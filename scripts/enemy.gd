@@ -1,5 +1,7 @@
 extends CharacterBody2D
 
+const HEALTH_STATE_SCRIPT := preload("res://scripts/health_state.gd")
+
 signal health_changed(current_health: int, max_health: int)
 signal died
 
@@ -13,8 +15,8 @@ signal died
 @export var health_bar_offset: Vector2 = Vector2(-28.0, -34.0)
 
 var target: Node2D
-var current_health: int = 40
 var health_bar: ProgressBar
+var health_state
 
 func _ready() -> void:
 	motion_mode = CharacterBody2D.MOTION_MODE_FLOATING
@@ -23,8 +25,7 @@ func _ready() -> void:
 	add_to_group("enemies")
 	health_changed.connect(_update_health_bar)
 	_create_health_bar()
-	current_health = clampi(current_health, 0, max_health)
-	health_changed.emit(current_health, max_health)
+	_create_health_state()
 	target = get_node_or_null(target_path) as Node2D
 
 func _physics_process(delta: float) -> void:
@@ -51,31 +52,21 @@ func _get_desired_velocity() -> Vector2:
 func take_damage(amount: int) -> void:
 	if amount <= 0:
 		return
-	_set_health(current_health - amount)
+	health_state.take_damage(amount)
 
 func heal(amount: int) -> void:
 	if amount <= 0:
 		return
-	_set_health(current_health + amount)
+	health_state.heal(amount)
 
 func is_dead() -> bool:
-	return current_health <= 0
-
-func _set_health(value: int) -> void:
-	var previous_health := current_health
-	current_health = clampi(value, 0, max_health)
-	if current_health == previous_health:
-		return
-	health_changed.emit(current_health, max_health)
-	if current_health == 0:
-		died.emit()
-		queue_free()
+	return health_state.is_dead()
 
 func _create_health_bar() -> void:
 	health_bar = ProgressBar.new()
 	health_bar.min_value = 0.0
 	health_bar.max_value = float(max_health)
-	health_bar.value = float(current_health)
+	health_bar.value = float(_get_current_health())
 	health_bar.show_percentage = false
 	health_bar.position = health_bar_offset
 	health_bar.custom_minimum_size = health_bar_size
@@ -104,3 +95,22 @@ func _update_health_bar(new_health: int, new_max_health: int) -> void:
 		return
 	health_bar.max_value = float(new_max_health)
 	health_bar.value = float(new_health)
+
+func _create_health_state() -> void:
+	health_state = HEALTH_STATE_SCRIPT.new()
+	health_state.health_changed.connect(_on_health_state_changed)
+	health_state.died.connect(_on_health_state_died)
+	add_child(health_state)
+	health_state.setup(max_health)
+
+func _on_health_state_changed(new_health: int, new_max_health: int) -> void:
+	health_changed.emit(new_health, new_max_health)
+
+func _on_health_state_died() -> void:
+	died.emit()
+	queue_free()
+
+func _get_current_health() -> int:
+	if health_state == null:
+		return max_health
+	return health_state.current_health
