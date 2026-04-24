@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="Godot2026"
-run/main_scene="uid://drax5neg5nl7r"
+run/main_scene="uid://duxot7tpxkfg6"
 config/features=PackedStringArray("4.6", "GL Compatibility")
 config/icon="res://icon.svg"
 
