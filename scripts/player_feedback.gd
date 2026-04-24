@@ -1,25 +1,33 @@
 extends Node2D
 
 const DEFAULT_IMPACT_SOUND := preload("res://sounds/impactPunch_medium_002.ogg")
+const DEFAULT_ATTACK_SWING_SOUND := preload("res://sounds/impactSoft_medium_001.ogg")
 
 var health_bar_size: Vector2 = Vector2(80.0, 10.0)
 var health_bar_offset: Vector2 = Vector2(-40.0, -42.0)
 var impact_sound: AudioStream = DEFAULT_IMPACT_SOUND
 var impact_volume_db: float = -6.0
+var attack_swing_sound: AudioStream = DEFAULT_ATTACK_SWING_SOUND
+var attack_swing_volume_db: float = -10.0
 var damage_flash_color: Color = Color(0.95, 0.12, 0.12, 1.0)
 var damage_flash_alpha: float = 0.45
 var damage_flash_fade_time: float = 0.16
 
 var health_bar: ProgressBar
 var impact_sound_player: AudioStreamPlayer2D
+var attack_swing_sound_player: AudioStreamPlayer2D
 var damage_flash_layer: CanvasLayer
 var damage_flash_rect: ColorRect
 var damage_flash_tween: Tween
+var attack_swing_shape: Polygon2D
+var attack_swing_tween: Tween
 
 func setup(max_health: int, current_health: int) -> void:
 	_create_health_bar(max_health, current_health)
 	_create_impact_sound_player()
+	_create_attack_swing_sound_player()
 	_create_damage_flash()
+	_create_attack_swing_visual()
 
 func update_health_bar(new_health: int, new_max_health: int) -> void:
 	if health_bar == null:
@@ -33,6 +41,39 @@ func play_impact_sound() -> void:
 	if impact_sound_player.stream == null:
 		return
 	impact_sound_player.play()
+
+func play_attack_swing_sound() -> void:
+	if attack_swing_sound_player == null:
+		return
+	if attack_swing_sound_player.stream == null:
+		return
+	attack_swing_sound_player.play()
+
+func play_attack_swing_visual(direction: Vector2, swing_range: float, arc_degrees: float) -> void:
+	if attack_swing_shape == null:
+		return
+
+	var points := PackedVector2Array()
+	points.push_back(Vector2.ZERO)
+	var half_arc := deg_to_rad(arc_degrees * 0.5)
+	var segments := maxi(8, int(arc_degrees / 8.0))
+	for i in range(segments + 1):
+		var t := float(i) / float(segments)
+		var angle := lerpf(-half_arc, half_arc, t)
+		points.push_back(Vector2.RIGHT.rotated(angle) * swing_range)
+
+	attack_swing_shape.polygon = points
+	attack_swing_shape.rotation = direction.angle()
+	attack_swing_shape.visible = true
+	attack_swing_shape.modulate = Color(1.0, 1.0, 1.0, 0.72)
+
+	if attack_swing_tween != null and attack_swing_tween.is_valid():
+		attack_swing_tween.kill()
+	attack_swing_shape.scale = Vector2(0.92, 0.92)
+	attack_swing_tween = create_tween()
+	attack_swing_tween.set_parallel(true)
+	attack_swing_tween.tween_property(attack_swing_shape, "modulate:a", 0.0, 0.11)
+	attack_swing_tween.tween_property(attack_swing_shape, "scale", Vector2(1.06, 1.06), 0.11)
 
 func play_damage_flash() -> void:
 	if damage_flash_rect == null:
@@ -77,6 +118,12 @@ func _create_impact_sound_player() -> void:
 	impact_sound_player.volume_db = impact_volume_db
 	add_child(impact_sound_player)
 
+func _create_attack_swing_sound_player() -> void:
+	attack_swing_sound_player = AudioStreamPlayer2D.new()
+	attack_swing_sound_player.stream = attack_swing_sound
+	attack_swing_sound_player.volume_db = attack_swing_volume_db
+	add_child(attack_swing_sound_player)
+
 func _create_damage_flash() -> void:
 	damage_flash_layer = CanvasLayer.new()
 	damage_flash_layer.layer = 100
@@ -93,3 +140,9 @@ func _create_damage_flash() -> void:
 
 	damage_flash_layer.add_child(damage_flash_rect)
 	add_child(damage_flash_layer)
+
+func _create_attack_swing_visual() -> void:
+	attack_swing_shape = Polygon2D.new()
+	attack_swing_shape.visible = false
+	attack_swing_shape.color = Color(0.99, 0.96, 0.68, 0.72)
+	add_child(attack_swing_shape)
