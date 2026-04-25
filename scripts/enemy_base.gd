@@ -52,7 +52,7 @@ func _update_visual_facing_direction() -> void:
 			visual_facing_direction = move_facing
 	queue_redraw()
 
-func take_damage(amount: int) -> void:
+func take_damage(amount: int, _damage_context: Dictionary = {}) -> void:
 	if amount <= 0:
 		return
 	health_state.take_damage(amount)

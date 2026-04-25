@@ -54,6 +54,7 @@ func _ready() -> void:
 	died.connect(_restart_current_scene)
 	upgrade_system = UPGRADE_SYSTEM_SCRIPT.new()
 	add_child(upgrade_system)
+	upgrade_system.initialize(self, null, null)
 	_create_health_state()
 	_create_player_feedback()
 	var sprite := get_node_or_null("Sprite2D") as Sprite2D
@@ -222,49 +223,10 @@ func is_dead() -> bool:
 	return health_state.is_dead()
 
 func apply_upgrade(boon_id: String) -> void:
-	match boon_id:
-		"swift_strike":
-			attack_cooldown = maxf(0.08, attack_cooldown * 0.86)
-		"heavy_blow":
-			attack_damage += 8
-		"wide_arc":
-			attack_arc_degrees = clampf(attack_arc_degrees + 18.0, 60.0, 240.0)
-		"long_reach":
-			attack_range += 14.0
-		"fleet_foot":
-			max_speed += 18.0
-		"blink_dash":
-			dash_cooldown = maxf(0.12, dash_cooldown * 0.85)
-		"iron_skin":
-			if health_state != null:
-				health_state.max_health += 20
-				health_state.set_health(health_state.current_health + 20)
-				max_health = health_state.max_health
-		_:
-			pass
+	upgrade_system.apply_upgrade(boon_id)
 
 func apply_trial_power(reward_id: String) -> void:
-	match reward_id:
-		"razor_wind":
-			reward_razor_wind = true
-			razor_wind_stacks += 1
-			razor_wind_range_scale = 1.58 + 0.14 * float(razor_wind_stacks)
-			razor_wind_damage_ratio = 0.6 + 0.12 * float(razor_wind_stacks)
-			attack_cooldown = maxf(0.1, attack_cooldown * 0.96)
-		"execution_edge":
-			reward_execution_edge = true
-			execution_edge_stacks += 1
-			execution_every = maxi(2, 4 - execution_edge_stacks)
-			execution_damage_mult = 2.2 + 0.45 * float(execution_edge_stacks)
-			attack_lock_duration = maxf(0.08, attack_lock_duration * 0.94)
-		"rupture_wave":
-			reward_rupture_wave = true
-			rupture_wave_stacks += 1
-			rupture_wave_radius = 72.0 + 10.0 * float(rupture_wave_stacks)
-			rupture_wave_damage_ratio = 0.34 + 0.1 * float(rupture_wave_stacks)
-			attack_damage += 2
-		_:
-			pass
+	upgrade_system.apply_trial_power(reward_id)
 
 func apply_power_for_test(power_id: String) -> bool:
 	var id := power_id.strip_edges().to_lower()
@@ -296,35 +258,10 @@ func apply_power_for_test(power_id: String) -> bool:
 	return false
 
 func get_trial_power_card_desc(reward_id: String) -> String:
-	match reward_id:
-		"razor_wind":
-			var next_stack := razor_wind_stacks + 1
-			var next_range := 1.58 + 0.14 * float(next_stack)
-			var next_damage := 0.6 + 0.12 * float(next_stack)
-			return "Next: forward wind slash at %d%% range and %d%% damage." % [int(round(next_range * 100.0)), int(round(next_damage * 100.0))]
-		"execution_edge":
-			var next_stack := execution_edge_stacks + 1
-			var next_every := maxi(2, 4 - next_stack)
-			var next_mult := 2.2 + 0.45 * float(next_stack)
-			return "Next: execution every %d swings, %d%% execution damage." % [next_every, int(round(next_mult * 100.0))]
-		"rupture_wave":
-			var next_stack := rupture_wave_stacks + 1
-			var next_radius := 72.0 + 10.0 * float(next_stack)
-			var next_wave_damage := 0.34 + 0.1 * float(next_stack)
-			return "Next: rupture radius %d, wave deals %d%% of hit damage." % [int(round(next_radius)), int(round(next_wave_damage * 100.0))]
-		_:
-			return "Enhances this power."
+	return upgrade_system.get_trial_power_card_description(reward_id)
 
 func get_trial_power_stack_count(reward_id: String) -> int:
-	match reward_id:
-		"razor_wind":
-			return razor_wind_stacks
-		"execution_edge":
-			return execution_edge_stacks
-		"rupture_wave":
-			return rupture_wave_stacks
-		_:
-			return 0
+	return upgrade_system.get_trial_power_stack_count(reward_id)
 
 func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary) -> bool:
 	var did_hit := false
@@ -334,6 +271,7 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 	var max_angle_radians := deg_to_rad(strike_arc_degrees * 0.5)
 
 	var melee_hit_enemy_ids: Dictionary = {}
+	var rupture_triggered_enemy_ids: Dictionary = {}
 
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		if not (enemy_node is Node2D):
@@ -349,22 +287,23 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		var to_enemy := enemy_body.global_position - global_position
 		if to_enemy.length() > strike_range:
 			continue
-		if attack_direction.angle_to(to_enemy.normalized()) > max_angle_radians:
+		if absf(attack_direction.angle_to(to_enemy.normalized())) > max_angle_radians:
 			continue
 
 		enemy_node.call("take_damage", strike_damage)
 		melee_hit_enemy_ids[enemy_id] = true
-		if reward_rupture_wave:
+		if reward_rupture_wave and not rupture_triggered_enemy_ids.has(enemy_id):
+			rupture_triggered_enemy_ids[enemy_id] = true
 			_apply_rupture_wave(enemy_body.global_position, strike_damage)
 		did_hit = true
 
 	if reward_razor_wind:
 		var wind_context: Dictionary = upgrade_system.build_razor_wind_attack_context(melee_context, razor_wind_damage_ratio, razor_wind_range_scale, razor_wind_arc_degrees, attack_damage, attack_range)
-		did_hit = _apply_razor_wind(attack_direction, wind_context) or did_hit
+		did_hit = _apply_razor_wind(attack_direction, wind_context, rupture_triggered_enemy_ids) or did_hit
 
 	return did_hit
 
-func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary) -> bool:
+func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupture_triggered_enemy_ids: Dictionary = {}) -> bool:
 	var did_hit := false
 	var wind_range := float(wind_context.get("range", attack_range * razor_wind_range_scale))
 	var wind_arc_degrees := float(wind_context.get("arc_degrees", razor_wind_arc_degrees))
@@ -383,11 +322,12 @@ func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary) -> b
 		var to_enemy := enemy_body.global_position - global_position
 		if to_enemy.length() > wind_range:
 			continue
-		if attack_direction.angle_to(to_enemy.normalized()) > wind_half_arc:
+		if absf(attack_direction.angle_to(to_enemy.normalized())) > wind_half_arc:
 			continue
 		enemy_node.call("take_damage", wind_damage)
 		wind_hit_enemy_ids[enemy_id] = true
-		if reward_rupture_wave:
+		if reward_rupture_wave and not rupture_triggered_enemy_ids.has(enemy_id):
+			rupture_triggered_enemy_ids[enemy_id] = true
 			_apply_rupture_wave(enemy_body.global_position, wind_damage)
 		did_hit = true
 	return did_hit
@@ -404,7 +344,7 @@ func _apply_rupture_wave(epicenter: Vector2, source_damage: int) -> void:
 		var enemy_body := enemy_node as Node2D
 		if enemy_body.global_position.distance_to(epicenter) > rupture_wave_radius:
 			continue
-		enemy_node.call("take_damage", wave_damage)
+		enemy_node.call("take_damage", wave_damage, {"is_ground_attack": true, "attack_type": "rupture_wave"})
 
 func _restart_current_scene() -> void:
 	if scene_restart_queued:

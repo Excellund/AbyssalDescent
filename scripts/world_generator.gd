@@ -2,6 +2,8 @@ extends Node2D
 
 const ENEMY_CHASER_SCRIPT := preload("res://scripts/enemy_chaser.gd")
 const ENEMY_CHARGER_SCRIPT := preload("res://scripts/enemy_charger.gd")
+const ENEMY_ARCHER_SCRIPT := preload("res://scripts/enemy_archer.gd")
+const ENEMY_SHIELDER_SCRIPT := preload("res://scripts/enemy_shielder.gd")
 const ENEMY_BOSS_SCRIPT := preload("res://scripts/enemy_boss.gd")
 const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
 const DEBUG_RUN_NORMAL := 0
@@ -18,6 +20,10 @@ const DEBUG_RUN_FIRST_BOSS := 1
 @export var chasers_per_room: int = 2
 @export var chargers_start_room: int = 2
 @export var chargers_per_room: int = 1
+@export var archer_start_room: int = 1
+@export var archers_per_room: int = 1
+@export var shielder_start_room: int = 2
+@export var shielders_per_room: int = 1
 @export var boss_chaser_count: int = 10
 @export var boss_charger_count: int = 5
 @export var door_distance_from_center: float = 290.0
@@ -31,7 +37,7 @@ const DEBUG_RUN_FIRST_BOSS := 1
 @export var arena_glow_strength: float = 0.22
 @export var normal_room_music: AudioStream
 @export var boss_room_music: AudioStream
-@export var music_volume_db: float = -10.0
+@export var music_volume_db: float = -16.0
 @export var music_intro_fade_duration: float = 1.6
 @export var music_crossfade_duration: float = 0.75
 @export var rest_heal_ratio: float = 0.32
@@ -414,13 +420,21 @@ func _begin_boss_room() -> void:
 
 func _spawn_profile_enemies(profile: Dictionary) -> int:
 	var total := 0
-	var chaser_count := int(profile["chaser_count"])
-	var charger_count := int(profile["charger_count"])
+	var chaser_count := int(profile.get("chaser_count", 0))
+	var charger_count := int(profile.get("charger_count", 0))
+	var archer_count := int(profile.get("archer_count", 0))
+	var shielder_count := int(profile.get("shielder_count", 0))
 	for _i in range(chaser_count):
 		_spawn_enemy_in_current_room(ENEMY_CHASER_SCRIPT)
 		total += 1
 	for _i in range(charger_count):
 		_spawn_enemy_in_current_room(ENEMY_CHARGER_SCRIPT)
+		total += 1
+	for _i in range(archer_count):
+		_spawn_enemy_in_current_room(ENEMY_ARCHER_SCRIPT)
+		total += 1
+	for _i in range(shielder_count):
+		_spawn_enemy_in_current_room(ENEMY_SHIELDER_SCRIPT)
 		total += 1
 	return total
 
@@ -570,8 +584,10 @@ func _build_skirmish_profile(depth: int) -> Dictionary:
 		"label": "Skirmish",
 		"room_size": size,
 		"static_camera": size.x <= static_camera_room_threshold,
-		"chaser_count": base_chaser_count + depth * chasers_per_room,
-		"charger_count": maxi(0, depth - chargers_start_room + 1) * chargers_per_room
+		"chaser_count": maxi(2, base_chaser_count + depth * chasers_per_room - 2),
+		"charger_count": maxi(0, depth - chargers_start_room + 1) * chargers_per_room,
+		"archer_count": maxi(0, depth - archer_start_room + 1) * archers_per_room,
+		"shielder_count": maxi(0, depth - shielder_start_room + 1) * shielders_per_room
 	}
 
 func _build_onslaught_profile(depth: int) -> Dictionary:
@@ -580,8 +596,10 @@ func _build_onslaught_profile(depth: int) -> Dictionary:
 		"label": "Onslaught",
 		"room_size": size,
 		"static_camera": false,
-		"chaser_count": base_chaser_count + depth * chasers_per_room + 3,
-		"charger_count": maxi(1, (depth - chargers_start_room + 1) * chargers_per_room + 1)
+		"chaser_count": maxi(1, base_chaser_count + depth * chasers_per_room),
+		"charger_count": maxi(1, (depth - chargers_start_room + 1) * chargers_per_room + 1),
+		"archer_count": maxi(0, (depth - archer_start_room + 1) * archers_per_room + 1),
+		"shielder_count": maxi(0, (depth - shielder_start_room + 1) * shielders_per_room + 1)
 	}
 
 func _build_easy_boon_profile(depth: int) -> Dictionary:

@@ -16,6 +16,22 @@ var trial_power_stacks: Dictionary = {
 	"rupture_wave": 0
 }
 
+const UPGRADE_IDS := {
+	"swift_strike": true,
+	"heavy_blow": true,
+	"wide_arc": true,
+	"long_reach": true,
+	"fleet_foot": true,
+	"blink_dash": true,
+	"iron_skin": true
+}
+
+const TRIAL_POWER_IDS := {
+	"razor_wind": true,
+	"execution_edge": true,
+	"rupture_wave": true
+}
+
 
 func _ready() -> void:
 	# Register as singleton or get injected
@@ -28,19 +44,36 @@ func apply_upgrade(upgrade_id: String) -> bool:
 	if not is_instance_valid(player_reference):
 		return false
 	
-	if not power_registry.is_upgrade(id):
+	if not _is_upgrade_id(id):
 		return false
 	
 	# Track in game state
 	if is_instance_valid(game_state):
 		game_state.add_upgrade(id)
 	
-	# Delegate specific upgrade effects to player
-	if player_reference.has_method("apply_upgrade"):
-		player_reference.call("apply_upgrade", id)
-		return true
-	
-	return false
+	match id:
+		"swift_strike":
+			player_reference.set("attack_cooldown", maxf(0.08, float(player_reference.get("attack_cooldown")) * 0.86))
+		"heavy_blow":
+			player_reference.set("attack_damage", int(player_reference.get("attack_damage")) + 8)
+		"wide_arc":
+			var next_arc := clampf(float(player_reference.get("attack_arc_degrees")) + 18.0, 60.0, 240.0)
+			player_reference.set("attack_arc_degrees", next_arc)
+		"long_reach":
+			player_reference.set("attack_range", float(player_reference.get("attack_range")) + 14.0)
+		"fleet_foot":
+			player_reference.set("max_speed", float(player_reference.get("max_speed")) + 18.0)
+		"blink_dash":
+			player_reference.set("dash_cooldown", maxf(0.12, float(player_reference.get("dash_cooldown")) * 0.85))
+		"iron_skin":
+			var health_state = player_reference.get("health_state")
+			if health_state != null:
+				health_state.max_health += 20
+				health_state.set_health(health_state.current_health + 20)
+				player_reference.set("max_health", health_state.max_health)
+		_:
+			return false
+	return true
 
 
 ## Apply a trial power (combat ability) to the player
@@ -49,7 +82,7 @@ func apply_trial_power(power_id: String) -> bool:
 	if not is_instance_valid(player_reference):
 		return false
 	
-	if not power_registry.is_trial_power(id):
+	if not _is_trial_power_id(id):
 		return false
 	
 	# Track in game state
@@ -60,21 +93,40 @@ func apply_trial_power(power_id: String) -> bool:
 	if trial_power_stacks.has(id):
 		trial_power_stacks[id] += 1
 	
-	# Delegate specific trial power effects to player
-	if player_reference.has_method("apply_trial_power"):
-		player_reference.call("apply_trial_power", id)
-		return true
-	
-	return false
+	match id:
+		"razor_wind":
+			player_reference.set("reward_razor_wind", true)
+			var razor_stacks := int(player_reference.get("razor_wind_stacks")) + 1
+			player_reference.set("razor_wind_stacks", razor_stacks)
+			player_reference.set("razor_wind_range_scale", 1.58 + 0.14 * float(razor_stacks))
+			player_reference.set("razor_wind_damage_ratio", 0.6 + 0.12 * float(razor_stacks))
+			player_reference.set("attack_cooldown", maxf(0.1, float(player_reference.get("attack_cooldown")) * 0.96))
+		"execution_edge":
+			player_reference.set("reward_execution_edge", true)
+			var execution_stacks := int(player_reference.get("execution_edge_stacks")) + 1
+			player_reference.set("execution_edge_stacks", execution_stacks)
+			player_reference.set("execution_every", maxi(2, 4 - execution_stacks))
+			player_reference.set("execution_damage_mult", 2.2 + 0.45 * float(execution_stacks))
+			player_reference.set("attack_lock_duration", maxf(0.08, float(player_reference.get("attack_lock_duration")) * 0.94))
+		"rupture_wave":
+			player_reference.set("reward_rupture_wave", true)
+			var rupture_stacks := int(player_reference.get("rupture_wave_stacks")) + 1
+			player_reference.set("rupture_wave_stacks", rupture_stacks)
+			player_reference.set("rupture_wave_radius", 72.0 + 10.0 * float(rupture_stacks))
+			player_reference.set("rupture_wave_damage_ratio", 0.34 + 0.1 * float(rupture_stacks))
+			player_reference.set("attack_damage", int(player_reference.get("attack_damage")) + 2)
+		_:
+			return false
+	return true
 
 
 ## Apply any power (upgrade or trial power)
 func apply_power(power_id: String) -> bool:
 	var id := power_id.strip_edges().to_lower()
 	
-	if power_registry.is_upgrade(id):
+	if _is_upgrade_id(id):
 		return apply_upgrade(id)
-	elif power_registry.is_trial_power(id):
+	elif _is_trial_power_id(id):
 		return apply_trial_power(id)
 	
 	return false
@@ -105,21 +157,42 @@ func apply_powers(power_ids: Array[String]) -> Dictionary:
 ## Get current stack count for a trial power
 func get_trial_power_stack_count(power_id: String) -> int:
 	var id := power_id.strip_edges().to_lower()
+	if is_instance_valid(player_reference):
+		match id:
+			"razor_wind":
+				return int(player_reference.get("razor_wind_stacks"))
+			"execution_edge":
+				return int(player_reference.get("execution_edge_stacks"))
+			"rupture_wave":
+				return int(player_reference.get("rupture_wave_stacks"))
 	if trial_power_stacks.has(id):
 		return trial_power_stacks[id]
 	return 0
 
 
-## Get trial power description with next stack info (delegates to player for accuracy)
+## Get trial power description with next stack info from the current player state.
 func get_trial_power_card_description(power_id: String) -> String:
 	var id := power_id.strip_edges().to_lower()
 	if not is_instance_valid(player_reference):
 		return "Enhances this power."
-	
-	if player_reference.has_method("get_trial_power_card_desc"):
-		return String(player_reference.call("get_trial_power_card_desc", id))
-	
-	return "Enhances this power."
+	match id:
+		"razor_wind":
+			var next_stack := int(player_reference.get("razor_wind_stacks")) + 1
+			var next_range := 1.58 + 0.14 * float(next_stack)
+			var next_damage := 0.6 + 0.12 * float(next_stack)
+			return "Next: forward wind slash at %d%% range and %d%% damage." % [int(round(next_range * 100.0)), int(round(next_damage * 100.0))]
+		"execution_edge":
+			var next_stack := int(player_reference.get("execution_edge_stacks")) + 1
+			var next_every := maxi(2, 4 - next_stack)
+			var next_mult := 2.2 + 0.45 * float(next_stack)
+			return "Next: execution every %d swings, %d%% execution damage." % [next_every, int(round(next_mult * 100.0))]
+		"rupture_wave":
+			var next_stack := int(player_reference.get("rupture_wave_stacks")) + 1
+			var next_radius := 72.0 + 10.0 * float(next_stack)
+			var next_wave_damage := 0.34 + 0.1 * float(next_stack)
+			return "Next: rupture radius %d, wave deals %d%% of hit damage." % [int(round(next_radius)), int(round(next_wave_damage * 100.0))]
+		_:
+			return "Enhances this power."
 
 
 ## Get all power IDs the player currently has
@@ -173,3 +246,13 @@ func initialize(player: Node, state: Node, registry: Node) -> void:
 	player_reference = player
 	game_state = state
 	power_registry = registry
+
+func _is_upgrade_id(power_id: String) -> bool:
+	if power_registry != null and power_registry.has_method("is_upgrade"):
+		return bool(power_registry.call("is_upgrade", power_id))
+	return UPGRADE_IDS.has(power_id)
+
+func _is_trial_power_id(power_id: String) -> bool:
+	if power_registry != null and power_registry.has_method("is_trial_power"):
+		return bool(power_registry.call("is_trial_power", power_id))
+	return TRIAL_POWER_IDS.has(power_id)
