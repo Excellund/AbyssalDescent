@@ -411,7 +411,17 @@ func _begin_room(profile: Dictionary) -> void:
 	var mutator_name := String(current_room_enemy_mutator.get("name", ""))
 	var room_subtitle := ""
 	if not mutator_name.is_empty():
-		room_subtitle = "Mutator: %s" % mutator_name
+		var banner_suffix := String(current_room_enemy_mutator.get("banner_suffix", ""))
+		room_subtitle = mutator_name
+		if not banner_suffix.is_empty():
+			room_subtitle += "  —  " + banner_suffix
+		var sub_color: Color = current_room_enemy_mutator.get("theme_color", Color(0.78, 0.9, 1.0, 0.92))
+		sub_color.a = 0.92
+		if room_banner_subtitle_label != null:
+			room_banner_subtitle_label.add_theme_color_override("font_color", sub_color)
+	else:
+		if room_banner_subtitle_label != null:
+			room_banner_subtitle_label.add_theme_color_override("font_color", Color(0.78, 0.9, 1.0, 0.92))
 	_show_room_banner(current_room_label, room_subtitle)
 	if is_instance_valid(enemy_spawner):
 		enemy_spawner.call("configure_room", current_room_size, spawn_padding, spawn_safe_radius, current_room_enemy_mutator)
@@ -784,40 +794,38 @@ func _draw_door_icon(door: Dictionary) -> void:
 		var crown_base_l := door_pos + Vector2(-9.0, 2.0)
 		var crown_base_r := door_pos + Vector2(9.0, 2.0)
 		var crown := PackedVector2Array([crown_base_l, left_tip, door_pos + Vector2(-3.0, -2.0), peak, door_pos + Vector2(3.0, -2.0), right_tip, crown_base_r])
-		draw_polyline(crown, outline_color, 4.0)
-		draw_polyline(crown, icon_color, 2.0)
+		draw_polyline(crown, outline_color, 4.8)
+		draw_polyline(crown, icon_color, 3.0)
+		draw_circle(door_pos + Vector2(0.0, 0.8), 2.4, outline_color)
+		draw_circle(door_pos + Vector2(0.0, 0.8), 1.5, Color(1.0, 0.86, 0.42, 0.96))
 		return
 
-	if icon == "hard":
-		var left_a := door_pos + Vector2(-10.0, -8.0)
-		var left_b := door_pos + Vector2(-3.0, 0.0)
-		var left_c := door_pos + Vector2(-10.0, 8.0)
-		var right_a := door_pos + Vector2(10.0, -8.0)
-		var right_b := door_pos + Vector2(3.0, 0.0)
-		var right_c := door_pos + Vector2(10.0, 8.0)
-		draw_line(left_a, left_b, outline_color, 4.0)
-		draw_line(left_b, left_c, outline_color, 4.0)
-		draw_line(right_a, right_b, outline_color, 4.0)
-		draw_line(right_b, right_c, outline_color, 4.0)
-		draw_line(left_a, left_b, icon_color, 2.0)
-		draw_line(left_b, left_c, icon_color, 2.0)
-		draw_line(right_a, right_b, icon_color, 2.0)
-		draw_line(right_b, right_c, icon_color, 2.0)
+	if icon == "hard" or icon == "easy":
+		# Crossed blades, reduced to a clear two-stroke silhouette.
+		var blade_a_l := door_pos + Vector2(-9.5, -7.0)
+		var blade_a_r := door_pos + Vector2(9.5, 7.0)
+		var blade_b_l := door_pos + Vector2(-9.5, 7.0)
+		var blade_b_r := door_pos + Vector2(9.5, -7.0)
+		draw_line(blade_a_l, blade_a_r, outline_color, 5.6)
+		draw_line(blade_b_l, blade_b_r, outline_color, 5.6)
+		draw_line(blade_a_l, blade_a_r, icon_color, 2.9)
+		draw_line(blade_b_l, blade_b_r, icon_color, 2.9)
+		draw_circle(door_pos, 3.4, outline_color)
+		draw_circle(door_pos, 2.0, Color(1.0, 0.92, 0.74, 0.95))
 		return
 
 	if icon == "trial":
-		var top := door_pos + Vector2(0.0, -10.0)
-		var right := door_pos + Vector2(10.0, 0.0)
-		var bottom := door_pos + Vector2(0.0, 10.0)
-		var left := door_pos + Vector2(-10.0, 0.0)
-		var diamond := PackedVector2Array([top, right, bottom, left, top])
-		draw_polyline(diamond, outline_color, 4.0)
-		draw_polyline(diamond, icon_color, 2.0)
-		draw_line(top, bottom, outline_color, 3.0)
-		draw_line(top, bottom, icon_color, 1.5)
+		# Read mutator shape identity from embedded profile — fallback to diamond if absent
+		var trial_mutator: Dictionary = door.get("profile", {}).get("enemy_mutator", {})
+		var shape_id := String(trial_mutator.get("icon_shape_id", ""))
+		var theme: Color = trial_mutator.get("theme_color", icon_color)
+		theme.a = 1.0
+		_draw_trial_mutator_icon(door_pos, shape_id, theme, icon_color, outline_color)
 		return
 
 	if icon == "rest":
+		draw_circle(door_pos, 10.0, outline_color)
+		draw_circle(door_pos, 8.0, Color(0.24, 0.56, 0.34, 0.75))
 		var rest_h_l := door_pos + Vector2(-8.0, 0.0)
 		var rest_h_r := door_pos + Vector2(8.0, 0.0)
 		var rest_v_t := door_pos + Vector2(0.0, -8.0)
@@ -832,7 +840,99 @@ func _draw_door_icon(door: Dictionary) -> void:
 	var h_r := door_pos + Vector2(8.0, 0.0)
 	var v_t := door_pos + Vector2(0.0, -8.0)
 	var v_b := door_pos + Vector2(0.0, 8.0)
-	draw_line(h_l, h_r, outline_color, 4.0)
-	draw_line(v_t, v_b, outline_color, 4.0)
-	draw_line(h_l, h_r, icon_color, 2.0)
-	draw_line(v_t, v_b, icon_color, 2.0)
+	draw_line(h_l, h_r, outline_color, 4.7)
+	draw_line(v_t, v_b, outline_color, 4.7)
+	draw_line(h_l, h_r, icon_color, 2.5)
+	draw_line(v_t, v_b, icon_color, 2.5)
+	draw_circle(door_pos, 1.7, Color(0.92, 0.98, 1.0, 0.92))
+
+func _draw_trial_mutator_icon(door_pos: Vector2, shape_id: String, theme: Color, icon_color: Color, outline_color: Color) -> void:
+	# Keep one clean ring and one bold symbol for at-speed readability.
+	draw_arc(door_pos, 11.4, 0.0, TAU, 28, outline_color, 3.6)
+	draw_arc(door_pos, 11.4, 0.0, TAU, 28, Color(theme.r, theme.g, theme.b, 0.86), 2.2)
+
+	match shape_id:
+		"blood_rush":
+			# Three simple outward spikes.
+			for a in [0.0, PI * 0.667, PI * 1.333]:
+				var dir := Vector2.RIGHT.rotated(a)
+				var tip := door_pos + dir * 10.5
+				var base := door_pos + dir * 3.6
+				var side := Vector2(-dir.y, dir.x)
+				var left_wing := base + side * 2.9
+				var right_wing := base - side * 2.9
+				var arrow := PackedVector2Array([left_wing, tip, right_wing])
+				draw_colored_polygon(arrow, theme)
+			draw_circle(door_pos, 2.9, outline_color)
+			draw_circle(door_pos, 1.8, theme)
+
+		"flashpoint":
+			# Single bolt shape.
+			var top_pt := door_pos + Vector2(-1.0, -11.0)
+			var mid_r  := door_pos + Vector2(5.0, -1.0)
+			var mid_l  := door_pos + Vector2(-4.5, 1.0)
+			var bot_pt := door_pos + Vector2(1.0, 11.0)
+			draw_line(top_pt, mid_r, outline_color, 5.6)
+			draw_line(mid_r,  bot_pt, outline_color, 5.6)
+			draw_line(top_pt, mid_r, theme, 3.4)
+			draw_line(mid_r,  bot_pt, theme, 3.4)
+			draw_line(mid_l, mid_r, outline_color, 3.4)
+			draw_line(mid_l, mid_r, theme, 2.1)
+
+		"siegebreak":
+			# Ram head silhouette only.
+			var tip_r := door_pos + Vector2(12.0, 0.0)
+			var body_tr := door_pos + Vector2(6.0, -6.0)
+			var body_tl := door_pos + Vector2(-8.0, -6.0)
+			var body_bl := door_pos + Vector2(-8.0, 6.0)
+			var body_br := door_pos + Vector2(6.0, 6.0)
+			var ram := PackedVector2Array([tip_r, body_tr, body_tl, body_bl, body_br])
+			draw_colored_polygon(ram, Color(outline_color.r, outline_color.g, outline_color.b, 0.9))
+			var ram_inner := PackedVector2Array([
+				door_pos + Vector2(10.0, 0.0),
+				door_pos + Vector2(5.0, -4.5),
+				door_pos + Vector2(-6.5, -4.5),
+				door_pos + Vector2(-6.5, 4.5),
+				door_pos + Vector2(5.0, 4.5)
+			])
+			draw_colored_polygon(ram_inner, theme)
+			draw_line(door_pos + Vector2(-4.5, -4.0), door_pos + Vector2(-4.5, 4.0), outline_color, 1.7)
+
+		"iron_volley":
+			# Shield with two simple side arrows.
+			var shield := PackedVector2Array([
+				door_pos + Vector2(0.0, -10.0),
+				door_pos + Vector2(8.0, -3.0),
+				door_pos + Vector2(6.0, 7.0),
+				door_pos + Vector2(0.0, 10.0),
+				door_pos + Vector2(-6.0, 7.0),
+				door_pos + Vector2(-8.0, -3.0)
+			])
+			draw_colored_polygon(shield, Color(outline_color.r, outline_color.g, outline_color.b, 0.86))
+			var shield_inner := PackedVector2Array([
+				door_pos + Vector2(0.0, -8.0),
+				door_pos + Vector2(6.0, -2.2),
+				door_pos + Vector2(4.6, 5.5),
+				door_pos + Vector2(0.0, 8.0),
+				door_pos + Vector2(-4.6, 5.5),
+				door_pos + Vector2(-6.0, -2.2)
+			])
+			draw_colored_polygon(shield_inner, theme)
+			for sx: float in [-1.0, 1.0]:
+				var tip := door_pos + Vector2(sx * 10.0, -4.0)
+				var base_l := tip + Vector2(-sx * 2.8, 3.8)
+				var base_r := tip + Vector2(sx * 2.8, 3.8)
+				var arrow := PackedVector2Array([base_l, tip, base_r])
+				draw_colored_polygon(arrow, theme)
+
+		_:
+			# Fallback: clean diamond sigil.
+			var top := door_pos + Vector2(0.0, -10.0)
+			var right := door_pos + Vector2(10.0, 0.0)
+			var bottom := door_pos + Vector2(0.0, 10.0)
+			var left := door_pos + Vector2(-10.0, 0.0)
+			var diamond := PackedVector2Array([top, right, bottom, left, top])
+			draw_polyline(diamond, outline_color, 4.4)
+			draw_polyline(diamond, icon_color, 2.6)
+			draw_line(top, bottom, outline_color, 3.4)
+			draw_line(top, bottom, icon_color, 1.9)

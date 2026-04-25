@@ -107,6 +107,8 @@ var attack_anim_duration: float = 0.1
 var visual_facing_direction: Vector2 = Vector2.LEFT
 var slow_time_left: float = 0.0
 var slow_speed_mult: float = 1.0
+var has_mutator_overlay: bool = false
+var mutator_theme_color: Color = Color(1.0, 0.4, 0.4, 1.0)
 
 func _ready() -> void:
 	motion_mode = CharacterBody2D.MOTION_MODE_FLOATING
@@ -253,6 +255,21 @@ func _draw_common_body(body_radius: float, body_color: Color, core_color: Color,
 	var spike_r := -side * (body_radius - 1.0)
 	draw_line(spike_l, spike_l + side * 6.0, COLOR_BODY_SPIKE, 1.8)
 	draw_line(spike_r, spike_r - side * 6.0, COLOR_BODY_SPIKE, 1.8)
+	_draw_mutator_overlay(body_radius)
+
+func _draw_mutator_overlay(body_radius: float) -> void:
+	if not has_mutator_overlay:
+		return
+	var t := float(Time.get_ticks_msec()) * 0.001
+	var pulse := 0.5 + 0.5 * sin(t * 3.4)
+	# Outer ring: theme-colored, slow pulse — persistent identity marker
+	var ring_color := mutator_theme_color
+	ring_color.a = 0.44 + pulse * 0.22
+	draw_arc(Vector2.ZERO, body_radius + 9.0, 0.0, TAU, 32, ring_color, 2.2)
+	# Inner accent fill: very subtle so role silhouette stays primary
+	var fill_color := mutator_theme_color
+	fill_color.a = 0.06 + pulse * 0.04
+	draw_circle(Vector2.ZERO, body_radius + 8.0, fill_color)
 
 func _get_attack_pulse() -> float:
 	var attack_t := 1.0 - (attack_anim_time_left / attack_anim_duration) if attack_anim_duration > 0.0 else 1.0

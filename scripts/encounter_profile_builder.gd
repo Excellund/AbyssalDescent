@@ -117,9 +117,12 @@ func roll_route_options(depth: int) -> Array[Dictionary]:
 	}
 
 	var trial_profile: Dictionary = _build_trial_profile()
+	var trial_mutator: Dictionary = trial_profile.get("enemy_mutator", {})
+	var trial_color: Color = trial_mutator.get("theme_color", Color(1.0, 0.32, 0.22, 0.96))
+	trial_color.a = 0.96
 	var trial_option: Dictionary = {
 		"label": "%s + Trial Reward" % String(trial_profile["label"]),
-		"color": Color(1.0, 0.32, 0.22, 0.96),
+		"color": trial_color,
 		"kind": "encounter",
 		"icon": "trial",
 		"reward": "trial_reward",
@@ -149,30 +152,59 @@ func roll_hard_enemy_mutator() -> Dictionary:
 	var pool: Array[Dictionary] = [
 		{
 			"name": "Blood Rush",
-			"chaser_damage_mult": 1.45,
-			"chaser_attack_interval_mult": 0.82,
-			"chaser_speed_mult": 1.08,
-			"charger_damage_mult": 1.35,
+			# Melee attackers hit harder and faster — chasers + chargers
+			"theme_color": Color(0.95, 0.22, 0.28, 1.0),
+			"icon_shape_id": "blood_rush",
+			"banner_suffix": "Melee enemies strike harder and faster",
+			"enemy_tint": Color(1.0, 0.80, 0.80, 1.0),
+			"chaser_damage_mult": 1.5,
+			"chaser_attack_interval_mult": 0.75,
+			"chaser_speed_mult": 1.1,
+			"charger_damage_mult": 1.45,
 			"charger_speed_mult": 1.0,
-			"charger_windup_mult": 0.95
+			"charger_windup_mult": 1.0
 		},
 		{
-			"name": "Lightning Lunge",
-			"chaser_damage_mult": 1.12,
-			"chaser_attack_interval_mult": 0.95,
-			"chaser_speed_mult": 1.25,
-			"charger_damage_mult": 1.22,
-			"charger_speed_mult": 1.26,
-			"charger_windup_mult": 0.7
+			"name": "Flashpoint",
+			# Ranged and charging attacks arrive with almost no warning — chargers + archers
+			"theme_color": Color(0.68, 0.40, 1.0, 1.0),
+			"icon_shape_id": "flashpoint",
+			"banner_suffix": "Charges and volleys strike with almost no warning",
+			"enemy_tint": Color(0.88, 0.82, 1.0, 1.0),
+			"charger_damage_mult": 1.2,
+			"charger_speed_mult": 1.32,
+			"charger_windup_mult": 0.55,
+			"archer_windup_mult": 0.55,
+			"archer_cooldown_mult": 0.72,
+			"archer_projectile_damage_mult": 1.25
 		},
 		{
 			"name": "Siegebreak",
-			"chaser_damage_mult": 1.22,
-			"chaser_attack_interval_mult": 1.0,
-			"chaser_speed_mult": 1.02,
-			"charger_damage_mult": 1.52,
-			"charger_speed_mult": 1.12,
-			"charger_windup_mult": 0.82
+			# Heavy-impact enemies deal devastating force — chargers + shielders
+			"theme_color": Color(0.96, 0.58, 0.18, 1.0),
+			"icon_shape_id": "siegebreak",
+			"banner_suffix": "Chargers and shielders hit with overwhelming force",
+			"enemy_tint": Color(1.0, 0.88, 0.72, 1.0),
+			"charger_damage_mult": 1.62,
+			"charger_speed_mult": 1.15,
+			"charger_windup_mult": 0.82,
+			"shielder_slam_damage_mult": 1.55,
+			"shielder_slam_windup_mult": 0.78,
+			"shielder_speed_mult": 1.18
+		},
+		{
+			"name": "Iron Volley",
+			# No chargers — archers pin you while shielders advance
+			"theme_color": Color(0.32, 0.82, 0.56, 1.0),
+			"icon_shape_id": "iron_volley",
+			"banner_suffix": "Archers and shielders hold the line",
+			"enemy_tint": Color(0.80, 1.0, 0.86, 1.0),
+			"archer_windup_mult": 0.68,
+			"archer_cooldown_mult": 0.62,
+			"archer_projectile_damage_mult": 1.35,
+			"shielder_slam_damage_mult": 1.3,
+			"shielder_slam_windup_mult": 0.85,
+			"shielder_speed_mult": 1.28
 		}
 	]
 	return pool[rng.randi_range(0, pool.size() - 1)]

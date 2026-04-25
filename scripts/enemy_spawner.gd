@@ -74,34 +74,69 @@ func _spawn_enemy_in_current_room(enemy_script: Script) -> void:
 func _apply_enemy_mutator(enemy: CharacterBody2D, enemy_script: Script) -> void:
 	if current_room_enemy_mutator.is_empty():
 		return
+	var is_affected: bool = false
 
 	if enemy_script == scripts.get("chaser"):
+		var chaser_damage_mult := float(current_room_enemy_mutator.get("chaser_damage_mult", 1.0))
+		var chaser_interval_mult := float(current_room_enemy_mutator.get("chaser_attack_interval_mult", 1.0))
+		var chaser_speed_mult := float(current_room_enemy_mutator.get("chaser_speed_mult", 1.0))
+		is_affected = not is_equal_approx(chaser_damage_mult, 1.0) \
+			or not is_equal_approx(chaser_interval_mult, 1.0) \
+			or not is_equal_approx(chaser_speed_mult, 1.0)
 		var base_damage := int(enemy.get("attack_damage"))
-		var damage_mult := float(current_room_enemy_mutator.get("chaser_damage_mult", 1.0))
-		enemy.set("attack_damage", maxi(1, int(round(float(base_damage) * damage_mult))))
-
+		enemy.set("attack_damage", maxi(1, int(round(float(base_damage) * chaser_damage_mult))))
 		var base_interval := float(enemy.get("attack_interval"))
-		var interval_mult := float(current_room_enemy_mutator.get("chaser_attack_interval_mult", 1.0))
-		enemy.set("attack_interval", maxf(0.2, base_interval * interval_mult))
-
+		enemy.set("attack_interval", maxf(0.2, base_interval * chaser_interval_mult))
 		var base_speed := float(enemy.get("move_speed"))
-		var speed_mult := float(current_room_enemy_mutator.get("chaser_speed_mult", 1.0))
-		enemy.set("move_speed", maxf(25.0, base_speed * speed_mult))
+		enemy.set("move_speed", maxf(25.0, base_speed * chaser_speed_mult))
 
 	if enemy_script == scripts.get("charger"):
+		var charger_damage_mult := float(current_room_enemy_mutator.get("charger_damage_mult", 1.0))
+		var charger_speed_mult := float(current_room_enemy_mutator.get("charger_speed_mult", 1.0))
+		var charger_windup_mult := float(current_room_enemy_mutator.get("charger_windup_mult", 1.0))
+		is_affected = not is_equal_approx(charger_damage_mult, 1.0) \
+			or not is_equal_approx(charger_speed_mult, 1.0) \
+			or not is_equal_approx(charger_windup_mult, 1.0)
 		var base_charge_damage := int(enemy.get("charge_damage"))
-		var charge_damage_mult := float(current_room_enemy_mutator.get("charger_damage_mult", 1.0))
-		enemy.set("charge_damage", maxi(1, int(round(float(base_charge_damage) * charge_damage_mult))))
-
+		enemy.set("charge_damage", maxi(1, int(round(float(base_charge_damage) * charger_damage_mult))))
 		var base_charge_speed := float(enemy.get("charge_speed"))
-		var charge_speed_mult := float(current_room_enemy_mutator.get("charger_speed_mult", 1.0))
-		enemy.set("charge_speed", maxf(60.0, base_charge_speed * charge_speed_mult))
-
+		enemy.set("charge_speed", maxf(60.0, base_charge_speed * charger_speed_mult))
 		var base_windup := float(enemy.get("windup_time"))
-		var windup_mult := float(current_room_enemy_mutator.get("charger_windup_mult", 1.0))
-		enemy.set("windup_time", maxf(0.2, base_windup * windup_mult))
+		enemy.set("windup_time", maxf(0.18, base_windup * charger_windup_mult))
 
-	enemy.modulate = Color(1.0, 0.92, 0.92, 1.0)
+	if enemy_script == scripts.get("archer"):
+		var archer_windup_mult := float(current_room_enemy_mutator.get("archer_windup_mult", 1.0))
+		var archer_cooldown_mult := float(current_room_enemy_mutator.get("archer_cooldown_mult", 1.0))
+		var archer_projectile_damage_mult := float(current_room_enemy_mutator.get("archer_projectile_damage_mult", 1.0))
+		is_affected = not is_equal_approx(archer_windup_mult, 1.0) \
+			or not is_equal_approx(archer_cooldown_mult, 1.0) \
+			or not is_equal_approx(archer_projectile_damage_mult, 1.0)
+		var base_windup := float(enemy.get("windup_time"))
+		enemy.set("windup_time", maxf(0.18, base_windup * archer_windup_mult))
+		var base_cooldown := float(enemy.get("attack_cooldown"))
+		enemy.set("attack_cooldown", maxf(0.6, base_cooldown * archer_cooldown_mult))
+		var base_proj_damage := int(enemy.get("projectile_damage"))
+		enemy.set("projectile_damage", maxi(1, int(round(float(base_proj_damage) * archer_projectile_damage_mult))))
+
+	if enemy_script == scripts.get("shielder"):
+		var shielder_slam_damage_mult := float(current_room_enemy_mutator.get("shielder_slam_damage_mult", 1.0))
+		var shielder_slam_windup_mult := float(current_room_enemy_mutator.get("shielder_slam_windup_mult", 1.0))
+		var shielder_speed_mult := float(current_room_enemy_mutator.get("shielder_speed_mult", 1.0))
+		is_affected = not is_equal_approx(shielder_slam_damage_mult, 1.0) \
+			or not is_equal_approx(shielder_slam_windup_mult, 1.0) \
+			or not is_equal_approx(shielder_speed_mult, 1.0)
+		var base_slam_damage := int(enemy.get("slam_damage"))
+		enemy.set("slam_damage", maxi(1, int(round(float(base_slam_damage) * shielder_slam_damage_mult))))
+		var base_slam_windup := float(enemy.get("slam_windup_time"))
+		enemy.set("slam_windup_time", maxf(0.32, base_slam_windup * shielder_slam_windup_mult))
+		var base_speed := float(enemy.get("move_speed"))
+		enemy.set("move_speed", maxf(20.0, base_speed * shielder_speed_mult))
+
+	enemy.modulate = current_room_enemy_mutator.get("enemy_tint", Color(1.0, 0.92, 0.92, 1.0))
+	if enemy.get("has_mutator_overlay") != null:
+		enemy.set("has_mutator_overlay", is_affected)
+	if enemy.get("mutator_theme_color") != null:
+		enemy.set("mutator_theme_color", current_room_enemy_mutator.get("theme_color", Color(1.0, 0.4, 0.4, 1.0)))
 
 func _pick_spawn_position_in_current_room() -> Vector2:
 	if rng == null:
