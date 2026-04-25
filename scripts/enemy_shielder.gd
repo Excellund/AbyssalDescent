@@ -238,25 +238,38 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 func _draw() -> void:
 	var attack_pulse := _get_attack_pulse()
 	var body_radius := 13.0 * body_size_scale + attack_pulse
-	var body_color := Color(0.96, 0.68, 0.26, 0.9)
-	var core_color := Color(1.0, 0.82, 0.48, 0.8)
+	var body_color := COLOR_SHIELDER_BODY
+	var core_color := COLOR_SHIELDER_CORE
 	if slam_state == SLAM_STATE_WINDUP:
-		body_color = Color(1.0, 0.74, 0.3, 1.0)
+		body_color = COLOR_SHIELDER_BODY_WINDUP
 	if slam_state == SLAM_STATE_THUMP:
-		body_color = Color(1.0, 0.82, 0.38, 1.0)
-		core_color = Color(1.0, 0.9, 0.56, 0.9)
+		body_color = COLOR_SHIELDER_BODY_THUMP
+		core_color = COLOR_SHIELDER_CORE_THUMP
 	_draw_common_body(body_radius, body_color, core_color, visual_facing_direction)
 
 	if slam_state == SLAM_STATE_WINDUP:
 		var windup_t := 1.0 - (slam_state_time_left / slam_windup_time) if slam_windup_time > 0.0 else 1.0
 		var warning_alpha := 0.28 + windup_t * 0.45
-		draw_circle(Vector2.ZERO, slam_radius, Color(1.0, 0.44, 0.2, warning_alpha * 0.18))
-		draw_arc(Vector2.ZERO, slam_radius, 0.0, TAU, 52, Color(1.0, 0.8, 0.38, warning_alpha), 3.0)
+		# Pulsing glow
+		var glow_pulse := 0.5 + 0.5 * sin(windup_t * PI * 2.0)
+		draw_circle(Vector2.ZERO, slam_radius, Color(COLOR_SHIELDER_SLAM_WARNING_GLOW.r, COLOR_SHIELDER_SLAM_WARNING_GLOW.g, COLOR_SHIELDER_SLAM_WARNING_GLOW.b, warning_alpha * (0.7 + glow_pulse * 0.3)))
+		# Inner danger ring
+		draw_arc(Vector2.ZERO, slam_radius * 0.6, 0.0, TAU, 42, Color(COLOR_SHIELDER_SLAM_WARNING_RING.r, COLOR_SHIELDER_SLAM_WARNING_RING.g, COLOR_SHIELDER_SLAM_WARNING_RING.b, warning_alpha * 0.6), 2.0)
+		# Outer danger ring (pulsing)
+		var ring_width := 3.0 + glow_pulse * 2.0
+		draw_arc(Vector2.ZERO, slam_radius, 0.0, TAU, 52, Color(COLOR_SHIELDER_SLAM_WARNING_RING.r, COLOR_SHIELDER_SLAM_WARNING_RING.g, COLOR_SHIELDER_SLAM_WARNING_RING.b, warning_alpha), ring_width)
 	if slam_state == SLAM_STATE_THUMP:
 		var thump_t := 1.0 - (slam_state_time_left / slam_thump_time) if slam_thump_time > 0.0 else 1.0
 		var shock_radius := lerpf(body_radius + 6.0, slam_radius, clampf(thump_t, 0.0, 1.0))
-		draw_circle(Vector2.ZERO, shock_radius, Color(1.0, 0.62, 0.28, 0.16))
-		draw_arc(Vector2.ZERO, shock_radius, 0.0, TAU, 52, Color(1.0, 0.9, 0.58, 0.84), 4.0)
+		# Main impact glow
+		var impact_glow_alpha := clampf(1.0 - thump_t * 1.2, 0.0, 1.0)
+		draw_circle(Vector2.ZERO, shock_radius, Color(COLOR_SHIELDER_SLAM_SHOCK_GLOW.r, COLOR_SHIELDER_SLAM_SHOCK_GLOW.g, COLOR_SHIELDER_SLAM_SHOCK_GLOW.b, impact_glow_alpha * 0.3))
+		# Expanding shock ring (main impact)
+		draw_arc(Vector2.ZERO, shock_radius, 0.0, TAU, 52, Color(COLOR_SHIELDER_SLAM_SHOCK_RING.r, COLOR_SHIELDER_SLAM_SHOCK_RING.g, COLOR_SHIELDER_SLAM_SHOCK_RING.b, impact_glow_alpha * 0.9), 5.0)
+		# Secondary fading ring (layered impact effect)
+		var secondary_radius := shock_radius * 1.15
+		var secondary_alpha := clampf((0.6 - thump_t) * 1.5, 0.0, 0.6)
+		draw_arc(Vector2.ZERO, secondary_radius, 0.0, TAU, 48, Color(COLOR_SHIELDER_SLAM_SHOCK_RING.r, COLOR_SHIELDER_SLAM_SHOCK_RING.g, COLOR_SHIELDER_SLAM_SHOCK_RING.b, secondary_alpha), 2.0)
 	
 	if not _is_finite_vec2(shield_facing) or shield_facing.length_squared() <= 0.000001:
 		shield_facing = Vector2.LEFT
@@ -276,10 +289,10 @@ func _draw() -> void:
 	if _is_finite_vec2(shield_arm) and _is_finite_vec2(shield_left) and _is_finite_vec2(shield_right):
 		var tri_area := absf((shield_left - shield_arm).cross(shield_right - shield_arm))
 		if tri_area > 0.001:
-			draw_colored_polygon(shield_points, Color(0.96, 0.74, 0.34, 0.86))
+			draw_colored_polygon(shield_points, COLOR_SHIELDER_SHIELD)
 	
 	# Shield outline
-	var shield_outline_color := Color(1.0, 0.88, 0.6, 0.7)
+	var shield_outline_color := COLOR_SHIELDER_SHIELD_OUTLINE
 	draw_line(shield_left, shield_right, shield_outline_color, 1.4)
 	draw_line(shield_arm, shield_left, shield_outline_color, 1.4)
 	draw_line(shield_arm, shield_right, shield_outline_color, 1.4)

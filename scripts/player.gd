@@ -3,6 +3,7 @@ extends CharacterBody2D
 const HEALTH_STATE_SCRIPT := preload("res://scripts/health_state.gd")
 const PLAYER_FEEDBACK_SCRIPT := preload("res://scripts/player_feedback.gd")
 const UPGRADE_SYSTEM_SCRIPT := preload("res://scripts/upgrade_system.gd")
+const ENEMY_BASE := preload("res://scripts/enemy_base.gd")
 
 signal health_changed(current_health: int, max_health: int)
 signal died
@@ -164,26 +165,26 @@ func _try_execute_attack(attack_direction: Vector2) -> void:
 	player_feedback.play_attack_swing_sound()
 
 	attack_combo_counter += 1
-	var swing_color := Color(0.99, 0.96, 0.68, 0.72)
+	var swing_color := ENEMY_BASE.COLOR_SWING_DEFAULT
 	var execution_proc := false
 	if reward_execution_edge and attack_combo_counter % execution_every == 0:
 		execution_proc = true
-		swing_color = Color(1.0, 0.58, 0.3, 0.86)
+		swing_color = ENEMY_BASE.COLOR_EXECUTION_PROC
 	var melee_context: Dictionary = upgrade_system.build_melee_attack_context(attack_damage, attack_range, attack_arc_degrees, execution_proc, execution_damage_mult)
 	attack_lock_time_left = attack_lock_duration
 	attack_lock_direction = attack_direction
 	visual_facing_direction = attack_direction
 	velocity = Vector2.ZERO
 	if reward_razor_wind:
-		swing_color = Color(0.58, 0.95, 0.86, 0.82) if not execution_proc else Color(1.0, 0.58, 0.3, 0.9)
+		swing_color = ENEMY_BASE.COLOR_SWING_RAZOR_WIND if not execution_proc else ENEMY_BASE.COLOR_EXECUTION_PROC_EXTENDED
 	player_feedback.play_attack_swing_visual(attack_direction, float(melee_context["range"]), float(melee_context["arc_degrees"]), swing_color)
 	if reward_razor_wind:
 		var wind_context: Dictionary = upgrade_system.build_razor_wind_attack_context(melee_context, razor_wind_damage_ratio, razor_wind_range_scale, razor_wind_arc_degrees, attack_damage, attack_range)
 		var wind_range := float(wind_context["range"])
-		var wind_color := Color(0.56, 1.0, 0.86, 0.62) if not execution_proc else Color(1.0, 0.62, 0.34, 0.74)
+		var wind_color := ENEMY_BASE.COLOR_SWING_RAZOR_WIND_EXTENDED if not execution_proc else ENEMY_BASE.COLOR_EXECUTION_WIND_EXTENDED
 		player_feedback.play_attack_swing_visual(attack_direction, wind_range, razor_wind_arc_degrees, wind_color, 0.14)
 	if execution_proc:
-		player_feedback.play_world_ring(global_position, 40.0, Color(1.0, 0.62, 0.34, 0.9), 0.16)
+		player_feedback.play_world_ring(global_position, 40.0, ENEMY_BASE.COLOR_EXECUTION_RING, 0.16)
 	if _perform_melee_attack(attack_direction, melee_context):
 		player_feedback.play_impact_sound()
 
@@ -252,16 +253,20 @@ func _sync_enemy_collision_exceptions() -> void:
 	for enemy_id in dash_enemy_exceptions.keys():
 		if seen_ids.has(enemy_id):
 			continue
-		var existing: PhysicsBody2D = dash_enemy_exceptions[enemy_id] as PhysicsBody2D
-		if is_instance_valid(existing):
-			remove_collision_exception_with(existing)
+		var enemy_ref = dash_enemy_exceptions[enemy_id]
+		if is_instance_valid(enemy_ref):
+			var existing: PhysicsBody2D = enemy_ref as PhysicsBody2D
+			if existing != null:
+				remove_collision_exception_with(existing)
 		dash_enemy_exceptions.erase(enemy_id)
 
 func _clear_enemy_collision_exceptions() -> void:
 	for enemy_id in dash_enemy_exceptions.keys():
-		var enemy: PhysicsBody2D = dash_enemy_exceptions[enemy_id] as PhysicsBody2D
-		if is_instance_valid(enemy):
-			remove_collision_exception_with(enemy)
+		var enemy_ref = dash_enemy_exceptions[enemy_id]
+		if is_instance_valid(enemy_ref):
+			var enemy: PhysicsBody2D = enemy_ref as PhysicsBody2D
+			if enemy != null:
+				remove_collision_exception_with(enemy)
 	dash_enemy_exceptions.clear()
 
 func _is_overlapping_enemy_body() -> bool:
@@ -456,7 +461,7 @@ func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupt
 func _apply_rupture_wave(epicenter: Vector2, source_damage: int) -> void:
 	var wave_damage := maxi(1, int(round(float(source_damage) * rupture_wave_damage_ratio)))
 	if player_feedback != null:
-		player_feedback.play_world_ring(epicenter, rupture_wave_radius * 0.85, Color(0.44, 0.96, 1.0, 0.86), 0.2)
+		player_feedback.play_world_ring(epicenter, rupture_wave_radius * 0.85, ENEMY_BASE.COLOR_RUPTURE_WAVE_RING, 0.2)
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		if not (enemy_node is Node2D):
 			continue
@@ -509,36 +514,40 @@ func _draw() -> void:
 	if dash_phasing_active:
 		var t := float(Time.get_ticks_msec()) * 0.001
 		var pulse := 0.5 + 0.5 * sin(t * 18.0)
-		var phase_color := Color(0.5, 1.0, 0.98, 0.24 + pulse * 0.22)
+		var phase_color := ENEMY_BASE.COLOR_PLAYER_DASH_PHASE
+		phase_color.a = 0.24 + pulse * 0.22
 		draw_arc(Vector2.ZERO, body_radius + 14.0 + pulse * 2.0, 0.0, TAU, 48, phase_color, 3.0)
 		var streak_dir := dash_direction if dash_direction.length_squared() > 0.000001 else facing
 		for i in range(3):
 			var offset := -streak_dir * (8.0 + float(i) * 7.0)
 			var alpha := 0.2 - float(i) * 0.05 + pulse * 0.06
-			draw_circle(offset, body_radius * (1.0 - float(i) * 0.08), Color(0.52, 1.0, 0.95, clampf(alpha, 0.04, 0.36)))
+			var streak_color := ENEMY_BASE.COLOR_PLAYER_DASH_STREAK
+			streak_color.a = clampf(alpha, 0.04, 0.36)
+			draw_circle(offset, body_radius * (1.0 - float(i) * 0.08), streak_color)
 
-	draw_circle(Vector2.ZERO, body_radius + 8.0 + speed_t * 2.0, Color(0.06, 0.24, 0.42, 0.16 + aura * 0.18))
-	draw_circle(Vector2.ZERO, body_radius + 3.4, Color(0.03, 0.06, 0.09, 0.46))
-	draw_circle(Vector2.ZERO, body_radius, Color(0.15, 0.76, 1.0, 1.0))
-	draw_circle(Vector2.ZERO, body_radius * 0.74, Color(0.08, 0.45, 0.84, 1.0))
-	draw_circle(Vector2.ZERO, body_radius * 0.42, Color(0.68, 0.92, 1.0, 0.9))
+	draw_circle(Vector2.ZERO, body_radius + 8.0 + speed_t * 2.0, Color(ENEMY_BASE.COLOR_PLAYER_GLOW.r, ENEMY_BASE.COLOR_PLAYER_GLOW.g, ENEMY_BASE.COLOR_PLAYER_GLOW.b, 0.16 + aura * 0.18))
+	draw_circle(Vector2.ZERO, body_radius + 3.4, ENEMY_BASE.COLOR_PLAYER_OUTER)
+	draw_circle(Vector2.ZERO, body_radius, ENEMY_BASE.COLOR_PLAYER_BODY)
+	draw_circle(Vector2.ZERO, body_radius * 0.74, ENEMY_BASE.COLOR_PLAYER_CORE)
+	draw_circle(Vector2.ZERO, body_radius * 0.42, ENEMY_BASE.COLOR_PLAYER_LIGHT)
 
 	if speed_t > 0.12:
-		draw_arc(Vector2.ZERO, body_radius + 6.5, -1.4, 1.4, 30, Color(0.56, 0.89, 1.0, 0.26 + speed_t * 0.25), 2.0)
+		var arc_alpha := Color(ENEMY_BASE.COLOR_PLAYER_SPEED_ARC.r, ENEMY_BASE.COLOR_PLAYER_SPEED_ARC.g, ENEMY_BASE.COLOR_PLAYER_SPEED_ARC.b, 0.26 + speed_t * 0.25)
+		draw_arc(Vector2.ZERO, body_radius + 6.5, -1.4, 1.4, 30, arc_alpha, 2.0)
 
 	var tip := facing * (body_radius + 9.0)
 	var base_center := facing * (body_radius - 1.5)
 	var fin := 4.9
 	var pointer := PackedVector2Array([tip, base_center + side * fin, base_center - side * fin])
-	draw_colored_polygon(pointer, Color(0.97, 0.99, 1.0, 0.98))
+	draw_colored_polygon(pointer, ENEMY_BASE.COLOR_PLAYER_POINTER)
 
 	var eye_pos := facing * (body_radius * 0.34) + side * 1.8
-	draw_circle(eye_pos, 2.0, Color(0.98, 1.0, 1.0, 0.95))
+	draw_circle(eye_pos, 2.0, ENEMY_BASE.COLOR_PLAYER_EYE)
 
 	var wing_l := facing * (body_radius - 2.0) + side * 6.3
 	var wing_r := facing * (body_radius - 2.0) - side * 6.3
-	draw_line(wing_l, wing_l - facing * 6.0, Color(0.85, 0.96, 1.0, 0.72), 2.0)
-	draw_line(wing_r, wing_r - facing * 6.0, Color(0.85, 0.96, 1.0, 0.72), 2.0)
+	draw_line(wing_l, wing_l - facing * 6.0, ENEMY_BASE.COLOR_PLAYER_WING, 2.0)
+	draw_line(wing_r, wing_r - facing * 6.0, ENEMY_BASE.COLOR_PLAYER_WING, 2.0)
 	_draw_hard_reward_state()
 
 func _draw_hard_reward_state() -> void:
@@ -550,8 +559,8 @@ func _draw_hard_reward_state() -> void:
 		var p0 := facing * 18.0
 		var p1 := facing * 33.0 + side * 5.0
 		var p2 := facing * 33.0 - side * 5.0
-		draw_colored_polygon(PackedVector2Array([p0, p1, p2]), Color(0.56, 1.0, 0.86, 0.8))
-		draw_line(facing * 8.0, facing * 37.0, Color(0.86, 1.0, 0.93, 0.86), 1.8)
+		draw_colored_polygon(PackedVector2Array([p0, p1, p2]), ENEMY_BASE.COLOR_RAZOR_WIND_TRIANGLE)
+		draw_line(facing * 8.0, facing * 37.0, ENEMY_BASE.COLOR_RAZOR_WIND_LINE, 1.8)
 
 	if reward_execution_edge:
 		var modulo := attack_combo_counter % execution_every
@@ -561,9 +570,11 @@ func _draw_hard_reward_state() -> void:
 		for i in range(execution_every):
 			var x := -10.0 + float(i) * 10.0
 			var lit := i < pips_lit
-			var c := Color(1.0, 0.56, 0.26, 0.92) if lit else Color(0.48, 0.32, 0.25, 0.55)
+			var c := ENEMY_BASE.COLOR_EXECUTION_PIP_LIT if lit else ENEMY_BASE.COLOR_EXECUTION_PIP_DARK
 			draw_circle(Vector2(x, -30.0), 2.4, c)
 
 	if reward_rupture_wave:
 		var pulse := 0.5 + 0.5 * sin(t * 4.2)
-		draw_arc(Vector2.ZERO, 20.0 + pulse * 2.8, 0.0, TAU, 42, Color(0.46, 0.96, 1.0, 0.3 + pulse * 0.18), 1.8)
+		var rupture_color := ENEMY_BASE.COLOR_RUPTURE_WAVE_AURA
+		rupture_color.a = 0.3 + pulse * 0.18
+		draw_arc(Vector2.ZERO, 20.0 + pulse * 2.8, 0.0, TAU, 42, rupture_color, 1.8)

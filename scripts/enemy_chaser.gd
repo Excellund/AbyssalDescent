@@ -49,6 +49,6 @@ func _draw() -> void:
 	var attack_pulse := _get_attack_pulse()
 	var body_radius := 13.0 + attack_pulse
 	var facing := visual_facing_direction if visual_facing_direction != Vector2.ZERO else Vector2.LEFT
-	var body_color := Color(0.95, 0.18, 0.26, 1.0)
-	var core_color := Color(0.62, 0.06, 0.12, 1.0)
+	var body_color := COLOR_CHASER_BODY
+	var core_color := COLOR_CHASER_CORE
 	_draw_common_body(body_radius, body_color, core_color, facing)

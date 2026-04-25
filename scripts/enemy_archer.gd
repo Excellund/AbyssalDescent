@@ -189,25 +189,38 @@ func _process_projectiles(delta: float) -> void:
 
 func _draw() -> void:
 	var body_radius := 13.0
-	var body_color := Color(0.26, 0.74, 0.96, 0.9)
-	var core_color := Color(0.55, 0.92, 1.0, 0.8)
+	var body_color := COLOR_ARCHER_BODY
+	var core_color := COLOR_ARCHER_CORE
 	_draw_common_body(body_radius, body_color, core_color, visual_facing_direction)
 	
 	# Draw telegraph during windup
 	if archer_state == STATE_WINDUP:
+		var windup_phase := 1.0 - (archer_state_time_left / windup_time) if windup_time > 0.0 else 1.0
 		var line_length := 400.0
 		var line_end := arrow_direction * line_length
-		draw_line(Vector2.ZERO, line_end, Color(0.96, 0.74, 0.26, 0.72), 2.0)
-		
-		# Draw aiming bracket
 		var bracket_size := 20.0
 		var side := Vector2(-arrow_direction.y, arrow_direction.x)
 		var aim_pos := arrow_direction * 100.0
-		draw_line(aim_pos - side * bracket_size, aim_pos + side * bracket_size, Color(0.96, 0.74, 0.26, 0.7), 1.6)
+		
+		# Background aim guide (subtle inner line)
+		draw_line(Vector2.ZERO, line_end * 0.8, Color(COLOR_ARCHER_AIM.r, COLOR_ARCHER_AIM.g, COLOR_ARCHER_AIM.b, 0.3), 1.0)
+		
+		# Main aiming line (thicker, more prominent)
+		draw_line(Vector2.ZERO, line_end, COLOR_ARCHER_AIM, 2.2)
+		
+		# Pulsing impact zone bracket (gets brighter as shot prepares)
+		var bracket_pulse := 0.6 + 0.4 * sin(windup_phase * PI * 2.0)
+		var bracket_alpha := COLOR_ARCHER_AIM_BRACKET.a * bracket_pulse
+		draw_line(aim_pos - side * bracket_size, aim_pos + side * bracket_size, Color(COLOR_ARCHER_AIM_BRACKET.r, COLOR_ARCHER_AIM_BRACKET.g, COLOR_ARCHER_AIM_BRACKET.b, bracket_alpha), 2.0)
+		
+		# Corner accent marks for target box
+		var corner_len := 8.0
+		draw_line(aim_pos + side * bracket_size - arrow_direction * corner_len, aim_pos + side * bracket_size, Color(COLOR_ARCHER_AIM.r, COLOR_ARCHER_AIM.g, COLOR_ARCHER_AIM.b, 0.7), 1.4)
+		draw_line(aim_pos - side * bracket_size - arrow_direction * corner_len, aim_pos - side * bracket_size, Color(COLOR_ARCHER_AIM.r, COLOR_ARCHER_AIM.g, COLOR_ARCHER_AIM.b, 0.7), 1.4)
 	
 	# Draw projectiles
 	for projectile in projectiles:
 		if is_instance_valid(projectile):
 			var offset := projectile.global_position - global_position
-			draw_circle(offset, 4.0, Color(0.96, 0.76, 0.28, 0.8))
+			draw_circle(offset, 4.0, COLOR_ARCHER_PROJECTILE)
 			draw_circle(offset, 2.2, Color(1.0, 0.92, 0.6, 0.9))

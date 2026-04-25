@@ -259,17 +259,17 @@ func _draw() -> void:
 	var pulse := _get_attack_pulse()
 	var body_radius := 34.0 + pulse * 0.8
 	var facing := visual_facing_direction if visual_facing_direction.length_squared() > 0.000001 else Vector2.RIGHT
-	var body_color := Color(0.78, 0.15, 0.16, 1.0)
-	var core_color := Color(0.98, 0.45, 0.2, 1.0)
+	var body_color := COLOR_BOSS_BODY
+	var core_color := COLOR_BOSS_CORE
 
 	if boss_state == STATE_TELEGRAPH:
-		body_color = Color(0.95, 0.25, 0.22, 1.0)
-		core_color = Color(1.0, 0.78, 0.28, 1.0)
+		body_color = COLOR_BOSS_BODY_TELEGRAPH
+		core_color = COLOR_BOSS_CORE_TELEGRAPH
 	if boss_state == STATE_ATTACK:
-		body_color = Color(1.0, 0.34, 0.18, 1.0)
-		core_color = Color(1.0, 0.86, 0.34, 1.0)
+		body_color = COLOR_BOSS_BODY_ATTACK
+		core_color = COLOR_BOSS_CORE_ATTACK
 
-	draw_circle(Vector2.ZERO, body_radius + 9.0, Color(0.4, 0.04, 0.06, 0.34))
+	draw_circle(Vector2.ZERO, body_radius + 9.0, COLOR_BOSS_GLOW)
 	_draw_common_body(body_radius, body_color, core_color, facing)
 
 	if boss_state == STATE_TELEGRAPH:
@@ -277,7 +277,7 @@ func _draw() -> void:
 
 	if boss_state == STATE_ATTACK and active_attack == ATTACK_CHARGE:
 		var line_end := locked_direction * 120.0
-		draw_line(Vector2.ZERO, line_end, Color(1.0, 0.84, 0.34, 0.9), 8.0)
+		draw_line(Vector2.ZERO, line_end, Color(COLOR_BOSS_CHARGE_LINE.r, COLOR_BOSS_CHARGE_LINE.g, COLOR_BOSS_CHARGE_LINE.b, 0.9), 8.0)
 
 
 func _draw_attack_telegraph() -> void:
@@ -287,11 +287,39 @@ func _draw_attack_telegraph() -> void:
 			var length := charge_speed * charge_duration * 0.72
 			var start := locked_direction * 24.0
 			var end := start + locked_direction * length
-			draw_line(start, end, Color(1.0, 0.65, 0.2, alpha), charge_width * 2.0)
-			draw_line(start, end, Color(1.0, 0.9, 0.45, minf(1.0, alpha + 0.15)), 4.0)
+			var charge_pulse := 0.5 + 0.5 * sin(telegraph_alpha * PI * 2.0)
+			
+			# Pulsing charge build-up glow
+			draw_circle(Vector2.ZERO, (end - start).length() * 0.3, Color(COLOR_BOSS_CHARGE_LINE.r, COLOR_BOSS_CHARGE_LINE.g, COLOR_BOSS_CHARGE_LINE.b, alpha * charge_pulse * 0.2))
+			
+			# Outer charge line (wider, more dramatic)
+			draw_line(start, end, Color(COLOR_BOSS_CHARGE_LINE.r, COLOR_BOSS_CHARGE_LINE.g, COLOR_BOSS_CHARGE_LINE.b, alpha * 0.6), charge_width * 2.5)
+			
+			# Inner bright core
+			draw_line(start, end, Color(COLOR_BOSS_CHARGE_LINE_INNER.r, COLOR_BOSS_CHARGE_LINE_INNER.g, COLOR_BOSS_CHARGE_LINE_INNER.b, minf(1.0, alpha + 0.15)), 4.0)
+			
+			# Impact zone accent marks
+			var side := Vector2(-locked_direction.y, locked_direction.x)
+			var impact_width := 16.0
+			draw_line(end + side * impact_width, end + side * impact_width - locked_direction * 14.0, Color(COLOR_BOSS_CHARGE_LINE_INNER.r, COLOR_BOSS_CHARGE_LINE_INNER.g, COLOR_BOSS_CHARGE_LINE_INNER.b, minf(1.0, alpha + 0.1)), 2.5)
+			draw_line(end - side * impact_width, end - side * impact_width - locked_direction * 14.0, Color(COLOR_BOSS_CHARGE_LINE_INNER.r, COLOR_BOSS_CHARGE_LINE_INNER.g, COLOR_BOSS_CHARGE_LINE_INNER.b, minf(1.0, alpha + 0.1)), 2.5)
+		
 		ATTACK_NOVA:
-			draw_circle(Vector2.ZERO, nova_radius, Color(1.0, 0.35, 0.15, alpha * 0.25))
-			draw_arc(Vector2.ZERO, nova_radius, 0.0, TAU, 56, Color(1.0, 0.74, 0.3, alpha), 4.0)
+			var nova_pulse := 0.5 + 0.5 * sin(telegraph_alpha * PI * 1.5)
+			
+			# Inner danger ring (closer threat)
+			draw_arc(Vector2.ZERO, nova_radius * 0.5, 0.0, TAU, 40, Color(COLOR_BOSS_NOVA_RING.r, COLOR_BOSS_NOVA_RING.g, COLOR_BOSS_NOVA_RING.b, alpha * 0.7), 3.0)
+			
+			# Main explosion glow (pulsing intensity)
+			draw_circle(Vector2.ZERO, nova_radius, Color(COLOR_BOSS_NOVA_GLOW.r, COLOR_BOSS_NOVA_GLOW.g, COLOR_BOSS_NOVA_GLOW.b, alpha * 0.25 * (0.7 + nova_pulse * 0.3)))
+			
+			# Outer nova ring (main danger zone)
+			var nova_width := 4.0 + nova_pulse * 2.0
+			draw_arc(Vector2.ZERO, nova_radius, 0.0, TAU, 56, Color(COLOR_BOSS_NOVA_RING.r, COLOR_BOSS_NOVA_RING.g, COLOR_BOSS_NOVA_RING.b, alpha), nova_width)
+			
+			# Secondary fading ring (aftermath indicator)
+			draw_arc(Vector2.ZERO, nova_radius * 1.2, 0.0, TAU, 48, Color(COLOR_BOSS_NOVA_RING.r, COLOR_BOSS_NOVA_RING.g, COLOR_BOSS_NOVA_RING.b, alpha * 0.3), 2.0)
+		
 		ATTACK_CLEAVE:
 			var half_arc := deg_to_rad(cleave_arc_degrees * 0.5)
 			var points := PackedVector2Array([Vector2.ZERO])
@@ -300,6 +328,15 @@ func _draw_attack_telegraph() -> void:
 				var t := float(i) / float(segments)
 				var angle := -half_arc + (half_arc * 2.0) * t
 				points.append(locked_direction.rotated(angle) * cleave_range)
-			draw_colored_polygon(points, Color(1.0, 0.45, 0.18, alpha * 0.33))
+			
+			# Main cleave fill (semi-transparent danger zone)
+			draw_colored_polygon(points, Color(COLOR_BOSS_CLEAVE_FILL.r, COLOR_BOSS_CLEAVE_FILL.g, COLOR_BOSS_CLEAVE_FILL.b, alpha * 0.4))
+			
+			# Cleave outline (sharp edges)
 			for i in range(segments):
-				draw_line(points[i + 1], points[i + 2], Color(1.0, 0.82, 0.4, alpha), 2.0)
+				draw_line(points[i + 1], points[i + 2], Color(COLOR_BOSS_CLEAVE_OUTLINE.r, COLOR_BOSS_CLEAVE_OUTLINE.g, COLOR_BOSS_CLEAVE_OUTLINE.b, alpha * 0.9), 2.5)
+			
+			# Inner sweep lines (shows slash motion)
+			var inner_radius := cleave_range * 0.4
+			draw_line(Vector2.ZERO, locked_direction.rotated(-half_arc) * inner_radius, Color(COLOR_BOSS_CLEAVE_OUTLINE.r, COLOR_BOSS_CLEAVE_OUTLINE.g, COLOR_BOSS_CLEAVE_OUTLINE.b, alpha * 0.6), 1.5)
+			draw_line(Vector2.ZERO, locked_direction.rotated(half_arc) * inner_radius, Color(COLOR_BOSS_CLEAVE_OUTLINE.r, COLOR_BOSS_CLEAVE_OUTLINE.g, COLOR_BOSS_CLEAVE_OUTLINE.b, alpha * 0.6), 1.5)

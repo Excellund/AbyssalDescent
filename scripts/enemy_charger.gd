@@ -169,8 +169,8 @@ func _draw() -> void:
 	var attack_pulse := _get_attack_pulse()
 	var body_radius := 13.0 + attack_pulse
 	var facing := visual_facing_direction if visual_facing_direction != Vector2.ZERO else Vector2.LEFT
-	var body_color := Color(0.95, 0.64, 0.18, 1.0)
-	var core_color := Color(0.74, 0.4, 0.08, 1.0)
+	var body_color := COLOR_CHARGER_BODY
+	var core_color := COLOR_CHARGER_CORE
 
 	if charger_state == STATE_WINDUP:
 		var windup_phase := 1.0 - (charger_state_time_left / windup_time) if windup_time > 0.0 else 1.0
@@ -178,12 +178,30 @@ func _draw() -> void:
 		body_color = Color(1.0, 0.72, 0.25 + pulse * 0.1, 1.0)
 	if charger_state == STATE_CHARGE:
 		body_color = Color(1.0, 0.86, 0.35, 1.0)
-		core_color = Color(0.86, 0.54, 0.1, 1.0)
+		core_color = COLOR_CHARGER_CORE_CHARGED
 
 	_draw_common_body(body_radius, body_color, core_color, facing)
 
 	if charger_state == STATE_WINDUP:
 		var preview_start := facing * (body_radius + 4.0)
 		var preview_end := preview_start + facing * charger_charge_preview_length
-		draw_line(preview_start, preview_end, Color(1.0, 0.82, 0.35, 0.78), 6.0)
-		draw_line(preview_start, preview_end, Color(1.0, 0.97, 0.72, 0.95), 2.0)
+		var windup_phase := 1.0 - (charger_state_time_left / windup_time) if windup_time > 0.0 else 1.0
+		
+		# Pulsing charge indicator (shows power building)
+		var charge_pulse := 0.5 + 0.5 * sin(windup_phase * PI * 3.0)
+		var glow_radius := body_radius + 8.0 + charge_pulse * 4.0
+		draw_circle(Vector2.ZERO, glow_radius, Color(1.0, 0.82, 0.35, 0.08 * charge_pulse))
+		
+		# Outer telegraph line (glow)
+		var outer_alpha := 0.5 + charge_pulse * 0.3
+		draw_line(preview_start, preview_end, Color(1.0, 0.82, 0.35, outer_alpha), 7.0)
+		
+		# Inner telegraph line (bright core - direction clarity)
+		draw_line(preview_start, preview_end, Color(1.0, 0.97, 0.72, 0.95), 2.2)
+		
+		# Edge accent marks showing impact zone
+		var accent_len := 12.0
+		var side := Vector2(-facing.y, facing.x)
+		var preview_impact := preview_end
+		draw_line(preview_impact + side * 8.0, preview_impact + side * 8.0 + facing * accent_len, Color(1.0, 0.88, 0.5, 0.7), 1.5)
+		draw_line(preview_impact - side * 8.0, preview_impact - side * 8.0 + facing * accent_len, Color(1.0, 0.88, 0.5, 0.7), 1.5)

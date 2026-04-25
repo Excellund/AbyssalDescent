@@ -2,6 +2,32 @@ extends Node2D
 
 const DEFAULT_IMPACT_SOUND := preload("res://sounds/impactPunch_medium_002.ogg")
 const DEFAULT_ATTACK_SWING_SOUND := preload("res://sounds/impactSoft_medium_001.ogg")
+const ENEMY_BASE := preload("res://scripts/enemy_base.gd")
+
+# === SHARED TIMING & ANIMATION HELPERS ===
+static func ease_in_out_quad(t: float) -> float:
+	"""Smooth ease-in-out quad curve. t should be in [0, 1]."""
+	if t < 0.5:
+		return 2.0 * t * t
+	else:
+		return 1.0 - pow(-2.0 * t + 2.0, 2.0) / 2.0
+
+static func pulse_sine(time: float, frequency: float) -> float:
+	"""Continuous sine pulse for smooth breathing animations."""
+	return 0.5 + 0.5 * sin(time * frequency)
+
+static func fade_curve(elapsed: float, duration: float) -> float:
+	"""Linear fade from 1.0 to 0.0 over duration."""
+	return maxf(0.0, 1.0 - elapsed / duration)
+
+# === TELEGRAPH-SPECIFIC HELPERS ===
+static func telegraph_intensity_pulse(time: float, frequency: float = 3.0) -> float:
+	"""Pulsing intensity for telegraph danger rings (0.3-1.0 range for safe alpha mult)."""
+	return 0.3 + pulse_sine(time, frequency) * 0.7
+
+static func telegraph_glow_width(base_width: float, time: float, frequency: float = 2.0) -> float:
+	"""Pulsing width expansion for telegraph rings."""
+	return base_width + pulse_sine(time, frequency) * (base_width * 0.4)
 
 var health_bar_size: Vector2 = Vector2(80.0, 10.0)
 var health_bar_offset: Vector2 = Vector2(-40.0, -42.0)
@@ -9,7 +35,7 @@ var impact_sound: AudioStream = DEFAULT_IMPACT_SOUND
 var impact_volume_db: float = -6.0
 var attack_swing_sound: AudioStream = DEFAULT_ATTACK_SWING_SOUND
 var attack_swing_volume_db: float = -10.0
-var damage_flash_color: Color = Color(0.95, 0.12, 0.12, 1.0)
+var damage_flash_color: Color = ENEMY_BASE.COLOR_DAMAGE_FLASH
 var damage_flash_alpha: float = 0.45
 var damage_flash_fade_time: float = 0.16
 
@@ -46,7 +72,7 @@ func play_attack_swing_sound() -> void:
 		return
 	attack_swing_sound_player.play()
 
-func play_attack_swing_visual(direction: Vector2, swing_range: float, arc_degrees: float, tint: Color = Color(0.99, 0.96, 0.68, 0.72), lifetime: float = 0.11) -> void:
+func play_attack_swing_visual(direction: Vector2, swing_range: float, arc_degrees: float, tint: Color = ENEMY_BASE.COLOR_SWING_DEFAULT, lifetime: float = 0.11) -> void:
 	var swing_shape := Polygon2D.new()
 	swing_shape.visible = true
 	swing_shape.color = tint
@@ -120,14 +146,14 @@ func _create_health_bar(max_health: int, current_health: int) -> void:
 	health_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	var background_style := StyleBoxFlat.new()
-	background_style.bg_color = Color(0.08, 0.08, 0.08, 0.92)
+	background_style.bg_color = ENEMY_BASE.COLOR_HEALTH_BAR_BG
 	background_style.corner_radius_top_left = 3
 	background_style.corner_radius_top_right = 3
 	background_style.corner_radius_bottom_left = 3
 	background_style.corner_radius_bottom_right = 3
 
 	var fill_style := StyleBoxFlat.new()
-	fill_style.bg_color = Color(0.18, 0.85, 0.33, 0.96)
+	fill_style.bg_color = ENEMY_BASE.COLOR_PLAYER_HEALTH_FILL
 	fill_style.corner_radius_top_left = 3
 	fill_style.corner_radius_top_right = 3
 	fill_style.corner_radius_bottom_left = 3
