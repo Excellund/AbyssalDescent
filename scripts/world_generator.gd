@@ -25,6 +25,12 @@ const ENEMY_CHARGER_SCRIPT := preload("res://scripts/enemy_charger.gd")
 @export var floor_grid_step: float = 70.0
 @export var floor_grid_fine_step: float = 35.0
 @export var arena_glow_strength: float = 0.22
+@export var rest_heal_ratio: float = 0.32
+@export var hard_room_enemy_bonus: int = 3
+@export var debug_apply_test_powers_on_start: bool = false
+@export var debug_skip_starting_boon_selection: bool = false
+@export var debug_start_power_ids: PackedStringArray = PackedStringArray()
+@export_multiline var debug_start_command: String = ""
 
 var player: Node2D
 var player_camera: Camera2D
@@ -44,14 +50,18 @@ var boon_title_text: String = ""
 var boon_choices: Array[Dictionary] = []
 var pending_initial_boon: bool = false
 var boons_taken: Array[String] = []
+var hard_rewards_taken: Array[String] = []
 var boon_confirm_lock_time: float = 0.0
 var boon_hovered_index: int = -1
 var boon_reveal_time: float = 0.0
+var reward_selection_mode: String = "boon"
 
 var current_room_size: Vector2 = Vector2.ZERO
 var current_room_static_camera: bool = true
 var current_room_label: String = ""
 var door_options: Array[Dictionary] = []
+var pending_room_reward: String = "none"
+var current_room_enemy_mutator: Dictionary = {}
 
 var boon_layer: CanvasLayer
 var boon_title_label: Label
@@ -73,8 +83,81 @@ func _ready() -> void:
 	_apply_camera_bounds_for_room(current_room_size)
 	_create_hud()
 	_create_boon_ui()
-	_open_boon_selection("Choose Starting Boon", true)
+	_apply_debug_start_powers_if_needed()
+	if debug_skip_starting_boon_selection:
+		_begin_room(_build_skirmish_profile(room_depth))
+	else:
+		_open_boon_selection("Choose Starting Boon", true, "boon")
 	queue_redraw()
+
+func start_run_with_powers(power_ids: Array[String]) -> Dictionary:
+	var applied: Array[String] = []
+	var unknown: Array[String] = []
+	if not is_instance_valid(player):
+		return {
+			"applied": applied,
+			"unknown": power_ids.duplicate()
+		}
+
+	for power_id in power_ids:
+		var id := power_id.strip_edges().to_lower()
+		if id.is_empty():
+			continue
+		if not _is_known_power_id(id):
+			unknown.append(id)
+			continue
+		if player.has_method("apply_power_for_test"):
+			if bool(player.call("apply_power_for_test", id)):
+				applied.append(id)
+			else:
+				unknown.append(id)
+		else:
+			unknown.append(id)
+
+	_update_hud()
+	return {
+		"applied": applied,
+		"unknown": unknown
+	}
+
+func start_run_with_command(command: String) -> Dictionary:
+	return start_run_with_powers(_parse_power_command(command))
+
+func _apply_debug_start_powers_if_needed() -> void:
+	if not debug_apply_test_powers_on_start:
+		return
+	var ids: Array[String] = []
+	for id in debug_start_power_ids:
+		ids.append(String(id))
+	if not debug_start_command.strip_edges().is_empty():
+		ids.append_array(_parse_power_command(debug_start_command))
+	if ids.is_empty():
+		return
+	start_run_with_powers(ids)
+
+func _parse_power_command(command: String) -> Array[String]:
+	var normalized := command.to_lower()
+	for keyword in ["start", "a", "run", "with", "these", "powers", "power", "and"]:
+		normalized = normalized.replace(keyword, " ")
+	for sep in [",", ";", "|", "\n", "\t"]:
+		normalized = normalized.replace(sep, " ")
+
+	var ids: Array[String] = []
+	for token in normalized.split(" ", false):
+		var id := token.strip_edges()
+		if id.is_empty():
+			continue
+		ids.append(id)
+	return ids
+
+func _is_known_power_id(power_id: String) -> bool:
+	for boon in _get_boon_pool():
+		if String(boon["id"]) == power_id:
+			return true
+	for reward in _get_hard_reward_pool():
+		if String(reward["id"]) == power_id:
+			return true
+	return false
 
 func _process(delta: float) -> void:
 	art_time += delta
@@ -130,46 +213,41 @@ func _on_room_cleared() -> void:
 		choosing_next_room = false
 		return
 
-	rooms_cleared += 1
-	room_depth += 1
-	if rooms_cleared >= encounter_count:
-		boss_unlocked = true
-	_open_boon_selection("Choose Boon Reward", false)
+	_advance_room_progress()
+
+	if pending_room_reward == "boon":
+		pending_room_reward = "none"
+		_open_boon_selection("Choose Boon Reward", false, "boon")
+		return
+
+	if pending_room_reward == "hard_reward":
+		pending_room_reward = "none"
+		_open_boon_selection("Choose Hard Trial Reward", false, "hard_reward")
+		return
+
+	pending_room_reward = "none"
+	_spawn_door_options()
 
 func _spawn_door_options() -> void:
 	door_options.clear()
 	choosing_next_room = true
-
-	var left_pos := Vector2(-door_distance_from_center, -40.0)
-	var right_pos := Vector2(door_distance_from_center, -40.0)
-
-	var skirmish := {
-		"label": "Skirmish",
-		"position": left_pos,
-		"color": Color(0.34, 0.78, 1.0, 0.95),
-		"kind": "encounter",
-		"profile": _build_skirmish_profile(room_depth)
-	}
-	var onslaught := {
-		"label": "Onslaught",
-		"position": right_pos,
-		"color": Color(1.0, 0.5, 0.26, 0.95),
-		"kind": "encounter",
-		"profile": _build_onslaught_profile(room_depth)
-	}
-	door_options.append(skirmish)
-
 	if boss_unlocked:
-		var boss_door := {
+		door_options.append({
 			"label": "Boss",
-			"position": right_pos,
+			"position": Vector2(0.0, -40.0),
 			"color": Color(0.95, 0.18, 0.22, 0.98),
 			"kind": "boss",
+			"icon": "boss",
 			"profile": {}
-		}
-		door_options.append(boss_door)
-	else:
-		door_options.append(onslaught)
+		})
+		return
+
+	var route_options := _roll_route_options(room_depth)
+	var positions := [Vector2(-door_distance_from_center, -40.0), Vector2(door_distance_from_center, -40.0)]
+	for i in range(mini(route_options.size(), positions.size())):
+		var option := route_options[i]
+		option["position"] = positions[i]
+		door_options.append(option)
 
 func _try_use_door() -> void:
 	if not choosing_next_room:
@@ -198,8 +276,13 @@ func _choose_door(door: Dictionary) -> void:
 	if String(door["kind"]) == "boss":
 		_begin_boss_room()
 		return
+	if String(door["kind"]) == "rest":
+		_enter_rest_site()
+		return
 
 	var profile: Dictionary = door["profile"]
+	pending_room_reward = String(door.get("reward", "none"))
+	current_room_enemy_mutator = profile.get("enemy_mutator", {})
 	_begin_room(profile)
 
 func _begin_room(profile: Dictionary) -> void:
@@ -209,8 +292,26 @@ func _begin_room(profile: Dictionary) -> void:
 	current_room_size = profile["room_size"]
 	current_room_static_camera = profile["static_camera"]
 	current_room_label = profile["label"]
+	current_room_enemy_mutator = profile.get("enemy_mutator", {})
 	_apply_camera_bounds_for_room(current_room_size)
 	active_room_enemy_count = _spawn_profile_enemies(profile)
+
+func _enter_rest_site() -> void:
+	in_boss_room = false
+	current_room_label = "Rest Site"
+	current_room_static_camera = true
+	_advance_room_progress()
+	if is_instance_valid(player) and player.has_method("heal"):
+		var player_max_health := int(player.get("max_health"))
+		var heal_amount := maxi(8, int(round(float(player_max_health) * rest_heal_ratio)))
+		player.call("heal", heal_amount)
+	_spawn_door_options()
+
+func _advance_room_progress() -> void:
+	rooms_cleared += 1
+	room_depth += 1
+	if rooms_cleared >= encounter_count:
+		boss_unlocked = true
 
 func _begin_boss_room() -> void:
 	in_boss_room = true
@@ -241,6 +342,7 @@ func _spawn_profile_enemies(profile: Dictionary) -> int:
 func _spawn_enemy_in_current_room(enemy_script: Script) -> void:
 	var enemy := CharacterBody2D.new()
 	enemy.set_script(enemy_script)
+	_apply_enemy_mutator(enemy, enemy_script)
 
 	var collision_shape := CollisionShape2D.new()
 	collision_shape.shape = CircleShape2D.new()
@@ -252,6 +354,38 @@ func _spawn_enemy_in_current_room(enemy_script: Script) -> void:
 	enemy.set("target", player)
 	if enemy.has_signal("died"):
 		enemy.died.connect(_on_room_enemy_died)
+
+func _apply_enemy_mutator(enemy: CharacterBody2D, enemy_script: Script) -> void:
+	if current_room_enemy_mutator.is_empty():
+		return
+
+	if enemy_script == ENEMY_CHASER_SCRIPT:
+		var base_damage := int(enemy.get("attack_damage"))
+		var damage_mult := float(current_room_enemy_mutator.get("chaser_damage_mult", 1.0))
+		enemy.set("attack_damage", maxi(1, int(round(float(base_damage) * damage_mult))))
+
+		var base_interval := float(enemy.get("attack_interval"))
+		var interval_mult := float(current_room_enemy_mutator.get("chaser_attack_interval_mult", 1.0))
+		enemy.set("attack_interval", maxf(0.2, base_interval * interval_mult))
+
+		var base_speed := float(enemy.get("move_speed"))
+		var speed_mult := float(current_room_enemy_mutator.get("chaser_speed_mult", 1.0))
+		enemy.set("move_speed", maxf(25.0, base_speed * speed_mult))
+
+	if enemy_script == ENEMY_CHARGER_SCRIPT:
+		var base_charge_damage := int(enemy.get("charge_damage"))
+		var charge_damage_mult := float(current_room_enemy_mutator.get("charger_damage_mult", 1.0))
+		enemy.set("charge_damage", maxi(1, int(round(float(base_charge_damage) * charge_damage_mult))))
+
+		var base_charge_speed := float(enemy.get("charge_speed"))
+		var charge_speed_mult := float(current_room_enemy_mutator.get("charger_speed_mult", 1.0))
+		enemy.set("charge_speed", maxf(60.0, base_charge_speed * charge_speed_mult))
+
+		var base_windup := float(enemy.get("windup_time"))
+		var windup_mult := float(current_room_enemy_mutator.get("charger_windup_mult", 1.0))
+		enemy.set("windup_time", maxf(0.2, base_windup * windup_mult))
+
+	enemy.modulate = Color(1.0, 0.92, 0.92, 1.0)
 
 func _pick_spawn_position_in_current_room() -> Vector2:
 	var half := current_room_size * 0.5 - Vector2.ONE * spawn_padding
@@ -314,6 +448,92 @@ func _build_onslaught_profile(depth: int) -> Dictionary:
 		"chaser_count": base_chaser_count + depth * chasers_per_room + 3,
 		"charger_count": maxi(1, (depth - chargers_start_room + 1) * chargers_per_room + 1)
 	}
+
+func _build_easy_boon_profile(depth: int) -> Dictionary:
+	var profile := _build_skirmish_profile(depth)
+	profile["label"] = "Calm Hunt"
+	profile["chaser_count"] = maxi(2, int(profile["chaser_count"]) - 1)
+	profile["charger_count"] = maxi(0, int(profile["charger_count"]) - 1)
+	profile["enemy_mutator"] = {}
+	return profile
+
+func _build_hard_trial_profile(depth: int) -> Dictionary:
+	var profile := _build_onslaught_profile(depth)
+	profile["label"] = "Savage Trial"
+	profile["chaser_count"] = int(profile["chaser_count"]) + hard_room_enemy_bonus
+	profile["charger_count"] = int(profile["charger_count"]) + 1
+	profile["enemy_mutator"] = _roll_hard_enemy_mutator()
+	return profile
+
+func _roll_route_options(depth: int) -> Array[Dictionary]:
+	var easy_option := {
+		"label": "Calm Hunt + Boon",
+		"color": Color(0.28, 0.83, 1.0, 0.95),
+		"kind": "encounter",
+		"icon": "easy",
+		"reward": "boon",
+		"profile": _build_easy_boon_profile(depth)
+	}
+	var hard_profile := _build_hard_trial_profile(depth)
+	var mutator_name := String(hard_profile["enemy_mutator"].get("name", "Frenzy"))
+	var hard_option := {
+		"label": "Savage Trial: %s" % mutator_name,
+		"color": Color(1.0, 0.46, 0.2, 0.95),
+		"kind": "encounter",
+		"icon": "hard",
+		"reward": "hard_reward",
+		"profile": hard_profile
+	}
+	var rest_option := {
+		"label": "Rest Site",
+		"color": Color(0.55, 1.0, 0.65, 0.92),
+		"kind": "rest",
+		"icon": "rest",
+		"reward": "none",
+		"profile": {}
+	}
+
+	var options := [easy_option, hard_option, rest_option]
+	var first: int = 0 if rng.randf() < 0.5 else 1
+	var chosen: Array[Dictionary] = [options[first]]
+
+	var remaining_indices: Array[int] = [0, 1, 2]
+	remaining_indices.erase(first)
+	var second_index: int = remaining_indices[rng.randi_range(0, remaining_indices.size() - 1)]
+	chosen.append(options[second_index])
+	return chosen
+
+func _roll_hard_enemy_mutator() -> Dictionary:
+	var pool: Array[Dictionary] = [
+		{
+			"name": "Blood Rush",
+			"chaser_damage_mult": 1.45,
+			"chaser_attack_interval_mult": 0.82,
+			"chaser_speed_mult": 1.08,
+			"charger_damage_mult": 1.35,
+			"charger_speed_mult": 1.0,
+			"charger_windup_mult": 0.95
+		},
+		{
+			"name": "Lightning Lunge",
+			"chaser_damage_mult": 1.12,
+			"chaser_attack_interval_mult": 0.95,
+			"chaser_speed_mult": 1.25,
+			"charger_damage_mult": 1.22,
+			"charger_speed_mult": 1.26,
+			"charger_windup_mult": 0.7
+		},
+		{
+			"name": "Siegebreak",
+			"chaser_damage_mult": 1.22,
+			"chaser_attack_interval_mult": 1.0,
+			"chaser_speed_mult": 1.02,
+			"charger_damage_mult": 1.52,
+			"charger_speed_mult": 1.12,
+			"charger_windup_mult": 0.82
+		}
+	]
+	return pool[rng.randi_range(0, pool.size() - 1)]
 
 func _create_hud() -> void:
 	var layer := CanvasLayer.new()
@@ -394,11 +614,15 @@ func _create_boon_ui() -> void:
 
 	boon_layer.visible = false
 
-func _open_boon_selection(title: String, is_initial: bool) -> void:
+func _open_boon_selection(title: String, is_initial: bool, mode: String = "boon") -> void:
 	boon_selection_active = true
 	pending_initial_boon = is_initial
 	boon_title_text = title
-	boon_choices = _roll_boon_choices(boon_choice_count)
+	reward_selection_mode = mode
+	if reward_selection_mode == "hard_reward":
+		boon_choices = _roll_hard_reward_choices(boon_choice_count)
+	else:
+		boon_choices = _roll_boon_choices(boon_choice_count)
 	boon_confirm_lock_time = boon_reveal_duration + 0.08
 	boon_reveal_time = 0.0
 	boon_hovered_index = -1
@@ -427,12 +651,17 @@ func _confirm_selected_boon(choice_index: int) -> void:
 	if choice_index < 0 or choice_index >= boon_choices.size():
 		return
 	var picked := boon_choices[choice_index]
-	_apply_boon_to_player(String(picked["id"]))
-	boons_taken.append(String(picked["name"]))
+	if reward_selection_mode == "hard_reward":
+		_apply_hard_reward_to_player(String(picked["id"]))
+		hard_rewards_taken.append(String(picked["name"]))
+	else:
+		_apply_boon_to_player(String(picked["id"]))
+		boons_taken.append(String(picked["name"]))
 
 	boon_selection_active = false
 	boon_choices.clear()
 	boon_layer.visible = false
+	reward_selection_mode = "boon"
 	_set_combat_paused(false)
 
 	if pending_initial_boon:
@@ -448,6 +677,12 @@ func _apply_boon_to_player(boon_id: String) -> void:
 	if player.has_method("apply_boon"):
 		player.call("apply_boon", boon_id)
 
+func _apply_hard_reward_to_player(reward_id: String) -> void:
+	if not is_instance_valid(player):
+		return
+	if player.has_method("apply_hard_reward"):
+		player.call("apply_hard_reward", reward_id)
+
 func _get_boon_pool() -> Array[Dictionary]:
 	return [
 		{"id": "swift_strike", "name": "Swift Strike", "desc": "Attack cooldown reduced by 14%."},
@@ -461,6 +696,30 @@ func _get_boon_pool() -> Array[Dictionary]:
 
 func _roll_boon_choices(choice_count: int) -> Array[Dictionary]:
 	var pool := _get_boon_pool()
+	var available := pool.duplicate(true)
+	var picks: Array[Dictionary] = []
+	for _i in range(mini(choice_count, available.size())):
+		var index := rng.randi_range(0, available.size() - 1)
+		picks.append(available[index])
+		available.remove_at(index)
+	return picks
+
+func _get_hard_reward_pool() -> Array[Dictionary]:
+	var razor_desc := "Attacks launch a long-range piercing wind slash."
+	var execution_desc := "Every 3rd swing is a huge execution strike."
+	var rupture_desc := "Hits detonate a damaging shockwave."
+	if is_instance_valid(player) and player.has_method("get_hard_reward_card_desc"):
+		razor_desc = String(player.call("get_hard_reward_card_desc", "razor_wind"))
+		execution_desc = String(player.call("get_hard_reward_card_desc", "execution_edge"))
+		rupture_desc = String(player.call("get_hard_reward_card_desc", "rupture_wave"))
+	return [
+		{"id": "razor_wind", "name": "Razor Wind", "desc": razor_desc},
+		{"id": "execution_edge", "name": "Execution Edge", "desc": execution_desc},
+		{"id": "rupture_wave", "name": "Rupture Wave", "desc": rupture_desc}
+	]
+
+func _roll_hard_reward_choices(choice_count: int) -> Array[Dictionary]:
+	var pool := _get_hard_reward_pool()
 	var available := pool.duplicate(true)
 	var picks: Array[Dictionary] = []
 	for _i in range(mini(choice_count, available.size())):
@@ -484,10 +743,30 @@ func _refresh_boon_ui() -> void:
 			continue
 		panel.visible = true
 		var boon := boon_choices[i]
-		label.text = "%d. %s\n%s" % [i + 1, boon["name"], boon["desc"]]
+		if reward_selection_mode == "hard_reward":
+			var reward_id := String(boon.get("id", ""))
+			var stack_count := 0
+			if is_instance_valid(player) and player.has_method("get_hard_reward_stack_count"):
+				stack_count = int(player.call("get_hard_reward_stack_count", reward_id))
+			var stack_icons := _format_stack_icons(stack_count)
+			label.text = "%d. %s\nStacks: %s\n%s" % [i + 1, boon["name"], stack_icons, boon["desc"]]
+		else:
+			label.text = "%d. %s\n%s" % [i + 1, boon["name"], boon["desc"]]
 		label.modulate = Color(0.82, 0.86, 0.94, 0.95)
 
 	_update_boon_reveal_visuals()
+
+func _format_stack_icons(stack_count: int) -> String:
+	var visible_slots := 5
+	var filled := mini(stack_count, visible_slots)
+	var icons := ""
+	for _i in range(filled):
+		icons += "◆"
+	for _i in range(visible_slots - filled):
+		icons += "◇"
+	if stack_count > visible_slots:
+		icons += "+%d" % (stack_count - visible_slots)
+	return icons
 
 func _update_boon_hover() -> void:
 	if boon_layer == null:
@@ -570,7 +849,7 @@ func _update_hud() -> void:
 	if hud_label == null:
 		return
 	if run_cleared:
-		hud_label.text = "Run Clear  Boons: %d" % boons_taken.size()
+		hud_label.text = "Run Clear  Boons: %d  Hard Rewards: %d" % [boons_taken.size(), hard_rewards_taken.size()]
 		return
 
 	if boon_selection_active:
@@ -583,12 +862,12 @@ func _update_hud() -> void:
 	if choosing_next_room:
 		var prompt := "Choose Door [E]"
 		if boss_unlocked:
-			prompt = "Choose Door [E]  (Boss Available)"
-		hud_label.text = "%s  Rooms Cleared: %d/%d\nIcon Key: + = Skirmish   >< = Onslaught   Crown = Boss   Boons: %d" % [prompt, rooms_cleared, encounter_count, boons_taken.size()]
+			prompt = "Boss Gate Open [E]"
+		hud_label.text = "%s  Rooms Cleared: %d/%d\nIcon Key: + = Easy Boon   >< = Hard Trial Reward   Cross = Rest   Crown = Boss   Boons: %d  Hard: %d" % [prompt, rooms_cleared, encounter_count, boons_taken.size(), hard_rewards_taken.size()]
 		return
 
 	var boss_text := "Unlocked" if boss_unlocked else "Locked"
-	hud_label.text = "%s  Enemies Left: %d  Boss: %s  Boons: %d" % [current_room_label, active_room_enemy_count, boss_text, boons_taken.size()]
+	hud_label.text = "%s  Enemies Left: %d  Boss: %s  Boons: %d  Hard: %d" % [current_room_label, active_room_enemy_count, boss_text, boons_taken.size(), hard_rewards_taken.size()]
 
 func _draw() -> void:
 	if current_room_size == Vector2.ZERO:
@@ -646,7 +925,7 @@ func _draw_door_icon(door: Dictionary) -> void:
 	var icon_color := Color(0.97, 0.98, 1.0, 0.96)
 	var outline_color := Color(0.08, 0.1, 0.14, 0.88)
 	var kind := String(door["kind"])
-	var label := String(door["label"])
+	var icon := String(door.get("icon", "easy"))
 
 	if kind == "boss":
 		var left_tip := door_pos + Vector2(-8.0, -5.0)
@@ -659,7 +938,7 @@ func _draw_door_icon(door: Dictionary) -> void:
 		draw_polyline(crown, icon_color, 2.0)
 		return
 
-	if label == "Onslaught":
+	if icon == "hard":
 		var left_a := door_pos + Vector2(-10.0, -8.0)
 		var left_b := door_pos + Vector2(-3.0, 0.0)
 		var left_c := door_pos + Vector2(-10.0, 8.0)
@@ -674,6 +953,17 @@ func _draw_door_icon(door: Dictionary) -> void:
 		draw_line(left_b, left_c, icon_color, 2.0)
 		draw_line(right_a, right_b, icon_color, 2.0)
 		draw_line(right_b, right_c, icon_color, 2.0)
+		return
+
+	if icon == "rest":
+		var rest_h_l := door_pos + Vector2(-8.0, 0.0)
+		var rest_h_r := door_pos + Vector2(8.0, 0.0)
+		var rest_v_t := door_pos + Vector2(0.0, -8.0)
+		var rest_v_b := door_pos + Vector2(0.0, 8.0)
+		draw_line(rest_h_l, rest_h_r, outline_color, 5.0)
+		draw_line(rest_v_t, rest_v_b, outline_color, 5.0)
+		draw_line(rest_h_l, rest_h_r, Color(0.84, 1.0, 0.86, 0.96), 3.0)
+		draw_line(rest_v_t, rest_v_b, Color(0.84, 1.0, 0.86, 0.96), 3.0)
 		return
 
 	var h_l := door_pos + Vector2(-8.0, 0.0)

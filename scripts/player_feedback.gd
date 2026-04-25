@@ -19,15 +19,12 @@ var attack_swing_sound_player: AudioStreamPlayer2D
 var damage_flash_layer: CanvasLayer
 var damage_flash_rect: ColorRect
 var damage_flash_tween: Tween
-var attack_swing_shape: Polygon2D
-var attack_swing_tween: Tween
 
 func setup(max_health: int, current_health: int) -> void:
 	_create_health_bar(max_health, current_health)
 	_create_impact_sound_player()
 	_create_attack_swing_sound_player()
 	_create_damage_flash()
-	_create_attack_swing_visual()
 
 func update_health_bar(new_health: int, new_max_health: int) -> void:
 	if health_bar == null:
@@ -49,9 +46,12 @@ func play_attack_swing_sound() -> void:
 		return
 	attack_swing_sound_player.play()
 
-func play_attack_swing_visual(direction: Vector2, swing_range: float, arc_degrees: float) -> void:
-	if attack_swing_shape == null:
-		return
+func play_attack_swing_visual(direction: Vector2, swing_range: float, arc_degrees: float, tint: Color = Color(0.99, 0.96, 0.68, 0.72), lifetime: float = 0.11) -> void:
+	var swing_shape := Polygon2D.new()
+	swing_shape.visible = true
+	swing_shape.color = tint
+	swing_shape.rotation = direction.angle()
+	add_child(swing_shape)
 
 	var points := PackedVector2Array()
 	points.push_back(Vector2.ZERO)
@@ -62,18 +62,43 @@ func play_attack_swing_visual(direction: Vector2, swing_range: float, arc_degree
 		var angle := lerpf(-half_arc, half_arc, t)
 		points.push_back(Vector2.RIGHT.rotated(angle) * swing_range)
 
-	attack_swing_shape.polygon = points
-	attack_swing_shape.rotation = direction.angle()
-	attack_swing_shape.visible = true
-	attack_swing_shape.modulate = Color(1.0, 1.0, 1.0, 0.72)
+	swing_shape.polygon = points
+	swing_shape.modulate = Color(1.0, 1.0, 1.0, tint.a)
+	swing_shape.scale = Vector2(0.92, 0.92)
 
-	if attack_swing_tween != null and attack_swing_tween.is_valid():
-		attack_swing_tween.kill()
-	attack_swing_shape.scale = Vector2(0.92, 0.92)
-	attack_swing_tween = create_tween()
+	var attack_swing_tween := create_tween()
 	attack_swing_tween.set_parallel(true)
-	attack_swing_tween.tween_property(attack_swing_shape, "modulate:a", 0.0, 0.11)
-	attack_swing_tween.tween_property(attack_swing_shape, "scale", Vector2(1.06, 1.06), 0.11)
+	attack_swing_tween.tween_property(swing_shape, "modulate:a", 0.0, lifetime)
+	attack_swing_tween.tween_property(swing_shape, "scale", Vector2(1.06, 1.06), lifetime)
+	attack_swing_tween.set_parallel(false)
+	attack_swing_tween.tween_interval(lifetime)
+	attack_swing_tween.tween_callback(swing_shape.queue_free)
+
+func play_world_ring(epicenter_global: Vector2, radius: float, color: Color, lifetime: float = 0.2) -> void:
+	var ring := Line2D.new()
+	ring.top_level = true
+	ring.global_position = Vector2.ZERO
+	ring.width = 4.0
+	ring.default_color = color
+	ring.closed = true
+	ring.antialiased = true
+	ring.z_index = 40
+
+	var points := PackedVector2Array()
+	var segments := 32
+	for i in range(segments):
+		var angle := TAU * float(i) / float(segments)
+		points.append(epicenter_global + Vector2.RIGHT.rotated(angle) * radius)
+	ring.points = points
+
+	add_child(ring)
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(ring, "modulate:a", 0.0, lifetime)
+	tween.tween_property(ring, "width", 1.0, lifetime)
+	tween.set_parallel(false)
+	tween.tween_interval(lifetime)
+	tween.tween_callback(ring.queue_free)
 
 func play_damage_flash() -> void:
 	if damage_flash_rect == null:
@@ -141,8 +166,3 @@ func _create_damage_flash() -> void:
 	damage_flash_layer.add_child(damage_flash_rect)
 	add_child(damage_flash_layer)
 
-func _create_attack_swing_visual() -> void:
-	attack_swing_shape = Polygon2D.new()
-	attack_swing_shape.visible = false
-	attack_swing_shape.color = Color(0.99, 0.96, 0.68, 0.72)
-	add_child(attack_swing_shape)

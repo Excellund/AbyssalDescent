@@ -33,6 +33,20 @@ var attack_anim_duration: float = 0.12
 var visual_facing_direction: Vector2 = Vector2.RIGHT
 var attack_lock_time_left: float = 0.0
 var attack_lock_direction: Vector2 = Vector2.RIGHT
+var attack_combo_counter: int = 0
+var reward_razor_wind: bool = false
+var reward_execution_edge: bool = false
+var reward_rupture_wave: bool = false
+var razor_wind_stacks: int = 0
+var execution_edge_stacks: int = 0
+var rupture_wave_stacks: int = 0
+var execution_every: int = 3
+var execution_damage_mult: float = 2.6
+var rupture_wave_radius: float = 82.0
+var rupture_wave_damage_ratio: float = 0.44
+var razor_wind_range_scale: float = 1.72
+var razor_wind_arc_degrees: float = 24.0
+var razor_wind_damage_ratio: float = 0.72
 
 func _ready() -> void:
 	died.connect(_restart_current_scene)
@@ -103,13 +117,28 @@ func _try_attack() -> void:
 	player_feedback.play_attack_swing_sound()
 
 	var attack_direction := _get_mouse_attack_direction()
+	attack_combo_counter += 1
+	var damage_mult := 1.0
+	var swing_color := Color(0.99, 0.96, 0.68, 0.72)
+	var execution_proc := false
+	if reward_execution_edge and attack_combo_counter % execution_every == 0:
+		damage_mult = execution_damage_mult
+		execution_proc = true
+		swing_color = Color(1.0, 0.58, 0.3, 0.86)
 	attack_lock_time_left = attack_lock_duration
 	attack_lock_direction = attack_direction
 	visual_facing_direction = attack_direction
 	velocity = Vector2.ZERO
 	dash_time_left = 0.0
-	player_feedback.play_attack_swing_visual(attack_direction, attack_range, attack_arc_degrees)
-	if _perform_melee_attack(attack_direction):
+	if reward_razor_wind:
+		swing_color = Color(0.58, 0.95, 0.86, 0.82) if not execution_proc else Color(1.0, 0.58, 0.3, 0.9)
+	player_feedback.play_attack_swing_visual(attack_direction, attack_range, attack_arc_degrees, swing_color)
+	if reward_razor_wind:
+		var wind_range := attack_range * razor_wind_range_scale
+		player_feedback.play_attack_swing_visual(attack_direction, wind_range, razor_wind_arc_degrees, Color(0.56, 1.0, 0.86, 0.62), 0.14)
+	if execution_proc:
+		player_feedback.play_world_ring(global_position, 40.0, Color(1.0, 0.62, 0.34, 0.9), 0.16)
+	if _perform_melee_attack(attack_direction, damage_mult):
 		player_feedback.play_impact_sound()
 
 func _update_attack_lock(delta: float) -> void:
@@ -209,9 +238,95 @@ func apply_boon(boon_id: String) -> void:
 		_:
 			pass
 
-func _perform_melee_attack(attack_direction: Vector2) -> bool:
+func apply_hard_reward(reward_id: String) -> void:
+	match reward_id:
+		"razor_wind":
+			reward_razor_wind = true
+			razor_wind_stacks += 1
+			razor_wind_range_scale = 1.58 + 0.14 * float(razor_wind_stacks)
+			razor_wind_damage_ratio = 0.6 + 0.12 * float(razor_wind_stacks)
+			attack_cooldown = maxf(0.1, attack_cooldown * 0.96)
+		"execution_edge":
+			reward_execution_edge = true
+			execution_edge_stacks += 1
+			execution_every = maxi(2, 4 - execution_edge_stacks)
+			execution_damage_mult = 2.2 + 0.45 * float(execution_edge_stacks)
+			attack_lock_duration = maxf(0.08, attack_lock_duration * 0.94)
+		"rupture_wave":
+			reward_rupture_wave = true
+			rupture_wave_stacks += 1
+			rupture_wave_radius = 72.0 + 10.0 * float(rupture_wave_stacks)
+			rupture_wave_damage_ratio = 0.34 + 0.1 * float(rupture_wave_stacks)
+			attack_damage += 2
+		_:
+			pass
+
+func apply_power_for_test(power_id: String) -> bool:
+	var id := power_id.strip_edges().to_lower()
+	if id.is_empty():
+		return false
+
+	var hard_ids := {
+		"razor_wind": true,
+		"execution_edge": true,
+		"rupture_wave": true
+	}
+	if hard_ids.has(id):
+		apply_hard_reward(id)
+		return true
+
+	var boon_ids := {
+		"swift_strike": true,
+		"heavy_blow": true,
+		"wide_arc": true,
+		"long_reach": true,
+		"fleet_foot": true,
+		"blink_dash": true,
+		"iron_skin": true
+	}
+	if boon_ids.has(id):
+		apply_boon(id)
+		return true
+
+	return false
+
+func get_hard_reward_card_desc(reward_id: String) -> String:
+	match reward_id:
+		"razor_wind":
+			var next_stack := razor_wind_stacks + 1
+			var next_range := 1.58 + 0.14 * float(next_stack)
+			var next_damage := 0.6 + 0.12 * float(next_stack)
+			return "Next: forward wind slash at %d%% range and %d%% damage." % [int(round(next_range * 100.0)), int(round(next_damage * 100.0))]
+		"execution_edge":
+			var next_stack := execution_edge_stacks + 1
+			var next_every := maxi(2, 4 - next_stack)
+			var next_mult := 2.2 + 0.45 * float(next_stack)
+			return "Next: execution every %d swings, %d%% execution damage." % [next_every, int(round(next_mult * 100.0))]
+		"rupture_wave":
+			var next_stack := rupture_wave_stacks + 1
+			var next_radius := 72.0 + 10.0 * float(next_stack)
+			var next_wave_damage := 0.34 + 0.1 * float(next_stack)
+			return "Next: rupture radius %d, wave deals %d%% of hit damage." % [int(round(next_radius)), int(round(next_wave_damage * 100.0))]
+		_:
+			return "Enhances this power."
+
+func get_hard_reward_stack_count(reward_id: String) -> int:
+	match reward_id:
+		"razor_wind":
+			return razor_wind_stacks
+		"execution_edge":
+			return execution_edge_stacks
+		"rupture_wave":
+			return rupture_wave_stacks
+		_:
+			return 0
+
+func _perform_melee_attack(attack_direction: Vector2, damage_mult: float = 1.0) -> bool:
 	var did_hit := false
+	var strike_damage := maxi(1, int(round(float(attack_damage) * damage_mult)))
 	var max_angle_radians := deg_to_rad(attack_arc_degrees * 0.5)
+
+	var hit_enemy_ids: Dictionary = {}
 
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		if not (enemy_node is Node2D):
@@ -220,16 +335,70 @@ func _perform_melee_attack(attack_direction: Vector2) -> bool:
 			continue
 
 		var enemy_body := enemy_node as Node2D
+		var enemy_id := enemy_body.get_instance_id()
+		if hit_enemy_ids.has(enemy_id):
+			continue
+
 		var to_enemy := enemy_body.global_position - global_position
 		if to_enemy.length() > attack_range:
 			continue
 		if attack_direction.angle_to(to_enemy.normalized()) > max_angle_radians:
 			continue
 
-		enemy_node.call("take_damage", attack_damage)
+		enemy_node.call("take_damage", strike_damage)
+		hit_enemy_ids[enemy_id] = true
+		if reward_rupture_wave:
+			_apply_rupture_wave(enemy_body.global_position, strike_damage, hit_enemy_ids)
 		did_hit = true
 
+	if reward_razor_wind:
+		did_hit = _apply_razor_wind(attack_direction, strike_damage, hit_enemy_ids) or did_hit
+
 	return did_hit
+
+func _apply_razor_wind(attack_direction: Vector2, source_damage: int, hit_enemy_ids: Dictionary) -> bool:
+	var did_hit := false
+	var wind_range := attack_range * razor_wind_range_scale
+	var wind_half_arc := deg_to_rad(razor_wind_arc_degrees * 0.5)
+	var wind_damage := maxi(1, int(round(float(source_damage) * razor_wind_damage_ratio)))
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if not enemy_node.has_method("take_damage"):
+			continue
+		var enemy_body := enemy_node as Node2D
+		var enemy_id := enemy_body.get_instance_id()
+		if hit_enemy_ids.has(enemy_id):
+			continue
+		var to_enemy := enemy_body.global_position - global_position
+		if to_enemy.length() > wind_range:
+			continue
+		if attack_direction.angle_to(to_enemy.normalized()) > wind_half_arc:
+			continue
+		enemy_node.call("take_damage", wind_damage)
+		hit_enemy_ids[enemy_id] = true
+		if reward_rupture_wave:
+			_apply_rupture_wave(enemy_body.global_position, wind_damage, hit_enemy_ids)
+		did_hit = true
+	return did_hit
+
+func _apply_rupture_wave(epicenter: Vector2, source_damage: int, hit_enemy_ids: Dictionary) -> void:
+	var wave_damage := maxi(1, int(round(float(source_damage) * rupture_wave_damage_ratio)))
+	if player_feedback != null:
+		player_feedback.play_world_ring(epicenter, rupture_wave_radius * 0.85, Color(0.44, 0.96, 1.0, 0.86), 0.2)
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if not enemy_node.has_method("take_damage"):
+			continue
+		var enemy_body := enemy_node as Node2D
+		var enemy_id := enemy_body.get_instance_id()
+		if hit_enemy_ids.has(enemy_id):
+			continue
+		if enemy_body.global_position.distance_to(epicenter) > rupture_wave_radius:
+			continue
+		enemy_node.call("take_damage", wave_damage)
+		hit_enemy_ids[enemy_id] = true
 
 func _restart_current_scene() -> void:
 	if scene_restart_queued:
@@ -293,3 +462,31 @@ func _draw() -> void:
 	var wing_r := facing * (body_radius - 2.0) - side * 6.3
 	draw_line(wing_l, wing_l - facing * 6.0, Color(0.85, 0.96, 1.0, 0.72), 2.0)
 	draw_line(wing_r, wing_r - facing * 6.0, Color(0.85, 0.96, 1.0, 0.72), 2.0)
+	_draw_hard_reward_state()
+
+func _draw_hard_reward_state() -> void:
+	var t := float(Time.get_ticks_msec()) * 0.001
+
+	if reward_razor_wind:
+		var facing := visual_facing_direction if visual_facing_direction.length_squared() > 0.000001 else Vector2.RIGHT
+		var side := Vector2(-facing.y, facing.x)
+		var p0 := facing * 18.0
+		var p1 := facing * 33.0 + side * 5.0
+		var p2 := facing * 33.0 - side * 5.0
+		draw_colored_polygon(PackedVector2Array([p0, p1, p2]), Color(0.56, 1.0, 0.86, 0.8))
+		draw_line(facing * 8.0, facing * 37.0, Color(0.86, 1.0, 0.93, 0.86), 1.8)
+
+	if reward_execution_edge:
+		var modulo := attack_combo_counter % execution_every
+		var pips_lit := modulo
+		if pips_lit == 0 and attack_combo_counter > 0:
+			pips_lit = execution_every
+		for i in range(execution_every):
+			var x := -10.0 + float(i) * 10.0
+			var lit := i < pips_lit
+			var c := Color(1.0, 0.56, 0.26, 0.92) if lit else Color(0.48, 0.32, 0.25, 0.55)
+			draw_circle(Vector2(x, -30.0), 2.4, c)
+
+	if reward_rupture_wave:
+		var pulse := 0.5 + 0.5 * sin(t * 4.2)
+		draw_arc(Vector2.ZERO, 20.0 + pulse * 2.8, 0.0, TAU, 42, Color(0.46, 0.96, 1.0, 0.3 + pulse * 0.18), 1.8)
