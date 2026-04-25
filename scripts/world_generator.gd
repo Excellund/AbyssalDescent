@@ -2,6 +2,7 @@ extends Node2D
 
 const ENEMY_CHASER_SCRIPT := preload("res://scripts/enemy_chaser.gd")
 const ENEMY_CHARGER_SCRIPT := preload("res://scripts/enemy_charger.gd")
+const ENEMY_BOSS_SCRIPT := preload("res://scripts/enemy_boss.gd")
 const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
 
 @export var player_path: NodePath = NodePath("Player")
@@ -314,15 +315,22 @@ func _begin_boss_room() -> void:
 	in_boss_room = true
 	current_room_size = Vector2(1260.0, 900.0)
 	current_room_static_camera = false
-	current_room_label = "Boss Chamber"
+	current_room_label = "Boss Chamber: The Warden"
 	_apply_camera_bounds_for_room(current_room_size)
-	active_room_enemy_count = 0
-	for _i in range(boss_chaser_count):
-		_spawn_enemy_in_current_room(ENEMY_CHASER_SCRIPT)
-		active_room_enemy_count += 1
-	for _i in range(boss_charger_count):
-		_spawn_enemy_in_current_room(ENEMY_CHARGER_SCRIPT)
-		active_room_enemy_count += 1
+	active_room_enemy_count = 1
+	var boss := CharacterBody2D.new()
+	boss.set_script(ENEMY_BOSS_SCRIPT)
+
+	var collision_shape := CollisionShape2D.new()
+	collision_shape.shape = CircleShape2D.new()
+	collision_shape.shape.radius = 34.0
+	boss.add_child(collision_shape)
+
+	boss.global_position = Vector2(0.0, -30.0)
+	add_child(boss)
+	boss.set("target", player)
+	if boss.has_signal("died"):
+		boss.died.connect(_on_room_enemy_died)
 
 func _spawn_profile_enemies(profile: Dictionary) -> int:
 	var total := 0
@@ -836,6 +844,10 @@ func _update_hud() -> void:
 		if boss_unlocked:
 			prompt = "Boss Gate Open [E]"
 		hud_label.text = "%s  Rooms Cleared: %d/%d\nIcon Key: + = Easy Boon   >< = Hard Trial Reward   Cross = Rest   Crown = Boss   Boons: %d  Hard: %d" % [prompt, rooms_cleared, encounter_count, boons_taken.size(), hard_rewards_taken.size()]
+		return
+
+	if in_boss_room and active_room_enemy_count > 0:
+		hud_label.text = "%s  Enemies Left: %d\nBoss Telegraphs: Line Charge, Ring Nova, Cone Cleave" % [current_room_label, active_room_enemy_count]
 		return
 
 	var boss_text := "Unlocked" if boss_unlocked else "Locked"

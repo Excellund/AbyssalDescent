@@ -326,7 +326,7 @@ func _perform_melee_attack(attack_direction: Vector2, damage_mult: float = 1.0) 
 	var strike_damage := maxi(1, int(round(float(attack_damage) * damage_mult)))
 	var max_angle_radians := deg_to_rad(attack_arc_degrees * 0.5)
 
-	var hit_enemy_ids: Dictionary = {}
+	var melee_hit_enemy_ids: Dictionary = {}
 
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		if not (enemy_node is Node2D):
@@ -336,7 +336,7 @@ func _perform_melee_attack(attack_direction: Vector2, damage_mult: float = 1.0) 
 
 		var enemy_body := enemy_node as Node2D
 		var enemy_id := enemy_body.get_instance_id()
-		if hit_enemy_ids.has(enemy_id):
+		if melee_hit_enemy_ids.has(enemy_id):
 			continue
 
 		var to_enemy := enemy_body.global_position - global_position
@@ -346,21 +346,22 @@ func _perform_melee_attack(attack_direction: Vector2, damage_mult: float = 1.0) 
 			continue
 
 		enemy_node.call("take_damage", strike_damage)
-		hit_enemy_ids[enemy_id] = true
+		melee_hit_enemy_ids[enemy_id] = true
 		if reward_rupture_wave:
-			_apply_rupture_wave(enemy_body.global_position, strike_damage, hit_enemy_ids)
+			_apply_rupture_wave(enemy_body.global_position, strike_damage)
 		did_hit = true
 
 	if reward_razor_wind:
-		did_hit = _apply_razor_wind(attack_direction, strike_damage, hit_enemy_ids) or did_hit
+		did_hit = _apply_razor_wind(attack_direction, strike_damage) or did_hit
 
 	return did_hit
 
-func _apply_razor_wind(attack_direction: Vector2, source_damage: int, hit_enemy_ids: Dictionary) -> bool:
+func _apply_razor_wind(attack_direction: Vector2, source_damage: int) -> bool:
 	var did_hit := false
 	var wind_range := attack_range * razor_wind_range_scale
 	var wind_half_arc := deg_to_rad(razor_wind_arc_degrees * 0.5)
 	var wind_damage := maxi(1, int(round(float(source_damage) * razor_wind_damage_ratio)))
+	var wind_hit_enemy_ids: Dictionary = {}
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		if not (enemy_node is Node2D):
 			continue
@@ -368,7 +369,7 @@ func _apply_razor_wind(attack_direction: Vector2, source_damage: int, hit_enemy_
 			continue
 		var enemy_body := enemy_node as Node2D
 		var enemy_id := enemy_body.get_instance_id()
-		if hit_enemy_ids.has(enemy_id):
+		if wind_hit_enemy_ids.has(enemy_id):
 			continue
 		var to_enemy := enemy_body.global_position - global_position
 		if to_enemy.length() > wind_range:
@@ -376,13 +377,13 @@ func _apply_razor_wind(attack_direction: Vector2, source_damage: int, hit_enemy_
 		if attack_direction.angle_to(to_enemy.normalized()) > wind_half_arc:
 			continue
 		enemy_node.call("take_damage", wind_damage)
-		hit_enemy_ids[enemy_id] = true
+		wind_hit_enemy_ids[enemy_id] = true
 		if reward_rupture_wave:
-			_apply_rupture_wave(enemy_body.global_position, wind_damage, hit_enemy_ids)
+			_apply_rupture_wave(enemy_body.global_position, wind_damage)
 		did_hit = true
 	return did_hit
 
-func _apply_rupture_wave(epicenter: Vector2, source_damage: int, hit_enemy_ids: Dictionary) -> void:
+func _apply_rupture_wave(epicenter: Vector2, source_damage: int) -> void:
 	var wave_damage := maxi(1, int(round(float(source_damage) * rupture_wave_damage_ratio)))
 	if player_feedback != null:
 		player_feedback.play_world_ring(epicenter, rupture_wave_radius * 0.85, Color(0.44, 0.96, 1.0, 0.86), 0.2)
@@ -392,13 +393,9 @@ func _apply_rupture_wave(epicenter: Vector2, source_damage: int, hit_enemy_ids: 
 		if not enemy_node.has_method("take_damage"):
 			continue
 		var enemy_body := enemy_node as Node2D
-		var enemy_id := enemy_body.get_instance_id()
-		if hit_enemy_ids.has(enemy_id):
-			continue
 		if enemy_body.global_position.distance_to(epicenter) > rupture_wave_radius:
 			continue
 		enemy_node.call("take_damage", wave_damage)
-		hit_enemy_ids[enemy_id] = true
 
 func _restart_current_scene() -> void:
 	if scene_restart_queued:

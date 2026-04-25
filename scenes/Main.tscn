@@ -5,6 +5,8 @@
 
 [node name="Main" type="Node2D" unique_id=1680556229]
 script = ExtResource("2_jxm8r")
+debug_apply_test_powers_on_start = true
+debug_skip_starting_boon_selection = true
 debug_start_power_ids = PackedStringArray("razor_wind", "rupture_wave")
 
 [node name="Player" parent="." unique_id=1831438957 instance=ExtResource("1_elqb8")]
