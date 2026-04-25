@@ -29,6 +29,11 @@ const DEBUG_RUN_FIRST_BOSS := 1
 @export var floor_grid_step: float = 70.0
 @export var floor_grid_fine_step: float = 35.0
 @export var arena_glow_strength: float = 0.22
+@export var normal_room_music: AudioStream
+@export var boss_room_music: AudioStream
+@export var music_volume_db: float = -10.0
+@export var music_intro_fade_duration: float = 1.6
+@export var music_crossfade_duration: float = 0.75
 @export var rest_heal_ratio: float = 0.32
 @export var hard_room_enemy_bonus: int = 3
 @export var debug_apply_test_powers_on_start: bool = false
@@ -77,6 +82,8 @@ var boon_card_rects: Array[Rect2] = []
 var boon_backdrop: ColorRect
 var hud_panel: Panel
 var art_time: float = 0.0
+var music_players: Array[AudioStreamPlayer] = []
+var active_music_player_index: int = -1
 
 func _ready() -> void:
 	rng.randomize()
@@ -88,6 +95,8 @@ func _ready() -> void:
 	current_room_size = room_base_size
 	current_room_label = "Starting Chamber"
 	_apply_camera_bounds_for_room(current_room_size)
+	_create_music_players()
+	_play_room_music(false, false, music_intro_fade_duration)
 	_create_hud()
 	_create_boon_ui()
 	_apply_debug_start_powers_if_needed()
@@ -355,6 +364,7 @@ func _begin_room(profile: Dictionary) -> void:
 	if profile.is_empty():
 		return
 	in_boss_room = false
+	_play_room_music(false)
 	current_room_size = profile["room_size"]
 	current_room_static_camera = profile["static_camera"]
 	current_room_label = profile["label"]
@@ -364,6 +374,7 @@ func _begin_room(profile: Dictionary) -> void:
 
 func _enter_rest_site() -> void:
 	in_boss_room = false
+	_play_room_music(false)
 	current_room_label = "Rest Site"
 	current_room_static_camera = true
 	_advance_room_progress()
@@ -381,6 +392,7 @@ func _advance_room_progress() -> void:
 
 func _begin_boss_room() -> void:
 	in_boss_room = true
+	_play_room_music(true)
 	current_room_size = Vector2(1260.0, 900.0)
 	current_room_static_camera = false
 	current_room_label = "Boss Chamber: The Warden"
@@ -427,6 +439,56 @@ func _spawn_enemy_in_current_room(enemy_script: Script) -> void:
 	enemy.set("target", player)
 	if enemy.has_signal("died"):
 		enemy.died.connect(_on_room_enemy_died)
+
+func _create_music_players() -> void:
+	music_players.clear()
+	for _i in range(2):
+		var player := AudioStreamPlayer.new()
+		player.autoplay = false
+		player.volume_db = -60.0
+		add_child(player)
+		music_players.append(player)
+
+func _play_room_music(is_boss_room: bool, instant: bool = false, fade_duration: float = -1.0) -> void:
+	if music_players.size() < 2:
+		return
+
+	var target_stream: AudioStream = boss_room_music if is_boss_room else normal_room_music
+	if target_stream == null:
+		return
+
+	if active_music_player_index >= 0 and active_music_player_index < music_players.size():
+		var current_player := music_players[active_music_player_index]
+		if current_player.stream == target_stream and current_player.playing:
+			return
+
+	var next_index := 0 if active_music_player_index != 0 else 1
+	var incoming := music_players[next_index]
+	var outgoing: AudioStreamPlayer = null
+	if active_music_player_index >= 0 and active_music_player_index < music_players.size():
+		outgoing = music_players[active_music_player_index]
+
+	incoming.stream = target_stream
+	incoming.volume_db = music_volume_db if instant else -60.0
+	incoming.play()
+
+	if instant:
+		if outgoing != null and outgoing != incoming:
+			outgoing.stop()
+		active_music_player_index = next_index
+		return
+
+	var fade_time := fade_duration
+	if fade_time < 0.0:
+		fade_time = music_crossfade_duration
+	fade_time = maxf(0.05, fade_time)
+	var tween := create_tween()
+	tween.tween_property(incoming, "volume_db", music_volume_db, fade_time)
+	if outgoing != null and outgoing.playing and outgoing != incoming:
+		tween.parallel().tween_property(outgoing, "volume_db", -60.0, fade_time)
+		tween.tween_callback(outgoing.stop)
+
+	active_music_player_index = next_index
 
 func _apply_enemy_mutator(enemy: CharacterBody2D, enemy_script: Script) -> void:
 	if current_room_enemy_mutator.is_empty():

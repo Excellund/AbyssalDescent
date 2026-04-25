@@ -2,12 +2,14 @@
 
 [ext_resource type="PackedScene" uid="uid://drax5neg5nl7r" path="res://scenes/Player.tscn" id="1_elqb8"]
 [ext_resource type="Script" uid="uid://babey36ee0m00" path="res://scripts/world_generator.gd" id="2_jxm8r"]
+[ext_resource type="AudioStream" uid="uid://by0stfy1g1ca" path="res://music/cynicbattleloop.ogg" id="2_rarhs"]
+[ext_resource type="AudioStream" uid="uid://dgjrw5cngi4a8" path="res://music/Heated Lands - MP3.mp3" id="3_vcsgt"]
 
 [node name="Main" type="Node2D" unique_id=1680556229]
 script = ExtResource("2_jxm8r")
-debug_apply_test_powers_on_start = true
-debug_skip_starting_boon_selection = true
+normal_room_music = ExtResource("2_rarhs")
+boss_room_music = ExtResource("3_vcsgt")
+music_volume_db = -34.835
 debug_start_power_ids = PackedStringArray("razor_wind", "rupture_wave")
-debug_run_state = 1
 
 [node name="Player" parent="." unique_id=1831438957 instance=ExtResource("1_elqb8")]
