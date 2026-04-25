@@ -120,17 +120,22 @@ func _get_current_health() -> int:
 
 func _draw_common_body(body_radius: float, body_color: Color, core_color: Color, facing: Vector2) -> void:
 	var side := Vector2(-facing.y, facing.x)
-	var outer_color := Color(0.12, 0.02, 0.04, 0.44)
+	var outer_color := Color(0.1, 0.02, 0.04, 0.46)
 	
+	draw_circle(Vector2.ZERO, body_radius + 6.2, Color(body_color.r * 0.6, body_color.g * 0.3, body_color.b * 0.3, 0.14))
 	draw_circle(Vector2.ZERO, body_radius + 3.0, outer_color)
 	draw_circle(Vector2.ZERO, body_radius, body_color)
 	draw_circle(Vector2.ZERO, body_radius * 0.72, core_color)
+	draw_circle(Vector2.ZERO, body_radius * 0.38, Color(1.0, 0.9, 0.88, 0.2))
 
 	var horn_tip := facing * (body_radius + 8.0)
 	var horn_base := facing * (body_radius - 2.0)
 	var horn_w := 4.6
 	var horn := PackedVector2Array([horn_tip, horn_base + side * horn_w, horn_base - side * horn_w])
 	draw_colored_polygon(horn, Color(1.0, 0.9, 0.9, 0.92))
+
+	var eye := facing * (body_radius * 0.34) + side * 2.0
+	draw_circle(eye, 1.8, Color(1.0, 0.96, 0.94, 0.9))
 
 	var spike_l := side * (body_radius - 1.0)
 	var spike_r := -side * (body_radius - 1.0)

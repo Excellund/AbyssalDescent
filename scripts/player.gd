@@ -265,19 +265,29 @@ func _get_current_health() -> int:
 func _draw() -> void:
 	var attack_t := 1.0 - (attack_anim_time_left / attack_anim_duration) if attack_anim_duration > 0.0 else 1.0
 	var attack_pulse := sin(attack_t * PI) * 1.9 if attack_anim_time_left > 0.0 else 0.0
+	var speed_t := clampf(velocity.length() / maxf(1.0, max_speed), 0.0, 1.0)
 	var body_radius := 14.0 + attack_pulse
 	var facing := visual_facing_direction if visual_facing_direction != Vector2.ZERO else Vector2.RIGHT
 	var side := Vector2(-facing.y, facing.x)
+	var aura := 0.35 + speed_t * 0.5
 
-	draw_circle(Vector2.ZERO, body_radius + 3.0, Color(0.03, 0.06, 0.09, 0.42))
-	draw_circle(Vector2.ZERO, body_radius, Color(0.12, 0.72, 0.98, 1.0))
-	draw_circle(Vector2.ZERO, body_radius * 0.7, Color(0.07, 0.42, 0.78, 1.0))
+	draw_circle(Vector2.ZERO, body_radius + 8.0 + speed_t * 2.0, Color(0.06, 0.24, 0.42, 0.16 + aura * 0.18))
+	draw_circle(Vector2.ZERO, body_radius + 3.4, Color(0.03, 0.06, 0.09, 0.46))
+	draw_circle(Vector2.ZERO, body_radius, Color(0.15, 0.76, 1.0, 1.0))
+	draw_circle(Vector2.ZERO, body_radius * 0.74, Color(0.08, 0.45, 0.84, 1.0))
+	draw_circle(Vector2.ZERO, body_radius * 0.42, Color(0.68, 0.92, 1.0, 0.9))
+
+	if speed_t > 0.12:
+		draw_arc(Vector2.ZERO, body_radius + 6.5, -1.4, 1.4, 30, Color(0.56, 0.89, 1.0, 0.26 + speed_t * 0.25), 2.0)
 
 	var tip := facing * (body_radius + 9.0)
 	var base_center := facing * (body_radius - 1.5)
 	var fin := 4.9
 	var pointer := PackedVector2Array([tip, base_center + side * fin, base_center - side * fin])
-	draw_colored_polygon(pointer, Color(0.96, 0.99, 1.0, 0.95))
+	draw_colored_polygon(pointer, Color(0.97, 0.99, 1.0, 0.98))
+
+	var eye_pos := facing * (body_radius * 0.34) + side * 1.8
+	draw_circle(eye_pos, 2.0, Color(0.98, 1.0, 1.0, 0.95))
 
 	var wing_l := facing * (body_radius - 2.0) + side * 6.3
 	var wing_r := facing * (body_radius - 2.0) - side * 6.3

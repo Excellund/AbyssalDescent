@@ -22,6 +22,9 @@ const ENEMY_CHARGER_SCRIPT := preload("res://scripts/enemy_charger.gd")
 @export var boon_choice_count: int = 3
 @export var camera_player_margin: float = 18.0
 @export var boon_reveal_duration: float = 0.22
+@export var floor_grid_step: float = 70.0
+@export var floor_grid_fine_step: float = 35.0
+@export var arena_glow_strength: float = 0.22
 
 var player: Node2D
 var player_camera: Camera2D
@@ -55,6 +58,9 @@ var boon_title_label: Label
 var boon_card_panels: Array[Panel] = []
 var boon_card_labels: Array[Label] = []
 var boon_card_rects: Array[Rect2] = []
+var boon_backdrop: ColorRect
+var hud_panel: Panel
+var art_time: float = 0.0
 
 func _ready() -> void:
 	rng.randomize()
@@ -71,6 +77,7 @@ func _ready() -> void:
 	queue_redraw()
 
 func _process(delta: float) -> void:
+	art_time += delta
 	if boon_selection_active:
 		_update_boon_selection_input(delta)
 		_update_hud()
@@ -313,10 +320,31 @@ func _create_hud() -> void:
 	layer.layer = 90
 	add_child(layer)
 
+	hud_panel = Panel.new()
+	hud_panel.position = Vector2(12.0, 10.0)
+	hud_panel.custom_minimum_size = Vector2(980.0, 74.0)
+	var hud_style := StyleBoxFlat.new()
+	hud_style.bg_color = Color(0.03, 0.05, 0.08, 0.78)
+	hud_style.border_color = Color(0.45, 0.65, 0.88, 0.82)
+	hud_style.border_width_left = 2
+	hud_style.border_width_top = 2
+	hud_style.border_width_right = 2
+	hud_style.border_width_bottom = 2
+	hud_style.corner_radius_top_left = 8
+	hud_style.corner_radius_top_right = 8
+	hud_style.corner_radius_bottom_left = 8
+	hud_style.corner_radius_bottom_right = 8
+	hud_panel.add_theme_stylebox_override("panel", hud_style)
+	layer.add_child(hud_panel)
+
 	hud_label = Label.new()
-	hud_label.position = Vector2(16.0, 12.0)
+	hud_label.position = Vector2(16.0, 10.0)
 	hud_label.add_theme_font_size_override("font_size", 20)
-	layer.add_child(hud_label)
+	hud_label.add_theme_color_override("font_color", Color(0.9, 0.96, 1.0, 0.98))
+	hud_label.add_theme_color_override("font_shadow_color", Color(0.02, 0.04, 0.06, 0.95))
+	hud_label.add_theme_constant_override("shadow_offset_x", 2)
+	hud_label.add_theme_constant_override("shadow_offset_y", 2)
+	hud_panel.add_child(hud_label)
 	_update_hud()
 
 func _create_boon_ui() -> void:
@@ -324,9 +352,23 @@ func _create_boon_ui() -> void:
 	boon_layer.layer = 130
 	add_child(boon_layer)
 
+	boon_backdrop = ColorRect.new()
+	boon_backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	boon_backdrop.offset_left = 0.0
+	boon_backdrop.offset_top = 0.0
+	boon_backdrop.offset_right = 0.0
+	boon_backdrop.offset_bottom = 0.0
+	boon_backdrop.color = Color(0.01, 0.02, 0.05, 0.8)
+	boon_backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	boon_layer.add_child(boon_backdrop)
+
 	boon_title_label = Label.new()
-	boon_title_label.position = Vector2(430.0, 80.0)
+	boon_title_label.position = Vector2(350.0, 76.0)
 	boon_title_label.add_theme_font_size_override("font_size", 32)
+	boon_title_label.add_theme_color_override("font_color", Color(0.93, 0.97, 1.0, 1.0))
+	boon_title_label.add_theme_color_override("font_shadow_color", Color(0.01, 0.02, 0.04, 0.95))
+	boon_title_label.add_theme_constant_override("shadow_offset_x", 2)
+	boon_title_label.add_theme_constant_override("shadow_offset_y", 2)
 	boon_layer.add_child(boon_title_label)
 
 	boon_card_panels.clear()
@@ -334,13 +376,16 @@ func _create_boon_ui() -> void:
 	boon_card_rects.clear()
 	for i in range(boon_choice_count):
 		var panel := Panel.new()
-		panel.position = Vector2(140.0, 160.0 + i * 130.0)
-		panel.custom_minimum_size = Vector2(980.0, 112.0)
+		panel.position = Vector2(220.0, 164.0 + i * 138.0)
+		panel.custom_minimum_size = Vector2(1460.0, 118.0)
 		boon_layer.add_child(panel)
 
 		var option_label := Label.new()
 		option_label.position = Vector2(18.0, 14.0)
 		option_label.add_theme_font_size_override("font_size", 22)
+		option_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
+		option_label.add_theme_constant_override("shadow_offset_x", 2)
+		option_label.add_theme_constant_override("shadow_offset_y", 2)
 		panel.add_child(option_label)
 
 		boon_card_panels.append(panel)
@@ -465,24 +510,29 @@ func _apply_boon_card_styles(hovered_index: int) -> void:
 	for i in range(boon_card_panels.size()):
 		var panel := boon_card_panels[i]
 		var style := StyleBoxFlat.new()
+		var t := float(i) / maxf(1.0, float(maxi(1, boon_choice_count - 1)))
+		var cool := Color(0.08, 0.17, 0.28, 0.96).lerp(Color(0.12, 0.2, 0.34, 0.96), t)
 		if i == hovered_index and boon_confirm_lock_time <= 0.0:
-			style.bg_color = Color(0.18, 0.24, 0.34, 0.95)
-			style.border_color = Color(0.92, 0.97, 1.0, 0.95)
+			style.bg_color = Color(0.22, 0.32, 0.46, 0.96)
+			style.border_color = Color(0.98, 0.99, 1.0, 1.0)
 			style.border_width_left = 4
 			style.border_width_top = 4
 			style.border_width_right = 4
 			style.border_width_bottom = 4
 		else:
-			style.bg_color = Color(0.09, 0.12, 0.17, 0.92)
-			style.border_color = Color(0.45, 0.55, 0.68, 0.88)
+			style.bg_color = cool
+			style.border_color = Color(0.57, 0.71, 0.88, 0.86)
 			style.border_width_left = 2
 			style.border_width_top = 2
 			style.border_width_right = 2
 			style.border_width_bottom = 2
-		style.corner_radius_top_left = 8
-		style.corner_radius_top_right = 8
-		style.corner_radius_bottom_left = 8
-		style.corner_radius_bottom_right = 8
+		style.corner_radius_top_left = 12
+		style.corner_radius_top_right = 12
+		style.corner_radius_bottom_left = 12
+		style.corner_radius_bottom_right = 12
+		style.shadow_color = Color(0.0, 0.0, 0.0, 0.35)
+		style.shadow_size = 6
+		style.shadow_offset = Vector2(0.0, 4.0)
 		panel.add_theme_stylebox_override("panel", style)
 
 func _update_boon_reveal_visuals() -> void:
@@ -495,6 +545,8 @@ func _update_boon_reveal_visuals() -> void:
 		var delay := float(i) * 0.06
 		var local_t := clampf((reveal_t - delay) / 0.6, 0.0, 1.0)
 		var eased := 1.0 - pow(1.0 - local_t, 3.0)
+		var base_pos := Vector2(220.0, 164.0 + i * 138.0)
+		panel.position = base_pos + Vector2(0.0, (1.0 - eased) * 18.0)
 		panel.modulate = Color(1.0, 1.0, 1.0, eased)
 		panel.scale = Vector2(0.94 + 0.06 * eased, 0.94 + 0.06 * eased)
 		label.modulate.a = eased
@@ -541,16 +593,52 @@ func _update_hud() -> void:
 func _draw() -> void:
 	if current_room_size == Vector2.ZERO:
 		return
+	var t := art_time
 	var room_rect := Rect2(-current_room_size * 0.5, current_room_size)
-	draw_rect(room_rect, Color(0.03, 0.05, 0.07, 0.16), true)
-	draw_rect(room_rect, Color(0.34, 0.47, 0.58, 0.85), false, 4.0)
+	var pulse := 0.5 + 0.5 * sin(t * 0.9)
+	draw_rect(room_rect.grow(240.0), Color(0.01, 0.02, 0.04, 0.98), true)
+
+	# Layered floor wash to create depth without textures.
+	for i in range(10):
+		var ratio := float(i) / 9.0
+		var inset := lerpf(0.0, minf(room_rect.size.x, room_rect.size.y) * 0.22, ratio)
+		var layer_rect := room_rect.grow(-inset)
+		var layer_color := Color(0.03, 0.08, 0.12, 0.22).lerp(Color(0.09, 0.16, 0.23, 0.12 + arena_glow_strength * pulse * 0.45), 1.0 - ratio)
+		draw_rect(layer_rect, layer_color, true)
+
+	var coarse_step := maxf(28.0, floor_grid_step)
+	var fine_step := maxf(16.0, floor_grid_fine_step)
+	for x in range(int(room_rect.position.x), int(room_rect.position.x + room_rect.size.x + coarse_step), int(coarse_step)):
+		draw_line(Vector2(float(x), room_rect.position.y), Vector2(float(x), room_rect.position.y + room_rect.size.y), Color(0.36, 0.56, 0.78, 0.11), 2.0)
+	for y in range(int(room_rect.position.y), int(room_rect.position.y + room_rect.size.y + coarse_step), int(coarse_step)):
+		draw_line(Vector2(room_rect.position.x, float(y)), Vector2(room_rect.position.x + room_rect.size.x, float(y)), Color(0.36, 0.56, 0.78, 0.11), 2.0)
+
+	for x in range(int(room_rect.position.x), int(room_rect.position.x + room_rect.size.x + fine_step), int(fine_step)):
+		draw_line(Vector2(float(x), room_rect.position.y), Vector2(float(x), room_rect.position.y + room_rect.size.y), Color(0.55, 0.74, 0.92, 0.035), 1.0)
+	for y in range(int(room_rect.position.y), int(room_rect.position.y + room_rect.size.y + fine_step), int(fine_step)):
+		draw_line(Vector2(room_rect.position.x, float(y)), Vector2(room_rect.position.x + room_rect.size.x, float(y)), Color(0.55, 0.74, 0.92, 0.035), 1.0)
+
+	var corners := [
+		room_rect.position,
+		room_rect.position + Vector2(room_rect.size.x, 0.0),
+		room_rect.position + Vector2(0.0, room_rect.size.y),
+		room_rect.position + room_rect.size
+	]
+	for corner in corners:
+		draw_circle(corner, 32.0, Color(0.42, 0.74, 1.0, 0.05 + pulse * 0.02))
+
+	draw_rect(room_rect, Color(0.56, 0.78, 0.95, 0.88), false, 4.0)
+	draw_rect(room_rect.grow(-16.0), Color(0.22, 0.42, 0.62, 0.28), false, 2.0)
 
 	if choosing_next_room:
 		for door in door_options:
 			var door_pos: Vector2 = door["position"]
 			var color: Color = door["color"]
-			draw_circle(door_pos, 26.0, Color(color.r, color.g, color.b, 0.22))
+			var door_pulse := 0.75 + 0.25 * sin(t * 4.2 + door_pos.x * 0.01)
+			draw_circle(door_pos, 34.0 + 4.0 * door_pulse, Color(color.r, color.g, color.b, 0.12))
+			draw_circle(door_pos, 22.0 + 2.0 * door_pulse, Color(color.r, color.g, color.b, 0.24))
 			draw_circle(door_pos, 14.0, color)
+			draw_arc(door_pos, 30.0, -PI * 0.35, PI * 1.35, 36, Color(color.r, color.g, color.b, 0.7), 2.0)
 			_draw_door_icon(door)
 
 func _draw_door_icon(door: Dictionary) -> void:
