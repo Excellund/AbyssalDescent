@@ -169,6 +169,7 @@ func _draw() -> void:
 	var attack_pulse := _get_attack_pulse()
 	var body_radius := 13.0 + attack_pulse
 	var facing := visual_facing_direction if visual_facing_direction != Vector2.ZERO else Vector2.LEFT
+	var side := Vector2(-facing.y, facing.x)
 	var body_color := COLOR_CHARGER_BODY
 	var core_color := COLOR_CHARGER_CORE
 
@@ -179,8 +180,21 @@ func _draw() -> void:
 	if charger_state == STATE_CHARGE:
 		body_color = Color(1.0, 0.86, 0.35, 1.0)
 		core_color = COLOR_CHARGER_CORE_CHARGED
+		body_radius += 0.7
 
 	_draw_common_body(body_radius, body_color, core_color, facing)
+
+	# Ram plate and side bars keep charger silhouette distinct from other melee roles.
+	var ram_tip := facing * (body_radius + 11.5)
+	var ram_base := facing * (body_radius + 2.0)
+	var ram_w := 6.4
+	var ram_color := Color(1.0, 0.9, 0.54, 0.9)
+	if charger_state == STATE_CHARGE:
+		ram_color = Color(1.0, 0.98, 0.74, 0.98)
+	var ram_plate := PackedVector2Array([ram_tip, ram_base + side * ram_w, ram_base - side * ram_w])
+	draw_colored_polygon(ram_plate, ram_color)
+	draw_line(ram_base + side * (ram_w + 2.0), ram_base + side * (ram_w + 2.0) - facing * 6.0, Color(1.0, 0.86, 0.44, 0.75), 1.8)
+	draw_line(ram_base - side * (ram_w + 2.0), ram_base - side * (ram_w + 2.0) - facing * 6.0, Color(1.0, 0.86, 0.44, 0.75), 1.8)
 
 	if charger_state == STATE_WINDUP:
 		var preview_start := facing * (body_radius + 4.0)
@@ -201,7 +215,7 @@ func _draw() -> void:
 		
 		# Edge accent marks showing impact zone
 		var accent_len := 12.0
-		var side := Vector2(-facing.y, facing.x)
+		var preview_side := Vector2(-facing.y, facing.x)
 		var preview_impact := preview_end
-		draw_line(preview_impact + side * 8.0, preview_impact + side * 8.0 + facing * accent_len, Color(1.0, 0.88, 0.5, 0.7), 1.5)
-		draw_line(preview_impact - side * 8.0, preview_impact - side * 8.0 + facing * accent_len, Color(1.0, 0.88, 0.5, 0.7), 1.5)
+		draw_line(preview_impact + preview_side * 8.0, preview_impact + preview_side * 8.0 + facing * accent_len, Color(1.0, 0.88, 0.5, 0.7), 1.5)
+		draw_line(preview_impact - preview_side * 8.0, preview_impact - preview_side * 8.0 + facing * accent_len, Color(1.0, 0.88, 0.5, 0.7), 1.5)

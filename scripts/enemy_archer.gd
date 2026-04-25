@@ -188,10 +188,37 @@ func _process_projectiles(delta: float) -> void:
 		projectiles.erase(projectile)
 
 func _draw() -> void:
-	var body_radius := 13.0
+	var body_radius := 12.8
+	var facing := visual_facing_direction if visual_facing_direction.length_squared() > 0.000001 else Vector2.LEFT
+	var side := Vector2(-facing.y, facing.x)
 	var body_color := COLOR_ARCHER_BODY
 	var core_color := COLOR_ARCHER_CORE
-	_draw_common_body(body_radius, body_color, core_color, visual_facing_direction)
+	if archer_state == STATE_WINDUP:
+		body_color = Color(0.34, 0.8, 1.0, 0.96)
+		core_color = Color(0.7, 0.96, 1.0, 0.88)
+	elif archer_state == STATE_FIRE:
+		core_color = Color(1.0, 0.9, 0.5, 0.92)
+	elif archer_state == STATE_RECOVER:
+		body_color = Color(0.22, 0.66, 0.86, 0.84)
+	_draw_common_body(body_radius, body_color, core_color, facing)
+
+	# Bow-arm fins communicate ranged role from a distance.
+	var fin_base := facing * (body_radius + 1.8)
+	var upper_fin := PackedVector2Array([
+		fin_base + side * 7.6,
+		fin_base + side * 3.1 + facing * 8.0,
+		fin_base + side * 2.6 - facing * 5.8
+	])
+	var lower_fin := PackedVector2Array([
+		fin_base - side * 7.6,
+		fin_base - side * 3.1 + facing * 8.0,
+		fin_base - side * 2.6 - facing * 5.8
+	])
+	var fin_color := Color(0.84, 0.97, 1.0, 0.44)
+	if archer_state == STATE_WINDUP:
+		fin_color = Color(1.0, 0.88, 0.5, 0.62)
+	draw_colored_polygon(upper_fin, fin_color)
+	draw_colored_polygon(lower_fin, fin_color)
 	
 	# Draw telegraph during windup
 	if archer_state == STATE_WINDUP:
@@ -199,7 +226,7 @@ func _draw() -> void:
 		var line_length := 400.0
 		var line_end := arrow_direction * line_length
 		var bracket_size := 20.0
-		var side := Vector2(-arrow_direction.y, arrow_direction.x)
+		var aim_side := Vector2(-arrow_direction.y, arrow_direction.x)  
 		var aim_pos := arrow_direction * 100.0
 		
 		# Background aim guide (subtle inner line)
@@ -211,12 +238,12 @@ func _draw() -> void:
 		# Pulsing impact zone bracket (gets brighter as shot prepares)
 		var bracket_pulse := 0.6 + 0.4 * sin(windup_phase * PI * 2.0)
 		var bracket_alpha := COLOR_ARCHER_AIM_BRACKET.a * bracket_pulse
-		draw_line(aim_pos - side * bracket_size, aim_pos + side * bracket_size, Color(COLOR_ARCHER_AIM_BRACKET.r, COLOR_ARCHER_AIM_BRACKET.g, COLOR_ARCHER_AIM_BRACKET.b, bracket_alpha), 2.0)
+		draw_line(aim_pos - aim_side * bracket_size, aim_pos + aim_side * bracket_size, Color(COLOR_ARCHER_AIM_BRACKET.r, COLOR_ARCHER_AIM_BRACKET.g, COLOR_ARCHER_AIM_BRACKET.b, bracket_alpha), 2.0)
 		
 		# Corner accent marks for target box
 		var corner_len := 8.0
-		draw_line(aim_pos + side * bracket_size - arrow_direction * corner_len, aim_pos + side * bracket_size, Color(COLOR_ARCHER_AIM.r, COLOR_ARCHER_AIM.g, COLOR_ARCHER_AIM.b, 0.7), 1.4)
-		draw_line(aim_pos - side * bracket_size - arrow_direction * corner_len, aim_pos - side * bracket_size, Color(COLOR_ARCHER_AIM.r, COLOR_ARCHER_AIM.g, COLOR_ARCHER_AIM.b, 0.7), 1.4)
+		draw_line(aim_pos + aim_side * bracket_size - arrow_direction * corner_len, aim_pos + aim_side * bracket_size, Color(COLOR_ARCHER_AIM.r, COLOR_ARCHER_AIM.g, COLOR_ARCHER_AIM.b, 0.7), 1.4)
+		draw_line(aim_pos - aim_side * bracket_size - arrow_direction * corner_len, aim_pos - aim_side * bracket_size, Color(COLOR_ARCHER_AIM.r, COLOR_ARCHER_AIM.g, COLOR_ARCHER_AIM.b, 0.7), 1.4)
 	
 	# Draw projectiles
 	for projectile in projectiles:

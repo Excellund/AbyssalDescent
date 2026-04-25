@@ -196,6 +196,11 @@ func _apply_charge_hit() -> void:
 		if collision.get_collider() == target:
 			target.call("take_damage", charge_damage)
 			charge_hit_applied = true
+			# Heavy impact feedback for charge
+			if is_instance_valid(target):
+				var feedback: Object = target.get("player_feedback") as Object
+				if feedback != null and feedback.has_method("play_impact_heavy"):
+					feedback.play_impact_heavy(target.global_position, charge_width * 1.5)
 			return
 
 	var seg_start := global_position - locked_direction * 34.0
@@ -203,6 +208,11 @@ func _apply_charge_hit() -> void:
 	if _distance_point_to_segment(target.global_position, seg_start, seg_end) <= charge_width:
 		target.call("take_damage", charge_damage)
 		charge_hit_applied = true
+		# Heavy impact feedback for charge
+		if is_instance_valid(target):
+			var feedback: Object = target.get("player_feedback") as Object
+			if feedback != null and feedback.has_method("play_impact_heavy"):
+				feedback.play_impact_heavy(target.global_position, charge_width * 1.5)
 
 
 func _apply_nova_hit() -> void:
@@ -210,6 +220,11 @@ func _apply_nova_hit() -> void:
 		return
 	if global_position.distance_to(target.global_position) <= nova_radius:
 		target.call("take_damage", nova_damage)
+		# Heavy impact feedback for nova
+		if is_instance_valid(target):
+			var feedback: Object = target.get("player_feedback") as Object
+			if feedback != null and feedback.has_method("play_impact_heavy"):
+				feedback.play_impact_heavy(global_position, nova_radius * 0.9)
 
 
 func _apply_cleave_hit() -> void:
@@ -218,6 +233,11 @@ func _apply_cleave_hit() -> void:
 	if not _point_in_cone(target.global_position, global_position, locked_direction, cleave_range, cleave_arc_degrees):
 		return
 	target.call("take_damage", cleave_damage)
+	# Heavy impact feedback for cleave
+	if is_instance_valid(target):
+		var feedback: Object = target.get("player_feedback") as Object
+		if feedback != null and feedback.has_method("play_impact_heavy"):
+			feedback.play_impact_heavy(global_position, cleave_range * 0.7)
 
 
 func _point_in_cone(point: Vector2, origin: Vector2, forward: Vector2, radius: float, arc_degrees: float) -> bool:
@@ -274,10 +294,26 @@ func _draw() -> void:
 
 	if boss_state == STATE_TELEGRAPH:
 		_draw_attack_telegraph()
+		_draw_role_state_icon(facing, body_radius)
 
 	if boss_state == STATE_ATTACK and active_attack == ATTACK_CHARGE:
 		var line_end := locked_direction * 120.0
 		draw_line(Vector2.ZERO, line_end, Color(COLOR_BOSS_CHARGE_LINE.r, COLOR_BOSS_CHARGE_LINE.g, COLOR_BOSS_CHARGE_LINE.b, 0.9), 8.0)
+
+
+func _draw_role_state_icon(facing: Vector2, body_radius: float) -> void:
+	var icon_alpha := 0.36 + telegraph_alpha * 0.58
+	match active_attack:
+		ATTACK_CHARGE:
+			var side := Vector2(-facing.y, facing.x)
+			var tip := facing * (body_radius + 14.0)
+			var base := facing * (body_radius + 4.0)
+			draw_colored_polygon(PackedVector2Array([tip, base + side * 5.4, base - side * 5.4]), Color(1.0, 0.88, 0.44, icon_alpha))
+		ATTACK_NOVA:
+			draw_arc(Vector2.ZERO, body_radius + 12.0, 0.0, TAU, 40, Color(1.0, 0.78, 0.36, icon_alpha), 2.4)
+		ATTACK_CLEAVE:
+			var half_arc := deg_to_rad(cleave_arc_degrees * 0.26)
+			draw_arc(Vector2.ZERO, body_radius + 12.0, facing.angle() - half_arc, facing.angle() + half_arc, 18, Color(1.0, 0.84, 0.42, icon_alpha), 2.8)
 
 
 func _draw_attack_telegraph() -> void:

@@ -47,8 +47,21 @@ func _try_attack_target() -> void:
 
 func _draw() -> void:
 	var attack_pulse := _get_attack_pulse()
-	var body_radius := 13.0 + attack_pulse
+	var speed_t := clampf(velocity.length() / maxf(1.0, move_speed), 0.0, 1.0)
+	var body_radius := 12.8 + attack_pulse + speed_t * 0.9
 	var facing := visual_facing_direction if visual_facing_direction != Vector2.ZERO else Vector2.LEFT
+	var side := Vector2(-facing.y, facing.x)
 	var body_color := COLOR_CHASER_BODY
 	var core_color := COLOR_CHASER_CORE
+	if speed_t > 0.4:
+		body_color = Color(1.0, 0.24, 0.3, 1.0)
 	_draw_common_body(body_radius, body_color, core_color, facing)
+
+	# Forward claw marks make chasers readable as melee rushers.
+	var claw_base := facing * (body_radius + 4.5)
+	draw_line(claw_base + side * 3.0, claw_base + side * 4.0 + facing * 8.0, Color(1.0, 0.72, 0.68, 0.86), 1.8)
+	draw_line(claw_base - side * 3.0, claw_base - side * 4.0 + facing * 8.0, Color(1.0, 0.72, 0.68, 0.86), 1.8)
+
+	if speed_t > 0.25:
+		var trail_alpha := 0.08 + speed_t * 0.18
+		draw_circle(-facing * (body_radius + 2.0), body_radius * 0.7, Color(0.9, 0.2, 0.24, trail_alpha))

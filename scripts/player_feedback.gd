@@ -126,6 +126,78 @@ func play_world_ring(epicenter_global: Vector2, radius: float, color: Color, lif
 	tween.tween_interval(lifetime)
 	tween.tween_callback(ring.queue_free)
 
+# === IMPACT FEEDBACK HIERARCHY ===
+func play_impact_light(epicenter_global: Vector2, radius: float = 60.0) -> void:
+	"""Light hit feedback: subtle ring + gentle flash (standard hits)."""
+	# Subtle ring
+	play_world_ring(epicenter_global, radius, Color(0.7, 0.7, 0.8, 0.4), 0.18)
+	# Light flash
+	play_damage_flash()
+
+func play_impact_heavy(epicenter_global: Vector2, radius: float = 100.0) -> void:
+	"""Heavy impact feedback: layered rings + strong flash + pulsing afterglow (abilities)."""
+	# Inner danger pulse ring
+	var inner_ring := Line2D.new()
+	inner_ring.top_level = true
+	inner_ring.global_position = Vector2.ZERO
+	inner_ring.width = 6.0
+	inner_ring.default_color = Color(1.0, 0.5, 0.3, 0.85)
+	inner_ring.closed = true
+	inner_ring.antialiased = true
+	inner_ring.z_index = 41
+
+	var inner_points := PackedVector2Array()
+	var segments := 40
+	for i in range(segments):
+		var angle := TAU * float(i) / float(segments)
+		inner_points.append(epicenter_global + Vector2.RIGHT.rotated(angle) * (radius * 0.5))
+	inner_ring.points = inner_points
+	add_child(inner_ring)
+
+	var inner_tween := create_tween()
+	inner_tween.set_parallel(true)
+	inner_tween.tween_property(inner_ring, "modulate:a", 0.0, 0.12)
+	inner_tween.tween_property(inner_ring, "width", 2.0, 0.12)
+	inner_tween.set_parallel(false)
+	inner_tween.tween_interval(0.12)
+	inner_tween.tween_callback(inner_ring.queue_free)
+
+	# Outer expansion ring (main impact zone)
+	play_world_ring(epicenter_global, radius, Color(1.0, 0.6, 0.2, 0.7), 0.25)
+
+	# Pulsing afterglow (lingers with intensity wave)
+	var afterglow := Line2D.new()
+	afterglow.top_level = true
+	afterglow.global_position = Vector2.ZERO
+	afterglow.width = 2.0
+	afterglow.default_color = Color(1.0, 0.4, 0.0, 0.3)
+	afterglow.closed = true
+	afterglow.antialiased = true
+	afterglow.z_index = 39
+
+	var afterglow_points := PackedVector2Array()
+	for i in range(segments):
+		var angle := TAU * float(i) / float(segments)
+		afterglow_points.append(epicenter_global + Vector2.RIGHT.rotated(angle) * (radius * 0.7))
+	afterglow.points = afterglow_points
+	add_child(afterglow)
+
+	var afterglow_tween := create_tween()
+	afterglow_tween.set_parallel(true)
+	afterglow_tween.tween_property(afterglow, "modulate:a", 0.0, 0.35)
+	afterglow_tween.tween_property(afterglow, "width", 1.0, 0.35)
+	afterglow_tween.set_parallel(false)
+	afterglow_tween.tween_interval(0.35)
+	afterglow_tween.tween_callback(afterglow.queue_free)
+
+	# Strong flash (heavier visual punch)
+	if damage_flash_rect != null:
+		if damage_flash_tween != null and damage_flash_tween.is_valid():
+			damage_flash_tween.kill()
+		damage_flash_rect.modulate.a = damage_flash_alpha * 1.3
+		damage_flash_tween = create_tween()
+		damage_flash_tween.tween_property(damage_flash_rect, "modulate:a", 0.0, 0.22)
+
 func play_damage_flash() -> void:
 	if damage_flash_rect == null:
 		return

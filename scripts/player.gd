@@ -535,6 +535,12 @@ func _draw() -> void:
 		var arc_alpha := Color(ENEMY_BASE.COLOR_PLAYER_SPEED_ARC.r, ENEMY_BASE.COLOR_PLAYER_SPEED_ARC.g, ENEMY_BASE.COLOR_PLAYER_SPEED_ARC.b, 0.26 + speed_t * 0.25)
 		draw_arc(Vector2.ZERO, body_radius + 6.5, -1.4, 1.4, 30, arc_alpha, 2.0)
 
+	# Explicit state ring keeps player readable during dense enemy FX.
+	if dash_phasing_active:
+		draw_arc(Vector2.ZERO, body_radius + 10.5, 0.0, TAU, 40, Color(0.9, 1.0, 1.0, 0.8), 2.0)
+	elif attack_anim_time_left > 0.0:
+		draw_arc(Vector2.ZERO, body_radius + 9.0, -0.75, 0.75, 24, Color(1.0, 0.98, 0.78, 0.78), 2.2)
+
 	var tip := facing * (body_radius + 9.0)
 	var base_center := facing * (body_radius - 1.5)
 	var fin := 4.9

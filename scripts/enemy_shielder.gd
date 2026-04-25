@@ -207,6 +207,11 @@ func _try_apply_slam_aoe_hit() -> void:
 	if global_position.distance_to(target.global_position) <= slam_radius:
 		target.call("take_damage", slam_damage, {"source": "enemy_ability", "ability": "shielder_slam"})
 		slam_hit_applied = true
+		# Heavy impact feedback for slam ability
+		if is_instance_valid(target):
+			var feedback: Object = target.get("player_feedback") as Object
+			if feedback != null and feedback.has_method("play_impact_heavy"):
+				feedback.play_impact_heavy(target.global_position, slam_radius * 0.95)
 
 func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 	if amount <= 0:
@@ -286,16 +291,25 @@ func _draw() -> void:
 		shield_left,
 		shield_right
 	])
+	var shield_outline_color := COLOR_SHIELDER_SHIELD_OUTLINE
+	var shield_fill_color := COLOR_SHIELDER_SHIELD
+	if slam_state == SLAM_STATE_WINDUP:
+		shield_fill_color = Color(1.0, 0.8, 0.4, 0.95)
+		shield_outline_color = Color(1.0, 0.92, 0.66, 0.82)
+	elif slam_state == SLAM_STATE_THUMP:
+		shield_fill_color = Color(1.0, 0.9, 0.58, 0.98)
+		shield_outline_color = Color(1.0, 0.96, 0.78, 0.9)
 	if _is_finite_vec2(shield_arm) and _is_finite_vec2(shield_left) and _is_finite_vec2(shield_right):
 		var tri_area := absf((shield_left - shield_arm).cross(shield_right - shield_arm))
 		if tri_area > 0.001:
-			draw_colored_polygon(shield_points, COLOR_SHIELDER_SHIELD)
-	
-	# Shield outline
-	var shield_outline_color := COLOR_SHIELDER_SHIELD_OUTLINE
-	draw_line(shield_left, shield_right, shield_outline_color, 1.4)
-	draw_line(shield_arm, shield_left, shield_outline_color, 1.4)
-	draw_line(shield_arm, shield_right, shield_outline_color, 1.4)
+			draw_colored_polygon(shield_points, shield_fill_color)
+			draw_line(shield_left, shield_right, shield_outline_color, 1.4)
+			draw_line(shield_arm, shield_left, shield_outline_color, 1.4)
+			draw_line(shield_arm, shield_right, shield_outline_color, 1.4)
+
+			# Shield boss dot clarifies facing at a glance.
+			var boss_center := shield_arm - facing * 3.2
+			draw_circle(boss_center, 2.8, Color(1.0, 0.95, 0.82, 0.84))
 
 func _is_finite_vec2(v: Vector2) -> bool:
 	return is_finite(v.x) and is_finite(v.y)
