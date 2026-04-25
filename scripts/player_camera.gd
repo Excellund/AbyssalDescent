@@ -13,7 +13,7 @@ const MODE_STATIC := 1
 @export var mouse_deadzone: float = 28.0
 @export var input_smoothing_speed: float = 14.0
 @export var zoom_lerp_speed: float = 10.0
-@export var min_zoom: float = 0.75
+@export var min_zoom: float = 0.9
 @export var max_zoom: float = 3.0
 @export var visible_edge_margin: float = 10.0
 

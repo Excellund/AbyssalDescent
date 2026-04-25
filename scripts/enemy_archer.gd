@@ -16,6 +16,7 @@ const STATE_RECOVER := 3
 @export var projectile_damage: int = 14
 @export var attack_cooldown: float = 2.2
 @export var fire_interval: float = 0.22
+@export var arena_size: Vector2 = Vector2(940.0, 700.0)
 
 var attack_cooldown_left: float = 0.0
 var archer_state: int = STATE_SEEK
@@ -176,6 +177,13 @@ func _process_projectiles(delta: float) -> void:
 				projectile.queue_free()
 				completed_projectiles.append(projectile)
 				continue
+
+		# Despawn when crossing room walls (arena bounds act as walls).
+		var half_arena := arena_size * 0.5
+		if absf(projectile.global_position.x) > half_arena.x or absf(projectile.global_position.y) > half_arena.y:
+			projectile.queue_free()
+			completed_projectiles.append(projectile)
+			continue
 		
 		# Remove if too far away
 		if projectile.global_position.distance_to(global_position) > 1200.0:

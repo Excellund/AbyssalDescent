@@ -68,6 +68,8 @@ func _spawn_enemy_in_current_room(enemy_script: Script) -> void:
 	enemy.global_position = _pick_spawn_position_in_current_room()
 	world_root.add_child(enemy)
 	enemy.set("target", player)
+	if enemy.get("arena_size") != null:
+		enemy.set("arena_size", current_room_size)
 	if enemy.has_signal("died") and on_enemy_died.is_valid():
 		enemy.died.connect(on_enemy_died)
 

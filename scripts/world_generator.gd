@@ -831,7 +831,10 @@ func _draw() -> void:
 	var t := art_time
 	var room_rect := Rect2(-current_room_size * 0.5, current_room_size)
 	var pulse := 0.5 + 0.5 * sin(t * 0.9)
-	draw_rect(room_rect.grow(240.0), Color(0.01, 0.02, 0.04, clampf(ambient_backdrop_alpha, 0.7, 1.0)), true)
+	var viewport_rect := get_viewport().get_visible_rect()
+	var viewport_to_world := get_viewport().get_canvas_transform().affine_inverse()
+	var viewport_world_rect := viewport_to_world * viewport_rect
+	draw_rect(viewport_world_rect.grow(50.0), Color(0.01, 0.02, 0.04, clampf(ambient_backdrop_alpha, 0.7, 1.0)), true)
 
 	# Layered floor wash to create depth without textures.
 	for i in range(10):
