@@ -83,7 +83,7 @@ func roll_route_options(depth: int) -> Array[Dictionary]:
 	if depth < 2:
 		var intro_profile: Dictionary = _build_intro_profile(depth)
 		var easy_option: Dictionary = {
-			"label": "%s + Boon" % String(intro_profile["label"]),
+			"label": String(intro_profile["label"]),
 			"color": Color(0.34, 0.8, 1.0, 0.95),
 			"kind": "encounter",
 			"icon": "easy",
@@ -108,7 +108,7 @@ func roll_route_options(depth: int) -> Array[Dictionary]:
 	var hard_pool: Array[Dictionary] = _get_hard_pool()
 	var hard_profile: Dictionary = hard_pool[rng.randi_range(0, hard_pool.size() - 1)]
 	var hard_option: Dictionary = {
-		"label": "%s + Boon" % String(hard_profile["label"]),
+		"label": String(hard_profile["label"]),
 		"color": Color(0.93, 0.62, 0.28, 0.95),
 		"kind": "encounter",
 		"icon": "hard",
@@ -118,10 +118,11 @@ func roll_route_options(depth: int) -> Array[Dictionary]:
 
 	var trial_profile: Dictionary = _build_trial_profile()
 	var trial_mutator: Dictionary = trial_profile.get("enemy_mutator", {})
+	var trial_mutator_name := String(trial_mutator.get("name", "Trial"))
 	var trial_color: Color = trial_mutator.get("theme_color", Color(1.0, 0.32, 0.22, 0.96))
 	trial_color.a = 0.96
 	var trial_option: Dictionary = {
-		"label": "%s + Trial Reward" % String(trial_profile["label"]),
+		"label": "Trial - %s" % trial_mutator_name,
 		"color": trial_color,
 		"kind": "encounter",
 		"icon": "trial",

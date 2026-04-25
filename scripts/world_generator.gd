@@ -81,8 +81,10 @@ var door_options: Array[Dictionary] = []
 var pending_room_reward: String = "none"
 var current_room_enemy_mutator: Dictionary = {}
 
-var hud_panel: Panel
-var hud_label: Label
+var status_panel: Panel
+var status_label: RichTextLabel
+var status_mutator_icon: TextureRect
+var status_mutator_label: Label
 var room_banner_title_label: Label
 var room_banner_subtitle_label: Label
 var room_banner_tween: Tween
@@ -528,31 +530,49 @@ func _create_hud() -> void:
 	layer.layer = 90
 	add_child(layer)
 
-	hud_panel = Panel.new()
-	hud_panel.position = Vector2(12.0, 10.0)
-	hud_panel.custom_minimum_size = Vector2(980.0, 74.0)
-	var hud_style := StyleBoxFlat.new()
-	hud_style.bg_color = Color(0.03, 0.05, 0.08, clampf(hud_background_alpha, 0.45, 0.9))
-	hud_style.border_color = Color(0.83, 0.9, 1.0, 0.76)
-	hud_style.border_width_left = 2
-	hud_style.border_width_top = 2
-	hud_style.border_width_right = 2
-	hud_style.border_width_bottom = 2
-	hud_style.corner_radius_top_left = 8
-	hud_style.corner_radius_top_right = 8
-	hud_style.corner_radius_bottom_left = 8
-	hud_style.corner_radius_bottom_right = 8
-	hud_panel.add_theme_stylebox_override("panel", hud_style)
-	layer.add_child(hud_panel)
+	status_panel = Panel.new()
+	status_panel.custom_minimum_size = Vector2(302.0, 84.0)
+	var status_style := StyleBoxFlat.new()
+	status_style.bg_color = Color(0.03, 0.06, 0.1, 0.44)
+	status_style.border_color = Color(0.0, 0.0, 0.0, 0.0)
+	status_style.corner_radius_top_left = 10
+	status_style.corner_radius_top_right = 10
+	status_style.corner_radius_bottom_left = 10
+	status_style.corner_radius_bottom_right = 10
+	status_panel.add_theme_stylebox_override("panel", status_style)
+	layer.add_child(status_panel)
 
-	hud_label = Label.new()
-	hud_label.position = Vector2(16.0, 10.0)
-	hud_label.add_theme_font_size_override("font_size", 20)
-	hud_label.add_theme_color_override("font_color", Color(0.94, 0.98, 1.0, 0.98))
-	hud_label.add_theme_color_override("font_shadow_color", Color(0.02, 0.04, 0.06, 0.95))
-	hud_label.add_theme_constant_override("shadow_offset_x", 2)
-	hud_label.add_theme_constant_override("shadow_offset_y", 2)
-	hud_panel.add_child(hud_label)
+	status_label = RichTextLabel.new()
+	status_label.position = Vector2(10.0, 8.0)
+	status_label.custom_minimum_size = Vector2(282.0, 34.0)
+	status_label.bbcode_enabled = true
+	status_label.fit_content = true
+	status_label.scroll_active = false
+	status_label.selection_enabled = false
+	status_label.add_theme_font_size_override("normal_font_size", 16)
+	status_label.add_theme_color_override("default_color", Color(0.94, 0.98, 1.0, 0.98))
+	status_label.add_theme_color_override("font_shadow_color", Color(0.02, 0.04, 0.06, 0.95))
+	status_label.add_theme_constant_override("shadow_offset_x", 1)
+	status_label.add_theme_constant_override("shadow_offset_y", 1)
+	status_panel.add_child(status_label)
+
+	status_mutator_icon = TextureRect.new()
+	status_mutator_icon.position = Vector2(10.0, 41.0)
+	status_mutator_icon.custom_minimum_size = Vector2(18.0, 18.0)
+	status_mutator_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	status_mutator_icon.visible = false
+	status_panel.add_child(status_mutator_icon)
+
+	status_mutator_label = Label.new()
+	status_mutator_label.position = Vector2(34.0, 39.0)
+	status_mutator_label.custom_minimum_size = Vector2(256.0, 24.0)
+	status_mutator_label.add_theme_font_size_override("font_size", 16)
+	status_mutator_label.add_theme_color_override("font_color", Color(0.86, 0.94, 1.0, 0.96))
+	status_mutator_label.add_theme_color_override("font_shadow_color", Color(0.02, 0.04, 0.06, 0.92))
+	status_mutator_label.add_theme_constant_override("shadow_offset_x", 1)
+	status_mutator_label.add_theme_constant_override("shadow_offset_y", 1)
+	status_mutator_label.visible = false
+	status_panel.add_child(status_mutator_label)
 	_update_hud()
 
 	# Room entry banner — centered, fades in then out on room entry.
@@ -692,42 +712,118 @@ func _set_combat_paused(paused: bool) -> void:
 			(enemy as Node).set_process(not paused)
 
 func _update_hud() -> void:
-	if hud_label == null:
+	if status_label == null:
 		return
+	_layout_hud_panels()
+	_update_status_panel_text()
+
+func _layout_hud_panels() -> void:
+	var viewport_size := get_viewport().get_visible_rect().size
+	if status_panel != null:
+		status_panel.position = Vector2(viewport_size.x - 314.0, 12.0)
+
+func _update_status_panel_text() -> void:
+	if status_label == null:
+		return
+
 	if run_cleared:
-		hud_label.text = "Run Clear  Boons: %d  Trial Rewards: %d" % [boons_taken.size(), trial_rewards_taken.size()]
+		status_label.text = "[b]Depth %d[/b]\n[color=#A8FFB0]Run Clear[/color]" % room_depth
+		if status_mutator_icon != null:
+			status_mutator_icon.visible = false
+		if status_mutator_label != null:
+			status_mutator_label.visible = false
 		return
 
-	if is_instance_valid(reward_selection_ui) and bool(reward_selection_ui.call("is_active")):
-		var confirm_lock := float(reward_selection_ui.call("get_confirm_lock_time"))
-		if confirm_lock > 0.0:
-			hud_label.text = "Boon Reward  Revealing cards..."
-		else:
-			hud_label.text = "Boon Choice  Click a card to pick 1 of %d" % int(reward_selection_ui.call("get_choice_count"))
+	status_label.text = "[b]Depth %d[/b]  [color=#A5B6C9]%d/%d[/color]" % [room_depth, rooms_cleared, encounter_count]
+
+	if current_room_enemy_mutator.is_empty():
+		if status_mutator_icon != null:
+			status_mutator_icon.visible = false
+		if status_mutator_label != null:
+			status_mutator_label.visible = false
 		return
 
+	var mutator_name := String(current_room_enemy_mutator.get("name", "Unknown"))
+	var mutator_color := current_room_enemy_mutator.get("theme_color", Color(0.74, 0.86, 1.0, 1.0)) as Color
+	var ui_mutator_color := mutator_color
+	ui_mutator_color.a = 1.0
+	var icon_shape := String(current_room_enemy_mutator.get("icon_shape_id", ""))
+	var icon_texture := _get_mutator_icon_texture(icon_shape)
+
+	if status_mutator_icon != null:
+		status_mutator_icon.texture = icon_texture
+		status_mutator_icon.modulate = ui_mutator_color
+		status_mutator_icon.visible = (icon_texture != null)
+	if status_mutator_label != null:
+		status_mutator_label.text = mutator_name
+		status_mutator_label.add_theme_color_override("font_color", ui_mutator_color)
+		status_mutator_label.visible = true
+
+func _build_room_state_text() -> String:
+	if in_boss_room:
+		if active_room_enemy_count > 0:
+			return "State: Boss Encounter (%d remaining)" % active_room_enemy_count
+		return "State: Boss Defeated"
 	if choosing_next_room:
-		var prompt := "Choose Door [E]"
-		if boss_unlocked:
-			prompt = "Boss Gate Open [E]"
-		var option_a := ""
-		var option_b := ""
-		if door_options.size() > 0:
-			option_a = String(door_options[0].get("label", ""))
-		if door_options.size() > 1:
-			option_b = String(door_options[1].get("label", ""))
-		var options_line := option_a
-		if not option_b.is_empty():
-			options_line += "  |  " + option_b
-		hud_label.text = "%s  Rooms Cleared: %d/%d\n%s\nIcon Key: + = Skirmish  >< = Encounter  ◆ = Trial  Cross = Rest  Crown = Boss  Boons: %d  Trials: %d" % [prompt, rooms_cleared, encounter_count, options_line, boons_taken.size(), trial_rewards_taken.size()]
-		return
+		return "State: Route Selection"
+	if active_room_enemy_count > 0:
+		return "State: Combat (%d remaining)" % active_room_enemy_count
+	return "State: Cleared"
 
-	if in_boss_room and active_room_enemy_count > 0:
-		hud_label.text = "%s  Enemies Left: %d\nBoss Telegraphs: Line Charge, Ring Nova, Cone Cleave" % [current_room_label, active_room_enemy_count]
-		return
+func _get_mutator_icon_texture(icon_shape_id: String) -> Texture2D:
+	var path := ""
+	match icon_shape_id:
+		"blood_rush":
+			path = "res://assets/ui/mutators/blood_rush.svg"
+		"flashpoint":
+			path = "res://assets/ui/mutators/flashpoint.svg"
+		"siegebreak":
+			path = "res://assets/ui/mutators/siegebreak.svg"
+		"iron_volley":
+			path = "res://assets/ui/mutators/iron_volley.svg"
+		_:
+			path = ""
+	if path.is_empty():
+		return null
+	return load(path) as Texture2D
 
-	var boss_text := "Unlocked" if boss_unlocked else "Locked"
-	hud_label.text = "%s  Enemies Left: %d  Boss: %s  Boons: %d  Trials: %d" % [current_room_label, active_room_enemy_count, boss_text, boons_taken.size(), trial_rewards_taken.size()]
+func _get_nearest_door_for_prompt() -> Dictionary:
+	if not is_instance_valid(player):
+		return {}
+	if door_options.is_empty():
+		return {}
+
+	var nearest: Dictionary = {}
+	var nearest_distance: float = INF
+	for door in door_options:
+		var door_pos := door.get("position", Vector2.ZERO) as Vector2
+		var dist := player.global_position.distance_to(door_pos)
+		if dist < nearest_distance:
+			nearest_distance = dist
+			nearest = door.duplicate(true)
+
+	if nearest.is_empty():
+		return {}
+	nearest["distance"] = nearest_distance
+	return nearest
+
+func _build_door_prompt_text(door: Dictionary) -> String:
+	var label := String(door.get("label", "Unknown Route"))
+	var kind := String(door.get("kind", "encounter"))
+	var icon := String(door.get("icon", ""))
+
+	if kind == "boss":
+		return "%s (Boss)" % label
+	if kind == "rest":
+		return "%s (Heal + Recover)" % label
+	if icon == "trial":
+		var mutator_name := String(door.get("profile", {}).get("enemy_mutator", {}).get("name", "Trial"))
+		return "%s (%s)" % [label, mutator_name]
+	if icon == "hard":
+		return "%s (Hard Fight)" % label
+	if icon == "easy":
+		return "%s (Skirmish)" % label
+	return label
 
 func _draw() -> void:
 	if current_room_size == Vector2.ZERO:
@@ -780,6 +876,55 @@ func _draw() -> void:
 			draw_arc(door_pos, 30.0, -PI * 0.35, PI * 1.35, 36, Color(color.r, color.g, color.b, 0.7), 2.0)
 			_draw_door_icon(door)
 
+		var nearest_door := _get_nearest_door_for_prompt()
+		if not nearest_door.is_empty() and float(nearest_door.get("distance", INF)) <= door_use_radius * 1.45:
+			_draw_door_interaction_prompt(nearest_door)
+
+func _draw_door_interaction_prompt(door: Dictionary) -> void:
+	var font := ThemeDB.fallback_font
+	if font == null:
+		return
+	var door_pos := door.get("position", Vector2.ZERO) as Vector2
+	var prompt_text := "[E]  " + _build_door_prompt_name(door)
+	var font_size := 20
+	var text_size := font.get_string_size(prompt_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size)
+	var plate_w := clampf(text_size.x + 38.0, 176.0, 420.0)
+	var plate_h := 34.0
+	var plate_x := door_pos.x - plate_w * 0.5
+	var plate_y := door_pos.y - 78.0
+	var radius := plate_h * 0.5
+	var door_color := door.get("color", Color(0.78, 0.9, 1.0, 1.0)) as Color
+
+	# Soft capsule glow
+	var glow_color := Color(door_color.r, door_color.g, door_color.b, 0.2)
+	draw_circle(Vector2(plate_x + radius, plate_y + radius), radius + 4.0, glow_color)
+	draw_circle(Vector2(plate_x + plate_w - radius, plate_y + radius), radius + 4.0, glow_color)
+	draw_rect(Rect2(Vector2(plate_x + radius, plate_y - 4.0), Vector2(plate_w - radius * 2.0, plate_h + 8.0)), glow_color, true)
+
+	# Main capsule plate
+	var plate_fill := Color(0.04, 0.07, 0.12, 0.8)
+	draw_circle(Vector2(plate_x + radius, plate_y + radius), radius, plate_fill)
+	draw_circle(Vector2(plate_x + plate_w - radius, plate_y + radius), radius, plate_fill)
+	draw_rect(Rect2(Vector2(plate_x + radius, plate_y), Vector2(plate_w - radius * 2.0, plate_h)), plate_fill, true)
+
+	# Accent strip
+	var accent := Color(door_color.r, door_color.g, door_color.b, 0.62)
+	draw_line(Vector2(plate_x + 12.0, plate_y + plate_h - 5.0), Vector2(plate_x + plate_w - 12.0, plate_y + plate_h - 5.0), accent, 1.6)
+
+	# Centered text
+	var text_max_width := plate_w
+	var text_pos := Vector2(plate_x, plate_y + 24.0)
+	draw_string(font, text_pos + Vector2(1.0, 1.0), prompt_text, HORIZONTAL_ALIGNMENT_CENTER, text_max_width, font_size, Color(0.0, 0.0, 0.0, 0.58))
+	draw_string(font, text_pos, prompt_text, HORIZONTAL_ALIGNMENT_CENTER, text_max_width, font_size, Color(1.0, 1.0, 1.0, 0.99))
+
+func _build_door_prompt_name(door: Dictionary) -> String:
+	var kind := String(door.get("kind", "encounter"))
+	if kind == "boss":
+		return "Boss Gate"
+	if kind == "rest":
+		return "Rest Site"
+	return String(door.get("label", "Encounter"))
+
 func _draw_door_icon(door: Dictionary) -> void:
 	var door_pos: Vector2 = door["position"]
 	var icon_color := Color(0.97, 0.98, 1.0, 0.96)
@@ -815,12 +960,19 @@ func _draw_door_icon(door: Dictionary) -> void:
 		return
 
 	if icon == "trial":
-		# Read mutator shape identity from embedded profile — fallback to diamond if absent
+		# Use shared mutator icon assets for door symbols.
 		var trial_mutator: Dictionary = door.get("profile", {}).get("enemy_mutator", {})
 		var shape_id := String(trial_mutator.get("icon_shape_id", ""))
 		var theme: Color = trial_mutator.get("theme_color", icon_color)
 		theme.a = 1.0
-		_draw_trial_mutator_icon(door_pos, shape_id, theme, icon_color, outline_color)
+		var icon_texture := _get_mutator_icon_texture(shape_id)
+		if icon_texture != null:
+			draw_circle(door_pos, 11.8, Color(outline_color.r, outline_color.g, outline_color.b, 0.74))
+			draw_circle(door_pos, 9.8, Color(theme.r, theme.g, theme.b, 0.24))
+			var icon_rect := Rect2(door_pos - Vector2(9.0, 9.0), Vector2(18.0, 18.0))
+			draw_texture_rect(icon_texture, icon_rect, false, theme)
+		else:
+			_draw_trial_mutator_icon(door_pos, shape_id, theme, icon_color, outline_color)
 		return
 
 	if icon == "rest":
