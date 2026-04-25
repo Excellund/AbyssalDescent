@@ -374,7 +374,8 @@ func _on_room_cleared() -> void:
 		_open_boon_selection("Choose Boon Reward", false, "boon")
 		return
 	if reward_mode == "arcana_reward" or reward_mode == "trial_reward":
-		_open_boon_selection("Choose Arcana", false, "arcana_reward")
+		var is_first_arcana := arcana_rewards_taken.is_empty()
+		_open_boon_selection("Choose Arcana", is_first_arcana, "arcana_reward")
 		return
 	if bool(outcome.get("spawn_doors", false)):
 		_spawn_door_options()

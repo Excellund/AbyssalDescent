@@ -16,7 +16,7 @@ var boon_layer: CanvasLayer
 var boon_title_label: Label
 var boon_subtitle_label: Label
 var boon_card_panels: Array[Panel] = []
-var boon_card_labels: Array[Label] = []
+var boon_card_labels: Array[RichTextLabel] = []
 var boon_card_stack_labels: Array[Label] = []
 var boon_card_rects: Array[Rect2] = []
 var boon_backdrop: ColorRect
@@ -143,9 +143,13 @@ func _create_ui() -> void:
 		panel.custom_minimum_size = Vector2(1460.0, 118.0)
 		boon_layer.add_child(panel)
 
-		var option_label := Label.new()
-		option_label.position = Vector2(18.0, 14.0)
-		option_label.add_theme_font_size_override("font_size", 22)
+		var option_label := RichTextLabel.new()
+		option_label.position = Vector2(14.0, 6.0)
+		option_label.custom_minimum_size = Vector2(1200.0, 106.0)
+		option_label.bbcode_enabled = true
+		option_label.scroll_active = false
+		option_label.fit_content = false
+		option_label.add_theme_font_size_override("normal_font_size", 22)
 		option_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
 		option_label.add_theme_constant_override("shadow_offset_x", 2)
 		option_label.add_theme_constant_override("shadow_offset_y", 2)
@@ -192,7 +196,11 @@ func _refresh_boon_ui(player: Node2D) -> void:
 	boon_layer.visible = true
 	boon_title_label.text = boon_title_text
 	if boon_subtitle_label != null:
-		boon_subtitle_label.text = "Revealing your options…"
+		var is_arcana := reward_selection_mode == "arcana_reward" or reward_selection_mode == "trial_reward"
+		if is_arcana and pending_initial_boon:
+			boon_subtitle_label.text = "Arcana are rare powers that permanently shape your run"
+		else:
+			boon_subtitle_label.text = "Revealing your options\u2026"
 
 	for i in range(boon_card_labels.size()):
 		var panel := boon_card_panels[i]
@@ -215,8 +223,8 @@ func _refresh_boon_ui(player: Node2D) -> void:
 		else:
 			stack_label.text = icon_line
 			stack_label.visible = true
-		label.text = "%d. %s\n%s" % [i + 1, boon["name"], boon["desc"]]
-		label.modulate = Color(0.82, 0.86, 0.94, 0.95)
+		label.text = "[b][color=#ddeeff]%d. %s[/color][/b]\n%s" % [i + 1, boon["name"], boon["desc"]]
+		label.modulate = Color(1.0, 1.0, 1.0, 0.95)
 
 	_update_boon_reveal_visuals()
 
@@ -301,11 +309,11 @@ func _apply_boon_card_styles(hovered_index: int) -> void:
 		var t := float(i) / maxf(1.0, float(maxi(1, boon_choice_count - 1)))
 		var base_color := Color(0.08, 0.17, 0.28, 0.96).lerp(Color(0.12, 0.2, 0.34, 0.96), t)
 		var border_color := Color(0.57, 0.71, 0.88, 0.86)
-		if reward_selection_mode == "trial_reward":
+		if reward_selection_mode == "arcana_reward" or reward_selection_mode == "trial_reward":
 			base_color = Color(0.16, 0.11, 0.08, 0.96).lerp(Color(0.22, 0.14, 0.09, 0.96), t)
 			border_color = Color(1.0, 0.72, 0.4, 0.84)
 		if i == hovered_index and boon_confirm_lock_time <= 0.0:
-			if reward_selection_mode == "trial_reward":
+			if reward_selection_mode == "arcana_reward" or reward_selection_mode == "trial_reward":
 				style.bg_color = Color(0.33, 0.2, 0.12, 0.97)
 				style.border_color = Color(1.0, 0.9, 0.72, 1.0)
 			else:
@@ -350,7 +358,16 @@ func _update_boon_reveal_visuals() -> void:
 		stack_label.modulate.a = eased
 
 	if boon_subtitle_label != null:
+		var is_arcana := reward_selection_mode == "arcana_reward" or reward_selection_mode == "trial_reward"
 		if boon_confirm_lock_time <= 0.0:
-			boon_subtitle_label.text = "Select a card to claim your reward"
+			if is_arcana and pending_initial_boon:
+				boon_subtitle_label.text = "Choose one — it will grow stronger every time you claim it"
+			elif is_arcana:
+				boon_subtitle_label.text = "Add another stack and push your stats further"
+			else:
+				boon_subtitle_label.text = "Select a card to claim your reward"
 		else:
-			boon_subtitle_label.text = "Preparing your choices…"
+			if is_arcana and pending_initial_boon:
+				boon_subtitle_label.text = "Arcana are rare powers that permanently shape your run"
+			else:
+				boon_subtitle_label.text = "Preparing your choices\u2026"

@@ -210,84 +210,83 @@ func get_trial_power_card_description(power_id: String) -> String:
 			var next_range_scale := 1.58 + 0.14 * float(next_stack)
 			var next_damage_ratio := 0.6 + 0.12 * float(next_stack)
 			if current_stack <= 0:
-				return "Unlocks Wind Slash: range x%.2f, damage %.0f%% of hit." % [next_range_scale, next_damage_ratio * 100.0]
-			return "Wind Slash: range x%.2f -> x%.2f, damage %.0f%% -> %.0f%%." % [maxf(1.58, next_range_scale - 0.14), next_range_scale, maxf(60.0, (next_damage_ratio - 0.12) * 100.0), next_damage_ratio * 100.0]
+				return "[color=#9ab8d8]Each swing fires a slicing projectile that travels through enemies at range.[/color]\n[color=#9ab8d8]Initial:[/color] range [color=#7de882]x%.2f[/color], damage [color=#7de882]%.0f%%[/color] of hit." % [next_range_scale, next_damage_ratio * 100.0]
+			return "[color=#c8daf0]Wind Slash:[/color] range [color=#e8c96a]x%.2f[/color] [color=#8899aa]->[/color] [color=#7de882]x%.2f[/color], damage [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color]." % [maxf(1.58, next_range_scale - 0.14), next_range_scale, maxf(60.0, (next_damage_ratio - 0.12) * 100.0), next_damage_ratio * 100.0]
 		"execution_edge":
 			var next_every := maxi(2, 4 - next_stack)
 			var next_mult := 2.2 + 0.45 * float(next_stack)
 			if current_stack <= 0:
-				return "Unlocks Execution: every %d swings for x%.2f damage." % [next_every, next_mult]
+				return "[color=#9ab8d8]Every few swings builds to a devastating strike that deals massive bonus damage.[/color]\n[color=#9ab8d8]Initial:[/color] every [color=#7de882]%d[/color] swings for [color=#7de882]x%.2f[/color] damage." % [next_every, next_mult]
 			var cur_every := maxi(2, 4 - maxi(0, next_stack - 1))
 			var cur_mult := 2.2 + 0.45 * float(maxi(0, next_stack - 1))
-			return "Execution: every %d -> %d swings, damage x%.2f -> x%.2f." % [cur_every, next_every, cur_mult, next_mult]
+			return "[color=#c8daf0]Execution:[/color] every [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color] swings, damage [color=#e8c96a]x%.2f[/color] [color=#8899aa]->[/color] [color=#7de882]x%.2f[/color]." % [cur_every, next_every, cur_mult, next_mult]
 		"rupture_wave":
 			var next_radius := 72.0 + 10.0 * float(next_stack)
 			var next_ratio := 0.34 + 0.1 * float(next_stack)
 			if current_stack <= 0:
-				return "Unlocks Rupture: radius %.0f, damage %.0f%% of hit." % [next_radius, next_ratio * 100.0]
+				return "[color=#9ab8d8]Your hits send a shockwave rippling outward, damaging all nearby enemies.[/color]\n[color=#9ab8d8]Initial:[/color] radius [color=#7de882]%.0f[/color], damage [color=#7de882]%.0f%%[/color] of hit." % [next_radius, next_ratio * 100.0]
 			var cur_radius := 72.0 + 10.0 * float(maxi(0, next_stack - 1))
 			var cur_ratio := 0.34 + 0.1 * float(maxi(0, next_stack - 1))
-			return "Rupture: radius %.0f -> %.0f, damage %.0f%% -> %.0f%%." % [cur_radius, next_radius, cur_ratio * 100.0, next_ratio * 100.0]
+			return "[color=#c8daf0]Rupture:[/color] radius [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color], damage [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color]." % [cur_radius, next_radius, cur_ratio * 100.0, next_ratio * 100.0]
 		"phantom_step":
 			var next_damage := 8 + next_stack * 4
 			var next_slow := 0.6 + float(next_stack) * 0.15
 			if current_stack <= 0:
-				return "Unlocks Phantom Step: dash-through hit %d, slow %.2fs." % [next_damage, next_slow]
+				return "[color=#9ab8d8]Dashing through enemies deals damage and leaves them slowed in your wake.[/color]\n[color=#9ab8d8]Initial:[/color] hit damage [color=#7de882]%d[/color], slow for [color=#7de882]%.2fs[/color]." % [next_damage, next_slow]
 			var cur_damage := 8 + maxi(0, next_stack - 1) * 4
 			var cur_slow := 0.6 + float(maxi(0, next_stack - 1)) * 0.15
-			return "Phantom Step: damage %d -> %d, slow %.2fs -> %.2fs." % [cur_damage, next_damage, cur_slow, next_slow]
+			return "[color=#c8daf0]Phantom Step:[/color] damage [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color], slow [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_damage, next_damage, cur_slow, next_slow]
 		"void_dash":
 			var next_range := 1.36 + float(next_stack) * 0.12
 			var next_cd_cut := float(next_stack) * 0.06
 			if current_stack <= 0:
-				return "Unlocks Void Dash: range x%.2f, kill cooldown cut %.2fs." % [next_range, next_cd_cut]
+				return "[color=#9ab8d8]Extends your dash range and cuts cooldown on every kill, rewarding aggressive play.[/color]\n[color=#9ab8d8]Initial:[/color] range [color=#7de882]x%.2f[/color], kill cooldown cut [color=#7de882]%.2fs[/color]." % [next_range, next_cd_cut]
 			var cur_range := 1.36 + float(maxi(0, next_stack - 1)) * 0.12
 			var cur_cd_cut := float(maxi(0, next_stack - 1)) * 0.06
-			return "Void Dash: range x%.2f -> x%.2f, kill cooldown cut %.2fs -> %.2fs." % [cur_range, next_range, cur_cd_cut, next_cd_cut]
+			return "[color=#c8daf0]Void Dash:[/color] range [color=#e8c96a]x%.2f[/color] [color=#8899aa]->[/color] [color=#7de882]x%.2f[/color], kill cut [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_range, next_range, cur_cd_cut, next_cd_cut]
 		"static_wake":
 			var next_damage := 6 + next_stack * 3
 			var next_lifetime := 1.2 + float(next_stack) * 0.25
 			if current_stack <= 0:
-				return "Unlocks Static Wake: trail tick %d, lifetime %.2fs." % [next_damage, next_lifetime]
+				return "[color=#9ab8d8]Leaves an electrified trail as you move that shocks any enemy who steps into it.[/color]\n[color=#9ab8d8]Initial:[/color] trail tick [color=#7de882]%d[/color] damage, lasts [color=#7de882]%.2fs[/color]." % [next_damage, next_lifetime]
 			var cur_damage := 6 + maxi(0, next_stack - 1) * 3
 			var cur_lifetime := 1.2 + float(maxi(0, next_stack - 1)) * 0.25
-			return "Static Wake: tick %d -> %d, trail %.2fs -> %.2fs." % [cur_damage, next_damage, cur_lifetime, next_lifetime]
+			return "[color=#c8daf0]Static Wake:[/color] tick [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color], trail [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_damage, next_damage, cur_lifetime, next_lifetime]
 		_:
-			return "Enhances this power."
+			return "[color=#9ab8d8]Enhances this power.[/color]"
 
 
 func get_upgrade_card_description(upgrade_id: String) -> String:
 	if not is_instance_valid(player_reference):
-		return "Upgrade your stats."
+		return "[color=#c8daf0]Upgrade your stats.[/color]"
 	var id := upgrade_id.strip_edges().to_lower()
 	match id:
 		"swift_strike":
 			var cur_cd := float(player_reference.get("attack_cooldown"))
 			var next_cd := maxf(0.08, cur_cd * 0.86)
-			return "Attack cooldown: %.2fs -> %.2fs." % [cur_cd, next_cd]
+			return "[color=#c8daf0]Attack cooldown:[/color] [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]" % [cur_cd, next_cd]
 		"heavy_blow":
 			var cur_dmg := int(player_reference.get("attack_damage"))
-			return "Attack damage: %d -> %d." % [cur_dmg, cur_dmg + 8]
+			return "[color=#c8daf0]Attack damage:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [cur_dmg, cur_dmg + 8]
 		"wide_arc":
 			var cur_arc := float(player_reference.get("attack_arc_degrees"))
 			var next_arc := clampf(cur_arc + 18.0, 60.0, 240.0)
-			return "Attack arc: %.0f deg -> %.0f deg." % [cur_arc, next_arc]
+			return "[color=#c8daf0]Attack arc:[/color] [color=#e8c96a]%.0f°[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f°[/color]" % [cur_arc, next_arc]
 		"long_reach":
 			var cur_range := float(player_reference.get("attack_range"))
-			return "Attack range: %.0f -> %.0f." % [cur_range, cur_range + 14.0]
+			return "[color=#c8daf0]Attack range:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [cur_range, cur_range + 14.0]
 		"fleet_foot":
 			var cur_speed := float(player_reference.get("max_speed"))
-			return "Move speed: %.0f -> %.0f." % [cur_speed, cur_speed + 18.0]
+			return "[color=#c8daf0]Move speed:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [cur_speed, cur_speed + 18.0]
 		"blink_dash":
 			var cur_dash_cd := float(player_reference.get("dash_cooldown"))
 			var next_dash_cd := maxf(0.18, cur_dash_cd * 0.85)
-			return "Dash cooldown: %.2fs -> %.2fs." % [cur_dash_cd, next_dash_cd]
+			return "[color=#c8daf0]Dash cooldown:[/color] [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]" % [cur_dash_cd, next_dash_cd]
 		"iron_skin":
 			var cur_armor := int(player_reference.get("iron_skin_armor"))
-			var cur_stacks := int(player_reference.get("iron_skin_stacks"))
-			return "Armor: %d -> %d  (Stacks %d/3 -> %d/3)." % [cur_armor, cur_armor + 3, cur_stacks, mini(3, cur_stacks + 1)]
+			return "[color=#c8daf0]Armor:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [cur_armor, cur_armor + 3]
 		_:
-			return "Upgrade your stats."
+			return "[color=#c8daf0]Upgrade your stats.[/color]"
 
 
 ## Get all power IDs the player currently has
