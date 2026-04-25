@@ -1,5 +1,7 @@
 extends "res://scripts/enemy_base.gd"
 
+const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
+
 const STATE_SEEK := 0
 const STATE_WINDUP := 1
 const STATE_FIRE := 2
@@ -172,8 +174,7 @@ func _process_projectiles(delta: float) -> void:
 		if is_instance_valid(target):
 			var dist_to_player := projectile.global_position.distance_to(target.global_position)
 			if dist_to_player < 28.0:
-				if target.has_method("take_damage"):
-					target.call("take_damage", projectile_damage)
+				DAMAGEABLE.apply_damage(target, projectile_damage)
 				projectile.queue_free()
 				completed_projectiles.append(projectile)
 				continue

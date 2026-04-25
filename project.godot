@@ -18,6 +18,9 @@ config/icon="res://icon.svg"
 [autoload]
 
 RunContext="*res://scripts/run_context.gd"
+Enums="*res://scripts/shared/enums.gd"
+GameBalance="*res://scripts/shared/game_balance.gd"
+ColorPalette="*res://scripts/shared/color_palette.gd"
 
 [display]
 

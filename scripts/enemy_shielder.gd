@@ -1,5 +1,7 @@
 extends "res://scripts/enemy_base.gd"
 
+const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
+
 const SLAM_STATE_IDLE := 0
 const SLAM_STATE_WINDUP := 1
 const SLAM_STATE_THUMP := 2
@@ -124,8 +126,6 @@ func _try_attack_target() -> void:
 		return
 	if attack_cooldown_left > 0.0:
 		return
-	if not target.has_method("take_damage"):
-		return
 	if global_position.distance_to(target.global_position) > attack_range:
 		return
 
@@ -135,7 +135,8 @@ func _try_attack_target() -> void:
 		shield_target_facing = shield_facing.slerp(to_target.normalized(), clampf(shield_attack_reaim_blend, 0.0, 1.0))
 		shield_reaim_left = maxf(shield_reaim_left, shield_reaim_interval * 0.6)
 
-	target.call("take_damage", attack_damage, {"source": "enemy_contact"})
+	if not DAMAGEABLE.apply_damage(target, attack_damage, {"source": "enemy_contact"}):
+		return
 	attack_cooldown_left = attack_interval
 	attack_anim_time_left = attack_anim_duration
 	queue_redraw()
@@ -204,10 +205,9 @@ func _try_apply_slam_aoe_hit() -> void:
 		return
 	if not is_instance_valid(target):
 		return
-	if not target.has_method("take_damage"):
-		return
 	if global_position.distance_to(target.global_position) <= slam_radius:
-		target.call("take_damage", slam_damage, {"source": "enemy_ability", "ability": "shielder_slam"})
+		if not DAMAGEABLE.apply_damage(target, slam_damage, {"source": "enemy_ability", "ability": "shielder_slam"}):
+			return
 		slam_hit_applied = true
 		# Heavy impact feedback for slam ability
 		if is_instance_valid(target):

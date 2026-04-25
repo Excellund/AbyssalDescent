@@ -1,5 +1,9 @@
 extends Node
 
+const ENUMS := preload("res://scripts/shared/enums.gd")
+
+signal reward_selected(choice: Dictionary, mode: int, is_initial: bool)
+
 var boon_choice_count: int = 3
 var boon_reveal_duration: float = 0.22
 
@@ -10,7 +14,7 @@ var pending_initial_boon: bool = false
 var boon_confirm_lock_time: float = 0.0
 var boon_hovered_index: int = -1
 var boon_reveal_time: float = 0.0
-var reward_selection_mode: String = "boon"
+var reward_selection_mode: int = ENUMS.RewardMode.BOON
 
 var boon_layer: CanvasLayer
 var boon_title_label: Label
@@ -38,18 +42,18 @@ func get_choice_count() -> int:
 func close_selection() -> void:
 	boon_selection_active = false
 	pending_initial_boon = false
-	reward_selection_mode = "boon"
+	reward_selection_mode = ENUMS.RewardMode.BOON
 	boon_choices.clear()
 	if boon_layer != null:
 		boon_layer.visible = false
 
-func open_selection(title: String, is_initial: bool, mode: String, power_registry: Node, player: Node2D, rng: RandomNumberGenerator) -> void:
+func open_selection(title: String, is_initial: bool, mode: int, power_registry: Node, player: Node2D, rng: RandomNumberGenerator) -> void:
 	boon_selection_active = true
 	pending_initial_boon = is_initial
 	boon_title_text = title
 	reward_selection_mode = mode
 	_apply_mode_theme()
-	if reward_selection_mode == "arcana_reward" or reward_selection_mode == "trial_reward":
+	if reward_selection_mode == ENUMS.RewardMode.ARCANA:
 		boon_choices = _roll_arcana_choices(boon_choice_count, power_registry, player, rng)
 	else:
 		boon_choices = _roll_boon_choices(boon_choice_count, power_registry, player, rng)
@@ -59,17 +63,17 @@ func open_selection(title: String, is_initial: bool, mode: String, power_registr
 	_apply_boon_card_styles(-1)
 	_refresh_boon_ui(player)
 
-func process_input(delta: float, _player: Node2D) -> Dictionary:
+func process_input(delta: float) -> void:
 	if not boon_selection_active:
-		return {"picked": false}
+		return
 	if boon_choices.is_empty():
-		return {"picked": false}
+		return
 
 	if boon_confirm_lock_time > 0.0:
 		boon_confirm_lock_time = maxf(0.0, boon_confirm_lock_time - delta)
 		boon_reveal_time += delta
 		_update_boon_reveal_visuals()
-		return {"picked": false}
+		return
 
 	_update_boon_hover()
 	if Input.is_action_just_pressed("attack"):
@@ -81,16 +85,10 @@ func process_input(delta: float, _player: Node2D) -> Dictionary:
 			boon_choices.clear()
 			if boon_layer != null:
 				boon_layer.visible = false
-			reward_selection_mode = "boon"
+			reward_selection_mode = ENUMS.RewardMode.BOON
 			pending_initial_boon = false
-			return {
-				"picked": true,
-				"choice": picked,
-				"mode": mode,
-				"is_initial": initial
-			}
-
-	return {"picked": false}
+			emit_signal("reward_selected", picked, mode, initial)
+			return
 
 func _create_ui() -> void:
 	boon_layer = CanvasLayer.new()
@@ -177,7 +175,7 @@ func _create_ui() -> void:
 func _apply_mode_theme() -> void:
 	if boon_backdrop == null or boon_title_label == null:
 		return
-	if reward_selection_mode == "arcana_reward" or reward_selection_mode == "trial_reward":
+	if reward_selection_mode == ENUMS.RewardMode.ARCANA:
 		boon_backdrop.color = Color(0.05, 0.02, 0.01, 0.72)
 		boon_title_label.add_theme_color_override("font_color", Color(1.0, 0.9, 0.76, 1.0))
 		boon_title_label.add_theme_color_override("font_shadow_color", Color(0.08, 0.03, 0.01, 0.96))
@@ -196,7 +194,7 @@ func _refresh_boon_ui(player: Node2D) -> void:
 	boon_layer.visible = true
 	boon_title_label.text = boon_title_text
 	if boon_subtitle_label != null:
-		var is_arcana := reward_selection_mode == "arcana_reward" or reward_selection_mode == "trial_reward"
+		var is_arcana := reward_selection_mode == ENUMS.RewardMode.ARCANA
 		if is_arcana and pending_initial_boon:
 			boon_subtitle_label.text = "Arcana are rare powers that permanently shape your run"
 		else:
@@ -266,7 +264,7 @@ func _get_stack_count_for_choice(choice: Dictionary, player: Node2D) -> int:
 	if not is_instance_valid(player):
 		return 0
 	var id := String(choice.get("id", ""))
-	if reward_selection_mode == "arcana_reward" or reward_selection_mode == "trial_reward":
+	if reward_selection_mode == ENUMS.RewardMode.ARCANA:
 		if player.has_method("get_trial_power_stack_count"):
 			return int(player.call("get_trial_power_stack_count", id))
 		return 0
@@ -309,11 +307,11 @@ func _apply_boon_card_styles(hovered_index: int) -> void:
 		var t := float(i) / maxf(1.0, float(maxi(1, boon_choice_count - 1)))
 		var base_color := Color(0.08, 0.17, 0.28, 0.96).lerp(Color(0.12, 0.2, 0.34, 0.96), t)
 		var border_color := Color(0.57, 0.71, 0.88, 0.86)
-		if reward_selection_mode == "arcana_reward" or reward_selection_mode == "trial_reward":
+		if reward_selection_mode == ENUMS.RewardMode.ARCANA:
 			base_color = Color(0.16, 0.11, 0.08, 0.96).lerp(Color(0.22, 0.14, 0.09, 0.96), t)
 			border_color = Color(1.0, 0.72, 0.4, 0.84)
 		if i == hovered_index and boon_confirm_lock_time <= 0.0:
-			if reward_selection_mode == "arcana_reward" or reward_selection_mode == "trial_reward":
+			if reward_selection_mode == ENUMS.RewardMode.ARCANA:
 				style.bg_color = Color(0.33, 0.2, 0.12, 0.97)
 				style.border_color = Color(1.0, 0.9, 0.72, 1.0)
 			else:
@@ -358,7 +356,7 @@ func _update_boon_reveal_visuals() -> void:
 		stack_label.modulate.a = eased
 
 	if boon_subtitle_label != null:
-		var is_arcana := reward_selection_mode == "arcana_reward" or reward_selection_mode == "trial_reward"
+		var is_arcana := reward_selection_mode == ENUMS.RewardMode.ARCANA
 		if boon_confirm_lock_time <= 0.0:
 			if is_arcana and pending_initial_boon:
 				boon_subtitle_label.text = "Choose one — it will grow stronger every time you claim it"

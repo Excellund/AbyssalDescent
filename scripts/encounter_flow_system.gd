@@ -1,5 +1,7 @@
 extends Node
 
+const ENUMS := preload("res://scripts/shared/enums.gd")
+
 func advance_room_progress(rooms_cleared: int, room_depth: int, encounter_count: int) -> Dictionary:
 	var next_rooms_cleared := rooms_cleared + 1
 	var next_room_depth := room_depth + 1
@@ -23,20 +25,21 @@ func resolve_room_cleared(in_boss_room: bool, pending_room_reward: String, rooms
 
 	var progress := advance_room_progress(rooms_cleared, room_depth, encounter_count)
 	var normalized_reward := pending_room_reward.strip_edges().to_lower()
-	if normalized_reward == "boon":
+	var reward_mode: int = ENUMS.reward_mode_from_legacy(normalized_reward)
+	if reward_mode == ENUMS.RewardMode.BOON:
 		return {
 			"run_cleared": false,
-			"open_reward_mode": "boon",
+			"open_reward_mode": ENUMS.reward_mode_to_legacy(ENUMS.RewardMode.BOON),
 			"spawn_doors": false,
 			"pending_room_reward": "none",
 			"rooms_cleared": int(progress["rooms_cleared"]),
 			"room_depth": int(progress["room_depth"]),
 			"boss_unlocked": bool(progress["boss_unlocked"])
 		}
-	if normalized_reward == "arcana_reward" or normalized_reward == "trial_reward" or normalized_reward == "hard_reward":
+	if reward_mode == ENUMS.RewardMode.ARCANA or reward_mode == ENUMS.RewardMode.HARD:
 		return {
 			"run_cleared": false,
-			"open_reward_mode": "arcana_reward",
+			"open_reward_mode": ENUMS.reward_mode_to_legacy(ENUMS.RewardMode.ARCANA),
 			"spawn_doors": false,
 			"pending_room_reward": "none",
 			"rooms_cleared": int(progress["rooms_cleared"]),

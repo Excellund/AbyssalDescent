@@ -1,5 +1,7 @@
 extends "res://scripts/enemy_base.gd"
 
+const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
+
 const STATE_SEEK := 0
 const STATE_WINDUP := 1
 const STATE_CHARGE := 2
@@ -163,20 +165,20 @@ func _try_apply_charge_hit() -> void:
 		return
 	if not is_instance_valid(target):
 		return
-	if not target.has_method("take_damage"):
+	if not DAMAGEABLE.can_take_damage(target):
 		return
 
 	for i in get_slide_collision_count():
 		var collision := get_slide_collision(i)
 		if collision.get_collider() == target:
-			target.call("take_damage", charge_damage)
+			DAMAGEABLE.apply_damage(target, charge_damage)
 			charger_charge_hit_applied = true
 			attack_anim_time_left = attack_anim_duration
 			queue_redraw()
 			return
 
 	if global_position.distance_to(target.global_position) <= path_width:
-		target.call("take_damage", charge_damage)
+		DAMAGEABLE.apply_damage(target, charge_damage)
 		charger_charge_hit_applied = true
 		attack_anim_time_left = attack_anim_duration
 		queue_redraw()

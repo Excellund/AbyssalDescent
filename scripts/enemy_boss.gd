@@ -1,5 +1,7 @@
 extends "res://scripts/enemy_base.gd"
 
+const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
+
 const STATE_IDLE := 0
 const STATE_TELEGRAPH := 1
 const STATE_ATTACK := 2
@@ -230,13 +232,13 @@ func _process_recover_state(delta: float) -> void:
 func _apply_charge_hit() -> void:
 	if charge_hit_applied:
 		return
-	if not target.has_method("take_damage"):
+	if not DAMAGEABLE.can_take_damage(target):
 		return
 
 	for i in get_slide_collision_count():
 		var collision := get_slide_collision(i)
 		if collision.get_collider() == target:
-			target.call("take_damage", charge_damage)
+			DAMAGEABLE.apply_damage(target, charge_damage)
 			charge_hit_applied = true
 			# Heavy impact feedback for charge
 			if is_instance_valid(target):
@@ -248,7 +250,7 @@ func _apply_charge_hit() -> void:
 	var seg_start := global_position - locked_direction * 34.0
 	var seg_end := global_position + locked_direction * 34.0
 	if _distance_point_to_segment(target.global_position, seg_start, seg_end) <= charge_width:
-		target.call("take_damage", charge_damage)
+		DAMAGEABLE.apply_damage(target, charge_damage)
 		charge_hit_applied = true
 		# Heavy impact feedback for charge
 		if is_instance_valid(target):
@@ -258,10 +260,10 @@ func _apply_charge_hit() -> void:
 
 
 func _apply_nova_hit() -> void:
-	if not target.has_method("take_damage"):
+	if not DAMAGEABLE.can_take_damage(target):
 		return
 	if global_position.distance_to(target.global_position) <= nova_radius:
-		target.call("take_damage", nova_damage)
+		DAMAGEABLE.apply_damage(target, nova_damage)
 		# Heavy impact feedback for nova
 		if is_instance_valid(target):
 			var feedback: Object = target.get("player_feedback") as Object
@@ -270,11 +272,11 @@ func _apply_nova_hit() -> void:
 
 
 func _apply_cleave_hit() -> void:
-	if not target.has_method("take_damage"):
+	if not DAMAGEABLE.can_take_damage(target):
 		return
 	if not _point_in_cone(target.global_position, global_position, locked_direction, cleave_range, cleave_arc_degrees):
 		return
-	target.call("take_damage", cleave_damage)
+	DAMAGEABLE.apply_damage(target, cleave_damage)
 	# Heavy impact feedback for cleave
 	if is_instance_valid(target):
 		var feedback: Object = target.get("player_feedback") as Object

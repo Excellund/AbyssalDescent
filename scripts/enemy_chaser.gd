@@ -1,5 +1,7 @@
 extends "res://scripts/enemy_base.gd"
 
+const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
+
 @export var move_speed: float = 120.0
 @export var acceleration: float = 900.0
 @export var deceleration: float = 1200.0
@@ -35,12 +37,11 @@ func _try_attack_target() -> void:
 		return
 	if attack_cooldown_left > 0.0:
 		return
-	if not target.has_method("take_damage"):
-		return
 	if global_position.distance_to(target.global_position) > attack_range:
 		return
 
-	target.call("take_damage", attack_damage, {"source": "enemy_contact"})
+	if not DAMAGEABLE.apply_damage(target, attack_damage, {"source": "enemy_contact"}):
+		return
 	attack_cooldown_left = attack_interval
 	attack_anim_time_left = attack_anim_duration
 	queue_redraw()

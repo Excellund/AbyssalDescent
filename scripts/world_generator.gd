@@ -11,6 +11,7 @@ const ENEMY_SPAWNER_SCRIPT := preload("res://scripts/enemy_spawner.gd")
 const ENCOUNTER_PROFILE_BUILDER_SCRIPT := preload("res://scripts/encounter_profile_builder.gd")
 const ENCOUNTER_FLOW_SYSTEM_SCRIPT := preload("res://scripts/encounter_flow_system.gd")
 const REWARD_SELECTION_UI_SCRIPT := preload("res://scripts/reward_selection_ui.gd")
+const ENUMS := preload("res://scripts/shared/enums.gd")
 const RUN_CONTEXT_PATH := "/root/RunContext"
 const MUTATOR_ICON_BLOOD_RUSH: Texture2D = preload("res://assets/ui/mutators/blood_rush.svg")
 const MUTATOR_ICON_FLASHPOINT: Texture2D = preload("res://assets/ui/mutators/flashpoint.svg")
@@ -124,6 +125,8 @@ func _ready() -> void:
 	reward_selection_ui = REWARD_SELECTION_UI_SCRIPT.new()
 	add_child(reward_selection_ui)
 	reward_selection_ui.call("initialize", boon_choice_count, boon_reveal_duration)
+	if reward_selection_ui.has_signal("reward_selected"):
+		reward_selection_ui.connect("reward_selected", Callable(self, "_on_reward_selected"))
 	encounter_profile_builder = ENCOUNTER_PROFILE_BUILDER_SCRIPT.new()
 	add_child(encounter_profile_builder)
 	encounter_profile_builder.call("initialize", rng)
@@ -159,7 +162,7 @@ func _ready() -> void:
 	if debug_skip_starting_boon_selection:
 		_begin_room(_build_skirmish_profile(room_depth))
 	else:
-		_open_boon_selection("Choose Starting Boon", true, "boon")
+		_open_boon_selection("Choose Starting Boon", true, ENUMS.RewardMode.BOON)
 	queue_redraw()
 
 func start_run_with_powers(power_ids: Array[String]) -> Dictionary:
@@ -286,7 +289,7 @@ func _is_known_power_id(power_id: String) -> bool:
 func _process(delta: float) -> void:
 	art_time += delta
 	if is_instance_valid(reward_selection_ui) and bool(reward_selection_ui.call("is_active")):
-		_update_boon_selection_input(delta)
+		reward_selection_ui.call("process_input", delta)
 		_update_hud()
 		queue_redraw()
 		return
@@ -369,13 +372,13 @@ func _on_room_cleared() -> void:
 	if _is_endless_mode() and endless_boss_defeated:
 		boss_unlocked = false
 	pending_room_reward = String(outcome.get("pending_room_reward", "none"))
-	var reward_mode := String(outcome.get("open_reward_mode", ""))
-	if reward_mode == "boon":
-		_open_boon_selection("Choose Boon Reward", false, "boon")
+	var reward_mode: int = ENUMS.reward_mode_from_legacy(String(outcome.get("open_reward_mode", "")))
+	if reward_mode == ENUMS.RewardMode.BOON:
+		_open_boon_selection("Choose Boon Reward", false, ENUMS.RewardMode.BOON)
 		return
-	if reward_mode == "arcana_reward" or reward_mode == "trial_reward":
+	if reward_mode == ENUMS.RewardMode.ARCANA:
 		var is_first_arcana := arcana_rewards_taken.is_empty()
-		_open_boon_selection("Choose Arcana", is_first_arcana, "arcana_reward")
+		_open_boon_selection("Choose Arcana", is_first_arcana, ENUMS.RewardMode.ARCANA)
 		return
 	if bool(outcome.get("spawn_doors", false)):
 		_spawn_door_options()
@@ -792,30 +795,24 @@ func _show_room_banner(title: String, subtitle: String) -> void:
 	room_banner_tween.tween_property(room_banner_title_label, "modulate:a", 0.0, 0.24)
 	room_banner_tween.parallel().tween_property(room_banner_subtitle_label, "modulate:a", 0.0, 0.24)
 
-func _open_boon_selection(title: String, is_initial: bool, mode: String = "boon") -> void:
+func _open_boon_selection(title: String, is_initial: bool, mode: int = ENUMS.RewardMode.BOON) -> void:
 	if is_instance_valid(reward_selection_ui):
 		reward_selection_ui.call("open_selection", title, is_initial, mode, power_registry_instance, player, rng)
 		_set_combat_paused(true)
 		return
 
-func _update_boon_selection_input(delta: float) -> void:
-	if is_instance_valid(reward_selection_ui):
-		var result: Dictionary = reward_selection_ui.call("process_input", delta, player)
-		if bool(result.get("picked", false)):
-			var picked: Dictionary = result.get("choice", {})
-			var mode := String(result.get("mode", "boon"))
-			if mode == "arcana_reward" or mode == "trial_reward":
-				_apply_arcana_to_player(String(picked["id"]))
-				arcana_rewards_taken.append(String(picked["name"]))
-			else:
-				_apply_boon_to_player(String(picked["id"]))
-				boons_taken.append(String(picked["name"]))
-			_set_combat_paused(false)
-			if bool(result.get("is_initial", false)):
-				_begin_room(_build_skirmish_profile(room_depth))
-			else:
-				_spawn_door_options()
-		return
+func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> void:
+	if mode == ENUMS.RewardMode.ARCANA:
+		_apply_arcana_to_player(String(choice["id"]))
+		arcana_rewards_taken.append(String(choice["name"]))
+	else:
+		_apply_boon_to_player(String(choice["id"]))
+		boons_taken.append(String(choice["name"]))
+	_set_combat_paused(false)
+	if is_initial:
+		_begin_room(_build_skirmish_profile(room_depth))
+	else:
+		_spawn_door_options()
 
 func _apply_boon_to_player(boon_id: String) -> void:
 	if not is_instance_valid(player):
