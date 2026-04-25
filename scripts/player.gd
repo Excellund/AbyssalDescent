@@ -187,6 +187,28 @@ func heal(amount: int) -> void:
 func is_dead() -> bool:
 	return health_state.is_dead()
 
+func apply_boon(boon_id: String) -> void:
+	match boon_id:
+		"swift_strike":
+			attack_cooldown = maxf(0.08, attack_cooldown * 0.86)
+		"heavy_blow":
+			attack_damage += 8
+		"wide_arc":
+			attack_arc_degrees = clampf(attack_arc_degrees + 18.0, 60.0, 240.0)
+		"long_reach":
+			attack_range += 14.0
+		"fleet_foot":
+			max_speed += 18.0
+		"blink_dash":
+			dash_cooldown = maxf(0.12, dash_cooldown * 0.85)
+		"iron_skin":
+			if health_state != null:
+				health_state.max_health += 20
+				health_state.set_health(health_state.current_health + 20)
+				max_health = health_state.max_health
+		_:
+			pass
+
 func _perform_melee_attack(attack_direction: Vector2) -> bool:
 	var did_hit := false
 	var max_angle_radians := deg_to_rad(attack_arc_degrees * 0.5)
