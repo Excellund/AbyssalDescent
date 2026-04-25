@@ -33,10 +33,10 @@ func resolve_room_cleared(in_boss_room: bool, pending_room_reward: String, rooms
 			"room_depth": int(progress["room_depth"]),
 			"boss_unlocked": bool(progress["boss_unlocked"])
 		}
-	if normalized_reward == "hard_reward":
+	if normalized_reward == "trial_reward" or normalized_reward == "hard_reward":
 		return {
 			"run_cleared": false,
-			"open_reward_mode": "hard_reward",
+			"open_reward_mode": "trial_reward",
 			"spawn_doors": false,
 			"pending_room_reward": "none",
 			"rooms_cleared": int(progress["rooms_cleared"]),

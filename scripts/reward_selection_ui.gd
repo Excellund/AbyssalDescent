@@ -48,8 +48,8 @@ func open_selection(title: String, is_initial: bool, mode: String, power_registr
 	boon_title_text = title
 	reward_selection_mode = mode
 	_apply_mode_theme()
-	if reward_selection_mode == "hard_reward":
-		boon_choices = _roll_hard_reward_choices(boon_choice_count, power_registry, player, rng)
+	if reward_selection_mode == "trial_reward":
+		boon_choices = _roll_trial_reward_choices(boon_choice_count, power_registry, player, rng)
 	else:
 		boon_choices = _roll_boon_choices(boon_choice_count, power_registry, player, rng)
 	boon_confirm_lock_time = boon_reveal_duration + 0.08
@@ -155,7 +155,7 @@ func _create_ui() -> void:
 func _apply_mode_theme() -> void:
 	if boon_backdrop == null or boon_title_label == null:
 		return
-	if reward_selection_mode == "hard_reward":
+	if reward_selection_mode == "trial_reward":
 		boon_backdrop.color = Color(0.05, 0.02, 0.01, 0.72)
 		boon_title_label.add_theme_color_override("font_color", Color(1.0, 0.9, 0.76, 1.0))
 		boon_title_label.add_theme_color_override("font_shadow_color", Color(0.08, 0.03, 0.01, 0.96))
@@ -213,7 +213,7 @@ func _roll_boon_choices(choice_count: int, power_registry: Node, player: Node2D,
 		available.remove_at(index)
 	return picks
 
-func _roll_hard_reward_choices(choice_count: int, power_registry: Node, player: Node2D, rng: RandomNumberGenerator) -> Array[Dictionary]:
+func _roll_trial_reward_choices(choice_count: int, power_registry: Node, player: Node2D, rng: RandomNumberGenerator) -> Array[Dictionary]:
 	var pool: Array[Dictionary] = power_registry.call("get_trial_power_pool", player)
 	var available: Array[Dictionary] = []
 	for entry in pool:
@@ -234,7 +234,7 @@ func _get_stack_count_for_choice(choice: Dictionary, player: Node2D) -> int:
 	if not is_instance_valid(player):
 		return 0
 	var id := String(choice.get("id", ""))
-	if reward_selection_mode == "hard_reward":
+	if reward_selection_mode == "trial_reward":
 		if player.has_method("get_trial_power_stack_count"):
 			return int(player.call("get_trial_power_stack_count", id))
 		return 0
@@ -277,11 +277,11 @@ func _apply_boon_card_styles(hovered_index: int) -> void:
 		var t := float(i) / maxf(1.0, float(maxi(1, boon_choice_count - 1)))
 		var base_color := Color(0.08, 0.17, 0.28, 0.96).lerp(Color(0.12, 0.2, 0.34, 0.96), t)
 		var border_color := Color(0.57, 0.71, 0.88, 0.86)
-		if reward_selection_mode == "hard_reward":
+		if reward_selection_mode == "trial_reward":
 			base_color = Color(0.16, 0.11, 0.08, 0.96).lerp(Color(0.22, 0.14, 0.09, 0.96), t)
 			border_color = Color(1.0, 0.72, 0.4, 0.84)
 		if i == hovered_index and boon_confirm_lock_time <= 0.0:
-			if reward_selection_mode == "hard_reward":
+			if reward_selection_mode == "trial_reward":
 				style.bg_color = Color(0.33, 0.2, 0.12, 0.97)
 				style.border_color = Color(1.0, 0.9, 0.72, 1.0)
 			else:

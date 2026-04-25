@@ -554,9 +554,9 @@ func _draw() -> void:
 	var wing_r := facing * (body_radius - 2.0) - side * 6.3
 	draw_line(wing_l, wing_l - facing * 6.0, ENEMY_BASE.COLOR_PLAYER_WING, 2.0)
 	draw_line(wing_r, wing_r - facing * 6.0, ENEMY_BASE.COLOR_PLAYER_WING, 2.0)
-	_draw_hard_reward_state()
+	_draw_trial_reward_state()
 
-func _draw_hard_reward_state() -> void:
+func _draw_trial_reward_state() -> void:
 	var t := float(Time.get_ticks_msec()) * 0.001
 
 	if reward_razor_wind:

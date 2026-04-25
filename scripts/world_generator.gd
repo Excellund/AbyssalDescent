@@ -72,7 +72,7 @@ var choosing_next_room: bool = false
 var run_cleared: bool = false
 
 var boons_taken: Array[String] = []
-var hard_rewards_taken: Array[String] = []
+var trial_rewards_taken: Array[String] = []
 
 var current_room_size: Vector2 = Vector2.ZERO
 var current_room_static_camera: bool = true
@@ -347,8 +347,8 @@ func _on_room_cleared() -> void:
 	if reward_mode == "boon":
 		_open_boon_selection("Choose Boon Reward", false, "boon")
 		return
-	if reward_mode == "hard_reward":
-		_open_boon_selection("Choose Hard Trial Reward", false, "hard_reward")
+	if reward_mode == "trial_reward":
+		_open_boon_selection("Choose Trial Reward", false, "trial_reward")
 		return
 	if bool(outcome.get("spawn_doors", false)):
 		_spawn_door_options()
@@ -643,9 +643,9 @@ func _update_boon_selection_input(delta: float) -> void:
 		if bool(result.get("picked", false)):
 			var picked: Dictionary = result.get("choice", {})
 			var mode := String(result.get("mode", "boon"))
-			if mode == "hard_reward":
-				_apply_hard_reward_to_player(String(picked["id"]))
-				hard_rewards_taken.append(String(picked["name"]))
+			if mode == "trial_reward":
+				_apply_trial_reward_to_player(String(picked["id"]))
+				trial_rewards_taken.append(String(picked["name"]))
 			else:
 				_apply_boon_to_player(String(picked["id"]))
 				boons_taken.append(String(picked["name"]))
@@ -662,7 +662,7 @@ func _apply_boon_to_player(boon_id: String) -> void:
 	if player.has_method("apply_upgrade"):
 		player.call("apply_upgrade", boon_id)
 
-func _apply_hard_reward_to_player(reward_id: String) -> void:
+func _apply_trial_reward_to_player(reward_id: String) -> void:
 	if not is_instance_valid(player):
 		return
 	if player.has_method("apply_trial_power"):
@@ -682,7 +682,7 @@ func _update_hud() -> void:
 	if hud_label == null:
 		return
 	if run_cleared:
-		hud_label.text = "Run Clear  Boons: %d  Hard Rewards: %d" % [boons_taken.size(), hard_rewards_taken.size()]
+		hud_label.text = "Run Clear  Boons: %d  Trial Rewards: %d" % [boons_taken.size(), trial_rewards_taken.size()]
 		return
 
 	if is_instance_valid(reward_selection_ui) and bool(reward_selection_ui.call("is_active")):
@@ -697,7 +697,16 @@ func _update_hud() -> void:
 		var prompt := "Choose Door [E]"
 		if boss_unlocked:
 			prompt = "Boss Gate Open [E]"
-		hud_label.text = "%s  Rooms Cleared: %d/%d\nIcon Key: + = Easy Boon   >< = Hard Trial Reward   Cross = Rest   Crown = Boss   Boons: %d  Hard: %d" % [prompt, rooms_cleared, encounter_count, boons_taken.size(), hard_rewards_taken.size()]
+		var option_a := ""
+		var option_b := ""
+		if door_options.size() > 0:
+			option_a = String(door_options[0].get("label", ""))
+		if door_options.size() > 1:
+			option_b = String(door_options[1].get("label", ""))
+		var options_line := option_a
+		if not option_b.is_empty():
+			options_line += "  |  " + option_b
+		hud_label.text = "%s  Rooms Cleared: %d/%d\n%s\nIcon Key: + = Skirmish  >< = Encounter  ◆ = Trial  Cross = Rest  Crown = Boss  Boons: %d  Trials: %d" % [prompt, rooms_cleared, encounter_count, options_line, boons_taken.size(), trial_rewards_taken.size()]
 		return
 
 	if in_boss_room and active_room_enemy_count > 0:
@@ -705,7 +714,7 @@ func _update_hud() -> void:
 		return
 
 	var boss_text := "Unlocked" if boss_unlocked else "Locked"
-	hud_label.text = "%s  Enemies Left: %d  Boss: %s  Boons: %d  Hard: %d" % [current_room_label, active_room_enemy_count, boss_text, boons_taken.size(), hard_rewards_taken.size()]
+	hud_label.text = "%s  Enemies Left: %d  Boss: %s  Boons: %d  Trials: %d" % [current_room_label, active_room_enemy_count, boss_text, boons_taken.size(), trial_rewards_taken.size()]
 
 func _draw() -> void:
 	if current_room_size == Vector2.ZERO:
@@ -791,6 +800,18 @@ func _draw_door_icon(door: Dictionary) -> void:
 		draw_line(left_b, left_c, icon_color, 2.0)
 		draw_line(right_a, right_b, icon_color, 2.0)
 		draw_line(right_b, right_c, icon_color, 2.0)
+		return
+
+	if icon == "trial":
+		var top := door_pos + Vector2(0.0, -10.0)
+		var right := door_pos + Vector2(10.0, 0.0)
+		var bottom := door_pos + Vector2(0.0, 10.0)
+		var left := door_pos + Vector2(-10.0, 0.0)
+		var diamond := PackedVector2Array([top, right, bottom, left, top])
+		draw_polyline(diamond, outline_color, 4.0)
+		draw_polyline(diamond, icon_color, 2.0)
+		draw_line(top, bottom, outline_color, 3.0)
+		draw_line(top, bottom, icon_color, 1.5)
 		return
 
 	if icon == "rest":

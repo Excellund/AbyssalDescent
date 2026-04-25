@@ -58,9 +58,21 @@ func play_room_music(is_boss_room: bool, instant: bool = false, fade_duration: f
 
 func _create_music_players() -> void:
 	music_players.clear()
-	for _i in range(2):
+	for i in range(2):
 		var music_player := AudioStreamPlayer.new()
 		music_player.autoplay = false
 		music_player.volume_db = -60.0
+		music_player.finished.connect(_on_music_player_finished.bind(i))
 		add_child(music_player)
 		music_players.append(music_player)
+
+func _on_music_player_finished(player_index: int) -> void:
+	# Guarantee looping even when imported stream assets are not configured to loop.
+	if player_index != active_music_player_index:
+		return
+	if player_index < 0 or player_index >= music_players.size():
+		return
+	var player := music_players[player_index]
+	if player == null or player.stream == null:
+		return
+	player.play(0.0)
