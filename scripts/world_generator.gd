@@ -78,7 +78,7 @@ var choosing_next_room: bool = false
 var run_cleared: bool = false
 
 var boons_taken: Array[String] = []
-var trial_rewards_taken: Array[String] = []
+var arcana_rewards_taken: Array[String] = []
 
 var current_room_size: Vector2 = Vector2.ZERO
 var current_room_static_camera: bool = true
@@ -91,6 +91,8 @@ var status_panel: Panel
 var status_label: RichTextLabel
 var status_mutator_icon: TextureRect
 var status_mutator_label: Label
+var stats_panel: Panel
+var stats_label: RichTextLabel
 var room_banner_title_label: Label
 var room_banner_subtitle_label: Label
 var room_banner_tween: Tween
@@ -371,8 +373,8 @@ func _on_room_cleared() -> void:
 	if reward_mode == "boon":
 		_open_boon_selection("Choose Boon Reward", false, "boon")
 		return
-	if reward_mode == "trial_reward":
-		_open_boon_selection("Choose Trial Reward", false, "trial_reward")
+	if reward_mode == "arcana_reward" or reward_mode == "trial_reward":
+		_open_boon_selection("Choose Arcana", false, "arcana_reward")
 		return
 	if bool(outcome.get("spawn_doors", false)):
 		_spawn_door_options()
@@ -672,6 +674,32 @@ func _create_hud() -> void:
 	status_mutator_label.add_theme_constant_override("shadow_offset_y", 1)
 	status_mutator_label.visible = false
 	status_panel.add_child(status_mutator_label)
+
+	stats_panel = Panel.new()
+	stats_panel.custom_minimum_size = Vector2(360.0, 214.0)
+	var stats_style := StyleBoxFlat.new()
+	stats_style.bg_color = Color(0.03, 0.06, 0.1, 0.44)
+	stats_style.border_color = Color(0.0, 0.0, 0.0, 0.0)
+	stats_style.corner_radius_top_left = 10
+	stats_style.corner_radius_top_right = 10
+	stats_style.corner_radius_bottom_left = 10
+	stats_style.corner_radius_bottom_right = 10
+	stats_panel.add_theme_stylebox_override("panel", stats_style)
+	layer.add_child(stats_panel)
+
+	stats_label = RichTextLabel.new()
+	stats_label.position = Vector2(10.0, 8.0)
+	stats_label.custom_minimum_size = Vector2(340.0, 198.0)
+	stats_label.bbcode_enabled = true
+	stats_label.fit_content = true
+	stats_label.scroll_active = false
+	stats_label.selection_enabled = false
+	stats_label.add_theme_font_size_override("normal_font_size", 15)
+	stats_label.add_theme_color_override("default_color", Color(0.94, 0.98, 1.0, 0.98))
+	stats_label.add_theme_color_override("font_shadow_color", Color(0.02, 0.04, 0.06, 0.95))
+	stats_label.add_theme_constant_override("shadow_offset_x", 1)
+	stats_label.add_theme_constant_override("shadow_offset_y", 1)
+	stats_panel.add_child(stats_label)
 	_update_hud()
 
 	# Room entry banner — centered, fades in then out on room entry.
@@ -775,9 +803,9 @@ func _update_boon_selection_input(delta: float) -> void:
 		if bool(result.get("picked", false)):
 			var picked: Dictionary = result.get("choice", {})
 			var mode := String(result.get("mode", "boon"))
-			if mode == "trial_reward":
-				_apply_trial_reward_to_player(String(picked["id"]))
-				trial_rewards_taken.append(String(picked["name"]))
+			if mode == "arcana_reward" or mode == "trial_reward":
+				_apply_arcana_to_player(String(picked["id"]))
+				arcana_rewards_taken.append(String(picked["name"]))
 			else:
 				_apply_boon_to_player(String(picked["id"]))
 				boons_taken.append(String(picked["name"]))
@@ -794,7 +822,7 @@ func _apply_boon_to_player(boon_id: String) -> void:
 	if player.has_method("apply_upgrade"):
 		player.call("apply_upgrade", boon_id)
 
-func _apply_trial_reward_to_player(reward_id: String) -> void:
+func _apply_arcana_to_player(reward_id: String) -> void:
 	if not is_instance_valid(player):
 		return
 	if player.has_method("apply_trial_power"):
@@ -815,6 +843,7 @@ func _update_hud() -> void:
 		return
 	_layout_hud_panels()
 	_update_status_panel_text()
+	_update_stats_panel_text()
 
 func _layout_hud_panels() -> void:
 	var viewport_size := get_viewport().get_visible_rect().size
@@ -823,6 +852,8 @@ func _layout_hud_panels() -> void:
 		if panel_width <= 0.0:
 			panel_width = status_panel.custom_minimum_size.x
 		status_panel.position = Vector2((viewport_size.x - panel_width) * 0.5, 14.0)
+	if stats_panel != null:
+		stats_panel.position = Vector2(14.0, 14.0)
 
 func _update_status_panel_text() -> void:
 	if status_label == null:
@@ -881,6 +912,30 @@ func _update_status_panel_text() -> void:
 	if status_mutator_label != null:
 		status_mutator_label.position = Vector2(start_x + icon_w + gap, row_top)
 		status_mutator_label.custom_minimum_size = Vector2(maxf(text_w + 2.0, 60.0), 24.0)
+
+func _update_stats_panel_text() -> void:
+	if stats_label == null:
+		return
+	if not is_instance_valid(player):
+		stats_label.text = "[b]Stats[/b]\nNo player"
+		return
+
+	var hp := int(player.get("max_health"))
+	var hp_now := hp
+	if player.has_method("_get_current_health"):
+		hp_now = int(player.call("_get_current_health"))
+	var dmg := int(player.get("attack_damage"))
+	var atk_range := float(player.get("attack_range"))
+	var atk_cd := float(player.get("attack_cooldown"))
+	var move_spd := float(player.get("max_speed"))
+	var dash_cd := float(player.get("dash_cooldown"))
+	var armor := int(player.get("iron_skin_armor"))
+	var trial_stacks := 0
+	if player.has_method("get_trial_power_stack_count"):
+		for trial_id in ["razor_wind", "execution_edge", "rupture_wave", "phantom_step", "void_dash", "static_wake"]:
+			trial_stacks += int(player.call("get_trial_power_stack_count", trial_id))
+
+	stats_label.text = "[b]Stats[/b]\nHealth: [color=#C8FFD8]%d/%d[/color]\nAttack Damage: [color=#FFD8AA]%d[/color]\nAttack Range: [color=#FFD8AA]%.0f[/color]\nAttack Speed: [color=#BFD8FF]%.2fs[/color]\nMove Speed: [color=#BFD8FF]%.0f[/color]\nDash Cooldown: [color=#BFD8FF]%.2fs[/color]\nArmor: [color=#E8E8FF]%d[/color]\nArcana Stacks: [color=#FFE6B2]%d[/color]" % [hp_now, hp, dmg, atk_range, atk_cd, move_spd, dash_cd, armor, trial_stacks]
 
 func _build_room_state_text() -> String:
 	if in_boss_room:

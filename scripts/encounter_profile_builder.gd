@@ -122,11 +122,11 @@ func roll_route_options(depth: int) -> Array[Dictionary]:
 	var trial_color: Color = trial_mutator.get("theme_color", Color(1.0, 0.32, 0.22, 0.96))
 	trial_color.a = 0.96
 	var trial_option: Dictionary = {
-		"label": "Trial - %s" % trial_mutator_name,
+		"label": "Arcana - %s" % trial_mutator_name,
 		"color": trial_color,
 		"kind": "encounter",
 		"icon": "trial",
-		"reward": "trial_reward",
+		"reward": "arcana_reward",
 		"profile": trial_profile
 	}
 

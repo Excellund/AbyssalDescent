@@ -41,15 +41,30 @@ func _ready() -> void:
 
 
 ## Return all upgrades (stat boosts)
-func get_upgrade_pool() -> Array[Dictionary]:
+func get_upgrade_pool(player_reference: Node = null) -> Array[Dictionary]:
+	var swift_desc := "Attack cooldown reduced by 14%."
+	var heavy_desc := "Attack damage +8."
+	var wide_desc := "Attack arc +18 degrees."
+	var reach_desc := "Attack range +14."
+	var fleet_desc := "Move speed +18."
+	var blink_desc := "Dash cooldown reduced by 15%."
+	var iron_desc := "-3 damage per hit."
+	if is_instance_valid(player_reference) and player_reference.has_method("get_upgrade_card_desc"):
+		swift_desc = String(player_reference.call("get_upgrade_card_desc", "swift_strike"))
+		heavy_desc = String(player_reference.call("get_upgrade_card_desc", "heavy_blow"))
+		wide_desc = String(player_reference.call("get_upgrade_card_desc", "wide_arc"))
+		reach_desc = String(player_reference.call("get_upgrade_card_desc", "long_reach"))
+		fleet_desc = String(player_reference.call("get_upgrade_card_desc", "fleet_foot"))
+		blink_desc = String(player_reference.call("get_upgrade_card_desc", "blink_dash"))
+		iron_desc = String(player_reference.call("get_upgrade_card_desc", "iron_skin"))
 	return [
-		Power.new("swift_strike", "Swift Strike", "Attack cooldown reduced by 14%.", POWER_TYPE_UPGRADE, 0, {}).to_dict(),
-		Power.new("heavy_blow", "Heavy Blow", "Attack damage +8.", POWER_TYPE_UPGRADE, 0, {}).to_dict(),
-		Power.new("wide_arc", "Wide Arc", "Attack arc +18 degrees.", POWER_TYPE_UPGRADE, 0, {}).to_dict(),
-		Power.new("long_reach", "Long Reach", "Attack range +14.", POWER_TYPE_UPGRADE, 0, {}).to_dict(),
-		Power.new("fleet_foot", "Fleet Foot", "Move speed +18.", POWER_TYPE_UPGRADE, 0, {}).to_dict(),
-		Power.new("blink_dash", "Blink Dash", "Dash cooldown reduced by 15%.", POWER_TYPE_UPGRADE, 0, {}).to_dict(),
-		Power.new("iron_skin", "Iron Skin", "-3 damage per hit.", POWER_TYPE_UPGRADE, 3, {}).to_dict(),
+		Power.new("swift_strike", "Swift Strike", swift_desc, POWER_TYPE_UPGRADE, 0, {}).to_dict(),
+		Power.new("heavy_blow", "Heavy Blow", heavy_desc, POWER_TYPE_UPGRADE, 0, {}).to_dict(),
+		Power.new("wide_arc", "Wide Arc", wide_desc, POWER_TYPE_UPGRADE, 0, {}).to_dict(),
+		Power.new("long_reach", "Long Reach", reach_desc, POWER_TYPE_UPGRADE, 0, {}).to_dict(),
+		Power.new("fleet_foot", "Fleet Foot", fleet_desc, POWER_TYPE_UPGRADE, 0, {}).to_dict(),
+		Power.new("blink_dash", "Blink Dash", blink_desc, POWER_TYPE_UPGRADE, 0, {}).to_dict(),
+		Power.new("iron_skin", "Iron Skin", iron_desc, POWER_TYPE_UPGRADE, 3, {}).to_dict(),
 	]
 
 
@@ -86,7 +101,7 @@ func get_trial_power_pool(player_reference: Node = null) -> Array[Dictionary]:
 ## Get all powers (upgrades + trial powers)
 func get_all_powers(player_reference: Node = null) -> Array[Dictionary]:
 	var all_powers: Array[Dictionary] = []
-	all_powers.append_array(get_upgrade_pool())
+	all_powers.append_array(get_upgrade_pool(player_reference))
 	all_powers.append_array(get_trial_power_pool(player_reference))
 	return all_powers
 

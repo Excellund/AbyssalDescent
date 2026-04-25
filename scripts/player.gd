@@ -14,7 +14,7 @@ signal died
 @export var turn_boost: float = 1.25
 @export var dash_speed: float = 600.0
 @export var dash_duration: float = 0.12
-@export var dash_cooldown: float = 0.35
+@export var dash_cooldown: float = 0.42
 @export var dash_phase_release_duration: float = 0.1
 @export var dash_overlap_clearance_duration: float = 0.08
 @export var max_health: int = 100
@@ -153,7 +153,7 @@ func _try_start_dash(direction: Vector2) -> void:
 	dash_direction = direction if direction != Vector2.ZERO else last_move_direction
 	var effective_duration := dash_duration * (void_dash_range_mult if reward_void_dash else 1.0)
 	dash_time_left = effective_duration
-	dash_cooldown_left = maxf(0.12, dash_cooldown - void_dash_cooldown_reduction)
+	dash_cooldown_left = maxf(0.18, dash_cooldown - void_dash_cooldown_reduction)
 	dash_phase_release_left = maxf(dash_phase_release_left, dash_phase_release_duration)
 	phantom_step_hit_ids.clear()
 	phantom_step_ghost_positions.clear()
@@ -441,6 +441,9 @@ func apply_power_for_test(power_id: String) -> bool:
 func get_trial_power_card_desc(reward_id: String) -> String:
 	return upgrade_system.get_trial_power_card_description(reward_id)
 
+func get_upgrade_card_desc(boon_id: String) -> String:
+	return upgrade_system.get_upgrade_card_description(boon_id)
+
 func get_trial_power_stack_count(reward_id: String) -> int:
 	return upgrade_system.get_trial_power_stack_count(reward_id)
 
@@ -586,7 +589,7 @@ func _restart_current_scene() -> void:
 	if scene_restart_queued:
 		return
 	scene_restart_queued = true
-	get_tree().call_deferred("reload_current_scene")
+	get_tree().call_deferred("change_scene_to_file", "res://scenes/Menu.tscn")
 
 func _create_health_state() -> void:
 	health_state = HEALTH_STATE_SCRIPT.new()

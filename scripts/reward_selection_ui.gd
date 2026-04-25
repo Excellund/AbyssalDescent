@@ -14,6 +14,7 @@ var reward_selection_mode: String = "boon"
 
 var boon_layer: CanvasLayer
 var boon_title_label: Label
+var boon_subtitle_label: Label
 var boon_card_panels: Array[Panel] = []
 var boon_card_labels: Array[Label] = []
 var boon_card_stack_labels: Array[Label] = []
@@ -48,8 +49,8 @@ func open_selection(title: String, is_initial: bool, mode: String, power_registr
 	boon_title_text = title
 	reward_selection_mode = mode
 	_apply_mode_theme()
-	if reward_selection_mode == "trial_reward":
-		boon_choices = _roll_trial_reward_choices(boon_choice_count, power_registry, player, rng)
+	if reward_selection_mode == "arcana_reward" or reward_selection_mode == "trial_reward":
+		boon_choices = _roll_arcana_choices(boon_choice_count, power_registry, player, rng)
 	else:
 		boon_choices = _roll_boon_choices(boon_choice_count, power_registry, player, rng)
 	boon_confirm_lock_time = boon_reveal_duration + 0.08
@@ -107,13 +108,30 @@ func _create_ui() -> void:
 	boon_layer.add_child(boon_backdrop)
 
 	boon_title_label = Label.new()
-	boon_title_label.position = Vector2(350.0, 76.0)
-	boon_title_label.add_theme_font_size_override("font_size", 32)
+	boon_title_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	boon_title_label.offset_top = 44.0
+	boon_title_label.offset_bottom = 108.0
+	boon_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	boon_title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	boon_title_label.add_theme_font_size_override("font_size", 46)
 	boon_title_label.add_theme_color_override("font_color", Color(0.93, 0.97, 1.0, 1.0))
-	boon_title_label.add_theme_color_override("font_shadow_color", Color(0.01, 0.02, 0.04, 0.95))
-	boon_title_label.add_theme_constant_override("shadow_offset_x", 2)
-	boon_title_label.add_theme_constant_override("shadow_offset_y", 2)
+	boon_title_label.add_theme_color_override("font_shadow_color", Color(0.01, 0.02, 0.06, 0.96))
+	boon_title_label.add_theme_constant_override("shadow_offset_x", 3)
+	boon_title_label.add_theme_constant_override("shadow_offset_y", 3)
 	boon_layer.add_child(boon_title_label)
+
+	boon_subtitle_label = Label.new()
+	boon_subtitle_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	boon_subtitle_label.offset_top = 108.0
+	boon_subtitle_label.offset_bottom = 148.0
+	boon_subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	boon_subtitle_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	boon_subtitle_label.add_theme_font_size_override("font_size", 20)
+	boon_subtitle_label.add_theme_color_override("font_color", Color(0.72, 0.82, 1.0, 0.65))
+	boon_subtitle_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
+	boon_subtitle_label.add_theme_constant_override("shadow_offset_x", 2)
+	boon_subtitle_label.add_theme_constant_override("shadow_offset_y", 2)
+	boon_layer.add_child(boon_subtitle_label)
 
 	boon_card_panels.clear()
 	boon_card_labels.clear()
@@ -155,20 +173,26 @@ func _create_ui() -> void:
 func _apply_mode_theme() -> void:
 	if boon_backdrop == null or boon_title_label == null:
 		return
-	if reward_selection_mode == "trial_reward":
+	if reward_selection_mode == "arcana_reward" or reward_selection_mode == "trial_reward":
 		boon_backdrop.color = Color(0.05, 0.02, 0.01, 0.72)
 		boon_title_label.add_theme_color_override("font_color", Color(1.0, 0.9, 0.76, 1.0))
 		boon_title_label.add_theme_color_override("font_shadow_color", Color(0.08, 0.03, 0.01, 0.96))
+		if boon_subtitle_label != null:
+			boon_subtitle_label.add_theme_color_override("font_color", Color(0.95, 0.78, 0.55, 0.65))
 	else:
 		boon_backdrop.color = Color(0.01, 0.02, 0.05, 0.7)
 		boon_title_label.add_theme_color_override("font_color", Color(0.93, 0.97, 1.0, 1.0))
 		boon_title_label.add_theme_color_override("font_shadow_color", Color(0.01, 0.02, 0.04, 0.95))
+		if boon_subtitle_label != null:
+			boon_subtitle_label.add_theme_color_override("font_color", Color(0.72, 0.82, 1.0, 0.65))
 
 func _refresh_boon_ui(player: Node2D) -> void:
 	if boon_layer == null:
 		return
 	boon_layer.visible = true
-	boon_title_label.text = "%s  (Cards reveal in...)" % boon_title_text
+	boon_title_label.text = boon_title_text
+	if boon_subtitle_label != null:
+		boon_subtitle_label.text = "Revealing your options…"
 
 	for i in range(boon_card_labels.size()):
 		var panel := boon_card_panels[i]
@@ -197,7 +221,7 @@ func _refresh_boon_ui(player: Node2D) -> void:
 	_update_boon_reveal_visuals()
 
 func _roll_boon_choices(choice_count: int, power_registry: Node, player: Node2D, rng: RandomNumberGenerator) -> Array[Dictionary]:
-	var pool: Array[Dictionary] = power_registry.call("get_upgrade_pool")
+	var pool: Array[Dictionary] = power_registry.call("get_upgrade_pool", player)
 	var available: Array[Dictionary] = []
 	for entry in pool:
 		var limit := int(entry.get("stack_limit", 0))
@@ -213,7 +237,7 @@ func _roll_boon_choices(choice_count: int, power_registry: Node, player: Node2D,
 		available.remove_at(index)
 	return picks
 
-func _roll_trial_reward_choices(choice_count: int, power_registry: Node, player: Node2D, rng: RandomNumberGenerator) -> Array[Dictionary]:
+func _roll_arcana_choices(choice_count: int, power_registry: Node, player: Node2D, rng: RandomNumberGenerator) -> Array[Dictionary]:
 	var pool: Array[Dictionary] = power_registry.call("get_trial_power_pool", player)
 	var available: Array[Dictionary] = []
 	for entry in pool:
@@ -234,7 +258,7 @@ func _get_stack_count_for_choice(choice: Dictionary, player: Node2D) -> int:
 	if not is_instance_valid(player):
 		return 0
 	var id := String(choice.get("id", ""))
-	if reward_selection_mode == "trial_reward":
+	if reward_selection_mode == "arcana_reward" or reward_selection_mode == "trial_reward":
 		if player.has_method("get_trial_power_stack_count"):
 			return int(player.call("get_trial_power_stack_count", id))
 		return 0
@@ -325,7 +349,8 @@ func _update_boon_reveal_visuals() -> void:
 		label.modulate.a = eased
 		stack_label.modulate.a = eased
 
-	if boon_confirm_lock_time <= 0.0:
-		boon_title_label.text = "%s  (Click a card to choose)" % boon_title_text
-	else:
-		boon_title_label.text = "%s  (Get ready...)" % boon_title_text
+	if boon_subtitle_label != null:
+		if boon_confirm_lock_time <= 0.0:
+			boon_subtitle_label.text = "Select a card to claim your reward"
+		else:
+			boon_subtitle_label.text = "Preparing your choices…"
