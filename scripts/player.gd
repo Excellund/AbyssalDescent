@@ -216,7 +216,7 @@ func heal(amount: int) -> void:
 func is_dead() -> bool:
 	return health_state.is_dead()
 
-func apply_boon(boon_id: String) -> void:
+func apply_upgrade(boon_id: String) -> void:
 	match boon_id:
 		"swift_strike":
 			attack_cooldown = maxf(0.08, attack_cooldown * 0.86)
@@ -238,7 +238,7 @@ func apply_boon(boon_id: String) -> void:
 		_:
 			pass
 
-func apply_hard_reward(reward_id: String) -> void:
+func apply_trial_power(reward_id: String) -> void:
 	match reward_id:
 		"razor_wind":
 			reward_razor_wind = true
@@ -272,7 +272,7 @@ func apply_power_for_test(power_id: String) -> bool:
 		"rupture_wave": true
 	}
 	if hard_ids.has(id):
-		apply_hard_reward(id)
+		apply_trial_power(id)
 		return true
 
 	var boon_ids := {
@@ -285,12 +285,12 @@ func apply_power_for_test(power_id: String) -> bool:
 		"iron_skin": true
 	}
 	if boon_ids.has(id):
-		apply_boon(id)
+		apply_upgrade(id)
 		return true
 
 	return false
 
-func get_hard_reward_card_desc(reward_id: String) -> String:
+func get_trial_power_card_desc(reward_id: String) -> String:
 	match reward_id:
 		"razor_wind":
 			var next_stack := razor_wind_stacks + 1
@@ -310,7 +310,7 @@ func get_hard_reward_card_desc(reward_id: String) -> String:
 		_:
 			return "Enhances this power."
 
-func get_hard_reward_stack_count(reward_id: String) -> int:
+func get_trial_power_stack_count(reward_id: String) -> int:
 	match reward_id:
 		"razor_wind":
 			return razor_wind_stacks

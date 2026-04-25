@@ -1,0 +1,116 @@
+## Centralized power registry and unified data structure
+## All upgrades (stat boosts) and trial powers (combat abilities) are defined here
+## This is the single source of truth for what powers exist and their metadata
+
+extends Node
+
+# Power type constants
+const POWER_TYPE_UPGRADE = "upgrade"  # Stat boosts: Swift Strike, Heavy Blow, etc
+const POWER_TYPE_TRIAL = "trial_power"  # Combat abilities: Razor Wind, Execution Edge, Rupture Wave
+
+# Unified power data structure
+class Power:
+	var id: String  # Unique identifier: "swift_strike", "razor_wind", etc
+	var name: String  # Display name: "Swift Strike"
+	var description: String  # Card text
+	var power_type: String  # POWER_TYPE_UPGRADE or POWER_TYPE_TRIAL
+	var stack_limit: int  # Max times this power can be taken (0 = unlimited)
+	var metadata: Dictionary  # Additional fields: scaling params, effect ranges, etc
+	
+	func _init(p_id: String, p_name: String, p_desc: String, p_type: String, p_stack_limit: int = 0, p_metadata: Dictionary = {}) -> void:
+		id = p_id
+		name = p_name
+		description = p_desc
+		power_type = p_type
+		stack_limit = p_stack_limit
+		metadata = p_metadata.duplicate()
+	
+	func to_dict() -> Dictionary:
+		return {
+			"id": id,
+			"name": name,
+			"desc": description,
+			"type": power_type,
+			"stack_limit": stack_limit
+		}
+
+
+func _ready() -> void:
+	# No initialization needed; registry is purely static data
+	pass
+
+
+## Return all upgrades (stat boosts)
+func get_upgrade_pool() -> Array[Dictionary]:
+	return [
+		Power.new("swift_strike", "Swift Strike", "Attack cooldown reduced by 14%.", POWER_TYPE_UPGRADE, 0, {}).to_dict(),
+		Power.new("heavy_blow", "Heavy Blow", "Attack damage +8.", POWER_TYPE_UPGRADE, 0, {}).to_dict(),
+		Power.new("wide_arc", "Wide Arc", "Attack arc +18 degrees.", POWER_TYPE_UPGRADE, 0, {}).to_dict(),
+		Power.new("long_reach", "Long Reach", "Attack range +14.", POWER_TYPE_UPGRADE, 0, {}).to_dict(),
+		Power.new("fleet_foot", "Fleet Foot", "Move speed +18.", POWER_TYPE_UPGRADE, 0, {}).to_dict(),
+		Power.new("blink_dash", "Blink Dash", "Dash cooldown reduced by 15%.", POWER_TYPE_UPGRADE, 0, {}).to_dict(),
+		Power.new("iron_skin", "Iron Skin", "Max health +20 and heal +20.", POWER_TYPE_UPGRADE, 0, {}).to_dict(),
+	]
+
+
+## Return all trial powers (combat abilities)
+func get_trial_power_pool(player_reference: Node = null) -> Array[Dictionary]:
+	var razor_desc := "Attacks launch a long-range piercing wind slash."
+	var execution_desc := "Every 3rd swing is a huge execution strike."
+	var rupture_desc := "Hits detonate a damaging shockwave."
+	
+	# Try to get dynamic descriptions from player stack counts
+	if is_instance_valid(player_reference) and player_reference.has_method("get_trial_power_card_desc"):
+		razor_desc = String(player_reference.call("get_trial_power_card_desc", "razor_wind"))
+		execution_desc = String(player_reference.call("get_trial_power_card_desc", "execution_edge"))
+		rupture_desc = String(player_reference.call("get_trial_power_card_desc", "rupture_wave"))
+	
+	return [
+		Power.new("razor_wind", "Razor Wind", razor_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
+		Power.new("execution_edge", "Execution Edge", execution_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
+		Power.new("rupture_wave", "Rupture Wave", rupture_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
+	]
+
+
+## Get all powers (upgrades + trial powers)
+func get_all_powers(player_reference: Node = null) -> Array[Dictionary]:
+	var all_powers: Array[Dictionary] = []
+	all_powers.append_array(get_upgrade_pool())
+	all_powers.append_array(get_trial_power_pool(player_reference))
+	return all_powers
+
+
+## Check if a power ID exists
+func is_valid_power_id(power_id: String) -> bool:
+	var id := power_id.strip_edges().to_lower()
+	for power in get_all_powers():
+		if power["id"] == id:
+			return true
+	return false
+
+
+## Check if a power ID is an upgrade
+func is_upgrade(power_id: String) -> bool:
+	var id := power_id.strip_edges().to_lower()
+	for power in get_upgrade_pool():
+		if power["id"] == id:
+			return true
+	return false
+
+
+## Check if a power ID is a trial power
+func is_trial_power(power_id: String) -> bool:
+	var id := power_id.strip_edges().to_lower()
+	for power in get_trial_power_pool():
+		if power["id"] == id:
+			return true
+	return false
+
+
+## Get power by ID
+func get_power(power_id: String) -> Dictionary:
+	var id := power_id.strip_edges().to_lower()
+	for power in get_all_powers():
+		if power["id"] == id:
+			return power.duplicate()
+	return {}

@@ -2,6 +2,7 @@ extends Node2D
 
 const ENEMY_CHASER_SCRIPT := preload("res://scripts/enemy_chaser.gd")
 const ENEMY_CHARGER_SCRIPT := preload("res://scripts/enemy_charger.gd")
+const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
 
 @export var player_path: NodePath = NodePath("Player")
 @export var encounter_count: int = 5
@@ -36,6 +37,7 @@ var player: Node2D
 var player_camera: Camera2D
 var hud_label: Label
 var rng := RandomNumberGenerator.new()
+var power_registry_instance: Node
 
 var rooms_cleared: int = 0
 var room_depth: int = 0
@@ -74,6 +76,7 @@ var art_time: float = 0.0
 
 func _ready() -> void:
 	rng.randomize()
+	power_registry_instance = POWER_REGISTRY.new()
 	player = get_node_or_null(player_path) as Node2D
 	if is_instance_valid(player):
 		player_camera = player.get_node_or_null("Camera2D") as Camera2D
@@ -151,13 +154,7 @@ func _parse_power_command(command: String) -> Array[String]:
 	return ids
 
 func _is_known_power_id(power_id: String) -> bool:
-	for boon in _get_boon_pool():
-		if String(boon["id"]) == power_id:
-			return true
-	for reward in _get_hard_reward_pool():
-		if String(reward["id"]) == power_id:
-			return true
-	return false
+	return power_registry_instance.is_valid_power_id(power_id)
 
 func _process(delta: float) -> void:
 	art_time += delta
@@ -674,28 +671,17 @@ func _confirm_selected_boon(choice_index: int) -> void:
 func _apply_boon_to_player(boon_id: String) -> void:
 	if not is_instance_valid(player):
 		return
-	if player.has_method("apply_boon"):
-		player.call("apply_boon", boon_id)
+	if player.has_method("apply_upgrade"):
+		player.call("apply_upgrade", boon_id)
 
 func _apply_hard_reward_to_player(reward_id: String) -> void:
 	if not is_instance_valid(player):
 		return
-	if player.has_method("apply_hard_reward"):
-		player.call("apply_hard_reward", reward_id)
-
-func _get_boon_pool() -> Array[Dictionary]:
-	return [
-		{"id": "swift_strike", "name": "Swift Strike", "desc": "Attack cooldown reduced by 14%."},
-		{"id": "heavy_blow", "name": "Heavy Blow", "desc": "Attack damage +8."},
-		{"id": "wide_arc", "name": "Wide Arc", "desc": "Attack arc +18 degrees."},
-		{"id": "long_reach", "name": "Long Reach", "desc": "Attack range +14."},
-		{"id": "fleet_foot", "name": "Fleet Foot", "desc": "Move speed +18."},
-		{"id": "blink_dash", "name": "Blink Dash", "desc": "Dash cooldown reduced by 15%."},
-		{"id": "iron_skin", "name": "Iron Skin", "desc": "Max health +20 and heal +20."}
-	]
+	if player.has_method("apply_trial_power"):
+		player.call("apply_trial_power", reward_id)
 
 func _roll_boon_choices(choice_count: int) -> Array[Dictionary]:
-	var pool := _get_boon_pool()
+	var pool: Array[Dictionary] = power_registry_instance.get_upgrade_pool()
 	var available := pool.duplicate(true)
 	var picks: Array[Dictionary] = []
 	for _i in range(mini(choice_count, available.size())):
@@ -704,22 +690,8 @@ func _roll_boon_choices(choice_count: int) -> Array[Dictionary]:
 		available.remove_at(index)
 	return picks
 
-func _get_hard_reward_pool() -> Array[Dictionary]:
-	var razor_desc := "Attacks launch a long-range piercing wind slash."
-	var execution_desc := "Every 3rd swing is a huge execution strike."
-	var rupture_desc := "Hits detonate a damaging shockwave."
-	if is_instance_valid(player) and player.has_method("get_hard_reward_card_desc"):
-		razor_desc = String(player.call("get_hard_reward_card_desc", "razor_wind"))
-		execution_desc = String(player.call("get_hard_reward_card_desc", "execution_edge"))
-		rupture_desc = String(player.call("get_hard_reward_card_desc", "rupture_wave"))
-	return [
-		{"id": "razor_wind", "name": "Razor Wind", "desc": razor_desc},
-		{"id": "execution_edge", "name": "Execution Edge", "desc": execution_desc},
-		{"id": "rupture_wave", "name": "Rupture Wave", "desc": rupture_desc}
-	]
-
 func _roll_hard_reward_choices(choice_count: int) -> Array[Dictionary]:
-	var pool := _get_hard_reward_pool()
+	var pool: Array[Dictionary] = power_registry_instance.get_trial_power_pool(player)
 	var available := pool.duplicate(true)
 	var picks: Array[Dictionary] = []
 	for _i in range(mini(choice_count, available.size())):
@@ -746,8 +718,8 @@ func _refresh_boon_ui() -> void:
 		if reward_selection_mode == "hard_reward":
 			var reward_id := String(boon.get("id", ""))
 			var stack_count := 0
-			if is_instance_valid(player) and player.has_method("get_hard_reward_stack_count"):
-				stack_count = int(player.call("get_hard_reward_stack_count", reward_id))
+			if is_instance_valid(player) and player.has_method("get_trial_power_stack_count"):
+				stack_count = int(player.call("get_trial_power_stack_count", reward_id))
 			var stack_icons := _format_stack_icons(stack_count)
 			label.text = "%d. %s\nStacks: %s\n%s" % [i + 1, boon["name"], stack_icons, boon["desc"]]
 		else:
