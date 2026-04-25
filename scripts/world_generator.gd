@@ -11,6 +11,10 @@ const ENEMY_SPAWNER_SCRIPT := preload("res://scripts/enemy_spawner.gd")
 const ENCOUNTER_PROFILE_BUILDER_SCRIPT := preload("res://scripts/encounter_profile_builder.gd")
 const ENCOUNTER_FLOW_SYSTEM_SCRIPT := preload("res://scripts/encounter_flow_system.gd")
 const REWARD_SELECTION_UI_SCRIPT := preload("res://scripts/reward_selection_ui.gd")
+const MUTATOR_ICON_BLOOD_RUSH: Texture2D = preload("res://assets/ui/mutators/blood_rush.svg")
+const MUTATOR_ICON_FLASHPOINT: Texture2D = preload("res://assets/ui/mutators/flashpoint.svg")
+const MUTATOR_ICON_SIEGEBREAK: Texture2D = preload("res://assets/ui/mutators/siegebreak.svg")
+const MUTATOR_ICON_IRON_VOLLEY: Texture2D = preload("res://assets/ui/mutators/iron_volley.svg")
 const DEBUG_RUN_NORMAL := 0
 const DEBUG_RUN_FIRST_BOSS := 1
 
@@ -771,21 +775,17 @@ func _build_room_state_text() -> String:
 	return "State: Cleared"
 
 func _get_mutator_icon_texture(icon_shape_id: String) -> Texture2D:
-	var path := ""
 	match icon_shape_id:
 		"blood_rush":
-			path = "res://assets/ui/mutators/blood_rush.svg"
+			return MUTATOR_ICON_BLOOD_RUSH
 		"flashpoint":
-			path = "res://assets/ui/mutators/flashpoint.svg"
+			return MUTATOR_ICON_FLASHPOINT
 		"siegebreak":
-			path = "res://assets/ui/mutators/siegebreak.svg"
+			return MUTATOR_ICON_SIEGEBREAK
 		"iron_volley":
-			path = "res://assets/ui/mutators/iron_volley.svg"
+			return MUTATOR_ICON_IRON_VOLLEY
 		_:
-			path = ""
-	if path.is_empty():
-		return null
-	return load(path) as Texture2D
+			return null
 
 func _get_nearest_door_for_prompt() -> Dictionary:
 	if not is_instance_valid(player):
