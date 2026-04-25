@@ -547,8 +547,8 @@ func _create_hud() -> void:
 	layer.add_child(status_panel)
 
 	status_label = RichTextLabel.new()
-	status_label.position = Vector2(10.0, 8.0)
-	status_label.custom_minimum_size = Vector2(282.0, 34.0)
+	status_label.position = Vector2(0.0, 8.0)
+	status_label.custom_minimum_size = Vector2(302.0, 34.0)
 	status_label.bbcode_enabled = true
 	status_label.fit_content = true
 	status_label.scroll_active = false
@@ -570,6 +570,8 @@ func _create_hud() -> void:
 	status_mutator_label = Label.new()
 	status_mutator_label.position = Vector2(34.0, 39.0)
 	status_mutator_label.custom_minimum_size = Vector2(256.0, 24.0)
+	status_mutator_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	status_mutator_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	status_mutator_label.add_theme_font_size_override("font_size", 16)
 	status_mutator_label.add_theme_color_override("font_color", Color(0.86, 0.94, 1.0, 0.96))
 	status_mutator_label.add_theme_color_override("font_shadow_color", Color(0.02, 0.04, 0.06, 0.92))
@@ -724,21 +726,27 @@ func _update_hud() -> void:
 func _layout_hud_panels() -> void:
 	var viewport_size := get_viewport().get_visible_rect().size
 	if status_panel != null:
-		status_panel.position = Vector2(viewport_size.x - 314.0, 12.0)
+		var panel_width := status_panel.size.x
+		if panel_width <= 0.0:
+			panel_width = status_panel.custom_minimum_size.x
+		status_panel.position = Vector2((viewport_size.x - panel_width) * 0.5, 14.0)
 
 func _update_status_panel_text() -> void:
 	if status_label == null:
 		return
 
 	if run_cleared:
-		status_label.text = "[b]Depth %d[/b]\n[color=#A8FFB0]Run Clear[/color]" % room_depth
+		status_label.text = "[center][b]Depth %d[/b]\n[color=#A8FFB0]Run Clear[/color][/center]" % room_depth
 		if status_mutator_icon != null:
 			status_mutator_icon.visible = false
 		if status_mutator_label != null:
 			status_mutator_label.visible = false
 		return
 
-	status_label.text = "[b]Depth %d[/b]  [color=#A5B6C9]%d/%d[/color]" % [room_depth, rooms_cleared, encounter_count]
+	if rooms_cleared >= encounter_count:
+		status_label.text = "[center][b]Depth %d[/b][/center]" % room_depth
+	else:
+		status_label.text = "[center][b]Depth %d[/b]  [color=#A5B6C9]%d/%d[/color][/center]" % [room_depth, rooms_cleared, encounter_count]
 
 	if current_room_enemy_mutator.is_empty():
 		if status_mutator_icon != null:
@@ -762,6 +770,24 @@ func _update_status_panel_text() -> void:
 		status_mutator_label.text = mutator_name
 		status_mutator_label.add_theme_color_override("font_color", ui_mutator_color)
 		status_mutator_label.visible = true
+
+	# Center the icon + text group horizontally in the panel.
+	var hud_font := ThemeDB.fallback_font
+	var text_w := 0.0
+	if hud_font != null:
+		text_w = hud_font.get_string_size(mutator_name, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 16).x
+	var icon_visible := (icon_texture != null)
+	var icon_w := 18.0 if icon_visible else 0.0
+	var gap := 6.0 if icon_visible else 0.0
+	var row_w := icon_w + gap + text_w
+	var panel_w := 302.0
+	var start_x := maxf(8.0, (panel_w - row_w) * 0.5)
+	var row_top := 38.0
+	if status_mutator_icon != null:
+		status_mutator_icon.position = Vector2(start_x, row_top + 1.0)
+	if status_mutator_label != null:
+		status_mutator_label.position = Vector2(start_x + icon_w + gap, row_top)
+		status_mutator_label.custom_minimum_size = Vector2(maxf(text_w + 2.0, 60.0), 24.0)
 
 func _build_room_state_text() -> String:
 	if in_boss_room:
@@ -808,21 +834,12 @@ func _get_nearest_door_for_prompt() -> Dictionary:
 	return nearest
 
 func _build_door_prompt_text(door: Dictionary) -> String:
-	var label := String(door.get("label", "Unknown Route"))
+	var label := String(door.get("label", "Encounter"))
 	var kind := String(door.get("kind", "encounter"))
-	var icon := String(door.get("icon", ""))
-
 	if kind == "boss":
-		return "%s (Boss)" % label
+		return "Boss Chamber"
 	if kind == "rest":
-		return "%s (Heal + Recover)" % label
-	if icon == "trial":
-		var mutator_name := String(door.get("profile", {}).get("enemy_mutator", {}).get("name", "Trial"))
-		return "%s (%s)" % [label, mutator_name]
-	if icon == "hard":
-		return "%s (Hard Fight)" % label
-	if icon == "easy":
-		return "%s (Skirmish)" % label
+		return "Rest Site"
 	return label
 
 func _draw() -> void:
@@ -888,37 +905,43 @@ func _draw_door_interaction_prompt(door: Dictionary) -> void:
 	if font == null:
 		return
 	var door_pos := door.get("position", Vector2.ZERO) as Vector2
-	var prompt_text := "[E]  " + _build_door_prompt_name(door)
-	var font_size := 20
-	var text_size := font.get_string_size(prompt_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size)
-	var plate_w := clampf(text_size.x + 38.0, 176.0, 420.0)
-	var plate_h := 34.0
-	var plate_x := door_pos.x - plate_w * 0.5
-	var plate_y := door_pos.y - 78.0
-	var radius := plate_h * 0.5
 	var door_color := door.get("color", Color(0.78, 0.9, 1.0, 1.0)) as Color
-
-	# Soft capsule glow
-	var glow_color := Color(door_color.r, door_color.g, door_color.b, 0.2)
-	draw_circle(Vector2(plate_x + radius, plate_y + radius), radius + 4.0, glow_color)
-	draw_circle(Vector2(plate_x + plate_w - radius, plate_y + radius), radius + 4.0, glow_color)
-	draw_rect(Rect2(Vector2(plate_x + radius, plate_y - 4.0), Vector2(plate_w - radius * 2.0, plate_h + 8.0)), glow_color, true)
-
-	# Main capsule plate
-	var plate_fill := Color(0.04, 0.07, 0.12, 0.8)
-	draw_circle(Vector2(plate_x + radius, plate_y + radius), radius, plate_fill)
-	draw_circle(Vector2(plate_x + plate_w - radius, plate_y + radius), radius, plate_fill)
-	draw_rect(Rect2(Vector2(plate_x + radius, plate_y), Vector2(plate_w - radius * 2.0, plate_h)), plate_fill, true)
-
-	# Accent strip
-	var accent := Color(door_color.r, door_color.g, door_color.b, 0.62)
-	draw_line(Vector2(plate_x + 12.0, plate_y + plate_h - 5.0), Vector2(plate_x + plate_w - 12.0, plate_y + plate_h - 5.0), accent, 1.6)
-
-	# Centered text
-	var text_max_width := plate_w
-	var text_pos := Vector2(plate_x, plate_y + 24.0)
-	draw_string(font, text_pos + Vector2(1.0, 1.0), prompt_text, HORIZONTAL_ALIGNMENT_CENTER, text_max_width, font_size, Color(0.0, 0.0, 0.0, 0.58))
-	draw_string(font, text_pos, prompt_text, HORIZONTAL_ALIGNMENT_CENTER, text_max_width, font_size, Color(1.0, 1.0, 1.0, 0.99))
+	var info_text := _build_door_prompt_text(door)
+	var action_text := "[E] Enter"
+	var action_font_size := 13
+	var info_font_size := 17
+	var action_size := font.get_string_size(action_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, action_font_size)
+	var info_size := font.get_string_size(info_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, info_font_size)
+	var plate_w := clampf(maxf(action_size.x, info_size.x) + 52.0, 210.0, 460.0)
+	var plate_h := 56.0
+	var radius := plate_h * 0.5
+	var plate_x := door_pos.x - plate_w * 0.5
+	var plate_y := door_pos.y - 100.0
+	var fill := Color(0.035, 0.055, 0.09, 0.88)
+	var glow := Color(door_color.r, door_color.g, door_color.b, 0.16)
+	var border := Color(door_color.r, door_color.g, door_color.b, 0.68)
+	# Glow
+	draw_circle(Vector2(plate_x + radius, plate_y + radius), radius + 5.0, glow)
+	draw_circle(Vector2(plate_x + plate_w - radius, plate_y + radius), radius + 5.0, glow)
+	draw_rect(Rect2(Vector2(plate_x + radius, plate_y - 5.0), Vector2(plate_w - radius * 2.0, plate_h + 10.0)), glow, true)
+	# Capsule fill
+	draw_circle(Vector2(plate_x + radius, plate_y + radius), radius, fill)
+	draw_circle(Vector2(plate_x + plate_w - radius, plate_y + radius), radius, fill)
+	draw_rect(Rect2(Vector2(plate_x + radius, plate_y), Vector2(plate_w - radius * 2.0, plate_h)), fill, true)
+	# Border
+	draw_arc(Vector2(plate_x + radius, plate_y + radius), radius, PI * 0.5, PI * 1.5, 22, border, 1.6)
+	draw_arc(Vector2(plate_x + plate_w - radius, plate_y + radius), radius, -PI * 0.5, PI * 0.5, 22, border, 1.6)
+	draw_line(Vector2(plate_x + radius, plate_y), Vector2(plate_x + plate_w - radius, plate_y), border, 1.6)
+	draw_line(Vector2(plate_x + radius, plate_y + plate_h), Vector2(plate_x + plate_w - radius, plate_y + plate_h), border, 1.6)
+	# Divider
+	draw_line(Vector2(plate_x + radius * 0.6, plate_y + 22.0), Vector2(plate_x + plate_w - radius * 0.6, plate_y + 22.0), Color(door_color.r, door_color.g, door_color.b, 0.32), 1.0)
+	# Text
+	var text_shadow := Color(0.0, 0.0, 0.0, 0.56)
+	var text_color := Color(0.95, 0.98, 1.0, 0.98)
+	draw_string(font, Vector2(plate_x, plate_y + 17.0) + Vector2(1.0, 1.0), action_text, HORIZONTAL_ALIGNMENT_CENTER, plate_w, action_font_size, text_shadow)
+	draw_string(font, Vector2(plate_x, plate_y + 17.0), action_text, HORIZONTAL_ALIGNMENT_CENTER, plate_w, action_font_size, text_color)
+	draw_string(font, Vector2(plate_x, plate_y + 46.0) + Vector2(1.0, 1.0), info_text, HORIZONTAL_ALIGNMENT_CENTER, plate_w, info_font_size, text_shadow)
+	draw_string(font, Vector2(plate_x, plate_y + 46.0), info_text, HORIZONTAL_ALIGNMENT_CENTER, plate_w, info_font_size, text_color)
 
 func _build_door_prompt_name(door: Dictionary) -> String:
 	var kind := String(door.get("kind", "encounter"))
