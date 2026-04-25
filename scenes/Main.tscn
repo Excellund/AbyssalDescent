@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://duxot7tpxkfg6"]
 
 [ext_resource type="PackedScene" uid="uid://drax5neg5nl7r" path="res://scenes/Player.tscn" id="1_elqb8"]
-[ext_resource type="Script" path="res://scripts/wave_manager.gd" id="2_jxm8r"]
+[ext_resource type="Script" path="res://scripts/world_generator.gd" id="2_jxm8r"]
 
 [node name="Main" type="Node2D" unique_id=1680556229]
 script = ExtResource("2_jxm8r")

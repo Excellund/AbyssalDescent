@@ -77,11 +77,9 @@ func _process_windup_state(delta: float) -> void:
 		_enter_charge_state()
 
 func _process_charge_state(delta: float) -> void:
-	var from_pos := global_position
 	velocity = charger_charge_direction * charge_speed
 	move_and_slide()
-	var to_pos := global_position
-	_try_apply_charge_hit(from_pos, to_pos)
+	_try_apply_charge_hit()
 	charger_state_time_left = maxf(0.0, charger_state_time_left - delta)
 	if charger_state_time_left <= 0.0:
 		_enter_recover_state()
@@ -119,7 +117,7 @@ func _enter_recover_state() -> void:
 	velocity *= 0.25
 	queue_redraw()
 
-func _try_apply_charge_hit(segment_start: Vector2, segment_end: Vector2) -> void:
+func _try_apply_charge_hit() -> void:
 	if charger_charge_hit_applied:
 		return
 	if not is_instance_valid(target):
@@ -127,14 +125,20 @@ func _try_apply_charge_hit(segment_start: Vector2, segment_end: Vector2) -> void
 	if not target.has_method("take_damage"):
 		return
 
-	var distance_to_path := _distance_point_to_segment(target.global_position, segment_start, segment_end)
-	if distance_to_path > path_width:
-		return
+	for i in get_slide_collision_count():
+		var collision := get_slide_collision(i)
+		if collision.get_collider() == target:
+			target.call("take_damage", charge_damage)
+			charger_charge_hit_applied = true
+			attack_anim_time_left = attack_anim_duration
+			queue_redraw()
+			return
 
-	target.call("take_damage", charge_damage)
-	charger_charge_hit_applied = true
-	attack_anim_time_left = attack_anim_duration
-	queue_redraw()
+	if global_position.distance_to(target.global_position) <= path_width:
+		target.call("take_damage", charge_damage)
+		charger_charge_hit_applied = true
+		attack_anim_time_left = attack_anim_duration
+		queue_redraw()
 
 func _distance_point_to_segment(point: Vector2, segment_start: Vector2, segment_end: Vector2) -> float:
 	var segment := segment_end - segment_start
