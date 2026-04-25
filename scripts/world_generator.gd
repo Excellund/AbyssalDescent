@@ -11,6 +11,7 @@ const ENEMY_SPAWNER_SCRIPT := preload("res://scripts/enemy_spawner.gd")
 const ENCOUNTER_PROFILE_BUILDER_SCRIPT := preload("res://scripts/encounter_profile_builder.gd")
 const ENCOUNTER_FLOW_SYSTEM_SCRIPT := preload("res://scripts/encounter_flow_system.gd")
 const REWARD_SELECTION_UI_SCRIPT := preload("res://scripts/reward_selection_ui.gd")
+const RUN_CONTEXT_PATH := "/root/RunContext"
 const MUTATOR_ICON_BLOOD_RUSH: Texture2D = preload("res://assets/ui/mutators/blood_rush.svg")
 const MUTATOR_ICON_FLASHPOINT: Texture2D = preload("res://assets/ui/mutators/flashpoint.svg")
 const MUTATOR_ICON_SIEGEBREAK: Texture2D = preload("res://assets/ui/mutators/siegebreak.svg")
@@ -72,6 +73,7 @@ var room_depth: int = 0
 var active_room_enemy_count: int = 0
 var boss_unlocked: bool = false
 var in_boss_room: bool = false
+var endless_boss_defeated: bool = false
 var choosing_next_room: bool = false
 var run_cleared: bool = false
 
@@ -106,6 +108,8 @@ func _ready() -> void:
 	player = get_node_or_null(player_path) as Node2D
 	if is_instance_valid(player):
 		player_camera = player.get_node_or_null("Camera2D") as Camera2D
+	_sync_audio_settings_from_context()
+	endless_boss_defeated = false
 
 	current_room_size = room_base_size
 	current_room_label = "Starting Chamber"
@@ -232,6 +236,7 @@ func _apply_debug_run_state(state: String) -> Dictionary:
 	pending_room_reward = "none"
 	run_cleared = false
 	in_boss_room = false
+	endless_boss_defeated = false
 	active_room_enemy_count = 0
 	_clear_all_enemies()
 
@@ -342,12 +347,25 @@ func _on_room_cleared() -> void:
 		return
 	var outcome: Dictionary = encounter_flow_system.call("resolve_room_cleared", in_boss_room, pending_room_reward, rooms_cleared, room_depth, encounter_count)
 	run_cleared = bool(outcome.get("run_cleared", false))
+	if run_cleared and _is_endless_mode() and in_boss_room:
+		run_cleared = false
+		in_boss_room = false
+		endless_boss_defeated = true
+		rooms_cleared += 1
+		room_depth += 1
+		boss_unlocked = false
+		pending_room_reward = "none"
+		_show_room_banner("Boss Defeated", "Endless continues")
+		_spawn_door_options()
+		return
 	if run_cleared:
 		choosing_next_room = false
 		return
 	rooms_cleared = int(outcome.get("rooms_cleared", rooms_cleared))
 	room_depth = int(outcome.get("room_depth", room_depth))
 	boss_unlocked = bool(outcome.get("boss_unlocked", boss_unlocked))
+	if _is_endless_mode() and endless_boss_defeated:
+		boss_unlocked = false
 	pending_room_reward = String(outcome.get("pending_room_reward", "none"))
 	var reward_mode := String(outcome.get("open_reward_mode", ""))
 	if reward_mode == "boon":
@@ -358,6 +376,28 @@ func _on_room_cleared() -> void:
 		return
 	if bool(outcome.get("spawn_doors", false)):
 		_spawn_door_options()
+
+func _get_run_context() -> Node:
+	return get_node_or_null(RUN_CONTEXT_PATH)
+
+func _is_endless_mode() -> bool:
+	var run_context := _get_run_context()
+	if run_context == null:
+		return false
+	if run_context.has_method("is_endless_mode"):
+		return bool(run_context.call("is_endless_mode"))
+	var mode_value: Variant = run_context.get("run_mode")
+	if mode_value == null:
+		return false
+	return String(mode_value) == "endless"
+
+func _sync_audio_settings_from_context() -> void:
+	var run_context := _get_run_context()
+	if run_context == null:
+		return
+	var music_volume_value: Variant = run_context.get("music_volume_db")
+	if music_volume_value != null:
+		music_volume_db = float(music_volume_value)
 
 func _spawn_door_options() -> void:
 	if not is_instance_valid(encounter_flow_system):
@@ -401,9 +441,62 @@ func _choose_door(door: Dictionary) -> void:
 		_enter_rest_site()
 		return
 	var profile: Dictionary = choice.get("profile", {})
+	profile = _apply_endless_scaling_to_profile(profile)
 	pending_room_reward = String(choice.get("reward", "none"))
 	current_room_enemy_mutator = profile.get("enemy_mutator", {})
 	_begin_room(profile)
+
+func _apply_endless_scaling_to_profile(profile: Dictionary) -> Dictionary:
+	if profile.is_empty():
+		return profile
+	if not _is_endless_mode() or not endless_boss_defeated:
+		return profile
+
+	var endless_depth := maxi(0, room_depth - encounter_count)
+	if endless_depth <= 0:
+		return profile
+
+	# Aggressive endless scaling: tier rises every depth after first boss clear.
+	var tier := endless_depth
+	var scaled := profile.duplicate(true)
+	scaled["chaser_count"] = int(scaled.get("chaser_count", 0)) + tier
+	scaled["charger_count"] = int(scaled.get("charger_count", 0)) + int(floor(float(tier) * 0.75))
+	scaled["archer_count"] = int(scaled.get("archer_count", 0)) + int(floor(float(tier) * 0.65))
+	scaled["shielder_count"] = int(scaled.get("shielder_count", 0)) + int(floor(float(tier) * 0.5))
+
+	var base_room_size := scaled.get("room_size", room_base_size) as Vector2
+	var room_growth := Vector2(34.0, 22.0) * float(mini(tier, 12))
+	var scaled_room_size := Vector2(
+		clampf(base_room_size.x + room_growth.x, room_base_size.x, 1800.0),
+		clampf(base_room_size.y + room_growth.y, room_base_size.y, 1300.0)
+	)
+	scaled["room_size"] = scaled_room_size
+	scaled["static_camera"] = scaled_room_size.x <= static_camera_room_threshold
+
+	# Merge endless stat pressure into the existing mutator channel.
+	var endless_health_mult := clampf(1.0 + float(tier) * 0.28, 1.0, 4.2)
+	var endless_damage_mult := clampf(1.0 + float(tier) * 0.14, 1.0, 2.8)
+	var endless_speed_mult := clampf(1.0 + float(tier) * 0.07, 1.0, 2.0)
+	var endless_windup_mult := clampf(1.0 - float(tier) * 0.03, 0.55, 1.0)
+	var merged_mutator := (scaled.get("enemy_mutator", {}) as Dictionary).duplicate(true)
+	merged_mutator["enemy_health_mult"] = float(merged_mutator.get("enemy_health_mult", 1.0)) * endless_health_mult
+	merged_mutator["chaser_damage_mult"] = float(merged_mutator.get("chaser_damage_mult", 1.0)) * endless_damage_mult
+	merged_mutator["charger_damage_mult"] = float(merged_mutator.get("charger_damage_mult", 1.0)) * endless_damage_mult
+	merged_mutator["archer_projectile_damage_mult"] = float(merged_mutator.get("archer_projectile_damage_mult", 1.0)) * endless_damage_mult
+	merged_mutator["shielder_slam_damage_mult"] = float(merged_mutator.get("shielder_slam_damage_mult", 1.0)) * endless_damage_mult
+	merged_mutator["chaser_speed_mult"] = float(merged_mutator.get("chaser_speed_mult", 1.0)) * endless_speed_mult
+	merged_mutator["charger_speed_mult"] = float(merged_mutator.get("charger_speed_mult", 1.0)) * endless_speed_mult
+	merged_mutator["shielder_speed_mult"] = float(merged_mutator.get("shielder_speed_mult", 1.0)) * endless_speed_mult
+	merged_mutator["charger_windup_mult"] = float(merged_mutator.get("charger_windup_mult", 1.0)) * endless_windup_mult
+	merged_mutator["archer_windup_mult"] = float(merged_mutator.get("archer_windup_mult", 1.0)) * endless_windup_mult
+	merged_mutator["shielder_slam_windup_mult"] = float(merged_mutator.get("shielder_slam_windup_mult", 1.0)) * endless_windup_mult
+	scaled["enemy_mutator"] = merged_mutator
+
+	var base_label := String(scaled.get("label", "Encounter"))
+	if base_label.find("Tier ") == -1:
+		scaled["label"] = "%s  Tier %d" % [base_label, tier]
+
+	return scaled
 
 func _begin_room(profile: Dictionary) -> void:
 	if profile.is_empty():

@@ -77,6 +77,12 @@ func _apply_enemy_mutator(enemy: CharacterBody2D, enemy_script: Script) -> void:
 	if current_room_enemy_mutator.is_empty():
 		return
 	var is_affected: bool = false
+	var enemy_health_mult := float(current_room_enemy_mutator.get("enemy_health_mult", 1.0))
+	if not is_equal_approx(enemy_health_mult, 1.0):
+		if enemy.get("max_health") != null:
+			var base_max_health := int(enemy.get("max_health"))
+			enemy.set("max_health", maxi(1, int(round(float(base_max_health) * enemy_health_mult))))
+		is_affected = true
 
 	if enemy_script == scripts.get("chaser"):
 		var chaser_damage_mult := float(current_room_enemy_mutator.get("chaser_damage_mult", 1.0))
