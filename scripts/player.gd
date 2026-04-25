@@ -2,6 +2,7 @@ extends CharacterBody2D
 
 const HEALTH_STATE_SCRIPT := preload("res://scripts/health_state.gd")
 const PLAYER_FEEDBACK_SCRIPT := preload("res://scripts/player_feedback.gd")
+const UPGRADE_SYSTEM_SCRIPT := preload("res://scripts/upgrade_system.gd")
 
 signal health_changed(current_health: int, max_health: int)
 signal died
@@ -28,6 +29,7 @@ var attack_cooldown_left: float = 0.0
 var scene_restart_queued: bool = false
 var health_state
 var player_feedback
+var upgrade_system
 var attack_anim_time_left: float = 0.0
 var attack_anim_duration: float = 0.12
 var visual_facing_direction: Vector2 = Vector2.RIGHT
@@ -50,6 +52,8 @@ var razor_wind_damage_ratio: float = 0.72
 
 func _ready() -> void:
 	died.connect(_restart_current_scene)
+	upgrade_system = UPGRADE_SYSTEM_SCRIPT.new()
+	add_child(upgrade_system)
 	_create_health_state()
 	_create_player_feedback()
 	var sprite := get_node_or_null("Sprite2D") as Sprite2D
@@ -118,13 +122,12 @@ func _try_attack() -> void:
 
 	var attack_direction := _get_mouse_attack_direction()
 	attack_combo_counter += 1
-	var damage_mult := 1.0
 	var swing_color := Color(0.99, 0.96, 0.68, 0.72)
 	var execution_proc := false
 	if reward_execution_edge and attack_combo_counter % execution_every == 0:
-		damage_mult = execution_damage_mult
 		execution_proc = true
 		swing_color = Color(1.0, 0.58, 0.3, 0.86)
+	var melee_context: Dictionary = upgrade_system.build_melee_attack_context(attack_damage, attack_range, attack_arc_degrees, execution_proc, execution_damage_mult)
 	attack_lock_time_left = attack_lock_duration
 	attack_lock_direction = attack_direction
 	visual_facing_direction = attack_direction
@@ -132,13 +135,15 @@ func _try_attack() -> void:
 	dash_time_left = 0.0
 	if reward_razor_wind:
 		swing_color = Color(0.58, 0.95, 0.86, 0.82) if not execution_proc else Color(1.0, 0.58, 0.3, 0.9)
-	player_feedback.play_attack_swing_visual(attack_direction, attack_range, attack_arc_degrees, swing_color)
+	player_feedback.play_attack_swing_visual(attack_direction, float(melee_context["range"]), float(melee_context["arc_degrees"]), swing_color)
 	if reward_razor_wind:
-		var wind_range := attack_range * razor_wind_range_scale
-		player_feedback.play_attack_swing_visual(attack_direction, wind_range, razor_wind_arc_degrees, Color(0.56, 1.0, 0.86, 0.62), 0.14)
+		var wind_context: Dictionary = upgrade_system.build_razor_wind_attack_context(melee_context, razor_wind_damage_ratio, razor_wind_range_scale, razor_wind_arc_degrees, attack_damage, attack_range)
+		var wind_range := float(wind_context["range"])
+		var wind_color := Color(0.56, 1.0, 0.86, 0.62) if not execution_proc else Color(1.0, 0.62, 0.34, 0.74)
+		player_feedback.play_attack_swing_visual(attack_direction, wind_range, razor_wind_arc_degrees, wind_color, 0.14)
 	if execution_proc:
 		player_feedback.play_world_ring(global_position, 40.0, Color(1.0, 0.62, 0.34, 0.9), 0.16)
-	if _perform_melee_attack(attack_direction, damage_mult):
+	if _perform_melee_attack(attack_direction, melee_context):
 		player_feedback.play_impact_sound()
 
 func _update_attack_lock(delta: float) -> void:
@@ -321,10 +326,12 @@ func get_trial_power_stack_count(reward_id: String) -> int:
 		_:
 			return 0
 
-func _perform_melee_attack(attack_direction: Vector2, damage_mult: float = 1.0) -> bool:
+func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary) -> bool:
 	var did_hit := false
-	var strike_damage := maxi(1, int(round(float(attack_damage) * damage_mult)))
-	var max_angle_radians := deg_to_rad(attack_arc_degrees * 0.5)
+	var strike_damage := int(melee_context.get("damage", attack_damage))
+	var strike_range := float(melee_context.get("range", attack_range))
+	var strike_arc_degrees := float(melee_context.get("arc_degrees", attack_arc_degrees))
+	var max_angle_radians := deg_to_rad(strike_arc_degrees * 0.5)
 
 	var melee_hit_enemy_ids: Dictionary = {}
 
@@ -340,7 +347,7 @@ func _perform_melee_attack(attack_direction: Vector2, damage_mult: float = 1.0) 
 			continue
 
 		var to_enemy := enemy_body.global_position - global_position
-		if to_enemy.length() > attack_range:
+		if to_enemy.length() > strike_range:
 			continue
 		if attack_direction.angle_to(to_enemy.normalized()) > max_angle_radians:
 			continue
@@ -352,15 +359,17 @@ func _perform_melee_attack(attack_direction: Vector2, damage_mult: float = 1.0) 
 		did_hit = true
 
 	if reward_razor_wind:
-		did_hit = _apply_razor_wind(attack_direction, strike_damage) or did_hit
+		var wind_context: Dictionary = upgrade_system.build_razor_wind_attack_context(melee_context, razor_wind_damage_ratio, razor_wind_range_scale, razor_wind_arc_degrees, attack_damage, attack_range)
+		did_hit = _apply_razor_wind(attack_direction, wind_context) or did_hit
 
 	return did_hit
 
-func _apply_razor_wind(attack_direction: Vector2, source_damage: int) -> bool:
+func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary) -> bool:
 	var did_hit := false
-	var wind_range := attack_range * razor_wind_range_scale
-	var wind_half_arc := deg_to_rad(razor_wind_arc_degrees * 0.5)
-	var wind_damage := maxi(1, int(round(float(source_damage) * razor_wind_damage_ratio)))
+	var wind_range := float(wind_context.get("range", attack_range * razor_wind_range_scale))
+	var wind_arc_degrees := float(wind_context.get("arc_degrees", razor_wind_arc_degrees))
+	var wind_half_arc := deg_to_rad(wind_arc_degrees * 0.5)
+	var wind_damage := int(wind_context.get("damage", maxi(1, int(round(float(attack_damage) * razor_wind_damage_ratio)))))
 	var wind_hit_enemy_ids: Dictionary = {}
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		if not (enemy_node is Node2D):

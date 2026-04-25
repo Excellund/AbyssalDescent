@@ -443,11 +443,11 @@ func _spawn_enemy_in_current_room(enemy_script: Script) -> void:
 func _create_music_players() -> void:
 	music_players.clear()
 	for _i in range(2):
-		var player := AudioStreamPlayer.new()
-		player.autoplay = false
-		player.volume_db = -60.0
-		add_child(player)
-		music_players.append(player)
+		var music_player := AudioStreamPlayer.new()
+		music_player.autoplay = false
+		music_player.volume_db = -60.0
+		add_child(music_player)
+		music_players.append(music_player)
 
 func _play_room_music(is_boss_room: bool, instant: bool = false, fade_duration: float = -1.0) -> void:
 	if music_players.size() < 2:

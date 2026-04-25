@@ -135,6 +135,30 @@ func get_player_powers() -> Dictionary:
 	}
 
 
+## Build the final melee attack context after all applicable power rules are considered.
+func build_melee_attack_context(base_attack_damage: int, base_attack_range: float, base_attack_arc_degrees: float, execution_proc: bool, execution_damage_mult: float) -> Dictionary:
+	var damage_mult := execution_damage_mult if execution_proc else 1.0
+	return {
+		"damage": maxi(1, int(round(float(base_attack_damage) * damage_mult))),
+		"range": base_attack_range,
+		"arc_degrees": base_attack_arc_degrees,
+		"damage_mult": damage_mult,
+		"execution_proc": execution_proc
+	}
+
+
+## Build the final Razor Wind attack context from the already-resolved melee context.
+func build_razor_wind_attack_context(melee_context: Dictionary, razor_wind_damage_ratio: float, razor_wind_range_scale: float, razor_wind_arc_degrees: float, fallback_attack_damage: int, fallback_attack_range: float) -> Dictionary:
+	var melee_damage := int(melee_context.get("damage", fallback_attack_damage))
+	return {
+		"damage": maxi(1, int(round(float(melee_damage) * razor_wind_damage_ratio))),
+		"range": float(melee_context.get("range", fallback_attack_range)) * razor_wind_range_scale,
+		"arc_degrees": razor_wind_arc_degrees,
+		"source_damage": melee_damage,
+		"execution_proc": bool(melee_context.get("execution_proc", false))
+	}
+
+
 ## Reset for new run
 func reset() -> void:
 	for key in trial_power_stacks.keys():
