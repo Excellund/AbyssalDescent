@@ -47,6 +47,7 @@ func open_selection(title: String, is_initial: bool, mode: String, power_registr
 	pending_initial_boon = is_initial
 	boon_title_text = title
 	reward_selection_mode = mode
+	_apply_mode_theme()
 	if reward_selection_mode == "hard_reward":
 		boon_choices = _roll_hard_reward_choices(boon_choice_count, power_registry, player, rng)
 	else:
@@ -101,7 +102,7 @@ func _create_ui() -> void:
 	boon_backdrop.offset_top = 0.0
 	boon_backdrop.offset_right = 0.0
 	boon_backdrop.offset_bottom = 0.0
-	boon_backdrop.color = Color(0.01, 0.02, 0.05, 0.8)
+	boon_backdrop.color = Color(0.01, 0.02, 0.05, 0.7)
 	boon_backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	boon_layer.add_child(boon_backdrop)
 
@@ -150,6 +151,18 @@ func _create_ui() -> void:
 		boon_card_rects.append(Rect2(panel.position, panel.custom_minimum_size))
 
 	boon_layer.visible = false
+
+func _apply_mode_theme() -> void:
+	if boon_backdrop == null or boon_title_label == null:
+		return
+	if reward_selection_mode == "hard_reward":
+		boon_backdrop.color = Color(0.05, 0.02, 0.01, 0.72)
+		boon_title_label.add_theme_color_override("font_color", Color(1.0, 0.9, 0.76, 1.0))
+		boon_title_label.add_theme_color_override("font_shadow_color", Color(0.08, 0.03, 0.01, 0.96))
+	else:
+		boon_backdrop.color = Color(0.01, 0.02, 0.05, 0.7)
+		boon_title_label.add_theme_color_override("font_color", Color(0.93, 0.97, 1.0, 1.0))
+		boon_title_label.add_theme_color_override("font_shadow_color", Color(0.01, 0.02, 0.04, 0.95))
 
 func _refresh_boon_ui(player: Node2D) -> void:
 	if boon_layer == null:
@@ -262,17 +275,25 @@ func _apply_boon_card_styles(hovered_index: int) -> void:
 		var panel := boon_card_panels[i]
 		var style := StyleBoxFlat.new()
 		var t := float(i) / maxf(1.0, float(maxi(1, boon_choice_count - 1)))
-		var cool := Color(0.08, 0.17, 0.28, 0.96).lerp(Color(0.12, 0.2, 0.34, 0.96), t)
+		var base_color := Color(0.08, 0.17, 0.28, 0.96).lerp(Color(0.12, 0.2, 0.34, 0.96), t)
+		var border_color := Color(0.57, 0.71, 0.88, 0.86)
+		if reward_selection_mode == "hard_reward":
+			base_color = Color(0.16, 0.11, 0.08, 0.96).lerp(Color(0.22, 0.14, 0.09, 0.96), t)
+			border_color = Color(1.0, 0.72, 0.4, 0.84)
 		if i == hovered_index and boon_confirm_lock_time <= 0.0:
-			style.bg_color = Color(0.22, 0.32, 0.46, 0.96)
-			style.border_color = Color(0.98, 0.99, 1.0, 1.0)
+			if reward_selection_mode == "hard_reward":
+				style.bg_color = Color(0.33, 0.2, 0.12, 0.97)
+				style.border_color = Color(1.0, 0.9, 0.72, 1.0)
+			else:
+				style.bg_color = Color(0.22, 0.32, 0.46, 0.96)
+				style.border_color = Color(0.98, 0.99, 1.0, 1.0)
 			style.border_width_left = 4
 			style.border_width_top = 4
 			style.border_width_right = 4
 			style.border_width_bottom = 4
 		else:
-			style.bg_color = cool
-			style.border_color = Color(0.57, 0.71, 0.88, 0.86)
+			style.bg_color = base_color
+			style.border_color = border_color
 			style.border_width_left = 2
 			style.border_width_top = 2
 			style.border_width_right = 2

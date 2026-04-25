@@ -40,6 +40,11 @@ const DEBUG_RUN_FIRST_BOSS := 1
 @export var floor_grid_step: float = 70.0
 @export var floor_grid_fine_step: float = 35.0
 @export var arena_glow_strength: float = 0.22
+@export var ambient_backdrop_alpha: float = 0.96
+@export var floor_coarse_grid_alpha: float = 0.075
+@export var floor_fine_grid_alpha: float = 0.024
+@export var floor_border_alpha: float = 0.72
+@export var hud_background_alpha: float = 0.7
 @export var normal_room_music: AudioStream
 @export var boss_room_music: AudioStream
 @export var music_volume_db: float = -46.0
@@ -514,8 +519,8 @@ func _create_hud() -> void:
 	hud_panel.position = Vector2(12.0, 10.0)
 	hud_panel.custom_minimum_size = Vector2(980.0, 74.0)
 	var hud_style := StyleBoxFlat.new()
-	hud_style.bg_color = Color(0.03, 0.05, 0.08, 0.78)
-	hud_style.border_color = Color(0.45, 0.65, 0.88, 0.82)
+	hud_style.bg_color = Color(0.03, 0.05, 0.08, clampf(hud_background_alpha, 0.45, 0.9))
+	hud_style.border_color = Color(0.83, 0.9, 1.0, 0.76)
 	hud_style.border_width_left = 2
 	hud_style.border_width_top = 2
 	hud_style.border_width_right = 2
@@ -530,7 +535,7 @@ func _create_hud() -> void:
 	hud_label = Label.new()
 	hud_label.position = Vector2(16.0, 10.0)
 	hud_label.add_theme_font_size_override("font_size", 20)
-	hud_label.add_theme_color_override("font_color", Color(0.9, 0.96, 1.0, 0.98))
+	hud_label.add_theme_color_override("font_color", Color(0.94, 0.98, 1.0, 0.98))
 	hud_label.add_theme_color_override("font_shadow_color", Color(0.02, 0.04, 0.06, 0.95))
 	hud_label.add_theme_constant_override("shadow_offset_x", 2)
 	hud_label.add_theme_constant_override("shadow_offset_y", 2)
@@ -558,7 +563,7 @@ func _create_hud() -> void:
 	room_banner_title_label.offset_top = 92.0
 	room_banner_title_label.offset_bottom = 126.0
 	room_banner_title_label.add_theme_font_size_override("font_size", 30)
-	room_banner_title_label.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 0.95))
+	room_banner_title_label.add_theme_color_override("font_color", Color(0.98, 0.93, 0.84, 0.96))
 	room_banner_title_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.92))
 	room_banner_title_label.add_theme_constant_override("shadow_offset_x", 2)
 	room_banner_title_label.add_theme_constant_override("shadow_offset_y", 2)
@@ -576,7 +581,7 @@ func _create_hud() -> void:
 	room_banner_subtitle_label.offset_top = 124.0
 	room_banner_subtitle_label.offset_bottom = 152.0
 	room_banner_subtitle_label.add_theme_font_size_override("font_size", 18)
-	room_banner_subtitle_label.add_theme_color_override("font_color", Color(0.72, 0.85, 0.98, 0.9))
+	room_banner_subtitle_label.add_theme_color_override("font_color", Color(0.78, 0.9, 1.0, 0.92))
 	room_banner_subtitle_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.9))
 	room_banner_subtitle_label.add_theme_constant_override("shadow_offset_x", 2)
 	room_banner_subtitle_label.add_theme_constant_override("shadow_offset_y", 2)
@@ -708,27 +713,27 @@ func _draw() -> void:
 	var t := art_time
 	var room_rect := Rect2(-current_room_size * 0.5, current_room_size)
 	var pulse := 0.5 + 0.5 * sin(t * 0.9)
-	draw_rect(room_rect.grow(240.0), Color(0.01, 0.02, 0.04, 0.98), true)
+	draw_rect(room_rect.grow(240.0), Color(0.01, 0.02, 0.04, clampf(ambient_backdrop_alpha, 0.7, 1.0)), true)
 
 	# Layered floor wash to create depth without textures.
 	for i in range(10):
 		var ratio := float(i) / 9.0
 		var inset := lerpf(0.0, minf(room_rect.size.x, room_rect.size.y) * 0.22, ratio)
 		var layer_rect := room_rect.grow(-inset)
-		var layer_color := Color(0.03, 0.08, 0.12, 0.22).lerp(Color(0.09, 0.16, 0.23, 0.12 + arena_glow_strength * pulse * 0.45), 1.0 - ratio)
+		var layer_color := Color(0.03, 0.08, 0.12, 0.17).lerp(Color(0.09, 0.16, 0.23, 0.09 + arena_glow_strength * pulse * 0.32), 1.0 - ratio)
 		draw_rect(layer_rect, layer_color, true)
 
 	var coarse_step := maxf(28.0, floor_grid_step)
 	var fine_step := maxf(16.0, floor_grid_fine_step)
 	for x in range(int(room_rect.position.x), int(room_rect.position.x + room_rect.size.x + coarse_step), int(coarse_step)):
-		draw_line(Vector2(float(x), room_rect.position.y), Vector2(float(x), room_rect.position.y + room_rect.size.y), Color(0.36, 0.56, 0.78, 0.11), 2.0)
+		draw_line(Vector2(float(x), room_rect.position.y), Vector2(float(x), room_rect.position.y + room_rect.size.y), Color(0.36, 0.56, 0.78, clampf(floor_coarse_grid_alpha, 0.01, 0.2)), 2.0)
 	for y in range(int(room_rect.position.y), int(room_rect.position.y + room_rect.size.y + coarse_step), int(coarse_step)):
-		draw_line(Vector2(room_rect.position.x, float(y)), Vector2(room_rect.position.x + room_rect.size.x, float(y)), Color(0.36, 0.56, 0.78, 0.11), 2.0)
+		draw_line(Vector2(room_rect.position.x, float(y)), Vector2(room_rect.position.x + room_rect.size.x, float(y)), Color(0.36, 0.56, 0.78, clampf(floor_coarse_grid_alpha, 0.01, 0.2)), 2.0)
 
 	for x in range(int(room_rect.position.x), int(room_rect.position.x + room_rect.size.x + fine_step), int(fine_step)):
-		draw_line(Vector2(float(x), room_rect.position.y), Vector2(float(x), room_rect.position.y + room_rect.size.y), Color(0.55, 0.74, 0.92, 0.035), 1.0)
+		draw_line(Vector2(float(x), room_rect.position.y), Vector2(float(x), room_rect.position.y + room_rect.size.y), Color(0.55, 0.74, 0.92, clampf(floor_fine_grid_alpha, 0.0, 0.08)), 1.0)
 	for y in range(int(room_rect.position.y), int(room_rect.position.y + room_rect.size.y + fine_step), int(fine_step)):
-		draw_line(Vector2(room_rect.position.x, float(y)), Vector2(room_rect.position.x + room_rect.size.x, float(y)), Color(0.55, 0.74, 0.92, 0.035), 1.0)
+		draw_line(Vector2(room_rect.position.x, float(y)), Vector2(room_rect.position.x + room_rect.size.x, float(y)), Color(0.55, 0.74, 0.92, clampf(floor_fine_grid_alpha, 0.0, 0.08)), 1.0)
 
 	var corners := [
 		room_rect.position,
@@ -737,9 +742,9 @@ func _draw() -> void:
 		room_rect.position + room_rect.size
 	]
 	for corner in corners:
-		draw_circle(corner, 32.0, Color(0.42, 0.74, 1.0, 0.05 + pulse * 0.02))
+		draw_circle(corner, 32.0, Color(0.42, 0.74, 1.0, 0.03 + pulse * 0.012))
 
-	draw_rect(room_rect, Color(0.56, 0.78, 0.95, 0.88), false, 4.0)
+	draw_rect(room_rect, Color(0.56, 0.78, 0.95, clampf(floor_border_alpha, 0.2, 0.95)), false, 4.0)
 	draw_rect(room_rect.grow(-16.0), Color(0.22, 0.42, 0.62, 0.28), false, 2.0)
 
 	if choosing_next_room:

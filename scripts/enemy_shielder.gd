@@ -27,6 +27,8 @@ const SLAM_STATE_RECOVER := 3
 @export var shield_attack_reaim_blend: float = 0.45
 @export var shield_max_health: int = 108
 @export var body_size_scale: float = 1.22
+@export var shield_length: float = 16.0
+@export var shield_width: float = 24.0
 
 var attack_cooldown_left: float = 0.0
 var slam_cooldown_left: float = 0.0
@@ -221,15 +223,12 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 		health_state.take_damage(amount)
 		return
 	
-	# Compare the attacker direction against current shield-facing direction.
+	# Use the same concrete shield wedge for both visuals and blocking.
 	var to_attacker := target.global_position - global_position if is_instance_valid(target) else Vector2.ZERO
-	var attacker_dir := to_attacker.normalized() if to_attacker.length_squared() > 0.000001 else Vector2.LEFT
-	
-	var damage_from_shield_angle := acos(clampf(attacker_dir.dot(shield_facing), -1.0, 1.0))
-	var shield_protection_angle := deg_to_rad(shield_protection_angle_degrees)
-	
+	var body_radius := 13.0 * body_size_scale
+	var shield_points := _get_shield_points(body_radius)
 	var mitigated_damage := amount
-	if damage_from_shield_angle < shield_protection_angle:
+	if _is_attack_blocked_by_shield(to_attacker, shield_points):
 		# Damage from protected zone: 75% reduction (only 25% gets through)
 		mitigated_damage = int(float(amount) * (1.0 - shield_damage_reduction))
 	else:
@@ -280,17 +279,12 @@ func _draw() -> void:
 		shield_facing = Vector2.LEFT
 
 	# Draw shield
-	var facing := shield_facing.normalized()
-	var shield_arm := facing * (body_radius + 14.0 * body_size_scale)
-	var shield_perp := Vector2(-facing.y, facing.x)
-	var shield_width := 18.0 * body_size_scale
-	var shield_left := shield_arm + shield_perp * (shield_width * 0.5)
-	var shield_right := shield_arm - shield_perp * (shield_width * 0.5)
-	var shield_points := PackedVector2Array([
-		shield_arm,
-		shield_left,
-		shield_right
-	])
+	var shield_points := _get_shield_points(body_radius)
+	var shield_front := shield_points[0]
+	var shield_shoulder_left := shield_points[1]
+	var shield_back_left := shield_points[2]
+	var shield_back_right := shield_points[3]
+	var shield_shoulder_right := shield_points[4]
 	var shield_outline_color := COLOR_SHIELDER_SHIELD_OUTLINE
 	var shield_fill_color := COLOR_SHIELDER_SHIELD
 	if slam_state == SLAM_STATE_WINDUP:
@@ -299,17 +293,59 @@ func _draw() -> void:
 	elif slam_state == SLAM_STATE_THUMP:
 		shield_fill_color = Color(1.0, 0.9, 0.58, 0.98)
 		shield_outline_color = Color(1.0, 0.96, 0.78, 0.9)
-	if _is_finite_vec2(shield_arm) and _is_finite_vec2(shield_left) and _is_finite_vec2(shield_right):
-		var tri_area := absf((shield_left - shield_arm).cross(shield_right - shield_arm))
-		if tri_area > 0.001:
-			draw_colored_polygon(shield_points, shield_fill_color)
-			draw_line(shield_left, shield_right, shield_outline_color, 1.4)
-			draw_line(shield_arm, shield_left, shield_outline_color, 1.4)
-			draw_line(shield_arm, shield_right, shield_outline_color, 1.4)
+	if _is_finite_vec2(shield_front) and _is_finite_vec2(shield_shoulder_left) and _is_finite_vec2(shield_back_left) and _is_finite_vec2(shield_back_right) and _is_finite_vec2(shield_shoulder_right):
+		# Outer glow improves readability without changing gameplay footprint.
+		draw_colored_polygon(shield_points, Color(shield_fill_color.r, shield_fill_color.g, shield_fill_color.b, shield_fill_color.a * 0.32))
+		draw_colored_polygon(shield_points, shield_fill_color)
+		draw_polyline(PackedVector2Array([
+			shield_front,
+			shield_shoulder_left,
+			shield_back_left,
+			shield_back_right,
+			shield_shoulder_right,
+			shield_front
+		]), shield_outline_color, 1.8)
+		# Mid rib emphasizes a plated shield silhouette.
+		var back_mid := (shield_back_left + shield_back_right) * 0.5
+		draw_line(back_mid, shield_front, Color(1.0, 0.95, 0.82, 0.72), 1.2)
 
-			# Shield boss dot clarifies facing at a glance.
-			var boss_center := shield_arm - facing * 3.2
-			draw_circle(boss_center, 2.8, Color(1.0, 0.95, 0.82, 0.84))
+		# Shield boss dot clarifies facing at a glance.
+		var boss_center := shield_front.lerp(back_mid, 0.58)
+		draw_circle(boss_center, 2.8, Color(1.0, 0.95, 0.82, 0.84))
+
+func _get_shield_points(body_radius: float) -> PackedVector2Array:
+	var facing := shield_facing.normalized() if shield_facing.length_squared() > 0.000001 else Vector2.LEFT
+	var shield_perp := Vector2(-facing.y, facing.x)
+	var anchor := body_radius + 14.0 * body_size_scale
+	var front := facing * (anchor + shield_length * 0.65)
+	var shoulder_center := facing * (anchor + shield_length * 0.15)
+	var back_center := facing * (anchor - shield_length * 0.55)
+	var shoulder_half := shield_width * body_size_scale * 0.5
+	var back_half := shoulder_half * 0.62
+	var shoulder_left := shoulder_center + shield_perp * shoulder_half
+	var shoulder_right := shoulder_center - shield_perp * shoulder_half
+	var back_left := back_center + shield_perp * back_half
+	var back_right := back_center - shield_perp * back_half
+	return PackedVector2Array([front, shoulder_left, back_left, back_right, shoulder_right])
+
+func _is_attack_blocked_by_shield(attacker_local_pos: Vector2, shield_points: PackedVector2Array) -> bool:
+	if attacker_local_pos.length_squared() <= 0.000001:
+		return false
+	if shield_points.size() < 3:
+		return false
+
+	# If attacker center is inside shield wedge, it is blocked.
+	if Geometry2D.is_point_in_polygon(attacker_local_pos, shield_points):
+		return true
+
+	# Otherwise, block only when the attack path from center to attacker crosses shield edges.
+	var o := Vector2.ZERO
+	for i in range(shield_points.size()):
+		var a := shield_points[i]
+		var b := shield_points[(i + 1) % shield_points.size()]
+		if Geometry2D.segment_intersects_segment(o, attacker_local_pos, a, b) != null:
+			return true
+	return false
 
 func _is_finite_vec2(v: Vector2) -> bool:
 	return is_finite(v.x) and is_finite(v.y)

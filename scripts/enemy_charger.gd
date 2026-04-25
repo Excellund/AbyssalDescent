@@ -24,6 +24,7 @@ var charger_state_time_left: float = 0.0
 var charger_charge_direction: Vector2 = Vector2.LEFT
 var charger_charge_preview_length: float = 0.0
 var charger_charge_hit_applied: bool = false
+var charge_enemy_exceptions: Dictionary = {}
 
 func _process_behavior(delta: float) -> void:
 	_update_attack_cooldown(delta)
@@ -34,6 +35,9 @@ func _update_attack_cooldown(delta: float) -> void:
 		attack_cooldown_left = maxf(0.0, attack_cooldown_left - delta)
 
 func _process_state_machine(delta: float) -> void:
+	if charger_state != STATE_CHARGE and not charge_enemy_exceptions.is_empty():
+		_clear_charge_enemy_collision_exceptions()
+
 	if not is_instance_valid(target):
 		velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
 		move_and_slide()
@@ -77,6 +81,7 @@ func _process_windup_state(delta: float) -> void:
 		_enter_charge_state()
 
 func _process_charge_state(delta: float) -> void:
+	_sync_charge_enemy_collision_exceptions()
 	velocity = charger_charge_direction * charge_speed
 	move_and_slide()
 	_try_apply_charge_hit()
@@ -108,6 +113,7 @@ func _enter_charge_state() -> void:
 	charger_state = STATE_CHARGE
 	charger_state_time_left = charge_time
 	visual_facing_direction = charger_charge_direction
+	_sync_charge_enemy_collision_exceptions()
 	queue_redraw()
 
 func _enter_recover_state() -> void:
@@ -115,7 +121,42 @@ func _enter_recover_state() -> void:
 	charger_state_time_left = recover_time
 	attack_cooldown_left = charge_cooldown
 	velocity *= 0.25
+	_clear_charge_enemy_collision_exceptions()
 	queue_redraw()
+
+func _sync_charge_enemy_collision_exceptions() -> void:
+	var seen_ids: Dictionary = {}
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is PhysicsBody2D):
+			continue
+		var enemy_body := enemy_node as PhysicsBody2D
+		if enemy_body == self:
+			continue
+		var enemy_id := enemy_body.get_instance_id()
+		seen_ids[enemy_id] = true
+		if charge_enemy_exceptions.has(enemy_id):
+			continue
+		add_collision_exception_with(enemy_body)
+		charge_enemy_exceptions[enemy_id] = enemy_body
+
+	for enemy_id in charge_enemy_exceptions.keys():
+		if seen_ids.has(enemy_id):
+			continue
+		var enemy_ref = charge_enemy_exceptions[enemy_id]
+		if is_instance_valid(enemy_ref):
+			var existing: PhysicsBody2D = enemy_ref as PhysicsBody2D
+			if existing != null:
+				remove_collision_exception_with(existing)
+		charge_enemy_exceptions.erase(enemy_id)
+
+func _clear_charge_enemy_collision_exceptions() -> void:
+	for enemy_id in charge_enemy_exceptions.keys():
+		var enemy_ref = charge_enemy_exceptions[enemy_id]
+		if is_instance_valid(enemy_ref):
+			var enemy_body: PhysicsBody2D = enemy_ref as PhysicsBody2D
+			if enemy_body != null:
+				remove_collision_exception_with(enemy_body)
+	charge_enemy_exceptions.clear()
 
 func _try_apply_charge_hit() -> void:
 	if charger_charge_hit_applied:

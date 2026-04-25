@@ -75,7 +75,7 @@ func build_hard_trial_profile(depth: int) -> Dictionary:
 func roll_route_options(depth: int) -> Array[Dictionary]:
 	var easy_option := {
 		"label": "Calm Hunt + Boon",
-		"color": Color(0.28, 0.83, 1.0, 0.95),
+		"color": Color(0.34, 0.8, 1.0, 0.95),
 		"kind": "encounter",
 		"icon": "easy",
 		"reward": "boon",
@@ -85,7 +85,7 @@ func roll_route_options(depth: int) -> Array[Dictionary]:
 	var mutator_name := String(hard_profile["enemy_mutator"].get("name", "Frenzy"))
 	var hard_option := {
 		"label": "Savage Trial: %s" % mutator_name,
-		"color": Color(1.0, 0.46, 0.2, 0.95),
+		"color": Color(1.0, 0.56, 0.26, 0.95),
 		"kind": "encounter",
 		"icon": "hard",
 		"reward": "hard_reward",
@@ -93,7 +93,7 @@ func roll_route_options(depth: int) -> Array[Dictionary]:
 	}
 	var rest_option := {
 		"label": "Rest Site",
-		"color": Color(0.55, 1.0, 0.65, 0.92),
+		"color": Color(0.66, 1.0, 0.76, 0.92),
 		"kind": "rest",
 		"icon": "rest",
 		"reward": "none",
