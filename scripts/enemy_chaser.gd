@@ -28,7 +28,7 @@ func _get_desired_velocity() -> Vector2:
 	var to_target := target.global_position - global_position
 	if to_target.length() <= stop_distance:
 		return Vector2.ZERO
-	return to_target.normalized() * move_speed
+	return to_target.normalized() * move_speed * slow_speed_mult
 
 func _try_attack_target() -> void:
 	if not is_instance_valid(target):
@@ -65,3 +65,4 @@ func _draw() -> void:
 	if speed_t > 0.25:
 		var trail_alpha := 0.08 + speed_t * 0.18
 		draw_circle(-facing * (body_radius + 2.0), body_radius * 0.7, Color(0.9, 0.2, 0.24, trail_alpha))
+	_draw_slow_indicator(body_radius)

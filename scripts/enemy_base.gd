@@ -105,6 +105,8 @@ var health_state
 var attack_anim_time_left: float = 0.0
 var attack_anim_duration: float = 0.1
 var visual_facing_direction: Vector2 = Vector2.LEFT
+var slow_time_left: float = 0.0
+var slow_speed_mult: float = 1.0
 
 func _ready() -> void:
 	motion_mode = CharacterBody2D.MOTION_MODE_FLOATING
@@ -131,6 +133,11 @@ func _update_attack_animation(delta: float) -> void:
 	if attack_anim_time_left > 0.0:
 		attack_anim_time_left = maxf(0.0, attack_anim_time_left - delta)
 		queue_redraw()
+	if slow_time_left > 0.0:
+		slow_time_left -= delta
+		if slow_time_left <= 0.0:
+			slow_time_left = 0.0
+			slow_speed_mult = 1.0
 
 func _update_visual_facing_direction() -> void:
 	if velocity.length_squared() > 1.0:
@@ -146,6 +153,21 @@ func take_damage(amount: int, _damage_context: Dictionary = {}) -> void:
 	if amount <= 0:
 		return
 	health_state.take_damage(amount)
+
+func apply_slow(duration: float, mult: float) -> void:
+	if duration > slow_time_left:
+		slow_time_left = duration
+	if mult < slow_speed_mult:
+		slow_speed_mult = mult
+
+func _draw_slow_indicator(body_radius: float) -> void:
+	if slow_time_left <= 0.0:
+		return
+	var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.011)
+	var fade := clampf(slow_time_left * 4.0, 0.0, 1.0)
+	draw_circle(Vector2.ZERO, body_radius + 8.0, Color(0.46, 1.0, 0.92, 0.07 * fade))
+	draw_arc(Vector2.ZERO, body_radius + 7.0, 0.0, TAU, 32,
+		Color(0.46, 1.0, 0.92, (0.52 + pulse * 0.28) * fade), 2.6)
 
 func heal(amount: int) -> void:
 	if amount <= 0:

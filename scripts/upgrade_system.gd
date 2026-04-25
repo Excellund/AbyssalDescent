@@ -13,7 +13,10 @@ var power_registry: Node = null  # power_registry.gd instance
 var trial_power_stacks: Dictionary = {
 	"razor_wind": 0,
 	"execution_edge": 0,
-	"rupture_wave": 0
+	"rupture_wave": 0,
+	"phantom_step": 0,
+	"void_dash": 0,
+	"static_wake": 0
 }
 
 const UPGRADE_IDS := {
@@ -29,7 +32,10 @@ const UPGRADE_IDS := {
 const TRIAL_POWER_IDS := {
 	"razor_wind": true,
 	"execution_edge": true,
-	"rupture_wave": true
+	"rupture_wave": true,
+	"phantom_step": true,
+	"void_dash": true,
+	"static_wake": true
 }
 
 
@@ -114,6 +120,25 @@ func apply_trial_power(power_id: String) -> bool:
 			player_reference.set("rupture_wave_radius", 72.0 + 10.0 * float(rupture_stacks))
 			player_reference.set("rupture_wave_damage_ratio", 0.34 + 0.1 * float(rupture_stacks))
 			player_reference.set("attack_damage", int(player_reference.get("attack_damage")) + 2)
+		"phantom_step":
+			player_reference.set("reward_phantom_step", true)
+			var ph_stacks := int(player_reference.get("phantom_step_stacks")) + 1
+			player_reference.set("phantom_step_stacks", ph_stacks)
+			player_reference.set("phantom_step_damage", 8 + ph_stacks * 4)
+			player_reference.set("phantom_step_slow_duration", 0.6 + float(ph_stacks) * 0.15)
+			player_reference.set("dash_cooldown", maxf(0.12, float(player_reference.get("dash_cooldown")) * 0.92))
+		"void_dash":
+			player_reference.set("reward_void_dash", true)
+			var vd_stacks := int(player_reference.get("void_dash_stacks")) + 1
+			player_reference.set("void_dash_stacks", vd_stacks)
+			player_reference.set("void_dash_range_mult", 1.36 + float(vd_stacks) * 0.12)
+			player_reference.set("void_dash_cooldown_reduction", float(vd_stacks) * 0.06)
+		"static_wake":
+			player_reference.set("reward_static_wake", true)
+			var sw_stacks := int(player_reference.get("static_wake_stacks")) + 1
+			player_reference.set("static_wake_stacks", sw_stacks)
+			player_reference.set("static_wake_damage", 6 + sw_stacks * 3)
+			player_reference.set("static_wake_lifetime", 1.2 + float(sw_stacks) * 0.25)
 		_:
 			return false
 	return true
@@ -164,6 +189,12 @@ func get_trial_power_stack_count(power_id: String) -> int:
 				return int(player_reference.get("execution_edge_stacks"))
 			"rupture_wave":
 				return int(player_reference.get("rupture_wave_stacks"))
+			"phantom_step":
+				return int(player_reference.get("phantom_step_stacks"))
+			"void_dash":
+				return int(player_reference.get("void_dash_stacks"))
+			"static_wake":
+				return int(player_reference.get("static_wake_stacks"))
 	if trial_power_stacks.has(id):
 		return trial_power_stacks[id]
 	return 0
@@ -179,6 +210,12 @@ func get_trial_power_card_description(power_id: String) -> String:
 			return "Periodic swings become execution strikes with heavy bonus damage."
 		"rupture_wave":
 			return "Hits detonate a rupture wave that damages nearby enemies."
+		"phantom_step":
+			return "Dashing through enemies damages and slows them."
+		"void_dash":
+			return "Dash travels farther. Kills reduce dash cooldown."
+		"static_wake":
+			return "Dashing leaves an electrified trail that burns enemies."
 		_:
 			return "Enhances this power."
 

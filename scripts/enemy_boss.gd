@@ -125,6 +125,7 @@ func _process_idle_state(delta: float) -> void:
 	if wall_pressure > 0.62 and desired_velocity.length_squared() > 0.000001:
 		desired_velocity = desired_velocity.normalized() * move_speed * speed_mult
 
+	desired_velocity *= slow_speed_mult
 	var move_rate := acceleration if desired_velocity != Vector2.ZERO else deceleration
 	velocity = velocity.move_toward(desired_velocity, move_rate * delta)
 	move_and_slide()
@@ -384,6 +385,7 @@ func _draw() -> void:
 
 	draw_circle(Vector2.ZERO, body_radius + 9.0, COLOR_BOSS_GLOW)
 	_draw_common_body(body_radius, body_color, core_color, facing)
+	_draw_slow_indicator(body_radius)
 	_draw_attack_afterglow(facing)
 	_draw_attack_impact_burst(facing)
 
@@ -478,7 +480,7 @@ func _draw_attack_afterglow(facing: Vector2) -> void:
 		return
 	var t := clampf(attack_afterglow_time_left / maxf(attack_afterglow_duration, 0.001), 0.0, 1.0)
 	var fade := t * t
-	var side := Vector2(-facing.y, facing.x)
+	var _side := Vector2(-facing.y, facing.x)
 	match last_attack_for_fx:
 		ATTACK_CHARGE:
 			var glow_len := 94.0 + 58.0 * t
@@ -503,24 +505,24 @@ func _draw_attack_impact_burst(facing: Vector2) -> void:
 	if impact_burst_time_left <= 0.0:
 		return
 	var t := 1.0 - clampf(impact_burst_time_left / maxf(impact_burst_duration, 0.001), 0.0, 1.0)
-	var ease := 1.0 - pow(1.0 - t, 3.0)
+	var burst_ease := 1.0 - pow(1.0 - t, 3.0)
 	var burst_alpha := (1.0 - t) * (1.0 - t)
 	var side := Vector2(-facing.y, facing.x)
 	match last_attack_for_fx:
 		ATTACK_CHARGE:
-			var burst_center := facing * (30.0 + ease * 32.0)
-			var burst_r := 18.0 + ease * 28.0
+			var burst_center := facing * (30.0 + burst_ease * 32.0)
+			var burst_r := 18.0 + burst_ease * 28.0
 			draw_circle(burst_center, burst_r, Color(1.0, 0.62, 0.22, 0.26 * burst_alpha))
 			draw_arc(burst_center, burst_r + 4.0, 0.0, TAU, 24, Color(1.0, 0.88, 0.5, 0.6 * burst_alpha), 3.0)
 			draw_line(burst_center + side * 18.0, burst_center + side * 42.0, Color(1.0, 0.84, 0.46, 0.5 * burst_alpha), 2.2)
 			draw_line(burst_center - side * 18.0, burst_center - side * 42.0, Color(1.0, 0.84, 0.46, 0.5 * burst_alpha), 2.2)
 		ATTACK_NOVA:
-			var nova_r := 44.0 + ease * (nova_radius * 0.72)
+			var nova_r := 44.0 + burst_ease * (nova_radius * 0.72)
 			draw_circle(Vector2.ZERO, nova_r, Color(1.0, 0.46, 0.18, 0.2 * burst_alpha))
 			draw_arc(Vector2.ZERO, nova_r, 0.0, TAU, 48, Color(1.0, 0.86, 0.5, 0.68 * burst_alpha), 4.0)
 		ATTACK_CLEAVE:
 			var half_arc := deg_to_rad(cleave_arc_degrees * 0.5)
-			var r := 56.0 + ease * (cleave_range * 0.62)
+			var r := 56.0 + burst_ease * (cleave_range * 0.62)
 			draw_arc(Vector2.ZERO, r, facing.angle() - half_arc, facing.angle() + half_arc, 26, Color(1.0, 0.78, 0.36, 0.72 * burst_alpha), 4.2)
 			draw_line(Vector2.ZERO, facing.rotated(-half_arc * 0.88) * r, Color(1.0, 0.86, 0.5, 0.42 * burst_alpha), 2.8)
 			draw_line(Vector2.ZERO, facing.rotated(half_arc * 0.88) * r, Color(1.0, 0.86, 0.5, 0.42 * burst_alpha), 2.8)

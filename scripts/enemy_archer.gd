@@ -70,7 +70,7 @@ func _process_seek_state(delta: float) -> void:
 	else:
 		speed_multiplier = 0.0  # At ideal range, hold position
 	
-	var desired_velocity := desired_direction * seek_speed * speed_multiplier
+	var desired_velocity := desired_direction * seek_speed * speed_multiplier * slow_speed_mult
 	var move_rate := acceleration if desired_velocity != Vector2.ZERO else deceleration
 	velocity = velocity.move_toward(desired_velocity, move_rate * delta)
 	move_and_slide()
@@ -251,3 +251,4 @@ func _draw() -> void:
 			var offset := projectile.global_position - global_position
 			draw_circle(offset, 4.0, COLOR_ARCHER_PROJECTILE)
 			draw_circle(offset, 2.2, Color(1.0, 0.92, 0.6, 0.9))
+	_draw_slow_indicator(12.8)

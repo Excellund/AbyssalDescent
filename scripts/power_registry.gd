@@ -65,10 +65,21 @@ func get_trial_power_pool(player_reference: Node = null) -> Array[Dictionary]:
 		execution_desc = String(player_reference.call("get_trial_power_card_desc", "execution_edge"))
 		rupture_desc = String(player_reference.call("get_trial_power_card_desc", "rupture_wave"))
 	
+	var phantom_desc := "Dashing through enemies damages and slows them."
+	var void_desc := "Dash travels farther. Kills shorten dash cooldown."
+	var static_desc := "Dashing leaves an electrified trail that burns enemies."
+	if is_instance_valid(player_reference) and player_reference.has_method("get_trial_power_card_desc"):
+		phantom_desc = String(player_reference.call("get_trial_power_card_desc", "phantom_step"))
+		void_desc = String(player_reference.call("get_trial_power_card_desc", "void_dash"))
+		static_desc = String(player_reference.call("get_trial_power_card_desc", "static_wake"))
+
 	return [
 		Power.new("razor_wind", "Razor Wind", razor_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
 		Power.new("execution_edge", "Execution Edge", execution_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
 		Power.new("rupture_wave", "Rupture Wave", rupture_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
+		Power.new("phantom_step", "Phantom Step", phantom_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
+		Power.new("void_dash", "Void Dash", void_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
+		Power.new("static_wake", "Static Wake", static_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
 	]
 
 

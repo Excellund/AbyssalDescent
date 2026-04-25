@@ -475,6 +475,8 @@ func _play_room_music(is_boss_room: bool, instant: bool = false, fade_duration: 
 
 func _on_room_enemy_died() -> void:
 	active_room_enemy_count = maxi(0, active_room_enemy_count - 1)
+	if is_instance_valid(player) and player.has_method("notify_enemy_killed"):
+		player.call("notify_enemy_killed")
 
 func _clear_all_enemies() -> void:
 	if is_instance_valid(enemy_spawner):

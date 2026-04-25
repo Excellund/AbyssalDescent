@@ -61,6 +61,29 @@ var razor_wind_range_scale: float = 1.72
 var razor_wind_arc_degrees: float = 24.0
 var razor_wind_damage_ratio: float = 0.72
 
+# Dash archetype trial powers
+var reward_phantom_step: bool = false
+var reward_void_dash: bool = false
+var reward_static_wake: bool = false
+var phantom_step_stacks: int = 0
+var void_dash_stacks: int = 0
+var static_wake_stacks: int = 0
+# Phantom Step: damage and slow duration scale with stacks
+var phantom_step_damage: int = 10
+var phantom_step_slow_duration: float = 0.7
+# Void Dash: extra distance multiplier and kill-reset tracking
+var void_dash_range_mult: float = 1.42
+var void_dash_cooldown_reduction: float = 0.0
+# Static Wake: trail damage and lifetime
+var static_wake_damage: int = 8
+var static_wake_lifetime: float = 1.4
+# Runtime state for dash powers
+var phantom_step_hit_ids: Dictionary = {}
+var phantom_step_ghost_positions: Array[Dictionary] = []
+var phantom_step_ghost_emit_cd: float = 0.0
+var static_wake_trails: Array[Dictionary] = []
+var static_wake_trail_emit_cooldown: float = 0.0
+
 func _ready() -> void:
 	died.connect(_restart_current_scene)
 	body_radius_cache = _get_body_radius_for(self, 14.0)
@@ -83,6 +106,7 @@ func _physics_process(delta: float) -> void:
 	_update_attack_lock(delta)
 	_update_attack_animation(delta)
 	_update_visual_facing_direction()
+	_update_static_wake_trails(delta)
 	_try_start_dash(direction)
 	_try_attack_input()
 
@@ -127,9 +151,14 @@ func _try_start_dash(direction: Vector2) -> void:
 		return
 
 	dash_direction = direction if direction != Vector2.ZERO else last_move_direction
-	dash_time_left = dash_duration
-	dash_cooldown_left = dash_cooldown
+	var effective_duration := dash_duration * (void_dash_range_mult if reward_void_dash else 1.0)
+	dash_time_left = effective_duration
+	dash_cooldown_left = maxf(0.12, dash_cooldown - void_dash_cooldown_reduction)
 	dash_phase_release_left = maxf(dash_phase_release_left, dash_phase_release_duration)
+	phantom_step_hit_ids.clear()
+	phantom_step_ghost_positions.clear()
+	phantom_step_ghost_emit_cd = 0.0
+	static_wake_trail_emit_cooldown = 0.0
 	_set_dash_phasing(true)
 
 func _try_attack_input() -> void:
@@ -210,6 +239,29 @@ func _process_active_dash(delta: float) -> bool:
 	dash_time_left = maxf(0.0, dash_time_left - delta)
 	velocity = dash_direction * dash_speed
 	move_and_slide()
+
+	if reward_phantom_step:
+		_apply_phantom_step_during_dash()
+		# Ghost afterimage emission
+		phantom_step_ghost_emit_cd = maxf(0.0, phantom_step_ghost_emit_cd - delta)
+		if phantom_step_ghost_emit_cd <= 0.0:
+			phantom_step_ghost_positions.append({"pos": global_position, "life": 0.14})
+			phantom_step_ghost_emit_cd = 0.03
+		var gi := phantom_step_ghost_positions.size() - 1
+		while gi >= 0:
+			phantom_step_ghost_positions[gi]["life"] -= delta
+			if float(phantom_step_ghost_positions[gi]["life"]) <= 0.0:
+				phantom_step_ghost_positions.remove_at(gi)
+			gi -= 1
+		queue_redraw()
+
+	if reward_static_wake:
+		static_wake_trail_emit_cooldown = maxf(0.0, static_wake_trail_emit_cooldown - delta)
+		if static_wake_trail_emit_cooldown <= 0.0:
+			static_wake_trails.append({"pos": global_position, "life": static_wake_lifetime})
+			static_wake_trail_emit_cooldown = 0.04
+		queue_redraw()
+
 	return true
 
 func _update_dash_phase_state(delta: float) -> void:
@@ -362,7 +414,10 @@ func apply_power_for_test(power_id: String) -> bool:
 	var hard_ids := {
 		"razor_wind": true,
 		"execution_edge": true,
-		"rupture_wave": true
+		"rupture_wave": true,
+		"phantom_step": true,
+		"void_dash": true,
+		"static_wake": true
 	}
 	if hard_ids.has(id):
 		apply_trial_power(id)
@@ -471,6 +526,61 @@ func _apply_rupture_wave(epicenter: Vector2, source_damage: int) -> void:
 		if enemy_body.global_position.distance_to(epicenter) > rupture_wave_radius:
 			continue
 		enemy_node.call("take_damage", wave_damage, {"is_ground_attack": true, "attack_type": "rupture_wave"})
+
+
+func _apply_phantom_step_during_dash() -> void:
+	var hit_radius := 38.0 + float(phantom_step_stacks) * 5.0
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if not enemy_node.has_method("take_damage"):
+			continue
+		var enemy_body := enemy_node as Node2D
+		var eid := enemy_body.get_instance_id()
+		if phantom_step_hit_ids.has(eid):
+			continue
+		if global_position.distance_to(enemy_body.global_position) > hit_radius:
+			continue
+		enemy_node.call("take_damage", phantom_step_damage)
+		if enemy_node.has_method("apply_slow"):
+			enemy_node.call("apply_slow", phantom_step_slow_duration, 0.36)
+		phantom_step_hit_ids[eid] = true
+		if player_feedback != null:
+			# Concentric rings: outer (slow field) + inner (damage burst)
+			player_feedback.play_world_ring(enemy_body.global_position, hit_radius * 0.82,
+				Color(0.46, 1.0, 0.92, 0.9), 0.22)
+			player_feedback.play_world_ring(enemy_body.global_position, hit_radius * 0.44,
+				Color(0.8, 1.0, 0.98, 0.72), 0.14)
+
+
+func _update_static_wake_trails(delta: float) -> void:
+	if static_wake_trails.is_empty():
+		return
+	var i := static_wake_trails.size() - 1
+	while i >= 0:
+		static_wake_trails[i]["life"] -= delta
+		if static_wake_trails[i]["life"] <= 0.0:
+			static_wake_trails.remove_at(i)
+		i -= 1
+
+	for trail in static_wake_trails:
+		var trail_pos: Vector2 = trail["pos"]
+		for enemy_node in get_tree().get_nodes_in_group("enemies"):
+			if not (enemy_node is Node2D):
+				continue
+			if not enemy_node.has_method("take_damage"):
+				continue
+			var enemy_body := enemy_node as Node2D
+			if enemy_body.global_position.distance_to(trail_pos) <= 18.0:
+				var wake_tick_damage := maxi(1, int(round(float(static_wake_damage) * delta * 6.0)))
+				enemy_node.call("take_damage", wake_tick_damage)
+
+	queue_redraw()
+
+
+func notify_enemy_killed() -> void:
+	if reward_void_dash and dash_cooldown_left > 0.0:
+		dash_cooldown_left = maxf(0.0, dash_cooldown_left - 0.22)
 
 func _restart_current_scene() -> void:
 	if scene_restart_queued:
@@ -584,3 +694,46 @@ func _draw_trial_reward_state() -> void:
 		var rupture_color := ENEMY_BASE.COLOR_RUPTURE_WAVE_AURA
 		rupture_color.a = 0.3 + pulse * 0.18
 		draw_arc(Vector2.ZERO, 20.0 + pulse * 2.8, 0.0, TAU, 42, rupture_color, 1.8)
+
+	# Dash archetype trial power visuals
+	if reward_phantom_step:
+		var ph_hit_radius := 38.0 + float(phantom_step_stacks) * 5.0
+		if dash_time_left > 0.0:
+			# Threat zone: filled disc + bright ring so players instantly read the hit window
+			draw_circle(Vector2.ZERO, ph_hit_radius, Color(0.46, 1.0, 0.92, 0.07))
+			draw_arc(Vector2.ZERO, ph_hit_radius, 0.0, TAU, 48,
+				Color(0.46, 1.0, 0.92, 0.68), 2.4)
+			# Ghost afterimages: player sees where they just were
+			for ghost_entry: Dictionary in phantom_step_ghost_positions:
+				var ghost_life_ratio: float = clampf(ghost_entry["life"] / 0.14, 0.0, 1.0)
+				var local_gp: Vector2 = to_local(ghost_entry["pos"])
+				draw_circle(local_gp, 14.0 * ghost_life_ratio, Color(0.46, 1.0, 0.92, 0.16 * ghost_life_ratio))
+				draw_arc(local_gp, 15.0 * ghost_life_ratio, 0.0, TAU, 24,
+					Color(0.46, 1.0, 0.92, 0.52 * ghost_life_ratio), 1.8)
+		else:
+			var pulse := 0.5 + 0.5 * sin(t * 6.0 + 1.0)
+			var ph_color := Color(0.46, 1.0, 0.92, 0.22 + pulse * 0.14)
+			draw_arc(Vector2.ZERO, 20.0 + pulse * 3.5, 0.0, TAU, 32, ph_color, 1.6)
+			var facing := visual_facing_direction if visual_facing_direction.length_squared() > 0.000001 else Vector2.RIGHT
+			var side := Vector2(-facing.y, facing.x)
+			draw_line(-facing * 8.0 + side * 4.0, -facing * 18.0 + side * 4.0, Color(0.46, 1.0, 0.92, 0.36 + pulse * 0.2), 1.4)
+			draw_line(-facing * 8.0 - side * 4.0, -facing * 18.0 - side * 4.0, Color(0.46, 1.0, 0.92, 0.36 + pulse * 0.2), 1.4)
+
+	if reward_void_dash:
+		var cd_ratio := clampf(1.0 - dash_cooldown_left / maxf(0.001, dash_cooldown), 0.0, 1.0)
+		var arc_end: float = lerp(0.0, TAU, cd_ratio)
+		draw_arc(Vector2.ZERO, 24.0, -PI * 0.5, -PI * 0.5 + arc_end, 36,
+			Color(0.88, 0.56, 1.0, 0.72 + cd_ratio * 0.2), 2.2)
+		if cd_ratio >= 0.99:
+			var pulse := 0.5 + 0.5 * sin(t * 8.0)
+			draw_arc(Vector2.ZERO, 26.0, 0.0, TAU, 24, Color(0.88, 0.56, 1.0, 0.32 + pulse * 0.22), 1.2)
+
+	if reward_static_wake:
+		var pulse := 0.5 + 0.5 * sin(t * 9.0 + 2.0)
+		draw_arc(Vector2.ZERO, 17.0, 0.0, TAU, 20, Color(0.96, 0.96, 0.36, 0.2 + pulse * 0.18), 1.4)
+		for trail_entry in static_wake_trails:
+			var trail_pos: Vector2 = trail_entry["pos"]
+			var life_ratio: float = clampf(trail_entry["life"] / maxf(0.001, static_wake_lifetime), 0.0, 1.0)
+			var local_pos := to_local(trail_pos)
+			draw_circle(local_pos, 7.0 * life_ratio, Color(0.96, 0.96, 0.36, 0.28 * life_ratio))
+			draw_arc(local_pos, 9.0 * life_ratio, 0.0, TAU, 14, Color(1.0, 1.0, 0.5, 0.42 * life_ratio), 1.2)
