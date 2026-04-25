@@ -14,6 +14,8 @@ signal died
 @export var dash_speed: float = 600.0
 @export var dash_duration: float = 0.12
 @export var dash_cooldown: float = 0.35
+@export var dash_phase_release_duration: float = 0.1
+@export var dash_overlap_clearance_duration: float = 0.08
 @export var max_health: int = 100
 @export var attack_damage: int = 20
 @export var attack_range: float = 74.0
@@ -36,6 +38,12 @@ var visual_facing_direction: Vector2 = Vector2.RIGHT
 var attack_lock_time_left: float = 0.0
 var attack_lock_direction: Vector2 = Vector2.RIGHT
 var attack_combo_counter: int = 0
+var dash_phasing_active: bool = false
+var dash_phase_release_left: float = 0.0
+var dash_enemy_exceptions: Dictionary = {}
+var body_radius_cache: float = 14.0
+var queued_attack_after_dash: bool = false
+var queued_attack_direction: Vector2 = Vector2.RIGHT
 var iron_skin_armor: int = 0
 var iron_skin_stacks: int = 0
 var reward_razor_wind: bool = false
@@ -54,6 +62,7 @@ var razor_wind_damage_ratio: float = 0.72
 
 func _ready() -> void:
 	died.connect(_restart_current_scene)
+	body_radius_cache = _get_body_radius_for(self, 14.0)
 	upgrade_system = UPGRADE_SYSTEM_SCRIPT.new()
 	add_child(upgrade_system)
 	upgrade_system.initialize(self, null, null)
@@ -68,12 +77,13 @@ func _physics_process(delta: float) -> void:
 	var direction := _read_movement_direction()
 	_update_last_move_direction(direction)
 	_update_dash_cooldown(delta)
+	_update_dash_phase_state(delta)
 	_update_attack_cooldown(delta)
 	_update_attack_lock(delta)
 	_update_attack_animation(delta)
 	_update_visual_facing_direction()
 	_try_start_dash(direction)
-	_try_attack()
+	_try_attack_input()
 
 	if _is_attack_locked():
 		velocity = Vector2.ZERO
@@ -81,6 +91,12 @@ func _physics_process(delta: float) -> void:
 		return
 
 	if _process_active_dash(delta):
+		return
+
+	_try_consume_queued_attack()
+	if _is_attack_locked():
+		velocity = Vector2.ZERO
+		move_and_slide()
 		return
 
 	_update_ground_movement(direction, delta)
@@ -112,18 +128,41 @@ func _try_start_dash(direction: Vector2) -> void:
 	dash_direction = direction if direction != Vector2.ZERO else last_move_direction
 	dash_time_left = dash_duration
 	dash_cooldown_left = dash_cooldown
+	dash_phase_release_left = maxf(dash_phase_release_left, dash_phase_release_duration)
+	_set_dash_phasing(true)
 
-func _try_attack() -> void:
+func _try_attack_input() -> void:
 	if not Input.is_action_just_pressed("attack"):
+		return
+	if dash_time_left > 0.0:
+		queued_attack_after_dash = true
+		queued_attack_direction = _get_mouse_attack_direction()
+		return
+	_try_execute_attack(_get_mouse_attack_direction())
+
+func _try_consume_queued_attack() -> void:
+	if not queued_attack_after_dash:
+		return
+	if dash_time_left > 0.0:
+		return
+	if dash_phase_release_left > 0.0:
+		return
+	_try_execute_attack(queued_attack_direction)
+	if attack_cooldown_left > 0.0 or _is_attack_locked():
+		return
+	queued_attack_after_dash = false
+
+func _try_execute_attack(attack_direction: Vector2) -> void:
+	if _is_attack_locked():
 		return
 	if attack_cooldown_left > 0.0:
 		return
+	queued_attack_after_dash = false
 
 	attack_cooldown_left = attack_cooldown
 	attack_anim_time_left = attack_anim_duration
 	player_feedback.play_attack_swing_sound()
 
-	var attack_direction := _get_mouse_attack_direction()
 	attack_combo_counter += 1
 	var swing_color := Color(0.99, 0.96, 0.68, 0.72)
 	var execution_proc := false
@@ -135,7 +174,6 @@ func _try_attack() -> void:
 	attack_lock_direction = attack_direction
 	visual_facing_direction = attack_direction
 	velocity = Vector2.ZERO
-	dash_time_left = 0.0
 	if reward_razor_wind:
 		swing_color = Color(0.58, 0.95, 0.86, 0.82) if not execution_proc else Color(1.0, 0.58, 0.3, 0.9)
 	player_feedback.play_attack_swing_visual(attack_direction, float(melee_context["range"]), float(melee_context["arc_degrees"]), swing_color)
@@ -173,6 +211,79 @@ func _process_active_dash(delta: float) -> bool:
 	move_and_slide()
 	return true
 
+func _update_dash_phase_state(delta: float) -> void:
+	if dash_time_left > 0.0:
+		dash_phase_release_left = maxf(dash_phase_release_left, dash_phase_release_duration)
+	elif dash_phase_release_left > 0.0:
+		dash_phase_release_left = maxf(0.0, dash_phase_release_left - delta)
+
+	if dash_time_left <= 0.0 and not dash_phasing_active and _is_overlapping_enemy_body():
+		dash_phase_release_left = maxf(dash_phase_release_left, dash_overlap_clearance_duration)
+
+	var should_phase := dash_time_left > 0.0 or dash_phase_release_left > 0.0
+	_set_dash_phasing(should_phase)
+	if dash_phasing_active:
+		_sync_enemy_collision_exceptions()
+
+func _set_dash_phasing(enabled: bool) -> void:
+	if enabled == dash_phasing_active:
+		return
+	dash_phasing_active = enabled
+	if enabled:
+		_sync_enemy_collision_exceptions()
+		return
+	_clear_enemy_collision_exceptions()
+
+func _sync_enemy_collision_exceptions() -> void:
+	var seen_ids: Dictionary = {}
+	for enemy in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy is PhysicsBody2D):
+			continue
+		var enemy_body := enemy as PhysicsBody2D
+		if enemy_body == self:
+			continue
+		var enemy_id := enemy_body.get_instance_id()
+		seen_ids[enemy_id] = true
+		if dash_enemy_exceptions.has(enemy_id):
+			continue
+		add_collision_exception_with(enemy_body)
+		dash_enemy_exceptions[enemy_id] = enemy_body
+
+	for enemy_id in dash_enemy_exceptions.keys():
+		if seen_ids.has(enemy_id):
+			continue
+		var existing: PhysicsBody2D = dash_enemy_exceptions[enemy_id] as PhysicsBody2D
+		if is_instance_valid(existing):
+			remove_collision_exception_with(existing)
+		dash_enemy_exceptions.erase(enemy_id)
+
+func _clear_enemy_collision_exceptions() -> void:
+	for enemy_id in dash_enemy_exceptions.keys():
+		var enemy: PhysicsBody2D = dash_enemy_exceptions[enemy_id] as PhysicsBody2D
+		if is_instance_valid(enemy):
+			remove_collision_exception_with(enemy)
+	dash_enemy_exceptions.clear()
+
+func _is_overlapping_enemy_body() -> bool:
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		var enemy_body := enemy_node as Node2D
+		var enemy_radius := _get_body_radius_for(enemy_body, 13.0)
+		var combined_radius := body_radius_cache + enemy_radius
+		if global_position.distance_to(enemy_body.global_position) < combined_radius - 0.5:
+			return true
+	return false
+
+func _get_body_radius_for(node: Node, fallback: float) -> float:
+	for child in node.get_children():
+		if not (child is CollisionShape2D):
+			continue
+		var shape_node := child as CollisionShape2D
+		if shape_node.shape is CircleShape2D:
+			return maxf(1.0, (shape_node.shape as CircleShape2D).radius)
+	return fallback
+
 func _update_ground_movement(direction: Vector2, delta: float) -> void:
 	var target_velocity := direction * max_speed
 	var applied_acceleration := _get_applied_acceleration(target_velocity)
@@ -207,8 +318,10 @@ func _update_visual_facing_direction() -> void:
 			visual_facing_direction = move_facing
 	queue_redraw()
 
-func take_damage(amount: int) -> void:
+func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 	if amount <= 0:
+		return
+	if dash_phasing_active and String(damage_context.get("source", "")) == "enemy_contact":
 		return
 	var reduced := maxi(1, amount - iron_skin_armor)
 	var health_before := _get_current_health()
@@ -393,6 +506,16 @@ func _draw() -> void:
 	var facing := visual_facing_direction if visual_facing_direction != Vector2.ZERO else Vector2.RIGHT
 	var side := Vector2(-facing.y, facing.x)
 	var aura := 0.35 + speed_t * 0.5
+	if dash_phasing_active:
+		var t := float(Time.get_ticks_msec()) * 0.001
+		var pulse := 0.5 + 0.5 * sin(t * 18.0)
+		var phase_color := Color(0.5, 1.0, 0.98, 0.24 + pulse * 0.22)
+		draw_arc(Vector2.ZERO, body_radius + 14.0 + pulse * 2.0, 0.0, TAU, 48, phase_color, 3.0)
+		var streak_dir := dash_direction if dash_direction.length_squared() > 0.000001 else facing
+		for i in range(3):
+			var offset := -streak_dir * (8.0 + float(i) * 7.0)
+			var alpha := 0.2 - float(i) * 0.05 + pulse * 0.06
+			draw_circle(offset, body_radius * (1.0 - float(i) * 0.08), Color(0.52, 1.0, 0.95, clampf(alpha, 0.04, 0.36)))
 
 	draw_circle(Vector2.ZERO, body_radius + 8.0 + speed_t * 2.0, Color(0.06, 0.24, 0.42, 0.16 + aura * 0.18))
 	draw_circle(Vector2.ZERO, body_radius + 3.4, Color(0.03, 0.06, 0.09, 0.46))

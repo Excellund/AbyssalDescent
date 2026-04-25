@@ -40,7 +40,7 @@ func _try_attack_target() -> void:
 	if global_position.distance_to(target.global_position) > attack_range:
 		return
 
-	target.call("take_damage", attack_damage)
+	target.call("take_damage", attack_damage, {"source": "enemy_contact"})
 	attack_cooldown_left = attack_interval
 	attack_anim_time_left = attack_anim_duration
 	queue_redraw()

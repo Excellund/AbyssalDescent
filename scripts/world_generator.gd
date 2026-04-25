@@ -274,6 +274,7 @@ func _process(delta: float) -> void:
 		return
 
 	_keep_player_inside_current_room()
+	_keep_enemies_inside_current_room()
 	_keep_player_inside_camera_view()
 	_try_use_door()
 	_update_encounter_state()
@@ -290,6 +291,17 @@ func _keep_player_inside_current_room() -> void:
 	var half := current_room_size * 0.5
 	player.global_position.x = clampf(player.global_position.x, -half.x, half.x)
 	player.global_position.y = clampf(player.global_position.y, -half.y, half.y)
+
+func _keep_enemies_inside_current_room() -> void:
+	if current_room_size == Vector2.ZERO:
+		return
+	var half := current_room_size * 0.5
+	for enemy in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy is Node2D):
+			continue
+		var enemy_body := enemy as Node2D
+		enemy_body.global_position.x = clampf(enemy_body.global_position.x, -half.x, half.x)
+		enemy_body.global_position.y = clampf(enemy_body.global_position.y, -half.y, half.y)
 
 func _keep_player_inside_camera_view() -> void:
 	if not is_instance_valid(player):
