@@ -16,6 +16,7 @@ var boon_layer: CanvasLayer
 var boon_title_label: Label
 var boon_card_panels: Array[Panel] = []
 var boon_card_labels: Array[Label] = []
+var boon_card_stack_labels: Array[Label] = []
 var boon_card_rects: Array[Rect2] = []
 var boon_backdrop: ColorRect
 
@@ -49,7 +50,7 @@ func open_selection(title: String, is_initial: bool, mode: String, power_registr
 	if reward_selection_mode == "hard_reward":
 		boon_choices = _roll_hard_reward_choices(boon_choice_count, power_registry, player, rng)
 	else:
-		boon_choices = _roll_boon_choices(boon_choice_count, power_registry, rng)
+		boon_choices = _roll_boon_choices(boon_choice_count, power_registry, player, rng)
 	boon_confirm_lock_time = boon_reveal_duration + 0.08
 	boon_reveal_time = 0.0
 	boon_hovered_index = -1
@@ -115,6 +116,7 @@ func _create_ui() -> void:
 
 	boon_card_panels.clear()
 	boon_card_labels.clear()
+	boon_card_stack_labels.clear()
 	boon_card_rects.clear()
 	for i in range(boon_choice_count):
 		var panel := Panel.new()
@@ -130,8 +132,21 @@ func _create_ui() -> void:
 		option_label.add_theme_constant_override("shadow_offset_y", 2)
 		panel.add_child(option_label)
 
+		var stack_label := Label.new()
+		stack_label.position = Vector2(1230.0, 10.0)
+		stack_label.custom_minimum_size = Vector2(210.0, 28.0)
+		stack_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		stack_label.add_theme_font_size_override("font_size", 21)
+		stack_label.add_theme_color_override("font_color", Color(0.98, 0.9, 0.68, 0.95))
+		stack_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.9))
+		stack_label.add_theme_constant_override("shadow_offset_x", 2)
+		stack_label.add_theme_constant_override("shadow_offset_y", 2)
+		stack_label.visible = false
+		panel.add_child(stack_label)
+
 		boon_card_panels.append(panel)
 		boon_card_labels.append(option_label)
+		boon_card_stack_labels.append(stack_label)
 		boon_card_rects.append(Rect2(panel.position, panel.custom_minimum_size))
 
 	boon_layer.visible = false
@@ -145,28 +160,39 @@ func _refresh_boon_ui(player: Node2D) -> void:
 	for i in range(boon_card_labels.size()):
 		var panel := boon_card_panels[i]
 		var label := boon_card_labels[i]
+		var stack_label := boon_card_stack_labels[i]
 		if i >= boon_choices.size():
 			label.text = ""
+			stack_label.text = ""
+			stack_label.visible = false
 			panel.visible = false
 			continue
 		panel.visible = true
 		var boon := boon_choices[i]
-		if reward_selection_mode == "hard_reward":
-			var reward_id := String(boon.get("id", ""))
-			var stack_count := 0
-			if is_instance_valid(player) and player.has_method("get_trial_power_stack_count"):
-				stack_count = int(player.call("get_trial_power_stack_count", reward_id))
-			var stack_icons := _format_stack_icons(stack_count)
-			label.text = "%d. %s\nStacks: %s\n%s" % [i + 1, boon["name"], stack_icons, boon["desc"]]
+		var stack_limit := int(boon.get("stack_limit", 0))
+		var stack_count := _get_stack_count_for_choice(boon, player)
+		var icon_line := _format_stack_progress_icons(stack_count, stack_limit)
+		if icon_line.is_empty():
+			stack_label.text = ""
+			stack_label.visible = false
 		else:
-			label.text = "%d. %s\n%s" % [i + 1, boon["name"], boon["desc"]]
+			stack_label.text = icon_line
+			stack_label.visible = true
+		label.text = "%d. %s\n%s" % [i + 1, boon["name"], boon["desc"]]
 		label.modulate = Color(0.82, 0.86, 0.94, 0.95)
 
 	_update_boon_reveal_visuals()
 
-func _roll_boon_choices(choice_count: int, power_registry: Node, rng: RandomNumberGenerator) -> Array[Dictionary]:
+func _roll_boon_choices(choice_count: int, power_registry: Node, player: Node2D, rng: RandomNumberGenerator) -> Array[Dictionary]:
 	var pool: Array[Dictionary] = power_registry.call("get_upgrade_pool")
-	var available := pool.duplicate(true)
+	var available: Array[Dictionary] = []
+	for entry in pool:
+		var limit := int(entry.get("stack_limit", 0))
+		if limit > 0 and is_instance_valid(player) and player.has_method("get_upgrade_stack_count"):
+			var current := int(player.call("get_upgrade_stack_count", String(entry["id"])))
+			if current >= limit:
+				continue
+		available.append(entry)
 	var picks: Array[Dictionary] = []
 	for _i in range(mini(choice_count, available.size())):
 		var index := rng.randi_range(0, available.size() - 1)
@@ -176,7 +202,14 @@ func _roll_boon_choices(choice_count: int, power_registry: Node, rng: RandomNumb
 
 func _roll_hard_reward_choices(choice_count: int, power_registry: Node, player: Node2D, rng: RandomNumberGenerator) -> Array[Dictionary]:
 	var pool: Array[Dictionary] = power_registry.call("get_trial_power_pool", player)
-	var available := pool.duplicate(true)
+	var available: Array[Dictionary] = []
+	for entry in pool:
+		var limit := int(entry.get("stack_limit", 0))
+		if limit > 0 and is_instance_valid(player) and player.has_method("get_trial_power_stack_count"):
+			var current := int(player.call("get_trial_power_stack_count", String(entry["id"])))
+			if current >= limit:
+				continue
+		available.append(entry)
 	var picks: Array[Dictionary] = []
 	for _i in range(mini(choice_count, available.size())):
 		var index := rng.randi_range(0, available.size() - 1)
@@ -184,16 +217,27 @@ func _roll_hard_reward_choices(choice_count: int, power_registry: Node, player: 
 		available.remove_at(index)
 	return picks
 
-func _format_stack_icons(stack_count: int) -> String:
-	var visible_slots := 5
-	var filled := mini(stack_count, visible_slots)
+func _get_stack_count_for_choice(choice: Dictionary, player: Node2D) -> int:
+	if not is_instance_valid(player):
+		return 0
+	var id := String(choice.get("id", ""))
+	if reward_selection_mode == "hard_reward":
+		if player.has_method("get_trial_power_stack_count"):
+			return int(player.call("get_trial_power_stack_count", id))
+		return 0
+	if player.has_method("get_upgrade_stack_count"):
+		return int(player.call("get_upgrade_stack_count", id))
+	return 0
+
+func _format_stack_progress_icons(stack_count: int, stack_limit: int) -> String:
+	if stack_limit <= 0:
+		return ""
+	var clamped := clampi(stack_count, 0, stack_limit)
 	var icons := ""
-	for _i in range(filled):
+	for _i in range(clamped):
 		icons += "◆"
-	for _i in range(visible_slots - filled):
+	for _i in range(stack_limit - clamped):
 		icons += "◇"
-	if stack_count > visible_slots:
-		icons += "+%d" % (stack_count - visible_slots)
 	return icons
 
 func _update_boon_hover() -> void:
@@ -249,6 +293,7 @@ func _update_boon_reveal_visuals() -> void:
 			continue
 		var panel := boon_card_panels[i]
 		var label := boon_card_labels[i]
+		var stack_label := boon_card_stack_labels[i]
 		var delay := float(i) * 0.06
 		var local_t := clampf((reveal_t - delay) / 0.6, 0.0, 1.0)
 		var eased := 1.0 - pow(1.0 - local_t, 3.0)
@@ -257,6 +302,7 @@ func _update_boon_reveal_visuals() -> void:
 		panel.modulate = Color(1.0, 1.0, 1.0, eased)
 		panel.scale = Vector2(0.94 + 0.06 * eased, 0.94 + 0.06 * eased)
 		label.modulate.a = eased
+		stack_label.modulate.a = eased
 
 	if boon_confirm_lock_time <= 0.0:
 		boon_title_label.text = "%s  (Click a card to choose)" % boon_title_text

@@ -49,7 +49,7 @@ func get_upgrade_pool() -> Array[Dictionary]:
 		Power.new("long_reach", "Long Reach", "Attack range +14.", POWER_TYPE_UPGRADE, 0, {}).to_dict(),
 		Power.new("fleet_foot", "Fleet Foot", "Move speed +18.", POWER_TYPE_UPGRADE, 0, {}).to_dict(),
 		Power.new("blink_dash", "Blink Dash", "Dash cooldown reduced by 15%.", POWER_TYPE_UPGRADE, 0, {}).to_dict(),
-		Power.new("iron_skin", "Iron Skin", "Max health +20 and heal +20.", POWER_TYPE_UPGRADE, 0, {}).to_dict(),
+		Power.new("iron_skin", "Iron Skin", "-3 damage per hit.", POWER_TYPE_UPGRADE, 3, {}).to_dict(),
 	]
 
 

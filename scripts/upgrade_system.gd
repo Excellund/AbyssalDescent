@@ -66,11 +66,10 @@ func apply_upgrade(upgrade_id: String) -> bool:
 		"blink_dash":
 			player_reference.set("dash_cooldown", maxf(0.12, float(player_reference.get("dash_cooldown")) * 0.85))
 		"iron_skin":
-			var health_state = player_reference.get("health_state")
-			if health_state != null:
-				health_state.max_health += 20
-				health_state.set_health(health_state.current_health + 20)
-				player_reference.set("max_health", health_state.max_health)
+			var current_armor := int(player_reference.get("iron_skin_armor"))
+			player_reference.set("iron_skin_armor", current_armor + 3)
+			var current_stacks := int(player_reference.get("iron_skin_stacks"))
+			player_reference.set("iron_skin_stacks", current_stacks + 1)
 		_:
 			return false
 	return true
@@ -173,24 +172,13 @@ func get_trial_power_stack_count(power_id: String) -> int:
 ## Get trial power description with next stack info from the current player state.
 func get_trial_power_card_description(power_id: String) -> String:
 	var id := power_id.strip_edges().to_lower()
-	if not is_instance_valid(player_reference):
-		return "Enhances this power."
 	match id:
 		"razor_wind":
-			var next_stack := int(player_reference.get("razor_wind_stacks")) + 1
-			var next_range := 1.58 + 0.14 * float(next_stack)
-			var next_damage := 0.6 + 0.12 * float(next_stack)
-			return "Next: forward wind slash at %d%% range and %d%% damage." % [int(round(next_range * 100.0)), int(round(next_damage * 100.0))]
+			return "Attacks launch a forward wind slash with increased range and damage."
 		"execution_edge":
-			var next_stack := int(player_reference.get("execution_edge_stacks")) + 1
-			var next_every := maxi(2, 4 - next_stack)
-			var next_mult := 2.2 + 0.45 * float(next_stack)
-			return "Next: execution every %d swings, %d%% execution damage." % [next_every, int(round(next_mult * 100.0))]
+			return "Periodic swings become execution strikes with heavy bonus damage."
 		"rupture_wave":
-			var next_stack := int(player_reference.get("rupture_wave_stacks")) + 1
-			var next_radius := 72.0 + 10.0 * float(next_stack)
-			var next_wave_damage := 0.34 + 0.1 * float(next_stack)
-			return "Next: rupture radius %d, wave deals %d%% of hit damage." % [int(round(next_radius)), int(round(next_wave_damage * 100.0))]
+			return "Hits detonate a rupture wave that damages nearby enemies."
 		_:
 			return "Enhances this power."
 

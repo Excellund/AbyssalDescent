@@ -36,6 +36,8 @@ var visual_facing_direction: Vector2 = Vector2.RIGHT
 var attack_lock_time_left: float = 0.0
 var attack_lock_direction: Vector2 = Vector2.RIGHT
 var attack_combo_counter: int = 0
+var iron_skin_armor: int = 0
+var iron_skin_stacks: int = 0
 var reward_razor_wind: bool = false
 var reward_execution_edge: bool = false
 var reward_rupture_wave: bool = false
@@ -208,8 +210,9 @@ func _update_visual_facing_direction() -> void:
 func take_damage(amount: int) -> void:
 	if amount <= 0:
 		return
+	var reduced := maxi(1, amount - iron_skin_armor)
 	var health_before := _get_current_health()
-	health_state.take_damage(amount)
+	health_state.take_damage(reduced)
 	if _get_current_health() < health_before:
 		player_feedback.play_damage_flash()
 		player_feedback.play_impact_sound()
@@ -221,6 +224,11 @@ func heal(amount: int) -> void:
 
 func is_dead() -> bool:
 	return health_state.is_dead()
+
+func get_upgrade_stack_count(id: String) -> int:
+	if id == "iron_skin":
+		return iron_skin_stacks
+	return 0
 
 func apply_upgrade(boon_id: String) -> void:
 	upgrade_system.apply_upgrade(boon_id)

@@ -55,7 +55,6 @@ const DEBUG_RUN_FIRST_BOSS := 1
 
 var player: Node2D
 var player_camera: Camera2D
-var hud_label: Label
 var rng := RandomNumberGenerator.new()
 var power_registry_instance: Node
 
@@ -78,6 +77,9 @@ var pending_room_reward: String = "none"
 var current_room_enemy_mutator: Dictionary = {}
 
 var hud_panel: Panel
+var hud_label: Label
+var room_banner_label: Label
+var room_banner_tween: Tween
 var art_time: float = 0.0
 var music_system: Node
 var enemy_spawner: Node
@@ -386,6 +388,8 @@ func _begin_room(profile: Dictionary) -> void:
 	current_room_static_camera = profile["static_camera"]
 	current_room_label = profile["label"]
 	current_room_enemy_mutator = profile.get("enemy_mutator", {})
+	var mutator_name := String(current_room_enemy_mutator.get("name", ""))
+	_show_room_banner(current_room_label, mutator_name)
 	if is_instance_valid(enemy_spawner):
 		enemy_spawner.call("configure_room", current_room_size, spawn_padding, spawn_safe_radius, current_room_enemy_mutator)
 	_apply_camera_bounds_for_room(current_room_size)
@@ -395,6 +399,7 @@ func _enter_rest_site() -> void:
 	in_boss_room = false
 	_play_room_music(false)
 	current_room_label = "Rest Site"
+	_show_room_banner("Rest Site", "Recovering...")
 	current_room_static_camera = true
 	_advance_room_progress()
 	if is_instance_valid(player) and player.has_method("heal"):
@@ -417,6 +422,7 @@ func _begin_boss_room() -> void:
 	current_room_size = Vector2(1260.0, 900.0)
 	current_room_static_camera = false
 	current_room_label = "Boss Chamber: The Warden"
+	_show_room_banner("Boss Chamber", "The Warden")
 	_apply_camera_bounds_for_room(current_room_size)
 	active_room_enemy_count = 1
 	var boss := CharacterBody2D.new()
@@ -512,6 +518,45 @@ func _create_hud() -> void:
 	hud_label.add_theme_constant_override("shadow_offset_y", 2)
 	hud_panel.add_child(hud_label)
 	_update_hud()
+
+	# Room entry banner — centered, fades in then out on room entry.
+	var banner_layer := CanvasLayer.new()
+	banner_layer.layer = 110
+	add_child(banner_layer)
+
+	var banner_container := Control.new()
+	banner_container.set_anchors_preset(Control.PRESET_FULL_RECT)
+	banner_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	banner_layer.add_child(banner_container)
+
+	room_banner_label = Label.new()
+	room_banner_label.set_anchors_preset(Control.PRESET_CENTER)
+	room_banner_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	room_banner_label.grow_vertical = Control.GROW_DIRECTION_BOTH
+	room_banner_label.custom_minimum_size = Vector2(900.0, 140.0)
+	room_banner_label.add_theme_font_size_override("font_size", 52)
+	room_banner_label.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 1.0))
+	room_banner_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.92))
+	room_banner_label.add_theme_constant_override("shadow_offset_x", 3)
+	room_banner_label.add_theme_constant_override("shadow_offset_y", 3)
+	room_banner_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	room_banner_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	room_banner_label.modulate.a = 0.0
+	banner_container.add_child(room_banner_label)
+
+func _show_room_banner(title: String, subtitle: String) -> void:
+	if room_banner_label == null:
+		return
+	if is_instance_valid(room_banner_tween):
+		room_banner_tween.kill()
+
+	room_banner_label.text = title if subtitle.is_empty() else "%s\n%s" % [title, subtitle]
+	room_banner_label.modulate.a = 0.0
+
+	room_banner_tween = create_tween()
+	room_banner_tween.tween_property(room_banner_label, "modulate:a", 1.0, 0.35)
+	room_banner_tween.tween_interval(1.8)
+	room_banner_tween.tween_property(room_banner_label, "modulate:a", 0.0, 0.55)
 
 func _open_boon_selection(title: String, is_initial: bool, mode: String = "boon") -> void:
 	if is_instance_valid(reward_selection_ui):
