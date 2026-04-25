@@ -459,6 +459,7 @@ func _begin_boss_room() -> void:
 	boss.global_position = Vector2(0.0, -30.0)
 	add_child(boss)
 	boss.set("target", player)
+	boss.set("arena_size", current_room_size)
 	if boss.has_signal("died"):
 		boss.died.connect(_on_room_enemy_died)
 

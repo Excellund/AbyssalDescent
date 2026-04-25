@@ -10,28 +10,31 @@ const ATTACK_NOVA := 1
 const ATTACK_CLEAVE := 2
 
 @export var boss_max_health: int = 520
-@export var move_speed: float = 110.0
+@export var move_speed: float = 124.0
 @export var acceleration: float = 900.0
 @export var deceleration: float = 1300.0
 @export var preferred_distance: float = 210.0
-@export var action_cooldown: float = 1.0
+@export var action_cooldown: float = 0.78
 
-@export var charge_windup: float = 0.95
-@export var charge_speed: float = 560.0
-@export var charge_duration: float = 0.55
+@export var charge_windup: float = 0.84
+@export var charge_speed: float = 640.0
+@export var charge_duration: float = 0.58
 @export var charge_width: float = 40.0
-@export var charge_damage: int = 24
+@export var charge_damage: int = 28
 
-@export var nova_windup: float = 1.05
-@export var nova_radius: float = 160.0
-@export var nova_damage: int = 30
+@export var nova_windup: float = 0.9
+@export var nova_radius: float = 172.0
+@export var nova_damage: int = 34
 
-@export var cleave_windup: float = 0.8
-@export var cleave_range: float = 190.0
-@export var cleave_arc_degrees: float = 120.0
-@export var cleave_damage: int = 20
+@export var cleave_windup: float = 0.7
+@export var cleave_range: float = 212.0
+@export var cleave_arc_degrees: float = 132.0
+@export var cleave_damage: int = 24
 
-@export var recover_time: float = 0.7
+@export var recover_time: float = 0.5
+@export var arena_size: Vector2 = Vector2(1260.0, 900.0)
+@export var edge_soft_margin: float = 170.0
+@export var edge_hard_margin: float = 105.0
 
 var boss_state: int = STATE_IDLE
 var state_time_left: float = 0.0
@@ -41,6 +44,11 @@ var active_attack: int = ATTACK_CHARGE
 var locked_direction: Vector2 = Vector2.RIGHT
 var telegraph_alpha: float = 0.0
 var charge_hit_applied: bool = false
+var attack_afterglow_time_left: float = 0.0
+var attack_afterglow_duration: float = 0.54
+var impact_burst_time_left: float = 0.0
+var impact_burst_duration: float = 0.2
+var last_attack_for_fx: int = ATTACK_CHARGE
 
 
 func _ready() -> void:
@@ -78,6 +86,9 @@ func _process_behavior(delta: float) -> void:
 		STATE_RECOVER:
 			_process_recover_state(delta)
 
+	attack_afterglow_time_left = maxf(0.0, attack_afterglow_time_left - delta)
+	impact_burst_time_left = maxf(0.0, impact_burst_time_left - delta)
+
 	queue_redraw()
 
 
@@ -85,11 +96,34 @@ func _process_idle_state(delta: float) -> void:
 	var to_target := target.global_position - global_position
 	var distance := to_target.length()
 	var desired_velocity := Vector2.ZERO
+	var enrage_t: float = _get_enrage_ratio()
+	var speed_mult: float = lerpf(1.0, 1.22, enrage_t)
+	var inward_bias := _get_inward_edge_bias()
+	var wall_pressure := inward_bias.length()
+
+	if wall_pressure > 0.0:
+		desired_velocity += inward_bias * move_speed * (0.95 + wall_pressure * 0.6)
 
 	if distance > preferred_distance + 24.0:
-		desired_velocity = to_target.normalized() * move_speed
+		desired_velocity += to_target.normalized() * move_speed * speed_mult
 	elif distance < preferred_distance - 36.0:
-		desired_velocity = -to_target.normalized() * (move_speed * 0.7)
+		var retreat_dir := -to_target.normalized()
+		if _can_move_in_direction(retreat_dir, 22.0):
+			desired_velocity += retreat_dir * (move_speed * 0.74 * speed_mult)
+		else:
+			# When pinned near map edges, strafe instead of backing into walls.
+			var lateral := Vector2(-retreat_dir.y, retreat_dir.x)
+			var left_clear := _can_move_in_direction(lateral, 18.0)
+			var right_clear := _can_move_in_direction(-lateral, 18.0)
+			if left_clear and not right_clear:
+				desired_velocity += lateral * (move_speed * 0.62 * speed_mult)
+			elif right_clear and not left_clear:
+				desired_velocity += -lateral * (move_speed * 0.62 * speed_mult)
+			elif left_clear and right_clear:
+				desired_velocity += lateral * (move_speed * 0.62 * speed_mult)
+
+	if wall_pressure > 0.62 and desired_velocity.length_squared() > 0.000001:
+		desired_velocity = desired_velocity.normalized() * move_speed * speed_mult
 
 	var move_rate := acceleration if desired_velocity != Vector2.ZERO else deceleration
 	velocity = velocity.move_toward(desired_velocity, move_rate * delta)
@@ -99,20 +133,21 @@ func _process_idle_state(delta: float) -> void:
 		locked_direction = to_target.normalized()
 		visual_facing_direction = locked_direction
 
-	if cooldown_left <= 0.0:
+	if cooldown_left <= 0.0 and wall_pressure < 0.65:
 		_start_next_attack(distance)
 
 
 func _start_next_attack(distance_to_target: float) -> void:
+	var enrage_t: float = _get_enrage_ratio()
 	if distance_to_target > 270.0:
 		active_attack = ATTACK_CHARGE
 	elif distance_to_target < 120.0:
-		active_attack = ATTACK_NOVA if randf() < 0.68 else ATTACK_CLEAVE
+		active_attack = ATTACK_NOVA if randf() < lerpf(0.66, 0.8, enrage_t) else ATTACK_CLEAVE
 	else:
 		var roll := randf()
-		if roll < 0.4:
+		if roll < lerpf(0.34, 0.24, enrage_t):
 			active_attack = ATTACK_CLEAVE
-		elif roll < 0.72:
+		elif roll < lerpf(0.72, 0.82, enrage_t):
 			active_attack = ATTACK_CHARGE
 		else:
 			active_attack = ATTACK_NOVA
@@ -146,10 +181,14 @@ func _process_telegraph_state(delta: float) -> void:
 func _enter_attack_state() -> void:
 	boss_state = STATE_ATTACK
 	attack_anim_time_left = attack_anim_duration
+	last_attack_for_fx = active_attack
+	attack_afterglow_time_left = attack_afterglow_duration
+	impact_burst_time_left = impact_burst_duration
+	var enrage_t: float = _get_enrage_ratio()
 	match active_attack:
 		ATTACK_CHARGE:
-			state_time_left = charge_duration
-			velocity = locked_direction * charge_speed
+			state_time_left = charge_duration * lerpf(1.0, 0.84, enrage_t)
+			velocity = locked_direction * charge_speed * lerpf(1.0, 1.18, enrage_t)
 		ATTACK_NOVA:
 			state_time_left = 0.05
 			velocity = Vector2.ZERO
@@ -163,7 +202,7 @@ func _enter_attack_state() -> void:
 func _process_attack_state(delta: float) -> void:
 	match active_attack:
 		ATTACK_CHARGE:
-			velocity = locked_direction * charge_speed
+			velocity = locked_direction * charge_speed * lerpf(1.0, 1.18, _get_enrage_ratio())
 			move_and_slide()
 			_apply_charge_hit()
 		_:
@@ -173,16 +212,18 @@ func _process_attack_state(delta: float) -> void:
 	state_time_left = maxf(0.0, state_time_left - delta)
 	if state_time_left <= 0.0:
 		boss_state = STATE_RECOVER
-		state_time_left = recover_time
+		state_time_left = recover_time * lerpf(1.0, 0.72, _get_enrage_ratio())
 
 
 func _process_recover_state(delta: float) -> void:
-	velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
+	var inward_bias := _get_inward_edge_bias()
+	var recover_target := inward_bias * move_speed * 0.58
+	velocity = velocity.move_toward(recover_target, deceleration * delta)
 	move_and_slide()
 	state_time_left = maxf(0.0, state_time_left - delta)
 	if state_time_left <= 0.0:
 		boss_state = STATE_IDLE
-		cooldown_left = action_cooldown
+		cooldown_left = action_cooldown * lerpf(1.0, 0.62, _get_enrage_ratio())
 
 
 func _apply_charge_hit() -> void:
@@ -263,16 +304,54 @@ func _distance_point_to_segment(point: Vector2, segment_start: Vector2, segment_
 	return point.distance_to(closest)
 
 
+func _can_move_in_direction(direction: Vector2, probe_distance: float) -> bool:
+	if direction.length_squared() <= 0.000001:
+		return true
+	var move_dir := direction.normalized()
+	return not test_move(global_transform, move_dir * probe_distance)
+
+
+func _get_inward_edge_bias() -> Vector2:
+	var half := arena_size * 0.5
+	if half.x <= 0.0 or half.y <= 0.0:
+		return Vector2.ZERO
+
+	var x_to_edge := half.x - absf(global_position.x)
+	var y_to_edge := half.y - absf(global_position.y)
+	var x_pressure := clampf((edge_soft_margin - x_to_edge) / maxf(1.0, edge_soft_margin - edge_hard_margin), 0.0, 1.0)
+	var y_pressure := clampf((edge_soft_margin - y_to_edge) / maxf(1.0, edge_soft_margin - edge_hard_margin), 0.0, 1.0)
+
+	var bias := Vector2.ZERO
+	if x_pressure > 0.0:
+		bias.x = -signf(global_position.x) * x_pressure
+	if y_pressure > 0.0:
+		bias.y = -signf(global_position.y) * y_pressure
+
+	if bias.length_squared() <= 0.000001:
+		return Vector2.ZERO
+	return bias.normalized() * maxf(x_pressure, y_pressure)
+
+
 func _get_windup_time(attack_id: int) -> float:
+	var enrage_t: float = _get_enrage_ratio()
 	match attack_id:
 		ATTACK_CHARGE:
-			return charge_windup
+			return charge_windup * lerpf(1.0, 0.82, enrage_t)
 		ATTACK_NOVA:
-			return nova_windup
+			return nova_windup * lerpf(1.0, 0.84, enrage_t)
 		ATTACK_CLEAVE:
-			return cleave_windup
+			return cleave_windup * lerpf(1.0, 0.8, enrage_t)
 		_:
 			return 0.7
+
+
+func _get_enrage_ratio() -> float:
+	var health_ratio: float = float(_get_current_health()) / maxf(1.0, float(max_health))
+	if health_ratio >= 0.7:
+		return 0.0
+	if health_ratio <= 0.25:
+		return 1.0
+	return clampf((0.7 - health_ratio) / 0.45, 0.0, 1.0)
 
 
 func _draw() -> void:
@@ -281,6 +360,9 @@ func _draw() -> void:
 	var facing := visual_facing_direction if visual_facing_direction.length_squared() > 0.000001 else Vector2.RIGHT
 	var body_color := COLOR_BOSS_BODY
 	var core_color := COLOR_BOSS_CORE
+	var threat_t := telegraph_alpha if boss_state == STATE_TELEGRAPH else 0.0
+	var threat_pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.016)
+	var enrage_t: float = _get_enrage_ratio()
 
 	if boss_state == STATE_TELEGRAPH:
 		body_color = COLOR_BOSS_BODY_TELEGRAPH
@@ -288,9 +370,22 @@ func _draw() -> void:
 	if boss_state == STATE_ATTACK:
 		body_color = COLOR_BOSS_BODY_ATTACK
 		core_color = COLOR_BOSS_CORE_ATTACK
+	if enrage_t > 0.0:
+		body_color = body_color.lerp(COLOR_BOSS_BODY_ATTACK, enrage_t * 0.35)
+		core_color = core_color.lerp(COLOR_BOSS_CORE_ATTACK, enrage_t * 0.48)
+
+	_draw_enrage_scaling_indicator(body_radius, facing, enrage_t)
+
+	# Persistent menace halo during telegraph to imply severe punishment on mistakes.
+	if boss_state == STATE_TELEGRAPH:
+		var halo_radius := body_radius + 16.0 + threat_t * 8.0
+		draw_circle(Vector2.ZERO, halo_radius, Color(1.0, 0.2, 0.08, 0.06 + threat_t * 0.1))
+		draw_arc(Vector2.ZERO, halo_radius + 3.0, 0.0, TAU, 48, Color(1.0, 0.82, 0.45, 0.28 + threat_t * 0.26 + threat_pulse * 0.08), 2.6)
 
 	draw_circle(Vector2.ZERO, body_radius + 9.0, COLOR_BOSS_GLOW)
 	_draw_common_body(body_radius, body_color, core_color, facing)
+	_draw_attack_afterglow(facing)
+	_draw_attack_impact_burst(facing)
 
 	if boss_state == STATE_TELEGRAPH:
 		_draw_attack_telegraph()
@@ -376,3 +471,91 @@ func _draw_attack_telegraph() -> void:
 			var inner_radius := cleave_range * 0.4
 			draw_line(Vector2.ZERO, locked_direction.rotated(-half_arc) * inner_radius, Color(COLOR_BOSS_CLEAVE_OUTLINE.r, COLOR_BOSS_CLEAVE_OUTLINE.g, COLOR_BOSS_CLEAVE_OUTLINE.b, alpha * 0.6), 1.5)
 			draw_line(Vector2.ZERO, locked_direction.rotated(half_arc) * inner_radius, Color(COLOR_BOSS_CLEAVE_OUTLINE.r, COLOR_BOSS_CLEAVE_OUTLINE.g, COLOR_BOSS_CLEAVE_OUTLINE.b, alpha * 0.6), 1.5)
+
+
+func _draw_attack_afterglow(facing: Vector2) -> void:
+	if attack_afterglow_time_left <= 0.0:
+		return
+	var t := clampf(attack_afterglow_time_left / maxf(attack_afterglow_duration, 0.001), 0.0, 1.0)
+	var fade := t * t
+	var side := Vector2(-facing.y, facing.x)
+	match last_attack_for_fx:
+		ATTACK_CHARGE:
+			var glow_len := 94.0 + 58.0 * t
+			var tail_alpha := 0.24 * fade
+			draw_line(-facing * 6.0, -facing * glow_len, Color(1.0, 0.66, 0.28, tail_alpha), 12.0)
+			draw_line(-facing * 3.0, -facing * (glow_len * 0.82), Color(1.0, 0.9, 0.56, tail_alpha * 1.35), 4.0)
+		ATTACK_NOVA:
+			var ring_radius := nova_radius * (1.0 + (1.0 - t) * 0.45)
+			draw_arc(Vector2.ZERO, ring_radius, 0.0, TAU, 56, Color(1.0, 0.52, 0.2, 0.42 * fade), 5.0)
+			draw_circle(Vector2.ZERO, ring_radius * 0.66, Color(1.0, 0.35, 0.12, 0.09 * fade))
+		ATTACK_CLEAVE:
+			var half_arc := deg_to_rad(cleave_arc_degrees * 0.5)
+			var outer := cleave_range * (0.92 + (1.0 - t) * 0.22)
+			var a0 := facing.angle() - half_arc
+			var a1 := facing.angle() + half_arc
+			draw_arc(Vector2.ZERO, outer, a0, a1, 28, Color(1.0, 0.7, 0.3, 0.4 * fade), 4.0)
+			draw_line(Vector2.ZERO, facing.rotated(-half_arc) * (outer * 0.7), Color(1.0, 0.76, 0.42, 0.22 * fade), 2.2)
+			draw_line(Vector2.ZERO, facing.rotated(half_arc) * (outer * 0.7), Color(1.0, 0.76, 0.42, 0.22 * fade), 2.2)
+
+
+func _draw_attack_impact_burst(facing: Vector2) -> void:
+	if impact_burst_time_left <= 0.0:
+		return
+	var t := 1.0 - clampf(impact_burst_time_left / maxf(impact_burst_duration, 0.001), 0.0, 1.0)
+	var ease := 1.0 - pow(1.0 - t, 3.0)
+	var burst_alpha := (1.0 - t) * (1.0 - t)
+	var side := Vector2(-facing.y, facing.x)
+	match last_attack_for_fx:
+		ATTACK_CHARGE:
+			var burst_center := facing * (30.0 + ease * 32.0)
+			var burst_r := 18.0 + ease * 28.0
+			draw_circle(burst_center, burst_r, Color(1.0, 0.62, 0.22, 0.26 * burst_alpha))
+			draw_arc(burst_center, burst_r + 4.0, 0.0, TAU, 24, Color(1.0, 0.88, 0.5, 0.6 * burst_alpha), 3.0)
+			draw_line(burst_center + side * 18.0, burst_center + side * 42.0, Color(1.0, 0.84, 0.46, 0.5 * burst_alpha), 2.2)
+			draw_line(burst_center - side * 18.0, burst_center - side * 42.0, Color(1.0, 0.84, 0.46, 0.5 * burst_alpha), 2.2)
+		ATTACK_NOVA:
+			var nova_r := 44.0 + ease * (nova_radius * 0.72)
+			draw_circle(Vector2.ZERO, nova_r, Color(1.0, 0.46, 0.18, 0.2 * burst_alpha))
+			draw_arc(Vector2.ZERO, nova_r, 0.0, TAU, 48, Color(1.0, 0.86, 0.5, 0.68 * burst_alpha), 4.0)
+		ATTACK_CLEAVE:
+			var half_arc := deg_to_rad(cleave_arc_degrees * 0.5)
+			var r := 56.0 + ease * (cleave_range * 0.62)
+			draw_arc(Vector2.ZERO, r, facing.angle() - half_arc, facing.angle() + half_arc, 26, Color(1.0, 0.78, 0.36, 0.72 * burst_alpha), 4.2)
+			draw_line(Vector2.ZERO, facing.rotated(-half_arc * 0.88) * r, Color(1.0, 0.86, 0.5, 0.42 * burst_alpha), 2.8)
+			draw_line(Vector2.ZERO, facing.rotated(half_arc * 0.88) * r, Color(1.0, 0.86, 0.5, 0.42 * burst_alpha), 2.8)
+
+
+func _draw_enrage_scaling_indicator(body_radius: float, facing: Vector2, enrage_t: float) -> void:
+	if enrage_t <= 0.0:
+		return
+
+	var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * (0.012 + enrage_t * 0.018))
+	var side := Vector2(-facing.y, facing.x)
+	var aura_radius := body_radius + 13.0 + enrage_t * 14.0
+	var aura_alpha := 0.05 + enrage_t * 0.12 + pulse * 0.05
+
+	# Always-on enrage aura so scaling is readable even out of telegraph windows.
+	draw_circle(Vector2.ZERO, aura_radius, Color(1.0, 0.2, 0.08, aura_alpha))
+	draw_arc(Vector2.ZERO, aura_radius + 2.0, 0.0, TAU, 42, Color(1.0, 0.78, 0.36, 0.2 + enrage_t * 0.35), 2.1 + enrage_t * 1.3)
+
+	var tier: int = _get_enrage_tier(enrage_t)
+	var pip_anchor := -facing * (body_radius + 18.0)
+	for i in range(3):
+		var offset := side * ((float(i) - 1.0) * 10.0)
+		var pip_pos := pip_anchor + offset
+		var lit: bool = i < tier
+		var pip_color := Color(1.0, 0.42, 0.14, 0.88) if lit else Color(0.44, 0.2, 0.16, 0.45)
+		draw_circle(pip_pos, 2.9, pip_color)
+		if lit:
+			draw_arc(pip_pos, 5.0, 0.0, TAU, 18, Color(1.0, 0.86, 0.54, 0.62), 1.4)
+
+
+func _get_enrage_tier(enrage_t: float) -> int:
+	if enrage_t >= 0.85:
+		return 3
+	if enrage_t >= 0.5:
+		return 2
+	if enrage_t > 0.0:
+		return 1
+	return 0
