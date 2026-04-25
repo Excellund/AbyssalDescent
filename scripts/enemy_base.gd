@@ -5,7 +5,6 @@ const HEALTH_STATE_SCRIPT := preload("res://scripts/health_state.gd")
 signal health_changed(current_health: int, max_health: int)
 signal died
 
-@export var target_path: NodePath
 @export var max_health: int = 40
 @export var health_bar_size: Vector2 = Vector2(56.0, 8.0)
 @export var health_bar_offset: Vector2 = Vector2(-28.0, -34.0)
@@ -25,23 +24,15 @@ func _ready() -> void:
 	health_changed.connect(_update_health_bar)
 	_create_health_bar()
 	_create_health_state()
-	target = get_node_or_null(target_path) as Node2D
 	var sprite := get_node_or_null("Sprite2D") as Sprite2D
 	if sprite != null:
 		sprite.visible = false
 	queue_redraw()
 
 func _physics_process(delta: float) -> void:
-	_refresh_target_if_missing()
 	_update_attack_animation(delta)
 	_process_behavior(delta)
 	_update_visual_facing_direction()
-
-func _refresh_target_if_missing() -> void:
-	if is_instance_valid(target):
-		return
-	if target_path != NodePath():
-		target = get_node_or_null(target_path) as Node2D
 
 func _process_behavior(_delta: float) -> void:
 	pass

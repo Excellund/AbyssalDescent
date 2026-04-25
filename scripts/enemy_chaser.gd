@@ -3,8 +3,8 @@ extends "res://scripts/enemy_base.gd"
 @export var move_speed: float = 120.0
 @export var acceleration: float = 900.0
 @export var deceleration: float = 1200.0
-@export var stop_distance: float = 8.0
-@export var attack_range: float = 28.0
+@export var stop_distance: float = 30.0
+@export var attack_range: float = 32.0
 @export var attack_damage: int = 10
 @export var attack_interval: float = 0.85
 

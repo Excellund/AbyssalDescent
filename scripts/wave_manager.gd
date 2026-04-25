@@ -68,10 +68,10 @@ func _spawn_enemy() -> void:
 	enemy.add_child(collision_shape)
 	
 	enemy.global_position = _pick_spawn_position()
-	enemy.set("target_path", NodePath("../Player"))
 	if enemy.has_signal("died"):
 		enemy.died.connect(_on_enemy_died)
 	add_child(enemy)
+	enemy.set("target", player)
 	enemies_alive += 1
 
 func _pick_spawn_position() -> Vector2:
