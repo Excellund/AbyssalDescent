@@ -6,13 +6,6 @@ signal health_changed(current_health: int, max_health: int)
 signal died
 
 @export var target_path: NodePath
-@export var move_speed: float = 160.0
-@export var acceleration: float = 900.0
-@export var deceleration: float = 1200.0
-@export var stop_distance: float = 8.0
-@export var attack_range: float = 30.0
-@export var attack_damage: int = 10
-@export var attack_interval: float = 0.65
 @export var max_health: int = 40
 @export var health_bar_size: Vector2 = Vector2(56.0, 8.0)
 @export var health_bar_offset: Vector2 = Vector2(-28.0, -34.0)
@@ -20,7 +13,6 @@ signal died
 var target: Node2D
 var health_bar: ProgressBar
 var health_state
-var attack_cooldown_left: float = 0.0
 var attack_anim_time_left: float = 0.0
 var attack_anim_duration: float = 0.1
 var visual_facing_direction: Vector2 = Vector2.LEFT
@@ -41,14 +33,9 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	_refresh_target_if_missing()
-	_update_attack_cooldown(delta)
 	_update_attack_animation(delta)
+	_process_behavior(delta)
 	_update_visual_facing_direction()
-	var desired_velocity := _get_desired_velocity()
-	var move_rate := acceleration if desired_velocity != Vector2.ZERO else deceleration
-	velocity = velocity.move_toward(desired_velocity, move_rate * delta)
-	move_and_slide()
-	_try_attack_target()
 
 func _refresh_target_if_missing() -> void:
 	if is_instance_valid(target):
@@ -56,32 +43,8 @@ func _refresh_target_if_missing() -> void:
 	if target_path != NodePath():
 		target = get_node_or_null(target_path) as Node2D
 
-func _get_desired_velocity() -> Vector2:
-	if not is_instance_valid(target):
-		return Vector2.ZERO
-	var to_target := target.global_position - global_position
-	if to_target.length() <= stop_distance:
-		return Vector2.ZERO
-	return to_target.normalized() * move_speed
-
-func _update_attack_cooldown(delta: float) -> void:
-	if attack_cooldown_left > 0.0:
-		attack_cooldown_left = maxf(0.0, attack_cooldown_left - delta)
-
-func _try_attack_target() -> void:
-	if not is_instance_valid(target):
-		return
-	if attack_cooldown_left > 0.0:
-		return
-	if not target.has_method("take_damage"):
-		return
-	if global_position.distance_to(target.global_position) > attack_range:
-		return
-
-	target.call("take_damage", attack_damage)
-	attack_cooldown_left = attack_interval
-	attack_anim_time_left = attack_anim_duration
-	queue_redraw()
+func _process_behavior(_delta: float) -> void:
+	pass
 
 func _update_attack_animation(delta: float) -> void:
 	if attack_anim_time_left > 0.0:
@@ -164,16 +127,13 @@ func _get_current_health() -> int:
 		return max_health
 	return health_state.current_health
 
-func _draw() -> void:
-	var attack_t := 1.0 - (attack_anim_time_left / attack_anim_duration) if attack_anim_duration > 0.0 else 1.0
-	var attack_pulse := sin(attack_t * PI) * 1.8 if attack_anim_time_left > 0.0 else 0.0
-	var body_radius := 13.0 + attack_pulse
-	var facing := visual_facing_direction if visual_facing_direction != Vector2.ZERO else Vector2.LEFT
+func _draw_common_body(body_radius: float, body_color: Color, core_color: Color, facing: Vector2) -> void:
 	var side := Vector2(-facing.y, facing.x)
-
-	draw_circle(Vector2.ZERO, body_radius + 3.0, Color(0.12, 0.02, 0.04, 0.44))
-	draw_circle(Vector2.ZERO, body_radius, Color(0.95, 0.18, 0.26, 1.0))
-	draw_circle(Vector2.ZERO, body_radius * 0.72, Color(0.62, 0.06, 0.12, 1.0))
+	var outer_color := Color(0.12, 0.02, 0.04, 0.44)
+	
+	draw_circle(Vector2.ZERO, body_radius + 3.0, outer_color)
+	draw_circle(Vector2.ZERO, body_radius, body_color)
+	draw_circle(Vector2.ZERO, body_radius * 0.72, core_color)
 
 	var horn_tip := facing * (body_radius + 8.0)
 	var horn_base := facing * (body_radius - 2.0)
@@ -185,3 +145,7 @@ func _draw() -> void:
 	var spike_r := -side * (body_radius - 1.0)
 	draw_line(spike_l, spike_l + side * 6.0, Color(0.95, 0.74, 0.74, 0.7), 1.8)
 	draw_line(spike_r, spike_r - side * 6.0, Color(0.95, 0.74, 0.74, 0.7), 1.8)
+
+func _get_attack_pulse() -> float:
+	var attack_t := 1.0 - (attack_anim_time_left / attack_anim_duration) if attack_anim_duration > 0.0 else 1.0
+	return sin(attack_t * PI) * 1.8 if attack_anim_time_left > 0.0 else 0.0

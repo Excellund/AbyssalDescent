@@ -1,0 +1,185 @@
+extends "res://scripts/enemy_base.gd"
+
+const STATE_SEEK := 0
+const STATE_WINDUP := 1
+const STATE_CHARGE := 2
+const STATE_RECOVER := 3
+
+@export var seek_speed: float = 92.0
+@export var acceleration: float = 900.0
+@export var deceleration: float = 1200.0
+@export var stop_distance: float = 8.0
+@export var trigger_range: float = 180.0
+@export var windup_time: float = 0.75
+@export var charge_speed: float = 410.0
+@export var charge_time: float = 0.34
+@export var recover_time: float = 0.6
+@export var charge_cooldown: float = 1.8
+@export var charge_damage: int = 18
+@export var path_width: float = 26.0
+
+var attack_cooldown_left: float = 0.0
+var charger_state: int = STATE_SEEK
+var charger_state_time_left: float = 0.0
+var charger_charge_direction: Vector2 = Vector2.LEFT
+var charger_charge_preview_length: float = 0.0
+var charger_charge_hit_applied: bool = false
+
+func _process_behavior(delta: float) -> void:
+	_update_attack_cooldown(delta)
+	_process_state_machine(delta)
+
+func _update_attack_cooldown(delta: float) -> void:
+	if attack_cooldown_left > 0.0:
+		attack_cooldown_left = maxf(0.0, attack_cooldown_left - delta)
+
+func _process_state_machine(delta: float) -> void:
+	if not is_instance_valid(target):
+		velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
+		move_and_slide()
+		return
+
+	if charger_state == STATE_SEEK:
+		_process_seek_state(delta)
+		return
+
+	if charger_state == STATE_WINDUP:
+		_process_windup_state(delta)
+		return
+
+	if charger_state == STATE_CHARGE:
+		_process_charge_state(delta)
+		return
+
+	_process_recover_state(delta)
+
+func _get_seek_velocity() -> Vector2:
+	if not is_instance_valid(target):
+		return Vector2.ZERO
+	var to_target := target.global_position - global_position
+	if to_target.length() <= stop_distance:
+		return Vector2.ZERO
+	return to_target.normalized() * seek_speed
+
+func _process_seek_state(delta: float) -> void:
+	var desired_velocity := _get_seek_velocity()
+	var move_rate := acceleration if desired_velocity != Vector2.ZERO else deceleration
+	velocity = velocity.move_toward(desired_velocity, move_rate * delta)
+	move_and_slide()
+	if attack_cooldown_left <= 0.0 and global_position.distance_to(target.global_position) <= trigger_range:
+		_enter_windup_state()
+
+func _process_windup_state(delta: float) -> void:
+	velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
+	move_and_slide()
+	charger_state_time_left = maxf(0.0, charger_state_time_left - delta)
+	if charger_state_time_left <= 0.0:
+		_enter_charge_state()
+
+func _process_charge_state(delta: float) -> void:
+	var from_pos := global_position
+	velocity = charger_charge_direction * charge_speed
+	move_and_slide()
+	var to_pos := global_position
+	_try_apply_charge_hit(from_pos, to_pos)
+	charger_state_time_left = maxf(0.0, charger_state_time_left - delta)
+	if charger_state_time_left <= 0.0:
+		_enter_recover_state()
+
+func _process_recover_state(delta: float) -> void:
+	velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
+	move_and_slide()
+	charger_state_time_left = maxf(0.0, charger_state_time_left - delta)
+	if charger_state_time_left <= 0.0:
+		charger_state = STATE_SEEK
+
+func _enter_windup_state() -> void:
+	charger_state = STATE_WINDUP
+	charger_state_time_left = windup_time
+	charger_charge_hit_applied = false
+	var to_target := target.global_position - global_position
+	if to_target.length_squared() > 0.000001:
+		charger_charge_direction = to_target.normalized()
+	if charger_charge_direction.length_squared() <= 0.000001:
+		charger_charge_direction = visual_facing_direction
+	charger_charge_preview_length = charge_speed * charge_time
+	visual_facing_direction = charger_charge_direction
+	queue_redraw()
+
+func _enter_charge_state() -> void:
+	charger_state = STATE_CHARGE
+	charger_state_time_left = charge_time
+	visual_facing_direction = charger_charge_direction
+	queue_redraw()
+
+func _enter_recover_state() -> void:
+	charger_state = STATE_RECOVER
+	charger_state_time_left = recover_time
+	attack_cooldown_left = charge_cooldown
+	velocity *= 0.25
+	queue_redraw()
+
+func _try_apply_charge_hit(segment_start: Vector2, segment_end: Vector2) -> void:
+	if charger_charge_hit_applied:
+		return
+	if not is_instance_valid(target):
+		return
+	if not target.has_method("take_damage"):
+		return
+
+	var distance_to_path := _distance_point_to_segment(target.global_position, segment_start, segment_end)
+	if distance_to_path > path_width:
+		return
+
+	target.call("take_damage", charge_damage)
+	charger_charge_hit_applied = true
+	attack_anim_time_left = attack_anim_duration
+	queue_redraw()
+
+func _distance_point_to_segment(point: Vector2, segment_start: Vector2, segment_end: Vector2) -> float:
+	var segment := segment_end - segment_start
+	var segment_length_squared := segment.length_squared()
+	if segment_length_squared <= 0.000001:
+		return point.distance_to(segment_start)
+	var t := clampf((point - segment_start).dot(segment) / segment_length_squared, 0.0, 1.0)
+	var closest := segment_start + segment * t
+	return point.distance_to(closest)
+
+func _update_visual_facing_direction() -> void:
+	if charger_state == STATE_WINDUP or charger_state == STATE_CHARGE:
+		if charger_charge_direction.length_squared() > 0.000001:
+			visual_facing_direction = charger_charge_direction
+		queue_redraw()
+		return
+
+	if velocity.length_squared() > 1.0:
+		var move_facing := velocity.normalized()
+		var blended_facing := visual_facing_direction.slerp(move_facing, 0.28)
+		if blended_facing.length_squared() > 0.000001:
+			visual_facing_direction = blended_facing.normalized()
+		else:
+			visual_facing_direction = move_facing
+	queue_redraw()
+
+func _draw() -> void:
+	var attack_pulse := _get_attack_pulse()
+	var body_radius := 13.0 + attack_pulse
+	var facing := visual_facing_direction if visual_facing_direction != Vector2.ZERO else Vector2.LEFT
+	var body_color := Color(0.95, 0.64, 0.18, 1.0)
+	var core_color := Color(0.74, 0.4, 0.08, 1.0)
+
+	if charger_state == STATE_WINDUP:
+		var windup_phase := 1.0 - (charger_state_time_left / windup_time) if windup_time > 0.0 else 1.0
+		var pulse := 0.45 + sin(windup_phase * PI * 4.0) * 0.25
+		body_color = Color(1.0, 0.72, 0.25 + pulse * 0.1, 1.0)
+	if charger_state == STATE_CHARGE:
+		body_color = Color(1.0, 0.86, 0.35, 1.0)
+		core_color = Color(0.86, 0.54, 0.1, 1.0)
+
+	_draw_common_body(body_radius, body_color, core_color, facing)
+
+	if charger_state == STATE_WINDUP:
+		var preview_start := facing * (body_radius + 4.0)
+		var preview_end := preview_start + facing * charger_charge_preview_length
+		draw_line(preview_start, preview_end, Color(1.0, 0.82, 0.35, 0.78), 6.0)
+		draw_line(preview_start, preview_end, Color(1.0, 0.97, 0.72, 0.95), 2.0)
