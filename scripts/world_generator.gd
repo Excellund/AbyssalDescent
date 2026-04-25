@@ -78,8 +78,10 @@ var current_room_enemy_mutator: Dictionary = {}
 
 var hud_panel: Panel
 var hud_label: Label
-var room_banner_label: Label
+var room_banner_title_label: Label
+var room_banner_subtitle_label: Label
 var room_banner_tween: Tween
+var room_banner_top_margin: float = 18.0
 var art_time: float = 0.0
 var music_system: Node
 var enemy_spawner: Node
@@ -276,6 +278,7 @@ func _process(delta: float) -> void:
 	_try_use_door()
 	_update_encounter_state()
 	_update_camera_mode()
+	_update_room_banner_layout()
 	_update_hud()
 	queue_redraw()
 
@@ -389,7 +392,10 @@ func _begin_room(profile: Dictionary) -> void:
 	current_room_label = profile["label"]
 	current_room_enemy_mutator = profile.get("enemy_mutator", {})
 	var mutator_name := String(current_room_enemy_mutator.get("name", ""))
-	_show_room_banner(current_room_label, mutator_name)
+	var room_subtitle := ""
+	if not mutator_name.is_empty():
+		room_subtitle = "Mutator: %s" % mutator_name
+	_show_room_banner(current_room_label, room_subtitle)
 	if is_instance_valid(enemy_spawner):
 		enemy_spawner.call("configure_room", current_room_size, spawn_padding, spawn_safe_radius, current_room_enemy_mutator)
 	_apply_camera_bounds_for_room(current_room_size)
@@ -522,6 +528,8 @@ func _create_hud() -> void:
 	# Room entry banner — centered, fades in then out on room entry.
 	var banner_layer := CanvasLayer.new()
 	banner_layer.layer = 110
+	banner_layer.follow_viewport_enabled = false
+	banner_layer.follow_viewport_scale = 1.0
 	add_child(banner_layer)
 
 	var banner_container := Control.new()
@@ -529,34 +537,82 @@ func _create_hud() -> void:
 	banner_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	banner_layer.add_child(banner_container)
 
-	room_banner_label = Label.new()
-	room_banner_label.set_anchors_preset(Control.PRESET_CENTER)
-	room_banner_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	room_banner_label.grow_vertical = Control.GROW_DIRECTION_BOTH
-	room_banner_label.custom_minimum_size = Vector2(900.0, 140.0)
-	room_banner_label.add_theme_font_size_override("font_size", 52)
-	room_banner_label.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 1.0))
-	room_banner_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.92))
-	room_banner_label.add_theme_constant_override("shadow_offset_x", 3)
-	room_banner_label.add_theme_constant_override("shadow_offset_y", 3)
-	room_banner_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	room_banner_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	room_banner_label.modulate.a = 0.0
-	banner_container.add_child(room_banner_label)
+	room_banner_title_label = Label.new()
+	room_banner_title_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	room_banner_title_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	room_banner_title_label.grow_vertical = Control.GROW_DIRECTION_END
+	room_banner_title_label.offset_left = 0.0
+	room_banner_title_label.offset_right = 0.0
+	room_banner_title_label.offset_top = 92.0
+	room_banner_title_label.offset_bottom = 126.0
+	room_banner_title_label.add_theme_font_size_override("font_size", 30)
+	room_banner_title_label.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 0.95))
+	room_banner_title_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.92))
+	room_banner_title_label.add_theme_constant_override("shadow_offset_x", 2)
+	room_banner_title_label.add_theme_constant_override("shadow_offset_y", 2)
+	room_banner_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	room_banner_title_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	room_banner_title_label.modulate.a = 0.0
+	banner_container.add_child(room_banner_title_label)
+
+	room_banner_subtitle_label = Label.new()
+	room_banner_subtitle_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	room_banner_subtitle_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	room_banner_subtitle_label.grow_vertical = Control.GROW_DIRECTION_END
+	room_banner_subtitle_label.offset_left = 0.0
+	room_banner_subtitle_label.offset_right = 0.0
+	room_banner_subtitle_label.offset_top = 124.0
+	room_banner_subtitle_label.offset_bottom = 152.0
+	room_banner_subtitle_label.add_theme_font_size_override("font_size", 18)
+	room_banner_subtitle_label.add_theme_color_override("font_color", Color(0.72, 0.85, 0.98, 0.9))
+	room_banner_subtitle_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.9))
+	room_banner_subtitle_label.add_theme_constant_override("shadow_offset_x", 2)
+	room_banner_subtitle_label.add_theme_constant_override("shadow_offset_y", 2)
+	room_banner_subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	room_banner_subtitle_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	room_banner_subtitle_label.modulate.a = 0.0
+	banner_container.add_child(room_banner_subtitle_label)
+	_update_room_banner_layout()
+
+func _update_room_banner_layout() -> void:
+	if room_banner_title_label == null or room_banner_subtitle_label == null:
+		return
+
+	var top_y := 92.0
+	if current_room_size != Vector2.ZERO:
+		var room_top_world := Vector2(0.0, -current_room_size.y * 0.5)
+		var canvas_xform := get_viewport().get_canvas_transform()
+		var room_top_screen := canvas_xform * room_top_world
+		var viewport_height := get_viewport().get_visible_rect().size.y
+		top_y = clampf(room_top_screen.y + room_banner_top_margin, 16.0, viewport_height * 0.45)
+
+	room_banner_title_label.offset_top = top_y
+	room_banner_title_label.offset_bottom = top_y + 34.0
+	room_banner_subtitle_label.offset_top = top_y + 32.0
+	room_banner_subtitle_label.offset_bottom = top_y + 60.0
 
 func _show_room_banner(title: String, subtitle: String) -> void:
-	if room_banner_label == null:
+	if room_banner_title_label == null or room_banner_subtitle_label == null:
 		return
 	if is_instance_valid(room_banner_tween):
 		room_banner_tween.kill()
 
-	room_banner_label.text = title if subtitle.is_empty() else "%s\n%s" % [title, subtitle]
-	room_banner_label.modulate.a = 0.0
+	room_banner_title_label.text = title
+	room_banner_subtitle_label.text = subtitle
+	_update_room_banner_layout()
+	room_banner_title_label.modulate.a = 0.0
+	room_banner_subtitle_label.modulate.a = 0.0
 
 	room_banner_tween = create_tween()
-	room_banner_tween.tween_property(room_banner_label, "modulate:a", 1.0, 0.35)
-	room_banner_tween.tween_interval(1.8)
-	room_banner_tween.tween_property(room_banner_label, "modulate:a", 0.0, 0.55)
+	room_banner_tween.tween_property(room_banner_title_label, "modulate:a", 1.0, 0.2)
+	if subtitle.is_empty():
+		room_banner_subtitle_label.visible = false
+	else:
+		room_banner_subtitle_label.visible = true
+		room_banner_tween.parallel().tween_property(room_banner_subtitle_label, "modulate:a", 1.0, 0.2)
+	room_banner_tween.tween_interval(0.95)
+	room_banner_tween.tween_property(room_banner_title_label, "modulate:a", 0.0, 0.24)
+	room_banner_tween.parallel().tween_property(room_banner_subtitle_label, "modulate:a", 0.0, 0.24)
 
 func _open_boon_selection(title: String, is_initial: bool, mode: String = "boon") -> void:
 	if is_instance_valid(reward_selection_ui):
