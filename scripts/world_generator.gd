@@ -4,6 +4,8 @@ const ENEMY_CHASER_SCRIPT := preload("res://scripts/enemy_chaser.gd")
 const ENEMY_CHARGER_SCRIPT := preload("res://scripts/enemy_charger.gd")
 const ENEMY_BOSS_SCRIPT := preload("res://scripts/enemy_boss.gd")
 const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
+const DEBUG_RUN_NORMAL := 0
+const DEBUG_RUN_FIRST_BOSS := 1
 
 @export var player_path: NodePath = NodePath("Player")
 @export var encounter_count: int = 5
@@ -33,6 +35,7 @@ const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
 @export var debug_skip_starting_boon_selection: bool = false
 @export var debug_start_power_ids: PackedStringArray = PackedStringArray()
 @export_multiline var debug_start_command: String = ""
+@export_enum("Normal", "First Boss") var debug_run_state: int = DEBUG_RUN_NORMAL
 
 var player: Node2D
 var player_camera: Camera2D
@@ -88,6 +91,10 @@ func _ready() -> void:
 	_create_hud()
 	_create_boon_ui()
 	_apply_debug_start_powers_if_needed()
+	if debug_run_state != DEBUG_RUN_NORMAL:
+		_apply_debug_run_state(_debug_run_state_to_key(debug_run_state))
+		queue_redraw()
+		return
 	if debug_skip_starting_boon_selection:
 		_begin_room(_build_skirmish_profile(room_depth))
 	else:
@@ -126,6 +133,67 @@ func start_run_with_powers(power_ids: Array[String]) -> Dictionary:
 
 func start_run_with_command(command: String) -> Dictionary:
 	return start_run_with_powers(_parse_power_command(command))
+
+func go_do_that_thing(state: String) -> Dictionary:
+	return _apply_debug_run_state(state)
+
+func _debug_run_state_to_key(state_value: int) -> String:
+	if state_value == DEBUG_RUN_FIRST_BOSS:
+		return "first_boss"
+	return "normal"
+
+func _apply_debug_run_state(state: String) -> Dictionary:
+	var normalized := state.strip_edges().to_lower()
+	for keyword in ["go", "to", "do", "that", "thing", "state", "run", "at", "the"]:
+		normalized = normalized.replace(keyword, " ")
+	for sep in [",", ";", "|", "\n", "\t", "-"]:
+		normalized = normalized.replace(sep, " ")
+	normalized = normalized.strip_edges()
+
+	if normalized.is_empty():
+		normalized = _debug_run_state_to_key(debug_run_state)
+
+	var aliases := {
+		"boss": "first_boss",
+		"first boss": "first_boss",
+		"boss1": "first_boss",
+		"boss 1": "first_boss"
+	}
+	if aliases.has(normalized):
+		normalized = String(aliases[normalized])
+
+	if normalized == "normal":
+		return {"ok": true, "state": "normal", "note": "No debug jump applied."}
+
+	if normalized != "first_boss":
+		return {"ok": false, "state": normalized, "note": "Unknown state. Use first_boss."}
+
+	# Reset transient UI and encounter state before jumping.
+	boon_selection_active = false
+	pending_initial_boon = false
+	reward_selection_mode = "boon"
+	boon_choices.clear()
+	if boon_layer != null:
+		boon_layer.visible = false
+	_set_combat_paused(false)
+	choosing_next_room = false
+	door_options.clear()
+	pending_room_reward = "none"
+	run_cleared = false
+	in_boss_room = false
+	active_room_enemy_count = 0
+	_clear_all_enemies()
+
+	if is_instance_valid(player):
+		player.global_position = Vector2.ZERO
+
+	rooms_cleared = encounter_count
+	room_depth = encounter_count
+	boss_unlocked = true
+	_begin_boss_room()
+
+	_update_hud()
+	return {"ok": true, "state": normalized}
 
 func _apply_debug_start_powers_if_needed() -> void:
 	if not debug_apply_test_powers_on_start:
