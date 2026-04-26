@@ -4,43 +4,93 @@ static func _encounter_rows() -> Array[Dictionary]:
 	return [
 		{
 			"name": "Skirmish",
-			"desc": "Standard combat room with mixed enemies.",
+			"group": "Core",
+			"color": Color(0.62, 0.86, 1.0, 1.0),
+			"desc": "Balanced warm-up fight with mixed pressure.",
 		},
 		{
 			"name": "Crossfire",
-			"desc": "Hard combat layout with ranged pressure and flanking lanes.",
+			"group": "Core",
+			"color": Color(1.0, 0.78, 0.48, 1.0),
+			"desc": "Ranged firing line with flanking disruption.",
 		},
 		{
 			"name": "Onslaught",
-			"desc": "Aggressive melee-heavy wave mix that keeps close pressure.",
+			"group": "Core",
+			"color": Color(1.0, 0.5, 0.42, 1.0),
+			"desc": "Melee flood: relentless close-range pressure.",
 		},
 		{
 			"name": "Fortress",
-			"desc": "Defensive enemy formation with shielders anchoring the fight.",
+			"group": "Core",
+			"color": Color(0.72, 0.9, 1.0, 1.0),
+			"desc": "Defensive wall built around shielders.",
+		},
+		{
+			"name": "Blitz",
+			"group": "Advanced",
+			"color": Color(1.0, 0.66, 0.4, 1.0),
+			"desc": "Fast assault. Hesitation gets punished.",
+		},
+		{
+			"name": "Suppression",
+			"group": "Advanced",
+			"color": Color(0.96, 0.64, 1.0, 1.0),
+			"desc": "Area denial with lancer-backed ranged pressure.",
+		},
+		{
+			"name": "Vanguard",
+			"group": "Advanced",
+			"color": Color(0.72, 0.88, 1.0, 1.0),
+			"desc": "Shielded advance and structured frontline push.",
+		},
+		{
+			"name": "Ambush",
+			"group": "Advanced",
+			"color": Color(1.0, 0.58, 0.52, 1.0),
+			"desc": "Predator pack that collapses escape routes.",
+		},
+		{
+			"name": "Gauntlet",
+			"group": "Advanced",
+			"color": Color(1.0, 0.82, 0.54, 1.0),
+			"desc": "Mixed-threat test of every enemy role.",
 		},
 		{
 			"name": "Trial",
-			"desc": "Hard encounter variant with an additional enemy mutator modifier.",
+			"group": "Objective",
+			"color": Color(1.0, 0.66, 0.52, 1.0),
+			"desc": "Hard variant with an enemy mutator.",
 		},
 		{
 			"name": "Last Stand",
-			"desc": "Objective encounter. Survive the timer, then finish the kill quota to clear.",
+			"group": "Objective",
+			"color": Color(1.0, 0.8, 0.5, 1.0),
+			"desc": "Survive the timer, then clear the kill quota.",
 		},
 		{
 			"name": "Cut the Signal",
-			"desc": "Objective encounter. Hunt the marked target while it relocates at health thresholds.",
+			"group": "Objective",
+			"color": Color(1.0, 0.86, 0.58, 1.0),
+			"desc": "Hunt the marked target as it relocates.",
 		},
 		{
 			"name": "Rest Site",
-			"desc": "Non-combat room that restores health before the next fight.",
+			"group": "Special",
+			"color": Color(0.64, 1.0, 0.76, 1.0),
+			"desc": "Non-combat room that restores health.",
 		},
 		{
 			"name": "Warden",
-			"desc": "First boss encounter. Defeat the Warden to advance into phase two.",
+			"group": "Boss",
+			"color": Color(1.0, 0.68, 0.54, 1.0),
+			"desc": "First boss encounter.",
 		},
 		{
 			"name": "Sovereign",
-			"desc": "Second boss encounter. Defeat the Sovereign to complete the run.",
+			"group": "Boss",
+			"color": Color(1.0, 0.58, 0.48, 1.0),
+			"desc": "Final boss encounter.",
 		},
 	]
 
@@ -102,12 +152,26 @@ static func _mutator_title_bbcode(row: Dictionary) -> String:
 	var color := row.get("color", Color(0.86, 0.94, 1.0, 1.0)) as Color
 	return "[color=%s]%s[/color]" % [_color_hex(color), title]
 
+static func _encounter_title_bbcode(row: Dictionary) -> String:
+	var name := String(row.get("name", ""))
+	var color := row.get("color", Color(0.9, 0.96, 1.0, 1.0)) as Color
+	return "[color=%s][b]%s[/b][/color]" % [_color_hex(color), name]
+
+static func _encounter_group_header_bbcode(group_name: String) -> String:
+	var title := "%s Encounters" % group_name.to_upper()
+	return "[color=#63C8FF][b][u]%s[/u][/b][/color]\n[color=#466A86]--------------------------------[/color]" % title
+
 static func glossary_bbcode() -> String:
 	var lines: Array[String] = []
 	lines.append("[center][b]Encounters[/b][/center]")
-	for row in _encounter_rows():
-		lines.append("[b]%s[/b]: %s" % [row.get("name", ""), row.get("desc", "")])
-	lines.append("")
+	var encounter_groups: Array[String] = ["Core", "Advanced", "Objective", "Special", "Boss"]
+	for group_name in encounter_groups:
+		lines.append(_encounter_group_header_bbcode(group_name))
+		for row in _encounter_rows():
+			if String(row.get("group", "")) != group_name:
+				continue
+			lines.append("%s  [color=#BFD2E8]-[/color]  %s" % [_encounter_title_bbcode(row), row.get("desc", "")])
+		lines.append("")
 	lines.append("[center][b]Mutators[/b][/center]")
 	for row in _mutator_rows():
 		lines.append("%s: %s" % [_mutator_title_bbcode(row), row.get("desc", "")])
