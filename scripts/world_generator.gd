@@ -14,8 +14,10 @@ const REWARD_SELECTION_UI_SCRIPT := preload("res://scripts/reward_selection_ui.g
 const ENUMS := preload("res://scripts/shared/enums.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const RUN_CONTEXT_PATH := "/root/RunContext"
+const MENU_SCENE_PATH := "res://scenes/Menu.tscn"
 const WORLD_HUD_SCRIPT := preload("res://scripts/world_hud.gd")
 const WORLD_RENDERER_SCRIPT := preload("res://scripts/world_renderer.gd")
+const PAUSE_MENU_CONTROLLER_SCRIPT := preload("res://scripts/pause_menu_controller.gd")
 const DEBUG_RUN_NORMAL := 0
 const DEBUG_RUN_FIRST_BOSS := 1
 
@@ -94,6 +96,7 @@ var enemy_spawner: Node
 var encounter_profile_builder: Node
 var encounter_flow_system: Node
 var reward_selection_ui: Node
+var pause_menu_controller: Node
 
 func _ready() -> void:
 	rng.randomize()
@@ -158,6 +161,13 @@ func _ready() -> void:
 		"floor_grid_fine_step": floor_grid_fine_step,
 		"door_use_radius": door_use_radius,
 	})
+	pause_menu_controller = PAUSE_MENU_CONTROLLER_SCRIPT.new()
+	add_child(pause_menu_controller)
+	pause_menu_controller.call("initialize", RUN_CONTEXT_PATH, Callable(self, "_set_music_volume_runtime"))
+	pause_menu_controller.connect("pause_opened", Callable(self, "_on_pause_menu_opened"))
+	pause_menu_controller.connect("pause_closed", Callable(self, "_on_pause_menu_closed"))
+	pause_menu_controller.connect("back_to_main_menu_requested", Callable(self, "_on_pause_back_to_menu_requested"))
+	pause_menu_controller.connect("exit_game_requested", Callable(self, "_on_pause_exit_game_requested"))
 	hud.refresh(_get_hud_state(), player)
 	_apply_debug_start_powers_if_needed()
 	if debug_run_state != DEBUG_RUN_NORMAL:
@@ -289,7 +299,27 @@ func _parse_power_command(command: String) -> Array[String]:
 func _is_known_power_id(power_id: String) -> bool:
 	return power_registry_instance.is_valid_power_id(power_id)
 
+func _unhandled_input(event: InputEvent) -> void:
+	if not event.is_action_pressed("ui_cancel"):
+		return
+	if not is_instance_valid(pause_menu_controller):
+		return
+	if bool(pause_menu_controller.call("is_open")) and bool(pause_menu_controller.call("is_options_open")):
+		pause_menu_controller.call("close_options")
+		get_viewport().set_input_as_handled()
+		return
+	if bool(pause_menu_controller.call("is_open")):
+		pause_menu_controller.call("close")
+		get_viewport().set_input_as_handled()
+		return
+	pause_menu_controller.call("open")
+	get_viewport().set_input_as_handled()
+
 func _process(delta: float) -> void:
+	if is_instance_valid(pause_menu_controller) and bool(pause_menu_controller.call("is_open")):
+		hud.refresh(_get_hud_state(), player)
+		_sync_renderer()
+		return
 	if is_instance_valid(reward_selection_ui) and bool(reward_selection_ui.call("is_active")):
 		reward_selection_ui.call("process_input", delta)
 		hud.refresh(_get_hud_state(), player)
@@ -427,6 +457,29 @@ func _sync_audio_settings_from_context() -> void:
 	var music_volume_value: Variant = run_context.get("music_volume_db")
 	if music_volume_value != null:
 		music_volume_db = float(music_volume_value)
+
+func _is_reward_selection_active() -> bool:
+	return is_instance_valid(reward_selection_ui) and bool(reward_selection_ui.call("is_active"))
+
+func _set_music_volume_runtime(music_db: float) -> void:
+	music_volume_db = clampf(music_db, -60.0, -6.0)
+	if is_instance_valid(music_system):
+		music_system.set("music_volume_db", music_volume_db)
+
+func _on_pause_menu_opened() -> void:
+	_set_combat_paused(true)
+
+func _on_pause_menu_closed() -> void:
+	_set_combat_paused(_is_reward_selection_active())
+
+func _on_pause_back_to_menu_requested() -> void:
+	_set_combat_paused(false)
+	if is_instance_valid(pause_menu_controller):
+		pause_menu_controller.call("close")
+	get_tree().change_scene_to_file(MENU_SCENE_PATH)
+
+func _on_pause_exit_game_requested() -> void:
+	get_tree().quit()
 
 func _spawn_door_options() -> void:
 	if not is_instance_valid(encounter_flow_system):

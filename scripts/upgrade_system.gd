@@ -271,7 +271,7 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 		"wide_arc":
 			var cur_arc := float(player_reference.get("attack_arc_degrees"))
 			var next_arc := clampf(cur_arc + 18.0, 60.0, 240.0)
-			return "[color=#c8daf0]Attack arc:[/color] [color=#e8c96a]%.0fÂ°[/color] [color=#8899aa]->[/color] [color=#7de882]%.0fÂ°[/color]" % [cur_arc, next_arc]
+			return "[color=#c8daf0]Attack arc:[/color] [color=#e8c96a]%.0f°[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f°[/color]" % [cur_arc, next_arc]
 		"long_reach":
 			var cur_range := float(player_reference.get("attack_range"))
 			return "[color=#c8daf0]Attack range:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [cur_range, cur_range + 14.0]
