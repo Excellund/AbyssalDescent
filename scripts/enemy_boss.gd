@@ -64,9 +64,7 @@ func _ready() -> void:
 			if shape_node.shape is CircleShape2D:
 				(shape_node.shape as CircleShape2D).radius = 34.0
 				break
-	if health_bar != null:
-		health_bar.custom_minimum_size = Vector2(132.0, 12.0)
-		health_bar.position = Vector2(-66.0, -74.0)
+	configure_health_bar_visuals(Vector2(-66.0, -74.0), Vector2(132.0, 12.0))
 
 
 func _process_behavior(delta: float) -> void:

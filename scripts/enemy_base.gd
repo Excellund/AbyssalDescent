@@ -77,8 +77,9 @@ const COLOR_BOSS_CLEAVE_OUTLINE := COLOR_PALETTE.COLOR_BOSS_CLEAVE_OUTLINE
 @export var max_health: int = 40
 @export var health_bar_size: Vector2 = Vector2(56.0, 8.0)
 @export var health_bar_offset: Vector2 = Vector2(-28.0, -34.0)
-@export var health_recent_damage_hold_time: float = 0.42
-@export var health_recent_damage_catchup_ratio_per_sec: float = 2.8
+@export var health_recent_damage_burst_window: float = 0.28
+@export var health_recent_damage_hold_time: float = 0.6
+@export var health_recent_damage_catchup_ratio_per_sec: float = 0.9
 @export var crowd_separation_radius: float = 42.0
 @export var crowd_separation_strength: float = 68.0
 
@@ -89,7 +90,9 @@ var health_bar_threshold_overlay: Control
 var health_bar_threshold_markers: Array[ColorRect] = []
 var health_recent_damage_display_health: float = 0.0
 var health_recent_damage_hold_left: float = 0.0
+var health_recent_damage_time_since_last_hit: float = 999.0
 var health_recent_damage_flash_strength: float = 0.0
+var health_recent_damage_burst_active: bool = false
 var health_state
 var attack_anim_time_left: float = 0.0
 var attack_anim_duration: float = 0.1
@@ -203,7 +206,9 @@ func _create_health_bar() -> void:
 	health_bar.show_percentage = false
 	health_bar.position = health_bar_offset
 	health_bar.custom_minimum_size = health_bar_size
+	health_bar.size = health_bar_size
 	health_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	health_bar.clip_contents = true
 
 	var background_style := StyleBoxFlat.new()
 	background_style.bg_color = COLOR_HEALTH_BAR_BG
@@ -225,9 +230,9 @@ func _create_health_bar() -> void:
 	health_bar_recent_damage_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var recent_damage_style := StyleBoxFlat.new()
 	recent_damage_style.bg_color = Color(1.0, 1.0, 1.0, 0.0)
-	recent_damage_style.corner_radius_top_left = 3
+	recent_damage_style.corner_radius_top_left = 0
 	recent_damage_style.corner_radius_top_right = 3
-	recent_damage_style.corner_radius_bottom_left = 3
+	recent_damage_style.corner_radius_bottom_left = 0
 	recent_damage_style.corner_radius_bottom_right = 3
 	health_bar_recent_damage_overlay.add_theme_stylebox_override("panel", recent_damage_style)
 	health_bar_recent_damage_overlay.visible = false
@@ -239,7 +244,9 @@ func _create_health_bar() -> void:
 	add_child(health_bar)
 	health_recent_damage_display_health = float(_get_current_health())
 	health_recent_damage_hold_left = 0.0
+	health_recent_damage_time_since_last_hit = health_recent_damage_hold_time + 1.0
 	health_recent_damage_flash_strength = 0.0
+	health_recent_damage_burst_active = false
 	_update_recent_damage_overlay_layout()
 	_update_health_bar_threshold_layout()
 
@@ -249,15 +256,28 @@ func _update_health_bar(new_health: int, new_max_health: int) -> void:
 	var previous_health := float(health_bar.value)
 	health_bar.max_value = float(new_max_health)
 	health_bar.value = float(new_health)
+
 	if float(new_health) < previous_health:
 		var lost_ratio := (previous_health - float(new_health)) / maxf(1.0, float(new_max_health))
-		health_recent_damage_display_health = maxf(health_recent_damage_display_health, previous_health)
-		health_recent_damage_hold_left = maxf(health_recent_damage_hold_left, health_recent_damage_hold_time)
+		var continuing_stack := health_recent_damage_burst_active
+		var display_before := health_recent_damage_display_health
+
+		if not continuing_stack:
+			health_recent_damage_display_health = previous_health
+		else:
+			health_recent_damage_display_health = maxf(health_recent_damage_display_health, previous_health)
+		health_recent_damage_burst_active = true
+
+		health_recent_damage_time_since_last_hit = 0.0
+		health_recent_damage_hold_left = health_recent_damage_hold_time
 		health_recent_damage_flash_strength = clampf(health_recent_damage_flash_strength + 0.34 + lost_ratio * 2.1, 0.0, 1.0)
 	else:
 		health_recent_damage_display_health = float(new_health)
 		health_recent_damage_hold_left = 0.0
+		health_recent_damage_time_since_last_hit = health_recent_damage_hold_time + 1.0
 		health_recent_damage_flash_strength = 0.0
+		health_recent_damage_burst_active = false
+
 	_update_recent_damage_overlay_layout()
 	_update_health_bar_threshold_layout()
 
@@ -269,6 +289,7 @@ func configure_health_bar_visuals(offset: Vector2, size: Vector2 = Vector2.ZERO)
 		return
 	health_bar.position = health_bar_offset
 	health_bar.custom_minimum_size = health_bar_size
+	health_bar.size = health_bar_size
 	_update_recent_damage_overlay_layout()
 	_update_health_bar_threshold_layout()
 
@@ -279,11 +300,19 @@ func _update_recent_damage_overlay(delta: float) -> void:
 		return
 	var current_health := float(health_bar.value)
 	var max_health_value := maxf(1.0, float(health_bar.max_value))
-	if health_recent_damage_hold_left > 0.0:
-		health_recent_damage_hold_left = maxf(0.0, health_recent_damage_hold_left - delta)
+	health_recent_damage_time_since_last_hit += delta
+
+	if health_recent_damage_time_since_last_hit <= health_recent_damage_hold_time:
+		health_recent_damage_hold_left = health_recent_damage_hold_time - health_recent_damage_time_since_last_hit
 	else:
+		health_recent_damage_hold_left = 0.0
+		var old_display := health_recent_damage_display_health
 		var catchup := max_health_value * maxf(0.1, health_recent_damage_catchup_ratio_per_sec) * delta
 		health_recent_damage_display_health = maxf(current_health, health_recent_damage_display_health - catchup)
+		if health_recent_damage_burst_active and old_display > current_health and health_recent_damage_display_health <= current_health + 0.001:
+			health_recent_damage_display_health = current_health
+			health_recent_damage_burst_active = false
+
 	health_recent_damage_flash_strength = maxf(0.0, health_recent_damage_flash_strength - delta * 1.9)
 	_update_recent_damage_overlay_layout()
 
@@ -296,14 +325,19 @@ func _update_recent_damage_overlay_layout() -> void:
 	var current_ratio := clampf(float(health_bar.value) / max_health_value, 0.0, 1.0)
 	var recent_ratio := clampf(health_recent_damage_display_health / max_health_value, 0.0, 1.0)
 	var recent_width_ratio := maxf(0.0, recent_ratio - current_ratio)
+
 	if recent_width_ratio <= 0.001:
 		health_bar_recent_damage_overlay.visible = false
 		return
+
 	var bar_w := maxf(1.0, health_bar_size.x)
 	var bar_h := maxf(1.0, health_bar_size.y)
 	health_bar_recent_damage_overlay.visible = true
 	health_bar_recent_damage_overlay.position = Vector2(bar_w * current_ratio, 0.0)
-	health_bar_recent_damage_overlay.custom_minimum_size = Vector2(maxf(1.0, bar_w * recent_width_ratio), bar_h)
+	var overlay_size := Vector2(maxf(1.0, bar_w * recent_width_ratio), bar_h)
+	health_bar_recent_damage_overlay.custom_minimum_size = overlay_size
+	health_bar_recent_damage_overlay.size = overlay_size
+
 	var pulse := 1.0
 	if health_recent_damage_hold_left > 0.0:
 		pulse = 0.78 + 0.22 * (0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.028))
