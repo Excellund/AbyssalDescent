@@ -25,22 +25,22 @@ const WORLD_RENDERER_SCRIPT := preload("res://scripts/world_renderer.gd")
 const PAUSE_MENU_CONTROLLER_SCRIPT := preload("res://scripts/pause_menu_controller.gd")
 const VICTORY_SCREEN_SCRIPT := preload("res://scripts/victory_screen.gd")
 const DEBUG_ENCOUNTER_NONE := 0
-const DEBUG_ENCOUNTER_SKIRMISH := 1
-const DEBUG_ENCOUNTER_CROSSFIRE := 2
-const DEBUG_ENCOUNTER_ONSLAUGHT := 3
+const DEBUG_ENCOUNTER_REST_SITE := 1
+const DEBUG_ENCOUNTER_SKIRMISH := 2
+const DEBUG_ENCOUNTER_CROSSFIRE := 3
 const DEBUG_ENCOUNTER_FORTRESS := 4
-const DEBUG_ENCOUNTER_TRIAL := 5
-const DEBUG_ENCOUNTER_OBJECTIVE_LAST_STAND := 6
-const DEBUG_ENCOUNTER_OBJECTIVE_PRIORITY_TARGET := 7
-const DEBUG_ENCOUNTER_OBJECTIVE_RANDOM := 8
-const DEBUG_ENCOUNTER_REST_SITE := 9
-const DEBUG_ENCOUNTER_BOSS_1 := 10
-const DEBUG_ENCOUNTER_BOSS_2 := 11
-const DEBUG_ENCOUNTER_BLITZ := 12
-const DEBUG_ENCOUNTER_SUPPRESSION := 13
-const DEBUG_ENCOUNTER_VANGUARD := 14
-const DEBUG_ENCOUNTER_AMBUSH := 15
-const DEBUG_ENCOUNTER_GAUNTLET := 16
+const DEBUG_ENCOUNTER_ONSLAUGHT := 5
+const DEBUG_ENCOUNTER_VANGUARD := 6
+const DEBUG_ENCOUNTER_BLITZ := 7
+const DEBUG_ENCOUNTER_AMBUSH := 8
+const DEBUG_ENCOUNTER_SUPPRESSION := 9
+const DEBUG_ENCOUNTER_GAUNTLET := 10
+const DEBUG_ENCOUNTER_OBJECTIVE_LAST_STAND := 11
+const DEBUG_ENCOUNTER_OBJECTIVE_PRIORITY_TARGET := 12
+const DEBUG_ENCOUNTER_OBJECTIVE_RANDOM := 13
+const DEBUG_ENCOUNTER_TRIAL := 14
+const DEBUG_ENCOUNTER_BOSS_1 := 15
+const DEBUG_ENCOUNTER_BOSS_2 := 16
 const DEBUG_MUTATOR_NONE := 0
 const DEBUG_MUTATOR_BLOOD_RUSH := 1
 const DEBUG_MUTATOR_FLASHPOINT := 2
@@ -92,7 +92,7 @@ const DEBUG_MUTATOR_RANDOM_HARD := 6
 @export var debug_skip_starting_boon_selection: bool = false
 @export var debug_start_power_ids: PackedStringArray = PackedStringArray()
 @export_multiline var debug_start_command: String = ""
-@export_enum("None", "Skirmish", "Crossfire", "Onslaught", "Fortress", "Trial", "Objective - Last Stand", "Objective - Cut the Signal", "Objective - Random", "Rest Site", "Warden", "Sovereign", "Blitz", "Suppression", "Vanguard", "Ambush", "Gauntlet") var debug_start_encounter: int = DEBUG_ENCOUNTER_NONE
+@export_enum("None", "Rest Site", "Skirmish", "Crossfire", "Fortress", "Onslaught", "Vanguard", "Blitz", "Ambush", "Suppression", "Gauntlet", "Objective - Last Stand", "Objective - Cut the Signal", "Objective - Random", "Trial", "Warden", "Sovereign") var debug_start_encounter: int = DEBUG_ENCOUNTER_NONE
 @export var debug_start_depth: int = 1
 @export_enum("None", "Blood Rush", "Flashpoint", "Siegebreak", "Iron Volley", "Killbox", "Random Hard") var debug_mutator_override: int = DEBUG_MUTATOR_NONE
 @export var debug_trigger_victory: bool = false
@@ -597,30 +597,8 @@ func _update_survival_objective_state(delta: float) -> void:
 	if quota_met and not objective_survival_quota_announced and objective_time_left > 0.0 and not objective_overtime:
 		objective_survival_quota_announced = true
 		hud.show_banner("Kill Quota Fulfilled", "")
-	if objective_overtime and quota_met:
-		_complete_current_objective("Objective Complete", "Kill quota reached")
-		return
-	
-	# Stop spawning enemies once quota is met
-	if quota_met:
-		# Check if all enemies are dead to immediately end the fight
-		if active_room_enemy_count <= 0:
-			_complete_current_objective("Objective Complete", "Kill quota reached")
-			return
-		# Don't spawn more enemies, just wait for the room to clear
-		return
-	
-	var pressure_floor := mini(18, 6 + int(floor(float(room_depth) * 0.6)) + objective_spawn_batch)
-	if objective_max_enemies > 0:
-		pressure_floor = mini(pressure_floor, objective_max_enemies)
-	if active_room_enemy_count < pressure_floor and (objective_time_left > 0.0 or objective_overtime):
-		objective_spawn_timer = minf(objective_spawn_timer, 0.4)
 	if objective_time_left > 0.0:
 		objective_time_left = maxf(0.0, objective_time_left - delta)
-	objective_spawn_timer = maxf(0.0, objective_spawn_timer - delta)
-	if objective_spawn_timer <= 0.0 and (objective_time_left > 0.0 or objective_overtime):
-		objective_spawn_timer = objective_spawn_interval
-		_spawn_survival_wave()
 	if objective_time_left <= 0.0 and not objective_overtime:
 		if quota_met:
 			_complete_current_objective("Objective Complete", "Survived the timer")
@@ -630,6 +608,28 @@ func _update_survival_objective_state(delta: float) -> void:
 		objective_spawn_batch = mini(7, objective_spawn_batch + 1)
 		objective_spawn_timer = 0.1
 		hud.show_banner("Overtime", "")
+	if objective_overtime and quota_met:
+		_complete_current_objective("Objective Complete", "Kill quota reached")
+		return
+
+	# Stop spawning enemies once quota is met
+	if quota_met:
+		# Check if all enemies are dead to immediately end the fight
+		if active_room_enemy_count <= 0:
+			_complete_current_objective("Objective Complete", "Kill quota reached")
+			return
+		# Don't spawn more enemies, just wait for the room to clear
+		return
+
+	var pressure_floor := mini(18, 6 + int(floor(float(room_depth) * 0.6)) + objective_spawn_batch)
+	if objective_max_enemies > 0:
+		pressure_floor = mini(pressure_floor, objective_max_enemies)
+	if active_room_enemy_count < pressure_floor and (objective_time_left > 0.0 or objective_overtime):
+		objective_spawn_timer = minf(objective_spawn_timer, 0.4)
+	objective_spawn_timer = maxf(0.0, objective_spawn_timer - delta)
+	if objective_spawn_timer <= 0.0 and (objective_time_left > 0.0 or objective_overtime):
+		objective_spawn_timer = objective_spawn_interval
+		_spawn_survival_wave()
 
 func _update_priority_target_objective_state(delta: float) -> void:
 	if choosing_next_room or run_cleared:
