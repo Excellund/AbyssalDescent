@@ -410,9 +410,9 @@ func _update_player_mutator_panel(state: Dictionary) -> void:
 		var damage_mult := float(mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_PLAYER_DAMAGE_MULT, 0.0))
 		if damage_mult > 0.0:
 			stat_parts.append("+%d%% dmg" % int(round(damage_mult * 100.0)))
-		var stat_text := ""
+		var _stat_text := ""
 		if not stat_parts.is_empty():
-			stat_text = "  [" + ", ".join(stat_parts) + "]"
+			_stat_text = "  [" + ", ".join(stat_parts) + "]"
 		row_label.text = "%s  (%d enc)" % [mutator_name, remaining]
 		row_label.add_theme_color_override("font_color", Color(color.r, color.g, color.b, 0.98))
 func _update_stats_panel_text(player: Node) -> void:

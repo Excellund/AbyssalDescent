@@ -19,6 +19,7 @@ const MENU_SCENE_PATH := "res://scenes/Menu.tscn"
 const WORLD_HUD_SCRIPT := preload("res://scripts/world_hud.gd")
 const WORLD_RENDERER_SCRIPT := preload("res://scripts/world_renderer.gd")
 const PAUSE_MENU_CONTROLLER_SCRIPT := preload("res://scripts/pause_menu_controller.gd")
+const VICTORY_SCREEN_SCRIPT := preload("res://scripts/victory_screen.gd")
 const DEBUG_ENCOUNTER_NONE := 0
 const DEBUG_ENCOUNTER_SKIRMISH := 1
 const DEBUG_ENCOUNTER_CROSSFIRE := 2
@@ -84,6 +85,7 @@ const DEBUG_MUTATOR_RANDOM_HARD := 6
 @export_multiline var debug_start_command: String = ""
 @export_enum("None", "Skirmish", "Crossfire", "Onslaught", "Fortress", "Trial", "Objective - Last Stand", "Objective - Cut the Signal", "Objective - Random", "Rest Site", "Warden", "Sovereign") var debug_start_encounter: int = DEBUG_ENCOUNTER_NONE
 @export_enum("None", "Blood Rush", "Flashpoint", "Siegebreak", "Iron Volley", "Killbox", "Random Hard") var debug_mutator_override: int = DEBUG_MUTATOR_NONE
+@export var debug_trigger_victory: bool = false
 
 var player: Node2D
 var player_camera: Camera2D
@@ -138,6 +140,7 @@ var encounter_profile_builder: Node
 var encounter_flow_system: Node
 var reward_selection_ui: Node
 var pause_menu_controller: Node
+var victory_screen: Node
 
 func _ready() -> void:
 	rng.randomize()
@@ -209,8 +212,14 @@ func _ready() -> void:
 	pause_menu_controller.connect("pause_closed", Callable(self, "_on_pause_menu_closed"))
 	pause_menu_controller.connect("back_to_main_menu_requested", Callable(self, "_on_pause_back_to_menu_requested"))
 	pause_menu_controller.connect("exit_game_requested", Callable(self, "_on_pause_exit_game_requested"))
+	victory_screen = VICTORY_SCREEN_SCRIPT.new()
+	add_child(victory_screen)
+	victory_screen.connect("back_to_main_menu_requested", Callable(self, "_on_victory_back_to_menu"))
 	hud.refresh(_get_hud_state(), player)
 	_apply_debug_start_powers_if_needed()
+	if debug_trigger_victory:
+		victory_screen.call("show_victory", 0)
+		return
 	if debug_start_encounter != DEBUG_ENCOUNTER_NONE:
 		_start_debug_selected_encounter(debug_start_encounter)
 		return
@@ -1050,6 +1059,8 @@ func _finish_second_boss_clear() -> void:
 	boss_unlocked = false
 	pending_room_reward = ENUMS.RewardMode.NONE
 	hud.show_banner("Run Complete", "")
+	if is_instance_valid(victory_screen):
+		victory_screen.call("show_victory", rooms_cleared)
 
 func _get_run_context() -> Node:
 	return get_node_or_null(RUN_CONTEXT_PATH)
@@ -1088,6 +1099,9 @@ func _on_pause_menu_opened() -> void:
 
 func _on_pause_menu_closed() -> void:
 	_set_combat_paused(_is_reward_selection_active())
+
+func _on_victory_back_to_menu() -> void:
+	get_tree().change_scene_to_file(MENU_SCENE_PATH)
 
 func _on_pause_back_to_menu_requested() -> void:
 	_set_combat_paused(false)
