@@ -110,7 +110,7 @@ func apply_trial_power(power_id: String) -> bool:
 			player_reference.set("reward_razor_wind", true)
 			var razor_stacks := int(player_reference.get("razor_wind_stacks")) + 1
 			player_reference.set("razor_wind_stacks", razor_stacks)
-			player_reference.set("razor_wind_range_scale", 1.58 + 0.14 * float(razor_stacks))
+			player_reference.set("razor_wind_range_scale", 1.25 + 0.10 * float(razor_stacks))
 			player_reference.set("razor_wind_damage_ratio", 0.6 + 0.12 * float(razor_stacks))
 			player_reference.set("attack_cooldown", maxf(0.1, float(player_reference.get("attack_cooldown")) * 0.96))
 		"execution_edge":

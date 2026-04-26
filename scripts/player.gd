@@ -63,7 +63,7 @@ var execution_every: int = 3
 var execution_damage_mult: float = 2.6
 var rupture_wave_radius: float = 82.0
 var rupture_wave_damage_ratio: float = 0.44
-var razor_wind_range_scale: float = 1.72
+var razor_wind_range_scale: float = 1.35
 var razor_wind_arc_degrees: float = 24.0
 var razor_wind_damage_ratio: float = 0.72
 var aegis_field_resist_ratio: float = 0.18
@@ -586,6 +586,7 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 
 	var melee_hit_enemy_ids: Dictionary = {}
 	var rupture_triggered_enemy_ids: Dictionary = {}
+	var rupture_hit_enemy_ids: Dictionary = {}
 
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		if not (enemy_node is Node2D):
@@ -610,7 +611,7 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		melee_hit_enemy_ids[enemy_id] = true
 		if reward_rupture_wave and not rupture_triggered_enemy_ids.has(enemy_id):
 			rupture_triggered_enemy_ids[enemy_id] = true
-			_apply_rupture_wave(enemy_body.global_position, final_strike_damage)
+			_apply_rupture_wave(enemy_body.global_position, final_strike_damage, rupture_hit_enemy_ids)
 		did_hit = true
 
 	if reward_razor_wind:
@@ -618,11 +619,11 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		var wind_damage := int(wind_context.get("damage", maxi(1, int(round(float(attack_damage) * razor_wind_damage_ratio)))))
 		wind_damage = _apply_objective_mutator_damage_mult(wind_damage)
 		wind_context["damage"] = wind_damage
-		did_hit = _apply_razor_wind(attack_direction, wind_context, rupture_triggered_enemy_ids) or did_hit
+		did_hit = _apply_razor_wind(attack_direction, wind_context, rupture_triggered_enemy_ids, rupture_hit_enemy_ids) or did_hit
 
 	return did_hit
 
-func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupture_triggered_enemy_ids: Dictionary = {}) -> bool:
+func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupture_triggered_enemy_ids: Dictionary = {}, rupture_hit_enemy_ids: Dictionary = {}) -> bool:
 	var did_hit := false
 	var wind_range := float(wind_context.get("range", attack_range * razor_wind_range_scale))
 	var wind_arc_degrees := float(wind_context.get("arc_degrees", razor_wind_arc_degrees))
@@ -649,7 +650,7 @@ func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupt
 		wind_hit_enemy_ids[enemy_id] = true
 		if reward_rupture_wave and not rupture_triggered_enemy_ids.has(enemy_id):
 			rupture_triggered_enemy_ids[enemy_id] = true
-			_apply_rupture_wave(enemy_body.global_position, final_wind_damage)
+			_apply_rupture_wave(enemy_body.global_position, final_wind_damage, rupture_hit_enemy_ids)
 		did_hit = true
 	return did_hit
 
@@ -670,7 +671,7 @@ func _apply_hunters_snare(enemy_node: Object) -> void:
 	if enemy_node.has_method("apply_slow"):
 		enemy_node.call("apply_slow", hunters_snare_slow_duration, hunters_snare_slow_mult)
 
-func _apply_rupture_wave(epicenter: Vector2, source_damage: int) -> void:
+func _apply_rupture_wave(epicenter: Vector2, source_damage: int, rupture_hit_enemy_ids: Dictionary = {}) -> void:
 	var wave_damage := maxi(1, int(round(float(source_damage) * rupture_wave_damage_ratio)))
 	wave_damage = _apply_objective_mutator_damage_mult(wave_damage)
 	if player_feedback != null:
@@ -683,6 +684,12 @@ func _apply_rupture_wave(epicenter: Vector2, source_damage: int) -> void:
 		var enemy_body := enemy_node as Node2D
 		if enemy_body.global_position.distance_to(epicenter) > rupture_wave_radius:
 			continue
+		var enemy_id := enemy_body.get_instance_id()
+		# Skip if this enemy already took rupture damage from a previous rupture in this swing
+		if rupture_hit_enemy_ids.has(enemy_id):
+			continue
+		# Mark this enemy as hit by rupture, preventing chain damage
+		rupture_hit_enemy_ids[enemy_id] = true
 		DAMAGEABLE.apply_damage(enemy_node, wave_damage, {"is_ground_attack": true, "attack_type": "rupture_wave"})
 
 
