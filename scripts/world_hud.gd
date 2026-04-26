@@ -6,6 +6,7 @@ const MUTATOR_ICON_BLOOD_RUSH: Texture2D = preload("res://assets/ui/mutators/blo
 const MUTATOR_ICON_FLASHPOINT: Texture2D = preload("res://assets/ui/mutators/flashpoint.svg")
 const MUTATOR_ICON_SIEGEBREAK: Texture2D = preload("res://assets/ui/mutators/siegebreak.svg")
 const MUTATOR_ICON_IRON_VOLLEY: Texture2D = preload("res://assets/ui/mutators/iron_volley.svg")
+const MUTATOR_ICON_KILLBOX_PATH := "res://assets/ui/mutators/killbox.svg"
 
 var status_panel: Panel
 var status_label: RichTextLabel
@@ -16,6 +17,7 @@ var stats_label: RichTextLabel
 var room_banner_title_label: Label
 var room_banner_subtitle_label: Label
 var room_banner_tween: Tween
+var _mutator_icon_killbox: Texture2D
 
 var _encounter_count: int = 5
 var _banner_top_margin: float = 18.0
@@ -222,6 +224,9 @@ func _update_status_panel_text(state: Dictionary) -> void:
 
 	if run_cleared:
 		status_label.text = "[center][b]Depth %d[/b]\n[color=#A8FFB0]Run Clear[/color][/center]" % room_depth
+		var run_clear_text_h := maxf(34.0, status_label.get_content_height())
+		if status_panel != null:
+			status_panel.custom_minimum_size.y = maxf(84.0, status_label.position.y + run_clear_text_h + 30.0)
 		if status_mutator_icon != null:
 			status_mutator_icon.visible = false
 		if status_mutator_label != null:
@@ -237,7 +242,13 @@ func _update_status_panel_text(state: Dictionary) -> void:
 		if objective_overtime:
 			status_label.text += "\n[center][color=#FFB36D]Objective: Overtime  Kills %d/%d[/color][/center]" % [objective_kills, objective_kill_target]
 		else:
-			status_label.text += "\n[center][color=#FCD77A]Objective: Survive %.1fs  Kills %d/%d[/color][/center]" % [objective_time_left, objective_kills, objective_kill_target]
+			var objective_seconds := maxi(0, int(ceil(objective_time_left)))
+			status_label.text += "\n[center][color=#FCD77A]Objective: Survive %ds  Kills %d/%d[/color][/center]" % [objective_seconds, objective_kills, objective_kill_target]
+
+	var status_text_h := maxf(34.0, status_label.get_content_height())
+	var row_top := status_label.position.y + status_text_h + 4.0
+	if status_panel != null:
+		status_panel.custom_minimum_size.y = maxf(84.0, row_top + 30.0)
 
 	if current_room_enemy_mutator.is_empty():
 		if status_mutator_icon != null:
@@ -272,7 +283,6 @@ func _update_status_panel_text(state: Dictionary) -> void:
 	var row_w := icon_w + gap + text_w
 	var panel_w := 302.0
 	var start_x := maxf(8.0, (panel_w - row_w) * 0.5)
-	var row_top := 38.0
 	if status_mutator_icon != null:
 		status_mutator_icon.position = Vector2(start_x, row_top + 1.0)
 	if status_mutator_label != null:
@@ -313,5 +323,17 @@ func _get_mutator_icon_texture(icon_shape_id: String) -> Texture2D:
 			return MUTATOR_ICON_SIEGEBREAK
 		"iron_volley":
 			return MUTATOR_ICON_IRON_VOLLEY
+		"killbox":
+			return _get_killbox_icon_texture()
 		_:
 			return null
+
+func _get_killbox_icon_texture() -> Texture2D:
+	if _mutator_icon_killbox != null:
+		return _mutator_icon_killbox
+	var icon_resource := load(MUTATOR_ICON_KILLBOX_PATH)
+	if icon_resource is Texture2D:
+		_mutator_icon_killbox = icon_resource as Texture2D
+		return _mutator_icon_killbox
+	# Keep UI stable if the asset import is temporarily unavailable.
+	return MUTATOR_ICON_SIEGEBREAK

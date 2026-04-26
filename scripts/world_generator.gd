@@ -93,6 +93,7 @@ var objective_time_left: float = 0.0
 var objective_spawn_interval: float = 0.0
 var objective_spawn_timer: float = 0.0
 var objective_spawn_batch: int = 1
+var objective_max_enemies: int = 0
 var objective_kill_target: int = 0
 var objective_kills: int = 0
 var objective_overtime: bool = false
@@ -360,6 +361,8 @@ func _update_objective_state(delta: float) -> void:
 		_on_room_cleared()
 		return
 	var pressure_floor := mini(18, 6 + int(floor(float(room_depth) * 0.6)) + objective_spawn_batch)
+	if objective_max_enemies > 0:
+		pressure_floor = mini(pressure_floor, objective_max_enemies)
 	if active_room_enemy_count < pressure_floor and (objective_time_left > 0.0 or objective_overtime):
 		objective_spawn_timer = minf(objective_spawn_timer, 0.4)
 	if objective_time_left > 0.0:
@@ -379,6 +382,8 @@ func _update_objective_state(delta: float) -> void:
 func _spawn_survival_wave() -> void:
 	if not is_instance_valid(enemy_spawner):
 		return
+	if objective_max_enemies > 0 and active_room_enemy_count >= objective_max_enemies:
+		return
 	var roster: Array[String] = ["charger", "archer", "chaser", "charger", "shielder", "archer"]
 	if objective_overtime:
 		roster = ["charger", "archer", "charger", "archer", "shielder", "chaser", "charger"]
@@ -388,6 +393,10 @@ func _spawn_survival_wave() -> void:
 	if objective_overtime:
 		spawn_count += 1
 	spawn_count = mini(8, spawn_count)
+	if objective_max_enemies > 0:
+		spawn_count = mini(spawn_count, maxi(0, objective_max_enemies - active_room_enemy_count))
+	if spawn_count <= 0:
+		return
 	for _i in range(spawn_count):
 		var enemy_type := roster[rng.randi_range(0, roster.size() - 1)]
 		active_room_enemy_count += int(enemy_spawner.call("spawn_enemy_type", enemy_type, 1))
@@ -658,6 +667,7 @@ func _begin_room(profile: Dictionary) -> void:
 	objective_spawn_interval = 0.0
 	objective_spawn_timer = 0.0
 	objective_spawn_batch = 1
+	objective_max_enemies = 0
 	objective_kill_target = 0
 	objective_kills = 0
 	objective_overtime = false
@@ -687,7 +697,9 @@ func _begin_room(profile: Dictionary) -> void:
 		objective_spawn_interval = ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
 		objective_spawn_timer = objective_spawn_interval
 		objective_spawn_batch = ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
-		objective_kill_target = maxi(10, int(round(objective_time_left * 0.65)) + 4 + int(floor(float(room_depth) * 0.7)))
+		objective_max_enemies = mini(24, 12 + int(floor(float(room_depth) * 0.9)))
+		var raw_kill_target := maxi(10, int(round(objective_time_left * 0.42)) + 2 + int(floor(float(room_depth) * 0.35)))
+		objective_kill_target = int(ceil(float(raw_kill_target) / 5.0)) * 5
 		objective_kills = 0
 		objective_overtime = false
 		hud.show_banner(current_room_label, "Survive %.0fs and kill %d" % [objective_time_left, objective_kill_target], sub_color)

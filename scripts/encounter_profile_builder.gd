@@ -93,7 +93,7 @@ func _build_survival_profile(depth: int) -> Dictionary:
 	var pressure_mutator := {
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME: "Killbox",
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_THEME_COLOR: Color(0.98, 0.72, 0.2, 1.0),
-		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID: "siegebreak",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID: "killbox",
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX: "The arena closes in and pressure rises",
 		ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_SPEED_MULT: 1.18,
 		ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_SPEED_MULT: 1.22,
@@ -104,7 +104,8 @@ func _build_survival_profile(depth: int) -> Dictionary:
 		ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_WINDUP_MULT: 0.88
 	}
 	var profile := _build_profile("Last Stand", survival_room_size, chasers, chargers, archers, shielders, pressure_mutator)
-	var duration := clampf(17.0 + float(depth) * 0.7, 17.0, 26.0)
+	var raw_duration := clampf(22.0 + float(depth) * 0.85, 22.0, 34.0)
+	var duration := int(ceil(raw_duration / 5.0)) * 5
 	var spawn_interval := clampf(1.95 - float(depth) * 0.06, 0.85, 1.95)
 	var spawn_batch := mini(5, 2 + int(floor(float(depth) / 3.0)))
 	ENCOUNTER_CONTRACTS.profile_set_survival_objective(profile, duration, spawn_interval, spawn_batch)
