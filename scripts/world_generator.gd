@@ -5,6 +5,7 @@ const ENEMY_CHARGER_SCRIPT := preload("res://scripts/enemy_charger.gd")
 const ENEMY_ARCHER_SCRIPT := preload("res://scripts/enemy_archer.gd")
 const ENEMY_SHIELDER_SCRIPT := preload("res://scripts/enemy_shielder.gd")
 const ENEMY_BOSS_SCRIPT := preload("res://scripts/enemy_boss.gd")
+const ENEMY_BOSS_2_SCRIPT := preload("res://scripts/enemy_boss_2.gd")
 const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
 const MUSIC_SYSTEM_SCRIPT := preload("res://scripts/music_system.gd")
 const ENEMY_SPAWNER_SCRIPT := preload("res://scripts/enemy_spawner.gd")
@@ -28,7 +29,8 @@ const DEBUG_ENCOUNTER_OBJECTIVE_LAST_STAND := 6
 const DEBUG_ENCOUNTER_OBJECTIVE_PRIORITY_TARGET := 7
 const DEBUG_ENCOUNTER_OBJECTIVE_RANDOM := 8
 const DEBUG_ENCOUNTER_REST_SITE := 9
-const DEBUG_ENCOUNTER_BOSS := 10
+const DEBUG_ENCOUNTER_BOSS_1 := 10
+const DEBUG_ENCOUNTER_BOSS_2 := 11
 const DEBUG_MUTATOR_NONE := 0
 const DEBUG_MUTATOR_BLOOD_RUSH := 1
 const DEBUG_MUTATOR_FLASHPOINT := 2
@@ -75,11 +77,12 @@ const DEBUG_MUTATOR_RANDOM_HARD := 6
 @export var music_crossfade_duration: float = 0.75
 @export var rest_heal_ratio: float = 0.32
 @export var hard_room_enemy_bonus: int = 3
+@export var second_boss_encounter_count: int = 4
 @export var debug_apply_test_powers_on_start: bool = false
 @export var debug_skip_starting_boon_selection: bool = false
 @export var debug_start_power_ids: PackedStringArray = PackedStringArray()
 @export_multiline var debug_start_command: String = ""
-@export_enum("None", "Skirmish", "Crossfire", "Onslaught", "Fortress", "Trial", "Objective - Last Stand", "Objective - Cut the Signal", "Objective - Random", "Rest Site", "Boss") var debug_start_encounter: int = DEBUG_ENCOUNTER_NONE
+@export_enum("None", "Skirmish", "Crossfire", "Onslaught", "Fortress", "Trial", "Objective - Last Stand", "Objective - Cut the Signal", "Objective - Random", "Rest Site", "Warden", "Sovereign") var debug_start_encounter: int = DEBUG_ENCOUNTER_NONE
 @export_enum("None", "Blood Rush", "Flashpoint", "Siegebreak", "Iron Volley", "Killbox", "Random Hard") var debug_mutator_override: int = DEBUG_MUTATOR_NONE
 
 var player: Node2D
@@ -92,6 +95,9 @@ var room_depth: int = 0
 var active_room_enemy_count: int = 0
 var boss_unlocked: bool = false
 var in_boss_room: bool = false
+var in_second_boss_room: bool = false
+var first_boss_defeated: bool = false
+var phase_two_rooms_cleared: int = 0
 var endless_boss_defeated: bool = false
 var choosing_next_room: bool = false
 var run_cleared: bool = false
@@ -281,8 +287,10 @@ func start_debug_encounter(encounter_key: String) -> Dictionary:
 			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_OBJECTIVE_RANDOM)
 		"rest", "rest_site":
 			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_REST_SITE)
-		"boss":
-			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_BOSS)
+		"boss", "boss_1", "boss1", "warden":
+			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_BOSS_1)
+		"boss_2", "boss2", "sovereign":
+			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_BOSS_2)
 		"objective_test":
 			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_OBJECTIVE_RANDOM)
 		_:
@@ -308,8 +316,10 @@ func _debug_encounter_key(encounter_state: int) -> String:
 			return "objective_random"
 		DEBUG_ENCOUNTER_REST_SITE:
 			return "rest"
-		DEBUG_ENCOUNTER_BOSS:
-			return "boss"
+		DEBUG_ENCOUNTER_BOSS_1:
+			return "boss_1"
+		DEBUG_ENCOUNTER_BOSS_2:
+			return "boss_2"
 		_:
 			return ""
 
@@ -317,8 +327,10 @@ func _start_debug_selected_encounter(encounter_state: int) -> Dictionary:
 	var encounter_key := _debug_encounter_key(encounter_state)
 	if encounter_key.is_empty():
 		return {"ok": true, "note": "No debug encounter selected."}
-	if encounter_key == "boss":
+	if encounter_key == "boss_1":
 		return _start_debug_boss_room()
+	if encounter_key == "boss_2":
+		return _start_debug_second_boss_room()
 
 	_reset_for_debug_jump()
 	var encounter_depth := 1
@@ -349,9 +361,24 @@ func _start_debug_boss_room() -> Dictionary:
 	rooms_cleared = encounter_count
 	room_depth = encounter_count
 	boss_unlocked = true
+	first_boss_defeated = false
+	in_second_boss_room = false
+	phase_two_rooms_cleared = 0
 	_begin_boss_room()
 	hud.refresh(_get_hud_state(), player)
-	return {"ok": true, "state": "debug_encounter", "encounter": "Boss Chamber"}
+	return {"ok": true, "state": "debug_encounter", "encounter": "Warden"}
+
+func _start_debug_second_boss_room() -> Dictionary:
+	_reset_for_debug_jump()
+	rooms_cleared = encounter_count + second_boss_encounter_count
+	room_depth = rooms_cleared
+	boss_unlocked = true
+	first_boss_defeated = true
+	in_second_boss_room = false
+	phase_two_rooms_cleared = second_boss_encounter_count
+	_begin_second_boss_room()
+	hud.refresh(_get_hud_state(), player)
+	return {"ok": true, "state": "debug_encounter", "encounter": "Sovereign"}
 
 func _build_debug_encounter_profile(encounter_key: String, depth: int) -> Dictionary:
 	if not is_instance_valid(encounter_profile_builder):
@@ -399,6 +426,9 @@ func _reset_for_debug_jump() -> void:
 	pending_room_reward = ENUMS.RewardMode.NONE
 	run_cleared = false
 	in_boss_room = false
+	in_second_boss_room = false
+	first_boss_defeated = false
+	phase_two_rooms_cleared = 0
 	endless_boss_defeated = false
 	active_room_enemy_count = 0
 	_clear_all_enemies()
@@ -950,6 +980,12 @@ func _update_encounter_state() -> void:
 func _on_room_cleared() -> void:
 	if not is_instance_valid(encounter_flow_system):
 		return
+	if in_second_boss_room:
+		_finish_second_boss_clear()
+		return
+	if in_boss_room and not first_boss_defeated:
+		_finish_first_boss_clear()
+		return
 	var raw_outcome: Variant = encounter_flow_system.call("resolve_room_cleared", in_boss_room, pending_room_reward, rooms_cleared, room_depth, encounter_count)
 	var outcome: Dictionary = ENCOUNTER_CONTRACTS.normalize_room_cleared_outcome(raw_outcome)
 	run_cleared = ENCOUNTER_CONTRACTS.outcome_run_cleared(outcome)
@@ -969,7 +1005,11 @@ func _on_room_cleared() -> void:
 		return
 	rooms_cleared = ENCOUNTER_CONTRACTS.outcome_rooms_cleared(outcome)
 	room_depth = ENCOUNTER_CONTRACTS.outcome_room_depth(outcome)
-	boss_unlocked = ENCOUNTER_CONTRACTS.outcome_boss_unlocked(outcome)
+	if first_boss_defeated:
+		phase_two_rooms_cleared += 1
+		boss_unlocked = phase_two_rooms_cleared >= second_boss_encounter_count
+	else:
+		boss_unlocked = ENCOUNTER_CONTRACTS.outcome_boss_unlocked(outcome)
 	if _is_endless_mode() and endless_boss_defeated:
 		boss_unlocked = false
 	pending_room_reward = ENCOUNTER_CONTRACTS.outcome_pending_room_reward(outcome)
@@ -982,6 +1022,27 @@ func _on_room_cleared() -> void:
 		return
 	if ENCOUNTER_CONTRACTS.outcome_spawn_doors(outcome):
 		_spawn_door_options()
+
+func _finish_first_boss_clear() -> void:
+	in_boss_room = false
+	first_boss_defeated = true
+	in_second_boss_room = false
+	phase_two_rooms_cleared = 0
+	rooms_cleared += 1
+	room_depth += 1
+	boss_unlocked = false
+	pending_room_reward = ENUMS.RewardMode.NONE
+	hud.show_banner("Warden Defeated", "")
+	_spawn_door_options()
+
+func _finish_second_boss_clear() -> void:
+	in_second_boss_room = false
+	active_room_enemy_count = 0
+	run_cleared = true
+	choosing_next_room = false
+	boss_unlocked = false
+	pending_room_reward = ENUMS.RewardMode.NONE
+	hud.show_banner("Run Complete", "")
 
 func _get_run_context() -> Node:
 	return get_node_or_null(RUN_CONTEXT_PATH)
@@ -1036,7 +1097,18 @@ func _spawn_door_options() -> void:
 	door_options.clear()
 	choosing_next_room = true
 	var route_options := _roll_route_options(room_depth)
-	door_options = encounter_flow_system.call("build_door_options", boss_unlocked, room_depth, door_distance_from_center, route_options)
+	var show_boss_door := boss_unlocked
+	if first_boss_defeated:
+		show_boss_door = phase_two_rooms_cleared >= second_boss_encounter_count
+		boss_unlocked = show_boss_door
+	door_options = encounter_flow_system.call("build_door_options", show_boss_door, room_depth, door_distance_from_center, route_options)
+	if show_boss_door and not door_options.is_empty():
+		if first_boss_defeated:
+			door_options[0]["label"] = "Sovereign"
+			door_options[0]["color"] = Color(0.92, 0.28, 0.1, 0.98)
+		else:
+			door_options[0]["label"] = "Warden"
+			door_options[0]["color"] = Color(0.96, 0.46, 0.18, 0.98)
 
 func _try_use_door() -> void:
 	if not choosing_next_room:
@@ -1068,7 +1140,10 @@ func _choose_door(door: Dictionary) -> void:
 	var choice: Dictionary = ENCOUNTER_CONTRACTS.normalize_door_choice(raw_choice)
 	var action_id: int = ENCOUNTER_CONTRACTS.door_choice_action_id(choice)
 	if action_id == ENUMS.EncounterAction.BOSS:
-		_begin_boss_room()
+		if first_boss_defeated:
+			_begin_second_boss_room()
+		else:
+			_begin_boss_room()
 		return
 	if action_id == ENUMS.EncounterAction.REST:
 		_enter_rest_site()
@@ -1138,6 +1213,7 @@ func _begin_room(profile: Dictionary) -> void:
 	if profile.is_empty():
 		return
 	in_boss_room = false
+	in_second_boss_room = false
 	active_objective_kind = ""
 	objective_time_left = 0.0
 	objective_spawn_interval = 0.0
@@ -1219,11 +1295,12 @@ func _advance_room_progress() -> void:
 
 func _begin_boss_room() -> void:
 	in_boss_room = true
+	in_second_boss_room = false
 	_play_room_music(true)
 	current_room_size = Vector2(1260.0, 900.0)
 	current_room_static_camera = false
 	current_room_label = "Boss Chamber: The Warden"
-	hud.show_banner("Boss Chamber", "")
+	hud.show_banner("The Warden", "")
 	_apply_camera_bounds_for_room(current_room_size)
 	active_room_enemy_count = 1
 	var boss := CharacterBody2D.new()
@@ -1235,6 +1312,31 @@ func _begin_boss_room() -> void:
 	boss.add_child(collision_shape)
 
 	boss.global_position = Vector2(0.0, -30.0)
+	add_child(boss)
+	boss.set("target", player)
+	boss.set("arena_size", current_room_size)
+	if boss.has_signal("died"):
+		boss.died.connect(_on_room_enemy_died)
+
+func _begin_second_boss_room() -> void:
+	in_boss_room = false
+	in_second_boss_room = true
+	_play_room_music(true)
+	current_room_size = Vector2(1360.0, 960.0)
+	current_room_static_camera = false
+	current_room_label = "Abyss Core: Sovereign"
+	hud.show_banner("Sovereign", "")
+	_apply_camera_bounds_for_room(current_room_size)
+	active_room_enemy_count = 1
+	var boss := CharacterBody2D.new()
+	boss.set_script(ENEMY_BOSS_2_SCRIPT)
+
+	var collision_shape := CollisionShape2D.new()
+	collision_shape.shape = CircleShape2D.new()
+	collision_shape.shape.radius = 38.0
+	boss.add_child(collision_shape)
+
+	boss.global_position = Vector2(0.0, -40.0)
 	add_child(boss)
 	boss.set("target", player)
 	boss.set("arena_size", current_room_size)

@@ -122,18 +122,19 @@ func _build_door_prompt_text(door: Dictionary) -> String:
 	var label := String(door.get("label", "Encounter"))
 	var kind_id: int = ENCOUNTER_CONTRACTS.normalize_door_kind(door.get("kind_id", door.get("kind", ENCOUNTER_CONTRACTS.DOOR_KIND_ENCOUNTER)))
 	if kind_id == ENUMS.DoorKind.BOSS:
-		return "Boss Chamber"
+		return label
 	if kind_id == ENUMS.DoorKind.REST:
 		return "Rest Site"
 	return label
 
 func _build_door_prompt_name(door: Dictionary) -> String:
+	var label := String(door.get("label", "Encounter"))
 	var kind_id: int = ENCOUNTER_CONTRACTS.normalize_door_kind(door.get("kind_id", door.get("kind", ENCOUNTER_CONTRACTS.DOOR_KIND_ENCOUNTER)))
 	if kind_id == ENUMS.DoorKind.BOSS:
-		return "Boss Gate"
+		return "%s Gate" % label
 	if kind_id == ENUMS.DoorKind.REST:
 		return "Rest Site"
-	return String(door.get("label", "Encounter"))
+	return label
 
 func _draw_door_interaction_prompt(door: Dictionary) -> void:
 	var font := ThemeDB.fallback_font
