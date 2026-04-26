@@ -16,7 +16,7 @@ var archer_start_room: int = 1
 var archers_per_room: int = 1
 var shielder_start_room: int = 2
 var shielders_per_room: int = 1
-var hard_room_enemy_bonus: int = 3
+var hard_room_enemy_bonus: int = 4
 
 const INTRO_ROOM_SIZE := Vector2(940.0, 700.0)
 const POOL_ROOM_SIZE := Vector2(1040.0, 760.0)
@@ -123,7 +123,7 @@ func _build_trial_profile() -> Dictionary:
 	var base: Dictionary = hard_pool[rng.randi_range(0, hard_pool.size() - 1)]
 	var mutator: Dictionary = roll_hard_enemy_mutator()
 	var chasers := ENCOUNTER_CONTRACTS.profile_chaser_count(base) + hard_room_enemy_bonus
-	var chargers := ENCOUNTER_CONTRACTS.profile_charger_count(base) + 1
+	var chargers := ENCOUNTER_CONTRACTS.profile_charger_count(base) + 2
 	var archers: int = maxi(ENCOUNTER_CONTRACTS.profile_archer_count(base), 1)
 	var shielders := ENCOUNTER_CONTRACTS.profile_shielder_count(base)
 	var mutator_name := ENCOUNTER_CONTRACTS.mutator_name(mutator)

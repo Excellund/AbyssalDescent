@@ -13,7 +13,7 @@ const ATTACK_ECHO_DASH := 2
 const ATTACK_ORBITAL_LANCE := 3
 const ATTACK_POLAR_SHIFT := 4
 
-@export var boss_max_health: int = 1250
+@export var boss_max_health: int = 2000
 @export var move_speed: float = 168.0
 @export var acceleration: float = 980.0
 @export var deceleration: float = 1380.0
@@ -24,18 +24,18 @@ const ATTACK_POLAR_SHIFT := 4
 @export var prism_radius: float = 300.0
 @export var prism_spoke_count: int = 5
 @export var prism_spoke_half_angle_degrees: float = 13.0
-@export var prism_damage: int = 32
+@export var prism_damage: int = 40
 
 @export var gravity_windup: float = 1.1
 @export var gravity_radius: float = 240.0
-@export var gravity_damage: int = 44
+@export var gravity_damage: int = 54
 
 @export var echo_dash_windup: float = 0.58
 @export var echo_dash_speed: float = 680.0
 @export var echo_dash_duration: float = 0.24
 @export var echo_dash_count: int = 3
 @export var echo_dash_width: float = 44.0
-@export var echo_dash_damage: int = 28
+@export var echo_dash_damage: int = 36
 @export var echo_dash_retarget_pause: float = 0.14
 @export var echo_dash_max_turn_degrees: float = 40.0
 @export var reposition_dash_chance: float = 0.46
@@ -48,7 +48,7 @@ const ATTACK_POLAR_SHIFT := 4
 @export var orbital_lance_windup: float = 0.88
 @export var orbital_lance_length: float = 320.0
 @export var orbital_lance_width: float = 24.0
-@export var orbital_lance_damage: int = 30
+@export var orbital_lance_damage: int = 38
 
 @export var polar_shift_windup: float = 0.92
 @export var polar_shift_radius: float = 440.0

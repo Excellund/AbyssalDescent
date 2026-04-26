@@ -19,6 +19,9 @@ var trial_power_stacks: Dictionary = {
 	"static_wake": 0
 }
 
+const LONG_REACH_RANGE_PER_STACK := 11.0
+const IRON_SKIN_ARMOR_PER_STACK := 4
+
 const UPGRADE_IDS := {
 	"swift_strike": true,
 	"heavy_blow": true,
@@ -66,14 +69,14 @@ func apply_upgrade(upgrade_id: String) -> bool:
 			var next_arc := clampf(float(player_reference.get("attack_arc_degrees")) + 18.0, 60.0, 240.0)
 			player_reference.set("attack_arc_degrees", next_arc)
 		"long_reach":
-			player_reference.set("attack_range", float(player_reference.get("attack_range")) + 14.0)
+			player_reference.set("attack_range", float(player_reference.get("attack_range")) + LONG_REACH_RANGE_PER_STACK)
 		"fleet_foot":
 			player_reference.set("max_speed", float(player_reference.get("max_speed")) + 18.0)
 		"blink_dash":
 			player_reference.set("dash_cooldown", maxf(0.18, float(player_reference.get("dash_cooldown")) * 0.85))
 		"iron_skin":
 			var current_armor := int(player_reference.get("iron_skin_armor"))
-			player_reference.set("iron_skin_armor", current_armor + 3)
+			player_reference.set("iron_skin_armor", current_armor + IRON_SKIN_ARMOR_PER_STACK)
 			var current_stacks := int(player_reference.get("iron_skin_stacks"))
 			player_reference.set("iron_skin_stacks", current_stacks + 1)
 		_:
@@ -274,7 +277,7 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 			return "[color=#c8daf0]Attack arc:[/color] [color=#e8c96a]%.0f°[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f°[/color]" % [cur_arc, next_arc]
 		"long_reach":
 			var cur_range := float(player_reference.get("attack_range"))
-			return "[color=#c8daf0]Attack range:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [cur_range, cur_range + 14.0]
+			return "[color=#c8daf0]Attack range:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [cur_range, cur_range + LONG_REACH_RANGE_PER_STACK]
 		"fleet_foot":
 			var cur_speed := float(player_reference.get("max_speed"))
 			return "[color=#c8daf0]Move speed:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [cur_speed, cur_speed + 18.0]
@@ -284,7 +287,7 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 			return "[color=#c8daf0]Dash cooldown:[/color] [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]" % [cur_dash_cd, next_dash_cd]
 		"iron_skin":
 			var cur_armor := int(player_reference.get("iron_skin_armor"))
-			return "[color=#c8daf0]Armor:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [cur_armor, cur_armor + 3]
+			return "[color=#c8daf0]Armor:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [cur_armor, cur_armor + IRON_SKIN_ARMOR_PER_STACK]
 		_:
 			return "[color=#c8daf0]Upgrade your stats.[/color]"
 
