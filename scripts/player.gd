@@ -417,7 +417,7 @@ func apply_power_for_test(power_id: String) -> bool:
 		"execution_edge": true,
 		"rupture_wave": true,
 		"phantom_step": true,
-		"void_dash": true,
+		"reaper_step": true,
 		"static_wake": true
 	}
 	if hard_ids.has(id):
@@ -584,7 +584,7 @@ func _update_static_wake_trails(delta: float) -> void:
 
 func notify_enemy_killed() -> void:
 	if reward_void_dash and dash_cooldown_left > 0.0:
-		dash_cooldown_left = maxf(0.0, dash_cooldown_left - 0.22)
+		dash_cooldown_left = 0.0
 
 func _restart_current_scene() -> void:
 	if scene_restart_queued:

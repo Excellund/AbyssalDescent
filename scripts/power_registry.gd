@@ -1,4 +1,4 @@
-## Centralized power registry and unified data structure
+﻿## Centralized power registry and unified data structure
 ## All upgrades (stat boosts) and trial powers (combat abilities) are defined here
 ## This is the single source of truth for what powers exist and their metadata
 
@@ -81,11 +81,11 @@ func get_trial_power_pool(player_reference: Node = null) -> Array[Dictionary]:
 		rupture_desc = String(player_reference.call("get_trial_power_card_desc", "rupture_wave"))
 	
 	var phantom_desc := "Dashing through enemies damages and slows them."
-	var void_desc := "Dash travels farther. Kills shorten dash cooldown."
+	var void_desc := "Dash travels farther. Kills fully reset dash cooldown."
 	var static_desc := "Dashing leaves an electrified trail that burns enemies."
 	if is_instance_valid(player_reference) and player_reference.has_method("get_trial_power_card_desc"):
 		phantom_desc = String(player_reference.call("get_trial_power_card_desc", "phantom_step"))
-		void_desc = String(player_reference.call("get_trial_power_card_desc", "void_dash"))
+		void_desc = String(player_reference.call("get_trial_power_card_desc", "reaper_step"))
 		static_desc = String(player_reference.call("get_trial_power_card_desc", "static_wake"))
 
 	return [
@@ -93,7 +93,7 @@ func get_trial_power_pool(player_reference: Node = null) -> Array[Dictionary]:
 		Power.new("execution_edge", "Execution Edge", execution_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
 		Power.new("rupture_wave", "Rupture Wave", rupture_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
 		Power.new("phantom_step", "Phantom Step", phantom_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
-		Power.new("void_dash", "Void Dash", void_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
+		Power.new("reaper_step", "Reaper Step", void_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
 		Power.new("static_wake", "Static Wake", static_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
 	]
 
@@ -140,3 +140,4 @@ func get_power(power_id: String) -> Dictionary:
 		if power["id"] == id:
 			return power.duplicate()
 	return {}
+

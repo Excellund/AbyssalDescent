@@ -1,4 +1,4 @@
-extends Node
+﻿extends Node
 
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 
@@ -287,7 +287,7 @@ func _update_stats_panel_text(player: Node) -> void:
 	var armor := int(player.get("iron_skin_armor"))
 	var trial_stacks := 0
 	if player.has_method("get_trial_power_stack_count"):
-		for trial_id in ["razor_wind", "execution_edge", "rupture_wave", "phantom_step", "void_dash", "static_wake"]:
+		for trial_id in ["razor_wind", "execution_edge", "rupture_wave", "phantom_step", "reaper_step", "static_wake"]:
 			trial_stacks += int(player.call("get_trial_power_stack_count", trial_id))
 
 	stats_label.text = "[b]Stats[/b]\nHealth: [color=#C8FFD8]%d/%d[/color]\nAttack Damage: [color=#FFD8AA]%d[/color]\nAttack Range: [color=#FFD8AA]%.0f[/color]\nAttack Speed: [color=#BFD8FF]%.2fs[/color]\nMove Speed: [color=#BFD8FF]%.0f[/color]\nDash Cooldown: [color=#BFD8FF]%.2fs[/color]\nArmor: [color=#E8E8FF]%d[/color]\nArcana Stacks: [color=#FFE6B2]%d[/color]" % [hp_now, hp, dmg, atk_range, atk_cd, move_spd, dash_cd, armor, trial_stacks]
@@ -304,3 +304,4 @@ func _get_mutator_icon_texture(icon_shape_id: String) -> Texture2D:
 			return MUTATOR_ICON_IRON_VOLLEY
 		_:
 			return null
+

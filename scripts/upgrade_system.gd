@@ -1,4 +1,4 @@
-## Unified power application and stacking system
+﻿## Unified power application and stacking system
 ## Handles all upgrade and trial power effects + their scaling with stacks
 ## This is the most reusable system: can be called by player, test harness, console, etc.
 
@@ -15,7 +15,7 @@ var trial_power_stacks: Dictionary = {
 	"execution_edge": 0,
 	"rupture_wave": 0,
 	"phantom_step": 0,
-	"void_dash": 0,
+	"reaper_step": 0,
 	"static_wake": 0
 }
 
@@ -34,7 +34,7 @@ const TRIAL_POWER_IDS := {
 	"execution_edge": true,
 	"rupture_wave": true,
 	"phantom_step": true,
-	"void_dash": true,
+	"reaper_step": true,
 	"static_wake": true
 }
 
@@ -127,7 +127,7 @@ func apply_trial_power(power_id: String) -> bool:
 			player_reference.set("phantom_step_damage", 8 + ph_stacks * 4)
 			player_reference.set("phantom_step_slow_duration", 0.6 + float(ph_stacks) * 0.15)
 			player_reference.set("dash_cooldown", maxf(0.18, float(player_reference.get("dash_cooldown")) * 0.92))
-		"void_dash":
+		"reaper_step":
 			player_reference.set("reward_void_dash", true)
 			var vd_stacks := int(player_reference.get("void_dash_stacks")) + 1
 			player_reference.set("void_dash_stacks", vd_stacks)
@@ -191,7 +191,7 @@ func get_trial_power_stack_count(power_id: String) -> int:
 				return int(player_reference.get("rupture_wave_stacks"))
 			"phantom_step":
 				return int(player_reference.get("phantom_step_stacks"))
-			"void_dash":
+			"reaper_step":
 				return int(player_reference.get("void_dash_stacks"))
 			"static_wake":
 				return int(player_reference.get("static_wake_stacks"))
@@ -236,14 +236,14 @@ func get_trial_power_card_description(power_id: String) -> String:
 			var cur_damage := 8 + maxi(0, next_stack - 1) * 4
 			var cur_slow := 0.6 + float(maxi(0, next_stack - 1)) * 0.15
 			return "[color=#c8daf0]Phantom Step:[/color] damage [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color], slow [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_damage, next_damage, cur_slow, next_slow]
-		"void_dash":
+		"reaper_step":
 			var next_range := 1.36 + float(next_stack) * 0.12
-			var next_cd_cut := float(next_stack) * 0.06
+			var next_cd_trim := float(next_stack) * 0.06
 			if current_stack <= 0:
-				return "[color=#9ab8d8]Extends your dash range and cuts cooldown on every kill, rewarding aggressive play.[/color]\n[color=#9ab8d8]Initial:[/color] range [color=#7de882]x%.2f[/color], kill cooldown cut [color=#7de882]%.2fs[/color]." % [next_range, next_cd_cut]
+				return "[color=#9ab8d8]Dash kills instantly reset your dash cooldown, and each stack extends your dash and trims base cooldown.[/color]\n[color=#9ab8d8]Initial:[/color] range [color=#7de882]x%.2f[/color], base cooldown trim [color=#7de882]%.2fs[/color], kill reset [color=#7de882]full[/color]." % [next_range, next_cd_trim]
 			var cur_range := 1.36 + float(maxi(0, next_stack - 1)) * 0.12
-			var cur_cd_cut := float(maxi(0, next_stack - 1)) * 0.06
-			return "[color=#c8daf0]Void Dash:[/color] range [color=#e8c96a]x%.2f[/color] [color=#8899aa]->[/color] [color=#7de882]x%.2f[/color], kill cut [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_range, next_range, cur_cd_cut, next_cd_cut]
+			var cur_cd_trim := float(maxi(0, next_stack - 1)) * 0.06
+			return "[color=#c8daf0]Reaper Step:[/color] range [color=#e8c96a]x%.2f[/color] [color=#8899aa]->[/color] [color=#7de882]x%.2f[/color], base trim [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color], kill reset [color=#7de882]full[/color]." % [cur_range, next_range, cur_cd_trim, next_cd_trim]
 		"static_wake":
 			var next_damage := 6 + next_stack * 3
 			var next_lifetime := 1.2 + float(next_stack) * 0.25
@@ -271,7 +271,7 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 		"wide_arc":
 			var cur_arc := float(player_reference.get("attack_arc_degrees"))
 			var next_arc := clampf(cur_arc + 18.0, 60.0, 240.0)
-			return "[color=#c8daf0]Attack arc:[/color] [color=#e8c96a]%.0f°[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f°[/color]" % [cur_arc, next_arc]
+			return "[color=#c8daf0]Attack arc:[/color] [color=#e8c96a]%.0fÂ°[/color] [color=#8899aa]->[/color] [color=#7de882]%.0fÂ°[/color]" % [cur_arc, next_arc]
 		"long_reach":
 			var cur_range := float(player_reference.get("attack_range"))
 			return "[color=#c8daf0]Attack range:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [cur_range, cur_range + 14.0]
@@ -350,3 +350,4 @@ func _is_trial_power_id(power_id: String) -> bool:
 	if power_registry != null and power_registry.has_method("is_trial_power"):
 		return bool(power_registry.call("is_trial_power", power_id))
 	return TRIAL_POWER_IDS.has(power_id)
+
