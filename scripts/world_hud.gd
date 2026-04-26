@@ -221,6 +221,9 @@ func _update_status_panel_text(state: Dictionary) -> void:
 	var objective_kills := int(state.get("objective_kills", 0))
 	var objective_kill_target := int(state.get("objective_kill_target", 0))
 	var objective_overtime := bool(state.get("objective_overtime", false))
+	var objective_target_name := String(state.get("objective_target_name", "Target"))
+	var objective_target_health := int(state.get("objective_target_health", 0))
+	var objective_target_max_health := int(state.get("objective_target_max_health", 0))
 
 	if run_cleared:
 		status_label.text = "[center][b]Depth %d[/b]\n[color=#A8FFB0]Run Clear[/color][/center]" % room_depth
@@ -244,6 +247,13 @@ func _update_status_panel_text(state: Dictionary) -> void:
 		else:
 			var objective_seconds := maxi(0, int(ceil(objective_time_left)))
 			status_label.text += "\n[center][color=#FCD77A]Objective: Survive %ds  Kills %d/%d[/color][/center]" % [objective_seconds, objective_kills, objective_kill_target]
+	elif objective_kind == "priority_target":
+		var target_seconds := maxi(0, int(ceil(objective_time_left)))
+		if objective_overtime:
+			status_label.text += "\n[center][color=#FFB36D]Objective: Eliminate %s  HP %d/%d[/color][/center]" % [objective_target_name, objective_target_health, objective_target_max_health]
+		else:
+			status_label.text += "\n[center][color=#FCD77A]Objective: Kill %s %ds  HP %d/%d[/color][/center]" % [objective_target_name, target_seconds, objective_target_health, objective_target_max_health]
+
 
 	var status_text_h := maxf(34.0, status_label.get_content_height())
 	var row_top := status_label.position.y + status_text_h + 4.0
@@ -288,7 +298,6 @@ func _update_status_panel_text(state: Dictionary) -> void:
 	if status_mutator_label != null:
 		status_mutator_label.position = Vector2(start_x + icon_w + gap, row_top)
 		status_mutator_label.custom_minimum_size = Vector2(maxf(text_w + 2.0, 60.0), 24.0)
-
 func _update_stats_panel_text(player: Node) -> void:
 	if stats_label == null:
 		return

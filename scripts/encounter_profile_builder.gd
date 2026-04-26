@@ -66,7 +66,10 @@ func build_objective_profile(depth: int, preferred: String = "") -> Dictionary:
 	var normalized := preferred.strip_edges().to_lower()
 	if normalized == "last_stand" or normalized == "last stand" or normalized == "survival":
 		return _build_survival_profile(depth)
-	return _build_survival_profile(depth)
+	if normalized == "priority_target" or normalized == "priority target" or normalized == "cut_the_signal" or normalized == "cut the signal":
+		return _build_priority_target_profile(depth)
+	var objective_profiles: Array[Dictionary] = [_build_survival_profile(depth), _build_priority_target_profile(depth)]
+	return objective_profiles[rng.randi_range(0, objective_profiles.size() - 1)]
 
 func build_debug_encounter_profile(encounter_key: String, depth: int) -> Dictionary:
 	var key := encounter_key.strip_edges().to_lower()
@@ -83,6 +86,8 @@ func build_debug_encounter_profile(encounter_key: String, depth: int) -> Diction
 			return _build_trial_profile()
 		"objective_last_stand":
 			return _build_survival_profile(depth)
+		"objective_priority_target":
+			return _build_priority_target_profile(depth)
 		"objective_endurance":
 			return _build_survival_profile(depth)
 		"objective_random":
@@ -143,6 +148,20 @@ func _build_survival_profile(depth: int) -> Dictionary:
 	ENCOUNTER_CONTRACTS.profile_set_survival_objective(profile, duration, spawn_interval, spawn_batch)
 	return profile
 
+func _build_priority_target_profile(depth: int) -> Dictionary:
+	var room_size := Vector2(1040.0, 760.0)
+	var chasers := 3 + int(floor(float(depth) * 0.5))
+	var chargers := 1 if depth >= 2 else 0
+	var archers := 0
+	var shielders := 1 + int(floor(float(depth) / 3.0))
+	var profile := _build_profile("Cut the Signal", room_size, chasers, chargers, archers, shielders)
+	var raw_duration := clampf(20.0 + float(depth) * 0.8, 20.0, 30.0)
+	var duration := int(ceil(raw_duration / 5.0)) * 5
+	var spawn_interval := clampf(2.5 - float(depth) * 0.06, 1.2, 2.5)
+	var spawn_batch := mini(4, 2 + int(floor(float(depth) / 4.0)))
+	ENCOUNTER_CONTRACTS.profile_set_priority_target_objective(profile, "archer", duration, spawn_interval, spawn_batch)
+	return profile
+
 func roll_route_options(depth: int) -> Array[Dictionary]:
 	if depth < 2:
 		var intro_profile: Dictionary = _build_intro_profile(depth)
@@ -196,14 +215,14 @@ func roll_route_options(depth: int) -> Array[Dictionary]:
 		trial_profile
 	)
 
-	var survival_profile := _build_survival_profile(depth)
+	var objective_profile := build_objective_profile(depth)
 	var survival_option := ENCOUNTER_CONTRACTS.door_option(
-		"Objective - %s" % ENCOUNTER_CONTRACTS.profile_label(survival_profile),
+		"Objective - %s" % ENCOUNTER_CONTRACTS.profile_label(objective_profile),
 		Color(0.98, 0.78, 0.34, 0.96),
 		ENUMS.DoorKind.ENCOUNTER,
 		"trial",
 		ENUMS.RewardMode.BOON,
-		survival_profile
+		objective_profile
 	)
 
 	var rest_option := ENCOUNTER_CONTRACTS.door_option(

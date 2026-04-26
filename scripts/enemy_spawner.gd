@@ -59,15 +59,24 @@ func spawn_enemy_type(enemy_type: String, count: int = 1) -> int:
 		return 0
 	var spawned := 0
 	for _i in range(maxi(0, count)):
-		_spawn_enemy_in_current_room(enemy_script)
-		spawned += 1
+		if _spawn_enemy_in_current_room(enemy_script) != null:
+			spawned += 1
 	return spawned
 
-func _spawn_enemy_in_current_room(enemy_script: Script) -> void:
+func spawn_enemy_node_type(enemy_type: String, min_player_distance: float = -1.0) -> CharacterBody2D:
+	var enemy_script: Script = scripts.get(enemy_type)
 	if enemy_script == null:
-		return
+		return null
+	return _spawn_enemy_in_current_room(enemy_script, min_player_distance)
+
+func pick_room_position(min_player_distance: float = -1.0, min_enemy_spacing: float = 86.0) -> Vector2:
+	return _pick_spawn_position_in_current_room(min_player_distance, min_enemy_spacing)
+
+func _spawn_enemy_in_current_room(enemy_script: Script, min_player_distance: float = -1.0) -> CharacterBody2D:
+	if enemy_script == null:
+		return null
 	if not is_instance_valid(world_root):
-		return
+		return null
 	var enemy := CharacterBody2D.new()
 	enemy.set_script(enemy_script)
 	_apply_enemy_mutator(enemy, enemy_script)
@@ -77,13 +86,14 @@ func _spawn_enemy_in_current_room(enemy_script: Script) -> void:
 	collision_shape.shape.radius = 13.0
 	enemy.add_child(collision_shape)
 
-	enemy.global_position = _pick_spawn_position_in_current_room()
+	enemy.global_position = _pick_spawn_position_in_current_room(min_player_distance)
 	world_root.add_child(enemy)
 	enemy.set("target", player)
 	if enemy.get("arena_size") != null:
 		enemy.set("arena_size", current_room_size)
 	if enemy.has_signal("died") and on_enemy_died.is_valid():
 		enemy.died.connect(on_enemy_died)
+	return enemy
 
 func _apply_enemy_mutator(enemy: CharacterBody2D, enemy_script: Script) -> void:
 	if current_room_enemy_mutator.is_empty():
@@ -158,17 +168,28 @@ func _apply_enemy_mutator(enemy: CharacterBody2D, enemy_script: Script) -> void:
 	if enemy.get("mutator_theme_color") != null:
 		enemy.set("mutator_theme_color", ENCOUNTER_CONTRACTS.mutator_theme_color(current_room_enemy_mutator, Color(1.0, 0.4, 0.4, 1.0)))
 
-func _pick_spawn_position_in_current_room() -> Vector2:
+func _pick_spawn_position_in_current_room(min_player_distance: float = -1.0, min_enemy_spacing: float = 86.0) -> Vector2:
 	if rng == null:
 		return Vector2.ZERO
 	var half := current_room_size * 0.5 - Vector2.ONE * spawn_padding
+	var required_player_distance := spawn_safe_radius if min_player_distance < 0.0 else maxf(spawn_safe_radius, min_player_distance)
 	var candidate := Vector2.ZERO
 	for _try in range(60):
 		candidate = Vector2(
 			rng.randf_range(-half.x, half.x),
 			rng.randf_range(-half.y, half.y)
 		)
-		if is_instance_valid(player) and candidate.distance_to(player.global_position) < spawn_safe_radius:
+		if is_instance_valid(player) and candidate.distance_to(player.global_position) < required_player_distance:
+			continue
+		var too_close_to_enemy := false
+		if is_instance_valid(world_root):
+			for enemy in world_root.get_tree().get_nodes_in_group("enemies"):
+				if not (enemy is Node2D):
+					continue
+				if candidate.distance_to((enemy as Node2D).global_position) < min_enemy_spacing:
+					too_close_to_enemy = true
+					break
+		if too_close_to_enemy:
 			continue
 		return candidate
 	return candidate

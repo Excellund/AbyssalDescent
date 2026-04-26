@@ -77,9 +77,13 @@ const COLOR_BOSS_CLEAVE_OUTLINE := COLOR_PALETTE.COLOR_BOSS_CLEAVE_OUTLINE
 @export var max_health: int = 40
 @export var health_bar_size: Vector2 = Vector2(56.0, 8.0)
 @export var health_bar_offset: Vector2 = Vector2(-28.0, -34.0)
+@export var crowd_separation_radius: float = 42.0
+@export var crowd_separation_strength: float = 68.0
 
 var target: Node2D
 var health_bar: ProgressBar
+var health_bar_threshold_overlay: Control
+var health_bar_threshold_markers: Array[ColorRect] = []
 var health_state
 var attack_anim_time_left: float = 0.0
 var attack_anim_duration: float = 0.1
@@ -88,6 +92,7 @@ var slow_time_left: float = 0.0
 var slow_speed_mult: float = 1.0
 var has_mutator_overlay: bool = false
 var mutator_theme_color: Color = Color(1.0, 0.4, 0.4, 1.0)
+var damage_blocked: bool = false
 
 func _ready() -> void:
 	motion_mode = CharacterBody2D.MOTION_MODE_FLOATING
@@ -105,6 +110,7 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	_update_attack_animation(delta)
 	_process_behavior(delta)
+	_apply_crowd_separation(delta)
 	_update_visual_facing_direction()
 
 func _process_behavior(_delta: float) -> void:
@@ -133,7 +139,31 @@ func _update_visual_facing_direction() -> void:
 func take_damage(amount: int, _damage_context: Dictionary = {}) -> void:
 	if amount <= 0:
 		return
+	if damage_blocked:
+		return
 	health_state.take_damage(amount)
+
+func _apply_crowd_separation(delta: float) -> void:
+	if crowd_separation_radius <= 0.0 or crowd_separation_strength <= 0.0:
+		return
+	var total_push := Vector2.ZERO
+	for enemy in get_tree().get_nodes_in_group("enemies"):
+		if enemy == self or not (enemy is Node2D):
+			continue
+		var neighbor := enemy as Node2D
+		var offset := global_position - neighbor.global_position
+		var dist_sq := offset.length_squared()
+		if dist_sq <= 0.0001:
+			offset = Vector2.RIGHT.rotated(float(get_instance_id() % 360) * 0.0174533)
+			dist_sq = 1.0
+		var distance := sqrt(dist_sq)
+		if distance >= crowd_separation_radius:
+			continue
+		var weight := 1.0 - (distance / crowd_separation_radius)
+		total_push += (offset / distance) * weight
+	if total_push.length_squared() <= 0.000001:
+		return
+	global_position += total_push.normalized() * crowd_separation_strength * delta
 
 func apply_slow(duration: float, mult: float) -> void:
 	if duration > slow_time_left:
@@ -184,13 +214,69 @@ func _create_health_bar() -> void:
 
 	health_bar.add_theme_stylebox_override("background", background_style)
 	health_bar.add_theme_stylebox_override("fill", fill_style)
+	health_bar_threshold_overlay = Control.new()
+	health_bar_threshold_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	health_bar_threshold_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	health_bar.add_child(health_bar_threshold_overlay)
 	add_child(health_bar)
+	_update_health_bar_threshold_layout()
 
 func _update_health_bar(new_health: int, new_max_health: int) -> void:
 	if health_bar == null:
 		return
 	health_bar.max_value = float(new_max_health)
 	health_bar.value = float(new_health)
+	_update_health_bar_threshold_layout()
+
+func configure_health_bar_visuals(offset: Vector2, size: Vector2 = Vector2.ZERO) -> void:
+	health_bar_offset = offset
+	if size != Vector2.ZERO:
+		health_bar_size = size
+	if health_bar == null:
+		return
+	health_bar.position = health_bar_offset
+	health_bar.custom_minimum_size = health_bar_size
+	_update_health_bar_threshold_layout()
+
+func set_health_threshold_markers(thresholds: Array, used_count: int = 0) -> void:
+	if health_bar_threshold_overlay == null:
+		return
+	for marker in health_bar_threshold_markers:
+		if is_instance_valid(marker):
+			marker.queue_free()
+	health_bar_threshold_markers.clear()
+	for index in range(thresholds.size()):
+		var marker := ColorRect.new()
+		marker.custom_minimum_size = Vector2(2.0, maxf(health_bar_size.y + 2.0, 10.0))
+		marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		health_bar_threshold_overlay.add_child(marker)
+		health_bar_threshold_markers.append(marker)
+	set_health_threshold_marker_progress(used_count)
+	_update_health_bar_threshold_layout()
+
+func set_health_threshold_marker_progress(used_count: int) -> void:
+	for index in range(health_bar_threshold_markers.size()):
+		var marker := health_bar_threshold_markers[index]
+		if not is_instance_valid(marker):
+			continue
+		if index < used_count:
+			marker.color = Color(0.42, 0.48, 0.56, 0.95)
+		else:
+			marker.color = Color(1.0, 0.84, 0.3, 0.98)
+
+func _update_health_bar_threshold_layout() -> void:
+	if health_bar == null or health_bar_threshold_overlay == null:
+		return
+	if health_bar_threshold_markers.is_empty():
+		return
+	var marker_count := health_bar_threshold_markers.size()
+	for index in range(marker_count):
+		var marker := health_bar_threshold_markers[index]
+		if not is_instance_valid(marker):
+			continue
+		var threshold_ratio := 1.0 - (float(index + 1) / float(marker_count + 1))
+		var x := health_bar_size.x * threshold_ratio - 1.0
+		marker.position = Vector2(x, -1.0)
 
 func _create_health_state() -> void:
 	health_state = HEALTH_STATE_SCRIPT.new()
@@ -235,6 +321,7 @@ func _draw_common_body(body_radius: float, body_color: Color, core_color: Color,
 	draw_line(spike_l, spike_l + side * 6.0, COLOR_BODY_SPIKE, 1.8)
 	draw_line(spike_r, spike_r - side * 6.0, COLOR_BODY_SPIKE, 1.8)
 	_draw_mutator_overlay(body_radius)
+	_draw_damage_blocked_indicator(body_radius)
 
 func _draw_mutator_overlay(body_radius: float) -> void:
 	if not has_mutator_overlay:
@@ -249,6 +336,14 @@ func _draw_mutator_overlay(body_radius: float) -> void:
 	var fill_color := mutator_theme_color
 	fill_color.a = 0.06 + pulse * 0.04
 	draw_circle(Vector2.ZERO, body_radius + 8.0, fill_color)
+
+func _draw_damage_blocked_indicator(body_radius: float) -> void:
+	if not damage_blocked:
+		return
+	var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.009)
+	var ring_color := Color(0.7, 0.94, 1.0, 0.56 + pulse * 0.2)
+	draw_arc(Vector2.ZERO, body_radius + 13.0, 0.0, TAU, 40, ring_color, 2.6)
+	draw_circle(Vector2.ZERO, body_radius + 11.2, Color(0.64, 0.9, 1.0, 0.05 + pulse * 0.03))
 
 func _get_attack_pulse() -> float:
 	var attack_t := 1.0 - (attack_anim_time_left / attack_anim_duration) if attack_anim_duration > 0.0 else 1.0

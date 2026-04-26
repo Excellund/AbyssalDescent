@@ -44,6 +44,7 @@ const PROFILE_KEY_OBJECTIVE_KIND := "objective_kind"
 const PROFILE_KEY_OBJECTIVE_DURATION := "objective_duration"
 const PROFILE_KEY_OBJECTIVE_SPAWN_INTERVAL := "objective_spawn_interval"
 const PROFILE_KEY_OBJECTIVE_SPAWN_BATCH := "objective_spawn_batch"
+const PROFILE_KEY_OBJECTIVE_TARGET_TYPE := "objective_target_type"
 
 const MUTATOR_KEY_NAME := "name"
 const MUTATOR_KEY_THEME_COLOR := "theme_color"
@@ -175,6 +176,7 @@ static func normalize_profile(value: Variant) -> Dictionary:
 		normalized[PROFILE_KEY_OBJECTIVE_DURATION] = float(input.get(PROFILE_KEY_OBJECTIVE_DURATION, 0.0))
 		normalized[PROFILE_KEY_OBJECTIVE_SPAWN_INTERVAL] = float(input.get(PROFILE_KEY_OBJECTIVE_SPAWN_INTERVAL, 0.0))
 		normalized[PROFILE_KEY_OBJECTIVE_SPAWN_BATCH] = int(input.get(PROFILE_KEY_OBJECTIVE_SPAWN_BATCH, 1))
+		normalized[PROFILE_KEY_OBJECTIVE_TARGET_TYPE] = String(input.get(PROFILE_KEY_OBJECTIVE_TARGET_TYPE, ""))
 	return normalized
 
 static func profile_label(profile_value: Dictionary) -> String:
@@ -231,8 +233,19 @@ static func profile_objective_spawn_interval(profile_value: Dictionary) -> float
 static func profile_objective_spawn_batch(profile_value: Dictionary) -> int:
 	return int(profile_value.get(PROFILE_KEY_OBJECTIVE_SPAWN_BATCH, 1))
 
+static func profile_objective_target_type(profile_value: Dictionary) -> String:
+	return String(profile_value.get(PROFILE_KEY_OBJECTIVE_TARGET_TYPE, ""))
+
 static func profile_set_survival_objective(profile_value: Dictionary, duration: float, spawn_interval: float, spawn_batch: int = 1) -> void:
 	profile_value[PROFILE_KEY_OBJECTIVE_KIND] = "survival"
+	profile_value[PROFILE_KEY_OBJECTIVE_DURATION] = maxf(1.0, duration)
+	profile_value[PROFILE_KEY_OBJECTIVE_SPAWN_INTERVAL] = maxf(0.25, spawn_interval)
+	profile_value[PROFILE_KEY_OBJECTIVE_SPAWN_BATCH] = maxi(1, spawn_batch)
+	profile_value.erase(PROFILE_KEY_OBJECTIVE_TARGET_TYPE)
+
+static func profile_set_priority_target_objective(profile_value: Dictionary, target_type: String, duration: float, spawn_interval: float, spawn_batch: int = 1) -> void:
+	profile_value[PROFILE_KEY_OBJECTIVE_KIND] = "priority_target"
+	profile_value[PROFILE_KEY_OBJECTIVE_TARGET_TYPE] = target_type.strip_edges().to_lower()
 	profile_value[PROFILE_KEY_OBJECTIVE_DURATION] = maxf(1.0, duration)
 	profile_value[PROFILE_KEY_OBJECTIVE_SPAWN_INTERVAL] = maxf(0.25, spawn_interval)
 	profile_value[PROFILE_KEY_OBJECTIVE_SPAWN_BATCH] = maxi(1, spawn_batch)
