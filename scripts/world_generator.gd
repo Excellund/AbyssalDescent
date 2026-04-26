@@ -114,6 +114,7 @@ var objective_max_enemies: int = 0
 var objective_kill_target: int = 0
 var objective_kills: int = 0
 var objective_overtime: bool = false
+var objective_survival_quota_announced: bool = false
 var objective_target_enemy: CharacterBody2D
 var objective_target_type: String = ""
 var objective_target_name: String = ""
@@ -207,9 +208,10 @@ func _ready() -> void:
 		_start_debug_selected_encounter(debug_start_encounter)
 		return
 	if debug_skip_starting_boon_selection:
+		pending_room_reward = ENUMS.RewardMode.BOON
 		_begin_room(_build_skirmish_profile(room_depth))
 	else:
-		_open_boon_selection("Choose Starting Boon", true, ENUMS.RewardMode.BOON)
+		_open_boon_selection("Choose Starting Arcana", true, ENUMS.RewardMode.ARCANA)
 
 func start_run_with_powers(power_ids: Array[String]) -> Dictionary:
 	var applied: Array[String] = []
@@ -511,7 +513,11 @@ func _update_objective_state(delta: float) -> void:
 func _update_survival_objective_state(delta: float) -> void:
 	if choosing_next_room or run_cleared:
 		return
-	if objective_kills >= objective_kill_target and objective_kill_target > 0:
+	var quota_met := objective_kill_target > 0 and objective_kills >= objective_kill_target
+	if quota_met and not objective_survival_quota_announced and objective_time_left > 0.0 and not objective_overtime:
+		objective_survival_quota_announced = true
+		hud.show_banner("Kill Quota Fulfilled", "")
+	if objective_overtime and quota_met:
 		_complete_current_objective("Objective Complete", "Kill quota reached")
 		return
 	var pressure_floor := mini(18, 6 + int(floor(float(room_depth) * 0.6)) + objective_spawn_batch)
@@ -526,6 +532,9 @@ func _update_survival_objective_state(delta: float) -> void:
 		objective_spawn_timer = objective_spawn_interval
 		_spawn_survival_wave()
 	if objective_time_left <= 0.0 and not objective_overtime:
+		if quota_met:
+			_complete_current_objective("Objective Complete", "Survived the timer")
+			return
 		objective_overtime = true
 		objective_spawn_interval = maxf(0.45, objective_spawn_interval * 0.65)
 		objective_spawn_batch = mini(7, objective_spawn_batch + 1)
@@ -609,6 +618,7 @@ func _complete_current_objective(title: String, _subtitle: String) -> void:
 	objective_target_enemy = null
 	objective_target_type = ""
 	objective_target_name = ""
+	objective_survival_quota_announced = false
 	objective_target_next_flee_index = 0
 	_clear_priority_target_dash_line()
 	_clear_all_enemies()
@@ -1137,6 +1147,7 @@ func _begin_room(profile: Dictionary) -> void:
 	objective_kill_target = 0
 	objective_kills = 0
 	objective_overtime = false
+	objective_survival_quota_announced = false
 	objective_target_enemy = null
 	objective_target_type = ""
 	objective_target_name = ""
@@ -1171,6 +1182,7 @@ func _begin_room(profile: Dictionary) -> void:
 		objective_kill_target = int(ceil(float(raw_kill_target) / 5.0)) * 5
 		objective_kills = 0
 		objective_overtime = false
+		objective_survival_quota_announced = false
 	elif active_objective_kind == "priority_target":
 		objective_target_type = ENCOUNTER_CONTRACTS.profile_objective_target_type(profile)
 		if objective_target_type.is_empty():
@@ -1297,6 +1309,7 @@ func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> voi
 		boons_taken.append(String(choice["name"]))
 	_set_combat_paused(false)
 	if is_initial:
+		pending_room_reward = ENUMS.RewardMode.BOON
 		_begin_room(_build_skirmish_profile(room_depth))
 	else:
 		_spawn_door_options()
