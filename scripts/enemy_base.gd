@@ -260,7 +260,6 @@ func _update_health_bar(new_health: int, new_max_health: int) -> void:
 	if float(new_health) < previous_health:
 		var lost_ratio := (previous_health - float(new_health)) / maxf(1.0, float(new_max_health))
 		var continuing_stack := health_recent_damage_burst_active
-		var display_before := health_recent_damage_display_health
 
 		if not continuing_stack:
 			health_recent_damage_display_health = previous_health

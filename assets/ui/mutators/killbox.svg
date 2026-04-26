@@ -1,9 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-  <rect x="4" y="4" width="16" height="16" rx="1"/>
-  <path d="M8 8 L16 16"/>
-  <path d="M16 8 L8 16"/>
-  <path d="M12 4 L12 7"/>
-  <path d="M20 12 L17 12"/>
-  <path d="M12 20 L12 17"/>
-  <path d="M4 12 L7 12"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+  <defs>
+    <linearGradient id="g" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFD97A"/>
+      <stop offset="1" stop-color="#C48010"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="16" height="16" rx="1" fill="url(#g)" stroke="#FFD97A" stroke-width="0.8"/>
+  <path d="M8 8 L16 16" stroke="#4A2C00" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M16 8 L8 16" stroke="#4A2C00" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M12 4 L12 7M20 12 L17 12M12 20 L12 17M4 12 L7 12" stroke="#FFE9A0" stroke-width="2.2" stroke-linecap="round"/>
 </svg>

@@ -98,6 +98,26 @@ func get_trial_power_pool(player_reference: Node = null) -> Array[Dictionary]:
 	]
 
 
+func get_objective_upgrade_pool(player_reference: Node = null) -> Array[Dictionary]:
+	var pool := get_upgrade_pool(player_reference)
+	var favored_ids := {
+		"swift_strike": true,
+		"heavy_blow": true,
+		"long_reach": true,
+		"fleet_foot": true,
+		"blink_dash": true,
+	}
+	var favored: Array[Dictionary] = []
+	var fallback: Array[Dictionary] = []
+	for entry in pool:
+		if favored_ids.has(String(entry.get("id", ""))):
+			favored.append(entry)
+		else:
+			fallback.append(entry)
+	favored.append_array(fallback)
+	return favored
+
+
 ## Get all powers (upgrades + trial powers)
 func get_all_powers(player_reference: Node = null) -> Array[Dictionary]:
 	var all_powers: Array[Dictionary] = []

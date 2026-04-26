@@ -111,6 +111,7 @@ var current_room_label: String = ""
 var door_options: Array[Dictionary] = []
 var pending_room_reward: int = ENUMS.RewardMode.NONE
 var current_room_enemy_mutator: Dictionary = {}
+var current_room_player_mutator: Dictionary = {}
 var active_objective_kind: String = ""
 var objective_time_left: float = 0.0
 var objective_spawn_interval: float = 0.0
@@ -348,6 +349,8 @@ func _start_debug_selected_encounter(encounter_state: int) -> Dictionary:
 	if profile.is_empty():
 		return {"ok": false, "state": "debug_encounter", "note": "Could not build encounter profile."}
 	pending_room_reward = ENUMS.RewardMode.ARCANA if encounter_key == "trial" else ENUMS.RewardMode.BOON
+	if encounter_key.begins_with("objective_"):
+		pending_room_reward = ENUMS.RewardMode.HARD
 	_begin_room(profile)
 	hud.refresh(_get_hud_state(), player)
 	return {
@@ -446,7 +449,7 @@ func _start_debug_objective_room(kind: String = "") -> Dictionary:
 	profile = _apply_debug_mutator_override(profile)
 	if profile.is_empty():
 		return {"ok": false, "state": "objective_test", "note": "Could not build objective profile."}
-	pending_room_reward = ENUMS.RewardMode.BOON
+	pending_room_reward = ENUMS.RewardMode.HARD
 	_begin_room(profile)
 	hud.refresh(_get_hud_state(), player)
 	return {
@@ -906,6 +909,7 @@ func _get_hud_state() -> Dictionary:
 		"objective_target_name": objective_target_name,
 		"objective_target_health": _get_priority_target_health(),
 		"objective_target_max_health": _get_priority_target_max_health(),
+		"active_player_mutators": _get_active_player_mutators_for_hud(),
 		"objective_target_flee_thresholds": objective_target_flee_thresholds,
 		"objective_target_next_flee_index": objective_target_next_flee_index,
 	}
@@ -1016,6 +1020,9 @@ func _on_room_cleared() -> void:
 	var reward_mode: int = ENCOUNTER_CONTRACTS.outcome_open_reward_mode(outcome)
 	if reward_mode == ENUMS.RewardMode.BOON:
 		_open_boon_selection("Choose Boon Reward", false, ENUMS.RewardMode.BOON)
+		return
+	if reward_mode == ENUMS.RewardMode.HARD:
+		_open_boon_selection("Choose Mission Reward", false, ENUMS.RewardMode.HARD, current_room_player_mutator)
 		return
 	if reward_mode == ENUMS.RewardMode.ARCANA:
 		_open_boon_selection("Choose Arcana", false, ENUMS.RewardMode.ARCANA)
@@ -1212,6 +1219,8 @@ func _apply_endless_scaling_to_profile(profile: Dictionary) -> Dictionary:
 func _begin_room(profile: Dictionary) -> void:
 	if profile.is_empty():
 		return
+	if is_instance_valid(player) and player.has_method("tick_objective_mutators_for_encounter"):
+		player.call("tick_objective_mutators_for_encounter")
 	in_boss_room = false
 	in_second_boss_room = false
 	active_objective_kind = ""
@@ -1232,6 +1241,7 @@ func _begin_room(profile: Dictionary) -> void:
 	current_room_static_camera = ENCOUNTER_CONTRACTS.profile_static_camera(profile)
 	current_room_label = ENCOUNTER_CONTRACTS.profile_label(profile)
 	current_room_enemy_mutator = ENCOUNTER_CONTRACTS.profile_enemy_mutator(profile)
+	current_room_player_mutator = ENCOUNTER_CONTRACTS.profile_player_mutator(profile)
 	var mutator_name := ENCOUNTER_CONTRACTS.mutator_name(current_room_enemy_mutator)
 	var _room_subtitle := ""
 	var sub_color := Color(0.78, 0.9, 1.0, 0.92)
@@ -1392,20 +1402,29 @@ func _build_skirmish_profile(depth: int) -> Dictionary:
 		return {}
 	return encounter_profile_builder.call("build_skirmish_profile", depth)
 
+func _get_active_player_mutators_for_hud() -> Array[Dictionary]:
+	if not is_instance_valid(player):
+		return []
+	if not player.has_method("get_active_objective_mutators"):
+		return []
+	return player.call("get_active_objective_mutators") as Array[Dictionary]
+
 func _roll_route_options(depth: int) -> Array[Dictionary]:
 	if not is_instance_valid(encounter_profile_builder):
 		return []
 	return encounter_profile_builder.call("roll_route_options", depth)
 
-func _open_boon_selection(title: String, is_initial: bool, mode: int = ENUMS.RewardMode.BOON) -> void:
+func _open_boon_selection(title: String, is_initial: bool, mode: int = ENUMS.RewardMode.BOON, player_mutator: Dictionary = {}) -> void:
 	if is_instance_valid(reward_selection_ui):
-		reward_selection_ui.call("open_selection", title, is_initial, mode, power_registry_instance, player, rng)
+		reward_selection_ui.call("open_selection", title, is_initial, mode, power_registry_instance, player, rng, player_mutator)
 		_set_combat_paused(true)
 
 func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> void:
 	if mode == ENUMS.RewardMode.ARCANA:
 		_apply_arcana_to_player(String(choice["id"]))
 		arcana_rewards_taken.append(String(choice["name"]))
+	elif mode == ENUMS.RewardMode.HARD:
+		_apply_objective_mutator(choice)
 	else:
 		_apply_boon_to_player(String(choice["id"]))
 		boons_taken.append(String(choice["name"]))
@@ -1423,11 +1442,59 @@ func _apply_boon_to_player(boon_id: String) -> void:
 	if player.has_method("apply_upgrade"):
 		player.call("apply_upgrade", boon_id)
 
+func _apply_mission_reward(choice: Dictionary) -> void:
+	var chosen_id := String(choice.get("id", ""))
+	if chosen_id.is_empty():
+		return
+	_apply_boon_to_player(chosen_id)
+	boons_taken.append(String(choice.get("name", chosen_id)))
+	var bonus_boon := _roll_bonus_mission_boon(chosen_id)
+	if bonus_boon.is_empty():
+		return
+	_apply_boon_to_player(String(bonus_boon.get("id", "")))
+	boons_taken.append(String(bonus_boon.get("name", "")))
+	if is_instance_valid(hud):
+		hud.show_banner("Mission Bonus", String(bonus_boon.get("name", "")))
+
+func _roll_bonus_mission_boon(excluded_id: String) -> Dictionary:
+	if not is_instance_valid(power_registry_instance):
+		return {}
+	var pool: Array[Dictionary] = power_registry_instance.call("get_objective_upgrade_pool", player)
+	var available: Array[Dictionary] = []
+	for entry in pool:
+		var entry_id := String(entry.get("id", ""))
+		if entry_id == excluded_id:
+			continue
+		var limit := int(entry.get("stack_limit", 0))
+		if limit > 0 and is_instance_valid(player) and player.has_method("get_upgrade_stack_count"):
+			var current := int(player.call("get_upgrade_stack_count", entry_id))
+			if current >= limit:
+				continue
+		available.append(entry)
+	if available.is_empty():
+		return {}
+	return available[rng.randi_range(0, available.size() - 1)]
+
 func _apply_arcana_to_player(reward_id: String) -> void:
 	if not is_instance_valid(player):
 		return
 	if player.has_method("apply_trial_power"):
 		player.call("apply_trial_power", reward_id)
+
+func _apply_objective_mutator(choice: Dictionary) -> void:
+	if not is_instance_valid(player):
+		return
+	var mutator_data := choice.get("full_data", {}) as Dictionary
+	if mutator_data.is_empty():
+		return
+	var applied_mutator := mutator_data.duplicate(true)
+	var duration := maxi(1, int(applied_mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_DURATION_ENCOUNTERS, 3)))
+	applied_mutator[ENCOUNTER_CONTRACTS.MUTATOR_KEY_DURATION_ENCOUNTERS] = duration
+	if player.has_method("apply_objective_mutator"):
+		player.call("apply_objective_mutator", applied_mutator)
+	var mutator_name := String(choice.get("name", "Objective Mutator"))
+	if is_instance_valid(hud):
+		hud.show_banner("Objective Reward", mutator_name)
 
 func _set_combat_paused(paused: bool) -> void:
 	if is_instance_valid(player):

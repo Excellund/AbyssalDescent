@@ -135,29 +135,33 @@ func _build_survival_profile(depth: int) -> Dictionary:
 	var hard_pool := _get_hard_pool()
 	var base: Dictionary = hard_pool[rng.randi_range(0, hard_pool.size() - 1)]
 	var survival_room_size := Vector2(980.0, 740.0)
-	var chasers := maxi(4, ENCOUNTER_CONTRACTS.profile_chaser_count(base) + 1)
-	var chargers := maxi(1, ENCOUNTER_CONTRACTS.profile_charger_count(base))
+	var chasers := maxi(5, ENCOUNTER_CONTRACTS.profile_chaser_count(base) + 2)
+	var chargers := maxi(1, ENCOUNTER_CONTRACTS.profile_charger_count(base) + 1)
 	var archers := maxi(1, ENCOUNTER_CONTRACTS.profile_archer_count(base) + 1)
 	var shielders := maxi(1, ENCOUNTER_CONTRACTS.profile_shielder_count(base))
 	var pressure_mutator := _build_killbox_mutator()
 	var profile := _build_profile("Last Stand", survival_room_size, chasers, chargers, archers, shielders, pressure_mutator)
+	var fortified_mutator := _build_fortified_mutator()
+	ENCOUNTER_CONTRACTS.profile_set_player_mutator(profile, fortified_mutator)
 	var raw_duration := clampf(22.0 + float(depth) * 0.85, 22.0, 34.0)
 	var duration := int(ceil(raw_duration / 5.0)) * 5
-	var spawn_interval := clampf(1.95 - float(depth) * 0.06, 0.85, 1.95)
+	var spawn_interval := clampf(1.82 - float(depth) * 0.06, 0.8, 1.82)
 	var spawn_batch := mini(5, 2 + int(floor(float(depth) / 3.0)))
 	ENCOUNTER_CONTRACTS.profile_set_survival_objective(profile, duration, spawn_interval, spawn_batch)
 	return profile
 
 func _build_priority_target_profile(depth: int) -> Dictionary:
 	var room_size := Vector2(1040.0, 760.0)
-	var chasers := 3 + int(floor(float(depth) * 0.5))
-	var chargers := 1 if depth >= 2 else 0
-	var archers := 0
+	var chasers := 4 + int(floor(float(depth) * 0.55))
+	var chargers := 1 + int(floor(float(depth) / 5.0)) if depth >= 2 else 0
+	var archers := 1
 	var shielders := 1 + int(floor(float(depth) / 3.0))
 	var profile := _build_profile("Cut the Signal", room_size, chasers, chargers, archers, shielders)
+	var hunters_focus_mutator := _build_hunters_focus_mutator()
+	ENCOUNTER_CONTRACTS.profile_set_player_mutator(profile, hunters_focus_mutator)
 	var raw_duration := clampf(20.0 + float(depth) * 0.8, 20.0, 30.0)
 	var duration := int(ceil(raw_duration / 5.0)) * 5
-	var spawn_interval := clampf(2.5 - float(depth) * 0.06, 1.2, 2.5)
+	var spawn_interval := clampf(2.18 - float(depth) * 0.06, 1.05, 2.18)
 	var spawn_batch := mini(4, 2 + int(floor(float(depth) / 4.0)))
 	ENCOUNTER_CONTRACTS.profile_set_priority_target_objective(profile, "archer", duration, spawn_interval, spawn_batch)
 	return profile
@@ -220,8 +224,8 @@ func roll_route_options(depth: int) -> Array[Dictionary]:
 		"Objective - %s" % ENCOUNTER_CONTRACTS.profile_label(objective_profile),
 		Color(0.98, 0.78, 0.34, 0.96),
 		ENUMS.DoorKind.ENCOUNTER,
-		"trial",
-		ENUMS.RewardMode.BOON,
+		"objective",
+		ENUMS.RewardMode.HARD,
 		objective_profile
 	)
 
@@ -261,6 +265,26 @@ func _build_killbox_mutator() -> Dictionary:
 		ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_COOLDOWN_MULT: 0.78,
 		ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SPEED_MULT: 1.16,
 		ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_WINDUP_MULT: 0.88
+	}
+
+func _build_fortified_mutator() -> Dictionary:
+	return {
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME: "Fortified",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_THEME_COLOR: Color(0.76, 0.82, 0.98, 1.0),
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID: "fortified",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX: "Incoming damage reduced by 15%",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_PLAYER_DAMAGE_RESIST: 0.15,
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_DURATION_ENCOUNTERS: 3
+	}
+
+func _build_hunters_focus_mutator() -> Dictionary:
+	return {
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME: "Hunter's Focus",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_THEME_COLOR: Color(0.98, 0.76, 0.34, 1.0),
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID: "hunters_focus",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX: "Deal 25% bonus damage",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_PLAYER_DAMAGE_MULT: 0.25,
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_DURATION_ENCOUNTERS: 3
 	}
 
 func _hard_mutator_pool() -> Array[Dictionary]:

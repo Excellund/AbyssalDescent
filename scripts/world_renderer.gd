@@ -222,6 +222,25 @@ func _draw_door_icon(door: Dictionary) -> void:
 			_draw_trial_mutator_icon(door_pos, shape_id, theme, icon_color, outline_color)
 		return
 
+	if icon == "objective":
+		draw_arc(door_pos, 11.0, -PI * 0.15, PI * 1.15, 26, outline_color, 4.8)
+		draw_arc(door_pos, 11.0, -PI * 0.15, PI * 1.15, 26, Color(0.98, 0.8, 0.42, 0.96), 2.8)
+		var diamond := PackedVector2Array([
+			door_pos + Vector2(0.0, -7.0),
+			door_pos + Vector2(6.0, 0.0),
+			door_pos + Vector2(0.0, 7.0),
+			door_pos + Vector2(-6.0, 0.0)
+		])
+		draw_colored_polygon(diamond, Color(0.24, 0.17, 0.08, 0.95))
+		draw_polyline(PackedVector2Array([
+			door_pos + Vector2(0.0, -7.0),
+			door_pos + Vector2(6.0, 0.0),
+			door_pos + Vector2(0.0, 7.0),
+			door_pos + Vector2(-6.0, 0.0),
+			door_pos + Vector2(0.0, -7.0)
+		]), Color(1.0, 0.92, 0.72, 0.96), 2.0)
+		return
+
 	if icon == "rest":
 		draw_circle(door_pos, 10.0, outline_color)
 		draw_circle(door_pos, 8.0, Color(0.24, 0.56, 0.34, 0.75))

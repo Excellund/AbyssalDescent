@@ -24,19 +24,23 @@ static func _encounter_rows() -> Array[Dictionary]:
 		},
 		{
 			"name": "Last Stand",
-			"desc": "Survive the timer, then finish the kill quota to clear.",
+			"desc": "Objective encounter. Survive the timer, then finish the kill quota to clear.",
 		},
 		{
 			"name": "Cut the Signal",
-			"desc": "Hunt the marked target. It retreats at health thresholds.",
+			"desc": "Objective encounter. Hunt the marked target while it relocates at health thresholds.",
 		},
 		{
 			"name": "Rest Site",
 			"desc": "Non-combat room that restores health before the next fight.",
 		},
 		{
-			"name": "Boss",
-			"desc": "Defeat the Warden to finish the run or enter endless scaling.",
+			"name": "Warden",
+			"desc": "First boss encounter. Defeat the Warden to advance into phase two.",
+		},
+		{
+			"name": "Sovereign",
+			"desc": "Second boss encounter. Defeat the Sovereign to complete the run.",
 		},
 	]
 
@@ -71,6 +75,18 @@ static func _mutator_rows() -> Array[Dictionary]:
 			"color": Color(0.98, 0.72, 0.2, 1.0),
 			"icon": "res://assets/ui/mutators/killbox.svg",
 			"desc": "Arena pressure rises over time; kiting space becomes risky.",
+		},
+		{
+			"name": "Fortified",
+			"color": Color(0.76, 0.82, 0.98, 1.0),
+			"icon": "res://assets/ui/mutators/fortified.svg",
+			"desc": "Hardens the player against punishment. Incoming hits glance off with reduced force.",
+		},
+		{
+			"name": "Hunter's Focus",
+			"color": Color(0.98, 0.76, 0.34, 1.0),
+			"icon": "res://assets/ui/mutators/hunters_focus.svg",
+			"desc": "Sharpens the player's edge in the hunt. Every strike lands with greater intent.",
 		},
 	]
 

@@ -6,6 +6,8 @@ const MUTATOR_ICON_BLOOD_RUSH: Texture2D = preload("res://assets/ui/mutators/blo
 const MUTATOR_ICON_FLASHPOINT: Texture2D = preload("res://assets/ui/mutators/flashpoint.svg")
 const MUTATOR_ICON_SIEGEBREAK: Texture2D = preload("res://assets/ui/mutators/siegebreak.svg")
 const MUTATOR_ICON_IRON_VOLLEY: Texture2D = preload("res://assets/ui/mutators/iron_volley.svg")
+const MUTATOR_ICON_FORTIFIED_PATH := "res://assets/ui/mutators/fortified.svg"
+const MUTATOR_ICON_HUNTERS_FOCUS_PATH := "res://assets/ui/mutators/hunters_focus.svg"
 const MUTATOR_ICON_KILLBOX_PATH := "res://assets/ui/mutators/killbox.svg"
 
 var status_panel: Panel
@@ -14,10 +16,16 @@ var status_mutator_icon: TextureRect
 var status_mutator_label: Label
 var stats_panel: Panel
 var stats_label: RichTextLabel
+var player_mutator_panel: Panel
+var player_mutator_rows: Array[HBoxContainer] = []
+var player_mutator_icons: Array[TextureRect] = []
+var player_mutator_labels: Array[Label] = []
 var room_banner_title_label: Label
 var room_banner_subtitle_label: Label
 var room_banner_tween: Tween
 var _mutator_icon_killbox: Texture2D
+var _mutator_icon_fortified: Texture2D
+var _mutator_icon_hunters_focus: Texture2D
 
 var _encounter_count: int = 5
 var _banner_top_margin: float = 18.0
@@ -37,6 +45,7 @@ func refresh(state: Dictionary, player: Node) -> void:
 	_update_banner_layout(_cached_room_size, viewport.get_canvas_transform(), viewport_size)
 	_layout_hud_panels(viewport_size)
 	_update_status_panel_text(state)
+	_update_player_mutator_panel(state)
 	_update_stats_panel_text(player)
 
 func show_banner(title: String, subtitle: String, subtitle_color: Color = Color(0.78, 0.9, 1.0, 0.92)) -> void:
@@ -139,6 +148,67 @@ func _create_hud() -> void:
 	stats_label.add_theme_constant_override("shadow_offset_y", 1)
 	stats_panel.add_child(stats_label)
 
+	player_mutator_panel = Panel.new()
+	player_mutator_panel.custom_minimum_size = Vector2(360.0, 136.0)
+	var mutator_panel_style := StyleBoxFlat.new()
+	mutator_panel_style.bg_color = Color(0.03, 0.06, 0.1, 0.52)
+	mutator_panel_style.border_color = Color(0.22, 0.32, 0.44, 0.62)
+	mutator_panel_style.border_width_left = 1
+	mutator_panel_style.border_width_top = 1
+	mutator_panel_style.border_width_right = 1
+	mutator_panel_style.border_width_bottom = 1
+	mutator_panel_style.corner_radius_top_left = 10
+	mutator_panel_style.corner_radius_top_right = 10
+	mutator_panel_style.corner_radius_bottom_left = 10
+	mutator_panel_style.corner_radius_bottom_right = 10
+	player_mutator_panel.add_theme_stylebox_override("panel", mutator_panel_style)
+	layer.add_child(player_mutator_panel)
+
+	var mutator_title := Label.new()
+	mutator_title.position = Vector2(10.0, 8.0)
+	mutator_title.custom_minimum_size = Vector2(300.0, 24.0)
+	mutator_title.text = "My Mutators"
+	mutator_title.add_theme_font_size_override("font_size", 15)
+	mutator_title.add_theme_color_override("font_color", Color(0.93, 0.97, 1.0, 0.95))
+	mutator_title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.86))
+	mutator_title.add_theme_constant_override("shadow_offset_x", 1)
+	mutator_title.add_theme_constant_override("shadow_offset_y", 1)
+	player_mutator_panel.add_child(mutator_title)
+
+	player_mutator_rows.clear()
+	player_mutator_icons.clear()
+	player_mutator_labels.clear()
+	for i in range(4):
+		var row := HBoxContainer.new()
+		row.position = Vector2(10.0, 32.0 + float(i) * 24.0)
+		row.custom_minimum_size = Vector2(340.0, 22.0)
+		row.visible = false
+		row.add_theme_constant_override("separation", 8)
+		player_mutator_panel.add_child(row)
+
+		var icon := TextureRect.new()
+		icon.custom_minimum_size = Vector2(16.0, 16.0)
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.visible = false
+		row.add_child(icon)
+
+		var row_label := Label.new()
+		row_label.custom_minimum_size = Vector2(316.0, 22.0)
+		row_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		row_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		row_label.add_theme_font_size_override("font_size", 14)
+		row_label.add_theme_color_override("font_color", Color(0.86, 0.94, 1.0, 0.94))
+		row_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.86))
+		row_label.add_theme_constant_override("shadow_offset_x", 1)
+		row_label.add_theme_constant_override("shadow_offset_y", 1)
+		row.add_child(row_label)
+
+		player_mutator_rows.append(row)
+		player_mutator_icons.append(icon)
+		player_mutator_labels.append(row_label)
+
+	player_mutator_panel.visible = false
+
 	var banner_layer := CanvasLayer.new()
 	banner_layer.layer = 110
 	banner_layer.follow_viewport_enabled = false
@@ -208,6 +278,11 @@ func _layout_hud_panels(viewport_size: Vector2) -> void:
 		status_panel.position = Vector2((viewport_size.x - panel_width) * 0.5, 14.0)
 	if stats_panel != null:
 		stats_panel.position = Vector2(14.0, 14.0)
+	if player_mutator_panel != null:
+		var panel_width := player_mutator_panel.size.x
+		if panel_width <= 0.0:
+			panel_width = player_mutator_panel.custom_minimum_size.x
+		player_mutator_panel.position = Vector2(viewport_size.x - panel_width - 14.0, 14.0)
 
 func _update_status_panel_text(state: Dictionary) -> void:
 	if status_label == null:
@@ -298,6 +373,48 @@ func _update_status_panel_text(state: Dictionary) -> void:
 	if status_mutator_label != null:
 		status_mutator_label.position = Vector2(start_x + icon_w + gap, row_top)
 		status_mutator_label.custom_minimum_size = Vector2(maxf(text_w + 2.0, 60.0), 24.0)
+
+func _update_player_mutator_panel(state: Dictionary) -> void:
+	if player_mutator_panel == null:
+		return
+	var active_mutators := state.get("active_player_mutators", []) as Array[Dictionary]
+	if active_mutators.is_empty():
+		player_mutator_panel.visible = false
+		for row in player_mutator_rows:
+			row.visible = false
+		return
+
+	player_mutator_panel.visible = true
+	for i in range(player_mutator_rows.size()):
+		var row := player_mutator_rows[i]
+		var icon := player_mutator_icons[i]
+		var row_label := player_mutator_labels[i]
+		if i >= active_mutators.size():
+			row.visible = false
+			continue
+		row.visible = true
+		var mutator := active_mutators[i]
+		var mutator_name := ENCOUNTER_CONTRACTS.mutator_name(mutator)
+		if mutator_name.is_empty():
+			mutator_name = "Mutator"
+		var color := ENCOUNTER_CONTRACTS.mutator_theme_color(mutator, Color(0.86, 0.94, 1.0, 0.94))
+		var icon_texture := _get_mutator_icon_texture(ENCOUNTER_CONTRACTS.mutator_icon_shape_id(mutator))
+		icon.texture = icon_texture
+		icon.modulate = Color(color.r, color.g, color.b, 1.0)
+		icon.visible = icon_texture != null
+		var remaining := int(mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_REMAINING_ENCOUNTERS, 0))
+		var stat_parts: Array[String] = []
+		var damage_resist := float(mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_PLAYER_DAMAGE_RESIST, 0.0))
+		if damage_resist > 0.0:
+			stat_parts.append("-%d%% dmg taken" % int(round(damage_resist * 100.0)))
+		var damage_mult := float(mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_PLAYER_DAMAGE_MULT, 0.0))
+		if damage_mult > 0.0:
+			stat_parts.append("+%d%% dmg" % int(round(damage_mult * 100.0)))
+		var stat_text := ""
+		if not stat_parts.is_empty():
+			stat_text = "  [" + ", ".join(stat_parts) + "]"
+		row_label.text = "%s  (%d enc)" % [mutator_name, remaining]
+		row_label.add_theme_color_override("font_color", Color(color.r, color.g, color.b, 0.98))
 func _update_stats_panel_text(player: Node) -> void:
 	if stats_label == null:
 		return
@@ -334,6 +451,10 @@ func _get_mutator_icon_texture(icon_shape_id: String) -> Texture2D:
 			return MUTATOR_ICON_IRON_VOLLEY
 		"killbox":
 			return _get_killbox_icon_texture()
+		"fortified":
+			return _get_fortified_icon_texture()
+		"hunters_focus":
+			return _get_hunters_focus_icon_texture()
 		_:
 			return null
 
@@ -346,3 +467,21 @@ func _get_killbox_icon_texture() -> Texture2D:
 		return _mutator_icon_killbox
 	# Keep UI stable if the asset import is temporarily unavailable.
 	return MUTATOR_ICON_SIEGEBREAK
+
+func _get_fortified_icon_texture() -> Texture2D:
+	if _mutator_icon_fortified != null:
+		return _mutator_icon_fortified
+	var icon_resource := load(MUTATOR_ICON_FORTIFIED_PATH)
+	if icon_resource is Texture2D:
+		_mutator_icon_fortified = icon_resource as Texture2D
+		return _mutator_icon_fortified
+	return MUTATOR_ICON_SIEGEBREAK
+
+func _get_hunters_focus_icon_texture() -> Texture2D:
+	if _mutator_icon_hunters_focus != null:
+		return _mutator_icon_hunters_focus
+	var icon_resource := load(MUTATOR_ICON_HUNTERS_FOCUS_PATH)
+	if icon_resource is Texture2D:
+		_mutator_icon_hunters_focus = icon_resource as Texture2D
+		return _mutator_icon_hunters_focus
+	return MUTATOR_ICON_IRON_VOLLEY

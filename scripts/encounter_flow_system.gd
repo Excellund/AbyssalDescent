@@ -36,7 +36,17 @@ func resolve_room_cleared(in_boss_room: bool, pending_room_reward: int, rooms_cl
 			int(progress["room_depth"]),
 			bool(progress["boss_unlocked"])
 		)
-	if reward_mode == ENUMS.RewardMode.ARCANA or reward_mode == ENUMS.RewardMode.HARD:
+	if reward_mode == ENUMS.RewardMode.HARD:
+		return ENCOUNTER_CONTRACTS.room_cleared_outcome(
+			false,
+			ENUMS.RewardMode.HARD,
+			false,
+			ENUMS.RewardMode.NONE,
+			int(progress["rooms_cleared"]),
+			int(progress["room_depth"]),
+			bool(progress["boss_unlocked"])
+		)
+	if reward_mode == ENUMS.RewardMode.ARCANA:
 		return ENCOUNTER_CONTRACTS.room_cleared_outcome(
 			false,
 			ENUMS.RewardMode.ARCANA,

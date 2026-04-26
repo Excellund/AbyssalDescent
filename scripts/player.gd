@@ -5,6 +5,7 @@ const PLAYER_FEEDBACK_SCRIPT := preload("res://scripts/player_feedback.gd")
 const UPGRADE_SYSTEM_SCRIPT := preload("res://scripts/upgrade_system.gd")
 const ENEMY_BASE := preload("res://scripts/enemy_base.gd")
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
+const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 
 signal health_changed(current_health: int, max_health: int)
 signal died
@@ -85,6 +86,12 @@ var phantom_step_ghost_emit_cd: float = 0.0
 var static_wake_trails: Array[Dictionary] = []
 var static_wake_trail_emit_cooldown: float = 0.0
 
+# Objective mutators
+var active_objective_mutators: Array[Dictionary] = []
+var objective_mutator_damage_resist: float = 0.0
+var objective_mutator_damage_mult: float = 0.0
+var objective_mutator_aura_phase: float = 0.0
+
 func _ready() -> void:
 	died.connect(_restart_current_scene)
 	body_radius_cache = _get_body_radius_for(self, 14.0)
@@ -99,6 +106,7 @@ func _ready() -> void:
 	queue_redraw()
 
 func _physics_process(delta: float) -> void:
+	objective_mutator_aura_phase += delta
 	var direction := _read_movement_direction()
 	_update_last_move_direction(direction)
 	_update_dash_cooldown(delta)
@@ -127,6 +135,8 @@ func _physics_process(delta: float) -> void:
 
 	_update_ground_movement(direction, delta)
 	move_and_slide()
+	if not active_objective_mutators.is_empty():
+		queue_redraw()
 
 func _read_movement_direction() -> Vector2:
 	return Input.get_vector("move_left", "move_right", "move_up", "move_down")
@@ -382,6 +392,7 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 	if dash_phasing_active and String(damage_context.get("source", "")) == "enemy_contact":
 		return
 	var reduced := maxi(1, amount - iron_skin_armor)
+	reduced = int(ceil(float(reduced) * (1.0 - objective_mutator_damage_resist)))
 	var health_before := _get_current_health()
 	health_state.take_damage(reduced)
 	if _get_current_health() < health_before:
@@ -406,6 +417,65 @@ func apply_upgrade(boon_id: String) -> void:
 
 func apply_trial_power(reward_id: String) -> void:
 	upgrade_system.apply_trial_power(reward_id)
+
+func apply_objective_mutator(mutator_data: Dictionary) -> void:
+	if mutator_data.is_empty():
+		return
+	var applied_mutator := mutator_data.duplicate(true)
+	var default_duration := int(applied_mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_DURATION_ENCOUNTERS, 3))
+	var duration := maxi(1, default_duration)
+	applied_mutator[ENCOUNTER_CONTRACTS.MUTATOR_KEY_DURATION_ENCOUNTERS] = duration
+	applied_mutator[ENCOUNTER_CONTRACTS.MUTATOR_KEY_REMAINING_ENCOUNTERS] = duration
+	var icon_shape := String(applied_mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID, ""))
+	var mutator_name := String(applied_mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME, ""))
+	var replaced := false
+	for i in range(active_objective_mutators.size()):
+		var existing := active_objective_mutators[i] as Dictionary
+		var existing_icon := String(existing.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID, ""))
+		var existing_name := String(existing.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME, ""))
+		if (not icon_shape.is_empty() and existing_icon == icon_shape) or (not mutator_name.is_empty() and existing_name == mutator_name):
+			active_objective_mutators[i] = applied_mutator
+			replaced = true
+			break
+	if not replaced:
+		active_objective_mutators.append(applied_mutator)
+	_recalculate_objective_mutator_totals()
+	queue_redraw()
+
+func tick_objective_mutators_for_encounter() -> void:
+	if active_objective_mutators.is_empty():
+		return
+	for i in range(active_objective_mutators.size() - 1, -1, -1):
+		var mutator := active_objective_mutators[i]
+		var remaining := int(mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_REMAINING_ENCOUNTERS, 0))
+		remaining -= 1
+		if remaining <= 0:
+			active_objective_mutators.remove_at(i)
+			continue
+		mutator[ENCOUNTER_CONTRACTS.MUTATOR_KEY_REMAINING_ENCOUNTERS] = remaining
+		active_objective_mutators[i] = mutator
+	_recalculate_objective_mutator_totals()
+	queue_redraw()
+
+func get_active_objective_mutators() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for mutator in active_objective_mutators:
+		result.append((mutator as Dictionary).duplicate(true))
+	return result
+
+func _recalculate_objective_mutator_totals() -> void:
+	objective_mutator_damage_resist = 0.0
+	objective_mutator_damage_mult = 0.0
+	for entry in active_objective_mutators:
+		var mutator := entry as Dictionary
+		objective_mutator_damage_resist += float(mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_PLAYER_DAMAGE_RESIST, 0.0))
+		objective_mutator_damage_mult += float(mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_PLAYER_DAMAGE_MULT, 0.0))
+	objective_mutator_damage_resist = clampf(objective_mutator_damage_resist, 0.0, 0.85)
+
+func _apply_objective_mutator_damage_mult(base_damage: int) -> int:
+	if objective_mutator_damage_mult <= 0.0:
+		return base_damage
+	return maxi(1, int(ceil(float(base_damage) * (1.0 + objective_mutator_damage_mult))))
 
 func apply_power_for_test(power_id: String) -> bool:
 	var id := power_id.strip_edges().to_lower()
@@ -451,6 +521,7 @@ func get_trial_power_stack_count(reward_id: String) -> int:
 func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary) -> bool:
 	var did_hit := false
 	var strike_damage := int(melee_context.get("damage", attack_damage))
+	strike_damage = _apply_objective_mutator_damage_mult(strike_damage)
 	var strike_range := float(melee_context.get("range", attack_range))
 	var strike_arc_degrees := float(melee_context.get("arc_degrees", attack_arc_degrees))
 	var max_angle_radians := deg_to_rad(strike_arc_degrees * 0.5)
@@ -484,6 +555,9 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 
 	if reward_razor_wind:
 		var wind_context: Dictionary = upgrade_system.build_razor_wind_attack_context(melee_context, razor_wind_damage_ratio, razor_wind_range_scale, razor_wind_arc_degrees, attack_damage, attack_range)
+		var wind_damage := int(wind_context.get("damage", maxi(1, int(round(float(attack_damage) * razor_wind_damage_ratio)))))
+		wind_damage = _apply_objective_mutator_damage_mult(wind_damage)
+		wind_context["damage"] = wind_damage
 		did_hit = _apply_razor_wind(attack_direction, wind_context, rupture_triggered_enemy_ids) or did_hit
 
 	return did_hit
@@ -519,6 +593,7 @@ func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupt
 
 func _apply_rupture_wave(epicenter: Vector2, source_damage: int) -> void:
 	var wave_damage := maxi(1, int(round(float(source_damage) * rupture_wave_damage_ratio)))
+	wave_damage = _apply_objective_mutator_damage_mult(wave_damage)
 	if player_feedback != null:
 		player_feedback.play_world_ring(epicenter, rupture_wave_radius * 0.85, ENEMY_BASE.COLOR_RUPTURE_WAVE_RING, 0.2)
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
@@ -534,6 +609,7 @@ func _apply_rupture_wave(epicenter: Vector2, source_damage: int) -> void:
 
 func _apply_phantom_step_during_dash() -> void:
 	var hit_radius := 38.0 + float(phantom_step_stacks) * 5.0
+	var phantom_damage := _apply_objective_mutator_damage_mult(phantom_step_damage)
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		if not (enemy_node is Node2D):
 			continue
@@ -545,7 +621,7 @@ func _apply_phantom_step_during_dash() -> void:
 			continue
 		if global_position.distance_to(enemy_body.global_position) > hit_radius:
 			continue
-		DAMAGEABLE.apply_damage(enemy_node, phantom_step_damage)
+		DAMAGEABLE.apply_damage(enemy_node, phantom_damage)
 		if enemy_node.has_method("apply_slow"):
 			enemy_node.call("apply_slow", phantom_step_slow_duration, 0.36)
 		phantom_step_hit_ids[eid] = true
@@ -577,6 +653,7 @@ func _update_static_wake_trails(delta: float) -> void:
 			var enemy_body := enemy_node as Node2D
 			if enemy_body.global_position.distance_to(trail_pos) <= 18.0:
 				var wake_tick_damage := maxi(1, int(round(float(static_wake_damage) * delta * 6.0)))
+				wake_tick_damage = _apply_objective_mutator_damage_mult(wake_tick_damage)
 				DAMAGEABLE.apply_damage(enemy_node, wake_tick_damage)
 
 	queue_redraw()
@@ -639,6 +716,8 @@ func _draw() -> void:
 			streak_color.a = clampf(alpha, 0.04, 0.36)
 			draw_circle(offset, body_radius * (1.0 - float(i) * 0.08), streak_color)
 
+	_draw_objective_mutator_aura(body_radius)
+
 	draw_circle(Vector2.ZERO, body_radius + 8.0 + speed_t * 2.0, Color(ENEMY_BASE.COLOR_PLAYER_GLOW.r, ENEMY_BASE.COLOR_PLAYER_GLOW.g, ENEMY_BASE.COLOR_PLAYER_GLOW.b, 0.16 + aura * 0.18))
 	draw_circle(Vector2.ZERO, body_radius + 3.4, ENEMY_BASE.COLOR_PLAYER_OUTER)
 	draw_circle(Vector2.ZERO, body_radius, ENEMY_BASE.COLOR_PLAYER_BODY)
@@ -669,6 +748,25 @@ func _draw() -> void:
 	draw_line(wing_l, wing_l - facing * 6.0, ENEMY_BASE.COLOR_PLAYER_WING, 2.0)
 	draw_line(wing_r, wing_r - facing * 6.0, ENEMY_BASE.COLOR_PLAYER_WING, 2.0)
 	_draw_trial_reward_state()
+
+func _draw_objective_mutator_aura(body_radius: float) -> void:
+	if active_objective_mutators.is_empty():
+		return
+	var aura_base := body_radius + 11.0
+	for i in range(active_objective_mutators.size()):
+		var mutator := active_objective_mutators[i]
+		var color := mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_THEME_COLOR, Color(0.84, 0.88, 1.0, 1.0)) as Color
+		var remaining := int(mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_REMAINING_ENCOUNTERS, 0))
+		var pulse := 0.5 + 0.5 * sin(objective_mutator_aura_phase * (3.2 + float(i) * 0.45) + float(i) * 0.8)
+		var ring_alpha := clampf(0.14 + pulse * 0.14, 0.08, 0.3)
+		var ring_radius := aura_base + float(i) * 4.8 + pulse * 1.2
+		var ring_color := Color(color.r, color.g, color.b, ring_alpha)
+		draw_arc(Vector2.ZERO, ring_radius, 0.0, TAU, 52, ring_color, 1.8)
+		var pip_count := mini(remaining, 6)
+		for pip in range(pip_count):
+			var angle := -PI * 0.5 + TAU * (float(pip) / float(maxi(1, pip_count))) + objective_mutator_aura_phase * 0.4
+			var pip_pos := Vector2(cos(angle), sin(angle)) * (ring_radius + 2.1)
+			draw_circle(pip_pos, 1.25, Color(color.r, color.g, color.b, 0.55))
 
 func _draw_trial_reward_state() -> void:
 	var t := float(Time.get_ticks_msec()) * 0.001

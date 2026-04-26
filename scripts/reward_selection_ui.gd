@@ -1,6 +1,14 @@
 extends Node
 
 const ENUMS := preload("res://scripts/shared/enums.gd")
+const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
+const MUTATOR_ICON_BLOOD_RUSH: Texture2D = preload("res://assets/ui/mutators/blood_rush.svg")
+const MUTATOR_ICON_FLASHPOINT: Texture2D = preload("res://assets/ui/mutators/flashpoint.svg")
+const MUTATOR_ICON_SIEGEBREAK: Texture2D = preload("res://assets/ui/mutators/siegebreak.svg")
+const MUTATOR_ICON_IRON_VOLLEY: Texture2D = preload("res://assets/ui/mutators/iron_volley.svg")
+const MUTATOR_ICON_FORTIFIED_PATH := "res://assets/ui/mutators/fortified.svg"
+const MUTATOR_ICON_HUNTERS_FOCUS_PATH := "res://assets/ui/mutators/hunters_focus.svg"
+const MUTATOR_ICON_KILLBOX_PATH := "res://assets/ui/mutators/killbox.svg"
 
 signal reward_selected(choice: Dictionary, mode: int, is_initial: bool)
 
@@ -22,8 +30,13 @@ var boon_subtitle_label: Label
 var boon_card_panels: Array[Panel] = []
 var boon_card_labels: Array[RichTextLabel] = []
 var boon_card_stack_labels: Array[Label] = []
+var boon_card_icon_nodes: Array[TextureRect] = []
 var boon_card_rects: Array[Rect2] = []
 var boon_backdrop: ColorRect
+var current_player_mutator: Dictionary = {}
+var _mutator_icon_killbox: Texture2D
+var _mutator_icon_fortified: Texture2D
+var _mutator_icon_hunters_focus: Texture2D
 
 func initialize(choice_count: int, reveal_duration: float) -> void:
 	boon_choice_count = choice_count
@@ -47,14 +60,17 @@ func close_selection() -> void:
 	if boon_layer != null:
 		boon_layer.visible = false
 
-func open_selection(title: String, is_initial: bool, mode: int, power_registry: Node, player: Node2D, rng: RandomNumberGenerator) -> void:
+func open_selection(title: String, is_initial: bool, mode: int, power_registry: Node, player: Node2D, rng: RandomNumberGenerator, player_mutator: Dictionary = {}) -> void:
 	boon_selection_active = true
 	pending_initial_boon = is_initial
 	boon_title_text = title
 	reward_selection_mode = mode
+	current_player_mutator = player_mutator
 	_apply_mode_theme()
 	if reward_selection_mode == ENUMS.RewardMode.ARCANA:
 		boon_choices = _roll_arcana_choices(boon_choice_count, power_registry, player, rng)
+	elif reward_selection_mode == ENUMS.RewardMode.HARD:
+		boon_choices = _roll_objective_mutator_choice(player_mutator)
 	else:
 		boon_choices = _roll_boon_choices(boon_choice_count, power_registry, player, rng)
 	boon_confirm_lock_time = boon_reveal_duration + 0.08
@@ -134,6 +150,7 @@ func _create_ui() -> void:
 	boon_card_panels.clear()
 	boon_card_labels.clear()
 	boon_card_stack_labels.clear()
+	boon_card_icon_nodes.clear()
 	boon_card_rects.clear()
 	for i in range(boon_choice_count):
 		var panel := Panel.new()
@@ -141,9 +158,16 @@ func _create_ui() -> void:
 		panel.custom_minimum_size = Vector2(1460.0, 118.0)
 		boon_layer.add_child(panel)
 
+		var icon_node := TextureRect.new()
+		icon_node.position = Vector2(16.0, 14.0)
+		icon_node.custom_minimum_size = Vector2(30.0, 30.0)
+		icon_node.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon_node.visible = false
+		panel.add_child(icon_node)
+
 		var option_label := RichTextLabel.new()
-		option_label.position = Vector2(14.0, 6.0)
-		option_label.custom_minimum_size = Vector2(1200.0, 106.0)
+		option_label.position = Vector2(56.0, 6.0)
+		option_label.custom_minimum_size = Vector2(1158.0, 106.0)
 		option_label.bbcode_enabled = true
 		option_label.scroll_active = false
 		option_label.fit_content = false
@@ -168,6 +192,7 @@ func _create_ui() -> void:
 		boon_card_panels.append(panel)
 		boon_card_labels.append(option_label)
 		boon_card_stack_labels.append(stack_label)
+		boon_card_icon_nodes.append(icon_node)
 		boon_card_rects.append(Rect2(panel.position, panel.custom_minimum_size))
 
 	boon_layer.visible = false
@@ -181,6 +206,12 @@ func _apply_mode_theme() -> void:
 		boon_title_label.add_theme_color_override("font_shadow_color", Color(0.08, 0.03, 0.01, 0.96))
 		if boon_subtitle_label != null:
 			boon_subtitle_label.add_theme_color_override("font_color", Color(0.95, 0.78, 0.55, 0.65))
+	elif reward_selection_mode == ENUMS.RewardMode.HARD:
+		boon_backdrop.color = Color(0.035, 0.03, 0.015, 0.7)
+		boon_title_label.add_theme_color_override("font_color", Color(1.0, 0.93, 0.76, 1.0))
+		boon_title_label.add_theme_color_override("font_shadow_color", Color(0.09, 0.06, 0.02, 0.95))
+		if boon_subtitle_label != null:
+			boon_subtitle_label.add_theme_color_override("font_color", Color(0.94, 0.82, 0.6, 0.7))
 	else:
 		boon_backdrop.color = Color(0.01, 0.02, 0.05, 0.7)
 		boon_title_label.add_theme_color_override("font_color", Color(0.93, 0.97, 1.0, 1.0))
@@ -197,6 +228,8 @@ func _refresh_boon_ui(player: Node2D) -> void:
 		var is_arcana := reward_selection_mode == ENUMS.RewardMode.ARCANA
 		if is_arcana and pending_initial_boon:
 			boon_subtitle_label.text = "Arcana are rare powers that permanently shape your run"
+		elif reward_selection_mode == ENUMS.RewardMode.HARD:
+			boon_subtitle_label.text = "Claim this objective mutator to empower your run"
 		else:
 			boon_subtitle_label.text = "Revealing your options\u2026"
 
@@ -204,24 +237,40 @@ func _refresh_boon_ui(player: Node2D) -> void:
 		var panel := boon_card_panels[i]
 		var label := boon_card_labels[i]
 		var stack_label := boon_card_stack_labels[i]
+		var icon_node := boon_card_icon_nodes[i]
 		if i >= boon_choices.size():
 			label.text = ""
 			stack_label.text = ""
 			stack_label.visible = false
+			icon_node.texture = null
+			icon_node.visible = false
 			panel.visible = false
 			continue
 		panel.visible = true
 		var boon := boon_choices[i]
+		var is_mutator_choice := bool(boon.get("is_mutator", false))
 		var stack_limit := int(boon.get("stack_limit", 0))
 		var stack_count := _get_stack_count_for_choice(boon, player)
 		var icon_line := _format_stack_progress_icons(stack_count, stack_limit)
-		if icon_line.is_empty():
+		if is_mutator_choice or icon_line.is_empty():
 			stack_label.text = ""
 			stack_label.visible = false
 		else:
 			stack_label.text = icon_line
 			stack_label.visible = true
-		label.text = "[b][color=#ddeeff]%d. %s[/color][/b]\n%s" % [i + 1, boon["name"], boon["desc"]]
+		if is_mutator_choice:
+			var mutator_data := boon.get("full_data", {}) as Dictionary
+			var icon_shape := String(mutator_data.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID, ""))
+			var icon_texture := _get_mutator_icon_texture(icon_shape)
+			var icon_color: Color = mutator_data.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_THEME_COLOR, Color(0.95, 0.95, 0.95, 1.0)) as Color
+			icon_node.texture = icon_texture
+			icon_node.modulate = Color(icon_color.r, icon_color.g, icon_color.b, 1.0)
+			icon_node.visible = icon_texture != null
+		else:
+			icon_node.texture = null
+			icon_node.visible = false
+		var boon_desc := String(boon.get("desc", boon.get("description", "")))
+		label.text = "[b][color=#ddeeff]%d. %s[/color][/b]\n%s" % [i + 1, String(boon.get("name", "Unknown")), boon_desc]
 		label.modulate = Color(1.0, 1.0, 1.0, 0.95)
 
 	_update_boon_reveal_visuals()
@@ -258,6 +307,61 @@ func _roll_arcana_choices(choice_count: int, power_registry: Node, player: Node2
 		var index := rng.randi_range(0, available.size() - 1)
 		picks.append(available[index])
 		available.remove_at(index)
+	return picks
+
+func _roll_objective_mutator_choice(player_mutator: Dictionary) -> Array[Dictionary]:
+	if player_mutator.is_empty():
+		return []
+	var mutator_name := String(player_mutator.get("name", "Unknown Mutator"))
+	var mutator_color: Color = player_mutator.get("theme_color", Color(0.76, 0.76, 0.76, 1.0)) as Color
+	var mutator_desc := _build_objective_mutator_desc(player_mutator)
+	var mutator_choice: Dictionary = {
+		"id": mutator_name.to_lower().replace(" ", "_"),
+		"name": mutator_name,
+		"desc": mutator_desc,
+		"is_mutator": true,
+		"color": mutator_color,
+		"full_data": player_mutator
+	}
+	return [mutator_choice]
+
+func _build_objective_mutator_desc(mutator_data: Dictionary) -> String:
+	var flavor := String(mutator_data.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX, ""))
+	if not flavor.is_empty():
+		return "[color=#F7E7B4]%s[/color]" % flavor
+	return ""
+
+func _roll_objective_choices(choice_count: int, power_registry: Node, player: Node2D, rng: RandomNumberGenerator) -> Array[Dictionary]:
+	var prioritized_pool: Array[Dictionary] = power_registry.call("get_objective_upgrade_pool", player)
+	var regular_pool: Array[Dictionary] = power_registry.call("get_upgrade_pool", player)
+	var available_priority: Array[Dictionary] = []
+	var available_regular: Array[Dictionary] = []
+	for entry in prioritized_pool:
+		var limit := int(entry.get("stack_limit", 0))
+		if limit > 0 and is_instance_valid(player) and player.has_method("get_upgrade_stack_count"):
+			var current := int(player.call("get_upgrade_stack_count", String(entry["id"])))
+			if current >= limit:
+				continue
+		available_priority.append(entry)
+	for entry in regular_pool:
+		var limit := int(entry.get("stack_limit", 0))
+		if limit > 0 and is_instance_valid(player) and player.has_method("get_upgrade_stack_count"):
+			var current := int(player.call("get_upgrade_stack_count", String(entry["id"])))
+			if current >= limit:
+				continue
+		available_regular.append(entry)
+	var picks: Array[Dictionary] = []
+	if not available_priority.is_empty():
+		var featured_index := rng.randi_range(0, available_priority.size() - 1)
+		var featured := available_priority[featured_index]
+		picks.append(featured)
+		for i in range(available_regular.size() - 1, -1, -1):
+			if String(available_regular[i].get("id", "")) == String(featured.get("id", "")):
+				available_regular.remove_at(i)
+	for _i in range(mini(choice_count - picks.size(), available_regular.size())):
+		var index := rng.randi_range(0, available_regular.size() - 1)
+		picks.append(available_regular[index])
+		available_regular.remove_at(index)
 	return picks
 
 func _get_stack_count_for_choice(choice: Dictionary, player: Node2D) -> int:
@@ -310,10 +414,22 @@ func _apply_boon_card_styles(hovered_index: int) -> void:
 		if reward_selection_mode == ENUMS.RewardMode.ARCANA:
 			base_color = Color(0.16, 0.11, 0.08, 0.96).lerp(Color(0.22, 0.14, 0.09, 0.96), t)
 			border_color = Color(1.0, 0.72, 0.4, 0.84)
+		elif reward_selection_mode == ENUMS.RewardMode.HARD:
+			var mission_tint := Color(0.98, 0.78, 0.34, 1.0)
+			if i < boon_choices.size():
+				mission_tint = boon_choices[i].get("color", mission_tint) as Color
+			base_color = Color(0.12, 0.09, 0.06, 0.96).lerp(Color(mission_tint.r * 0.26, mission_tint.g * 0.24, mission_tint.b * 0.2, 0.97), 0.5 + t * 0.2)
+			border_color = Color(mission_tint.r, mission_tint.g, mission_tint.b, 0.9)
 		if i == hovered_index and boon_confirm_lock_time <= 0.0:
 			if reward_selection_mode == ENUMS.RewardMode.ARCANA:
 				style.bg_color = Color(0.33, 0.2, 0.12, 0.97)
 				style.border_color = Color(1.0, 0.9, 0.72, 1.0)
+			elif reward_selection_mode == ENUMS.RewardMode.HARD:
+				var hover_tint := Color(1.0, 0.9, 0.72, 1.0)
+				if i < boon_choices.size():
+					hover_tint = boon_choices[i].get("color", hover_tint) as Color
+				style.bg_color = Color(hover_tint.r * 0.42, hover_tint.g * 0.34, hover_tint.b * 0.22, 0.98)
+				style.border_color = Color(hover_tint.r, hover_tint.g, hover_tint.b, 1.0)
 			else:
 				style.bg_color = Color(0.22, 0.32, 0.46, 0.96)
 				style.border_color = Color(0.98, 0.99, 1.0, 1.0)
@@ -362,10 +478,60 @@ func _update_boon_reveal_visuals() -> void:
 				boon_subtitle_label.text = "Choose one — it will grow stronger every time you claim it"
 			elif is_arcana:
 				boon_subtitle_label.text = "Add another stack and push your stats further"
+			elif reward_selection_mode == ENUMS.RewardMode.HARD:
+				boon_subtitle_label.text = "Objective mutators stack and refresh when repeated"
 			else:
 				boon_subtitle_label.text = "Select a card to claim your reward"
 		else:
 			if is_arcana and pending_initial_boon:
 				boon_subtitle_label.text = "Arcana are rare powers that permanently shape your run"
+			elif reward_selection_mode == ENUMS.RewardMode.HARD:
+				boon_subtitle_label.text = "Mission rewards now grant objective mutators"
 			else:
 				boon_subtitle_label.text = "Preparing your choices\u2026"
+
+func _get_mutator_icon_texture(icon_shape_id: String) -> Texture2D:
+	match icon_shape_id:
+		"blood_rush":
+			return MUTATOR_ICON_BLOOD_RUSH
+		"flashpoint":
+			return MUTATOR_ICON_FLASHPOINT
+		"siegebreak":
+			return MUTATOR_ICON_SIEGEBREAK
+		"iron_volley":
+			return MUTATOR_ICON_IRON_VOLLEY
+		"killbox":
+			return _get_killbox_icon_texture()
+		"fortified":
+			return _get_fortified_icon_texture()
+		"hunters_focus":
+			return _get_hunters_focus_icon_texture()
+		_:
+			return null
+
+func _get_killbox_icon_texture() -> Texture2D:
+	if _mutator_icon_killbox != null:
+		return _mutator_icon_killbox
+	var icon_resource := load(MUTATOR_ICON_KILLBOX_PATH)
+	if icon_resource is Texture2D:
+		_mutator_icon_killbox = icon_resource as Texture2D
+		return _mutator_icon_killbox
+	return MUTATOR_ICON_SIEGEBREAK
+
+func _get_fortified_icon_texture() -> Texture2D:
+	if _mutator_icon_fortified != null:
+		return _mutator_icon_fortified
+	var icon_resource := load(MUTATOR_ICON_FORTIFIED_PATH)
+	if icon_resource is Texture2D:
+		_mutator_icon_fortified = icon_resource as Texture2D
+		return _mutator_icon_fortified
+	return MUTATOR_ICON_SIEGEBREAK
+
+func _get_hunters_focus_icon_texture() -> Texture2D:
+	if _mutator_icon_hunters_focus != null:
+		return _mutator_icon_hunters_focus
+	var icon_resource := load(MUTATOR_ICON_HUNTERS_FOCUS_PATH)
+	if icon_resource is Texture2D:
+		_mutator_icon_hunters_focus = icon_resource as Texture2D
+		return _mutator_icon_hunters_focus
+	return MUTATOR_ICON_IRON_VOLLEY

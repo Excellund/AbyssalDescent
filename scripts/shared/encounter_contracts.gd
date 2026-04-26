@@ -40,6 +40,7 @@ const PROFILE_KEY_CHARGER_COUNT := "charger_count"
 const PROFILE_KEY_ARCHER_COUNT := "archer_count"
 const PROFILE_KEY_SHIELDER_COUNT := "shielder_count"
 const PROFILE_KEY_ENEMY_MUTATOR := "enemy_mutator"
+const PROFILE_KEY_PLAYER_MUTATOR := "player_mutator"
 const PROFILE_KEY_OBJECTIVE_KIND := "objective_kind"
 const PROFILE_KEY_OBJECTIVE_DURATION := "objective_duration"
 const PROFILE_KEY_OBJECTIVE_SPAWN_INTERVAL := "objective_spawn_interval"
@@ -51,6 +52,10 @@ const MUTATOR_KEY_THEME_COLOR := "theme_color"
 const MUTATOR_KEY_ICON_SHAPE_ID := "icon_shape_id"
 const MUTATOR_KEY_BANNER_SUFFIX := "banner_suffix"
 const MUTATOR_KEY_ENEMY_TINT := "enemy_tint"
+const MUTATOR_KEY_PLAYER_DAMAGE_MULT := "player_damage_mult"
+const MUTATOR_KEY_PLAYER_DAMAGE_RESIST := "player_damage_resist"
+const MUTATOR_KEY_DURATION_ENCOUNTERS := "duration_encounters"
+const MUTATOR_KEY_REMAINING_ENCOUNTERS := "remaining_encounters"
 const MUTATOR_STAT_ENEMY_HEALTH_MULT := "enemy_health_mult"
 const MUTATOR_STAT_CHASER_DAMAGE_MULT := "chaser_damage_mult"
 const MUTATOR_STAT_CHASER_ATTACK_INTERVAL_MULT := "chaser_attack_interval_mult"
@@ -203,6 +208,9 @@ static func profile_shielder_count(profile_value: Dictionary) -> int:
 static func profile_enemy_mutator(profile_value: Dictionary) -> Dictionary:
 	return profile_value.get(PROFILE_KEY_ENEMY_MUTATOR, {}) as Dictionary
 
+static func profile_player_mutator(profile_value: Dictionary) -> Dictionary:
+	return profile_value.get(PROFILE_KEY_PLAYER_MUTATOR, {}) as Dictionary
+
 static func profile_set_room_size(profile_value: Dictionary, room_size: Vector2) -> void:
 	profile_value[PROFILE_KEY_ROOM_SIZE] = room_size
 
@@ -218,8 +226,15 @@ static func profile_set_counts(profile_value: Dictionary, chasers: int, chargers
 static func profile_set_enemy_mutator(profile_value: Dictionary, enemy_mutator: Dictionary) -> void:
 	if enemy_mutator.is_empty():
 		profile_value.erase(PROFILE_KEY_ENEMY_MUTATOR)
-		return
-	profile_value[PROFILE_KEY_ENEMY_MUTATOR] = enemy_mutator
+
+	else:
+		profile_value[PROFILE_KEY_ENEMY_MUTATOR] = enemy_mutator
+
+static func profile_set_player_mutator(profile_value: Dictionary, player_mutator: Dictionary) -> void:
+	if player_mutator.is_empty():
+		profile_value.erase(PROFILE_KEY_PLAYER_MUTATOR)
+	else:
+		profile_value[PROFILE_KEY_PLAYER_MUTATOR] = player_mutator
 
 static func profile_objective_kind(profile_value: Dictionary) -> String:
 	return String(profile_value.get(PROFILE_KEY_OBJECTIVE_KIND, ""))
