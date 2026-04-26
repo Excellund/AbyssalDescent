@@ -22,7 +22,7 @@ const ATTACK_POLAR_SHIFT := 4
 
 @export var prism_windup: float = 0.95
 @export var prism_radius: float = 300.0
-@export var prism_inner_radius: float = 92.0
+@export var prism_inner_radius: float = 120.0
 @export var prism_spoke_count: int = 5
 @export var prism_spoke_half_angle_degrees: float = 13.0
 @export var prism_damage: int = 46
@@ -48,7 +48,7 @@ const ATTACK_POLAR_SHIFT := 4
 @export var orb_rotation_speed: float = 1.1
 @export var orbital_lance_windup: float = 0.88
 @export var orbital_lance_length: float = 320.0
-@export var orbital_lance_width: float = 24.0
+@export var orbital_lance_width: float = 36.0
 @export var orbital_lance_damage: int = 44
 
 @export var polar_shift_windup: float = 0.92
@@ -591,6 +591,8 @@ func _apply_polar_shift() -> void:
 	var to_target := target.global_position - global_position
 	if to_target.length() > polar_shift_radius:
 		return
+	if not _polar_shift_is_pull and not _is_polar_shift_in_safe_lane(to_target.angle()):
+		DAMAGEABLE.apply_damage(target, 30)
 	if target is CharacterBody2D:
 		var target_body := target as CharacterBody2D
 		var dir := (global_position - target_body.global_position)
@@ -686,7 +688,7 @@ func _capture_orbital_lance_pattern() -> void:
 	if positions.is_empty():
 		return
 	var start_index := randi() % 2
-	for step in range(3):
+	for step in range(4):
 		var orb_index := (start_index + step * 2) % positions.size()
 		_orbital_lance_indices.append(orb_index)
 		_orbital_lance_positions.append(positions[orb_index])
