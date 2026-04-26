@@ -844,11 +844,16 @@ func _on_priority_target_died() -> void:
 	_complete_current_objective("Target Eliminated", "%s down" % objective_target_name)
 
 func _get_hud_state() -> Dictionary:
+	var display_room_depth := room_depth
+	var between_rooms := choosing_next_room or _is_reward_selection_active()
+	# Keep the visible depth anchored to the cleared room until the next room is entered.
+	if between_rooms and not run_cleared and current_room_label != "Rest Site":
+		display_room_depth = maxi(0, room_depth - 1)
 	return {
 		"room_size": current_room_size,
 		"current_room_label": current_room_label,
 		"rooms_cleared": rooms_cleared,
-		"room_depth": room_depth,
+		"room_depth": display_room_depth,
 		"run_cleared": run_cleared,
 		"current_room_enemy_mutator": current_room_enemy_mutator,
 		"in_boss_room": in_boss_room,
@@ -963,8 +968,7 @@ func _on_room_cleared() -> void:
 		_open_boon_selection("Choose Boon Reward", false, ENUMS.RewardMode.BOON)
 		return
 	if reward_mode == ENUMS.RewardMode.ARCANA:
-		var is_first_arcana := arcana_rewards_taken.is_empty()
-		_open_boon_selection("Choose Arcana", is_first_arcana, ENUMS.RewardMode.ARCANA)
+		_open_boon_selection("Choose Arcana", false, ENUMS.RewardMode.ARCANA)
 		return
 	if ENCOUNTER_CONTRACTS.outcome_spawn_doors(outcome):
 		_spawn_door_options()

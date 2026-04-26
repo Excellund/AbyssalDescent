@@ -17,7 +17,7 @@ var menu_music_player: AudioStreamPlayer
 
 func _ready() -> void:
 	if _should_autostart_debug_encounter():
-		get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)
+		call_deferred("_change_to_gameplay_scene")
 		return
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -25,6 +25,10 @@ func _ready() -> void:
 	_build_ui()
 	_sync_options_from_context()
 	_start_menu_music()
+
+func _change_to_gameplay_scene() -> void:
+	if get_tree() != null:
+		get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)
 
 func _should_autostart_debug_encounter() -> bool:
 	var packed := load(GAMEPLAY_SCENE_PATH) as PackedScene
