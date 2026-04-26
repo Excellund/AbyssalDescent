@@ -22,6 +22,7 @@ const ATTACK_POLAR_SHIFT := 4
 
 @export var prism_windup: float = 0.95
 @export var prism_radius: float = 300.0
+@export var prism_inner_radius: float = 92.0
 @export var prism_spoke_count: int = 5
 @export var prism_spoke_half_angle_degrees: float = 13.0
 @export var prism_damage: int = 40
@@ -527,7 +528,11 @@ func _apply_prism_burst() -> void:
 	if not DAMAGEABLE.can_take_damage(target):
 		return
 	var to_target := target.global_position - global_position
-	if to_target.length() > prism_radius:
+	var target_distance := to_target.length()
+	if target_distance <= prism_inner_radius:
+		DAMAGEABLE.apply_damage(target, prism_damage)
+		return
+	if target_distance > prism_radius:
 		return
 	var target_angle := to_target.angle()
 	var half_arc := deg_to_rad(prism_spoke_half_angle_degrees)
@@ -896,19 +901,33 @@ func _draw_attack_telegraph() -> void:
 	match active_attack:
 		ATTACK_PRISM:
 			var half_arc := deg_to_rad(prism_spoke_half_angle_degrees)
+			var inner_ring_radius := prism_inner_radius
+			var sweep_t := float(Time.get_ticks_msec()) * 0.001
+			var shimmer := 0.84 + 0.16 * sin(sweep_t * 5.0)
+			var prism_fill_color := Color(1.0, 0.42, 0.2, alpha * 0.26 * shimmer)
+			var prism_edge_color := Color(1.0, 0.9, 0.6, alpha * 0.92)
+			draw_circle(Vector2.ZERO, inner_ring_radius, prism_fill_color)
+			draw_arc(Vector2.ZERO, inner_ring_radius, 0.0, TAU, 56, prism_edge_color, 3.0)
+			draw_arc(Vector2.ZERO, inner_ring_radius + 8.0, 0.0, TAU, 56, Color(prism_edge_color.r, prism_edge_color.g, prism_edge_color.b, prism_edge_color.a * 0.42), 1.8)
 			for i in range(prism_spoke_count):
 				var spoke_angle := _prism_base_angle + TAU * float(i) / float(prism_spoke_count)
-				# Draw exact damaging lane as a sector wedge so visual and hitbox align.
-				var sector_points := PackedVector2Array([Vector2.ZERO])
+				# Draw each prism lane as an annular wedge connected to the inner core.
+				var lane_fill := prism_fill_color
+				var sector_points := PackedVector2Array()
 				var segments := 16
 				for step in range(segments + 1):
 					var t := float(step) / float(segments)
 					var angle := lerpf(spoke_angle - half_arc, spoke_angle + half_arc, t)
-					sector_points.append(Vector2.RIGHT.rotated(angle) * prism_radius)
-				draw_colored_polygon(sector_points, Color(1.0, 0.42, 0.2, alpha * 0.26))
-				draw_arc(Vector2.ZERO, prism_radius, spoke_angle - half_arc, spoke_angle + half_arc, 16, Color(1.0, 0.9, 0.6, alpha * 0.92), 2.4)
-				draw_line(Vector2.ZERO, Vector2.RIGHT.rotated(spoke_angle - half_arc) * prism_radius, Color(1.0, 0.72, 0.4, alpha * 0.68), 1.8)
-				draw_line(Vector2.ZERO, Vector2.RIGHT.rotated(spoke_angle + half_arc) * prism_radius, Color(1.0, 0.72, 0.4, alpha * 0.68), 1.8)
+					sector_points.append(Vector2.RIGHT.rotated(angle) * inner_ring_radius)
+				for step in range(segments, -1, -1):
+					var t_outer := float(step) / float(segments)
+					var angle_outer := lerpf(spoke_angle - half_arc, spoke_angle + half_arc, t_outer)
+					sector_points.append(Vector2.RIGHT.rotated(angle_outer) * prism_radius)
+				draw_colored_polygon(sector_points, lane_fill)
+				draw_arc(Vector2.ZERO, prism_radius, spoke_angle - half_arc, spoke_angle + half_arc, 16, prism_edge_color, 2.4)
+				draw_arc(Vector2.ZERO, inner_ring_radius, spoke_angle - half_arc, spoke_angle + half_arc, 16, Color(prism_edge_color.r, prism_edge_color.g, prism_edge_color.b, prism_edge_color.a * 0.85), 2.2)
+				draw_line(Vector2.ZERO, Vector2.RIGHT.rotated(spoke_angle - half_arc) * prism_radius, Color(prism_edge_color.r, prism_edge_color.g, prism_edge_color.b, prism_edge_color.a * 0.74), 1.8)
+				draw_line(Vector2.ZERO, Vector2.RIGHT.rotated(spoke_angle + half_arc) * prism_radius, Color(prism_edge_color.r, prism_edge_color.g, prism_edge_color.b, prism_edge_color.a * 0.74), 1.8)
 			draw_arc(Vector2.ZERO, prism_radius, 0.0, TAU, 64, Color(1.0, 0.54, 0.3, alpha * 0.62), 2.0)
 		ATTACK_GRAVITY:
 			var pulse := 0.5 + 0.5 * sin(telegraph_alpha * PI * 2.0)
