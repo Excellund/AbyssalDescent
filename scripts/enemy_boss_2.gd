@@ -1003,24 +1003,70 @@ func _draw_attack_telegraph() -> void:
 				draw_line(base, tip, Color(cc_color.r, cc_color.g, cc_color.b, alpha * 1.0), 2.8)
 				draw_colored_polygon(PackedVector2Array([tip, tip - arrow_dir * 12.0 + side, tip - arrow_dir * 12.0 - side]), Color(cc_color.r, cc_color.g, cc_color.b, alpha * 0.96))
 		ATTACK_ORBITAL_LANCE:
-			for orb_pos in _orbital_lance_positions:
+			var charge_pulse := 0.5 + 0.5 * sin(telegraph_alpha * PI)
+			for orb_index in range(_orbital_lance_positions.size()):
+				var orb_pos: Vector2 = _orbital_lance_positions[orb_index]
 				var outward := orb_pos.normalized()
 				if outward.length_squared() <= 0.000001:
 					continue
-				var beam_end := orb_pos + outward * orbital_lance_length
+				var beam_end: Vector2 = orb_pos + outward * orbital_lance_length
 				var side := Vector2(-outward.y, outward.x)
 				var lane_half := orbital_lance_width
+				
+				# Expanding pulse rings from each charging orb
+				for ring_step in range(3):
+					var ring_delay := float(ring_step) * 0.3
+					var ring_age := telegraph_alpha - ring_delay
+					if ring_age > 0.0 and ring_age < 1.0:
+						var ring_pulse := sin(ring_age * PI)
+						var ring_radius := 16.0 + ring_age * 48.0
+						var ring_alpha_val: float = alpha * 0.6 * (1.0 - ring_age) * ring_pulse
+						draw_arc(orb_pos, ring_radius, 0.0, TAU, 32, Color(1.0, 0.54, 0.24, ring_alpha_val), 2.4)
+				
+				# Directional aiming rays showing beam direction
+				var ray_count := 6
+				for ray_i in range(ray_count):
+					var ray_angle := -PI * 0.15 + PI * 0.3 * float(ray_i) / float(ray_count - 1)
+					var ray_dir := outward.rotated(ray_angle)
+					var ray_start: Vector2 = orb_pos + ray_dir * 12.0
+					var ray_end: Vector2 = orb_pos + ray_dir * (orbital_lance_length + 20.0)
+					var ray_alpha_val: float = alpha * 0.3 * (1.0 - abs(ray_angle) * 0.8) * telegraph_alpha
+					draw_line(ray_start, ray_end, Color(1.0, 0.72, 0.38, ray_alpha_val), 0.8)
+				
+				# Main beam lane with layered effects
 				var lane := PackedVector2Array([
 					orb_pos + side * lane_half,
 					beam_end + side * lane_half,
 					beam_end - side * lane_half,
 					orb_pos - side * lane_half
 				])
-				draw_colored_polygon(lane, Color(1.0, 0.46, 0.22, alpha * 0.22))
-				draw_circle(orb_pos, 8.0 + telegraph_alpha * 4.0, Color(1.0, 0.72, 0.42, alpha * 0.34))
-				draw_line(orb_pos + side * lane_half, beam_end + side * lane_half, Color(1.0, 0.82, 0.52, alpha), 2.2)
-				draw_line(orb_pos - side * lane_half, beam_end - side * lane_half, Color(1.0, 0.82, 0.52, alpha), 2.2)
-				draw_line(orb_pos, beam_end, Color(1.0, 0.96, 0.72, alpha * 0.88), 1.8)
+				
+				# Core beam lane (inner glow)
+				var core_glow_width := lane_half * 0.5
+				var core_lane := PackedVector2Array([
+					orb_pos + side * core_glow_width,
+					beam_end + side * core_glow_width,
+					beam_end - side * core_glow_width,
+					orb_pos - side * core_glow_width
+				])
+				draw_colored_polygon(core_lane, Color(1.0, 0.86, 0.62, alpha * 0.44 * charge_pulse))
+				
+				# Outer lane (main telegraph)
+				draw_colored_polygon(lane, Color(1.0, 0.46, 0.22, alpha * 0.26))
+				
+				# Bright edge highlights
+				draw_line(orb_pos + side * lane_half, beam_end + side * lane_half, Color(1.0, 0.92, 0.62, alpha * 0.84), 2.8)
+				draw_line(orb_pos - side * lane_half, beam_end - side * lane_half, Color(1.0, 0.92, 0.62, alpha * 0.84), 2.8)
+				
+				# Central beam line (bright core)
+				var beam_color := Color(1.0, 1.0, 0.82, alpha * (0.7 + charge_pulse * 0.3))
+				draw_line(orb_pos, beam_end, beam_color, 2.4)
+				
+				# Charging orb with dramatic glow
+				var orb_size := 10.0 + telegraph_alpha * 6.0 + charge_pulse * 2.0
+				draw_circle(orb_pos, orb_size, Color(1.0, 0.82, 0.52, alpha * 0.5 * charge_pulse))
+				draw_circle(orb_pos, orb_size * 0.7, Color(1.0, 0.96, 0.72, alpha * (0.6 + charge_pulse * 0.4)))
+				draw_arc(orb_pos, orb_size + 4.0, 0.0, TAU, 24, Color(1.0, 0.72, 0.42, alpha * 0.88 * charge_pulse), 2.0)
 
 func _draw_attack_afterglow(facing: Vector2) -> void:
 	if attack_afterglow_time_left <= 0.0:
@@ -1049,8 +1095,20 @@ func _draw_attack_afterglow(facing: Vector2) -> void:
 				if outward.length_squared() <= 0.000001:
 					continue
 				var beam_end := orb_pos + outward * orbital_lance_length * (0.84 + (1.0 - t) * 0.2)
-				draw_line(orb_pos, beam_end, Color(1.0, 0.74, 0.34, 0.28 * fade), 7.0)
-				draw_line(orb_pos, beam_end, Color(1.0, 0.94, 0.7, 0.18 * fade), 2.4)
+				
+				# Bright outer beam afterglow (thick, fades quickly)
+				draw_line(orb_pos, beam_end, Color(1.0, 0.62, 0.22, 0.38 * fade), 12.0)
+				
+				# Medium glow layer
+				draw_line(orb_pos, beam_end, Color(1.0, 0.84, 0.44, 0.26 * fade), 8.0)
+				
+				# Bright core beam (persistent)
+				draw_line(orb_pos, beam_end, Color(1.0, 0.96, 0.7, 0.32 * fade), 3.2)
+				
+				# Expanding impact rings from each orb
+				var ring_expand := (1.0 - t) * 48.0
+				draw_arc(orb_pos, 16.0 + ring_expand, 0.0, TAU, 24, Color(1.0, 0.74, 0.34, 0.22 * fade), 2.8)
+				draw_arc(orb_pos, 8.0 + ring_expand * 0.6, 0.0, TAU, 24, Color(1.0, 0.92, 0.62, 0.14 * fade), 1.8)
 		ATTACK_POLAR_SHIFT:
 			var cc_color := Color(0.52, 0.84, 1.0, 0.38 * fade) if _polar_shift_is_pull else Color(1.0, 0.56, 0.34, 0.38 * fade)
 			var ring_r := polar_shift_radius * (0.86 + (1.0 - t) * 0.18)
