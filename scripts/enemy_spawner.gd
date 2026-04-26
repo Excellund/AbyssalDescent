@@ -53,6 +53,16 @@ func clear_all_enemies() -> void:
 		if enemy is Node:
 			(enemy as Node).queue_free()
 
+func spawn_enemy_type(enemy_type: String, count: int = 1) -> int:
+	var enemy_script: Script = scripts.get(enemy_type)
+	if enemy_script == null:
+		return 0
+	var spawned := 0
+	for _i in range(maxi(0, count)):
+		_spawn_enemy_in_current_room(enemy_script)
+		spawned += 1
+	return spawned
+
 func _spawn_enemy_in_current_room(enemy_script: Script) -> void:
 	if enemy_script == null:
 		return

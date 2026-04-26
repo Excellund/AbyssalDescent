@@ -22,7 +22,7 @@ const DEBUG_RUN_NORMAL := 0
 const DEBUG_RUN_FIRST_BOSS := 1
 
 @export var player_path: NodePath = NodePath("Player")
-@export var encounter_count: int = 5
+@export var encounter_count: int = 8
 @export var room_base_size: Vector2 = Vector2(940.0, 700.0)
 @export var room_size_growth: Vector2 = Vector2(80.0, 45.0)
 @export var spawn_padding: float = 90.0
@@ -88,6 +88,14 @@ var current_room_label: String = ""
 var door_options: Array[Dictionary] = []
 var pending_room_reward: int = ENUMS.RewardMode.NONE
 var current_room_enemy_mutator: Dictionary = {}
+var active_objective_kind: String = ""
+var objective_time_left: float = 0.0
+var objective_spawn_interval: float = 0.0
+var objective_spawn_timer: float = 0.0
+var objective_spawn_batch: int = 1
+var objective_kill_target: int = 0
+var objective_kills: int = 0
+var objective_overtime: bool = false
 
 var hud: Node
 var renderer: Node2D
@@ -329,11 +337,60 @@ func _process(delta: float) -> void:
 	_keep_player_inside_current_room()
 	_keep_enemies_inside_current_room()
 	_keep_player_inside_camera_view()
+	_update_objective_state(delta)
 	_try_use_door()
 	_update_encounter_state()
 	_update_camera_mode()
 	hud.refresh(_get_hud_state(), player)
 	_sync_renderer()
+
+func _update_objective_state(delta: float) -> void:
+	if active_objective_kind != "survival":
+		return
+	if choosing_next_room or run_cleared:
+		return
+	if objective_kills >= objective_kill_target and objective_kill_target > 0:
+		active_objective_kind = ""
+		objective_spawn_timer = 0.0
+		objective_time_left = 0.0
+		objective_overtime = false
+		_clear_all_enemies()
+		active_room_enemy_count = 0
+		hud.show_banner("Objective Complete", "Kill quota reached")
+		_on_room_cleared()
+		return
+	var pressure_floor := mini(18, 6 + int(floor(float(room_depth) * 0.6)) + objective_spawn_batch)
+	if active_room_enemy_count < pressure_floor and (objective_time_left > 0.0 or objective_overtime):
+		objective_spawn_timer = minf(objective_spawn_timer, 0.4)
+	if objective_time_left > 0.0:
+		objective_time_left = maxf(0.0, objective_time_left - delta)
+	objective_spawn_timer = maxf(0.0, objective_spawn_timer - delta)
+	if objective_spawn_timer <= 0.0 and (objective_time_left > 0.0 or objective_overtime):
+		objective_spawn_timer = objective_spawn_interval
+		_spawn_survival_wave()
+	if objective_time_left <= 0.0 and not objective_overtime:
+		objective_overtime = true
+		objective_spawn_interval = maxf(0.45, objective_spawn_interval * 0.65)
+		objective_spawn_batch = mini(7, objective_spawn_batch + 1)
+		objective_spawn_timer = 0.1
+		var kills_left := maxi(0, objective_kill_target - objective_kills)
+		hud.show_banner("Overtime", "%d kills remaining" % kills_left)
+
+func _spawn_survival_wave() -> void:
+	if not is_instance_valid(enemy_spawner):
+		return
+	var roster: Array[String] = ["charger", "archer", "chaser", "charger", "shielder", "archer"]
+	if objective_overtime:
+		roster = ["charger", "archer", "charger", "archer", "shielder", "chaser", "charger"]
+	var spawn_count := objective_spawn_batch
+	if active_room_enemy_count <= objective_spawn_batch:
+		spawn_count += 1
+	if objective_overtime:
+		spawn_count += 1
+	spawn_count = mini(8, spawn_count)
+	for _i in range(spawn_count):
+		var enemy_type := roster[rng.randi_range(0, roster.size() - 1)]
+		active_room_enemy_count += int(enemy_spawner.call("spawn_enemy_type", enemy_type, 1))
 
 func _get_hud_state() -> Dictionary:
 	return {
@@ -344,6 +401,11 @@ func _get_hud_state() -> Dictionary:
 		"current_room_enemy_mutator": current_room_enemy_mutator,
 		"in_boss_room": in_boss_room,
 		"active_room_enemy_count": active_room_enemy_count,
+		"active_objective_kind": active_objective_kind,
+		"objective_time_left": objective_time_left,
+		"objective_kills": objective_kills,
+		"objective_kill_target": objective_kill_target,
+		"objective_overtime": objective_overtime,
 	}
 
 func _sync_renderer() -> void:
@@ -392,6 +454,8 @@ func _keep_player_inside_camera_view() -> void:
 
 func _update_encounter_state() -> void:
 	if choosing_next_room or run_cleared:
+		return
+	if active_objective_kind == "survival":
 		return
 	if active_room_enemy_count > 0:
 		return
@@ -589,6 +653,14 @@ func _begin_room(profile: Dictionary) -> void:
 	if profile.is_empty():
 		return
 	in_boss_room = false
+	active_objective_kind = ""
+	objective_time_left = 0.0
+	objective_spawn_interval = 0.0
+	objective_spawn_timer = 0.0
+	objective_spawn_batch = 1
+	objective_kill_target = 0
+	objective_kills = 0
+	objective_overtime = false
 	_play_room_music(false)
 	current_room_size = ENCOUNTER_CONTRACTS.profile_room_size(profile)
 	current_room_static_camera = ENCOUNTER_CONTRACTS.profile_static_camera(profile)
@@ -609,6 +681,16 @@ func _begin_room(profile: Dictionary) -> void:
 		enemy_spawner.call("configure_room", current_room_size, spawn_padding, spawn_safe_radius, current_room_enemy_mutator)
 	_apply_camera_bounds_for_room(current_room_size)
 	active_room_enemy_count = _spawn_profile_enemies(profile)
+	active_objective_kind = ENCOUNTER_CONTRACTS.profile_objective_kind(profile)
+	if active_objective_kind == "survival":
+		objective_time_left = ENCOUNTER_CONTRACTS.profile_objective_duration(profile)
+		objective_spawn_interval = ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
+		objective_spawn_timer = objective_spawn_interval
+		objective_spawn_batch = ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
+		objective_kill_target = maxi(10, int(round(objective_time_left * 0.65)) + 4 + int(floor(float(room_depth) * 0.7)))
+		objective_kills = 0
+		objective_overtime = false
+		hud.show_banner(current_room_label, "Survive %.0fs and kill %d" % [objective_time_left, objective_kill_target], sub_color)
 
 func _enter_rest_site() -> void:
 	in_boss_room = false
@@ -667,6 +749,8 @@ func _play_room_music(is_boss_room: bool, instant: bool = false, fade_duration: 
 
 func _on_room_enemy_died() -> void:
 	active_room_enemy_count = maxi(0, active_room_enemy_count - 1)
+	if active_objective_kind == "survival":
+		objective_kills += 1
 	if is_instance_valid(player) and player.has_method("notify_enemy_killed"):
 		player.call("notify_enemy_killed")
 

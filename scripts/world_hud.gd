@@ -1,4 +1,4 @@
-﻿extends Node
+extends Node
 
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 
@@ -214,6 +214,11 @@ func _update_status_panel_text(state: Dictionary) -> void:
 	var rooms_cleared := int(state.get("rooms_cleared", 0))
 	var room_depth := int(state.get("room_depth", 0))
 	var current_room_enemy_mutator := state.get("current_room_enemy_mutator", {}) as Dictionary
+	var objective_kind := String(state.get("active_objective_kind", ""))
+	var objective_time_left := float(state.get("objective_time_left", 0.0))
+	var objective_kills := int(state.get("objective_kills", 0))
+	var objective_kill_target := int(state.get("objective_kill_target", 0))
+	var objective_overtime := bool(state.get("objective_overtime", false))
 
 	if run_cleared:
 		status_label.text = "[center][b]Depth %d[/b]\n[color=#A8FFB0]Run Clear[/color][/center]" % room_depth
@@ -227,6 +232,12 @@ func _update_status_panel_text(state: Dictionary) -> void:
 		status_label.text = "[center][b]Depth %d[/b][/center]" % room_depth
 	else:
 		status_label.text = "[center][b]Depth %d[/b]  [color=#A5B6C9]%d/%d[/color][/center]" % [room_depth, rooms_cleared, _encounter_count]
+
+	if objective_kind == "survival":
+		if objective_overtime:
+			status_label.text += "\n[center][color=#FFB36D]Objective: Overtime  Kills %d/%d[/color][/center]" % [objective_kills, objective_kill_target]
+		else:
+			status_label.text += "\n[center][color=#FCD77A]Objective: Survive %.1fs  Kills %d/%d[/color][/center]" % [objective_time_left, objective_kills, objective_kill_target]
 
 	if current_room_enemy_mutator.is_empty():
 		if status_mutator_icon != null:
@@ -304,4 +315,3 @@ func _get_mutator_icon_texture(icon_shape_id: String) -> Texture2D:
 			return MUTATOR_ICON_IRON_VOLLEY
 		_:
 			return null
-

@@ -82,6 +82,34 @@ func _build_trial_profile() -> Dictionary:
 		mutator_name = "Frenzy"
 	return _build_profile("Trial %s" % mutator_name, TRIAL_ROOM_SIZE, chasers, chargers, archers, shielders, mutator)
 
+func _build_survival_profile(depth: int) -> Dictionary:
+	var hard_pool := _get_hard_pool()
+	var base: Dictionary = hard_pool[rng.randi_range(0, hard_pool.size() - 1)]
+	var survival_room_size := Vector2(980.0, 740.0)
+	var chasers := maxi(4, ENCOUNTER_CONTRACTS.profile_chaser_count(base) + 1)
+	var chargers := maxi(1, ENCOUNTER_CONTRACTS.profile_charger_count(base))
+	var archers := maxi(1, ENCOUNTER_CONTRACTS.profile_archer_count(base) + 1)
+	var shielders := maxi(1, ENCOUNTER_CONTRACTS.profile_shielder_count(base))
+	var pressure_mutator := {
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME: "Killbox",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_THEME_COLOR: Color(0.98, 0.72, 0.2, 1.0),
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID: "siegebreak",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX: "The arena closes in and pressure rises",
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_SPEED_MULT: 1.18,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_SPEED_MULT: 1.22,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_WINDUP_MULT: 0.85,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_WINDUP_MULT: 0.8,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_COOLDOWN_MULT: 0.78,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SPEED_MULT: 1.16,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_WINDUP_MULT: 0.88
+	}
+	var profile := _build_profile("Last Stand", survival_room_size, chasers, chargers, archers, shielders, pressure_mutator)
+	var duration := clampf(17.0 + float(depth) * 0.7, 17.0, 26.0)
+	var spawn_interval := clampf(1.95 - float(depth) * 0.06, 0.85, 1.95)
+	var spawn_batch := mini(5, 2 + int(floor(float(depth) / 3.0)))
+	ENCOUNTER_CONTRACTS.profile_set_survival_objective(profile, duration, spawn_interval, spawn_batch)
+	return profile
+
 func roll_route_options(depth: int) -> Array[Dictionary]:
 	if depth < 2:
 		var intro_profile: Dictionary = _build_intro_profile(depth)
@@ -135,6 +163,16 @@ func roll_route_options(depth: int) -> Array[Dictionary]:
 		trial_profile
 	)
 
+	var survival_profile := _build_survival_profile(depth)
+	var survival_option := ENCOUNTER_CONTRACTS.door_option(
+		"Objective - Last Stand",
+		Color(0.98, 0.78, 0.34, 0.96),
+		ENUMS.DoorKind.ENCOUNTER,
+		"trial",
+		ENUMS.RewardMode.BOON,
+		survival_profile
+	)
+
 	var rest_option := ENCOUNTER_CONTRACTS.door_option(
 		"Rest Site",
 		Color(0.66, 1.0, 0.76, 0.92),
@@ -144,7 +182,7 @@ func roll_route_options(depth: int) -> Array[Dictionary]:
 		{}
 	)
 
-	var options: Array[Dictionary] = [hard_option, trial_option, rest_option]
+	var options: Array[Dictionary] = [hard_option, trial_option, survival_option, rest_option]
 	var first: int = rng.randi_range(0, options.size() - 1)
 	var chosen: Array[Dictionary] = [options[first]]
 

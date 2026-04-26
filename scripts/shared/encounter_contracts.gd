@@ -40,6 +40,10 @@ const PROFILE_KEY_CHARGER_COUNT := "charger_count"
 const PROFILE_KEY_ARCHER_COUNT := "archer_count"
 const PROFILE_KEY_SHIELDER_COUNT := "shielder_count"
 const PROFILE_KEY_ENEMY_MUTATOR := "enemy_mutator"
+const PROFILE_KEY_OBJECTIVE_KIND := "objective_kind"
+const PROFILE_KEY_OBJECTIVE_DURATION := "objective_duration"
+const PROFILE_KEY_OBJECTIVE_SPAWN_INTERVAL := "objective_spawn_interval"
+const PROFILE_KEY_OBJECTIVE_SPAWN_BATCH := "objective_spawn_batch"
 
 const MUTATOR_KEY_NAME := "name"
 const MUTATOR_KEY_THEME_COLOR := "theme_color"
@@ -155,7 +159,7 @@ static func normalize_profile(value: Variant) -> Dictionary:
 	if not (value is Dictionary):
 		return profile("Encounter", Vector2.ZERO, true, 0, 0, 0, 0)
 	var input := value as Dictionary
-	return profile(
+	var normalized := profile(
 		String(input.get(PROFILE_KEY_LABEL, "Encounter")),
 		input.get(PROFILE_KEY_ROOM_SIZE, Vector2.ZERO) as Vector2,
 		bool(input.get(PROFILE_KEY_STATIC_CAMERA, true)),
@@ -165,6 +169,13 @@ static func normalize_profile(value: Variant) -> Dictionary:
 		int(input.get(PROFILE_KEY_SHIELDER_COUNT, 0)),
 		input.get(PROFILE_KEY_ENEMY_MUTATOR, {}) as Dictionary
 	)
+	var objective_kind := String(input.get(PROFILE_KEY_OBJECTIVE_KIND, ""))
+	if not objective_kind.is_empty():
+		normalized[PROFILE_KEY_OBJECTIVE_KIND] = objective_kind
+		normalized[PROFILE_KEY_OBJECTIVE_DURATION] = float(input.get(PROFILE_KEY_OBJECTIVE_DURATION, 0.0))
+		normalized[PROFILE_KEY_OBJECTIVE_SPAWN_INTERVAL] = float(input.get(PROFILE_KEY_OBJECTIVE_SPAWN_INTERVAL, 0.0))
+		normalized[PROFILE_KEY_OBJECTIVE_SPAWN_BATCH] = int(input.get(PROFILE_KEY_OBJECTIVE_SPAWN_BATCH, 1))
+	return normalized
 
 static func profile_label(profile_value: Dictionary) -> String:
 	return String(profile_value.get(PROFILE_KEY_LABEL, "Encounter"))
@@ -207,6 +218,24 @@ static func profile_set_enemy_mutator(profile_value: Dictionary, enemy_mutator: 
 		profile_value.erase(PROFILE_KEY_ENEMY_MUTATOR)
 		return
 	profile_value[PROFILE_KEY_ENEMY_MUTATOR] = enemy_mutator
+
+static func profile_objective_kind(profile_value: Dictionary) -> String:
+	return String(profile_value.get(PROFILE_KEY_OBJECTIVE_KIND, ""))
+
+static func profile_objective_duration(profile_value: Dictionary) -> float:
+	return float(profile_value.get(PROFILE_KEY_OBJECTIVE_DURATION, 0.0))
+
+static func profile_objective_spawn_interval(profile_value: Dictionary) -> float:
+	return float(profile_value.get(PROFILE_KEY_OBJECTIVE_SPAWN_INTERVAL, 0.0))
+
+static func profile_objective_spawn_batch(profile_value: Dictionary) -> int:
+	return int(profile_value.get(PROFILE_KEY_OBJECTIVE_SPAWN_BATCH, 1))
+
+static func profile_set_survival_objective(profile_value: Dictionary, duration: float, spawn_interval: float, spawn_batch: int = 1) -> void:
+	profile_value[PROFILE_KEY_OBJECTIVE_KIND] = "survival"
+	profile_value[PROFILE_KEY_OBJECTIVE_DURATION] = maxf(1.0, duration)
+	profile_value[PROFILE_KEY_OBJECTIVE_SPAWN_INTERVAL] = maxf(0.25, spawn_interval)
+	profile_value[PROFILE_KEY_OBJECTIVE_SPAWN_BATCH] = maxi(1, spawn_batch)
 
 static func mutator_name(mutator: Dictionary) -> String:
 	return String(mutator.get(MUTATOR_KEY_NAME, ""))
