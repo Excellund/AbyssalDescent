@@ -7,6 +7,7 @@ const POWER_REGISTRY_SCRIPT := preload("res://scripts/power_registry.gd")
 const ENEMY_BASE := preload("res://scripts/enemy_base.gd")
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
+const RUN_CONTEXT_PATH := "/root/RunContext"
 const RUN_SNAPSHOT_VERSION := 1
 const RUN_SNAPSHOT_PROPERTIES := [
 	"max_speed",
@@ -870,6 +871,12 @@ func _restart_current_scene() -> void:
 	if scene_restart_queued:
 		return
 	scene_restart_queued = true
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context != null:
+		if run_context.has_method("clear_active_run"):
+			run_context.call("clear_active_run")
+		if run_context.has_method("clear_resume_saved_run_request"):
+			run_context.call("clear_resume_saved_run_request")
 	get_tree().call_deferred("change_scene_to_file", "res://scenes/Menu.tscn")
 
 func _create_health_state() -> void:
