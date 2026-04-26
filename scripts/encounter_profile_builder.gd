@@ -77,11 +77,32 @@ func build_debug_encounter_profile(encounter_key: String, depth: int) -> Diction
 		"skirmish":
 			return _build_intro_profile(0)
 		"crossfire":
-			return _build_profile("Crossfire", POOL_ROOM_SIZE, 4, 1, 2, 0)
+			return _build_profile("Crossfire", POOL_ROOM_SIZE, 2, 1, 3, 0)
 		"onslaught":
-			return _build_profile("Onslaught", POOL_ROOM_SIZE, 5, 2, 0, 1)
+			return _build_profile("Onslaught", POOL_ROOM_SIZE, 7, 2, 0, 0)
 		"fortress":
-			return _build_profile("Fortress", POOL_ROOM_SIZE, 3, 1, 1, 2)
+			return _build_profile("Fortress", POOL_ROOM_SIZE, 2, 0, 1, 3)
+		"blitz":
+			var blitz := _build_profile("Blitz", POOL_ROOM_SIZE, 2, 0, 0, 0)
+			blitz["lurker_count"] = 2
+			blitz["ram_count"] = 1
+			return blitz
+		"suppression":
+			var suppression := _build_profile("Suppression", POOL_ROOM_SIZE, 1, 1, 2, 1)
+			suppression["lancer_count"] = 2
+			return suppression
+		"vanguard":
+			return _build_profile("Vanguard", POOL_ROOM_SIZE, 3, 2, 0, 2)
+		"ambush":
+			var ambush := _build_profile("Ambush", POOL_ROOM_SIZE, 3, 0, 0, 0)
+			ambush["lurker_count"] = 3
+			ambush["lancer_count"] = 1
+			return ambush
+		"gauntlet":
+			var gauntlet := _build_profile("Gauntlet", POOL_ROOM_SIZE, 2, 1, 1, 1)
+			gauntlet["lurker_count"] = 1
+			gauntlet["lancer_count"] = 1
+			return gauntlet
 		"trial":
 			return _build_trial_profile(depth)
 		"objective_last_stand":
@@ -112,11 +133,31 @@ func build_debug_mutator(mutator_key: String) -> Dictionary:
 	return {}
 
 func _get_hard_pool() -> Array[Dictionary]:
-	return [
-		_build_profile("Crossfire", POOL_ROOM_SIZE, 4, 1, 2, 0),
-		_build_profile("Onslaught", POOL_ROOM_SIZE, 5, 2, 0, 1),
-		_build_profile("Fortress", POOL_ROOM_SIZE, 3, 1, 1, 2)
-	]
+	# Crossfire: archers pin you, charger punishes standing still.
+	# Onslaught: pure melee flood — no respite from ranged.
+	# Fortress: true defensive wall — shielders advance with no charger to bypass.
+	# Blitz: all fast melee — lurkers ambush, ram charges, no ranged cover.
+	# Suppression: lancer hazard zones force constant movement, archers +
+	#              shielder deny safe angles.
+	# Vanguard: shielded advance with chargers punching through the line.
+	# Ambush: lancer cuts escape routes while lurkers converge.
+	# Gauntlet: one of everything — a comprehensive skill test.
+	var crossfire := _build_profile("Crossfire", POOL_ROOM_SIZE, 2, 1, 3, 0)
+	var onslaught := _build_profile("Onslaught", POOL_ROOM_SIZE, 7, 2, 0, 0)
+	var fortress := _build_profile("Fortress", POOL_ROOM_SIZE, 2, 0, 1, 3)
+	var blitz := _build_profile("Blitz", POOL_ROOM_SIZE, 2, 0, 0, 0)
+	blitz["lurker_count"] = 2
+	blitz["ram_count"] = 1
+	var suppression := _build_profile("Suppression", POOL_ROOM_SIZE, 1, 1, 2, 1)
+	suppression["lancer_count"] = 2
+	var vanguard := _build_profile("Vanguard", POOL_ROOM_SIZE, 3, 2, 0, 2)
+	var ambush := _build_profile("Ambush", POOL_ROOM_SIZE, 3, 0, 0, 0)
+	ambush["lurker_count"] = 3
+	ambush["lancer_count"] = 1
+	var gauntlet := _build_profile("Gauntlet", POOL_ROOM_SIZE, 2, 1, 1, 1)
+	gauntlet["lurker_count"] = 1
+	gauntlet["lancer_count"] = 1
+	return [crossfire, onslaught, fortress, blitz, suppression, vanguard, ambush, gauntlet]
 
 func _build_trial_profile(depth: int = 0) -> Dictionary:
 	var hard_pool := _get_hard_pool()
@@ -137,6 +178,9 @@ func _build_trial_profile(depth: int = 0) -> Dictionary:
 	# Rams appear at depth ≥ 6, slightly behind lurkers in the difficulty ramp.
 	if depth >= 6:
 		profile["ram_count"] = int(floor(float(maxi(0, depth - 5)) * 0.4))
+	# Lancers appear at depth ≥ 7 — one at a time, as a spatial pressure layer.
+	if depth >= 7:
+		profile["lancer_count"] = 1
 	return profile
 
 func _build_survival_profile(depth: int) -> Dictionary:

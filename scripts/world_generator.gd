@@ -6,6 +6,7 @@ const ENEMY_ARCHER_SCRIPT := preload("res://scripts/enemy_archer.gd")
 const ENEMY_SHIELDER_SCRIPT := preload("res://scripts/enemy_shielder.gd")
 const ENEMY_LURKER_SCRIPT := preload("res://scripts/enemy_lurker.gd")
 const ENEMY_RAM_SCRIPT := preload("res://scripts/enemy_ram.gd")
+const ENEMY_LANCER_SCRIPT := preload("res://scripts/enemy_lancer.gd")
 const ENEMY_BOSS_SCRIPT := preload("res://scripts/enemy_boss.gd")
 const ENEMY_BOSS_2_SCRIPT := preload("res://scripts/enemy_boss_2.gd")
 const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
@@ -34,6 +35,11 @@ const DEBUG_ENCOUNTER_OBJECTIVE_RANDOM := 8
 const DEBUG_ENCOUNTER_REST_SITE := 9
 const DEBUG_ENCOUNTER_BOSS_1 := 10
 const DEBUG_ENCOUNTER_BOSS_2 := 11
+const DEBUG_ENCOUNTER_BLITZ := 12
+const DEBUG_ENCOUNTER_SUPPRESSION := 13
+const DEBUG_ENCOUNTER_VANGUARD := 14
+const DEBUG_ENCOUNTER_AMBUSH := 15
+const DEBUG_ENCOUNTER_GAUNTLET := 16
 const DEBUG_MUTATOR_NONE := 0
 const DEBUG_MUTATOR_BLOOD_RUSH := 1
 const DEBUG_MUTATOR_FLASHPOINT := 2
@@ -85,7 +91,7 @@ const DEBUG_MUTATOR_RANDOM_HARD := 6
 @export var debug_skip_starting_boon_selection: bool = false
 @export var debug_start_power_ids: PackedStringArray = PackedStringArray()
 @export_multiline var debug_start_command: String = ""
-@export_enum("None", "Skirmish", "Crossfire", "Onslaught", "Fortress", "Trial", "Objective - Last Stand", "Objective - Cut the Signal", "Objective - Random", "Rest Site", "Warden", "Sovereign") var debug_start_encounter: int = DEBUG_ENCOUNTER_NONE
+@export_enum("None", "Skirmish", "Crossfire", "Onslaught", "Fortress", "Trial", "Objective - Last Stand", "Objective - Cut the Signal", "Objective - Random", "Rest Site", "Warden", "Sovereign", "Blitz", "Suppression", "Vanguard", "Ambush", "Gauntlet") var debug_start_encounter: int = DEBUG_ENCOUNTER_NONE
 @export var debug_start_depth: int = 1
 @export_enum("None", "Blood Rush", "Flashpoint", "Siegebreak", "Iron Volley", "Killbox", "Random Hard") var debug_mutator_override: int = DEBUG_MUTATOR_NONE
 @export var debug_trigger_victory: bool = false
@@ -192,7 +198,8 @@ func _ready() -> void:
 		"archer": ENEMY_ARCHER_SCRIPT,
 		"shielder": ENEMY_SHIELDER_SCRIPT,
 		"lurker": ENEMY_LURKER_SCRIPT,
-		"ram": ENEMY_RAM_SCRIPT
+		"ram": ENEMY_RAM_SCRIPT,
+		"lancer": ENEMY_LANCER_SCRIPT
 	}, Callable(self, "_on_room_enemy_died"))
 	_play_room_music(false, false, music_intro_fade_duration)
 	hud = WORLD_HUD_SCRIPT.new()
@@ -290,6 +297,16 @@ func start_debug_encounter(encounter_key: String) -> Dictionary:
 			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_ONSLAUGHT)
 		"fortress":
 			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_FORTRESS)
+		"blitz":
+			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_BLITZ)
+		"suppression":
+			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_SUPPRESSION)
+		"vanguard":
+			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_VANGUARD)
+		"ambush":
+			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_AMBUSH)
+		"gauntlet":
+			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_GAUNTLET)
 		"trial":
 			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_TRIAL)
 		"objective_last_stand", "last_stand":
@@ -321,6 +338,16 @@ func _debug_encounter_key(encounter_state: int) -> String:
 			return "onslaught"
 		DEBUG_ENCOUNTER_FORTRESS:
 			return "fortress"
+		DEBUG_ENCOUNTER_BLITZ:
+			return "blitz"
+		DEBUG_ENCOUNTER_SUPPRESSION:
+			return "suppression"
+		DEBUG_ENCOUNTER_VANGUARD:
+			return "vanguard"
+		DEBUG_ENCOUNTER_AMBUSH:
+			return "ambush"
+		DEBUG_ENCOUNTER_GAUNTLET:
+			return "gauntlet"
 		DEBUG_ENCOUNTER_TRIAL:
 			return "trial"
 		DEBUG_ENCOUNTER_OBJECTIVE_LAST_STAND:
