@@ -5,6 +5,7 @@ const GLOSSARY_DATA := preload("res://scripts/shared/glossary_data.gd")
 signal pause_opened
 signal pause_closed
 signal back_to_main_menu_requested
+signal abandon_run_requested
 signal exit_game_requested
 
 var run_context_path: String = "/root/RunContext"
@@ -74,7 +75,7 @@ func _create_pause_menu_ui() -> void:
 	pause_menu_layer.add_child(backdrop)
 
 	pause_menu_panel = Panel.new()
-	pause_menu_panel.custom_minimum_size = Vector2(440.0, 420.0)
+	pause_menu_panel.custom_minimum_size = Vector2(440.0, 480.0)
 	pause_menu_panel.position = Vector2(740.0, 260.0)
 	var panel_style := StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.06, 0.09, 0.13, 0.94)
@@ -123,7 +124,14 @@ func _create_pause_menu_ui() -> void:
 	)
 	pause_menu_panel.add_child(glossary_button)
 
-	var exit_button := _make_pause_button("Exit Game", Vector2(80.0, 328.0))
+	var abandon_run_button := _make_pause_button("Abandon Run", Vector2(80.0, 328.0))
+	_apply_destructive_button_style(abandon_run_button)
+	abandon_run_button.pressed.connect(func() -> void:
+		abandon_run_requested.emit()
+	)
+	pause_menu_panel.add_child(abandon_run_button)
+
+	var exit_button := _make_pause_button("Exit Game", Vector2(80.0, 388.0))
 	exit_button.pressed.connect(func() -> void:
 		exit_game_requested.emit()
 	)
@@ -146,6 +154,32 @@ func _make_pause_button(text: String, pos: Vector2) -> Button:
 	button.custom_minimum_size = Vector2(280.0, 52.0)
 	button.add_theme_font_size_override("font_size", 20)
 	return button
+
+func _apply_destructive_button_style(button: Button) -> void:
+	var normal_style := StyleBoxFlat.new()
+	normal_style.bg_color = Color(0.3, 0.07, 0.09, 0.9)
+	normal_style.border_color = Color(0.86, 0.26, 0.3, 0.95)
+	normal_style.set_border_width_all(2)
+	normal_style.set_corner_radius_all(8)
+	button.add_theme_stylebox_override("normal", normal_style)
+
+	var hover_style := StyleBoxFlat.new()
+	hover_style.bg_color = Color(0.4, 0.1, 0.12, 0.94)
+	hover_style.border_color = Color(0.96, 0.34, 0.38, 1.0)
+	hover_style.set_border_width_all(2)
+	hover_style.set_corner_radius_all(8)
+	button.add_theme_stylebox_override("hover", hover_style)
+
+	var pressed_style := StyleBoxFlat.new()
+	pressed_style.bg_color = Color(0.25, 0.06, 0.08, 0.96)
+	pressed_style.border_color = Color(0.84, 0.24, 0.3, 1.0)
+	pressed_style.set_border_width_all(2)
+	pressed_style.set_corner_radius_all(8)
+	button.add_theme_stylebox_override("pressed", pressed_style)
+
+	button.add_theme_color_override("font_color", Color(1.0, 0.86, 0.86, 1.0))
+	button.add_theme_color_override("font_hover_color", Color(1.0, 0.94, 0.94, 1.0))
+	button.add_theme_color_override("font_pressed_color", Color(1.0, 0.82, 0.82, 1.0))
 
 func _build_pause_options_panel() -> Panel:
 	var panel := Panel.new()

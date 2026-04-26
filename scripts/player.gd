@@ -7,6 +7,57 @@ const POWER_REGISTRY_SCRIPT := preload("res://scripts/power_registry.gd")
 const ENEMY_BASE := preload("res://scripts/enemy_base.gd")
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
+const RUN_SNAPSHOT_VERSION := 1
+const RUN_SNAPSHOT_PROPERTIES := [
+	"max_speed",
+	"dash_cooldown",
+	"attack_damage",
+	"attack_range",
+	"attack_arc_degrees",
+	"attack_cooldown",
+	"attack_lock_duration",
+	"iron_skin_armor",
+	"iron_skin_stacks",
+	"reward_razor_wind",
+	"reward_execution_edge",
+	"reward_rupture_wave",
+	"reward_aegis_field",
+	"reward_hunters_snare",
+	"razor_wind_stacks",
+	"execution_edge_stacks",
+	"rupture_wave_stacks",
+	"aegis_field_stacks",
+	"hunters_snare_stacks",
+	"execution_every",
+	"execution_damage_mult",
+	"rupture_wave_radius",
+	"rupture_wave_damage_ratio",
+	"razor_wind_range_scale",
+	"razor_wind_arc_degrees",
+	"razor_wind_damage_ratio",
+	"aegis_field_resist_ratio",
+	"aegis_field_resist_duration",
+	"aegis_field_pulse_radius",
+	"aegis_field_slow_duration",
+	"aegis_field_slow_mult",
+	"aegis_field_cooldown",
+	"aegis_field_active_left",
+	"aegis_field_cooldown_left",
+	"hunters_snare_bonus_damage",
+	"hunters_snare_slow_duration",
+	"hunters_snare_slow_mult",
+	"reward_phantom_step",
+	"reward_void_dash",
+	"reward_static_wake",
+	"phantom_step_stacks",
+	"void_dash_stacks",
+	"static_wake_stacks",
+	"phantom_step_damage",
+	"phantom_step_slow_duration",
+	"void_dash_range_mult",
+	"static_wake_damage",
+	"static_wake_lifetime"
+]
 
 signal health_changed(current_health: int, max_health: int)
 signal died
@@ -456,6 +507,58 @@ func set_power_registry(registry: Node) -> void:
 	if not is_instance_valid(upgrade_system):
 		return
 	upgrade_system.initialize(self, null, registry)
+
+func build_run_snapshot() -> Dictionary:
+	var properties: Dictionary = {}
+	for property_name in RUN_SNAPSHOT_PROPERTIES:
+		properties[property_name] = get(property_name)
+	var trial_stacks: Dictionary = {}
+	if is_instance_valid(upgrade_system):
+		var raw_stacks: Variant = upgrade_system.get("trial_power_stacks")
+		if raw_stacks is Dictionary:
+			trial_stacks = (raw_stacks as Dictionary).duplicate(true)
+	return {
+		"version": RUN_SNAPSHOT_VERSION,
+		"current_health": _get_current_health(),
+		"properties": properties,
+		"active_objective_mutators": get_active_objective_mutators(),
+		"trial_power_stacks": trial_stacks
+	}
+
+func apply_run_snapshot(snapshot: Dictionary) -> void:
+	if snapshot.is_empty():
+		return
+	var properties := snapshot.get("properties", {}) as Dictionary
+	for property_name in properties.keys():
+		set(String(property_name), properties[property_name])
+	var mutators := snapshot.get("active_objective_mutators", []) as Array
+	active_objective_mutators.clear()
+	for mutator_entry in mutators:
+		if mutator_entry is Dictionary:
+			active_objective_mutators.append((mutator_entry as Dictionary).duplicate(true))
+	_recalculate_objective_mutator_totals()
+	var trial_stacks := snapshot.get("trial_power_stacks", {}) as Dictionary
+	if is_instance_valid(upgrade_system):
+		upgrade_system.set("trial_power_stacks", trial_stacks.duplicate(true))
+	if is_instance_valid(health_state):
+		health_state.max_health = max_health
+		health_state.set_health(int(snapshot.get("current_health", max_health)))
+
+	dash_time_left = 0.0
+	dash_cooldown_left = 0.0
+	attack_cooldown_left = 0.0
+	attack_anim_time_left = 0.0
+	attack_lock_time_left = 0.0
+	dash_phase_release_left = 0.0
+	dash_enemy_exceptions.clear()
+	queued_attack_after_dash = false
+	phantom_step_hit_ids.clear()
+	phantom_step_ghost_positions.clear()
+	static_wake_trails.clear()
+	void_dash_reset_pulse_left = 0.0
+	_set_dash_phasing(false)
+	velocity = Vector2.ZERO
+	queue_redraw()
 
 func apply_trial_power(reward_id: String) -> void:
 	upgrade_system.apply_trial_power(reward_id)

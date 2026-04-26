@@ -14,6 +14,7 @@ var music_slider: HSlider
 var master_value_label: Label
 var music_value_label: Label
 var menu_music_player: AudioStreamPlayer
+var primary_run_button: Button
 
 func _ready() -> void:
 	if _should_autostart_debug_encounter():
@@ -94,9 +95,9 @@ func _build_ui() -> void:
 	subtitle.add_theme_color_override("font_color", Color(0.7, 0.84, 1.0, 0.9))
 	root_panel.add_child(subtitle)
 
-	var standard_button := _make_menu_button("Standard Run", Vector2(120.0, 170.0))
-	standard_button.pressed.connect(_on_standard_pressed)
-	root_panel.add_child(standard_button)
+	primary_run_button = _make_menu_button("Standard Run", Vector2(120.0, 170.0))
+	primary_run_button.pressed.connect(_on_primary_run_pressed)
+	root_panel.add_child(primary_run_button)
 
 	var endless_button := _make_menu_button("Endless Mode", Vector2(120.0, 242.0))
 	endless_button.pressed.connect(_on_endless_pressed)
@@ -113,6 +114,7 @@ func _build_ui() -> void:
 	var exit_button := _make_menu_button("Exit Game", Vector2(120.0, 458.0))
 	exit_button.pressed.connect(_on_exit_pressed)
 	root_panel.add_child(exit_button)
+	_refresh_primary_run_button()
 
 	options_panel = _build_options_panel()
 	options_panel.visible = false
@@ -206,11 +208,24 @@ func _build_options_panel() -> Panel:
 
 	return panel
 
-func _on_standard_pressed() -> void:
+func _on_primary_run_pressed() -> void:
+	if _has_saved_run():
+		_on_continue_pressed()
+		return
+	_clear_saved_run()
 	_set_run_mode(ENUMS.RunMode.STANDARD)
 	get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)
 
+func _on_continue_pressed() -> void:
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context == null:
+		return
+	if run_context.has_method("request_resume_saved_run"):
+		run_context.call("request_resume_saved_run")
+	get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)
+
 func _on_endless_pressed() -> void:
+	_clear_saved_run()
 	_set_run_mode(ENUMS.RunMode.ENDLESS)
 	get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)
 
@@ -329,3 +344,23 @@ func _set_run_mode(mode: int) -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context != null and run_context.has_method("set_run_mode"):
 		run_context.call("set_run_mode", mode)
+
+func _refresh_primary_run_button() -> void:
+	if primary_run_button == null:
+		return
+	primary_run_button.text = "Continue Run" if _has_saved_run() else "Standard Run"
+
+func _has_saved_run() -> bool:
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context == null or not run_context.has_method("has_saved_run"):
+		return false
+	return bool(run_context.call("has_saved_run"))
+
+func _clear_saved_run() -> void:
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context == null:
+		return
+	if run_context.has_method("clear_active_run"):
+		run_context.call("clear_active_run")
+	if run_context.has_method("clear_resume_saved_run_request"):
+		run_context.call("clear_resume_saved_run_request")
