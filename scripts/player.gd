@@ -4,6 +4,7 @@ const HEALTH_STATE_SCRIPT := preload("res://scripts/health_state.gd")
 const PLAYER_FEEDBACK_SCRIPT := preload("res://scripts/player_feedback.gd")
 const UPGRADE_SYSTEM_SCRIPT := preload("res://scripts/upgrade_system.gd")
 const ENEMY_BASE := preload("res://scripts/enemy_base.gd")
+const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 
 signal health_changed(current_health: int, max_health: int)
 signal died
@@ -460,7 +461,7 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		if not (enemy_node is Node2D):
 			continue
-		if not enemy_node.has_method("take_damage"):
+		if not DAMAGEABLE.can_take_damage(enemy_node):
 			continue
 
 		var enemy_body := enemy_node as Node2D
@@ -474,7 +475,7 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		if absf(attack_direction.angle_to(to_enemy.normalized())) > max_angle_radians:
 			continue
 
-		enemy_node.call("take_damage", strike_damage)
+		DAMAGEABLE.apply_damage(enemy_node, strike_damage)
 		melee_hit_enemy_ids[enemy_id] = true
 		if reward_rupture_wave and not rupture_triggered_enemy_ids.has(enemy_id):
 			rupture_triggered_enemy_ids[enemy_id] = true
@@ -497,7 +498,7 @@ func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupt
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		if not (enemy_node is Node2D):
 			continue
-		if not enemy_node.has_method("take_damage"):
+		if not DAMAGEABLE.can_take_damage(enemy_node):
 			continue
 		var enemy_body := enemy_node as Node2D
 		var enemy_id := enemy_body.get_instance_id()
@@ -508,7 +509,7 @@ func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupt
 			continue
 		if absf(attack_direction.angle_to(to_enemy.normalized())) > wind_half_arc:
 			continue
-		enemy_node.call("take_damage", wind_damage)
+		DAMAGEABLE.apply_damage(enemy_node, wind_damage)
 		wind_hit_enemy_ids[enemy_id] = true
 		if reward_rupture_wave and not rupture_triggered_enemy_ids.has(enemy_id):
 			rupture_triggered_enemy_ids[enemy_id] = true
@@ -523,12 +524,12 @@ func _apply_rupture_wave(epicenter: Vector2, source_damage: int) -> void:
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		if not (enemy_node is Node2D):
 			continue
-		if not enemy_node.has_method("take_damage"):
+		if not DAMAGEABLE.can_take_damage(enemy_node):
 			continue
 		var enemy_body := enemy_node as Node2D
 		if enemy_body.global_position.distance_to(epicenter) > rupture_wave_radius:
 			continue
-		enemy_node.call("take_damage", wave_damage, {"is_ground_attack": true, "attack_type": "rupture_wave"})
+		DAMAGEABLE.apply_damage(enemy_node, wave_damage, {"is_ground_attack": true, "attack_type": "rupture_wave"})
 
 
 func _apply_phantom_step_during_dash() -> void:
@@ -536,7 +537,7 @@ func _apply_phantom_step_during_dash() -> void:
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		if not (enemy_node is Node2D):
 			continue
-		if not enemy_node.has_method("take_damage"):
+		if not DAMAGEABLE.can_take_damage(enemy_node):
 			continue
 		var enemy_body := enemy_node as Node2D
 		var eid := enemy_body.get_instance_id()
@@ -544,7 +545,7 @@ func _apply_phantom_step_during_dash() -> void:
 			continue
 		if global_position.distance_to(enemy_body.global_position) > hit_radius:
 			continue
-		enemy_node.call("take_damage", phantom_step_damage)
+		DAMAGEABLE.apply_damage(enemy_node, phantom_step_damage)
 		if enemy_node.has_method("apply_slow"):
 			enemy_node.call("apply_slow", phantom_step_slow_duration, 0.36)
 		phantom_step_hit_ids[eid] = true
@@ -571,12 +572,12 @@ func _update_static_wake_trails(delta: float) -> void:
 		for enemy_node in get_tree().get_nodes_in_group("enemies"):
 			if not (enemy_node is Node2D):
 				continue
-			if not enemy_node.has_method("take_damage"):
+			if not DAMAGEABLE.can_take_damage(enemy_node):
 				continue
 			var enemy_body := enemy_node as Node2D
 			if enemy_body.global_position.distance_to(trail_pos) <= 18.0:
 				var wake_tick_damage := maxi(1, int(round(float(static_wake_damage) * delta * 6.0)))
-				enemy_node.call("take_damage", wake_tick_damage)
+				DAMAGEABLE.apply_damage(enemy_node, wake_tick_damage)
 
 	queue_redraw()
 

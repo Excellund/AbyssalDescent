@@ -13,6 +13,18 @@ enum RewardMode {
 	HARD,
 }
 
+enum DoorKind {
+	ENCOUNTER,
+	BOSS,
+	REST,
+}
+
+enum EncounterAction {
+	ENCOUNTER,
+	BOSS,
+	REST,
+}
+
 enum RoomState {
 	INIT,
 	PLAYING,
@@ -45,14 +57,3 @@ static func reward_mode_from_legacy(value: String) -> int:
 			return RewardMode.HARD
 		_:
 			return RewardMode.NONE
-
-static func reward_mode_to_legacy(value: int) -> String:
-	match value:
-		RewardMode.BOON:
-			return "boon"
-		RewardMode.ARCANA:
-			return "arcana_reward"
-		RewardMode.HARD:
-			return "hard_reward"
-		_:
-			return "none"

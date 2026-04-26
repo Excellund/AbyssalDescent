@@ -1,5 +1,7 @@
 extends Node
 
+const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
+
 var world_root: Node2D
 var player: Node2D
 var rng: RandomNumberGenerator
@@ -26,10 +28,10 @@ func configure_room(room_size: Vector2, padding: float, safe_radius: float, enem
 
 func spawn_profile_enemies(profile: Dictionary) -> int:
 	var total := 0
-	var chaser_count := int(profile.get("chaser_count", 0))
-	var charger_count := int(profile.get("charger_count", 0))
-	var archer_count := int(profile.get("archer_count", 0))
-	var shielder_count := int(profile.get("shielder_count", 0))
+	var chaser_count := ENCOUNTER_CONTRACTS.profile_chaser_count(profile)
+	var charger_count := ENCOUNTER_CONTRACTS.profile_charger_count(profile)
+	var archer_count := ENCOUNTER_CONTRACTS.profile_archer_count(profile)
+	var shielder_count := ENCOUNTER_CONTRACTS.profile_shielder_count(profile)
 	for _i in range(chaser_count):
 		_spawn_enemy_in_current_room(scripts.get("chaser"))
 		total += 1
@@ -77,7 +79,7 @@ func _apply_enemy_mutator(enemy: CharacterBody2D, enemy_script: Script) -> void:
 	if current_room_enemy_mutator.is_empty():
 		return
 	var is_affected: bool = false
-	var enemy_health_mult := float(current_room_enemy_mutator.get("enemy_health_mult", 1.0))
+	var enemy_health_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_ENEMY_HEALTH_MULT, 1.0)
 	if not is_equal_approx(enemy_health_mult, 1.0):
 		if enemy.get("max_health") != null:
 			var base_max_health := int(enemy.get("max_health"))
@@ -85,9 +87,9 @@ func _apply_enemy_mutator(enemy: CharacterBody2D, enemy_script: Script) -> void:
 		is_affected = true
 
 	if enemy_script == scripts.get("chaser"):
-		var chaser_damage_mult := float(current_room_enemy_mutator.get("chaser_damage_mult", 1.0))
-		var chaser_interval_mult := float(current_room_enemy_mutator.get("chaser_attack_interval_mult", 1.0))
-		var chaser_speed_mult := float(current_room_enemy_mutator.get("chaser_speed_mult", 1.0))
+		var chaser_damage_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT, 1.0)
+		var chaser_interval_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_ATTACK_INTERVAL_MULT, 1.0)
+		var chaser_speed_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_SPEED_MULT, 1.0)
 		is_affected = not is_equal_approx(chaser_damage_mult, 1.0) \
 			or not is_equal_approx(chaser_interval_mult, 1.0) \
 			or not is_equal_approx(chaser_speed_mult, 1.0)
@@ -99,9 +101,9 @@ func _apply_enemy_mutator(enemy: CharacterBody2D, enemy_script: Script) -> void:
 		enemy.set("move_speed", maxf(25.0, base_speed * chaser_speed_mult))
 
 	if enemy_script == scripts.get("charger"):
-		var charger_damage_mult := float(current_room_enemy_mutator.get("charger_damage_mult", 1.0))
-		var charger_speed_mult := float(current_room_enemy_mutator.get("charger_speed_mult", 1.0))
-		var charger_windup_mult := float(current_room_enemy_mutator.get("charger_windup_mult", 1.0))
+		var charger_damage_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_DAMAGE_MULT, 1.0)
+		var charger_speed_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_SPEED_MULT, 1.0)
+		var charger_windup_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_WINDUP_MULT, 1.0)
 		is_affected = not is_equal_approx(charger_damage_mult, 1.0) \
 			or not is_equal_approx(charger_speed_mult, 1.0) \
 			or not is_equal_approx(charger_windup_mult, 1.0)
@@ -113,9 +115,9 @@ func _apply_enemy_mutator(enemy: CharacterBody2D, enemy_script: Script) -> void:
 		enemy.set("windup_time", maxf(0.18, base_windup * charger_windup_mult))
 
 	if enemy_script == scripts.get("archer"):
-		var archer_windup_mult := float(current_room_enemy_mutator.get("archer_windup_mult", 1.0))
-		var archer_cooldown_mult := float(current_room_enemy_mutator.get("archer_cooldown_mult", 1.0))
-		var archer_projectile_damage_mult := float(current_room_enemy_mutator.get("archer_projectile_damage_mult", 1.0))
+		var archer_windup_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_WINDUP_MULT, 1.0)
+		var archer_cooldown_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_COOLDOWN_MULT, 1.0)
+		var archer_projectile_damage_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_PROJECTILE_DAMAGE_MULT, 1.0)
 		is_affected = not is_equal_approx(archer_windup_mult, 1.0) \
 			or not is_equal_approx(archer_cooldown_mult, 1.0) \
 			or not is_equal_approx(archer_projectile_damage_mult, 1.0)
@@ -127,9 +129,9 @@ func _apply_enemy_mutator(enemy: CharacterBody2D, enemy_script: Script) -> void:
 		enemy.set("projectile_damage", maxi(1, int(round(float(base_proj_damage) * archer_projectile_damage_mult))))
 
 	if enemy_script == scripts.get("shielder"):
-		var shielder_slam_damage_mult := float(current_room_enemy_mutator.get("shielder_slam_damage_mult", 1.0))
-		var shielder_slam_windup_mult := float(current_room_enemy_mutator.get("shielder_slam_windup_mult", 1.0))
-		var shielder_speed_mult := float(current_room_enemy_mutator.get("shielder_speed_mult", 1.0))
+		var shielder_slam_damage_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_DAMAGE_MULT, 1.0)
+		var shielder_slam_windup_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_WINDUP_MULT, 1.0)
+		var shielder_speed_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SPEED_MULT, 1.0)
 		is_affected = not is_equal_approx(shielder_slam_damage_mult, 1.0) \
 			or not is_equal_approx(shielder_slam_windup_mult, 1.0) \
 			or not is_equal_approx(shielder_speed_mult, 1.0)
@@ -140,11 +142,11 @@ func _apply_enemy_mutator(enemy: CharacterBody2D, enemy_script: Script) -> void:
 		var base_speed := float(enemy.get("move_speed"))
 		enemy.set("move_speed", maxf(20.0, base_speed * shielder_speed_mult))
 
-	enemy.modulate = current_room_enemy_mutator.get("enemy_tint", Color(1.0, 0.92, 0.92, 1.0))
+	enemy.modulate = ENCOUNTER_CONTRACTS.mutator_enemy_tint(current_room_enemy_mutator, Color(1.0, 0.92, 0.92, 1.0))
 	if enemy.get("has_mutator_overlay") != null:
 		enemy.set("has_mutator_overlay", is_affected)
 	if enemy.get("mutator_theme_color") != null:
-		enemy.set("mutator_theme_color", current_room_enemy_mutator.get("theme_color", Color(1.0, 0.4, 0.4, 1.0)))
+		enemy.set("mutator_theme_color", ENCOUNTER_CONTRACTS.mutator_theme_color(current_room_enemy_mutator, Color(1.0, 0.4, 0.4, 1.0)))
 
 func _pick_spawn_position_in_current_room() -> Vector2:
 	if rng == null:

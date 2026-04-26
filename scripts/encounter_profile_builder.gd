@@ -1,5 +1,8 @@
 extends Node
 
+const ENUMS := preload("res://scripts/shared/enums.gd")
+const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
+
 var rng: RandomNumberGenerator
 
 var room_base_size: Vector2 = Vector2(940.0, 700.0)
@@ -37,18 +40,16 @@ func configure(settings: Dictionary) -> void:
 	hard_room_enemy_bonus = int(settings.get("hard_room_enemy_bonus", hard_room_enemy_bonus))
 
 func _build_profile(label: String, room_size: Vector2, chasers: int, chargers: int, archers: int, shielders: int, enemy_mutator: Dictionary = {}) -> Dictionary:
-	var profile := {
-		"label": label,
-		"room_size": room_size,
-		"static_camera": room_size.x <= static_camera_room_threshold,
-		"chaser_count": chasers,
-		"charger_count": chargers,
-		"archer_count": archers,
-		"shielder_count": shielders
-	}
-	if not enemy_mutator.is_empty():
-		profile["enemy_mutator"] = enemy_mutator
-	return profile
+	return ENCOUNTER_CONTRACTS.profile(
+		label,
+		room_size,
+		room_size.x <= static_camera_room_threshold,
+		chasers,
+		chargers,
+		archers,
+		shielders,
+		enemy_mutator
+	)
 
 func _build_intro_profile(depth: int) -> Dictionary:
 	if depth <= 0:
@@ -72,32 +73,34 @@ func _build_trial_profile() -> Dictionary:
 	var hard_pool := _get_hard_pool()
 	var base: Dictionary = hard_pool[rng.randi_range(0, hard_pool.size() - 1)]
 	var mutator: Dictionary = roll_hard_enemy_mutator()
-	var chasers := int(base["chaser_count"]) + hard_room_enemy_bonus
-	var chargers := int(base["charger_count"]) + 1
-	var archers: int = maxi(int(base["archer_count"]), 1)
-	var shielders := int(base["shielder_count"])
-	var mutator_name := String(mutator.get("name", "Frenzy"))
+	var chasers := ENCOUNTER_CONTRACTS.profile_chaser_count(base) + hard_room_enemy_bonus
+	var chargers := ENCOUNTER_CONTRACTS.profile_charger_count(base) + 1
+	var archers: int = maxi(ENCOUNTER_CONTRACTS.profile_archer_count(base), 1)
+	var shielders := ENCOUNTER_CONTRACTS.profile_shielder_count(base)
+	var mutator_name := ENCOUNTER_CONTRACTS.mutator_name(mutator)
+	if mutator_name.is_empty():
+		mutator_name = "Frenzy"
 	return _build_profile("Trial %s" % mutator_name, TRIAL_ROOM_SIZE, chasers, chargers, archers, shielders, mutator)
 
 func roll_route_options(depth: int) -> Array[Dictionary]:
 	if depth < 2:
 		var intro_profile: Dictionary = _build_intro_profile(depth)
-		var easy_option: Dictionary = {
-			"label": String(intro_profile["label"]),
-			"color": Color(0.34, 0.8, 1.0, 0.95),
-			"kind": "encounter",
-			"icon": "easy",
-			"reward": "boon",
-			"profile": intro_profile
-		}
-		var intro_rest_option: Dictionary = {
-			"label": "Rest Site",
-			"color": Color(0.66, 1.0, 0.76, 0.92),
-			"kind": "rest",
-			"icon": "rest",
-			"reward": "none",
-			"profile": {}
-		}
+		var easy_option := ENCOUNTER_CONTRACTS.door_option(
+			ENCOUNTER_CONTRACTS.profile_label(intro_profile),
+			Color(0.34, 0.8, 1.0, 0.95),
+			ENUMS.DoorKind.ENCOUNTER,
+			"easy",
+			ENUMS.RewardMode.BOON,
+			intro_profile
+		)
+		var intro_rest_option := ENCOUNTER_CONTRACTS.door_option(
+			"Rest Site",
+			Color(0.66, 1.0, 0.76, 0.92),
+			ENUMS.DoorKind.REST,
+			"rest",
+			ENUMS.RewardMode.NONE,
+			{}
+		)
 		var intro_options: Array[Dictionary] = [easy_option, intro_rest_option]
 		if rng.randf() < 0.5:
 			return intro_options
@@ -107,37 +110,39 @@ func roll_route_options(depth: int) -> Array[Dictionary]:
 	# After room 2: no more easy-pool encounters.
 	var hard_pool: Array[Dictionary] = _get_hard_pool()
 	var hard_profile: Dictionary = hard_pool[rng.randi_range(0, hard_pool.size() - 1)]
-	var hard_option: Dictionary = {
-		"label": String(hard_profile["label"]),
-		"color": Color(0.93, 0.62, 0.28, 0.95),
-		"kind": "encounter",
-		"icon": "hard",
-		"reward": "boon",
-		"profile": hard_profile
-	}
+	var hard_option := ENCOUNTER_CONTRACTS.door_option(
+		ENCOUNTER_CONTRACTS.profile_label(hard_profile),
+		Color(0.93, 0.62, 0.28, 0.95),
+		ENUMS.DoorKind.ENCOUNTER,
+		"hard",
+		ENUMS.RewardMode.BOON,
+		hard_profile
+	)
 
 	var trial_profile: Dictionary = _build_trial_profile()
-	var trial_mutator: Dictionary = trial_profile.get("enemy_mutator", {})
-	var trial_mutator_name := String(trial_mutator.get("name", "Trial"))
-	var trial_color: Color = trial_mutator.get("theme_color", Color(1.0, 0.32, 0.22, 0.96))
+	var trial_mutator: Dictionary = ENCOUNTER_CONTRACTS.profile_enemy_mutator(trial_profile)
+	var trial_mutator_name := ENCOUNTER_CONTRACTS.mutator_name(trial_mutator)
+	if trial_mutator_name.is_empty():
+		trial_mutator_name = "Trial"
+	var trial_color: Color = ENCOUNTER_CONTRACTS.mutator_theme_color(trial_mutator, Color(1.0, 0.32, 0.22, 0.96))
 	trial_color.a = 0.96
-	var trial_option: Dictionary = {
-		"label": "Trial - %s" % trial_mutator_name,
-		"color": trial_color,
-		"kind": "encounter",
-		"icon": "trial",
-		"reward": "arcana_reward",
-		"profile": trial_profile
-	}
+	var trial_option := ENCOUNTER_CONTRACTS.door_option(
+		"Trial - %s" % trial_mutator_name,
+		trial_color,
+		ENUMS.DoorKind.ENCOUNTER,
+		"trial",
+		ENUMS.RewardMode.ARCANA,
+		trial_profile
+	)
 
-	var rest_option: Dictionary = {
-		"label": "Rest Site",
-		"color": Color(0.66, 1.0, 0.76, 0.92),
-		"kind": "rest",
-		"icon": "rest",
-		"reward": "none",
-		"profile": {}
-	}
+	var rest_option := ENCOUNTER_CONTRACTS.door_option(
+		"Rest Site",
+		Color(0.66, 1.0, 0.76, 0.92),
+		ENUMS.DoorKind.REST,
+		"rest",
+		ENUMS.RewardMode.NONE,
+		{}
+	)
 
 	var options: Array[Dictionary] = [hard_option, trial_option, rest_option]
 	var first: int = rng.randi_range(0, options.size() - 1)
@@ -150,62 +155,63 @@ func roll_route_options(depth: int) -> Array[Dictionary]:
 	return chosen
 
 func roll_hard_enemy_mutator() -> Dictionary:
+	var C := ENCOUNTER_CONTRACTS
 	var pool: Array[Dictionary] = [
 		{
-			"name": "Blood Rush",
+			C.MUTATOR_KEY_NAME: "Blood Rush",
 			# Melee attackers hit harder and faster — chasers + chargers
-			"theme_color": Color(0.95, 0.22, 0.28, 1.0),
-			"icon_shape_id": "blood_rush",
-			"banner_suffix": "Melee enemies strike harder and faster",
-			"enemy_tint": Color(1.0, 0.80, 0.80, 1.0),
-			"chaser_damage_mult": 1.5,
-			"chaser_attack_interval_mult": 0.75,
-			"chaser_speed_mult": 1.1,
-			"charger_damage_mult": 1.45,
-			"charger_speed_mult": 1.0,
-			"charger_windup_mult": 1.0
+			C.MUTATOR_KEY_THEME_COLOR: Color(0.95, 0.22, 0.28, 1.0),
+			C.MUTATOR_KEY_ICON_SHAPE_ID: "blood_rush",
+			C.MUTATOR_KEY_BANNER_SUFFIX: "Melee enemies strike harder and faster",
+			C.MUTATOR_KEY_ENEMY_TINT: Color(1.0, 0.80, 0.80, 1.0),
+			C.MUTATOR_STAT_CHASER_DAMAGE_MULT: 1.5,
+			C.MUTATOR_STAT_CHASER_ATTACK_INTERVAL_MULT: 0.75,
+			C.MUTATOR_STAT_CHASER_SPEED_MULT: 1.1,
+			C.MUTATOR_STAT_CHARGER_DAMAGE_MULT: 1.45,
+			C.MUTATOR_STAT_CHARGER_SPEED_MULT: 1.0,
+			C.MUTATOR_STAT_CHARGER_WINDUP_MULT: 1.0
 		},
 		{
-			"name": "Flashpoint",
+			C.MUTATOR_KEY_NAME: "Flashpoint",
 			# Ranged and charging attacks arrive with almost no warning — chargers + archers
-			"theme_color": Color(0.68, 0.40, 1.0, 1.0),
-			"icon_shape_id": "flashpoint",
-			"banner_suffix": "Charges and volleys strike with almost no warning",
-			"enemy_tint": Color(0.88, 0.82, 1.0, 1.0),
-			"charger_damage_mult": 1.2,
-			"charger_speed_mult": 1.32,
-			"charger_windup_mult": 0.55,
-			"archer_windup_mult": 0.55,
-			"archer_cooldown_mult": 0.72,
-			"archer_projectile_damage_mult": 1.25
+			C.MUTATOR_KEY_THEME_COLOR: Color(0.68, 0.40, 1.0, 1.0),
+			C.MUTATOR_KEY_ICON_SHAPE_ID: "flashpoint",
+			C.MUTATOR_KEY_BANNER_SUFFIX: "Charges and volleys strike with almost no warning",
+			C.MUTATOR_KEY_ENEMY_TINT: Color(0.88, 0.82, 1.0, 1.0),
+			C.MUTATOR_STAT_CHARGER_DAMAGE_MULT: 1.2,
+			C.MUTATOR_STAT_CHARGER_SPEED_MULT: 1.32,
+			C.MUTATOR_STAT_CHARGER_WINDUP_MULT: 0.55,
+			C.MUTATOR_STAT_ARCHER_WINDUP_MULT: 0.55,
+			C.MUTATOR_STAT_ARCHER_COOLDOWN_MULT: 0.72,
+			C.MUTATOR_STAT_ARCHER_PROJECTILE_DAMAGE_MULT: 1.25
 		},
 		{
-			"name": "Siegebreak",
+			C.MUTATOR_KEY_NAME: "Siegebreak",
 			# Heavy-impact enemies deal devastating force — chargers + shielders
-			"theme_color": Color(0.96, 0.58, 0.18, 1.0),
-			"icon_shape_id": "siegebreak",
-			"banner_suffix": "Chargers and shielders hit with overwhelming force",
-			"enemy_tint": Color(1.0, 0.88, 0.72, 1.0),
-			"charger_damage_mult": 1.62,
-			"charger_speed_mult": 1.15,
-			"charger_windup_mult": 0.82,
-			"shielder_slam_damage_mult": 1.55,
-			"shielder_slam_windup_mult": 0.78,
-			"shielder_speed_mult": 1.18
+			C.MUTATOR_KEY_THEME_COLOR: Color(0.96, 0.58, 0.18, 1.0),
+			C.MUTATOR_KEY_ICON_SHAPE_ID: "siegebreak",
+			C.MUTATOR_KEY_BANNER_SUFFIX: "Chargers and shielders hit with overwhelming force",
+			C.MUTATOR_KEY_ENEMY_TINT: Color(1.0, 0.88, 0.72, 1.0),
+			C.MUTATOR_STAT_CHARGER_DAMAGE_MULT: 1.62,
+			C.MUTATOR_STAT_CHARGER_SPEED_MULT: 1.15,
+			C.MUTATOR_STAT_CHARGER_WINDUP_MULT: 0.82,
+			C.MUTATOR_STAT_SHIELDER_SLAM_DAMAGE_MULT: 1.55,
+			C.MUTATOR_STAT_SHIELDER_SLAM_WINDUP_MULT: 0.78,
+			C.MUTATOR_STAT_SHIELDER_SPEED_MULT: 1.18
 		},
 		{
-			"name": "Iron Volley",
+			C.MUTATOR_KEY_NAME: "Iron Volley",
 			# No chargers — archers pin you while shielders advance
-			"theme_color": Color(0.32, 0.82, 0.56, 1.0),
-			"icon_shape_id": "iron_volley",
-			"banner_suffix": "Archers and shielders hold the line",
-			"enemy_tint": Color(0.80, 1.0, 0.86, 1.0),
-			"archer_windup_mult": 0.68,
-			"archer_cooldown_mult": 0.62,
-			"archer_projectile_damage_mult": 1.35,
-			"shielder_slam_damage_mult": 1.3,
-			"shielder_slam_windup_mult": 0.85,
-			"shielder_speed_mult": 1.28
+			C.MUTATOR_KEY_THEME_COLOR: Color(0.32, 0.82, 0.56, 1.0),
+			C.MUTATOR_KEY_ICON_SHAPE_ID: "iron_volley",
+			C.MUTATOR_KEY_BANNER_SUFFIX: "Archers and shielders hold the line",
+			C.MUTATOR_KEY_ENEMY_TINT: Color(0.80, 1.0, 0.86, 1.0),
+			C.MUTATOR_STAT_ARCHER_WINDUP_MULT: 0.68,
+			C.MUTATOR_STAT_ARCHER_COOLDOWN_MULT: 0.62,
+			C.MUTATOR_STAT_ARCHER_PROJECTILE_DAMAGE_MULT: 1.35,
+			C.MUTATOR_STAT_SHIELDER_SLAM_DAMAGE_MULT: 1.3,
+			C.MUTATOR_STAT_SHIELDER_SLAM_WINDUP_MULT: 0.85,
+			C.MUTATOR_STAT_SHIELDER_SPEED_MULT: 1.28
 		}
 	]
 	return pool[rng.randi_range(0, pool.size() - 1)]

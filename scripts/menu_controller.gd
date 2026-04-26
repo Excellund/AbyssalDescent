@@ -3,6 +3,7 @@ extends Control
 const GAMEPLAY_SCENE_PATH := "res://scenes/Main.tscn"
 const RUN_CONTEXT_PATH := "/root/RunContext"
 const MENU_MUSIC := preload("res://music/msx1.mp3")
+const ENUMS := preload("res://scripts/shared/enums.gd")
 
 var root_panel: Panel
 var options_panel: Panel
@@ -172,11 +173,11 @@ func _build_options_panel() -> Panel:
 	return panel
 
 func _on_standard_pressed() -> void:
-	_set_run_mode("standard")
+	_set_run_mode(ENUMS.RunMode.STANDARD)
 	get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)
 
 func _on_endless_pressed() -> void:
-	_set_run_mode("endless")
+	_set_run_mode(ENUMS.RunMode.ENDLESS)
 	get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)
 
 func _on_options_pressed() -> void:
@@ -237,7 +238,7 @@ func _apply_menu_music_volume(music_db: float) -> void:
 		return
 	menu_music_player.volume_db = clampf(music_db, -60.0, -6.0)
 
-func _set_run_mode(mode: String) -> void:
+func _set_run_mode(mode: int) -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context != null and run_context.has_method("set_run_mode"):
 		run_context.call("set_run_mode", mode)

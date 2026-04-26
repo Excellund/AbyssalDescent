@@ -1,4 +1,4 @@
-extends Node2D
+﻿extends Node2D
 
 const ENEMY_CHASER_SCRIPT := preload("res://scripts/enemy_chaser.gd")
 const ENEMY_CHARGER_SCRIPT := preload("res://scripts/enemy_charger.gd")
@@ -12,11 +12,10 @@ const ENCOUNTER_PROFILE_BUILDER_SCRIPT := preload("res://scripts/encounter_profi
 const ENCOUNTER_FLOW_SYSTEM_SCRIPT := preload("res://scripts/encounter_flow_system.gd")
 const REWARD_SELECTION_UI_SCRIPT := preload("res://scripts/reward_selection_ui.gd")
 const ENUMS := preload("res://scripts/shared/enums.gd")
+const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const RUN_CONTEXT_PATH := "/root/RunContext"
-const MUTATOR_ICON_BLOOD_RUSH: Texture2D = preload("res://assets/ui/mutators/blood_rush.svg")
-const MUTATOR_ICON_FLASHPOINT: Texture2D = preload("res://assets/ui/mutators/flashpoint.svg")
-const MUTATOR_ICON_SIEGEBREAK: Texture2D = preload("res://assets/ui/mutators/siegebreak.svg")
-const MUTATOR_ICON_IRON_VOLLEY: Texture2D = preload("res://assets/ui/mutators/iron_volley.svg")
+const WORLD_HUD_SCRIPT := preload("res://scripts/world_hud.gd")
+const WORLD_RENDERER_SCRIPT := preload("res://scripts/world_renderer.gd")
 const DEBUG_RUN_NORMAL := 0
 const DEBUG_RUN_FIRST_BOSS := 1
 
@@ -85,20 +84,11 @@ var current_room_size: Vector2 = Vector2.ZERO
 var current_room_static_camera: bool = true
 var current_room_label: String = ""
 var door_options: Array[Dictionary] = []
-var pending_room_reward: String = "none"
+var pending_room_reward: int = ENUMS.RewardMode.NONE
 var current_room_enemy_mutator: Dictionary = {}
 
-var status_panel: Panel
-var status_label: RichTextLabel
-var status_mutator_icon: TextureRect
-var status_mutator_label: Label
-var stats_panel: Panel
-var stats_label: RichTextLabel
-var room_banner_title_label: Label
-var room_banner_subtitle_label: Label
-var room_banner_tween: Tween
-var room_banner_top_margin: float = 18.0
-var art_time: float = 0.0
+var hud: Node
+var renderer: Node2D
 var music_system: Node
 var enemy_spawner: Node
 var encounter_profile_builder: Node
@@ -153,17 +143,30 @@ func _ready() -> void:
 		"shielder": ENEMY_SHIELDER_SCRIPT
 	}, Callable(self, "_on_room_enemy_died"))
 	_play_room_music(false, false, music_intro_fade_duration)
-	_create_hud()
+	hud = WORLD_HUD_SCRIPT.new()
+	add_child(hud)
+	hud.setup(encounter_count, 18.0)
+	renderer = WORLD_RENDERER_SCRIPT.new()
+	add_child(renderer)
+	renderer.configure({
+		"ambient_backdrop_alpha": ambient_backdrop_alpha,
+		"arena_glow_strength": arena_glow_strength,
+		"floor_coarse_grid_alpha": floor_coarse_grid_alpha,
+		"floor_fine_grid_alpha": floor_fine_grid_alpha,
+		"floor_border_alpha": floor_border_alpha,
+		"floor_grid_step": floor_grid_step,
+		"floor_grid_fine_step": floor_grid_fine_step,
+		"door_use_radius": door_use_radius,
+	})
+	hud.refresh(_get_hud_state(), player)
 	_apply_debug_start_powers_if_needed()
 	if debug_run_state != DEBUG_RUN_NORMAL:
 		_apply_debug_run_state(_debug_run_state_to_key(debug_run_state))
-		queue_redraw()
 		return
 	if debug_skip_starting_boon_selection:
 		_begin_room(_build_skirmish_profile(room_depth))
 	else:
 		_open_boon_selection("Choose Starting Boon", true, ENUMS.RewardMode.BOON)
-	queue_redraw()
 
 func start_run_with_powers(power_ids: Array[String]) -> Dictionary:
 	var applied: Array[String] = []
@@ -189,7 +192,7 @@ func start_run_with_powers(power_ids: Array[String]) -> Dictionary:
 		else:
 			unknown.append(id)
 
-	_update_hud()
+	hud.refresh(_get_hud_state(), player)
 	return {
 		"applied": applied,
 		"unknown": unknown
@@ -238,7 +241,7 @@ func _apply_debug_run_state(state: String) -> Dictionary:
 	_set_combat_paused(false)
 	choosing_next_room = false
 	door_options.clear()
-	pending_room_reward = "none"
+	pending_room_reward = ENUMS.RewardMode.NONE
 	run_cleared = false
 	in_boss_room = false
 	endless_boss_defeated = false
@@ -253,7 +256,7 @@ func _apply_debug_run_state(state: String) -> Dictionary:
 	boss_unlocked = true
 	_begin_boss_room()
 
-	_update_hud()
+	hud.refresh(_get_hud_state(), player)
 	return {"ok": true, "state": normalized}
 
 func _apply_debug_start_powers_if_needed() -> void:
@@ -287,11 +290,10 @@ func _is_known_power_id(power_id: String) -> bool:
 	return power_registry_instance.is_valid_power_id(power_id)
 
 func _process(delta: float) -> void:
-	art_time += delta
 	if is_instance_valid(reward_selection_ui) and bool(reward_selection_ui.call("is_active")):
 		reward_selection_ui.call("process_input", delta)
-		_update_hud()
-		queue_redraw()
+		hud.refresh(_get_hud_state(), player)
+		_sync_renderer()
 		return
 
 	_keep_player_inside_current_room()
@@ -300,9 +302,27 @@ func _process(delta: float) -> void:
 	_try_use_door()
 	_update_encounter_state()
 	_update_camera_mode()
-	_update_room_banner_layout()
-	_update_hud()
-	queue_redraw()
+	hud.refresh(_get_hud_state(), player)
+	_sync_renderer()
+
+func _get_hud_state() -> Dictionary:
+	return {
+		"room_size": current_room_size,
+		"rooms_cleared": rooms_cleared,
+		"room_depth": room_depth,
+		"run_cleared": run_cleared,
+		"current_room_enemy_mutator": current_room_enemy_mutator,
+		"in_boss_room": in_boss_room,
+		"active_room_enemy_count": active_room_enemy_count,
+	}
+
+func _sync_renderer() -> void:
+	if not is_instance_valid(renderer):
+		return
+	renderer.room_size = current_room_size
+	renderer.choosing_next_room = choosing_next_room
+	renderer.door_options = door_options
+	renderer.player_global_position = player.global_position if is_instance_valid(player) else Vector2.ZERO
 
 func _keep_player_inside_current_room() -> void:
 	if not is_instance_valid(player):
@@ -350,8 +370,9 @@ func _update_encounter_state() -> void:
 func _on_room_cleared() -> void:
 	if not is_instance_valid(encounter_flow_system):
 		return
-	var outcome: Dictionary = encounter_flow_system.call("resolve_room_cleared", in_boss_room, pending_room_reward, rooms_cleared, room_depth, encounter_count)
-	run_cleared = bool(outcome.get("run_cleared", false))
+	var raw_outcome: Variant = encounter_flow_system.call("resolve_room_cleared", in_boss_room, pending_room_reward, rooms_cleared, room_depth, encounter_count)
+	var outcome: Dictionary = ENCOUNTER_CONTRACTS.normalize_room_cleared_outcome(raw_outcome)
+	run_cleared = ENCOUNTER_CONTRACTS.outcome_run_cleared(outcome)
 	if run_cleared and _is_endless_mode() and in_boss_room:
 		run_cleared = false
 		in_boss_room = false
@@ -359,20 +380,20 @@ func _on_room_cleared() -> void:
 		rooms_cleared += 1
 		room_depth += 1
 		boss_unlocked = false
-		pending_room_reward = "none"
-		_show_room_banner("Boss Defeated", "Endless continues")
+		pending_room_reward = ENUMS.RewardMode.NONE
+		hud.show_banner("Boss Defeated", "Endless continues")
 		_spawn_door_options()
 		return
 	if run_cleared:
 		choosing_next_room = false
 		return
-	rooms_cleared = int(outcome.get("rooms_cleared", rooms_cleared))
-	room_depth = int(outcome.get("room_depth", room_depth))
-	boss_unlocked = bool(outcome.get("boss_unlocked", boss_unlocked))
+	rooms_cleared = ENCOUNTER_CONTRACTS.outcome_rooms_cleared(outcome)
+	room_depth = ENCOUNTER_CONTRACTS.outcome_room_depth(outcome)
+	boss_unlocked = ENCOUNTER_CONTRACTS.outcome_boss_unlocked(outcome)
 	if _is_endless_mode() and endless_boss_defeated:
 		boss_unlocked = false
-	pending_room_reward = String(outcome.get("pending_room_reward", "none"))
-	var reward_mode: int = ENUMS.reward_mode_from_legacy(String(outcome.get("open_reward_mode", "")))
+	pending_room_reward = ENCOUNTER_CONTRACTS.outcome_pending_room_reward(outcome)
+	var reward_mode: int = ENCOUNTER_CONTRACTS.outcome_open_reward_mode(outcome)
 	if reward_mode == ENUMS.RewardMode.BOON:
 		_open_boon_selection("Choose Boon Reward", false, ENUMS.RewardMode.BOON)
 		return
@@ -380,7 +401,7 @@ func _on_room_cleared() -> void:
 		var is_first_arcana := arcana_rewards_taken.is_empty()
 		_open_boon_selection("Choose Arcana", is_first_arcana, ENUMS.RewardMode.ARCANA)
 		return
-	if bool(outcome.get("spawn_doors", false)):
+	if ENCOUNTER_CONTRACTS.outcome_spawn_doors(outcome):
 		_spawn_door_options()
 
 func _get_run_context() -> Node:
@@ -395,7 +416,9 @@ func _is_endless_mode() -> bool:
 	var mode_value: Variant = run_context.get("run_mode")
 	if mode_value == null:
 		return false
-	return String(mode_value) == "endless"
+	if mode_value is int:
+		return int(mode_value) == ENUMS.RunMode.ENDLESS
+	return String(mode_value).to_lower() == "endless"
 
 func _sync_audio_settings_from_context() -> void:
 	var run_context := _get_run_context()
@@ -422,10 +445,11 @@ func _try_use_door() -> void:
 		return
 	if not is_instance_valid(encounter_flow_system):
 		return
-	var result: Dictionary = encounter_flow_system.call("find_used_door", player.global_position, door_options, door_use_radius)
-	if not bool(result.get("used", false)):
+	var raw_result: Variant = encounter_flow_system.call("find_used_door", player.global_position, door_options, door_use_radius)
+	var result: Dictionary = ENCOUNTER_CONTRACTS.normalize_door_use_result(raw_result)
+	if not ENCOUNTER_CONTRACTS.door_use_is_used(result):
 		return
-	var used_door := result.get("door", {}) as Dictionary
+	var used_door := ENCOUNTER_CONTRACTS.door_use_get_door(result)
 	_choose_door(used_door)
 
 func _choose_door(door: Dictionary) -> void:
@@ -438,17 +462,18 @@ func _choose_door(door: Dictionary) -> void:
 	player.global_position = Vector2.ZERO
 	if not is_instance_valid(encounter_flow_system):
 		return
-	var choice: Dictionary = encounter_flow_system.call("resolve_chosen_door", door)
-	var action := String(choice.get("action", "encounter"))
-	if action == "boss":
+	var raw_choice: Variant = encounter_flow_system.call("resolve_chosen_door", door)
+	var choice: Dictionary = ENCOUNTER_CONTRACTS.normalize_door_choice(raw_choice)
+	var action_id: int = ENCOUNTER_CONTRACTS.door_choice_action_id(choice)
+	if action_id == ENUMS.EncounterAction.BOSS:
 		_begin_boss_room()
 		return
-	if action == "rest":
+	if action_id == ENUMS.EncounterAction.REST:
 		_enter_rest_site()
 		return
-	var profile: Dictionary = choice.get("profile", {})
+	var profile: Dictionary = ENCOUNTER_CONTRACTS.door_choice_profile(choice)
 	profile = _apply_endless_scaling_to_profile(profile)
-	pending_room_reward = String(choice.get("reward", "none"))
+	pending_room_reward = ENCOUNTER_CONTRACTS.door_choice_reward_mode(choice)
 	current_room_enemy_mutator = profile.get("enemy_mutator", {})
 	_begin_room(profile)
 
@@ -464,43 +489,46 @@ func _apply_endless_scaling_to_profile(profile: Dictionary) -> Dictionary:
 
 	# Aggressive endless scaling: tier rises every depth after first boss clear.
 	var tier := endless_depth
-	var scaled := profile.duplicate(true)
-	scaled["chaser_count"] = int(scaled.get("chaser_count", 0)) + tier
-	scaled["charger_count"] = int(scaled.get("charger_count", 0)) + int(floor(float(tier) * 0.75))
-	scaled["archer_count"] = int(scaled.get("archer_count", 0)) + int(floor(float(tier) * 0.65))
-	scaled["shielder_count"] = int(scaled.get("shielder_count", 0)) + int(floor(float(tier) * 0.5))
+	var scaled := ENCOUNTER_CONTRACTS.normalize_profile(profile.duplicate(true))
+	var scaled_chasers := ENCOUNTER_CONTRACTS.profile_chaser_count(scaled) + tier
+	var scaled_chargers := ENCOUNTER_CONTRACTS.profile_charger_count(scaled) + int(floor(float(tier) * 0.75))
+	var scaled_archers := ENCOUNTER_CONTRACTS.profile_archer_count(scaled) + int(floor(float(tier) * 0.65))
+	var scaled_shielders := ENCOUNTER_CONTRACTS.profile_shielder_count(scaled) + int(floor(float(tier) * 0.5))
+	ENCOUNTER_CONTRACTS.profile_set_counts(scaled, scaled_chasers, scaled_chargers, scaled_archers, scaled_shielders)
 
-	var base_room_size := scaled.get("room_size", room_base_size) as Vector2
+	var base_room_size := ENCOUNTER_CONTRACTS.profile_room_size(scaled)
+	if base_room_size == Vector2.ZERO:
+		base_room_size = room_base_size
 	var room_growth := Vector2(34.0, 22.0) * float(mini(tier, 12))
 	var scaled_room_size := Vector2(
 		clampf(base_room_size.x + room_growth.x, room_base_size.x, 1800.0),
 		clampf(base_room_size.y + room_growth.y, room_base_size.y, 1300.0)
 	)
-	scaled["room_size"] = scaled_room_size
-	scaled["static_camera"] = scaled_room_size.x <= static_camera_room_threshold
+	ENCOUNTER_CONTRACTS.profile_set_room_size(scaled, scaled_room_size)
+	ENCOUNTER_CONTRACTS.profile_set_static_camera(scaled, scaled_room_size.x <= static_camera_room_threshold)
 
 	# Merge endless stat pressure into the existing mutator channel.
 	var endless_health_mult := clampf(1.0 + float(tier) * 0.28, 1.0, 4.2)
 	var endless_damage_mult := clampf(1.0 + float(tier) * 0.14, 1.0, 2.8)
 	var endless_speed_mult := clampf(1.0 + float(tier) * 0.07, 1.0, 2.0)
 	var endless_windup_mult := clampf(1.0 - float(tier) * 0.03, 0.55, 1.0)
-	var merged_mutator := (scaled.get("enemy_mutator", {}) as Dictionary).duplicate(true)
-	merged_mutator["enemy_health_mult"] = float(merged_mutator.get("enemy_health_mult", 1.0)) * endless_health_mult
-	merged_mutator["chaser_damage_mult"] = float(merged_mutator.get("chaser_damage_mult", 1.0)) * endless_damage_mult
-	merged_mutator["charger_damage_mult"] = float(merged_mutator.get("charger_damage_mult", 1.0)) * endless_damage_mult
-	merged_mutator["archer_projectile_damage_mult"] = float(merged_mutator.get("archer_projectile_damage_mult", 1.0)) * endless_damage_mult
-	merged_mutator["shielder_slam_damage_mult"] = float(merged_mutator.get("shielder_slam_damage_mult", 1.0)) * endless_damage_mult
-	merged_mutator["chaser_speed_mult"] = float(merged_mutator.get("chaser_speed_mult", 1.0)) * endless_speed_mult
-	merged_mutator["charger_speed_mult"] = float(merged_mutator.get("charger_speed_mult", 1.0)) * endless_speed_mult
-	merged_mutator["shielder_speed_mult"] = float(merged_mutator.get("shielder_speed_mult", 1.0)) * endless_speed_mult
-	merged_mutator["charger_windup_mult"] = float(merged_mutator.get("charger_windup_mult", 1.0)) * endless_windup_mult
-	merged_mutator["archer_windup_mult"] = float(merged_mutator.get("archer_windup_mult", 1.0)) * endless_windup_mult
-	merged_mutator["shielder_slam_windup_mult"] = float(merged_mutator.get("shielder_slam_windup_mult", 1.0)) * endless_windup_mult
-	scaled["enemy_mutator"] = merged_mutator
+	var merged_mutator := ENCOUNTER_CONTRACTS.profile_enemy_mutator(scaled).duplicate(true)
+	ENCOUNTER_CONTRACTS.mutator_multiply_stat(merged_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_ENEMY_HEALTH_MULT, endless_health_mult, 1.0)
+	ENCOUNTER_CONTRACTS.mutator_multiply_stat(merged_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT, endless_damage_mult, 1.0)
+	ENCOUNTER_CONTRACTS.mutator_multiply_stat(merged_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_DAMAGE_MULT, endless_damage_mult, 1.0)
+	ENCOUNTER_CONTRACTS.mutator_multiply_stat(merged_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_PROJECTILE_DAMAGE_MULT, endless_damage_mult, 1.0)
+	ENCOUNTER_CONTRACTS.mutator_multiply_stat(merged_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_DAMAGE_MULT, endless_damage_mult, 1.0)
+	ENCOUNTER_CONTRACTS.mutator_multiply_stat(merged_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_SPEED_MULT, endless_speed_mult, 1.0)
+	ENCOUNTER_CONTRACTS.mutator_multiply_stat(merged_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_SPEED_MULT, endless_speed_mult, 1.0)
+	ENCOUNTER_CONTRACTS.mutator_multiply_stat(merged_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SPEED_MULT, endless_speed_mult, 1.0)
+	ENCOUNTER_CONTRACTS.mutator_multiply_stat(merged_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_WINDUP_MULT, endless_windup_mult, 1.0)
+	ENCOUNTER_CONTRACTS.mutator_multiply_stat(merged_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_WINDUP_MULT, endless_windup_mult, 1.0)
+	ENCOUNTER_CONTRACTS.mutator_multiply_stat(merged_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_WINDUP_MULT, endless_windup_mult, 1.0)
+	ENCOUNTER_CONTRACTS.profile_set_enemy_mutator(scaled, merged_mutator)
 
-	var base_label := String(scaled.get("label", "Encounter"))
+	var base_label := ENCOUNTER_CONTRACTS.profile_label(scaled)
 	if base_label.find("Tier ") == -1:
-		scaled["label"] = "%s  Tier %d" % [base_label, tier]
+		scaled[ENCOUNTER_CONTRACTS.PROFILE_KEY_LABEL] = "%s  Tier %d" % [base_label, tier]
 
 	return scaled
 
@@ -509,25 +537,21 @@ func _begin_room(profile: Dictionary) -> void:
 		return
 	in_boss_room = false
 	_play_room_music(false)
-	current_room_size = profile["room_size"]
-	current_room_static_camera = profile["static_camera"]
-	current_room_label = profile["label"]
-	current_room_enemy_mutator = profile.get("enemy_mutator", {})
-	var mutator_name := String(current_room_enemy_mutator.get("name", ""))
+	current_room_size = ENCOUNTER_CONTRACTS.profile_room_size(profile)
+	current_room_static_camera = ENCOUNTER_CONTRACTS.profile_static_camera(profile)
+	current_room_label = ENCOUNTER_CONTRACTS.profile_label(profile)
+	current_room_enemy_mutator = ENCOUNTER_CONTRACTS.profile_enemy_mutator(profile)
+	var mutator_name := ENCOUNTER_CONTRACTS.mutator_name(current_room_enemy_mutator)
 	var room_subtitle := ""
+	var sub_color := Color(0.78, 0.9, 1.0, 0.92)
 	if not mutator_name.is_empty():
-		var banner_suffix := String(current_room_enemy_mutator.get("banner_suffix", ""))
+		var banner_suffix := ENCOUNTER_CONTRACTS.mutator_banner_suffix(current_room_enemy_mutator)
 		room_subtitle = mutator_name
 		if not banner_suffix.is_empty():
-			room_subtitle += "  —  " + banner_suffix
-		var sub_color: Color = current_room_enemy_mutator.get("theme_color", Color(0.78, 0.9, 1.0, 0.92))
+			room_subtitle += "  -  " + banner_suffix
+		sub_color = ENCOUNTER_CONTRACTS.mutator_theme_color(current_room_enemy_mutator, sub_color)
 		sub_color.a = 0.92
-		if room_banner_subtitle_label != null:
-			room_banner_subtitle_label.add_theme_color_override("font_color", sub_color)
-	else:
-		if room_banner_subtitle_label != null:
-			room_banner_subtitle_label.add_theme_color_override("font_color", Color(0.78, 0.9, 1.0, 0.92))
-	_show_room_banner(current_room_label, room_subtitle)
+	hud.show_banner(current_room_label, room_subtitle, sub_color)
 	if is_instance_valid(enemy_spawner):
 		enemy_spawner.call("configure_room", current_room_size, spawn_padding, spawn_safe_radius, current_room_enemy_mutator)
 	_apply_camera_bounds_for_room(current_room_size)
@@ -537,7 +561,7 @@ func _enter_rest_site() -> void:
 	in_boss_room = false
 	_play_room_music(false)
 	current_room_label = "Rest Site"
-	_show_room_banner("Rest Site", "Recovering...")
+	hud.show_banner("Rest Site", "Recovering...")
 	current_room_static_camera = true
 	_advance_room_progress()
 	if is_instance_valid(player) and player.has_method("heal"):
@@ -560,7 +584,7 @@ func _begin_boss_room() -> void:
 	current_room_size = Vector2(1260.0, 900.0)
 	current_room_static_camera = false
 	current_room_label = "Boss Chamber: The Warden"
-	_show_room_banner("Boss Chamber", "The Warden")
+	hud.show_banner("Boss Chamber", "The Warden")
 	_apply_camera_bounds_for_room(current_room_size)
 	active_room_enemy_count = 1
 	var boss := CharacterBody2D.new()
@@ -628,178 +652,10 @@ func _roll_route_options(depth: int) -> Array[Dictionary]:
 		return []
 	return encounter_profile_builder.call("roll_route_options", depth)
 
-func _create_hud() -> void:
-	var layer := CanvasLayer.new()
-	layer.layer = 90
-	add_child(layer)
-
-	status_panel = Panel.new()
-	status_panel.custom_minimum_size = Vector2(302.0, 84.0)
-	var status_style := StyleBoxFlat.new()
-	status_style.bg_color = Color(0.03, 0.06, 0.1, 0.44)
-	status_style.border_color = Color(0.0, 0.0, 0.0, 0.0)
-	status_style.corner_radius_top_left = 10
-	status_style.corner_radius_top_right = 10
-	status_style.corner_radius_bottom_left = 10
-	status_style.corner_radius_bottom_right = 10
-	status_panel.add_theme_stylebox_override("panel", status_style)
-	layer.add_child(status_panel)
-
-	status_label = RichTextLabel.new()
-	status_label.position = Vector2(0.0, 8.0)
-	status_label.custom_minimum_size = Vector2(302.0, 34.0)
-	status_label.bbcode_enabled = true
-	status_label.fit_content = true
-	status_label.scroll_active = false
-	status_label.selection_enabled = false
-	status_label.add_theme_font_size_override("normal_font_size", 16)
-	status_label.add_theme_color_override("default_color", Color(0.94, 0.98, 1.0, 0.98))
-	status_label.add_theme_color_override("font_shadow_color", Color(0.02, 0.04, 0.06, 0.95))
-	status_label.add_theme_constant_override("shadow_offset_x", 1)
-	status_label.add_theme_constant_override("shadow_offset_y", 1)
-	status_panel.add_child(status_label)
-
-	status_mutator_icon = TextureRect.new()
-	status_mutator_icon.position = Vector2(10.0, 41.0)
-	status_mutator_icon.custom_minimum_size = Vector2(18.0, 18.0)
-	status_mutator_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	status_mutator_icon.visible = false
-	status_panel.add_child(status_mutator_icon)
-
-	status_mutator_label = Label.new()
-	status_mutator_label.position = Vector2(34.0, 39.0)
-	status_mutator_label.custom_minimum_size = Vector2(256.0, 24.0)
-	status_mutator_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	status_mutator_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	status_mutator_label.add_theme_font_size_override("font_size", 16)
-	status_mutator_label.add_theme_color_override("font_color", Color(0.86, 0.94, 1.0, 0.96))
-	status_mutator_label.add_theme_color_override("font_shadow_color", Color(0.02, 0.04, 0.06, 0.92))
-	status_mutator_label.add_theme_constant_override("shadow_offset_x", 1)
-	status_mutator_label.add_theme_constant_override("shadow_offset_y", 1)
-	status_mutator_label.visible = false
-	status_panel.add_child(status_mutator_label)
-
-	stats_panel = Panel.new()
-	stats_panel.custom_minimum_size = Vector2(360.0, 214.0)
-	var stats_style := StyleBoxFlat.new()
-	stats_style.bg_color = Color(0.03, 0.06, 0.1, 0.44)
-	stats_style.border_color = Color(0.0, 0.0, 0.0, 0.0)
-	stats_style.corner_radius_top_left = 10
-	stats_style.corner_radius_top_right = 10
-	stats_style.corner_radius_bottom_left = 10
-	stats_style.corner_radius_bottom_right = 10
-	stats_panel.add_theme_stylebox_override("panel", stats_style)
-	layer.add_child(stats_panel)
-
-	stats_label = RichTextLabel.new()
-	stats_label.position = Vector2(10.0, 8.0)
-	stats_label.custom_minimum_size = Vector2(340.0, 198.0)
-	stats_label.bbcode_enabled = true
-	stats_label.fit_content = true
-	stats_label.scroll_active = false
-	stats_label.selection_enabled = false
-	stats_label.add_theme_font_size_override("normal_font_size", 15)
-	stats_label.add_theme_color_override("default_color", Color(0.94, 0.98, 1.0, 0.98))
-	stats_label.add_theme_color_override("font_shadow_color", Color(0.02, 0.04, 0.06, 0.95))
-	stats_label.add_theme_constant_override("shadow_offset_x", 1)
-	stats_label.add_theme_constant_override("shadow_offset_y", 1)
-	stats_panel.add_child(stats_label)
-	_update_hud()
-
-	# Room entry banner — centered, fades in then out on room entry.
-	var banner_layer := CanvasLayer.new()
-	banner_layer.layer = 110
-	banner_layer.follow_viewport_enabled = false
-	banner_layer.follow_viewport_scale = 1.0
-	add_child(banner_layer)
-
-	var banner_container := Control.new()
-	banner_container.set_anchors_preset(Control.PRESET_FULL_RECT)
-	banner_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	banner_layer.add_child(banner_container)
-
-	room_banner_title_label = Label.new()
-	room_banner_title_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	room_banner_title_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	room_banner_title_label.grow_vertical = Control.GROW_DIRECTION_END
-	room_banner_title_label.offset_left = 0.0
-	room_banner_title_label.offset_right = 0.0
-	room_banner_title_label.offset_top = 92.0
-	room_banner_title_label.offset_bottom = 126.0
-	room_banner_title_label.add_theme_font_size_override("font_size", 30)
-	room_banner_title_label.add_theme_color_override("font_color", Color(0.98, 0.93, 0.84, 0.96))
-	room_banner_title_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.92))
-	room_banner_title_label.add_theme_constant_override("shadow_offset_x", 2)
-	room_banner_title_label.add_theme_constant_override("shadow_offset_y", 2)
-	room_banner_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	room_banner_title_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	room_banner_title_label.modulate.a = 0.0
-	banner_container.add_child(room_banner_title_label)
-
-	room_banner_subtitle_label = Label.new()
-	room_banner_subtitle_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	room_banner_subtitle_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	room_banner_subtitle_label.grow_vertical = Control.GROW_DIRECTION_END
-	room_banner_subtitle_label.offset_left = 0.0
-	room_banner_subtitle_label.offset_right = 0.0
-	room_banner_subtitle_label.offset_top = 124.0
-	room_banner_subtitle_label.offset_bottom = 152.0
-	room_banner_subtitle_label.add_theme_font_size_override("font_size", 18)
-	room_banner_subtitle_label.add_theme_color_override("font_color", Color(0.78, 0.9, 1.0, 0.92))
-	room_banner_subtitle_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.9))
-	room_banner_subtitle_label.add_theme_constant_override("shadow_offset_x", 2)
-	room_banner_subtitle_label.add_theme_constant_override("shadow_offset_y", 2)
-	room_banner_subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	room_banner_subtitle_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	room_banner_subtitle_label.modulate.a = 0.0
-	banner_container.add_child(room_banner_subtitle_label)
-	_update_room_banner_layout()
-
-func _update_room_banner_layout() -> void:
-	if room_banner_title_label == null or room_banner_subtitle_label == null:
-		return
-
-	var top_y := 92.0
-	if current_room_size != Vector2.ZERO:
-		var room_top_world := Vector2(0.0, -current_room_size.y * 0.5)
-		var canvas_xform := get_viewport().get_canvas_transform()
-		var room_top_screen := canvas_xform * room_top_world
-		var viewport_height := get_viewport().get_visible_rect().size.y
-		top_y = clampf(room_top_screen.y + room_banner_top_margin, 16.0, viewport_height * 0.45)
-
-	room_banner_title_label.offset_top = top_y
-	room_banner_title_label.offset_bottom = top_y + 34.0
-	room_banner_subtitle_label.offset_top = top_y + 32.0
-	room_banner_subtitle_label.offset_bottom = top_y + 60.0
-
-func _show_room_banner(title: String, subtitle: String) -> void:
-	if room_banner_title_label == null or room_banner_subtitle_label == null:
-		return
-	if is_instance_valid(room_banner_tween):
-		room_banner_tween.kill()
-
-	room_banner_title_label.text = title
-	room_banner_subtitle_label.text = subtitle
-	_update_room_banner_layout()
-	room_banner_title_label.modulate.a = 0.0
-	room_banner_subtitle_label.modulate.a = 0.0
-
-	room_banner_tween = create_tween()
-	room_banner_tween.tween_property(room_banner_title_label, "modulate:a", 1.0, 0.2)
-	if subtitle.is_empty():
-		room_banner_subtitle_label.visible = false
-	else:
-		room_banner_subtitle_label.visible = true
-		room_banner_tween.parallel().tween_property(room_banner_subtitle_label, "modulate:a", 1.0, 0.2)
-	room_banner_tween.tween_interval(0.95)
-	room_banner_tween.tween_property(room_banner_title_label, "modulate:a", 0.0, 0.24)
-	room_banner_tween.parallel().tween_property(room_banner_subtitle_label, "modulate:a", 0.0, 0.24)
-
 func _open_boon_selection(title: String, is_initial: bool, mode: int = ENUMS.RewardMode.BOON) -> void:
 	if is_instance_valid(reward_selection_ui):
 		reward_selection_ui.call("open_selection", title, is_initial, mode, power_registry_instance, player, rng)
 		_set_combat_paused(true)
-		return
 
 func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> void:
 	if mode == ENUMS.RewardMode.ARCANA:
@@ -813,6 +669,7 @@ func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> voi
 		_begin_room(_build_skirmish_profile(room_depth))
 	else:
 		_spawn_door_options()
+	hud.refresh(_get_hud_state(), player)
 
 func _apply_boon_to_player(boon_id: String) -> void:
 	if not is_instance_valid(player):
@@ -835,428 +692,3 @@ func _set_combat_paused(paused: bool) -> void:
 		if enemy is Node:
 			(enemy as Node).set_physics_process(not paused)
 			(enemy as Node).set_process(not paused)
-
-func _update_hud() -> void:
-	if status_label == null:
-		return
-	_layout_hud_panels()
-	_update_status_panel_text()
-	_update_stats_panel_text()
-
-func _layout_hud_panels() -> void:
-	var viewport_size := get_viewport().get_visible_rect().size
-	if status_panel != null:
-		var panel_width := status_panel.size.x
-		if panel_width <= 0.0:
-			panel_width = status_panel.custom_minimum_size.x
-		status_panel.position = Vector2((viewport_size.x - panel_width) * 0.5, 14.0)
-	if stats_panel != null:
-		stats_panel.position = Vector2(14.0, 14.0)
-
-func _update_status_panel_text() -> void:
-	if status_label == null:
-		return
-
-	if run_cleared:
-		status_label.text = "[center][b]Depth %d[/b]\n[color=#A8FFB0]Run Clear[/color][/center]" % room_depth
-		if status_mutator_icon != null:
-			status_mutator_icon.visible = false
-		if status_mutator_label != null:
-			status_mutator_label.visible = false
-		return
-
-	if rooms_cleared >= encounter_count:
-		status_label.text = "[center][b]Depth %d[/b][/center]" % room_depth
-	else:
-		status_label.text = "[center][b]Depth %d[/b]  [color=#A5B6C9]%d/%d[/color][/center]" % [room_depth, rooms_cleared, encounter_count]
-
-	if current_room_enemy_mutator.is_empty():
-		if status_mutator_icon != null:
-			status_mutator_icon.visible = false
-		if status_mutator_label != null:
-			status_mutator_label.visible = false
-		return
-
-	var mutator_name := String(current_room_enemy_mutator.get("name", "Unknown"))
-	var mutator_color := current_room_enemy_mutator.get("theme_color", Color(0.74, 0.86, 1.0, 1.0)) as Color
-	var ui_mutator_color := mutator_color
-	ui_mutator_color.a = 1.0
-	var icon_shape := String(current_room_enemy_mutator.get("icon_shape_id", ""))
-	var icon_texture := _get_mutator_icon_texture(icon_shape)
-
-	if status_mutator_icon != null:
-		status_mutator_icon.texture = icon_texture
-		status_mutator_icon.modulate = ui_mutator_color
-		status_mutator_icon.visible = (icon_texture != null)
-	if status_mutator_label != null:
-		status_mutator_label.text = mutator_name
-		status_mutator_label.add_theme_color_override("font_color", ui_mutator_color)
-		status_mutator_label.visible = true
-
-	# Center the icon + text group horizontally in the panel.
-	var hud_font := ThemeDB.fallback_font
-	var text_w := 0.0
-	if hud_font != null:
-		text_w = hud_font.get_string_size(mutator_name, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 16).x
-	var icon_visible := (icon_texture != null)
-	var icon_w := 18.0 if icon_visible else 0.0
-	var gap := 6.0 if icon_visible else 0.0
-	var row_w := icon_w + gap + text_w
-	var panel_w := 302.0
-	var start_x := maxf(8.0, (panel_w - row_w) * 0.5)
-	var row_top := 38.0
-	if status_mutator_icon != null:
-		status_mutator_icon.position = Vector2(start_x, row_top + 1.0)
-	if status_mutator_label != null:
-		status_mutator_label.position = Vector2(start_x + icon_w + gap, row_top)
-		status_mutator_label.custom_minimum_size = Vector2(maxf(text_w + 2.0, 60.0), 24.0)
-
-func _update_stats_panel_text() -> void:
-	if stats_label == null:
-		return
-	if not is_instance_valid(player):
-		stats_label.text = "[b]Stats[/b]\nNo player"
-		return
-
-	var hp := int(player.get("max_health"))
-	var hp_now := hp
-	if player.has_method("_get_current_health"):
-		hp_now = int(player.call("_get_current_health"))
-	var dmg := int(player.get("attack_damage"))
-	var atk_range := float(player.get("attack_range"))
-	var atk_cd := float(player.get("attack_cooldown"))
-	var move_spd := float(player.get("max_speed"))
-	var dash_cd := float(player.get("dash_cooldown"))
-	var armor := int(player.get("iron_skin_armor"))
-	var trial_stacks := 0
-	if player.has_method("get_trial_power_stack_count"):
-		for trial_id in ["razor_wind", "execution_edge", "rupture_wave", "phantom_step", "void_dash", "static_wake"]:
-			trial_stacks += int(player.call("get_trial_power_stack_count", trial_id))
-
-	stats_label.text = "[b]Stats[/b]\nHealth: [color=#C8FFD8]%d/%d[/color]\nAttack Damage: [color=#FFD8AA]%d[/color]\nAttack Range: [color=#FFD8AA]%.0f[/color]\nAttack Speed: [color=#BFD8FF]%.2fs[/color]\nMove Speed: [color=#BFD8FF]%.0f[/color]\nDash Cooldown: [color=#BFD8FF]%.2fs[/color]\nArmor: [color=#E8E8FF]%d[/color]\nArcana Stacks: [color=#FFE6B2]%d[/color]" % [hp_now, hp, dmg, atk_range, atk_cd, move_spd, dash_cd, armor, trial_stacks]
-
-func _build_room_state_text() -> String:
-	if in_boss_room:
-		if active_room_enemy_count > 0:
-			return "State: Boss Encounter (%d remaining)" % active_room_enemy_count
-		return "State: Boss Defeated"
-	if choosing_next_room:
-		return "State: Route Selection"
-	if active_room_enemy_count > 0:
-		return "State: Combat (%d remaining)" % active_room_enemy_count
-	return "State: Cleared"
-
-func _get_mutator_icon_texture(icon_shape_id: String) -> Texture2D:
-	match icon_shape_id:
-		"blood_rush":
-			return MUTATOR_ICON_BLOOD_RUSH
-		"flashpoint":
-			return MUTATOR_ICON_FLASHPOINT
-		"siegebreak":
-			return MUTATOR_ICON_SIEGEBREAK
-		"iron_volley":
-			return MUTATOR_ICON_IRON_VOLLEY
-		_:
-			return null
-
-func _get_nearest_door_for_prompt() -> Dictionary:
-	if not is_instance_valid(player):
-		return {}
-	if door_options.is_empty():
-		return {}
-
-	var nearest: Dictionary = {}
-	var nearest_distance: float = INF
-	for door in door_options:
-		var door_pos := door.get("position", Vector2.ZERO) as Vector2
-		var dist := player.global_position.distance_to(door_pos)
-		if dist < nearest_distance:
-			nearest_distance = dist
-			nearest = door.duplicate(true)
-
-	if nearest.is_empty():
-		return {}
-	nearest["distance"] = nearest_distance
-	return nearest
-
-func _build_door_prompt_text(door: Dictionary) -> String:
-	var label := String(door.get("label", "Encounter"))
-	var kind := String(door.get("kind", "encounter"))
-	if kind == "boss":
-		return "Boss Chamber"
-	if kind == "rest":
-		return "Rest Site"
-	return label
-
-func _draw() -> void:
-	if current_room_size == Vector2.ZERO:
-		return
-	var t := art_time
-	var room_rect := Rect2(-current_room_size * 0.5, current_room_size)
-	var pulse := 0.5 + 0.5 * sin(t * 0.9)
-	var viewport_rect := get_viewport().get_visible_rect()
-	var viewport_to_world := get_viewport().get_canvas_transform().affine_inverse()
-	var viewport_world_rect := viewport_to_world * viewport_rect
-	draw_rect(viewport_world_rect.grow(50.0), Color(0.01, 0.02, 0.04, clampf(ambient_backdrop_alpha, 0.7, 1.0)), true)
-
-	# Layered floor wash to create depth without textures.
-	for i in range(10):
-		var ratio := float(i) / 9.0
-		var inset := lerpf(0.0, minf(room_rect.size.x, room_rect.size.y) * 0.22, ratio)
-		var layer_rect := room_rect.grow(-inset)
-		var layer_color := Color(0.03, 0.08, 0.12, 0.17).lerp(Color(0.09, 0.16, 0.23, 0.09 + arena_glow_strength * pulse * 0.32), 1.0 - ratio)
-		draw_rect(layer_rect, layer_color, true)
-
-	var coarse_step := maxf(28.0, floor_grid_step)
-	var fine_step := maxf(16.0, floor_grid_fine_step)
-	for x in range(int(room_rect.position.x), int(room_rect.position.x + room_rect.size.x + coarse_step), int(coarse_step)):
-		draw_line(Vector2(float(x), room_rect.position.y), Vector2(float(x), room_rect.position.y + room_rect.size.y), Color(0.36, 0.56, 0.78, clampf(floor_coarse_grid_alpha, 0.01, 0.2)), 2.0)
-	for y in range(int(room_rect.position.y), int(room_rect.position.y + room_rect.size.y + coarse_step), int(coarse_step)):
-		draw_line(Vector2(room_rect.position.x, float(y)), Vector2(room_rect.position.x + room_rect.size.x, float(y)), Color(0.36, 0.56, 0.78, clampf(floor_coarse_grid_alpha, 0.01, 0.2)), 2.0)
-
-	for x in range(int(room_rect.position.x), int(room_rect.position.x + room_rect.size.x + fine_step), int(fine_step)):
-		draw_line(Vector2(float(x), room_rect.position.y), Vector2(float(x), room_rect.position.y + room_rect.size.y), Color(0.55, 0.74, 0.92, clampf(floor_fine_grid_alpha, 0.0, 0.08)), 1.0)
-	for y in range(int(room_rect.position.y), int(room_rect.position.y + room_rect.size.y + fine_step), int(fine_step)):
-		draw_line(Vector2(room_rect.position.x, float(y)), Vector2(room_rect.position.x + room_rect.size.x, float(y)), Color(0.55, 0.74, 0.92, clampf(floor_fine_grid_alpha, 0.0, 0.08)), 1.0)
-
-	var corners := [
-		room_rect.position,
-		room_rect.position + Vector2(room_rect.size.x, 0.0),
-		room_rect.position + Vector2(0.0, room_rect.size.y),
-		room_rect.position + room_rect.size
-	]
-	for corner in corners:
-		draw_circle(corner, 32.0, Color(0.42, 0.74, 1.0, 0.03 + pulse * 0.012))
-
-	draw_rect(room_rect, Color(0.56, 0.78, 0.95, clampf(floor_border_alpha, 0.2, 0.95)), false, 4.0)
-	draw_rect(room_rect.grow(-16.0), Color(0.22, 0.42, 0.62, 0.28), false, 2.0)
-
-	if choosing_next_room:
-		for door in door_options:
-			var door_pos: Vector2 = door["position"]
-			var color: Color = door["color"]
-			var door_pulse := 0.75 + 0.25 * sin(t * 4.2 + door_pos.x * 0.01)
-			draw_circle(door_pos, 34.0 + 4.0 * door_pulse, Color(color.r, color.g, color.b, 0.12))
-			draw_circle(door_pos, 22.0 + 2.0 * door_pulse, Color(color.r, color.g, color.b, 0.24))
-			draw_circle(door_pos, 14.0, color)
-			draw_arc(door_pos, 30.0, -PI * 0.35, PI * 1.35, 36, Color(color.r, color.g, color.b, 0.7), 2.0)
-			_draw_door_icon(door)
-
-		var nearest_door := _get_nearest_door_for_prompt()
-		if not nearest_door.is_empty() and float(nearest_door.get("distance", INF)) <= door_use_radius * 1.45:
-			_draw_door_interaction_prompt(nearest_door)
-
-func _draw_door_interaction_prompt(door: Dictionary) -> void:
-	var font := ThemeDB.fallback_font
-	if font == null:
-		return
-	var door_pos := door.get("position", Vector2.ZERO) as Vector2
-	var door_color := door.get("color", Color(0.78, 0.9, 1.0, 1.0)) as Color
-	var info_text := _build_door_prompt_text(door)
-	var action_text := "[E] Enter"
-	var action_font_size := 13
-	var info_font_size := 17
-	var action_size := font.get_string_size(action_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, action_font_size)
-	var info_size := font.get_string_size(info_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, info_font_size)
-	var plate_w := clampf(maxf(action_size.x, info_size.x) + 52.0, 210.0, 460.0)
-	var plate_h := 56.0
-	var radius := plate_h * 0.5
-	var plate_x := door_pos.x - plate_w * 0.5
-	var plate_y := door_pos.y - 100.0
-	var fill := Color(0.035, 0.055, 0.09, 0.88)
-	var glow := Color(door_color.r, door_color.g, door_color.b, 0.16)
-	var border := Color(door_color.r, door_color.g, door_color.b, 0.68)
-	# Glow
-	draw_circle(Vector2(plate_x + radius, plate_y + radius), radius + 5.0, glow)
-	draw_circle(Vector2(plate_x + plate_w - radius, plate_y + radius), radius + 5.0, glow)
-	draw_rect(Rect2(Vector2(plate_x + radius, plate_y - 5.0), Vector2(plate_w - radius * 2.0, plate_h + 10.0)), glow, true)
-	# Capsule fill
-	draw_circle(Vector2(plate_x + radius, plate_y + radius), radius, fill)
-	draw_circle(Vector2(plate_x + plate_w - radius, plate_y + radius), radius, fill)
-	draw_rect(Rect2(Vector2(plate_x + radius, plate_y), Vector2(plate_w - radius * 2.0, plate_h)), fill, true)
-	# Border
-	draw_arc(Vector2(plate_x + radius, plate_y + radius), radius, PI * 0.5, PI * 1.5, 22, border, 1.6)
-	draw_arc(Vector2(plate_x + plate_w - radius, plate_y + radius), radius, -PI * 0.5, PI * 0.5, 22, border, 1.6)
-	draw_line(Vector2(plate_x + radius, plate_y), Vector2(plate_x + plate_w - radius, plate_y), border, 1.6)
-	draw_line(Vector2(plate_x + radius, plate_y + plate_h), Vector2(plate_x + plate_w - radius, plate_y + plate_h), border, 1.6)
-	# Divider
-	draw_line(Vector2(plate_x + radius * 0.6, plate_y + 22.0), Vector2(plate_x + plate_w - radius * 0.6, plate_y + 22.0), Color(door_color.r, door_color.g, door_color.b, 0.32), 1.0)
-	# Text
-	var text_shadow := Color(0.0, 0.0, 0.0, 0.56)
-	var text_color := Color(0.95, 0.98, 1.0, 0.98)
-	draw_string(font, Vector2(plate_x, plate_y + 17.0) + Vector2(1.0, 1.0), action_text, HORIZONTAL_ALIGNMENT_CENTER, plate_w, action_font_size, text_shadow)
-	draw_string(font, Vector2(plate_x, plate_y + 17.0), action_text, HORIZONTAL_ALIGNMENT_CENTER, plate_w, action_font_size, text_color)
-	draw_string(font, Vector2(plate_x, plate_y + 46.0) + Vector2(1.0, 1.0), info_text, HORIZONTAL_ALIGNMENT_CENTER, plate_w, info_font_size, text_shadow)
-	draw_string(font, Vector2(plate_x, plate_y + 46.0), info_text, HORIZONTAL_ALIGNMENT_CENTER, plate_w, info_font_size, text_color)
-
-func _build_door_prompt_name(door: Dictionary) -> String:
-	var kind := String(door.get("kind", "encounter"))
-	if kind == "boss":
-		return "Boss Gate"
-	if kind == "rest":
-		return "Rest Site"
-	return String(door.get("label", "Encounter"))
-
-func _draw_door_icon(door: Dictionary) -> void:
-	var door_pos: Vector2 = door["position"]
-	var icon_color := Color(0.97, 0.98, 1.0, 0.96)
-	var outline_color := Color(0.08, 0.1, 0.14, 0.88)
-	var kind := String(door["kind"])
-	var icon := String(door.get("icon", "easy"))
-
-	if kind == "boss":
-		var left_tip := door_pos + Vector2(-8.0, -5.0)
-		var peak := door_pos + Vector2(0.0, -12.0)
-		var right_tip := door_pos + Vector2(8.0, -5.0)
-		var crown_base_l := door_pos + Vector2(-9.0, 2.0)
-		var crown_base_r := door_pos + Vector2(9.0, 2.0)
-		var crown := PackedVector2Array([crown_base_l, left_tip, door_pos + Vector2(-3.0, -2.0), peak, door_pos + Vector2(3.0, -2.0), right_tip, crown_base_r])
-		draw_polyline(crown, outline_color, 4.8)
-		draw_polyline(crown, icon_color, 3.0)
-		draw_circle(door_pos + Vector2(0.0, 0.8), 2.4, outline_color)
-		draw_circle(door_pos + Vector2(0.0, 0.8), 1.5, Color(1.0, 0.86, 0.42, 0.96))
-		return
-
-	if icon == "hard" or icon == "easy":
-		# Crossed blades, reduced to a clear two-stroke silhouette.
-		var blade_a_l := door_pos + Vector2(-9.5, -7.0)
-		var blade_a_r := door_pos + Vector2(9.5, 7.0)
-		var blade_b_l := door_pos + Vector2(-9.5, 7.0)
-		var blade_b_r := door_pos + Vector2(9.5, -7.0)
-		draw_line(blade_a_l, blade_a_r, outline_color, 5.6)
-		draw_line(blade_b_l, blade_b_r, outline_color, 5.6)
-		draw_line(blade_a_l, blade_a_r, icon_color, 2.9)
-		draw_line(blade_b_l, blade_b_r, icon_color, 2.9)
-		draw_circle(door_pos, 3.4, outline_color)
-		draw_circle(door_pos, 2.0, Color(1.0, 0.92, 0.74, 0.95))
-		return
-
-	if icon == "trial":
-		# Use shared mutator icon assets for door symbols.
-		var trial_mutator: Dictionary = door.get("profile", {}).get("enemy_mutator", {})
-		var shape_id := String(trial_mutator.get("icon_shape_id", ""))
-		var theme: Color = trial_mutator.get("theme_color", icon_color)
-		theme.a = 1.0
-		var icon_texture := _get_mutator_icon_texture(shape_id)
-		if icon_texture != null:
-			draw_circle(door_pos, 11.8, Color(outline_color.r, outline_color.g, outline_color.b, 0.74))
-			draw_circle(door_pos, 9.8, Color(theme.r, theme.g, theme.b, 0.24))
-			var icon_rect := Rect2(door_pos - Vector2(9.0, 9.0), Vector2(18.0, 18.0))
-			draw_texture_rect(icon_texture, icon_rect, false, theme)
-		else:
-			_draw_trial_mutator_icon(door_pos, shape_id, theme, icon_color, outline_color)
-		return
-
-	if icon == "rest":
-		draw_circle(door_pos, 10.0, outline_color)
-		draw_circle(door_pos, 8.0, Color(0.24, 0.56, 0.34, 0.75))
-		var rest_h_l := door_pos + Vector2(-8.0, 0.0)
-		var rest_h_r := door_pos + Vector2(8.0, 0.0)
-		var rest_v_t := door_pos + Vector2(0.0, -8.0)
-		var rest_v_b := door_pos + Vector2(0.0, 8.0)
-		draw_line(rest_h_l, rest_h_r, outline_color, 5.0)
-		draw_line(rest_v_t, rest_v_b, outline_color, 5.0)
-		draw_line(rest_h_l, rest_h_r, Color(0.84, 1.0, 0.86, 0.96), 3.0)
-		draw_line(rest_v_t, rest_v_b, Color(0.84, 1.0, 0.86, 0.96), 3.0)
-		return
-
-	var h_l := door_pos + Vector2(-8.0, 0.0)
-	var h_r := door_pos + Vector2(8.0, 0.0)
-	var v_t := door_pos + Vector2(0.0, -8.0)
-	var v_b := door_pos + Vector2(0.0, 8.0)
-	draw_line(h_l, h_r, outline_color, 4.7)
-	draw_line(v_t, v_b, outline_color, 4.7)
-	draw_line(h_l, h_r, icon_color, 2.5)
-	draw_line(v_t, v_b, icon_color, 2.5)
-	draw_circle(door_pos, 1.7, Color(0.92, 0.98, 1.0, 0.92))
-
-func _draw_trial_mutator_icon(door_pos: Vector2, shape_id: String, theme: Color, icon_color: Color, outline_color: Color) -> void:
-	# Keep one clean ring and one bold symbol for at-speed readability.
-	draw_arc(door_pos, 11.4, 0.0, TAU, 28, outline_color, 3.6)
-	draw_arc(door_pos, 11.4, 0.0, TAU, 28, Color(theme.r, theme.g, theme.b, 0.86), 2.2)
-
-	match shape_id:
-		"blood_rush":
-			# Three simple outward spikes.
-			for a in [0.0, PI * 0.667, PI * 1.333]:
-				var dir := Vector2.RIGHT.rotated(a)
-				var tip := door_pos + dir * 10.5
-				var base := door_pos + dir * 3.6
-				var side := Vector2(-dir.y, dir.x)
-				var left_wing := base + side * 2.9
-				var right_wing := base - side * 2.9
-				var arrow := PackedVector2Array([left_wing, tip, right_wing])
-				draw_colored_polygon(arrow, theme)
-			draw_circle(door_pos, 2.9, outline_color)
-			draw_circle(door_pos, 1.8, theme)
-
-		"flashpoint":
-			# Single bolt shape.
-			var top_pt := door_pos + Vector2(-1.0, -11.0)
-			var mid_r  := door_pos + Vector2(5.0, -1.0)
-			var mid_l  := door_pos + Vector2(-4.5, 1.0)
-			var bot_pt := door_pos + Vector2(1.0, 11.0)
-			draw_line(top_pt, mid_r, outline_color, 5.6)
-			draw_line(mid_r,  bot_pt, outline_color, 5.6)
-			draw_line(top_pt, mid_r, theme, 3.4)
-			draw_line(mid_r,  bot_pt, theme, 3.4)
-			draw_line(mid_l, mid_r, outline_color, 3.4)
-			draw_line(mid_l, mid_r, theme, 2.1)
-
-		"siegebreak":
-			# Ram head silhouette only.
-			var tip_r := door_pos + Vector2(12.0, 0.0)
-			var body_tr := door_pos + Vector2(6.0, -6.0)
-			var body_tl := door_pos + Vector2(-8.0, -6.0)
-			var body_bl := door_pos + Vector2(-8.0, 6.0)
-			var body_br := door_pos + Vector2(6.0, 6.0)
-			var ram := PackedVector2Array([tip_r, body_tr, body_tl, body_bl, body_br])
-			draw_colored_polygon(ram, Color(outline_color.r, outline_color.g, outline_color.b, 0.9))
-			var ram_inner := PackedVector2Array([
-				door_pos + Vector2(10.0, 0.0),
-				door_pos + Vector2(5.0, -4.5),
-				door_pos + Vector2(-6.5, -4.5),
-				door_pos + Vector2(-6.5, 4.5),
-				door_pos + Vector2(5.0, 4.5)
-			])
-			draw_colored_polygon(ram_inner, theme)
-			draw_line(door_pos + Vector2(-4.5, -4.0), door_pos + Vector2(-4.5, 4.0), outline_color, 1.7)
-
-		"iron_volley":
-			# Shield with two simple side arrows.
-			var shield := PackedVector2Array([
-				door_pos + Vector2(0.0, -10.0),
-				door_pos + Vector2(8.0, -3.0),
-				door_pos + Vector2(6.0, 7.0),
-				door_pos + Vector2(0.0, 10.0),
-				door_pos + Vector2(-6.0, 7.0),
-				door_pos + Vector2(-8.0, -3.0)
-			])
-			draw_colored_polygon(shield, Color(outline_color.r, outline_color.g, outline_color.b, 0.86))
-			var shield_inner := PackedVector2Array([
-				door_pos + Vector2(0.0, -8.0),
-				door_pos + Vector2(6.0, -2.2),
-				door_pos + Vector2(4.6, 5.5),
-				door_pos + Vector2(0.0, 8.0),
-				door_pos + Vector2(-4.6, 5.5),
-				door_pos + Vector2(-6.0, -2.2)
-			])
-			draw_colored_polygon(shield_inner, theme)
-			for sx: float in [-1.0, 1.0]:
-				var tip := door_pos + Vector2(sx * 10.0, -4.0)
-				var base_l := tip + Vector2(-sx * 2.8, 3.8)
-				var base_r := tip + Vector2(sx * 2.8, 3.8)
-				var arrow := PackedVector2Array([base_l, tip, base_r])
-				draw_colored_polygon(arrow, theme)
-
-		_:
-			# Fallback: clean diamond sigil.
-			var top := door_pos + Vector2(0.0, -10.0)
-			var right := door_pos + Vector2(10.0, 0.0)
-			var bottom := door_pos + Vector2(0.0, 10.0)
-			var left := door_pos + Vector2(-10.0, 0.0)
-			var diamond := PackedVector2Array([top, right, bottom, left, top])
-			draw_polyline(diamond, outline_color, 4.4)
-			draw_polyline(diamond, icon_color, 2.6)
-			draw_line(top, bottom, outline_color, 3.4)
-			draw_line(top, bottom, icon_color, 1.9)
