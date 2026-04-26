@@ -13,30 +13,31 @@ const STATE_LURK := 1
 const STATE_STRIKE := 2
 const STATE_RECOVER := 3
 
-@export var move_speed: float = 152.0
-@export var acceleration: float = 950.0
+@export var move_speed: float = 178.0
+@export var acceleration: float = 1250.0
 @export var deceleration: float = 1400.0
 @export var stop_distance: float = 28.0
-@export var trigger_range: float = 72.0
-@export var strike_range: float = 40.0
-@export var strike_damage: int = 24
-@export var lurk_duration: float = 0.28
-@export var strike_speed_mult: float = 2.6
-@export var strike_duration: float = 0.13
-@export var recover_duration: float = 0.62
-@export var attack_cooldown: float = 0.8
+@export var trigger_range: float = 96.0
+@export var strike_range: float = 48.0
+@export var strike_damage: int = 34
+@export var lurk_duration: float = 0.22
+@export var strike_speed_mult: float = 3.2
+@export var strike_duration: float = 0.16
+@export var recover_duration: float = 0.42
+@export var attack_cooldown: float = 0.55
 
 var lurker_state: int = STATE_STALK
 var state_time_left: float = 0.0
 var attack_cooldown_left: float = 0.0
 var _lunge_direction: Vector2 = Vector2.LEFT
 var _strike_hit_applied: bool = false
+var _strike_previous_position: Vector2 = Vector2.ZERO
 
 func _ready() -> void:
 	super()
 	max_health = 95
 	# Override crowd separation for better swarm navigation
-	crowd_separation_radius = 65.0
+	crowd_separation_radius = 72.0
 	crowd_separation_strength = 110.0
 
 func _process_behavior(delta: float) -> void:
@@ -92,6 +93,7 @@ func _enter_strike_state() -> void:
 	lurker_state = STATE_STRIKE
 	state_time_left = strike_duration
 	_strike_hit_applied = false
+	_strike_previous_position = global_position
 	if is_instance_valid(target):
 		var to_target := target.global_position - global_position
 		if to_target.length_squared() > 0.000001:
@@ -101,13 +103,18 @@ func _enter_strike_state() -> void:
 	queue_redraw()
 
 func _process_strike(delta: float) -> void:
+	var strike_start := _strike_previous_position
 	move_and_slide()
+	var strike_end := global_position
 	if not _strike_hit_applied and is_instance_valid(target) and DAMAGEABLE.can_take_damage(target):
-		if global_position.distance_to(target.global_position) <= strike_range:
+		var target_pos := target.global_position
+		var closest := Geometry2D.get_closest_point_to_segment(target_pos, strike_start, strike_end)
+		if closest.distance_to(target_pos) <= strike_range:
 			if DAMAGEABLE.apply_damage(target, strike_damage, {"source": "enemy_contact"}):
 				_strike_hit_applied = true
 				attack_anim_time_left = attack_anim_duration
 				queue_redraw()
+	_strike_previous_position = strike_end
 	state_time_left = maxf(0.0, state_time_left - delta)
 	if state_time_left <= 0.0:
 		_enter_recover_state()
@@ -137,6 +144,13 @@ func _draw() -> void:
 	var aura_pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.008)
 	var aura_alpha := 0.12 + aura_pulse * 0.08
 	draw_circle(Vector2.ZERO, body_radius + 10.0, Color(1.0, 0.32, 0.2, aura_alpha))
+	if lurker_state == STATE_STALK and is_instance_valid(target):
+		var proximity_dist := global_position.distance_to(target.global_position)
+		var proximity_window := trigger_range * 1.8
+		if proximity_dist <= proximity_window:
+			var proximity_t := 1.0 - (proximity_dist / proximity_window)
+			draw_arc(Vector2.ZERO, body_radius + 12.0 + proximity_t * 5.0, 0.0, TAU, 44,
+				Color(1.0, 0.5, 0.26, 0.16 + proximity_t * 0.28), 2.2)
 
 	# Deep crimson body — visually distinct predator, darker and more menacing than Chaser
 	var body_color := COLOR_PALETTE.COLOR_LURKER_BODY
