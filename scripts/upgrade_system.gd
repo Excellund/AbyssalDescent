@@ -14,6 +14,8 @@ var trial_power_stacks: Dictionary = {
 	"razor_wind": 0,
 	"execution_edge": 0,
 	"rupture_wave": 0,
+	"aegis_field": 0,
+	"hunters_snare": 0,
 	"phantom_step": 0,
 	"reaper_step": 0,
 	"static_wake": 0
@@ -36,6 +38,8 @@ const TRIAL_POWER_IDS := {
 	"razor_wind": true,
 	"execution_edge": true,
 	"rupture_wave": true,
+	"aegis_field": true,
+	"hunters_snare": true,
 	"phantom_step": true,
 	"reaper_step": true,
 	"static_wake": true
@@ -123,6 +127,23 @@ func apply_trial_power(power_id: String) -> bool:
 			player_reference.set("rupture_wave_radius", 72.0 + 10.0 * float(rupture_stacks))
 			player_reference.set("rupture_wave_damage_ratio", 0.34 + 0.1 * float(rupture_stacks))
 			player_reference.set("attack_damage", int(player_reference.get("attack_damage")) + 2)
+		"aegis_field":
+			player_reference.set("reward_aegis_field", true)
+			var aegis_stacks := int(player_reference.get("aegis_field_stacks")) + 1
+			player_reference.set("aegis_field_stacks", aegis_stacks)
+			player_reference.set("aegis_field_resist_ratio", minf(0.42, 0.12 + float(aegis_stacks) * 0.06))
+			player_reference.set("aegis_field_resist_duration", 0.9 + float(aegis_stacks) * 0.2)
+			player_reference.set("aegis_field_pulse_radius", 92.0 + float(aegis_stacks) * 14.0)
+			player_reference.set("aegis_field_slow_duration", 1.0 + float(aegis_stacks) * 0.18)
+			player_reference.set("aegis_field_slow_mult", maxf(0.36, 0.7 - float(aegis_stacks) * 0.06))
+			player_reference.set("aegis_field_cooldown", maxf(1.7, 3.0 - float(aegis_stacks) * 0.2))
+		"hunters_snare":
+			player_reference.set("reward_hunters_snare", true)
+			var snare_stacks := int(player_reference.get("hunters_snare_stacks")) + 1
+			player_reference.set("hunters_snare_stacks", snare_stacks)
+			player_reference.set("hunters_snare_bonus_damage", 4 + snare_stacks * 3)
+			player_reference.set("hunters_snare_slow_duration", 0.55 + float(snare_stacks) * 0.12)
+			player_reference.set("hunters_snare_slow_mult", maxf(0.42, 0.72 - float(snare_stacks) * 0.06))
 		"phantom_step":
 			player_reference.set("reward_phantom_step", true)
 			var ph_stacks := int(player_reference.get("phantom_step_stacks")) + 1
@@ -191,6 +212,10 @@ func get_trial_power_stack_count(power_id: String) -> int:
 				return int(player_reference.get("execution_edge_stacks"))
 			"rupture_wave":
 				return int(player_reference.get("rupture_wave_stacks"))
+			"aegis_field":
+				return int(player_reference.get("aegis_field_stacks"))
+			"hunters_snare":
+				return int(player_reference.get("hunters_snare_stacks"))
 			"phantom_step":
 				return int(player_reference.get("phantom_step_stacks"))
 			"reaper_step":
@@ -230,6 +255,28 @@ func get_trial_power_card_description(power_id: String) -> String:
 			var cur_radius := 72.0 + 10.0 * float(maxi(0, next_stack - 1))
 			var cur_ratio := 0.34 + 0.1 * float(maxi(0, next_stack - 1))
 			return "[color=#c8daf0]Rupture:[/color] radius [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color], damage [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color]." % [cur_radius, next_radius, cur_ratio * 100.0, next_ratio * 100.0]
+		"aegis_field":
+			var next_resist := minf(0.42, 0.12 + float(next_stack) * 0.06)
+			var next_duration := 0.9 + float(next_stack) * 0.2
+			var next_radius := 92.0 + float(next_stack) * 14.0
+			var next_cooldown := maxf(1.7, 3.0 - float(next_stack) * 0.2)
+			if current_stack <= 0:
+				return "[color=#9ab8d8]Taking damage triggers a guard pulse that slows nearby enemies and grants brief damage resistance.[/color]\n[color=#9ab8d8]Initial:[/color] resist [color=#7de882]%.0f%%[/color] for [color=#7de882]%.2fs[/color], pulse radius [color=#7de882]%.0f[/color], cooldown [color=#7de882]%.2fs[/color]." % [next_resist * 100.0, next_duration, next_radius, next_cooldown]
+			var cur_resist := minf(0.42, 0.12 + float(maxi(0, next_stack - 1)) * 0.06)
+			var cur_duration := 0.9 + float(maxi(0, next_stack - 1)) * 0.2
+			var cur_radius := 92.0 + float(maxi(0, next_stack - 1)) * 14.0
+			var cur_cooldown := maxf(1.7, 3.0 - float(maxi(0, next_stack - 1)) * 0.2)
+			return "[color=#c8daf0]Aegis Field:[/color] resist [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color], guard [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color], pulse radius [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color], cooldown [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_resist * 100.0, next_resist * 100.0, cur_duration, next_duration, cur_radius, next_radius, cur_cooldown, next_cooldown]
+		"hunters_snare":
+			var next_bonus := 4 + next_stack * 3
+			var next_duration := 0.55 + float(next_stack) * 0.12
+			var next_slow_mult := maxf(0.42, 0.72 - float(next_stack) * 0.06)
+			if current_stack <= 0:
+				return "[color=#9ab8d8]Hits slow enemies, and striking slowed targets deals bonus damage.[/color]\n[color=#9ab8d8]Initial:[/color] slow [color=#7de882]%.2fs[/color] at [color=#7de882]%.0f%%[/color] speed, bonus [color=#7de882]+%d[/color] damage." % [next_duration, next_slow_mult * 100.0, next_bonus]
+			var cur_bonus := 4 + maxi(0, next_stack - 1) * 3
+			var cur_duration := 0.55 + float(maxi(0, next_stack - 1)) * 0.12
+			var cur_slow_mult := maxf(0.42, 0.72 - float(maxi(0, next_stack - 1)) * 0.06)
+			return "[color=#c8daf0]Hunter's Snare:[/color] slow [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color], speed [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color], bonus [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]." % [cur_duration, next_duration, cur_slow_mult * 100.0, next_slow_mult * 100.0, cur_bonus, next_bonus]
 		"phantom_step":
 			var next_damage := 8 + next_stack * 4
 			var next_slow := 0.6 + float(next_stack) * 0.15

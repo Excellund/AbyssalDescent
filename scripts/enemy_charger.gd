@@ -171,14 +171,14 @@ func _try_apply_charge_hit() -> void:
 	for i in get_slide_collision_count():
 		var collision := get_slide_collision(i)
 		if collision.get_collider() == target:
-			DAMAGEABLE.apply_damage(target, charge_damage)
+			DAMAGEABLE.apply_damage(target, charge_damage, {"source": "enemy_contact", "ability": "charger_charge"})
 			charger_charge_hit_applied = true
 			attack_anim_time_left = attack_anim_duration
 			queue_redraw()
 			return
 
 	if global_position.distance_to(target.global_position) <= path_width:
-		DAMAGEABLE.apply_damage(target, charge_damage)
+		DAMAGEABLE.apply_damage(target, charge_damage, {"source": "enemy_contact", "ability": "charger_charge"})
 		charger_charge_hit_applied = true
 		attack_anim_time_left = attack_anim_duration
 		queue_redraw()

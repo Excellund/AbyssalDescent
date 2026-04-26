@@ -181,6 +181,9 @@ func apply_slow(duration: float, mult: float) -> void:
 	if mult < slow_speed_mult:
 		slow_speed_mult = mult
 
+func is_slowed() -> bool:
+	return slow_time_left > 0.0
+
 func _draw_slow_indicator(body_radius: float) -> void:
 	if slow_time_left <= 0.0:
 		return

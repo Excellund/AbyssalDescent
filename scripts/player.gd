@@ -52,9 +52,13 @@ var iron_skin_stacks: int = 0
 var reward_razor_wind: bool = false
 var reward_execution_edge: bool = false
 var reward_rupture_wave: bool = false
+var reward_aegis_field: bool = false
+var reward_hunters_snare: bool = false
 var razor_wind_stacks: int = 0
 var execution_edge_stacks: int = 0
 var rupture_wave_stacks: int = 0
+var aegis_field_stacks: int = 0
+var hunters_snare_stacks: int = 0
 var execution_every: int = 3
 var execution_damage_mult: float = 2.6
 var rupture_wave_radius: float = 82.0
@@ -62,6 +66,17 @@ var rupture_wave_damage_ratio: float = 0.44
 var razor_wind_range_scale: float = 1.72
 var razor_wind_arc_degrees: float = 24.0
 var razor_wind_damage_ratio: float = 0.72
+var aegis_field_resist_ratio: float = 0.18
+var aegis_field_resist_duration: float = 1.1
+var aegis_field_pulse_radius: float = 108.0
+var aegis_field_slow_duration: float = 1.18
+var aegis_field_slow_mult: float = 0.64
+var aegis_field_cooldown: float = 2.8
+var aegis_field_active_left: float = 0.0
+var aegis_field_cooldown_left: float = 0.0
+var hunters_snare_bonus_damage: int = 7
+var hunters_snare_slow_duration: float = 0.67
+var hunters_snare_slow_mult: float = 0.66
 
 # Dash archetype trial powers
 var reward_phantom_step: bool = false
@@ -116,6 +131,7 @@ func _physics_process(delta: float) -> void:
 	_update_attack_lock(delta)
 	_update_attack_animation(delta)
 	_update_visual_facing_direction()
+	_update_aegis_field_state(delta)
 	_update_static_wake_trails(delta)
 	_update_void_dash_reset_pulse(delta)
 	_try_start_dash(direction)
@@ -378,6 +394,13 @@ func _update_void_dash_reset_pulse(delta: float) -> void:
 	void_dash_reset_pulse_left = maxf(0.0, void_dash_reset_pulse_left - delta)
 	queue_redraw()
 
+func _update_aegis_field_state(delta: float) -> void:
+	if aegis_field_active_left > 0.0:
+		aegis_field_active_left = maxf(0.0, aegis_field_active_left - delta)
+		queue_redraw()
+	if aegis_field_cooldown_left > 0.0:
+		aegis_field_cooldown_left = maxf(0.0, aegis_field_cooldown_left - delta)
+
 func _update_visual_facing_direction() -> void:
 	if _is_attack_locked():
 		if attack_lock_direction.length_squared() > 0.000001:
@@ -400,10 +423,15 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 	if dash_phasing_active and String(damage_context.get("source", "")) == "enemy_contact":
 		return
 	var reduced := maxi(1, amount - iron_skin_armor)
-	reduced = int(ceil(float(reduced) * (1.0 - objective_mutator_damage_resist)))
+	var total_resist := objective_mutator_damage_resist
+	if reward_aegis_field and aegis_field_active_left > 0.0:
+		total_resist += aegis_field_resist_ratio
+	total_resist = clampf(total_resist, 0.0, 0.92)
+	reduced = int(ceil(float(reduced) * (1.0 - total_resist)))
 	var health_before := _get_current_health()
 	health_state.take_damage(reduced)
 	if _get_current_health() < health_before:
+		_trigger_aegis_field()
 		player_feedback.play_damage_flash()
 		player_feedback.play_impact_sound()
 
@@ -485,6 +513,26 @@ func _apply_objective_mutator_damage_mult(base_damage: int) -> int:
 		return base_damage
 	return maxi(1, int(ceil(float(base_damage) * (1.0 + objective_mutator_damage_mult))))
 
+func _trigger_aegis_field() -> void:
+	if not reward_aegis_field:
+		return
+	if aegis_field_cooldown_left > 0.0:
+		return
+	aegis_field_active_left = aegis_field_resist_duration
+	aegis_field_cooldown_left = aegis_field_cooldown
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		var enemy_body := enemy_node as Node2D
+		if global_position.distance_to(enemy_body.global_position) > aegis_field_pulse_radius:
+			continue
+		if enemy_node.has_method("apply_slow"):
+			enemy_node.call("apply_slow", aegis_field_slow_duration, aegis_field_slow_mult)
+	if player_feedback != null:
+		player_feedback.play_world_ring(global_position, aegis_field_pulse_radius, Color(0.62, 0.98, 1.0, 0.92), 0.22)
+		player_feedback.play_world_ring(global_position, aegis_field_pulse_radius * 0.64, Color(0.88, 1.0, 1.0, 0.78), 0.16)
+	queue_redraw()
+
 func apply_power_for_test(power_id: String) -> bool:
 	var id := power_id.strip_edges().to_lower()
 	if id.is_empty():
@@ -494,6 +542,8 @@ func apply_power_for_test(power_id: String) -> bool:
 		"razor_wind": true,
 		"execution_edge": true,
 		"rupture_wave": true,
+		"aegis_field": true,
+		"hunters_snare": true,
 		"phantom_step": true,
 		"reaper_step": true,
 		"static_wake": true
@@ -554,11 +604,13 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		if absf(attack_direction.angle_to(to_enemy.normalized())) > max_angle_radians:
 			continue
 
-		DAMAGEABLE.apply_damage(enemy_node, strike_damage)
+		var final_strike_damage := strike_damage + _get_hunters_snare_bonus_damage(enemy_node)
+		DAMAGEABLE.apply_damage(enemy_node, final_strike_damage)
+		_apply_hunters_snare(enemy_node)
 		melee_hit_enemy_ids[enemy_id] = true
 		if reward_rupture_wave and not rupture_triggered_enemy_ids.has(enemy_id):
 			rupture_triggered_enemy_ids[enemy_id] = true
-			_apply_rupture_wave(enemy_body.global_position, strike_damage)
+			_apply_rupture_wave(enemy_body.global_position, final_strike_damage)
 		did_hit = true
 
 	if reward_razor_wind:
@@ -591,13 +643,32 @@ func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupt
 			continue
 		if absf(attack_direction.angle_to(to_enemy.normalized())) > wind_half_arc:
 			continue
-		DAMAGEABLE.apply_damage(enemy_node, wind_damage)
+		var final_wind_damage := wind_damage + _get_hunters_snare_bonus_damage(enemy_node)
+		DAMAGEABLE.apply_damage(enemy_node, final_wind_damage)
+		_apply_hunters_snare(enemy_node)
 		wind_hit_enemy_ids[enemy_id] = true
 		if reward_rupture_wave and not rupture_triggered_enemy_ids.has(enemy_id):
 			rupture_triggered_enemy_ids[enemy_id] = true
-			_apply_rupture_wave(enemy_body.global_position, wind_damage)
+			_apply_rupture_wave(enemy_body.global_position, final_wind_damage)
 		did_hit = true
 	return did_hit
+
+func _get_hunters_snare_bonus_damage(enemy_node: Object) -> int:
+	if not reward_hunters_snare:
+		return 0
+	if not is_instance_valid(enemy_node):
+		return 0
+	if not enemy_node.has_method("is_slowed"):
+		return 0
+	return hunters_snare_bonus_damage if bool(enemy_node.call("is_slowed")) else 0
+
+func _apply_hunters_snare(enemy_node: Object) -> void:
+	if not reward_hunters_snare:
+		return
+	if not is_instance_valid(enemy_node):
+		return
+	if enemy_node.has_method("apply_slow"):
+		enemy_node.call("apply_slow", hunters_snare_slow_duration, hunters_snare_slow_mult)
 
 func _apply_rupture_wave(epicenter: Vector2, source_damage: int) -> void:
 	var wave_damage := maxi(1, int(round(float(source_damage) * rupture_wave_damage_ratio)))
@@ -812,6 +883,16 @@ func _draw_trial_reward_state() -> void:
 		var rupture_color := ENEMY_BASE.COLOR_RUPTURE_WAVE_AURA
 		rupture_color.a = 0.3 + pulse * 0.18
 		draw_arc(Vector2.ZERO, 20.0 + pulse * 2.8, 0.0, TAU, 42, rupture_color, 1.8)
+
+	if reward_aegis_field:
+		var aegis_pulse := 0.5 + 0.5 * sin(t * 3.8 + 0.4)
+		var aegis_radius := 22.0 + aegis_pulse * 3.0
+		var aegis_alpha := 0.22 + aegis_pulse * 0.14
+		if aegis_field_active_left > 0.0:
+			aegis_radius = 24.0 + aegis_pulse * 4.0
+			aegis_alpha = 0.44 + aegis_pulse * 0.2
+		draw_arc(Vector2.ZERO, aegis_radius, 0.0, TAU, 48, Color(0.62, 0.98, 1.0, aegis_alpha), 2.2)
+		draw_circle(Vector2.ZERO, aegis_radius * 0.62, Color(0.62, 0.98, 1.0, aegis_alpha * 0.18))
 
 	# Dash archetype trial power visuals
 	if reward_phantom_step:

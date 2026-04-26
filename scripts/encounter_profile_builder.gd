@@ -83,7 +83,7 @@ func build_debug_encounter_profile(encounter_key: String, depth: int) -> Diction
 		"fortress":
 			return _build_profile("Fortress", POOL_ROOM_SIZE, 3, 1, 1, 2)
 		"trial":
-			return _build_trial_profile()
+			return _build_trial_profile(depth)
 		"objective_last_stand":
 			return _build_survival_profile(depth)
 		"objective_priority_target":
@@ -118,14 +118,15 @@ func _get_hard_pool() -> Array[Dictionary]:
 		_build_profile("Fortress", POOL_ROOM_SIZE, 3, 1, 1, 2)
 	]
 
-func _build_trial_profile() -> Dictionary:
+func _build_trial_profile(depth: int = 0) -> Dictionary:
 	var hard_pool := _get_hard_pool()
 	var base: Dictionary = hard_pool[rng.randi_range(0, hard_pool.size() - 1)]
 	var mutator: Dictionary = roll_hard_enemy_mutator()
-	var chasers := ENCOUNTER_CONTRACTS.profile_chaser_count(base) + hard_room_enemy_bonus
-	var chargers := ENCOUNTER_CONTRACTS.profile_charger_count(base) + 2
-	var archers: int = maxi(ENCOUNTER_CONTRACTS.profile_archer_count(base), 1)
-	var shielders := ENCOUNTER_CONTRACTS.profile_shielder_count(base)
+	var depth_pressure := maxi(0, depth - 2)
+	var chasers := ENCOUNTER_CONTRACTS.profile_chaser_count(base) + hard_room_enemy_bonus + int(floor(float(depth_pressure) * 0.75))
+	var chargers := ENCOUNTER_CONTRACTS.profile_charger_count(base) + 2 + int(floor(float(depth_pressure) / 4.0))
+	var archers: int = maxi(ENCOUNTER_CONTRACTS.profile_archer_count(base), 1) + int(floor(float(depth_pressure) / 5.0))
+	var shielders := ENCOUNTER_CONTRACTS.profile_shielder_count(base) + int(floor(float(depth_pressure) / 4.0))
 	var mutator_name := ENCOUNTER_CONTRACTS.mutator_name(mutator)
 	if mutator_name.is_empty():
 		mutator_name = "Frenzy"
@@ -203,7 +204,7 @@ func roll_route_options(depth: int) -> Array[Dictionary]:
 		hard_profile
 	)
 
-	var trial_profile: Dictionary = _build_trial_profile()
+	var trial_profile: Dictionary = _build_trial_profile(depth)
 	var trial_mutator: Dictionary = ENCOUNTER_CONTRACTS.profile_enemy_mutator(trial_profile)
 	var trial_mutator_name := ENCOUNTER_CONTRACTS.mutator_name(trial_mutator)
 	if trial_mutator_name.is_empty():
@@ -242,8 +243,11 @@ func roll_route_options(depth: int) -> Array[Dictionary]:
 	var first: int = rng.randi_range(0, options.size() - 1)
 	var chosen: Array[Dictionary] = [options[first]]
 
-	var remaining_indices: Array[int] = [0, 1, 2]
-	remaining_indices.erase(first)
+	var remaining_indices: Array[int] = []
+	for index in range(options.size()):
+		if index == first:
+			continue
+		remaining_indices.append(index)
 	var second_index: int = remaining_indices[rng.randi_range(0, remaining_indices.size() - 1)]
 	chosen.append(options[second_index])
 	return chosen

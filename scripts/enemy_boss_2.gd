@@ -562,13 +562,13 @@ func _apply_echo_dash_hit() -> void:
 	for i in get_slide_collision_count():
 		var collision := get_slide_collision(i)
 		if collision.get_collider() == target:
-			DAMAGEABLE.apply_damage(target, echo_dash_damage)
+			DAMAGEABLE.apply_damage(target, echo_dash_damage, {"source": "enemy_contact", "ability": "echo_dash"})
 			_echo_dash_hits[target_id] = true
 			return
 	var seg_start := global_position - locked_direction * 40.0
 	var seg_end := global_position + locked_direction * 40.0
 	if _distance_point_to_segment(target.global_position, seg_start, seg_end) <= echo_dash_width:
-		DAMAGEABLE.apply_damage(target, echo_dash_damage)
+		DAMAGEABLE.apply_damage(target, echo_dash_damage, {"source": "enemy_contact", "ability": "echo_dash"})
 		_echo_dash_hits[target_id] = true
 
 func _apply_orbital_lance_hits() -> void:

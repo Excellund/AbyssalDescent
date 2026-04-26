@@ -73,12 +73,16 @@ func get_trial_power_pool(player_reference: Node = null) -> Array[Dictionary]:
 	var razor_desc := "Attacks launch a long-range piercing wind slash."
 	var execution_desc := "Every 3rd swing is a huge execution strike."
 	var rupture_desc := "Hits detonate a damaging shockwave."
+	var aegis_desc := "Taking damage triggers a guard pulse that slows nearby enemies and grants brief damage resistance."
+	var snare_desc := "Hits slow enemies. Striking slowed enemies deals bonus damage."
 	
 	# Try to get dynamic descriptions from player stack counts
 	if is_instance_valid(player_reference) and player_reference.has_method("get_trial_power_card_desc"):
 		razor_desc = String(player_reference.call("get_trial_power_card_desc", "razor_wind"))
 		execution_desc = String(player_reference.call("get_trial_power_card_desc", "execution_edge"))
 		rupture_desc = String(player_reference.call("get_trial_power_card_desc", "rupture_wave"))
+		aegis_desc = String(player_reference.call("get_trial_power_card_desc", "aegis_field"))
+		snare_desc = String(player_reference.call("get_trial_power_card_desc", "hunters_snare"))
 	
 	var phantom_desc := "Dashing through enemies damages and slows them."
 	var void_desc := "Dash travels farther. Kills refresh dash cooldown."
@@ -92,6 +96,8 @@ func get_trial_power_pool(player_reference: Node = null) -> Array[Dictionary]:
 		Power.new("razor_wind", "Razor Wind", razor_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
 		Power.new("execution_edge", "Execution Edge", execution_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
 		Power.new("rupture_wave", "Rupture Wave", rupture_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
+		Power.new("aegis_field", "Aegis Field", aegis_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
+		Power.new("hunters_snare", "Hunter's Snare", snare_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
 		Power.new("phantom_step", "Phantom Step", phantom_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
 		Power.new("reaper_step", "Reaper Step", void_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
 		Power.new("static_wake", "Static Wake", static_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
