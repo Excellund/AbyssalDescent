@@ -130,7 +130,14 @@ func _build_trial_profile(depth: int = 0) -> Dictionary:
 	var mutator_name := ENCOUNTER_CONTRACTS.mutator_name(mutator)
 	if mutator_name.is_empty():
 		mutator_name = "Frenzy"
-	return _build_profile("Trial %s" % mutator_name, TRIAL_ROOM_SIZE, chasers, chargers, archers, shielders, mutator)
+	var profile := _build_profile("Trial %s" % mutator_name, TRIAL_ROOM_SIZE, chasers, chargers, archers, shielders, mutator)
+	# Lurkers appear at depth ≥ 5, ramping up gradually so they feel earned.
+	if depth >= 5:
+		profile["lurker_count"] = int(floor(float(maxi(0, depth - 4)) * 0.6))
+	# Rams appear at depth ≥ 6, slightly behind lurkers in the difficulty ramp.
+	if depth >= 6:
+		profile["ram_count"] = int(floor(float(maxi(0, depth - 5)) * 0.4))
+	return profile
 
 func _build_survival_profile(depth: int) -> Dictionary:
 	var hard_pool := _get_hard_pool()

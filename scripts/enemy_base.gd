@@ -119,8 +119,8 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	_update_attack_animation(delta)
 	_update_recent_damage_overlay(delta)
-	_process_behavior(delta)
 	_apply_crowd_separation(delta)
+	_process_behavior(delta)
 	_update_visual_facing_direction()
 
 func _process_behavior(_delta: float) -> void:
@@ -173,7 +173,9 @@ func _apply_crowd_separation(delta: float) -> void:
 		total_push += (offset / distance) * weight
 	if total_push.length_squared() <= 0.000001:
 		return
-	global_position += total_push.normalized() * crowd_separation_strength * delta
+	# Apply separation to velocity rather than warping position after movement
+	var separation_impulse := total_push.normalized() * crowd_separation_strength
+	velocity = velocity.move_toward(velocity + separation_impulse, crowd_separation_strength * delta)
 
 func apply_slow(duration: float, mult: float) -> void:
 	if duration > slow_time_left:

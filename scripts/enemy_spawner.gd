@@ -32,6 +32,8 @@ func spawn_profile_enemies(profile: Dictionary) -> int:
 	var charger_count := ENCOUNTER_CONTRACTS.profile_charger_count(profile)
 	var archer_count := ENCOUNTER_CONTRACTS.profile_archer_count(profile)
 	var shielder_count := ENCOUNTER_CONTRACTS.profile_shielder_count(profile)
+	var lurker_count := int(profile.get("lurker_count", 0))
+	var ram_count := int(profile.get("ram_count", 0))
 	for _i in range(chaser_count):
 		_spawn_enemy_in_current_room(scripts.get("chaser"))
 		total += 1
@@ -43,6 +45,12 @@ func spawn_profile_enemies(profile: Dictionary) -> int:
 		total += 1
 	for _i in range(shielder_count):
 		_spawn_enemy_in_current_room(scripts.get("shielder"))
+		total += 1
+	for _i in range(lurker_count):
+		_spawn_enemy_in_current_room(scripts.get("lurker"))
+		total += 1
+	for _i in range(ram_count):
+		_spawn_enemy_in_current_room(scripts.get("ram"))
 		total += 1
 	return total
 
@@ -161,6 +169,31 @@ func _apply_enemy_mutator(enemy: CharacterBody2D, enemy_script: Script) -> void:
 		enemy.set("slam_windup_time", maxf(0.32, base_slam_windup * shielder_slam_windup_mult))
 		var base_speed := float(enemy.get("move_speed"))
 		enemy.set("move_speed", maxf(20.0, base_speed * shielder_speed_mult))
+
+	if enemy_script == scripts.get("lurker"):
+		# Lurker is a melee striker — reads chaser mutator stats so Blood Rush buffs it alongside Chasers.
+		var chaser_damage_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT, 1.0)
+		var chaser_speed_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_SPEED_MULT, 1.0)
+		is_affected = not is_equal_approx(chaser_damage_mult, 1.0) or not is_equal_approx(chaser_speed_mult, 1.0)
+		var base_strike := int(enemy.get("strike_damage"))
+		enemy.set("strike_damage", maxi(1, int(round(float(base_strike) * chaser_damage_mult))))
+		var base_lurker_speed := float(enemy.get("move_speed"))
+		enemy.set("move_speed", maxf(25.0, base_lurker_speed * chaser_speed_mult))
+
+	if enemy_script == scripts.get("ram"):
+		# Ram is a charge attacker — reads charger mutator stats so Flashpoint/Siegebreak buff it alongside Chargers.
+		var charger_damage_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_DAMAGE_MULT, 1.0)
+		var charger_speed_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_SPEED_MULT, 1.0)
+		var charger_windup_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_WINDUP_MULT, 1.0)
+		is_affected = not is_equal_approx(charger_damage_mult, 1.0) \
+			or not is_equal_approx(charger_speed_mult, 1.0) \
+			or not is_equal_approx(charger_windup_mult, 1.0)
+		var base_ram_charge_damage := int(enemy.get("charge_damage"))
+		enemy.set("charge_damage", maxi(1, int(round(float(base_ram_charge_damage) * charger_damage_mult))))
+		var base_ram_charge_speed := float(enemy.get("charge_speed"))
+		enemy.set("charge_speed", maxf(60.0, base_ram_charge_speed * charger_speed_mult))
+		var base_ram_windup := float(enemy.get("windup_time"))
+		enemy.set("windup_time", maxf(0.18, base_ram_windup * charger_windup_mult))
 
 	enemy.modulate = ENCOUNTER_CONTRACTS.mutator_enemy_tint(current_room_enemy_mutator, Color(1.0, 0.92, 0.92, 1.0))
 	if enemy.get("has_mutator_overlay") != null:

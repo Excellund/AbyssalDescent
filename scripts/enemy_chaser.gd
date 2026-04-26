@@ -2,6 +2,10 @@ extends "res://scripts/enemy_base.gd"
 
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 
+# When the player enters melee range while the Chaser is mid-cooldown, snap the
+# remaining cooldown down to this window so the hit registers quickly on contact.
+const ATTACK_COMMIT_WINDOW := 0.15
+
 @export var move_speed: float = 120.0
 @export var acceleration: float = 900.0
 @export var deceleration: float = 1200.0
@@ -11,9 +15,14 @@ const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 @export var attack_interval: float = 0.85
 
 var attack_cooldown_left: float = 0.0
+var _player_was_in_range: bool = false
 
 func _process_behavior(delta: float) -> void:
 	_update_attack_cooldown(delta)
+	var in_range := is_instance_valid(target) and global_position.distance_to(target.global_position) <= attack_range
+	if in_range and not _player_was_in_range and attack_cooldown_left > ATTACK_COMMIT_WINDOW:
+		attack_cooldown_left = ATTACK_COMMIT_WINDOW
+	_player_was_in_range = in_range
 	var desired_velocity := _get_desired_velocity()
 	var move_rate := acceleration if desired_velocity != Vector2.ZERO else deceleration
 	velocity = velocity.move_toward(desired_velocity, move_rate * delta)

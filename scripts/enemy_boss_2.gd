@@ -18,25 +18,25 @@ const ATTACK_POLAR_SHIFT := 4
 @export var acceleration: float = 980.0
 @export var deceleration: float = 1380.0
 @export var preferred_distance: float = 260.0
-@export var action_cooldown: float = 0.52
+@export var action_cooldown: float = 0.38
 
 @export var prism_windup: float = 0.95
 @export var prism_radius: float = 300.0
 @export var prism_inner_radius: float = 92.0
 @export var prism_spoke_count: int = 5
 @export var prism_spoke_half_angle_degrees: float = 13.0
-@export var prism_damage: int = 40
+@export var prism_damage: int = 46
 
 @export var gravity_windup: float = 1.1
 @export var gravity_radius: float = 240.0
-@export var gravity_damage: int = 54
+@export var gravity_damage: int = 63
 
-@export var echo_dash_windup: float = 0.58
+@export var echo_dash_windup: float = 0.45
 @export var echo_dash_speed: float = 680.0
 @export var echo_dash_duration: float = 0.24
 @export var echo_dash_count: int = 3
 @export var echo_dash_width: float = 44.0
-@export var echo_dash_damage: int = 36
+@export var echo_dash_damage: int = 42
 @export var echo_dash_retarget_pause: float = 0.14
 @export var echo_dash_max_turn_degrees: float = 40.0
 @export var reposition_dash_chance: float = 0.46
@@ -44,12 +44,12 @@ const ATTACK_POLAR_SHIFT := 4
 @export var reposition_dash_duration: float = 0.23
 
 @export var orb_count: int = 6
-@export var orb_ring_radius: float = 54.0
-@export var orb_rotation_speed: float = 0.95
+@export var orb_ring_radius: float = 45.0
+@export var orb_rotation_speed: float = 1.1
 @export var orbital_lance_windup: float = 0.88
 @export var orbital_lance_length: float = 320.0
 @export var orbital_lance_width: float = 24.0
-@export var orbital_lance_damage: int = 38
+@export var orbital_lance_damage: int = 44
 
 @export var polar_shift_windup: float = 0.92
 @export var polar_shift_radius: float = 440.0
@@ -61,11 +61,11 @@ const ATTACK_POLAR_SHIFT := 4
 @export var polar_shift_anchor_radius: float = 92.0
 @export var polar_shift_anchor_force_mult: float = 0.0
 @export var polar_shift_pull_inner_radius: float = 160.0
-@export var polar_shift_pull_inner_damage: int = 28
+@export var polar_shift_pull_inner_damage: int = 32
 @export var polar_shift_pull_inner_delay: float = 0.32
 @export var polar_shift_pull_afterglow_duration: float = 0.42
 
-@export var recover_time: float = 0.42
+@export var recover_time: float = 0.28
 @export var arena_size: Vector2 = Vector2(1360.0, 960.0)
 @export var edge_soft_margin: float = 180.0
 @export var edge_hard_margin: float = 112.0
@@ -254,7 +254,7 @@ func _start_next_attack(distance_to_target: float, wall_pressure: float = 0.0) -
 			active_attack = ATTACK_POLAR_SHIFT
 		else:
 			active_attack = ATTACK_GRAVITY if distance_to_target < 235.0 else ATTACK_PRISM
-	elif distance_to_target > 360.0 and enrage_t > 0.32:
+	elif distance_to_target > 240.0:
 		active_attack = ATTACK_ECHO_DASH
 	elif distance_to_target < 150.0:
 		if _orbital_attack_unlocked() and randf() < 0.42:
@@ -730,11 +730,11 @@ func _get_windup_time(attack_id: int) -> float:
 
 func _get_enrage_ratio() -> float:
 	var health_ratio := float(_get_current_health()) / maxf(1.0, float(max_health))
-	if health_ratio >= 0.72:
+	if health_ratio >= 0.78:
 		return 0.0
 	if health_ratio <= 0.2:
 		return 1.0
-	return clampf((0.72 - health_ratio) / 0.52, 0.0, 1.0)
+	return clampf((0.78 - health_ratio) / 0.58, 0.0, 1.0)
 
 func _draw() -> void:
 	var pulse := _get_attack_pulse()

@@ -4,6 +4,8 @@ const ENEMY_CHASER_SCRIPT := preload("res://scripts/enemy_chaser.gd")
 const ENEMY_CHARGER_SCRIPT := preload("res://scripts/enemy_charger.gd")
 const ENEMY_ARCHER_SCRIPT := preload("res://scripts/enemy_archer.gd")
 const ENEMY_SHIELDER_SCRIPT := preload("res://scripts/enemy_shielder.gd")
+const ENEMY_LURKER_SCRIPT := preload("res://scripts/enemy_lurker.gd")
+const ENEMY_RAM_SCRIPT := preload("res://scripts/enemy_ram.gd")
 const ENEMY_BOSS_SCRIPT := preload("res://scripts/enemy_boss.gd")
 const ENEMY_BOSS_2_SCRIPT := preload("res://scripts/enemy_boss_2.gd")
 const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
@@ -84,6 +86,7 @@ const DEBUG_MUTATOR_RANDOM_HARD := 6
 @export var debug_start_power_ids: PackedStringArray = PackedStringArray()
 @export_multiline var debug_start_command: String = ""
 @export_enum("None", "Skirmish", "Crossfire", "Onslaught", "Fortress", "Trial", "Objective - Last Stand", "Objective - Cut the Signal", "Objective - Random", "Rest Site", "Warden", "Sovereign") var debug_start_encounter: int = DEBUG_ENCOUNTER_NONE
+@export var debug_start_depth: int = 1
 @export_enum("None", "Blood Rush", "Flashpoint", "Siegebreak", "Iron Volley", "Killbox", "Random Hard") var debug_mutator_override: int = DEBUG_MUTATOR_NONE
 @export var debug_trigger_victory: bool = false
 
@@ -187,7 +190,9 @@ func _ready() -> void:
 		"chaser": ENEMY_CHASER_SCRIPT,
 		"charger": ENEMY_CHARGER_SCRIPT,
 		"archer": ENEMY_ARCHER_SCRIPT,
-		"shielder": ENEMY_SHIELDER_SCRIPT
+		"shielder": ENEMY_SHIELDER_SCRIPT,
+		"lurker": ENEMY_LURKER_SCRIPT,
+		"ram": ENEMY_RAM_SCRIPT
 	}, Callable(self, "_on_room_enemy_died"))
 	_play_room_music(false, false, music_intro_fade_duration)
 	hud = WORLD_HUD_SCRIPT.new()
@@ -343,7 +348,7 @@ func _start_debug_selected_encounter(encounter_state: int) -> Dictionary:
 		return _start_debug_second_boss_room()
 
 	_reset_for_debug_jump()
-	var encounter_depth := 1
+	var encounter_depth := debug_start_depth
 	rooms_cleared = encounter_depth - 1
 	room_depth = encounter_depth
 	boss_unlocked = false
