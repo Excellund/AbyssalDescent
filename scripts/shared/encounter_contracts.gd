@@ -134,8 +134,8 @@ static func normalize_reward_mode(value: Variant) -> int:
 			return ENUMS.RewardMode.BOON
 		if mode_int == ENUMS.RewardMode.ARCANA:
 			return ENUMS.RewardMode.ARCANA
-		if mode_int == ENUMS.RewardMode.HARD:
-			return ENUMS.RewardMode.HARD
+		if mode_int == ENUMS.RewardMode.MISSION:
+			return ENUMS.RewardMode.MISSION
 		return ENUMS.RewardMode.NONE
 	return ENUMS.reward_mode_from_legacy(String(value).to_lower())
 

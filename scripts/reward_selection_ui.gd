@@ -79,7 +79,7 @@ func open_selection(title: String, is_initial: bool, mode: int, power_registry: 
 	_apply_mode_theme()
 	if reward_selection_mode == ENUMS.RewardMode.ARCANA:
 		boon_choices = _roll_arcana_choices(boon_choice_count, power_registry, player, rng)
-	elif reward_selection_mode == ENUMS.RewardMode.HARD:
+	elif reward_selection_mode == ENUMS.RewardMode.MISSION:
 		boon_choices = _roll_objective_choices(boon_choice_count, power_registry, player, rng)
 	else:
 		boon_choices = _roll_boon_choices(boon_choice_count, power_registry, player, rng)
@@ -105,7 +105,7 @@ func process_input(delta: float) -> void:
 	if Input.is_action_just_pressed("attack"):
 		if boon_hovered_index >= 0 and boon_hovered_index < boon_choices.size():
 			var picked := boon_choices[boon_hovered_index]
-			if reward_selection_mode == ENUMS.RewardMode.HARD and mission_reward_stage == 0 and _has_mission_bonus_mutator():
+			if reward_selection_mode == ENUMS.RewardMode.MISSION and mission_reward_stage == 0 and _has_mission_bonus_mutator():
 				pending_mission_upgrade_choice = picked
 				mission_reward_stage = 1
 				boon_choices = _roll_objective_mutator_choice(current_player_mutator)
@@ -118,7 +118,7 @@ func process_input(delta: float) -> void:
 			var mode := reward_selection_mode
 			var initial := pending_initial_boon
 			var emitted_choice := picked
-			if mode == ENUMS.RewardMode.HARD and mission_reward_stage == 1 and not pending_mission_upgrade_choice.is_empty():
+			if mode == ENUMS.RewardMode.MISSION and mission_reward_stage == 1 and not pending_mission_upgrade_choice.is_empty():
 				emitted_choice = {
 					"mission_upgrade": pending_mission_upgrade_choice,
 					"mission_mutator": picked
@@ -236,7 +236,7 @@ func _apply_mode_theme() -> void:
 		boon_title_label.add_theme_color_override("font_shadow_color", Color(0.08, 0.03, 0.01, 0.96))
 		if boon_subtitle_label != null:
 			boon_subtitle_label.add_theme_color_override("font_color", Color(0.95, 0.78, 0.55, 0.65))
-	elif reward_selection_mode == ENUMS.RewardMode.HARD:
+	elif reward_selection_mode == ENUMS.RewardMode.MISSION:
 		boon_backdrop.color = Color(0.035, 0.03, 0.015, 0.7)
 		boon_title_label.add_theme_color_override("font_color", Color(1.0, 0.93, 0.76, 1.0))
 		boon_title_label.add_theme_color_override("font_shadow_color", Color(0.09, 0.06, 0.02, 0.95))
@@ -300,7 +300,7 @@ func _refresh_boon_ui(player: Node2D) -> void:
 	_update_boon_reveal_visuals()
 
 func _has_mission_bonus_mutator() -> bool:
-	return reward_selection_mode == ENUMS.RewardMode.HARD and not current_player_mutator.is_empty()
+	return reward_selection_mode == ENUMS.RewardMode.MISSION and not current_player_mutator.is_empty()
 
 func _get_boon_title_text() -> String:
 	if _has_mission_bonus_mutator():
@@ -316,7 +316,7 @@ func _get_boon_subtitle_text() -> String:
 		if reveal_complete:
 			return "Choose one - it will grow stronger every time you claim it"
 		return "Arcana are rare powers that permanently shape your run"
-	if reward_selection_mode == ENUMS.RewardMode.HARD:
+	if reward_selection_mode == ENUMS.RewardMode.MISSION:
 		if mission_reward_stage == 0:
 			if reveal_complete:
 				return "Step 1 of 2: Select a card to claim your reward"
@@ -469,7 +469,7 @@ func _apply_boon_card_styles(hovered_index: int) -> void:
 		if reward_selection_mode == ENUMS.RewardMode.ARCANA:
 			base_color = Color(0.16, 0.11, 0.08, 0.96).lerp(Color(0.22, 0.14, 0.09, 0.96), t)
 			border_color = Color(1.0, 0.72, 0.4, 0.84)
-		elif reward_selection_mode == ENUMS.RewardMode.HARD:
+		elif reward_selection_mode == ENUMS.RewardMode.MISSION:
 			var mission_tint := Color(0.98, 0.78, 0.34, 1.0)
 			if i < boon_choices.size():
 				mission_tint = boon_choices[i].get("color", mission_tint) as Color
@@ -479,7 +479,7 @@ func _apply_boon_card_styles(hovered_index: int) -> void:
 			if reward_selection_mode == ENUMS.RewardMode.ARCANA:
 				style.bg_color = Color(0.33, 0.2, 0.12, 0.97)
 				style.border_color = Color(1.0, 0.9, 0.72, 1.0)
-			elif reward_selection_mode == ENUMS.RewardMode.HARD:
+			elif reward_selection_mode == ENUMS.RewardMode.MISSION:
 				var hover_tint := Color(1.0, 0.9, 0.72, 1.0)
 				if i < boon_choices.size():
 					hover_tint = boon_choices[i].get("color", hover_tint) as Color

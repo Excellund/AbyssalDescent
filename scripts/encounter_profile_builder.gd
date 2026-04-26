@@ -387,7 +387,7 @@ func roll_route_options(depth: int) -> Array[Dictionary]:
 		Color(0.98, 0.78, 0.34, 0.96),
 		ENUMS.DoorKind.ENCOUNTER,
 		"objective",
-		ENUMS.RewardMode.HARD,
+		ENUMS.RewardMode.MISSION,
 		objective_profile
 	)
 

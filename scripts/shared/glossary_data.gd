@@ -58,7 +58,7 @@ static func _encounter_rows() -> Array[Dictionary]:
 		},
 		{
 			"name": "Trial",
-			"group": "Objective",
+			"group": "Trial",
 			"color": Color(1.0, 0.66, 0.52, 1.0),
 			"desc": "Hard variant with an enemy mutator.",
 		},
@@ -140,6 +140,30 @@ static func _mutator_rows() -> Array[Dictionary]:
 		},
 	]
 
+static func _reward_rows() -> Array[Dictionary]:
+	return [
+		{
+			"tier": "BOON",
+			"color": Color(0.58, 0.86, 1.0, 1.0),
+			"desc": "Standard room reward. Choose one core power upgrade.",
+		},
+		{
+			"tier": "MISSION",
+			"color": Color(0.98, 0.8, 0.44, 1.0),
+			"desc": "Objective reward tier. Higher-impact upgrade path for run momentum.",
+		},
+		{
+			"tier": "ARCANA",
+			"color": Color(1.0, 0.66, 0.48, 1.0),
+			"desc": "Trial reward tier. Rare arcana powers that stack through the run.",
+		},
+		{
+			"tier": "NONE",
+			"color": Color(0.74, 0.84, 0.95, 1.0),
+			"desc": "No immediate reward card.",
+		},
+	]
+
 static func _color_hex(color: Color) -> String:
 	return "#" + color.to_html(false)
 
@@ -157,14 +181,44 @@ static func _encounter_title_bbcode(row: Dictionary) -> String:
 	var color := row.get("color", Color(0.9, 0.96, 1.0, 1.0)) as Color
 	return "[color=%s][b]%s[/b][/color]" % [_color_hex(color), name]
 
+static func _reward_tier_title_bbcode(row: Dictionary) -> String:
+	var tier := String(row.get("tier", ""))
+	var color := row.get("color", Color(0.9, 0.96, 1.0, 1.0)) as Color
+	return "[color=%s][b]%s[/b][/color]" % [_color_hex(color), tier]
+
+static func _section_title_bbcode(title: String) -> String:
+	return "[center][b]%s[/b][/center]" % title
+
+static func _subsection_title_bbcode(title: String) -> String:
+	return "[color=#8EA8C0][b]%s[/b][/color]" % title
+
 static func _encounter_group_header_bbcode(group_name: String) -> String:
-	var title := "%s Encounters" % group_name.to_upper()
-	return "[color=#63C8FF][b][u]%s[/u][/b][/color]\n[color=#466A86]--------------------------------[/color]" % title
+	var reward_tier := "BOON"
+	var tier_color := Color(0.58, 0.86, 1.0, 1.0)
+	match group_name:
+		"Objective":
+			reward_tier = "MISSION"
+			tier_color = Color(0.98, 0.8, 0.44, 1.0)
+		"Trial":
+			reward_tier = "ARCANA"
+			tier_color = Color(1.0, 0.66, 0.48, 1.0)
+		"Special", "Boss":
+			reward_tier = "NONE"
+			tier_color = Color(0.74, 0.84, 0.95, 1.0)
+		_:
+			reward_tier = "BOON"
+			tier_color = Color(0.58, 0.86, 1.0, 1.0)
+	var title := "%s Encounter" % group_name
+	return "[color=#9EC9E8][b]%s[/b][/color] [color=#7F96AE]-[/color] [color=%s][b][%s][/b][/color]" % [title, _color_hex(tier_color), reward_tier]
 
 static func glossary_bbcode() -> String:
 	var lines: Array[String] = []
-	lines.append("[center][b]Encounters[/b][/center]")
-	var encounter_groups: Array[String] = ["Core", "Advanced", "Objective", "Special", "Boss"]
+	lines.append(_section_title_bbcode("Reward Tiers"))
+	for row in _reward_rows():
+		lines.append("%s  [color=#BFD2E8]-[/color]  %s" % [_reward_tier_title_bbcode(row), row.get("desc", "")])
+	lines.append("")
+	lines.append(_section_title_bbcode("Encounters"))
+	var encounter_groups: Array[String] = ["Core", "Advanced", "Trial", "Objective", "Special", "Boss"]
 	for group_name in encounter_groups:
 		lines.append(_encounter_group_header_bbcode(group_name))
 		for row in _encounter_rows():
@@ -172,7 +226,7 @@ static func glossary_bbcode() -> String:
 				continue
 			lines.append("%s  [color=#BFD2E8]-[/color]  %s" % [_encounter_title_bbcode(row), row.get("desc", "")])
 		lines.append("")
-	lines.append("[center][b]Mutators[/b][/center]")
+	lines.append(_section_title_bbcode("Mutators"))
 	for row in _mutator_rows():
 		lines.append("%s: %s" % [_mutator_title_bbcode(row), row.get("desc", "")])
 	return "\n".join(lines)

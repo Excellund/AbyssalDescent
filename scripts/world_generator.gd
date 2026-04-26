@@ -419,7 +419,7 @@ func _start_debug_selected_encounter(encounter_state: int) -> Dictionary:
 		return {"ok": false, "state": "debug_encounter", "note": "Could not build encounter profile."}
 	pending_room_reward = ENUMS.RewardMode.ARCANA if encounter_key == "trial" else ENUMS.RewardMode.BOON
 	if encounter_key.begins_with("objective_"):
-		pending_room_reward = ENUMS.RewardMode.HARD
+		pending_room_reward = ENUMS.RewardMode.MISSION
 	_begin_room(profile)
 	hud.refresh(_get_hud_state(), player)
 	return {
@@ -520,7 +520,7 @@ func _start_debug_objective_room(kind: String = "") -> Dictionary:
 	profile = _apply_debug_mutator_override(profile)
 	if profile.is_empty():
 		return {"ok": false, "state": "objective_test", "note": "Could not build objective profile."}
-	pending_room_reward = ENUMS.RewardMode.HARD
+	pending_room_reward = ENUMS.RewardMode.MISSION
 	_begin_room(profile)
 	hud.refresh(_get_hud_state(), player)
 	return {
@@ -1374,8 +1374,8 @@ func _on_room_cleared() -> void:
 	if reward_mode == ENUMS.RewardMode.BOON:
 		_open_boon_selection("Choose Boon Reward", false, ENUMS.RewardMode.BOON)
 		return
-	if reward_mode == ENUMS.RewardMode.HARD:
-		_open_boon_selection("Choose Mission Reward", false, ENUMS.RewardMode.HARD, current_room_player_mutator)
+	if reward_mode == ENUMS.RewardMode.MISSION:
+		_open_boon_selection("Choose Mission Reward", false, ENUMS.RewardMode.MISSION, current_room_player_mutator)
 		return
 	if reward_mode == ENUMS.RewardMode.ARCANA:
 		_open_boon_selection("Choose Arcana", false, ENUMS.RewardMode.ARCANA)
@@ -1966,7 +1966,7 @@ func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> voi
 	if mode == ENUMS.RewardMode.ARCANA:
 		_apply_arcana_to_player(String(choice["id"]))
 		arcana_rewards_taken.append(String(choice["name"]))
-	elif mode == ENUMS.RewardMode.HARD:
+	elif mode == ENUMS.RewardMode.MISSION:
 		_apply_mission_reward(choice)
 	else:
 		_apply_boon_to_player(String(choice["id"]))
