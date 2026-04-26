@@ -1438,7 +1438,7 @@ func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> voi
 		_apply_arcana_to_player(String(choice["id"]))
 		arcana_rewards_taken.append(String(choice["name"]))
 	elif mode == ENUMS.RewardMode.HARD:
-		_apply_objective_mutator(choice)
+		_apply_mission_reward(choice)
 	else:
 		_apply_boon_to_player(String(choice["id"]))
 		boons_taken.append(String(choice["name"]))
@@ -1457,18 +1457,24 @@ func _apply_boon_to_player(boon_id: String) -> void:
 		player.call("apply_upgrade", boon_id)
 
 func _apply_mission_reward(choice: Dictionary) -> void:
-	var chosen_id := String(choice.get("id", ""))
+	var chosen_upgrade := choice.get("mission_upgrade", choice) as Dictionary
+	var chosen_mutator := choice.get("mission_mutator", {}) as Dictionary
+	var chosen_id := String(chosen_upgrade.get("id", ""))
 	if chosen_id.is_empty():
 		return
 	_apply_boon_to_player(chosen_id)
-	boons_taken.append(String(choice.get("name", chosen_id)))
-	var bonus_boon := _roll_bonus_mission_boon(chosen_id)
-	if bonus_boon.is_empty():
-		return
-	_apply_boon_to_player(String(bonus_boon.get("id", "")))
-	boons_taken.append(String(bonus_boon.get("name", "")))
+	boons_taken.append(String(chosen_upgrade.get("name", chosen_id)))
 	if is_instance_valid(hud):
-		hud.show_banner("Mission Bonus", String(bonus_boon.get("name", "")))
+		hud.show_banner("Mission Reward", String(chosen_upgrade.get("name", chosen_id)))
+	if not chosen_mutator.is_empty():
+		_apply_objective_mutator(chosen_mutator)
+		return
+	if current_room_player_mutator.is_empty():
+		return
+	_apply_objective_mutator({
+		"name": String(current_room_player_mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME, "Objective Mutator")),
+		"full_data": current_room_player_mutator
+	})
 
 func _roll_bonus_mission_boon(excluded_id: String) -> Dictionary:
 	if not is_instance_valid(power_registry_instance):

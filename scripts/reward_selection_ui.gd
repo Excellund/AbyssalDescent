@@ -23,6 +23,9 @@ var boon_confirm_lock_time: float = 0.0
 var boon_hovered_index: int = -1
 var boon_reveal_time: float = 0.0
 var reward_selection_mode: int = ENUMS.RewardMode.BOON
+var mission_reward_stage: int = 0
+var pending_mission_upgrade_choice: Dictionary = {}
+var current_player: Node2D
 
 var boon_layer: CanvasLayer
 var boon_title_label: Label
@@ -56,6 +59,10 @@ func close_selection() -> void:
 	boon_selection_active = false
 	pending_initial_boon = false
 	reward_selection_mode = ENUMS.RewardMode.BOON
+	mission_reward_stage = 0
+	pending_mission_upgrade_choice = {}
+	current_player = null
+	current_player_mutator = {}
 	boon_choices.clear()
 	if boon_layer != null:
 		boon_layer.visible = false
@@ -65,12 +72,15 @@ func open_selection(title: String, is_initial: bool, mode: int, power_registry: 
 	pending_initial_boon = is_initial
 	boon_title_text = title
 	reward_selection_mode = mode
+	mission_reward_stage = 0
+	pending_mission_upgrade_choice = {}
+	current_player = player
 	current_player_mutator = player_mutator
 	_apply_mode_theme()
 	if reward_selection_mode == ENUMS.RewardMode.ARCANA:
 		boon_choices = _roll_arcana_choices(boon_choice_count, power_registry, player, rng)
 	elif reward_selection_mode == ENUMS.RewardMode.HARD:
-		boon_choices = _roll_objective_mutator_choice(player_mutator)
+		boon_choices = _roll_objective_choices(boon_choice_count, power_registry, player, rng)
 	else:
 		boon_choices = _roll_boon_choices(boon_choice_count, power_registry, player, rng)
 	boon_confirm_lock_time = boon_reveal_duration + 0.08
@@ -95,15 +105,35 @@ func process_input(delta: float) -> void:
 	if Input.is_action_just_pressed("attack"):
 		if boon_hovered_index >= 0 and boon_hovered_index < boon_choices.size():
 			var picked := boon_choices[boon_hovered_index]
+			if reward_selection_mode == ENUMS.RewardMode.HARD and mission_reward_stage == 0 and _has_mission_bonus_mutator():
+				pending_mission_upgrade_choice = picked
+				mission_reward_stage = 1
+				boon_choices = _roll_objective_mutator_choice(current_player_mutator)
+				boon_confirm_lock_time = boon_reveal_duration + 0.08
+				boon_reveal_time = 0.0
+				boon_hovered_index = -1
+				_apply_boon_card_styles(-1)
+				_refresh_boon_ui(current_player)
+				return
 			var mode := reward_selection_mode
 			var initial := pending_initial_boon
+			var emitted_choice := picked
+			if mode == ENUMS.RewardMode.HARD and mission_reward_stage == 1 and not pending_mission_upgrade_choice.is_empty():
+				emitted_choice = {
+					"mission_upgrade": pending_mission_upgrade_choice,
+					"mission_mutator": picked
+				}
 			boon_selection_active = false
 			boon_choices.clear()
 			if boon_layer != null:
 				boon_layer.visible = false
 			reward_selection_mode = ENUMS.RewardMode.BOON
+			mission_reward_stage = 0
+			pending_mission_upgrade_choice = {}
+			current_player = null
+			current_player_mutator = {}
 			pending_initial_boon = false
-			emit_signal("reward_selected", picked, mode, initial)
+			emit_signal("reward_selected", emitted_choice, mode, initial)
 			return
 
 func _create_ui() -> void:
@@ -223,15 +253,9 @@ func _refresh_boon_ui(player: Node2D) -> void:
 	if boon_layer == null:
 		return
 	boon_layer.visible = true
-	boon_title_label.text = boon_title_text
+	boon_title_label.text = _get_boon_title_text()
 	if boon_subtitle_label != null:
-		var is_arcana := reward_selection_mode == ENUMS.RewardMode.ARCANA
-		if is_arcana and pending_initial_boon:
-			boon_subtitle_label.text = "Arcana are rare powers that permanently shape your run"
-		elif reward_selection_mode == ENUMS.RewardMode.HARD:
-			boon_subtitle_label.text = "Claim this objective mutator to empower your run"
-		else:
-			boon_subtitle_label.text = "Revealing your options\u2026"
+		boon_subtitle_label.text = _get_boon_subtitle_text()
 
 	for i in range(boon_card_labels.size()):
 		var panel := boon_card_panels[i]
@@ -274,6 +298,37 @@ func _refresh_boon_ui(player: Node2D) -> void:
 		label.modulate = Color(1.0, 1.0, 1.0, 0.95)
 
 	_update_boon_reveal_visuals()
+
+func _has_mission_bonus_mutator() -> bool:
+	return reward_selection_mode == ENUMS.RewardMode.HARD and not current_player_mutator.is_empty()
+
+func _get_boon_title_text() -> String:
+	if _has_mission_bonus_mutator():
+		if mission_reward_stage == 0:
+			return "%s (1/2)" % boon_title_text
+		return "Claim Mission Mutator (2/2)"
+	return boon_title_text
+
+func _get_boon_subtitle_text() -> String:
+	var is_arcana := reward_selection_mode == ENUMS.RewardMode.ARCANA
+	var reveal_complete := boon_confirm_lock_time <= 0.0
+	if is_arcana and pending_initial_boon:
+		if reveal_complete:
+			return "Choose one - it will grow stronger every time you claim it"
+		return "Arcana are rare powers that permanently shape your run"
+	if reward_selection_mode == ENUMS.RewardMode.HARD:
+		if mission_reward_stage == 0:
+			if reveal_complete:
+				return "Step 1 of 2: Select a card to claim your reward"
+			return "Step 1 of 2: Preparing your choices..."
+		if reveal_complete:
+			return "Step 2 of 2: claim your bonus mission mutator"
+		return "Permanent upgrade locked in. Bonus mutator ready to claim"
+	if reveal_complete:
+		if is_arcana:
+			return "Add another stack and push your stats further"
+		return "Select a card to claim your reward"
+	return "Preparing your choices..."
 
 func _roll_boon_choices(choice_count: int, power_registry: Node, player: Node2D, rng: RandomNumberGenerator) -> Array[Dictionary]:
 	var pool: Array[Dictionary] = power_registry.call("get_upgrade_pool", player)
@@ -472,23 +527,7 @@ func _update_boon_reveal_visuals() -> void:
 		stack_label.modulate.a = eased
 
 	if boon_subtitle_label != null:
-		var is_arcana := reward_selection_mode == ENUMS.RewardMode.ARCANA
-		if boon_confirm_lock_time <= 0.0:
-			if is_arcana and pending_initial_boon:
-				boon_subtitle_label.text = "Choose one — it will grow stronger every time you claim it"
-			elif is_arcana:
-				boon_subtitle_label.text = "Add another stack and push your stats further"
-			elif reward_selection_mode == ENUMS.RewardMode.HARD:
-				boon_subtitle_label.text = "Objective mutators stack and refresh when repeated"
-			else:
-				boon_subtitle_label.text = "Select a card to claim your reward"
-		else:
-			if is_arcana and pending_initial_boon:
-				boon_subtitle_label.text = "Arcana are rare powers that permanently shape your run"
-			elif reward_selection_mode == ENUMS.RewardMode.HARD:
-				boon_subtitle_label.text = "Mission rewards now grant objective mutators"
-			else:
-				boon_subtitle_label.text = "Preparing your choices\u2026"
+		boon_subtitle_label.text = _get_boon_subtitle_text()
 
 func _get_mutator_icon_texture(icon_shape_id: String) -> Texture2D:
 	match icon_shape_id:
