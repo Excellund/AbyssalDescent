@@ -21,9 +21,6 @@ var trial_power_stacks: Dictionary = {
 	"static_wake": 0
 }
 
-const LONG_REACH_RANGE_PER_STACK := 11.0
-const IRON_SKIN_ARMOR_PER_STACK := 4
-
 const UPGRADE_IDS := {
 	"swift_strike": true,
 	"heavy_blow": true,
@@ -63,26 +60,17 @@ func apply_upgrade(upgrade_id: String) -> bool:
 	# Track in game state
 	if is_instance_valid(game_state):
 		game_state.add_upgrade(id)
-	
+
+	var preview := _build_upgrade_preview(id)
+	if preview.is_empty():
+		return false
+
 	match id:
-		"swift_strike":
-			player_reference.set("attack_cooldown", maxf(0.08, float(player_reference.get("attack_cooldown")) * 0.86))
-		"heavy_blow":
-			player_reference.set("attack_damage", int(player_reference.get("attack_damage")) + 8)
-		"wide_arc":
-			var next_arc := clampf(float(player_reference.get("attack_arc_degrees")) + 18.0, 60.0, 240.0)
-			player_reference.set("attack_arc_degrees", next_arc)
-		"long_reach":
-			player_reference.set("attack_range", float(player_reference.get("attack_range")) + LONG_REACH_RANGE_PER_STACK)
-		"fleet_foot":
-			player_reference.set("max_speed", float(player_reference.get("max_speed")) + 18.0)
-		"blink_dash":
-			player_reference.set("dash_cooldown", maxf(0.18, float(player_reference.get("dash_cooldown")) * 0.85))
+		"swift_strike", "heavy_blow", "wide_arc", "long_reach", "fleet_foot", "blink_dash":
+			player_reference.set(String(preview.get("property", "")), preview.get("next", player_reference.get(String(preview.get("property", "")))))
 		"iron_skin":
-			var current_armor := int(player_reference.get("iron_skin_armor"))
-			player_reference.set("iron_skin_armor", current_armor + IRON_SKIN_ARMOR_PER_STACK)
-			var current_stacks := int(player_reference.get("iron_skin_stacks"))
-			player_reference.set("iron_skin_stacks", current_stacks + 1)
+			player_reference.set("iron_skin_armor", int(preview.get("next", int(player_reference.get("iron_skin_armor")))))
+			player_reference.set("iron_skin_stacks", int(player_reference.get("iron_skin_stacks")) + 1)
 		_:
 			return false
 	return true
@@ -104,64 +92,61 @@ func apply_trial_power(power_id: String) -> bool:
 	# Update local stack
 	if trial_power_stacks.has(id):
 		trial_power_stacks[id] += 1
+
+	var next_stack := get_trial_power_stack_count(id) + 1
+	var next_values := _build_trial_values(id, next_stack)
+	if next_values.is_empty():
+		return false
 	
 	match id:
 		"razor_wind":
 			player_reference.set("reward_razor_wind", true)
-			var razor_stacks := int(player_reference.get("razor_wind_stacks")) + 1
-			player_reference.set("razor_wind_stacks", razor_stacks)
-			player_reference.set("razor_wind_range_scale", 1.25 + 0.10 * float(razor_stacks))
-			player_reference.set("razor_wind_damage_ratio", 0.6 + 0.12 * float(razor_stacks))
-			player_reference.set("attack_cooldown", maxf(0.1, float(player_reference.get("attack_cooldown")) * 0.96))
+			player_reference.set("razor_wind_stacks", next_stack)
+			player_reference.set("razor_wind_range_scale", float(next_values.get("range_scale", player_reference.get("razor_wind_range_scale"))))
+			player_reference.set("razor_wind_damage_ratio", float(next_values.get("damage_ratio", player_reference.get("razor_wind_damage_ratio"))))
+			player_reference.set("attack_cooldown", float(next_values.get("attack_cooldown", player_reference.get("attack_cooldown"))))
 		"execution_edge":
 			player_reference.set("reward_execution_edge", true)
-			var execution_stacks := int(player_reference.get("execution_edge_stacks")) + 1
-			player_reference.set("execution_edge_stacks", execution_stacks)
-			player_reference.set("execution_every", maxi(2, 4 - execution_stacks))
-			player_reference.set("execution_damage_mult", 2.2 + 0.45 * float(execution_stacks))
-			player_reference.set("attack_lock_duration", maxf(0.08, float(player_reference.get("attack_lock_duration")) * 0.94))
+			player_reference.set("execution_edge_stacks", next_stack)
+			player_reference.set("execution_every", int(next_values.get("every", player_reference.get("execution_every"))))
+			player_reference.set("execution_damage_mult", float(next_values.get("damage_mult", player_reference.get("execution_damage_mult"))))
+			player_reference.set("attack_lock_duration", float(next_values.get("attack_lock_duration", player_reference.get("attack_lock_duration"))))
 		"rupture_wave":
 			player_reference.set("reward_rupture_wave", true)
-			var rupture_stacks := int(player_reference.get("rupture_wave_stacks")) + 1
-			player_reference.set("rupture_wave_stacks", rupture_stacks)
-			player_reference.set("rupture_wave_radius", 72.0 + 10.0 * float(rupture_stacks))
-			player_reference.set("rupture_wave_damage_ratio", 0.34 + 0.1 * float(rupture_stacks))
-			player_reference.set("attack_damage", int(player_reference.get("attack_damage")) + 2)
+			player_reference.set("rupture_wave_stacks", next_stack)
+			player_reference.set("rupture_wave_radius", float(next_values.get("radius", player_reference.get("rupture_wave_radius"))))
+			player_reference.set("rupture_wave_damage_ratio", float(next_values.get("damage_ratio", player_reference.get("rupture_wave_damage_ratio"))))
+			player_reference.set("attack_damage", int(next_values.get("attack_damage", player_reference.get("attack_damage"))))
 		"aegis_field":
 			player_reference.set("reward_aegis_field", true)
-			var aegis_stacks := int(player_reference.get("aegis_field_stacks")) + 1
-			player_reference.set("aegis_field_stacks", aegis_stacks)
-			player_reference.set("aegis_field_resist_ratio", minf(0.42, 0.12 + float(aegis_stacks) * 0.06))
-			player_reference.set("aegis_field_resist_duration", 0.9 + float(aegis_stacks) * 0.2)
-			player_reference.set("aegis_field_pulse_radius", 92.0 + float(aegis_stacks) * 14.0)
-			player_reference.set("aegis_field_slow_duration", 1.0 + float(aegis_stacks) * 0.18)
-			player_reference.set("aegis_field_slow_mult", maxf(0.36, 0.7 - float(aegis_stacks) * 0.06))
-			player_reference.set("aegis_field_cooldown", maxf(1.7, 3.0 - float(aegis_stacks) * 0.2))
+			player_reference.set("aegis_field_stacks", next_stack)
+			player_reference.set("aegis_field_resist_ratio", float(next_values.get("resist", player_reference.get("aegis_field_resist_ratio"))))
+			player_reference.set("aegis_field_resist_duration", float(next_values.get("duration", player_reference.get("aegis_field_resist_duration"))))
+			player_reference.set("aegis_field_pulse_radius", float(next_values.get("radius", player_reference.get("aegis_field_pulse_radius"))))
+			player_reference.set("aegis_field_slow_duration", float(next_values.get("slow_duration", player_reference.get("aegis_field_slow_duration"))))
+			player_reference.set("aegis_field_slow_mult", float(next_values.get("slow_mult", player_reference.get("aegis_field_slow_mult"))))
+			player_reference.set("aegis_field_cooldown", float(next_values.get("cooldown", player_reference.get("aegis_field_cooldown"))))
 		"hunters_snare":
 			player_reference.set("reward_hunters_snare", true)
-			var snare_stacks := int(player_reference.get("hunters_snare_stacks")) + 1
-			player_reference.set("hunters_snare_stacks", snare_stacks)
-			player_reference.set("hunters_snare_bonus_damage", 4 + snare_stacks * 3)
-			player_reference.set("hunters_snare_slow_duration", 0.55 + float(snare_stacks) * 0.12)
-			player_reference.set("hunters_snare_slow_mult", maxf(0.42, 0.72 - float(snare_stacks) * 0.06))
+			player_reference.set("hunters_snare_stacks", next_stack)
+			player_reference.set("hunters_snare_bonus_damage", int(next_values.get("bonus_damage", player_reference.get("hunters_snare_bonus_damage"))))
+			player_reference.set("hunters_snare_slow_duration", float(next_values.get("slow_duration", player_reference.get("hunters_snare_slow_duration"))))
+			player_reference.set("hunters_snare_slow_mult", float(next_values.get("slow_mult", player_reference.get("hunters_snare_slow_mult"))))
 		"phantom_step":
 			player_reference.set("reward_phantom_step", true)
-			var ph_stacks := int(player_reference.get("phantom_step_stacks")) + 1
-			player_reference.set("phantom_step_stacks", ph_stacks)
-			player_reference.set("phantom_step_damage", 8 + ph_stacks * 4)
-			player_reference.set("phantom_step_slow_duration", 0.6 + float(ph_stacks) * 0.15)
-			player_reference.set("dash_cooldown", maxf(0.18, float(player_reference.get("dash_cooldown")) * 0.92))
+			player_reference.set("phantom_step_stacks", next_stack)
+			player_reference.set("phantom_step_damage", int(next_values.get("damage", player_reference.get("phantom_step_damage"))))
+			player_reference.set("phantom_step_slow_duration", float(next_values.get("slow_duration", player_reference.get("phantom_step_slow_duration"))))
+			player_reference.set("dash_cooldown", float(next_values.get("dash_cooldown", player_reference.get("dash_cooldown"))))
 		"reaper_step":
 			player_reference.set("reward_void_dash", true)
-			var vd_stacks := int(player_reference.get("void_dash_stacks")) + 1
-			player_reference.set("void_dash_stacks", vd_stacks)
-			player_reference.set("void_dash_range_mult", 1.36 + float(vd_stacks) * 0.12)
+			player_reference.set("void_dash_stacks", next_stack)
+			player_reference.set("void_dash_range_mult", float(next_values.get("range_mult", player_reference.get("void_dash_range_mult"))))
 		"static_wake":
 			player_reference.set("reward_static_wake", true)
-			var sw_stacks := int(player_reference.get("static_wake_stacks")) + 1
-			player_reference.set("static_wake_stacks", sw_stacks)
-			player_reference.set("static_wake_damage", 6 + sw_stacks * 3)
-			player_reference.set("static_wake_lifetime", 1.2 + float(sw_stacks) * 0.25)
+			player_reference.set("static_wake_stacks", next_stack)
+			player_reference.set("static_wake_damage", int(next_values.get("damage", player_reference.get("static_wake_damage"))))
+			player_reference.set("static_wake_lifetime", float(next_values.get("lifetime", player_reference.get("static_wake_lifetime"))))
 		_:
 			return false
 	return true
@@ -227,77 +212,196 @@ func get_trial_power_stack_count(power_id: String) -> int:
 	return 0
 
 
+func _get_power_balance_data(power_id: String) -> Dictionary:
+	if power_registry != null and power_registry.has_method("get_power_balance"):
+		return power_registry.call("get_power_balance", power_id) as Dictionary
+	return {}
+
+
+func _build_upgrade_preview(upgrade_id: String) -> Dictionary:
+	if not is_instance_valid(player_reference):
+		return {}
+	var data := _get_power_balance_data(upgrade_id)
+	if data.is_empty():
+		return {}
+	var property_name := String(data.get("property", ""))
+	if property_name.is_empty():
+		return {}
+
+	var current_value: Variant = player_reference.get(property_name)
+	var next_value: Variant = current_value
+	match String(data.get("kind", "")):
+		"mul_min":
+			next_value = maxf(float(data.get("min", 0.0)), float(current_value) * float(data.get("mult", 1.0)))
+		"add_int":
+			next_value = int(current_value) + int(data.get("add", 0))
+		"add_float":
+			next_value = float(current_value) + float(data.get("add", 0.0))
+		"add_clamp":
+			next_value = clampf(float(current_value) + float(data.get("add", 0.0)), float(data.get("min", -INF)), float(data.get("max", INF)))
+		_:
+			return {}
+
+	return {
+		"property": property_name,
+		"current": current_value,
+		"next": next_value,
+		"data": data
+	}
+
+
+func _build_trial_values(power_id: String, stack_count: int) -> Dictionary:
+	if not is_instance_valid(player_reference):
+		return {}
+	var data := _get_power_balance_data(power_id)
+	if data.is_empty():
+		return {}
+
+	match power_id:
+		"razor_wind":
+			return {
+				"range_scale": float(data.get("range_base", 0.0)) + float(data.get("range_per_stack", 0.0)) * float(stack_count),
+				"damage_ratio": float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count),
+				"attack_cooldown": maxf(float(data.get("attack_cooldown_min", 0.0)), float(player_reference.get("attack_cooldown")) * float(data.get("attack_cooldown_mult", 1.0)))
+			}
+		"execution_edge":
+			return {
+				"every": maxi(int(data.get("every_floor", 1)), int(data.get("every_base", 1)) - stack_count),
+				"damage_mult": float(data.get("damage_mult_base", 0.0)) + float(data.get("damage_mult_per_stack", 0.0)) * float(stack_count),
+				"attack_lock_duration": maxf(float(data.get("attack_lock_min", 0.0)), float(player_reference.get("attack_lock_duration")) * float(data.get("attack_lock_mult", 1.0)))
+			}
+		"rupture_wave":
+			return {
+				"radius": float(data.get("radius_base", 0.0)) + float(data.get("radius_per_stack", 0.0)) * float(stack_count),
+				"damage_ratio": float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count),
+				"attack_damage": int(player_reference.get("attack_damage")) + int(data.get("attack_damage_add", 0))
+			}
+		"aegis_field":
+			return {
+				"resist": minf(float(data.get("resist_cap", 1.0)), float(data.get("resist_base", 0.0)) + float(data.get("resist_per_stack", 0.0)) * float(stack_count)),
+				"duration": float(data.get("resist_duration_base", 0.0)) + float(data.get("resist_duration_per_stack", 0.0)) * float(stack_count),
+				"radius": float(data.get("pulse_radius_base", 0.0)) + float(data.get("pulse_radius_per_stack", 0.0)) * float(stack_count),
+				"slow_duration": float(data.get("slow_duration_base", 0.0)) + float(data.get("slow_duration_per_stack", 0.0)) * float(stack_count),
+				"slow_mult": maxf(float(data.get("slow_mult_min", 0.0)), float(data.get("slow_mult_base", 1.0)) + float(data.get("slow_mult_per_stack", 0.0)) * float(stack_count)),
+				"cooldown": maxf(float(data.get("cooldown_min", 0.0)), float(data.get("cooldown_base", 0.0)) + float(data.get("cooldown_per_stack", 0.0)) * float(stack_count))
+			}
+		"hunters_snare":
+			return {
+				"bonus_damage": int(data.get("bonus_damage_base", 0)) + stack_count * int(data.get("bonus_damage_per_stack", 0)),
+				"slow_duration": float(data.get("slow_duration_base", 0.0)) + float(data.get("slow_duration_per_stack", 0.0)) * float(stack_count),
+				"slow_mult": maxf(float(data.get("slow_mult_min", 0.0)), float(data.get("slow_mult_base", 1.0)) + float(data.get("slow_mult_per_stack", 0.0)) * float(stack_count))
+			}
+		"phantom_step":
+			return {
+				"damage": int(data.get("damage_base", 0)) + stack_count * int(data.get("damage_per_stack", 0)),
+				"slow_duration": float(data.get("slow_duration_base", 0.0)) + float(data.get("slow_duration_per_stack", 0.0)) * float(stack_count),
+				"dash_cooldown": maxf(float(data.get("dash_cooldown_min", 0.0)), float(player_reference.get("dash_cooldown")) * float(data.get("dash_cooldown_mult", 1.0)))
+			}
+		"reaper_step":
+			return {
+				"range_mult": float(data.get("range_mult_base", 0.0)) + float(data.get("range_mult_per_stack", 0.0)) * float(stack_count)
+			}
+		"static_wake":
+			return {
+				"damage": int(data.get("damage_base", 0)) + stack_count * int(data.get("damage_per_stack", 0)),
+				"lifetime": float(data.get("lifetime_base", 0.0)) + float(data.get("lifetime_per_stack", 0.0)) * float(stack_count)
+			}
+		_:
+			return {}
+
+
 ## Get trial power description with next stack info from the current player state.
 func get_trial_power_card_description(power_id: String) -> String:
+	if not is_instance_valid(player_reference):
+		return "[color=#9ab8d8]Enhances this power.[/color]"
 	var id := power_id.strip_edges().to_lower()
 	var current_stack := get_trial_power_stack_count(id)
 	var next_stack := current_stack + 1
+	var next_values := _build_trial_values(id, next_stack)
 	match id:
 		"razor_wind":
-			var next_range_scale := 1.58 + 0.14 * float(next_stack)
-			var next_damage_ratio := 0.6 + 0.12 * float(next_stack)
+			if next_values.is_empty():
+				return "[color=#9ab8d8]Enhances this power.[/color]"
+			var next_range_scale := float(next_values.get("range_scale", 1.0))
+			var next_damage_ratio := float(next_values.get("damage_ratio", 0.0))
+			var cur_range_scale := float(player_reference.get("razor_wind_range_scale"))
+			var cur_damage_ratio := float(player_reference.get("razor_wind_damage_ratio"))
 			if current_stack <= 0:
 				return "[color=#9ab8d8]Each swing fires a slicing projectile that travels through enemies at range.[/color]\n[color=#9ab8d8]Initial:[/color] range [color=#7de882]x%.2f[/color], damage [color=#7de882]%.0f%%[/color] of hit." % [next_range_scale, next_damage_ratio * 100.0]
-			return "[color=#c8daf0]Wind Slash:[/color] range [color=#e8c96a]x%.2f[/color] [color=#8899aa]->[/color] [color=#7de882]x%.2f[/color], damage [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color]." % [maxf(1.58, next_range_scale - 0.14), next_range_scale, maxf(60.0, (next_damage_ratio - 0.12) * 100.0), next_damage_ratio * 100.0]
+			return "[color=#c8daf0]Wind Slash:[/color] range [color=#e8c96a]x%.2f[/color] [color=#8899aa]->[/color] [color=#7de882]x%.2f[/color], damage [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color]." % [cur_range_scale, next_range_scale, cur_damage_ratio * 100.0, next_damage_ratio * 100.0]
 		"execution_edge":
-			var next_every := maxi(2, 4 - next_stack)
-			var next_mult := 2.2 + 0.45 * float(next_stack)
+			if next_values.is_empty():
+				return "[color=#9ab8d8]Enhances this power.[/color]"
+			var next_every := int(next_values.get("every", 2))
+			var next_mult := float(next_values.get("damage_mult", 1.0))
+			var cur_every := int(player_reference.get("execution_every"))
+			var cur_mult := float(player_reference.get("execution_damage_mult"))
 			if current_stack <= 0:
 				return "[color=#9ab8d8]Every few swings builds to a devastating strike that deals massive bonus damage.[/color]\n[color=#9ab8d8]Initial:[/color] every [color=#7de882]%d[/color] swings for [color=#7de882]x%.2f[/color] damage." % [next_every, next_mult]
-			var cur_every := maxi(2, 4 - maxi(0, next_stack - 1))
-			var cur_mult := 2.2 + 0.45 * float(maxi(0, next_stack - 1))
 			return "[color=#c8daf0]Execution:[/color] every [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color] swings, damage [color=#e8c96a]x%.2f[/color] [color=#8899aa]->[/color] [color=#7de882]x%.2f[/color]." % [cur_every, next_every, cur_mult, next_mult]
 		"rupture_wave":
-			var next_radius := 72.0 + 10.0 * float(next_stack)
-			var next_ratio := 0.34 + 0.1 * float(next_stack)
+			if next_values.is_empty():
+				return "[color=#9ab8d8]Enhances this power.[/color]"
+			var next_radius := float(next_values.get("radius", 0.0))
+			var next_ratio := float(next_values.get("damage_ratio", 0.0))
+			var cur_radius := float(player_reference.get("rupture_wave_radius"))
+			var cur_ratio := float(player_reference.get("rupture_wave_damage_ratio"))
 			if current_stack <= 0:
 				return "[color=#9ab8d8]Your hits send a shockwave rippling outward, damaging all nearby enemies.[/color]\n[color=#9ab8d8]Initial:[/color] radius [color=#7de882]%.0f[/color], damage [color=#7de882]%.0f%%[/color] of hit." % [next_radius, next_ratio * 100.0]
-			var cur_radius := 72.0 + 10.0 * float(maxi(0, next_stack - 1))
-			var cur_ratio := 0.34 + 0.1 * float(maxi(0, next_stack - 1))
 			return "[color=#c8daf0]Rupture:[/color] radius [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color], damage [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color]." % [cur_radius, next_radius, cur_ratio * 100.0, next_ratio * 100.0]
 		"aegis_field":
-			var next_resist := minf(0.42, 0.12 + float(next_stack) * 0.06)
-			var next_duration := 0.9 + float(next_stack) * 0.2
-			var next_radius := 92.0 + float(next_stack) * 14.0
-			var next_cooldown := maxf(1.7, 3.0 - float(next_stack) * 0.2)
+			if next_values.is_empty():
+				return "[color=#9ab8d8]Enhances this power.[/color]"
+			var next_resist := float(next_values.get("resist", 0.0))
+			var next_duration := float(next_values.get("duration", 0.0))
+			var next_radius := float(next_values.get("radius", 0.0))
+			var next_cooldown := float(next_values.get("cooldown", 0.0))
+			var cur_resist := float(player_reference.get("aegis_field_resist_ratio"))
+			var cur_duration := float(player_reference.get("aegis_field_resist_duration"))
+			var cur_radius := float(player_reference.get("aegis_field_pulse_radius"))
+			var cur_cooldown := float(player_reference.get("aegis_field_cooldown"))
 			if current_stack <= 0:
 				return "[color=#9ab8d8]Taking damage triggers a guard pulse that slows nearby enemies and grants brief damage resistance.[/color]\n[color=#9ab8d8]Initial:[/color] resist [color=#7de882]%.0f%%[/color] for [color=#7de882]%.2fs[/color], pulse radius [color=#7de882]%.0f[/color], cooldown [color=#7de882]%.2fs[/color]." % [next_resist * 100.0, next_duration, next_radius, next_cooldown]
-			var cur_resist := minf(0.42, 0.12 + float(maxi(0, next_stack - 1)) * 0.06)
-			var cur_duration := 0.9 + float(maxi(0, next_stack - 1)) * 0.2
-			var cur_radius := 92.0 + float(maxi(0, next_stack - 1)) * 14.0
-			var cur_cooldown := maxf(1.7, 3.0 - float(maxi(0, next_stack - 1)) * 0.2)
 			return "[color=#c8daf0]Aegis Field:[/color] resist [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color], guard [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color], pulse radius [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color], cooldown [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_resist * 100.0, next_resist * 100.0, cur_duration, next_duration, cur_radius, next_radius, cur_cooldown, next_cooldown]
 		"hunters_snare":
-			var next_bonus := 4 + next_stack * 3
-			var next_duration := 0.55 + float(next_stack) * 0.12
-			var next_slow_mult := maxf(0.42, 0.72 - float(next_stack) * 0.06)
+			if next_values.is_empty():
+				return "[color=#9ab8d8]Enhances this power.[/color]"
+			var next_bonus := int(next_values.get("bonus_damage", 0))
+			var next_duration := float(next_values.get("slow_duration", 0.0))
+			var next_slow_mult := float(next_values.get("slow_mult", 1.0))
+			var cur_bonus := int(player_reference.get("hunters_snare_bonus_damage"))
+			var cur_duration := float(player_reference.get("hunters_snare_slow_duration"))
+			var cur_slow_mult := float(player_reference.get("hunters_snare_slow_mult"))
 			if current_stack <= 0:
 				return "[color=#9ab8d8]Hits slow enemies, and striking slowed targets deals bonus damage.[/color]\n[color=#9ab8d8]Initial:[/color] slow [color=#7de882]%.2fs[/color] at [color=#7de882]%.0f%%[/color] speed, bonus [color=#7de882]+%d[/color] damage." % [next_duration, next_slow_mult * 100.0, next_bonus]
-			var cur_bonus := 4 + maxi(0, next_stack - 1) * 3
-			var cur_duration := 0.55 + float(maxi(0, next_stack - 1)) * 0.12
-			var cur_slow_mult := maxf(0.42, 0.72 - float(maxi(0, next_stack - 1)) * 0.06)
 			return "[color=#c8daf0]Hunter's Snare:[/color] slow [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color], speed [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color], bonus [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]." % [cur_duration, next_duration, cur_slow_mult * 100.0, next_slow_mult * 100.0, cur_bonus, next_bonus]
 		"phantom_step":
-			var next_damage := 8 + next_stack * 4
-			var next_slow := 0.6 + float(next_stack) * 0.15
+			if next_values.is_empty():
+				return "[color=#9ab8d8]Enhances this power.[/color]"
+			var next_damage := int(next_values.get("damage", 0))
+			var next_slow := float(next_values.get("slow_duration", 0.0))
+			var cur_damage := int(player_reference.get("phantom_step_damage"))
+			var cur_slow := float(player_reference.get("phantom_step_slow_duration"))
 			if current_stack <= 0:
 				return "[color=#9ab8d8]Dashing through enemies deals damage and leaves them slowed in your wake.[/color]\n[color=#9ab8d8]Initial:[/color] hit damage [color=#7de882]%d[/color], slow for [color=#7de882]%.2fs[/color]." % [next_damage, next_slow]
-			var cur_damage := 8 + maxi(0, next_stack - 1) * 4
-			var cur_slow := 0.6 + float(maxi(0, next_stack - 1)) * 0.15
 			return "[color=#c8daf0]Phantom Step:[/color] damage [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color], slow [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_damage, next_damage, cur_slow, next_slow]
 		"reaper_step":
-			var next_range := 1.36 + float(next_stack) * 0.12
+			if next_values.is_empty():
+				return "[color=#9ab8d8]Enhances this power.[/color]"
+			var next_range := float(next_values.get("range_mult", 1.0))
+			var cur_range := float(player_reference.get("void_dash_range_mult"))
 			if current_stack <= 0:
 				return "[color=#9ab8d8]Kills fully refresh your dash, and each stack extends your dash.[/color]\n[color=#9ab8d8]Initial:[/color] range [color=#7de882]x%.2f[/color], kill refresh [color=#7de882]full[/color]." % [next_range]
-			var cur_range := 1.36 + float(maxi(0, next_stack - 1)) * 0.12
 			return "[color=#c8daf0]Reaper Step:[/color] range [color=#e8c96a]x%.2f[/color] [color=#8899aa]->[/color] [color=#7de882]x%.2f[/color], kill refresh [color=#7de882]full[/color]." % [cur_range, next_range]
 		"static_wake":
-			var next_damage := 6 + next_stack * 3
-			var next_lifetime := 1.2 + float(next_stack) * 0.25
+			if next_values.is_empty():
+				return "[color=#9ab8d8]Enhances this power.[/color]"
+			var next_damage := int(next_values.get("damage", 0))
+			var next_lifetime := float(next_values.get("lifetime", 0.0))
+			var cur_damage := int(player_reference.get("static_wake_damage"))
+			var cur_lifetime := float(player_reference.get("static_wake_lifetime"))
 			if current_stack <= 0:
 				return "[color=#9ab8d8]Leaves an electrified trail as you move that shocks any enemy who steps into it.[/color]\n[color=#9ab8d8]Initial:[/color] trail tick [color=#7de882]%d[/color] damage, lasts [color=#7de882]%.2fs[/color]." % [next_damage, next_lifetime]
-			var cur_damage := 6 + maxi(0, next_stack - 1) * 3
-			var cur_lifetime := 1.2 + float(maxi(0, next_stack - 1)) * 0.25
 			return "[color=#c8daf0]Static Wake:[/color] tick [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color], trail [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_damage, next_damage, cur_lifetime, next_lifetime]
 		_:
 			return "[color=#9ab8d8]Enhances this power.[/color]"
@@ -307,31 +411,32 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 	if not is_instance_valid(player_reference):
 		return "[color=#c8daf0]Upgrade your stats.[/color]"
 	var id := upgrade_id.strip_edges().to_lower()
+	var preview := _build_upgrade_preview(id)
+	if preview.is_empty():
+		return "[color=#c8daf0]Upgrade your stats.[/color]"
+	var cur_val: Variant = preview.get("current")
+	var next_val: Variant = preview.get("next")
 	match id:
 		"swift_strike":
-			var cur_cd := float(player_reference.get("attack_cooldown"))
-			var next_cd := maxf(0.08, cur_cd * 0.86)
+			var cur_cd := float(cur_val)
+			var next_cd := float(next_val)
 			return "[color=#c8daf0]Attack cooldown:[/color] [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]" % [cur_cd, next_cd]
 		"heavy_blow":
-			var cur_dmg := int(player_reference.get("attack_damage"))
-			return "[color=#c8daf0]Attack damage:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [cur_dmg, cur_dmg + 8]
+			return "[color=#c8daf0]Attack damage:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [int(cur_val), int(next_val)]
 		"wide_arc":
-			var cur_arc := float(player_reference.get("attack_arc_degrees"))
-			var next_arc := clampf(cur_arc + 18.0, 60.0, 240.0)
+			var cur_arc := float(cur_val)
+			var next_arc := float(next_val)
 			return "[color=#c8daf0]Attack arc:[/color] [color=#e8c96a]%.0f°[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f°[/color]" % [cur_arc, next_arc]
 		"long_reach":
-			var cur_range := float(player_reference.get("attack_range"))
-			return "[color=#c8daf0]Attack range:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [cur_range, cur_range + LONG_REACH_RANGE_PER_STACK]
+			return "[color=#c8daf0]Attack range:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [float(cur_val), float(next_val)]
 		"fleet_foot":
-			var cur_speed := float(player_reference.get("max_speed"))
-			return "[color=#c8daf0]Move speed:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [cur_speed, cur_speed + 18.0]
+			return "[color=#c8daf0]Move speed:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [float(cur_val), float(next_val)]
 		"blink_dash":
-			var cur_dash_cd := float(player_reference.get("dash_cooldown"))
-			var next_dash_cd := maxf(0.18, cur_dash_cd * 0.85)
+			var cur_dash_cd := float(cur_val)
+			var next_dash_cd := float(next_val)
 			return "[color=#c8daf0]Dash cooldown:[/color] [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]" % [cur_dash_cd, next_dash_cd]
 		"iron_skin":
-			var cur_armor := int(player_reference.get("iron_skin_armor"))
-			return "[color=#c8daf0]Armor:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [cur_armor, cur_armor + IRON_SKIN_ARMOR_PER_STACK]
+			return "[color=#c8daf0]Armor:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [int(cur_val), int(next_val)]
 		_:
 			return "[color=#c8daf0]Upgrade your stats.[/color]"
 

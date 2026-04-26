@@ -8,6 +8,119 @@ extends Node
 const POWER_TYPE_UPGRADE = "upgrade"  # Stat boosts: Swift Strike, Heavy Blow, etc
 const POWER_TYPE_TRIAL = "trial_power"  # Combat abilities: Razor Wind, Execution Edge, Rupture Wave
 
+const UPGRADE_BALANCE := {
+	"swift_strike": {
+		"kind": "mul_min",
+		"property": "attack_cooldown",
+		"mult": 0.86,
+		"min": 0.08
+	},
+	"heavy_blow": {
+		"kind": "add_int",
+		"property": "attack_damage",
+		"add": 8
+	},
+	"wide_arc": {
+		"kind": "add_clamp",
+		"property": "attack_arc_degrees",
+		"add": 18.0,
+		"min": 60.0,
+		"max": 240.0
+	},
+	"long_reach": {
+		"kind": "add_float",
+		"property": "attack_range",
+		"add": 11.0
+	},
+	"fleet_foot": {
+		"kind": "add_float",
+		"property": "max_speed",
+		"add": 18.0
+	},
+	"blink_dash": {
+		"kind": "mul_min",
+		"property": "dash_cooldown",
+		"mult": 0.85,
+		"min": 0.18
+	},
+	"iron_skin": {
+		"kind": "add_int",
+		"property": "iron_skin_armor",
+		"add": 4,
+		"stack_property": "iron_skin_stacks"
+	}
+}
+
+const TRIAL_POWER_BALANCE := {
+	"razor_wind": {
+		"range_base": 1.25,
+		"range_per_stack": 0.10,
+		"damage_ratio_base": 0.6,
+		"damage_ratio_per_stack": 0.12,
+		"attack_cooldown_mult": 0.96,
+		"attack_cooldown_min": 0.1
+	},
+	"execution_edge": {
+		"every_base": 4,
+		"every_floor": 2,
+		"damage_mult_base": 2.2,
+		"damage_mult_per_stack": 0.45,
+		"attack_lock_mult": 0.94,
+		"attack_lock_min": 0.08
+	},
+	"rupture_wave": {
+		"radius_base": 72.0,
+		"radius_per_stack": 10.0,
+		"damage_ratio_base": 0.34,
+		"damage_ratio_per_stack": 0.1,
+		"attack_damage_add": 2
+	},
+	"aegis_field": {
+		"resist_base": 0.12,
+		"resist_per_stack": 0.06,
+		"resist_cap": 0.42,
+		"resist_duration_base": 0.9,
+		"resist_duration_per_stack": 0.2,
+		"pulse_radius_base": 92.0,
+		"pulse_radius_per_stack": 14.0,
+		"slow_duration_base": 1.0,
+		"slow_duration_per_stack": 0.18,
+		"slow_mult_base": 0.7,
+		"slow_mult_per_stack": -0.06,
+		"slow_mult_min": 0.36,
+		"cooldown_base": 3.0,
+		"cooldown_per_stack": -0.2,
+		"cooldown_min": 1.7
+	},
+	"hunters_snare": {
+		"bonus_damage_base": 4,
+		"bonus_damage_per_stack": 3,
+		"slow_duration_base": 0.55,
+		"slow_duration_per_stack": 0.12,
+		"slow_mult_base": 0.72,
+		"slow_mult_per_stack": -0.06,
+		"slow_mult_min": 0.42
+	},
+	"phantom_step": {
+		"damage_base": 8,
+		"damage_per_stack": 4,
+		"slow_duration_base": 0.6,
+		"slow_duration_per_stack": 0.15,
+		"dash_cooldown_mult": 0.92,
+		"dash_cooldown_min": 0.18
+	},
+	"reaper_step": {
+		"range_mult_base": 1.36,
+		"range_mult_per_stack": 0.12
+	},
+	"static_wake": {
+		"damage_base": 6,
+		"damage_per_stack": 3,
+		"lifetime_base": 1.2,
+		"lifetime_per_stack": 0.25
+	}
+}
+
 # Unified power data structure
 class Power:
 	var id: String  # Unique identifier: "swift_strike", "razor_wind", etc
@@ -31,7 +144,8 @@ class Power:
 			"name": name,
 			"desc": description,
 			"type": power_type,
-			"stack_limit": stack_limit
+			"stack_limit": stack_limit,
+			"metadata": metadata.duplicate(true)
 		}
 
 
@@ -42,13 +156,13 @@ func _ready() -> void:
 
 ## Return all upgrades (stat boosts)
 func get_upgrade_pool(player_reference: Node = null) -> Array[Dictionary]:
-	var swift_desc := "Attack cooldown reduced by 14%."
-	var heavy_desc := "Attack damage +8."
-	var wide_desc := "Attack arc +18 degrees."
-	var reach_desc := "Attack range +14."
-	var fleet_desc := "Move speed +18."
-	var blink_desc := "Dash cooldown reduced by 15%."
-	var iron_desc := "-3 damage per hit."
+	var swift_desc := _get_upgrade_fallback_description("swift_strike")
+	var heavy_desc := _get_upgrade_fallback_description("heavy_blow")
+	var wide_desc := _get_upgrade_fallback_description("wide_arc")
+	var reach_desc := _get_upgrade_fallback_description("long_reach")
+	var fleet_desc := _get_upgrade_fallback_description("fleet_foot")
+	var blink_desc := _get_upgrade_fallback_description("blink_dash")
+	var iron_desc := _get_upgrade_fallback_description("iron_skin")
 	if is_instance_valid(player_reference) and player_reference.has_method("get_upgrade_card_desc"):
 		swift_desc = String(player_reference.call("get_upgrade_card_desc", "swift_strike"))
 		heavy_desc = String(player_reference.call("get_upgrade_card_desc", "heavy_blow"))
@@ -58,23 +172,23 @@ func get_upgrade_pool(player_reference: Node = null) -> Array[Dictionary]:
 		blink_desc = String(player_reference.call("get_upgrade_card_desc", "blink_dash"))
 		iron_desc = String(player_reference.call("get_upgrade_card_desc", "iron_skin"))
 	return [
-		Power.new("swift_strike", "Swift Strike", swift_desc, POWER_TYPE_UPGRADE, 0, {}).to_dict(),
-		Power.new("heavy_blow", "Heavy Blow", heavy_desc, POWER_TYPE_UPGRADE, 0, {}).to_dict(),
-		Power.new("wide_arc", "Wide Arc", wide_desc, POWER_TYPE_UPGRADE, 0, {}).to_dict(),
-		Power.new("long_reach", "Long Reach", reach_desc, POWER_TYPE_UPGRADE, 0, {}).to_dict(),
-		Power.new("fleet_foot", "Fleet Foot", fleet_desc, POWER_TYPE_UPGRADE, 0, {}).to_dict(),
-		Power.new("blink_dash", "Blink Dash", blink_desc, POWER_TYPE_UPGRADE, 0, {}).to_dict(),
-		Power.new("iron_skin", "Iron Skin", iron_desc, POWER_TYPE_UPGRADE, 3, {}).to_dict(),
+		Power.new("swift_strike", "Swift Strike", swift_desc, POWER_TYPE_UPGRADE, 0, get_power_balance("swift_strike")).to_dict(),
+		Power.new("heavy_blow", "Heavy Blow", heavy_desc, POWER_TYPE_UPGRADE, 0, get_power_balance("heavy_blow")).to_dict(),
+		Power.new("wide_arc", "Wide Arc", wide_desc, POWER_TYPE_UPGRADE, 0, get_power_balance("wide_arc")).to_dict(),
+		Power.new("long_reach", "Long Reach", reach_desc, POWER_TYPE_UPGRADE, 0, get_power_balance("long_reach")).to_dict(),
+		Power.new("fleet_foot", "Fleet Foot", fleet_desc, POWER_TYPE_UPGRADE, 0, get_power_balance("fleet_foot")).to_dict(),
+		Power.new("blink_dash", "Blink Dash", blink_desc, POWER_TYPE_UPGRADE, 0, get_power_balance("blink_dash")).to_dict(),
+		Power.new("iron_skin", "Iron Skin", iron_desc, POWER_TYPE_UPGRADE, 3, get_power_balance("iron_skin")).to_dict(),
 	]
 
 
 ## Return all trial powers (combat abilities)
 func get_trial_power_pool(player_reference: Node = null) -> Array[Dictionary]:
-	var razor_desc := "Attacks launch a long-range piercing wind slash."
-	var execution_desc := "Every 3rd swing is a huge execution strike."
-	var rupture_desc := "Hits detonate a damaging shockwave."
-	var aegis_desc := "Taking damage triggers a guard pulse that slows nearby enemies and grants brief damage resistance."
-	var snare_desc := "Hits slow enemies. Striking slowed enemies deals bonus damage."
+	var razor_desc := _get_trial_fallback_description("razor_wind")
+	var execution_desc := _get_trial_fallback_description("execution_edge")
+	var rupture_desc := _get_trial_fallback_description("rupture_wave")
+	var aegis_desc := _get_trial_fallback_description("aegis_field")
+	var snare_desc := _get_trial_fallback_description("hunters_snare")
 	
 	# Try to get dynamic descriptions from player stack counts
 	if is_instance_valid(player_reference) and player_reference.has_method("get_trial_power_card_desc"):
@@ -84,23 +198,23 @@ func get_trial_power_pool(player_reference: Node = null) -> Array[Dictionary]:
 		aegis_desc = String(player_reference.call("get_trial_power_card_desc", "aegis_field"))
 		snare_desc = String(player_reference.call("get_trial_power_card_desc", "hunters_snare"))
 	
-	var phantom_desc := "Dashing through enemies damages and slows them."
-	var void_desc := "Dash travels farther. Kills refresh dash cooldown."
-	var static_desc := "Dashing leaves an electrified trail that burns enemies."
+	var phantom_desc := _get_trial_fallback_description("phantom_step")
+	var void_desc := _get_trial_fallback_description("reaper_step")
+	var static_desc := _get_trial_fallback_description("static_wake")
 	if is_instance_valid(player_reference) and player_reference.has_method("get_trial_power_card_desc"):
 		phantom_desc = String(player_reference.call("get_trial_power_card_desc", "phantom_step"))
 		void_desc = String(player_reference.call("get_trial_power_card_desc", "reaper_step"))
 		static_desc = String(player_reference.call("get_trial_power_card_desc", "static_wake"))
 
 	return [
-		Power.new("razor_wind", "Razor Wind", razor_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
-		Power.new("execution_edge", "Execution Edge", execution_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
-		Power.new("rupture_wave", "Rupture Wave", rupture_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
-		Power.new("aegis_field", "Aegis Field", aegis_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
-		Power.new("hunters_snare", "Hunter's Snare", snare_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
-		Power.new("phantom_step", "Phantom Step", phantom_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
-		Power.new("reaper_step", "Reaper Step", void_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
-		Power.new("static_wake", "Static Wake", static_desc, POWER_TYPE_TRIAL, 0, {}).to_dict(),
+		Power.new("razor_wind", "Razor Wind", razor_desc, POWER_TYPE_TRIAL, 0, get_power_balance("razor_wind")).to_dict(),
+		Power.new("execution_edge", "Execution Edge", execution_desc, POWER_TYPE_TRIAL, 0, get_power_balance("execution_edge")).to_dict(),
+		Power.new("rupture_wave", "Rupture Wave", rupture_desc, POWER_TYPE_TRIAL, 0, get_power_balance("rupture_wave")).to_dict(),
+		Power.new("aegis_field", "Aegis Field", aegis_desc, POWER_TYPE_TRIAL, 0, get_power_balance("aegis_field")).to_dict(),
+		Power.new("hunters_snare", "Hunter's Snare", snare_desc, POWER_TYPE_TRIAL, 0, get_power_balance("hunters_snare")).to_dict(),
+		Power.new("phantom_step", "Phantom Step", phantom_desc, POWER_TYPE_TRIAL, 0, get_power_balance("phantom_step")).to_dict(),
+		Power.new("reaper_step", "Reaper Step", void_desc, POWER_TYPE_TRIAL, 0, get_power_balance("reaper_step")).to_dict(),
+		Power.new("static_wake", "Static Wake", static_desc, POWER_TYPE_TRIAL, 0, get_power_balance("static_wake")).to_dict(),
 	]
 
 
@@ -166,4 +280,56 @@ func get_power(power_id: String) -> Dictionary:
 		if power["id"] == id:
 			return power.duplicate()
 	return {}
+
+
+func get_power_balance(power_id: String) -> Dictionary:
+	var id := power_id.strip_edges().to_lower()
+	if UPGRADE_BALANCE.has(id):
+		return (UPGRADE_BALANCE[id] as Dictionary).duplicate(true)
+	if TRIAL_POWER_BALANCE.has(id):
+		return (TRIAL_POWER_BALANCE[id] as Dictionary).duplicate(true)
+	return {}
+
+
+func _get_upgrade_fallback_description(upgrade_id: String) -> String:
+	var data := get_power_balance(upgrade_id)
+	match upgrade_id:
+		"swift_strike":
+			return "Attack cooldown reduced by %.0f%%." % [(1.0 - float(data.get("mult", 1.0))) * 100.0]
+		"heavy_blow":
+			return "Attack damage +%d." % [int(data.get("add", 0))]
+		"wide_arc":
+			return "Attack arc +%.0f degrees." % [float(data.get("add", 0.0))]
+		"long_reach":
+			return "Attack range +%.0f." % [float(data.get("add", 0.0))]
+		"fleet_foot":
+			return "Move speed +%.0f." % [float(data.get("add", 0.0))]
+		"blink_dash":
+			return "Dash cooldown reduced by %.0f%%." % [(1.0 - float(data.get("mult", 1.0))) * 100.0]
+		"iron_skin":
+			return "Armor +%d." % [int(data.get("add", 0))]
+		_:
+			return "Upgrade your stats."
+
+
+func _get_trial_fallback_description(power_id: String) -> String:
+	match power_id:
+		"razor_wind":
+			return "Attacks launch a long-range piercing wind slash."
+		"execution_edge":
+			return "Every few swings become an execution strike."
+		"rupture_wave":
+			return "Hits detonate a damaging shockwave."
+		"aegis_field":
+			return "Taking damage triggers a guard pulse that slows nearby enemies and grants brief damage resistance."
+		"hunters_snare":
+			return "Hits slow enemies. Striking slowed enemies deals bonus damage."
+		"phantom_step":
+			return "Dashing through enemies damages and slows them."
+		"reaper_step":
+			return "Dash travels farther. Kills refresh dash cooldown."
+		"static_wake":
+			return "Dashing leaves an electrified trail that burns enemies."
+		_:
+			return "Enhances this power."
 

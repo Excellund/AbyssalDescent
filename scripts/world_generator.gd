@@ -155,6 +155,8 @@ func _ready() -> void:
 	rng.randomize()
 	power_registry_instance = POWER_REGISTRY.new()
 	player = get_node_or_null(player_path) as Node2D
+	if is_instance_valid(player) and player.has_method("set_power_registry"):
+		player.call("set_power_registry", power_registry_instance)
 	if is_instance_valid(player):
 		player_camera = player.get_node_or_null("Camera2D") as Camera2D
 	_sync_audio_settings_from_context()

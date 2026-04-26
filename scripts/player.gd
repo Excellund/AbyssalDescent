@@ -3,6 +3,7 @@ extends CharacterBody2D
 const HEALTH_STATE_SCRIPT := preload("res://scripts/health_state.gd")
 const PLAYER_FEEDBACK_SCRIPT := preload("res://scripts/player_feedback.gd")
 const UPGRADE_SYSTEM_SCRIPT := preload("res://scripts/upgrade_system.gd")
+const POWER_REGISTRY_SCRIPT := preload("res://scripts/power_registry.gd")
 const ENEMY_BASE := preload("res://scripts/enemy_base.gd")
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
@@ -113,7 +114,7 @@ func _ready() -> void:
 	body_radius_cache = _get_body_radius_for(self, 14.0)
 	upgrade_system = UPGRADE_SYSTEM_SCRIPT.new()
 	add_child(upgrade_system)
-	upgrade_system.initialize(self, null, null)
+	upgrade_system.initialize(self, null, POWER_REGISTRY_SCRIPT.new())
 	_create_health_state()
 	_create_player_feedback()
 	var sprite := get_node_or_null("Sprite2D") as Sprite2D
@@ -450,6 +451,11 @@ func get_upgrade_stack_count(id: String) -> int:
 
 func apply_upgrade(boon_id: String) -> void:
 	upgrade_system.apply_upgrade(boon_id)
+
+func set_power_registry(registry: Node) -> void:
+	if not is_instance_valid(upgrade_system):
+		return
+	upgrade_system.initialize(self, null, registry)
 
 func apply_trial_power(reward_id: String) -> void:
 	upgrade_system.apply_trial_power(reward_id)
