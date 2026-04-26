@@ -50,6 +50,9 @@ const ATTACK_POLAR_SHIFT := 4
 @export var orbital_lance_length: float = 320.0
 @export var orbital_lance_width: float = 36.0
 @export var orbital_lance_damage: int = 44
+@export var orbital_fortress_damage_reduction: float = 0.72
+@export var orbital_fortress_max_damage_per_hit: int = 22
+@export var orbital_fortress_hit_flash_duration: float = 0.16
 
 @export var polar_shift_windup: float = 0.92
 @export var polar_shift_radius: float = 440.0
@@ -102,10 +105,15 @@ var _polar_shift_pull_damage_pending: bool = false
 var _polar_shift_pull_damage_delay_left: float = 0.0
 var _polar_shift_pull_damage_just_started: bool = false
 var _polar_shift_pull_afterglow_left: float = 0.0
+var _orbital_fortress_hit_flash_left: float = 0.0
+var _fortress_health_fill_default: Color = Color(0.0, 0.0, 0.0, 0.0)
+var _fortress_health_bg_default: Color = Color(0.0, 0.0, 0.0, 0.0)
+var _fortress_health_colors_cached: bool = false
 
 func _ready() -> void:
 	max_health = boss_max_health
 	super._ready()
+	_cache_fortress_health_bar_defaults()
 	for child in get_children():
 		if child is CollisionShape2D:
 			var shape_node := child as CollisionShape2D
@@ -136,9 +144,62 @@ func _process_behavior(delta: float) -> void:
 	attack_afterglow_time_left = maxf(0.0, attack_afterglow_time_left - delta)
 	impact_burst_time_left = maxf(0.0, impact_burst_time_left - delta)
 	_polar_shift_pull_afterglow_left = maxf(0.0, _polar_shift_pull_afterglow_left - delta)
+	_orbital_fortress_hit_flash_left = maxf(0.0, _orbital_fortress_hit_flash_left - delta)
 	_process_polar_shift_pull_punish(delta)
+	_update_fortress_health_bar_visuals()
 
 	queue_redraw()
+
+func take_damage(amount: int, _damage_context: Dictionary = {}) -> void:
+	if amount <= 0:
+		return
+	if damage_blocked:
+		return
+	var final_damage := amount
+	if _is_orbital_fortress_active():
+		var reduction := clampf(orbital_fortress_damage_reduction, 0.0, 0.95)
+		final_damage = maxi(1, int(round(float(amount) * (1.0 - reduction))))
+		if orbital_fortress_max_damage_per_hit > 0:
+			final_damage = mini(final_damage, orbital_fortress_max_damage_per_hit)
+		if final_damage < amount:
+			_orbital_fortress_hit_flash_left = orbital_fortress_hit_flash_duration
+	health_state.take_damage(final_damage)
+
+func _is_orbital_fortress_active() -> bool:
+	if active_attack != ATTACK_ORBITAL_LANCE:
+		return false
+	return boss_state == STATE_WINDUP or boss_state == STATE_ATTACK
+
+func _cache_fortress_health_bar_defaults() -> void:
+	if health_bar == null:
+		return
+	var fill_style := health_bar.get_theme_stylebox("fill") as StyleBoxFlat
+	if fill_style != null:
+		_fortress_health_fill_default = fill_style.bg_color
+	var bg_style := health_bar.get_theme_stylebox("background") as StyleBoxFlat
+	if bg_style != null:
+		_fortress_health_bg_default = bg_style.bg_color
+	_fortress_health_colors_cached = true
+
+func _update_fortress_health_bar_visuals() -> void:
+	if health_bar == null:
+		return
+	if not _fortress_health_colors_cached:
+		_cache_fortress_health_bar_defaults()
+	var fill_style := health_bar.get_theme_stylebox("fill") as StyleBoxFlat
+	var bg_style := health_bar.get_theme_stylebox("background") as StyleBoxFlat
+	if fill_style == null or bg_style == null:
+		return
+	if _is_orbital_fortress_active():
+		var hit_t := clampf(_orbital_fortress_hit_flash_left / maxf(0.001, orbital_fortress_hit_flash_duration), 0.0, 1.0)
+		var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.016)
+		var shield_fill := Color(0.54, 0.88, 1.0, 1.0)
+		var hot_fill := Color(0.96, 1.0, 1.0, 1.0)
+		fill_style.bg_color = shield_fill.lerp(hot_fill, hit_t * (0.72 + pulse * 0.28))
+		bg_style.bg_color = Color(0.04, 0.18, 0.3, 0.95)
+		return
+	fill_style.bg_color = _fortress_health_fill_default
+	bg_style.bg_color = _fortress_health_bg_default
 
 func _process_polar_shift_pull_punish(delta: float) -> void:
 	if not _polar_shift_pull_damage_pending:
@@ -743,6 +804,7 @@ func _draw() -> void:
 	var facing := visual_facing_direction if visual_facing_direction.length_squared() > 0.000001 else Vector2.RIGHT
 	var body_radius := 36.0 + pulse * 0.78
 	var enrage_t := _get_enrage_ratio()
+	var fortress_active := _is_orbital_fortress_active()
 	var threat_t := telegraph_alpha if boss_state == STATE_WINDUP or (boss_state == STATE_ATTACK and active_attack == ATTACK_ECHO_DASH and _echo_dash_retargeting) else 0.0
 
 	var body_color := Color(0.18, 0.44, 0.72, 0.97)
@@ -770,6 +832,8 @@ func _draw() -> void:
 
 	_draw_sovereign_floor_sigil(body_radius, enrage_t)
 	_draw_sovereign_body(body_radius, body_color, core_color, facing, enrage_t)
+	if fortress_active:
+		_draw_orbital_fortress_indicator(body_radius)
 	_draw_mutator_overlay(body_radius)
 	_draw_damage_blocked_indicator(body_radius)
 	_draw_slow_indicator(body_radius)
@@ -790,6 +854,25 @@ func _draw() -> void:
 		var tail_end := -locked_direction * 110.0
 		draw_line(Vector2.ZERO, tail_end, Color(1.0, 0.62, 0.26, 0.44), 8.0)
 		draw_line(Vector2.ZERO, tail_end * 0.8, Color(1.0, 0.9, 0.62, 0.62), 2.6)
+
+func _draw_orbital_fortress_indicator(body_radius: float) -> void:
+	var t := float(Time.get_ticks_msec()) * 0.001
+	var pulse := 0.5 + 0.5 * sin(t * 7.6)
+	var hit_t := clampf(_orbital_fortress_hit_flash_left / maxf(0.001, orbital_fortress_hit_flash_duration), 0.0, 1.0)
+	var shell_radius := body_radius + 22.0 + pulse * 2.0
+	var shell_alpha := 0.16 + pulse * 0.08
+	draw_circle(Vector2.ZERO, shell_radius, Color(0.3, 0.78, 1.0, shell_alpha))
+	draw_arc(Vector2.ZERO, shell_radius + 2.8, 0.0, TAU, 64, Color(0.72, 0.94, 1.0, 0.68), 3.0)
+	draw_arc(Vector2.ZERO, shell_radius + 9.0, t * 1.8, t * 1.8 + TAU, 64, Color(0.92, 0.98, 1.0, 0.34), 1.8)
+	if hit_t > 0.0:
+		var burst_r := shell_radius + (1.0 - hit_t) * 14.0
+		draw_arc(Vector2.ZERO, burst_r, 0.0, TAU, 56, Color(1.0, 1.0, 1.0, 0.82 * hit_t), 3.8)
+		draw_circle(Vector2.ZERO, shell_radius * 0.9, Color(0.9, 0.98, 1.0, 0.12 * hit_t))
+	for i in range(3):
+		var phase := t * (2.2 + float(i) * 0.5)
+		var sweep_start := phase
+		var sweep_end := phase + PI * 0.38
+		draw_arc(Vector2.ZERO, shell_radius + 6.0 + float(i) * 4.0, sweep_start, sweep_end, 18, Color(0.86, 0.98, 1.0, 0.58 - float(i) * 0.14), 2.0)
 
 func _draw_sovereign_floor_sigil(body_radius: float, enrage_t: float) -> void:
 	var t := float(Time.get_ticks_msec()) * 0.001
