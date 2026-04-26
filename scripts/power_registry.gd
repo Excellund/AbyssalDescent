@@ -81,7 +81,7 @@ func get_trial_power_pool(player_reference: Node = null) -> Array[Dictionary]:
 		rupture_desc = String(player_reference.call("get_trial_power_card_desc", "rupture_wave"))
 	
 	var phantom_desc := "Dashing through enemies damages and slows them."
-	var void_desc := "Dash travels farther. Kills fully reset dash cooldown."
+	var void_desc := "Dash travels farther. Kills refresh dash cooldown."
 	var static_desc := "Dashing leaves an electrified trail that burns enemies."
 	if is_instance_valid(player_reference) and player_reference.has_method("get_trial_power_card_desc"):
 		phantom_desc = String(player_reference.call("get_trial_power_card_desc", "phantom_step"))

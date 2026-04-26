@@ -75,7 +75,6 @@ var phantom_step_damage: int = 10
 var phantom_step_slow_duration: float = 0.7
 # Void Dash: extra distance multiplier and kill-reset tracking
 var void_dash_range_mult: float = 1.42
-var void_dash_cooldown_reduction: float = 0.0
 # Static Wake: trail damage and lifetime
 var static_wake_damage: int = 8
 var static_wake_lifetime: float = 1.4
@@ -85,6 +84,8 @@ var phantom_step_ghost_positions: Array[Dictionary] = []
 var phantom_step_ghost_emit_cd: float = 0.0
 var static_wake_trails: Array[Dictionary] = []
 var static_wake_trail_emit_cooldown: float = 0.0
+var void_dash_reset_pulse_left: float = 0.0
+var void_dash_reset_pulse_duration: float = 0.28
 
 # Objective mutators
 var active_objective_mutators: Array[Dictionary] = []
@@ -116,6 +117,7 @@ func _physics_process(delta: float) -> void:
 	_update_attack_animation(delta)
 	_update_visual_facing_direction()
 	_update_static_wake_trails(delta)
+	_update_void_dash_reset_pulse(delta)
 	_try_start_dash(direction)
 	_try_attack_input()
 
@@ -164,7 +166,7 @@ func _try_start_dash(direction: Vector2) -> void:
 	dash_direction = direction if direction != Vector2.ZERO else last_move_direction
 	var effective_duration := dash_duration * (void_dash_range_mult if reward_void_dash else 1.0)
 	dash_time_left = effective_duration
-	dash_cooldown_left = maxf(0.18, dash_cooldown - void_dash_cooldown_reduction)
+	dash_cooldown_left = dash_cooldown
 	dash_phase_release_left = maxf(dash_phase_release_left, dash_phase_release_duration)
 	phantom_step_hit_ids.clear()
 	phantom_step_ghost_positions.clear()
@@ -369,6 +371,12 @@ func _update_attack_animation(delta: float) -> void:
 	if attack_anim_time_left > 0.0:
 		attack_anim_time_left = maxf(0.0, attack_anim_time_left - delta)
 		queue_redraw()
+
+func _update_void_dash_reset_pulse(delta: float) -> void:
+	if void_dash_reset_pulse_left <= 0.0:
+		return
+	void_dash_reset_pulse_left = maxf(0.0, void_dash_reset_pulse_left - delta)
+	queue_redraw()
 
 func _update_visual_facing_direction() -> void:
 	if _is_attack_locked():
@@ -660,8 +668,16 @@ func _update_static_wake_trails(delta: float) -> void:
 
 
 func notify_enemy_killed() -> void:
-	if reward_void_dash and dash_cooldown_left > 0.0:
+	if not reward_void_dash:
+		return
+	var dash_was_active := dash_cooldown_left > 0.0
+	if dash_was_active:
 		dash_cooldown_left = 0.0
+		void_dash_reset_pulse_left = void_dash_reset_pulse_duration
+		if player_feedback != null:
+			player_feedback.play_world_ring(global_position, 42.0, Color(0.92, 0.54, 1.0, 0.92), 0.18)
+			player_feedback.play_world_ring(global_position, 26.0, Color(1.0, 0.82, 1.0, 0.72), 0.12)
+		queue_redraw()
 
 func _restart_current_scene() -> void:
 	if scene_restart_queued:
@@ -821,14 +837,20 @@ func _draw_trial_reward_state() -> void:
 			draw_line(-facing * 8.0 + side * 4.0, -facing * 18.0 + side * 4.0, Color(0.46, 1.0, 0.92, 0.36 + pulse * 0.2), 1.4)
 			draw_line(-facing * 8.0 - side * 4.0, -facing * 18.0 - side * 4.0, Color(0.46, 1.0, 0.92, 0.36 + pulse * 0.2), 1.4)
 
-	if reward_void_dash:
-		var cd_ratio := clampf(1.0 - dash_cooldown_left / maxf(0.001, dash_cooldown), 0.0, 1.0)
-		var arc_end: float = lerp(0.0, TAU, cd_ratio)
-		draw_arc(Vector2.ZERO, 24.0, -PI * 0.5, -PI * 0.5 + arc_end, 36,
-			Color(0.88, 0.56, 1.0, 0.72 + cd_ratio * 0.2), 2.2)
-		if cd_ratio >= 0.99:
-			var pulse := 0.5 + 0.5 * sin(t * 8.0)
-			draw_arc(Vector2.ZERO, 26.0, 0.0, TAU, 24, Color(0.88, 0.56, 1.0, 0.32 + pulse * 0.22), 1.2)
+	if reward_void_dash and void_dash_reset_pulse_left > 0.0:
+		var pulse_t := clampf(void_dash_reset_pulse_left / maxf(0.001, void_dash_reset_pulse_duration), 0.0, 1.0)
+		var glow_t := 1.0 - pulse_t
+		var reset_radius := 22.0 + glow_t * 34.0
+		var glow_alpha := pulse_t * pulse_t
+		var facing := visual_facing_direction if visual_facing_direction.length_squared() > 0.000001 else Vector2.RIGHT
+		var side := Vector2(-facing.y, facing.x)
+		draw_circle(Vector2.ZERO, reset_radius * 0.82, Color(0.88, 0.56, 1.0, 0.2 * glow_alpha))
+		draw_circle(Vector2.ZERO, reset_radius * 0.5, Color(1.0, 0.84, 1.0, 0.13 * glow_alpha))
+		draw_arc(Vector2.ZERO, reset_radius, 0.0, TAU, 34, Color(1.0, 0.86, 1.0, 0.94 * glow_alpha), 3.2)
+		draw_arc(Vector2.ZERO, reset_radius + 7.0, 0.0, TAU, 34, Color(0.88, 0.56, 1.0, 0.54 * glow_alpha), 2.1)
+		draw_arc(Vector2.ZERO, reset_radius + 13.0, 0.0, TAU, 34, Color(0.76, 0.4, 0.98, 0.24 * glow_alpha), 1.4)
+		draw_line(-facing * 10.0, facing * (18.0 + glow_t * 10.0), Color(1.0, 0.86, 1.0, 0.34 * glow_alpha), 1.8)
+		draw_line(-side * 8.0, side * (15.0 + glow_t * 8.0), Color(0.9, 0.62, 1.0, 0.26 * glow_alpha), 1.6)
 
 	if reward_static_wake:
 		var pulse := 0.5 + 0.5 * sin(t * 9.0 + 2.0)

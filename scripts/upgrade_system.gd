@@ -135,7 +135,6 @@ func apply_trial_power(power_id: String) -> bool:
 			var vd_stacks := int(player_reference.get("void_dash_stacks")) + 1
 			player_reference.set("void_dash_stacks", vd_stacks)
 			player_reference.set("void_dash_range_mult", 1.36 + float(vd_stacks) * 0.12)
-			player_reference.set("void_dash_cooldown_reduction", float(vd_stacks) * 0.06)
 		"static_wake":
 			player_reference.set("reward_static_wake", true)
 			var sw_stacks := int(player_reference.get("static_wake_stacks")) + 1
@@ -241,12 +240,10 @@ func get_trial_power_card_description(power_id: String) -> String:
 			return "[color=#c8daf0]Phantom Step:[/color] damage [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color], slow [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_damage, next_damage, cur_slow, next_slow]
 		"reaper_step":
 			var next_range := 1.36 + float(next_stack) * 0.12
-			var next_cd_trim := float(next_stack) * 0.06
 			if current_stack <= 0:
-				return "[color=#9ab8d8]Dash kills instantly reset your dash cooldown, and each stack extends your dash and trims base cooldown.[/color]\n[color=#9ab8d8]Initial:[/color] range [color=#7de882]x%.2f[/color], base cooldown trim [color=#7de882]%.2fs[/color], kill reset [color=#7de882]full[/color]." % [next_range, next_cd_trim]
+				return "[color=#9ab8d8]Kills fully refresh your dash, and each stack extends your dash.[/color]\n[color=#9ab8d8]Initial:[/color] range [color=#7de882]x%.2f[/color], kill refresh [color=#7de882]full[/color]." % [next_range]
 			var cur_range := 1.36 + float(maxi(0, next_stack - 1)) * 0.12
-			var cur_cd_trim := float(maxi(0, next_stack - 1)) * 0.06
-			return "[color=#c8daf0]Reaper Step:[/color] range [color=#e8c96a]x%.2f[/color] [color=#8899aa]->[/color] [color=#7de882]x%.2f[/color], base trim [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color], kill reset [color=#7de882]full[/color]." % [cur_range, next_range, cur_cd_trim, next_cd_trim]
+			return "[color=#c8daf0]Reaper Step:[/color] range [color=#e8c96a]x%.2f[/color] [color=#8899aa]->[/color] [color=#7de882]x%.2f[/color], kill refresh [color=#7de882]full[/color]." % [cur_range, next_range]
 		"static_wake":
 			var next_damage := 6 + next_stack * 3
 			var next_lifetime := 1.2 + float(next_stack) * 0.25
