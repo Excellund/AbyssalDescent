@@ -62,6 +62,50 @@ func build_skirmish_profile(depth: int) -> Dictionary:
 	var hard_pool := _get_hard_pool()
 	return hard_pool[rng.randi_range(0, hard_pool.size() - 1)]
 
+func build_objective_profile(depth: int, preferred: String = "") -> Dictionary:
+	var normalized := preferred.strip_edges().to_lower()
+	if normalized == "last_stand" or normalized == "last stand" or normalized == "survival":
+		return _build_survival_profile(depth)
+	return _build_survival_profile(depth)
+
+func build_debug_encounter_profile(encounter_key: String, depth: int) -> Dictionary:
+	var key := encounter_key.strip_edges().to_lower()
+	match key:
+		"skirmish":
+			return _build_intro_profile(0)
+		"crossfire":
+			return _build_profile("Crossfire", POOL_ROOM_SIZE, 4, 1, 2, 0)
+		"onslaught":
+			return _build_profile("Onslaught", POOL_ROOM_SIZE, 5, 2, 0, 1)
+		"fortress":
+			return _build_profile("Fortress", POOL_ROOM_SIZE, 3, 1, 1, 2)
+		"trial":
+			return _build_trial_profile()
+		"objective_last_stand":
+			return _build_survival_profile(depth)
+		"objective_endurance":
+			return _build_survival_profile(depth)
+		"objective_random":
+			return build_objective_profile(depth)
+		_:
+			return {}
+
+func build_debug_mutator(mutator_key: String) -> Dictionary:
+	var key := mutator_key.strip_edges().to_lower()
+	if key.is_empty() or key == "none":
+		return {}
+	if key == "killbox":
+		return _build_killbox_mutator()
+	if key == "random_hard":
+		return roll_hard_enemy_mutator()
+	var hard_pool := _hard_mutator_pool()
+	for mutator in hard_pool:
+		var icon_id := String(mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID, "")).to_lower()
+		var normalized_name := String(mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME, "")).to_lower().replace(" ", "_")
+		if key == icon_id or key == normalized_name:
+			return mutator.duplicate(true)
+	return {}
+
 func _get_hard_pool() -> Array[Dictionary]:
 	return [
 		_build_profile("Crossfire", POOL_ROOM_SIZE, 4, 1, 2, 0),
@@ -90,19 +134,7 @@ func _build_survival_profile(depth: int) -> Dictionary:
 	var chargers := maxi(1, ENCOUNTER_CONTRACTS.profile_charger_count(base))
 	var archers := maxi(1, ENCOUNTER_CONTRACTS.profile_archer_count(base) + 1)
 	var shielders := maxi(1, ENCOUNTER_CONTRACTS.profile_shielder_count(base))
-	var pressure_mutator := {
-		ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME: "Killbox",
-		ENCOUNTER_CONTRACTS.MUTATOR_KEY_THEME_COLOR: Color(0.98, 0.72, 0.2, 1.0),
-		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID: "killbox",
-		ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX: "The arena closes in and pressure rises",
-		ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_SPEED_MULT: 1.18,
-		ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_SPEED_MULT: 1.22,
-		ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_WINDUP_MULT: 0.85,
-		ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_WINDUP_MULT: 0.8,
-		ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_COOLDOWN_MULT: 0.78,
-		ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SPEED_MULT: 1.16,
-		ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_WINDUP_MULT: 0.88
-	}
+	var pressure_mutator := _build_killbox_mutator()
 	var profile := _build_profile("Last Stand", survival_room_size, chasers, chargers, archers, shielders, pressure_mutator)
 	var raw_duration := clampf(22.0 + float(depth) * 0.85, 22.0, 34.0)
 	var duration := int(ceil(raw_duration / 5.0)) * 5
@@ -166,7 +198,7 @@ func roll_route_options(depth: int) -> Array[Dictionary]:
 
 	var survival_profile := _build_survival_profile(depth)
 	var survival_option := ENCOUNTER_CONTRACTS.door_option(
-		"Objective - Last Stand",
+		"Objective - %s" % ENCOUNTER_CONTRACTS.profile_label(survival_profile),
 		Color(0.98, 0.78, 0.34, 0.96),
 		ENUMS.DoorKind.ENCOUNTER,
 		"trial",
@@ -194,8 +226,27 @@ func roll_route_options(depth: int) -> Array[Dictionary]:
 	return chosen
 
 func roll_hard_enemy_mutator() -> Dictionary:
+	var pool := _hard_mutator_pool()
+	return pool[rng.randi_range(0, pool.size() - 1)]
+
+func _build_killbox_mutator() -> Dictionary:
+	return {
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME: "Killbox",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_THEME_COLOR: Color(0.98, 0.72, 0.2, 1.0),
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID: "killbox",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX: "The arena closes in and pressure rises",
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_SPEED_MULT: 1.18,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_SPEED_MULT: 1.22,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_WINDUP_MULT: 0.85,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_WINDUP_MULT: 0.8,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_COOLDOWN_MULT: 0.78,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SPEED_MULT: 1.16,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_WINDUP_MULT: 0.88
+	}
+
+func _hard_mutator_pool() -> Array[Dictionary]:
 	var C := ENCOUNTER_CONTRACTS
-	var pool: Array[Dictionary] = [
+	return [
 		{
 			C.MUTATOR_KEY_NAME: "Blood Rush",
 			# Melee attackers hit harder and faster — chasers + chargers
@@ -253,4 +304,3 @@ func roll_hard_enemy_mutator() -> Dictionary:
 			C.MUTATOR_STAT_SHIELDER_SPEED_MULT: 1.28
 		}
 	]
-	return pool[rng.randi_range(0, pool.size() - 1)]

@@ -14,12 +14,28 @@ var music_value_label: Label
 var menu_music_player: AudioStreamPlayer
 
 func _ready() -> void:
+	if _should_autostart_debug_encounter():
+		get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)
+		return
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	_build_ui()
 	_sync_options_from_context()
 	_start_menu_music()
+
+func _should_autostart_debug_encounter() -> bool:
+	var packed := load(GAMEPLAY_SCENE_PATH) as PackedScene
+	if packed == null:
+		return false
+	var main_root := packed.instantiate()
+	if main_root == null:
+		return false
+	var encounter_value: Variant = main_root.get("debug_start_encounter")
+	main_root.queue_free()
+	if encounter_value == null:
+		return false
+	return int(encounter_value) != 0
 
 func _exit_tree() -> void:
 	if menu_music_player != null and menu_music_player.playing:

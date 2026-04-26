@@ -18,8 +18,23 @@ const MENU_SCENE_PATH := "res://scenes/Menu.tscn"
 const WORLD_HUD_SCRIPT := preload("res://scripts/world_hud.gd")
 const WORLD_RENDERER_SCRIPT := preload("res://scripts/world_renderer.gd")
 const PAUSE_MENU_CONTROLLER_SCRIPT := preload("res://scripts/pause_menu_controller.gd")
-const DEBUG_RUN_NORMAL := 0
-const DEBUG_RUN_FIRST_BOSS := 1
+const DEBUG_ENCOUNTER_NONE := 0
+const DEBUG_ENCOUNTER_SKIRMISH := 1
+const DEBUG_ENCOUNTER_CROSSFIRE := 2
+const DEBUG_ENCOUNTER_ONSLAUGHT := 3
+const DEBUG_ENCOUNTER_FORTRESS := 4
+const DEBUG_ENCOUNTER_TRIAL := 5
+const DEBUG_ENCOUNTER_OBJECTIVE_LAST_STAND := 6
+const DEBUG_ENCOUNTER_OBJECTIVE_RANDOM := 7
+const DEBUG_ENCOUNTER_REST_SITE := 8
+const DEBUG_ENCOUNTER_BOSS := 9
+const DEBUG_MUTATOR_NONE := 0
+const DEBUG_MUTATOR_BLOOD_RUSH := 1
+const DEBUG_MUTATOR_FLASHPOINT := 2
+const DEBUG_MUTATOR_SIEGEBREAK := 3
+const DEBUG_MUTATOR_IRON_VOLLEY := 4
+const DEBUG_MUTATOR_KILLBOX := 5
+const DEBUG_MUTATOR_RANDOM_HARD := 6
 
 @export var player_path: NodePath = NodePath("Player")
 @export var encounter_count: int = 8
@@ -63,7 +78,8 @@ const DEBUG_RUN_FIRST_BOSS := 1
 @export var debug_skip_starting_boon_selection: bool = false
 @export var debug_start_power_ids: PackedStringArray = PackedStringArray()
 @export_multiline var debug_start_command: String = ""
-@export_enum("Normal", "First Boss") var debug_run_state: int = DEBUG_RUN_NORMAL
+@export_enum("None", "Skirmish", "Crossfire", "Onslaught", "Fortress", "Trial", "Objective - Last Stand", "Objective - Random", "Rest Site", "Boss") var debug_start_encounter: int = DEBUG_ENCOUNTER_NONE
+@export_enum("None", "Blood Rush", "Flashpoint", "Siegebreak", "Iron Volley", "Killbox", "Random Hard") var debug_mutator_override: int = DEBUG_MUTATOR_NONE
 
 var player: Node2D
 var player_camera: Camera2D
@@ -179,8 +195,8 @@ func _ready() -> void:
 	pause_menu_controller.connect("exit_game_requested", Callable(self, "_on_pause_exit_game_requested"))
 	hud.refresh(_get_hud_state(), player)
 	_apply_debug_start_powers_if_needed()
-	if debug_run_state != DEBUG_RUN_NORMAL:
-		_apply_debug_run_state(_debug_run_state_to_key(debug_run_state))
+	if debug_start_encounter != DEBUG_ENCOUNTER_NONE:
+		_start_debug_selected_encounter(debug_start_encounter)
 		return
 	if debug_skip_starting_boon_selection:
 		_begin_room(_build_skirmish_profile(room_depth))
@@ -221,40 +237,146 @@ func start_run_with_command(command: String) -> Dictionary:
 	return start_run_with_powers(_parse_power_command(command))
 
 func go_do_that_thing(state: String) -> Dictionary:
-	return _apply_debug_run_state(state)
+	return start_debug_encounter(state)
 
-func _debug_run_state_to_key(state_value: int) -> String:
-	if state_value == DEBUG_RUN_FIRST_BOSS:
-		return "first_boss"
-	return "normal"
+func start_objective_test(kind: String = "") -> Dictionary:
+	return _start_debug_objective_room(kind)
 
-func _apply_debug_run_state(state: String) -> Dictionary:
-	var normalized := state.strip_edges().to_lower()
-	for keyword in ["go", "to", "do", "that", "thing", "state", "run", "at", "the"]:
-		normalized = normalized.replace(keyword, " ")
-	for sep in [",", ";", "|", "\n", "\t", "-"]:
-		normalized = normalized.replace(sep, " ")
-	normalized = normalized.strip_edges()
+func start_last_stand_test() -> Dictionary:
+	return _start_debug_objective_room("last_stand")
 
-	if normalized.is_empty():
-		normalized = _debug_run_state_to_key(debug_run_state)
+func start_endurance_test() -> Dictionary:
+	return _start_debug_objective_room("last_stand")
 
-	var aliases := {
-		"boss": "first_boss",
-		"first boss": "first_boss",
-		"boss1": "first_boss",
-		"boss 1": "first_boss"
+func start_debug_encounter(encounter_key: String) -> Dictionary:
+	var key := encounter_key.strip_edges().to_lower()
+	match key:
+		"skirmish":
+			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_SKIRMISH)
+		"crossfire":
+			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_CROSSFIRE)
+		"onslaught":
+			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_ONSLAUGHT)
+		"fortress":
+			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_FORTRESS)
+		"trial":
+			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_TRIAL)
+		"objective_last_stand", "last_stand":
+			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_OBJECTIVE_LAST_STAND)
+		"objective_endurance", "endurance":
+			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_OBJECTIVE_LAST_STAND)
+		"objective_random", "objective":
+			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_OBJECTIVE_RANDOM)
+		"rest", "rest_site":
+			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_REST_SITE)
+		"boss":
+			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_BOSS)
+		"objective_test":
+			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_OBJECTIVE_RANDOM)
+		_:
+			return {"ok": false, "note": "Unknown encounter key."}
+
+func _debug_encounter_key(encounter_state: int) -> String:
+	match encounter_state:
+		DEBUG_ENCOUNTER_SKIRMISH:
+			return "skirmish"
+		DEBUG_ENCOUNTER_CROSSFIRE:
+			return "crossfire"
+		DEBUG_ENCOUNTER_ONSLAUGHT:
+			return "onslaught"
+		DEBUG_ENCOUNTER_FORTRESS:
+			return "fortress"
+		DEBUG_ENCOUNTER_TRIAL:
+			return "trial"
+		DEBUG_ENCOUNTER_OBJECTIVE_LAST_STAND:
+			return "objective_last_stand"
+		DEBUG_ENCOUNTER_OBJECTIVE_RANDOM:
+			return "objective_random"
+		DEBUG_ENCOUNTER_REST_SITE:
+			return "rest"
+		DEBUG_ENCOUNTER_BOSS:
+			return "boss"
+		_:
+			return ""
+
+func _start_debug_selected_encounter(encounter_state: int) -> Dictionary:
+	var encounter_key := _debug_encounter_key(encounter_state)
+	if encounter_key.is_empty():
+		return {"ok": true, "note": "No debug encounter selected."}
+	if encounter_key == "boss":
+		return _start_debug_boss_room()
+
+	_reset_for_debug_jump()
+	var encounter_depth := 1
+	rooms_cleared = encounter_depth - 1
+	room_depth = encounter_depth
+	boss_unlocked = false
+
+	if encounter_key == "rest":
+		_enter_rest_site()
+		hud.refresh(_get_hud_state(), player)
+		return {"ok": true, "state": "debug_encounter", "encounter": "Rest Site"}
+
+	var profile := _build_debug_encounter_profile(encounter_key, encounter_depth)
+	profile = _apply_debug_mutator_override(profile)
+	if profile.is_empty():
+		return {"ok": false, "state": "debug_encounter", "note": "Could not build encounter profile."}
+	pending_room_reward = ENUMS.RewardMode.ARCANA if encounter_key == "trial" else ENUMS.RewardMode.BOON
+	_begin_room(profile)
+	hud.refresh(_get_hud_state(), player)
+	return {
+		"ok": true,
+		"state": "debug_encounter",
+		"encounter": ENCOUNTER_CONTRACTS.profile_label(profile)
 	}
-	if aliases.has(normalized):
-		normalized = String(aliases[normalized])
 
-	if normalized == "normal":
-		return {"ok": true, "state": "normal", "note": "No debug jump applied."}
+func _start_debug_boss_room() -> Dictionary:
+	_reset_for_debug_jump()
+	rooms_cleared = encounter_count
+	room_depth = encounter_count
+	boss_unlocked = true
+	_begin_boss_room()
+	hud.refresh(_get_hud_state(), player)
+	return {"ok": true, "state": "debug_encounter", "encounter": "Boss Chamber"}
 
-	if normalized != "first_boss":
-		return {"ok": false, "state": normalized, "note": "Unknown state. Use first_boss."}
+func _build_debug_encounter_profile(encounter_key: String, depth: int) -> Dictionary:
+	if not is_instance_valid(encounter_profile_builder):
+		return {}
+	return encounter_profile_builder.call("build_debug_encounter_profile", encounter_key, depth)
 
-	# Reset transient UI and encounter state before jumping.
+func _debug_mutator_key(state_value: int) -> String:
+	match state_value:
+		DEBUG_MUTATOR_BLOOD_RUSH:
+			return "blood_rush"
+		DEBUG_MUTATOR_FLASHPOINT:
+			return "flashpoint"
+		DEBUG_MUTATOR_SIEGEBREAK:
+			return "siegebreak"
+		DEBUG_MUTATOR_IRON_VOLLEY:
+			return "iron_volley"
+		DEBUG_MUTATOR_KILLBOX:
+			return "killbox"
+		DEBUG_MUTATOR_RANDOM_HARD:
+			return "random_hard"
+		_:
+			return ""
+
+func _apply_debug_mutator_override(profile: Dictionary) -> Dictionary:
+	if profile.is_empty():
+		return profile
+	var mutator_key := _debug_mutator_key(debug_mutator_override)
+	if mutator_key.is_empty():
+		return profile
+	if not is_instance_valid(encounter_profile_builder):
+		return profile
+	var mutator: Dictionary = encounter_profile_builder.call("build_debug_mutator", mutator_key)
+	if mutator.is_empty():
+		return profile
+	var modified := profile.duplicate(true)
+	ENCOUNTER_CONTRACTS.profile_set_enemy_mutator(modified, mutator)
+	return modified
+
+func _reset_for_debug_jump() -> void:
 	if is_instance_valid(reward_selection_ui):
 		reward_selection_ui.call("close_selection")
 	_set_combat_paused(false)
@@ -270,13 +392,29 @@ func _apply_debug_run_state(state: String) -> Dictionary:
 	if is_instance_valid(player):
 		player.global_position = Vector2.ZERO
 
-	rooms_cleared = encounter_count
-	room_depth = encounter_count
-	boss_unlocked = true
-	_begin_boss_room()
-
+func _start_debug_objective_room(kind: String = "") -> Dictionary:
+	_reset_for_debug_jump()
+	var objective_depth := 1
+	rooms_cleared = objective_depth - 1
+	room_depth = objective_depth
+	boss_unlocked = false
+	var profile := _build_objective_test_profile(objective_depth, kind)
+	profile = _apply_debug_mutator_override(profile)
+	if profile.is_empty():
+		return {"ok": false, "state": "objective_test", "note": "Could not build objective profile."}
+	pending_room_reward = ENUMS.RewardMode.BOON
+	_begin_room(profile)
 	hud.refresh(_get_hud_state(), player)
-	return {"ok": true, "state": normalized}
+	return {
+		"ok": true,
+		"state": "objective_test",
+		"objective": ENCOUNTER_CONTRACTS.profile_label(profile)
+	}
+
+func _build_objective_test_profile(depth: int, kind: String = "") -> Dictionary:
+	if not is_instance_valid(encounter_profile_builder):
+		return {}
+	return encounter_profile_builder.call("build_objective_profile", depth, kind)
 
 func _apply_debug_start_powers_if_needed() -> void:
 	if not debug_apply_test_powers_on_start:
