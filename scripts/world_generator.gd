@@ -141,6 +141,26 @@ var objective_target_flee_thresholds: Array[float] = [0.75, 0.5, 0.25]
 var objective_target_next_flee_index: int = 0
 var objective_target_dash_line: Line2D
 var objective_target_dash_line_time_left: float = 0.0
+var objective_escort_dash_lines: Array[Line2D] = []
+var objective_escort_dash_line_time_left: float = 0.0
+var objective_hunt_kill_progress: int = 0
+var objective_hunt_kill_goal: int = 4
+var objective_exposure_duration: float = 2.0
+var objective_exposure_left: float = 0.0
+var objective_exposure_push_duration: float = 1.2
+var objective_exposure_push_left: float = 0.0
+var objective_exposure_push_strength: float = 380.0
+var objective_exposure_push_radius: float = 252.0
+var objective_exposure_push_accel: float = 940.0
+var objective_relocation_escort_radius: float = 236.0
+var objective_relocation_escort_cap: int = 3
+var objective_last_relocated_escort_count: int = 0
+var objective_relocation_hint_left: float = 0.0
+var objective_signal_fx_node: Node2D
+var objective_signal_fx_left: float = 0.0
+var objective_signal_fx_duration: float = 0.0
+var objective_signal_fx_strength: float = 1.0
+var objective_signal_fx_phase: float = 0.0
 
 var hud: Node
 var renderer: Node2D
@@ -639,6 +659,7 @@ func _update_priority_target_objective_state(delta: float) -> void:
 	if not is_instance_valid(objective_target_enemy):
 		_complete_current_objective("Target Eliminated", "%s down" % objective_target_name)
 		return
+	_update_priority_target_exposure_state(delta)
 	_check_priority_target_relocation_threshold()
 	var pressure_floor := 5 + objective_spawn_batch
 	if objective_overtime:
@@ -649,6 +670,10 @@ func _update_priority_target_objective_state(delta: float) -> void:
 		objective_spawn_timer = minf(objective_spawn_timer, 0.45)
 	if objective_time_left > 0.0:
 		objective_time_left = maxf(0.0, objective_time_left - delta)
+	if objective_relocation_hint_left > 0.0:
+		objective_relocation_hint_left = maxf(0.0, objective_relocation_hint_left - delta)
+	if objective_exposure_left > 0.0:
+		return
 	objective_spawn_timer = maxf(0.0, objective_spawn_timer - delta)
 	if objective_spawn_timer <= 0.0:
 		objective_spawn_timer = objective_spawn_interval
@@ -702,17 +727,90 @@ func _spawn_priority_target_wave() -> void:
 		var enemy_type := roster[rng.randi_range(0, roster.size() - 1)]
 		active_room_enemy_count += int(enemy_spawner.call("spawn_enemy_type", enemy_type, 1))
 
+func _update_priority_target_exposure_state(delta: float) -> void:
+	if objective_signal_fx_left > 0.0:
+		objective_signal_fx_left = maxf(0.0, objective_signal_fx_left - delta)
+		objective_signal_fx_phase += delta
+		_refresh_priority_target_exposure_vfx()
+		if objective_signal_fx_left <= 0.0:
+			_clear_priority_target_exposure_vfx()
+	if objective_exposure_left <= 0.0:
+		return
+	objective_exposure_left = maxf(0.0, objective_exposure_left - delta)
+	if objective_exposure_push_left > 0.0:
+		objective_exposure_push_left = maxf(0.0, objective_exposure_push_left - delta)
+		_apply_priority_target_exposure_push(delta)
+	if objective_exposure_left <= 0.0:
+		hud.show_banner("Signal Recovered", "")
+
+func _trigger_priority_target_exposure(banner_title: String = "Signal Exposed", banner_subtitle: String = "Take the shot", duration_override: float = -1.0, fx_strength: float = 1.0) -> void:
+	if not is_instance_valid(objective_target_enemy):
+		return
+	var duration := objective_exposure_duration if duration_override <= 0.0 else duration_override
+	objective_exposure_left = maxf(objective_exposure_left, duration)
+	objective_exposure_push_left = maxf(objective_exposure_push_left, objective_exposure_push_duration)
+	objective_hunt_kill_progress = 0
+	objective_spawn_timer = maxf(objective_spawn_timer, 1.2)
+	_show_priority_target_exposure_vfx(fx_strength, duration)
+	hud.show_banner(banner_title, banner_subtitle)
+
+func _apply_priority_target_exposure_push(delta: float) -> void:
+	if not is_instance_valid(objective_target_enemy):
+		return
+	var origin := objective_target_enemy.global_position
+	var player_position := player.global_position if is_instance_valid(player) else Vector2.ZERO
+	var has_player := is_instance_valid(player)
+	var push_t := clampf(objective_exposure_push_left / maxf(0.01, objective_exposure_push_duration), 0.0, 1.0)
+	var push_strength := lerpf(objective_exposure_push_strength * 0.62, objective_exposure_push_strength, push_t)
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if enemy_node == objective_target_enemy or not (enemy_node is CharacterBody2D):
+			continue
+		var enemy := enemy_node as CharacterBody2D
+		var to_enemy := enemy.global_position - origin
+		var dist := maxf(0.001, to_enemy.length())
+		if dist > objective_exposure_push_radius:
+			continue
+		var dir := to_enemy / dist
+		var tuned_strength := push_strength
+		if has_player:
+			var enemy_to_player := player_position - enemy.global_position
+			var player_dist := enemy_to_player.length()
+			if player_dist < 188.0:
+				var to_player_dir := enemy_to_player / maxf(0.001, player_dist)
+				var toward_player := dir.dot(to_player_dir)
+				if toward_player > 0.0:
+					var safe_dir := (dir - to_player_dir * (toward_player + 0.38)).normalized()
+					if safe_dir.length() > 0.01:
+						dir = safe_dir
+					else:
+						dir = -to_player_dir
+					tuned_strength *= 0.72
+			if player_dist < 96.0:
+				dir = (enemy.global_position - player_position).normalized()
+				tuned_strength = maxf(tuned_strength, objective_exposure_push_strength * 0.82)
+		var target_velocity := dir * tuned_strength
+		enemy.velocity = enemy.velocity.move_toward(target_velocity, delta * objective_exposure_push_accel)
+		if enemy.has_method("apply_slow"):
+			enemy.call("apply_slow", 0.2, 0.74)
+
 func _complete_current_objective(title: String, _subtitle: String) -> void:
 	active_objective_kind = ""
 	objective_spawn_timer = 0.0
 	objective_time_left = 0.0
 	objective_overtime = false
+	objective_hunt_kill_progress = 0
+	objective_exposure_left = 0.0
+	objective_exposure_push_left = 0.0
+	objective_last_relocated_escort_count = 0
+	objective_relocation_hint_left = 0.0
+	_clear_priority_target_exposure_vfx()
 	objective_target_enemy = null
 	objective_target_type = ""
 	objective_target_name = ""
 	objective_survival_quota_announced = false
 	objective_target_next_flee_index = 0
 	_clear_priority_target_dash_line()
+	_clear_priority_target_escort_dash_lines()
 	_clear_all_enemies()
 	active_room_enemy_count = 0
 	hud.show_banner(title, "")
@@ -744,6 +842,13 @@ func _spawn_priority_target_enemy() -> void:
 		spawned_target.call("configure_health_bar_visuals", Vector2(-36.0, -48.0), Vector2(72.0, 9.0))
 	if spawned_target.has_method("set_health_threshold_markers"):
 		spawned_target.call("set_health_threshold_markers", objective_target_flee_thresholds, objective_target_next_flee_index)
+	objective_hunt_kill_progress = 0
+	objective_hunt_kill_goal = 4
+	objective_exposure_left = 0.0
+	objective_exposure_push_left = 0.0
+	objective_last_relocated_escort_count = 0
+	objective_relocation_hint_left = 0.0
+	_clear_priority_target_exposure_vfx()
 	_attach_priority_target_marker(spawned_target)
 	_spawn_priority_target_opening_escorts()
 	if spawned_target.has_signal("died"):
@@ -770,7 +875,7 @@ func _spawn_priority_target_opening_escorts() -> void:
 		escort.global_position = _clamp_position_to_current_room(anchor + Vector2.RIGHT.rotated(angle) * radius, 44.0)
 		active_room_enemy_count += 1
 	objective_spawn_timer = maxf(objective_spawn_timer, objective_spawn_interval)
-	hud.show_banner("Mark Spotted", "")
+	hud.show_banner("Mark Spotted  Kill %d escorts to expose" % objective_hunt_kill_goal, "")
 
 func _check_priority_target_relocation_threshold() -> void:
 	if not is_instance_valid(objective_target_enemy):
@@ -788,7 +893,19 @@ func _check_priority_target_relocation_threshold() -> void:
 	objective_target_next_flee_index += 1
 	if objective_target_enemy.has_method("set_health_threshold_marker_progress"):
 		objective_target_enemy.call("set_health_threshold_marker_progress", objective_target_next_flee_index)
-	_relocate_priority_target(threshold_ratio)
+	_trigger_priority_target_threshold_phase(threshold_ratio)
+
+func _trigger_priority_target_threshold_phase(_threshold_ratio: float) -> void:
+	if not is_instance_valid(objective_target_enemy):
+		return
+	var phase_index := objective_target_next_flee_index
+	_relocate_priority_target(_threshold_ratio)
+	objective_hunt_kill_goal = maxi(2, objective_hunt_kill_goal - 1)
+	var duration := clampf(1.9 + float(phase_index) * 0.28, 1.9, 3.0)
+	var fx_strength := clampf(1.0 + float(phase_index) * 0.2, 1.0, 1.8)
+	_trigger_priority_target_exposure("Signal Cracked", "Push through", duration, fx_strength)
+	if is_instance_valid(objective_target_enemy):
+		objective_target_enemy.velocity = Vector2.ZERO
 
 func _relocate_priority_target(_threshold_ratio: float) -> void:
 	if not is_instance_valid(objective_target_enemy):
@@ -799,9 +916,53 @@ func _relocate_priority_target(_threshold_ratio: float) -> void:
 		return
 	objective_target_enemy.global_position = new_position
 	objective_target_enemy.velocity = Vector2.ZERO
+	var relocated_count := _relocate_priority_target_nearby_escorts(old_position, new_position)
 	_show_priority_target_dash_line(old_position, new_position)
-	_spawn_priority_target_relocation_escorts(new_position)
-	hud.show_banner("Signal Breakaway", "")
+	objective_last_relocated_escort_count = relocated_count
+	objective_relocation_hint_left = 3.2 if relocated_count > 0 else 0.0
+	if relocated_count > 0:
+		hud.show_banner("Signal Breakaway +%d Escorts" % relocated_count, "")
+	else:
+		hud.show_banner("Signal Breakaway", "")
+
+func _relocate_priority_target_nearby_escorts(old_position: Vector2, new_position: Vector2) -> int:
+	var candidates: Array[Dictionary] = []
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if enemy_node == objective_target_enemy or not (enemy_node is CharacterBody2D):
+			continue
+		var escort := enemy_node as CharacterBody2D
+		var dist := escort.global_position.distance_to(old_position)
+		if dist > objective_relocation_escort_radius:
+			continue
+		candidates.append({"enemy": escort, "distance": dist})
+	if candidates.is_empty():
+		_spawn_priority_target_relocation_escorts(new_position)
+		return 0
+	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a.get("distance", INF)) < float(b.get("distance", INF))
+	)
+	var moved := 0
+	var carry_paths: Array[Dictionary] = []
+	var base_angle := rng.randf_range(0.0, TAU)
+	for entry in candidates:
+		if moved >= objective_relocation_escort_cap:
+			break
+		var escort := entry.get("enemy") as CharacterBody2D
+		if not is_instance_valid(escort):
+			continue
+		var from_position := escort.global_position
+		var slot_t := float(moved) / float(maxi(1, objective_relocation_escort_cap))
+		var angle := base_angle + TAU * slot_t
+		var radius := 92.0 + 14.0 * float(moved)
+		escort.global_position = _clamp_position_to_current_room(new_position + Vector2.RIGHT.rotated(angle) * radius, 44.0)
+		escort.velocity = Vector2.ZERO
+		carry_paths.append({"from": from_position, "to": escort.global_position})
+		moved += 1
+	if moved < 1:
+		_spawn_priority_target_relocation_escorts(new_position)
+		return 0
+	_show_priority_target_escort_carry_lines(carry_paths)
+	return moved
 
 func _pick_priority_target_relocation_position(old_position: Vector2) -> Vector2:
 	if not is_instance_valid(enemy_spawner):
@@ -850,19 +1011,128 @@ func _show_priority_target_dash_line(from_position: Vector2, to_position: Vector
 	_clear_priority_target_dash_line()
 	objective_target_dash_line = Line2D.new()
 	objective_target_dash_line.name = "PriorityTargetDashLine"
-	objective_target_dash_line.width = 5.0
-	objective_target_dash_line.default_color = Color(1.0, 0.86, 0.42, 0.9)
+	objective_target_dash_line.width = 6.6
+	objective_target_dash_line.default_color = Color(1.0, 0.9, 0.54, 0.96)
 	objective_target_dash_line.points = PackedVector2Array([from_position, to_position])
 	objective_target_dash_line.z_as_relative = false
 	objective_target_dash_line.z_index = 48
 	add_child(objective_target_dash_line)
-	objective_target_dash_line_time_left = 0.22
+	objective_target_dash_line_time_left = 0.34
 
 func _clear_priority_target_dash_line() -> void:
 	if is_instance_valid(objective_target_dash_line):
 		objective_target_dash_line.queue_free()
 	objective_target_dash_line = null
 	objective_target_dash_line_time_left = 0.0
+
+func _show_priority_target_escort_carry_lines(paths: Array[Dictionary]) -> void:
+	_clear_priority_target_escort_dash_lines()
+	for path in paths:
+		var from_position := path.get("from", Vector2.ZERO) as Vector2
+		var to_position := path.get("to", Vector2.ZERO) as Vector2
+		if from_position.distance_to(to_position) < 16.0:
+			continue
+		var line := Line2D.new()
+		line.width = 4.2
+		line.default_color = Color(0.9, 0.98, 1.0, 0.96)
+		line.points = PackedVector2Array([from_position, to_position])
+		line.z_as_relative = false
+		line.z_index = 47
+		add_child(line)
+		objective_escort_dash_lines.append(line)
+	objective_escort_dash_line_time_left = 0.48 if not objective_escort_dash_lines.is_empty() else 0.0
+
+func _clear_priority_target_escort_dash_lines() -> void:
+	for line in objective_escort_dash_lines:
+		if is_instance_valid(line):
+			line.queue_free()
+	objective_escort_dash_lines.clear()
+	objective_escort_dash_line_time_left = 0.0
+
+func _show_priority_target_exposure_vfx(strength: float, duration: float) -> void:
+	if not is_instance_valid(objective_target_enemy):
+		return
+	_clear_priority_target_exposure_vfx()
+	objective_signal_fx_node = Node2D.new()
+	objective_signal_fx_node.name = "PriorityTargetExposureFX"
+	objective_signal_fx_node.z_as_relative = false
+	objective_signal_fx_node.z_index = 49
+	add_child(objective_signal_fx_node)
+	var fill := Polygon2D.new()
+	fill.color = Color(1.0, 0.9, 0.46, 0.22)
+	fill.z_as_relative = false
+	fill.z_index = 49
+	objective_signal_fx_node.add_child(fill)
+	for _i in range(2):
+		var ring := Line2D.new()
+		ring.width = 3.8
+		ring.default_color = Color(1.0, 0.95, 0.68, 0.92)
+		ring.z_as_relative = false
+		ring.z_index = 50
+		objective_signal_fx_node.add_child(ring)
+	for _i in range(6):
+		var spoke := Line2D.new()
+		spoke.width = 2.4
+		spoke.default_color = Color(1.0, 0.9, 0.58, 0.86)
+		spoke.z_as_relative = false
+		spoke.z_index = 50
+		objective_signal_fx_node.add_child(spoke)
+	objective_signal_fx_left = duration
+	objective_signal_fx_duration = duration
+	objective_signal_fx_strength = strength
+	objective_signal_fx_phase = 0.0
+	_refresh_priority_target_exposure_vfx()
+
+func _refresh_priority_target_exposure_vfx() -> void:
+	if not is_instance_valid(objective_signal_fx_node):
+		return
+	if not is_instance_valid(objective_target_enemy):
+		return
+	if objective_signal_fx_node.get_child_count() < 9:
+		return
+	var origin := objective_target_enemy.global_position
+	var life_t := clampf(objective_signal_fx_left / maxf(0.01, objective_signal_fx_duration), 0.0, 1.0)
+	var pulse := 0.5 + 0.5 * sin(objective_signal_fx_phase * 11.0)
+	var outer_radius := 126.0 + objective_signal_fx_strength * 30.0 + pulse * 12.0
+	var inner_radius := outer_radius * 0.58
+	var fill := objective_signal_fx_node.get_child(0) as Polygon2D
+	if fill != null:
+		var cone := PackedVector2Array()
+		var segments := 24
+		for i in range(segments):
+			var angle := TAU * (float(i) / float(segments))
+			cone.append(origin + Vector2.RIGHT.rotated(angle) * inner_radius)
+		fill.polygon = cone
+		fill.color = Color(1.0, 0.9, 0.46, (0.08 + pulse * 0.08) * life_t)
+	for i in range(2):
+		var ring := objective_signal_fx_node.get_child(1 + i) as Line2D
+		if ring == null:
+			continue
+		var radius := outer_radius - float(i) * 22.0
+		var points := PackedVector2Array()
+		var segments := 40
+		for p in range(segments + 1):
+			var angle := TAU * (float(p) / float(segments))
+			points.append(origin + Vector2.RIGHT.rotated(angle) * radius)
+		ring.points = points
+		ring.width = 2.2 + life_t * 2.4
+		ring.default_color = Color(1.0, 0.95, 0.68, (0.2 + pulse * 0.6) * life_t)
+	for i in range(6):
+		var spoke := objective_signal_fx_node.get_child(3 + i) as Line2D
+		if spoke == null:
+			continue
+		var angle := objective_signal_fx_phase * 0.9 + TAU * (float(i) / 6.0)
+		var from_p := origin + Vector2.RIGHT.rotated(angle) * (inner_radius * 0.64)
+		var to_p := origin + Vector2.RIGHT.rotated(angle) * (outer_radius + pulse * 8.0)
+		spoke.points = PackedVector2Array([from_p, to_p])
+		spoke.default_color = Color(1.0, 0.9, 0.58, (0.12 + pulse * 0.36) * life_t)
+		spoke.width = 1.4 + life_t * 1.8
+
+func _clear_priority_target_exposure_vfx() -> void:
+	if is_instance_valid(objective_signal_fx_node):
+		objective_signal_fx_node.queue_free()
+	objective_signal_fx_node = null
+	objective_signal_fx_left = 0.0
 
 func _clamp_position_to_current_room(target_position: Vector2, margin: float = 28.0) -> Vector2:
 	if current_room_size == Vector2.ZERO:
@@ -899,12 +1169,22 @@ func _attach_priority_target_marker(enemy: CharacterBody2D) -> void:
 	enemy.add_child(marker)
 
 func _update_priority_target_marker(delta: float) -> void:
+	if objective_escort_dash_line_time_left > 0.0:
+		objective_escort_dash_line_time_left = maxf(0.0, objective_escort_dash_line_time_left - delta)
+		var escort_alpha := clampf(objective_escort_dash_line_time_left / 0.48, 0.0, 1.0)
+		for line in objective_escort_dash_lines:
+			if not is_instance_valid(line):
+				continue
+			line.default_color = Color(0.9, 0.98, 1.0, 0.96 * escort_alpha)
+			line.width = 2.6 + 2.8 * escort_alpha
+		if objective_escort_dash_line_time_left <= 0.0:
+			_clear_priority_target_escort_dash_lines()
 	if objective_target_dash_line_time_left > 0.0:
 		objective_target_dash_line_time_left = maxf(0.0, objective_target_dash_line_time_left - delta)
 		if is_instance_valid(objective_target_dash_line):
-			var alpha := clampf(objective_target_dash_line_time_left / 0.22, 0.0, 1.0)
-			objective_target_dash_line.default_color = Color(1.0, 0.86, 0.42, 0.9 * alpha)
-			objective_target_dash_line.width = 3.0 + 3.0 * alpha
+			var alpha := clampf(objective_target_dash_line_time_left / 0.34, 0.0, 1.0)
+			objective_target_dash_line.default_color = Color(1.0, 0.9, 0.54, 0.96 * alpha)
+			objective_target_dash_line.width = 3.6 + 3.0 * alpha
 		if objective_target_dash_line_time_left <= 0.0:
 			_clear_priority_target_dash_line()
 	if not is_instance_valid(objective_target_enemy):
@@ -917,12 +1197,16 @@ func _update_priority_target_marker(delta: float) -> void:
 	var diamond := marker.get_child(0) as Polygon2D
 	var stem := marker.get_child(1) as Line2D
 	if diamond != null:
-		if objective_overtime:
+		if objective_exposure_left > 0.0:
+			diamond.color = Color(1.0, 0.98, 0.7, 1.0)
+		elif objective_overtime:
 			diamond.color = Color(1.0, 0.44, 0.32, 0.96)
 		else:
 			diamond.color = Color(1.0, 0.84, 0.3, 0.95)
 	if stem != null:
-		if objective_overtime:
+		if objective_exposure_left > 0.0:
+			stem.default_color = Color(1.0, 0.94, 0.62, 0.98)
+		elif objective_overtime:
 			stem.default_color = Color(1.0, 0.62, 0.36, 0.92)
 		else:
 			stem.default_color = Color(1.0, 0.9, 0.46, 0.9)
@@ -968,6 +1252,11 @@ func _get_hud_state() -> Dictionary:
 		"objective_target_name": objective_target_name,
 		"objective_target_health": _get_priority_target_health(),
 		"objective_target_max_health": _get_priority_target_max_health(),
+		"objective_hunt_kill_progress": objective_hunt_kill_progress,
+		"objective_hunt_kill_goal": objective_hunt_kill_goal,
+		"objective_exposure_left": objective_exposure_left,
+		"objective_last_relocated_escort_count": objective_last_relocated_escort_count,
+		"objective_relocation_hint_left": objective_relocation_hint_left,
 		"active_player_mutators": _get_active_player_mutators_for_hud(),
 		"objective_target_flee_thresholds": objective_target_flee_thresholds,
 		"objective_target_next_flee_index": objective_target_next_flee_index,
@@ -1469,6 +1758,13 @@ func _begin_room(profile: Dictionary) -> void:
 	objective_target_enemy = null
 	objective_target_type = ""
 	objective_target_name = ""
+	objective_hunt_kill_progress = 0
+	objective_exposure_left = 0.0
+	objective_exposure_push_left = 0.0
+	objective_last_relocated_escort_count = 0
+	objective_relocation_hint_left = 0.0
+	_clear_priority_target_escort_dash_lines()
+	_clear_priority_target_exposure_vfx()
 	_play_room_music(false)
 	current_room_size = ENCOUNTER_CONTRACTS.profile_room_size(profile)
 	current_room_static_camera = ENCOUNTER_CONTRACTS.profile_static_camera(profile)
@@ -1600,6 +1896,11 @@ func _on_room_enemy_died() -> void:
 	active_room_enemy_count = maxi(0, active_room_enemy_count - 1)
 	if active_objective_kind == "survival":
 		objective_kills += 1
+	if active_objective_kind == "priority_target" and is_instance_valid(objective_target_enemy):
+		if objective_exposure_left <= 0.0:
+			objective_hunt_kill_progress += 1
+			if objective_hunt_kill_progress >= objective_hunt_kill_goal:
+				_trigger_priority_target_exposure()
 	if active_objective_kind == "priority_target" and objective_overtime and objective_spawn_timer > 0.2:
 		objective_spawn_timer = maxf(0.2, objective_spawn_timer - 0.08)
 	if is_instance_valid(player) and player.has_method("notify_enemy_killed"):

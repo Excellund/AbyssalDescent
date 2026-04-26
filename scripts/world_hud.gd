@@ -299,6 +299,11 @@ func _update_status_panel_text(state: Dictionary) -> void:
 	var objective_target_name := String(state.get("objective_target_name", "Target"))
 	var objective_target_health := int(state.get("objective_target_health", 0))
 	var objective_target_max_health := int(state.get("objective_target_max_health", 0))
+	var objective_hunt_kill_progress := int(state.get("objective_hunt_kill_progress", 0))
+	var objective_hunt_kill_goal := int(state.get("objective_hunt_kill_goal", 0))
+	var objective_exposure_left := float(state.get("objective_exposure_left", 0.0))
+	var objective_last_relocated_escort_count := int(state.get("objective_last_relocated_escort_count", 0))
+	var objective_relocation_hint_left := float(state.get("objective_relocation_hint_left", 0.0))
 
 	if run_cleared:
 		status_label.text = "[center][b]Depth %d[/b]\n[color=#A8FFB0]Run Clear[/color][/center]" % room_depth
@@ -328,6 +333,15 @@ func _update_status_panel_text(state: Dictionary) -> void:
 			status_label.text += "\n[center][color=#FFB36D]Objective: Eliminate %s  HP %d/%d[/color][/center]" % [objective_target_name, objective_target_health, objective_target_max_health]
 		else:
 			status_label.text += "\n[center][color=#FCD77A]Objective: Kill %s %ds  HP %d/%d[/color][/center]" % [objective_target_name, target_seconds, objective_target_health, objective_target_max_health]
+		var safe_goal := maxi(1, objective_hunt_kill_goal)
+		var safe_progress := mini(maxi(0, objective_hunt_kill_progress), safe_goal)
+		var remaining_kills := maxi(0, safe_goal - safe_progress)
+		if objective_exposure_left > 0.0:
+			status_label.text += "\n[center][color=#FFECA8]Signal Exposed: attack the mark[/color][/center]"
+		else:
+			status_label.text += "\n[center][color=#9FD6FF]Expose Signal: escort kills %d/%d  (%d left)[/color][/center]" % [safe_progress, safe_goal, remaining_kills]
+		if objective_relocation_hint_left > 0.0 and objective_last_relocated_escort_count > 0:
+			status_label.text += "\n[center][color=#A9E6FF]Breakaway carried %d nearby escorts[/color][/center]" % objective_last_relocated_escort_count
 
 
 	var status_text_h := maxf(34.0, status_label.get_content_height())
