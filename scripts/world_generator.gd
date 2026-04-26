@@ -162,6 +162,8 @@ var objective_signal_fx_duration: float = 0.0
 var objective_signal_fx_strength: float = 1.0
 var objective_signal_fx_phase: float = 0.0
 
+var encounter_intro_grace_active: bool = false
+
 var hud: Node
 var renderer: Node2D
 var music_system: Node
@@ -596,7 +598,9 @@ func _process(delta: float) -> void:
 	_keep_player_inside_current_room()
 	_keep_enemies_inside_current_room()
 	_keep_player_inside_camera_view()
-	_update_objective_state(delta)
+	var _grace_active := _update_encounter_intro_grace()
+	if not _grace_active:
+		_update_objective_state(delta)
 	_update_priority_target_marker(delta)
 	_try_use_door()
 	_update_encounter_state()
@@ -1260,6 +1264,7 @@ func _get_hud_state() -> Dictionary:
 		"active_player_mutators": _get_active_player_mutators_for_hud(),
 		"objective_target_flee_thresholds": objective_target_flee_thresholds,
 		"objective_target_next_flee_index": objective_target_next_flee_index,
+		"encounter_intro_grace_active": encounter_intro_grace_active,
 	}
 
 func _get_priority_target_health() -> int:
@@ -1741,6 +1746,7 @@ func _apply_endless_scaling_to_profile(profile: Dictionary) -> Dictionary:
 func _begin_room(profile: Dictionary) -> void:
 	if profile.is_empty():
 		return
+	encounter_intro_grace_active = false
 	if is_instance_valid(player) and player.has_method("tick_objective_mutators_for_encounter"):
 		player.call("tick_objective_mutators_for_encounter")
 	in_boss_room = false
@@ -1810,6 +1816,7 @@ func _begin_room(profile: Dictionary) -> void:
 		objective_max_enemies = 12 + int(floor(float(room_depth) * 0.6))
 		objective_overtime = false
 		_spawn_priority_target_enemy()
+	_start_encounter_intro_grace()
 
 func _enter_rest_site() -> void:
 	in_boss_room = false
@@ -1856,6 +1863,7 @@ func _begin_boss_room() -> void:
 	boss.set("arena_size", current_room_size)
 	if boss.has_signal("died"):
 		boss.died.connect(_on_room_enemy_died)
+	_start_encounter_intro_grace()
 
 func _begin_second_boss_room() -> void:
 	in_boss_room = false
@@ -1881,6 +1889,7 @@ func _begin_second_boss_room() -> void:
 	boss.set("arena_size", current_room_size)
 	if boss.has_signal("died"):
 		boss.died.connect(_on_room_enemy_died)
+	_start_encounter_intro_grace()
 
 func _spawn_profile_enemies(profile: Dictionary) -> int:
 	if not is_instance_valid(enemy_spawner):
@@ -2045,3 +2054,43 @@ func _set_combat_paused(paused: bool) -> void:
 		if enemy is Node:
 			(enemy as Node).set_physics_process(not paused)
 			(enemy as Node).set_process(not paused)
+
+func _start_encounter_intro_grace() -> void:
+	encounter_intro_grace_active = true
+	if is_instance_valid(player) and player is CharacterBody2D:
+		(player as CharacterBody2D).velocity = Vector2.ZERO
+	_set_enemy_targets_passive(true)
+	hud.show_banner("Survey the arena", "")
+
+func _update_encounter_intro_grace() -> bool:
+	if not encounter_intro_grace_active:
+		return false
+	if not is_instance_valid(player):
+		return false
+	var move_input := Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	var player_moving := move_input.length_squared() > 0.04 or (player as CharacterBody2D).velocity.length_squared() > 64.0
+	if player_moving:
+		encounter_intro_grace_active = false
+		_set_enemy_targets_passive(false)
+		hud.show_banner("Engage", "")
+		return false
+	return true
+
+func _set_enemy_targets_passive(passive: bool) -> void:
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is CharacterBody2D):
+			continue
+		var enemy := enemy_node as CharacterBody2D
+		if passive:
+			enemy.set("target", null)
+			if enemy is CharacterBody2D:
+				enemy.velocity = Vector2.ZERO
+		else:
+			enemy.set("target", player)
+			var cooldown_key := ""
+			if enemy.get("attack_cooldown_left") != null:
+				cooldown_key = "attack_cooldown_left"
+			if not cooldown_key.is_empty():
+				var current_cd := float(enemy.get(cooldown_key))
+				if current_cd < 0.32:
+					enemy.set(cooldown_key, 0.32)

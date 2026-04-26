@@ -304,6 +304,8 @@ func _update_status_panel_text(state: Dictionary) -> void:
 	var objective_exposure_left := float(state.get("objective_exposure_left", 0.0))
 	var objective_last_relocated_escort_count := int(state.get("objective_last_relocated_escort_count", 0))
 	var objective_relocation_hint_left := float(state.get("objective_relocation_hint_left", 0.0))
+	var encounter_intro_grace_left := float(state.get("encounter_intro_grace_left", 0.0))
+	var encounter_intro_grace_active := bool(state.get("encounter_intro_grace_active", false))
 
 	if run_cleared:
 		status_label.text = "[center][b]Depth %d[/b]\n[color=#A8FFB0]Run Clear[/color][/center]" % room_depth
@@ -320,6 +322,17 @@ func _update_status_panel_text(state: Dictionary) -> void:
 		status_label.text = "[center][b]Depth %d[/b][/center]" % room_depth
 	else:
 		status_label.text = "[center][b]Depth %d[/b]  [color=#A5B6C9]%d/%d[/color][/center]" % [room_depth, rooms_cleared, _encounter_count]
+
+	if encounter_intro_grace_active:
+		status_label.text += "\n[center][color=#C8F0FF]Move to engage[/color][/center]"
+		var grace_text_h := maxf(34.0, status_label.get_content_height())
+		if status_panel != null:
+			status_panel.custom_minimum_size.y = maxf(84.0, status_label.position.y + grace_text_h + 30.0)
+		if status_mutator_icon != null:
+			status_mutator_icon.visible = false
+		if status_mutator_label != null:
+			status_mutator_label.visible = false
+		return
 
 	if objective_kind == "survival":
 		if objective_overtime:
