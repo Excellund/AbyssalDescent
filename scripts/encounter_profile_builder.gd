@@ -155,8 +155,8 @@ func _get_hard_pool() -> Array[Dictionary]:
 	ambush["lurker_count"] = 4
 	ambush["lancer_count"] = 1
 	var gauntlet := _build_profile("Gauntlet", POOL_ROOM_SIZE, 2, 1, 1, 1)
-	gauntlet["lurker_count"] = 2
-	gauntlet["lancer_count"] = 1
+	gauntlet["lurker_count"] = 1
+	gauntlet["lancer_count"] = 0
 	return [crossfire, onslaught, fortress, blitz, suppression, vanguard, ambush, gauntlet]
 
 func _build_trial_profile(depth: int = 0) -> Dictionary:
@@ -363,21 +363,23 @@ func roll_route_options(depth: int) -> Array[Dictionary]:
 		hard_profile
 	)
 
-	var trial_profile: Dictionary = _build_trial_profile(depth)
-	var trial_mutator: Dictionary = ENCOUNTER_CONTRACTS.profile_enemy_mutator(trial_profile)
-	var trial_mutator_name := ENCOUNTER_CONTRACTS.mutator_name(trial_mutator)
-	if trial_mutator_name.is_empty():
-		trial_mutator_name = "Trial"
-	var trial_color: Color = ENCOUNTER_CONTRACTS.mutator_theme_color(trial_mutator, Color(1.0, 0.32, 0.22, 0.96))
-	trial_color.a = 0.96
-	var trial_option := ENCOUNTER_CONTRACTS.door_option(
-		"Trial - %s" % trial_mutator_name,
-		trial_color,
-		ENUMS.DoorKind.ENCOUNTER,
-		"trial",
-		ENUMS.RewardMode.ARCANA,
-		trial_profile
-	)
+	var trial_option: Dictionary = {}
+	if depth >= 3:
+		var trial_profile: Dictionary = _build_trial_profile(depth)
+		var trial_mutator: Dictionary = ENCOUNTER_CONTRACTS.profile_enemy_mutator(trial_profile)
+		var trial_mutator_name := ENCOUNTER_CONTRACTS.mutator_name(trial_mutator)
+		if trial_mutator_name.is_empty():
+			trial_mutator_name = "Trial"
+		var trial_color: Color = ENCOUNTER_CONTRACTS.mutator_theme_color(trial_mutator, Color(1.0, 0.32, 0.22, 0.96))
+		trial_color.a = 0.96
+		trial_option = ENCOUNTER_CONTRACTS.door_option(
+			"Trial - %s" % trial_mutator_name,
+			trial_color,
+			ENUMS.DoorKind.ENCOUNTER,
+			"trial",
+			ENUMS.RewardMode.ARCANA,
+			trial_profile
+		)
 
 	var objective_profile := build_objective_profile(depth)
 	var survival_option := ENCOUNTER_CONTRACTS.door_option(
@@ -398,7 +400,11 @@ func roll_route_options(depth: int) -> Array[Dictionary]:
 		{}
 	)
 
-	var options: Array[Dictionary] = [hard_option, trial_option, survival_option, rest_option]
+	var options: Array[Dictionary] = [hard_option]
+	if not trial_option.is_empty():
+		options.append(trial_option)
+	options.append(survival_option)
+	options.append(rest_option)
 	var first: int = rng.randi_range(0, options.size() - 1)
 	var chosen: Array[Dictionary] = [options[first]]
 

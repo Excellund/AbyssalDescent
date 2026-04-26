@@ -647,7 +647,7 @@ func _update_survival_objective_state(delta: float) -> void:
 		# Don't spawn more enemies, just wait for the room to clear
 		return
 
-	var pressure_floor := mini(18, 6 + int(floor(float(room_depth) * 0.6)) + objective_spawn_batch)
+	var pressure_floor := mini(18, 5 + int(floor(float(room_depth) * 0.45)) + objective_spawn_batch)
 	if objective_max_enemies > 0:
 		pressure_floor = mini(pressure_floor, objective_max_enemies)
 	if active_room_enemy_count < pressure_floor and (objective_time_left > 0.0 or objective_overtime):

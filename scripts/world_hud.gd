@@ -304,7 +304,7 @@ func _update_status_panel_text(state: Dictionary) -> void:
 	var objective_exposure_left := float(state.get("objective_exposure_left", 0.0))
 	var objective_last_relocated_escort_count := int(state.get("objective_last_relocated_escort_count", 0))
 	var objective_relocation_hint_left := float(state.get("objective_relocation_hint_left", 0.0))
-	var encounter_intro_grace_left := float(state.get("encounter_intro_grace_left", 0.0))
+	var _encounter_intro_grace_left := float(state.get("encounter_intro_grace_left", 0.0))
 	var encounter_intro_grace_active := bool(state.get("encounter_intro_grace_active", false))
 
 	if run_cleared:
