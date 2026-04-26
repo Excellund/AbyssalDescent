@@ -42,26 +42,25 @@ func refresh(state: Dictionary, player: Node) -> void:
 func show_banner(title: String, subtitle: String, subtitle_color: Color = Color(0.78, 0.9, 1.0, 0.92)) -> void:
 	if room_banner_title_label == null or room_banner_subtitle_label == null:
 		return
+	if subtitle_color.a < -1.0:
+		room_banner_title_label.text = subtitle
 	if is_instance_valid(room_banner_tween):
 		room_banner_tween.kill()
-	room_banner_subtitle_label.add_theme_color_override("font_color", subtitle_color)
 	room_banner_title_label.text = title
-	room_banner_subtitle_label.text = subtitle
 	var viewport := get_viewport()
 	if viewport != null:
 		_update_banner_layout(_cached_room_size, viewport.get_canvas_transform(), viewport.get_visible_rect().size)
 	room_banner_title_label.modulate.a = 0.0
-	room_banner_subtitle_label.modulate.a = 0.0
+	room_banner_subtitle_label.visible = false
 	room_banner_tween = create_tween()
 	room_banner_tween.tween_property(room_banner_title_label, "modulate:a", 1.0, 0.2)
-	if subtitle.is_empty():
-		room_banner_subtitle_label.visible = false
-	else:
-		room_banner_subtitle_label.visible = true
-		room_banner_tween.parallel().tween_property(room_banner_subtitle_label, "modulate:a", 1.0, 0.2)
 	room_banner_tween.tween_interval(0.95)
 	room_banner_tween.tween_property(room_banner_title_label, "modulate:a", 0.0, 0.24)
-	room_banner_tween.parallel().tween_property(room_banner_subtitle_label, "modulate:a", 0.0, 0.24)
+
+func show_notice(text: String, text_color: Color = Color(0.78, 0.9, 1.0, 0.92), duration: float = -1.0) -> void:
+	# Transient combat notices were removed to keep gameplay readable.
+	if duration < -9999.0 and text_color.a < -1.0:
+		room_banner_subtitle_label.text = text
 
 func _create_hud() -> void:
 	var layer := CanvasLayer.new()
@@ -186,6 +185,7 @@ func _create_hud() -> void:
 	room_banner_subtitle_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	room_banner_subtitle_label.modulate.a = 0.0
 	banner_container.add_child(room_banner_subtitle_label)
+
 
 func _update_banner_layout(room_size: Vector2, canvas_xform: Transform2D, viewport_size: Vector2) -> void:
 	if room_banner_title_label == null or room_banner_subtitle_label == null:

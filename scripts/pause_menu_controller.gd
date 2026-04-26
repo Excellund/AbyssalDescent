@@ -1,5 +1,7 @@
 extends Node
 
+const GLOSSARY_DATA := preload("res://scripts/shared/glossary_data.gd")
+
 signal pause_opened
 signal pause_closed
 signal back_to_main_menu_requested
@@ -11,6 +13,7 @@ var apply_music_volume_callback: Callable
 var pause_menu_layer: CanvasLayer
 var pause_menu_panel: Panel
 var pause_options_panel: Panel
+var pause_glossary_panel: Panel
 var pause_master_slider: HSlider
 var pause_music_slider: HSlider
 var pause_master_value_label: Label
@@ -28,12 +31,17 @@ func is_open() -> bool:
 func is_options_open() -> bool:
 	return pause_options_panel != null and pause_options_panel.visible
 
+func is_glossary_open() -> bool:
+	return pause_glossary_panel != null and pause_glossary_panel.visible
+
 func open() -> void:
 	pause_menu_visible = true
 	if pause_menu_layer != null:
 		pause_menu_layer.visible = true
 	if pause_options_panel != null:
 		pause_options_panel.visible = false
+	if pause_glossary_panel != null:
+		pause_glossary_panel.visible = false
 	_sync_pause_options_from_context()
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	pause_opened.emit()
@@ -47,6 +55,12 @@ func close() -> void:
 func close_options() -> void:
 	if pause_options_panel != null:
 		pause_options_panel.visible = false
+	if pause_glossary_panel != null:
+		pause_glossary_panel.visible = false
+
+func close_glossary() -> void:
+	if pause_glossary_panel != null:
+		pause_glossary_panel.visible = false
 
 func _create_pause_menu_ui() -> void:
 	pause_menu_layer = CanvasLayer.new()
@@ -60,7 +74,7 @@ func _create_pause_menu_ui() -> void:
 	pause_menu_layer.add_child(backdrop)
 
 	pause_menu_panel = Panel.new()
-	pause_menu_panel.custom_minimum_size = Vector2(440.0, 340.0)
+	pause_menu_panel.custom_minimum_size = Vector2(440.0, 420.0)
 	pause_menu_panel.position = Vector2(740.0, 260.0)
 	var panel_style := StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.06, 0.09, 0.13, 0.94)
@@ -95,10 +109,21 @@ func _create_pause_menu_ui() -> void:
 	options_button.pressed.connect(func() -> void:
 		if pause_options_panel != null:
 			pause_options_panel.visible = true
+		if pause_glossary_panel != null:
+			pause_glossary_panel.visible = false
 	)
 	pause_menu_panel.add_child(options_button)
 
-	var exit_button := _make_pause_button("Exit Game", Vector2(80.0, 268.0))
+	var glossary_button := _make_pause_button("Glossary", Vector2(80.0, 268.0))
+	glossary_button.pressed.connect(func() -> void:
+		if pause_glossary_panel != null:
+			pause_glossary_panel.visible = true
+		if pause_options_panel != null:
+			pause_options_panel.visible = false
+	)
+	pause_menu_panel.add_child(glossary_button)
+
+	var exit_button := _make_pause_button("Exit Game", Vector2(80.0, 328.0))
 	exit_button.pressed.connect(func() -> void:
 		exit_game_requested.emit()
 	)
@@ -107,6 +132,10 @@ func _create_pause_menu_ui() -> void:
 	pause_options_panel = _build_pause_options_panel()
 	pause_options_panel.visible = false
 	pause_menu_layer.add_child(pause_options_panel)
+
+	pause_glossary_panel = _build_pause_glossary_panel()
+	pause_glossary_panel.visible = false
+	pause_menu_layer.add_child(pause_glossary_panel)
 
 	pause_menu_layer.visible = false
 
@@ -190,6 +219,51 @@ func _build_pause_options_panel() -> Panel:
 	back_button.pressed.connect(func() -> void:
 		if pause_options_panel != null:
 			pause_options_panel.visible = false
+	)
+	panel.add_child(back_button)
+
+	return panel
+
+func _build_pause_glossary_panel() -> Panel:
+	var panel := Panel.new()
+	panel.custom_minimum_size = Vector2(760.0, 520.0)
+	panel.position = Vector2(580.0, 160.0)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.04, 0.06, 0.1, 0.96)
+	style.border_color = Color(0.44, 0.7, 0.96, 0.74)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(12)
+	panel.add_theme_stylebox_override("panel", style)
+
+	var title := Label.new()
+	title.text = "Glossary"
+	title.position = Vector2(0.0, 16.0)
+	title.custom_minimum_size = Vector2(760.0, 32.0)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 30)
+	title.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 0.98))
+	panel.add_child(title)
+
+	var body := RichTextLabel.new()
+	body.position = Vector2(28.0, 62.0)
+	body.custom_minimum_size = Vector2(704.0, 396.0)
+	body.bbcode_enabled = true
+	body.fit_content = false
+	body.scroll_active = true
+	body.selection_enabled = false
+	body.add_theme_font_size_override("normal_font_size", 16)
+	body.add_theme_color_override("default_color", Color(0.86, 0.94, 1.0, 0.96))
+	body.text = GLOSSARY_DATA.glossary_bbcode()
+	panel.add_child(body)
+
+	var back_button := Button.new()
+	back_button.text = "Back"
+	back_button.position = Vector2(300.0, 468.0)
+	back_button.custom_minimum_size = Vector2(160.0, 40.0)
+	back_button.add_theme_font_size_override("font_size", 18)
+	back_button.pressed.connect(func() -> void:
+		if pause_glossary_panel != null:
+			pause_glossary_panel.visible = false
 	)
 	panel.add_child(back_button)
 

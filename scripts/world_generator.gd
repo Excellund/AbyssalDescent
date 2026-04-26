@@ -467,6 +467,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		pause_menu_controller.call("close_options")
 		get_viewport().set_input_as_handled()
 		return
+	if bool(pause_menu_controller.call("is_open")) and bool(pause_menu_controller.call("is_glossary_open")):
+		pause_menu_controller.call("close_glossary")
+		get_viewport().set_input_as_handled()
+		return
 	if bool(pause_menu_controller.call("is_open")):
 		pause_menu_controller.call("close")
 		get_viewport().set_input_as_handled()
@@ -526,8 +530,7 @@ func _update_survival_objective_state(delta: float) -> void:
 		objective_spawn_interval = maxf(0.45, objective_spawn_interval * 0.65)
 		objective_spawn_batch = mini(7, objective_spawn_batch + 1)
 		objective_spawn_timer = 0.1
-		var kills_left := maxi(0, objective_kill_target - objective_kills)
-		hud.show_banner("Overtime", "%d kills remaining" % kills_left)
+		hud.show_banner("Overtime", "")
 
 func _update_priority_target_objective_state(delta: float) -> void:
 	if choosing_next_room or run_cleared:
@@ -555,7 +558,7 @@ func _update_priority_target_objective_state(delta: float) -> void:
 		objective_spawn_batch = mini(6, objective_spawn_batch + 1)
 		objective_spawn_timer = 0.15
 		_enrage_priority_target()
-		hud.show_banner("Signal Escalating", "Escorts intensify and the mark speeds up")
+		hud.show_banner("Signal Escalating", "")
 
 func _spawn_survival_wave() -> void:
 	if not is_instance_valid(enemy_spawner):
@@ -598,7 +601,7 @@ func _spawn_priority_target_wave() -> void:
 		var enemy_type := roster[rng.randi_range(0, roster.size() - 1)]
 		active_room_enemy_count += int(enemy_spawner.call("spawn_enemy_type", enemy_type, 1))
 
-func _complete_current_objective(title: String, subtitle: String) -> void:
+func _complete_current_objective(title: String, _subtitle: String) -> void:
 	active_objective_kind = ""
 	objective_spawn_timer = 0.0
 	objective_time_left = 0.0
@@ -610,7 +613,7 @@ func _complete_current_objective(title: String, subtitle: String) -> void:
 	_clear_priority_target_dash_line()
 	_clear_all_enemies()
 	active_room_enemy_count = 0
-	hud.show_banner(title, subtitle)
+	hud.show_banner(title, "")
 	_on_room_cleared()
 
 func _spawn_priority_target_enemy() -> void:
@@ -665,7 +668,7 @@ func _spawn_priority_target_opening_escorts() -> void:
 		escort.global_position = _clamp_position_to_current_room(anchor + Vector2.RIGHT.rotated(angle) * radius, 44.0)
 		active_room_enemy_count += 1
 	objective_spawn_timer = maxf(objective_spawn_timer, objective_spawn_interval)
-	hud.show_banner("Mark Spotted", "Cut through the escort and drop the signal")
+	hud.show_banner("Mark Spotted", "")
 
 func _check_priority_target_relocation_threshold() -> void:
 	if not is_instance_valid(objective_target_enemy):
@@ -685,7 +688,7 @@ func _check_priority_target_relocation_threshold() -> void:
 		objective_target_enemy.call("set_health_threshold_marker_progress", objective_target_next_flee_index)
 	_relocate_priority_target(threshold_ratio)
 
-func _relocate_priority_target(threshold_ratio: float) -> void:
+func _relocate_priority_target(_threshold_ratio: float) -> void:
 	if not is_instance_valid(objective_target_enemy):
 		return
 	var old_position := objective_target_enemy.global_position
@@ -696,8 +699,7 @@ func _relocate_priority_target(threshold_ratio: float) -> void:
 	objective_target_enemy.velocity = Vector2.ZERO
 	_show_priority_target_dash_line(old_position, new_position)
 	_spawn_priority_target_relocation_escorts(new_position)
-	var threshold_percent := int(round(threshold_ratio * 100.0))
-	hud.show_banner("Signal Breakaway", "%d%% threshold hit. The mark dashes away." % threshold_percent)
+	hud.show_banner("Signal Breakaway", "")
 
 func _pick_priority_target_relocation_position(old_position: Vector2) -> Vector2:
 	if not is_instance_valid(enemy_spawner):
@@ -844,6 +846,7 @@ func _on_priority_target_died() -> void:
 func _get_hud_state() -> Dictionary:
 	return {
 		"room_size": current_room_size,
+		"current_room_label": current_room_label,
 		"rooms_cleared": rooms_cleared,
 		"room_depth": room_depth,
 		"run_cleared": run_cleared,
@@ -943,7 +946,7 @@ func _on_room_cleared() -> void:
 		room_depth += 1
 		boss_unlocked = false
 		pending_room_reward = ENUMS.RewardMode.NONE
-		hud.show_banner("Boss Defeated", "Endless continues")
+		hud.show_banner("Boss Defeated", "")
 		_spawn_door_options()
 		return
 	if run_cleared:
@@ -1139,16 +1142,16 @@ func _begin_room(profile: Dictionary) -> void:
 	current_room_label = ENCOUNTER_CONTRACTS.profile_label(profile)
 	current_room_enemy_mutator = ENCOUNTER_CONTRACTS.profile_enemy_mutator(profile)
 	var mutator_name := ENCOUNTER_CONTRACTS.mutator_name(current_room_enemy_mutator)
-	var room_subtitle := ""
+	var _room_subtitle := ""
 	var sub_color := Color(0.78, 0.9, 1.0, 0.92)
 	if not mutator_name.is_empty():
 		var banner_suffix := ENCOUNTER_CONTRACTS.mutator_banner_suffix(current_room_enemy_mutator)
-		room_subtitle = mutator_name
+		_room_subtitle = mutator_name
 		if not banner_suffix.is_empty():
-			room_subtitle += "  -  " + banner_suffix
+			_room_subtitle += "  -  " + banner_suffix
 		sub_color = ENCOUNTER_CONTRACTS.mutator_theme_color(current_room_enemy_mutator, sub_color)
 		sub_color.a = 0.92
-	hud.show_banner(current_room_label, room_subtitle, sub_color)
+	hud.show_banner(current_room_label, "", sub_color)
 	if is_instance_valid(enemy_spawner):
 		enemy_spawner.call("configure_room", current_room_size, spawn_padding, spawn_safe_radius, current_room_enemy_mutator)
 	_apply_camera_bounds_for_room(current_room_size)
@@ -1164,7 +1167,6 @@ func _begin_room(profile: Dictionary) -> void:
 		objective_kill_target = int(ceil(float(raw_kill_target) / 5.0)) * 5
 		objective_kills = 0
 		objective_overtime = false
-		hud.show_banner(current_room_label, "Survive %.0fs and kill %d" % [objective_time_left, objective_kill_target], sub_color)
 	elif active_objective_kind == "priority_target":
 		objective_target_type = ENCOUNTER_CONTRACTS.profile_objective_target_type(profile)
 		if objective_target_type.is_empty():
@@ -1177,13 +1179,12 @@ func _begin_room(profile: Dictionary) -> void:
 		objective_max_enemies = 12 + int(floor(float(room_depth) * 0.6))
 		objective_overtime = false
 		_spawn_priority_target_enemy()
-		hud.show_banner(current_room_label, "The mark starts guarded. Timer expiry escalates escorts.", Color(1.0, 0.84, 0.3, 0.95))
 
 func _enter_rest_site() -> void:
 	in_boss_room = false
 	_play_room_music(false)
 	current_room_label = "Rest Site"
-	hud.show_banner("Rest Site", "Recovering...")
+	hud.show_banner("Rest Site", "")
 	current_room_static_camera = true
 	_advance_room_progress()
 	if is_instance_valid(player) and player.has_method("heal"):
@@ -1206,7 +1207,7 @@ func _begin_boss_room() -> void:
 	current_room_size = Vector2(1260.0, 900.0)
 	current_room_static_camera = false
 	current_room_label = "Boss Chamber: The Warden"
-	hud.show_banner("Boss Chamber", "The Warden")
+	hud.show_banner("Boss Chamber", "")
 	_apply_camera_bounds_for_room(current_room_size)
 	active_room_enemy_count = 1
 	var boss := CharacterBody2D.new()
