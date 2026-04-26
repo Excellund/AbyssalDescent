@@ -463,6 +463,8 @@ func _apply_debug_mutator_override(profile: Dictionary) -> Dictionary:
 	var mutator: Dictionary = encounter_profile_builder.call("build_debug_mutator", mutator_key)
 	if mutator.is_empty():
 		return profile
+	if encounter_profile_builder.has_method("apply_mutator_variant_to_profile"):
+		return encounter_profile_builder.call("apply_mutator_variant_to_profile", profile, mutator, room_depth) as Dictionary
 	var modified := profile.duplicate(true)
 	ENCOUNTER_CONTRACTS.profile_set_enemy_mutator(modified, mutator)
 	return modified

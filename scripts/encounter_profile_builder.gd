@@ -160,28 +160,136 @@ func _get_hard_pool() -> Array[Dictionary]:
 	return [crossfire, onslaught, fortress, blitz, suppression, vanguard, ambush, gauntlet]
 
 func _build_trial_profile(depth: int = 0) -> Dictionary:
-	var hard_pool := _get_hard_pool()
-	var base: Dictionary = hard_pool[rng.randi_range(0, hard_pool.size() - 1)]
 	var mutator: Dictionary = roll_hard_enemy_mutator()
+	var base: Dictionary = _pick_trial_base_profile(mutator)
 	var depth_pressure := maxi(0, depth - 2)
 	var chasers := ENCOUNTER_CONTRACTS.profile_chaser_count(base) + hard_room_enemy_bonus + int(floor(float(depth_pressure) * 0.75))
 	var chargers := ENCOUNTER_CONTRACTS.profile_charger_count(base) + 2 + int(floor(float(depth_pressure) / 4.0))
 	var archers: int = maxi(ENCOUNTER_CONTRACTS.profile_archer_count(base), 1) + int(floor(float(depth_pressure) / 5.0))
 	var shielders := ENCOUNTER_CONTRACTS.profile_shielder_count(base) + int(floor(float(depth_pressure) / 4.0))
+	var specialist_counts := _trial_specialist_counts(mutator, depth, chasers, chargers, archers, shielders)
+	chasers = int(specialist_counts.get("chasers", chasers))
+	chargers = int(specialist_counts.get("chargers", chargers))
+	archers = int(specialist_counts.get("archers", archers))
+	shielders = int(specialist_counts.get("shielders", shielders))
 	var mutator_name := ENCOUNTER_CONTRACTS.mutator_name(mutator)
 	if mutator_name.is_empty():
 		mutator_name = "Frenzy"
 	var profile := _build_profile("Trial %s" % mutator_name, TRIAL_ROOM_SIZE, chasers, chargers, archers, shielders, mutator)
-	# Lurkers appear at depth ≥ 5, ramping up gradually so they feel earned.
-	if depth >= 5:
-		profile["lurker_count"] = int(floor(float(maxi(0, depth - 4)) * 0.6))
-	# Rams appear at depth ≥ 6, slightly behind lurkers in the difficulty ramp.
-	if depth >= 6:
-		profile["ram_count"] = int(floor(float(maxi(0, depth - 5)) * 0.4))
-	# Lancers appear at depth ≥ 7 — one at a time, as a spatial pressure layer.
-	if depth >= 7:
-		profile["lancer_count"] = 1
+	var specialist_enemies := _trial_specialist_enemies(mutator, depth)
+	if specialist_enemies.has("lurker_count"):
+		profile["lurker_count"] = int(specialist_enemies.get("lurker_count", 0))
+	if specialist_enemies.has("ram_count"):
+		profile["ram_count"] = int(specialist_enemies.get("ram_count", 0))
+	if specialist_enemies.has("lancer_count"):
+		profile["lancer_count"] = int(specialist_enemies.get("lancer_count", 0))
 	return profile
+
+func apply_mutator_variant_to_profile(profile: Dictionary, mutator: Dictionary, depth: int = 1) -> Dictionary:
+	if profile.is_empty() or mutator.is_empty():
+		return profile
+	var modified := profile.duplicate(true)
+	ENCOUNTER_CONTRACTS.profile_set_enemy_mutator(modified, mutator)
+	var chasers := ENCOUNTER_CONTRACTS.profile_chaser_count(modified)
+	var chargers := ENCOUNTER_CONTRACTS.profile_charger_count(modified)
+	var archers := ENCOUNTER_CONTRACTS.profile_archer_count(modified)
+	var shielders := ENCOUNTER_CONTRACTS.profile_shielder_count(modified)
+	var specialist_counts := _trial_specialist_counts(mutator, depth, chasers, chargers, archers, shielders)
+	ENCOUNTER_CONTRACTS.profile_set_counts(
+		modified,
+		int(specialist_counts.get("chasers", chasers)),
+		int(specialist_counts.get("chargers", chargers)),
+		int(specialist_counts.get("archers", archers)),
+		int(specialist_counts.get("shielders", shielders))
+	)
+	var specialist_enemies := _trial_specialist_enemies(mutator, depth)
+	modified["lurker_count"] = int(specialist_enemies.get("lurker_count", 0))
+	modified["ram_count"] = int(specialist_enemies.get("ram_count", 0))
+	modified["lancer_count"] = int(specialist_enemies.get("lancer_count", 0))
+	var label := ENCOUNTER_CONTRACTS.profile_label(modified)
+	var mutator_name := ENCOUNTER_CONTRACTS.mutator_name(mutator)
+	if not mutator_name.is_empty() and label.begins_with("Trial"):
+		modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_LABEL] = "Trial %s" % mutator_name
+	return modified
+
+func _pick_trial_base_profile(mutator: Dictionary) -> Dictionary:
+	var hard_pool := _get_hard_pool()
+	var icon := ENCOUNTER_CONTRACTS.mutator_icon_shape_id(mutator)
+	if icon.is_empty():
+		return hard_pool[rng.randi_range(0, hard_pool.size() - 1)]
+	match icon:
+		"iron_volley":
+			return _build_profile("Fortress", POOL_ROOM_SIZE, 2, 0, 3, 3)
+		"blood_rush":
+			return _build_profile("Onslaught", POOL_ROOM_SIZE, 7, 3, 0, 0)
+		"flashpoint":
+			return _build_profile("Crossfire", POOL_ROOM_SIZE, 2, 2, 4, 0)
+		"siegebreak":
+			return _build_profile("Vanguard", POOL_ROOM_SIZE, 3, 3, 0, 3)
+		_:
+			return hard_pool[rng.randi_range(0, hard_pool.size() - 1)]
+
+func _trial_specialist_counts(mutator: Dictionary, depth: int, chasers: int, chargers: int, archers: int, shielders: int) -> Dictionary:
+	var icon := ENCOUNTER_CONTRACTS.mutator_icon_shape_id(mutator)
+	match icon:
+		"iron_volley":
+			return {
+				"chasers": maxi(3, chasers),
+				"chargers": mini(chargers, 1),
+				"archers": maxi(6, archers + 2 + int(floor(float(depth) * 0.25))),
+				"shielders": maxi(4, shielders + 1 + int(floor(float(depth) * 0.15)))
+			}
+		"blood_rush":
+			return {
+				"chasers": maxi(chasers + 2, 7 + int(floor(float(depth) * 0.3))),
+				"chargers": maxi(chargers + 2, 4 + int(floor(float(depth) * 0.2))),
+				"archers": mini(archers, 1),
+				"shielders": mini(shielders, 1)
+			}
+		"flashpoint":
+			return {
+				"chasers": maxi(3, chasers - 1),
+				"chargers": maxi(chargers + 1, 3 + int(floor(float(depth) * 0.2))),
+				"archers": maxi(4, archers + 1 + int(floor(float(depth) * 0.2))),
+				"shielders": maxi(1, shielders)
+			}
+		"siegebreak":
+			return {
+				"chasers": maxi(3, chasers),
+				"chargers": maxi(chargers + 1, 4 + int(floor(float(depth) * 0.2))),
+				"archers": mini(archers, 1),
+				"shielders": maxi(shielders + 1, 4 + int(floor(float(depth) * 0.15)))
+			}
+		_:
+			return {
+				"chasers": chasers,
+				"chargers": chargers,
+				"archers": archers,
+				"shielders": shielders
+			}
+
+func _trial_specialist_enemies(mutator: Dictionary, depth: int) -> Dictionary:
+	var icon := ENCOUNTER_CONTRACTS.mutator_icon_shape_id(mutator)
+	var lurker_count := int(floor(float(maxi(0, depth - 4)) * 0.6)) if depth >= 5 else 0
+	var ram_count := int(floor(float(maxi(0, depth - 5)) * 0.4)) if depth >= 6 else 0
+	var lancer_count := 1 if depth >= 7 else 0
+	match icon:
+		"iron_volley":
+			lurker_count = 0
+			ram_count = 0
+			lancer_count = 0
+		"blood_rush":
+			lurker_count += 1 if depth >= 5 else 0
+			ram_count += 1 if depth >= 6 else 0
+		"flashpoint":
+			lancer_count += 1 if depth >= 7 else 0
+		"siegebreak":
+			ram_count += 1 if depth >= 6 else 0
+	return {
+		"lurker_count": maxi(0, lurker_count),
+		"ram_count": maxi(0, ram_count),
+		"lancer_count": maxi(0, lancer_count)
+	}
 
 func _build_survival_profile(depth: int) -> Dictionary:
 	var hard_pool := _get_hard_pool()
