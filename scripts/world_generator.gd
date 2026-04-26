@@ -567,6 +567,16 @@ func _update_survival_objective_state(delta: float) -> void:
 	if objective_overtime and quota_met:
 		_complete_current_objective("Objective Complete", "Kill quota reached")
 		return
+	
+	# Stop spawning enemies once quota is met
+	if quota_met:
+		# Check if all enemies are dead to immediately end the fight
+		if active_room_enemy_count <= 0:
+			_complete_current_objective("Objective Complete", "Kill quota reached")
+			return
+		# Don't spawn more enemies, just wait for the room to clear
+		return
+	
 	var pressure_floor := mini(18, 6 + int(floor(float(room_depth) * 0.6)) + objective_spawn_batch)
 	if objective_max_enemies > 0:
 		pressure_floor = mini(pressure_floor, objective_max_enemies)
