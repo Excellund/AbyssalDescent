@@ -11,5 +11,6 @@ normal_room_music = ExtResource("2_rarhs")
 boss_room_music = ExtResource("3_vcsgt")
 music_volume_db = -50.0
 debug_start_power_ids = PackedStringArray("razor_wind", "execution_edge")
+debug_start_encounter = 11
 
 [node name="Player" parent="." unique_id=1831438957 instance=ExtResource("1_elqb8")]

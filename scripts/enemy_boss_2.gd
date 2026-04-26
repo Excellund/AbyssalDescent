@@ -18,7 +18,7 @@ const ATTACK_POLAR_SHIFT := 4
 @export var acceleration: float = 980.0
 @export var deceleration: float = 1380.0
 @export var preferred_distance: float = 260.0
-@export var action_cooldown: float = 0.6
+@export var action_cooldown: float = 0.52
 
 @export var prism_windup: float = 0.95
 @export var prism_radius: float = 300.0
@@ -59,8 +59,12 @@ const ATTACK_POLAR_SHIFT := 4
 @export var polar_shift_counter_force_mult: float = 0.56
 @export var polar_shift_anchor_radius: float = 92.0
 @export var polar_shift_anchor_force_mult: float = 0.0
+@export var polar_shift_pull_inner_radius: float = 160.0
+@export var polar_shift_pull_inner_damage: int = 28
+@export var polar_shift_pull_inner_delay: float = 0.32
+@export var polar_shift_pull_afterglow_duration: float = 0.42
 
-@export var recover_time: float = 0.48
+@export var recover_time: float = 0.42
 @export var arena_size: Vector2 = Vector2(1360.0, 960.0)
 @export var edge_soft_margin: float = 180.0
 @export var edge_hard_margin: float = 112.0
@@ -93,6 +97,10 @@ var attack_afterglow_duration: float = 0.56
 var impact_burst_time_left: float = 0.0
 var impact_burst_duration: float = 0.2
 var last_attack_for_fx: int = ATTACK_PRISM
+var _polar_shift_pull_damage_pending: bool = false
+var _polar_shift_pull_damage_delay_left: float = 0.0
+var _polar_shift_pull_damage_just_started: bool = false
+var _polar_shift_pull_afterglow_left: float = 0.0
 
 func _ready() -> void:
 	max_health = boss_max_health
@@ -126,8 +134,59 @@ func _process_behavior(delta: float) -> void:
 
 	attack_afterglow_time_left = maxf(0.0, attack_afterglow_time_left - delta)
 	impact_burst_time_left = maxf(0.0, impact_burst_time_left - delta)
+	_polar_shift_pull_afterglow_left = maxf(0.0, _polar_shift_pull_afterglow_left - delta)
+	_process_polar_shift_pull_punish(delta)
 
 	queue_redraw()
+
+func _process_polar_shift_pull_punish(delta: float) -> void:
+	if not _polar_shift_pull_damage_pending:
+		return
+	if _polar_shift_pull_damage_just_started:
+		_polar_shift_pull_damage_just_started = false
+		return
+	_polar_shift_pull_damage_delay_left = maxf(0.0, _polar_shift_pull_damage_delay_left - delta)
+	if _polar_shift_pull_damage_delay_left > 0.0:
+		return
+	_polar_shift_pull_damage_pending = false
+	_polar_shift_pull_afterglow_left = polar_shift_pull_afterglow_duration
+	if not DAMAGEABLE.can_take_damage(target):
+		return
+	if global_position.distance_to(target.global_position) <= polar_shift_pull_inner_radius:
+		DAMAGEABLE.apply_damage(target, polar_shift_pull_inner_damage)
+
+func _draw_polar_shift_pull_delayed_indicator() -> void:
+	if not _polar_shift_pull_damage_pending and _polar_shift_pull_afterglow_left <= 0.0:
+		return
+	var delay_total := maxf(0.001, polar_shift_pull_inner_delay)
+	var radius := polar_shift_pull_inner_radius
+	if _polar_shift_pull_damage_pending:
+		var remaining_t := clampf(_polar_shift_pull_damage_delay_left / delay_total, 0.0, 1.0)
+		var progress := 1.0 - remaining_t
+		var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.022)
+		var base_alpha := 0.1 + progress * 0.18 + pulse * 0.05
+		var ring_alpha := 0.32 + progress * 0.58
+
+		# Persistent danger area while the delayed hit is armed.
+		draw_circle(Vector2.ZERO, radius, Color(1.0, 0.34, 0.2, base_alpha))
+		draw_arc(Vector2.ZERO, radius, 0.0, TAU, 72, Color(1.0, 0.5, 0.3, ring_alpha), 3.2)
+
+		# Countdown sweep that fills toward the damage moment.
+		var sweep_start := -PI * 0.5
+		var sweep_end := sweep_start + TAU * progress
+		draw_arc(Vector2.ZERO, radius + 7.0, sweep_start, sweep_end, 56, Color(1.0, 0.92, 0.64, 0.78), 4.0)
+
+		# Clock hand marker for quick read of time-to-hit.
+		var marker := Vector2.RIGHT.rotated(sweep_end) * (radius + 7.0)
+		draw_circle(marker, 3.2, Color(1.0, 0.95, 0.76, 0.9))
+		return
+
+	# Afterglow lingers briefly after the hit resolves.
+	var glow_t := clampf(_polar_shift_pull_afterglow_left / maxf(0.001, polar_shift_pull_afterglow_duration), 0.0, 1.0)
+	var expanded_radius := radius + (1.0 - glow_t) * 16.0
+	draw_circle(Vector2.ZERO, radius, Color(1.0, 0.36, 0.22, 0.08 * glow_t))
+	draw_arc(Vector2.ZERO, expanded_radius, 0.0, TAU, 72, Color(1.0, 0.58, 0.36, 0.62 * glow_t), 3.4)
+	draw_arc(Vector2.ZERO, expanded_radius + 6.0, 0.0, TAU, 72, Color(1.0, 0.9, 0.7, 0.26 * glow_t), 1.8)
 
 func _process_stalk_state(delta: float) -> void:
 	var to_target := target.global_position - global_position
@@ -259,6 +318,15 @@ func _start_next_attack(distance_to_target: float, wall_pressure: float = 0.0) -
 
 	boss_state = STATE_WINDUP
 	state_time_left = _get_windup_time(active_attack)
+	if active_attack == ATTACK_POLAR_SHIFT and _polar_shift_is_pull:
+		_polar_shift_pull_damage_pending = true
+		_polar_shift_pull_damage_delay_left = state_time_left + polar_shift_pull_inner_delay
+		_polar_shift_pull_damage_just_started = true
+		_polar_shift_pull_afterglow_left = 0.0
+	else:
+		_polar_shift_pull_damage_pending = false
+		_polar_shift_pull_damage_delay_left = 0.0
+		_polar_shift_pull_damage_just_started = false
 	telegraph_alpha = 0.0
 	_echo_dash_hits.clear()
 	_echo_dash_remaining = 0
@@ -700,6 +768,7 @@ func _draw() -> void:
 	_draw_slow_indicator(body_radius)
 	_draw_attack_afterglow(facing)
 	_draw_attack_impact_burst(facing)
+	_draw_polar_shift_pull_delayed_indicator()
 
 	_draw_orbital_satellites()
 
