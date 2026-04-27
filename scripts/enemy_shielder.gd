@@ -31,6 +31,14 @@ const SLAM_STATE_RECOVER := 3
 @export var body_size_scale: float = 1.22
 @export var shield_length: float = 16.0
 @export var shield_width: float = 24.0
+@export var body_check_damage: int = 8
+@export var body_check_cooldown: float = 0.6
+@export var body_check_shove_force: float = 450.0
+@export var body_check_overlap_padding: float = 4.0
+@export var body_check_trigger_margin: float = 5.0
+@export var body_check_post_dash_immunity: float = 0.15
+@export var body_check_min_approach_speed: float = 0.0
+@export var body_check_anim_duration: float = 0.35
 
 var attack_cooldown_left: float = 0.0
 var slam_cooldown_left: float = 0.0
@@ -41,6 +49,10 @@ var slam_hit_applied: bool = false
 var shield_facing: Vector2 = Vector2.LEFT
 var shield_target_facing: Vector2 = Vector2.LEFT
 var shield_reaim_left: float = 0.0
+var body_check_cooldown_left: float = 0.0
+var body_check_anim_time_left: float = 0.0
+var body_check_dash_immunity_left: float = 0.0
+var player_was_dashing_last_frame: bool = false
 
 func _ready() -> void:
 	max_health = shield_max_health
@@ -60,6 +72,9 @@ func _ready() -> void:
 func _process_behavior(delta: float) -> void:
 	_update_attack_cooldown(delta)
 	_update_slam_cooldown(delta)
+	_update_body_check_cooldown(delta)
+	_update_body_check_anim(delta)
+	_update_body_check_dash_immunity(delta)
 	_update_shield_reaim(delta)
 	_update_shield_facing(delta)
 
@@ -77,6 +92,7 @@ func _process_behavior(delta: float) -> void:
 	var move_rate := acceleration if desired_velocity != Vector2.ZERO else deceleration
 	velocity = velocity.move_toward(desired_velocity, move_rate * delta)
 	move_and_slide()
+	_try_body_check_target()
 	_try_start_slam()
 	_try_attack_target()
 
@@ -87,6 +103,37 @@ func _update_attack_cooldown(delta: float) -> void:
 func _update_slam_cooldown(delta: float) -> void:
 	if slam_cooldown_left > 0.0:
 		slam_cooldown_left = maxf(0.0, slam_cooldown_left - delta)
+
+func _update_body_check_cooldown(delta: float) -> void:
+	if body_check_cooldown_left > 0.0:
+		body_check_cooldown_left = maxf(0.0, body_check_cooldown_left - delta)
+
+func _update_body_check_anim(delta: float) -> void:
+	if body_check_anim_time_left > 0.0:
+		body_check_anim_time_left = maxf(0.0, body_check_anim_time_left - delta)
+		queue_redraw()
+
+func _update_body_check_dash_immunity(delta: float) -> void:
+	if not is_instance_valid(target):
+		player_was_dashing_last_frame = false
+		return
+	
+	var target_body := target as CharacterBody2D
+	if target_body == null:
+		player_was_dashing_last_frame = false
+		return
+	
+	var is_dashing_now := bool(target_body.get("dash_phasing_active"))
+	
+	# Detect transition from dashing to not dashing
+	if player_was_dashing_last_frame and not is_dashing_now:
+		body_check_dash_immunity_left = body_check_post_dash_immunity
+	
+	player_was_dashing_last_frame = is_dashing_now
+	
+	# Decrement immunity timer
+	if body_check_dash_immunity_left > 0.0:
+		body_check_dash_immunity_left = maxf(0.0, body_check_dash_immunity_left - delta)
 
 func _update_shield_reaim(delta: float) -> void:
 	if shield_reaim_left > 0.0:
@@ -168,6 +215,7 @@ func _try_start_slam() -> void:
 func _process_slam_windup(delta: float) -> void:
 	velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
 	move_and_slide()
+	_try_body_check_target()
 	if is_instance_valid(target):
 		var to_target := target.global_position - global_position
 		if to_target.length_squared() > 0.000001:
@@ -180,12 +228,13 @@ func _process_slam_windup(delta: float) -> void:
 		slam_state = SLAM_STATE_THUMP
 		slam_state_time_left = slam_thump_time
 		slam_hit_applied = false
+		_try_apply_slam_aoe_hit()
 		attack_anim_time_left = attack_anim_duration
 
 func _process_slam_thump(delta: float) -> void:
 	velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
 	move_and_slide()
-	_try_apply_slam_aoe_hit()
+	_try_body_check_target()
 	slam_state_time_left = maxf(0.0, slam_state_time_left - delta)
 	queue_redraw()
 	if slam_state_time_left <= 0.0:
@@ -196,6 +245,7 @@ func _process_slam_thump(delta: float) -> void:
 func _process_slam_recover(delta: float) -> void:
 	velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
 	move_and_slide()
+	_try_body_check_target()
 	slam_state_time_left = maxf(0.0, slam_state_time_left - delta)
 	if slam_state_time_left <= 0.0:
 		slam_state = SLAM_STATE_IDLE
@@ -214,6 +264,47 @@ func _try_apply_slam_aoe_hit() -> void:
 			var feedback: Object = target.get("player_feedback") as Object
 			if feedback != null and feedback.has_method("play_impact_heavy"):
 				feedback.play_impact_heavy(target.global_position, slam_radius * 0.95)
+
+func _try_body_check_target() -> void:
+	if not is_instance_valid(target):
+		return
+	var target_body := target as CharacterBody2D
+	if target_body == null:
+		return
+	if body_check_cooldown_left > 0.0:
+		return
+	if bool(target_body.get("dash_phasing_active")):
+		return
+	if body_check_dash_immunity_left > 0.0:
+		return
+
+	var shielder_radius := 13.0 * body_size_scale
+	var target_radius_value: Variant = target_body.get("body_radius_cache")
+	var target_radius := float(target_radius_value) if target_radius_value != null else 13.0
+	var distance := global_position.distance_to(target_body.global_position)
+	if distance > shielder_radius + target_radius + body_check_overlap_padding + body_check_trigger_margin:
+		return
+
+	var toward_shielder := global_position - target_body.global_position
+	if toward_shielder.length_squared() <= 0.000001:
+		return
+
+	# Trigger animation before damage for synchronized feedback
+	body_check_anim_time_left = body_check_anim_duration
+
+	if not DAMAGEABLE.apply_damage(target_body, body_check_damage, {"source": "enemy_contact", "ability": "shielder_body_check"}):
+		return
+
+	var shove_direction := target_body.global_position - global_position
+	if shove_direction.length_squared() > 0.000001:
+		target_body.velocity += shove_direction.normalized() * body_check_shove_force
+
+	# Play impact feedback if available
+	var feedback: Object = target_body.get("player_feedback") as Object
+	if feedback != null and feedback.has_method("play_impact_medium"):
+		feedback.play_impact_medium(target_body.global_position, shielder_radius + 30.0)
+
+	body_check_cooldown_left = body_check_cooldown
 
 func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 	if amount <= 0:
@@ -274,6 +365,17 @@ func _draw() -> void:
 		var secondary_radius := shock_radius * 1.15
 		var secondary_alpha := clampf((0.6 - thump_t) * 1.5, 0.0, 0.6)
 		draw_arc(Vector2.ZERO, secondary_radius, 0.0, TAU, 48, Color(COLOR_SHIELDER_SLAM_SHOCK_RING.r, COLOR_SHIELDER_SLAM_SHOCK_RING.g, COLOR_SHIELDER_SLAM_SHOCK_RING.b, secondary_alpha), 2.0)
+
+	# Body check visual effect
+	if body_check_anim_time_left > 0.0:
+		var body_check_t := 1.0 - (body_check_anim_time_left / body_check_anim_duration) if body_check_anim_duration > 0.0 else 1.0
+		var check_base_radius := body_radius + 8.0
+		var check_expand_radius := lerpf(check_base_radius, body_radius + 45.0, clampf(body_check_t, 0.0, 1.0))
+		var check_alpha := clampf(1.0 - body_check_t, 0.0, 1.0)
+		# Expanding burst glow
+		draw_circle(Vector2.ZERO, check_expand_radius, Color(1.0, 0.6, 0.3, check_alpha * 0.25))
+		# Expanding burst ring
+		draw_arc(Vector2.ZERO, check_expand_radius, 0.0, TAU, 40, Color(1.0, 0.7, 0.4, check_alpha * 0.8), 3.0)
 	
 	if not _is_finite_vec2(shield_facing) or shield_facing.length_squared() <= 0.000001:
 		shield_facing = Vector2.LEFT
