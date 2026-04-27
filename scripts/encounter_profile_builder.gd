@@ -97,6 +97,60 @@ func _apply_bearing_count_scaling(profile: Dictionary, pressure_mult_override: f
 func _skirmish_min_total_enemies() -> int:
 	return 3 + _difficulty_rank()
 
+func _build_gauntlet_profile() -> Dictionary:
+	var gauntlet := _build_profile("Gauntlet", POOL_ROOM_SIZE, 1, 1, 1, 1)
+	gauntlet["lurker_count"] = 1
+	gauntlet["lancer_count"] = 1
+	return gauntlet
+
+func _build_fortress_profile() -> Dictionary:
+	return _build_profile("Fortress", POOL_ROOM_SIZE, 1, 0, 1, 4)
+
+func _build_crossfire_profile() -> Dictionary:
+	return _build_profile("Crossfire", POOL_ROOM_SIZE, 1, 1, 4, 0)
+
+func _apply_crossfire_bearing_scaling(profile: Dictionary) -> Dictionary:
+	var modified := _apply_bearing_count_scaling(profile, 1.0, 0)
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT] = maxi(3, ENCOUNTER_CONTRACTS.profile_archer_count(modified))
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT] = maxi(1, ENCOUNTER_CONTRACTS.profile_charger_count(modified))
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT] = maxi(1, ENCOUNTER_CONTRACTS.profile_chaser_count(modified))
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT] = mini(1, ENCOUNTER_CONTRACTS.profile_shielder_count(modified))
+	var rank := _difficulty_rank()
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT] = ENCOUNTER_CONTRACTS.profile_archer_count(modified) + rank
+	if rank >= 2:
+		modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT] = ENCOUNTER_CONTRACTS.profile_charger_count(modified) + 1
+	return modified
+
+func _apply_fortress_bearing_scaling(profile: Dictionary) -> Dictionary:
+	var modified := _apply_bearing_count_scaling(profile, 1.0, 0)
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT] = 0
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT] = maxi(1, ENCOUNTER_CONTRACTS.profile_chaser_count(modified))
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT] = maxi(1, ENCOUNTER_CONTRACTS.profile_archer_count(modified))
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT] = maxi(3, ENCOUNTER_CONTRACTS.profile_shielder_count(modified))
+	var rank := _difficulty_rank()
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT] = ENCOUNTER_CONTRACTS.profile_shielder_count(modified) + rank
+	if rank >= 2:
+		modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT] = ENCOUNTER_CONTRACTS.profile_chaser_count(modified) + 1
+	if rank >= 3:
+		modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT] = ENCOUNTER_CONTRACTS.profile_archer_count(modified) + 1
+	return modified
+
+func _apply_gauntlet_bearing_scaling(profile: Dictionary) -> Dictionary:
+	var modified := _apply_bearing_count_scaling(profile, 1.0, 0)
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT] = maxi(1, ENCOUNTER_CONTRACTS.profile_chaser_count(modified))
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT] = maxi(1, ENCOUNTER_CONTRACTS.profile_charger_count(modified))
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT] = maxi(1, ENCOUNTER_CONTRACTS.profile_archer_count(modified))
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT] = maxi(1, ENCOUNTER_CONTRACTS.profile_shielder_count(modified))
+	modified["lurker_count"] = maxi(1, int(modified.get("lurker_count", 0)))
+	modified["lancer_count"] = maxi(1, int(modified.get("lancer_count", 0)))
+	var rank := _difficulty_rank()
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT] = ENCOUNTER_CONTRACTS.profile_chaser_count(modified) + rank
+	if rank >= 2:
+		modified["lurker_count"] = int(modified.get("lurker_count", 0)) + 1
+	if rank >= 3:
+		modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT] = ENCOUNTER_CONTRACTS.profile_charger_count(modified) + 1
+	return modified
+
 func _scale_mutator_damage(mutator: Dictionary) -> Dictionary:
 	if mutator.is_empty():
 		return {}
@@ -165,6 +219,12 @@ func build_skirmish_profile(depth: int) -> Dictionary:
 	var hard_pool := _get_hard_pool()
 	var profile := hard_pool[rng.randi_range(0, hard_pool.size() - 1)]
 	profile = _maybe_apply_hard_mutator(profile, depth)
+	if ENCOUNTER_CONTRACTS.profile_label(profile) == "Crossfire":
+		return _apply_crossfire_bearing_scaling(profile)
+	if ENCOUNTER_CONTRACTS.profile_label(profile) == "Gauntlet":
+		return _apply_gauntlet_bearing_scaling(profile)
+	if ENCOUNTER_CONTRACTS.profile_label(profile) == "Fortress":
+		return _apply_fortress_bearing_scaling(profile)
 	return _apply_bearing_count_scaling(profile, 1.0, _skirmish_min_total_enemies())
 
 func build_objective_profile(depth: int, preferred: String = "") -> Dictionary:
@@ -182,11 +242,11 @@ func build_debug_encounter_profile(encounter_key: String, depth: int) -> Diction
 		"skirmish":
 			return _build_intro_profile(0)
 		"crossfire":
-			return _build_profile("Crossfire", POOL_ROOM_SIZE, 2, 1, 3, 0)
+			return _apply_crossfire_bearing_scaling(_build_crossfire_profile())
 		"onslaught":
 			return _build_profile("Onslaught", POOL_ROOM_SIZE, 7, 2, 0, 0)
 		"fortress":
-			return _build_profile("Fortress", POOL_ROOM_SIZE, 2, 0, 1, 3)
+			return _apply_fortress_bearing_scaling(_build_fortress_profile())
 		"blitz":
 			var blitz := _build_profile("Blitz", POOL_ROOM_SIZE, 2, 0, 0, 0)
 			blitz["lurker_count"] = 3
@@ -204,10 +264,7 @@ func build_debug_encounter_profile(encounter_key: String, depth: int) -> Diction
 			ambush["lancer_count"] = 1
 			return ambush
 		"gauntlet":
-			var gauntlet := _build_profile("Gauntlet", POOL_ROOM_SIZE, 2, 1, 1, 1)
-			gauntlet["lurker_count"] = 2
-			gauntlet["lancer_count"] = 1
-			return gauntlet
+			return _apply_gauntlet_bearing_scaling(_build_gauntlet_profile())
 		"trial":
 			return _build_trial_profile(depth)
 		"objective_last_stand":
@@ -247,9 +304,9 @@ func _get_hard_pool() -> Array[Dictionary]:
 	# Vanguard: shielded advance with chargers punching through the line.
 	# Ambush: lancer cuts escape routes while lurkers converge.
 	# Gauntlet: one of everything — a comprehensive skill test.
-	var crossfire := _build_profile("Crossfire", POOL_ROOM_SIZE, 2, 1, 3, 0)
+	var crossfire := _build_crossfire_profile()
 	var onslaught := _build_profile("Onslaught", POOL_ROOM_SIZE, 7, 2, 0, 0)
-	var fortress := _build_profile("Fortress", POOL_ROOM_SIZE, 2, 0, 1, 3)
+	var fortress := _build_fortress_profile()
 	var blitz := _build_profile("Blitz", POOL_ROOM_SIZE, 2, 0, 0, 0)
 	blitz["lurker_count"] = 3
 	blitz["ram_count"] = 1
@@ -259,9 +316,7 @@ func _get_hard_pool() -> Array[Dictionary]:
 	var ambush := _build_profile("Ambush", POOL_ROOM_SIZE, 3, 0, 0, 0)
 	ambush["lurker_count"] = 4
 	ambush["lancer_count"] = 1
-	var gauntlet := _build_profile("Gauntlet", POOL_ROOM_SIZE, 2, 1, 1, 1)
-	gauntlet["lurker_count"] = 1
-	gauntlet["lancer_count"] = 0
+	var gauntlet := _build_gauntlet_profile()
 	return [crossfire, onslaught, fortress, blitz, suppression, vanguard, ambush, gauntlet]
 
 func _build_trial_profile(depth: int = 0) -> Dictionary:
@@ -489,7 +544,15 @@ func roll_route_options(depth: int) -> Array[Dictionary]:
 	var hard_pool: Array[Dictionary] = _get_hard_pool()
 	var hard_profile: Dictionary = hard_pool[rng.randi_range(0, hard_pool.size() - 1)]
 	hard_profile = _maybe_apply_hard_mutator(hard_profile, depth)
-	hard_profile = _apply_bearing_count_scaling(hard_profile, 1.0, _skirmish_min_total_enemies())
+	var hard_label := ENCOUNTER_CONTRACTS.profile_label(hard_profile)
+	if hard_label == "Crossfire":
+		hard_profile = _apply_crossfire_bearing_scaling(hard_profile)
+	elif hard_label == "Gauntlet":
+		hard_profile = _apply_gauntlet_bearing_scaling(hard_profile)
+	elif hard_label == "Fortress":
+		hard_profile = _apply_fortress_bearing_scaling(hard_profile)
+	else:
+		hard_profile = _apply_bearing_count_scaling(hard_profile, 1.0, _skirmish_min_total_enemies())
 	var hard_option := ENCOUNTER_CONTRACTS.door_option(
 		ENCOUNTER_CONTRACTS.profile_label(hard_profile),
 		Color(0.93, 0.62, 0.28, 0.95),

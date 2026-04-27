@@ -1283,7 +1283,7 @@ func _get_hud_state() -> Dictionary:
 		"encounter_intro_grace_active": encounter_intro_grace_active,
 		"boss_unlocked": boss_unlocked,
 		"first_boss_defeated": first_boss_defeated,
-		"second_boss_unlocked": first_boss_defeated and rooms_cleared >= (encounter_count + second_boss_encounter_count),
+		"second_boss_unlocked": _is_second_boss_unlocked(),
 	}
 	return hud_state
 
@@ -1384,7 +1384,7 @@ func _on_room_cleared() -> void:
 	room_depth = ENCOUNTER_CONTRACTS.outcome_room_depth(outcome)
 	if first_boss_defeated:
 		phase_two_rooms_cleared += 1
-		boss_unlocked = phase_two_rooms_cleared >= second_boss_encounter_count
+		boss_unlocked = _is_second_boss_unlocked()
 	else:
 		boss_unlocked = ENCOUNTER_CONTRACTS.outcome_boss_unlocked(outcome)
 	if _is_endless_mode() and endless_boss_defeated:
@@ -1453,6 +1453,12 @@ func _apply_difficulty_tier_bonuses(difficulty_tier: int) -> void:
 	bonus_rest_heal_charges = maxi(0, int(difficulty_config.get("player_potion_charges_bonus", 0)))
 	if player.has_method("set_incoming_damage_taken_mult"):
 		player.call("set_incoming_damage_taken_mult", float(difficulty_config.get("player_damage_taken_mult", 1.0)))
+
+func _get_second_boss_target_depth() -> int:
+	return maxi(encounter_count + 1, encounter_count * 2)
+
+func _is_second_boss_unlocked() -> bool:
+	return first_boss_defeated and room_depth >= _get_second_boss_target_depth()
 	
 	var health_bonus := float(difficulty_config.get("player_starting_health_bonus", 0.0))
 	if health_bonus > 0.0 and player.get("max_health") != null:
@@ -1721,7 +1727,7 @@ func _spawn_door_options() -> void:
 	var route_options := _roll_route_options(room_depth)
 	var show_boss_door := boss_unlocked
 	if first_boss_defeated:
-		show_boss_door = phase_two_rooms_cleared >= second_boss_encounter_count
+		show_boss_door = _is_second_boss_unlocked()
 		boss_unlocked = show_boss_door
 	door_options = encounter_flow_system.call("build_door_options", show_boss_door, room_depth, door_distance_from_center, route_options)
 	if show_boss_door and not door_options.is_empty():
@@ -1925,7 +1931,7 @@ func _enter_rest_site() -> void:
 		rooms_cleared += 1
 		room_depth += 1
 		phase_two_rooms_cleared += 1
-		boss_unlocked = phase_two_rooms_cleared >= second_boss_encounter_count
+		boss_unlocked = _is_second_boss_unlocked()
 	else:
 		_advance_room_progress()
 	if is_instance_valid(player) and player.has_method("heal"):
