@@ -51,6 +51,7 @@ var attack_afterglow_duration: float = 0.54
 var impact_burst_time_left: float = 0.0
 var impact_burst_duration: float = 0.2
 var last_attack_for_fx: int = ATTACK_CHARGE
+var _edge_stall_time: float = 0.0
 
 
 func _ready() -> void:
@@ -134,13 +135,30 @@ func _process_idle_state(delta: float) -> void:
 		locked_direction = to_target.normalized()
 		visual_facing_direction = locked_direction
 
-	if cooldown_left <= 0.0 and wall_pressure < 0.65:
-		_start_next_attack(distance)
+	# Track stalls when edge-pinned and movement stalls
+	var is_edge_stalled := wall_pressure > 0.58 and velocity.length() < move_speed * 0.18
+	if is_edge_stalled:
+		_edge_stall_time += delta
+	else:
+		_edge_stall_time = 0.0
+
+	# Compress cooldown aggressively when wall-bound to prevent long inert windows
+	if wall_pressure >= 0.78:
+		cooldown_left = minf(cooldown_left, 0.06)
+
+	# Allow attack after stall timeout even if wall pressure is elevated
+	var should_start_attack := cooldown_left <= 0.0 and (wall_pressure < 0.65 or _edge_stall_time >= 0.28)
+	if should_start_attack:
+		_start_next_attack(distance, wall_pressure)
 
 
-func _start_next_attack(distance_to_target: float) -> void:
+func _start_next_attack(distance_to_target: float, wall_pressure: float = 0.0) -> void:
 	var enrage_t: float = _get_enrage_ratio()
-	if distance_to_target > 270.0:
+	# Force reposition attack when edge-pinned or stall timeout exceeded
+	var force_reposition := wall_pressure >= 0.80 or (_edge_stall_time >= 0.18 and wall_pressure > 0.65)
+	if force_reposition:
+		active_attack = ATTACK_CHARGE
+	elif distance_to_target > 270.0:
 		active_attack = ATTACK_CHARGE
 	elif distance_to_target < 120.0:
 		active_attack = ATTACK_NOVA if randf() < lerpf(0.66, 0.8, enrage_t) else ATTACK_CLEAVE
