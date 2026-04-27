@@ -19,6 +19,7 @@ const OBJECTIVE_RUNTIME_SCRIPT := preload("res://scripts/objective_runtime.gd")
 const REWARD_SELECTION_UI_SCRIPT := preload("res://scripts/reward_selection_ui.gd")
 const ENUMS := preload("res://scripts/shared/enums.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
+const RUN_TELEMETRY_STORE := preload("res://scripts/run_telemetry_store.gd")
 const RUN_CONTEXT_PATH := "/root/RunContext"
 const MENU_SCENE_PATH := "res://scenes/Menu.tscn"
 const RUN_SNAPSHOT_VERSION := 1
@@ -217,6 +218,9 @@ var objective_runtime: Node
 var reward_selection_ui: Node
 var pause_menu_controller: Node
 var victory_screen: Node
+var telemetry_run_id: String = ""
+var telemetry_enabled: bool = false
+var telemetry_run_finished: bool = false
 
 func _ready() -> void:
 	rng.randomize()
@@ -226,6 +230,10 @@ func _ready() -> void:
 		player.call("set_power_registry", power_registry_instance)
 	if is_instance_valid(player):
 		player_camera = player.get_node_or_null("Camera2D") as Camera2D
+		if player.has_signal("damage_taken"):
+			player.connect("damage_taken", Callable(self, "_on_player_damage_taken"))
+		if player.has_signal("died"):
+			player.connect("died", Callable(self, "_on_player_died_for_telemetry"))
 	_sync_audio_settings_from_context()
 	endless_boss_defeated = false
 
@@ -306,8 +314,10 @@ func _ready() -> void:
 	objective_runtime = OBJECTIVE_RUNTIME_SCRIPT.new()
 	add_child(objective_runtime)
 	objective_runtime.initialize(self, rng)
+	var resumed_run := _try_resume_saved_run()
+	_initialize_run_telemetry(not _is_debug_boot_session())
 	hud.refresh(_get_hud_state(), player)
-	if _try_resume_saved_run():
+	if resumed_run:
 		return
 	_apply_debug_start_powers_if_needed()
 	if debug_trigger_victory:
@@ -355,6 +365,9 @@ func start_run_with_powers(power_ids: Array[String]) -> Dictionary:
 func start_run_with_command(command: String) -> Dictionary:
 	return start_run_with_powers(_parse_power_command(command))
 
+func get_balance_telemetry(max_runs: int = 10, max_age_days: int = 21, include_debug: bool = false, game_version: String = "") -> Dictionary:
+	return RUN_TELEMETRY_STORE.build_balance_summary(max_runs, max_age_days, include_debug, game_version)
+
 func go_do_that_thing(state: String) -> Dictionary:
 	return start_debug_encounter(state)
 
@@ -380,6 +393,7 @@ func _debug_encounter_key(encounter_state: int) -> String:
 	return ""
 
 func _start_debug_selected_encounter(encounter_state: int) -> Dictionary:
+	_mark_telemetry_debug_mode()
 	var encounter_key := _debug_encounter_key(encounter_state)
 	if encounter_key.is_empty():
 		return {"ok": true, "note": "No debug encounter selected."}
@@ -497,6 +511,7 @@ func _reset_for_debug_jump() -> void:
 		player.global_position = Vector2.ZERO
 
 func _start_debug_objective_room(kind: String = "") -> Dictionary:
+	_mark_telemetry_debug_mode()
 	_reset_for_debug_jump()
 	var objective_depth := 1
 	rooms_cleared = objective_depth - 1
@@ -1021,6 +1036,7 @@ func _finish_second_boss_clear() -> void:
 	in_second_boss_room = false
 	active_room_enemy_count = 0
 	run_cleared = true
+	_finish_active_run_telemetry("clear")
 	choosing_next_room = false
 	boss_unlocked = false
 	pending_room_reward = ENUMS.RewardMode.NONE
@@ -1307,10 +1323,12 @@ func _on_pause_menu_closed() -> void:
 	_set_combat_paused(_is_reward_selection_active())
 
 func _on_victory_back_to_menu() -> void:
+	_finish_active_run_telemetry("clear")
 	_clear_active_run_checkpoint()
 	get_tree().change_scene_to_file(MENU_SCENE_PATH)
 
 func _on_pause_back_to_menu_requested() -> void:
+	_finish_active_run_telemetry("menu_exit")
 	_set_combat_paused(false)
 	if is_instance_valid(pause_menu_controller):
 		pause_menu_controller.call("close")
@@ -1323,10 +1341,12 @@ func _on_pause_abandon_run_requested() -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context != null and run_context.has_method("set_last_run_outcome"):
 		run_context.call("set_last_run_outcome", "death")
+	_finish_active_run_telemetry("abandon")
 	_clear_active_run_checkpoint()
 	get_tree().change_scene_to_file(MENU_SCENE_PATH)
 
 func _on_pause_exit_game_requested() -> void:
+	_finish_active_run_telemetry("quit")
 	get_tree().quit()
 
 func _spawn_door_options() -> void:
@@ -1377,6 +1397,7 @@ func _choose_door(door: Dictionary) -> void:
 		return
 	var raw_choice: Variant = encounter_flow_system.call("resolve_chosen_door", door)
 	var choice: Dictionary = ENCOUNTER_CONTRACTS.normalize_door_choice(raw_choice)
+	_record_door_choice(choice)
 	var action_id: int = ENCOUNTER_CONTRACTS.door_choice_action_id(choice)
 	if action_id == ENUMS.EncounterAction.BOSS:
 		if first_boss_defeated:
@@ -1482,6 +1503,7 @@ func _begin_room(profile: Dictionary) -> void:
 	current_room_label = ENCOUNTER_CONTRACTS.profile_label(profile)
 	current_room_enemy_mutator = ENCOUNTER_CONTRACTS.profile_enemy_mutator(profile)
 	current_room_player_mutator = ENCOUNTER_CONTRACTS.profile_player_mutator(profile)
+	_record_room_entry("encounter", profile)
 	var mutator_name := ENCOUNTER_CONTRACTS.mutator_name(current_room_enemy_mutator)
 	var _room_subtitle := ""
 	var sub_color := Color(0.78, 0.9, 1.0, 0.92)
@@ -1536,6 +1558,7 @@ func _enter_rest_site() -> void:
 	in_boss_room = false
 	_play_room_music(false)
 	current_room_label = "Rest Site"
+	_record_room_entry("rest", {})
 	hud.show_banner("Rest Site", "")
 	current_room_static_camera = true
 	if first_boss_defeated:
@@ -1569,6 +1592,7 @@ func _begin_boss_room() -> void:
 	current_room_size = Vector2(1260.0, 900.0)
 	current_room_static_camera = false
 	current_room_label = "Boss Chamber: The Warden"
+	_record_room_entry("boss_1", {})
 	hud.show_banner("The Warden", "")
 	_apply_camera_bounds_for_room(current_room_size)
 	active_room_enemy_count = 1
@@ -1596,6 +1620,7 @@ func _begin_second_boss_room() -> void:
 	current_room_size = Vector2(1360.0, 960.0)
 	current_room_static_camera = false
 	current_room_label = "Abyss Core: Sovereign"
+	_record_room_entry("boss_2", {})
 	hud.show_banner("Sovereign", "")
 	_apply_camera_bounds_for_room(current_room_size)
 	active_room_enemy_count = 1
@@ -1688,6 +1713,7 @@ func _open_boon_selection(title: String, is_initial: bool, mode: int = ENUMS.Rew
 		_set_combat_paused(true)
 
 func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> void:
+	_record_reward_choice(choice, mode, is_initial)
 	if mode == ENUMS.RewardMode.ARCANA:
 		_apply_arcana_to_player(String(choice["id"]))
 		arcana_rewards_taken.append(String(choice["name"]))
@@ -1703,6 +1729,153 @@ func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> voi
 	else:
 		_spawn_door_options()
 	hud.refresh(_get_hud_state(), player)
+
+func _is_debug_boot_session() -> bool:
+	if debug_trigger_victory:
+		return true
+	if debug_start_encounter != DEBUG_ENCOUNTER_NONE:
+		return true
+	if debug_apply_test_powers_on_start:
+		return true
+	if debug_skip_starting_boon_selection:
+		return true
+	return false
+
+func _initialize_run_telemetry(allow_collection: bool) -> void:
+	telemetry_run_id = ""
+	telemetry_enabled = allow_collection
+	telemetry_run_finished = false
+	if not telemetry_enabled:
+		return
+	var run_context := _get_run_context()
+	var run_mode := int(ENUMS.RunMode.STANDARD)
+	if run_context != null:
+		var run_mode_value: Variant = run_context.get("run_mode")
+		if run_mode_value != null:
+			run_mode = int(run_mode_value)
+	var run_seed := {
+		"difficulty_tier": current_difficulty_tier,
+		"run_mode": run_mode,
+		"start_depth": room_depth,
+		"rooms_cleared": rooms_cleared,
+		"is_debug": false
+	}
+	telemetry_run_id = RUN_TELEMETRY_STORE.start_run(run_seed)
+
+func _mark_telemetry_debug_mode() -> void:
+	if telemetry_run_id.is_empty():
+		telemetry_enabled = false
+		return
+	if telemetry_run_finished:
+		telemetry_enabled = false
+		return
+	RUN_TELEMETRY_STORE.mark_run_debug(telemetry_run_id)
+	RUN_TELEMETRY_STORE.finish_run(telemetry_run_id, "debug", {
+		"max_depth": room_depth,
+		"rooms_cleared": rooms_cleared
+	})
+	telemetry_enabled = false
+	telemetry_run_finished = true
+
+func _finish_active_run_telemetry(outcome: String, death_event: Dictionary = {}) -> void:
+	if not telemetry_enabled:
+		return
+	if telemetry_run_id.is_empty() or telemetry_run_finished:
+		return
+	var summary := {
+		"max_depth": room_depth,
+		"rooms_cleared": rooms_cleared
+	}
+	if not death_event.is_empty():
+		summary["death_event"] = death_event.duplicate(true)
+	RUN_TELEMETRY_STORE.finish_run(telemetry_run_id, outcome, summary)
+	telemetry_run_finished = true
+
+func _record_room_entry(room_kind: String, profile: Dictionary) -> void:
+	if not telemetry_enabled or telemetry_run_id.is_empty() or telemetry_run_finished:
+		return
+	var mutator_name := "none"
+	var objective_kind := ""
+	if not profile.is_empty():
+		var mutator := ENCOUNTER_CONTRACTS.profile_enemy_mutator(profile)
+		mutator_name = ENCOUNTER_CONTRACTS.mutator_name(mutator)
+		if mutator_name.is_empty():
+			mutator_name = "none"
+		objective_kind = ENCOUNTER_CONTRACTS.profile_objective_kind(profile)
+	RUN_TELEMETRY_STORE.append_room_entry(telemetry_run_id, {
+		"unix_time": int(Time.get_unix_time_from_system()),
+		"room_kind": room_kind,
+		"room_label": current_room_label,
+		"enemy_mutator": mutator_name,
+		"objective_kind": objective_kind,
+		"room_depth": room_depth,
+		"rooms_cleared": rooms_cleared
+	})
+
+func _record_reward_choice(choice: Dictionary, mode: int, is_initial: bool) -> void:
+	if not telemetry_enabled or telemetry_run_id.is_empty() or telemetry_run_finished:
+		return
+	var choice_id := String(choice.get("id", ""))
+	var choice_name := String(choice.get("name", choice_id))
+	if mode == ENUMS.RewardMode.MISSION:
+		var mission_upgrade := choice.get("mission_upgrade", {}) as Dictionary
+		if not mission_upgrade.is_empty():
+			choice_id = String(mission_upgrade.get("id", choice_id))
+			choice_name = String(mission_upgrade.get("name", choice_name))
+	RUN_TELEMETRY_STORE.append_reward_choice(telemetry_run_id, {
+		"unix_time": int(Time.get_unix_time_from_system()),
+		"mode": mode,
+		"choice_id": choice_id,
+		"choice_name": choice_name,
+		"is_initial": is_initial,
+		"room_depth": room_depth
+	})
+
+func _record_door_choice(choice: Dictionary) -> void:
+	if not telemetry_enabled or telemetry_run_id.is_empty() or telemetry_run_finished:
+		return
+	var profile := ENCOUNTER_CONTRACTS.door_choice_profile(choice)
+	var door_mutator := "none"
+	if not profile.is_empty():
+		var mutator := ENCOUNTER_CONTRACTS.profile_enemy_mutator(profile)
+		door_mutator = ENCOUNTER_CONTRACTS.mutator_name(mutator)
+		if door_mutator.is_empty():
+			door_mutator = "none"
+	RUN_TELEMETRY_STORE.append_door_choice(telemetry_run_id, {
+		"unix_time": int(Time.get_unix_time_from_system()),
+		"action_id": ENCOUNTER_CONTRACTS.door_choice_action_id(choice),
+		"door_label": String(choice.get("label", "")),
+		"reward_mode": ENCOUNTER_CONTRACTS.door_choice_reward_mode(choice),
+		"encounter_label": ENCOUNTER_CONTRACTS.profile_label(profile),
+		"enemy_mutator": door_mutator,
+		"room_depth": room_depth
+	})
+
+func _on_player_damage_taken(raw_amount: int, final_amount: int, damage_context: Dictionary) -> void:
+	if not telemetry_enabled or telemetry_run_id.is_empty() or telemetry_run_finished:
+		return
+	var context_copy := damage_context.duplicate(true)
+	RUN_TELEMETRY_STORE.append_damage_event(telemetry_run_id, {
+		"unix_time": int(context_copy.get("unix_time", Time.get_unix_time_from_system())),
+		"source": String(context_copy.get("source", "unknown")),
+		"ability": String(context_copy.get("ability", "unknown")),
+		"raw_amount": raw_amount,
+		"final_amount": final_amount,
+		"health_before": int(context_copy.get("health_before", 0)),
+		"health_after": int(context_copy.get("health_after", 0)),
+		"room_label": current_room_label,
+		"room_depth": room_depth
+	})
+
+func _on_player_died_for_telemetry() -> void:
+	if not telemetry_enabled or telemetry_run_id.is_empty() or telemetry_run_finished:
+		return
+	var death_event: Dictionary = {}
+	if is_instance_valid(player) and player.has_method("get_last_damage_event"):
+		death_event = player.call("get_last_damage_event") as Dictionary
+	death_event["room_label"] = current_room_label
+	death_event["room_depth"] = room_depth
+	_finish_active_run_telemetry("death", death_event)
 
 func _apply_boon_to_player(boon_id: String) -> void:
 	if not is_instance_valid(player):

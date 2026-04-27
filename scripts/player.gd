@@ -75,6 +75,7 @@ const RUN_SNAPSHOT_PROPERTIES := [
 
 signal health_changed(current_health: int, max_health: int)
 signal died
+signal damage_taken(raw_amount: int, final_amount: int, damage_context: Dictionary)
 
 @export var max_speed: float = 220.0
 @export var acceleration: float = 1400.0
@@ -195,6 +196,7 @@ var objective_mutator_damage_resist: float = 0.0
 var objective_mutator_damage_mult: float = 0.0
 var objective_mutator_aura_phase: float = 0.0
 var incoming_damage_taken_mult: float = 1.0
+var last_damage_event: Dictionary = {}
 
 func _ready() -> void:
 	died.connect(_restart_current_scene)
@@ -532,6 +534,7 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 		return
 	if dash_phasing_active and String(damage_context.get("source", "")) == "enemy_contact":
 		return
+	var raw_amount := amount
 	var reduced := maxi(1, amount - iron_skin_armor)
 	var total_resist := objective_mutator_damage_resist
 	if reward_aegis_field and aegis_field_active_left > 0.0:
@@ -543,9 +546,22 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 	var health_before := _get_current_health()
 	health_state.take_damage(reduced)
 	if _get_current_health() < health_before:
+		var context_copy := damage_context.duplicate(true)
+		context_copy["source"] = String(context_copy.get("source", "unknown"))
+		context_copy["ability"] = String(context_copy.get("ability", "unknown"))
+		context_copy["raw_amount"] = raw_amount
+		context_copy["final_amount"] = reduced
+		context_copy["health_before"] = health_before
+		context_copy["health_after"] = _get_current_health()
+		context_copy["unix_time"] = int(Time.get_unix_time_from_system())
+		last_damage_event = context_copy
+		damage_taken.emit(raw_amount, reduced, context_copy)
 		_trigger_aegis_field()
 		player_feedback.play_damage_flash()
 		player_feedback.play_impact_sound()
+
+func get_last_damage_event() -> Dictionary:
+	return last_damage_event.duplicate(true)
 
 func set_incoming_damage_taken_mult(mult: float) -> void:
 	incoming_damage_taken_mult = clampf(mult, 0.25, 4.0)
