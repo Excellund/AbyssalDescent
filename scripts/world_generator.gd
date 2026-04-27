@@ -50,6 +50,43 @@ const DEBUG_MUTATOR_IRON_VOLLEY := 4
 const DEBUG_MUTATOR_KILLBOX := 5
 const DEBUG_MUTATOR_RANDOM_HARD := 6
 
+const ENCOUNTER_DEBUG_MAP := [
+	{"id": 0, "key": "none", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": 1, "key": "rest", "aliases": ["rest_site"], "is_boss": false, "is_rest": true, "is_objective": false},
+	{"id": 2, "key": "skirmish", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": 3, "key": "crossfire", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": 4, "key": "fortress", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": 5, "key": "onslaught", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": 6, "key": "vanguard", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": 7, "key": "blitz", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": 8, "key": "ambush", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": 9, "key": "suppression", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": 10, "key": "gauntlet", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": 11, "key": "objective_last_stand", "aliases": ["last_stand", "endurance", "objective_endurance"], "is_boss": false, "is_rest": false, "is_objective": true},
+	{"id": 12, "key": "objective_priority_target", "aliases": ["priority_target", "cut_the_signal", "cut the signal"], "is_boss": false, "is_rest": false, "is_objective": true},
+	{"id": 13, "key": "objective_random", "aliases": ["objective", "objective_test"], "is_boss": false, "is_rest": false, "is_objective": true},
+	{"id": 14, "key": "trial", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": 15, "key": "boss_1", "aliases": ["boss", "boss1", "warden"], "is_boss": true, "is_rest": false, "is_objective": false},
+	{"id": 16, "key": "boss_2", "aliases": ["boss_2", "boss2", "sovereign"], "is_boss": true, "is_rest": false, "is_objective": false},
+]
+
+func _find_debug_encounter_entry(key: String) -> Dictionary:
+	var normalized := key.strip_edges().to_lower()
+	for entry in ENCOUNTER_DEBUG_MAP:
+		if entry["key"] == normalized:
+			return entry
+		for alias in entry.get("aliases", []):
+			if alias == normalized:
+				return entry
+	return {}
+
+func _get_debug_encounter_reward_mode(encounter_key: String) -> int:
+	if encounter_key == "trial":
+		return ENUMS.RewardMode.ARCANA
+	if encounter_key.begins_with("objective_"):
+		return ENUMS.RewardMode.MISSION
+	return ENUMS.RewardMode.BOON
+
 @export var player_path: NodePath = NodePath("Player")
 @export var encounter_count: int = 8
 @export var room_base_size: Vector2 = Vector2(940.0, 700.0)
@@ -326,83 +363,16 @@ func start_endurance_test() -> Dictionary:
 	return _start_debug_objective_room("last_stand")
 
 func start_debug_encounter(encounter_key: String) -> Dictionary:
-	var key := encounter_key.strip_edges().to_lower()
-	match key:
-		"skirmish":
-			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_SKIRMISH)
-		"crossfire":
-			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_CROSSFIRE)
-		"onslaught":
-			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_ONSLAUGHT)
-		"fortress":
-			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_FORTRESS)
-		"blitz":
-			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_BLITZ)
-		"suppression":
-			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_SUPPRESSION)
-		"vanguard":
-			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_VANGUARD)
-		"ambush":
-			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_AMBUSH)
-		"gauntlet":
-			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_GAUNTLET)
-		"trial":
-			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_TRIAL)
-		"objective_last_stand", "last_stand":
-			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_OBJECTIVE_LAST_STAND)
-		"objective_priority_target", "priority_target", "cut_the_signal", "cut the signal":
-			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_OBJECTIVE_PRIORITY_TARGET)
-		"objective_endurance", "endurance":
-			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_OBJECTIVE_LAST_STAND)
-		"objective_random", "objective":
-			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_OBJECTIVE_RANDOM)
-		"rest", "rest_site":
-			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_REST_SITE)
-		"boss", "boss_1", "boss1", "warden":
-			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_BOSS_1)
-		"boss_2", "boss2", "sovereign":
-			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_BOSS_2)
-		"objective_test":
-			return _start_debug_selected_encounter(DEBUG_ENCOUNTER_OBJECTIVE_RANDOM)
-		_:
-			return {"ok": false, "note": "Unknown encounter key."}
+	var entry := _find_debug_encounter_entry(encounter_key)
+	if entry.is_empty():
+		return {"ok": false, "note": "Unknown encounter key."}
+	return _start_debug_selected_encounter(entry["id"])
 
 func _debug_encounter_key(encounter_state: int) -> String:
-	match encounter_state:
-		DEBUG_ENCOUNTER_SKIRMISH:
-			return "skirmish"
-		DEBUG_ENCOUNTER_CROSSFIRE:
-			return "crossfire"
-		DEBUG_ENCOUNTER_ONSLAUGHT:
-			return "onslaught"
-		DEBUG_ENCOUNTER_FORTRESS:
-			return "fortress"
-		DEBUG_ENCOUNTER_BLITZ:
-			return "blitz"
-		DEBUG_ENCOUNTER_SUPPRESSION:
-			return "suppression"
-		DEBUG_ENCOUNTER_VANGUARD:
-			return "vanguard"
-		DEBUG_ENCOUNTER_AMBUSH:
-			return "ambush"
-		DEBUG_ENCOUNTER_GAUNTLET:
-			return "gauntlet"
-		DEBUG_ENCOUNTER_TRIAL:
-			return "trial"
-		DEBUG_ENCOUNTER_OBJECTIVE_LAST_STAND:
-			return "objective_last_stand"
-		DEBUG_ENCOUNTER_OBJECTIVE_PRIORITY_TARGET:
-			return "objective_priority_target"
-		DEBUG_ENCOUNTER_OBJECTIVE_RANDOM:
-			return "objective_random"
-		DEBUG_ENCOUNTER_REST_SITE:
-			return "rest"
-		DEBUG_ENCOUNTER_BOSS_1:
-			return "boss_1"
-		DEBUG_ENCOUNTER_BOSS_2:
-			return "boss_2"
-		_:
-			return ""
+	for entry in ENCOUNTER_DEBUG_MAP:
+		if entry["id"] == encounter_state:
+			return entry["key"]
+	return ""
 
 func _start_debug_selected_encounter(encounter_state: int) -> Dictionary:
 	var encounter_key := _debug_encounter_key(encounter_state)

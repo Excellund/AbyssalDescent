@@ -5,6 +5,25 @@ const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.g
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
 
+# Debug encounter name canonicalization map - mirrors world_generator.ENCOUNTER_DEBUG_MAP
+const DEBUG_ENCOUNTER_ALIASES := {
+	"rest_site": "rest",
+	"last_stand": "objective_last_stand",
+	"endurance": "objective_last_stand",
+	"objective_endurance": "objective_last_stand",
+	"priority_target": "objective_priority_target",
+	"cut_the_signal": "objective_priority_target",
+	"cut the signal": "objective_priority_target",
+	"objective": "objective_random",
+	"objective_test": "objective_random",
+	"boss": "boss_1",
+	"boss1": "boss_1",
+	"warden": "boss_1",
+	"boss_2": "boss_2",
+	"boss2": "boss_2",
+	"sovereign": "boss_2",
+}
+
 var rng: RandomNumberGenerator
 var current_difficulty_tier: int = META_PROGRESS.TIER_DELVER
 var current_difficulty_config: Dictionary = DIFFICULTY_CONFIG.get_tier_config(META_PROGRESS.TIER_DELVER)
@@ -408,8 +427,14 @@ func build_objective_profile(depth: int, preferred: String = "") -> Dictionary:
 	var objective_profiles: Array[Dictionary] = [_build_survival_profile(depth), _build_priority_target_profile(depth)]
 	return objective_profiles[rng.randi_range(0, objective_profiles.size() - 1)]
 
-func build_debug_encounter_profile(encounter_key: String, depth: int) -> Dictionary:
+func _canonicalize_debug_encounter_key(encounter_key: String) -> String:
 	var key := encounter_key.strip_edges().to_lower()
+	if key in DEBUG_ENCOUNTER_ALIASES:
+		return DEBUG_ENCOUNTER_ALIASES[key]
+	return key
+
+func build_debug_encounter_profile(encounter_key: String, depth: int) -> Dictionary:
+	var key := _canonicalize_debug_encounter_key(encounter_key)
 	match key:
 		"skirmish":
 			return _build_intro_profile(0)
@@ -435,8 +460,6 @@ func build_debug_encounter_profile(encounter_key: String, depth: int) -> Diction
 			return _build_survival_profile(depth)
 		"objective_priority_target":
 			return _build_priority_target_profile(depth)
-		"objective_endurance":
-			return _build_survival_profile(depth)
 		"objective_random":
 			return build_objective_profile(depth)
 		_:
