@@ -1791,21 +1791,50 @@ func _finish_active_run_telemetry(outcome: String, death_event: Dictionary = {})
 	RUN_TELEMETRY_STORE.finish_run(telemetry_run_id, outcome, summary)
 	telemetry_run_finished = true
 
+func _bearing_key_from_label(label: String, fallback: String = "unknown") -> String:
+	var normalized := label.strip_edges().to_lower()
+	if normalized.is_empty():
+		return fallback
+	normalized = normalized.replace(":", " ")
+	normalized = normalized.replace("-", " ")
+	normalized = normalized.replace("/", " ")
+	normalized = normalized.replace(".", " ")
+	normalized = normalized.replace("'", "")
+	normalized = normalized.replace("\"", "")
+	while normalized.find("  ") != -1:
+		normalized = normalized.replace("  ", " ")
+	normalized = normalized.strip_edges().replace(" ", "_")
+	if normalized.is_empty():
+		return fallback
+	return normalized
+
+func _bearing_key_from_profile(profile: Dictionary, fallback: String = "unknown") -> String:
+	if profile.is_empty():
+		return fallback
+	var profile_label := ENCOUNTER_CONTRACTS.profile_label(profile)
+	return _bearing_key_from_label(profile_label, fallback)
+
 func _record_room_entry(room_kind: String, profile: Dictionary) -> void:
 	if not telemetry_enabled or telemetry_run_id.is_empty() or telemetry_run_finished:
 		return
 	var mutator_name := "none"
 	var objective_kind := ""
+	var bearing_label := current_room_label
+	var bearing_key := _bearing_key_from_label(bearing_label, room_kind)
 	if not profile.is_empty():
 		var mutator := ENCOUNTER_CONTRACTS.profile_enemy_mutator(profile)
 		mutator_name = ENCOUNTER_CONTRACTS.mutator_name(mutator)
 		if mutator_name.is_empty():
 			mutator_name = "none"
 		objective_kind = ENCOUNTER_CONTRACTS.profile_objective_kind(profile)
+		bearing_label = ENCOUNTER_CONTRACTS.profile_label(profile)
+		bearing_key = _bearing_key_from_profile(profile, room_kind)
 	RUN_TELEMETRY_STORE.append_room_entry(telemetry_run_id, {
 		"unix_time": int(Time.get_unix_time_from_system()),
 		"room_kind": room_kind,
 		"room_label": current_room_label,
+		"bearing_key": bearing_key,
+		"bearing_label": bearing_label,
 		"enemy_mutator": mutator_name,
 		"objective_kind": objective_kind,
 		"room_depth": room_depth,
@@ -1835,7 +1864,16 @@ func _record_door_choice(choice: Dictionary) -> void:
 	if not telemetry_enabled or telemetry_run_id.is_empty() or telemetry_run_finished:
 		return
 	var profile := ENCOUNTER_CONTRACTS.door_choice_profile(choice)
+	var action_id := ENCOUNTER_CONTRACTS.door_choice_action_id(choice)
 	var door_mutator := "none"
+	var bearing_label := ENCOUNTER_CONTRACTS.profile_label(profile)
+	var bearing_key := _bearing_key_from_profile(profile, "encounter")
+	if action_id == ENUMS.EncounterAction.BOSS:
+		bearing_key = "boss_2" if first_boss_defeated else "boss_1"
+		bearing_label = "Sovereign" if first_boss_defeated else "Warden"
+	elif action_id == ENUMS.EncounterAction.REST:
+		bearing_key = "rest"
+		bearing_label = "Rest Site"
 	if not profile.is_empty():
 		var mutator := ENCOUNTER_CONTRACTS.profile_enemy_mutator(profile)
 		door_mutator = ENCOUNTER_CONTRACTS.mutator_name(mutator)
@@ -1843,10 +1881,12 @@ func _record_door_choice(choice: Dictionary) -> void:
 			door_mutator = "none"
 	RUN_TELEMETRY_STORE.append_door_choice(telemetry_run_id, {
 		"unix_time": int(Time.get_unix_time_from_system()),
-		"action_id": ENCOUNTER_CONTRACTS.door_choice_action_id(choice),
+		"action_id": action_id,
 		"door_label": String(choice.get("label", "")),
 		"reward_mode": ENCOUNTER_CONTRACTS.door_choice_reward_mode(choice),
 		"encounter_label": ENCOUNTER_CONTRACTS.profile_label(profile),
+		"bearing_key": bearing_key,
+		"bearing_label": bearing_label,
 		"enemy_mutator": door_mutator,
 		"room_depth": room_depth
 	})
@@ -1855,6 +1895,7 @@ func _on_player_damage_taken(raw_amount: int, final_amount: int, damage_context:
 	if not telemetry_enabled or telemetry_run_id.is_empty() or telemetry_run_finished:
 		return
 	var context_copy := damage_context.duplicate(true)
+	var current_bearing_key := _bearing_key_from_label(current_room_label, "unknown")
 	RUN_TELEMETRY_STORE.append_damage_event(telemetry_run_id, {
 		"unix_time": int(context_copy.get("unix_time", Time.get_unix_time_from_system())),
 		"source": String(context_copy.get("source", "unknown")),
@@ -1864,6 +1905,7 @@ func _on_player_damage_taken(raw_amount: int, final_amount: int, damage_context:
 		"health_before": int(context_copy.get("health_before", 0)),
 		"health_after": int(context_copy.get("health_after", 0)),
 		"room_label": current_room_label,
+		"bearing_key": current_bearing_key,
 		"room_depth": room_depth
 	})
 
@@ -1874,6 +1916,7 @@ func _on_player_died_for_telemetry() -> void:
 	if is_instance_valid(player) and player.has_method("get_last_damage_event"):
 		death_event = player.call("get_last_damage_event") as Dictionary
 	death_event["room_label"] = current_room_label
+	death_event["bearing_key"] = _bearing_key_from_label(current_room_label, "unknown")
 	death_event["room_depth"] = room_depth
 	_finish_active_run_telemetry("death", death_event)
 

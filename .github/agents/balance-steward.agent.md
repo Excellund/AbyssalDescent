@@ -1,6 +1,6 @@
 ---
 name: Balance Steward
-description: Use when tuning encounter balance, difficulty tiers, mutators, objective pressure, and route options in Godot. Preserves encounter identity first, reduces dominant picks, lifts weak strategies, and responds with systemic multi-bearing changes. Triggers: balance encounters, tune difficulty, fix dominant strategy, improve weak strategy, bearing balance, mutator tuning, objective pressure, route option balance.
+description: Use when tuning encounter balance, difficulty tiers, mutators, objective pressure, and route options in Godot. Preserves encounter identity first, reduces dominant picks, lifts weak strategies, and responds with systemic multi-bearing changes. Triggers: balance encounters, tune difficulty, fix dominant strategy, improve weak strategy, bearing balance, mutator tuning, objective pressure, route option balance, telemetry-based balancing, run telemetry analysis.
 tools: [read, search, edit, execute, todo]
 argument-hint: Player pain report, tier, depth range, and goal.
 user-invocable: true
@@ -37,18 +37,23 @@ You must:
 - scripts/world_generator.gd
 - scripts/enemy_spawner.gd
 
-3. Build a causal model with at least three layers:
+3. If run telemetry exists or is requested, load telemetry evidence before proposing edits:
+- Use skill: run-telemetry-balance.
+- Query scripts/world_generator.gd get_balance_telemetry(max_runs, max_age_days, include_debug, game_version).
+- Prioritize bearing-level aggregates (damage_by_bearing, deaths_by_bearing, room_entries_by_bearing, door_choices_by_bearing).
+
+4. Build a causal model with at least three layers:
 - Composition layer: counts, role mix, specialist gates.
 - Cadence layer: spawn interval, batch, overtime/escalation.
 - Stat layer: mutator multipliers and archetype stat maps.
 
-4. Produce a change package that includes:
+5. Produce a change package that includes:
 - At least one broad systemic adjustment.
 - At least one per-bearing adjustment for identity preservation.
 - At least one anti-dominance action.
 - At least one weak-strategy enablement action.
 
-5. Provide rollback-safe validation:
+6. Provide rollback-safe validation:
 - Expected impact by Pilgrim, Delver, Harbinger, Forsworn.
 - Early/mid/late-depth sanity checks.
 - Risks and what to monitor.

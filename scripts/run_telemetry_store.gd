@@ -209,16 +209,26 @@ static func build_balance_summary(max_runs: int = 10, max_age_days: int = 21, in
 	var recent_runs := get_recent_runs(max_runs, max_age_days, include_debug, game_version)
 	var damage_by_source: Dictionary = {}
 	var damage_by_ability: Dictionary = {}
+	var damage_by_bearing: Dictionary = {}
 	var reward_choices: Dictionary = {}
 	var room_entries: Dictionary = {}
+	var room_entries_by_bearing: Dictionary = {}
+	var door_choices_by_bearing: Dictionary = {}
 	var death_sources: Dictionary = {}
+	var deaths_by_bearing: Dictionary = {}
 	var outcomes: Dictionary = {}
 	for run_entry in recent_runs:
 		_increment_counter(outcomes, String(run_entry.get("outcome", "unknown")))
 		for room_entry_variant in run_entry.get("room_entries", []):
 			var room_entry := room_entry_variant as Dictionary
+			var bearing_key := String(room_entry.get("bearing_key", room_entry.get("room_kind", "unknown")))
 			var room_key := "%s|%s" % [String(room_entry.get("room_label", "Unknown")), String(room_entry.get("enemy_mutator", "none"))]
 			_increment_counter(room_entries, room_key)
+			_increment_counter(room_entries_by_bearing, bearing_key)
+		for door_choice_variant in run_entry.get("door_choices", []):
+			var door_choice := door_choice_variant as Dictionary
+			var door_bearing_key := String(door_choice.get("bearing_key", "unknown"))
+			_increment_counter(door_choices_by_bearing, door_bearing_key)
 		for choice_variant in run_entry.get("reward_choices", []):
 			var reward_entry := choice_variant as Dictionary
 			var reward_key := "%s|%s" % [String(reward_entry.get("mode", "unknown")), String(reward_entry.get("choice_id", "unknown"))]
@@ -227,9 +237,11 @@ static func build_balance_summary(max_runs: int = 10, max_age_days: int = 21, in
 			var damage_entry := damage_variant as Dictionary
 			_increment_counter(damage_by_source, String(damage_entry.get("source", "unknown")))
 			_increment_counter(damage_by_ability, String(damage_entry.get("ability", "unknown")))
+			_increment_counter(damage_by_bearing, String(damage_entry.get("bearing_key", "unknown")))
 		var death_event := run_entry.get("death_event", {}) as Dictionary
 		if not death_event.is_empty():
 			_increment_counter(death_sources, String(death_event.get("source", "unknown")))
+			_increment_counter(deaths_by_bearing, String(death_event.get("bearing_key", "unknown")))
 	return {
 		"filters": {
 			"max_runs": max_runs,
@@ -243,8 +255,12 @@ static func build_balance_summary(max_runs: int = 10, max_age_days: int = 21, in
 			"outcomes": outcomes,
 			"damage_by_source": damage_by_source,
 			"damage_by_ability": damage_by_ability,
+			"damage_by_bearing": damage_by_bearing,
 			"death_sources": death_sources,
+			"deaths_by_bearing": deaths_by_bearing,
 			"reward_choices": reward_choices,
-			"room_entries": room_entries
+			"room_entries": room_entries,
+			"room_entries_by_bearing": room_entries_by_bearing,
+			"door_choices_by_bearing": door_choices_by_bearing
 		}
 	}
