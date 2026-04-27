@@ -307,6 +307,8 @@ func _update_status_panel_text(state: Dictionary) -> void:
 	var _encounter_intro_grace_left := float(state.get("encounter_intro_grace_left", 0.0))
 	var encounter_intro_grace_active := bool(state.get("encounter_intro_grace_active", false))
 
+	var boss_unlocked := bool(state.get("boss_unlocked", false))
+	var first_boss_defeated := bool(state.get("first_boss_defeated", false))
 	if run_cleared:
 		status_label.text = "[center][b]Depth %d[/b]\n[color=#A8FFB0]Run Clear[/color][/center]" % room_depth
 		var run_clear_text_h := maxf(34.0, status_label.get_content_height())
@@ -318,10 +320,15 @@ func _update_status_panel_text(state: Dictionary) -> void:
 			status_mutator_label.visible = false
 		return
 
-	if rooms_cleared >= _encounter_count:
-		status_label.text = "[center][b]Depth %d[/b][/center]" % room_depth
+	var second_boss_unlocked := bool(state.get("second_boss_unlocked", false))
+	if boss_unlocked and not first_boss_defeated:
+		status_label.text = "[center][b]Act I[/b]\n[color=#A5B6C9]Depth %d[/color]\n[color=#FFC0A0][b]The Warden[/b] awaits[/color][/center]" % room_depth
+	elif second_boss_unlocked:
+		status_label.text = "[center][b]Act II[/b]\n[color=#A5B6C9]Depth %d[/color]\n[color=#E8A0FF][b]The Sovereign[/b] awaits[/color][/center]" % room_depth
+	elif first_boss_defeated:
+		status_label.text = "[center][b]Act II[/b]\n[color=#A5B6C9]Depth %d[/color][/center]" % room_depth
 	else:
-		status_label.text = "[center][b]Depth %d[/b]  [color=#A5B6C9]%d/%d[/color][/center]" % [room_depth, rooms_cleared, _encounter_count]
+		status_label.text = "[center][b]Act I[/b]\n[color=#A5B6C9]Depth %d[/color][/center]" % room_depth
 
 	if encounter_intro_grace_active:
 		status_label.text += "\n[center][color=#C8F0FF]Move to engage[/color][/center]"

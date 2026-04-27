@@ -88,7 +88,7 @@ const DEBUG_MUTATOR_RANDOM_HARD := 6
 @export var music_crossfade_duration: float = 0.75
 @export var rest_heal_ratio: float = 0.32
 @export var hard_room_enemy_bonus: int = 3
-@export var second_boss_encounter_count: int = 4
+@export var second_boss_encounter_count: int = 8
 @export var debug_apply_test_powers_on_start: bool = false
 @export var debug_skip_starting_boon_selection: bool = false
 @export var debug_start_power_ids: PackedStringArray = PackedStringArray()
@@ -1247,7 +1247,7 @@ func _get_hud_state() -> Dictionary:
 	# Keep the visible depth anchored to the cleared room until the next room is entered.
 	if between_rooms and not run_cleared and current_room_label != "Rest Site":
 		display_room_depth = maxi(0, room_depth - 1)
-	return {
+	var hud_state := {
 		"room_size": current_room_size,
 		"current_room_label": current_room_label,
 		"rooms_cleared": rooms_cleared,
@@ -1273,7 +1273,11 @@ func _get_hud_state() -> Dictionary:
 		"objective_target_flee_thresholds": objective_target_flee_thresholds,
 		"objective_target_next_flee_index": objective_target_next_flee_index,
 		"encounter_intro_grace_active": encounter_intro_grace_active,
+		"boss_unlocked": boss_unlocked,
+		"first_boss_defeated": first_boss_defeated,
+		"second_boss_unlocked": first_boss_defeated and rooms_cleared >= (encounter_count + second_boss_encounter_count),
 	}
+	return hud_state
 
 func _get_priority_target_health() -> int:
 	if not is_instance_valid(objective_target_enemy):
