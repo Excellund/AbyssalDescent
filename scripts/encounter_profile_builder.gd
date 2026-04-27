@@ -313,7 +313,9 @@ func _build_profile(label: String, room_size: Vector2, chasers: int, chargers: i
 func _build_intro_profile(depth: int) -> Dictionary:
 	if depth <= 0:
 		return _apply_bearing_count_scaling(_build_profile("Skirmish", INTRO_ROOM_SIZE, 3, 0, 0, 0), 1.0, _skirmish_min_total_enemies())
-	return _apply_bearing_count_scaling(_build_profile("Skirmish", INTRO_ROOM_SIZE, 3, 0, 1, 0), 1.0, _skirmish_min_total_enemies())
+	var rank := _difficulty_rank()
+	var chasers_by_rank := [2, 3, 3, 4]
+	return _build_profile("Skirmish", INTRO_ROOM_SIZE, chasers_by_rank[rank], 0, 1, 0)
 
 func build_skirmish_profile(depth: int) -> Dictionary:
 	if depth < 2:
