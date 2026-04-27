@@ -1008,11 +1008,14 @@ func _draw_trial_reward_state() -> void:
 		var pips_lit := modulo
 		if pips_lit == 0 and attack_combo_counter > 0:
 			pips_lit = execution_every
+		var pip_y := -24.0
 		for i in range(execution_every):
 			var x := -10.0 + float(i) * 10.0
 			var lit := i < pips_lit
 			var c := ENEMY_BASE.COLOR_EXECUTION_PIP_LIT if lit else ENEMY_BASE.COLOR_EXECUTION_PIP_DARK
-			draw_circle(Vector2(x, -30.0), 2.4, c)
+			var pip_pos := Vector2(x, pip_y)
+			draw_circle(pip_pos, 3.4, Color(0.08, 0.08, 0.1, 0.46))
+			draw_circle(pip_pos, 2.5, c)
 
 	if reward_rupture_wave:
 		var pulse := 0.5 + 0.5 * sin(t * 4.2)

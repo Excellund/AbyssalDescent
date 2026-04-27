@@ -221,6 +221,11 @@ func _create_health_bar() -> void:
 	background_style.corner_radius_top_right = 3
 	background_style.corner_radius_bottom_left = 3
 	background_style.corner_radius_bottom_right = 3
+	background_style.border_width_left = 1
+	background_style.border_width_top = 1
+	background_style.border_width_right = 1
+	background_style.border_width_bottom = 1
+	background_style.border_color = Color(0.88, 0.92, 1.0, 0.78)
 
 	var fill_style := StyleBoxFlat.new()
 	fill_style.bg_color = COLOR_ENEMY_HEALTH_FILL
