@@ -86,6 +86,9 @@ func _build_ui() -> void:
 	sep.color = Color(0.9, 0.76, 0.42, 0.35)
 	_root.add_child(sep)
 
+	var menu_button_top := 500.0
+	var menu_button_bottom := 556.0
+
 	## Unlock notification (conditionally shown)
 	if _unlocked_tier >= 0:
 		var unlock_panel := Panel.new()
@@ -93,44 +96,61 @@ func _build_ui() -> void:
 		unlock_panel.set_anchor(SIDE_RIGHT, 0.5)
 		unlock_panel.set_anchor(SIDE_TOP, 0.0)
 		unlock_panel.set_anchor(SIDE_BOTTOM, 0.0)
-		unlock_panel.offset_left = -280.0
-		unlock_panel.offset_right = 280.0
-		unlock_panel.offset_top = 330.0
-		unlock_panel.offset_bottom = 420.0
+		unlock_panel.offset_left = -340.0
+		unlock_panel.offset_right = 340.0
+		unlock_panel.offset_top = 476.0
+		unlock_panel.offset_bottom = 618.0
 		var unlock_style := StyleBoxFlat.new()
-		unlock_style.bg_color = Color(0.2, 0.25, 0.15, 0.92)
+		unlock_style.bg_color = Color(0.14, 0.18, 0.12, 0.95)
 		unlock_style.border_color = Color(0.8, 0.95, 0.5, 0.95)
 		unlock_style.set_border_width_all(2)
-		unlock_style.set_corner_radius_all(10)
+		unlock_style.set_corner_radius_all(12)
 		unlock_panel.add_theme_stylebox_override("panel", unlock_style)
 		_root.add_child(unlock_panel)
 
 		var unlock_config := DIFFICULTY_CONFIG.get_tier_config(_unlocked_tier)
 		var unlock_tier_name: String = unlock_config.get("name", "Unknown")
 
+		var unlock_layout := MarginContainer.new()
+		unlock_layout.set_anchors_preset(Control.PRESET_FULL_RECT)
+		unlock_layout.add_theme_constant_override("margin_left", 26)
+		unlock_layout.add_theme_constant_override("margin_right", 26)
+		unlock_layout.add_theme_constant_override("margin_top", 14)
+		unlock_layout.add_theme_constant_override("margin_bottom", 14)
+		unlock_panel.add_child(unlock_layout)
+
+		var unlock_stack := VBoxContainer.new()
+		unlock_stack.set_anchors_preset(Control.PRESET_FULL_RECT)
+		unlock_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		unlock_stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		unlock_stack.add_theme_constant_override("separation", 8)
+		unlock_layout.add_child(unlock_stack)
+
 		var unlock_title := Label.new()
-		unlock_title.set_anchors_preset(Control.PRESET_TOP_WIDE)
-		unlock_title.offset_left = 20.0
-		unlock_title.offset_right = -20.0
-		unlock_title.offset_top = 10.0
-		unlock_title.offset_bottom = 40.0
+		unlock_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		unlock_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		unlock_title.text = "New Difficulty Unlocked!"
-		unlock_title.add_theme_font_size_override("font_size", 20)
+		unlock_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		unlock_title.text = "New Bearing Unlocked!"
+		unlock_title.add_theme_font_size_override("font_size", 26)
 		unlock_title.add_theme_color_override("font_color", Color(0.8, 0.95, 0.5, 1.0))
-		unlock_panel.add_child(unlock_title)
+		unlock_title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.75))
+		unlock_title.add_theme_constant_override("shadow_offset_x", 1)
+		unlock_title.add_theme_constant_override("shadow_offset_y", 1)
+		unlock_stack.add_child(unlock_title)
 
 		var unlock_desc := Label.new()
-		unlock_desc.set_anchors_preset(Control.PRESET_CENTER)
-		unlock_desc.offset_top = 25.0
-		unlock_desc.offset_bottom = 70.0
-		unlock_desc.offset_left = 20.0
-		unlock_desc.offset_right = -20.0
+		unlock_desc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		unlock_desc.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		unlock_desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		unlock_desc.text = "%s is now available!\nYou can still choose easier difficulties whenever you prefer." % unlock_tier_name
-		unlock_desc.add_theme_font_size_override("font_size", 14)
+		unlock_desc.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		unlock_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		unlock_desc.text = "%s is now available in the Bearing menu." % unlock_tier_name
+		unlock_desc.add_theme_font_size_override("font_size", 17)
 		unlock_desc.add_theme_color_override("font_color", Color(0.85, 0.92, 1.0, 0.9))
-		unlock_panel.add_child(unlock_desc)
+		unlock_stack.add_child(unlock_desc)
+
+		menu_button_top = 650.0
+		menu_button_bottom = 706.0
 
 	# Main menu button
 	var btn_panel := Panel.new()
@@ -140,8 +160,8 @@ func _build_ui() -> void:
 	btn_panel.set_anchor(SIDE_BOTTOM, 0.0)
 	btn_panel.offset_left = -150.0
 	btn_panel.offset_right = 150.0
-	btn_panel.offset_top = 500.0
-	btn_panel.offset_bottom = 556.0
+	btn_panel.offset_top = menu_button_top
+	btn_panel.offset_bottom = menu_button_bottom
 	var btn_style := StyleBoxFlat.new()
 	btn_style.bg_color = Color(0.10, 0.14, 0.20, 0.96)
 	btn_style.border_color = Color(0.62, 0.74, 0.96, 0.82)

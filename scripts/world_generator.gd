@@ -97,6 +97,7 @@ const DEBUG_MUTATOR_RANDOM_HARD := 6
 @export var debug_start_depth: int = 1
 @export_enum("None", "Blood Rush", "Flashpoint", "Siegebreak", "Iron Volley", "Killbox", "Random Hard") var debug_mutator_override: int = DEBUG_MUTATOR_NONE
 @export var debug_trigger_victory: bool = false
+@export_enum("No Unlock:-1", "Pilgrim:0", "Delver:1", "Harbinger:2", "Forsworn:3") var debug_victory_unlock_tier: int = -1
 
 var player: Node2D
 var player_camera: Camera2D
@@ -265,7 +266,7 @@ func _ready() -> void:
 		return
 	_apply_debug_start_powers_if_needed()
 	if debug_trigger_victory:
-		victory_screen.call("show_victory", 0, -1)
+		victory_screen.call("show_victory", 0, debug_victory_unlock_tier)
 		return
 	if debug_start_encounter != DEBUG_ENCOUNTER_NONE:
 		_start_debug_selected_encounter(debug_start_encounter)
@@ -2105,7 +2106,8 @@ func _update_encounter_intro_grace() -> bool:
 		return false
 	var move_input := Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	var player_moving := move_input.length_squared() > 0.04 or (player as CharacterBody2D).velocity.length_squared() > 64.0
-	if player_moving:
+	var player_attacking := Input.is_action_just_pressed("attack")
+	if player_moving or player_attacking:
 		encounter_intro_grace_active = false
 		_set_enemy_targets_passive(false)
 		hud.show_banner("Engage", "")
