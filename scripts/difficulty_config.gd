@@ -67,6 +67,8 @@ static func get_tier_config(tier: int) -> Dictionary:
 				"mutator_frequency_mult": 1.3,  ## More mutators
 				"trial_encounter_frequency_mult": 1.2,  ## More trials
 				"mutator_damage_mult": 1.1,  ## Mutators are more dangerous
+				## Contact-heavy rooms can spike too hard at this tier; keep identity while trimming touch damage.
+				"enemy_contact_damage_mult": 0.94,
 				## No player bonuses (veteran players don't need them)
 				"player_starting_health_bonus": 0.0,
 				"player_damage_taken_mult": 1.0,
@@ -89,6 +91,8 @@ static func get_tier_config(tier: int) -> Dictionary:
 				"mutator_frequency_mult": 1.6,  ## Frequent mutators
 				"trial_encounter_frequency_mult": 1.4,  ## More trials
 				"mutator_damage_mult": 1.25,  ## Heavily damaging mutators
+				## Keep Forsworn lethal but avoid contact stack one-shots.
+				"enemy_contact_damage_mult": 0.94,
 				## No player bonuses
 				"player_starting_health_bonus": 0.0,
 				"player_damage_taken_mult": 1.0,

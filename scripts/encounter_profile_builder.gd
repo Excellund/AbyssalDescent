@@ -119,8 +119,8 @@ const BEARING_DEFINITIONS := {
 		"rank_counts": [
 			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 2, "ram_count": 1, "lancer_count": 0},
 			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 2, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 3, "ram_count": 1, "lancer_count": 0},
-			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 4, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 3, "ram_count": 1, "lancer_count": 0},
-			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 5, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 4, "ram_count": 2, "lancer_count": 0}
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 3, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 3, "ram_count": 1, "lancer_count": 0},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 4, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 3, "ram_count": 2, "lancer_count": 0}
 		]
 	},
 	"Suppression": {
@@ -406,8 +406,8 @@ func _build_intro_variant_profile(depth: int) -> Dictionary:
 	if depth <= 0:
 		var opening_chasers_by_rank := [2, 2, 3, 3]
 		return _build_profile("Pursuit", INTRO_ROOM_SIZE, opening_chasers_by_rank[rank], 1, 0, 0)
-	var chasers_by_rank := [1, 2, 2, 3]
-	var chargers_by_rank := [1, 1, 1, 2]
+	var chasers_by_rank := [1, 2, 2, 2]
+	var chargers_by_rank := [1, 1, 1, 1]
 	return _build_profile("Pursuit", INTRO_ROOM_SIZE, chasers_by_rank[rank], chargers_by_rank[rank], 0, 0)
 
 func build_skirmish_profile(depth: int) -> Dictionary:
@@ -901,7 +901,7 @@ func _hard_mutator_pool() -> Array[Dictionary]:
 			"affected_archetypes": ["charger", "archer"],
 			C.MUTATOR_KEY_BANNER_SUFFIX: "Charges and volleys strike with almost no warning",
 			C.MUTATOR_KEY_ENEMY_TINT: Color(0.88, 0.82, 1.0, 1.0),
-			C.MUTATOR_STAT_CHARGER_DAMAGE_MULT: 1.2,
+			C.MUTATOR_STAT_CHARGER_DAMAGE_MULT: 1.12,
 			C.MUTATOR_STAT_CHARGER_SPEED_MULT: 1.32,
 			C.MUTATOR_STAT_CHARGER_WINDUP_MULT: 0.55,
 			C.MUTATOR_STAT_ARCHER_WINDUP_MULT: 0.55,
@@ -916,7 +916,7 @@ func _hard_mutator_pool() -> Array[Dictionary]:
 			"affected_archetypes": ["charger", "shielder"],
 			C.MUTATOR_KEY_BANNER_SUFFIX: "Chargers and shielders hit with overwhelming force",
 			C.MUTATOR_KEY_ENEMY_TINT: Color(1.0, 0.88, 0.72, 1.0),
-			C.MUTATOR_STAT_CHARGER_DAMAGE_MULT: 1.62,
+			C.MUTATOR_STAT_CHARGER_DAMAGE_MULT: 1.5,
 			C.MUTATOR_STAT_CHARGER_SPEED_MULT: 1.15,
 			C.MUTATOR_STAT_CHARGER_WINDUP_MULT: 0.82,
 			C.MUTATOR_STAT_SHIELDER_SLAM_DAMAGE_MULT: 1.55,

@@ -110,7 +110,7 @@ func _process_strike(delta: float) -> void:
 		var target_pos := target.global_position
 		var closest := Geometry2D.get_closest_point_to_segment(target_pos, strike_start, strike_end)
 		if closest.distance_to(target_pos) <= strike_range:
-			if DAMAGEABLE.apply_damage(target, strike_damage, {"source": "enemy_contact"}):
+			if DAMAGEABLE.apply_damage(target, strike_damage, {"source": "enemy_contact", "ability": "lurker_lunge"}):
 				_strike_hit_applied = true
 				attack_anim_time_left = attack_anim_duration
 				queue_redraw()

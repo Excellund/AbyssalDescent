@@ -1071,6 +1071,8 @@ func _apply_difficulty_tier_bonuses(difficulty_tier: int) -> void:
 	bonus_rest_heal_charges = maxi(0, int(difficulty_config.get("player_potion_charges_bonus", 0)))
 	if player.has_method("set_incoming_damage_taken_mult"):
 		player.call("set_incoming_damage_taken_mult", float(difficulty_config.get("player_damage_taken_mult", 1.0)))
+	if player.has_method("set_incoming_contact_damage_mult"):
+		player.call("set_incoming_contact_damage_mult", float(difficulty_config.get("enemy_contact_damage_mult", 1.0)))
 	var health_bonus := float(difficulty_config.get("player_starting_health_bonus", 0.0))
 	if health_bonus > 0.0 and player.get("max_health") != null:
 		var current_max := int(player.get("max_health"))

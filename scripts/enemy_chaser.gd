@@ -49,7 +49,7 @@ func _try_attack_target() -> void:
 	if global_position.distance_to(target.global_position) > attack_range:
 		return
 
-	if not DAMAGEABLE.apply_damage(target, attack_damage, {"source": "enemy_contact"}):
+	if not DAMAGEABLE.apply_damage(target, attack_damage, {"source": "enemy_contact", "ability": "chaser_strike"}):
 		return
 	attack_cooldown_left = attack_interval
 	attack_anim_time_left = attack_anim_duration

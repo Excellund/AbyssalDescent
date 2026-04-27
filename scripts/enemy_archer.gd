@@ -174,7 +174,7 @@ func _process_projectiles(delta: float) -> void:
 		if is_instance_valid(target):
 			var dist_to_player := projectile.global_position.distance_to(target.global_position)
 			if dist_to_player < 28.0:
-				DAMAGEABLE.apply_damage(target, projectile_damage)
+				DAMAGEABLE.apply_damage(target, projectile_damage, {"source": "enemy_ability", "ability": "archer_projectile"})
 				projectile.queue_free()
 				completed_projectiles.append(projectile)
 				continue

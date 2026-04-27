@@ -292,7 +292,7 @@ func _process_zones(delta: float) -> void:
 			if is_instance_valid(target):
 				if (z["pos"] as Vector2).distance_to(target.global_position) <= zone_radius:
 					if DAMAGEABLE.can_take_damage(target):
-						DAMAGEABLE.apply_damage(target, zone_tick_damage)
+						DAMAGEABLE.apply_damage(target, zone_tick_damage, {"source": "enemy_ability", "ability": "lancer_zone_tick"})
 
 		if float(z["time_left"]) <= 0.0:
 			expired.append(i)

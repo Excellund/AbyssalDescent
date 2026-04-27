@@ -182,7 +182,7 @@ func _try_attack_target() -> void:
 		shield_target_facing = shield_facing.slerp(to_target.normalized(), clampf(shield_attack_reaim_blend, 0.0, 1.0))
 		shield_reaim_left = maxf(shield_reaim_left, shield_reaim_interval * 0.6)
 
-	if not DAMAGEABLE.apply_damage(target, attack_damage, {"source": "enemy_contact"}):
+	if not DAMAGEABLE.apply_damage(target, attack_damage, {"source": "enemy_contact", "ability": "shielder_strike"}):
 		return
 	attack_cooldown_left = attack_interval
 	attack_anim_time_left = attack_anim_duration
