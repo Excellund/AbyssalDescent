@@ -57,7 +57,20 @@ const RUN_SNAPSHOT_PROPERTIES := [
 	"phantom_step_slow_duration",
 	"void_dash_range_mult",
 	"static_wake_damage",
-	"static_wake_lifetime"
+	"static_wake_lifetime",
+	"reward_storm_crown",
+	"reward_wraithstep",
+	"storm_crown_stacks",
+	"wraithstep_stacks",
+	"storm_crown_proc_every",
+	"storm_crown_chain_targets",
+	"storm_crown_chain_radius",
+	"storm_crown_damage_ratio",
+	"wraithstep_mark_duration",
+	"wraithstep_dash_mark_radius",
+	"wraithstep_mark_bonus_damage",
+	"wraithstep_mark_splash_radius",
+	"wraithstep_mark_splash_ratio"
 ]
 
 signal health_changed(current_health: int, max_health: int)
@@ -135,9 +148,13 @@ var hunters_snare_slow_mult: float = 0.66
 var reward_phantom_step: bool = false
 var reward_void_dash: bool = false
 var reward_static_wake: bool = false
+var reward_storm_crown: bool = false
+var reward_wraithstep: bool = false
 var phantom_step_stacks: int = 0
 var void_dash_stacks: int = 0
 var static_wake_stacks: int = 0
+var storm_crown_stacks: int = 0
+var wraithstep_stacks: int = 0
 # Phantom Step: damage and slow duration scale with stacks
 var phantom_step_damage: int = 10
 var phantom_step_slow_duration: float = 0.7
@@ -146,6 +163,17 @@ var void_dash_range_mult: float = 1.42
 # Static Wake: trail damage and lifetime
 var static_wake_damage: int = 8
 var static_wake_lifetime: float = 1.4
+# Storm Crown: attack cadence proc that chains from the struck target
+var storm_crown_proc_every: int = 4
+var storm_crown_chain_targets: int = 2
+var storm_crown_chain_radius: float = 112.0
+var storm_crown_damage_ratio: float = 0.52
+# Wraithstep: dash marks targets; marked hits consume for cleave damage
+var wraithstep_mark_duration: float = 2.4
+var wraithstep_dash_mark_radius: float = 42.0
+var wraithstep_mark_bonus_damage: int = 12
+var wraithstep_mark_splash_radius: float = 52.0
+var wraithstep_mark_splash_ratio: float = 0.48
 # Runtime state for dash powers
 var phantom_step_hit_ids: Dictionary = {}
 var phantom_step_ghost_positions: Array[Dictionary] = []
@@ -154,6 +182,10 @@ var static_wake_trails: Array[Dictionary] = []
 var static_wake_trail_emit_cooldown: float = 0.0
 var void_dash_reset_pulse_left: float = 0.0
 var void_dash_reset_pulse_duration: float = 0.28
+var storm_crown_hit_counter: int = 0
+var storm_crown_discharge_flash_left: float = 0.0
+var storm_crown_discharge_flash_duration: float = 0.24
+var wraithstep_marked_enemy_expiry: Dictionary = {}
 
 # Objective mutators
 var active_objective_mutators: Array[Dictionary] = []
@@ -188,6 +220,8 @@ func _physics_process(delta: float) -> void:
 	_update_aegis_field_state(delta)
 	_update_static_wake_trails(delta)
 	_update_void_dash_reset_pulse(delta)
+	_update_wraithstep_marks()
+	_update_storm_crown_discharge(delta)
 	_try_start_dash(direction)
 	_try_attack_input()
 
@@ -319,9 +353,11 @@ func _process_active_dash(delta: float) -> bool:
 	if dash_time_left <= 0.0:
 		return false
 
+	var dash_start := global_position
 	dash_time_left = maxf(0.0, dash_time_left - delta)
 	velocity = dash_direction * dash_speed
 	move_and_slide()
+	var dash_end := global_position
 
 	if reward_phantom_step:
 		_apply_phantom_step_during_dash()
@@ -344,6 +380,9 @@ func _process_active_dash(delta: float) -> bool:
 			static_wake_trails.append({"pos": global_position, "life": static_wake_lifetime})
 			static_wake_trail_emit_cooldown = 0.04
 		queue_redraw()
+
+	if reward_wraithstep:
+		_apply_wraithstep_marks_during_dash(dash_start, dash_end)
 
 	return true
 
@@ -446,6 +485,12 @@ func _update_void_dash_reset_pulse(delta: float) -> void:
 	if void_dash_reset_pulse_left <= 0.0:
 		return
 	void_dash_reset_pulse_left = maxf(0.0, void_dash_reset_pulse_left - delta)
+	queue_redraw()
+
+func _update_storm_crown_discharge(delta: float) -> void:
+	if storm_crown_discharge_flash_left <= 0.0:
+		return
+	storm_crown_discharge_flash_left = maxf(0.0, storm_crown_discharge_flash_left - delta)
 	queue_redraw()
 
 func _update_aegis_field_state(delta: float) -> void:
@@ -574,6 +619,9 @@ func apply_run_snapshot(snapshot: Dictionary) -> void:
 	phantom_step_ghost_positions.clear()
 	static_wake_trails.clear()
 	void_dash_reset_pulse_left = 0.0
+	storm_crown_hit_counter = 0
+	storm_crown_discharge_flash_left = 0.0
+	wraithstep_marked_enemy_expiry.clear()
 	_set_dash_phasing(false)
 	velocity = Vector2.ZERO
 	queue_redraw()
@@ -673,7 +721,9 @@ func apply_power_for_test(power_id: String) -> bool:
 		"hunters_snare": true,
 		"phantom_step": true,
 		"reaper_step": true,
-		"static_wake": true
+		"static_wake": true,
+		"storm_crown": true,
+		"wraithstep": true
 	}
 	if hard_ids.has(id):
 		apply_trial_power(id)
@@ -736,9 +786,12 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 			continue
 
 		var final_strike_damage := strike_damage + _get_hunters_snare_bonus_damage(enemy_node)
+		final_strike_damage += _consume_wraithstep_mark(enemy_node, enemy_body.global_position, strike_damage)
 		DAMAGEABLE.apply_damage(enemy_node, final_strike_damage)
 		_apply_hunters_snare(enemy_node)
 		melee_hit_enemy_ids[enemy_id] = true
+		if reward_storm_crown:
+			_apply_storm_crown_hit(enemy_body.global_position, enemy_id, final_strike_damage)
 		if reward_rupture_wave and not rupture_triggered_enemy_ids.has(enemy_id):
 			rupture_triggered_enemy_ids[enemy_id] = true
 			_apply_rupture_wave(enemy_body.global_position, final_strike_damage, rupture_hit_enemy_ids)
@@ -775,9 +828,12 @@ func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupt
 		if absf(attack_direction.angle_to(to_enemy.normalized())) > wind_half_arc:
 			continue
 		var final_wind_damage := wind_damage + _get_hunters_snare_bonus_damage(enemy_node)
+		final_wind_damage += _consume_wraithstep_mark(enemy_node, enemy_body.global_position, wind_damage)
 		DAMAGEABLE.apply_damage(enemy_node, final_wind_damage)
 		_apply_hunters_snare(enemy_node)
 		wind_hit_enemy_ids[enemy_id] = true
+		if reward_storm_crown:
+			_apply_storm_crown_hit(enemy_body.global_position, enemy_id, final_wind_damage)
 		if reward_rupture_wave and not rupture_triggered_enemy_ids.has(enemy_id):
 			rupture_triggered_enemy_ids[enemy_id] = true
 			_apply_rupture_wave(enemy_body.global_position, final_wind_damage, rupture_hit_enemy_ids)
@@ -821,6 +877,164 @@ func _apply_rupture_wave(epicenter: Vector2, source_damage: int, rupture_hit_ene
 		# Mark this enemy as hit by rupture, preventing chain damage
 		rupture_hit_enemy_ids[enemy_id] = true
 		DAMAGEABLE.apply_damage(enemy_node, wave_damage, {"is_ground_attack": true, "attack_type": "rupture_wave"})
+
+
+func _update_wraithstep_marks() -> void:
+	if wraithstep_marked_enemy_expiry.is_empty():
+		return
+	var now := Time.get_ticks_msec() / 1000.0
+	for enemy_id in wraithstep_marked_enemy_expiry.keys():
+		var entry := wraithstep_marked_enemy_expiry[enemy_id] as Dictionary
+		if float(entry.get("expiry", 0.0)) <= now or not is_instance_valid(entry.get("node")):
+			wraithstep_marked_enemy_expiry.erase(enemy_id)
+	queue_redraw()
+
+
+func _apply_wraithstep_marks_during_dash(dash_start: Vector2, dash_end: Vector2) -> void:
+	var now := Time.get_ticks_msec() / 1000.0
+	var expiry := now + wraithstep_mark_duration
+	var effective_mark_radius := wraithstep_dash_mark_radius + 12.0
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if not DAMAGEABLE.can_take_damage(enemy_node):
+			continue
+		var enemy_body := enemy_node as Node2D
+		var nearest := Geometry2D.get_closest_point_to_segment(enemy_body.global_position, dash_start, dash_end)
+		if enemy_body.global_position.distance_to(nearest) > effective_mark_radius:
+			continue
+		var enemy_id := enemy_body.get_instance_id()
+		var is_new_mark := not wraithstep_marked_enemy_expiry.has(enemy_id)
+		wraithstep_marked_enemy_expiry[enemy_id] = {"expiry": expiry, "node": enemy_body}
+		if is_new_mark and player_feedback != null:
+			player_feedback.play_world_ring(enemy_body.global_position, 18.0, Color(0.72, 0.96, 1.0, 0.82), 0.18)
+			player_feedback.play_world_ring(enemy_body.global_position, 30.0, Color(0.56, 0.88, 1.0, 0.42), 0.26)
+	queue_redraw()
+
+
+func _consume_wraithstep_mark(enemy_node: Object, hit_position: Vector2, base_damage: int) -> int:
+	if not reward_wraithstep:
+		return 0
+	if not is_instance_valid(enemy_node):
+		return 0
+	var enemy_id := enemy_node.get_instance_id()
+	if not wraithstep_marked_enemy_expiry.has(enemy_id):
+		return 0
+	wraithstep_marked_enemy_expiry.erase(enemy_id)
+	var splash_source_damage := maxi(1, int(round(float(base_damage) * wraithstep_mark_splash_ratio)))
+	var chain_damage_scale := minf(1.0, 0.72 + float(maxi(0, wraithstep_stacks - 1)) * 0.1)
+	var chain_damage := maxi(1, int(round(float(splash_source_damage) * chain_damage_scale)))
+	_apply_wraithstep_splash(hit_position, splash_source_damage, enemy_id)
+	_apply_wraithstep_chain(hit_position, enemy_id, chain_damage)
+	if player_feedback != null:
+		# Tight core burst
+		player_feedback.play_world_ring(hit_position, 16.0, Color(1.0, 1.0, 1.0, 0.92), 0.08)
+		# Main cleave ring
+		player_feedback.play_world_ring(hit_position, wraithstep_mark_splash_radius, Color(0.72, 0.96, 1.0, 0.86), 0.22)
+		# Outer drift
+		player_feedback.play_world_ring(hit_position, wraithstep_mark_splash_radius * 1.35, Color(0.48, 0.78, 1.0, 0.38), 0.32)
+		# Inner fill ring for impact
+		player_feedback.play_world_ring(hit_position, wraithstep_mark_splash_radius * 0.46, Color(0.88, 0.98, 1.0, 0.62), 0.12)
+	queue_redraw()
+	return wraithstep_mark_bonus_damage
+
+
+func _apply_wraithstep_chain(chain_origin: Vector2, consumed_enemy_id: int, chain_damage: int) -> void:
+	if wraithstep_marked_enemy_expiry.is_empty():
+		return
+	var propagated_ids: Dictionary = {consumed_enemy_id: true}
+	var pending_epicenters: Array[Vector2] = [chain_origin]
+	while not pending_epicenters.is_empty():
+		var epicenter: Vector2 = pending_epicenters[0]
+		pending_epicenters.remove_at(0)
+		var triggered_in_wave: Array[Dictionary] = []
+		for enemy_id in wraithstep_marked_enemy_expiry.keys():
+			if propagated_ids.has(enemy_id):
+				continue
+			var entry := wraithstep_marked_enemy_expiry[enemy_id] as Dictionary
+			var enemy_ref := entry.get("node") as Node2D
+			if not is_instance_valid(enemy_ref):
+				continue
+			if not DAMAGEABLE.can_take_damage(enemy_ref):
+				continue
+			if enemy_ref.global_position.distance_to(epicenter) > wraithstep_mark_splash_radius:
+				continue
+			triggered_in_wave.append({"id": int(enemy_id), "node": enemy_ref})
+
+		for triggered_entry in triggered_in_wave:
+			var triggered_enemy_id := int(triggered_entry["id"])
+			var triggered_enemy := triggered_entry["node"] as Node2D
+			wraithstep_marked_enemy_expiry.erase(triggered_enemy_id)
+			propagated_ids[triggered_enemy_id] = true
+			DAMAGEABLE.apply_damage(triggered_enemy, chain_damage)
+			pending_epicenters.append(triggered_enemy.global_position)
+			if player_feedback != null:
+				player_feedback.call("play_wraithstep_chain_echo", epicenter, triggered_enemy.global_position)
+				player_feedback.play_world_ring(triggered_enemy.global_position, wraithstep_mark_splash_radius * 0.5, Color(0.72, 0.94, 1.0, 0.64), 0.14)
+
+
+func _apply_wraithstep_splash(epicenter: Vector2, splash_damage: int, excluded_enemy_id: int) -> void:
+	var final_splash_damage := _apply_objective_mutator_damage_mult(splash_damage)
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if not DAMAGEABLE.can_take_damage(enemy_node):
+			continue
+		var enemy_body := enemy_node as Node2D
+		var enemy_id := enemy_body.get_instance_id()
+		if enemy_id == excluded_enemy_id:
+			continue
+		if enemy_body.global_position.distance_to(epicenter) > wraithstep_mark_splash_radius:
+			continue
+		DAMAGEABLE.apply_damage(enemy_node, final_splash_damage)
+
+
+func _apply_storm_crown_hit(source_position: Vector2, source_enemy_id: int, source_damage: int) -> void:
+	if not reward_storm_crown:
+		return
+	storm_crown_hit_counter += 1
+	if storm_crown_hit_counter % maxi(1, storm_crown_proc_every) != 0:
+		return
+
+	var chain_damage := maxi(1, int(round(float(source_damage) * storm_crown_damage_ratio)))
+	chain_damage = _apply_objective_mutator_damage_mult(chain_damage)
+	var chained_enemy_ids: Dictionary = {source_enemy_id: true}
+	var remaining_chains := maxi(0, storm_crown_chain_targets)
+	var chain_origin := source_position
+	while remaining_chains > 0:
+		var next_enemy: Node2D = null
+		var next_enemy_id := -1
+		var nearest_distance_sq := INF
+		for enemy_node in get_tree().get_nodes_in_group("enemies"):
+			if not (enemy_node is Node2D):
+				continue
+			if not DAMAGEABLE.can_take_damage(enemy_node):
+				continue
+			var enemy_body := enemy_node as Node2D
+			var enemy_id := enemy_body.get_instance_id()
+			if chained_enemy_ids.has(enemy_id):
+				continue
+			var dist_sq := chain_origin.distance_squared_to(enemy_body.global_position)
+			if dist_sq > storm_crown_chain_radius * storm_crown_chain_radius:
+				continue
+			if dist_sq < nearest_distance_sq:
+				nearest_distance_sq = dist_sq
+				next_enemy = enemy_body
+				next_enemy_id = enemy_id
+		if next_enemy == null:
+			break
+		DAMAGEABLE.apply_damage(next_enemy, chain_damage)
+		chained_enemy_ids[next_enemy_id] = true
+		if player_feedback != null:
+			player_feedback.call("play_chain_lightning", chain_origin, next_enemy.global_position)
+			player_feedback.play_world_ring(next_enemy.global_position, 16.0, Color(1.0, 0.98, 0.72, 0.82), 0.1)
+			player_feedback.play_world_ring(next_enemy.global_position, 28.0, Color(0.82, 0.94, 1.0, 0.46), 0.18)
+		chain_origin = next_enemy.global_position
+		remaining_chains -= 1
+	if player_feedback != null:
+		player_feedback.call("play_storm_crown_discharge", source_position)
+	storm_crown_discharge_flash_left = storm_crown_discharge_flash_duration
+	queue_redraw()
 
 
 func _apply_phantom_step_during_dash() -> void:
@@ -1090,3 +1304,81 @@ func _draw_trial_reward_state() -> void:
 			var local_pos := to_local(trail_pos)
 			draw_circle(local_pos, 7.0 * life_ratio, Color(0.96, 0.96, 0.36, 0.28 * life_ratio))
 			draw_arc(local_pos, 9.0 * life_ratio, 0.0, TAU, 14, Color(1.0, 1.0, 0.5, 0.42 * life_ratio), 1.2)
+
+	if reward_storm_crown:
+		var crown_pulse := 0.5 + 0.5 * sin(t * 7.8 + 0.9)
+		var proc_ratio := 0.0
+		if storm_crown_proc_every > 0:
+			proc_ratio = float(storm_crown_hit_counter % storm_crown_proc_every) / float(storm_crown_proc_every)
+		var charge := proc_ratio
+
+		# Discharge pop
+		if storm_crown_discharge_flash_left > 0.0:
+			var flash_t := clampf(storm_crown_discharge_flash_left / maxf(0.001, storm_crown_discharge_flash_duration), 0.0, 1.0)
+			var glow_t := 1.0 - flash_t
+			var pop_r := 18.0 + glow_t * 20.0
+			draw_circle(Vector2.ZERO, pop_r * 0.72, Color(0.98, 0.97, 0.6, 0.22 * flash_t))
+			draw_arc(Vector2.ZERO, pop_r, 0.0, TAU, 36, Color(1.0, 0.98, 0.78, 0.92 * flash_t * flash_t), 3.4)
+			draw_arc(Vector2.ZERO, pop_r + 9.0, 0.0, TAU, 36, Color(0.82, 0.94, 1.0, 0.48 * flash_t), 1.8)
+
+		# Charge arc — fills clockwise from top, shifts yellow -> electric white at full
+		var ring_r := 26.0 + crown_pulse * 1.4
+		var charge_arc := TAU * charge
+		var arc_r := lerpf(0.44, 1.0, charge)
+		var arc_g := lerpf(0.62, 0.97, charge)
+		var arc_b := lerpf(0.26, 0.72, charge)
+		var arc_a := 0.28 + charge * 0.44 + crown_pulse * 0.1
+		if charge_arc > 0.05:
+			draw_arc(Vector2.ZERO, ring_r, -PI * 0.5, -PI * 0.5 + charge_arc, maxi(6, int(charge_arc / 0.1)), Color(arc_r, arc_g, arc_b, arc_a), 2.6 + charge * 0.8)
+
+		# Crown ticks — 5 radial spikes, each lights up as charge passes their threshold
+		var tick_count := 5
+		for i in range(tick_count):
+			var tick_angle := -PI * 0.5 + TAU * (float(i) / float(tick_count))
+			var tick_threshold := float(i) / float(tick_count)
+			var lit := charge >= tick_threshold
+			var tick_inner := 28.0
+			var tick_outer := tick_inner + (6.0 + charge * 7.0 if lit else 3.2)
+			var tick_a := (0.32 + charge * 0.5 + crown_pulse * 0.18) if lit else 0.14
+			var tick_c := Color(0.98, 0.96, 0.56, tick_a) if lit else Color(0.56, 0.62, 0.44, tick_a)
+			draw_line(Vector2(cos(tick_angle), sin(tick_angle)) * tick_inner,
+				Vector2(cos(tick_angle), sin(tick_angle)) * tick_outer, tick_c, 2.0)
+
+		# Near-full shimmer
+		if charge > 0.74:
+			var shimmer_pulse := 0.5 + 0.5 * sin(t * 16.0 + 2.1)
+			draw_arc(Vector2.ZERO, ring_r + 5.0, 0.0, TAU, 32, Color(1.0, 0.98, 0.76, 0.12 + shimmer_pulse * 0.2), 1.4)
+
+	if reward_wraithstep:
+		var mark_count := wraithstep_marked_enemy_expiry.size()
+		var wraith_pulse := 0.5 + 0.5 * sin(t * 6.2 + 2.4)
+
+		# Player passive ring — brighter when marks are active
+		var passive_alpha := (0.28 + mark_count * 0.12 + wraith_pulse * 0.14) if mark_count > 0 else (0.12 + wraith_pulse * 0.06)
+		draw_arc(Vector2.ZERO, 20.0 + wraith_pulse * 1.8, 0.0, TAU, 32, Color(0.72, 0.94, 1.0, clampf(passive_alpha, 0.0, 0.72)), 1.8)
+
+		# Per-enemy mark glyphs drawn at world positions
+		var now_t := Time.get_ticks_msec() / 1000.0
+		for enemy_id in wraithstep_marked_enemy_expiry.keys():
+			var entry := wraithstep_marked_enemy_expiry[enemy_id] as Dictionary
+			var enemy_ref: Node2D = entry.get("node") as Node2D
+			if not is_instance_valid(enemy_ref):
+				continue
+			var local_ep := to_local(enemy_ref.global_position) + Vector2(0.0, -18.0)
+			var expiry := float(entry.get("expiry", 0.0))
+			var life_ratio := clampf((expiry - now_t) / maxf(0.001, wraithstep_mark_duration), 0.0, 1.0)
+			var mark_pulse := 0.5 + 0.5 * sin(t * 9.0 + float(enemy_id & 0xFF) * 0.04)
+			var mark_alpha := clampf((0.6 + mark_pulse * 0.3) * life_ratio, 0.0, 1.0)
+			var mark_c := Color(0.68, 0.96, 1.0, mark_alpha)
+			var mark_c_bright := Color(1.0, 1.0, 1.0, mark_alpha * 0.85)
+			var r := 10.0 + mark_pulse * 1.2
+			# Bracket arcs top/bottom
+			draw_arc(local_ep, r, -PI * 0.28, PI * 0.28, 12, mark_c, 2.2)
+			draw_arc(local_ep, r, PI * 0.72, PI * 1.28, 12, mark_c, 2.2)
+			# Corner ticks
+			var tick_dirs := PackedVector2Array([Vector2(0.7, -0.7), Vector2(-0.7, -0.7), Vector2(0.7, 0.7), Vector2(-0.7, 0.7)])
+			for tick_dir: Vector2 in tick_dirs:
+				var tp: Vector2 = local_ep + tick_dir * (r + 1.5)
+				draw_line(tp, tp + tick_dir * 4.0, mark_c, 1.4)
+			# Center dot
+			draw_circle(local_ep, 1.8 + mark_pulse * 0.6, mark_c_bright)

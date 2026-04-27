@@ -198,6 +198,102 @@ func play_impact_heavy(epicenter_global: Vector2, radius: float = 100.0) -> void
 		damage_flash_tween = create_tween()
 		damage_flash_tween.tween_property(damage_flash_rect, "modulate:a", 0.0, 0.22)
 
+func play_chain_lightning(from_global: Vector2, target_global: Vector2, color: Color = Color(0.98, 0.98, 0.76, 0.92), lifetime: float = 0.14) -> void:
+	var dir := target_global - from_global
+	var length := dir.length()
+	if length < 1.0:
+		return
+	var perp := dir.normalized().rotated(PI * 0.5)
+	var jag_scale := length * 0.22
+	var pts := PackedVector2Array()
+	pts.push_back(from_global)
+	for i in range(1, 5):
+		var tt := float(i) / 5.0
+		pts.push_back(from_global.lerp(target_global, tt) + perp * randf_range(-jag_scale, jag_scale))
+	pts.push_back(target_global)
+
+	# Outer glow bolt
+	var bolt := Line2D.new()
+	bolt.top_level = true
+	bolt.global_position = Vector2.ZERO
+	bolt.width = 3.2
+	bolt.default_color = color
+	bolt.antialiased = true
+	bolt.z_index = 42
+	bolt.points = pts
+	add_child(bolt)
+	var t1 := create_tween()
+	t1.set_parallel(true)
+	t1.tween_property(bolt, "modulate:a", 0.0, lifetime)
+	t1.tween_property(bolt, "width", 0.8, lifetime)
+	t1.set_parallel(false)
+	t1.tween_interval(lifetime)
+	t1.tween_callback(bolt.queue_free)
+
+	# Inner white core
+	var core := Line2D.new()
+	core.top_level = true
+	core.global_position = Vector2.ZERO
+	core.width = 1.4
+	core.default_color = Color(1.0, 1.0, 1.0, 0.8)
+	core.antialiased = true
+	core.z_index = 43
+	core.points = pts
+	add_child(core)
+	var t2 := create_tween()
+	t2.tween_property(core, "modulate:a", 0.0, lifetime * 0.45)
+	t2.tween_callback(core.queue_free)
+
+func play_wraithstep_chain_echo(from_global: Vector2, target_global: Vector2, lifetime: float = 0.18) -> void:
+	var dir := target_global - from_global
+	var length := dir.length()
+	if length < 1.0:
+		return
+	var perp := dir.normalized().rotated(PI * 0.5)
+	var bend := minf(26.0, length * 0.22)
+	var arc_mid := from_global.lerp(target_global, 0.5) + perp * randf_range(-bend, bend)
+
+	var ribbon := Line2D.new()
+	ribbon.top_level = true
+	ribbon.global_position = Vector2.ZERO
+	ribbon.width = 2.8
+	ribbon.default_color = Color(0.72, 0.94, 1.0, 0.86)
+	ribbon.antialiased = true
+	ribbon.z_index = 42
+	ribbon.points = PackedVector2Array([from_global, arc_mid, target_global])
+	add_child(ribbon)
+
+	var core := Line2D.new()
+	core.top_level = true
+	core.global_position = Vector2.ZERO
+	core.width = 1.2
+	core.default_color = Color(0.96, 1.0, 1.0, 0.76)
+	core.antialiased = true
+	core.z_index = 43
+	core.points = ribbon.points
+	add_child(core)
+
+	var t1 := create_tween()
+	t1.set_parallel(true)
+	t1.tween_property(ribbon, "modulate:a", 0.0, lifetime)
+	t1.tween_property(ribbon, "width", 0.8, lifetime)
+	t1.tween_property(core, "modulate:a", 0.0, lifetime * 0.72)
+	t1.tween_property(core, "width", 0.5, lifetime * 0.72)
+	t1.set_parallel(false)
+	t1.tween_interval(lifetime)
+	t1.tween_callback(ribbon.queue_free)
+	t1.tween_callback(core.queue_free)
+
+	play_world_ring(target_global, 12.0, Color(0.86, 0.98, 1.0, 0.7), lifetime * 0.7)
+
+func play_storm_crown_discharge(epicenter_global: Vector2) -> void:
+	# Tight white core flash
+	play_world_ring(epicenter_global, 20.0, Color(1.0, 1.0, 0.95, 0.95), 0.09)
+	# Electric yellow mid ring
+	play_world_ring(epicenter_global, 38.0, Color(0.98, 0.95, 0.48, 0.82), 0.16)
+	# Outer blue-white drift ring
+	play_world_ring(epicenter_global, 62.0, Color(0.82, 0.94, 1.0, 0.44), 0.26)
+
 func play_damage_flash() -> void:
 	if damage_flash_rect == null:
 		return

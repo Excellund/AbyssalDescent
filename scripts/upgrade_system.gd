@@ -19,7 +19,9 @@ var trial_power_stacks: Dictionary = {
 	"hunters_snare": 0,
 	"phantom_step": 0,
 	"reaper_step": 0,
-	"static_wake": 0
+	"static_wake": 0,
+	"storm_crown": 0,
+	"wraithstep": 0
 }
 
 const UPGRADE_IDS := {
@@ -43,7 +45,9 @@ const TRIAL_POWER_IDS := {
 	"hunters_snare": true,
 	"phantom_step": true,
 	"reaper_step": true,
-	"static_wake": true
+	"static_wake": true,
+	"storm_crown": true,
+	"wraithstep": true
 }
 
 
@@ -157,6 +161,21 @@ func apply_trial_power(power_id: String) -> bool:
 			player_reference.set("static_wake_stacks", next_stack)
 			player_reference.set("static_wake_damage", int(next_values.get("damage", player_reference.get("static_wake_damage"))))
 			player_reference.set("static_wake_lifetime", float(next_values.get("lifetime", player_reference.get("static_wake_lifetime"))))
+		"storm_crown":
+			player_reference.set("reward_storm_crown", true)
+			player_reference.set("storm_crown_stacks", next_stack)
+			player_reference.set("storm_crown_proc_every", int(next_values.get("proc_every", player_reference.get("storm_crown_proc_every"))))
+			player_reference.set("storm_crown_chain_targets", int(next_values.get("chain_targets", player_reference.get("storm_crown_chain_targets"))))
+			player_reference.set("storm_crown_chain_radius", float(next_values.get("chain_radius", player_reference.get("storm_crown_chain_radius"))))
+			player_reference.set("storm_crown_damage_ratio", float(next_values.get("damage_ratio", player_reference.get("storm_crown_damage_ratio"))))
+		"wraithstep":
+			player_reference.set("reward_wraithstep", true)
+			player_reference.set("wraithstep_stacks", next_stack)
+			player_reference.set("wraithstep_mark_duration", float(next_values.get("mark_duration", player_reference.get("wraithstep_mark_duration"))))
+			player_reference.set("wraithstep_dash_mark_radius", float(next_values.get("dash_mark_radius", player_reference.get("wraithstep_dash_mark_radius"))))
+			player_reference.set("wraithstep_mark_bonus_damage", int(next_values.get("bonus_damage", player_reference.get("wraithstep_mark_bonus_damage"))))
+			player_reference.set("wraithstep_mark_splash_radius", float(next_values.get("splash_radius", player_reference.get("wraithstep_mark_splash_radius"))))
+			player_reference.set("wraithstep_mark_splash_ratio", float(next_values.get("splash_ratio", player_reference.get("wraithstep_mark_splash_ratio"))))
 		_:
 			return false
 	return true
@@ -217,6 +236,10 @@ func get_trial_power_stack_count(power_id: String) -> int:
 				return int(player_reference.get("void_dash_stacks"))
 			"static_wake":
 				return int(player_reference.get("static_wake_stacks"))
+			"storm_crown":
+				return int(player_reference.get("storm_crown_stacks"))
+			"wraithstep":
+				return int(player_reference.get("wraithstep_stacks"))
 	if trial_power_stacks.has(id):
 		return trial_power_stacks[id]
 	return 0
@@ -316,6 +339,21 @@ func _build_trial_values(power_id: String, stack_count: int) -> Dictionary:
 				"damage": int(data.get("damage_base", 0)) + stack_count * int(data.get("damage_per_stack", 0)),
 				"lifetime": float(data.get("lifetime_base", 0.0)) + float(data.get("lifetime_per_stack", 0.0)) * float(stack_count)
 			}
+		"storm_crown":
+			return {
+				"proc_every": maxi(int(data.get("proc_every_floor", 1)), int(data.get("proc_every_base", 1)) - stack_count),
+				"chain_targets": mini(int(data.get("chain_targets_cap", 6)), int(data.get("chain_targets_base", 1)) + stack_count * int(data.get("chain_targets_per_stack", 0))),
+				"chain_radius": float(data.get("chain_radius_base", 0.0)) + float(data.get("chain_radius_per_stack", 0.0)) * float(stack_count),
+				"damage_ratio": minf(float(data.get("damage_ratio_cap", 1.0)), float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count))
+			}
+		"wraithstep":
+			return {
+				"mark_duration": float(data.get("mark_duration_base", 0.0)) + float(data.get("mark_duration_per_stack", 0.0)) * float(stack_count),
+				"dash_mark_radius": float(data.get("dash_mark_radius_base", 0.0)) + float(data.get("dash_mark_radius_per_stack", 0.0)) * float(stack_count),
+				"bonus_damage": int(data.get("bonus_damage_base", 0)) + stack_count * int(data.get("bonus_damage_per_stack", 0)),
+				"splash_radius": float(data.get("splash_radius_base", 0.0)) + float(data.get("splash_radius_per_stack", 0.0)) * float(stack_count),
+				"splash_ratio": minf(float(data.get("splash_ratio_cap", 1.0)), float(data.get("splash_ratio_base", 0.0)) + float(data.get("splash_ratio_per_stack", 0.0)) * float(stack_count))
+			}
 		_:
 			return {}
 
@@ -413,6 +451,32 @@ func get_trial_power_card_description(power_id: String) -> String:
 			if current_stack <= 0:
 				return "[color=#9ab8d8]Leaves an electrified trail as you move that shocks any enemy who steps into it.[/color]\n[color=#9ab8d8]Initial:[/color] trail tick [color=#7de882]%d[/color] damage, lasts [color=#7de882]%.2fs[/color]." % [next_damage, next_lifetime]
 			return "[color=#c8daf0]Static Wake:[/color] tick [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color], trail [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_damage, next_damage, cur_lifetime, next_lifetime]
+		"storm_crown":
+			if next_values.is_empty():
+				return "[color=#9ab8d8]Enhances this power.[/color]"
+			var next_every := int(next_values.get("proc_every", 1))
+			var next_targets := int(next_values.get("chain_targets", 1))
+			var next_radius := float(next_values.get("chain_radius", 0.0))
+			var next_ratio := float(next_values.get("damage_ratio", 0.0))
+			var cur_every := int(player_reference.get("storm_crown_proc_every"))
+			var cur_targets := int(player_reference.get("storm_crown_chain_targets"))
+			var cur_radius := float(player_reference.get("storm_crown_chain_radius"))
+			var cur_ratio := float(player_reference.get("storm_crown_damage_ratio"))
+			if current_stack <= 0:
+				return "[color=#9ab8d8]Every few hits discharge chain lightning from your target to nearby foes.[/color]\n[color=#9ab8d8]Initial:[/color] every [color=#7de882]%d[/color] hits, chains to [color=#7de882]%d[/color] targets within [color=#7de882]%.0f[/color], for [color=#7de882]%.0f%%[/color] damage." % [next_every, next_targets, next_radius, next_ratio * 100.0]
+			return "[color=#c8daf0]Storm Crown:[/color] proc [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color], chains [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color], radius [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color], damage [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color]." % [cur_every, next_every, cur_targets, next_targets, cur_radius, next_radius, cur_ratio * 100.0, next_ratio * 100.0]
+		"wraithstep":
+			if next_values.is_empty():
+				return "[color=#9ab8d8]Enhances this power.[/color]"
+			var next_mark_duration := float(next_values.get("mark_duration", 0.0))
+			var next_bonus_damage := int(next_values.get("bonus_damage", 0))
+			var next_splash_ratio := float(next_values.get("splash_ratio", 0.0))
+			var cur_mark_duration := float(player_reference.get("wraithstep_mark_duration"))
+			var cur_bonus_damage := int(player_reference.get("wraithstep_mark_bonus_damage"))
+			var cur_splash_ratio := float(player_reference.get("wraithstep_mark_splash_ratio"))
+			if current_stack <= 0:
+				return "[color=#9ab8d8]Dash marks nearby enemies. Hitting a marked target deals bonus damage and detonates chained splashes through other marked foes.[/color]\n[color=#9ab8d8]Initial:[/color] mark [color=#7de882]%.2fs[/color], bonus [color=#7de882]+%d[/color], cleave [color=#7de882]%.0f%%[/color]." % [next_mark_duration, next_bonus_damage, next_splash_ratio * 100.0]
+			return "[color=#c8daf0]Wraithstep:[/color] mark [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color], bonus [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color], cleave [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color]." % [cur_mark_duration, next_mark_duration, cur_bonus_damage, next_bonus_damage, cur_splash_ratio * 100.0, next_splash_ratio * 100.0]
 		_:
 			return "[color=#9ab8d8]Enhances this power.[/color]"
 

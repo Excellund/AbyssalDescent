@@ -134,6 +134,31 @@ const TRIAL_POWER_BALANCE := {
 		"damage_per_stack": 3,
 		"lifetime_base": 1.2,
 		"lifetime_per_stack": 0.25
+	},
+	"storm_crown": {
+		"proc_every_base": 5,
+		"proc_every_floor": 2,
+		"chain_targets_base": 2,
+		"chain_targets_per_stack": 1,
+		"chain_targets_cap": 5,
+		"chain_radius_base": 120.0,
+		"chain_radius_per_stack": 12.0,
+		"damage_ratio_base": 0.38,
+		"damage_ratio_per_stack": 0.08,
+		"damage_ratio_cap": 0.82
+	},
+	"wraithstep": {
+		"mark_duration_base": 2.8,
+		"mark_duration_per_stack": 0.55,
+		"dash_mark_radius_base": 42.0,
+		"dash_mark_radius_per_stack": 10.0,
+		"bonus_damage_base": 14,
+		"bonus_damage_per_stack": 8,
+		"splash_radius_base": 52.0,
+		"splash_radius_per_stack": 10.0,
+		"splash_ratio_base": 0.55,
+		"splash_ratio_per_stack": 0.12,
+		"splash_ratio_cap": 0.95
 	}
 }
 
@@ -236,10 +261,14 @@ func get_trial_power_pool(player_reference: Node = null) -> Array[Dictionary]:
 	var phantom_desc := _get_trial_fallback_description("phantom_step")
 	var void_desc := _get_trial_fallback_description("reaper_step")
 	var static_desc := _get_trial_fallback_description("static_wake")
+	var storm_desc := _get_trial_fallback_description("storm_crown")
+	var wraith_desc := _get_trial_fallback_description("wraithstep")
 	if is_instance_valid(player_reference) and player_reference.has_method("get_trial_power_card_desc"):
 		phantom_desc = String(player_reference.call("get_trial_power_card_desc", "phantom_step"))
 		void_desc = String(player_reference.call("get_trial_power_card_desc", "reaper_step"))
 		static_desc = String(player_reference.call("get_trial_power_card_desc", "static_wake"))
+		storm_desc = String(player_reference.call("get_trial_power_card_desc", "storm_crown"))
+		wraith_desc = String(player_reference.call("get_trial_power_card_desc", "wraithstep"))
 
 	return [
 		Power.new("razor_wind", "Razor Wind", razor_desc, POWER_TYPE_TRIAL, get_power_stack_limit("razor_wind"), get_power_balance("razor_wind")).to_dict(),
@@ -250,6 +279,8 @@ func get_trial_power_pool(player_reference: Node = null) -> Array[Dictionary]:
 		Power.new("phantom_step", "Phantom Step", phantom_desc, POWER_TYPE_TRIAL, get_power_stack_limit("phantom_step"), get_power_balance("phantom_step")).to_dict(),
 		Power.new("reaper_step", "Reaper Step", void_desc, POWER_TYPE_TRIAL, get_power_stack_limit("reaper_step"), get_power_balance("reaper_step")).to_dict(),
 		Power.new("static_wake", "Static Wake", static_desc, POWER_TYPE_TRIAL, get_power_stack_limit("static_wake"), get_power_balance("static_wake")).to_dict(),
+		Power.new("storm_crown", "Storm Crown", storm_desc, POWER_TYPE_TRIAL, get_power_stack_limit("storm_crown"), get_power_balance("storm_crown")).to_dict(),
+		Power.new("wraithstep", "Wraithstep", wraith_desc, POWER_TYPE_TRIAL, get_power_stack_limit("wraithstep"), get_power_balance("wraithstep")).to_dict(),
 	]
 
 
@@ -382,6 +413,10 @@ func _get_trial_fallback_description(power_id: String) -> String:
 			return "Dash travels farther. Kills refresh dash cooldown."
 		"static_wake":
 			return "Dashing leaves an electrified trail that burns enemies."
+		"storm_crown":
+			return "Every few hits unleash chain lightning that arcs through nearby enemies."
+		"wraithstep":
+			return "Dash marks enemies. Hitting a marked target deals bonus damage and cleaves nearby foes."
 		_:
 			return "Enhances this power."
 
