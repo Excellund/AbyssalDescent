@@ -119,8 +119,8 @@ const BEARING_DEFINITIONS := {
 		"rank_counts": [
 			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 2, "ram_count": 1, "lancer_count": 0},
 			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 2, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 3, "ram_count": 1, "lancer_count": 0},
-			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 3, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 4, "ram_count": 1, "lancer_count": 0},
-			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 4, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 5, "ram_count": 2, "lancer_count": 0}
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 4, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 3, "ram_count": 1, "lancer_count": 0},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 5, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 4, "ram_count": 2, "lancer_count": 0}
 		]
 	},
 	"Suppression": {
@@ -173,8 +173,8 @@ const BEARING_DEFINITIONS := {
 		"rank_counts": [
 			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 3, "ram_count": 0, "lancer_count": 1},
 			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 2, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 4, "ram_count": 0, "lancer_count": 1},
-			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 3, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 5, "ram_count": 0, "lancer_count": 2},
-			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 4, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 6, "ram_count": 0, "lancer_count": 2}
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 4, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 4, "ram_count": 0, "lancer_count": 2},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 4, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 5, "ram_count": 0, "lancer_count": 3}
 		]
 	},
 	"Gauntlet": {
@@ -642,7 +642,7 @@ func _trial_specialist_enemies(mutator: Dictionary, depth: int, tier: int = META
 	var specialist_offset := int(difficulty_config.get("specialist_enemy_depth_offset", 0))
 	var depth_pressure_divisor := maxf(0.1, float(difficulty_config.get("depth_pressure_divisor", 1.0)))
 	var effective_depth := int(floor(float(maxi(0, depth)) / depth_pressure_divisor))
-	var base_pressure_mult := float(difficulty_config.get("base_enemy_pressure_mult", 1.0))
+	var specialist_pressure_mult := float(difficulty_config.get("specialist_enemy_pressure_mult", 1.0))
 	
 	## Adjust depth gates for specialist enemies based on tier
 	var lurker_gate := 5 + specialist_offset
@@ -658,16 +658,19 @@ func _trial_specialist_enemies(mutator: Dictionary, depth: int, tier: int = META
 			ram_count = 0
 			lancer_count = 0
 		"blood_rush":
-			lurker_count += 1 if depth >= lurker_gate else 0
+			lurker_count += 1 if effective_depth >= lurker_gate + 1 else 0
 			ram_count += 1 if depth >= ram_gate else 0
 		"flashpoint":
 			lancer_count += 1 if depth >= lancer_gate else 0
 		"siegebreak":
 			if tier != META_PROGRESS.TIER_PILGRIM:
 				ram_count += 1 if effective_depth >= ram_gate else 0
-	lurker_count = int(floor(float(maxi(0, lurker_count)) * base_pressure_mult))
-	ram_count = int(floor(float(maxi(0, ram_count)) * base_pressure_mult))
-	lancer_count = int(floor(float(maxi(0, lancer_count)) * base_pressure_mult))
+	lurker_count = int(floor(float(maxi(0, lurker_count)) * specialist_pressure_mult))
+	ram_count = int(floor(float(maxi(0, ram_count)) * specialist_pressure_mult))
+	lancer_count = int(floor(float(maxi(0, lancer_count)) * specialist_pressure_mult))
+	if icon == "blood_rush":
+		var blood_rush_lurker_cap := 3 + int(floor(float(maxi(0, effective_depth - lurker_gate)) / 5.0))
+		lurker_count = mini(lurker_count, blood_rush_lurker_cap)
 	return {
 		"lurker_count": maxi(0, lurker_count),
 		"ram_count": maxi(0, ram_count),
@@ -883,7 +886,7 @@ func _hard_mutator_pool() -> Array[Dictionary]:
 			"affected_archetypes": ["melee", "charger"],
 			C.MUTATOR_KEY_BANNER_SUFFIX: "Melee enemies strike harder and faster",
 			C.MUTATOR_KEY_ENEMY_TINT: Color(1.0, 0.80, 0.80, 1.0),
-			C.MUTATOR_STAT_CHASER_DAMAGE_MULT: 1.5,
+			C.MUTATOR_STAT_CHASER_DAMAGE_MULT: 1.35,
 			C.MUTATOR_STAT_CHASER_ATTACK_INTERVAL_MULT: 0.75,
 			C.MUTATOR_STAT_CHASER_SPEED_MULT: 1.1,
 			C.MUTATOR_STAT_CHARGER_DAMAGE_MULT: 1.45,

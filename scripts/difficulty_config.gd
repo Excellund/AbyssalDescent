@@ -17,6 +17,7 @@ static func get_tier_config(tier: int) -> Dictionary:
 				"base_enemy_pressure_mult": 0.6,  ## Baseline enemy count multiplier
 				"depth_pressure_divisor": 1.5,  ## Higher = slower ramping of difficulty; Apprentice ramps slower
 				"specialist_enemy_depth_offset": 3,  ## Lurkers start at depth 5 on apprentice (vs depth 5 on standard)
+				"specialist_enemy_pressure_mult": 0.75,  ## Specialist enemies ramp slower to avoid burst spikes
 				"boss_difficulty_mult": 0.75,  ## Boss health/damage multiplier
 				## Mutator and encounter complexity
 				"mutator_frequency_mult": 0.5,  ## Fewer mutators per room on lower tiers
@@ -38,6 +39,7 @@ static func get_tier_config(tier: int) -> Dictionary:
 				"base_enemy_pressure_mult": 1.0,
 				"depth_pressure_divisor": 1.0,
 				"specialist_enemy_depth_offset": 0,
+				"specialist_enemy_pressure_mult": 1.0,
 				"boss_difficulty_mult": 1.0,
 				## Mutator and encounter complexity
 				"mutator_frequency_mult": 1.0,
@@ -59,6 +61,7 @@ static func get_tier_config(tier: int) -> Dictionary:
 				"base_enemy_pressure_mult": 1.25,  ## More enemies per room
 				"depth_pressure_divisor": 0.8,  ## Faster ramping
 				"specialist_enemy_depth_offset": -1,  ## Specialist enemies appear 1 depth earlier
+				"specialist_enemy_pressure_mult": 1.05,
 				"boss_difficulty_mult": 1.15,  ## Stronger boss
 				## Mutator and encounter complexity
 				"mutator_frequency_mult": 1.3,  ## More mutators
@@ -80,6 +83,7 @@ static func get_tier_config(tier: int) -> Dictionary:
 				"base_enemy_pressure_mult": 1.5,  ## Significantly more enemies
 				"depth_pressure_divisor": 0.6,  ## Very fast ramping
 				"specialist_enemy_depth_offset": -2,  ## Specialist enemies much earlier
+				"specialist_enemy_pressure_mult": 1.15,
 				"boss_difficulty_mult": 1.3,  ## Very strong boss
 				## Mutator and encounter complexity
 				"mutator_frequency_mult": 1.6,  ## Frequent mutators
