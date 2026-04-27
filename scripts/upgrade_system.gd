@@ -454,7 +454,12 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 		"surge_step":
 			return "[color=#c8daf0]Dash speed:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [float(cur_val), float(next_val)]
 		"kinetic_drive":
-			return "[color=#c8daf0]Acceleration:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [float(cur_val), float(next_val)]
+			var cur_accel := float(cur_val)
+			var next_accel := float(next_val)
+			var top_speed := maxf(1.0, float(player_reference.get("max_speed")))
+			var cur_time_to_top := top_speed / maxf(1.0, cur_accel)
+			var next_time_to_top := top_speed / maxf(1.0, next_accel)
+			return "[color=#c8daf0]Acceleration:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]\n[color=#c8daf0]0->max speed:[/color] [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]" % [cur_accel, next_accel, cur_time_to_top, next_time_to_top]
 		_:
 			return "[color=#c8daf0]Upgrade your stats.[/color]"
 

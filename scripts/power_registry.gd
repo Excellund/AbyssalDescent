@@ -63,7 +63,7 @@ const UPGRADE_BALANCE := {
 	"kinetic_drive": {
 		"kind": "add_float",
 		"property": "acceleration",
-		"add": 220.0
+		"add": 320.0
 	}
 }
 
@@ -359,7 +359,7 @@ func _get_upgrade_fallback_description(upgrade_id: String) -> String:
 		"surge_step":
 			return "Dash speed +%.0f." % [float(data.get("add", 0.0))]
 		"kinetic_drive":
-			return "Acceleration +%.0f." % [float(data.get("add", 0.0))]
+			return "Reach full move speed faster and snap into turns (acceleration +%.0f)." % [float(data.get("add", 0.0))]
 		_:
 			return "Upgrade your stats."
 
