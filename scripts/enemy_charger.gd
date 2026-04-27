@@ -249,16 +249,39 @@ func _draw() -> void:
 		var glow_radius := body_radius + 8.0 + charge_pulse * 4.0
 		draw_circle(Vector2.ZERO, glow_radius, Color(1.0, 0.82, 0.35, 0.08 * charge_pulse))
 		
-		# Outer telegraph line (glow)
-		var outer_alpha := 0.5 + charge_pulse * 0.3
-		draw_line(preview_start, preview_end, Color(1.0, 0.82, 0.35, outer_alpha), 7.0)
-		
-		# Inner telegraph line (bright core - direction clarity)
-		draw_line(preview_start, preview_end, Color(1.0, 0.97, 0.72, 0.95), 2.2)
-		
-		# Edge accent marks showing impact zone
-		var accent_len := 12.0
 		var preview_side := Vector2(-facing.y, facing.x)
 		var preview_impact := preview_end
-		draw_line(preview_impact + preview_side * 8.0, preview_impact + preview_side * 8.0 + facing * accent_len, Color(1.0, 0.88, 0.5, 0.7), 1.5)
-		draw_line(preview_impact - preview_side * 8.0, preview_impact - preview_side * 8.0 + facing * accent_len, Color(1.0, 0.88, 0.5, 0.7), 1.5)
+		var lane_width_start := 6.0 + charge_pulse * 1.5
+		var lane_width_end := 14.0 + charge_pulse * 4.0
+		var telegraph_lane := PackedVector2Array([
+			preview_start + preview_side * lane_width_start,
+			preview_impact + preview_side * lane_width_end,
+			preview_impact - preview_side * lane_width_end,
+			preview_start - preview_side * lane_width_start
+		])
+		var telegraph_core := PackedVector2Array([
+			preview_start + preview_side * 1.8,
+			preview_impact + preview_side * (3.0 + charge_pulse * 1.2),
+			preview_impact - preview_side * (3.0 + charge_pulse * 1.2),
+			preview_start - preview_side * 1.8
+		])
+		
+		# Soft lane glow reads as energy in space instead of a rigid beam.
+		draw_colored_polygon(telegraph_lane, Color(1.0, 0.76, 0.28, 0.12 + charge_pulse * 0.08))
+		draw_colored_polygon(telegraph_core, Color(1.0, 0.94, 0.7, 0.18 + charge_pulse * 0.08))
+		draw_polyline(PackedVector2Array([
+			preview_start + preview_side * lane_width_start,
+			preview_impact + preview_side * lane_width_end
+		]), Color(1.0, 0.86, 0.42, 0.3 + charge_pulse * 0.16), 1.5)
+		draw_polyline(PackedVector2Array([
+			preview_start - preview_side * lane_width_start,
+			preview_impact - preview_side * lane_width_end
+		]), Color(1.0, 0.86, 0.42, 0.3 + charge_pulse * 0.16), 1.5)
+		
+		# Impact halo and brackets make the endpoint feel like a danger zone.
+		var impact_radius := 11.0 + charge_pulse * 5.0
+		draw_circle(preview_impact, impact_radius, Color(1.0, 0.78, 0.32, 0.08 + charge_pulse * 0.06))
+		draw_arc(preview_impact, impact_radius, 0.0, TAU, 30, Color(1.0, 0.9, 0.54, 0.48 + charge_pulse * 0.18), 2.0)
+		var accent_len := 11.0
+		draw_line(preview_impact + preview_side * (lane_width_end - 2.0), preview_impact + preview_side * (lane_width_end - 2.0) - facing * accent_len, Color(1.0, 0.9, 0.54, 0.62), 1.6)
+		draw_line(preview_impact - preview_side * (lane_width_end - 2.0), preview_impact - preview_side * (lane_width_end - 2.0) - facing * accent_len, Color(1.0, 0.9, 0.54, 0.62), 1.6)
