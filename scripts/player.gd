@@ -497,6 +497,8 @@ func is_dead() -> bool:
 	return health_state.is_dead()
 
 func get_upgrade_stack_count(id: String) -> int:
+	if is_instance_valid(upgrade_system) and upgrade_system.has_method("get_upgrade_stack_count"):
+		return int(upgrade_system.call("get_upgrade_stack_count", id))
 	if id == "iron_skin":
 		return iron_skin_stacks
 	return 0
@@ -518,12 +520,18 @@ func build_run_snapshot() -> Dictionary:
 		var raw_stacks: Variant = upgrade_system.get("trial_power_stacks")
 		if raw_stacks is Dictionary:
 			trial_stacks = (raw_stacks as Dictionary).duplicate(true)
+	var upgrade_stacks: Dictionary = {}
+	if is_instance_valid(upgrade_system):
+		var raw_upgrade_stacks: Variant = upgrade_system.get("upgrade_stacks")
+		if raw_upgrade_stacks is Dictionary:
+			upgrade_stacks = (raw_upgrade_stacks as Dictionary).duplicate(true)
 	return {
 		"version": RUN_SNAPSHOT_VERSION,
 		"current_health": _get_current_health(),
 		"properties": properties,
 		"active_objective_mutators": get_active_objective_mutators(),
-		"trial_power_stacks": trial_stacks
+		"trial_power_stacks": trial_stacks,
+		"upgrade_stacks": upgrade_stacks
 	}
 
 func apply_run_snapshot(snapshot: Dictionary) -> void:
@@ -541,6 +549,9 @@ func apply_run_snapshot(snapshot: Dictionary) -> void:
 	var trial_stacks := snapshot.get("trial_power_stacks", {}) as Dictionary
 	if is_instance_valid(upgrade_system):
 		upgrade_system.set("trial_power_stacks", trial_stacks.duplicate(true))
+	var upgrade_stacks := snapshot.get("upgrade_stacks", {}) as Dictionary
+	if is_instance_valid(upgrade_system):
+		upgrade_system.set("upgrade_stacks", upgrade_stacks.duplicate(true))
 	if is_instance_valid(health_state):
 		health_state.max_health = max_health
 		health_state.set_health(int(snapshot.get("current_health", max_health)))
@@ -873,6 +884,8 @@ func _restart_current_scene() -> void:
 	scene_restart_queued = true
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context != null:
+		if run_context.has_method("set_last_run_outcome"):
+			run_context.call("set_last_run_outcome", "death")
 		if run_context.has_method("clear_active_run"):
 			run_context.call("clear_active_run")
 		if run_context.has_method("clear_resume_saved_run_request"):

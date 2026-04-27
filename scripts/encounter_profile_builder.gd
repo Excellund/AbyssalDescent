@@ -6,7 +6,7 @@ const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
 
 var rng: RandomNumberGenerator
-var current_difficulty_tier: int = META_PROGRESS.TIER_STANDARD
+var current_difficulty_tier: int = META_PROGRESS.TIER_DELVER
 
 var room_base_size: Vector2 = Vector2(940.0, 700.0)
 var room_size_growth: Vector2 = Vector2(80.0, 45.0)
@@ -139,7 +139,7 @@ func build_debug_mutator(mutator_key: String) -> Dictionary:
 	return {}
 
 func _get_hard_pool() -> Array[Dictionary]:
-	var is_apprentice := current_difficulty_tier == META_PROGRESS.TIER_APPRENTICE
+	var is_apprentice := current_difficulty_tier == META_PROGRESS.TIER_PILGRIM
 	# Crossfire: archers pin you, charger punishes standing still.
 	# Onslaught: pure melee flood — no respite from ranged.
 	# Fortress: true defensive wall — shielders advance with no charger to bypass.
@@ -238,7 +238,7 @@ func _pick_trial_base_profile(mutator: Dictionary) -> Dictionary:
 		"flashpoint":
 			return _build_profile("Crossfire", POOL_ROOM_SIZE, 2, 2, 4, 0)
 		"siegebreak":
-			if current_difficulty_tier == META_PROGRESS.TIER_APPRENTICE:
+			if current_difficulty_tier == META_PROGRESS.TIER_PILGRIM:
 				return _build_profile("Vanguard", POOL_ROOM_SIZE, 3, 2, 0, 2)
 			return _build_profile("Vanguard", POOL_ROOM_SIZE, 3, 3, 0, 3)
 		_:
@@ -269,7 +269,7 @@ func _trial_specialist_counts(mutator: Dictionary, depth: int, chasers: int, cha
 				"shielders": maxi(1, shielders)
 			}
 		"siegebreak":
-			if current_difficulty_tier == META_PROGRESS.TIER_APPRENTICE:
+			if current_difficulty_tier == META_PROGRESS.TIER_PILGRIM:
 				return {
 					"chasers": maxi(3, chasers),
 					"chargers": maxi(chargers, 3 + int(floor(float(depth) * 0.15))),
@@ -290,7 +290,7 @@ func _trial_specialist_counts(mutator: Dictionary, depth: int, chasers: int, cha
 				"shielders": shielders
 			}
 
-func _trial_specialist_enemies(mutator: Dictionary, depth: int, tier: int = META_PROGRESS.TIER_STANDARD) -> Dictionary:
+func _trial_specialist_enemies(mutator: Dictionary, depth: int, tier: int = META_PROGRESS.TIER_DELVER) -> Dictionary:
 	var icon := ENCOUNTER_CONTRACTS.mutator_icon_shape_id(mutator)
 	var difficulty_config := DIFFICULTY_CONFIG.get_tier_config(tier)
 	var specialist_offset := int(difficulty_config.get("specialist_enemy_depth_offset", 0))
@@ -314,7 +314,7 @@ func _trial_specialist_enemies(mutator: Dictionary, depth: int, tier: int = META
 		"flashpoint":
 			lancer_count += 1 if depth >= lancer_gate else 0
 		"siegebreak":
-			if tier != META_PROGRESS.TIER_APPRENTICE:
+			if tier != META_PROGRESS.TIER_PILGRIM:
 				ram_count += 1 if depth >= ram_gate else 0
 	return {
 		"lurker_count": maxi(0, lurker_count),

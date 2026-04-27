@@ -15,8 +15,8 @@ var resume_saved_run_requested: bool = false
 
 ## Meta-progression state
 var meta_progress_profile: Dictionary = {}
-var current_difficulty_tier: int = META_PROGRESS_STORE.TIER_APPRENTICE
-var highest_unlocked_difficulty_tier: int = META_PROGRESS_STORE.TIER_APPRENTICE
+var current_difficulty_tier: int = META_PROGRESS_STORE.TIER_PILGRIM
+var highest_unlocked_difficulty_tier: int = META_PROGRESS_STORE.TIER_PILGRIM
 var just_unlocked_tier: int = -1  ## -1 means no new unlock, otherwise the newly unlocked tier
 
 func _ready() -> void:
@@ -155,6 +155,24 @@ func is_difficulty_tier_unlocked(tier: int) -> bool:
 	return META_PROGRESS_STORE.is_tier_unlocked(meta_progress_profile, tier)
 
 
+## Award permanent difficulty unlocks for a completed run on the current tier.
+func award_run_clear_unlocks() -> int:
+	var unlocked_tier := -1
+	if not get_milestone("first_clear"):
+		set_milestone("first_clear", true)
+		if highest_unlocked_difficulty_tier < META_PROGRESS_STORE.TIER_DELVER and unlock_difficulty_tier(META_PROGRESS_STORE.TIER_DELVER):
+			unlocked_tier = META_PROGRESS_STORE.TIER_DELVER
+	if current_difficulty_tier == META_PROGRESS_STORE.TIER_DELVER and not get_milestone("first_clear_on_standard"):
+		set_milestone("first_clear_on_standard", true)
+		if highest_unlocked_difficulty_tier < META_PROGRESS_STORE.TIER_HARBINGER and unlock_difficulty_tier(META_PROGRESS_STORE.TIER_HARBINGER):
+			unlocked_tier = META_PROGRESS_STORE.TIER_HARBINGER
+	if current_difficulty_tier == META_PROGRESS_STORE.TIER_HARBINGER and not get_milestone("first_clear_on_veteran"):
+		set_milestone("first_clear_on_veteran", true)
+		if highest_unlocked_difficulty_tier < META_PROGRESS_STORE.TIER_FORSWORN and unlock_difficulty_tier(META_PROGRESS_STORE.TIER_FORSWORN):
+			unlocked_tier = META_PROGRESS_STORE.TIER_FORSWORN
+	return unlocked_tier
+
+
 ## Get and clear any newly unlocked tier (returns -1 if none)
 func consume_just_unlocked_tier() -> int:
 	var result := just_unlocked_tier
@@ -172,6 +190,15 @@ func record_run_completion(depth: int) -> void:
 	save_meta_progress()
 
 
+func set_last_run_outcome(outcome: String) -> void:
+	META_PROGRESS_STORE.set_last_run_outcome(meta_progress_profile, outcome)
+	save_meta_progress()
+
+
+func get_last_run_outcome() -> String:
+	return META_PROGRESS_STORE.get_last_run_outcome(meta_progress_profile)
+
+
 ## Set and save a milestone
 func set_milestone(key: String, value: bool) -> void:
 	META_PROGRESS_STORE.set_milestone(meta_progress_profile, key, value)
@@ -181,4 +208,3 @@ func set_milestone(key: String, value: bool) -> void:
 ## Get a milestone
 func get_milestone(key: String) -> bool:
 	return META_PROGRESS_STORE.get_milestone(meta_progress_profile, key)
-

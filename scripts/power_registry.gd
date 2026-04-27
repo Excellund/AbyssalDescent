@@ -121,6 +121,13 @@ const TRIAL_POWER_BALANCE := {
 	}
 }
 
+const UPGRADE_STACK_LIMITS := {
+	"long_reach": 3,
+	"iron_skin": 3
+}
+
+const TRIAL_POWER_STACK_LIMITS := {}
+
 # Unified power data structure
 class Power:
 	var id: String  # Unique identifier: "swift_strike", "razor_wind", etc
@@ -172,13 +179,13 @@ func get_upgrade_pool(player_reference: Node = null) -> Array[Dictionary]:
 		blink_desc = String(player_reference.call("get_upgrade_card_desc", "blink_dash"))
 		iron_desc = String(player_reference.call("get_upgrade_card_desc", "iron_skin"))
 	return [
-		Power.new("swift_strike", "Swift Strike", swift_desc, POWER_TYPE_UPGRADE, 0, get_power_balance("swift_strike")).to_dict(),
-		Power.new("heavy_blow", "Heavy Blow", heavy_desc, POWER_TYPE_UPGRADE, 0, get_power_balance("heavy_blow")).to_dict(),
-		Power.new("wide_arc", "Wide Arc", wide_desc, POWER_TYPE_UPGRADE, 0, get_power_balance("wide_arc")).to_dict(),
-		Power.new("long_reach", "Long Reach", reach_desc, POWER_TYPE_UPGRADE, 0, get_power_balance("long_reach")).to_dict(),
-		Power.new("fleet_foot", "Fleet Foot", fleet_desc, POWER_TYPE_UPGRADE, 0, get_power_balance("fleet_foot")).to_dict(),
-		Power.new("blink_dash", "Blink Dash", blink_desc, POWER_TYPE_UPGRADE, 0, get_power_balance("blink_dash")).to_dict(),
-		Power.new("iron_skin", "Iron Skin", iron_desc, POWER_TYPE_UPGRADE, 3, get_power_balance("iron_skin")).to_dict(),
+		Power.new("swift_strike", "Swift Strike", swift_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("swift_strike"), get_power_balance("swift_strike")).to_dict(),
+		Power.new("heavy_blow", "Heavy Blow", heavy_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("heavy_blow"), get_power_balance("heavy_blow")).to_dict(),
+		Power.new("wide_arc", "Wide Arc", wide_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("wide_arc"), get_power_balance("wide_arc")).to_dict(),
+		Power.new("long_reach", "Long Reach", reach_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("long_reach"), get_power_balance("long_reach")).to_dict(),
+		Power.new("fleet_foot", "Fleet Foot", fleet_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("fleet_foot"), get_power_balance("fleet_foot")).to_dict(),
+		Power.new("blink_dash", "Blink Dash", blink_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("blink_dash"), get_power_balance("blink_dash")).to_dict(),
+		Power.new("iron_skin", "Iron Skin", iron_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("iron_skin"), get_power_balance("iron_skin")).to_dict(),
 	]
 
 
@@ -207,14 +214,14 @@ func get_trial_power_pool(player_reference: Node = null) -> Array[Dictionary]:
 		static_desc = String(player_reference.call("get_trial_power_card_desc", "static_wake"))
 
 	return [
-		Power.new("razor_wind", "Razor Wind", razor_desc, POWER_TYPE_TRIAL, 0, get_power_balance("razor_wind")).to_dict(),
-		Power.new("execution_edge", "Execution Edge", execution_desc, POWER_TYPE_TRIAL, 0, get_power_balance("execution_edge")).to_dict(),
-		Power.new("rupture_wave", "Rupture Wave", rupture_desc, POWER_TYPE_TRIAL, 0, get_power_balance("rupture_wave")).to_dict(),
-		Power.new("aegis_field", "Aegis Field", aegis_desc, POWER_TYPE_TRIAL, 0, get_power_balance("aegis_field")).to_dict(),
-		Power.new("hunters_snare", "Hunter's Snare", snare_desc, POWER_TYPE_TRIAL, 0, get_power_balance("hunters_snare")).to_dict(),
-		Power.new("phantom_step", "Phantom Step", phantom_desc, POWER_TYPE_TRIAL, 0, get_power_balance("phantom_step")).to_dict(),
-		Power.new("reaper_step", "Reaper Step", void_desc, POWER_TYPE_TRIAL, 0, get_power_balance("reaper_step")).to_dict(),
-		Power.new("static_wake", "Static Wake", static_desc, POWER_TYPE_TRIAL, 0, get_power_balance("static_wake")).to_dict(),
+		Power.new("razor_wind", "Razor Wind", razor_desc, POWER_TYPE_TRIAL, get_power_stack_limit("razor_wind"), get_power_balance("razor_wind")).to_dict(),
+		Power.new("execution_edge", "Execution Edge", execution_desc, POWER_TYPE_TRIAL, get_power_stack_limit("execution_edge"), get_power_balance("execution_edge")).to_dict(),
+		Power.new("rupture_wave", "Rupture Wave", rupture_desc, POWER_TYPE_TRIAL, get_power_stack_limit("rupture_wave"), get_power_balance("rupture_wave")).to_dict(),
+		Power.new("aegis_field", "Aegis Field", aegis_desc, POWER_TYPE_TRIAL, get_power_stack_limit("aegis_field"), get_power_balance("aegis_field")).to_dict(),
+		Power.new("hunters_snare", "Hunter's Snare", snare_desc, POWER_TYPE_TRIAL, get_power_stack_limit("hunters_snare"), get_power_balance("hunters_snare")).to_dict(),
+		Power.new("phantom_step", "Phantom Step", phantom_desc, POWER_TYPE_TRIAL, get_power_stack_limit("phantom_step"), get_power_balance("phantom_step")).to_dict(),
+		Power.new("reaper_step", "Reaper Step", void_desc, POWER_TYPE_TRIAL, get_power_stack_limit("reaper_step"), get_power_balance("reaper_step")).to_dict(),
+		Power.new("static_wake", "Static Wake", static_desc, POWER_TYPE_TRIAL, get_power_stack_limit("static_wake"), get_power_balance("static_wake")).to_dict(),
 	]
 
 
@@ -289,6 +296,15 @@ func get_power_balance(power_id: String) -> Dictionary:
 	if TRIAL_POWER_BALANCE.has(id):
 		return (TRIAL_POWER_BALANCE[id] as Dictionary).duplicate(true)
 	return {}
+
+
+func get_power_stack_limit(power_id: String) -> int:
+	var id := power_id.strip_edges().to_lower()
+	if UPGRADE_STACK_LIMITS.has(id):
+		return int(UPGRADE_STACK_LIMITS[id])
+	if TRIAL_POWER_STACK_LIMITS.has(id):
+		return int(TRIAL_POWER_STACK_LIMITS[id])
+	return 0
 
 
 func _get_upgrade_fallback_description(upgrade_id: String) -> String:

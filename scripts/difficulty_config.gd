@@ -8,10 +8,10 @@ const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
 ## Difficulty config per tier: pacing, pressure, and affordances
 static func get_tier_config(tier: int) -> Dictionary:
 	match tier:
-		META_PROGRESS.TIER_APPRENTICE:
+		META_PROGRESS.TIER_PILGRIM:
 			return {
-				"name": META_PROGRESS.TIER_NAMES[META_PROGRESS.TIER_APPRENTICE],
-				"description": META_PROGRESS.TIER_DESCRIPTIONS[META_PROGRESS.TIER_APPRENTICE],
+				"name": META_PROGRESS.TIER_NAMES[META_PROGRESS.TIER_PILGRIM],
+				"description": META_PROGRESS.TIER_DESCRIPTIONS[META_PROGRESS.TIER_PILGRIM],
 				## Encounter generation
 				"encounter_count_before_boss": 5,  ## Rooms to clear before boss; easier tier has fewer rooms
 				"base_enemy_pressure_mult": 0.6,  ## Baseline enemy count multiplier
@@ -29,10 +29,10 @@ static func get_tier_config(tier: int) -> Dictionary:
 				"difficulty_rank": 0
 			}
 		
-		META_PROGRESS.TIER_STANDARD:
+		META_PROGRESS.TIER_DELVER:
 			return {
-				"name": META_PROGRESS.TIER_NAMES[META_PROGRESS.TIER_STANDARD],
-				"description": META_PROGRESS.TIER_DESCRIPTIONS[META_PROGRESS.TIER_STANDARD],
+				"name": META_PROGRESS.TIER_NAMES[META_PROGRESS.TIER_DELVER],
+				"description": META_PROGRESS.TIER_DESCRIPTIONS[META_PROGRESS.TIER_DELVER],
 				## Encounter generation (baseline)
 				"encounter_count_before_boss": 5,
 				"base_enemy_pressure_mult": 1.0,
@@ -50,10 +50,10 @@ static func get_tier_config(tier: int) -> Dictionary:
 				"difficulty_rank": 1
 			}
 		
-		META_PROGRESS.TIER_VETERAN:
+		META_PROGRESS.TIER_HARBINGER:
 			return {
-				"name": META_PROGRESS.TIER_NAMES[META_PROGRESS.TIER_VETERAN],
-				"description": META_PROGRESS.TIER_DESCRIPTIONS[META_PROGRESS.TIER_VETERAN],
+				"name": META_PROGRESS.TIER_NAMES[META_PROGRESS.TIER_HARBINGER],
+				"description": META_PROGRESS.TIER_DESCRIPTIONS[META_PROGRESS.TIER_HARBINGER],
 				## Encounter generation (harder)
 				"encounter_count_before_boss": 5,
 				"base_enemy_pressure_mult": 1.25,  ## More enemies per room
@@ -71,10 +71,10 @@ static func get_tier_config(tier: int) -> Dictionary:
 				"difficulty_rank": 2
 			}
 		
-		META_PROGRESS.TIER_TORMENT:
+		META_PROGRESS.TIER_FORSWORN:
 			return {
-				"name": META_PROGRESS.TIER_NAMES[META_PROGRESS.TIER_TORMENT],
-				"description": META_PROGRESS.TIER_DESCRIPTIONS[META_PROGRESS.TIER_TORMENT],
+				"name": META_PROGRESS.TIER_NAMES[META_PROGRESS.TIER_FORSWORN],
+				"description": META_PROGRESS.TIER_DESCRIPTIONS[META_PROGRESS.TIER_FORSWORN],
 				## Encounter generation (extreme)
 				"encounter_count_before_boss": 5,
 				"base_enemy_pressure_mult": 1.5,  ## Significantly more enemies
@@ -93,7 +93,7 @@ static func get_tier_config(tier: int) -> Dictionary:
 			}
 		
 		_:
-			return get_tier_config(META_PROGRESS.TIER_STANDARD)
+			return get_tier_config(META_PROGRESS.TIER_DELVER)
 
 ## Get a specific multiplier for a tier
 static func get_tier_multiplier(tier: int, key: String, default: float = 1.0) -> float:

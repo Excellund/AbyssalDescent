@@ -7,23 +7,23 @@ extends RefCounted
 const META_PROGRESS_PATH := "user://meta_progress.save"
 const META_PROGRESS_VERSION := 1
 
-const TIER_APPRENTICE := 0
-const TIER_STANDARD := 1
-const TIER_VETERAN := 2
-const TIER_TORMENT := 3
+const TIER_PILGRIM := 0
+const TIER_DELVER := 1
+const TIER_HARBINGER := 2
+const TIER_FORSWORN := 3
 
 const TIER_NAMES := {
-	TIER_APPRENTICE: "Apprentice",
-	TIER_STANDARD: "Standard",
-	TIER_VETERAN: "Veteran",
-	TIER_TORMENT: "Torment"
+	TIER_PILGRIM: "Pilgrim",
+	TIER_DELVER: "Delver",
+	TIER_HARBINGER: "Harbinger",
+	TIER_FORSWORN: "Forsworn"
 }
 
 const TIER_DESCRIPTIONS := {
-	TIER_APPRENTICE: "Learn the basics—fewer threats, gentler pacing.",
-	TIER_STANDARD: "The intended experience—master the systems.",
-	TIER_VETERAN: "Challenge unlocked—increased pressure and complexity.",
-	TIER_TORMENT: "Extreme test—all systems at maximum intensity."
+	TIER_PILGRIM: "The descent as intended.",
+	TIER_DELVER: "Harder. Faster. Less forgiving.",
+	TIER_HARBINGER: "A serious test. Few survive it.",
+	TIER_FORSWORN: "Punishing in every way."
 }
 
 ## Default profile for new players
@@ -33,8 +33,8 @@ static func _get_default_profile() -> Dictionary:
 		"created_at_unix": int(Time.get_unix_time_from_system()),
 		"last_modified_unix": int(Time.get_unix_time_from_system()),
 		"difficulty_state": {
-			"current_tier": TIER_APPRENTICE,
-			"highest_unlocked_tier": TIER_APPRENTICE
+			"current_tier": TIER_PILGRIM,
+			"highest_unlocked_tier": TIER_PILGRIM
 		},
 		"milestones": {
 			"first_clear": false,
@@ -47,7 +47,8 @@ static func _get_default_profile() -> Dictionary:
 		"run_stats": {
 			"total_runs": 0,
 			"total_clears": 0,
-			"best_depth": 0
+			"best_depth": 0,
+			"last_outcome": "none"
 		}
 	}
 
@@ -97,8 +98,8 @@ static func _migrate_profile(old_payload: Dictionary, old_version: int) -> Dicti
 		## Version 0 (nonexistent) -> version 1: preserve any difficulty_state and milestones
 		if "difficulty_state" in old_payload:
 			var old_state := old_payload["difficulty_state"] as Dictionary
-			migrated["difficulty_state"]["current_tier"] = int(old_state.get("current_tier", TIER_APPRENTICE))
-			migrated["difficulty_state"]["highest_unlocked_tier"] = int(old_state.get("highest_unlocked_tier", TIER_APPRENTICE))
+			migrated["difficulty_state"]["current_tier"] = int(old_state.get("current_tier", TIER_PILGRIM))
+			migrated["difficulty_state"]["highest_unlocked_tier"] = int(old_state.get("highest_unlocked_tier", TIER_PILGRIM))
 		
 		if "milestones" in old_payload:
 			var old_milestones := old_payload["milestones"] as Dictionary
@@ -114,7 +115,7 @@ static func is_tier_unlocked(profile: Dictionary, tier: int) -> bool:
 	if not ("difficulty_state" in profile):
 		return false
 	var state := profile["difficulty_state"] as Dictionary
-	var highest := int(state.get("highest_unlocked_tier", TIER_APPRENTICE))
+	var highest := int(state.get("highest_unlocked_tier", TIER_PILGRIM))
 	return highest >= tier
 
 ## Unlock a tier by raising highest_unlocked_tier if needed
@@ -123,7 +124,7 @@ static func unlock_tier(profile: Dictionary, tier: int) -> bool:
 		return false
 	
 	var state := profile["difficulty_state"] as Dictionary
-	var highest := int(state.get("highest_unlocked_tier", TIER_APPRENTICE))
+	var highest := int(state.get("highest_unlocked_tier", TIER_PILGRIM))
 	
 	if tier > highest:
 		state["highest_unlocked_tier"] = tier
@@ -143,16 +144,16 @@ static func set_current_tier(profile: Dictionary, tier: int) -> bool:
 ## Get current selected tier
 static func get_current_tier(profile: Dictionary) -> int:
 	if not ("difficulty_state" in profile):
-		return TIER_APPRENTICE
+		return TIER_PILGRIM
 	var state := profile["difficulty_state"] as Dictionary
-	return int(state.get("current_tier", TIER_APPRENTICE))
+	return int(state.get("current_tier", TIER_PILGRIM))
 
 ## Get highest unlocked tier
 static func get_highest_unlocked_tier(profile: Dictionary) -> int:
 	if not ("difficulty_state" in profile):
-		return TIER_APPRENTICE
+		return TIER_PILGRIM
 	var state := profile["difficulty_state"] as Dictionary
-	return int(state.get("highest_unlocked_tier", TIER_APPRENTICE))
+	return int(state.get("highest_unlocked_tier", TIER_PILGRIM))
 
 ## Set a milestone flag
 static func set_milestone(profile: Dictionary, milestone_key: String, value: bool) -> void:
@@ -171,21 +172,34 @@ static func get_milestone(profile: Dictionary, milestone_key: String) -> bool:
 ## Update run stats
 static func record_run_attempt(profile: Dictionary) -> void:
 	if not ("run_stats" in profile):
-		profile["run_stats"] = {"total_runs": 0, "total_clears": 0, "best_depth": 0}
+		profile["run_stats"] = {"total_runs": 0, "total_clears": 0, "best_depth": 0, "last_outcome": "none"}
 	var stats := profile["run_stats"] as Dictionary
 	stats["total_runs"] = int(stats.get("total_runs", 0)) + 1
 
 static func record_run_completion(profile: Dictionary, depth: int) -> void:
 	if not ("run_stats" in profile):
-		profile["run_stats"] = {"total_runs": 0, "total_clears": 0, "best_depth": 0}
+		profile["run_stats"] = {"total_runs": 0, "total_clears": 0, "best_depth": 0, "last_outcome": "none"}
 	var stats := profile["run_stats"] as Dictionary
 	stats["total_clears"] = int(stats.get("total_clears", 0)) + 1
+	stats["last_outcome"] = "clear"
 	var best := int(stats.get("best_depth", 0))
 	if depth > best:
 		stats["best_depth"] = depth
 
+static func set_last_run_outcome(profile: Dictionary, outcome: String) -> void:
+	if not ("run_stats" in profile):
+		profile["run_stats"] = {"total_runs": 0, "total_clears": 0, "best_depth": 0, "last_outcome": "none"}
+	var stats := profile["run_stats"] as Dictionary
+	stats["last_outcome"] = outcome
+
+static func get_last_run_outcome(profile: Dictionary) -> String:
+	if not ("run_stats" in profile):
+		return "none"
+	var stats := profile["run_stats"] as Dictionary
+	return String(stats.get("last_outcome", "none"))
+
 ## Get run stats
 static func get_run_stats(profile: Dictionary) -> Dictionary:
 	if not ("run_stats" in profile):
-		return {"total_runs": 0, "total_clears": 0, "best_depth": 0}
+		return {"total_runs": 0, "total_clears": 0, "best_depth": 0, "last_outcome": "none"}
 	return (profile["run_stats"] as Dictionary).duplicate()

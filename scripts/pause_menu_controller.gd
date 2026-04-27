@@ -124,7 +124,7 @@ func _create_pause_menu_ui() -> void:
 	)
 	pause_menu_panel.add_child(glossary_button)
 
-	var abandon_run_button := _make_pause_button("Abandon Run", Vector2(80.0, 328.0))
+	var abandon_run_button := _make_pause_button("Abandon Descent", Vector2(80.0, 328.0))
 	_apply_destructive_button_style(abandon_run_button)
 	abandon_run_button.pressed.connect(func() -> void:
 		abandon_run_requested.emit()

@@ -8,6 +8,7 @@ extends Node
 var player_reference: Node = null
 var game_state: Node = null  # GameStateManager instance
 var power_registry: Node = null  # power_registry.gd instance
+var upgrade_stacks: Dictionary = {}
 
 # Track stacks for trial powers (upgrades don't track stacks for mechanics, but could)
 var trial_power_stacks: Dictionary = {
@@ -57,21 +58,19 @@ func apply_upgrade(upgrade_id: String) -> bool:
 	if not _is_upgrade_id(id):
 		return false
 	
-	## Check stack limits for upgrades with caps
-	if id == "long_reach":
-		var current_stacks := 0
-		if is_instance_valid(game_state):
-			current_stacks = game_state.get_upgrade_stack_count(id)
-		if current_stacks >= 3:
-			return false
-	
-	# Track in game state
-	if is_instance_valid(game_state):
-		game_state.add_upgrade(id)
+	var current_stacks := get_upgrade_stack_count(id)
+	var stack_limit := _get_power_stack_limit(id)
+	if stack_limit > 0 and current_stacks >= stack_limit:
+		return false
 
 	var preview := _build_upgrade_preview(id)
 	if preview.is_empty():
 		return false
+
+	# Track after verifying this upgrade can apply.
+	if is_instance_valid(game_state):
+		game_state.add_upgrade(id)
+	upgrade_stacks[id] = current_stacks + 1
 
 	match id:
 		"swift_strike", "heavy_blow", "wide_arc", "long_reach", "fleet_foot", "blink_dash":
@@ -488,6 +487,7 @@ func build_razor_wind_attack_context(melee_context: Dictionary, razor_wind_damag
 
 ## Reset for new run
 func reset() -> void:
+	upgrade_stacks.clear()
 	for key in trial_power_stacks.keys():
 		trial_power_stacks[key] = 0
 	
@@ -500,6 +500,19 @@ func initialize(player: Node, state: Node, registry: Node) -> void:
 	player_reference = player
 	game_state = state
 	power_registry = registry
+
+
+func get_upgrade_stack_count(upgrade_id: String) -> int:
+	var id := upgrade_id.strip_edges().to_lower()
+	if is_instance_valid(game_state) and game_state.has_method("get_upgrade_stack_count"):
+		return int(game_state.call("get_upgrade_stack_count", id))
+	return int(upgrade_stacks.get(id, 0))
+
+
+func _get_power_stack_limit(power_id: String) -> int:
+	if power_registry != null and power_registry.has_method("get_power_stack_limit"):
+		return int(power_registry.call("get_power_stack_limit", power_id))
+	return 0
 
 func _is_upgrade_id(power_id: String) -> bool:
 	if power_registry != null and power_registry.has_method("is_upgrade"):

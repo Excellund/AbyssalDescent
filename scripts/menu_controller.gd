@@ -7,6 +7,25 @@ const ENUMS := preload("res://scripts/shared/enums.gd")
 const GLOSSARY_DATA := preload("res://scripts/shared/glossary_data.gd")
 const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
+const MENU_QUOTE_NEUTRAL := "\"Something unfamiliar begins.\""
+const MENU_QUOTES_AFTER_DEATH := [
+	"\"Back already?\"",
+	"\"I expected more from that attempt.\"",
+	"\"You fell faster than the others.\"",
+	"\"You left the dark hungry. Try again.\"",
+	"\"Was that your whole answer?\""
+]
+const MENU_QUOTES_AFTER_CLEAR := [
+	"\"A small victory. Keep it.\"",
+	"\"Take the climb if you need it.\"",
+	"\"You delayed the end. Nothing more.\"",
+	"\"Enjoy the air while it lasts.\"",
+	"\"You won a breath. Not freedom.\""
+]
+const QUOTE_PULSE_SPEED := 2.1
+const QUOTE_PULSE_AMPLITUDE := 0.018
+const QUOTE_COLOR_COOL := Color(0.72, 0.86, 1.0, 0.9)
+const QUOTE_COLOR_WARM := Color(1.0, 0.95, 0.84, 1.0)
 
 var root_panel: Panel
 var options_panel: Panel
@@ -19,6 +38,13 @@ var music_value_label: Label
 var menu_music_player: AudioStreamPlayer
 var primary_run_button: Button
 var difficulty_tier_buttons: Array[Button] = []
+var difficulty_tier_name_labels: Array[Label] = []
+var difficulty_tier_desc_labels: Array[Label] = []
+var atmosphere_band: Panel
+var flavor_quote_label: RichTextLabel
+var quote_wrapper: Control
+var _quote_pulse_active: bool = false
+var _quote_pulse_time: float = 0.0
 
 func _ready() -> void:
 	if _should_autostart_debug_encounter():
@@ -26,8 +52,10 @@ func _ready() -> void:
 		return
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	set_process(false)
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	_build_ui()
+	_play_menu_intro()
 	_sync_options_from_context()
 	_start_menu_music()
 
@@ -54,16 +82,15 @@ func _exit_tree() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel") and options_panel != null and options_panel.visible:
-		options_panel.visible = false
+		_show_root_panel()
 		get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed("ui_cancel") and glossary_panel != null and glossary_panel.visible:
-		glossary_panel.visible = false
+		_show_root_panel()
 		get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed("ui_cancel") and difficulty_selector_panel != null and difficulty_selector_panel.visible:
-		difficulty_selector_panel.visible = false
-		root_panel.visible = true
+		_show_root_panel()
 		get_viewport().set_input_as_handled()
 
 func _build_ui() -> void:
@@ -72,58 +99,117 @@ func _build_ui() -> void:
 	backdrop.color = Color(0.03, 0.05, 0.08, 1.0)
 	add_child(backdrop)
 
+	atmosphere_band = Panel.new()
+	atmosphere_band.position = Vector2(84.0, 74.0)
+	atmosphere_band.custom_minimum_size = Vector2(620.0, 660.0)
+	atmosphere_band.add_theme_stylebox_override("panel", _make_panel_style(Color(0.05, 0.10, 0.16, 0.42), Color(0.12, 0.24, 0.38, 0.20), 26, 1))
+	add_child(atmosphere_band)
+
 	root_panel = Panel.new()
-	root_panel.custom_minimum_size = Vector2(520.0, 520.0)
-	root_panel.position = Vector2(700.0, 170.0)
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.06, 0.09, 0.13, 0.92)
-	panel_style.border_color = Color(0.34, 0.56, 0.84, 0.76)
-	panel_style.set_border_width_all(2)
-	panel_style.set_corner_radius_all(14)
-	root_panel.add_theme_stylebox_override("panel", panel_style)
+	root_panel.set_anchors_preset(Control.PRESET_CENTER)
+	root_panel.position = Vector2(-490.0, -320.0)
+	root_panel.custom_minimum_size = Vector2(980.0, 640.0)
+	root_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.06, 0.09, 0.13, 0.94), Color(0.34, 0.56, 0.84, 0.76), 22, 2))
 	add_child(root_panel)
+
+	var shell := HBoxContainer.new()
+	shell.position = Vector2(30.0, 30.0)
+	shell.custom_minimum_size = Vector2(920.0, 580.0)
+	shell.add_theme_constant_override("separation", 24)
+	root_panel.add_child(shell)
+
+	var hero_panel := Panel.new()
+	hero_panel.custom_minimum_size = Vector2(362.0, 580.0)
+	hero_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.09, 0.15, 0.24, 0.82), Color(0.30, 0.48, 0.72, 0.46), 20, 2))
+	shell.add_child(hero_panel)
+
+	var hero_content := VBoxContainer.new()
+	hero_content.position = Vector2(28.0, 26.0)
+	hero_content.custom_minimum_size = Vector2(306.0, 528.0)
+	hero_content.add_theme_constant_override("separation", 10)
+	hero_panel.add_child(hero_content)
+
+	var hero_spacer_top := Control.new()
+	hero_spacer_top.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	hero_content.add_child(hero_spacer_top)
 
 	var title := Label.new()
 	title.text = "Abyssal Descent"
-	title.position = Vector2(0.0, 44.0)
-	title.custom_minimum_size = Vector2(520.0, 46.0)
+	title.custom_minimum_size = Vector2(306.0, 72.0)
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title.add_theme_font_size_override("font_size", 42)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 40)
 	title.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 0.98))
 	title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.8))
 	title.add_theme_constant_override("shadow_offset_x", 2)
 	title.add_theme_constant_override("shadow_offset_y", 2)
-	root_panel.add_child(title)
+	hero_content.add_child(title)
 
-	var subtitle := Label.new()
-	subtitle.text = "Choose your run"
-	subtitle.position = Vector2(0.0, 98.0)
-	subtitle.custom_minimum_size = Vector2(520.0, 24.0)
-	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	subtitle.add_theme_font_size_override("font_size", 18)
-	subtitle.add_theme_color_override("font_color", Color(0.7, 0.84, 1.0, 0.9))
-	root_panel.add_child(subtitle)
+	quote_wrapper = Control.new()
+	quote_wrapper.custom_minimum_size = Vector2(306.0, 72.0)
+	hero_content.add_child(quote_wrapper)
 
-	primary_run_button = _make_menu_button("Standard Run", Vector2(120.0, 170.0))
+	flavor_quote_label = RichTextLabel.new()
+	flavor_quote_label.bbcode_enabled = true
+	flavor_quote_label.fit_content = true
+	flavor_quote_label.scroll_active = false
+	flavor_quote_label.custom_minimum_size = Vector2(306.0, 72.0)
+	flavor_quote_label.add_theme_font_size_override("normal_font_size", 20)
+	flavor_quote_label.add_theme_color_override("default_color", Color(0.72, 0.86, 1.0, 0.92))
+	flavor_quote_label.text = "[center][wave amp=14.0 freq=3.0]" + _pick_menu_quote() + "[/wave][/center]"
+	quote_wrapper.add_child(flavor_quote_label)
+
+	var hero_spacer := Control.new()
+	hero_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	hero_content.add_child(hero_spacer)
+
+	var action_panel := Panel.new()
+	action_panel.custom_minimum_size = Vector2(534.0, 580.0)
+	action_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	action_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.07, 0.11, 0.16, 0.88), Color(0.22, 0.36, 0.52, 0.44), 20, 2))
+	shell.add_child(action_panel)
+
+	var action_content := VBoxContainer.new()
+	action_content.position = Vector2(32.0, 30.0)
+	action_content.custom_minimum_size = Vector2(470.0, 520.0)
+	action_content.add_theme_constant_override("separation", 14)
+	action_panel.add_child(action_content)
+
+	var action_spacer_top := Control.new()
+	action_spacer_top.custom_minimum_size = Vector2(470.0, 32.0)
+	action_content.add_child(action_spacer_top)
+
+	var actions := VBoxContainer.new()
+	actions.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	actions.add_theme_constant_override("separation", 14)
+	action_content.add_child(actions)
+
+	primary_run_button = _make_menu_button("Begin Descent", true)
 	primary_run_button.pressed.connect(_on_primary_run_pressed)
-	root_panel.add_child(primary_run_button)
+	actions.add_child(primary_run_button)
 
-	var endless_button := _make_menu_button("Endless Mode", Vector2(120.0, 242.0))
+	var endless_button := _make_menu_button("Endless Mode")
 	endless_button.pressed.connect(_on_endless_pressed)
-	root_panel.add_child(endless_button)
+	actions.add_child(endless_button)
 
-	var options_button := _make_menu_button("Options", Vector2(120.0, 314.0))
+	var options_button := _make_menu_button("Options")
 	options_button.pressed.connect(_on_options_pressed)
-	root_panel.add_child(options_button)
+	actions.add_child(options_button)
 
-	var glossary_button := _make_menu_button("Glossary", Vector2(120.0, 386.0))
+	var glossary_button := _make_menu_button("Glossary")
 	glossary_button.pressed.connect(_on_glossary_pressed)
-	root_panel.add_child(glossary_button)
+	actions.add_child(glossary_button)
 
-	var exit_button := _make_menu_button("Exit Game", Vector2(120.0, 458.0))
+	var exit_button := _make_menu_button("Exit Game")
 	exit_button.pressed.connect(_on_exit_pressed)
-	root_panel.add_child(exit_button)
+	actions.add_child(exit_button)
+
+	var action_spacer_bottom := Control.new()
+	action_spacer_bottom.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	action_content.add_child(action_spacer_bottom)
+
 	_refresh_primary_run_button()
+	primary_run_button.grab_focus()
 
 	options_panel = _build_options_panel()
 	options_panel.visible = false
@@ -136,25 +222,186 @@ func _build_ui() -> void:
 	difficulty_selector_panel = _build_difficulty_selector_panel()
 	difficulty_selector_panel.visible = false
 	add_child(difficulty_selector_panel)
+	_show_root_panel(false)
 
-func _make_menu_button(text: String, pos: Vector2) -> Button:
+func _make_menu_button(text: String, emphasize: bool = false) -> Button:
 	var button := Button.new()
 	button.text = text
-	button.position = pos
-	button.custom_minimum_size = Vector2(280.0, 52.0)
-	button.add_theme_font_size_override("font_size", 20)
+	button.custom_minimum_size = Vector2(470.0, 64.0)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.focus_mode = Control.FOCUS_ALL
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.add_theme_font_size_override("font_size", 22)
+	button.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 0.98))
+	button.add_theme_color_override("font_hover_color", Color(0.98, 1.0, 1.0, 1.0))
+	button.add_theme_color_override("font_pressed_color", Color(0.98, 1.0, 1.0, 1.0))
+	button.add_theme_color_override("font_disabled_color", Color(0.52, 0.60, 0.68, 0.90))
+	if emphasize:
+		button.add_theme_stylebox_override("normal", _make_button_style(Color(0.16, 0.27, 0.42, 0.95), Color(0.76, 0.90, 1.0, 0.92), 16, 2))
+		button.add_theme_stylebox_override("hover", _make_button_style(Color(0.19, 0.32, 0.50, 0.98), Color(0.86, 0.96, 1.0, 1.0), 16, 2))
+		button.add_theme_stylebox_override("pressed", _make_button_style(Color(0.12, 0.22, 0.34, 0.98), Color(0.92, 0.98, 1.0, 1.0), 16, 2))
+	else:
+		button.add_theme_stylebox_override("normal", _make_button_style(Color(0.10, 0.15, 0.22, 0.95), Color(0.34, 0.56, 0.84, 0.72), 16, 2))
+		button.add_theme_stylebox_override("hover", _make_button_style(Color(0.13, 0.19, 0.28, 0.98), Color(0.62, 0.82, 0.98, 0.88), 16, 2))
+		button.add_theme_stylebox_override("pressed", _make_button_style(Color(0.08, 0.12, 0.18, 0.98), Color(0.74, 0.90, 1.0, 0.92), 16, 2))
+	button.add_theme_stylebox_override("focus", _make_button_style(Color(0.13, 0.20, 0.29, 0.98), Color(0.86, 0.96, 1.0, 1.0), 16, 2))
+	button.add_theme_stylebox_override("disabled", _make_button_style(Color(0.08, 0.10, 0.14, 0.82), Color(0.22, 0.26, 0.32, 0.54), 16, 2))
 	return button
+
+func _make_panel_style(bg_color: Color, border_color: Color, corner_radius: int = 14, border_width: int = 2) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = bg_color
+	style.border_color = border_color
+	style.set_border_width_all(border_width)
+	style.set_corner_radius_all(corner_radius)
+	return style
+
+func _make_button_style(bg_color: Color, border_color: Color, corner_radius: int = 14, border_width: int = 2) -> StyleBoxFlat:
+	var style := _make_panel_style(bg_color, border_color, corner_radius, border_width)
+	style.content_margin_left = 18.0
+	style.content_margin_right = 18.0
+	style.content_margin_top = 14.0
+	style.content_margin_bottom = 14.0
+	return style
+
+func _apply_difficulty_button_theme(button: Button, state: String) -> void:
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.add_theme_font_size_override("font_size", 22)
+	button.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 0.98))
+	button.add_theme_color_override("font_hover_color", Color(0.98, 1.0, 1.0, 1.0))
+	button.add_theme_color_override("font_pressed_color", Color(0.98, 1.0, 1.0, 1.0))
+	button.add_theme_color_override("font_disabled_color", Color(0.56, 0.62, 0.68, 0.86))
+	match state:
+		"current":
+			button.add_theme_stylebox_override("normal", _make_button_style(Color(0.18, 0.30, 0.47, 0.96), Color(0.88, 0.97, 1.0, 1.0), 18, 2))
+			button.add_theme_stylebox_override("hover", _make_button_style(Color(0.20, 0.34, 0.53, 0.98), Color(0.94, 0.99, 1.0, 1.0), 18, 2))
+			button.add_theme_stylebox_override("pressed", _make_button_style(Color(0.14, 0.24, 0.38, 0.98), Color(0.95, 1.0, 1.0, 1.0), 18, 2))
+		"revealed":
+			button.add_theme_stylebox_override("normal", _make_button_style(Color(0.10, 0.15, 0.22, 0.96), Color(0.44, 0.66, 0.88, 0.86), 18, 2))
+			button.add_theme_stylebox_override("hover", _make_button_style(Color(0.13, 0.19, 0.28, 0.98), Color(0.68, 0.86, 1.0, 0.94), 18, 2))
+			button.add_theme_stylebox_override("pressed", _make_button_style(Color(0.08, 0.12, 0.18, 0.98), Color(0.78, 0.92, 1.0, 0.96), 18, 2))
+		_:
+			button.add_theme_stylebox_override("normal", _make_button_style(Color(0.08, 0.09, 0.12, 0.86), Color(0.24, 0.28, 0.34, 0.60), 18, 2))
+			button.add_theme_stylebox_override("hover", _make_button_style(Color(0.08, 0.09, 0.12, 0.86), Color(0.24, 0.28, 0.34, 0.60), 18, 2))
+			button.add_theme_stylebox_override("pressed", _make_button_style(Color(0.08, 0.09, 0.12, 0.86), Color(0.24, 0.28, 0.34, 0.60), 18, 2))
+	button.add_theme_stylebox_override("focus", _make_button_style(Color(0.14, 0.22, 0.32, 0.98), Color(0.92, 0.98, 1.0, 1.0), 18, 2))
+	button.add_theme_stylebox_override("disabled", _make_button_style(Color(0.08, 0.09, 0.12, 0.86), Color(0.24, 0.28, 0.34, 0.60), 18, 2))
+
+func _pick_menu_quote() -> String:
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	var outcome := "none"
+	if run_context != null and run_context.has_method("get_last_run_outcome"):
+		outcome = String(run_context.call("get_last_run_outcome"))
+	match outcome:
+		"death":
+			return _pick_random_quote(MENU_QUOTES_AFTER_DEATH)
+		"clear":
+			return _pick_random_quote(MENU_QUOTES_AFTER_CLEAR)
+		_:
+			return MENU_QUOTE_NEUTRAL
+
+func _pick_random_quote(quotes: Array) -> String:
+	if quotes.is_empty():
+		return MENU_QUOTE_NEUTRAL
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	return String(quotes[rng.randi_range(0, quotes.size() - 1)])
+
+func _show_root_panel(animate: bool = true) -> void:
+	if root_panel != null:
+		root_panel.visible = true
+		if animate:
+			_animate_panel_in(root_panel, Vector2(0.0, 14.0))
+	if options_panel != null:
+		options_panel.visible = false
+	if glossary_panel != null:
+		glossary_panel.visible = false
+	if difficulty_selector_panel != null:
+		difficulty_selector_panel.visible = false
+
+func _show_options_panel() -> void:
+	if root_panel != null:
+		root_panel.visible = true
+	if options_panel != null:
+		options_panel.visible = true
+	if glossary_panel != null:
+		glossary_panel.visible = false
+	if difficulty_selector_panel != null:
+		difficulty_selector_panel.visible = false
+
+func _show_glossary_panel() -> void:
+	if root_panel != null:
+		root_panel.visible = true
+	if options_panel != null:
+		options_panel.visible = false
+	if glossary_panel != null:
+		glossary_panel.visible = true
+	if difficulty_selector_panel != null:
+		difficulty_selector_panel.visible = false
+
+func _show_difficulty_selector() -> void:
+	if root_panel != null:
+		root_panel.visible = false
+	if options_panel != null:
+		options_panel.visible = false
+	if glossary_panel != null:
+		glossary_panel.visible = false
+	if difficulty_selector_panel != null:
+		difficulty_selector_panel.visible = true
+		_animate_panel_in(difficulty_selector_panel, Vector2(0.0, 28.0))
+
+func _play_menu_intro() -> void:
+	if atmosphere_band != null:
+		atmosphere_band.modulate.a = 0.0
+		atmosphere_band.position += Vector2(-10.0, 0.0)
+	if root_panel != null:
+		root_panel.modulate.a = 0.0
+		root_panel.position += Vector2(0.0, 14.0)
+	if flavor_quote_label != null:
+		flavor_quote_label.modulate.a = 0.0
+	var tween := create_tween()
+	tween.set_parallel(true)
+	if atmosphere_band != null:
+		tween.tween_property(atmosphere_band, "modulate:a", 1.0, 0.18)
+		tween.tween_property(atmosphere_band, "position", atmosphere_band.position + Vector2(10.0, 0.0), 0.24).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	if root_panel != null:
+		tween.tween_property(root_panel, "modulate:a", 1.0, 0.16)
+		tween.tween_property(root_panel, "position", root_panel.position - Vector2(0.0, 14.0), 0.22).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	if flavor_quote_label != null:
+		tween.tween_property(flavor_quote_label, "modulate:a", 1.0, 0.28).set_delay(0.06)
+		call_deferred("_start_quote_idle_animation")
+
+func _start_quote_idle_animation() -> void:
+	if flavor_quote_label == null or quote_wrapper == null:
+		return
+	flavor_quote_label.modulate = QUOTE_COLOR_COOL
+	_quote_pulse_time = 0.0
+	_quote_pulse_active = true
+	set_process(true)
+
+func _process(delta: float) -> void:
+	if not _quote_pulse_active or flavor_quote_label == null:
+		return
+	_quote_pulse_time += delta
+	var t := (sin(_quote_pulse_time * QUOTE_PULSE_SPEED) + 1.0) * 0.5
+	flavor_quote_label.modulate = QUOTE_COLOR_COOL.lerp(QUOTE_COLOR_WARM, t)
+
+func _animate_panel_in(panel: Control, offset: Vector2) -> void:
+	if panel == null:
+		return
+	var target_position := panel.position
+	panel.modulate.a = 0.0
+	panel.position = target_position + offset
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(panel, "modulate:a", 1.0, 0.14)
+	tween.tween_property(panel, "position", target_position, 0.18).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 
 func _build_options_panel() -> Panel:
 	var panel := Panel.new()
 	panel.custom_minimum_size = Vector2(620.0, 300.0)
 	panel.position = Vector2(650.0, 380.0)
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.04, 0.06, 0.1, 0.95)
-	style.border_color = Color(0.44, 0.7, 0.96, 0.74)
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(12)
-	panel.add_theme_stylebox_override("panel", style)
+	panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.04, 0.06, 0.1, 0.95), Color(0.44, 0.7, 0.96, 0.74), 12, 2))
 
 	var title := Label.new()
 	title.text = "Options"
@@ -215,7 +462,7 @@ func _build_options_panel() -> Panel:
 	back_button.custom_minimum_size = Vector2(160.0, 42.0)
 	back_button.add_theme_font_size_override("font_size", 18)
 	back_button.pressed.connect(func() -> void:
-		options_panel.visible = false
+		_show_root_panel()
 	)
 	panel.add_child(back_button)
 
@@ -227,14 +474,9 @@ func _on_primary_run_pressed() -> void:
 		return
 	_clear_saved_run()
 	_set_run_mode(ENUMS.RunMode.STANDARD)
-	## Show difficulty selector before starting
 	if difficulty_selector_panel != null:
 		_update_difficulty_selector()
-		difficulty_selector_panel.visible = true
-		if options_panel != null:
-			options_panel.visible = false
-		if glossary_panel != null:
-			glossary_panel.visible = false
+		_show_difficulty_selector()
 
 func _on_continue_pressed() -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
@@ -250,16 +492,10 @@ func _on_endless_pressed() -> void:
 	get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)
 
 func _on_options_pressed() -> void:
-	if options_panel != null:
-		options_panel.visible = true
-	if glossary_panel != null:
-		glossary_panel.visible = false
+	_show_options_panel()
 
 func _on_glossary_pressed() -> void:
-	if glossary_panel != null:
-		glossary_panel.visible = true
-	if options_panel != null:
-		options_panel.visible = false
+	_show_glossary_panel()
 
 func _on_exit_pressed() -> void:
 	get_tree().quit()
@@ -268,12 +504,7 @@ func _build_glossary_panel() -> Panel:
 	var panel := Panel.new()
 	panel.custom_minimum_size = Vector2(760.0, 520.0)
 	panel.position = Vector2(580.0, 160.0)
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.04, 0.06, 0.1, 0.96)
-	style.border_color = Color(0.44, 0.7, 0.96, 0.74)
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(12)
-	panel.add_theme_stylebox_override("panel", style)
+	panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.04, 0.06, 0.1, 0.96), Color(0.44, 0.7, 0.96, 0.74), 12, 2))
 
 	var title := Label.new()
 	title.text = "Glossary"
@@ -302,8 +533,7 @@ func _build_glossary_panel() -> Panel:
 	back_button.custom_minimum_size = Vector2(160.0, 40.0)
 	back_button.add_theme_font_size_override("font_size", 18)
 	back_button.pressed.connect(func() -> void:
-		if glossary_panel != null:
-			glossary_panel.visible = false
+		_show_root_panel()
 	)
 	panel.add_child(back_button)
 
@@ -311,53 +541,114 @@ func _build_glossary_panel() -> Panel:
 
 func _build_difficulty_selector_panel() -> Panel:
 	var panel := Panel.new()
-	panel.custom_minimum_size = Vector2(820.0, 520.0)
-	panel.position = Vector2(550.0, 160.0)
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.04, 0.06, 0.1, 0.96)
-	style.border_color = Color(0.44, 0.7, 0.96, 0.74)
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(12)
-	panel.add_theme_stylebox_override("panel", style)
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.position = Vector2(-510.0, -360.0)
+	panel.custom_minimum_size = Vector2(1020.0, 720.0)
+	panel.size = Vector2(1020.0, 720.0)
+	panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.04, 0.06, 0.1, 0.97), Color(0.44, 0.7, 0.96, 0.74), 20, 2))
+
+	var layout := MarginContainer.new()
+	layout.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layout.add_theme_constant_override("margin_left", 60)
+	layout.add_theme_constant_override("margin_right", 60)
+	layout.add_theme_constant_override("margin_top", 44)
+	layout.add_theme_constant_override("margin_bottom", 44)
+	panel.add_child(layout)
+
+	var stack := VBoxContainer.new()
+	stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	stack.add_theme_constant_override("separation", 18)
+	layout.add_child(stack)
 
 	var title := Label.new()
-	title.text = "Select Difficulty"
-	title.position = Vector2(0.0, 16.0)
-	title.custom_minimum_size = Vector2(820.0, 32.0)
+	title.text = "Set Your Bearing"
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 30)
-	title.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 0.98))
-	panel.add_child(title)
+	title.add_theme_font_size_override("font_size", 44)
+	title.add_theme_color_override("font_color", Color(1.0, 0.95, 0.78, 1.0))
+	title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
+	title.add_theme_constant_override("shadow_offset_x", 2)
+	title.add_theme_constant_override("shadow_offset_y", 2)
+	stack.add_child(title)
+
+	var accent := ColorRect.new()
+	accent.custom_minimum_size = Vector2(180.0, 2.0)
+	accent.color = Color(0.62, 0.78, 0.96, 0.65)
+	accent.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	stack.add_child(accent)
+
+	var intro := Label.new()
+	intro.text = "Choose the burden you will carry."
+	intro.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	intro.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	intro.add_theme_font_size_override("font_size", 18)
+	intro.add_theme_color_override("font_color", Color(0.78, 0.88, 0.98, 0.78))
+	stack.add_child(intro)
 
 	var tier_buttons_container := VBoxContainer.new()
-	tier_buttons_container.position = Vector2(40.0, 70.0)
-	tier_buttons_container.custom_minimum_size = Vector2(740.0, 360.0)
+	tier_buttons_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tier_buttons_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	tier_buttons_container.add_theme_constant_override("separation", 14)
-	panel.add_child(tier_buttons_container)
+	stack.add_child(tier_buttons_container)
 
 	difficulty_tier_buttons.clear()
+	difficulty_tier_name_labels.clear()
+	difficulty_tier_desc_labels.clear()
 	for tier in range(4):
-		var tier_button_container := HBoxContainer.new()
-		tier_button_container.custom_minimum_size = Vector2(740.0, 80.0)
-		tier_buttons_container.add_child(tier_button_container)
-
 		var button := Button.new()
-		button.custom_minimum_size = Vector2(700.0, 80.0)
-		button.add_theme_font_size_override("font_size", 18)
+		button.custom_minimum_size = Vector2(0.0, 84.0)
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.focus_mode = Control.FOCUS_ALL
+		button.text = ""
 		button.pressed.connect(_on_difficulty_tier_selected.bindv([tier]))
-		tier_button_container.add_child(button)
+		_apply_difficulty_button_theme(button, "revealed")
+		tier_buttons_container.add_child(button)
+
+		var content := VBoxContainer.new()
+		content.set_anchors_preset(Control.PRESET_FULL_RECT)
+		content.offset_left = 22
+		content.offset_right = -22
+		content.offset_top = 12
+		content.offset_bottom = -12
+		content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		content.add_theme_constant_override("separation", 4)
+		button.add_child(content)
+
+		var name_label := Label.new()
+		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		name_label.add_theme_font_size_override("font_size", 26)
+		name_label.add_theme_color_override("font_color", Color(1.0, 0.95, 0.78, 1.0))
+		name_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.7))
+		name_label.add_theme_constant_override("shadow_offset_x", 1)
+		name_label.add_theme_constant_override("shadow_offset_y", 1)
+		name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		content.add_child(name_label)
+
+		var desc_label := Label.new()
+		desc_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		desc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		desc_label.add_theme_font_size_override("font_size", 15)
+		desc_label.add_theme_color_override("font_color", Color(0.78, 0.86, 0.96, 0.78))
+		desc_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		content.add_child(desc_label)
+
 		difficulty_tier_buttons.append(button)
+		difficulty_tier_name_labels.append(name_label)
+		difficulty_tier_desc_labels.append(desc_label)
 
 	var back_button := Button.new()
 	back_button.text = "Back"
-	back_button.position = Vector2(330.0, 460.0)
-	back_button.custom_minimum_size = Vector2(160.0, 42.0)
-	back_button.add_theme_font_size_override("font_size", 18)
+	back_button.custom_minimum_size = Vector2(180.0, 46.0)
+	back_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	back_button.add_theme_font_size_override("font_size", 20)
 	back_button.pressed.connect(func() -> void:
-		difficulty_selector_panel.visible = false
-		root_panel.visible = true
+		_show_root_panel()
 	)
-	panel.add_child(back_button)
+	stack.add_child(back_button)
 
 	return panel
 
@@ -365,54 +656,36 @@ func _update_difficulty_selector() -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context == null:
 		return
-	
-	var current_tier: int = META_PROGRESS.TIER_STANDARD
-	var highest_unlocked_tier: int = META_PROGRESS.TIER_APPRENTICE
-	
+	var current_tier: int = META_PROGRESS.TIER_DELVER
+	var highest_unlocked_tier: int = META_PROGRESS.TIER_PILGRIM
 	if run_context.has_method("get_current_difficulty_tier"):
 		current_tier = int(run_context.call("get_current_difficulty_tier"))
 	if run_context.has_method("get_highest_unlocked_difficulty_tier"):
 		highest_unlocked_tier = int(run_context.call("get_highest_unlocked_difficulty_tier"))
-	
 	for i in range(difficulty_tier_buttons.size()):
 		var button := difficulty_tier_buttons[i]
+		var name_label := difficulty_tier_name_labels[i]
+		var desc_label := difficulty_tier_desc_labels[i]
 		var config := DIFFICULTY_CONFIG.get_tier_config(i)
 		var tier_name: String = config.get("name", "Unknown")
 		var tier_desc: String = config.get("description", "")
 		var is_unlocked := i <= highest_unlocked_tier
 		var is_selected := i == current_tier
-		
-		var status := ""
-		if not is_unlocked:
-			status = " [LOCKED]"
-		elif is_selected:
-			status = " [CURRENT]"
-		
-		button.text = "%s%s\n%s" % [tier_name, status, tier_desc]
-		button.disabled = not is_unlocked
-		
-		## Visual styling for selected/unlocked state
-		if is_selected:
-			var selected_style := StyleBoxFlat.new()
-			selected_style.bg_color = Color(0.22, 0.35, 0.55, 0.95)
-			selected_style.border_color = Color(0.8, 0.95, 1.0, 1.0)
-			selected_style.set_border_width_all(2)
-			selected_style.set_corner_radius_all(8)
-			button.add_theme_stylebox_override("normal", selected_style)
-		elif is_unlocked:
-			var unlocked_style := StyleBoxFlat.new()
-			unlocked_style.bg_color = Color(0.10, 0.14, 0.20, 0.90)
-			unlocked_style.border_color = Color(0.44, 0.66, 0.88, 0.85)
-			unlocked_style.set_border_width_all(2)
-			unlocked_style.set_corner_radius_all(8)
-			button.add_theme_stylebox_override("normal", unlocked_style)
+		if is_unlocked:
+			name_label.text = tier_name
+			desc_label.text = tier_desc
+			desc_label.visible = true
 		else:
-			var locked_style := StyleBoxFlat.new()
-			locked_style.bg_color = Color(0.08, 0.08, 0.10, 0.70)
-			locked_style.border_color = Color(0.30, 0.30, 0.35, 0.50)
-			locked_style.set_border_width_all(2)
-			locked_style.set_corner_radius_all(8)
-			button.add_theme_stylebox_override("normal", locked_style)
+			name_label.text = "\u2014  Sealed  \u2014"
+			desc_label.text = ""
+			desc_label.visible = false
+		button.disabled = not is_unlocked
+		if is_selected:
+			_apply_difficulty_button_theme(button, "current")
+		elif is_unlocked:
+			_apply_difficulty_button_theme(button, "revealed")
+		else:
+			_apply_difficulty_button_theme(button, "sealed")
 
 func _on_difficulty_tier_selected(tier: int) -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
@@ -483,7 +756,7 @@ func _set_run_mode(mode: int) -> void:
 func _refresh_primary_run_button() -> void:
 	if primary_run_button == null:
 		return
-	primary_run_button.text = "Continue Run" if _has_saved_run() else "Standard Run"
+	primary_run_button.text = "Resume Descent" if _has_saved_run() else "Begin Descent"
 
 func _has_saved_run() -> bool:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)

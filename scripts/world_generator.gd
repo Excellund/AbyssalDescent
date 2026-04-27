@@ -1414,6 +1414,10 @@ func _finish_second_boss_clear() -> void:
 	if is_instance_valid(victory_screen):
 		var run_context := _get_run_context()
 		var unlocked_tier := -1
+		if run_context != null and run_context.has_method("set_last_run_outcome"):
+			run_context.call("set_last_run_outcome", "clear")
+		if run_context != null and run_context.has_method("award_run_clear_unlocks"):
+			run_context.call("award_run_clear_unlocks")
 		if run_context != null and run_context.has_method("consume_just_unlocked_tier"):
 			unlocked_tier = int(run_context.call("consume_just_unlocked_tier"))
 		victory_screen.call("show_victory", rooms_cleared, unlocked_tier)
@@ -1647,6 +1651,9 @@ func _on_pause_abandon_run_requested() -> void:
 	_set_combat_paused(false)
 	if is_instance_valid(pause_menu_controller):
 		pause_menu_controller.call("close")
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context != null and run_context.has_method("set_last_run_outcome"):
+		run_context.call("set_last_run_outcome", "death")
 	_clear_active_run_checkpoint()
 	get_tree().change_scene_to_file(MENU_SCENE_PATH)
 
