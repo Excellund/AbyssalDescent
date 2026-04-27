@@ -12,7 +12,7 @@ const UPGRADE_BALANCE := {
 	"swift_strike": {
 		"kind": "mul_min",
 		"property": "attack_cooldown",
-		"mult": 0.86,
+		"mult": 0.82,
 		"min": 0.08
 	},
 	"heavy_blow": {
@@ -23,9 +23,9 @@ const UPGRADE_BALANCE := {
 	"wide_arc": {
 		"kind": "add_clamp",
 		"property": "attack_arc_degrees",
-		"add": 18.0,
+		"add": 28.0,
 		"min": 60.0,
-		"max": 240.0
+		"max": 280.0
 	},
 	"long_reach": {
 		"kind": "add_float",
@@ -40,14 +40,30 @@ const UPGRADE_BALANCE := {
 	"blink_dash": {
 		"kind": "mul_min",
 		"property": "dash_cooldown",
-		"mult": 0.85,
-		"min": 0.18
+		"mult": 0.80,
+		"min": 0.14
 	},
 	"iron_skin": {
 		"kind": "add_int",
 		"property": "iron_skin_armor",
 		"add": 4,
 		"stack_property": "iron_skin_stacks"
+	},
+	"battle_trance": {
+		"kind": "mul_min",
+		"property": "attack_lock_duration",
+		"mult": 0.84,
+		"min": 0.05
+	},
+	"surge_step": {
+		"kind": "add_float",
+		"property": "dash_speed",
+		"add": 85.0
+	},
+	"kinetic_drive": {
+		"kind": "add_float",
+		"property": "acceleration",
+		"add": 220.0
 	}
 }
 
@@ -123,7 +139,10 @@ const TRIAL_POWER_BALANCE := {
 
 const UPGRADE_STACK_LIMITS := {
 	"long_reach": 3,
-	"iron_skin": 3
+	"iron_skin": 3,
+	"battle_trance": 3,
+	"surge_step": 3,
+	"kinetic_drive": 2
 }
 
 const TRIAL_POWER_STACK_LIMITS := {}
@@ -170,6 +189,9 @@ func get_upgrade_pool(player_reference: Node = null) -> Array[Dictionary]:
 	var fleet_desc := _get_upgrade_fallback_description("fleet_foot")
 	var blink_desc := _get_upgrade_fallback_description("blink_dash")
 	var iron_desc := _get_upgrade_fallback_description("iron_skin")
+	var trance_desc := _get_upgrade_fallback_description("battle_trance")
+	var surge_desc := _get_upgrade_fallback_description("surge_step")
+	var kinetic_desc := _get_upgrade_fallback_description("kinetic_drive")
 	if is_instance_valid(player_reference) and player_reference.has_method("get_upgrade_card_desc"):
 		swift_desc = String(player_reference.call("get_upgrade_card_desc", "swift_strike"))
 		heavy_desc = String(player_reference.call("get_upgrade_card_desc", "heavy_blow"))
@@ -178,6 +200,9 @@ func get_upgrade_pool(player_reference: Node = null) -> Array[Dictionary]:
 		fleet_desc = String(player_reference.call("get_upgrade_card_desc", "fleet_foot"))
 		blink_desc = String(player_reference.call("get_upgrade_card_desc", "blink_dash"))
 		iron_desc = String(player_reference.call("get_upgrade_card_desc", "iron_skin"))
+		trance_desc = String(player_reference.call("get_upgrade_card_desc", "battle_trance"))
+		surge_desc = String(player_reference.call("get_upgrade_card_desc", "surge_step"))
+		kinetic_desc = String(player_reference.call("get_upgrade_card_desc", "kinetic_drive"))
 	return [
 		Power.new("swift_strike", "Swift Strike", swift_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("swift_strike"), get_power_balance("swift_strike")).to_dict(),
 		Power.new("heavy_blow", "Heavy Blow", heavy_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("heavy_blow"), get_power_balance("heavy_blow")).to_dict(),
@@ -186,6 +211,9 @@ func get_upgrade_pool(player_reference: Node = null) -> Array[Dictionary]:
 		Power.new("fleet_foot", "Fleet Foot", fleet_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("fleet_foot"), get_power_balance("fleet_foot")).to_dict(),
 		Power.new("blink_dash", "Blink Dash", blink_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("blink_dash"), get_power_balance("blink_dash")).to_dict(),
 		Power.new("iron_skin", "Iron Skin", iron_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("iron_skin"), get_power_balance("iron_skin")).to_dict(),
+		Power.new("battle_trance", "Battle Trance", trance_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("battle_trance"), get_power_balance("battle_trance")).to_dict(),
+		Power.new("surge_step", "Surge Step", surge_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("surge_step"), get_power_balance("surge_step")).to_dict(),
+		Power.new("kinetic_drive", "Kinetic Drive", kinetic_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("kinetic_drive"), get_power_balance("kinetic_drive")).to_dict(),
 	]
 
 
@@ -233,6 +261,8 @@ func get_objective_upgrade_pool(player_reference: Node = null) -> Array[Dictiona
 		"long_reach": true,
 		"fleet_foot": true,
 		"blink_dash": true,
+		"battle_trance": true,
+		"surge_step": true,
 	}
 	var favored: Array[Dictionary] = []
 	var fallback: Array[Dictionary] = []
@@ -324,6 +354,12 @@ func _get_upgrade_fallback_description(upgrade_id: String) -> String:
 			return "Dash cooldown reduced by %.0f%%." % [(1.0 - float(data.get("mult", 1.0))) * 100.0]
 		"iron_skin":
 			return "Armor +%d." % [int(data.get("add", 0))]
+		"battle_trance":
+			return "Attack lock duration reduced by %.0f%%." % [(1.0 - float(data.get("mult", 1.0))) * 100.0]
+		"surge_step":
+			return "Dash speed +%.0f." % [float(data.get("add", 0.0))]
+		"kinetic_drive":
+			return "Acceleration +%.0f." % [float(data.get("add", 0.0))]
 		_:
 			return "Upgrade your stats."
 

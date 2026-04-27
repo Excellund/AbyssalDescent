@@ -680,7 +680,10 @@ func apply_power_for_test(power_id: String) -> bool:
 		"long_reach": true,
 		"fleet_foot": true,
 		"blink_dash": true,
-		"iron_skin": true
+		"iron_skin": true,
+		"battle_trance": true,
+		"surge_step": true,
+		"kinetic_drive": true
 	}
 	if boon_ids.has(id):
 		apply_upgrade(id)

@@ -29,7 +29,10 @@ const UPGRADE_IDS := {
 	"long_reach": true,
 	"fleet_foot": true,
 	"blink_dash": true,
-	"iron_skin": true
+	"iron_skin": true,
+	"battle_trance": true,
+	"surge_step": true,
+	"kinetic_drive": true
 }
 
 const TRIAL_POWER_IDS := {
@@ -73,7 +76,7 @@ func apply_upgrade(upgrade_id: String) -> bool:
 	upgrade_stacks[id] = current_stacks + 1
 
 	match id:
-		"swift_strike", "heavy_blow", "wide_arc", "long_reach", "fleet_foot", "blink_dash":
+		"swift_strike", "heavy_blow", "wide_arc", "long_reach", "fleet_foot", "blink_dash", "battle_trance", "surge_step", "kinetic_drive":
 			player_reference.set(String(preview.get("property", "")), preview.get("next", player_reference.get(String(preview.get("property", "")))))
 		"iron_skin":
 			player_reference.set("iron_skin_armor", int(preview.get("next", int(player_reference.get("iron_skin_armor")))))
@@ -444,6 +447,14 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 			return "[color=#c8daf0]Dash cooldown:[/color] [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]" % [cur_dash_cd, next_dash_cd]
 		"iron_skin":
 			return "[color=#c8daf0]Armor:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [int(cur_val), int(next_val)]
+		"battle_trance":
+			var cur_lock := float(cur_val)
+			var next_lock := float(next_val)
+			return "[color=#c8daf0]Attack lock duration:[/color] [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]" % [cur_lock, next_lock]
+		"surge_step":
+			return "[color=#c8daf0]Dash speed:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [float(cur_val), float(next_val)]
+		"kinetic_drive":
+			return "[color=#c8daf0]Acceleration:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [float(cur_val), float(next_val)]
 		_:
 			return "[color=#c8daf0]Upgrade your stats.[/color]"
 
