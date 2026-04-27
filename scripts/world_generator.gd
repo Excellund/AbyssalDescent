@@ -88,7 +88,7 @@ const DEBUG_MUTATOR_RANDOM_HARD := 6
 @export var music_crossfade_duration: float = 0.75
 @export var rest_heal_ratio: float = 0.32
 @export var hard_room_enemy_bonus: int = 3
-@export var second_boss_encounter_count: int = 8
+@export var second_boss_encounter_count: int = 7
 @export var debug_apply_test_powers_on_start: bool = false
 @export var debug_skip_starting_boon_selection: bool = false
 @export var debug_start_power_ids: PackedStringArray = PackedStringArray()
@@ -103,6 +103,9 @@ var player: Node2D
 var player_camera: Camera2D
 var rng := RandomNumberGenerator.new()
 var power_registry_instance: Node
+var current_difficulty_tier: int = 0
+var current_difficulty_config: Dictionary = {}
+var bonus_rest_heal_charges: int = 0
 
 var rooms_cleared: int = 0
 var room_depth: int = 0
@@ -855,7 +858,7 @@ func _spawn_priority_target_enemy() -> void:
 	if spawned_target.has_method("set_health_threshold_markers"):
 		spawned_target.call("set_health_threshold_markers", objective_target_flee_thresholds, objective_target_next_flee_index)
 	objective_hunt_kill_progress = 0
-	objective_hunt_kill_goal = 4
+	objective_hunt_kill_goal = maxi(2, objective_hunt_kill_goal)
 	objective_exposure_left = 0.0
 	objective_exposure_push_left = 0.0
 	objective_last_relocated_escort_count = 0
@@ -876,9 +879,13 @@ func _spawn_priority_target_opening_escorts() -> void:
 		escort_types.append("shielder")
 	if room_depth >= 4:
 		escort_types[escort_types.size() - 1] = "charger"
+	while escort_types.size() < objective_hunt_kill_goal:
+		escort_types.append("charger" if room_depth >= 4 else "chaser")
 	var anchor := objective_target_enemy.global_position
 	var base_angle := rng.randf_range(0.0, TAU)
 	for escort_index in range(escort_types.size()):
+		if objective_max_enemies > 0 and active_room_enemy_count >= objective_max_enemies:
+			break
 		var escort := enemy_spawner.call("spawn_enemy_node_type", escort_types[escort_index]) as CharacterBody2D
 		if not is_instance_valid(escort):
 			continue
@@ -912,7 +919,8 @@ func _trigger_priority_target_threshold_phase(_threshold_ratio: float) -> void:
 		return
 	var phase_index := objective_target_next_flee_index
 	_relocate_priority_target(_threshold_ratio)
-	objective_hunt_kill_goal = maxi(2, objective_hunt_kill_goal - 1)
+	var goal_drop := maxi(1, int(round(_objective_pressure_mult() - 0.4)))
+	objective_hunt_kill_goal = maxi(2, objective_hunt_kill_goal - goal_drop)
 	var duration := clampf(1.9 + float(phase_index) * 0.28, 1.9, 3.0)
 	var fx_strength := clampf(1.0 + float(phase_index) * 0.2, 1.0, 1.8)
 	_trigger_priority_target_exposure("Signal Cracked", "Push through", duration, fx_strength)
@@ -1434,19 +1442,55 @@ func _apply_difficulty_tier_bonuses(difficulty_tier: int) -> void:
 	if not is_instance_valid(player):
 		return
 	
-	var difficulty_config := DIFFICULTY_CONFIG.get_tier_config(difficulty_tier)
+	current_difficulty_tier = difficulty_tier
+	current_difficulty_config = DIFFICULTY_CONFIG.get_tier_config(difficulty_tier)
+	var difficulty_config := current_difficulty_config
+	var encounter_target := int(difficulty_config.get("encounter_count_before_boss", encounter_count))
+	if encounter_target > 0:
+		encounter_count = encounter_target
+		second_boss_encounter_count = maxi(1, encounter_target - 1)
+
+	bonus_rest_heal_charges = maxi(0, int(difficulty_config.get("player_potion_charges_bonus", 0)))
+	if player.has_method("set_incoming_damage_taken_mult"):
+		player.call("set_incoming_damage_taken_mult", float(difficulty_config.get("player_damage_taken_mult", 1.0)))
 	
-	## Apply starting health bonus on easiest tiers
 	var health_bonus := float(difficulty_config.get("player_starting_health_bonus", 0.0))
 	if health_bonus > 0.0 and player.get("max_health") != null:
 		var current_max := int(player.get("max_health"))
 		var new_max := current_max + int(health_bonus)
 		player.set("max_health", new_max)
-		## Sync health_state to new max_health to prevent heal clamping issues
 		if player.get("health_state") != null:
 			var health_state: Object = player.get("health_state")
 			if health_state.has_method("setup"):
 				health_state.call("setup", new_max)
+
+func _get_boss_difficulty_mult() -> float:
+	if current_difficulty_config.is_empty():
+		return 1.0
+	return float(current_difficulty_config.get("boss_difficulty_mult", 1.0))
+
+func _objective_pressure_mult() -> float:
+	return DIFFICULTY_CONFIG.get_objective_pressure_mult(current_difficulty_tier)
+
+func _apply_boss_difficulty_scaling(boss: CharacterBody2D) -> void:
+	if not is_instance_valid(boss):
+		return
+	var boss_mult := _get_boss_difficulty_mult()
+	if is_equal_approx(boss_mult, 1.0):
+		return
+	if boss.get("max_health") != null:
+		var base_max_health := int(boss.get("max_health"))
+		var scaled_max_health := maxi(1, int(round(float(base_max_health) * boss_mult)))
+		boss.set("max_health", scaled_max_health)
+		if boss.get("health_state") != null:
+			var health_state: Object = boss.get("health_state") as Object
+			if health_state != null and health_state.has_method("setup"):
+				health_state.call("setup", scaled_max_health)
+	for damage_property in ["charge_damage", "nova_damage", "cleave_damage", "prism_damage", "gravity_damage", "echo_dash_damage", "orbital_lance_damage", "polar_shift_pull_inner_damage"]:
+		if boss.get(damage_property) == null:
+			continue
+		var base_damage := int(boss.get(damage_property))
+		boss.set(damage_property, maxi(1, int(round(float(base_damage) * boss_mult))))
 
 func _try_resume_saved_run() -> bool:
 	var run_context := _get_run_context()
@@ -1536,6 +1580,8 @@ func _build_active_run_snapshot() -> Dictionary:
 		"objective_kills": objective_kills,
 		"objective_overtime": objective_overtime,
 		"objective_survival_quota_announced": objective_survival_quota_announced,
+		"current_difficulty_tier": current_difficulty_tier,
+		"bonus_rest_heal_charges": bonus_rest_heal_charges,
 		"player_snapshot": player_snapshot
 	}
 
@@ -1584,6 +1630,8 @@ func _apply_active_run_snapshot(snapshot: Dictionary) -> bool:
 	objective_kills = int(snapshot.get("objective_kills", 0))
 	objective_overtime = bool(snapshot.get("objective_overtime", false))
 	objective_survival_quota_announced = bool(snapshot.get("objective_survival_quota_announced", false))
+	current_difficulty_tier = int(snapshot.get("current_difficulty_tier", current_difficulty_tier))
+	bonus_rest_heal_charges = int(snapshot.get("bonus_rest_heal_charges", bonus_rest_heal_charges))
 	objective_target_enemy = null
 	objective_target_type = ""
 	objective_target_name = ""
@@ -1839,8 +1887,12 @@ func _begin_room(profile: Dictionary) -> void:
 		objective_spawn_interval = ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
 		objective_spawn_timer = objective_spawn_interval
 		objective_spawn_batch = ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
+		var objective_pressure_mult := _objective_pressure_mult()
+		objective_spawn_batch = maxi(1, int(round(float(objective_spawn_batch) * objective_pressure_mult)))
 		objective_max_enemies = mini(24, 12 + int(floor(float(room_depth) * 0.9)))
+		objective_max_enemies = maxi(8, int(round(float(objective_max_enemies) * objective_pressure_mult)))
 		var raw_kill_target := maxi(10, int(round(objective_time_left * 0.42)) + 2 + int(floor(float(room_depth) * 0.35)))
+		raw_kill_target = maxi(8, int(round(float(raw_kill_target) * objective_pressure_mult)))
 		objective_kill_target = int(ceil(float(raw_kill_target) / 5.0)) * 5
 		objective_kills = 0
 		objective_overtime = false
@@ -1852,9 +1904,13 @@ func _begin_room(profile: Dictionary) -> void:
 		objective_target_name = "Signal"
 		objective_time_left = ENCOUNTER_CONTRACTS.profile_objective_duration(profile)
 		objective_spawn_interval = ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
-		objective_spawn_timer = maxf(0.4, objective_spawn_interval * 0.7)
+		var objective_pressure_mult := _objective_pressure_mult()
+		objective_spawn_timer = maxf(0.35, objective_spawn_interval * clampf(1.2 - objective_pressure_mult * 0.45, 0.5, 0.95))
 		objective_spawn_batch = ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
+		objective_spawn_batch = maxi(1, int(round(float(objective_spawn_batch) * objective_pressure_mult)))
 		objective_max_enemies = 12 + int(floor(float(room_depth) * 0.6))
+		objective_max_enemies = maxi(6, int(round(float(objective_max_enemies) * objective_pressure_mult)))
+		objective_hunt_kill_goal = clampi(int(round(4.0 * objective_pressure_mult)), 2, 6)
 		objective_overtime = false
 		_spawn_priority_target_enemy()
 	_start_encounter_intro_grace()
@@ -1875,6 +1931,9 @@ func _enter_rest_site() -> void:
 	if is_instance_valid(player) and player.has_method("heal"):
 		var player_max_health := int(player.get("max_health"))
 		var heal_amount := maxi(8, int(round(float(player_max_health) * rest_heal_ratio)))
+		if bonus_rest_heal_charges > 0:
+			bonus_rest_heal_charges -= 1
+			heal_amount += maxi(6, int(round(float(player_max_health) * 0.14)))
 		player.call("heal", heal_amount)
 	_spawn_door_options()
 
@@ -1908,6 +1967,7 @@ func _begin_boss_room() -> void:
 	add_child(boss)
 	boss.set("target", player)
 	boss.set("arena_size", current_room_size)
+	_apply_boss_difficulty_scaling(boss)
 	if boss.has_signal("died"):
 		boss.died.connect(_on_room_enemy_died)
 	_start_encounter_intro_grace()
@@ -1934,6 +1994,7 @@ func _begin_second_boss_room() -> void:
 	add_child(boss)
 	boss.set("target", player)
 	boss.set("arena_size", current_room_size)
+	_apply_boss_difficulty_scaling(boss)
 	if boss.has_signal("died"):
 		boss.died.connect(_on_room_enemy_died)
 	_start_encounter_intro_grace()

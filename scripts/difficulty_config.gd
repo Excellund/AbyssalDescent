@@ -13,7 +13,7 @@ static func get_tier_config(tier: int) -> Dictionary:
 				"name": META_PROGRESS.TIER_NAMES[META_PROGRESS.TIER_PILGRIM],
 				"description": META_PROGRESS.TIER_DESCRIPTIONS[META_PROGRESS.TIER_PILGRIM],
 				## Encounter generation
-				"encounter_count_before_boss": 5,  ## Rooms to clear before boss; easier tier has fewer rooms
+				"encounter_count_before_boss": 8,  ## Rooms to clear before boss
 				"base_enemy_pressure_mult": 0.6,  ## Baseline enemy count multiplier
 				"depth_pressure_divisor": 1.5,  ## Higher = slower ramping of difficulty; Apprentice ramps slower
 				"specialist_enemy_depth_offset": 3,  ## Lurkers start at depth 5 on apprentice (vs depth 5 on standard)
@@ -34,7 +34,7 @@ static func get_tier_config(tier: int) -> Dictionary:
 				"name": META_PROGRESS.TIER_NAMES[META_PROGRESS.TIER_DELVER],
 				"description": META_PROGRESS.TIER_DESCRIPTIONS[META_PROGRESS.TIER_DELVER],
 				## Encounter generation (baseline)
-				"encounter_count_before_boss": 5,
+				"encounter_count_before_boss": 8,
 				"base_enemy_pressure_mult": 1.0,
 				"depth_pressure_divisor": 1.0,
 				"specialist_enemy_depth_offset": 0,
@@ -55,7 +55,7 @@ static func get_tier_config(tier: int) -> Dictionary:
 				"name": META_PROGRESS.TIER_NAMES[META_PROGRESS.TIER_HARBINGER],
 				"description": META_PROGRESS.TIER_DESCRIPTIONS[META_PROGRESS.TIER_HARBINGER],
 				## Encounter generation (harder)
-				"encounter_count_before_boss": 5,
+				"encounter_count_before_boss": 8,
 				"base_enemy_pressure_mult": 1.25,  ## More enemies per room
 				"depth_pressure_divisor": 0.8,  ## Faster ramping
 				"specialist_enemy_depth_offset": -1,  ## Specialist enemies appear 1 depth earlier
@@ -76,7 +76,7 @@ static func get_tier_config(tier: int) -> Dictionary:
 				"name": META_PROGRESS.TIER_NAMES[META_PROGRESS.TIER_FORSWORN],
 				"description": META_PROGRESS.TIER_DESCRIPTIONS[META_PROGRESS.TIER_FORSWORN],
 				## Encounter generation (extreme)
-				"encounter_count_before_boss": 5,
+				"encounter_count_before_boss": 8,
 				"base_enemy_pressure_mult": 1.5,  ## Significantly more enemies
 				"depth_pressure_divisor": 0.6,  ## Very fast ramping
 				"specialist_enemy_depth_offset": -2,  ## Specialist enemies much earlier
@@ -123,3 +123,11 @@ static func get_player_damage_taken_mult(tier: int) -> float:
 ## Get player potion bonus for this tier
 static func get_player_potion_charges_bonus(tier: int) -> int:
 	return int(get_tier_value(tier, "player_potion_charges_bonus", 0))
+
+## Get normalized difficulty rank for systemic scaling helpers
+static func get_difficulty_rank(tier: int) -> int:
+	return clampi(int(get_tier_value(tier, "difficulty_rank", META_PROGRESS.TIER_DELVER)), 0, 3)
+
+## Shared objective pressure curve used by objective encounter runtime logic
+static func get_objective_pressure_mult(tier: int) -> float:
+	return 0.8 + float(get_difficulty_rank(tier)) * 0.2

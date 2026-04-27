@@ -160,6 +160,7 @@ var active_objective_mutators: Array[Dictionary] = []
 var objective_mutator_damage_resist: float = 0.0
 var objective_mutator_damage_mult: float = 0.0
 var objective_mutator_aura_phase: float = 0.0
+var incoming_damage_taken_mult: float = 1.0
 
 func _ready() -> void:
 	died.connect(_restart_current_scene)
@@ -481,12 +482,17 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 		total_resist += aegis_field_resist_ratio
 	total_resist = clampf(total_resist, 0.0, 0.92)
 	reduced = int(ceil(float(reduced) * (1.0 - total_resist)))
+	reduced = int(ceil(float(reduced) * incoming_damage_taken_mult))
+	reduced = maxi(1, reduced)
 	var health_before := _get_current_health()
 	health_state.take_damage(reduced)
 	if _get_current_health() < health_before:
 		_trigger_aegis_field()
 		player_feedback.play_damage_flash()
 		player_feedback.play_impact_sound()
+
+func set_incoming_damage_taken_mult(mult: float) -> void:
+	incoming_damage_taken_mult = clampf(mult, 0.25, 4.0)
 
 func heal(amount: int) -> void:
 	if amount <= 0:
