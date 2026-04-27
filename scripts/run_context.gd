@@ -4,6 +4,7 @@ const ENUMS := preload("res://scripts/shared/enums.gd")
 const MODE_STANDARD := "standard"
 const MODE_ENDLESS := "endless"
 const SETTINGS_STORE := preload("res://scripts/settings_store.gd")
+const META_PROGRESS_STORE := preload("res://scripts/meta_progress_store.gd")
 const ACTIVE_RUN_SAVE_PATH := "user://active_run.save"
 const ACTIVE_RUN_VERSION := 1
 
@@ -12,8 +13,15 @@ var master_volume_db: float = 0.0
 var music_volume_db: float = -46.0
 var resume_saved_run_requested: bool = false
 
+## Meta-progression state
+var meta_progress_profile: Dictionary = {}
+var current_difficulty_tier: int = META_PROGRESS_STORE.TIER_APPRENTICE
+var highest_unlocked_difficulty_tier: int = META_PROGRESS_STORE.TIER_APPRENTICE
+var just_unlocked_tier: int = -1  ## -1 means no new unlock, otherwise the newly unlocked tier
+
 func _ready() -> void:
 	load_audio_settings()
+	load_meta_progress()
 	_apply_master_volume()
 
 func set_run_mode(mode: Variant) -> void:
@@ -98,3 +106,79 @@ func consume_resume_saved_run_request() -> bool:
 
 func clear_resume_saved_run_request() -> void:
 	resume_saved_run_requested = false
+
+
+## Load meta-progression profile from disk
+func load_meta_progress() -> void:
+	meta_progress_profile = META_PROGRESS_STORE.load_meta_progress()
+	current_difficulty_tier = META_PROGRESS_STORE.get_current_tier(meta_progress_profile)
+	highest_unlocked_difficulty_tier = META_PROGRESS_STORE.get_highest_unlocked_tier(meta_progress_profile)
+	just_unlocked_tier = -1
+
+
+## Save meta-progression profile to disk
+func save_meta_progress() -> bool:
+	return META_PROGRESS_STORE.save_meta_progress(meta_progress_profile)
+
+
+## Set the current difficulty tier (must be unlocked or same as current)
+func set_difficulty_tier(tier: int) -> bool:
+	if META_PROGRESS_STORE.set_current_tier(meta_progress_profile, tier):
+		current_difficulty_tier = tier
+		return save_meta_progress()
+	return false
+
+
+## Unlock a difficulty tier
+func unlock_difficulty_tier(tier: int) -> bool:
+	var was_unlocked := META_PROGRESS_STORE.is_tier_unlocked(meta_progress_profile, tier)
+	if META_PROGRESS_STORE.unlock_tier(meta_progress_profile, tier):
+		highest_unlocked_difficulty_tier = META_PROGRESS_STORE.get_highest_unlocked_tier(meta_progress_profile)
+		if not was_unlocked:
+			just_unlocked_tier = tier
+		return save_meta_progress()
+	return false
+
+
+## Get current difficulty tier
+func get_current_difficulty_tier() -> int:
+	return current_difficulty_tier
+
+
+## Get highest unlocked difficulty tier
+func get_highest_unlocked_difficulty_tier() -> int:
+	return highest_unlocked_difficulty_tier
+
+
+## Check if a tier is unlocked
+func is_difficulty_tier_unlocked(tier: int) -> bool:
+	return META_PROGRESS_STORE.is_tier_unlocked(meta_progress_profile, tier)
+
+
+## Get and clear any newly unlocked tier (returns -1 if none)
+func consume_just_unlocked_tier() -> int:
+	var result := just_unlocked_tier
+	just_unlocked_tier = -1
+	return result
+
+
+## Record run statistics
+func record_run_start() -> void:
+	META_PROGRESS_STORE.record_run_attempt(meta_progress_profile)
+
+
+func record_run_completion(depth: int) -> void:
+	META_PROGRESS_STORE.record_run_completion(meta_progress_profile, depth)
+	save_meta_progress()
+
+
+## Set and save a milestone
+func set_milestone(key: String, value: bool) -> void:
+	META_PROGRESS_STORE.set_milestone(meta_progress_profile, key, value)
+	save_meta_progress()
+
+
+## Get a milestone
+func get_milestone(key: String) -> bool:
+	return META_PROGRESS_STORE.get_milestone(meta_progress_profile, key)
+

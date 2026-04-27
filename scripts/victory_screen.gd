@@ -2,12 +2,17 @@ extends Node
 
 signal back_to_main_menu_requested
 
+const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
+const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
+
 var _layer: CanvasLayer
 var _root: Control
 var _tween: Tween
 var _visible: bool = false
+var _unlocked_tier: int = -1
 
-func show_victory(_rooms_cleared: int) -> void:
+func show_victory(_rooms_cleared: int, unlocked_tier: int = -1) -> void:
+	_unlocked_tier = unlocked_tier
 	if _layer == null:
 		_build_ui()
 	_visible = true
@@ -80,6 +85,52 @@ func _build_ui() -> void:
 	sep.offset_bottom = 448.0
 	sep.color = Color(0.9, 0.76, 0.42, 0.35)
 	_root.add_child(sep)
+
+	## Unlock notification (conditionally shown)
+	if _unlocked_tier >= 0:
+		var unlock_panel := Panel.new()
+		unlock_panel.set_anchor(SIDE_LEFT, 0.5)
+		unlock_panel.set_anchor(SIDE_RIGHT, 0.5)
+		unlock_panel.set_anchor(SIDE_TOP, 0.0)
+		unlock_panel.set_anchor(SIDE_BOTTOM, 0.0)
+		unlock_panel.offset_left = -280.0
+		unlock_panel.offset_right = 280.0
+		unlock_panel.offset_top = 330.0
+		unlock_panel.offset_bottom = 420.0
+		var unlock_style := StyleBoxFlat.new()
+		unlock_style.bg_color = Color(0.2, 0.25, 0.15, 0.92)
+		unlock_style.border_color = Color(0.8, 0.95, 0.5, 0.95)
+		unlock_style.set_border_width_all(2)
+		unlock_style.set_corner_radius_all(10)
+		unlock_panel.add_theme_stylebox_override("panel", unlock_style)
+		_root.add_child(unlock_panel)
+
+		var unlock_config := DIFFICULTY_CONFIG.get_tier_config(_unlocked_tier)
+		var unlock_tier_name: String = unlock_config.get("name", "Unknown")
+
+		var unlock_title := Label.new()
+		unlock_title.set_anchors_preset(Control.PRESET_TOP_WIDE)
+		unlock_title.offset_left = 20.0
+		unlock_title.offset_right = -20.0
+		unlock_title.offset_top = 10.0
+		unlock_title.offset_bottom = 40.0
+		unlock_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		unlock_title.text = "New Difficulty Unlocked!"
+		unlock_title.add_theme_font_size_override("font_size", 20)
+		unlock_title.add_theme_color_override("font_color", Color(0.8, 0.95, 0.5, 1.0))
+		unlock_panel.add_child(unlock_title)
+
+		var unlock_desc := Label.new()
+		unlock_desc.set_anchors_preset(Control.PRESET_CENTER)
+		unlock_desc.offset_top = 25.0
+		unlock_desc.offset_bottom = 70.0
+		unlock_desc.offset_left = 20.0
+		unlock_desc.offset_right = -20.0
+		unlock_desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		unlock_desc.text = "%s is now available!\nYou can still choose easier difficulties whenever you prefer." % unlock_tier_name
+		unlock_desc.add_theme_font_size_override("font_size", 14)
+		unlock_desc.add_theme_color_override("font_color", Color(0.85, 0.92, 1.0, 0.9))
+		unlock_panel.add_child(unlock_desc)
 
 	# Main menu button
 	var btn_panel := Panel.new()

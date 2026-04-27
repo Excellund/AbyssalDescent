@@ -5,16 +5,20 @@ const RUN_CONTEXT_PATH := "/root/RunContext"
 const MENU_MUSIC := preload("res://music/msx1.mp3")
 const ENUMS := preload("res://scripts/shared/enums.gd")
 const GLOSSARY_DATA := preload("res://scripts/shared/glossary_data.gd")
+const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
+const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 
 var root_panel: Panel
 var options_panel: Panel
 var glossary_panel: Panel
+var difficulty_selector_panel: Panel
 var master_slider: HSlider
 var music_slider: HSlider
 var master_value_label: Label
 var music_value_label: Label
 var menu_music_player: AudioStreamPlayer
 var primary_run_button: Button
+var difficulty_tier_buttons: Array[Button] = []
 
 func _ready() -> void:
 	if _should_autostart_debug_encounter():
@@ -55,6 +59,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.is_action_pressed("ui_cancel") and glossary_panel != null and glossary_panel.visible:
 		glossary_panel.visible = false
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed("ui_cancel") and difficulty_selector_panel != null and difficulty_selector_panel.visible:
+		difficulty_selector_panel.visible = false
+		root_panel.visible = true
 		get_viewport().set_input_as_handled()
 
 func _build_ui() -> void:
@@ -123,6 +132,10 @@ func _build_ui() -> void:
 	glossary_panel = _build_glossary_panel()
 	glossary_panel.visible = false
 	add_child(glossary_panel)
+	
+	difficulty_selector_panel = _build_difficulty_selector_panel()
+	difficulty_selector_panel.visible = false
+	add_child(difficulty_selector_panel)
 
 func _make_menu_button(text: String, pos: Vector2) -> Button:
 	var button := Button.new()
@@ -214,7 +227,14 @@ func _on_primary_run_pressed() -> void:
 		return
 	_clear_saved_run()
 	_set_run_mode(ENUMS.RunMode.STANDARD)
-	get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)
+	## Show difficulty selector before starting
+	if difficulty_selector_panel != null:
+		_update_difficulty_selector()
+		difficulty_selector_panel.visible = true
+		if options_panel != null:
+			options_panel.visible = false
+		if glossary_panel != null:
+			glossary_panel.visible = false
 
 func _on_continue_pressed() -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
@@ -288,6 +308,121 @@ func _build_glossary_panel() -> Panel:
 	panel.add_child(back_button)
 
 	return panel
+
+func _build_difficulty_selector_panel() -> Panel:
+	var panel := Panel.new()
+	panel.custom_minimum_size = Vector2(820.0, 520.0)
+	panel.position = Vector2(550.0, 160.0)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.04, 0.06, 0.1, 0.96)
+	style.border_color = Color(0.44, 0.7, 0.96, 0.74)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(12)
+	panel.add_theme_stylebox_override("panel", style)
+
+	var title := Label.new()
+	title.text = "Select Difficulty"
+	title.position = Vector2(0.0, 16.0)
+	title.custom_minimum_size = Vector2(820.0, 32.0)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 30)
+	title.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 0.98))
+	panel.add_child(title)
+
+	var tier_buttons_container := VBoxContainer.new()
+	tier_buttons_container.position = Vector2(40.0, 70.0)
+	tier_buttons_container.custom_minimum_size = Vector2(740.0, 360.0)
+	tier_buttons_container.add_theme_constant_override("separation", 14)
+	panel.add_child(tier_buttons_container)
+
+	difficulty_tier_buttons.clear()
+	for tier in range(4):
+		var tier_button_container := HBoxContainer.new()
+		tier_button_container.custom_minimum_size = Vector2(740.0, 80.0)
+		tier_buttons_container.add_child(tier_button_container)
+
+		var button := Button.new()
+		button.custom_minimum_size = Vector2(700.0, 80.0)
+		button.add_theme_font_size_override("font_size", 18)
+		button.pressed.connect(_on_difficulty_tier_selected.bindv([tier]))
+		tier_button_container.add_child(button)
+		difficulty_tier_buttons.append(button)
+
+	var back_button := Button.new()
+	back_button.text = "Back"
+	back_button.position = Vector2(330.0, 460.0)
+	back_button.custom_minimum_size = Vector2(160.0, 42.0)
+	back_button.add_theme_font_size_override("font_size", 18)
+	back_button.pressed.connect(func() -> void:
+		difficulty_selector_panel.visible = false
+		root_panel.visible = true
+	)
+	panel.add_child(back_button)
+
+	return panel
+
+func _update_difficulty_selector() -> void:
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context == null:
+		return
+	
+	var current_tier: int = META_PROGRESS.TIER_STANDARD
+	var highest_unlocked_tier: int = META_PROGRESS.TIER_APPRENTICE
+	
+	if run_context.has_method("get_current_difficulty_tier"):
+		current_tier = int(run_context.call("get_current_difficulty_tier"))
+	if run_context.has_method("get_highest_unlocked_difficulty_tier"):
+		highest_unlocked_tier = int(run_context.call("get_highest_unlocked_difficulty_tier"))
+	
+	for i in range(difficulty_tier_buttons.size()):
+		var button := difficulty_tier_buttons[i]
+		var config := DIFFICULTY_CONFIG.get_tier_config(i)
+		var tier_name: String = config.get("name", "Unknown")
+		var tier_desc: String = config.get("description", "")
+		var is_unlocked := i <= highest_unlocked_tier
+		var is_selected := i == current_tier
+		
+		var status := ""
+		if not is_unlocked:
+			status = " [LOCKED]"
+		elif is_selected:
+			status = " [CURRENT]"
+		
+		button.text = "%s%s\n%s" % [tier_name, status, tier_desc]
+		button.disabled = not is_unlocked
+		
+		## Visual styling for selected/unlocked state
+		if is_selected:
+			var selected_style := StyleBoxFlat.new()
+			selected_style.bg_color = Color(0.22, 0.35, 0.55, 0.95)
+			selected_style.border_color = Color(0.8, 0.95, 1.0, 1.0)
+			selected_style.set_border_width_all(2)
+			selected_style.set_corner_radius_all(8)
+			button.add_theme_stylebox_override("normal", selected_style)
+		elif is_unlocked:
+			var unlocked_style := StyleBoxFlat.new()
+			unlocked_style.bg_color = Color(0.10, 0.14, 0.20, 0.90)
+			unlocked_style.border_color = Color(0.44, 0.66, 0.88, 0.85)
+			unlocked_style.set_border_width_all(2)
+			unlocked_style.set_corner_radius_all(8)
+			button.add_theme_stylebox_override("normal", unlocked_style)
+		else:
+			var locked_style := StyleBoxFlat.new()
+			locked_style.bg_color = Color(0.08, 0.08, 0.10, 0.70)
+			locked_style.border_color = Color(0.30, 0.30, 0.35, 0.50)
+			locked_style.set_border_width_all(2)
+			locked_style.set_corner_radius_all(8)
+			button.add_theme_stylebox_override("normal", locked_style)
+
+func _on_difficulty_tier_selected(tier: int) -> void:
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context == null:
+		return
+	
+	if run_context.has_method("set_difficulty_tier"):
+		if run_context.call("set_difficulty_tier", tier):
+			difficulty_selector_panel.visible = false
+			get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)
 
 func _on_master_volume_changed(value: float) -> void:
 	_apply_options(value, music_slider.value)

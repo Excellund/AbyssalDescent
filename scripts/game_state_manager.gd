@@ -21,6 +21,8 @@ var run_start_time: float = 0.0
 signal room_completed
 signal boss_available  # Emitted when boss becomes available (after enough rooms cleared)
 signal run_completed
+signal milestone_achieved(milestone_key: String)  # Emitted when a milestone is achieved
+signal tier_unlocked(tier: int)  # Emitted when a new difficulty tier is unlocked
 signal upgrade_taken(upgrade_id: String)
 signal trial_power_taken(power_id: String)
 
@@ -50,6 +52,58 @@ func enter_boss_room() -> void:
 func complete_run() -> void:
 	run_cleared = true
 	emit_signal("run_completed")
+	_check_and_award_unlocks()
+
+
+## Check if run unlocked any new difficulty tiers
+func _check_and_award_unlocks() -> void:
+	var run_context := get_node_or_null("/root/RunContext")
+	if run_context == null:
+		return
+	
+	## Tier unlock rules:
+	## - First clear: unlock Tier 1 (Standard)
+	## - First clear on Standard: unlock Tier 2 (Veteran)
+	## - First clear on Veteran: unlock Tier 3 (Torment)
+	
+	if not run_context.has_method("get_current_difficulty_tier"):
+		return
+	if not run_context.has_method("get_highest_unlocked_difficulty_tier"):
+		return
+	if not run_context.has_method("unlock_difficulty_tier"):
+		return
+	if not run_context.has_method("get_milestone"):
+		return
+	if not run_context.has_method("set_milestone"):
+		return
+	
+	var current_tier: int = int(run_context.call("get_current_difficulty_tier"))
+	var highest_unlocked: int = int(run_context.call("get_highest_unlocked_difficulty_tier"))
+	
+	## First clear ever: unlock Standard tier
+	if not run_context.call("get_milestone", "first_clear"):
+		run_context.call("set_milestone", "first_clear", true)
+		emit_signal("milestone_achieved", "first_clear")
+		if highest_unlocked < 1:
+			run_context.call("unlock_difficulty_tier", 1)
+			emit_signal("tier_unlocked", 1)
+	
+	## First clear on Standard: unlock Veteran tier
+	if current_tier == 1 and not run_context.call("get_milestone", "first_clear_on_standard"):
+		run_context.call("set_milestone", "first_clear_on_standard", true)
+		emit_signal("milestone_achieved", "first_clear_on_standard")
+		if highest_unlocked < 2:
+			run_context.call("unlock_difficulty_tier", 2)
+			emit_signal("tier_unlocked", 2)
+	
+	## First clear on Veteran: unlock Torment tier
+	if current_tier == 2 and not run_context.call("get_milestone", "first_clear_on_veteran"):
+		run_context.call("set_milestone", "first_clear_on_veteran", true)
+		emit_signal("milestone_achieved", "first_clear_on_veteran")
+		if highest_unlocked < 3:
+			run_context.call("unlock_difficulty_tier", 3)
+			emit_signal("tier_unlocked", 3)
+
 
 
 ## Register an upgrade selection

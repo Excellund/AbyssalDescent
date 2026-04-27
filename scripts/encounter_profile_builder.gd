@@ -2,8 +2,11 @@ extends Node
 
 const ENUMS := preload("res://scripts/shared/enums.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
+const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
+const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
 
 var rng: RandomNumberGenerator
+var current_difficulty_tier: int = META_PROGRESS.TIER_STANDARD
 
 var room_base_size: Vector2 = Vector2(940.0, 700.0)
 var room_size_growth: Vector2 = Vector2(80.0, 45.0)
@@ -24,6 +27,9 @@ const TRIAL_ROOM_SIZE := Vector2(1160.0, 860.0)
 
 func initialize(rng_instance: RandomNumberGenerator) -> void:
 	rng = rng_instance
+
+func set_difficulty_tier(tier: int) -> void:
+	current_difficulty_tier = tier
 
 func configure(settings: Dictionary) -> void:
 	room_base_size = settings.get("room_base_size", room_base_size)
@@ -162,11 +168,17 @@ func _get_hard_pool() -> Array[Dictionary]:
 func _build_trial_profile(depth: int = 0) -> Dictionary:
 	var mutator: Dictionary = roll_hard_enemy_mutator()
 	var base: Dictionary = _pick_trial_base_profile(mutator)
-	var depth_pressure := maxi(0, depth - 2)
-	var chasers := ENCOUNTER_CONTRACTS.profile_chaser_count(base) + hard_room_enemy_bonus + int(floor(float(depth_pressure) * 0.75))
-	var chargers := ENCOUNTER_CONTRACTS.profile_charger_count(base) + 2 + int(floor(float(depth_pressure) / 4.0))
-	var archers: int = maxi(ENCOUNTER_CONTRACTS.profile_archer_count(base), 1) + int(floor(float(depth_pressure) / 5.0))
-	var shielders := ENCOUNTER_CONTRACTS.profile_shielder_count(base) + int(floor(float(depth_pressure) / 4.0))
+	var base_pressure := maxi(0, depth - 2)
+	## Apply tier-based difficulty scaling to depth pressure
+	var difficulty_config := DIFFICULTY_CONFIG.get_tier_config(current_difficulty_tier)
+	var depth_pressure_divisor := float(difficulty_config.get("depth_pressure_divisor", 1.0))
+	var depth_pressure := int(floor(float(base_pressure) / depth_pressure_divisor))
+	var base_pressure_mult := float(difficulty_config.get("base_enemy_pressure_mult", 1.0))
+	
+	var chasers := int(float(ENCOUNTER_CONTRACTS.profile_chaser_count(base) + hard_room_enemy_bonus + int(floor(float(depth_pressure) * 0.75))) * base_pressure_mult)
+	var chargers := int(float(ENCOUNTER_CONTRACTS.profile_charger_count(base) + 2 + int(floor(float(depth_pressure) / 4.0))) * base_pressure_mult)
+	var archers := int(float(maxi(ENCOUNTER_CONTRACTS.profile_archer_count(base), 1) + int(floor(float(depth_pressure) / 5.0))) * base_pressure_mult)
+	var shielders := int(float(ENCOUNTER_CONTRACTS.profile_shielder_count(base) + int(floor(float(depth_pressure) / 4.0))) * base_pressure_mult)
 	var specialist_counts := _trial_specialist_counts(mutator, depth, chasers, chargers, archers, shielders)
 	chasers = int(specialist_counts.get("chasers", chasers))
 	chargers = int(specialist_counts.get("chargers", chargers))
@@ -176,7 +188,7 @@ func _build_trial_profile(depth: int = 0) -> Dictionary:
 	if mutator_name.is_empty():
 		mutator_name = "Frenzy"
 	var profile := _build_profile("Trial %s" % mutator_name, TRIAL_ROOM_SIZE, chasers, chargers, archers, shielders, mutator)
-	var specialist_enemies := _trial_specialist_enemies(mutator, depth)
+	var specialist_enemies := _trial_specialist_enemies(mutator, depth, current_difficulty_tier)
 	if specialist_enemies.has("lurker_count"):
 		profile["lurker_count"] = int(specialist_enemies.get("lurker_count", 0))
 	if specialist_enemies.has("ram_count"):
@@ -268,23 +280,31 @@ func _trial_specialist_counts(mutator: Dictionary, depth: int, chasers: int, cha
 				"shielders": shielders
 			}
 
-func _trial_specialist_enemies(mutator: Dictionary, depth: int) -> Dictionary:
+func _trial_specialist_enemies(mutator: Dictionary, depth: int, tier: int = META_PROGRESS.TIER_STANDARD) -> Dictionary:
 	var icon := ENCOUNTER_CONTRACTS.mutator_icon_shape_id(mutator)
-	var lurker_count := int(floor(float(maxi(0, depth - 4)) * 0.6)) if depth >= 5 else 0
-	var ram_count := int(floor(float(maxi(0, depth - 5)) * 0.4)) if depth >= 6 else 0
-	var lancer_count := 1 if depth >= 7 else 0
+	var difficulty_config := DIFFICULTY_CONFIG.get_tier_config(tier)
+	var specialist_offset := int(difficulty_config.get("specialist_enemy_depth_offset", 0))
+	
+	## Adjust depth gates for specialist enemies based on tier
+	var lurker_gate := 5 + specialist_offset
+	var ram_gate := 6 + specialist_offset
+	var lancer_gate := 7 + specialist_offset
+	
+	var lurker_count := int(floor(float(maxi(0, depth - lurker_gate + 1)) * 0.6)) if depth >= lurker_gate else 0
+	var ram_count := int(floor(float(maxi(0, depth - ram_gate + 1)) * 0.4)) if depth >= ram_gate else 0
+	var lancer_count := 1 if depth >= lancer_gate else 0
 	match icon:
 		"iron_volley":
 			lurker_count = 0
 			ram_count = 0
 			lancer_count = 0
 		"blood_rush":
-			lurker_count += 1 if depth >= 5 else 0
-			ram_count += 1 if depth >= 6 else 0
+			lurker_count += 1 if depth >= lurker_gate else 0
+			ram_count += 1 if depth >= ram_gate else 0
 		"flashpoint":
-			lancer_count += 1 if depth >= 7 else 0
+			lancer_count += 1 if depth >= lancer_gate else 0
 		"siegebreak":
-			ram_count += 1 if depth >= 6 else 0
+			ram_count += 1 if depth >= ram_gate else 0
 	return {
 		"lurker_count": maxi(0, lurker_count),
 		"ram_count": maxi(0, ram_count),

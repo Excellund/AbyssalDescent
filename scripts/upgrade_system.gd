@@ -57,6 +57,14 @@ func apply_upgrade(upgrade_id: String) -> bool:
 	if not _is_upgrade_id(id):
 		return false
 	
+	## Check stack limits for upgrades with caps
+	if id == "long_reach":
+		var current_stacks := 0
+		if is_instance_valid(game_state):
+			current_stacks = game_state.get_upgrade_stack_count(id)
+		if current_stacks >= 3:
+			return false
+	
 	# Track in game state
 	if is_instance_valid(game_state):
 		game_state.add_upgrade(id)

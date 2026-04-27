@@ -10,6 +10,7 @@ const ENEMY_LANCER_SCRIPT := preload("res://scripts/enemy_lancer.gd")
 const ENEMY_BOSS_SCRIPT := preload("res://scripts/enemy_boss.gd")
 const ENEMY_BOSS_2_SCRIPT := preload("res://scripts/enemy_boss_2.gd")
 const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
+const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 const MUSIC_SYSTEM_SCRIPT := preload("res://scripts/music_system.gd")
 const ENEMY_SPAWNER_SCRIPT := preload("res://scripts/enemy_spawner.gd")
 const ENCOUNTER_PROFILE_BUILDER_SCRIPT := preload("res://scripts/encounter_profile_builder.gd")
@@ -201,6 +202,12 @@ func _ready() -> void:
 	encounter_profile_builder = ENCOUNTER_PROFILE_BUILDER_SCRIPT.new()
 	add_child(encounter_profile_builder)
 	encounter_profile_builder.call("initialize", rng)
+	## Set difficulty tier from RunContext
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context != null and run_context.has_method("get_current_difficulty_tier"):
+		var difficulty_tier: int = run_context.call("get_current_difficulty_tier")
+		encounter_profile_builder.call("set_difficulty_tier", difficulty_tier)
+		_apply_difficulty_tier_bonuses(difficulty_tier)
 	encounter_profile_builder.call("configure", {
 		"room_base_size": room_base_size,
 		"room_size_growth": room_size_growth,
@@ -258,7 +265,7 @@ func _ready() -> void:
 		return
 	_apply_debug_start_powers_if_needed()
 	if debug_trigger_victory:
-		victory_screen.call("show_victory", 0)
+		victory_screen.call("show_victory", 0, -1)
 		return
 	if debug_start_encounter != DEBUG_ENCOUNTER_NONE:
 		_start_debug_selected_encounter(debug_start_encounter)
@@ -1405,10 +1412,32 @@ func _finish_second_boss_clear() -> void:
 	_clear_active_run_checkpoint()
 	hud.show_banner("Run Complete", "")
 	if is_instance_valid(victory_screen):
-		victory_screen.call("show_victory", rooms_cleared)
+		var run_context := _get_run_context()
+		var unlocked_tier := -1
+		if run_context != null and run_context.has_method("consume_just_unlocked_tier"):
+			unlocked_tier = int(run_context.call("consume_just_unlocked_tier"))
+		victory_screen.call("show_victory", rooms_cleared, unlocked_tier)
 
 func _get_run_context() -> Node:
 	return get_node_or_null(RUN_CONTEXT_PATH)
+
+func _apply_difficulty_tier_bonuses(difficulty_tier: int) -> void:
+	if not is_instance_valid(player):
+		return
+	
+	var difficulty_config := DIFFICULTY_CONFIG.get_tier_config(difficulty_tier)
+	
+	## Apply starting health bonus on easiest tiers
+	var health_bonus := float(difficulty_config.get("player_starting_health_bonus", 0.0))
+	if health_bonus > 0.0 and player.get("max_health") != null:
+		var current_max := int(player.get("max_health"))
+		var new_max := current_max + int(health_bonus)
+		player.set("max_health", new_max)
+		## Sync health_state to new max_health to prevent heal clamping issues
+		if player.get("health_state") != null:
+			var health_state: Object = player.get("health_state")
+			if health_state.has_method("setup"):
+				health_state.call("setup", new_max)
 
 func _try_resume_saved_run() -> bool:
 	var run_context := _get_run_context()
