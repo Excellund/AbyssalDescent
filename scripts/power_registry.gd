@@ -416,7 +416,7 @@ func _get_trial_fallback_description(power_id: String) -> String:
 		"storm_crown":
 			return "Every few hits unleash chain lightning that arcs through nearby enemies."
 		"wraithstep":
-			return "Dash marks enemies. Hitting a marked target deals bonus damage and cleaves nearby foes."
+			return "Dash marks enemies. Marked hits deal bonus damage and chain splashes nearby."
 		_:
 			return "Enhances this power."
 

@@ -475,7 +475,7 @@ func get_trial_power_card_description(power_id: String) -> String:
 			var cur_bonus_damage := int(player_reference.get("wraithstep_mark_bonus_damage"))
 			var cur_splash_ratio := float(player_reference.get("wraithstep_mark_splash_ratio"))
 			if current_stack <= 0:
-				return "[color=#9ab8d8]Dash marks nearby enemies. Hitting a marked target deals bonus damage and detonates chained splashes through other marked foes.[/color]\n[color=#9ab8d8]Initial:[/color] mark [color=#7de882]%.2fs[/color], bonus [color=#7de882]+%d[/color], cleave [color=#7de882]%.0f%%[/color]." % [next_mark_duration, next_bonus_damage, next_splash_ratio * 100.0]
+				return "[color=#9ab8d8]Dash marks enemies. Marked hits deal bonus damage and chain splashes nearby.[/color]\n[color=#9ab8d8]Initial:[/color] mark [color=#7de882]%.2fs[/color], bonus [color=#7de882]+%d[/color], cleave [color=#7de882]%.0f%%[/color]." % [next_mark_duration, next_bonus_damage, next_splash_ratio * 100.0]
 			return "[color=#c8daf0]Wraithstep:[/color] mark [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color], bonus [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color], cleave [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color]." % [cur_mark_duration, next_mark_duration, cur_bonus_damage, next_bonus_damage, cur_splash_ratio * 100.0, next_splash_ratio * 100.0]
 		_:
 			return "[color=#9ab8d8]Enhances this power.[/color]"
