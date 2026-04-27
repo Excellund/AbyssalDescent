@@ -1,0 +1,60 @@
+name: Build And Release Windows
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: ubuntu-latest
+    env:
+      GODOT_VERSION: 4.6-stable
+      GODOT_VERSION_DIR: 4.6.stable
+      EXPORT_NAME: AbyssalDescent
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget unzip zip
+
+      - name: Download Godot and export templates
+        run: |
+          wget -q "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip" -O godot.zip
+          wget -q "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_export_templates.tpz" -O templates.tpz
+
+          unzip -q godot.zip
+          unzip -q templates.tpz
+
+          chmod +x "Godot_v${GODOT_VERSION}_linux.x86_64"
+          mkdir -p "${HOME}/.local/share/godot/export_templates/${GODOT_VERSION_DIR}"
+          mv templates/* "${HOME}/.local/share/godot/export_templates/${GODOT_VERSION_DIR}/"
+
+      - name: Export Windows build
+        run: |
+          mkdir -p build/windows
+          "./Godot_v${GODOT_VERSION}_linux.x86_64" --headless --path . --export-release "Windows Desktop" "build/windows/${EXPORT_NAME}.exe"
+
+      - name: Create release artifacts
+        run: |
+          cd build/windows
+          zip -q "../../${EXPORT_NAME}-Windows.zip" "${EXPORT_NAME}.exe"
+          cd ../..
+          sha256sum "${EXPORT_NAME}-Windows.zip" > "${EXPORT_NAME}-Windows.zip.sha256"
+
+      - name: Publish GitHub release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            AbyssalDescent-Windows.zip
+            AbyssalDescent-Windows.zip.sha256
+          generate_release_notes: true
