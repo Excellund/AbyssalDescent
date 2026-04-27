@@ -963,8 +963,11 @@ func _apply_wraithstep_chain(chain_origin: Vector2, consumed_enemy_id: int, chai
 			if propagated_ids.has(enemy_id):
 				continue
 			var entry := wraithstep_marked_enemy_expiry[enemy_id] as Dictionary
-			var enemy_ref := entry.get("node") as Node2D
-			if not is_instance_valid(enemy_ref):
+			var enemy_node: Variant = entry.get("node")
+			if not is_instance_valid(enemy_node):
+				continue
+			var enemy_ref := enemy_node as Node2D
+			if enemy_ref == null:
 				continue
 			if not DAMAGEABLE.can_take_damage(enemy_ref):
 				continue
@@ -1386,8 +1389,11 @@ func _draw_trial_reward_state() -> void:
 		var now_t := Time.get_ticks_msec() / 1000.0
 		for enemy_id in wraithstep_marked_enemy_expiry.keys():
 			var entry := wraithstep_marked_enemy_expiry[enemy_id] as Dictionary
-			var enemy_ref: Node2D = entry.get("node") as Node2D
-			if not is_instance_valid(enemy_ref):
+			var enemy_node: Variant = entry.get("node")
+			if not is_instance_valid(enemy_node):
+				continue
+			var enemy_ref: Node2D = enemy_node as Node2D
+			if enemy_ref == null:
 				continue
 			var local_ep := to_local(enemy_ref.global_position) + Vector2(0.0, -18.0)
 			var expiry := float(entry.get("expiry", 0.0))

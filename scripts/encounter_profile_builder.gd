@@ -31,6 +31,152 @@ const MUTATOR_DAMAGE_STAT_KEYS: Array[String] = [
 	ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_PROJECTILE_DAMAGE_MULT,
 	ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_DAMAGE_MULT
 ]
+const BEARING_DEFINITIONS := {
+	"Crossfire": {
+		"room_size": POOL_ROOM_SIZE,
+		"base_counts": {
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 1,
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 1,
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 4,
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0,
+			"lurker_count": 0,
+			"ram_count": 0,
+			"lancer_count": 0
+		},
+		"rank_counts": [
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 3, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 0, "ram_count": 0, "lancer_count": 0},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 5, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 0, "ram_count": 0, "lancer_count": 0},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 2, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 7, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 0, "ram_count": 0, "lancer_count": 0},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 2, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 9, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 0, "ram_count": 0, "lancer_count": 0}
+		]
+	},
+	"Onslaught": {
+		"room_size": POOL_ROOM_SIZE,
+		"base_counts": {
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 7,
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 2,
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0,
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0,
+			"lurker_count": 0,
+			"ram_count": 0,
+			"lancer_count": 0
+		},
+		"rank_counts": [
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 4, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 0, "ram_count": 0, "lancer_count": 0},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 7, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 2, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 0, "ram_count": 0, "lancer_count": 0},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 8, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 2, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 0, "ram_count": 0, "lancer_count": 0},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 10, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 3, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 0, "ram_count": 0, "lancer_count": 0}
+		]
+	},
+	"Fortress": {
+		"room_size": POOL_ROOM_SIZE,
+		"base_counts": {
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 1,
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0,
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 1,
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 4,
+			"lurker_count": 0,
+			"ram_count": 0,
+			"lancer_count": 0
+		},
+		"rank_counts": [
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 3, "lurker_count": 0, "ram_count": 0, "lancer_count": 0},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 5, "lurker_count": 0, "ram_count": 0, "lancer_count": 0},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 2, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 7, "lurker_count": 0, "ram_count": 0, "lancer_count": 0},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 2, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 2, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 9, "lurker_count": 0, "ram_count": 0, "lancer_count": 0}
+		]
+	},
+	"Blitz": {
+		"room_size": POOL_ROOM_SIZE,
+		"base_counts": {
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 1,
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0,
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0,
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0,
+			"lurker_count": 3,
+			"ram_count": 1,
+			"lancer_count": 0
+		},
+		"rank_counts": [
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 2, "ram_count": 1, "lancer_count": 0},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 2, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 3, "ram_count": 1, "lancer_count": 0},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 3, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 4, "ram_count": 1, "lancer_count": 0},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 4, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 5, "ram_count": 2, "lancer_count": 0}
+		]
+	},
+	"Suppression": {
+		"room_size": POOL_ROOM_SIZE,
+		"base_counts": {
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 1,
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 1,
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 2,
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 1,
+			"lurker_count": 0,
+			"ram_count": 0,
+			"lancer_count": 2
+		},
+		"rank_counts": [
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 2, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 1, "lurker_count": 0, "ram_count": 0, "lancer_count": 1},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 3, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 1, "lurker_count": 0, "ram_count": 0, "lancer_count": 2},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 2, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 4, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 2, "lurker_count": 0, "ram_count": 0, "lancer_count": 2},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 2, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 2, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 5, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 2, "lurker_count": 0, "ram_count": 0, "lancer_count": 3}
+		]
+	},
+	"Vanguard": {
+		"room_size": POOL_ROOM_SIZE,
+		"base_counts": {
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 2,
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 2,
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0,
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 3,
+			"lurker_count": 0,
+			"ram_count": 0,
+			"lancer_count": 0
+		},
+		"rank_counts": [
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 2, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 2, "lurker_count": 0, "ram_count": 0, "lancer_count": 0},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 2, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 3, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 3, "lurker_count": 0, "ram_count": 0, "lancer_count": 0},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 2, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 4, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 4, "lurker_count": 0, "ram_count": 0, "lancer_count": 0},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 3, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 5, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 4, "lurker_count": 0, "ram_count": 0, "lancer_count": 0}
+		]
+	},
+	"Ambush": {
+		"room_size": POOL_ROOM_SIZE,
+		"base_counts": {
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 2,
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0,
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0,
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0,
+			"lurker_count": 4,
+			"ram_count": 0,
+			"lancer_count": 1
+		},
+		"rank_counts": [
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 3, "ram_count": 0, "lancer_count": 1},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 2, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 4, "ram_count": 0, "lancer_count": 1},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 3, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 5, "ram_count": 0, "lancer_count": 2},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 4, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 0, "lurker_count": 6, "ram_count": 0, "lancer_count": 2}
+		]
+	},
+	"Gauntlet": {
+		"room_size": POOL_ROOM_SIZE,
+		"base_counts": {
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 1,
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 1,
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 1,
+			ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 1,
+			"lurker_count": 1,
+			"ram_count": 0,
+			"lancer_count": 1
+		},
+		"rank_counts": [
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 1, "lurker_count": 1, "ram_count": 0, "lancer_count": 1},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 2, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 1, "lurker_count": 1, "ram_count": 0, "lancer_count": 1},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 3, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 1, "lurker_count": 2, "ram_count": 0, "lancer_count": 1},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 4, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 2, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 1, "lurker_count": 2, "ram_count": 0, "lancer_count": 1}
+		]
+	}
+}
 
 func initialize(rng_instance: RandomNumberGenerator) -> void:
 	rng = rng_instance
@@ -97,161 +243,46 @@ func _apply_bearing_count_scaling(profile: Dictionary, pressure_mult_override: f
 func _skirmish_min_total_enemies() -> int:
 	return 3 + _difficulty_rank()
 
-func _build_gauntlet_profile() -> Dictionary:
-	var gauntlet := _build_profile("Gauntlet", POOL_ROOM_SIZE, 1, 1, 1, 1)
-	gauntlet["lurker_count"] = 1
-	gauntlet["lancer_count"] = 1
-	return gauntlet
-
-func _build_fortress_profile() -> Dictionary:
-	return _build_profile("Fortress", POOL_ROOM_SIZE, 1, 0, 1, 4)
-
-func _build_crossfire_profile() -> Dictionary:
-	return _build_profile("Crossfire", POOL_ROOM_SIZE, 1, 1, 4, 0)
-
-func _build_blitz_profile() -> Dictionary:
-	var blitz := _build_profile("Blitz", POOL_ROOM_SIZE, 1, 0, 0, 0)
-	blitz["lurker_count"] = 3
-	blitz["ram_count"] = 1
-	return blitz
-
-func _build_suppression_profile() -> Dictionary:
-	var suppression := _build_profile("Suppression", POOL_ROOM_SIZE, 1, 1, 2, 1)
-	suppression["lancer_count"] = 2
-	return suppression
-
-func _build_vanguard_profile() -> Dictionary:
-	return _build_profile("Vanguard", POOL_ROOM_SIZE, 2, 2, 0, 3)
-
-func _build_ambush_profile() -> Dictionary:
-	var ambush := _build_profile("Ambush", POOL_ROOM_SIZE, 2, 0, 0, 0)
-	ambush["lurker_count"] = 4
-	ambush["lancer_count"] = 1
-	return ambush
-
-func _apply_crossfire_bearing_scaling(profile: Dictionary) -> Dictionary:
-	var modified := _apply_bearing_count_scaling(profile, 1.0, 0)
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT] = maxi(3, ENCOUNTER_CONTRACTS.profile_archer_count(modified))
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT] = maxi(1, ENCOUNTER_CONTRACTS.profile_charger_count(modified))
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT] = maxi(1, ENCOUNTER_CONTRACTS.profile_chaser_count(modified))
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT] = mini(1, ENCOUNTER_CONTRACTS.profile_shielder_count(modified))
-	var rank := _difficulty_rank()
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT] = ENCOUNTER_CONTRACTS.profile_archer_count(modified) + rank
-	if rank >= 2:
-		modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT] = ENCOUNTER_CONTRACTS.profile_charger_count(modified) + 1
-	return modified
-
-func _apply_blitz_bearing_scaling(profile: Dictionary) -> Dictionary:
+func _apply_profile_counts(profile: Dictionary, counts: Dictionary) -> Dictionary:
 	var modified := profile.duplicate(true)
-	var rank := _difficulty_rank()
-	var chasers_by_rank := [1, 2, 3, 4]
-	var lurkers_by_rank := [2, 3, 4, 5]
-	var rams_by_rank := [1, 1, 1, 2]
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT] = chasers_by_rank[rank]
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT] = 0
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT] = 0
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT] = 0
-	modified["lurker_count"] = lurkers_by_rank[rank]
-	modified["ram_count"] = rams_by_rank[rank]
-	modified["lancer_count"] = 0
+	ENCOUNTER_CONTRACTS.profile_set_counts(
+		modified,
+		int(counts.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT, 0)),
+		int(counts.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT, 0)),
+		int(counts.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT, 0)),
+		int(counts.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT, 0))
+	)
+	modified["lurker_count"] = int(counts.get("lurker_count", 0))
+	modified["ram_count"] = int(counts.get("ram_count", 0))
+	modified["lancer_count"] = int(counts.get("lancer_count", 0))
 	return modified
 
-func _apply_suppression_bearing_scaling(profile: Dictionary) -> Dictionary:
-	var modified := profile.duplicate(true)
-	var rank := _difficulty_rank()
-	var chasers_by_rank := [1, 1, 2, 2]
-	var chargers_by_rank := [1, 1, 1, 2]
-	var archers_by_rank := [2, 3, 4, 5]
-	var shielders_by_rank := [1, 1, 2, 2]
-	var lancers_by_rank := [1, 2, 2, 3]
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT] = chasers_by_rank[rank]
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT] = chargers_by_rank[rank]
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT] = archers_by_rank[rank]
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT] = shielders_by_rank[rank]
-	modified["lancer_count"] = lancers_by_rank[rank]
-	modified["lurker_count"] = 0
-	modified["ram_count"] = 0
-	return modified
-
-func _apply_vanguard_bearing_scaling(profile: Dictionary) -> Dictionary:
-	var modified := profile.duplicate(true)
-	var rank := _difficulty_rank()
-	var chasers_by_rank := [1, 2, 2, 3]
-	var chargers_by_rank := [2, 3, 4, 5]
-	var shielders_by_rank := [2, 3, 4, 4]
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT] = chasers_by_rank[rank]
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT] = chargers_by_rank[rank]
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT] = 0
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT] = shielders_by_rank[rank]
-	modified["lurker_count"] = 0
-	modified["ram_count"] = 0
-	modified["lancer_count"] = 0
-	return modified
-
-func _apply_ambush_bearing_scaling(profile: Dictionary) -> Dictionary:
-	var modified := profile.duplicate(true)
-	var rank := _difficulty_rank()
-	var chasers_by_rank := [1, 2, 3, 4]
-	var lurkers_by_rank := [3, 4, 5, 6]
-	var lancers_by_rank := [1, 1, 2, 2]
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT] = chasers_by_rank[rank]
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT] = 0
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT] = 0
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT] = 0
-	modified["lurker_count"] = lurkers_by_rank[rank]
-	modified["lancer_count"] = lancers_by_rank[rank]
-	modified["ram_count"] = 0
-	return modified
-
-func _apply_fortress_bearing_scaling(profile: Dictionary) -> Dictionary:
-	var modified := _apply_bearing_count_scaling(profile, 1.0, 0)
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT] = 0
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT] = maxi(1, ENCOUNTER_CONTRACTS.profile_chaser_count(modified))
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT] = maxi(1, ENCOUNTER_CONTRACTS.profile_archer_count(modified))
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT] = maxi(3, ENCOUNTER_CONTRACTS.profile_shielder_count(modified))
-	var rank := _difficulty_rank()
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT] = ENCOUNTER_CONTRACTS.profile_shielder_count(modified) + rank
-	if rank >= 2:
-		modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT] = ENCOUNTER_CONTRACTS.profile_chaser_count(modified) + 1
-	if rank >= 3:
-		modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT] = ENCOUNTER_CONTRACTS.profile_archer_count(modified) + 1
-	return modified
-
-func _apply_gauntlet_bearing_scaling(profile: Dictionary) -> Dictionary:
-	var modified := _apply_bearing_count_scaling(profile, 1.0, 0)
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT] = maxi(1, ENCOUNTER_CONTRACTS.profile_chaser_count(modified))
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT] = maxi(1, ENCOUNTER_CONTRACTS.profile_charger_count(modified))
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT] = maxi(1, ENCOUNTER_CONTRACTS.profile_archer_count(modified))
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT] = maxi(1, ENCOUNTER_CONTRACTS.profile_shielder_count(modified))
-	modified["lurker_count"] = maxi(1, int(modified.get("lurker_count", 0)))
-	modified["lancer_count"] = maxi(1, int(modified.get("lancer_count", 0)))
-	var rank := _difficulty_rank()
-	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT] = ENCOUNTER_CONTRACTS.profile_chaser_count(modified) + rank
-	if rank >= 2:
-		modified["lurker_count"] = int(modified.get("lurker_count", 0)) + 1
-	if rank >= 3:
-		modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT] = ENCOUNTER_CONTRACTS.profile_charger_count(modified) + 1
-	return modified
+func _build_bearing_profile(label: String) -> Dictionary:
+	var definition := BEARING_DEFINITIONS.get(label, {}) as Dictionary
+	if definition.is_empty():
+		return {}
+	var counts := definition.get("base_counts", {}) as Dictionary
+	var room_size := definition.get("room_size", POOL_ROOM_SIZE) as Vector2
+	var profile := _build_profile(
+		label,
+		room_size,
+		int(counts.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT, 0)),
+		int(counts.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT, 0)),
+		int(counts.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT, 0)),
+		int(counts.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT, 0))
+	)
+	return _apply_profile_counts(profile, counts)
 
 func _apply_identity_bearing_scaling(profile: Dictionary) -> Dictionary:
 	var label := ENCOUNTER_CONTRACTS.profile_label(profile)
-	match label:
-		"Crossfire":
-			return _apply_crossfire_bearing_scaling(profile)
-		"Fortress":
-			return _apply_fortress_bearing_scaling(profile)
-		"Gauntlet":
-			return _apply_gauntlet_bearing_scaling(profile)
-		"Blitz":
-			return _apply_blitz_bearing_scaling(profile)
-		"Suppression":
-			return _apply_suppression_bearing_scaling(profile)
-		"Vanguard":
-			return _apply_vanguard_bearing_scaling(profile)
-		"Ambush":
-			return _apply_ambush_bearing_scaling(profile)
-		_:
-			return _apply_bearing_count_scaling(profile, 1.0, _skirmish_min_total_enemies())
+	var definition := BEARING_DEFINITIONS.get(label, {}) as Dictionary
+	if definition.is_empty():
+		return _apply_bearing_count_scaling(profile, 1.0, _skirmish_min_total_enemies())
+	var rank_counts := definition.get("rank_counts", []) as Array
+	var rank := _difficulty_rank()
+	if rank_counts.is_empty() or rank >= rank_counts.size():
+		return profile.duplicate(true)
+	return _apply_profile_counts(profile, rank_counts[rank] as Dictionary)
 
 func _scale_mutator_damage(mutator: Dictionary) -> Dictionary:
 	if mutator.is_empty():
@@ -275,13 +306,47 @@ func _hard_mutator_chance(depth: int) -> float:
 	var depth_bonus := float(maxi(0, depth - 2)) * 0.02
 	return clampf((0.18 + depth_bonus) * _difficulty_float("mutator_frequency_mult", 1.0), 0.04, 0.9)
 
+func _profile_has_enemy_archetype(profile: Dictionary, archetype: String) -> bool:
+	match archetype:
+		"melee":
+			return ENCOUNTER_CONTRACTS.profile_chaser_count(profile) > 0 or int(profile.get("lurker_count", 0)) > 0
+		"charger":
+			return ENCOUNTER_CONTRACTS.profile_charger_count(profile) > 0 or int(profile.get("ram_count", 0)) > 0
+		"archer":
+			return ENCOUNTER_CONTRACTS.profile_archer_count(profile) > 0 or int(profile.get("lancer_count", 0)) > 0
+		"shielder":
+			return ENCOUNTER_CONTRACTS.profile_shielder_count(profile) > 0
+		_:
+			return false
+
+func _mutator_matches_profile(mutator: Dictionary, profile: Dictionary) -> bool:
+	var archetypes_variant: Variant = mutator.get("affected_archetypes", [])
+	if not (archetypes_variant is Array):
+		return true
+	var archetypes := archetypes_variant as Array
+	if archetypes.is_empty():
+		return true
+	for archetype_variant in archetypes:
+		if _profile_has_enemy_archetype(profile, String(archetype_variant)):
+			return true
+	return false
+
+func _roll_hard_enemy_mutator_for_profile(profile: Dictionary) -> Dictionary:
+	var pool := _hard_mutator_pool()
+	var filtered_pool: Array[Dictionary] = []
+	for mutator in pool:
+		if _mutator_matches_profile(mutator, profile):
+			filtered_pool.append(mutator)
+	var candidate_pool := filtered_pool if not filtered_pool.is_empty() else pool
+	return _scale_mutator_damage(candidate_pool[rng.randi_range(0, candidate_pool.size() - 1)])
+
 func _maybe_apply_hard_mutator(profile: Dictionary, depth: int) -> Dictionary:
 	if profile.is_empty():
 		return profile
 	if rng.randf() > _hard_mutator_chance(depth):
 		return profile
 	var modified := profile.duplicate(true)
-	ENCOUNTER_CONTRACTS.profile_set_enemy_mutator(modified, roll_hard_enemy_mutator())
+	ENCOUNTER_CONTRACTS.profile_set_enemy_mutator(modified, _roll_hard_enemy_mutator_for_profile(modified))
 	return modified
 
 func configure(settings: Dictionary) -> void:
@@ -349,21 +414,21 @@ func build_debug_encounter_profile(encounter_key: String, depth: int) -> Diction
 		"skirmish":
 			return _build_intro_profile(0)
 		"crossfire":
-			return _apply_crossfire_bearing_scaling(_build_crossfire_profile())
+			return _apply_identity_bearing_scaling(_build_bearing_profile("Crossfire"))
 		"onslaught":
-			return _build_profile("Onslaught", POOL_ROOM_SIZE, 7, 2, 0, 0)
+			return _apply_identity_bearing_scaling(_build_bearing_profile("Onslaught"))
 		"fortress":
-			return _apply_fortress_bearing_scaling(_build_fortress_profile())
+			return _apply_identity_bearing_scaling(_build_bearing_profile("Fortress"))
 		"blitz":
-			return _apply_blitz_bearing_scaling(_build_blitz_profile())
+			return _apply_identity_bearing_scaling(_build_bearing_profile("Blitz"))
 		"suppression":
-			return _apply_suppression_bearing_scaling(_build_suppression_profile())
+			return _apply_identity_bearing_scaling(_build_bearing_profile("Suppression"))
 		"vanguard":
-			return _apply_vanguard_bearing_scaling(_build_vanguard_profile())
+			return _apply_identity_bearing_scaling(_build_bearing_profile("Vanguard"))
 		"ambush":
-			return _apply_ambush_bearing_scaling(_build_ambush_profile())
+			return _apply_identity_bearing_scaling(_build_bearing_profile("Ambush"))
 		"gauntlet":
-			return _apply_gauntlet_bearing_scaling(_build_gauntlet_profile())
+			return _apply_identity_bearing_scaling(_build_bearing_profile("Gauntlet"))
 		"trial":
 			return _build_trial_profile(depth)
 		"objective_last_stand":
@@ -403,14 +468,14 @@ func _get_hard_pool() -> Array[Dictionary]:
 	# Vanguard: shielded advance with chargers punching through the line.
 	# Ambush: lancer cuts escape routes while lurkers converge.
 	# Gauntlet: one of everything — a comprehensive skill test.
-	var crossfire := _build_crossfire_profile()
-	var onslaught := _build_profile("Onslaught", POOL_ROOM_SIZE, 7, 2, 0, 0)
-	var fortress := _build_fortress_profile()
-	var blitz := _build_blitz_profile()
-	var suppression := _build_suppression_profile()
-	var vanguard := _build_vanguard_profile()
-	var ambush := _build_ambush_profile()
-	var gauntlet := _build_gauntlet_profile()
+	var crossfire := _build_bearing_profile("Crossfire")
+	var onslaught := _build_bearing_profile("Onslaught")
+	var fortress := _build_bearing_profile("Fortress")
+	var blitz := _build_bearing_profile("Blitz")
+	var suppression := _build_bearing_profile("Suppression")
+	var vanguard := _build_bearing_profile("Vanguard")
+	var ambush := _build_bearing_profile("Ambush")
+	var gauntlet := _build_bearing_profile("Gauntlet")
 	return [crossfire, onslaught, fortress, blitz, suppression, vanguard, ambush, gauntlet]
 
 func _get_hard_pool_for_depth(depth: int) -> Array[Dictionary]:
@@ -792,6 +857,7 @@ func _hard_mutator_pool() -> Array[Dictionary]:
 			# Melee attackers hit harder and faster — chasers + chargers
 			C.MUTATOR_KEY_THEME_COLOR: Color(0.95, 0.22, 0.28, 1.0),
 			C.MUTATOR_KEY_ICON_SHAPE_ID: "blood_rush",
+			"affected_archetypes": ["melee", "charger"],
 			C.MUTATOR_KEY_BANNER_SUFFIX: "Melee enemies strike harder and faster",
 			C.MUTATOR_KEY_ENEMY_TINT: Color(1.0, 0.80, 0.80, 1.0),
 			C.MUTATOR_STAT_CHASER_DAMAGE_MULT: 1.5,
@@ -806,6 +872,7 @@ func _hard_mutator_pool() -> Array[Dictionary]:
 			# Ranged and charging attacks arrive with almost no warning — chargers + archers
 			C.MUTATOR_KEY_THEME_COLOR: Color(0.68, 0.40, 1.0, 1.0),
 			C.MUTATOR_KEY_ICON_SHAPE_ID: "flashpoint",
+			"affected_archetypes": ["charger", "archer"],
 			C.MUTATOR_KEY_BANNER_SUFFIX: "Charges and volleys strike with almost no warning",
 			C.MUTATOR_KEY_ENEMY_TINT: Color(0.88, 0.82, 1.0, 1.0),
 			C.MUTATOR_STAT_CHARGER_DAMAGE_MULT: 1.2,
@@ -820,6 +887,7 @@ func _hard_mutator_pool() -> Array[Dictionary]:
 			# Heavy-impact enemies deal devastating force — chargers + shielders
 			C.MUTATOR_KEY_THEME_COLOR: Color(0.96, 0.58, 0.18, 1.0),
 			C.MUTATOR_KEY_ICON_SHAPE_ID: "siegebreak",
+			"affected_archetypes": ["charger", "shielder"],
 			C.MUTATOR_KEY_BANNER_SUFFIX: "Chargers and shielders hit with overwhelming force",
 			C.MUTATOR_KEY_ENEMY_TINT: Color(1.0, 0.88, 0.72, 1.0),
 			C.MUTATOR_STAT_CHARGER_DAMAGE_MULT: 1.62,
@@ -834,6 +902,7 @@ func _hard_mutator_pool() -> Array[Dictionary]:
 			# No chargers — archers pin you while shielders advance
 			C.MUTATOR_KEY_THEME_COLOR: Color(0.32, 0.82, 0.56, 1.0),
 			C.MUTATOR_KEY_ICON_SHAPE_ID: "iron_volley",
+			"affected_archetypes": ["archer", "shielder"],
 			C.MUTATOR_KEY_BANNER_SUFFIX: "Archers and shielders hold the line",
 			C.MUTATOR_KEY_ENEMY_TINT: Color(0.80, 1.0, 0.86, 1.0),
 			C.MUTATOR_STAT_ARCHER_WINDUP_MULT: 0.68,

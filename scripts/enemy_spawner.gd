@@ -1,6 +1,41 @@
 extends Node
 
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
+const ENEMY_MUTATOR_STAT_MAP := {
+	"chaser": [
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT, "prop": "attack_damage", "min": 1.0, "is_int": true},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_ATTACK_INTERVAL_MULT, "prop": "attack_interval", "min": 0.2},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_SPEED_MULT, "prop": "move_speed", "min": 25.0}
+	],
+	"charger": [
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_DAMAGE_MULT, "prop": "charge_damage", "min": 1.0, "is_int": true},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_SPEED_MULT, "prop": "charge_speed", "min": 60.0},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_WINDUP_MULT, "prop": "windup_time", "min": 0.18}
+	],
+	"archer": [
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_WINDUP_MULT, "prop": "windup_time", "min": 0.18},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_COOLDOWN_MULT, "prop": "attack_cooldown", "min": 0.6},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_PROJECTILE_DAMAGE_MULT, "prop": "projectile_damage", "min": 1.0, "is_int": true}
+	],
+	"shielder": [
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_DAMAGE_MULT, "prop": "slam_damage", "min": 1.0, "is_int": true},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_WINDUP_MULT, "prop": "slam_windup_time", "min": 0.32},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SPEED_MULT, "prop": "move_speed", "min": 20.0}
+	],
+	"lurker": [
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT, "prop": "strike_damage", "min": 1.0, "is_int": true},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_SPEED_MULT, "prop": "move_speed", "min": 25.0}
+	],
+	"ram": [
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_DAMAGE_MULT, "prop": "charge_damage", "min": 1.0, "is_int": true},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_SPEED_MULT, "prop": "charge_speed", "min": 60.0},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_WINDUP_MULT, "prop": "windup_time", "min": 0.18}
+	],
+	"lancer": [
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_WINDUP_MULT, "prop": "windup_time", "min": 0.22},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_COOLDOWN_MULT, "prop": "attack_cooldown", "min": 0.8}
+	]
+}
 
 var world_root: Node2D
 var player: Node2D
@@ -107,6 +142,34 @@ func _spawn_enemy_in_current_room(enemy_script: Script, min_player_distance: flo
 		enemy.died.connect(on_enemy_died)
 	return enemy
 
+func _enemy_script_key(enemy_script: Script) -> String:
+	for enemy_key in scripts.keys():
+		if scripts.get(enemy_key) == enemy_script:
+			return String(enemy_key)
+	return ""
+
+func _apply_mutator_specs(enemy: CharacterBody2D, specs: Array) -> bool:
+	var is_affected := false
+	for spec_variant in specs:
+		var spec := spec_variant as Dictionary
+		var stat_key := String(spec.get("stat", ""))
+		if stat_key.is_empty():
+			continue
+		var multiplier := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, stat_key, 1.0)
+		if not is_equal_approx(multiplier, 1.0):
+			is_affected = true
+		var property_name := String(spec.get("prop", ""))
+		if property_name.is_empty() or enemy.get(property_name) == null:
+			continue
+		var min_value := float(spec.get("min", 0.0))
+		var base_value := float(enemy.get(property_name))
+		var scaled_value := maxf(min_value, base_value * multiplier)
+		if bool(spec.get("is_int", false)):
+			enemy.set(property_name, maxi(int(round(min_value)), int(round(scaled_value))))
+		else:
+			enemy.set(property_name, scaled_value)
+	return is_affected
+
 func _apply_enemy_mutator(enemy: CharacterBody2D, enemy_script: Script) -> void:
 	if current_room_enemy_mutator.is_empty():
 		return
@@ -117,98 +180,9 @@ func _apply_enemy_mutator(enemy: CharacterBody2D, enemy_script: Script) -> void:
 			var base_max_health := int(enemy.get("max_health"))
 			enemy.set("max_health", maxi(1, int(round(float(base_max_health) * enemy_health_mult))))
 		is_affected = true
-
-	if enemy_script == scripts.get("chaser"):
-		var chaser_damage_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT, 1.0)
-		var chaser_interval_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_ATTACK_INTERVAL_MULT, 1.0)
-		var chaser_speed_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_SPEED_MULT, 1.0)
-		is_affected = not is_equal_approx(chaser_damage_mult, 1.0) \
-			or not is_equal_approx(chaser_interval_mult, 1.0) \
-			or not is_equal_approx(chaser_speed_mult, 1.0)
-		var base_damage := int(enemy.get("attack_damage"))
-		enemy.set("attack_damage", maxi(1, int(round(float(base_damage) * chaser_damage_mult))))
-		var base_interval := float(enemy.get("attack_interval"))
-		enemy.set("attack_interval", maxf(0.2, base_interval * chaser_interval_mult))
-		var base_speed := float(enemy.get("move_speed"))
-		enemy.set("move_speed", maxf(25.0, base_speed * chaser_speed_mult))
-
-	if enemy_script == scripts.get("charger"):
-		var charger_damage_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_DAMAGE_MULT, 1.0)
-		var charger_speed_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_SPEED_MULT, 1.0)
-		var charger_windup_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_WINDUP_MULT, 1.0)
-		is_affected = not is_equal_approx(charger_damage_mult, 1.0) \
-			or not is_equal_approx(charger_speed_mult, 1.0) \
-			or not is_equal_approx(charger_windup_mult, 1.0)
-		var base_charge_damage := int(enemy.get("charge_damage"))
-		enemy.set("charge_damage", maxi(1, int(round(float(base_charge_damage) * charger_damage_mult))))
-		var base_charge_speed := float(enemy.get("charge_speed"))
-		enemy.set("charge_speed", maxf(60.0, base_charge_speed * charger_speed_mult))
-		var base_windup := float(enemy.get("windup_time"))
-		enemy.set("windup_time", maxf(0.18, base_windup * charger_windup_mult))
-
-	if enemy_script == scripts.get("archer"):
-		var archer_windup_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_WINDUP_MULT, 1.0)
-		var archer_cooldown_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_COOLDOWN_MULT, 1.0)
-		var archer_projectile_damage_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_PROJECTILE_DAMAGE_MULT, 1.0)
-		is_affected = not is_equal_approx(archer_windup_mult, 1.0) \
-			or not is_equal_approx(archer_cooldown_mult, 1.0) \
-			or not is_equal_approx(archer_projectile_damage_mult, 1.0)
-		var base_windup := float(enemy.get("windup_time"))
-		enemy.set("windup_time", maxf(0.18, base_windup * archer_windup_mult))
-		var base_cooldown := float(enemy.get("attack_cooldown"))
-		enemy.set("attack_cooldown", maxf(0.6, base_cooldown * archer_cooldown_mult))
-		var base_proj_damage := int(enemy.get("projectile_damage"))
-		enemy.set("projectile_damage", maxi(1, int(round(float(base_proj_damage) * archer_projectile_damage_mult))))
-
-	if enemy_script == scripts.get("shielder"):
-		var shielder_slam_damage_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_DAMAGE_MULT, 1.0)
-		var shielder_slam_windup_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_WINDUP_MULT, 1.0)
-		var shielder_speed_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SPEED_MULT, 1.0)
-		is_affected = not is_equal_approx(shielder_slam_damage_mult, 1.0) \
-			or not is_equal_approx(shielder_slam_windup_mult, 1.0) \
-			or not is_equal_approx(shielder_speed_mult, 1.0)
-		var base_slam_damage := int(enemy.get("slam_damage"))
-		enemy.set("slam_damage", maxi(1, int(round(float(base_slam_damage) * shielder_slam_damage_mult))))
-		var base_slam_windup := float(enemy.get("slam_windup_time"))
-		enemy.set("slam_windup_time", maxf(0.32, base_slam_windup * shielder_slam_windup_mult))
-		var base_speed := float(enemy.get("move_speed"))
-		enemy.set("move_speed", maxf(20.0, base_speed * shielder_speed_mult))
-
-	if enemy_script == scripts.get("lurker"):
-		# Lurker is a melee striker — reads chaser mutator stats so Blood Rush buffs it alongside Chasers.
-		var chaser_damage_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT, 1.0)
-		var chaser_speed_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_SPEED_MULT, 1.0)
-		is_affected = not is_equal_approx(chaser_damage_mult, 1.0) or not is_equal_approx(chaser_speed_mult, 1.0)
-		var base_strike := int(enemy.get("strike_damage"))
-		enemy.set("strike_damage", maxi(1, int(round(float(base_strike) * chaser_damage_mult))))
-		var base_lurker_speed := float(enemy.get("move_speed"))
-		enemy.set("move_speed", maxf(25.0, base_lurker_speed * chaser_speed_mult))
-
-	if enemy_script == scripts.get("ram"):
-		# Ram is a charge attacker — reads charger mutator stats so Flashpoint/Siegebreak buff it alongside Chargers.
-		var charger_damage_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_DAMAGE_MULT, 1.0)
-		var charger_speed_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_SPEED_MULT, 1.0)
-		var charger_windup_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_WINDUP_MULT, 1.0)
-		is_affected = not is_equal_approx(charger_damage_mult, 1.0) \
-			or not is_equal_approx(charger_speed_mult, 1.0) \
-			or not is_equal_approx(charger_windup_mult, 1.0)
-		var base_ram_charge_damage := int(enemy.get("charge_damage"))
-		enemy.set("charge_damage", maxi(1, int(round(float(base_ram_charge_damage) * charger_damage_mult))))
-		var base_ram_charge_speed := float(enemy.get("charge_speed"))
-		enemy.set("charge_speed", maxf(60.0, base_ram_charge_speed * charger_speed_mult))
-		var base_ram_windup := float(enemy.get("windup_time"))
-		enemy.set("windup_time", maxf(0.18, base_ram_windup * charger_windup_mult))
-
-	if enemy_script == scripts.get("lancer"):
-		# Lancer is a ranged area-denial enemy — reads archer windup/cooldown so
-		# Flashpoint and Iron Volley both affect it alongside archers.
-		var archer_windup_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_WINDUP_MULT, 1.0)
-		var archer_cooldown_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_COOLDOWN_MULT, 1.0)
-		is_affected = not is_equal_approx(archer_windup_mult, 1.0) or not is_equal_approx(archer_cooldown_mult, 1.0)
-		var base_lancer_windup := float(enemy.get("windup_time"))
-		enemy.set("windup_time", maxf(0.22, base_lancer_windup * archer_windup_mult))
-		var base_lancer_cooldown := float(enemy.get("attack_cooldown"))
-		enemy.set("attack_cooldown", maxf(0.8, base_lancer_cooldown * archer_cooldown_mult))
+	var enemy_key := _enemy_script_key(enemy_script)
+	var specs := ENEMY_MUTATOR_STAT_MAP.get(enemy_key, []) as Array
+	is_affected = _apply_mutator_specs(enemy, specs) or is_affected
 
 	enemy.modulate = ENCOUNTER_CONTRACTS.mutator_enemy_tint(current_room_enemy_mutator, Color(1.0, 0.92, 0.92, 1.0))
 	if enemy.get("has_mutator_overlay") != null:
