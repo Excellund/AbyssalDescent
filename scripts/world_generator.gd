@@ -1865,7 +1865,13 @@ func _enter_rest_site() -> void:
 	current_room_label = "Rest Site"
 	hud.show_banner("Rest Site", "")
 	current_room_static_camera = true
-	_advance_room_progress()
+	if first_boss_defeated:
+		rooms_cleared += 1
+		room_depth += 1
+		phase_two_rooms_cleared += 1
+		boss_unlocked = phase_two_rooms_cleared >= second_boss_encounter_count
+	else:
+		_advance_room_progress()
 	if is_instance_valid(player) and player.has_method("heal"):
 		var player_max_health := int(player.get("max_health"))
 		var heal_amount := maxi(8, int(round(float(player_max_health) * rest_heal_ratio)))
