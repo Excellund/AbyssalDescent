@@ -1466,6 +1466,15 @@ func _apply_difficulty_tier_bonuses(difficulty_tier: int) -> void:
 func _get_second_boss_target_depth() -> int:
 	return maxi(encounter_count + 1, encounter_count * 2)
 
+func _build_route_context(depth: int) -> Dictionary:
+	var target_depth := encounter_count
+	if first_boss_defeated:
+		target_depth = _get_second_boss_target_depth()
+	return {
+		"depth": depth,
+		"rooms_until_boss": maxi(0, target_depth - depth)
+	}
+
 func _is_second_boss_unlocked() -> bool:
 	return first_boss_defeated and room_depth >= _get_second_boss_target_depth()
 
@@ -1723,7 +1732,7 @@ func _spawn_door_options() -> void:
 		return
 	door_options.clear()
 	choosing_next_room = true
-	var route_options := _roll_route_options(room_depth)
+	var route_options := _roll_route_options(_build_route_context(room_depth))
 	var show_boss_door := boss_unlocked
 	if first_boss_defeated:
 		show_boss_door = _is_second_boss_unlocked()
@@ -2066,10 +2075,10 @@ func _get_active_player_mutators_for_hud() -> Array[Dictionary]:
 		return []
 	return player.call("get_active_objective_mutators") as Array[Dictionary]
 
-func _roll_route_options(depth: int) -> Array[Dictionary]:
+func _roll_route_options(route_context: Variant) -> Array[Dictionary]:
 	if not is_instance_valid(encounter_profile_builder):
 		return []
-	return encounter_profile_builder.call("roll_route_options", depth)
+	return encounter_profile_builder.call("roll_route_options", route_context)
 
 func _open_boon_selection(title: String, is_initial: bool, mode: int = ENUMS.RewardMode.BOON, player_mutator: Dictionary = {}) -> void:
 	if is_instance_valid(reward_selection_ui):

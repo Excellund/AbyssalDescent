@@ -317,6 +317,15 @@ func _build_intro_profile(depth: int) -> Dictionary:
 	var chasers_by_rank := [2, 3, 3, 4]
 	return _build_profile("Skirmish", INTRO_ROOM_SIZE, chasers_by_rank[rank], 0, 1, 0)
 
+func _build_intro_variant_profile(depth: int) -> Dictionary:
+	var rank := _difficulty_rank()
+	if depth <= 0:
+		var opening_chasers_by_rank := [2, 2, 3, 3]
+		return _build_profile("Pursuit", INTRO_ROOM_SIZE, opening_chasers_by_rank[rank], 1, 0, 0)
+	var chasers_by_rank := [1, 2, 2, 3]
+	var chargers_by_rank := [1, 1, 1, 2]
+	return _build_profile("Pursuit", INTRO_ROOM_SIZE, chasers_by_rank[rank], chargers_by_rank[rank], 0, 0)
+
 func build_skirmish_profile(depth: int) -> Dictionary:
 	if depth < 2:
 		return _build_intro_profile(depth)
@@ -614,37 +623,34 @@ func _build_priority_target_profile(depth: int) -> Dictionary:
 	ENCOUNTER_CONTRACTS.profile_set_priority_target_objective(profile, "archer", duration, spawn_interval, spawn_batch)
 	return _apply_bearing_count_scaling(profile)
 
-func roll_route_options(depth: int) -> Array[Dictionary]:
-	if depth < 2:
-		var intro_profile: Dictionary = _build_intro_profile(depth)
-		var easy_option := ENCOUNTER_CONTRACTS.door_option(
-			ENCOUNTER_CONTRACTS.profile_label(intro_profile),
-			Color(0.34, 0.8, 1.0, 0.95),
-			ENUMS.DoorKind.ENCOUNTER,
-			"easy",
-			ENUMS.RewardMode.BOON,
-			intro_profile
-		)
-		var intro_rest_option := ENCOUNTER_CONTRACTS.door_option(
-			"Rest Site",
-			Color(0.66, 1.0, 0.76, 0.92),
-			ENUMS.DoorKind.REST,
-			"rest",
-			ENUMS.RewardMode.NONE,
-			{}
-		)
-		var intro_options: Array[Dictionary] = [easy_option, intro_rest_option]
-		if rng.randf() < 0.5:
-			return intro_options
-		var reversed_intro_options: Array[Dictionary] = [intro_options[1], intro_options[0]]
-		return reversed_intro_options
+func _normalize_route_context(route_context: Variant) -> Dictionary:
+	if route_context is Dictionary:
+		var context_dict := route_context as Dictionary
+		return {
+			"depth": maxi(0, int(context_dict.get("depth", 0))),
+			"rooms_until_boss": maxi(-1, int(context_dict.get("rooms_until_boss", -1)))
+		}
+	return {
+		"depth": maxi(0, int(route_context)),
+		"rooms_until_boss": -1
+	}
 
-	# After room 2: no more easy-pool encounters.
+func _build_intro_route_option(profile: Dictionary) -> Dictionary:
+	return ENCOUNTER_CONTRACTS.door_option(
+		ENCOUNTER_CONTRACTS.profile_label(profile),
+		Color(0.34, 0.8, 1.0, 0.95),
+		ENUMS.DoorKind.ENCOUNTER,
+		"easy",
+		ENUMS.RewardMode.BOON,
+		profile
+	)
+
+func _build_hard_route_option(depth: int) -> Dictionary:
 	var hard_pool: Array[Dictionary] = _get_hard_pool_for_depth(depth)
 	var hard_profile: Dictionary = hard_pool[rng.randi_range(0, hard_pool.size() - 1)]
 	hard_profile = _maybe_apply_hard_mutator(hard_profile, depth)
 	hard_profile = _apply_identity_bearing_scaling(hard_profile)
-	var hard_option := ENCOUNTER_CONTRACTS.door_option(
+	return ENCOUNTER_CONTRACTS.door_option(
 		ENCOUNTER_CONTRACTS.profile_label(hard_profile),
 		Color(0.93, 0.62, 0.28, 0.95),
 		ENUMS.DoorKind.ENCOUNTER,
@@ -653,26 +659,28 @@ func roll_route_options(depth: int) -> Array[Dictionary]:
 		hard_profile
 	)
 
-	var trial_option: Dictionary = {}
-	if depth >= 3 and rng.randf() <= _trial_option_chance(depth):
-		var trial_profile: Dictionary = _build_trial_profile(depth)
-		var trial_mutator: Dictionary = ENCOUNTER_CONTRACTS.profile_enemy_mutator(trial_profile)
-		var trial_mutator_name := ENCOUNTER_CONTRACTS.mutator_name(trial_mutator)
-		if trial_mutator_name.is_empty():
-			trial_mutator_name = "Trial"
-		var trial_color: Color = ENCOUNTER_CONTRACTS.mutator_theme_color(trial_mutator, Color(1.0, 0.32, 0.22, 0.96))
-		trial_color.a = 0.96
-		trial_option = ENCOUNTER_CONTRACTS.door_option(
-			"Trial - %s" % trial_mutator_name,
-			trial_color,
-			ENUMS.DoorKind.ENCOUNTER,
-			"trial",
-			ENUMS.RewardMode.ARCANA,
-			trial_profile
-		)
+func _build_trial_route_option(depth: int) -> Dictionary:
+	if depth < 3 or rng.randf() > _trial_option_chance(depth):
+		return {}
+	var trial_profile: Dictionary = _build_trial_profile(depth)
+	var trial_mutator: Dictionary = ENCOUNTER_CONTRACTS.profile_enemy_mutator(trial_profile)
+	var trial_mutator_name := ENCOUNTER_CONTRACTS.mutator_name(trial_mutator)
+	if trial_mutator_name.is_empty():
+		trial_mutator_name = "Trial"
+	var trial_color: Color = ENCOUNTER_CONTRACTS.mutator_theme_color(trial_mutator, Color(1.0, 0.32, 0.22, 0.96))
+	trial_color.a = 0.96
+	return ENCOUNTER_CONTRACTS.door_option(
+		"Trial - %s" % trial_mutator_name,
+		trial_color,
+		ENUMS.DoorKind.ENCOUNTER,
+		"trial",
+		ENUMS.RewardMode.ARCANA,
+		trial_profile
+	)
 
+func _build_objective_route_option(depth: int) -> Dictionary:
 	var objective_profile := build_objective_profile(depth)
-	var survival_option := ENCOUNTER_CONTRACTS.door_option(
+	return ENCOUNTER_CONTRACTS.door_option(
 		"Objective - %s" % ENCOUNTER_CONTRACTS.profile_label(objective_profile),
 		Color(0.98, 0.78, 0.34, 0.96),
 		ENUMS.DoorKind.ENCOUNTER,
@@ -681,7 +689,8 @@ func roll_route_options(depth: int) -> Array[Dictionary]:
 		objective_profile
 	)
 
-	var rest_option := ENCOUNTER_CONTRACTS.door_option(
+func _build_rest_route_option() -> Dictionary:
+	return ENCOUNTER_CONTRACTS.door_option(
 		"Rest Site",
 		Color(0.66, 1.0, 0.76, 0.92),
 		ENUMS.DoorKind.REST,
@@ -690,14 +699,16 @@ func roll_route_options(depth: int) -> Array[Dictionary]:
 		{}
 	)
 
-	var options: Array[Dictionary] = [hard_option]
-	if not trial_option.is_empty():
-		options.append(trial_option)
-	options.append(survival_option)
-	options.append(rest_option)
+func _shuffle_route_options(options: Array[Dictionary]) -> Array[Dictionary]:
+	if options.size() < 2 or rng.randf() < 0.5:
+		return options
+	return [options[1], options[0]]
+
+func _pick_two_route_options(options: Array[Dictionary]) -> Array[Dictionary]:
+	if options.size() <= 2:
+		return _shuffle_route_options(options)
 	var first: int = rng.randi_range(0, options.size() - 1)
 	var chosen: Array[Dictionary] = [options[first]]
-
 	var remaining_indices: Array[int] = []
 	for index in range(options.size()):
 		if index == first:
@@ -705,7 +716,34 @@ func roll_route_options(depth: int) -> Array[Dictionary]:
 		remaining_indices.append(index)
 	var second_index: int = remaining_indices[rng.randi_range(0, remaining_indices.size() - 1)]
 	chosen.append(options[second_index])
-	return chosen
+	return _shuffle_route_options(chosen)
+
+func _build_intro_route_options(depth: int) -> Array[Dictionary]:
+	return _shuffle_route_options([
+		_build_intro_route_option(_build_intro_profile(depth)),
+		_build_intro_route_option(_build_intro_variant_profile(depth))
+	])
+
+func _build_non_rest_route_options(depth: int) -> Array[Dictionary]:
+	var options: Array[Dictionary] = [_build_hard_route_option(depth), _build_objective_route_option(depth)]
+	var trial_option := _build_trial_route_option(depth)
+	if not trial_option.is_empty():
+		options.append(trial_option)
+	return options
+
+func roll_route_options(route_context: Variant) -> Array[Dictionary]:
+	var context := _normalize_route_context(route_context)
+	var depth := int(context.get("depth", 0))
+	var rooms_until_boss := int(context.get("rooms_until_boss", -1))
+	if depth < 2:
+		return _build_intro_route_options(depth)
+	if rooms_until_boss == 1:
+		var pre_boss_options := _build_non_rest_route_options(depth)
+		var alternate := pre_boss_options[rng.randi_range(0, pre_boss_options.size() - 1)]
+		return _shuffle_route_options([alternate, _build_rest_route_option()])
+	var options := _build_non_rest_route_options(depth)
+	options.append(_build_rest_route_option())
+	return _pick_two_route_options(options)
 
 func roll_hard_enemy_mutator() -> Dictionary:
 	var pool := _hard_mutator_pool()
