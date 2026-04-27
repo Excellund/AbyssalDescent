@@ -57,6 +57,7 @@ const ATTACK_POLAR_SHIFT := 4
 @export var polar_shift_windup: float = 0.92
 @export var polar_shift_radius: float = 440.0
 @export var polar_shift_force: float = 820.0
+@export var polar_shift_pull_force_mult: float = 1.24
 @export var polar_shift_safe_arc_degrees: float = 52.0
 @export var polar_shift_safe_force_mult: float = 0.0
 @export var polar_shift_counter_velocity_threshold: float = 150.0
@@ -67,6 +68,7 @@ const ATTACK_POLAR_SHIFT := 4
 @export var polar_shift_pull_inner_damage: int = 32
 @export var polar_shift_pull_inner_delay: float = 0.32
 @export var polar_shift_pull_afterglow_duration: float = 0.42
+@export var polar_shift_dash_lockout_duration: float = 0.72
 
 @export var recover_time: float = 0.28
 @export var arena_size: Vector2 = Vector2(1360.0, 960.0)
@@ -656,6 +658,7 @@ func _apply_polar_shift() -> void:
 		DAMAGEABLE.apply_damage(target, 30)
 	if target is CharacterBody2D:
 		var target_body := target as CharacterBody2D
+		var in_safe_lane := _is_polar_shift_in_safe_lane(to_target.angle())
 		var dir := (global_position - target_body.global_position)
 		if dir.length_squared() <= 0.000001:
 			dir = Vector2.RIGHT
@@ -663,14 +666,16 @@ func _apply_polar_shift() -> void:
 		if not _polar_shift_is_pull:
 			dir = -dir
 		var force_mult := 1.0
+		if _polar_shift_is_pull:
+			force_mult *= polar_shift_pull_force_mult
 		if to_target.length() <= polar_shift_anchor_radius:
 			force_mult *= polar_shift_anchor_force_mult
-		if _is_polar_shift_in_safe_lane(to_target.angle()):
+		if in_safe_lane:
 			force_mult *= polar_shift_safe_force_mult
-		var counter_velocity := target_body.velocity.dot(-dir)
-		if counter_velocity >= polar_shift_counter_velocity_threshold:
-			force_mult *= polar_shift_counter_force_mult
-		target_body.velocity += dir * polar_shift_force * force_mult
+		target_body.velocity = Vector2.ZERO
+		target_body.velocity = dir * polar_shift_force * force_mult
+		if not in_safe_lane and target_body.has_method("apply_polar_shift_dash_lockout"):
+			target_body.call("apply_polar_shift_dash_lockout", polar_shift_dash_lockout_duration)
 
 func _capture_polar_shift_pattern() -> void:
 	_polar_shift_safe_angles.clear()

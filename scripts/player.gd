@@ -186,6 +186,8 @@ var storm_crown_hit_counter: int = 0
 var storm_crown_discharge_flash_left: float = 0.0
 var storm_crown_discharge_flash_duration: float = 0.24
 var wraithstep_marked_enemy_expiry: Dictionary = {}
+var polar_shift_dash_lockout_left: float = 0.0
+var polar_shift_dash_lockout_duration: float = 0.0
 
 # Objective mutators
 var active_objective_mutators: Array[Dictionary] = []
@@ -220,6 +222,7 @@ func _physics_process(delta: float) -> void:
 	_update_aegis_field_state(delta)
 	_update_static_wake_trails(delta)
 	_update_void_dash_reset_pulse(delta)
+	_update_polar_shift_dash_lockout(delta)
 	_update_wraithstep_marks()
 	_update_storm_crown_discharge(delta)
 	_try_start_dash(direction)
@@ -261,6 +264,8 @@ func _update_attack_cooldown(delta: float) -> void:
 
 func _try_start_dash(direction: Vector2) -> void:
 	if _is_attack_locked():
+		return
+	if polar_shift_dash_lockout_left > 0.0:
 		return
 	if not Input.is_action_just_pressed("dash"):
 		return
@@ -485,6 +490,12 @@ func _update_void_dash_reset_pulse(delta: float) -> void:
 	if void_dash_reset_pulse_left <= 0.0:
 		return
 	void_dash_reset_pulse_left = maxf(0.0, void_dash_reset_pulse_left - delta)
+	queue_redraw()
+
+func _update_polar_shift_dash_lockout(delta: float) -> void:
+	if polar_shift_dash_lockout_left <= 0.0:
+		return
+	polar_shift_dash_lockout_left = maxf(0.0, polar_shift_dash_lockout_left - delta)
 	queue_redraw()
 
 func _update_storm_crown_discharge(delta: float) -> void:
@@ -1101,6 +1112,20 @@ func notify_enemy_killed() -> void:
 			player_feedback.play_world_ring(global_position, 26.0, Color(1.0, 0.82, 1.0, 0.72), 0.12)
 		queue_redraw()
 
+func apply_polar_shift_dash_lockout(duration: float) -> void:
+	var applied_duration := maxf(0.0, duration)
+	if applied_duration <= 0.0:
+		return
+	dash_time_left = 0.0
+	dash_phase_release_left = 0.0
+	queued_attack_after_dash = false
+	_set_dash_phasing(false)
+	polar_shift_dash_lockout_duration = maxf(polar_shift_dash_lockout_duration, applied_duration)
+	polar_shift_dash_lockout_left = maxf(polar_shift_dash_lockout_left, applied_duration)
+	if player_feedback != null and player_feedback.has_method("play_polar_shift_dash_lockout"):
+		player_feedback.call("play_polar_shift_dash_lockout", global_position)
+	queue_redraw()
+
 func _restart_current_scene() -> void:
 	if scene_restart_queued:
 		return
@@ -1382,3 +1407,31 @@ func _draw_trial_reward_state() -> void:
 				draw_line(tp, tp + tick_dir * 4.0, mark_c, 1.4)
 			# Center dot
 			draw_circle(local_ep, 1.8 + mark_pulse * 0.6, mark_c_bright)
+
+	if polar_shift_dash_lockout_left > 0.0:
+		var debuff_t := clampf(polar_shift_dash_lockout_left / maxf(0.001, polar_shift_dash_lockout_duration), 0.0, 1.0)
+		var field_pulse := 0.5 + 0.5 * sin(t * 8.4 + 0.35)
+		var fast_pulse := 0.5 + 0.5 * sin(t * 14.0 + 1.1)
+		var spin := t * 1.4
+		var field_radius := 24.0 + field_pulse * 2.2
+		var sovereign_blue := Color(0.32, 0.78, 0.98, 1.0)
+		var sovereign_orange := Color(1.0, 0.58, 0.28, 1.0)
+		var sovereign_gold := Color(1.0, 0.88, 0.58, 1.0)
+		# Dark tinted fill to visually separate the player from the cage
+		draw_circle(Vector2.ZERO, field_radius + 8.0, Color(0.04, 0.12, 0.22, (0.22 + field_pulse * 0.08) * debuff_t))
+		# Soft orange inner glow for heat/weight
+		draw_circle(Vector2.ZERO, field_radius - 4.0, Color(0.82, 0.44, 0.14, (0.08 + field_pulse * 0.06) * debuff_t))
+		# Primary rotating blue ring — thick and bright
+		draw_arc(Vector2.ZERO, field_radius, spin, spin + TAU, 52, Color(sovereign_blue.r, sovereign_blue.g, sovereign_blue.b, (0.72 + field_pulse * 0.2) * debuff_t), 3.4)
+		# Counter-rotating orange ring slightly outside
+		draw_arc(Vector2.ZERO, field_radius + 6.0, -spin * 1.3, -spin * 1.3 + TAU, 60, Color(sovereign_orange.r, sovereign_orange.g, sovereign_orange.b, (0.38 + field_pulse * 0.18) * debuff_t), 2.2)
+		# 4 bind spokes with bright gold tips
+		for i in range(4):
+			var angle := spin + TAU * float(i) / 4.0
+			var bind_dir := Vector2.RIGHT.rotated(angle)
+			var bind_color := sovereign_blue if i % 2 == 0 else sovereign_orange
+			draw_line(bind_dir * 8.0, bind_dir * (field_radius + 7.0), Color(bind_color.r, bind_color.g, bind_color.b, (0.52 + field_pulse * 0.24) * debuff_t), 2.8)
+			draw_circle(bind_dir * (field_radius + 7.0), 3.2 + fast_pulse * 0.6, Color(sovereign_gold.r, sovereign_gold.g, sovereign_gold.b, (0.72 + fast_pulse * 0.2) * debuff_t))
+		# Countdown sweep ring — shows remaining duration
+		var sweep_angle := -PI * 0.5 + (1.0 - debuff_t) * TAU
+		draw_arc(Vector2.ZERO, field_radius + 12.0, -PI * 0.5, sweep_angle, 32, Color(0.94, 0.98, 1.0, (0.44 + field_pulse * 0.2) * debuff_t), 2.0)

@@ -286,6 +286,11 @@ func play_wraithstep_chain_echo(from_global: Vector2, target_global: Vector2, li
 
 	play_world_ring(target_global, 12.0, Color(0.86, 0.98, 1.0, 0.7), lifetime * 0.7)
 
+func play_polar_shift_dash_lockout(epicenter_global: Vector2) -> void:
+	play_world_ring(epicenter_global, 16.0, Color(0.96, 0.98, 1.0, 0.94), 0.07)
+	play_world_ring(epicenter_global, 26.0, Color(0.32, 0.78, 0.98, 0.62), 0.14)
+	play_world_ring(epicenter_global, 36.0, Color(1.0, 0.58, 0.28, 0.28), 0.18)
+
 func play_storm_crown_discharge(epicenter_global: Vector2) -> void:
 	# Tight white core flash
 	play_world_ring(epicenter_global, 20.0, Color(1.0, 1.0, 0.95, 0.95), 0.09)
