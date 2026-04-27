@@ -139,6 +139,7 @@ func build_debug_mutator(mutator_key: String) -> Dictionary:
 	return {}
 
 func _get_hard_pool() -> Array[Dictionary]:
+	var is_apprentice := current_difficulty_tier == META_PROGRESS.TIER_APPRENTICE
 	# Crossfire: archers pin you, charger punishes standing still.
 	# Onslaught: pure melee flood — no respite from ranged.
 	# Fortress: true defensive wall — shielders advance with no charger to bypass.
@@ -152,13 +153,13 @@ func _get_hard_pool() -> Array[Dictionary]:
 	var onslaught := _build_profile("Onslaught", POOL_ROOM_SIZE, 7, 2, 0, 0)
 	var fortress := _build_profile("Fortress", POOL_ROOM_SIZE, 2, 0, 1, 3)
 	var blitz := _build_profile("Blitz", POOL_ROOM_SIZE, 2, 0, 0, 0)
-	blitz["lurker_count"] = 3
-	blitz["ram_count"] = 1
+	blitz["lurker_count"] = 1 if is_apprentice else 3
+	blitz["ram_count"] = 0 if is_apprentice else 1
 	var suppression := _build_profile("Suppression", POOL_ROOM_SIZE, 1, 1, 2, 1)
 	suppression["lancer_count"] = 2
 	var vanguard := _build_profile("Vanguard", POOL_ROOM_SIZE, 3, 2, 0, 2)
 	var ambush := _build_profile("Ambush", POOL_ROOM_SIZE, 3, 0, 0, 0)
-	ambush["lurker_count"] = 4
+	ambush["lurker_count"] = 2 if is_apprentice else 4
 	ambush["lancer_count"] = 1
 	var gauntlet := _build_profile("Gauntlet", POOL_ROOM_SIZE, 2, 1, 1, 1)
 	gauntlet["lurker_count"] = 1
@@ -237,6 +238,8 @@ func _pick_trial_base_profile(mutator: Dictionary) -> Dictionary:
 		"flashpoint":
 			return _build_profile("Crossfire", POOL_ROOM_SIZE, 2, 2, 4, 0)
 		"siegebreak":
+			if current_difficulty_tier == META_PROGRESS.TIER_APPRENTICE:
+				return _build_profile("Vanguard", POOL_ROOM_SIZE, 3, 2, 0, 2)
 			return _build_profile("Vanguard", POOL_ROOM_SIZE, 3, 3, 0, 3)
 		_:
 			return hard_pool[rng.randi_range(0, hard_pool.size() - 1)]
@@ -266,6 +269,13 @@ func _trial_specialist_counts(mutator: Dictionary, depth: int, chasers: int, cha
 				"shielders": maxi(1, shielders)
 			}
 		"siegebreak":
+			if current_difficulty_tier == META_PROGRESS.TIER_APPRENTICE:
+				return {
+					"chasers": maxi(3, chasers),
+					"chargers": maxi(chargers, 3 + int(floor(float(depth) * 0.15))),
+					"archers": mini(archers, 1),
+					"shielders": maxi(shielders, 3 + int(floor(float(depth) * 0.1)))
+				}
 			return {
 				"chasers": maxi(3, chasers),
 				"chargers": maxi(chargers + 1, 4 + int(floor(float(depth) * 0.2))),
@@ -304,7 +314,8 @@ func _trial_specialist_enemies(mutator: Dictionary, depth: int, tier: int = META
 		"flashpoint":
 			lancer_count += 1 if depth >= lancer_gate else 0
 		"siegebreak":
-			ram_count += 1 if depth >= ram_gate else 0
+			if tier != META_PROGRESS.TIER_APPRENTICE:
+				ram_count += 1 if depth >= ram_gate else 0
 	return {
 		"lurker_count": maxi(0, lurker_count),
 		"ram_count": maxi(0, ram_count),
