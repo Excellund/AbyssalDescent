@@ -1453,13 +1453,6 @@ func _apply_difficulty_tier_bonuses(difficulty_tier: int) -> void:
 	bonus_rest_heal_charges = maxi(0, int(difficulty_config.get("player_potion_charges_bonus", 0)))
 	if player.has_method("set_incoming_damage_taken_mult"):
 		player.call("set_incoming_damage_taken_mult", float(difficulty_config.get("player_damage_taken_mult", 1.0)))
-
-func _get_second_boss_target_depth() -> int:
-	return maxi(encounter_count + 1, encounter_count * 2)
-
-func _is_second_boss_unlocked() -> bool:
-	return first_boss_defeated and room_depth >= _get_second_boss_target_depth()
-	
 	var health_bonus := float(difficulty_config.get("player_starting_health_bonus", 0.0))
 	if health_bonus > 0.0 and player.get("max_health") != null:
 		var current_max := int(player.get("max_health"))
@@ -1469,6 +1462,12 @@ func _is_second_boss_unlocked() -> bool:
 			var health_state: Object = player.get("health_state")
 			if health_state.has_method("setup"):
 				health_state.call("setup", new_max)
+
+func _get_second_boss_target_depth() -> int:
+	return maxi(encounter_count + 1, encounter_count * 2)
+
+func _is_second_boss_unlocked() -> bool:
+	return first_boss_defeated and room_depth >= _get_second_boss_target_depth()
 
 func _get_boss_difficulty_mult() -> float:
 	if current_difficulty_config.is_empty():
@@ -1891,9 +1890,10 @@ func _begin_room(profile: Dictionary) -> void:
 	if active_objective_kind == "survival":
 		objective_time_left = ENCOUNTER_CONTRACTS.profile_objective_duration(profile)
 		objective_spawn_interval = ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
+		var objective_pressure_mult := _objective_pressure_mult()
+		objective_spawn_interval *= clampf(1.15 - objective_pressure_mult * 0.2, 0.8, 1.08)
 		objective_spawn_timer = objective_spawn_interval
 		objective_spawn_batch = ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
-		var objective_pressure_mult := _objective_pressure_mult()
 		objective_spawn_batch = maxi(1, int(round(float(objective_spawn_batch) * objective_pressure_mult)))
 		objective_max_enemies = mini(24, 12 + int(floor(float(room_depth) * 0.9)))
 		objective_max_enemies = maxi(8, int(round(float(objective_max_enemies) * objective_pressure_mult)))

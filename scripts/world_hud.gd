@@ -288,7 +288,7 @@ func _update_status_panel_text(state: Dictionary) -> void:
 	if status_label == null:
 		return
 	var run_cleared := bool(state.get("run_cleared", false))
-	var rooms_cleared := int(state.get("rooms_cleared", 0))
+	var _rooms_cleared := int(state.get("rooms_cleared", 0))
 	var room_depth := int(state.get("room_depth", 0))
 	var current_room_enemy_mutator := state.get("current_room_enemy_mutator", {}) as Dictionary
 	var objective_kind := String(state.get("active_objective_kind", ""))

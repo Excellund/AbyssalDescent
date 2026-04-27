@@ -109,6 +109,26 @@ func _build_fortress_profile() -> Dictionary:
 func _build_crossfire_profile() -> Dictionary:
 	return _build_profile("Crossfire", POOL_ROOM_SIZE, 1, 1, 4, 0)
 
+func _build_blitz_profile() -> Dictionary:
+	var blitz := _build_profile("Blitz", POOL_ROOM_SIZE, 1, 0, 0, 0)
+	blitz["lurker_count"] = 3
+	blitz["ram_count"] = 1
+	return blitz
+
+func _build_suppression_profile() -> Dictionary:
+	var suppression := _build_profile("Suppression", POOL_ROOM_SIZE, 1, 1, 2, 1)
+	suppression["lancer_count"] = 2
+	return suppression
+
+func _build_vanguard_profile() -> Dictionary:
+	return _build_profile("Vanguard", POOL_ROOM_SIZE, 2, 2, 0, 3)
+
+func _build_ambush_profile() -> Dictionary:
+	var ambush := _build_profile("Ambush", POOL_ROOM_SIZE, 2, 0, 0, 0)
+	ambush["lurker_count"] = 4
+	ambush["lancer_count"] = 1
+	return ambush
+
 func _apply_crossfire_bearing_scaling(profile: Dictionary) -> Dictionary:
 	var modified := _apply_bearing_count_scaling(profile, 1.0, 0)
 	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT] = maxi(3, ENCOUNTER_CONTRACTS.profile_archer_count(modified))
@@ -119,6 +139,68 @@ func _apply_crossfire_bearing_scaling(profile: Dictionary) -> Dictionary:
 	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT] = ENCOUNTER_CONTRACTS.profile_archer_count(modified) + rank
 	if rank >= 2:
 		modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT] = ENCOUNTER_CONTRACTS.profile_charger_count(modified) + 1
+	return modified
+
+func _apply_blitz_bearing_scaling(profile: Dictionary) -> Dictionary:
+	var modified := profile.duplicate(true)
+	var rank := _difficulty_rank()
+	var chasers_by_rank := [1, 2, 3, 4]
+	var lurkers_by_rank := [2, 3, 4, 5]
+	var rams_by_rank := [1, 1, 1, 2]
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT] = chasers_by_rank[rank]
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT] = 0
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT] = 0
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT] = 0
+	modified["lurker_count"] = lurkers_by_rank[rank]
+	modified["ram_count"] = rams_by_rank[rank]
+	modified["lancer_count"] = 0
+	return modified
+
+func _apply_suppression_bearing_scaling(profile: Dictionary) -> Dictionary:
+	var modified := profile.duplicate(true)
+	var rank := _difficulty_rank()
+	var chasers_by_rank := [1, 1, 2, 2]
+	var chargers_by_rank := [1, 1, 1, 2]
+	var archers_by_rank := [2, 3, 4, 5]
+	var shielders_by_rank := [1, 1, 2, 2]
+	var lancers_by_rank := [1, 2, 2, 3]
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT] = chasers_by_rank[rank]
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT] = chargers_by_rank[rank]
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT] = archers_by_rank[rank]
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT] = shielders_by_rank[rank]
+	modified["lancer_count"] = lancers_by_rank[rank]
+	modified["lurker_count"] = 0
+	modified["ram_count"] = 0
+	return modified
+
+func _apply_vanguard_bearing_scaling(profile: Dictionary) -> Dictionary:
+	var modified := profile.duplicate(true)
+	var rank := _difficulty_rank()
+	var chasers_by_rank := [1, 2, 2, 3]
+	var chargers_by_rank := [2, 3, 4, 5]
+	var shielders_by_rank := [2, 3, 4, 4]
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT] = chasers_by_rank[rank]
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT] = chargers_by_rank[rank]
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT] = 0
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT] = shielders_by_rank[rank]
+	modified["lurker_count"] = 0
+	modified["ram_count"] = 0
+	modified["lancer_count"] = 0
+	return modified
+
+func _apply_ambush_bearing_scaling(profile: Dictionary) -> Dictionary:
+	var modified := profile.duplicate(true)
+	var rank := _difficulty_rank()
+	var chasers_by_rank := [1, 2, 3, 4]
+	var lurkers_by_rank := [3, 4, 5, 6]
+	var lancers_by_rank := [1, 1, 2, 2]
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT] = chasers_by_rank[rank]
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT] = 0
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT] = 0
+	modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT] = 0
+	modified["lurker_count"] = lurkers_by_rank[rank]
+	modified["lancer_count"] = lancers_by_rank[rank]
+	modified["ram_count"] = 0
 	return modified
 
 func _apply_fortress_bearing_scaling(profile: Dictionary) -> Dictionary:
@@ -150,6 +232,26 @@ func _apply_gauntlet_bearing_scaling(profile: Dictionary) -> Dictionary:
 	if rank >= 3:
 		modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT] = ENCOUNTER_CONTRACTS.profile_charger_count(modified) + 1
 	return modified
+
+func _apply_identity_bearing_scaling(profile: Dictionary) -> Dictionary:
+	var label := ENCOUNTER_CONTRACTS.profile_label(profile)
+	match label:
+		"Crossfire":
+			return _apply_crossfire_bearing_scaling(profile)
+		"Fortress":
+			return _apply_fortress_bearing_scaling(profile)
+		"Gauntlet":
+			return _apply_gauntlet_bearing_scaling(profile)
+		"Blitz":
+			return _apply_blitz_bearing_scaling(profile)
+		"Suppression":
+			return _apply_suppression_bearing_scaling(profile)
+		"Vanguard":
+			return _apply_vanguard_bearing_scaling(profile)
+		"Ambush":
+			return _apply_ambush_bearing_scaling(profile)
+		_:
+			return _apply_bearing_count_scaling(profile, 1.0, _skirmish_min_total_enemies())
 
 func _scale_mutator_damage(mutator: Dictionary) -> Dictionary:
 	if mutator.is_empty():
@@ -216,16 +318,10 @@ func _build_intro_profile(depth: int) -> Dictionary:
 func build_skirmish_profile(depth: int) -> Dictionary:
 	if depth < 2:
 		return _build_intro_profile(depth)
-	var hard_pool := _get_hard_pool()
+	var hard_pool := _get_hard_pool_for_depth(depth)
 	var profile := hard_pool[rng.randi_range(0, hard_pool.size() - 1)]
 	profile = _maybe_apply_hard_mutator(profile, depth)
-	if ENCOUNTER_CONTRACTS.profile_label(profile) == "Crossfire":
-		return _apply_crossfire_bearing_scaling(profile)
-	if ENCOUNTER_CONTRACTS.profile_label(profile) == "Gauntlet":
-		return _apply_gauntlet_bearing_scaling(profile)
-	if ENCOUNTER_CONTRACTS.profile_label(profile) == "Fortress":
-		return _apply_fortress_bearing_scaling(profile)
-	return _apply_bearing_count_scaling(profile, 1.0, _skirmish_min_total_enemies())
+	return _apply_identity_bearing_scaling(profile)
 
 func build_objective_profile(depth: int, preferred: String = "") -> Dictionary:
 	var normalized := preferred.strip_edges().to_lower()
@@ -248,21 +344,13 @@ func build_debug_encounter_profile(encounter_key: String, depth: int) -> Diction
 		"fortress":
 			return _apply_fortress_bearing_scaling(_build_fortress_profile())
 		"blitz":
-			var blitz := _build_profile("Blitz", POOL_ROOM_SIZE, 2, 0, 0, 0)
-			blitz["lurker_count"] = 3
-			blitz["ram_count"] = 1
-			return blitz
+			return _apply_blitz_bearing_scaling(_build_blitz_profile())
 		"suppression":
-			var suppression := _build_profile("Suppression", POOL_ROOM_SIZE, 1, 1, 2, 1)
-			suppression["lancer_count"] = 2
-			return suppression
+			return _apply_suppression_bearing_scaling(_build_suppression_profile())
 		"vanguard":
-			return _build_profile("Vanguard", POOL_ROOM_SIZE, 3, 2, 0, 2)
+			return _apply_vanguard_bearing_scaling(_build_vanguard_profile())
 		"ambush":
-			var ambush := _build_profile("Ambush", POOL_ROOM_SIZE, 3, 0, 0, 0)
-			ambush["lurker_count"] = 4
-			ambush["lancer_count"] = 1
-			return ambush
+			return _apply_ambush_bearing_scaling(_build_ambush_profile())
 		"gauntlet":
 			return _apply_gauntlet_bearing_scaling(_build_gauntlet_profile())
 		"trial":
@@ -307,17 +395,26 @@ func _get_hard_pool() -> Array[Dictionary]:
 	var crossfire := _build_crossfire_profile()
 	var onslaught := _build_profile("Onslaught", POOL_ROOM_SIZE, 7, 2, 0, 0)
 	var fortress := _build_fortress_profile()
-	var blitz := _build_profile("Blitz", POOL_ROOM_SIZE, 2, 0, 0, 0)
-	blitz["lurker_count"] = 3
-	blitz["ram_count"] = 1
-	var suppression := _build_profile("Suppression", POOL_ROOM_SIZE, 1, 1, 2, 1)
-	suppression["lancer_count"] = 2
-	var vanguard := _build_profile("Vanguard", POOL_ROOM_SIZE, 3, 2, 0, 2)
-	var ambush := _build_profile("Ambush", POOL_ROOM_SIZE, 3, 0, 0, 0)
-	ambush["lurker_count"] = 4
-	ambush["lancer_count"] = 1
+	var blitz := _build_blitz_profile()
+	var suppression := _build_suppression_profile()
+	var vanguard := _build_vanguard_profile()
+	var ambush := _build_ambush_profile()
 	var gauntlet := _build_gauntlet_profile()
 	return [crossfire, onslaught, fortress, blitz, suppression, vanguard, ambush, gauntlet]
+
+func _get_hard_pool_for_depth(depth: int) -> Array[Dictionary]:
+	var pool := _get_hard_pool()
+	var filtered: Array[Dictionary] = []
+	var effective_depth := _effective_depth(depth)
+	var ambush_depth_gate := 4 if _difficulty_rank() == 0 else 3
+	for profile in pool:
+		var label := ENCOUNTER_CONTRACTS.profile_label(profile)
+		if label == "Ambush" and effective_depth < ambush_depth_gate:
+			continue
+		filtered.append(profile)
+	if filtered.is_empty():
+		return pool
+	return filtered
 
 func _build_trial_profile(depth: int = 0) -> Dictionary:
 	var mutator: Dictionary = roll_hard_enemy_mutator()
@@ -541,18 +638,10 @@ func roll_route_options(depth: int) -> Array[Dictionary]:
 		return reversed_intro_options
 
 	# After room 2: no more easy-pool encounters.
-	var hard_pool: Array[Dictionary] = _get_hard_pool()
+	var hard_pool: Array[Dictionary] = _get_hard_pool_for_depth(depth)
 	var hard_profile: Dictionary = hard_pool[rng.randi_range(0, hard_pool.size() - 1)]
 	hard_profile = _maybe_apply_hard_mutator(hard_profile, depth)
-	var hard_label := ENCOUNTER_CONTRACTS.profile_label(hard_profile)
-	if hard_label == "Crossfire":
-		hard_profile = _apply_crossfire_bearing_scaling(hard_profile)
-	elif hard_label == "Gauntlet":
-		hard_profile = _apply_gauntlet_bearing_scaling(hard_profile)
-	elif hard_label == "Fortress":
-		hard_profile = _apply_fortress_bearing_scaling(hard_profile)
-	else:
-		hard_profile = _apply_bearing_count_scaling(hard_profile, 1.0, _skirmish_min_total_enemies())
+	hard_profile = _apply_identity_bearing_scaling(hard_profile)
 	var hard_option := ENCOUNTER_CONTRACTS.door_option(
 		ENCOUNTER_CONTRACTS.profile_label(hard_profile),
 		Color(0.93, 0.62, 0.28, 0.95),
