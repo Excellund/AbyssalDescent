@@ -7,10 +7,12 @@ const SETTINGS_STORE := preload("res://scripts/settings_store.gd")
 const META_PROGRESS_STORE := preload("res://scripts/meta_progress_store.gd")
 const ACTIVE_RUN_SAVE_PATH := "user://active_run.save"
 const ACTIVE_RUN_VERSION := 1
+const AUDIO_VOLUME_MIN_DB := -80.0
+const AUDIO_VOLUME_MAX_DB := 6.0
 
 var run_mode: int = ENUMS.RunMode.STANDARD
 var master_volume_db: float = 0.0
-var music_volume_db: float = -46.0
+var music_volume_db: float = -20.0
 var resume_saved_run_requested: bool = false
 
 ## Meta-progression state
@@ -41,12 +43,12 @@ func is_endless_mode() -> bool:
 
 func load_audio_settings() -> void:
 	var loaded: Dictionary = SETTINGS_STORE.load_settings()
-	master_volume_db = float(loaded.get("master_volume_db", master_volume_db))
-	music_volume_db = float(loaded.get("music_volume_db", music_volume_db))
+	master_volume_db = clampf(float(loaded.get("master_volume_db", master_volume_db)), AUDIO_VOLUME_MIN_DB, AUDIO_VOLUME_MAX_DB)
+	music_volume_db = clampf(float(loaded.get("music_volume_db", music_volume_db)), AUDIO_VOLUME_MIN_DB, AUDIO_VOLUME_MAX_DB)
 
 func set_audio_settings(master_db: float, music_db: float, persist: bool = true) -> void:
-	master_volume_db = clampf(master_db, -40.0, 6.0)
-	music_volume_db = clampf(music_db, -60.0, -6.0)
+	master_volume_db = clampf(master_db, AUDIO_VOLUME_MIN_DB, AUDIO_VOLUME_MAX_DB)
+	music_volume_db = clampf(music_db, AUDIO_VOLUME_MIN_DB, AUDIO_VOLUME_MAX_DB)
 	_apply_master_volume()
 	if persist:
 		SETTINGS_STORE.save_settings(master_volume_db, music_volume_db)

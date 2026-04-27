@@ -26,6 +26,8 @@ const QUOTE_PULSE_SPEED := 2.1
 const QUOTE_PULSE_AMPLITUDE := 0.018
 const QUOTE_COLOR_COOL := Color(0.72, 0.86, 1.0, 0.9)
 const QUOTE_COLOR_WARM := Color(1.0, 0.95, 0.84, 1.0)
+const AUDIO_DB_MIN := -80.0
+const AUDIO_DB_MAX := 6.0
 
 var root_panel: Panel
 var options_panel: Panel
@@ -248,6 +250,25 @@ func _make_menu_button(text: String, emphasize: bool = false) -> Button:
 	button.add_theme_stylebox_override("disabled", _make_button_style(Color(0.08, 0.10, 0.14, 0.82), Color(0.22, 0.26, 0.32, 0.54), 16, 2))
 	return button
 
+func _make_panel_back_button() -> Button:
+	var button := Button.new()
+	button.text = "Back"
+	button.custom_minimum_size = Vector2(180.0, 46.0)
+	button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	button.focus_mode = Control.FOCUS_ALL
+	button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	button.add_theme_font_size_override("font_size", 20)
+	button.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 0.98))
+	button.add_theme_color_override("font_hover_color", Color(0.98, 1.0, 1.0, 1.0))
+	button.add_theme_color_override("font_pressed_color", Color(0.98, 1.0, 1.0, 1.0))
+	button.add_theme_color_override("font_disabled_color", Color(0.52, 0.60, 0.68, 0.90))
+	button.add_theme_stylebox_override("normal", _make_button_style(Color(0.10, 0.15, 0.22, 0.95), Color(0.34, 0.56, 0.84, 0.72), 16, 2))
+	button.add_theme_stylebox_override("hover", _make_button_style(Color(0.13, 0.19, 0.28, 0.98), Color(0.62, 0.82, 0.98, 0.88), 16, 2))
+	button.add_theme_stylebox_override("pressed", _make_button_style(Color(0.08, 0.12, 0.18, 0.98), Color(0.74, 0.90, 1.0, 0.92), 16, 2))
+	button.add_theme_stylebox_override("focus", _make_button_style(Color(0.13, 0.20, 0.29, 0.98), Color(0.86, 0.96, 1.0, 1.0), 16, 2))
+	button.add_theme_stylebox_override("disabled", _make_button_style(Color(0.08, 0.10, 0.14, 0.82), Color(0.22, 0.26, 0.32, 0.54), 16, 2))
+	return button
+
 func _make_panel_style(bg_color: Color, border_color: Color, corner_radius: int = 14, border_width: int = 2) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = bg_color
@@ -399,72 +420,113 @@ func _animate_panel_in(panel: Control, offset: Vector2) -> void:
 
 func _build_options_panel() -> Panel:
 	var panel := Panel.new()
-	panel.custom_minimum_size = Vector2(620.0, 300.0)
-	panel.position = Vector2(650.0, 380.0)
-	panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.04, 0.06, 0.1, 0.95), Color(0.44, 0.7, 0.96, 0.74), 12, 2))
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.position = Vector2(-380.0, -250.0)
+	panel.custom_minimum_size = Vector2(760.0, 500.0)
+	panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.04, 0.06, 0.1, 0.97), Color(0.44, 0.7, 0.96, 0.74), 20, 2))
+
+	var layout := MarginContainer.new()
+	layout.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layout.add_theme_constant_override("margin_left", 52)
+	layout.add_theme_constant_override("margin_right", 52)
+	layout.add_theme_constant_override("margin_top", 40)
+	layout.add_theme_constant_override("margin_bottom", 36)
+	panel.add_child(layout)
+
+	var stack := VBoxContainer.new()
+	stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	stack.add_theme_constant_override("separation", 16)
+	layout.add_child(stack)
 
 	var title := Label.new()
 	title.text = "Options"
-	title.position = Vector2(0.0, 16.0)
-	title.custom_minimum_size = Vector2(620.0, 32.0)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 30)
-	title.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 0.98))
-	panel.add_child(title)
+	title.add_theme_font_size_override("font_size", 42)
+	title.add_theme_color_override("font_color", Color(1.0, 0.95, 0.78, 1.0))
+	title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
+	title.add_theme_constant_override("shadow_offset_x", 2)
+	title.add_theme_constant_override("shadow_offset_y", 2)
+	stack.add_child(title)
+
+	var accent := ColorRect.new()
+	accent.custom_minimum_size = Vector2(180.0, 2.0)
+	accent.color = Color(0.62, 0.78, 0.96, 0.65)
+	accent.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	stack.add_child(accent)
+
+	var rows := VBoxContainer.new()
+	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rows.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	rows.add_theme_constant_override("separation", 14)
+	stack.add_child(rows)
+
+	var master_row := VBoxContainer.new()
+	master_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	master_row.add_theme_constant_override("separation", 6)
+	rows.add_child(master_row)
 
 	var master_label := Label.new()
 	master_label.text = "Master Volume"
-	master_label.position = Vector2(42.0, 84.0)
-	master_label.custom_minimum_size = Vector2(260.0, 24.0)
+	master_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	master_label.add_theme_font_size_override("font_size", 18)
-	panel.add_child(master_label)
+	master_label.add_theme_color_override("font_color", Color(0.90, 0.96, 1.0, 0.96))
+	master_row.add_child(master_label)
+
+	var master_controls := HBoxContainer.new()
+	master_controls.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	master_controls.add_theme_constant_override("separation", 14)
+	master_row.add_child(master_controls)
 
 	master_slider = HSlider.new()
-	master_slider.position = Vector2(42.0, 112.0)
-	master_slider.custom_minimum_size = Vector2(450.0, 24.0)
-	master_slider.min_value = -40.0
-	master_slider.max_value = 6.0
+	master_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	master_slider.min_value = 0.0
+	master_slider.max_value = 100.0
 	master_slider.step = 1.0
 	master_slider.value_changed.connect(_on_master_volume_changed)
-	panel.add_child(master_slider)
+	master_controls.add_child(master_slider)
 
 	master_value_label = Label.new()
-	master_value_label.position = Vector2(510.0, 108.0)
 	master_value_label.custom_minimum_size = Vector2(90.0, 24.0)
 	master_value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	panel.add_child(master_value_label)
+	master_controls.add_child(master_value_label)
+
+	var music_row := VBoxContainer.new()
+	music_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	music_row.add_theme_constant_override("separation", 6)
+	rows.add_child(music_row)
 
 	var music_label := Label.new()
 	music_label.text = "Music Volume"
-	music_label.position = Vector2(42.0, 164.0)
-	music_label.custom_minimum_size = Vector2(260.0, 24.0)
+	music_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	music_label.add_theme_font_size_override("font_size", 18)
-	panel.add_child(music_label)
+	music_label.add_theme_color_override("font_color", Color(0.90, 0.96, 1.0, 0.96))
+	music_row.add_child(music_label)
+
+	var music_controls := HBoxContainer.new()
+	music_controls.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	music_controls.add_theme_constant_override("separation", 14)
+	music_row.add_child(music_controls)
 
 	music_slider = HSlider.new()
-	music_slider.position = Vector2(42.0, 192.0)
-	music_slider.custom_minimum_size = Vector2(450.0, 24.0)
-	music_slider.min_value = -60.0
-	music_slider.max_value = -6.0
+	music_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	music_slider.min_value = 0.0
+	music_slider.max_value = 100.0
 	music_slider.step = 1.0
 	music_slider.value_changed.connect(_on_music_volume_changed)
-	panel.add_child(music_slider)
+	music_controls.add_child(music_slider)
 
 	music_value_label = Label.new()
-	music_value_label.position = Vector2(510.0, 188.0)
 	music_value_label.custom_minimum_size = Vector2(90.0, 24.0)
 	music_value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	panel.add_child(music_value_label)
+	music_controls.add_child(music_value_label)
 
-	var back_button := Button.new()
-	back_button.text = "Back"
-	back_button.position = Vector2(230.0, 242.0)
-	back_button.custom_minimum_size = Vector2(160.0, 42.0)
-	back_button.add_theme_font_size_override("font_size", 18)
+	var back_button := _make_panel_back_button()
 	back_button.pressed.connect(func() -> void:
 		_show_root_panel()
 	)
-	panel.add_child(back_button)
+	stack.add_child(back_button)
 
 	return panel
 
@@ -502,22 +564,54 @@ func _on_exit_pressed() -> void:
 
 func _build_glossary_panel() -> Panel:
 	var panel := Panel.new()
-	panel.custom_minimum_size = Vector2(760.0, 520.0)
-	panel.position = Vector2(580.0, 160.0)
-	panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.04, 0.06, 0.1, 0.96), Color(0.44, 0.7, 0.96, 0.74), 12, 2))
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.position = Vector2(-490.0, -340.0)
+	panel.custom_minimum_size = Vector2(980.0, 680.0)
+	panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.04, 0.06, 0.1, 0.97), Color(0.44, 0.7, 0.96, 0.74), 20, 2))
+
+	var layout := MarginContainer.new()
+	layout.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layout.add_theme_constant_override("margin_left", 44)
+	layout.add_theme_constant_override("margin_right", 44)
+	layout.add_theme_constant_override("margin_top", 36)
+	layout.add_theme_constant_override("margin_bottom", 30)
+	panel.add_child(layout)
+
+	var stack := VBoxContainer.new()
+	stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	stack.add_theme_constant_override("separation", 14)
+	layout.add_child(stack)
 
 	var title := Label.new()
 	title.text = "Glossary"
-	title.position = Vector2(0.0, 16.0)
-	title.custom_minimum_size = Vector2(760.0, 32.0)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 30)
-	title.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 0.98))
-	panel.add_child(title)
+	title.add_theme_font_size_override("font_size", 44)
+	title.add_theme_color_override("font_color", Color(1.0, 0.95, 0.78, 1.0))
+	title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
+	title.add_theme_constant_override("shadow_offset_x", 2)
+	title.add_theme_constant_override("shadow_offset_y", 2)
+	stack.add_child(title)
+
+	var accent := ColorRect.new()
+	accent.custom_minimum_size = Vector2(180.0, 2.0)
+	accent.color = Color(0.62, 0.78, 0.96, 0.65)
+	accent.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	stack.add_child(accent)
+
+	var body_panel := Panel.new()
+	body_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.03, 0.05, 0.08, 0.72), Color(0.26, 0.4, 0.58, 0.56), 12, 1))
+	stack.add_child(body_panel)
 
 	var body := RichTextLabel.new()
-	body.position = Vector2(28.0, 62.0)
-	body.custom_minimum_size = Vector2(704.0, 396.0)
+	body.set_anchors_preset(Control.PRESET_FULL_RECT)
+	body.offset_left = 16.0
+	body.offset_top = 12.0
+	body.offset_right = -16.0
+	body.offset_bottom = -12.0
 	body.bbcode_enabled = true
 	body.fit_content = false
 	body.scroll_active = true
@@ -525,17 +619,13 @@ func _build_glossary_panel() -> Panel:
 	body.add_theme_font_size_override("normal_font_size", 16)
 	body.add_theme_color_override("default_color", Color(0.86, 0.94, 1.0, 0.96))
 	body.text = GLOSSARY_DATA.glossary_bbcode()
-	panel.add_child(body)
+	body_panel.add_child(body)
 
-	var back_button := Button.new()
-	back_button.text = "Back"
-	back_button.position = Vector2(300.0, 468.0)
-	back_button.custom_minimum_size = Vector2(160.0, 40.0)
-	back_button.add_theme_font_size_override("font_size", 18)
+	var back_button := _make_panel_back_button()
 	back_button.pressed.connect(func() -> void:
 		_show_root_panel()
 	)
-	panel.add_child(back_button)
+	stack.add_child(back_button)
 
 	return panel
 
@@ -640,11 +730,7 @@ func _build_difficulty_selector_panel() -> Panel:
 		difficulty_tier_name_labels.append(name_label)
 		difficulty_tier_desc_labels.append(desc_label)
 
-	var back_button := Button.new()
-	back_button.text = "Back"
-	back_button.custom_minimum_size = Vector2(180.0, 46.0)
-	back_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	back_button.add_theme_font_size_override("font_size", 20)
+	var back_button := _make_panel_back_button()
 	back_button.pressed.connect(func() -> void:
 		_show_root_panel()
 	)
@@ -705,16 +791,30 @@ func _on_music_volume_changed(value: float) -> void:
 
 func _sync_options_from_context() -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if master_slider != null:
+		master_slider.set_block_signals(true)
+	if music_slider != null:
+		music_slider.set_block_signals(true)
 	if run_context == null:
-		master_slider.value = 0.0
-		music_slider.value = -46.0
+		master_slider.value = _db_to_percent(0.0)
+		music_slider.value = _db_to_percent(-20.0)
+		if master_slider != null:
+			master_slider.set_block_signals(false)
+		if music_slider != null:
+			music_slider.set_block_signals(false)
 		_update_option_labels()
 		return
-	master_slider.value = float(run_context.get("master_volume_db"))
-	music_slider.value = float(run_context.get("music_volume_db"))
+	master_slider.value = _db_to_percent(float(run_context.get("master_volume_db")))
+	music_slider.value = _db_to_percent(float(run_context.get("music_volume_db")))
+	if master_slider != null:
+		master_slider.set_block_signals(false)
+	if music_slider != null:
+		music_slider.set_block_signals(false)
 	_update_option_labels()
 
-func _apply_options(master_db: float, music_db: float) -> void:
+func _apply_options(master_percent: float, music_percent: float) -> void:
+	var master_db := _percent_to_db(master_percent)
+	var music_db := _percent_to_db(music_percent)
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context != null and run_context.has_method("set_audio_settings"):
 		run_context.call("set_audio_settings", master_db, music_db, true)
@@ -723,9 +823,9 @@ func _apply_options(master_db: float, music_db: float) -> void:
 
 func _update_option_labels() -> void:
 	if master_value_label != null:
-		master_value_label.text = "%+d dB" % int(round(master_slider.value))
+		master_value_label.text = "%d%%" % int(round(master_slider.value))
 	if music_value_label != null:
-		music_value_label.text = "%+d dB" % int(round(music_slider.value))
+		music_value_label.text = "%d%%" % int(round(music_slider.value))
 
 func _start_menu_music() -> void:
 	if MENU_MUSIC == null:
@@ -735,7 +835,7 @@ func _start_menu_music() -> void:
 	menu_music_player.bus = "Master"
 	menu_music_player.finished.connect(_on_menu_music_finished)
 	add_child(menu_music_player)
-	_apply_menu_music_volume(music_slider.value)
+	_apply_menu_music_volume(_percent_to_db(music_slider.value))
 	menu_music_player.play()
 
 func _on_menu_music_finished() -> void:
@@ -746,7 +846,19 @@ func _on_menu_music_finished() -> void:
 func _apply_menu_music_volume(music_db: float) -> void:
 	if menu_music_player == null:
 		return
-	menu_music_player.volume_db = clampf(music_db, -60.0, -6.0)
+	menu_music_player.volume_db = clampf(music_db, AUDIO_DB_MIN, AUDIO_DB_MAX)
+
+func _percent_to_db(percent: float) -> float:
+	var clamped := clampf(percent, 0.0, 100.0)
+	if clamped <= 0.0:
+		return AUDIO_DB_MIN
+	return lerpf(AUDIO_DB_MIN, AUDIO_DB_MAX, clamped / 100.0)
+
+func _db_to_percent(db: float) -> float:
+	var clamped := clampf(db, AUDIO_DB_MIN, AUDIO_DB_MAX)
+	if clamped <= AUDIO_DB_MIN:
+		return 0.0
+	return inverse_lerp(AUDIO_DB_MIN, AUDIO_DB_MAX, clamped) * 100.0
 
 func _set_run_mode(mode: int) -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)

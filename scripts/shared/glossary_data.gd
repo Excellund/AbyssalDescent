@@ -218,7 +218,7 @@ static func glossary_bbcode() -> String:
 		lines.append("%s  [color=#BFD2E8]-[/color]  %s" % [_reward_tier_title_bbcode(row), row.get("desc", "")])
 	lines.append("")
 	lines.append(_section_title_bbcode("Encounters"))
-	var encounter_groups: Array[String] = ["Core", "Advanced", "Trial", "Objective", "Special", "Boss"]
+	var encounter_groups: Array[String] = ["Core", "Advanced", "Objective", "Trial", "Special", "Boss"]
 	for group_name in encounter_groups:
 		lines.append(_encounter_group_header_bbcode(group_name))
 		for row in _encounter_rows():

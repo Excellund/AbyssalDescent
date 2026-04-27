@@ -83,7 +83,7 @@ const DEBUG_MUTATOR_RANDOM_HARD := 6
 @export var hud_background_alpha: float = 0.7
 @export var normal_room_music: AudioStream
 @export var boss_room_music: AudioStream
-@export var music_volume_db: float = -46.0
+@export var music_volume_db: float = -20.0
 @export var music_intro_fade_duration: float = 1.6
 @export var music_crossfade_duration: float = 0.75
 @export var rest_heal_ratio: float = 0.32
@@ -1628,7 +1628,7 @@ func _is_reward_selection_active() -> bool:
 	return is_instance_valid(reward_selection_ui) and bool(reward_selection_ui.call("is_active"))
 
 func _set_music_volume_runtime(music_db: float) -> void:
-	music_volume_db = clampf(music_db, -60.0, -6.0)
+	music_volume_db = clampf(music_db, -80.0, 6.0)
 	if is_instance_valid(music_system):
 		music_system.set("music_volume_db", music_volume_db)
 

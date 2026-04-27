@@ -1,6 +1,8 @@
 extends Node
 
 const GLOSSARY_DATA := preload("res://scripts/shared/glossary_data.gd")
+const AUDIO_DB_MIN := -80.0
+const AUDIO_DB_MAX := 6.0
 
 signal pause_opened
 signal pause_closed
@@ -211,8 +213,8 @@ func _build_pause_options_panel() -> Panel:
 	pause_master_slider = HSlider.new()
 	pause_master_slider.position = Vector2(42.0, 112.0)
 	pause_master_slider.custom_minimum_size = Vector2(450.0, 24.0)
-	pause_master_slider.min_value = -40.0
-	pause_master_slider.max_value = 6.0
+	pause_master_slider.min_value = 0.0
+	pause_master_slider.max_value = 100.0
 	pause_master_slider.step = 1.0
 	pause_master_slider.value_changed.connect(_on_pause_master_volume_changed)
 	panel.add_child(pause_master_slider)
@@ -233,8 +235,8 @@ func _build_pause_options_panel() -> Panel:
 	pause_music_slider = HSlider.new()
 	pause_music_slider.position = Vector2(42.0, 192.0)
 	pause_music_slider.custom_minimum_size = Vector2(450.0, 24.0)
-	pause_music_slider.min_value = -60.0
-	pause_music_slider.max_value = -6.0
+	pause_music_slider.min_value = 0.0
+	pause_music_slider.max_value = 100.0
 	pause_music_slider.step = 1.0
 	pause_music_slider.value_changed.connect(_on_pause_music_volume_changed)
 	panel.add_child(pause_music_slider)
@@ -309,14 +311,20 @@ func _get_run_context() -> Node:
 func _sync_pause_options_from_context() -> void:
 	if pause_master_slider == null or pause_music_slider == null:
 		return
+	pause_master_slider.set_block_signals(true)
+	pause_music_slider.set_block_signals(true)
 	var run_context := _get_run_context()
 	if run_context == null:
-		pause_master_slider.value = 0.0
-		pause_music_slider.value = -46.0
+		pause_master_slider.value = _db_to_percent(0.0)
+		pause_music_slider.value = _db_to_percent(-20.0)
+		pause_master_slider.set_block_signals(false)
+		pause_music_slider.set_block_signals(false)
 		_update_pause_option_labels()
 		return
-	pause_master_slider.value = float(run_context.get("master_volume_db"))
-	pause_music_slider.value = float(run_context.get("music_volume_db"))
+	pause_master_slider.value = _db_to_percent(float(run_context.get("master_volume_db")))
+	pause_music_slider.value = _db_to_percent(float(run_context.get("music_volume_db")))
+	pause_master_slider.set_block_signals(false)
+	pause_music_slider.set_block_signals(false)
 	_update_pause_option_labels()
 
 func _on_pause_master_volume_changed(value: float) -> void:
@@ -325,16 +333,30 @@ func _on_pause_master_volume_changed(value: float) -> void:
 func _on_pause_music_volume_changed(value: float) -> void:
 	_apply_pause_options(pause_master_slider.value, value)
 
-func _apply_pause_options(master_db: float, music_db: float) -> void:
+func _apply_pause_options(master_percent: float, music_percent: float) -> void:
+	var master_db := _percent_to_db(master_percent)
+	var music_db := _percent_to_db(music_percent)
 	var run_context := _get_run_context()
 	if run_context != null and run_context.has_method("set_audio_settings"):
 		run_context.call("set_audio_settings", master_db, music_db, true)
 	if apply_music_volume_callback.is_valid():
-		apply_music_volume_callback.call(clampf(music_db, -60.0, -6.0))
+		apply_music_volume_callback.call(clampf(music_db, AUDIO_DB_MIN, AUDIO_DB_MAX))
 	_update_pause_option_labels()
 
 func _update_pause_option_labels() -> void:
 	if pause_master_value_label != null and pause_master_slider != null:
-		pause_master_value_label.text = "%+d dB" % int(round(pause_master_slider.value))
+		pause_master_value_label.text = "%d%%" % int(round(pause_master_slider.value))
 	if pause_music_value_label != null and pause_music_slider != null:
-		pause_music_value_label.text = "%+d dB" % int(round(pause_music_slider.value))
+		pause_music_value_label.text = "%d%%" % int(round(pause_music_slider.value))
+
+func _percent_to_db(percent: float) -> float:
+	var clamped := clampf(percent, 0.0, 100.0)
+	if clamped <= 0.0:
+		return AUDIO_DB_MIN
+	return lerpf(AUDIO_DB_MIN, AUDIO_DB_MAX, clamped / 100.0)
+
+func _db_to_percent(db: float) -> float:
+	var clamped := clampf(db, AUDIO_DB_MIN, AUDIO_DB_MAX)
+	if clamped <= AUDIO_DB_MIN:
+		return 0.0
+	return inverse_lerp(AUDIO_DB_MIN, AUDIO_DB_MAX, clamped) * 100.0
