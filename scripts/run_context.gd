@@ -9,10 +9,19 @@ const ACTIVE_RUN_SAVE_PATH := "user://active_run.save"
 const ACTIVE_RUN_VERSION := 1
 const AUDIO_VOLUME_MIN_DB := -80.0
 const AUDIO_VOLUME_MAX_DB := 6.0
+const SUPPORTED_RESOLUTIONS := [
+	{"width": 3840, "height": 2160, "label": "3840 x 2160"},
+	{"width": 2560, "height": 1440, "label": "2560 x 1440"},
+	{"width": 1920, "height": 1080, "label": "1920 x 1080"},
+	{"width": 1600, "height": 900, "label": "1600 x 900"},
+	{"width": 1280, "height": 720, "label": "1280 x 720"}
+]
 
 var run_mode: int = ENUMS.RunMode.STANDARD
 var master_volume_db: float = 0.0
 var music_volume_db: float = -20.0
+var resolution_width: int = SETTINGS_STORE.DEFAULT_RESOLUTION_WIDTH
+var resolution_height: int = SETTINGS_STORE.DEFAULT_RESOLUTION_HEIGHT
 var resume_saved_run_requested: bool = false
 
 ## Meta-progression state
@@ -22,9 +31,10 @@ var highest_unlocked_difficulty_tier: int = META_PROGRESS_STORE.TIER_PILGRIM
 var just_unlocked_tier: int = -1  ## -1 means no new unlock, otherwise the newly unlocked tier
 
 func _ready() -> void:
-	load_audio_settings()
+	load_settings()
 	load_meta_progress()
 	_apply_master_volume()
+	_apply_resolution()
 
 func set_run_mode(mode: Variant) -> void:
 	if mode is int:
@@ -41,22 +51,82 @@ func set_run_mode(mode: Variant) -> void:
 func is_endless_mode() -> bool:
 	return run_mode == ENUMS.RunMode.ENDLESS
 
-func load_audio_settings() -> void:
+func load_settings() -> void:
 	var loaded: Dictionary = SETTINGS_STORE.load_settings()
 	master_volume_db = clampf(float(loaded.get("master_volume_db", master_volume_db)), AUDIO_VOLUME_MIN_DB, AUDIO_VOLUME_MAX_DB)
 	music_volume_db = clampf(float(loaded.get("music_volume_db", music_volume_db)), AUDIO_VOLUME_MIN_DB, AUDIO_VOLUME_MAX_DB)
+	var normalized := _normalize_resolution(
+		int(loaded.get("resolution_width", resolution_width)),
+		int(loaded.get("resolution_height", resolution_height))
+	)
+	resolution_width = int(normalized.get("width", resolution_width))
+	resolution_height = int(normalized.get("height", resolution_height))
 
 func set_audio_settings(master_db: float, music_db: float, persist: bool = true) -> void:
 	master_volume_db = clampf(master_db, AUDIO_VOLUME_MIN_DB, AUDIO_VOLUME_MAX_DB)
 	music_volume_db = clampf(music_db, AUDIO_VOLUME_MIN_DB, AUDIO_VOLUME_MAX_DB)
 	_apply_master_volume()
 	if persist:
-		SETTINGS_STORE.save_settings(master_volume_db, music_volume_db)
+		SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, resolution_width, resolution_height)
+
+func set_resolution_settings(width: int, height: int, persist: bool = true) -> void:
+	var normalized := _normalize_resolution(width, height)
+	resolution_width = int(normalized.get("width", resolution_width))
+	resolution_height = int(normalized.get("height", resolution_height))
+	_apply_resolution()
+	if persist:
+		SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, resolution_width, resolution_height)
+
+func get_supported_resolution_options() -> Array[Dictionary]:
+	var options: Array[Dictionary] = []
+	for option in _get_available_resolution_options():
+		options.append(option.duplicate(true))
+	return options
 
 func _apply_master_volume() -> void:
 	var master_bus := AudioServer.get_bus_index("Master")
 	if master_bus >= 0:
 		AudioServer.set_bus_volume_db(master_bus, master_volume_db)
+
+func _apply_resolution() -> void:
+	var window := get_window()
+	if window == null:
+		return
+	var new_size := Vector2i(resolution_width, resolution_height)
+	window.content_scale_size = new_size
+	if DisplayServer.window_get_mode() != DisplayServer.WINDOW_MODE_WINDOWED:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	var screen_rect := DisplayServer.screen_get_usable_rect(DisplayServer.window_get_current_screen())
+	var offset_x := maxi(0, int(float(screen_rect.size.x - new_size.x) * 0.5))
+	var offset_y := maxi(0, int(float(screen_rect.size.y - new_size.y) * 0.5))
+	var centered := Vector2i(
+		screen_rect.position.x + offset_x,
+		screen_rect.position.y + offset_y
+	)
+	DisplayServer.window_set_size(new_size)
+	DisplayServer.window_set_position(centered)
+	window.size = new_size
+	window.position = centered
+
+func _get_available_resolution_options() -> Array[Dictionary]:
+	var screen_index := DisplayServer.window_get_current_screen()
+	var screen_size := DisplayServer.screen_get_size(screen_index)
+	var options: Array[Dictionary] = []
+	for option in SUPPORTED_RESOLUTIONS:
+		var width := int(option.get("width", 0))
+		var height := int(option.get("height", 0))
+		if width <= screen_size.x and height <= screen_size.y:
+			options.append(option)
+	if options.is_empty():
+		options.append(SUPPORTED_RESOLUTIONS[SUPPORTED_RESOLUTIONS.size() - 1])
+	return options
+
+func _normalize_resolution(width: int, height: int) -> Dictionary:
+	var options := _get_available_resolution_options()
+	for option in options:
+		if int(option.get("width", 0)) == width and int(option.get("height", 0)) == height:
+			return option
+	return options[0]
 
 func has_saved_run() -> bool:
 	return FileAccess.file_exists(ACTIVE_RUN_SAVE_PATH)

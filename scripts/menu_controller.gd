@@ -7,6 +7,7 @@ const ENUMS := preload("res://scripts/shared/enums.gd")
 const GLOSSARY_DATA := preload("res://scripts/shared/glossary_data.gd")
 const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
+const SETTINGS_STORE := preload("res://scripts/settings_store.gd")
 const MENU_QUOTE_NEUTRAL := "\"Something unfamiliar begins.\""
 const MENU_QUOTES_AFTER_DEATH := [
 	"\"Back already?\"",
@@ -35,6 +36,7 @@ var glossary_panel: Panel
 var difficulty_selector_panel: Panel
 var master_slider: HSlider
 var music_slider: HSlider
+var resolution_selector: OptionButton
 var master_value_label: Label
 var music_value_label: Label
 var menu_music_player: AudioStreamPlayer
@@ -285,6 +287,20 @@ func _make_button_style(bg_color: Color, border_color: Color, corner_radius: int
 	style.content_margin_bottom = 14.0
 	return style
 
+func _apply_option_selector_theme(selector: OptionButton) -> void:
+	if selector == null:
+		return
+	selector.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	selector.add_theme_font_size_override("font_size", 18)
+	selector.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 0.98))
+	selector.add_theme_color_override("font_hover_color", Color(0.98, 1.0, 1.0, 1.0))
+	selector.add_theme_color_override("font_pressed_color", Color(0.98, 1.0, 1.0, 1.0))
+	selector.add_theme_stylebox_override("normal", _make_button_style(Color(0.10, 0.15, 0.22, 0.95), Color(0.34, 0.56, 0.84, 0.72), 14, 2))
+	selector.add_theme_stylebox_override("hover", _make_button_style(Color(0.13, 0.19, 0.28, 0.98), Color(0.62, 0.82, 0.98, 0.88), 14, 2))
+	selector.add_theme_stylebox_override("pressed", _make_button_style(Color(0.08, 0.12, 0.18, 0.98), Color(0.74, 0.90, 1.0, 0.92), 14, 2))
+	selector.add_theme_stylebox_override("focus", _make_button_style(Color(0.13, 0.20, 0.29, 0.98), Color(0.86, 0.96, 1.0, 1.0), 14, 2))
+	selector.add_theme_stylebox_override("disabled", _make_button_style(Color(0.08, 0.10, 0.14, 0.82), Color(0.22, 0.26, 0.32, 0.54), 14, 2))
+
 func _apply_difficulty_button_theme(button: Button, state: String) -> void:
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.add_theme_font_size_override("font_size", 22)
@@ -422,7 +438,7 @@ func _build_options_panel() -> Panel:
 	var panel := Panel.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.position = Vector2(-380.0, -250.0)
-	panel.custom_minimum_size = Vector2(760.0, 500.0)
+	panel.custom_minimum_size = Vector2(760.0, 548.0)
 	panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.04, 0.06, 0.1, 0.97), Color(0.44, 0.7, 0.96, 0.74), 20, 2))
 
 	var layout := MarginContainer.new()
@@ -459,7 +475,7 @@ func _build_options_panel() -> Panel:
 	var rows := VBoxContainer.new()
 	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	rows.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	rows.add_theme_constant_override("separation", 14)
+	rows.add_theme_constant_override("separation", 18)
 	stack.add_child(rows)
 
 	var master_row := VBoxContainer.new()
@@ -521,6 +537,33 @@ func _build_options_panel() -> Panel:
 	music_value_label.custom_minimum_size = Vector2(90.0, 24.0)
 	music_value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	music_controls.add_child(music_value_label)
+
+	var resolution_row := VBoxContainer.new()
+	resolution_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	resolution_row.add_theme_constant_override("separation", 6)
+	rows.add_child(resolution_row)
+
+	var resolution_label := Label.new()
+	resolution_label.text = "Resolution"
+	resolution_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	resolution_label.add_theme_font_size_override("font_size", 18)
+	resolution_label.add_theme_color_override("font_color", Color(0.90, 0.96, 1.0, 0.96))
+	resolution_row.add_child(resolution_label)
+
+	resolution_selector = OptionButton.new()
+	resolution_selector.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	resolution_selector.custom_minimum_size = Vector2(0.0, 50.0)
+	_apply_option_selector_theme(resolution_selector)
+	resolution_selector.item_selected.connect(_on_resolution_selected)
+	resolution_row.add_child(resolution_selector)
+
+	var resolution_hint := Label.new()
+	resolution_hint.text = "Applies immediately and keeps the window centered."
+	resolution_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	resolution_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	resolution_hint.add_theme_font_size_override("font_size", 14)
+	resolution_hint.add_theme_color_override("font_color", Color(0.70, 0.80, 0.90, 0.76))
+	resolution_row.add_child(resolution_hint)
 
 	var back_button := _make_panel_back_button()
 	back_button.pressed.connect(func() -> void:
@@ -789,27 +832,53 @@ func _on_master_volume_changed(value: float) -> void:
 func _on_music_volume_changed(value: float) -> void:
 	_apply_options(master_slider.value, value)
 
+func _on_resolution_selected(index: int) -> void:
+	if resolution_selector == null:
+		return
+	var metadata: Variant = resolution_selector.get_item_metadata(index)
+	if not (metadata is Dictionary):
+		return
+	var resolution := metadata as Dictionary
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context != null and run_context.has_method("set_resolution_settings"):
+		run_context.call("set_resolution_settings", int(resolution.get("width", 0)), int(resolution.get("height", 0)), true)
+
 func _sync_options_from_context() -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if master_slider != null:
 		master_slider.set_block_signals(true)
 	if music_slider != null:
 		music_slider.set_block_signals(true)
+	if resolution_selector != null:
+		resolution_selector.set_block_signals(true)
 	if run_context == null:
 		master_slider.value = _db_to_percent(0.0)
 		music_slider.value = _db_to_percent(-20.0)
+		_populate_resolution_selector([], SETTINGS_STORE.DEFAULT_RESOLUTION_WIDTH, SETTINGS_STORE.DEFAULT_RESOLUTION_HEIGHT)
 		if master_slider != null:
 			master_slider.set_block_signals(false)
 		if music_slider != null:
 			music_slider.set_block_signals(false)
+		if resolution_selector != null:
+			resolution_selector.set_block_signals(false)
 		_update_option_labels()
 		return
 	master_slider.value = _db_to_percent(float(run_context.get("master_volume_db")))
 	music_slider.value = _db_to_percent(float(run_context.get("music_volume_db")))
+	var resolution_options: Array[Dictionary] = []
+	if run_context.has_method("get_supported_resolution_options"):
+		resolution_options = run_context.call("get_supported_resolution_options") as Array[Dictionary]
+	_populate_resolution_selector(
+		resolution_options,
+		int(run_context.get("resolution_width")),
+		int(run_context.get("resolution_height"))
+	)
 	if master_slider != null:
 		master_slider.set_block_signals(false)
 	if music_slider != null:
 		music_slider.set_block_signals(false)
+	if resolution_selector != null:
+		resolution_selector.set_block_signals(false)
 	_update_option_labels()
 
 func _apply_options(master_percent: float, music_percent: float) -> void:
@@ -826,6 +895,29 @@ func _update_option_labels() -> void:
 		master_value_label.text = "%d%%" % int(round(master_slider.value))
 	if music_value_label != null:
 		music_value_label.text = "%d%%" % int(round(music_slider.value))
+
+func _populate_resolution_selector(options: Array[Dictionary], selected_width: int, selected_height: int) -> void:
+	if resolution_selector == null:
+		return
+	resolution_selector.clear()
+	if options.is_empty():
+		options = [{
+			"width": selected_width,
+			"height": selected_height,
+			"label": "%d x %d" % [selected_width, selected_height]
+		}]
+	var best_match := -1
+	for index in range(options.size()):
+		var option := options[index]
+		var label := String(option.get("label", "%d x %d" % [int(option.get("width", 0)), int(option.get("height", 0))]))
+		resolution_selector.add_item(label)
+		resolution_selector.set_item_metadata(index, option)
+		if int(option.get("width", 0)) == selected_width and int(option.get("height", 0)) == selected_height:
+			best_match = index
+	if best_match == -1 and resolution_selector.item_count > 0:
+		best_match = 0
+	if best_match >= 0:
+		resolution_selector.select(best_match)
 
 func _start_menu_music() -> void:
 	if MENU_MUSIC == null:

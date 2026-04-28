@@ -19,6 +19,7 @@ var pause_options_panel: Panel
 var pause_glossary_panel: Panel
 var pause_master_slider: HSlider
 var pause_music_slider: HSlider
+var pause_resolution_selector: OptionButton
 var pause_master_value_label: Label
 var pause_music_value_label: Label
 var pause_menu_visible: bool = false
@@ -77,8 +78,9 @@ func _create_pause_menu_ui() -> void:
 	pause_menu_layer.add_child(backdrop)
 
 	pause_menu_panel = Panel.new()
+	pause_menu_panel.set_anchors_preset(Control.PRESET_CENTER)
 	pause_menu_panel.custom_minimum_size = Vector2(440.0, 480.0)
-	pause_menu_panel.position = Vector2(740.0, 260.0)
+	pause_menu_panel.position = Vector2(-220.0, -240.0)
 	var panel_style := StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.06, 0.09, 0.13, 0.94)
 	panel_style.border_color = Color(0.34, 0.56, 0.84, 0.78)
@@ -183,10 +185,45 @@ func _apply_destructive_button_style(button: Button) -> void:
 	button.add_theme_color_override("font_hover_color", Color(1.0, 0.94, 0.94, 1.0))
 	button.add_theme_color_override("font_pressed_color", Color(1.0, 0.82, 0.82, 1.0))
 
+func _apply_pause_option_selector_theme(selector: OptionButton) -> void:
+	if selector == null:
+		return
+	var normal_style := StyleBoxFlat.new()
+	normal_style.bg_color = Color(0.10, 0.15, 0.22, 0.95)
+	normal_style.border_color = Color(0.34, 0.56, 0.84, 0.72)
+	normal_style.set_border_width_all(2)
+	normal_style.set_corner_radius_all(10)
+	normal_style.content_margin_left = 18.0
+	normal_style.content_margin_right = 18.0
+	normal_style.content_margin_top = 12.0
+	normal_style.content_margin_bottom = 12.0
+	selector.add_theme_stylebox_override("normal", normal_style)
+
+	var hover_style := normal_style.duplicate() as StyleBoxFlat
+	hover_style.bg_color = Color(0.13, 0.19, 0.28, 0.98)
+	hover_style.border_color = Color(0.62, 0.82, 0.98, 0.88)
+	selector.add_theme_stylebox_override("hover", hover_style)
+
+	var pressed_style := normal_style.duplicate() as StyleBoxFlat
+	pressed_style.bg_color = Color(0.08, 0.12, 0.18, 0.98)
+	pressed_style.border_color = Color(0.74, 0.90, 1.0, 0.92)
+	selector.add_theme_stylebox_override("pressed", pressed_style)
+
+	var focus_style := normal_style.duplicate() as StyleBoxFlat
+	focus_style.bg_color = Color(0.13, 0.20, 0.29, 0.98)
+	focus_style.border_color = Color(0.86, 0.96, 1.0, 1.0)
+	selector.add_theme_stylebox_override("focus", focus_style)
+	selector.add_theme_font_size_override("font_size", 18)
+	selector.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 0.98))
+	selector.add_theme_color_override("font_hover_color", Color(0.98, 1.0, 1.0, 1.0))
+	selector.add_theme_color_override("font_pressed_color", Color(0.98, 1.0, 1.0, 1.0))
+	selector.alignment = HORIZONTAL_ALIGNMENT_LEFT
+
 func _build_pause_options_panel() -> Panel:
 	var panel := Panel.new()
-	panel.custom_minimum_size = Vector2(620.0, 300.0)
-	panel.position = Vector2(650.0, 380.0)
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.custom_minimum_size = Vector2(660.0, 430.0)
+	panel.position = Vector2(-330.0, -215.0)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.04, 0.06, 0.1, 0.95)
 	style.border_color = Color(0.44, 0.7, 0.96, 0.74)
@@ -197,7 +234,7 @@ func _build_pause_options_panel() -> Panel:
 	var title := Label.new()
 	title.text = "Options"
 	title.position = Vector2(0.0, 16.0)
-	title.custom_minimum_size = Vector2(620.0, 32.0)
+	title.custom_minimum_size = Vector2(660.0, 32.0)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 30)
 	title.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 0.98))
@@ -212,7 +249,7 @@ func _build_pause_options_panel() -> Panel:
 
 	pause_master_slider = HSlider.new()
 	pause_master_slider.position = Vector2(42.0, 112.0)
-	pause_master_slider.custom_minimum_size = Vector2(450.0, 24.0)
+	pause_master_slider.custom_minimum_size = Vector2(486.0, 24.0)
 	pause_master_slider.min_value = 0.0
 	pause_master_slider.max_value = 100.0
 	pause_master_slider.step = 1.0
@@ -220,7 +257,7 @@ func _build_pause_options_panel() -> Panel:
 	panel.add_child(pause_master_slider)
 
 	pause_master_value_label = Label.new()
-	pause_master_value_label.position = Vector2(510.0, 108.0)
+	pause_master_value_label.position = Vector2(548.0, 108.0)
 	pause_master_value_label.custom_minimum_size = Vector2(90.0, 24.0)
 	pause_master_value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	panel.add_child(pause_master_value_label)
@@ -234,7 +271,7 @@ func _build_pause_options_panel() -> Panel:
 
 	pause_music_slider = HSlider.new()
 	pause_music_slider.position = Vector2(42.0, 192.0)
-	pause_music_slider.custom_minimum_size = Vector2(450.0, 24.0)
+	pause_music_slider.custom_minimum_size = Vector2(486.0, 24.0)
 	pause_music_slider.min_value = 0.0
 	pause_music_slider.max_value = 100.0
 	pause_music_slider.step = 1.0
@@ -242,14 +279,37 @@ func _build_pause_options_panel() -> Panel:
 	panel.add_child(pause_music_slider)
 
 	pause_music_value_label = Label.new()
-	pause_music_value_label.position = Vector2(510.0, 188.0)
+	pause_music_value_label.position = Vector2(548.0, 188.0)
 	pause_music_value_label.custom_minimum_size = Vector2(90.0, 24.0)
 	pause_music_value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	panel.add_child(pause_music_value_label)
 
+	var resolution_label := Label.new()
+	resolution_label.text = "Resolution"
+	resolution_label.position = Vector2(42.0, 244.0)
+	resolution_label.custom_minimum_size = Vector2(260.0, 24.0)
+	resolution_label.add_theme_font_size_override("font_size", 18)
+	panel.add_child(resolution_label)
+
+	pause_resolution_selector = OptionButton.new()
+	pause_resolution_selector.position = Vector2(42.0, 272.0)
+	pause_resolution_selector.custom_minimum_size = Vector2(576.0, 48.0)
+	_apply_pause_option_selector_theme(pause_resolution_selector)
+	pause_resolution_selector.item_selected.connect(_on_pause_resolution_selected)
+	panel.add_child(pause_resolution_selector)
+
+	var resolution_hint := Label.new()
+	resolution_hint.text = "Applies immediately and recenters the game window."
+	resolution_hint.position = Vector2(42.0, 326.0)
+	resolution_hint.custom_minimum_size = Vector2(576.0, 34.0)
+	resolution_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	resolution_hint.add_theme_font_size_override("font_size", 14)
+	resolution_hint.add_theme_color_override("font_color", Color(0.70, 0.80, 0.90, 0.76))
+	panel.add_child(resolution_hint)
+
 	var back_button := Button.new()
 	back_button.text = "Back"
-	back_button.position = Vector2(230.0, 242.0)
+	back_button.position = Vector2(250.0, 374.0)
 	back_button.custom_minimum_size = Vector2(160.0, 42.0)
 	back_button.add_theme_font_size_override("font_size", 18)
 	back_button.pressed.connect(func() -> void:
@@ -262,8 +322,9 @@ func _build_pause_options_panel() -> Panel:
 
 func _build_pause_glossary_panel() -> Panel:
 	var panel := Panel.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.custom_minimum_size = Vector2(760.0, 520.0)
-	panel.position = Vector2(580.0, 160.0)
+	panel.position = Vector2(-380.0, -260.0)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.04, 0.06, 0.1, 0.96)
 	style.border_color = Color(0.44, 0.7, 0.96, 0.74)
@@ -309,22 +370,34 @@ func _get_run_context() -> Node:
 	return get_node_or_null(run_context_path)
 
 func _sync_pause_options_from_context() -> void:
-	if pause_master_slider == null or pause_music_slider == null:
+	if pause_master_slider == null or pause_music_slider == null or pause_resolution_selector == null:
 		return
 	pause_master_slider.set_block_signals(true)
 	pause_music_slider.set_block_signals(true)
+	pause_resolution_selector.set_block_signals(true)
 	var run_context := _get_run_context()
 	if run_context == null:
 		pause_master_slider.value = _db_to_percent(0.0)
 		pause_music_slider.value = _db_to_percent(-20.0)
+		_populate_pause_resolution_selector([], 1920, 1080)
 		pause_master_slider.set_block_signals(false)
 		pause_music_slider.set_block_signals(false)
+		pause_resolution_selector.set_block_signals(false)
 		_update_pause_option_labels()
 		return
 	pause_master_slider.value = _db_to_percent(float(run_context.get("master_volume_db")))
 	pause_music_slider.value = _db_to_percent(float(run_context.get("music_volume_db")))
+	var resolution_options: Array[Dictionary] = []
+	if run_context.has_method("get_supported_resolution_options"):
+		resolution_options = run_context.call("get_supported_resolution_options") as Array[Dictionary]
+	_populate_pause_resolution_selector(
+		resolution_options,
+		int(run_context.get("resolution_width")),
+		int(run_context.get("resolution_height"))
+	)
 	pause_master_slider.set_block_signals(false)
 	pause_music_slider.set_block_signals(false)
+	pause_resolution_selector.set_block_signals(false)
 	_update_pause_option_labels()
 
 func _on_pause_master_volume_changed(value: float) -> void:
@@ -332,6 +405,17 @@ func _on_pause_master_volume_changed(value: float) -> void:
 
 func _on_pause_music_volume_changed(value: float) -> void:
 	_apply_pause_options(pause_master_slider.value, value)
+
+func _on_pause_resolution_selected(index: int) -> void:
+	if pause_resolution_selector == null:
+		return
+	var metadata: Variant = pause_resolution_selector.get_item_metadata(index)
+	if not (metadata is Dictionary):
+		return
+	var resolution := metadata as Dictionary
+	var run_context := _get_run_context()
+	if run_context != null and run_context.has_method("set_resolution_settings"):
+		run_context.call("set_resolution_settings", int(resolution.get("width", 0)), int(resolution.get("height", 0)), true)
 
 func _apply_pause_options(master_percent: float, music_percent: float) -> void:
 	var master_db := _percent_to_db(master_percent)
@@ -348,6 +432,29 @@ func _update_pause_option_labels() -> void:
 		pause_master_value_label.text = "%d%%" % int(round(pause_master_slider.value))
 	if pause_music_value_label != null and pause_music_slider != null:
 		pause_music_value_label.text = "%d%%" % int(round(pause_music_slider.value))
+
+func _populate_pause_resolution_selector(options: Array[Dictionary], selected_width: int, selected_height: int) -> void:
+	if pause_resolution_selector == null:
+		return
+	pause_resolution_selector.clear()
+	if options.is_empty():
+		options = [{
+			"width": selected_width,
+			"height": selected_height,
+			"label": "%d x %d" % [selected_width, selected_height]
+		}]
+	var best_match := -1
+	for index in range(options.size()):
+		var option := options[index]
+		var label := String(option.get("label", "%d x %d" % [int(option.get("width", 0)), int(option.get("height", 0))]))
+		pause_resolution_selector.add_item(label)
+		pause_resolution_selector.set_item_metadata(index, option)
+		if int(option.get("width", 0)) == selected_width and int(option.get("height", 0)) == selected_height:
+			best_match = index
+	if best_match == -1 and pause_resolution_selector.item_count > 0:
+		best_match = 0
+	if best_match >= 0:
+		pause_resolution_selector.select(best_match)
 
 func _percent_to_db(percent: float) -> float:
 	var clamped := clampf(percent, 0.0, 100.0)
