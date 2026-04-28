@@ -40,6 +40,13 @@ var current_player_mutator: Dictionary = {}
 var _mutator_icon_killbox: Texture2D
 var _mutator_icon_fortified: Texture2D
 var _mutator_icon_hunters_focus: Texture2D
+const BOON_CARD_MAX_WIDTH := 1460.0
+const BOON_CARD_MIN_WIDTH := 860.0
+const BOON_CARD_HEIGHT := 118.0
+const BOON_CARD_GAP := 20.0
+const BOON_TOP_SAFE_Y := 156.0
+const BOON_TOP_MAX_Y := 210.0
+const BOON_SIDE_MARGIN_RATIO := 0.08
 
 func initialize(choice_count: int, reveal_duration: float) -> void:
 	boon_choice_count = choice_count
@@ -140,6 +147,8 @@ func _create_ui() -> void:
 	boon_layer = CanvasLayer.new()
 	boon_layer.layer = 130
 	add_child(boon_layer)
+	if get_viewport() != null and not get_viewport().size_changed.is_connected(_on_viewport_size_changed):
+		get_viewport().size_changed.connect(_on_viewport_size_changed)
 
 	boon_backdrop = ColorRect.new()
 	boon_backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -184,8 +193,8 @@ func _create_ui() -> void:
 	boon_card_rects.clear()
 	for i in range(boon_choice_count):
 		var panel := Panel.new()
-		panel.position = Vector2(220.0, 164.0 + i * 138.0)
-		panel.custom_minimum_size = Vector2(1460.0, 118.0)
+		panel.position = Vector2.ZERO
+		panel.custom_minimum_size = Vector2(BOON_CARD_MAX_WIDTH, BOON_CARD_HEIGHT)
 		boon_layer.add_child(panel)
 
 		var icon_node := TextureRect.new()
@@ -223,9 +232,43 @@ func _create_ui() -> void:
 		boon_card_labels.append(option_label)
 		boon_card_stack_labels.append(stack_label)
 		boon_card_icon_nodes.append(icon_node)
-		boon_card_rects.append(Rect2(panel.position, panel.custom_minimum_size))
+		boon_card_rects.append(Rect2(Vector2.ZERO, Vector2.ZERO))
 
+	_layout_boon_cards()
 	boon_layer.visible = false
+
+func _on_viewport_size_changed() -> void:
+	_layout_boon_cards()
+	if boon_selection_active:
+		_update_boon_reveal_visuals()
+
+func _layout_boon_cards() -> void:
+	if boon_card_panels.is_empty() or get_viewport() == null:
+		return
+	var viewport_size := get_viewport().get_visible_rect().size
+	var side_margin := maxf(48.0, viewport_size.x * BOON_SIDE_MARGIN_RATIO)
+	var card_width := clampf(viewport_size.x - side_margin * 2.0, BOON_CARD_MIN_WIDTH, BOON_CARD_MAX_WIDTH)
+	var total_height := float(boon_choice_count) * BOON_CARD_HEIGHT + float(maxi(0, boon_choice_count - 1)) * BOON_CARD_GAP
+	var start_x := (viewport_size.x - card_width) * 0.5
+	var centered_y := (viewport_size.y - total_height) * 0.5
+	var start_y := clampf(centered_y, BOON_TOP_SAFE_Y, BOON_TOP_MAX_Y)
+	for i in range(boon_card_panels.size()):
+		var panel := boon_card_panels[i]
+		var base_pos := Vector2(start_x, start_y + float(i) * (BOON_CARD_HEIGHT + BOON_CARD_GAP))
+		panel.position = base_pos
+		panel.custom_minimum_size = Vector2(card_width, BOON_CARD_HEIGHT)
+		if i < boon_card_rects.size():
+			boon_card_rects[i] = Rect2(base_pos, Vector2(card_width, BOON_CARD_HEIGHT))
+		if i < boon_card_labels.size():
+			var label := boon_card_labels[i]
+			var stack_w := 210.0
+			var stack_x := card_width - stack_w - 18.0
+			var text_x := 56.0
+			label.position = Vector2(text_x, 6.0)
+			label.custom_minimum_size = Vector2(maxf(320.0, stack_x - text_x - 12.0), 106.0)
+		if i < boon_card_stack_labels.size():
+			var stack_label := boon_card_stack_labels[i]
+			stack_label.position = Vector2(card_width - stack_label.custom_minimum_size.x - 18.0, 10.0)
 
 func _apply_mode_theme() -> void:
 	if boon_backdrop == null or boon_title_label == null:
@@ -519,7 +562,9 @@ func _update_boon_reveal_visuals() -> void:
 		var delay := float(i) * 0.06
 		var local_t := clampf((reveal_t - delay) / 0.6, 0.0, 1.0)
 		var eased := 1.0 - pow(1.0 - local_t, 3.0)
-		var base_pos := Vector2(220.0, 164.0 + i * 138.0)
+		var base_pos := panel.position
+		if i < boon_card_rects.size():
+			base_pos = boon_card_rects[i].position
 		panel.position = base_pos + Vector2(0.0, (1.0 - eased) * 18.0)
 		panel.modulate = Color(1.0, 1.0, 1.0, eased)
 		panel.scale = Vector2(0.94 + 0.06 * eased, 0.94 + 0.06 * eased)

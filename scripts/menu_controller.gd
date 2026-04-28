@@ -29,6 +29,7 @@ const QUOTE_COLOR_COOL := Color(0.72, 0.86, 1.0, 0.9)
 const QUOTE_COLOR_WARM := Color(1.0, 0.95, 0.84, 1.0)
 const AUDIO_DB_MIN := -80.0
 const AUDIO_DB_MAX := 6.0
+const MENU_LAYOUT_BASE_SIZE := Vector2(1020.0, 720.0)
 
 var root_panel: Panel
 var options_panel: Panel
@@ -36,9 +37,11 @@ var glossary_panel: Panel
 var difficulty_selector_panel: Panel
 var master_slider: HSlider
 var music_slider: HSlider
+var display_mode_selector: OptionButton
 var resolution_selector: OptionButton
 var master_value_label: Label
 var music_value_label: Label
+var resolution_hint_label: Label
 var menu_music_player: AudioStreamPlayer
 var primary_run_button: Button
 var difficulty_tier_buttons: Array[Button] = []
@@ -59,9 +62,14 @@ func _ready() -> void:
 	set_process(false)
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	_build_ui()
+	_apply_menu_layout()
 	_play_menu_intro()
 	_sync_options_from_context()
 	_start_menu_music()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED:
+		_apply_menu_layout()
 
 func _change_to_gameplay_scene() -> void:
 	if get_tree() != null:
@@ -104,7 +112,8 @@ func _build_ui() -> void:
 	add_child(backdrop)
 
 	atmosphere_band = Panel.new()
-	atmosphere_band.position = Vector2(84.0, 74.0)
+	atmosphere_band.set_anchors_preset(Control.PRESET_CENTER)
+	atmosphere_band.position = Vector2(-310.0, -330.0)
 	atmosphere_band.custom_minimum_size = Vector2(620.0, 660.0)
 	atmosphere_band.add_theme_stylebox_override("panel", _make_panel_style(Color(0.05, 0.10, 0.16, 0.42), Color(0.12, 0.24, 0.38, 0.20), 26, 1))
 	add_child(atmosphere_band)
@@ -227,6 +236,29 @@ func _build_ui() -> void:
 	difficulty_selector_panel.visible = false
 	add_child(difficulty_selector_panel)
 	_show_root_panel(false)
+
+func _apply_menu_layout() -> void:
+	var viewport_size := get_viewport_rect().size
+	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
+		return
+	var fit_scale := minf(1.0, minf(viewport_size.x / MENU_LAYOUT_BASE_SIZE.x, viewport_size.y / MENU_LAYOUT_BASE_SIZE.y))
+	if root_panel != null:
+		_set_centered_panel_layout(root_panel, Vector2(980.0, 640.0), fit_scale, viewport_size)
+	if options_panel != null:
+		_set_centered_panel_layout(options_panel, Vector2(760.0, 548.0), fit_scale, viewport_size)
+	if glossary_panel != null:
+		_set_centered_panel_layout(glossary_panel, Vector2(980.0, 680.0), fit_scale, viewport_size)
+	if difficulty_selector_panel != null:
+		_set_centered_panel_layout(difficulty_selector_panel, Vector2(1020.0, 720.0), fit_scale, viewport_size)
+	if atmosphere_band != null:
+		_set_centered_panel_layout(atmosphere_band, Vector2(620.0, 660.0), fit_scale, viewport_size)
+
+func _set_centered_panel_layout(panel: Panel, base_size: Vector2, panel_scale: float, viewport_size: Vector2) -> void:
+	panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	panel.size = base_size
+	panel.scale = Vector2(panel_scale, panel_scale)
+	var scaled_size := base_size * panel_scale
+	panel.position = (viewport_size - scaled_size) * 0.5
 
 func _make_menu_button(text: String, emphasize: bool = false) -> Button:
 	var button := Button.new()
@@ -538,6 +570,25 @@ func _build_options_panel() -> Panel:
 	music_value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	music_controls.add_child(music_value_label)
 
+	var display_mode_row := VBoxContainer.new()
+	display_mode_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	display_mode_row.add_theme_constant_override("separation", 6)
+	rows.add_child(display_mode_row)
+
+	var display_mode_label := Label.new()
+	display_mode_label.text = "Display Mode"
+	display_mode_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	display_mode_label.add_theme_font_size_override("font_size", 18)
+	display_mode_label.add_theme_color_override("font_color", Color(0.90, 0.96, 1.0, 0.96))
+	display_mode_row.add_child(display_mode_label)
+
+	display_mode_selector = OptionButton.new()
+	display_mode_selector.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	display_mode_selector.custom_minimum_size = Vector2(0.0, 50.0)
+	_apply_option_selector_theme(display_mode_selector)
+	display_mode_selector.item_selected.connect(_on_display_mode_selected)
+	display_mode_row.add_child(display_mode_selector)
+
 	var resolution_row := VBoxContainer.new()
 	resolution_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	resolution_row.add_theme_constant_override("separation", 6)
@@ -557,13 +608,13 @@ func _build_options_panel() -> Panel:
 	resolution_selector.item_selected.connect(_on_resolution_selected)
 	resolution_row.add_child(resolution_selector)
 
-	var resolution_hint := Label.new()
-	resolution_hint.text = "Applies immediately and keeps the window centered."
-	resolution_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	resolution_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	resolution_hint.add_theme_font_size_override("font_size", 14)
-	resolution_hint.add_theme_color_override("font_color", Color(0.70, 0.80, 0.90, 0.76))
-	resolution_row.add_child(resolution_hint)
+	resolution_hint_label = Label.new()
+	resolution_hint_label.text = "Applies immediately and keeps the window centered."
+	resolution_hint_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	resolution_hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	resolution_hint_label.add_theme_font_size_override("font_size", 14)
+	resolution_hint_label.add_theme_color_override("font_color", Color(0.70, 0.80, 0.90, 0.76))
+	resolution_row.add_child(resolution_hint_label)
 
 	var back_button := _make_panel_back_button()
 	back_button.pressed.connect(func() -> void:
@@ -843,28 +894,48 @@ func _on_resolution_selected(index: int) -> void:
 	if run_context != null and run_context.has_method("set_resolution_settings"):
 		run_context.call("set_resolution_settings", int(resolution.get("width", 0)), int(resolution.get("height", 0)), true)
 
+func _on_display_mode_selected(index: int) -> void:
+	if display_mode_selector == null:
+		return
+	var metadata: Variant = display_mode_selector.get_item_metadata(index)
+	var selected_mode := String(metadata)
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context != null and run_context.has_method("set_display_mode"):
+		run_context.call("set_display_mode", selected_mode, true)
+	_sync_options_from_context()
+
 func _sync_options_from_context() -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if master_slider != null:
 		master_slider.set_block_signals(true)
 	if music_slider != null:
 		music_slider.set_block_signals(true)
+	if display_mode_selector != null:
+		display_mode_selector.set_block_signals(true)
 	if resolution_selector != null:
 		resolution_selector.set_block_signals(true)
 	if run_context == null:
 		master_slider.value = _db_to_percent(0.0)
 		music_slider.value = _db_to_percent(-20.0)
+		_populate_display_mode_selector([], SETTINGS_STORE.DEFAULT_DISPLAY_MODE)
 		_populate_resolution_selector([], SETTINGS_STORE.DEFAULT_RESOLUTION_WIDTH, SETTINGS_STORE.DEFAULT_RESOLUTION_HEIGHT)
 		if master_slider != null:
 			master_slider.set_block_signals(false)
 		if music_slider != null:
 			music_slider.set_block_signals(false)
+		if display_mode_selector != null:
+			display_mode_selector.set_block_signals(false)
 		if resolution_selector != null:
 			resolution_selector.set_block_signals(false)
+		_update_resolution_control_state(SETTINGS_STORE.DEFAULT_DISPLAY_MODE)
 		_update_option_labels()
 		return
 	master_slider.value = _db_to_percent(float(run_context.get("master_volume_db")))
 	music_slider.value = _db_to_percent(float(run_context.get("music_volume_db")))
+	var mode_options: Array[Dictionary] = []
+	if run_context.has_method("get_display_mode_options"):
+		mode_options = run_context.call("get_display_mode_options") as Array[Dictionary]
+	_populate_display_mode_selector(mode_options, String(run_context.get("display_mode")))
 	var resolution_options: Array[Dictionary] = []
 	if run_context.has_method("get_supported_resolution_options"):
 		resolution_options = run_context.call("get_supported_resolution_options") as Array[Dictionary]
@@ -877,8 +948,11 @@ func _sync_options_from_context() -> void:
 		master_slider.set_block_signals(false)
 	if music_slider != null:
 		music_slider.set_block_signals(false)
+	if display_mode_selector != null:
+		display_mode_selector.set_block_signals(false)
 	if resolution_selector != null:
 		resolution_selector.set_block_signals(false)
+	_update_resolution_control_state(String(run_context.get("display_mode")))
 	_update_option_labels()
 
 func _apply_options(master_percent: float, music_percent: float) -> void:
@@ -918,6 +992,39 @@ func _populate_resolution_selector(options: Array[Dictionary], selected_width: i
 		best_match = 0
 	if best_match >= 0:
 		resolution_selector.select(best_match)
+
+func _populate_display_mode_selector(options: Array[Dictionary], selected_mode: String) -> void:
+	if display_mode_selector == null:
+		return
+	display_mode_selector.clear()
+	if options.is_empty():
+		options = [
+			{"id": SETTINGS_STORE.DISPLAY_MODE_FULLSCREEN, "label": "Borderless Fullscreen"},
+			{"id": SETTINGS_STORE.DISPLAY_MODE_WINDOWED, "label": "Windowed"}
+		]
+	var best_match := -1
+	for index in range(options.size()):
+		var option := options[index]
+		var mode_id := String(option.get("id", SETTINGS_STORE.DISPLAY_MODE_FULLSCREEN))
+		var label := String(option.get("label", mode_id))
+		display_mode_selector.add_item(label)
+		display_mode_selector.set_item_metadata(index, mode_id)
+		if mode_id == selected_mode:
+			best_match = index
+	if best_match == -1 and display_mode_selector.item_count > 0:
+		best_match = 0
+	if best_match >= 0:
+		display_mode_selector.select(best_match)
+
+func _update_resolution_control_state(current_mode: String) -> void:
+	var is_windowed := current_mode == SETTINGS_STORE.DISPLAY_MODE_WINDOWED
+	if resolution_selector != null:
+		resolution_selector.disabled = not is_windowed
+	if resolution_hint_label != null:
+		if is_windowed:
+			resolution_hint_label.text = "Applies immediately and keeps the window centered."
+		else:
+			resolution_hint_label.text = "Disabled in fullscreen. Switch to Windowed to choose a resolution."
 
 func _start_menu_music() -> void:
 	if MENU_MUSIC == null:

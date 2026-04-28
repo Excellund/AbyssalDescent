@@ -9,6 +9,12 @@ const ACTIVE_RUN_SAVE_PATH := "user://active_run.save"
 const ACTIVE_RUN_VERSION := 1
 const AUDIO_VOLUME_MIN_DB := -80.0
 const AUDIO_VOLUME_MAX_DB := 6.0
+const DISPLAY_MODE_WINDOWED := SETTINGS_STORE.DISPLAY_MODE_WINDOWED
+const DISPLAY_MODE_FULLSCREEN := SETTINGS_STORE.DISPLAY_MODE_FULLSCREEN
+const DISPLAY_MODE_OPTIONS := [
+	{"id": DISPLAY_MODE_FULLSCREEN, "label": "Borderless Fullscreen"},
+	{"id": DISPLAY_MODE_WINDOWED, "label": "Windowed"}
+]
 const SUPPORTED_RESOLUTIONS := [
 	{"width": 3840, "height": 2160, "label": "3840 x 2160"},
 	{"width": 2560, "height": 1440, "label": "2560 x 1440"},
@@ -20,6 +26,9 @@ const SUPPORTED_RESOLUTIONS := [
 var run_mode: int = ENUMS.RunMode.STANDARD
 var master_volume_db: float = 0.0
 var music_volume_db: float = -20.0
+var base_viewport_width: int = 1920
+var base_viewport_height: int = 1080
+var display_mode: String = SETTINGS_STORE.DEFAULT_DISPLAY_MODE
 var resolution_width: int = SETTINGS_STORE.DEFAULT_RESOLUTION_WIDTH
 var resolution_height: int = SETTINGS_STORE.DEFAULT_RESOLUTION_HEIGHT
 var resume_saved_run_requested: bool = false
@@ -31,6 +40,8 @@ var highest_unlocked_difficulty_tier: int = META_PROGRESS_STORE.TIER_PILGRIM
 var just_unlocked_tier: int = -1  ## -1 means no new unlock, otherwise the newly unlocked tier
 
 func _ready() -> void:
+	base_viewport_width = int(ProjectSettings.get_setting("display/window/size/viewport_width", 1920))
+	base_viewport_height = int(ProjectSettings.get_setting("display/window/size/viewport_height", 1080))
 	load_settings()
 	load_meta_progress()
 	_apply_master_volume()
@@ -55,6 +66,7 @@ func load_settings() -> void:
 	var loaded: Dictionary = SETTINGS_STORE.load_settings()
 	master_volume_db = clampf(float(loaded.get("master_volume_db", master_volume_db)), AUDIO_VOLUME_MIN_DB, AUDIO_VOLUME_MAX_DB)
 	music_volume_db = clampf(float(loaded.get("music_volume_db", music_volume_db)), AUDIO_VOLUME_MIN_DB, AUDIO_VOLUME_MAX_DB)
+	display_mode = _normalize_display_mode(String(loaded.get("display_mode", display_mode)))
 	var normalized := _normalize_resolution(
 		int(loaded.get("resolution_width", resolution_width)),
 		int(loaded.get("resolution_height", resolution_height))
@@ -67,7 +79,7 @@ func set_audio_settings(master_db: float, music_db: float, persist: bool = true)
 	music_volume_db = clampf(music_db, AUDIO_VOLUME_MIN_DB, AUDIO_VOLUME_MAX_DB)
 	_apply_master_volume()
 	if persist:
-		SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, resolution_width, resolution_height)
+		SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, resolution_width, resolution_height, display_mode)
 
 func set_resolution_settings(width: int, height: int, persist: bool = true) -> void:
 	var normalized := _normalize_resolution(width, height)
@@ -75,7 +87,22 @@ func set_resolution_settings(width: int, height: int, persist: bool = true) -> v
 	resolution_height = int(normalized.get("height", resolution_height))
 	_apply_resolution()
 	if persist:
-		SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, resolution_width, resolution_height)
+		SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, resolution_width, resolution_height, display_mode)
+
+func set_display_mode(mode: String, persist: bool = true) -> void:
+	display_mode = _normalize_display_mode(mode)
+	_apply_resolution()
+	if persist:
+		SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, resolution_width, resolution_height, display_mode)
+
+func get_display_mode_options() -> Array[Dictionary]:
+	var options: Array[Dictionary] = []
+	for option in DISPLAY_MODE_OPTIONS:
+		options.append(option.duplicate(true))
+	return options
+
+func is_windowed_mode() -> bool:
+	return display_mode == DISPLAY_MODE_WINDOWED
 
 func get_supported_resolution_options() -> Array[Dictionary]:
 	var options: Array[Dictionary] = []
@@ -92,21 +119,27 @@ func _apply_resolution() -> void:
 	var window := get_window()
 	if window == null:
 		return
-	var new_size := Vector2i(resolution_width, resolution_height)
-	window.content_scale_size = new_size
-	if DisplayServer.window_get_mode() != DisplayServer.WINDOW_MODE_WINDOWED:
-		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
-	var screen_rect := DisplayServer.screen_get_usable_rect(DisplayServer.window_get_current_screen())
+	var base_size := Vector2i.ZERO
+	base_size.x = base_viewport_width
+	base_size.y = base_viewport_height
+	if window.content_scale_size != base_size:
+		window.content_scale_size = base_size
+	if display_mode == DISPLAY_MODE_FULLSCREEN:
+		window.borderless = false
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		return
+	window.borderless = false
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	var screen_index := window.current_screen
+	var screen_size := DisplayServer.screen_get_size(screen_index)
+	var max_w := maxi(640, screen_size.x - 80)
+	var max_h := maxi(480, screen_size.y - 80)
+	var new_size := Vector2i(mini(resolution_width, max_w), mini(resolution_height, max_h))
+	window.size = new_size
+	var screen_rect := DisplayServer.screen_get_usable_rect(screen_index)
 	var offset_x := maxi(0, int(float(screen_rect.size.x - new_size.x) * 0.5))
 	var offset_y := maxi(0, int(float(screen_rect.size.y - new_size.y) * 0.5))
-	var centered := Vector2i(
-		screen_rect.position.x + offset_x,
-		screen_rect.position.y + offset_y
-	)
-	DisplayServer.window_set_size(new_size)
-	DisplayServer.window_set_position(centered)
-	window.size = new_size
-	window.position = centered
+	window.position = Vector2i(screen_rect.position.x + offset_x, screen_rect.position.y + offset_y)
 
 func _get_available_resolution_options() -> Array[Dictionary]:
 	var screen_index := DisplayServer.window_get_current_screen()
@@ -127,6 +160,11 @@ func _normalize_resolution(width: int, height: int) -> Dictionary:
 		if int(option.get("width", 0)) == width and int(option.get("height", 0)) == height:
 			return option
 	return options[0]
+
+func _normalize_display_mode(mode: String) -> String:
+	if mode == DISPLAY_MODE_WINDOWED:
+		return DISPLAY_MODE_WINDOWED
+	return DISPLAY_MODE_FULLSCREEN
 
 func has_saved_run() -> bool:
 	return FileAccess.file_exists(ACTIVE_RUN_SAVE_PATH)
