@@ -48,6 +48,7 @@ static func get_tier_config(tier: int) -> Dictionary:
 				## No player bonuses
 				"player_starting_health_bonus": 0.0,
 				"player_damage_taken_mult": 1.0,
+				"enemy_contact_damage_mult": 0.94,
 				"rest_heal_ratio_mult": 1.0,
 				"difficulty_rank": 1
 			}

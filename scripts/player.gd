@@ -92,7 +92,7 @@ signal damage_taken(raw_amount: int, final_amount: int, damage_context: Dictiona
 @export var dash_overlap_clearance_duration: float = 0.08
 @export var max_health: int = 100
 @export var attack_damage: int = 20
-@export var attack_range: float = 74.0
+@export var attack_range: float = 78.0
 @export var attack_arc_degrees: float = 130.0
 @export var attack_cooldown: float = 0.28
 @export var attack_lock_duration: float = 0.12
@@ -171,7 +171,7 @@ var phantom_step_slow_duration: float = 0.7
 var void_dash_range_mult: float = 1.42
 # Static Wake: trail damage and lifetime
 var static_wake_damage: int = 8
-var static_wake_lifetime: float = 1.4
+var static_wake_lifetime: float = 1.6
 # Storm Crown: attack cadence proc that chains from the struck target
 var storm_crown_proc_every: int = 4
 var storm_crown_chain_targets: int = 2
@@ -400,7 +400,7 @@ func _process_active_dash(delta: float) -> bool:
 		static_wake_trail_emit_cooldown = maxf(0.0, static_wake_trail_emit_cooldown - delta)
 		if static_wake_trail_emit_cooldown <= 0.0:
 			static_wake_trails.append({"pos": global_position, "life": static_wake_lifetime})
-			static_wake_trail_emit_cooldown = 0.04
+			static_wake_trail_emit_cooldown = 0.035
 		queue_redraw()
 
 	if reward_wraithstep:
@@ -1157,7 +1157,7 @@ func _update_static_wake_trails(delta: float) -> void:
 			if not DAMAGEABLE.can_take_damage(enemy_node):
 				continue
 			var enemy_body := enemy_node as Node2D
-			if enemy_body.global_position.distance_to(trail_pos) <= 18.0:
+			if enemy_body.global_position.distance_to(trail_pos) <= 28.0:
 				var wake_tick_damage := maxi(1, int(round(float(static_wake_damage) * delta * 6.0)))
 				wake_tick_damage = _apply_objective_mutator_damage_mult(wake_tick_damage)
 				DAMAGEABLE.apply_damage(enemy_node, wake_tick_damage)
@@ -1392,8 +1392,8 @@ func _draw_trial_reward_state() -> void:
 			var trail_pos: Vector2 = trail_entry["pos"]
 			var life_ratio: float = clampf(trail_entry["life"] / maxf(0.001, static_wake_lifetime), 0.0, 1.0)
 			var local_pos := to_local(trail_pos)
-			draw_circle(local_pos, 7.0 * life_ratio, Color(0.96, 0.96, 0.36, 0.28 * life_ratio))
-			draw_arc(local_pos, 9.0 * life_ratio, 0.0, TAU, 14, Color(1.0, 1.0, 0.5, 0.42 * life_ratio), 1.2)
+			draw_circle(local_pos, 10.0 * life_ratio, Color(0.96, 0.96, 0.36, 0.28 * life_ratio))
+			draw_arc(local_pos, 13.0 * life_ratio, 0.0, TAU, 14, Color(1.0, 1.0, 0.5, 0.42 * life_ratio), 1.2)
 
 	if reward_storm_crown:
 		var crown_pulse := 0.5 + 0.5 * sin(t * 7.8 + 0.9)

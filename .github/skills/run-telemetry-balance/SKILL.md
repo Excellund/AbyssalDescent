@@ -49,14 +49,19 @@ Use this skill when you need evidence from real runs before changing encounter b
    - Query: get_balance_telemetry(25, 21, true, "")
    - Use when: reproducing issues that only appear in controlled debug runs.
 
+## Terminology Note
+- **Bearing** = difficulty tier (Pilgrim, Delver, Harbinger, Forsworn).
+- **Encounter** = room composition type (Skirmish, Crossfire, Blitz, Onslaught, Fortress, Suppression, Vanguard, Ambush, Gauntlet).
+- The code stores encounter type in fields called `bearing_key` and `bearing_label`, and aggregate buckets are named `damage_by_bearing`, `deaths_by_bearing`, etc. These are code-level names; conceptually they track **encounter** type, not difficulty tier.
+
 ## Core Aggregates To Read First
 - outcomes
 - damage_by_source
 - damage_by_ability
-- damage_by_bearing
-- deaths_by_bearing
-- room_entries_by_bearing
-- door_choices_by_bearing
+- damage_by_bearing (= damage by encounter type in code)
+- deaths_by_bearing (= deaths by encounter type in code)
+- room_entries_by_bearing (= room entries by encounter type in code)
+- door_choices_by_bearing (= door choices by encounter type in code)
 
 ## Interpretation Workflow
 1. Validate sample quality.
@@ -64,14 +69,15 @@ Use this skill when you need evidence from real runs before changing encounter b
    - Confirm version filter matches the balance target build.
    - Keep debug runs excluded unless explicitly investigating debug-only behavior.
 2. Find dominant pressure channels.
-   - Compare damage_by_bearing vs room_entries_by_bearing.
-   - Compare deaths_by_bearing vs door_choices_by_bearing.
+   - Compare damage_by_bearing (per-encounter) vs room_entries_by_bearing (per-encounter).
+   - Compare deaths_by_bearing (per-encounter) vs door_choices_by_bearing (per-encounter).
 3. Map pressure to design levers.
-   - Composition levers in scripts/encounter_profile_builder.gd.
+   - Encounter composition levers in scripts/encounter_profile_builder.gd.
    - Mutator/stat levers in scripts/encounter_profile_builder.gd and scripts/enemy_spawner.gd.
-   - Tier pressure levers in scripts/difficulty_config.gd.
+   - Per-bearing (difficulty tier) pressure levers in scripts/difficulty_config.gd.
 4. Propose identity-safe adjustments.
-   - Preserve each bearing's fantasy while tuning cadence, role mix, and bounded stats.
+   - Preserve each encounter's fantasy while tuning cadence, role mix, and bounded stats.
+   - Check per-bearing (difficulty) rank_counts if a specific tier is over- or under-pressured.
 
 ## Caveats
 - Deleting user://run_telemetry.save resets history; a new file is created on the next telemetry-enabled run.

@@ -1,12 +1,16 @@
 ---
 name: encounter-identity-balance
-description: "Balance or retune encounters in Godot while preserving encounter identity first. Use for per-bearing tuning, pressure changes, and encounter composition adjustments."
+description: "Balance or retune encounters in Godot while preserving encounter identity first. Use for per-bearing difficulty tuning, pressure changes, and encounter composition adjustments."
 argument-hint: "Encounter names, target bearings, and balance goals"
 ---
 
 # Encounter Identity Balance
 
 Use this skill when encounter balance is changing and identity must remain the primary constraint.
+
+## Terminology
+- **Encounter**: a room composition type — Skirmish, Crossfire, Blitz, Onslaught, Fortress, Suppression, Vanguard, Ambush, Gauntlet.
+- **Bearing**: a difficulty tier — Pilgrim, Delver, Harbinger, Forsworn. "Per-bearing tuning" means adjusting how an encounter plays at each difficulty tier.
 
 ## Goals
 - Preserve the encounter fantasy and signature threat pattern.
@@ -20,8 +24,8 @@ Use this skill when encounter balance is changing and identity must remain the p
 2. Choose scaling strategy.
    - Prefer encounter-specific scaling helpers when identity-sensitive.
    - Use shared scaling only where identity remains intact.
-3. Apply per-bearing tuning.
-   - Tune Pilgrim, Delver, Harbinger, Forsworn intentionally.
+3. Apply per-bearing (per-difficulty-tier) tuning.
+   - Tune Pilgrim, Delver, Harbinger, Forsworn rank_counts intentionally.
    - Keep progression monotonic unless a deliberate exception is documented.
 4. Validate route and runtime consistency.
    - Ensure route output still matches expected encounter intent.
@@ -30,8 +34,8 @@ Use this skill when encounter balance is changing and identity must remain the p
    - Early-depth and late-depth spot checks.
    - Objective and trial parity checks when affected.
 6. Summarize clearly.
-   - State what identity was preserved.
-   - State what pressure lever changed and why.
+   - State which encounter's identity was preserved.
+   - State which bearing (difficulty tier) the pressure lever changed and why.
 
 ## Key Files
 - scripts/encounter_profile_builder.gd

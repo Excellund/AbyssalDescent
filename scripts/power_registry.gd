@@ -128,10 +128,10 @@ const TRIAL_POWER_BALANCE := {
 		"range_mult_per_stack": 0.12
 	},
 	"static_wake": {
-		"damage_base": 6,
-		"damage_per_stack": 3,
-		"lifetime_base": 1.2,
-		"lifetime_per_stack": 0.25
+		"damage_base": 8,
+		"damage_per_stack": 5,
+		"lifetime_base": 1.6,
+		"lifetime_per_stack": 0.35
 	},
 	"storm_crown": {
 		"proc_every_base": 5,
