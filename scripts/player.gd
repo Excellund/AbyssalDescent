@@ -15,8 +15,12 @@ const RUN_SNAPSHOT_PROPERTIES := [
 	"attack_damage",
 	"attack_range",
 	"attack_arc_degrees",
+	"first_strike_bonus_damage",
 	"attack_cooldown",
 	"attack_lock_duration",
+	"battle_trance_move_speed_bonus",
+	"battle_trance_duration",
+	"battle_trance_active_left",
 	"iron_skin_armor",
 	"iron_skin_stacks",
 	"reward_razor_wind",
@@ -92,12 +96,14 @@ signal damage_taken(raw_amount: int, final_amount: int, damage_context: Dictiona
 @export var attack_arc_degrees: float = 130.0
 @export var attack_cooldown: float = 0.28
 @export var attack_lock_duration: float = 0.12
+@export var battle_trance_duration: float = 1.25
 
 var dash_time_left: float = 0.0
 var dash_cooldown_left: float = 0.0
 var last_move_direction: Vector2 = Vector2.RIGHT
 var dash_direction: Vector2 = Vector2.ZERO
 var attack_cooldown_left: float = 0.0
+var first_strike_bonus_damage: int = 0
 var scene_restart_queued: bool = false
 var health_state
 var player_feedback
@@ -107,6 +113,8 @@ var attack_anim_duration: float = 0.12
 var visual_facing_direction: Vector2 = Vector2.RIGHT
 var attack_lock_time_left: float = 0.0
 var attack_lock_direction: Vector2 = Vector2.RIGHT
+var battle_trance_move_speed_bonus: float = 0.0
+var battle_trance_active_left: float = 0.0
 var attack_combo_counter: int = 0
 var dash_phasing_active: bool = false
 var dash_phase_release_left: float = 0.0
@@ -220,6 +228,7 @@ func _physics_process(delta: float) -> void:
 	_update_dash_phase_state(delta)
 	_update_attack_cooldown(delta)
 	_update_attack_lock(delta)
+	_update_battle_trance(delta)
 	_update_attack_animation(delta)
 	_update_visual_facing_direction()
 	_update_aegis_field_state(delta)
@@ -345,6 +354,11 @@ func _try_execute_attack(attack_direction: Vector2) -> void:
 func _update_attack_lock(delta: float) -> void:
 	if attack_lock_time_left > 0.0:
 		attack_lock_time_left = maxf(0.0, attack_lock_time_left - delta)
+
+func _update_battle_trance(delta: float) -> void:
+	if battle_trance_active_left <= 0.0:
+		return
+	battle_trance_active_left = maxf(0.0, battle_trance_active_left - delta)
 
 func _is_attack_locked() -> bool:
 	return attack_lock_time_left > 0.0
@@ -472,7 +486,8 @@ func _get_body_radius_for(node: Node, fallback: float) -> float:
 	return fallback
 
 func _update_ground_movement(direction: Vector2, delta: float) -> void:
-	var target_velocity := direction * max_speed
+	var trance_speed_bonus := battle_trance_move_speed_bonus if battle_trance_active_left > 0.0 else 0.0
+	var target_velocity := direction * (max_speed + trance_speed_bonus)
 	var applied_acceleration := _get_applied_acceleration(target_velocity)
 	var move_rate := applied_acceleration if direction != Vector2.ZERO else deceleration
 	velocity = velocity.move_toward(target_velocity, move_rate * delta)
@@ -763,7 +778,7 @@ func apply_power_for_test(power_id: String) -> bool:
 		return true
 
 	var boon_ids := {
-		"swift_strike": true,
+		"first_strike": true,
 		"heavy_blow": true,
 		"wide_arc": true,
 		"long_reach": true,
@@ -819,6 +834,7 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 			continue
 
 		var final_strike_damage := strike_damage + _get_hunters_snare_bonus_damage(enemy_node)
+		final_strike_damage += _get_first_strike_bonus_damage(enemy_node)
 		final_strike_damage += _consume_wraithstep_mark(enemy_node, enemy_body.global_position, strike_damage)
 		DAMAGEABLE.apply_damage(enemy_node, final_strike_damage)
 		_apply_hunters_snare(enemy_node)
@@ -836,6 +852,8 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		wind_damage = _apply_objective_mutator_damage_mult(wind_damage)
 		wind_context["damage"] = wind_damage
 		did_hit = _apply_razor_wind(attack_direction, wind_context, rupture_triggered_enemy_ids, rupture_hit_enemy_ids) or did_hit
+	if did_hit:
+		_trigger_battle_trance()
 
 	return did_hit
 
@@ -861,6 +879,7 @@ func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupt
 		if absf(attack_direction.angle_to(to_enemy.normalized())) > wind_half_arc:
 			continue
 		var final_wind_damage := wind_damage + _get_hunters_snare_bonus_damage(enemy_node)
+		final_wind_damage += _get_first_strike_bonus_damage(enemy_node)
 		final_wind_damage += _consume_wraithstep_mark(enemy_node, enemy_body.global_position, wind_damage)
 		DAMAGEABLE.apply_damage(enemy_node, final_wind_damage)
 		_apply_hunters_snare(enemy_node)
@@ -889,6 +908,27 @@ func _apply_hunters_snare(enemy_node: Object) -> void:
 		return
 	if enemy_node.has_method("apply_slow"):
 		enemy_node.call("apply_slow", hunters_snare_slow_duration, hunters_snare_slow_mult)
+
+func _trigger_battle_trance() -> void:
+	if battle_trance_move_speed_bonus <= 0.0:
+		return
+	battle_trance_active_left = battle_trance_duration
+
+func _get_first_strike_bonus_damage(enemy_node: Object) -> int:
+	if first_strike_bonus_damage <= 0:
+		return 0
+	if not is_instance_valid(enemy_node):
+		return 0
+	var enemy_health_state: Variant = enemy_node.get("health_state")
+	if enemy_health_state == null or not is_instance_valid(enemy_health_state):
+		return 0
+	var enemy_max := int(enemy_health_state.get("max_health"))
+	if enemy_max <= 0:
+		return 0
+	var enemy_current := int(enemy_health_state.get("current_health"))
+	if float(enemy_current) / float(enemy_max) >= 0.7:
+		return first_strike_bonus_damage
+	return 0
 
 func _apply_rupture_wave(epicenter: Vector2, source_damage: int, rupture_hit_enemy_ids: Dictionary = {}) -> void:
 	var wave_damage := maxi(1, int(round(float(source_damage) * rupture_wave_damage_ratio)))

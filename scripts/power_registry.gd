@@ -9,11 +9,10 @@ const POWER_TYPE_UPGRADE = "upgrade"  # Stat boosts: Swift Strike, Heavy Blow, e
 const POWER_TYPE_TRIAL = "trial_power"  # Combat abilities: Razor Wind, Execution Edge, Rupture Wave
 
 const UPGRADE_BALANCE := {
-	"swift_strike": {
-		"kind": "mul_min",
-		"property": "attack_cooldown",
-		"mult": 0.82,
-		"min": 0.08
+	"first_strike": {
+		"kind": "add_int",
+		"property": "first_strike_bonus_damage",
+		"add": 5
 	},
 	"heavy_blow": {
 		"kind": "add_int",
@@ -50,10 +49,9 @@ const UPGRADE_BALANCE := {
 		"stack_property": "iron_skin_stacks"
 	},
 	"battle_trance": {
-		"kind": "mul_min",
-		"property": "attack_lock_duration",
-		"mult": 0.84,
-		"min": 0.05
+		"kind": "add_float",
+		"property": "battle_trance_move_speed_bonus",
+		"add": 22.0
 	},
 	"surge_step": {
 		"kind": "add_float",
@@ -61,9 +59,9 @@ const UPGRADE_BALANCE := {
 		"add": 85.0
 	},
 	"kinetic_drive": {
-		"kind": "add_float",
-		"property": "acceleration",
-		"add": 320.0
+		"kind": "add_int",
+		"property": "max_health",
+		"add": 15
 	}
 }
 
@@ -163,6 +161,7 @@ const TRIAL_POWER_BALANCE := {
 }
 
 const UPGRADE_STACK_LIMITS := {
+	"first_strike": 3,
 	"long_reach": 3,
 	"iron_skin": 3,
 	"battle_trance": 3,
@@ -207,7 +206,7 @@ func _ready() -> void:
 
 ## Return all upgrades (stat boosts)
 func get_upgrade_pool(player_reference: Node = null) -> Array[Dictionary]:
-	var swift_desc := _get_upgrade_fallback_description("swift_strike")
+	var first_strike_desc := _get_upgrade_fallback_description("first_strike")
 	var heavy_desc := _get_upgrade_fallback_description("heavy_blow")
 	var wide_desc := _get_upgrade_fallback_description("wide_arc")
 	var reach_desc := _get_upgrade_fallback_description("long_reach")
@@ -218,7 +217,7 @@ func get_upgrade_pool(player_reference: Node = null) -> Array[Dictionary]:
 	var surge_desc := _get_upgrade_fallback_description("surge_step")
 	var kinetic_desc := _get_upgrade_fallback_description("kinetic_drive")
 	if is_instance_valid(player_reference) and player_reference.has_method("get_upgrade_card_desc"):
-		swift_desc = String(player_reference.call("get_upgrade_card_desc", "swift_strike"))
+		first_strike_desc = String(player_reference.call("get_upgrade_card_desc", "first_strike"))
 		heavy_desc = String(player_reference.call("get_upgrade_card_desc", "heavy_blow"))
 		wide_desc = String(player_reference.call("get_upgrade_card_desc", "wide_arc"))
 		reach_desc = String(player_reference.call("get_upgrade_card_desc", "long_reach"))
@@ -229,7 +228,7 @@ func get_upgrade_pool(player_reference: Node = null) -> Array[Dictionary]:
 		surge_desc = String(player_reference.call("get_upgrade_card_desc", "surge_step"))
 		kinetic_desc = String(player_reference.call("get_upgrade_card_desc", "kinetic_drive"))
 	return [
-		Power.new("swift_strike", "Swift Strike", swift_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("swift_strike"), get_power_balance("swift_strike")).to_dict(),
+		Power.new("first_strike", "First Strike", first_strike_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("first_strike"), get_power_balance("first_strike")).to_dict(),
 		Power.new("heavy_blow", "Heavy Blow", heavy_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("heavy_blow"), get_power_balance("heavy_blow")).to_dict(),
 		Power.new("wide_arc", "Wide Arc", wide_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("wide_arc"), get_power_balance("wide_arc")).to_dict(),
 		Power.new("long_reach", "Long Reach", reach_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("long_reach"), get_power_balance("long_reach")).to_dict(),
@@ -238,7 +237,7 @@ func get_upgrade_pool(player_reference: Node = null) -> Array[Dictionary]:
 		Power.new("iron_skin", "Iron Skin", iron_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("iron_skin"), get_power_balance("iron_skin")).to_dict(),
 		Power.new("battle_trance", "Battle Trance", trance_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("battle_trance"), get_power_balance("battle_trance")).to_dict(),
 		Power.new("surge_step", "Surge Step", surge_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("surge_step"), get_power_balance("surge_step")).to_dict(),
-		Power.new("kinetic_drive", "Kinetic Drive", kinetic_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("kinetic_drive"), get_power_balance("kinetic_drive")).to_dict(),
+		Power.new("kinetic_drive", "Heartstone", kinetic_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("kinetic_drive"), get_power_balance("kinetic_drive")).to_dict(),
 	]
 
 
@@ -287,7 +286,7 @@ func get_trial_power_pool(player_reference: Node = null) -> Array[Dictionary]:
 func get_objective_upgrade_pool(player_reference: Node = null) -> Array[Dictionary]:
 	var pool := get_upgrade_pool(player_reference)
 	var favored_ids := {
-		"swift_strike": true,
+		"first_strike": true,
 		"heavy_blow": true,
 		"long_reach": true,
 		"fleet_foot": true,
@@ -371,8 +370,8 @@ func get_power_stack_limit(power_id: String) -> int:
 func _get_upgrade_fallback_description(upgrade_id: String) -> String:
 	var data := get_power_balance(upgrade_id)
 	match upgrade_id:
-		"swift_strike":
-			return "Attack cooldown reduced by %.0f%%." % [(1.0 - float(data.get("mult", 1.0))) * 100.0]
+		"first_strike":
+			return "Bonus damage versus enemies above 70%% HP: +%d." % [int(data.get("add", 0))]
 		"heavy_blow":
 			return "Attack damage +%d." % [int(data.get("add", 0))]
 		"wide_arc":
@@ -386,11 +385,11 @@ func _get_upgrade_fallback_description(upgrade_id: String) -> String:
 		"iron_skin":
 			return "Armor +%d." % [int(data.get("add", 0))]
 		"battle_trance":
-			return "Attack lock duration reduced by %.0f%%." % [(1.0 - float(data.get("mult", 1.0))) * 100.0]
+			return "Hitting an enemy grants +%.0f move speed for a short time." % [float(data.get("add", 0.0))]
 		"surge_step":
 			return "Dash speed +%.0f." % [float(data.get("add", 0.0))]
 		"kinetic_drive":
-			return "Reach full move speed faster and snap into turns (acceleration +%.0f)." % [float(data.get("add", 0.0))]
+			return "Max health +%d (and heals immediately)." % [int(data.get("add", 0))]
 		_:
 			return "Upgrade your stats."
 
