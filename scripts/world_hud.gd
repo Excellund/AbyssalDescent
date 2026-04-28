@@ -12,6 +12,8 @@ const MUTATOR_ICON_KILLBOX_PATH := "res://assets/ui/mutators/killbox.svg"
 
 var status_panel: Panel
 var status_label: RichTextLabel
+var status_bearing_badge_panel: Panel
+var status_bearing_badge_label: Label
 var status_mutator_icon: TextureRect
 var status_mutator_label: Label
 var stats_panel: Panel
@@ -79,8 +81,12 @@ func _create_hud() -> void:
 	status_panel = Panel.new()
 	status_panel.custom_minimum_size = Vector2(302.0, 84.0)
 	var status_style := StyleBoxFlat.new()
-	status_style.bg_color = Color(0.03, 0.06, 0.1, 0.44)
-	status_style.border_color = Color(0.0, 0.0, 0.0, 0.0)
+	status_style.bg_color = Color(0.0, 0.0, 0.0, 0.34)
+	status_style.border_color = Color(0.76, 0.84, 0.92, 0.16)
+	status_style.border_width_left = 1
+	status_style.border_width_top = 1
+	status_style.border_width_right = 1
+	status_style.border_width_bottom = 1
 	status_style.corner_radius_top_left = 10
 	status_style.corner_radius_top_right = 10
 	status_style.corner_radius_bottom_left = 10
@@ -101,6 +107,35 @@ func _create_hud() -> void:
 	status_label.add_theme_constant_override("shadow_offset_x", 1)
 	status_label.add_theme_constant_override("shadow_offset_y", 1)
 	status_panel.add_child(status_label)
+
+	status_bearing_badge_panel = Panel.new()
+	status_bearing_badge_panel.position = Vector2(206.0, 7.0)
+	status_bearing_badge_panel.custom_minimum_size = Vector2(88.0, 24.0)
+	var badge_style := StyleBoxFlat.new()
+	badge_style.bg_color = Color(0.26, 0.38, 0.34, 0.82)
+	badge_style.border_color = Color(0.72, 0.9, 0.84, 0.94)
+	badge_style.border_width_left = 1
+	badge_style.border_width_top = 1
+	badge_style.border_width_right = 1
+	badge_style.border_width_bottom = 1
+	badge_style.corner_radius_top_left = 6
+	badge_style.corner_radius_top_right = 6
+	badge_style.corner_radius_bottom_left = 6
+	badge_style.corner_radius_bottom_right = 6
+	status_bearing_badge_panel.add_theme_stylebox_override("panel", badge_style)
+	status_panel.add_child(status_bearing_badge_panel)
+
+	status_bearing_badge_label = Label.new()
+	status_bearing_badge_label.position = Vector2(1.0, 0.0)
+	status_bearing_badge_label.custom_minimum_size = Vector2(72.0, 24.0)
+	status_bearing_badge_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	status_bearing_badge_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	status_bearing_badge_label.add_theme_font_size_override("font_size", 13)
+	status_bearing_badge_label.add_theme_color_override("font_color", Color(0.9, 0.98, 0.94, 0.98))
+	status_bearing_badge_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.88))
+	status_bearing_badge_label.add_theme_constant_override("shadow_offset_x", 0)
+	status_bearing_badge_label.add_theme_constant_override("shadow_offset_y", 0)
+	status_bearing_badge_panel.add_child(status_bearing_badge_label)
 
 	status_mutator_icon = TextureRect.new()
 	status_mutator_icon.position = Vector2(10.0, 41.0)
@@ -125,8 +160,12 @@ func _create_hud() -> void:
 	stats_panel = Panel.new()
 	stats_panel.custom_minimum_size = Vector2(360.0, 214.0)
 	var stats_style := StyleBoxFlat.new()
-	stats_style.bg_color = Color(0.03, 0.06, 0.1, 0.44)
-	stats_style.border_color = Color(0.0, 0.0, 0.0, 0.0)
+	stats_style.bg_color = Color(0.0, 0.0, 0.0, 0.34)
+	stats_style.border_color = Color(0.76, 0.84, 0.92, 0.16)
+	stats_style.border_width_left = 1
+	stats_style.border_width_top = 1
+	stats_style.border_width_right = 1
+	stats_style.border_width_bottom = 1
 	stats_style.corner_radius_top_left = 10
 	stats_style.corner_radius_top_right = 10
 	stats_style.corner_radius_bottom_left = 10
@@ -306,6 +345,8 @@ func _update_status_panel_text(state: Dictionary) -> void:
 	var objective_relocation_hint_left := float(state.get("objective_relocation_hint_left", 0.0))
 	var _encounter_intro_grace_left := float(state.get("encounter_intro_grace_left", 0.0))
 	var encounter_intro_grace_active := bool(state.get("encounter_intro_grace_active", false))
+	var current_difficulty_tier := int(state.get("current_difficulty_tier", 0))
+	_update_bearing_badge(current_difficulty_tier)
 
 	var boss_unlocked := bool(state.get("boss_unlocked", false))
 	var first_boss_defeated := bool(state.get("first_boss_defeated", false))
@@ -332,14 +373,6 @@ func _update_status_panel_text(state: Dictionary) -> void:
 
 	if encounter_intro_grace_active:
 		status_label.text += "\n[center][color=#C8F0FF]Move to engage[/color][/center]"
-		var grace_text_h := maxf(34.0, status_label.get_content_height())
-		if status_panel != null:
-			status_panel.custom_minimum_size.y = maxf(84.0, status_label.position.y + grace_text_h + 30.0)
-		if status_mutator_icon != null:
-			status_mutator_icon.visible = false
-		if status_mutator_label != null:
-			status_mutator_label.visible = false
-		return
 
 	if objective_kind == "survival":
 		if objective_overtime:
@@ -374,6 +407,8 @@ func _update_status_panel_text(state: Dictionary) -> void:
 			status_mutator_icon.visible = false
 		if status_mutator_label != null:
 			status_mutator_label.visible = false
+		if status_panel != null:
+			status_panel.custom_minimum_size.y = maxf(84.0, row_top + 8.0)
 		return
 
 	var mutator_name := ENCOUNTER_CONTRACTS.mutator_name(current_room_enemy_mutator)
@@ -407,6 +442,60 @@ func _update_status_panel_text(state: Dictionary) -> void:
 	if status_mutator_label != null:
 		status_mutator_label.position = Vector2(start_x + icon_w + gap, row_top)
 		status_mutator_label.custom_minimum_size = Vector2(maxf(text_w + 2.0, 60.0), 24.0)
+	if status_panel != null:
+		status_panel.custom_minimum_size.y = maxf(84.0, row_top + 32.0)
+
+func _bearing_name_from_tier(tier: int) -> String:
+	match tier:
+		0:
+			return "Pilgrim"
+		1:
+			return "Delver"
+		2:
+			return "Harbinger"
+		3:
+			return "Forsworn"
+		_:
+			return "Pilgrim"
+
+func _bearing_color_from_tier(tier: int) -> Color:
+	match tier:
+		0:
+			return Color("#9FE7C7")
+		1:
+			return Color("#F3CE78")
+		2:
+			return Color("#F5A462")
+		3:
+			return Color("#E56D6D")
+		_:
+			return Color("#9FE7C7")
+
+func _update_bearing_badge(tier: int) -> void:
+	if status_bearing_badge_panel == null or status_bearing_badge_label == null:
+		return
+	var bearing_name := _bearing_name_from_tier(tier)
+	var tier_color := _bearing_color_from_tier(tier)
+	var tier_border := Color(tier_color.r, tier_color.g, tier_color.b, 0.98)
+	var tier_fill := Color(tier_color.r * 0.24, tier_color.g * 0.24, tier_color.b * 0.24, 0.86)
+	var style := status_bearing_badge_panel.get_theme_stylebox("panel")
+	if style is StyleBoxFlat:
+		var badge_style := style as StyleBoxFlat
+		badge_style.bg_color = tier_fill
+		badge_style.border_color = tier_border
+		status_bearing_badge_panel.add_theme_stylebox_override("panel", badge_style)
+	status_bearing_badge_label.text = bearing_name
+	status_bearing_badge_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.98))
+	var hud_font := ThemeDB.fallback_font
+	var text_w := 50.0
+	if hud_font != null:
+		text_w = hud_font.get_string_size(bearing_name, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 13).x
+	var badge_w := clampf(text_w + 20.0, 78.0, 122.0)
+	status_bearing_badge_panel.custom_minimum_size = Vector2(badge_w, 24.0)
+	status_bearing_badge_panel.size = Vector2(badge_w, 24.0)
+	status_bearing_badge_panel.position = Vector2(302.0 - badge_w - 8.0, 7.0)
+	status_bearing_badge_label.position = Vector2(1.0, 0.0)
+	status_bearing_badge_label.custom_minimum_size = Vector2(badge_w - 1.0, 24.0)
 
 func _update_player_mutator_panel(state: Dictionary) -> void:
 	if player_mutator_panel == null:

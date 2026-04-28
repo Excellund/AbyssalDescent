@@ -875,6 +875,7 @@ func _get_hud_state() -> Dictionary:
 	var hud_state := {
 		"room_size": current_room_size,
 		"current_room_label": current_room_label,
+		"current_difficulty_tier": current_difficulty_tier,
 		"rooms_cleared": rooms_cleared,
 		"room_depth": display_room_depth,
 		"run_cleared": run_cleared,
