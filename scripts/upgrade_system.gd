@@ -500,7 +500,7 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 		"first_strike":
 			var cur_bonus := int(cur_val)
 			var next_bonus := int(next_val)
-			return "[color=#c8daf0]Vs enemies above 70% HP:[/color] [color=#e8c96a]+%d dmg[/color] [color=#8899aa]->[/color] [color=#7de882]+%d dmg[/color]" % [cur_bonus, next_bonus]
+			return "[color=#c8daf0]Vs enemies above 70%% HP:[/color] [color=#e8c96a]+%d dmg[/color] [color=#8899aa]->[/color] [color=#7de882]+%d dmg[/color]" % [cur_bonus, next_bonus]
 		"heavy_blow":
 			return "[color=#c8daf0]Attack damage:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [int(cur_val), int(next_val)]
 		"wide_arc":
