@@ -24,9 +24,9 @@ static func get_tier_config(tier: int) -> Dictionary:
 				"trial_encounter_frequency_mult": 0.7,  ## Fewer trial encounters
 				"mutator_damage_mult": 0.8,  ## Mutators hurt less
 				## Player affordances on easiest tier
-				"player_starting_health_bonus": 20.0,  ## Extra starting health
-				"player_damage_taken_mult": 0.9,  ## 10% damage reduction
-				"player_potion_charges_bonus": 1,  ## Extra healing resource
+				"player_starting_health_bonus": 35.0,  ## Extra starting health
+				"player_damage_taken_mult": 0.78,  ## 22% damage reduction — enough to survive two slams where one would have killed
+				"rest_heal_ratio_mult": 1.25,  ## Rest Sites always heal more on Pilgrim instead of spending hidden charges
 				"difficulty_rank": 0
 			}
 		
@@ -48,7 +48,7 @@ static func get_tier_config(tier: int) -> Dictionary:
 				## No player bonuses
 				"player_starting_health_bonus": 0.0,
 				"player_damage_taken_mult": 1.0,
-				"player_potion_charges_bonus": 0,
+				"rest_heal_ratio_mult": 1.0,
 				"difficulty_rank": 1
 			}
 		
@@ -72,7 +72,7 @@ static func get_tier_config(tier: int) -> Dictionary:
 				## No player bonuses (veteran players don't need them)
 				"player_starting_health_bonus": 0.0,
 				"player_damage_taken_mult": 1.0,
-				"player_potion_charges_bonus": 0,
+				"rest_heal_ratio_mult": 1.0,
 				"difficulty_rank": 2
 			}
 		
@@ -96,7 +96,7 @@ static func get_tier_config(tier: int) -> Dictionary:
 				## No player bonuses
 				"player_starting_health_bonus": 0.0,
 				"player_damage_taken_mult": 1.0,
-				"player_potion_charges_bonus": 0,
+				"rest_heal_ratio_mult": 1.0,
 				"difficulty_rank": 3
 			}
 		
@@ -128,9 +128,9 @@ static func get_player_starting_health_bonus(tier: int) -> float:
 static func get_player_damage_taken_mult(tier: int) -> float:
 	return get_tier_multiplier(tier, "player_damage_taken_mult", 1.0)
 
-## Get player potion bonus for this tier
-static func get_player_potion_charges_bonus(tier: int) -> int:
-	return int(get_tier_value(tier, "player_potion_charges_bonus", 0))
+## Get Rest Site heal multiplier for this tier
+static func get_rest_heal_ratio_mult(tier: int) -> float:
+	return get_tier_multiplier(tier, "rest_heal_ratio_mult", 1.0)
 
 ## Get normalized difficulty rank for systemic scaling helpers
 static func get_difficulty_rank(tier: int) -> int:

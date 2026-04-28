@@ -99,7 +99,7 @@ const BEARING_DEFINITIONS := {
 			"lancer_count": 0
 		},
 		"rank_counts": [
-			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 3, "lurker_count": 0, "ram_count": 0, "lancer_count": 0},
+			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 2, "lurker_count": 0, "ram_count": 0, "lancer_count": 0},
 			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 5, "lurker_count": 0, "ram_count": 0, "lancer_count": 0},
 			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 2, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 1, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 7, "lurker_count": 0, "ram_count": 0, "lancer_count": 0},
 			{ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: 2, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: 0, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: 2, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: 9, "lurker_count": 0, "ram_count": 0, "lancer_count": 0}
@@ -685,7 +685,11 @@ func _build_survival_profile(depth: int) -> Dictionary:
 	var chasers := maxi(5, ENCOUNTER_CONTRACTS.profile_chaser_count(base) + 2)
 	var chargers := maxi(1, ENCOUNTER_CONTRACTS.profile_charger_count(base) + 1)
 	var archers := maxi(1, ENCOUNTER_CONTRACTS.profile_archer_count(base) + 1)
-	var shielders := maxi(1, ENCOUNTER_CONTRACTS.profile_shielder_count(base))
+	var shielders: int
+	if current_difficulty_tier == META_PROGRESS.TIER_PILGRIM and effective_depth < 4:
+		shielders = 0
+	else:
+		shielders = maxi(1, ENCOUNTER_CONTRACTS.profile_shielder_count(base))
 	var pressure_mutator := _build_killbox_mutator()
 	var profile := _build_profile("Last Stand", survival_room_size, chasers, chargers, archers, shielders, pressure_mutator)
 	var fortified_mutator := _build_fortified_mutator()

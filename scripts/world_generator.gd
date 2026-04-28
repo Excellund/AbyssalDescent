@@ -144,7 +144,6 @@ var rng := RandomNumberGenerator.new()
 var power_registry_instance: Node
 var current_difficulty_tier: int = 0
 var current_difficulty_config: Dictionary = {}
-var bonus_rest_heal_charges: int = 0
 
 var rooms_cleared: int = 0
 var room_depth: int = 0
@@ -1069,7 +1068,6 @@ func _apply_difficulty_tier_bonuses(difficulty_tier: int) -> void:
 		encounter_count = encounter_target
 		second_boss_encounter_count = maxi(1, encounter_target - 1)
 
-	bonus_rest_heal_charges = maxi(0, int(difficulty_config.get("player_potion_charges_bonus", 0)))
 	if player.has_method("set_incoming_damage_taken_mult"):
 		player.call("set_incoming_damage_taken_mult", float(difficulty_config.get("player_damage_taken_mult", 1.0)))
 	if player.has_method("set_incoming_contact_damage_mult"):
@@ -1216,7 +1214,6 @@ func _build_active_run_snapshot() -> Dictionary:
 		"objective_overtime": objective_overtime,
 		"objective_survival_quota_announced": objective_survival_quota_announced,
 		"current_difficulty_tier": current_difficulty_tier,
-		"bonus_rest_heal_charges": bonus_rest_heal_charges,
 		"player_snapshot": player_snapshot
 	}
 
@@ -1266,7 +1263,6 @@ func _apply_active_run_snapshot(snapshot: Dictionary) -> bool:
 	objective_overtime = bool(snapshot.get("objective_overtime", false))
 	objective_survival_quota_announced = bool(snapshot.get("objective_survival_quota_announced", false))
 	current_difficulty_tier = int(snapshot.get("current_difficulty_tier", current_difficulty_tier))
-	bonus_rest_heal_charges = int(snapshot.get("bonus_rest_heal_charges", bonus_rest_heal_charges))
 	objective_target_enemy = null
 	objective_target_type = ""
 	objective_target_name = ""
@@ -1573,10 +1569,8 @@ func _enter_rest_site() -> void:
 		_advance_room_progress()
 	if is_instance_valid(player) and player.has_method("heal"):
 		var player_max_health := int(player.get("max_health"))
-		var heal_amount := maxi(8, int(round(float(player_max_health) * rest_heal_ratio)))
-		if bonus_rest_heal_charges > 0:
-			bonus_rest_heal_charges -= 1
-			heal_amount += maxi(6, int(round(float(player_max_health) * 0.14)))
+		var heal_ratio_mult := float(current_difficulty_config.get("rest_heal_ratio_mult", 1.0))
+		var heal_amount := maxi(8, int(round(float(player_max_health) * rest_heal_ratio * heal_ratio_mult)))
 		player.call("heal", heal_amount)
 	_spawn_door_options()
 
