@@ -868,6 +868,9 @@ func _on_priority_target_died() -> void:
 func _get_hud_state() -> Dictionary:
 	var display_room_depth := room_depth
 	var between_rooms := choosing_next_room or _is_reward_selection_active()
+	var display_enemy_mutator := current_room_enemy_mutator
+	if between_rooms:
+		display_enemy_mutator = {}
 	# Keep the visible depth anchored to the cleared room until the next room is entered.
 	if between_rooms and not run_cleared and current_room_label != "Rest Site":
 		display_room_depth = maxi(0, room_depth - 1)
@@ -878,7 +881,7 @@ func _get_hud_state() -> Dictionary:
 		"rooms_cleared": rooms_cleared,
 		"room_depth": display_room_depth,
 		"run_cleared": run_cleared,
-		"current_room_enemy_mutator": current_room_enemy_mutator,
+		"current_room_enemy_mutator": display_enemy_mutator,
 		"in_boss_room": in_boss_room,
 		"active_room_enemy_count": active_room_enemy_count,
 		"active_objective_kind": active_objective_kind,
