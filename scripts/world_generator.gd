@@ -27,6 +27,7 @@ const WORLD_HUD_SCRIPT := preload("res://scripts/world_hud.gd")
 const WORLD_RENDERER_SCRIPT := preload("res://scripts/world_renderer.gd")
 const PAUSE_MENU_CONTROLLER_SCRIPT := preload("res://scripts/pause_menu_controller.gd")
 const VICTORY_SCREEN_SCRIPT := preload("res://scripts/victory_screen.gd")
+const DEFEAT_SCREEN_SCRIPT := preload("res://scripts/defeat_screen.gd")
 const DEBUG_ENCOUNTER_NONE := 0
 const DEBUG_ENCOUNTER_REST_SITE := 1
 const DEBUG_ENCOUNTER_SKIRMISH := 2
@@ -51,6 +52,9 @@ const DEBUG_MUTATOR_SIEGEBREAK := 3
 const DEBUG_MUTATOR_IRON_VOLLEY := 4
 const DEBUG_MUTATOR_KILLBOX := 5
 const DEBUG_MUTATOR_RANDOM_HARD := 6
+const DEBUG_END_SCREEN_NONE := 0
+const DEBUG_END_SCREEN_VICTORY := 1
+const DEBUG_END_SCREEN_DEFEAT := 2
 const DEBUG_POWER_PRESET_NONE := 0
 const DEBUG_POWER_PRESET_DASH_SPECIALIST := 1
 const DEBUG_POWER_PRESET_NO_DASH_BRUISER := 2
@@ -140,7 +144,7 @@ func _get_debug_encounter_reward_mode(encounter_key: String) -> int:
 @export_enum("None", "Rest Site", "Skirmish", "Crossfire", "Fortress", "Onslaught", "Vanguard", "Blitz", "Ambush", "Suppression", "Gauntlet", "Objective - Last Stand", "Objective - Cut the Signal", "Objective - Random", "Trial", "Warden", "Sovereign") var debug_start_encounter: int = DEBUG_ENCOUNTER_NONE
 @export var debug_start_depth: int = 1
 @export_enum("None", "Blood Rush", "Flashpoint", "Siegebreak", "Iron Volley", "Killbox", "Random Hard") var debug_mutator_override: int = DEBUG_MUTATOR_NONE
-@export var debug_trigger_victory: bool = false
+@export_enum("None", "Victory", "Defeat") var debug_end_screen_preview: int = DEBUG_END_SCREEN_NONE
 @export_enum("No Unlock:-1", "Pilgrim:0", "Delver:1", "Harbinger:2", "Forsworn:3") var debug_victory_unlock_tier: int = -1
 
 var player: Node2D
@@ -222,9 +226,11 @@ var objective_runtime: Node
 var reward_selection_ui: Node
 var pause_menu_controller: Node
 var victory_screen: Node
+var defeat_screen: Node
 var telemetry_run_id: String = ""
 var telemetry_enabled: bool = false
 var telemetry_run_finished: bool = false
+var player_defeated: bool = false
 
 func _ready() -> void:
 	rng.randomize()
@@ -238,6 +244,7 @@ func _ready() -> void:
 			player.connect("damage_taken", Callable(self, "_on_player_damage_taken"))
 		if player.has_signal("died"):
 			player.connect("died", Callable(self, "_on_player_died_for_telemetry"))
+			player.connect("died", Callable(self, "_on_player_died"))
 	_sync_audio_settings_from_context()
 	endless_boss_defeated = false
 
@@ -315,6 +322,9 @@ func _ready() -> void:
 	victory_screen = VICTORY_SCREEN_SCRIPT.new()
 	add_child(victory_screen)
 	victory_screen.connect("back_to_main_menu_requested", Callable(self, "_on_victory_back_to_menu"))
+	defeat_screen = DEFEAT_SCREEN_SCRIPT.new()
+	add_child(defeat_screen)
+	defeat_screen.connect("back_to_main_menu_requested", Callable(self, "_on_defeat_back_to_menu"))
 	objective_runtime = OBJECTIVE_RUNTIME_SCRIPT.new()
 	add_child(objective_runtime)
 	objective_runtime.initialize(self, rng)
@@ -324,9 +334,13 @@ func _ready() -> void:
 	if resumed_run:
 		return
 	_apply_debug_start_powers_if_needed()
-	if debug_trigger_victory:
-		victory_screen.call("show_victory", 0, debug_victory_unlock_tier)
-		return
+	match debug_end_screen_preview:
+		DEBUG_END_SCREEN_VICTORY:
+			victory_screen.call("show_victory", 0, debug_victory_unlock_tier)
+			return
+		DEBUG_END_SCREEN_DEFEAT:
+			defeat_screen.call("show_defeat", "Debug Arena", max(1, debug_start_depth))
+			return
 	if debug_start_encounter != DEBUG_ENCOUNTER_NONE:
 		_start_debug_selected_encounter(debug_start_encounter)
 		return
@@ -622,6 +636,9 @@ func _is_known_power_id(power_id: String) -> bool:
 	return power_registry_instance.is_valid_power_id(power_id)
 
 func _unhandled_input(event: InputEvent) -> void:
+	if is_instance_valid(defeat_screen) and bool(defeat_screen.call("is_open")):
+		get_viewport().set_input_as_handled()
+		return
 	if not event.is_action_pressed("ui_cancel"):
 		return
 	if not is_instance_valid(pause_menu_controller):
@@ -642,6 +659,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	get_viewport().set_input_as_handled()
 
 func _process(delta: float) -> void:
+	if is_instance_valid(defeat_screen) and bool(defeat_screen.call("is_open")):
+		hud.refresh(_get_hud_state(), player)
+		_sync_renderer()
+		return
 	if is_instance_valid(pause_menu_controller) and bool(pause_menu_controller.call("is_open")):
 		hud.refresh(_get_hud_state(), player)
 		_sync_renderer()
@@ -1389,6 +1410,12 @@ func _on_victory_back_to_menu() -> void:
 	_clear_active_run_checkpoint()
 	get_tree().change_scene_to_file(MENU_SCENE_PATH)
 
+func _on_defeat_back_to_menu() -> void:
+	_set_combat_paused(false)
+	_finish_active_run_telemetry("death")
+	_clear_active_run_checkpoint()
+	get_tree().change_scene_to_file(MENU_SCENE_PATH)
+
 func _on_pause_back_to_menu_requested() -> void:
 	_finish_active_run_telemetry("menu_exit")
 	_set_combat_paused(false)
@@ -1793,7 +1820,7 @@ func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> voi
 	hud.refresh(_get_hud_state(), player)
 
 func _is_debug_boot_session() -> bool:
-	if debug_trigger_victory:
+	if debug_end_screen_preview != DEBUG_END_SCREEN_NONE:
 		return true
 	if debug_start_encounter != DEBUG_ENCOUNTER_NONE:
 		return true
@@ -1983,6 +2010,30 @@ func _on_player_died_for_telemetry() -> void:
 	death_event["bearing_key"] = _bearing_key_from_label(current_room_label, "unknown")
 	death_event["room_depth"] = room_depth
 	_finish_active_run_telemetry("death", death_event)
+
+func _on_player_died() -> void:
+	if player_defeated:
+		return
+	player_defeated = true
+	_set_combat_paused(true)
+	if is_instance_valid(reward_selection_ui):
+		reward_selection_ui.call("close_selection")
+	if is_instance_valid(pause_menu_controller) and bool(pause_menu_controller.call("is_open")):
+		pause_menu_controller.call("close")
+	run_cleared = true
+	choosing_next_room = false
+	active_objective_kind = ""
+	active_room_enemy_count = 0
+	var run_context := _get_run_context()
+	if run_context != null and run_context.has_method("set_last_run_outcome"):
+		run_context.call("set_last_run_outcome", "death")
+	if run_context != null and run_context.has_method("clear_active_run"):
+		run_context.call("clear_active_run")
+	if run_context != null and run_context.has_method("clear_resume_saved_run_request"):
+		run_context.call("clear_resume_saved_run_request")
+	hud.show_banner("Defeat", "")
+	if is_instance_valid(defeat_screen):
+		defeat_screen.call("show_defeat", current_room_label, room_depth)
 
 func _apply_boon_to_player(boon_id: String) -> void:
 	if not is_instance_valid(player):

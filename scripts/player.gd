@@ -7,7 +7,6 @@ const POWER_REGISTRY_SCRIPT := preload("res://scripts/power_registry.gd")
 const ENEMY_BASE := preload("res://scripts/enemy_base.gd")
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
-const RUN_CONTEXT_PATH := "/root/RunContext"
 const RUN_SNAPSHOT_VERSION := 1
 const RUN_SNAPSHOT_PROPERTIES := [
 	"max_speed",
@@ -104,7 +103,6 @@ var last_move_direction: Vector2 = Vector2.RIGHT
 var dash_direction: Vector2 = Vector2.ZERO
 var attack_cooldown_left: float = 0.0
 var first_strike_bonus_damage: int = 0
-var scene_restart_queued: bool = false
 var health_state
 var player_feedback
 var upgrade_system
@@ -208,7 +206,6 @@ var incoming_contact_damage_mult: float = 1.0
 var last_damage_event: Dictionary = {}
 
 func _ready() -> void:
-	died.connect(_restart_current_scene)
 	body_radius_cache = _get_body_radius_for(self, 14.0)
 	upgrade_system = UPGRADE_SYSTEM_SCRIPT.new()
 	add_child(upgrade_system)
@@ -1208,20 +1205,6 @@ func apply_polar_shift_dash_lockout(duration: float) -> void:
 	if player_feedback != null and player_feedback.has_method("play_polar_shift_dash_lockout"):
 		player_feedback.call("play_polar_shift_dash_lockout", global_position)
 	queue_redraw()
-
-func _restart_current_scene() -> void:
-	if scene_restart_queued:
-		return
-	scene_restart_queued = true
-	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
-	if run_context != null:
-		if run_context.has_method("set_last_run_outcome"):
-			run_context.call("set_last_run_outcome", "death")
-		if run_context.has_method("clear_active_run"):
-			run_context.call("clear_active_run")
-		if run_context.has_method("clear_resume_saved_run_request"):
-			run_context.call("clear_resume_saved_run_request")
-	get_tree().call_deferred("change_scene_to_file", "res://scenes/Menu.tscn")
 
 func _create_health_state() -> void:
 	health_state = HEALTH_STATE_SCRIPT.new()
