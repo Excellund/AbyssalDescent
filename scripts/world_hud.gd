@@ -57,16 +57,24 @@ func show_banner(title: String, subtitle: String, subtitle_color: Color = Color(
 		room_banner_title_label.text = subtitle
 	if is_instance_valid(room_banner_tween):
 		room_banner_tween.kill()
+	var has_subtitle := not subtitle.strip_edges().is_empty()
 	room_banner_title_label.text = title
+	room_banner_subtitle_label.text = subtitle
+	room_banner_subtitle_label.add_theme_color_override("font_color", subtitle_color)
 	var viewport := get_viewport()
 	if viewport != null:
 		_update_banner_layout(_cached_room_size, viewport.get_canvas_transform(), viewport.get_visible_rect().size)
 	room_banner_title_label.modulate.a = 0.0
-	room_banner_subtitle_label.visible = false
+	room_banner_subtitle_label.modulate.a = 0.0
+	room_banner_subtitle_label.visible = has_subtitle
 	room_banner_tween = create_tween()
 	room_banner_tween.tween_property(room_banner_title_label, "modulate:a", 1.0, 0.2)
+	if has_subtitle:
+		room_banner_tween.parallel().tween_property(room_banner_subtitle_label, "modulate:a", 1.0, 0.2)
 	room_banner_tween.tween_interval(0.95)
 	room_banner_tween.tween_property(room_banner_title_label, "modulate:a", 0.0, 0.24)
+	if has_subtitle:
+		room_banner_tween.parallel().tween_property(room_banner_subtitle_label, "modulate:a", 0.0, 0.24)
 
 func show_notice(text: String, text_color: Color = Color(0.78, 0.9, 1.0, 0.92), duration: float = -1.0) -> void:
 	# Transient combat notices were removed to keep gameplay readable.
@@ -379,7 +387,12 @@ func _update_status_panel_text(state: Dictionary) -> void:
 			status_label.text += "\n[center][color=#FFB36D]Objective: Overtime  Kills %d/%d[/color][/center]" % [objective_kills, objective_kill_target]
 		else:
 			var objective_seconds := maxi(0, int(ceil(objective_time_left)))
-			status_label.text += "\n[center][color=#FCD77A]Objective: Survive %ds  Kills %d/%d[/color][/center]" % [objective_seconds, objective_kills, objective_kill_target]
+			var quota_met := objective_kill_target > 0 and objective_kills >= objective_kill_target
+			if quota_met:
+				status_label.text += "\n[center][color=#A8FFB0]Objective: Cleanup %ds  Hold position[/color][/center]" % objective_seconds
+				status_label.text += "\n[center][color=#C8F0FF]Quota met: timer is accelerating[/color][/center]"
+			else:
+				status_label.text += "\n[center][color=#FCD77A]Objective: Survive %ds  Kills %d/%d[/color][/center]" % [objective_seconds, objective_kills, objective_kill_target]
 	elif objective_kind == "priority_target":
 		var target_seconds := maxi(0, int(ceil(objective_time_left)))
 		if objective_overtime:

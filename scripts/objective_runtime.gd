@@ -25,9 +25,13 @@ func update_survival_objective_state(delta: float) -> void:
 		return
 	if quota_met and not world.objective_survival_quota_announced and world.objective_time_left > 0.0 and not world.objective_overtime:
 		world.objective_survival_quota_announced = true
-		world.hud.show_banner("Kill Quota Fulfilled", "")
+		# Shift into a short cleanup window once quota is met so the player is rewarded for engaging.
+		world.objective_time_left = minf(world.objective_time_left, 8.0)
+		world.hud.show_banner("Kill Quota Fulfilled", "Cleanup phase: hold briefly")
 	if world.objective_time_left > 0.0:
 		world.objective_time_left = maxf(0.0, world.objective_time_left - delta)
+	if quota_met and world.objective_time_left > 0.0 and not world.objective_overtime:
+		world.objective_time_left = maxf(0.0, world.objective_time_left - delta * 0.85)
 	if world.objective_time_left <= 0.0 and not world.objective_overtime:
 		if quota_met:
 			complete_current_objective("Objective Complete", "Survived the timer")

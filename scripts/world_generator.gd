@@ -51,6 +51,10 @@ const DEBUG_MUTATOR_SIEGEBREAK := 3
 const DEBUG_MUTATOR_IRON_VOLLEY := 4
 const DEBUG_MUTATOR_KILLBOX := 5
 const DEBUG_MUTATOR_RANDOM_HARD := 6
+const DEBUG_POWER_PRESET_NONE := 0
+const DEBUG_POWER_PRESET_DASH_SPECIALIST := 1
+const DEBUG_POWER_PRESET_NO_DASH_BRUISER := 2
+const DEBUG_POWER_PRESET_HIGH_RANGE_DPS := 3
 
 const ENCOUNTER_DEBUG_MAP := [
 	{"id": 0, "key": "none", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
@@ -130,6 +134,7 @@ func _get_debug_encounter_reward_mode(encounter_key: String) -> int:
 @export var second_boss_encounter_count: int = 7
 @export var debug_apply_test_powers_on_start: bool = false
 @export var debug_skip_starting_boon_selection: bool = false
+@export_enum("None", "Dasher", "Bruiser", "Marksman") var debug_start_power_preset: int = DEBUG_POWER_PRESET_NONE
 @export var debug_start_power_ids: PackedStringArray = PackedStringArray()
 @export_multiline var debug_start_command: String = ""
 @export_enum("None", "Rest Site", "Skirmish", "Crossfire", "Fortress", "Onslaught", "Vanguard", "Blitz", "Ambush", "Suppression", "Gauntlet", "Objective - Last Stand", "Objective - Cut the Signal", "Objective - Random", "Trial", "Warden", "Sovereign") var debug_start_encounter: int = DEBUG_ENCOUNTER_NONE
@@ -364,6 +369,20 @@ func start_run_with_powers(power_ids: Array[String]) -> Dictionary:
 func start_run_with_command(command: String) -> Dictionary:
 	return start_run_with_powers(_parse_power_command(command))
 
+func start_run_with_preset(preset_key: String) -> Dictionary:
+	var normalized := preset_key.strip_edges().to_lower()
+	var preset := DEBUG_POWER_PRESET_NONE
+	match normalized:
+		"dash", "dasher", "dash_specialist", "dash specialist":
+			preset = DEBUG_POWER_PRESET_DASH_SPECIALIST
+		"bruiser", "no_dash_bruiser", "no dash bruiser", "iron_vanguard", "iron vanguard", "grounded", "non_dash", "non-dash":
+			preset = DEBUG_POWER_PRESET_NO_DASH_BRUISER
+		"marksman", "high_range_dps", "high range dps", "ranged", "range_dps", "range dps":
+			preset = DEBUG_POWER_PRESET_HIGH_RANGE_DPS
+		_:
+			preset = DEBUG_POWER_PRESET_NONE
+	return start_run_with_powers(_get_debug_power_preset_ids(preset))
+
 func get_balance_telemetry(max_runs: int = 10, max_age_days: int = 21, include_debug: bool = false, game_version: String = "") -> Dictionary:
 	return RUN_TELEMETRY_STORE.build_balance_summary(max_runs, max_age_days, include_debug, game_version)
 
@@ -538,6 +557,7 @@ func _apply_debug_start_powers_if_needed() -> void:
 	if not debug_apply_test_powers_on_start:
 		return
 	var ids: Array[String] = []
+	ids.append_array(_get_debug_power_preset_ids(debug_start_power_preset))
 	for id in debug_start_power_ids:
 		ids.append(String(id))
 	if not debug_start_command.strip_edges().is_empty():
@@ -545,6 +565,43 @@ func _apply_debug_start_powers_if_needed() -> void:
 	if ids.is_empty():
 		return
 	start_run_with_powers(ids)
+
+func _get_debug_power_preset_ids(preset: int) -> Array[String]:
+	match preset:
+		DEBUG_POWER_PRESET_DASH_SPECIALIST:
+			return [
+				"fleet_foot",
+				"blink_dash",
+				"surge_step",
+				"phantom_step",
+				"reaper_step",
+				"static_wake",
+				"wraithstep"
+			]
+		DEBUG_POWER_PRESET_NO_DASH_BRUISER:
+			return [
+				"heavy_blow",
+				"wide_arc",
+				"long_reach",
+				"iron_skin",
+				"heartstone",
+				"battle_trance",
+				"rupture_wave",
+				"aegis_field",
+				"hunters_snare"
+			]
+		DEBUG_POWER_PRESET_HIGH_RANGE_DPS:
+			return [
+				"first_strike",
+				"heavy_blow",
+				"long_reach",
+				"razor_wind",
+				"execution_edge",
+				"storm_crown",
+				"hunters_snare"
+			]
+		_:
+			return []
 
 func _parse_power_command(command: String) -> Array[String]:
 	var normalized := command.to_lower()
@@ -1741,6 +1798,8 @@ func _is_debug_boot_session() -> bool:
 	if debug_start_encounter != DEBUG_ENCOUNTER_NONE:
 		return true
 	if debug_apply_test_powers_on_start:
+		return true
+	if debug_start_power_preset != DEBUG_POWER_PRESET_NONE:
 		return true
 	if debug_skip_starting_boon_selection:
 		return true
