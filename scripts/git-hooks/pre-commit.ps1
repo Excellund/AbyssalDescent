@@ -90,6 +90,13 @@ $debugSettingsPath = "$scriptsPath/debug_settings.gd"
 if (Test-Path $debugSettingsPath) {
     $content = Get-Content -Path $debugSettingsPath -Raw
 
+    # Check enabled
+    $enabledValue = Get-DebugSettingValue -content $content -settingName "enabled"
+    if ($null -ne $enabledValue -and $enabledValue -match '^true$') {
+        Write-Host "  [ERROR] enabled is true" -ForegroundColor Red
+        $debugChecksPassed = $false
+    }
+
     # Check apply_test_powers_on_start
     $debugApplyTestPowersValue = Get-DebugSettingValue -content $content -settingName "apply_test_powers_on_start"
     if ($null -ne $debugApplyTestPowersValue -and $debugApplyTestPowersValue -match '^true$') {
@@ -173,6 +180,7 @@ try {
 
 if ($stagedSceneFiles.Count -gt 0) {
     $sceneDebugRules = @(
+        @{ name = "enabled"; allowed = "^false$"; description = "false" },
         @{ name = "apply_test_powers_on_start"; allowed = "^false$"; description = "false" },
         @{ name = "skip_starting_boon_selection"; allowed = "^false$"; description = "false" },
         @{ name = "start_power_preset"; allowed = "(^0$|DEBUG_POWER_PRESET_NONE)"; description = "NONE/0" },

@@ -4,9 +4,8 @@
 
 This pre-commit hook system automatically blocks commits if:
 
-1. **Debug options are enabled** in `scripts/world_generator.gd`:
-
 1. **Debug options are enabled** in `scripts/debug_settings.gd`:
+   `enabled` must be `false`
    `apply_test_powers_on_start` must be `false`
    `skip_starting_boon_selection` must be `false`
    `start_power_preset` must be `DEBUG_POWER_PRESET_NONE`
