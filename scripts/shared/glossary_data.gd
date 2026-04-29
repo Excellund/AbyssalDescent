@@ -42,7 +42,7 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"name": "Suppression",
 			"group": "Advanced",
 			"color": Color(0.96, 0.64, 1.0, 1.0),
-			"desc": "Area denial with lancer-backed ranged pressure.",
+			"desc": "Lancer zone saturation. Archers reinforce the denial field.",
 		},
 		{
 			"name": "Vanguard",
