@@ -84,8 +84,8 @@ signal damage_taken(raw_amount: int, final_amount: int, damage_context: Dictiona
 @export var acceleration: float = 1400.0
 @export var deceleration: float = 1800.0
 @export var turn_boost: float = 1.25
-@export var dash_speed: float = 600.0
-@export var dash_duration: float = 0.12
+@export var dash_speed: float = 720.0
+@export var dash_distance: float = 175.0
 @export var dash_cooldown: float = 0.42
 @export var dash_phase_release_duration: float = 0.1
 @export var dash_overlap_clearance_duration: float = 0.08
@@ -98,6 +98,7 @@ signal damage_taken(raw_amount: int, final_amount: int, damage_context: Dictiona
 @export var battle_trance_duration: float = 1.25
 
 var dash_time_left: float = 0.0
+var dash_remaining_distance: float = 0.0
 var dash_cooldown_left: float = 0.0
 var last_move_direction: Vector2 = Vector2.RIGHT
 var dash_direction: Vector2 = Vector2.ZERO
@@ -282,7 +283,10 @@ func _try_start_dash(direction: Vector2) -> void:
 		return
 
 	dash_direction = direction if direction != Vector2.ZERO else last_move_direction
-	var effective_duration := dash_duration * (void_dash_range_mult if reward_void_dash else 1.0)
+	var range_mult := void_dash_range_mult if reward_void_dash else 1.0
+	dash_remaining_distance = dash_distance * range_mult
+	var effective_dash_speed := maxf(1.0, dash_speed * range_mult)
+	var effective_duration := dash_remaining_distance / effective_dash_speed
 	dash_time_left = effective_duration
 	dash_cooldown_left = dash_cooldown
 	dash_phase_release_left = maxf(dash_phase_release_left, dash_phase_release_duration)
@@ -295,7 +299,7 @@ func _try_start_dash(direction: Vector2) -> void:
 func _try_attack_input() -> void:
 	if not Input.is_action_just_pressed("attack"):
 		return
-	if dash_time_left > 0.0:
+	if _is_dash_active():
 		queued_attack_after_dash = true
 		queued_attack_direction = _get_mouse_attack_direction()
 		return
@@ -304,7 +308,7 @@ func _try_attack_input() -> void:
 func _try_consume_queued_attack() -> void:
 	if not queued_attack_after_dash:
 		return
-	if dash_time_left > 0.0:
+	if _is_dash_active():
 		return
 	if dash_phase_release_left > 0.0:
 		return
@@ -369,14 +373,33 @@ func _get_mouse_attack_direction() -> Vector2:
 	return Vector2.RIGHT
 
 func _process_active_dash(delta: float) -> bool:
-	if dash_time_left <= 0.0:
+	if dash_remaining_distance <= 0.0:
 		return false
 
 	var dash_start := global_position
 	dash_time_left = maxf(0.0, dash_time_left - delta)
-	velocity = dash_direction * dash_speed
+	var dash_speed_mult := void_dash_range_mult if reward_void_dash else 1.0
+	var max_step := maxf(0.0, dash_speed * dash_speed_mult * delta)
+	var desired_step := minf(dash_remaining_distance, max_step)
+	if desired_step <= 0.0:
+		dash_time_left = 0.0
+		dash_remaining_distance = 0.0
+		return false
+	velocity = dash_direction * (desired_step / maxf(delta, 0.0001))
 	move_and_slide()
 	var dash_end := global_position
+	var moved := dash_start.distance_to(dash_end)
+	if moved <= 0.001:
+		dash_time_left = 0.0
+		dash_remaining_distance = 0.0
+		velocity = Vector2.ZERO
+		return false
+	dash_remaining_distance = maxf(0.0, dash_remaining_distance - moved)
+	if dash_remaining_distance <= 0.001:
+		dash_time_left = 0.0
+		dash_remaining_distance = 0.0
+		# End dash with a small consistent carry velocity to avoid occasional hard-brake feel.
+		velocity = dash_direction * minf(max_speed * 0.9, dash_speed * 0.22)
 
 	if reward_phantom_step:
 		_apply_phantom_step_during_dash()
@@ -406,18 +429,21 @@ func _process_active_dash(delta: float) -> bool:
 	return true
 
 func _update_dash_phase_state(delta: float) -> void:
-	if dash_time_left > 0.0:
+	if _is_dash_active():
 		dash_phase_release_left = maxf(dash_phase_release_left, dash_phase_release_duration)
 	elif dash_phase_release_left > 0.0:
 		dash_phase_release_left = maxf(0.0, dash_phase_release_left - delta)
 
-	if dash_time_left <= 0.0 and not dash_phasing_active and _is_overlapping_enemy_body():
+	if not _is_dash_active() and not dash_phasing_active and _is_overlapping_enemy_body():
 		dash_phase_release_left = maxf(dash_phase_release_left, dash_overlap_clearance_duration)
 
-	var should_phase := dash_time_left > 0.0 or dash_phase_release_left > 0.0
+	var should_phase := _is_dash_active() or dash_phase_release_left > 0.0
 	_set_dash_phasing(should_phase)
 	if dash_phasing_active:
 		_sync_enemy_collision_exceptions()
+
+func _is_dash_active() -> bool:
+	return dash_remaining_distance > 0.001
 
 func _set_dash_phasing(enabled: bool) -> void:
 	if enabled == dash_phasing_active:
@@ -660,6 +686,7 @@ func apply_run_snapshot(snapshot: Dictionary) -> void:
 		health_state.set_health(int(snapshot.get("current_health", max_health)))
 
 	dash_time_left = 0.0
+	dash_remaining_distance = 0.0
 	dash_cooldown_left = 0.0
 	attack_cooldown_left = 0.0
 	attack_anim_time_left = 0.0
@@ -1350,7 +1377,7 @@ func _draw_trial_reward_state() -> void:
 	# Dash archetype trial power visuals
 	if reward_phantom_step:
 		var ph_hit_radius := 38.0 + float(phantom_step_stacks) * 5.0
-		if dash_time_left > 0.0:
+		if _is_dash_active():
 			# Threat zone: filled disc + bright ring so players instantly read the hit window
 			draw_circle(Vector2.ZERO, ph_hit_radius, Color(0.46, 1.0, 0.92, 0.07))
 			draw_arc(Vector2.ZERO, ph_hit_radius, 0.0, TAU, 48,

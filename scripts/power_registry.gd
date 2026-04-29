@@ -409,7 +409,7 @@ func _get_trial_fallback_description(power_id: String) -> String:
 		"phantom_step":
 			return "Dashing through enemies damages and slows them."
 		"reaper_step":
-			return "Dash travels farther. Kills refresh dash cooldown."
+			return "Dash range and dash speed scale together. Kills refresh dash cooldown."
 		"static_wake":
 			return "Dashing leaves an electrified trail that burns enemies."
 		"storm_crown":

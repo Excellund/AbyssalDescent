@@ -449,8 +449,8 @@ func get_trial_power_card_description(power_id: String) -> String:
 			var next_range := float(next_values.get("range_mult", 1.0))
 			var cur_range := float(player_reference.get("void_dash_range_mult"))
 			if current_stack <= 0:
-				return "[color=#9ab8d8]Kills fully refresh your dash, and each stack extends your dash.[/color]\n[color=#9ab8d8]Initial:[/color] range [color=#7de882]x%.2f[/color], kill refresh [color=#7de882]full[/color]." % [next_range]
-			return "[color=#c8daf0]Reaper Step:[/color] range [color=#e8c96a]x%.2f[/color] [color=#8899aa]->[/color] [color=#7de882]x%.2f[/color], kill refresh [color=#7de882]full[/color]." % [cur_range, next_range]
+				return "[color=#9ab8d8]Kills fully refresh your dash. Each stack scales dash range and dash speed together.[/color]\n[color=#9ab8d8]Initial:[/color] range/speed [color=#7de882]x%.2f[/color], kill refresh [color=#7de882]full[/color]." % [next_range]
+			return "[color=#c8daf0]Reaper Step:[/color] range/speed [color=#e8c96a]x%.2f[/color] [color=#8899aa]->[/color] [color=#7de882]x%.2f[/color], kill refresh [color=#7de882]full[/color]." % [cur_range, next_range]
 		"static_wake":
 			if next_values.is_empty():
 				return "[color=#9ab8d8]Enhances this power.[/color]"
