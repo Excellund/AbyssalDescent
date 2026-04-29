@@ -590,6 +590,8 @@ func _get_mutator_icon_texture(icon_shape_id: String) -> Texture2D:
 			return _get_fortified_icon_texture()
 		"hunters_focus":
 			return _get_hunters_focus_icon_texture()
+		"breach_momentum":
+			return _get_hunters_focus_icon_texture()
 		_:
 			return null
 

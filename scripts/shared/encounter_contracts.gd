@@ -49,6 +49,10 @@ const PROFILE_KEY_OBJECTIVE_DURATION := "objective_duration"
 const PROFILE_KEY_OBJECTIVE_SPAWN_INTERVAL := "objective_spawn_interval"
 const PROFILE_KEY_OBJECTIVE_SPAWN_BATCH := "objective_spawn_batch"
 const PROFILE_KEY_OBJECTIVE_TARGET_TYPE := "objective_target_type"
+const PROFILE_KEY_OBJECTIVE_ZONE_RADIUS := "objective_zone_radius"
+const PROFILE_KEY_OBJECTIVE_PROGRESS_GOAL := "objective_progress_goal"
+const PROFILE_KEY_OBJECTIVE_PROGRESS_DECAY := "objective_progress_decay"
+const PROFILE_KEY_OBJECTIVE_CONTEST_THRESHOLD := "objective_contest_threshold"
 
 const MUTATOR_KEY_NAME := "name"
 const MUTATOR_KEY_THEME_COLOR := "theme_color"
@@ -86,10 +90,11 @@ const DEBUG_ENCOUNTER_SUPPRESSION := 9
 const DEBUG_ENCOUNTER_GAUNTLET := 10
 const DEBUG_ENCOUNTER_OBJECTIVE_LAST_STAND := 11
 const DEBUG_ENCOUNTER_OBJECTIVE_PRIORITY_TARGET := 12
-const DEBUG_ENCOUNTER_OBJECTIVE_RANDOM := 13
-const DEBUG_ENCOUNTER_TRIAL := 14
-const DEBUG_ENCOUNTER_BOSS_1 := 15
-const DEBUG_ENCOUNTER_BOSS_2 := 16
+const DEBUG_ENCOUNTER_OBJECTIVE_HOLD_THE_LINE := 13
+const DEBUG_ENCOUNTER_OBJECTIVE_RANDOM := 14
+const DEBUG_ENCOUNTER_TRIAL := 15
+const DEBUG_ENCOUNTER_BOSS_1 := 16
+const DEBUG_ENCOUNTER_BOSS_2 := 17
 
 const DEBUG_ENCOUNTER_MAP := [
 	{"id": DEBUG_ENCOUNTER_NONE, "key": "none", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
@@ -105,6 +110,7 @@ const DEBUG_ENCOUNTER_MAP := [
 	{"id": DEBUG_ENCOUNTER_GAUNTLET, "key": "gauntlet", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
 	{"id": DEBUG_ENCOUNTER_OBJECTIVE_LAST_STAND, "key": "objective_last_stand", "aliases": ["last_stand", "endurance", "objective_endurance"], "is_boss": false, "is_rest": false, "is_objective": true},
 	{"id": DEBUG_ENCOUNTER_OBJECTIVE_PRIORITY_TARGET, "key": "objective_priority_target", "aliases": ["priority_target", "cut_the_signal", "cut the signal"], "is_boss": false, "is_rest": false, "is_objective": true},
+	{"id": DEBUG_ENCOUNTER_OBJECTIVE_HOLD_THE_LINE, "key": "objective_hold_the_line", "aliases": ["hold_the_line", "hold the line", "control", "zone_control"], "is_boss": false, "is_rest": false, "is_objective": true},
 	{"id": DEBUG_ENCOUNTER_OBJECTIVE_RANDOM, "key": "objective_random", "aliases": ["objective", "objective_test"], "is_boss": false, "is_rest": false, "is_objective": true},
 	{"id": DEBUG_ENCOUNTER_TRIAL, "key": "trial", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
 	{"id": DEBUG_ENCOUNTER_BOSS_1, "key": "boss_1", "aliases": ["boss", "boss1", "warden"], "is_boss": true, "is_rest": false, "is_objective": false},
@@ -245,6 +251,10 @@ static func normalize_profile(value: Variant) -> Dictionary:
 		normalized[PROFILE_KEY_OBJECTIVE_SPAWN_INTERVAL] = float(input.get(PROFILE_KEY_OBJECTIVE_SPAWN_INTERVAL, 0.0))
 		normalized[PROFILE_KEY_OBJECTIVE_SPAWN_BATCH] = int(input.get(PROFILE_KEY_OBJECTIVE_SPAWN_BATCH, 1))
 		normalized[PROFILE_KEY_OBJECTIVE_TARGET_TYPE] = String(input.get(PROFILE_KEY_OBJECTIVE_TARGET_TYPE, ""))
+		normalized[PROFILE_KEY_OBJECTIVE_ZONE_RADIUS] = float(input.get(PROFILE_KEY_OBJECTIVE_ZONE_RADIUS, 0.0))
+		normalized[PROFILE_KEY_OBJECTIVE_PROGRESS_GOAL] = float(input.get(PROFILE_KEY_OBJECTIVE_PROGRESS_GOAL, 0.0))
+		normalized[PROFILE_KEY_OBJECTIVE_PROGRESS_DECAY] = float(input.get(PROFILE_KEY_OBJECTIVE_PROGRESS_DECAY, 0.0))
+		normalized[PROFILE_KEY_OBJECTIVE_CONTEST_THRESHOLD] = int(input.get(PROFILE_KEY_OBJECTIVE_CONTEST_THRESHOLD, 1))
 	return normalized
 
 static func profile_label(profile_value: Dictionary) -> String:
@@ -339,12 +349,28 @@ static func profile_objective_spawn_batch(profile_value: Dictionary) -> int:
 static func profile_objective_target_type(profile_value: Dictionary) -> String:
 	return String(profile_value.get(PROFILE_KEY_OBJECTIVE_TARGET_TYPE, ""))
 
+static func profile_objective_zone_radius(profile_value: Dictionary) -> float:
+	return float(profile_value.get(PROFILE_KEY_OBJECTIVE_ZONE_RADIUS, 0.0))
+
+static func profile_objective_progress_goal(profile_value: Dictionary) -> float:
+	return float(profile_value.get(PROFILE_KEY_OBJECTIVE_PROGRESS_GOAL, 0.0))
+
+static func profile_objective_progress_decay(profile_value: Dictionary) -> float:
+	return float(profile_value.get(PROFILE_KEY_OBJECTIVE_PROGRESS_DECAY, 0.0))
+
+static func profile_objective_contest_threshold(profile_value: Dictionary) -> int:
+	return int(profile_value.get(PROFILE_KEY_OBJECTIVE_CONTEST_THRESHOLD, 1))
+
 static func profile_set_survival_objective(profile_value: Dictionary, duration: float, spawn_interval: float, spawn_batch: int = 1) -> void:
 	profile_value[PROFILE_KEY_OBJECTIVE_KIND] = "survival"
 	profile_value[PROFILE_KEY_OBJECTIVE_DURATION] = maxf(1.0, duration)
 	profile_value[PROFILE_KEY_OBJECTIVE_SPAWN_INTERVAL] = maxf(0.25, spawn_interval)
 	profile_value[PROFILE_KEY_OBJECTIVE_SPAWN_BATCH] = maxi(1, spawn_batch)
 	profile_value.erase(PROFILE_KEY_OBJECTIVE_TARGET_TYPE)
+	profile_value.erase(PROFILE_KEY_OBJECTIVE_ZONE_RADIUS)
+	profile_value.erase(PROFILE_KEY_OBJECTIVE_PROGRESS_GOAL)
+	profile_value.erase(PROFILE_KEY_OBJECTIVE_PROGRESS_DECAY)
+	profile_value.erase(PROFILE_KEY_OBJECTIVE_CONTEST_THRESHOLD)
 
 static func profile_set_priority_target_objective(profile_value: Dictionary, target_type: String, duration: float, spawn_interval: float, spawn_batch: int = 1) -> void:
 	profile_value[PROFILE_KEY_OBJECTIVE_KIND] = "priority_target"
@@ -352,6 +378,21 @@ static func profile_set_priority_target_objective(profile_value: Dictionary, tar
 	profile_value[PROFILE_KEY_OBJECTIVE_DURATION] = maxf(1.0, duration)
 	profile_value[PROFILE_KEY_OBJECTIVE_SPAWN_INTERVAL] = maxf(0.25, spawn_interval)
 	profile_value[PROFILE_KEY_OBJECTIVE_SPAWN_BATCH] = maxi(1, spawn_batch)
+	profile_value.erase(PROFILE_KEY_OBJECTIVE_ZONE_RADIUS)
+	profile_value.erase(PROFILE_KEY_OBJECTIVE_PROGRESS_GOAL)
+	profile_value.erase(PROFILE_KEY_OBJECTIVE_PROGRESS_DECAY)
+	profile_value.erase(PROFILE_KEY_OBJECTIVE_CONTEST_THRESHOLD)
+
+static func profile_set_control_objective(profile_value: Dictionary, duration: float, spawn_interval: float, spawn_batch: int, zone_radius: float, progress_goal: float, progress_decay: float, contest_threshold: int = 1) -> void:
+	profile_value[PROFILE_KEY_OBJECTIVE_KIND] = "control"
+	profile_value[PROFILE_KEY_OBJECTIVE_DURATION] = maxf(1.0, duration)
+	profile_value[PROFILE_KEY_OBJECTIVE_SPAWN_INTERVAL] = maxf(0.25, spawn_interval)
+	profile_value[PROFILE_KEY_OBJECTIVE_SPAWN_BATCH] = maxi(1, spawn_batch)
+	profile_value[PROFILE_KEY_OBJECTIVE_ZONE_RADIUS] = maxf(48.0, zone_radius)
+	profile_value[PROFILE_KEY_OBJECTIVE_PROGRESS_GOAL] = maxf(1.0, progress_goal)
+	profile_value[PROFILE_KEY_OBJECTIVE_PROGRESS_DECAY] = maxf(0.0, progress_decay)
+	profile_value[PROFILE_KEY_OBJECTIVE_CONTEST_THRESHOLD] = maxi(1, contest_threshold)
+	profile_value.erase(PROFILE_KEY_OBJECTIVE_TARGET_TYPE)
 
 static func mutator_name(mutator: Dictionary) -> String:
 	return String(mutator.get(MUTATOR_KEY_NAME, ""))

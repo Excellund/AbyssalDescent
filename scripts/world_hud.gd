@@ -348,6 +348,11 @@ func _update_status_panel_text(state: Dictionary) -> void:
 	var objective_target_max_health := int(state.get("objective_target_max_health", 0))
 	var objective_hunt_kill_progress := int(state.get("objective_hunt_kill_progress", 0))
 	var objective_hunt_kill_goal := int(state.get("objective_hunt_kill_goal", 0))
+	var objective_control_progress := float(state.get("objective_control_progress", 0.0))
+	var objective_control_goal := float(state.get("objective_control_goal", 0.0))
+	var objective_control_enemies_in_zone := int(state.get("objective_control_enemies_in_zone", 0))
+	var objective_control_contested := bool(state.get("objective_control_contested", false))
+	var objective_control_player_inside := bool(state.get("objective_control_player_inside", false))
 	var objective_exposure_left := float(state.get("objective_exposure_left", 0.0))
 	var objective_last_relocated_escort_count := int(state.get("objective_last_relocated_escort_count", 0))
 	var objective_relocation_hint_left := float(state.get("objective_relocation_hint_left", 0.0))
@@ -408,6 +413,20 @@ func _update_status_panel_text(state: Dictionary) -> void:
 			status_label.text += "\n[center][color=#9FD6FF]Expose Signal: escort kills %d/%d  (%d left)[/color][/center]" % [safe_progress, safe_goal, remaining_kills]
 		if objective_relocation_hint_left > 0.0 and objective_last_relocated_escort_count > 0:
 			status_label.text += "\n[center][color=#A9E6FF]Breakaway carried %d nearby escorts[/color][/center]" % objective_last_relocated_escort_count
+	elif objective_kind == "control":
+		var control_seconds := maxi(0, int(ceil(objective_time_left)))
+		var control_goal := maxf(0.01, objective_control_goal)
+		var control_ratio := clampf(objective_control_progress / control_goal, 0.0, 1.0)
+		if objective_overtime:
+			status_label.text += "\n[center][color=#FFB36D]Objective: Hold the Line  %d%% secured[/color][/center]" % int(round(control_ratio * 100.0))
+		else:
+			status_label.text += "\n[center][color=#FCD77A]Objective: Hold %ds  Secure %d%%[/color][/center]" % [control_seconds, int(round(control_ratio * 100.0))]
+		if objective_control_player_inside and not objective_control_contested:
+			status_label.text += "\n[center][color=#A8FFB0]Zone stable: keep pressure inside the ring[/color][/center]"
+		elif objective_control_contested:
+			status_label.text += "\n[center][color=#FFCAA0]Zone contested: clear %d enemies from the point[/color][/center]" % objective_control_enemies_in_zone
+		else:
+			status_label.text += "\n[center][color=#9FD6FF]Re-enter the zone before progress decays[/color][/center]"
 
 
 	var status_text_h := maxf(34.0, status_label.get_content_height())
@@ -590,6 +609,8 @@ func _get_mutator_icon_texture(icon_shape_id: String) -> Texture2D:
 		"fortified":
 			return _get_fortified_icon_texture()
 		"hunters_focus":
+			return _get_hunters_focus_icon_texture()
+		"breach_momentum":
 			return _get_hunters_focus_icon_texture()
 		_:
 			return null

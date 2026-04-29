@@ -99,7 +99,7 @@ func _get_debug_encounter_reward_mode(encounter_key: String) -> int:
 @export_enum("None", "Dasher", "Bruiser", "Marksman") var debug_start_power_preset: int = DEBUG_POWER_PRESET_NONE
 @export var debug_start_power_ids: PackedStringArray = PackedStringArray()
 @export_multiline var debug_start_command: String = ""
-@export_enum("None", "Rest Site", "Skirmish", "Crossfire", "Fortress", "Onslaught", "Vanguard", "Blitz", "Ambush", "Suppression", "Gauntlet", "Objective - Last Stand", "Objective - Cut the Signal", "Objective - Random", "Trial", "Warden", "Sovereign") var debug_start_encounter: int = ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_NONE
+@export_enum("None", "Rest Site", "Skirmish", "Crossfire", "Fortress", "Onslaught", "Vanguard", "Blitz", "Ambush", "Suppression", "Gauntlet", "Objective - Last Stand", "Objective - Cut the Signal", "Objective - Hold the Line", "Objective - Random", "Trial", "Warden", "Sovereign") var debug_start_encounter: int = ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_NONE
 @export var debug_start_depth: int = 1
 @export_enum("None", "Blood Rush", "Flashpoint", "Siegebreak", "Iron Volley", "Killbox", "Random Hard") var debug_mutator_override: int = DEBUG_MUTATOR_NONE
 @export_enum("None", "Victory", "Defeat") var debug_end_screen_preview: int = DEBUG_END_SCREEN_NONE
@@ -155,6 +155,15 @@ var objective_escort_dash_lines: Array[Line2D] = []
 var objective_escort_dash_line_time_left: float = 0.0
 var objective_hunt_kill_progress: int = 0
 var objective_hunt_kill_goal: int = 4
+var objective_control_anchor: Vector2 = Vector2.ZERO
+var objective_control_radius: float = 0.0
+var objective_control_progress: float = 0.0
+var objective_control_goal: float = 0.0
+var objective_control_decay_rate: float = 0.0
+var objective_control_contest_threshold: int = 0
+var objective_control_enemies_in_zone: int = 0
+var objective_control_player_inside: bool = false
+var objective_control_contested: bool = false
 var objective_exposure_duration: float = 2.0
 var objective_exposure_left: float = 0.0
 var objective_exposure_push_duration: float = 1.2
@@ -635,11 +644,36 @@ func _process(delta: float) -> void:
 	if not _grace_active:
 		_update_objective_state(delta)
 	_update_priority_target_marker(delta)
+	if active_objective_kind == "control" or objective_control_radius > 0.0:
+		queue_redraw()
 	_try_use_door()
 	_update_encounter_state()
 	_update_camera_mode()
 	hud.refresh(_get_hud_state(), player)
 	_sync_renderer()
+
+func _draw() -> void:
+	if objective_control_radius <= 0.0:
+		return
+	if active_objective_kind != "control" and objective_control_progress <= 0.0:
+		return
+	var goal := maxf(0.01, objective_control_goal)
+	var progress_ratio := clampf(objective_control_progress / goal, 0.0, 1.0)
+	var fill_color := Color(0.32, 0.72, 0.96, 0.08)
+	var ring_color := Color(0.46, 0.86, 1.0, 0.4)
+	var progress_color := Color(0.98, 0.86, 0.42, 0.92)
+	if objective_control_player_inside and not objective_control_contested:
+		fill_color = Color(0.38, 0.92, 0.62, 0.1)
+		ring_color = Color(0.56, 1.0, 0.74, 0.5)
+		progress_color = Color(0.92, 1.0, 0.7, 0.98)
+	elif objective_control_contested:
+		fill_color = Color(0.98, 0.46, 0.34, 0.08)
+		ring_color = Color(1.0, 0.64, 0.44, 0.54)
+		progress_color = Color(1.0, 0.8, 0.52, 0.94)
+	draw_circle(objective_control_anchor, objective_control_radius, fill_color)
+	draw_arc(objective_control_anchor, objective_control_radius, 0.0, TAU, 72, ring_color, 3.0)
+	draw_arc(objective_control_anchor, objective_control_radius - 8.0, -PI * 0.5, -PI * 0.5 + TAU * progress_ratio, 64, progress_color, 6.0)
+	draw_circle(objective_control_anchor, 8.0, Color(1.0, 0.96, 0.72, 0.75))
 
 func _update_objective_state(delta: float) -> void:
 	if is_instance_valid(objective_runtime):
@@ -927,6 +961,11 @@ func _get_hud_state() -> Dictionary:
 		"objective_target_max_health": _get_priority_target_max_health(),
 		"objective_hunt_kill_progress": objective_hunt_kill_progress,
 		"objective_hunt_kill_goal": objective_hunt_kill_goal,
+		"objective_control_progress": objective_control_progress,
+		"objective_control_goal": objective_control_goal,
+		"objective_control_enemies_in_zone": objective_control_enemies_in_zone,
+		"objective_control_contested": objective_control_contested,
+		"objective_control_player_inside": objective_control_player_inside,
 		"objective_exposure_left": objective_exposure_left,
 		"objective_last_relocated_escort_count": objective_last_relocated_escort_count,
 		"objective_relocation_hint_left": objective_relocation_hint_left,

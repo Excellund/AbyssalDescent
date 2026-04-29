@@ -81,6 +81,12 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"desc": "Hunt the marked target as it relocates.",
 		},
 		{
+			"name": "Hold the Line",
+			"group": "Objective",
+			"color": Color(1.0, 0.82, 0.52, 1.0),
+			"desc": "Control the center zone long enough to secure it under pressure.",
+		},
+		{
 			"name": "Rest Site",
 			"group": "Special",
 			"color": Color(0.64, 1.0, 0.76, 1.0),
@@ -143,6 +149,12 @@ static func _mutator_rows() -> Array[Dictionary]:
 			"color": Color(0.98, 0.76, 0.34, 1.0),
 			"icon": "res://assets/ui/mutators/hunters_focus.svg",
 			"desc": "Sharpens the player's edge in the hunt. Every strike lands with greater intent.",
+		},
+		{
+			"name": "Breach Momentum",
+			"color": Color(0.94, 0.68, 0.28, 1.0),
+			"icon": "",
+			"desc": "Rewards decisive pushes. The player hits harder and shrugs off some return fire.",
 		},
 	]
 

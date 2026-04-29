@@ -405,7 +405,9 @@ func build_objective_profile(depth: int, preferred: String = "") -> Dictionary:
 		return _build_survival_profile(depth)
 	if normalized == "priority_target" or normalized == "priority target" or normalized == "cut_the_signal" or normalized == "cut the signal":
 		return _build_priority_target_profile(depth)
-	var objective_profiles: Array[Dictionary] = [_build_survival_profile(depth), _build_priority_target_profile(depth)]
+	if normalized == "hold_the_line" or normalized == "hold the line" or normalized == "control" or normalized == "zone_control":
+		return _build_control_profile(depth)
+	var objective_profiles: Array[Dictionary] = [_build_survival_profile(depth), _build_priority_target_profile(depth), _build_control_profile(depth)]
 	return objective_profiles[rng.randi_range(0, objective_profiles.size() - 1)]
 
 func _canonicalize_debug_encounter_key(encounter_key: String) -> String:
@@ -438,6 +440,8 @@ func build_debug_encounter_profile(encounter_key: String, depth: int) -> Diction
 			return _build_survival_profile(depth)
 		"objective_priority_target":
 			return _build_priority_target_profile(depth)
+		"objective_hold_the_line":
+			return _build_control_profile(depth)
 		"objective_random":
 			return build_objective_profile(depth)
 		_:
@@ -699,6 +703,25 @@ func _build_priority_target_profile(depth: int) -> Dictionary:
 	ENCOUNTER_CONTRACTS.profile_set_priority_target_objective(profile, "archer", duration, spawn_interval, spawn_batch)
 	return _apply_bearing_count_scaling(profile)
 
+func _build_control_profile(depth: int) -> Dictionary:
+	var effective_depth := _effective_depth(depth)
+	var room_size := Vector2(1000.0, 760.0)
+	var chasers := 2 + int(floor(float(effective_depth) * 0.34))
+	var chargers := 1 + int(floor(float(effective_depth) / 6.0)) if effective_depth >= 2 else 0
+	var archers := 1 if effective_depth >= 5 else 0
+	var shielders := 1 + int(floor(float(effective_depth) / 5.0))
+	var profile := _build_profile("Hold the Line", room_size, chasers, chargers, archers, shielders)
+	ENCOUNTER_CONTRACTS.profile_set_player_mutator(profile, _build_breach_momentum_mutator())
+	var raw_duration := clampf(22.0 + float(effective_depth) * 0.75, 22.0, 30.0)
+	var duration := int(ceil(raw_duration / 5.0)) * 5
+	var spawn_interval := clampf(2.52 - float(effective_depth) * 0.04, 1.62, 2.52)
+	var spawn_batch := mini(3, 1 + int(floor(float(effective_depth) / 5.0)))
+	var zone_radius := clampf(184.0 + float(effective_depth) * 3.2, 184.0, 228.0)
+	var progress_goal := clampf(8.4 + float(effective_depth) * 0.28, 8.4, 11.8)
+	var progress_decay := clampf(0.24 + float(effective_depth) * 0.014, 0.24, 0.42)
+	ENCOUNTER_CONTRACTS.profile_set_control_objective(profile, duration, spawn_interval, spawn_batch, zone_radius, progress_goal, progress_decay, 3)
+	return _apply_bearing_count_scaling(profile, 0.85)
+
 func _normalize_route_context(route_context: Variant) -> Dictionary:
 	if route_context is Dictionary:
 		var context_dict := route_context as Dictionary
@@ -857,6 +880,17 @@ func _build_hunters_focus_mutator() -> Dictionary:
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID: "hunters_focus",
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX: "Deal 25% bonus damage",
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_PLAYER_DAMAGE_MULT: 0.25,
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_DURATION_ENCOUNTERS: 3
+	}
+
+func _build_breach_momentum_mutator() -> Dictionary:
+	return {
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME: "Breach Momentum",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_THEME_COLOR: Color(0.94, 0.68, 0.28, 1.0),
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID: "breach_momentum",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX: "Deal 18% bonus damage and take 8% less damage",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_PLAYER_DAMAGE_MULT: 0.18,
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_PLAYER_DAMAGE_RESIST: 0.08,
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_DURATION_ENCOUNTERS: 3
 	}
 

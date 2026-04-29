@@ -26,6 +26,15 @@ func reset_room_objective_state() -> void:
 	world.objective_target_type = ""
 	world.objective_target_name = ""
 	world.objective_hunt_kill_progress = 0
+	world.objective_control_anchor = Vector2.ZERO
+	world.objective_control_radius = 0.0
+	world.objective_control_progress = 0.0
+	world.objective_control_goal = 0.0
+	world.objective_control_decay_rate = 0.0
+	world.objective_control_contest_threshold = 0
+	world.objective_control_enemies_in_zone = 0
+	world.objective_control_player_inside = false
+	world.objective_control_contested = false
 	world.objective_exposure_left = 0.0
 	world.objective_exposure_push_left = 0.0
 	world.objective_last_relocated_escort_count = 0
@@ -40,6 +49,9 @@ func begin_room_objective(profile: Dictionary) -> void:
 		return
 	if world.active_objective_kind == "priority_target":
 		_begin_priority_target_objective(profile)
+		return
+	if world.active_objective_kind == "control":
+		_begin_control_objective(profile)
 
 func _begin_survival_objective(profile: Dictionary) -> void:
 	world.objective_time_left = ENCOUNTER_CONTRACTS.profile_objective_duration(profile)
@@ -75,12 +87,37 @@ func _begin_priority_target_objective(profile: Dictionary) -> void:
 	world.objective_overtime = false
 	spawn_priority_target_enemy()
 
+func _begin_control_objective(profile: Dictionary) -> void:
+	world.objective_time_left = ENCOUNTER_CONTRACTS.profile_objective_duration(profile)
+	world.objective_spawn_interval = ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
+	var objective_pressure_mult: float = world._objective_pressure_mult()
+	world.objective_spawn_timer = maxf(0.7, world.objective_spawn_interval * clampf(1.25 - objective_pressure_mult * 0.2, 0.86, 1.16))
+	world.objective_spawn_batch = ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
+	world.objective_spawn_batch = maxi(1, int(round(float(world.objective_spawn_batch) * objective_pressure_mult)))
+	world.objective_max_enemies = 7 + int(floor(float(world.room_depth) * 0.4))
+	world.objective_max_enemies = maxi(5, int(round(float(world.objective_max_enemies) * objective_pressure_mult)))
+	world.objective_control_anchor = Vector2.ZERO
+	world.objective_control_radius = ENCOUNTER_CONTRACTS.profile_objective_zone_radius(profile)
+	world.objective_control_progress = 0.0
+	world.objective_control_goal = ENCOUNTER_CONTRACTS.profile_objective_progress_goal(profile)
+	world.objective_control_decay_rate = ENCOUNTER_CONTRACTS.profile_objective_progress_decay(profile)
+	world.objective_control_contest_threshold = ENCOUNTER_CONTRACTS.profile_objective_contest_threshold(profile)
+	world.objective_control_enemies_in_zone = 0
+	world.objective_control_player_inside = false
+	world.objective_control_contested = false
+	world.objective_overtime = false
+	world.hud.show_banner("Hold the Line", "Secure the control zone")
+	world.queue_redraw()
+
 func update_objective_state(delta: float) -> void:
 	if world.active_objective_kind == "survival":
 		update_survival_objective_state(delta)
 		return
 	if world.active_objective_kind == "priority_target":
 		update_priority_target_objective_state(delta)
+		return
+	if world.active_objective_kind == "control":
+		update_control_objective_state(delta)
 		return
 
 func update_survival_objective_state(delta: float) -> void:
@@ -158,6 +195,43 @@ func update_priority_target_objective_state(delta: float) -> void:
 		enrage_priority_target()
 		world.hud.show_banner("Signal Escalating", "")
 
+func update_control_objective_state(delta: float) -> void:
+	if world.choosing_next_room or world.run_cleared:
+		return
+	if world.objective_time_left > 0.0:
+		world.objective_time_left = maxf(0.0, world.objective_time_left - delta)
+	if world.objective_time_left <= 0.0 and not world.objective_overtime:
+		world.objective_overtime = true
+		world.objective_spawn_interval = maxf(1.05, world.objective_spawn_interval * 0.88)
+		world.objective_spawn_batch = mini(5, world.objective_spawn_batch + 1)
+		world.objective_spawn_timer = 0.45
+		world.hud.show_banner("Line Breaking", "Zone pressure escalating")
+	var has_player := is_instance_valid(world.player)
+	var anchor: Vector2 = world.objective_control_anchor
+	var radius := maxf(1.0, world.objective_control_radius)
+	world.objective_control_player_inside = has_player and world.player.global_position.distance_to(anchor) <= radius
+	world.objective_control_enemies_in_zone = _count_control_zone_enemies(anchor, radius)
+	world.objective_control_contested = world.objective_control_enemies_in_zone >= maxi(1, world.objective_control_contest_threshold)
+	if world.objective_control_player_inside and not world.objective_control_contested:
+		world.objective_control_progress = minf(world.objective_control_goal, world.objective_control_progress + delta * 1.35)
+	elif world.objective_control_player_inside:
+		world.objective_control_progress = maxf(0.0, world.objective_control_progress - world.objective_control_decay_rate * delta * 0.05)
+	else:
+		world.objective_control_progress = maxf(0.0, world.objective_control_progress - world.objective_control_decay_rate * delta * 0.8)
+	if world.objective_control_progress >= world.objective_control_goal:
+		complete_current_objective("Objective Complete", "Control secured")
+		return
+	var pressure_floor: int = 1 + world.objective_spawn_batch
+	if world.objective_max_enemies > 0:
+		pressure_floor = mini(pressure_floor, world.objective_max_enemies)
+	if world.active_room_enemy_count < pressure_floor:
+		world.objective_spawn_timer = minf(world.objective_spawn_timer, 0.9)
+	world.objective_spawn_timer = maxf(0.0, world.objective_spawn_timer - delta)
+	if world.objective_spawn_timer <= 0.0:
+		world.objective_spawn_timer = world.objective_spawn_interval
+		spawn_control_wave()
+	world.queue_redraw()
+
 func spawn_survival_wave() -> void:
 	if not is_instance_valid(world.enemy_spawner):
 		return
@@ -198,6 +272,35 @@ func spawn_priority_target_wave() -> void:
 	for _i in range(spawn_count):
 		var enemy_type := roster[rng.randi_range(0, roster.size() - 1)]
 		world.active_room_enemy_count += int(world.enemy_spawner.call("spawn_enemy_type", enemy_type, 1))
+
+func spawn_control_wave() -> void:
+	if not is_instance_valid(world.enemy_spawner):
+		return
+	if world.objective_max_enemies > 0 and world.active_room_enemy_count >= world.objective_max_enemies:
+		return
+	var roster: Array[String] = ["shielder", "charger", "chaser", "chaser", "chaser"]
+	if world.objective_overtime:
+		roster = ["charger", "shielder", "chaser", "charger", "chaser", "archer"]
+	var spawn_count: int = world.objective_spawn_batch
+	if world.objective_overtime and world.active_room_enemy_count <= max(1, world.objective_spawn_batch):
+		spawn_count += 1
+	if world.objective_max_enemies > 0:
+		spawn_count = mini(spawn_count, maxi(0, world.objective_max_enemies - world.active_room_enemy_count))
+	if spawn_count <= 0:
+		return
+	for _i in range(spawn_count):
+		var enemy_type := roster[rng.randi_range(0, roster.size() - 1)]
+		world.active_room_enemy_count += int(world.enemy_spawner.call("spawn_enemy_type", enemy_type, 1))
+
+func _count_control_zone_enemies(anchor: Vector2, radius: float) -> int:
+	var count := 0
+	for enemy_node in world.get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		var enemy_body := enemy_node as Node2D
+		if enemy_body.global_position.distance_to(anchor) <= radius:
+			count += 1
+	return count
 
 func update_priority_target_exposure_state(delta: float) -> void:
 	if world.objective_signal_fx_left > 0.0:
@@ -266,6 +369,15 @@ func apply_priority_target_exposure_push(delta: float) -> void:
 			enemy.call("apply_slow", 0.2, 0.74)
 
 func complete_current_objective(title: String, _subtitle: String) -> void:
+	world.objective_control_anchor = Vector2.ZERO
+	world.objective_control_radius = 0.0
+	world.objective_control_progress = 0.0
+	world.objective_control_goal = 0.0
+	world.objective_control_decay_rate = 0.0
+	world.objective_control_contest_threshold = 0
+	world.objective_control_enemies_in_zone = 0
+	world.objective_control_player_inside = false
+	world.objective_control_contested = false
 	world.active_objective_kind = ""
 	world.objective_spawn_timer = 0.0
 	world.objective_time_left = 0.0
@@ -286,6 +398,7 @@ func complete_current_objective(title: String, _subtitle: String) -> void:
 	world._clear_all_enemies()
 	world.active_room_enemy_count = 0
 	world.hud.show_banner(title, "")
+	world.queue_redraw()
 	world._on_room_cleared()
 
 func spawn_priority_target_enemy() -> void:
