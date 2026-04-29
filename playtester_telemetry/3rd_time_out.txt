@@ -1,0 +1,158 @@
+TOTAL_RUNS: 22
+--- RUN 1 ---
+id=1777408280-23396974
+version=
+difficulty_tier=0
+outcome=clear
+max_depth=17 rooms_cleared=17 is_debug=false
+--- RUN 2 ---
+id=1777408658-400725546
+version=
+difficulty_tier=1
+outcome=death
+max_depth=6 rooms_cleared=6 is_debug=false
+death=ability=archer_projectile, bearing_key=cut_the_signal, final_amount=14, health_after=20, health_before=34, raw_amount=14, room_depth=6, room_label=Cut the Signal, source=enemy_ability, unix_time=1777408800
+--- RUN 3 ---
+id=1777408801-544265036
+version=
+difficulty_tier=1
+outcome=death
+max_depth=8 rooms_cleared=8 is_debug=false
+death=ability=archer_projectile, bearing_key=boss_chamber_the_warden, final_amount=12, health_after=33, health_before=45, raw_amount=14, room_depth=8, room_label=Boss Chamber: The Warden, source=enemy_ability, unix_time=1777408913
+--- RUN 4 ---
+id=1777408967-710009741
+version=
+difficulty_tier=1
+outcome=death
+max_depth=9 rooms_cleared=9 is_debug=false
+death=ability=lurker_lunge, bearing_key=ambush, final_amount=24, health_after=3, health_before=27, raw_amount=29, room_depth=9, room_label=Ambush, source=enemy_contact, unix_time=1777409121
+--- RUN 5 ---
+id=1777409124-866423679
+version=
+difficulty_tier=1
+outcome=death
+max_depth=6 rooms_cleared=6 is_debug=false
+death=ability=chaser_strike, bearing_key=last_stand, final_amount=6, health_after=8, health_before=14, raw_amount=10, room_depth=6, room_label=Last Stand, source=enemy_contact, unix_time=1777409247
+--- RUN 6 ---
+id=1777409259-1001414214
+version=
+difficulty_tier=1
+outcome=death
+max_depth=17 rooms_cleared=17 is_debug=false
+death=ability=shielder_slam, bearing_key=abyss_core_sovereign, final_amount=16, health_after=41, health_before=57, raw_amount=28, room_depth=17, room_label=Abyss Core: Sovereign, source=enemy_ability, unix_time=1777409627
+--- RUN 7 ---
+id=1777409674-1416683849
+version=
+difficulty_tier=1
+outcome=death
+max_depth=9 rooms_cleared=9 is_debug=false
+death=ability=charger_charge, bearing_key=trial_flashpoint, final_amount=19, health_after=13, health_before=32, raw_amount=20, room_depth=9, room_label=Trial Flashpoint, source=enemy_contact, unix_time=1777409792
+--- RUN 8 ---
+id=1777409796-1538506464
+version=
+difficulty_tier=1
+outcome=death
+max_depth=17 rooms_cleared=17 is_debug=false
+death=ability=archer_projectile, bearing_key=abyss_core_sovereign, final_amount=14, health_after=38, health_before=52, raw_amount=14, room_depth=17, room_label=Abyss Core: Sovereign, source=enemy_ability, unix_time=1777410088
+--- RUN 9 ---
+id=1777410132-1875374170
+version=
+difficulty_tier=1
+outcome=death
+max_depth=8 rooms_cleared=8 is_debug=false
+death=ability=lurker_lunge, bearing_key=boss_chamber_the_warden, final_amount=28, health_after=44, health_before=72, raw_amount=29, room_depth=8, room_label=Boss Chamber: The Warden, source=enemy_contact, unix_time=1777410158
+--- RUN 10 ---
+id=1777410294-2036606882
+version=
+difficulty_tier=1
+outcome=death
+max_depth=8 rooms_cleared=8 is_debug=false
+death=ability=unknown, bearing_key=boss_chamber_the_warden, final_amount=23, health_after=17, health_before=40, raw_amount=38, room_depth=8, room_label=Boss Chamber: The Warden, source=unknown, unix_time=1777410431
+--- RUN 11 ---
+id=1777410445-2187714533
+version=
+difficulty_tier=0
+outcome=abandon
+max_depth=0 rooms_cleared=0 is_debug=false
+--- RUN 12 ---
+id=1777410448-2190636487
+version=
+difficulty_tier=0
+outcome=abandon
+max_depth=0 rooms_cleared=0 is_debug=false
+--- RUN 13 ---
+id=1777410450-2192775876
+version=
+difficulty_tier=1
+outcome=death
+max_depth=8 rooms_cleared=8 is_debug=false
+death=ability=charger_charge, bearing_key=boss_chamber_the_warden, final_amount=16, health_after=6, health_before=22, raw_amount=18, room_depth=8, room_label=Boss Chamber: The Warden, source=enemy_contact, unix_time=1777410586
+--- RUN 14 ---
+id=1777410633-2375700856
+version=
+difficulty_tier=1
+outcome=death
+max_depth=4 rooms_cleared=4 is_debug=false
+death=ability=lurker_lunge, bearing_key=blitz, final_amount=28, health_after=20, health_before=48, raw_amount=29, room_depth=4, room_label=Blitz, source=enemy_contact, unix_time=1777410743
+--- RUN 15 ---
+id=1777410746-2488941257
+version=
+difficulty_tier=1
+outcome=death
+max_depth=7 rooms_cleared=7 is_debug=false
+death=ability=lurker_lunge, bearing_key=ambush, final_amount=32, health_after=15, health_before=47, raw_amount=39, room_depth=7, room_label=Ambush, source=enemy_contact, unix_time=1777410886
+--- RUN 16 ---
+id=1777410888-2631187361
+version=
+difficulty_tier=1
+outcome=abandon
+max_depth=0 rooms_cleared=0 is_debug=false
+--- RUN 17 ---
+id=1777410892-2634456777
+version=
+difficulty_tier=1
+outcome=death
+max_depth=10 rooms_cleared=10 is_debug=false
+death=ability=lurker_lunge, bearing_key=trial_blood_rush, final_amount=28, health_after=19, health_before=47, raw_amount=29, room_depth=10, room_label=Trial Blood Rush, source=enemy_contact, unix_time=1777411069
+--- RUN 18 ---
+id=1777411106-2848445016
+version=
+difficulty_tier=1
+outcome=abandon
+max_depth=0 rooms_cleared=0 is_debug=false
+--- RUN 19 ---
+id=1777411108-2850890168
+version=
+difficulty_tier=1
+outcome=death
+max_depth=11 rooms_cleared=11 is_debug=false
+death=ability=lurker_lunge, bearing_key=trial_flashpoint, final_amount=20, health_after=14, health_before=34, raw_amount=29, room_depth=11, room_label=Trial Flashpoint, source=enemy_contact, unix_time=1777411324
+--- RUN 20 ---
+id=1777411326-3068546162
+version=
+difficulty_tier=1
+outcome=abandon
+max_depth=0 rooms_cleared=0 is_debug=false
+--- RUN 21 ---
+id=1777411330-3073137037
+version=
+difficulty_tier=1
+outcome=death
+max_depth=7 rooms_cleared=7 is_debug=false
+death=ability=lurker_lunge, bearing_key=trial_blood_rush, final_amount=32, health_after=8, health_before=40, raw_amount=39, room_depth=7, room_label=Trial Blood Rush, source=enemy_contact, unix_time=1777411465
+--- RUN 22 ---
+id=1777411487-3229459365
+version=
+difficulty_tier=1
+outcome=clear
+max_depth=16 rooms_cleared=16 is_debug=false
+=== Aggregate ===
+reward_picks: battle_trance=3, blink_dash=3, execution_edge=7, first_strike=12, fleet_foot=7, heavy_blow=32, hunters_snare=3, iron_skin=10, kinetic_drive=2, long_reach=19, razor_wind=4, reaper_step=2, rupture_wave=6, static_wake=2, storm_crown=5, surge_step=6, wide_arc=14, wraithstep=1
+reward_picks_by_mode: 1|battle_trance=1, 1|blink_dash=1, 1|first_strike=9, 1|fleet_foot=5, 1|heavy_blow=23, 1|iron_skin=7, 1|kinetic_drive=1, 1|long_reach=13, 1|surge_step=5, 1|wide_arc=7, 3|execution_edge=7, 3|hunters_snare=3, 3|razor_wind=4, 3|reaper_step=2, 3|rupture_wave=6, 3|static_wake=2, 3|storm_crown=5, 3|wraithstep=1, 4|battle_trance=2, 4|blink_dash=2, 4|first_strike=3, 4|fleet_foot=2, 4|heavy_blow=9, 4|iron_skin=3, 4|kinetic_drive=1, 4|long_reach=6, 4|surge_step=1, 4|wide_arc=7
+initial_reward_picks: execution_edge=5, hunters_snare=3, razor_wind=2, reaper_step=1, rupture_wave=1, static_wake=2, storm_crown=3
+reward_offers: 
+door_choices_by_bearing: ambush=5, blitz=4, boss_1=12, boss_2=4, crossfire=5, cut_the_signal=15, fortress=3, gauntlet=7, last_stand=23, onslaught=9, pursuit=9, rest=17, skirmish=8, suppression=2, trial_blood_rush=4, trial_flashpoint=6, trial_iron_volley=3, trial_siegebreak=4, vanguard=6
+room_entries_by_bearing: abyss_core_sovereign=4, ambush=5, blitz=4, boss_chamber_the_warden=12, crossfire=5, cut_the_signal=15, fortress=3, gauntlet=7, last_stand=23, onslaught=9, pursuit=9, rest_site=17, skirmish=25, suppression=2, trial_blood_rush=4, trial_flashpoint=6, trial_iron_volley=3, trial_siegebreak=4, vanguard=6
+damage_by_bearing: abyss_core_sovereign=2, ambush=3, blitz=9, boss_chamber_the_warden=6, cut_the_signal=22, gauntlet=14, last_stand=43, onslaught=5, skirmish=2, trial_blood_rush=7, trial_flashpoint=13, trial_iron_volley=2, trial_siegebreak=3, vanguard=1
+deaths_by_bearing: abyss_core_sovereign=2, ambush=2, blitz=1, boss_chamber_the_warden=4, cut_the_signal=1, last_stand=1, trial_blood_rush=2, trial_flashpoint=2
+pick_rate_candidates:

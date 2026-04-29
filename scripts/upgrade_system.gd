@@ -34,7 +34,7 @@ const UPGRADE_IDS := {
 	"iron_skin": true,
 	"battle_trance": true,
 	"surge_step": true,
-	"kinetic_drive": true
+	"heartstone": true
 }
 
 const TRIAL_POWER_IDS := {
@@ -82,12 +82,16 @@ func apply_upgrade(upgrade_id: String) -> bool:
 	match id:
 		"first_strike", "heavy_blow", "wide_arc", "long_reach", "fleet_foot", "blink_dash", "battle_trance", "surge_step":
 			player_reference.set(String(preview.get("property", "")), preview.get("next", player_reference.get(String(preview.get("property", "")))))
-		"kinetic_drive":
+		"heartstone":
 			var next_max := int(preview.get("next", int(player_reference.get("max_health"))))
+			var current_max := int(player_reference.get("max_health"))
+			var max_gain := maxi(0, next_max - current_max)
 			player_reference.set("max_health", next_max)
 			var health_state_ref: Variant = player_reference.get("health_state")
 			if health_state_ref != null and is_instance_valid(health_state_ref):
 				health_state_ref.set("max_health", next_max)
+				if max_gain > 0 and health_state_ref.has_method("heal"):
+					health_state_ref.call("heal", max_gain)
 		"iron_skin":
 			player_reference.set("iron_skin_armor", int(preview.get("next", int(player_reference.get("iron_skin_armor")))))
 			player_reference.set("iron_skin_stacks", int(player_reference.get("iron_skin_stacks")) + 1)
@@ -500,7 +504,7 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 		"first_strike":
 			var cur_bonus := int(cur_val)
 			var next_bonus := int(next_val)
-			return "[color=#c8daf0]Vs enemies above 70%% HP:[/color] [color=#e8c96a]+%d dmg[/color] [color=#8899aa]->[/color] [color=#7de882]+%d dmg[/color]" % [cur_bonus, next_bonus]
+			return "[color=#c8daf0]Vs enemies above 80%% HP:[/color] [color=#e8c96a]+%d dmg[/color] [color=#8899aa]->[/color] [color=#7de882]+%d dmg[/color]" % [cur_bonus, next_bonus]
 		"heavy_blow":
 			return "[color=#c8daf0]Attack damage:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [int(cur_val), int(next_val)]
 		"wide_arc":
@@ -526,10 +530,11 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 			return "[color=#c8daf0]On hit:[/color] gain [color=#e8c96a]+%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]+%.0f[/color] move speed for [color=#7de882]%.2fs[/color]." % [cur_speed_bonus, next_speed_bonus, trance_duration]
 		"surge_step":
 			return "[color=#c8daf0]Dash speed:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [float(cur_val), float(next_val)]
-		"kinetic_drive":
+		"heartstone":
 			var cur_max := int(cur_val)
 			var next_max := int(next_val)
-			return "[color=#c8daf0]Max HP:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [cur_max, next_max]
+			var gain := maxi(0, next_max - cur_max)
+			return "[color=#c8daf0]Max HP:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]  [color=#c8daf0](Heal +%d)[/color]" % [cur_max, next_max, gain]
 		_:
 			return "[color=#c8daf0]Upgrade your stats.[/color]"
 

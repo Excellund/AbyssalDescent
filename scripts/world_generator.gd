@@ -1475,6 +1475,8 @@ func _begin_room(profile: Dictionary) -> void:
 	if profile.is_empty():
 		return
 	encounter_intro_grace_active = false
+	if is_instance_valid(player) and player.has_method("clear_lingering_combat_effects"):
+		player.call("clear_lingering_combat_effects")
 	if is_instance_valid(player) and player.has_method("tick_objective_mutators_for_encounter"):
 		player.call("tick_objective_mutators_for_encounter")
 	in_boss_room = false

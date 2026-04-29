@@ -787,7 +787,7 @@ func apply_power_for_test(power_id: String) -> bool:
 		"iron_skin": true,
 		"battle_trance": true,
 		"surge_step": true,
-		"kinetic_drive": true
+		"heartstone": true
 	}
 	if boon_ids.has(id):
 		apply_upgrade(id)
@@ -926,9 +926,20 @@ func _get_first_strike_bonus_damage(enemy_node: Object) -> int:
 	if enemy_max <= 0:
 		return 0
 	var enemy_current := int(enemy_health_state.get("current_health"))
-	if float(enemy_current) / float(enemy_max) >= 0.7:
+	if float(enemy_current) / float(enemy_max) >= 0.8:
 		return first_strike_bonus_damage
 	return 0
+
+func clear_lingering_combat_effects() -> void:
+	phantom_step_hit_ids.clear()
+	phantom_step_ghost_positions.clear()
+	phantom_step_ghost_emit_cd = 0.0
+	static_wake_trails.clear()
+	static_wake_trail_emit_cooldown = 0.0
+	wraithstep_marked_enemy_expiry.clear()
+	storm_crown_discharge_flash_left = 0.0
+	void_dash_reset_pulse_left = 0.0
+	queue_redraw()
 
 func _apply_rupture_wave(epicenter: Vector2, source_damage: int, rupture_hit_enemy_ids: Dictionary = {}) -> void:
 	var wave_damage := maxi(1, int(round(float(source_damage) * rupture_wave_damage_ratio)))

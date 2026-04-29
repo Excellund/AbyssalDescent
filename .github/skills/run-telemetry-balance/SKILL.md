@@ -83,3 +83,4 @@ Use this skill when you need evidence from real runs before changing encounter b
 - Deleting user://run_telemetry.save resets history; a new file is created on the next telemetry-enabled run.
 - If no file exists yet, verify the run was not started in a debug mode that disables telemetry collection.
 - Label-based bearing normalization is stable enough for analysis, but explicit bearing_key fields should be preferred whenever present.
+- Reward telemetry currently records the selected `choice_id` but not the full offered choice set. Treat "least picked" reward conclusions as selection-frequency signals, not true pick-rate/offer-rate measurements, unless offer-set logging is added.
