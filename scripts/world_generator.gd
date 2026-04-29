@@ -1674,6 +1674,26 @@ func _advance_room_progress() -> void:
 	room_depth = int(progress.get("room_depth", room_depth))
 	boss_unlocked = bool(progress.get("boss_unlocked", boss_unlocked))
 
+func _pick_boss_spawn_position(min_player_distance: float = 260.0, wall_margin: float = 210.0) -> Vector2:
+	if rng == null:
+		return Vector2.ZERO
+	var half := current_room_size * 0.5
+	var usable_half := Vector2(
+		maxf(80.0, half.x - wall_margin),
+		maxf(80.0, half.y - wall_margin)
+	)
+	var fallback := Vector2.ZERO
+	for _try in range(80):
+		var candidate := Vector2(
+			rng.randf_range(-usable_half.x, usable_half.x),
+			rng.randf_range(-usable_half.y, usable_half.y)
+		)
+		fallback = candidate
+		if is_instance_valid(player) and candidate.distance_to(player.global_position) < min_player_distance:
+			continue
+		return candidate
+	return fallback
+
 func _begin_boss_room() -> void:
 	in_boss_room = true
 	in_second_boss_room = false
@@ -1693,7 +1713,7 @@ func _begin_boss_room() -> void:
 	collision_shape.shape.radius = 34.0
 	boss.add_child(collision_shape)
 
-	boss.global_position = Vector2(0.0, -30.0)
+	boss.global_position = _pick_boss_spawn_position(maxf(260.0, spawn_safe_radius + 90.0), maxf(210.0, spawn_padding + 110.0))
 	add_child(boss)
 	boss.set("target", player)
 	boss.set("arena_size", current_room_size)
@@ -1721,7 +1741,7 @@ func _begin_second_boss_room() -> void:
 	collision_shape.shape.radius = 38.0
 	boss.add_child(collision_shape)
 
-	boss.global_position = Vector2(0.0, -40.0)
+	boss.global_position = _pick_boss_spawn_position(maxf(280.0, spawn_safe_radius + 110.0), maxf(230.0, spawn_padding + 130.0))
 	add_child(boss)
 	boss.set("target", player)
 	boss.set("arena_size", current_room_size)
