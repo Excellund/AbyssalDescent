@@ -1600,26 +1600,26 @@ func _pick_boss_spawn_position(min_player_distance: float = 260.0, wall_margin: 
 		return candidate
 	return fallback
 
-func _begin_boss_room() -> void:
-	in_boss_room = true
-	in_second_boss_room = false
+func _begin_configured_boss_room(is_first_boss: bool, room_size: Vector2, room_label: String, room_entry_key: String, banner_title: String, boss_script, collision_radius: float, min_player_distance: float, wall_margin: float) -> void:
+	in_boss_room = is_first_boss
+	in_second_boss_room = not is_first_boss
 	_play_room_music(true)
-	current_room_size = Vector2(1260.0, 900.0)
+	current_room_size = room_size
 	current_room_static_camera = false
-	current_room_label = "Boss Chamber: The Warden"
-	_record_room_entry("boss_1", {})
-	hud.show_banner("The Warden", "")
+	current_room_label = room_label
+	_record_room_entry(room_entry_key, {})
+	hud.show_banner(banner_title, "")
 	_apply_camera_bounds_for_room(current_room_size)
 	active_room_enemy_count = 1
 	var boss := CharacterBody2D.new()
-	boss.set_script(ENEMY_BOSS_SCRIPT)
+	boss.set_script(boss_script)
 
 	var collision_shape := CollisionShape2D.new()
 	collision_shape.shape = CircleShape2D.new()
-	collision_shape.shape.radius = 34.0
+	collision_shape.shape.radius = collision_radius
 	boss.add_child(collision_shape)
 
-	boss.global_position = _pick_boss_spawn_position(maxf(260.0, spawn_safe_radius + 90.0), maxf(210.0, spawn_padding + 110.0))
+	boss.global_position = _pick_boss_spawn_position(min_player_distance, wall_margin)
 	add_child(boss)
 	if boss.has_method("begin_spawn_transport"):
 		boss.call("begin_spawn_transport", BOSS_SPAWN_TRANSPORT_DURATION)
@@ -1629,36 +1629,32 @@ func _begin_boss_room() -> void:
 	if boss.has_signal("died"):
 		boss.died.connect(_on_room_enemy_died)
 	_start_encounter_intro_grace()
+
+func _begin_boss_room() -> void:
+	_begin_configured_boss_room(
+		true,
+		Vector2(1260.0, 900.0),
+		"Boss Chamber: The Warden",
+		"boss_1",
+		"The Warden",
+		ENEMY_BOSS_SCRIPT,
+		34.0,
+		maxf(260.0, spawn_safe_radius + 90.0),
+		maxf(210.0, spawn_padding + 110.0)
+	)
 
 func _begin_second_boss_room() -> void:
-	in_boss_room = false
-	in_second_boss_room = true
-	_play_room_music(true)
-	current_room_size = Vector2(1360.0, 960.0)
-	current_room_static_camera = false
-	current_room_label = "Abyss Core: Sovereign"
-	_record_room_entry("boss_2", {})
-	hud.show_banner("Sovereign", "")
-	_apply_camera_bounds_for_room(current_room_size)
-	active_room_enemy_count = 1
-	var boss := CharacterBody2D.new()
-	boss.set_script(ENEMY_BOSS_2_SCRIPT)
-
-	var collision_shape := CollisionShape2D.new()
-	collision_shape.shape = CircleShape2D.new()
-	collision_shape.shape.radius = 38.0
-	boss.add_child(collision_shape)
-
-	boss.global_position = _pick_boss_spawn_position(maxf(280.0, spawn_safe_radius + 110.0), maxf(230.0, spawn_padding + 130.0))
-	add_child(boss)
-	if boss.has_method("begin_spawn_transport"):
-		boss.call("begin_spawn_transport", BOSS_SPAWN_TRANSPORT_DURATION)
-	boss.set("target", player)
-	boss.set("arena_size", current_room_size)
-	_apply_boss_difficulty_scaling(boss)
-	if boss.has_signal("died"):
-		boss.died.connect(_on_room_enemy_died)
-	_start_encounter_intro_grace()
+	_begin_configured_boss_room(
+		false,
+		Vector2(1360.0, 960.0),
+		"Abyss Core: Sovereign",
+		"boss_2",
+		"Sovereign",
+		ENEMY_BOSS_2_SCRIPT,
+		38.0,
+		maxf(280.0, spawn_safe_radius + 110.0),
+		maxf(230.0, spawn_padding + 130.0)
+	)
 
 func _spawn_profile_enemies(profile: Dictionary) -> int:
 	if not is_instance_valid(enemy_spawner):

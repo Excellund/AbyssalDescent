@@ -44,7 +44,7 @@ func begin_room_objective(profile: Dictionary) -> void:
 func _begin_survival_objective(profile: Dictionary) -> void:
 	world.objective_time_left = ENCOUNTER_CONTRACTS.profile_objective_duration(profile)
 	world.objective_spawn_interval = ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
-	var objective_pressure_mult := world._objective_pressure_mult()
+	var objective_pressure_mult: float = world._objective_pressure_mult()
 	world.objective_spawn_interval *= clampf(1.15 - objective_pressure_mult * 0.2, 0.8, 1.08)
 	world.objective_spawn_timer = world.objective_spawn_interval
 	world.objective_spawn_batch = ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
@@ -65,7 +65,7 @@ func _begin_priority_target_objective(profile: Dictionary) -> void:
 	world.objective_target_name = "Signal"
 	world.objective_time_left = ENCOUNTER_CONTRACTS.profile_objective_duration(profile)
 	world.objective_spawn_interval = ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
-	var objective_pressure_mult := world._objective_pressure_mult()
+	var objective_pressure_mult: float = world._objective_pressure_mult()
 	world.objective_spawn_timer = maxf(0.35, world.objective_spawn_interval * clampf(1.2 - objective_pressure_mult * 0.45, 0.5, 0.95))
 	world.objective_spawn_batch = ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
 	world.objective_spawn_batch = maxi(1, int(round(float(world.objective_spawn_batch) * objective_pressure_mult)))
