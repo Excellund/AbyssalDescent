@@ -14,5 +14,6 @@ music_volume_db = -50.0
 
 [node name="DebugSettings" type="Node" parent="." unique_id=390124711]
 script = ExtResource("5_oxjlc")
+enabled = true
 
 [node name="Player" parent="." unique_id=1831438957 instance=ExtResource("1_elqb8")]
