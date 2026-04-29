@@ -124,6 +124,9 @@ func _ready() -> void:
 				break
 	configure_health_bar_visuals(Vector2(-74.0, -82.0), Vector2(148.0, 12.0))
 
+func _get_transport_color() -> Color:
+	return Color(0.46, 0.62, 1.0, 1.0)
+
 func _process_behavior(delta: float) -> void:
 	if not is_instance_valid(target):
 		velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
@@ -805,6 +808,10 @@ func _get_enrage_ratio() -> float:
 	return clampf((0.78 - health_ratio) / 0.58, 0.0, 1.0)
 
 func _draw() -> void:
+	if is_spawn_transporting():
+		var facing := visual_facing_direction if visual_facing_direction.length_squared() > 0.000001 else Vector2.RIGHT
+		_draw_spawn_transport_fx(36.0, facing)
+		return
 	var pulse := _get_attack_pulse()
 	var facing := visual_facing_direction if visual_facing_direction.length_squared() > 0.000001 else Vector2.RIGHT
 	var body_radius := 36.0 + pulse * 0.78

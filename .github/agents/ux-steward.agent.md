@@ -1,6 +1,6 @@
 ---
 name: UX Steward
-description: "Use when building or refining UI, HUD, reward cards, menus, and VFX feedback in Godot. Focuses on text fit and readability, layout hierarchy, animation timing, layer ordering, and audiovisual feedback clarity. Triggers: UI text overflow, reward card wrapping, HUD layout, menu polish, pause menu UI, victory screen UI, health bar feedback, animation timing, transition fade, z-index conflict, layer ordering, button feedback, visual feedback clarity, audio visual sync."
+description: "Use when building or refining UI, HUD, reward cards, menus, and VFX feedback in Godot. Focuses on text fit and readability, layout hierarchy, animation timing, layer ordering, and audiovisual feedback clarity. Triggers: UI text overflow, reward card wrapping, HUD layout, menu polish, pause menu UI, victory screen UI, health bar feedback, animation timing, transition fade, z-index conflict, layer ordering, button feedback, visual feedback clarity, audio visual sync, spawn transport VFX, enemy transport animation, crisp glow effects."
 tools: [read, search, edit, execute, todo]
 argument-hint: Describe the UX issue, affected screen/component, and success criteria.
 user-invocable: true
@@ -24,6 +24,7 @@ Your mission is to improve clarity, readability, and tactile feedback across UI,
 - World visual rendering: scripts/world_renderer.gd
 - Shared color language: scripts/color_palette.gd
 - Menus/overlays: scripts/menu_controller.gd, scripts/pause_menu_controller.gd, scripts/victory_screen.gd
+- Spawn transport VFX: scripts/enemy_base.gd `_draw_spawn_transport_fx()` — use skill `vfx-transport-fx` for duration tuning, phase editing, and new enemy color identities.
 
 ## Required Workflow
 1. Identify the exact UX surface and failure mode (overflow, clipping, timing, hierarchy, interaction, readability).

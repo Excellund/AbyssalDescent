@@ -102,6 +102,9 @@ var slow_speed_mult: float = 1.0
 var has_mutator_overlay: bool = false
 var mutator_theme_color: Color = Color(1.0, 0.4, 0.4, 1.0)
 var damage_blocked: bool = false
+var spawn_transport_time_left: float = 0.0
+var spawn_transport_duration: float = 0.0
+var spawn_transport_seed: float = 0.0
 
 func _ready() -> void:
 	motion_mode = CharacterBody2D.MOTION_MODE_FLOATING
@@ -119,9 +122,33 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	_update_attack_animation(delta)
 	_update_recent_damage_overlay(delta)
+	_update_spawn_transport(delta)
+	if is_spawn_transporting():
+		velocity = Vector2.ZERO
+		move_and_slide()
+		return
 	_apply_crowd_separation(delta)
 	_process_behavior(delta)
 	_update_visual_facing_direction()
+
+func _update_spawn_transport(delta: float) -> void:
+	if spawn_transport_time_left <= 0.0:
+		return
+	spawn_transport_time_left = maxf(0.0, spawn_transport_time_left - delta)
+	queue_redraw()
+
+func begin_spawn_transport(duration: float = 0.3) -> void:
+	spawn_transport_duration = clampf(duration, 0.16, 1.4)
+	spawn_transport_time_left = spawn_transport_duration
+	spawn_transport_seed = rng_seed_from_instance()
+	velocity = Vector2.ZERO
+	queue_redraw()
+
+func is_spawn_transporting() -> bool:
+	return spawn_transport_time_left > 0.0
+
+func rng_seed_from_instance() -> float:
+	return float(int(get_instance_id()) % 10000) * 0.0137
 
 func _process_behavior(_delta: float) -> void:
 	pass
@@ -415,6 +442,9 @@ func _get_current_health() -> int:
 	return health_state.current_health
 
 func _draw_common_body(body_radius: float, body_color: Color, core_color: Color, facing: Vector2) -> void:
+	if is_spawn_transporting():
+		_draw_spawn_transport_fx(body_radius, facing)
+		return
 	var side := Vector2(-facing.y, facing.x)
 	var outer_color := COLOR_BODY_OUTER_GLOW
 	
@@ -439,6 +469,76 @@ func _draw_common_body(body_radius: float, body_color: Color, core_color: Color,
 	draw_line(spike_r, spike_r - side * 6.0, COLOR_BODY_SPIKE, 1.8)
 	_draw_mutator_overlay(body_radius)
 	_draw_damage_blocked_indicator(body_radius)
+
+func _get_transport_color() -> Color:
+	return Color(0.56, 0.94, 1.0, 1.0)
+
+func _draw_spawn_transport_fx(body_radius: float, _facing: Vector2) -> void:
+	var duration := maxf(0.001, spawn_transport_duration)
+	var t := 1.0 - clampf(spawn_transport_time_left / duration, 0.0, 1.0)
+	var seed := spawn_transport_seed
+	var tint := _get_transport_color()
+
+	# Soft outer glow — tinted, atmospheric, bell-curves through the full animation
+	var glow_a := sin(clampf(t / 0.88, 0.0, 1.0) * PI) * 0.32
+	if glow_a > 0.01:
+		draw_circle(Vector2.ZERO, body_radius + 26.0,
+				Color(tint.r * 0.52, tint.g * 0.68, tint.b, glow_a))
+
+	# Pillar (t 0→0.50) — drops from above; wide tinted glow + sharp white spine
+	var pillar_t := clampf(t / 0.50, 0.0, 1.0)
+	var pillar_a := sin(pillar_t * PI)
+	if pillar_a > 0.02:
+		var ph := 200.0 - pillar_t * 130.0
+		draw_line(Vector2(0.0, -ph), Vector2(0.0, body_radius),
+				Color(tint.r * 0.62, tint.g * 0.80, tint.b, pillar_a * 0.18), 52.0)
+		draw_line(Vector2(0.0, -ph), Vector2(0.0, body_radius),
+				Color(1.0, 1.0, 1.0, pillar_a * 0.94), 4.0)
+
+	# Body ring (t 0.26→0.88) — one ring, glow halo + sharp white core
+	var ring_t := clampf((t - 0.26) / 0.62, 0.0, 1.0)
+	if ring_t > 0.0:
+		var ring_a := sin(ring_t * PI)
+		draw_arc(Vector2.ZERO, body_radius + 3.0, 0.0, TAU, 48,
+				Color(tint.r * 0.68, tint.g * 0.84, tint.b, ring_a * 0.38), 11.0)
+		draw_arc(Vector2.ZERO, body_radius + 3.0, 0.0, TAU, 48,
+				Color(1.0, 1.0, 1.0, ring_a * 0.86), 2.0)
+
+	# 4 radial streaks (t 0.30→0.80) — directed outward, not orbiting
+	var streak_t := clampf((t - 0.30) / 0.50, 0.0, 1.0)
+	if streak_t > 0.0 and streak_t < 1.0:
+		var streak_a := sin(streak_t * PI)
+		for i in range(4):
+			var ang := seed + TAU * float(i) / 4.0
+			var dir := Vector2.RIGHT.rotated(ang)
+			var inner := dir * body_radius * 0.85
+			var outer := dir * (body_radius + 5.0 + streak_t * body_radius * 2.4)
+			draw_line(inner, outer,
+					Color(tint.r * 0.78, tint.g * 0.88, tint.b, streak_a * 0.26), 8.0)
+			draw_line(inner, outer,
+					Color(1.0, 0.96, 0.90, streak_a * 0.88), 2.0)
+			draw_circle(outer, 3.2, Color(1.0, 0.98, 0.92, streak_a * 0.80))
+
+	# Materialize bridge (t 0.72→1.0) — smooth handoff into normal body draw
+	var reveal_t := clampf((t - 0.72) / 0.28, 0.0, 1.0)
+	if reveal_t > 0.0:
+		var reveal_a := reveal_t * reveal_t
+		draw_circle(Vector2.ZERO, body_radius + 5.0,
+				Color(tint.r * 0.42, tint.g * 0.56, tint.b * 0.98, reveal_a * 0.18))
+		draw_circle(Vector2.ZERO, body_radius,
+				Color(tint.r * 0.78, tint.g * 0.90, tint.b, reveal_a * 0.52))
+		draw_circle(Vector2.ZERO, body_radius * 0.66,
+				Color(1.0, 1.0, 1.0, reveal_a * 0.16))
+
+	# Arrival flash (t 0.86→1.0) — fast pop, linear decay, gets out of the way
+	var flash_t := clampf((t - 0.86) / 0.14, 0.0, 1.0)
+	if flash_t > 0.0:
+		var flash_a := 1.0 - flash_t
+		draw_circle(Vector2.ZERO, body_radius * (1.0 + flash_t * 0.65),
+				Color(lerpf(1.0, tint.r, 0.28), lerpf(0.94, tint.g, 0.20), lerpf(0.88, tint.b, 0.16),
+				flash_a * 0.70))
+		draw_circle(Vector2.ZERO, body_radius * 0.62,
+				Color(1.0, 1.0, 1.0, flash_a * 0.94))
 
 func _draw_mutator_overlay(body_radius: float) -> void:
 	if not has_mutator_overlay:

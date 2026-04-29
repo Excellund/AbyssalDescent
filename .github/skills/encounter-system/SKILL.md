@@ -31,6 +31,9 @@ Use this skill when working on the refactored encounter-generation surfaces.
   - Add an entry to `ENEMY_MUTATOR_STAT_MAP`.
   - Reuse existing stat families intentionally when the enemy shares an archetype.
   - Only add new mutator stat keys in `encounter_contracts.gd` when an existing family no longer fits.
+- Tune spawn intro pacing for encounters/boss rooms:
+  - Edit `begin_spawn_transport()` call-site durations in `scripts/enemy_spawner.gd` (normal) and `scripts/world_generator.gd` (bosses).
+  - Keep `_start_encounter_intro_grace()` pulse from overwriting in-progress boss transport.
 
 ## Archetype Rules
 - `melee`: chasers and lurkers
@@ -58,3 +61,4 @@ Mutators match a profile if any declared archetype is present. If a filtered poo
 - Do not reintroduce encounter-specific build/scaling helper sprawl when `BEARING_DEFINITIONS` can express the change.
 - Do not add a random hard mutator without `affected_archetypes`, or invalid rooms can roll it.
 - Do not duplicate per-enemy mutator logic outside `ENEMY_MUTATOR_STAT_MAP` unless the behavior is genuinely exceptional.
+- Do not assume transport FX appears on custom boss draw paths: if a boss bypasses `_draw_common_body()`, its `_draw()` must explicitly gate on `is_spawn_transporting()` and render `_draw_spawn_transport_fx(...)` before returning.

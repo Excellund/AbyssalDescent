@@ -1715,6 +1715,8 @@ func _begin_boss_room() -> void:
 
 	boss.global_position = _pick_boss_spawn_position(maxf(260.0, spawn_safe_radius + 90.0), maxf(210.0, spawn_padding + 110.0))
 	add_child(boss)
+	if boss.has_method("begin_spawn_transport"):
+		boss.call("begin_spawn_transport", 0.40)
 	boss.set("target", player)
 	boss.set("arena_size", current_room_size)
 	_apply_boss_difficulty_scaling(boss)
@@ -1743,6 +1745,8 @@ func _begin_second_boss_room() -> void:
 
 	boss.global_position = _pick_boss_spawn_position(maxf(280.0, spawn_safe_radius + 110.0), maxf(230.0, spawn_padding + 130.0))
 	add_child(boss)
+	if boss.has_method("begin_spawn_transport"):
+		boss.call("begin_spawn_transport", 0.40)
 	boss.set("target", player)
 	boss.set("arena_size", current_room_size)
 	_apply_boss_difficulty_scaling(boss)
@@ -2135,6 +2139,12 @@ func _start_encounter_intro_grace() -> void:
 	encounter_intro_grace_active = true
 	if is_instance_valid(player) and player is CharacterBody2D:
 		(player as CharacterBody2D).velocity = Vector2.ZERO
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node):
+			continue
+		var enemy := enemy_node as Node
+		if enemy.has_method("begin_spawn_transport") and not enemy.get("spawn_transport_time_left") > 0.36:
+			enemy.call("begin_spawn_transport", 0.24)
 	_set_enemy_targets_passive(true)
 	hud.show_banner("Survey the arena", "")
 

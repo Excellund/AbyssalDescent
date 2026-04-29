@@ -46,6 +46,7 @@ var scripts: Dictionary = {}
 var current_room_size: Vector2 = Vector2.ZERO
 var spawn_padding: float = 90.0
 var spawn_safe_radius: float = 170.0
+var spawn_transport_duration: float = 0.36
 var current_room_enemy_mutator: Dictionary = {}
 
 func initialize(world_root_node: Node2D, player_node: Node2D, rng_instance: RandomNumberGenerator, script_map: Dictionary, enemy_died_callback: Callable) -> void:
@@ -135,6 +136,8 @@ func _spawn_enemy_in_current_room(enemy_script: Script, min_player_distance: flo
 
 	enemy.global_position = _pick_spawn_position_in_current_room(min_player_distance)
 	world_root.add_child(enemy)
+	if enemy.has_method("begin_spawn_transport"):
+		enemy.call("begin_spawn_transport", spawn_transport_duration)
 	enemy.set("target", player)
 	if enemy.get("arena_size") != null:
 		enemy.set("arena_size", current_room_size)

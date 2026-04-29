@@ -67,6 +67,8 @@ func _ready() -> void:
 				break
 	configure_health_bar_visuals(Vector2(-66.0, -74.0), Vector2(132.0, 12.0))
 
+func _get_transport_color() -> Color:
+	return Color(1.0, 0.68, 0.18, 1.0)
 
 func _process_behavior(delta: float) -> void:
 	if not is_instance_valid(target):
@@ -374,9 +376,12 @@ func _get_enrage_ratio() -> float:
 
 
 func _draw() -> void:
+	var facing := visual_facing_direction if visual_facing_direction.length_squared() > 0.000001 else Vector2.RIGHT
+	if is_spawn_transporting():
+		_draw_spawn_transport_fx(34.0, facing)
+		return
 	var pulse := _get_attack_pulse()
 	var body_radius := 34.0 + pulse * 0.8
-	var facing := visual_facing_direction if visual_facing_direction.length_squared() > 0.000001 else Vector2.RIGHT
 	var body_color := COLOR_BOSS_BODY
 	var core_color := COLOR_BOSS_CORE
 	var threat_t := telegraph_alpha if boss_state == STATE_TELEGRAPH else 0.0
