@@ -1,0 +1,137 @@
+# PowerShell pre-commit hook for build validation and debug checks
+# This prevents commits when:
+# 1. Godot scripts have syntax errors
+# 2. Debug options are enabled in the project
+
+$ErrorActionPreference = "Stop"
+$projectRoot = git rev-parse --show-toplevel
+$scriptsPath = "$projectRoot/scripts"
+
+Write-Host "[PRE-COMMIT] Starting validation..." -ForegroundColor Cyan
+
+# ============================================================================
+# CHECK 1: Validate Godot script syntax (quick check)
+# ============================================================================
+Write-Host ""
+Write-Host "Checking for syntax issues..." -ForegroundColor Yellow
+
+# Only check recently modified or staged files for performance
+$stagedFiles = @()
+try {
+    $stagedFiles = git diff --cached --name-only --diff-filter=ACM | Where-Object { $_ -like "*.gd" }
+} catch {
+    Write-Host "[WARN] Could not get staged files" -ForegroundColor Yellow
+}
+
+if ($stagedFiles.Count -eq 0) {
+    Write-Host "[SKIP] No .gd files staged for commit" -ForegroundColor Yellow
+} else {
+    $quickErrors = 0
+    foreach ($file in $stagedFiles) {
+        $fullPath = "$projectRoot/$file"
+        if (-not (Test-Path $fullPath)) { continue }
+        
+        $content = Get-Content -Path $fullPath -Raw
+        
+        # Quick checks only - unclosed braces at end of file
+        if ($content -match '\{\s*$' -and -not ($content -match '\}\s*$')) {
+            Write-Host "  [ERROR] $($file): Possible unclosed braces" -ForegroundColor Red
+            $quickErrors++
+        }
+    }
+    
+    if ($quickErrors -gt 0) {
+        exit 1
+    }
+    
+    Write-Host "[OK] Staged .gd files checked ($($stagedFiles.Count) files)" -ForegroundColor Green
+}
+
+# ============================================================================
+# CHECK 2: Verify debug options are not enabled
+# ============================================================================
+Write-Host ""
+Write-Host "Checking for enabled debug options..." -ForegroundColor Yellow
+
+$debugChecksPassed = $true
+
+# Check world_generator.gd for debug exports
+$worldGenPath = "$scriptsPath/world_generator.gd"
+if (Test-Path $worldGenPath) {
+    $content = Get-Content -Path $worldGenPath -Raw
+    
+    # Check debug_apply_test_powers_on_start
+    if ($content -match 'debug_apply_test_powers_on_start\s*:\s*bool\s*=\s*true') {
+        Write-Host "  [ERROR] debug_apply_test_powers_on_start is enabled" -ForegroundColor Red
+        $debugChecksPassed = $false
+    }
+    
+    # Check debug_skip_starting_boon_selection
+    if ($content -match 'debug_skip_starting_boon_selection\s*:\s*bool\s*=\s*true') {
+        Write-Host "  [ERROR] debug_skip_starting_boon_selection is enabled" -ForegroundColor Red
+        $debugChecksPassed = $false
+    }
+    
+    # Check debug_start_power_preset - extract the line and check if it has a valid NONE value
+    $powerPresetMatch = [regex]::Match($content, 'debug_start_power_preset\s*:\s*int\s*=\s*(.+?)(?=\n|$)')
+    if ($powerPresetMatch.Success) {
+        $value = $powerPresetMatch.Groups[1].Value.Trim()
+        if ($value -notmatch '(DEBUG_POWER_PRESET_NONE|= 0)') {
+            Write-Host "  [ERROR] debug_start_power_preset is not set to NONE (currently: $value)" -ForegroundColor Red
+            $debugChecksPassed = $false
+        }
+    }
+    
+    # Check debug_start_encounter - should have DEBUG_ENCOUNTER_NONE
+    $encounterMatch = [regex]::Match($content, 'debug_start_encounter\s*:\s*int\s*=\s*(.+?)(?=\n|$)')
+    if ($encounterMatch.Success) {
+        $value = $encounterMatch.Groups[1].Value.Trim()
+        if ($value -notmatch '(DEBUG_ENCOUNTER_NONE|= 0)') {
+            Write-Host "  [ERROR] debug_start_encounter is not set to NONE (currently: $value)" -ForegroundColor Red
+            $debugChecksPassed = $false
+        }
+    }
+    
+    # Check debug_mutator_override - should have DEBUG_MUTATOR_NONE
+    $mutatorMatch = [regex]::Match($content, 'debug_mutator_override\s*:\s*int\s*=\s*(.+?)(?=\n|$)')
+    if ($mutatorMatch.Success) {
+        $value = $mutatorMatch.Groups[1].Value.Trim()
+        if ($value -notmatch '(DEBUG_MUTATOR_NONE|= 0)') {
+            Write-Host "  [ERROR] debug_mutator_override is not set to NONE (currently: $value)" -ForegroundColor Red
+            $debugChecksPassed = $false
+        }
+    }
+    
+    # Check debug_end_screen_preview - should have DEBUG_END_SCREEN_NONE
+    $endScreenMatch = [regex]::Match($content, 'debug_end_screen_preview\s*:\s*int\s*=\s*(.+?)(?=\n|$)')
+    if ($endScreenMatch.Success) {
+        $value = $endScreenMatch.Groups[1].Value.Trim()
+        if ($value -notmatch '(DEBUG_END_SCREEN_NONE|= 0)') {
+            Write-Host "  [ERROR] debug_end_screen_preview is not set to NONE (currently: $value)" -ForegroundColor Red
+            $debugChecksPassed = $false
+        }
+    }
+}
+
+# Check menu_controller.gd for other debug settings
+$menuControllerPath = "$scriptsPath/menu_controller.gd"
+if (Test-Path $menuControllerPath) {
+    $content = Get-Content -Path $menuControllerPath -Raw
+    
+    # Future debug checks can go here if needed
+}
+
+if ($debugChecksPassed) {
+    Write-Host "[OK] No debug options are enabled" -ForegroundColor Green
+} else {
+    Write-Host ""
+    Write-Host "[FAIL] Debug options are still enabled. Disable them before committing." -ForegroundColor Red
+    exit 1
+}
+
+# ============================================================================
+# All checks passed!
+# ============================================================================
+Write-Host ""
+Write-Host "[SUCCESS] All pre-commit checks passed! Commit allowed." -ForegroundColor Green
+exit 0

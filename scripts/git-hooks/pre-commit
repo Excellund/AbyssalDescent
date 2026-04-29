@@ -1,0 +1,11 @@
+#!/bin/sh
+# Pre-commit hook wrapper for Windows/PowerShell
+# This file should be copied to .git/hooks/pre-commit
+
+# Get the script directory
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+
+# Call the PowerShell validation script
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PROJECT_ROOT/scripts/git-hooks/pre-commit.ps1"
+exit $?
