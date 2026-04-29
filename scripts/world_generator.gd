@@ -1523,26 +1523,8 @@ func _begin_room(profile: Dictionary) -> void:
 		player.call("tick_objective_mutators_for_encounter")
 	in_boss_room = false
 	in_second_boss_room = false
-	active_objective_kind = ""
-	objective_time_left = 0.0
-	objective_spawn_interval = 0.0
-	objective_spawn_timer = 0.0
-	objective_spawn_batch = 1
-	objective_max_enemies = 0
-	objective_kill_target = 0
-	objective_kills = 0
-	objective_overtime = false
-	objective_survival_quota_announced = false
-	objective_target_enemy = null
-	objective_target_type = ""
-	objective_target_name = ""
-	objective_hunt_kill_progress = 0
-	objective_exposure_left = 0.0
-	objective_exposure_push_left = 0.0
-	objective_last_relocated_escort_count = 0
-	objective_relocation_hint_left = 0.0
-	_clear_priority_target_escort_dash_lines()
-	_clear_priority_target_exposure_vfx()
+	if is_instance_valid(objective_runtime):
+		objective_runtime.reset_room_objective_state()
 	_play_room_music(false)
 	current_room_size = ENCOUNTER_CONTRACTS.profile_room_size(profile)
 	current_room_static_camera = ENCOUNTER_CONTRACTS.profile_static_camera(profile)
@@ -1565,39 +1547,8 @@ func _begin_room(profile: Dictionary) -> void:
 		enemy_spawner.call("configure_room", current_room_size, spawn_padding, spawn_safe_radius, current_room_enemy_mutator)
 	_apply_camera_bounds_for_room(current_room_size)
 	active_room_enemy_count = _spawn_profile_enemies(profile)
-	active_objective_kind = ENCOUNTER_CONTRACTS.profile_objective_kind(profile)
-	if active_objective_kind == "survival":
-		objective_time_left = ENCOUNTER_CONTRACTS.profile_objective_duration(profile)
-		objective_spawn_interval = ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
-		var objective_pressure_mult := _objective_pressure_mult()
-		objective_spawn_interval *= clampf(1.15 - objective_pressure_mult * 0.2, 0.8, 1.08)
-		objective_spawn_timer = objective_spawn_interval
-		objective_spawn_batch = ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
-		objective_spawn_batch = maxi(1, int(round(float(objective_spawn_batch) * objective_pressure_mult)))
-		objective_max_enemies = mini(24, 12 + int(floor(float(room_depth) * 0.9)))
-		objective_max_enemies = maxi(8, int(round(float(objective_max_enemies) * objective_pressure_mult)))
-		var raw_kill_target := maxi(10, int(round(objective_time_left * 0.42)) + 2 + int(floor(float(room_depth) * 0.35)))
-		raw_kill_target = maxi(8, int(round(float(raw_kill_target) * objective_pressure_mult)))
-		objective_kill_target = int(ceil(float(raw_kill_target) / 5.0)) * 5
-		objective_kills = 0
-		objective_overtime = false
-		objective_survival_quota_announced = false
-	elif active_objective_kind == "priority_target":
-		objective_target_type = ENCOUNTER_CONTRACTS.profile_objective_target_type(profile)
-		if objective_target_type.is_empty():
-			objective_target_type = "archer"
-		objective_target_name = "Signal"
-		objective_time_left = ENCOUNTER_CONTRACTS.profile_objective_duration(profile)
-		objective_spawn_interval = ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
-		var objective_pressure_mult := _objective_pressure_mult()
-		objective_spawn_timer = maxf(0.35, objective_spawn_interval * clampf(1.2 - objective_pressure_mult * 0.45, 0.5, 0.95))
-		objective_spawn_batch = ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
-		objective_spawn_batch = maxi(1, int(round(float(objective_spawn_batch) * objective_pressure_mult)))
-		objective_max_enemies = 12 + int(floor(float(room_depth) * 0.6))
-		objective_max_enemies = maxi(6, int(round(float(objective_max_enemies) * objective_pressure_mult)))
-		objective_hunt_kill_goal = clampi(int(round(4.0 * objective_pressure_mult)), 2, 6)
-		objective_overtime = false
-		_spawn_priority_target_enemy()
+	if is_instance_valid(objective_runtime):
+		objective_runtime.begin_room_objective(profile)
 	_start_encounter_intro_grace()
 
 func _enter_rest_site() -> void:

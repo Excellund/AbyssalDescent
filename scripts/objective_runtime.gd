@@ -11,6 +11,70 @@ func initialize(world_generator: Node, random_number_generator: RandomNumberGene
 	world = world_generator
 	rng = random_number_generator
 
+func reset_room_objective_state() -> void:
+	world.active_objective_kind = ""
+	world.objective_time_left = 0.0
+	world.objective_spawn_interval = 0.0
+	world.objective_spawn_timer = 0.0
+	world.objective_spawn_batch = 1
+	world.objective_max_enemies = 0
+	world.objective_kill_target = 0
+	world.objective_kills = 0
+	world.objective_overtime = false
+	world.objective_survival_quota_announced = false
+	world.objective_target_enemy = null
+	world.objective_target_type = ""
+	world.objective_target_name = ""
+	world.objective_hunt_kill_progress = 0
+	world.objective_exposure_left = 0.0
+	world.objective_exposure_push_left = 0.0
+	world.objective_last_relocated_escort_count = 0
+	world.objective_relocation_hint_left = 0.0
+	clear_priority_target_escort_dash_lines()
+	clear_priority_target_exposure_vfx()
+
+func begin_room_objective(profile: Dictionary) -> void:
+	world.active_objective_kind = ENCOUNTER_CONTRACTS.profile_objective_kind(profile)
+	if world.active_objective_kind == "survival":
+		_begin_survival_objective(profile)
+		return
+	if world.active_objective_kind == "priority_target":
+		_begin_priority_target_objective(profile)
+
+func _begin_survival_objective(profile: Dictionary) -> void:
+	world.objective_time_left = ENCOUNTER_CONTRACTS.profile_objective_duration(profile)
+	world.objective_spawn_interval = ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
+	var objective_pressure_mult := world._objective_pressure_mult()
+	world.objective_spawn_interval *= clampf(1.15 - objective_pressure_mult * 0.2, 0.8, 1.08)
+	world.objective_spawn_timer = world.objective_spawn_interval
+	world.objective_spawn_batch = ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
+	world.objective_spawn_batch = maxi(1, int(round(float(world.objective_spawn_batch) * objective_pressure_mult)))
+	world.objective_max_enemies = mini(24, 12 + int(floor(float(world.room_depth) * 0.9)))
+	world.objective_max_enemies = maxi(8, int(round(float(world.objective_max_enemies) * objective_pressure_mult)))
+	var raw_kill_target := maxi(10, int(round(world.objective_time_left * 0.42)) + 2 + int(floor(float(world.room_depth) * 0.35)))
+	raw_kill_target = maxi(8, int(round(float(raw_kill_target) * objective_pressure_mult)))
+	world.objective_kill_target = int(ceil(float(raw_kill_target) / 5.0)) * 5
+	world.objective_kills = 0
+	world.objective_overtime = false
+	world.objective_survival_quota_announced = false
+
+func _begin_priority_target_objective(profile: Dictionary) -> void:
+	world.objective_target_type = ENCOUNTER_CONTRACTS.profile_objective_target_type(profile)
+	if world.objective_target_type.is_empty():
+		world.objective_target_type = "archer"
+	world.objective_target_name = "Signal"
+	world.objective_time_left = ENCOUNTER_CONTRACTS.profile_objective_duration(profile)
+	world.objective_spawn_interval = ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
+	var objective_pressure_mult := world._objective_pressure_mult()
+	world.objective_spawn_timer = maxf(0.35, world.objective_spawn_interval * clampf(1.2 - objective_pressure_mult * 0.45, 0.5, 0.95))
+	world.objective_spawn_batch = ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
+	world.objective_spawn_batch = maxi(1, int(round(float(world.objective_spawn_batch) * objective_pressure_mult)))
+	world.objective_max_enemies = 12 + int(floor(float(world.room_depth) * 0.6))
+	world.objective_max_enemies = maxi(6, int(round(float(world.objective_max_enemies) * objective_pressure_mult)))
+	world.objective_hunt_kill_goal = clampi(int(round(4.0 * objective_pressure_mult)), 2, 6)
+	world.objective_overtime = false
+	spawn_priority_target_enemy()
+
 func update_objective_state(delta: float) -> void:
 	if world.active_objective_kind == "survival":
 		update_survival_objective_state(delta)
@@ -457,6 +521,7 @@ func clear_priority_target_escort_dash_lines() -> void:
 		if is_instance_valid(line):
 			line.queue_free()
 	world.objective_escort_dash_lines.clear()
+	world.objective_escort_dash_line_time_left = 0.0
 
 func update_priority_target_marker(delta: float) -> void:
 	if world.objective_escort_dash_line_time_left > 0.0:
