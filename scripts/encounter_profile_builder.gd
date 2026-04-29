@@ -221,20 +221,17 @@ func _apply_bearing_count_scaling(profile: Dictionary, pressure_mult_override: f
 		archers,
 		shielders
 	)
-	if modified.has("lurker_count"):
-		modified["lurker_count"] = _scale_enemy_count(int(modified.get("lurker_count", 0)), 0, pressure_mult_override)
-	if modified.has("ram_count"):
-		modified["ram_count"] = _scale_enemy_count(int(modified.get("ram_count", 0)), 0, pressure_mult_override)
-	if modified.has("lancer_count"):
-		modified["lancer_count"] = _scale_enemy_count(int(modified.get("lancer_count", 0)), 0, pressure_mult_override)
+	var lurkers := ENCOUNTER_CONTRACTS.profile_lurker_count(modified)
+	var rams := ENCOUNTER_CONTRACTS.profile_ram_count(modified)
+	var lancers := ENCOUNTER_CONTRACTS.profile_lancer_count(modified)
+	ENCOUNTER_CONTRACTS.profile_set_specialist_counts(
+		modified,
+		_scale_enemy_count(lurkers, 0, pressure_mult_override),
+		_scale_enemy_count(rams, 0, pressure_mult_override),
+		_scale_enemy_count(lancers, 0, pressure_mult_override)
+	)
 	if minimum_total > 0:
-		var current_total := ENCOUNTER_CONTRACTS.profile_chaser_count(modified)
-		current_total += ENCOUNTER_CONTRACTS.profile_charger_count(modified)
-		current_total += ENCOUNTER_CONTRACTS.profile_archer_count(modified)
-		current_total += ENCOUNTER_CONTRACTS.profile_shielder_count(modified)
-		current_total += int(modified.get("lurker_count", 0))
-		current_total += int(modified.get("ram_count", 0))
-		current_total += int(modified.get("lancer_count", 0))
+		var current_total := ENCOUNTER_CONTRACTS.profile_total_enemy_count(modified)
 		if current_total < minimum_total:
 			var delta := minimum_total - current_total
 			modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT] = ENCOUNTER_CONTRACTS.profile_chaser_count(modified) + delta
@@ -252,9 +249,12 @@ func _apply_profile_counts(profile: Dictionary, counts: Dictionary) -> Dictionar
 		int(counts.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT, 0)),
 		int(counts.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT, 0))
 	)
-	modified["lurker_count"] = int(counts.get("lurker_count", 0))
-	modified["ram_count"] = int(counts.get("ram_count", 0))
-	modified["lancer_count"] = int(counts.get("lancer_count", 0))
+	ENCOUNTER_CONTRACTS.profile_set_specialist_counts(
+		modified,
+		int(counts.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_LURKER_COUNT, 0)),
+		int(counts.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_RAM_COUNT, 0)),
+		int(counts.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_LANCER_COUNT, 0))
+	)
 	return modified
 
 func _build_bearing_profile(label: String) -> Dictionary:
@@ -309,11 +309,11 @@ func _hard_mutator_chance(depth: int) -> float:
 func _profile_has_enemy_archetype(profile: Dictionary, archetype: String) -> bool:
 	match archetype:
 		"melee":
-			return ENCOUNTER_CONTRACTS.profile_chaser_count(profile) > 0 or int(profile.get("lurker_count", 0)) > 0
+			return ENCOUNTER_CONTRACTS.profile_chaser_count(profile) > 0 or ENCOUNTER_CONTRACTS.profile_lurker_count(profile) > 0
 		"charger":
-			return ENCOUNTER_CONTRACTS.profile_charger_count(profile) > 0 or int(profile.get("ram_count", 0)) > 0
+			return ENCOUNTER_CONTRACTS.profile_charger_count(profile) > 0 or ENCOUNTER_CONTRACTS.profile_ram_count(profile) > 0
 		"archer":
-			return ENCOUNTER_CONTRACTS.profile_archer_count(profile) > 0 or int(profile.get("lancer_count", 0)) > 0
+			return ENCOUNTER_CONTRACTS.profile_archer_count(profile) > 0 or ENCOUNTER_CONTRACTS.profile_lancer_count(profile) > 0
 		"shielder":
 			return ENCOUNTER_CONTRACTS.profile_shielder_count(profile) > 0
 		_:
@@ -514,12 +514,12 @@ func _build_trial_profile(depth: int = 0) -> Dictionary:
 		mutator_name = "Frenzy"
 	var profile := _build_profile("Trial %s" % mutator_name, TRIAL_ROOM_SIZE, chasers, chargers, archers, shielders, mutator)
 	var specialist_enemies := _trial_specialist_enemies(mutator, depth, current_difficulty_tier)
-	if specialist_enemies.has("lurker_count"):
-		profile["lurker_count"] = int(specialist_enemies.get("lurker_count", 0))
-	if specialist_enemies.has("ram_count"):
-		profile["ram_count"] = int(specialist_enemies.get("ram_count", 0))
-	if specialist_enemies.has("lancer_count"):
-		profile["lancer_count"] = int(specialist_enemies.get("lancer_count", 0))
+	ENCOUNTER_CONTRACTS.profile_set_specialist_counts(
+		profile,
+		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_LURKER_COUNT, 0)),
+		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_RAM_COUNT, 0)),
+		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_LANCER_COUNT, 0))
+	)
 	return profile
 
 func apply_mutator_variant_to_profile(profile: Dictionary, mutator: Dictionary, depth: int = 1) -> Dictionary:
@@ -540,9 +540,12 @@ func apply_mutator_variant_to_profile(profile: Dictionary, mutator: Dictionary, 
 		int(specialist_counts.get("shielders", shielders))
 	)
 	var specialist_enemies := _trial_specialist_enemies(mutator, depth)
-	modified["lurker_count"] = int(specialist_enemies.get("lurker_count", 0))
-	modified["ram_count"] = int(specialist_enemies.get("ram_count", 0))
-	modified["lancer_count"] = int(specialist_enemies.get("lancer_count", 0))
+	ENCOUNTER_CONTRACTS.profile_set_specialist_counts(
+		modified,
+		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_LURKER_COUNT, 0)),
+		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_RAM_COUNT, 0)),
+		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_LANCER_COUNT, 0))
+	)
 	var label := ENCOUNTER_CONTRACTS.profile_label(modified)
 	var mutator_name := ENCOUNTER_CONTRACTS.mutator_name(mutator)
 	if not mutator_name.is_empty() and label.begins_with("Trial"):
@@ -650,9 +653,9 @@ func _trial_specialist_enemies(mutator: Dictionary, depth: int, tier: int = META
 		var blood_rush_lurker_cap := 3 + int(floor(float(maxi(0, effective_depth - lurker_gate)) / 5.0))
 		lurker_count = mini(lurker_count, blood_rush_lurker_cap)
 	return {
-		"lurker_count": maxi(0, lurker_count),
-		"ram_count": maxi(0, ram_count),
-		"lancer_count": maxi(0, lancer_count)
+		ENCOUNTER_CONTRACTS.PROFILE_KEY_LURKER_COUNT: maxi(0, lurker_count),
+		ENCOUNTER_CONTRACTS.PROFILE_KEY_RAM_COUNT: maxi(0, ram_count),
+		ENCOUNTER_CONTRACTS.PROFILE_KEY_LANCER_COUNT: maxi(0, lancer_count)
 	}
 
 func _build_survival_profile(depth: int) -> Dictionary:

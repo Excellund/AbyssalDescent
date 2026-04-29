@@ -41,6 +41,8 @@ const PROFILE_KEY_ARCHER_COUNT := "archer_count"
 const PROFILE_KEY_SHIELDER_COUNT := "shielder_count"
 const PROFILE_KEY_ENEMY_MUTATOR := "enemy_mutator"
 const PROFILE_KEY_PLAYER_MUTATOR := "player_mutator"
+const PROFILE_KEY_LURKER_COUNT := "lurker_count"
+const PROFILE_KEY_RAM_COUNT := "ram_count"
 const PROFILE_KEY_LANCER_COUNT := "lancer_count"
 const PROFILE_KEY_OBJECTIVE_KIND := "objective_kind"
 const PROFILE_KEY_OBJECTIVE_DURATION := "objective_duration"
@@ -266,6 +268,15 @@ static func profile_archer_count(profile_value: Dictionary) -> int:
 static func profile_shielder_count(profile_value: Dictionary) -> int:
 	return int(profile_value.get(PROFILE_KEY_SHIELDER_COUNT, 0))
 
+static func profile_lurker_count(profile_value: Dictionary) -> int:
+	return int(profile_value.get(PROFILE_KEY_LURKER_COUNT, 0))
+
+static func profile_ram_count(profile_value: Dictionary) -> int:
+	return int(profile_value.get(PROFILE_KEY_RAM_COUNT, 0))
+
+static func profile_lancer_count(profile_value: Dictionary) -> int:
+	return int(profile_value.get(PROFILE_KEY_LANCER_COUNT, 0))
+
 static func profile_enemy_mutator(profile_value: Dictionary) -> Dictionary:
 	return profile_value.get(PROFILE_KEY_ENEMY_MUTATOR, {}) as Dictionary
 
@@ -283,6 +294,22 @@ static func profile_set_counts(profile_value: Dictionary, chasers: int, chargers
 	profile_value[PROFILE_KEY_CHARGER_COUNT] = chargers
 	profile_value[PROFILE_KEY_ARCHER_COUNT] = archers
 	profile_value[PROFILE_KEY_SHIELDER_COUNT] = shielders
+
+static func profile_set_specialist_counts(profile_value: Dictionary, lurkers: int, rams: int, lancers: int) -> void:
+	profile_value[PROFILE_KEY_LURKER_COUNT] = lurkers
+	profile_value[PROFILE_KEY_RAM_COUNT] = rams
+	profile_value[PROFILE_KEY_LANCER_COUNT] = lancers
+
+static func profile_total_enemy_count(profile_value: Dictionary) -> int:
+	var total := 0
+	total += profile_chaser_count(profile_value)
+	total += profile_charger_count(profile_value)
+	total += profile_archer_count(profile_value)
+	total += profile_shielder_count(profile_value)
+	total += profile_lurker_count(profile_value)
+	total += profile_ram_count(profile_value)
+	total += profile_lancer_count(profile_value)
+	return total
 
 static func profile_set_enemy_mutator(profile_value: Dictionary, enemy_mutator: Dictionary) -> void:
 	if enemy_mutator.is_empty():

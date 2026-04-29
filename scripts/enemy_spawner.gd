@@ -68,9 +68,9 @@ func spawn_profile_enemies(profile: Dictionary) -> int:
 	var charger_count := ENCOUNTER_CONTRACTS.profile_charger_count(profile)
 	var archer_count := ENCOUNTER_CONTRACTS.profile_archer_count(profile)
 	var shielder_count := ENCOUNTER_CONTRACTS.profile_shielder_count(profile)
-	var lurker_count := int(profile.get("lurker_count", 0))
-	var ram_count := int(profile.get("ram_count", 0))
-	var lancer_count := int(profile.get("lancer_count", 0))
+	var lurker_count := ENCOUNTER_CONTRACTS.profile_lurker_count(profile)
+	var ram_count := ENCOUNTER_CONTRACTS.profile_ram_count(profile)
+	var lancer_count := ENCOUNTER_CONTRACTS.profile_lancer_count(profile)
 	for _i in range(chaser_count):
 		_spawn_enemy_in_current_room(scripts.get("chaser"))
 		total += 1
