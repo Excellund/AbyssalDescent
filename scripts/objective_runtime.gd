@@ -198,6 +198,18 @@ func update_priority_target_objective_state(delta: float) -> void:
 func update_control_objective_state(delta: float) -> void:
 	if world.choosing_next_room or world.run_cleared:
 		return
+	var difficulty_rank := DIFFICULTY_CONFIG.get_difficulty_rank(int(world.current_difficulty_tier))
+	var progress_gain_mult := 1.35
+	var contested_decay_mult := 0.05
+	var out_of_zone_decay_mult := 0.8
+	if difficulty_rank == 0:
+		progress_gain_mult = 1.12
+		contested_decay_mult = 0.16
+		out_of_zone_decay_mult = 1.0
+	elif difficulty_rank == 1:
+		progress_gain_mult = 1.2
+		contested_decay_mult = 0.12
+		out_of_zone_decay_mult = 0.92
 	if world.objective_time_left > 0.0:
 		world.objective_time_left = maxf(0.0, world.objective_time_left - delta)
 	if world.objective_time_left <= 0.0 and not world.objective_overtime:
@@ -213,19 +225,26 @@ func update_control_objective_state(delta: float) -> void:
 	world.objective_control_enemies_in_zone = _count_control_zone_enemies(anchor, radius)
 	world.objective_control_contested = world.objective_control_enemies_in_zone >= maxi(1, world.objective_control_contest_threshold)
 	if world.objective_control_player_inside and not world.objective_control_contested:
-		world.objective_control_progress = minf(world.objective_control_goal, world.objective_control_progress + delta * 1.35)
+		world.objective_control_progress = minf(world.objective_control_goal, world.objective_control_progress + delta * progress_gain_mult)
 	elif world.objective_control_player_inside:
-		world.objective_control_progress = maxf(0.0, world.objective_control_progress - world.objective_control_decay_rate * delta * 0.05)
+		world.objective_control_progress = maxf(0.0, world.objective_control_progress - world.objective_control_decay_rate * delta * contested_decay_mult)
 	else:
-		world.objective_control_progress = maxf(0.0, world.objective_control_progress - world.objective_control_decay_rate * delta * 0.8)
+		world.objective_control_progress = maxf(0.0, world.objective_control_progress - world.objective_control_decay_rate * delta * out_of_zone_decay_mult)
 	if world.objective_control_progress >= world.objective_control_goal:
 		complete_current_objective("Objective Complete", "Control secured")
 		return
 	var pressure_floor: int = 1 + world.objective_spawn_batch
+	if difficulty_rank <= 1:
+		pressure_floor += 1
 	if world.objective_max_enemies > 0:
 		pressure_floor = mini(pressure_floor, world.objective_max_enemies)
 	if world.active_room_enemy_count < pressure_floor:
-		world.objective_spawn_timer = minf(world.objective_spawn_timer, 0.9)
+		var refill_spawn_cap := 0.9
+		if difficulty_rank == 0:
+			refill_spawn_cap = 0.75
+		elif difficulty_rank == 1:
+			refill_spawn_cap = 0.82
+		world.objective_spawn_timer = minf(world.objective_spawn_timer, refill_spawn_cap)
 	world.objective_spawn_timer = maxf(0.0, world.objective_spawn_timer - delta)
 	if world.objective_spawn_timer <= 0.0:
 		world.objective_spawn_timer = world.objective_spawn_interval

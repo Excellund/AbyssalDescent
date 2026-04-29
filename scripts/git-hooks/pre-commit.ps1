@@ -124,6 +124,16 @@ if (Test-Path $worldGenPath) {
         }
     }
 
+    # Check debug_start_bearing - should have no override
+    $bearingValue = Get-DebugSettingValue -content $content -settingName "debug_start_bearing"
+    if ($null -ne $bearingValue) {
+        $value = $bearingValue
+        if ($value -notmatch '(^-1$)') {
+            Write-Host "  [ERROR] debug_start_bearing is not set to No Override (currently: $value)" -ForegroundColor Red
+            $debugChecksPassed = $false
+        }
+    }
+
     # Check debug_mutator_override - should have DEBUG_MUTATOR_NONE
     $mutatorValue = Get-DebugSettingValue -content $content -settingName "debug_mutator_override"
     if ($null -ne $mutatorValue) {
@@ -167,6 +177,7 @@ if ($stagedSceneFiles.Count -gt 0) {
         @{ name = "debug_skip_starting_boon_selection"; allowed = "^false$"; description = "false" },
         @{ name = "debug_start_power_preset"; allowed = "(^0$|DEBUG_POWER_PRESET_NONE)"; description = "NONE/0" },
         @{ name = "debug_start_encounter"; allowed = "(^0$|DEBUG_ENCOUNTER_NONE)"; description = "NONE/0" },
+        @{ name = "debug_start_bearing"; allowed = "(^-1$)"; description = "No Override/-1" },
         @{ name = "debug_mutator_override"; allowed = "(^0$|DEBUG_MUTATOR_NONE)"; description = "NONE/0" },
         @{ name = "debug_end_screen_preview"; allowed = "(^0$|DEBUG_END_SCREEN_NONE)"; description = "NONE/0" }
     )

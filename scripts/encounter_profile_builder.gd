@@ -705,6 +705,30 @@ func _build_priority_target_profile(depth: int) -> Dictionary:
 
 func _build_control_profile(depth: int) -> Dictionary:
 	var effective_depth := _effective_depth(depth)
+	var difficulty_rank := _difficulty_rank()
+	var control_pressure_mult := 0.85
+	var contest_threshold := 3
+	var tier_spawn_interval_bias := 0.0
+	var tier_radius_bias := 0.0
+	var tier_goal_bias := 0.0
+	var tier_decay_bias := 0.0
+	match difficulty_rank:
+		0:
+			control_pressure_mult = 0.98
+			contest_threshold = 2
+			tier_spawn_interval_bias = -0.2
+			tier_radius_bias = -12.0
+			tier_goal_bias = 1.1
+			tier_decay_bias = 0.08
+		1:
+			control_pressure_mult = 0.93
+			contest_threshold = 2
+			tier_spawn_interval_bias = -0.12
+			tier_radius_bias = -8.0
+			tier_goal_bias = 0.7
+			tier_decay_bias = 0.05
+		3:
+			control_pressure_mult = 0.86
 	var room_size := Vector2(1000.0, 760.0)
 	var chasers := 2 + int(floor(float(effective_depth) * 0.34))
 	var chargers := 1 + int(floor(float(effective_depth) / 6.0)) if effective_depth >= 2 else 0
@@ -714,13 +738,13 @@ func _build_control_profile(depth: int) -> Dictionary:
 	ENCOUNTER_CONTRACTS.profile_set_player_mutator(profile, _build_breach_momentum_mutator())
 	var raw_duration := clampf(22.0 + float(effective_depth) * 0.75, 22.0, 30.0)
 	var duration := int(ceil(raw_duration / 5.0)) * 5
-	var spawn_interval := clampf(2.52 - float(effective_depth) * 0.04, 1.62, 2.52)
+	var spawn_interval := clampf(2.52 - float(effective_depth) * 0.04 + tier_spawn_interval_bias, 1.5, 2.52)
 	var spawn_batch := mini(3, 1 + int(floor(float(effective_depth) / 5.0)))
-	var zone_radius := clampf(184.0 + float(effective_depth) * 3.2, 184.0, 228.0)
-	var progress_goal := clampf(8.4 + float(effective_depth) * 0.28, 8.4, 11.8)
-	var progress_decay := clampf(0.24 + float(effective_depth) * 0.014, 0.24, 0.42)
-	ENCOUNTER_CONTRACTS.profile_set_control_objective(profile, duration, spawn_interval, spawn_batch, zone_radius, progress_goal, progress_decay, 3)
-	return _apply_bearing_count_scaling(profile, 0.85)
+	var zone_radius := clampf(184.0 + float(effective_depth) * 3.2 + tier_radius_bias, 172.0, 228.0)
+	var progress_goal := clampf(8.4 + float(effective_depth) * 0.28 + tier_goal_bias, 8.4, 12.8)
+	var progress_decay := clampf(0.24 + float(effective_depth) * 0.014 + tier_decay_bias, 0.24, 0.5)
+	ENCOUNTER_CONTRACTS.profile_set_control_objective(profile, duration, spawn_interval, spawn_batch, zone_radius, progress_goal, progress_decay, contest_threshold)
+	return _apply_bearing_count_scaling(profile, control_pressure_mult)
 
 func _normalize_route_context(route_context: Variant) -> Dictionary:
 	if route_context is Dictionary:

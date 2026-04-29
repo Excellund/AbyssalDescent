@@ -20,6 +20,7 @@ const REWARD_SELECTION_UI_SCRIPT := preload("res://scripts/reward_selection_ui.g
 const ENUMS := preload("res://scripts/shared/enums.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const RUN_TELEMETRY_STORE := preload("res://scripts/run_telemetry_store.gd")
+const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
 const RUN_CONTEXT_PATH := "/root/RunContext"
 const MENU_SCENE_PATH := "res://scenes/Menu.tscn"
 const RUN_SNAPSHOT_VERSION := 1
@@ -101,6 +102,7 @@ func _get_debug_encounter_reward_mode(encounter_key: String) -> int:
 @export_multiline var debug_start_command: String = ""
 @export_enum("None", "Rest Site", "Skirmish", "Crossfire", "Fortress", "Onslaught", "Vanguard", "Blitz", "Ambush", "Suppression", "Gauntlet", "Objective - Last Stand", "Objective - Cut the Signal", "Objective - Hold the Line", "Objective - Random", "Trial", "Warden", "Sovereign") var debug_start_encounter: int = ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_NONE
 @export var debug_start_depth: int = 1
+@export_enum("No Override:-1", "Pilgrim:0", "Delver:1", "Harbinger:2", "Forsworn:3") var debug_start_bearing: int = -1
 @export_enum("None", "Blood Rush", "Flashpoint", "Siegebreak", "Iron Volley", "Killbox", "Random Hard") var debug_mutator_override: int = DEBUG_MUTATOR_NONE
 @export_enum("None", "Victory", "Defeat") var debug_end_screen_preview: int = DEBUG_END_SCREEN_NONE
 @export_enum("No Unlock:-1", "Pilgrim:0", "Delver:1", "Harbinger:2", "Forsworn:3") var debug_victory_unlock_tier: int = -1
@@ -231,10 +233,17 @@ func _ready() -> void:
 	encounter_profile_builder = ENCOUNTER_PROFILE_BUILDER_SCRIPT.new()
 	add_child(encounter_profile_builder)
 	encounter_profile_builder.initialize(rng)
-	## Set difficulty tier from RunContext
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	var should_apply_difficulty := false
+	var difficulty_tier := current_difficulty_tier
 	if run_context != null and run_context.has_method("get_current_difficulty_tier"):
-		var difficulty_tier: int = run_context.call("get_current_difficulty_tier")
+		difficulty_tier = int(run_context.call("get_current_difficulty_tier"))
+		should_apply_difficulty = true
+	var debug_bearing_tier := _debug_bearing_override_tier()
+	if debug_bearing_tier >= 0:
+		difficulty_tier = debug_bearing_tier
+		should_apply_difficulty = true
+	if should_apply_difficulty:
 		encounter_profile_builder.set_difficulty_tier(difficulty_tier)
 		_apply_difficulty_tier_bonuses(difficulty_tier)
 	encounter_profile_builder.configure({
@@ -469,6 +478,11 @@ func _debug_mutator_key(state_value: int) -> String:
 			return "random_hard"
 		_:
 			return ""
+
+func _debug_bearing_override_tier() -> int:
+	if debug_start_bearing < META_PROGRESS.TIER_PILGRIM:
+		return -1
+	return clampi(debug_start_bearing, META_PROGRESS.TIER_PILGRIM, META_PROGRESS.TIER_FORSWORN)
 
 func _apply_debug_mutator_override(profile: Dictionary) -> Dictionary:
 	if profile.is_empty():
@@ -1788,6 +1802,8 @@ func _is_debug_boot_session() -> bool:
 	if debug_end_screen_preview != DEBUG_END_SCREEN_NONE:
 		return true
 	if debug_start_encounter != ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_NONE:
+		return true
+	if _debug_bearing_override_tier() >= 0:
 		return true
 	if debug_apply_test_powers_on_start:
 		return true
