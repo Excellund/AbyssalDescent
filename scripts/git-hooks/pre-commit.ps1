@@ -7,6 +7,23 @@ $ErrorActionPreference = "Stop"
 $projectRoot = git rev-parse --show-toplevel
 $scriptsPath = "$projectRoot/scripts"
 
+function Get-DebugSettingValue {
+    param(
+        [string]$content,
+        [string]$settingName
+    )
+
+    # Match both typed declarations and plain assignments, and ignore trailing comments.
+    $escapedName = [regex]::Escape($settingName)
+    $pattern = "(?m)^[ \t]*(?!#).*?\b$escapedName\b\s*(?::\s*[^=\r\n]+)?=\s*([^\r\n#]+)"
+    $matches = [regex]::Matches($content, $pattern)
+    if ($matches.Count -eq 0) {
+        return $null
+    }
+
+    return $matches[$matches.Count - 1].Groups[1].Value.Trim()
+}
+
 Write-Host "[PRE-COMMIT] Starting validation..." -ForegroundColor Cyan
 
 # ============================================================================
@@ -59,54 +76,56 @@ $debugChecksPassed = $true
 $worldGenPath = "$scriptsPath/world_generator.gd"
 if (Test-Path $worldGenPath) {
     $content = Get-Content -Path $worldGenPath -Raw
-    
+
     # Check debug_apply_test_powers_on_start
-    if ($content -match 'debug_apply_test_powers_on_start\s*:\s*bool\s*=\s*true') {
+    $debugApplyTestPowersValue = Get-DebugSettingValue -content $content -settingName "debug_apply_test_powers_on_start"
+    if ($null -ne $debugApplyTestPowersValue -and $debugApplyTestPowersValue -match '^true$') {
         Write-Host "  [ERROR] debug_apply_test_powers_on_start is enabled" -ForegroundColor Red
         $debugChecksPassed = $false
     }
-    
+
     # Check debug_skip_starting_boon_selection
-    if ($content -match 'debug_skip_starting_boon_selection\s*:\s*bool\s*=\s*true') {
+    $debugSkipBoonSelectionValue = Get-DebugSettingValue -content $content -settingName "debug_skip_starting_boon_selection"
+    if ($null -ne $debugSkipBoonSelectionValue -and $debugSkipBoonSelectionValue -match '^true$') {
         Write-Host "  [ERROR] debug_skip_starting_boon_selection is enabled" -ForegroundColor Red
         $debugChecksPassed = $false
     }
-    
-    # Check debug_start_power_preset - extract the line and check if it has a valid NONE value
-    $powerPresetMatch = [regex]::Match($content, 'debug_start_power_preset\s*:\s*int\s*=\s*(.+?)(?=\n|$)')
-    if ($powerPresetMatch.Success) {
-        $value = $powerPresetMatch.Groups[1].Value.Trim()
-        if ($value -notmatch '(DEBUG_POWER_PRESET_NONE|= 0)') {
+
+    # Check debug_start_power_preset - should have DEBUG_POWER_PRESET_NONE
+    $powerPresetValue = Get-DebugSettingValue -content $content -settingName "debug_start_power_preset"
+    if ($null -ne $powerPresetValue) {
+        $value = $powerPresetValue
+        if ($value -notmatch '(^0$|DEBUG_POWER_PRESET_NONE)') {
             Write-Host "  [ERROR] debug_start_power_preset is not set to NONE (currently: $value)" -ForegroundColor Red
             $debugChecksPassed = $false
         }
     }
-    
+
     # Check debug_start_encounter - should have DEBUG_ENCOUNTER_NONE
-    $encounterMatch = [regex]::Match($content, 'debug_start_encounter\s*:\s*int\s*=\s*(.+?)(?=\n|$)')
-    if ($encounterMatch.Success) {
-        $value = $encounterMatch.Groups[1].Value.Trim()
-        if ($value -notmatch '(DEBUG_ENCOUNTER_NONE|= 0)') {
+    $encounterValue = Get-DebugSettingValue -content $content -settingName "debug_start_encounter"
+    if ($null -ne $encounterValue) {
+        $value = $encounterValue
+        if ($value -notmatch '(^0$|DEBUG_ENCOUNTER_NONE)') {
             Write-Host "  [ERROR] debug_start_encounter is not set to NONE (currently: $value)" -ForegroundColor Red
             $debugChecksPassed = $false
         }
     }
-    
+
     # Check debug_mutator_override - should have DEBUG_MUTATOR_NONE
-    $mutatorMatch = [regex]::Match($content, 'debug_mutator_override\s*:\s*int\s*=\s*(.+?)(?=\n|$)')
-    if ($mutatorMatch.Success) {
-        $value = $mutatorMatch.Groups[1].Value.Trim()
-        if ($value -notmatch '(DEBUG_MUTATOR_NONE|= 0)') {
+    $mutatorValue = Get-DebugSettingValue -content $content -settingName "debug_mutator_override"
+    if ($null -ne $mutatorValue) {
+        $value = $mutatorValue
+        if ($value -notmatch '(^0$|DEBUG_MUTATOR_NONE)') {
             Write-Host "  [ERROR] debug_mutator_override is not set to NONE (currently: $value)" -ForegroundColor Red
             $debugChecksPassed = $false
         }
     }
-    
+
     # Check debug_end_screen_preview - should have DEBUG_END_SCREEN_NONE
-    $endScreenMatch = [regex]::Match($content, 'debug_end_screen_preview\s*:\s*int\s*=\s*(.+?)(?=\n|$)')
-    if ($endScreenMatch.Success) {
-        $value = $endScreenMatch.Groups[1].Value.Trim()
-        if ($value -notmatch '(DEBUG_END_SCREEN_NONE|= 0)') {
+    $endScreenValue = Get-DebugSettingValue -content $content -settingName "debug_end_screen_preview"
+    if ($null -ne $endScreenValue) {
+        $value = $endScreenValue
+        if ($value -notmatch '(^0$|DEBUG_END_SCREEN_NONE)') {
             Write-Host "  [ERROR] debug_end_screen_preview is not set to NONE (currently: $value)" -ForegroundColor Red
             $debugChecksPassed = $false
         }
