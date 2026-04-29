@@ -486,7 +486,14 @@ func _get_body_radius_for(node: Node, fallback: float) -> float:
 	return fallback
 
 func _update_ground_movement(direction: Vector2, delta: float) -> void:
-	var trance_speed_bonus := battle_trance_move_speed_bonus if battle_trance_active_left > 0.0 else 0.0
+	var trance_speed_bonus := 0.0
+	if battle_trance_active_left > 0.0:
+		var trance_ratio := battle_trance_move_speed_bonus
+		# Backward compatibility for snapshots that stored pre-percentage flat values.
+		if trance_ratio > 2.0:
+			trance_ratio = trance_ratio / maxf(1.0, max_speed)
+		trance_ratio = clampf(trance_ratio, 0.0, 1.5)
+		trance_speed_bonus = max_speed * trance_ratio
 	var target_velocity := direction * (max_speed + trance_speed_bonus)
 	var applied_acceleration := _get_applied_acceleration(target_velocity)
 	var move_rate := applied_acceleration if direction != Vector2.ZERO else deceleration

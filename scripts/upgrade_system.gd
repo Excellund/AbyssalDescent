@@ -522,12 +522,12 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 		"iron_skin":
 			return "[color=#c8daf0]Armor:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [int(cur_val), int(next_val)]
 		"battle_trance":
-			var cur_speed_bonus := float(cur_val)
-			var next_speed_bonus := float(next_val)
+			var cur_speed_bonus := float(cur_val) * 100.0
+			var next_speed_bonus := float(next_val) * 100.0
 			var trance_duration := 1.25
 			if player_reference.get("battle_trance_duration") != null:
 				trance_duration = float(player_reference.get("battle_trance_duration"))
-			return "[color=#c8daf0]On hit:[/color] gain [color=#e8c96a]+%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]+%.0f[/color] move speed for [color=#7de882]%.2fs[/color]." % [cur_speed_bonus, next_speed_bonus, trance_duration]
+			return "[color=#c8daf0]On hit:[/color] gain [color=#e8c96a]+%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]+%.0f%%[/color] move speed for [color=#7de882]%.2fs[/color]." % [cur_speed_bonus, next_speed_bonus, trance_duration]
 		"surge_step":
 			return "[color=#c8daf0]Dash speed:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [float(cur_val), float(next_val)]
 		"heartstone":

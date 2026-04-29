@@ -34,7 +34,7 @@ const UPGRADE_BALANCE := {
 	"fleet_foot": {
 		"kind": "add_float",
 		"property": "max_speed",
-		"add": 18.0
+		"add": 17.0
 	},
 	"blink_dash": {
 		"kind": "mul_min",
@@ -51,7 +51,7 @@ const UPGRADE_BALANCE := {
 	"battle_trance": {
 		"kind": "add_float",
 		"property": "battle_trance_move_speed_bonus",
-		"add": 22.0
+		"add": 0.13
 	},
 	"surge_step": {
 		"kind": "add_float",
@@ -385,7 +385,7 @@ func _get_upgrade_fallback_description(upgrade_id: String) -> String:
 		"iron_skin":
 			return "Armor +%d." % [int(data.get("add", 0))]
 		"battle_trance":
-			return "Hitting an enemy grants +%.0f move speed for a short time." % [float(data.get("add", 0.0))]
+			return "Hitting an enemy grants +%.0f%% move speed for a short time." % [float(data.get("add", 0.0)) * 100.0]
 		"surge_step":
 			return "Dash speed +%.0f." % [float(data.get("add", 0.0))]
 		"heartstone":
