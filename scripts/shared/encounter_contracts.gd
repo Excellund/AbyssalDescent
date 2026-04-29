@@ -71,6 +71,44 @@ const MUTATOR_STAT_SHIELDER_SLAM_DAMAGE_MULT := "shielder_slam_damage_mult"
 const MUTATOR_STAT_SHIELDER_SLAM_WINDUP_MULT := "shielder_slam_windup_mult"
 const MUTATOR_STAT_SHIELDER_SPEED_MULT := "shielder_speed_mult"
 
+const DEBUG_ENCOUNTER_NONE := 0
+const DEBUG_ENCOUNTER_REST_SITE := 1
+const DEBUG_ENCOUNTER_SKIRMISH := 2
+const DEBUG_ENCOUNTER_CROSSFIRE := 3
+const DEBUG_ENCOUNTER_FORTRESS := 4
+const DEBUG_ENCOUNTER_ONSLAUGHT := 5
+const DEBUG_ENCOUNTER_VANGUARD := 6
+const DEBUG_ENCOUNTER_BLITZ := 7
+const DEBUG_ENCOUNTER_AMBUSH := 8
+const DEBUG_ENCOUNTER_SUPPRESSION := 9
+const DEBUG_ENCOUNTER_GAUNTLET := 10
+const DEBUG_ENCOUNTER_OBJECTIVE_LAST_STAND := 11
+const DEBUG_ENCOUNTER_OBJECTIVE_PRIORITY_TARGET := 12
+const DEBUG_ENCOUNTER_OBJECTIVE_RANDOM := 13
+const DEBUG_ENCOUNTER_TRIAL := 14
+const DEBUG_ENCOUNTER_BOSS_1 := 15
+const DEBUG_ENCOUNTER_BOSS_2 := 16
+
+const DEBUG_ENCOUNTER_MAP := [
+	{"id": DEBUG_ENCOUNTER_NONE, "key": "none", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": DEBUG_ENCOUNTER_REST_SITE, "key": "rest", "aliases": ["rest_site"], "is_boss": false, "is_rest": true, "is_objective": false},
+	{"id": DEBUG_ENCOUNTER_SKIRMISH, "key": "skirmish", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": DEBUG_ENCOUNTER_CROSSFIRE, "key": "crossfire", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": DEBUG_ENCOUNTER_FORTRESS, "key": "fortress", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": DEBUG_ENCOUNTER_ONSLAUGHT, "key": "onslaught", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": DEBUG_ENCOUNTER_VANGUARD, "key": "vanguard", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": DEBUG_ENCOUNTER_BLITZ, "key": "blitz", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": DEBUG_ENCOUNTER_AMBUSH, "key": "ambush", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": DEBUG_ENCOUNTER_SUPPRESSION, "key": "suppression", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": DEBUG_ENCOUNTER_GAUNTLET, "key": "gauntlet", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": DEBUG_ENCOUNTER_OBJECTIVE_LAST_STAND, "key": "objective_last_stand", "aliases": ["last_stand", "endurance", "objective_endurance"], "is_boss": false, "is_rest": false, "is_objective": true},
+	{"id": DEBUG_ENCOUNTER_OBJECTIVE_PRIORITY_TARGET, "key": "objective_priority_target", "aliases": ["priority_target", "cut_the_signal", "cut the signal"], "is_boss": false, "is_rest": false, "is_objective": true},
+	{"id": DEBUG_ENCOUNTER_OBJECTIVE_RANDOM, "key": "objective_random", "aliases": ["objective", "objective_test"], "is_boss": false, "is_rest": false, "is_objective": true},
+	{"id": DEBUG_ENCOUNTER_TRIAL, "key": "trial", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": DEBUG_ENCOUNTER_BOSS_1, "key": "boss_1", "aliases": ["boss", "boss1", "warden"], "is_boss": true, "is_rest": false, "is_objective": false},
+	{"id": DEBUG_ENCOUNTER_BOSS_2, "key": "boss_2", "aliases": ["boss_2", "boss2", "sovereign"], "is_boss": true, "is_rest": false, "is_objective": false},
+]
+
 static func _door_kind_from_legacy(value: String) -> int:
 	match value.to_lower():
 		"boss":
@@ -138,6 +176,28 @@ static func normalize_reward_mode(value: Variant) -> int:
 			return ENUMS.RewardMode.MISSION
 		return ENUMS.RewardMode.NONE
 	return ENUMS.reward_mode_from_legacy(String(value).to_lower())
+
+static func debug_encounter_entry(encounter_key: String) -> Dictionary:
+	var normalized := encounter_key.strip_edges().to_lower()
+	for entry in DEBUG_ENCOUNTER_MAP:
+		if String(entry.get("key", "")) == normalized:
+			return entry
+		for alias in entry.get("aliases", []):
+			if String(alias) == normalized:
+				return entry
+	return {}
+
+static func canonicalize_debug_encounter_key(encounter_key: String) -> String:
+	var entry := debug_encounter_entry(encounter_key)
+	if entry.is_empty():
+		return encounter_key.strip_edges().to_lower()
+	return String(entry.get("key", ""))
+
+static func debug_encounter_key_from_id(encounter_id: int) -> String:
+	for entry in DEBUG_ENCOUNTER_MAP:
+		if int(entry.get("id", -1)) == encounter_id:
+			return String(entry.get("key", ""))
+	return ""
 
 static func profile(
 	label: String,

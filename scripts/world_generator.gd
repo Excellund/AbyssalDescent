@@ -30,23 +30,6 @@ const WORLD_RENDERER_SCRIPT := preload("res://scripts/world_renderer.gd")
 const PAUSE_MENU_CONTROLLER_SCRIPT := preload("res://scripts/pause_menu_controller.gd")
 const VICTORY_SCREEN_SCRIPT := preload("res://scripts/victory_screen.gd")
 const DEFEAT_SCREEN_SCRIPT := preload("res://scripts/defeat_screen.gd")
-const DEBUG_ENCOUNTER_NONE := 0
-const DEBUG_ENCOUNTER_REST_SITE := 1
-const DEBUG_ENCOUNTER_SKIRMISH := 2
-const DEBUG_ENCOUNTER_CROSSFIRE := 3
-const DEBUG_ENCOUNTER_FORTRESS := 4
-const DEBUG_ENCOUNTER_ONSLAUGHT := 5
-const DEBUG_ENCOUNTER_VANGUARD := 6
-const DEBUG_ENCOUNTER_BLITZ := 7
-const DEBUG_ENCOUNTER_AMBUSH := 8
-const DEBUG_ENCOUNTER_SUPPRESSION := 9
-const DEBUG_ENCOUNTER_GAUNTLET := 10
-const DEBUG_ENCOUNTER_OBJECTIVE_LAST_STAND := 11
-const DEBUG_ENCOUNTER_OBJECTIVE_PRIORITY_TARGET := 12
-const DEBUG_ENCOUNTER_OBJECTIVE_RANDOM := 13
-const DEBUG_ENCOUNTER_TRIAL := 14
-const DEBUG_ENCOUNTER_BOSS_1 := 15
-const DEBUG_ENCOUNTER_BOSS_2 := 16
 const DEBUG_MUTATOR_NONE := 0
 const DEBUG_MUTATOR_BLOOD_RUSH := 1
 const DEBUG_MUTATOR_FLASHPOINT := 2
@@ -62,35 +45,8 @@ const DEBUG_POWER_PRESET_DASH_SPECIALIST := 1
 const DEBUG_POWER_PRESET_NO_DASH_BRUISER := 2
 const DEBUG_POWER_PRESET_HIGH_RANGE_DPS := 3
 
-const ENCOUNTER_DEBUG_MAP := [
-	{"id": 0, "key": "none", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": 1, "key": "rest", "aliases": ["rest_site"], "is_boss": false, "is_rest": true, "is_objective": false},
-	{"id": 2, "key": "skirmish", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": 3, "key": "crossfire", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": 4, "key": "fortress", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": 5, "key": "onslaught", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": 6, "key": "vanguard", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": 7, "key": "blitz", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": 8, "key": "ambush", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": 9, "key": "suppression", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": 10, "key": "gauntlet", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": 11, "key": "objective_last_stand", "aliases": ["last_stand", "endurance", "objective_endurance"], "is_boss": false, "is_rest": false, "is_objective": true},
-	{"id": 12, "key": "objective_priority_target", "aliases": ["priority_target", "cut_the_signal", "cut the signal"], "is_boss": false, "is_rest": false, "is_objective": true},
-	{"id": 13, "key": "objective_random", "aliases": ["objective", "objective_test"], "is_boss": false, "is_rest": false, "is_objective": true},
-	{"id": 14, "key": "trial", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": 15, "key": "boss_1", "aliases": ["boss", "boss1", "warden"], "is_boss": true, "is_rest": false, "is_objective": false},
-	{"id": 16, "key": "boss_2", "aliases": ["boss_2", "boss2", "sovereign"], "is_boss": true, "is_rest": false, "is_objective": false},
-]
-
 func _find_debug_encounter_entry(key: String) -> Dictionary:
-	var normalized := key.strip_edges().to_lower()
-	for entry in ENCOUNTER_DEBUG_MAP:
-		if entry["key"] == normalized:
-			return entry
-		for alias in entry.get("aliases", []):
-			if alias == normalized:
-				return entry
-	return {}
+	return ENCOUNTER_CONTRACTS.debug_encounter_entry(key)
 
 func _get_debug_encounter_reward_mode(encounter_key: String) -> int:
 	if encounter_key == "trial":
@@ -143,7 +99,7 @@ func _get_debug_encounter_reward_mode(encounter_key: String) -> int:
 @export_enum("None", "Dasher", "Bruiser", "Marksman") var debug_start_power_preset: int = DEBUG_POWER_PRESET_NONE
 @export var debug_start_power_ids: PackedStringArray = PackedStringArray()
 @export_multiline var debug_start_command: String = ""
-@export_enum("None", "Rest Site", "Skirmish", "Crossfire", "Fortress", "Onslaught", "Vanguard", "Blitz", "Ambush", "Suppression", "Gauntlet", "Objective - Last Stand", "Objective - Cut the Signal", "Objective - Random", "Trial", "Warden", "Sovereign") var debug_start_encounter: int = DEBUG_ENCOUNTER_NONE
+@export_enum("None", "Rest Site", "Skirmish", "Crossfire", "Fortress", "Onslaught", "Vanguard", "Blitz", "Ambush", "Suppression", "Gauntlet", "Objective - Last Stand", "Objective - Cut the Signal", "Objective - Random", "Trial", "Warden", "Sovereign") var debug_start_encounter: int = ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_NONE
 @export var debug_start_depth: int = 1
 @export_enum("None", "Blood Rush", "Flashpoint", "Siegebreak", "Iron Volley", "Killbox", "Random Hard") var debug_mutator_override: int = DEBUG_MUTATOR_NONE
 @export_enum("None", "Victory", "Defeat") var debug_end_screen_preview: int = DEBUG_END_SCREEN_NONE
@@ -343,7 +299,7 @@ func _ready() -> void:
 		DEBUG_END_SCREEN_DEFEAT:
 			defeat_screen.call("show_defeat", "Debug Arena", max(1, debug_start_depth))
 			return
-	if debug_start_encounter != DEBUG_ENCOUNTER_NONE:
+	if debug_start_encounter != ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_NONE:
 		_start_debug_selected_encounter(debug_start_encounter)
 		return
 	if debug_skip_starting_boon_selection:
@@ -421,10 +377,7 @@ func start_debug_encounter(encounter_key: String) -> Dictionary:
 	return _start_debug_selected_encounter(entry["id"])
 
 func _debug_encounter_key(encounter_state: int) -> String:
-	for entry in ENCOUNTER_DEBUG_MAP:
-		if entry["id"] == encounter_state:
-			return entry["key"]
-	return ""
+	return ENCOUNTER_CONTRACTS.debug_encounter_key_from_id(encounter_state)
 
 func _start_debug_selected_encounter(encounter_state: int) -> Dictionary:
 	_mark_telemetry_debug_mode()
@@ -1848,7 +1801,7 @@ func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> voi
 func _is_debug_boot_session() -> bool:
 	if debug_end_screen_preview != DEBUG_END_SCREEN_NONE:
 		return true
-	if debug_start_encounter != DEBUG_ENCOUNTER_NONE:
+	if debug_start_encounter != ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_NONE:
 		return true
 	if debug_apply_test_powers_on_start:
 		return true
