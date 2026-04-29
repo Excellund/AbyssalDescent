@@ -23,6 +23,8 @@ const RUN_TELEMETRY_STORE := preload("res://scripts/run_telemetry_store.gd")
 const RUN_CONTEXT_PATH := "/root/RunContext"
 const MENU_SCENE_PATH := "res://scenes/Menu.tscn"
 const RUN_SNAPSHOT_VERSION := 1
+const BOSS_SPAWN_TRANSPORT_DURATION := 0.40
+const INTRO_SURVEY_TRANSPORT_PULSE_DURATION := 0.24
 const WORLD_HUD_SCRIPT := preload("res://scripts/world_hud.gd")
 const WORLD_RENDERER_SCRIPT := preload("res://scripts/world_renderer.gd")
 const PAUSE_MENU_CONTROLLER_SCRIPT := preload("res://scripts/pause_menu_controller.gd")
@@ -1716,7 +1718,7 @@ func _begin_boss_room() -> void:
 	boss.global_position = _pick_boss_spawn_position(maxf(260.0, spawn_safe_radius + 90.0), maxf(210.0, spawn_padding + 110.0))
 	add_child(boss)
 	if boss.has_method("begin_spawn_transport"):
-		boss.call("begin_spawn_transport", 0.40)
+		boss.call("begin_spawn_transport", BOSS_SPAWN_TRANSPORT_DURATION)
 	boss.set("target", player)
 	boss.set("arena_size", current_room_size)
 	_apply_boss_difficulty_scaling(boss)
@@ -1746,7 +1748,7 @@ func _begin_second_boss_room() -> void:
 	boss.global_position = _pick_boss_spawn_position(maxf(280.0, spawn_safe_radius + 110.0), maxf(230.0, spawn_padding + 130.0))
 	add_child(boss)
 	if boss.has_method("begin_spawn_transport"):
-		boss.call("begin_spawn_transport", 0.40)
+		boss.call("begin_spawn_transport", BOSS_SPAWN_TRANSPORT_DURATION)
 	boss.set("target", player)
 	boss.set("arena_size", current_room_size)
 	_apply_boss_difficulty_scaling(boss)
@@ -2135,6 +2137,23 @@ func _set_combat_paused(paused: bool) -> void:
 			(enemy as Node).set_physics_process(not paused)
 			(enemy as Node).set_process(not paused)
 
+func _is_spawn_transport_active(enemy: Node) -> bool:
+	if enemy.has_method("is_spawn_transporting"):
+		return bool(enemy.call("is_spawn_transporting"))
+	var transport_left: Variant = enemy.get("spawn_transport_time_left")
+	if transport_left is float:
+		return transport_left > 0.0
+	if transport_left is int:
+		return transport_left > 0
+	return false
+
+func _begin_spawn_transport_if_idle(enemy: Node, duration: float) -> void:
+	if not enemy.has_method("begin_spawn_transport"):
+		return
+	if _is_spawn_transport_active(enemy):
+		return
+	enemy.call("begin_spawn_transport", duration)
+
 func _start_encounter_intro_grace() -> void:
 	encounter_intro_grace_active = true
 	if is_instance_valid(player) and player is CharacterBody2D:
@@ -2143,8 +2162,7 @@ func _start_encounter_intro_grace() -> void:
 		if not (enemy_node is Node):
 			continue
 		var enemy := enemy_node as Node
-		if enemy.has_method("begin_spawn_transport") and not enemy.get("spawn_transport_time_left") > 0.36:
-			enemy.call("begin_spawn_transport", 0.24)
+		_begin_spawn_transport_if_idle(enemy, INTRO_SURVEY_TRANSPORT_PULSE_DURATION)
 	_set_enemy_targets_passive(true)
 	hud.show_banner("Survey the arena", "")
 

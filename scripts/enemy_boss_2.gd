@@ -808,12 +808,11 @@ func _get_enrage_ratio() -> float:
 	return clampf((0.78 - health_ratio) / 0.58, 0.0, 1.0)
 
 func _draw() -> void:
+	var facing := visual_facing_direction if visual_facing_direction.length_squared() > 0.000001 else Vector2.RIGHT
 	if is_spawn_transporting():
-		var facing := visual_facing_direction if visual_facing_direction.length_squared() > 0.000001 else Vector2.RIGHT
 		_draw_spawn_transport_fx(36.0, facing)
 		return
 	var pulse := _get_attack_pulse()
-	var facing := visual_facing_direction if visual_facing_direction.length_squared() > 0.000001 else Vector2.RIGHT
 	var body_radius := 36.0 + pulse * 0.78
 	var enrage_t := _get_enrage_ratio()
 	var fortress_active := _is_orbital_fortress_active()

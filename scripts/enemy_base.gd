@@ -476,7 +476,7 @@ func _get_transport_color() -> Color:
 func _draw_spawn_transport_fx(body_radius: float, _facing: Vector2) -> void:
 	var duration := maxf(0.001, spawn_transport_duration)
 	var t := 1.0 - clampf(spawn_transport_time_left / duration, 0.0, 1.0)
-	var seed := spawn_transport_seed
+	var transport_seed := spawn_transport_seed
 	var tint := _get_transport_color()
 
 	# Soft outer glow — tinted, atmospheric, bell-curves through the full animation
@@ -509,7 +509,7 @@ func _draw_spawn_transport_fx(body_radius: float, _facing: Vector2) -> void:
 	if streak_t > 0.0 and streak_t < 1.0:
 		var streak_a := sin(streak_t * PI)
 		for i in range(4):
-			var ang := seed + TAU * float(i) / 4.0
+			var ang := transport_seed + TAU * float(i) / 4.0
 			var dir := Vector2.RIGHT.rotated(ang)
 			var inner := dir * body_radius * 0.85
 			var outer := dir * (body_radius + 5.0 + streak_t * body_radius * 2.4)
