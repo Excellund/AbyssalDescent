@@ -11,9 +11,20 @@ var active_music_player_index: int = -1
 func initialize(normal_music: AudioStream, boss_music: AudioStream, volume_db: float, crossfade_duration: float) -> void:
 	normal_room_music = normal_music
 	boss_room_music = boss_music
-	music_volume_db = volume_db
+	set_music_volume_db(volume_db)
 	music_crossfade_duration = crossfade_duration
 	_create_music_players()
+
+func set_music_volume_db(volume_db: float) -> void:
+	music_volume_db = clampf(volume_db, -80.0, 6.0)
+	for index in range(music_players.size()):
+		var player := music_players[index]
+		if player == null or not player.playing:
+			continue
+		if index == active_music_player_index:
+			player.volume_db = music_volume_db
+		else:
+			player.volume_db = -60.0
 
 func play_room_music(is_boss_room: bool, instant: bool = false, fade_duration: float = -1.0) -> void:
 	if music_players.size() < 2:

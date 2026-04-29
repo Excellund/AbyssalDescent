@@ -1316,7 +1316,10 @@ func _is_reward_selection_active() -> bool:
 func _set_music_volume_runtime(music_db: float) -> void:
 	music_volume_db = clampf(music_db, -80.0, 6.0)
 	if is_instance_valid(music_system):
-		music_system.set("music_volume_db", music_volume_db)
+		if music_system.has_method("set_music_volume_db"):
+			music_system.call("set_music_volume_db", music_volume_db)
+		else:
+			music_system.set("music_volume_db", music_volume_db)
 
 func _on_pause_menu_opened() -> void:
 	_set_combat_paused(true)
