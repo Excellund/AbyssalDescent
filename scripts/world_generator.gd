@@ -178,10 +178,10 @@ var hud: Node
 var renderer: Node2D
 var music_system: Node
 var enemy_spawner: Node
-var encounter_profile_builder: Node
-var encounter_flow_system: Node
+var encounter_profile_builder
+var encounter_flow_system
 var objective_runtime: Node
-var reward_selection_ui: Node
+var reward_selection_ui
 var pause_menu_controller: Node
 var victory_screen: Node
 var defeat_screen: Node
@@ -216,19 +216,19 @@ func _ready() -> void:
 	add_child(encounter_flow_system)
 	reward_selection_ui = REWARD_SELECTION_UI_SCRIPT.new()
 	add_child(reward_selection_ui)
-	reward_selection_ui.call("initialize", boon_choice_count, boon_reveal_duration)
+	reward_selection_ui.initialize(boon_choice_count, boon_reveal_duration)
 	if reward_selection_ui.has_signal("reward_selected"):
 		reward_selection_ui.connect("reward_selected", Callable(self, "_on_reward_selected"))
 	encounter_profile_builder = ENCOUNTER_PROFILE_BUILDER_SCRIPT.new()
 	add_child(encounter_profile_builder)
-	encounter_profile_builder.call("initialize", rng)
+	encounter_profile_builder.initialize(rng)
 	## Set difficulty tier from RunContext
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context != null and run_context.has_method("get_current_difficulty_tier"):
 		var difficulty_tier: int = run_context.call("get_current_difficulty_tier")
-		encounter_profile_builder.call("set_difficulty_tier", difficulty_tier)
+		encounter_profile_builder.set_difficulty_tier(difficulty_tier)
 		_apply_difficulty_tier_bonuses(difficulty_tier)
-	encounter_profile_builder.call("configure", {
+	encounter_profile_builder.configure({
 		"room_base_size": room_base_size,
 		"room_size_growth": room_size_growth,
 		"static_camera_room_threshold": static_camera_room_threshold,
@@ -442,7 +442,7 @@ func _start_debug_second_boss_room() -> Dictionary:
 func _build_debug_encounter_profile(encounter_key: String, depth: int) -> Dictionary:
 	if not is_instance_valid(encounter_profile_builder):
 		return {}
-	return encounter_profile_builder.call("build_debug_encounter_profile", encounter_key, depth)
+	return encounter_profile_builder.build_debug_encounter_profile(encounter_key, depth)
 
 func _debug_mutator_key(state_value: int) -> String:
 	match state_value:
@@ -469,18 +469,18 @@ func _apply_debug_mutator_override(profile: Dictionary) -> Dictionary:
 		return profile
 	if not is_instance_valid(encounter_profile_builder):
 		return profile
-	var mutator: Dictionary = encounter_profile_builder.call("build_debug_mutator", mutator_key)
+	var mutator: Dictionary = encounter_profile_builder.build_debug_mutator(mutator_key)
 	if mutator.is_empty():
 		return profile
 	if encounter_profile_builder.has_method("apply_mutator_variant_to_profile"):
-		return encounter_profile_builder.call("apply_mutator_variant_to_profile", profile, mutator, room_depth) as Dictionary
+		return encounter_profile_builder.apply_mutator_variant_to_profile(profile, mutator, room_depth)
 	var modified := profile.duplicate(true)
 	ENCOUNTER_CONTRACTS.profile_set_enemy_mutator(modified, mutator)
 	return modified
 
 func _reset_for_debug_jump() -> void:
 	if is_instance_valid(reward_selection_ui):
-		reward_selection_ui.call("close_selection")
+		reward_selection_ui.close_selection()
 	_set_combat_paused(false)
 	choosing_next_room = false
 	door_options.clear()
@@ -520,7 +520,7 @@ func _start_debug_objective_room(kind: String = "") -> Dictionary:
 func _build_objective_test_profile(depth: int, kind: String = "") -> Dictionary:
 	if not is_instance_valid(encounter_profile_builder):
 		return {}
-	return encounter_profile_builder.call("build_objective_profile", depth, kind)
+	return encounter_profile_builder.build_objective_profile(depth, kind)
 
 func _apply_debug_start_powers_if_needed() -> void:
 	if not debug_apply_test_powers_on_start:
@@ -622,8 +622,8 @@ func _process(delta: float) -> void:
 		hud.refresh(_get_hud_state(), player)
 		_sync_renderer()
 		return
-	if is_instance_valid(reward_selection_ui) and bool(reward_selection_ui.call("is_active")):
-		reward_selection_ui.call("process_input", delta)
+	if is_instance_valid(reward_selection_ui) and reward_selection_ui.is_active():
+		reward_selection_ui.process_input(delta)
 		hud.refresh(_get_hud_state(), player)
 		_sync_renderer()
 		return
@@ -1016,7 +1016,7 @@ func _on_room_cleared() -> void:
 	if in_boss_room and not first_boss_defeated:
 		_finish_first_boss_clear()
 		return
-	var raw_outcome: Variant = encounter_flow_system.call("resolve_room_cleared", in_boss_room, pending_room_reward, rooms_cleared, room_depth, encounter_count)
+	var raw_outcome: Variant = encounter_flow_system.resolve_room_cleared(in_boss_room, pending_room_reward, rooms_cleared, room_depth, encounter_count)
 	var outcome: Dictionary = ENCOUNTER_CONTRACTS.normalize_room_cleared_outcome(raw_outcome)
 	run_cleared = ENCOUNTER_CONTRACTS.outcome_run_cleared(outcome)
 	if run_cleared and _is_endless_mode() and in_boss_room:
@@ -1344,7 +1344,7 @@ func _sync_audio_settings_from_context() -> void:
 		music_volume_db = float(music_volume_value)
 
 func _is_reward_selection_active() -> bool:
-	return is_instance_valid(reward_selection_ui) and bool(reward_selection_ui.call("is_active"))
+	return is_instance_valid(reward_selection_ui) and reward_selection_ui.is_active()
 
 func _set_music_volume_runtime(music_db: float) -> void:
 	music_volume_db = clampf(music_db, -80.0, 6.0)
@@ -1403,7 +1403,7 @@ func _spawn_door_options() -> void:
 	if first_boss_defeated:
 		show_boss_door = _is_second_boss_unlocked()
 		boss_unlocked = show_boss_door
-	door_options = encounter_flow_system.call("build_door_options", show_boss_door, room_depth, door_distance_from_center, route_options)
+	door_options = encounter_flow_system.build_door_options(show_boss_door, room_depth, door_distance_from_center, route_options)
 	if show_boss_door and not door_options.is_empty():
 		if first_boss_defeated:
 			door_options[0]["label"] = "Sovereign"
@@ -1422,7 +1422,7 @@ func _try_use_door() -> void:
 		return
 	if not is_instance_valid(encounter_flow_system):
 		return
-	var raw_result: Variant = encounter_flow_system.call("find_used_door", player.global_position, door_options, door_use_radius)
+	var raw_result: Variant = encounter_flow_system.find_used_door(player.global_position, door_options, door_use_radius)
 	var result: Dictionary = ENCOUNTER_CONTRACTS.normalize_door_use_result(raw_result)
 	if not ENCOUNTER_CONTRACTS.door_use_is_used(result):
 		return
@@ -1439,7 +1439,7 @@ func _choose_door(door: Dictionary) -> void:
 	player.global_position = Vector2.ZERO
 	if not is_instance_valid(encounter_flow_system):
 		return
-	var raw_choice: Variant = encounter_flow_system.call("resolve_chosen_door", door)
+	var raw_choice: Variant = encounter_flow_system.resolve_chosen_door(door)
 	var choice: Dictionary = ENCOUNTER_CONTRACTS.normalize_door_choice(raw_choice)
 	_record_door_choice(choice)
 	var action_id: int = ENCOUNTER_CONTRACTS.door_choice_action_id(choice)
@@ -1624,7 +1624,7 @@ func _enter_rest_site() -> void:
 func _advance_room_progress() -> void:
 	if not is_instance_valid(encounter_flow_system):
 		return
-	var progress: Dictionary = encounter_flow_system.call("advance_room_progress", rooms_cleared, room_depth, encounter_count)
+	var progress: Dictionary = encounter_flow_system.advance_room_progress(rooms_cleared, room_depth, encounter_count)
 	rooms_cleared = int(progress.get("rooms_cleared", rooms_cleared))
 	room_depth = int(progress.get("room_depth", room_depth))
 	boss_unlocked = bool(progress.get("boss_unlocked", boss_unlocked))
@@ -1748,7 +1748,7 @@ func _apply_camera_bounds_for_room(room_size: Vector2) -> void:
 func _update_camera_mode() -> void:
 	if not is_instance_valid(player_camera):
 		return
-	if (is_instance_valid(reward_selection_ui) and bool(reward_selection_ui.call("is_active"))) or choosing_next_room:
+	if (is_instance_valid(reward_selection_ui) and reward_selection_ui.is_active()) or choosing_next_room:
 		if player_camera.has_method("set_static_mode"):
 			player_camera.call("set_static_mode", Vector2.ZERO)
 		return
@@ -1761,7 +1761,7 @@ func _update_camera_mode() -> void:
 func _build_skirmish_profile(depth: int) -> Dictionary:
 	if not is_instance_valid(encounter_profile_builder):
 		return {}
-	return encounter_profile_builder.call("build_skirmish_profile", depth)
+	return encounter_profile_builder.build_skirmish_profile(depth)
 
 func _get_active_player_mutators_for_hud() -> Array[Dictionary]:
 	if not is_instance_valid(player):
@@ -1773,11 +1773,11 @@ func _get_active_player_mutators_for_hud() -> Array[Dictionary]:
 func _roll_route_options(route_context: Variant) -> Array[Dictionary]:
 	if not is_instance_valid(encounter_profile_builder):
 		return []
-	return encounter_profile_builder.call("roll_route_options", route_context)
+	return encounter_profile_builder.roll_route_options(route_context)
 
 func _open_boon_selection(title: String, is_initial: bool, mode: int = ENUMS.RewardMode.BOON, player_mutator: Dictionary = {}) -> void:
 	if is_instance_valid(reward_selection_ui):
-		reward_selection_ui.call("open_selection", title, is_initial, mode, power_registry_instance, player, rng, player_mutator)
+		reward_selection_ui.open_selection(title, is_initial, mode, power_registry_instance, player, rng, player_mutator)
 		_set_combat_paused(true)
 
 func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> void:
@@ -1996,7 +1996,7 @@ func _on_player_died() -> void:
 	player_defeated = true
 	_set_combat_paused(true)
 	if is_instance_valid(reward_selection_ui):
-		reward_selection_ui.call("close_selection")
+		reward_selection_ui.close_selection()
 	if is_instance_valid(pause_menu_controller) and bool(pause_menu_controller.call("is_open")):
 		pause_menu_controller.call("close")
 	run_cleared = true
