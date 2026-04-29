@@ -4,13 +4,15 @@
 [ext_resource type="Script" uid="uid://babey36ee0m00" path="res://scripts/world_generator.gd" id="2_jxm8r"]
 [ext_resource type="AudioStream" uid="uid://by0stfy1g1ca" path="res://music/cynicbattleloop.ogg" id="2_rarhs"]
 [ext_resource type="AudioStream" uid="uid://dgjrw5cngi4a8" path="res://music/Heated Lands - MP3.mp3" id="3_vcsgt"]
+[ext_resource type="Script" uid="uid://do2pj03talbao" path="res://scripts/debug_settings.gd" id="5_oxjlc"]
 
 [node name="Main" type="Node2D" unique_id=1680556229]
 script = ExtResource("2_jxm8r")
 normal_room_music = ExtResource("2_rarhs")
 boss_room_music = ExtResource("3_vcsgt")
 music_volume_db = -50.0
-debug_start_power_ids = PackedStringArray()
-debug_start_depth = 5
+
+[node name="DebugSettings" type="Node" parent="." unique_id=390124711]
+script = ExtResource("5_oxjlc")
 
 [node name="Player" parent="." unique_id=1831438957 instance=ExtResource("1_elqb8")]

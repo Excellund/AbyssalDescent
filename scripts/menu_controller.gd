@@ -82,8 +82,15 @@ func _should_autostart_debug_encounter() -> bool:
 	var main_root := packed.instantiate()
 	if main_root == null:
 		return false
-	var encounter_value: Variant = main_root.get("debug_start_encounter")
+	var settings_enabled := false
+	var encounter_value: Variant = null
+	var debug_settings := main_root.get_node_or_null("DebugSettings")
+	if debug_settings != null:
+		settings_enabled = bool(debug_settings.get("enabled"))
+		encounter_value = debug_settings.get("start_encounter")
 	main_root.queue_free()
+	if not settings_enabled:
+		return false
 	if encounter_value == null:
 		return false
 	return int(encounter_value) != 0

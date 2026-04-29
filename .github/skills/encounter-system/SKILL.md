@@ -17,12 +17,14 @@ Use this skill when working on the refactored encounter-generation surfaces.
 - Encounter compositions live in `BEARING_DEFINITIONS` in `scripts/encounter_profile_builder.gd`.
 - Random hard mutator compatibility is decided by each mutator's `affected_archetypes` entry in `_hard_mutator_pool()`.
 - Enemy mutator stat application lives in `ENEMY_MUTATOR_STAT_MAP` in `scripts/enemy_spawner.gd`.
+- Debug startup controls are read from the DebugSettings child in `scenes/Main.tscn` via prefix-free fields (for example: `enabled`, `start_encounter`, `mutator_override`).
 
 ## When To Edit What
 - Add or retune an encounter:
   - Update `BEARING_DEFINITIONS`.
   - Preserve the encounter's signature threat pattern across all 4 difficulty ranks (Pilgrim/Delver/Harbinger/Forsworn).
   - Keep labels aligned with glossary/debug naming.
+  - If debug launch paths are affected, keep `DebugSettings.start_encounter` behavior coherent in `scripts/world_generator.gd` and `scripts/menu_controller.gd`.
 - Add or retune a random hard mutator:
   - Update `_hard_mutator_pool()`.
   - Set `affected_archetypes` so incompatible rooms cannot roll it.
@@ -49,6 +51,7 @@ Mutators match a profile if any declared archetype is present. If a filtered poo
 3. Prefer data edits over new branching logic.
 4. Preserve encounter identity first: do not flatten distinct encounters into similar mixes.
 5. Keep debug encounter and mutator entry points working.
+  - Respect `DebugSettings.enabled` gating for startup debug behavior.
 6. If an encounter name or gameplay meaning changes, update `scripts/shared/glossary_data.gd` in the same change.
 
 ## Verification

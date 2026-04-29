@@ -85,71 +85,71 @@ Write-Host "Checking for enabled debug options..." -ForegroundColor Yellow
 
 $debugChecksPassed = $true
 
-# Check world_generator.gd for debug exports
-$worldGenPath = "$scriptsPath/world_generator.gd"
-if (Test-Path $worldGenPath) {
-    $content = Get-Content -Path $worldGenPath -Raw
+# Check debug_settings.gd for debug defaults
+$debugSettingsPath = "$scriptsPath/debug_settings.gd"
+if (Test-Path $debugSettingsPath) {
+    $content = Get-Content -Path $debugSettingsPath -Raw
 
-    # Check debug_apply_test_powers_on_start
-    $debugApplyTestPowersValue = Get-DebugSettingValue -content $content -settingName "debug_apply_test_powers_on_start"
+    # Check apply_test_powers_on_start
+    $debugApplyTestPowersValue = Get-DebugSettingValue -content $content -settingName "apply_test_powers_on_start"
     if ($null -ne $debugApplyTestPowersValue -and $debugApplyTestPowersValue -match '^true$') {
-        Write-Host "  [ERROR] debug_apply_test_powers_on_start is enabled" -ForegroundColor Red
+        Write-Host "  [ERROR] apply_test_powers_on_start is enabled" -ForegroundColor Red
         $debugChecksPassed = $false
     }
 
-    # Check debug_skip_starting_boon_selection
-    $debugSkipBoonSelectionValue = Get-DebugSettingValue -content $content -settingName "debug_skip_starting_boon_selection"
+    # Check skip_starting_boon_selection
+    $debugSkipBoonSelectionValue = Get-DebugSettingValue -content $content -settingName "skip_starting_boon_selection"
     if ($null -ne $debugSkipBoonSelectionValue -and $debugSkipBoonSelectionValue -match '^true$') {
-        Write-Host "  [ERROR] debug_skip_starting_boon_selection is enabled" -ForegroundColor Red
+        Write-Host "  [ERROR] skip_starting_boon_selection is enabled" -ForegroundColor Red
         $debugChecksPassed = $false
     }
 
-    # Check debug_start_power_preset - should have DEBUG_POWER_PRESET_NONE
-    $powerPresetValue = Get-DebugSettingValue -content $content -settingName "debug_start_power_preset"
+    # Check start_power_preset - should have DEBUG_POWER_PRESET_NONE
+    $powerPresetValue = Get-DebugSettingValue -content $content -settingName "start_power_preset"
     if ($null -ne $powerPresetValue) {
         $value = $powerPresetValue
         if ($value -notmatch '(^0$|DEBUG_POWER_PRESET_NONE)') {
-            Write-Host "  [ERROR] debug_start_power_preset is not set to NONE (currently: $value)" -ForegroundColor Red
+            Write-Host "  [ERROR] start_power_preset is not set to NONE (currently: $value)" -ForegroundColor Red
             $debugChecksPassed = $false
         }
     }
 
-    # Check debug_start_encounter - should have DEBUG_ENCOUNTER_NONE
-    $encounterValue = Get-DebugSettingValue -content $content -settingName "debug_start_encounter"
+    # Check start_encounter - should have DEBUG_ENCOUNTER_NONE
+    $encounterValue = Get-DebugSettingValue -content $content -settingName "start_encounter"
     if ($null -ne $encounterValue) {
         $value = $encounterValue
         if ($value -notmatch '(^0$|DEBUG_ENCOUNTER_NONE)') {
-            Write-Host "  [ERROR] debug_start_encounter is not set to NONE (currently: $value)" -ForegroundColor Red
+            Write-Host "  [ERROR] start_encounter is not set to NONE (currently: $value)" -ForegroundColor Red
             $debugChecksPassed = $false
         }
     }
 
-    # Check debug_start_bearing - should have no override
-    $bearingValue = Get-DebugSettingValue -content $content -settingName "debug_start_bearing"
+    # Check start_bearing - should have no override
+    $bearingValue = Get-DebugSettingValue -content $content -settingName "start_bearing"
     if ($null -ne $bearingValue) {
         $value = $bearingValue
         if ($value -notmatch '(^-1$)') {
-            Write-Host "  [ERROR] debug_start_bearing is not set to No Override (currently: $value)" -ForegroundColor Red
+            Write-Host "  [ERROR] start_bearing is not set to No Override (currently: $value)" -ForegroundColor Red
             $debugChecksPassed = $false
         }
     }
 
-    # Check debug_mutator_override - should have DEBUG_MUTATOR_NONE
-    $mutatorValue = Get-DebugSettingValue -content $content -settingName "debug_mutator_override"
+    # Check mutator_override - should have DEBUG_MUTATOR_NONE
+    $mutatorValue = Get-DebugSettingValue -content $content -settingName "mutator_override"
     if ($null -ne $mutatorValue) {
         $value = $mutatorValue
         if ($value -notmatch '(^0$|DEBUG_MUTATOR_NONE)') {
-            Write-Host "  [ERROR] debug_mutator_override is not set to NONE (currently: $value)" -ForegroundColor Red
+            Write-Host "  [ERROR] mutator_override is not set to NONE (currently: $value)" -ForegroundColor Red
             $debugChecksPassed = $false
         }
     }
 
-    # Check debug_end_screen_preview - should have DEBUG_END_SCREEN_NONE
-    $endScreenValue = Get-DebugSettingValue -content $content -settingName "debug_end_screen_preview"
+    # Check end_screen_preview - should have DEBUG_END_SCREEN_NONE
+    $endScreenValue = Get-DebugSettingValue -content $content -settingName "end_screen_preview"
     if ($null -ne $endScreenValue) {
         $value = $endScreenValue
         if ($value -notmatch '(^0$|DEBUG_END_SCREEN_NONE)') {
-            Write-Host "  [ERROR] debug_end_screen_preview is not set to NONE (currently: $value)" -ForegroundColor Red
+            Write-Host "  [ERROR] end_screen_preview is not set to NONE (currently: $value)" -ForegroundColor Red
             $debugChecksPassed = $false
         }
     }
@@ -173,13 +173,13 @@ try {
 
 if ($stagedSceneFiles.Count -gt 0) {
     $sceneDebugRules = @(
-        @{ name = "debug_apply_test_powers_on_start"; allowed = "^false$"; description = "false" },
-        @{ name = "debug_skip_starting_boon_selection"; allowed = "^false$"; description = "false" },
-        @{ name = "debug_start_power_preset"; allowed = "(^0$|DEBUG_POWER_PRESET_NONE)"; description = "NONE/0" },
-        @{ name = "debug_start_encounter"; allowed = "(^0$|DEBUG_ENCOUNTER_NONE)"; description = "NONE/0" },
-        @{ name = "debug_start_bearing"; allowed = "(^-1$)"; description = "No Override/-1" },
-        @{ name = "debug_mutator_override"; allowed = "(^0$|DEBUG_MUTATOR_NONE)"; description = "NONE/0" },
-        @{ name = "debug_end_screen_preview"; allowed = "(^0$|DEBUG_END_SCREEN_NONE)"; description = "NONE/0" }
+        @{ name = "apply_test_powers_on_start"; allowed = "^false$"; description = "false" },
+        @{ name = "skip_starting_boon_selection"; allowed = "^false$"; description = "false" },
+        @{ name = "start_power_preset"; allowed = "(^0$|DEBUG_POWER_PRESET_NONE)"; description = "NONE/0" },
+        @{ name = "start_encounter"; allowed = "(^0$|DEBUG_ENCOUNTER_NONE)"; description = "NONE/0" },
+        @{ name = "start_bearing"; allowed = "(^-1$)"; description = "No Override/-1" },
+        @{ name = "mutator_override"; allowed = "(^0$|DEBUG_MUTATOR_NONE)"; description = "NONE/0" },
+        @{ name = "end_screen_preview"; allowed = "(^0$|DEBUG_END_SCREEN_NONE)"; description = "NONE/0" }
     )
 
     foreach ($sceneFile in $stagedSceneFiles) {

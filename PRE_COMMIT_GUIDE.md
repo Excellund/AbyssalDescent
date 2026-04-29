@@ -5,13 +5,14 @@
 This pre-commit hook system automatically blocks commits if:
 
 1. **Debug options are enabled** in `scripts/world_generator.gd`:
-   - `debug_apply_test_powers_on_start` must be `false`
-   - `debug_skip_starting_boon_selection` must be `false`
-   - `debug_start_power_preset` must be `DEBUG_POWER_PRESET_NONE`
-   - `debug_start_encounter` must be `ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_NONE`
-   - `debug_mutator_override` must be `DEBUG_MUTATOR_NONE`
-   - `debug_end_screen_preview` must be `DEBUG_END_SCREEN_NONE`
 
+1. **Debug options are enabled** in `scripts/debug_settings.gd`:
+   `apply_test_powers_on_start` must be `false`
+   `skip_starting_boon_selection` must be `false`
+   `start_power_preset` must be `DEBUG_POWER_PRESET_NONE`
+   `start_encounter` must be `ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_NONE`
+   `mutator_override` must be `DEBUG_MUTATOR_NONE`
+   `end_screen_preview` must be `DEBUG_END_SCREEN_NONE`
 2. **Syntax issues** in staged GDScript files (quick check)
 
 ## Setup (One-Time Only)

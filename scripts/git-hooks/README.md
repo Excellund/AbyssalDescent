@@ -20,13 +20,13 @@ Run this once to install the hooks:
 
 The hooks will block commits if any of these are true:
 
-1. **Debug options enabled in `scripts/world_generator.gd`:**
-   - `debug_apply_test_powers_on_start = true`
-   - `debug_skip_starting_boon_selection = true`
-   - `debug_start_power_preset` is not `DEBUG_POWER_PRESET_NONE`
-   - `debug_start_encounter` is not `ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_NONE`
-   - `debug_mutator_override` is not `DEBUG_MUTATOR_NONE`
-   - `debug_end_screen_preview` is not `DEBUG_END_SCREEN_NONE`
+1. **Debug options enabled in `scripts/debug_settings.gd` or scene debug settings:**
+   - `apply_test_powers_on_start = true`
+   - `skip_starting_boon_selection = true`
+   - `start_power_preset` is not `DEBUG_POWER_PRESET_NONE`
+   - `start_encounter` is not `ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_NONE`
+   - `mutator_override` is not `DEBUG_MUTATOR_NONE`
+   - `end_screen_preview` is not `DEBUG_END_SCREEN_NONE`
 
 2. **Syntax errors in staged GDScript files**
 

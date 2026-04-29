@@ -21,6 +21,7 @@ const ENUMS := preload("res://scripts/shared/enums.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const RUN_TELEMETRY_STORE := preload("res://scripts/run_telemetry_store.gd")
 const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
+const DEBUG_SETTINGS_SCRIPT := preload("res://scripts/debug_settings.gd")
 const RUN_CONTEXT_PATH := "/root/RunContext"
 const MENU_SCENE_PATH := "res://scenes/Menu.tscn"
 const RUN_SNAPSHOT_VERSION := 1
@@ -95,17 +96,17 @@ func _get_debug_encounter_reward_mode(encounter_key: String) -> int:
 @export var rest_heal_ratio: float = 0.32
 @export var hard_room_enemy_bonus: int = 3
 @export var second_boss_encounter_count: int = 7
-@export var debug_apply_test_powers_on_start: bool = false
-@export var debug_skip_starting_boon_selection: bool = false
-@export_enum("None", "Dasher", "Bruiser", "Marksman") var debug_start_power_preset: int = DEBUG_POWER_PRESET_NONE
-@export var debug_start_power_ids: PackedStringArray = PackedStringArray()
-@export_multiline var debug_start_command: String = ""
-@export_enum("None", "Rest Site", "Skirmish", "Crossfire", "Fortress", "Onslaught", "Vanguard", "Blitz", "Ambush", "Suppression", "Gauntlet", "Objective - Last Stand", "Objective - Cut the Signal", "Objective - Hold the Line", "Objective - Random", "Trial", "Warden", "Sovereign") var debug_start_encounter: int = ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_NONE
-@export var debug_start_depth: int = 1
-@export_enum("No Override:-1", "Pilgrim:0", "Delver:1", "Harbinger:2", "Forsworn:3") var debug_start_bearing: int = -1
-@export_enum("None", "Blood Rush", "Flashpoint", "Siegebreak", "Iron Volley", "Killbox", "Random Hard") var debug_mutator_override: int = DEBUG_MUTATOR_NONE
-@export_enum("None", "Victory", "Defeat") var debug_end_screen_preview: int = DEBUG_END_SCREEN_NONE
-@export_enum("No Unlock:-1", "Pilgrim:0", "Delver:1", "Harbinger:2", "Forsworn:3") var debug_victory_unlock_tier: int = -1
+var settings_enabled: bool = false
+var apply_test_powers_on_start: bool = false
+var skip_starting_boon_selection: bool = false
+var start_power_preset: int = DEBUG_POWER_PRESET_NONE
+var start_power_ids: PackedStringArray = PackedStringArray()
+var start_encounter: int = ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_NONE
+var start_depth: int = 1
+var start_bearing: int = -1
+var mutator_override: int = DEBUG_MUTATOR_NONE
+var end_screen_preview: int = DEBUG_END_SCREEN_NONE
+var victory_unlock_tier: int = -1
 
 var player: Node2D
 var player_camera: Camera2D
@@ -201,8 +202,29 @@ var telemetry_enabled: bool = false
 var telemetry_run_finished: bool = false
 var player_defeated: bool = false
 
+func _apply_debug_settings_from_node() -> void:
+	var debug_settings := get_node_or_null("DebugSettings")
+	if not (is_instance_valid(debug_settings) and debug_settings.get_script() == DEBUG_SETTINGS_SCRIPT):
+		return
+	settings_enabled = bool(debug_settings.get("enabled"))
+	apply_test_powers_on_start = bool(debug_settings.get("apply_test_powers_on_start"))
+	skip_starting_boon_selection = bool(debug_settings.get("skip_starting_boon_selection"))
+	start_power_preset = int(debug_settings.get("start_power_preset"))
+	var start_power_ids_value: Variant = debug_settings.get("start_power_ids")
+	if start_power_ids_value is PackedStringArray:
+		start_power_ids = start_power_ids_value
+	else:
+		start_power_ids = PackedStringArray()
+	start_encounter = int(debug_settings.get("start_encounter"))
+	start_depth = int(debug_settings.get("start_depth"))
+	start_bearing = int(debug_settings.get("start_bearing"))
+	mutator_override = int(debug_settings.get("mutator_override"))
+	end_screen_preview = int(debug_settings.get("end_screen_preview"))
+	victory_unlock_tier = int(debug_settings.get("victory_unlock_tier"))
+
 func _ready() -> void:
 	rng.randomize()
+	_apply_debug_settings_from_node()
 	power_registry_instance = POWER_REGISTRY.new()
 	player = get_node_or_null(player_path) as Node2D
 	if is_instance_valid(player) and player.has_method("set_power_registry"):
@@ -310,17 +332,18 @@ func _ready() -> void:
 	if resumed_run:
 		return
 	_apply_debug_start_powers_if_needed()
-	match debug_end_screen_preview:
-		DEBUG_END_SCREEN_VICTORY:
-			victory_screen.call("show_victory", 0, debug_victory_unlock_tier)
+	if settings_enabled:
+		match end_screen_preview:
+			DEBUG_END_SCREEN_VICTORY:
+				victory_screen.call("show_victory", 0, victory_unlock_tier)
+				return
+			DEBUG_END_SCREEN_DEFEAT:
+				defeat_screen.call("show_defeat", "Debug Arena", max(1, start_depth))
+				return
+		if start_encounter != ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_NONE:
+			_start_debug_selected_encounter(start_encounter)
 			return
-		DEBUG_END_SCREEN_DEFEAT:
-			defeat_screen.call("show_defeat", "Debug Arena", max(1, debug_start_depth))
-			return
-	if debug_start_encounter != ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_NONE:
-		_start_debug_selected_encounter(debug_start_encounter)
-		return
-	if debug_skip_starting_boon_selection:
+	if settings_enabled and skip_starting_boon_selection:
 		pending_room_reward = ENUMS.RewardMode.BOON
 		_begin_room(_build_skirmish_profile(room_depth))
 	else:
@@ -408,7 +431,7 @@ func _start_debug_selected_encounter(encounter_state: int) -> Dictionary:
 		return _start_debug_second_boss_room()
 
 	_reset_for_debug_jump()
-	var encounter_depth := debug_start_depth
+	var encounter_depth := start_depth
 	rooms_cleared = encounter_depth - 1
 	room_depth = encounter_depth
 	boss_unlocked = false
@@ -480,14 +503,18 @@ func _debug_mutator_key(state_value: int) -> String:
 			return ""
 
 func _debug_bearing_override_tier() -> int:
-	if debug_start_bearing < META_PROGRESS.TIER_PILGRIM:
+	if not settings_enabled:
 		return -1
-	return clampi(debug_start_bearing, META_PROGRESS.TIER_PILGRIM, META_PROGRESS.TIER_FORSWORN)
+	if start_bearing < META_PROGRESS.TIER_PILGRIM:
+		return -1
+	return clampi(start_bearing, META_PROGRESS.TIER_PILGRIM, META_PROGRESS.TIER_FORSWORN)
 
 func _apply_debug_mutator_override(profile: Dictionary) -> Dictionary:
+	if not settings_enabled:
+		return profile
 	if profile.is_empty():
 		return profile
-	var mutator_key := _debug_mutator_key(debug_mutator_override)
+	var mutator_key := _debug_mutator_key(mutator_override)
 	if mutator_key.is_empty():
 		return profile
 	if not is_instance_valid(encounter_profile_builder):
@@ -546,14 +573,14 @@ func _build_objective_test_profile(depth: int, kind: String = "") -> Dictionary:
 	return encounter_profile_builder.build_objective_profile(depth, kind)
 
 func _apply_debug_start_powers_if_needed() -> void:
-	if not debug_apply_test_powers_on_start:
+	if not settings_enabled:
+		return
+	if not apply_test_powers_on_start:
 		return
 	var ids: Array[String] = []
-	ids.append_array(_get_debug_power_preset_ids(debug_start_power_preset))
-	for id in debug_start_power_ids:
+	ids.append_array(_get_debug_power_preset_ids(start_power_preset))
+	for id in start_power_ids:
 		ids.append(String(id))
-	if not debug_start_command.strip_edges().is_empty():
-		ids.append_array(_parse_power_command(debug_start_command))
 	if ids.is_empty():
 		return
 	start_run_with_powers(ids)
@@ -1799,17 +1826,19 @@ func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> voi
 	hud.refresh(_get_hud_state(), player)
 
 func _is_debug_boot_session() -> bool:
-	if debug_end_screen_preview != DEBUG_END_SCREEN_NONE:
+	if not settings_enabled:
+		return false
+	if end_screen_preview != DEBUG_END_SCREEN_NONE:
 		return true
-	if debug_start_encounter != ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_NONE:
+	if start_encounter != ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_NONE:
 		return true
 	if _debug_bearing_override_tier() >= 0:
 		return true
-	if debug_apply_test_powers_on_start:
+	if apply_test_powers_on_start:
 		return true
-	if debug_start_power_preset != DEBUG_POWER_PRESET_NONE:
+	if start_power_preset != DEBUG_POWER_PRESET_NONE:
 		return true
-	if debug_skip_starting_boon_selection:
+	if skip_starting_boon_selection:
 		return true
 	return false
 
