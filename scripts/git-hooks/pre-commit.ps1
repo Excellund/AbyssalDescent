@@ -24,6 +24,19 @@ function Get-DebugSettingValue {
     return $matches[$matches.Count - 1].Groups[1].Value.Trim()
 }
 
+function Test-DebugValueAllowed {
+    param(
+        [string]$value,
+        [string]$allowedPattern
+    )
+
+        if ($null -eq $value -or [string]::IsNullOrWhiteSpace([string]$value)) {
+        return $true
+    }
+
+        return ([string]$value) -match $allowedPattern
+}
+
 Write-Host "[PRE-COMMIT] Starting validation..." -ForegroundColor Cyan
 
 # ============================================================================
@@ -138,6 +151,39 @@ if (Test-Path $menuControllerPath) {
     $content = Get-Content -Path $menuControllerPath -Raw
     
     # Future debug checks can go here if needed
+}
+
+# Check staged scene files for serialized debug overrides.
+$stagedSceneFiles = @()
+try {
+    $stagedSceneFiles = git diff --cached --name-only --diff-filter=ACM | Where-Object { $_ -like "*.tscn" }
+} catch {
+    Write-Host "[WARN] Could not get staged scene files" -ForegroundColor Yellow
+}
+
+if ($stagedSceneFiles.Count -gt 0) {
+    $sceneDebugRules = @(
+        @{ name = "debug_apply_test_powers_on_start"; allowed = "^false$"; description = "false" },
+        @{ name = "debug_skip_starting_boon_selection"; allowed = "^false$"; description = "false" },
+        @{ name = "debug_start_power_preset"; allowed = "(^0$|DEBUG_POWER_PRESET_NONE)"; description = "NONE/0" },
+        @{ name = "debug_start_encounter"; allowed = "(^0$|DEBUG_ENCOUNTER_NONE)"; description = "NONE/0" },
+        @{ name = "debug_mutator_override"; allowed = "(^0$|DEBUG_MUTATOR_NONE)"; description = "NONE/0" },
+        @{ name = "debug_end_screen_preview"; allowed = "(^0$|DEBUG_END_SCREEN_NONE)"; description = "NONE/0" }
+    )
+
+    foreach ($sceneFile in $stagedSceneFiles) {
+        $scenePath = "$projectRoot/$sceneFile"
+        if (-not (Test-Path $scenePath)) { continue }
+
+        $sceneContent = Get-Content -Path $scenePath -Raw
+        foreach ($rule in $sceneDebugRules) {
+            $value = Get-DebugSettingValue -content $sceneContent -settingName $rule.name
+            if (-not (Test-DebugValueAllowed -value $value -allowedPattern $rule.allowed)) {
+                Write-Host "  [ERROR] ${sceneFile}: $($rule.name) is not $($rule.description) (currently: $value)" -ForegroundColor Red
+                $debugChecksPassed = $false
+            }
+        }
+    }
 }
 
 if ($debugChecksPassed) {
