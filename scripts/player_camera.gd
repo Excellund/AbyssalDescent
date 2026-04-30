@@ -13,7 +13,8 @@ const MODE_STATIC := 1
 @export var mouse_deadzone: float = 28.0
 @export var input_smoothing_speed: float = 14.0
 @export var zoom_lerp_speed: float = 10.0
-@export var min_zoom: float = 0.9
+@export var room_fit_zoom_scale: float = 0.95
+@export var min_zoom: float = 0.5
 @export var max_zoom: float = 3.0
 @export var visible_edge_margin: float = 10.0
 
@@ -23,6 +24,9 @@ var smoothed_mouse_offset: Vector2 = Vector2.ZERO
 var camera_mode: int = MODE_FOLLOW
 var static_center_global: Vector2 = Vector2.ZERO
 var target_zoom: Vector2 = Vector2.ONE
+var world_bounds_rect: Rect2 = Rect2()
+var has_world_bounds: bool = false
+var cached_viewport_size: Vector2 = Vector2.ZERO
 
 func _ready() -> void:
 	target_body = get_parent() as CharacterBody2D
@@ -32,12 +36,14 @@ func _ready() -> void:
 	if is_instance_valid(target_body):
 		global_position = target_body.global_position
 		static_center_global = global_position
+	cached_viewport_size = get_viewport_rect().size
 	target_zoom = zoom
 	make_current()
 
 func _physics_process(delta: float) -> void:
 	if not is_instance_valid(target_body):
 		return
+	_refresh_world_bounds_for_viewport_change()
 
 	var velocity_offset_target := Vector2.ZERO
 	if camera_mode == MODE_FOLLOW and target_body.velocity.length() > velocity_deadzone:
@@ -76,15 +82,39 @@ func set_static_mode(center_global: Vector2) -> void:
 	static_center_global = center_global
 
 func set_world_bounds(bounds_rect: Rect2) -> void:
+	world_bounds_rect = bounds_rect
+	has_world_bounds = true
+	_apply_zoom_and_limits_from_bounds(bounds_rect)
+
+func set_room_fit_zoom_scale(scale: float) -> void:
+	room_fit_zoom_scale = maxf(0.01, scale)
+	if has_world_bounds:
+		_apply_zoom_and_limits_from_bounds(world_bounds_rect)
+
+func _refresh_world_bounds_for_viewport_change() -> void:
+	var viewport_size := get_viewport_rect().size
+	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
+		return
+	if viewport_size.distance_to(cached_viewport_size) <= 0.1:
+		return
+	cached_viewport_size = viewport_size
+	if has_world_bounds:
+		_apply_zoom_and_limits_from_bounds(world_bounds_rect)
+
+func _apply_zoom_and_limits_from_bounds(bounds_rect: Rect2) -> void:
 	var viewport_size := get_viewport_rect().size
 	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
 		return
 
-	var fit_zoom := maxf(bounds_rect.size.x / viewport_size.x, bounds_rect.size.y / viewport_size.y)
+	var fit_zoom := minf(viewport_size.x / maxf(1.0, bounds_rect.size.x), viewport_size.y / maxf(1.0, bounds_rect.size.y))
+	fit_zoom *= maxf(0.01, room_fit_zoom_scale)
 	fit_zoom = clampf(fit_zoom, min_zoom, max_zoom)
 	target_zoom = Vector2(fit_zoom, fit_zoom)
 
-	var half_view := viewport_size * 0.5 * fit_zoom
+	var half_view := Vector2(
+		viewport_size.x * 0.5 / maxf(0.001, fit_zoom),
+		viewport_size.y * 0.5 / maxf(0.001, fit_zoom)
+	)
 	var left := bounds_rect.position.x + half_view.x
 	var right := bounds_rect.position.x + bounds_rect.size.x - half_view.x
 	if left > right:
@@ -112,7 +142,10 @@ func _ensure_target_visible() -> void:
 	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
 		return
 
-	var half_view := viewport_size * 0.5 * zoom
+	var half_view := Vector2(
+		viewport_size.x * 0.5 / maxf(0.001, zoom.x),
+		viewport_size.y * 0.5 / maxf(0.001, zoom.y)
+	)
 	var min_visible := global_position - half_view + Vector2.ONE * visible_edge_margin
 	var max_visible := global_position + half_view - Vector2.ONE * visible_edge_margin
 

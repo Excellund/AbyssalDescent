@@ -78,6 +78,7 @@ func _get_debug_encounter_reward_mode(encounter_key: String) -> int:
 @export var door_distance_from_center: float = 290.0
 @export var door_use_radius: float = 72.0
 @export var camera_room_margin: Vector2 = Vector2(160.0, 120.0)
+@export_range(0.85, 2.0, 0.01) var camera_base_zoom_in: float = 0.95
 @export var boon_choice_count: int = 3
 @export var camera_player_margin: float = 18.0
 @export var boon_reveal_duration: float = 0.22
@@ -232,6 +233,8 @@ func _ready() -> void:
 		player.set_power_registry(power_registry_instance)
 	if is_instance_valid(player):
 		player_camera = player.get_node_or_null("Camera2D") as Camera2D
+		if is_instance_valid(player_camera) and player_camera.has_method("set_room_fit_zoom_scale"):
+			player_camera.call("set_room_fit_zoom_scale", camera_base_zoom_in)
 		if player.has_signal("damage_taken"):
 			player.connect("damage_taken", Callable(self, "_on_player_damage_taken"))
 		if player.has_signal("died"):
@@ -1085,7 +1088,10 @@ func _keep_player_inside_camera_view() -> void:
 	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
 		return
 
-	var half_view := viewport_size * 0.5 * player_camera.zoom
+	var half_view := Vector2(
+		viewport_size.x * 0.5 / maxf(0.001, player_camera.zoom.x),
+		viewport_size.y * 0.5 / maxf(0.001, player_camera.zoom.y)
+	)
 	var min_visible := player_camera.global_position - half_view + Vector2.ONE * camera_player_margin
 	var max_visible := player_camera.global_position + half_view - Vector2.ONE * camera_player_margin
 
