@@ -389,7 +389,7 @@ func _get_upgrade_fallback_description(upgrade_id: String) -> String:
 		"surge_step":
 			return "Dash speed +%.0f." % [float(data.get("add", 0.0))]
 		"heartstone":
-			return "Max health +%d (and heals immediately)." % [int(data.get("add", 0))]
+			return "Max health +%d." % [int(data.get("add", 0))]
 		_:
 			return "Upgrade your stats."
 

@@ -533,8 +533,7 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 		"heartstone":
 			var cur_max := int(cur_val)
 			var next_max := int(next_val)
-			var gain := maxi(0, next_max - cur_max)
-			return "[color=#c8daf0]Max HP:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]  [color=#c8daf0](Heal +%d)[/color]" % [cur_max, next_max, gain]
+			return "[color=#c8daf0]Max HP:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [cur_max, next_max]
 		_:
 			return "[color=#c8daf0]Upgrade your stats.[/color]"
 
