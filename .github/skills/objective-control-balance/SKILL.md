@@ -20,6 +20,19 @@ Use this skill when a control objective is technically winnable but practically 
 - Keep pressure readable and monotonic across bearings.
 - Avoid converting control into a low-pressure free capture.
 
+## Terminology And Shorthand
+- Bearing shorthand: P, D, H, F map to Pilgrim, Delver, Harbinger, Forsworn.
+- Depth shorthand: 1 through 16 map to run depth.
+- Combined shorthand: H3 means Harbinger depth 3.
+
+## Contest Semantics
+- Zero-allowed mode means no enemies are allowed in the zone while capturing.
+- When zero-allowed mode is active, contest should evaluate as enemies_in_zone > contest_threshold with contest_threshold = 0.
+- If zero-allowed behavior appears broken, verify all three surfaces agree:
+	- scripts/encounter_profile_builder.gd sets control contest threshold to 0.
+	- scripts/shared/encounter_contracts.gd allows 0 in profile_set_control_objective clamp.
+	- scripts/objective_runtime.gd uses > threshold (not >= max(1, threshold)).
+
 ## Primary Levers
 1. Builder-side pressure envelope (scripts/encounter_profile_builder.gd)
 - Lower base role counts and slower growth on primary swarm units.
@@ -28,6 +41,7 @@ Use this skill when a control objective is technically winnable but practically 
 - Lower progress goal and progress decay for realistic completion pacing.
 - Raise contest threshold when contesting is too sticky.
 - If identity is being flattened by global scaling, use encounter-specific scaling override in _apply_bearing_count_scaling.
+- Prefer table-driven rank/depth tuning maps plus resolver helpers over inline one-off conditionals.
 
 2. Runtime-side recoverability (scripts/objective_runtime.gd)
 - Lower objective_max_enemies for control mode.
@@ -37,12 +51,17 @@ Use this skill when a control objective is technically winnable but practically 
 - Heavily reduce contested in-zone loss multiplier.
 - Reduce out-of-zone decay if repositioning is too punishing.
 - Prevent unconditional overtime extra spawns; gate bonus spawns behind low-enemy conditions.
+- Keep multiplier monotonic by difficulty tier:
+	- contested_decay_mult should never be higher on easier tiers.
+	- out_of_zone_decay_mult should never be higher on easier tiers.
+	- progress_gain_mult should never be lower on easier tiers.
 
 ## Guardrails
 - Do not solve only by inflating player damage or nerfing all enemy archetypes globally.
 - Do not remove contest pressure entirely; contested state must still matter.
 - Keep control completion tied to zone commitment, not passive timer drift.
 - Keep route/debug/glossary surfaces in sync if objective meaning changes.
+- Avoid ad-hoc per-depth bandaids; add or adjust depth windows in centralized tuning tables instead.
 
 ## Procedure
 1. Read current control profile and runtime state handlers.

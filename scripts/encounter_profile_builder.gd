@@ -31,6 +31,56 @@ const MUTATOR_DAMAGE_STAT_KEYS: Array[String] = [
 	ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_PROJECTILE_DAMAGE_MULT,
 	ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_DAMAGE_MULT
 ]
+const CONTROL_TUNING_BY_RANK := {
+	0: {
+		"pressure_mult": 0.95,
+		"spawn_interval_bias": 0.2,
+		"radius_bias": 12.0,
+		"goal_bias": 1.05,
+		"decay_bias": 0.05
+	},
+	1: {
+		"pressure_mult": 0.84,
+		"spawn_interval_bias": 0.18,
+		"radius_bias": 12.0,
+		"goal_bias": 0.45,
+		"decay_bias": -0.005
+	},
+	2: {
+		"pressure_mult": 0.74,
+		"spawn_interval_bias": 0.14,
+		"radius_bias": 12.0,
+		"goal_bias": -0.3,
+		"decay_bias": -0.05
+	},
+	3: {
+		"pressure_mult": 0.78,
+		"spawn_interval_bias": 0.08,
+		"radius_bias": 9.0,
+		"goal_bias": 0.05,
+		"decay_bias": -0.01
+	}
+}
+const CONTROL_DEPTH_WINDOWS_BY_RANK := {
+	2: [
+		{
+			"start_depth": 1,
+			"end_depth": 3,
+			"pressure_bias": 0.02,
+			"spawn_interval_bias": -0.05,
+			"goal_bias": 0.14,
+			"decay_bias": 0.015
+		},
+		{
+			"start_depth": 6,
+			"end_depth": 8,
+			"pressure_bias": -0.04,
+			"spawn_interval_bias": 0.08,
+			"goal_bias": -0.2,
+			"decay_bias": -0.02
+		}
+	]
+}
 const BEARING_DEFINITIONS := {
 	"Crossfire": {
 		"room_size": POOL_ROOM_SIZE,
@@ -705,37 +755,14 @@ func _build_priority_target_profile(depth: int) -> Dictionary:
 func _build_control_profile(depth: int) -> Dictionary:
 	var effective_depth := _effective_depth(depth)
 	var difficulty_rank := _difficulty_rank()
-	var control_pressure_mult := 0.8
+	var rank_tuning := _control_rank_tuning(difficulty_rank)
+	var depth_tuning := _control_depth_tuning(difficulty_rank, depth)
+	var control_pressure_mult := float(rank_tuning.get("pressure_mult", 0.8)) + float(depth_tuning.get("pressure_bias", 0.0))
 	var contest_threshold := 0
-	var tier_spawn_interval_bias := 0.0
-	var tier_radius_bias := 0.0
-	var tier_goal_bias := 0.0
-	var tier_decay_bias := 0.0
-	match difficulty_rank:
-		0:
-			control_pressure_mult = 0.95
-			tier_spawn_interval_bias = 0.2
-			tier_radius_bias = 12.0
-			tier_goal_bias = 1.05
-			tier_decay_bias = 0.05
-		1:
-			control_pressure_mult = 0.84
-			tier_spawn_interval_bias = 0.18
-			tier_radius_bias = 12.0
-			tier_goal_bias = 0.45
-			tier_decay_bias = -0.005
-		2:
-			control_pressure_mult = 0.74
-			tier_spawn_interval_bias = 0.14
-			tier_radius_bias = 12.0
-			tier_goal_bias = -0.3
-			tier_decay_bias = -0.05
-		3:
-			control_pressure_mult = 0.78
-			tier_spawn_interval_bias = 0.08
-			tier_radius_bias = 9.0
-			tier_goal_bias = 0.05
-			tier_decay_bias = -0.01
+	var tier_spawn_interval_bias := float(rank_tuning.get("spawn_interval_bias", 0.0)) + float(depth_tuning.get("spawn_interval_bias", 0.0))
+	var tier_radius_bias := float(rank_tuning.get("radius_bias", 0.0))
+	var tier_goal_bias := float(rank_tuning.get("goal_bias", 0.0)) + float(depth_tuning.get("goal_bias", 0.0))
+	var tier_decay_bias := float(rank_tuning.get("decay_bias", 0.0)) + float(depth_tuning.get("decay_bias", 0.0))
 	var room_size := Vector2(1000.0, 760.0)
 	var chasers := 2 + int(floor(float(effective_depth) * 0.32))
 	var chargers := 1 + int(floor(float(effective_depth) / 6.0)) if effective_depth >= 2 else 0
@@ -752,6 +779,33 @@ func _build_control_profile(depth: int) -> Dictionary:
 	var progress_decay := clampf(0.2 + float(effective_depth) * 0.01 + tier_decay_bias, 0.16, 0.4)
 	ENCOUNTER_CONTRACTS.profile_set_control_objective(profile, duration, spawn_interval, spawn_batch, zone_radius, progress_goal, progress_decay, contest_threshold)
 	return _apply_bearing_count_scaling(profile, control_pressure_mult)
+
+func _control_rank_tuning(difficulty_rank: int) -> Dictionary:
+	if CONTROL_TUNING_BY_RANK.has(difficulty_rank):
+		return (CONTROL_TUNING_BY_RANK[difficulty_rank] as Dictionary).duplicate(true)
+	return (CONTROL_TUNING_BY_RANK[1] as Dictionary).duplicate(true)
+
+func _control_depth_tuning(difficulty_rank: int, depth: int) -> Dictionary:
+	var result := {
+		"pressure_bias": 0.0,
+		"spawn_interval_bias": 0.0,
+		"goal_bias": 0.0,
+		"decay_bias": 0.0
+	}
+	if not CONTROL_DEPTH_WINDOWS_BY_RANK.has(difficulty_rank):
+		return result
+	var windows := CONTROL_DEPTH_WINDOWS_BY_RANK[difficulty_rank] as Array
+	for window_variant in windows:
+		var window := window_variant as Dictionary
+		var start_depth := int(window.get("start_depth", 1))
+		var end_depth := int(window.get("end_depth", start_depth))
+		if depth < start_depth or depth > end_depth:
+			continue
+		result["pressure_bias"] = float(result.get("pressure_bias", 0.0)) + float(window.get("pressure_bias", 0.0))
+		result["spawn_interval_bias"] = float(result.get("spawn_interval_bias", 0.0)) + float(window.get("spawn_interval_bias", 0.0))
+		result["goal_bias"] = float(result.get("goal_bias", 0.0)) + float(window.get("goal_bias", 0.0))
+		result["decay_bias"] = float(result.get("decay_bias", 0.0)) + float(window.get("decay_bias", 0.0))
+	return result
 
 func _normalize_route_context(route_context: Variant) -> Dictionary:
 	if route_context is Dictionary:
