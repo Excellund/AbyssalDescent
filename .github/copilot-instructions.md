@@ -13,3 +13,8 @@
 ## Validation
 - Run script diagnostics for all changed files before finishing.
 - For encounter work, include a quick per-encounter sanity check across all 4 bearings (Pilgrim, Delver, Harbinger, Forsworn) in the final summary.
+
+## Command List Maintenance
+- Keep `.github/command-list.md` as the source-of-truth for user-invocable command phrases.
+- If skills, agents, prompts, or instruction descriptions are changed to support new command wording, update `.github/command-list.md` in the same change.
+- Include canonical phrase plus 1-3 practical variants for discoverability.
