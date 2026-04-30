@@ -20,6 +20,7 @@ const REWARD_SELECTION_UI_SCRIPT := preload("res://scripts/reward_selection_ui.g
 const ENUMS := preload("res://scripts/shared/enums.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const RUN_TELEMETRY_STORE := preload("res://scripts/run_telemetry_store.gd")
+const RUN_SNAPSHOT_SERVICE := preload("res://scripts/run_snapshot_service.gd")
 const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
 const DEBUG_SETTINGS_SCRIPT := preload("res://scripts/debug_settings.gd")
 const RUN_CONTEXT_PATH := "/root/RunContext"
@@ -1285,107 +1286,22 @@ func _clear_active_run_checkpoint() -> void:
 		run_context.call("clear_resume_saved_run_request")
 
 func _build_active_run_snapshot() -> Dictionary:
-	if not is_instance_valid(player):
-		return {}
 	var run_context := _get_run_context()
-	var run_mode_value: Variant = ENUMS.RunMode.ENDLESS if _is_endless_mode() else ENUMS.RunMode.STANDARD
-	if run_context != null:
-		var context_mode: Variant = run_context.get("run_mode")
-		if context_mode != null:
-			run_mode_value = context_mode
-	var player_snapshot: Dictionary = {}
-	if player.has_method("build_run_snapshot"):
-		player_snapshot = player.call("build_run_snapshot") as Dictionary
-	return {
-		"version": RUN_SNAPSHOT_VERSION,
-		"run_mode": run_mode_value,
-		"rooms_cleared": rooms_cleared,
-		"room_depth": room_depth,
-		"active_room_enemy_count": active_room_enemy_count,
-		"boss_unlocked": boss_unlocked,
-		"in_boss_room": in_boss_room,
-		"in_second_boss_room": in_second_boss_room,
-		"first_boss_defeated": first_boss_defeated,
-		"phase_two_rooms_cleared": phase_two_rooms_cleared,
-		"endless_boss_defeated": endless_boss_defeated,
-		"choosing_next_room": choosing_next_room,
-		"run_cleared": run_cleared,
-		"boons_taken": boons_taken.duplicate(),
-		"arcana_rewards_taken": arcana_rewards_taken.duplicate(),
-		"current_room_size": current_room_size,
-		"current_room_static_camera": current_room_static_camera,
-		"current_room_label": current_room_label,
-		"door_options": door_options.duplicate(true),
-		"pending_room_reward": pending_room_reward,
-		"current_room_enemy_mutator": current_room_enemy_mutator.duplicate(true),
-		"current_room_player_mutator": current_room_player_mutator.duplicate(true),
-		"active_objective_kind": active_objective_kind,
-		"objective_time_left": objective_time_left,
-		"objective_spawn_interval": objective_spawn_interval,
-		"objective_spawn_timer": objective_spawn_timer,
-		"objective_spawn_batch": objective_spawn_batch,
-		"objective_max_enemies": objective_max_enemies,
-		"objective_kill_target": objective_kill_target,
-		"objective_kills": objective_kills,
-		"objective_overtime": objective_overtime,
-		"objective_survival_quota_announced": objective_survival_quota_announced,
-		"current_difficulty_tier": current_difficulty_tier,
-		"player_snapshot": player_snapshot
-	}
+	var fallback_run_mode: Variant = ENUMS.RunMode.ENDLESS if _is_endless_mode() else ENUMS.RunMode.STANDARD
+	return RUN_SNAPSHOT_SERVICE.build_snapshot(self, player, run_context, RUN_SNAPSHOT_VERSION, fallback_run_mode)
 
 func _apply_active_run_snapshot(snapshot: Dictionary) -> bool:
-	if not is_instance_valid(player):
-		return false
 	var run_context := _get_run_context()
-	if run_context != null and run_context.has_method("set_run_mode"):
-		run_context.call("set_run_mode", snapshot.get("run_mode", ENUMS.RunMode.STANDARD))
-
-	rooms_cleared = int(snapshot.get("rooms_cleared", rooms_cleared))
-	room_depth = int(snapshot.get("room_depth", room_depth))
-	active_room_enemy_count = 0
-	boss_unlocked = bool(snapshot.get("boss_unlocked", boss_unlocked))
-	in_boss_room = bool(snapshot.get("in_boss_room", false))
-	in_second_boss_room = bool(snapshot.get("in_second_boss_room", false))
-	first_boss_defeated = bool(snapshot.get("first_boss_defeated", first_boss_defeated))
-	phase_two_rooms_cleared = int(snapshot.get("phase_two_rooms_cleared", phase_two_rooms_cleared))
-	endless_boss_defeated = bool(snapshot.get("endless_boss_defeated", endless_boss_defeated))
-	run_cleared = bool(snapshot.get("run_cleared", false))
-	choosing_next_room = bool(snapshot.get("choosing_next_room", true))
-	if not choosing_next_room:
-		choosing_next_room = true
-
-	boons_taken = _to_string_array(snapshot.get("boons_taken", []))
-	arcana_rewards_taken = _to_string_array(snapshot.get("arcana_rewards_taken", []))
-	current_room_size = snapshot.get("current_room_size", room_base_size) as Vector2
-	current_room_static_camera = bool(snapshot.get("current_room_static_camera", true))
-	current_room_label = String(snapshot.get("current_room_label", "Doorway"))
-	var loaded_doors := snapshot.get("door_options", []) as Array
-	door_options.clear()
-	for door in loaded_doors:
-		if door is Dictionary:
-			door_options.append((door as Dictionary).duplicate(true))
-	pending_room_reward = int(snapshot.get("pending_room_reward", ENUMS.RewardMode.NONE))
-	current_room_enemy_mutator = snapshot.get("current_room_enemy_mutator", {}) as Dictionary
-	current_room_player_mutator = snapshot.get("current_room_player_mutator", {}) as Dictionary
-
-	active_objective_kind = String(snapshot.get("active_objective_kind", ""))
-	objective_time_left = float(snapshot.get("objective_time_left", 0.0))
-	objective_spawn_interval = float(snapshot.get("objective_spawn_interval", 0.0))
-	objective_spawn_timer = float(snapshot.get("objective_spawn_timer", 0.0))
-	objective_spawn_batch = int(snapshot.get("objective_spawn_batch", 1))
-	objective_max_enemies = int(snapshot.get("objective_max_enemies", 0))
-	objective_kill_target = int(snapshot.get("objective_kill_target", 0))
-	objective_kills = int(snapshot.get("objective_kills", 0))
-	objective_overtime = bool(snapshot.get("objective_overtime", false))
-	objective_survival_quota_announced = bool(snapshot.get("objective_survival_quota_announced", false))
-	current_difficulty_tier = int(snapshot.get("current_difficulty_tier", current_difficulty_tier))
-	objective_target_enemy = null
-	objective_target_type = ""
-	objective_target_name = ""
-
-	var player_snapshot := snapshot.get("player_snapshot", {}) as Dictionary
-	if player.has_method("apply_run_snapshot"):
-		player.call("apply_run_snapshot", player_snapshot)
+	if not RUN_SNAPSHOT_SERVICE.apply_snapshot(
+		self,
+		player,
+		run_context,
+		snapshot,
+		room_base_size,
+		ENUMS.RunMode.STANDARD,
+		ENUMS.RewardMode.NONE
+	):
+		return false
 
 	_clear_all_enemies()
 	player.global_position = Vector2.ZERO
@@ -1394,13 +1310,6 @@ func _apply_active_run_snapshot(snapshot: Dictionary) -> bool:
 	hud.refresh(_get_hud_state(), player)
 	_set_combat_paused(false)
 	return true
-
-func _to_string_array(value: Variant) -> Array[String]:
-	var out: Array[String] = []
-	if value is Array:
-		for entry in value:
-			out.append(String(entry))
-	return out
 
 func _is_endless_mode() -> bool:
 	var run_context := _get_run_context()
