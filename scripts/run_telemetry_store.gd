@@ -87,7 +87,7 @@ static func _mutate_run_entry(run_id: String, mutator: Callable) -> bool:
 	if run_index < 0:
 		return false
 	var run_entry := (runs[run_index] as Dictionary).duplicate(true)
-	mutator.call(run_entry)
+	mutator.callv([run_entry])
 	runs[run_index] = run_entry
 	store["runs"] = runs
 	return save_store(store)

@@ -91,7 +91,7 @@ func apply_upgrade(upgrade_id: String) -> bool:
 			if health_state_ref != null and is_instance_valid(health_state_ref):
 				health_state_ref.set("max_health", next_max)
 				if max_gain > 0 and health_state_ref.has_method("heal"):
-					health_state_ref.call("heal", max_gain)
+					health_state_ref.heal(max_gain)
 		"iron_skin":
 			player_reference.set("iron_skin_armor", int(preview.get("next", int(player_reference.get("iron_skin_armor")))))
 			player_reference.set("iron_skin_stacks", int(player_reference.get("iron_skin_stacks")) + 1)
@@ -257,7 +257,7 @@ func get_trial_power_stack_count(power_id: String) -> int:
 
 func _get_power_balance_data(power_id: String) -> Dictionary:
 	if power_registry != null and power_registry.has_method("get_power_balance"):
-		return power_registry.call("get_power_balance", power_id) as Dictionary
+		return power_registry.get_power_balance(power_id) as Dictionary
 	return {}
 
 
@@ -596,21 +596,21 @@ func initialize(player: Node, state: Node, registry: Node) -> void:
 func get_upgrade_stack_count(upgrade_id: String) -> int:
 	var id := upgrade_id.strip_edges().to_lower()
 	if is_instance_valid(game_state) and game_state.has_method("get_upgrade_stack_count"):
-		return int(game_state.call("get_upgrade_stack_count", id))
+		return int(game_state.get_upgrade_stack_count(id))
 	return int(upgrade_stacks.get(id, 0))
 
 
 func _get_power_stack_limit(power_id: String) -> int:
 	if power_registry != null and power_registry.has_method("get_power_stack_limit"):
-		return int(power_registry.call("get_power_stack_limit", power_id))
+		return int(power_registry.get_power_stack_limit(power_id))
 	return 0
 
 func _is_upgrade_id(power_id: String) -> bool:
 	if power_registry != null and power_registry.has_method("is_upgrade"):
-		return bool(power_registry.call("is_upgrade", power_id))
+		return bool(power_registry.is_upgrade(power_id))
 	return UPGRADE_IDS.has(power_id)
 
 func _is_trial_power_id(power_id: String) -> bool:
 	if power_registry != null and power_registry.has_method("is_trial_power"):
-		return bool(power_registry.call("is_trial_power", power_id))
+		return bool(power_registry.is_trial_power(power_id))
 	return TRIAL_POWER_IDS.has(power_id)

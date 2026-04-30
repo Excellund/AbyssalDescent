@@ -374,12 +374,12 @@ func _get_boon_subtitle_text() -> String:
 	return "Preparing your choices..."
 
 func _roll_boon_choices(choice_count: int, power_registry: Node, player: Node2D, rng: RandomNumberGenerator) -> Array[Dictionary]:
-	var pool: Array[Dictionary] = power_registry.call("get_upgrade_pool", player)
+	var pool: Array[Dictionary] = power_registry.get_upgrade_pool(player)
 	var available: Array[Dictionary] = []
 	for entry in pool:
 		var limit := int(entry.get("stack_limit", 0))
 		if limit > 0 and is_instance_valid(player) and player.has_method("get_upgrade_stack_count"):
-			var current := int(player.call("get_upgrade_stack_count", String(entry["id"])))
+			var current := int(player.get_upgrade_stack_count(String(entry["id"])))
 			if current >= limit:
 				continue
 		available.append(entry)
@@ -391,12 +391,12 @@ func _roll_boon_choices(choice_count: int, power_registry: Node, player: Node2D,
 	return picks
 
 func _roll_arcana_choices(choice_count: int, power_registry: Node, player: Node2D, rng: RandomNumberGenerator) -> Array[Dictionary]:
-	var pool: Array[Dictionary] = power_registry.call("get_trial_power_pool", player)
+	var pool: Array[Dictionary] = power_registry.get_trial_power_pool(player)
 	var available: Array[Dictionary] = []
 	for entry in pool:
 		var limit := int(entry.get("stack_limit", 0))
 		if limit > 0 and is_instance_valid(player) and player.has_method("get_trial_power_stack_count"):
-			var current := int(player.call("get_trial_power_stack_count", String(entry["id"])))
+			var current := int(player.get_trial_power_stack_count(String(entry["id"])))
 			if current >= limit:
 				continue
 		available.append(entry)
@@ -430,21 +430,21 @@ func _build_objective_mutator_desc(mutator_data: Dictionary) -> String:
 	return ""
 
 func _roll_objective_choices(choice_count: int, power_registry: Node, player: Node2D, rng: RandomNumberGenerator) -> Array[Dictionary]:
-	var prioritized_pool: Array[Dictionary] = power_registry.call("get_objective_upgrade_pool", player)
-	var regular_pool: Array[Dictionary] = power_registry.call("get_upgrade_pool", player)
+	var prioritized_pool: Array[Dictionary] = power_registry.get_objective_upgrade_pool(player)
+	var regular_pool: Array[Dictionary] = power_registry.get_upgrade_pool(player)
 	var available_priority: Array[Dictionary] = []
 	var available_regular: Array[Dictionary] = []
 	for entry in prioritized_pool:
 		var limit := int(entry.get("stack_limit", 0))
 		if limit > 0 and is_instance_valid(player) and player.has_method("get_upgrade_stack_count"):
-			var current := int(player.call("get_upgrade_stack_count", String(entry["id"])))
+			var current := int(player.get_upgrade_stack_count(String(entry["id"])))
 			if current >= limit:
 				continue
 		available_priority.append(entry)
 	for entry in regular_pool:
 		var limit := int(entry.get("stack_limit", 0))
 		if limit > 0 and is_instance_valid(player) and player.has_method("get_upgrade_stack_count"):
-			var current := int(player.call("get_upgrade_stack_count", String(entry["id"])))
+			var current := int(player.get_upgrade_stack_count(String(entry["id"])))
 			if current >= limit:
 				continue
 		available_regular.append(entry)
@@ -468,10 +468,10 @@ func _get_stack_count_for_choice(choice: Dictionary, player: Node2D) -> int:
 	var id := String(choice.get("id", ""))
 	if reward_selection_mode == ENUMS.RewardMode.ARCANA:
 		if player.has_method("get_trial_power_stack_count"):
-			return int(player.call("get_trial_power_stack_count", id))
+			return int(player.get_trial_power_stack_count(id))
 		return 0
 	if player.has_method("get_upgrade_stack_count"):
-		return int(player.call("get_upgrade_stack_count", id))
+		return int(player.get_upgrade_stack_count(id))
 	return 0
 
 func _format_stack_progress_icons(stack_count: int, stack_limit: int) -> String:

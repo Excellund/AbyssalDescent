@@ -217,16 +217,16 @@ func get_upgrade_pool(player_reference: Node = null) -> Array[Dictionary]:
 	var surge_desc := _get_upgrade_fallback_description("surge_step")
 	var heartstone_desc := _get_upgrade_fallback_description("heartstone")
 	if is_instance_valid(player_reference) and player_reference.has_method("get_upgrade_card_desc"):
-		first_strike_desc = String(player_reference.call("get_upgrade_card_desc", "first_strike"))
-		heavy_desc = String(player_reference.call("get_upgrade_card_desc", "heavy_blow"))
-		wide_desc = String(player_reference.call("get_upgrade_card_desc", "wide_arc"))
-		reach_desc = String(player_reference.call("get_upgrade_card_desc", "long_reach"))
-		fleet_desc = String(player_reference.call("get_upgrade_card_desc", "fleet_foot"))
-		blink_desc = String(player_reference.call("get_upgrade_card_desc", "blink_dash"))
-		iron_desc = String(player_reference.call("get_upgrade_card_desc", "iron_skin"))
-		trance_desc = String(player_reference.call("get_upgrade_card_desc", "battle_trance"))
-		surge_desc = String(player_reference.call("get_upgrade_card_desc", "surge_step"))
-		heartstone_desc = String(player_reference.call("get_upgrade_card_desc", "heartstone"))
+		first_strike_desc = String(player_reference.get_upgrade_card_desc("first_strike"))
+		heavy_desc = String(player_reference.get_upgrade_card_desc("heavy_blow"))
+		wide_desc = String(player_reference.get_upgrade_card_desc("wide_arc"))
+		reach_desc = String(player_reference.get_upgrade_card_desc("long_reach"))
+		fleet_desc = String(player_reference.get_upgrade_card_desc("fleet_foot"))
+		blink_desc = String(player_reference.get_upgrade_card_desc("blink_dash"))
+		iron_desc = String(player_reference.get_upgrade_card_desc("iron_skin"))
+		trance_desc = String(player_reference.get_upgrade_card_desc("battle_trance"))
+		surge_desc = String(player_reference.get_upgrade_card_desc("surge_step"))
+		heartstone_desc = String(player_reference.get_upgrade_card_desc("heartstone"))
 	return [
 		Power.new("first_strike", "First Strike", first_strike_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("first_strike"), get_power_balance("first_strike")).to_dict(),
 		Power.new("heavy_blow", "Heavy Blow", heavy_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("heavy_blow"), get_power_balance("heavy_blow")).to_dict(),
@@ -251,11 +251,11 @@ func get_trial_power_pool(player_reference: Node = null) -> Array[Dictionary]:
 	
 	# Try to get dynamic descriptions from player stack counts
 	if is_instance_valid(player_reference) and player_reference.has_method("get_trial_power_card_desc"):
-		razor_desc = String(player_reference.call("get_trial_power_card_desc", "razor_wind"))
-		execution_desc = String(player_reference.call("get_trial_power_card_desc", "execution_edge"))
-		rupture_desc = String(player_reference.call("get_trial_power_card_desc", "rupture_wave"))
-		aegis_desc = String(player_reference.call("get_trial_power_card_desc", "aegis_field"))
-		snare_desc = String(player_reference.call("get_trial_power_card_desc", "hunters_snare"))
+		razor_desc = String(player_reference.get_trial_power_card_desc("razor_wind"))
+		execution_desc = String(player_reference.get_trial_power_card_desc("execution_edge"))
+		rupture_desc = String(player_reference.get_trial_power_card_desc("rupture_wave"))
+		aegis_desc = String(player_reference.get_trial_power_card_desc("aegis_field"))
+		snare_desc = String(player_reference.get_trial_power_card_desc("hunters_snare"))
 	
 	var phantom_desc := _get_trial_fallback_description("phantom_step")
 	var void_desc := _get_trial_fallback_description("reaper_step")
@@ -263,11 +263,11 @@ func get_trial_power_pool(player_reference: Node = null) -> Array[Dictionary]:
 	var storm_desc := _get_trial_fallback_description("storm_crown")
 	var wraith_desc := _get_trial_fallback_description("wraithstep")
 	if is_instance_valid(player_reference) and player_reference.has_method("get_trial_power_card_desc"):
-		phantom_desc = String(player_reference.call("get_trial_power_card_desc", "phantom_step"))
-		void_desc = String(player_reference.call("get_trial_power_card_desc", "reaper_step"))
-		static_desc = String(player_reference.call("get_trial_power_card_desc", "static_wake"))
-		storm_desc = String(player_reference.call("get_trial_power_card_desc", "storm_crown"))
-		wraith_desc = String(player_reference.call("get_trial_power_card_desc", "wraithstep"))
+		phantom_desc = String(player_reference.get_trial_power_card_desc("phantom_step"))
+		void_desc = String(player_reference.get_trial_power_card_desc("reaper_step"))
+		static_desc = String(player_reference.get_trial_power_card_desc("static_wake"))
+		storm_desc = String(player_reference.get_trial_power_card_desc("storm_crown"))
+		wraith_desc = String(player_reference.get_trial_power_card_desc("wraithstep"))
 
 	return [
 		Power.new("razor_wind", "Razor Wind", razor_desc, POWER_TYPE_TRIAL, get_power_stack_limit("razor_wind"), get_power_balance("razor_wind")).to_dict(),

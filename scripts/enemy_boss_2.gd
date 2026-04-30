@@ -678,7 +678,7 @@ func _apply_polar_shift() -> void:
 		target_body.velocity = Vector2.ZERO
 		target_body.velocity = dir * polar_shift_force * force_mult
 		if not in_safe_lane and target_body.has_method("apply_polar_shift_dash_lockout"):
-			target_body.call("apply_polar_shift_dash_lockout", polar_shift_dash_lockout_duration)
+			target_body.apply_polar_shift_dash_lockout(polar_shift_dash_lockout_duration)
 
 func _capture_polar_shift_pattern() -> void:
 	_polar_shift_safe_angles.clear()

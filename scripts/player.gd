@@ -627,7 +627,7 @@ func is_dead() -> bool:
 
 func get_upgrade_stack_count(id: String) -> int:
 	if is_instance_valid(upgrade_system) and upgrade_system.has_method("get_upgrade_stack_count"):
-		return int(upgrade_system.call("get_upgrade_stack_count", id))
+		return int(upgrade_system.get_upgrade_stack_count(id))
 	if id == "iron_skin":
 		return iron_skin_stacks
 	return 0
@@ -781,7 +781,7 @@ func _trigger_aegis_field() -> void:
 		if global_position.distance_to(enemy_body.global_position) > aegis_field_pulse_radius:
 			continue
 		if enemy_node.has_method("apply_slow"):
-			enemy_node.call("apply_slow", aegis_field_slow_duration, aegis_field_slow_mult)
+			enemy_node.apply_slow(aegis_field_slow_duration, aegis_field_slow_mult)
 	if player_feedback != null:
 		player_feedback.play_world_ring(global_position, aegis_field_pulse_radius, Color(0.62, 0.98, 1.0, 0.92), 0.22)
 		player_feedback.play_world_ring(global_position, aegis_field_pulse_radius * 0.64, Color(0.88, 1.0, 1.0, 0.78), 0.16)
@@ -930,7 +930,7 @@ func _get_hunters_snare_bonus_damage(enemy_node: Object) -> int:
 		return 0
 	if not enemy_node.has_method("is_slowed"):
 		return 0
-	return hunters_snare_bonus_damage if bool(enemy_node.call("is_slowed")) else 0
+	return hunters_snare_bonus_damage if bool(enemy_node.is_slowed()) else 0
 
 func _apply_hunters_snare(enemy_node: Object) -> void:
 	if not reward_hunters_snare:
@@ -938,7 +938,7 @@ func _apply_hunters_snare(enemy_node: Object) -> void:
 	if not is_instance_valid(enemy_node):
 		return
 	if enemy_node.has_method("apply_slow"):
-		enemy_node.call("apply_slow", hunters_snare_slow_duration, hunters_snare_slow_mult)
+		enemy_node.apply_slow(hunters_snare_slow_duration, hunters_snare_slow_mult)
 
 func _trigger_battle_trance() -> void:
 	if battle_trance_move_speed_bonus <= 0.0:
@@ -1087,7 +1087,7 @@ func _apply_wraithstep_chain(chain_origin: Vector2, consumed_enemy_id: int, chai
 			DAMAGEABLE.apply_damage(triggered_enemy, chain_damage)
 			pending_epicenters.append(triggered_enemy.global_position)
 			if player_feedback != null:
-				player_feedback.call("play_wraithstep_chain_echo", epicenter, triggered_enemy.global_position)
+				player_feedback.play_wraithstep_chain_echo(epicenter, triggered_enemy.global_position)
 				player_feedback.play_world_ring(triggered_enemy.global_position, wraithstep_mark_splash_radius * 0.5, Color(0.72, 0.94, 1.0, 0.64), 0.14)
 
 
@@ -1144,13 +1144,13 @@ func _apply_storm_crown_hit(source_position: Vector2, source_enemy_id: int, sour
 		DAMAGEABLE.apply_damage(next_enemy, chain_damage)
 		chained_enemy_ids[next_enemy_id] = true
 		if player_feedback != null:
-			player_feedback.call("play_chain_lightning", chain_origin, next_enemy.global_position)
+			player_feedback.play_chain_lightning(chain_origin, next_enemy.global_position)
 			player_feedback.play_world_ring(next_enemy.global_position, 16.0, Color(1.0, 0.98, 0.72, 0.82), 0.1)
 			player_feedback.play_world_ring(next_enemy.global_position, 28.0, Color(0.82, 0.94, 1.0, 0.46), 0.18)
 		chain_origin = next_enemy.global_position
 		remaining_chains -= 1
 	if player_feedback != null:
-		player_feedback.call("play_storm_crown_discharge", source_position)
+		player_feedback.play_storm_crown_discharge(source_position)
 	storm_crown_discharge_flash_left = storm_crown_discharge_flash_duration
 	queue_redraw()
 
@@ -1171,7 +1171,7 @@ func _apply_phantom_step_during_dash() -> void:
 			continue
 		DAMAGEABLE.apply_damage(enemy_node, phantom_damage)
 		if enemy_node.has_method("apply_slow"):
-			enemy_node.call("apply_slow", phantom_step_slow_duration, 0.36)
+			enemy_node.apply_slow(phantom_step_slow_duration, 0.36)
 		phantom_step_hit_ids[eid] = true
 		if player_feedback != null:
 			# Concentric rings: outer (slow field) + inner (damage burst)
@@ -1230,7 +1230,7 @@ func apply_polar_shift_dash_lockout(duration: float) -> void:
 	polar_shift_dash_lockout_duration = maxf(polar_shift_dash_lockout_duration, applied_duration)
 	polar_shift_dash_lockout_left = maxf(polar_shift_dash_lockout_left, applied_duration)
 	if player_feedback != null and player_feedback.has_method("play_polar_shift_dash_lockout"):
-		player_feedback.call("play_polar_shift_dash_lockout", global_position)
+		player_feedback.play_polar_shift_dash_lockout(global_position)
 	queue_redraw()
 
 func _create_health_state() -> void:

@@ -223,6 +223,26 @@ Do not pass placeholder or immediately-overwritten values to a function just to 
 
 ---
 
+### 9. Capture Durable User Guidance In Skills
+
+When a user identifies a better way of working, treat it as candidate guidance for relevant skill docs.
+
+**Why it matters:**
+
+- Prevents repeating the same correction across future tasks.
+- Converts one-off feedback into team-scale consistency.
+- Keeps skill guidance aligned with real project needs.
+
+**How to apply:**
+
+- Update a skill only when guidance is durable, reusable, and likely to improve future outcomes.
+- Gate updates on quality: prefer updating skills after the related code change is validated/diagnostics-clean.
+- Keep updates minimal and specific: add one clear rule plus brief rationale.
+- Do not overfit transient preferences into broad rules; keep one-off choices in session/user memory instead.
+- If dynamic behavior remains necessary, document the boundary explicitly.
+
+---
+
 ## Procedure: Code Quality Review Checklist
 
 When reviewing or refactoring code, ask these questions in order:

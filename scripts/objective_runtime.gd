@@ -271,7 +271,7 @@ func spawn_survival_wave() -> void:
 		return
 	for _i in range(spawn_count):
 		var enemy_type := roster[rng.randi_range(0, roster.size() - 1)]
-		world.active_room_enemy_count += int(world.enemy_spawner.call("spawn_enemy_type", enemy_type, 1))
+		world.active_room_enemy_count += int(world.enemy_spawner.spawn_enemy_type(enemy_type, 1))
 
 func spawn_priority_target_wave() -> void:
 	if not is_instance_valid(world.enemy_spawner):
@@ -290,7 +290,7 @@ func spawn_priority_target_wave() -> void:
 		return
 	for _i in range(spawn_count):
 		var enemy_type := roster[rng.randi_range(0, roster.size() - 1)]
-		world.active_room_enemy_count += int(world.enemy_spawner.call("spawn_enemy_type", enemy_type, 1))
+		world.active_room_enemy_count += int(world.enemy_spawner.spawn_enemy_type(enemy_type, 1))
 
 func spawn_control_wave() -> void:
 	if not is_instance_valid(world.enemy_spawner):
@@ -309,7 +309,7 @@ func spawn_control_wave() -> void:
 		return
 	for _i in range(spawn_count):
 		var enemy_type := roster[rng.randi_range(0, roster.size() - 1)]
-		world.active_room_enemy_count += int(world.enemy_spawner.call("spawn_enemy_type", enemy_type, 1))
+		world.active_room_enemy_count += int(world.enemy_spawner.spawn_enemy_type(enemy_type, 1))
 
 func _count_control_zone_enemies(anchor: Vector2, radius: float) -> int:
 	var count := 0
@@ -385,7 +385,7 @@ func apply_priority_target_exposure_push(delta: float) -> void:
 		var target_velocity: Vector2 = dir * tuned_strength
 		enemy.velocity = enemy.velocity.move_toward(target_velocity, delta * world.objective_exposure_push_accel)
 		if enemy.has_method("apply_slow"):
-			enemy.call("apply_slow", 0.2, 0.74)
+			enemy.apply_slow(0.2, 0.74)
 
 func complete_current_objective(title: String, _subtitle: String) -> void:
 	world.objective_control_anchor = Vector2.ZERO
@@ -425,7 +425,7 @@ func spawn_priority_target_enemy() -> void:
 	if not is_instance_valid(world.enemy_spawner):
 		return
 	var target_spawn_distance := maxf(world.spawn_safe_radius + 180.0, 320.0)
-	var spawned_target := world.enemy_spawner.call("spawn_enemy_node_type", target_type, target_spawn_distance) as CharacterBody2D
+	var spawned_target := world.enemy_spawner.spawn_enemy_node_type(target_type, target_spawn_distance) as CharacterBody2D
 	if not is_instance_valid(spawned_target):
 		return
 	world.objective_target_enemy = spawned_target
@@ -435,7 +435,7 @@ func spawn_priority_target_enemy() -> void:
 		spawned_target.set("max_health", boosted_max)
 		var health_state: Object = spawned_target.get("health_state") as Object
 		if health_state != null and health_state.has_method("setup"):
-			health_state.call("setup", boosted_max)
+			health_state.setup(boosted_max)
 	if spawned_target.get("has_mutator_overlay") != null:
 		spawned_target.set("has_mutator_overlay", true)
 	if spawned_target.get("mutator_theme_color") != null:
@@ -443,9 +443,9 @@ func spawn_priority_target_enemy() -> void:
 	spawned_target.scale *= 1.14
 	world.objective_target_next_flee_index = 0
 	if spawned_target.has_method("configure_health_bar_visuals"):
-		spawned_target.call("configure_health_bar_visuals", Vector2(-36.0, -48.0), Vector2(72.0, 9.0))
+		spawned_target.configure_health_bar_visuals(Vector2(-36.0, -48.0), Vector2(72.0, 9.0))
 	if spawned_target.has_method("set_health_threshold_markers"):
-		spawned_target.call("set_health_threshold_markers", world.objective_target_flee_thresholds, world.objective_target_next_flee_index)
+		spawned_target.set_health_threshold_markers(world.objective_target_flee_thresholds, world.objective_target_next_flee_index)
 	world.objective_hunt_kill_progress = 0
 	world.objective_hunt_kill_goal = maxi(2, world.objective_hunt_kill_goal)
 	world.objective_exposure_left = 0.0
@@ -475,7 +475,7 @@ func spawn_priority_target_opening_escorts() -> void:
 	for escort_index in range(escort_types.size()):
 		if world.objective_max_enemies > 0 and world.active_room_enemy_count >= world.objective_max_enemies:
 			break
-		var escort := world.enemy_spawner.call("spawn_enemy_node_type", escort_types[escort_index]) as CharacterBody2D
+		var escort := world.enemy_spawner.spawn_enemy_node_type(escort_types[escort_index]) as CharacterBody2D
 		if not is_instance_valid(escort):
 			continue
 		var angle := base_angle + TAU * float(escort_index) / float(maxi(1, escort_types.size()))
@@ -500,7 +500,7 @@ func check_priority_target_relocation_threshold() -> void:
 		return
 	world.objective_target_next_flee_index += 1
 	if world.objective_target_enemy.has_method("set_health_threshold_marker_progress"):
-		world.objective_target_enemy.call("set_health_threshold_marker_progress", world.objective_target_next_flee_index)
+		world.objective_target_enemy.set_health_threshold_marker_progress(world.objective_target_next_flee_index)
 	trigger_priority_target_threshold_phase(threshold_ratio)
 
 func trigger_priority_target_threshold_phase(_threshold_ratio: float) -> void:
@@ -581,7 +581,7 @@ func pick_priority_target_relocation_position(old_position: Vector2) -> Vector2:
 	var best_position := old_position
 	var best_score := -INF
 	for _attempt in range(8):
-		var candidate := world.enemy_spawner.call("pick_room_position", min_player_distance, min_enemy_spacing) as Vector2
+		var candidate := world.enemy_spawner.pick_room_position(min_player_distance, min_enemy_spacing) as Vector2
 		if candidate.distance_to(old_position) < 160.0:
 			continue
 		var score := candidate.distance_to(old_position)
@@ -608,7 +608,7 @@ func spawn_priority_target_relocation_escorts(anchor: Vector2) -> void:
 	for escort_type in escort_types:
 		if world.objective_max_enemies > 0 and world.active_room_enemy_count >= world.objective_max_enemies:
 			return
-		var escort := world.enemy_spawner.call("spawn_enemy_node_type", escort_type) as CharacterBody2D
+		var escort := world.enemy_spawner.spawn_enemy_node_type(escort_type) as CharacterBody2D
 		if not is_instance_valid(escort):
 			continue
 		var escort_angle := rng.randf_range(0.0, TAU)
@@ -792,7 +792,7 @@ func get_priority_target_health() -> int:
 	if not is_instance_valid(world.objective_target_enemy):
 		return 0
 	if world.objective_target_enemy.has_method("_get_current_health"):
-		return int(world.objective_target_enemy.call("_get_current_health"))
+		return int(world.objective_target_enemy._get_current_health())
 	return 0
 
 func get_priority_target_max_health() -> int:

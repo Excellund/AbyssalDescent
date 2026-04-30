@@ -77,31 +77,31 @@ func _check_and_award_unlocks() -> void:
 	if not run_context.has_method("set_milestone"):
 		return
 	
-	var current_tier: int = int(run_context.call("get_current_difficulty_tier"))
-	var highest_unlocked: int = int(run_context.call("get_highest_unlocked_difficulty_tier"))
+	var current_tier: int = int(run_context.get_current_difficulty_tier())
+	var highest_unlocked: int = int(run_context.get_highest_unlocked_difficulty_tier())
 	
 	## First clear ever: unlock Standard tier
-	if not run_context.call("get_milestone", "first_clear"):
-		run_context.call("set_milestone", "first_clear", true)
+	if not run_context.get_milestone("first_clear"):
+		run_context.set_milestone("first_clear", true)
 		emit_signal("milestone_achieved", "first_clear")
 		if highest_unlocked < 1:
-			run_context.call("unlock_difficulty_tier", 1)
+			run_context.unlock_difficulty_tier(1)
 			emit_signal("tier_unlocked", 1)
 	
 	## First clear on Standard: unlock Veteran tier
-	if current_tier == 1 and not run_context.call("get_milestone", "first_clear_on_standard"):
-		run_context.call("set_milestone", "first_clear_on_standard", true)
+	if current_tier == 1 and not run_context.get_milestone("first_clear_on_standard"):
+		run_context.set_milestone("first_clear_on_standard", true)
 		emit_signal("milestone_achieved", "first_clear_on_standard")
 		if highest_unlocked < 2:
-			run_context.call("unlock_difficulty_tier", 2)
+			run_context.unlock_difficulty_tier(2)
 			emit_signal("tier_unlocked", 2)
 	
 	## First clear on Veteran: unlock Torment tier
-	if current_tier == 2 and not run_context.call("get_milestone", "first_clear_on_veteran"):
-		run_context.call("set_milestone", "first_clear_on_veteran", true)
+	if current_tier == 2 and not run_context.get_milestone("first_clear_on_veteran"):
+		run_context.set_milestone("first_clear_on_veteran", true)
 		emit_signal("milestone_achieved", "first_clear_on_veteran")
 		if highest_unlocked < 3:
-			run_context.call("unlock_difficulty_tier", 3)
+			run_context.unlock_difficulty_tier(3)
 			emit_signal("tier_unlocked", 3)
 
 

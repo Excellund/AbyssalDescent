@@ -10,7 +10,7 @@ static func apply_damage(target: Object, amount: int, damage_context: Dictionary
 	if not can_take_damage(target):
 		return false
 	if damage_context.is_empty():
-		target.call("take_damage", amount)
+		target.take_damage(amount)
 	else:
-		target.call("take_damage", amount, damage_context)
+		target.take_damage(amount, damage_context)
 	return true
