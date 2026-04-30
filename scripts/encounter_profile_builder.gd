@@ -209,16 +209,6 @@ func _scale_enemy_count(count: int, minimum: int = 0, pressure_mult_override: fl
 func _count_from_counts(counts: Dictionary, key: String) -> int:
 	return int(counts.get(key, 0))
 
-func _build_profile_from_counts(label: String, room_size: Vector2, counts: Dictionary) -> Dictionary:
-	return _build_profile(
-		label,
-		room_size,
-		_count_from_counts(counts, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT),
-		_count_from_counts(counts, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT),
-		_count_from_counts(counts, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT),
-		_count_from_counts(counts, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT)
-	)
-
 func _set_profile_counts_from_counts_dict(profile: Dictionary, counts: Dictionary) -> void:
 	ENCOUNTER_CONTRACTS.profile_set_counts(
 		profile,
@@ -279,7 +269,7 @@ func _build_bearing_profile(label: String) -> Dictionary:
 		return {}
 	var counts := definition.get("base_counts", {}) as Dictionary
 	var room_size := definition.get("room_size", POOL_ROOM_SIZE) as Vector2
-	var profile := _build_profile_from_counts(label, room_size, counts)
+	var profile := _build_profile(label, room_size)
 	return _apply_profile_counts(profile, counts)
 
 func _apply_identity_bearing_scaling(profile: Dictionary) -> Dictionary:
@@ -372,7 +362,7 @@ func configure(settings: Dictionary) -> void:
 	shielders_per_room = int(settings.get("shielders_per_room", shielders_per_room))
 	hard_room_enemy_bonus = int(settings.get("hard_room_enemy_bonus", hard_room_enemy_bonus))
 
-func _build_profile(label: String, room_size: Vector2, chasers: int, chargers: int, archers: int, shielders: int, enemy_mutator: Dictionary = {}) -> Dictionary:
+func _build_profile(label: String, room_size: Vector2, chasers: int = 0, chargers: int = 0, archers: int = 0, shielders: int = 0, enemy_mutator: Dictionary = {}) -> Dictionary:
 	return ENCOUNTER_CONTRACTS.profile(
 		label,
 		room_size,

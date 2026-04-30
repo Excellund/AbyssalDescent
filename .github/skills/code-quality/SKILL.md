@@ -205,79 +205,21 @@ Prefer explicit method calls over wrappers that dispatch via method-name strings
 
 ---
 
-## Procedure: Highest-Value Refactor (Refactor Steward Mode)
+### 8. Do Not Pass Irrelevant Parameters
 
-When you receive a request to **"Do the highest value refactor"**, follow this systematic approach:
+Do not pass placeholder or immediately-overwritten values to a function just to satisfy its signature.
 
-### 1. Understand the Context
+**Why it matters:**
 
-- Identify the area of code in focus (e.g., encounters, objectives, player systems).
+- Placeholder arguments (e.g. `0, 0, 0, 0`) obscure which values actually matter.
+- A reader cannot tell whether the zeros are intentional constraints or noise.
+- The pattern signals a mismatch between the function's signature and its real call contract.
 
-- Recognize which **domain-specific skills** may be relevant:
-  - **encounter-identity-balance**: Encounter difficulty and composition tuning
+**How to apply:**
 
-  - **encounter-content-sync**: Encounter glossary, debug surfaces, labels
-
-  - **encounter-system**: Encounter generation and enemy spawning logic
-
-  - **objective-design**: Objective mechanics and runtime systems
-
-  - **objective-control-balance**: Control objective difficulty tuning
-
-  - **gameplay-loop-pacing**: Combat pacing and anti-kiting mechanics
-
-  - **boon-design**: Upgrade system and power registry
-
-- Map domain concerns alongside code quality concerns.
-
-### 2. Build a System Map
-
-- Identify entry points, core state, data transformations, and side effects.
-
-- Determine where truth is unclear, responsibility is split, or changes feel risky.
-
-- Note implicit coupling and hidden data flow.
-
-### 3. Apply Refactor Steward Process
-
-- **Identify leverage points** using the Core Value Heuristic:
-  - Change Amplification: Makes future changes easier or safer
-
-  - Cognitive Load Reduction: Makes code easier to understand
-
-  - Bug Surface Area Reduction: Removes risk and edge cases
-
-  - Locality of Impact: One change affects many places positively
-
-- **Generate candidates** for each leverage point with Impact/Risk/Effort/Confidence scores.
-
-- **Select the highest-value refactor**: Best impact-to-risk-to-effort ratio.
-
-### 4. Execute Incrementally
-
-- Break the refactor into small, reversible steps.
-
-- Each step must preserve behavior and be testable in isolation.
-
-- Validate after each step.
-
-### 5. Present the Refactor
-
-Deliver:
-
-- **System Understanding** (core responsibilities, data flow, pain points)
-
-- **Refactor Candidates** (problem, why it matters, proposed change, scores)
-
-- **Selected Refactor** (why chosen over others)
-
-- **Step-by-Step Changes** (change, why, before/after, risk for each)
-
-- **Validation** (what was verified, behavior preservation)
-
-- **Result** (what is simpler, what risks were removed)
-
-- **Next Best Refactor** (suggested follow-up)
+- Give parameters default values when a sensible default exists and most call sites don't need to override them.
+- If a call site overwrites all of a function's outputs immediately after calling it, restructure so the caller passes only what it owns.
+- Prefer a narrow, honest signature over a broad one padded with zeros or empty dicts.
 
 ---
 
@@ -324,11 +266,6 @@ When reviewing or refactoring code, ask these questions in order:
 - Project structure mirrors the domain, not the implementation type.
 
 - Changes preserve behavior and are easy to review.
-  name: code-quality
-  description: "Apply core code quality principles: DRY, modularity, single responsibility, data structure selection, minimize globals, and organize project structure for clarity and maintainability."
-  argument-hint: "Area of code being reviewed or refactored"
-
----
 
 # Code Quality Best Practices
 

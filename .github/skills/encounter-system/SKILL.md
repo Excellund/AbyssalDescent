@@ -71,6 +71,7 @@ Mutators match a profile if any declared archetype is present. If a filtered poo
 ## Pitfalls
 
 - Do not reintroduce encounter-specific build/scaling helper sprawl when `BEARING_DEFINITIONS` can express the change.
+- When building a profile shell that will immediately have all counts filled by `_apply_profile_counts`, do not pass placeholder count values. Use default parameters so the shell call is honest about what it owns (label and room size only).
 - Do not add a random hard mutator without `affected_archetypes`, or invalid rooms can roll it.
 - Do not duplicate per-enemy mutator logic outside `ENEMY_MUTATOR_STAT_MAP` unless the behavior is genuinely exceptional.
 - Do not route internal world/objective calls through method-name string dispatch helpers (for example `_call(method: String, ...)` + `callv`); prefer explicit typed calls.
