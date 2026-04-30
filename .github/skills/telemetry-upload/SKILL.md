@@ -42,6 +42,57 @@ Run end
   - `config/telemetry_upload_endpoint`
   - `config/telemetry_upload_api_key`
 - RLS insert policy validates array/object types and bounds; no read policy (write-only from client)
+- For analysis tooling without service-role secrets, use RPC `public.get_latest_balance_run(...)`.
+
+### RPC Read Path (No Service Key Needed)
+
+Use the anon/publishable key with this REST endpoint:
+
+```
+POST https://<PROJECT_REF>.supabase.co/rest/v1/rpc/get_latest_balance_run
+```
+
+JSON body:
+
+```json
+{
+  "p_include_debug": false,
+  "p_game_version": "",
+  "p_max_age_days": 120
+}
+```
+
+Response is a single run payload (or `{}` if none match), including raw arrays and aggregate fields.
+
+For multi-run analysis windows, use these RPC endpoints with the same anon key:
+
+```
+POST https://<PROJECT_REF>.supabase.co/rest/v1/rpc/get_balance_runs_for_day
+POST https://<PROJECT_REF>.supabase.co/rest/v1/rpc/get_balance_runs_between
+```
+
+Today (UTC) example body:
+
+```json
+{
+  "p_day_utc": "2026-04-30",
+  "p_include_debug": false,
+  "p_game_version": "",
+  "p_max_runs": 500
+}
+```
+
+Custom unix window example body:
+
+```json
+{
+  "p_start_unix": 1777507200,
+  "p_end_unix": 1777593600,
+  "p_include_debug": false,
+  "p_game_version": "",
+  "p_max_runs": 1000
+}
+```
 
 ## Payload Shape
 

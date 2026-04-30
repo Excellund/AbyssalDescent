@@ -65,3 +65,162 @@ with check (
 -- for select
 -- to anon
 -- using (false);
+
+-- Hardened read RPC for tooling: returns only the latest run payload.
+-- This avoids broad anon SELECT access on the table while still allowing
+-- client-side analysis helpers to fetch one run at a time.
+drop function if exists public.get_latest_balance_run(boolean, text, integer);
+create or replace function public.get_latest_balance_run(
+  p_include_debug boolean default false,
+  p_game_version text default '',
+  p_max_age_days integer default 120
+)
+returns jsonb
+language sql
+security definer
+set search_path = public
+as $$
+  with picked as (
+    select
+      run_id,
+      started_at_unix,
+      ended_at_unix,
+      game_version,
+      difficulty_tier,
+      run_mode,
+      outcome,
+      max_depth,
+      rooms_cleared,
+      is_debug,
+      death_event,
+      damage_events,
+      reward_choices,
+      room_entries,
+      door_choices,
+      aggregate,
+      upload_source
+    from public.telemetry_runs
+    where (p_include_debug or is_debug = false)
+      and (
+        nullif(trim(p_game_version), '') is null
+        or game_version = nullif(trim(p_game_version), '')
+      )
+      and started_at_unix >= (
+        extract(epoch from now())::bigint - greatest(p_max_age_days, 1) * 86400
+      )
+    order by started_at_unix desc
+    limit 1
+  )
+  select coalesce((select to_jsonb(picked) from picked), '{}'::jsonb);
+$$;
+
+revoke all on function public.get_latest_balance_run(boolean, text, integer) from public;
+grant execute on function public.get_latest_balance_run(boolean, text, integer) to anon;
+grant execute on function public.get_latest_balance_run(boolean, text, integer) to authenticated;
+
+-- Hardened read RPC for batch analysis: returns runs for one UTC day.
+-- Default day is "today" in UTC.
+drop function if exists public.get_balance_runs_for_day(date, boolean, text, integer);
+create or replace function public.get_balance_runs_for_day(
+  p_day_utc date default (now() at time zone 'utc')::date,
+  p_include_debug boolean default false,
+  p_game_version text default '',
+  p_max_runs integer default 500
+)
+returns jsonb
+language sql
+security definer
+set search_path = public
+as $$
+  with bounds as (
+    select
+      extract(epoch from (p_day_utc::timestamp at time zone 'utc'))::bigint as day_start_unix,
+      extract(epoch from ((p_day_utc::timestamp + interval '1 day') at time zone 'utc'))::bigint as day_end_unix
+  ),
+  picked as (
+    select
+      run_id,
+      started_at_unix,
+      ended_at_unix,
+      game_version,
+      difficulty_tier,
+      run_mode,
+      outcome,
+      max_depth,
+      rooms_cleared,
+      is_debug,
+      death_event,
+      damage_events,
+      reward_choices,
+      room_entries,
+      door_choices,
+      aggregate,
+      upload_source
+    from public.telemetry_runs, bounds
+    where started_at_unix >= bounds.day_start_unix
+      and started_at_unix < bounds.day_end_unix
+      and (p_include_debug or is_debug = false)
+      and (
+        nullif(trim(p_game_version), '') is null
+        or game_version = nullif(trim(p_game_version), '')
+      )
+    order by started_at_unix desc
+    limit greatest(1, least(p_max_runs, 2000))
+  )
+  select coalesce((select jsonb_agg(to_jsonb(picked)) from picked), '[]'::jsonb);
+$$;
+
+revoke all on function public.get_balance_runs_for_day(date, boolean, text, integer) from public;
+grant execute on function public.get_balance_runs_for_day(date, boolean, text, integer) to anon;
+grant execute on function public.get_balance_runs_for_day(date, boolean, text, integer) to authenticated;
+
+-- Hardened read RPC for open window analysis by unix timestamp.
+drop function if exists public.get_balance_runs_between(bigint, bigint, boolean, text, integer);
+create or replace function public.get_balance_runs_between(
+  p_start_unix bigint,
+  p_end_unix bigint,
+  p_include_debug boolean default false,
+  p_game_version text default '',
+  p_max_runs integer default 1000
+)
+returns jsonb
+language sql
+security definer
+set search_path = public
+as $$
+  with picked as (
+    select
+      run_id,
+      started_at_unix,
+      ended_at_unix,
+      game_version,
+      difficulty_tier,
+      run_mode,
+      outcome,
+      max_depth,
+      rooms_cleared,
+      is_debug,
+      death_event,
+      damage_events,
+      reward_choices,
+      room_entries,
+      door_choices,
+      aggregate,
+      upload_source
+    from public.telemetry_runs
+    where started_at_unix >= least(p_start_unix, p_end_unix)
+      and started_at_unix < greatest(p_start_unix, p_end_unix)
+      and (p_include_debug or is_debug = false)
+      and (
+        nullif(trim(p_game_version), '') is null
+        or game_version = nullif(trim(p_game_version), '')
+      )
+    order by started_at_unix desc
+    limit greatest(1, least(p_max_runs, 5000))
+  )
+  select coalesce((select jsonb_agg(to_jsonb(picked)) from picked), '[]'::jsonb);
+$$;
+
+revoke all on function public.get_balance_runs_between(bigint, bigint, boolean, text, integer) from public;
+grant execute on function public.get_balance_runs_between(bigint, bigint, boolean, text, integer) to anon;
+grant execute on function public.get_balance_runs_between(bigint, bigint, boolean, text, integer) to authenticated;
