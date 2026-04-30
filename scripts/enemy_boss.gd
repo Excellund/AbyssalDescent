@@ -261,7 +261,7 @@ func _apply_charge_hit() -> void:
 			# Heavy impact feedback for charge
 			if is_instance_valid(target):
 				var feedback: Object = target.get("player_feedback") as Object
-				if feedback != null and feedback.has_method("play_impact_heavy"):
+				if feedback != null:
 					feedback.play_impact_heavy(target.global_position, charge_width * 1.5)
 			return
 
@@ -273,7 +273,7 @@ func _apply_charge_hit() -> void:
 		# Heavy impact feedback for charge
 		if is_instance_valid(target):
 			var feedback: Object = target.get("player_feedback") as Object
-			if feedback != null and feedback.has_method("play_impact_heavy"):
+			if feedback != null:
 				feedback.play_impact_heavy(target.global_position, charge_width * 1.5)
 
 
@@ -285,7 +285,7 @@ func _apply_nova_hit() -> void:
 		# Heavy impact feedback for nova
 		if is_instance_valid(target):
 			var feedback: Object = target.get("player_feedback") as Object
-			if feedback != null and feedback.has_method("play_impact_heavy"):
+			if feedback != null:
 				feedback.play_impact_heavy(global_position, nova_radius * 0.9)
 
 
@@ -298,7 +298,7 @@ func _apply_cleave_hit() -> void:
 	# Heavy impact feedback for cleave
 	if is_instance_valid(target):
 		var feedback: Object = target.get("player_feedback") as Object
-		if feedback != null and feedback.has_method("play_impact_heavy"):
+		if feedback != null:
 			feedback.play_impact_heavy(global_position, cleave_range * 0.7)
 
 

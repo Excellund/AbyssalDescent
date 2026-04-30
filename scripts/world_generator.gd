@@ -228,7 +228,7 @@ func _ready() -> void:
 	_apply_debug_settings_from_node()
 	power_registry_instance = POWER_REGISTRY.new()
 	player = get_node_or_null(player_path) as Node2D
-	if is_instance_valid(player) and player.has_method("set_power_registry"):
+	if is_instance_valid(player):
 		player.set_power_registry(power_registry_instance)
 	if is_instance_valid(player):
 		player_camera = player.get_node_or_null("Camera2D") as Camera2D
@@ -259,7 +259,7 @@ func _ready() -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	var should_apply_difficulty := false
 	var difficulty_tier := current_difficulty_tier
-	if run_context != null and run_context.has_method("get_current_difficulty_tier"):
+	if run_context != null:
 		difficulty_tier = int(run_context.get_current_difficulty_tier())
 		should_apply_difficulty = true
 	var debug_bearing_tier := _debug_bearing_override_tier()
@@ -366,11 +366,8 @@ func start_run_with_powers(power_ids: Array[String]) -> Dictionary:
 		if not _is_known_power_id(id):
 			unknown.append(id)
 			continue
-		if player.has_method("apply_power_for_test"):
-			if bool(player.apply_power_for_test(id)):
-				applied.append(id)
-			else:
-				unknown.append(id)
+		if bool(player.apply_power_for_test(id)):
+			applied.append(id)
 		else:
 			unknown.append(id)
 
@@ -523,8 +520,7 @@ func _apply_debug_mutator_override(profile: Dictionary) -> Dictionary:
 	var mutator: Dictionary = encounter_profile_builder.build_debug_mutator(mutator_key)
 	if mutator.is_empty():
 		return profile
-	if encounter_profile_builder.has_method("apply_mutator_variant_to_profile"):
-		return encounter_profile_builder.apply_mutator_variant_to_profile(profile, mutator, room_depth)
+	return encounter_profile_builder.apply_mutator_variant_to_profile(profile, mutator, room_depth)
 	var modified := profile.duplicate(true)
 	ENCOUNTER_CONTRACTS.profile_set_enemy_mutator(modified, mutator)
 	return modified
@@ -1024,9 +1020,7 @@ func _get_hud_state() -> Dictionary:
 func _get_priority_target_health() -> int:
 	if not is_instance_valid(objective_target_enemy):
 		return 0
-	if objective_target_enemy.has_method("_get_current_health"):
-		return int(objective_target_enemy._get_current_health())
-	return 0
+	return int(objective_target_enemy._get_current_health())
 
 func _get_priority_target_max_health() -> int:
 	if not is_instance_valid(objective_target_enemy):
@@ -1162,11 +1156,9 @@ func _finish_second_boss_clear() -> void:
 	if is_instance_valid(victory_screen):
 		var run_context := _get_run_context()
 		var unlocked_tier := -1
-		if run_context != null and run_context.has_method("set_last_run_outcome"):
+		if run_context != null:
 			run_context.set_last_run_outcome("clear")
-		if run_context != null and run_context.has_method("award_run_clear_unlocks"):
 			run_context.award_run_clear_unlocks()
-		if run_context != null and run_context.has_method("consume_just_unlocked_tier"):
 			unlocked_tier = int(run_context.consume_just_unlocked_tier())
 		victory_screen.show_victory(rooms_cleared, unlocked_tier)
 
@@ -1185,10 +1177,8 @@ func _apply_difficulty_tier_bonuses(difficulty_tier: int) -> void:
 		encounter_count = encounter_target
 		second_boss_encounter_count = maxi(1, encounter_target - 1)
 
-	if player.has_method("set_incoming_damage_taken_mult"):
-		player.set_incoming_damage_taken_mult(float(difficulty_config.get("player_damage_taken_mult", 1.0)))
-	if player.has_method("set_incoming_contact_damage_mult"):
-		player.set_incoming_contact_damage_mult(float(difficulty_config.get("enemy_contact_damage_mult", 1.0)))
+	player.set_incoming_damage_taken_mult(float(difficulty_config.get("player_damage_taken_mult", 1.0)))
+	player.set_incoming_contact_damage_mult(float(difficulty_config.get("enemy_contact_damage_mult", 1.0)))
 	var health_bonus := float(difficulty_config.get("player_starting_health_bonus", 0.0))
 	if health_bonus > 0.0 and player.get("max_health") != null:
 		var current_max := int(player.get("max_health"))
@@ -1196,8 +1186,7 @@ func _apply_difficulty_tier_bonuses(difficulty_tier: int) -> void:
 		player.set("max_health", new_max)
 		if player.get("health_state") != null:
 			var health_state: Object = player.get("health_state")
-			if health_state.has_method("setup"):
-				health_state.setup(new_max)
+			health_state.setup(new_max)
 
 func _get_second_boss_target_depth() -> int:
 	return maxi(encounter_count + 1, encounter_count * 2)
@@ -1234,7 +1223,7 @@ func _apply_boss_difficulty_scaling(boss: CharacterBody2D) -> void:
 		boss.set("max_health", scaled_max_health)
 		if boss.get("health_state") != null:
 			var health_state: Object = boss.get("health_state") as Object
-			if health_state != null and health_state.has_method("setup"):
+			if health_state != null:
 				health_state.setup(scaled_max_health)
 	for damage_property in ["charge_damage", "nova_damage", "cleave_damage", "prism_damage", "gravity_damage", "echo_dash_damage", "orbital_lance_damage", "polar_shift_pull_inner_damage"]:
 		if boss.get(damage_property) == null:
@@ -1246,30 +1235,22 @@ func _try_resume_saved_run() -> bool:
 	var run_context := _get_run_context()
 	if run_context == null:
 		return false
-	if not run_context.has_method("consume_resume_saved_run_request"):
-		return false
 	if not bool(run_context.consume_resume_saved_run_request()):
-		return false
-	if not run_context.has_method("load_active_run"):
 		return false
 	var snapshot := run_context.load_active_run() as Dictionary
 	if snapshot.is_empty():
 		return false
 	if int(snapshot.get("version", -1)) != RUN_SNAPSHOT_VERSION:
-		if run_context.has_method("clear_active_run"):
-			run_context.clear_active_run()
+		run_context.clear_active_run()
 		return false
 	if not _apply_active_run_snapshot(snapshot):
-		if run_context.has_method("clear_active_run"):
-			run_context.clear_active_run()
+		run_context.clear_active_run()
 		return false
 	return true
 
 func _save_active_run_checkpoint() -> void:
 	var run_context := _get_run_context()
 	if run_context == null:
-		return
-	if not run_context.has_method("save_active_run"):
 		return
 	var snapshot := _build_active_run_snapshot()
 	if snapshot.is_empty():
@@ -1280,10 +1261,8 @@ func _clear_active_run_checkpoint() -> void:
 	var run_context := _get_run_context()
 	if run_context == null:
 		return
-	if run_context.has_method("clear_active_run"):
-		run_context.clear_active_run()
-	if run_context.has_method("clear_resume_saved_run_request"):
-		run_context.clear_resume_saved_run_request()
+	run_context.clear_active_run()
+	run_context.clear_resume_saved_run_request()
 
 func _build_active_run_snapshot() -> Dictionary:
 	var run_context := _get_run_context()
@@ -1315,8 +1294,7 @@ func _is_endless_mode() -> bool:
 	var run_context := _get_run_context()
 	if run_context == null:
 		return false
-	if run_context.has_method("is_endless_mode"):
-		return bool(run_context.is_endless_mode())
+	return bool(run_context.is_endless_mode())
 	var mode_value: Variant = run_context.get("run_mode")
 	if mode_value == null:
 		return false
@@ -1338,10 +1316,7 @@ func _is_reward_selection_active() -> bool:
 func _set_music_volume_runtime(music_db: float) -> void:
 	music_volume_db = clampf(music_db, -80.0, 6.0)
 	if is_instance_valid(music_system):
-		if music_system.has_method("set_music_volume_db"):
-			music_system.set_music_volume_db(music_volume_db)
-		else:
-			music_system.set("music_volume_db", music_volume_db)
+		music_system.set_music_volume_db(music_volume_db)
 
 func _on_pause_menu_opened() -> void:
 	_set_combat_paused(true)
@@ -1372,7 +1347,7 @@ func _on_pause_abandon_run_requested() -> void:
 	if is_instance_valid(pause_menu_controller):
 		pause_menu_controller.close()
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
-	if run_context != null and run_context.has_method("set_last_run_outcome"):
+	if run_context != null:
 		run_context.set_last_run_outcome("death")
 	_finish_active_run_telemetry("abandon")
 	_clear_active_run_checkpoint()
@@ -1506,9 +1481,8 @@ func _begin_room(profile: Dictionary) -> void:
 	if profile.is_empty():
 		return
 	encounter_intro_grace_active = false
-	if is_instance_valid(player) and player.has_method("clear_lingering_combat_effects"):
+	if is_instance_valid(player):
 		player.clear_lingering_combat_effects()
-	if is_instance_valid(player) and player.has_method("tick_objective_mutators_for_encounter"):
 		player.tick_objective_mutators_for_encounter()
 	in_boss_room = false
 	in_second_boss_room = false
@@ -1554,7 +1528,7 @@ func _enter_rest_site() -> void:
 		boss_unlocked = _is_second_boss_unlocked()
 	else:
 		_advance_room_progress()
-	if is_instance_valid(player) and player.has_method("heal"):
+	if is_instance_valid(player):
 		var player_max_health := int(player.get("max_health"))
 		var heal_ratio_mult := float(current_difficulty_config.get("rest_heal_ratio_mult", 1.0))
 		var heal_amount := maxi(8, int(round(float(player_max_health) * rest_heal_ratio * heal_ratio_mult)))
@@ -1610,8 +1584,7 @@ func _begin_configured_boss_room(is_first_boss: bool, room_size: Vector2, room_l
 
 	boss.global_position = _pick_boss_spawn_position(min_player_distance, wall_margin)
 	add_child(boss)
-	if boss.has_method("begin_spawn_transport"):
-		boss.begin_spawn_transport(BOSS_SPAWN_TRANSPORT_DURATION)
+	boss.begin_spawn_transport(BOSS_SPAWN_TRANSPORT_DURATION)
 	boss.set("target", player)
 	boss.set("arena_size", current_room_size)
 	_apply_boss_difficulty_scaling(boss)
@@ -1666,7 +1639,7 @@ func _on_room_enemy_died() -> void:
 				_trigger_priority_target_exposure()
 	if active_objective_kind == "priority_target" and objective_overtime and objective_spawn_timer > 0.2:
 		objective_spawn_timer = maxf(0.2, objective_spawn_timer - 0.08)
-	if is_instance_valid(player) and player.has_method("notify_enemy_killed"):
+	if is_instance_valid(player):
 		player.notify_enemy_killed()
 
 func _clear_all_enemies() -> void:
@@ -1676,8 +1649,6 @@ func _clear_all_enemies() -> void:
 func _apply_camera_bounds_for_room(room_size: Vector2) -> void:
 	if not is_instance_valid(player_camera):
 		return
-	if not player_camera.has_method("set_world_bounds"):
-		return
 	var rect := Rect2(-room_size * 0.5, room_size)
 	player_camera.set_world_bounds(rect)
 
@@ -1685,14 +1656,12 @@ func _update_camera_mode() -> void:
 	if not is_instance_valid(player_camera):
 		return
 	if (is_instance_valid(reward_selection_ui) and reward_selection_ui.is_active()) or choosing_next_room:
-		if player_camera.has_method("set_static_mode"):
-			player_camera.set_static_mode(Vector2.ZERO)
-		return
-	if current_room_static_camera and player_camera.has_method("set_static_mode"):
 		player_camera.set_static_mode(Vector2.ZERO)
 		return
-	if player_camera.has_method("set_follow_mode"):
-		player_camera.set_follow_mode()
+	if current_room_static_camera:
+		player_camera.set_static_mode(Vector2.ZERO)
+		return
+	player_camera.set_follow_mode()
 
 func _build_skirmish_profile(depth: int) -> Dictionary:
 	if not is_instance_valid(encounter_profile_builder):
@@ -1701,8 +1670,6 @@ func _build_skirmish_profile(depth: int) -> Dictionary:
 
 func _get_active_player_mutators_for_hud() -> Array[Dictionary]:
 	if not is_instance_valid(player):
-		return []
-	if not player.has_method("get_active_objective_mutators"):
 		return []
 	return player.get_active_objective_mutators() as Array[Dictionary]
 
@@ -1923,7 +1890,7 @@ func _on_player_died_for_telemetry() -> void:
 	if not telemetry_enabled or telemetry_run_id.is_empty() or telemetry_run_finished:
 		return
 	var death_event: Dictionary = {}
-	if is_instance_valid(player) and player.has_method("get_last_damage_event"):
+	if is_instance_valid(player):
 		death_event = player.get_last_damage_event() as Dictionary
 	death_event["room_label"] = current_room_label
 	death_event["bearing_key"] = _bearing_key_from_label(current_room_label, "unknown")
@@ -1944,11 +1911,9 @@ func _on_player_died() -> void:
 	active_objective_kind = ""
 	active_room_enemy_count = 0
 	var run_context := _get_run_context()
-	if run_context != null and run_context.has_method("set_last_run_outcome"):
+	if run_context != null:
 		run_context.set_last_run_outcome("death")
-	if run_context != null and run_context.has_method("clear_active_run"):
 		run_context.clear_active_run()
-	if run_context != null and run_context.has_method("clear_resume_saved_run_request"):
 		run_context.clear_resume_saved_run_request()
 	hud.show_banner("Defeat", "")
 	if is_instance_valid(defeat_screen):
@@ -1957,8 +1922,7 @@ func _on_player_died() -> void:
 func _apply_boon_to_player(boon_id: String) -> void:
 	if not is_instance_valid(player):
 		return
-	if player.has_method("apply_upgrade"):
-		player.apply_upgrade(boon_id)
+	player.apply_upgrade(boon_id)
 
 func _apply_mission_reward(choice: Dictionary) -> void:
 	var chosen_upgrade := choice.get("mission_upgrade", choice) as Dictionary
@@ -1990,7 +1954,7 @@ func _roll_bonus_mission_boon(excluded_id: String) -> Dictionary:
 		if entry_id == excluded_id:
 			continue
 		var limit := int(entry.get("stack_limit", 0))
-		if limit > 0 and is_instance_valid(player) and player.has_method("get_upgrade_stack_count"):
+		if limit > 0 and is_instance_valid(player):
 			var current := int(player.get_upgrade_stack_count(entry_id))
 			if current >= limit:
 				continue
@@ -2002,8 +1966,7 @@ func _roll_bonus_mission_boon(excluded_id: String) -> Dictionary:
 func _apply_arcana_to_player(reward_id: String) -> void:
 	if not is_instance_valid(player):
 		return
-	if player.has_method("apply_trial_power"):
-		player.apply_trial_power(reward_id)
+	player.apply_trial_power(reward_id)
 
 func _apply_objective_mutator(choice: Dictionary) -> void:
 	if not is_instance_valid(player):
@@ -2014,8 +1977,7 @@ func _apply_objective_mutator(choice: Dictionary) -> void:
 	var applied_mutator := mutator_data.duplicate(true)
 	var duration := maxi(1, int(applied_mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_DURATION_ENCOUNTERS, 3)))
 	applied_mutator[ENCOUNTER_CONTRACTS.MUTATOR_KEY_DURATION_ENCOUNTERS] = duration
-	if player.has_method("apply_objective_mutator"):
-		player.apply_objective_mutator(applied_mutator)
+	player.apply_objective_mutator(applied_mutator)
 	var mutator_name := String(choice.get("name", "Objective Mutator"))
 	if is_instance_valid(hud):
 		hud.show_banner("Objective Reward", mutator_name)
@@ -2031,18 +1993,9 @@ func _set_combat_paused(paused: bool) -> void:
 			(enemy as Node).set_process(not paused)
 
 func _is_spawn_transport_active(enemy: Node) -> bool:
-	if enemy.has_method("is_spawn_transporting"):
-		return bool(enemy.is_spawn_transporting())
-	var transport_left: Variant = enemy.get("spawn_transport_time_left")
-	if transport_left is float:
-		return transport_left > 0.0
-	if transport_left is int:
-		return transport_left > 0
-	return false
+	return bool(enemy.is_spawn_transporting())
 
 func _begin_spawn_transport_if_idle(enemy: Node, duration: float) -> void:
-	if not enemy.has_method("begin_spawn_transport"):
-		return
 	if _is_spawn_transport_active(enemy):
 		return
 	enemy.begin_spawn_transport(duration)

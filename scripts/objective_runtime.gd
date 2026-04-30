@@ -384,8 +384,7 @@ func apply_priority_target_exposure_push(delta: float) -> void:
 				tuned_strength = maxf(tuned_strength, world.objective_exposure_push_strength * 0.82)
 		var target_velocity: Vector2 = dir * tuned_strength
 		enemy.velocity = enemy.velocity.move_toward(target_velocity, delta * world.objective_exposure_push_accel)
-		if enemy.has_method("apply_slow"):
-			enemy.apply_slow(0.2, 0.74)
+		enemy.apply_slow(0.2, 0.74)
 
 func complete_current_objective(title: String, _subtitle: String) -> void:
 	world.objective_control_anchor = Vector2.ZERO
@@ -434,7 +433,7 @@ func spawn_priority_target_enemy() -> void:
 		var boosted_max := maxi(40, int(round(float(int(spawned_target.get("max_health"))) * 2.6)))
 		spawned_target.set("max_health", boosted_max)
 		var health_state: Object = spawned_target.get("health_state") as Object
-		if health_state != null and health_state.has_method("setup"):
+		if health_state != null:
 			health_state.setup(boosted_max)
 	if spawned_target.get("has_mutator_overlay") != null:
 		spawned_target.set("has_mutator_overlay", true)
@@ -442,10 +441,8 @@ func spawn_priority_target_enemy() -> void:
 		spawned_target.set("mutator_theme_color", Color(1.0, 0.84, 0.3, 1.0))
 	spawned_target.scale *= 1.14
 	world.objective_target_next_flee_index = 0
-	if spawned_target.has_method("configure_health_bar_visuals"):
-		spawned_target.configure_health_bar_visuals(Vector2(-36.0, -48.0), Vector2(72.0, 9.0))
-	if spawned_target.has_method("set_health_threshold_markers"):
-		spawned_target.set_health_threshold_markers(world.objective_target_flee_thresholds, world.objective_target_next_flee_index)
+	spawned_target.configure_health_bar_visuals(Vector2(-36.0, -48.0), Vector2(72.0, 9.0))
+	spawned_target.set_health_threshold_markers(world.objective_target_flee_thresholds, world.objective_target_next_flee_index)
 	world.objective_hunt_kill_progress = 0
 	world.objective_hunt_kill_goal = maxi(2, world.objective_hunt_kill_goal)
 	world.objective_exposure_left = 0.0
@@ -499,8 +496,7 @@ func check_priority_target_relocation_threshold() -> void:
 	if current_ratio > threshold_ratio:
 		return
 	world.objective_target_next_flee_index += 1
-	if world.objective_target_enemy.has_method("set_health_threshold_marker_progress"):
-		world.objective_target_enemy.set_health_threshold_marker_progress(world.objective_target_next_flee_index)
+	world.objective_target_enemy.set_health_threshold_marker_progress(world.objective_target_next_flee_index)
 	trigger_priority_target_threshold_phase(threshold_ratio)
 
 func trigger_priority_target_threshold_phase(_threshold_ratio: float) -> void:
@@ -791,9 +787,7 @@ func clear_priority_target_exposure_vfx() -> void:
 func get_priority_target_health() -> int:
 	if not is_instance_valid(world.objective_target_enemy):
 		return 0
-	if world.objective_target_enemy.has_method("_get_current_health"):
-		return int(world.objective_target_enemy._get_current_health())
-	return 0
+	return int(world.objective_target_enemy._get_current_health())
 
 func get_priority_target_max_health() -> int:
 	if not is_instance_valid(world.objective_target_enemy):

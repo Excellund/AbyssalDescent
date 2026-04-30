@@ -66,17 +66,6 @@ func _check_and_award_unlocks() -> void:
 	## - First clear on Standard: unlock Tier 2 (Veteran)
 	## - First clear on Veteran: unlock Tier 3 (Torment)
 	
-	if not run_context.has_method("get_current_difficulty_tier"):
-		return
-	if not run_context.has_method("get_highest_unlocked_difficulty_tier"):
-		return
-	if not run_context.has_method("unlock_difficulty_tier"):
-		return
-	if not run_context.has_method("get_milestone"):
-		return
-	if not run_context.has_method("set_milestone"):
-		return
-	
 	var current_tier: int = int(run_context.get_current_difficulty_tier())
 	var highest_unlocked: int = int(run_context.get_highest_unlocked_difficulty_tier())
 	

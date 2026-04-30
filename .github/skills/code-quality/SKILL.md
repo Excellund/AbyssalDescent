@@ -223,20 +223,44 @@ Do not pass placeholder or immediately-overwritten values to a function just to 
 
 ---
 
-### 9. Capture Durable User Guidance In Skills
+### 9. Trust Type Contracts; Avoid Runtime Method Introspection
 
-When a user identifies a better way of working, treat it as candidate guidance for relevant skill docs.
+Do not use `.has_method()` to defensively check if a method exists. Instead, establish clear type contracts and trust callers to uphold them.
+
+**Why it matters:**
+
+- Runtime introspection (`has_method`, `has_property`) is a code smell that signals unclear ownership or missing type information.
+- Defensive checks hide the real contract — code that appears to handle missing methods may mask a design gap.
+- Runtime checks add cognitive load and make refactoring risky (rename a method, forget to update the string check).
+- Strong types and clear ownership make code flow easier to trace and reason about.
+
+**How to apply:**
+
+- Establish explicit type contracts: if a subsystem calls `target.take_damage()`, document that `target` must implement `take_damage` or inherit from a base class that does.
+- Replace `if obj.has_method("method_name"): obj.method_name()` with direct calls behind instance-validity guards (`if obj != null:`).
+- Use typed references and inheritance when possible to enforce contracts at declaration time.
+- If a method is optional, make that explicit in the signature (e.g., a callback parameter with null default) rather than hidden runtime checks.
+- When integrating with dynamic systems (plugins, data-driven configs), document the boundary explicitly and constrain introspection to that boundary only.
+
+---
+
+### 10. Capture Durable User Guidance In Skills (Autonomous Checkpoint)
+
+When code changes establish or validate a **durable, reusable practice**, update the relevant skill doc as part of task completion, not as optional follow-up work.
 
 **Why it matters:**
 
 - Prevents repeating the same correction across future tasks.
 - Converts one-off feedback into team-scale consistency.
 - Keeps skill guidance aligned with real project needs.
+- Makes continuous improvement to process guidance an integral part of development, not a side effect.
 
 **How to apply:**
 
-- Update a skill only when guidance is durable, reusable, and likely to improve future outcomes.
-- Gate updates on quality: prefer updating skills after the related code change is validated/diagnostics-clean.
+- After code validation (diagnostics-clean, patterns confirmed), ask: "Does this establish a durable practice?"
+- If yes: identify which skill(s) cover this area (e.g., code-quality for patterns, encounter-identity-balance for tuning).
+- Check the skill doc: does it reflect this learning, or is the guidance incomplete/outdated?
+- If incomplete: update the skill in the same task, before calling task_complete.
 - Keep updates minimal and specific: add one clear rule plus brief rationale.
 - Do not overfit transient preferences into broad rules; keep one-off choices in session/user memory instead.
 - If dynamic behavior remains necessary, document the boundary explicitly.

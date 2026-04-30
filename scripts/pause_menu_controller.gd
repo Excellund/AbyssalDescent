@@ -408,13 +408,9 @@ func _sync_pause_options_from_context() -> void:
 		return
 	pause_master_slider.value = _db_to_percent(float(run_context.get("master_volume_db")))
 	pause_music_slider.value = _db_to_percent(float(run_context.get("music_volume_db")))
-	var mode_options: Array[Dictionary] = []
-	if run_context.has_method("get_display_mode_options"):
-		mode_options = run_context.get_display_mode_options() as Array[Dictionary]
+	var mode_options: Array[Dictionary] = run_context.get_display_mode_options() as Array[Dictionary]
 	_populate_pause_display_mode_selector(mode_options, String(run_context.get("display_mode")))
-	var resolution_options: Array[Dictionary] = []
-	if run_context.has_method("get_supported_resolution_options"):
-		resolution_options = run_context.get_supported_resolution_options() as Array[Dictionary]
+	var resolution_options: Array[Dictionary] = run_context.get_supported_resolution_options() as Array[Dictionary]
 	_populate_pause_resolution_selector(
 		resolution_options,
 		int(run_context.get("resolution_width")),
@@ -441,7 +437,7 @@ func _on_pause_resolution_selected(index: int) -> void:
 		return
 	var resolution := metadata as Dictionary
 	var run_context := _get_run_context()
-	if run_context != null and run_context.has_method("set_resolution_settings"):
+	if run_context != null:
 		run_context.set_resolution_settings(int(resolution.get("width", 0)), int(resolution.get("height", 0)), true)
 
 func _on_pause_display_mode_selected(index: int) -> void:
@@ -450,7 +446,7 @@ func _on_pause_display_mode_selected(index: int) -> void:
 	var metadata: Variant = pause_display_mode_selector.get_item_metadata(index)
 	var selected_mode := String(metadata)
 	var run_context := _get_run_context()
-	if run_context != null and run_context.has_method("set_display_mode"):
+	if run_context != null:
 		run_context.set_display_mode(selected_mode, true)
 	_sync_pause_options_from_context()
 
@@ -458,7 +454,7 @@ func _apply_pause_options(master_percent: float, music_percent: float) -> void:
 	var master_db := _percent_to_db(master_percent)
 	var music_db := _percent_to_db(music_percent)
 	var run_context := _get_run_context()
-	if run_context != null and run_context.has_method("set_audio_settings"):
+	if run_context != null:
 		run_context.set_audio_settings(master_db, music_db, true)
 	if apply_music_volume_callback.is_valid():
 		apply_music_volume_callback.callv([clampf(music_db, AUDIO_DB_MIN, AUDIO_DB_MAX)])

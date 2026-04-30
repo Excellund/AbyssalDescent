@@ -366,7 +366,7 @@ func _apply_difficulty_button_theme(button: Button, state: String) -> void:
 func _pick_menu_quote() -> String:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	var outcome := "none"
-	if run_context != null and run_context.has_method("get_last_run_outcome"):
+	if run_context != null:
 		outcome = String(run_context.get_last_run_outcome())
 	match outcome:
 		"death":
@@ -645,8 +645,7 @@ func _on_continue_pressed() -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context == null:
 		return
-	if run_context.has_method("request_resume_saved_run"):
-		run_context.request_resume_saved_run()
+	run_context.request_resume_saved_run()
 	get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)
 
 func _on_endless_pressed() -> void:
@@ -843,12 +842,8 @@ func _update_difficulty_selector() -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context == null:
 		return
-	var current_tier: int = META_PROGRESS.TIER_DELVER
-	var highest_unlocked_tier: int = META_PROGRESS.TIER_PILGRIM
-	if run_context.has_method("get_current_difficulty_tier"):
-		current_tier = int(run_context.get_current_difficulty_tier())
-	if run_context.has_method("get_highest_unlocked_difficulty_tier"):
-		highest_unlocked_tier = int(run_context.get_highest_unlocked_difficulty_tier())
+	var current_tier: int = int(run_context.get_current_difficulty_tier())
+	var highest_unlocked_tier: int = int(run_context.get_highest_unlocked_difficulty_tier())
 	for i in range(difficulty_tier_buttons.size()):
 		var button := difficulty_tier_buttons[i]
 		var name_label := difficulty_tier_name_labels[i]
@@ -879,10 +874,9 @@ func _on_difficulty_tier_selected(tier: int) -> void:
 	if run_context == null:
 		return
 	
-	if run_context.has_method("set_difficulty_tier"):
-		if run_context.set_difficulty_tier(tier):
-			difficulty_selector_panel.visible = false
-			get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)
+	if run_context.set_difficulty_tier(tier):
+		difficulty_selector_panel.visible = false
+		get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)
 
 func _on_master_volume_changed(value: float) -> void:
 	_apply_options(value, music_slider.value)
@@ -898,7 +892,7 @@ func _on_resolution_selected(index: int) -> void:
 		return
 	var resolution := metadata as Dictionary
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
-	if run_context != null and run_context.has_method("set_resolution_settings"):
+	if run_context != null:
 		run_context.set_resolution_settings(int(resolution.get("width", 0)), int(resolution.get("height", 0)), true)
 
 func _on_display_mode_selected(index: int) -> void:
@@ -907,7 +901,7 @@ func _on_display_mode_selected(index: int) -> void:
 	var metadata: Variant = display_mode_selector.get_item_metadata(index)
 	var selected_mode := String(metadata)
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
-	if run_context != null and run_context.has_method("set_display_mode"):
+	if run_context != null:
 		run_context.set_display_mode(selected_mode, true)
 	_sync_options_from_context()
 
@@ -939,13 +933,9 @@ func _sync_options_from_context() -> void:
 		return
 	master_slider.value = _db_to_percent(float(run_context.get("master_volume_db")))
 	music_slider.value = _db_to_percent(float(run_context.get("music_volume_db")))
-	var mode_options: Array[Dictionary] = []
-	if run_context.has_method("get_display_mode_options"):
-		mode_options = run_context.get_display_mode_options() as Array[Dictionary]
+	var mode_options: Array[Dictionary] = run_context.get_display_mode_options() as Array[Dictionary]
 	_populate_display_mode_selector(mode_options, String(run_context.get("display_mode")))
-	var resolution_options: Array[Dictionary] = []
-	if run_context.has_method("get_supported_resolution_options"):
-		resolution_options = run_context.get_supported_resolution_options() as Array[Dictionary]
+	var resolution_options: Array[Dictionary] = run_context.get_supported_resolution_options() as Array[Dictionary]
 	_populate_resolution_selector(
 		resolution_options,
 		int(run_context.get("resolution_width")),
@@ -966,7 +956,7 @@ func _apply_options(master_percent: float, music_percent: float) -> void:
 	var master_db := _percent_to_db(master_percent)
 	var music_db := _percent_to_db(music_percent)
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
-	if run_context != null and run_context.has_method("set_audio_settings"):
+	if run_context != null:
 		run_context.set_audio_settings(master_db, music_db, true)
 	_apply_menu_music_volume(music_db)
 	_update_option_labels()
@@ -1068,7 +1058,7 @@ func _db_to_percent(db: float) -> float:
 
 func _set_run_mode(mode: int) -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
-	if run_context != null and run_context.has_method("set_run_mode"):
+	if run_context != null:
 		run_context.set_run_mode(mode)
 
 func _refresh_primary_run_button() -> void:
@@ -1078,7 +1068,7 @@ func _refresh_primary_run_button() -> void:
 
 func _has_saved_run() -> bool:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
-	if run_context == null or not run_context.has_method("has_saved_run"):
+	if run_context == null:
 		return false
 	return bool(run_context.has_saved_run())
 
@@ -1086,7 +1076,5 @@ func _clear_saved_run() -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context == null:
 		return
-	if run_context.has_method("clear_active_run"):
-		run_context.clear_active_run()
-	if run_context.has_method("clear_resume_saved_run_request"):
-		run_context.clear_resume_saved_run_request()
+	run_context.clear_active_run()
+	run_context.clear_resume_saved_run_request()

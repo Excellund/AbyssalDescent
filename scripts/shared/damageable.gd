@@ -2,7 +2,7 @@ extends RefCounted
 
 # Shared helper to enforce the take_damage contract consistently.
 static func can_take_damage(target: Object) -> bool:
-	return is_instance_valid(target) and target.has_method("take_damage")
+	return is_instance_valid(target)
 
 static func apply_damage(target: Object, amount: int, damage_context: Dictionary = {}) -> bool:
 	if amount <= 0:

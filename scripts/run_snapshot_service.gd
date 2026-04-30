@@ -15,9 +15,7 @@ static func build_snapshot(world: Node, player: Node, run_context: Node, snapsho
 		var context_mode: Variant = run_context.get("run_mode")
 		if context_mode != null:
 			run_mode_value = context_mode
-	var player_snapshot: Dictionary = {}
-	if player.has_method("build_run_snapshot"):
-		player_snapshot = player.build_run_snapshot() as Dictionary
+	var player_snapshot: Dictionary = player.build_run_snapshot() as Dictionary
 	return {
 		"version": snapshot_version,
 		"run_mode": run_mode_value,
@@ -58,7 +56,7 @@ static func build_snapshot(world: Node, player: Node, run_context: Node, snapsho
 static func apply_snapshot(world: Node, player: Node, run_context: Node, snapshot: Dictionary, room_base_size: Vector2, fallback_run_mode: Variant, reward_mode_none: int) -> bool:
 	if not is_instance_valid(player):
 		return false
-	if run_context != null and run_context.has_method("set_run_mode"):
+	if run_context != null:
 		run_context.set_run_mode(snapshot.get("run_mode", fallback_run_mode))
 
 	world.rooms_cleared = int(snapshot.get("rooms_cleared", world.rooms_cleared))
@@ -105,7 +103,6 @@ static func apply_snapshot(world: Node, player: Node, run_context: Node, snapsho
 	world.objective_target_name = ""
 
 	var player_snapshot := snapshot.get("player_snapshot", {}) as Dictionary
-	if player.has_method("apply_run_snapshot"):
-		player.apply_run_snapshot(player_snapshot)
+	player.apply_run_snapshot(player_snapshot)
 
 	return true

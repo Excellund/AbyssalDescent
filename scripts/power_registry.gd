@@ -216,7 +216,7 @@ func get_upgrade_pool(player_reference: Node = null) -> Array[Dictionary]:
 	var trance_desc := _get_upgrade_fallback_description("battle_trance")
 	var surge_desc := _get_upgrade_fallback_description("surge_step")
 	var heartstone_desc := _get_upgrade_fallback_description("heartstone")
-	if is_instance_valid(player_reference) and player_reference.has_method("get_upgrade_card_desc"):
+	if is_instance_valid(player_reference):
 		first_strike_desc = String(player_reference.get_upgrade_card_desc("first_strike"))
 		heavy_desc = String(player_reference.get_upgrade_card_desc("heavy_blow"))
 		wide_desc = String(player_reference.get_upgrade_card_desc("wide_arc"))
@@ -250,7 +250,7 @@ func get_trial_power_pool(player_reference: Node = null) -> Array[Dictionary]:
 	var snare_desc := _get_trial_fallback_description("hunters_snare")
 	
 	# Try to get dynamic descriptions from player stack counts
-	if is_instance_valid(player_reference) and player_reference.has_method("get_trial_power_card_desc"):
+	if is_instance_valid(player_reference):
 		razor_desc = String(player_reference.get_trial_power_card_desc("razor_wind"))
 		execution_desc = String(player_reference.get_trial_power_card_desc("execution_edge"))
 		rupture_desc = String(player_reference.get_trial_power_card_desc("rupture_wave"))
@@ -262,7 +262,7 @@ func get_trial_power_pool(player_reference: Node = null) -> Array[Dictionary]:
 	var static_desc := _get_trial_fallback_description("static_wake")
 	var storm_desc := _get_trial_fallback_description("storm_crown")
 	var wraith_desc := _get_trial_fallback_description("wraithstep")
-	if is_instance_valid(player_reference) and player_reference.has_method("get_trial_power_card_desc"):
+	if is_instance_valid(player_reference):
 		phantom_desc = String(player_reference.get_trial_power_card_desc("phantom_step"))
 		void_desc = String(player_reference.get_trial_power_card_desc("reaper_step"))
 		static_desc = String(player_reference.get_trial_power_card_desc("static_wake"))

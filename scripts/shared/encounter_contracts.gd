@@ -441,7 +441,7 @@ static func normalize_room_cleared_outcome(value: Variant) -> Dictionary:
 	var outcome: Dictionary = {}
 	if value is Dictionary:
 		outcome = value as Dictionary
-	elif value != null and value.has_method("to_dict"):
+	elif value != null:
 		outcome = value.to_dict() as Dictionary
 	return room_cleared_outcome(
 		bool(outcome.get(KEY_RUN_CLEARED, false)),
@@ -484,7 +484,7 @@ static func normalize_door_use_result(value: Variant) -> Dictionary:
 	var result: Dictionary = {}
 	if value is Dictionary:
 		result = value as Dictionary
-	elif value != null and value.has_method("to_dict"):
+	elif value != null:
 		result = value.to_dict() as Dictionary
 	var used := bool(result.get(KEY_USED, false))
 	return door_use_result(used, result.get(KEY_DOOR, {}) as Dictionary)
@@ -548,7 +548,7 @@ static func normalize_door_choice(value: Variant) -> Dictionary:
 	var choice: Dictionary = {}
 	if value is Dictionary:
 		choice = value as Dictionary
-	elif value != null and value.has_method("to_dict"):
+	elif value != null:
 		choice = value.to_dict() as Dictionary
 	return door_choice(
 		choice.get(KEY_ACTION_ID, choice.get(KEY_ACTION, ACTION_ENCOUNTER)),

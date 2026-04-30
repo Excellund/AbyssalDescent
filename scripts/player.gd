@@ -626,7 +626,7 @@ func is_dead() -> bool:
 	return health_state.is_dead()
 
 func get_upgrade_stack_count(id: String) -> int:
-	if is_instance_valid(upgrade_system) and upgrade_system.has_method("get_upgrade_stack_count"):
+	if is_instance_valid(upgrade_system):
 		return int(upgrade_system.get_upgrade_stack_count(id))
 	if id == "iron_skin":
 		return iron_skin_stacks
@@ -780,8 +780,7 @@ func _trigger_aegis_field() -> void:
 		var enemy_body := enemy_node as Node2D
 		if global_position.distance_to(enemy_body.global_position) > aegis_field_pulse_radius:
 			continue
-		if enemy_node.has_method("apply_slow"):
-			enemy_node.apply_slow(aegis_field_slow_duration, aegis_field_slow_mult)
+		enemy_node.apply_slow(aegis_field_slow_duration, aegis_field_slow_mult)
 	if player_feedback != null:
 		player_feedback.play_world_ring(global_position, aegis_field_pulse_radius, Color(0.62, 0.98, 1.0, 0.92), 0.22)
 		player_feedback.play_world_ring(global_position, aegis_field_pulse_radius * 0.64, Color(0.88, 1.0, 1.0, 0.78), 0.16)
@@ -928,8 +927,6 @@ func _get_hunters_snare_bonus_damage(enemy_node: Object) -> int:
 		return 0
 	if not is_instance_valid(enemy_node):
 		return 0
-	if not enemy_node.has_method("is_slowed"):
-		return 0
 	return hunters_snare_bonus_damage if bool(enemy_node.is_slowed()) else 0
 
 func _apply_hunters_snare(enemy_node: Object) -> void:
@@ -937,8 +934,7 @@ func _apply_hunters_snare(enemy_node: Object) -> void:
 		return
 	if not is_instance_valid(enemy_node):
 		return
-	if enemy_node.has_method("apply_slow"):
-		enemy_node.apply_slow(hunters_snare_slow_duration, hunters_snare_slow_mult)
+	enemy_node.apply_slow(hunters_snare_slow_duration, hunters_snare_slow_mult)
 
 func _trigger_battle_trance() -> void:
 	if battle_trance_move_speed_bonus <= 0.0:
@@ -1170,8 +1166,7 @@ func _apply_phantom_step_during_dash() -> void:
 		if global_position.distance_to(enemy_body.global_position) > hit_radius:
 			continue
 		DAMAGEABLE.apply_damage(enemy_node, phantom_damage)
-		if enemy_node.has_method("apply_slow"):
-			enemy_node.apply_slow(phantom_step_slow_duration, 0.36)
+		enemy_node.apply_slow(phantom_step_slow_duration, 0.36)
 		phantom_step_hit_ids[eid] = true
 		if player_feedback != null:
 			# Concentric rings: outer (slow field) + inner (damage burst)
@@ -1229,7 +1224,7 @@ func apply_polar_shift_dash_lockout(duration: float) -> void:
 	_set_dash_phasing(false)
 	polar_shift_dash_lockout_duration = maxf(polar_shift_dash_lockout_duration, applied_duration)
 	polar_shift_dash_lockout_left = maxf(polar_shift_dash_lockout_left, applied_duration)
-	if player_feedback != null and player_feedback.has_method("play_polar_shift_dash_lockout"):
+	if player_feedback != null:
 		player_feedback.play_polar_shift_dash_lockout(global_position)
 	queue_redraw()
 

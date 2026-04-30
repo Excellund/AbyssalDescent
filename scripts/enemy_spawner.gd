@@ -136,8 +136,7 @@ func _spawn_enemy_in_current_room(enemy_script: Script, min_player_distance: flo
 
 	enemy.global_position = _pick_spawn_position_in_current_room(min_player_distance)
 	world_root.add_child(enemy)
-	if enemy.has_method("begin_spawn_transport"):
-		enemy.begin_spawn_transport(spawn_transport_duration)
+	enemy.begin_spawn_transport(spawn_transport_duration)
 	enemy.set("target", player)
 	if enemy.get("arena_size") != null:
 		enemy.set("arena_size", current_room_size)

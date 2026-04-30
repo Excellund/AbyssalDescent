@@ -262,7 +262,7 @@ func _try_apply_slam_aoe_hit() -> void:
 		# Heavy impact feedback for slam ability
 		if is_instance_valid(target):
 			var feedback: Object = target.get("player_feedback") as Object
-			if feedback != null and feedback.has_method("play_impact_heavy"):
+			if feedback != null:
 				feedback.play_impact_heavy(target.global_position, slam_radius * 0.95)
 
 func _try_body_check_target() -> void:
@@ -301,7 +301,7 @@ func _try_body_check_target() -> void:
 
 	# Play impact feedback if available
 	var feedback: Object = target_body.get("player_feedback") as Object
-	if feedback != null and feedback.has_method("play_impact_medium"):
+	if feedback != null:
 		feedback.play_impact_medium(target_body.global_position, shielder_radius + 30.0)
 
 	body_check_cooldown_left = body_check_cooldown
