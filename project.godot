@@ -14,6 +14,8 @@ config/name="AbyssalDescent"
 run/main_scene="res://scenes/Menu.tscn"
 config/features=PackedStringArray("4.6", "GL Compatibility")
 config/icon="res://icon.svg"
+config/telemetry_upload_endpoint="https://aizoebowshcnqvuizava.supabase.co/rest/v1/telemetry_runs"
+config/telemetry_upload_api_key="sb_publishable_LiXb9xg1jvwUZYw1arDcag_YIzGTPGV"
 
 [autoload]
 

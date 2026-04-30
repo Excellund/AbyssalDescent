@@ -34,3 +34,9 @@ const DEBUG_POWER_PRESET_NONE := 0
 @export_group("End Screen")
 @export_enum("None", "Victory", "Defeat") var end_screen_preview: int = DEBUG_END_SCREEN_NONE
 @export_enum("No Unlock:-1", "Pilgrim:0", "Delver:1", "Harbinger:2", "Forsworn:3") var victory_unlock_tier: int = -1
+
+@export_group("Telemetry Spike")
+@export var telemetry_spike_enabled: bool = false
+@export var telemetry_spike_endpoint: String = ""
+@export var telemetry_spike_api_key: String = ""
+@export_range(3.0, 20.0, 0.5) var telemetry_spike_timeout_seconds: float = 8.0

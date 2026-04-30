@@ -23,6 +23,12 @@ Use this skill when you need evidence from real runs before changing encounter b
   - scripts/run_telemetry_store.gd
 - Persisted file:
   - user://run_telemetry.save
+- Remote upload pipeline (playtester collection):
+  - scripts/telemetry_upload_queue.gd — durable local queue with retry metadata
+  - scripts/telemetry_uploader.gd — background HTTP sender, 10s flush interval
+  - Destination: Supabase table `public.telemetry_runs`
+  - Upload is triggered automatically at run end via `world_generator._finish_active_run_telemetry()`
+  - Raw event arrays (`damage_events`, `reward_choices`, `room_entries`, `door_choices`) are included in the remote payload alongside the `aggregate` dict
 
 ## Query Path
 1. Call world-level query API:
@@ -80,7 +86,8 @@ Use this skill when you need evidence from real runs before changing encounter b
    - Check per-bearing (difficulty) rank_counts if a specific tier is over- or under-pressured.
 
 ## Caveats
-- Deleting user://run_telemetry.save resets history; a new file is created on the next telemetry-enabled run.
+- Deleting user://run_telemetry.save resets local history; a new file is created on the next telemetry-enabled run.
 - If no file exists yet, verify the run was not started in a debug mode that disables telemetry collection.
 - Label-based bearing normalization is stable enough for analysis, but explicit bearing_key fields should be preferred whenever present.
 - Reward telemetry currently records the selected `choice_id` but not the full offered choice set. Treat "least picked" reward conclusions as selection-frequency signals, not true pick-rate/offer-rate measurements, unless offer-set logging is added.
+- Remote uploads are gated on player consent (`telemetry_consent_asked` + `telemetry_upload_enabled` in settings_store). Debug runs are still uploaded but flagged `is_debug: true`; filter them in Supabase queries for clean production data.

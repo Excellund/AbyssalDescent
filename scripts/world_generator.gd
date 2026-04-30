@@ -20,6 +20,7 @@ const REWARD_SELECTION_UI_SCRIPT := preload("res://scripts/reward_selection_ui.g
 const ENUMS := preload("res://scripts/shared/enums.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const RUN_TELEMETRY_STORE := preload("res://scripts/run_telemetry_store.gd")
+const TELEMETRY_SPIKE_SENDER_SCRIPT := preload("res://scripts/telemetry_spike_sender.gd")
 const RUN_SNAPSHOT_SERVICE := preload("res://scripts/run_snapshot_service.gd")
 const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
 const DEBUG_SETTINGS_SCRIPT := preload("res://scripts/debug_settings.gd")
@@ -203,6 +204,12 @@ var telemetry_run_id: String = ""
 var telemetry_enabled: bool = false
 var telemetry_run_finished: bool = false
 var player_defeated: bool = false
+var telemetry_spike_enabled: bool = false
+var telemetry_spike_endpoint: String = ""
+var telemetry_spike_api_key: String = ""
+var telemetry_spike_timeout_seconds: float = 8.0
+var telemetry_spike_sender: Node
+var telemetry_spike_requested: bool = false
 
 func _apply_debug_settings_from_node() -> void:
 	var debug_settings := get_node_or_null("DebugSettings")
@@ -223,10 +230,18 @@ func _apply_debug_settings_from_node() -> void:
 	mutator_override = int(debug_settings.get("mutator_override"))
 	end_screen_preview = int(debug_settings.get("end_screen_preview"))
 	victory_unlock_tier = int(debug_settings.get("victory_unlock_tier"))
+	telemetry_spike_enabled = bool(debug_settings.get("telemetry_spike_enabled"))
+	var telemetry_endpoint_value: Variant = debug_settings.get("telemetry_spike_endpoint")
+	var telemetry_api_key_value: Variant = debug_settings.get("telemetry_spike_api_key")
+	var telemetry_timeout_value: Variant = debug_settings.get("telemetry_spike_timeout_seconds")
+	telemetry_spike_endpoint = String(telemetry_endpoint_value) if telemetry_endpoint_value != null else ""
+	telemetry_spike_api_key = String(telemetry_api_key_value) if telemetry_api_key_value != null else ""
+	telemetry_spike_timeout_seconds = float(telemetry_timeout_value) if telemetry_timeout_value != null else 8.0
 
 func _ready() -> void:
 	rng.randomize()
 	_apply_debug_settings_from_node()
+	_maybe_start_telemetry_spike_probe()
 	power_registry_instance = POWER_REGISTRY.new()
 	player = get_node_or_null(player_path) as Node2D
 	if is_instance_valid(player):
@@ -1744,6 +1759,38 @@ func _is_debug_boot_session() -> bool:
 		return true
 	return false
 
+func _maybe_start_telemetry_spike_probe() -> void:
+	if telemetry_spike_requested:
+		return
+	if not settings_enabled or not telemetry_spike_enabled:
+		return
+	telemetry_spike_requested = true
+	var endpoint := telemetry_spike_endpoint.strip_edges()
+	if endpoint.is_empty():
+		push_warning("Telemetry spike probe skipped: endpoint is empty.")
+		return
+	telemetry_spike_sender = TELEMETRY_SPIKE_SENDER_SCRIPT.new()
+	add_child(telemetry_spike_sender)
+	telemetry_spike_sender.connect("probe_completed", Callable(self, "_on_telemetry_spike_probe_completed"), CONNECT_ONE_SHOT)
+	telemetry_spike_sender.call("begin_probe", {
+		"endpoint": endpoint,
+		"api_key": telemetry_spike_api_key,
+		"timeout_seconds": clampf(telemetry_spike_timeout_seconds, 3.0, 20.0),
+		"game_version": String(ProjectSettings.get_setting("application/config/version", "dev")),
+	})
+	print("Telemetry spike probe started: %s" % endpoint)
+
+func _on_telemetry_spike_probe_completed(success: bool, http_code: int, error_message: String, response_preview: String) -> void:
+	if success:
+		print("Telemetry spike probe succeeded (HTTP %d)." % http_code)
+	else:
+		push_warning("Telemetry spike probe failed (%s, HTTP %d)." % [error_message, http_code])
+	if not response_preview.is_empty():
+		print("Telemetry spike response preview: %s" % response_preview)
+	if is_instance_valid(telemetry_spike_sender):
+		telemetry_spike_sender.queue_free()
+	telemetry_spike_sender = null
+
 func _initialize_run_telemetry(allow_collection: bool) -> void:
 	telemetry_run_id = ""
 	telemetry_enabled = allow_collection
@@ -1792,6 +1839,11 @@ func _finish_active_run_telemetry(outcome: String, death_event: Dictionary = {})
 	if not death_event.is_empty():
 		summary["death_event"] = death_event.duplicate(true)
 	RUN_TELEMETRY_STORE.finish_run(telemetry_run_id, outcome, summary)
+	var run_context := _get_run_context()
+	if run_context != null and run_context.has_method("enqueue_telemetry_payload"):
+		var upload_payload := RUN_TELEMETRY_STORE.build_upload_payload(telemetry_run_id)
+		if not upload_payload.is_empty():
+			run_context.call("enqueue_telemetry_payload", upload_payload)
 	telemetry_run_finished = true
 
 func _bearing_key_from_label(label: String, fallback: String = "unknown") -> String:

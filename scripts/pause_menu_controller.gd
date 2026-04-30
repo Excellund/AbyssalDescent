@@ -22,6 +22,7 @@ var pause_master_slider: HSlider
 var pause_music_slider: HSlider
 var pause_display_mode_selector: OptionButton
 var pause_resolution_selector: OptionButton
+var pause_telemetry_upload_checkbox: CheckBox
 var pause_master_value_label: Label
 var pause_music_value_label: Label
 var pause_resolution_hint_label: Label
@@ -225,8 +226,8 @@ func _apply_pause_option_selector_theme(selector: OptionButton) -> void:
 func _build_pause_options_panel() -> Panel:
 	var panel := Panel.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.custom_minimum_size = Vector2(660.0, 520.0)
-	panel.position = Vector2(-330.0, -260.0)
+	panel.custom_minimum_size = Vector2(660.0, 620.0)
+	panel.position = Vector2(-330.0, -310.0)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.04, 0.06, 0.1, 0.95)
 	style.border_color = Color(0.44, 0.7, 0.96, 0.74)
@@ -324,9 +325,17 @@ func _build_pause_options_panel() -> Panel:
 	pause_resolution_hint_label.add_theme_color_override("font_color", Color(0.70, 0.80, 0.90, 0.76))
 	panel.add_child(pause_resolution_hint_label)
 
+	pause_telemetry_upload_checkbox = CheckBox.new()
+	pause_telemetry_upload_checkbox.text = "Send Anonymous Telemetry"
+	pause_telemetry_upload_checkbox.position = Vector2(42.0, 456.0)
+	pause_telemetry_upload_checkbox.custom_minimum_size = Vector2(576.0, 30.0)
+	pause_telemetry_upload_checkbox.add_theme_font_size_override("font_size", 18)
+	pause_telemetry_upload_checkbox.toggled.connect(_on_pause_telemetry_upload_toggled)
+	panel.add_child(pause_telemetry_upload_checkbox)
+
 	var back_button := Button.new()
 	back_button.text = "Back"
-	back_button.position = Vector2(250.0, 462.0)
+	back_button.position = Vector2(250.0, 522.0)
 	back_button.custom_minimum_size = Vector2(160.0, 42.0)
 	back_button.add_theme_font_size_override("font_size", 18)
 	back_button.pressed.connect(func() -> void:
@@ -387,22 +396,25 @@ func _get_run_context() -> Node:
 	return get_node_or_null(run_context_path)
 
 func _sync_pause_options_from_context() -> void:
-	if pause_master_slider == null or pause_music_slider == null or pause_resolution_selector == null or pause_display_mode_selector == null:
+	if pause_master_slider == null or pause_music_slider == null or pause_resolution_selector == null or pause_display_mode_selector == null or pause_telemetry_upload_checkbox == null:
 		return
 	pause_master_slider.set_block_signals(true)
 	pause_music_slider.set_block_signals(true)
 	pause_display_mode_selector.set_block_signals(true)
 	pause_resolution_selector.set_block_signals(true)
+	pause_telemetry_upload_checkbox.set_block_signals(true)
 	var run_context := _get_run_context()
 	if run_context == null:
 		pause_master_slider.value = _db_to_percent(0.0)
 		pause_music_slider.value = _db_to_percent(-20.0)
 		_populate_pause_display_mode_selector([], SETTINGS_STORE.DEFAULT_DISPLAY_MODE)
 		_populate_pause_resolution_selector([], 1920, 1080)
+		pause_telemetry_upload_checkbox.button_pressed = SETTINGS_STORE.DEFAULT_TELEMETRY_UPLOAD_ENABLED
 		pause_master_slider.set_block_signals(false)
 		pause_music_slider.set_block_signals(false)
 		pause_display_mode_selector.set_block_signals(false)
 		pause_resolution_selector.set_block_signals(false)
+		pause_telemetry_upload_checkbox.set_block_signals(false)
 		_update_pause_resolution_control_state(SETTINGS_STORE.DEFAULT_DISPLAY_MODE)
 		_update_pause_option_labels()
 		return
@@ -416,10 +428,12 @@ func _sync_pause_options_from_context() -> void:
 		int(run_context.get("resolution_width")),
 		int(run_context.get("resolution_height"))
 	)
+	pause_telemetry_upload_checkbox.button_pressed = bool(run_context.get("telemetry_upload_enabled"))
 	pause_master_slider.set_block_signals(false)
 	pause_music_slider.set_block_signals(false)
 	pause_display_mode_selector.set_block_signals(false)
 	pause_resolution_selector.set_block_signals(false)
+	pause_telemetry_upload_checkbox.set_block_signals(false)
 	_update_pause_resolution_control_state(String(run_context.get("display_mode")))
 	_update_pause_option_labels()
 
@@ -449,6 +463,11 @@ func _on_pause_display_mode_selected(index: int) -> void:
 	if run_context != null:
 		run_context.set_display_mode(selected_mode, true)
 	_sync_pause_options_from_context()
+
+func _on_pause_telemetry_upload_toggled(enabled: bool) -> void:
+	var run_context := _get_run_context()
+	if run_context != null and run_context.has_method("set_telemetry_upload_enabled"):
+		run_context.call("set_telemetry_upload_enabled", enabled, true, true)
 
 func _apply_pause_options(master_percent: float, music_percent: float) -> void:
 	var master_db := _percent_to_db(master_percent)

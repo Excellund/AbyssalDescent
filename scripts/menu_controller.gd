@@ -39,9 +39,11 @@ var master_slider: HSlider
 var music_slider: HSlider
 var display_mode_selector: OptionButton
 var resolution_selector: OptionButton
+var telemetry_upload_checkbox: CheckBox
 var master_value_label: Label
 var music_value_label: Label
 var resolution_hint_label: Label
+var telemetry_consent_layer: Control
 var menu_music_player: AudioStreamPlayer
 var primary_run_button: Button
 var difficulty_tier_buttons: Array[Button] = []
@@ -65,6 +67,7 @@ func _ready() -> void:
 	_apply_menu_layout()
 	_play_menu_intro()
 	_sync_options_from_context()
+	_maybe_show_telemetry_consent_prompt()
 	_start_menu_music()
 
 func _notification(what: int) -> void:
@@ -101,6 +104,8 @@ func _exit_tree() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel") and options_panel != null and options_panel.visible:
+		if telemetry_consent_layer != null and telemetry_consent_layer.visible:
+			return
 		_show_root_panel()
 		get_viewport().set_input_as_handled()
 		return
@@ -242,6 +247,10 @@ func _build_ui() -> void:
 	difficulty_selector_panel = _build_difficulty_selector_panel()
 	difficulty_selector_panel.visible = false
 	add_child(difficulty_selector_panel)
+
+	telemetry_consent_layer = _build_telemetry_consent_layer()
+	telemetry_consent_layer.visible = false
+	add_child(telemetry_consent_layer)
 	_show_root_panel(false)
 
 func _apply_menu_layout() -> void:
@@ -252,7 +261,7 @@ func _apply_menu_layout() -> void:
 	if root_panel != null:
 		_set_centered_panel_layout(root_panel, Vector2(980.0, 640.0), fit_scale, viewport_size)
 	if options_panel != null:
-		_set_centered_panel_layout(options_panel, Vector2(760.0, 548.0), fit_scale, viewport_size)
+		_set_centered_panel_layout(options_panel, Vector2(760.0, 700.0), fit_scale, viewport_size)
 	if glossary_panel != null:
 		_set_centered_panel_layout(glossary_panel, Vector2(980.0, 680.0), fit_scale, viewport_size)
 	if difficulty_selector_panel != null:
@@ -476,8 +485,8 @@ func _animate_panel_in(panel: Control, offset: Vector2) -> void:
 func _build_options_panel() -> Panel:
 	var panel := Panel.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.position = Vector2(-380.0, -250.0)
-	panel.custom_minimum_size = Vector2(760.0, 548.0)
+	panel.position = Vector2(-380.0, -350.0)
+	panel.custom_minimum_size = Vector2(760.0, 700.0)
 	panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.04, 0.06, 0.1, 0.97), Color(0.44, 0.7, 0.96, 0.74), 20, 2))
 
 	var layout := MarginContainer.new()
@@ -511,11 +520,23 @@ func _build_options_panel() -> Panel:
 	accent.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	stack.add_child(accent)
 
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	stack.add_child(scroll)
+
+	var scroll_content := MarginContainer.new()
+	scroll_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll_content.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	scroll_content.add_theme_constant_override("margin_right", 18)
+	scroll.add_child(scroll_content)
+
 	var rows := VBoxContainer.new()
 	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	rows.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	rows.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	rows.add_theme_constant_override("separation", 18)
-	stack.add_child(rows)
+	scroll_content.add_child(rows)
 
 	var master_row := VBoxContainer.new()
 	master_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -622,6 +643,27 @@ func _build_options_panel() -> Panel:
 	resolution_hint_label.add_theme_font_size_override("font_size", 14)
 	resolution_hint_label.add_theme_color_override("font_color", Color(0.70, 0.80, 0.90, 0.76))
 	resolution_row.add_child(resolution_hint_label)
+
+	var telemetry_row := VBoxContainer.new()
+	telemetry_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	telemetry_row.add_theme_constant_override("separation", 6)
+	rows.add_child(telemetry_row)
+
+	telemetry_upload_checkbox = CheckBox.new()
+	telemetry_upload_checkbox.text = "Send Anonymous Telemetry"
+	telemetry_upload_checkbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	telemetry_upload_checkbox.add_theme_font_size_override("font_size", 18)
+	telemetry_upload_checkbox.button_pressed = false
+	telemetry_upload_checkbox.toggled.connect(_on_telemetry_upload_toggled)
+	telemetry_row.add_child(telemetry_upload_checkbox)
+
+	var telemetry_hint := Label.new()
+	telemetry_hint.text = "Uploads run summaries in the background to help tune balance."
+	telemetry_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	telemetry_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	telemetry_hint.add_theme_font_size_override("font_size", 14)
+	telemetry_hint.add_theme_color_override("font_color", Color(0.70, 0.80, 0.90, 0.76))
+	telemetry_row.add_child(telemetry_hint)
 
 	var back_button := _make_panel_back_button()
 	back_button.pressed.connect(func() -> void:
@@ -905,6 +947,13 @@ func _on_display_mode_selected(index: int) -> void:
 		run_context.set_display_mode(selected_mode, true)
 	_sync_options_from_context()
 
+func _on_telemetry_upload_toggled(enabled: bool) -> void:
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context == null:
+		return
+	if run_context.has_method("set_telemetry_upload_enabled"):
+		run_context.call("set_telemetry_upload_enabled", enabled, true, true)
+
 func _sync_options_from_context() -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if master_slider != null:
@@ -915,11 +964,15 @@ func _sync_options_from_context() -> void:
 		display_mode_selector.set_block_signals(true)
 	if resolution_selector != null:
 		resolution_selector.set_block_signals(true)
+	if telemetry_upload_checkbox != null:
+		telemetry_upload_checkbox.set_block_signals(true)
 	if run_context == null:
 		master_slider.value = _db_to_percent(0.0)
 		music_slider.value = _db_to_percent(-20.0)
 		_populate_display_mode_selector([], SETTINGS_STORE.DEFAULT_DISPLAY_MODE)
 		_populate_resolution_selector([], SETTINGS_STORE.DEFAULT_RESOLUTION_WIDTH, SETTINGS_STORE.DEFAULT_RESOLUTION_HEIGHT)
+		if telemetry_upload_checkbox != null:
+			telemetry_upload_checkbox.button_pressed = SETTINGS_STORE.DEFAULT_TELEMETRY_UPLOAD_ENABLED
 		if master_slider != null:
 			master_slider.set_block_signals(false)
 		if music_slider != null:
@@ -928,6 +981,8 @@ func _sync_options_from_context() -> void:
 			display_mode_selector.set_block_signals(false)
 		if resolution_selector != null:
 			resolution_selector.set_block_signals(false)
+		if telemetry_upload_checkbox != null:
+			telemetry_upload_checkbox.set_block_signals(false)
 		_update_resolution_control_state(SETTINGS_STORE.DEFAULT_DISPLAY_MODE)
 		_update_option_labels()
 		return
@@ -941,6 +996,8 @@ func _sync_options_from_context() -> void:
 		int(run_context.get("resolution_width")),
 		int(run_context.get("resolution_height"))
 	)
+	if telemetry_upload_checkbox != null:
+		telemetry_upload_checkbox.button_pressed = bool(run_context.get("telemetry_upload_enabled"))
 	if master_slider != null:
 		master_slider.set_block_signals(false)
 	if music_slider != null:
@@ -949,8 +1006,99 @@ func _sync_options_from_context() -> void:
 		display_mode_selector.set_block_signals(false)
 	if resolution_selector != null:
 		resolution_selector.set_block_signals(false)
+	if telemetry_upload_checkbox != null:
+		telemetry_upload_checkbox.set_block_signals(false)
 	_update_resolution_control_state(String(run_context.get("display_mode")))
 	_update_option_labels()
+
+func _build_telemetry_consent_layer() -> Control:
+	var layer := Control.new()
+	layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.mouse_filter = Control.MOUSE_FILTER_STOP
+
+	var dim := ColorRect.new()
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0.01, 0.02, 0.04, 0.72)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	layer.add_child(dim)
+
+	var panel := Panel.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.custom_minimum_size = Vector2(640.0, 300.0)
+	panel.position = Vector2(-320.0, -150.0)
+	panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.05, 0.08, 0.12, 0.97), Color(0.44, 0.7, 0.96, 0.74), 18, 2))
+	layer.add_child(panel)
+
+	var content := MarginContainer.new()
+	content.set_anchors_preset(Control.PRESET_FULL_RECT)
+	content.add_theme_constant_override("margin_left", 30)
+	content.add_theme_constant_override("margin_right", 30)
+	content.add_theme_constant_override("margin_top", 26)
+	content.add_theme_constant_override("margin_bottom", 24)
+	panel.add_child(content)
+
+	var stack := VBoxContainer.new()
+	stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	stack.add_theme_constant_override("separation", 14)
+	content.add_child(stack)
+
+	var title := Label.new()
+	title.text = "Help Improve Balance"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 34)
+	title.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 0.98))
+	stack.add_child(title)
+
+	var body := Label.new()
+	body.text = "Allow anonymous run telemetry uploads? This sends run outcomes and combat summary data only."
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	body.add_theme_font_size_override("font_size", 18)
+	body.add_theme_color_override("font_color", Color(0.82, 0.9, 0.98, 0.94))
+	stack.add_child(body)
+
+	var actions := HBoxContainer.new()
+	actions.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	actions.add_theme_constant_override("separation", 14)
+	stack.add_child(actions)
+
+	var allow_button := _make_menu_button("Allow", true)
+	allow_button.custom_minimum_size = Vector2(0.0, 56.0)
+	allow_button.pressed.connect(func() -> void:
+		var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+		if run_context != null and run_context.has_method("set_telemetry_upload_enabled"):
+			run_context.call("set_telemetry_upload_enabled", true, true, true)
+		_sync_options_from_context()
+		if telemetry_consent_layer != null:
+			telemetry_consent_layer.visible = false
+	)
+	actions.add_child(allow_button)
+
+	var not_now_button := _make_menu_button("Not Now")
+	not_now_button.custom_minimum_size = Vector2(0.0, 56.0)
+	not_now_button.pressed.connect(func() -> void:
+		var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+		if run_context != null and run_context.has_method("set_telemetry_upload_enabled"):
+			run_context.call("set_telemetry_upload_enabled", false, true, true)
+		_sync_options_from_context()
+		if telemetry_consent_layer != null:
+			telemetry_consent_layer.visible = false
+	)
+	actions.add_child(not_now_button)
+
+	return layer
+
+func _maybe_show_telemetry_consent_prompt() -> void:
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context == null:
+		return
+	if not run_context.has_method("should_prompt_telemetry_consent"):
+		return
+	if not bool(run_context.call("should_prompt_telemetry_consent")):
+		return
+	if telemetry_consent_layer != null:
+		telemetry_consent_layer.visible = true
 
 func _apply_options(master_percent: float, music_percent: float) -> void:
 	var master_db := _percent_to_db(master_percent)

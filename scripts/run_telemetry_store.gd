@@ -175,6 +175,58 @@ static func get_recent_runs(max_runs: int = 10, max_age_days: int = 21, include_
 static func _increment_counter(counter: Dictionary, key: String, amount: int = 1) -> void:
 	counter[key] = int(counter.get(key, 0)) + amount
 
+static func get_run_by_id(run_id: String) -> Dictionary:
+	if run_id.is_empty():
+		return {}
+	var store := load_store()
+	var runs := store.get("runs", []) as Array
+	for run_entry_variant in runs:
+		var run_entry := run_entry_variant as Dictionary
+		if String(run_entry.get("id", "")) == run_id:
+			return run_entry.duplicate(true)
+	return {}
+
+static func build_upload_payload(run_id: String) -> Dictionary:
+	var run_entry := get_run_by_id(run_id)
+	if run_entry.is_empty():
+		return {}
+	var damage_by_source: Dictionary = {}
+	var damage_by_ability: Dictionary = {}
+	for damage_variant in run_entry.get("damage_events", []):
+		var damage_entry := damage_variant as Dictionary
+		_increment_counter(damage_by_source, String(damage_entry.get("source", "unknown")))
+		_increment_counter(damage_by_ability, String(damage_entry.get("ability", "unknown")))
+	var room_entries := run_entry.get("room_entries", []) as Array
+	var reward_choices := run_entry.get("reward_choices", []) as Array
+	var door_choices := run_entry.get("door_choices", []) as Array
+	var damage_events := run_entry.get("damage_events", []) as Array
+	return {
+		"run_id": String(run_entry.get("id", "")),
+		"started_at_unix": int(run_entry.get("started_at_unix", 0)),
+		"ended_at_unix": int(run_entry.get("ended_at_unix", 0)),
+		"game_version": String(run_entry.get("game_version", _current_game_version())),
+		"difficulty_tier": int(run_entry.get("difficulty_tier", 0)),
+		"run_mode": int(run_entry.get("run_mode", 0)),
+		"outcome": String(run_entry.get("outcome", "unknown")),
+		"max_depth": int(run_entry.get("max_depth", 0)),
+		"rooms_cleared": int(run_entry.get("rooms_cleared", 0)),
+		"is_debug": bool(run_entry.get("is_debug", false)),
+		"death_event": (run_entry.get("death_event", {}) as Dictionary).duplicate(true),
+		"damage_events": damage_events.duplicate(true),
+		"reward_choices": reward_choices.duplicate(true),
+		"room_entries": room_entries.duplicate(true),
+		"door_choices": door_choices.duplicate(true),
+		"aggregate": {
+			"room_entry_count": room_entries.size(),
+			"reward_choice_count": reward_choices.size(),
+			"door_choice_count": door_choices.size(),
+			"damage_event_count": damage_events.size(),
+			"damage_by_source": damage_by_source,
+			"damage_by_ability": damage_by_ability
+		},
+		"upload_source": "game_client"
+	}
+
 static func build_balance_summary(max_runs: int = 10, max_age_days: int = 21, include_debug: bool = false, game_version: String = "") -> Dictionary:
 	var recent_runs := get_recent_runs(max_runs, max_age_days, include_debug, game_version)
 	var damage_by_source: Dictionary = {}

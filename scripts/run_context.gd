@@ -5,6 +5,7 @@ const MODE_STANDARD := "standard"
 const MODE_ENDLESS := "endless"
 const SETTINGS_STORE := preload("res://scripts/settings_store.gd")
 const META_PROGRESS_STORE := preload("res://scripts/meta_progress_store.gd")
+const TELEMETRY_UPLOADER_SCRIPT := preload("res://scripts/telemetry_uploader.gd")
 const ACTIVE_RUN_SAVE_PATH := "user://active_run.save"
 const ACTIVE_RUN_VERSION := 1
 const AUDIO_VOLUME_MIN_DB := -80.0
@@ -31,7 +32,10 @@ var base_viewport_height: int = 1080
 var display_mode: String = SETTINGS_STORE.DEFAULT_DISPLAY_MODE
 var resolution_width: int = SETTINGS_STORE.DEFAULT_RESOLUTION_WIDTH
 var resolution_height: int = SETTINGS_STORE.DEFAULT_RESOLUTION_HEIGHT
+var telemetry_upload_enabled: bool = SETTINGS_STORE.DEFAULT_TELEMETRY_UPLOAD_ENABLED
+var telemetry_consent_asked: bool = SETTINGS_STORE.DEFAULT_TELEMETRY_CONSENT_ASKED
 var resume_saved_run_requested: bool = false
+var telemetry_uploader: Node
 
 ## Meta-progression state
 var meta_progress_profile: Dictionary = {}
@@ -46,6 +50,9 @@ func _ready() -> void:
 	load_meta_progress()
 	_apply_master_volume()
 	_apply_resolution()
+	telemetry_uploader = TELEMETRY_UPLOADER_SCRIPT.new()
+	add_child(telemetry_uploader)
+	telemetry_uploader.call("initialize", self)
 
 func set_run_mode(mode: Variant) -> void:
 	if mode is int:
@@ -73,13 +80,15 @@ func load_settings() -> void:
 	)
 	resolution_width = int(normalized.get("width", resolution_width))
 	resolution_height = int(normalized.get("height", resolution_height))
+	telemetry_upload_enabled = bool(loaded.get("telemetry_upload_enabled", telemetry_upload_enabled))
+	telemetry_consent_asked = bool(loaded.get("telemetry_consent_asked", telemetry_consent_asked))
 
 func set_audio_settings(master_db: float, music_db: float, persist: bool = true) -> void:
 	master_volume_db = clampf(master_db, AUDIO_VOLUME_MIN_DB, AUDIO_VOLUME_MAX_DB)
 	music_volume_db = clampf(music_db, AUDIO_VOLUME_MIN_DB, AUDIO_VOLUME_MAX_DB)
 	_apply_master_volume()
 	if persist:
-		SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, resolution_width, resolution_height, display_mode)
+		SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, resolution_width, resolution_height, display_mode, telemetry_upload_enabled, telemetry_consent_asked)
 
 func set_resolution_settings(width: int, height: int, persist: bool = true) -> void:
 	var normalized := _normalize_resolution(width, height)
@@ -87,13 +96,47 @@ func set_resolution_settings(width: int, height: int, persist: bool = true) -> v
 	resolution_height = int(normalized.get("height", resolution_height))
 	_apply_resolution()
 	if persist:
-		SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, resolution_width, resolution_height, display_mode)
+		SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, resolution_width, resolution_height, display_mode, telemetry_upload_enabled, telemetry_consent_asked)
 
 func set_display_mode(mode: String, persist: bool = true) -> void:
 	display_mode = _normalize_display_mode(mode)
 	_apply_resolution()
 	if persist:
-		SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, resolution_width, resolution_height, display_mode)
+		SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, resolution_width, resolution_height, display_mode, telemetry_upload_enabled, telemetry_consent_asked)
+
+func is_telemetry_upload_enabled() -> bool:
+	return telemetry_upload_enabled
+
+func should_prompt_telemetry_consent() -> bool:
+	return not telemetry_consent_asked
+
+func set_telemetry_upload_enabled(enabled: bool, persist: bool = true, mark_asked: bool = true) -> void:
+	telemetry_upload_enabled = enabled
+	if mark_asked:
+		telemetry_consent_asked = true
+	if persist:
+		SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, resolution_width, resolution_height, display_mode, telemetry_upload_enabled, telemetry_consent_asked)
+
+func mark_telemetry_consent_asked(persist: bool = true) -> void:
+	telemetry_consent_asked = true
+	if persist:
+		SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, resolution_width, resolution_height, display_mode, telemetry_upload_enabled, telemetry_consent_asked)
+
+func enqueue_telemetry_payload(payload: Dictionary) -> void:
+	if payload.is_empty():
+		return
+	if telemetry_uploader == null:
+		return
+	if not telemetry_upload_enabled:
+		return
+	telemetry_uploader.call("enqueue_payload", payload)
+
+func get_pending_telemetry_upload_count() -> int:
+	if telemetry_uploader == null:
+		return 0
+	if not telemetry_uploader.has_method("pending_count"):
+		return 0
+	return int(telemetry_uploader.call("pending_count"))
 
 func get_display_mode_options() -> Array[Dictionary]:
 	var options: Array[Dictionary] = []
