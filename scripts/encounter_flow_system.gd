@@ -26,41 +26,12 @@ func resolve_room_cleared(in_boss_room: bool, pending_room_reward: int, rooms_cl
 
 	var progress := advance_room_progress(rooms_cleared, room_depth, encounter_count)
 	var reward_mode: int = ENCOUNTER_CONTRACTS.normalize_reward_mode(pending_room_reward)
-	if reward_mode == ENUMS.RewardMode.BOON:
-		return ENCOUNTER_CONTRACTS.room_cleared_outcome(
-			false,
-			ENUMS.RewardMode.BOON,
-			false,
-			ENUMS.RewardMode.NONE,
-			int(progress["rooms_cleared"]),
-			int(progress["room_depth"]),
-			bool(progress["boss_unlocked"])
-		)
-	if reward_mode == ENUMS.RewardMode.MISSION:
-		return ENCOUNTER_CONTRACTS.room_cleared_outcome(
-			false,
-			ENUMS.RewardMode.MISSION,
-			false,
-			ENUMS.RewardMode.NONE,
-			int(progress["rooms_cleared"]),
-			int(progress["room_depth"]),
-			bool(progress["boss_unlocked"])
-		)
-	if reward_mode == ENUMS.RewardMode.ARCANA:
-		return ENCOUNTER_CONTRACTS.room_cleared_outcome(
-			false,
-			ENUMS.RewardMode.ARCANA,
-			false,
-			ENUMS.RewardMode.NONE,
-			int(progress["rooms_cleared"]),
-			int(progress["room_depth"]),
-			bool(progress["boss_unlocked"])
-		)
-
+	var opens_reward_selection := reward_mode == ENUMS.RewardMode.BOON or reward_mode == ENUMS.RewardMode.MISSION or reward_mode == ENUMS.RewardMode.ARCANA
+	var open_reward_mode := reward_mode if opens_reward_selection else ENUMS.RewardMode.NONE
 	return ENCOUNTER_CONTRACTS.room_cleared_outcome(
 		false,
-		ENUMS.RewardMode.NONE,
-		true,
+		open_reward_mode,
+		not opens_reward_selection,
 		ENUMS.RewardMode.NONE,
 		int(progress["rooms_cleared"]),
 		int(progress["room_depth"]),

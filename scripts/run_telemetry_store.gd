@@ -80,6 +80,18 @@ static func _find_run_index(runs: Array, run_id: String) -> int:
 			return index
 	return -1
 
+static func _mutate_run_entry(run_id: String, mutator: Callable) -> bool:
+	var store := load_store()
+	var runs := store.get("runs", []) as Array
+	var run_index := _find_run_index(runs, run_id)
+	if run_index < 0:
+		return false
+	var run_entry := (runs[run_index] as Dictionary).duplicate(true)
+	mutator.call(run_entry)
+	runs[run_index] = run_entry
+	store["runs"] = runs
+	return save_store(store)
+
 static func _append_limited_event(run_entry: Dictionary, key: String, event_data: Dictionary, max_events: int) -> void:
 	var events := run_entry.get(key, []) as Array
 	events.append(event_data)
@@ -90,94 +102,52 @@ static func _append_limited_event(run_entry: Dictionary, key: String, event_data
 static func append_damage_event(run_id: String, event_data: Dictionary) -> void:
 	if run_id.is_empty():
 		return
-	var store := load_store()
-	var runs := store.get("runs", []) as Array
-	var run_index := _find_run_index(runs, run_id)
-	if run_index < 0:
-		return
-	var run_entry := (runs[run_index] as Dictionary).duplicate(true)
-	_append_limited_event(run_entry, "damage_events", event_data, MAX_DAMAGE_EVENTS_PER_RUN)
-	run_entry["max_depth"] = maxi(int(run_entry.get("max_depth", 0)), int(event_data.get("room_depth", 0)))
-	runs[run_index] = run_entry
-	store["runs"] = runs
-	save_store(store)
+	_mutate_run_entry(run_id, func(run_entry: Dictionary) -> void:
+		_append_limited_event(run_entry, "damage_events", event_data, MAX_DAMAGE_EVENTS_PER_RUN)
+		run_entry["max_depth"] = maxi(int(run_entry.get("max_depth", 0)), int(event_data.get("room_depth", 0)))
+	)
 
 static func append_reward_choice(run_id: String, event_data: Dictionary) -> void:
 	if run_id.is_empty():
 		return
-	var store := load_store()
-	var runs := store.get("runs", []) as Array
-	var run_index := _find_run_index(runs, run_id)
-	if run_index < 0:
-		return
-	var run_entry := (runs[run_index] as Dictionary).duplicate(true)
-	_append_limited_event(run_entry, "reward_choices", event_data, 180)
-	runs[run_index] = run_entry
-	store["runs"] = runs
-	save_store(store)
+	_mutate_run_entry(run_id, func(run_entry: Dictionary) -> void:
+		_append_limited_event(run_entry, "reward_choices", event_data, 180)
+	)
 
 static func append_room_entry(run_id: String, event_data: Dictionary) -> void:
 	if run_id.is_empty():
 		return
-	var store := load_store()
-	var runs := store.get("runs", []) as Array
-	var run_index := _find_run_index(runs, run_id)
-	if run_index < 0:
-		return
-	var run_entry := (runs[run_index] as Dictionary).duplicate(true)
-	_append_limited_event(run_entry, "room_entries", event_data, 220)
-	run_entry["max_depth"] = maxi(int(run_entry.get("max_depth", 0)), int(event_data.get("room_depth", 0)))
-	run_entry["rooms_cleared"] = maxi(int(run_entry.get("rooms_cleared", 0)), int(event_data.get("rooms_cleared", 0)))
-	runs[run_index] = run_entry
-	store["runs"] = runs
-	save_store(store)
+	_mutate_run_entry(run_id, func(run_entry: Dictionary) -> void:
+		_append_limited_event(run_entry, "room_entries", event_data, 220)
+		run_entry["max_depth"] = maxi(int(run_entry.get("max_depth", 0)), int(event_data.get("room_depth", 0)))
+		run_entry["rooms_cleared"] = maxi(int(run_entry.get("rooms_cleared", 0)), int(event_data.get("rooms_cleared", 0)))
+	)
 
 static func append_door_choice(run_id: String, event_data: Dictionary) -> void:
 	if run_id.is_empty():
 		return
-	var store := load_store()
-	var runs := store.get("runs", []) as Array
-	var run_index := _find_run_index(runs, run_id)
-	if run_index < 0:
-		return
-	var run_entry := (runs[run_index] as Dictionary).duplicate(true)
-	_append_limited_event(run_entry, "door_choices", event_data, 180)
-	runs[run_index] = run_entry
-	store["runs"] = runs
-	save_store(store)
+	_mutate_run_entry(run_id, func(run_entry: Dictionary) -> void:
+		_append_limited_event(run_entry, "door_choices", event_data, 180)
+	)
 
 static func mark_run_debug(run_id: String) -> void:
 	if run_id.is_empty():
 		return
-	var store := load_store()
-	var runs := store.get("runs", []) as Array
-	var run_index := _find_run_index(runs, run_id)
-	if run_index < 0:
-		return
-	var run_entry := (runs[run_index] as Dictionary).duplicate(true)
-	run_entry["is_debug"] = true
-	runs[run_index] = run_entry
-	store["runs"] = runs
-	save_store(store)
+	_mutate_run_entry(run_id, func(run_entry: Dictionary) -> void:
+		run_entry["is_debug"] = true
+	)
 
 static func finish_run(run_id: String, outcome: String, summary: Dictionary = {}) -> void:
 	if run_id.is_empty():
 		return
-	var store := load_store()
-	var runs := store.get("runs", []) as Array
-	var run_index := _find_run_index(runs, run_id)
-	if run_index < 0:
-		return
-	var run_entry := (runs[run_index] as Dictionary).duplicate(true)
-	run_entry["ended_at_unix"] = _now_unix()
-	run_entry["outcome"] = outcome
-	run_entry["max_depth"] = maxi(int(run_entry.get("max_depth", 0)), int(summary.get("max_depth", 0)))
-	run_entry["rooms_cleared"] = maxi(int(run_entry.get("rooms_cleared", 0)), int(summary.get("rooms_cleared", 0)))
-	if summary.has("death_event"):
-		run_entry["death_event"] = (summary.get("death_event", {}) as Dictionary).duplicate(true)
-	runs[run_index] = run_entry
-	store["runs"] = runs
-	save_store(store)
+	_mutate_run_entry(run_id, func(run_entry: Dictionary) -> void:
+		run_entry["ended_at_unix"] = _now_unix()
+		run_entry["outcome"] = outcome
+		run_entry["max_depth"] = maxi(int(run_entry.get("max_depth", 0)), int(summary.get("max_depth", 0)))
+		run_entry["rooms_cleared"] = maxi(int(run_entry.get("rooms_cleared", 0)), int(summary.get("rooms_cleared", 0)))
+		if summary.has("death_event"):
+			run_entry["death_event"] = (summary.get("death_event", {}) as Dictionary).duplicate(true)
+	)
 
 static func get_recent_runs(max_runs: int = 10, max_age_days: int = 21, include_debug: bool = false, game_version: String = "") -> Array[Dictionary]:
 	var store := load_store()
