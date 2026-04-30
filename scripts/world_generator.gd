@@ -521,9 +521,6 @@ func _apply_debug_mutator_override(profile: Dictionary) -> Dictionary:
 	if mutator.is_empty():
 		return profile
 	return encounter_profile_builder.apply_mutator_variant_to_profile(profile, mutator, room_depth)
-	var modified := profile.duplicate(true)
-	ENCOUNTER_CONTRACTS.profile_set_enemy_mutator(modified, mutator)
-	return modified
 
 func _reset_for_debug_jump() -> void:
 	if is_instance_valid(reward_selection_ui):
@@ -1295,12 +1292,6 @@ func _is_endless_mode() -> bool:
 	if run_context == null:
 		return false
 	return bool(run_context.is_endless_mode())
-	var mode_value: Variant = run_context.get("run_mode")
-	if mode_value == null:
-		return false
-	if mode_value is int:
-		return int(mode_value) == ENUMS.RunMode.ENDLESS
-	return String(mode_value).to_lower() == "endless"
 
 func _sync_audio_settings_from_context() -> void:
 	var run_context := _get_run_context()

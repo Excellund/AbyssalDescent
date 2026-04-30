@@ -134,6 +134,16 @@ func play_impact_light(epicenter_global: Vector2, radius: float = 60.0) -> void:
 	# Light flash
 	play_damage_flash()
 
+func play_impact_medium(epicenter_global: Vector2, radius: float = 80.0) -> void:
+	"""Medium impact feedback: stronger than light, cleaner than heavy (contact hits)."""
+	play_world_ring(epicenter_global, radius, Color(0.92, 0.74, 0.5, 0.56), 0.2)
+	if damage_flash_rect != null:
+		if damage_flash_tween != null and damage_flash_tween.is_valid():
+			damage_flash_tween.kill()
+		damage_flash_rect.modulate.a = damage_flash_alpha * 1.1
+		damage_flash_tween = create_tween()
+		damage_flash_tween.tween_property(damage_flash_rect, "modulate:a", 0.0, 0.18)
+
 func play_impact_heavy(epicenter_global: Vector2, radius: float = 100.0) -> void:
 	"""Heavy impact feedback: layered rings + strong flash + pulsing afterglow (abilities)."""
 	# Inner danger pulse ring
