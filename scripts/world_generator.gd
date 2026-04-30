@@ -392,7 +392,7 @@ func start_run_with_preset(preset_key: String) -> Dictionary:
 			preset = DEBUG_POWER_PRESET_HIGH_RANGE_DPS
 		_:
 			preset = DEBUG_POWER_PRESET_NONE
-	return start_run_with_powers(_get_debug_power_preset_ids(preset))
+	return start_run_with_powers(_get_debug_power_preset_ids(preset, _debug_depth_for_power_preset()))
 
 func get_balance_telemetry(max_runs: int = 10, max_age_days: int = 21, include_debug: bool = false, game_version: String = "") -> Dictionary:
 	return RUN_TELEMETRY_STORE.build_balance_summary(max_runs, max_age_days, include_debug, game_version)
@@ -572,14 +572,25 @@ func _apply_debug_start_powers_if_needed() -> void:
 	if not apply_test_powers_on_start:
 		return
 	var ids: Array[String] = []
-	ids.append_array(_get_debug_power_preset_ids(start_power_preset))
+	ids.append_array(_get_debug_power_preset_ids(start_power_preset, start_depth))
 	for id in start_power_ids:
 		ids.append(String(id))
 	if ids.is_empty():
 		return
 	start_run_with_powers(ids)
 
-func _get_debug_power_preset_ids(preset: int) -> Array[String]:
+func _debug_depth_for_power_preset() -> int:
+	if settings_enabled:
+		return maxi(1, start_depth)
+	if room_depth > 0:
+		return room_depth
+	return 1
+
+func _debug_preset_power_count_for_depth(depth: int) -> int:
+	var clamped_depth := maxi(1, depth)
+	return 2 + int(floor(float(clamped_depth - 1) / 2.0))
+
+func _get_debug_power_preset_pool(preset: int) -> Array[String]:
 	match preset:
 		DEBUG_POWER_PRESET_DASH_SPECIALIST:
 			return [
@@ -615,6 +626,17 @@ func _get_debug_power_preset_ids(preset: int) -> Array[String]:
 			]
 		_:
 			return []
+
+func _get_debug_power_preset_ids(preset: int, depth: int = -1) -> Array[String]:
+	var pool := _get_debug_power_preset_pool(preset)
+	if pool.is_empty():
+		return []
+	var resolved_depth := depth if depth > 0 else _debug_depth_for_power_preset()
+	var target_count := mini(pool.size(), _debug_preset_power_count_for_depth(resolved_depth))
+	var selected: Array[String] = []
+	for i in range(target_count):
+		selected.append(pool[i])
+	return selected
 
 func _parse_power_command(command: String) -> Array[String]:
 	var normalized := command.to_lower()
@@ -1073,7 +1095,7 @@ func _keep_player_inside_camera_view() -> void:
 func _update_encounter_state() -> void:
 	if choosing_next_room or run_cleared:
 		return
-	if active_objective_kind == "survival" or active_objective_kind == "priority_target":
+	if active_objective_kind == "survival" or active_objective_kind == "priority_target" or active_objective_kind == "control":
 		return
 	if active_room_enemy_count > 0:
 		return

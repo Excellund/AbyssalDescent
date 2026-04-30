@@ -91,10 +91,10 @@ func _begin_control_objective(profile: Dictionary) -> void:
 	world.objective_time_left = ENCOUNTER_CONTRACTS.profile_objective_duration(profile)
 	world.objective_spawn_interval = ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
 	var objective_pressure_mult: float = world._objective_pressure_mult()
-	world.objective_spawn_timer = maxf(0.7, world.objective_spawn_interval * clampf(1.25 - objective_pressure_mult * 0.2, 0.86, 1.16))
+	world.objective_spawn_timer = maxf(1.0, world.objective_spawn_interval * clampf(1.36 - objective_pressure_mult * 0.16, 0.98, 1.24))
 	world.objective_spawn_batch = ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
 	world.objective_spawn_batch = maxi(1, int(round(float(world.objective_spawn_batch) * objective_pressure_mult)))
-	world.objective_max_enemies = 7 + int(floor(float(world.room_depth) * 0.4))
+	world.objective_max_enemies = 5 + int(floor(float(world.room_depth) * 0.32))
 	world.objective_max_enemies = maxi(5, int(round(float(world.objective_max_enemies) * objective_pressure_mult)))
 	world.objective_control_anchor = Vector2.ZERO
 	world.objective_control_radius = ENCOUNTER_CONTRACTS.profile_objective_zone_radius(profile)
@@ -199,31 +199,39 @@ func update_control_objective_state(delta: float) -> void:
 	if world.choosing_next_room or world.run_cleared:
 		return
 	var difficulty_rank := DIFFICULTY_CONFIG.get_difficulty_rank(int(world.current_difficulty_tier))
-	var progress_gain_mult := 1.35
-	var contested_decay_mult := 0.05
-	var out_of_zone_decay_mult := 0.8
+	var progress_gain_mult := 1.36
+	var contested_decay_mult := 0.08
+	var out_of_zone_decay_mult := 0.72
 	if difficulty_rank == 0:
-		progress_gain_mult = 1.12
-		contested_decay_mult = 0.16
-		out_of_zone_decay_mult = 1.0
+		progress_gain_mult = 1.5
+		contested_decay_mult = 0.05
+		out_of_zone_decay_mult = 0.6
 	elif difficulty_rank == 1:
-		progress_gain_mult = 1.2
-		contested_decay_mult = 0.12
-		out_of_zone_decay_mult = 0.92
+		progress_gain_mult = 1.46
+		contested_decay_mult = 0.06
+		out_of_zone_decay_mult = 0.64
+	elif difficulty_rank == 2:
+		progress_gain_mult = 1.4
+		contested_decay_mult = 0.07
+		out_of_zone_decay_mult = 0.68
+	elif difficulty_rank == 3:
+		progress_gain_mult = 1.3
+		contested_decay_mult = 0.09
+		out_of_zone_decay_mult = 0.76
 	if world.objective_time_left > 0.0:
 		world.objective_time_left = maxf(0.0, world.objective_time_left - delta)
 	if world.objective_time_left <= 0.0 and not world.objective_overtime:
 		world.objective_overtime = true
-		world.objective_spawn_interval = maxf(1.05, world.objective_spawn_interval * 0.88)
-		world.objective_spawn_batch = mini(5, world.objective_spawn_batch + 1)
-		world.objective_spawn_timer = 0.45
+		world.objective_spawn_interval = maxf(1.2, world.objective_spawn_interval * 0.95)
+		world.objective_spawn_batch = mini(4, world.objective_spawn_batch + 1)
+		world.objective_spawn_timer = 0.8
 		world.hud.show_banner("Line Breaking", "Zone pressure escalating")
 	var has_player := is_instance_valid(world.player)
 	var anchor: Vector2 = world.objective_control_anchor
 	var radius := maxf(1.0, world.objective_control_radius)
 	world.objective_control_player_inside = has_player and world.player.global_position.distance_to(anchor) <= radius
 	world.objective_control_enemies_in_zone = _count_control_zone_enemies(anchor, radius)
-	world.objective_control_contested = world.objective_control_enemies_in_zone >= maxi(1, world.objective_control_contest_threshold)
+	world.objective_control_contested = world.objective_control_enemies_in_zone > world.objective_control_contest_threshold
 	if world.objective_control_player_inside and not world.objective_control_contested:
 		world.objective_control_progress = minf(world.objective_control_goal, world.objective_control_progress + delta * progress_gain_mult)
 	elif world.objective_control_player_inside:
@@ -233,17 +241,21 @@ func update_control_objective_state(delta: float) -> void:
 	if world.objective_control_progress >= world.objective_control_goal:
 		complete_current_objective("Objective Complete", "Control secured")
 		return
-	var pressure_floor: int = 1 + world.objective_spawn_batch
-	if difficulty_rank <= 1:
+	var pressure_floor: int = world.objective_spawn_batch
+	if difficulty_rank == 3:
 		pressure_floor += 1
 	if world.objective_max_enemies > 0:
 		pressure_floor = mini(pressure_floor, world.objective_max_enemies)
 	if world.active_room_enemy_count < pressure_floor:
-		var refill_spawn_cap := 0.9
+		var refill_spawn_cap := 1.0
 		if difficulty_rank == 0:
-			refill_spawn_cap = 0.75
+			refill_spawn_cap = 1.08
 		elif difficulty_rank == 1:
-			refill_spawn_cap = 0.82
+			refill_spawn_cap = 1.2
+		elif difficulty_rank == 2:
+			refill_spawn_cap = 1.1
+		elif difficulty_rank == 3:
+			refill_spawn_cap = 0.92
 		world.objective_spawn_timer = minf(world.objective_spawn_timer, refill_spawn_cap)
 	world.objective_spawn_timer = maxf(0.0, world.objective_spawn_timer - delta)
 	if world.objective_spawn_timer <= 0.0:
@@ -297,11 +309,11 @@ func spawn_control_wave() -> void:
 		return
 	if world.objective_max_enemies > 0 and world.active_room_enemy_count >= world.objective_max_enemies:
 		return
-	var roster: Array[String] = ["shielder", "charger", "chaser", "chaser", "chaser"]
+	var roster: Array[String] = ["shielder", "charger", "archer", "chaser", "archer"]
 	if world.objective_overtime:
-		roster = ["charger", "shielder", "chaser", "charger", "chaser", "archer"]
+		roster = ["charger", "shielder", "archer", "chaser", "archer", "shielder"]
 	var spawn_count: int = world.objective_spawn_batch
-	if world.objective_overtime and world.active_room_enemy_count <= max(1, world.objective_spawn_batch):
+	if world.objective_overtime and world.active_room_enemy_count <= 1:
 		spawn_count += 1
 	if world.objective_max_enemies > 0:
 		spawn_count = mini(spawn_count, maxi(0, world.objective_max_enemies - world.active_room_enemy_count))

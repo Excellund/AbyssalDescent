@@ -391,7 +391,7 @@ static func profile_set_control_objective(profile_value: Dictionary, duration: f
 	profile_value[PROFILE_KEY_OBJECTIVE_ZONE_RADIUS] = maxf(48.0, zone_radius)
 	profile_value[PROFILE_KEY_OBJECTIVE_PROGRESS_GOAL] = maxf(1.0, progress_goal)
 	profile_value[PROFILE_KEY_OBJECTIVE_PROGRESS_DECAY] = maxf(0.0, progress_decay)
-	profile_value[PROFILE_KEY_OBJECTIVE_CONTEST_THRESHOLD] = maxi(1, contest_threshold)
+	profile_value[PROFILE_KEY_OBJECTIVE_CONTEST_THRESHOLD] = maxi(0, contest_threshold)
 	profile_value.erase(PROFILE_KEY_OBJECTIVE_TARGET_TYPE)
 
 static func mutator_name(mutator: Dictionary) -> String:
