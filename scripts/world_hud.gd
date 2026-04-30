@@ -10,6 +10,7 @@ const MUTATOR_ICON_FORTIFIED_PATH := "res://assets/ui/mutators/fortified.svg"
 const MUTATOR_ICON_HUNTERS_FOCUS_PATH := "res://assets/ui/mutators/hunters_focus.svg"
 const MUTATOR_ICON_KILLBOX_PATH := "res://assets/ui/mutators/killbox.svg"
 const MUTATOR_ICON_COMBO_RELAY_PATH := "res://assets/ui/mutators/combo_relay.svg"
+const HUD_INFO_PANEL_WIDTH := 302.0
 
 var status_panel: Panel
 var status_label: RichTextLabel
@@ -47,7 +48,7 @@ func refresh(state: Dictionary, player: Node) -> void:
 	_cached_room_size = state.get("room_size", Vector2.ZERO) as Vector2
 	var viewport_size := viewport.get_visible_rect().size
 	_update_banner_layout(_cached_room_size, viewport.get_canvas_transform(), viewport_size)
-	_layout_hud_panels(viewport_size)
+	_layout_hud_panels(viewport_size, _cached_room_size, viewport.get_canvas_transform())
 	_update_status_panel_text(state)
 	_update_player_mutator_panel(state)
 	_update_stats_panel_text(player)
@@ -89,24 +90,24 @@ func _create_hud() -> void:
 	add_child(layer)
 
 	status_panel = Panel.new()
-	status_panel.custom_minimum_size = Vector2(302.0, 84.0)
+	status_panel.custom_minimum_size = Vector2(HUD_INFO_PANEL_WIDTH, 84.0)
 	var status_style := StyleBoxFlat.new()
-	status_style.bg_color = Color(0.0, 0.0, 0.0, 0.34)
-	status_style.border_color = Color(0.76, 0.84, 0.92, 0.16)
+	status_style.bg_color = Color(0.03, 0.06, 0.1, 0.56)
+	status_style.border_color = Color(0.62, 0.77, 0.9, 0.32)
 	status_style.border_width_left = 1
 	status_style.border_width_top = 1
 	status_style.border_width_right = 1
 	status_style.border_width_bottom = 1
-	status_style.corner_radius_top_left = 10
-	status_style.corner_radius_top_right = 10
-	status_style.corner_radius_bottom_left = 10
-	status_style.corner_radius_bottom_right = 10
+	status_style.corner_radius_top_left = 12
+	status_style.corner_radius_top_right = 12
+	status_style.corner_radius_bottom_left = 12
+	status_style.corner_radius_bottom_right = 12
 	status_panel.add_theme_stylebox_override("panel", status_style)
 	layer.add_child(status_panel)
 
 	status_label = RichTextLabel.new()
 	status_label.position = Vector2(0.0, 8.0)
-	status_label.custom_minimum_size = Vector2(302.0, 34.0)
+	status_label.custom_minimum_size = Vector2(HUD_INFO_PANEL_WIDTH, 34.0)
 	status_label.bbcode_enabled = true
 	status_label.fit_content = true
 	status_label.scroll_active = false
@@ -156,7 +157,7 @@ func _create_hud() -> void:
 
 	status_mutator_label = Label.new()
 	status_mutator_label.position = Vector2(34.0, 39.0)
-	status_mutator_label.custom_minimum_size = Vector2(256.0, 24.0)
+	status_mutator_label.custom_minimum_size = Vector2(HUD_INFO_PANEL_WIDTH - 46.0, 24.0)
 	status_mutator_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	status_mutator_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	status_mutator_label.add_theme_font_size_override("font_size", 16)
@@ -168,24 +169,24 @@ func _create_hud() -> void:
 	status_panel.add_child(status_mutator_label)
 
 	stats_panel = Panel.new()
-	stats_panel.custom_minimum_size = Vector2(360.0, 214.0)
+	stats_panel.custom_minimum_size = Vector2(HUD_INFO_PANEL_WIDTH, 214.0)
 	var stats_style := StyleBoxFlat.new()
-	stats_style.bg_color = Color(0.0, 0.0, 0.0, 0.34)
-	stats_style.border_color = Color(0.76, 0.84, 0.92, 0.16)
+	stats_style.bg_color = Color(0.03, 0.06, 0.1, 0.5)
+	stats_style.border_color = Color(0.54, 0.7, 0.84, 0.26)
 	stats_style.border_width_left = 1
 	stats_style.border_width_top = 1
 	stats_style.border_width_right = 1
 	stats_style.border_width_bottom = 1
-	stats_style.corner_radius_top_left = 10
-	stats_style.corner_radius_top_right = 10
-	stats_style.corner_radius_bottom_left = 10
-	stats_style.corner_radius_bottom_right = 10
+	stats_style.corner_radius_top_left = 12
+	stats_style.corner_radius_top_right = 12
+	stats_style.corner_radius_bottom_left = 12
+	stats_style.corner_radius_bottom_right = 12
 	stats_panel.add_theme_stylebox_override("panel", stats_style)
 	layer.add_child(stats_panel)
 
 	stats_label = RichTextLabel.new()
 	stats_label.position = Vector2(10.0, 8.0)
-	stats_label.custom_minimum_size = Vector2(340.0, 198.0)
+	stats_label.custom_minimum_size = Vector2(HUD_INFO_PANEL_WIDTH - 20.0, 198.0)
 	stats_label.bbcode_enabled = true
 	stats_label.fit_content = true
 	stats_label.scroll_active = false
@@ -198,24 +199,24 @@ func _create_hud() -> void:
 	stats_panel.add_child(stats_label)
 
 	player_mutator_panel = Panel.new()
-	player_mutator_panel.custom_minimum_size = Vector2(360.0, 136.0)
+	player_mutator_panel.custom_minimum_size = Vector2(HUD_INFO_PANEL_WIDTH, 136.0)
 	var mutator_panel_style := StyleBoxFlat.new()
-	mutator_panel_style.bg_color = Color(0.03, 0.06, 0.1, 0.52)
-	mutator_panel_style.border_color = Color(0.22, 0.32, 0.44, 0.62)
+	mutator_panel_style.bg_color = Color(0.03, 0.06, 0.1, 0.56)
+	mutator_panel_style.border_color = Color(0.54, 0.7, 0.84, 0.26)
 	mutator_panel_style.border_width_left = 1
 	mutator_panel_style.border_width_top = 1
 	mutator_panel_style.border_width_right = 1
 	mutator_panel_style.border_width_bottom = 1
-	mutator_panel_style.corner_radius_top_left = 10
-	mutator_panel_style.corner_radius_top_right = 10
-	mutator_panel_style.corner_radius_bottom_left = 10
-	mutator_panel_style.corner_radius_bottom_right = 10
+	mutator_panel_style.corner_radius_top_left = 12
+	mutator_panel_style.corner_radius_top_right = 12
+	mutator_panel_style.corner_radius_bottom_left = 12
+	mutator_panel_style.corner_radius_bottom_right = 12
 	player_mutator_panel.add_theme_stylebox_override("panel", mutator_panel_style)
 	layer.add_child(player_mutator_panel)
 
 	var mutator_title := Label.new()
 	mutator_title.position = Vector2(10.0, 8.0)
-	mutator_title.custom_minimum_size = Vector2(300.0, 24.0)
+	mutator_title.custom_minimum_size = Vector2(HUD_INFO_PANEL_WIDTH - 20.0, 24.0)
 	mutator_title.text = "My Mutators"
 	mutator_title.add_theme_font_size_override("font_size", 15)
 	mutator_title.add_theme_color_override("font_color", Color(0.93, 0.97, 1.0, 0.95))
@@ -230,7 +231,7 @@ func _create_hud() -> void:
 	for i in range(4):
 		var row := HBoxContainer.new()
 		row.position = Vector2(10.0, 32.0 + float(i) * 24.0)
-		row.custom_minimum_size = Vector2(340.0, 22.0)
+		row.custom_minimum_size = Vector2(HUD_INFO_PANEL_WIDTH - 20.0, 22.0)
 		row.visible = false
 		row.add_theme_constant_override("separation", 8)
 		player_mutator_panel.add_child(row)
@@ -242,7 +243,7 @@ func _create_hud() -> void:
 		row.add_child(icon)
 
 		var row_label := Label.new()
-		row_label.custom_minimum_size = Vector2(316.0, 22.0)
+		row_label.custom_minimum_size = Vector2(HUD_INFO_PANEL_WIDTH - 44.0, 22.0)
 		row_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		row_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		row_label.add_theme_font_size_override("font_size", 14)
@@ -319,19 +320,57 @@ func _update_banner_layout(room_size: Vector2, canvas_xform: Transform2D, viewpo
 	room_banner_subtitle_label.offset_top = top_y + 32.0
 	room_banner_subtitle_label.offset_bottom = top_y + 60.0
 
-func _layout_hud_panels(viewport_size: Vector2) -> void:
+
+func _layout_hud_panels(viewport_size: Vector2, room_size: Vector2, canvas_xform: Transform2D) -> void:
+	var edge_margin := 14.0
+	var column_gap := 10.0
+	var arena_top_screen := INF
+	if room_size != Vector2.ZERO:
+		arena_top_screen = (canvas_xform * Vector2(0.0, -room_size.y * 0.5)).y
 	if status_panel != null:
-		var panel_width := status_panel.size.x
+		var panel_width := _panel_width(status_panel)
+		var panel_height := _panel_height(status_panel)
+		var status_y := edge_margin
+		if arena_top_screen < INF:
+			var candidate_y := arena_top_screen - panel_height - 8.0
+			if candidate_y >= edge_margin:
+				status_y = candidate_y
 		if panel_width <= 0.0:
 			panel_width = status_panel.custom_minimum_size.x
-		status_panel.position = Vector2((viewport_size.x - panel_width) * 0.5, 14.0)
+		status_panel.position = Vector2(edge_margin, status_y)
 	if stats_panel != null:
-		stats_panel.position = Vector2(14.0, 14.0)
+		var stats_h := _panel_height(stats_panel)
+		var status_bottom := edge_margin
+		if status_panel != null:
+			status_bottom = status_panel.position.y + _panel_height(status_panel)
+		var preferred_stats_y := status_bottom + column_gap
+		var max_stats_y := viewport_size.y - stats_h - edge_margin
+		stats_panel.position = Vector2(edge_margin, clampf(preferred_stats_y, edge_margin, max_stats_y))
 	if player_mutator_panel != null:
-		var panel_width := player_mutator_panel.size.x
+		var panel_width := _panel_width(player_mutator_panel)
+		var panel_height := _panel_height(player_mutator_panel)
 		if panel_width <= 0.0:
 			panel_width = player_mutator_panel.custom_minimum_size.x
-		player_mutator_panel.position = Vector2(viewport_size.x - panel_width - 14.0, 14.0)
+		var mutator_y := edge_margin
+		if arena_top_screen < INF:
+			var candidate_y := arena_top_screen - panel_height - 8.0
+			if candidate_y >= edge_margin:
+				mutator_y = candidate_y
+		player_mutator_panel.position = Vector2(viewport_size.x - panel_width - edge_margin, mutator_y)
+
+func _panel_width(panel: Control) -> float:
+	if panel == null:
+		return 0.0
+	if panel.size.x > 0.0:
+		return panel.size.x
+	return panel.custom_minimum_size.x
+
+func _panel_height(panel: Control) -> float:
+	if panel == null:
+		return 0.0
+	if panel.size.y > 0.0:
+		return panel.size.y
+	return panel.custom_minimum_size.y
 
 func _update_status_panel_text(state: Dictionary) -> void:
 	if status_label == null:
@@ -469,7 +508,7 @@ func _update_status_panel_text(state: Dictionary) -> void:
 	var icon_w := 18.0 if icon_visible else 0.0
 	var gap := 6.0 if icon_visible else 0.0
 	var row_w := icon_w + gap + text_w
-	var panel_w := 302.0
+	var panel_w := HUD_INFO_PANEL_WIDTH
 	var start_x := maxf(8.0, (panel_w - row_w) * 0.5)
 	if status_mutator_icon != null:
 		status_mutator_icon.position = Vector2(start_x, row_top + 1.0)
@@ -527,7 +566,7 @@ func _update_bearing_badge(tier: int) -> void:
 	var badge_w := clampf(text_w + 20.0, 78.0, 122.0)
 	status_bearing_badge_panel.custom_minimum_size = Vector2(badge_w, 24.0)
 	status_bearing_badge_panel.size = Vector2(badge_w, 24.0)
-	status_bearing_badge_panel.position = Vector2(302.0 - badge_w - 8.0, 7.0)
+	status_bearing_badge_panel.position = Vector2(HUD_INFO_PANEL_WIDTH - badge_w - 8.0, 7.0)
 	status_bearing_badge_label.position = Vector2(1.0, 0.0)
 	status_bearing_badge_label.custom_minimum_size = Vector2(badge_w - 1.0, 24.0)
 
