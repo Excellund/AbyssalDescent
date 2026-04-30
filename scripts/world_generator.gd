@@ -1526,7 +1526,7 @@ func _begin_room(profile: Dictionary) -> void:
 		sub_color.a = 0.92
 	hud.show_banner(current_room_label, "", sub_color)
 	if is_instance_valid(enemy_spawner):
-		enemy_spawner.configure_room(current_room_size, spawn_padding, spawn_safe_radius, current_room_enemy_mutator)
+		enemy_spawner.configure_room(current_room_size, spawn_padding, spawn_safe_radius, current_room_enemy_mutator, _get_active_enemy_mutators_for_room())
 	_apply_camera_bounds_for_room(current_room_size)
 	active_room_enemy_count = _spawn_profile_enemies(profile)
 	if is_instance_valid(objective_runtime):
@@ -1691,6 +1691,13 @@ func _get_active_player_mutators_for_hud() -> Array[Dictionary]:
 	if not is_instance_valid(player):
 		return []
 	return player.get_active_objective_mutators() as Array[Dictionary]
+
+func _get_active_enemy_mutators_for_room() -> Array[Dictionary]:
+	if not is_instance_valid(player):
+		return []
+	if player.has_method("get_active_enemy_objective_mutators"):
+		return player.get_active_enemy_objective_mutators() as Array[Dictionary]
+	return []
 
 func _roll_route_options(route_context: Variant) -> Array[Dictionary]:
 	if not is_instance_valid(encounter_profile_builder):

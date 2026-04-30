@@ -19,6 +19,8 @@ Use this skill when working on the refactored encounter-generation surfaces.
 - Encounter compositions live in `BEARING_DEFINITIONS` in `scripts/encounter_profile_builder.gd`.
 - Random hard mutator compatibility is decided by each mutator's `affected_archetypes` entry in `_hard_mutator_pool()`.
 - Enemy mutator stat application lives in `ENEMY_MUTATOR_STAT_MAP` in `scripts/enemy_spawner.gd`.
+- Temporary transferable mutators (objective rewards and similar) are contract-driven and can target player/enemy/both.
+- Keep hard mutators (room-level) and temporary mutators (cross-encounter) distinct in naming and tuning intent.
 - Debug startup controls are read from the DebugSettings child in `scenes/Main.tscn` via prefix-free fields (for example: `enabled`, `start_encounter`, `mutator_override`).
 
 ## When To Edit What
@@ -37,6 +39,12 @@ Use this skill when working on the refactored encounter-generation surfaces.
   - Reuse existing stat families intentionally when the enemy shares an archetype.
   - Only add new mutator stat keys in `encounter_contracts.gd` when an existing family no longer fits.
 - Tune spawn intro pacing for encounters/boss rooms:
+
+  - Add or retune a temporary transferable mutator:
+    - Keep identity first (name/icon/fantasy) and define explicit target scope.
+    - Use contract fields for effects, stack policy, stack limit, and falloff.
+    - Ensure reward UI, HUD, and glossary all reflect the same mutator identity.
+    - Ensure enemy-target temporary effects are applied through the enemy spawner pipeline, not ad hoc per enemy script.
   - Edit `begin_spawn_transport()` call-site durations in `scripts/enemy_spawner.gd` (normal) and `scripts/world_generator.gd` (bosses).
   - Keep `_start_encounter_intro_grace()` pulse from overwriting in-progress boss transport.
 

@@ -63,6 +63,14 @@ const MUTATOR_KEY_PLAYER_DAMAGE_MULT := "player_damage_mult"
 const MUTATOR_KEY_PLAYER_DAMAGE_RESIST := "player_damage_resist"
 const MUTATOR_KEY_DURATION_ENCOUNTERS := "duration_encounters"
 const MUTATOR_KEY_REMAINING_ENCOUNTERS := "remaining_encounters"
+const MUTATOR_KEY_ID := "id"
+const MUTATOR_KEY_SOURCE_ENCOUNTER := "source_encounter"
+const MUTATOR_KEY_SOURCE_OBJECTIVE_KIND := "source_objective_kind"
+const MUTATOR_KEY_TARGET_SCOPE := "target_scope"
+const MUTATOR_KEY_EFFECTS := "effects"
+const MUTATOR_KEY_STACK_POLICY := "stack_policy"
+const MUTATOR_KEY_STACK_LIMIT := "stack_limit"
+const MUTATOR_KEY_STACK_FALLOFF := "stack_falloff"
 const MUTATOR_STAT_ENEMY_HEALTH_MULT := "enemy_health_mult"
 const MUTATOR_STAT_CHASER_DAMAGE_MULT := "chaser_damage_mult"
 const MUTATOR_STAT_CHASER_ATTACK_INTERVAL_MULT := "chaser_attack_interval_mult"
@@ -396,6 +404,59 @@ static func profile_set_control_objective(profile_value: Dictionary, duration: f
 
 static func mutator_name(mutator: Dictionary) -> String:
 	return String(mutator.get(MUTATOR_KEY_NAME, ""))
+
+static func mutator_id(mutator: Dictionary) -> String:
+	var id := String(mutator.get(MUTATOR_KEY_ID, "")).strip_edges()
+	if not id.is_empty():
+		return id
+	var shape_id := mutator_icon_shape_id(mutator)
+	if not shape_id.is_empty():
+		return shape_id
+	return mutator_name(mutator).to_lower().replace(" ", "_")
+
+static func mutator_target_scope(mutator: Dictionary) -> String:
+	var scope := String(mutator.get(MUTATOR_KEY_TARGET_SCOPE, "player")).strip_edges().to_lower()
+	if scope == "enemy" or scope == "both":
+		return scope
+	return "player"
+
+static func mutator_affects_scope(mutator: Dictionary, scope: String) -> bool:
+	var normalized_scope := scope.strip_edges().to_lower()
+	if normalized_scope.is_empty():
+		return false
+	var mutator_scope := mutator_target_scope(mutator)
+	return mutator_scope == "both" or mutator_scope == normalized_scope
+
+static func mutator_effects(mutator: Dictionary) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	var raw: Variant = mutator.get(MUTATOR_KEY_EFFECTS, [])
+	if raw is Array:
+		for entry in raw:
+			if entry is Dictionary:
+				result.append((entry as Dictionary).duplicate(true))
+	return result
+
+static func mutator_effect_value(mutator: Dictionary, effect_type: String, default_value: float = 0.0) -> float:
+	var normalized := effect_type.strip_edges().to_lower()
+	if normalized.is_empty():
+		return default_value
+	for effect in mutator_effects(mutator):
+		if String(effect.get("type", "")).strip_edges().to_lower() != normalized:
+			continue
+		return float(effect.get("value", default_value))
+	return default_value
+
+static func mutator_stack_policy(mutator: Dictionary) -> String:
+	var policy := String(mutator.get(MUTATOR_KEY_STACK_POLICY, "refresh")).strip_edges().to_lower()
+	if policy == "stack" or policy == "replace":
+		return policy
+	return "refresh"
+
+static func mutator_stack_limit(mutator: Dictionary) -> int:
+	return maxi(1, int(mutator.get(MUTATOR_KEY_STACK_LIMIT, 1)))
+
+static func mutator_stack_falloff(mutator: Dictionary) -> float:
+	return clampf(float(mutator.get(MUTATOR_KEY_STACK_FALLOFF, 1.0)), 0.0, 1.0)
 
 static func mutator_theme_color(mutator: Dictionary, fallback: Color = Color(0.78, 0.9, 1.0, 0.92)) -> Color:
 	return mutator.get(MUTATOR_KEY_THEME_COLOR, fallback) as Color

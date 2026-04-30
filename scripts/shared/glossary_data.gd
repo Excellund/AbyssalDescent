@@ -142,19 +142,19 @@ static func _mutator_rows() -> Array[Dictionary]:
 			"name": "Fortified",
 			"color": Color(0.76, 0.82, 0.98, 1.0),
 			"icon": "res://assets/ui/mutators/fortified.svg",
-			"desc": "Hardens the player against punishment. Incoming hits glance off with reduced force.",
+			"desc": "Objective mutator that hardens the player against incoming punishment.",
 		},
 		{
 			"name": "Hunter's Focus",
 			"color": Color(0.98, 0.76, 0.34, 1.0),
 			"icon": "res://assets/ui/mutators/hunters_focus.svg",
-			"desc": "Sharpens the player's edge in the hunt. Every strike lands with greater intent.",
+			"desc": "Objective mutator that sharpens the player's offensive pressure.",
 		},
 		{
-			"name": "Breach Momentum",
-			"color": Color(0.94, 0.68, 0.28, 1.0),
-			"icon": "",
-			"desc": "Rewards decisive pushes. The player hits harder and shrugs off some return fire.",
+			"name": "Combo Relay",
+			"color": Color(0.98, 0.72, 0.3, 1.0),
+			"icon": "res://assets/ui/mutators/combo_relay.svg",
+			"desc": "Objective mutator that builds kill-chain momentum before the relay breaks.",
 		},
 	]
 

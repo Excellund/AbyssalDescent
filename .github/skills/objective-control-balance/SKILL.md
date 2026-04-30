@@ -43,6 +43,13 @@ Use this skill when a control objective is technically winnable but practically 
 - If identity is being flattened by global scaling, use encounter-specific scaling override in _apply_bearing_count_scaling.
 - Prefer table-driven rank/depth tuning maps plus resolver helpers over inline one-off conditionals.
 
+3. Temporary mutator identity and bridge value
+- For Hold the Line reward mutators, preserve control fantasy while giving a clear excitement spike.
+- Prefer mutators that reinforce active zone commitment and momentum chains rather than passive sustain.
+- Temporary mutators can target player, enemy, or both. Keep target scope explicit in mutator contract fields.
+- If mutator stack behavior changes, define stack policy (refresh/replace/stack), stack limit, and falloff.
+- Avoid objective mutators that erase contest readability (for example, full contest immunity).
+
 2. Runtime-side recoverability (scripts/objective_runtime.gd)
 - Lower objective_max_enemies for control mode.
 - Soften pressure_floor and forced spawn_timer clamp.
@@ -74,7 +81,11 @@ Use this skill when a control objective is technically winnable but practically 
 
 3. Validate diagnostics for all touched files.
 
-4. Run per-bearing sanity checks.
+4. Validate temporary mutator integration for control objective rewards.
+- Confirm mutator id, icon, banner text, target scope, duration, and stacking policy are coherent.
+- Confirm player-facing and enemy-facing effects both apply exactly when intended.
+
+5. Run per-bearing sanity checks.
 - Pilgrim: recoverable by average play, obvious reclaim windows.
 - Delver: pressured but maintainable with target priority.
 - Harbinger: demanding but not permanently downhill.

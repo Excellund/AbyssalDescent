@@ -769,7 +769,7 @@ func _build_control_profile(depth: int) -> Dictionary:
 	var archers := 1 if effective_depth >= 5 else 0
 	var shielders := 1 + int(floor(float(effective_depth) / 5.0))
 	var profile := _build_profile("Hold the Line", room_size, chasers, chargers, archers, shielders)
-	ENCOUNTER_CONTRACTS.profile_set_player_mutator(profile, _build_breach_momentum_mutator())
+	ENCOUNTER_CONTRACTS.profile_set_player_mutator(profile, _build_combo_relay_mutator())
 	var raw_duration := clampf(22.0 + float(effective_depth) * 0.75, 22.0, 30.0)
 	var duration := int(ceil(raw_duration / 5.0)) * 5
 	var spawn_interval := clampf(2.74 - float(effective_depth) * 0.03 + tier_spawn_interval_bias, 1.75, 2.95)
@@ -968,14 +968,20 @@ func _build_hunters_focus_mutator() -> Dictionary:
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_DURATION_ENCOUNTERS: 3
 	}
 
-func _build_breach_momentum_mutator() -> Dictionary:
+func _build_combo_relay_mutator() -> Dictionary:
 	return {
-		ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME: "Breach Momentum",
-		ENCOUNTER_CONTRACTS.MUTATOR_KEY_THEME_COLOR: Color(0.94, 0.68, 0.28, 1.0),
-		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID: "breach_momentum",
-		ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX: "Deal 18% bonus damage and take 8% less damage",
-		ENCOUNTER_CONTRACTS.MUTATOR_KEY_PLAYER_DAMAGE_MULT: 0.18,
-		ENCOUNTER_CONTRACTS.MUTATOR_KEY_PLAYER_DAMAGE_RESIST: 0.08,
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ID: "combo_relay",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME: "Combo Relay",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_SOURCE_ENCOUNTER: "Hold the Line",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_SOURCE_OBJECTIVE_KIND: "control",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_THEME_COLOR: Color(0.98, 0.72, 0.3, 1.0),
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID: "combo_relay",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_TARGET_SCOPE: "player",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_STACK_POLICY: "refresh",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_STACK_LIMIT: 1,
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_STACK_FALLOFF: 1.0,
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX: "Kill chain stacks grant damage and speed",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_EFFECTS: [],
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_DURATION_ENCOUNTERS: 3
 	}
 

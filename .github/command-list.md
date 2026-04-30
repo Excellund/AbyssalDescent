@@ -24,6 +24,9 @@ Use these natural-language commands in chat. Phrases do not need to match exactl
 - Last Stand feels passive; make active play better
 - Reduce kiting dominance in [encounter/objective]
 - Retune Hold the Line recoverability
+- Redesign Hold the Line mutator identity
+- Build a temporary mutator that targets player and enemies
+- Rework temporary mutator stacking and duration rules
 
 ## Encounter Content And Sync
 
@@ -50,6 +53,7 @@ Use these natural-language commands in chat. Phrases do not need to match exactl
 - Add phrase support for this command style
 - Create/update instruction file for [workflow]
 - Add/update agent for [workflow]
+- Add skill for temporary mutator design workflow
 
 ## Maintenance Rule
 

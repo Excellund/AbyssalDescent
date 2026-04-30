@@ -9,6 +9,7 @@ const MUTATOR_ICON_IRON_VOLLEY: Texture2D = preload("res://assets/ui/mutators/ir
 const MUTATOR_ICON_FORTIFIED_PATH := "res://assets/ui/mutators/fortified.svg"
 const MUTATOR_ICON_HUNTERS_FOCUS_PATH := "res://assets/ui/mutators/hunters_focus.svg"
 const MUTATOR_ICON_KILLBOX_PATH := "res://assets/ui/mutators/killbox.svg"
+const MUTATOR_ICON_COMBO_RELAY_PATH := "res://assets/ui/mutators/combo_relay.svg"
 
 var status_panel: Panel
 var status_label: RichTextLabel
@@ -28,6 +29,7 @@ var room_banner_tween: Tween
 var _mutator_icon_killbox: Texture2D
 var _mutator_icon_fortified: Texture2D
 var _mutator_icon_hunters_focus: Texture2D
+var _mutator_icon_combo_relay: Texture2D
 
 var _encounter_count: int = 5
 var _banner_top_margin: float = 18.0
@@ -558,6 +560,9 @@ func _update_player_mutator_panel(state: Dictionary) -> void:
 		icon.modulate = Color(color.r, color.g, color.b, 1.0)
 		icon.visible = icon_texture != null
 		var remaining := int(mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_REMAINING_ENCOUNTERS, 0))
+		var mutator_id := ENCOUNTER_CONTRACTS.mutator_id(mutator)
+		var runtime_stacks := int(mutator.get("runtime_combo_relay_stacks", 0))
+		var runtime_max_stacks := int(mutator.get("runtime_combo_relay_max_stacks", 0))
 		var stat_parts: Array[String] = []
 		var damage_resist := float(mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_PLAYER_DAMAGE_RESIST, 0.0))
 		if damage_resist > 0.0:
@@ -565,10 +570,13 @@ func _update_player_mutator_panel(state: Dictionary) -> void:
 		var damage_mult := float(mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_PLAYER_DAMAGE_MULT, 0.0))
 		if damage_mult > 0.0:
 			stat_parts.append("+%d%% dmg" % int(round(damage_mult * 100.0)))
-		var _stat_text := ""
+		var stat_text := ""
 		if not stat_parts.is_empty():
-			_stat_text = "  [" + ", ".join(stat_parts) + "]"
-		row_label.text = "%s  (%d enc)" % [mutator_name, remaining]
+			stat_text = "  [" + ", ".join(stat_parts) + "]"
+		if mutator_id == "combo_relay" and runtime_max_stacks > 0:
+			row_label.text = "%s  (%d enc)  x%d/%d%s" % [mutator_name, remaining, runtime_stacks, runtime_max_stacks, stat_text]
+		else:
+			row_label.text = "%s  (%d enc)%s" % [mutator_name, remaining, stat_text]
 		row_label.add_theme_color_override("font_color", Color(color.r, color.g, color.b, 0.98))
 func _update_stats_panel_text(player: Node) -> void:
 	if stats_label == null:
@@ -607,8 +615,10 @@ func _get_mutator_icon_texture(icon_shape_id: String) -> Texture2D:
 			return _get_fortified_icon_texture()
 		"hunters_focus":
 			return _get_hunters_focus_icon_texture()
+		"combo_relay":
+			return _get_combo_relay_icon_texture()
 		"breach_momentum":
-			return _get_hunters_focus_icon_texture()
+			return _get_combo_relay_icon_texture()
 		_:
 			return null
 
@@ -639,3 +649,12 @@ func _get_hunters_focus_icon_texture() -> Texture2D:
 		_mutator_icon_hunters_focus = icon_resource as Texture2D
 		return _mutator_icon_hunters_focus
 	return MUTATOR_ICON_IRON_VOLLEY
+
+func _get_combo_relay_icon_texture() -> Texture2D:
+	if _mutator_icon_combo_relay != null:
+		return _mutator_icon_combo_relay
+	var icon_resource := load(MUTATOR_ICON_COMBO_RELAY_PATH)
+	if icon_resource is Texture2D:
+		_mutator_icon_combo_relay = icon_resource as Texture2D
+		return _mutator_icon_combo_relay
+	return _get_hunters_focus_icon_texture()

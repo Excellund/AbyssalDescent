@@ -9,6 +9,7 @@ const MUTATOR_ICON_IRON_VOLLEY: Texture2D = preload("res://assets/ui/mutators/ir
 const MUTATOR_ICON_FORTIFIED_PATH := "res://assets/ui/mutators/fortified.svg"
 const MUTATOR_ICON_HUNTERS_FOCUS_PATH := "res://assets/ui/mutators/hunters_focus.svg"
 const MUTATOR_ICON_KILLBOX_PATH := "res://assets/ui/mutators/killbox.svg"
+const MUTATOR_ICON_COMBO_RELAY_PATH := "res://assets/ui/mutators/combo_relay.svg"
 
 signal reward_selected(choice: Dictionary, mode: int, is_initial: bool)
 
@@ -40,6 +41,7 @@ var current_player_mutator: Dictionary = {}
 var _mutator_icon_killbox: Texture2D
 var _mutator_icon_fortified: Texture2D
 var _mutator_icon_hunters_focus: Texture2D
+var _mutator_icon_combo_relay: Texture2D
 const BOON_CARD_MAX_WIDTH := 1460.0
 const BOON_CARD_MIN_WIDTH := 860.0
 const BOON_CARD_HEIGHT := 118.0
@@ -47,6 +49,12 @@ const BOON_CARD_GAP := 20.0
 const BOON_TOP_SAFE_Y := 156.0
 const BOON_TOP_MAX_Y := 210.0
 const BOON_SIDE_MARGIN_RATIO := 0.08
+const BOON_ICON_POS := Vector2(14.0, 14.0)
+const BOON_ICON_SIZE := Vector2(24.0, 24.0)
+const BOON_LABEL_X := 52.0
+const MUTATOR_ICON_POS := Vector2(10.0, 10.0)
+const MUTATOR_ICON_SIZE := Vector2(32.0, 32.0)
+const MUTATOR_LABEL_X := 52.0
 
 func initialize(choice_count: int, reveal_duration: float) -> void:
 	boon_choice_count = choice_count
@@ -198,14 +206,16 @@ func _create_ui() -> void:
 		boon_layer.add_child(panel)
 
 		var icon_node := TextureRect.new()
-		icon_node.position = Vector2(16.0, 14.0)
-		icon_node.custom_minimum_size = Vector2(30.0, 30.0)
+		icon_node.position = BOON_ICON_POS
+		icon_node.size = BOON_ICON_SIZE
+		icon_node.custom_minimum_size = BOON_ICON_SIZE
+		icon_node.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon_node.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		icon_node.visible = false
 		panel.add_child(icon_node)
 
 		var option_label := RichTextLabel.new()
-		option_label.position = Vector2(56.0, 6.0)
+		option_label.position = Vector2(BOON_LABEL_X, 6.0)
 		option_label.custom_minimum_size = Vector2(1158.0, 106.0)
 		option_label.bbcode_enabled = true
 		option_label.scroll_active = false
@@ -263,7 +273,7 @@ func _layout_boon_cards() -> void:
 			var label := boon_card_labels[i]
 			var stack_w := 210.0
 			var stack_x := card_width - stack_w - 18.0
-			var text_x := 56.0
+			var text_x := BOON_LABEL_X
 			label.position = Vector2(text_x, 6.0)
 			label.custom_minimum_size = Vector2(maxf(320.0, stack_x - text_x - 12.0), 106.0)
 		if i < boon_card_stack_labels.size():
@@ -330,14 +340,24 @@ func _refresh_boon_ui(player: Node2D) -> void:
 			var icon_shape := String(mutator_data.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID, ""))
 			var icon_texture := _get_mutator_icon_texture(icon_shape)
 			var icon_color: Color = mutator_data.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_THEME_COLOR, Color(0.95, 0.95, 0.95, 1.0)) as Color
+			icon_node.position = MUTATOR_ICON_POS
+			icon_node.size = MUTATOR_ICON_SIZE
+			icon_node.custom_minimum_size = MUTATOR_ICON_SIZE
+			label.position = Vector2(MUTATOR_LABEL_X, 6.0)
 			icon_node.texture = icon_texture
 			icon_node.modulate = Color(icon_color.r, icon_color.g, icon_color.b, 1.0)
 			icon_node.visible = icon_texture != null
+			var boon_desc := String(boon.get("desc", boon.get("description", "")))
+			label.text = "[b][color=#fffef0]%s[/color][/b]\n%s" % [String(boon.get("name", "Unknown")), boon_desc]
 		else:
+			icon_node.position = BOON_ICON_POS
+			icon_node.size = BOON_ICON_SIZE
+			icon_node.custom_minimum_size = BOON_ICON_SIZE
+			label.position = Vector2(BOON_LABEL_X, 6.0)
 			icon_node.texture = null
 			icon_node.visible = false
-		var boon_desc := String(boon.get("desc", boon.get("description", "")))
-		label.text = "[b][color=#ddeeff]%d. %s[/color][/b]\n%s" % [i + 1, String(boon.get("name", "Unknown")), boon_desc]
+			var boon_desc := String(boon.get("desc", boon.get("description", "")))
+			label.text = "[b][color=#ddeeff]%d. %s[/color][/b]\n%s" % [i + 1, String(boon.get("name", "Unknown")), boon_desc]
 		label.modulate = Color(1.0, 1.0, 1.0, 0.95)
 
 	_update_boon_reveal_visuals()
@@ -424,9 +444,12 @@ func _roll_objective_mutator_choice(player_mutator: Dictionary) -> Array[Diction
 	return [mutator_choice]
 
 func _build_objective_mutator_desc(mutator_data: Dictionary) -> String:
+	var mutator_id := ENCOUNTER_CONTRACTS.mutator_id(mutator_data)
+	if mutator_id == "combo_relay":
+		return "Kill chain: [color=#FFE4A6]+5% damage[/color] [color=#FFE4A6]+5% movement speed[/color] per kill (max 4). Reset after [color=#FFE4A6]2.8s[/color]."
 	var flavor := String(mutator_data.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX, ""))
 	if not flavor.is_empty():
-		return "[color=#F7E7B4]%s[/color]" % flavor
+		return flavor
 	return ""
 
 func _roll_objective_choices(choice_count: int, power_registry: Node, player: Node2D, rng: RandomNumberGenerator) -> Array[Dictionary]:
@@ -586,8 +609,10 @@ func _get_mutator_icon_texture(icon_shape_id: String) -> Texture2D:
 			return _get_fortified_icon_texture()
 		"hunters_focus":
 			return _get_hunters_focus_icon_texture()
+		"combo_relay":
+			return _get_combo_relay_icon_texture()
 		"breach_momentum":
-			return _get_hunters_focus_icon_texture()
+			return _get_combo_relay_icon_texture()
 		_:
 			return null
 
@@ -617,3 +642,12 @@ func _get_hunters_focus_icon_texture() -> Texture2D:
 		_mutator_icon_hunters_focus = icon_resource as Texture2D
 		return _mutator_icon_hunters_focus
 	return MUTATOR_ICON_IRON_VOLLEY
+
+func _get_combo_relay_icon_texture() -> Texture2D:
+	if _mutator_icon_combo_relay != null:
+		return _mutator_icon_combo_relay
+	var icon_resource := load(MUTATOR_ICON_COMBO_RELAY_PATH)
+	if icon_resource is Texture2D:
+		_mutator_icon_combo_relay = icon_resource as Texture2D
+		return _mutator_icon_combo_relay
+	return _get_hunters_focus_icon_texture()

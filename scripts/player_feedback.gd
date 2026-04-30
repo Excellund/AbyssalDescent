@@ -126,6 +126,64 @@ func play_world_ring(epicenter_global: Vector2, radius: float, color: Color, lif
 	tween.tween_interval(lifetime)
 	tween.tween_callback(ring.queue_free)
 
+func _play_world_line(points: PackedVector2Array, color: Color, width: float, lifetime: float, final_width: float = 1.0) -> void:
+	if points.size() < 2:
+		return
+	var line := Line2D.new()
+	line.top_level = true
+	line.global_position = Vector2.ZERO
+	line.width = width
+	line.default_color = color
+	line.antialiased = true
+	line.z_index = 41
+	line.points = points
+	add_child(line)
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(line, "modulate:a", 0.0, lifetime)
+	tween.tween_property(line, "width", final_width, lifetime)
+	tween.set_parallel(false)
+	tween.tween_interval(lifetime)
+	tween.tween_callback(line.queue_free)
+
+func play_combo_relay_kill(epicenter_global: Vector2, stack_count: int, max_stacks: int, color: Color, lifetime: float = 0.2) -> void:
+	var clamped_max := maxi(1, max_stacks)
+	var clamped_stack := clampi(stack_count, 1, clamped_max)
+	var stack_ratio := float(clamped_stack) / float(clamped_max)
+	var radius := 22.0 + float(clamped_stack) * 3.5
+
+	# Outer clock face pulse.
+	play_world_ring(epicenter_global, radius, Color(color.r, color.g, color.b, 0.82), lifetime)
+
+	# Four stack pips at cardinal points to mirror the mutator icon language.
+	for i in range(4):
+		var angle := -PI * 0.5 + TAU * float(i) * 0.25
+		var pip_pos := epicenter_global + Vector2(cos(angle), sin(angle)) * radius
+		play_world_ring(pip_pos, 2.6, Color(color.r, color.g, color.b, 0.7), lifetime * 0.82)
+
+	# Sweeping arc communicates relay progress from current stack fill.
+	var sweep_points := PackedVector2Array()
+	var sweep_start := -PI * 0.5
+	var sweep_end := sweep_start + TAU * stack_ratio
+	var sweep_segments := maxi(8, int(22.0 * stack_ratio))
+	for i in range(sweep_segments + 1):
+		var t := float(i) / float(maxi(1, sweep_segments))
+		var angle := lerpf(sweep_start, sweep_end, t)
+		sweep_points.append(epicenter_global + Vector2(cos(angle), sin(angle)) * (radius + 1.8))
+	_play_world_line(sweep_points, Color(color.r, color.g, color.b, 0.95), 2.4, lifetime * 0.95, 1.0)
+
+	# Main hand plus trailing blur lines for speed-up motion feel.
+	var hand_angle := sweep_end
+	var hand_len := radius - 3.2
+	for i in range(2, -1, -1):
+		var trail_offset := float(i) * 0.22
+		var alpha := 0.25 + (2.0 - float(i)) * 0.24
+		var line_points := PackedVector2Array([
+			epicenter_global,
+			epicenter_global + Vector2(cos(hand_angle - trail_offset), sin(hand_angle - trail_offset)) * hand_len
+		])
+		_play_world_line(line_points, Color(color.r, color.g, color.b, alpha), 1.2 + (2.0 - float(i)) * 0.35, lifetime * 0.9, 0.8)
+
 # === IMPACT FEEDBACK HIERARCHY ===
 func play_impact_light(epicenter_global: Vector2, radius: float = 60.0) -> void:
 	"""Light hit feedback: subtle ring + gentle flash (standard hits)."""

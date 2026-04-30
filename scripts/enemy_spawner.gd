@@ -1,6 +1,21 @@
 extends Node
 
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
+const ENEMY_MUTATOR_STACK_STAT_KEYS := [
+	ENCOUNTER_CONTRACTS.MUTATOR_STAT_ENEMY_HEALTH_MULT,
+	ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT,
+	ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_ATTACK_INTERVAL_MULT,
+	ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_SPEED_MULT,
+	ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_DAMAGE_MULT,
+	ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_SPEED_MULT,
+	ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_WINDUP_MULT,
+	ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_WINDUP_MULT,
+	ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_COOLDOWN_MULT,
+	ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_PROJECTILE_DAMAGE_MULT,
+	ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_DAMAGE_MULT,
+	ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_WINDUP_MULT,
+	ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SPEED_MULT
+]
 const ENEMY_MUTATOR_STAT_MAP := {
 	"chaser": [
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT, "prop": "attack_damage", "min": 1.0, "is_int": true},
@@ -48,6 +63,7 @@ var spawn_padding: float = 90.0
 var spawn_safe_radius: float = 170.0
 var spawn_transport_duration: float = 0.36
 var current_room_enemy_mutator: Dictionary = {}
+var active_temporary_enemy_mutators: Array[Dictionary] = []
 
 func initialize(world_root_node: Node2D, player_node: Node2D, rng_instance: RandomNumberGenerator, script_map: Dictionary, enemy_died_callback: Callable) -> void:
 	world_root = world_root_node
@@ -56,11 +72,33 @@ func initialize(world_root_node: Node2D, player_node: Node2D, rng_instance: Rand
 	scripts = script_map
 	on_enemy_died = enemy_died_callback
 
-func configure_room(room_size: Vector2, padding: float, safe_radius: float, enemy_mutator: Dictionary) -> void:
+func configure_room(room_size: Vector2, padding: float, safe_radius: float, enemy_mutator: Dictionary, temporary_enemy_mutators: Array[Dictionary] = []) -> void:
 	current_room_size = room_size
 	spawn_padding = padding
 	spawn_safe_radius = safe_radius
 	current_room_enemy_mutator = enemy_mutator
+	active_temporary_enemy_mutators = []
+	for entry in temporary_enemy_mutators:
+		if not (entry is Dictionary):
+			continue
+		active_temporary_enemy_mutators.append((entry as Dictionary).duplicate(true))
+
+func _compose_active_enemy_mutator() -> Dictionary:
+	var composed := current_room_enemy_mutator.duplicate(true)
+	for mutator in active_temporary_enemy_mutators:
+		if not ENCOUNTER_CONTRACTS.mutator_affects_scope(mutator, "enemy"):
+			continue
+		for stat_key in ENEMY_MUTATOR_STACK_STAT_KEYS:
+			var current_value := ENCOUNTER_CONTRACTS.mutator_stat(composed, stat_key, 1.0)
+			var mutator_value := ENCOUNTER_CONTRACTS.mutator_stat(mutator, stat_key, 1.0)
+			ENCOUNTER_CONTRACTS.mutator_set_stat(composed, stat_key, current_value * mutator_value)
+		if String(composed.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME, "")).is_empty():
+			composed[ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME] = ENCOUNTER_CONTRACTS.mutator_name(mutator)
+		if String(composed.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID, "")).is_empty():
+			composed[ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID] = ENCOUNTER_CONTRACTS.mutator_icon_shape_id(mutator)
+		if composed.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_THEME_COLOR) == null:
+			composed[ENCOUNTER_CONTRACTS.MUTATOR_KEY_THEME_COLOR] = ENCOUNTER_CONTRACTS.mutator_theme_color(mutator)
+	return composed
 
 func spawn_profile_enemies(profile: Dictionary) -> int:
 	var total := 0
@@ -173,10 +211,11 @@ func _apply_mutator_specs(enemy: CharacterBody2D, specs: Array) -> bool:
 	return is_affected
 
 func _apply_enemy_mutator(enemy: CharacterBody2D, enemy_script: Script) -> void:
-	if current_room_enemy_mutator.is_empty():
+	var applied_mutator := _compose_active_enemy_mutator()
+	if applied_mutator.is_empty():
 		return
 	var is_affected: bool = false
-	var enemy_health_mult := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_ENEMY_HEALTH_MULT, 1.0)
+	var enemy_health_mult := ENCOUNTER_CONTRACTS.mutator_stat(applied_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_ENEMY_HEALTH_MULT, 1.0)
 	if not is_equal_approx(enemy_health_mult, 1.0):
 		if enemy.get("max_health") != null:
 			var base_max_health := int(enemy.get("max_health"))
@@ -184,13 +223,16 @@ func _apply_enemy_mutator(enemy: CharacterBody2D, enemy_script: Script) -> void:
 		is_affected = true
 	var enemy_key := _enemy_script_key(enemy_script)
 	var specs := ENEMY_MUTATOR_STAT_MAP.get(enemy_key, []) as Array
+	var previous_mutator := current_room_enemy_mutator
+	current_room_enemy_mutator = applied_mutator
 	is_affected = _apply_mutator_specs(enemy, specs) or is_affected
+	current_room_enemy_mutator = previous_mutator
 
-	enemy.modulate = ENCOUNTER_CONTRACTS.mutator_enemy_tint(current_room_enemy_mutator, Color(1.0, 0.92, 0.92, 1.0))
+	enemy.modulate = ENCOUNTER_CONTRACTS.mutator_enemy_tint(applied_mutator, Color(1.0, 0.92, 0.92, 1.0))
 	if enemy.get("has_mutator_overlay") != null:
 		enemy.set("has_mutator_overlay", is_affected)
 	if enemy.get("mutator_theme_color") != null:
-		enemy.set("mutator_theme_color", ENCOUNTER_CONTRACTS.mutator_theme_color(current_room_enemy_mutator, Color(1.0, 0.4, 0.4, 1.0)))
+		enemy.set("mutator_theme_color", ENCOUNTER_CONTRACTS.mutator_theme_color(applied_mutator, Color(1.0, 0.4, 0.4, 1.0)))
 
 func _pick_spawn_position_in_current_room(min_player_distance: float = -1.0, min_enemy_spacing: float = 86.0) -> Vector2:
 	if rng == null:

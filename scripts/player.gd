@@ -202,6 +202,12 @@ var active_objective_mutators: Array[Dictionary] = []
 var objective_mutator_damage_resist: float = 0.0
 var objective_mutator_damage_mult: float = 0.0
 var objective_mutator_aura_phase: float = 0.0
+var combo_relay_stacks: int = 0
+var combo_relay_stack_timer: float = 0.0
+var combo_relay_stack_window: float = 2.8
+var combo_relay_max_stacks: int = 4
+var combo_relay_damage_per_stack: float = 0.05
+var combo_relay_speed_per_stack: float = 0.05
 var incoming_damage_taken_mult: float = 1.0
 var incoming_contact_damage_mult: float = 1.0
 var last_damage_event: Dictionary = {}
@@ -235,6 +241,7 @@ func _physics_process(delta: float) -> void:
 	_update_polar_shift_dash_lockout(delta)
 	_update_wraithstep_marks()
 	_update_storm_crown_discharge(delta)
+	_update_combo_relay_state(delta)
 	_try_start_dash(direction)
 	_try_attack_input()
 
@@ -517,7 +524,8 @@ func _update_ground_movement(direction: Vector2, delta: float) -> void:
 			trance_ratio = trance_ratio / maxf(1.0, max_speed)
 		trance_ratio = clampf(trance_ratio, 0.0, 1.5)
 		trance_speed_bonus = max_speed * trance_ratio
-	var target_velocity := direction * (max_speed + trance_speed_bonus)
+	var combo_relay_speed_bonus := max_speed * combo_relay_speed_per_stack * float(combo_relay_stacks)
+	var target_velocity := direction * (max_speed + trance_speed_bonus + combo_relay_speed_bonus)
 	var applied_acceleration := _get_applied_acceleration(target_velocity)
 	var move_rate := applied_acceleration if direction != Vector2.ZERO else deceleration
 	velocity = velocity.move_toward(target_velocity, move_rate * delta)
@@ -701,6 +709,8 @@ func apply_run_snapshot(snapshot: Dictionary) -> void:
 	storm_crown_hit_counter = 0
 	storm_crown_discharge_flash_left = 0.0
 	wraithstep_marked_enemy_expiry.clear()
+	combo_relay_stacks = 0
+	combo_relay_stack_timer = 0.0
 	_set_dash_phasing(false)
 	velocity = Vector2.ZERO
 	queue_redraw()
@@ -716,18 +726,40 @@ func apply_objective_mutator(mutator_data: Dictionary) -> void:
 	var duration := maxi(1, default_duration)
 	applied_mutator[ENCOUNTER_CONTRACTS.MUTATOR_KEY_DURATION_ENCOUNTERS] = duration
 	applied_mutator[ENCOUNTER_CONTRACTS.MUTATOR_KEY_REMAINING_ENCOUNTERS] = duration
+	var policy := ENCOUNTER_CONTRACTS.mutator_stack_policy(applied_mutator)
+	var stack_limit := ENCOUNTER_CONTRACTS.mutator_stack_limit(applied_mutator)
+	var applied_id := ENCOUNTER_CONTRACTS.mutator_id(applied_mutator)
 	var icon_shape := String(applied_mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID, ""))
 	var mutator_name := String(applied_mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME, ""))
-	var replaced := false
+	var matching_indices: Array[int] = []
 	for i in range(active_objective_mutators.size()):
 		var existing := active_objective_mutators[i] as Dictionary
+		var existing_id := ENCOUNTER_CONTRACTS.mutator_id(existing)
 		var existing_icon := String(existing.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID, ""))
 		var existing_name := String(existing.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME, ""))
-		if (not icon_shape.is_empty() and existing_icon == icon_shape) or (not mutator_name.is_empty() and existing_name == mutator_name):
-			active_objective_mutators[i] = applied_mutator
-			replaced = true
-			break
-	if not replaced:
+		if (not applied_id.is_empty() and existing_id == applied_id) or (not icon_shape.is_empty() and existing_icon == icon_shape) or (not mutator_name.is_empty() and existing_name == mutator_name):
+			matching_indices.append(i)
+	if policy == "stack":
+		if matching_indices.size() >= stack_limit and not matching_indices.is_empty():
+			active_objective_mutators[matching_indices[0]] = applied_mutator
+		else:
+			active_objective_mutators.append(applied_mutator)
+	else:
+		if not matching_indices.is_empty():
+			active_objective_mutators[matching_indices[0]] = applied_mutator
+		else:
+			active_objective_mutators.append(applied_mutator)
+	if policy == "replace" and matching_indices.size() > 1:
+		for i in range(matching_indices.size() - 1, 0, -1):
+			active_objective_mutators.remove_at(matching_indices[i])
+	if active_objective_mutators.size() > 8:
+		active_objective_mutators = active_objective_mutators.slice(active_objective_mutators.size() - 8, active_objective_mutators.size())
+	if policy == "refresh" and active_objective_mutators.size() > 1 and not applied_id.is_empty():
+		for i in range(active_objective_mutators.size() - 2, -1, -1):
+			var existing := active_objective_mutators[i] as Dictionary
+			if ENCOUNTER_CONTRACTS.mutator_id(existing) == applied_id:
+				active_objective_mutators.remove_at(i)
+	if active_objective_mutators.is_empty():
 		active_objective_mutators.append(applied_mutator)
 	_recalculate_objective_mutator_totals()
 	queue_redraw()
@@ -739,7 +771,7 @@ func tick_objective_mutators_for_encounter() -> void:
 		var mutator := active_objective_mutators[i]
 		var remaining := int(mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_REMAINING_ENCOUNTERS, 0))
 		remaining -= 1
-		if remaining <= 0:
+		if remaining < 0:
 			active_objective_mutators.remove_at(i)
 			continue
 		mutator[ENCOUNTER_CONTRACTS.MUTATOR_KEY_REMAINING_ENCOUNTERS] = remaining
@@ -750,22 +782,52 @@ func tick_objective_mutators_for_encounter() -> void:
 func get_active_objective_mutators() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	for mutator in active_objective_mutators:
-		result.append((mutator as Dictionary).duplicate(true))
+		var copied := (mutator as Dictionary).duplicate(true)
+		if ENCOUNTER_CONTRACTS.mutator_id(copied) == "combo_relay":
+			copied["runtime_combo_relay_stacks"] = combo_relay_stacks
+			copied["runtime_combo_relay_max_stacks"] = combo_relay_max_stacks
+			copied["runtime_combo_relay_stack_timer"] = combo_relay_stack_timer
+		result.append(copied)
 	return result
+
+func get_active_enemy_objective_mutators() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for entry in active_objective_mutators:
+		var mutator := entry as Dictionary
+		if not ENCOUNTER_CONTRACTS.mutator_affects_scope(mutator, "enemy"):
+			continue
+		result.append(mutator.duplicate(true))
+	return result
+
+func _mutator_effect_or_legacy(mutator: Dictionary, effect_type: String, legacy_key: String) -> float:
+	for effect in ENCOUNTER_CONTRACTS.mutator_effects(mutator):
+		if String(effect.get("type", "")).strip_edges().to_lower() != effect_type:
+			continue
+		return float(effect.get("value", 0.0))
+	return float(mutator.get(legacy_key, 0.0))
 
 func _recalculate_objective_mutator_totals() -> void:
 	objective_mutator_damage_resist = 0.0
 	objective_mutator_damage_mult = 0.0
+	var stacks_by_id: Dictionary = {}
 	for entry in active_objective_mutators:
 		var mutator := entry as Dictionary
-		objective_mutator_damage_resist += float(mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_PLAYER_DAMAGE_RESIST, 0.0))
-		objective_mutator_damage_mult += float(mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_PLAYER_DAMAGE_MULT, 0.0))
+		if not ENCOUNTER_CONTRACTS.mutator_affects_scope(mutator, "player"):
+			continue
+		var mutator_id := ENCOUNTER_CONTRACTS.mutator_id(mutator)
+		var stack_index := int(stacks_by_id.get(mutator_id, 0))
+		var stack_falloff := ENCOUNTER_CONTRACTS.mutator_stack_falloff(mutator)
+		var stack_scale := pow(stack_falloff, float(stack_index))
+		stacks_by_id[mutator_id] = stack_index + 1
+		objective_mutator_damage_resist += _mutator_effect_or_legacy(mutator, "player_damage_resist", ENCOUNTER_CONTRACTS.MUTATOR_KEY_PLAYER_DAMAGE_RESIST) * stack_scale
+		objective_mutator_damage_mult += _mutator_effect_or_legacy(mutator, "player_damage_mult", ENCOUNTER_CONTRACTS.MUTATOR_KEY_PLAYER_DAMAGE_MULT) * stack_scale
 	objective_mutator_damage_resist = clampf(objective_mutator_damage_resist, 0.0, 0.85)
 
 func _apply_objective_mutator_damage_mult(base_damage: int) -> int:
-	if objective_mutator_damage_mult <= 0.0:
+	var total_damage_mult := objective_mutator_damage_mult + combo_relay_damage_per_stack * float(combo_relay_stacks)
+	if total_damage_mult <= 0.0:
 		return base_damage
-	return maxi(1, int(ceil(float(base_damage) * (1.0 + objective_mutator_damage_mult))))
+	return maxi(1, int(ceil(float(base_damage) * (1.0 + total_damage_mult))))
 
 func _trigger_aegis_field() -> void:
 	if not reward_aegis_field:
@@ -1203,6 +1265,7 @@ func _update_static_wake_trails(delta: float) -> void:
 
 
 func notify_enemy_killed() -> void:
+	_trigger_combo_relay_kill()
 	if not reward_void_dash:
 		return
 	var dash_was_active := dash_cooldown_left > 0.0
@@ -1213,6 +1276,38 @@ func notify_enemy_killed() -> void:
 			player_feedback.play_world_ring(global_position, 42.0, Color(0.92, 0.54, 1.0, 0.92), 0.18)
 			player_feedback.play_world_ring(global_position, 26.0, Color(1.0, 0.82, 1.0, 0.72), 0.12)
 		queue_redraw()
+
+func _has_combo_relay_mutator_active() -> bool:
+	for entry in active_objective_mutators:
+		var mutator := entry as Dictionary
+		if ENCOUNTER_CONTRACTS.mutator_id(mutator) == "combo_relay":
+			return true
+	return false
+
+func _trigger_combo_relay_kill() -> void:
+	if not _has_combo_relay_mutator_active():
+		return
+	combo_relay_stacks = mini(combo_relay_max_stacks, combo_relay_stacks + 1)
+	combo_relay_stack_timer = combo_relay_stack_window
+	if player_feedback != null:
+		player_feedback.play_combo_relay_kill(global_position, combo_relay_stacks, combo_relay_max_stacks, Color(1.0, 0.82, 0.42, 0.92), 0.2)
+	queue_redraw()
+
+func _update_combo_relay_state(delta: float) -> void:
+	if combo_relay_stacks <= 0:
+		return
+	if not _has_combo_relay_mutator_active():
+		combo_relay_stacks = 0
+		combo_relay_stack_timer = 0.0
+		queue_redraw()
+		return
+	combo_relay_stack_timer = maxf(0.0, combo_relay_stack_timer - delta)
+	if combo_relay_stack_timer > 0.0:
+		return
+	combo_relay_stacks = maxi(0, combo_relay_stacks - 1)
+	if combo_relay_stacks > 0:
+		combo_relay_stack_timer = combo_relay_stack_window * 0.6
+	queue_redraw()
 
 func apply_polar_shift_dash_lockout(duration: float) -> void:
 	var applied_duration := maxf(0.0, duration)

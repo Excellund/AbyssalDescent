@@ -46,6 +46,11 @@ Use this skill when adding a new objective type or introducing a new objective-f
 - scripts/reward_selection_ui.gd
 - scripts/encounter_profile_builder.gd
 - Ensure mutator IDs, labels, and icon fallbacks are present and coherent.
+- Prefer registry-driven temporary mutator definitions with explicit fields:
+	- id, name, icon_shape_id, theme_color
+	- target_scope (player/enemy/both)
+	- effects list
+	- stack policy and duration
 
 6. Glossary and naming sync
 
@@ -105,6 +110,10 @@ Use this skill when adding a new objective type or introducing a new objective-f
 
 - Run diagnostics on all changed files.
 - Perform quick sanity checks for Pilgrim, Delver, Harbinger, Forsworn.
+
+8. Validate temporary mutator runtime behavior
+- If objective reward includes a temporary mutator, verify player and enemy scopes independently.
+- Verify replacement/refresh/stack policy and expiry behavior across encounter transitions.
 
 ## Done Criteria
 

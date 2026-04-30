@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+  <defs>
+    <linearGradient id="g" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFD84D"/>
+      <stop offset="1" stop-color="#FF9914"/>
+    </linearGradient>
+  </defs>
+  <!-- Speed lines radiating outward (motion effect) -->
+  <line x1="12" y1="0.5" x2="12" y2="2" stroke="url(#g)" stroke-width="0.7" stroke-linecap="round" opacity="0.8"/>
+  <line x1="20" y1="4" x2="18.8" y2="5.2" stroke="url(#g)" stroke-width="0.7" stroke-linecap="round" opacity="0.7"/>
+  <line x1="23.5" y1="12" x2="22" y2="12" stroke="url(#g)" stroke-width="0.7" stroke-linecap="round" opacity="0.8"/>
+  <line x1="20" y1="20" x2="18.8" y2="18.8" stroke="url(#g)" stroke-width="0.7" stroke-linecap="round" opacity="0.7"/>
+  <line x1="12" y1="23.5" x2="12" y2="22" stroke="url(#g)" stroke-width="0.7" stroke-linecap="round" opacity="0.8"/>
+  <line x1="4" y1="20" x2="5.2" y2="18.8" stroke="url(#g)" stroke-width="0.7" stroke-linecap="round" opacity="0.7"/>
+  <line x1="0.5" y1="12" x2="2" y2="12" stroke="url(#g)" stroke-width="0.7" stroke-linecap="round" opacity="0.8"/>
+  <line x1="4" y1="4" x2="5.2" y2="5.2" stroke="url(#g)" stroke-width="0.7" stroke-linecap="round" opacity="0.7"/>
+  <!-- Clock face circle -->
+  <circle cx="12" cy="12" r="7.5" fill="none" stroke="url(#g)" stroke-width="1"/>
+  <!-- Stack dots at cardinal positions (12, 3, 6, 9 o'clock) -->
+  <circle cx="12" cy="4.5" r="1.4" fill="url(#g)" stroke="#FFD84D" stroke-width="0.5"/>
+  <circle cx="19.5" cy="12" r="1.4" fill="url(#g)" stroke="#FFD84D" stroke-width="0.5"/>
+  <circle cx="12" cy="19.5" r="1.4" fill="url(#g)" stroke="#FFD84D" stroke-width="0.5"/>
+  <circle cx="4.5" cy="12" r="1.4" fill="url(#g)" stroke="#FFD84D" stroke-width="0.5"/>
+  <!-- Clock hand motion blur effect: trailing lines showing motion -->
+  <line x1="12" y1="12" x2="12" y2="3" stroke="url(#g)" stroke-width="0.8" stroke-linecap="round" opacity="0.3"/>
+  <line x1="12" y1="12" x2="12.8" y2="4.2" stroke="url(#g)" stroke-width="0.8" stroke-linecap="round" opacity="0.5"/>
+  <!-- Main clock hand in mid-motion (pointing toward 2 o'clock) -->
+  <line x1="12" y1="12" x2="17" y2="4" stroke="url(#g)" stroke-width="1.2" stroke-linecap="round"/>
+</svg>
