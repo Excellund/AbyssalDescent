@@ -185,6 +185,26 @@ Organize code by concern and purpose, not by implementation type.
 
 ---
 
+### 7. Avoid String-Based Dynamic Dispatch For Internal Calls
+
+Prefer explicit method calls over wrappers that dispatch via method-name strings (for example helper signatures like `_call(method: String, args: Array)` using `callv`).
+
+**Why it matters:**
+
+- String dispatch hides control flow and weakens editor/language-server navigation.
+- Typos become runtime failures instead of obvious code review issues.
+- Refactors are riskier because renames do not update string literals safely.
+- Call intent is less readable than direct method calls.
+
+**How to apply:**
+
+- Use direct calls (`objective_runtime.update_objective_state(delta)`) behind a normal instance-validity guard.
+- Keep lightweight wrapper methods explicit and typed when forwarding behavior.
+- Reserve dynamic dispatch (`call`, `callv`) for truly dynamic plugin/mod interfaces, not internal game-runtime wiring.
+- If dynamic dispatch is unavoidable, document why and constrain it to one narrow boundary.
+
+---
+
 ## Procedure: Highest-Value Refactor (Refactor Steward Mode)
 
 When you receive a request to **"Do the highest value refactor"**, follow this systematic approach:
