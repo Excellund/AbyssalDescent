@@ -86,8 +86,8 @@ func set_world_bounds(bounds_rect: Rect2) -> void:
 	has_world_bounds = true
 	_apply_zoom_and_limits_from_bounds(bounds_rect)
 
-func set_room_fit_zoom_scale(scale: float) -> void:
-	room_fit_zoom_scale = maxf(0.01, scale)
+func set_room_fit_zoom_scale(scale_factor: float) -> void:
+	room_fit_zoom_scale = maxf(0.01, scale_factor)
 	if has_world_bounds:
 		_apply_zoom_and_limits_from_bounds(world_bounds_rect)
 
