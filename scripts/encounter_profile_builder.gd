@@ -206,6 +206,34 @@ func _scale_enemy_count(count: int, minimum: int = 0, pressure_mult_override: fl
 	var scaled := int(floor(float(maxi(0, count)) * pressure_mult))
 	return maxi(minimum, scaled)
 
+func _count_from_counts(counts: Dictionary, key: String) -> int:
+	return int(counts.get(key, 0))
+
+func _build_profile_from_counts(label: String, room_size: Vector2, counts: Dictionary) -> Dictionary:
+	return _build_profile(
+		label,
+		room_size,
+		_count_from_counts(counts, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT),
+		_count_from_counts(counts, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT),
+		_count_from_counts(counts, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT),
+		_count_from_counts(counts, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT)
+	)
+
+func _set_profile_counts_from_counts_dict(profile: Dictionary, counts: Dictionary) -> void:
+	ENCOUNTER_CONTRACTS.profile_set_counts(
+		profile,
+		_count_from_counts(counts, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT),
+		_count_from_counts(counts, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT),
+		_count_from_counts(counts, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT),
+		_count_from_counts(counts, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT)
+	)
+	ENCOUNTER_CONTRACTS.profile_set_specialist_counts(
+		profile,
+		_count_from_counts(counts, ENCOUNTER_CONTRACTS.PROFILE_KEY_LURKER_COUNT),
+		_count_from_counts(counts, ENCOUNTER_CONTRACTS.PROFILE_KEY_RAM_COUNT),
+		_count_from_counts(counts, ENCOUNTER_CONTRACTS.PROFILE_KEY_LANCER_COUNT)
+	)
+
 func _apply_bearing_count_scaling(profile: Dictionary, pressure_mult_override: float = 1.0, minimum_total: int = 0) -> Dictionary:
 	if profile.is_empty():
 		return profile
@@ -242,19 +270,7 @@ func _skirmish_min_total_enemies() -> int:
 
 func _apply_profile_counts(profile: Dictionary, counts: Dictionary) -> Dictionary:
 	var modified := profile.duplicate(true)
-	ENCOUNTER_CONTRACTS.profile_set_counts(
-		modified,
-		int(counts.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT, 0)),
-		int(counts.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT, 0)),
-		int(counts.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT, 0)),
-		int(counts.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT, 0))
-	)
-	ENCOUNTER_CONTRACTS.profile_set_specialist_counts(
-		modified,
-		int(counts.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_LURKER_COUNT, 0)),
-		int(counts.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_RAM_COUNT, 0)),
-		int(counts.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_LANCER_COUNT, 0))
-	)
+	_set_profile_counts_from_counts_dict(modified, counts)
 	return modified
 
 func _build_bearing_profile(label: String) -> Dictionary:
@@ -263,14 +279,7 @@ func _build_bearing_profile(label: String) -> Dictionary:
 		return {}
 	var counts := definition.get("base_counts", {}) as Dictionary
 	var room_size := definition.get("room_size", POOL_ROOM_SIZE) as Vector2
-	var profile := _build_profile(
-		label,
-		room_size,
-		int(counts.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT, 0)),
-		int(counts.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT, 0)),
-		int(counts.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT, 0)),
-		int(counts.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT, 0))
-	)
+	var profile := _build_profile_from_counts(label, room_size, counts)
 	return _apply_profile_counts(profile, counts)
 
 func _apply_identity_bearing_scaling(profile: Dictionary) -> Dictionary:
