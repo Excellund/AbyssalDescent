@@ -25,6 +25,18 @@ var floor_grid_step: float = 70.0
 var floor_grid_fine_step: float = 35.0
 
 var _art_time: float = 0.0
+var _frame_delta: float = 1.0 / 60.0
+var _focused_chip_morph: float = 0.0
+var _focused_chip_morph_speed: float = 9.0
+var _focused_detail_active: bool = false
+var _detail_enter_radius_mult: float = 1.35
+var _detail_exit_radius_mult: float = 1.62
+var _focused_door_position: Vector2 = Vector2(99999.0, 99999.0)
+var _focused_door_valid: bool = false
+var _pending_focus_position: Vector2 = Vector2(99999.0, 99999.0)
+var _pending_focus_timer: float = 0.0
+var _focus_commit_delay: float = 0.12
+var _focus_switch_advantage: float = 14.0
 
 func _ready() -> void:
 	# Keep floor and door FX behind gameplay actors.
@@ -43,6 +55,7 @@ func configure(config: Dictionary) -> void:
 
 func _process(delta: float) -> void:
 	_art_time += delta
+	_frame_delta = maxf(0.0001, delta)
 	queue_redraw()
 
 func _draw() -> void:
@@ -88,19 +101,43 @@ func _draw() -> void:
 	draw_rect(room_rect.grow(-16.0), Color(0.22, 0.42, 0.62, 0.28), false, 2.0)
 
 	if choosing_next_room:
+		var nearest_door := _get_nearest_door_for_prompt()
+		var focused_door := _get_smoothed_focused_door(nearest_door)
+		var focused_door_pos := focused_door.get("position", Vector2(99999.0, 99999.0)) as Vector2
+		var focused_distance := float(focused_door.get("distance", INF))
+		var detail_enter_distance := door_use_radius * _detail_enter_radius_mult
+		var detail_exit_distance := door_use_radius * _detail_exit_radius_mult
+		if focused_distance >= INF:
+			_focused_detail_active = false
+		elif _focused_detail_active:
+			if focused_distance > detail_exit_distance:
+				_focused_detail_active = false
+		elif focused_distance <= detail_enter_distance:
+			_focused_detail_active = true
+		var target_focused_morph := 0.0
+		if _focused_detail_active:
+			target_focused_morph = 1.0
+		var morph_blend := 1.0 - exp(-_focused_chip_morph_speed * _frame_delta)
+		_focused_chip_morph = lerpf(_focused_chip_morph, target_focused_morph, morph_blend)
+		if absf(_focused_chip_morph - target_focused_morph) < 0.01:
+			_focused_chip_morph = target_focused_morph
 		for door in door_options:
 			var door_pos: Vector2 = door["position"]
 			var color: Color = door["color"]
 			var door_pulse := 0.75 + 0.25 * sin(t * 4.2 + door_pos.x * 0.01)
 			draw_circle(door_pos, 34.0 + 4.0 * door_pulse, Color(color.r, color.g, color.b, 0.12))
+			var is_focused := door_pos.distance_to(focused_door_pos) <= 0.1
 			draw_circle(door_pos, 22.0 + 2.0 * door_pulse, Color(color.r, color.g, color.b, 0.24))
 			draw_circle(door_pos, 14.0, color)
 			draw_arc(door_pos, 30.0, -PI * 0.35, PI * 1.35, 36, Color(color.r, color.g, color.b, 0.7), 2.0)
 			_draw_door_icon(door)
-
-		var nearest_door := _get_nearest_door_for_prompt()
-		if not nearest_door.is_empty() and float(nearest_door.get("distance", INF)) <= door_use_radius * 1.45:
-			_draw_door_interaction_prompt(nearest_door)
+			var chip_morph := _focused_chip_morph if is_focused else 0.0
+			_draw_door_identity_chip(door, chip_morph, is_focused)
+	else:
+		_focused_door_valid = false
+		_focused_detail_active = false
+		_pending_focus_timer = 0.0
+		_focused_chip_morph = 0.0
 
 func _get_nearest_door_for_prompt() -> Dictionary:
 	if door_options.is_empty():
@@ -117,6 +154,53 @@ func _get_nearest_door_for_prompt() -> Dictionary:
 		return {}
 	nearest["distance"] = nearest_distance
 	return nearest
+
+func _find_door_by_position(door_position: Vector2) -> Dictionary:
+	for door in door_options:
+		var pos := door.get("position", Vector2.ZERO) as Vector2
+		if pos.distance_to(door_position) <= 0.1:
+			var matched_door := door.duplicate(true)
+			matched_door["distance"] = player_global_position.distance_to(pos)
+			return matched_door
+	return {}
+
+func _get_smoothed_focused_door(nearest_door: Dictionary) -> Dictionary:
+	if nearest_door.is_empty():
+		_focused_door_valid = false
+		_pending_focus_timer = 0.0
+		return {}
+
+	var nearest_pos := nearest_door.get("position", Vector2(99999.0, 99999.0)) as Vector2
+	var nearest_distance := float(nearest_door.get("distance", INF))
+	if not _focused_door_valid:
+		_focused_door_position = nearest_pos
+		_focused_door_valid = true
+		_pending_focus_timer = 0.0
+		return nearest_door
+
+	var focused_door := _find_door_by_position(_focused_door_position)
+	if focused_door.is_empty():
+		_focused_door_position = nearest_pos
+		_pending_focus_timer = 0.0
+		return nearest_door
+
+	var focused_distance := float(focused_door.get("distance", INF))
+	if nearest_pos.distance_to(_focused_door_position) <= 0.1 or nearest_distance + _focus_switch_advantage >= focused_distance:
+		_pending_focus_timer = 0.0
+		return focused_door
+
+	if _pending_focus_position.distance_to(nearest_pos) > 0.1:
+		_pending_focus_position = nearest_pos
+		_pending_focus_timer = 0.0
+		return focused_door
+
+	_pending_focus_timer += _frame_delta
+	if _pending_focus_timer < _focus_commit_delay:
+		return focused_door
+
+	_focused_door_position = nearest_pos
+	_pending_focus_timer = 0.0
+	return nearest_door
 
 func _build_door_prompt_text(door: Dictionary) -> String:
 	var label := String(door.get("label", "Encounter"))
@@ -136,43 +220,72 @@ func _build_door_prompt_name(door: Dictionary) -> String:
 		return "Rest Site"
 	return label
 
-func _draw_door_interaction_prompt(door: Dictionary) -> void:
+func _build_door_identity_label(door: Dictionary) -> String:
+	var kind_id: int = ENCOUNTER_CONTRACTS.normalize_door_kind(door.get("kind_id", door.get("kind", ENCOUNTER_CONTRACTS.DOOR_KIND_ENCOUNTER)))
+	if kind_id == ENUMS.DoorKind.BOSS:
+		return "Boss"
+	if kind_id == ENUMS.DoorKind.REST:
+		return "Rest"
+	var icon := String(door.get("icon", ""))
+	if icon == "trial":
+		return "Trial"
+	if icon == "objective":
+		var objective_label := String(door.get("label", "Objective"))
+		if objective_label.begins_with("Objective - "):
+			objective_label = objective_label.trim_prefix("Objective - ")
+		return objective_label
+	var label := String(door.get("label", "Encounter"))
+	if label.length() > 20:
+		return label.substr(0, 20) + "..."
+	return label
+
+func _draw_door_identity_chip(door: Dictionary, morph_t: float, is_focused: bool) -> void:
 	var font := ThemeDB.fallback_font
 	if font == null:
 		return
 	var door_pos := door.get("position", Vector2.ZERO) as Vector2
 	var door_color := door.get("color", Color(0.78, 0.9, 1.0, 1.0)) as Color
-	var info_text := _build_door_prompt_text(door)
+	var compact_text := _build_door_identity_label(door)
+	var detail_text := _build_door_prompt_text(door)
 	var action_text := "[E] Enter"
-	var action_font_size := 13
-	var info_font_size := 17
-	var action_size := font.get_string_size(action_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, action_font_size)
-	var info_size := font.get_string_size(info_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, info_font_size)
-	var plate_w := clampf(maxf(action_size.x, info_size.x) + 52.0, 210.0, 460.0)
-	var plate_h := 56.0
-	var radius := plate_h * 0.5
-	var plate_x := door_pos.x - plate_w * 0.5
-	var plate_y := door_pos.y - 100.0
-	var fill := Color(0.035, 0.055, 0.09, 0.88)
-	var glow := Color(door_color.r, door_color.g, door_color.b, 0.16)
-	var border := Color(door_color.r, door_color.g, door_color.b, 0.68)
-	draw_circle(Vector2(plate_x + radius, plate_y + radius), radius + 5.0, glow)
-	draw_circle(Vector2(plate_x + plate_w - radius, plate_y + radius), radius + 5.0, glow)
-	draw_rect(Rect2(Vector2(plate_x + radius, plate_y - 5.0), Vector2(plate_w - radius * 2.0, plate_h + 10.0)), glow, true)
-	draw_circle(Vector2(plate_x + radius, plate_y + radius), radius, fill)
-	draw_circle(Vector2(plate_x + plate_w - radius, plate_y + radius), radius, fill)
-	draw_rect(Rect2(Vector2(plate_x + radius, plate_y), Vector2(plate_w - radius * 2.0, plate_h)), fill, true)
-	draw_arc(Vector2(plate_x + radius, plate_y + radius), radius, PI * 0.5, PI * 1.5, 22, border, 1.6)
-	draw_arc(Vector2(plate_x + plate_w - radius, plate_y + radius), radius, -PI * 0.5, PI * 0.5, 22, border, 1.6)
-	draw_line(Vector2(plate_x + radius, plate_y), Vector2(plate_x + plate_w - radius, plate_y), border, 1.6)
-	draw_line(Vector2(plate_x + radius, plate_y + plate_h), Vector2(plate_x + plate_w - radius, plate_y + plate_h), border, 1.6)
-	draw_line(Vector2(plate_x + radius * 0.6, plate_y + 22.0), Vector2(plate_x + plate_w - radius * 0.6, plate_y + 22.0), Color(door_color.r, door_color.g, door_color.b, 0.32), 1.0)
-	var text_shadow := Color(0.0, 0.0, 0.0, 0.56)
+	var compact_size := font.get_string_size(compact_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 14)
+	var detail_size := font.get_string_size(detail_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 17)
+	var action_size := font.get_string_size(action_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 13)
+	var compact_w := clampf(compact_size.x + 34.0, 96.0, 240.0)
+	var detail_w := clampf(maxf(detail_size.x, action_size.x) + 52.0, 210.0, 460.0)
+	var eased := clampf(morph_t, 0.0, 1.0)
+	eased = eased * eased * (3.0 - 2.0 * eased)
+	# Two-stage morph prevents duplicated/intersecting text at mid distance.
+	var shape_t := clampf(eased / 0.72, 0.0, 1.0)
+	var chip_w := lerpf(compact_w, detail_w, shape_t)
+	var chip_h := lerpf(26.0, 56.0, shape_t)
+	var chip_x := door_pos.x - chip_w * 0.5
+	var chip_y := door_pos.y - lerpf(64.0, 100.0, shape_t)
+	var focus_boost := 0.1 if is_focused else 0.0
+	var fill := Color(0.03, 0.05, 0.08, lerpf(0.76, 0.9, eased) + focus_boost)
+	var border_alpha := lerpf(0.55, 0.84, eased) + focus_boost * 0.4
+	var shimmer := 0.5 + 0.5 * sin(_art_time * 6.0 + door_pos.x * 0.02)
+	if eased > 0.01:
+		var glow_alpha := 0.08 + 0.14 * eased + 0.06 * shimmer * eased
+		draw_rect(Rect2(Vector2(chip_x - 4.0, chip_y - 4.0), Vector2(chip_w + 8.0, chip_h + 8.0)), Color(door_color.r, door_color.g, door_color.b, glow_alpha), true)
+	draw_rect(Rect2(Vector2(chip_x, chip_y), Vector2(chip_w, chip_h)), fill, true)
+	draw_rect(Rect2(Vector2(chip_x, chip_y), Vector2(chip_w, chip_h)), Color(door_color.r, door_color.g, door_color.b, clampf(border_alpha, 0.0, 1.0)), false, 1.6)
+	if shape_t > 0.65:
+		var divider_alpha := (shape_t - 0.65) / 0.35
+		draw_line(Vector2(chip_x + 16.0, chip_y + 22.0), Vector2(chip_x + chip_w - 16.0, chip_y + 22.0), Color(door_color.r, door_color.g, door_color.b, 0.3 * divider_alpha), 1.0)
+	var text_shadow := Color(0.0, 0.0, 0.0, 0.55)
 	var text_color := Color(0.95, 0.98, 1.0, 0.98)
-	draw_string(font, Vector2(plate_x, plate_y + 17.0) + Vector2(1.0, 1.0), action_text, HORIZONTAL_ALIGNMENT_CENTER, plate_w, action_font_size, text_shadow)
-	draw_string(font, Vector2(plate_x, plate_y + 17.0), action_text, HORIZONTAL_ALIGNMENT_CENTER, plate_w, action_font_size, text_color)
-	draw_string(font, Vector2(plate_x, plate_y + 46.0) + Vector2(1.0, 1.0), info_text, HORIZONTAL_ALIGNMENT_CENTER, plate_w, info_font_size, text_shadow)
-	draw_string(font, Vector2(plate_x, plate_y + 46.0), info_text, HORIZONTAL_ALIGNMENT_CENTER, plate_w, info_font_size, text_color)
+	var compact_alpha := 1.0 - clampf((eased - 0.5) / 0.26, 0.0, 1.0)
+	var detail_alpha := clampf((eased - 0.72) / 0.28, 0.0, 1.0)
+	if compact_alpha > 0.01:
+		draw_string(font, Vector2(chip_x, chip_y + 18.0) + Vector2(1.0, 1.0), compact_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 14, Color(text_shadow.r, text_shadow.g, text_shadow.b, text_shadow.a * compact_alpha))
+		draw_string(font, Vector2(chip_x, chip_y + 18.0), compact_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 14, Color(text_color.r, text_color.g, text_color.b, text_color.a * compact_alpha))
+	if detail_alpha > 0.01:
+		var detail_offset := (1.0 - detail_alpha) * 6.0
+		draw_string(font, Vector2(chip_x, chip_y + 17.0) + Vector2(1.0, 1.0), action_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 13, Color(text_shadow.r, text_shadow.g, text_shadow.b, text_shadow.a * detail_alpha))
+		draw_string(font, Vector2(chip_x, chip_y + 17.0 + detail_offset), action_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 13, Color(text_color.r, text_color.g, text_color.b, text_color.a * detail_alpha))
+		draw_string(font, Vector2(chip_x, chip_y + 46.0 + detail_offset) + Vector2(1.0, 1.0), detail_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 17, Color(text_shadow.r, text_shadow.g, text_shadow.b, text_shadow.a * detail_alpha))
+		draw_string(font, Vector2(chip_x, chip_y + 46.0 + detail_offset), detail_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 17, Color(text_color.r, text_color.g, text_color.b, text_color.a * detail_alpha))
 
 func _draw_door_icon(door: Dictionary) -> void:
 	var door_pos: Vector2 = door["position"]
