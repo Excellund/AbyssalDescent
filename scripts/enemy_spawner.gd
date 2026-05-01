@@ -51,6 +51,7 @@ const ENEMY_MUTATOR_STAT_MAP := {
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_COOLDOWN_MULT, "prop": "attack_cooldown", "min": 0.8}
 	]
 }
+const ENEMY_SPAWN_ORDER: Array[String] = ["chaser", "charger", "archer", "shielder", "lurker", "ram", "lancer"]
 
 var world_root: Node2D
 var player: Node2D
@@ -102,35 +103,31 @@ func _compose_active_enemy_mutator() -> Dictionary:
 
 func spawn_profile_enemies(profile: Dictionary) -> int:
 	var total := 0
-	var chaser_count := ENCOUNTER_CONTRACTS.profile_chaser_count(profile)
-	var charger_count := ENCOUNTER_CONTRACTS.profile_charger_count(profile)
-	var archer_count := ENCOUNTER_CONTRACTS.profile_archer_count(profile)
-	var shielder_count := ENCOUNTER_CONTRACTS.profile_shielder_count(profile)
-	var lurker_count := ENCOUNTER_CONTRACTS.profile_lurker_count(profile)
-	var ram_count := ENCOUNTER_CONTRACTS.profile_ram_count(profile)
-	var lancer_count := ENCOUNTER_CONTRACTS.profile_lancer_count(profile)
-	for _i in range(chaser_count):
-		_spawn_enemy_in_current_room(scripts.get("chaser"))
-		total += 1
-	for _i in range(charger_count):
-		_spawn_enemy_in_current_room(scripts.get("charger"))
-		total += 1
-	for _i in range(archer_count):
-		_spawn_enemy_in_current_room(scripts.get("archer"))
-		total += 1
-	for _i in range(shielder_count):
-		_spawn_enemy_in_current_room(scripts.get("shielder"))
-		total += 1
-	for _i in range(lurker_count):
-		_spawn_enemy_in_current_room(scripts.get("lurker"))
-		total += 1
-	for _i in range(ram_count):
-		_spawn_enemy_in_current_room(scripts.get("ram"))
-		total += 1
-	for _i in range(lancer_count):
-		_spawn_enemy_in_current_room(scripts.get("lancer"))
-		total += 1
+	for enemy_type in ENEMY_SPAWN_ORDER:
+		var count := _profile_count_for_enemy_type(profile, enemy_type)
+		for _i in range(maxi(0, count)):
+			_spawn_enemy_in_current_room(scripts.get(enemy_type))
+			total += 1
 	return total
+
+func _profile_count_for_enemy_type(profile: Dictionary, enemy_type: String) -> int:
+	match enemy_type:
+		"chaser":
+			return ENCOUNTER_CONTRACTS.profile_chaser_count(profile)
+		"charger":
+			return ENCOUNTER_CONTRACTS.profile_charger_count(profile)
+		"archer":
+			return ENCOUNTER_CONTRACTS.profile_archer_count(profile)
+		"shielder":
+			return ENCOUNTER_CONTRACTS.profile_shielder_count(profile)
+		"lurker":
+			return ENCOUNTER_CONTRACTS.profile_lurker_count(profile)
+		"ram":
+			return ENCOUNTER_CONTRACTS.profile_ram_count(profile)
+		"lancer":
+			return ENCOUNTER_CONTRACTS.profile_lancer_count(profile)
+		_:
+			return 0
 
 func clear_all_enemies() -> void:
 	if not is_instance_valid(world_root):
@@ -188,14 +185,14 @@ func _enemy_script_key(enemy_script: Script) -> String:
 			return String(enemy_key)
 	return ""
 
-func _apply_mutator_specs(enemy: CharacterBody2D, specs: Array) -> bool:
+func _apply_mutator_specs(enemy: CharacterBody2D, mutator: Dictionary, specs: Array) -> bool:
 	var is_affected := false
 	for spec_variant in specs:
 		var spec := spec_variant as Dictionary
 		var stat_key := String(spec.get("stat", ""))
 		if stat_key.is_empty():
 			continue
-		var multiplier := ENCOUNTER_CONTRACTS.mutator_stat(current_room_enemy_mutator, stat_key, 1.0)
+		var multiplier := ENCOUNTER_CONTRACTS.mutator_stat(mutator, stat_key, 1.0)
 		if not is_equal_approx(multiplier, 1.0):
 			is_affected = true
 		var property_name := String(spec.get("prop", ""))
@@ -223,10 +220,7 @@ func _apply_enemy_mutator(enemy: CharacterBody2D, enemy_script: Script) -> void:
 		is_affected = true
 	var enemy_key := _enemy_script_key(enemy_script)
 	var specs := ENEMY_MUTATOR_STAT_MAP.get(enemy_key, []) as Array
-	var previous_mutator := current_room_enemy_mutator
-	current_room_enemy_mutator = applied_mutator
-	is_affected = _apply_mutator_specs(enemy, specs) or is_affected
-	current_room_enemy_mutator = previous_mutator
+	is_affected = _apply_mutator_specs(enemy, applied_mutator, specs) or is_affected
 
 	enemy.modulate = ENCOUNTER_CONTRACTS.mutator_enemy_tint(applied_mutator, Color(1.0, 0.92, 0.92, 1.0))
 	if enemy.get("has_mutator_overlay") != null:

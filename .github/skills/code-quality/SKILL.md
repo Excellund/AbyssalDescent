@@ -244,7 +244,25 @@ Do not use `.has_method()` to defensively check if a method exists. Instead, est
 
 ---
 
-### 10. Capture Durable User Guidance In Skills (Autonomous Checkpoint)
+### 10. Avoid Temporary Shared-State Swapping
+
+Do not temporarily overwrite shared/module state just to pass context into a helper, then restore it afterward.
+
+**Why it matters:**
+
+- Temporary write/restore logic obscures control flow.
+- Later edits can accidentally skip restoration and leak state.
+- Helper behavior becomes implicitly coupled to ambient mutable state.
+
+**How to apply:**
+
+- Pass required context as explicit helper parameters.
+- Keep shared state writes at clear ownership boundaries (setup/configuration), not mid-operation.
+- Treat temporary state swaps as a refactor smell, especially in hot runtime paths.
+
+---
+
+### 11. Capture Durable User Guidance In Skills (Autonomous Checkpoint)
 
 When code changes establish or validate a **durable, reusable practice**, update the relevant skill doc as part of task completion, not as optional follow-up work.
 
@@ -261,7 +279,7 @@ When code changes establish or validate a **durable, reusable practice**, update
 
 ---
 
-### 11. Prefer Shared Enums Over Integer Constant Ladders
+### 12. Prefer Shared Enums Over Integer Constant Ladders
 
 Avoid per-file ladders like `const STATE_X := 0`, `const STATE_Y := 1` for finite state sets.
 
