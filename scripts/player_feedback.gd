@@ -235,9 +235,9 @@ func play_rest_site_heal(epicenter_global: Vector2) -> void:
 		var lift_drift := Vector2(0.0, randf_range(-16.0, -8.0))
 		var drift := radial_drift + tangential_drift + lift_drift
 		var duration := randf_range(0.34, 0.44)
-		var scale := randf_range(0.9, 1.02)
+		var cross_scale := randf_range(0.9, 1.02)
 		var rotation_bias := randf_range(-0.06, 0.06)
-		_spawn_heal_cross(epicenter_global, start_offset, drift, duration, scale, rotation_bias)
+		_spawn_heal_cross(epicenter_global, start_offset, drift, duration, cross_scale, rotation_bias)
 
 func play_combo_relay_kill(epicenter_global: Vector2, stack_count: int, max_stacks: int, color: Color, lifetime: float = 0.2) -> void:
 	var clamped_max := maxi(1, max_stacks)
