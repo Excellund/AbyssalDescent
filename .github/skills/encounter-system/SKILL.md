@@ -19,6 +19,8 @@ Use this skill when working on the refactored encounter-generation surfaces.
 - Encounter compositions live in `BEARING_DEFINITIONS` in `scripts/encounter_profile_builder.gd`.
 - Random hard mutator compatibility is decided by each mutator's `affected_archetypes` entry in `_hard_mutator_pool()`.
 - Enemy mutator stat application lives in `ENEMY_MUTATOR_STAT_MAP` in `scripts/enemy_spawner.gd`.
+- Canonical debug encounter keys live in `DEBUG_ENCOUNTER_MAP` in `scripts/shared/encounter_contracts.gd`.
+- Canonical objective kind strings are written by `profile_set_survival_objective`, `profile_set_priority_target_objective`, and `profile_set_control_objective` in `scripts/shared/encounter_contracts.gd`.
 - Temporary transferable mutators (objective rewards and similar) are contract-driven and can target player/enemy/both.
 - Keep hard mutators (room-level) and temporary mutators (cross-encounter) distinct in naming and tuning intent.
 - Debug startup controls are read from the DebugSettings child in `scenes/Main.tscn` via prefix-free fields (for example: `enabled`, `start_encounter`, `mutator_override`).
@@ -29,6 +31,7 @@ Use this skill when working on the refactored encounter-generation surfaces.
   - Update `BEARING_DEFINITIONS`.
   - Preserve the encounter's signature threat pattern across all 4 difficulty ranks (Pilgrim/Delver/Harbinger/Forsworn).
   - Keep labels aligned with glossary/debug naming.
+  - If canonical debug encounter keys or objective kind strings are renamed, update all contract consumers in the same change (builder dispatch, world runtime checks, objective runtime, HUD, telemetry bearing keys).
   - If debug launch paths are affected, keep `DebugSettings.start_encounter` behavior coherent in `scripts/world_generator.gd` and `scripts/menu_controller.gd`.
 - Add or retune a random hard mutator:
   - Update `_hard_mutator_pool()`.
@@ -82,6 +85,7 @@ Mutators match a profile if any declared archetype is present. If a filtered poo
 - Do not add a random hard mutator without `affected_archetypes`, or invalid rooms can roll it.
 - Do not duplicate per-enemy mutator logic outside `ENEMY_MUTATOR_STAT_MAP` unless the behavior is genuinely exceptional.
 - Do not route internal world/objective calls through method-name string dispatch helpers (for example `_call(method: String, ...)` + `callv`); prefer explicit typed calls.
+- Do not infer objective debug encounters via string prefixes (for example `begins_with("objective_")`) when keys are canonical data. Use contract metadata (for example `debug_encounter_is_objective`) so renames do not silently break reward routing.
 - Do not assume transport FX appears on custom boss draw paths: if a boss bypasses `_draw_common_body()`, its `_draw()` must explicitly gate on `is_spawn_transporting()` and render `_draw_spawn_transport_fx(...)` before returning.
 - Do not add new integer constant ladders for finite categorical state (debug modes, AI states, camera modes, tier IDs). Define enums in shared `scripts/shared/*_enums.gd` files and reference enum members directly in consumers.
 - Do not mirror shared enum members with local alias constants in usage scripts unless a compatibility boundary explicitly requires legacy symbols.
