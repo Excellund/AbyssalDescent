@@ -5,10 +5,13 @@ signal check_finished
 signal download_finished(success: bool, message: String)
 
 const UPDATE_FEED_SETTING := "application/config/update_feed_url"
+const UPDATE_FEED_TOKEN_SETTING := "application/config/update_feed_token"
 const UPDATE_RELEASE_PAGE_SETTING := "application/config/update_release_page_url"
 const DEFAULT_UPDATE_FEED_URL := "https://api.github.com/repos/Excellund/AbyssalDescent/releases/latest"
 const DEFAULT_UPDATE_RELEASE_PAGE_URL := "https://github.com/Excellund/AbyssalDescent/releases/latest"
 const UPDATE_DOWNLOAD_DIR := "user://updates"
+const UPDATE_FEED_ETAG_PATH := "user://updates/feed.etag"
+const UPDATE_FEED_CACHE_PATH := "user://updates/feed_cache.json"
 
 var current_version: String = ""
 var latest_version: String = ""
@@ -56,6 +59,12 @@ func request_check(is_manual: bool = false) -> void:
 	check_in_progress = true
 	_set_status("Checking for updates...", "Contacting release feed..." if is_manual else "Current version: %s" % _display_current_version())
 	var headers := PackedStringArray(["Accept: application/json", "User-Agent: AbyssalDescent-Updater"])
+	var token := _update_feed_token()
+	if not token.is_empty():
+		headers.append("Authorization: Bearer %s" % token)
+	var cached_etag := _load_cached_feed_etag()
+	if not cached_etag.is_empty():
+		headers.append("If-None-Match: %s" % cached_etag)
 	var err := _check_request.request(feed_url, headers, HTTPClient.METHOD_GET)
 	if err != OK:
 		check_in_progress = false
@@ -182,12 +191,31 @@ func _ensure_requests() -> void:
 		_download_request.request_completed.connect(_on_download_completed)
 		add_child(_download_request)
 
-func _on_check_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+func _on_check_completed(result: int, response_code: int, headers: PackedStringArray, body: PackedByteArray) -> void:
 	check_in_progress = false
+	if result == HTTPRequest.RESULT_SUCCESS and response_code == 304:
+		var cached_payload := _load_cached_release_payload()
+		if not _apply_release_payload(cached_payload):
+			update_available = false
+			latest_version = ""
+			download_url = ""
+			check_error_detail = "Release feed returned not-modified, but cached data is unavailable."
+			_set_status("Update check failed.", "Cached release info is unavailable. Try checking again.")
+		emit_signal("check_finished")
+		return
 	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
 		update_available = false
 		latest_version = ""
 		download_url = ""
+		if response_code == 403:
+			var rate_remaining := _header_value(headers, "x-ratelimit-remaining")
+			if rate_remaining == "0":
+				var rate_reset := _header_value(headers, "x-ratelimit-reset")
+				var reset_text := "unknown" if rate_reset.is_empty() else rate_reset
+				check_error_detail = "GitHub API rate limit exceeded."
+				_set_status("Update check failed.", "GitHub rate limit exceeded. Retry after reset epoch %s or configure %s." % [reset_text, UPDATE_FEED_TOKEN_SETTING])
+				emit_signal("check_finished")
+				return
 		check_error_detail = "Update check failed (network result %d, HTTP %d)." % [result, response_code]
 		_set_status("Update check failed.", "Network result %d, HTTP %d." % [result, response_code])
 		emit_signal("check_finished")
@@ -201,26 +229,17 @@ func _on_check_completed(result: int, response_code: int, _headers: PackedString
 		_set_status("Update feed returned invalid data.", "Expected a JSON object response.")
 		emit_signal("check_finished")
 		return
+	var response_etag := _header_value(headers, "etag")
+	if not response_etag.is_empty():
+		_save_cached_feed_etag(response_etag)
 	var payload := parsed_raw as Dictionary
-	var resolved_latest := _resolve_latest_version(payload)
-	var resolved_download := _resolve_download_url(payload)
-	var resolved_release_page := _resolve_release_page_url(payload)
-	if not resolved_release_page.is_empty():
-		release_page_url = resolved_release_page
-	latest_version = resolved_latest
-	download_url = resolved_download
-	if resolved_latest.is_empty():
+	_save_cached_release_payload(payload)
+	if not _apply_release_payload(payload):
 		update_available = false
 		check_error_detail = "Release feed is missing version info."
 		_set_status("Release feed is missing version info.", "No tag_name/version field found in release response.")
 		emit_signal("check_finished")
 		return
-	check_error_detail = ""
-	update_available = _compare_versions(current_version, latest_version) < 0
-	if update_available:
-		_set_status("New version available: %s" % latest_version, "Current version: %s" % _display_current_version())
-	else:
-		_set_status("You are up to date.", "Current version: %s" % _display_current_version())
 	emit_signal("check_finished")
 
 func _on_download_completed(result: int, response_code: int, _headers: PackedStringArray, _body: PackedByteArray) -> void:
@@ -249,6 +268,9 @@ func _display_latest_version() -> String:
 
 func _update_feed_url() -> String:
 	return String(ProjectSettings.get_setting(UPDATE_FEED_SETTING, DEFAULT_UPDATE_FEED_URL)).strip_edges()
+
+func _update_feed_token() -> String:
+	return String(ProjectSettings.get_setting(UPDATE_FEED_TOKEN_SETTING, "")).strip_edges()
 
 func _update_release_page_url() -> String:
 	return String(ProjectSettings.get_setting(UPDATE_RELEASE_PAGE_SETTING, DEFAULT_UPDATE_RELEASE_PAGE_URL)).strip_edges()
@@ -342,3 +364,66 @@ func _file_name_from_url(url: String) -> String:
 	if slash_index < 0 or slash_index >= path_only.length() - 1:
 		return ""
 	return path_only.substr(slash_index + 1)
+
+func _apply_release_payload(payload: Dictionary) -> bool:
+	var resolved_latest := _resolve_latest_version(payload)
+	var resolved_download := _resolve_download_url(payload)
+	var resolved_release_page := _resolve_release_page_url(payload)
+	if not resolved_release_page.is_empty():
+		release_page_url = resolved_release_page
+	latest_version = resolved_latest
+	download_url = resolved_download
+	if resolved_latest.is_empty():
+		return false
+	check_error_detail = ""
+	update_available = _compare_versions(current_version, latest_version) < 0
+	if update_available:
+		_set_status("New version available: %s" % latest_version, "Current version: %s" % _display_current_version())
+	else:
+		_set_status("You are up to date.", "Current version: %s" % _display_current_version())
+	return true
+
+func _header_value(headers: PackedStringArray, key: String) -> String:
+	var normalized_key := key.strip_edges().to_lower()
+	for entry in headers:
+		var separator_index := entry.find(":")
+		if separator_index <= 0:
+			continue
+		var header_name := entry.substr(0, separator_index).strip_edges().to_lower()
+		if header_name != normalized_key:
+			continue
+		return entry.substr(separator_index + 1, entry.length() - separator_index - 1).strip_edges()
+	return ""
+
+func _load_cached_feed_etag() -> String:
+	if not FileAccess.file_exists(UPDATE_FEED_ETAG_PATH):
+		return ""
+	var file := FileAccess.open(UPDATE_FEED_ETAG_PATH, FileAccess.READ)
+	if file == null:
+		return ""
+	return file.get_as_text().strip_edges()
+
+func _save_cached_feed_etag(etag: String) -> void:
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(UPDATE_DOWNLOAD_DIR))
+	var file := FileAccess.open(UPDATE_FEED_ETAG_PATH, FileAccess.WRITE)
+	if file == null:
+		return
+	file.store_string(etag.strip_edges())
+
+func _load_cached_release_payload() -> Dictionary:
+	if not FileAccess.file_exists(UPDATE_FEED_CACHE_PATH):
+		return {}
+	var file := FileAccess.open(UPDATE_FEED_CACHE_PATH, FileAccess.READ)
+	if file == null:
+		return {}
+	var parsed_raw: Variant = JSON.parse_string(file.get_as_text())
+	if not (parsed_raw is Dictionary):
+		return {}
+	return parsed_raw as Dictionary
+
+func _save_cached_release_payload(payload: Dictionary) -> void:
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(UPDATE_DOWNLOAD_DIR))
+	var file := FileAccess.open(UPDATE_FEED_CACHE_PATH, FileAccess.WRITE)
+	if file == null:
+		return
+	file.store_string(JSON.stringify(payload))
