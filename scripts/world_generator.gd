@@ -1548,6 +1548,8 @@ func _begin_configured_boss_room(is_first_boss: bool, room_size: Vector2, room_l
 	current_room_size = room_size
 	current_room_static_camera = false
 	current_room_label = room_label
+	current_room_enemy_mutator = {}
+	current_room_player_mutator = {}
 	_record_room_entry(room_entry_key, {})
 	hud.show_banner(banner_title, "")
 	_apply_camera_bounds_for_room(current_room_size)
