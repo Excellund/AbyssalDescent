@@ -29,6 +29,7 @@ const KEY_ICON := "icon"
 const KEY_REWARD := "reward"
 const KEY_PROFILE := "profile"
 const KEY_POSITION := "position"
+const KEY_ENCOUNTER_KEY := "encounter_key"
 
 const KEY_ACTION_ID := "action_id"
 const KEY_ACTION := "action"
@@ -106,6 +107,77 @@ const DEBUG_ENCOUNTER_MAP := [
 	{"id": DEBUG_ENUMS.Encounter.BOSS_1, "key": "warden", "is_boss": true, "is_rest": false, "is_objective": false},
 	{"id": DEBUG_ENUMS.Encounter.BOSS_2, "key": "sovereign", "is_boss": true, "is_rest": false, "is_objective": false},
 ]
+
+const ENCOUNTER_DOOR_PRESENTATION := {
+	"skirmish": {
+		"label": "Skirmish"
+	},
+	"pursuit": {
+		"label": "Pursuit"
+	},
+	"crossfire": {
+		"label": "Crossfire"
+	},
+	"onslaught": {
+		"label": "Onslaught"
+	},
+	"fortress": {
+		"label": "Fortress"
+	},
+	"blitz": {
+		"label": "Blitz"
+	},
+	"suppression": {
+		"label": "Suppression"
+	},
+	"vanguard": {
+		"label": "Vanguard"
+	},
+	"ambush": {
+		"label": "Ambush"
+	},
+	"gauntlet": {
+		"label": "Gauntlet"
+	},
+	"rest": {
+		"label": "Rest Site",
+		"short_label": "Rest",
+		"color": Color(0.66, 1.0, 0.76, 0.92),
+		"icon": "rest",
+		"kind": DOOR_KIND_REST,
+		"reward": ENUMS.RewardMode.NONE,
+		"prompt_name_suffix": ""
+	},
+	"trial": {
+		"short_label": "Trial"
+	},
+	"warden": {
+		"label": "Warden",
+		"short_label": "Boss",
+		"color": Color(0.96, 0.46, 0.18, 0.98),
+		"icon": "boss",
+		"kind": DOOR_KIND_BOSS,
+		"reward": ENUMS.RewardMode.NONE,
+		"prompt_name_suffix": " Gate"
+	},
+	"sovereign": {
+		"label": "Sovereign",
+		"short_label": "Boss",
+		"color": Color(0.92, 0.28, 0.1, 0.98),
+		"icon": "boss",
+		"kind": DOOR_KIND_BOSS,
+		"reward": ENUMS.RewardMode.NONE,
+		"prompt_name_suffix": " Gate"
+	}
+}
+
+const INTRO_ENCOUNTER_DOOR_KEYS := {
+	"skirmish": true,
+	"pursuit": true
+}
+
+const INTRO_ENCOUNTER_DOOR_COLOR := Color(0.34, 0.8, 1.0, 0.95)
+const STANDARD_ENCOUNTER_DOOR_COLOR := Color(0.93, 0.62, 0.28, 0.95)
 
 static func _door_kind_from_legacy(value: String) -> int:
 	match value.to_lower():
@@ -199,6 +271,38 @@ static func debug_encounter_is_objective(encounter_key: String) -> bool:
 	if entry.is_empty():
 		return false
 	return bool(entry.get("is_objective", false))
+
+static func _door_presentation(encounter_key: String) -> Dictionary:
+	return ENCOUNTER_DOOR_PRESENTATION.get(encounter_key.strip_edges().to_lower(), {}) as Dictionary
+
+static func _normalize_encounter_key(value: String, fallback: String = "unknown") -> String:
+	var key := value.strip_edges().to_lower()
+	if key.is_empty():
+		return fallback
+	for sep in [":", "-", "/", "."]:
+		key = key.replace(sep, " ")
+	for punct in ["'", "\""]:
+		key = key.replace(punct, "")
+	while key.find("  ") != -1:
+		key = key.replace("  ", " ")
+	key = key.strip_edges().replace(" ", "_")
+	return key if not key.is_empty() else fallback
+
+static func _profile_encounter_key(profile: Dictionary, fallback: String = "unknown") -> String:
+	if profile.is_empty():
+		return fallback
+	return _normalize_encounter_key(profile_label(profile), fallback)
+
+static func _objective_prompt_label(profile: Dictionary) -> String:
+	return "Objective - %s" % profile_label(profile)
+
+static func _objective_short_label(profile: Dictionary) -> String:
+	return profile_label(profile)
+
+static func _truncate_door_label(label: String, max_length: int = 20) -> String:
+	if label.length() <= max_length:
+		return label
+	return label.substr(0, max_length) + "..."
 
 static func profile(
 	label: String,
@@ -614,7 +718,7 @@ static func door_use_is_used(result: Dictionary) -> bool:
 static func door_use_get_door(result: Dictionary) -> Dictionary:
 	return result.get(KEY_DOOR, {}) as Dictionary
 
-static func door_option(label: String, color: Color, kind: Variant, icon: String, reward_mode: int, room_profile: Dictionary) -> Dictionary:
+static func door_option(label: String, color: Color, kind: Variant, icon: String, reward_mode: int, room_profile: Dictionary, encounter_key: String = "") -> Dictionary:
 	var kind_id := normalize_door_kind(kind)
 	return {
 		KEY_LABEL: label,
@@ -623,7 +727,8 @@ static func door_option(label: String, color: Color, kind: Variant, icon: String
 		KEY_KIND: _door_kind_to_legacy(kind_id),
 		KEY_ICON: icon,
 		KEY_REWARD: normalize_reward_mode(reward_mode),
-		KEY_PROFILE: room_profile
+		KEY_PROFILE: room_profile,
+		KEY_ENCOUNTER_KEY: encounter_key.strip_edges().to_lower()
 	}
 
 static func normalize_door_option(value: Variant) -> Dictionary:
@@ -636,7 +741,86 @@ static func normalize_door_option(value: Variant) -> Dictionary:
 		option.get(KEY_KIND_ID, option.get(KEY_KIND, DOOR_KIND_ENCOUNTER)),
 		String(option.get(KEY_ICON, "easy")),
 		int(option.get(KEY_REWARD, ENUMS.RewardMode.NONE)),
-		option.get(KEY_PROFILE, {}) as Dictionary
+		option.get(KEY_PROFILE, {}) as Dictionary,
+		String(option.get(KEY_ENCOUNTER_KEY, ""))
+	)
+
+static func rest_door_option() -> Dictionary:
+	var presentation := _door_presentation("rest")
+	return door_option(
+		String(presentation.get("label", "Rest Site")),
+		presentation.get("color", Color(0.66, 1.0, 0.76, 0.92)) as Color,
+		presentation.get("kind", DOOR_KIND_REST),
+		String(presentation.get("icon", "rest")),
+		int(presentation.get("reward", ENUMS.RewardMode.NONE)),
+		{},
+		"rest"
+	)
+
+static func boss_door_option(encounter_key: String) -> Dictionary:
+	var normalized_key := encounter_key.strip_edges().to_lower()
+	var presentation := _door_presentation(normalized_key)
+	if presentation.is_empty():
+		presentation = _door_presentation("warden")
+		normalized_key = "warden"
+	return door_option(
+		String(presentation.get("label", "Boss")),
+		presentation.get("color", Color(0.95, 0.18, 0.22, 0.98)) as Color,
+		presentation.get("kind", DOOR_KIND_BOSS),
+		String(presentation.get("icon", "boss")),
+		int(presentation.get("reward", ENUMS.RewardMode.NONE)),
+		{},
+		normalized_key
+	)
+
+static func objective_door_option(profile: Dictionary) -> Dictionary:
+	return door_option(
+		_objective_prompt_label(profile),
+		Color(0.98, 0.78, 0.34, 0.96),
+		DOOR_KIND_ENCOUNTER,
+		"objective",
+		ENUMS.RewardMode.MISSION,
+		profile,
+		String(profile.get(PROFILE_KEY_OBJECTIVE_KIND, "objective"))
+	)
+
+static func trial_door_option(profile: Dictionary, mutator_name: String, color: Color) -> Dictionary:
+	return door_option(
+		"Trial - %s" % mutator_name,
+		color,
+		DOOR_KIND_ENCOUNTER,
+		"trial",
+		ENUMS.RewardMode.ARCANA,
+		profile,
+		"trial"
+	)
+
+static func intro_encounter_door_option(profile: Dictionary) -> Dictionary:
+	var encounter_key := _profile_encounter_key(profile)
+	var presentation := _door_presentation(encounter_key)
+	var label := String(presentation.get("label", profile_label(profile)))
+	return door_option(
+		label,
+		INTRO_ENCOUNTER_DOOR_COLOR,
+		DOOR_KIND_ENCOUNTER,
+		"easy",
+		ENUMS.RewardMode.BOON,
+		profile,
+		encounter_key
+	)
+
+static func standard_encounter_door_option(profile: Dictionary) -> Dictionary:
+	var encounter_key := _profile_encounter_key(profile)
+	var presentation := _door_presentation(encounter_key)
+	var label := String(presentation.get("label", profile_label(profile)))
+	return door_option(
+		label,
+		STANDARD_ENCOUNTER_DOOR_COLOR,
+		DOOR_KIND_ENCOUNTER,
+		"easy" if INTRO_ENCOUNTER_DOOR_KEYS.has(encounter_key) else "hard",
+		ENUMS.RewardMode.BOON,
+		profile,
+		encounter_key
 	)
 
 static func door_option_set_position(option: Dictionary, position: Vector2) -> void:
@@ -653,6 +837,38 @@ static func door_option_reward_mode(option: Dictionary) -> int:
 
 static func door_option_profile(option: Dictionary) -> Dictionary:
 	return option.get(KEY_PROFILE, {}) as Dictionary
+
+static func door_option_encounter_key(option: Dictionary) -> String:
+	return String(option.get(KEY_ENCOUNTER_KEY, "")).strip_edges().to_lower()
+
+static func door_prompt_text(option: Dictionary) -> String:
+	var normalized_option := normalize_door_option(option)
+	var encounter_key := door_option_encounter_key(normalized_option)
+	var presentation := _door_presentation(encounter_key)
+	if not presentation.is_empty() and presentation.has("label"):
+		return String(presentation.get("label", "Encounter"))
+	var icon := String(normalized_option.get(KEY_ICON, ""))
+	if icon == "objective":
+		return _objective_prompt_label(door_option_profile(normalized_option))
+	return String(normalized_option.get(KEY_LABEL, "Encounter"))
+
+static func door_prompt_name(option: Dictionary) -> String:
+	var normalized_option := normalize_door_option(option)
+	var prompt_text := door_prompt_text(normalized_option)
+	var presentation := _door_presentation(door_option_encounter_key(normalized_option))
+	var suffix := String(presentation.get("prompt_name_suffix", ""))
+	return prompt_text + suffix
+
+static func door_identity_label(option: Dictionary) -> String:
+	var normalized_option := normalize_door_option(option)
+	var encounter_key := door_option_encounter_key(normalized_option)
+	var presentation := _door_presentation(encounter_key)
+	if not presentation.is_empty() and presentation.has("short_label"):
+		return String(presentation.get("short_label", "Encounter"))
+	var icon := String(normalized_option.get(KEY_ICON, ""))
+	if icon == "objective":
+		return _objective_short_label(door_option_profile(normalized_option))
+	return _truncate_door_label(String(normalized_option.get(KEY_LABEL, "Encounter")))
 
 static func door_choice(action: Variant, room_profile: Dictionary, reward_mode: int = ENUMS.RewardMode.NONE) -> Dictionary:
 	var action_id := normalize_action(action)

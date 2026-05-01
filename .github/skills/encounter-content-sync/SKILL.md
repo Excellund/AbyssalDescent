@@ -36,17 +36,18 @@ Use this skill whenever an encounter is added, renamed, removed, or meaningfully
 
 1. Update encounter source-of-truth builders/scalers.
 2. Update route selection or door metadata if encounter can appear through doors.
-3. Add or update glossary entry with accurate player-facing description.
-4. Update debug hooks/settings when practical so encounter can be tested directly.
-5. If canonical debug key names or objective kind names change, sync all key consumers in the same change:
+3. Prefer shared door presentation helpers in `scripts/shared/encounter_contracts.gd` for route-facing labels, colors, icons, and boss/rest identity instead of mutating door dictionaries downstream in `world_generator.gd` or re-deriving display text in `world_renderer.gd`.
+4. Add or update glossary entry with accurate player-facing description.
+5. Update debug hooks/settings when practical so encounter can be tested directly.
+6. If canonical debug key names or objective kind names change, sync all key consumers in the same change:
 
 - `scripts/shared/encounter_contracts.gd` (`DEBUG_ENCOUNTER_MAP`, objective kind setters)
 - `scripts/encounter_profile_builder.gd` (`build_debug_encounter_profile`, objective kind dispatch)
 - `scripts/world_generator.gd` (debug routing, boss key checks, objective reward mode checks, telemetry bearing keys)
 - `scripts/objective_runtime.gd` and `scripts/world_hud.gd` objective kind comparisons
 
-6. Run diagnostics for all touched scripts.
-7. Report a sync checklist in the final summary.
+7. Run diagnostics for all touched scripts.
+8. Report a sync checklist in the final summary.
 
 ## Done Criteria
 

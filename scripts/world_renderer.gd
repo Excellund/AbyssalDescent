@@ -203,41 +203,13 @@ func _get_smoothed_focused_door(nearest_door: Dictionary) -> Dictionary:
 	return nearest_door
 
 func _build_door_prompt_text(door: Dictionary) -> String:
-	var label := String(door.get("label", "Encounter"))
-	var kind_id: int = ENCOUNTER_CONTRACTS.normalize_door_kind(door.get("kind_id", door.get("kind", ENCOUNTER_CONTRACTS.DOOR_KIND_ENCOUNTER)))
-	if kind_id == ENUMS.DoorKind.BOSS:
-		return label
-	if kind_id == ENUMS.DoorKind.REST:
-		return "Rest Site"
-	return label
+	return ENCOUNTER_CONTRACTS.door_prompt_text(door)
 
 func _build_door_prompt_name(door: Dictionary) -> String:
-	var label := String(door.get("label", "Encounter"))
-	var kind_id: int = ENCOUNTER_CONTRACTS.normalize_door_kind(door.get("kind_id", door.get("kind", ENCOUNTER_CONTRACTS.DOOR_KIND_ENCOUNTER)))
-	if kind_id == ENUMS.DoorKind.BOSS:
-		return "%s Gate" % label
-	if kind_id == ENUMS.DoorKind.REST:
-		return "Rest Site"
-	return label
+	return ENCOUNTER_CONTRACTS.door_prompt_name(door)
 
 func _build_door_identity_label(door: Dictionary) -> String:
-	var kind_id: int = ENCOUNTER_CONTRACTS.normalize_door_kind(door.get("kind_id", door.get("kind", ENCOUNTER_CONTRACTS.DOOR_KIND_ENCOUNTER)))
-	if kind_id == ENUMS.DoorKind.BOSS:
-		return "Boss"
-	if kind_id == ENUMS.DoorKind.REST:
-		return "Rest"
-	var icon := String(door.get("icon", ""))
-	if icon == "trial":
-		return "Trial"
-	if icon == "objective":
-		var objective_label := String(door.get("label", "Objective"))
-		if objective_label.begins_with("Objective - "):
-			objective_label = objective_label.trim_prefix("Objective - ")
-		return objective_label
-	var label := String(door.get("label", "Encounter"))
-	if label.length() > 20:
-		return label.substr(0, 20) + "..."
-	return label
+	return ENCOUNTER_CONTRACTS.door_identity_label(door)
 
 func _draw_door_identity_chip(door: Dictionary, morph_t: float, is_focused: bool) -> void:
 	var font := ThemeDB.fallback_font

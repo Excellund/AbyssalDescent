@@ -38,17 +38,10 @@ func resolve_room_cleared(in_boss_room: bool, pending_room_reward: int, rooms_cl
 		bool(progress["boss_unlocked"])
 	)
 
-func build_door_options(boss_unlocked: bool, _room_depth: int, door_distance_from_center: float, route_options: Array[Dictionary]) -> Array[Dictionary]:
+func build_door_options(boss_unlocked: bool, _room_depth: int, door_distance_from_center: float, route_options: Array[Dictionary], boss_encounter_key: String = "warden") -> Array[Dictionary]:
 	var options: Array[Dictionary] = []
 	if boss_unlocked:
-		var boss_option := ENCOUNTER_CONTRACTS.door_option(
-			"Boss",
-			Color(0.95, 0.18, 0.22, 0.98),
-			ENUMS.DoorKind.BOSS,
-			"boss",
-			ENUMS.RewardMode.NONE,
-			{}
-		)
+		var boss_option := ENCOUNTER_CONTRACTS.boss_door_option(boss_encounter_key)
 		ENCOUNTER_CONTRACTS.door_option_set_position(boss_option, Vector2(0.0, -40.0))
 		options.append(boss_option)
 		return options

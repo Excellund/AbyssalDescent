@@ -698,28 +698,14 @@ func _normalize_route_context(route_context: Variant) -> Dictionary:
 	}
 
 func _build_intro_route_option(profile: Dictionary) -> Dictionary:
-	return ENCOUNTER_CONTRACTS.door_option(
-		ENCOUNTER_CONTRACTS.profile_label(profile),
-		Color(0.34, 0.8, 1.0, 0.95),
-		ENUMS.DoorKind.ENCOUNTER,
-		"easy",
-		ENUMS.RewardMode.BOON,
-		profile
-	)
+	return ENCOUNTER_CONTRACTS.intro_encounter_door_option(profile)
 
 func _build_hard_route_option(depth: int) -> Dictionary:
 	var hard_pool: Array[Dictionary] = _get_hard_pool_for_depth(depth)
 	var hard_profile: Dictionary = hard_pool[rng.randi_range(0, hard_pool.size() - 1)]
 	hard_profile = _maybe_apply_hard_mutator(hard_profile, depth)
 	hard_profile = _apply_identity_bearing_scaling(hard_profile)
-	return ENCOUNTER_CONTRACTS.door_option(
-		ENCOUNTER_CONTRACTS.profile_label(hard_profile),
-		Color(0.93, 0.62, 0.28, 0.95),
-		ENUMS.DoorKind.ENCOUNTER,
-		"hard",
-		ENUMS.RewardMode.BOON,
-		hard_profile
-	)
+	return ENCOUNTER_CONTRACTS.standard_encounter_door_option(hard_profile)
 
 func _build_trial_route_option(depth: int) -> Dictionary:
 	if depth < 3 or rng.randf() > _trial_option_chance(depth):
@@ -731,35 +717,14 @@ func _build_trial_route_option(depth: int) -> Dictionary:
 		trial_mutator_name = "Trial"
 	var trial_color: Color = ENCOUNTER_CONTRACTS.mutator_theme_color(trial_mutator, Color(1.0, 0.32, 0.22, 0.96))
 	trial_color.a = 0.96
-	return ENCOUNTER_CONTRACTS.door_option(
-		"Trial - %s" % trial_mutator_name,
-		trial_color,
-		ENUMS.DoorKind.ENCOUNTER,
-		"trial",
-		ENUMS.RewardMode.ARCANA,
-		trial_profile
-	)
+	return ENCOUNTER_CONTRACTS.trial_door_option(trial_profile, trial_mutator_name, trial_color)
 
 func _build_objective_route_option(depth: int) -> Dictionary:
 	var objective_profile := build_objective_profile(depth)
-	return ENCOUNTER_CONTRACTS.door_option(
-		"Objective - %s" % ENCOUNTER_CONTRACTS.profile_label(objective_profile),
-		Color(0.98, 0.78, 0.34, 0.96),
-		ENUMS.DoorKind.ENCOUNTER,
-		"objective",
-		ENUMS.RewardMode.MISSION,
-		objective_profile
-	)
+	return ENCOUNTER_CONTRACTS.objective_door_option(objective_profile)
 
 func _build_rest_route_option() -> Dictionary:
-	return ENCOUNTER_CONTRACTS.door_option(
-		"Rest Site",
-		Color(0.66, 1.0, 0.76, 0.92),
-		ENUMS.DoorKind.REST,
-		"rest",
-		ENUMS.RewardMode.NONE,
-		{}
-	)
+	return ENCOUNTER_CONTRACTS.rest_door_option()
 
 func _shuffle_route_options(options: Array[Dictionary]) -> Array[Dictionary]:
 	if options.size() < 2 or rng.randf() < 0.5:

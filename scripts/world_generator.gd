@@ -1388,17 +1388,12 @@ func _spawn_door_options() -> void:
 	choosing_next_room = true
 	var route_options := _roll_route_options(_build_route_context(room_depth))
 	var show_boss_door := boss_unlocked
+	var boss_encounter_key := "warden"
 	if first_boss_defeated:
 		show_boss_door = _is_second_boss_unlocked()
 		boss_unlocked = show_boss_door
-	door_options = encounter_flow_system.build_door_options(show_boss_door, room_depth, door_distance_from_center, route_options)
-	if show_boss_door and not door_options.is_empty():
-		if first_boss_defeated:
-			door_options[0]["label"] = "Sovereign"
-			door_options[0]["color"] = Color(0.92, 0.28, 0.1, 0.98)
-		else:
-			door_options[0]["label"] = "Warden"
-			door_options[0]["color"] = Color(0.96, 0.46, 0.18, 0.98)
+		boss_encounter_key = "sovereign"
+	door_options = encounter_flow_system.build_door_options(show_boss_door, room_depth, door_distance_from_center, route_options, boss_encounter_key)
 	_save_active_run_checkpoint()
 
 func _try_use_door() -> void:
