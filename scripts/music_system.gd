@@ -24,7 +24,7 @@ func set_music_volume_db(volume_db: float) -> void:
 		if player == null or not player.playing:
 			continue
 		if index == active_music_player_index:
-			player.volume_db = music_volume_db
+			player.volume_db = _target_music_db()
 		else:
 			player.volume_db = _crossfade_floor_db()
 
@@ -48,7 +48,7 @@ func play_room_music(is_boss_room: bool, instant: bool = false, fade_duration: f
 		outgoing = music_players[active_music_player_index]
 
 	incoming.stream = target_stream
-	incoming.volume_db = music_volume_db if instant else _crossfade_floor_db()
+	incoming.volume_db = _target_music_db() if instant else _crossfade_floor_db()
 	incoming.play()
 
 	if instant:
@@ -62,7 +62,7 @@ func play_room_music(is_boss_room: bool, instant: bool = false, fade_duration: f
 		fade_time = music_crossfade_duration
 	fade_time = maxf(0.05, fade_time)
 	var tween := create_tween()
-	tween.tween_property(incoming, "volume_db", music_volume_db, fade_time)
+	tween.tween_property(incoming, "volume_db", _target_music_db(), fade_time)
 	if outgoing != null and outgoing.playing and outgoing != incoming:
 		tween.parallel().tween_property(outgoing, "volume_db", _crossfade_floor_db(), fade_time)
 		tween.tween_callback(outgoing.stop)
@@ -80,7 +80,10 @@ func _create_music_players() -> void:
 		music_players.append(music_player)
 
 func _crossfade_floor_db() -> float:
-	return AUDIO_LEVELS.crossfade_floor_db(music_volume_db)
+	return AUDIO_LEVELS.crossfade_floor_db(_target_music_db())
+
+func _target_music_db() -> float:
+	return AUDIO_LEVELS.gameplay_music_db(music_volume_db)
 
 func _on_music_player_finished(player_index: int) -> void:
 	# Guarantee looping even when imported stream assets are not configured to loop.

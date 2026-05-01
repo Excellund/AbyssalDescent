@@ -1193,7 +1193,7 @@ func _on_menu_music_finished() -> void:
 func _apply_menu_music_volume(music_db: float) -> void:
 	if menu_music_player == null:
 		return
-	var clamped_db := AUDIO_LEVELS.clamp_db(music_db)
+	var clamped_db := AUDIO_LEVELS.menu_music_db(music_db)
 	menu_music_player.volume_db = clamped_db
 	if AUDIO_LEVELS.is_muted_db(clamped_db):
 		if menu_music_player.playing:
