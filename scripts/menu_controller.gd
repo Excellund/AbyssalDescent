@@ -994,7 +994,7 @@ func _refresh_update_ui() -> void:
 		if _is_editor_run() and not bool(update_service.force_prompt_mode):
 			show_update_panel = false
 		else:
-			show_update_panel = bool(update_service.update_available) or bool(update_service.force_prompt_mode)
+			show_update_panel = bool(update_service.update_available) or bool(update_service.force_prompt_mode) or not String(update_service.check_error_detail).is_empty()
 	update_panel.visible = show_update_panel
 	if not show_update_panel:
 		return

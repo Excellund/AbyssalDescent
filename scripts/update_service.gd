@@ -23,6 +23,7 @@ var force_prompt_mode: bool = false
 var download_path: String = ""
 var status_text: String = "Checking for updates..."
 var detail_text: String = "Current version: unknown"
+var check_error_detail: String = ""
 
 var _check_request: HTTPRequest
 var _download_request: HTTPRequest
@@ -42,11 +43,13 @@ func request_check(is_manual: bool = false) -> void:
 	_ensure_requests()
 	if check_in_progress:
 		return
+	check_error_detail = ""
 	var feed_url := _update_feed_url()
 	if feed_url.is_empty():
 		update_available = false
 		latest_version = ""
 		download_url = ""
+		check_error_detail = "Update feed URL is not configured."
 		_set_status("Automatic updates are not configured.", "Configure %s to enable auto update checks." % UPDATE_FEED_SETTING)
 		emit_signal("check_finished")
 		return
@@ -56,6 +59,7 @@ func request_check(is_manual: bool = false) -> void:
 	var err := _check_request.request(feed_url, headers, HTTPClient.METHOD_GET)
 	if err != OK:
 		check_in_progress = false
+		check_error_detail = "Could not start update check (request error: %d)." % err
 		_set_status("Could not start update check.", "Request error: %d" % err)
 		emit_signal("check_finished")
 
@@ -184,6 +188,7 @@ func _on_check_completed(result: int, response_code: int, _headers: PackedString
 		update_available = false
 		latest_version = ""
 		download_url = ""
+		check_error_detail = "Update check failed (network result %d, HTTP %d)." % [result, response_code]
 		_set_status("Update check failed.", "Network result %d, HTTP %d." % [result, response_code])
 		emit_signal("check_finished")
 		return
@@ -192,6 +197,7 @@ func _on_check_completed(result: int, response_code: int, _headers: PackedString
 		update_available = false
 		latest_version = ""
 		download_url = ""
+		check_error_detail = "Release feed returned invalid data."
 		_set_status("Update feed returned invalid data.", "Expected a JSON object response.")
 		emit_signal("check_finished")
 		return
@@ -205,9 +211,11 @@ func _on_check_completed(result: int, response_code: int, _headers: PackedString
 	download_url = resolved_download
 	if resolved_latest.is_empty():
 		update_available = false
+		check_error_detail = "Release feed is missing version info."
 		_set_status("Release feed is missing version info.", "No tag_name/version field found in release response.")
 		emit_signal("check_finished")
 		return
+	check_error_detail = ""
 	update_available = _compare_versions(current_version, latest_version) < 0
 	if update_available:
 		_set_status("New version available: %s" % latest_version, "Current version: %s" % _display_current_version())
