@@ -441,12 +441,8 @@ func spawn_priority_target_enemy() -> void:
 		return
 	world.objective_target_enemy = spawned_target
 	world.active_room_enemy_count += 1
-	if spawned_target.get("max_health") != null:
-		var boosted_max := maxi(40, int(round(float(int(spawned_target.get("max_health"))) * 2.6)))
-		spawned_target.set("max_health", boosted_max)
-		var health_state: Object = spawned_target.get("health_state") as Object
-		if health_state != null:
-			health_state.setup(boosted_max)
+	var boosted_max := maxi(40, int(round(float(spawned_target.get_max_health()) * 2.6)))
+	spawned_target.set_max_health_and_current(boosted_max, boosted_max)
 	if spawned_target.get("has_mutator_overlay") != null:
 		spawned_target.set("has_mutator_overlay", true)
 	if spawned_target.get("mutator_theme_color") != null:
@@ -799,11 +795,9 @@ func clear_priority_target_exposure_vfx() -> void:
 func get_priority_target_health() -> int:
 	if not is_instance_valid(world.objective_target_enemy):
 		return 0
-	return int(world.objective_target_enemy._get_current_health())
+	return world.objective_target_enemy.get_current_health()
 
 func get_priority_target_max_health() -> int:
 	if not is_instance_valid(world.objective_target_enemy):
 		return 0
-	if world.objective_target_enemy.get("max_health") != null:
-		return int(world.objective_target_enemy.get("max_health"))
-	return 0
+	return world.objective_target_enemy.get_max_health()

@@ -214,9 +214,9 @@ func _apply_enemy_mutator(enemy: CharacterBody2D, enemy_script: Script) -> void:
 	var is_affected: bool = false
 	var enemy_health_mult := ENCOUNTER_CONTRACTS.mutator_stat(applied_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_ENEMY_HEALTH_MULT, 1.0)
 	if not is_equal_approx(enemy_health_mult, 1.0):
-		if enemy.get("max_health") != null:
-			var base_max_health := int(enemy.get("max_health"))
-			enemy.set("max_health", maxi(1, int(round(float(base_max_health) * enemy_health_mult))))
+		var base_max_health := enemy.get_max_health()
+		var scaled_max_health := maxi(1, int(round(float(base_max_health) * enemy_health_mult)))
+		enemy.set_max_health_and_current(scaled_max_health, scaled_max_health)
 		is_affected = true
 	var enemy_key := _enemy_script_key(enemy_script)
 	var specs := ENEMY_MUTATOR_STAT_MAP.get(enemy_key, []) as Array

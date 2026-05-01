@@ -227,6 +227,21 @@ func heal(amount: int) -> void:
 		return
 	health_state.heal(amount)
 
+func get_current_health() -> int:
+	return _get_current_health()
+
+func get_max_health() -> int:
+	return max_health
+
+func set_max_health_and_current(new_max_health: int, new_current_health: int = -1) -> void:
+	max_health = maxi(1, new_max_health)
+	if not is_instance_valid(health_state):
+		return
+	if new_current_health < 0:
+		health_state.setup(max_health)
+		return
+	health_state.setup(max_health, new_current_health)
+
 func is_dead() -> bool:
 	return health_state.is_dead()
 

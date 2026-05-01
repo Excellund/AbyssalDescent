@@ -83,15 +83,11 @@ func apply_upgrade(upgrade_id: String) -> bool:
 		"first_strike", "heavy_blow", "wide_arc", "long_reach", "fleet_foot", "blink_dash", "battle_trance", "surge_step":
 			player_reference.set(String(preview.get("property", "")), preview.get("next", player_reference.get(String(preview.get("property", "")))))
 		"heartstone":
-			var next_max := int(preview.get("next", int(player_reference.get("max_health"))))
-			var current_max := int(player_reference.get("max_health"))
+			var next_max := int(preview.get("next", player_reference.get_max_health()))
+			var current_max := player_reference.get_max_health()
 			var max_gain := maxi(0, next_max - current_max)
-			player_reference.set("max_health", next_max)
-			var health_state_ref: Variant = player_reference.get("health_state")
-			if health_state_ref != null and is_instance_valid(health_state_ref):
-				health_state_ref.set("max_health", next_max)
-				if max_gain > 0:
-					health_state_ref.heal(max_gain)
+			var next_current := player_reference.get_current_health() + max_gain
+			player_reference.set_max_health_and_current(next_max, next_current)
 		"iron_skin":
 			player_reference.set("iron_skin_armor", int(preview.get("next", int(player_reference.get("iron_skin_armor")))))
 			player_reference.set("iron_skin_stacks", int(player_reference.get("iron_skin_stacks")) + 1)

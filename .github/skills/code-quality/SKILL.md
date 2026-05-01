@@ -248,6 +248,26 @@ Do not use `.has_method()` to defensively check if a method exists. Instead, est
 
 Do not temporarily overwrite shared/module state just to pass context into a helper, then restore it afterward.
 
+---
+
+### 11. Prefer Direct Actor Contracts Over Property Strings
+
+Do not read or mutate known gameplay actor state through `get("...")` and `set("...")` when the actor belongs to a stable internal contract.
+
+**Why it matters:**
+
+- Property-name strings hide ownership and make cross-system dependencies harder to trace.
+- Renames become risky because editor-assisted refactors do not update string literals.
+- Reaching into nested internals like `health_state` spreads representation details across the codebase.
+- Direct actor methods are easier to read and navigate than helper wrappers when the contract is already known.
+
+**How to apply:**
+
+- Add focused methods on the owning script for stable cross-system state such as health, objective data, or progression flags.
+- Prefer calls like `enemy.get_max_health()` or `player.set_max_health_and_current(...)` over `get("max_health")`, `set("max_health")`, direct nested state pokes, or helper wrappers around the same contract.
+- Introduce a shared helper only when the caller truly needs one abstraction boundary for mixed or dynamic targets.
+- Reserve property-string access for genuinely dynamic data or editor-driven configuration where the field name is not known at author time.
+
 **Why it matters:**
 
 - Temporary write/restore logic obscures control flow.

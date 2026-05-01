@@ -630,6 +630,21 @@ func heal(amount: int) -> void:
 		return
 	health_state.heal(amount)
 
+func get_current_health() -> int:
+	return _get_current_health()
+
+func get_max_health() -> int:
+	return max_health
+
+func set_max_health_and_current(new_max_health: int, new_current_health: int = -1) -> void:
+	max_health = maxi(1, new_max_health)
+	if not is_instance_valid(health_state):
+		return
+	if new_current_health < 0:
+		health_state.setup(max_health)
+		return
+	health_state.setup(max_health, new_current_health)
+
 func play_rest_site_heal_feedback() -> void:
 	if player_feedback == null:
 		return
@@ -694,9 +709,7 @@ func apply_run_snapshot(snapshot: Dictionary) -> void:
 	var upgrade_stacks := snapshot.get("upgrade_stacks", {}) as Dictionary
 	if is_instance_valid(upgrade_system):
 		upgrade_system.set("upgrade_stacks", upgrade_stacks.duplicate(true))
-	if is_instance_valid(health_state):
-		health_state.max_health = max_health
-		health_state.set_health(int(snapshot.get("current_health", max_health)))
+	set_max_health_and_current(max_health, int(snapshot.get("current_health", max_health)))
 
 	dash_time_left = 0.0
 	dash_remaining_distance = 0.0
@@ -1013,13 +1026,10 @@ func _get_first_strike_bonus_damage(enemy_node: Object) -> int:
 		return 0
 	if not is_instance_valid(enemy_node):
 		return 0
-	var enemy_health_state: Variant = enemy_node.get("health_state")
-	if enemy_health_state == null or not is_instance_valid(enemy_health_state):
-		return 0
-	var enemy_max := int(enemy_health_state.get("max_health"))
+	var enemy_max := enemy_node.get_max_health()
 	if enemy_max <= 0:
 		return 0
-	var enemy_current := int(enemy_health_state.get("current_health"))
+	var enemy_current := enemy_node.get_current_health()
 	if float(enemy_current) / float(enemy_max) >= 0.8:
 		return first_strike_bonus_damage
 	return 0
