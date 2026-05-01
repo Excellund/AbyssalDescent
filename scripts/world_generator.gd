@@ -237,8 +237,8 @@ func _ready() -> void:
 		player.set_power_registry(power_registry_instance)
 	if is_instance_valid(player):
 		player_camera = player.get_node_or_null("Camera2D") as Camera2D
-		if is_instance_valid(player_camera) and player_camera.has_method("set_room_fit_zoom_scale"):
-			player_camera.call("set_room_fit_zoom_scale", camera_base_zoom_in)
+		if is_instance_valid(player_camera):
+			player_camera.set_room_fit_zoom_scale(camera_base_zoom_in)
 		if player.has_signal("damage_taken"):
 			player.connect("damage_taken", Callable(self, "_on_player_damage_taken"))
 		if player.has_signal("died"):
@@ -1337,8 +1337,8 @@ func _set_music_volume_runtime(music_db: float) -> void:
 
 func _set_sfx_volume_runtime(volume_db: float) -> void:
 	sfx_volume_db = AUDIO_LEVELS.clamp_db(volume_db)
-	if is_instance_valid(player) and player.has_method("set_sfx_volume_db"):
-		player.call("set_sfx_volume_db", sfx_volume_db)
+	if is_instance_valid(player):
+		player.set_sfx_volume_db(sfx_volume_db)
 
 func _on_pause_menu_opened() -> void:
 	_set_combat_paused(true)
@@ -1699,9 +1699,7 @@ func _get_active_player_mutators_for_hud() -> Array[Dictionary]:
 func _get_active_enemy_mutators_for_room() -> Array[Dictionary]:
 	if not is_instance_valid(player):
 		return []
-	if player.has_method("get_active_enemy_objective_mutators"):
-		return player.get_active_enemy_objective_mutators() as Array[Dictionary]
-	return []
+	return player.get_active_enemy_objective_mutators() as Array[Dictionary]
 
 func _roll_route_options(route_context: Variant) -> Array[Dictionary]:
 	if not is_instance_valid(encounter_profile_builder):

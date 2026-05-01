@@ -1353,8 +1353,7 @@ func _create_player_feedback() -> void:
 func set_sfx_volume_db(volume_db: float) -> void:
 	if player_feedback == null:
 		return
-	if player_feedback.has_method("set_sfx_volume_db"):
-		player_feedback.set_sfx_volume_db(volume_db)
+	player_feedback.set_sfx_volume_db(volume_db)
 
 func _on_health_state_changed(new_health: int, new_max_health: int) -> void:
 	health_changed.emit(new_health, new_max_health)
