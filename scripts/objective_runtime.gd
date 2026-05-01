@@ -44,13 +44,13 @@ func reset_room_objective_state() -> void:
 
 func begin_room_objective(profile: Dictionary) -> void:
 	world.active_objective_kind = ENCOUNTER_CONTRACTS.profile_objective_kind(profile)
-	if world.active_objective_kind == "survival":
+	if world.active_objective_kind == "last_stand":
 		_begin_survival_objective(profile)
 		return
-	if world.active_objective_kind == "priority_target":
+	if world.active_objective_kind == "cut_the_signal":
 		_begin_priority_target_objective(profile)
 		return
-	if world.active_objective_kind == "control":
+	if world.active_objective_kind == "hold_the_line":
 		_begin_control_objective(profile)
 
 func _begin_survival_objective(profile: Dictionary) -> void:
@@ -110,13 +110,13 @@ func _begin_control_objective(profile: Dictionary) -> void:
 	world.queue_redraw()
 
 func update_objective_state(delta: float) -> void:
-	if world.active_objective_kind == "survival":
+	if world.active_objective_kind == "last_stand":
 		update_survival_objective_state(delta)
 		return
-	if world.active_objective_kind == "priority_target":
+	if world.active_objective_kind == "cut_the_signal":
 		update_priority_target_objective_state(delta)
 		return
-	if world.active_objective_kind == "control":
+	if world.active_objective_kind == "hold_the_line":
 		update_control_objective_state(delta)
 		return
 
@@ -744,7 +744,7 @@ func enrage_priority_target() -> void:
 		world.objective_target_enemy.set("attack_cooldown", maxf(0.45, float(world.objective_target_enemy.get("attack_cooldown")) * 0.8))
 
 func _on_priority_target_died() -> void:
-	if world.active_objective_kind != "priority_target":
+	if world.active_objective_kind != "cut_the_signal":
 		return
 	world.objective_target_enemy = null
 	complete_current_objective("Target Eliminated", "%s down" % world.objective_target_name)

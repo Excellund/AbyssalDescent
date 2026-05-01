@@ -428,7 +428,7 @@ func _update_status_panel_text(state: Dictionary) -> void:
 	if encounter_intro_grace_active:
 		status_label.text += "\n[center][color=#C8F0FF]Move to engage[/color][/center]"
 
-	if objective_kind == "survival":
+	if objective_kind == "last_stand":
 		if objective_overtime:
 			status_label.text += "\n[center][color=#FFB36D]Objective: Overtime  Kills %d/%d[/color][/center]" % [objective_kills, objective_kill_target]
 		else:
@@ -439,7 +439,7 @@ func _update_status_panel_text(state: Dictionary) -> void:
 				status_label.text += "\n[center][color=#C8F0FF]Quota met: timer is accelerating[/color][/center]"
 			else:
 				status_label.text += "\n[center][color=#FCD77A]Objective: Survive %ds  Kills %d/%d[/color][/center]" % [objective_seconds, objective_kills, objective_kill_target]
-	elif objective_kind == "priority_target":
+	elif objective_kind == "cut_the_signal":
 		var target_seconds := maxi(0, int(ceil(objective_time_left)))
 		if objective_overtime:
 			status_label.text += "\n[center][color=#FFB36D]Objective: Eliminate %s  HP %d/%d[/color][/center]" % [objective_target_name, objective_target_health, objective_target_max_health]
@@ -454,7 +454,7 @@ func _update_status_panel_text(state: Dictionary) -> void:
 			status_label.text += "\n[center][color=#9FD6FF]Expose Signal: escort kills %d/%d  (%d left)[/color][/center]" % [safe_progress, safe_goal, remaining_kills]
 		if objective_relocation_hint_left > 0.0 and objective_last_relocated_escort_count > 0:
 			status_label.text += "\n[center][color=#A9E6FF]Breakaway carried %d nearby escorts[/color][/center]" % objective_last_relocated_escort_count
-	elif objective_kind == "control":
+	elif objective_kind == "hold_the_line":
 		var control_seconds := maxi(0, int(ceil(objective_time_left)))
 		var control_goal := maxf(0.01, objective_control_goal)
 		var control_ratio := clampf(objective_control_progress / control_goal, 0.0, 1.0)

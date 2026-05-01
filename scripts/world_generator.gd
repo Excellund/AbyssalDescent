@@ -43,7 +43,7 @@ func _find_debug_encounter_entry(key: String) -> Dictionary:
 func _get_debug_encounter_reward_mode(encounter_key: String) -> int:
 	if encounter_key == "trial":
 		return ENUMS.RewardMode.ARCANA
-	if encounter_key.begins_with("objective_"):
+	if ENCOUNTER_CONTRACTS.debug_encounter_is_objective(encounter_key):
 		return ENUMS.RewardMode.MISSION
 	return ENUMS.RewardMode.BOON
 
@@ -430,9 +430,9 @@ func _start_debug_selected_encounter(encounter_state: int) -> Dictionary:
 	var encounter_key := _debug_encounter_key(encounter_state)
 	if encounter_key.is_empty():
 		return {"ok": true, "note": "No debug encounter selected."}
-	if encounter_key == "boss_1":
+	if encounter_key == "warden":
 		return _start_debug_boss_room()
-	if encounter_key == "boss_2":
+	if encounter_key == "sovereign":
 		return _start_debug_second_boss_room()
 
 	_reset_for_debug_jump()
@@ -451,7 +451,7 @@ func _start_debug_selected_encounter(encounter_state: int) -> Dictionary:
 	if profile.is_empty():
 		return {"ok": false, "state": "debug_encounter", "note": "Could not build encounter profile."}
 	pending_room_reward = ENUMS.RewardMode.ARCANA if encounter_key == "trial" else ENUMS.RewardMode.BOON
-	if encounter_key.begins_with("objective_"):
+	if ENCOUNTER_CONTRACTS.debug_encounter_is_objective(encounter_key):
 		pending_room_reward = ENUMS.RewardMode.MISSION
 	_begin_room(profile)
 	hud.refresh(_get_hud_state(), player)
@@ -708,7 +708,7 @@ func _process(delta: float) -> void:
 	if not _grace_active:
 		_update_objective_state(delta)
 	_update_priority_target_marker(delta)
-	if active_objective_kind == "control" or objective_control_radius > 0.0:
+	if active_objective_kind == "hold_the_line" or objective_control_radius > 0.0:
 		queue_redraw()
 	_try_use_door()
 	_update_encounter_state()
@@ -719,7 +719,7 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	if objective_control_radius <= 0.0:
 		return
-	if active_objective_kind != "control" and objective_control_progress <= 0.0:
+	if active_objective_kind != "hold_the_line" and objective_control_progress <= 0.0:
 		return
 	var goal := maxf(0.01, objective_control_goal)
 	var progress_ratio := clampf(objective_control_progress / goal, 0.0, 1.0)
@@ -1105,7 +1105,7 @@ func _keep_player_inside_camera_view() -> void:
 func _update_encounter_state() -> void:
 	if choosing_next_room or run_cleared:
 		return
-	if active_objective_kind == "survival" or active_objective_kind == "priority_target" or active_objective_kind == "control":
+	if active_objective_kind == "last_stand" or active_objective_kind == "cut_the_signal" or active_objective_kind == "hold_the_line":
 		return
 	if active_room_enemy_count > 0:
 		return
@@ -1630,7 +1630,7 @@ func _begin_boss_room() -> void:
 		true,
 		Vector2(1260.0, 900.0),
 		"Boss Chamber: The Warden",
-		"boss_1",
+		"warden",
 		"The Warden",
 		ENEMY_BOSS_SCRIPT,
 		34.0,
@@ -1643,7 +1643,7 @@ func _begin_second_boss_room() -> void:
 		false,
 		Vector2(1360.0, 960.0),
 		"Abyss Core: Sovereign",
-		"boss_2",
+		"sovereign",
 		"Sovereign",
 		ENEMY_BOSS_2_SCRIPT,
 		38.0,
@@ -1663,14 +1663,14 @@ func _play_room_music(is_boss_room: bool, instant: bool = false, fade_duration: 
 
 func _on_room_enemy_died() -> void:
 	active_room_enemy_count = maxi(0, active_room_enemy_count - 1)
-	if active_objective_kind == "survival":
+	if active_objective_kind == "last_stand":
 		objective_kills += 1
-	if active_objective_kind == "priority_target" and is_instance_valid(objective_target_enemy):
+	if active_objective_kind == "cut_the_signal" and is_instance_valid(objective_target_enemy):
 		if objective_exposure_left <= 0.0:
 			objective_hunt_kill_progress += 1
 			if objective_hunt_kill_progress >= objective_hunt_kill_goal:
 				_trigger_priority_target_exposure()
-	if active_objective_kind == "priority_target" and objective_overtime and objective_spawn_timer > 0.2:
+	if active_objective_kind == "cut_the_signal" and objective_overtime and objective_spawn_timer > 0.2:
 		objective_spawn_timer = maxf(0.2, objective_spawn_timer - 0.08)
 	if is_instance_valid(player):
 		player.notify_enemy_killed()
@@ -1923,7 +1923,7 @@ func _record_door_choice(choice: Dictionary) -> void:
 	var bearing_label := ENCOUNTER_CONTRACTS.profile_label(profile)
 	var bearing_key := _bearing_key_from_profile(profile, "encounter")
 	if action_id == ENUMS.EncounterAction.BOSS:
-		bearing_key = "boss_2" if first_boss_defeated else "boss_1"
+		bearing_key = "sovereign" if first_boss_defeated else "warden"
 		bearing_label = "Sovereign" if first_boss_defeated else "Warden"
 	elif action_id == ENUMS.EncounterAction.REST:
 		bearing_key = "rest"

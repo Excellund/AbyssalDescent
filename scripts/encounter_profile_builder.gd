@@ -399,14 +399,22 @@ func build_skirmish_profile(depth: int) -> Dictionary:
 	profile = _maybe_apply_hard_mutator(profile, depth)
 	return _apply_identity_bearing_scaling(profile)
 
+func _build_objective_profile_for_kind(kind: String, depth: int) -> Dictionary:
+	match kind:
+		"last_stand":
+			return _build_survival_profile(depth)
+		"cut_the_signal":
+			return _build_priority_target_profile(depth)
+		"hold_the_line":
+			return _build_control_profile(depth)
+		_:
+			return {}
+
 func build_objective_profile(depth: int, preferred: String = "") -> Dictionary:
-	var normalized := preferred.strip_edges().to_lower()
-	if normalized == "last_stand" or normalized == "last stand" or normalized == "survival":
-		return _build_survival_profile(depth)
-	if normalized == "priority_target" or normalized == "priority target" or normalized == "cut_the_signal" or normalized == "cut the signal":
-		return _build_priority_target_profile(depth)
-	if normalized == "hold_the_line" or normalized == "hold the line" or normalized == "control" or normalized == "zone_control":
-		return _build_control_profile(depth)
+	var canonical_kind := preferred.strip_edges().to_lower()
+	var explicit_profile := _build_objective_profile_for_kind(canonical_kind, depth)
+	if not explicit_profile.is_empty():
+		return explicit_profile
 	var objective_profiles: Array[Dictionary] = [_build_survival_profile(depth), _build_priority_target_profile(depth), _build_control_profile(depth)]
 	return objective_profiles[rng.randi_range(0, objective_profiles.size() - 1)]
 
@@ -423,13 +431,13 @@ func build_debug_encounter_profile(encounter_key: String, depth: int) -> Diction
 			return _build_intro_profile(0)
 		"trial":
 			return _build_trial_profile(depth)
-		"objective_last_stand":
+		"last_stand":
 			return _build_survival_profile(depth)
-		"objective_priority_target":
+		"cut_the_signal":
 			return _build_priority_target_profile(depth)
-		"objective_hold_the_line":
+		"hold_the_line":
 			return _build_control_profile(depth)
-		"objective_random":
+		"random_objective":
 			return build_objective_profile(depth)
 		_:
 			return {}
@@ -906,7 +914,7 @@ func _build_combo_relay_mutator() -> Dictionary:
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ID: "combo_relay",
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME: "Combo Relay",
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_SOURCE_ENCOUNTER: "Hold the Line",
-		ENCOUNTER_CONTRACTS.MUTATOR_KEY_SOURCE_OBJECTIVE_KIND: "control",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_SOURCE_OBJECTIVE_KIND: "hold_the_line",
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_THEME_COLOR: Color(0.98, 0.72, 0.3, 1.0),
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID: "combo_relay",
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_TARGET_SCOPE: "player",
