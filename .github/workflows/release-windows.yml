@@ -43,6 +43,9 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           sed -i "s/^config\/version=.*/config\/version=\"${VERSION}\"/" project.godot
+          printf "%s\n" "${VERSION}" > build_version.txt
+          echo "✓ Version stamp created: $(cat build_version.txt)"
+          test -s build_version.txt || (echo "ERROR: build_version.txt is empty" && exit 1)
 
       - name: Export Windows build
         run: |

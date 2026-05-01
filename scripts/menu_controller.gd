@@ -1017,10 +1017,28 @@ func _refresh_update_ui() -> void:
 		update_check_button.disabled = controls_disabled
 
 func _current_game_version() -> String:
+	var stamped_version := _read_build_version_stamp()
+	if not stamped_version.is_empty() and stamped_version != "dev":
+		print("[Version] Using stamped build version: %s" % stamped_version)
+		return stamped_version
 	var configured_version := String(ProjectSettings.get_setting("application/config/version", "")).strip_edges()
-	if configured_version.is_empty():
-		return "dev"
-	return configured_version
+	if not configured_version.is_empty():
+		print("[Version] Using project config version: %s" % configured_version)
+		return configured_version
+	var fallback_version := "dev"
+	if not OS.has_feature("editor"):
+		print("[Version] WARNING: Packaged build with no version stamp. Defaulting to dev.")
+	else:
+		print("[Version] Editor mode, using dev.")
+	return fallback_version
+
+func _read_build_version_stamp() -> String:
+	if not ResourceLoader.exists("res://build_version.txt"):
+		return ""
+	var stamp_file := FileAccess.open("res://build_version.txt", FileAccess.READ)
+	if stamp_file == null:
+		return ""
+	return stamp_file.get_as_text().strip_edges()
 
 func _is_editor_run() -> bool:
 	return OS.has_feature("editor")
