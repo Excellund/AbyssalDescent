@@ -14,88 +14,87 @@ const OBJECTIVE_KIND_BY_ROLE := {
 	OBJECTIVE_ROLE_HOLD_THE_LINE: "hold_the_line"
 }
 
-# === SURVIVAL OBJECTIVE ===
-const LAST_STAND_SPAWN_INTERVAL_MULT_BASE = 1.15
-const LAST_STAND_SPAWN_INTERVAL_MULT_PRESSURE = 0.2
-const LAST_STAND_SPAWN_INTERVAL_CLAMP_MIN = 0.8
-const LAST_STAND_SPAWN_INTERVAL_CLAMP_MAX = 1.08
-const LAST_STAND_MAX_ENEMIES_BASE = 12
-const LAST_STAND_MAX_ENEMIES_HARD_CAP = 24
-const LAST_STAND_MAX_ENEMIES_DEPTH_MULT = 0.9
-const LAST_STAND_KILL_TARGET_MIN = 8
-const LAST_STAND_KILL_TARGET_BASE = 10
-const LAST_STAND_KILL_TARGET_TIME_MULT = 0.42
-const LAST_STAND_KILL_TARGET_BASE_BONUS = 2
-const LAST_STAND_KILL_TARGET_DEPTH_MULT = 0.35
-const LAST_STAND_KILL_TARGET_ROUND_TO = 5
-const LAST_STAND_CLEANUP_WINDOW = 8.0
-const LAST_STAND_QUOTA_MET_DECAY_MULT = 0.85
-const LAST_STAND_OVERTIME_SPAWN_INTERVAL_MULT = 0.65
-const LAST_STAND_OVERTIME_SPAWN_BATCH_CAP = 7
+# === OBJECTIVE CONFIGS ===
+class LastStandConfig:
+	const SPAWN_INTERVAL_MULT_BASE = 1.15
+	const SPAWN_INTERVAL_MULT_PRESSURE = 0.2
+	const SPAWN_INTERVAL_CLAMP_MIN = 0.8
+	const SPAWN_INTERVAL_CLAMP_MAX = 1.08
+	const MAX_ENEMIES_BASE = 12
+	const MAX_ENEMIES_HARD_CAP = 24
+	const MAX_ENEMIES_DEPTH_MULT = 0.9
+	const KILL_TARGET_MIN = 8
+	const KILL_TARGET_BASE = 10
+	const KILL_TARGET_TIME_MULT = 0.42
+	const KILL_TARGET_BASE_BONUS = 2
+	const KILL_TARGET_DEPTH_MULT = 0.35
+	const KILL_TARGET_ROUND_TO = 5
+	const CLEANUP_WINDOW = 8.0
+	const QUOTA_MET_DECAY_MULT = 0.85
+	const OVERTIME_SPAWN_INTERVAL_MULT = 0.65
+	const OVERTIME_SPAWN_BATCH_CAP = 7
 
-# === PRIORITY TARGET OBJECTIVE ===
-const CUT_THE_SIGNAL_SPAWN_TIMER_MIN = 0.35
-const CUT_THE_SIGNAL_SPAWN_INTERVAL_BASE = 1.2
-const CUT_THE_SIGNAL_SPAWN_INTERVAL_CLAMP_MIN = 0.5
-const CUT_THE_SIGNAL_SPAWN_INTERVAL_CLAMP_MAX = 0.95
-const CUT_THE_SIGNAL_MAX_ENEMIES_BASE = 12
-const CUT_THE_SIGNAL_MAX_ENEMIES_DEPTH_MULT = 0.6
-const CUT_THE_SIGNAL_MAX_ENEMIES_MIN = 6
-const CUT_THE_SIGNAL_HUNT_KILL_GOAL_MIN = 2
-const CUT_THE_SIGNAL_HUNT_KILL_GOAL_MAX = 6
-const CUT_THE_SIGNAL_HUNT_KILL_MULT = 4.0
-const CUT_THE_SIGNAL_SPAWN_TIMER_REFILL = 0.45
-const CUT_THE_SIGNAL_SPAWN_INTERVAL_OVERTIME_MULT = 0.7
-const CUT_THE_SIGNAL_SPAWN_BATCH_OVERTIME_CAP = 6
-const CUT_THE_SIGNAL_SPAWN_TIMER_OVERTIME = 0.15
-const CUT_THE_SIGNAL_HEALTH_BOOST_MULT = 2.6
-const CUT_THE_SIGNAL_HEALTH_BOOST_MIN = 40
-const CUT_THE_SIGNAL_SCALE_MULT = 1.14
-const CUT_THE_SIGNAL_MARKER_Y_OFFSET = -62.0
-const CUT_THE_SIGNAL_MARKER_Z_INDEX = 50
-const CUT_THE_SIGNAL_HEALTH_BAR_SIZE = Vector2(72.0, 9.0)
-const CUT_THE_SIGNAL_HEALTH_BAR_OFFSET = Vector2(-36.0, -48.0)
-const CUT_THE_SIGNAL_DEFAULT_TYPE = "archer"
-const CUT_THE_SIGNAL_SPAWN_DISTANCE_MIN = 320.0
-const CUT_THE_SIGNAL_SPAWN_DISTANCE_BASE = 180.0
-const CUT_THE_SIGNAL_OPENING_ESCORT_TYPES = ["shielder", "chaser", "chaser"]
-const CUT_THE_SIGNAL_OPENING_ESCORT_RADIUS_SHIELDER = 76.0
-const CUT_THE_SIGNAL_OPENING_ESCORT_RADIUS_OTHER = 92.0
-const CUT_THE_SIGNAL_RELOCATION_MIN_DISTANCE = 120.0
-const CUT_THE_SIGNAL_RELOCATION_ATTEMPT_COUNT = 8
-const CUT_THE_SIGNAL_RELOCATION_CANDIDATE_MIN_DISTANCE = 160.0
-const CUT_THE_SIGNAL_RELOCATION_SCORE_PLAYER_MULT = 1.2
-const CUT_THE_SIGNAL_RELOCATION_SCORE_NEIGHBOR_MULT = 0.35
-const CUT_THE_SIGNAL_RELOCATION_SCORE_NEIGHBOR_CAP = 180.0
+class CutTheSignalConfig:
+	const SPAWN_TIMER_MIN = 0.35
+	const SPAWN_INTERVAL_BASE = 1.2
+	const SPAWN_INTERVAL_CLAMP_MIN = 0.5
+	const SPAWN_INTERVAL_CLAMP_MAX = 0.95
+	const MAX_ENEMIES_BASE = 12
+	const MAX_ENEMIES_DEPTH_MULT = 0.6
+	const MAX_ENEMIES_MIN = 6
+	const HUNT_KILL_GOAL_MIN = 2
+	const HUNT_KILL_GOAL_MAX = 6
+	const HUNT_KILL_MULT = 4.0
+	const SPAWN_TIMER_REFILL = 0.45
+	const SPAWN_INTERVAL_OVERTIME_MULT = 0.7
+	const SPAWN_BATCH_OVERTIME_CAP = 6
+	const SPAWN_TIMER_OVERTIME = 0.15
+	const HEALTH_BOOST_MULT = 2.6
+	const HEALTH_BOOST_MIN = 40
+	const SCALE_MULT = 1.14
+	const MARKER_Y_OFFSET = -62.0
+	const MARKER_Z_INDEX = 50
+	const HEALTH_BAR_SIZE = Vector2(72.0, 9.0)
+	const HEALTH_BAR_OFFSET = Vector2(-36.0, -48.0)
+	const DEFAULT_TYPE = "archer"
+	const SPAWN_DISTANCE_MIN = 320.0
+	const SPAWN_DISTANCE_BASE = 180.0
+	const OPENING_ESCORT_TYPES = ["shielder", "chaser", "chaser"]
+	const OPENING_ESCORT_RADIUS_SHIELDER = 76.0
+	const OPENING_ESCORT_RADIUS_OTHER = 92.0
+	const RELOCATION_MIN_DISTANCE = 120.0
+	const RELOCATION_ATTEMPT_COUNT = 8
+	const RELOCATION_CANDIDATE_MIN_DISTANCE = 160.0
+	const RELOCATION_SCORE_PLAYER_MULT = 1.2
+	const RELOCATION_SCORE_NEIGHBOR_MULT = 0.35
+	const RELOCATION_SCORE_NEIGHBOR_CAP = 180.0
+	const EXPOSURE_THRESHOLD_PHASE_BASE = 1.9
+	const EXPOSURE_THRESHOLD_PHASE_STEP = 0.28
+	const EXPOSURE_THRESHOLD_PHASE_MAX = 3.0
+	const EXPOSURE_FX_STRENGTH_BASE = 1.0
+	const EXPOSURE_FX_STRENGTH_STEP = 0.2
+	const EXPOSURE_FX_STRENGTH_MAX = 1.8
+	const EXPOSURE_PUSH_STRENGTH_MIN_MULT = 0.62
+	const EXPOSURE_PUSH_LERP_A = 0.62
+	const EXPOSURE_PUSH_LERP_B = 1.0
+	const EXPOSURE_PUSH_AWAY_DIR_BONUS = 0.38
+	const EXPOSURE_PUSH_CLOSE_THRESHOLD = 188.0
+	const EXPOSURE_PUSH_CLOSE_MULT = 0.72
+	const EXPOSURE_PUSH_VERY_CLOSE_THRESHOLD = 96.0
+	const EXPOSURE_PUSH_VERY_CLOSE_MULT = 0.82
 
-# === PRIORITY TARGET EXPOSURE ===
-const CUT_THE_SIGNAL_EXPOSURE_THRESHOLD_PHASE_BASE = 1.9
-const CUT_THE_SIGNAL_EXPOSURE_THRESHOLD_PHASE_STEP = 0.28
-const CUT_THE_SIGNAL_EXPOSURE_THRESHOLD_PHASE_MAX = 3.0
-const CUT_THE_SIGNAL_EXPOSURE_FX_STRENGTH_BASE = 1.0
-const CUT_THE_SIGNAL_EXPOSURE_FX_STRENGTH_STEP = 0.2
-const CUT_THE_SIGNAL_EXPOSURE_FX_STRENGTH_MAX = 1.8
-const CUT_THE_SIGNAL_EXPOSURE_PUSH_STRENGTH_MIN_MULT = 0.62
-const CUT_THE_SIGNAL_EXPOSURE_PUSH_LERP_A = 0.62
-const CUT_THE_SIGNAL_EXPOSURE_PUSH_LERP_B = 1.0
-const CUT_THE_SIGNAL_EXPOSURE_PUSH_AWAY_DIR_BONUS = 0.38
-const CUT_THE_SIGNAL_EXPOSURE_PUSH_CLOSE_THRESHOLD = 188.0
-const CUT_THE_SIGNAL_EXPOSURE_PUSH_CLOSE_MULT = 0.72
-const CUT_THE_SIGNAL_EXPOSURE_PUSH_VERY_CLOSE_THRESHOLD = 96.0
-const CUT_THE_SIGNAL_EXPOSURE_PUSH_VERY_CLOSE_MULT = 0.82
-
-# === CONTROL OBJECTIVE ===
-const HOLD_THE_LINE_MAX_ENEMIES_BASE = 5
-const HOLD_THE_LINE_MAX_ENEMIES_DEPTH_MULT = 0.32
-const HOLD_THE_LINE_MAX_ENEMIES_MIN = 5
-const HOLD_THE_LINE_SPAWN_TIMER_MIN = 1.0
-const HOLD_THE_LINE_SPAWN_INTERVAL_BASE = 1.36
-const HOLD_THE_LINE_SPAWN_INTERVAL_CLAMP_MIN = 0.98
-const HOLD_THE_LINE_SPAWN_INTERVAL_CLAMP_MAX = 1.24
-const HOLD_THE_LINE_SPAWN_INTERVAL_OVERTIME_MULT = 0.95
-const HOLD_THE_LINE_SPAWN_INTERVAL_OVERTIME_MIN = 1.2
-const HOLD_THE_LINE_SPAWN_BATCH_OVERTIME_CAP = 4
-const HOLD_THE_LINE_SPAWN_TIMER_OVERTIME = 0.8
+class HoldTheLineConfig:
+	const MAX_ENEMIES_BASE = 5
+	const MAX_ENEMIES_DEPTH_MULT = 0.32
+	const MAX_ENEMIES_MIN = 5
+	const SPAWN_TIMER_MIN = 1.0
+	const SPAWN_INTERVAL_BASE = 1.36
+	const SPAWN_INTERVAL_CLAMP_MIN = 0.98
+	const SPAWN_INTERVAL_CLAMP_MAX = 1.24
+	const SPAWN_INTERVAL_OVERTIME_MULT = 0.95
+	const SPAWN_INTERVAL_OVERTIME_MIN = 1.2
+	const SPAWN_BATCH_OVERTIME_CAP = 4
+	const SPAWN_TIMER_OVERTIME = 0.8
 
 # === COLORS ===
 const COLOR_SIGNAL_BASE = Color(1.0, 0.84, 0.3, 0.95)
@@ -192,14 +191,14 @@ func _begin_survival_objective(profile: Dictionary) -> void:
 	world.objective_time_left = ENCOUNTER_CONTRACTS.profile_objective_duration(profile)
 	world.objective_spawn_interval = ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
 	var objective_pressure_mult: float = world._objective_pressure_mult()
-	world.objective_spawn_interval *= clampf(LAST_STAND_SPAWN_INTERVAL_MULT_BASE - objective_pressure_mult * LAST_STAND_SPAWN_INTERVAL_MULT_PRESSURE, LAST_STAND_SPAWN_INTERVAL_CLAMP_MIN, LAST_STAND_SPAWN_INTERVAL_CLAMP_MAX)
+	world.objective_spawn_interval *= clampf(LastStandConfig.SPAWN_INTERVAL_MULT_BASE - objective_pressure_mult * LastStandConfig.SPAWN_INTERVAL_MULT_PRESSURE, LastStandConfig.SPAWN_INTERVAL_CLAMP_MIN, LastStandConfig.SPAWN_INTERVAL_CLAMP_MAX)
 	world.objective_spawn_timer = world.objective_spawn_interval
 	world.objective_spawn_batch = ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
 	world.objective_spawn_batch = maxi(1, int(round(float(world.objective_spawn_batch) * objective_pressure_mult)))
-	world.objective_max_enemies = mini(LAST_STAND_MAX_ENEMIES_HARD_CAP, LAST_STAND_MAX_ENEMIES_BASE + int(floor(float(world.room_depth) * LAST_STAND_MAX_ENEMIES_DEPTH_MULT)))
+	world.objective_max_enemies = mini(LastStandConfig.MAX_ENEMIES_HARD_CAP, LastStandConfig.MAX_ENEMIES_BASE + int(floor(float(world.room_depth) * LastStandConfig.MAX_ENEMIES_DEPTH_MULT)))
 	world.objective_max_enemies = maxi(8, int(round(float(world.objective_max_enemies) * objective_pressure_mult)))
-	var raw_kill_target := maxi(LAST_STAND_KILL_TARGET_BASE, int(round(world.objective_time_left * LAST_STAND_KILL_TARGET_TIME_MULT)) + LAST_STAND_KILL_TARGET_BASE_BONUS + int(floor(float(world.room_depth) * LAST_STAND_KILL_TARGET_DEPTH_MULT)))
-	raw_kill_target = maxi(LAST_STAND_KILL_TARGET_MIN, int(round(float(raw_kill_target) * objective_pressure_mult)))
+	var raw_kill_target := maxi(LastStandConfig.KILL_TARGET_BASE, int(round(world.objective_time_left * LastStandConfig.KILL_TARGET_TIME_MULT)) + LastStandConfig.KILL_TARGET_BASE_BONUS + int(floor(float(world.room_depth) * LastStandConfig.KILL_TARGET_DEPTH_MULT)))
+	raw_kill_target = maxi(LastStandConfig.KILL_TARGET_MIN, int(round(float(raw_kill_target) * objective_pressure_mult)))
 	world.objective_kill_target = int(ceil(float(raw_kill_target) / 5.0)) * 5
 	world.objective_kills = 0
 	world.objective_overtime = false
@@ -208,17 +207,17 @@ func _begin_survival_objective(profile: Dictionary) -> void:
 func _begin_priority_target_objective(profile: Dictionary) -> void:
 	world.objective_target_type = ENCOUNTER_CONTRACTS.profile_objective_target_type(profile)
 	if world.objective_target_type.is_empty():
-		world.objective_target_type = CUT_THE_SIGNAL_DEFAULT_TYPE
+		world.objective_target_type = CutTheSignalConfig.DEFAULT_TYPE
 	world.objective_target_name = "Signal"
 	world.objective_time_left = ENCOUNTER_CONTRACTS.profile_objective_duration(profile)
 	world.objective_spawn_interval = ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
 	var objective_pressure_mult: float = world._objective_pressure_mult()
-	world.objective_spawn_timer = maxf(CUT_THE_SIGNAL_SPAWN_TIMER_MIN, world.objective_spawn_interval * clampf(CUT_THE_SIGNAL_SPAWN_INTERVAL_BASE - objective_pressure_mult * 0.45, CUT_THE_SIGNAL_SPAWN_INTERVAL_CLAMP_MIN, CUT_THE_SIGNAL_SPAWN_INTERVAL_CLAMP_MAX))
+	world.objective_spawn_timer = maxf(CutTheSignalConfig.SPAWN_TIMER_MIN, world.objective_spawn_interval * clampf(CutTheSignalConfig.SPAWN_INTERVAL_BASE - objective_pressure_mult * 0.45, CutTheSignalConfig.SPAWN_INTERVAL_CLAMP_MIN, CutTheSignalConfig.SPAWN_INTERVAL_CLAMP_MAX))
 	world.objective_spawn_batch = ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
 	world.objective_spawn_batch = maxi(1, int(round(float(world.objective_spawn_batch) * objective_pressure_mult)))
-	world.objective_max_enemies = 12 + int(floor(float(world.room_depth) * CUT_THE_SIGNAL_MAX_ENEMIES_DEPTH_MULT))
-	world.objective_max_enemies = maxi(CUT_THE_SIGNAL_MAX_ENEMIES_MIN, int(round(float(world.objective_max_enemies) * objective_pressure_mult)))
-	world.objective_hunt_kill_goal = clampi(int(round(CUT_THE_SIGNAL_HUNT_KILL_MULT * objective_pressure_mult)), CUT_THE_SIGNAL_HUNT_KILL_GOAL_MIN, CUT_THE_SIGNAL_HUNT_KILL_GOAL_MAX)
+	world.objective_max_enemies = 12 + int(floor(float(world.room_depth) * CutTheSignalConfig.MAX_ENEMIES_DEPTH_MULT))
+	world.objective_max_enemies = maxi(CutTheSignalConfig.MAX_ENEMIES_MIN, int(round(float(world.objective_max_enemies) * objective_pressure_mult)))
+	world.objective_hunt_kill_goal = clampi(int(round(CutTheSignalConfig.HUNT_KILL_MULT * objective_pressure_mult)), CutTheSignalConfig.HUNT_KILL_GOAL_MIN, CutTheSignalConfig.HUNT_KILL_GOAL_MAX)
 	world.objective_overtime = false
 	spawn_priority_target_enemy()
 
@@ -226,11 +225,11 @@ func _begin_control_objective(profile: Dictionary) -> void:
 	world.objective_time_left = ENCOUNTER_CONTRACTS.profile_objective_duration(profile)
 	world.objective_spawn_interval = ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
 	var objective_pressure_mult: float = world._objective_pressure_mult()
-	world.objective_spawn_timer = maxf(HOLD_THE_LINE_SPAWN_TIMER_MIN, world.objective_spawn_interval * clampf(HOLD_THE_LINE_SPAWN_INTERVAL_BASE - objective_pressure_mult * 0.16, HOLD_THE_LINE_SPAWN_INTERVAL_CLAMP_MIN, HOLD_THE_LINE_SPAWN_INTERVAL_CLAMP_MAX))
+	world.objective_spawn_timer = maxf(HoldTheLineConfig.SPAWN_TIMER_MIN, world.objective_spawn_interval * clampf(HoldTheLineConfig.SPAWN_INTERVAL_BASE - objective_pressure_mult * 0.16, HoldTheLineConfig.SPAWN_INTERVAL_CLAMP_MIN, HoldTheLineConfig.SPAWN_INTERVAL_CLAMP_MAX))
 	world.objective_spawn_batch = ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
 	world.objective_spawn_batch = maxi(1, int(round(float(world.objective_spawn_batch) * objective_pressure_mult)))
-	world.objective_max_enemies = HOLD_THE_LINE_MAX_ENEMIES_BASE + int(floor(float(world.room_depth) * HOLD_THE_LINE_MAX_ENEMIES_DEPTH_MULT))
-	world.objective_max_enemies = maxi(HOLD_THE_LINE_MAX_ENEMIES_MIN, int(round(float(world.objective_max_enemies) * objective_pressure_mult)))
+	world.objective_max_enemies = HoldTheLineConfig.MAX_ENEMIES_BASE + int(floor(float(world.room_depth) * HoldTheLineConfig.MAX_ENEMIES_DEPTH_MULT))
+	world.objective_max_enemies = maxi(HoldTheLineConfig.MAX_ENEMIES_MIN, int(round(float(world.objective_max_enemies) * objective_pressure_mult)))
 	world.objective_control_anchor = Vector2.ZERO
 	world.objective_control_radius = ENCOUNTER_CONTRACTS.profile_objective_zone_radius(profile)
 	world.objective_control_progress = 0.0
@@ -267,14 +266,14 @@ func update_survival_objective_state(delta: float) -> void:
 	if world.objective_time_left > 0.0:
 		world.objective_time_left = maxf(0.0, world.objective_time_left - delta)
 	if quota_met and world.objective_time_left > 0.0 and not world.objective_overtime:
-		world.objective_time_left = maxf(0.0, world.objective_time_left - delta * LAST_STAND_QUOTA_MET_DECAY_MULT)
+		world.objective_time_left = maxf(0.0, world.objective_time_left - delta * LastStandConfig.QUOTA_MET_DECAY_MULT)
 	if world.objective_time_left <= 0.0 and not world.objective_overtime:
 		if quota_met:
 			complete_current_objective("Objective Complete", "Survived the timer")
 			return
 		world.objective_overtime = true
-		world.objective_spawn_interval = maxf(0.45, world.objective_spawn_interval * LAST_STAND_OVERTIME_SPAWN_INTERVAL_MULT)
-		world.objective_spawn_batch = mini(LAST_STAND_OVERTIME_SPAWN_BATCH_CAP, world.objective_spawn_batch + 1)
+		world.objective_spawn_interval = maxf(0.45, world.objective_spawn_interval * LastStandConfig.OVERTIME_SPAWN_INTERVAL_MULT)
+		world.objective_spawn_batch = mini(LastStandConfig.OVERTIME_SPAWN_BATCH_CAP, world.objective_spawn_batch + 1)
 		world.objective_spawn_timer = 0.1
 		world.hud.show_banner("Overtime", "")
 	if world.objective_overtime and quota_met:
@@ -325,8 +324,8 @@ func update_priority_target_objective_state(delta: float) -> void:
 	if world.objective_time_left <= 0.0 and not world.objective_overtime:
 		world.objective_overtime = true
 		world.objective_spawn_interval = maxf(0.55, world.objective_spawn_interval * 0.7)
-		world.objective_spawn_batch = mini(CUT_THE_SIGNAL_SPAWN_BATCH_OVERTIME_CAP, world.objective_spawn_batch + 1)
-		world.objective_spawn_timer = CUT_THE_SIGNAL_SPAWN_TIMER_OVERTIME
+		world.objective_spawn_batch = mini(CutTheSignalConfig.SPAWN_BATCH_OVERTIME_CAP, world.objective_spawn_batch + 1)
+		world.objective_spawn_timer = CutTheSignalConfig.SPAWN_TIMER_OVERTIME
 		enrage_priority_target()
 		world.hud.show_banner("Signal Escalating", "")
 
@@ -374,9 +373,9 @@ func update_control_objective_state(delta: float) -> void:
 		world.objective_time_left = maxf(0.0, world.objective_time_left - delta)
 	if world.objective_time_left <= 0.0 and not world.objective_overtime:
 		world.objective_overtime = true
-		world.objective_spawn_interval = maxf(HOLD_THE_LINE_SPAWN_INTERVAL_OVERTIME_MIN, world.objective_spawn_interval * HOLD_THE_LINE_SPAWN_INTERVAL_OVERTIME_MULT)
-		world.objective_spawn_batch = mini(HOLD_THE_LINE_SPAWN_BATCH_OVERTIME_CAP, world.objective_spawn_batch + 1)
-		world.objective_spawn_timer = HOLD_THE_LINE_SPAWN_TIMER_OVERTIME
+		world.objective_spawn_interval = maxf(HoldTheLineConfig.SPAWN_INTERVAL_OVERTIME_MIN, world.objective_spawn_interval * HoldTheLineConfig.SPAWN_INTERVAL_OVERTIME_MULT)
+		world.objective_spawn_batch = mini(HoldTheLineConfig.SPAWN_BATCH_OVERTIME_CAP, world.objective_spawn_batch + 1)
+		world.objective_spawn_timer = HoldTheLineConfig.SPAWN_TIMER_OVERTIME
 		world.hud.show_banner("Line Breaking", "Zone pressure escalating")
 	var has_player := is_instance_valid(world.player)
 	var anchor: Vector2 = world.objective_control_anchor
@@ -508,7 +507,7 @@ func apply_priority_target_exposure_push(delta: float) -> void:
 	var player_position: Vector2 = world.player.global_position if is_instance_valid(world.player) else Vector2.ZERO
 	var has_player := is_instance_valid(world.player)
 	var push_t := clampf(world.objective_exposure_push_left / maxf(0.01, world.objective_exposure_push_duration), 0.0, 1.0)
-	var push_strength := lerpf(world.objective_exposure_push_strength * CUT_THE_SIGNAL_EXPOSURE_PUSH_LERP_A, world.objective_exposure_push_strength * CUT_THE_SIGNAL_EXPOSURE_PUSH_LERP_B, push_t)
+	var push_strength := lerpf(world.objective_exposure_push_strength * CutTheSignalConfig.EXPOSURE_PUSH_LERP_A, world.objective_exposure_push_strength * CutTheSignalConfig.EXPOSURE_PUSH_LERP_B, push_t)
 	for enemy_node in world.get_tree().get_nodes_in_group("enemies"):
 		if enemy_node == world.objective_target_enemy or not (enemy_node is CharacterBody2D):
 			continue
@@ -522,19 +521,19 @@ func apply_priority_target_exposure_push(delta: float) -> void:
 		if has_player:
 			var enemy_to_player: Vector2 = player_position - enemy.global_position
 			var player_dist: float = enemy_to_player.length()
-			if player_dist < CUT_THE_SIGNAL_EXPOSURE_PUSH_CLOSE_THRESHOLD:
+			if player_dist < CutTheSignalConfig.EXPOSURE_PUSH_CLOSE_THRESHOLD:
 				var to_player_dir: Vector2 = enemy_to_player / maxf(0.001, player_dist)
 				var toward_player: float = dir.dot(to_player_dir)
 				if toward_player > 0.0:
-					var safe_dir: Vector2 = (dir - to_player_dir * (toward_player + CUT_THE_SIGNAL_EXPOSURE_PUSH_AWAY_DIR_BONUS)).normalized()
+					var safe_dir: Vector2 = (dir - to_player_dir * (toward_player + CutTheSignalConfig.EXPOSURE_PUSH_AWAY_DIR_BONUS)).normalized()
 					if safe_dir.length() > 0.01:
 						dir = safe_dir
 					else:
 						dir = -to_player_dir
-					tuned_strength *= CUT_THE_SIGNAL_EXPOSURE_PUSH_CLOSE_MULT
-			if player_dist < CUT_THE_SIGNAL_EXPOSURE_PUSH_VERY_CLOSE_THRESHOLD:
+					tuned_strength *= CutTheSignalConfig.EXPOSURE_PUSH_CLOSE_MULT
+			if player_dist < CutTheSignalConfig.EXPOSURE_PUSH_VERY_CLOSE_THRESHOLD:
 				dir = (enemy.global_position - player_position).normalized()
-				tuned_strength = maxf(tuned_strength, world.objective_exposure_push_strength * CUT_THE_SIGNAL_EXPOSURE_PUSH_VERY_CLOSE_MULT)
+				tuned_strength = maxf(tuned_strength, world.objective_exposure_push_strength * CutTheSignalConfig.EXPOSURE_PUSH_VERY_CLOSE_MULT)
 		var target_velocity: Vector2 = dir * tuned_strength
 		enemy.velocity = enemy.velocity.move_toward(target_velocity, delta * world.objective_exposure_push_accel)
 		enemy.apply_slow(0.2, 0.74)
@@ -553,21 +552,21 @@ func spawn_priority_target_enemy() -> void:
 	var target_type: String = world.objective_target_type if not world.objective_target_type.is_empty() else "archer"
 	if not is_instance_valid(world.enemy_spawner):
 		return
-	var target_spawn_distance := maxf(world.spawn_safe_radius + CUT_THE_SIGNAL_SPAWN_DISTANCE_BASE, CUT_THE_SIGNAL_SPAWN_DISTANCE_MIN)
+	var target_spawn_distance := maxf(world.spawn_safe_radius + CutTheSignalConfig.SPAWN_DISTANCE_BASE, CutTheSignalConfig.SPAWN_DISTANCE_MIN)
 	var spawned_target := world.enemy_spawner.spawn_enemy_node_type(target_type, target_spawn_distance) as CharacterBody2D
 	if not is_instance_valid(spawned_target):
 		return
 	world.objective_target_enemy = spawned_target
 	world.active_room_enemy_count += 1
-	var boosted_max := maxi(CUT_THE_SIGNAL_HEALTH_BOOST_MIN, int(round(float(spawned_target.get_max_health()) * CUT_THE_SIGNAL_HEALTH_BOOST_MULT)))
+	var boosted_max := maxi(CutTheSignalConfig.HEALTH_BOOST_MIN, int(round(float(spawned_target.get_max_health()) * CutTheSignalConfig.HEALTH_BOOST_MULT)))
 	spawned_target.set_max_health_and_current(boosted_max, boosted_max)
 	if spawned_target.get("has_mutator_overlay") != null:
 		spawned_target.set("has_mutator_overlay", true)
 	if spawned_target.get("mutator_theme_color") != null:
 		spawned_target.set("mutator_theme_color", COLOR_SIGNAL_MUTATOR)
-	spawned_target.scale *= CUT_THE_SIGNAL_SCALE_MULT
+	spawned_target.scale *= CutTheSignalConfig.SCALE_MULT
 	world.objective_target_next_flee_index = 0
-	spawned_target.configure_health_bar_visuals(CUT_THE_SIGNAL_HEALTH_BAR_OFFSET, CUT_THE_SIGNAL_HEALTH_BAR_SIZE)
+	spawned_target.configure_health_bar_visuals(CutTheSignalConfig.HEALTH_BAR_OFFSET, CutTheSignalConfig.HEALTH_BAR_SIZE)
 	spawned_target.set_health_threshold_markers(world.objective_target_flee_thresholds, world.objective_target_next_flee_index)
 	world.objective_hunt_kill_progress = 0
 	world.objective_hunt_kill_goal = maxi(2, world.objective_hunt_kill_goal)
@@ -602,7 +601,7 @@ func spawn_priority_target_opening_escorts() -> void:
 		if not is_instance_valid(escort):
 			continue
 		var angle := base_angle + TAU * float(escort_index) / float(maxi(1, escort_types.size()))
-		var radius := CUT_THE_SIGNAL_OPENING_ESCORT_RADIUS_SHIELDER if escort_types[escort_index] == "shielder" else CUT_THE_SIGNAL_OPENING_ESCORT_RADIUS_OTHER
+		var radius := CutTheSignalConfig.OPENING_ESCORT_RADIUS_SHIELDER if escort_types[escort_index] == "shielder" else CutTheSignalConfig.OPENING_ESCORT_RADIUS_OTHER
 		escort.global_position = world._clamp_position_to_current_room(anchor + Vector2.RIGHT.rotated(angle) * radius, 44.0)
 		world.active_room_enemy_count += 1
 	world.objective_spawn_timer = maxf(world.objective_spawn_timer, world.objective_spawn_interval)
@@ -632,8 +631,8 @@ func trigger_priority_target_threshold_phase(_threshold_ratio: float) -> void:
 	relocate_priority_target(_threshold_ratio)
 	var goal_drop := maxi(1, int(round(world._objective_pressure_mult() - 0.4)))
 	world.objective_hunt_kill_goal = maxi(2, world.objective_hunt_kill_goal - goal_drop)
-	var duration := clampf(CUT_THE_SIGNAL_EXPOSURE_THRESHOLD_PHASE_BASE + float(phase_index) * CUT_THE_SIGNAL_EXPOSURE_THRESHOLD_PHASE_STEP, CUT_THE_SIGNAL_EXPOSURE_THRESHOLD_PHASE_BASE, CUT_THE_SIGNAL_EXPOSURE_THRESHOLD_PHASE_MAX)
-	var fx_strength := clampf(CUT_THE_SIGNAL_EXPOSURE_FX_STRENGTH_BASE + float(phase_index) * CUT_THE_SIGNAL_EXPOSURE_FX_STRENGTH_STEP, CUT_THE_SIGNAL_EXPOSURE_FX_STRENGTH_BASE, CUT_THE_SIGNAL_EXPOSURE_FX_STRENGTH_MAX)
+	var duration := clampf(CutTheSignalConfig.EXPOSURE_THRESHOLD_PHASE_BASE + float(phase_index) * CutTheSignalConfig.EXPOSURE_THRESHOLD_PHASE_STEP, CutTheSignalConfig.EXPOSURE_THRESHOLD_PHASE_BASE, CutTheSignalConfig.EXPOSURE_THRESHOLD_PHASE_MAX)
+	var fx_strength := clampf(CutTheSignalConfig.EXPOSURE_FX_STRENGTH_BASE + float(phase_index) * CutTheSignalConfig.EXPOSURE_FX_STRENGTH_STEP, CutTheSignalConfig.EXPOSURE_FX_STRENGTH_BASE, CutTheSignalConfig.EXPOSURE_FX_STRENGTH_MAX)
 	trigger_priority_target_exposure("Signal Cracked", "Push through", duration, fx_strength)
 	if is_instance_valid(world.objective_target_enemy):
 		world.objective_target_enemy.velocity = Vector2.ZERO
@@ -643,7 +642,7 @@ func relocate_priority_target(_threshold_ratio: float) -> void:
 		return
 	var old_position: Vector2 = world.objective_target_enemy.global_position
 	var new_position := pick_priority_target_relocation_position(old_position)
-	if old_position.distance_to(new_position) < CUT_THE_SIGNAL_RELOCATION_MIN_DISTANCE:
+	if old_position.distance_to(new_position) < CutTheSignalConfig.RELOCATION_MIN_DISTANCE:
 		return
 	world.objective_target_enemy.global_position = new_position
 	world.objective_target_enemy.velocity = Vector2.ZERO
@@ -684,7 +683,7 @@ func relocate_priority_target_nearby_escorts(old_position: Vector2, new_position
 		var from_position := escort.global_position
 		var slot_t := float(moved) / float(maxi(1, world.objective_relocation_escort_cap))
 		var angle := base_angle + TAU * slot_t
-		var radius := CUT_THE_SIGNAL_OPENING_ESCORT_RADIUS_OTHER + 14.0 * float(moved)
+		var radius := CutTheSignalConfig.OPENING_ESCORT_RADIUS_OTHER + 14.0 * float(moved)
 		escort.global_position = world._clamp_position_to_current_room(new_position + Vector2.RIGHT.rotated(angle) * radius, 44.0)
 		escort.velocity = Vector2.ZERO
 		carry_paths.append({"from": from_position, "to": escort.global_position})
@@ -698,22 +697,22 @@ func relocate_priority_target_nearby_escorts(old_position: Vector2, new_position
 func pick_priority_target_relocation_position(old_position: Vector2) -> Vector2:
 	if not is_instance_valid(world.enemy_spawner):
 		return old_position
-	var min_player_distance := maxf(world.spawn_safe_radius + CUT_THE_SIGNAL_SPAWN_DISTANCE_BASE, CUT_THE_SIGNAL_SPAWN_DISTANCE_MIN)
+	var min_player_distance := maxf(world.spawn_safe_radius + CutTheSignalConfig.SPAWN_DISTANCE_BASE, CutTheSignalConfig.SPAWN_DISTANCE_MIN)
 	var min_enemy_spacing := 132.0
 	var best_position := old_position
 	var best_score := -INF
-	for _attempt in range(CUT_THE_SIGNAL_RELOCATION_ATTEMPT_COUNT):
+	for _attempt in range(CutTheSignalConfig.RELOCATION_ATTEMPT_COUNT):
 		var candidate := world.enemy_spawner.pick_room_position(min_player_distance, min_enemy_spacing) as Vector2
-		if candidate.distance_to(old_position) < CUT_THE_SIGNAL_RELOCATION_CANDIDATE_MIN_DISTANCE:
+		if candidate.distance_to(old_position) < CutTheSignalConfig.RELOCATION_CANDIDATE_MIN_DISTANCE:
 			continue
 		var score := candidate.distance_to(old_position)
 		if is_instance_valid(world.player):
-			score += candidate.distance_to(world.player.global_position) * CUT_THE_SIGNAL_RELOCATION_SCORE_PLAYER_MULT
+			score += candidate.distance_to(world.player.global_position) * CutTheSignalConfig.RELOCATION_SCORE_PLAYER_MULT
 		for enemy in world.get_tree().get_nodes_in_group("enemies"):
 			if enemy == world.objective_target_enemy or not (enemy is Node2D):
 				continue
 			var neighbor := enemy as Node2D
-			score += minf(CUT_THE_SIGNAL_RELOCATION_SCORE_NEIGHBOR_CAP, candidate.distance_to(neighbor.global_position)) * CUT_THE_SIGNAL_RELOCATION_SCORE_NEIGHBOR_MULT
+			score += minf(CutTheSignalConfig.RELOCATION_SCORE_NEIGHBOR_CAP, candidate.distance_to(neighbor.global_position)) * CutTheSignalConfig.RELOCATION_SCORE_NEIGHBOR_MULT
 		if score > best_score:
 			best_score = score
 			best_position = candidate
@@ -825,9 +824,9 @@ func attach_priority_target_marker(enemy: CharacterBody2D) -> void:
 		existing.queue_free()
 	var marker := Node2D.new()
 	marker.name = "PriorityTargetMarker"
-	marker.position = Vector2(0.0, CUT_THE_SIGNAL_MARKER_Y_OFFSET)
+	marker.position = Vector2(0.0, CutTheSignalConfig.MARKER_Y_OFFSET)
 	marker.z_as_relative = false
-	marker.z_index = CUT_THE_SIGNAL_MARKER_Z_INDEX
+	marker.z_index = CutTheSignalConfig.MARKER_Z_INDEX
 	var diamond := Polygon2D.new()
 	diamond.polygon = PackedVector2Array([
 		Vector2(0.0, -VFX_MARKER_DIAMOND_SIZE),
