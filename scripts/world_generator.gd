@@ -1567,6 +1567,7 @@ func _enter_rest_site() -> void:
 		var heal_ratio_mult := float(current_difficulty_config.get("rest_heal_ratio_mult", 1.0))
 		var heal_amount := maxi(8, int(round(float(player_max_health) * rest_heal_ratio * heal_ratio_mult)))
 		player.heal(heal_amount)
+		player.play_rest_site_heal_feedback()
 	_spawn_door_options()
 
 func _advance_room_progress() -> void:

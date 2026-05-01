@@ -146,6 +146,92 @@ func _play_world_line(points: PackedVector2Array, color: Color, width: float, li
 	tween.tween_interval(lifetime)
 	tween.tween_callback(line.queue_free)
 
+func _build_circle_polygon(radius: float, segments: int = 20) -> PackedVector2Array:
+	var polygon := PackedVector2Array()
+	var clamped_segments := maxi(8, segments)
+	for i in range(clamped_segments):
+		var angle := TAU * float(i) / float(clamped_segments)
+		polygon.append(Vector2(cos(angle), sin(angle)) * radius)
+	return polygon
+
+func _spawn_heal_cross(epicenter_global: Vector2, start_offset: Vector2, drift: Vector2, duration: float, base_scale: float, rotation_bias: float) -> void:
+	var cross := Node2D.new()
+	cross.top_level = true
+	cross.global_position = epicenter_global + start_offset
+	cross.scale = Vector2(base_scale, base_scale)
+	cross.rotation = rotation_bias
+	cross.z_index = 45
+
+	var arm_length := 16.0
+	var arm_width := 6.0
+	var cross_color := Color(ENEMY_BASE.COLOR_PLAYER_HEALTH_FILL.r, ENEMY_BASE.COLOR_PLAYER_HEALTH_FILL.g, ENEMY_BASE.COLOR_PLAYER_HEALTH_FILL.b, 0.9)
+
+	var vertical := ColorRect.new()
+	vertical.color = cross_color
+	vertical.size = Vector2(arm_width, arm_length)
+	vertical.position = Vector2(-arm_width * 0.5, -arm_length * 0.5)
+	vertical.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cross.add_child(vertical)
+
+	var horizontal := ColorRect.new()
+	horizontal.color = cross_color
+	horizontal.size = Vector2(arm_length, arm_width)
+	horizontal.position = Vector2(-arm_length * 0.5, -arm_width * 0.5)
+	horizontal.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cross.add_child(horizontal)
+
+	add_child(cross)
+
+	var end_position := cross.global_position + drift
+	var end_rotation := rotation_bias + randf_range(-0.22, 0.22)
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(cross, "global_position", end_position, duration).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(cross, "rotation", end_rotation, duration).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(cross, "scale", Vector2(base_scale * 1.08, base_scale * 1.08), duration).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(cross, "modulate:a", 0.0, duration).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tween.set_parallel(false)
+	tween.tween_interval(duration)
+	tween.tween_callback(cross.queue_free)
+
+func _spawn_heal_pulse(epicenter_global: Vector2) -> void:
+	var pulse := Polygon2D.new()
+	pulse.top_level = true
+	pulse.global_position = epicenter_global
+	pulse.z_index = 44
+	pulse.polygon = _build_circle_polygon(20.0, 24)
+	pulse.color = Color(ENEMY_BASE.COLOR_PLAYER_HEALTH_FILL.r, ENEMY_BASE.COLOR_PLAYER_HEALTH_FILL.g, ENEMY_BASE.COLOR_PLAYER_HEALTH_FILL.b, 0.24)
+	pulse.scale = Vector2(0.6, 0.6)
+	add_child(pulse)
+
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(pulse, "scale", Vector2(1.55, 1.55), 0.2).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(pulse, "modulate:a", 0.0, 0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.set_parallel(false)
+	tween.tween_interval(0.2)
+	tween.tween_callback(pulse.queue_free)
+
+func play_rest_site_heal(epicenter_global: Vector2) -> void:
+	_spawn_heal_pulse(epicenter_global)
+	play_world_ring(epicenter_global, 20.0, Color(ENEMY_BASE.COLOR_PLAYER_HEALTH_FILL.r, ENEMY_BASE.COLOR_PLAYER_HEALTH_FILL.g, ENEMY_BASE.COLOR_PLAYER_HEALTH_FILL.b, 0.92), 0.11)
+	play_world_ring(epicenter_global, 34.0, Color(0.84, 1.0, 0.86, 0.54), 0.18)
+	play_world_ring(epicenter_global, 48.0, Color(0.72, 0.94, 0.76, 0.28), 0.24)
+
+	for i in range(5):
+		var angle := TAU * (float(i) / 5.0) + randf_range(-0.14, 0.14)
+		var spawn_radius := randf_range(10.0, 20.0)
+		var start_offset := Vector2(cos(angle), sin(angle)) * spawn_radius
+		var radial_dir := start_offset.normalized() if start_offset.length_squared() > 0.00001 else Vector2.RIGHT
+		var radial_drift := radial_dir * randf_range(14.0, 22.0)
+		var tangential_drift := Vector2(-radial_dir.y, radial_dir.x) * randf_range(-5.0, 5.0)
+		var lift_drift := Vector2(0.0, randf_range(-16.0, -8.0))
+		var drift := radial_drift + tangential_drift + lift_drift
+		var duration := randf_range(0.34, 0.44)
+		var scale := randf_range(0.9, 1.02)
+		var rotation_bias := randf_range(-0.06, 0.06)
+		_spawn_heal_cross(epicenter_global, start_offset, drift, duration, scale, rotation_bias)
+
 func play_combo_relay_kill(epicenter_global: Vector2, stack_count: int, max_stacks: int, color: Color, lifetime: float = 0.2) -> void:
 	var clamped_max := maxi(1, max_stacks)
 	var clamped_stack := clampi(stack_count, 1, clamped_max)

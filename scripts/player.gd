@@ -630,6 +630,11 @@ func heal(amount: int) -> void:
 		return
 	health_state.heal(amount)
 
+func play_rest_site_heal_feedback() -> void:
+	if player_feedback == null:
+		return
+	player_feedback.play_rest_site_heal(global_position)
+
 func is_dead() -> bool:
 	return health_state.is_dead()
 
