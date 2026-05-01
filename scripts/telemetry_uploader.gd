@@ -4,7 +4,7 @@ const TELEMETRY_UPLOAD_QUEUE := preload("res://scripts/telemetry_upload_queue.gd
 const TELEMETRY_ENDPOINT_SETTING := "application/config/telemetry_upload_endpoint"
 const TELEMETRY_API_KEY_SETTING := "application/config/telemetry_upload_api_key"
 
-var _run_context: Node
+var _run_context
 var _timer: Timer
 var _request: HTTPRequest
 var _active_entry_id: String = ""
@@ -97,9 +97,7 @@ func _mark_retry(entry_id: String, attempt_count: int, error_message: String) ->
 func _is_upload_enabled() -> bool:
 	if _run_context == null:
 		return false
-	if not _run_context.has_method("is_telemetry_upload_enabled"):
-		return false
-	return bool(_run_context.call("is_telemetry_upload_enabled"))
+	return bool(_run_context.is_telemetry_upload_enabled())
 
 func _upload_endpoint() -> String:
 	return String(ProjectSettings.get_setting(TELEMETRY_ENDPOINT_SETTING, "")).strip_edges()

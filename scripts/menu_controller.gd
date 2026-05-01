@@ -987,8 +987,7 @@ func _on_telemetry_upload_toggled(enabled: bool) -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context == null:
 		return
-	if run_context.has_method("set_telemetry_upload_enabled"):
-		run_context.call("set_telemetry_upload_enabled", enabled, true, true)
+	run_context.set_telemetry_upload_enabled(enabled, true, true)
 
 func _sync_options_from_context() -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
@@ -1111,8 +1110,8 @@ func _build_telemetry_consent_layer() -> Control:
 	allow_button.custom_minimum_size = Vector2(0.0, 56.0)
 	allow_button.pressed.connect(func() -> void:
 		var run_context := get_node_or_null(RUN_CONTEXT_PATH)
-		if run_context != null and run_context.has_method("set_telemetry_upload_enabled"):
-			run_context.call("set_telemetry_upload_enabled", true, true, true)
+		if run_context != null:
+			run_context.set_telemetry_upload_enabled(true, true, true)
 		_sync_options_from_context()
 		if telemetry_consent_layer != null:
 			telemetry_consent_layer.visible = false
@@ -1123,8 +1122,8 @@ func _build_telemetry_consent_layer() -> Control:
 	not_now_button.custom_minimum_size = Vector2(0.0, 56.0)
 	not_now_button.pressed.connect(func() -> void:
 		var run_context := get_node_or_null(RUN_CONTEXT_PATH)
-		if run_context != null and run_context.has_method("set_telemetry_upload_enabled"):
-			run_context.call("set_telemetry_upload_enabled", false, true, true)
+		if run_context != null:
+			run_context.set_telemetry_upload_enabled(false, true, true)
 		_sync_options_from_context()
 		if telemetry_consent_layer != null:
 			telemetry_consent_layer.visible = false
@@ -1137,9 +1136,7 @@ func _maybe_show_telemetry_consent_prompt() -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context == null:
 		return
-	if not run_context.has_method("should_prompt_telemetry_consent"):
-		return
-	if not bool(run_context.call("should_prompt_telemetry_consent")):
+	if not run_context.should_prompt_telemetry_consent():
 		return
 	if telemetry_consent_layer != null:
 		telemetry_consent_layer.visible = true

@@ -36,7 +36,7 @@ var resolution_height: int = SETTINGS_STORE.DEFAULT_RESOLUTION_HEIGHT
 var telemetry_upload_enabled: bool = SETTINGS_STORE.DEFAULT_TELEMETRY_UPLOAD_ENABLED
 var telemetry_consent_asked: bool = SETTINGS_STORE.DEFAULT_TELEMETRY_CONSENT_ASKED
 var resume_saved_run_requested: bool = false
-var telemetry_uploader: Node
+var telemetry_uploader
 
 ## Meta-progression state
 var meta_progress_profile: Dictionary = {}
@@ -53,7 +53,7 @@ func _ready() -> void:
 	_apply_resolution()
 	telemetry_uploader = TELEMETRY_UPLOADER_SCRIPT.new()
 	add_child(telemetry_uploader)
-	telemetry_uploader.call("initialize", self)
+	telemetry_uploader.initialize(self)
 
 func set_run_mode(mode: Variant) -> void:
 	if mode is int:
@@ -135,14 +135,12 @@ func enqueue_telemetry_payload(payload: Dictionary) -> void:
 		return
 	if not telemetry_upload_enabled:
 		return
-	telemetry_uploader.call("enqueue_payload", payload)
+	telemetry_uploader.enqueue_payload(payload)
 
 func get_pending_telemetry_upload_count() -> int:
 	if telemetry_uploader == null:
 		return 0
-	if not telemetry_uploader.has_method("pending_count"):
-		return 0
-	return int(telemetry_uploader.call("pending_count"))
+	return int(telemetry_uploader.pending_count())
 
 func get_display_mode_options() -> Array[Dictionary]:
 	var options: Array[Dictionary] = []

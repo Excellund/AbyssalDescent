@@ -197,7 +197,7 @@ var telemetry_spike_enabled: bool = false
 var telemetry_spike_endpoint: String = ""
 var telemetry_spike_api_key: String = ""
 var telemetry_spike_timeout_seconds: float = 8.0
-var telemetry_spike_sender: Node
+var telemetry_spike_sender
 var telemetry_spike_requested: bool = false
 
 func _apply_debug_settings_from_node() -> void:
@@ -1759,7 +1759,7 @@ func _maybe_start_telemetry_spike_probe() -> void:
 	telemetry_spike_sender = TELEMETRY_SPIKE_SENDER_SCRIPT.new()
 	add_child(telemetry_spike_sender)
 	telemetry_spike_sender.connect("probe_completed", Callable(self, "_on_telemetry_spike_probe_completed"), CONNECT_ONE_SHOT)
-	telemetry_spike_sender.call("begin_probe", {
+	telemetry_spike_sender.begin_probe({
 		"endpoint": endpoint,
 		"api_key": telemetry_spike_api_key,
 		"timeout_seconds": clampf(telemetry_spike_timeout_seconds, 3.0, 20.0),
@@ -1827,10 +1827,10 @@ func _finish_active_run_telemetry(outcome: String, death_event: Dictionary = {})
 		summary["death_event"] = death_event.duplicate(true)
 	RUN_TELEMETRY_STORE.finish_run(telemetry_run_id, outcome, summary)
 	var run_context := _get_run_context()
-	if run_context != null and run_context.has_method("enqueue_telemetry_payload"):
+	if run_context != null:
 		var upload_payload := RUN_TELEMETRY_STORE.build_upload_payload(telemetry_run_id)
 		if not upload_payload.is_empty():
-			run_context.call("enqueue_telemetry_payload", upload_payload)
+			run_context.enqueue_telemetry_payload(upload_payload)
 	telemetry_run_finished = true
 
 func _bearing_key_from_label(label: String, fallback: String = "unknown") -> String:

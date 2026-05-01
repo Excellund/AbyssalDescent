@@ -501,8 +501,8 @@ func _on_pause_display_mode_selected(index: int) -> void:
 
 func _on_pause_telemetry_upload_toggled(enabled: bool) -> void:
 	var run_context := _get_run_context()
-	if run_context != null and run_context.has_method("set_telemetry_upload_enabled"):
-		run_context.call("set_telemetry_upload_enabled", enabled, true, true)
+	if run_context != null:
+		run_context.set_telemetry_upload_enabled(enabled, true, true)
 
 func _apply_pause_options(master_percent: float, music_percent: float, sfx_percent: float) -> void:
 	var master_db := _percent_to_db(master_percent)
