@@ -9,6 +9,7 @@ const GLOSSARY_DATA := preload("res://scripts/shared/glossary_data.gd")
 const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 const SETTINGS_STORE := preload("res://scripts/settings_store.gd")
+const UPDATE_SERVICE_SCRIPT := preload("res://scripts/update_service.gd")
 const MENU_QUOTE_NEUTRAL := "\"Something unfamiliar begins.\""
 const MENU_QUOTES_AFTER_DEATH := [
 	"\"Back already?\"",
@@ -57,6 +58,17 @@ var flavor_quote_label: RichTextLabel
 var quote_wrapper: Control
 var _quote_pulse_active: bool = false
 var _quote_pulse_time: float = 0.0
+var update_panel: Panel
+var update_status_label: Label
+var update_detail_label: Label
+var update_action_button: Button
+var update_check_button: Button
+var update_prompt_layer: Control
+var update_prompt_title_label: Label
+var update_prompt_body_label: Label
+var update_prompt_pending: bool = false
+var update_check_was_manual: bool = false
+var update_service
 
 func _ready() -> void:
 	if _should_autostart_debug_encounter():
@@ -72,6 +84,7 @@ func _ready() -> void:
 	_sync_options_from_context()
 	_maybe_show_telemetry_consent_prompt()
 	_start_menu_music()
+	_start_update_check()
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED:
@@ -82,30 +95,41 @@ func _change_to_gameplay_scene() -> void:
 		get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)
 
 func _should_autostart_debug_encounter() -> bool:
-	var packed := load(GAMEPLAY_SCENE_PATH) as PackedScene
-	if packed == null:
+	var debug_values := _read_main_debug_settings_values()
+	if debug_values.is_empty():
 		return false
-	var main_root := packed.instantiate()
-	if main_root == null:
+	if not bool(debug_values.get("enabled", false)):
 		return false
-	var settings_enabled := false
-	var encounter_value: Variant = null
-	var debug_settings := main_root.get_node_or_null("DebugSettings")
-	if debug_settings != null:
-		settings_enabled = bool(debug_settings.get("enabled"))
-		encounter_value = debug_settings.get("start_encounter")
-	main_root.queue_free()
-	if not settings_enabled:
-		return false
+	var encounter_value: Variant = debug_values.get("start_encounter", null)
 	if encounter_value == null:
 		return false
 	return int(encounter_value) != 0
+
+func _read_main_debug_settings_values() -> Dictionary:
+	var packed := load(GAMEPLAY_SCENE_PATH) as PackedScene
+	if packed == null:
+		return {}
+	var main_root := packed.instantiate()
+	if main_root == null:
+		return {}
+	var values := {}
+	var debug_settings := main_root.get_node_or_null("DebugSettings")
+	if debug_settings != null:
+		values = {
+			"enabled": bool(debug_settings.get("enabled")),
+			"start_encounter": debug_settings.get("start_encounter"),
+			"force_update_prompt_on_menu": bool(debug_settings.get("force_update_prompt_on_menu"))
+		}
+	main_root.queue_free()
+	return values
 
 func _exit_tree() -> void:
 	if menu_music_player != null and menu_music_player.playing:
 		menu_music_player.stop()
 
 func _unhandled_input(event: InputEvent) -> void:
+	if update_prompt_layer != null and update_prompt_layer.visible:
+		return
 	if event.is_action_pressed("ui_cancel") and options_panel != null and options_panel.visible:
 		if telemetry_consent_layer != null and telemetry_consent_layer.visible:
 			return
@@ -236,6 +260,10 @@ func _build_ui() -> void:
 	action_spacer_bottom.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	action_content.add_child(action_spacer_bottom)
 
+	update_panel = _build_update_panel()
+	update_panel.visible = false
+	add_child(update_panel)
+
 	_refresh_primary_run_button()
 	primary_run_button.grab_focus()
 
@@ -254,6 +282,10 @@ func _build_ui() -> void:
 	telemetry_consent_layer = _build_telemetry_consent_layer()
 	telemetry_consent_layer.visible = false
 	add_child(telemetry_consent_layer)
+
+	update_prompt_layer = _build_update_prompt_layer()
+	update_prompt_layer.visible = false
+	add_child(update_prompt_layer)
 	_show_root_panel(false)
 
 func _apply_menu_layout() -> void:
@@ -269,6 +301,14 @@ func _apply_menu_layout() -> void:
 		_set_centered_panel_layout(glossary_panel, Vector2(980.0, 680.0), fit_scale, viewport_size)
 	if difficulty_selector_panel != null:
 		_set_centered_panel_layout(difficulty_selector_panel, Vector2(1020.0, 720.0), fit_scale, viewport_size)
+	if update_panel != null and root_panel != null:
+		var update_base_size := Vector2(470.0, 190.0)
+		update_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		update_panel.size = update_base_size
+		update_panel.scale = Vector2(fit_scale, fit_scale)
+		var vertical_gap := 16.0 * fit_scale
+		var root_scaled_size := root_panel.size * root_panel.scale
+		update_panel.position = Vector2(root_panel.position.x, root_panel.position.y + root_scaled_size.y + vertical_gap)
 	if atmosphere_band != null:
 		_set_centered_panel_layout(atmosphere_band, Vector2(620.0, 660.0), fit_scale, viewport_size)
 
@@ -706,6 +746,293 @@ func _build_options_panel() -> Panel:
 
 	return panel
 
+func _build_update_panel() -> Panel:
+	var panel := Panel.new()
+	panel.custom_minimum_size = Vector2(470.0, 170.0)
+	panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.04, 0.08, 0.13, 0.90), Color(0.36, 0.64, 0.88, 0.74), 16, 2))
+
+	var content := MarginContainer.new()
+	content.set_anchors_preset(Control.PRESET_FULL_RECT)
+	content.add_theme_constant_override("margin_left", 14)
+	content.add_theme_constant_override("margin_right", 14)
+	content.add_theme_constant_override("margin_top", 14)
+	content.add_theme_constant_override("margin_bottom", 12)
+	panel.add_child(content)
+
+	var stack := VBoxContainer.new()
+	stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	stack.add_theme_constant_override("separation", 8)
+	content.add_child(stack)
+
+	var title := Label.new()
+	title.text = "Game Update"
+	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_color_override("font_color", Color(0.96, 0.99, 1.0, 0.98))
+	stack.add_child(title)
+
+	update_status_label = Label.new()
+	update_status_label.text = "Checking for updates..."
+	update_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	update_status_label.add_theme_font_size_override("font_size", 17)
+	update_status_label.add_theme_color_override("font_color", Color(0.86, 0.94, 1.0, 0.96))
+	stack.add_child(update_status_label)
+
+	update_detail_label = Label.new()
+	update_detail_label.text = "Current version: unknown"
+	update_detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	update_detail_label.add_theme_font_size_override("font_size", 14)
+	update_detail_label.add_theme_color_override("font_color", Color(0.68, 0.80, 0.92, 0.84))
+	stack.add_child(update_detail_label)
+
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 10)
+	stack.add_child(actions)
+
+	update_action_button = _make_menu_button("Open Releases", true)
+	update_action_button.custom_minimum_size = Vector2(0.0, 50.0)
+	update_action_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	update_action_button.pressed.connect(_on_update_action_pressed)
+	actions.add_child(update_action_button)
+
+	update_check_button = _make_menu_button("Check Again")
+	update_check_button.custom_minimum_size = Vector2(130.0, 50.0)
+	update_check_button.size_flags_horizontal = Control.SIZE_SHRINK_END
+	update_check_button.pressed.connect(_on_update_check_pressed)
+	actions.add_child(update_check_button)
+
+	return panel
+
+func _build_update_prompt_layer() -> Control:
+	var layer := Control.new()
+	layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.mouse_filter = Control.MOUSE_FILTER_STOP
+
+	var dim := ColorRect.new()
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0.01, 0.02, 0.05, 0.76)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	layer.add_child(dim)
+
+	var panel := Panel.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.custom_minimum_size = Vector2(700.0, 252.0)
+	panel.position = Vector2(-350.0, -126.0)
+	panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.05, 0.08, 0.12, 0.97), Color(0.44, 0.7, 0.96, 0.74), 18, 2))
+	layer.add_child(panel)
+
+	var content := MarginContainer.new()
+	content.set_anchors_preset(Control.PRESET_FULL_RECT)
+	content.add_theme_constant_override("margin_left", 34)
+	content.add_theme_constant_override("margin_right", 34)
+	content.add_theme_constant_override("margin_top", 22)
+	content.add_theme_constant_override("margin_bottom", 20)
+	panel.add_child(content)
+
+	var stack := VBoxContainer.new()
+	stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stack.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	stack.add_theme_constant_override("separation", 10)
+	content.add_child(stack)
+
+	update_prompt_title_label = Label.new()
+	update_prompt_title_label.text = "Update Available"
+	update_prompt_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	update_prompt_title_label.add_theme_font_size_override("font_size", 34)
+	update_prompt_title_label.add_theme_color_override("font_color", Color(0.96, 0.99, 1.0, 0.98))
+	stack.add_child(update_prompt_title_label)
+
+	update_prompt_body_label = Label.new()
+	update_prompt_body_label.text = "A new version is ready to install."
+	update_prompt_body_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	update_prompt_body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	update_prompt_body_label.add_theme_font_size_override("font_size", 18)
+	update_prompt_body_label.add_theme_color_override("font_color", Color(0.82, 0.9, 0.98, 0.94))
+	stack.add_child(update_prompt_body_label)
+
+	var actions := HBoxContainer.new()
+	actions.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	actions.add_theme_constant_override("separation", 14)
+	stack.add_child(actions)
+
+	var update_now_button := _make_menu_button("Update Now", true)
+	update_now_button.custom_minimum_size = Vector2(0.0, 58.0)
+	update_now_button.pressed.connect(func() -> void:
+		if update_prompt_layer != null:
+			update_prompt_layer.visible = false
+		_on_update_action_pressed()
+	)
+	actions.add_child(update_now_button)
+
+	var not_now_button := _make_menu_button("Not Now")
+	not_now_button.custom_minimum_size = Vector2(0.0, 58.0)
+	not_now_button.pressed.connect(func() -> void:
+		var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+		if run_context != null and update_service != null and not String(update_service.latest_version).is_empty():
+			run_context.set_skipped_update_version(String(update_service.latest_version), true)
+		if update_prompt_layer != null:
+			update_prompt_layer.visible = false
+	)
+	actions.add_child(not_now_button)
+
+	return layer
+
+func _start_update_check() -> void:
+	if update_service == null:
+		update_service = UPDATE_SERVICE_SCRIPT.new()
+		add_child(update_service)
+		update_service.state_changed.connect(_on_update_service_state_changed)
+		update_service.check_finished.connect(_on_update_service_check_finished)
+		update_service.download_finished.connect(_on_update_service_download_finished)
+	update_service.initialize(_current_game_version())
+	update_service.configure_runtime_mode(_is_editor_run(), _is_debug_update_prompt_forced())
+	_refresh_update_ui()
+	update_check_was_manual = false
+	update_service.request_check(false)
+
+func _on_update_check_pressed() -> void:
+	if update_service == null:
+		return
+	update_check_was_manual = true
+	update_service.request_check(true)
+
+func _on_update_service_state_changed() -> void:
+	if update_service == null:
+		return
+	if update_status_label != null:
+		update_status_label.text = String(update_service.status_text)
+	if update_detail_label != null:
+		update_detail_label.text = String(update_service.detail_text)
+	_refresh_update_ui()
+
+func _on_update_service_check_finished() -> void:
+	if not update_check_was_manual:
+		_maybe_show_update_prompt()
+	update_check_was_manual = false
+	_refresh_update_ui()
+
+func _on_update_service_download_finished(success: bool, _message: String) -> void:
+	if update_service == null:
+		return
+	if not bool(update_service.action_enabled):
+		_refresh_update_ui()
+		return
+	if success and update_service.launch_downloaded_installer():
+		if update_status_label != null:
+			update_status_label.text = "Update ready. Closing game to apply..."
+		if update_detail_label != null:
+			update_detail_label.text = "The game will relaunch automatically once updated."
+		_refresh_update_ui()
+		get_tree().quit()
+		return
+	if update_status_label != null:
+		update_status_label.text = "Could not install automatically. Opening release page."
+	if update_detail_label != null:
+		update_detail_label.text = "Download may have failed or installer launch was blocked."
+	update_service.open_release_page()
+	_refresh_update_ui()
+
+func _maybe_show_update_prompt() -> void:
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context == null:
+		return
+	if update_service == null:
+		return
+	if _is_editor_run() and not bool(update_service.force_prompt_mode):
+		return
+	if not update_service.should_prompt_for_update(String(run_context.get_skipped_update_version())):
+		return
+	if telemetry_consent_layer != null and telemetry_consent_layer.visible:
+		update_prompt_pending = true
+		return
+	_show_update_prompt()
+
+func _show_update_prompt() -> void:
+	if update_prompt_layer == null:
+		return
+	if update_service == null:
+		return
+	var latest_version := String(update_service.latest_version)
+	if update_prompt_title_label != null:
+		update_prompt_title_label.text = "Update %s Available" % latest_version
+	if update_prompt_body_label != null:
+		update_prompt_body_label.text = "Install %s now? The game will close while the installer opens." % latest_version
+	update_prompt_pending = false
+	update_prompt_layer.visible = true
+
+func _show_pending_update_prompt() -> void:
+	if not update_prompt_pending:
+		return
+	if telemetry_consent_layer != null and telemetry_consent_layer.visible:
+		return
+	_show_update_prompt()
+
+func _on_update_action_pressed() -> void:
+	if update_service == null:
+		return
+	if not bool(update_service.action_enabled):
+		if update_prompt_layer != null:
+			update_prompt_layer.visible = false
+		_refresh_update_ui()
+		return
+	if update_service.download_in_progress:
+		return
+	if update_service.update_available:
+		var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+		if run_context != null:
+			run_context.clear_skipped_update_version(true)
+		if update_service.request_download():
+			return
+	update_service.open_release_page()
+
+func _refresh_update_ui() -> void:
+	if update_action_button == null or update_panel == null:
+		return
+	var show_update_panel := false
+	if update_service != null:
+		if _is_editor_run() and not bool(update_service.force_prompt_mode):
+			show_update_panel = false
+		else:
+			show_update_panel = bool(update_service.update_available) or bool(update_service.force_prompt_mode)
+	update_panel.visible = show_update_panel
+	if not show_update_panel:
+		return
+	if update_service == null:
+		update_action_button.text = "Open Releases"
+		update_action_button.disabled = false
+		if update_check_button != null:
+			update_check_button.disabled = false
+		return
+	var controls_disabled := bool(update_service.check_in_progress) or bool(update_service.download_in_progress)
+	if bool(update_service.download_in_progress):
+		update_action_button.text = "Downloading..."
+		update_action_button.disabled = true
+	elif bool(update_service.update_available):
+		update_action_button.text = "Update to %s" % String(update_service.latest_version)
+		update_action_button.disabled = controls_disabled
+	else:
+		update_action_button.text = "Open Releases"
+		update_action_button.disabled = controls_disabled
+	if update_check_button != null:
+		update_check_button.disabled = controls_disabled
+
+func _current_game_version() -> String:
+	var configured_version := String(ProjectSettings.get_setting("application/config/version", "")).strip_edges()
+	if configured_version.is_empty():
+		return "dev"
+	return configured_version
+
+func _is_editor_run() -> bool:
+	return OS.has_feature("editor")
+
+func _is_debug_update_prompt_forced() -> bool:
+	var debug_values := _read_main_debug_settings_values()
+	if debug_values.is_empty():
+		return false
+	if not bool(debug_values.get("enabled", false)):
+		return false
+	return bool(debug_values.get("force_update_prompt_on_menu", false))
+
 func _on_primary_run_pressed() -> void:
 	if _has_saved_run():
 		_on_continue_pressed()
@@ -1115,6 +1442,7 @@ func _build_telemetry_consent_layer() -> Control:
 		_sync_options_from_context()
 		if telemetry_consent_layer != null:
 			telemetry_consent_layer.visible = false
+		_show_pending_update_prompt()
 	)
 	actions.add_child(allow_button)
 
@@ -1127,6 +1455,7 @@ func _build_telemetry_consent_layer() -> Control:
 		_sync_options_from_context()
 		if telemetry_consent_layer != null:
 			telemetry_consent_layer.visible = false
+		_show_pending_update_prompt()
 	)
 	actions.add_child(not_now_button)
 

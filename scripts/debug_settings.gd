@@ -5,6 +5,7 @@ const DEBUG_ENUMS := preload("res://scripts/shared/debug_enums.gd")
 
 @export_group("Debug")
 @export var enabled: bool = false
+@export var force_update_prompt_on_menu: bool = false
 
 @export_group("Startup")
 @export var skip_starting_boon_selection: bool = false

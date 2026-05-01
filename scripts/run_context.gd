@@ -36,6 +36,7 @@ var resolution_width: int = SETTINGS_STORE.DEFAULT_RESOLUTION_WIDTH
 var resolution_height: int = SETTINGS_STORE.DEFAULT_RESOLUTION_HEIGHT
 var telemetry_upload_enabled: bool = SETTINGS_STORE.DEFAULT_TELEMETRY_UPLOAD_ENABLED
 var telemetry_consent_asked: bool = SETTINGS_STORE.DEFAULT_TELEMETRY_CONSENT_ASKED
+var skipped_update_version: String = SETTINGS_STORE.DEFAULT_SKIPPED_UPDATE_VERSION
 var resume_saved_run_requested: bool = false
 var telemetry_uploader
 
@@ -85,9 +86,10 @@ func load_settings() -> void:
 	resolution_height = int(normalized.get("height", resolution_height))
 	telemetry_upload_enabled = bool(loaded.get("telemetry_upload_enabled", telemetry_upload_enabled))
 	telemetry_consent_asked = bool(loaded.get("telemetry_consent_asked", telemetry_consent_asked))
+	skipped_update_version = String(loaded.get("skipped_update_version", skipped_update_version)).strip_edges()
 
 func _persist_settings() -> void:
-	SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, sfx_volume_db, resolution_width, resolution_height, display_mode, telemetry_upload_enabled, telemetry_consent_asked)
+	SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, sfx_volume_db, resolution_width, resolution_height, display_mode, telemetry_upload_enabled, telemetry_consent_asked, skipped_update_version)
 
 func set_audio_settings(master_db: float, music_db: float, sfx_db: float, persist: bool = true) -> void:
 	master_volume_db = clampf(master_db, AUDIO_VOLUME_MIN_DB, AUDIO_VOLUME_MAX_DB)
@@ -128,6 +130,17 @@ func mark_telemetry_consent_asked(persist: bool = true) -> void:
 	telemetry_consent_asked = true
 	if persist:
 		_persist_settings()
+
+func get_skipped_update_version() -> String:
+	return skipped_update_version
+
+func set_skipped_update_version(version: String, persist: bool = true) -> void:
+	skipped_update_version = version.strip_edges()
+	if persist:
+		_persist_settings()
+
+func clear_skipped_update_version(persist: bool = true) -> void:
+	set_skipped_update_version("", persist)
 
 func enqueue_telemetry_payload(payload: Dictionary) -> void:
 	if payload.is_empty():

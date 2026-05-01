@@ -11,11 +11,15 @@ config_version=5
 [application]
 
 config/name="AbyssalDescent"
+config/version="0.2.1"
 run/main_scene="res://scenes/Menu.tscn"
 config/features=PackedStringArray("4.6", "GL Compatibility")
 config/icon="res://icon.svg"
 config/telemetry_upload_endpoint="https://aizoebowshcnqvuizava.supabase.co/rest/v1/telemetry_runs"
 config/telemetry_upload_api_key="sb_publishable_LiXb9xg1jvwUZYw1arDcag_YIzGTPGV"
+config/update_feed_url="https://api.github.com/repos/Excellund/AbyssalDescent/releases/latest"
+config/update_release_page_url="https://github.com/Excellund/AbyssalDescent/releases/latest"
+config/update_debug_force_prompt=false
 
 [autoload]
 

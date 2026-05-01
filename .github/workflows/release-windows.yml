@@ -39,6 +39,11 @@ jobs:
           mkdir -p "${HOME}/.local/share/godot/export_templates/${GODOT_VERSION_DIR}"
           mv templates/* "${HOME}/.local/share/godot/export_templates/${GODOT_VERSION_DIR}/"
 
+      - name: Set version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          sed -i "s/^config\/version=.*/config\/version=\"${VERSION}\"/" project.godot
+
       - name: Export Windows build
         run: |
           mkdir -p build/windows
