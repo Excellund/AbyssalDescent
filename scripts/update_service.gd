@@ -10,6 +10,7 @@ const UPDATE_RELEASE_PAGE_SETTING := "application/config/update_release_page_url
 const DEFAULT_UPDATE_FEED_URL := "https://github.com/Excellund/AbyssalDescent/releases/latest/download/latest_release.json"
 const DEFAULT_UPDATE_RELEASE_PAGE_URL := "https://github.com/Excellund/AbyssalDescent/releases/latest"
 const UPDATE_DOWNLOAD_DIR := "user://updates"
+const UPDATE_APPLY_SCRIPT_PATH := "user://updates/apply_update.bat"
 const UPDATE_FEED_ETAG_PATH := "user://updates/feed.etag"
 const UPDATE_FEED_CACHE_PATH := "user://updates/feed_cache.json"
 
@@ -157,9 +158,9 @@ func _launch_zip_update(zip_absolute_path: String) -> bool:
 
 	# Write a batch script that waits for this process to exit, copies files, then relaunches
 	var pid := OS.get_process_id()
-	var batch_path := staging_dir + "\\apply_update.bat"
+	var batch_path := ProjectSettings.globalize_path(UPDATE_APPLY_SCRIPT_PATH).replace("/", "\\")
 	var relaunch_path := install_dir + "\\" + exe_name
-	var batch := FileAccess.open("user://updates/staging/apply_update.bat", FileAccess.WRITE)
+	var batch := FileAccess.open(UPDATE_APPLY_SCRIPT_PATH, FileAccess.WRITE)
 	if batch == null:
 		return false
 	batch.store_string("@echo off\r\n")
