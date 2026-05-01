@@ -1022,10 +1022,6 @@ func _current_game_version() -> String:
 	if not script_version.is_empty() and script_version != "dev":
 		print("[Version] Using scripted build version: %s" % script_version)
 		return script_version
-	var stamped_version := _read_build_version_stamp()
-	if not stamped_version.is_empty() and stamped_version != "dev":
-		print("[Version] Using stamped build version: %s" % stamped_version)
-		return stamped_version
 	var configured_version := String(ProjectSettings.get_setting("application/config/version", "")).strip_edges()
 	if not configured_version.is_empty() and configured_version != "dev":
 		print("[Version] Using project config version: %s" % configured_version)
@@ -1036,14 +1032,6 @@ func _current_game_version() -> String:
 	else:
 		print("[Version] Editor mode, using dev.")
 	return fallback_version
-
-func _read_build_version_stamp() -> String:
-	if not ResourceLoader.exists("res://build_version.txt"):
-		return ""
-	var stamp_file := FileAccess.open("res://build_version.txt", FileAccess.READ)
-	if stamp_file == null:
-		return ""
-	return stamp_file.get_as_text().strip_edges()
 
 func _is_editor_run() -> bool:
 	return OS.has_feature("editor")

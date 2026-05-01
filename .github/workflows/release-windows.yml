@@ -45,11 +45,8 @@ jobs:
           echo "RELEASE_VERSION=${VERSION}" >> "$GITHUB_ENV"
           sed -i "s/^config\/version=.*/config\/version=\"${VERSION}\"/" project.godot
           sed -i "s/^const GAME_VERSION := .*/const GAME_VERSION := \"${VERSION}\"/" scripts/build_info.gd
-          printf "%s\n" "${VERSION}" > build_version.txt
           echo "✓ Script version created: $(grep -E '^const GAME_VERSION' scripts/build_info.gd)"
-          echo "✓ Version stamp created: $(cat build_version.txt)"
           grep -q "^const GAME_VERSION := \"${VERSION}\"" scripts/build_info.gd || (echo "ERROR: scripts/build_info.gd version mismatch" && exit 1)
-          test -s build_version.txt || (echo "ERROR: build_version.txt is empty" && exit 1)
 
       - name: Export Windows build
         run: |
@@ -66,8 +63,7 @@ jobs:
           }
           EOF
           cd build/windows
-          cp ../../build_version.txt ./build_version.txt
-          zip -q "../../${EXPORT_NAME}-Windows.zip" "${EXPORT_NAME}.exe" "build_version.txt"
+          zip -q "../../${EXPORT_NAME}-Windows.zip" "${EXPORT_NAME}.exe"
           cd ../..
           sha256sum "${EXPORT_NAME}-Windows.zip" > "${EXPORT_NAME}-Windows.zip.sha256"
 
