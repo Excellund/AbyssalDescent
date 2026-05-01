@@ -1026,10 +1026,10 @@ func _get_first_strike_bonus_damage(enemy_node: Object) -> int:
 		return 0
 	if not is_instance_valid(enemy_node):
 		return 0
-	var enemy_max := enemy_node.get_max_health()
+	var enemy_max: int = int(enemy_node.get_max_health())
 	if enemy_max <= 0:
 		return 0
-	var enemy_current := enemy_node.get_current_health()
+	var enemy_current: int = int(enemy_node.get_current_health())
 	if float(enemy_current) / float(enemy_max) >= 0.8:
 		return first_strike_bonus_damage
 	return 0

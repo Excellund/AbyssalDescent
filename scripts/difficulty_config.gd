@@ -4,14 +4,15 @@
 extends RefCounted
 
 const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
+const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
 
 ## Difficulty config per tier: pacing, pressure, and affordances
 static func get_tier_config(tier: int) -> Dictionary:
 	match tier:
-		META_PROGRESS.TIER_PILGRIM:
+		BEARING_ENUMS.BearingTier.PILGRIM:
 			return {
-				"name": META_PROGRESS.TIER_NAMES[META_PROGRESS.TIER_PILGRIM],
-				"description": META_PROGRESS.TIER_DESCRIPTIONS[META_PROGRESS.TIER_PILGRIM],
+				"name": META_PROGRESS.TIER_NAMES[BEARING_ENUMS.BearingTier.PILGRIM],
+				"description": META_PROGRESS.TIER_DESCRIPTIONS[BEARING_ENUMS.BearingTier.PILGRIM],
 				## Encounter generation
 				"encounter_count_before_boss": 8,  ## Rooms to clear before boss
 				"base_enemy_pressure_mult": 0.6,  ## Baseline enemy count multiplier
@@ -30,10 +31,10 @@ static func get_tier_config(tier: int) -> Dictionary:
 				"difficulty_rank": 0
 			}
 		
-		META_PROGRESS.TIER_DELVER:
+		BEARING_ENUMS.BearingTier.DELVER:
 			return {
-				"name": META_PROGRESS.TIER_NAMES[META_PROGRESS.TIER_DELVER],
-				"description": META_PROGRESS.TIER_DESCRIPTIONS[META_PROGRESS.TIER_DELVER],
+				"name": META_PROGRESS.TIER_NAMES[BEARING_ENUMS.BearingTier.DELVER],
+				"description": META_PROGRESS.TIER_DESCRIPTIONS[BEARING_ENUMS.BearingTier.DELVER],
 				## Encounter generation (baseline)
 				"encounter_count_before_boss": 8,
 				"base_enemy_pressure_mult": 1.0,
@@ -53,10 +54,10 @@ static func get_tier_config(tier: int) -> Dictionary:
 				"difficulty_rank": 1
 			}
 		
-		META_PROGRESS.TIER_HARBINGER:
+		BEARING_ENUMS.BearingTier.HARBINGER:
 			return {
-				"name": META_PROGRESS.TIER_NAMES[META_PROGRESS.TIER_HARBINGER],
-				"description": META_PROGRESS.TIER_DESCRIPTIONS[META_PROGRESS.TIER_HARBINGER],
+				"name": META_PROGRESS.TIER_NAMES[BEARING_ENUMS.BearingTier.HARBINGER],
+				"description": META_PROGRESS.TIER_DESCRIPTIONS[BEARING_ENUMS.BearingTier.HARBINGER],
 				## Encounter generation (harder)
 				"encounter_count_before_boss": 8,
 				"base_enemy_pressure_mult": 1.25,  ## More enemies per room
@@ -77,10 +78,10 @@ static func get_tier_config(tier: int) -> Dictionary:
 				"difficulty_rank": 2
 			}
 		
-		META_PROGRESS.TIER_FORSWORN:
+		BEARING_ENUMS.BearingTier.FORSWORN:
 			return {
-				"name": META_PROGRESS.TIER_NAMES[META_PROGRESS.TIER_FORSWORN],
-				"description": META_PROGRESS.TIER_DESCRIPTIONS[META_PROGRESS.TIER_FORSWORN],
+				"name": META_PROGRESS.TIER_NAMES[BEARING_ENUMS.BearingTier.FORSWORN],
+				"description": META_PROGRESS.TIER_DESCRIPTIONS[BEARING_ENUMS.BearingTier.FORSWORN],
 				## Encounter generation (extreme)
 				"encounter_count_before_boss": 8,
 				"base_enemy_pressure_mult": 1.5,  ## Significantly more enemies
@@ -102,7 +103,7 @@ static func get_tier_config(tier: int) -> Dictionary:
 			}
 		
 		_:
-			return get_tier_config(META_PROGRESS.TIER_DELVER)
+			return get_tier_config(BEARING_ENUMS.BearingTier.DELVER)
 
 ## Get a specific multiplier for a tier
 static func get_tier_multiplier(tier: int, key: String, default: float = 1.0) -> float:
@@ -135,7 +136,7 @@ static func get_rest_heal_ratio_mult(tier: int) -> float:
 
 ## Get normalized difficulty rank for systemic scaling helpers
 static func get_difficulty_rank(tier: int) -> int:
-	return clampi(int(get_tier_value(tier, "difficulty_rank", META_PROGRESS.TIER_DELVER)), 0, 3)
+	return clampi(int(get_tier_value(tier, "difficulty_rank", BEARING_ENUMS.BearingTier.DELVER)), 0, 3)
 
 ## Shared objective pressure curve used by objective encounter runtime logic
 static func get_objective_pressure_mult(tier: int) -> float:

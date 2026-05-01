@@ -115,7 +115,7 @@ if (Test-Path $debugSettingsPath) {
     $powerPresetValue = Get-DebugSettingValue -content $content -settingName "start_power_preset"
     if ($null -ne $powerPresetValue) {
         $value = $powerPresetValue
-        if ($value -notmatch '(^0$|DEBUG_POWER_PRESET_NONE)') {
+        if ($value -notmatch '(^0$|DEBUG_POWER_PRESET_NONE|DEBUG_ENUMS\.PowerPreset\.NONE)') {
             Write-Host "  [ERROR] start_power_preset is not set to NONE (currently: $value)" -ForegroundColor Red
             $debugChecksPassed = $false
         }
@@ -125,7 +125,7 @@ if (Test-Path $debugSettingsPath) {
     $encounterValue = Get-DebugSettingValue -content $content -settingName "start_encounter"
     if ($null -ne $encounterValue) {
         $value = $encounterValue
-        if ($value -notmatch '(^0$|DEBUG_ENCOUNTER_NONE)') {
+        if ($value -notmatch '(^0$|DEBUG_ENCOUNTER_NONE|DEBUG_ENUMS\.Encounter\.NONE)') {
             Write-Host "  [ERROR] start_encounter is not set to NONE (currently: $value)" -ForegroundColor Red
             $debugChecksPassed = $false
         }
@@ -184,7 +184,7 @@ if ($stagedSceneFiles.Count -gt 0) {
         @{ name = "apply_test_powers_on_start"; allowed = "^false$"; description = "false" },
         @{ name = "skip_starting_boon_selection"; allowed = "^false$"; description = "false" },
         @{ name = "start_power_preset"; allowed = "(^0$|DEBUG_POWER_PRESET_NONE|DEBUG_ENUMS\.PowerPreset\.NONE)"; description = "NONE/0" },
-        @{ name = "start_encounter"; allowed = "(^0$|DEBUG_ENCOUNTER_NONE)"; description = "NONE/0" },
+        @{ name = "start_encounter"; allowed = "(^0$|DEBUG_ENCOUNTER_NONE|DEBUG_ENUMS\.Encounter\.NONE)"; description = "NONE/0" },
         @{ name = "start_bearing"; allowed = "(^-1$)"; description = "No Override/-1" },
         @{ name = "mutator_override"; allowed = "(^0$|DEBUG_MUTATOR_NONE|DEBUG_ENUMS\.MutatorOverride\.NONE)"; description = "NONE/0" },
         @{ name = "end_screen_preview"; allowed = "(^0$|DEBUG_END_SCREEN_NONE|DEBUG_ENUMS\.EndScreenPreview\.NONE)"; description = "NONE/0" }

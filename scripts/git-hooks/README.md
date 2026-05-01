@@ -24,8 +24,8 @@ The hooks will block commits if any of these are true:
    - `enabled = true`
    - `apply_test_powers_on_start = true`
    - `skip_starting_boon_selection = true`
-   - `start_power_preset` is not `DEBUG_POWER_PRESET_NONE`
-   - `start_encounter` is not `ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_NONE`
+   - `start_power_preset` is not NONE (`DEBUG_ENUMS.PowerPreset.NONE`, `DEBUG_POWER_PRESET_NONE`, or `0`)
+   - `start_encounter` is not NONE (`DEBUG_ENUMS.Encounter.NONE`, `DEBUG_ENCOUNTER_NONE`, or `0`)
    - `mutator_override` is not `DEBUG_MUTATOR_NONE`
    - `end_screen_preview` is not `DEBUG_END_SCREEN_NONE`
 

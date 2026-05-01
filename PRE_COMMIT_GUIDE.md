@@ -9,7 +9,7 @@ This pre-commit hook system automatically blocks commits if:
    `apply_test_powers_on_start` must be `false`
    `skip_starting_boon_selection` must be `false`
    `start_power_preset` must be `DEBUG_ENUMS.PowerPreset.NONE`
-   `start_encounter` must be `ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_NONE`
+   `start_encounter` must be `DEBUG_ENUMS.Encounter.NONE`
    `mutator_override` must be `DEBUG_ENUMS.MutatorOverride.NONE`
    `end_screen_preview` must be `DEBUG_ENUMS.EndScreenPreview.NONE`
 2. **Syntax issues** in staged GDScript files (quick check)

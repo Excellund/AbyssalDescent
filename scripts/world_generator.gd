@@ -21,6 +21,7 @@ const ENUMS := preload("res://scripts/shared/enums.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const ENDLESS_PROFILE_SCALER := preload("res://scripts/shared/endless_profile_scaler.gd")
 const BEARING_KEY_NORMALIZER := preload("res://scripts/shared/bearing_key_normalizer.gd")
+const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
 const AUDIO_LEVELS := preload("res://scripts/shared/audio_levels.gd")
 const RUN_TELEMETRY_STORE := preload("res://scripts/run_telemetry_store.gd")
 const TELEMETRY_SPIKE_SENDER_SCRIPT := preload("res://scripts/telemetry_spike_sender.gd")
@@ -512,9 +513,9 @@ func _debug_mutator_key(state_value: int) -> String:
 func _debug_bearing_override_tier() -> int:
 	if not settings_enabled:
 		return -1
-	if start_bearing < META_PROGRESS.TIER_PILGRIM:
+	if start_bearing < BEARING_ENUMS.BearingTier.PILGRIM:
 		return -1
-	return clampi(start_bearing, META_PROGRESS.TIER_PILGRIM, META_PROGRESS.TIER_FORSWORN)
+	return clampi(start_bearing, BEARING_ENUMS.BearingTier.PILGRIM, BEARING_ENUMS.BearingTier.FORSWORN)
 
 func _apply_debug_mutator_override(profile: Dictionary) -> Dictionary:
 	if not settings_enabled:
@@ -1210,8 +1211,8 @@ func _apply_difficulty_tier_bonuses(difficulty_tier: int) -> void:
 	player.set_incoming_contact_damage_mult(float(difficulty_config.get("enemy_contact_damage_mult", 1.0)))
 	var health_bonus := float(difficulty_config.get("player_starting_health_bonus", 0.0))
 	if health_bonus > 0.0:
-		var current_max := player.get_max_health()
-		var new_max := current_max + int(health_bonus)
+		var current_max: int = int(player.get_max_health())
+		var new_max: int = current_max + int(health_bonus)
 		player.set_max_health_and_current(new_max, new_max)
 
 func _get_second_boss_target_depth() -> int:
@@ -1243,7 +1244,7 @@ func _apply_boss_difficulty_scaling(boss: CharacterBody2D) -> void:
 	var boss_mult := _get_boss_difficulty_mult()
 	if is_equal_approx(boss_mult, 1.0):
 		return
-	var base_max_health := boss.get_max_health()
+	var base_max_health: int = int(boss.get_max_health())
 	var scaled_max_health := maxi(1, int(round(float(base_max_health) * boss_mult)))
 	boss.set_max_health_and_current(scaled_max_health, scaled_max_health)
 	for damage_property in ["charge_damage", "nova_damage", "cleave_damage", "prism_damage", "gravity_damage", "echo_dash_damage", "orbital_lance_damage", "polar_shift_pull_inner_damage"]:
@@ -1504,7 +1505,7 @@ func _enter_rest_site() -> void:
 	else:
 		_advance_room_progress()
 	if is_instance_valid(player):
-		var player_max_health := player.get_max_health()
+		var player_max_health: int = int(player.get_max_health())
 		var heal_ratio_mult := float(current_difficulty_config.get("rest_heal_ratio_mult", 1.0))
 		var heal_amount := maxi(8, int(round(float(player_max_health) * rest_heal_ratio * heal_ratio_mult)))
 		player.heal(heal_amount)

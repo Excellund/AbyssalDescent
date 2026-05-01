@@ -5,6 +5,7 @@ const MODE_STANDARD := "standard"
 const MODE_ENDLESS := "endless"
 const SETTINGS_STORE := preload("res://scripts/settings_store.gd")
 const META_PROGRESS_STORE := preload("res://scripts/meta_progress_store.gd")
+const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
 const TELEMETRY_UPLOADER_SCRIPT := preload("res://scripts/telemetry_uploader.gd")
 const ACTIVE_RUN_SAVE_PATH := "user://active_run.save"
 const ACTIVE_RUN_VERSION := 1
@@ -40,8 +41,8 @@ var telemetry_uploader
 
 ## Meta-progression state
 var meta_progress_profile: Dictionary = {}
-var current_difficulty_tier: int = META_PROGRESS_STORE.TIER_PILGRIM
-var highest_unlocked_difficulty_tier: int = META_PROGRESS_STORE.TIER_PILGRIM
+var current_difficulty_tier: int = BEARING_ENUMS.BearingTier.PILGRIM
+var highest_unlocked_difficulty_tier: int = BEARING_ENUMS.BearingTier.PILGRIM
 var just_unlocked_tier: int = -1  ## -1 means no new unlock, otherwise the newly unlocked tier
 
 func _ready() -> void:
@@ -317,16 +318,16 @@ func award_run_clear_unlocks() -> int:
 	var unlocked_tier := -1
 	if not get_milestone("first_clear"):
 		set_milestone("first_clear", true)
-		if highest_unlocked_difficulty_tier < META_PROGRESS_STORE.TIER_DELVER and unlock_difficulty_tier(META_PROGRESS_STORE.TIER_DELVER):
-			unlocked_tier = META_PROGRESS_STORE.TIER_DELVER
-	if current_difficulty_tier == META_PROGRESS_STORE.TIER_DELVER and not get_milestone("first_clear_on_standard"):
+		if highest_unlocked_difficulty_tier < BEARING_ENUMS.BearingTier.DELVER and unlock_difficulty_tier(BEARING_ENUMS.BearingTier.DELVER):
+			unlocked_tier = BEARING_ENUMS.BearingTier.DELVER
+	if current_difficulty_tier == BEARING_ENUMS.BearingTier.DELVER and not get_milestone("first_clear_on_standard"):
 		set_milestone("first_clear_on_standard", true)
-		if highest_unlocked_difficulty_tier < META_PROGRESS_STORE.TIER_HARBINGER and unlock_difficulty_tier(META_PROGRESS_STORE.TIER_HARBINGER):
-			unlocked_tier = META_PROGRESS_STORE.TIER_HARBINGER
-	if current_difficulty_tier == META_PROGRESS_STORE.TIER_HARBINGER and not get_milestone("first_clear_on_veteran"):
+		if highest_unlocked_difficulty_tier < BEARING_ENUMS.BearingTier.HARBINGER and unlock_difficulty_tier(BEARING_ENUMS.BearingTier.HARBINGER):
+			unlocked_tier = BEARING_ENUMS.BearingTier.HARBINGER
+	if current_difficulty_tier == BEARING_ENUMS.BearingTier.HARBINGER and not get_milestone("first_clear_on_veteran"):
 		set_milestone("first_clear_on_veteran", true)
-		if highest_unlocked_difficulty_tier < META_PROGRESS_STORE.TIER_FORSWORN and unlock_difficulty_tier(META_PROGRESS_STORE.TIER_FORSWORN):
-			unlocked_tier = META_PROGRESS_STORE.TIER_FORSWORN
+		if highest_unlocked_difficulty_tier < BEARING_ENUMS.BearingTier.FORSWORN and unlock_difficulty_tier(BEARING_ENUMS.BearingTier.FORSWORN):
+			unlocked_tier = BEARING_ENUMS.BearingTier.FORSWORN
 	return unlocked_tier
 
 

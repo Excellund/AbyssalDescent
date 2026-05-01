@@ -87,6 +87,8 @@ const MUTATOR_STAT_SHIELDER_SLAM_DAMAGE_MULT := "shielder_slam_damage_mult"
 const MUTATOR_STAT_SHIELDER_SLAM_WINDUP_MULT := "shielder_slam_windup_mult"
 const MUTATOR_STAT_SHIELDER_SPEED_MULT := "shielder_speed_mult"
 
+const DEBUG_ENCOUNTER_NONE := DEBUG_ENUMS.Encounter.NONE
+
 const DEBUG_ENCOUNTER_MAP := [
 	{"id": DEBUG_ENUMS.Encounter.NONE, "key": "none", "is_boss": false, "is_rest": false, "is_objective": false},
 	{"id": DEBUG_ENUMS.Encounter.REST_SITE, "key": "rest", "is_boss": false, "is_rest": true, "is_objective": false},

@@ -624,8 +624,8 @@ func _update_stats_panel_text(player: Node) -> void:
 		stats_label.text = "[b]Stats[/b]\nNo player"
 		return
 
-	var hp := player.get_max_health()
-	var hp_now := player.get_current_health()
+	var hp: int = int(player.get_max_health())
+	var hp_now: int = int(player.get_current_health())
 	var dmg := int(player.get("attack_damage"))
 	var atk_range := float(player.get("attack_range"))
 	var atk_cd := float(player.get("attack_cooldown"))

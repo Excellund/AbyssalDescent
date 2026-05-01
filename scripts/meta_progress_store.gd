@@ -95,8 +95,8 @@ static func _migrate_profile(old_payload: Dictionary, old_version: int) -> Dicti
 		## Version 0 (nonexistent) -> version 1: preserve any difficulty_state and milestones
 		if "difficulty_state" in old_payload:
 			var old_state := old_payload["difficulty_state"] as Dictionary
-			migrated["difficulty_state"]["current_tier"] = int(old_state.get("current_tier", TIER_PILGRIM))
-			migrated["difficulty_state"]["highest_unlocked_tier"] = int(old_state.get("highest_unlocked_tier", TIER_PILGRIM))
+			migrated["difficulty_state"]["current_tier"] = int(old_state.get("current_tier", BEARING_ENUMS.BearingTier.PILGRIM))
+			migrated["difficulty_state"]["highest_unlocked_tier"] = int(old_state.get("highest_unlocked_tier", BEARING_ENUMS.BearingTier.PILGRIM))
 		
 		if "milestones" in old_payload:
 			var old_milestones := old_payload["milestones"] as Dictionary
@@ -112,7 +112,7 @@ static func is_tier_unlocked(profile: Dictionary, tier: int) -> bool:
 	if not ("difficulty_state" in profile):
 		return false
 	var state := profile["difficulty_state"] as Dictionary
-	var highest := int(state.get("highest_unlocked_tier", TIER_PILGRIM))
+	var highest := int(state.get("highest_unlocked_tier", BEARING_ENUMS.BearingTier.PILGRIM))
 	return highest >= tier
 
 ## Unlock a tier by raising highest_unlocked_tier if needed
@@ -121,7 +121,7 @@ static func unlock_tier(profile: Dictionary, tier: int) -> bool:
 		return false
 	
 	var state := profile["difficulty_state"] as Dictionary
-	var highest := int(state.get("highest_unlocked_tier", TIER_PILGRIM))
+	var highest := int(state.get("highest_unlocked_tier", BEARING_ENUMS.BearingTier.PILGRIM))
 	
 	if tier > highest:
 		state["highest_unlocked_tier"] = tier
@@ -141,16 +141,16 @@ static func set_current_tier(profile: Dictionary, tier: int) -> bool:
 ## Get current selected tier
 static func get_current_tier(profile: Dictionary) -> int:
 	if not ("difficulty_state" in profile):
-		return TIER_PILGRIM
+		return BEARING_ENUMS.BearingTier.PILGRIM
 	var state := profile["difficulty_state"] as Dictionary
-	return int(state.get("current_tier", TIER_PILGRIM))
+	return int(state.get("current_tier", BEARING_ENUMS.BearingTier.PILGRIM))
 
 ## Get highest unlocked tier
 static func get_highest_unlocked_tier(profile: Dictionary) -> int:
 	if not ("difficulty_state" in profile):
-		return TIER_PILGRIM
+		return BEARING_ENUMS.BearingTier.PILGRIM
 	var state := profile["difficulty_state"] as Dictionary
-	return int(state.get("highest_unlocked_tier", TIER_PILGRIM))
+	return int(state.get("highest_unlocked_tier", BEARING_ENUMS.BearingTier.PILGRIM))
 
 ## Set a milestone flag
 static func set_milestone(profile: Dictionary, milestone_key: String, value: bool) -> void:
