@@ -82,6 +82,8 @@ const COLOR_BOSS_CLEAVE_OUTLINE := COLOR_PALETTE.COLOR_BOSS_CLEAVE_OUTLINE
 @export var health_recent_damage_catchup_ratio_per_sec: float = 0.9
 @export var crowd_separation_radius: float = 42.0
 @export var crowd_separation_strength: float = 68.0
+@export var edge_escape_phase_duration: float = 0.32
+@export var edge_escape_nudge_speed: float = 340.0
 
 var target: Node2D
 var health_bar: ProgressBar
@@ -105,6 +107,8 @@ var damage_blocked: bool = false
 var spawn_transport_time_left: float = 0.0
 var spawn_transport_duration: float = 0.0
 var spawn_transport_seed: float = 0.0
+var _edge_escape_phase_left: float = 0.0
+var _ignoring_target_collision: bool = false
 
 func _ready() -> void:
 	motion_mode = CharacterBody2D.MOTION_MODE_FLOATING
@@ -152,6 +156,9 @@ func rng_seed_from_instance() -> float:
 
 func _process_behavior(_delta: float) -> void:
 	pass
+
+func _get_inward_edge_bias() -> Vector2:
+	return Vector2.ZERO
 
 func _update_attack_animation(delta: float) -> void:
 	if attack_anim_time_left > 0.0:
@@ -203,6 +210,50 @@ func _apply_crowd_separation(delta: float) -> void:
 	# Apply separation to velocity rather than warping position after movement
 	var separation_impulse := total_push.normalized() * crowd_separation_strength
 	velocity = velocity.move_toward(velocity + separation_impulse, crowd_separation_strength * delta)
+
+func _maybe_trigger_edge_escape(wall_pressure: float, inward_bias: Vector2, to_target: Vector2, edge_stall_time: float) -> void:
+	if edge_escape_phase_duration <= 0.0 or edge_escape_nudge_speed <= 0.0:
+		return
+	if wall_pressure <= 0.42:
+		return
+	var target_blocks_inward := false
+	if to_target.length_squared() > 0.000001 and inward_bias.length_squared() > 0.000001:
+		target_blocks_inward = inward_bias.dot(to_target.normalized()) > 0.18
+	if edge_stall_time >= 0.1 or (target_blocks_inward and wall_pressure >= 0.48):
+		_edge_escape_phase_left = maxf(_edge_escape_phase_left, edge_escape_phase_duration)
+
+func _update_edge_escape_state(delta: float) -> void:
+	if edge_escape_phase_duration <= 0.0 or edge_escape_nudge_speed <= 0.0:
+		_set_target_collision_ignored(false)
+		_edge_escape_phase_left = 0.0
+		return
+	if _edge_escape_phase_left > 0.0:
+		_edge_escape_phase_left = maxf(0.0, _edge_escape_phase_left - delta)
+	if _edge_escape_phase_left <= 0.0:
+		_set_target_collision_ignored(false)
+		return
+	_set_target_collision_ignored(true)
+	var inward := _get_inward_edge_bias()
+	if inward.length_squared() <= 0.000001:
+		return
+	global_position += inward * edge_escape_nudge_speed * delta
+
+func _clear_edge_escape_state() -> void:
+	_edge_escape_phase_left = 0.0
+	_set_target_collision_ignored(false)
+
+func _set_target_collision_ignored(should_ignore: bool) -> void:
+	if should_ignore == _ignoring_target_collision:
+		return
+	if not is_instance_valid(target) or not (target is PhysicsBody2D):
+		_ignoring_target_collision = false
+		return
+	var target_body := target as PhysicsBody2D
+	if should_ignore:
+		add_collision_exception_with(target_body)
+	else:
+		remove_collision_exception_with(target_body)
+	_ignoring_target_collision = should_ignore
 
 func apply_slow(duration: float, mult: float) -> void:
 	if duration > slow_time_left:

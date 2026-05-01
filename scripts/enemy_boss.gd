@@ -64,6 +64,7 @@ func _get_transport_color() -> Color:
 
 func _process_behavior(delta: float) -> void:
 	if not is_instance_valid(target):
+		_clear_edge_escape_state()
 		velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
 		move_and_slide()
 		return
@@ -83,6 +84,7 @@ func _process_behavior(delta: float) -> void:
 
 	attack_afterglow_time_left = maxf(0.0, attack_afterglow_time_left - delta)
 	impact_burst_time_left = maxf(0.0, impact_burst_time_left - delta)
+	_update_edge_escape_state(delta)
 
 	queue_redraw()
 
@@ -144,6 +146,8 @@ func _process_idle_state(delta: float) -> void:
 	var should_start_attack := cooldown_left <= 0.0 and (wall_pressure < 0.65 or _edge_stall_time >= 0.28)
 	if should_start_attack:
 		_start_next_attack(distance, wall_pressure)
+
+	_maybe_trigger_edge_escape(wall_pressure, inward_bias, to_target, _edge_stall_time)
 
 
 func _start_next_attack(distance_to_target: float, wall_pressure: float = 0.0) -> void:
@@ -233,6 +237,7 @@ func _process_recover_state(delta: float) -> void:
 	var recover_target := inward_bias * move_speed * 0.58
 	velocity = velocity.move_toward(recover_target, deceleration * delta)
 	move_and_slide()
+	_maybe_trigger_edge_escape(inward_bias.length(), inward_bias, target.global_position - global_position, _edge_stall_time)
 	state_time_left = maxf(0.0, state_time_left - delta)
 	if state_time_left <= 0.0:
 		boss_state = ENEMY_STATE_ENUMS.BossState.IDLE

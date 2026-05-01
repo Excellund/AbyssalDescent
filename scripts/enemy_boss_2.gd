@@ -104,6 +104,7 @@ var _fortress_health_colors_cached: bool = false
 
 func _ready() -> void:
 	max_health = boss_max_health
+	edge_escape_nudge_speed = 360.0
 	super._ready()
 	_cache_fortress_health_bar_defaults()
 	for child in get_children():
@@ -119,6 +120,7 @@ func _get_transport_color() -> Color:
 
 func _process_behavior(delta: float) -> void:
 	if not is_instance_valid(target):
+		_clear_edge_escape_state()
 		velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
 		move_and_slide()
 		return
@@ -142,6 +144,7 @@ func _process_behavior(delta: float) -> void:
 	_orbital_fortress_hit_flash_left = maxf(0.0, _orbital_fortress_hit_flash_left - delta)
 	_process_polar_shift_pull_punish(delta)
 	_update_fortress_health_bar_visuals()
+	_update_edge_escape_state(delta)
 
 	queue_redraw()
 
@@ -283,6 +286,8 @@ func _process_stalk_state(delta: float) -> void:
 
 	if cooldown_left <= 0.0 and (wall_pressure < 0.68 or _edge_stall_time >= 0.28):
 		_start_next_attack(distance, wall_pressure)
+
+	_maybe_trigger_edge_escape(wall_pressure, inward_bias, to_target, _edge_stall_time)
 
 func _start_next_attack(distance_to_target: float, wall_pressure: float = 0.0) -> void:
 	var enrage_t := _get_enrage_ratio()
@@ -554,6 +559,7 @@ func _process_recover_state(delta: float) -> void:
 	var recover_target := inward_bias * move_speed * 0.54
 	velocity = velocity.move_toward(recover_target, deceleration * delta)
 	move_and_slide()
+	_maybe_trigger_edge_escape(inward_bias.length(), inward_bias, target.global_position - global_position, _edge_stall_time)
 	state_time_left = maxf(0.0, state_time_left - delta)
 	if state_time_left <= 0.0:
 		boss_state = ENEMY_STATE_ENUMS.Boss2State.STALK
