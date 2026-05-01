@@ -3,6 +3,7 @@ extends Node2D
 const DEFAULT_IMPACT_SOUND := preload("res://sounds/impactPunch_medium_002.ogg")
 const DEFAULT_ATTACK_SWING_SOUND := preload("res://sounds/impactSoft_medium_001.ogg")
 const ENEMY_BASE := preload("res://scripts/enemy_base.gd")
+const AUDIO_LEVELS := preload("res://scripts/shared/audio_levels.gd")
 
 # === SHARED TIMING & ANIMATION HELPERS ===
 static func ease_in_out_quad(t: float) -> float:
@@ -35,6 +36,7 @@ var impact_sound: AudioStream = DEFAULT_IMPACT_SOUND
 var impact_volume_db: float = -6.0
 var attack_swing_sound: AudioStream = DEFAULT_ATTACK_SWING_SOUND
 var attack_swing_volume_db: float = -10.0
+var sfx_volume_db: float = 0.0
 var damage_flash_color: Color = ENEMY_BASE.COLOR_DAMAGE_FLASH
 var damage_flash_alpha: float = 0.45
 var damage_flash_fade_time: float = 0.16
@@ -51,6 +53,11 @@ func setup(max_health: int, current_health: int) -> void:
 	_create_impact_sound_player()
 	_create_attack_swing_sound_player()
 	_create_damage_flash()
+	_apply_sfx_volume()
+
+func set_sfx_volume_db(volume_db: float) -> void:
+	sfx_volume_db = AUDIO_LEVELS.clamp_db(volume_db)
+	_apply_sfx_volume()
 
 func update_health_bar(new_health: int, new_max_health: int) -> void:
 	if health_bar == null:
@@ -498,14 +505,20 @@ func _create_health_bar(max_health: int, current_health: int) -> void:
 func _create_impact_sound_player() -> void:
 	impact_sound_player = AudioStreamPlayer2D.new()
 	impact_sound_player.stream = impact_sound
-	impact_sound_player.volume_db = impact_volume_db
+	impact_sound_player.volume_db = AUDIO_LEVELS.clamp_db(impact_volume_db + sfx_volume_db)
 	add_child(impact_sound_player)
 
 func _create_attack_swing_sound_player() -> void:
 	attack_swing_sound_player = AudioStreamPlayer2D.new()
 	attack_swing_sound_player.stream = attack_swing_sound
-	attack_swing_sound_player.volume_db = attack_swing_volume_db
+	attack_swing_sound_player.volume_db = AUDIO_LEVELS.clamp_db(attack_swing_volume_db + sfx_volume_db)
 	add_child(attack_swing_sound_player)
+
+func _apply_sfx_volume() -> void:
+	if impact_sound_player != null:
+		impact_sound_player.volume_db = AUDIO_LEVELS.clamp_db(impact_volume_db + sfx_volume_db)
+	if attack_swing_sound_player != null:
+		attack_swing_sound_player.volume_db = AUDIO_LEVELS.clamp_db(attack_swing_volume_db + sfx_volume_db)
 
 func _create_damage_flash() -> void:
 	damage_flash_layer = CanvasLayer.new()

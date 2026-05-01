@@ -38,11 +38,13 @@ var glossary_panel: Panel
 var difficulty_selector_panel: Panel
 var master_slider: HSlider
 var music_slider: HSlider
+var sfx_slider: HSlider
 var display_mode_selector: OptionButton
 var resolution_selector: OptionButton
 var telemetry_upload_checkbox: CheckBox
 var master_value_label: Label
 var music_value_label: Label
+var sfx_value_label: Label
 var resolution_hint_label: Label
 var telemetry_consent_layer: Control
 var menu_music_player: AudioStreamPlayer
@@ -599,6 +601,36 @@ func _build_options_panel() -> Panel:
 	music_value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	music_controls.add_child(music_value_label)
 
+	var sfx_row := VBoxContainer.new()
+	sfx_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sfx_row.add_theme_constant_override("separation", 6)
+	rows.add_child(sfx_row)
+
+	var sfx_label := Label.new()
+	sfx_label.text = "SFX Volume"
+	sfx_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sfx_label.add_theme_font_size_override("font_size", 18)
+	sfx_label.add_theme_color_override("font_color", Color(0.90, 0.96, 1.0, 0.96))
+	sfx_row.add_child(sfx_label)
+
+	var sfx_controls := HBoxContainer.new()
+	sfx_controls.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sfx_controls.add_theme_constant_override("separation", 14)
+	sfx_row.add_child(sfx_controls)
+
+	sfx_slider = HSlider.new()
+	sfx_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sfx_slider.min_value = 0.0
+	sfx_slider.max_value = 100.0
+	sfx_slider.step = 1.0
+	sfx_slider.value_changed.connect(_on_sfx_volume_changed)
+	sfx_controls.add_child(sfx_slider)
+
+	sfx_value_label = Label.new()
+	sfx_value_label.custom_minimum_size = Vector2(90.0, 24.0)
+	sfx_value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	sfx_controls.add_child(sfx_value_label)
+
 	var display_mode_row := VBoxContainer.new()
 	display_mode_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	display_mode_row.add_theme_constant_override("separation", 6)
@@ -922,10 +954,13 @@ func _on_difficulty_tier_selected(tier: int) -> void:
 		get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)
 
 func _on_master_volume_changed(value: float) -> void:
-	_apply_options(value, music_slider.value)
+	_apply_options(value, music_slider.value, sfx_slider.value)
 
 func _on_music_volume_changed(value: float) -> void:
-	_apply_options(master_slider.value, value)
+	_apply_options(master_slider.value, value, sfx_slider.value)
+
+func _on_sfx_volume_changed(value: float) -> void:
+	_apply_options(master_slider.value, music_slider.value, value)
 
 func _on_resolution_selected(index: int) -> void:
 	if resolution_selector == null:
@@ -961,6 +996,8 @@ func _sync_options_from_context() -> void:
 		master_slider.set_block_signals(true)
 	if music_slider != null:
 		music_slider.set_block_signals(true)
+	if sfx_slider != null:
+		sfx_slider.set_block_signals(true)
 	if display_mode_selector != null:
 		display_mode_selector.set_block_signals(true)
 	if resolution_selector != null:
@@ -970,6 +1007,7 @@ func _sync_options_from_context() -> void:
 	if run_context == null:
 		master_slider.value = _db_to_percent(0.0)
 		music_slider.value = _db_to_percent(-20.0)
+		sfx_slider.value = _db_to_percent(0.0)
 		_populate_display_mode_selector([], SETTINGS_STORE.DEFAULT_DISPLAY_MODE)
 		_populate_resolution_selector([], SETTINGS_STORE.DEFAULT_RESOLUTION_WIDTH, SETTINGS_STORE.DEFAULT_RESOLUTION_HEIGHT)
 		if telemetry_upload_checkbox != null:
@@ -978,6 +1016,8 @@ func _sync_options_from_context() -> void:
 			master_slider.set_block_signals(false)
 		if music_slider != null:
 			music_slider.set_block_signals(false)
+		if sfx_slider != null:
+			sfx_slider.set_block_signals(false)
 		if display_mode_selector != null:
 			display_mode_selector.set_block_signals(false)
 		if resolution_selector != null:
@@ -989,6 +1029,7 @@ func _sync_options_from_context() -> void:
 		return
 	master_slider.value = _db_to_percent(float(run_context.get("master_volume_db")))
 	music_slider.value = _db_to_percent(float(run_context.get("music_volume_db")))
+	sfx_slider.value = _db_to_percent(float(run_context.get("sfx_volume_db")))
 	var mode_options: Array[Dictionary] = run_context.get_display_mode_options() as Array[Dictionary]
 	_populate_display_mode_selector(mode_options, String(run_context.get("display_mode")))
 	var resolution_options: Array[Dictionary] = run_context.get_supported_resolution_options() as Array[Dictionary]
@@ -1003,6 +1044,8 @@ func _sync_options_from_context() -> void:
 		master_slider.set_block_signals(false)
 	if music_slider != null:
 		music_slider.set_block_signals(false)
+	if sfx_slider != null:
+		sfx_slider.set_block_signals(false)
 	if display_mode_selector != null:
 		display_mode_selector.set_block_signals(false)
 	if resolution_selector != null:
@@ -1101,12 +1144,13 @@ func _maybe_show_telemetry_consent_prompt() -> void:
 	if telemetry_consent_layer != null:
 		telemetry_consent_layer.visible = true
 
-func _apply_options(master_percent: float, music_percent: float) -> void:
+func _apply_options(master_percent: float, music_percent: float, sfx_percent: float) -> void:
 	var master_db := _percent_to_db(master_percent)
 	var music_db := _percent_to_db(music_percent)
+	var sfx_db := _percent_to_db(sfx_percent)
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context != null:
-		run_context.set_audio_settings(master_db, music_db, true)
+		run_context.set_audio_settings(master_db, music_db, sfx_db, true)
 	_apply_menu_music_volume(music_db)
 	_update_option_labels()
 
@@ -1115,6 +1159,8 @@ func _update_option_labels() -> void:
 		master_value_label.text = "%d%%" % int(round(master_slider.value))
 	if music_value_label != null:
 		music_value_label.text = "%d%%" % int(round(music_slider.value))
+	if sfx_value_label != null:
+		sfx_value_label.text = "%d%%" % int(round(sfx_slider.value))
 
 func _populate_resolution_selector(options: Array[Dictionary], selected_width: int, selected_height: int) -> void:
 	if resolution_selector == null:
@@ -1203,16 +1249,10 @@ func _apply_menu_music_volume(music_db: float) -> void:
 		menu_music_player.play()
 
 func _percent_to_db(percent: float) -> float:
-	var clamped := clampf(percent, 0.0, 100.0)
-	if clamped <= 0.0:
-		return AUDIO_DB_MIN
-	return lerpf(AUDIO_DB_MIN, AUDIO_DB_MAX, clamped / 100.0)
+	return AUDIO_LEVELS.percent_to_db(percent)
 
 func _db_to_percent(db: float) -> float:
-	var clamped := clampf(db, AUDIO_DB_MIN, AUDIO_DB_MAX)
-	if clamped <= AUDIO_DB_MIN:
-		return 0.0
-	return inverse_lerp(AUDIO_DB_MIN, AUDIO_DB_MAX, clamped) * 100.0
+	return AUDIO_LEVELS.db_to_percent(db)
 
 func _set_run_mode(mode: int) -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)

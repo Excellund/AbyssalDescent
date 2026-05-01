@@ -19,6 +19,7 @@ const OBJECTIVE_RUNTIME_SCRIPT := preload("res://scripts/objective_runtime.gd")
 const REWARD_SELECTION_UI_SCRIPT := preload("res://scripts/reward_selection_ui.gd")
 const ENUMS := preload("res://scripts/shared/enums.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
+const AUDIO_LEVELS := preload("res://scripts/shared/audio_levels.gd")
 const RUN_TELEMETRY_STORE := preload("res://scripts/run_telemetry_store.gd")
 const TELEMETRY_SPIKE_SENDER_SCRIPT := preload("res://scripts/telemetry_spike_sender.gd")
 const RUN_SNAPSHOT_SERVICE := preload("res://scripts/run_snapshot_service.gd")
@@ -94,6 +95,7 @@ func _get_debug_encounter_reward_mode(encounter_key: String) -> int:
 @export var normal_room_music: AudioStream
 @export var boss_room_music: AudioStream
 @export var music_volume_db: float = -20.0
+@export var sfx_volume_db: float = 0.0
 @export var music_intro_fade_duration: float = 1.6
 @export var music_crossfade_duration: float = 0.75
 @export var rest_heal_ratio: float = 0.32
@@ -330,7 +332,7 @@ func _ready() -> void:
 	})
 	pause_menu_controller = PAUSE_MENU_CONTROLLER_SCRIPT.new()
 	add_child(pause_menu_controller)
-	pause_menu_controller.initialize(RUN_CONTEXT_PATH, Callable(self, "_set_music_volume_runtime"))
+	pause_menu_controller.initialize(RUN_CONTEXT_PATH, Callable(self, "_set_music_volume_runtime"), Callable(self, "_set_sfx_volume_runtime"))
 	pause_menu_controller.connect("pause_opened", Callable(self, "_on_pause_menu_opened"))
 	pause_menu_controller.connect("pause_closed", Callable(self, "_on_pause_menu_closed"))
 	pause_menu_controller.connect("back_to_main_menu_requested", Callable(self, "_on_pause_back_to_menu_requested"))
@@ -1342,15 +1344,24 @@ func _sync_audio_settings_from_context() -> void:
 		return
 	var music_volume_value: Variant = run_context.get("music_volume_db")
 	if music_volume_value != null:
-		music_volume_db = float(music_volume_value)
+		music_volume_db = AUDIO_LEVELS.clamp_db(float(music_volume_value))
+	var sfx_volume_value: Variant = run_context.get("sfx_volume_db")
+	if sfx_volume_value != null:
+		sfx_volume_db = AUDIO_LEVELS.clamp_db(float(sfx_volume_value))
+	_set_sfx_volume_runtime(sfx_volume_db)
 
 func _is_reward_selection_active() -> bool:
 	return is_instance_valid(reward_selection_ui) and reward_selection_ui.is_active()
 
 func _set_music_volume_runtime(music_db: float) -> void:
-	music_volume_db = clampf(music_db, -80.0, 6.0)
+	music_volume_db = AUDIO_LEVELS.clamp_db(music_db)
 	if is_instance_valid(music_system):
 		music_system.set_music_volume_db(music_volume_db)
+
+func _set_sfx_volume_runtime(volume_db: float) -> void:
+	sfx_volume_db = AUDIO_LEVELS.clamp_db(volume_db)
+	if is_instance_valid(player) and player.has_method("set_sfx_volume_db"):
+		player.call("set_sfx_volume_db", sfx_volume_db)
 
 func _on_pause_menu_opened() -> void:
 	_set_combat_paused(true)

@@ -14,6 +14,7 @@ signal exit_game_requested
 
 var run_context_path: String = "/root/RunContext"
 var apply_music_volume_callback: Callable
+var apply_sfx_volume_callback: Callable
 
 var pause_menu_layer: CanvasLayer
 var pause_menu_panel: Panel
@@ -21,17 +22,20 @@ var pause_options_panel: Panel
 var pause_glossary_panel: Panel
 var pause_master_slider: HSlider
 var pause_music_slider: HSlider
+var pause_sfx_slider: HSlider
 var pause_display_mode_selector: OptionButton
 var pause_resolution_selector: OptionButton
 var pause_telemetry_upload_checkbox: CheckBox
 var pause_master_value_label: Label
 var pause_music_value_label: Label
+var pause_sfx_value_label: Label
 var pause_resolution_hint_label: Label
 var pause_menu_visible: bool = false
 
-func initialize(context_path: String, apply_music_volume: Callable) -> void:
+func initialize(context_path: String, apply_music_volume: Callable, apply_sfx_volume: Callable) -> void:
 	run_context_path = context_path
 	apply_music_volume_callback = apply_music_volume
+	apply_sfx_volume_callback = apply_sfx_volume
 	_create_pause_menu_ui()
 
 func is_open() -> bool:
@@ -227,8 +231,8 @@ func _apply_pause_option_selector_theme(selector: OptionButton) -> void:
 func _build_pause_options_panel() -> Panel:
 	var panel := Panel.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.custom_minimum_size = Vector2(660.0, 620.0)
-	panel.position = Vector2(-330.0, -310.0)
+	panel.custom_minimum_size = Vector2(660.0, 700.0)
+	panel.position = Vector2(-330.0, -350.0)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.04, 0.06, 0.1, 0.95)
 	style.border_color = Color(0.44, 0.7, 0.96, 0.74)
@@ -289,15 +293,37 @@ func _build_pause_options_panel() -> Panel:
 	pause_music_value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	panel.add_child(pause_music_value_label)
 
+	var sfx_label := Label.new()
+	sfx_label.text = "SFX Volume"
+	sfx_label.position = Vector2(42.0, 244.0)
+	sfx_label.custom_minimum_size = Vector2(260.0, 24.0)
+	sfx_label.add_theme_font_size_override("font_size", 18)
+	panel.add_child(sfx_label)
+
+	pause_sfx_slider = HSlider.new()
+	pause_sfx_slider.position = Vector2(42.0, 272.0)
+	pause_sfx_slider.custom_minimum_size = Vector2(486.0, 24.0)
+	pause_sfx_slider.min_value = 0.0
+	pause_sfx_slider.max_value = 100.0
+	pause_sfx_slider.step = 1.0
+	pause_sfx_slider.value_changed.connect(_on_pause_sfx_volume_changed)
+	panel.add_child(pause_sfx_slider)
+
+	pause_sfx_value_label = Label.new()
+	pause_sfx_value_label.position = Vector2(548.0, 268.0)
+	pause_sfx_value_label.custom_minimum_size = Vector2(90.0, 24.0)
+	pause_sfx_value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	panel.add_child(pause_sfx_value_label)
+
 	var display_mode_label := Label.new()
 	display_mode_label.text = "Display Mode"
-	display_mode_label.position = Vector2(42.0, 244.0)
+	display_mode_label.position = Vector2(42.0, 324.0)
 	display_mode_label.custom_minimum_size = Vector2(260.0, 24.0)
 	display_mode_label.add_theme_font_size_override("font_size", 18)
 	panel.add_child(display_mode_label)
 
 	pause_display_mode_selector = OptionButton.new()
-	pause_display_mode_selector.position = Vector2(42.0, 272.0)
+	pause_display_mode_selector.position = Vector2(42.0, 352.0)
 	pause_display_mode_selector.custom_minimum_size = Vector2(576.0, 48.0)
 	_apply_pause_option_selector_theme(pause_display_mode_selector)
 	pause_display_mode_selector.item_selected.connect(_on_pause_display_mode_selected)
@@ -305,13 +331,13 @@ func _build_pause_options_panel() -> Panel:
 
 	var resolution_label := Label.new()
 	resolution_label.text = "Resolution"
-	resolution_label.position = Vector2(42.0, 332.0)
+	resolution_label.position = Vector2(42.0, 412.0)
 	resolution_label.custom_minimum_size = Vector2(260.0, 24.0)
 	resolution_label.add_theme_font_size_override("font_size", 18)
 	panel.add_child(resolution_label)
 
 	pause_resolution_selector = OptionButton.new()
-	pause_resolution_selector.position = Vector2(42.0, 360.0)
+	pause_resolution_selector.position = Vector2(42.0, 440.0)
 	pause_resolution_selector.custom_minimum_size = Vector2(576.0, 48.0)
 	_apply_pause_option_selector_theme(pause_resolution_selector)
 	pause_resolution_selector.item_selected.connect(_on_pause_resolution_selected)
@@ -319,7 +345,7 @@ func _build_pause_options_panel() -> Panel:
 
 	pause_resolution_hint_label = Label.new()
 	pause_resolution_hint_label.text = "Applies immediately and recenters the game window."
-	pause_resolution_hint_label.position = Vector2(42.0, 414.0)
+	pause_resolution_hint_label.position = Vector2(42.0, 494.0)
 	pause_resolution_hint_label.custom_minimum_size = Vector2(576.0, 34.0)
 	pause_resolution_hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	pause_resolution_hint_label.add_theme_font_size_override("font_size", 14)
@@ -328,7 +354,7 @@ func _build_pause_options_panel() -> Panel:
 
 	pause_telemetry_upload_checkbox = CheckBox.new()
 	pause_telemetry_upload_checkbox.text = "Send Anonymous Telemetry"
-	pause_telemetry_upload_checkbox.position = Vector2(42.0, 456.0)
+	pause_telemetry_upload_checkbox.position = Vector2(42.0, 536.0)
 	pause_telemetry_upload_checkbox.custom_minimum_size = Vector2(576.0, 30.0)
 	pause_telemetry_upload_checkbox.add_theme_font_size_override("font_size", 18)
 	pause_telemetry_upload_checkbox.toggled.connect(_on_pause_telemetry_upload_toggled)
@@ -336,7 +362,7 @@ func _build_pause_options_panel() -> Panel:
 
 	var back_button := Button.new()
 	back_button.text = "Back"
-	back_button.position = Vector2(250.0, 522.0)
+	back_button.position = Vector2(250.0, 602.0)
 	back_button.custom_minimum_size = Vector2(160.0, 42.0)
 	back_button.add_theme_font_size_override("font_size", 18)
 	back_button.pressed.connect(func() -> void:
@@ -397,10 +423,11 @@ func _get_run_context() -> Node:
 	return get_node_or_null(run_context_path)
 
 func _sync_pause_options_from_context() -> void:
-	if pause_master_slider == null or pause_music_slider == null or pause_resolution_selector == null or pause_display_mode_selector == null or pause_telemetry_upload_checkbox == null:
+	if pause_master_slider == null or pause_music_slider == null or pause_sfx_slider == null or pause_resolution_selector == null or pause_display_mode_selector == null or pause_telemetry_upload_checkbox == null:
 		return
 	pause_master_slider.set_block_signals(true)
 	pause_music_slider.set_block_signals(true)
+	pause_sfx_slider.set_block_signals(true)
 	pause_display_mode_selector.set_block_signals(true)
 	pause_resolution_selector.set_block_signals(true)
 	pause_telemetry_upload_checkbox.set_block_signals(true)
@@ -408,11 +435,13 @@ func _sync_pause_options_from_context() -> void:
 	if run_context == null:
 		pause_master_slider.value = _db_to_percent(0.0)
 		pause_music_slider.value = _db_to_percent(-20.0)
+		pause_sfx_slider.value = _db_to_percent(0.0)
 		_populate_pause_display_mode_selector([], SETTINGS_STORE.DEFAULT_DISPLAY_MODE)
 		_populate_pause_resolution_selector([], 1920, 1080)
 		pause_telemetry_upload_checkbox.button_pressed = SETTINGS_STORE.DEFAULT_TELEMETRY_UPLOAD_ENABLED
 		pause_master_slider.set_block_signals(false)
 		pause_music_slider.set_block_signals(false)
+		pause_sfx_slider.set_block_signals(false)
 		pause_display_mode_selector.set_block_signals(false)
 		pause_resolution_selector.set_block_signals(false)
 		pause_telemetry_upload_checkbox.set_block_signals(false)
@@ -421,6 +450,7 @@ func _sync_pause_options_from_context() -> void:
 		return
 	pause_master_slider.value = _db_to_percent(float(run_context.get("master_volume_db")))
 	pause_music_slider.value = _db_to_percent(float(run_context.get("music_volume_db")))
+	pause_sfx_slider.value = _db_to_percent(float(run_context.get("sfx_volume_db")))
 	var mode_options: Array[Dictionary] = run_context.get_display_mode_options() as Array[Dictionary]
 	_populate_pause_display_mode_selector(mode_options, String(run_context.get("display_mode")))
 	var resolution_options: Array[Dictionary] = run_context.get_supported_resolution_options() as Array[Dictionary]
@@ -432,6 +462,7 @@ func _sync_pause_options_from_context() -> void:
 	pause_telemetry_upload_checkbox.button_pressed = bool(run_context.get("telemetry_upload_enabled"))
 	pause_master_slider.set_block_signals(false)
 	pause_music_slider.set_block_signals(false)
+	pause_sfx_slider.set_block_signals(false)
 	pause_display_mode_selector.set_block_signals(false)
 	pause_resolution_selector.set_block_signals(false)
 	pause_telemetry_upload_checkbox.set_block_signals(false)
@@ -439,10 +470,13 @@ func _sync_pause_options_from_context() -> void:
 	_update_pause_option_labels()
 
 func _on_pause_master_volume_changed(value: float) -> void:
-	_apply_pause_options(value, pause_music_slider.value)
+	_apply_pause_options(value, pause_music_slider.value, pause_sfx_slider.value)
 
 func _on_pause_music_volume_changed(value: float) -> void:
-	_apply_pause_options(pause_master_slider.value, value)
+	_apply_pause_options(pause_master_slider.value, value, pause_sfx_slider.value)
+
+func _on_pause_sfx_volume_changed(value: float) -> void:
+	_apply_pause_options(pause_master_slider.value, pause_music_slider.value, value)
 
 func _on_pause_resolution_selected(index: int) -> void:
 	if pause_resolution_selector == null:
@@ -470,14 +504,17 @@ func _on_pause_telemetry_upload_toggled(enabled: bool) -> void:
 	if run_context != null and run_context.has_method("set_telemetry_upload_enabled"):
 		run_context.call("set_telemetry_upload_enabled", enabled, true, true)
 
-func _apply_pause_options(master_percent: float, music_percent: float) -> void:
+func _apply_pause_options(master_percent: float, music_percent: float, sfx_percent: float) -> void:
 	var master_db := _percent_to_db(master_percent)
 	var music_db := _percent_to_db(music_percent)
+	var sfx_db := _percent_to_db(sfx_percent)
 	var run_context := _get_run_context()
 	if run_context != null:
-		run_context.set_audio_settings(master_db, music_db, true)
+		run_context.set_audio_settings(master_db, music_db, sfx_db, true)
 	if apply_music_volume_callback.is_valid():
 		apply_music_volume_callback.callv([AUDIO_LEVELS.clamp_db(music_db)])
+	if apply_sfx_volume_callback.is_valid():
+		apply_sfx_volume_callback.callv([AUDIO_LEVELS.clamp_db(sfx_db)])
 	_update_pause_option_labels()
 
 func _update_pause_option_labels() -> void:
@@ -485,6 +522,8 @@ func _update_pause_option_labels() -> void:
 		pause_master_value_label.text = "%d%%" % int(round(pause_master_slider.value))
 	if pause_music_value_label != null and pause_music_slider != null:
 		pause_music_value_label.text = "%d%%" % int(round(pause_music_slider.value))
+	if pause_sfx_value_label != null and pause_sfx_slider != null:
+		pause_sfx_value_label.text = "%d%%" % int(round(pause_sfx_slider.value))
 
 func _populate_pause_resolution_selector(options: Array[Dictionary], selected_width: int, selected_height: int) -> void:
 	if pause_resolution_selector == null:
@@ -543,13 +582,7 @@ func _update_pause_resolution_control_state(current_mode: String) -> void:
 			pause_resolution_hint_label.text = "Disabled in fullscreen. Switch to Windowed to choose a resolution."
 
 func _percent_to_db(percent: float) -> float:
-	var clamped := clampf(percent, 0.0, 100.0)
-	if clamped <= 0.0:
-		return AUDIO_DB_MIN
-	return lerpf(AUDIO_DB_MIN, AUDIO_DB_MAX, clamped / 100.0)
+	return AUDIO_LEVELS.percent_to_db(percent)
 
 func _db_to_percent(db: float) -> float:
-	var clamped := clampf(db, AUDIO_DB_MIN, AUDIO_DB_MAX)
-	if clamped <= AUDIO_DB_MIN:
-		return 0.0
-	return inverse_lerp(AUDIO_DB_MIN, AUDIO_DB_MAX, clamped) * 100.0
+	return AUDIO_LEVELS.db_to_percent(db)

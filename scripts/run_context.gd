@@ -27,6 +27,7 @@ const SUPPORTED_RESOLUTIONS := [
 var run_mode: int = ENUMS.RunMode.STANDARD
 var master_volume_db: float = 0.0
 var music_volume_db: float = -20.0
+var sfx_volume_db: float = 0.0
 var base_viewport_width: int = 1920
 var base_viewport_height: int = 1080
 var display_mode: String = SETTINGS_STORE.DEFAULT_DISPLAY_MODE
@@ -73,6 +74,7 @@ func load_settings() -> void:
 	var loaded: Dictionary = SETTINGS_STORE.load_settings()
 	master_volume_db = clampf(float(loaded.get("master_volume_db", master_volume_db)), AUDIO_VOLUME_MIN_DB, AUDIO_VOLUME_MAX_DB)
 	music_volume_db = clampf(float(loaded.get("music_volume_db", music_volume_db)), AUDIO_VOLUME_MIN_DB, AUDIO_VOLUME_MAX_DB)
+	sfx_volume_db = clampf(float(loaded.get("sfx_volume_db", sfx_volume_db)), AUDIO_VOLUME_MIN_DB, AUDIO_VOLUME_MAX_DB)
 	display_mode = _normalize_display_mode(String(loaded.get("display_mode", display_mode)))
 	var normalized := _normalize_resolution(
 		int(loaded.get("resolution_width", resolution_width)),
@@ -83,12 +85,13 @@ func load_settings() -> void:
 	telemetry_upload_enabled = bool(loaded.get("telemetry_upload_enabled", telemetry_upload_enabled))
 	telemetry_consent_asked = bool(loaded.get("telemetry_consent_asked", telemetry_consent_asked))
 
-func set_audio_settings(master_db: float, music_db: float, persist: bool = true) -> void:
+func set_audio_settings(master_db: float, music_db: float, sfx_db: float, persist: bool = true) -> void:
 	master_volume_db = clampf(master_db, AUDIO_VOLUME_MIN_DB, AUDIO_VOLUME_MAX_DB)
 	music_volume_db = clampf(music_db, AUDIO_VOLUME_MIN_DB, AUDIO_VOLUME_MAX_DB)
+	sfx_volume_db = clampf(sfx_db, AUDIO_VOLUME_MIN_DB, AUDIO_VOLUME_MAX_DB)
 	_apply_master_volume()
 	if persist:
-		SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, resolution_width, resolution_height, display_mode, telemetry_upload_enabled, telemetry_consent_asked)
+		SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, sfx_volume_db, resolution_width, resolution_height, display_mode, telemetry_upload_enabled, telemetry_consent_asked)
 
 func set_resolution_settings(width: int, height: int, persist: bool = true) -> void:
 	var normalized := _normalize_resolution(width, height)
@@ -96,13 +99,13 @@ func set_resolution_settings(width: int, height: int, persist: bool = true) -> v
 	resolution_height = int(normalized.get("height", resolution_height))
 	_apply_resolution()
 	if persist:
-		SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, resolution_width, resolution_height, display_mode, telemetry_upload_enabled, telemetry_consent_asked)
+		SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, sfx_volume_db, resolution_width, resolution_height, display_mode, telemetry_upload_enabled, telemetry_consent_asked)
 
 func set_display_mode(mode: String, persist: bool = true) -> void:
 	display_mode = _normalize_display_mode(mode)
 	_apply_resolution()
 	if persist:
-		SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, resolution_width, resolution_height, display_mode, telemetry_upload_enabled, telemetry_consent_asked)
+		SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, sfx_volume_db, resolution_width, resolution_height, display_mode, telemetry_upload_enabled, telemetry_consent_asked)
 
 func is_telemetry_upload_enabled() -> bool:
 	return telemetry_upload_enabled
@@ -115,12 +118,12 @@ func set_telemetry_upload_enabled(enabled: bool, persist: bool = true, mark_aske
 	if mark_asked:
 		telemetry_consent_asked = true
 	if persist:
-		SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, resolution_width, resolution_height, display_mode, telemetry_upload_enabled, telemetry_consent_asked)
+		SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, sfx_volume_db, resolution_width, resolution_height, display_mode, telemetry_upload_enabled, telemetry_consent_asked)
 
 func mark_telemetry_consent_asked(persist: bool = true) -> void:
 	telemetry_consent_asked = true
 	if persist:
-		SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, resolution_width, resolution_height, display_mode, telemetry_upload_enabled, telemetry_consent_asked)
+		SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, sfx_volume_db, resolution_width, resolution_height, display_mode, telemetry_upload_enabled, telemetry_consent_asked)
 
 func enqueue_telemetry_payload(payload: Dictionary) -> void:
 	if payload.is_empty():
