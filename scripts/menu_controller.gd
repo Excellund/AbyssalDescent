@@ -10,6 +10,7 @@ const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 const SETTINGS_STORE := preload("res://scripts/settings_store.gd")
 const UPDATE_SERVICE_SCRIPT := preload("res://scripts/update_service.gd")
+const BUILD_INFO := preload("res://scripts/build_info.gd")
 const MENU_QUOTE_NEUTRAL := "\"Something unfamiliar begins.\""
 const MENU_QUOTES_AFTER_DEATH := [
 	"\"Back already?\"",
@@ -1017,17 +1018,21 @@ func _refresh_update_ui() -> void:
 		update_check_button.disabled = controls_disabled
 
 func _current_game_version() -> String:
+	var script_version := String(BUILD_INFO.GAME_VERSION).strip_edges()
+	if not script_version.is_empty() and script_version != "dev":
+		print("[Version] Using scripted build version: %s" % script_version)
+		return script_version
 	var stamped_version := _read_build_version_stamp()
 	if not stamped_version.is_empty() and stamped_version != "dev":
 		print("[Version] Using stamped build version: %s" % stamped_version)
 		return stamped_version
 	var configured_version := String(ProjectSettings.get_setting("application/config/version", "")).strip_edges()
-	if not configured_version.is_empty():
+	if not configured_version.is_empty() and configured_version != "dev":
 		print("[Version] Using project config version: %s" % configured_version)
 		return configured_version
 	var fallback_version := "dev"
 	if not OS.has_feature("editor"):
-		print("[Version] WARNING: Packaged build with no version stamp. Defaulting to dev.")
+		print("[Version] WARNING: Packaged build has no release version source. Defaulting to dev.")
 	else:
 		print("[Version] Editor mode, using dev.")
 	return fallback_version
