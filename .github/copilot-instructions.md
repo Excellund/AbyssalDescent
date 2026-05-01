@@ -22,3 +22,10 @@
 - Keep `.github/command-list.md` as the source-of-truth for user-invocable command phrases.
 - If skills, agents, prompts, or instruction descriptions are changed to support new command wording, update `.github/command-list.md` in the same change.
 - Include canonical phrase plus 1-3 practical variants for discoverability.
+
+## Skill Maintenance
+
+- After any task that establishes a durable practice — code pattern, balance decision, design rule, workflow insight — check whether an existing skill covers it.
+- If the skill exists but doesn't reflect the learning, update it before finishing.
+- If no skill covers the area and the insight is broadly reusable, create a new skill at `.github/skills/<topic>/SKILL.md`.
+- This applies to all agents (standard and specialized). Do not defer skill updates as follow-up work.
