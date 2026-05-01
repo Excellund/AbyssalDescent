@@ -4,6 +4,7 @@ const GAMEPLAY_SCENE_PATH := "res://scenes/Main.tscn"
 const RUN_CONTEXT_PATH := "/root/RunContext"
 const MENU_MUSIC := preload("res://music/msx1.mp3")
 const ENUMS := preload("res://scripts/shared/enums.gd")
+const AUDIO_LEVELS := preload("res://scripts/shared/audio_levels.gd")
 const GLOSSARY_DATA := preload("res://scripts/shared/glossary_data.gd")
 const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
@@ -27,8 +28,8 @@ const QUOTE_PULSE_SPEED := 2.1
 const QUOTE_PULSE_AMPLITUDE := 0.018
 const QUOTE_COLOR_COOL := Color(0.72, 0.86, 1.0, 0.9)
 const QUOTE_COLOR_WARM := Color(1.0, 0.95, 0.84, 1.0)
-const AUDIO_DB_MIN := -80.0
-const AUDIO_DB_MAX := 6.0
+const AUDIO_DB_MIN := AUDIO_LEVELS.DB_MIN
+const AUDIO_DB_MAX := AUDIO_LEVELS.DB_MAX
 const MENU_LAYOUT_BASE_SIZE := Vector2(1020.0, 720.0)
 
 var root_panel: Panel
@@ -1179,18 +1180,27 @@ func _start_menu_music() -> void:
 	menu_music_player.bus = "Master"
 	menu_music_player.finished.connect(_on_menu_music_finished)
 	add_child(menu_music_player)
-	_apply_menu_music_volume(_percent_to_db(music_slider.value))
 	menu_music_player.play()
+	_apply_menu_music_volume(_percent_to_db(music_slider.value))
 
 func _on_menu_music_finished() -> void:
 	if menu_music_player == null:
+		return
+	if AUDIO_LEVELS.is_muted_db(menu_music_player.volume_db):
 		return
 	menu_music_player.play(0.0)
 
 func _apply_menu_music_volume(music_db: float) -> void:
 	if menu_music_player == null:
 		return
-	menu_music_player.volume_db = clampf(music_db, AUDIO_DB_MIN, AUDIO_DB_MAX)
+	var clamped_db := AUDIO_LEVELS.clamp_db(music_db)
+	menu_music_player.volume_db = clamped_db
+	if AUDIO_LEVELS.is_muted_db(clamped_db):
+		if menu_music_player.playing:
+			menu_music_player.stop()
+		return
+	if not menu_music_player.playing and menu_music_player.stream != null:
+		menu_music_player.play()
 
 func _percent_to_db(percent: float) -> float:
 	var clamped := clampf(percent, 0.0, 100.0)

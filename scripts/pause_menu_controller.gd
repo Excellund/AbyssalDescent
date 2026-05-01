@@ -2,8 +2,9 @@ extends Node
 
 const GLOSSARY_DATA := preload("res://scripts/shared/glossary_data.gd")
 const SETTINGS_STORE := preload("res://scripts/settings_store.gd")
-const AUDIO_DB_MIN := -80.0
-const AUDIO_DB_MAX := 6.0
+const AUDIO_LEVELS := preload("res://scripts/shared/audio_levels.gd")
+const AUDIO_DB_MIN := AUDIO_LEVELS.DB_MIN
+const AUDIO_DB_MAX := AUDIO_LEVELS.DB_MAX
 
 signal pause_opened
 signal pause_closed
@@ -476,7 +477,7 @@ func _apply_pause_options(master_percent: float, music_percent: float) -> void:
 	if run_context != null:
 		run_context.set_audio_settings(master_db, music_db, true)
 	if apply_music_volume_callback.is_valid():
-		apply_music_volume_callback.callv([clampf(music_db, AUDIO_DB_MIN, AUDIO_DB_MAX)])
+		apply_music_volume_callback.callv([AUDIO_LEVELS.clamp_db(music_db)])
 	_update_pause_option_labels()
 
 func _update_pause_option_labels() -> void:
