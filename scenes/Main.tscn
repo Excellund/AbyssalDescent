@@ -14,7 +14,5 @@ music_volume_db = -50.0
 
 [node name="DebugSettings" type="Node" parent="." unique_id=390124711]
 script = ExtResource("5_oxjlc")
-telemetry_spike_endpoint = "https://aizoebowshcnqvuizava.supabase.co/rest/v1/telemetry_spike_events"
-telemetry_spike_api_key = "sb_publishable_LiXb9xg1jvwUZYw1arDcag_YIzGTPGV"
 
 [node name="Player" parent="." unique_id=1831438957 instance=ExtResource("1_elqb8")]

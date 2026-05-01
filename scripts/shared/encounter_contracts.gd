@@ -290,16 +290,16 @@ static func _normalize_encounter_key(value: String, fallback: String = "unknown"
 	key = key.strip_edges().replace(" ", "_")
 	return key if not key.is_empty() else fallback
 
-static func _profile_encounter_key(profile: Dictionary, fallback: String = "unknown") -> String:
-	if profile.is_empty():
+static func _profile_encounter_key(encounter_profile: Dictionary, fallback: String = "unknown") -> String:
+	if encounter_profile.is_empty():
 		return fallback
-	return _normalize_encounter_key(profile_label(profile), fallback)
+	return _normalize_encounter_key(profile_label(encounter_profile), fallback)
 
-static func _objective_prompt_label(profile: Dictionary) -> String:
-	return "Objective - %s" % profile_label(profile)
+static func _objective_prompt_label(encounter_profile: Dictionary) -> String:
+	return "Objective - %s" % profile_label(encounter_profile)
 
-static func _objective_short_label(profile: Dictionary) -> String:
-	return profile_label(profile)
+static func _objective_short_label(encounter_profile: Dictionary) -> String:
+	return profile_label(encounter_profile)
 
 static func _truncate_door_label(label: String, max_length: int = 20) -> String:
 	if label.length() <= max_length:
@@ -775,53 +775,58 @@ static func boss_door_option(encounter_key: String) -> Dictionary:
 		normalized_key
 	)
 
-static func objective_door_option(profile: Dictionary) -> Dictionary:
+static func objective_door_option(encounter_profile: Dictionary) -> Dictionary:
 	return door_option(
-		_objective_prompt_label(profile),
+		_objective_prompt_label(encounter_profile),
 		Color(0.98, 0.78, 0.34, 0.96),
 		DOOR_KIND_ENCOUNTER,
 		"objective",
 		ENUMS.RewardMode.MISSION,
-		profile,
-		String(profile.get(PROFILE_KEY_OBJECTIVE_KIND, "objective"))
+		encounter_profile,
+		String(encounter_profile.get(PROFILE_KEY_OBJECTIVE_KIND, "objective"))
 	)
 
-static func trial_door_option(profile: Dictionary, mutator_name: String, color: Color) -> Dictionary:
+static func trial_door_option(encounter_profile: Dictionary, mutator_name: String, color: Color) -> Dictionary:
+	var trial_name := mutator_name.strip_edges()
+	if trial_name.is_empty():
+		trial_name = mutator_name(profile_enemy_mutator(encounter_profile))
+	if trial_name.is_empty():
+		trial_name = "Trial"
 	return door_option(
-		"Trial - %s" % mutator_name,
+		trial_name,
 		color,
 		DOOR_KIND_ENCOUNTER,
 		"trial",
 		ENUMS.RewardMode.ARCANA,
-		profile,
+		encounter_profile,
 		"trial"
 	)
 
-static func intro_encounter_door_option(profile: Dictionary) -> Dictionary:
-	var encounter_key := _profile_encounter_key(profile)
+static func intro_encounter_door_option(encounter_profile: Dictionary) -> Dictionary:
+	var encounter_key := _profile_encounter_key(encounter_profile)
 	var presentation := _door_presentation(encounter_key)
-	var label := String(presentation.get("label", profile_label(profile)))
+	var label := String(presentation.get("label", profile_label(encounter_profile)))
 	return door_option(
 		label,
 		INTRO_ENCOUNTER_DOOR_COLOR,
 		DOOR_KIND_ENCOUNTER,
 		"easy",
 		ENUMS.RewardMode.BOON,
-		profile,
+		encounter_profile,
 		encounter_key
 	)
 
-static func standard_encounter_door_option(profile: Dictionary) -> Dictionary:
-	var encounter_key := _profile_encounter_key(profile)
+static func standard_encounter_door_option(encounter_profile: Dictionary) -> Dictionary:
+	var encounter_key := _profile_encounter_key(encounter_profile)
 	var presentation := _door_presentation(encounter_key)
-	var label := String(presentation.get("label", profile_label(profile)))
+	var label := String(presentation.get("label", profile_label(encounter_profile)))
 	return door_option(
 		label,
 		STANDARD_ENCOUNTER_DOOR_COLOR,
 		DOOR_KIND_ENCOUNTER,
 		"easy" if INTRO_ENCOUNTER_DOOR_KEYS.has(encounter_key) else "hard",
 		ENUMS.RewardMode.BOON,
-		profile,
+		encounter_profile,
 		encounter_key
 	)
 
@@ -845,14 +850,25 @@ static func door_option_encounter_key(option: Dictionary) -> String:
 
 static func door_prompt_text(option: Dictionary) -> String:
 	var normalized_option := normalize_door_option(option)
+	var icon := String(normalized_option.get(KEY_ICON, ""))
+	if icon == "trial":
+		return String(normalized_option.get(KEY_LABEL, "Trial"))
+	var profile := door_option_profile(normalized_option)
+	var enemy_mutator := profile_enemy_mutator(profile)
+	var mutator_label := mutator_name(enemy_mutator)
 	var encounter_key := door_option_encounter_key(normalized_option)
 	var presentation := _door_presentation(encounter_key)
 	if not presentation.is_empty() and presentation.has("label"):
-		return String(presentation.get("label", "Encounter"))
-	var icon := String(normalized_option.get(KEY_ICON, ""))
+		var label := String(presentation.get("label", "Encounter"))
+		if not mutator_label.is_empty():
+			return "%s  |  Mutator: %s" % [label, mutator_label]
+		return label
 	if icon == "objective":
 		return _objective_prompt_label(door_option_profile(normalized_option))
-	return String(normalized_option.get(KEY_LABEL, "Encounter"))
+	var fallback_label := String(normalized_option.get(KEY_LABEL, "Encounter"))
+	if not mutator_label.is_empty():
+		return "%s  |  Mutator: %s" % [fallback_label, mutator_label]
+	return fallback_label
 
 static func door_prompt_name(option: Dictionary) -> String:
 	var normalized_option := normalize_door_option(option)
@@ -863,11 +879,21 @@ static func door_prompt_name(option: Dictionary) -> String:
 
 static func door_identity_label(option: Dictionary) -> String:
 	var normalized_option := normalize_door_option(option)
+	var icon := String(normalized_option.get(KEY_ICON, ""))
+	if icon == "trial":
+		var trial_mutator_name := mutator_name(profile_enemy_mutator(door_option_profile(normalized_option)))
+		if not trial_mutator_name.is_empty():
+			return _truncate_door_label(trial_mutator_name)
+	if door_option_kind_id(normalized_option) == DOOR_KIND_BOSS:
+		var boss_key := door_option_encounter_key(normalized_option)
+		var boss_presentation := _door_presentation(boss_key)
+		if not boss_presentation.is_empty() and boss_presentation.has("label"):
+			return _truncate_door_label(String(boss_presentation.get("label", "Boss")))
+		return _truncate_door_label(String(normalized_option.get(KEY_LABEL, "Boss")))
 	var encounter_key := door_option_encounter_key(normalized_option)
 	var presentation := _door_presentation(encounter_key)
 	if not presentation.is_empty() and presentation.has("short_label"):
 		return String(presentation.get("short_label", "Encounter"))
-	var icon := String(normalized_option.get(KEY_ICON, ""))
 	if icon == "objective":
 		return _objective_short_label(door_option_profile(normalized_option))
 	return _truncate_door_label(String(normalized_option.get(KEY_LABEL, "Encounter")))

@@ -125,11 +125,14 @@ func _draw() -> void:
 			var door_pos: Vector2 = door["position"]
 			var color: Color = door["color"]
 			var door_pulse := 0.75 + 0.25 * sin(t * 4.2 + door_pos.x * 0.01)
-			draw_circle(door_pos, 34.0 + 4.0 * door_pulse, Color(color.r, color.g, color.b, 0.12))
 			var is_focused := door_pos.distance_to(focused_door_pos) <= 0.1
+			_draw_challenge_door_vfx(door, door_pulse, is_focused)
+			_draw_mutator_door_vfx(door, door_pulse, is_focused)
+			draw_circle(door_pos, 34.0 + 4.0 * door_pulse, Color(color.r, color.g, color.b, 0.12))
 			draw_circle(door_pos, 22.0 + 2.0 * door_pulse, Color(color.r, color.g, color.b, 0.24))
 			draw_circle(door_pos, 14.0, color)
 			draw_arc(door_pos, 30.0, -PI * 0.35, PI * 1.35, 36, Color(color.r, color.g, color.b, 0.7), 2.0)
+			_draw_superior_door_marks(door, door_pulse, is_focused)
 			_draw_door_icon(door)
 			var chip_morph := _focused_chip_morph if is_focused else 0.0
 			_draw_door_identity_chip(door, chip_morph, is_focused)
@@ -138,6 +141,223 @@ func _draw() -> void:
 		_focused_detail_active = false
 		_pending_focus_timer = 0.0
 		_focused_chip_morph = 0.0
+
+func _draw_challenge_door_vfx(door: Dictionary, door_pulse: float, is_focused: bool) -> void:
+	var kind_id: int = ENCOUNTER_CONTRACTS.normalize_door_kind(door.get("kind_id", door.get("kind", ENCOUNTER_CONTRACTS.DOOR_KIND_ENCOUNTER)))
+	if kind_id != ENUMS.DoorKind.BOSS:
+		return
+
+	var door_pos := door.get("position", Vector2.ZERO) as Vector2
+	var focus_boost := 0.18 if is_focused else 0.0
+	var slow := 0.5 + 0.5 * sin(_art_time * 2.4 + door_pos.x * 0.01)
+	var fast := 0.5 + 0.5 * sin(_art_time * 8.8 + door_pos.y * 0.03)
+	var spin := _art_time * (1.1 if kind_id == ENUMS.DoorKind.BOSS else 1.8) + door_pos.x * 0.002
+
+	if kind_id == ENUMS.DoorKind.BOSS:
+		var boss_key := String(door.get("encounter_key", "")).strip_edges().to_lower()
+		if boss_key == "sovereign":
+			_draw_sovereign_boss_door_vfx(door_pos, door_pulse, focus_boost, slow, fast, spin)
+		else:
+			_draw_warden_boss_door_vfx(door_pos, door_pulse, focus_boost, slow, fast, spin)
+		return
+
+func _is_superior_door(door: Dictionary) -> bool:
+	var kind_id: int = ENCOUNTER_CONTRACTS.normalize_door_kind(door.get("kind_id", door.get("kind", ENCOUNTER_CONTRACTS.DOOR_KIND_ENCOUNTER)))
+	if kind_id == ENUMS.DoorKind.BOSS:
+		return true
+	return String(door.get("icon", "")) == "trial"
+
+func _superior_door_tag(door: Dictionary) -> String:
+	var kind_id: int = ENCOUNTER_CONTRACTS.normalize_door_kind(door.get("kind_id", door.get("kind", ENCOUNTER_CONTRACTS.DOOR_KIND_ENCOUNTER)))
+	if kind_id == ENUMS.DoorKind.BOSS:
+		return "BOSS"
+	return "TRIAL"
+
+func _draw_superior_door_marks(door: Dictionary, door_pulse: float, is_focused: bool) -> void:
+	if not _is_superior_door(door):
+		return
+	var door_pos := door.get("position", Vector2.ZERO) as Vector2
+	var color := door.get("color", Color(1.0, 0.86, 0.36, 1.0)) as Color
+	var focus_boost := 0.16 if is_focused else 0.0
+	var alpha := 0.34 + 0.22 * door_pulse + focus_boost
+	var ring_r := 34.0 + 2.0 * door_pulse
+	draw_arc(door_pos, ring_r, -PI * 0.22, PI * 0.22, 20, Color(color.r, color.g, color.b, alpha), 2.0)
+	draw_arc(door_pos, ring_r, PI - PI * 0.22, PI + PI * 0.22, 20, Color(color.r, color.g, color.b, alpha), 2.0)
+	var chevron_offset := 20.0 + 2.0 * door_pulse
+	var left := door_pos + Vector2(-chevron_offset, 0.0)
+	var right := door_pos + Vector2(chevron_offset, 0.0)
+	draw_polyline(PackedVector2Array([left + Vector2(3.0, -5.5), left + Vector2(-3.0, 0.0), left + Vector2(3.0, 5.5)]), Color(color.r, color.g, color.b, alpha), 2.0)
+	draw_polyline(PackedVector2Array([right + Vector2(-3.0, -5.5), right + Vector2(3.0, 0.0), right + Vector2(-3.0, 5.5)]), Color(color.r, color.g, color.b, alpha), 2.0)
+
+func _draw_warden_boss_door_vfx(door_pos: Vector2, door_pulse: float, focus_boost: float, slow: float, fast: float, spin: float) -> void:
+	var core := Color(1.0, 0.5, 0.18, 1.0)
+	var hot := Color(1.0, 0.86, 0.38, 1.0)
+
+	# Warden reads as brute impact: charge lanes + cleave fan + nova shock ring.
+	draw_circle(door_pos, 43.0 + 7.0 * slow, Color(core.r, core.g, core.b, 0.2 + focus_boost * 0.56))
+	draw_circle(door_pos, 33.0 + 5.0 * fast, Color(hot.r, hot.g, hot.b, 0.16 + focus_boost * 0.45))
+
+	for ring_i in range(2):
+		var radius := 22.0 + float(ring_i) * 9.0 + 1.6 * slow
+		var phase := spin * (1.0 + float(ring_i) * 0.2)
+		for seg in range(3):
+			var start := phase + float(seg) * TAU / 3.0
+			draw_arc(door_pos, radius, start, start + 0.66, 14, Color(hot.r, hot.g, hot.b, 0.56 + focus_boost), 2.2 - float(ring_i) * 0.35)
+
+	# Cleave wedge sweeps around center.
+	var wedge_mid := spin * 0.72
+	var half_wedge := 0.4 + 0.08 * fast
+	var wedge_inner := 10.0
+	var wedge_outer := 30.0 + 4.0 * fast
+	var wedge := PackedVector2Array([door_pos])
+	var wedge_steps := 6
+	for i in range(wedge_steps + 1):
+		var t := float(i) / float(wedge_steps)
+		var a := wedge_mid - half_wedge + (half_wedge * 2.0) * t
+		wedge.append(door_pos + Vector2.RIGHT.rotated(a) * wedge_outer)
+	for i in range(wedge_steps, -1, -1):
+		var t := float(i) / float(wedge_steps)
+		var a := wedge_mid - half_wedge + (half_wedge * 2.0) * t
+		wedge.append(door_pos + Vector2.RIGHT.rotated(a) * wedge_inner)
+	draw_colored_polygon(wedge, Color(core.r, core.g, core.b, 0.14 + focus_boost * 0.25))
+
+	# Charge lane pulse.
+	var lane_dir := Vector2.RIGHT.rotated(spin * 0.94)
+	var lane_a := door_pos + lane_dir * -12.0
+	var lane_b := door_pos + lane_dir * (30.0 + 4.0 * door_pulse)
+	draw_line(lane_a, lane_b, Color(core.r, core.g, core.b, 0.54), 3.6)
+	draw_line(lane_a, lane_b, Color(hot.r, hot.g, hot.b, 0.68), 1.7)
+
+	# Nova-like expanding snap ring.
+	var nova_r := 25.0 + 6.0 * fast
+	draw_arc(door_pos, nova_r, 0.0, TAU, 44, Color(hot.r, hot.g, hot.b, 0.4 + focus_boost * 0.4), 2.0)
+
+func _draw_sovereign_boss_door_vfx(door_pos: Vector2, _door_pulse: float, focus_boost: float, slow: float, fast: float, spin: float) -> void:
+	var core := Color(0.42, 0.84, 1.0, 1.0)
+	var hot := Color(0.82, 0.94, 1.0, 1.0)
+	var void_color := Color(0.42, 0.44, 1.0, 1.0)
+
+	# Sovereign reads as cosmic control: prism geometry + orbital lances + gravity curl.
+	draw_circle(door_pos, 43.0 + 7.0 * slow, Color(core.r, core.g, core.b, 0.17 + focus_boost * 0.46))
+	draw_circle(door_pos, 33.0 + 5.0 * fast, Color(hot.r, hot.g, hot.b, 0.14 + focus_boost * 0.38))
+
+	for ring_i in range(2):
+		var radius := 22.0 + float(ring_i) * 9.0 + 1.1 * slow
+		var phase := spin * (1.22 + float(ring_i) * 0.25)
+		for seg in range(4):
+			var start := phase + float(seg) * TAU / 4.0
+			draw_arc(door_pos, radius, start, start + 0.5, 12, Color(core.r, core.g, core.b, 0.55 + focus_boost), 2.0)
+
+	# Prism spokes (signature attack language).
+	for spoke_i in range(5):
+		var a := spin * 0.62 + float(spoke_i) * TAU / 5.0
+		var inner := door_pos + Vector2.RIGHT.rotated(a) * 10.0
+		var outer := door_pos + Vector2.RIGHT.rotated(a) * (30.0 + 4.0 * fast)
+		draw_line(inner, outer, Color(hot.r, hot.g, hot.b, 0.64), 1.7)
+
+	# Orbital lance constellation points.
+	for lance_i in range(4):
+		var a := spin * 1.06 + float(lance_i) * TAU / 4.0
+		var tip := door_pos + Vector2.RIGHT.rotated(a) * (31.0 + 3.0 * slow)
+		var dir := Vector2.RIGHT.rotated(a)
+		var side := Vector2(-dir.y, dir.x)
+		var back := tip - dir * 4.8
+		draw_colored_polygon(PackedVector2Array([back + side * 1.9, tip, back - side * 1.9]), Color(hot.r, hot.g, hot.b, 0.72))
+
+	# Gravity swirl hint.
+	var swirl_phase := spin * 0.58
+	for s in range(2):
+		var start := swirl_phase + float(s) * PI
+		draw_arc(door_pos, 17.0 + float(s) * 7.0 + 1.0 * fast, start, start + 1.45, 20, Color(void_color.r, void_color.g, void_color.b, 0.48 + focus_boost * 0.36), 1.8)
+
+func _door_enemy_mutator(door: Dictionary) -> Dictionary:
+	var profile := door.get("profile", {}) as Dictionary
+	if profile.is_empty():
+		return {}
+	return ENCOUNTER_CONTRACTS.profile_enemy_mutator(profile)
+
+func _draw_mutator_door_vfx(door: Dictionary, door_pulse: float, is_focused: bool) -> void:
+	var mutator := _door_enemy_mutator(door)
+	if mutator.is_empty():
+		return
+	var door_pos := door.get("position", Vector2.ZERO) as Vector2
+	var base_color := door.get("color", Color(0.78, 0.9, 1.0, 1.0)) as Color
+	var theme := ENCOUNTER_CONTRACTS.mutator_theme_color(mutator, base_color)
+	theme.a = 1.0
+	var shape_id := ENCOUNTER_CONTRACTS.mutator_icon_shape_id(mutator)
+	if shape_id.is_empty():
+		shape_id = ENCOUNTER_CONTRACTS.mutator_id(mutator)
+
+	var focus_boost := 0.14 if is_focused else 0.0
+	var slow_pulse := 0.5 + 0.5 * sin(_art_time * 3.2 + door_pos.x * 0.02)
+	var fast_pulse := 0.5 + 0.5 * sin(_art_time * 9.6 + door_pos.y * 0.035)
+	var glow_alpha := 0.1 + 0.16 * door_pulse + 0.1 * fast_pulse + focus_boost
+
+	draw_circle(door_pos, 42.0 + 8.0 * slow_pulse, Color(theme.r, theme.g, theme.b, glow_alpha * 0.42))
+	draw_circle(door_pos, 33.0 + 6.0 * fast_pulse, Color(theme.r, theme.g, theme.b, glow_alpha * 0.3))
+	draw_circle(door_pos, 26.0 + 3.0 * door_pulse, Color(theme.r, theme.g, theme.b, glow_alpha * 0.18))
+
+	var spin := _art_time * 1.55 + door_pos.x * 0.003
+	for ring_i in range(2):
+		var radius := 23.0 + float(ring_i) * 7.0 + 1.5 * slow_pulse
+		var thickness := 1.3 + float(ring_i) * 0.6
+		for seg in range(4):
+			var seg_phase := spin * (1.0 + float(ring_i) * 0.18) + float(seg) * TAU * 0.25
+			var seg_len := 0.46 + 0.12 * fast_pulse
+			draw_arc(
+				door_pos,
+				radius,
+				seg_phase,
+				seg_phase + seg_len,
+				14,
+				Color(theme.r, theme.g, theme.b, 0.42 + focus_boost * 0.8),
+				thickness
+			)
+
+	for mote_i in range(5):
+		var orbit_t := spin * (0.9 + float(mote_i) * 0.07) + float(mote_i) * TAU / 5.0
+		var orbit_r := 18.0 + float(mote_i % 3) * 6.5 + 2.0 * slow_pulse
+		var mote_pos := door_pos + Vector2.RIGHT.rotated(orbit_t) * orbit_r
+		var mote_alpha := 0.35 + 0.35 * sin(orbit_t * 2.0 + float(mote_i))
+		draw_circle(mote_pos, 1.6 + 0.5 * fast_pulse, Color(theme.r, theme.g, theme.b, mote_alpha))
+
+	_draw_mutator_identity_motion(door_pos, theme, shape_id, spin, fast_pulse, focus_boost)
+
+func _draw_mutator_identity_motion(door_pos: Vector2, theme: Color, shape_id: String, spin: float, pulse: float, focus_boost: float) -> void:
+	var accent := Color(theme.r, theme.g, theme.b, 0.7 + focus_boost)
+	match shape_id:
+		"blood_rush":
+			for i in range(3):
+				var angle := spin * 1.45 + float(i) * TAU / 3.0
+				var dir := Vector2.RIGHT.rotated(angle)
+				var tail := door_pos + dir * (12.0 + 3.0 * pulse)
+				var tip := door_pos + dir * (24.0 + 4.0 * pulse)
+				draw_line(tail, tip, Color(accent.r, accent.g, accent.b, 0.78), 2.4)
+				draw_line(tail - Vector2(-dir.y, dir.x) * 1.5, tip, Color(accent.r, accent.g, accent.b, 0.42), 1.2)
+		"flashpoint":
+			for i in range(2):
+				var phase := spin * 2.0 + float(i) * PI
+				var p0 := door_pos + Vector2.RIGHT.rotated(phase) * 9.0
+				var p1 := p0 + Vector2.RIGHT.rotated(phase + 0.7) * 7.0
+				var p2 := p1 + Vector2.RIGHT.rotated(phase - 0.45) * 6.0
+				draw_polyline(PackedVector2Array([p0, p1, p2]), Color(accent.r, accent.g, accent.b, 0.86), 2.6)
+				draw_polyline(PackedVector2Array([p0, p1, p2]), Color(1.0, 0.98, 0.92, 0.44), 1.2)
+		"siegebreak":
+			for i in range(3):
+				var sweep := spin * 0.9 + float(i) * TAU / 3.0
+				draw_arc(door_pos, 19.0 + float(i) * 4.8, sweep, sweep + 0.52 + 0.08 * pulse, 12, Color(accent.r, accent.g, accent.b, 0.72), 2.0)
+			var ram_tip := door_pos + Vector2.RIGHT.rotated(spin * 0.9) * (26.0 + 2.0 * pulse)
+			draw_line(door_pos, ram_tip, Color(accent.r, accent.g, accent.b, 0.76), 2.8)
+		"iron_volley":
+			draw_arc(door_pos, 16.5 + pulse * 2.0, spin * 0.8, spin * 0.8 + TAU * 0.62, 28, Color(accent.r, accent.g, accent.b, 0.72), 2.6)
+			for i in range(2):
+				var a := spin * 1.3 + float(i) * PI
+				var tip := door_pos + Vector2.RIGHT.rotated(a) * (23.0 + 3.0 * pulse)
+				var wing_l := tip + Vector2.RIGHT.rotated(a + 2.7) * 4.0
+				var wing_r := tip + Vector2.RIGHT.rotated(a - 2.7) * 4.0
+				draw_colored_polygon(PackedVector2Array([wing_l, tip, wing_r]), Color(accent.r, accent.g, accent.b, 0.84))
+		_:
+			draw_arc(door_pos, 20.0 + 3.0 * pulse, spin, spin + 0.9, 18, Color(accent.r, accent.g, accent.b, 0.7), 2.2)
 
 func _get_nearest_door_for_prompt() -> Dictionary:
 	if door_options.is_empty():
@@ -217,31 +437,52 @@ func _draw_door_identity_chip(door: Dictionary, morph_t: float, is_focused: bool
 		return
 	var door_pos := door.get("position", Vector2.ZERO) as Vector2
 	var door_color := door.get("color", Color(0.78, 0.9, 1.0, 1.0)) as Color
+	var superior := _is_superior_door(door)
+	var superior_tag := _superior_door_tag(door)
 	var compact_text := _build_door_identity_label(door)
 	var detail_text := _build_door_prompt_text(door)
 	var action_text := "[E] Enter"
+	if superior:
+		action_text = "[E] Accept Challenge"
+	var badge_font_size := 12
+	var badge_text_size := font.get_string_size(superior_tag, HORIZONTAL_ALIGNMENT_LEFT, -1.0, badge_font_size)
+	var badge_pad_x := 18.0
+	var badge_w := badge_text_size.x + badge_pad_x
 	var compact_size := font.get_string_size(compact_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 14)
 	var detail_size := font.get_string_size(detail_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 17)
 	var action_size := font.get_string_size(action_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 13)
 	var compact_w := clampf(compact_size.x + 34.0, 96.0, 240.0)
 	var detail_w := clampf(maxf(detail_size.x, action_size.x) + 52.0, 210.0, 460.0)
+	if superior:
+		compact_w = maxf(compact_w, badge_w + 26.0)
+		detail_w = maxf(detail_w, badge_w + 34.0)
 	var eased := clampf(morph_t, 0.0, 1.0)
 	eased = eased * eased * (3.0 - 2.0 * eased)
 	# Two-stage morph prevents duplicated/intersecting text at mid distance.
 	var shape_t := clampf(eased / 0.72, 0.0, 1.0)
 	var chip_w := lerpf(compact_w, detail_w, shape_t)
 	var chip_h := lerpf(26.0, 56.0, shape_t)
-	var chip_x := door_pos.x - chip_w * 0.5
-	var chip_y := door_pos.y - lerpf(64.0, 100.0, shape_t)
+	var chip_x := floorf(door_pos.x - chip_w * 0.5)
+	var chip_y := floorf(door_pos.y - lerpf(64.0, 100.0, shape_t))
 	var focus_boost := 0.1 if is_focused else 0.0
 	var fill := Color(0.03, 0.05, 0.08, lerpf(0.76, 0.9, eased) + focus_boost)
 	var border_alpha := lerpf(0.55, 0.84, eased) + focus_boost * 0.4
+	if superior:
+		border_alpha = minf(1.0, border_alpha + 0.2)
 	var shimmer := 0.5 + 0.5 * sin(_art_time * 6.0 + door_pos.x * 0.02)
 	if eased > 0.01:
 		var glow_alpha := 0.08 + 0.14 * eased + 0.06 * shimmer * eased
+		if superior:
+			glow_alpha += 0.06
 		draw_rect(Rect2(Vector2(chip_x - 4.0, chip_y - 4.0), Vector2(chip_w + 8.0, chip_h + 8.0)), Color(door_color.r, door_color.g, door_color.b, glow_alpha), true)
 	draw_rect(Rect2(Vector2(chip_x, chip_y), Vector2(chip_w, chip_h)), fill, true)
 	draw_rect(Rect2(Vector2(chip_x, chip_y), Vector2(chip_w, chip_h)), Color(door_color.r, door_color.g, door_color.b, clampf(border_alpha, 0.0, 1.0)), false, 1.6)
+	if superior:
+		var badge_h := 14.0
+		var badge_x := floorf(chip_x + (chip_w - badge_w) * 0.5)
+		var badge_y := floorf(chip_y - badge_h - 4.0)
+		draw_rect(Rect2(Vector2(badge_x, badge_y), Vector2(badge_w, badge_h)), Color(door_color.r, door_color.g, door_color.b, 0.3), true)
+		draw_rect(Rect2(Vector2(badge_x, badge_y), Vector2(badge_w, badge_h)), Color(door_color.r, door_color.g, door_color.b, 0.7), false, 1.0)
 	if shape_t > 0.65:
 		var divider_alpha := (shape_t - 0.65) / 0.35
 		draw_line(Vector2(chip_x + 16.0, chip_y + 22.0), Vector2(chip_x + chip_w - 16.0, chip_y + 22.0), Color(door_color.r, door_color.g, door_color.b, 0.3 * divider_alpha), 1.0)
@@ -250,14 +491,19 @@ func _draw_door_identity_chip(door: Dictionary, morph_t: float, is_focused: bool
 	var compact_alpha := 1.0 - clampf((eased - 0.5) / 0.26, 0.0, 1.0)
 	var detail_alpha := clampf((eased - 0.72) / 0.28, 0.0, 1.0)
 	if compact_alpha > 0.01:
-		draw_string(font, Vector2(chip_x, chip_y + 18.0) + Vector2(1.0, 1.0), compact_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 14, Color(text_shadow.r, text_shadow.g, text_shadow.b, text_shadow.a * compact_alpha))
-		draw_string(font, Vector2(chip_x, chip_y + 18.0), compact_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 14, Color(text_color.r, text_color.g, text_color.b, text_color.a * compact_alpha))
+		draw_string(font, Vector2(chip_x, chip_y + 18.0).floor() + Vector2(1.0, 1.0), compact_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 14, Color(text_shadow.r, text_shadow.g, text_shadow.b, text_shadow.a * compact_alpha))
+		draw_string(font, Vector2(chip_x, chip_y + 18.0).floor(), compact_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 14, Color(text_color.r, text_color.g, text_color.b, text_color.a * compact_alpha))
+	if superior:
+		var badge_text_x := floorf(chip_x + (chip_w - badge_w) * 0.5)
+		var badge_text_y := floorf(chip_y - 7.0)
+		draw_string(font, Vector2(badge_text_x, badge_text_y) + Vector2(1.0, 1.0), superior_tag, HORIZONTAL_ALIGNMENT_CENTER, badge_w, badge_font_size, Color(text_shadow.r, text_shadow.g, text_shadow.b, 0.65))
+		draw_string(font, Vector2(badge_text_x, badge_text_y), superior_tag, HORIZONTAL_ALIGNMENT_CENTER, badge_w, badge_font_size, Color(1.0, 0.95, 0.82, 0.96))
 	if detail_alpha > 0.01:
 		var detail_offset := (1.0 - detail_alpha) * 6.0
-		draw_string(font, Vector2(chip_x, chip_y + 17.0) + Vector2(1.0, 1.0), action_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 13, Color(text_shadow.r, text_shadow.g, text_shadow.b, text_shadow.a * detail_alpha))
-		draw_string(font, Vector2(chip_x, chip_y + 17.0 + detail_offset), action_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 13, Color(text_color.r, text_color.g, text_color.b, text_color.a * detail_alpha))
-		draw_string(font, Vector2(chip_x, chip_y + 46.0 + detail_offset) + Vector2(1.0, 1.0), detail_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 17, Color(text_shadow.r, text_shadow.g, text_shadow.b, text_shadow.a * detail_alpha))
-		draw_string(font, Vector2(chip_x, chip_y + 46.0 + detail_offset), detail_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 17, Color(text_color.r, text_color.g, text_color.b, text_color.a * detail_alpha))
+		draw_string(font, Vector2(chip_x, chip_y + 17.0).floor() + Vector2(1.0, 1.0), action_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 13, Color(text_shadow.r, text_shadow.g, text_shadow.b, text_shadow.a * detail_alpha))
+		draw_string(font, Vector2(chip_x, chip_y + 17.0 + detail_offset).floor(), action_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 13, Color(text_color.r, text_color.g, text_color.b, text_color.a * detail_alpha))
+		draw_string(font, Vector2(chip_x, chip_y + 46.0 + detail_offset).floor() + Vector2(1.0, 1.0), detail_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 17, Color(text_shadow.r, text_shadow.g, text_shadow.b, text_shadow.a * detail_alpha))
+		draw_string(font, Vector2(chip_x, chip_y + 46.0 + detail_offset).floor(), detail_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 17, Color(text_color.r, text_color.g, text_color.b, text_color.a * detail_alpha))
 
 func _draw_door_icon(door: Dictionary) -> void:
 	var door_pos: Vector2 = door["position"]
