@@ -789,7 +789,7 @@ func tick_objective_mutators_for_encounter() -> void:
 		var mutator := active_objective_mutators[i]
 		var remaining := int(mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_REMAINING_ENCOUNTERS, 0))
 		remaining -= 1
-		if remaining < 0:
+		if remaining <= 0:
 			active_objective_mutators.remove_at(i)
 			continue
 		mutator[ENCOUNTER_CONTRACTS.MUTATOR_KEY_REMAINING_ENCOUNTERS] = remaining

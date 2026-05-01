@@ -1121,6 +1121,8 @@ func _on_room_cleared() -> void:
 	if in_boss_room and not first_boss_defeated:
 		_finish_first_boss_clear()
 		return
+	if is_instance_valid(player):
+		player.tick_objective_mutators_for_encounter()
 	var raw_outcome: Variant = encounter_flow_system.resolve_room_cleared(in_boss_room, pending_room_reward, rooms_cleared, room_depth, encounter_count)
 	var outcome: Dictionary = ENCOUNTER_CONTRACTS.normalize_room_cleared_outcome(raw_outcome)
 	run_cleared = ENCOUNTER_CONTRACTS.outcome_run_cleared(outcome)
@@ -1459,7 +1461,6 @@ func _begin_room(profile: Dictionary) -> void:
 	encounter_intro_grace_active = false
 	if is_instance_valid(player):
 		player.clear_lingering_combat_effects()
-		player.tick_objective_mutators_for_encounter()
 	in_boss_room = false
 	in_second_boss_room = false
 	if is_instance_valid(objective_runtime):
