@@ -1,0 +1,1 @@
+truncate table public.telemetry_runs restart identity;

@@ -2,7 +2,6 @@ extends Node
 
 signal back_to_main_menu_requested
 
-const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 
 var _layer: CanvasLayer
@@ -43,7 +42,6 @@ func _build_ui() -> void:
 	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
 	_root.add_child(backdrop)
 
-	# Title
 	var title := Label.new()
 	title.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	title.offset_top = 280.0
@@ -58,7 +56,6 @@ func _build_ui() -> void:
 	title.add_theme_constant_override("shadow_offset_y", 4)
 	_root.add_child(title)
 
-	# Subtitle
 	var subtitle := Label.new()
 	subtitle.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	subtitle.offset_top = 375.0
@@ -73,7 +70,6 @@ func _build_ui() -> void:
 	subtitle.add_theme_constant_override("shadow_offset_y", 2)
 	_root.add_child(subtitle)
 
-	# Divider
 	var sep := ColorRect.new()
 	sep.set_anchor(SIDE_LEFT, 0.5)
 	sep.set_anchor(SIDE_RIGHT, 0.5)
@@ -89,7 +85,6 @@ func _build_ui() -> void:
 	var menu_button_top := 500.0
 	var menu_button_bottom := 556.0
 
-	## Unlock notification (conditionally shown)
 	if _unlocked_tier >= 0:
 		var unlock_panel := Panel.new()
 		unlock_panel.set_anchor(SIDE_LEFT, 0.5)
@@ -152,7 +147,6 @@ func _build_ui() -> void:
 		menu_button_top = 650.0
 		menu_button_bottom = 706.0
 
-	# Main menu button
 	var btn_panel := Panel.new()
 	btn_panel.set_anchor(SIDE_LEFT, 0.5)
 	btn_panel.set_anchor(SIDE_RIGHT, 0.5)

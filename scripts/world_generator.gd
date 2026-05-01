@@ -1746,6 +1746,7 @@ func _initialize_run_telemetry(allow_collection: bool) -> void:
 		if run_mode_value != null:
 			run_mode = int(run_mode_value)
 	var run_seed := {
+		"game_version": String(ProjectSettings.get_setting("application/config/version", "dev")).strip_edges(),
 		"difficulty_tier": current_difficulty_tier,
 		"run_mode": run_mode,
 		"start_depth": room_depth,

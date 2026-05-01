@@ -15,7 +15,10 @@ static func _now_unix() -> int:
 	return int(Time.get_unix_time_from_system())
 
 static func _current_game_version() -> String:
-	return String(ProjectSettings.get_setting("application/config/version", "dev"))
+	var configured_version := String(ProjectSettings.get_setting("application/config/version", "dev")).strip_edges()
+	if configured_version.is_empty():
+		return "dev"
+	return configured_version
 
 static func load_store() -> Dictionary:
 	if not FileAccess.file_exists(TELEMETRY_SAVE_PATH):
@@ -148,7 +151,6 @@ static func finish_run(run_id: String, outcome: String, summary: Dictionary = {}
 		if summary.has("death_event"):
 			run_entry["death_event"] = (summary.get("death_event", {}) as Dictionary).duplicate(true)
 	)
-
 static func get_recent_runs(max_runs: int = 10, max_age_days: int = 21, include_debug: bool = false, game_version: String = "") -> Array[Dictionary]:
 	var store := load_store()
 	var runs := store.get("runs", []) as Array
