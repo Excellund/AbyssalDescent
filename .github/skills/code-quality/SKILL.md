@@ -85,6 +85,8 @@ Divide code into smaller, focused units with clear boundaries.
 - Use clear file names that signal purpose.
 
 - Group related functionality into modules; avoid "util" dumping grounds.
+  - Name shared helpers by their single responsibility, not their type. Prefer `_normalizer`, `_scaler`, `_builder`, `_resolver` over `_utils` or `_helpers`.
+  - A file named `_utils` invites unrelated additions over time; a name like `bearing_key_normalizer.gd` signals what it does and keeps scope narrow.
 
 - Expose minimal public surface; keep helpers private.
 

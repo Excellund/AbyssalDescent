@@ -19,6 +19,8 @@ const OBJECTIVE_RUNTIME_SCRIPT := preload("res://scripts/objective_runtime.gd")
 const REWARD_SELECTION_UI_SCRIPT := preload("res://scripts/reward_selection_ui.gd")
 const ENUMS := preload("res://scripts/shared/enums.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
+const ENDLESS_PROFILE_SCALER := preload("res://scripts/shared/endless_profile_scaler.gd")
+const BEARING_KEY_NORMALIZER := preload("res://scripts/shared/bearing_key_normalizer.gd")
 const AUDIO_LEVELS := preload("res://scripts/shared/audio_levels.gd")
 const RUN_TELEMETRY_STORE := preload("res://scripts/run_telemetry_store.gd")
 const TELEMETRY_SPIKE_SENDER_SCRIPT := preload("res://scripts/telemetry_spike_sender.gd")
@@ -1445,59 +1447,15 @@ func _choose_door(door: Dictionary) -> void:
 	_begin_room(profile)
 
 func _apply_endless_scaling_to_profile(profile: Dictionary) -> Dictionary:
-	if profile.is_empty():
-		return profile
-	if not _is_endless_mode() or not endless_boss_defeated:
-		return profile
-
-	var endless_depth := maxi(0, room_depth - encounter_count)
-	if endless_depth <= 0:
-		return profile
-
-	# Aggressive endless scaling: tier rises every depth after first boss clear.
-	var tier := endless_depth
-	var scaled := ENCOUNTER_CONTRACTS.normalize_profile(profile.duplicate(true))
-	var scaled_chasers := ENCOUNTER_CONTRACTS.profile_chaser_count(scaled) + tier
-	var scaled_chargers := ENCOUNTER_CONTRACTS.profile_charger_count(scaled) + int(floor(float(tier) * 0.75))
-	var scaled_archers := ENCOUNTER_CONTRACTS.profile_archer_count(scaled) + int(floor(float(tier) * 0.65))
-	var scaled_shielders := ENCOUNTER_CONTRACTS.profile_shielder_count(scaled) + int(floor(float(tier) * 0.5))
-	ENCOUNTER_CONTRACTS.profile_set_counts(scaled, scaled_chasers, scaled_chargers, scaled_archers, scaled_shielders)
-
-	var base_room_size := ENCOUNTER_CONTRACTS.profile_room_size(scaled)
-	if base_room_size == Vector2.ZERO:
-		base_room_size = room_base_size
-	var room_growth := Vector2(34.0, 22.0) * float(mini(tier, 12))
-	var scaled_room_size := Vector2(
-		clampf(base_room_size.x + room_growth.x, room_base_size.x, 1800.0),
-		clampf(base_room_size.y + room_growth.y, room_base_size.y, 1300.0)
+	return ENDLESS_PROFILE_SCALER.apply_scaling(
+		profile,
+		_is_endless_mode(),
+		endless_boss_defeated,
+		room_depth,
+		encounter_count,
+		room_base_size,
+		static_camera_room_threshold
 	)
-	ENCOUNTER_CONTRACTS.profile_set_room_size(scaled, scaled_room_size)
-	ENCOUNTER_CONTRACTS.profile_set_static_camera(scaled, scaled_room_size.x <= static_camera_room_threshold)
-
-	# Merge endless stat pressure into the existing mutator channel.
-	var endless_health_mult := clampf(1.0 + float(tier) * 0.28, 1.0, 4.2)
-	var endless_damage_mult := clampf(1.0 + float(tier) * 0.14, 1.0, 2.8)
-	var endless_speed_mult := clampf(1.0 + float(tier) * 0.07, 1.0, 2.0)
-	var endless_windup_mult := clampf(1.0 - float(tier) * 0.03, 0.55, 1.0)
-	var merged_mutator := ENCOUNTER_CONTRACTS.profile_enemy_mutator(scaled).duplicate(true)
-	ENCOUNTER_CONTRACTS.mutator_multiply_stat(merged_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_ENEMY_HEALTH_MULT, endless_health_mult, 1.0)
-	ENCOUNTER_CONTRACTS.mutator_multiply_stat(merged_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT, endless_damage_mult, 1.0)
-	ENCOUNTER_CONTRACTS.mutator_multiply_stat(merged_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_DAMAGE_MULT, endless_damage_mult, 1.0)
-	ENCOUNTER_CONTRACTS.mutator_multiply_stat(merged_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_PROJECTILE_DAMAGE_MULT, endless_damage_mult, 1.0)
-	ENCOUNTER_CONTRACTS.mutator_multiply_stat(merged_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_DAMAGE_MULT, endless_damage_mult, 1.0)
-	ENCOUNTER_CONTRACTS.mutator_multiply_stat(merged_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_SPEED_MULT, endless_speed_mult, 1.0)
-	ENCOUNTER_CONTRACTS.mutator_multiply_stat(merged_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_SPEED_MULT, endless_speed_mult, 1.0)
-	ENCOUNTER_CONTRACTS.mutator_multiply_stat(merged_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SPEED_MULT, endless_speed_mult, 1.0)
-	ENCOUNTER_CONTRACTS.mutator_multiply_stat(merged_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_WINDUP_MULT, endless_windup_mult, 1.0)
-	ENCOUNTER_CONTRACTS.mutator_multiply_stat(merged_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_WINDUP_MULT, endless_windup_mult, 1.0)
-	ENCOUNTER_CONTRACTS.mutator_multiply_stat(merged_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_WINDUP_MULT, endless_windup_mult, 1.0)
-	ENCOUNTER_CONTRACTS.profile_set_enemy_mutator(scaled, merged_mutator)
-
-	var base_label := ENCOUNTER_CONTRACTS.profile_label(scaled)
-	if base_label.find("Tier ") == -1:
-		scaled[ENCOUNTER_CONTRACTS.PROFILE_KEY_LABEL] = "%s  Tier %d" % [base_label, tier]
-
-	return scaled
 
 func _begin_room(profile: Dictionary) -> void:
 	if profile.is_empty():
@@ -1834,27 +1792,10 @@ func _finish_active_run_telemetry(outcome: String, death_event: Dictionary = {})
 	telemetry_run_finished = true
 
 func _bearing_key_from_label(label: String, fallback: String = "unknown") -> String:
-	var normalized := label.strip_edges().to_lower()
-	if normalized.is_empty():
-		return fallback
-	normalized = normalized.replace(":", " ")
-	normalized = normalized.replace("-", " ")
-	normalized = normalized.replace("/", " ")
-	normalized = normalized.replace(".", " ")
-	normalized = normalized.replace("'", "")
-	normalized = normalized.replace("\"", "")
-	while normalized.find("  ") != -1:
-		normalized = normalized.replace("  ", " ")
-	normalized = normalized.strip_edges().replace(" ", "_")
-	if normalized.is_empty():
-		return fallback
-	return normalized
+	return BEARING_KEY_NORMALIZER.from_label(label, fallback)
 
 func _bearing_key_from_profile(profile: Dictionary, fallback: String = "unknown") -> String:
-	if profile.is_empty():
-		return fallback
-	var profile_label := ENCOUNTER_CONTRACTS.profile_label(profile)
-	return _bearing_key_from_label(profile_label, fallback)
+	return BEARING_KEY_NORMALIZER.from_profile(profile, fallback)
 
 func _record_room_entry(room_kind: String, profile: Dictionary) -> void:
 	if not telemetry_enabled or telemetry_run_id.is_empty() or telemetry_run_finished:
