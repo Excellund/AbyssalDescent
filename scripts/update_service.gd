@@ -7,7 +7,7 @@ signal download_finished(success: bool, message: String)
 const UPDATE_FEED_SETTING := "application/config/update_feed_url"
 const UPDATE_FEED_TOKEN_SETTING := "application/config/update_feed_token"
 const UPDATE_RELEASE_PAGE_SETTING := "application/config/update_release_page_url"
-const DEFAULT_UPDATE_FEED_URL := "https://api.github.com/repos/Excellund/AbyssalDescent/releases/latest"
+const DEFAULT_UPDATE_FEED_URL := "https://github.com/Excellund/AbyssalDescent/releases/latest/download/latest_release.json"
 const DEFAULT_UPDATE_RELEASE_PAGE_URL := "https://github.com/Excellund/AbyssalDescent/releases/latest"
 const UPDATE_DOWNLOAD_DIR := "user://updates"
 const UPDATE_FEED_ETAG_PATH := "user://updates/feed.etag"
@@ -270,6 +270,13 @@ func _update_feed_url() -> String:
 	return String(ProjectSettings.get_setting(UPDATE_FEED_SETTING, DEFAULT_UPDATE_FEED_URL)).strip_edges()
 
 func _update_feed_token() -> String:
+	# Prefer environment variables so tokens are not stored in project files.
+	var env_token := OS.get_environment("ABYSSAL_UPDATE_FEED_TOKEN").strip_edges()
+	if not env_token.is_empty():
+		return env_token
+	var github_token := OS.get_environment("GITHUB_TOKEN").strip_edges()
+	if not github_token.is_empty():
+		return github_token
 	return String(ProjectSettings.get_setting(UPDATE_FEED_TOKEN_SETTING, "")).strip_edges()
 
 func _update_release_page_url() -> String:

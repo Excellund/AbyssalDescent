@@ -42,6 +42,7 @@ jobs:
       - name: Set version from tag
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
+          echo "RELEASE_VERSION=${VERSION}" >> "$GITHUB_ENV"
           sed -i "s/^config\/version=.*/config\/version=\"${VERSION}\"/" project.godot
           sed -i "s/^const GAME_VERSION := .*/const GAME_VERSION := \"${VERSION}\"/" scripts/build_info.gd
           printf "%s\n" "${VERSION}" > build_version.txt
@@ -57,6 +58,13 @@ jobs:
 
       - name: Create release artifacts
         run: |
+          cat > latest_release.json <<EOF
+          {
+            "latest_version": "${RELEASE_VERSION}",
+            "download_url": "https://github.com/Excellund/AbyssalDescent/releases/download/v${RELEASE_VERSION}/${EXPORT_NAME}-Windows.zip",
+            "release_page_url": "https://github.com/Excellund/AbyssalDescent/releases/tag/v${RELEASE_VERSION}"
+          }
+          EOF
           cd build/windows
           cp ../../build_version.txt ./build_version.txt
           zip -q "../../${EXPORT_NAME}-Windows.zip" "${EXPORT_NAME}.exe" "build_version.txt"
@@ -69,4 +77,5 @@ jobs:
           files: |
             AbyssalDescent-Windows.zip
             AbyssalDescent-Windows.zip.sha256
+            latest_release.json
           generate_release_notes: true
