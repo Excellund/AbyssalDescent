@@ -25,6 +25,16 @@ var hard_room_enemy_bonus: int = 4
 const INTRO_ROOM_SIZE := Vector2(940.0, 700.0)
 const POOL_ROOM_SIZE := Vector2(1040.0, 760.0)
 const TRIAL_ROOM_SIZE := Vector2(1160.0, 860.0)
+const BEARING_LABELS: Array[String] = [
+	"Crossfire",
+	"Onslaught",
+	"Fortress",
+	"Blitz",
+	"Suppression",
+	"Vanguard",
+	"Ambush",
+	"Gauntlet"
+]
 const MUTATOR_DAMAGE_STAT_KEYS: Array[String] = [
 	ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT,
 	ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_DAMAGE_MULT,
@@ -254,6 +264,15 @@ func _build_bearing_profile(label: String) -> Dictionary:
 	var profile := _build_profile(label, room_size)
 	return _apply_profile_counts(profile, counts)
 
+func _build_scaled_bearing_profile(label: String) -> Dictionary:
+	return _apply_identity_bearing_scaling(_build_bearing_profile(label))
+
+func _bearing_label_from_debug_key(key: String) -> String:
+	for label in BEARING_LABELS:
+		if label.to_lower() == key:
+			return label
+	return ""
+
 func _apply_identity_bearing_scaling(profile: Dictionary) -> Dictionary:
 	var label := ENCOUNTER_CONTRACTS.profile_label(profile)
 	var definition := _get_bearing_definition(label)
@@ -396,25 +415,12 @@ func _canonicalize_debug_encounter_key(encounter_key: String) -> String:
 
 func build_debug_encounter_profile(encounter_key: String, depth: int) -> Dictionary:
 	var key := _canonicalize_debug_encounter_key(encounter_key)
+	var bearing_label := _bearing_label_from_debug_key(key)
+	if not bearing_label.is_empty():
+		return _build_scaled_bearing_profile(bearing_label)
 	match key:
 		"skirmish":
 			return _build_intro_profile(0)
-		"crossfire":
-			return _apply_identity_bearing_scaling(_build_bearing_profile("Crossfire"))
-		"onslaught":
-			return _apply_identity_bearing_scaling(_build_bearing_profile("Onslaught"))
-		"fortress":
-			return _apply_identity_bearing_scaling(_build_bearing_profile("Fortress"))
-		"blitz":
-			return _apply_identity_bearing_scaling(_build_bearing_profile("Blitz"))
-		"suppression":
-			return _apply_identity_bearing_scaling(_build_bearing_profile("Suppression"))
-		"vanguard":
-			return _apply_identity_bearing_scaling(_build_bearing_profile("Vanguard"))
-		"ambush":
-			return _apply_identity_bearing_scaling(_build_bearing_profile("Ambush"))
-		"gauntlet":
-			return _apply_identity_bearing_scaling(_build_bearing_profile("Gauntlet"))
 		"trial":
 			return _build_trial_profile(depth)
 		"objective_last_stand":
@@ -454,15 +460,10 @@ func _get_hard_pool() -> Array[Dictionary]:
 	# Vanguard: shielded advance with chargers punching through the line.
 	# Ambush: lancer cuts escape routes while lurkers converge.
 	# Gauntlet: one of everything — a comprehensive skill test.
-	var crossfire := _build_bearing_profile("Crossfire")
-	var onslaught := _build_bearing_profile("Onslaught")
-	var fortress := _build_bearing_profile("Fortress")
-	var blitz := _build_bearing_profile("Blitz")
-	var suppression := _build_bearing_profile("Suppression")
-	var vanguard := _build_bearing_profile("Vanguard")
-	var ambush := _build_bearing_profile("Ambush")
-	var gauntlet := _build_bearing_profile("Gauntlet")
-	return [crossfire, onslaught, fortress, blitz, suppression, vanguard, ambush, gauntlet]
+	var pool: Array[Dictionary] = []
+	for label in BEARING_LABELS:
+		pool.append(_build_bearing_profile(label))
+	return pool
 
 func _get_hard_pool_for_depth(depth: int) -> Array[Dictionary]:
 	var pool := _get_hard_pool()
