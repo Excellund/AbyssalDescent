@@ -1,11 +1,7 @@
 extends "res://scripts/enemy_base.gd"
 
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
-
-const STATE_SEEK := 0
-const STATE_WINDUP := 1
-const STATE_CHARGE := 2
-const STATE_RECOVER := 3
+const ENEMY_STATE_ENUMS := preload("res://scripts/shared/enemy_state_enums.gd")
 
 @export var seek_speed: float = 92.0
 @export var acceleration: float = 900.0
@@ -21,7 +17,7 @@ const STATE_RECOVER := 3
 @export var path_width: float = 26.0
 
 var attack_cooldown_left: float = 0.0
-var charger_state: int = STATE_SEEK
+var charger_state: int = ENEMY_STATE_ENUMS.ChargerState.SEEK
 var charger_state_time_left: float = 0.0
 var charger_charge_direction: Vector2 = Vector2.LEFT
 var charger_charge_preview_length: float = 0.0
@@ -37,7 +33,7 @@ func _update_attack_cooldown(delta: float) -> void:
 		attack_cooldown_left = maxf(0.0, attack_cooldown_left - delta)
 
 func _process_state_machine(delta: float) -> void:
-	if charger_state != STATE_CHARGE and not charge_enemy_exceptions.is_empty():
+	if charger_state != ENEMY_STATE_ENUMS.ChargerState.CHARGE and not charge_enemy_exceptions.is_empty():
 		_clear_charge_enemy_collision_exceptions()
 
 	if not is_instance_valid(target):
@@ -45,15 +41,15 @@ func _process_state_machine(delta: float) -> void:
 		move_and_slide()
 		return
 
-	if charger_state == STATE_SEEK:
+	if charger_state == ENEMY_STATE_ENUMS.ChargerState.SEEK:
 		_process_seek_state(delta)
 		return
 
-	if charger_state == STATE_WINDUP:
+	if charger_state == ENEMY_STATE_ENUMS.ChargerState.WINDUP:
 		_process_windup_state(delta)
 		return
 
-	if charger_state == STATE_CHARGE:
+	if charger_state == ENEMY_STATE_ENUMS.ChargerState.CHARGE:
 		_process_charge_state(delta)
 		return
 
@@ -96,10 +92,10 @@ func _process_recover_state(delta: float) -> void:
 	move_and_slide()
 	charger_state_time_left = maxf(0.0, charger_state_time_left - delta)
 	if charger_state_time_left <= 0.0:
-		charger_state = STATE_SEEK
+		charger_state = ENEMY_STATE_ENUMS.ChargerState.SEEK
 
 func _enter_windup_state() -> void:
-	charger_state = STATE_WINDUP
+	charger_state = ENEMY_STATE_ENUMS.ChargerState.WINDUP
 	charger_state_time_left = windup_time
 	charger_charge_hit_applied = false
 	var to_target := target.global_position - global_position
@@ -112,14 +108,14 @@ func _enter_windup_state() -> void:
 	queue_redraw()
 
 func _enter_charge_state() -> void:
-	charger_state = STATE_CHARGE
+	charger_state = ENEMY_STATE_ENUMS.ChargerState.CHARGE
 	charger_state_time_left = charge_time
 	visual_facing_direction = charger_charge_direction
 	_sync_charge_enemy_collision_exceptions()
 	queue_redraw()
 
 func _enter_recover_state() -> void:
-	charger_state = STATE_RECOVER
+	charger_state = ENEMY_STATE_ENUMS.ChargerState.RECOVER
 	charger_state_time_left = recover_time
 	attack_cooldown_left = charge_cooldown
 	velocity *= 0.25
@@ -193,7 +189,7 @@ func _distance_point_to_segment(point: Vector2, segment_start: Vector2, segment_
 	return point.distance_to(closest)
 
 func _update_visual_facing_direction() -> void:
-	if charger_state == STATE_WINDUP or charger_state == STATE_CHARGE:
+	if charger_state == ENEMY_STATE_ENUMS.ChargerState.WINDUP or charger_state == ENEMY_STATE_ENUMS.ChargerState.CHARGE:
 		if charger_charge_direction.length_squared() > 0.000001:
 			visual_facing_direction = charger_charge_direction
 		queue_redraw()
@@ -216,11 +212,11 @@ func _draw() -> void:
 	var body_color := COLOR_CHARGER_BODY
 	var core_color := COLOR_CHARGER_CORE
 
-	if charger_state == STATE_WINDUP:
+	if charger_state == ENEMY_STATE_ENUMS.ChargerState.WINDUP:
 		var windup_phase := 1.0 - (charger_state_time_left / windup_time) if windup_time > 0.0 else 1.0
 		var pulse := 0.45 + sin(windup_phase * PI * 4.0) * 0.25
 		body_color = Color(1.0, 0.72, 0.25 + pulse * 0.1, 1.0)
-	if charger_state == STATE_CHARGE:
+	if charger_state == ENEMY_STATE_ENUMS.ChargerState.CHARGE:
 		body_color = Color(1.0, 0.86, 0.35, 1.0)
 		core_color = COLOR_CHARGER_CORE_CHARGED
 		body_radius += 0.7
@@ -232,14 +228,14 @@ func _draw() -> void:
 	var ram_base := facing * (body_radius + 2.0)
 	var ram_w := 6.4
 	var ram_color := Color(1.0, 0.9, 0.54, 0.9)
-	if charger_state == STATE_CHARGE:
+	if charger_state == ENEMY_STATE_ENUMS.ChargerState.CHARGE:
 		ram_color = Color(1.0, 0.98, 0.74, 0.98)
 	var ram_plate := PackedVector2Array([ram_tip, ram_base + side * ram_w, ram_base - side * ram_w])
 	draw_colored_polygon(ram_plate, ram_color)
 	draw_line(ram_base + side * (ram_w + 2.0), ram_base + side * (ram_w + 2.0) - facing * 6.0, Color(1.0, 0.86, 0.44, 0.75), 1.8)
 	draw_line(ram_base - side * (ram_w + 2.0), ram_base - side * (ram_w + 2.0) - facing * 6.0, Color(1.0, 0.86, 0.44, 0.75), 1.8)
 
-	if charger_state == STATE_WINDUP:
+	if charger_state == ENEMY_STATE_ENUMS.ChargerState.WINDUP:
 		var preview_start := facing * (body_radius + 4.0)
 		var preview_end := preview_start + facing * charger_charge_preview_length
 		var windup_phase := 1.0 - (charger_state_time_left / windup_time) if windup_time > 0.0 else 1.0

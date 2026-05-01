@@ -1,17 +1,7 @@
 extends "res://scripts/enemy_base.gd"
 
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
-
-const STATE_STALK := 0
-const STATE_WINDUP := 1
-const STATE_ATTACK := 2
-const STATE_RECOVER := 3
-
-const ATTACK_PRISM := 0
-const ATTACK_GRAVITY := 1
-const ATTACK_ECHO_DASH := 2
-const ATTACK_ORBITAL_LANCE := 3
-const ATTACK_POLAR_SHIFT := 4
+const ENEMY_STATE_ENUMS := preload("res://scripts/shared/enemy_state_enums.gd")
 
 @export var boss_max_health: int = 2000
 @export var move_speed: float = 168.0
@@ -75,10 +65,10 @@ const ATTACK_POLAR_SHIFT := 4
 @export var edge_soft_margin: float = 180.0
 @export var edge_hard_margin: float = 112.0
 
-var boss_state: int = STATE_STALK
+var boss_state: int = ENEMY_STATE_ENUMS.Boss2State.STALK
 var state_time_left: float = 0.0
 var cooldown_left: float = 0.5
-var active_attack: int = ATTACK_PRISM
+var active_attack: int = ENEMY_STATE_ENUMS.Boss2Attack.PRISM
 
 var locked_direction: Vector2 = Vector2.RIGHT
 var telegraph_alpha: float = 0.0
@@ -102,7 +92,7 @@ var attack_afterglow_time_left: float = 0.0
 var attack_afterglow_duration: float = 0.56
 var impact_burst_time_left: float = 0.0
 var impact_burst_duration: float = 0.2
-var last_attack_for_fx: int = ATTACK_PRISM
+var last_attack_for_fx: int = ENEMY_STATE_ENUMS.Boss2Attack.PRISM
 var _polar_shift_pull_damage_pending: bool = false
 var _polar_shift_pull_damage_delay_left: float = 0.0
 var _polar_shift_pull_damage_just_started: bool = false
@@ -137,13 +127,13 @@ func _process_behavior(delta: float) -> void:
 		cooldown_left = maxf(0.0, cooldown_left - delta)
 
 	match boss_state:
-		STATE_STALK:
+		ENEMY_STATE_ENUMS.Boss2State.STALK:
 			_process_stalk_state(delta)
-		STATE_WINDUP:
+		ENEMY_STATE_ENUMS.Boss2State.WINDUP:
 			_process_windup_state(delta)
-		STATE_ATTACK:
+		ENEMY_STATE_ENUMS.Boss2State.ATTACK:
 			_process_attack_state(delta)
-		STATE_RECOVER:
+		ENEMY_STATE_ENUMS.Boss2State.RECOVER:
 			_process_recover_state(delta)
 
 	attack_afterglow_time_left = maxf(0.0, attack_afterglow_time_left - delta)
@@ -171,9 +161,9 @@ func take_damage(amount: int, _damage_context: Dictionary = {}) -> void:
 	health_state.take_damage(final_damage)
 
 func _is_orbital_fortress_active() -> bool:
-	if active_attack != ATTACK_ORBITAL_LANCE:
+	if active_attack != ENEMY_STATE_ENUMS.Boss2Attack.ORBITAL_LANCE:
 		return false
-	return boss_state == STATE_WINDUP or boss_state == STATE_ATTACK
+	return boss_state == ENEMY_STATE_ENUMS.Boss2State.WINDUP or boss_state == ENEMY_STATE_ENUMS.Boss2State.ATTACK
 
 func _cache_fortress_health_bar_defaults() -> void:
 	if health_bar == null:
@@ -299,46 +289,46 @@ func _start_next_attack(distance_to_target: float, wall_pressure: float = 0.0) -
 	var cycle_step := _attack_cycle_step % 3
 	var force_reposition := wall_pressure >= 0.82 or _edge_stall_time >= 0.18
 	if force_reposition:
-		active_attack = ATTACK_ECHO_DASH
+		active_attack = ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH
 		_echo_dash_reposition_only = true
 	elif wall_pressure >= 0.68:
 		if randf() < 0.24:
-			active_attack = ATTACK_POLAR_SHIFT
+			active_attack = ENEMY_STATE_ENUMS.Boss2Attack.POLAR_SHIFT
 		elif _orbital_attack_unlocked() and randf() < 0.34:
-			active_attack = ATTACK_ORBITAL_LANCE
+			active_attack = ENEMY_STATE_ENUMS.Boss2Attack.ORBITAL_LANCE
 		else:
-			active_attack = ATTACK_GRAVITY if distance_to_target < 190.0 else ATTACK_PRISM
+			active_attack = ENEMY_STATE_ENUMS.Boss2Attack.GRAVITY if distance_to_target < 190.0 else ENEMY_STATE_ENUMS.Boss2Attack.PRISM
 	elif cycle_step == 0:
 		if randf() < 0.26:
-			active_attack = ATTACK_POLAR_SHIFT
+			active_attack = ENEMY_STATE_ENUMS.Boss2Attack.POLAR_SHIFT
 		elif _orbital_attack_unlocked() and (distance_to_target > 210.0 or randf() < 0.58):
-			active_attack = ATTACK_ORBITAL_LANCE
+			active_attack = ENEMY_STATE_ENUMS.Boss2Attack.ORBITAL_LANCE
 		else:
-			active_attack = ATTACK_PRISM
+			active_attack = ENEMY_STATE_ENUMS.Boss2Attack.PRISM
 	elif cycle_step == 1:
 		if randf() < 0.36:
-			active_attack = ATTACK_POLAR_SHIFT
+			active_attack = ENEMY_STATE_ENUMS.Boss2Attack.POLAR_SHIFT
 		else:
-			active_attack = ATTACK_GRAVITY if distance_to_target < 235.0 else ATTACK_PRISM
+			active_attack = ENEMY_STATE_ENUMS.Boss2Attack.GRAVITY if distance_to_target < 235.0 else ENEMY_STATE_ENUMS.Boss2Attack.PRISM
 	elif distance_to_target > 240.0:
-		active_attack = ATTACK_ECHO_DASH
+		active_attack = ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH
 	elif distance_to_target < 150.0:
 		if _orbital_attack_unlocked() and randf() < 0.42:
-			active_attack = ATTACK_ORBITAL_LANCE
+			active_attack = ENEMY_STATE_ENUMS.Boss2Attack.ORBITAL_LANCE
 		else:
-			active_attack = ATTACK_GRAVITY if randf() < 0.84 else ATTACK_PRISM
+			active_attack = ENEMY_STATE_ENUMS.Boss2Attack.GRAVITY if randf() < 0.84 else ENEMY_STATE_ENUMS.Boss2Attack.PRISM
 	else:
 		var roll := randf()
 		if roll < 0.24:
-			active_attack = ATTACK_POLAR_SHIFT
+			active_attack = ENEMY_STATE_ENUMS.Boss2Attack.POLAR_SHIFT
 		elif _orbital_attack_unlocked() and roll < 0.5:
-			active_attack = ATTACK_ORBITAL_LANCE
+			active_attack = ENEMY_STATE_ENUMS.Boss2Attack.ORBITAL_LANCE
 		elif roll < 0.8:
-			active_attack = ATTACK_PRISM
+			active_attack = ENEMY_STATE_ENUMS.Boss2Attack.PRISM
 		elif roll < 0.96:
-			active_attack = ATTACK_GRAVITY
+			active_attack = ENEMY_STATE_ENUMS.Boss2Attack.GRAVITY
 		else:
-			active_attack = ATTACK_ECHO_DASH
+			active_attack = ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH
 
 	if active_attack == _last_attack:
 		var avoid_repeat_chance := clampf(0.74 + float(_repeat_attack_streak) * 0.12, 0.0, 0.95)
@@ -351,19 +341,19 @@ func _start_next_attack(distance_to_target: float, wall_pressure: float = 0.0) -
 		_repeat_attack_streak = 0
 	_last_attack = active_attack
 
-	if enrage_t > 0.72 and active_attack == ATTACK_PRISM and randf() < 0.3:
-		active_attack = ATTACK_ORBITAL_LANCE
-	if active_attack == ATTACK_PRISM:
+	if enrage_t > 0.72 and active_attack == ENEMY_STATE_ENUMS.Boss2Attack.PRISM and randf() < 0.3:
+		active_attack = ENEMY_STATE_ENUMS.Boss2Attack.ORBITAL_LANCE
+	if active_attack == ENEMY_STATE_ENUMS.Boss2Attack.PRISM:
 		_capture_prism_pattern()
-	elif active_attack == ATTACK_ORBITAL_LANCE:
+	elif active_attack == ENEMY_STATE_ENUMS.Boss2Attack.ORBITAL_LANCE:
 		_capture_orbital_lance_pattern()
-	elif active_attack == ATTACK_POLAR_SHIFT:
+	elif active_attack == ENEMY_STATE_ENUMS.Boss2Attack.POLAR_SHIFT:
 		_polar_shift_is_pull = distance_to_target > preferred_distance or randf() < 0.56
 		_capture_polar_shift_pattern()
 
-	if active_attack != ATTACK_ECHO_DASH:
+	if active_attack != ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH:
 		_echo_dash_reposition_only = false
-	if active_attack == ATTACK_ECHO_DASH:
+	if active_attack == ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH:
 		var reposition_chance := reposition_dash_chance
 		if wall_pressure > 0.45:
 			reposition_chance += 0.24
@@ -380,12 +370,12 @@ func _start_next_attack(distance_to_target: float, wall_pressure: float = 0.0) -
 			_echo_dash_retarget_time_left = 0.0
 			_echo_dash_warning_line = PackedVector2Array([Vector2.ZERO, locked_direction * 340.0])
 	_attack_cycle_step += 1
-	if active_attack == ATTACK_GRAVITY or active_attack == ATTACK_ECHO_DASH or active_attack == ATTACK_POLAR_SHIFT:
+	if active_attack == ENEMY_STATE_ENUMS.Boss2Attack.GRAVITY or active_attack == ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH or active_attack == ENEMY_STATE_ENUMS.Boss2Attack.POLAR_SHIFT:
 		_orbit_clockwise = not _orbit_clockwise
 
-	boss_state = STATE_WINDUP
+	boss_state = ENEMY_STATE_ENUMS.Boss2State.WINDUP
 	state_time_left = _get_windup_time(active_attack)
-	if active_attack == ATTACK_POLAR_SHIFT and _polar_shift_is_pull:
+	if active_attack == ENEMY_STATE_ENUMS.Boss2Attack.POLAR_SHIFT and _polar_shift_is_pull:
 		_polar_shift_pull_damage_pending = true
 		_polar_shift_pull_damage_delay_left = state_time_left + polar_shift_pull_inner_delay
 		_polar_shift_pull_damage_just_started = true
@@ -406,19 +396,19 @@ func _start_next_attack(distance_to_target: float, wall_pressure: float = 0.0) -
 func _pick_non_repeating_attack(distance_to_target: float, wall_pressure: float, excluded_attack: int) -> int:
 	var candidates: Array[int] = []
 	if wall_pressure > 0.6:
-		candidates = [ATTACK_ECHO_DASH, ATTACK_POLAR_SHIFT, ATTACK_GRAVITY, ATTACK_PRISM]
+		candidates = [ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH, ENEMY_STATE_ENUMS.Boss2Attack.POLAR_SHIFT, ENEMY_STATE_ENUMS.Boss2Attack.GRAVITY, ENEMY_STATE_ENUMS.Boss2Attack.PRISM]
 	elif distance_to_target > 330.0:
-		candidates = [ATTACK_ORBITAL_LANCE, ATTACK_POLAR_SHIFT, ATTACK_PRISM, ATTACK_ECHO_DASH]
+		candidates = [ENEMY_STATE_ENUMS.Boss2Attack.ORBITAL_LANCE, ENEMY_STATE_ENUMS.Boss2Attack.POLAR_SHIFT, ENEMY_STATE_ENUMS.Boss2Attack.PRISM, ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH]
 	elif distance_to_target < 170.0:
-		candidates = [ATTACK_GRAVITY, ATTACK_ECHO_DASH, ATTACK_POLAR_SHIFT, ATTACK_PRISM]
+		candidates = [ENEMY_STATE_ENUMS.Boss2Attack.GRAVITY, ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH, ENEMY_STATE_ENUMS.Boss2Attack.POLAR_SHIFT, ENEMY_STATE_ENUMS.Boss2Attack.PRISM]
 	else:
-		candidates = [ATTACK_POLAR_SHIFT, ATTACK_ORBITAL_LANCE, ATTACK_PRISM, ATTACK_GRAVITY, ATTACK_ECHO_DASH]
+		candidates = [ENEMY_STATE_ENUMS.Boss2Attack.POLAR_SHIFT, ENEMY_STATE_ENUMS.Boss2Attack.ORBITAL_LANCE, ENEMY_STATE_ENUMS.Boss2Attack.PRISM, ENEMY_STATE_ENUMS.Boss2Attack.GRAVITY, ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH]
 	for candidate in candidates:
-		if candidate == ATTACK_ORBITAL_LANCE and not _orbital_attack_unlocked():
+		if candidate == ENEMY_STATE_ENUMS.Boss2Attack.ORBITAL_LANCE and not _orbital_attack_unlocked():
 			continue
 		if candidate != excluded_attack:
 			return candidate
-	return ATTACK_GRAVITY if excluded_attack != ATTACK_GRAVITY else ATTACK_PRISM
+	return ENEMY_STATE_ENUMS.Boss2Attack.GRAVITY if excluded_attack != ENEMY_STATE_ENUMS.Boss2Attack.GRAVITY else ENEMY_STATE_ENUMS.Boss2Attack.PRISM
 
 func _process_windup_state(delta: float) -> void:
 	velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
@@ -427,7 +417,7 @@ func _process_windup_state(delta: float) -> void:
 	var windup := _get_windup_time(active_attack)
 	telegraph_alpha = 1.0 - (state_time_left / maxf(0.001, windup))
 
-	if active_attack == ATTACK_ECHO_DASH and is_instance_valid(target):
+	if active_attack == ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH and is_instance_valid(target):
 		var dash_dir := locked_direction
 		if _echo_dash_reposition_only:
 			if dash_dir.length_squared() <= 0.000001:
@@ -442,34 +432,34 @@ func _process_windup_state(delta: float) -> void:
 		_enter_attack_state()
 
 func _enter_attack_state() -> void:
-	boss_state = STATE_ATTACK
+	boss_state = ENEMY_STATE_ENUMS.Boss2State.ATTACK
 	attack_anim_time_left = attack_anim_duration
 	last_attack_for_fx = active_attack
 	attack_afterglow_time_left = attack_afterglow_duration
 	impact_burst_time_left = impact_burst_duration
 	match active_attack:
-		ATTACK_PRISM:
+		ENEMY_STATE_ENUMS.Boss2Attack.PRISM:
 			state_time_left = 0.06
 			velocity = Vector2.ZERO
 			_apply_prism_burst()
-		ATTACK_GRAVITY:
+		ENEMY_STATE_ENUMS.Boss2Attack.GRAVITY:
 			state_time_left = 0.06
 			velocity = Vector2.ZERO
 			_apply_gravity_burst()
-		ATTACK_ECHO_DASH:
+		ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH:
 			_echo_dash_remaining = 1 if _echo_dash_reposition_only else echo_dash_count
 			_begin_echo_dash_leg()
-		ATTACK_ORBITAL_LANCE:
+		ENEMY_STATE_ENUMS.Boss2Attack.ORBITAL_LANCE:
 			state_time_left = 0.08
 			velocity = Vector2.ZERO
 			_apply_orbital_lance_hits()
-		ATTACK_POLAR_SHIFT:
+		ENEMY_STATE_ENUMS.Boss2Attack.POLAR_SHIFT:
 			state_time_left = 0.08
 			velocity = Vector2.ZERO
 			_apply_polar_shift()
 
 func _process_attack_state(delta: float) -> void:
-	if active_attack == ATTACK_ECHO_DASH:
+	if active_attack == ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH:
 		if _echo_dash_retargeting:
 			velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
 			move_and_slide()
@@ -498,7 +488,7 @@ func _process_attack_state(delta: float) -> void:
 				_echo_dash_retarget_time_left = 0.0
 				_echo_dash_warning_line = PackedVector2Array()
 				_echo_dash_reposition_only = false
-				boss_state = STATE_RECOVER
+				boss_state = ENEMY_STATE_ENUMS.Boss2State.RECOVER
 				state_time_left = recover_time * (0.62 if reposition_recover else 0.8)
 		return
 
@@ -506,7 +496,7 @@ func _process_attack_state(delta: float) -> void:
 	move_and_slide()
 	state_time_left = maxf(0.0, state_time_left - delta)
 	if state_time_left <= 0.0:
-		boss_state = STATE_RECOVER
+		boss_state = ENEMY_STATE_ENUMS.Boss2State.RECOVER
 		state_time_left = recover_time
 
 func _begin_echo_dash_leg(should_retarget: bool = true) -> void:
@@ -566,7 +556,7 @@ func _process_recover_state(delta: float) -> void:
 	move_and_slide()
 	state_time_left = maxf(0.0, state_time_left - delta)
 	if state_time_left <= 0.0:
-		boss_state = STATE_STALK
+		boss_state = ENEMY_STATE_ENUMS.Boss2State.STALK
 		cooldown_left = action_cooldown * lerpf(1.0, 0.7, _get_enrage_ratio())
 
 func _get_inward_edge_bias() -> Vector2:
@@ -784,17 +774,17 @@ func _get_orb_positions(time_seconds: float) -> PackedVector2Array:
 func _get_windup_time(attack_id: int) -> float:
 	var enrage_t := _get_enrage_ratio()
 	match attack_id:
-		ATTACK_PRISM:
+		ENEMY_STATE_ENUMS.Boss2Attack.PRISM:
 			return prism_windup * lerpf(1.0, 0.82, enrage_t)
-		ATTACK_GRAVITY:
+		ENEMY_STATE_ENUMS.Boss2Attack.GRAVITY:
 			return gravity_windup * lerpf(1.0, 0.86, enrage_t)
-		ATTACK_ECHO_DASH:
+		ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH:
 			if _echo_dash_reposition_only:
 				return maxf(0.24, echo_dash_windup * 0.68)
 			return echo_dash_windup * lerpf(1.0, 0.8, enrage_t)
-		ATTACK_ORBITAL_LANCE:
+		ENEMY_STATE_ENUMS.Boss2Attack.ORBITAL_LANCE:
 			return orbital_lance_windup * lerpf(1.0, 0.84, enrage_t)
-		ATTACK_POLAR_SHIFT:
+		ENEMY_STATE_ENUMS.Boss2Attack.POLAR_SHIFT:
 			return polar_shift_windup * lerpf(1.0, 0.86, enrage_t)
 		_:
 			return 0.8
@@ -816,14 +806,14 @@ func _draw() -> void:
 	var body_radius := 36.0 + pulse * 0.78
 	var enrage_t := _get_enrage_ratio()
 	var fortress_active := _is_orbital_fortress_active()
-	var threat_t := telegraph_alpha if boss_state == STATE_WINDUP or (boss_state == STATE_ATTACK and active_attack == ATTACK_ECHO_DASH and _echo_dash_retargeting) else 0.0
+	var threat_t := telegraph_alpha if boss_state == ENEMY_STATE_ENUMS.Boss2State.WINDUP or (boss_state == ENEMY_STATE_ENUMS.Boss2State.ATTACK and active_attack == ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH and _echo_dash_retargeting) else 0.0
 
 	var body_color := Color(0.18, 0.44, 0.72, 0.97)
 	var core_color := Color(0.66, 0.88, 1.0, 0.86)
-	if boss_state == STATE_WINDUP:
+	if boss_state == ENEMY_STATE_ENUMS.Boss2State.WINDUP:
 		body_color = Color(0.78, 0.28, 0.16, 0.97)
 		core_color = Color(1.0, 0.72, 0.42, 0.92)
-	elif boss_state == STATE_ATTACK:
+	elif boss_state == ENEMY_STATE_ENUMS.Boss2State.ATTACK:
 		body_color = Color(0.92, 0.34, 0.14, 0.98)
 		core_color = Color(1.0, 0.82, 0.52, 0.96)
 
@@ -832,11 +822,11 @@ func _draw() -> void:
 
 	_draw_enrage_scaling_indicator(body_radius, facing, enrage_t)
 
-	if boss_state == STATE_WINDUP or (boss_state == STATE_ATTACK and active_attack == ATTACK_ECHO_DASH and _echo_dash_retargeting):
+	if boss_state == ENEMY_STATE_ENUMS.Boss2State.WINDUP or (boss_state == ENEMY_STATE_ENUMS.Boss2State.ATTACK and active_attack == ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH and _echo_dash_retargeting):
 		var halo_radius := body_radius + 17.0 + threat_t * 10.0
 		draw_circle(Vector2.ZERO, halo_radius, Color(1.0, 0.26, 0.14, 0.06 + threat_t * 0.12))
 		draw_arc(Vector2.ZERO, halo_radius + 3.0, 0.0, TAU, 52, Color(1.0, 0.82, 0.46, 0.24 + threat_t * 0.3), 2.8)
-	if boss_state == STATE_WINDUP and active_attack == ATTACK_ORBITAL_LANCE:
+	if boss_state == ENEMY_STATE_ENUMS.Boss2State.WINDUP and active_attack == ENEMY_STATE_ENUMS.Boss2Attack.ORBITAL_LANCE:
 		var lattice_radius := body_radius + 25.0 + telegraph_alpha * 10.0
 		draw_arc(Vector2.ZERO, lattice_radius, 0.0, TAU, 64, Color(1.0, 0.76, 0.46, 0.26 + telegraph_alpha * 0.34), 3.2)
 		draw_circle(Vector2.ZERO, lattice_radius * 0.72, Color(1.0, 0.52, 0.24, 0.05 + telegraph_alpha * 0.08))
@@ -854,14 +844,14 @@ func _draw() -> void:
 
 	_draw_orbital_satellites()
 
-	if boss_state == STATE_WINDUP:
+	if boss_state == ENEMY_STATE_ENUMS.Boss2State.WINDUP:
 		_draw_attack_telegraph()
 		_draw_role_state_icon(facing, body_radius)
-	elif boss_state == STATE_ATTACK and active_attack == ATTACK_ECHO_DASH and _echo_dash_retargeting:
+	elif boss_state == ENEMY_STATE_ENUMS.Boss2State.ATTACK and active_attack == ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH and _echo_dash_retargeting:
 		_draw_attack_telegraph()
 		_draw_role_state_icon(facing, body_radius)
 
-	if boss_state == STATE_ATTACK and active_attack == ATTACK_ECHO_DASH:
+	if boss_state == ENEMY_STATE_ENUMS.Boss2State.ATTACK and active_attack == ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH:
 		var tail_end := -locked_direction * 110.0
 		draw_line(Vector2.ZERO, tail_end, Color(1.0, 0.62, 0.26, 0.44), 8.0)
 		draw_line(Vector2.ZERO, tail_end * 0.8, Color(1.0, 0.9, 0.62, 0.62), 2.6)
@@ -974,28 +964,28 @@ func _draw_sovereign_body(body_radius: float, body_color: Color, core_color: Col
 func _draw_role_state_icon(facing: Vector2, body_radius: float) -> void:
 	var icon_alpha := 0.35 + telegraph_alpha * 0.58
 	match active_attack:
-		ATTACK_PRISM:
+		ENEMY_STATE_ENUMS.Boss2Attack.PRISM:
 			draw_arc(Vector2.ZERO, body_radius + 12.0, 0.0, TAU, 40, Color(1.0, 0.78, 0.4, icon_alpha), 2.6)
-		ATTACK_GRAVITY:
+		ENEMY_STATE_ENUMS.Boss2Attack.GRAVITY:
 			draw_circle(Vector2.ZERO, body_radius + 11.0, Color(1.0, 0.48, 0.24, icon_alpha * 0.22))
 			draw_arc(Vector2.ZERO, body_radius + 11.0, 0.0, TAU, 36, Color(1.0, 0.76, 0.42, icon_alpha), 2.2)
-		ATTACK_ECHO_DASH:
+		ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH:
 			var side := Vector2(-facing.y, facing.x)
 			var tip := facing * (body_radius + 14.0)
 			var base := facing * (body_radius + 2.0)
 			var dash_color := Color(0.72, 0.94, 1.0, icon_alpha) if _echo_dash_reposition_only else Color(1.0, 0.84, 0.48, icon_alpha)
 			draw_colored_polygon(PackedVector2Array([tip, base + side * 5.8, base - side * 5.8]), dash_color)
-		ATTACK_ORBITAL_LANCE:
+		ENEMY_STATE_ENUMS.Boss2Attack.ORBITAL_LANCE:
 			for orb_pos in _orbital_lance_positions:
 				draw_circle(orb_pos, 4.8, Color(1.0, 0.86, 0.54, icon_alpha * 0.92))
-		ATTACK_POLAR_SHIFT:
+		ENEMY_STATE_ENUMS.Boss2Attack.POLAR_SHIFT:
 			var ring_color := Color(0.58, 0.84, 1.0, icon_alpha) if _polar_shift_is_pull else Color(1.0, 0.58, 0.38, icon_alpha)
 			draw_arc(Vector2.ZERO, body_radius + 12.0, 0.0, TAU, 42, ring_color, 2.6)
 
 func _draw_attack_telegraph() -> void:
 	var alpha := 0.22 + telegraph_alpha * 0.7
 	match active_attack:
-		ATTACK_PRISM:
+		ENEMY_STATE_ENUMS.Boss2Attack.PRISM:
 			var half_arc := deg_to_rad(prism_spoke_half_angle_degrees)
 			var inner_ring_radius := prism_inner_radius
 			var sweep_t := float(Time.get_ticks_msec()) * 0.001
@@ -1025,7 +1015,7 @@ func _draw_attack_telegraph() -> void:
 				draw_line(Vector2.ZERO, Vector2.RIGHT.rotated(spoke_angle - half_arc) * prism_radius, Color(prism_edge_color.r, prism_edge_color.g, prism_edge_color.b, prism_edge_color.a * 0.74), 1.8)
 				draw_line(Vector2.ZERO, Vector2.RIGHT.rotated(spoke_angle + half_arc) * prism_radius, Color(prism_edge_color.r, prism_edge_color.g, prism_edge_color.b, prism_edge_color.a * 0.74), 1.8)
 			draw_arc(Vector2.ZERO, prism_radius, 0.0, TAU, 64, Color(1.0, 0.54, 0.3, alpha * 0.62), 2.0)
-		ATTACK_GRAVITY:
+		ENEMY_STATE_ENUMS.Boss2Attack.GRAVITY:
 			var pulse := 0.5 + 0.5 * sin(telegraph_alpha * PI * 2.0)
 			draw_circle(Vector2.ZERO, gravity_radius, Color(1.0, 0.2, 0.16, alpha * 0.22 * (0.75 + pulse * 0.25)))
 			draw_arc(Vector2.ZERO, gravity_radius, 0.0, TAU, 64, Color(1.0, 0.44, 0.3, alpha), 3.4)
@@ -1035,7 +1025,7 @@ func _draw_attack_telegraph() -> void:
 				var p0 := Vector2.RIGHT.rotated(a) * (gravity_radius + 24.0)
 				var p1 := Vector2.RIGHT.rotated(a) * (gravity_radius + 6.0)
 				draw_line(p0, p1, Color(1.0, 0.82, 0.54, alpha * 0.75), 2.1)
-		ATTACK_ECHO_DASH:
+		ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH:
 			if _echo_dash_warning_line.size() >= 2:
 				var from := _echo_dash_warning_line[0]
 				var to := _echo_dash_warning_line[1]
@@ -1055,7 +1045,7 @@ func _draw_attack_telegraph() -> void:
 				draw_line(from + side * lane_half, to + side * lane_half, dash_edge, 2.8)
 				draw_line(from - side * lane_half, to - side * lane_half, dash_edge, 2.8)
 				draw_line(from, to, dash_center, 2.0)
-		ATTACK_POLAR_SHIFT:
+		ENEMY_STATE_ENUMS.Boss2Attack.POLAR_SHIFT:
 			var cc_color := Color(0.52, 0.84, 1.0, alpha) if _polar_shift_is_pull else Color(1.0, 0.56, 0.34, alpha)
 			var fill_inner := maxf(polar_shift_anchor_radius, 24.0)
 			var fill_outer := polar_shift_radius
@@ -1096,7 +1086,7 @@ func _draw_attack_telegraph() -> void:
 				var side := Vector2(-dir.y, dir.x) * 6.0
 				draw_line(base, tip, Color(cc_color.r, cc_color.g, cc_color.b, alpha * 1.0), 2.8)
 				draw_colored_polygon(PackedVector2Array([tip, tip - arrow_dir * 12.0 + side, tip - arrow_dir * 12.0 - side]), Color(cc_color.r, cc_color.g, cc_color.b, alpha * 0.96))
-		ATTACK_ORBITAL_LANCE:
+		ENEMY_STATE_ENUMS.Boss2Attack.ORBITAL_LANCE:
 			var charge_pulse := 0.5 + 0.5 * sin(telegraph_alpha * PI)
 			for orb_index in range(_orbital_lance_positions.size()):
 				var orb_pos: Vector2 = _orbital_lance_positions[orb_index]
@@ -1168,14 +1158,14 @@ func _draw_attack_afterglow(facing: Vector2) -> void:
 	var t := clampf(attack_afterglow_time_left / maxf(attack_afterglow_duration, 0.001), 0.0, 1.0)
 	var fade := t * t
 	match last_attack_for_fx:
-		ATTACK_PRISM:
+		ENEMY_STATE_ENUMS.Boss2Attack.PRISM:
 			var ring_r := prism_radius * (1.0 + (1.0 - t) * 0.2)
 			draw_arc(Vector2.ZERO, ring_r, 0.0, TAU, 56, Color(1.0, 0.54, 0.24, 0.38 * fade), 4.0)
-		ATTACK_GRAVITY:
+		ENEMY_STATE_ENUMS.Boss2Attack.GRAVITY:
 			var shock_r := gravity_radius * (0.7 + (1.0 - t) * 0.58)
 			draw_circle(Vector2.ZERO, shock_r, Color(1.0, 0.4, 0.18, 0.1 * fade))
 			draw_arc(Vector2.ZERO, shock_r, 0.0, TAU, 48, Color(1.0, 0.8, 0.52, 0.44 * fade), 4.4)
-		ATTACK_ECHO_DASH:
+		ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH:
 			var glow_len := 104.0 + 52.0 * t
 			if _echo_dash_reposition_only:
 				draw_line(-facing * 8.0, -facing * glow_len, Color(0.4, 0.84, 1.0, 0.26 * fade), 10.0)
@@ -1183,7 +1173,7 @@ func _draw_attack_afterglow(facing: Vector2) -> void:
 			else:
 				draw_line(-facing * 8.0, -facing * glow_len, Color(1.0, 0.62, 0.28, 0.26 * fade), 10.0)
 				draw_line(-facing * 5.0, -facing * (glow_len * 0.8), Color(1.0, 0.9, 0.58, 0.32 * fade), 3.6)
-		ATTACK_ORBITAL_LANCE:
+		ENEMY_STATE_ENUMS.Boss2Attack.ORBITAL_LANCE:
 			for orb_pos in _orbital_lance_positions:
 				var outward := orb_pos.normalized()
 				if outward.length_squared() <= 0.000001:
@@ -1203,7 +1193,7 @@ func _draw_attack_afterglow(facing: Vector2) -> void:
 				var ring_expand := (1.0 - t) * 48.0
 				draw_arc(orb_pos, 16.0 + ring_expand, 0.0, TAU, 24, Color(1.0, 0.74, 0.34, 0.22 * fade), 2.8)
 				draw_arc(orb_pos, 8.0 + ring_expand * 0.6, 0.0, TAU, 24, Color(1.0, 0.92, 0.62, 0.14 * fade), 1.8)
-		ATTACK_POLAR_SHIFT:
+		ENEMY_STATE_ENUMS.Boss2Attack.POLAR_SHIFT:
 			var cc_color := Color(0.52, 0.84, 1.0, 0.38 * fade) if _polar_shift_is_pull else Color(1.0, 0.56, 0.34, 0.38 * fade)
 			var ring_r := polar_shift_radius * (0.86 + (1.0 - t) * 0.18)
 			draw_arc(Vector2.ZERO, ring_r, 0.0, TAU, 72, cc_color, 5.0)
@@ -1216,29 +1206,29 @@ func _draw_attack_impact_burst(facing: Vector2) -> void:
 	var alpha := (1.0 - t) * (1.0 - t)
 	var side := Vector2(-facing.y, facing.x)
 	match last_attack_for_fx:
-		ATTACK_PRISM:
+		ENEMY_STATE_ENUMS.Boss2Attack.PRISM:
 			var burst_r := 24.0 + eased_t * 38.0
 			draw_arc(Vector2.ZERO, burst_r, 0.0, TAU, 28, Color(1.0, 0.86, 0.56, 0.6 * alpha), 3.4)
 			for i in range(prism_spoke_count):
 				var a := _prism_base_angle + TAU * float(i) / float(prism_spoke_count)
 				draw_line(Vector2.RIGHT.rotated(a) * (burst_r * 0.45), Vector2.RIGHT.rotated(a) * (burst_r + 16.0), Color(1.0, 0.72, 0.36, 0.46 * alpha), 2.2)
-		ATTACK_GRAVITY:
+		ENEMY_STATE_ENUMS.Boss2Attack.GRAVITY:
 			var grav_r := 42.0 + eased_t * (gravity_radius * 0.64)
 			draw_circle(Vector2.ZERO, grav_r, Color(1.0, 0.5, 0.2, 0.18 * alpha))
 			draw_arc(Vector2.ZERO, grav_r, 0.0, TAU, 48, Color(1.0, 0.86, 0.56, 0.62 * alpha), 4.0)
-		ATTACK_ECHO_DASH:
+		ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH:
 			var center := facing * (26.0 + eased_t * 32.0)
 			var burst := 18.0 + eased_t * 26.0
 			draw_circle(center, burst, Color(1.0, 0.64, 0.3, 0.24 * alpha))
 			draw_arc(center, burst + 4.0, 0.0, TAU, 24, Color(1.0, 0.9, 0.6, 0.62 * alpha), 2.8)
 			draw_line(center + side * 16.0, center + side * 34.0, Color(1.0, 0.86, 0.58, 0.45 * alpha), 2.0)
 			draw_line(center - side * 16.0, center - side * 34.0, Color(1.0, 0.86, 0.58, 0.45 * alpha), 2.0)
-		ATTACK_ORBITAL_LANCE:
+		ENEMY_STATE_ENUMS.Boss2Attack.ORBITAL_LANCE:
 			for orb_pos in _orbital_lance_positions:
 				var burst_r := 10.0 + eased_t * 18.0
 				draw_circle(orb_pos, burst_r, Color(1.0, 0.64, 0.28, 0.22 * alpha))
 				draw_arc(orb_pos, burst_r + 3.0, 0.0, TAU, 20, Color(1.0, 0.92, 0.66, 0.6 * alpha), 2.2)
-		ATTACK_POLAR_SHIFT:
+		ENEMY_STATE_ENUMS.Boss2Attack.POLAR_SHIFT:
 			var cc_color := Color(0.62, 0.9, 1.0, 0.52 * alpha) if _polar_shift_is_pull else Color(1.0, 0.62, 0.4, 0.52 * alpha)
 			var ring_r := polar_shift_radius * (0.54 + eased_t * 0.52)
 			draw_arc(Vector2.ZERO, ring_r, 0.0, TAU, 72, cc_color, 4.6)
@@ -1254,7 +1244,7 @@ func _draw_orbital_satellites() -> void:
 		if awakened:
 			ring_color = Color(0.96, 0.58, 0.3, 0.16 + ring_pulse * 0.14)
 			ring_width = 1.8 + ring_pulse * 0.4
-		if active_attack == ATTACK_ORBITAL_LANCE and not _orbital_lance_positions.is_empty() and (boss_state == STATE_WINDUP or boss_state == STATE_ATTACK):
+		if active_attack == ENEMY_STATE_ENUMS.Boss2Attack.ORBITAL_LANCE and not _orbital_lance_positions.is_empty() and (boss_state == ENEMY_STATE_ENUMS.Boss2State.WINDUP or boss_state == ENEMY_STATE_ENUMS.Boss2State.ATTACK):
 			ring_color = Color(1.0, 0.76, 0.5, 0.26 + telegraph_alpha * 0.18)
 			ring_width = 2.2
 		for i in range(positions.size()):
@@ -1266,14 +1256,14 @@ func _draw_orbital_satellites() -> void:
 			draw_arc(Vector2.ZERO, orb_ring_radius + 7.0, 0.0, TAU, 48, Color(1.0, 0.56, 0.28, 0.12), 1.4)
 			draw_arc(Vector2.ZERO, orb_ring_radius - 8.0, t * 0.55, t * 0.55 + TAU, 40, Color(0.78, 0.94, 1.0, 0.09), 1.0)
 
-	if active_attack == ATTACK_ORBITAL_LANCE and not _orbital_lance_positions.is_empty() and (boss_state == STATE_WINDUP or boss_state == STATE_ATTACK):
+	if active_attack == ENEMY_STATE_ENUMS.Boss2Attack.ORBITAL_LANCE and not _orbital_lance_positions.is_empty() and (boss_state == ENEMY_STATE_ENUMS.Boss2State.WINDUP or boss_state == ENEMY_STATE_ENUMS.Boss2State.ATTACK):
 		var nexus_color := Color(1.0, 0.84, 0.58, 0.18 + telegraph_alpha * 0.18)
 		for orb_pos in _orbital_lance_positions:
 			draw_line(Vector2.ZERO, orb_pos, nexus_color, 2.1)
 		for i in range(_orbital_lance_positions.size()):
 			for j in range(i + 1, _orbital_lance_positions.size()):
 				draw_line(_orbital_lance_positions[i], _orbital_lance_positions[j], Color(1.0, 0.72, 0.42, 0.12 + telegraph_alpha * 0.16), 1.6)
-	elif active_attack == ATTACK_POLAR_SHIFT and (boss_state == STATE_WINDUP or boss_state == STATE_ATTACK):
+	elif active_attack == ENEMY_STATE_ENUMS.Boss2Attack.POLAR_SHIFT and (boss_state == ENEMY_STATE_ENUMS.Boss2State.WINDUP or boss_state == ENEMY_STATE_ENUMS.Boss2State.ATTACK):
 		var cc_color := Color(0.62, 0.9, 1.0, 0.22 + telegraph_alpha * 0.2) if _polar_shift_is_pull else Color(1.0, 0.62, 0.4, 0.22 + telegraph_alpha * 0.2)
 		for orb_pos in positions:
 			var dir := orb_pos.normalized()
@@ -1286,7 +1276,7 @@ func _draw_orbital_satellites() -> void:
 
 	for i in range(positions.size()):
 		var orb_pos := positions[i]
-		var highlighted := i in _orbital_lance_indices and active_attack == ATTACK_ORBITAL_LANCE and (boss_state == STATE_WINDUP or boss_state == STATE_ATTACK)
+		var highlighted := i in _orbital_lance_indices and active_attack == ENEMY_STATE_ENUMS.Boss2Attack.ORBITAL_LANCE and (boss_state == ENEMY_STATE_ENUMS.Boss2State.WINDUP or boss_state == ENEMY_STATE_ENUMS.Boss2State.ATTACK)
 		var orb_color := Color(0.95, 0.4, 0.22, 0.82)
 		var orb_radius := 3.6
 		var trail_dir := orb_pos.normalized().orthogonal()

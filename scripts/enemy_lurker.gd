@@ -7,11 +7,7 @@ extends "res://scripts/enemy_base.gd"
 # from the player than the Chaser's continuous pressure.
 
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
-
-const STATE_STALK := 0
-const STATE_LURK := 1
-const STATE_STRIKE := 2
-const STATE_RECOVER := 3
+const ENEMY_STATE_ENUMS := preload("res://scripts/shared/enemy_state_enums.gd")
 
 @export var move_speed: float = 178.0
 @export var acceleration: float = 1250.0
@@ -26,7 +22,7 @@ const STATE_RECOVER := 3
 @export var recover_duration: float = 0.42
 @export var attack_cooldown: float = 0.55
 
-var lurker_state: int = STATE_STALK
+var lurker_state: int = ENEMY_STATE_ENUMS.LurkerState.STALK
 var state_time_left: float = 0.0
 var attack_cooldown_left: float = 0.0
 var _lunge_direction: Vector2 = Vector2.LEFT
@@ -44,13 +40,13 @@ func _process_behavior(delta: float) -> void:
 	if attack_cooldown_left > 0.0:
 		attack_cooldown_left = maxf(0.0, attack_cooldown_left - delta)
 	match lurker_state:
-		STATE_STALK:
+		ENEMY_STATE_ENUMS.LurkerState.STALK:
 			_process_stalk(delta)
-		STATE_LURK:
+		ENEMY_STATE_ENUMS.LurkerState.LURK:
 			_process_lurk(delta)
-		STATE_STRIKE:
+		ENEMY_STATE_ENUMS.LurkerState.STRIKE:
 			_process_strike(delta)
-		STATE_RECOVER:
+		ENEMY_STATE_ENUMS.LurkerState.RECOVER:
 			_process_recover(delta)
 
 func _process_stalk(delta: float) -> void:
@@ -68,7 +64,7 @@ func _process_stalk(delta: float) -> void:
 		_enter_lurk_state()
 
 func _enter_lurk_state() -> void:
-	lurker_state = STATE_LURK
+	lurker_state = ENEMY_STATE_ENUMS.LurkerState.LURK
 	state_time_left = lurk_duration
 	velocity = Vector2.ZERO
 	if is_instance_valid(target):
@@ -90,7 +86,7 @@ func _process_lurk(delta: float) -> void:
 		_enter_strike_state()
 
 func _enter_strike_state() -> void:
-	lurker_state = STATE_STRIKE
+	lurker_state = ENEMY_STATE_ENUMS.LurkerState.STRIKE
 	state_time_left = strike_duration
 	_strike_hit_applied = false
 	_strike_previous_position = global_position
@@ -120,7 +116,7 @@ func _process_strike(delta: float) -> void:
 		_enter_recover_state()
 
 func _enter_recover_state() -> void:
-	lurker_state = STATE_RECOVER
+	lurker_state = ENEMY_STATE_ENUMS.LurkerState.RECOVER
 	state_time_left = recover_duration
 	attack_cooldown_left = attack_cooldown
 	velocity *= 0.28
@@ -131,7 +127,7 @@ func _process_recover(delta: float) -> void:
 	move_and_slide()
 	state_time_left = maxf(0.0, state_time_left - delta)
 	if state_time_left <= 0.0:
-		lurker_state = STATE_STALK
+		lurker_state = ENEMY_STATE_ENUMS.LurkerState.STALK
 
 func _draw() -> void:
 	var attack_pulse := _get_attack_pulse()
@@ -144,7 +140,7 @@ func _draw() -> void:
 	var aura_pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.008)
 	var aura_alpha := 0.12 + aura_pulse * 0.08
 	draw_circle(Vector2.ZERO, body_radius + 10.0, Color(1.0, 0.32, 0.2, aura_alpha))
-	if lurker_state == STATE_STALK and is_instance_valid(target):
+	if lurker_state == ENEMY_STATE_ENUMS.LurkerState.STALK and is_instance_valid(target):
 		var proximity_dist := global_position.distance_to(target.global_position)
 		var proximity_window := trigger_range * 1.8
 		if proximity_dist <= proximity_window:
@@ -156,11 +152,11 @@ func _draw() -> void:
 	var body_color := COLOR_PALETTE.COLOR_LURKER_BODY
 	var core_color := COLOR_PALETTE.COLOR_LURKER_CORE
 	
-	if lurker_state == STATE_LURK:
+	if lurker_state == ENEMY_STATE_ENUMS.LurkerState.LURK:
 		var tension_t := 1.0 - (state_time_left / maxf(0.001, lurk_duration))
 		body_color = body_color.lerp(COLOR_PALETTE.COLOR_LURKER_BODY_LURK, tension_t)
 		core_color = core_color.lerp(COLOR_PALETTE.COLOR_LURKER_CORE_LURK, tension_t)
-	elif lurker_state == STATE_STRIKE:
+	elif lurker_state == ENEMY_STATE_ENUMS.LurkerState.STRIKE:
 		body_color = COLOR_PALETTE.COLOR_LURKER_BODY_STRIKE
 		core_color = COLOR_PALETTE.COLOR_LURKER_CORE_STRIKE
 	
@@ -181,8 +177,8 @@ func _draw() -> void:
 		draw_circle(-ridge_pos, 2.2, Color(0.72, 0.12, 0.16, ridge_alpha))
 	
 	# Predatory eye glow — intensifies during lurk state (shows "watching" state)
-	if lurker_state == STATE_LURK or lurker_state == STATE_STRIKE:
-		var tension_t := 1.0 if lurker_state == STATE_STRIKE else (1.0 - (state_time_left / maxf(0.001, lurk_duration)))
+	if lurker_state == ENEMY_STATE_ENUMS.LurkerState.LURK or lurker_state == ENEMY_STATE_ENUMS.LurkerState.STRIKE:
+		var tension_t := 1.0 if lurker_state == ENEMY_STATE_ENUMS.LurkerState.STRIKE else (1.0 - (state_time_left / maxf(0.001, lurk_duration)))
 		var eye_pos := facing * (body_radius * 0.34) + side * 2.0
 		var glow_pulse := 0.4 + 0.6 * sin(float(Time.get_ticks_msec()) * 0.012)
 		var eye_glow_alpha := 0.3 + tension_t * 0.5 + glow_pulse * 0.2
@@ -190,7 +186,7 @@ func _draw() -> void:
 		draw_circle(eye_pos, 2.4, Color(1.0, 0.32, 0.2, eye_glow_alpha * 0.6))
 
 	# Predatory aura during lurk — growing threat indicator
-	if lurker_state == STATE_LURK:
+	if lurker_state == ENEMY_STATE_ENUMS.LurkerState.LURK:
 		var tension_t := 1.0 - (state_time_left / maxf(0.001, lurk_duration))
 		# Growing hunting aura
 		var hunt_aura_alpha := 0.08 + tension_t * 0.16
@@ -201,7 +197,7 @@ func _draw() -> void:
 		draw_arc(Vector2.ZERO, ring_radius, 0.0, TAU, 48, Color(1.0, 0.68, 0.28, ring_alpha), 2.6)
 
 	# Speed streaks on lunge — motion blur on strike state
-	if lurker_state == STATE_STRIKE and speed_t > 0.5:
+	if lurker_state == ENEMY_STATE_ENUMS.LurkerState.STRIKE and speed_t > 0.5:
 		var streak_alpha := 0.12 + speed_t * 0.18
 		draw_circle(-facing * (body_radius + 3.0), body_radius * 0.7, Color(0.86, 0.16, 0.2, streak_alpha * 0.6))
 		draw_circle(-facing * (body_radius + 8.0), body_radius * 0.5, Color(0.72, 0.12, 0.16, streak_alpha * 0.3))

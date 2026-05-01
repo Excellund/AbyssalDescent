@@ -1,7 +1,6 @@
 extends Camera2D
 
-const MODE_FOLLOW := 0
-const MODE_STATIC := 1
+const CAMERA_MODE_ENUMS := preload("res://scripts/shared/camera_mode_enums.gd")
 
 @export var velocity_lookahead_distance: float = 72.0
 @export var mouse_lookahead_distance: float = 96.0
@@ -21,7 +20,7 @@ const MODE_STATIC := 1
 var target_body: CharacterBody2D
 var smoothed_velocity_offset: Vector2 = Vector2.ZERO
 var smoothed_mouse_offset: Vector2 = Vector2.ZERO
-var camera_mode: int = MODE_FOLLOW
+var camera_mode: int = CAMERA_MODE_ENUMS.CameraMode.FOLLOW
 var static_center_global: Vector2 = Vector2.ZERO
 var target_zoom: Vector2 = Vector2.ONE
 var world_bounds_rect: Rect2 = Rect2()
@@ -46,7 +45,7 @@ func _physics_process(delta: float) -> void:
 	_refresh_world_bounds_for_viewport_change()
 
 	var velocity_offset_target := Vector2.ZERO
-	if camera_mode == MODE_FOLLOW and target_body.velocity.length() > velocity_deadzone:
+	if camera_mode == CAMERA_MODE_ENUMS.CameraMode.FOLLOW and target_body.velocity.length() > velocity_deadzone:
 		velocity_offset_target = target_body.velocity.normalized() * velocity_lookahead_distance
 
 	var input_blend := 1.0 - exp(-input_smoothing_speed * delta)
@@ -54,13 +53,13 @@ func _physics_process(delta: float) -> void:
 
 	var mouse_vector := get_global_mouse_position() - target_body.global_position
 	var mouse_offset_target := Vector2.ZERO
-	if camera_mode == MODE_FOLLOW and mouse_vector.length() > mouse_deadzone:
+	if camera_mode == CAMERA_MODE_ENUMS.CameraMode.FOLLOW and mouse_vector.length() > mouse_deadzone:
 		var mouse_strength := minf(1.0, (mouse_vector.length() - mouse_deadzone) / mouse_lookahead_distance)
 		mouse_offset_target = mouse_vector.normalized() * mouse_lookahead_distance * mouse_strength * mouse_influence
 	smoothed_mouse_offset = smoothed_mouse_offset.lerp(mouse_offset_target, input_blend)
 
 	var desired_position := target_body.global_position
-	if camera_mode == MODE_FOLLOW:
+	if camera_mode == CAMERA_MODE_ENUMS.CameraMode.FOLLOW:
 		var target_offset := smoothed_velocity_offset + smoothed_mouse_offset
 		if target_offset.length() > max_offset_distance:
 			target_offset = target_offset.normalized() * max_offset_distance
@@ -75,10 +74,10 @@ func _physics_process(delta: float) -> void:
 	_ensure_target_visible()
 
 func set_follow_mode() -> void:
-	camera_mode = MODE_FOLLOW
+	camera_mode = CAMERA_MODE_ENUMS.CameraMode.FOLLOW
 
 func set_static_mode(center_global: Vector2) -> void:
-	camera_mode = MODE_STATIC
+	camera_mode = CAMERA_MODE_ENUMS.CameraMode.STATIC
 	static_center_global = center_global
 
 func set_world_bounds(bounds_rect: Rect2) -> void:

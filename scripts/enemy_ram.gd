@@ -7,12 +7,7 @@ extends "res://scripts/enemy_base.gd"
 # multiple times per attack cycle rather than reacting once.
 
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
-
-const STATE_SEEK := 0
-const STATE_WINDUP := 1
-const STATE_CHARGE := 2
-const STATE_CHARGE_PAUSE := 3
-const STATE_RECOVER := 4
+const ENEMY_STATE_ENUMS := preload("res://scripts/shared/enemy_state_enums.gd")
 
 @export var seek_speed: float = 82.0
 @export var acceleration: float = 900.0
@@ -28,7 +23,7 @@ const STATE_RECOVER := 4
 @export var charge_damage: int = 12
 @export var path_width: float = 22.0
 
-var ram_state: int = STATE_SEEK
+var ram_state: int = ENEMY_STATE_ENUMS.RamState.SEEK
 var state_time_left: float = 0.0
 var attack_cooldown_left: float = 0.0
 var _charge_direction: Vector2 = Vector2.LEFT
@@ -45,22 +40,22 @@ func _ready() -> void:
 func _process_behavior(delta: float) -> void:
 	if attack_cooldown_left > 0.0:
 		attack_cooldown_left = maxf(0.0, attack_cooldown_left - delta)
-	if ram_state != STATE_CHARGE and not _charge_enemy_exceptions.is_empty():
+	if ram_state != ENEMY_STATE_ENUMS.RamState.CHARGE and not _charge_enemy_exceptions.is_empty():
 		_clear_charge_exceptions()
 	if not is_instance_valid(target):
 		velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
 		move_and_slide()
 		return
 	match ram_state:
-		STATE_SEEK:
+		ENEMY_STATE_ENUMS.RamState.SEEK:
 			_process_seek(delta)
-		STATE_WINDUP:
+		ENEMY_STATE_ENUMS.RamState.WINDUP:
 			_process_windup(delta)
-		STATE_CHARGE:
+		ENEMY_STATE_ENUMS.RamState.CHARGE:
 			_process_charge(delta)
-		STATE_CHARGE_PAUSE:
+		ENEMY_STATE_ENUMS.RamState.CHARGE_PAUSE:
 			_process_charge_pause(delta)
-		STATE_RECOVER:
+		ENEMY_STATE_ENUMS.RamState.RECOVER:
 			_process_recover(delta)
 
 func _process_seek(delta: float) -> void:
@@ -75,7 +70,7 @@ func _process_seek(delta: float) -> void:
 		_enter_windup_state()
 
 func _enter_windup_state() -> void:
-	ram_state = STATE_WINDUP
+	ram_state = ENEMY_STATE_ENUMS.RamState.WINDUP
 	state_time_left = windup_time
 	_charge_hit_applied = false
 	_charges_remaining = charge_count
@@ -99,7 +94,7 @@ func _process_windup(delta: float) -> void:
 		_enter_charge_state()
 
 func _enter_charge_state() -> void:
-	ram_state = STATE_CHARGE
+	ram_state = ENEMY_STATE_ENUMS.RamState.CHARGE
 	state_time_left = charge_time
 	_charge_hit_applied = false
 	visual_facing_direction = _charge_direction
@@ -121,7 +116,7 @@ func _process_charge(delta: float) -> void:
 			_enter_recover_state()
 
 func _enter_charge_pause_state() -> void:
-	ram_state = STATE_CHARGE_PAUSE
+	ram_state = ENEMY_STATE_ENUMS.RamState.CHARGE_PAUSE
 	state_time_left = charge_pause_time
 	velocity *= 0.18
 	_clear_charge_exceptions()
@@ -141,7 +136,7 @@ func _process_charge_pause(delta: float) -> void:
 		_enter_charge_state()
 
 func _enter_recover_state() -> void:
-	ram_state = STATE_RECOVER
+	ram_state = ENEMY_STATE_ENUMS.RamState.RECOVER
 	state_time_left = recover_time
 	attack_cooldown_left = full_cooldown
 	velocity *= 0.22
@@ -153,7 +148,7 @@ func _process_recover(delta: float) -> void:
 	move_and_slide()
 	state_time_left = maxf(0.0, state_time_left - delta)
 	if state_time_left <= 0.0:
-		ram_state = STATE_SEEK
+		ram_state = ENEMY_STATE_ENUMS.RamState.SEEK
 
 func _try_apply_charge_hit() -> void:
 	if _charge_hit_applied:
@@ -222,10 +217,10 @@ func _draw() -> void:
 	# Aggressive amber/gold body — signals raw power and multi-hit threat
 	var body_color := COLOR_PALETTE.COLOR_RAM_BODY
 	var core_color := COLOR_PALETTE.COLOR_RAM_CORE
-	if ram_state == STATE_WINDUP or ram_state == STATE_CHARGE_PAUSE:
+	if ram_state == ENEMY_STATE_ENUMS.RamState.WINDUP or ram_state == ENEMY_STATE_ENUMS.RamState.CHARGE_PAUSE:
 		body_color = COLOR_PALETTE.COLOR_RAM_BODY_WINDUP
 		core_color = COLOR_PALETTE.COLOR_RAM_CORE_WINDUP
-	elif ram_state == STATE_CHARGE:
+	elif ram_state == ENEMY_STATE_ENUMS.RamState.CHARGE:
 		body_color = COLOR_PALETTE.COLOR_RAM_BODY_CHARGE
 		core_color = COLOR_PALETTE.COLOR_RAM_CORE_CHARGE
 	_draw_common_body(body_radius, body_color, core_color, facing)
@@ -244,14 +239,14 @@ func _draw() -> void:
 		draw_line(spike_base, spike_tip, Color(1.0, 0.7, 0.2, 0.8), 2.0)
 
 	# Pulsing charge glow during attack phases
-	if ram_state == STATE_WINDUP or ram_state == STATE_CHARGE or ram_state == STATE_CHARGE_PAUSE:
+	if ram_state == ENEMY_STATE_ENUMS.RamState.WINDUP or ram_state == ENEMY_STATE_ENUMS.RamState.CHARGE or ram_state == ENEMY_STATE_ENUMS.RamState.CHARGE_PAUSE:
 		var pulse_t := float(Time.get_ticks_msec()) * 0.008
 		var pulse_strength := 0.4 + 0.6 * sin(pulse_t)
 		var glow_alpha := 0.12 + pulse_strength * 0.18
 		draw_circle(Vector2.ZERO, body_radius + 9.0, Color(1.0, 0.44, 0.08, glow_alpha))
 
 	# Show remaining charges as prominent pips so player can track incoming multi-charges
-	if ram_state == STATE_CHARGE or ram_state == STATE_CHARGE_PAUSE:
+	if ram_state == ENEMY_STATE_ENUMS.RamState.CHARGE or ram_state == ENEMY_STATE_ENUMS.RamState.CHARGE_PAUSE:
 		var pip_spacing := 7.0
 		var pip_start := -side * (float(_charges_remaining - 1) * pip_spacing * 0.5)
 		for i in range(_charges_remaining):
@@ -264,7 +259,7 @@ func _draw() -> void:
 			draw_circle(pip_pos, pip_size - 0.8, Color(1.0, 0.96, 0.7, pip_alpha * 0.5))
 
 	# Trajectory forecast during charges — prominent directional telegraph with multi-charge info
-	if ram_state == STATE_WINDUP:
+	if ram_state == ENEMY_STATE_ENUMS.RamState.WINDUP:
 		var forecast_distance := charge_speed * charge_time
 		var cone_alpha := 0.32
 		var cone_width := body_radius + 16.0
@@ -307,7 +302,7 @@ func _draw() -> void:
 			draw_circle(step_pos, path_width * 0.8, Color(1.0, 0.7, 0.2, step_alpha))
 	
 	# Charging speed streaks — motion blur on active charges
-	if ram_state == STATE_CHARGE and speed_t > 0.4:
+	if ram_state == ENEMY_STATE_ENUMS.RamState.CHARGE and speed_t > 0.4:
 		var streak_alpha := 0.14 + speed_t * 0.16
 		draw_circle(-facing * (body_radius + 4.0), body_radius * 0.75, Color(0.96, 0.4, 0.08, streak_alpha * 0.7))
 		draw_circle(-facing * (body_radius + 10.0), body_radius * 0.5, Color(0.8, 0.32, 0.06, streak_alpha * 0.35))

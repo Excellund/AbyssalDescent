@@ -1,11 +1,7 @@
 extends "res://scripts/enemy_base.gd"
 
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
-
-const SLAM_STATE_IDLE := 0
-const SLAM_STATE_WINDUP := 1
-const SLAM_STATE_THUMP := 2
-const SLAM_STATE_RECOVER := 3
+const ENEMY_STATE_ENUMS := preload("res://scripts/shared/enemy_state_enums.gd")
 
 @export var move_speed: float = 46.0
 @export var acceleration: float = 560.0
@@ -42,7 +38,7 @@ const SLAM_STATE_RECOVER := 3
 
 var attack_cooldown_left: float = 0.0
 var slam_cooldown_left: float = 0.0
-var slam_state: int = SLAM_STATE_IDLE
+var slam_state: int = ENEMY_STATE_ENUMS.ShielderSlamState.IDLE
 var slam_state_time_left: float = 0.0
 var slam_direction: Vector2 = Vector2.LEFT
 var slam_hit_applied: bool = false
@@ -78,13 +74,13 @@ func _process_behavior(delta: float) -> void:
 	_update_shield_reaim(delta)
 	_update_shield_facing(delta)
 
-	if slam_state == SLAM_STATE_WINDUP:
+	if slam_state == ENEMY_STATE_ENUMS.ShielderSlamState.WINDUP:
 		_process_slam_windup(delta)
 		return
-	if slam_state == SLAM_STATE_THUMP:
+	if slam_state == ENEMY_STATE_ENUMS.ShielderSlamState.THUMP:
 		_process_slam_thump(delta)
 		return
-	if slam_state == SLAM_STATE_RECOVER:
+	if slam_state == ENEMY_STATE_ENUMS.ShielderSlamState.RECOVER:
 		_process_slam_recover(delta)
 		return
 
@@ -169,7 +165,7 @@ func _get_desired_velocity() -> Vector2:
 func _try_attack_target() -> void:
 	if not is_instance_valid(target):
 		return
-	if slam_state != SLAM_STATE_IDLE:
+	if slam_state != ENEMY_STATE_ENUMS.ShielderSlamState.IDLE:
 		return
 	if attack_cooldown_left > 0.0:
 		return
@@ -191,7 +187,7 @@ func _try_attack_target() -> void:
 func _try_start_slam() -> void:
 	if not is_instance_valid(target):
 		return
-	if slam_state != SLAM_STATE_IDLE:
+	if slam_state != ENEMY_STATE_ENUMS.ShielderSlamState.IDLE:
 		return
 	if slam_cooldown_left > 0.0:
 		return
@@ -204,7 +200,7 @@ func _try_start_slam() -> void:
 	if to_target.length_squared() <= 0.000001:
 		return
 	slam_direction = to_target.normalized()
-	slam_state = SLAM_STATE_WINDUP
+	slam_state = ENEMY_STATE_ENUMS.ShielderSlamState.WINDUP
 	slam_state_time_left = slam_windup_time
 	slam_hit_applied = false
 	velocity = Vector2.ZERO
@@ -225,7 +221,7 @@ func _process_slam_windup(delta: float) -> void:
 	slam_state_time_left = maxf(0.0, slam_state_time_left - delta)
 	queue_redraw()
 	if slam_state_time_left <= 0.0:
-		slam_state = SLAM_STATE_THUMP
+		slam_state = ENEMY_STATE_ENUMS.ShielderSlamState.THUMP
 		slam_state_time_left = slam_thump_time
 		slam_hit_applied = false
 		_try_apply_slam_aoe_hit()
@@ -238,7 +234,7 @@ func _process_slam_thump(delta: float) -> void:
 	slam_state_time_left = maxf(0.0, slam_state_time_left - delta)
 	queue_redraw()
 	if slam_state_time_left <= 0.0:
-		slam_state = SLAM_STATE_RECOVER
+		slam_state = ENEMY_STATE_ENUMS.ShielderSlamState.RECOVER
 		slam_state_time_left = slam_recover_time
 		slam_cooldown_left = slam_cooldown
 
@@ -248,7 +244,7 @@ func _process_slam_recover(delta: float) -> void:
 	_try_body_check_target()
 	slam_state_time_left = maxf(0.0, slam_state_time_left - delta)
 	if slam_state_time_left <= 0.0:
-		slam_state = SLAM_STATE_IDLE
+		slam_state = ENEMY_STATE_ENUMS.ShielderSlamState.IDLE
 
 func _try_apply_slam_aoe_hit() -> void:
 	if slam_hit_applied:
@@ -335,14 +331,14 @@ func _draw() -> void:
 	var body_radius := 13.0 * body_size_scale + attack_pulse
 	var body_color := COLOR_SHIELDER_BODY
 	var core_color := COLOR_SHIELDER_CORE
-	if slam_state == SLAM_STATE_WINDUP:
+	if slam_state == ENEMY_STATE_ENUMS.ShielderSlamState.WINDUP:
 		body_color = COLOR_SHIELDER_BODY_WINDUP
-	if slam_state == SLAM_STATE_THUMP:
+	if slam_state == ENEMY_STATE_ENUMS.ShielderSlamState.THUMP:
 		body_color = COLOR_SHIELDER_BODY_THUMP
 		core_color = COLOR_SHIELDER_CORE_THUMP
 	_draw_common_body(body_radius, body_color, core_color, visual_facing_direction)
 
-	if slam_state == SLAM_STATE_WINDUP:
+	if slam_state == ENEMY_STATE_ENUMS.ShielderSlamState.WINDUP:
 		var windup_t := 1.0 - (slam_state_time_left / slam_windup_time) if slam_windup_time > 0.0 else 1.0
 		var warning_alpha := 0.28 + windup_t * 0.45
 		# Pulsing glow
@@ -353,7 +349,7 @@ func _draw() -> void:
 		# Outer danger ring (pulsing)
 		var ring_width := 3.0 + glow_pulse * 2.0
 		draw_arc(Vector2.ZERO, slam_radius, 0.0, TAU, 52, Color(COLOR_SHIELDER_SLAM_WARNING_RING.r, COLOR_SHIELDER_SLAM_WARNING_RING.g, COLOR_SHIELDER_SLAM_WARNING_RING.b, warning_alpha), ring_width)
-	if slam_state == SLAM_STATE_THUMP:
+	if slam_state == ENEMY_STATE_ENUMS.ShielderSlamState.THUMP:
 		var thump_t := 1.0 - (slam_state_time_left / slam_thump_time) if slam_thump_time > 0.0 else 1.0
 		var shock_radius := lerpf(body_radius + 6.0, slam_radius, clampf(thump_t, 0.0, 1.0))
 		# Main impact glow
@@ -389,10 +385,10 @@ func _draw() -> void:
 	var shield_shoulder_right := shield_points[4]
 	var shield_outline_color := COLOR_SHIELDER_SHIELD_OUTLINE
 	var shield_fill_color := COLOR_SHIELDER_SHIELD
-	if slam_state == SLAM_STATE_WINDUP:
+	if slam_state == ENEMY_STATE_ENUMS.ShielderSlamState.WINDUP:
 		shield_fill_color = Color(1.0, 0.8, 0.4, 0.95)
 		shield_outline_color = Color(1.0, 0.92, 0.66, 0.82)
-	elif slam_state == SLAM_STATE_THUMP:
+	elif slam_state == ENEMY_STATE_ENUMS.ShielderSlamState.THUMP:
 		shield_fill_color = Color(1.0, 0.9, 0.58, 0.98)
 		shield_outline_color = Color(1.0, 0.96, 0.78, 0.9)
 	if _is_finite_vec2(shield_front) and _is_finite_vec2(shield_shoulder_left) and _is_finite_vec2(shield_back_left) and _is_finite_vec2(shield_back_right) and _is_finite_vec2(shield_shoulder_right):

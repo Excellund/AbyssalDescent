@@ -258,6 +258,26 @@ When code changes establish or validate a **durable, reusable practice**, update
 **How to apply:**
 
 - After code validation (diagnostics-clean, patterns confirmed), ask: "Does this establish a durable practice?"
+
+---
+
+### 11. Prefer Shared Enums Over Integer Constant Ladders
+
+Avoid per-file ladders like `const STATE_X := 0`, `const STATE_Y := 1` for finite state sets.
+
+**Why it matters:**
+
+- Integer ladders obscure intent and make value drift likely when copied across files.
+- Enum ownership is unclear when each script invents its own constant set.
+- Shared enum modules reduce duplication and make call sites self-documenting.
+
+**How to apply:**
+
+- Define enums in focused shared modules under `scripts/shared/*_enums.gd`.
+- In consumer scripts, reference enum members directly at defaults/match sites instead of recreating per-file alias constants.
+- Only keep alias constants at explicit compatibility boundaries where external code or serialized content requires a stable legacy symbol.
+- Preserve serialized/debug compatibility by keeping exported/default-facing symbols stable (for example pre-commit checks or scene serialization) while sourcing values from shared enums.
+- Treat scalar tuning constants (durations, distances, damage values) as normal constants; only migrate finite categorical sets.
 - If yes: identify which skill(s) cover this area (e.g., code-quality for patterns, encounter-identity-balance for tuning).
 - Check the skill doc: does it reflect this learning, or is the guidance incomplete/outdated?
 - If incomplete: update the skill in the same task, before calling task_complete.

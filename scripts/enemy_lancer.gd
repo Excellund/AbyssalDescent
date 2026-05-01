@@ -6,11 +6,7 @@ extends "res://scripts/enemy_base.gd"
 # zones cut off escape routes.
 
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
-
-const STATE_STALK := 0
-const STATE_WINDUP := 1
-const STATE_FIRE := 2
-const STATE_REPOSITION := 3
+const ENEMY_STATE_ENUMS := preload("res://scripts/shared/enemy_state_enums.gd")
 
 @export var seek_speed: float = 72.0
 @export var acceleration: float = 740.0
@@ -31,7 +27,7 @@ const STATE_REPOSITION := 3
 @export var reposition_duration: float = 0.52
 @export var arena_size: Vector2 = Vector2(940.0, 700.0)
 
-var lancer_state: int = STATE_STALK
+var lancer_state: int = ENEMY_STATE_ENUMS.LancerState.STALK
 var state_time_left: float = 0.0
 var attack_cooldown_left: float = 0.0
 var fire_direction: Vector2 = Vector2.LEFT
@@ -66,13 +62,13 @@ func _process_behavior(delta: float) -> void:
 	_process_zones(delta)
 
 	match lancer_state:
-		STATE_STALK:
+		ENEMY_STATE_ENUMS.LancerState.STALK:
 			_process_stalk(delta)
-		STATE_WINDUP:
+		ENEMY_STATE_ENUMS.LancerState.WINDUP:
 			_process_windup(delta)
-		STATE_FIRE:
+		ENEMY_STATE_ENUMS.LancerState.FIRE:
 			_process_fire_state(delta)
-		STATE_REPOSITION:
+		ENEMY_STATE_ENUMS.LancerState.REPOSITION:
 			_process_reposition(delta)
 
 # ---------------------------------------------------------------------------
@@ -106,7 +102,7 @@ func _process_stalk(delta: float) -> void:
 		_enter_windup()
 
 func _enter_windup() -> void:
-	lancer_state = STATE_WINDUP
+	lancer_state = ENEMY_STATE_ENUMS.LancerState.WINDUP
 	state_time_left = windup_time
 	if is_instance_valid(target):
 		var aim_point := _get_facing_lead_point()
@@ -145,7 +141,7 @@ func _process_windup(delta: float) -> void:
 		_fire_bolt()
 
 func _fire_bolt() -> void:
-	lancer_state = STATE_FIRE
+	lancer_state = ENEMY_STATE_ENUMS.LancerState.FIRE
 	state_time_left = 0.12
 
 	var fire_origin := global_position + fire_direction * 22.0
@@ -174,7 +170,7 @@ func _process_fire_state(delta: float) -> void:
 		_enter_reposition()
 
 func _enter_reposition() -> void:
-	lancer_state = STATE_REPOSITION
+	lancer_state = ENEMY_STATE_ENUMS.LancerState.REPOSITION
 	state_time_left = reposition_duration
 	# Strafe 90° from player — pick the side that moves away from room centre.
 	if is_instance_valid(target):
@@ -193,7 +189,7 @@ func _process_reposition(delta: float) -> void:
 	move_and_slide()
 	state_time_left = maxf(0.0, state_time_left - delta)
 	if state_time_left <= 0.0:
-		lancer_state = STATE_STALK
+		lancer_state = ENEMY_STATE_ENUMS.LancerState.STALK
 		attack_cooldown_left = attack_cooldown
 
 # ---------------------------------------------------------------------------
@@ -316,13 +312,13 @@ func _draw() -> void:
 	# Body colors shift during windup to signal danger.
 	var body_color := Color(0.44, 0.34, 0.78, 0.96)
 	var core_color := Color(0.82, 0.72, 1.0, 0.88)
-	if lancer_state == STATE_WINDUP:
+	if lancer_state == ENEMY_STATE_ENUMS.LancerState.WINDUP:
 		body_color = Color(0.72, 0.48, 1.0, 0.96)
 		core_color = Color(0.96, 0.88, 1.0, 0.94)
-	elif lancer_state == STATE_FIRE:
+	elif lancer_state == ENEMY_STATE_ENUMS.LancerState.FIRE:
 		body_color = Color(0.58, 0.38, 0.86, 0.96)
 		core_color = Color(1.0, 0.78, 1.0, 0.96)
-	elif lancer_state == STATE_REPOSITION:
+	elif lancer_state == ENEMY_STATE_ENUMS.LancerState.REPOSITION:
 		body_color = Color(0.34, 0.56, 0.84, 0.96)
 		core_color = Color(0.82, 0.94, 1.0, 0.92)
 
@@ -331,7 +327,7 @@ func _draw() -> void:
 	# Side prongs — communicate "area projector" role.
 	var side := Vector2(-facing.y, facing.x)
 	var prong_color := Color(0.78, 0.62, 1.0, 0.52)
-	if lancer_state == STATE_WINDUP:
+	if lancer_state == ENEMY_STATE_ENUMS.LancerState.WINDUP:
 		prong_color = Color(1.0, 0.82, 1.0, 0.72)
 	var prong_tip_l := facing * (body_radius * 0.4) + side * (body_radius + 9.0)
 	var prong_tip_r := facing * (body_radius * 0.4) - side * (body_radius + 9.0)
@@ -343,7 +339,7 @@ func _draw() -> void:
 	draw_circle(prong_tip_r, 2.8, Color(prong_color.r, prong_color.g, prong_color.b, prong_color.a * 0.8))
 
 	# Windup telegraph — explicit lane + locked impact reticle + countdown.
-	if lancer_state == STATE_WINDUP and windup_time > 0.0:
+	if lancer_state == ENEMY_STATE_ENUMS.LancerState.WINDUP and windup_time > 0.0:
 		var phase := clampf(1.0 - state_time_left / windup_time, 0.0, 1.0)
 		var charge_size := 6.0 + phase * 14.0
 		var pulse := 0.5 + 0.5 * sin(t * 12.0)

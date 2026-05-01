@@ -1,0 +1,46 @@
+extends Node
+
+# Shared debug-facing enum definitions used by world/debug tooling.
+enum MutatorOverride {
+	NONE,
+	BLOOD_RUSH,
+	FLASHPOINT,
+	SIEGEBREAK,
+	IRON_VOLLEY,
+	KILLBOX,
+	RANDOM_HARD,
+}
+
+enum EndScreenPreview {
+	NONE,
+	VICTORY,
+	DEFEAT,
+}
+
+enum PowerPreset {
+	NONE,
+	DASH_SPECIALIST,
+	NO_DASH_BRUISER,
+	HIGH_RANGE_DPS,
+}
+
+enum Encounter {
+	NONE,
+	REST_SITE,
+	SKIRMISH,
+	CROSSFIRE,
+	FORTRESS,
+	ONSLAUGHT,
+	VANGUARD,
+	BLITZ,
+	AMBUSH,
+	SUPPRESSION,
+	GAUNTLET,
+	OBJECTIVE_LAST_STAND,
+	OBJECTIVE_PRIORITY_TARGET,
+	OBJECTIVE_HOLD_THE_LINE,
+	OBJECTIVE_RANDOM,
+	TRIAL,
+	BOSS_1,
+	BOSS_2,
+}

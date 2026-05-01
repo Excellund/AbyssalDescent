@@ -8,20 +8,22 @@ This pre-commit hook system automatically blocks commits if:
    `enabled` must be `false`
    `apply_test_powers_on_start` must be `false`
    `skip_starting_boon_selection` must be `false`
-   `start_power_preset` must be `DEBUG_POWER_PRESET_NONE`
+   `start_power_preset` must be `DEBUG_ENUMS.PowerPreset.NONE`
    `start_encounter` must be `ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_NONE`
-   `mutator_override` must be `DEBUG_MUTATOR_NONE`
-   `end_screen_preview` must be `DEBUG_END_SCREEN_NONE`
+   `mutator_override` must be `DEBUG_ENUMS.MutatorOverride.NONE`
+   `end_screen_preview` must be `DEBUG_ENUMS.EndScreenPreview.NONE`
 2. **Syntax issues** in staged GDScript files (quick check)
 
 ## Setup (One-Time Only)
 
 Run this in the project root:
+
 ```powershell
 .\.git\hooks\setup-hooks.ps1
 ```
 
 This will:
+
 - Make the hooks executable
 - Configure Git to use the hooks
 - Run a validation test
@@ -82,6 +84,7 @@ To manually run the validation:
 ```
 
 Expected output when all checks pass:
+
 ```
 [PRE-COMMIT] Starting validation...
 Checking for syntax issues...

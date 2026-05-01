@@ -1,6 +1,7 @@
 extends RefCounted
 
 const ENUMS := preload("res://scripts/shared/enums.gd")
+const DEBUG_ENUMS := preload("res://scripts/shared/debug_enums.gd")
 
 const DOOR_KIND_ENCOUNTER := ENUMS.DoorKind.ENCOUNTER
 const DOOR_KIND_BOSS := ENUMS.DoorKind.BOSS
@@ -85,44 +86,25 @@ const MUTATOR_STAT_SHIELDER_SLAM_DAMAGE_MULT := "shielder_slam_damage_mult"
 const MUTATOR_STAT_SHIELDER_SLAM_WINDUP_MULT := "shielder_slam_windup_mult"
 const MUTATOR_STAT_SHIELDER_SPEED_MULT := "shielder_speed_mult"
 
-const DEBUG_ENCOUNTER_NONE := 0
-const DEBUG_ENCOUNTER_REST_SITE := 1
-const DEBUG_ENCOUNTER_SKIRMISH := 2
-const DEBUG_ENCOUNTER_CROSSFIRE := 3
-const DEBUG_ENCOUNTER_FORTRESS := 4
-const DEBUG_ENCOUNTER_ONSLAUGHT := 5
-const DEBUG_ENCOUNTER_VANGUARD := 6
-const DEBUG_ENCOUNTER_BLITZ := 7
-const DEBUG_ENCOUNTER_AMBUSH := 8
-const DEBUG_ENCOUNTER_SUPPRESSION := 9
-const DEBUG_ENCOUNTER_GAUNTLET := 10
-const DEBUG_ENCOUNTER_OBJECTIVE_LAST_STAND := 11
-const DEBUG_ENCOUNTER_OBJECTIVE_PRIORITY_TARGET := 12
-const DEBUG_ENCOUNTER_OBJECTIVE_HOLD_THE_LINE := 13
-const DEBUG_ENCOUNTER_OBJECTIVE_RANDOM := 14
-const DEBUG_ENCOUNTER_TRIAL := 15
-const DEBUG_ENCOUNTER_BOSS_1 := 16
-const DEBUG_ENCOUNTER_BOSS_2 := 17
-
 const DEBUG_ENCOUNTER_MAP := [
-	{"id": DEBUG_ENCOUNTER_NONE, "key": "none", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENCOUNTER_REST_SITE, "key": "rest", "aliases": ["rest_site"], "is_boss": false, "is_rest": true, "is_objective": false},
-	{"id": DEBUG_ENCOUNTER_SKIRMISH, "key": "skirmish", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENCOUNTER_CROSSFIRE, "key": "crossfire", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENCOUNTER_FORTRESS, "key": "fortress", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENCOUNTER_ONSLAUGHT, "key": "onslaught", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENCOUNTER_VANGUARD, "key": "vanguard", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENCOUNTER_BLITZ, "key": "blitz", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENCOUNTER_AMBUSH, "key": "ambush", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENCOUNTER_SUPPRESSION, "key": "suppression", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENCOUNTER_GAUNTLET, "key": "gauntlet", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENCOUNTER_OBJECTIVE_LAST_STAND, "key": "objective_last_stand", "aliases": ["last_stand", "endurance", "objective_endurance"], "is_boss": false, "is_rest": false, "is_objective": true},
-	{"id": DEBUG_ENCOUNTER_OBJECTIVE_PRIORITY_TARGET, "key": "objective_priority_target", "aliases": ["priority_target", "cut_the_signal", "cut the signal"], "is_boss": false, "is_rest": false, "is_objective": true},
-	{"id": DEBUG_ENCOUNTER_OBJECTIVE_HOLD_THE_LINE, "key": "objective_hold_the_line", "aliases": ["hold_the_line", "hold the line", "control", "zone_control"], "is_boss": false, "is_rest": false, "is_objective": true},
-	{"id": DEBUG_ENCOUNTER_OBJECTIVE_RANDOM, "key": "objective_random", "aliases": ["objective", "objective_test"], "is_boss": false, "is_rest": false, "is_objective": true},
-	{"id": DEBUG_ENCOUNTER_TRIAL, "key": "trial", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENCOUNTER_BOSS_1, "key": "boss_1", "aliases": ["boss", "boss1", "warden"], "is_boss": true, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENCOUNTER_BOSS_2, "key": "boss_2", "aliases": ["boss_2", "boss2", "sovereign"], "is_boss": true, "is_rest": false, "is_objective": false},
+	{"id": DEBUG_ENUMS.Encounter.NONE, "key": "none", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": DEBUG_ENUMS.Encounter.REST_SITE, "key": "rest", "aliases": ["rest_site"], "is_boss": false, "is_rest": true, "is_objective": false},
+	{"id": DEBUG_ENUMS.Encounter.SKIRMISH, "key": "skirmish", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": DEBUG_ENUMS.Encounter.CROSSFIRE, "key": "crossfire", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": DEBUG_ENUMS.Encounter.FORTRESS, "key": "fortress", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": DEBUG_ENUMS.Encounter.ONSLAUGHT, "key": "onslaught", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": DEBUG_ENUMS.Encounter.VANGUARD, "key": "vanguard", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": DEBUG_ENUMS.Encounter.BLITZ, "key": "blitz", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": DEBUG_ENUMS.Encounter.AMBUSH, "key": "ambush", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": DEBUG_ENUMS.Encounter.SUPPRESSION, "key": "suppression", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": DEBUG_ENUMS.Encounter.GAUNTLET, "key": "gauntlet", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": DEBUG_ENUMS.Encounter.OBJECTIVE_LAST_STAND, "key": "objective_last_stand", "aliases": ["last_stand", "endurance", "objective_endurance"], "is_boss": false, "is_rest": false, "is_objective": true},
+	{"id": DEBUG_ENUMS.Encounter.OBJECTIVE_PRIORITY_TARGET, "key": "objective_priority_target", "aliases": ["priority_target", "cut_the_signal", "cut the signal"], "is_boss": false, "is_rest": false, "is_objective": true},
+	{"id": DEBUG_ENUMS.Encounter.OBJECTIVE_HOLD_THE_LINE, "key": "objective_hold_the_line", "aliases": ["hold_the_line", "hold the line", "control", "zone_control"], "is_boss": false, "is_rest": false, "is_objective": true},
+	{"id": DEBUG_ENUMS.Encounter.OBJECTIVE_RANDOM, "key": "objective_random", "aliases": ["objective", "objective_test"], "is_boss": false, "is_rest": false, "is_objective": true},
+	{"id": DEBUG_ENUMS.Encounter.TRIAL, "key": "trial", "aliases": [], "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": DEBUG_ENUMS.Encounter.BOSS_1, "key": "boss_1", "aliases": ["boss", "boss1", "warden"], "is_boss": true, "is_rest": false, "is_objective": false},
+	{"id": DEBUG_ENUMS.Encounter.BOSS_2, "key": "boss_2", "aliases": ["boss_2", "boss2", "sovereign"], "is_boss": true, "is_rest": false, "is_objective": false},
 ]
 
 static func _door_kind_from_legacy(value: String) -> int:

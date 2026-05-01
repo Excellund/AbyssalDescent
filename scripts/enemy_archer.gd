@@ -1,11 +1,7 @@
 extends "res://scripts/enemy_base.gd"
 
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
-
-const STATE_SEEK := 0
-const STATE_WINDUP := 1
-const STATE_FIRE := 2
-const STATE_RECOVER := 3
+const ENEMY_STATE_ENUMS := preload("res://scripts/shared/enemy_state_enums.gd")
 
 @export var seek_speed: float = 78.0
 @export var acceleration: float = 800.0
@@ -21,7 +17,7 @@ const STATE_RECOVER := 3
 @export var arena_size: Vector2 = Vector2(940.0, 700.0)
 
 var attack_cooldown_left: float = 0.0
-var archer_state: int = STATE_SEEK
+var archer_state: int = ENEMY_STATE_ENUMS.ArcherState.SEEK
 var archer_state_time_left: float = 0.0
 var arrow_direction: Vector2 = Vector2.LEFT
 var projectiles: Array[Node2D] = []
@@ -44,15 +40,15 @@ func _process_state_machine(delta: float) -> void:
 		move_and_slide()
 		return
 
-	if archer_state == STATE_SEEK:
+	if archer_state == ENEMY_STATE_ENUMS.ArcherState.SEEK:
 		_process_seek_state(delta)
 		return
 
-	if archer_state == STATE_WINDUP:
+	if archer_state == ENEMY_STATE_ENUMS.ArcherState.WINDUP:
 		_process_windup_state(delta)
 		return
 
-	if archer_state == STATE_FIRE:
+	if archer_state == ENEMY_STATE_ENUMS.ArcherState.FIRE:
 		_process_fire_state(delta)
 		return
 
@@ -111,11 +107,11 @@ func _process_recover_state(delta: float) -> void:
 	move_and_slide()
 	archer_state_time_left = maxf(0.0, archer_state_time_left - delta)
 	if archer_state_time_left <= 0.0:
-		archer_state = STATE_SEEK
+		archer_state = ENEMY_STATE_ENUMS.ArcherState.SEEK
 		attack_cooldown_left = attack_cooldown
 
 func _enter_windup_state() -> void:
-	archer_state = STATE_WINDUP
+	archer_state = ENEMY_STATE_ENUMS.ArcherState.WINDUP
 	archer_state_time_left = windup_time
 	var to_target := target.global_position - global_position
 	if to_target.length_squared() > 0.000001:
@@ -123,13 +119,13 @@ func _enter_windup_state() -> void:
 	visual_facing_direction = arrow_direction
 
 func _enter_fire_state() -> void:
-	archer_state = STATE_FIRE
+	archer_state = ENEMY_STATE_ENUMS.ArcherState.FIRE
 	archer_state_time_left = fire_interval * 3.5
 	fire_time_left = 0.0
 	arrows_fired = 0
 
 func _enter_recover_state() -> void:
-	archer_state = STATE_RECOVER
+	archer_state = ENEMY_STATE_ENUMS.ArcherState.RECOVER
 	archer_state_time_left = 0.4
 
 func _fire_arrow() -> void:
@@ -202,12 +198,12 @@ func _draw() -> void:
 	var side := Vector2(-facing.y, facing.x)
 	var body_color := COLOR_ARCHER_BODY
 	var core_color := COLOR_ARCHER_CORE
-	if archer_state == STATE_WINDUP:
+	if archer_state == ENEMY_STATE_ENUMS.ArcherState.WINDUP:
 		body_color = Color(0.34, 0.8, 1.0, 0.96)
 		core_color = Color(0.7, 0.96, 1.0, 0.88)
-	elif archer_state == STATE_FIRE:
+	elif archer_state == ENEMY_STATE_ENUMS.ArcherState.FIRE:
 		core_color = Color(1.0, 0.9, 0.5, 0.92)
-	elif archer_state == STATE_RECOVER:
+	elif archer_state == ENEMY_STATE_ENUMS.ArcherState.RECOVER:
 		body_color = Color(0.22, 0.66, 0.86, 0.84)
 	_draw_common_body(body_radius, body_color, core_color, facing)
 
@@ -224,13 +220,13 @@ func _draw() -> void:
 		fin_base - side * 2.6 - facing * 5.8
 	])
 	var fin_color := Color(0.84, 0.97, 1.0, 0.44)
-	if archer_state == STATE_WINDUP:
+	if archer_state == ENEMY_STATE_ENUMS.ArcherState.WINDUP:
 		fin_color = Color(1.0, 0.88, 0.5, 0.62)
 	draw_colored_polygon(upper_fin, fin_color)
 	draw_colored_polygon(lower_fin, fin_color)
 	
 	# Draw telegraph during windup
-	if archer_state == STATE_WINDUP:
+	if archer_state == ENEMY_STATE_ENUMS.ArcherState.WINDUP:
 		var windup_phase := 1.0 - (archer_state_time_left / windup_time) if windup_time > 0.0 else 1.0
 		var line_length := 400.0
 		var line_end := arrow_direction * line_length

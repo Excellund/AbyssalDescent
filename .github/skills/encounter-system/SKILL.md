@@ -39,7 +39,6 @@ Use this skill when working on the refactored encounter-generation surfaces.
   - Reuse existing stat families intentionally when the enemy shares an archetype.
   - Only add new mutator stat keys in `encounter_contracts.gd` when an existing family no longer fits.
 - Tune spawn intro pacing for encounters/boss rooms:
-
   - Add or retune a temporary transferable mutator:
     - Keep identity first (name/icon/fantasy) and define explicit target scope.
     - Use contract fields for effects, stack policy, stack limit, and falloff.
@@ -84,3 +83,5 @@ Mutators match a profile if any declared archetype is present. If a filtered poo
 - Do not duplicate per-enemy mutator logic outside `ENEMY_MUTATOR_STAT_MAP` unless the behavior is genuinely exceptional.
 - Do not route internal world/objective calls through method-name string dispatch helpers (for example `_call(method: String, ...)` + `callv`); prefer explicit typed calls.
 - Do not assume transport FX appears on custom boss draw paths: if a boss bypasses `_draw_common_body()`, its `_draw()` must explicitly gate on `is_spawn_transporting()` and render `_draw_spawn_transport_fx(...)` before returning.
+- Do not add new integer constant ladders for finite categorical state (debug modes, AI states, camera modes, tier IDs). Define enums in shared `scripts/shared/*_enums.gd` files and reference enum members directly in consumers.
+- Do not mirror shared enum members with local alias constants in usage scripts unless a compatibility boundary explicitly requires legacy symbols.

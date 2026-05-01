@@ -145,7 +145,7 @@ if (Test-Path $debugSettingsPath) {
     $mutatorValue = Get-DebugSettingValue -content $content -settingName "mutator_override"
     if ($null -ne $mutatorValue) {
         $value = $mutatorValue
-        if ($value -notmatch '(^0$|DEBUG_MUTATOR_NONE)') {
+        if ($value -notmatch '(^0$|DEBUG_MUTATOR_NONE|DEBUG_ENUMS\.MutatorOverride\.NONE)') {
             Write-Host "  [ERROR] mutator_override is not set to NONE (currently: $value)" -ForegroundColor Red
             $debugChecksPassed = $false
         }
@@ -155,7 +155,7 @@ if (Test-Path $debugSettingsPath) {
     $endScreenValue = Get-DebugSettingValue -content $content -settingName "end_screen_preview"
     if ($null -ne $endScreenValue) {
         $value = $endScreenValue
-        if ($value -notmatch '(^0$|DEBUG_END_SCREEN_NONE)') {
+        if ($value -notmatch '(^0$|DEBUG_END_SCREEN_NONE|DEBUG_ENUMS\.EndScreenPreview\.NONE)') {
             Write-Host "  [ERROR] end_screen_preview is not set to NONE (currently: $value)" -ForegroundColor Red
             $debugChecksPassed = $false
         }
@@ -183,11 +183,11 @@ if ($stagedSceneFiles.Count -gt 0) {
         @{ name = "enabled"; allowed = "^false$"; description = "false" },
         @{ name = "apply_test_powers_on_start"; allowed = "^false$"; description = "false" },
         @{ name = "skip_starting_boon_selection"; allowed = "^false$"; description = "false" },
-        @{ name = "start_power_preset"; allowed = "(^0$|DEBUG_POWER_PRESET_NONE)"; description = "NONE/0" },
+        @{ name = "start_power_preset"; allowed = "(^0$|DEBUG_POWER_PRESET_NONE|DEBUG_ENUMS\.PowerPreset\.NONE)"; description = "NONE/0" },
         @{ name = "start_encounter"; allowed = "(^0$|DEBUG_ENCOUNTER_NONE)"; description = "NONE/0" },
         @{ name = "start_bearing"; allowed = "(^-1$)"; description = "No Override/-1" },
-        @{ name = "mutator_override"; allowed = "(^0$|DEBUG_MUTATOR_NONE)"; description = "NONE/0" },
-        @{ name = "end_screen_preview"; allowed = "(^0$|DEBUG_END_SCREEN_NONE)"; description = "NONE/0" }
+        @{ name = "mutator_override"; allowed = "(^0$|DEBUG_MUTATOR_NONE|DEBUG_ENUMS\.MutatorOverride\.NONE)"; description = "NONE/0" },
+        @{ name = "end_screen_preview"; allowed = "(^0$|DEBUG_END_SCREEN_NONE|DEBUG_ENUMS\.EndScreenPreview\.NONE)"; description = "NONE/0" }
     )
 
     foreach ($sceneFile in $stagedSceneFiles) {

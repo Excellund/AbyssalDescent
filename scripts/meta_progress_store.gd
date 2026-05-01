@@ -4,26 +4,23 @@
 
 extends RefCounted
 
+const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
+
 const META_PROGRESS_PATH := "user://meta_progress.save"
 const META_PROGRESS_VERSION := 1
 
-const TIER_PILGRIM := 0
-const TIER_DELVER := 1
-const TIER_HARBINGER := 2
-const TIER_FORSWORN := 3
-
 const TIER_NAMES := {
-	TIER_PILGRIM: "Pilgrim",
-	TIER_DELVER: "Delver",
-	TIER_HARBINGER: "Harbinger",
-	TIER_FORSWORN: "Forsworn"
+	BEARING_ENUMS.BearingTier.PILGRIM: "Pilgrim",
+	BEARING_ENUMS.BearingTier.DELVER: "Delver",
+	BEARING_ENUMS.BearingTier.HARBINGER: "Harbinger",
+	BEARING_ENUMS.BearingTier.FORSWORN: "Forsworn"
 }
 
 const TIER_DESCRIPTIONS := {
-	TIER_PILGRIM: "The descent as intended.",
-	TIER_DELVER: "Harder. Faster. Less forgiving.",
-	TIER_HARBINGER: "A serious test. Few survive it.",
-	TIER_FORSWORN: "Punishing in every way."
+	BEARING_ENUMS.BearingTier.PILGRIM: "The descent as intended.",
+	BEARING_ENUMS.BearingTier.DELVER: "Harder. Faster. Less forgiving.",
+	BEARING_ENUMS.BearingTier.HARBINGER: "A serious test. Few survive it.",
+	BEARING_ENUMS.BearingTier.FORSWORN: "Punishing in every way."
 }
 
 ## Default profile for new players
@@ -33,8 +30,8 @@ static func _get_default_profile() -> Dictionary:
 		"created_at_unix": int(Time.get_unix_time_from_system()),
 		"last_modified_unix": int(Time.get_unix_time_from_system()),
 		"difficulty_state": {
-			"current_tier": TIER_PILGRIM,
-			"highest_unlocked_tier": TIER_PILGRIM
+			"current_tier": BEARING_ENUMS.BearingTier.PILGRIM,
+			"highest_unlocked_tier": BEARING_ENUMS.BearingTier.PILGRIM
 		},
 		"milestones": {
 			"first_clear": false,

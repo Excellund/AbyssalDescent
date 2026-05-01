@@ -24,6 +24,7 @@ const RUN_TELEMETRY_STORE := preload("res://scripts/run_telemetry_store.gd")
 const TELEMETRY_SPIKE_SENDER_SCRIPT := preload("res://scripts/telemetry_spike_sender.gd")
 const RUN_SNAPSHOT_SERVICE := preload("res://scripts/run_snapshot_service.gd")
 const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
+const DEBUG_ENUMS := preload("res://scripts/shared/debug_enums.gd")
 const DEBUG_SETTINGS_SCRIPT := preload("res://scripts/debug_settings.gd")
 const RUN_CONTEXT_PATH := "/root/RunContext"
 const MENU_SCENE_PATH := "res://scenes/Menu.tscn"
@@ -35,20 +36,6 @@ const WORLD_RENDERER_SCRIPT := preload("res://scripts/world_renderer.gd")
 const PAUSE_MENU_CONTROLLER_SCRIPT := preload("res://scripts/pause_menu_controller.gd")
 const VICTORY_SCREEN_SCRIPT := preload("res://scripts/victory_screen.gd")
 const DEFEAT_SCREEN_SCRIPT := preload("res://scripts/defeat_screen.gd")
-const DEBUG_MUTATOR_NONE := 0
-const DEBUG_MUTATOR_BLOOD_RUSH := 1
-const DEBUG_MUTATOR_FLASHPOINT := 2
-const DEBUG_MUTATOR_SIEGEBREAK := 3
-const DEBUG_MUTATOR_IRON_VOLLEY := 4
-const DEBUG_MUTATOR_KILLBOX := 5
-const DEBUG_MUTATOR_RANDOM_HARD := 6
-const DEBUG_END_SCREEN_NONE := 0
-const DEBUG_END_SCREEN_VICTORY := 1
-const DEBUG_END_SCREEN_DEFEAT := 2
-const DEBUG_POWER_PRESET_NONE := 0
-const DEBUG_POWER_PRESET_DASH_SPECIALIST := 1
-const DEBUG_POWER_PRESET_NO_DASH_BRUISER := 2
-const DEBUG_POWER_PRESET_HIGH_RANGE_DPS := 3
 
 func _find_debug_encounter_entry(key: String) -> Dictionary:
 	return ENCOUNTER_CONTRACTS.debug_encounter_entry(key)
@@ -104,13 +91,13 @@ func _get_debug_encounter_reward_mode(encounter_key: String) -> int:
 var settings_enabled: bool = false
 var apply_test_powers_on_start: bool = false
 var skip_starting_boon_selection: bool = false
-var start_power_preset: int = DEBUG_POWER_PRESET_NONE
+var start_power_preset: int = DEBUG_ENUMS.PowerPreset.NONE
 var start_power_ids: PackedStringArray = PackedStringArray()
 var start_encounter: int = ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_NONE
 var start_depth: int = 1
 var start_bearing: int = -1
-var mutator_override: int = DEBUG_MUTATOR_NONE
-var end_screen_preview: int = DEBUG_END_SCREEN_NONE
+var mutator_override: int = DEBUG_ENUMS.MutatorOverride.NONE
+var end_screen_preview: int = DEBUG_ENUMS.EndScreenPreview.NONE
 var victory_unlock_tier: int = -1
 
 var player: Node2D
@@ -355,10 +342,10 @@ func _ready() -> void:
 	_apply_debug_start_powers_if_needed()
 	if settings_enabled:
 		match end_screen_preview:
-			DEBUG_END_SCREEN_VICTORY:
+			DEBUG_ENUMS.EndScreenPreview.VICTORY:
 				victory_screen.show_victory(0, victory_unlock_tier)
 				return
-			DEBUG_END_SCREEN_DEFEAT:
+			DEBUG_ENUMS.EndScreenPreview.DEFEAT:
 				defeat_screen.show_defeat("Debug Arena", max(1, start_depth))
 				return
 		if start_encounter != ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_NONE:
@@ -402,16 +389,16 @@ func start_run_with_command(command: String) -> Dictionary:
 
 func start_run_with_preset(preset_key: String) -> Dictionary:
 	var normalized := preset_key.strip_edges().to_lower()
-	var preset := DEBUG_POWER_PRESET_NONE
+	var preset := DEBUG_ENUMS.PowerPreset.NONE
 	match normalized:
 		"dash", "dasher", "dash_specialist", "dash specialist":
-			preset = DEBUG_POWER_PRESET_DASH_SPECIALIST
+			preset = DEBUG_ENUMS.PowerPreset.DASH_SPECIALIST
 		"bruiser", "no_dash_bruiser", "no dash bruiser", "iron_vanguard", "iron vanguard", "grounded", "non_dash", "non-dash":
-			preset = DEBUG_POWER_PRESET_NO_DASH_BRUISER
+			preset = DEBUG_ENUMS.PowerPreset.NO_DASH_BRUISER
 		"marksman", "high_range_dps", "high range dps", "ranged", "range_dps", "range dps":
-			preset = DEBUG_POWER_PRESET_HIGH_RANGE_DPS
+			preset = DEBUG_ENUMS.PowerPreset.HIGH_RANGE_DPS
 		_:
-			preset = DEBUG_POWER_PRESET_NONE
+			preset = DEBUG_ENUMS.PowerPreset.NONE
 	return start_run_with_powers(_get_debug_power_preset_ids(preset, _debug_depth_for_power_preset()))
 
 func get_balance_telemetry(max_runs: int = 10, max_age_days: int = 21, include_debug: bool = false, game_version: String = "") -> Dictionary:
@@ -505,17 +492,17 @@ func _build_debug_encounter_profile(encounter_key: String, depth: int) -> Dictio
 
 func _debug_mutator_key(state_value: int) -> String:
 	match state_value:
-		DEBUG_MUTATOR_BLOOD_RUSH:
+		DEBUG_ENUMS.MutatorOverride.BLOOD_RUSH:
 			return "blood_rush"
-		DEBUG_MUTATOR_FLASHPOINT:
+		DEBUG_ENUMS.MutatorOverride.FLASHPOINT:
 			return "flashpoint"
-		DEBUG_MUTATOR_SIEGEBREAK:
+		DEBUG_ENUMS.MutatorOverride.SIEGEBREAK:
 			return "siegebreak"
-		DEBUG_MUTATOR_IRON_VOLLEY:
+		DEBUG_ENUMS.MutatorOverride.IRON_VOLLEY:
 			return "iron_volley"
-		DEBUG_MUTATOR_KILLBOX:
+		DEBUG_ENUMS.MutatorOverride.KILLBOX:
 			return "killbox"
-		DEBUG_MUTATOR_RANDOM_HARD:
+		DEBUG_ENUMS.MutatorOverride.RANDOM_HARD:
 			return "random_hard"
 		_:
 			return ""
@@ -612,7 +599,7 @@ func _debug_preset_power_count_for_depth(depth: int) -> int:
 
 func _get_debug_power_preset_pool(preset: int) -> Array[String]:
 	match preset:
-		DEBUG_POWER_PRESET_DASH_SPECIALIST:
+		DEBUG_ENUMS.PowerPreset.DASH_SPECIALIST:
 			return [
 				"fleet_foot",
 				"blink_dash",
@@ -622,7 +609,7 @@ func _get_debug_power_preset_pool(preset: int) -> Array[String]:
 				"static_wake",
 				"wraithstep"
 			]
-		DEBUG_POWER_PRESET_NO_DASH_BRUISER:
+		DEBUG_ENUMS.PowerPreset.NO_DASH_BRUISER:
 			return [
 				"heavy_blow",
 				"wide_arc",
@@ -634,7 +621,7 @@ func _get_debug_power_preset_pool(preset: int) -> Array[String]:
 				"aegis_field",
 				"hunters_snare"
 			]
-		DEBUG_POWER_PRESET_HIGH_RANGE_DPS:
+		DEBUG_ENUMS.PowerPreset.HIGH_RANGE_DPS:
 			return [
 				"first_strike",
 				"heavy_blow",
@@ -1757,7 +1744,7 @@ func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> voi
 func _is_debug_boot_session() -> bool:
 	if not settings_enabled:
 		return false
-	if end_screen_preview != DEBUG_END_SCREEN_NONE:
+	if end_screen_preview != DEBUG_ENUMS.EndScreenPreview.NONE:
 		return true
 	if start_encounter != ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_NONE:
 		return true
@@ -1765,7 +1752,7 @@ func _is_debug_boot_session() -> bool:
 		return true
 	if apply_test_powers_on_start:
 		return true
-	if start_power_preset != DEBUG_POWER_PRESET_NONE:
+	if start_power_preset != DEBUG_ENUMS.PowerPreset.NONE:
 		return true
 	if skip_starting_boon_selection:
 		return true

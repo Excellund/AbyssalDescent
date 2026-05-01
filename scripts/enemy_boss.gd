@@ -1,15 +1,7 @@
 extends "res://scripts/enemy_base.gd"
 
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
-
-const STATE_IDLE := 0
-const STATE_TELEGRAPH := 1
-const STATE_ATTACK := 2
-const STATE_RECOVER := 3
-
-const ATTACK_CHARGE := 0
-const ATTACK_NOVA := 1
-const ATTACK_CLEAVE := 2
+const ENEMY_STATE_ENUMS := preload("res://scripts/shared/enemy_state_enums.gd")
 
 @export var boss_max_health: int = 1100
 @export var move_speed: float = 138.0
@@ -38,10 +30,10 @@ const ATTACK_CLEAVE := 2
 @export var edge_soft_margin: float = 170.0
 @export var edge_hard_margin: float = 105.0
 
-var boss_state: int = STATE_IDLE
+var boss_state: int = ENEMY_STATE_ENUMS.BossState.IDLE
 var state_time_left: float = 0.0
 var cooldown_left: float = 0.35
-var active_attack: int = ATTACK_CHARGE
+var active_attack: int = ENEMY_STATE_ENUMS.BossAttack.CHARGE
 
 var locked_direction: Vector2 = Vector2.RIGHT
 var telegraph_alpha: float = 0.0
@@ -50,7 +42,7 @@ var attack_afterglow_time_left: float = 0.0
 var attack_afterglow_duration: float = 0.54
 var impact_burst_time_left: float = 0.0
 var impact_burst_duration: float = 0.2
-var last_attack_for_fx: int = ATTACK_CHARGE
+var last_attack_for_fx: int = ENEMY_STATE_ENUMS.BossAttack.CHARGE
 var _edge_stall_time: float = 0.0
 
 
@@ -80,13 +72,13 @@ func _process_behavior(delta: float) -> void:
 		cooldown_left = maxf(0.0, cooldown_left - delta)
 
 	match boss_state:
-		STATE_IDLE:
+		ENEMY_STATE_ENUMS.BossState.IDLE:
 			_process_idle_state(delta)
-		STATE_TELEGRAPH:
+		ENEMY_STATE_ENUMS.BossState.TELEGRAPH:
 			_process_telegraph_state(delta)
-		STATE_ATTACK:
+		ENEMY_STATE_ENUMS.BossState.ATTACK:
 			_process_attack_state(delta)
-		STATE_RECOVER:
+		ENEMY_STATE_ENUMS.BossState.RECOVER:
 			_process_recover_state(delta)
 
 	attack_afterglow_time_left = maxf(0.0, attack_afterglow_time_left - delta)
@@ -159,26 +151,26 @@ func _start_next_attack(distance_to_target: float, wall_pressure: float = 0.0) -
 	# Force reposition attack when edge-pinned or stall timeout exceeded
 	var force_reposition := wall_pressure >= 0.80 or (_edge_stall_time >= 0.18 and wall_pressure > 0.65)
 	if force_reposition:
-		active_attack = ATTACK_CHARGE
+		active_attack = ENEMY_STATE_ENUMS.BossAttack.CHARGE
 	elif distance_to_target > 270.0:
-		active_attack = ATTACK_CHARGE
+		active_attack = ENEMY_STATE_ENUMS.BossAttack.CHARGE
 	elif distance_to_target < 120.0:
-		active_attack = ATTACK_NOVA if randf() < lerpf(0.66, 0.8, enrage_t) else ATTACK_CLEAVE
+		active_attack = ENEMY_STATE_ENUMS.BossAttack.NOVA if randf() < lerpf(0.66, 0.8, enrage_t) else ENEMY_STATE_ENUMS.BossAttack.CLEAVE
 	else:
 		var roll := randf()
 		if roll < lerpf(0.34, 0.24, enrage_t):
-			active_attack = ATTACK_CLEAVE
+			active_attack = ENEMY_STATE_ENUMS.BossAttack.CLEAVE
 		elif roll < lerpf(0.72, 0.82, enrage_t):
-			active_attack = ATTACK_CHARGE
+			active_attack = ENEMY_STATE_ENUMS.BossAttack.CHARGE
 		else:
-			active_attack = ATTACK_NOVA
+			active_attack = ENEMY_STATE_ENUMS.BossAttack.NOVA
 
 	var to_target := target.global_position - global_position
 	if to_target.length_squared() > 0.000001:
 		locked_direction = to_target.normalized()
 	visual_facing_direction = locked_direction
 
-	boss_state = STATE_TELEGRAPH
+	boss_state = ENEMY_STATE_ENUMS.BossState.TELEGRAPH
 	state_time_left = _get_windup_time(active_attack)
 	telegraph_alpha = 0.0
 	charge_hit_applied = false
@@ -200,21 +192,21 @@ func _process_telegraph_state(delta: float) -> void:
 
 
 func _enter_attack_state() -> void:
-	boss_state = STATE_ATTACK
+	boss_state = ENEMY_STATE_ENUMS.BossState.ATTACK
 	attack_anim_time_left = attack_anim_duration
 	last_attack_for_fx = active_attack
 	attack_afterglow_time_left = attack_afterglow_duration
 	impact_burst_time_left = impact_burst_duration
 	var enrage_t: float = _get_enrage_ratio()
 	match active_attack:
-		ATTACK_CHARGE:
+		ENEMY_STATE_ENUMS.BossAttack.CHARGE:
 			state_time_left = charge_duration * lerpf(1.0, 0.84, enrage_t)
 			velocity = locked_direction * charge_speed * lerpf(1.0, 1.18, enrage_t)
-		ATTACK_NOVA:
+		ENEMY_STATE_ENUMS.BossAttack.NOVA:
 			state_time_left = 0.05
 			velocity = Vector2.ZERO
 			_apply_nova_hit()
-		ATTACK_CLEAVE:
+		ENEMY_STATE_ENUMS.BossAttack.CLEAVE:
 			state_time_left = 0.06
 			velocity = Vector2.ZERO
 			_apply_cleave_hit()
@@ -222,7 +214,7 @@ func _enter_attack_state() -> void:
 
 func _process_attack_state(delta: float) -> void:
 	match active_attack:
-		ATTACK_CHARGE:
+		ENEMY_STATE_ENUMS.BossAttack.CHARGE:
 			velocity = locked_direction * charge_speed * lerpf(1.0, 1.18, _get_enrage_ratio())
 			move_and_slide()
 			_apply_charge_hit()
@@ -232,7 +224,7 @@ func _process_attack_state(delta: float) -> void:
 
 	state_time_left = maxf(0.0, state_time_left - delta)
 	if state_time_left <= 0.0:
-		boss_state = STATE_RECOVER
+		boss_state = ENEMY_STATE_ENUMS.BossState.RECOVER
 		state_time_left = recover_time * lerpf(1.0, 0.72, _get_enrage_ratio())
 
 
@@ -243,7 +235,7 @@ func _process_recover_state(delta: float) -> void:
 	move_and_slide()
 	state_time_left = maxf(0.0, state_time_left - delta)
 	if state_time_left <= 0.0:
-		boss_state = STATE_IDLE
+		boss_state = ENEMY_STATE_ENUMS.BossState.IDLE
 		cooldown_left = action_cooldown * lerpf(1.0, 0.62, _get_enrage_ratio())
 
 
@@ -356,11 +348,11 @@ func _get_inward_edge_bias() -> Vector2:
 func _get_windup_time(attack_id: int) -> float:
 	var enrage_t: float = _get_enrage_ratio()
 	match attack_id:
-		ATTACK_CHARGE:
+		ENEMY_STATE_ENUMS.BossAttack.CHARGE:
 			return charge_windup * lerpf(1.0, 0.82, enrage_t)
-		ATTACK_NOVA:
+		ENEMY_STATE_ENUMS.BossAttack.NOVA:
 			return nova_windup * lerpf(1.0, 0.84, enrage_t)
-		ATTACK_CLEAVE:
+		ENEMY_STATE_ENUMS.BossAttack.CLEAVE:
 			return cleave_windup * lerpf(1.0, 0.8, enrage_t)
 		_:
 			return 0.7
@@ -384,14 +376,14 @@ func _draw() -> void:
 	var body_radius := 34.0 + pulse * 0.8
 	var body_color := COLOR_BOSS_BODY
 	var core_color := COLOR_BOSS_CORE
-	var threat_t := telegraph_alpha if boss_state == STATE_TELEGRAPH else 0.0
+	var threat_t := telegraph_alpha if boss_state == ENEMY_STATE_ENUMS.BossState.TELEGRAPH else 0.0
 	var threat_pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.016)
 	var enrage_t: float = _get_enrage_ratio()
 
-	if boss_state == STATE_TELEGRAPH:
+	if boss_state == ENEMY_STATE_ENUMS.BossState.TELEGRAPH:
 		body_color = COLOR_BOSS_BODY_TELEGRAPH
 		core_color = COLOR_BOSS_CORE_TELEGRAPH
-	if boss_state == STATE_ATTACK:
+	if boss_state == ENEMY_STATE_ENUMS.BossState.ATTACK:
 		body_color = COLOR_BOSS_BODY_ATTACK
 		core_color = COLOR_BOSS_CORE_ATTACK
 	if enrage_t > 0.0:
@@ -401,7 +393,7 @@ func _draw() -> void:
 	_draw_enrage_scaling_indicator(body_radius, facing, enrage_t)
 
 	# Persistent menace halo during telegraph to imply severe punishment on mistakes.
-	if boss_state == STATE_TELEGRAPH:
+	if boss_state == ENEMY_STATE_ENUMS.BossState.TELEGRAPH:
 		var halo_radius := body_radius + 16.0 + threat_t * 8.0
 		draw_circle(Vector2.ZERO, halo_radius, Color(1.0, 0.2, 0.08, 0.06 + threat_t * 0.1))
 		draw_arc(Vector2.ZERO, halo_radius + 3.0, 0.0, TAU, 48, Color(1.0, 0.82, 0.45, 0.28 + threat_t * 0.26 + threat_pulse * 0.08), 2.6)
@@ -412,11 +404,11 @@ func _draw() -> void:
 	_draw_attack_afterglow(facing)
 	_draw_attack_impact_burst(facing)
 
-	if boss_state == STATE_TELEGRAPH:
+	if boss_state == ENEMY_STATE_ENUMS.BossState.TELEGRAPH:
 		_draw_attack_telegraph()
 		_draw_role_state_icon(facing, body_radius)
 
-	if boss_state == STATE_ATTACK and active_attack == ATTACK_CHARGE:
+	if boss_state == ENEMY_STATE_ENUMS.BossState.ATTACK and active_attack == ENEMY_STATE_ENUMS.BossAttack.CHARGE:
 		var line_end := locked_direction * 120.0
 		draw_line(Vector2.ZERO, line_end, Color(COLOR_BOSS_CHARGE_LINE.r, COLOR_BOSS_CHARGE_LINE.g, COLOR_BOSS_CHARGE_LINE.b, 0.9), 8.0)
 
@@ -424,14 +416,14 @@ func _draw() -> void:
 func _draw_role_state_icon(facing: Vector2, body_radius: float) -> void:
 	var icon_alpha := 0.36 + telegraph_alpha * 0.58
 	match active_attack:
-		ATTACK_CHARGE:
+		ENEMY_STATE_ENUMS.BossAttack.CHARGE:
 			var side := Vector2(-facing.y, facing.x)
 			var tip := facing * (body_radius + 14.0)
 			var base := facing * (body_radius + 4.0)
 			draw_colored_polygon(PackedVector2Array([tip, base + side * 5.4, base - side * 5.4]), Color(1.0, 0.88, 0.44, icon_alpha))
-		ATTACK_NOVA:
+		ENEMY_STATE_ENUMS.BossAttack.NOVA:
 			draw_arc(Vector2.ZERO, body_radius + 12.0, 0.0, TAU, 40, Color(1.0, 0.78, 0.36, icon_alpha), 2.4)
-		ATTACK_CLEAVE:
+		ENEMY_STATE_ENUMS.BossAttack.CLEAVE:
 			var half_arc := deg_to_rad(cleave_arc_degrees * 0.26)
 			draw_arc(Vector2.ZERO, body_radius + 12.0, facing.angle() - half_arc, facing.angle() + half_arc, 18, Color(1.0, 0.84, 0.42, icon_alpha), 2.8)
 
@@ -439,7 +431,7 @@ func _draw_role_state_icon(facing: Vector2, body_radius: float) -> void:
 func _draw_attack_telegraph() -> void:
 	var alpha := 0.2 + telegraph_alpha * 0.7
 	match active_attack:
-		ATTACK_CHARGE:
+		ENEMY_STATE_ENUMS.BossAttack.CHARGE:
 			var length := charge_speed * charge_duration * 0.72
 			var start := locked_direction * 24.0
 			var end := start + locked_direction * length
@@ -460,7 +452,7 @@ func _draw_attack_telegraph() -> void:
 			draw_line(end + side * impact_width, end + side * impact_width - locked_direction * 14.0, Color(COLOR_BOSS_CHARGE_LINE_INNER.r, COLOR_BOSS_CHARGE_LINE_INNER.g, COLOR_BOSS_CHARGE_LINE_INNER.b, minf(1.0, alpha + 0.1)), 2.5)
 			draw_line(end - side * impact_width, end - side * impact_width - locked_direction * 14.0, Color(COLOR_BOSS_CHARGE_LINE_INNER.r, COLOR_BOSS_CHARGE_LINE_INNER.g, COLOR_BOSS_CHARGE_LINE_INNER.b, minf(1.0, alpha + 0.1)), 2.5)
 		
-		ATTACK_NOVA:
+		ENEMY_STATE_ENUMS.BossAttack.NOVA:
 			var nova_pulse := 0.5 + 0.5 * sin(telegraph_alpha * PI * 1.5)
 			
 			# Inner danger ring (closer threat)
@@ -476,7 +468,7 @@ func _draw_attack_telegraph() -> void:
 			# Secondary fading ring (aftermath indicator)
 			draw_arc(Vector2.ZERO, nova_radius * 1.2, 0.0, TAU, 48, Color(COLOR_BOSS_NOVA_RING.r, COLOR_BOSS_NOVA_RING.g, COLOR_BOSS_NOVA_RING.b, alpha * 0.3), 2.0)
 		
-		ATTACK_CLEAVE:
+		ENEMY_STATE_ENUMS.BossAttack.CLEAVE:
 			var half_arc := deg_to_rad(cleave_arc_degrees * 0.5)
 			var points := PackedVector2Array([Vector2.ZERO])
 			var segments := 26
@@ -505,16 +497,16 @@ func _draw_attack_afterglow(facing: Vector2) -> void:
 	var fade := t * t
 	var _side := Vector2(-facing.y, facing.x)
 	match last_attack_for_fx:
-		ATTACK_CHARGE:
+		ENEMY_STATE_ENUMS.BossAttack.CHARGE:
 			var glow_len := 94.0 + 58.0 * t
 			var tail_alpha := 0.24 * fade
 			draw_line(-facing * 6.0, -facing * glow_len, Color(1.0, 0.66, 0.28, tail_alpha), 12.0)
 			draw_line(-facing * 3.0, -facing * (glow_len * 0.82), Color(1.0, 0.9, 0.56, tail_alpha * 1.35), 4.0)
-		ATTACK_NOVA:
+		ENEMY_STATE_ENUMS.BossAttack.NOVA:
 			var ring_radius := nova_radius * (1.0 + (1.0 - t) * 0.45)
 			draw_arc(Vector2.ZERO, ring_radius, 0.0, TAU, 56, Color(1.0, 0.52, 0.2, 0.42 * fade), 5.0)
 			draw_circle(Vector2.ZERO, ring_radius * 0.66, Color(1.0, 0.35, 0.12, 0.09 * fade))
-		ATTACK_CLEAVE:
+		ENEMY_STATE_ENUMS.BossAttack.CLEAVE:
 			var half_arc := deg_to_rad(cleave_arc_degrees * 0.5)
 			var outer := cleave_range * (0.92 + (1.0 - t) * 0.22)
 			var a0 := facing.angle() - half_arc
@@ -532,18 +524,18 @@ func _draw_attack_impact_burst(facing: Vector2) -> void:
 	var burst_alpha := (1.0 - t) * (1.0 - t)
 	var side := Vector2(-facing.y, facing.x)
 	match last_attack_for_fx:
-		ATTACK_CHARGE:
+		ENEMY_STATE_ENUMS.BossAttack.CHARGE:
 			var burst_center := facing * (30.0 + burst_ease * 32.0)
 			var burst_r := 18.0 + burst_ease * 28.0
 			draw_circle(burst_center, burst_r, Color(1.0, 0.62, 0.22, 0.26 * burst_alpha))
 			draw_arc(burst_center, burst_r + 4.0, 0.0, TAU, 24, Color(1.0, 0.88, 0.5, 0.6 * burst_alpha), 3.0)
 			draw_line(burst_center + side * 18.0, burst_center + side * 42.0, Color(1.0, 0.84, 0.46, 0.5 * burst_alpha), 2.2)
 			draw_line(burst_center - side * 18.0, burst_center - side * 42.0, Color(1.0, 0.84, 0.46, 0.5 * burst_alpha), 2.2)
-		ATTACK_NOVA:
+		ENEMY_STATE_ENUMS.BossAttack.NOVA:
 			var nova_r := 44.0 + burst_ease * (nova_radius * 0.72)
 			draw_circle(Vector2.ZERO, nova_r, Color(1.0, 0.46, 0.18, 0.2 * burst_alpha))
 			draw_arc(Vector2.ZERO, nova_r, 0.0, TAU, 48, Color(1.0, 0.86, 0.5, 0.68 * burst_alpha), 4.0)
-		ATTACK_CLEAVE:
+		ENEMY_STATE_ENUMS.BossAttack.CLEAVE:
 			var half_arc := deg_to_rad(cleave_arc_degrees * 0.5)
 			var r := 56.0 + burst_ease * (cleave_range * 0.62)
 			draw_arc(Vector2.ZERO, r, facing.angle() - half_arc, facing.angle() + half_arc, 26, Color(1.0, 0.78, 0.36, 0.72 * burst_alpha), 4.2)
