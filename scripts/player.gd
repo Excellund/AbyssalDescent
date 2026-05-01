@@ -1319,9 +1319,8 @@ func _update_combo_relay_state(delta: float) -> void:
 	combo_relay_stack_timer = maxf(0.0, combo_relay_stack_timer - delta)
 	if combo_relay_stack_timer > 0.0:
 		return
-	combo_relay_stacks = maxi(0, combo_relay_stacks - 1)
-	if combo_relay_stacks > 0:
-		combo_relay_stack_timer = combo_relay_stack_window * 0.6
+	combo_relay_stacks = 0
+	combo_relay_stack_timer = 0.0
 	queue_redraw()
 
 func apply_polar_shift_dash_lockout(duration: float) -> void:
