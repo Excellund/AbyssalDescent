@@ -4,6 +4,14 @@
 
 extends Node
 
+## Tier unlock chain: each entry fires when required_tier matches (or -1 = any tier).
+## Adding a new tier requires only a new entry here.
+const TIER_UNLOCK_CHAIN := [
+	{"required_tier": -1, "milestone": "first_clear",             "unlocks_tier": 1},
+	{"required_tier":  1, "milestone": "first_clear_on_standard", "unlocks_tier": 2},
+	{"required_tier":  2, "milestone": "first_clear_on_veteran",  "unlocks_tier": 3},
+]
+
 # State
 var rooms_cleared: int = 0
 var room_depth: int = 0
@@ -60,38 +68,23 @@ func _check_and_award_unlocks() -> void:
 	var run_context := get_node_or_null("/root/RunContext")
 	if run_context == null:
 		return
-	
-	## Tier unlock rules:
-	## - First clear: unlock Tier 1 (Standard)
-	## - First clear on Standard: unlock Tier 2 (Veteran)
-	## - First clear on Veteran: unlock Tier 3 (Torment)
-	
+
 	var current_tier: int = int(run_context.get_current_difficulty_tier())
 	var highest_unlocked: int = int(run_context.get_highest_unlocked_difficulty_tier())
-	
-	## First clear ever: unlock Standard tier
-	if not run_context.get_milestone("first_clear"):
-		run_context.set_milestone("first_clear", true)
-		emit_signal("milestone_achieved", "first_clear")
-		if highest_unlocked < 1:
-			run_context.unlock_difficulty_tier(1)
-			emit_signal("tier_unlocked", 1)
-	
-	## First clear on Standard: unlock Veteran tier
-	if current_tier == 1 and not run_context.get_milestone("first_clear_on_standard"):
-		run_context.set_milestone("first_clear_on_standard", true)
-		emit_signal("milestone_achieved", "first_clear_on_standard")
-		if highest_unlocked < 2:
-			run_context.unlock_difficulty_tier(2)
-			emit_signal("tier_unlocked", 2)
-	
-	## First clear on Veteran: unlock Torment tier
-	if current_tier == 2 and not run_context.get_milestone("first_clear_on_veteran"):
-		run_context.set_milestone("first_clear_on_veteran", true)
-		emit_signal("milestone_achieved", "first_clear_on_veteran")
-		if highest_unlocked < 3:
-			run_context.unlock_difficulty_tier(3)
-			emit_signal("tier_unlocked", 3)
+
+	for entry in TIER_UNLOCK_CHAIN:
+		var required_tier: int = int(entry["required_tier"])
+		if required_tier != -1 and current_tier != required_tier:
+			continue
+		var milestone: String = String(entry["milestone"])
+		if run_context.get_milestone(milestone):
+			continue
+		var unlocks_tier: int = int(entry["unlocks_tier"])
+		run_context.set_milestone(milestone, true)
+		emit_signal("milestone_achieved", milestone)
+		if highest_unlocked < unlocks_tier:
+			run_context.unlock_difficulty_tier(unlocks_tier)
+			emit_signal("tier_unlocked", unlocks_tier)
 
 
 
