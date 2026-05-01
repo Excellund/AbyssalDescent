@@ -92,7 +92,10 @@ func should_prompt_for_update(skipped_version: String) -> bool:
 		return false
 	if latest_version.is_empty():
 		return false
-	return skipped_version.strip_edges() != latest_version
+	var skipped := skipped_version.strip_edges()
+	if skipped.is_empty():
+		return true
+	return _compare_versions(skipped, latest_version) != 0
 
 func open_release_page() -> void:
 	if not action_enabled:
@@ -133,7 +136,6 @@ func _launch_zip_update(zip_absolute_path: String) -> bool:
 	DirAccess.make_dir_recursive_absolute(staging_dir)
 	for file_path in zip.get_files():
 		var file_data := zip.read_file(file_path)
-		var dest := staging_dir + "\\" + file_path.get_file()
 		var f := FileAccess.open("user://updates/staging/" + file_path.get_file(), FileAccess.WRITE)
 		if f != null:
 			f.store_buffer(file_data)
@@ -144,7 +146,6 @@ func _launch_zip_update(zip_absolute_path: String) -> bool:
 	var pid := OS.get_process_id()
 	var batch_path := staging_dir + "\\apply_update.bat"
 	var relaunch_path := install_dir + "\\" + exe_name
-	var staged_exe_path := staging_dir + "\\" + exe_name
 	var batch := FileAccess.open("user://updates/staging/apply_update.bat", FileAccess.WRITE)
 	if batch == null:
 		return false
@@ -154,12 +155,12 @@ func _launch_zip_update(zip_absolute_path: String) -> bool:
 	batch.store_string("if not errorlevel 1 (timeout /t 1 /nobreak >NUL && goto wait)\r\n")
 	batch.store_string("xcopy /Y /E /R /I \"%s\\*\" \"%s\\\" >NUL\r\n" % [staging_dir, install_dir])
 	batch.store_string("if errorlevel 1 goto copy_failed\r\n")
-	batch.store_string("if exist \"%s\" (start \"\" \"%s\") else (start \"\" \"%s\")\r\n" % [relaunch_path, relaunch_path, staged_exe_path])
+	batch.store_string("if exist \"%s\" start \"\" \"%s\"\r\n" % [relaunch_path, relaunch_path])
 	batch.store_string("rd /S /Q \"%s\"\r\n" % staging_dir)
 	batch.store_string("del /F /Q \"%s\"\r\n" % zip_absolute_path)
 	batch.store_string("exit /b 0\r\n")
 	batch.store_string(":copy_failed\r\n")
-	batch.store_string("start \"\" \"%s\"\r\n" % staged_exe_path)
+	batch.store_string("if exist \"%s\" start \"\" \"%s\"\r\n" % [relaunch_path, relaunch_path])
 	batch.store_string("exit /b 0\r\n")
 	batch.close()
 

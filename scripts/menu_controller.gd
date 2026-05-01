@@ -919,9 +919,6 @@ func _on_update_service_download_finished(success: bool, _message: String) -> vo
 		_refresh_update_ui()
 		return
 	if success and update_service.launch_downloaded_installer():
-		var run_context := get_node_or_null(RUN_CONTEXT_PATH)
-		if run_context != null:
-			run_context.set_skipped_update_version(String(update_service.latest_version), true)
 		if update_status_label != null:
 			update_status_label.text = "Update ready. Closing game to apply..."
 		if update_detail_label != null:

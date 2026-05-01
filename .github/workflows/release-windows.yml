@@ -58,7 +58,8 @@ jobs:
       - name: Create release artifacts
         run: |
           cd build/windows
-          zip -q "../../${EXPORT_NAME}-Windows.zip" "${EXPORT_NAME}.exe"
+          cp ../../build_version.txt ./build_version.txt
+          zip -q "../../${EXPORT_NAME}-Windows.zip" "${EXPORT_NAME}.exe" "build_version.txt"
           cd ../..
           sha256sum "${EXPORT_NAME}-Windows.zip" > "${EXPORT_NAME}-Windows.zip.sha256"
 
