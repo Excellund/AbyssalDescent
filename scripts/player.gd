@@ -8,6 +8,7 @@ const ENEMY_BASE := preload("res://scripts/enemy_base.gd")
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const RUN_SNAPSHOT_VERSION := 1
+const EXECUTION_EDGE_PROC_DISPLAY_HOLD: float = 0.24
 const RUN_SNAPSHOT_PROPERTIES := [
 	"max_speed",
 	"dash_cooldown",
@@ -135,6 +136,7 @@ var aegis_field_stacks: int = 0
 var hunters_snare_stacks: int = 0
 var execution_every: int = 3
 var execution_damage_mult: float = 2.6
+var execution_edge_proc_display_left: float = 0.0
 var rupture_wave_radius: float = 82.0
 var rupture_wave_damage_ratio: float = 0.44
 var razor_wind_range_scale: float = 1.35
@@ -231,6 +233,7 @@ func _physics_process(delta: float) -> void:
 	_update_dash_cooldown(delta)
 	_update_dash_phase_state(delta)
 	_update_attack_cooldown(delta)
+	_update_execution_edge_proc_display(delta)
 	_update_attack_lock(delta)
 	_update_battle_trance(delta)
 	_update_attack_animation(delta)
@@ -278,6 +281,13 @@ func _update_dash_cooldown(delta: float) -> void:
 func _update_attack_cooldown(delta: float) -> void:
 	if attack_cooldown_left > 0.0:
 		attack_cooldown_left = maxf(0.0, attack_cooldown_left - delta)
+
+func _update_execution_edge_proc_display(delta: float) -> void:
+	if execution_edge_proc_display_left <= 0.0:
+		return
+	execution_edge_proc_display_left = maxf(0.0, execution_edge_proc_display_left - delta)
+	if execution_edge_proc_display_left == 0.0:
+		queue_redraw()
 
 func _try_start_dash(direction: Vector2) -> void:
 	if _is_attack_locked():
@@ -355,6 +365,8 @@ func _try_execute_attack(attack_direction: Vector2) -> void:
 		var wind_color := ENEMY_BASE.COLOR_SWING_RAZOR_WIND_EXTENDED if not execution_proc else ENEMY_BASE.COLOR_EXECUTION_WIND_EXTENDED
 		player_feedback.play_attack_swing_visual(attack_direction, wind_range, razor_wind_arc_degrees, wind_color, 0.14)
 	if execution_proc:
+		execution_edge_proc_display_left = EXECUTION_EDGE_PROC_DISPLAY_HOLD
+		queue_redraw()
 		player_feedback.play_world_ring(global_position, 40.0, ENEMY_BASE.COLOR_EXECUTION_RING, 0.16)
 	if _perform_melee_attack(attack_direction, melee_context):
 		player_feedback.play_impact_sound()
@@ -724,6 +736,7 @@ func apply_run_snapshot(snapshot: Dictionary) -> void:
 	phantom_step_ghost_positions.clear()
 	static_wake_trails.clear()
 	void_dash_reset_pulse_left = 0.0
+	execution_edge_proc_display_left = 0.0
 	storm_crown_hit_counter = 0
 	storm_crown_discharge_flash_left = 0.0
 	wraithstep_marked_enemy_expiry.clear()
@@ -1043,6 +1056,7 @@ func clear_lingering_combat_effects() -> void:
 	wraithstep_marked_enemy_expiry.clear()
 	storm_crown_discharge_flash_left = 0.0
 	void_dash_reset_pulse_left = 0.0
+	execution_edge_proc_display_left = 0.0
 	queue_redraw()
 
 func _apply_rupture_wave(epicenter: Vector2, source_damage: int, rupture_hit_enemy_ids: Dictionary = {}) -> void:
@@ -1456,8 +1470,9 @@ func _draw_trial_reward_state() -> void:
 	if reward_execution_edge:
 		var modulo := attack_combo_counter % execution_every
 		var pips_lit := modulo
-		if pips_lit == 0 and attack_combo_counter > 0:
+		if modulo == 0 and attack_combo_counter > 0 and execution_edge_proc_display_left > 0.0:
 			pips_lit = execution_every
+
 		var pip_y := -24.0
 		for i in range(execution_every):
 			var x := -10.0 + float(i) * 10.0
