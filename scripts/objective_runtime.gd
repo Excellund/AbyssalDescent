@@ -4,6 +4,132 @@ const ENUMS := preload("res://scripts/shared/enums.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 
+# Objective roles are stable internal IDs. Encounter kind strings can change in one place below.
+const OBJECTIVE_ROLE_LAST_STAND = "last_stand_role"
+const OBJECTIVE_ROLE_CUT_THE_SIGNAL = "cut_the_signal_role"
+const OBJECTIVE_ROLE_HOLD_THE_LINE = "hold_the_line_role"
+const OBJECTIVE_KIND_BY_ROLE := {
+	OBJECTIVE_ROLE_LAST_STAND: "last_stand",
+	OBJECTIVE_ROLE_CUT_THE_SIGNAL: "cut_the_signal",
+	OBJECTIVE_ROLE_HOLD_THE_LINE: "hold_the_line"
+}
+
+# === SURVIVAL OBJECTIVE ===
+const LAST_STAND_SPAWN_INTERVAL_MULT_BASE = 1.15
+const LAST_STAND_SPAWN_INTERVAL_MULT_PRESSURE = 0.2
+const LAST_STAND_SPAWN_INTERVAL_CLAMP_MIN = 0.8
+const LAST_STAND_SPAWN_INTERVAL_CLAMP_MAX = 1.08
+const LAST_STAND_MAX_ENEMIES_BASE = 12
+const LAST_STAND_MAX_ENEMIES_HARD_CAP = 24
+const LAST_STAND_MAX_ENEMIES_DEPTH_MULT = 0.9
+const LAST_STAND_KILL_TARGET_MIN = 8
+const LAST_STAND_KILL_TARGET_BASE = 10
+const LAST_STAND_KILL_TARGET_TIME_MULT = 0.42
+const LAST_STAND_KILL_TARGET_BASE_BONUS = 2
+const LAST_STAND_KILL_TARGET_DEPTH_MULT = 0.35
+const LAST_STAND_KILL_TARGET_ROUND_TO = 5
+const LAST_STAND_CLEANUP_WINDOW = 8.0
+const LAST_STAND_QUOTA_MET_DECAY_MULT = 0.85
+const LAST_STAND_OVERTIME_SPAWN_INTERVAL_MULT = 0.65
+const LAST_STAND_OVERTIME_SPAWN_BATCH_CAP = 7
+
+# === PRIORITY TARGET OBJECTIVE ===
+const CUT_THE_SIGNAL_SPAWN_TIMER_MIN = 0.35
+const CUT_THE_SIGNAL_SPAWN_INTERVAL_BASE = 1.2
+const CUT_THE_SIGNAL_SPAWN_INTERVAL_CLAMP_MIN = 0.5
+const CUT_THE_SIGNAL_SPAWN_INTERVAL_CLAMP_MAX = 0.95
+const CUT_THE_SIGNAL_MAX_ENEMIES_BASE = 12
+const CUT_THE_SIGNAL_MAX_ENEMIES_DEPTH_MULT = 0.6
+const CUT_THE_SIGNAL_MAX_ENEMIES_MIN = 6
+const CUT_THE_SIGNAL_HUNT_KILL_GOAL_MIN = 2
+const CUT_THE_SIGNAL_HUNT_KILL_GOAL_MAX = 6
+const CUT_THE_SIGNAL_HUNT_KILL_MULT = 4.0
+const CUT_THE_SIGNAL_SPAWN_TIMER_REFILL = 0.45
+const CUT_THE_SIGNAL_SPAWN_INTERVAL_OVERTIME_MULT = 0.7
+const CUT_THE_SIGNAL_SPAWN_BATCH_OVERTIME_CAP = 6
+const CUT_THE_SIGNAL_SPAWN_TIMER_OVERTIME = 0.15
+const CUT_THE_SIGNAL_HEALTH_BOOST_MULT = 2.6
+const CUT_THE_SIGNAL_HEALTH_BOOST_MIN = 40
+const CUT_THE_SIGNAL_SCALE_MULT = 1.14
+const CUT_THE_SIGNAL_MARKER_Y_OFFSET = -62.0
+const CUT_THE_SIGNAL_MARKER_Z_INDEX = 50
+const CUT_THE_SIGNAL_HEALTH_BAR_SIZE = Vector2(72.0, 9.0)
+const CUT_THE_SIGNAL_HEALTH_BAR_OFFSET = Vector2(-36.0, -48.0)
+const CUT_THE_SIGNAL_DEFAULT_TYPE = "archer"
+const CUT_THE_SIGNAL_SPAWN_DISTANCE_MIN = 320.0
+const CUT_THE_SIGNAL_SPAWN_DISTANCE_BASE = 180.0
+const CUT_THE_SIGNAL_OPENING_ESCORT_TYPES = ["shielder", "chaser", "chaser"]
+const CUT_THE_SIGNAL_OPENING_ESCORT_RADIUS_SHIELDER = 76.0
+const CUT_THE_SIGNAL_OPENING_ESCORT_RADIUS_OTHER = 92.0
+const CUT_THE_SIGNAL_RELOCATION_MIN_DISTANCE = 120.0
+const CUT_THE_SIGNAL_RELOCATION_ATTEMPT_COUNT = 8
+const CUT_THE_SIGNAL_RELOCATION_CANDIDATE_MIN_DISTANCE = 160.0
+const CUT_THE_SIGNAL_RELOCATION_SCORE_PLAYER_MULT = 1.2
+const CUT_THE_SIGNAL_RELOCATION_SCORE_NEIGHBOR_MULT = 0.35
+const CUT_THE_SIGNAL_RELOCATION_SCORE_NEIGHBOR_CAP = 180.0
+
+# === PRIORITY TARGET EXPOSURE ===
+const CUT_THE_SIGNAL_EXPOSURE_THRESHOLD_PHASE_BASE = 1.9
+const CUT_THE_SIGNAL_EXPOSURE_THRESHOLD_PHASE_STEP = 0.28
+const CUT_THE_SIGNAL_EXPOSURE_THRESHOLD_PHASE_MAX = 3.0
+const CUT_THE_SIGNAL_EXPOSURE_FX_STRENGTH_BASE = 1.0
+const CUT_THE_SIGNAL_EXPOSURE_FX_STRENGTH_STEP = 0.2
+const CUT_THE_SIGNAL_EXPOSURE_FX_STRENGTH_MAX = 1.8
+const CUT_THE_SIGNAL_EXPOSURE_PUSH_STRENGTH_MIN_MULT = 0.62
+const CUT_THE_SIGNAL_EXPOSURE_PUSH_LERP_A = 0.62
+const CUT_THE_SIGNAL_EXPOSURE_PUSH_LERP_B = 1.0
+const CUT_THE_SIGNAL_EXPOSURE_PUSH_AWAY_DIR_BONUS = 0.38
+const CUT_THE_SIGNAL_EXPOSURE_PUSH_CLOSE_THRESHOLD = 188.0
+const CUT_THE_SIGNAL_EXPOSURE_PUSH_CLOSE_MULT = 0.72
+const CUT_THE_SIGNAL_EXPOSURE_PUSH_VERY_CLOSE_THRESHOLD = 96.0
+const CUT_THE_SIGNAL_EXPOSURE_PUSH_VERY_CLOSE_MULT = 0.82
+
+# === CONTROL OBJECTIVE ===
+const HOLD_THE_LINE_MAX_ENEMIES_BASE = 5
+const HOLD_THE_LINE_MAX_ENEMIES_DEPTH_MULT = 0.32
+const HOLD_THE_LINE_MAX_ENEMIES_MIN = 5
+const HOLD_THE_LINE_SPAWN_TIMER_MIN = 1.0
+const HOLD_THE_LINE_SPAWN_INTERVAL_BASE = 1.36
+const HOLD_THE_LINE_SPAWN_INTERVAL_CLAMP_MIN = 0.98
+const HOLD_THE_LINE_SPAWN_INTERVAL_CLAMP_MAX = 1.24
+const HOLD_THE_LINE_SPAWN_INTERVAL_OVERTIME_MULT = 0.95
+const HOLD_THE_LINE_SPAWN_INTERVAL_OVERTIME_MIN = 1.2
+const HOLD_THE_LINE_SPAWN_BATCH_OVERTIME_CAP = 4
+const HOLD_THE_LINE_SPAWN_TIMER_OVERTIME = 0.8
+
+# === COLORS ===
+const COLOR_SIGNAL_BASE = Color(1.0, 0.84, 0.3, 0.95)
+const COLOR_SIGNAL_MUTATOR = Color(1.0, 0.84, 0.3, 1.0)
+const COLOR_DASH_LINE = Color(1.0, 0.9, 0.54, 0.96)
+const COLOR_ESCORT_CARRY_LINE = Color(0.9, 0.98, 1.0, 0.96)
+const COLOR_MARKER_DIAMOND_EXPOSED = Color(1.0, 0.98, 0.7, 1.0)
+const COLOR_MARKER_DIAMOND_OVERTIME = Color(1.0, 0.44, 0.32, 0.96)
+const COLOR_MARKER_DIAMOND_BASE = Color(1.0, 0.84, 0.3, 0.95)
+const COLOR_MARKER_STEM_EXPOSED = Color(1.0, 0.94, 0.62, 0.98)
+const COLOR_MARKER_STEM_OVERTIME = Color(1.0, 0.62, 0.36, 0.92)
+const COLOR_MARKER_STEM_BASE = Color(1.0, 0.9, 0.46, 0.9)
+const COLOR_SIGNAL_FX_CIRCLE = Color(1.0, 0.84, 0.3, 0.0)
+
+# === VFX AND TIMING ===
+const VFX_DASH_LINE_WIDTH = 6.6
+const VFX_ESCORT_LINE_WIDTH = 2.6
+const VFX_DASH_LINE_Z_INDEX = 48
+const VFX_ESCORT_LINE_Z_INDEX = 49
+const VFX_EXPOSURE_Z_INDEX = 32
+const VFX_MARKER_Z_INDEX = 50
+const VFX_MARKER_SCALE_PULSE_MAGNITUDE = 0.08
+const VFX_MARKER_SCALE_PULSE_FREQUENCY = 5.0
+const VFX_DASH_LINE_FADE_TIME = 0.34
+const VFX_ESCORT_LINE_FADE_TIME = 0.48
+const VFX_EXPOSURE_CIRCLE_RADIUS_BASE = 120.0
+const VFX_EXPOSURE_CIRCLE_RADIUS_STEP = 40.0
+const VFX_EXPOSURE_CIRCLE_COUNT = 3
+const VFX_EXPOSURE_CIRCLE_POINT_COUNT = 24
+const VFX_EXPOSURE_PULSE_PHASE_MULT = 3.2
+const VFX_EXPOSURE_PULSE_PHASE_OFFSET = 0.4
+const VFX_EXPOSURE_PULSE_AMPLITUDE = 0.5
+const VFX_MARKER_DIAMOND_SIZE = 8.0
+
 var world: Node
 var rng: RandomNumberGenerator
 
@@ -11,7 +137,13 @@ func initialize(world_generator: Node, random_number_generator: RandomNumberGene
 	world = world_generator
 	rng = random_number_generator
 
-func reset_room_objective_state() -> void:
+func _objective_kind_for_role(role: String) -> String:
+	return String(OBJECTIVE_KIND_BY_ROLE.get(role, ""))
+
+func _is_active_objective_role(role: String) -> bool:
+	return world.active_objective_kind == _objective_kind_for_role(role)
+
+func _clear_all_objective_state() -> void:
 	world.active_objective_kind = ""
 	world.objective_time_left = 0.0
 	world.objective_spawn_interval = 0.0
@@ -42,29 +174,32 @@ func reset_room_objective_state() -> void:
 	clear_priority_target_escort_dash_lines()
 	clear_priority_target_exposure_vfx()
 
+func reset_room_objective_state() -> void:
+	_clear_all_objective_state()
+
 func begin_room_objective(profile: Dictionary) -> void:
 	world.active_objective_kind = ENCOUNTER_CONTRACTS.profile_objective_kind(profile)
-	if world.active_objective_kind == "last_stand":
+	if _is_active_objective_role(OBJECTIVE_ROLE_LAST_STAND):
 		_begin_survival_objective(profile)
 		return
-	if world.active_objective_kind == "cut_the_signal":
+	if _is_active_objective_role(OBJECTIVE_ROLE_CUT_THE_SIGNAL):
 		_begin_priority_target_objective(profile)
 		return
-	if world.active_objective_kind == "hold_the_line":
+	if _is_active_objective_role(OBJECTIVE_ROLE_HOLD_THE_LINE):
 		_begin_control_objective(profile)
 
 func _begin_survival_objective(profile: Dictionary) -> void:
 	world.objective_time_left = ENCOUNTER_CONTRACTS.profile_objective_duration(profile)
 	world.objective_spawn_interval = ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
 	var objective_pressure_mult: float = world._objective_pressure_mult()
-	world.objective_spawn_interval *= clampf(1.15 - objective_pressure_mult * 0.2, 0.8, 1.08)
+	world.objective_spawn_interval *= clampf(LAST_STAND_SPAWN_INTERVAL_MULT_BASE - objective_pressure_mult * LAST_STAND_SPAWN_INTERVAL_MULT_PRESSURE, LAST_STAND_SPAWN_INTERVAL_CLAMP_MIN, LAST_STAND_SPAWN_INTERVAL_CLAMP_MAX)
 	world.objective_spawn_timer = world.objective_spawn_interval
 	world.objective_spawn_batch = ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
 	world.objective_spawn_batch = maxi(1, int(round(float(world.objective_spawn_batch) * objective_pressure_mult)))
-	world.objective_max_enemies = mini(24, 12 + int(floor(float(world.room_depth) * 0.9)))
+	world.objective_max_enemies = mini(LAST_STAND_MAX_ENEMIES_HARD_CAP, LAST_STAND_MAX_ENEMIES_BASE + int(floor(float(world.room_depth) * LAST_STAND_MAX_ENEMIES_DEPTH_MULT)))
 	world.objective_max_enemies = maxi(8, int(round(float(world.objective_max_enemies) * objective_pressure_mult)))
-	var raw_kill_target := maxi(10, int(round(world.objective_time_left * 0.42)) + 2 + int(floor(float(world.room_depth) * 0.35)))
-	raw_kill_target = maxi(8, int(round(float(raw_kill_target) * objective_pressure_mult)))
+	var raw_kill_target := maxi(LAST_STAND_KILL_TARGET_BASE, int(round(world.objective_time_left * LAST_STAND_KILL_TARGET_TIME_MULT)) + LAST_STAND_KILL_TARGET_BASE_BONUS + int(floor(float(world.room_depth) * LAST_STAND_KILL_TARGET_DEPTH_MULT)))
+	raw_kill_target = maxi(LAST_STAND_KILL_TARGET_MIN, int(round(float(raw_kill_target) * objective_pressure_mult)))
 	world.objective_kill_target = int(ceil(float(raw_kill_target) / 5.0)) * 5
 	world.objective_kills = 0
 	world.objective_overtime = false
@@ -73,17 +208,17 @@ func _begin_survival_objective(profile: Dictionary) -> void:
 func _begin_priority_target_objective(profile: Dictionary) -> void:
 	world.objective_target_type = ENCOUNTER_CONTRACTS.profile_objective_target_type(profile)
 	if world.objective_target_type.is_empty():
-		world.objective_target_type = "archer"
+		world.objective_target_type = CUT_THE_SIGNAL_DEFAULT_TYPE
 	world.objective_target_name = "Signal"
 	world.objective_time_left = ENCOUNTER_CONTRACTS.profile_objective_duration(profile)
 	world.objective_spawn_interval = ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
 	var objective_pressure_mult: float = world._objective_pressure_mult()
-	world.objective_spawn_timer = maxf(0.35, world.objective_spawn_interval * clampf(1.2 - objective_pressure_mult * 0.45, 0.5, 0.95))
+	world.objective_spawn_timer = maxf(CUT_THE_SIGNAL_SPAWN_TIMER_MIN, world.objective_spawn_interval * clampf(CUT_THE_SIGNAL_SPAWN_INTERVAL_BASE - objective_pressure_mult * 0.45, CUT_THE_SIGNAL_SPAWN_INTERVAL_CLAMP_MIN, CUT_THE_SIGNAL_SPAWN_INTERVAL_CLAMP_MAX))
 	world.objective_spawn_batch = ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
 	world.objective_spawn_batch = maxi(1, int(round(float(world.objective_spawn_batch) * objective_pressure_mult)))
-	world.objective_max_enemies = 12 + int(floor(float(world.room_depth) * 0.6))
-	world.objective_max_enemies = maxi(6, int(round(float(world.objective_max_enemies) * objective_pressure_mult)))
-	world.objective_hunt_kill_goal = clampi(int(round(4.0 * objective_pressure_mult)), 2, 6)
+	world.objective_max_enemies = 12 + int(floor(float(world.room_depth) * CUT_THE_SIGNAL_MAX_ENEMIES_DEPTH_MULT))
+	world.objective_max_enemies = maxi(CUT_THE_SIGNAL_MAX_ENEMIES_MIN, int(round(float(world.objective_max_enemies) * objective_pressure_mult)))
+	world.objective_hunt_kill_goal = clampi(int(round(CUT_THE_SIGNAL_HUNT_KILL_MULT * objective_pressure_mult)), CUT_THE_SIGNAL_HUNT_KILL_GOAL_MIN, CUT_THE_SIGNAL_HUNT_KILL_GOAL_MAX)
 	world.objective_overtime = false
 	spawn_priority_target_enemy()
 
@@ -91,11 +226,11 @@ func _begin_control_objective(profile: Dictionary) -> void:
 	world.objective_time_left = ENCOUNTER_CONTRACTS.profile_objective_duration(profile)
 	world.objective_spawn_interval = ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
 	var objective_pressure_mult: float = world._objective_pressure_mult()
-	world.objective_spawn_timer = maxf(1.0, world.objective_spawn_interval * clampf(1.36 - objective_pressure_mult * 0.16, 0.98, 1.24))
+	world.objective_spawn_timer = maxf(HOLD_THE_LINE_SPAWN_TIMER_MIN, world.objective_spawn_interval * clampf(HOLD_THE_LINE_SPAWN_INTERVAL_BASE - objective_pressure_mult * 0.16, HOLD_THE_LINE_SPAWN_INTERVAL_CLAMP_MIN, HOLD_THE_LINE_SPAWN_INTERVAL_CLAMP_MAX))
 	world.objective_spawn_batch = ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
 	world.objective_spawn_batch = maxi(1, int(round(float(world.objective_spawn_batch) * objective_pressure_mult)))
-	world.objective_max_enemies = 5 + int(floor(float(world.room_depth) * 0.32))
-	world.objective_max_enemies = maxi(5, int(round(float(world.objective_max_enemies) * objective_pressure_mult)))
+	world.objective_max_enemies = HOLD_THE_LINE_MAX_ENEMIES_BASE + int(floor(float(world.room_depth) * HOLD_THE_LINE_MAX_ENEMIES_DEPTH_MULT))
+	world.objective_max_enemies = maxi(HOLD_THE_LINE_MAX_ENEMIES_MIN, int(round(float(world.objective_max_enemies) * objective_pressure_mult)))
 	world.objective_control_anchor = Vector2.ZERO
 	world.objective_control_radius = ENCOUNTER_CONTRACTS.profile_objective_zone_radius(profile)
 	world.objective_control_progress = 0.0
@@ -110,13 +245,13 @@ func _begin_control_objective(profile: Dictionary) -> void:
 	world.queue_redraw()
 
 func update_objective_state(delta: float) -> void:
-	if world.active_objective_kind == "last_stand":
+	if _is_active_objective_role(OBJECTIVE_ROLE_LAST_STAND):
 		update_survival_objective_state(delta)
 		return
-	if world.active_objective_kind == "cut_the_signal":
+	if _is_active_objective_role(OBJECTIVE_ROLE_CUT_THE_SIGNAL):
 		update_priority_target_objective_state(delta)
 		return
-	if world.active_objective_kind == "hold_the_line":
+	if _is_active_objective_role(OBJECTIVE_ROLE_HOLD_THE_LINE):
 		update_control_objective_state(delta)
 		return
 
@@ -132,14 +267,14 @@ func update_survival_objective_state(delta: float) -> void:
 	if world.objective_time_left > 0.0:
 		world.objective_time_left = maxf(0.0, world.objective_time_left - delta)
 	if quota_met and world.objective_time_left > 0.0 and not world.objective_overtime:
-		world.objective_time_left = maxf(0.0, world.objective_time_left - delta * 0.85)
+		world.objective_time_left = maxf(0.0, world.objective_time_left - delta * LAST_STAND_QUOTA_MET_DECAY_MULT)
 	if world.objective_time_left <= 0.0 and not world.objective_overtime:
 		if quota_met:
 			complete_current_objective("Objective Complete", "Survived the timer")
 			return
 		world.objective_overtime = true
-		world.objective_spawn_interval = maxf(0.45, world.objective_spawn_interval * 0.65)
-		world.objective_spawn_batch = mini(7, world.objective_spawn_batch + 1)
+		world.objective_spawn_interval = maxf(0.45, world.objective_spawn_interval * LAST_STAND_OVERTIME_SPAWN_INTERVAL_MULT)
+		world.objective_spawn_batch = mini(LAST_STAND_OVERTIME_SPAWN_BATCH_CAP, world.objective_spawn_batch + 1)
 		world.objective_spawn_timer = 0.1
 		world.hud.show_banner("Overtime", "")
 	if world.objective_overtime and quota_met:
@@ -190,41 +325,58 @@ func update_priority_target_objective_state(delta: float) -> void:
 	if world.objective_time_left <= 0.0 and not world.objective_overtime:
 		world.objective_overtime = true
 		world.objective_spawn_interval = maxf(0.55, world.objective_spawn_interval * 0.7)
-		world.objective_spawn_batch = mini(6, world.objective_spawn_batch + 1)
-		world.objective_spawn_timer = 0.15
+		world.objective_spawn_batch = mini(CUT_THE_SIGNAL_SPAWN_BATCH_OVERTIME_CAP, world.objective_spawn_batch + 1)
+		world.objective_spawn_timer = CUT_THE_SIGNAL_SPAWN_TIMER_OVERTIME
 		enrage_priority_target()
 		world.hud.show_banner("Signal Escalating", "")
+
+func _get_control_objective_difficulty_params(difficulty_rank: int) -> Dictionary:
+	var params := {
+		"progress_gain_mult": 1.36,
+		"contested_decay_mult": 0.08,
+		"out_of_zone_decay_mult": 0.72,
+		"refill_spawn_cap": 1.0,
+		"pressure_floor_bonus": 0
+	}
+	if difficulty_rank == 0:
+		params["progress_gain_mult"] = 1.5
+		params["contested_decay_mult"] = 0.05
+		params["out_of_zone_decay_mult"] = 0.6
+		params["refill_spawn_cap"] = 1.08
+	elif difficulty_rank == 1:
+		params["progress_gain_mult"] = 1.46
+		params["contested_decay_mult"] = 0.06
+		params["out_of_zone_decay_mult"] = 0.64
+		params["refill_spawn_cap"] = 1.2
+	elif difficulty_rank == 2:
+		params["progress_gain_mult"] = 1.4
+		params["contested_decay_mult"] = 0.07
+		params["out_of_zone_decay_mult"] = 0.68
+		params["refill_spawn_cap"] = 1.1
+	elif difficulty_rank == 3:
+		params["progress_gain_mult"] = 1.3
+		params["contested_decay_mult"] = 0.09
+		params["out_of_zone_decay_mult"] = 0.76
+		params["refill_spawn_cap"] = 0.92
+		params["pressure_floor_bonus"] = 1
+	return params
 
 func update_control_objective_state(delta: float) -> void:
 	if world.choosing_next_room or world.run_cleared:
 		return
 	var difficulty_rank := DIFFICULTY_CONFIG.get_difficulty_rank(int(world.current_difficulty_tier))
-	var progress_gain_mult := 1.36
-	var contested_decay_mult := 0.08
-	var out_of_zone_decay_mult := 0.72
-	if difficulty_rank == 0:
-		progress_gain_mult = 1.5
-		contested_decay_mult = 0.05
-		out_of_zone_decay_mult = 0.6
-	elif difficulty_rank == 1:
-		progress_gain_mult = 1.46
-		contested_decay_mult = 0.06
-		out_of_zone_decay_mult = 0.64
-	elif difficulty_rank == 2:
-		progress_gain_mult = 1.4
-		contested_decay_mult = 0.07
-		out_of_zone_decay_mult = 0.68
-	elif difficulty_rank == 3:
-		progress_gain_mult = 1.3
-		contested_decay_mult = 0.09
-		out_of_zone_decay_mult = 0.76
+	var params := _get_control_objective_difficulty_params(difficulty_rank)
+	var progress_gain_mult: float = params["progress_gain_mult"]
+	var contested_decay_mult: float = params["contested_decay_mult"]
+	var out_of_zone_decay_mult: float = params["out_of_zone_decay_mult"]
+	var refill_spawn_cap: float = params["refill_spawn_cap"]
 	if world.objective_time_left > 0.0:
 		world.objective_time_left = maxf(0.0, world.objective_time_left - delta)
 	if world.objective_time_left <= 0.0 and not world.objective_overtime:
 		world.objective_overtime = true
-		world.objective_spawn_interval = maxf(1.2, world.objective_spawn_interval * 0.95)
-		world.objective_spawn_batch = mini(4, world.objective_spawn_batch + 1)
-		world.objective_spawn_timer = 0.8
+		world.objective_spawn_interval = maxf(HOLD_THE_LINE_SPAWN_INTERVAL_OVERTIME_MIN, world.objective_spawn_interval * HOLD_THE_LINE_SPAWN_INTERVAL_OVERTIME_MULT)
+		world.objective_spawn_batch = mini(HOLD_THE_LINE_SPAWN_BATCH_OVERTIME_CAP, world.objective_spawn_batch + 1)
+		world.objective_spawn_timer = HOLD_THE_LINE_SPAWN_TIMER_OVERTIME
 		world.hud.show_banner("Line Breaking", "Zone pressure escalating")
 	var has_player := is_instance_valid(world.player)
 	var anchor: Vector2 = world.objective_control_anchor
@@ -241,21 +393,10 @@ func update_control_objective_state(delta: float) -> void:
 	if world.objective_control_progress >= world.objective_control_goal:
 		complete_current_objective("Objective Complete", "Control secured")
 		return
-	var pressure_floor: int = world.objective_spawn_batch
-	if difficulty_rank == 3:
-		pressure_floor += 1
+	var pressure_floor: int = world.objective_spawn_batch + params["pressure_floor_bonus"]
 	if world.objective_max_enemies > 0:
 		pressure_floor = mini(pressure_floor, world.objective_max_enemies)
 	if world.active_room_enemy_count < pressure_floor:
-		var refill_spawn_cap := 1.0
-		if difficulty_rank == 0:
-			refill_spawn_cap = 1.08
-		elif difficulty_rank == 1:
-			refill_spawn_cap = 1.2
-		elif difficulty_rank == 2:
-			refill_spawn_cap = 1.1
-		elif difficulty_rank == 3:
-			refill_spawn_cap = 0.92
 		world.objective_spawn_timer = minf(world.objective_spawn_timer, refill_spawn_cap)
 	world.objective_spawn_timer = maxf(0.0, world.objective_spawn_timer - delta)
 	if world.objective_spawn_timer <= 0.0:
@@ -367,7 +508,7 @@ func apply_priority_target_exposure_push(delta: float) -> void:
 	var player_position: Vector2 = world.player.global_position if is_instance_valid(world.player) else Vector2.ZERO
 	var has_player := is_instance_valid(world.player)
 	var push_t := clampf(world.objective_exposure_push_left / maxf(0.01, world.objective_exposure_push_duration), 0.0, 1.0)
-	var push_strength := lerpf(world.objective_exposure_push_strength * 0.62, world.objective_exposure_push_strength, push_t)
+	var push_strength := lerpf(world.objective_exposure_push_strength * CUT_THE_SIGNAL_EXPOSURE_PUSH_LERP_A, world.objective_exposure_push_strength * CUT_THE_SIGNAL_EXPOSURE_PUSH_LERP_B, push_t)
 	for enemy_node in world.get_tree().get_nodes_in_group("enemies"):
 		if enemy_node == world.objective_target_enemy or not (enemy_node is CharacterBody2D):
 			continue
@@ -381,52 +522,29 @@ func apply_priority_target_exposure_push(delta: float) -> void:
 		if has_player:
 			var enemy_to_player: Vector2 = player_position - enemy.global_position
 			var player_dist: float = enemy_to_player.length()
-			if player_dist < 188.0:
+			if player_dist < CUT_THE_SIGNAL_EXPOSURE_PUSH_CLOSE_THRESHOLD:
 				var to_player_dir: Vector2 = enemy_to_player / maxf(0.001, player_dist)
 				var toward_player: float = dir.dot(to_player_dir)
 				if toward_player > 0.0:
-					var safe_dir: Vector2 = (dir - to_player_dir * (toward_player + 0.38)).normalized()
+					var safe_dir: Vector2 = (dir - to_player_dir * (toward_player + CUT_THE_SIGNAL_EXPOSURE_PUSH_AWAY_DIR_BONUS)).normalized()
 					if safe_dir.length() > 0.01:
 						dir = safe_dir
 					else:
 						dir = -to_player_dir
-					tuned_strength *= 0.72
-			if player_dist < 96.0:
+					tuned_strength *= CUT_THE_SIGNAL_EXPOSURE_PUSH_CLOSE_MULT
+			if player_dist < CUT_THE_SIGNAL_EXPOSURE_PUSH_VERY_CLOSE_THRESHOLD:
 				dir = (enemy.global_position - player_position).normalized()
-				tuned_strength = maxf(tuned_strength, world.objective_exposure_push_strength * 0.82)
+				tuned_strength = maxf(tuned_strength, world.objective_exposure_push_strength * CUT_THE_SIGNAL_EXPOSURE_PUSH_VERY_CLOSE_MULT)
 		var target_velocity: Vector2 = dir * tuned_strength
 		enemy.velocity = enemy.velocity.move_toward(target_velocity, delta * world.objective_exposure_push_accel)
 		enemy.apply_slow(0.2, 0.74)
 
 func complete_current_objective(title: String, _subtitle: String) -> void:
-	world.objective_control_anchor = Vector2.ZERO
-	world.objective_control_radius = 0.0
-	world.objective_control_progress = 0.0
-	world.objective_control_goal = 0.0
-	world.objective_control_decay_rate = 0.0
-	world.objective_control_contest_threshold = 0
-	world.objective_control_enemies_in_zone = 0
-	world.objective_control_player_inside = false
-	world.objective_control_contested = false
-	world.active_objective_kind = ""
-	world.objective_spawn_timer = 0.0
-	world.objective_time_left = 0.0
-	world.objective_overtime = false
-	world.objective_hunt_kill_progress = 0
-	world.objective_exposure_left = 0.0
-	world.objective_exposure_push_left = 0.0
-	world.objective_last_relocated_escort_count = 0
-	world.objective_relocation_hint_left = 0.0
-	clear_priority_target_exposure_vfx()
-	world.objective_target_enemy = null
-	world.objective_target_type = ""
-	world.objective_target_name = ""
-	world.objective_survival_quota_announced = false
-	world.objective_target_next_flee_index = 0
+	_clear_all_objective_state()
 	clear_priority_target_dash_line()
-	clear_priority_target_escort_dash_lines()
 	world._clear_all_enemies()
 	world.active_room_enemy_count = 0
+	world.objective_target_next_flee_index = 0
 	world.hud.show_banner(title, "")
 	world.queue_redraw()
 	world._on_room_cleared()
@@ -435,21 +553,21 @@ func spawn_priority_target_enemy() -> void:
 	var target_type: String = world.objective_target_type if not world.objective_target_type.is_empty() else "archer"
 	if not is_instance_valid(world.enemy_spawner):
 		return
-	var target_spawn_distance := maxf(world.spawn_safe_radius + 180.0, 320.0)
+	var target_spawn_distance := maxf(world.spawn_safe_radius + CUT_THE_SIGNAL_SPAWN_DISTANCE_BASE, CUT_THE_SIGNAL_SPAWN_DISTANCE_MIN)
 	var spawned_target := world.enemy_spawner.spawn_enemy_node_type(target_type, target_spawn_distance) as CharacterBody2D
 	if not is_instance_valid(spawned_target):
 		return
 	world.objective_target_enemy = spawned_target
 	world.active_room_enemy_count += 1
-	var boosted_max := maxi(40, int(round(float(spawned_target.get_max_health()) * 2.6)))
+	var boosted_max := maxi(CUT_THE_SIGNAL_HEALTH_BOOST_MIN, int(round(float(spawned_target.get_max_health()) * CUT_THE_SIGNAL_HEALTH_BOOST_MULT)))
 	spawned_target.set_max_health_and_current(boosted_max, boosted_max)
 	if spawned_target.get("has_mutator_overlay") != null:
 		spawned_target.set("has_mutator_overlay", true)
 	if spawned_target.get("mutator_theme_color") != null:
-		spawned_target.set("mutator_theme_color", Color(1.0, 0.84, 0.3, 1.0))
-	spawned_target.scale *= 1.14
+		spawned_target.set("mutator_theme_color", COLOR_SIGNAL_MUTATOR)
+	spawned_target.scale *= CUT_THE_SIGNAL_SCALE_MULT
 	world.objective_target_next_flee_index = 0
-	spawned_target.configure_health_bar_visuals(Vector2(-36.0, -48.0), Vector2(72.0, 9.0))
+	spawned_target.configure_health_bar_visuals(CUT_THE_SIGNAL_HEALTH_BAR_OFFSET, CUT_THE_SIGNAL_HEALTH_BAR_SIZE)
 	spawned_target.set_health_threshold_markers(world.objective_target_flee_thresholds, world.objective_target_next_flee_index)
 	world.objective_hunt_kill_progress = 0
 	world.objective_hunt_kill_goal = maxi(2, world.objective_hunt_kill_goal)
@@ -484,7 +602,7 @@ func spawn_priority_target_opening_escorts() -> void:
 		if not is_instance_valid(escort):
 			continue
 		var angle := base_angle + TAU * float(escort_index) / float(maxi(1, escort_types.size()))
-		var radius := 76.0 if escort_types[escort_index] == "shielder" else 92.0
+		var radius := CUT_THE_SIGNAL_OPENING_ESCORT_RADIUS_SHIELDER if escort_types[escort_index] == "shielder" else CUT_THE_SIGNAL_OPENING_ESCORT_RADIUS_OTHER
 		escort.global_position = world._clamp_position_to_current_room(anchor + Vector2.RIGHT.rotated(angle) * radius, 44.0)
 		world.active_room_enemy_count += 1
 	world.objective_spawn_timer = maxf(world.objective_spawn_timer, world.objective_spawn_interval)
@@ -514,8 +632,8 @@ func trigger_priority_target_threshold_phase(_threshold_ratio: float) -> void:
 	relocate_priority_target(_threshold_ratio)
 	var goal_drop := maxi(1, int(round(world._objective_pressure_mult() - 0.4)))
 	world.objective_hunt_kill_goal = maxi(2, world.objective_hunt_kill_goal - goal_drop)
-	var duration := clampf(1.9 + float(phase_index) * 0.28, 1.9, 3.0)
-	var fx_strength := clampf(1.0 + float(phase_index) * 0.2, 1.0, 1.8)
+	var duration := clampf(CUT_THE_SIGNAL_EXPOSURE_THRESHOLD_PHASE_BASE + float(phase_index) * CUT_THE_SIGNAL_EXPOSURE_THRESHOLD_PHASE_STEP, CUT_THE_SIGNAL_EXPOSURE_THRESHOLD_PHASE_BASE, CUT_THE_SIGNAL_EXPOSURE_THRESHOLD_PHASE_MAX)
+	var fx_strength := clampf(CUT_THE_SIGNAL_EXPOSURE_FX_STRENGTH_BASE + float(phase_index) * CUT_THE_SIGNAL_EXPOSURE_FX_STRENGTH_STEP, CUT_THE_SIGNAL_EXPOSURE_FX_STRENGTH_BASE, CUT_THE_SIGNAL_EXPOSURE_FX_STRENGTH_MAX)
 	trigger_priority_target_exposure("Signal Cracked", "Push through", duration, fx_strength)
 	if is_instance_valid(world.objective_target_enemy):
 		world.objective_target_enemy.velocity = Vector2.ZERO
@@ -525,7 +643,7 @@ func relocate_priority_target(_threshold_ratio: float) -> void:
 		return
 	var old_position: Vector2 = world.objective_target_enemy.global_position
 	var new_position := pick_priority_target_relocation_position(old_position)
-	if old_position.distance_to(new_position) < 120.0:
+	if old_position.distance_to(new_position) < CUT_THE_SIGNAL_RELOCATION_MIN_DISTANCE:
 		return
 	world.objective_target_enemy.global_position = new_position
 	world.objective_target_enemy.velocity = Vector2.ZERO
@@ -566,7 +684,7 @@ func relocate_priority_target_nearby_escorts(old_position: Vector2, new_position
 		var from_position := escort.global_position
 		var slot_t := float(moved) / float(maxi(1, world.objective_relocation_escort_cap))
 		var angle := base_angle + TAU * slot_t
-		var radius := 92.0 + 14.0 * float(moved)
+		var radius := CUT_THE_SIGNAL_OPENING_ESCORT_RADIUS_OTHER + 14.0 * float(moved)
 		escort.global_position = world._clamp_position_to_current_room(new_position + Vector2.RIGHT.rotated(angle) * radius, 44.0)
 		escort.velocity = Vector2.ZERO
 		carry_paths.append({"from": from_position, "to": escort.global_position})
@@ -580,22 +698,22 @@ func relocate_priority_target_nearby_escorts(old_position: Vector2, new_position
 func pick_priority_target_relocation_position(old_position: Vector2) -> Vector2:
 	if not is_instance_valid(world.enemy_spawner):
 		return old_position
-	var min_player_distance := maxf(world.spawn_safe_radius + 150.0, 300.0)
+	var min_player_distance := maxf(world.spawn_safe_radius + CUT_THE_SIGNAL_SPAWN_DISTANCE_BASE, CUT_THE_SIGNAL_SPAWN_DISTANCE_MIN)
 	var min_enemy_spacing := 132.0
 	var best_position := old_position
 	var best_score := -INF
-	for _attempt in range(8):
+	for _attempt in range(CUT_THE_SIGNAL_RELOCATION_ATTEMPT_COUNT):
 		var candidate := world.enemy_spawner.pick_room_position(min_player_distance, min_enemy_spacing) as Vector2
-		if candidate.distance_to(old_position) < 160.0:
+		if candidate.distance_to(old_position) < CUT_THE_SIGNAL_RELOCATION_CANDIDATE_MIN_DISTANCE:
 			continue
 		var score := candidate.distance_to(old_position)
 		if is_instance_valid(world.player):
-			score += candidate.distance_to(world.player.global_position) * 1.2
+			score += candidate.distance_to(world.player.global_position) * CUT_THE_SIGNAL_RELOCATION_SCORE_PLAYER_MULT
 		for enemy in world.get_tree().get_nodes_in_group("enemies"):
 			if enemy == world.objective_target_enemy or not (enemy is Node2D):
 				continue
 			var neighbor := enemy as Node2D
-			score += minf(180.0, candidate.distance_to(neighbor.global_position)) * 0.35
+			score += minf(CUT_THE_SIGNAL_RELOCATION_SCORE_NEIGHBOR_CAP, candidate.distance_to(neighbor.global_position)) * CUT_THE_SIGNAL_RELOCATION_SCORE_NEIGHBOR_MULT
 		if score > best_score:
 			best_score = score
 			best_position = candidate
@@ -620,17 +738,21 @@ func spawn_priority_target_relocation_escorts(anchor: Vector2) -> void:
 		escort.global_position = world._clamp_position_to_current_room(anchor + Vector2.RIGHT.rotated(escort_angle) * escort_radius, 44.0)
 		world.active_room_enemy_count += 1
 
+func _create_line_2d(width: float, color: Color, z_index: int, points: PackedVector2Array) -> Line2D:
+	var line := Line2D.new()
+	line.width = width
+	line.default_color = color
+	line.points = points
+	line.z_as_relative = false
+	line.z_index = z_index
+	return line
+
 func show_priority_target_dash_line(from_position: Vector2, to_position: Vector2) -> void:
 	clear_priority_target_dash_line()
-	world.objective_target_dash_line = Line2D.new()
+	world.objective_target_dash_line = _create_line_2d(VFX_DASH_LINE_WIDTH, COLOR_DASH_LINE, VFX_DASH_LINE_Z_INDEX, PackedVector2Array([from_position, to_position]))
 	world.objective_target_dash_line.name = "PriorityTargetDashLine"
-	world.objective_target_dash_line.width = 6.6
-	world.objective_target_dash_line.default_color = Color(1.0, 0.9, 0.54, 0.96)
-	world.objective_target_dash_line.points = PackedVector2Array([from_position, to_position])
-	world.objective_target_dash_line.z_as_relative = false
-	world.objective_target_dash_line.z_index = 48
 	world.add_child(world.objective_target_dash_line)
-	world.objective_target_dash_line_time_left = 0.34
+	world.objective_target_dash_line_time_left = VFX_DASH_LINE_FADE_TIME
 
 func clear_priority_target_dash_line() -> void:
 	if is_instance_valid(world.objective_target_dash_line):
@@ -642,15 +764,10 @@ func show_priority_target_escort_carry_lines(paths: Array[Dictionary]) -> void:
 	for path_info in paths:
 		var from_pos := path_info.get("from", Vector2.ZERO) as Vector2
 		var to_pos := path_info.get("to", Vector2.ZERO) as Vector2
-		var line := Line2D.new()
-		line.width = 2.6
-		line.default_color = Color(0.9, 0.98, 1.0, 0.96)
-		line.points = PackedVector2Array([from_pos, to_pos])
-		line.z_as_relative = false
-		line.z_index = 49
+		var line := _create_line_2d(VFX_ESCORT_LINE_WIDTH, COLOR_ESCORT_CARRY_LINE, VFX_ESCORT_LINE_Z_INDEX, PackedVector2Array([from_pos, to_pos]))
 		world.add_child(line)
 		world.objective_escort_dash_lines.append(line)
-	world.objective_escort_dash_line_time_left = 0.48
+	world.objective_escort_dash_line_time_left = VFX_ESCORT_LINE_FADE_TIME
 
 func clear_priority_target_escort_dash_lines() -> void:
 	for line in world.objective_escort_dash_lines:
@@ -662,19 +779,19 @@ func clear_priority_target_escort_dash_lines() -> void:
 func update_priority_target_marker(delta: float) -> void:
 	if world.objective_escort_dash_line_time_left > 0.0:
 		world.objective_escort_dash_line_time_left = maxf(0.0, world.objective_escort_dash_line_time_left - delta)
-		var escort_alpha := clampf(world.objective_escort_dash_line_time_left / 0.48, 0.0, 1.0)
+		var escort_alpha := clampf(world.objective_escort_dash_line_time_left / VFX_ESCORT_LINE_FADE_TIME, 0.0, 1.0)
 		for line in world.objective_escort_dash_lines:
 			if not is_instance_valid(line):
 				continue
-			line.default_color = Color(0.9, 0.98, 1.0, 0.96 * escort_alpha)
-			line.width = 2.6 + 2.8 * escort_alpha
+			line.default_color = COLOR_ESCORT_CARRY_LINE * Color(1.0, 1.0, 1.0, escort_alpha)
+			line.width = VFX_ESCORT_LINE_WIDTH + 2.8 * escort_alpha
 		if world.objective_escort_dash_line_time_left <= 0.0:
 			clear_priority_target_escort_dash_lines()
 	if world.objective_target_dash_line_time_left > 0.0:
 		world.objective_target_dash_line_time_left = maxf(0.0, world.objective_target_dash_line_time_left - delta)
 		if is_instance_valid(world.objective_target_dash_line):
-			var alpha := clampf(world.objective_target_dash_line_time_left / 0.34, 0.0, 1.0)
-			world.objective_target_dash_line.default_color = Color(1.0, 0.9, 0.54, 0.96 * alpha)
+			var alpha := clampf(world.objective_target_dash_line_time_left / VFX_DASH_LINE_FADE_TIME, 0.0, 1.0)
+			world.objective_target_dash_line.default_color = COLOR_DASH_LINE * Color(1.0, 1.0, 1.0, alpha)
 			world.objective_target_dash_line.width = 3.6 + 3.0 * alpha
 		if world.objective_target_dash_line_time_left <= 0.0:
 			clear_priority_target_dash_line()
@@ -684,23 +801,23 @@ func update_priority_target_marker(delta: float) -> void:
 	if marker == null:
 		return
 	var t := float(Time.get_ticks_msec()) * 0.001
-	marker.scale = Vector2.ONE * (1.0 + 0.08 * sin(t * 5.0))
+	marker.scale = Vector2.ONE * (1.0 + VFX_MARKER_SCALE_PULSE_MAGNITUDE * sin(t * VFX_MARKER_SCALE_PULSE_FREQUENCY))
 	var diamond := marker.get_child(0) as Polygon2D
 	var stem := marker.get_child(1) as Line2D
 	if diamond != null:
 		if world.objective_exposure_left > 0.0:
-			diamond.color = Color(1.0, 0.98, 0.7, 1.0)
+			diamond.color = COLOR_MARKER_DIAMOND_EXPOSED
 		elif world.objective_overtime:
-			diamond.color = Color(1.0, 0.44, 0.32, 0.96)
+			diamond.color = COLOR_MARKER_DIAMOND_OVERTIME
 		else:
-			diamond.color = Color(1.0, 0.84, 0.3, 0.95)
+			diamond.color = COLOR_MARKER_DIAMOND_BASE
 	if stem != null:
 		if world.objective_exposure_left > 0.0:
-			stem.default_color = Color(1.0, 0.94, 0.62, 0.98)
+			stem.default_color = COLOR_MARKER_STEM_EXPOSED
 		elif world.objective_overtime:
-			stem.default_color = Color(1.0, 0.62, 0.36, 0.92)
+			stem.default_color = COLOR_MARKER_STEM_OVERTIME
 		else:
-			stem.default_color = Color(1.0, 0.9, 0.46, 0.9)
+			stem.default_color = COLOR_MARKER_STEM_BASE
 
 func attach_priority_target_marker(enemy: CharacterBody2D) -> void:
 	var existing := enemy.get_node_or_null("PriorityTargetMarker")
@@ -708,22 +825,22 @@ func attach_priority_target_marker(enemy: CharacterBody2D) -> void:
 		existing.queue_free()
 	var marker := Node2D.new()
 	marker.name = "PriorityTargetMarker"
-	marker.position = Vector2(0.0, -62.0)
+	marker.position = Vector2(0.0, CUT_THE_SIGNAL_MARKER_Y_OFFSET)
 	marker.z_as_relative = false
-	marker.z_index = 50
+	marker.z_index = CUT_THE_SIGNAL_MARKER_Z_INDEX
 	var diamond := Polygon2D.new()
 	diamond.polygon = PackedVector2Array([
-		Vector2(0.0, -8.0),
-		Vector2(8.0, 0.0),
-		Vector2(0.0, 8.0),
-		Vector2(-8.0, 0.0)
+		Vector2(0.0, -VFX_MARKER_DIAMOND_SIZE),
+		Vector2(VFX_MARKER_DIAMOND_SIZE, 0.0),
+		Vector2(0.0, VFX_MARKER_DIAMOND_SIZE),
+		Vector2(-VFX_MARKER_DIAMOND_SIZE, 0.0)
 	])
-	diamond.color = Color(1.0, 0.84, 0.3, 0.95)
+	diamond.color = COLOR_MARKER_DIAMOND_BASE
 	marker.add_child(diamond)
 	var stem := Line2D.new()
 	stem.width = 2.0
-	stem.default_color = Color(1.0, 0.9, 0.46, 0.9)
-	stem.points = PackedVector2Array([Vector2(0.0, 8.0), Vector2(0.0, 16.0)])
+	stem.default_color = COLOR_MARKER_STEM_BASE
+	stem.points = PackedVector2Array([Vector2(0.0, VFX_MARKER_DIAMOND_SIZE), Vector2(0.0, VFX_MARKER_DIAMOND_SIZE * 2.0)])
 	marker.add_child(stem)
 	enemy.add_child(marker)
 
@@ -740,7 +857,7 @@ func enrage_priority_target() -> void:
 		world.objective_target_enemy.set("attack_cooldown", maxf(0.45, float(world.objective_target_enemy.get("attack_cooldown")) * 0.8))
 
 func _on_priority_target_died() -> void:
-	if world.active_objective_kind != "cut_the_signal":
+	if not _is_active_objective_role(OBJECTIVE_ROLE_CUT_THE_SIGNAL):
 		return
 	world.objective_target_enemy = null
 	complete_current_objective("Target Eliminated", "%s down" % world.objective_target_name)
@@ -753,19 +870,19 @@ func show_priority_target_exposure_vfx(strength: float, duration: float) -> void
 	world.objective_signal_fx_phase = 0.0
 	world.objective_signal_fx_node = Node2D.new()
 	world.objective_signal_fx_node.name = "SignalExposureFX"
-	for _circle_index in range(3):
+	for _circle_index in range(VFX_EXPOSURE_CIRCLE_COUNT):
 		var circle := Line2D.new()
 		circle.width = 1.0
-		circle.default_color = Color(1.0, 0.84, 0.3, 0.0)
-		var radius := 120.0 + float(_circle_index) * 40.0
-		var point_count := 24
+		circle.default_color = COLOR_SIGNAL_FX_CIRCLE
+		var radius := VFX_EXPOSURE_CIRCLE_RADIUS_BASE + float(_circle_index) * VFX_EXPOSURE_CIRCLE_RADIUS_STEP
+		var point_count := VFX_EXPOSURE_CIRCLE_POINT_COUNT
 		var points: PackedVector2Array = []
 		for point_index in range(point_count + 1):
 			var angle := TAU * float(point_index) / float(point_count)
 			points.append(Vector2.RIGHT.rotated(angle) * radius)
 		circle.points = points
 		circle.z_as_relative = false
-		circle.z_index = 32
+		circle.z_index = VFX_EXPOSURE_Z_INDEX
 		world.objective_signal_fx_node.add_child(circle)
 	if is_instance_valid(world.objective_target_enemy):
 		world.objective_signal_fx_node.global_position = world.objective_target_enemy.global_position
@@ -780,11 +897,11 @@ func refresh_priority_target_exposure_vfx() -> void:
 		var circle := world.objective_signal_fx_node.get_child(circle_index) as Line2D
 		if circle == null:
 			continue
-		var pulse_phase := fmod(phase_offset * 3.2 - float(circle_index) * 0.4, TAU)
-		var pulse_strength := 0.5 + 0.5 * sin(pulse_phase)
+		var pulse_phase := fmod(phase_offset * VFX_EXPOSURE_PULSE_PHASE_MULT - float(circle_index) * VFX_EXPOSURE_PULSE_PHASE_OFFSET, TAU)
+		var pulse_strength := VFX_EXPOSURE_PULSE_AMPLITUDE + VFX_EXPOSURE_PULSE_AMPLITUDE * sin(pulse_phase)
 		var alpha_base := 1.0 - progress
 		var alpha_pulse: float = alpha_base * pulse_strength * world.objective_signal_fx_strength
-		circle.default_color = Color(1.0, 0.84, 0.3, alpha_pulse)
+		circle.default_color = COLOR_SIGNAL_FX_CIRCLE * Color(1.0, 1.0, 1.0, alpha_pulse)
 
 func clear_priority_target_exposure_vfx() -> void:
 	if is_instance_valid(world.objective_signal_fx_node):
