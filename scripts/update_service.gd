@@ -144,6 +144,7 @@ func _launch_zip_update(zip_absolute_path: String) -> bool:
 	var pid := OS.get_process_id()
 	var batch_path := staging_dir + "\\apply_update.bat"
 	var relaunch_path := install_dir + "\\" + exe_name
+	var staged_exe_path := staging_dir + "\\" + exe_name
 	var batch := FileAccess.open("user://updates/staging/apply_update.bat", FileAccess.WRITE)
 	if batch == null:
 		return false
@@ -151,10 +152,15 @@ func _launch_zip_update(zip_absolute_path: String) -> bool:
 	batch.store_string(":wait\r\n")
 	batch.store_string("tasklist /FI \"PID eq %d\" 2>NUL | find \"%d\" >NUL\r\n" % [pid, pid])
 	batch.store_string("if not errorlevel 1 (timeout /t 1 /nobreak >NUL && goto wait)\r\n")
-	batch.store_string("xcopy /Y /E \"%s\\*\" \"%s\\\"\r\n" % [staging_dir, install_dir])
-	batch.store_string("start \"\" \"%s\"\r\n" % relaunch_path)
+	batch.store_string("xcopy /Y /E /R /I \"%s\\*\" \"%s\\\" >NUL\r\n" % [staging_dir, install_dir])
+	batch.store_string("if errorlevel 1 goto copy_failed\r\n")
+	batch.store_string("if exist \"%s\" (start \"\" \"%s\") else (start \"\" \"%s\")\r\n" % [relaunch_path, relaunch_path, staged_exe_path])
 	batch.store_string("rd /S /Q \"%s\"\r\n" % staging_dir)
 	batch.store_string("del /F /Q \"%s\"\r\n" % zip_absolute_path)
+	batch.store_string("exit /b 0\r\n")
+	batch.store_string(":copy_failed\r\n")
+	batch.store_string("start \"\" \"%s\"\r\n" % staged_exe_path)
+	batch.store_string("exit /b 0\r\n")
 	batch.close()
 
 	return OS.create_process("cmd.exe", PackedStringArray(["/c", batch_path])) >= 0
