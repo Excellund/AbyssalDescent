@@ -303,6 +303,79 @@ static func profile_set_specialist_counts(profile_value: Dictionary, lurkers: in
 	profile_value[PROFILE_KEY_RAM_COUNT] = rams
 	profile_value[PROFILE_KEY_LANCER_COUNT] = lancers
 
+static func profile_counts(chasers: int, chargers: int, archers: int, shielders: int, lurkers: int = 0, rams: int = 0, lancers: int = 0) -> Dictionary:
+	return {
+		PROFILE_KEY_CHASER_COUNT: chasers,
+		PROFILE_KEY_CHARGER_COUNT: chargers,
+		PROFILE_KEY_ARCHER_COUNT: archers,
+		PROFILE_KEY_SHIELDER_COUNT: shielders,
+		PROFILE_KEY_LURKER_COUNT: lurkers,
+		PROFILE_KEY_RAM_COUNT: rams,
+		PROFILE_KEY_LANCER_COUNT: lancers
+	}
+
+static func profile_count_from_counts(counts: Dictionary, key: String) -> int:
+	return int(counts.get(key, 0))
+
+static func profile_counts_from_profile(profile_value: Dictionary) -> Dictionary:
+	return profile_counts(
+		profile_chaser_count(profile_value),
+		profile_charger_count(profile_value),
+		profile_archer_count(profile_value),
+		profile_shielder_count(profile_value),
+		profile_lurker_count(profile_value),
+		profile_ram_count(profile_value),
+		profile_lancer_count(profile_value)
+	)
+
+static func profile_set_counts_from_dict(profile_value: Dictionary, counts: Dictionary) -> void:
+	profile_set_counts(
+		profile_value,
+		profile_count_from_counts(counts, PROFILE_KEY_CHASER_COUNT),
+		profile_count_from_counts(counts, PROFILE_KEY_CHARGER_COUNT),
+		profile_count_from_counts(counts, PROFILE_KEY_ARCHER_COUNT),
+		profile_count_from_counts(counts, PROFILE_KEY_SHIELDER_COUNT)
+	)
+	profile_set_specialist_counts(
+		profile_value,
+		profile_count_from_counts(counts, PROFILE_KEY_LURKER_COUNT),
+		profile_count_from_counts(counts, PROFILE_KEY_RAM_COUNT),
+		profile_count_from_counts(counts, PROFILE_KEY_LANCER_COUNT)
+	)
+
+static func profile_with_counts(profile_value: Dictionary, counts: Dictionary) -> Dictionary:
+	var modified := profile_value.duplicate(true)
+	profile_set_counts_from_dict(modified, counts)
+	return modified
+
+static func profile_scale_count(count: int, pressure_mult: float, minimum: int = 0) -> int:
+	var scaled := int(floor(float(maxi(0, count)) * pressure_mult))
+	return maxi(minimum, scaled)
+
+static func profile_scaled_counts(profile_value: Dictionary, pressure_mult: float = 1.0, minimum_total: int = 0) -> Dictionary:
+	if profile_value.is_empty():
+		return profile_value
+	var modified := profile_value.duplicate(true)
+	profile_set_counts(
+		modified,
+		profile_scale_count(profile_chaser_count(modified), pressure_mult),
+		profile_scale_count(profile_charger_count(modified), pressure_mult),
+		profile_scale_count(profile_archer_count(modified), pressure_mult),
+		profile_scale_count(profile_shielder_count(modified), pressure_mult)
+	)
+	profile_set_specialist_counts(
+		modified,
+		profile_scale_count(profile_lurker_count(modified), pressure_mult),
+		profile_scale_count(profile_ram_count(modified), pressure_mult),
+		profile_scale_count(profile_lancer_count(modified), pressure_mult)
+	)
+	if minimum_total > 0:
+		var current_total := profile_total_enemy_count(modified)
+		if current_total < minimum_total:
+			var delta := minimum_total - current_total
+			modified[PROFILE_KEY_CHASER_COUNT] = profile_chaser_count(modified) + delta
+	return modified
+
 static func profile_total_enemy_count(profile_value: Dictionary) -> int:
 	var total := 0
 	total += profile_chaser_count(profile_value)

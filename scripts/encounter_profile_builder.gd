@@ -94,17 +94,6 @@ const CONTROL_DEPTH_WINDOWS_BY_RANK := {
 
 var _bearing_definitions_cache: Dictionary = {}
 
-func _bearing_counts(chasers: int, chargers: int, archers: int, shielders: int, lurkers: int = 0, rams: int = 0, lancers: int = 0) -> Dictionary:
-	return {
-		ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT: chasers,
-		ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT: chargers,
-		ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT: archers,
-		ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT: shielders,
-		ENCOUNTER_CONTRACTS.PROFILE_KEY_LURKER_COUNT: lurkers,
-		ENCOUNTER_CONTRACTS.PROFILE_KEY_RAM_COUNT: rams,
-		ENCOUNTER_CONTRACTS.PROFILE_KEY_LANCER_COUNT: lancers
-	}
-
 func _bearing_definition(room_size: Vector2, base_counts: Dictionary, rank_counts: Array[Dictionary]) -> Dictionary:
 	return {
 		"room_size": room_size,
@@ -116,53 +105,53 @@ func _get_bearing_definitions() -> Dictionary:
 	if not _bearing_definitions_cache.is_empty():
 		return _bearing_definitions_cache
 	_bearing_definitions_cache = {
-		"Crossfire": _bearing_definition(POOL_ROOM_SIZE, _bearing_counts(1, 1, 4, 0), [
-			_bearing_counts(1, 1, 3, 0),
-			_bearing_counts(1, 1, 4, 0),
-			_bearing_counts(1, 2, 7, 0),
-			_bearing_counts(1, 2, 9, 0)
+		"Crossfire": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(1, 1, 4, 0), [
+			ENCOUNTER_CONTRACTS.profile_counts(1, 1, 3, 0),
+			ENCOUNTER_CONTRACTS.profile_counts(1, 1, 4, 0),
+			ENCOUNTER_CONTRACTS.profile_counts(1, 2, 7, 0),
+			ENCOUNTER_CONTRACTS.profile_counts(1, 2, 9, 0)
 		]),
-		"Onslaught": _bearing_definition(POOL_ROOM_SIZE, _bearing_counts(7, 2, 0, 0), [
-			_bearing_counts(4, 1, 0, 0),
-			_bearing_counts(7, 2, 0, 0),
-			_bearing_counts(8, 2, 0, 0),
-			_bearing_counts(10, 3, 0, 0)
+		"Onslaught": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(7, 2, 0, 0), [
+			ENCOUNTER_CONTRACTS.profile_counts(4, 1, 0, 0),
+			ENCOUNTER_CONTRACTS.profile_counts(7, 2, 0, 0),
+			ENCOUNTER_CONTRACTS.profile_counts(8, 2, 0, 0),
+			ENCOUNTER_CONTRACTS.profile_counts(10, 3, 0, 0)
 		]),
-		"Fortress": _bearing_definition(POOL_ROOM_SIZE, _bearing_counts(1, 0, 1, 4), [
-			_bearing_counts(1, 0, 1, 2),
-			_bearing_counts(1, 0, 1, 5),
-			_bearing_counts(2, 0, 1, 7),
-			_bearing_counts(2, 0, 2, 9)
+		"Fortress": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(1, 0, 1, 4), [
+			ENCOUNTER_CONTRACTS.profile_counts(1, 0, 1, 2),
+			ENCOUNTER_CONTRACTS.profile_counts(1, 0, 1, 5),
+			ENCOUNTER_CONTRACTS.profile_counts(2, 0, 1, 7),
+			ENCOUNTER_CONTRACTS.profile_counts(2, 0, 2, 9)
 		]),
-		"Blitz": _bearing_definition(POOL_ROOM_SIZE, _bearing_counts(1, 0, 0, 0, 3, 1), [
-			_bearing_counts(1, 0, 0, 0, 2, 1),
-			_bearing_counts(2, 0, 0, 0, 3, 1),
-			_bearing_counts(3, 0, 0, 0, 3, 1),
-			_bearing_counts(4, 0, 0, 0, 3, 2)
+		"Blitz": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(1, 0, 0, 0, 3, 1), [
+			ENCOUNTER_CONTRACTS.profile_counts(1, 0, 0, 0, 2, 1),
+			ENCOUNTER_CONTRACTS.profile_counts(2, 0, 0, 0, 3, 1),
+			ENCOUNTER_CONTRACTS.profile_counts(3, 0, 0, 0, 3, 1),
+			ENCOUNTER_CONTRACTS.profile_counts(4, 0, 0, 0, 3, 2)
 		]),
-		"Suppression": _bearing_definition(POOL_ROOM_SIZE, _bearing_counts(1, 1, 2, 1, 0, 0, 2), [
-			_bearing_counts(1, 1, 1, 1, 0, 0, 2),
-			_bearing_counts(1, 1, 2, 1, 0, 0, 3),
-			_bearing_counts(2, 1, 3, 2, 0, 0, 3),
-			_bearing_counts(2, 2, 4, 2, 0, 0, 4)
+		"Suppression": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(1, 1, 2, 1, 0, 0, 2), [
+			ENCOUNTER_CONTRACTS.profile_counts(1, 1, 1, 1, 0, 0, 2),
+			ENCOUNTER_CONTRACTS.profile_counts(1, 1, 2, 1, 0, 0, 3),
+			ENCOUNTER_CONTRACTS.profile_counts(2, 1, 3, 2, 0, 0, 3),
+			ENCOUNTER_CONTRACTS.profile_counts(2, 2, 4, 2, 0, 0, 4)
 		]),
-		"Vanguard": _bearing_definition(POOL_ROOM_SIZE, _bearing_counts(2, 2, 0, 3), [
-			_bearing_counts(1, 2, 0, 2),
-			_bearing_counts(2, 3, 0, 3),
-			_bearing_counts(2, 4, 0, 4),
-			_bearing_counts(3, 5, 0, 4)
+		"Vanguard": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(2, 2, 0, 3), [
+			ENCOUNTER_CONTRACTS.profile_counts(1, 2, 0, 2),
+			ENCOUNTER_CONTRACTS.profile_counts(2, 3, 0, 3),
+			ENCOUNTER_CONTRACTS.profile_counts(2, 4, 0, 4),
+			ENCOUNTER_CONTRACTS.profile_counts(3, 5, 0, 4)
 		]),
-		"Ambush": _bearing_definition(POOL_ROOM_SIZE, _bearing_counts(2, 0, 0, 0, 4, 0, 1), [
-			_bearing_counts(1, 0, 0, 0, 3, 0, 1),
-			_bearing_counts(2, 0, 0, 0, 4, 0, 1),
-			_bearing_counts(4, 0, 0, 0, 4, 0, 2),
-			_bearing_counts(4, 0, 0, 0, 5, 0, 3)
+		"Ambush": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(2, 0, 0, 0, 4, 0, 1), [
+			ENCOUNTER_CONTRACTS.profile_counts(1, 0, 0, 0, 3, 0, 1),
+			ENCOUNTER_CONTRACTS.profile_counts(2, 0, 0, 0, 4, 0, 1),
+			ENCOUNTER_CONTRACTS.profile_counts(4, 0, 0, 0, 4, 0, 2),
+			ENCOUNTER_CONTRACTS.profile_counts(4, 0, 0, 0, 5, 0, 3)
 		]),
-		"Gauntlet": _bearing_definition(POOL_ROOM_SIZE, _bearing_counts(1, 1, 1, 1, 1, 0, 1), [
-			_bearing_counts(1, 1, 1, 1, 1, 0, 1),
-			_bearing_counts(2, 1, 1, 1, 1, 0, 1),
-			_bearing_counts(3, 1, 1, 1, 2, 0, 1),
-			_bearing_counts(4, 2, 1, 1, 2, 0, 1)
+		"Gauntlet": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(1, 1, 1, 1, 1, 0, 1), [
+			ENCOUNTER_CONTRACTS.profile_counts(1, 1, 1, 1, 1, 0, 1),
+			ENCOUNTER_CONTRACTS.profile_counts(2, 1, 1, 1, 1, 0, 1),
+			ENCOUNTER_CONTRACTS.profile_counts(3, 1, 1, 1, 2, 0, 1),
+			ENCOUNTER_CONTRACTS.profile_counts(4, 2, 1, 1, 2, 0, 1)
 		])
 	}
 	return _bearing_definitions_cache
@@ -193,67 +182,15 @@ func _effective_depth(depth: int) -> int:
 	var divisor := maxf(0.1, _difficulty_float("depth_pressure_divisor", 1.0))
 	return int(floor(float(maxi(0, depth)) / divisor))
 
-func _scale_enemy_count(count: int, minimum: int = 0, pressure_mult_override: float = 1.0) -> int:
-	var pressure_mult := _difficulty_float("base_enemy_pressure_mult", 1.0) * pressure_mult_override
-	var scaled := int(floor(float(maxi(0, count)) * pressure_mult))
-	return maxi(minimum, scaled)
-
-func _count_from_counts(counts: Dictionary, key: String) -> int:
-	return int(counts.get(key, 0))
-
-func _set_profile_counts_from_counts_dict(profile: Dictionary, counts: Dictionary) -> void:
-	ENCOUNTER_CONTRACTS.profile_set_counts(
-		profile,
-		_count_from_counts(counts, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT),
-		_count_from_counts(counts, ENCOUNTER_CONTRACTS.PROFILE_KEY_CHARGER_COUNT),
-		_count_from_counts(counts, ENCOUNTER_CONTRACTS.PROFILE_KEY_ARCHER_COUNT),
-		_count_from_counts(counts, ENCOUNTER_CONTRACTS.PROFILE_KEY_SHIELDER_COUNT)
-	)
-	ENCOUNTER_CONTRACTS.profile_set_specialist_counts(
-		profile,
-		_count_from_counts(counts, ENCOUNTER_CONTRACTS.PROFILE_KEY_LURKER_COUNT),
-		_count_from_counts(counts, ENCOUNTER_CONTRACTS.PROFILE_KEY_RAM_COUNT),
-		_count_from_counts(counts, ENCOUNTER_CONTRACTS.PROFILE_KEY_LANCER_COUNT)
-	)
-
 func _apply_bearing_count_scaling(profile: Dictionary, pressure_mult_override: float = 1.0, minimum_total: int = 0) -> Dictionary:
-	if profile.is_empty():
-		return profile
-	var modified := profile.duplicate(true)
-	var chasers := _scale_enemy_count(ENCOUNTER_CONTRACTS.profile_chaser_count(modified), 0, pressure_mult_override)
-	var chargers := _scale_enemy_count(ENCOUNTER_CONTRACTS.profile_charger_count(modified), 0, pressure_mult_override)
-	var archers := _scale_enemy_count(ENCOUNTER_CONTRACTS.profile_archer_count(modified), 0, pressure_mult_override)
-	var shielders := _scale_enemy_count(ENCOUNTER_CONTRACTS.profile_shielder_count(modified), 0, pressure_mult_override)
-	ENCOUNTER_CONTRACTS.profile_set_counts(
-		modified,
-		chasers,
-		chargers,
-		archers,
-		shielders
-	)
-	var lurkers := ENCOUNTER_CONTRACTS.profile_lurker_count(modified)
-	var rams := ENCOUNTER_CONTRACTS.profile_ram_count(modified)
-	var lancers := ENCOUNTER_CONTRACTS.profile_lancer_count(modified)
-	ENCOUNTER_CONTRACTS.profile_set_specialist_counts(
-		modified,
-		_scale_enemy_count(lurkers, 0, pressure_mult_override),
-		_scale_enemy_count(rams, 0, pressure_mult_override),
-		_scale_enemy_count(lancers, 0, pressure_mult_override)
-	)
-	if minimum_total > 0:
-		var current_total := ENCOUNTER_CONTRACTS.profile_total_enemy_count(modified)
-		if current_total < minimum_total:
-			var delta := minimum_total - current_total
-			modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_CHASER_COUNT] = ENCOUNTER_CONTRACTS.profile_chaser_count(modified) + delta
-	return modified
+	var pressure_mult := _difficulty_float("base_enemy_pressure_mult", 1.0) * pressure_mult_override
+	return ENCOUNTER_CONTRACTS.profile_scaled_counts(profile, pressure_mult, minimum_total)
 
 func _skirmish_min_total_enemies() -> int:
 	return 3 + _difficulty_rank()
 
 func _apply_profile_counts(profile: Dictionary, counts: Dictionary) -> Dictionary:
-	var modified := profile.duplicate(true)
-	_set_profile_counts_from_counts_dict(modified, counts)
-	return modified
+	return ENCOUNTER_CONTRACTS.profile_with_counts(profile, counts)
 
 func _build_bearing_profile(label: String) -> Dictionary:
 	var definition := _get_bearing_definition(label)
