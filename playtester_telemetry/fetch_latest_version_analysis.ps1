@@ -184,16 +184,20 @@ foreach ($r in $runs) {
     if ($out -eq 'death') { $charByBearing[$cbKey].deaths++ }
 
     # --- offer-side pick-rate aggregates ---
-    $offers = @(); if ($r.reward_offers -is [System.Array]) { $offers = $r.reward_offers }
-    foreach ($o in $offers) {
+    # Each reward_offers entry is a presentation event: { mode, offers: [{choice_id, ...}, ...], ... }
+    $offerEvents = @(); if ($r.reward_offers -is [System.Array]) { $offerEvents = $r.reward_offers }
+    foreach ($o in $offerEvents) {
         $mode = [int]$o.mode
-        $oid = [string]$o.choice_id; if ([string]::IsNullOrWhiteSpace($oid)) { $oid = 'unknown' }
-        if ($mode -eq 3) {
-            if (-not $arcanaOfferCounts.ContainsKey($oid)) { $arcanaOfferCounts[$oid] = 0 }
-            $arcanaOfferCounts[$oid]++
-        } elseif ($mode -eq 1) {
-            if (-not $boonOfferCounts.ContainsKey($oid)) { $boonOfferCounts[$oid] = 0 }
-            $boonOfferCounts[$oid]++
+        $innerOffers = @(); if ($o.offers -is [System.Array]) { $innerOffers = $o.offers }
+        foreach ($item in $innerOffers) {
+            $oid = [string]$item.choice_id; if ([string]::IsNullOrWhiteSpace($oid)) { $oid = 'unknown' }
+            if ($mode -eq 3) {
+                if (-not $arcanaOfferCounts.ContainsKey($oid)) { $arcanaOfferCounts[$oid] = 0 }
+                $arcanaOfferCounts[$oid]++
+            } elseif ($mode -eq 1) {
+                if (-not $boonOfferCounts.ContainsKey($oid)) { $boonOfferCounts[$oid] = 0 }
+                $boonOfferCounts[$oid]++
+            }
         }
     }
 }

@@ -1,5 +1,5 @@
 ﻿{
-    "generated_at_utc":  "2026-05-02 23:25:33",
+    "generated_at_utc":  "2026-05-02 23:29:43",
     "latest_version":  "0.3.1",
     "run_count":  24,
     "outcomes":  {
@@ -275,86 +275,92 @@
                        ],
     "arcana_pick_rates":  [
                               {
-                                  "arcana":  "rupture_wave",
-                                  "offers":  0,
+                                  "arcana":  "execution_edge",
+                                  "offers":  6,
                                   "picks":  5,
-                                  "pick_rate_pct":  null
+                                  "pick_rate_pct":  83.33
                               },
                               {
-                                  "arcana":  "execution_edge",
-                                  "offers":  0,
+                                  "arcana":  "rupture_wave",
+                                  "offers":  10,
                                   "picks":  5,
-                                  "pick_rate_pct":  null
+                                  "pick_rate_pct":  50
                               },
                               {
                                   "arcana":  "razor_wind",
-                                  "offers":  0,
+                                  "offers":  6,
                                   "picks":  4,
-                                  "pick_rate_pct":  null
+                                  "pick_rate_pct":  66.67
                               },
                               {
                                   "arcana":  "static_wake",
-                                  "offers":  0,
+                                  "offers":  12,
                                   "picks":  4,
-                                  "pick_rate_pct":  null
+                                  "pick_rate_pct":  33.33
                               },
                               {
                                   "arcana":  "wraithstep",
-                                  "offers":  0,
+                                  "offers":  11,
                                   "picks":  3,
-                                  "pick_rate_pct":  null
-                              },
-                              {
-                                  "arcana":  "storm_crown",
-                                  "offers":  0,
-                                  "picks":  2,
-                                  "pick_rate_pct":  null
-                              },
-                              {
-                                  "arcana":  "voidfire",
-                                  "offers":  0,
-                                  "picks":  2,
-                                  "pick_rate_pct":  null
+                                  "pick_rate_pct":  27.27
                               },
                               {
                                   "arcana":  "vow_shatter",
-                                  "offers":  0,
+                                  "offers":  13,
                                   "picks":  2,
-                                  "pick_rate_pct":  null
+                                  "pick_rate_pct":  15.38
+                              },
+                              {
+                                  "arcana":  "voidfire",
+                                  "offers":  8,
+                                  "picks":  2,
+                                  "pick_rate_pct":  25
+                              },
+                              {
+                                  "arcana":  "storm_crown",
+                                  "offers":  9,
+                                  "picks":  2,
+                                  "pick_rate_pct":  22.22
                               },
                               {
                                   "arcana":  "hunters_snare",
-                                  "offers":  0,
+                                  "offers":  10,
                                   "picks":  2,
-                                  "pick_rate_pct":  null
+                                  "pick_rate_pct":  20
                               },
                               {
                                   "arcana":  "phantom_step",
-                                  "offers":  0,
+                                  "offers":  7,
                                   "picks":  2,
-                                  "pick_rate_pct":  null
+                                  "pick_rate_pct":  28.57
                               },
                               {
                                   "arcana":  "aegis_field",
-                                  "offers":  0,
+                                  "offers":  5,
                                   "picks":  1,
-                                  "pick_rate_pct":  null
-                              },
-                              {
-                                  "arcana":  "eclipse_mark",
-                                  "offers":  0,
-                                  "picks":  1,
-                                  "pick_rate_pct":  null
+                                  "pick_rate_pct":  20
                               },
                               {
                                   "arcana":  "fracture_field",
-                                  "offers":  0,
+                                  "offers":  3,
                                   "picks":  1,
-                                  "pick_rate_pct":  null
+                                  "pick_rate_pct":  33.33
                               },
                               {
-                                  "arcana":  "unknown",
-                                  "offers":  40,
+                                  "arcana":  "eclipse_mark",
+                                  "offers":  9,
+                                  "picks":  1,
+                                  "pick_rate_pct":  11.11
+                              },
+                              {
+                                  "arcana":  "dread_resonance",
+                                  "offers":  5,
+                                  "picks":  0,
+                                  "pick_rate_pct":  0
+                              },
+                              {
+                                  "arcana":  "reaper_step",
+                                  "offers":  6,
                                   "picks":  0,
                                   "pick_rate_pct":  0
                               }
@@ -362,73 +368,80 @@
     "boon_pick_rates":  [
                             {
                                 "boon":  "heavy_blow",
-                                "offers":  0,
+                                "offers":  20,
                                 "picks":  20,
-                                "pick_rate_pct":  null
+                                "pick_rate_pct":  100
                             },
                             {
                                 "boon":  "wide_arc",
-                                "offers":  0,
+                                "offers":  27,
                                 "picks":  12,
-                                "pick_rate_pct":  null
+                                "pick_rate_pct":  44.44
                             },
                             {
                                 "boon":  "surge_step",
-                                "offers":  0,
+                                "offers":  28,
                                 "picks":  11,
-                                "pick_rate_pct":  null
-                            },
-                            {
-                                "boon":  "blink_dash",
-                                "offers":  0,
-                                "picks":  10,
-                                "pick_rate_pct":  null
+                                "pick_rate_pct":  39.29
                             },
                             {
                                 "boon":  "first_strike",
-                                "offers":  0,
+                                "offers":  16,
                                 "picks":  10,
-                                "pick_rate_pct":  null
+                                "pick_rate_pct":  62.5
+                            },
+                            {
+                                "boon":  "blink_dash",
+                                "offers":  22,
+                                "picks":  10,
+                                "pick_rate_pct":  45.45
                             },
                             {
                                 "boon":  "long_reach",
-                                "offers":  0,
+                                "offers":  15,
                                 "picks":  7,
-                                "pick_rate_pct":  null
+                                "pick_rate_pct":  46.67
                             },
                             {
                                 "boon":  "iron_skin",
-                                "offers":  0,
+                                "offers":  25,
                                 "picks":  6,
-                                "pick_rate_pct":  null
+                                "pick_rate_pct":  24
                             },
                             {
                                 "boon":  "heartstone",
-                                "offers":  0,
+                                "offers":  17,
                                 "picks":  5,
-                                "pick_rate_pct":  null
+                                "pick_rate_pct":  29.41
                             },
                             {
                                 "boon":  "fleet_foot",
-                                "offers":  0,
+                                "offers":  23,
                                 "picks":  2,
-                                "pick_rate_pct":  null
+                                "pick_rate_pct":  8.7
                             },
                             {
                                 "boon":  "crushed_vow",
-                                "offers":  0,
+                                "offers":  19,
                                 "picks":  1,
-                                "pick_rate_pct":  null
+                                "pick_rate_pct":  5.26
                             },
                             {
-                                "boon":  "unknown",
-                                "offers":  85,
+                                "boon":  "battle_trance",
+                                "offers":  24,
+                                "picks":  0,
+                                "pick_rate_pct":  0
+                            },
+                            {
+                                "boon":  "severing_edge",
+                                "offers":  19,
                                 "picks":  0,
                                 "pick_rate_pct":  0
                             }
                         ],
     "never_picked_arcana":  [
-                                "unknown"
+                                "dread_resonance",
+                                "reaper_step"
                             ],
     "character_popularity":  [
                                  {
