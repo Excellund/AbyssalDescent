@@ -8,6 +8,7 @@ const AUDIO_LEVELS := preload("res://scripts/shared/audio_levels.gd")
 const GLOSSARY_DATA := preload("res://scripts/shared/glossary_data.gd")
 const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
+const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 const SETTINGS_STORE := preload("res://scripts/settings_store.gd")
 const UPDATE_SERVICE_SCRIPT := preload("res://scripts/update_service.gd")
 const BUILD_INFO := preload("res://scripts/build_info.gd")
@@ -38,6 +39,7 @@ var root_panel: Panel
 var options_panel: Panel
 var glossary_panel: Panel
 var difficulty_selector_panel: Panel
+var character_selector_panel: Panel
 var master_slider: HSlider
 var music_slider: HSlider
 var sfx_slider: HSlider
@@ -54,6 +56,11 @@ var primary_run_button: Button
 var difficulty_tier_buttons: Array[Button] = []
 var difficulty_tier_name_labels: Array[Label] = []
 var difficulty_tier_desc_labels: Array[Label] = []
+var character_buttons: Array[Button] = []
+var character_name_labels: Array[Label] = []
+var character_role_labels: Array[Label] = []
+var character_opposition_labels: Array[Label] = []
+var character_ids: Array[String] = []
 var atmosphere_band: Panel
 var flavor_quote_label: RichTextLabel
 var quote_wrapper: Control
@@ -143,6 +150,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.is_action_pressed("ui_cancel") and difficulty_selector_panel != null and difficulty_selector_panel.visible:
 		_show_root_panel()
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed("ui_cancel") and character_selector_panel != null and character_selector_panel.visible:
+		_show_difficulty_selector()
 		get_viewport().set_input_as_handled()
 
 func _build_ui() -> void:
@@ -280,6 +291,10 @@ func _build_ui() -> void:
 	difficulty_selector_panel.visible = false
 	add_child(difficulty_selector_panel)
 
+	character_selector_panel = _build_character_selector_panel()
+	character_selector_panel.visible = false
+	add_child(character_selector_panel)
+
 	telemetry_consent_layer = _build_telemetry_consent_layer()
 	telemetry_consent_layer.visible = false
 	add_child(telemetry_consent_layer)
@@ -302,6 +317,8 @@ func _apply_menu_layout() -> void:
 		_set_centered_panel_layout(glossary_panel, Vector2(980.0, 680.0), fit_scale, viewport_size)
 	if difficulty_selector_panel != null:
 		_set_centered_panel_layout(difficulty_selector_panel, Vector2(1020.0, 720.0), fit_scale, viewport_size)
+	if character_selector_panel != null:
+		_set_centered_panel_layout(character_selector_panel, Vector2(1020.0, 720.0), fit_scale, viewport_size)
 	if update_panel != null and root_panel != null:
 		var update_base_size := Vector2(470.0, 190.0)
 		update_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
@@ -447,6 +464,8 @@ func _show_root_panel(animate: bool = true) -> void:
 		glossary_panel.visible = false
 	if difficulty_selector_panel != null:
 		difficulty_selector_panel.visible = false
+	if character_selector_panel != null:
+		character_selector_panel.visible = false
 
 func _show_options_panel() -> void:
 	if root_panel != null:
@@ -457,6 +476,8 @@ func _show_options_panel() -> void:
 		glossary_panel.visible = false
 	if difficulty_selector_panel != null:
 		difficulty_selector_panel.visible = false
+	if character_selector_panel != null:
+		character_selector_panel.visible = false
 
 func _show_glossary_panel() -> void:
 	if root_panel != null:
@@ -467,6 +488,8 @@ func _show_glossary_panel() -> void:
 		glossary_panel.visible = true
 	if difficulty_selector_panel != null:
 		difficulty_selector_panel.visible = false
+	if character_selector_panel != null:
+		character_selector_panel.visible = false
 
 func _show_difficulty_selector() -> void:
 	if root_panel != null:
@@ -478,6 +501,22 @@ func _show_difficulty_selector() -> void:
 	if difficulty_selector_panel != null:
 		difficulty_selector_panel.visible = true
 		_animate_panel_in(difficulty_selector_panel, Vector2(0.0, 28.0))
+	if character_selector_panel != null:
+		character_selector_panel.visible = false
+
+func _show_character_selector() -> void:
+	if root_panel != null:
+		root_panel.visible = false
+	if options_panel != null:
+		options_panel.visible = false
+	if glossary_panel != null:
+		glossary_panel.visible = false
+	if difficulty_selector_panel != null:
+		difficulty_selector_panel.visible = false
+	if character_selector_panel != null:
+		_update_character_selector()
+		character_selector_panel.visible = true
+		_animate_panel_in(character_selector_panel, Vector2(0.0, 28.0))
 
 func _play_menu_intro() -> void:
 	if atmosphere_band != null:
@@ -1289,6 +1328,174 @@ func _on_difficulty_tier_selected(tier: int) -> void:
 	
 	if run_context.set_difficulty_tier(tier):
 		difficulty_selector_panel.visible = false
+		_show_character_selector()
+
+func _build_character_selector_panel() -> Panel:
+	var panel := Panel.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.position = Vector2(-510.0, -360.0)
+	panel.custom_minimum_size = Vector2(1020.0, 720.0)
+	panel.size = Vector2(1020.0, 720.0)
+	panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.04, 0.06, 0.1, 0.97), Color(0.44, 0.7, 0.96, 0.74), 20, 2))
+
+	var layout := MarginContainer.new()
+	layout.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layout.add_theme_constant_override("margin_left", 60)
+	layout.add_theme_constant_override("margin_right", 60)
+	layout.add_theme_constant_override("margin_top", 44)
+	layout.add_theme_constant_override("margin_bottom", 44)
+	panel.add_child(layout)
+
+	var stack := VBoxContainer.new()
+	stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	stack.add_theme_constant_override("separation", 18)
+	layout.add_child(stack)
+
+	var title := Label.new()
+	title.text = "Choose Your Vessel"
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 44)
+	title.add_theme_color_override("font_color", Color(1.0, 0.95, 0.78, 1.0))
+	title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
+	title.add_theme_constant_override("shadow_offset_x", 2)
+	title.add_theme_constant_override("shadow_offset_y", 2)
+	stack.add_child(title)
+
+	var accent := ColorRect.new()
+	accent.custom_minimum_size = Vector2(220.0, 2.0)
+	accent.color = Color(0.62, 0.78, 0.96, 0.65)
+	accent.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	stack.add_child(accent)
+
+	var intro := Label.new()
+	intro.text = "Each vessel is forged to oppose a throne of the abyss."
+	intro.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	intro.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	intro.add_theme_font_size_override("font_size", 18)
+	intro.add_theme_color_override("font_color", Color(0.78, 0.88, 0.98, 0.78))
+	stack.add_child(intro)
+
+	var button_container := VBoxContainer.new()
+	button_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	button_container.add_theme_constant_override("separation", 14)
+	stack.add_child(button_container)
+
+	character_buttons.clear()
+	character_name_labels.clear()
+	character_role_labels.clear()
+	character_opposition_labels.clear()
+	character_ids.clear()
+	for character in CHARACTER_REGISTRY.get_launch_characters():
+		var character_id := String(character.get("id", "")).strip_edges().to_lower()
+		if character_id.is_empty():
+			continue
+		character_ids.append(character_id)
+		var button := Button.new()
+		button.custom_minimum_size = Vector2(0.0, 118.0)
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.focus_mode = Control.FOCUS_ALL
+		button.text = ""
+		button.pressed.connect(_on_character_selected.bind(character_id))
+		_apply_difficulty_button_theme(button, "revealed")
+		button_container.add_child(button)
+
+		var content := VBoxContainer.new()
+		content.set_anchors_preset(Control.PRESET_FULL_RECT)
+		content.offset_left = 22
+		content.offset_right = -22
+		content.offset_top = 12
+		content.offset_bottom = -12
+		content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		content.add_theme_constant_override("separation", 2)
+		button.add_child(content)
+
+		var name_label := Label.new()
+		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		name_label.add_theme_font_size_override("font_size", 26)
+		name_label.add_theme_color_override("font_color", Color(1.0, 0.95, 0.78, 1.0))
+		name_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.7))
+		name_label.add_theme_constant_override("shadow_offset_x", 1)
+		name_label.add_theme_constant_override("shadow_offset_y", 1)
+		name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		content.add_child(name_label)
+
+		var role_label := Label.new()
+		role_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		role_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		role_label.add_theme_font_size_override("font_size", 16)
+		role_label.add_theme_color_override("font_color", Color(0.84, 0.91, 1.0, 0.9))
+		role_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		content.add_child(role_label)
+
+		var opposition_label := Label.new()
+		opposition_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		opposition_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		opposition_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		opposition_label.add_theme_font_size_override("font_size", 14)
+		opposition_label.add_theme_color_override("font_color", Color(0.78, 0.86, 0.96, 0.78))
+		opposition_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		content.add_child(opposition_label)
+
+		character_buttons.append(button)
+		character_name_labels.append(name_label)
+		character_role_labels.append(role_label)
+		character_opposition_labels.append(opposition_label)
+
+	var back_button := _make_panel_back_button()
+	back_button.pressed.connect(func() -> void:
+		_show_difficulty_selector()
+	)
+	stack.add_child(back_button)
+
+	return panel
+
+func _update_character_selector() -> void:
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context == null:
+		return
+	var selected_character_id := String(run_context.get_selected_character_id())
+	var unlocked_ids: Array[String] = run_context.get_unlocked_character_ids()
+	for i in range(character_buttons.size()):
+		var button := character_buttons[i]
+		var name_label := character_name_labels[i]
+		var role_label := character_role_labels[i]
+		var opposition_label := character_opposition_labels[i]
+		var character_id := String(character_ids[i])
+		var character := CHARACTER_REGISTRY.get_character(character_id)
+		var is_unlocked := unlocked_ids.has(character_id)
+		var is_selected := character_id == selected_character_id
+		if is_unlocked:
+			name_label.text = String(character.get("name", "Unknown"))
+			role_label.text = String(character.get("archetype", ""))
+			opposition_label.text = "Opposes: %s" % String(character.get("boss_opposition", "Unknown"))
+			role_label.visible = true
+			opposition_label.visible = true
+		else:
+			name_label.text = "\u2014  Sealed  \u2014"
+			role_label.text = ""
+			opposition_label.text = ""
+			role_label.visible = false
+			opposition_label.visible = false
+		button.disabled = not is_unlocked
+		if is_selected:
+			_apply_difficulty_button_theme(button, "current")
+		elif is_unlocked:
+			_apply_difficulty_button_theme(button, "revealed")
+		else:
+			_apply_difficulty_button_theme(button, "sealed")
+
+func _on_character_selected(character_id: String) -> void:
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context == null:
+		return
+	if run_context.set_selected_character_id(character_id):
+		if character_selector_panel != null:
+			character_selector_panel.visible = false
 		get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)
 
 func _on_master_volume_changed(value: float) -> void:

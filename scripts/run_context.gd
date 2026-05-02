@@ -45,6 +45,8 @@ var meta_progress_profile: Dictionary = {}
 var current_difficulty_tier: int = BEARING_ENUMS.BearingTier.PILGRIM
 var highest_unlocked_difficulty_tier: int = BEARING_ENUMS.BearingTier.PILGRIM
 var just_unlocked_tier: int = -1  ## -1 means no new unlock, otherwise the newly unlocked tier
+var selected_character_id: String = "bastion"
+var unlocked_character_ids: Array[String] = []
 
 func _ready() -> void:
 	base_viewport_width = int(ProjectSettings.get_setting("display/window/size/viewport_width", 1920))
@@ -284,6 +286,8 @@ func load_meta_progress() -> void:
 	meta_progress_profile = META_PROGRESS_STORE.load_meta_progress()
 	current_difficulty_tier = META_PROGRESS_STORE.get_current_tier(meta_progress_profile)
 	highest_unlocked_difficulty_tier = META_PROGRESS_STORE.get_highest_unlocked_tier(meta_progress_profile)
+	selected_character_id = META_PROGRESS_STORE.get_selected_character_id(meta_progress_profile)
+	unlocked_character_ids = META_PROGRESS_STORE.get_unlocked_character_ids(meta_progress_profile)
 	just_unlocked_tier = -1
 
 
@@ -324,6 +328,24 @@ func get_highest_unlocked_difficulty_tier() -> int:
 ## Check if a tier is unlocked
 func is_difficulty_tier_unlocked(tier: int) -> bool:
 	return META_PROGRESS_STORE.is_tier_unlocked(meta_progress_profile, tier)
+
+
+func get_selected_character_id() -> String:
+	if selected_character_id.is_empty():
+		selected_character_id = META_PROGRESS_STORE.get_selected_character_id(meta_progress_profile)
+	return selected_character_id
+
+
+func get_unlocked_character_ids() -> Array[String]:
+	unlocked_character_ids = META_PROGRESS_STORE.get_unlocked_character_ids(meta_progress_profile)
+	return unlocked_character_ids.duplicate()
+
+
+func set_selected_character_id(character_id: String) -> bool:
+	if META_PROGRESS_STORE.set_selected_character_id(meta_progress_profile, character_id):
+		selected_character_id = META_PROGRESS_STORE.get_selected_character_id(meta_progress_profile)
+		return save_meta_progress()
+	return false
 
 
 ## Award permanent difficulty unlocks for a completed run on the current tier.

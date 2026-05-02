@@ -5,9 +5,10 @@
 extends RefCounted
 
 const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
+const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 
 const META_PROGRESS_PATH := "user://meta_progress.save"
-const META_PROGRESS_VERSION := 1
+const META_PROGRESS_VERSION := 2
 
 const TIER_NAMES := {
 	BEARING_ENUMS.BearingTier.PILGRIM: "Pilgrim",
@@ -32,6 +33,10 @@ static func _get_default_profile() -> Dictionary:
 		"difficulty_state": {
 			"current_tier": BEARING_ENUMS.BearingTier.PILGRIM,
 			"highest_unlocked_tier": BEARING_ENUMS.BearingTier.PILGRIM
+		},
+		"character_state": {
+			"selected_character_id": CHARACTER_REGISTRY.get_default_character_id(),
+			"unlocked_character_ids": CHARACTER_REGISTRY.get_launch_character_ids()
 		},
 		"milestones": {
 			"first_clear": false,
@@ -90,22 +95,106 @@ static func _migrate_profile(old_payload: Dictionary, old_version: int) -> Dicti
 	
 	if old_version < 0 or old_version > META_PROGRESS_VERSION:
 		return migrated
-	
-	if old_version == 0:
-		## Version 0 (nonexistent) -> version 1: preserve any difficulty_state and milestones
-		if "difficulty_state" in old_payload:
-			var old_state := old_payload["difficulty_state"] as Dictionary
-			migrated["difficulty_state"]["current_tier"] = int(old_state.get("current_tier", BEARING_ENUMS.BearingTier.PILGRIM))
-			migrated["difficulty_state"]["highest_unlocked_tier"] = int(old_state.get("highest_unlocked_tier", BEARING_ENUMS.BearingTier.PILGRIM))
-		
-		if "milestones" in old_payload:
-			var old_milestones := old_payload["milestones"] as Dictionary
-			for key in migrated["milestones"].keys():
-				if key in old_milestones:
-					migrated["milestones"][key] = bool(old_milestones[key])
+
+	if "difficulty_state" in old_payload:
+		var old_state := old_payload["difficulty_state"] as Dictionary
+		migrated["difficulty_state"]["current_tier"] = int(old_state.get("current_tier", BEARING_ENUMS.BearingTier.PILGRIM))
+		migrated["difficulty_state"]["highest_unlocked_tier"] = int(old_state.get("highest_unlocked_tier", BEARING_ENUMS.BearingTier.PILGRIM))
+
+	if "milestones" in old_payload:
+		var old_milestones := old_payload["milestones"] as Dictionary
+		for key in migrated["milestones"].keys():
+			if key in old_milestones:
+				migrated["milestones"][key] = bool(old_milestones[key])
+
+	if "run_stats" in old_payload:
+		var old_stats := old_payload["run_stats"] as Dictionary
+		for key in migrated["run_stats"].keys():
+			if key in old_stats:
+				migrated["run_stats"][key] = old_stats[key]
+
+	if "character_state" in old_payload:
+		var old_character_state: Dictionary = old_payload["character_state"] as Dictionary
+		var unlocked_raw: Variant = old_character_state.get("unlocked_character_ids", [])
+		var unlocked: Array[String] = []
+		if unlocked_raw is Array:
+			for id_value in unlocked_raw:
+				var id: String = _normalize_character_id(id_value)
+				if CHARACTER_REGISTRY.is_known_character_id(id) and not unlocked.has(id):
+					unlocked.append(id)
+		if unlocked.is_empty():
+			unlocked = CHARACTER_REGISTRY.get_launch_character_ids()
+		migrated["character_state"]["unlocked_character_ids"] = unlocked
+		var selected: String = _normalize_character_id(old_character_state.get("selected_character_id", CHARACTER_REGISTRY.get_default_character_id()))
+		if not unlocked.has(selected):
+			selected = String(unlocked[0])
+		migrated["character_state"]["selected_character_id"] = selected
 	
 	migrated["version"] = META_PROGRESS_VERSION
 	return migrated
+
+static func _normalize_character_id(value: Variant) -> String:
+	return String(value).strip_edges().to_lower()
+
+static func _get_character_state(profile: Dictionary) -> Dictionary:
+	if not ("character_state" in profile):
+		profile["character_state"] = {
+			"selected_character_id": CHARACTER_REGISTRY.get_default_character_id(),
+			"unlocked_character_ids": CHARACTER_REGISTRY.get_launch_character_ids()
+		}
+	return profile["character_state"] as Dictionary
+
+static func get_unlocked_character_ids(profile: Dictionary) -> Array[String]:
+	var state: Dictionary = _get_character_state(profile)
+	var unlocked_raw: Variant = state.get("unlocked_character_ids", [])
+	var unlocked: Array[String] = []
+	if unlocked_raw is Array:
+		for id_value in unlocked_raw:
+			var id: String = _normalize_character_id(id_value)
+			if CHARACTER_REGISTRY.is_known_character_id(id) and not unlocked.has(id):
+				unlocked.append(id)
+	if unlocked.is_empty():
+		unlocked = CHARACTER_REGISTRY.get_launch_character_ids()
+	state["unlocked_character_ids"] = unlocked
+	return unlocked
+
+static func is_character_unlocked(profile: Dictionary, character_id: String) -> bool:
+	var normalized: String = _normalize_character_id(character_id)
+	if normalized.is_empty():
+		return false
+	return get_unlocked_character_ids(profile).has(normalized)
+
+static func unlock_character(profile: Dictionary, character_id: String) -> bool:
+	var normalized: String = _normalize_character_id(character_id)
+	if not CHARACTER_REGISTRY.is_known_character_id(normalized):
+		return false
+	var unlocked: Array[String] = get_unlocked_character_ids(profile)
+	if unlocked.has(normalized):
+		return false
+	unlocked.append(normalized)
+	var state: Dictionary = _get_character_state(profile)
+	state["unlocked_character_ids"] = unlocked
+	return true
+
+static func get_selected_character_id(profile: Dictionary) -> String:
+	var state: Dictionary = _get_character_state(profile)
+	var unlocked: Array[String] = get_unlocked_character_ids(profile)
+	var selected: String = _normalize_character_id(state.get("selected_character_id", CHARACTER_REGISTRY.get_default_character_id()))
+	if unlocked.has(selected):
+		return selected
+	selected = String(unlocked[0])
+	state["selected_character_id"] = selected
+	return selected
+
+static func set_selected_character_id(profile: Dictionary, character_id: String) -> bool:
+	var normalized: String = _normalize_character_id(character_id)
+	if normalized.is_empty():
+		return false
+	if not is_character_unlocked(profile, normalized):
+		return false
+	var state: Dictionary = _get_character_state(profile)
+	state["selected_character_id"] = normalized
+	return true
 
 ## Check if a tier is unlocked (i.e., highest_unlocked_tier >= tier)
 static func is_tier_unlocked(profile: Dictionary, tier: int) -> bool:

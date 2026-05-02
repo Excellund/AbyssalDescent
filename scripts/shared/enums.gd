@@ -53,6 +53,16 @@ enum PowerKind {
 	ARCANA,
 }
 
+enum Character {
+	BASTION,
+	HEXWEAVER,
+	VEILSTRIDER,
+}
+
+const CHARACTER_ID_BASTION := "bastion"
+const CHARACTER_ID_HEXWEAVER := "hexweaver"
+const CHARACTER_ID_VEILSTRIDER := "veilstrider"
+
 static func reward_mode_from_legacy(value: String) -> int:
 	match value:
 		"boon":

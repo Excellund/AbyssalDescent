@@ -277,6 +277,31 @@ func play_combo_relay_kill(epicenter_global: Vector2, stack_count: int, max_stac
 		])
 		_play_world_line(line_points, Color(color.r, color.g, color.b, alpha), 1.2 + (2.0 - float(i)) * 0.35, lifetime * 0.9, 0.8)
 
+func play_iron_retort_window_open(epicenter_global: Vector2) -> void:
+	var core := Color(1.0, 0.56, 0.3, 0.76)
+	play_world_ring(epicenter_global, 28.0, core, 0.16)
+	play_world_ring(epicenter_global, 46.0, Color(1.0, 0.78, 0.56, 0.58), 0.2)
+	for i in range(4):
+		var angle := -PI * 0.5 + TAU * float(i) / 4.0
+		var p0 := epicenter_global + Vector2(cos(angle), sin(angle)) * 18.0
+		var p1 := epicenter_global + Vector2(cos(angle), sin(angle)) * 36.0
+		_play_world_line(PackedVector2Array([p0, p1]), Color(1.0, 0.74, 0.5, 0.62), 1.6, 0.14, 0.7)
+
+func play_iron_retort_consume(player_global: Vector2, impact_global: Vector2) -> void:
+	var dir := impact_global - player_global
+	if dir.length_squared() < 0.0001:
+		dir = Vector2.RIGHT
+	var forward := dir.normalized()
+	var side := Vector2(-forward.y, forward.x)
+	play_world_ring(player_global, 20.0, Color(1.0, 0.6, 0.34, 0.58), 0.1)
+	play_world_ring(impact_global, 30.0, Color(1.0, 0.44, 0.24, 0.72), 0.12)
+	for i in range(0, 2):
+		var lane := -1.0 if i == 0 else 1.0
+		var offset := side * (lane * 7.0)
+		var start := player_global + forward * 10.0 + offset
+		var end := impact_global + forward * 8.0 + offset
+		_play_world_line(PackedVector2Array([start, end]), Color(1.0, 0.74, 0.5, 0.72), 1.8, 0.09, 0.65)
+
 # === IMPACT FEEDBACK HIERARCHY ===
 func play_impact_light(epicenter_global: Vector2, radius: float = 60.0) -> void:
 	"""Light hit feedback: subtle ring + gentle flash (standard hits)."""

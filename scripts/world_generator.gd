@@ -27,6 +27,7 @@ const RUN_TELEMETRY_STORE := preload("res://scripts/run_telemetry_store.gd")
 const TELEMETRY_SPIKE_SENDER_SCRIPT := preload("res://scripts/telemetry_spike_sender.gd")
 const RUN_SNAPSHOT_SERVICE := preload("res://scripts/run_snapshot_service.gd")
 const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
+const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 const DEBUG_ENUMS := preload("res://scripts/shared/debug_enums.gd")
 const DEBUG_SETTINGS_SCRIPT := preload("res://scripts/debug_settings.gd")
 const RUN_CONTEXT_PATH := "/root/RunContext"
@@ -109,6 +110,7 @@ var rng := RandomNumberGenerator.new()
 var power_registry_instance: Node
 var current_difficulty_tier: int = 0
 var current_difficulty_config: Dictionary = {}
+var current_character_id: String = "bastion"
 
 var rooms_cleared: int = 0
 var room_depth: int = 0
@@ -271,11 +273,15 @@ func _ready() -> void:
 	var difficulty_tier := current_difficulty_tier
 	if run_context != null:
 		difficulty_tier = int(run_context.get_current_difficulty_tier())
+		current_character_id = String(run_context.get_selected_character_id()).strip_edges().to_lower()
 		should_apply_difficulty = true
 	var debug_bearing_tier := _debug_bearing_override_tier()
 	if debug_bearing_tier >= 0:
 		difficulty_tier = debug_bearing_tier
 		should_apply_difficulty = true
+	if is_instance_valid(player) and player.has_method("apply_character_package"):
+		var char_data: Dictionary = CHARACTER_REGISTRY.get_character(current_character_id)
+		player.apply_character_package(char_data)
 	if should_apply_difficulty:
 		encounter_profile_builder.set_difficulty_tier(difficulty_tier)
 		_apply_difficulty_tier_bonuses(difficulty_tier)

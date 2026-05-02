@@ -214,6 +214,21 @@ var incoming_damage_taken_mult: float = 1.0
 var incoming_contact_damage_mult: float = 1.0
 var last_damage_event: Dictionary = {}
 
+# Character visual identity — set via apply_character_package(); defaults match the shared palette
+var player_body_color: Color = ENEMY_BASE.COLOR_PLAYER_BODY
+var player_core_color: Color = ENEMY_BASE.COLOR_PLAYER_CORE
+var player_glow_color: Color = ENEMY_BASE.COLOR_PLAYER_GLOW
+var player_speed_arc_color: Color = ENEMY_BASE.COLOR_PLAYER_SPEED_ARC
+var player_dash_phase_color: Color = ENEMY_BASE.COLOR_PLAYER_DASH_PHASE
+var player_dash_streak_color: Color = ENEMY_BASE.COLOR_PLAYER_DASH_STREAK
+
+# Character passives — set via apply_character_package(); exactly one is active per run
+var passive_iron_retort: bool = false
+var passive_sigil_burst: bool = false
+var passive_death_tempo: bool = false
+var iron_retort_window_left: float = 0.0
+var sigil_burst_ready: bool = false
+
 func _ready() -> void:
 	body_radius_cache = _get_body_radius_for(self, 14.0)
 	upgrade_system = UPGRADE_SYSTEM_SCRIPT.new()
@@ -245,6 +260,7 @@ func _physics_process(delta: float) -> void:
 	_update_wraithstep_marks()
 	_update_storm_crown_discharge(delta)
 	_update_combo_relay_state(delta)
+	_update_iron_retort(delta)
 	_try_start_dash(direction)
 	_try_attack_input()
 
@@ -312,6 +328,8 @@ func _try_start_dash(direction: Vector2) -> void:
 	phantom_step_ghost_emit_cd = 0.0
 	static_wake_trail_emit_cooldown = 0.0
 	_set_dash_phasing(true)
+	if passive_sigil_burst:
+		sigil_burst_ready = true
 
 func _try_attack_input() -> void:
 	if not Input.is_action_just_pressed("attack"):
@@ -627,6 +645,11 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 		_trigger_aegis_field()
 		player_feedback.play_damage_flash()
 		player_feedback.play_impact_sound()
+		if passive_iron_retort:
+			iron_retort_window_left = 0.6
+			if player_feedback != null and player_feedback.has_method("play_iron_retort_window_open"):
+				player_feedback.play_iron_retort_window_open(global_position)
+			queue_redraw()
 
 func get_last_damage_event() -> Dictionary:
 	return last_damage_event.duplicate(true)
@@ -656,6 +679,35 @@ func set_max_health_and_current(new_max_health: int, new_current_health: int = -
 		health_state.setup(max_health)
 		return
 	health_state.setup(max_health, new_current_health)
+
+func apply_character_package(data: Dictionary) -> void:
+	var mods: Dictionary = data.get("stat_modifiers", {}) as Dictionary
+	for key in mods:
+		var prop: String = String(key)
+		if prop == "max_health":
+			set_max_health_and_current(int(mods[key]), int(mods[key]))
+		else:
+			set(prop, mods[key])
+	var vis: Dictionary = data.get("visual", {}) as Dictionary
+	if vis.has("body_color"):
+		player_body_color = vis["body_color"] as Color
+	if vis.has("core_color"):
+		player_core_color = vis["core_color"] as Color
+	if vis.has("glow_color"):
+		player_glow_color = vis["glow_color"] as Color
+	if vis.has("speed_arc_color"):
+		player_speed_arc_color = vis["speed_arc_color"] as Color
+	if vis.has("dash_phase_color"):
+		player_dash_phase_color = vis["dash_phase_color"] as Color
+	if vis.has("dash_streak_color"):
+		player_dash_streak_color = vis["dash_streak_color"] as Color
+	var passive_id: String = String(data.get("passive_id", ""))
+	passive_iron_retort = passive_id == "iron_retort"
+	passive_sigil_burst = passive_id == "sigil_burst"
+	passive_death_tempo = passive_id == "death_tempo"
+	iron_retort_window_left = 0.0
+	sigil_burst_ready = false
+	queue_redraw()
 
 func play_rest_site_heal_feedback() -> void:
 	if player_feedback == null:
@@ -932,6 +984,12 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 	var strike_damage := int(melee_context.get("damage", attack_damage))
 	strike_damage = _apply_objective_mutator_damage_mult(strike_damage)
 	var strike_range := float(melee_context.get("range", attack_range))
+	var retort_active: bool = passive_iron_retort and iron_retort_window_left > 0.0
+	if retort_active:
+		strike_damage = int(round(float(strike_damage) * 1.7))
+		iron_retort_window_left = 0.0
+	var sigil_burst_fired: bool = false
+	var retort_impact_position: Vector2 = global_position + attack_direction * (strike_range * 0.45)
 	var strike_arc_degrees := float(melee_context.get("arc_degrees", attack_arc_degrees))
 	var max_angle_radians := deg_to_rad(strike_arc_degrees * 0.5)
 
@@ -960,7 +1018,13 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		final_strike_damage += _get_first_strike_bonus_damage(enemy_node)
 		final_strike_damage += _consume_wraithstep_mark(enemy_node, enemy_body.global_position, strike_damage)
 		DAMAGEABLE.apply_damage(enemy_node, final_strike_damage)
+		if retort_active and not did_hit:
+			retort_impact_position = enemy_body.global_position
 		_apply_hunters_snare(enemy_node)
+		if passive_sigil_burst and sigil_burst_ready and not sigil_burst_fired:
+			sigil_burst_ready = false
+			sigil_burst_fired = true
+			_apply_sigil_burst(enemy_body.global_position, strike_damage)
 		melee_hit_enemy_ids[enemy_id] = true
 		if reward_storm_crown:
 			_apply_storm_crown_hit(enemy_body.global_position, enemy_id, final_strike_damage)
@@ -977,6 +1041,12 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		did_hit = _apply_razor_wind(attack_direction, wind_context, rupture_triggered_enemy_ids, rupture_hit_enemy_ids) or did_hit
 	if did_hit:
 		_trigger_battle_trance()
+	if retort_active and player_feedback != null:
+		if did_hit and player_feedback.has_method("play_iron_retort_consume"):
+			player_feedback.play_iron_retort_consume(global_position, retort_impact_position)
+		else:
+			player_feedback.play_world_ring(global_position, 36.0, Color(0.96, 0.52, 0.28, 0.88), 0.18)
+		queue_redraw()
 
 	return did_hit
 
@@ -1295,6 +1365,11 @@ func _update_static_wake_trails(delta: float) -> void:
 
 func notify_enemy_killed() -> void:
 	_trigger_combo_relay_kill()
+	if passive_death_tempo and dash_cooldown_left > 0.0:
+		dash_cooldown_left = 0.0
+		if player_feedback != null:
+			player_feedback.play_world_ring(global_position, 38.0, Color(player_body_color.r, player_body_color.g, player_body_color.b, 0.88), 0.18)
+		queue_redraw()
 	if not reward_void_dash:
 		return
 	var dash_was_active := dash_cooldown_left > 0.0
@@ -1392,27 +1467,27 @@ func _draw() -> void:
 	if dash_phasing_active:
 		var t := float(Time.get_ticks_msec()) * 0.001
 		var pulse := 0.5 + 0.5 * sin(t * 18.0)
-		var phase_color := ENEMY_BASE.COLOR_PLAYER_DASH_PHASE
+		var phase_color := player_dash_phase_color
 		phase_color.a = 0.24 + pulse * 0.22
 		draw_arc(Vector2.ZERO, body_radius + 14.0 + pulse * 2.0, 0.0, TAU, 48, phase_color, 3.0)
 		var streak_dir := dash_direction if dash_direction.length_squared() > 0.000001 else facing
 		for i in range(3):
 			var offset := -streak_dir * (8.0 + float(i) * 7.0)
 			var alpha := 0.2 - float(i) * 0.05 + pulse * 0.06
-			var streak_color := ENEMY_BASE.COLOR_PLAYER_DASH_STREAK
+			var streak_color := player_dash_streak_color
 			streak_color.a = clampf(alpha, 0.04, 0.36)
 			draw_circle(offset, body_radius * (1.0 - float(i) * 0.08), streak_color)
 
 	_draw_objective_mutator_aura(body_radius)
 
-	draw_circle(Vector2.ZERO, body_radius + 8.0 + speed_t * 2.0, Color(ENEMY_BASE.COLOR_PLAYER_GLOW.r, ENEMY_BASE.COLOR_PLAYER_GLOW.g, ENEMY_BASE.COLOR_PLAYER_GLOW.b, 0.16 + aura * 0.18))
+	draw_circle(Vector2.ZERO, body_radius + 8.0 + speed_t * 2.0, Color(player_glow_color.r, player_glow_color.g, player_glow_color.b, 0.16 + aura * 0.18))
 	draw_circle(Vector2.ZERO, body_radius + 3.4, ENEMY_BASE.COLOR_PLAYER_OUTER)
-	draw_circle(Vector2.ZERO, body_radius, ENEMY_BASE.COLOR_PLAYER_BODY)
-	draw_circle(Vector2.ZERO, body_radius * 0.74, ENEMY_BASE.COLOR_PLAYER_CORE)
+	draw_circle(Vector2.ZERO, body_radius, player_body_color)
+	draw_circle(Vector2.ZERO, body_radius * 0.74, player_core_color)
 	draw_circle(Vector2.ZERO, body_radius * 0.42, ENEMY_BASE.COLOR_PLAYER_LIGHT)
 
 	if speed_t > 0.12:
-		var arc_alpha := Color(ENEMY_BASE.COLOR_PLAYER_SPEED_ARC.r, ENEMY_BASE.COLOR_PLAYER_SPEED_ARC.g, ENEMY_BASE.COLOR_PLAYER_SPEED_ARC.b, 0.26 + speed_t * 0.25)
+		var arc_alpha := Color(player_speed_arc_color.r, player_speed_arc_color.g, player_speed_arc_color.b, 0.26 + speed_t * 0.25)
 		draw_arc(Vector2.ZERO, body_radius + 6.5, -1.4, 1.4, 30, arc_alpha, 2.0)
 
 	# Explicit state ring keeps player readable during dense enemy FX.
@@ -1421,20 +1496,137 @@ func _draw() -> void:
 	elif attack_anim_time_left > 0.0:
 		draw_arc(Vector2.ZERO, body_radius + 9.0, -0.75, 0.75, 24, Color(1.0, 0.98, 0.78, 0.78), 2.2)
 
+	_draw_character_identity(body_radius, facing, side, speed_t)
+	_draw_trial_reward_state()
+	_draw_passive_state(body_radius)
+
+func _draw_character_identity(body_radius: float, facing: Vector2, side: Vector2, speed_t: float) -> void:
+	if passive_iron_retort:
+		_draw_bastion_identity(body_radius, facing, side)
+		return
+	if passive_sigil_burst:
+		_draw_hexweaver_identity(body_radius, facing, side)
+		return
+	if passive_death_tempo:
+		_draw_veilstrider_identity(body_radius, facing, side, speed_t)
+		return
+	# Fallback silhouette for unknown/legacy character data.
 	var tip := facing * (body_radius + 9.0)
 	var base_center := facing * (body_radius - 1.5)
 	var fin := 4.9
 	var pointer := PackedVector2Array([tip, base_center + side * fin, base_center - side * fin])
 	draw_colored_polygon(pointer, ENEMY_BASE.COLOR_PLAYER_POINTER)
-
 	var eye_pos := facing * (body_radius * 0.34) + side * 1.8
 	draw_circle(eye_pos, 2.0, ENEMY_BASE.COLOR_PLAYER_EYE)
-
 	var wing_l := facing * (body_radius - 2.0) + side * 6.3
 	var wing_r := facing * (body_radius - 2.0) - side * 6.3
 	draw_line(wing_l, wing_l - facing * 6.0, ENEMY_BASE.COLOR_PLAYER_WING, 2.0)
 	draw_line(wing_r, wing_r - facing * 6.0, ENEMY_BASE.COLOR_PLAYER_WING, 2.0)
-	_draw_trial_reward_state()
+
+func _draw_bastion_identity(body_radius: float, facing: Vector2, side: Vector2) -> void:
+	var shield_tip := facing * (body_radius + 10.5)
+	var shield_mid := facing * (body_radius + 1.8)
+	var shield_w := 6.2
+	var shield := PackedVector2Array([
+		shield_tip,
+		shield_mid + side * shield_w,
+		facing * (body_radius - 3.0) + side * (shield_w - 1.4),
+		facing * (body_radius - 3.0) - side * (shield_w - 1.4),
+		shield_mid - side * shield_w
+	])
+	draw_colored_polygon(shield, Color(ENEMY_BASE.COLOR_PLAYER_POINTER.r, ENEMY_BASE.COLOR_PLAYER_POINTER.g, ENEMY_BASE.COLOR_PLAYER_POINTER.b, 0.94))
+	var visor_center := facing * (body_radius * 0.32)
+	draw_line(visor_center - side * 3.0, visor_center + side * 3.0, Color(1.0, 0.96, 0.86, 0.9), 1.8)
+	var pauldron_l := side * (body_radius + 0.9) - facing * 1.2
+	var pauldron_r := -side * (body_radius + 0.9) - facing * 1.2
+	draw_circle(pauldron_l, 3.4, Color(player_core_color.r, player_core_color.g, player_core_color.b, 0.78))
+	draw_circle(pauldron_r, 3.4, Color(player_core_color.r, player_core_color.g, player_core_color.b, 0.78))
+	draw_arc(Vector2.ZERO, body_radius + 7.2, -0.92, 0.92, 28, Color(0.9, 0.94, 1.0, 0.5), 1.8)
+
+func _draw_hexweaver_identity(body_radius: float, facing: Vector2, side: Vector2) -> void:
+	var t := float(Time.get_ticks_msec()) * 0.001
+	var sigil_r := body_radius + 7.6
+	var sigil_pulse := 0.5 + 0.5 * sin(t * 4.6)
+	draw_arc(Vector2.ZERO, sigil_r + sigil_pulse * 1.1, 0.0, TAU, 40, Color(0.96, 0.74, 1.0, 0.52), 1.8)
+	var forward_tip := facing * (body_radius + 10.0)
+	var forward_base := facing * (body_radius + 3.0)
+	var forward_w := 3.2
+	var forward_glyph := PackedVector2Array([
+		forward_tip,
+		forward_base + side * forward_w,
+		forward_base - side * forward_w
+	])
+	draw_colored_polygon(forward_glyph, Color(1.0, 0.9, 1.0, 0.86))
+	draw_line(forward_base - side * 1.4, forward_tip, Color(1.0, 0.98, 1.0, 0.88), 1.2)
+	draw_line(forward_base + side * 1.4, forward_tip, Color(1.0, 0.98, 1.0, 0.88), 1.2)
+	for i in range(3):
+		var angle := t * 0.9 + TAU * float(i) / 3.0
+		var pivot := Vector2(cos(angle), sin(angle)) * (body_radius + 4.8)
+		var glyph_tip := pivot + Vector2.RIGHT.rotated(angle) * 3.3
+		var glyph_side := Vector2(-sin(angle), cos(angle)) * 2.2
+		var glyph := PackedVector2Array([glyph_tip, pivot + glyph_side, pivot - glyph_side])
+		draw_colored_polygon(glyph, Color(1.0, 0.84, 1.0, 0.7))
+	var eye_center := facing * (body_radius * 0.3)
+	draw_circle(eye_center - side * 1.4, 1.4, Color(0.98, 0.92, 1.0, 0.86))
+	draw_circle(eye_center + side * 1.4, 1.4, Color(0.98, 0.92, 1.0, 0.86))
+	var focus_eye := facing * (body_radius * 0.52) + side * 0.7
+	draw_circle(focus_eye, 1.25, Color(1.0, 0.96, 1.0, 0.95))
+	var rune_back := -facing * (body_radius - 1.0)
+	draw_line(rune_back - side * 4.0, rune_back + side * 4.0, Color(0.86, 0.72, 1.0, 0.62), 1.4)
+	draw_line(rune_back - side * 2.2, rune_back + side * 2.2, Color(1.0, 0.88, 1.0, 0.72), 1.2)
+
+func _draw_veilstrider_identity(body_radius: float, facing: Vector2, side: Vector2, speed_t: float) -> void:
+	var blade_tip := facing * (body_radius + 12.0)
+	var blade_mid := facing * (body_radius + 0.8)
+	var blade_w := 3.6
+	var blade := PackedVector2Array([
+		blade_tip,
+		blade_mid + side * blade_w,
+		facing * (body_radius - 4.0),
+		blade_mid - side * blade_w
+	])
+	draw_colored_polygon(blade, Color(0.88, 1.0, 0.94, 0.94))
+	var slit_eye := facing * (body_radius * 0.34) + side * 1.9
+	draw_line(slit_eye - side * 2.4, slit_eye + side * 0.9, Color(0.9, 1.0, 0.94, 0.9), 1.7)
+	var trail_len := 7.2 + speed_t * 4.6
+	var tail_l := -facing * (body_radius - 1.4) + side * 5.8
+	var tail_r := -facing * (body_radius - 1.4) - side * 5.8
+	draw_line(tail_l, tail_l - facing * trail_len + side * 1.8, Color(0.64, 1.0, 0.82, 0.64), 1.7)
+	draw_line(tail_r, tail_r - facing * trail_len - side * 1.8, Color(0.64, 1.0, 0.82, 0.64), 1.7)
+func _update_iron_retort(delta: float) -> void:
+	if iron_retort_window_left <= 0.0:
+		return
+	iron_retort_window_left = maxf(0.0, iron_retort_window_left - delta)
+	queue_redraw()
+
+func _apply_sigil_burst(epicenter: Vector2, source_damage: int) -> void:
+	var burst_damage: int = maxi(1, int(round(float(source_damage) * 0.7)))
+	burst_damage = _apply_objective_mutator_damage_mult(burst_damage)
+	if player_feedback != null:
+		player_feedback.play_world_ring(epicenter, 72.0, Color(0.82, 0.36, 1.0, 0.92), 0.22)
+		player_feedback.play_world_ring(epicenter, 46.0, Color(1.0, 0.72, 1.0, 0.72), 0.14)
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if not DAMAGEABLE.can_take_damage(enemy_node):
+			continue
+		var enemy_body := enemy_node as Node2D
+		if enemy_body.global_position.distance_to(epicenter) > 72.0:
+			continue
+		DAMAGEABLE.apply_damage(enemy_node, burst_damage, {"is_ground_attack": true, "attack_type": "sigil_burst"})
+
+func _draw_passive_state(body_radius: float) -> void:
+	if passive_iron_retort and iron_retort_window_left > 0.0:
+		var t := clampf(iron_retort_window_left / 0.6, 0.0, 1.0)
+		var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.001 * 16.0)
+		var ring_alpha := 0.38 + pulse * 0.2
+		draw_circle(Vector2.ZERO, body_radius + 10.0, Color(1.0, 0.56, 0.3, 0.07 * t))
+		draw_arc(Vector2.ZERO, body_radius + 12.0, 0.0, TAU, 48, Color(1.0, 0.58, 0.32, ring_alpha), 2.6)
+		draw_arc(Vector2.ZERO, body_radius + 15.0, -PI * 0.5, -PI * 0.5 + TAU * t, 52, Color(1.0, 0.88, 0.62, 0.72), 2.0)
+	if passive_sigil_burst and sigil_burst_ready:
+		var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.001 * 14.0)
+		draw_arc(Vector2.ZERO, body_radius + 13.0, 0.0, TAU, 40, Color(0.82, 0.36, 1.0, 0.55 + pulse * 0.22), 2.6)
+
 
 func _draw_objective_mutator_aura(body_radius: float) -> void:
 	if active_objective_mutators.is_empty():
