@@ -40,6 +40,7 @@ const WORLD_RENDERER_SCRIPT := preload("res://scripts/world_renderer.gd")
 const PAUSE_MENU_CONTROLLER_SCRIPT := preload("res://scripts/pause_menu_controller.gd")
 const VICTORY_SCREEN_SCRIPT := preload("res://scripts/victory_screen.gd")
 const DEFEAT_SCREEN_SCRIPT := preload("res://scripts/defeat_screen.gd")
+const BUILD_DETAIL_PANEL_SCRIPT := preload("res://scripts/build_detail_panel.gd")
 
 func _find_debug_encounter_entry(key: String) -> Dictionary:
 	return ENCOUNTER_CONTRACTS.debug_encounter_entry(key)
@@ -194,6 +195,7 @@ var reward_selection_ui
 var pause_menu_controller: Node
 var victory_screen: Node
 var defeat_screen: Node
+var build_detail_panel: Node
 var telemetry_run_id: String = ""
 var telemetry_enabled: bool = false
 var telemetry_run_finished: bool = false
@@ -340,6 +342,11 @@ func _ready() -> void:
 	defeat_screen = DEFEAT_SCREEN_SCRIPT.new()
 	add_child(defeat_screen)
 	defeat_screen.connect("back_to_main_menu_requested", Callable(self, "_on_defeat_back_to_menu"))
+	build_detail_panel = BUILD_DETAIL_PANEL_SCRIPT.new()
+	add_child(build_detail_panel)
+	build_detail_panel.setup()
+	build_detail_panel.connect("build_detail_opened", Callable(self, "_on_build_detail_opened"))
+	build_detail_panel.connect("build_detail_closed", Callable(self, "_on_build_detail_closed"))
 	objective_runtime = OBJECTIVE_RUNTIME_SCRIPT.new()
 	add_child(objective_runtime)
 	objective_runtime.initialize(self, rng)
@@ -673,6 +680,24 @@ func _is_known_power_id(power_id: String) -> bool:
 	return power_registry_instance.is_valid_power_id(power_id)
 
 func _unhandled_input(event: InputEvent) -> void:
+	# Handle Tab for build detail panel
+	if event is InputEventKey and event.pressed and event.keycode == KEY_TAB:
+		if is_instance_valid(defeat_screen) and bool(defeat_screen.is_open()):
+			return
+		if is_instance_valid(pause_menu_controller) and bool(pause_menu_controller.is_open()):
+			return
+		if is_instance_valid(reward_selection_ui) and bool(reward_selection_ui.is_active()):
+			return
+		if is_instance_valid(build_detail_panel):
+			if build_detail_panel.is_open():
+				build_detail_panel.close()
+			else:
+				var active_powers := _get_active_player_powers()
+				build_detail_panel.refresh(current_character_id, active_powers["boons"], active_powers["arcana"], player)
+				build_detail_panel.open()
+			get_viewport().set_input_as_handled()
+		return
+	
 	if is_instance_valid(defeat_screen) and bool(defeat_screen.is_open()):
 		get_viewport().set_input_as_handled()
 		return
@@ -697,6 +722,10 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _process(delta: float) -> void:
 	if is_instance_valid(defeat_screen) and bool(defeat_screen.is_open()):
+		hud.refresh(_get_hud_state(), player)
+		_sync_renderer()
+		return
+	if is_instance_valid(build_detail_panel) and bool(build_detail_panel.is_open()):
 		hud.refresh(_get_hud_state(), player)
 		_sync_renderer()
 		return
@@ -1014,6 +1043,14 @@ func _get_hud_state() -> Dictionary:
 	# Keep the visible depth anchored to the cleared room until the next room is entered.
 	if between_rooms and not run_cleared and current_room_label != "Rest Site":
 		display_room_depth = maxi(0, room_depth - 1)
+	
+	# Get current character passive name
+	var current_character_passive_name := "Passive"
+	if not current_character_id.is_empty():
+		var char_data := CHARACTER_REGISTRY.get_character(current_character_id)
+		if char_data != null and char_data.has("passive_id"):
+			current_character_passive_name = String(char_data.get("passive_id", "Passive"))
+	
 	var hud_state := {
 		"room_size": current_room_size,
 		"current_room_label": current_room_label,
@@ -1049,7 +1086,11 @@ func _get_hud_state() -> Dictionary:
 		"boss_unlocked": boss_unlocked,
 		"first_boss_defeated": first_boss_defeated,
 		"second_boss_unlocked": _is_second_boss_unlocked(),
+		"current_character_passive_name": current_character_passive_name,
 	}
+	var active_powers := _get_active_player_powers()
+	hud_state["active_boons"] = active_powers["boons"]
+	hud_state["active_arcana"] = active_powers["arcana"]
 	return hud_state
 
 func _get_priority_target_health() -> int:
@@ -1061,6 +1102,26 @@ func _get_priority_target_max_health() -> int:
 	if not is_instance_valid(objective_target_enemy):
 		return 0
 	return objective_target_enemy.get_max_health()
+
+func _get_active_player_powers() -> Dictionary:
+	# Returns {"boons": [id1, id2, ...], "arcana": [id1, id2, ...]}
+	var result := {"boons": [], "arcana": []}
+	if not is_instance_valid(player):
+		return result
+	
+	# Check all boons (upgrades)
+	for power_id in POWER_REGISTRY.UPGRADE_BALANCE.keys():
+		var stack_count := int(player.get_upgrade_stack_count(power_id))
+		if stack_count > 0:
+			result["boons"].append(power_id)
+	
+	# Check all arcana (trial powers)
+	for power_id in POWER_REGISTRY.TRIAL_POWER_BALANCE.keys():
+		var stack_count := int(player.get_trial_power_stack_count(power_id))
+		if stack_count > 0:
+			result["arcana"].append(power_id)
+	
+	return result
 
 func _sync_renderer() -> void:
 	if not is_instance_valid(renderer):
@@ -1356,6 +1417,12 @@ func _on_pause_menu_opened() -> void:
 
 func _on_pause_menu_closed() -> void:
 	_set_combat_paused(_is_reward_selection_active())
+
+func _on_build_detail_opened() -> void:
+	_set_combat_paused(true)
+
+func _on_build_detail_closed() -> void:
+	_set_combat_paused(false)
 
 func _on_victory_back_to_menu() -> void:
 	_finish_active_run_telemetry("clear")

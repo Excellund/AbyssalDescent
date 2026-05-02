@@ -32,6 +32,19 @@ var _mutator_icon_fortified: Texture2D
 var _mutator_icon_hunters_focus: Texture2D
 var _mutator_icon_combo_relay: Texture2D
 
+var build_strip_panel: Panel
+var build_strip_content: VBoxContainer
+var build_strip_passive_chip: Panel
+var build_strip_passive_label: RichTextLabel
+var build_strip_boon_container: VBoxContainer
+var build_strip_arcana_container: VBoxContainer
+var build_strip_boon_chips: Array[Panel] = []
+var build_strip_boon_labels: Array[Label] = []
+var build_strip_boon_stack_labels: Array[Label] = []
+var build_strip_arcana_chips: Array[Panel] = []
+var build_strip_arcana_labels: Array[Label] = []
+var build_strip_arcana_stack_labels: Array[Label] = []
+
 var _encounter_count: int = 5
 var _banner_top_margin: float = 18.0
 var _cached_room_size: Vector2 = Vector2.ZERO
@@ -52,6 +65,7 @@ func refresh(state: Dictionary, player: Node) -> void:
 	_update_status_panel_text(state)
 	_update_player_mutator_panel(state)
 	_update_stats_panel_text(player)
+	_update_build_strip(state, player)
 
 func show_banner(title: String, subtitle: String, subtitle_color: Color = Color(0.78, 0.9, 1.0, 0.92)) -> void:
 	if room_banner_title_label == null or room_banner_subtitle_label == null:
@@ -306,6 +320,8 @@ func _create_hud() -> void:
 	room_banner_subtitle_label.modulate.a = 0.0
 	banner_container.add_child(room_banner_subtitle_label)
 
+	_create_build_strip(layer)
+
 
 func _update_banner_layout(room_size: Vector2, canvas_xform: Transform2D, viewport_size: Vector2) -> void:
 	if room_banner_title_label == null or room_banner_subtitle_label == null:
@@ -357,6 +373,23 @@ func _layout_hud_panels(viewport_size: Vector2, room_size: Vector2, canvas_xform
 			if candidate_y >= edge_margin:
 				mutator_y = candidate_y
 		player_mutator_panel.position = Vector2(viewport_size.x - panel_width - edge_margin, mutator_y)
+	
+	# Layout build strip below stats
+	if build_strip_panel != null:
+		var strip_w := HUD_INFO_PANEL_WIDTH
+		if stats_panel != null:
+			strip_w = _panel_width(stats_panel)
+		if strip_w <= 0.0:
+			strip_w = build_strip_panel.custom_minimum_size.x
+		build_strip_panel.custom_minimum_size.x = strip_w
+		build_strip_panel.size.x = strip_w
+		var stats_bottom := edge_margin
+		if stats_panel != null:
+			stats_bottom = stats_panel.position.y + _panel_height(stats_panel)
+		var strip_x := edge_margin
+		var strip_y := stats_bottom + column_gap
+		build_strip_panel.position = Vector2(strip_x, strip_y)
+		_update_build_strip_layout()
 
 func _panel_width(panel: Control) -> float:
 	if panel == null:
@@ -570,6 +603,161 @@ func _update_bearing_badge(tier: int) -> void:
 	status_bearing_badge_label.position = Vector2(1.0, 0.0)
 	status_bearing_badge_label.custom_minimum_size = Vector2(badge_w - 1.0, 24.0)
 
+func _create_build_strip(layer: CanvasLayer) -> void:
+	build_strip_panel = Panel.new()
+	build_strip_panel.custom_minimum_size = Vector2(HUD_INFO_PANEL_WIDTH, 0.0)
+	var build_style := StyleBoxFlat.new()
+	build_style.bg_color = Color(0.03, 0.06, 0.1, 0.48)
+	build_style.border_color = Color(0.62, 0.77, 0.9, 0.24)
+	build_style.set_border_width_all(1)
+	build_style.set_corner_radius_all(8)
+	build_strip_panel.add_theme_stylebox_override("panel", build_style)
+	layer.add_child(build_strip_panel)
+
+	build_strip_content = VBoxContainer.new()
+	build_strip_content.position = Vector2(8.0, 8.0)
+	build_strip_content.custom_minimum_size = Vector2(HUD_INFO_PANEL_WIDTH - 16.0, 0.0)
+	build_strip_content.add_theme_constant_override("separation", 8)
+	build_strip_panel.add_child(build_strip_content)
+
+	# Passive row
+	var passive_row := HBoxContainer.new()
+	passive_row.add_theme_constant_override("separation", 8)
+	passive_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	passive_row.custom_minimum_size = Vector2(HUD_INFO_PANEL_WIDTH - 16.0, 44.0)
+	build_strip_content.add_child(passive_row)
+
+	build_strip_passive_chip = Panel.new()
+	build_strip_passive_chip.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	build_strip_passive_chip.custom_minimum_size = Vector2(120.0, 40.0)
+	var passive_style := StyleBoxFlat.new()
+	passive_style.bg_color = Color(0.08, 0.04, 0.14, 0.80)
+	passive_style.border_color = Color(0.72, 0.52, 1.0, 0.96)
+	passive_style.set_border_width_all(2)
+	passive_style.set_corner_radius_all(6)
+	build_strip_passive_chip.add_theme_stylebox_override("panel", passive_style)
+	passive_row.add_child(build_strip_passive_chip)
+
+	var passive_center := CenterContainer.new()
+	passive_center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	build_strip_passive_chip.add_child(passive_center)
+
+	build_strip_passive_label = RichTextLabel.new()
+	build_strip_passive_label.custom_minimum_size = Vector2(100.0, 32.0)
+	build_strip_passive_label.bbcode_enabled = true
+	build_strip_passive_label.fit_content = true
+	build_strip_passive_label.scroll_active = false
+	build_strip_passive_label.selection_enabled = false
+	build_strip_passive_label.add_theme_font_size_override("normal_font_size", 11)
+	build_strip_passive_label.add_theme_color_override("default_color", Color(1.0, 0.82, 0.40, 0.98))
+	build_strip_passive_label.add_theme_color_override("font_shadow_color", Color(0.02, 0.04, 0.06, 0.95))
+	build_strip_passive_label.add_theme_constant_override("shadow_offset_x", 1)
+	build_strip_passive_label.add_theme_constant_override("shadow_offset_y", 1)
+	build_strip_passive_label.text = "[center][b]Passive[/b][/center]"
+	passive_center.add_child(build_strip_passive_label)
+
+	# Arcana section
+	build_strip_arcana_container = VBoxContainer.new()
+	build_strip_arcana_container.add_theme_constant_override("separation", 4)
+	build_strip_content.add_child(build_strip_arcana_container)
+
+	# Boon section
+	build_strip_boon_container = VBoxContainer.new()
+	build_strip_boon_container.add_theme_constant_override("separation", 4)
+	build_strip_content.add_child(build_strip_boon_container)
+
+	# Create placeholder chips for boons/arcana
+	for i in range(6):
+		var boon_chip := _create_build_strip_chip()
+		boon_chip.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		build_strip_boon_chips.append(boon_chip)
+		build_strip_boon_container.add_child(boon_chip)
+		boon_chip.visible = false
+		var boon_label := Label.new()
+		boon_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+		boon_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		boon_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		boon_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		boon_label.add_theme_font_size_override("font_size", 12)
+		boon_label.add_theme_color_override("font_color", Color(0.8, 0.9, 1.0, 0.95))
+		boon_chip.add_child(boon_label)
+		build_strip_boon_labels.append(boon_label)
+		var boon_stack_label := Label.new()
+		boon_stack_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+		boon_stack_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		boon_stack_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		boon_stack_label.add_theme_font_size_override("font_size", 11)
+		boon_stack_label.add_theme_color_override("font_color", Color(0.92, 0.98, 1.0, 0.96))
+		boon_stack_label.add_theme_constant_override("outline_size", 1)
+		boon_stack_label.add_theme_color_override("font_outline_color", Color(0.02, 0.04, 0.06, 0.95))
+		boon_stack_label.offset_left = 4.0
+		boon_stack_label.offset_right = -8.0
+		boon_stack_label.text = ""
+		boon_chip.add_child(boon_stack_label)
+		build_strip_boon_stack_labels.append(boon_stack_label)
+
+		var arcana_chip := _create_build_strip_chip()
+		arcana_chip.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		build_strip_arcana_chips.append(arcana_chip)
+		build_strip_arcana_container.add_child(arcana_chip)
+		arcana_chip.visible = false
+		var arcana_label := Label.new()
+		arcana_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+		arcana_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		arcana_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		arcana_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		arcana_label.add_theme_font_size_override("font_size", 12)
+		arcana_label.add_theme_color_override("font_color", Color(1.0, 0.9, 0.6, 0.95))
+		arcana_chip.add_child(arcana_label)
+		build_strip_arcana_labels.append(arcana_label)
+		var arcana_stack_label := Label.new()
+		arcana_stack_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+		arcana_stack_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		arcana_stack_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		arcana_stack_label.add_theme_font_size_override("font_size", 11)
+		arcana_stack_label.add_theme_color_override("font_color", Color(1.0, 0.95, 0.80, 0.96))
+		arcana_stack_label.add_theme_constant_override("outline_size", 1)
+		arcana_stack_label.add_theme_color_override("font_outline_color", Color(0.02, 0.04, 0.06, 0.95))
+		arcana_stack_label.offset_left = 4.0
+		arcana_stack_label.offset_right = -8.0
+		arcana_stack_label.text = ""
+		arcana_chip.add_child(arcana_stack_label)
+		build_strip_arcana_stack_labels.append(arcana_stack_label)
+
+func _create_build_strip_chip() -> Panel:
+	var chip := Panel.new()
+	chip.custom_minimum_size = Vector2(120.0, 32.0)
+	var chip_style := StyleBoxFlat.new()
+	chip_style.bg_color = Color(0.08, 0.12, 0.18, 0.64)
+	chip_style.border_color = Color(0.62, 0.77, 0.9, 0.48)
+	chip_style.set_border_width_all(1)
+	chip_style.set_corner_radius_all(4)
+	chip.add_theme_stylebox_override("panel", chip_style)
+	return chip
+
+func _update_build_strip_layout() -> void:
+	if build_strip_panel == null:
+		return
+	var strip_width := _panel_width(build_strip_panel)
+	if strip_width <= 0.0:
+		strip_width = build_strip_panel.custom_minimum_size.x
+	var inner_width := maxf(100.0, strip_width - 16.0)
+	if build_strip_content != null:
+		build_strip_content.custom_minimum_size.x = inner_width
+
+	var chip_width := clampf(inner_width * 0.75, 90.0, inner_width)
+	if build_strip_passive_chip != null:
+		build_strip_passive_chip.custom_minimum_size = Vector2(chip_width, 32.0)
+	if build_strip_passive_label != null:
+		build_strip_passive_label.custom_minimum_size = Vector2(maxf(80.0, chip_width - 20.0), 28.0)
+
+	for chip in build_strip_boon_chips:
+		if chip != null:
+			chip.custom_minimum_size = Vector2(chip_width, 32.0)
+	for chip in build_strip_arcana_chips:
+		if chip != null:
+			chip.custom_minimum_size = Vector2(chip_width, 32.0)
+
 func _update_player_mutator_panel(state: Dictionary) -> void:
 	if player_mutator_panel == null:
 		return
@@ -632,11 +820,136 @@ func _update_stats_panel_text(player: Node) -> void:
 	var move_spd := float(player.get("max_speed"))
 	var dash_cd := float(player.get("dash_cooldown"))
 	var armor := int(player.get("iron_skin_armor"))
-	var trial_stacks := 0
-	for trial_id in ["razor_wind", "execution_edge", "rupture_wave", "phantom_step", "reaper_step", "static_wake"]:
-		trial_stacks += int(player.get_trial_power_stack_count(trial_id))
 
-	stats_label.text = "[b]Stats[/b]\nHealth: [color=#C8FFD8]%d/%d[/color]\nAttack Damage: [color=#FFD8AA]%d[/color]\nAttack Range: [color=#FFD8AA]%.0f[/color]\nAttack Speed: [color=#BFD8FF]%.2fs[/color]\nMove Speed: [color=#BFD8FF]%.0f[/color]\nDash Cooldown: [color=#BFD8FF]%.2fs[/color]\nArmor: [color=#E8E8FF]%d[/color]\nArcana Stacks: [color=#FFE6B2]%d[/color]" % [hp_now, hp, dmg, atk_range, atk_cd, move_spd, dash_cd, armor, trial_stacks]
+	stats_label.text = "[b]Stats[/b]\nHealth: [color=#C8FFD8]%d/%d[/color]\nAttack Damage: [color=#FFD8AA]%d[/color]\nAttack Range: [color=#FFD8AA]%.0f[/color]\nAttack Speed: [color=#BFD8FF]%.2fs[/color]\nMove Speed: [color=#BFD8FF]%.0f[/color]\nDash Cooldown: [color=#BFD8FF]%.2fs[/color]\nArmor: [color=#E8E8FF]%d[/color]" % [hp_now, hp, dmg, atk_range, atk_cd, move_spd, dash_cd, armor]
+
+func _update_build_strip(state: Dictionary, player: Node) -> void:
+	if build_strip_panel == null:
+		return
+	# Get passive name from state and format it
+	var passive_id := String(state.get("current_character_passive_name", "Passive"))
+	var passive_display_name := _get_passive_display_name(passive_id)
+	if build_strip_passive_label != null:
+		build_strip_passive_label.text = "[center][b]%s[/b][/center]" % passive_display_name
+	# Get active boons and arcana from state
+	var active_boons := state.get("active_boons", []) as Array
+	var active_arcana := state.get("active_arcana", []) as Array
+	# Update boon chips
+	for i in range(build_strip_boon_chips.size()):
+		var chip := build_strip_boon_chips[i]
+		var label := build_strip_boon_labels[i]
+		var stack_label := build_strip_boon_stack_labels[i]
+		if i < active_boons.size():
+			var boon_id = active_boons[i]
+			chip.visible = true
+			if is_instance_valid(player):
+				var stack_count := int(player.get_upgrade_stack_count(boon_id))
+				var display_name := _get_power_display_name(boon_id)
+				label.text = display_name
+				stack_label.text = "x%d" % stack_count if stack_count > 1 else ""
+			else:
+				label.text = "?"
+				stack_label.text = ""
+		else:
+			chip.visible = false
+			label.text = ""
+			stack_label.text = ""
+	# Update arcana chips
+	for i in range(build_strip_arcana_chips.size()):
+		var chip := build_strip_arcana_chips[i]
+		var label := build_strip_arcana_labels[i]
+		var stack_label := build_strip_arcana_stack_labels[i]
+		if i < active_arcana.size():
+			var arcana_id = active_arcana[i]
+			chip.visible = true
+			if is_instance_valid(player):
+				var stack_count := int(player.get_trial_power_stack_count(arcana_id))
+				var display_name := _get_power_display_name(arcana_id)
+				label.text = display_name
+				stack_label.text = "x%d" % stack_count if stack_count > 1 else ""
+			else:
+				label.text = "?"
+				stack_label.text = ""
+		else:
+			chip.visible = false
+			label.text = ""
+			stack_label.text = ""
+
+func _get_passive_display_name(passive_id: String) -> String:
+	match passive_id:
+		"iron_retort":
+			return "Iron Retort"
+		"sigil_burst":
+			return "Sigil Burst"
+		"death_tempo":
+			return "Death's Tempo"
+		_:
+			return "Passive"
+
+func _get_power_display_name(power_id: String) -> String:
+	match power_id:
+		# Upgrades
+		"first_strike":
+			return "First Strike"
+		"heavy_blow":
+			return "Heavy Blow"
+		"wide_arc":
+			return "Wide Arc"
+		"long_reach":
+			return "Long Reach"
+		"fleet_foot":
+			return "Fleet Foot"
+		"blink_dash":
+			return "Blink Dash"
+		"iron_skin":
+			return "Iron Skin"
+		"backstab":
+			return "Backstab"
+		"executioner":
+			return "Executioner"
+		"bleeding_edge":
+			return "Bleeding Edge"
+		"ricochet":
+			return "Ricochet"
+		"piercing_shot":
+			return "Piercing Shot"
+		"frostbite":
+			return "Frostbite"
+		"weakpoint":
+			return "Weakpoint"
+		"hardened_skin":
+			return "Hardened Skin"
+		"last_stand":
+			return "Last Stand"
+		"adrenaline":
+			return "Adrenaline"
+		"counter_strike":
+			return "Counter Strike"
+		"heartstone":
+			return "Heartstone"
+		# Trial Powers (Arcana)
+		"razor_wind":
+			return "Razor Wind"
+		"execution_edge":
+			return "Execution Edge"
+		"rupture_wave":
+			return "Rupture Wave"
+		"aegis_field":
+			return "Aegis Field"
+		"hunters_snare":
+			return "Hunters Snare"
+		"phantom_step":
+			return "Phantom Step"
+		"reaper_step":
+			return "Reaper Step"
+		"static_wake":
+			return "Static Wake"
+		"storm_crown":
+			return "Storm Crown"
+		"wraithstep":
+			return "Wraithstep"
+		_:
+			return "Unknown"
 
 func _get_mutator_icon_texture(icon_shape_id: String) -> Texture2D:
 	match icon_shape_id:
