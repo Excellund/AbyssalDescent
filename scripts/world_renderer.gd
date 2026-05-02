@@ -219,7 +219,10 @@ func _draw_warden_boss_door_vfx(door_pos: Vector2, door_pulse: float, focus_boos
 		var t := float(i) / float(wedge_steps)
 		var a := wedge_mid - half_wedge + (half_wedge * 2.0) * t
 		wedge.append(door_pos + Vector2.RIGHT.rotated(a) * wedge_inner)
-	draw_colored_polygon(wedge, Color(core.r, core.g, core.b, 0.14 + focus_boost * 0.25))
+	
+	# Guard against invalid polygon data.
+	if wedge.size() >= 3 and wedge_inner > 0.0 and wedge_inner < wedge_outer:
+		draw_colored_polygon(wedge, Color(core.r, core.g, core.b, 0.14 + focus_boost * 0.25))
 
 	# Charge lane pulse.
 	var lane_dir := Vector2.RIGHT.rotated(spin * 0.94)
