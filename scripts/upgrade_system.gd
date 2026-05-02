@@ -651,8 +651,8 @@ func get_trial_power_card_description(power_id: String) -> String:
 			var cur_ratio_ff := float(player_reference.get("fracture_field_damage_ratio"))
 			var cur_slow_ff := float(player_reference.get("fracture_field_slow_duration"))
 			if current_stack <= 0:
-				return "[color=#9ab8d8]Killing an enemy detonates an implosion at their location, dealing damage in a radius with a brief slow.[/color]\n[color=#9ab8d8]Initial:[/color] radius [color=#7de882]%.0f[/color], damage [color=#7de882]%.0f%%[/color] of hit, slow [color=#7de882]%.2fs[/color]." % [next_radius_ff, next_ratio_ff * 100.0, next_slow_ff]
-			return "[color=#c8daf0]Fracture Field:[/color] radius [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color], damage [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color] of hit, slow [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_radius_ff, next_radius_ff, cur_ratio_ff * 100.0, next_ratio_ff * 100.0, cur_slow_ff, next_slow_ff]
+				return "[color=#9ab8d8]Kills rupture fault lines from the slain enemy, striking enemies on each line. Fracture damage does not chain into more fractures.[/color]\n[color=#9ab8d8]Initial:[/color] line length [color=#7de882]%.0f[/color], damage [color=#7de882]%.0f%%[/color] of hit, slow [color=#7de882]%.2fs[/color]." % [next_radius_ff, next_ratio_ff * 100.0, next_slow_ff]
+			return "[color=#c8daf0]Fracture Field:[/color] line length [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color], damage [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color] of hit, slow [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_radius_ff, next_radius_ff, cur_ratio_ff * 100.0, next_ratio_ff * 100.0, cur_slow_ff, next_slow_ff]
 		_:
 			return "[color=#9ab8d8]Enhances this power.[/color]"
 

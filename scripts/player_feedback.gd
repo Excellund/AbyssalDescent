@@ -302,6 +302,43 @@ func play_iron_retort_consume(player_global: Vector2, impact_global: Vector2) ->
 		var end := impact_global + forward * 8.0 + offset
 		_play_world_line(PackedVector2Array([start, end]), Color(1.0, 0.74, 0.5, 0.72), 1.8, 0.09, 0.65)
 
+func play_fracture_field_fault_lines(epicenter_global: Vector2, radius: float, beam_count: int, base_angle: float, beam_width: float = 12.0) -> void:
+	var core_color := Color(0.86, 0.96, 1.0, 0.9)
+	var fault_color := Color(0.38, 0.86, 1.0, 0.82)
+	var ember_color := Color(1.0, 0.78, 0.42, 0.6)
+	var halo_color := Color(0.42, 0.9, 1.0, 0.14)
+
+	play_world_ring(epicenter_global, 14.0, core_color, 0.08)
+	play_world_ring(epicenter_global, 24.0, Color(fault_color.r, fault_color.g, fault_color.b, 0.45), 0.14)
+
+	for i in range(beam_count):
+		var ang := base_angle + TAU * (float(i) / float(beam_count))
+		var dir := Vector2.RIGHT.rotated(ang)
+		var tip := epicenter_global + dir * radius
+
+		_play_world_line(
+			PackedVector2Array([epicenter_global, tip]),
+			halo_color,
+			beam_width * 2.0,
+			0.22,
+			0.9
+		)
+
+		_play_world_line(
+			PackedVector2Array([epicenter_global, tip]),
+			fault_color,
+			3.0,
+			0.2,
+			0.9
+		)
+		_play_world_line(
+			PackedVector2Array([epicenter_global + dir * 8.0, tip]),
+			ember_color,
+			1.7,
+			0.16,
+			0.6
+		)
+
 # === IMPACT FEEDBACK HIERARCHY ===
 func play_impact_light(epicenter_global: Vector2, radius: float = 60.0) -> void:
 	"""Light hit feedback: subtle ring + gentle flash (standard hits)."""

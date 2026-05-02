@@ -259,10 +259,11 @@ var eclipse_mark_radius: float = 110.0
 var eclipse_mark_duration: float = 1.4
 var eclipse_mark_bonus_ratio: float = 0.65
 var _eclipse_marked_enemies: Dictionary = {}
-# Fracture Field: on-kill implosion AoE
+# Fracture Field: kill-triggered fault lines (non-chain)
 var fracture_field_radius: float = 80.0
 var fracture_field_damage_ratio: float = 0.50
 var fracture_field_slow_duration: float = 0.6
+var _fracture_field_resolving: bool = false
 # New boons
 var crushed_vow_bonus_damage: int = 0
 var _crushed_vow_primed: bool = false
@@ -1302,6 +1303,7 @@ func clear_lingering_combat_effects() -> void:
 	_dread_resonance_target_stacks = 0
 	_vow_shatter_primed = false
 	_crushed_vow_primed = false
+	_fracture_field_resolving = false
 	queue_redraw()
 
 func _apply_rupture_wave(epicenter: Vector2, source_damage: int, rupture_hit_enemy_ids: Dictionary = {}) -> void:
@@ -1543,7 +1545,7 @@ func notify_enemy_killed(kill_position: Vector2 = Vector2.ZERO) -> void:
 	_trigger_combo_relay_kill()
 	if reward_eclipse_mark:
 		_apply_eclipse_mark(kill_position)
-	if reward_fracture_field:
+	if reward_fracture_field and not _fracture_field_resolving:
 		_apply_fracture_field(kill_position)
 	if reward_dread_resonance:
 		_dread_resonance_target_id = -1
@@ -1917,21 +1919,50 @@ func _consume_eclipse_mark_bonus(enemy_node: Object, base_damage: int) -> int:
 func _apply_fracture_field(kill_pos: Vector2) -> void:
 	if kill_pos == Vector2.ZERO:
 		return
+	if _fracture_field_resolving:
+		return
+
+	_fracture_field_resolving = true
 	var field_damage := maxi(1, int(round(float(damage) * fracture_field_damage_ratio)))
 	field_damage = _apply_objective_mutator_damage_mult(field_damage)
-	if player_feedback != null:
-		player_feedback.play_world_ring(kill_pos, fracture_field_radius, Color(0.72, 0.26, 0.96, 0.86), 0.24)
-		player_feedback.play_world_ring(kill_pos, fracture_field_radius * 0.55, Color(1.0, 0.72, 1.0, 0.62), 0.15)
+	var beam_count := 3 + mini(2, maxi(0, fracture_field_stacks - 1))
+	var beam_width := 12.0 + float(maxi(0, fracture_field_stacks - 1)) * 2.0
+	var base_angle := randf_range(0.0, TAU)
+
+	if player_feedback != null and player_feedback.has_method("play_fracture_field_fault_lines"):
+		player_feedback.play_fracture_field_fault_lines(kill_pos, fracture_field_radius, beam_count, base_angle, beam_width)
+
+	var hit_enemy_ids: Dictionary = {}
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		if not (enemy_node is Node2D):
 			continue
 		if not DAMAGEABLE.can_take_damage(enemy_node):
 			continue
 		var enemy_body := enemy_node as Node2D
-		if enemy_body.global_position.distance_to(kill_pos) > fracture_field_radius:
+		var enemy_id := enemy_body.get_instance_id()
+		if hit_enemy_ids.has(enemy_id):
 			continue
-		DAMAGEABLE.apply_damage(enemy_node, field_damage, {"is_ground_attack": true, "attack_type": "fracture_field"})
-		enemy_node.apply_slow(fracture_field_slow_duration, 0.55)
+		if enemy_body.global_position.distance_to(kill_pos) > fracture_field_radius + beam_width:
+			continue
+
+		var hit_by_fault := false
+		for i in range(beam_count):
+			var ang := base_angle + TAU * (float(i) / float(beam_count))
+			var dir := Vector2.RIGHT.rotated(ang)
+			var seg_end := kill_pos + dir * fracture_field_radius
+			var closest := Geometry2D.get_closest_point_to_segment(enemy_body.global_position, kill_pos, seg_end)
+			if enemy_body.global_position.distance_to(closest) <= beam_width:
+				hit_by_fault = true
+				break
+
+		if not hit_by_fault:
+			continue
+
+		hit_enemy_ids[enemy_id] = true
+		DAMAGEABLE.apply_damage(enemy_node, field_damage, {"is_ground_attack": true, "attack_type": "fracture_fault_line"})
+		enemy_node.apply_slow(fracture_field_slow_duration, 0.45)
+
+	_fracture_field_resolving = false
 
 
 

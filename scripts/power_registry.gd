@@ -96,7 +96,7 @@ const DAMAGE_MODEL_BY_POWER := {
 	"fracture_field": {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
-		"formula_note": "Y% of hit damage implosion at kill location"
+		"formula_note": "Y% of hit damage along non-chaining fault lines from kill position"
 	},
 	# Boons
 	"crushed_vow": {
@@ -636,6 +636,6 @@ func _get_trial_fallback_description(power_id: String) -> String:
 		"eclipse_mark":
 			return "%sKilling an enemy marks all nearby enemies. First hit on each marked enemy deals amplified damage. Marks expire quickly." % [_damage_kind_bracket(power_id)]
 		"fracture_field":
-			return "%sKilling an enemy detonates an implosion at their location, dealing a percentage of hit damage in a radius with a brief slow." % [_damage_kind_bracket(power_id)]
+			return "%sKills rupture fault lines from the slain enemy, striking enemies along the lines. Fracture damage does not chain." % [_damage_kind_bracket(power_id)]
 		_:
 			return "Enhances this power."
