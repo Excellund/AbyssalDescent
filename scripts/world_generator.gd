@@ -1541,6 +1541,8 @@ func _on_pause_exit_game_requested() -> void:
 func _spawn_door_options() -> void:
 	if not is_instance_valid(encounter_flow_system):
 		return
+	if choosing_next_room and not door_options.is_empty():
+		return
 	door_options.clear()
 	choosing_next_room = true
 	var route_options := _roll_route_options(_build_route_context(room_depth))
