@@ -75,6 +75,11 @@ $boonPickCounts = @{}
 $arcanaOutcome = @{}
 $holdLineDamage = [double]0
 $holdLineShielder = [double]0
+$charCounts = @{}
+$charOutcomes = @{}
+$charByBearing = @{}
+$arcanaOfferCounts = @{}
+$boonOfferCounts = @{}
 
 foreach ($r in $runs) {
     $out = [string]$r.outcome
@@ -156,6 +161,41 @@ foreach ($r in $runs) {
         if ([string]$r.outcome -eq 'death') { $arcanaOutcome[$openId].deaths++ }
         $arcanaOutcome[$openId].avgDepth += [double]$r.max_depth
     }
+
+    # --- character aggregates ---
+    $cid = [string]$r.character_id; if ([string]::IsNullOrWhiteSpace($cid)) { $cid = 'unknown' }
+    if (-not $charCounts.ContainsKey($cid)) { $charCounts[$cid] = 0 }
+    $charCounts[$cid]++
+    if (-not $charOutcomes.ContainsKey($cid)) {
+        $charOutcomes[$cid] = @{ runs = 0; clears = 0; deaths = 0; avgDepth = 0.0 }
+    }
+    $charOutcomes[$cid].runs++
+    if ($out -eq 'clear') { $charOutcomes[$cid].clears++ }
+    if ($out -eq 'death') { $charOutcomes[$cid].deaths++ }
+    $charOutcomes[$cid].avgDepth += [double]$r.max_depth
+
+    $tier = [string]$r.difficulty_tier
+    $cbKey = "${cid}__${tier}"
+    if (-not $charByBearing.ContainsKey($cbKey)) {
+        $charByBearing[$cbKey] = @{ character = $cid; difficulty_tier = $tier; runs = 0; clears = 0; deaths = 0 }
+    }
+    $charByBearing[$cbKey].runs++
+    if ($out -eq 'clear') { $charByBearing[$cbKey].clears++ }
+    if ($out -eq 'death') { $charByBearing[$cbKey].deaths++ }
+
+    # --- offer-side pick-rate aggregates ---
+    $offers = @(); if ($r.reward_offers -is [System.Array]) { $offers = $r.reward_offers }
+    foreach ($o in $offers) {
+        $mode = [int]$o.mode
+        $oid = [string]$o.choice_id; if ([string]::IsNullOrWhiteSpace($oid)) { $oid = 'unknown' }
+        if ($mode -eq 3) {
+            if (-not $arcanaOfferCounts.ContainsKey($oid)) { $arcanaOfferCounts[$oid] = 0 }
+            $arcanaOfferCounts[$oid]++
+        } elseif ($mode -eq 1) {
+            if (-not $boonOfferCounts.ContainsKey($oid)) { $boonOfferCounts[$oid] = 0 }
+            $boonOfferCounts[$oid]++
+        }
+    }
 }
 
 $durationArr = [double[]]$durations.ToArray()
@@ -208,6 +248,69 @@ foreach ($k in $arcanaOutcome.Keys) {
 }
 $arcanaEffect = $arcanaEffect | Sort-Object -Property @{ Expression = 'runs'; Descending = $true }, @{ Expression = 'clear_rate_pct'; Descending = $true } | Select-Object -First 10
 
+# --- character popularity ---
+$charPopularity = @()
+foreach ($k in $charOutcomes.Keys) {
+    $v = $charOutcomes[$k]
+    $n = [double]$v.runs
+    $charPopularity += [PSCustomObject]@{
+        character      = $k
+        runs           = [int]$v.runs
+        clear_rate_pct = [math]::Round((100.0 * $v.clears / [math]::Max($n, 1)), 2)
+        death_rate_pct = [math]::Round((100.0 * $v.deaths / [math]::Max($n, 1)), 2)
+        avg_max_depth  = [math]::Round(($v.avgDepth / [math]::Max($n, 1)), 2)
+    }
+}
+$charPopularity = $charPopularity | Sort-Object runs -Descending
+
+$charByBearingArr = @()
+foreach ($k in $charByBearing.Keys) {
+    $v = $charByBearing[$k]
+    $n = [double]$v.runs
+    $charByBearingArr += [PSCustomObject]@{
+        character      = $v.character
+        difficulty_tier = $v.difficulty_tier
+        runs           = [int]$v.runs
+        clear_rate_pct = [math]::Round((100.0 * $v.clears / [math]::Max($n, 1)), 2)
+        death_rate_pct = [math]::Round((100.0 * $v.deaths / [math]::Max($n, 1)), 2)
+    }
+}
+$charByBearingArr = $charByBearingArr | Sort-Object character, difficulty_tier
+
+# --- pick rates (pick / offer) ---
+$allArcanaIds = ($arcanaPickCounts.Keys + $arcanaOfferCounts.Keys) | Sort-Object -Unique
+$arcanaPickRates = @()
+foreach ($id in $allArcanaIds) {
+    $picks  = if ($arcanaPickCounts.ContainsKey($id))  { [int]$arcanaPickCounts[$id] }  else { 0 }
+    $offers = if ($arcanaOfferCounts.ContainsKey($id)) { [int]$arcanaOfferCounts[$id] } else { 0 }
+    $rate   = if ($offers -gt 0) { [math]::Round((100.0 * $picks / $offers), 2) } else { $null }
+    $arcanaPickRates += [PSCustomObject]@{
+        arcana        = $id
+        offers        = $offers
+        picks         = $picks
+        pick_rate_pct = $rate
+    }
+}
+$arcanaPickRates = $arcanaPickRates | Sort-Object picks -Descending
+
+$allBoonIds = ($boonPickCounts.Keys + $boonOfferCounts.Keys) | Sort-Object -Unique
+$boonPickRates = @()
+foreach ($id in $allBoonIds) {
+    $picks  = if ($boonPickCounts.ContainsKey($id))  { [int]$boonPickCounts[$id] }  else { 0 }
+    $offers = if ($boonOfferCounts.ContainsKey($id)) { [int]$boonOfferCounts[$id] } else { 0 }
+    $rate   = if ($offers -gt 0) { [math]::Round((100.0 * $picks / $offers), 2) } else { $null }
+    $boonPickRates += [PSCustomObject]@{
+        boon          = $id
+        offers        = $offers
+        picks         = $picks
+        pick_rate_pct = $rate
+    }
+}
+$boonPickRates = $boonPickRates | Sort-Object picks -Descending
+
+# arcana offered >=2 times but never picked
+$neverPickedArcana = @($arcanaPickRates | Where-Object { $_.offers -ge 2 -and $_.picks -eq 0 } | ForEach-Object { $_.arcana })
+
 $totalDeathN = 0; foreach ($v in $deathBySource.Values) { $totalDeathN += [int]$v }
 $shielderDeathN = 0; if ($deathBySource.ContainsKey('enemy_shielder')) { $shielderDeathN = [int]$deathBySource['enemy_shielder'] }
 $holdShare = 0.0; if ($holdLineDamage -gt 0) { $holdShare = 100.0 * $holdLineShielder / $holdLineDamage }
@@ -238,6 +341,11 @@ $report = [ordered]@{
     top_arcana_picks = @($topArcana | ForEach-Object { [ordered]@{ arcana = $_.Key; picks = $_.Value } })
     arcana_outcomes = @($arcanaEffect)
     top_boon_picks = @($topBoon | ForEach-Object { [ordered]@{ boon = $_.Key; picks = $_.Value } })
+    arcana_pick_rates = @($arcanaPickRates)
+    boon_pick_rates = @($boonPickRates)
+    never_picked_arcana = $neverPickedArcana
+    character_popularity = @($charPopularity)
+    character_by_bearing = @($charByBearingArr)
 }
 
 $outJson = 'c:\Mike\Godot Projects\godot-2026\playtester_telemetry\latest_version_balance_report.json'

@@ -17,6 +17,9 @@ Use these natural-language commands in chat. Phrases do not need to match exactl
 - Fix dominant strategy in [encounter/objective]
 - Lift weak strategy in [encounter/objective]
 - Use shorthand bearings/depth in reports, e.g. H3 for Harbinger depth 3
+- Analyze latest player data
+- Pull latest telemetry and analyze
+- What does the data say
 
 ## Gameplay Loop And Objective Pacing
 

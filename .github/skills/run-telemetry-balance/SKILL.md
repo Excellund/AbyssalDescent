@@ -91,3 +91,44 @@ Use this skill when you need evidence from real runs before changing encounter b
 - Label-based bearing normalization is stable enough for analysis, but explicit bearing_key fields should be preferred whenever present.
 - Reward telemetry currently records the selected `choice_id` but not the full offered choice set. Treat "least picked" reward conclusions as selection-frequency signals, not true pick-rate/offer-rate measurements, unless offer-set logging is added.
 - Remote uploads are gated on player consent (`telemetry_consent_asked` + `telemetry_upload_enabled` in settings_store). Debug runs are still uploaded but flagged `is_debug: true`; filter them in Supabase queries for clean production data.
+
+## Pick Rate Calculation
+Pick rate = picks / offers. The `reward_choices` array records what was selected; `reward_offers` records what was presented. True pick rate requires both.
+- `fetch_latest_version_analysis.ps1` computes this and writes `arcana_pick_rates` and `boon_pick_rates` to the report JSON.
+- Each entry has: `{ arcana/boon, offers, picks, pick_rate_pct }`. `pick_rate_pct` is `null` if the reward was never offered (picks came from a source without offer tracking).
+- `never_picked_arcana` is the pre-filtered list of arcana offered ≥2 times but never chosen — the highest-priority buff/rework candidates.
+- Treat pick rates from very small offer counts (< 5) as directional signals, not reliable percentages.
+
+## Character Analysis
+Character data is in `character_popularity` and `character_by_bearing` in the report JSON.
+- `character_popularity`: {character, runs, clear_rate_pct, death_rate_pct, avg_max_depth} — use for overall balance.
+- `character_by_bearing`: {character, difficulty_tier, runs, clear_rate_pct} — use to identify if a character is strong on Pilgrim but fails on Forsworn.
+- Low pick rate does not always mean weakness — check whether unlock gating is the cause before proposing buffs.
+- A character > 30 percentage points below average clear rate is a balance concern. A character > 30 points above average is an overperformance concern.
+
+## Fun / Satisfaction Proxy
+There is no direct "fun" signal in the telemetry. Use this proxy chain:
+1. **Engagement signal** (`boredom_proxy.long_low_engagement_runs`): long runs with very few damage events. Elevated count suggests passive play (kiting, avoidance) rather than active combat.
+2. **Arcana outcome depth** (`arcana_outcomes.avg_max_depth`): how far players get with each opening arcana. Low avg depth on frequently-picked arcana suggests it felt compelling but failed to deliver.
+3. **Death timing** (`death_timing`): if median death depth is in the first quarter of rooms, players aren't reaching the designed late-game experience.
+4. **Character diversity** (`character_popularity`): when players cluster on one character, they are either optimizing heavily or the other options feel unrewarding.
+Synthesize these four signals into POSITIVE / MIXED / NEGATIVE. Always state which signals drove the assessment and note that this is not a direct player satisfaction measure.
+
+## Full Analysis Workflow (13 Dimensions)
+When a full analysis is requested, work through all 13 dimensions in order. The dedicated Telemetry Analyst agent applies this workflow automatically via `fetch_latest_version_analysis.ps1`.
+
+| # | Dimension | Key Fields | Flag Threshold |
+|---|-----------|------------|----------------|
+| D1 | Dataset quality | run_count, outcomes | WARN < 10 runs; STOP < 5 |
+| D2 | Difficulty calibration | outcomes (clear rate), death_timing | FLAG < 10% or > 70% clear rate |
+| D3 | Arcana pick concentration | top_arcana_picks | FLAG if top pick > 50% of total |
+| D4 | Arcana never picked | never_picked_arcana, arcana_pick_rates | FLAG all entries (buff/rework candidates) |
+| D5 | Arcana win rate | arcana_outcomes | FLAG death_rate > 80% with ≥3 runs |
+| D6 | Boon pick concentration | top_boon_picks, boon_pick_rates | FLAG if top boon > 40% of total |
+| D7 | Damage pressure | encounter_pressure.damage_per_entry | FLAG if ≥ 2× median |
+| D8 | Death concentration | encounter_pressure.deaths_per_100_entries | FLAG > 50; WATCH > 25 |
+| D9 | Engagement signal | boredom_proxy | FLAG if long_low_engagement > 15% of runs |
+| D10 | Character popularity | character_popularity | FLAG if any character < 15% of runs |
+| D11 | Character win rate | character_popularity, character_by_bearing | FLAG if > 30 pts below/above average |
+| D12 | Encounter selection | encounter_pressure.entries (share) | FLAG if non-boss < 5% of total entries |
+| D13 | Fun proxy | D9 + D5 + D2 + D10 synthesis | POSITIVE / MIXED / NEGATIVE |
