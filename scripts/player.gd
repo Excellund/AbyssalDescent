@@ -89,7 +89,16 @@ const RUN_SNAPSHOT_PROPERTIES := [
 	"voidfire_detonate_ratio",
 	"voidfire_detonate_radius",
 	"voidfire_lockout_duration",
+	"voidfire_heat_per_hit",
+	"voidfire_danger_zone_threshold",
+	"voidfire_danger_zone_heat_gain_mult",
+	"voidfire_reckless_heat_ratio",
+	"voidfire_reckless_heat_gain_mult",
+	"voidfire_danger_zone_decay_mult",
+	"voidfire_reckless_decay_mult",
 	"void_heat",
+	"void_heat_cap",
+	"void_heat_decay_rate",
 	"dread_resonance_bonus_per_stack",
 	"vow_shatter_damage_mult",
 	"eclipse_mark_radius",
@@ -239,11 +248,18 @@ var fracture_field_stacks: int = 0
 var voidfire_danger_zone_amp: float = 0.20
 var voidfire_detonate_ratio: float = 0.80
 var voidfire_detonate_radius: float = 80.0
-var voidfire_lockout_duration: float = 5.40
+var voidfire_lockout_duration: float = 1.8
 var voidfire_overheat_move_mult: float = 0.65
+var voidfire_heat_per_hit: float = 10.0
+var voidfire_danger_zone_threshold: float = 68.0
+var voidfire_danger_zone_heat_gain_mult: float = 0.58
+var voidfire_reckless_heat_ratio: float = 0.93
+var voidfire_reckless_heat_gain_mult: float = 1.45
+var voidfire_danger_zone_decay_mult: float = 1.45
+var voidfire_reckless_decay_mult: float = 1.9
 var void_heat: float = 0.0
-var void_heat_cap: float = 100.0
-var void_heat_decay_rate: float = 8.0
+var void_heat_cap: float = 110.0
+var void_heat_decay_rate: float = 10.0
 var _voidfire_last_hit_time: float = -999.0
 var _voidfire_lockout_left: float = 0.0
 # Dread Resonance: same-target streak bonus
@@ -1144,7 +1160,8 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 	# Voidfire: apply Danger Zone amp to base damage before breakdowns
 	if reward_voidfire and _voidfire_lockout_left <= 0.0:
 		var heat_ratio := void_heat / maxf(1.0, void_heat_cap)
-		if heat_ratio >= 0.7:
+		var danger_ratio := clampf(voidfire_danger_zone_threshold / maxf(1.0, void_heat_cap), 0.0, 1.0)
+		if heat_ratio >= danger_ratio:
 			strike_damage = int(round(float(strike_damage) * (1.0 + voidfire_danger_zone_amp)))
 	# Vow Shatter: apply multiplier if primed
 	if _vow_shatter_primed:
@@ -1214,7 +1231,7 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		# Voidfire: gain heat on any hit
 		if reward_voidfire and _voidfire_lockout_left <= 0.0:
 			_voidfire_last_hit_time = Time.get_ticks_msec() / 1000.0
-			_gain_void_heat(12.0)
+			_gain_void_heat(voidfire_heat_per_hit)
 	if retort_active and player_feedback != null:
 		if did_hit and player_feedback.has_method("play_iron_retort_consume"):
 			player_feedback.play_iron_retort_consume(global_position, retort_impact_position)
@@ -1794,7 +1811,16 @@ func _update_iron_retort(delta: float) -> void:
 # --- Voidfire ---
 
 func _gain_void_heat(amount: float) -> void:
-	void_heat = minf(void_heat_cap, void_heat + amount)
+	var clamped_cap := maxf(1.0, void_heat_cap)
+	var danger_ratio := clampf(voidfire_danger_zone_threshold / clamped_cap, 0.0, 1.0)
+	var reckless_ratio := clampf(voidfire_reckless_heat_ratio, danger_ratio, 0.99)
+	var gain := maxf(0.0, amount)
+	var heat_ratio_before := clampf(void_heat / clamped_cap, 0.0, 1.0)
+	if heat_ratio_before >= reckless_ratio:
+		gain *= maxf(1.0, voidfire_reckless_heat_gain_mult)
+	elif heat_ratio_before >= danger_ratio:
+		gain *= clampf(voidfire_danger_zone_heat_gain_mult, 0.2, 1.0)
+	void_heat = minf(clamped_cap, void_heat + gain)
 	if void_heat >= void_heat_cap:
 		_trigger_voidfire_detonation()
 
@@ -1830,8 +1856,17 @@ func _update_voidfire_heat(delta: float) -> void:
 		return
 	var now := Time.get_ticks_msec() / 1000.0
 	var idle_seconds := now - _voidfire_last_hit_time
-	if idle_seconds > 0.4:
-		void_heat = maxf(0.0, void_heat - void_heat_decay_rate * delta)
+	if idle_seconds > 0.28:
+		var clamped_cap := maxf(1.0, void_heat_cap)
+		var heat_ratio := clampf(void_heat / clamped_cap, 0.0, 1.0)
+		var danger_ratio := clampf(voidfire_danger_zone_threshold / clamped_cap, 0.0, 1.0)
+		var reckless_ratio := clampf(voidfire_reckless_heat_ratio, danger_ratio, 0.99)
+		var decay := maxf(0.0, void_heat_decay_rate)
+		if heat_ratio >= reckless_ratio:
+			decay *= maxf(voidfire_danger_zone_decay_mult, voidfire_reckless_decay_mult)
+		elif heat_ratio >= danger_ratio:
+			decay *= maxf(1.0, voidfire_danger_zone_decay_mult)
+		void_heat = maxf(0.0, void_heat - decay * delta)
 	queue_redraw()
 
 func _update_voidfire_lockout(delta: float) -> void:
@@ -1845,7 +1880,8 @@ func _sync_voidfire_ui() -> void:
 		return
 	if not player_feedback.has_method("update_voidfire_heat_bar"):
 		return
-	player_feedback.update_voidfire_heat_bar(void_heat, void_heat_cap, reward_voidfire, _voidfire_lockout_left)
+	var danger_ratio := clampf(voidfire_danger_zone_threshold / maxf(1.0, void_heat_cap), 0.0, 1.0)
+	player_feedback.update_voidfire_heat_bar(void_heat, void_heat_cap, reward_voidfire, _voidfire_lockout_left, danger_ratio)
 
 # --- Dread Resonance ---
 

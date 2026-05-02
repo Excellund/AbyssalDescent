@@ -4,6 +4,8 @@
 
 extends Node
 
+const DESCRIPTION_CAP_GUARD := preload("res://scripts/shared/description_cap_guard.gd")
+
 # Power type constants
 const POWER_TYPE_UPGRADE = "upgrade"  # Stat boosts: Swift Strike, Heavy Blow, etc
 const POWER_TYPE_TRIAL = "trial_power"  # Combat abilities: Razor Wind, Execution Edge, Rupture Wave
@@ -261,20 +263,25 @@ const TRIAL_POWER_BALANCE := {
 		"damage_ratio_cap": 0.82
 	},
 	"voidfire": {
-		"heat_per_hit": 12.0,
-		"heat_cap": 100.0,
-		"danger_zone_threshold": 70.0,
+		"heat_per_hit": 10.0,
+		"heat_cap": 110.0,
+		"danger_zone_threshold": 68.0,
 		"danger_zone_amp_base": 0.20,
 		"danger_zone_amp_per_stack": 0.08,
 		"detonate_ratio_base": 0.80,
 		"detonate_ratio_per_stack": 0.15,
 		"detonate_radius_base": 80.0,
 		"detonate_radius_per_stack": 10.0,
-		"lockout_base": 1.8,
+		"lockout_base": 1.6,
 		"lockout_per_stack": 0.0,
 		"lockout_min": 0,
 		"overheat_move_mult": 0.65,
-		"heat_decay_rate": 8.0
+		"heat_decay_rate": 10.0,
+		"danger_zone_heat_gain_mult": 0.58,
+		"reckless_heat_ratio": 0.93,
+		"reckless_heat_gain_mult": 1.45,
+		"danger_zone_decay_mult": 1.45,
+		"reckless_decay_mult": 1.9
 	},
 	"dread_resonance": {
 		"max_stacks": 3,
@@ -628,7 +635,8 @@ func _get_trial_fallback_description(power_id: String) -> String:
 		"wraithstep":
 			return "%sDash marks enemies. Marked hits deal extra hit damage and trigger splash chains that deal a percentage of hit damage." % [_damage_kind_bracket(power_id)]
 		"voidfire":
-			return "Heat up attacks. Danger Zone boosts hit damage. Overheat detonates and briefly locks actions."
+			var voidfire_desc := "Heat attacks. Danger Zone boosts hit damage. At cap, overheat detonates and briefly locks attacks."
+			return DESCRIPTION_CAP_GUARD.assert_visible_cap(voidfire_desc, "voidfire", "fallback")
 		"dread_resonance":
 			var data := get_power_balance("dread_resonance")
 			var max_stacks := int(data.get("max_stacks", 3))
@@ -638,6 +646,7 @@ func _get_trial_fallback_description(power_id: String) -> String:
 		"eclipse_mark":
 			return "%sKilling an enemy marks all nearby enemies. First hit on each marked enemy deals amplified damage. Marks expire quickly." % [_damage_kind_bracket(power_id)]
 		"fracture_field":
-			return "%sKills rupture fault lines from the slain enemy, striking enemies along the lines. Fracture damage does not chain." % [_damage_kind_bracket(power_id)]
+			var fracture_desc := "%sKills rupture fault lines from the slain enemy, striking enemies along each line." % [_damage_kind_bracket(power_id)]
+			return DESCRIPTION_CAP_GUARD.assert_visible_cap(fracture_desc, "fracture_field", "fallback")
 		_:
 			return "Enhances this power."

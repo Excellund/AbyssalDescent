@@ -1,6 +1,7 @@
 extends Node
 
 const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
+const DESCRIPTION_CAP_GUARD := preload("res://scripts/shared/description_cap_guard.gd")
 
 signal build_detail_opened
 signal build_detail_closed
@@ -402,8 +403,9 @@ func _get_power_current_desc(power_id: String, power_type: String, player: Node)
 		"voidfire":
 			var vf_amp := 0.20 + 0.08 * float(stacks)
 			var vf_det := 0.80 + 0.15 * float(stacks)
-			var vf_lockout := 5.40
-			return "[color=#9ab8d8]Build heat through attacks. Danger Zone boosts damage. Max heat detonates, seals attacks, slows movement, and disables dash.[/color]\n    [color=#c8daf0]%sDanger amp:[/color] [color=#e8c96a]+%.0f%%[/color], [color=#c8daf0]Detonate:[/color] [color=#e8c96a]%.0f%%[/color] of hit, [color=#c8daf0]Overheat lock:[/color] [color=#e8c96a]%.2fs[/color]" % [_damage_kind_prefix(power_id, player), vf_amp * 100.0, vf_det * 100.0, vf_lockout]
+			var vf_lockout := 1.60
+			var vf_desc := "[color=#9ab8d8]Heat attacks. Danger Zone boosts hit damage.[/color]\n    [color=#c8daf0]Damage:[/color] [color=#e8c96a]+%.0f%%[/color], [color=#c8daf0]Detonate:[/color] [color=#e8c96a]%.0f%%[/color], [color=#c8daf0]Lockout:[/color] [color=#e8c96a]%.2fs[/color]" % [vf_amp * 100.0, vf_det * 100.0, vf_lockout]
+			return DESCRIPTION_CAP_GUARD.assert_visible_cap(vf_desc, "voidfire", "build_detail")
 		"dread_resonance":
 			var dr_bonus := 6 + 3 * stacks
 			return "[color=#9ab8d8]Chain hits on one enemy build resonance. Swapping targets resets it.[/color]\n    [color=#c8daf0]%sBonus per resonance stack:[/color] [color=#e8c96a]+%d[/color]" % [_damage_kind_prefix(power_id, player), dr_bonus]
@@ -419,7 +421,8 @@ func _get_power_current_desc(power_id: String, power_type: String, player: Node)
 			var ff_radius := 80.0 + 10.0 * float(stacks)
 			var ff_damage := 0.50 + 0.10 * float(stacks)
 			var ff_slow := 0.60 + 0.10 * float(stacks)
-			return "[color=#9ab8d8]Kills trigger an implosion at the target location with a brief slow.[/color]\n    [color=#c8daf0]%sRadius:[/color] [color=#e8c96a]%.0f[/color], [color=#c8daf0]Damage:[/color] [color=#e8c96a]%.0f%%[/color] of hit, [color=#c8daf0]Slow:[/color] [color=#e8c96a]%.2fs[/color]" % [_damage_kind_prefix(power_id, player), ff_radius, ff_damage * 100.0, ff_slow]
+			var ff_desc := "[color=#9ab8d8]Kills rupture fault lines from slain enemies.[/color]\n    [color=#c8daf0]Length:[/color] [color=#e8c96a]%.0f[/color], [color=#c8daf0]Damage:[/color] [color=#e8c96a]%.0f%%[/color], [color=#c8daf0]Slow:[/color] [color=#e8c96a]%.2fs[/color]" % [ff_radius, ff_damage * 100.0, ff_slow]
+			return DESCRIPTION_CAP_GUARD.assert_visible_cap(ff_desc, "fracture_field", "build_detail")
 		_:
 			return ""
 

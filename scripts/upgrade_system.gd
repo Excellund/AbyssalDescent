@@ -4,6 +4,8 @@
 
 extends Node
 
+const DESCRIPTION_CAP_GUARD := preload("res://scripts/shared/description_cap_guard.gd")
+
 # Dependencies (injected)
 var player_reference: Node = null
 var game_state: Node = null  # GameStateManager instance
@@ -200,11 +202,20 @@ func apply_trial_power(power_id: String) -> bool:
 		"voidfire":
 			player_reference.set("reward_voidfire", true)
 			player_reference.set("voidfire_stacks", next_stack)
+			player_reference.set("voidfire_heat_per_hit", float(next_values.get("heat_per_hit", player_reference.get("voidfire_heat_per_hit"))))
+			player_reference.set("void_heat_cap", float(next_values.get("heat_cap", player_reference.get("void_heat_cap"))))
+			player_reference.set("voidfire_danger_zone_threshold", float(next_values.get("danger_zone_threshold", player_reference.get("voidfire_danger_zone_threshold"))))
 			player_reference.set("voidfire_danger_zone_amp", float(next_values.get("danger_zone_amp", player_reference.get("voidfire_danger_zone_amp"))))
 			player_reference.set("voidfire_detonate_ratio", float(next_values.get("detonate_ratio", player_reference.get("voidfire_detonate_ratio"))))
 			player_reference.set("voidfire_detonate_radius", float(next_values.get("detonate_radius", player_reference.get("voidfire_detonate_radius"))))
 			player_reference.set("voidfire_lockout_duration", float(next_values.get("lockout_duration", player_reference.get("voidfire_lockout_duration"))))
 			player_reference.set("voidfire_overheat_move_mult", float(next_values.get("overheat_move_mult", player_reference.get("voidfire_overheat_move_mult"))))
+			player_reference.set("void_heat_decay_rate", float(next_values.get("heat_decay_rate", player_reference.get("void_heat_decay_rate"))))
+			player_reference.set("voidfire_danger_zone_heat_gain_mult", float(next_values.get("danger_zone_heat_gain_mult", player_reference.get("voidfire_danger_zone_heat_gain_mult"))))
+			player_reference.set("voidfire_reckless_heat_ratio", float(next_values.get("reckless_heat_ratio", player_reference.get("voidfire_reckless_heat_ratio"))))
+			player_reference.set("voidfire_reckless_heat_gain_mult", float(next_values.get("reckless_heat_gain_mult", player_reference.get("voidfire_reckless_heat_gain_mult"))))
+			player_reference.set("voidfire_danger_zone_decay_mult", float(next_values.get("danger_zone_decay_mult", player_reference.get("voidfire_danger_zone_decay_mult"))))
+			player_reference.set("voidfire_reckless_decay_mult", float(next_values.get("reckless_decay_mult", player_reference.get("voidfire_reckless_decay_mult"))))
 		"dread_resonance":
 			player_reference.set("reward_dread_resonance", true)
 			player_reference.set("dread_resonance_stacks", next_stack)
@@ -446,11 +457,20 @@ func _build_trial_values(power_id: String, stack_count: int) -> Dictionary:
 			}
 		"voidfire":
 			return {
+				"heat_per_hit": float(data.get("heat_per_hit", 12.0)),
+				"heat_cap": float(data.get("heat_cap", 100.0)),
+				"danger_zone_threshold": float(data.get("danger_zone_threshold", 70.0)),
 				"danger_zone_amp": float(data.get("danger_zone_amp_base", 0.0)) + float(data.get("danger_zone_amp_per_stack", 0.0)) * float(stack_count),
 				"detonate_ratio": float(data.get("detonate_ratio_base", 0.0)) + float(data.get("detonate_ratio_per_stack", 0.0)) * float(stack_count),
 				"detonate_radius": float(data.get("detonate_radius_base", 0.0)) + float(data.get("detonate_radius_per_stack", 0.0)) * float(stack_count),
 				"lockout_duration": maxf(float(data.get("lockout_min", 0.0)), float(data.get("lockout_base", 0.0)) + float(data.get("lockout_per_stack", 0.0)) * float(stack_count)),
-				"overheat_move_mult": float(data.get("overheat_move_mult", 1.0))
+				"overheat_move_mult": float(data.get("overheat_move_mult", 1.0)),
+				"heat_decay_rate": float(data.get("heat_decay_rate", 8.0)),
+				"danger_zone_heat_gain_mult": float(data.get("danger_zone_heat_gain_mult", 1.0)),
+				"reckless_heat_ratio": float(data.get("reckless_heat_ratio", 0.9)),
+				"reckless_heat_gain_mult": float(data.get("reckless_heat_gain_mult", 1.0)),
+				"danger_zone_decay_mult": float(data.get("danger_zone_decay_mult", 1.0)),
+				"reckless_decay_mult": float(data.get("reckless_decay_mult", 1.0))
 			}
 		"dread_resonance":
 			return {
@@ -611,8 +631,10 @@ func get_trial_power_card_description(power_id: String) -> String:
 			var cur_det_ratio := float(player_reference.get("voidfire_detonate_ratio"))
 			var cur_lockout := float(player_reference.get("voidfire_lockout_duration"))
 			if current_stack <= 0:
-				return "[color=#9ab8d8]Heat up attacks. Danger Zone boosts hit damage; overheat detonates and briefly locks actions.[/color]\n[color=#9ab8d8]Initial:[/color] amp [color=#7de882]+%.0f%%[/color], detonate [color=#7de882]%.0f%%[/color], lock [color=#7de882]%.2fs[/color]." % [next_amp * 100.0, next_det_ratio * 100.0, next_lockout]
-			return "[color=#c8daf0]Voidfire:[/color] amp [color=#e8c96a]+%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]+%.0f%%[/color], detonate [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color], lock [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_amp * 100.0, next_amp * 100.0, cur_det_ratio * 100.0, next_det_ratio * 100.0, cur_lockout, next_lockout]
+				var voidfire_initial := "[color=#9ab8d8]Heat attacks. Danger Zone boosts hit damage.[/color]\n[color=#9ab8d8]Initial:[/color] damage [color=#7de882]+%.0f%%[/color], detonate [color=#7de882]%.0f%%[/color], lockout [color=#7de882]%.2fs[/color]." % [next_amp * 100.0, next_det_ratio * 100.0, next_lockout]
+				return DESCRIPTION_CAP_GUARD.assert_visible_cap(voidfire_initial, "voidfire", "reward_card")
+			var voidfire_stack_desc := "[color=#c8daf0]Voidfire:[/color] damage [color=#e8c96a]+%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]+%.0f%%[/color], detonate [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color], lockout [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_amp * 100.0, next_amp * 100.0, cur_det_ratio * 100.0, next_det_ratio * 100.0, cur_lockout, next_lockout]
+			return DESCRIPTION_CAP_GUARD.assert_visible_cap(voidfire_stack_desc, "voidfire", "reward_card")
 		"dread_resonance":
 			if next_values.is_empty():
 				return "[color=#9ab8d8]Enhances this power.[/color]"
@@ -652,8 +674,10 @@ func get_trial_power_card_description(power_id: String) -> String:
 			var cur_ratio_ff := float(player_reference.get("fracture_field_damage_ratio"))
 			var cur_slow_ff := float(player_reference.get("fracture_field_slow_duration"))
 			if current_stack <= 0:
-				return "[color=#9ab8d8]Kills rupture fault lines from the slain enemy, striking enemies on each line. Fracture damage does not chain into more fractures.[/color]\n[color=#9ab8d8]Initial:[/color] line length [color=#7de882]%.0f[/color], damage [color=#7de882]%.0f%%[/color] of hit, slow [color=#7de882]%.2fs[/color]." % [next_radius_ff, next_ratio_ff * 100.0, next_slow_ff]
-			return "[color=#c8daf0]Fracture Field:[/color] line length [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color], damage [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color] of hit, slow [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_radius_ff, next_radius_ff, cur_ratio_ff * 100.0, next_ratio_ff * 100.0, cur_slow_ff, next_slow_ff]
+				var fracture_initial := "[color=#9ab8d8]Kill ruptures fault lines from the slain enemy.[/color]\n[color=#9ab8d8]Initial:[/color] length [color=#7de882]%.0f[/color], damage [color=#7de882]%.0f%%[/color], slow [color=#7de882]%.2fs[/color]." % [next_radius_ff, next_ratio_ff * 100.0, next_slow_ff]
+				return DESCRIPTION_CAP_GUARD.assert_visible_cap(fracture_initial, "fracture_field", "reward_card")
+			var fracture_stack_desc := "[color=#c8daf0]Fracture:[/color] length [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color], damage [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color], slow [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_radius_ff, next_radius_ff, cur_ratio_ff * 100.0, next_ratio_ff * 100.0, cur_slow_ff, next_slow_ff]
+			return DESCRIPTION_CAP_GUARD.assert_visible_cap(fracture_stack_desc, "fracture_field", "reward_card")
 		_:
 			return "[color=#9ab8d8]Enhances this power.[/color]"
 

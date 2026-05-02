@@ -40,6 +40,12 @@ Use these natural-language commands in chat. Phrases do not need to match exactl
 - Rebalance boon [id] without healing or timing changes
 - Rename boon identity and update id everywhere
 
+## Power Description Sync
+
+- Sync power descriptions across reward card, build panel, and fallback
+- Apply description cap policy to [power id]
+- Shorten and sync reward/build descriptions for [power id]
+
 ## Repo And Release Ops
 
 - Create new repo tag

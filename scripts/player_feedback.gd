@@ -79,7 +79,7 @@ func update_health_bar(new_health: int, new_max_health: int) -> void:
 	health_bar.max_value = float(new_max_health)
 	health_bar.value = float(new_health)
 
-func update_voidfire_heat_bar(heat: float, heat_cap: float, enabled: bool, lockout_left: float = 0.0) -> void:
+func update_voidfire_heat_bar(heat: float, heat_cap: float, enabled: bool, lockout_left: float = 0.0, danger_ratio: float = VOIDFIRE_DANGER_RATIO) -> void:
 	if voidfire_bar == null:
 		return
 	voidfire_bar.visible = enabled
@@ -95,8 +95,9 @@ func update_voidfire_heat_bar(heat: float, heat_cap: float, enabled: bool, locko
 	var clamped_cap := maxf(1.0, heat_cap)
 	var clamped_heat := clampf(heat, 0.0, clamped_cap)
 	var heat_ratio := clampf(clamped_heat / clamped_cap, 0.0, 1.0)
-	var in_sweetspot := heat_ratio >= VOIDFIRE_DANGER_RATIO and lockout_left <= 0.0
-	var warm_t := clampf((heat_ratio - VOIDFIRE_DANGER_RATIO) / maxf(0.001, 1.0 - VOIDFIRE_DANGER_RATIO), 0.0, 1.0)
+	var sweetspot_ratio := clampf(danger_ratio, 0.0, 0.98)
+	var in_sweetspot := heat_ratio >= sweetspot_ratio and lockout_left <= 0.0
+	var warm_t := clampf((heat_ratio - sweetspot_ratio) / maxf(0.001, 1.0 - sweetspot_ratio), 0.0, 1.0)
 
 	voidfire_bar.max_value = clamped_cap
 	voidfire_bar.value = clamped_heat
@@ -113,9 +114,12 @@ func update_voidfire_heat_bar(heat: float, heat_cap: float, enabled: bool, locko
 	var threshold_base := Color(0.76, 0.9, 1.0, 0.72)
 	var threshold_hot := Color(1.0, 0.94, 0.74, 0.96)
 	if voidfire_threshold_line != null:
+		voidfire_threshold_line.position = voidfire_bar_offset + Vector2(voidfire_bar_size.x * sweetspot_ratio - 1.0, -1.0)
 		voidfire_threshold_line.color = threshold_base.lerp(threshold_hot, warm_t)
 
 	if voidfire_sweetspot_zone != null:
+		voidfire_sweetspot_zone.position = voidfire_bar_offset + Vector2(voidfire_bar_size.x * sweetspot_ratio, 0.0)
+		voidfire_sweetspot_zone.size = Vector2(voidfire_bar_size.x * (1.0 - sweetspot_ratio), voidfire_bar_size.y)
 		var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.001 * 9.0)
 		var sweet_alpha := 0.08 + heat_ratio * 0.12
 		if in_sweetspot:
