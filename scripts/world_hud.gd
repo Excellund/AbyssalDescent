@@ -820,17 +820,8 @@ func _update_stats_panel_text(player: Node) -> void:
 	var move_spd := float(player.get("max_speed"))
 	var dash_cd := float(player.get("dash_cooldown"))
 	var armor := int(player.get("iron_skin_armor"))
-	var breakdown_line := ""
-	if player.has_method("get_last_damage_breakdown"):
-		var breakdown := player.get_last_damage_breakdown() as Dictionary
-		var source := String(breakdown.get("source", "none"))
-		if source != "none":
-			var base_scaling := int(breakdown.get("base_scaling_damage", 0))
-			var flat_bonus := int(breakdown.get("flat_bonus_damage", 0))
-			var final_damage := int(breakdown.get("final_damage", 0))
-			breakdown_line = "\nLast Hit (%s): [color=#BFD8FF]%d[/color] + [color=#FFD8AA]%d[/color] = [color=#C8FFD8]%d[/color]" % [source, base_scaling, flat_bonus, final_damage]
 
-	stats_label.text = "[b]Stats[/b]\nHealth: [color=#C8FFD8]%d/%d[/color]\nDamage: [color=#FFD8AA]%d[/color]\nAttack Range: [color=#FFD8AA]%.0f[/color]\nAttack Speed: [color=#BFD8FF]%.2fs[/color]\nMove Speed: [color=#BFD8FF]%.0f[/color]\nDash Cooldown: [color=#BFD8FF]%.2fs[/color]\nArmor: [color=#E8E8FF]%d[/color]%s" % [hp_now, hp, dmg, atk_range, atk_cd, move_spd, dash_cd, armor, breakdown_line]
+	stats_label.text = "[b]Stats[/b]\nHealth: [color=#C8FFD8]%d/%d[/color]\nDamage: [color=#FFD8AA]%d[/color]\nAttack Range: [color=#FFD8AA]%.0f[/color]\nAttack Speed: [color=#BFD8FF]%.2fs[/color]\nMove Speed: [color=#BFD8FF]%.0f[/color]\nDash Cooldown: [color=#BFD8FF]%.2fs[/color]\nArmor: [color=#E8E8FF]%d[/color]" % [hp_now, hp, dmg, atk_range, atk_cd, move_spd, dash_cd, armor]
 
 func _update_build_strip(state: Dictionary, player: Node) -> void:
 	if build_strip_panel == null:
