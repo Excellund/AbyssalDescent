@@ -1398,7 +1398,7 @@ func _apply_boss_difficulty_scaling(boss: CharacterBody2D) -> void:
 	var base_max_health: int = int(boss.get_max_health())
 	var scaled_max_health := maxi(1, int(round(float(base_max_health) * boss_mult)))
 	boss.set_max_health_and_current(scaled_max_health, scaled_max_health)
-	for damage_property in ["charge_damage", "nova_damage", "cleave_damage", "prism_damage", "gravity_damage", "echo_dash_damage", "orbital_lance_damage", "polar_shift_pull_inner_damage", "sever_damage", "gap_damage", "echo_cross_damage", "seam_tick_damage"]:
+	for damage_property in ["charge_damage", "nova_damage", "cleave_damage", "prism_damage", "gravity_damage", "echo_dash_damage", "orbital_lance_damage", "polar_shift_pull_inner_damage", "sever_damage", "null_ring_damage", "gap_damage", "echo_cross_damage", "seam_tick_damage"]:
 		if boss.get(damage_property) == null:
 			continue
 		var base_damage := int(boss.get(damage_property))

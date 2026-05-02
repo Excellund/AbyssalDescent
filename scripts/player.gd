@@ -1964,7 +1964,7 @@ func _get_severing_edge_bonus(enemy_node: Object) -> int:
 	if enemy_max <= 0:
 		return 0
 	var enemy_current: int = int(enemy_node.get_current_health())
-	if float(enemy_current) / float(enemy_max) < 0.35:
+	if float(enemy_current) / float(enemy_max) < 0.55:
 		return severing_edge_bonus_damage
 	return 0
 

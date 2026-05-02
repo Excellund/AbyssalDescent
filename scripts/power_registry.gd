@@ -109,7 +109,7 @@ const DAMAGE_MODEL_BY_POWER := {
 	"severing_edge": {
 		"kind": DAMAGE_KIND_FLAT,
 		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
-		"formula_note": "+X bonus damage on hits against enemies below 35% HP"
+		"formula_note": "+X bonus damage on hits against enemies below 55% HP"
 	}
 }
 
@@ -117,12 +117,12 @@ const UPGRADE_BALANCE := {
 	"first_strike": {
 		"kind": "add_int",
 		"property": "first_strike_bonus_damage",
-		"add": 12
+		"add": 16
 	},
 	"heavy_blow": {
 		"kind": "add_int",
 		"property": "damage",
-		"add": 8
+		"add": 7
 	},
 	"wide_arc": {
 		"kind": "add_clamp",
@@ -156,7 +156,7 @@ const UPGRADE_BALANCE := {
 	"battle_trance": {
 		"kind": "add_float",
 		"property": "battle_trance_move_speed_bonus",
-		"add": 0.13
+		"add": 0.22
 	},
 	"surge_step": {
 		"kind": "add_float",
@@ -171,12 +171,12 @@ const UPGRADE_BALANCE := {
 	"crushed_vow": {
 		"kind": "add_int",
 		"property": "crushed_vow_bonus_damage",
-		"add": 14
+		"add": 18
 	},
 	"severing_edge": {
 		"kind": "add_int",
 		"property": "severing_edge_bonus_damage",
-		"add": 10
+		"add": 14
 	}
 }
 
@@ -285,8 +285,8 @@ const TRIAL_POWER_BALANCE := {
 	},
 	"dread_resonance": {
 		"max_stacks": 3,
-		"bonus_per_resonance_base": 6,
-		"bonus_per_resonance_per_stack": 3
+		"bonus_per_resonance_base": 10,
+		"bonus_per_resonance_per_stack": 4
 	},
 	"vow_shatter": {
 		"damage_mult_base": 1.8,
@@ -325,6 +325,7 @@ const TRIAL_POWER_BALANCE := {
 
 const UPGRADE_STACK_LIMITS := {
 	"first_strike": 3,
+	"heavy_blow": 3,
 	"long_reach": 3,
 	"iron_skin": 3,
 	"battle_trance": 3,
@@ -607,7 +608,7 @@ func _get_upgrade_fallback_description(upgrade_id: String) -> String:
 		"crushed_vow":
 			return "After being hit, next attack deals +%d damage (consumes on hit)." % [int(data.get("add", 0))]
 		"severing_edge":
-			return "Bonus damage on hits against enemies below 35%% HP: +%d." % [int(data.get("add", 0))]
+			return "Bonus damage on hits against enemies below 55%% HP: +%d." % [int(data.get("add", 0))]
 		_:
 			return "Upgrade your stats."
 

@@ -22,13 +22,13 @@ const ATTACK_ECHO_CROSS := 2
 @export var sever_speed: float = 760.0
 @export var sever_duration: float = 0.2
 @export var sever_width: float = 42.0
-@export var sever_damage: int = 40
+@export var sever_damage: int = 36
 @export var sever_prediction_time: float = 0.52
 @export var sever_prediction_speed_cap: float = 420.0
 
 @export var null_ring_windup: float = 1.32
 @export var null_ring_radius: float = 160.0
-@export var null_ring_damage: int = 34
+@export var null_ring_damage: int = 30
 @export var null_ring_safe_radius: float = 96.0
 @export var null_ring_pull_force: float = 680.0
 @export var null_ring_prediction_speed_cap: float = 300.0
@@ -38,7 +38,7 @@ const ATTACK_ECHO_CROSS := 2
 @export var echo_cross_windup: float = 0.86
 @export var echo_cross_length: float = 280.0
 @export var echo_cross_width: float = 34.0
-@export var echo_cross_damage: int = 38
+@export var echo_cross_damage: int = 34
 @export var echo_cross_follow_delay: float = 0.26
 
 @export var recover_time: float = 0.24

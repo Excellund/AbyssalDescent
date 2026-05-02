@@ -46,9 +46,9 @@ static func get_tier_config(tier: int) -> Dictionary:
 				"mutator_frequency_mult": 1.0,
 				"trial_encounter_frequency_mult": 1.0,
 				"mutator_damage_mult": 1.0,
-				## No player bonuses
-				"player_starting_health_bonus": 0.0,
-				"player_damage_taken_mult": 1.0,
+			## Slight damage buffer — keeps run-ending spikes from gating players before they learn patterns
+			"player_starting_health_bonus": 0.0,
+			"player_damage_taken_mult": 0.92,
 				"enemy_contact_damage_mult": 0.94,
 				"rest_heal_ratio_mult": 1.0,
 				"difficulty_rank": 1

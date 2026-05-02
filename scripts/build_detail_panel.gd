@@ -330,9 +330,9 @@ func _get_power_current_desc(power_id: String, power_type: String, player: Node)
 	match power_id:
 		# Boons
 		"first_strike":
-			return "[color=#c8daf0]%sExtra hit damage vs enemies above 80%% HP:[/color] [color=#e8c96a]+%d[/color]" % [_damage_kind_prefix(power_id, player), (12 * stacks)]
+			return "[color=#c8daf0]%sExtra hit damage vs enemies above 80%% HP:[/color] [color=#e8c96a]+%d[/color]" % [_damage_kind_prefix(power_id, player), (16 * stacks)]
 		"heavy_blow":
-			return "[color=#c8daf0]%sDamage stat:[/color] [color=#e8c96a]+%d[/color]" % [_damage_kind_prefix(power_id, player), (8 * stacks)]
+			return "[color=#c8daf0]%sDamage stat:[/color] [color=#e8c96a]+%d[/color]" % [_damage_kind_prefix(power_id, player), (7 * stacks)]
 		"wide_arc":
 			return "[color=#c8daf0]Attack arc:[/color] [color=#e8c96a]+%d deg[/color]" % (28 * stacks)
 		"long_reach":
@@ -345,15 +345,15 @@ func _get_power_current_desc(power_id: String, power_type: String, player: Node)
 		"iron_skin":
 			return "[color=#c8daf0]Armor:[/color] [color=#e8c96a]+%d[/color]" % (4 * stacks)
 		"battle_trance":
-			return "[color=#c8daf0]On-hit move speed:[/color] [color=#e8c96a]+%.0f%%[/color]" % (13.0 * float(stacks))
+			return "[color=#c8daf0]On-hit move speed:[/color] [color=#e8c96a]+%.0f%%[/color]" % (22.0 * float(stacks))
 		"surge_step":
 			return "[color=#c8daf0]Dash speed:[/color] [color=#e8c96a]+%d[/color]" % (85 * stacks)
 		"heartstone":
 			return "[color=#c8daf0]Max HP:[/color] [color=#e8c96a]+%d[/color]" % (10 * stacks)
 		"crushed_vow":
-			return "[color=#c8daf0]After taking damage, next-hit bonus:[/color] [color=#e8c96a]+%d[/color]" % (14 * stacks)
+			return "[color=#c8daf0]After taking damage, next-hit bonus:[/color] [color=#e8c96a]+%d[/color]" % (18 * stacks)
 		"severing_edge":
-			return "[color=#c8daf0]Bonus damage on hits against enemies below 35%% HP:[/color] [color=#e8c96a]+%d[/color]" % (10 * stacks)
+			return "[color=#c8daf0]Bonus damage on hits against enemies below 55%% HP:[/color] [color=#e8c96a]+%d[/color]" % (14 * stacks)
 		# Arcana
 		"razor_wind":
 			var rw_range := 1.25 + 0.10 * float(stacks)
@@ -407,7 +407,7 @@ func _get_power_current_desc(power_id: String, power_type: String, player: Node)
 			var vf_desc := "[color=#9ab8d8]Heat attacks. Danger Zone boosts hit damage.[/color]\n    [color=#c8daf0]Damage:[/color] [color=#e8c96a]+%.0f%%[/color], [color=#c8daf0]Detonate:[/color] [color=#e8c96a]%.0f%%[/color], [color=#c8daf0]Lockout:[/color] [color=#e8c96a]%.2fs[/color]" % [vf_amp * 100.0, vf_det * 100.0, vf_lockout]
 			return DESCRIPTION_CAP_GUARD.assert_visible_cap(vf_desc, "voidfire", "build_detail")
 		"dread_resonance":
-			var dr_bonus := 6 + 3 * stacks
+			var dr_bonus := 10 + 4 * stacks
 			return "[color=#9ab8d8]Chain hits on one enemy build resonance. Swapping targets resets it.[/color]\n    [color=#c8daf0]%sBonus per resonance stack:[/color] [color=#e8c96a]+%d[/color]" % [_damage_kind_prefix(power_id, player), dr_bonus]
 		"vow_shatter":
 			var vs_mult := 1.80 + 0.25 * float(stacks)
