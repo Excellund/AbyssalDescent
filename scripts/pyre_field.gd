@@ -22,6 +22,7 @@ func initialize(target_node: Node2D, field_radius: float, field_duration: float,
 	tick_left = tick_interval * 0.5
 
 func _ready() -> void:
+	add_to_group("enemy_lingering_effects")
 	z_as_relative = false
 	z_index = -10
 	set_process(true)

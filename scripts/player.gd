@@ -149,6 +149,7 @@ var attack_lock_time_left: float = 0.0
 var attack_lock_direction: Vector2 = Vector2.RIGHT
 var battle_trance_move_speed_bonus: float = 0.0
 var battle_trance_active_left: float = 0.0
+var combat_damage_enabled: bool = true
 var attack_combo_counter: int = 0
 var dash_phasing_active: bool = false
 var dash_phase_release_left: float = 0.0
@@ -734,6 +735,8 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 		return
 	var source := String(damage_context.get("source", "unknown"))
 	var ability := String(damage_context.get("ability", "unknown"))
+	if not combat_damage_enabled and source.begins_with("enemy_"):
+		return
 	if dash_phasing_active and source == "enemy_contact":
 		return
 	if source == "enemy_contact" and _contact_damage_grace_left > 0.0 and ability == _contact_damage_grace_ability:
@@ -777,6 +780,9 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 		if source == "enemy_contact":
 			_contact_damage_grace_left = contact_damage_grace_duration
 			_contact_damage_grace_ability = ability
+
+func set_combat_damage_enabled(enabled: bool) -> void:
+	combat_damage_enabled = enabled
 
 func get_last_damage_event() -> Dictionary:
 	return last_damage_event.duplicate(true)

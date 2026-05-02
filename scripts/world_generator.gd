@@ -1232,6 +1232,7 @@ func _update_encounter_state() -> void:
 func _on_room_cleared() -> void:
 	if not is_instance_valid(encounter_flow_system):
 		return
+	_end_combat_phase()
 	if in_second_boss_room:
 		_finish_second_boss_clear()
 		return
@@ -1618,6 +1619,8 @@ func _begin_room(profile: Dictionary) -> void:
 	if profile.is_empty():
 		return
 	encounter_intro_grace_active = false
+	_set_player_combat_damage_enabled(true)
+	_clear_enemy_lingering_effects()
 	if is_instance_valid(player):
 		player.clear_lingering_combat_effects()
 	in_boss_room = false
@@ -1824,6 +1827,19 @@ func _apply_objective_engagement_bonus_on_kill(kill_pos: Vector2) -> void:
 func _clear_all_enemies() -> void:
 	if is_instance_valid(enemy_spawner):
 		enemy_spawner.clear_all_enemies()
+
+func _clear_enemy_lingering_effects() -> void:
+	for effect in get_tree().get_nodes_in_group("enemy_lingering_effects"):
+		if effect is Node:
+			(effect as Node).queue_free()
+
+func _set_player_combat_damage_enabled(enabled: bool) -> void:
+	if is_instance_valid(player) and player.has_method("set_combat_damage_enabled"):
+		player.set_combat_damage_enabled(enabled)
+
+func _end_combat_phase() -> void:
+	_set_player_combat_damage_enabled(false)
+	_clear_enemy_lingering_effects()
 
 func _apply_camera_bounds_for_room(room_size: Vector2) -> void:
 	if not is_instance_valid(player_camera):
