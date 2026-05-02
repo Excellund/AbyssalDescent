@@ -11,7 +11,7 @@ const ATTACK_COMMIT_WINDOW := 0.15
 @export var deceleration: float = 1200.0
 @export var stop_distance: float = 30.0
 @export var attack_range: float = 32.0
-@export var attack_damage: int = 10
+@export var damage: int = 10
 @export var attack_interval: float = 0.85
 
 var attack_cooldown_left: float = 0.0
@@ -49,7 +49,7 @@ func _try_attack_target() -> void:
 	if global_position.distance_to(target.global_position) > attack_range:
 		return
 
-	if not DAMAGEABLE.apply_damage(target, attack_damage, {"source": "enemy_contact", "ability": "chaser_strike"}):
+	if not DAMAGEABLE.apply_damage(target, damage, {"source": "enemy_contact", "ability": "chaser_strike"}):
 		return
 	attack_cooldown_left = attack_interval
 	attack_anim_time_left = attack_anim_duration

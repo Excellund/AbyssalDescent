@@ -18,7 +18,7 @@ const ENEMY_MUTATOR_STACK_STAT_KEYS := [
 ]
 const ENEMY_MUTATOR_STAT_MAP := {
 	"chaser": [
-		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT, "prop": "attack_damage", "min": 1.0, "is_int": true},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT, "prop": "damage", "min": 1.0, "is_int": true},
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_ATTACK_INTERVAL_MULT, "prop": "attack_interval", "min": 0.2},
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_SPEED_MULT, "prop": "move_speed", "min": 25.0}
 	],
@@ -50,6 +50,40 @@ const ENEMY_MUTATOR_STAT_MAP := {
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_WINDUP_MULT, "prop": "windup_time", "min": 0.22},
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_COOLDOWN_MULT, "prop": "attack_cooldown", "min": 0.8}
 	]
+}
+
+# Enemy damage intent map for flat-vs-scaling clarity.
+# Enemy attacks are flat by default and scale through encounter mutator multipliers.
+const ENEMY_DAMAGE_CLASSIFICATION := {
+	"chaser": {
+		"contact_strike": {"kind": "flat", "scales_via_mutator": true, "mutator_stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT}
+	},
+	"charger": {
+		"charge_hit": {"kind": "flat", "scales_via_mutator": true, "mutator_stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_DAMAGE_MULT}
+	},
+	"archer": {
+		"projectile_hit": {"kind": "flat", "scales_via_mutator": true, "mutator_stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_PROJECTILE_DAMAGE_MULT}
+	},
+	"shielder": {
+		"contact_strike": {"kind": "flat", "scales_via_mutator": true, "mutator_stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT},
+		"slam_hit": {"kind": "flat", "scales_via_mutator": true, "mutator_stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_DAMAGE_MULT},
+		"body_check": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"}
+	},
+	"lurker": {
+		"strike": {"kind": "flat", "scales_via_mutator": true, "mutator_stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT}
+	},
+	"ram": {
+		"charge_hit": {"kind": "flat", "scales_via_mutator": true, "mutator_stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_DAMAGE_MULT}
+	},
+	"lancer": {
+		"zone_tick": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"}
+	},
+	"boss_warden": {
+		"all_attacks": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"}
+	},
+	"boss_sovereign": {
+		"all_attacks": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"}
+	}
 }
 const ENEMY_SPAWN_ORDER: Array[String] = ["chaser", "charger", "archer", "shielder", "lurker", "ram", "lancer"]
 

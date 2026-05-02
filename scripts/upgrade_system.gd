@@ -136,7 +136,6 @@ func apply_trial_power(power_id: String) -> bool:
 			player_reference.set("rupture_wave_stacks", next_stack)
 			player_reference.set("rupture_wave_radius", float(next_values.get("radius", player_reference.get("rupture_wave_radius"))))
 			player_reference.set("rupture_wave_damage_ratio", float(next_values.get("damage_ratio", player_reference.get("rupture_wave_damage_ratio"))))
-			player_reference.set("attack_damage", int(next_values.get("attack_damage", player_reference.get("attack_damage"))))
 		"aegis_field":
 			player_reference.set("reward_aegis_field", true)
 			player_reference.set("aegis_field_stacks", next_stack)
@@ -257,6 +256,20 @@ func _get_power_balance_data(power_id: String) -> Dictionary:
 	return {}
 
 
+func get_power_damage_model(power_id: String) -> Dictionary:
+	if power_registry != null and power_registry.has_method("get_damage_model"):
+		return power_registry.get_damage_model(power_id)
+	return {
+		"kind": "none",
+		"scale_source": "none",
+		"formula_note": "No direct damage"
+	}
+
+
+func _damage_kind_prefix(_power_id: String) -> String:
+	return ""
+
+
 func _build_upgrade_preview(upgrade_id: String) -> Dictionary:
 	if not is_instance_valid(player_reference):
 		return {}
@@ -298,22 +311,24 @@ func _build_trial_values(power_id: String, stack_count: int) -> Dictionary:
 
 	match power_id:
 		"razor_wind":
+			# Damage scales as ratio of damage. Heavy Blow (+8 DMG) directly increases this output.
 			return {
 				"range_scale": float(data.get("range_base", 0.0)) + float(data.get("range_per_stack", 0.0)) * float(stack_count),
 				"damage_ratio": float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count),
 				"attack_cooldown": maxf(float(data.get("attack_cooldown_min", 0.0)), float(player_reference.get("attack_cooldown")) * float(data.get("attack_cooldown_mult", 1.0)))
 			}
 		"execution_edge":
+			# Damage multiplier applies to the current melee damage. Heavy Blow boosts this indirectly.
 			return {
 				"every": maxi(int(data.get("every_floor", 1)), int(data.get("every_base", 1)) - stack_count),
 				"damage_mult": float(data.get("damage_mult_base", 0.0)) + float(data.get("damage_mult_per_stack", 0.0)) * float(stack_count),
 				"attack_lock_duration": maxf(float(data.get("attack_lock_min", 0.0)), float(player_reference.get("attack_lock_duration")) * float(data.get("attack_lock_mult", 1.0)))
 			}
 		"rupture_wave":
+			# Damage scales as ratio of damage. Heavy Blow (+8 DMG) increases the shockwave output.
 			return {
 				"radius": float(data.get("radius_base", 0.0)) + float(data.get("radius_per_stack", 0.0)) * float(stack_count),
-				"damage_ratio": float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count),
-				"attack_damage": int(player_reference.get("attack_damage")) + int(data.get("attack_damage_add", 0))
+				"damage_ratio": float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count)
 			}
 		"aegis_field":
 			return {
@@ -331,8 +346,11 @@ func _build_trial_values(power_id: String, stack_count: int) -> Dictionary:
 				"slow_mult": maxf(float(data.get("slow_mult_min", 0.0)), float(data.get("slow_mult_base", 1.0)) + float(data.get("slow_mult_per_stack", 0.0)) * float(stack_count))
 			}
 		"phantom_step":
+			# Damage scales as ratio of damage. Heavy Blow (+8 DMG) directly increases this output.
+			# Objective mutators (Hunter's Focus, Fortified, Combo Relay) also apply to this damage.
+			var damage_ratio := float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count)
 			return {
-				"damage": int(data.get("damage_base", 0)) + stack_count * int(data.get("damage_per_stack", 0)),
+				"damage": int(ceil(float(player_reference.get("damage")) * damage_ratio)),
 				"slow_duration": float(data.get("slow_duration_base", 0.0)) + float(data.get("slow_duration_per_stack", 0.0)) * float(stack_count),
 				"dash_cooldown": maxf(float(data.get("dash_cooldown_min", 0.0)), float(player_reference.get("dash_cooldown")) * float(data.get("dash_cooldown_mult", 1.0)))
 			}
@@ -341,11 +359,15 @@ func _build_trial_values(power_id: String, stack_count: int) -> Dictionary:
 				"range_mult": float(data.get("range_mult_base", 0.0)) + float(data.get("range_mult_per_stack", 0.0)) * float(stack_count)
 			}
 		"static_wake":
+			# Damage scales as ratio of damage. Heavy Blow (+8 DMG) directly increases this output.
+			# Objective mutators (Hunter's Focus, Fortified, Combo Relay) also apply to this damage.
+			var damage_ratio := float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count)
 			return {
-				"damage": int(data.get("damage_base", 0)) + stack_count * int(data.get("damage_per_stack", 0)),
+				"damage": int(ceil(float(player_reference.get("damage")) * damage_ratio)),
 				"lifetime": float(data.get("lifetime_base", 0.0)) + float(data.get("lifetime_per_stack", 0.0)) * float(stack_count)
 			}
 		"storm_crown":
+			# Damage scales as ratio of damage. Heavy Blow (+8 DMG) increases chain damage output.
 			return {
 				"proc_every": maxi(int(data.get("proc_every_floor", 1)), int(data.get("proc_every_base", 1)) - stack_count),
 				"chain_targets": mini(int(data.get("chain_targets_cap", 6)), int(data.get("chain_targets_base", 1)) + stack_count * int(data.get("chain_targets_per_stack", 0))),
@@ -382,7 +404,8 @@ func get_trial_power_card_description(power_id: String) -> String:
 			var cur_damage_ratio := float(player_reference.get("razor_wind_damage_ratio"))
 			if current_stack <= 0:
 				return "[color=#9ab8d8]Each swing fires a slicing projectile that travels through enemies at range.[/color]\n[color=#9ab8d8]Initial:[/color] range [color=#7de882]x%.2f[/color], damage [color=#7de882]%.0f%%[/color] of hit." % [next_range_scale, next_damage_ratio * 100.0]
-			return "[color=#c8daf0]Wind Slash:[/color] range [color=#e8c96a]x%.2f[/color] [color=#8899aa]->[/color] [color=#7de882]x%.2f[/color], damage [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color]." % [cur_range_scale, next_range_scale, cur_damage_ratio * 100.0, next_damage_ratio * 100.0]
+			var razor_prefix := _damage_kind_prefix("razor_wind")
+			return "%s[color=#c8daf0]Wind Slash:[/color] range [color=#e8c96a]x%.2f[/color] [color=#8899aa]->[/color] [color=#7de882]x%.2f[/color], damage [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color] of hit." % [razor_prefix, cur_range_scale, next_range_scale, cur_damage_ratio * 100.0, next_damage_ratio * 100.0]
 		"execution_edge":
 			if next_values.is_empty():
 				return "[color=#9ab8d8]Enhances this power.[/color]"
@@ -391,8 +414,9 @@ func get_trial_power_card_description(power_id: String) -> String:
 			var cur_every := int(player_reference.get("execution_every"))
 			var cur_mult := float(player_reference.get("execution_damage_mult"))
 			if current_stack <= 0:
-				return "[color=#9ab8d8]Every few swings builds to a devastating strike that deals massive bonus damage.[/color]\n[color=#9ab8d8]Initial:[/color] every [color=#7de882]%d[/color] swings for [color=#7de882]x%.2f[/color] damage." % [next_every, next_mult]
-			return "[color=#c8daf0]Execution:[/color] every [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color] swings, damage [color=#e8c96a]x%.2f[/color] [color=#8899aa]->[/color] [color=#7de882]x%.2f[/color]." % [cur_every, next_every, cur_mult, next_mult]
+				return "[color=#9ab8d8]Every few swings builds to a devastating strike that deals massive extra damage.[/color]\n[color=#9ab8d8]Initial:[/color] every [color=#7de882]%d[/color] swings for [color=#7de882]x%.2f[/color] damage." % [next_every, next_mult]
+			var execution_prefix := _damage_kind_prefix("execution_edge")
+			return "%s[color=#c8daf0]Execution:[/color] every [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color] swings, damage [color=#e8c96a]x%.2f[/color] [color=#8899aa]->[/color] [color=#7de882]x%.2f[/color] on hit." % [execution_prefix, cur_every, next_every, cur_mult, next_mult]
 		"rupture_wave":
 			if next_values.is_empty():
 				return "[color=#9ab8d8]Enhances this power.[/color]"
@@ -427,18 +451,20 @@ func get_trial_power_card_description(power_id: String) -> String:
 			var cur_duration := float(player_reference.get("hunters_snare_slow_duration"))
 			var cur_slow_mult := float(player_reference.get("hunters_snare_slow_mult"))
 			if current_stack <= 0:
-				return "[color=#9ab8d8]Hits slow enemies, and striking slowed targets deals bonus damage.[/color]\n[color=#9ab8d8]Initial:[/color] slow [color=#7de882]%.2fs[/color] at [color=#7de882]%.0f%%[/color] speed, bonus [color=#7de882]+%d[/color] damage." % [next_duration, next_slow_mult * 100.0, next_bonus]
-			return "[color=#c8daf0]Hunter's Snare:[/color] slow [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color], speed [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color], bonus [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]." % [cur_duration, next_duration, cur_slow_mult * 100.0, next_slow_mult * 100.0, cur_bonus, next_bonus]
+				return "[color=#9ab8d8]Hits slow enemies, and striking slowed targets deals extra hit damage.[/color]\n[color=#9ab8d8]Initial:[/color] slow [color=#7de882]%.2fs[/color] at [color=#7de882]%.0f%%[/color] speed, extra hit damage [color=#7de882]+%d[/color]." % [next_duration, next_slow_mult * 100.0, next_bonus]
+			var snare_prefix := _damage_kind_prefix("hunters_snare")
+			return "%s[color=#c8daf0]Hunter's Snare:[/color] slow [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color], speed [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color], extra hit damage [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]." % [snare_prefix, cur_duration, next_duration, cur_slow_mult * 100.0, next_slow_mult * 100.0, cur_bonus, next_bonus]
 		"phantom_step":
 			if next_values.is_empty():
 				return "[color=#9ab8d8]Enhances this power.[/color]"
+			var phantom_prefix := _damage_kind_prefix("phantom_step")
 			var next_damage := int(next_values.get("damage", 0))
 			var next_slow := float(next_values.get("slow_duration", 0.0))
 			var cur_damage := int(player_reference.get("phantom_step_damage"))
 			var cur_slow := float(player_reference.get("phantom_step_slow_duration"))
 			if current_stack <= 0:
-				return "[color=#9ab8d8]Dashing through enemies deals damage and leaves them slowed in your wake.[/color]\n[color=#9ab8d8]Initial:[/color] hit damage [color=#7de882]%d[/color], slow for [color=#7de882]%.2fs[/color]." % [next_damage, next_slow]
-			return "[color=#c8daf0]Phantom Step:[/color] damage [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color], slow [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_damage, next_damage, cur_slow, next_slow]
+				return "[color=#9ab8d8]Dashing through enemies deals damage and leaves them slowed in your wake.[/color]\n[color=#9ab8d8]Initial:[/color] damage [color=#7de882]%d[/color], slow [color=#7de882]%.2fs[/color]." % [next_damage, next_slow]
+			return "%s[color=#c8daf0]Phantom Step:[/color] damage [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color], slow [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [phantom_prefix, cur_damage, next_damage, cur_slow, next_slow]
 		"reaper_step":
 			if next_values.is_empty():
 				return "[color=#9ab8d8]Enhances this power.[/color]"
@@ -450,13 +476,14 @@ func get_trial_power_card_description(power_id: String) -> String:
 		"static_wake":
 			if next_values.is_empty():
 				return "[color=#9ab8d8]Enhances this power.[/color]"
+			var wake_prefix := _damage_kind_prefix("static_wake")
 			var next_damage := int(next_values.get("damage", 0))
 			var next_lifetime := float(next_values.get("lifetime", 0.0))
 			var cur_damage := int(player_reference.get("static_wake_damage"))
 			var cur_lifetime := float(player_reference.get("static_wake_lifetime"))
 			if current_stack <= 0:
-				return "[color=#9ab8d8]Leaves an electrified trail as you move that shocks any enemy who steps into it.[/color]\n[color=#9ab8d8]Initial:[/color] trail tick [color=#7de882]%d[/color] damage, lasts [color=#7de882]%.2fs[/color]." % [next_damage, next_lifetime]
-			return "[color=#c8daf0]Static Wake:[/color] tick [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color], trail [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_damage, next_damage, cur_lifetime, next_lifetime]
+				return "[color=#9ab8d8]Leaves an electrified trail as you move that shocks any enemy who steps into it.[/color]\n[color=#9ab8d8]Initial:[/color] damage per pulse [color=#7de882]%d[/color], lasts [color=#7de882]%.2fs[/color]." % [next_damage, next_lifetime]
+			return "%s[color=#c8daf0]Static Wake:[/color] damage per pulse [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color], trail [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [wake_prefix, cur_damage, next_damage, cur_lifetime, next_lifetime]
 		"storm_crown":
 			if next_values.is_empty():
 				return "[color=#9ab8d8]Enhances this power.[/color]"
@@ -481,8 +508,9 @@ func get_trial_power_card_description(power_id: String) -> String:
 			var cur_bonus_damage := int(player_reference.get("wraithstep_mark_bonus_damage"))
 			var cur_splash_ratio := float(player_reference.get("wraithstep_mark_splash_ratio"))
 			if current_stack <= 0:
-				return "[color=#9ab8d8]Dash marks enemies. Marked hits deal bonus damage and chain splashes nearby.[/color]\n[color=#9ab8d8]Initial:[/color] mark [color=#7de882]%.2fs[/color], bonus [color=#7de882]+%d[/color], cleave [color=#7de882]%.0f%%[/color]." % [next_mark_duration, next_bonus_damage, next_splash_ratio * 100.0]
-			return "[color=#c8daf0]Wraithstep:[/color] mark [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color], bonus [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color], cleave [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color]." % [cur_mark_duration, next_mark_duration, cur_bonus_damage, next_bonus_damage, cur_splash_ratio * 100.0, next_splash_ratio * 100.0]
+				return "[color=#9ab8d8]Dash marks enemies. Marked hits deal extra hit damage and chain splashes nearby.[/color]\n[color=#9ab8d8]Initial:[/color] mark [color=#7de882]%.2fs[/color], marked-hit damage [color=#7de882]+%d[/color], cleave [color=#7de882]%.0f%%[/color]." % [next_mark_duration, next_bonus_damage, next_splash_ratio * 100.0]
+			var wraith_prefix := _damage_kind_prefix("wraithstep")
+			return "%s[color=#c8daf0]Wraithstep:[/color] mark [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color], marked-hit damage [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color], cleave [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color] of hit." % [wraith_prefix, cur_mark_duration, next_mark_duration, cur_bonus_damage, next_bonus_damage, cur_splash_ratio * 100.0, next_splash_ratio * 100.0]
 		_:
 			return "[color=#9ab8d8]Enhances this power.[/color]"
 
@@ -500,9 +528,11 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 		"first_strike":
 			var cur_bonus := int(cur_val)
 			var next_bonus := int(next_val)
-			return "[color=#c8daf0]Vs enemies above 80%% HP:[/color] [color=#e8c96a]+%d dmg[/color] [color=#8899aa]->[/color] [color=#7de882]+%d dmg[/color]" % [cur_bonus, next_bonus]
+			var first_strike_prefix := _damage_kind_prefix("first_strike")
+			return "%s[color=#c8daf0]Extra hit damage vs enemies above 80%% HP:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [first_strike_prefix, cur_bonus, next_bonus]
 		"heavy_blow":
-			return "[color=#c8daf0]Attack damage:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [int(cur_val), int(next_val)]
+			var heavy_blow_prefix := _damage_kind_prefix("heavy_blow")
+			return "%s[color=#c8daf0]Damage:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [heavy_blow_prefix, int(cur_val), int(next_val)]
 		"wide_arc":
 			var cur_arc := float(cur_val)
 			var next_arc := float(next_val)
@@ -548,10 +578,10 @@ func get_player_powers() -> Dictionary:
 
 
 ## Build the final melee attack context after all applicable power rules are considered.
-func build_melee_attack_context(base_attack_damage: int, base_attack_range: float, base_attack_arc_degrees: float, execution_proc: bool, execution_damage_mult: float) -> Dictionary:
+func build_melee_attack_context(base_damage: int, base_attack_range: float, base_attack_arc_degrees: float, execution_proc: bool, execution_damage_mult: float) -> Dictionary:
 	var damage_mult := execution_damage_mult if execution_proc else 1.0
 	return {
-		"damage": maxi(1, int(round(float(base_attack_damage) * damage_mult))),
+		"damage": maxi(1, int(round(float(base_damage) * damage_mult))),
 		"range": base_attack_range,
 		"arc_degrees": base_attack_arc_degrees,
 		"damage_mult": damage_mult,
@@ -560,8 +590,8 @@ func build_melee_attack_context(base_attack_damage: int, base_attack_range: floa
 
 
 ## Build the final Razor Wind attack context from the already-resolved melee context.
-func build_razor_wind_attack_context(melee_context: Dictionary, razor_wind_damage_ratio: float, razor_wind_range_scale: float, razor_wind_arc_degrees: float, fallback_attack_damage: int, fallback_attack_range: float) -> Dictionary:
-	var melee_damage := int(melee_context.get("damage", fallback_attack_damage))
+func build_razor_wind_attack_context(melee_context: Dictionary, razor_wind_damage_ratio: float, razor_wind_range_scale: float, razor_wind_arc_degrees: float, fallback_damage: int, fallback_attack_range: float) -> Dictionary:
+	var melee_damage := int(melee_context.get("damage", fallback_damage))
 	return {
 		"damage": maxi(1, int(round(float(melee_damage) * razor_wind_damage_ratio))),
 		"range": float(melee_context.get("range", fallback_attack_range)) * razor_wind_range_scale,

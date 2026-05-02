@@ -1,4 +1,4 @@
-﻿## Centralized power registry and unified data structure
+## Centralized power registry and unified data structure
 ## All upgrades (stat boosts) and trial powers (combat abilities) are defined here
 ## This is the single source of truth for what powers exist and their metadata
 
@@ -8,6 +8,71 @@ extends Node
 const POWER_TYPE_UPGRADE = "upgrade"  # Stat boosts: Swift Strike, Heavy Blow, etc
 const POWER_TYPE_TRIAL = "trial_power"  # Combat abilities: Razor Wind, Execution Edge, Rupture Wave
 
+# Damage modeling metadata
+const DAMAGE_KIND_NONE = "none"
+const DAMAGE_KIND_FLAT = "flat"
+const DAMAGE_KIND_SCALING = "scaling"
+const DAMAGE_KIND_HYBRID = "hybrid"
+
+const DAMAGE_SCALE_SOURCE_NONE = "none"
+const DAMAGE_SCALE_SOURCE_DAMAGE = "damage_stat"
+const DAMAGE_SCALE_SOURCE_HIT = "hit_damage"
+
+const DAMAGE_MODEL_BY_POWER := {
+	# Upgrades
+	"first_strike": {
+		"kind": DAMAGE_KIND_FLAT,
+		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
+		"formula_note": "+X extra hit damage vs enemies above 80% HP"
+	},
+	"heavy_blow": {
+		"kind": DAMAGE_KIND_FLAT,
+		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
+		"formula_note": "+X to Damage stat"
+	},
+	# Trial powers
+	"razor_wind": {
+		"kind": DAMAGE_KIND_SCALING,
+		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
+		"formula_note": "Y% of hit damage"
+	},
+	"execution_edge": {
+		"kind": DAMAGE_KIND_SCALING,
+		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
+		"formula_note": "Hit damage multiplied every N swings"
+	},
+	"rupture_wave": {
+		"kind": DAMAGE_KIND_SCALING,
+		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
+		"formula_note": "Y% of hit damage in radius"
+	},
+	"hunters_snare": {
+		"kind": DAMAGE_KIND_FLAT,
+		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
+		"formula_note": "+X against slowed targets"
+	},
+	"phantom_step": {
+		"kind": DAMAGE_KIND_SCALING,
+		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
+		"formula_note": "Y% dash-through damage"
+	},
+	"static_wake": {
+		"kind": DAMAGE_KIND_SCALING,
+		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
+		"formula_note": "Y% wake pulse damage"
+	},
+	"storm_crown": {
+		"kind": DAMAGE_KIND_SCALING,
+		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
+		"formula_note": "Y% of hit damage on chain proc"
+	},
+	"wraithstep": {
+		"kind": DAMAGE_KIND_HYBRID,
+		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
+		"formula_note": "Flat marked-hit bonus + scaling splash/chain"
+	}
+}
+
 const UPGRADE_BALANCE := {
 	"first_strike": {
 		"kind": "add_int",
@@ -16,7 +81,7 @@ const UPGRADE_BALANCE := {
 	},
 	"heavy_blow": {
 		"kind": "add_int",
-		"property": "attack_damage",
+		"property": "damage",
 		"add": 8
 	},
 	"wide_arc": {
@@ -87,7 +152,7 @@ const TRIAL_POWER_BALANCE := {
 		"radius_per_stack": 10.0,
 		"damage_ratio_base": 0.34,
 		"damage_ratio_per_stack": 0.1,
-		"attack_damage_add": 2
+		"damage_add": 2
 	},
 	"aegis_field": {
 		"resist_base": 0.12,
@@ -116,8 +181,9 @@ const TRIAL_POWER_BALANCE := {
 		"slow_mult_min": 0.42
 	},
 	"phantom_step": {
-		"damage_base": 8,
-		"damage_per_stack": 4,
+		# Damage scales as a ratio of damage. Affected by all damage boons and objective mutators.
+		"damage_ratio_base": 0.40,
+		"damage_ratio_per_stack": 0.08,
 		"slow_duration_base": 0.6,
 		"slow_duration_per_stack": 0.15,
 		"dash_cooldown_mult": 0.92,
@@ -128,8 +194,9 @@ const TRIAL_POWER_BALANCE := {
 		"range_mult_per_stack": 0.12
 	},
 	"static_wake": {
-		"damage_base": 8,
-		"damage_per_stack": 5,
+		# Damage scales as a ratio of damage. Affected by all damage boons and objective mutators.
+		"damage_ratio_base": 0.35,
+		"damage_ratio_per_stack": 0.10,
 		"lifetime_base": 1.6,
 		"lifetime_per_stack": 0.35
 	},
@@ -367,13 +434,41 @@ func get_power_stack_limit(power_id: String) -> int:
 	return 0
 
 
+func get_damage_model(power_id: String) -> Dictionary:
+	var id := power_id.strip_edges().to_lower()
+	if DAMAGE_MODEL_BY_POWER.has(id):
+		return (DAMAGE_MODEL_BY_POWER[id] as Dictionary).duplicate(true)
+	return {
+		"kind": DAMAGE_KIND_NONE,
+		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
+		"formula_note": "No direct damage"
+	}
+
+
+func get_damage_model_label(power_id: String) -> String:
+	var model := get_damage_model(power_id)
+	match String(model.get("kind", DAMAGE_KIND_NONE)):
+		DAMAGE_KIND_FLAT:
+			return "Flat"
+		DAMAGE_KIND_SCALING:
+			return "Scaling"
+		DAMAGE_KIND_HYBRID:
+			return "Hybrid"
+		_:
+			return "None"
+
+
+func _damage_kind_bracket(_power_id: String) -> String:
+	return ""
+
+
 func _get_upgrade_fallback_description(upgrade_id: String) -> String:
 	var data := get_power_balance(upgrade_id)
 	match upgrade_id:
 		"first_strike":
-			return "Bonus damage versus enemies above 80%% HP: +%d." % [int(data.get("add", 0))]
+			return "%sExtra hit damage versus enemies above 80%% HP: +%d." % [_damage_kind_bracket(upgrade_id), int(data.get("add", 0))]
 		"heavy_blow":
-			return "Attack damage +%d." % [int(data.get("add", 0))]
+			return "%sDamage +%d (to Damage stat)." % [_damage_kind_bracket(upgrade_id), int(data.get("add", 0))]
 		"wide_arc":
 			return "Attack arc +%.0f degrees." % [float(data.get("add", 0.0))]
 		"long_reach":
@@ -397,25 +492,24 @@ func _get_upgrade_fallback_description(upgrade_id: String) -> String:
 func _get_trial_fallback_description(power_id: String) -> String:
 	match power_id:
 		"razor_wind":
-			return "Attacks launch a long-range piercing wind slash."
+			return "%sAttacks launch a piercing wind slash that deals % of hit damage." % [_damage_kind_bracket(power_id)]
 		"execution_edge":
-			return "Every few swings become an execution strike."
+			return "%sEvery few swings become execution strikes that multiply hit damage." % [_damage_kind_bracket(power_id)]
 		"rupture_wave":
-			return "Hits detonate a damaging shockwave."
+			return "%sHits detonate a shockwave that deals % of hit damage." % [_damage_kind_bracket(power_id)]
 		"aegis_field":
 			return "Taking damage triggers a guard pulse that slows nearby enemies and grants brief damage resistance."
 		"hunters_snare":
-			return "Hits slow enemies. Striking slowed enemies deals bonus damage."
+			return "%sHits slow enemies. Striking slowed enemies deals extra hit damage." % [_damage_kind_bracket(power_id)]
 		"phantom_step":
-			return "Dashing through enemies damages and slows them."
+			return "%sDashing through enemies damages and slows them. Damage uses a percentage value." % [_damage_kind_bracket(power_id)]
 		"reaper_step":
 			return "Dash range and dash speed scale together. Kills refresh dash cooldown."
 		"static_wake":
-			return "Dashing leaves an electrified trail that burns enemies."
+			return "%sDashing leaves an electrified trail that burns enemies. Damage per pulse uses a percentage value." % [_damage_kind_bracket(power_id)]
 		"storm_crown":
-			return "Every few hits unleash chain lightning that arcs through nearby enemies."
+			return "%sEvery few hits unleash chain lightning that deals % of hit damage." % [_damage_kind_bracket(power_id)]
 		"wraithstep":
-			return "Dash marks enemies. Marked hits deal bonus damage and chain splashes nearby."
+			return "%sDash marks enemies. Marked hits deal extra hit damage and trigger splash chains that deal a percentage of hit damage." % [_damage_kind_bracket(power_id)]
 		_:
 			return "Enhances this power."
-

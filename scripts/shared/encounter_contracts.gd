@@ -786,8 +786,8 @@ static func objective_door_option(encounter_profile: Dictionary) -> Dictionary:
 		String(encounter_profile.get(PROFILE_KEY_OBJECTIVE_KIND, "objective"))
 	)
 
-static func trial_door_option(encounter_profile: Dictionary, mutator_name: String, color: Color) -> Dictionary:
-	var trial_name := mutator_name.strip_edges()
+static func trial_door_option(encounter_profile: Dictionary, trial_mutator_name: String, color: Color) -> Dictionary:
+	var trial_name := trial_mutator_name.strip_edges()
 	if trial_name.is_empty():
 		trial_name = mutator_name(profile_enemy_mutator(encounter_profile))
 	if trial_name.is_empty():
@@ -853,8 +853,8 @@ static func door_prompt_text(option: Dictionary) -> String:
 	var icon := String(normalized_option.get(KEY_ICON, ""))
 	if icon == "trial":
 		return String(normalized_option.get(KEY_LABEL, "Trial"))
-	var profile := door_option_profile(normalized_option)
-	var enemy_mutator := profile_enemy_mutator(profile)
+	var room_profile := door_option_profile(normalized_option)
+	var enemy_mutator := profile_enemy_mutator(room_profile)
 	var mutator_label := mutator_name(enemy_mutator)
 	var encounter_key := door_option_encounter_key(normalized_option)
 	var presentation := _door_presentation(encounter_key)

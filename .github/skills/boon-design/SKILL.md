@@ -40,7 +40,7 @@ If the backing property on the player also changes (e.g. `swift_strike_dash_cool
 
 1. **State the identity in one sentence.** Example: "Vanguard rewards swapping to fresh targets by adding burst damage to enemies above a HP threshold."
 2. **Verify identity is not healing or timing.** If it touches HP regeneration or any cooldown/speed/lock duration, redesign.
-3. **Pick a backing property.** Either an existing player stat (`max_health`, `attack_damage`, `attack_range`, `attack_arc_degrees`, `max_speed`, `dash_speed`, `iron_skin_armor`, `battle_trance_move_speed_bonus`) or a new bespoke field (e.g. `vanguard_bonus_damage`).
+3. **Pick a backing property.** Either an existing player stat (`max_health`, `damage`, `attack_range`, `attack_arc_degrees`, `max_speed`, `dash_speed`, `iron_skin_armor`, `battle_trance_move_speed_bonus`) or a new bespoke field (e.g. `vanguard_bonus_damage`).
 4. **Write `UPGRADE_BALANCE` entry** with `kind` (`add_int`, `add_float`, `add_clamp`, `mul_min`), `property`, and per-stack values. Keep stack scaling linear unless there is a documented reason.
 5. **Set `UPGRADE_STACK_LIMITS`.** Default to 3 for additive stat boosts, 2 for high-impact stats (max HP, multiplicative dash), 1 for unique mechanics.
 6. **Add display + description.**

@@ -9,7 +9,7 @@ const ENEMY_STATE_ENUMS := preload("res://scripts/shared/enemy_state_enums.gd")
 @export var preferred_distance: float = 54.0
 @export var distance_tolerance: float = 10.0
 @export var attack_range: float = 31.0
-@export var attack_damage: int = 14
+@export var damage: int = 14
 @export var attack_interval: float = 1.05
 @export var slam_trigger_range: float = 220.0
 @export var slam_windup_time: float = 0.88
@@ -178,7 +178,7 @@ func _try_attack_target() -> void:
 		shield_target_facing = shield_facing.slerp(to_target.normalized(), clampf(shield_attack_reaim_blend, 0.0, 1.0))
 		shield_reaim_left = maxf(shield_reaim_left, shield_reaim_interval * 0.6)
 
-	if not DAMAGEABLE.apply_damage(target, attack_damage, {"source": "enemy_contact", "ability": "shielder_strike"}):
+	if not DAMAGEABLE.apply_damage(target, damage, {"source": "enemy_contact", "ability": "shielder_strike"}):
 		return
 	attack_cooldown_left = attack_interval
 	attack_anim_time_left = attack_anim_duration

@@ -2,7 +2,7 @@ extends CharacterBody2D
 
 const HEALTH_STATE_SCRIPT := preload("res://scripts/health_state.gd")
 const PLAYER_FEEDBACK_SCRIPT := preload("res://scripts/player_feedback.gd")
-const UPGRADE_SYSTEM_SCRIPT := preload("res://scripts/upgrade_system.gd")
+const UPGRADE_SYSTEM_SCRIPT_PATH := "res://scripts/upgrade_system.gd"
 const POWER_REGISTRY_SCRIPT := preload("res://scripts/power_registry.gd")
 const ENEMY_BASE := preload("res://scripts/enemy_base.gd")
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
@@ -12,7 +12,7 @@ const EXECUTION_EDGE_PROC_DISPLAY_HOLD: float = 0.24
 const RUN_SNAPSHOT_PROPERTIES := [
 	"max_speed",
 	"dash_cooldown",
-	"attack_damage",
+	"damage",
 	"attack_range",
 	"attack_arc_degrees",
 	"first_strike_bonus_damage",
@@ -91,7 +91,7 @@ signal damage_taken(raw_amount: int, final_amount: int, damage_context: Dictiona
 @export var dash_phase_release_duration: float = 0.1
 @export var dash_overlap_clearance_duration: float = 0.08
 @export var max_health: int = 100
-@export var attack_damage: int = 20
+@export var damage: int = 20
 @export var attack_range: float = 78.0
 @export var attack_arc_degrees: float = 130.0
 @export var attack_cooldown: float = 0.28
@@ -213,6 +213,12 @@ var combo_relay_speed_per_stack: float = 0.05
 var incoming_damage_taken_mult: float = 1.0
 var incoming_contact_damage_mult: float = 1.0
 var last_damage_event: Dictionary = {}
+var last_damage_breakdown: Dictionary = {
+	"source": "none",
+	"base_scaling_damage": 0,
+	"flat_bonus_damage": 0,
+	"final_damage": 0
+}
 
 # Character visual identity — set via apply_character_package(); defaults match the shared palette
 var player_body_color: Color = ENEMY_BASE.COLOR_PLAYER_BODY
@@ -231,7 +237,11 @@ var sigil_burst_ready: bool = false
 
 func _ready() -> void:
 	body_radius_cache = _get_body_radius_for(self, 14.0)
-	upgrade_system = UPGRADE_SYSTEM_SCRIPT.new()
+	var upgrade_system_script := load(UPGRADE_SYSTEM_SCRIPT_PATH)
+	if upgrade_system_script == null:
+		push_error("Failed to load %s" % UPGRADE_SYSTEM_SCRIPT_PATH)
+		return
+	upgrade_system = upgrade_system_script.new()
 	add_child(upgrade_system)
 	upgrade_system.initialize(self, null, POWER_REGISTRY_SCRIPT.new())
 	_create_health_state()
@@ -369,7 +379,7 @@ func _try_execute_attack(attack_direction: Vector2) -> void:
 	if reward_execution_edge and attack_combo_counter % execution_every == 0:
 		execution_proc = true
 		swing_color = ENEMY_BASE.COLOR_EXECUTION_PROC
-	var melee_context: Dictionary = upgrade_system.build_melee_attack_context(attack_damage, attack_range, attack_arc_degrees, execution_proc, execution_damage_mult)
+	var melee_context: Dictionary = upgrade_system.build_melee_attack_context(damage, attack_range, attack_arc_degrees, execution_proc, execution_damage_mult)
 	attack_lock_time_left = attack_lock_duration
 	attack_lock_direction = attack_direction
 	visual_facing_direction = attack_direction
@@ -378,7 +388,7 @@ func _try_execute_attack(attack_direction: Vector2) -> void:
 		swing_color = ENEMY_BASE.COLOR_SWING_RAZOR_WIND if not execution_proc else ENEMY_BASE.COLOR_EXECUTION_PROC_EXTENDED
 	player_feedback.play_attack_swing_visual(attack_direction, float(melee_context["range"]), float(melee_context["arc_degrees"]), swing_color)
 	if reward_razor_wind:
-		var wind_context: Dictionary = upgrade_system.build_razor_wind_attack_context(melee_context, razor_wind_damage_ratio, razor_wind_range_scale, razor_wind_arc_degrees, attack_damage, attack_range)
+		var wind_context: Dictionary = upgrade_system.build_razor_wind_attack_context(melee_context, razor_wind_damage_ratio, razor_wind_range_scale, razor_wind_arc_degrees, damage, attack_range)
 		var wind_range := float(wind_context["range"])
 		var wind_color := ENEMY_BASE.COLOR_SWING_RAZOR_WIND_EXTENDED if not execution_proc else ENEMY_BASE.COLOR_EXECUTION_WIND_EXTENDED
 		player_feedback.play_attack_swing_visual(attack_direction, wind_range, razor_wind_arc_degrees, wind_color, 0.14)
@@ -979,9 +989,37 @@ func get_upgrade_card_desc(boon_id: String) -> String:
 func get_trial_power_stack_count(reward_id: String) -> int:
 	return upgrade_system.get_trial_power_stack_count(reward_id)
 
+func get_power_damage_model(power_id: String) -> Dictionary:
+	if upgrade_system != null and upgrade_system.has_method("get_power_damage_model"):
+		return upgrade_system.get_power_damage_model(power_id)
+	return {
+		"kind": "none",
+		"scale_source": "none",
+		"formula_note": "No direct damage"
+	}
+
+func get_last_damage_breakdown() -> Dictionary:
+	return last_damage_breakdown.duplicate(true)
+
+
+# Damage packets are separated into a scaling base and flat conditional bonuses.
+# This makes Flat vs Scaling behavior explicit and easy to audit.
+func _build_damage_breakdown(base_scaling_damage: int, enemy_node: Object, hit_position: Vector2, source: String) -> Dictionary:
+	var flat_bonus_damage := _get_hunters_snare_bonus_damage(enemy_node)
+	flat_bonus_damage += _get_first_strike_bonus_damage(enemy_node)
+	flat_bonus_damage += _consume_wraithstep_mark(enemy_node, hit_position, base_scaling_damage)
+	var breakdown := {
+		"source": source,
+		"base_scaling_damage": base_scaling_damage,
+		"flat_bonus_damage": flat_bonus_damage,
+		"final_damage": base_scaling_damage + flat_bonus_damage
+	}
+	last_damage_breakdown = breakdown.duplicate(true)
+	return breakdown
+
 func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary) -> bool:
 	var did_hit := false
-	var strike_damage := int(melee_context.get("damage", attack_damage))
+	var strike_damage := int(melee_context.get("damage", damage))
 	strike_damage = _apply_objective_mutator_damage_mult(strike_damage)
 	var strike_range := float(melee_context.get("range", attack_range))
 	var retort_active: bool = passive_iron_retort and iron_retort_window_left > 0.0
@@ -1014,9 +1052,8 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		if absf(attack_direction.angle_to(to_enemy.normalized())) > max_angle_radians:
 			continue
 
-		var final_strike_damage := strike_damage + _get_hunters_snare_bonus_damage(enemy_node)
-		final_strike_damage += _get_first_strike_bonus_damage(enemy_node)
-		final_strike_damage += _consume_wraithstep_mark(enemy_node, enemy_body.global_position, strike_damage)
+		var strike_breakdown := _build_damage_breakdown(strike_damage, enemy_node, enemy_body.global_position, "melee")
+		var final_strike_damage := int(strike_breakdown.get("final_damage", strike_damage))
 		DAMAGEABLE.apply_damage(enemy_node, final_strike_damage)
 		if retort_active and not did_hit:
 			retort_impact_position = enemy_body.global_position
@@ -1034,8 +1071,8 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		did_hit = true
 
 	if reward_razor_wind:
-		var wind_context: Dictionary = upgrade_system.build_razor_wind_attack_context(melee_context, razor_wind_damage_ratio, razor_wind_range_scale, razor_wind_arc_degrees, attack_damage, attack_range)
-		var wind_damage := int(wind_context.get("damage", maxi(1, int(round(float(attack_damage) * razor_wind_damage_ratio)))))
+		var wind_context: Dictionary = upgrade_system.build_razor_wind_attack_context(melee_context, razor_wind_damage_ratio, razor_wind_range_scale, razor_wind_arc_degrees, damage, attack_range)
+		var wind_damage := int(wind_context.get("damage", maxi(1, int(round(float(damage) * razor_wind_damage_ratio)))))
 		wind_damage = _apply_objective_mutator_damage_mult(wind_damage)
 		wind_context["damage"] = wind_damage
 		did_hit = _apply_razor_wind(attack_direction, wind_context, rupture_triggered_enemy_ids, rupture_hit_enemy_ids) or did_hit
@@ -1055,7 +1092,7 @@ func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupt
 	var wind_range := float(wind_context.get("range", attack_range * razor_wind_range_scale))
 	var wind_arc_degrees := float(wind_context.get("arc_degrees", razor_wind_arc_degrees))
 	var wind_half_arc := deg_to_rad(wind_arc_degrees * 0.5)
-	var wind_damage := int(wind_context.get("damage", maxi(1, int(round(float(attack_damage) * razor_wind_damage_ratio)))))
+	var wind_damage := int(wind_context.get("damage", maxi(1, int(round(float(damage) * razor_wind_damage_ratio)))))
 	var wind_hit_enemy_ids: Dictionary = {}
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		if not (enemy_node is Node2D):
@@ -1071,9 +1108,8 @@ func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupt
 			continue
 		if absf(attack_direction.angle_to(to_enemy.normalized())) > wind_half_arc:
 			continue
-		var final_wind_damage := wind_damage + _get_hunters_snare_bonus_damage(enemy_node)
-		final_wind_damage += _get_first_strike_bonus_damage(enemy_node)
-		final_wind_damage += _consume_wraithstep_mark(enemy_node, enemy_body.global_position, wind_damage)
+		var wind_breakdown := _build_damage_breakdown(wind_damage, enemy_node, enemy_body.global_position, "razor_wind")
+		var final_wind_damage := int(wind_breakdown.get("final_damage", wind_damage))
 		DAMAGEABLE.apply_damage(enemy_node, final_wind_damage)
 		_apply_hunters_snare(enemy_node)
 		wind_hit_enemy_ids[enemy_id] = true
@@ -1214,6 +1250,7 @@ func _consume_wraithstep_mark(enemy_node: Object, hit_position: Vector2, base_da
 func _apply_wraithstep_chain(chain_origin: Vector2, consumed_enemy_id: int, chain_damage: int) -> void:
 	if wraithstep_marked_enemy_expiry.is_empty():
 		return
+	var final_chain_damage := _apply_objective_mutator_damage_mult(chain_damage)
 	var propagated_ids: Dictionary = {consumed_enemy_id: true}
 	var pending_epicenters: Array[Vector2] = [chain_origin]
 	while not pending_epicenters.is_empty():
@@ -1241,7 +1278,7 @@ func _apply_wraithstep_chain(chain_origin: Vector2, consumed_enemy_id: int, chai
 			var triggered_enemy := triggered_entry["node"] as Node2D
 			wraithstep_marked_enemy_expiry.erase(triggered_enemy_id)
 			propagated_ids[triggered_enemy_id] = true
-			DAMAGEABLE.apply_damage(triggered_enemy, chain_damage)
+			DAMAGEABLE.apply_damage(triggered_enemy, final_chain_damage)
 			pending_epicenters.append(triggered_enemy.global_position)
 			if player_feedback != null:
 				player_feedback.play_wraithstep_chain_echo(epicenter, triggered_enemy.global_position)

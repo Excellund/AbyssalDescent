@@ -240,7 +240,7 @@ func _update_passive_section(character_id: String) -> void:
 	var desc := ""
 	match passive_id:
 		"iron_retort":
-			desc = "When you take damage, a counter window opens for 0.6s. Your next attack within the window deals 70% bonus damage."
+			desc = "When you take damage, a counter window opens for 0.6s. Your next attack within the window deals 70% extra damage."
 		"sigil_burst":
 			desc = "Dashing arms a burst. Your next attack unleashes a 70% damage sigil explosion at the target."
 		"death_tempo":
@@ -315,6 +315,9 @@ func _pf(node: Node, prop: String, fallback: float = 0.0) -> float:
 	var v = node.get(prop)
 	return v if v != null else fallback
 
+func _damage_kind_prefix(_power_id: String, _player: Node) -> String:
+	return ""
+
 func _get_power_current_desc(power_id: String, power_type: String, player: Node) -> String:
 	if not is_instance_valid(player):
 		return ""
@@ -326,9 +329,9 @@ func _get_power_current_desc(power_id: String, power_type: String, player: Node)
 	match power_id:
 		# Boons
 		"first_strike":
-			return "[color=#c8daf0]Bonus damage vs high-HP enemies:[/color] [color=#e8c96a]+%d[/color]" % (12 * stacks)
+			return "[color=#c8daf0]%sExtra hit damage vs enemies above 80%% HP:[/color] [color=#e8c96a]+%d[/color]" % [_damage_kind_prefix(power_id, player), (12 * stacks)]
 		"heavy_blow":
-			return "[color=#c8daf0]Attack damage:[/color] [color=#e8c96a]+%d[/color]" % (8 * stacks)
+			return "[color=#c8daf0]%sDamage stat:[/color] [color=#e8c96a]+%d[/color]" % [_damage_kind_prefix(power_id, player), (8 * stacks)]
 		"wide_arc":
 			return "[color=#c8daf0]Attack arc:[/color] [color=#e8c96a]+%d deg[/color]" % (28 * stacks)
 		"long_reach":
@@ -350,15 +353,15 @@ func _get_power_current_desc(power_id: String, power_type: String, player: Node)
 		"razor_wind":
 			var rw_range := 1.25 + 0.10 * float(stacks)
 			var rw_damage := 0.60 + 0.12 * float(stacks)
-			return "[color=#9ab8d8]Each swing fires a slicing projectile through enemies.[/color]\n    [color=#c8daf0]Range:[/color] [color=#e8c96a]x%.2f[/color], [color=#c8daf0]Damage:[/color] [color=#e8c96a]%.0f%%[/color]" % [rw_range, rw_damage * 100.0]
+			return "[color=#9ab8d8]Each swing fires a slicing projectile through enemies.[/color]\n    [color=#c8daf0]%sRange:[/color] [color=#e8c96a]x%.2f[/color], [color=#c8daf0]Damage:[/color] [color=#e8c96a]%.0f%%[/color] of hit" % [_damage_kind_prefix(power_id, player), rw_range, rw_damage * 100.0]
 		"execution_edge":
 			var ex_every := maxi(2, 4 - stacks)
 			var ex_mult := 2.20 + 0.45 * float(stacks)
-			return "[color=#9ab8d8]Every [color=#e8c96a]%d[/color] hits, your strike lands for [color=#e8c96a]x%.2f[/color] damage.[/color]" % [ex_every, ex_mult]
+			return "[color=#9ab8d8]Every [color=#e8c96a]%d[/color] hits, your strike lands for [color=#e8c96a]x%.2f[/color] damage.[/color]\n    [color=#c8daf0]%sDamage multiplier applies to hit damage[/color]" % [ex_every, ex_mult, _damage_kind_prefix(power_id, player)]
 		"rupture_wave":
 			var rp_radius := 72.0 + 10.0 * float(stacks)
 			var rp_damage := 0.34 + 0.10 * float(stacks)
-			return "[color=#9ab8d8]Hits release a shockwave that damages nearby enemies.[/color]\n    [color=#c8daf0]Radius:[/color] [color=#e8c96a]%.0f[/color], [color=#c8daf0]Damage:[/color] [color=#e8c96a]%.0f%%[/color] of hit" % [rp_radius, rp_damage * 100.0]
+			return "[color=#9ab8d8]Hits release a shockwave that damages nearby enemies.[/color]\n    [color=#c8daf0]%sRadius:[/color] [color=#e8c96a]%.0f[/color], [color=#c8daf0]Damage:[/color] [color=#e8c96a]%.0f%%[/color] of hit" % [_damage_kind_prefix(power_id, player), rp_radius, rp_damage * 100.0]
 		"aegis_field":
 			var ag_resist := minf(0.42, 0.12 + 0.06 * float(stacks))
 			var ag_guard := 0.90 + 0.20 * float(stacks)
@@ -369,29 +372,29 @@ func _get_power_current_desc(power_id: String, power_type: String, player: Node)
 			var hs_bonus := 4 + 3 * stacks
 			var hs_slow := 0.55 + 0.12 * float(stacks)
 			var hs_speed := maxf(0.42, 0.72 - 0.06 * float(stacks))
-			return "[color=#9ab8d8]Hits slow enemies; striking slowed targets deals bonus damage.[/color]\n    [color=#c8daf0]Slow:[/color] [color=#e8c96a]%.2fs[/color] at [color=#e8c96a]%.0f%%[/color] speed, [color=#c8daf0]Bonus:[/color] [color=#e8c96a]+%d[/color]" % [hs_slow, hs_speed * 100.0, hs_bonus]
+			return "[color=#9ab8d8]Hits slow enemies; striking slowed targets deals extra hit damage.[/color]\n    [color=#c8daf0]%sSlow:[/color] [color=#e8c96a]%.2fs[/color] at [color=#e8c96a]%.0f%%[/color] speed, [color=#c8daf0]Extra hit damage:[/color] [color=#e8c96a]+%d[/color]" % [_damage_kind_prefix(power_id, player), hs_slow, hs_speed * 100.0, hs_bonus]
 		"phantom_step":
-			var ph_damage := 8 + 4 * stacks
+			var ph_ratio := 0.40 + 0.08 * float(stacks)
 			var ph_slow := 0.60 + 0.15 * float(stacks)
-			return "[color=#9ab8d8]Dashing through enemies deals damage and leaves them slowed.[/color]\n    [color=#c8daf0]Dash damage:[/color] [color=#e8c96a]%d[/color], [color=#c8daf0]Slow:[/color] [color=#e8c96a]%.2fs[/color]" % [ph_damage, ph_slow]
+			return "[color=#9ab8d8]Dashing through enemies deals damage and leaves them slowed.[/color]\n    [color=#c8daf0]%sDash damage:[/color] [color=#e8c96a]%.0f%%[/color], [color=#c8daf0]Slow:[/color] [color=#e8c96a]%.2fs[/color]" % [_damage_kind_prefix(power_id, player), ph_ratio * 100.0, ph_slow]
 		"reaper_step":
 			var rp_mult := 1.36 + 0.12 * float(stacks)
 			return "[color=#9ab8d8]Kills fully refresh your dash. Dash range and speed scale together.[/color]\n    [color=#c8daf0]Range/speed:[/color] [color=#e8c96a]x%.2f[/color]" % rp_mult
 		"static_wake":
-			var sw_damage := 8 + 5 * stacks
+			var sw_ratio := 0.35 + 0.10 * float(stacks)
 			var sw_life := 1.60 + 0.35 * float(stacks)
-			return "[color=#9ab8d8]Moving leaves an electrified trail that shocks enemies.[/color]\n    [color=#c8daf0]Tick damage:[/color] [color=#e8c96a]%d[/color], [color=#c8daf0]Trail duration:[/color] [color=#e8c96a]%.2fs[/color]" % [sw_damage, sw_life]
+			return "[color=#9ab8d8]Moving leaves an electrified trail that shocks enemies.[/color]\n    [color=#c8daf0]%sDamage per pulse:[/color] [color=#e8c96a]%.0f%%[/color], [color=#c8daf0]Trail duration:[/color] [color=#e8c96a]%.2fs[/color]" % [_damage_kind_prefix(power_id, player), sw_ratio * 100.0, sw_life]
 		"storm_crown":
 			var sc_every := maxi(2, 5 - stacks)
 			var sc_targets := mini(5, 2 + stacks)
 			var sc_radius := 120.0 + 12.0 * float(stacks)
 			var sc_damage := minf(0.82, 0.38 + 0.08 * float(stacks))
-			return "[color=#9ab8d8]Every few hits discharge chain lightning to nearby foes.[/color]\n    [color=#c8daf0]Every:[/color] [color=#e8c96a]%d[/color] hits, [color=#c8daf0]Chains:[/color] [color=#e8c96a]%d[/color], [color=#c8daf0]Radius:[/color] [color=#e8c96a]%.0f[/color], [color=#c8daf0]Damage:[/color] [color=#e8c96a]%.0f%%[/color]" % [sc_every, sc_targets, sc_radius, sc_damage * 100.0]
+			return "[color=#9ab8d8]Every few hits discharge chain lightning to nearby foes.[/color]\n    [color=#c8daf0]%sEvery:[/color] [color=#e8c96a]%d[/color] hits, [color=#c8daf0]Chains:[/color] [color=#e8c96a]%d[/color], [color=#c8daf0]Radius:[/color] [color=#e8c96a]%.0f[/color], [color=#c8daf0]Damage:[/color] [color=#e8c96a]%.0f%%[/color] of hit" % [_damage_kind_prefix(power_id, player), sc_every, sc_targets, sc_radius, sc_damage * 100.0]
 		"wraithstep":
 			var ws_mark := 2.80 + 0.55 * float(stacks)
 			var ws_bonus := 14 + 8 * stacks
 			var ws_splash := minf(0.95, 0.55 + 0.12 * float(stacks))
-			return "[color=#9ab8d8]Dashing marks enemies. Marked hits deal bonus damage and splash nearby.[/color]\n    [color=#c8daf0]Mark:[/color] [color=#e8c96a]%.2fs[/color], [color=#c8daf0]Bonus:[/color] [color=#e8c96a]+%d[/color], [color=#c8daf0]Cleave:[/color] [color=#e8c96a]%.0f%%[/color]" % [ws_mark, ws_bonus, ws_splash * 100.0]
+			return "[color=#9ab8d8]Dashing marks enemies. Marked hits deal extra hit damage and splash nearby.[/color]\n    [color=#c8daf0]%sMark:[/color] [color=#e8c96a]%.2fs[/color], [color=#c8daf0]Marked-hit damage:[/color] [color=#e8c96a]+%d[/color], [color=#c8daf0]Cleave:[/color] [color=#e8c96a]%.0f%%[/color] of hit" % [_damage_kind_prefix(power_id, player), ws_mark, ws_bonus, ws_splash * 100.0]
 		_:
 			return ""
 

@@ -15,7 +15,7 @@ const CHARACTER_DEFINITIONS := {
 		"stat_modifiers": {
 			"max_health": 130,
 			"max_speed": 180.0,
-			"attack_damage": 24,
+			"damage": 24,
 			"attack_arc_degrees": 150.0,
 			"dash_cooldown": 0.52,
 			"iron_skin_armor": 1
@@ -41,7 +41,7 @@ const CHARACTER_DEFINITIONS := {
 		"stat_modifiers": {
 			"max_health": 75,
 			"max_speed": 210.0,
-			"attack_damage": 28,
+			"damage": 28,
 			"attack_range": 90.0,
 			"attack_cooldown": 0.22,
 			"dash_cooldown": 0.54
@@ -67,7 +67,7 @@ const CHARACTER_DEFINITIONS := {
 		"stat_modifiers": {
 			"max_health": 70,
 			"max_speed": 260.0,
-			"attack_damage": 18,
+			"damage": 18,
 			"dash_cooldown": 0.30,
 			"attack_cooldown": 0.24
 		},

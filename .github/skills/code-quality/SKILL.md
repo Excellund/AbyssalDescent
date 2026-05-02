@@ -219,6 +219,25 @@ Do not pass placeholder or immediately-overwritten values to a function just to 
 
 **How to apply:**
 
+---
+
+### 9. Encode Damage Semantics as Data
+
+When gameplay distinguishes flat, scaling, and hybrid damage, store that classification in a shared data source and consume it from UI/runtime code.
+
+**Why it matters:**
+
+- Prevents wording drift between card text, HUD, and runtime behavior.
+- Makes balancing safer by separating *what kind of damage* from per-skill numbers.
+- Reduces copy-pasted labels like `[Flat]`/`[Scaling]` across multiple files.
+
+**How to apply:**
+
+- Define a canonical damage model map in a registry (for example: `{kind, scales_with}`).
+- Expose small getters (for example `get_damage_model`, `get_damage_model_label`).
+- Build UI prefixes/tooltips from those getters rather than hardcoded strings.
+- Keep runtime breakdowns explicit (`base`, `flat_bonus`, `final`) for debugging and telemetry sanity checks.
+
 - Give parameters default values when a sensible default exists and most call sites don't need to override them.
 - If a call site overwrites all of a function's outputs immediately after calling it, restructure so the caller passes only what it owns.
 - Prefer a narrow, honest signature over a broad one padded with zeros or empty dicts.
