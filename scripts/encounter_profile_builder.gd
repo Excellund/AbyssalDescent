@@ -44,41 +44,53 @@ const MUTATOR_DAMAGE_STAT_KEYS: Array[String] = [
 ]
 const CONTROL_TUNING_BY_RANK := {
 	0: {
-		"pressure_mult": 0.95,
-		"spawn_interval_bias": 0.2,
-		"radius_bias": 12.0,
-		"goal_bias": 1.05,
-		"decay_bias": 0.05
+		"pressure_mult": 0.93,
+		"spawn_interval_bias": 0.24,
+		"radius_bias": 8.0,
+		"goal_bias": 0.95,
+		"decay_bias": 0.04
 	},
 	1: {
-		"pressure_mult": 0.84,
-		"spawn_interval_bias": 0.18,
-		"radius_bias": 12.0,
-		"goal_bias": 0.45,
-		"decay_bias": -0.005
+		"pressure_mult": 0.81,
+		"spawn_interval_bias": 0.24,
+		"radius_bias": 6.0,
+		"goal_bias": 0.15,
+		"decay_bias": -0.025
 	},
 	2: {
-		"pressure_mult": 0.74,
-		"spawn_interval_bias": 0.14,
-		"radius_bias": 12.0,
-		"goal_bias": -0.3,
-		"decay_bias": -0.05
+		"pressure_mult": 0.75,
+		"spawn_interval_bias": 0.16,
+		"radius_bias": 8.0,
+		"goal_bias": -0.28,
+		"decay_bias": -0.045
 	},
 	3: {
-		"pressure_mult": 0.78,
-		"spawn_interval_bias": 0.08,
-		"radius_bias": 9.0,
+		"pressure_mult": 0.79,
+		"spawn_interval_bias": 0.1,
+		"radius_bias": 6.0,
 		"goal_bias": 0.05,
 		"decay_bias": -0.01
 	}
 }
 const CONTROL_DEPTH_WINDOWS_BY_RANK := {
+	0: [
+		{
+			"start_depth": 9,
+			"end_depth": 12,
+			"pressure_bias": -0.05,
+			"spawn_interval_bias": 0.08,
+			"radius_bias": -8.0,
+			"goal_bias": -0.2,
+			"decay_bias": -0.015
+		}
+	],
 	1: [
 		{
 			"start_depth": 1,
 			"end_depth": 3,
 			"pressure_bias": 0.03,
 			"spawn_interval_bias": -0.03,
+			"radius_bias": 0.0,
 			"goal_bias": 0.1,
 			"decay_bias": 0.01
 		},
@@ -87,8 +99,18 @@ const CONTROL_DEPTH_WINDOWS_BY_RANK := {
 			"end_depth": 9,
 			"pressure_bias": -0.08,
 			"spawn_interval_bias": 0.1,
+			"radius_bias": -4.0,
 			"goal_bias": -0.24,
 			"decay_bias": -0.02
+		},
+		{
+			"start_depth": 10,
+			"end_depth": 13,
+			"pressure_bias": -0.07,
+			"spawn_interval_bias": 0.12,
+			"radius_bias": -16.0,
+			"goal_bias": -0.45,
+			"decay_bias": -0.03
 		}
 	],
 	2: [
@@ -97,6 +119,7 @@ const CONTROL_DEPTH_WINDOWS_BY_RANK := {
 			"end_depth": 3,
 			"pressure_bias": 0.02,
 			"spawn_interval_bias": -0.05,
+			"radius_bias": 0.0,
 			"goal_bias": 0.14,
 			"decay_bias": 0.015
 		},
@@ -105,7 +128,17 @@ const CONTROL_DEPTH_WINDOWS_BY_RANK := {
 			"end_depth": 8,
 			"pressure_bias": -0.06,
 			"spawn_interval_bias": 0.1,
+			"radius_bias": -4.0,
 			"goal_bias": -0.24,
+			"decay_bias": -0.02
+		},
+		{
+			"start_depth": 9,
+			"end_depth": 12,
+			"pressure_bias": -0.05,
+			"spawn_interval_bias": 0.08,
+			"radius_bias": -10.0,
+			"goal_bias": -0.26,
 			"decay_bias": -0.02
 		}
 	],
@@ -115,8 +148,18 @@ const CONTROL_DEPTH_WINDOWS_BY_RANK := {
 			"end_depth": 10,
 			"pressure_bias": -0.03,
 			"spawn_interval_bias": 0.05,
+			"radius_bias": -6.0,
 			"goal_bias": -0.08,
 			"decay_bias": -0.01
+		},
+		{
+			"start_depth": 11,
+			"end_depth": 14,
+			"pressure_bias": -0.04,
+			"spawn_interval_bias": 0.06,
+			"radius_bias": -10.0,
+			"goal_bias": -0.14,
+			"decay_bias": -0.015
 		}
 	]
 }
@@ -667,7 +710,7 @@ func _build_control_profile(depth: int) -> Dictionary:
 	var control_pressure_mult := float(rank_tuning.get("pressure_mult", 0.8)) + float(depth_tuning.get("pressure_bias", 0.0))
 	var contest_threshold := 0
 	var tier_spawn_interval_bias := float(rank_tuning.get("spawn_interval_bias", 0.0)) + float(depth_tuning.get("spawn_interval_bias", 0.0))
-	var tier_radius_bias := float(rank_tuning.get("radius_bias", 0.0))
+	var tier_radius_bias := float(rank_tuning.get("radius_bias", 0.0)) + float(depth_tuning.get("radius_bias", 0.0))
 	var tier_goal_bias := float(rank_tuning.get("goal_bias", 0.0)) + float(depth_tuning.get("goal_bias", 0.0))
 	var tier_decay_bias := float(rank_tuning.get("decay_bias", 0.0)) + float(depth_tuning.get("decay_bias", 0.0))
 	var room_size := Vector2(1000.0, 760.0)
@@ -680,10 +723,10 @@ func _build_control_profile(depth: int) -> Dictionary:
 	var raw_duration := clampf(22.0 + float(effective_depth) * 0.75, 22.0, 30.0)
 	var duration := int(ceil(raw_duration / 5.0)) * 5
 	var spawn_interval := clampf(2.74 - float(effective_depth) * 0.03 + tier_spawn_interval_bias, 1.75, 2.95)
-	var spawn_batch := mini(3, 1 + int(floor(float(effective_depth) / 5.0)))
+	var spawn_batch := mini(3, 1 + int(floor(float(effective_depth) / 6.0)))
 	var zone_radius := clampf(194.0 + float(effective_depth) * 3.6 + tier_radius_bias, 184.0, 248.0)
-	var progress_goal := clampf(7.95 + float(effective_depth) * 0.23 + tier_goal_bias, 7.8, 12.2)
-	var progress_decay := clampf(0.2 + float(effective_depth) * 0.01 + tier_decay_bias, 0.16, 0.4)
+	var progress_goal := clampf(7.95 + float(effective_depth) * 0.2 + tier_goal_bias, 7.8, 11.8)
+	var progress_decay := clampf(0.2 + float(effective_depth) * 0.008 + tier_decay_bias, 0.16, 0.36)
 	ENCOUNTER_CONTRACTS.profile_set_control_objective(profile, duration, spawn_interval, spawn_batch, zone_radius, progress_goal, progress_decay, contest_threshold)
 	return _apply_bearing_count_scaling(profile, control_pressure_mult)
 
@@ -696,6 +739,7 @@ func _control_depth_tuning(difficulty_rank: int, depth: int) -> Dictionary:
 	var result := {
 		"pressure_bias": 0.0,
 		"spawn_interval_bias": 0.0,
+		"radius_bias": 0.0,
 		"goal_bias": 0.0,
 		"decay_bias": 0.0
 	}
@@ -710,6 +754,7 @@ func _control_depth_tuning(difficulty_rank: int, depth: int) -> Dictionary:
 			continue
 		result["pressure_bias"] = float(result.get("pressure_bias", 0.0)) + float(window.get("pressure_bias", 0.0))
 		result["spawn_interval_bias"] = float(result.get("spawn_interval_bias", 0.0)) + float(window.get("spawn_interval_bias", 0.0))
+		result["radius_bias"] = float(result.get("radius_bias", 0.0)) + float(window.get("radius_bias", 0.0))
 		result["goal_bias"] = float(result.get("goal_bias", 0.0)) + float(window.get("goal_bias", 0.0))
 		result["decay_bias"] = float(result.get("decay_bias", 0.0)) + float(window.get("decay_bias", 0.0))
 	return result

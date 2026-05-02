@@ -85,16 +85,16 @@ class CutTheSignalConfig:
 
 class HoldTheLineConfig:
 	const MAX_ENEMIES_BASE = 5
-	const MAX_ENEMIES_DEPTH_MULT = 0.28
+	const MAX_ENEMIES_DEPTH_MULT = 0.24
 	const MAX_ENEMIES_MIN = 5
 	const SPAWN_TIMER_MIN = 1.0
 	const SPAWN_INTERVAL_BASE = 1.36
 	const SPAWN_INTERVAL_CLAMP_MIN = 0.98
 	const SPAWN_INTERVAL_CLAMP_MAX = 1.24
-	const SPAWN_INTERVAL_OVERTIME_MULT = 0.97
-	const SPAWN_INTERVAL_OVERTIME_MIN = 1.2
-	const SPAWN_BATCH_OVERTIME_CAP = 4
-	const SPAWN_TIMER_OVERTIME = 0.8
+	const SPAWN_INTERVAL_OVERTIME_MULT = 0.985
+	const SPAWN_INTERVAL_OVERTIME_MIN = 1.34
+	const SPAWN_BATCH_OVERTIME_CAP = 3
+	const SPAWN_TIMER_OVERTIME = 1.0
 
 # === COLORS ===
 const COLOR_SIGNAL_BASE = Color(1.0, 0.84, 0.3, 0.95)
@@ -225,7 +225,7 @@ func _begin_control_objective(profile: Dictionary) -> void:
 	world.objective_time_left = ENCOUNTER_CONTRACTS.profile_objective_duration(profile)
 	world.objective_spawn_interval = ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
 	var objective_pressure_mult: float = world._objective_pressure_mult()
-	world.objective_spawn_timer = maxf(HoldTheLineConfig.SPAWN_TIMER_MIN, world.objective_spawn_interval * clampf(HoldTheLineConfig.SPAWN_INTERVAL_BASE - objective_pressure_mult * 0.16, HoldTheLineConfig.SPAWN_INTERVAL_CLAMP_MIN, HoldTheLineConfig.SPAWN_INTERVAL_CLAMP_MAX))
+	world.objective_spawn_timer = maxf(HoldTheLineConfig.SPAWN_TIMER_MIN, world.objective_spawn_interval * clampf(HoldTheLineConfig.SPAWN_INTERVAL_BASE - objective_pressure_mult * 0.12, HoldTheLineConfig.SPAWN_INTERVAL_CLAMP_MIN, HoldTheLineConfig.SPAWN_INTERVAL_CLAMP_MAX))
 	world.objective_spawn_batch = ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
 	world.objective_spawn_batch = maxi(1, int(round(float(world.objective_spawn_batch) * objective_pressure_mult)))
 	world.objective_max_enemies = HoldTheLineConfig.MAX_ENEMIES_BASE + int(floor(float(world.room_depth) * HoldTheLineConfig.MAX_ENEMIES_DEPTH_MULT))
@@ -374,7 +374,8 @@ func update_control_objective_state(delta: float) -> void:
 	if world.objective_time_left <= 0.0 and not world.objective_overtime:
 		world.objective_overtime = true
 		world.objective_spawn_interval = maxf(HoldTheLineConfig.SPAWN_INTERVAL_OVERTIME_MIN, world.objective_spawn_interval * HoldTheLineConfig.SPAWN_INTERVAL_OVERTIME_MULT)
-		world.objective_spawn_batch = mini(HoldTheLineConfig.SPAWN_BATCH_OVERTIME_CAP, world.objective_spawn_batch + 1)
+		if world.active_room_enemy_count <= maxi(1, world.objective_spawn_batch):
+			world.objective_spawn_batch = mini(HoldTheLineConfig.SPAWN_BATCH_OVERTIME_CAP, world.objective_spawn_batch + 1)
 		world.objective_spawn_timer = HoldTheLineConfig.SPAWN_TIMER_OVERTIME
 		world.hud.show_banner("Line Breaking", "Zone pressure escalating")
 	var has_player := is_instance_valid(world.player)
@@ -453,7 +454,7 @@ func spawn_control_wave() -> void:
 	if world.objective_overtime:
 		roster = ["charger", "shielder", "archer", "chaser", "archer", "shielder"]
 	var spawn_count: int = world.objective_spawn_batch
-	if world.objective_overtime and world.active_room_enemy_count <= 1:
+	if world.objective_overtime and world.active_room_enemy_count <= 0:
 		spawn_count += 1
 	if world.objective_max_enemies > 0:
 		spawn_count = mini(spawn_count, maxi(0, world.objective_max_enemies - world.active_room_enemy_count))
