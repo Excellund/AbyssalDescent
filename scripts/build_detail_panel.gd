@@ -349,6 +349,10 @@ func _get_power_current_desc(power_id: String, power_type: String, player: Node)
 			return "[color=#c8daf0]Dash speed:[/color] [color=#e8c96a]+%d[/color]" % (85 * stacks)
 		"heartstone":
 			return "[color=#c8daf0]Max HP:[/color] [color=#e8c96a]+%d[/color]" % (10 * stacks)
+		"crushed_vow":
+			return "[color=#c8daf0]After taking damage, next-hit bonus:[/color] [color=#e8c96a]+%d[/color]" % (14 * stacks)
+		"severing_edge":
+			return "[color=#c8daf0]Bonus damage vs enemies below 35%% HP:[/color] [color=#e8c96a]+%d[/color]" % (10 * stacks)
 		# Arcana
 		"razor_wind":
 			var rw_range := 1.25 + 0.10 * float(stacks)
@@ -395,6 +399,27 @@ func _get_power_current_desc(power_id: String, power_type: String, player: Node)
 			var ws_bonus := 14 + 8 * stacks
 			var ws_splash := minf(0.95, 0.55 + 0.12 * float(stacks))
 			return "[color=#9ab8d8]Dashing marks enemies. Marked hits deal extra hit damage and splash nearby.[/color]\n    [color=#c8daf0]%sMark:[/color] [color=#e8c96a]%.2fs[/color], [color=#c8daf0]Marked-hit damage:[/color] [color=#e8c96a]+%d[/color], [color=#c8daf0]Cleave:[/color] [color=#e8c96a]%.0f%%[/color] of hit" % [_damage_kind_prefix(power_id, player), ws_mark, ws_bonus, ws_splash * 100.0]
+		"voidfire":
+			var vf_amp := 0.20 + 0.08 * float(stacks)
+			var vf_det := 0.80 + 0.15 * float(stacks)
+			var vf_lockout := 5.40
+			return "[color=#9ab8d8]Build heat through attacks. Danger Zone boosts damage. Max heat detonates, seals attacks, slows movement, and disables dash.[/color]\n    [color=#c8daf0]%sDanger amp:[/color] [color=#e8c96a]+%.0f%%[/color], [color=#c8daf0]Detonate:[/color] [color=#e8c96a]%.0f%%[/color] of hit, [color=#c8daf0]Overheat lock:[/color] [color=#e8c96a]%.2fs[/color]" % [_damage_kind_prefix(power_id, player), vf_amp * 100.0, vf_det * 100.0, vf_lockout]
+		"dread_resonance":
+			var dr_bonus := 6 + 3 * stacks
+			return "[color=#9ab8d8]Chain hits on one enemy build resonance. Swapping targets resets it.[/color]\n    [color=#c8daf0]%sBonus per resonance stack:[/color] [color=#e8c96a]+%d[/color]" % [_damage_kind_prefix(power_id, player), dr_bonus]
+		"vow_shatter":
+			var vs_mult := 1.80 + 0.25 * float(stacks)
+			return "[color=#9ab8d8]Taking damage primes your next attack, then consumes the vow.[/color]\n    [color=#c8daf0]%sPrimed hit damage:[/color] [color=#e8c96a]x%.2f[/color]" % [_damage_kind_prefix(power_id, player), vs_mult]
+		"eclipse_mark":
+			var em_radius := 110.0 + 14.0 * float(stacks)
+			var em_duration := 1.40 + 0.20 * float(stacks)
+			var em_bonus := 0.65 + 0.12 * float(stacks)
+			return "[color=#9ab8d8]Kills mark nearby enemies. First hit on each mark gains burst damage.[/color]\n    [color=#c8daf0]%sRadius:[/color] [color=#e8c96a]%.0f[/color], [color=#c8daf0]Duration:[/color] [color=#e8c96a]%.2fs[/color], [color=#c8daf0]Bonus:[/color] [color=#e8c96a]%.0f%%[/color] of hit" % [_damage_kind_prefix(power_id, player), em_radius, em_duration, em_bonus * 100.0]
+		"fracture_field":
+			var ff_radius := 80.0 + 10.0 * float(stacks)
+			var ff_damage := 0.50 + 0.10 * float(stacks)
+			var ff_slow := 0.60 + 0.10 * float(stacks)
+			return "[color=#9ab8d8]Kills trigger an implosion at the target location with a brief slow.[/color]\n    [color=#c8daf0]%sRadius:[/color] [color=#e8c96a]%.0f[/color], [color=#c8daf0]Damage:[/color] [color=#e8c96a]%.0f%%[/color] of hit, [color=#c8daf0]Slow:[/color] [color=#e8c96a]%.2fs[/color]" % [_damage_kind_prefix(power_id, player), ff_radius, ff_damage * 100.0, ff_slow]
 		_:
 			return ""
 
@@ -421,6 +446,10 @@ func _power_display_name(power_id: String) -> String:
 			return "Surge Step"
 		"heartstone":
 			return "Heartstone"
+		"crushed_vow":
+			return "Crushed Vow"
+		"severing_edge":
+			return "Severing Edge"
 		"razor_wind":
 			return "Razor Wind"
 		"execution_edge":
@@ -441,6 +470,16 @@ func _power_display_name(power_id: String) -> String:
 			return "Storm Crown"
 		"wraithstep":
 			return "Wraithstep"
+		"voidfire":
+			return "Voidfire"
+		"dread_resonance":
+			return "Dread Resonance"
+		"vow_shatter":
+			return "Vow Shatter"
+		"eclipse_mark":
+			return "Eclipse Mark"
+		"fracture_field":
+			return "Fracture Field"
 		_:
 			return power_id.capitalize()
 

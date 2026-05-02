@@ -70,6 +70,44 @@ const DAMAGE_MODEL_BY_POWER := {
 		"kind": DAMAGE_KIND_HYBRID,
 		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
 		"formula_note": "Flat marked-hit bonus + scaling splash/chain"
+	},
+	# Voidfire archetype
+	"voidfire": {
+		"kind": DAMAGE_KIND_SCALING,
+		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
+		"formula_note": "Y% of hit damage on detonation burst"
+	},
+	"dread_resonance": {
+		"kind": DAMAGE_KIND_FLAT,
+		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
+		"formula_note": "+X per resonance stack on same target"
+	},
+	# Character-lore bridges
+	"vow_shatter": {
+		"kind": DAMAGE_KIND_SCALING,
+		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
+		"formula_note": "Hit damage multiplied after being hit"
+	},
+	"eclipse_mark": {
+		"kind": DAMAGE_KIND_SCALING,
+		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
+		"formula_note": "Y% bonus damage on first hit vs marked enemy"
+	},
+	"fracture_field": {
+		"kind": DAMAGE_KIND_SCALING,
+		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
+		"formula_note": "Y% of hit damage implosion at kill location"
+	},
+	# Boons
+	"crushed_vow": {
+		"kind": DAMAGE_KIND_FLAT,
+		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
+		"formula_note": "+X flat damage on next hit after being hit"
+	},
+	"severing_edge": {
+		"kind": DAMAGE_KIND_FLAT,
+		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
+		"formula_note": "+X flat damage vs enemies below 35% HP"
 	}
 }
 
@@ -126,6 +164,16 @@ const UPGRADE_BALANCE := {
 	"heartstone": {
 		"kind": "add_int",
 		"property": "max_health",
+		"add": 10
+	},
+	"crushed_vow": {
+		"kind": "add_int",
+		"property": "crushed_vow_bonus_damage",
+		"add": 14
+	},
+	"severing_edge": {
+		"kind": "add_int",
+		"property": "severing_edge_bonus_damage",
 		"add": 10
 	}
 }
@@ -212,6 +260,47 @@ const TRIAL_POWER_BALANCE := {
 		"damage_ratio_per_stack": 0.08,
 		"damage_ratio_cap": 0.82
 	},
+	"voidfire": {
+		"heat_per_hit": 12.0,
+		"heat_cap": 100.0,
+		"danger_zone_threshold": 70.0,
+		"danger_zone_amp_base": 0.20,
+		"danger_zone_amp_per_stack": 0.08,
+		"detonate_ratio_base": 0.80,
+		"detonate_ratio_per_stack": 0.15,
+		"detonate_radius_base": 80.0,
+		"detonate_radius_per_stack": 10.0,
+		"lockout_base": 1.8,
+		"lockout_per_stack": 0.0,
+		"lockout_min": 0,
+		"overheat_move_mult": 0.65,
+		"heat_decay_rate": 8.0
+	},
+	"dread_resonance": {
+		"max_stacks": 3,
+		"bonus_per_resonance_base": 6,
+		"bonus_per_resonance_per_stack": 3
+	},
+	"vow_shatter": {
+		"damage_mult_base": 1.8,
+		"damage_mult_per_stack": 0.25
+	},
+	"eclipse_mark": {
+		"radius_base": 110.0,
+		"radius_per_stack": 14.0,
+		"mark_duration_base": 1.4,
+		"mark_duration_per_stack": 0.2,
+		"bonus_ratio_base": 0.65,
+		"bonus_ratio_per_stack": 0.12
+	},
+	"fracture_field": {
+		"radius_base": 80.0,
+		"radius_per_stack": 10.0,
+		"damage_ratio_base": 0.50,
+		"damage_ratio_per_stack": 0.10,
+		"slow_duration_base": 0.6,
+		"slow_duration_per_stack": 0.10
+	},
 	"wraithstep": {
 		"mark_duration_base": 2.8,
 		"mark_duration_per_stack": 0.55,
@@ -233,7 +322,9 @@ const UPGRADE_STACK_LIMITS := {
 	"iron_skin": 3,
 	"battle_trance": 3,
 	"surge_step": 3,
-	"heartstone": 2
+	"heartstone": 2,
+	"crushed_vow": 3,
+	"severing_edge": 3
 }
 
 const TRIAL_POWER_STACK_LIMITS := {}
@@ -283,6 +374,8 @@ func get_upgrade_pool(player_reference: Node = null) -> Array[Dictionary]:
 	var trance_desc := _get_upgrade_fallback_description("battle_trance")
 	var surge_desc := _get_upgrade_fallback_description("surge_step")
 	var heartstone_desc := _get_upgrade_fallback_description("heartstone")
+	var crushed_vow_desc := _get_upgrade_fallback_description("crushed_vow")
+	var severing_edge_desc := _get_upgrade_fallback_description("severing_edge")
 	if is_instance_valid(player_reference):
 		first_strike_desc = String(player_reference.get_upgrade_card_desc("first_strike"))
 		heavy_desc = String(player_reference.get_upgrade_card_desc("heavy_blow"))
@@ -294,6 +387,8 @@ func get_upgrade_pool(player_reference: Node = null) -> Array[Dictionary]:
 		trance_desc = String(player_reference.get_upgrade_card_desc("battle_trance"))
 		surge_desc = String(player_reference.get_upgrade_card_desc("surge_step"))
 		heartstone_desc = String(player_reference.get_upgrade_card_desc("heartstone"))
+		crushed_vow_desc = String(player_reference.get_upgrade_card_desc("crushed_vow"))
+		severing_edge_desc = String(player_reference.get_upgrade_card_desc("severing_edge"))
 	return [
 		Power.new("first_strike", "First Strike", first_strike_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("first_strike"), get_power_balance("first_strike")).to_dict(),
 		Power.new("heavy_blow", "Heavy Blow", heavy_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("heavy_blow"), get_power_balance("heavy_blow")).to_dict(),
@@ -305,6 +400,8 @@ func get_upgrade_pool(player_reference: Node = null) -> Array[Dictionary]:
 		Power.new("battle_trance", "Battle Trance", trance_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("battle_trance"), get_power_balance("battle_trance")).to_dict(),
 		Power.new("surge_step", "Surge Step", surge_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("surge_step"), get_power_balance("surge_step")).to_dict(),
 		Power.new("heartstone", "Heartstone", heartstone_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("heartstone"), get_power_balance("heartstone")).to_dict(),
+		Power.new("crushed_vow", "Crushed Vow", crushed_vow_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("crushed_vow"), get_power_balance("crushed_vow")).to_dict(),
+		Power.new("severing_edge", "Severing Edge", severing_edge_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("severing_edge"), get_power_balance("severing_edge")).to_dict(),
 	]
 
 
@@ -329,12 +426,22 @@ func get_trial_power_pool(player_reference: Node = null) -> Array[Dictionary]:
 	var static_desc := _get_trial_fallback_description("static_wake")
 	var storm_desc := _get_trial_fallback_description("storm_crown")
 	var wraith_desc := _get_trial_fallback_description("wraithstep")
+	var voidfire_desc := _get_trial_fallback_description("voidfire")
+	var dread_desc := _get_trial_fallback_description("dread_resonance")
+	var vow_desc := _get_trial_fallback_description("vow_shatter")
+	var eclipse_desc := _get_trial_fallback_description("eclipse_mark")
+	var fracture_desc := _get_trial_fallback_description("fracture_field")
 	if is_instance_valid(player_reference):
 		phantom_desc = String(player_reference.get_trial_power_card_desc("phantom_step"))
 		void_desc = String(player_reference.get_trial_power_card_desc("reaper_step"))
 		static_desc = String(player_reference.get_trial_power_card_desc("static_wake"))
 		storm_desc = String(player_reference.get_trial_power_card_desc("storm_crown"))
 		wraith_desc = String(player_reference.get_trial_power_card_desc("wraithstep"))
+		voidfire_desc = String(player_reference.get_trial_power_card_desc("voidfire"))
+		dread_desc = String(player_reference.get_trial_power_card_desc("dread_resonance"))
+		vow_desc = String(player_reference.get_trial_power_card_desc("vow_shatter"))
+		eclipse_desc = String(player_reference.get_trial_power_card_desc("eclipse_mark"))
+		fracture_desc = String(player_reference.get_trial_power_card_desc("fracture_field"))
 
 	return [
 		Power.new("razor_wind", "Razor Wind", razor_desc, POWER_TYPE_TRIAL, get_power_stack_limit("razor_wind"), get_power_balance("razor_wind")).to_dict(),
@@ -347,6 +454,11 @@ func get_trial_power_pool(player_reference: Node = null) -> Array[Dictionary]:
 		Power.new("static_wake", "Static Wake", static_desc, POWER_TYPE_TRIAL, get_power_stack_limit("static_wake"), get_power_balance("static_wake")).to_dict(),
 		Power.new("storm_crown", "Storm Crown", storm_desc, POWER_TYPE_TRIAL, get_power_stack_limit("storm_crown"), get_power_balance("storm_crown")).to_dict(),
 		Power.new("wraithstep", "Wraithstep", wraith_desc, POWER_TYPE_TRIAL, get_power_stack_limit("wraithstep"), get_power_balance("wraithstep")).to_dict(),
+		Power.new("voidfire", "Voidfire", voidfire_desc, POWER_TYPE_TRIAL, get_power_stack_limit("voidfire"), get_power_balance("voidfire")).to_dict(),
+		Power.new("dread_resonance", "Dread Resonance", dread_desc, POWER_TYPE_TRIAL, get_power_stack_limit("dread_resonance"), get_power_balance("dread_resonance")).to_dict(),
+		Power.new("vow_shatter", "Vow Shatter", vow_desc, POWER_TYPE_TRIAL, get_power_stack_limit("vow_shatter"), get_power_balance("vow_shatter")).to_dict(),
+		Power.new("eclipse_mark", "Eclipse Mark", eclipse_desc, POWER_TYPE_TRIAL, get_power_stack_limit("eclipse_mark"), get_power_balance("eclipse_mark")).to_dict(),
+		Power.new("fracture_field", "Fracture Field", fracture_desc, POWER_TYPE_TRIAL, get_power_stack_limit("fracture_field"), get_power_balance("fracture_field")).to_dict(),
 	]
 
 
@@ -485,6 +597,10 @@ func _get_upgrade_fallback_description(upgrade_id: String) -> String:
 			return "Dash speed +%.0f." % [float(data.get("add", 0.0))]
 		"heartstone":
 			return "Max health +%d." % [int(data.get("add", 0))]
+		"crushed_vow":
+			return "After being hit, next attack deals +%d damage (consumes on hit)." % [int(data.get("add", 0))]
+		"severing_edge":
+			return "Attacks against enemies below 35%% HP deal +%d damage." % [int(data.get("add", 0))]
 		_:
 			return "Upgrade your stats."
 
@@ -511,5 +627,15 @@ func _get_trial_fallback_description(power_id: String) -> String:
 			return "%sEvery few hits unleash chain lightning that deals % of hit damage." % [_damage_kind_bracket(power_id)]
 		"wraithstep":
 			return "%sDash marks enemies. Marked hits deal extra hit damage and trigger splash chains that deal a percentage of hit damage." % [_damage_kind_bracket(power_id)]
+		"voidfire":
+			return "Build void heat. Danger Zone boosts hit damage. Max heat detonates, seals attacks, slows movement, and disables dash."
+		"dread_resonance":
+			return "%sChain hits on one enemy build resonance. Swapping targets resets it." % [_damage_kind_bracket(power_id)]
+		"vow_shatter":
+			return "%sTaking a hit primes a vow. Next attack multiplies damage and consumes it. Must be hit again to reload." % [_damage_kind_bracket(power_id)]
+		"eclipse_mark":
+			return "%sKilling an enemy marks all nearby enemies. First hit on each marked enemy deals amplified damage. Marks expire quickly." % [_damage_kind_bracket(power_id)]
+		"fracture_field":
+			return "%sKilling an enemy detonates an implosion at their location, dealing a percentage of hit damage in a radius with a brief slow." % [_damage_kind_bracket(power_id)]
 		_:
 			return "Enhances this power."

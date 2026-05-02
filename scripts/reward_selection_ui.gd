@@ -348,7 +348,8 @@ func _refresh_boon_ui(player: Node2D) -> void:
 			icon_node.modulate = Color(icon_color.r, icon_color.g, icon_color.b, 1.0)
 			icon_node.visible = icon_texture != null
 			var boon_desc := String(boon.get("desc", boon.get("description", "")))
-			label.text = "[b][color=#fffef0]%s[/color][/b]\n%s" % [String(boon.get("name", "Unknown")), boon_desc]
+			var mutator_name := _choice_display_name(boon)
+			label.text = "[b][color=#fffef0]%s[/color][/b]\n%s" % [mutator_name, boon_desc]
 		else:
 			icon_node.position = BOON_ICON_POS
 			icon_node.size = BOON_ICON_SIZE
@@ -357,7 +358,8 @@ func _refresh_boon_ui(player: Node2D) -> void:
 			icon_node.texture = null
 			icon_node.visible = false
 			var boon_desc := String(boon.get("desc", boon.get("description", "")))
-			label.text = "[b][color=#ddeeff]%d. %s[/color][/b]\n%s" % [i + 1, String(boon.get("name", "Unknown")), boon_desc]
+			var choice_name := _choice_display_name(boon)
+			label.text = "[b][color=#ddeeff]%d. %s[/color][/b]\n%s" % [i + 1, choice_name, boon_desc]
 		label.modulate = Color(1.0, 1.0, 1.0, 0.95)
 
 	_update_boon_reveal_visuals()
@@ -492,6 +494,27 @@ func _get_stack_count_for_choice(choice: Dictionary, player: Node2D) -> int:
 	if reward_selection_mode == ENUMS.RewardMode.ARCANA:
 		return int(player.get_trial_power_stack_count(id))
 	return int(player.get_upgrade_stack_count(id))
+
+func _choice_display_name(choice: Dictionary) -> String:
+	var raw_name := String(choice.get("name", "")).strip_edges()
+	if not raw_name.is_empty() and raw_name.to_lower() != "unknown":
+		return raw_name
+	var id := String(choice.get("id", "")).strip_edges().to_lower()
+	if id.is_empty():
+		return "Power"
+	match id:
+		"hunters_snare":
+			return "Hunter's Snare"
+		"wraithstep":
+			return "Wraithstep"
+		_:
+			var words := id.split("_", false)
+			var result := ""
+			for i in range(words.size()):
+				if i > 0:
+					result += " "
+				result += String(words[i]).capitalize()
+			return result.strip_edges()
 
 func _format_stack_progress_icons(stack_count: int, stack_limit: int) -> String:
 	if stack_limit <= 0:

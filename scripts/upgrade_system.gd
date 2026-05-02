@@ -21,7 +21,12 @@ var trial_power_stacks: Dictionary = {
 	"reaper_step": 0,
 	"static_wake": 0,
 	"storm_crown": 0,
-	"wraithstep": 0
+	"wraithstep": 0,
+	"voidfire": 0,
+	"dread_resonance": 0,
+	"vow_shatter": 0,
+	"eclipse_mark": 0,
+	"fracture_field": 0
 }
 
 const UPGRADE_IDS := {
@@ -34,7 +39,9 @@ const UPGRADE_IDS := {
 	"iron_skin": true,
 	"battle_trance": true,
 	"surge_step": true,
-	"heartstone": true
+	"heartstone": true,
+	"crushed_vow": true,
+	"severing_edge": true
 }
 
 const TRIAL_POWER_IDS := {
@@ -47,7 +54,12 @@ const TRIAL_POWER_IDS := {
 	"reaper_step": true,
 	"static_wake": true,
 	"storm_crown": true,
-	"wraithstep": true
+	"wraithstep": true,
+	"voidfire": true,
+	"dread_resonance": true,
+	"vow_shatter": true,
+	"eclipse_mark": true,
+	"fracture_field": true
 }
 
 
@@ -91,6 +103,10 @@ func apply_upgrade(upgrade_id: String) -> bool:
 		"iron_skin":
 			player_reference.set("iron_skin_armor", int(preview.get("next", int(player_reference.get("iron_skin_armor")))))
 			player_reference.set("iron_skin_stacks", int(player_reference.get("iron_skin_stacks")) + 1)
+		"crushed_vow":
+			player_reference.set("crushed_vow_bonus_damage", int(preview.get("next", int(player_reference.get("crushed_vow_bonus_damage")))))
+		"severing_edge":
+			player_reference.set("severing_edge_bonus_damage", int(preview.get("next", int(player_reference.get("severing_edge_bonus_damage")))))
 		_:
 			return false
 	return true
@@ -181,6 +197,34 @@ func apply_trial_power(power_id: String) -> bool:
 			player_reference.set("wraithstep_mark_bonus_damage", int(next_values.get("bonus_damage", player_reference.get("wraithstep_mark_bonus_damage"))))
 			player_reference.set("wraithstep_mark_splash_radius", float(next_values.get("splash_radius", player_reference.get("wraithstep_mark_splash_radius"))))
 			player_reference.set("wraithstep_mark_splash_ratio", float(next_values.get("splash_ratio", player_reference.get("wraithstep_mark_splash_ratio"))))
+		"voidfire":
+			player_reference.set("reward_voidfire", true)
+			player_reference.set("voidfire_stacks", next_stack)
+			player_reference.set("voidfire_danger_zone_amp", float(next_values.get("danger_zone_amp", player_reference.get("voidfire_danger_zone_amp"))))
+			player_reference.set("voidfire_detonate_ratio", float(next_values.get("detonate_ratio", player_reference.get("voidfire_detonate_ratio"))))
+			player_reference.set("voidfire_detonate_radius", float(next_values.get("detonate_radius", player_reference.get("voidfire_detonate_radius"))))
+			player_reference.set("voidfire_lockout_duration", float(next_values.get("lockout_duration", player_reference.get("voidfire_lockout_duration"))))
+			player_reference.set("voidfire_overheat_move_mult", float(next_values.get("overheat_move_mult", player_reference.get("voidfire_overheat_move_mult"))))
+		"dread_resonance":
+			player_reference.set("reward_dread_resonance", true)
+			player_reference.set("dread_resonance_stacks", next_stack)
+			player_reference.set("dread_resonance_bonus_per_stack", int(next_values.get("bonus_per_stack", player_reference.get("dread_resonance_bonus_per_stack"))))
+		"vow_shatter":
+			player_reference.set("reward_vow_shatter", true)
+			player_reference.set("vow_shatter_stacks", next_stack)
+			player_reference.set("vow_shatter_damage_mult", float(next_values.get("damage_mult", player_reference.get("vow_shatter_damage_mult"))))
+		"eclipse_mark":
+			player_reference.set("reward_eclipse_mark", true)
+			player_reference.set("eclipse_mark_stacks", next_stack)
+			player_reference.set("eclipse_mark_radius", float(next_values.get("radius", player_reference.get("eclipse_mark_radius"))))
+			player_reference.set("eclipse_mark_duration", float(next_values.get("mark_duration", player_reference.get("eclipse_mark_duration"))))
+			player_reference.set("eclipse_mark_bonus_ratio", float(next_values.get("bonus_ratio", player_reference.get("eclipse_mark_bonus_ratio"))))
+		"fracture_field":
+			player_reference.set("reward_fracture_field", true)
+			player_reference.set("fracture_field_stacks", next_stack)
+			player_reference.set("fracture_field_radius", float(next_values.get("radius", player_reference.get("fracture_field_radius"))))
+			player_reference.set("fracture_field_damage_ratio", float(next_values.get("damage_ratio", player_reference.get("fracture_field_damage_ratio"))))
+			player_reference.set("fracture_field_slow_duration", float(next_values.get("slow_duration", player_reference.get("fracture_field_slow_duration"))))
 		_:
 			return false
 	return true
@@ -245,9 +289,27 @@ func get_trial_power_stack_count(power_id: String) -> int:
 				return int(player_reference.get("storm_crown_stacks"))
 			"wraithstep":
 				return int(player_reference.get("wraithstep_stacks"))
+			"voidfire":
+				return int(player_reference.get("voidfire_stacks"))
+			"dread_resonance":
+				return int(player_reference.get("dread_resonance_stacks"))
+			"vow_shatter":
+				return int(player_reference.get("vow_shatter_stacks"))
+			"eclipse_mark":
+				return int(player_reference.get("eclipse_mark_stacks"))
+			"fracture_field":
+				return int(player_reference.get("fracture_field_stacks"))
 	if trial_power_stacks.has(id):
 		return trial_power_stacks[id]
 	return 0
+
+
+func get_trial_runtime_values(power_id: String) -> Dictionary:
+	var id := power_id.strip_edges().to_lower()
+	if id.is_empty():
+		return {}
+	var stack_count := get_trial_power_stack_count(id)
+	return _build_trial_values(id, stack_count)
 
 
 func _get_power_balance_data(power_id: String) -> Dictionary:
@@ -382,6 +444,34 @@ func _build_trial_values(power_id: String, stack_count: int) -> Dictionary:
 				"splash_radius": float(data.get("splash_radius_base", 0.0)) + float(data.get("splash_radius_per_stack", 0.0)) * float(stack_count),
 				"splash_ratio": minf(float(data.get("splash_ratio_cap", 1.0)), float(data.get("splash_ratio_base", 0.0)) + float(data.get("splash_ratio_per_stack", 0.0)) * float(stack_count))
 			}
+		"voidfire":
+			return {
+				"danger_zone_amp": float(data.get("danger_zone_amp_base", 0.0)) + float(data.get("danger_zone_amp_per_stack", 0.0)) * float(stack_count),
+				"detonate_ratio": float(data.get("detonate_ratio_base", 0.0)) + float(data.get("detonate_ratio_per_stack", 0.0)) * float(stack_count),
+				"detonate_radius": float(data.get("detonate_radius_base", 0.0)) + float(data.get("detonate_radius_per_stack", 0.0)) * float(stack_count),
+				"lockout_duration": maxf(float(data.get("lockout_min", 0.0)), float(data.get("lockout_base", 0.0)) + float(data.get("lockout_per_stack", 0.0)) * float(stack_count)),
+				"overheat_move_mult": float(data.get("overheat_move_mult", 1.0))
+			}
+		"dread_resonance":
+			return {
+				"bonus_per_stack": int(data.get("bonus_per_resonance_base", 0)) + stack_count * int(data.get("bonus_per_resonance_per_stack", 0))
+			}
+		"vow_shatter":
+			return {
+				"damage_mult": float(data.get("damage_mult_base", 1.0)) + float(data.get("damage_mult_per_stack", 0.0)) * float(stack_count)
+			}
+		"eclipse_mark":
+			return {
+				"radius": float(data.get("radius_base", 0.0)) + float(data.get("radius_per_stack", 0.0)) * float(stack_count),
+				"mark_duration": float(data.get("mark_duration_base", 0.0)) + float(data.get("mark_duration_per_stack", 0.0)) * float(stack_count),
+				"bonus_ratio": float(data.get("bonus_ratio_base", 0.0)) + float(data.get("bonus_ratio_per_stack", 0.0)) * float(stack_count)
+			}
+		"fracture_field":
+			return {
+				"radius": float(data.get("radius_base", 0.0)) + float(data.get("radius_per_stack", 0.0)) * float(stack_count),
+				"damage_ratio": float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count),
+				"slow_duration": float(data.get("slow_duration_base", 0.0)) + float(data.get("slow_duration_per_stack", 0.0)) * float(stack_count)
+			}
 		_:
 			return {}
 
@@ -511,6 +601,58 @@ func get_trial_power_card_description(power_id: String) -> String:
 				return "[color=#9ab8d8]Dash marks enemies. Marked hits deal extra hit damage and chain splashes nearby.[/color]\n[color=#9ab8d8]Initial:[/color] mark [color=#7de882]%.2fs[/color], marked-hit damage [color=#7de882]+%d[/color], cleave [color=#7de882]%.0f%%[/color]." % [next_mark_duration, next_bonus_damage, next_splash_ratio * 100.0]
 			var wraith_prefix := _damage_kind_prefix("wraithstep")
 			return "%s[color=#c8daf0]Wraithstep:[/color] mark [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color], marked-hit damage [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color], cleave [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color] of hit." % [wraith_prefix, cur_mark_duration, next_mark_duration, cur_bonus_damage, next_bonus_damage, cur_splash_ratio * 100.0, next_splash_ratio * 100.0]
+		"voidfire":
+			if next_values.is_empty():
+				return "[color=#9ab8d8]Enhances this power.[/color]"
+			var next_amp := float(next_values.get("danger_zone_amp", 0.0))
+			var next_det_ratio := float(next_values.get("detonate_ratio", 0.0))
+			var next_lockout := float(next_values.get("lockout_duration", 0.0))
+			var cur_amp := float(player_reference.get("voidfire_danger_zone_amp"))
+			var cur_det_ratio := float(player_reference.get("voidfire_detonate_ratio"))
+			var cur_lockout := float(player_reference.get("voidfire_lockout_duration"))
+			if current_stack <= 0:
+				return "[color=#9ab8d8]Build void heat. Danger Zone boosts hit damage. Max heat detonates, seals attacks, slows movement, and disables dash.[/color]\n[color=#9ab8d8]Initial:[/color] Danger Zone amp [color=#7de882]+%.0f%%[/color], detonate [color=#7de882]%.0f%%[/color] of hit, overheat lock [color=#7de882]%.2fs[/color]." % [next_amp * 100.0, next_det_ratio * 100.0, next_lockout]
+			return "[color=#c8daf0]Voidfire:[/color] Danger Zone amp [color=#e8c96a]+%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]+%.0f%%[/color], detonate [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color] of hit, overheat lock [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_amp * 100.0, next_amp * 100.0, cur_det_ratio * 100.0, next_det_ratio * 100.0, cur_lockout, next_lockout]
+		"dread_resonance":
+			if next_values.is_empty():
+				return "[color=#9ab8d8]Enhances this power.[/color]"
+			var next_bonus := int(next_values.get("bonus_per_stack", 0))
+			var cur_bonus_dr := int(player_reference.get("dread_resonance_bonus_per_stack"))
+			if current_stack <= 0:
+				return "[color=#9ab8d8]Chain hits on one enemy build resonance. Swapping targets resets it.[/color]\n[color=#9ab8d8]Initial:[/color] bonus per resonance stack [color=#7de882]+%d[/color]." % [next_bonus]
+			return "[color=#c8daf0]Dread Resonance:[/color] bonus per resonance stack [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]." % [cur_bonus_dr, next_bonus]
+		"vow_shatter":
+			if next_values.is_empty():
+				return "[color=#9ab8d8]Enhances this power.[/color]"
+			var next_mult_vs := float(next_values.get("damage_mult", 1.0))
+			var cur_mult_vs := float(player_reference.get("vow_shatter_damage_mult"))
+			if current_stack <= 0:
+				return "[color=#9ab8d8]Taking a hit primes a vow. Your next attack multiplies damage and consumes the vow.[/color]\n[color=#9ab8d8]Initial:[/color] primed hit damage [color=#7de882]x%.2f[/color]." % [next_mult_vs]
+			return "[color=#c8daf0]Vow Shatter:[/color] primed hit damage [color=#e8c96a]x%.2f[/color] [color=#8899aa]->[/color] [color=#7de882]x%.2f[/color]." % [cur_mult_vs, next_mult_vs]
+		"eclipse_mark":
+			if next_values.is_empty():
+				return "[color=#9ab8d8]Enhances this power.[/color]"
+			var next_radius_em := float(next_values.get("radius", 0.0))
+			var next_dur_em := float(next_values.get("mark_duration", 0.0))
+			var next_ratio_em := float(next_values.get("bonus_ratio", 0.0))
+			var cur_radius_em := float(player_reference.get("eclipse_mark_radius"))
+			var cur_dur_em := float(player_reference.get("eclipse_mark_duration"))
+			var cur_ratio_em := float(player_reference.get("eclipse_mark_bonus_ratio"))
+			if current_stack <= 0:
+				return "[color=#9ab8d8]Kills mark all nearby enemies. First hit on each marked enemy deals amplified damage. Marks expire quickly.[/color]\n[color=#9ab8d8]Initial:[/color] mark radius [color=#7de882]%.0f[/color], mark duration [color=#7de882]%.2fs[/color], bonus [color=#7de882]%.0f%%[/color] of hit." % [next_radius_em, next_dur_em, next_ratio_em * 100.0]
+			return "[color=#c8daf0]Eclipse Mark:[/color] radius [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color], duration [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color], bonus [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color] of hit." % [cur_radius_em, next_radius_em, cur_dur_em, next_dur_em, cur_ratio_em * 100.0, next_ratio_em * 100.0]
+		"fracture_field":
+			if next_values.is_empty():
+				return "[color=#9ab8d8]Enhances this power.[/color]"
+			var next_radius_ff := float(next_values.get("radius", 0.0))
+			var next_ratio_ff := float(next_values.get("damage_ratio", 0.0))
+			var next_slow_ff := float(next_values.get("slow_duration", 0.0))
+			var cur_radius_ff := float(player_reference.get("fracture_field_radius"))
+			var cur_ratio_ff := float(player_reference.get("fracture_field_damage_ratio"))
+			var cur_slow_ff := float(player_reference.get("fracture_field_slow_duration"))
+			if current_stack <= 0:
+				return "[color=#9ab8d8]Killing an enemy detonates an implosion at their location, dealing damage in a radius with a brief slow.[/color]\n[color=#9ab8d8]Initial:[/color] radius [color=#7de882]%.0f[/color], damage [color=#7de882]%.0f%%[/color] of hit, slow [color=#7de882]%.2fs[/color]." % [next_radius_ff, next_ratio_ff * 100.0, next_slow_ff]
+			return "[color=#c8daf0]Fracture Field:[/color] radius [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color], damage [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color] of hit, slow [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_radius_ff, next_radius_ff, cur_ratio_ff * 100.0, next_ratio_ff * 100.0, cur_slow_ff, next_slow_ff]
 		_:
 			return "[color=#9ab8d8]Enhances this power.[/color]"
 
@@ -560,6 +702,10 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 			var cur_max := int(cur_val)
 			var next_max := int(next_val)
 			return "[color=#c8daf0]Max HP:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [cur_max, next_max]
+		"crushed_vow":
+			return "[color=#c8daf0]After being hit, next attack bonus damage:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
+		"severing_edge":
+			return "[color=#c8daf0]Bonus damage vs enemies below 35%% HP:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
 		_:
 			return "[color=#c8daf0]Upgrade your stats.[/color]"
 

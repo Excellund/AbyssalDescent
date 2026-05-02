@@ -1642,7 +1642,8 @@ func _begin_configured_boss_room(is_first_boss: bool, room_size: Vector2, room_l
 	boss.set("arena_size", current_room_size)
 	_apply_boss_difficulty_scaling(boss)
 	if boss.has_signal("died"):
-		boss.died.connect(_on_room_enemy_died)
+		var captured_boss := boss
+		boss.died.connect(func(): _on_room_enemy_died(captured_boss.global_position if is_instance_valid(captured_boss) else Vector2.ZERO))
 	_start_encounter_intro_grace()
 
 func _begin_boss_room() -> void:
@@ -1681,7 +1682,7 @@ func _play_room_music(is_boss_room: bool, instant: bool = false, fade_duration: 
 		return
 	music_system.play_room_music(is_boss_room, instant, fade_duration)
 
-func _on_room_enemy_died() -> void:
+func _on_room_enemy_died(kill_pos: Vector2 = Vector2.ZERO) -> void:
 	active_room_enemy_count = maxi(0, active_room_enemy_count - 1)
 	if active_objective_kind == "last_stand":
 		objective_kills += 1
@@ -1693,7 +1694,7 @@ func _on_room_enemy_died() -> void:
 	if active_objective_kind == "cut_the_signal" and objective_overtime and objective_spawn_timer > 0.2:
 		objective_spawn_timer = maxf(0.2, objective_spawn_timer - 0.08)
 	if is_instance_valid(player):
-		player.notify_enemy_killed()
+		player.notify_enemy_killed(kill_pos)
 
 func _clear_all_enemies() -> void:
 	if is_instance_valid(enemy_spawner):

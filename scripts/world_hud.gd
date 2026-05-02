@@ -912,6 +912,10 @@ func _get_power_display_name(power_id: String) -> String:
 			return "Blink Dash"
 		"iron_skin":
 			return "Iron Skin"
+		"battle_trance":
+			return "Battle Trance"
+		"surge_step":
+			return "Surge Step"
 		"backstab":
 			return "Backstab"
 		"executioner":
@@ -936,6 +940,10 @@ func _get_power_display_name(power_id: String) -> String:
 			return "Counter Strike"
 		"heartstone":
 			return "Heartstone"
+		"crushed_vow":
+			return "Crushed Vow"
+		"severing_edge":
+			return "Severing Edge"
 		# Trial Powers (Arcana)
 		"razor_wind":
 			return "Razor Wind"
@@ -957,6 +965,16 @@ func _get_power_display_name(power_id: String) -> String:
 			return "Storm Crown"
 		"wraithstep":
 			return "Wraithstep"
+		"voidfire":
+			return "Voidfire"
+		"dread_resonance":
+			return "Dread Resonance"
+		"vow_shatter":
+			return "Vow Shatter"
+		"eclipse_mark":
+			return "Eclipse Mark"
+		"fracture_field":
+			return "Fracture Field"
 		_:
 			return "Unknown"
 

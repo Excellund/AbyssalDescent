@@ -210,7 +210,8 @@ func _spawn_enemy_in_current_room(enemy_script: Script, min_player_distance: flo
 	if enemy.get("arena_size") != null:
 		enemy.set("arena_size", current_room_size)
 	if enemy.has_signal("died") and on_enemy_died.is_valid():
-		enemy.died.connect(on_enemy_died)
+		var captured := enemy
+		enemy.died.connect(func(): on_enemy_died.call(captured.global_position if is_instance_valid(captured) else Vector2.ZERO))
 	return enemy
 
 func _enemy_script_key(enemy_script: Script) -> String:

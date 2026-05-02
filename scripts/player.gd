@@ -74,7 +74,32 @@ const RUN_SNAPSHOT_PROPERTIES := [
 	"wraithstep_dash_mark_radius",
 	"wraithstep_mark_bonus_damage",
 	"wraithstep_mark_splash_radius",
-	"wraithstep_mark_splash_ratio"
+	"wraithstep_mark_splash_ratio",
+	"reward_voidfire",
+	"reward_dread_resonance",
+	"reward_vow_shatter",
+	"reward_eclipse_mark",
+	"reward_fracture_field",
+	"voidfire_stacks",
+	"dread_resonance_stacks",
+	"vow_shatter_stacks",
+	"eclipse_mark_stacks",
+	"fracture_field_stacks",
+	"voidfire_danger_zone_amp",
+	"voidfire_detonate_ratio",
+	"voidfire_detonate_radius",
+	"voidfire_lockout_duration",
+	"void_heat",
+	"dread_resonance_bonus_per_stack",
+	"vow_shatter_damage_mult",
+	"eclipse_mark_radius",
+	"eclipse_mark_duration",
+	"eclipse_mark_bonus_ratio",
+	"fracture_field_radius",
+	"fracture_field_damage_ratio",
+	"fracture_field_slow_duration",
+	"crushed_vow_bonus_damage",
+	"severing_edge_bonus_damage"
 ]
 
 signal health_changed(current_health: int, max_health: int)
@@ -199,6 +224,50 @@ var wraithstep_marked_enemy_expiry: Dictionary = {}
 var polar_shift_dash_lockout_left: float = 0.0
 var polar_shift_dash_lockout_duration: float = 0.0
 
+# Voidfire archetype trial powers
+var reward_voidfire: bool = false
+var reward_dread_resonance: bool = false
+var reward_vow_shatter: bool = false
+var reward_eclipse_mark: bool = false
+var reward_fracture_field: bool = false
+var voidfire_stacks: int = 0
+var dread_resonance_stacks: int = 0
+var vow_shatter_stacks: int = 0
+var eclipse_mark_stacks: int = 0
+var fracture_field_stacks: int = 0
+# Voidfire: heat-based overheat mechanic
+var voidfire_danger_zone_amp: float = 0.20
+var voidfire_detonate_ratio: float = 0.80
+var voidfire_detonate_radius: float = 80.0
+var voidfire_lockout_duration: float = 5.40
+var voidfire_overheat_move_mult: float = 0.65
+var void_heat: float = 0.0
+var void_heat_cap: float = 100.0
+var void_heat_decay_rate: float = 8.0
+var _voidfire_last_hit_time: float = -999.0
+var _voidfire_lockout_left: float = 0.0
+# Dread Resonance: same-target streak bonus
+var dread_resonance_bonus_per_stack: int = 6
+var dread_resonance_max_stacks: int = 3
+var _dread_resonance_target_id: int = -1
+var _dread_resonance_target_stacks: int = 0
+# Vow Shatter: primed multiplier after being hit
+var vow_shatter_damage_mult: float = 1.8
+var _vow_shatter_primed: bool = false
+# Eclipse Mark: on-kill radial mark
+var eclipse_mark_radius: float = 110.0
+var eclipse_mark_duration: float = 1.4
+var eclipse_mark_bonus_ratio: float = 0.65
+var _eclipse_marked_enemies: Dictionary = {}
+# Fracture Field: on-kill implosion AoE
+var fracture_field_radius: float = 80.0
+var fracture_field_damage_ratio: float = 0.50
+var fracture_field_slow_duration: float = 0.6
+# New boons
+var crushed_vow_bonus_damage: int = 0
+var _crushed_vow_primed: bool = false
+var severing_edge_bonus_damage: int = 0
+
 # Objective mutators
 var active_objective_mutators: Array[Dictionary] = []
 var objective_mutator_damage_resist: float = 0.0
@@ -271,6 +340,9 @@ func _physics_process(delta: float) -> void:
 	_update_storm_crown_discharge(delta)
 	_update_combo_relay_state(delta)
 	_update_iron_retort(delta)
+	_update_voidfire_heat(delta)
+	_update_voidfire_lockout(delta)
+	_update_eclipse_marks()
 	_try_start_dash(direction)
 	_try_attack_input()
 
@@ -364,6 +436,8 @@ func _try_consume_queued_attack() -> void:
 
 func _try_execute_attack(attack_direction: Vector2) -> void:
 	if _is_attack_locked():
+		return
+	if _voidfire_lockout_left > 0.0:
 		return
 	if attack_cooldown_left > 0.0:
 		return
@@ -565,7 +639,10 @@ func _update_ground_movement(direction: Vector2, delta: float) -> void:
 		trance_ratio = clampf(trance_ratio, 0.0, 1.5)
 		trance_speed_bonus = max_speed * trance_ratio
 	var combo_relay_speed_bonus := max_speed * combo_relay_speed_per_stack * float(combo_relay_stacks)
-	var target_velocity := direction * (max_speed + trance_speed_bonus + combo_relay_speed_bonus)
+	var overheat_move_mult := 1.0
+	if reward_voidfire and _voidfire_lockout_left > 0.0:
+		overheat_move_mult = clampf(voidfire_overheat_move_mult, 0.2, 1.0)
+	var target_velocity := direction * (max_speed + trance_speed_bonus + combo_relay_speed_bonus) * overheat_move_mult
 	var applied_acceleration := _get_applied_acceleration(target_velocity)
 	var move_rate := applied_acceleration if direction != Vector2.ZERO else deceleration
 	velocity = velocity.move_toward(target_velocity, move_rate * delta)
@@ -660,6 +737,10 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 			if player_feedback != null and player_feedback.has_method("play_iron_retort_window_open"):
 				player_feedback.play_iron_retort_window_open(global_position)
 			queue_redraw()
+		if reward_vow_shatter:
+			_vow_shatter_primed = true
+		if crushed_vow_bonus_damage > 0:
+			_crushed_vow_primed = true
 
 func get_last_damage_event() -> Dictionary:
 	return last_damage_event.duplicate(true)
@@ -804,6 +885,13 @@ func apply_run_snapshot(snapshot: Dictionary) -> void:
 	wraithstep_marked_enemy_expiry.clear()
 	combo_relay_stacks = 0
 	combo_relay_stack_timer = 0.0
+	_eclipse_marked_enemies.clear()
+	_dread_resonance_target_id = -1
+	_dread_resonance_target_stacks = 0
+	void_heat = 0.0
+	_voidfire_lockout_left = 0.0
+	_vow_shatter_primed = false
+	_crushed_vow_primed = false
 	_set_dash_phasing(false)
 	velocity = Vector2.ZERO
 	queue_redraw()
@@ -956,7 +1044,12 @@ func apply_power_for_test(power_id: String) -> bool:
 		"reaper_step": true,
 		"static_wake": true,
 		"storm_crown": true,
-		"wraithstep": true
+		"wraithstep": true,
+		"voidfire": true,
+		"dread_resonance": true,
+		"vow_shatter": true,
+		"eclipse_mark": true,
+		"fracture_field": true
 	}
 	if hard_ids.has(id):
 		apply_trial_power(id)
@@ -972,7 +1065,9 @@ func apply_power_for_test(power_id: String) -> bool:
 		"iron_skin": true,
 		"battle_trance": true,
 		"surge_step": true,
-		"heartstone": true
+		"heartstone": true,
+		"crushed_vow": true,
+		"severing_edge": true
 	}
 	if boon_ids.has(id):
 		apply_upgrade(id)
@@ -1008,6 +1103,10 @@ func _build_damage_breakdown(base_scaling_damage: int, enemy_node: Object, hit_p
 	var flat_bonus_damage := _get_hunters_snare_bonus_damage(enemy_node)
 	flat_bonus_damage += _get_first_strike_bonus_damage(enemy_node)
 	flat_bonus_damage += _consume_wraithstep_mark(enemy_node, hit_position, base_scaling_damage)
+	flat_bonus_damage += _get_crushed_vow_bonus()
+	flat_bonus_damage += _get_severing_edge_bonus(enemy_node)
+	flat_bonus_damage += _get_dread_resonance_bonus(enemy_node)
+	flat_bonus_damage += _consume_eclipse_mark_bonus(enemy_node, base_scaling_damage)
 	var breakdown := {
 		"source": source,
 		"base_scaling_damage": base_scaling_damage,
@@ -1021,6 +1120,17 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 	var did_hit := false
 	var strike_damage := int(melee_context.get("damage", damage))
 	strike_damage = _apply_objective_mutator_damage_mult(strike_damage)
+	# Voidfire: apply Danger Zone amp to base damage before breakdowns
+	if reward_voidfire and _voidfire_lockout_left <= 0.0:
+		var heat_ratio := void_heat / maxf(1.0, void_heat_cap)
+		if heat_ratio >= 0.7:
+			strike_damage = int(round(float(strike_damage) * (1.0 + voidfire_danger_zone_amp)))
+	# Vow Shatter: apply multiplier if primed
+	if _vow_shatter_primed:
+		strike_damage = int(round(float(strike_damage) * vow_shatter_damage_mult))
+		_vow_shatter_primed = false
+		if player_feedback != null:
+			player_feedback.play_world_ring(global_position, 30.0, Color(0.46, 0.62, 0.82, 0.88), 0.18)
 	var strike_range := float(melee_context.get("range", attack_range))
 	var retort_active: bool = passive_iron_retort and iron_retort_window_left > 0.0
 	if retort_active:
@@ -1068,6 +1178,8 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		if reward_rupture_wave and not rupture_triggered_enemy_ids.has(enemy_id):
 			rupture_triggered_enemy_ids[enemy_id] = true
 			_apply_rupture_wave(enemy_body.global_position, final_strike_damage, rupture_hit_enemy_ids)
+		if reward_dread_resonance:
+			_update_dread_resonance_target(enemy_id)
 		did_hit = true
 
 	if reward_razor_wind:
@@ -1078,6 +1190,10 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		did_hit = _apply_razor_wind(attack_direction, wind_context, rupture_triggered_enemy_ids, rupture_hit_enemy_ids) or did_hit
 	if did_hit:
 		_trigger_battle_trance()
+		# Voidfire: gain heat on any hit
+		if reward_voidfire and _voidfire_lockout_left <= 0.0:
+			_voidfire_last_hit_time = Time.get_ticks_msec() / 1000.0
+			_gain_void_heat(12.0)
 	if retort_active and player_feedback != null:
 		if did_hit and player_feedback.has_method("play_iron_retort_consume"):
 			player_feedback.play_iron_retort_consume(global_position, retort_impact_position)
@@ -1163,6 +1279,11 @@ func clear_lingering_combat_effects() -> void:
 	storm_crown_discharge_flash_left = 0.0
 	void_dash_reset_pulse_left = 0.0
 	execution_edge_proc_display_left = 0.0
+	_eclipse_marked_enemies.clear()
+	_dread_resonance_target_id = -1
+	_dread_resonance_target_stacks = 0
+	_vow_shatter_primed = false
+	_crushed_vow_primed = false
 	queue_redraw()
 
 func _apply_rupture_wave(epicenter: Vector2, source_damage: int, rupture_hit_enemy_ids: Dictionary = {}) -> void:
@@ -1400,8 +1521,15 @@ func _update_static_wake_trails(delta: float) -> void:
 	queue_redraw()
 
 
-func notify_enemy_killed() -> void:
+func notify_enemy_killed(kill_position: Vector2 = Vector2.ZERO) -> void:
 	_trigger_combo_relay_kill()
+	if reward_eclipse_mark:
+		_apply_eclipse_mark(kill_position)
+	if reward_fracture_field:
+		_apply_fracture_field(kill_position)
+	if reward_dread_resonance:
+		_dread_resonance_target_id = -1
+		_dread_resonance_target_stacks = 0
 	if passive_death_tempo and dash_cooldown_left > 0.0:
 		dash_cooldown_left = 0.0
 		if player_feedback != null:
@@ -1636,6 +1764,159 @@ func _update_iron_retort(delta: float) -> void:
 	iron_retort_window_left = maxf(0.0, iron_retort_window_left - delta)
 	queue_redraw()
 
+# --- Voidfire ---
+
+func _gain_void_heat(amount: float) -> void:
+	void_heat = minf(void_heat_cap, void_heat + amount)
+	if void_heat >= void_heat_cap:
+		_trigger_voidfire_detonation()
+
+func _trigger_voidfire_detonation() -> void:
+	var det_damage := maxi(1, int(round(float(damage) * voidfire_detonate_ratio)))
+	det_damage = _apply_objective_mutator_damage_mult(det_damage)
+	var overheat_lockout := voidfire_lockout_duration
+	if is_instance_valid(upgrade_system) and upgrade_system.has_method("get_trial_runtime_values"):
+		var voidfire_values: Dictionary = upgrade_system.get_trial_runtime_values("voidfire")
+		overheat_lockout = float(voidfire_values.get("lockout_duration", overheat_lockout))
+		voidfire_lockout_duration = overheat_lockout
+	if player_feedback != null:
+		player_feedback.play_world_ring(global_position, voidfire_detonate_radius, Color(0.28, 0.96, 1.0, 0.90), 0.28)
+		player_feedback.play_world_ring(global_position, voidfire_detonate_radius * 0.6, Color(0.58, 0.78, 1.0, 0.74), 0.18)
+		player_feedback.play_world_ring(global_position, voidfire_detonate_radius * 1.2, Color(0.34, 0.46, 0.98, 0.32), 0.34)
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if not DAMAGEABLE.can_take_damage(enemy_node):
+			continue
+		var enemy_body := enemy_node as Node2D
+		if enemy_body.global_position.distance_to(global_position) > voidfire_detonate_radius:
+			continue
+		DAMAGEABLE.apply_damage(enemy_node, det_damage, {"is_ground_attack": true, "attack_type": "voidfire_detonate"})
+	void_heat = 0.0
+	_voidfire_lockout_left = overheat_lockout
+	# Overheat should lock attacks, but movement remains available.
+	apply_polar_shift_dash_lockout(overheat_lockout)
+	queue_redraw()
+
+func _update_voidfire_heat(delta: float) -> void:
+	if not reward_voidfire:
+		return
+	var now := Time.get_ticks_msec() / 1000.0
+	var idle_seconds := now - _voidfire_last_hit_time
+	if idle_seconds > 0.4:
+		void_heat = maxf(0.0, void_heat - void_heat_decay_rate * delta)
+	queue_redraw()
+
+func _update_voidfire_lockout(delta: float) -> void:
+	if _voidfire_lockout_left <= 0.0:
+		return
+	_voidfire_lockout_left = maxf(0.0, _voidfire_lockout_left - delta)
+	queue_redraw()
+
+# --- Dread Resonance ---
+
+func _update_dread_resonance_target(enemy_id: int) -> void:
+	if enemy_id != _dread_resonance_target_id:
+		_dread_resonance_target_id = enemy_id
+		_dread_resonance_target_stacks = 1
+	else:
+		_dread_resonance_target_stacks = mini(dread_resonance_max_stacks, _dread_resonance_target_stacks + 1)
+
+func _get_dread_resonance_bonus(enemy_node: Object) -> int:
+	if not reward_dread_resonance:
+		return 0
+	if not is_instance_valid(enemy_node):
+		return 0
+	if enemy_node.get_instance_id() != _dread_resonance_target_id:
+		return 0
+	return dread_resonance_bonus_per_stack * _dread_resonance_target_stacks
+
+# --- Crushed Vow (boon) ---
+
+func _get_crushed_vow_bonus() -> int:
+	if crushed_vow_bonus_damage <= 0 or not _crushed_vow_primed:
+		return 0
+	_crushed_vow_primed = false
+	return crushed_vow_bonus_damage
+
+# --- Severing Edge (boon) ---
+
+func _get_severing_edge_bonus(enemy_node: Object) -> int:
+	if severing_edge_bonus_damage <= 0:
+		return 0
+	if not is_instance_valid(enemy_node):
+		return 0
+	var enemy_max: int = int(enemy_node.get_max_health())
+	if enemy_max <= 0:
+		return 0
+	var enemy_current: int = int(enemy_node.get_current_health())
+	if float(enemy_current) / float(enemy_max) < 0.35:
+		return severing_edge_bonus_damage
+	return 0
+
+# --- Eclipse Mark ---
+
+func _apply_eclipse_mark(kill_pos: Vector2) -> void:
+	if kill_pos == Vector2.ZERO:
+		return
+	var now := Time.get_ticks_msec() / 1000.0
+	var expiry := now + eclipse_mark_duration
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if not DAMAGEABLE.can_take_damage(enemy_node):
+			continue
+		var enemy_body := enemy_node as Node2D
+		if enemy_body.global_position.distance_to(kill_pos) > eclipse_mark_radius:
+			continue
+		var enemy_id := enemy_body.get_instance_id()
+		_eclipse_marked_enemies[enemy_id] = {"expiry": expiry, "node": enemy_body}
+		if player_feedback != null:
+			player_feedback.play_world_ring(enemy_body.global_position, 20.0, Color(0.14, 0.94, 0.62, 0.86), 0.18)
+
+func _update_eclipse_marks() -> void:
+	if _eclipse_marked_enemies.is_empty():
+		return
+	var now := Time.get_ticks_msec() / 1000.0
+	for enemy_id in _eclipse_marked_enemies.keys():
+		var entry := _eclipse_marked_enemies[enemy_id] as Dictionary
+		if float(entry.get("expiry", 0.0)) <= now or not is_instance_valid(entry.get("node")):
+			_eclipse_marked_enemies.erase(enemy_id)
+
+func _consume_eclipse_mark_bonus(enemy_node: Object, base_damage: int) -> int:
+	if not reward_eclipse_mark:
+		return 0
+	if not is_instance_valid(enemy_node):
+		return 0
+	var enemy_id := enemy_node.get_instance_id()
+	if not _eclipse_marked_enemies.has(enemy_id):
+		return 0
+	_eclipse_marked_enemies.erase(enemy_id)
+	return maxi(1, int(round(float(base_damage) * eclipse_mark_bonus_ratio)))
+
+# --- Fracture Field ---
+
+func _apply_fracture_field(kill_pos: Vector2) -> void:
+	if kill_pos == Vector2.ZERO:
+		return
+	var field_damage := maxi(1, int(round(float(damage) * fracture_field_damage_ratio)))
+	field_damage = _apply_objective_mutator_damage_mult(field_damage)
+	if player_feedback != null:
+		player_feedback.play_world_ring(kill_pos, fracture_field_radius, Color(0.72, 0.26, 0.96, 0.86), 0.24)
+		player_feedback.play_world_ring(kill_pos, fracture_field_radius * 0.55, Color(1.0, 0.72, 1.0, 0.62), 0.15)
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if not DAMAGEABLE.can_take_damage(enemy_node):
+			continue
+		var enemy_body := enemy_node as Node2D
+		if enemy_body.global_position.distance_to(kill_pos) > fracture_field_radius:
+			continue
+		DAMAGEABLE.apply_damage(enemy_node, field_damage, {"is_ground_attack": true, "attack_type": "fracture_field"})
+		enemy_node.apply_slow(fracture_field_slow_duration, 0.55)
+
+
+
 func _apply_sigil_burst(epicenter: Vector2, source_damage: int) -> void:
 	var burst_damage: int = maxi(1, int(round(float(source_damage) * 0.7)))
 	burst_damage = _apply_objective_mutator_damage_mult(burst_damage)
@@ -1726,6 +2007,87 @@ func _draw_trial_reward_state() -> void:
 			aegis_alpha = 0.44 + aegis_pulse * 0.2
 		draw_arc(Vector2.ZERO, aegis_radius, 0.0, TAU, 48, Color(0.62, 0.98, 1.0, aegis_alpha), 2.2)
 		draw_circle(Vector2.ZERO, aegis_radius * 0.62, Color(0.62, 0.98, 1.0, aegis_alpha * 0.18))
+
+	if reward_voidfire:
+		var heat_ratio := clampf(void_heat / maxf(1.0, void_heat_cap), 0.0, 1.0)
+		var danger_ratio := 0.70
+		var start_angle := -PI * 0.5
+		var ring_radius := 27.0
+		var character_tint := player_core_color.lerp(player_body_color, 0.35)
+		var scaffold_base := Color(0.08, 0.14, 0.24, 0.58)
+		var scaffold_color := scaffold_base.lerp(Color(character_tint.r, character_tint.g, character_tint.b, scaffold_base.a), 0.42)
+		# Always-visible scaffold for heat readability.
+		draw_arc(Vector2.ZERO, ring_radius, 0.0, TAU, 56, scaffold_color, 2.0)
+		if heat_ratio > 0.001:
+			var warm_t := clampf((heat_ratio - danger_ratio) / maxf(0.001, 1.0 - danger_ratio), 0.0, 1.0)
+			var heat_color_base := Color(
+				lerpf(0.24, 0.60, warm_t),
+				lerpf(0.92, 0.78, warm_t),
+				lerpf(1.00, 1.00, warm_t),
+				0.88
+			)
+			var heat_color := heat_color_base.lerp(Color(character_tint.r, character_tint.g, character_tint.b, heat_color_base.a), 0.34)
+			draw_arc(Vector2.ZERO, ring_radius, start_angle, start_angle + TAU * heat_ratio, 72, heat_color, 3.4)
+			if heat_ratio > 0.05:
+				var flame_count := 14
+				var flow_phase := fposmod(t * (0.12 + heat_ratio * 0.22), 1.0)
+				for i in range(flame_count):
+					var base_t := (float(i) + 0.5) / float(flame_count)
+					var fill_mask := clampf((heat_ratio - base_t) * float(flame_count) + 0.5, 0.0, 1.0)
+					if fill_mask <= 0.001:
+						continue
+					var sample_t := fposmod(base_t + flow_phase * 0.18, 1.0)
+					var flame_angle := start_angle + TAU * sample_t
+					var dir := Vector2(cos(flame_angle), sin(flame_angle))
+					var tangent := Vector2(-dir.y, dir.x)
+					var flicker := 0.5 + 0.5 * sin(t * (7.8 + heat_ratio * 2.4) + float(i) * 1.7)
+					var flow_strength := (0.42 + 0.58 * pow(base_t, 0.72)) * fill_mask
+					var base_radius := ring_radius - 1.0
+					var tongue_height := 2.1 + heat_ratio * 5.1 + flicker * 1.9 + flow_strength * 1.8
+					var tongue_half_width := 0.9 + heat_ratio * 1.4 + flicker * 0.7
+					var base_center := dir * base_radius
+					var forward_lean := tangent * (0.5 + flow_strength * (1.0 + heat_ratio * 0.8))
+					var tip := dir * (ring_radius + tongue_height) + forward_lean
+					var p1 := base_center + tangent * tongue_half_width
+					var p2 := base_center - tangent * tongue_half_width
+					var outer_flame := Color(
+						lerpf(0.26, 0.56, warm_t),
+						lerpf(0.82, 0.66, warm_t),
+						1.0,
+						(0.36 + heat_ratio * 0.30) * flow_strength
+					)
+					outer_flame = outer_flame.lerp(Color(character_tint.r, character_tint.g, character_tint.b, outer_flame.a), 0.30)
+					draw_colored_polygon(PackedVector2Array([tip, p1, p2]), outer_flame)
+					var core_tip := dir * (ring_radius + tongue_height * 0.68) + forward_lean * 0.64
+					var core_base := dir * (base_radius + 0.9)
+					var core_w := tongue_half_width * 0.48
+					var c1 := core_base + tangent * core_w
+					var c2 := core_base - tangent * core_w
+					var core_flame := Color(
+						lerpf(0.70, 0.86, warm_t),
+						lerpf(0.94, 0.88, warm_t),
+						1.0,
+						(0.48 + heat_ratio * 0.34) * flow_strength
+					)
+					core_flame = core_flame.lerp(Color(character_tint.r, character_tint.g, character_tint.b, core_flame.a), 0.22)
+					draw_colored_polygon(PackedVector2Array([core_tip, c1, c2]), core_flame)
+		# Mark where Danger Zone begins.
+		var marker_angle := start_angle + TAU * danger_ratio
+		var marker_dir := Vector2(cos(marker_angle), sin(marker_angle))
+		var marker_inner := marker_dir * (ring_radius - 3.5)
+		var marker_outer := marker_dir * (ring_radius + 3.5)
+		var marker_color := Color(0.74, 0.90, 1.0, 0.92).lerp(Color(character_tint.r, character_tint.g, character_tint.b, 0.92), 0.26)
+		draw_line(marker_inner, marker_outer, marker_color, 1.8)
+		if _voidfire_lockout_left > 0.0:
+			var lock_ratio := clampf(_voidfire_lockout_left / maxf(0.001, voidfire_lockout_duration), 0.0, 1.0)
+			var lock_pulse := 0.5 + 0.5 * sin(t * 18.0)
+			var lock_alpha := clampf(0.42 + lock_pulse * 0.28, 0.0, 0.92) * lock_ratio
+			var lock_color := Color(0.38, 0.74, 1.0, lock_alpha).lerp(Color(character_tint.r, character_tint.g, character_tint.b, lock_alpha), 0.28)
+			draw_arc(Vector2.ZERO, ring_radius + 5.0, 0.0, TAU, 56, lock_color, 2.6)
+			var cross_len := 7.0 + lock_pulse * 1.6
+			var cross_color := Color(0.72, 0.90, 1.0, lock_alpha).lerp(Color(character_tint.r, character_tint.g, character_tint.b, lock_alpha), 0.22)
+			draw_line(Vector2(-cross_len, -cross_len), Vector2(cross_len, cross_len), cross_color, 1.8)
+			draw_line(Vector2(-cross_len, cross_len), Vector2(cross_len, -cross_len), cross_color, 1.8)
 
 	# Dash archetype trial power visuals
 	if reward_phantom_step:
