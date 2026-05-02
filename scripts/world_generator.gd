@@ -162,6 +162,8 @@ var objective_control_progress: float = 0.0
 var objective_control_goal: float = 0.0
 var objective_control_decay_rate: float = 0.0
 var objective_control_contest_threshold: int = 0
+var objective_engagement_kill_progress_bonus: float = 0.4
+var objective_engagement_bonus_radius_scale: float = 1.18
 var objective_control_enemies_in_zone: int = 0
 var objective_control_player_inside: bool = false
 var objective_control_contested: bool = false
@@ -267,6 +269,8 @@ func _ready() -> void:
 	reward_selection_ui.initialize(boon_choice_count, boon_reveal_duration)
 	if reward_selection_ui.has_signal("reward_selected"):
 		reward_selection_ui.connect("reward_selected", Callable(self, "_on_reward_selected"))
+	if reward_selection_ui.has_signal("reward_offers_presented"):
+		reward_selection_ui.connect("reward_offers_presented", Callable(self, "_on_reward_offers_presented"))
 	encounter_profile_builder = ENCOUNTER_PROFILE_BUILDER_SCRIPT.new()
 	add_child(encounter_profile_builder)
 	encounter_profile_builder.initialize(rng)
@@ -1684,6 +1688,7 @@ func _play_room_music(is_boss_room: bool, instant: bool = false, fade_duration: 
 
 func _on_room_enemy_died(kill_pos: Vector2 = Vector2.ZERO) -> void:
 	active_room_enemy_count = maxi(0, active_room_enemy_count - 1)
+	_apply_objective_engagement_bonus_on_kill(kill_pos)
 	if active_objective_kind == "last_stand":
 		objective_kills += 1
 	if active_objective_kind == "cut_the_signal" and is_instance_valid(objective_target_enemy):
@@ -1695,6 +1700,24 @@ func _on_room_enemy_died(kill_pos: Vector2 = Vector2.ZERO) -> void:
 		objective_spawn_timer = maxf(0.2, objective_spawn_timer - 0.08)
 	if is_instance_valid(player):
 		player.notify_enemy_killed(kill_pos)
+
+func _apply_objective_engagement_bonus_on_kill(kill_pos: Vector2) -> void:
+	if active_objective_kind != "hold_the_line":
+		return
+	if objective_control_goal <= 0.0:
+		return
+	if not objective_control_player_inside or objective_control_contested:
+		return
+	if not is_instance_valid(player):
+		return
+	if kill_pos == Vector2.ZERO:
+		return
+	var anchor := objective_control_anchor
+	var bonus_radius := maxf(1.0, objective_control_radius * objective_engagement_bonus_radius_scale)
+	if kill_pos.distance_to(anchor) > bonus_radius:
+		return
+	objective_control_progress = minf(objective_control_goal, objective_control_progress + objective_engagement_kill_progress_bonus)
+	queue_redraw()
 
 func _clear_all_enemies() -> void:
 	if is_instance_valid(enemy_spawner):
@@ -1760,6 +1783,9 @@ func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> voi
 		_spawn_door_options()
 	hud.refresh(_get_hud_state(), player)
 
+func _on_reward_offers_presented(offers: Array[Dictionary], mode: int, is_initial: bool, stage: int) -> void:
+	_record_reward_offers(offers, mode, is_initial, stage)
+
 func _is_debug_boot_session() -> bool:
 	if not settings_enabled:
 		return false
@@ -1823,6 +1849,7 @@ func _initialize_run_telemetry(allow_collection: bool) -> void:
 			run_mode = int(run_mode_value)
 	var run_seed := {
 		"game_version": String(ProjectSettings.get_setting("application/config/version", "dev")).strip_edges(),
+		"character_id": current_character_id,
 		"difficulty_tier": current_difficulty_tier,
 		"run_mode": run_mode,
 		"start_depth": room_depth,
@@ -1917,6 +1944,20 @@ func _record_reward_choice(choice: Dictionary, mode: int, is_initial: bool) -> v
 		"room_depth": room_depth
 	})
 
+func _record_reward_offers(offers: Array[Dictionary], mode: int, is_initial: bool, stage: int) -> void:
+	if not telemetry_enabled or telemetry_run_id.is_empty() or telemetry_run_finished:
+		return
+	if offers.is_empty():
+		return
+	RUN_TELEMETRY_STORE.append_reward_offers(telemetry_run_id, {
+		"unix_time": int(Time.get_unix_time_from_system()),
+		"mode": mode,
+		"is_initial": is_initial,
+		"stage": stage,
+		"room_depth": room_depth,
+		"offers": offers.duplicate(true)
+	})
+
 func _record_door_choice(choice: Dictionary) -> void:
 	if not telemetry_enabled or telemetry_run_id.is_empty() or telemetry_run_finished:
 		return
@@ -1963,7 +2004,11 @@ func _on_player_damage_taken(raw_amount: int, final_amount: int, damage_context:
 		"health_after": int(context_copy.get("health_after", 0)),
 		"room_label": current_room_label,
 		"bearing_key": current_bearing_key,
-		"room_depth": room_depth
+		"room_depth": room_depth,
+		"objective_kind": active_objective_kind,
+		"active_enemies": active_room_enemy_count,
+		"difficulty_tier": current_difficulty_tier,
+		"character_id": current_character_id
 	})
 
 func _on_player_died_for_telemetry() -> void:
@@ -1975,6 +2020,12 @@ func _on_player_died_for_telemetry() -> void:
 	death_event["room_label"] = current_room_label
 	death_event["bearing_key"] = _bearing_key_from_label(current_room_label, "unknown")
 	death_event["room_depth"] = room_depth
+	death_event["objective_kind"] = active_objective_kind
+	death_event["active_enemies"] = active_room_enemy_count
+	death_event["objective_player_inside"] = objective_control_player_inside
+	death_event["objective_contested"] = objective_control_contested
+	death_event["difficulty_tier"] = current_difficulty_tier
+	death_event["character_id"] = current_character_id
 	_finish_active_run_telemetry("death", death_event)
 
 func _on_player_died() -> void:

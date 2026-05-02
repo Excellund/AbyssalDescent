@@ -628,7 +628,7 @@ func _get_trial_fallback_description(power_id: String) -> String:
 		"wraithstep":
 			return "%sDash marks enemies. Marked hits deal extra hit damage and trigger splash chains that deal a percentage of hit damage." % [_damage_kind_bracket(power_id)]
 		"voidfire":
-			return "Build void heat. Danger Zone boosts hit damage. Max heat detonates, seals attacks, slows movement, and disables dash."
+			return "Heat up attacks. Danger Zone boosts hit damage. Overheat detonates and briefly locks actions."
 		"dread_resonance":
 			return "%sChain hits on one enemy build resonance. Swapping targets resets it." % [_damage_kind_bracket(power_id)]
 		"vow_shatter":

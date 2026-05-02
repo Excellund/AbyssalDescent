@@ -611,8 +611,8 @@ func get_trial_power_card_description(power_id: String) -> String:
 			var cur_det_ratio := float(player_reference.get("voidfire_detonate_ratio"))
 			var cur_lockout := float(player_reference.get("voidfire_lockout_duration"))
 			if current_stack <= 0:
-				return "[color=#9ab8d8]Build void heat. Danger Zone boosts hit damage. Max heat detonates, seals attacks, slows movement, and disables dash.[/color]\n[color=#9ab8d8]Initial:[/color] Danger Zone amp [color=#7de882]+%.0f%%[/color], detonate [color=#7de882]%.0f%%[/color] of hit, overheat lock [color=#7de882]%.2fs[/color]." % [next_amp * 100.0, next_det_ratio * 100.0, next_lockout]
-			return "[color=#c8daf0]Voidfire:[/color] Danger Zone amp [color=#e8c96a]+%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]+%.0f%%[/color], detonate [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color] of hit, overheat lock [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_amp * 100.0, next_amp * 100.0, cur_det_ratio * 100.0, next_det_ratio * 100.0, cur_lockout, next_lockout]
+				return "[color=#9ab8d8]Heat up attacks. Danger Zone boosts hit damage; overheat detonates and briefly locks actions.[/color]\n[color=#9ab8d8]Initial:[/color] amp [color=#7de882]+%.0f%%[/color], detonate [color=#7de882]%.0f%%[/color], lock [color=#7de882]%.2fs[/color]." % [next_amp * 100.0, next_det_ratio * 100.0, next_lockout]
+			return "[color=#c8daf0]Voidfire:[/color] amp [color=#e8c96a]+%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]+%.0f%%[/color], detonate [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color], lock [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_amp * 100.0, next_amp * 100.0, cur_det_ratio * 100.0, next_det_ratio * 100.0, cur_lockout, next_lockout]
 		"dread_resonance":
 			if next_values.is_empty():
 				return "[color=#9ab8d8]Enhances this power.[/color]"

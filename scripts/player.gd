@@ -281,6 +281,9 @@ var combo_relay_damage_per_stack: float = 0.05
 var combo_relay_speed_per_stack: float = 0.05
 var incoming_damage_taken_mult: float = 1.0
 var incoming_contact_damage_mult: float = 1.0
+var contact_damage_grace_duration: float = 0.22
+var _contact_damage_grace_left: float = 0.0
+var _contact_damage_grace_ability: String = ""
 var last_damage_event: Dictionary = {}
 var last_damage_breakdown: Dictionary = {
 	"source": "none",
@@ -326,6 +329,7 @@ func _physics_process(delta: float) -> void:
 	_update_last_move_direction(direction)
 	_update_dash_cooldown(delta)
 	_update_dash_phase_state(delta)
+	_update_contact_damage_grace(delta)
 	_update_attack_cooldown(delta)
 	_update_execution_edge_proc_display(delta)
 	_update_attack_lock(delta)
@@ -375,6 +379,13 @@ func _update_last_move_direction(direction: Vector2) -> void:
 func _update_dash_cooldown(delta: float) -> void:
 	if dash_cooldown_left > 0.0:
 		dash_cooldown_left = maxf(0.0, dash_cooldown_left - delta)
+
+func _update_contact_damage_grace(delta: float) -> void:
+	if _contact_damage_grace_left <= 0.0:
+		return
+	_contact_damage_grace_left = maxf(0.0, _contact_damage_grace_left - delta)
+	if _contact_damage_grace_left <= 0.0:
+		_contact_damage_grace_ability = ""
 
 func _update_attack_cooldown(delta: float) -> void:
 	if attack_cooldown_left > 0.0:
@@ -703,7 +714,11 @@ func _update_visual_facing_direction() -> void:
 func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 	if amount <= 0:
 		return
-	if dash_phasing_active and String(damage_context.get("source", "")) == "enemy_contact":
+	var source := String(damage_context.get("source", "unknown"))
+	var ability := String(damage_context.get("ability", "unknown"))
+	if dash_phasing_active and source == "enemy_contact":
+		return
+	if source == "enemy_contact" and _contact_damage_grace_left > 0.0 and ability == _contact_damage_grace_ability:
 		return
 	var raw_amount := amount
 	var reduced := maxi(1, amount - iron_skin_armor)
@@ -713,15 +728,15 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 	total_resist = clampf(total_resist, 0.0, 0.92)
 	reduced = int(ceil(float(reduced) * (1.0 - total_resist)))
 	reduced = int(ceil(float(reduced) * incoming_damage_taken_mult))
-	if String(damage_context.get("source", "")) == "enemy_contact":
+	if source == "enemy_contact":
 		reduced = int(ceil(float(reduced) * incoming_contact_damage_mult))
 	reduced = maxi(1, reduced)
 	var health_before := _get_current_health()
 	health_state.take_damage(reduced)
 	if _get_current_health() < health_before:
 		var context_copy := damage_context.duplicate(true)
-		context_copy["source"] = String(context_copy.get("source", "unknown"))
-		context_copy["ability"] = String(context_copy.get("ability", "unknown"))
+		context_copy["source"] = source
+		context_copy["ability"] = ability
 		context_copy["raw_amount"] = raw_amount
 		context_copy["final_amount"] = reduced
 		context_copy["health_before"] = health_before
@@ -741,6 +756,9 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 			_vow_shatter_primed = true
 		if crushed_vow_bonus_damage > 0:
 			_crushed_vow_primed = true
+		if source == "enemy_contact":
+			_contact_damage_grace_left = contact_damage_grace_duration
+			_contact_damage_grace_ability = ability
 
 func get_last_damage_event() -> Dictionary:
 	return last_damage_event.duplicate(true)

@@ -8,25 +8,25 @@ const ENEMY_STATE_ENUMS := preload("res://scripts/shared/enemy_state_enums.gd")
 @export var acceleration: float = 980.0
 @export var deceleration: float = 1380.0
 @export var preferred_distance: float = 260.0
-@export var action_cooldown: float = 0.38
+@export var action_cooldown: float = 0.42
 
 @export var prism_windup: float = 0.95
 @export var prism_radius: float = 300.0
 @export var prism_inner_radius: float = 120.0
 @export var prism_spoke_count: int = 5
 @export var prism_spoke_half_angle_degrees: float = 13.0
-@export var prism_damage: int = 46
+@export var prism_damage: int = 42
 
 @export var gravity_windup: float = 1.1
 @export var gravity_radius: float = 240.0
-@export var gravity_damage: int = 63
+@export var gravity_damage: int = 56
 
 @export var echo_dash_windup: float = 0.45
 @export var echo_dash_speed: float = 680.0
 @export var echo_dash_duration: float = 0.24
 @export var echo_dash_count: int = 3
 @export var echo_dash_width: float = 44.0
-@export var echo_dash_damage: int = 42
+@export var echo_dash_damage: int = 38
 @export var echo_dash_retarget_pause: float = 0.14
 @export var echo_dash_max_turn_degrees: float = 40.0
 @export var reposition_dash_chance: float = 0.46
@@ -39,7 +39,7 @@ const ENEMY_STATE_ENUMS := preload("res://scripts/shared/enemy_state_enums.gd")
 @export var orbital_lance_windup: float = 0.88
 @export var orbital_lance_length: float = 320.0
 @export var orbital_lance_width: float = 36.0
-@export var orbital_lance_damage: int = 44
+@export var orbital_lance_damage: int = 40
 @export var orbital_fortress_damage_reduction: float = 0.72
 @export var orbital_fortress_max_damage_per_hit: int = 22
 @export var orbital_fortress_hit_flash_duration: float = 0.16
@@ -55,7 +55,7 @@ const ENEMY_STATE_ENUMS := preload("res://scripts/shared/enemy_state_enums.gd")
 @export var polar_shift_anchor_radius: float = 92.0
 @export var polar_shift_anchor_force_mult: float = 0.0
 @export var polar_shift_pull_inner_radius: float = 160.0
-@export var polar_shift_pull_inner_damage: int = 32
+@export var polar_shift_pull_inner_damage: int = 28
 @export var polar_shift_pull_inner_delay: float = 0.32
 @export var polar_shift_pull_afterglow_duration: float = 0.42
 @export var polar_shift_dash_lockout_duration: float = 0.72
@@ -213,7 +213,7 @@ func _process_polar_shift_pull_punish(delta: float) -> void:
 	if not DAMAGEABLE.can_take_damage(target):
 		return
 	if global_position.distance_to(target.global_position) <= polar_shift_pull_inner_radius:
-		DAMAGEABLE.apply_damage(target, polar_shift_pull_inner_damage)
+		DAMAGEABLE.apply_damage(target, polar_shift_pull_inner_damage, {"source": "enemy_ability", "ability": "polar_shift_pull"})
 
 func _draw_polar_shift_pull_delayed_indicator() -> void:
 	if not _polar_shift_pull_damage_pending and _polar_shift_pull_afterglow_left <= 0.0:
@@ -592,7 +592,7 @@ func _apply_prism_burst() -> void:
 	var to_target := target.global_position - global_position
 	var target_distance := to_target.length()
 	if target_distance <= prism_inner_radius:
-		DAMAGEABLE.apply_damage(target, prism_damage)
+		DAMAGEABLE.apply_damage(target, prism_damage, {"source": "enemy_ability", "ability": "prism_burst"})
 		return
 	if target_distance > prism_radius:
 		return
@@ -601,14 +601,14 @@ func _apply_prism_burst() -> void:
 	for i in range(prism_spoke_count):
 		var spoke_angle := _prism_base_angle + TAU * float(i) / float(prism_spoke_count)
 		if absf(wrapf(target_angle - spoke_angle, -PI, PI)) <= half_arc:
-			DAMAGEABLE.apply_damage(target, prism_damage)
+			DAMAGEABLE.apply_damage(target, prism_damage, {"source": "enemy_ability", "ability": "prism_burst"})
 			return
 
 func _apply_gravity_burst() -> void:
 	if not DAMAGEABLE.can_take_damage(target):
 		return
 	if global_position.distance_to(target.global_position) <= gravity_radius:
-		DAMAGEABLE.apply_damage(target, gravity_damage)
+		DAMAGEABLE.apply_damage(target, gravity_damage, {"source": "enemy_ability", "ability": "gravity_burst"})
 		if target is CharacterBody2D:
 			var body := target as CharacterBody2D
 			var pull_dir := (global_position - body.global_position)
@@ -644,7 +644,7 @@ func _apply_orbital_lance_hits() -> void:
 			continue
 		var beam_end := orb_pos + outward * orbital_lance_length
 		if _distance_point_to_segment(target.global_position - global_position, orb_pos, beam_end) <= orbital_lance_width:
-			DAMAGEABLE.apply_damage(target, orbital_lance_damage)
+			DAMAGEABLE.apply_damage(target, orbital_lance_damage, {"source": "enemy_ability", "ability": "orbital_lance"})
 			return
 
 func _apply_polar_shift() -> void:
@@ -654,7 +654,7 @@ func _apply_polar_shift() -> void:
 	if to_target.length() > polar_shift_radius:
 		return
 	if not _polar_shift_is_pull and not _is_polar_shift_in_safe_lane(to_target.angle()):
-		DAMAGEABLE.apply_damage(target, 30)
+		DAMAGEABLE.apply_damage(target, 30, {"source": "enemy_ability", "ability": "polar_shift_burst"})
 	if target is CharacterBody2D:
 		var target_body := target as CharacterBody2D
 		var in_safe_lane := _is_polar_shift_in_safe_lane(to_target.angle())

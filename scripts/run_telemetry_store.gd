@@ -57,6 +57,7 @@ static func start_run(run_seed: Dictionary) -> String:
 		"started_at_unix": _now_unix(),
 		"ended_at_unix": 0,
 		"game_version": String(run_seed.get("game_version", _current_game_version())),
+		"character_id": String(run_seed.get("character_id", "unknown")).strip_edges().to_lower(),
 		"difficulty_tier": int(run_seed.get("difficulty_tier", 0)),
 		"run_mode": int(run_seed.get("run_mode", 0)),
 		"is_debug": bool(run_seed.get("is_debug", false)),
@@ -65,6 +66,7 @@ static func start_run(run_seed: Dictionary) -> String:
 		"rooms_cleared": int(run_seed.get("rooms_cleared", 0)),
 		"damage_events": [],
 		"reward_choices": [],
+		"reward_offers": [],
 		"room_entries": [],
 		"door_choices": [],
 		"death_event": {}
@@ -115,6 +117,13 @@ static func append_reward_choice(run_id: String, event_data: Dictionary) -> void
 		return
 	_mutate_run_entry(run_id, func(run_entry: Dictionary) -> void:
 		_append_limited_event(run_entry, "reward_choices", event_data, 180)
+	)
+
+static func append_reward_offers(run_id: String, event_data: Dictionary) -> void:
+	if run_id.is_empty():
+		return
+	_mutate_run_entry(run_id, func(run_entry: Dictionary) -> void:
+		_append_limited_event(run_entry, "reward_offers", event_data, 220)
 	)
 
 static func append_room_entry(run_id: String, event_data: Dictionary) -> void:
@@ -200,6 +209,7 @@ static func build_upload_payload(run_id: String) -> Dictionary:
 		_increment_counter(damage_by_ability, String(damage_entry.get("ability", "unknown")))
 	var room_entries := run_entry.get("room_entries", []) as Array
 	var reward_choices := run_entry.get("reward_choices", []) as Array
+	var reward_offers := run_entry.get("reward_offers", []) as Array
 	var door_choices := run_entry.get("door_choices", []) as Array
 	var damage_events := run_entry.get("damage_events", []) as Array
 	return {
@@ -207,6 +217,7 @@ static func build_upload_payload(run_id: String) -> Dictionary:
 		"started_at_unix": int(run_entry.get("started_at_unix", 0)),
 		"ended_at_unix": int(run_entry.get("ended_at_unix", 0)),
 		"game_version": String(run_entry.get("game_version", _current_game_version())),
+		"character_id": String(run_entry.get("character_id", "unknown")),
 		"difficulty_tier": int(run_entry.get("difficulty_tier", 0)),
 		"run_mode": int(run_entry.get("run_mode", 0)),
 		"outcome": String(run_entry.get("outcome", "unknown")),
@@ -216,11 +227,13 @@ static func build_upload_payload(run_id: String) -> Dictionary:
 		"death_event": (run_entry.get("death_event", {}) as Dictionary).duplicate(true),
 		"damage_events": damage_events.duplicate(true),
 		"reward_choices": reward_choices.duplicate(true),
+		"reward_offers": reward_offers.duplicate(true),
 		"room_entries": room_entries.duplicate(true),
 		"door_choices": door_choices.duplicate(true),
 		"aggregate": {
 			"room_entry_count": room_entries.size(),
 			"reward_choice_count": reward_choices.size(),
+			"reward_offer_count": reward_offers.size(),
 			"door_choice_count": door_choices.size(),
 			"damage_event_count": damage_events.size(),
 			"damage_by_source": damage_by_source,

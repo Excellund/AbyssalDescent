@@ -8,6 +8,7 @@ create table if not exists public.telemetry_runs (
   started_at_unix bigint not null,
   ended_at_unix bigint not null,
   game_version text not null,
+  character_id text not null default 'unknown',
   difficulty_tier int not null,
   run_mode int not null,
   outcome text not null,
@@ -17,6 +18,7 @@ create table if not exists public.telemetry_runs (
   death_event jsonb not null default '{}'::jsonb,
   damage_events jsonb not null default '[]'::jsonb,
   reward_choices jsonb not null default '[]'::jsonb,
+  reward_offers jsonb not null default '[]'::jsonb,
   room_entries jsonb not null default '[]'::jsonb,
   door_choices jsonb not null default '[]'::jsonb,
   aggregate jsonb not null default '{}'::jsonb,
@@ -25,6 +27,8 @@ create table if not exists public.telemetry_runs (
 
 alter table public.telemetry_runs add column if not exists damage_events jsonb not null default '[]'::jsonb;
 alter table public.telemetry_runs add column if not exists reward_choices jsonb not null default '[]'::jsonb;
+alter table public.telemetry_runs add column if not exists character_id text not null default 'unknown';
+alter table public.telemetry_runs add column if not exists reward_offers jsonb not null default '[]'::jsonb;
 alter table public.telemetry_runs add column if not exists room_entries jsonb not null default '[]'::jsonb;
 alter table public.telemetry_runs add column if not exists door_choices jsonb not null default '[]'::jsonb;
 
@@ -43,6 +47,7 @@ with check (
   length(trim(run_id)) >= 8
   and started_at_unix > 0
   and ended_at_unix >= started_at_unix
+  and length(trim(character_id)) > 0
   and difficulty_tier between 0 and 3
   and run_mode in (0, 1)
   and outcome in ('clear', 'death', 'abandon', 'menu_exit', 'quit', 'debug')
@@ -51,6 +56,7 @@ with check (
   and jsonb_typeof(death_event) = 'object'
   and jsonb_typeof(damage_events) = 'array'
   and jsonb_typeof(reward_choices) = 'array'
+  and jsonb_typeof(reward_offers) = 'array'
   and jsonb_typeof(room_entries) = 'array'
   and jsonb_typeof(door_choices) = 'array'
   and jsonb_typeof(aggregate) = 'object'
@@ -86,6 +92,7 @@ as $$
       started_at_unix,
       ended_at_unix,
       game_version,
+      character_id,
       difficulty_tier,
       run_mode,
       outcome,
@@ -95,6 +102,7 @@ as $$
       death_event,
       damage_events,
       reward_choices,
+      reward_offers,
       room_entries,
       door_choices,
       aggregate,
@@ -143,6 +151,7 @@ as $$
       started_at_unix,
       ended_at_unix,
       game_version,
+      character_id,
       difficulty_tier,
       run_mode,
       outcome,
@@ -152,6 +161,7 @@ as $$
       death_event,
       damage_events,
       reward_choices,
+      reward_offers,
       room_entries,
       door_choices,
       aggregate,
@@ -194,6 +204,7 @@ as $$
       started_at_unix,
       ended_at_unix,
       game_version,
+      character_id,
       difficulty_tier,
       run_mode,
       outcome,
@@ -203,6 +214,7 @@ as $$
       death_event,
       damage_events,
       reward_choices,
+      reward_offers,
       room_entries,
       door_choices,
       aggregate,

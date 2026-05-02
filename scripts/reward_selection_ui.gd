@@ -12,6 +12,7 @@ const MUTATOR_ICON_KILLBOX_PATH := "res://assets/ui/mutators/killbox.svg"
 const MUTATOR_ICON_COMBO_RELAY_PATH := "res://assets/ui/mutators/combo_relay.svg"
 
 signal reward_selected(choice: Dictionary, mode: int, is_initial: bool)
+signal reward_offers_presented(offers: Array[Dictionary], mode: int, is_initial: bool, stage: int)
 
 var boon_choice_count: int = 3
 var boon_reveal_duration: float = 0.22
@@ -103,6 +104,7 @@ func open_selection(title: String, is_initial: bool, mode: int, power_registry: 
 	boon_hovered_index = -1
 	_apply_boon_card_styles(-1)
 	_refresh_boon_ui(player)
+	_emit_reward_offers_presented()
 
 func process_input(delta: float) -> void:
 	if not boon_selection_active:
@@ -129,6 +131,7 @@ func process_input(delta: float) -> void:
 				boon_hovered_index = -1
 				_apply_boon_card_styles(-1)
 				_refresh_boon_ui(current_player)
+				_emit_reward_offers_presented()
 				return
 			var mode := reward_selection_mode
 			var initial := pending_initial_boon
@@ -515,6 +518,28 @@ func _choice_display_name(choice: Dictionary) -> String:
 					result += " "
 				result += String(words[i]).capitalize()
 			return result.strip_edges()
+
+func _build_offer_payload(choice: Dictionary) -> Dictionary:
+	var id := String(choice.get("id", "")).strip_edges()
+	var choice_name := _choice_display_name(choice)
+	var payload := {
+		"choice_id": id,
+		"choice_name": choice_name,
+	}
+	if bool(choice.get("is_mutator", false)):
+		payload["is_mutator"] = true
+		var mutator_data := choice.get("full_data", {}) as Dictionary
+		payload["mutator_name"] = String(mutator_data.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME, choice_name))
+	return payload
+
+func _emit_reward_offers_presented() -> void:
+	if boon_choices.is_empty():
+		return
+	var offers: Array[Dictionary] = []
+	for choice_variant in boon_choices:
+		var choice := choice_variant as Dictionary
+		offers.append(_build_offer_payload(choice))
+	emit_signal("reward_offers_presented", offers, reward_selection_mode, pending_initial_boon, mission_reward_stage)
 
 func _format_stack_progress_icons(stack_count: int, stack_limit: int) -> String:
 	if stack_limit <= 0:

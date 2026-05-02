@@ -8,22 +8,22 @@ const ENEMY_STATE_ENUMS := preload("res://scripts/shared/enemy_state_enums.gd")
 @export var acceleration: float = 900.0
 @export var deceleration: float = 1300.0
 @export var preferred_distance: float = 210.0
-@export var action_cooldown: float = 0.64
+@export var action_cooldown: float = 0.68
 
 @export var charge_windup: float = 0.84
 @export var charge_speed: float = 640.0
 @export var charge_duration: float = 0.58
 @export var charge_width: float = 40.0
-@export var charge_damage: int = 42
+@export var charge_damage: int = 38
 
 @export var nova_windup: float = 0.9
 @export var nova_radius: float = 172.0
-@export var nova_damage: int = 52
+@export var nova_damage: int = 47
 
 @export var cleave_windup: float = 0.7
 @export var cleave_range: float = 212.0
 @export var cleave_arc_degrees: float = 132.0
-@export var cleave_damage: int = 38
+@export var cleave_damage: int = 34
 
 @export var recover_time: float = 0.5
 @export var arena_size: Vector2 = Vector2(1260.0, 900.0)
@@ -278,7 +278,7 @@ func _apply_nova_hit() -> void:
 	if not DAMAGEABLE.can_take_damage(target):
 		return
 	if global_position.distance_to(target.global_position) <= nova_radius:
-		DAMAGEABLE.apply_damage(target, nova_damage)
+		DAMAGEABLE.apply_damage(target, nova_damage, {"source": "enemy_ability", "ability": "warden_nova"})
 		# Heavy impact feedback for nova
 		if is_instance_valid(target):
 			var feedback: Object = target.get("player_feedback") as Object
@@ -291,7 +291,7 @@ func _apply_cleave_hit() -> void:
 		return
 	if not _point_in_cone(target.global_position, global_position, locked_direction, cleave_range, cleave_arc_degrees):
 		return
-	DAMAGEABLE.apply_damage(target, cleave_damage)
+	DAMAGEABLE.apply_damage(target, cleave_damage, {"source": "enemy_ability", "ability": "warden_cleave"})
 	# Heavy impact feedback for cleave
 	if is_instance_valid(target):
 		var feedback: Object = target.get("player_feedback") as Object

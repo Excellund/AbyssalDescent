@@ -95,6 +95,7 @@ class HoldTheLineConfig:
 	const SPAWN_INTERVAL_OVERTIME_MIN = 1.34
 	const SPAWN_BATCH_OVERTIME_CAP = 3
 	const SPAWN_TIMER_OVERTIME = 1.0
+	const SPAWN_ZONE_EXCLUSION_PADDING = 42.0
 
 # === COLORS ===
 const COLOR_SIGNAL_BASE = Color(1.0, 0.84, 0.3, 0.95)
@@ -353,10 +354,10 @@ func _get_control_objective_difficulty_params(difficulty_rank: int) -> Dictionar
 		params["out_of_zone_decay_mult"] = 0.68
 		params["refill_spawn_cap"] = 1.1
 	elif difficulty_rank == 3:
-		params["progress_gain_mult"] = 1.3
-		params["contested_decay_mult"] = 0.09
+		params["progress_gain_mult"] = 1.34
+		params["contested_decay_mult"] = 0.08
 		params["out_of_zone_decay_mult"] = 0.76
-		params["refill_spawn_cap"] = 0.92
+		params["refill_spawn_cap"] = 1.0
 		params["pressure_floor_bonus"] = 1
 	return params
 
@@ -452,7 +453,7 @@ func spawn_control_wave() -> void:
 		return
 	var roster: Array[String] = ["shielder", "charger", "archer", "chaser", "archer"]
 	if world.objective_overtime:
-		roster = ["charger", "shielder", "archer", "chaser", "archer", "shielder"]
+		roster = ["charger", "shielder", "archer", "chaser", "archer", "charger"]
 	var spawn_count: int = world.objective_spawn_batch
 	if world.objective_overtime and world.active_room_enemy_count <= 0:
 		spawn_count += 1
@@ -462,7 +463,25 @@ func spawn_control_wave() -> void:
 		return
 	for _i in range(spawn_count):
 		var enemy_type := roster[rng.randi_range(0, roster.size() - 1)]
-		world.active_room_enemy_count += int(world.enemy_spawner.spawn_enemy_type(enemy_type, 1))
+		var spawned_enemy: CharacterBody2D = world.enemy_spawner.spawn_enemy_node_type(enemy_type) as CharacterBody2D
+		if not is_instance_valid(spawned_enemy):
+			continue
+		_reposition_control_spawn_outside_zone(spawned_enemy)
+		world.active_room_enemy_count += 1
+
+func _reposition_control_spawn_outside_zone(enemy: CharacterBody2D) -> void:
+	if not is_instance_valid(enemy):
+		return
+	var radius := maxf(1.0, world.objective_control_radius)
+	var anchor: Vector2 = world.objective_control_anchor
+	var exclusion_radius := radius + HoldTheLineConfig.SPAWN_ZONE_EXCLUSION_PADDING
+	var offset := enemy.global_position - anchor
+	if offset.length() >= exclusion_radius:
+		return
+	if offset.length_squared() <= 0.000001:
+		offset = Vector2.RIGHT.rotated(rng.randf_range(0.0, TAU))
+	var pushed_position := anchor + offset.normalized() * exclusion_radius
+	enemy.global_position = world._clamp_position_to_current_room(pushed_position, 32.0)
 
 func _count_control_zone_enemies(anchor: Vector2, radius: float) -> int:
 	var count := 0

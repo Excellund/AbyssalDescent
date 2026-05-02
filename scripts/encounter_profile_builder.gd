@@ -66,8 +66,8 @@ const CONTROL_TUNING_BY_RANK := {
 	},
 	3: {
 		"pressure_mult": 0.79,
-		"spawn_interval_bias": 0.1,
-		"radius_bias": 6.0,
+		"spawn_interval_bias": 0.16,
+		"radius_bias": 10.0,
 		"goal_bias": 0.05,
 		"decay_bias": -0.01
 	}
@@ -148,7 +148,7 @@ const CONTROL_DEPTH_WINDOWS_BY_RANK := {
 			"end_depth": 10,
 			"pressure_bias": -0.03,
 			"spawn_interval_bias": 0.05,
-			"radius_bias": -6.0,
+			"radius_bias": -2.0,
 			"goal_bias": -0.08,
 			"decay_bias": -0.01
 		},
@@ -156,9 +156,9 @@ const CONTROL_DEPTH_WINDOWS_BY_RANK := {
 			"start_depth": 11,
 			"end_depth": 14,
 			"pressure_bias": -0.04,
-			"spawn_interval_bias": 0.06,
-			"radius_bias": -10.0,
-			"goal_bias": -0.14,
+			"spawn_interval_bias": 0.1,
+			"radius_bias": -2.0,
+			"goal_bias": -0.05,
 			"decay_bias": -0.015
 		}
 	]

@@ -44,10 +44,10 @@ dmg_by_source as (
   select
     e.source,
     count(*)            as hit_count,
-    sum((e.amount)::int) as total_damage
+    sum(coalesce((e.final_amount)::numeric, 0)) as total_damage
   from latest,
        jsonb_to_recordset(latest.damage_events)
-         as e(source text, ability text, amount numeric,
+         as e(source text, ability text, raw_amount numeric, final_amount numeric,
               bearing_key text, room_depth int)
   group by e.source
   order by total_damage desc
@@ -58,10 +58,10 @@ dmg_by_ability as (
   select
     e.ability,
     count(*)            as hit_count,
-    sum((e.amount)::int) as total_damage
+    sum(coalesce((e.final_amount)::numeric, 0)) as total_damage
   from latest,
        jsonb_to_recordset(latest.damage_events)
-         as e(source text, ability text, amount numeric,
+         as e(source text, ability text, raw_amount numeric, final_amount numeric,
               bearing_key text, room_depth int)
   group by e.ability
   order by total_damage desc
@@ -72,10 +72,10 @@ dmg_by_encounter as (
   select
     coalesce(e.bearing_key, 'unknown') as encounter_type,
     count(*)            as hit_count,
-    sum((e.amount)::int) as total_damage
+    sum(coalesce((e.final_amount)::numeric, 0)) as total_damage
   from latest,
        jsonb_to_recordset(latest.damage_events)
-         as e(source text, ability text, amount numeric,
+         as e(source text, ability text, raw_amount numeric, final_amount numeric,
               bearing_key text, room_depth int)
   group by encounter_type
   order by total_damage desc
