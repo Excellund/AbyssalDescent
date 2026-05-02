@@ -516,20 +516,30 @@ func _build_trial_profile(depth: int = 0) -> Dictionary:
 	var depth_pressure := maxi(0, effective_depth - 2)
 	var base_pressure_mult := _difficulty_float("base_enemy_pressure_mult", 1.0)
 	
-	var chasers := int(float(ENCOUNTER_CONTRACTS.profile_chaser_count(base) + hard_room_enemy_bonus + int(floor(float(depth_pressure) * 0.75))) * base_pressure_mult)
-	var chargers := int(float(ENCOUNTER_CONTRACTS.profile_charger_count(base) + 2 + int(floor(float(depth_pressure) / 4.0))) * base_pressure_mult)
-	var archers := int(float(maxi(ENCOUNTER_CONTRACTS.profile_archer_count(base), 1) + int(floor(float(depth_pressure) / 5.0))) * base_pressure_mult)
-	var shielders := int(float(ENCOUNTER_CONTRACTS.profile_shielder_count(base) + int(floor(float(depth_pressure) / 4.0))) * base_pressure_mult)
+	var chasers := int(float(ENCOUNTER_CONTRACTS.profile_chaser_count(base) + hard_room_enemy_bonus + int(floor(float(depth_pressure) * 0.65))) * base_pressure_mult)
+	var chargers := int(float(ENCOUNTER_CONTRACTS.profile_charger_count(base) + 2 + int(floor(float(depth_pressure) / 5.0))) * base_pressure_mult)
+	var archers := int(float(maxi(ENCOUNTER_CONTRACTS.profile_archer_count(base), 1) + int(floor(float(depth_pressure) / 6.0))) * base_pressure_mult)
+	var shielders := int(float(ENCOUNTER_CONTRACTS.profile_shielder_count(base) + int(floor(float(depth_pressure) / 5.0))) * base_pressure_mult)
 	var specialist_counts := _trial_specialist_counts(mutator, depth, chasers, chargers, archers, shielders)
 	chasers = int(specialist_counts.get("chasers", chasers))
 	chargers = int(specialist_counts.get("chargers", chargers))
 	archers = int(specialist_counts.get("archers", archers))
 	shielders = int(specialist_counts.get("shielders", shielders))
+	var specialist_enemies := _trial_specialist_enemies(mutator, depth, current_difficulty_tier)
+	var converted_counts := _apply_trial_elite_conversion(mutator, depth, current_difficulty_tier, {
+		"chasers": chasers,
+		"chargers": chargers,
+		"archers": archers,
+		"shielders": shielders
+	}, specialist_enemies)
+	chasers = int(converted_counts.get("chasers", chasers))
+	chargers = int(converted_counts.get("chargers", chargers))
+	archers = int(converted_counts.get("archers", archers))
+	shielders = int(converted_counts.get("shielders", shielders))
 	var mutator_name := ENCOUNTER_CONTRACTS.mutator_name(mutator)
 	if mutator_name.is_empty():
 		mutator_name = "Frenzy"
 	var profile := _build_profile("Trial %s" % mutator_name, TRIAL_ROOM_SIZE, chasers, chargers, archers, shielders, mutator)
-	var specialist_enemies := _trial_specialist_enemies(mutator, depth, current_difficulty_tier)
 	ENCOUNTER_CONTRACTS.profile_set_specialist_counts(
 		profile,
 		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_LURKER_COUNT, 0)),
@@ -551,14 +561,20 @@ func apply_mutator_variant_to_profile(profile: Dictionary, mutator: Dictionary, 
 	var archers := ENCOUNTER_CONTRACTS.profile_archer_count(modified)
 	var shielders := ENCOUNTER_CONTRACTS.profile_shielder_count(modified)
 	var specialist_counts := _trial_specialist_counts(mutator, depth, chasers, chargers, archers, shielders)
+	var specialist_enemies := _trial_specialist_enemies(mutator, depth, current_difficulty_tier)
+	var converted_counts := _apply_trial_elite_conversion(mutator, depth, current_difficulty_tier, {
+		"chasers": int(specialist_counts.get("chasers", chasers)),
+		"chargers": int(specialist_counts.get("chargers", chargers)),
+		"archers": int(specialist_counts.get("archers", archers)),
+		"shielders": int(specialist_counts.get("shielders", shielders))
+	}, specialist_enemies)
 	ENCOUNTER_CONTRACTS.profile_set_counts(
 		modified,
-		int(specialist_counts.get("chasers", chasers)),
-		int(specialist_counts.get("chargers", chargers)),
-		int(specialist_counts.get("archers", archers)),
-		int(specialist_counts.get("shielders", shielders))
+		int(converted_counts.get("chasers", chasers)),
+		int(converted_counts.get("chargers", chargers)),
+		int(converted_counts.get("archers", archers)),
+		int(converted_counts.get("shielders", shielders))
 	)
-	var specialist_enemies := _trial_specialist_enemies(mutator, depth)
 	ENCOUNTER_CONTRACTS.profile_set_specialist_counts(
 		modified,
 		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_LURKER_COUNT, 0)),
@@ -656,6 +672,87 @@ func _trial_specialist_counts(mutator: Dictionary, depth: int, chasers: int, cha
 				"archers": archers,
 				"shielders": shielders
 			}
+
+func _apply_trial_elite_conversion(mutator: Dictionary, depth: int, tier: int, base_counts: Dictionary, specialist_enemies: Dictionary) -> Dictionary:
+	var icon := ENCOUNTER_CONTRACTS.mutator_icon_shape_id(mutator)
+	var difficulty_config := DIFFICULTY_CONFIG.get_tier_config(tier)
+	var depth_pressure_divisor := maxf(0.1, float(difficulty_config.get("depth_pressure_divisor", 1.0)))
+	var effective_depth := int(floor(float(maxi(0, depth)) / depth_pressure_divisor))
+	var lurkers := int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_LURKER_COUNT, 0))
+	var rams := int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_RAM_COUNT, 0))
+	var lancers := int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_LANCER_COUNT, 0))
+	var spectres := int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_SPECTRE_COUNT, 0))
+	var pyres := int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_PYRE_COUNT, 0))
+	var tether_pairs := int(floor(float(int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_TETHER_COUNT, 0))) / 2.0))
+	var melee_elites := lurkers + rams
+	var ranged_elites := lancers + spectres + pyres
+	var control_elites := tether_pairs
+	var total_base := int(base_counts.get("chasers", 0)) + int(base_counts.get("chargers", 0)) + int(base_counts.get("archers", 0)) + int(base_counts.get("shielders", 0))
+	if total_base <= 0:
+		return base_counts.duplicate(true)
+	var reduction_ratio := clampf(0.22 + float(maxi(0, effective_depth - 6)) * 0.02, 0.22, 0.42)
+	var max_total_reduction := int(floor(float(total_base) * reduction_ratio))
+	var requested_reduction := int(floor(float(melee_elites) * 1.45 + float(ranged_elites) * 1.15 + float(control_elites) * 1.75))
+	var reduction_budget := mini(max_total_reduction, requested_reduction)
+	if reduction_budget <= 0:
+		return base_counts.duplicate(true)
+	var mins := {
+		"chasers": 2,
+		"chargers": 0,
+		"archers": 0,
+		"shielders": 0
+	}
+	match icon:
+		"iron_volley":
+			mins["archers"] = 4
+			mins["shielders"] = 3
+		"blood_rush":
+			mins["chasers"] = 5
+			mins["chargers"] = 3
+		"flashpoint":
+			mins["chargers"] = 2
+			mins["archers"] = 3
+		"siegebreak":
+			mins["chargers"] = 3
+			mins["shielders"] = 3
+		"convergence":
+			mins["chasers"] = 3
+		"conflagration":
+			mins["chasers"] = 4
+			mins["chargers"] = 2
+	var reduction_order: Array[String] = ["chasers", "chargers", "archers", "shielders"]
+	match icon:
+		"iron_volley":
+			reduction_order = ["chasers", "chargers", "shielders", "archers"]
+		"blood_rush":
+			reduction_order = ["archers", "shielders", "chasers", "chargers"]
+		"flashpoint":
+			reduction_order = ["chasers", "shielders", "archers", "chargers"]
+		"siegebreak":
+			reduction_order = ["chasers", "archers", "shielders", "chargers"]
+		"convergence":
+			reduction_order = ["chasers", "chargers", "archers", "shielders"]
+		"conflagration":
+			reduction_order = ["chasers", "chargers", "archers", "shielders"]
+	var adjusted := {
+		"chasers": int(base_counts.get("chasers", 0)),
+		"chargers": int(base_counts.get("chargers", 0)),
+		"archers": int(base_counts.get("archers", 0)),
+		"shielders": int(base_counts.get("shielders", 0))
+	}
+	var remaining := reduction_budget
+	for key in reduction_order:
+		if remaining <= 0:
+			break
+		var current := int(adjusted.get(key, 0))
+		var min_allowed := int(mins.get(key, 0))
+		var reducible := maxi(0, current - min_allowed)
+		if reducible <= 0:
+			continue
+		var spend := mini(remaining, reducible)
+		adjusted[key] = current - spend
+		remaining -= spend
+	return adjusted
 
 func _trial_specialist_enemies(mutator: Dictionary, depth: int, tier: int = BEARING_ENUMS.BearingTier.DELVER) -> Dictionary:
 	var icon := ENCOUNTER_CONTRACTS.mutator_icon_shape_id(mutator)
