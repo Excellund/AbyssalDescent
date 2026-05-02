@@ -54,6 +54,9 @@ func _on_tick() -> void:
 	var next_attempt := int(entry.get("attempt_count", 0)) + 1
 	if entry_id.is_empty() or payload.is_empty():
 		return
+	if not _is_payload_uploadable(payload):
+		TELEMETRY_UPLOAD_QUEUE.mark_success(entry_id)
+		return
 	var api_key := _upload_api_key()
 	var headers := PackedStringArray(["Content-Type: application/json", "Prefer: return=minimal"])
 	if not api_key.is_empty():
@@ -104,3 +107,17 @@ func _upload_endpoint() -> String:
 
 func _upload_api_key() -> String:
 	return String(ProjectSettings.get_setting(TELEMETRY_API_KEY_SETTING, "")).strip_edges()
+
+func _is_payload_uploadable(payload: Dictionary) -> bool:
+	if bool(payload.get("is_debug", false)):
+		return false
+	var version := String(payload.get("game_version", "")).strip_edges().to_lower()
+	if version.is_empty():
+		return false
+	if version == "dev":
+		return false
+	if version.contains("debug"):
+		return false
+	if version.contains("dev"):
+		return false
+	return true

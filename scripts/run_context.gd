@@ -151,7 +151,23 @@ func enqueue_telemetry_payload(payload: Dictionary) -> void:
 		return
 	if not telemetry_upload_enabled:
 		return
+	if not _is_telemetry_payload_uploadable(payload):
+		return
 	telemetry_uploader.enqueue_payload(payload)
+
+func _is_telemetry_payload_uploadable(payload: Dictionary) -> bool:
+	if bool(payload.get("is_debug", false)):
+		return false
+	var version := String(payload.get("game_version", "")).strip_edges().to_lower()
+	if version.is_empty():
+		return false
+	if version == "dev":
+		return false
+	if version.contains("debug"):
+		return false
+	if version.contains("dev"):
+		return false
+	return true
 
 func get_pending_telemetry_upload_count() -> int:
 	if telemetry_uploader == null:
