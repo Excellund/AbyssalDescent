@@ -618,9 +618,10 @@ func get_trial_power_card_description(power_id: String) -> String:
 				return "[color=#9ab8d8]Enhances this power.[/color]"
 			var next_bonus := int(next_values.get("bonus_per_stack", 0))
 			var cur_bonus_dr := int(player_reference.get("dread_resonance_bonus_per_stack"))
+			var max_stacks_dr := int(player_reference.get("dread_resonance_max_stacks"))
 			if current_stack <= 0:
-				return "[color=#9ab8d8]Chain hits on one enemy build resonance. Swapping targets resets it.[/color]\n[color=#9ab8d8]Initial:[/color] bonus per resonance stack [color=#7de882]+%d[/color]." % [next_bonus]
-			return "[color=#c8daf0]Dread Resonance:[/color] bonus per resonance stack [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]." % [cur_bonus_dr, next_bonus]
+				return "[color=#9ab8d8]Chain hits on one enemy build resonance to [color=#e8c96a]%d[/color] stacks. Swapping targets resets to 1.[/color]\n[color=#9ab8d8]Initial:[/color] bonus per resonance stack [color=#7de882]+%d[/color]." % [max_stacks_dr, next_bonus]
+			return "[color=#c8daf0]Dread Resonance:[/color] bonus per resonance stack [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color] (cap [color=#e8c96a]%d[/color])." % [cur_bonus_dr, next_bonus, max_stacks_dr]
 		"vow_shatter":
 			if next_values.is_empty():
 				return "[color=#9ab8d8]Enhances this power.[/color]"

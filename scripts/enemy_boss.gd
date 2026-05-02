@@ -50,6 +50,7 @@ func _ready() -> void:
 	# Apply boss-specific tuning to inherited health before base setup runs.
 	max_health = boss_max_health
 	super._ready()
+	dread_resonance_visual_boss_emphasis = true
 	# Resize inherited collision shape so boss body and hitbox align.
 	for child in get_children():
 		if child is CollisionShape2D:

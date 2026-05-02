@@ -630,7 +630,9 @@ func _get_trial_fallback_description(power_id: String) -> String:
 		"voidfire":
 			return "Heat up attacks. Danger Zone boosts hit damage. Overheat detonates and briefly locks actions."
 		"dread_resonance":
-			return "%sChain hits on one enemy build resonance. Swapping targets resets it." % [_damage_kind_bracket(power_id)]
+			var data := get_power_balance("dread_resonance")
+			var max_stacks := int(data.get("max_stacks", 3))
+			return "%sChain hits on one enemy build resonance up to %d stacks. Swapping targets resets to 1." % [_damage_kind_bracket(power_id), max_stacks]
 		"vow_shatter":
 			return "%sTaking a hit primes a vow. Next attack multiplies damage and consumes it. Must be hit again to reload." % [_damage_kind_bracket(power_id)]
 		"eclipse_mark":

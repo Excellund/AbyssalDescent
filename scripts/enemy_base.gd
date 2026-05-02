@@ -104,6 +104,15 @@ var slow_speed_mult: float = 1.0
 var has_mutator_overlay: bool = false
 var mutator_theme_color: Color = Color(1.0, 0.4, 0.4, 1.0)
 var damage_blocked: bool = false
+var dread_resonance_visual_stacks: int = 0
+var dread_resonance_visual_max_stacks: int = 3
+var dread_resonance_visual_hold_left: float = 0.0
+var dread_resonance_visual_hold_duration: float = 0.22
+var dread_resonance_visual_decay_left: float = 0.0
+var dread_resonance_visual_decay_duration: float = 0.42
+var dread_resonance_visual_peak_left: float = 0.0
+var dread_resonance_visual_peak_duration: float = 0.14
+var dread_resonance_visual_boss_emphasis: bool = false
 var spawn_transport_time_left: float = 0.0
 var spawn_transport_duration: float = 0.0
 var spawn_transport_seed: float = 0.0
@@ -126,6 +135,7 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	_update_attack_animation(delta)
 	_update_recent_damage_overlay(delta)
+	_update_dread_resonance_visual(delta)
 	_update_spawn_transport(delta)
 	if is_spawn_transporting():
 		velocity = Vector2.ZERO
@@ -534,6 +544,7 @@ func _draw_common_body(body_radius: float, body_color: Color, core_color: Color,
 	draw_line(spike_l, spike_l + side * 6.0, COLOR_BODY_SPIKE, 1.8)
 	draw_line(spike_r, spike_r - side * 6.0, COLOR_BODY_SPIKE, 1.8)
 	_draw_mutator_overlay(body_radius)
+	_draw_dread_resonance_overlay(body_radius)
 	_draw_damage_blocked_indicator(body_radius)
 
 func _get_transport_color() -> Color:
@@ -627,6 +638,71 @@ func _draw_damage_blocked_indicator(body_radius: float) -> void:
 	var ring_color := Color(0.7, 0.94, 1.0, 0.56 + pulse * 0.2)
 	draw_arc(Vector2.ZERO, body_radius + 13.0, 0.0, TAU, 40, ring_color, 2.6)
 	draw_circle(Vector2.ZERO, body_radius + 11.2, Color(0.64, 0.9, 1.0, 0.05 + pulse * 0.03))
+
+func set_dread_resonance_visual(stack_count: int, max_stacks: int = 3, peak_flash: bool = false) -> void:
+	var clamped_max := maxi(1, max_stacks)
+	var clamped_stack := clampi(stack_count, 1, clamped_max)
+	dread_resonance_visual_max_stacks = clamped_max
+	dread_resonance_visual_stacks = clamped_stack
+	dread_resonance_visual_hold_left = dread_resonance_visual_hold_duration
+	dread_resonance_visual_decay_left = dread_resonance_visual_decay_duration
+	if peak_flash:
+		dread_resonance_visual_peak_left = dread_resonance_visual_peak_duration
+	queue_redraw()
+
+func clear_dread_resonance_visual() -> void:
+	if dread_resonance_visual_stacks <= 0 and dread_resonance_visual_peak_left <= 0.0:
+		return
+	dread_resonance_visual_stacks = 0
+	dread_resonance_visual_hold_left = 0.0
+	dread_resonance_visual_decay_left = 0.0
+	dread_resonance_visual_peak_left = 0.0
+	queue_redraw()
+
+func _update_dread_resonance_visual(delta: float) -> void:
+	if dread_resonance_visual_stacks <= 0 and dread_resonance_visual_peak_left <= 0.0:
+		return
+	var had_visual := dread_resonance_visual_stacks > 0 or dread_resonance_visual_peak_left > 0.0
+	if dread_resonance_visual_hold_left > 0.0:
+		dread_resonance_visual_hold_left = maxf(0.0, dread_resonance_visual_hold_left - delta)
+	else:
+		dread_resonance_visual_decay_left = maxf(0.0, dread_resonance_visual_decay_left - delta)
+	if dread_resonance_visual_peak_left > 0.0:
+		dread_resonance_visual_peak_left = maxf(0.0, dread_resonance_visual_peak_left - delta)
+	if dread_resonance_visual_decay_left <= 0.0 and dread_resonance_visual_peak_left <= 0.0:
+		dread_resonance_visual_stacks = 0
+		dread_resonance_visual_hold_left = 0.0
+	var has_visual := dread_resonance_visual_stacks > 0 or dread_resonance_visual_peak_left > 0.0
+	if had_visual or has_visual:
+		queue_redraw()
+
+func _draw_dread_resonance_overlay(body_radius: float) -> void:
+	if dread_resonance_visual_stacks <= 0:
+		return
+	var max_stacks := maxi(1, dread_resonance_visual_max_stacks)
+	var stack_ratio := clampf(float(dread_resonance_visual_stacks) / float(max_stacks), 0.0, 1.0)
+	var fade := 1.0
+	if dread_resonance_visual_hold_left <= 0.0:
+		fade = clampf(dread_resonance_visual_decay_left / maxf(0.001, dread_resonance_visual_decay_duration), 0.0, 1.0)
+	if fade <= 0.0:
+		return
+	var t := float(Time.get_ticks_msec()) * 0.001
+	var pulse := 0.5 + 0.5 * sin(t * 6.2)
+	var emphasis := 1.4 if dread_resonance_visual_boss_emphasis else 1.0
+	var ring_color := Color(0.92, 0.76, 1.0, (0.24 + pulse * 0.06) * fade * emphasis)
+	var aura_color := Color(0.6, 0.36, 0.94, (0.04 + pulse * 0.03) * fade * emphasis)
+	var arc_radius := body_radius + 10.0
+	var arc_width := (1.6 + stack_ratio * 0.9) * emphasis
+	draw_circle(Vector2.ZERO, body_radius + 8.0, aura_color)
+	var arc_start := -PI * 0.5
+	var arc_end := arc_start + TAU * stack_ratio
+	draw_arc(Vector2.ZERO, arc_radius, arc_start, arc_end, 24, ring_color, arc_width)
+	if dread_resonance_visual_boss_emphasis:
+		draw_arc(Vector2.ZERO, arc_radius + 3.0, 0.0, TAU, 36, Color(0.76, 0.48, 0.98, (0.12 + pulse * 0.05) * fade), 1.2)
+	if dread_resonance_visual_peak_left > 0.0:
+		var peak_t := clampf(dread_resonance_visual_peak_left / maxf(0.001, dread_resonance_visual_peak_duration), 0.0, 1.0)
+		var burst_radius := arc_radius + (1.0 - peak_t) * 10.0
+		draw_arc(Vector2.ZERO, burst_radius, 0.0, TAU, 36, Color(1.0, 0.92, 1.0, 0.5 * peak_t * fade), 2.0)
 
 func _get_attack_pulse() -> float:
 	var attack_t := 1.0 - (attack_anim_time_left / attack_anim_duration) if attack_anim_duration > 0.0 else 1.0

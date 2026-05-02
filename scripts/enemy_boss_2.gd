@@ -106,6 +106,7 @@ func _ready() -> void:
 	max_health = boss_max_health
 	edge_escape_nudge_speed = 360.0
 	super._ready()
+	dread_resonance_visual_boss_emphasis = true
 	_cache_fortress_health_bar_defaults()
 	for child in get_children():
 		if child is CollisionShape2D:
@@ -841,6 +842,7 @@ func _draw() -> void:
 	_draw_sovereign_body(body_radius, body_color, core_color, facing, enrage_t)
 	if fortress_active:
 		_draw_orbital_fortress_indicator(body_radius)
+	_draw_dread_resonance_overlay(body_radius)
 	_draw_mutator_overlay(body_radius)
 	_draw_damage_blocked_indicator(body_radius)
 	_draw_slow_indicator(body_radius)

@@ -908,8 +908,7 @@ func apply_run_snapshot(snapshot: Dictionary) -> void:
 	_eclipse_marked_enemies.clear()
 	if player_feedback != null and player_feedback.has_method("clear_all_eclipse_mark_decals"):
 		player_feedback.clear_all_eclipse_mark_decals()
-	_dread_resonance_target_id = -1
-	_dread_resonance_target_stacks = 0
+	_reset_dread_resonance_tracking()
 	void_heat = 0.0
 	_voidfire_lockout_left = 0.0
 	_vow_shatter_primed = false
@@ -1201,7 +1200,7 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 			rupture_triggered_enemy_ids[enemy_id] = true
 			_apply_rupture_wave(enemy_body.global_position, final_strike_damage, rupture_hit_enemy_ids)
 		if reward_dread_resonance:
-			_update_dread_resonance_target(enemy_id)
+			_update_dread_resonance_target(enemy_node, enemy_id)
 		did_hit = true
 
 	if reward_razor_wind:
@@ -1309,8 +1308,7 @@ func clear_lingering_combat_effects() -> void:
 	_eclipse_marked_enemies.clear()
 	if player_feedback != null and player_feedback.has_method("clear_all_eclipse_mark_decals"):
 		player_feedback.clear_all_eclipse_mark_decals()
-	_dread_resonance_target_id = -1
-	_dread_resonance_target_stacks = 0
+	_reset_dread_resonance_tracking()
 	_vow_shatter_primed = false
 	_crushed_vow_primed = false
 	_fracture_field_resolving = false
@@ -1558,8 +1556,7 @@ func notify_enemy_killed(kill_position: Vector2 = Vector2.ZERO) -> void:
 	if reward_fracture_field and not _fracture_field_resolving:
 		_apply_fracture_field(kill_position)
 	if reward_dread_resonance:
-		_dread_resonance_target_id = -1
-		_dread_resonance_target_stacks = 0
+		_reset_dread_resonance_tracking()
 	if passive_death_tempo and dash_cooldown_left > 0.0:
 		dash_cooldown_left = 0.0
 		if player_feedback != null:
@@ -1852,12 +1849,50 @@ func _sync_voidfire_ui() -> void:
 
 # --- Dread Resonance ---
 
-func _update_dread_resonance_target(enemy_id: int) -> void:
+func _update_dread_resonance_target(enemy_node: Object, enemy_id: int) -> void:
+	if not is_instance_valid(enemy_node):
+		return
+	var switched_target := enemy_id != _dread_resonance_target_id
+	if switched_target:
+		_clear_dread_resonance_visual_for_enemy_id(_dread_resonance_target_id)
 	if enemy_id != _dread_resonance_target_id:
 		_dread_resonance_target_id = enemy_id
 		_dread_resonance_target_stacks = 1
 	else:
 		_dread_resonance_target_stacks = mini(dread_resonance_max_stacks, _dread_resonance_target_stacks + 1)
+	var hit_cap := _dread_resonance_target_stacks >= dread_resonance_max_stacks
+	_push_dread_resonance_visual(enemy_node, _dread_resonance_target_stacks, hit_cap and not switched_target)
+
+func _push_dread_resonance_visual(enemy_node: Object, stack_count: int, peak_flash: bool) -> void:
+	if not is_instance_valid(enemy_node):
+		return
+	if not enemy_node.has_method("set_dread_resonance_visual"):
+		return
+	enemy_node.call("set_dread_resonance_visual", stack_count, dread_resonance_max_stacks, peak_flash)
+
+func _clear_dread_resonance_visual_for_enemy_id(enemy_id: int) -> void:
+	if enemy_id < 0:
+		return
+	var enemy_node := _find_enemy_node_by_instance_id(enemy_id)
+	if not is_instance_valid(enemy_node):
+		return
+	if enemy_node.has_method("clear_dread_resonance_visual"):
+		enemy_node.call("clear_dread_resonance_visual")
+
+func _find_enemy_node_by_instance_id(enemy_id: int) -> Object:
+	if enemy_id < 0:
+		return null
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not is_instance_valid(enemy_node):
+			continue
+		if enemy_node.get_instance_id() == enemy_id:
+			return enemy_node
+	return null
+
+func _reset_dread_resonance_tracking() -> void:
+	_clear_dread_resonance_visual_for_enemy_id(_dread_resonance_target_id)
+	_dread_resonance_target_id = -1
+	_dread_resonance_target_stacks = 0
 
 func _get_dread_resonance_bonus(enemy_node: Object) -> int:
 	if not reward_dread_resonance:
