@@ -684,23 +684,26 @@ func _is_known_power_id(power_id: String) -> bool:
 	return power_registry_instance.is_valid_power_id(power_id)
 
 func _unhandled_input(event: InputEvent) -> void:
-	# Handle Tab for build detail panel
-	if event is InputEventKey and event.pressed and event.keycode == KEY_TAB:
-		if is_instance_valid(defeat_screen) and bool(defeat_screen.is_open()):
-			return
-		if is_instance_valid(pause_menu_controller) and bool(pause_menu_controller.is_open()):
-			return
-		if is_instance_valid(reward_selection_ui) and bool(reward_selection_ui.is_active()):
-			return
+	# Hold Tab to show build details; release Tab to close.
+	if event is InputEventKey and event.keycode == KEY_TAB and not event.echo:
 		if is_instance_valid(build_detail_panel):
+			if event.pressed:
+				if is_instance_valid(defeat_screen) and bool(defeat_screen.is_open()):
+					return
+				if is_instance_valid(pause_menu_controller) and bool(pause_menu_controller.is_open()):
+					return
+				if is_instance_valid(reward_selection_ui) and bool(reward_selection_ui.is_active()):
+					return
+				if not build_detail_panel.is_open():
+					var active_powers := _get_active_player_powers()
+					build_detail_panel.refresh(current_character_id, active_powers["boons"], active_powers["arcana"], player)
+					build_detail_panel.open()
+				get_viewport().set_input_as_handled()
+				return
 			if build_detail_panel.is_open():
 				build_detail_panel.close()
-			else:
-				var active_powers := _get_active_player_powers()
-				build_detail_panel.refresh(current_character_id, active_powers["boons"], active_powers["arcana"], player)
-				build_detail_panel.open()
-			get_viewport().set_input_as_handled()
-		return
+				get_viewport().set_input_as_handled()
+				return
 	
 	if is_instance_valid(defeat_screen) and bool(defeat_screen.is_open()):
 		get_viewport().set_input_as_handled()
