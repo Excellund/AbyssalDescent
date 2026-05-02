@@ -56,6 +56,10 @@ var attack_swing_sound_player: AudioStreamPlayer2D
 var damage_flash_layer: CanvasLayer
 var damage_flash_rect: ColorRect
 var damage_flash_tween: Tween
+var _eclipse_mark_decals: Dictionary = {}
+var _eclipse_mark_decal_token_seed: int = 1
+var _eclipse_mark_pulse_tweens: Dictionary = {}
+var _eclipse_mark_life_tweens: Dictionary = {}
 
 func setup(max_health: int, current_health: int) -> void:
 	_create_health_bar(max_health, current_health)
@@ -589,6 +593,112 @@ func play_storm_crown_discharge(epicenter_global: Vector2) -> void:
 	# Outer blue-white drift ring
 	play_world_ring(epicenter_global, 62.0, Color(0.82, 0.94, 1.0, 0.44), 0.26)
 
+func show_eclipse_mark_decal(enemy_node: Node2D, duration: float) -> void:
+	if not is_instance_valid(enemy_node):
+		return
+	var enemy_id := enemy_node.get_instance_id()
+	_clear_eclipse_mark_decal_by_id(enemy_id)
+
+	var marker_root := Node2D.new()
+	marker_root.position = Vector2(0.0, -20.0)
+	marker_root.z_as_relative = false
+	marker_root.z_index = 220
+
+	var outer_ring := Line2D.new()
+	outer_ring.width = 2.0
+	outer_ring.default_color = Color(0.26, 0.98, 0.68, 0.76)
+	outer_ring.closed = true
+	outer_ring.antialiased = true
+	outer_ring.points = _build_circle_polygon(9.5, 20)
+	marker_root.add_child(outer_ring)
+
+	var inner_ring := Line2D.new()
+	inner_ring.width = 1.1
+	inner_ring.default_color = Color(0.94, 1.0, 0.98, 0.74)
+	inner_ring.closed = true
+	inner_ring.antialiased = true
+	inner_ring.points = _build_circle_polygon(5.5, 16)
+	inner_ring.rotation = PI * 0.25
+	marker_root.add_child(inner_ring)
+
+	enemy_node.add_child(marker_root)
+	var token: int = _eclipse_mark_decal_token_seed
+	_eclipse_mark_decal_token_seed += 1
+	_eclipse_mark_decals[enemy_id] = {
+		"node": marker_root,
+		"token": token
+	}
+	_pulse_eclipse_mark_decal(enemy_id, token, true)
+
+	var life_tween := create_tween()
+	_eclipse_mark_life_tweens[enemy_id] = life_tween
+	life_tween.tween_interval(maxf(0.05, duration))
+	life_tween.tween_callback(func() -> void:
+		var active: Dictionary = _eclipse_mark_decals.get(enemy_id, {}) as Dictionary
+		if int(active.get("token", -1)) != token:
+			return
+		_clear_eclipse_mark_decal_by_id(enemy_id)
+	)
+
+func clear_eclipse_mark_decal(enemy_node: Object) -> void:
+	if not is_instance_valid(enemy_node):
+		return
+	_clear_eclipse_mark_decal_by_id(enemy_node.get_instance_id())
+
+func clear_all_eclipse_mark_decals() -> void:
+	for enemy_id in _eclipse_mark_decals.keys():
+		if _eclipse_mark_pulse_tweens.has(enemy_id):
+			var pulse_tween: Tween = _eclipse_mark_pulse_tweens[enemy_id]
+			if pulse_tween and pulse_tween.is_valid():
+				pulse_tween.kill()
+			_eclipse_mark_pulse_tweens.erase(enemy_id)
+		if _eclipse_mark_life_tweens.has(enemy_id):
+			var life_tween: Tween = _eclipse_mark_life_tweens[enemy_id]
+			if life_tween and life_tween.is_valid():
+				life_tween.kill()
+			_eclipse_mark_life_tweens.erase(enemy_id)
+		var entry: Dictionary = _eclipse_mark_decals[enemy_id] as Dictionary
+		var marker_variant: Variant = entry.get("node", null)
+		if is_instance_valid(marker_variant) and marker_variant is Node:
+			(marker_variant as Node).queue_free()
+	_eclipse_mark_decals.clear()
+
+func _clear_eclipse_mark_decal_by_id(enemy_id: int) -> void:
+	if not _eclipse_mark_decals.has(enemy_id):
+		return
+	if _eclipse_mark_pulse_tweens.has(enemy_id):
+		var pulse_tween: Tween = _eclipse_mark_pulse_tweens[enemy_id]
+		if pulse_tween and pulse_tween.is_valid():
+			pulse_tween.kill()
+		_eclipse_mark_pulse_tweens.erase(enemy_id)
+	if _eclipse_mark_life_tweens.has(enemy_id):
+		var life_tween: Tween = _eclipse_mark_life_tweens[enemy_id]
+		if life_tween and life_tween.is_valid():
+			life_tween.kill()
+		_eclipse_mark_life_tweens.erase(enemy_id)
+	var entry: Dictionary = _eclipse_mark_decals[enemy_id] as Dictionary
+	var marker_variant: Variant = entry.get("node", null)
+	if is_instance_valid(marker_variant) and marker_variant is Node:
+		(marker_variant as Node).queue_free()
+	_eclipse_mark_decals.erase(enemy_id)
+
+func _pulse_eclipse_mark_decal(enemy_id: int, token: int, grow_phase: bool) -> void:
+	var active: Dictionary = _eclipse_mark_decals.get(enemy_id, {}) as Dictionary
+	if int(active.get("token", -1)) != token:
+		return
+	var marker_variant: Variant = active.get("node", null)
+	if not (is_instance_valid(marker_variant) and marker_variant is Node):
+		return
+	var marker_root: Node2D = marker_variant as Node2D
+	var tween := create_tween()
+	_eclipse_mark_pulse_tweens[enemy_id] = tween
+	var target_scale := Vector2(1.08, 1.08) if grow_phase else Vector2(0.96, 0.96)
+	tween.tween_property(marker_root, "scale", target_scale, 0.22)
+	tween.tween_callback(func() -> void:
+		if _eclipse_mark_decals.has(enemy_id):
+			_pulse_eclipse_mark_decal(enemy_id, token, not grow_phase)
+	)
+
 func play_damage_flash() -> void:
 	if damage_flash_rect == null:
 		return
@@ -725,4 +835,3 @@ func _create_damage_flash() -> void:
 
 	damage_flash_layer.add_child(damage_flash_rect)
 	add_child(damage_flash_layer)
-

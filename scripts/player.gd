@@ -906,6 +906,8 @@ func apply_run_snapshot(snapshot: Dictionary) -> void:
 	combo_relay_stacks = 0
 	combo_relay_stack_timer = 0.0
 	_eclipse_marked_enemies.clear()
+	if player_feedback != null and player_feedback.has_method("clear_all_eclipse_mark_decals"):
+		player_feedback.clear_all_eclipse_mark_decals()
 	_dread_resonance_target_id = -1
 	_dread_resonance_target_stacks = 0
 	void_heat = 0.0
@@ -1300,6 +1302,8 @@ func clear_lingering_combat_effects() -> void:
 	void_dash_reset_pulse_left = 0.0
 	execution_edge_proc_display_left = 0.0
 	_eclipse_marked_enemies.clear()
+	if player_feedback != null and player_feedback.has_method("clear_all_eclipse_mark_decals"):
+		player_feedback.clear_all_eclipse_mark_decals()
 	_dread_resonance_target_id = -1
 	_dread_resonance_target_stacks = 0
 	_vow_shatter_primed = false
@@ -1901,15 +1905,25 @@ func _apply_eclipse_mark(kill_pos: Vector2) -> void:
 		_eclipse_marked_enemies[enemy_id] = {"expiry": expiry, "node": enemy_body}
 		if player_feedback != null:
 			player_feedback.play_world_ring(enemy_body.global_position, 20.0, Color(0.14, 0.94, 0.62, 0.86), 0.18)
+			if player_feedback.has_method("show_eclipse_mark_decal"):
+				player_feedback.show_eclipse_mark_decal(enemy_body, eclipse_mark_duration)
 
 func _update_eclipse_marks() -> void:
 	if _eclipse_marked_enemies.is_empty():
 		return
 	var now := Time.get_ticks_msec() / 1000.0
+	var expired_ids: Array[int] = []
 	for enemy_id in _eclipse_marked_enemies.keys():
-		var entry := _eclipse_marked_enemies[enemy_id] as Dictionary
-		if float(entry.get("expiry", 0.0)) <= now or not is_instance_valid(entry.get("node")):
-			_eclipse_marked_enemies.erase(enemy_id)
+		var entry: Dictionary = _eclipse_marked_enemies[enemy_id] as Dictionary
+		var node_variant: Variant = entry.get("node", null)
+		var is_expired := float(entry.get("expiry", 0.0)) <= now
+		var is_invalid := not (is_instance_valid(node_variant) and node_variant is Node)
+		if is_expired or is_invalid:
+			if is_instance_valid(node_variant) and player_feedback != null and player_feedback.has_method("clear_eclipse_mark_decal"):
+				player_feedback.clear_eclipse_mark_decal(node_variant)
+			expired_ids.append(enemy_id)
+	for enemy_id in expired_ids:
+		_eclipse_marked_enemies.erase(enemy_id)
 
 func _consume_eclipse_mark_bonus(enemy_node: Object, base_damage: int) -> int:
 	if not reward_eclipse_mark:
@@ -1919,6 +1933,8 @@ func _consume_eclipse_mark_bonus(enemy_node: Object, base_damage: int) -> int:
 	var enemy_id := enemy_node.get_instance_id()
 	if not _eclipse_marked_enemies.has(enemy_id):
 		return 0
+	if player_feedback != null and player_feedback.has_method("clear_eclipse_mark_decal"):
+		player_feedback.clear_eclipse_mark_decal(enemy_node)
 	_eclipse_marked_enemies.erase(enemy_id)
 	return maxi(1, int(round(float(base_damage) * eclipse_mark_bonus_ratio)))
 
