@@ -347,6 +347,7 @@ func _physics_process(delta: float) -> void:
 	_update_iron_retort(delta)
 	_update_voidfire_heat(delta)
 	_update_voidfire_lockout(delta)
+	_sync_voidfire_ui()
 	_update_eclipse_marks()
 	_try_start_dash(direction)
 	_try_attack_input()
@@ -1833,6 +1834,13 @@ func _update_voidfire_lockout(delta: float) -> void:
 	_voidfire_lockout_left = maxf(0.0, _voidfire_lockout_left - delta)
 	queue_redraw()
 
+func _sync_voidfire_ui() -> void:
+	if player_feedback == null:
+		return
+	if not player_feedback.has_method("update_voidfire_heat_bar"):
+		return
+	player_feedback.update_voidfire_heat_bar(void_heat, void_heat_cap, reward_voidfire, _voidfire_lockout_left)
+
 # --- Dread Resonance ---
 
 func _update_dread_resonance_target(enemy_id: int) -> void:
@@ -2032,7 +2040,7 @@ func _draw_trial_reward_state() -> void:
 		if modulo == 0 and attack_combo_counter > 0 and execution_edge_proc_display_left > 0.0:
 			pips_lit = execution_every
 
-		var pip_y := -24.0
+		var pip_y := -26.0
 		for i in range(execution_every):
 			var x := -10.0 + float(i) * 10.0
 			var lit := i < pips_lit
@@ -2056,87 +2064,6 @@ func _draw_trial_reward_state() -> void:
 			aegis_alpha = 0.44 + aegis_pulse * 0.2
 		draw_arc(Vector2.ZERO, aegis_radius, 0.0, TAU, 48, Color(0.62, 0.98, 1.0, aegis_alpha), 2.2)
 		draw_circle(Vector2.ZERO, aegis_radius * 0.62, Color(0.62, 0.98, 1.0, aegis_alpha * 0.18))
-
-	if reward_voidfire:
-		var heat_ratio := clampf(void_heat / maxf(1.0, void_heat_cap), 0.0, 1.0)
-		var danger_ratio := 0.70
-		var start_angle := -PI * 0.5
-		var ring_radius := 27.0
-		var character_tint := player_core_color.lerp(player_body_color, 0.35)
-		var scaffold_base := Color(0.08, 0.14, 0.24, 0.58)
-		var scaffold_color := scaffold_base.lerp(Color(character_tint.r, character_tint.g, character_tint.b, scaffold_base.a), 0.42)
-		# Always-visible scaffold for heat readability.
-		draw_arc(Vector2.ZERO, ring_radius, 0.0, TAU, 56, scaffold_color, 2.0)
-		if heat_ratio > 0.001:
-			var warm_t := clampf((heat_ratio - danger_ratio) / maxf(0.001, 1.0 - danger_ratio), 0.0, 1.0)
-			var heat_color_base := Color(
-				lerpf(0.24, 0.60, warm_t),
-				lerpf(0.92, 0.78, warm_t),
-				lerpf(1.00, 1.00, warm_t),
-				0.88
-			)
-			var heat_color := heat_color_base.lerp(Color(character_tint.r, character_tint.g, character_tint.b, heat_color_base.a), 0.34)
-			draw_arc(Vector2.ZERO, ring_radius, start_angle, start_angle + TAU * heat_ratio, 72, heat_color, 3.4)
-			if heat_ratio > 0.05:
-				var flame_count := 14
-				var flow_phase := fposmod(t * (0.12 + heat_ratio * 0.22), 1.0)
-				for i in range(flame_count):
-					var base_t := (float(i) + 0.5) / float(flame_count)
-					var fill_mask := clampf((heat_ratio - base_t) * float(flame_count) + 0.5, 0.0, 1.0)
-					if fill_mask <= 0.001:
-						continue
-					var sample_t := fposmod(base_t + flow_phase * 0.18, 1.0)
-					var flame_angle := start_angle + TAU * sample_t
-					var dir := Vector2(cos(flame_angle), sin(flame_angle))
-					var tangent := Vector2(-dir.y, dir.x)
-					var flicker := 0.5 + 0.5 * sin(t * (7.8 + heat_ratio * 2.4) + float(i) * 1.7)
-					var flow_strength := (0.42 + 0.58 * pow(base_t, 0.72)) * fill_mask
-					var base_radius := ring_radius - 1.0
-					var tongue_height := 2.1 + heat_ratio * 5.1 + flicker * 1.9 + flow_strength * 1.8
-					var tongue_half_width := 0.9 + heat_ratio * 1.4 + flicker * 0.7
-					var base_center := dir * base_radius
-					var forward_lean := tangent * (0.5 + flow_strength * (1.0 + heat_ratio * 0.8))
-					var tip := dir * (ring_radius + tongue_height) + forward_lean
-					var p1 := base_center + tangent * tongue_half_width
-					var p2 := base_center - tangent * tongue_half_width
-					var outer_flame := Color(
-						lerpf(0.26, 0.56, warm_t),
-						lerpf(0.82, 0.66, warm_t),
-						1.0,
-						(0.36 + heat_ratio * 0.30) * flow_strength
-					)
-					outer_flame = outer_flame.lerp(Color(character_tint.r, character_tint.g, character_tint.b, outer_flame.a), 0.30)
-					draw_colored_polygon(PackedVector2Array([tip, p1, p2]), outer_flame)
-					var core_tip := dir * (ring_radius + tongue_height * 0.68) + forward_lean * 0.64
-					var core_base := dir * (base_radius + 0.9)
-					var core_w := tongue_half_width * 0.48
-					var c1 := core_base + tangent * core_w
-					var c2 := core_base - tangent * core_w
-					var core_flame := Color(
-						lerpf(0.70, 0.86, warm_t),
-						lerpf(0.94, 0.88, warm_t),
-						1.0,
-						(0.48 + heat_ratio * 0.34) * flow_strength
-					)
-					core_flame = core_flame.lerp(Color(character_tint.r, character_tint.g, character_tint.b, core_flame.a), 0.22)
-					draw_colored_polygon(PackedVector2Array([core_tip, c1, c2]), core_flame)
-		# Mark where Danger Zone begins.
-		var marker_angle := start_angle + TAU * danger_ratio
-		var marker_dir := Vector2(cos(marker_angle), sin(marker_angle))
-		var marker_inner := marker_dir * (ring_radius - 3.5)
-		var marker_outer := marker_dir * (ring_radius + 3.5)
-		var marker_color := Color(0.74, 0.90, 1.0, 0.92).lerp(Color(character_tint.r, character_tint.g, character_tint.b, 0.92), 0.26)
-		draw_line(marker_inner, marker_outer, marker_color, 1.8)
-		if _voidfire_lockout_left > 0.0:
-			var lock_ratio := clampf(_voidfire_lockout_left / maxf(0.001, voidfire_lockout_duration), 0.0, 1.0)
-			var lock_pulse := 0.5 + 0.5 * sin(t * 18.0)
-			var lock_alpha := clampf(0.42 + lock_pulse * 0.28, 0.0, 0.92) * lock_ratio
-			var lock_color := Color(0.38, 0.74, 1.0, lock_alpha).lerp(Color(character_tint.r, character_tint.g, character_tint.b, lock_alpha), 0.28)
-			draw_arc(Vector2.ZERO, ring_radius + 5.0, 0.0, TAU, 56, lock_color, 2.6)
-			var cross_len := 7.0 + lock_pulse * 1.6
-			var cross_color := Color(0.72, 0.90, 1.0, lock_alpha).lerp(Color(character_tint.r, character_tint.g, character_tint.b, lock_alpha), 0.22)
-			draw_line(Vector2(-cross_len, -cross_len), Vector2(cross_len, cross_len), cross_color, 1.8)
-			draw_line(Vector2(-cross_len, cross_len), Vector2(cross_len, -cross_len), cross_color, 1.8)
 
 	# Dash archetype trial power visuals
 	if reward_phantom_step:

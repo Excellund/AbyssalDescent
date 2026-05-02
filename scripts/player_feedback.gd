@@ -32,6 +32,9 @@ static func telegraph_glow_width(base_width: float, time: float, frequency: floa
 
 var health_bar_size: Vector2 = Vector2(80.0, 10.0)
 var health_bar_offset: Vector2 = Vector2(-40.0, -42.0)
+var voidfire_bar_size: Vector2 = Vector2(80.0, 6.0)
+var voidfire_bar_offset: Vector2 = Vector2(-40.0, -51.0)
+const VOIDFIRE_DANGER_RATIO: float = 0.70
 var impact_sound: AudioStream = DEFAULT_IMPACT_SOUND
 var impact_volume_db: float = -6.0
 var attack_swing_sound: AudioStream = DEFAULT_ATTACK_SWING_SOUND
@@ -42,6 +45,12 @@ var damage_flash_alpha: float = 0.45
 var damage_flash_fade_time: float = 0.16
 
 var health_bar: ProgressBar
+var voidfire_bar: ProgressBar
+var voidfire_sweetspot_zone: ColorRect
+var voidfire_threshold_line: ColorRect
+var voidfire_glow: ColorRect
+var voidfire_bar_background_style: StyleBoxFlat
+var voidfire_bar_fill_style: StyleBoxFlat
 var impact_sound_player: AudioStreamPlayer2D
 var attack_swing_sound_player: AudioStreamPlayer2D
 var damage_flash_layer: CanvasLayer
@@ -50,6 +59,7 @@ var damage_flash_tween: Tween
 
 func setup(max_health: int, current_health: int) -> void:
 	_create_health_bar(max_health, current_health)
+	_create_voidfire_bar()
 	_create_impact_sound_player()
 	_create_attack_swing_sound_player()
 	_create_damage_flash()
@@ -64,6 +74,63 @@ func update_health_bar(new_health: int, new_max_health: int) -> void:
 		return
 	health_bar.max_value = float(new_max_health)
 	health_bar.value = float(new_health)
+
+func update_voidfire_heat_bar(heat: float, heat_cap: float, enabled: bool, lockout_left: float = 0.0) -> void:
+	if voidfire_bar == null:
+		return
+	voidfire_bar.visible = enabled
+	if voidfire_sweetspot_zone != null:
+		voidfire_sweetspot_zone.visible = enabled
+	if voidfire_threshold_line != null:
+		voidfire_threshold_line.visible = enabled
+	if voidfire_glow != null:
+		voidfire_glow.visible = enabled
+	if not enabled:
+		return
+
+	var clamped_cap := maxf(1.0, heat_cap)
+	var clamped_heat := clampf(heat, 0.0, clamped_cap)
+	var heat_ratio := clampf(clamped_heat / clamped_cap, 0.0, 1.0)
+	var in_sweetspot := heat_ratio >= VOIDFIRE_DANGER_RATIO and lockout_left <= 0.0
+	var warm_t := clampf((heat_ratio - VOIDFIRE_DANGER_RATIO) / maxf(0.001, 1.0 - VOIDFIRE_DANGER_RATIO), 0.0, 1.0)
+
+	voidfire_bar.max_value = clamped_cap
+	voidfire_bar.value = clamped_heat
+
+	var cool_fill := Color(0.26, 0.72, 0.98, 0.88)
+	var hot_fill := Color(1.0, 0.78, 0.34, 0.96)
+	var fill_color := cool_fill.lerp(hot_fill, warm_t)
+	fill_color.a = 0.62 + heat_ratio * 0.34
+	if lockout_left > 0.0:
+		fill_color = Color(0.52, 0.82, 1.0, 0.84)
+	if voidfire_bar_fill_style != null:
+		voidfire_bar_fill_style.bg_color = fill_color
+
+	var threshold_base := Color(0.76, 0.9, 1.0, 0.72)
+	var threshold_hot := Color(1.0, 0.94, 0.74, 0.96)
+	if voidfire_threshold_line != null:
+		voidfire_threshold_line.color = threshold_base.lerp(threshold_hot, warm_t)
+
+	if voidfire_sweetspot_zone != null:
+		var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.001 * 9.0)
+		var sweet_alpha := 0.08 + heat_ratio * 0.12
+		if in_sweetspot:
+			sweet_alpha = 0.24 + pulse * 0.22
+		voidfire_sweetspot_zone.color = Color(1.0, 0.84, 0.44, sweet_alpha)
+
+	if voidfire_glow != null:
+		var glow_alpha := 0.0
+		if lockout_left > 0.0:
+			var lock_pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.001 * 14.0)
+			glow_alpha = 0.24 + lock_pulse * 0.28
+			voidfire_glow.color = Color(0.56, 0.84, 1.0, glow_alpha)
+		elif in_sweetspot:
+			var sweet_pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.001 * 10.0)
+			glow_alpha = 0.22 + sweet_pulse * 0.24
+			voidfire_glow.color = Color(1.0, 0.86, 0.48, glow_alpha)
+		else:
+			glow_alpha = 0.08 + heat_ratio * 0.1
+			voidfire_glow.color = Color(0.48, 0.78, 1.0, glow_alpha)
 
 func play_impact_sound() -> void:
 	if impact_sound_player == null:
@@ -563,6 +630,66 @@ func _create_health_bar(max_health: int, current_health: int) -> void:
 	health_bar.add_theme_stylebox_override("background", background_style)
 	health_bar.add_theme_stylebox_override("fill", fill_style)
 	add_child(health_bar)
+
+func _create_voidfire_bar() -> void:
+	voidfire_bar = ProgressBar.new()
+	voidfire_bar.min_value = 0.0
+	voidfire_bar.max_value = 100.0
+	voidfire_bar.value = 0.0
+	voidfire_bar.show_percentage = false
+	voidfire_bar.position = voidfire_bar_offset
+	voidfire_bar.custom_minimum_size = voidfire_bar_size
+	voidfire_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	voidfire_bar.z_index = 6
+
+	voidfire_bar_background_style = StyleBoxFlat.new()
+	voidfire_bar_background_style.bg_color = Color(0.06, 0.12, 0.18, 0.7)
+	voidfire_bar_background_style.corner_radius_top_left = 2
+	voidfire_bar_background_style.corner_radius_top_right = 2
+	voidfire_bar_background_style.corner_radius_bottom_left = 2
+	voidfire_bar_background_style.corner_radius_bottom_right = 2
+	voidfire_bar_background_style.border_width_left = 1
+	voidfire_bar_background_style.border_width_top = 1
+	voidfire_bar_background_style.border_width_right = 1
+	voidfire_bar_background_style.border_width_bottom = 1
+	voidfire_bar_background_style.border_color = Color(0.72, 0.84, 0.98, 0.7)
+
+	voidfire_bar_fill_style = StyleBoxFlat.new()
+	voidfire_bar_fill_style.bg_color = Color(0.26, 0.72, 0.98, 0.88)
+	voidfire_bar_fill_style.corner_radius_top_left = 2
+	voidfire_bar_fill_style.corner_radius_top_right = 2
+	voidfire_bar_fill_style.corner_radius_bottom_left = 2
+	voidfire_bar_fill_style.corner_radius_bottom_right = 2
+
+	voidfire_bar.add_theme_stylebox_override("background", voidfire_bar_background_style)
+	voidfire_bar.add_theme_stylebox_override("fill", voidfire_bar_fill_style)
+	add_child(voidfire_bar)
+
+	voidfire_sweetspot_zone = ColorRect.new()
+	voidfire_sweetspot_zone.position = voidfire_bar_offset + Vector2(voidfire_bar_size.x * VOIDFIRE_DANGER_RATIO, 0.0)
+	voidfire_sweetspot_zone.size = Vector2(voidfire_bar_size.x * (1.0 - VOIDFIRE_DANGER_RATIO), voidfire_bar_size.y)
+	voidfire_sweetspot_zone.color = Color(1.0, 0.84, 0.44, 0.08)
+	voidfire_sweetspot_zone.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	voidfire_sweetspot_zone.z_index = 7
+	add_child(voidfire_sweetspot_zone)
+
+	voidfire_threshold_line = ColorRect.new()
+	voidfire_threshold_line.position = voidfire_bar_offset + Vector2(voidfire_bar_size.x * VOIDFIRE_DANGER_RATIO - 1.0, -1.0)
+	voidfire_threshold_line.size = Vector2(2.0, voidfire_bar_size.y + 2.0)
+	voidfire_threshold_line.color = Color(0.76, 0.9, 1.0, 0.72)
+	voidfire_threshold_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	voidfire_threshold_line.z_index = 8
+	add_child(voidfire_threshold_line)
+
+	voidfire_glow = ColorRect.new()
+	voidfire_glow.position = voidfire_bar_offset + Vector2(-1.0, -1.0)
+	voidfire_glow.size = voidfire_bar_size + Vector2(2.0, 2.0)
+	voidfire_glow.color = Color(0.48, 0.78, 1.0, 0.0)
+	voidfire_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	voidfire_glow.z_index = 9
+	add_child(voidfire_glow)
+
+	update_voidfire_heat_bar(0.0, 100.0, false, 0.0)
 
 func _create_impact_sound_player() -> void:
 	impact_sound_player = AudioStreamPlayer2D.new()
