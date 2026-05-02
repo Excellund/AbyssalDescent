@@ -1232,6 +1232,7 @@ func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupt
 	var wind_half_arc := deg_to_rad(wind_arc_degrees * 0.5)
 	var wind_damage := int(wind_context.get("damage", maxi(1, int(round(float(damage) * razor_wind_damage_ratio)))))
 	var wind_hit_enemy_ids: Dictionary = {}
+	var sigil_burst_fired: bool = false
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		if not (enemy_node is Node2D):
 			continue
@@ -1250,6 +1251,10 @@ func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupt
 		var final_wind_damage := int(wind_breakdown.get("final_damage", wind_damage))
 		DAMAGEABLE.apply_damage(enemy_node, final_wind_damage)
 		_apply_hunters_snare(enemy_node)
+		if passive_sigil_burst and sigil_burst_ready and not sigil_burst_fired:
+			sigil_burst_ready = false
+			sigil_burst_fired = true
+			_apply_sigil_burst(enemy_body.global_position, wind_damage)
 		wind_hit_enemy_ids[enemy_id] = true
 		if reward_storm_crown:
 			_apply_storm_crown_hit(enemy_body.global_position, enemy_id, final_wind_damage)
