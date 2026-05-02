@@ -175,6 +175,7 @@ var objective_engagement_bonus_radius_scale: float = 1.18
 var objective_control_enemies_in_zone: int = 0
 var objective_control_player_inside: bool = false
 var objective_control_contested: bool = false
+var objective_control_kill_baseline: int = 0
 var objective_exposure_duration: float = 2.0
 var objective_exposure_left: float = 0.0
 var objective_exposure_push_duration: float = 1.2

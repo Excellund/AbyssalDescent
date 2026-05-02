@@ -240,6 +240,7 @@ func _begin_control_objective(profile: Dictionary) -> void:
 	world.objective_control_enemies_in_zone = 0
 	world.objective_control_player_inside = false
 	world.objective_control_contested = false
+	world.objective_control_kill_baseline = world.objective_kills
 	world.objective_overtime = false
 	world.hud.show_banner("Hold the Line", "Secure the control zone")
 	world.queue_redraw()
@@ -379,6 +380,10 @@ func update_control_objective_state(delta: float) -> void:
 			world.objective_spawn_batch = mini(HoldTheLineConfig.SPAWN_BATCH_OVERTIME_CAP, world.objective_spawn_batch + 1)
 		world.objective_spawn_timer = HoldTheLineConfig.SPAWN_TIMER_OVERTIME
 		world.hud.show_banner("Line Breaking", "Zone pressure escalating")
+	var kills_this_room: int = world.objective_kills - world.objective_control_kill_baseline
+	if kills_this_room > 0:
+		var kill_spawn_reduction: float = float(kills_this_room) * -0.04
+		world.objective_spawn_interval = maxf(HoldTheLineConfig.SPAWN_INTERVAL_CLAMP_MIN, world.objective_spawn_interval + kill_spawn_reduction)
 	var has_player := is_instance_valid(world.player)
 	var anchor: Vector2 = world.objective_control_anchor
 	var radius := maxf(1.0, world.objective_control_radius)
