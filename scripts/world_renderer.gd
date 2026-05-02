@@ -284,6 +284,10 @@ func _draw_lacuna_boss_door_vfx(door_pos: Vector2, _door_pulse: float, focus_boo
 	# Lacuna reads as severed tempo: broken rings, seam vectors, and crossed silence lines.
 	draw_circle(door_pos, 44.0 + 7.0 * slow, Color(core.r, core.g, core.b, 0.18 + focus_boost * 0.48))
 	draw_circle(door_pos, 32.0 + 5.0 * fast, Color(hot.r, hot.g, hot.b, 0.12 + focus_boost * 0.34))
+	for echo_i in range(3):
+		var echo_t := float(echo_i + 1) / 3.0
+		var echo_offset := Vector2.LEFT.rotated(spin * 0.34 + echo_t * 0.55) * (5.0 + echo_t * 7.0)
+		draw_circle(door_pos + echo_offset, 26.0 - echo_t * 5.0 + 2.0 * fast, Color(core.r, core.g, core.b, 0.06 + focus_boost * 0.06))
 	for ring_i in range(2):
 		var radius := 22.0 + float(ring_i) * 8.0 + 1.2 * slow
 		var phase := spin * (1.1 + float(ring_i) * 0.18)
@@ -298,10 +302,21 @@ func _draw_lacuna_boss_door_vfx(door_pos: Vector2, _door_pulse: float, focus_boo
 		draw_line(start, end, Color(hot.r, hot.g, hot.b, 0.7), 2.0)
 		var ghost := end + dir.orthogonal() * (4.0 + fast)
 		draw_circle(ghost, 2.2, Color(core.r, core.g, core.b, 0.78))
+		var split_start := door_pos + dir * 12.0
+		var split_end := door_pos + dir * (18.0 + 3.0 * fast)
+		draw_line(split_start, split_end, Color(seam.r, seam.g, seam.b, 0.56 + focus_boost * 0.22), 1.0)
 	var cross_a := Vector2.RIGHT.rotated(spin * 0.56)
 	var cross_b := cross_a.orthogonal()
 	draw_line(door_pos - cross_a * 18.0, door_pos + cross_a * 18.0, Color(seam.r, seam.g, seam.b, 0.72 + focus_boost), 2.8)
 	draw_line(door_pos - cross_b * 18.0, door_pos + cross_b * 18.0, Color(seam.r, seam.g, seam.b, 0.54 + focus_boost), 2.0)
+	for shard_i in range(3):
+		var shard_angle := spin * 1.14 + float(shard_i) * TAU / 3.0
+		var shard_dir := Vector2.RIGHT.rotated(shard_angle)
+		var shard_side := Vector2(-shard_dir.y, shard_dir.x)
+		var shard_center := door_pos + shard_dir * (24.0 + slow * 3.0)
+		var tip := shard_center + shard_dir * 7.0
+		var back := shard_center - shard_dir * 3.0
+		draw_colored_polygon(PackedVector2Array([tip, back + shard_side * 2.4, back - shard_side * 2.4]), Color(hot.r, hot.g, hot.b, 0.66 + focus_boost * 0.18))
 
 func _door_enemy_mutator(door: Dictionary) -> Dictionary:
 	var profile := door.get("profile", {}) as Dictionary

@@ -114,7 +114,7 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"name": "Lacuna",
 			"group": "Boss",
 			"color": Color(0.46, 1.0, 0.82, 1.0),
-			"desc": "Final boss encounter that denies tempo and turns escape seams into traps.",
+			"desc": "Final boss encounter. Lacuna is the Silent Threshold: a split-bodied sovereign of the missing beat that severs tempo, weaponizes silence, and turns every escape seam into a living trap.",
 		},
 	]
 
