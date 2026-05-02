@@ -10,6 +10,8 @@ const MUTATOR_ICON_FORTIFIED_PATH := "res://assets/ui/mutators/fortified.svg"
 const MUTATOR_ICON_HUNTERS_FOCUS_PATH := "res://assets/ui/mutators/hunters_focus.svg"
 const MUTATOR_ICON_KILLBOX_PATH := "res://assets/ui/mutators/killbox.svg"
 const MUTATOR_ICON_COMBO_RELAY_PATH := "res://assets/ui/mutators/combo_relay.svg"
+const MUTATOR_ICON_CONVERGENCE_PATH := "res://assets/ui/mutators/convergence.svg"
+const MUTATOR_ICON_CONFLAGRATION_PATH := "res://assets/ui/mutators/conflagration.svg"
 
 signal reward_selected(choice: Dictionary, mode: int, is_initial: bool)
 signal reward_offers_presented(offers: Array[Dictionary], mode: int, is_initial: bool, stage: int)
@@ -43,6 +45,8 @@ var _mutator_icon_killbox: Texture2D
 var _mutator_icon_fortified: Texture2D
 var _mutator_icon_hunters_focus: Texture2D
 var _mutator_icon_combo_relay: Texture2D
+var _mutator_icon_convergence: Texture2D
+var _mutator_icon_conflagration: Texture2D
 const BOON_CARD_MAX_WIDTH := 1460.0
 const BOON_CARD_MIN_WIDTH := 860.0
 const BOON_CARD_HEIGHT := 118.0
@@ -661,6 +665,10 @@ func _get_mutator_icon_texture(icon_shape_id: String) -> Texture2D:
 			return _get_combo_relay_icon_texture()
 		"breach_momentum":
 			return _get_combo_relay_icon_texture()
+		"convergence":
+			return _get_convergence_icon_texture()
+		"conflagration":
+			return _get_conflagration_icon_texture()
 		_:
 			return null
 
@@ -699,3 +707,21 @@ func _get_combo_relay_icon_texture() -> Texture2D:
 		_mutator_icon_combo_relay = icon_resource as Texture2D
 		return _mutator_icon_combo_relay
 	return _get_hunters_focus_icon_texture()
+
+func _get_convergence_icon_texture() -> Texture2D:
+	if _mutator_icon_convergence != null:
+		return _mutator_icon_convergence
+	var icon_resource := load(MUTATOR_ICON_CONVERGENCE_PATH)
+	if icon_resource is Texture2D:
+		_mutator_icon_convergence = icon_resource as Texture2D
+		return _mutator_icon_convergence
+	return MUTATOR_ICON_FLASHPOINT
+
+func _get_conflagration_icon_texture() -> Texture2D:
+	if _mutator_icon_conflagration != null:
+		return _mutator_icon_conflagration
+	var icon_resource := load(MUTATOR_ICON_CONFLAGRATION_PATH)
+	if icon_resource is Texture2D:
+		_mutator_icon_conflagration = icon_resource as Texture2D
+		return _mutator_icon_conflagration
+	return MUTATOR_ICON_SIEGEBREAK

@@ -62,7 +62,7 @@ func _build_ui() -> void:
 	subtitle.offset_bottom = 425.0
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	subtitle.text = "The Sovereign has fallen. The run is over."
+	subtitle.text = "Lacuna has fallen. The run is over."
 	subtitle.add_theme_font_size_override("font_size", 24)
 	subtitle.add_theme_color_override("font_color", Color(0.82, 0.88, 1.0, 0.75))
 	subtitle.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.9))

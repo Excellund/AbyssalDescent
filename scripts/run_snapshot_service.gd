@@ -25,8 +25,11 @@ static func build_snapshot(world: Node, player: Node, run_context: Node, snapsho
 		"boss_unlocked": world.boss_unlocked,
 		"in_boss_room": world.in_boss_room,
 		"in_second_boss_room": world.in_second_boss_room,
+		"in_third_boss_room": world.in_third_boss_room,
 		"first_boss_defeated": world.first_boss_defeated,
+		"second_boss_defeated": world.second_boss_defeated,
 		"phase_two_rooms_cleared": world.phase_two_rooms_cleared,
+		"phase_three_rooms_cleared": world.phase_three_rooms_cleared,
 		"endless_boss_defeated": world.endless_boss_defeated,
 		"choosing_next_room": world.choosing_next_room,
 		"run_cleared": world.run_cleared,
@@ -65,8 +68,11 @@ static func apply_snapshot(world: Node, player: Node, run_context: Node, snapsho
 	world.boss_unlocked = bool(snapshot.get("boss_unlocked", world.boss_unlocked))
 	world.in_boss_room = bool(snapshot.get("in_boss_room", false))
 	world.in_second_boss_room = bool(snapshot.get("in_second_boss_room", false))
+	world.in_third_boss_room = bool(snapshot.get("in_third_boss_room", false))
 	world.first_boss_defeated = bool(snapshot.get("first_boss_defeated", world.first_boss_defeated))
+	world.second_boss_defeated = bool(snapshot.get("second_boss_defeated", world.second_boss_defeated))
 	world.phase_two_rooms_cleared = int(snapshot.get("phase_two_rooms_cleared", world.phase_two_rooms_cleared))
+	world.phase_three_rooms_cleared = int(snapshot.get("phase_three_rooms_cleared", world.phase_three_rooms_cleared))
 	world.endless_boss_defeated = bool(snapshot.get("endless_boss_defeated", world.endless_boss_defeated))
 	world.run_cleared = bool(snapshot.get("run_cleared", false))
 	world.choosing_next_room = bool(snapshot.get("choosing_next_room", true))

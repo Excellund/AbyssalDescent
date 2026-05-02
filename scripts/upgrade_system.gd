@@ -706,7 +706,7 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 		"crushed_vow":
 			return "[color=#c8daf0]After being hit, next attack bonus damage:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
 		"severing_edge":
-			return "[color=#c8daf0]Bonus damage vs enemies below 35%% HP:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
+			return "[color=#c8daf0]Bonus damage on hits against enemies below 35%% HP:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
 		_:
 			return "[color=#c8daf0]Upgrade your stats.[/color]"
 

@@ -34,6 +34,7 @@ const BEARING_LABELS: Array[String] = [
 	"Suppression",
 	"Vanguard",
 	"Ambush",
+	"Convergence",
 	"Gauntlet"
 ]
 const MUTATOR_DAMAGE_STAT_KEYS: Array[String] = [
@@ -184,10 +185,10 @@ func _get_bearing_definitions() -> Dictionary:
 			ENCOUNTER_CONTRACTS.profile_counts(1, 2, 9, 0)
 		]),
 		"Onslaught": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(7, 2, 0, 0), [
-			ENCOUNTER_CONTRACTS.profile_counts(4, 1, 0, 0),
-			ENCOUNTER_CONTRACTS.profile_counts(7, 2, 0, 0),
-			ENCOUNTER_CONTRACTS.profile_counts(8, 2, 0, 0),
-			ENCOUNTER_CONTRACTS.profile_counts(10, 3, 0, 0)
+			ENCOUNTER_CONTRACTS.profile_counts(4, 1, 0, 0, 0, 0, 0, 0, 1, 0),
+			ENCOUNTER_CONTRACTS.profile_counts(6, 2, 0, 0, 0, 0, 0, 0, 2, 0),
+			ENCOUNTER_CONTRACTS.profile_counts(7, 2, 0, 0, 0, 0, 0, 0, 3, 0),
+			ENCOUNTER_CONTRACTS.profile_counts(8, 3, 0, 0, 0, 0, 0, 0, 4, 0)
 		]),
 		"Fortress": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(1, 0, 1, 4), [
 			ENCOUNTER_CONTRACTS.profile_counts(1, 0, 1, 2),
@@ -213,11 +214,17 @@ func _get_bearing_definitions() -> Dictionary:
 			ENCOUNTER_CONTRACTS.profile_counts(2, 4, 0, 4),
 			ENCOUNTER_CONTRACTS.profile_counts(3, 5, 0, 4)
 		]),
-		"Ambush": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(2, 0, 0, 0, 4, 0, 1), [
-			ENCOUNTER_CONTRACTS.profile_counts(1, 0, 0, 0, 3, 0, 1),
-			ENCOUNTER_CONTRACTS.profile_counts(2, 0, 0, 0, 4, 0, 1),
-			ENCOUNTER_CONTRACTS.profile_counts(4, 0, 0, 0, 4, 0, 2),
-			ENCOUNTER_CONTRACTS.profile_counts(4, 0, 0, 0, 5, 0, 3)
+		"Ambush": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(2, 0, 0, 0, 4, 0, 1, 0, 0, 1), [
+			ENCOUNTER_CONTRACTS.profile_counts(1, 0, 0, 0, 3, 0, 1, 0, 0, 1),
+			ENCOUNTER_CONTRACTS.profile_counts(2, 0, 0, 0, 4, 0, 1, 0, 0, 1),
+			ENCOUNTER_CONTRACTS.profile_counts(3, 0, 0, 0, 4, 0, 2, 0, 0, 2),
+			ENCOUNTER_CONTRACTS.profile_counts(4, 0, 0, 0, 5, 0, 3, 0, 0, 2)
+		]),
+		"Convergence": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(3, 0, 0, 0, 0, 0, 0, 2, 0, 0), [
+			ENCOUNTER_CONTRACTS.profile_counts(2, 0, 0, 0, 0, 0, 0, 1, 0, 0),
+			ENCOUNTER_CONTRACTS.profile_counts(3, 0, 0, 0, 0, 0, 0, 2, 0, 0),
+			ENCOUNTER_CONTRACTS.profile_counts(4, 0, 0, 0, 0, 0, 0, 3, 0, 0),
+			ENCOUNTER_CONTRACTS.profile_counts(5, 0, 0, 0, 0, 0, 0, 4, 0, 0)
 		]),
 		"Gauntlet": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(1, 1, 1, 1, 1, 0, 1), [
 			ENCOUNTER_CONTRACTS.profile_counts(1, 1, 1, 1, 1, 0, 1),
@@ -325,6 +332,12 @@ func _profile_has_enemy_archetype(profile: Dictionary, archetype: String) -> boo
 			return ENCOUNTER_CONTRACTS.profile_archer_count(profile) > 0 or ENCOUNTER_CONTRACTS.profile_lancer_count(profile) > 0
 		"shielder":
 			return ENCOUNTER_CONTRACTS.profile_shielder_count(profile) > 0
+		"spectre":
+			return ENCOUNTER_CONTRACTS.profile_spectre_count(profile) > 0
+		"pyre":
+			return ENCOUNTER_CONTRACTS.profile_pyre_count(profile) > 0
+		"tether":
+			return ENCOUNTER_CONTRACTS.profile_tether_count(profile) > 0
 		_:
 			return false
 
@@ -521,7 +534,10 @@ func _build_trial_profile(depth: int = 0) -> Dictionary:
 		profile,
 		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_LURKER_COUNT, 0)),
 		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_RAM_COUNT, 0)),
-		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_LANCER_COUNT, 0))
+		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_LANCER_COUNT, 0)),
+		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_SPECTRE_COUNT, 0)),
+		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_PYRE_COUNT, 0)),
+		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_TETHER_COUNT, 0))
 	)
 	return profile
 
@@ -547,7 +563,10 @@ func apply_mutator_variant_to_profile(profile: Dictionary, mutator: Dictionary, 
 		modified,
 		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_LURKER_COUNT, 0)),
 		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_RAM_COUNT, 0)),
-		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_LANCER_COUNT, 0))
+		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_LANCER_COUNT, 0)),
+		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_SPECTRE_COUNT, 0)),
+		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_PYRE_COUNT, 0)),
+		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_TETHER_COUNT, 0))
 	)
 	var label := ENCOUNTER_CONTRACTS.profile_label(modified)
 	var mutator_name := ENCOUNTER_CONTRACTS.mutator_name(mutator)
@@ -571,6 +590,10 @@ func _pick_trial_base_profile(mutator: Dictionary) -> Dictionary:
 			if current_difficulty_tier == BEARING_ENUMS.BearingTier.PILGRIM:
 				return _build_profile("Vanguard", POOL_ROOM_SIZE, 3, 2, 0, 2)
 			return _build_profile("Vanguard", POOL_ROOM_SIZE, 3, 3, 0, 3)
+		"convergence":
+			return _build_profile("Convergence", POOL_ROOM_SIZE, 3, 0, 0, 0)
+		"conflagration":
+			return _build_profile("Onslaught", POOL_ROOM_SIZE, 6, 2, 0, 0)
 		_:
 			return hard_pool[rng.randi_range(0, hard_pool.size() - 1)]
 
@@ -612,6 +635,20 @@ func _trial_specialist_counts(mutator: Dictionary, depth: int, chasers: int, cha
 				"archers": mini(archers, 1),
 				"shielders": maxi(shielders + 1, 4 + int(floor(float(depth) * 0.15)))
 			}
+		"convergence":
+			return {
+				"chasers": maxi(4, chasers + 1 + int(floor(float(depth) * 0.15))),
+				"chargers": 0,
+				"archers": 0,
+				"shielders": 0
+			}
+		"conflagration":
+			return {
+				"chasers": maxi(5, chasers + 1),
+				"chargers": maxi(2, chargers),
+				"archers": 0,
+				"shielders": 0
+			}
 		_:
 			return {
 				"chasers": chasers,
@@ -636,6 +673,9 @@ func _trial_specialist_enemies(mutator: Dictionary, depth: int, tier: int = BEAR
 	var lurker_count := int(floor(float(maxi(0, effective_depth - lurker_gate + 1)) * 0.6)) if effective_depth >= lurker_gate else 0
 	var ram_count := int(floor(float(maxi(0, effective_depth - ram_gate + 1)) * 0.4)) if effective_depth >= ram_gate else 0
 	var lancer_count := 1 if effective_depth >= lancer_gate else 0
+	var spectre_count := 0
+	var pyre_count := 0
+	var tether_count := 0
 	match icon:
 		"iron_volley":
 			lurker_count = 0
@@ -649,16 +689,36 @@ func _trial_specialist_enemies(mutator: Dictionary, depth: int, tier: int = BEAR
 		"siegebreak":
 			if tier != BEARING_ENUMS.BearingTier.PILGRIM:
 				ram_count += 1 if effective_depth >= ram_gate else 0
+		"convergence":
+			lurker_count = 0
+			ram_count = 0
+			lancer_count = 0
+			spectre_count = 2 + int(floor(float(maxi(0, effective_depth - 3)) * 0.35))
+		"conflagration":
+			lurker_count = 0
+			ram_count = 0
+			lancer_count = 0
+			pyre_count = 2 + int(floor(float(maxi(0, effective_depth - 3)) * 0.4))
+			tether_count = 2 if effective_depth >= 8 else 0
 	lurker_count = int(floor(float(maxi(0, lurker_count)) * specialist_pressure_mult))
 	ram_count = int(floor(float(maxi(0, ram_count)) * specialist_pressure_mult))
 	lancer_count = int(floor(float(maxi(0, lancer_count)) * specialist_pressure_mult))
+	spectre_count = int(floor(float(maxi(0, spectre_count)) * specialist_pressure_mult))
+	pyre_count = int(floor(float(maxi(0, pyre_count)) * specialist_pressure_mult))
+	tether_count = int(floor(float(maxi(0, tether_count)) * specialist_pressure_mult))
+	if tether_count % 2 != 0:
+		tether_count -= 1
+	tether_count = maxi(0, tether_count)
 	if icon == "blood_rush":
 		var blood_rush_lurker_cap := 3 + int(floor(float(maxi(0, effective_depth - lurker_gate)) / 5.0))
 		lurker_count = mini(lurker_count, blood_rush_lurker_cap)
 	return {
 		ENCOUNTER_CONTRACTS.PROFILE_KEY_LURKER_COUNT: maxi(0, lurker_count),
 		ENCOUNTER_CONTRACTS.PROFILE_KEY_RAM_COUNT: maxi(0, ram_count),
-		ENCOUNTER_CONTRACTS.PROFILE_KEY_LANCER_COUNT: maxi(0, lancer_count)
+		ENCOUNTER_CONTRACTS.PROFILE_KEY_LANCER_COUNT: maxi(0, lancer_count),
+		ENCOUNTER_CONTRACTS.PROFILE_KEY_SPECTRE_COUNT: maxi(0, spectre_count),
+		ENCOUNTER_CONTRACTS.PROFILE_KEY_PYRE_COUNT: maxi(0, pyre_count),
+		ENCOUNTER_CONTRACTS.PROFILE_KEY_TETHER_COUNT: maxi(0, tether_count)
 	}
 
 func _build_survival_profile(depth: int) -> Dictionary:
@@ -964,5 +1024,32 @@ func _hard_mutator_pool() -> Array[Dictionary]:
 			C.MUTATOR_STAT_SHIELDER_SLAM_DAMAGE_MULT: 1.3,
 			C.MUTATOR_STAT_SHIELDER_SLAM_WINDUP_MULT: 0.85,
 			C.MUTATOR_STAT_SHIELDER_SPEED_MULT: 1.28
+		},
+		{
+			C.MUTATOR_KEY_NAME: "Phase Collapse",
+			C.MUTATOR_KEY_THEME_COLOR: Color(0.34, 0.96, 0.82, 1.0),
+			C.MUTATOR_KEY_ICON_SHAPE_ID: "convergence",
+			"affected_archetypes": ["melee", "spectre"],
+			C.MUTATOR_KEY_BANNER_SUFFIX: "Spectres and hunters collapse your escape seam",
+			C.MUTATOR_KEY_ENEMY_TINT: Color(0.82, 1.0, 0.94, 1.0),
+			C.MUTATOR_STAT_CHASER_DAMAGE_MULT: 1.22,
+			C.MUTATOR_STAT_CHASER_ATTACK_INTERVAL_MULT: 0.72,
+			C.MUTATOR_STAT_CHASER_SPEED_MULT: 1.16,
+			C.MUTATOR_STAT_SPECTRE_WINDUP_MULT: 0.78,
+			C.MUTATOR_STAT_SPECTRE_STRIKE_DELAY_MULT: 0.68
+		},
+		{
+			C.MUTATOR_KEY_NAME: "Conflagration",
+			C.MUTATOR_KEY_THEME_COLOR: Color(1.0, 0.48, 0.18, 1.0),
+			C.MUTATOR_KEY_ICON_SHAPE_ID: "conflagration",
+			"affected_archetypes": ["melee", "pyre"],
+			C.MUTATOR_KEY_BANNER_SUFFIX: "Burn zones linger where careless kills collapse",
+			C.MUTATOR_KEY_ENEMY_TINT: Color(1.0, 0.88, 0.78, 1.0),
+			C.MUTATOR_STAT_ENEMY_HEALTH_MULT: 1.08,
+			C.MUTATOR_STAT_CHASER_DAMAGE_MULT: 1.14,
+			C.MUTATOR_STAT_CHASER_ATTACK_INTERVAL_MULT: 0.84,
+			C.MUTATOR_STAT_CHASER_SPEED_MULT: 1.08,
+			C.MUTATOR_STAT_PYRE_FIELD_RADIUS_MULT: 1.22,
+			C.MUTATOR_STAT_PYRE_FIELD_DURATION_MULT: 1.55
 		}
 	]

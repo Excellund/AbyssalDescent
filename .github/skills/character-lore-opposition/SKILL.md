@@ -40,6 +40,11 @@ For each character, define:
 - Sovereign-opposed character: counters control geometry, zoning, and forced positioning.
 - Boss III-opposed character: define pillar first (attrition, summoning, denial, etc.), then anchor character identity against it.
 
+## Worked Boss III Example
+- Lacuna: tempo denial and missing-beat pressure. This boss opposes characters that rely on clean disengage windows, execution tempo, or living inside the seam between attacks.
+- Veilstrider vs Lacuna pattern: the boss owns the silence between actions; the character survives by severing that silence before it closes.
+- Mechanical test: the opposition should show up in boss pacing, not only in lore copy. If the character's strength is precise tempo control, the boss must contest prediction windows, escape seams, or reset timing.
+
 ## UI Copy Pattern
 Use this format for selection cards:
 - Name

@@ -46,6 +46,9 @@ const PROFILE_KEY_PLAYER_MUTATOR := "player_mutator"
 const PROFILE_KEY_LURKER_COUNT := "lurker_count"
 const PROFILE_KEY_RAM_COUNT := "ram_count"
 const PROFILE_KEY_LANCER_COUNT := "lancer_count"
+const PROFILE_KEY_SPECTRE_COUNT := "spectre_count"
+const PROFILE_KEY_PYRE_COUNT := "pyre_count"
+const PROFILE_KEY_TETHER_COUNT := "tether_count"
 const PROFILE_KEY_OBJECTIVE_KIND := "objective_kind"
 const PROFILE_KEY_OBJECTIVE_DURATION := "objective_duration"
 const PROFILE_KEY_OBJECTIVE_SPAWN_INTERVAL := "objective_spawn_interval"
@@ -86,6 +89,10 @@ const MUTATOR_STAT_ARCHER_PROJECTILE_DAMAGE_MULT := "archer_projectile_damage_mu
 const MUTATOR_STAT_SHIELDER_SLAM_DAMAGE_MULT := "shielder_slam_damage_mult"
 const MUTATOR_STAT_SHIELDER_SLAM_WINDUP_MULT := "shielder_slam_windup_mult"
 const MUTATOR_STAT_SHIELDER_SPEED_MULT := "shielder_speed_mult"
+const MUTATOR_STAT_PYRE_FIELD_RADIUS_MULT := "pyre_field_radius_mult"
+const MUTATOR_STAT_PYRE_FIELD_DURATION_MULT := "pyre_field_duration_mult"
+const MUTATOR_STAT_SPECTRE_WINDUP_MULT := "spectre_windup_mult"
+const MUTATOR_STAT_SPECTRE_STRIKE_DELAY_MULT := "spectre_strike_delay_mult"
 
 const DEBUG_ENCOUNTER_NONE := DEBUG_ENUMS.Encounter.NONE
 
@@ -101,6 +108,7 @@ const DEBUG_ENCOUNTER_MAP := [
 	{"id": DEBUG_ENUMS.Encounter.AMBUSH, "key": "ambush", "is_boss": false, "is_rest": false, "is_objective": false},
 	{"id": DEBUG_ENUMS.Encounter.SUPPRESSION, "key": "suppression", "is_boss": false, "is_rest": false, "is_objective": false},
 	{"id": DEBUG_ENUMS.Encounter.GAUNTLET, "key": "gauntlet", "is_boss": false, "is_rest": false, "is_objective": false},
+	{"id": DEBUG_ENUMS.Encounter.CONVERGENCE, "key": "convergence", "is_boss": false, "is_rest": false, "is_objective": false},
 	{"id": DEBUG_ENUMS.Encounter.OBJECTIVE_LAST_STAND, "key": "last_stand", "is_boss": false, "is_rest": false, "is_objective": true},
 	{"id": DEBUG_ENUMS.Encounter.OBJECTIVE_PRIORITY_TARGET, "key": "cut_the_signal", "is_boss": false, "is_rest": false, "is_objective": true},
 	{"id": DEBUG_ENUMS.Encounter.OBJECTIVE_HOLD_THE_LINE, "key": "hold_the_line", "is_boss": false, "is_rest": false, "is_objective": true},
@@ -108,6 +116,7 @@ const DEBUG_ENCOUNTER_MAP := [
 	{"id": DEBUG_ENUMS.Encounter.TRIAL, "key": "trial", "is_boss": false, "is_rest": false, "is_objective": false},
 	{"id": DEBUG_ENUMS.Encounter.BOSS_1, "key": "warden", "is_boss": true, "is_rest": false, "is_objective": false},
 	{"id": DEBUG_ENUMS.Encounter.BOSS_2, "key": "sovereign", "is_boss": true, "is_rest": false, "is_objective": false},
+	{"id": DEBUG_ENUMS.Encounter.BOSS_3, "key": "lacuna", "is_boss": true, "is_rest": false, "is_objective": false},
 ]
 
 const ENCOUNTER_DOOR_PRESENTATION := {
@@ -141,6 +150,9 @@ const ENCOUNTER_DOOR_PRESENTATION := {
 	"gauntlet": {
 		"label": "Gauntlet"
 	},
+	"convergence": {
+		"label": "Convergence"
+	},
 	"rest": {
 		"label": "Rest Site",
 		"short_label": "Rest",
@@ -166,6 +178,15 @@ const ENCOUNTER_DOOR_PRESENTATION := {
 		"label": "Sovereign",
 		"short_label": "Boss",
 		"color": Color(0.92, 0.28, 0.1, 0.98),
+		"icon": "boss",
+		"kind": DOOR_KIND_BOSS,
+		"reward": ENUMS.RewardMode.NONE,
+		"prompt_name_suffix": " Gate"
+	},
+	"lacuna": {
+		"label": "Lacuna",
+		"short_label": "Boss",
+		"color": Color(0.34, 0.92, 0.74, 0.98),
 		"icon": "boss",
 		"kind": DOOR_KIND_BOSS,
 		"reward": ENUMS.RewardMode.NONE,
@@ -343,6 +364,15 @@ static func normalize_profile(value: Variant) -> Dictionary:
 		int(input.get(PROFILE_KEY_SHIELDER_COUNT, 0)),
 		input.get(PROFILE_KEY_ENEMY_MUTATOR, {}) as Dictionary
 	)
+	profile_set_specialist_counts(
+		normalized,
+		int(input.get(PROFILE_KEY_LURKER_COUNT, 0)),
+		int(input.get(PROFILE_KEY_RAM_COUNT, 0)),
+		int(input.get(PROFILE_KEY_LANCER_COUNT, 0)),
+		int(input.get(PROFILE_KEY_SPECTRE_COUNT, 0)),
+		int(input.get(PROFILE_KEY_PYRE_COUNT, 0)),
+		int(input.get(PROFILE_KEY_TETHER_COUNT, 0))
+	)
 	var objective_kind := String(input.get(PROFILE_KEY_OBJECTIVE_KIND, ""))
 	if not objective_kind.is_empty():
 		normalized[PROFILE_KEY_OBJECTIVE_KIND] = objective_kind
@@ -386,6 +416,15 @@ static func profile_ram_count(profile_value: Dictionary) -> int:
 static func profile_lancer_count(profile_value: Dictionary) -> int:
 	return int(profile_value.get(PROFILE_KEY_LANCER_COUNT, 0))
 
+static func profile_spectre_count(profile_value: Dictionary) -> int:
+	return int(profile_value.get(PROFILE_KEY_SPECTRE_COUNT, 0))
+
+static func profile_pyre_count(profile_value: Dictionary) -> int:
+	return int(profile_value.get(PROFILE_KEY_PYRE_COUNT, 0))
+
+static func profile_tether_count(profile_value: Dictionary) -> int:
+	return int(profile_value.get(PROFILE_KEY_TETHER_COUNT, 0))
+
 static func profile_enemy_mutator(profile_value: Dictionary) -> Dictionary:
 	return profile_value.get(PROFILE_KEY_ENEMY_MUTATOR, {}) as Dictionary
 
@@ -404,12 +443,15 @@ static func profile_set_counts(profile_value: Dictionary, chasers: int, chargers
 	profile_value[PROFILE_KEY_ARCHER_COUNT] = archers
 	profile_value[PROFILE_KEY_SHIELDER_COUNT] = shielders
 
-static func profile_set_specialist_counts(profile_value: Dictionary, lurkers: int, rams: int, lancers: int) -> void:
+static func profile_set_specialist_counts(profile_value: Dictionary, lurkers: int, rams: int, lancers: int, spectres: int = 0, pyres: int = 0, tethers: int = 0) -> void:
 	profile_value[PROFILE_KEY_LURKER_COUNT] = lurkers
 	profile_value[PROFILE_KEY_RAM_COUNT] = rams
 	profile_value[PROFILE_KEY_LANCER_COUNT] = lancers
+	profile_value[PROFILE_KEY_SPECTRE_COUNT] = spectres
+	profile_value[PROFILE_KEY_PYRE_COUNT] = pyres
+	profile_value[PROFILE_KEY_TETHER_COUNT] = tethers
 
-static func profile_counts(chasers: int, chargers: int, archers: int, shielders: int, lurkers: int = 0, rams: int = 0, lancers: int = 0) -> Dictionary:
+static func profile_counts(chasers: int, chargers: int, archers: int, shielders: int, lurkers: int = 0, rams: int = 0, lancers: int = 0, spectres: int = 0, pyres: int = 0, tethers: int = 0) -> Dictionary:
 	return {
 		PROFILE_KEY_CHASER_COUNT: chasers,
 		PROFILE_KEY_CHARGER_COUNT: chargers,
@@ -417,7 +459,10 @@ static func profile_counts(chasers: int, chargers: int, archers: int, shielders:
 		PROFILE_KEY_SHIELDER_COUNT: shielders,
 		PROFILE_KEY_LURKER_COUNT: lurkers,
 		PROFILE_KEY_RAM_COUNT: rams,
-		PROFILE_KEY_LANCER_COUNT: lancers
+		PROFILE_KEY_LANCER_COUNT: lancers,
+		PROFILE_KEY_SPECTRE_COUNT: spectres,
+		PROFILE_KEY_PYRE_COUNT: pyres,
+		PROFILE_KEY_TETHER_COUNT: tethers
 	}
 
 static func profile_count_from_counts(counts: Dictionary, key: String) -> int:
@@ -431,7 +476,10 @@ static func profile_counts_from_profile(profile_value: Dictionary) -> Dictionary
 		profile_shielder_count(profile_value),
 		profile_lurker_count(profile_value),
 		profile_ram_count(profile_value),
-		profile_lancer_count(profile_value)
+		profile_lancer_count(profile_value),
+		profile_spectre_count(profile_value),
+		profile_pyre_count(profile_value),
+		profile_tether_count(profile_value)
 	)
 
 static func profile_set_counts_from_dict(profile_value: Dictionary, counts: Dictionary) -> void:
@@ -446,7 +494,10 @@ static func profile_set_counts_from_dict(profile_value: Dictionary, counts: Dict
 		profile_value,
 		profile_count_from_counts(counts, PROFILE_KEY_LURKER_COUNT),
 		profile_count_from_counts(counts, PROFILE_KEY_RAM_COUNT),
-		profile_count_from_counts(counts, PROFILE_KEY_LANCER_COUNT)
+		profile_count_from_counts(counts, PROFILE_KEY_LANCER_COUNT),
+		profile_count_from_counts(counts, PROFILE_KEY_SPECTRE_COUNT),
+		profile_count_from_counts(counts, PROFILE_KEY_PYRE_COUNT),
+		profile_count_from_counts(counts, PROFILE_KEY_TETHER_COUNT)
 	)
 
 static func profile_with_counts(profile_value: Dictionary, counts: Dictionary) -> Dictionary:
@@ -473,7 +524,10 @@ static func profile_scaled_counts(profile_value: Dictionary, pressure_mult: floa
 		modified,
 		profile_scale_count(profile_lurker_count(modified), pressure_mult),
 		profile_scale_count(profile_ram_count(modified), pressure_mult),
-		profile_scale_count(profile_lancer_count(modified), pressure_mult)
+		profile_scale_count(profile_lancer_count(modified), pressure_mult),
+		profile_scale_count(profile_spectre_count(modified), pressure_mult),
+		profile_scale_count(profile_pyre_count(modified), pressure_mult),
+		profile_scale_count(profile_tether_count(modified), pressure_mult)
 	)
 	if minimum_total > 0:
 		var current_total := profile_total_enemy_count(modified)
@@ -491,6 +545,9 @@ static func profile_total_enemy_count(profile_value: Dictionary) -> int:
 	total += profile_lurker_count(profile_value)
 	total += profile_ram_count(profile_value)
 	total += profile_lancer_count(profile_value)
+	total += profile_spectre_count(profile_value)
+	total += profile_pyre_count(profile_value)
+	total += profile_tether_count(profile_value)
 	return total
 
 static func profile_set_enemy_mutator(profile_value: Dictionary, enemy_mutator: Dictionary) -> void:

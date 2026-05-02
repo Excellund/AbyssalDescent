@@ -352,7 +352,7 @@ func _get_power_current_desc(power_id: String, power_type: String, player: Node)
 		"crushed_vow":
 			return "[color=#c8daf0]After taking damage, next-hit bonus:[/color] [color=#e8c96a]+%d[/color]" % (14 * stacks)
 		"severing_edge":
-			return "[color=#c8daf0]Bonus damage vs enemies below 35%% HP:[/color] [color=#e8c96a]+%d[/color]" % (10 * stacks)
+			return "[color=#c8daf0]Bonus damage on hits against enemies below 35%% HP:[/color] [color=#e8c96a]+%d[/color]" % (10 * stacks)
 		# Arcana
 		"razor_wind":
 			var rw_range := 1.25 + 0.10 * float(stacks)

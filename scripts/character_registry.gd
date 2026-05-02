@@ -59,9 +59,9 @@ const CHARACTER_DEFINITIONS := {
 		"id": ENUMS.CHARACTER_ID_VEILSTRIDER,
 		"name": "Veilstrider",
 		"archetype": "Riftbound Blade",
-		"boss_opposition": "Boss III (Unrevealed)",
+		"boss_opposition": "Lacuna",
 		"tagline": "Dictate tempo through execution pressure and precise disengage.",
-		"lore": "Veilstriders walk the seam between heartbeat and silence. They do not win by force but by ending turns before they begin. Whatever throne rises next from the abyss, the Veilstrider exists to sever it.",
+		"lore": "Veilstriders walk the seam between heartbeat and silence. They do not win by force but by ending turns before they begin. Where Lacuna claims the missing beat between breaths, the Veilstrider exists to sever that silence and reclaim tempo.",
 		"arcana_pool_key": "veilstrider",
 		"passive_id": "death_tempo",
 		"stat_modifiers": {

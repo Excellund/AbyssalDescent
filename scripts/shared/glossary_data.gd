@@ -63,6 +63,12 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"desc": "Mixed-threat test of every enemy role.",
 		},
 		{
+			"name": "Convergence",
+			"group": "Advanced",
+			"color": Color(0.5, 0.96, 0.86, 1.0),
+			"desc": "Spectres predict escape routes while pursuit pressure collapses the seam.",
+		},
+		{
 			"name": "Trial",
 			"group": "Trial",
 			"color": Color(1.0, 0.66, 0.52, 1.0),
@@ -102,7 +108,13 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"name": "Sovereign",
 			"group": "Boss",
 			"color": Color(1.0, 0.58, 0.48, 1.0),
-			"desc": "Final boss encounter.",
+			"desc": "Second boss encounter.",
+		},
+		{
+			"name": "Lacuna",
+			"group": "Boss",
+			"color": Color(0.46, 1.0, 0.82, 1.0),
+			"desc": "Final boss encounter that denies tempo and turns escape seams into traps.",
 		},
 	]
 
@@ -131,6 +143,18 @@ static func _mutator_rows() -> Array[Dictionary]:
 			"color": Color(0.32, 0.82, 0.56, 1.0),
 			"icon": "res://assets/ui/mutators/iron_volley.svg",
 			"desc": "Ranged enemies attack more often and punish open movement.",
+		},
+		{
+			"name": "Phase Collapse",
+			"color": Color(0.34, 0.96, 0.82, 1.0),
+			"icon": "res://assets/ui/mutators/convergence.svg",
+			"desc": "Spectres collapse future positions and punish predictable movement.",
+		},
+		{
+			"name": "Conflagration",
+			"color": Color(1.0, 0.48, 0.18, 1.0),
+			"icon": "res://assets/ui/mutators/conflagration.svg",
+			"desc": "Pyres seed lingering burn zones that turn careless clears into traps.",
 		},
 		{
 			"name": "Killbox",

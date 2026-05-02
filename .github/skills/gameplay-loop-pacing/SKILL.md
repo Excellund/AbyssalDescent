@@ -25,6 +25,9 @@ Use this skill when the core loop feels passive, repetitive, or dominated by eva
 - Add role combinations that punish infinite orbiting (lane cutoffs, flankers, zone denial).
 - Use soft containment over hard lock: readable pressure cones, telegraphed intercepts, temporary area taxes.
 - Tune pursuit cadence, not just top speed.
+- Spectre pattern: predictive repositioner that punishes staying on the same orbit line.
+- Pyre pattern: kill-position tax that turns careless clears into temporary denial.
+- Tether pattern: moving beam pair that cuts a lane dynamically rather than placing a static zone.
 
 2. Commitment rewards
 - Add short-duration bonuses for proximity, chained hits, or objective control presence.
@@ -73,6 +76,11 @@ Use this skill when the core loop feels passive, repetitive, or dominated by eva
 - Do not remove defensive movement viability entirely.
 - Avoid unreadable hard counters to mobility.
 - Keep route, glossary, and debug surfaces in sync when encounter meaning changes.
+
+## Reusable Enemy Patterns
+- Use predictive enemies when the player loop is too deterministic; the counterplay should be direction change or tempo break, not raw speed checks.
+- Use death-residue enemies when kill order and kill location should matter more than pure survival time.
+- Use moving lane-cutters when static hazard circles already exist and you need a different anti-kiting shape.
 
 ## Output Format
 1. Loop failure diagnosis

@@ -49,6 +49,25 @@ const ENEMY_MUTATOR_STAT_MAP := {
 	"lancer": [
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_WINDUP_MULT, "prop": "windup_time", "min": 0.22},
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_COOLDOWN_MULT, "prop": "attack_cooldown", "min": 0.8}
+	],
+	"spectre": [
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT, "prop": "strike_damage", "min": 1.0, "is_int": true},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_ATTACK_INTERVAL_MULT, "prop": "attack_cooldown", "min": 0.22},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_SPEED_MULT, "prop": "move_speed", "min": 25.0},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_SPECTRE_WINDUP_MULT, "prop": "windup_time", "min": 0.36},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_SPECTRE_STRIKE_DELAY_MULT, "prop": "post_blink_strike_delay", "min": 0.28}
+	],
+	"pyre": [
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT, "prop": "contact_damage", "min": 1.0, "is_int": true},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_ATTACK_INTERVAL_MULT, "prop": "attack_interval", "min": 0.24},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_SPEED_MULT, "prop": "move_speed", "min": 25.0},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_PYRE_FIELD_RADIUS_MULT, "prop": "death_field_radius", "min": 40.0},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_PYRE_FIELD_DURATION_MULT, "prop": "death_field_duration", "min": 2.0}
+	],
+	"tether": [
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_WINDUP_MULT, "prop": "beam_windup_time", "min": 0.18},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_COOLDOWN_MULT, "prop": "beam_cooldown", "min": 0.5},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_SPEED_MULT, "prop": "move_speed", "min": 25.0}
 	]
 }
 
@@ -78,6 +97,16 @@ const ENEMY_DAMAGE_CLASSIFICATION := {
 	"lancer": {
 		"zone_tick": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"}
 	},
+	"spectre": {
+		"strike": {"kind": "flat", "scales_via_mutator": true, "mutator_stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT}
+	},
+	"pyre": {
+		"contact_strike": {"kind": "flat", "scales_via_mutator": true, "mutator_stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT},
+		"death_field": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"}
+	},
+	"tether": {
+		"beam_tick": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"}
+	},
 	"boss_warden": {
 		"all_attacks": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"}
 	},
@@ -85,7 +114,7 @@ const ENEMY_DAMAGE_CLASSIFICATION := {
 		"all_attacks": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"}
 	}
 }
-const ENEMY_SPAWN_ORDER: Array[String] = ["chaser", "charger", "archer", "shielder", "lurker", "ram", "lancer"]
+const ENEMY_SPAWN_ORDER: Array[String] = ["chaser", "charger", "archer", "shielder", "lurker", "ram", "lancer", "spectre", "pyre", "tether"]
 
 var world_root: Node2D
 var player: Node2D
@@ -160,6 +189,15 @@ func _profile_count_for_enemy_type(profile: Dictionary, enemy_type: String) -> i
 			return ENCOUNTER_CONTRACTS.profile_ram_count(profile)
 		"lancer":
 			return ENCOUNTER_CONTRACTS.profile_lancer_count(profile)
+		"spectre":
+			return ENCOUNTER_CONTRACTS.profile_spectre_count(profile)
+		"pyre":
+			return ENCOUNTER_CONTRACTS.profile_pyre_count(profile)
+		"tether":
+			var tether_count := ENCOUNTER_CONTRACTS.profile_tether_count(profile)
+			if tether_count % 2 != 0:
+				tether_count -= 1
+			return maxi(0, tether_count)
 		_:
 			return 0
 

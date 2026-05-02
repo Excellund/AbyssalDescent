@@ -7,8 +7,12 @@ const ENEMY_SHIELDER_SCRIPT := preload("res://scripts/enemy_shielder.gd")
 const ENEMY_LURKER_SCRIPT := preload("res://scripts/enemy_lurker.gd")
 const ENEMY_RAM_SCRIPT := preload("res://scripts/enemy_ram.gd")
 const ENEMY_LANCER_SCRIPT := preload("res://scripts/enemy_lancer.gd")
+const ENEMY_SPECTRE_SCRIPT := preload("res://scripts/enemy_spectre.gd")
+const ENEMY_PYRE_SCRIPT := preload("res://scripts/enemy_pyre.gd")
+const ENEMY_TETHER_SCRIPT := preload("res://scripts/enemy_tether.gd")
 const ENEMY_BOSS_SCRIPT := preload("res://scripts/enemy_boss.gd")
 const ENEMY_BOSS_2_SCRIPT := preload("res://scripts/enemy_boss_2.gd")
+const ENEMY_BOSS_3_SCRIPT := preload("res://scripts/enemy_boss_3.gd")
 const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 const MUSIC_SYSTEM_SCRIPT := preload("res://scripts/music_system.gd")
@@ -93,6 +97,7 @@ func _get_debug_encounter_reward_mode(encounter_key: String) -> int:
 @export var rest_heal_ratio: float = 0.32
 @export var hard_room_enemy_bonus: int = 3
 @export var second_boss_encounter_count: int = 7
+@export var third_boss_encounter_count: int = 7
 var settings_enabled: bool = false
 var apply_test_powers_on_start: bool = false
 var skip_starting_boon_selection: bool = false
@@ -119,8 +124,11 @@ var active_room_enemy_count: int = 0
 var boss_unlocked: bool = false
 var in_boss_room: bool = false
 var in_second_boss_room: bool = false
+var in_third_boss_room: bool = false
 var first_boss_defeated: bool = false
+var second_boss_defeated: bool = false
 var phase_two_rooms_cleared: int = 0
+var phase_three_rooms_cleared: int = 0
 var endless_boss_defeated: bool = false
 var choosing_next_room: bool = false
 var run_cleared: bool = false
@@ -314,7 +322,10 @@ func _ready() -> void:
 		"shielder": ENEMY_SHIELDER_SCRIPT,
 		"lurker": ENEMY_LURKER_SCRIPT,
 		"ram": ENEMY_RAM_SCRIPT,
-		"lancer": ENEMY_LANCER_SCRIPT
+		"lancer": ENEMY_LANCER_SCRIPT,
+		"spectre": ENEMY_SPECTRE_SCRIPT,
+		"pyre": ENEMY_PYRE_SCRIPT,
+		"tether": ENEMY_TETHER_SCRIPT
 	}, Callable(self, "_on_room_enemy_died"))
 	_play_room_music(false, false, music_intro_fade_duration)
 	hud = WORLD_HUD_SCRIPT.new()
@@ -454,6 +465,8 @@ func _start_debug_selected_encounter(encounter_state: int) -> Dictionary:
 		return _start_debug_boss_room()
 	if encounter_key == "sovereign":
 		return _start_debug_second_boss_room()
+	if encounter_key == "lacuna":
+		return _start_debug_third_boss_room()
 
 	_reset_for_debug_jump()
 	var encounter_depth := start_depth
@@ -487,8 +500,11 @@ func _start_debug_boss_room() -> Dictionary:
 	room_depth = encounter_count
 	boss_unlocked = true
 	first_boss_defeated = false
+	second_boss_defeated = false
 	in_second_boss_room = false
+	in_third_boss_room = false
 	phase_two_rooms_cleared = 0
+	phase_three_rooms_cleared = 0
 	_begin_boss_room()
 	hud.refresh(_get_hud_state(), player)
 	return {"ok": true, "state": "debug_encounter", "encounter": "Warden"}
@@ -499,11 +515,29 @@ func _start_debug_second_boss_room() -> Dictionary:
 	room_depth = rooms_cleared
 	boss_unlocked = true
 	first_boss_defeated = true
+	second_boss_defeated = false
 	in_second_boss_room = false
+	in_third_boss_room = false
 	phase_two_rooms_cleared = second_boss_encounter_count
+	phase_three_rooms_cleared = 0
 	_begin_second_boss_room()
 	hud.refresh(_get_hud_state(), player)
 	return {"ok": true, "state": "debug_encounter", "encounter": "Sovereign"}
+
+func _start_debug_third_boss_room() -> Dictionary:
+	_reset_for_debug_jump()
+	rooms_cleared = _get_third_boss_target_depth()
+	room_depth = rooms_cleared
+	boss_unlocked = true
+	first_boss_defeated = true
+	second_boss_defeated = true
+	in_second_boss_room = false
+	in_third_boss_room = false
+	phase_two_rooms_cleared = second_boss_encounter_count
+	phase_three_rooms_cleared = third_boss_encounter_count
+	_begin_third_boss_room()
+	hud.refresh(_get_hud_state(), player)
+	return {"ok": true, "state": "debug_encounter", "encounter": "Lacuna"}
 
 func _build_debug_encounter_profile(encounter_key: String, depth: int) -> Dictionary:
 	if not is_instance_valid(encounter_profile_builder):
@@ -522,6 +556,10 @@ func _debug_mutator_key(state_value: int) -> String:
 			return "iron_volley"
 		DEBUG_ENUMS.MutatorOverride.KILLBOX:
 			return "killbox"
+		DEBUG_ENUMS.MutatorOverride.PHASE_COLLAPSE:
+			return "convergence"
+		DEBUG_ENUMS.MutatorOverride.CONFLAGRATION:
+			return "conflagration"
 		DEBUG_ENUMS.MutatorOverride.RANDOM_HARD:
 			return "random_hard"
 		_:
@@ -559,8 +597,11 @@ func _reset_for_debug_jump() -> void:
 	run_cleared = false
 	in_boss_room = false
 	in_second_boss_room = false
+	in_third_boss_room = false
 	first_boss_defeated = false
+	second_boss_defeated = false
 	phase_two_rooms_cleared = 0
+	phase_three_rooms_cleared = 0
 	endless_boss_defeated = false
 	active_room_enemy_count = 0
 	_clear_all_enemies()
@@ -1092,7 +1133,9 @@ func _get_hud_state() -> Dictionary:
 		"encounter_intro_grace_active": encounter_intro_grace_active,
 		"boss_unlocked": boss_unlocked,
 		"first_boss_defeated": first_boss_defeated,
+		"second_boss_defeated": second_boss_defeated,
 		"second_boss_unlocked": _is_second_boss_unlocked(),
+		"third_boss_unlocked": _is_third_boss_unlocked(),
 		"current_character_passive_name": current_character_passive_name,
 	}
 	var active_powers := _get_active_player_powers()
@@ -1192,6 +1235,9 @@ func _on_room_cleared() -> void:
 	if in_second_boss_room:
 		_finish_second_boss_clear()
 		return
+	if in_third_boss_room:
+		_finish_third_boss_clear()
+		return
 	if in_boss_room and not first_boss_defeated:
 		_finish_first_boss_clear()
 		return
@@ -1216,7 +1262,10 @@ func _on_room_cleared() -> void:
 		return
 	rooms_cleared = ENCOUNTER_CONTRACTS.outcome_rooms_cleared(outcome)
 	room_depth = ENCOUNTER_CONTRACTS.outcome_room_depth(outcome)
-	if first_boss_defeated:
+	if second_boss_defeated:
+		phase_three_rooms_cleared += 1
+		boss_unlocked = _is_third_boss_unlocked()
+	elif first_boss_defeated:
 		phase_two_rooms_cleared += 1
 		boss_unlocked = _is_second_boss_unlocked()
 	else:
@@ -1241,7 +1290,9 @@ func _finish_first_boss_clear() -> void:
 	in_boss_room = false
 	first_boss_defeated = true
 	in_second_boss_room = false
+	in_third_boss_room = false
 	phase_two_rooms_cleared = 0
+	phase_three_rooms_cleared = 0
 	rooms_cleared += 1
 	room_depth += 1
 	boss_unlocked = false
@@ -1251,6 +1302,19 @@ func _finish_first_boss_clear() -> void:
 
 func _finish_second_boss_clear() -> void:
 	in_second_boss_room = false
+	second_boss_defeated = true
+	active_room_enemy_count = 0
+	choosing_next_room = false
+	rooms_cleared += 1
+	room_depth += 1
+	boss_unlocked = false
+	pending_room_reward = ENUMS.RewardMode.NONE
+	phase_three_rooms_cleared = 0
+	hud.show_banner("Sovereign Defeated", "")
+	_spawn_door_options()
+
+func _finish_third_boss_clear() -> void:
+	in_third_boss_room = false
 	active_room_enemy_count = 0
 	run_cleared = true
 	_finish_active_run_telemetry("clear")
@@ -1282,6 +1346,7 @@ func _apply_difficulty_tier_bonuses(difficulty_tier: int) -> void:
 	if encounter_target > 0:
 		encounter_count = encounter_target
 		second_boss_encounter_count = maxi(1, encounter_target - 1)
+		third_boss_encounter_count = maxi(1, encounter_target - 1)
 
 	player.set_incoming_damage_taken_mult(float(difficulty_config.get("player_damage_taken_mult", 1.0)))
 	player.set_incoming_contact_damage_mult(float(difficulty_config.get("enemy_contact_damage_mult", 1.0)))
@@ -1294,9 +1359,14 @@ func _apply_difficulty_tier_bonuses(difficulty_tier: int) -> void:
 func _get_second_boss_target_depth() -> int:
 	return maxi(encounter_count + 1, encounter_count * 2)
 
+func _get_third_boss_target_depth() -> int:
+	return maxi(_get_second_boss_target_depth() + 1, _get_second_boss_target_depth() + third_boss_encounter_count + 1)
+
 func _build_route_context(depth: int) -> Dictionary:
 	var target_depth := encounter_count
-	if first_boss_defeated:
+	if second_boss_defeated:
+		target_depth = _get_third_boss_target_depth()
+	elif first_boss_defeated:
 		target_depth = _get_second_boss_target_depth()
 	return {
 		"depth": depth,
@@ -1304,7 +1374,10 @@ func _build_route_context(depth: int) -> Dictionary:
 	}
 
 func _is_second_boss_unlocked() -> bool:
-	return first_boss_defeated and room_depth >= _get_second_boss_target_depth()
+	return first_boss_defeated and not second_boss_defeated and room_depth >= _get_second_boss_target_depth()
+
+func _is_third_boss_unlocked() -> bool:
+	return second_boss_defeated and room_depth >= _get_third_boss_target_depth()
 
 func _get_boss_difficulty_mult() -> float:
 	if current_difficulty_config.is_empty():
@@ -1323,7 +1396,7 @@ func _apply_boss_difficulty_scaling(boss: CharacterBody2D) -> void:
 	var base_max_health: int = int(boss.get_max_health())
 	var scaled_max_health := maxi(1, int(round(float(base_max_health) * boss_mult)))
 	boss.set_max_health_and_current(scaled_max_health, scaled_max_health)
-	for damage_property in ["charge_damage", "nova_damage", "cleave_damage", "prism_damage", "gravity_damage", "echo_dash_damage", "orbital_lance_damage", "polar_shift_pull_inner_damage"]:
+	for damage_property in ["charge_damage", "nova_damage", "cleave_damage", "prism_damage", "gravity_damage", "echo_dash_damage", "orbital_lance_damage", "polar_shift_pull_inner_damage", "sever_damage", "gap_damage", "echo_cross_damage", "seam_tick_damage"]:
 		if boss.get(damage_property) == null:
 			continue
 		var base_damage := int(boss.get(damage_property))
@@ -1472,7 +1545,11 @@ func _spawn_door_options() -> void:
 	var route_options := _roll_route_options(_build_route_context(room_depth))
 	var show_boss_door := boss_unlocked
 	var boss_encounter_key := "warden"
-	if first_boss_defeated:
+	if second_boss_defeated:
+		show_boss_door = _is_third_boss_unlocked()
+		boss_unlocked = show_boss_door
+		boss_encounter_key = "lacuna"
+	elif first_boss_defeated:
 		show_boss_door = _is_second_boss_unlocked()
 		boss_unlocked = show_boss_door
 		boss_encounter_key = "sovereign"
@@ -1510,7 +1587,9 @@ func _choose_door(door: Dictionary) -> void:
 	_record_door_choice(choice)
 	var action_id: int = ENCOUNTER_CONTRACTS.door_choice_action_id(choice)
 	if action_id == ENUMS.EncounterAction.BOSS:
-		if first_boss_defeated:
+		if second_boss_defeated:
+			_begin_third_boss_room()
+		elif first_boss_defeated:
 			_begin_second_boss_room()
 		else:
 			_begin_boss_room()
@@ -1543,6 +1622,7 @@ func _begin_room(profile: Dictionary) -> void:
 		player.clear_lingering_combat_effects()
 	in_boss_room = false
 	in_second_boss_room = false
+	in_third_boss_room = false
 	if is_instance_valid(objective_runtime):
 		objective_runtime.reset_room_objective_state()
 	_play_room_music(false)
@@ -1578,7 +1658,12 @@ func _enter_rest_site() -> void:
 	_record_room_entry("rest", {})
 	hud.show_banner("Rest Site", "")
 	current_room_static_camera = true
-	if first_boss_defeated:
+	if second_boss_defeated:
+		rooms_cleared += 1
+		room_depth += 1
+		phase_three_rooms_cleared += 1
+		boss_unlocked = _is_third_boss_unlocked()
+	elif first_boss_defeated:
 		rooms_cleared += 1
 		room_depth += 1
 		phase_two_rooms_cleared += 1
@@ -1621,9 +1706,10 @@ func _pick_boss_spawn_position(min_player_distance: float = 260.0, wall_margin: 
 		return candidate
 	return fallback
 
-func _begin_configured_boss_room(is_first_boss: bool, room_size: Vector2, room_label: String, room_entry_key: String, banner_title: String, boss_script, collision_radius: float, min_player_distance: float, wall_margin: float) -> void:
-	in_boss_room = is_first_boss
-	in_second_boss_room = not is_first_boss
+func _begin_configured_boss_room(boss_stage: int, room_size: Vector2, room_label: String, room_entry_key: String, banner_title: String, boss_script, collision_radius: float, min_player_distance: float, wall_margin: float) -> void:
+	in_boss_room = boss_stage == 1
+	in_second_boss_room = boss_stage == 2
+	in_third_boss_room = boss_stage == 3
 	_play_room_music(true)
 	current_room_size = room_size
 	current_room_static_camera = false
@@ -1655,7 +1741,7 @@ func _begin_configured_boss_room(is_first_boss: bool, room_size: Vector2, room_l
 
 func _begin_boss_room() -> void:
 	_begin_configured_boss_room(
-		true,
+		1,
 		Vector2(1260.0, 900.0),
 		"Boss Chamber: The Warden",
 		"warden",
@@ -1668,7 +1754,7 @@ func _begin_boss_room() -> void:
 
 func _begin_second_boss_room() -> void:
 	_begin_configured_boss_room(
-		false,
+		2,
 		Vector2(1360.0, 960.0),
 		"Abyss Core: Sovereign",
 		"sovereign",
@@ -1677,6 +1763,19 @@ func _begin_second_boss_room() -> void:
 		38.0,
 		maxf(280.0, spawn_safe_radius + 110.0),
 		maxf(230.0, spawn_padding + 130.0)
+	)
+
+func _begin_third_boss_room() -> void:
+	_begin_configured_boss_room(
+		3,
+		Vector2(1460.0, 1040.0),
+		"Silent Threshold: Lacuna",
+		"lacuna",
+		"Lacuna",
+		ENEMY_BOSS_3_SCRIPT,
+		40.0,
+		maxf(300.0, spawn_safe_radius + 130.0),
+		maxf(250.0, spawn_padding + 150.0)
 	)
 
 func _spawn_profile_enemies(profile: Dictionary) -> int:
@@ -1970,8 +2069,15 @@ func _record_door_choice(choice: Dictionary) -> void:
 	var bearing_label := ENCOUNTER_CONTRACTS.profile_label(profile)
 	var bearing_key := _bearing_key_from_profile(profile, "encounter")
 	if action_id == ENUMS.EncounterAction.BOSS:
-		bearing_key = "sovereign" if first_boss_defeated else "warden"
-		bearing_label = "Sovereign" if first_boss_defeated else "Warden"
+		if second_boss_defeated:
+			bearing_key = "lacuna"
+			bearing_label = "Lacuna"
+		elif first_boss_defeated:
+			bearing_key = "sovereign"
+			bearing_label = "Sovereign"
+		else:
+			bearing_key = "warden"
+			bearing_label = "Warden"
 	elif action_id == ENUMS.EncounterAction.REST:
 		bearing_key = "rest"
 		bearing_label = "Rest Site"

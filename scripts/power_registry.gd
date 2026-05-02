@@ -107,7 +107,7 @@ const DAMAGE_MODEL_BY_POWER := {
 	"severing_edge": {
 		"kind": DAMAGE_KIND_FLAT,
 		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
-		"formula_note": "+X flat damage vs enemies below 35% HP"
+		"formula_note": "+X bonus damage on hits against enemies below 35% HP"
 	}
 }
 
@@ -600,7 +600,7 @@ func _get_upgrade_fallback_description(upgrade_id: String) -> String:
 		"crushed_vow":
 			return "After being hit, next attack deals +%d damage (consumes on hit)." % [int(data.get("add", 0))]
 		"severing_edge":
-			return "Attacks against enemies below 35%% HP deal +%d damage." % [int(data.get("add", 0))]
+			return "Bonus damage on hits against enemies below 35%% HP: +%d." % [int(data.get("add", 0))]
 		_:
 			return "Upgrade your stats."
 

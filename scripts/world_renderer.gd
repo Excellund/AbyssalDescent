@@ -7,6 +7,8 @@ const MUTATOR_ICON_BLOOD_RUSH: Texture2D = preload("res://assets/ui/mutators/blo
 const MUTATOR_ICON_FLASHPOINT: Texture2D = preload("res://assets/ui/mutators/flashpoint.svg")
 const MUTATOR_ICON_SIEGEBREAK: Texture2D = preload("res://assets/ui/mutators/siegebreak.svg")
 const MUTATOR_ICON_IRON_VOLLEY: Texture2D = preload("res://assets/ui/mutators/iron_volley.svg")
+const MUTATOR_ICON_CONVERGENCE: Texture2D = preload("res://assets/ui/mutators/convergence.svg")
+const MUTATOR_ICON_CONFLAGRATION: Texture2D = preload("res://assets/ui/mutators/conflagration.svg")
 
 # Draw state — updated each frame by world_generator
 var room_size: Vector2 = Vector2.ZERO
@@ -157,6 +159,8 @@ func _draw_challenge_door_vfx(door: Dictionary, door_pulse: float, is_focused: b
 		var boss_key := String(door.get("encounter_key", "")).strip_edges().to_lower()
 		if boss_key == "sovereign":
 			_draw_sovereign_boss_door_vfx(door_pos, door_pulse, focus_boost, slow, fast, spin)
+		elif boss_key == "lacuna":
+			_draw_lacuna_boss_door_vfx(door_pos, door_pulse, focus_boost, slow, fast, spin)
 		else:
 			_draw_warden_boss_door_vfx(door_pos, door_pulse, focus_boost, slow, fast, spin)
 		return
@@ -239,7 +243,6 @@ func _draw_sovereign_boss_door_vfx(door_pos: Vector2, _door_pulse: float, focus_
 	var core := Color(0.42, 0.84, 1.0, 1.0)
 	var hot := Color(0.82, 0.94, 1.0, 1.0)
 	var void_color := Color(0.42, 0.44, 1.0, 1.0)
-
 	# Sovereign reads as cosmic control: prism geometry + orbital lances + gravity curl.
 	draw_circle(door_pos, 43.0 + 7.0 * slow, Color(core.r, core.g, core.b, 0.17 + focus_boost * 0.46))
 	draw_circle(door_pos, 33.0 + 5.0 * fast, Color(hot.r, hot.g, hot.b, 0.14 + focus_boost * 0.38))
@@ -272,6 +275,33 @@ func _draw_sovereign_boss_door_vfx(door_pos: Vector2, _door_pulse: float, focus_
 	for s in range(2):
 		var start := swirl_phase + float(s) * PI
 		draw_arc(door_pos, 17.0 + float(s) * 7.0 + 1.0 * fast, start, start + 1.45, 20, Color(void_color.r, void_color.g, void_color.b, 0.48 + focus_boost * 0.36), 1.8)
+
+func _draw_lacuna_boss_door_vfx(door_pos: Vector2, _door_pulse: float, focus_boost: float, slow: float, fast: float, spin: float) -> void:
+	var core := Color(0.22, 0.96, 0.74, 1.0)
+	var hot := Color(0.86, 1.0, 0.96, 1.0)
+	var seam := Color(0.2, 0.68, 0.52, 1.0)
+
+	# Lacuna reads as severed tempo: broken rings, seam vectors, and crossed silence lines.
+	draw_circle(door_pos, 44.0 + 7.0 * slow, Color(core.r, core.g, core.b, 0.18 + focus_boost * 0.48))
+	draw_circle(door_pos, 32.0 + 5.0 * fast, Color(hot.r, hot.g, hot.b, 0.12 + focus_boost * 0.34))
+	for ring_i in range(2):
+		var radius := 22.0 + float(ring_i) * 8.0 + 1.2 * slow
+		var phase := spin * (1.1 + float(ring_i) * 0.18)
+		for seg in range(3):
+			var start := phase + float(seg) * TAU / 3.0
+			draw_arc(door_pos, radius, start, start + 0.44, 12, Color(core.r, core.g, core.b, 0.56 + focus_boost), 2.0)
+	for seam_i in range(3):
+		var angle := spin * 0.72 + float(seam_i) * TAU / 3.0
+		var dir := Vector2.RIGHT.rotated(angle)
+		var start := door_pos + dir * 8.0
+		var end := door_pos + dir * (28.0 + 4.0 * fast)
+		draw_line(start, end, Color(hot.r, hot.g, hot.b, 0.7), 2.0)
+		var ghost := end + dir.orthogonal() * (4.0 + fast)
+		draw_circle(ghost, 2.2, Color(core.r, core.g, core.b, 0.78))
+	var cross_a := Vector2.RIGHT.rotated(spin * 0.56)
+	var cross_b := cross_a.orthogonal()
+	draw_line(door_pos - cross_a * 18.0, door_pos + cross_a * 18.0, Color(seam.r, seam.g, seam.b, 0.72 + focus_boost), 2.8)
+	draw_line(door_pos - cross_b * 18.0, door_pos + cross_b * 18.0, Color(seam.r, seam.g, seam.b, 0.54 + focus_boost), 2.0)
 
 func _door_enemy_mutator(door: Dictionary) -> Dictionary:
 	var profile := door.get("profile", {}) as Dictionary
@@ -359,6 +389,20 @@ func _draw_mutator_identity_motion(door_pos: Vector2, theme: Color, shape_id: St
 				var wing_l := tip + Vector2.RIGHT.rotated(a + 2.7) * 4.0
 				var wing_r := tip + Vector2.RIGHT.rotated(a - 2.7) * 4.0
 				draw_colored_polygon(PackedVector2Array([wing_l, tip, wing_r]), Color(accent.r, accent.g, accent.b, 0.84))
+		"convergence":
+			for i in range(3):
+				var phase := spin * 1.4 + float(i) * TAU / 3.0
+				var outer := door_pos + Vector2.RIGHT.rotated(phase) * (23.0 + 2.0 * pulse)
+				var inner := door_pos + Vector2.RIGHT.rotated(phase + 0.42) * 8.0
+				draw_line(inner, outer, Color(accent.r, accent.g, accent.b, 0.82), 2.2)
+				draw_circle(outer, 1.8 + pulse * 0.3, Color(accent.r, accent.g, accent.b, 0.76))
+		"conflagration":
+			for i in range(3):
+				var flame_phase := spin * 0.9 + float(i) * TAU / 3.0
+				var base := door_pos + Vector2.RIGHT.rotated(flame_phase) * 7.0
+				var tip := door_pos + Vector2.RIGHT.rotated(flame_phase + 0.16 * sin(spin + float(i))) * (18.0 + 3.0 * pulse)
+				draw_line(base, tip, Color(accent.r, accent.g, accent.b, 0.8), 2.4)
+				draw_circle(base, 2.4, Color(accent.r, accent.g, accent.b, 0.54))
 		_:
 			draw_arc(door_pos, 20.0 + 3.0 * pulse, spin, spin + 0.9, 18, Color(accent.r, accent.g, accent.b, 0.7), 2.2)
 
@@ -672,6 +716,35 @@ func _draw_trial_mutator_icon(door_pos: Vector2, shape_id: String, theme: Color,
 				var arrow := PackedVector2Array([base_l, tip, base_r])
 				draw_colored_polygon(arrow, theme)
 
+		"convergence":
+			for angle in [0.0, TAU / 3.0, TAU * 2.0 / 3.0]:
+				var dir := Vector2.RIGHT.rotated(angle)
+				var head := door_pos + dir * 9.5
+				var tail := door_pos + dir * 3.0
+				var side := Vector2(-dir.y, dir.x)
+				draw_colored_polygon(PackedVector2Array([head, tail + side * 2.6, tail - side * 2.6]), theme)
+			draw_circle(door_pos, 2.2, outline_color)
+
+		"conflagration":
+			var flame := PackedVector2Array([
+				door_pos + Vector2(0.0, -10.0),
+				door_pos + Vector2(5.5, -2.5),
+				door_pos + Vector2(2.5, 9.5),
+				door_pos + Vector2(-2.0, 4.0),
+				door_pos + Vector2(-6.0, 9.0),
+				door_pos + Vector2(-4.5, -1.5)
+			])
+			draw_colored_polygon(flame, Color(outline_color.r, outline_color.g, outline_color.b, 0.9))
+			var flame_inner := PackedVector2Array([
+				door_pos + Vector2(0.0, -8.0),
+				door_pos + Vector2(3.8, -1.6),
+				door_pos + Vector2(1.8, 7.2),
+				door_pos + Vector2(-1.0, 3.2),
+				door_pos + Vector2(-4.0, 7.0),
+				door_pos + Vector2(-3.0, -1.0)
+			])
+			draw_colored_polygon(flame_inner, theme)
+
 		_:
 			var top := door_pos + Vector2(0.0, -10.0)
 			var right := door_pos + Vector2(10.0, 0.0)
@@ -693,5 +766,9 @@ func _get_mutator_icon_texture(icon_shape_id: String) -> Texture2D:
 			return MUTATOR_ICON_SIEGEBREAK
 		"iron_volley":
 			return MUTATOR_ICON_IRON_VOLLEY
+		"convergence":
+			return MUTATOR_ICON_CONVERGENCE
+		"conflagration":
+			return MUTATOR_ICON_CONFLAGRATION
 		_:
 			return null
