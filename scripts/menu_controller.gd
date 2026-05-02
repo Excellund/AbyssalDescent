@@ -1472,9 +1472,9 @@ func _update_character_selector() -> void:
 		if is_unlocked:
 			name_label.text = String(character.get("name", "Unknown"))
 			role_label.text = String(character.get("archetype", ""))
-			opposition_label.text = "Opposes: %s" % String(character.get("boss_opposition", "Unknown"))
+			opposition_label.text = ""
 			role_label.visible = true
-			opposition_label.visible = true
+			opposition_label.visible = false
 		else:
 			name_label.text = "\u2014  Sealed  \u2014"
 			role_label.text = ""
