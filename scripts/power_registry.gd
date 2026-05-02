@@ -608,11 +608,11 @@ func _get_upgrade_fallback_description(upgrade_id: String) -> String:
 func _get_trial_fallback_description(power_id: String) -> String:
 	match power_id:
 		"razor_wind":
-			return "%sAttacks launch a piercing wind slash that deals % of hit damage." % [_damage_kind_bracket(power_id)]
+			return "%sAttacks launch a piercing wind slash that deals %% of hit damage." % [_damage_kind_bracket(power_id)]
 		"execution_edge":
 			return "%sEvery few swings become execution strikes that multiply hit damage." % [_damage_kind_bracket(power_id)]
 		"rupture_wave":
-			return "%sHits detonate a shockwave that deals % of hit damage." % [_damage_kind_bracket(power_id)]
+			return "%sHits detonate a shockwave that deals %% of hit damage." % [_damage_kind_bracket(power_id)]
 		"aegis_field":
 			return "Taking damage triggers a guard pulse that slows nearby enemies and grants brief damage resistance."
 		"hunters_snare":
@@ -624,7 +624,7 @@ func _get_trial_fallback_description(power_id: String) -> String:
 		"static_wake":
 			return "%sDashing leaves an electrified trail that burns enemies. Damage per pulse uses a percentage value." % [_damage_kind_bracket(power_id)]
 		"storm_crown":
-			return "%sEvery few hits unleash chain lightning that deals % of hit damage." % [_damage_kind_bracket(power_id)]
+			return "%sEvery few hits unleash chain lightning that deals %% of hit damage." % [_damage_kind_bracket(power_id)]
 		"wraithstep":
 			return "%sDash marks enemies. Marked hits deal extra hit damage and trigger splash chains that deal a percentage of hit damage." % [_damage_kind_bracket(power_id)]
 		"voidfire":
