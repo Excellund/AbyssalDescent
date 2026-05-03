@@ -601,6 +601,8 @@ func _roll_boss_reward_choices(choice_count: int, power_registry: Node, player: 
 	var pool: Array[Dictionary] = power_registry.get_boss_reward_pool(player)
 	var available: Array[Dictionary] = []
 	for entry in pool:
+		if _is_upgrade_blocked_for_character(String(entry.get("id", ""))):
+			continue
 		var limit := int(entry.get("stack_limit", 0))
 		if limit > 0 and is_instance_valid(player):
 			var current := int(player.get_upgrade_stack_count(String(entry["id"])))

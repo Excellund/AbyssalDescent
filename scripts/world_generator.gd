@@ -389,7 +389,7 @@ func _ready() -> void:
 		pending_room_reward = ENUMS.RewardMode.BOON
 		_begin_room(_build_skirmish_profile(room_depth))
 	else:
-		_open_boon_selection("Choose Starting Arcana", true, ENUMS.RewardMode.ARCANA)
+		_open_boon_selection("Choose Starting Arcana", true, ENUMS.RewardMode.ARCANA, {}, "", current_character_id)
 
 func start_run_with_powers(power_ids: Array[String]) -> Dictionary:
 	var applied: Array[String] = []
@@ -1317,13 +1317,13 @@ func _on_room_cleared() -> void:
 	pending_room_reward = ENCOUNTER_CONTRACTS.outcome_pending_room_reward(outcome)
 	var reward_mode: int = ENCOUNTER_CONTRACTS.outcome_open_reward_mode(outcome)
 	if reward_mode == ENUMS.RewardMode.BOON:
-		_open_boon_selection("Choose Boon Reward", false, ENUMS.RewardMode.BOON)
+		_open_boon_selection("Choose Boon Reward", false, ENUMS.RewardMode.BOON, {}, "", current_character_id)
 		return
 	if reward_mode == ENUMS.RewardMode.MISSION:
-		_open_boon_selection("Choose Mission Reward", false, ENUMS.RewardMode.MISSION, current_room_player_mutator)
+		_open_boon_selection("Choose Mission Reward", false, ENUMS.RewardMode.MISSION, current_room_player_mutator, "", current_character_id)
 		return
 	if reward_mode == ENUMS.RewardMode.ARCANA:
-		_open_boon_selection("Choose Arcana", false, ENUMS.RewardMode.ARCANA)
+		_open_boon_selection("Choose Arcana", false, ENUMS.RewardMode.ARCANA, {}, "", current_character_id)
 		return
 	if ENCOUNTER_CONTRACTS.outcome_spawn_doors(outcome):
 		_spawn_door_options()
@@ -2275,6 +2275,8 @@ func _roll_bonus_mission_boon(excluded_id: String) -> Dictionary:
 	for entry in pool:
 		var entry_id := String(entry.get("id", ""))
 		if entry_id == excluded_id:
+			continue
+		if current_character_id == "riftlancer" and entry_id == "wide_arc":
 			continue
 		var limit := int(entry.get("stack_limit", 0))
 		if limit > 0 and is_instance_valid(player):

@@ -338,7 +338,7 @@ func get_power_flavor_text(power_id: String) -> String:
 		"void_echo":
 			return "Kills create a void zone that pulses damage and empowers attacks inside it."
 		"apex_momentum":
-			return "Hits build tempo stacks. Finishing a dash releases a momentum wave; hitting enemies refunds dash cooldown."
+			return "Hits build tempo. Ending a dash releases a wave; hits refund dash cooldown."
 		"convergence_surge":
 			return "Every few damaging hits you enter Convergence, pulsing damage around you until it expires."
 		"indomitable_spirit":
