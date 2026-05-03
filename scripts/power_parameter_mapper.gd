@@ -181,7 +181,7 @@ static func apply_trial_power_values(player_reference: Node, power_id: String, n
 	if not TRIAL_POWER_PARAM_MAP.has(power_id):
 		return false
 	
-	var power_map := TRIAL_POWER_PARAM_MAP[power_id]
+	var power_map: Dictionary = TRIAL_POWER_PARAM_MAP[power_id]
 	
 	# Set reward flag
 	var reward_flag: String = power_map.get("reward_flag", "")
@@ -199,7 +199,7 @@ static func apply_trial_power_values(player_reference: Node, power_id: String, n
 		if not param_name in next_values:
 			continue
 		
-		var param_def := parameters[param_name]
+		var param_def: Dictionary = parameters[param_name]
 		var property_name: String = param_def.get("property", "")
 		var param_type: String = param_def.get("type", "float")
 		var param_value = next_values.get(param_name)
@@ -225,7 +225,7 @@ static func apply_trial_power_values(player_reference: Node, power_id: String, n
 static func get_property_name(power_id: String, param_name: String) -> String:
 	if not TRIAL_POWER_PARAM_MAP.has(power_id):
 		return ""
-	var power_map := TRIAL_POWER_PARAM_MAP[power_id]
+	var power_map: Dictionary = TRIAL_POWER_PARAM_MAP[power_id]
 	var parameters: Dictionary = power_map.get("parameters", {})
 	if param_name in parameters:
 		return parameters[param_name].get("property", "")
@@ -237,7 +237,7 @@ static func get_affected_properties(power_id: String) -> Array[String]:
 	if not TRIAL_POWER_PARAM_MAP.has(power_id):
 		return properties
 	
-	var power_map := TRIAL_POWER_PARAM_MAP[power_id]
+	var power_map: Dictionary = TRIAL_POWER_PARAM_MAP[power_id]
 	properties.append(power_map.get("reward_flag", ""))
 	properties.append(power_map.get("stack_property", ""))
 	
@@ -274,7 +274,7 @@ static func get_all_snapshot_properties() -> Array[String]:
 	
 	# Add all upgrade properties
 	for upgrade_id: String in UPGRADE_PARAM_MAP.keys():
-		var upgrade_map := UPGRADE_PARAM_MAP[upgrade_id]
+		var upgrade_map: Dictionary = UPGRADE_PARAM_MAP[upgrade_id]
 		if "property" in upgrade_map:
 			var prop: String = upgrade_map.get("property", "")
 			if not prop.is_empty() and prop not in properties:
