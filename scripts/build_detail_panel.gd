@@ -273,7 +273,7 @@ func _update_passive_section(character_id: String) -> void:
 		passive_desc_label.text = "No passive available"
 		return
 	
-	var passive_id := String(char_data.get("passive_id", ""))
+	var passive_id := String(char_data.get("passive_id", "")).strip_edges().to_lower()
 	passive_name_label.text = _format_passive_name(passive_id)
 	
 	# Get passive description based on ID
@@ -285,6 +285,8 @@ func _update_passive_section(character_id: String) -> void:
 			desc = "Dashing arms a burst. Your next attack unleashes a 70% damage sigil explosion at the target."
 		"death_tempo":
 			desc = "Killing an enemy instantly resets your dash cooldown, allowing immediate repositioning."
+		"farline_focus":
+			desc = "Hits inside your farline band and tight aim lane deal 65% bonus damage. Keep distance and commit to precision angles."
 		_:
 			desc = "Passive ability"
 	
@@ -434,15 +436,18 @@ func _power_display_name(power_id: String) -> String:
 			return power_id.capitalize()
 
 func _format_passive_name(passive_id: String) -> String:
-	match passive_id:
+	var normalized_id := passive_id.strip_edges().to_lower()
+	match normalized_id:
 		"iron_retort":
 			return "Iron Retort"
 		"sigil_burst":
 			return "Sigil Burst"
 		"death_tempo":
 			return "Death's Tempo"
+		"farline_focus":
+			return "Farline Focus"
 		_:
-			var words := passive_id.split("_", false)
+			var words := normalized_id.split("_", false)
 			var formatted := ""
 			for i in range(words.size()):
 				if i > 0:

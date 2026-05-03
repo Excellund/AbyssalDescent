@@ -34,6 +34,15 @@ const QUOTE_COLOR_WARM := Color(1.0, 0.95, 0.84, 1.0)
 const AUDIO_DB_MIN := AUDIO_LEVELS.DB_MIN
 const AUDIO_DB_MAX := AUDIO_LEVELS.DB_MAX
 const MENU_LAYOUT_BASE_SIZE := Vector2(1020.0, 720.0)
+const CHARACTER_SELECTOR_PANEL_WIDTH := 1020.0
+const CHARACTER_SELECTOR_ROW_HEIGHT := 118.0
+const CHARACTER_SELECTOR_ROW_SEPARATION := 14.0
+const CHARACTER_SELECTOR_STACK_SEPARATION := 18.0
+const CHARACTER_SELECTOR_MARGIN_TOP_BOTTOM := 88.0
+const CHARACTER_SELECTOR_TITLE_HEIGHT := 44.0
+const CHARACTER_SELECTOR_ACCENT_HEIGHT := 2.0
+const CHARACTER_SELECTOR_INTRO_HEIGHT := 30.0
+const CHARACTER_SELECTOR_BACK_BUTTON_HEIGHT := 46.0
 
 var root_panel: Panel
 var options_panel: Panel
@@ -318,7 +327,7 @@ func _apply_menu_layout() -> void:
 	if difficulty_selector_panel != null:
 		_set_centered_panel_layout(difficulty_selector_panel, Vector2(1020.0, 720.0), fit_scale, viewport_size)
 	if character_selector_panel != null:
-		_set_centered_panel_layout(character_selector_panel, Vector2(1020.0, 720.0), fit_scale, viewport_size)
+		_set_centered_panel_layout(character_selector_panel, _character_selector_panel_size(), fit_scale, viewport_size)
 	if update_panel != null and root_panel != null:
 		var update_base_size := Vector2(470.0, 190.0)
 		update_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
@@ -336,6 +345,19 @@ func _set_centered_panel_layout(panel: Panel, base_size: Vector2, panel_scale: f
 	panel.scale = Vector2(panel_scale, panel_scale)
 	var scaled_size := base_size * panel_scale
 	panel.position = (viewport_size - scaled_size) * 0.5
+
+func _character_selector_panel_size() -> Vector2:
+	var character_count := maxi(1, CHARACTER_REGISTRY.get_launch_characters().size())
+	var rows_height := float(character_count) * CHARACTER_SELECTOR_ROW_HEIGHT
+	rows_height += float(maxi(0, character_count - 1)) * CHARACTER_SELECTOR_ROW_SEPARATION
+	var fixed_height := CHARACTER_SELECTOR_MARGIN_TOP_BOTTOM
+	fixed_height += CHARACTER_SELECTOR_TITLE_HEIGHT
+	fixed_height += CHARACTER_SELECTOR_ACCENT_HEIGHT
+	fixed_height += CHARACTER_SELECTOR_INTRO_HEIGHT
+	fixed_height += CHARACTER_SELECTOR_BACK_BUTTON_HEIGHT
+	fixed_height += CHARACTER_SELECTOR_STACK_SEPARATION * 4.0
+	var panel_height := maxf(MENU_LAYOUT_BASE_SIZE.y, rows_height + fixed_height)
+	return Vector2(CHARACTER_SELECTOR_PANEL_WIDTH, panel_height)
 
 func _make_menu_button(text: String, emphasize: bool = false) -> Button:
 	var button := Button.new()
@@ -1334,8 +1356,9 @@ func _build_character_selector_panel() -> Panel:
 	var panel := Panel.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.position = Vector2(-510.0, -360.0)
-	panel.custom_minimum_size = Vector2(1020.0, 720.0)
-	panel.size = Vector2(1020.0, 720.0)
+	var panel_size := _character_selector_panel_size()
+	panel.custom_minimum_size = panel_size
+	panel.size = panel_size
 	panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.04, 0.06, 0.1, 0.97), Color(0.44, 0.7, 0.96, 0.74), 20, 2))
 
 	var layout := MarginContainer.new()

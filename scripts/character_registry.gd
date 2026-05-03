@@ -79,6 +79,38 @@ const CHARACTER_DEFINITIONS := {
 			"dash_phase_color": Color(0.24, 1.00, 0.72, 0.24),
 			"dash_streak_color": Color(0.24, 0.96, 0.66, 0.20)
 		}
+	},
+	ENUMS.CHARACTER_ID_RIFTLANCER: {
+		"id": ENUMS.CHARACTER_ID_RIFTLANCER,
+		"name": "Riftlancer",
+		"archetype": "Farline Harpoon",
+		"boss_opposition": "Mirror Hunt",
+		"tagline": "Skewer from the seam where distance becomes certainty.",
+		"lore": "Riftlancers bind abyssal anchors to a single line, then force the world to answer through that seam. They do not brawl for ground; they draft kill corridors and punish any step into them. Where Mirror Hunt multiplies false targets and punishes linear commitment, the Riftlancer survives by mastering one true lane and breaking the reflection before it closes.",
+		"design_lanes": {
+			"survivability": "Stabilize by maintaining farline spacing and denying contact collapse.",
+			"expression": "Pre-aim lane control and strike only when enemies enter the precision band.",
+			"mastery": "Route fights so chained farline punctures keep pressure without losing distance discipline."
+		},
+		"arcana_pool_key": "riftlancer",
+		"passive_id": "farline_focus",
+		"stat_modifiers": {
+			"max_health": 64,
+			"max_speed": 228.0,
+			"damage": 20,
+			"attack_range": 132.0,
+			"attack_arc_degrees": 44.0,
+			"attack_cooldown": 0.26,
+			"dash_cooldown": 0.44
+		},
+		"visual": {
+			"body_color": Color(0.90, 0.78, 0.28, 1.0),
+			"core_color": Color(0.52, 0.40, 0.08, 1.0),
+			"glow_color": Color(0.38, 0.26, 0.08, 0.16),
+			"speed_arc_color": Color(1.00, 0.84, 0.34, 0.26),
+			"dash_phase_color": Color(1.00, 0.90, 0.56, 0.24),
+			"dash_streak_color": Color(1.00, 0.78, 0.30, 0.20)
+		}
 	}
 }
 
@@ -86,7 +118,8 @@ const DEFAULT_CHARACTER_ID := ENUMS.CHARACTER_ID_BASTION
 const LAUNCH_CHARACTER_IDS := [
 	ENUMS.CHARACTER_ID_BASTION,
 	ENUMS.CHARACTER_ID_HEXWEAVER,
-	ENUMS.CHARACTER_ID_VEILSTRIDER
+	ENUMS.CHARACTER_ID_VEILSTRIDER,
+	ENUMS.CHARACTER_ID_RIFTLANCER
 ]
 
 static func get_launch_character_ids() -> Array[String]:

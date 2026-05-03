@@ -313,7 +313,16 @@ func load_meta_progress() -> void:
 	current_difficulty_tier = META_PROGRESS_STORE.get_current_tier(meta_progress_profile)
 	highest_unlocked_difficulty_tier = META_PROGRESS_STORE.get_highest_unlocked_tier(meta_progress_profile)
 	selected_character_id = META_PROGRESS_STORE.get_selected_character_id(meta_progress_profile)
+	var unlocked_before: Array[String] = []
+	var character_state_raw: Variant = meta_progress_profile.get("character_state", {})
+	if character_state_raw is Dictionary:
+		var unlocked_raw: Variant = (character_state_raw as Dictionary).get("unlocked_character_ids", [])
+		if unlocked_raw is Array:
+			for id_value in unlocked_raw:
+				unlocked_before.append(String(id_value).strip_edges().to_lower())
 	unlocked_character_ids = META_PROGRESS_STORE.get_unlocked_character_ids(meta_progress_profile)
+	if unlocked_character_ids.size() != unlocked_before.size():
+		save_meta_progress()
 	just_unlocked_tier = -1
 
 

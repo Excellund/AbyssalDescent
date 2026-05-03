@@ -353,8 +353,16 @@ var player_dash_streak_color: Color = ENEMY_BASE.COLOR_PLAYER_DASH_STREAK
 var passive_iron_retort: bool = false
 var passive_sigil_burst: bool = false
 var passive_death_tempo: bool = false
+var passive_farline_focus: bool = false
 var iron_retort_window_left: float = 0.0
 var sigil_burst_ready: bool = false
+var farline_focus_min_range: float = 98.0
+var farline_focus_max_range: float = 132.0
+var farline_focus_damage_mult: float = 1.65
+var farline_focus_alignment_degrees: float = 8.0
+var farline_focus_ready: bool = false
+var farline_focus_proc_flash_left: float = 0.0
+var farline_focus_proc_flash_duration: float = 0.2
 
 func _ready() -> void:
 	body_radius_cache = _get_body_radius_for(self, 14.0)
@@ -394,6 +402,7 @@ func _physics_process(delta: float) -> void:
 	_update_storm_crown_discharge(delta)
 	_update_combo_relay_state(delta)
 	_update_iron_retort(delta)
+	_update_farline_focus_state(delta)
 	_update_apex_predator_combo(delta)
 	_update_apex_momentum(delta)
 	_update_void_echo_zones(delta)
@@ -886,8 +895,11 @@ func apply_character_package(data: Dictionary) -> void:
 	passive_iron_retort = passive_id == "iron_retort"
 	passive_sigil_burst = passive_id == "sigil_burst"
 	passive_death_tempo = passive_id == "death_tempo"
+	passive_farline_focus = passive_id == "farline_focus"
 	iron_retort_window_left = 0.0
 	sigil_burst_ready = false
+	farline_focus_ready = false
+	farline_focus_proc_flash_left = 0.0
 	queue_redraw()
 
 func play_rest_site_heal_feedback() -> void:
@@ -1245,6 +1257,7 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		strike_damage = int(round(float(strike_damage) * 1.7))
 		iron_retort_window_left = 0.0
 	var sigil_burst_fired: bool = false
+	var farline_focus_proc_fired: bool = false
 	var retort_impact_position: Vector2 = global_position + attack_direction * (strike_range * 0.45)
 	var strike_arc_degrees := float(melee_context.get("arc_degrees", attack_arc_degrees))
 	var max_angle_radians := deg_to_rad(strike_arc_degrees * 0.5)
@@ -1274,7 +1287,15 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		if absf(attack_direction.angle_to(to_enemy.normalized())) > max_angle_radians:
 			continue
 
-		var strike_breakdown := _build_damage_breakdown(strike_damage, enemy_node, enemy_body.global_position, "melee")
+		var enemy_strike_damage := strike_damage
+		if passive_farline_focus and _is_farline_focus_hit(attack_direction, to_enemy):
+			enemy_strike_damage = int(round(float(enemy_strike_damage) * farline_focus_damage_mult))
+			if not farline_focus_proc_fired:
+				farline_focus_proc_fired = true
+				farline_focus_proc_flash_left = farline_focus_proc_flash_duration
+				if player_feedback != null:
+					player_feedback.play_world_ring(enemy_body.global_position, 36.0, Color(1.0, 0.88, 0.44, 0.92), 0.14)
+		var strike_breakdown := _build_damage_breakdown(enemy_strike_damage, enemy_node, enemy_body.global_position, "melee")
 		var final_strike_damage := int(strike_breakdown.get("final_damage", strike_damage))
 		DAMAGEABLE.apply_damage(enemy_node, final_strike_damage)
 		if retort_active and not did_hit:
@@ -1318,8 +1339,19 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		else:
 			player_feedback.play_world_ring(global_position, 36.0, Color(0.96, 0.52, 0.28, 0.88), 0.18)
 		queue_redraw()
+	if farline_focus_proc_fired:
+		queue_redraw()
 
 	return did_hit
+
+func _is_farline_focus_hit(attack_direction: Vector2, to_enemy: Vector2) -> bool:
+	var distance := to_enemy.length()
+	if distance < farline_focus_min_range or distance > farline_focus_max_range:
+		return false
+	if to_enemy.length_squared() <= 0.000001:
+		return false
+	var angle_error := absf(attack_direction.angle_to(to_enemy.normalized()))
+	return angle_error <= deg_to_rad(farline_focus_alignment_degrees)
 
 func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupture_triggered_enemy_ids: Dictionary = {}, rupture_hit_enemy_ids: Dictionary = {}, proc_flags: Dictionary = {}) -> bool:
 	var did_hit := false
@@ -1428,6 +1460,8 @@ func clear_lingering_combat_effects() -> void:
 	convergence_surge_hit_counter = 0
 	convergence_window_left = 0.0
 	convergence_pulse_cooldown = 0.0
+	farline_focus_proc_flash_left = 0.0
+	farline_focus_ready = false
 	_fracture_field_resolving = false
 	queue_redraw()
 
@@ -1924,6 +1958,9 @@ func _draw_character_identity(body_radius: float, facing: Vector2, side: Vector2
 	if passive_sigil_burst:
 		_draw_hexweaver_identity(body_radius, facing, side)
 		return
+	if passive_farline_focus:
+		_draw_riftlancer_identity(body_radius, facing, side, speed_t)
+		return
 	if passive_death_tempo:
 		_draw_veilstrider_identity(body_radius, facing, side, speed_t)
 		return
@@ -2010,6 +2047,54 @@ func _draw_veilstrider_identity(body_radius: float, facing: Vector2, side: Vecto
 	var tail_r := -facing * (body_radius - 1.4) - side * 5.8
 	draw_line(tail_l, tail_l - facing * trail_len + side * 1.8, Color(0.64, 1.0, 0.82, 0.64), 1.7)
 	draw_line(tail_r, tail_r - facing * trail_len - side * 1.8, Color(0.64, 1.0, 0.82, 0.64), 1.7)
+
+func _draw_riftlancer_identity(body_radius: float, facing: Vector2, side: Vector2, speed_t: float) -> void:
+	var lance_tip := facing * (body_radius + 14.0)
+	var lance_base := facing * (body_radius + 1.4)
+	var lance_w := 2.2
+	var lance := PackedVector2Array([
+		lance_tip,
+		lance_base + side * lance_w,
+		facing * (body_radius - 5.2),
+		lance_base - side * lance_w
+	])
+	draw_colored_polygon(lance, Color(1.0, 0.96, 0.74, 0.95))
+	var reel_center := -facing * 2.8 + side * 3.1
+	draw_circle(reel_center, 3.0, Color(0.56, 0.43, 0.14, 0.9))
+	draw_circle(reel_center, 1.6, Color(1.0, 0.91, 0.58, 0.92))
+	var reel_notch_tip := reel_center + side * 4.8 + facing * 0.8
+	draw_line(reel_center + side * 2.0, reel_notch_tip, Color(0.98, 0.82, 0.36, 0.86), 1.4)
+	var tether_start := reel_center - side * 1.1 - facing * 0.9
+	var tether_end := lance_base - side * 0.5
+	draw_line(tether_start, tether_end, Color(1.0, 0.9, 0.62, 0.62), 1.2)
+	var anchor := -facing * (body_radius - 1.8)
+	var fin_out := 6.4
+	draw_line(anchor - side * fin_out, anchor + side * fin_out, Color(0.94, 0.78, 0.34, 0.86), 1.8)
+	draw_line(anchor - side * (fin_out - 2.2), anchor + side * (fin_out - 2.2), Color(1.0, 0.9, 0.52, 0.7), 1.2)
+	var eye := facing * (body_radius * 0.36)
+	draw_circle(eye + side * 1.3, 1.45, Color(1.0, 0.95, 0.76, 0.9))
+	draw_circle(eye - side * 1.3, 1.45, Color(1.0, 0.95, 0.76, 0.9))
+	var wake_len := 5.6 + speed_t * 5.2
+	var wake_l := -facing * (body_radius - 2.0) + side * 4.4
+	var wake_r := -facing * (body_radius - 2.0) - side * 4.4
+	draw_line(wake_l, wake_l - facing * wake_len + side * 1.0, Color(1.0, 0.86, 0.42, 0.62), 1.4)
+	draw_line(wake_r, wake_r - facing * wake_len - side * 1.0, Color(1.0, 0.86, 0.42, 0.62), 1.4)
+func _update_farline_focus_state(delta: float) -> void:
+	if not passive_farline_focus:
+		if farline_focus_ready or farline_focus_proc_flash_left > 0.0:
+			farline_focus_ready = false
+			farline_focus_proc_flash_left = 0.0
+			queue_redraw()
+		return
+	var mouse_distance := global_position.distance_to(get_global_mouse_position())
+	var was_ready := farline_focus_ready
+	farline_focus_ready = mouse_distance >= farline_focus_min_range and mouse_distance <= farline_focus_max_range
+	if was_ready != farline_focus_ready:
+		queue_redraw()
+	if farline_focus_proc_flash_left > 0.0:
+		farline_focus_proc_flash_left = maxf(0.0, farline_focus_proc_flash_left - delta)
+		queue_redraw()
+
 func _update_iron_retort(delta: float) -> void:
 	if iron_retort_window_left <= 0.0:
 		return
@@ -2531,6 +2616,21 @@ func _draw_passive_state(body_radius: float) -> void:
 	if passive_sigil_burst and sigil_burst_ready:
 		var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.001 * 14.0)
 		draw_arc(Vector2.ZERO, body_radius + 13.0, 0.0, TAU, 40, Color(0.82, 0.36, 1.0, 0.55 + pulse * 0.22), 2.6)
+	if passive_farline_focus:
+		var range_color := Color(1.0, 0.86, 0.38, 0.26)
+		draw_arc(Vector2.ZERO, farline_focus_min_range, 0.0, TAU, 72, range_color, 1.3)
+		draw_arc(Vector2.ZERO, farline_focus_max_range, 0.0, TAU, 72, range_color, 1.3)
+		var facing := _get_mouse_attack_direction()
+		if facing.length_squared() <= 0.000001:
+			facing = visual_facing_direction if visual_facing_direction.length_squared() > 0.000001 else Vector2.RIGHT
+		var center_angle := facing.angle()
+		var half_window := deg_to_rad(farline_focus_alignment_degrees)
+		var lane_color := Color(1.0, 0.94, 0.64, 0.66 if farline_focus_ready else 0.34)
+		draw_arc(Vector2.ZERO, farline_focus_max_range, center_angle - half_window, center_angle + half_window, 18, lane_color, 3.0)
+		draw_arc(Vector2.ZERO, farline_focus_min_range, center_angle - half_window, center_angle + half_window, 18, lane_color, 3.0)
+		if farline_focus_proc_flash_left > 0.0:
+			var flash_t := clampf(farline_focus_proc_flash_left / farline_focus_proc_flash_duration, 0.0, 1.0)
+			draw_circle(Vector2.ZERO, body_radius + 18.0 + (1.0 - flash_t) * 6.0, Color(1.0, 0.92, 0.58, 0.22 * flash_t))
 
 
 func _draw_objective_mutator_aura(body_radius: float) -> void:

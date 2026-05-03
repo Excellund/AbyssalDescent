@@ -59,11 +59,13 @@ enum Character {
 	BASTION,
 	HEXWEAVER,
 	VEILSTRIDER,
+	RIFTLANCER,
 }
 
 const CHARACTER_ID_BASTION := "bastion"
 const CHARACTER_ID_HEXWEAVER := "hexweaver"
 const CHARACTER_ID_VEILSTRIDER := "veilstrider"
+const CHARACTER_ID_RIFTLANCER := "riftlancer"
 
 static func reward_mode_from_legacy(value: String) -> int:
 	match value:

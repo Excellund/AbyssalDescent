@@ -153,8 +153,12 @@ static func get_unlocked_character_ids(profile: Dictionary) -> Array[String]:
 			var id: String = _normalize_character_id(id_value)
 			if CHARACTER_REGISTRY.is_known_character_id(id) and not unlocked.has(id):
 				unlocked.append(id)
+	var launch_ids: Array[String] = CHARACTER_REGISTRY.get_launch_character_ids()
+	for launch_id in launch_ids:
+		if not unlocked.has(launch_id):
+			unlocked.append(launch_id)
 	if unlocked.is_empty():
-		unlocked = CHARACTER_REGISTRY.get_launch_character_ids()
+		unlocked = launch_ids
 	state["unlocked_character_ids"] = unlocked
 	return unlocked
 

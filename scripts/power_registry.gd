@@ -26,18 +26,21 @@ const BOSS_EPITAPHS := {
 		"hexweaver": "Your chaos toppled the first pillar. The void approves.",
 		"veilstrider": "The guardian never saw you coming.",
 		"bastion": "Your walls didn't break. The Warden did.",
+		"riftlancer": "You pinned brute force to a single line and broke it where it stood.",
 		"default": "A guardian falls."
 	},
 	"sovereign": {
 		"hexweaver": "Order crumbles before true chaos.",
 		"veilstrider": "You danced through infinity itself.",
 		"bastion": "Not enough stone to hold the cosmos.",
+		"riftlancer": "You found the one true vector in a throne of false geometry.",
 		"default": "Sovereign's reign ends. Only Lacuna stands."
 	},
 	"lacuna": {
 		"hexweaver": "The void answered your call. Now it's silent.",
 		"veilstrider": "You stepped through the abyss and back. Impossible.",
 		"bastion": "Unbreakable became broken. The irony is exquisite.",
+		"riftlancer": "Even the missing beat held long enough for your harpoon to land.",
 		"default": "The Abyss itself breathes no more."
 	}
 }
