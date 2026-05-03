@@ -132,6 +132,8 @@ var phase_three_rooms_cleared: int = 0
 var endless_boss_defeated: bool = false
 var choosing_next_room: bool = false
 var run_cleared: bool = false
+var boss_reward_pending: bool = false
+var last_defeated_boss_id: String = ""
 
 var boons_taken: Array[String] = []
 var arcana_rewards_taken: Array[String] = []
@@ -506,6 +508,8 @@ func _start_debug_boss_room() -> Dictionary:
 	in_third_boss_room = false
 	phase_two_rooms_cleared = 0
 	phase_three_rooms_cleared = 0
+	boss_reward_pending = false
+	last_defeated_boss_id = ""
 	_begin_boss_room()
 	hud.refresh(_get_hud_state(), player)
 	return {"ok": true, "state": "debug_encounter", "encounter": "Warden"}
@@ -605,6 +609,8 @@ func _reset_for_debug_jump() -> void:
 	phase_three_rooms_cleared = 0
 	endless_boss_defeated = false
 	active_room_enemy_count = 0
+	boss_reward_pending = false
+	last_defeated_boss_id = ""
 	_clear_all_enemies()
 
 	if is_instance_valid(player):
@@ -1299,8 +1305,11 @@ func _finish_first_boss_clear() -> void:
 	room_depth += 1
 	boss_unlocked = false
 	pending_room_reward = ENUMS.RewardMode.NONE
+	last_defeated_boss_id = "warden"
+	boss_reward_pending = true
 	hud.show_banner("Warden Defeated", "")
-	_spawn_door_options()
+	var epitaph: String = power_registry_instance.get_boss_epitaph("warden", current_character_id)
+	_open_boon_selection("Claim Warden's Power", false, ENUMS.RewardMode.BOSS, {}, epitaph, current_character_id)
 
 func _finish_second_boss_clear() -> void:
 	in_second_boss_room = false
@@ -1312,8 +1321,11 @@ func _finish_second_boss_clear() -> void:
 	boss_unlocked = false
 	pending_room_reward = ENUMS.RewardMode.NONE
 	phase_three_rooms_cleared = 0
+	last_defeated_boss_id = "sovereign"
+	boss_reward_pending = true
 	hud.show_banner("Sovereign Defeated", "")
-	_spawn_door_options()
+	var epitaph: String = power_registry_instance.get_boss_epitaph("sovereign", current_character_id)
+	_open_boon_selection("Claim Sovereign's Power", false, ENUMS.RewardMode.BOSS, {}, epitaph, current_character_id)
 
 func _finish_third_boss_clear() -> void:
 	in_third_boss_room = false
@@ -1324,6 +1336,7 @@ func _finish_third_boss_clear() -> void:
 	boss_unlocked = false
 	pending_room_reward = ENUMS.RewardMode.NONE
 	_clear_active_run_checkpoint()
+	last_defeated_boss_id = "lacuna"
 	hud.show_banner("Run Complete", "")
 	if is_instance_valid(victory_screen):
 		var run_context := _get_run_context()
@@ -1881,9 +1894,9 @@ func _roll_route_options(route_context: Variant) -> Array[Dictionary]:
 		return []
 	return encounter_profile_builder.roll_route_options(route_context)
 
-func _open_boon_selection(title: String, is_initial: bool, mode: int = ENUMS.RewardMode.BOON, player_mutator: Dictionary = {}) -> void:
+func _open_boon_selection(title: String, is_initial: bool, mode: int = ENUMS.RewardMode.BOON, player_mutator: Dictionary = {}, epitaph: String = "", character_id: String = "") -> void:
 	if is_instance_valid(reward_selection_ui):
-		reward_selection_ui.open_selection(title, is_initial, mode, power_registry_instance, player, rng, player_mutator)
+		reward_selection_ui.open_selection(title, is_initial, mode, power_registry_instance, player, rng, player_mutator, epitaph, character_id)
 		_set_combat_paused(true)
 
 func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> void:
@@ -1893,6 +1906,10 @@ func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> voi
 		arcana_rewards_taken.append(String(choice["name"]))
 	elif mode == ENUMS.RewardMode.MISSION:
 		_apply_mission_reward(choice)
+	elif mode == ENUMS.RewardMode.BOSS:
+		_apply_boon_to_player(String(choice["id"]))
+		boons_taken.append(String(choice["name"]))
+		boss_reward_pending = false
 	else:
 		_apply_boon_to_player(String(choice["id"]))
 		boons_taken.append(String(choice["name"]))
@@ -2056,28 +2073,34 @@ func _record_reward_choice(choice: Dictionary, mode: int, is_initial: bool) -> v
 		if not mission_upgrade.is_empty():
 			choice_id = String(mission_upgrade.get("id", choice_id))
 			choice_name = String(mission_upgrade.get("name", choice_name))
-	RUN_TELEMETRY_STORE.append_reward_choice(telemetry_run_id, {
+	var event_data := {
 		"unix_time": int(Time.get_unix_time_from_system()),
 		"mode": mode,
 		"choice_id": choice_id,
 		"choice_name": choice_name,
 		"is_initial": is_initial,
 		"room_depth": room_depth
-	})
+	}
+	if mode == ENUMS.RewardMode.BOSS:
+		event_data["boss_id"] = last_defeated_boss_id
+	RUN_TELEMETRY_STORE.append_reward_choice(telemetry_run_id, event_data)
 
 func _record_reward_offers(offers: Array[Dictionary], mode: int, is_initial: bool, stage: int) -> void:
 	if not telemetry_enabled or telemetry_run_id.is_empty() or telemetry_run_finished:
 		return
 	if offers.is_empty():
 		return
-	RUN_TELEMETRY_STORE.append_reward_offers(telemetry_run_id, {
+	var event_data := {
 		"unix_time": int(Time.get_unix_time_from_system()),
 		"mode": mode,
 		"is_initial": is_initial,
 		"stage": stage,
 		"room_depth": room_depth,
 		"offers": offers.duplicate(true)
-	})
+	}
+	if mode == ENUMS.RewardMode.BOSS:
+		event_data["boss_id"] = last_defeated_boss_id
+	RUN_TELEMETRY_STORE.append_reward_offers(telemetry_run_id, event_data)
 
 func _record_door_choice(choice: Dictionary) -> void:
 	if not telemetry_enabled or telemetry_run_id.is_empty() or telemetry_run_finished:

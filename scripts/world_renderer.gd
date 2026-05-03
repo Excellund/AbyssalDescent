@@ -80,14 +80,14 @@ func _draw() -> void:
 
 	var coarse_step := maxf(28.0, floor_grid_step)
 	var fine_step := maxf(16.0, floor_grid_fine_step)
-	for x in range(int(room_rect.position.x), int(room_rect.position.x + room_rect.size.x + coarse_step), int(coarse_step)):
+	for x in range(floori(room_rect.position.x), floori(room_rect.position.x + room_rect.size.x + coarse_step), floori(coarse_step)):
 		draw_line(Vector2(float(x), room_rect.position.y), Vector2(float(x), room_rect.position.y + room_rect.size.y), Color(0.36, 0.56, 0.78, clampf(floor_coarse_grid_alpha, 0.01, 0.2)), 2.0)
-	for y in range(int(room_rect.position.y), int(room_rect.position.y + room_rect.size.y + coarse_step), int(coarse_step)):
+	for y in range(floori(room_rect.position.y), floori(room_rect.position.y + room_rect.size.y + coarse_step), floori(coarse_step)):
 		draw_line(Vector2(room_rect.position.x, float(y)), Vector2(room_rect.position.x + room_rect.size.x, float(y)), Color(0.36, 0.56, 0.78, clampf(floor_coarse_grid_alpha, 0.01, 0.2)), 2.0)
 
-	for x in range(int(room_rect.position.x), int(room_rect.position.x + room_rect.size.x + fine_step), int(fine_step)):
+	for x in range(floori(room_rect.position.x), floori(room_rect.position.x + room_rect.size.x + fine_step), floori(fine_step)):
 		draw_line(Vector2(float(x), room_rect.position.y), Vector2(float(x), room_rect.position.y + room_rect.size.y), Color(0.55, 0.74, 0.92, clampf(floor_fine_grid_alpha, 0.0, 0.08)), 1.0)
-	for y in range(int(room_rect.position.y), int(room_rect.position.y + room_rect.size.y + fine_step), int(fine_step)):
+	for y in range(floori(room_rect.position.y), floori(room_rect.position.y + room_rect.size.y + fine_step), floori(fine_step)):
 		draw_line(Vector2(room_rect.position.x, float(y)), Vector2(room_rect.position.x + room_rect.size.x, float(y)), Color(0.55, 0.74, 0.92, clampf(floor_fine_grid_alpha, 0.0, 0.08)), 1.0)
 
 	var corners := [
@@ -224,8 +224,10 @@ func _draw_warden_boss_door_vfx(door_pos: Vector2, door_pulse: float, focus_boos
 		var a := wedge_mid - half_wedge + (half_wedge * 2.0) * t
 		wedge.append(door_pos + Vector2.RIGHT.rotated(a) * wedge_inner)
 	
-	# Guard against invalid polygon data.
-	if wedge.size() >= 3 and wedge_inner > 0.0 and wedge_inner < wedge_outer:
+	# Guard against invalid polygon data: require sufficient point count, valid radii separation, and wedge angle.
+	var radius_diff := wedge_outer - wedge_inner
+	var wedge_angle := half_wedge * 2.0
+	if wedge.size() >= 6 and radius_diff >= 10.0 and wedge_angle > 0.05:
 		draw_colored_polygon(wedge, Color(core.r, core.g, core.b, 0.14 + focus_boost * 0.25))
 
 	# Charge lane pulse.

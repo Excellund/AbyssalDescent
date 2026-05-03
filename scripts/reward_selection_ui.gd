@@ -30,10 +30,12 @@ var reward_selection_mode: int = ENUMS.RewardMode.BOON
 var mission_reward_stage: int = 0
 var pending_mission_upgrade_choice: Dictionary = {}
 var current_player: Node2D
+var current_character_id: String = ""
 
 var boon_layer: CanvasLayer
 var boon_title_label: Label
 var boon_subtitle_label: Label
+var epitaph_label: RichTextLabel
 var boon_card_panels: Array[Panel] = []
 var boon_card_labels: Array[RichTextLabel] = []
 var boon_card_stack_labels: Array[Label] = []
@@ -41,12 +43,18 @@ var boon_card_icon_nodes: Array[TextureRect] = []
 var boon_card_rects: Array[Rect2] = []
 var boon_backdrop: ColorRect
 var current_player_mutator: Dictionary = {}
+var _epitaph_text: String = ""
+var _epitaph_pulse_active: bool = false
+var _epitaph_pulse_time: float = 0.0
 var _mutator_icon_killbox: Texture2D
 var _mutator_icon_fortified: Texture2D
 var _mutator_icon_hunters_focus: Texture2D
 var _mutator_icon_combo_relay: Texture2D
 var _mutator_icon_convergence: Texture2D
 var _mutator_icon_conflagration: Texture2D
+const EPITAPH_COLOR_COOL := Color(0.72, 0.86, 1.0, 0.9)
+const EPITAPH_COLOR_WARM := Color(1.0, 0.95, 0.84, 1.0)
+const EPITAPH_PULSE_SPEED := 2.1
 const BOON_CARD_MAX_WIDTH := 1460.0
 const BOON_CARD_MIN_WIDTH := 860.0
 const BOON_CARD_HEIGHT := 118.0
@@ -83,11 +91,15 @@ func close_selection() -> void:
 	pending_mission_upgrade_choice = {}
 	current_player = null
 	current_player_mutator = {}
+	current_character_id = ""
 	boon_choices.clear()
+	_epitaph_text = ""
+	_epitaph_pulse_active = false
 	if boon_layer != null:
 		boon_layer.visible = false
 
-func open_selection(title: String, is_initial: bool, mode: int, power_registry: Node, player: Node2D, rng: RandomNumberGenerator, player_mutator: Dictionary = {}) -> void:
+
+func open_selection(title: String, is_initial: bool, mode: int, power_registry: Node, player: Node2D, rng: RandomNumberGenerator, player_mutator: Dictionary = {}, epitaph: String = "", character_id: String = "") -> void:
 	boon_selection_active = true
 	pending_initial_boon = is_initial
 	boon_title_text = title
@@ -96,11 +108,15 @@ func open_selection(title: String, is_initial: bool, mode: int, power_registry: 
 	pending_mission_upgrade_choice = {}
 	current_player = player
 	current_player_mutator = player_mutator
+	current_character_id = character_id
+	_epitaph_text = epitaph
 	_apply_mode_theme()
 	if reward_selection_mode == ENUMS.RewardMode.ARCANA:
 		boon_choices = _roll_arcana_choices(boon_choice_count, power_registry, player, rng)
 	elif reward_selection_mode == ENUMS.RewardMode.MISSION:
 		boon_choices = _roll_objective_choices(boon_choice_count, power_registry, player, rng)
+	elif reward_selection_mode == ENUMS.RewardMode.BOSS:
+		boon_choices = _roll_boss_reward_choices(boon_choice_count, power_registry, player, rng)
 	else:
 		boon_choices = _roll_boon_choices(boon_choice_count, power_registry, player, rng)
 	boon_confirm_lock_time = boon_reveal_duration + 0.08
@@ -108,6 +124,7 @@ func open_selection(title: String, is_initial: bool, mode: int, power_registry: 
 	boon_hovered_index = -1
 	_apply_boon_card_styles(-1)
 	_refresh_boon_ui(player)
+	_refresh_epitaph_display()
 	_emit_reward_offers_presented()
 
 func process_input(delta: float) -> void:
@@ -157,6 +174,30 @@ func process_input(delta: float) -> void:
 			pending_initial_boon = false
 			emit_signal("reward_selected", emitted_choice, mode, initial)
 			return
+	
+	_update_epitaph_pulse(delta)
+
+
+func _update_epitaph_pulse(delta: float) -> void:
+	if not _epitaph_pulse_active or epitaph_label == null:
+		return
+	_epitaph_pulse_time += delta
+	var t := (sin(_epitaph_pulse_time * EPITAPH_PULSE_SPEED) + 1.0) * 0.5
+	epitaph_label.modulate = EPITAPH_COLOR_COOL.lerp(EPITAPH_COLOR_WARM, t)
+
+func _refresh_epitaph_display() -> void:
+	if epitaph_label == null:
+		return
+	if _epitaph_text.is_empty():
+		epitaph_label.visible = false
+		_epitaph_pulse_active = false
+		return
+	epitaph_label.text = "[center][wave amp=14.0 freq=3.0]" + _epitaph_text + "[/wave][/center]"
+	epitaph_label.visible = true
+	epitaph_label.modulate = EPITAPH_COLOR_COOL
+	_epitaph_pulse_time = 0.0
+	_epitaph_pulse_active = true
+
 
 func _create_ui() -> void:
 	boon_layer = CanvasLayer.new()
@@ -251,11 +292,31 @@ func _create_ui() -> void:
 		boon_card_icon_nodes.append(icon_node)
 		boon_card_rects.append(Rect2(Vector2.ZERO, Vector2.ZERO))
 
+	epitaph_label = RichTextLabel.new()
+	epitaph_label.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	epitaph_label.offset_left = 60.0
+	epitaph_label.offset_right = -60.0
+	epitaph_label.bbcode_enabled = true
+	epitaph_label.scroll_active = false
+	epitaph_label.fit_content = true
+	epitaph_label.custom_minimum_size = Vector2(0.0, 100.0)
+	epitaph_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	epitaph_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	epitaph_label.add_theme_font_size_override("normal_font_size", 24)
+	epitaph_label.add_theme_color_override("font_color", EPITAPH_COLOR_COOL)
+	epitaph_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
+	epitaph_label.add_theme_constant_override("shadow_offset_x", 2)
+	epitaph_label.add_theme_constant_override("shadow_offset_y", 2)
+	epitaph_label.visible = false
+	boon_layer.add_child(epitaph_label)
+
 	_layout_boon_cards()
+	_position_epitaph_label()
 	boon_layer.visible = false
 
 func _on_viewport_size_changed() -> void:
 	_layout_boon_cards()
+	_position_epitaph_label()
 	if boon_selection_active:
 		_update_boon_reveal_visuals()
 
@@ -287,6 +348,24 @@ func _layout_boon_cards() -> void:
 			var stack_label := boon_card_stack_labels[i]
 			stack_label.position = Vector2(card_width - stack_label.custom_minimum_size.x - 18.0, 10.0)
 
+func _position_epitaph_label() -> void:
+	if epitaph_label == null or boon_card_rects.is_empty() or get_viewport() == null:
+		return
+	var viewport_size := get_viewport().get_visible_rect().size
+	# Find the bottom of the last card
+	var last_card_bottom := 0.0
+	for rect in boon_card_rects:
+		var card_bottom := rect.position.y + rect.size.y
+		if card_bottom > last_card_bottom:
+			last_card_bottom = card_bottom
+	# Calculate halfway point between card bottom and viewport bottom
+	var halfway_y := (last_card_bottom + viewport_size.y) * 0.5
+	# Position epitaph centered on halfway point
+	var epitaph_height := 100.0  # Approximate label height
+	epitaph_label.offset_top = halfway_y - epitaph_height * 0.5
+	epitaph_label.position = Vector2(epitaph_label.position.x, halfway_y - epitaph_height * 0.5)
+	epitaph_label.size = Vector2(viewport_size.x - 120.0, epitaph_height)
+
 func _apply_mode_theme() -> void:
 	if boon_backdrop == null or boon_title_label == null:
 		return
@@ -302,6 +381,12 @@ func _apply_mode_theme() -> void:
 		boon_title_label.add_theme_color_override("font_shadow_color", Color(0.09, 0.06, 0.02, 0.95))
 		if boon_subtitle_label != null:
 			boon_subtitle_label.add_theme_color_override("font_color", Color(0.94, 0.82, 0.6, 0.7))
+	elif reward_selection_mode == ENUMS.RewardMode.BOSS:
+		boon_backdrop.color = Color(0.04, 0.01, 0.06, 0.72)
+		boon_title_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.95, 1.0))
+		boon_title_label.add_theme_color_override("font_shadow_color", Color(0.08, 0.01, 0.08, 0.96))
+		if boon_subtitle_label != null:
+			boon_subtitle_label.add_theme_color_override("font_color", Color(0.92, 0.72, 0.98, 0.7))
 	else:
 		boon_backdrop.color = Color(0.01, 0.02, 0.05, 0.7)
 		boon_title_label.add_theme_color_override("font_color", Color(0.93, 0.97, 1.0, 1.0))
@@ -383,11 +468,16 @@ func _get_boon_title_text() -> String:
 
 func _get_boon_subtitle_text() -> String:
 	var is_arcana := reward_selection_mode == ENUMS.RewardMode.ARCANA
+	var is_boss := reward_selection_mode == ENUMS.RewardMode.BOSS
 	var reveal_complete := boon_confirm_lock_time <= 0.0
 	if is_arcana and pending_initial_boon:
 		if reveal_complete:
 			return "Choose one - it will grow stronger every time you claim it"
 		return "Arcana are rare powers that permanently shape your run"
+	if is_boss:
+		if reveal_complete:
+			return "Claim your victory reward - choose one ascended power"
+		return "Preparing your boss reward..."
 	if reward_selection_mode == ENUMS.RewardMode.MISSION:
 		if mission_reward_stage == 0:
 			if reveal_complete:
@@ -494,6 +584,23 @@ func _roll_objective_choices(choice_count: int, power_registry: Node, player: No
 		available_regular.remove_at(index)
 	return picks
 
+func _roll_boss_reward_choices(choice_count: int, power_registry: Node, player: Node2D, rng: RandomNumberGenerator) -> Array[Dictionary]:
+	var pool: Array[Dictionary] = power_registry.get_boss_reward_pool(player)
+	var available: Array[Dictionary] = []
+	for entry in pool:
+		var limit := int(entry.get("stack_limit", 0))
+		if limit > 0 and is_instance_valid(player):
+			var current := int(player.get_upgrade_stack_count(String(entry["id"])))
+			if current >= limit:
+				continue
+		available.append(entry)
+	var picks: Array[Dictionary] = []
+	for _i in range(mini(choice_count, available.size())):
+		var index := rng.randi_range(0, available.size() - 1)
+		picks.append(available[index])
+		available.remove_at(index)
+	return picks
+
 func _get_stack_count_for_choice(choice: Dictionary, player: Node2D) -> int:
 	if not is_instance_valid(player):
 		return 0
@@ -589,6 +696,9 @@ func _apply_boon_card_styles(hovered_index: int) -> void:
 				mission_tint = boon_choices[i].get("color", mission_tint) as Color
 			base_color = Color(0.12, 0.09, 0.06, 0.96).lerp(Color(mission_tint.r * 0.26, mission_tint.g * 0.24, mission_tint.b * 0.2, 0.97), 0.5 + t * 0.2)
 			border_color = Color(mission_tint.r, mission_tint.g, mission_tint.b, 0.9)
+		elif reward_selection_mode == ENUMS.RewardMode.BOSS:
+			base_color = Color(0.12, 0.06, 0.16, 0.96).lerp(Color(0.16, 0.08, 0.22, 0.96), t)
+			border_color = Color(0.95, 0.65, 1.0, 0.88)
 		if i == hovered_index and boon_confirm_lock_time <= 0.0:
 			if reward_selection_mode == ENUMS.RewardMode.ARCANA:
 				style.bg_color = Color(0.33, 0.2, 0.12, 0.97)
@@ -599,6 +709,9 @@ func _apply_boon_card_styles(hovered_index: int) -> void:
 					hover_tint = boon_choices[i].get("color", hover_tint) as Color
 				style.bg_color = Color(hover_tint.r * 0.42, hover_tint.g * 0.34, hover_tint.b * 0.22, 0.98)
 				style.border_color = Color(hover_tint.r, hover_tint.g, hover_tint.b, 1.0)
+			elif reward_selection_mode == ENUMS.RewardMode.BOSS:
+				style.bg_color = Color(0.3, 0.14, 0.38, 0.97)
+				style.border_color = Color(1.0, 0.9, 1.0, 1.0)
 			else:
 				style.bg_color = Color(0.22, 0.32, 0.46, 0.96)
 				style.border_color = Color(0.98, 0.99, 1.0, 1.0)

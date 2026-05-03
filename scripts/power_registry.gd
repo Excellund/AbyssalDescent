@@ -20,6 +20,28 @@ const DAMAGE_SCALE_SOURCE_NONE = "none"
 const DAMAGE_SCALE_SOURCE_DAMAGE = "damage_stat"
 const DAMAGE_SCALE_SOURCE_HIT = "hit_damage"
 
+# Boss epitaph lines - displayed on boss defeat
+const BOSS_EPITAPHS := {
+	"warden": {
+		"hexweaver": "Your chaos toppled the first pillar. The void approves.",
+		"veilstrider": "The guardian never saw you coming.",
+		"bastion": "Your walls didn't break. The Warden did.",
+		"default": "A guardian falls."
+	},
+	"sovereign": {
+		"hexweaver": "Order crumbles before true chaos.",
+		"veilstrider": "You danced through infinity itself.",
+		"bastion": "Not enough stone to hold the cosmos.",
+		"default": "Sovereign's reign ends. Only Lacuna stands."
+	},
+	"lacuna": {
+		"hexweaver": "The void answered your call. Now it's silent.",
+		"veilstrider": "You stepped through the abyss and back. Impossible.",
+		"bastion": "Unbreakable became broken. The irony is exquisite.",
+		"default": "The Abyss itself breathes no more."
+	}
+}
+
 const DAMAGE_MODEL_BY_POWER := {
 	# Upgrades
 	"first_strike": {
@@ -110,6 +132,32 @@ const DAMAGE_MODEL_BY_POWER := {
 		"kind": DAMAGE_KIND_FLAT,
 		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
 		"formula_note": "+X bonus damage on hits against enemies below 55% HP"
+	},
+	# Boss rewards
+	"apex_predator": {
+		"kind": DAMAGE_KIND_FLAT,
+		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
+		"formula_note": "+X bonus damage on enemies below 50% HP"
+	},
+	"void_echo": {
+		"kind": DAMAGE_KIND_FLAT,
+		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
+		"formula_note": "+X damage spawned at kill location"
+	},
+	"apex_momentum": {
+		"kind": DAMAGE_KIND_NONE,
+		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
+		"formula_note": "+Y% movement speed on consecutive hits"
+	},
+	"convergence_surge": {
+		"kind": DAMAGE_KIND_NONE,
+		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
+		"formula_note": "-Y% chain cooldown reduction"
+	},
+	"indomitable_spirit": {
+		"kind": DAMAGE_KIND_NONE,
+		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
+		"formula_note": "+Y% damage reduction after heavy hit"
 	}
 }
 
@@ -323,6 +371,35 @@ const TRIAL_POWER_BALANCE := {
 	}
 }
 
+const BOSS_REWARD_BALANCE := {
+	"apex_predator": {
+		"kind": "add_int",
+		"property": "apex_predator_bonus_damage",
+		"add": 22
+	},
+	"void_echo": {
+		"kind": "add_int",
+		"property": "void_echo_damage",
+		"add": 28
+	},
+	"apex_momentum": {
+		"kind": "add_float",
+		"property": "apex_momentum_speed_bonus",
+		"add": 0.18
+	},
+	"convergence_surge": {
+		"kind": "mul_min",
+		"property": "storm_crown_chain_cooldown",
+		"mult": 0.82,
+		"min": 1.2
+	},
+	"indomitable_spirit": {
+		"kind": "add_float",
+		"property": "indomitable_spirit_damage_reduction",
+		"add": 0.12
+	}
+}
+
 const UPGRADE_STACK_LIMITS := {
 	"first_strike": 3,
 	"heavy_blow": 3,
@@ -336,6 +413,14 @@ const UPGRADE_STACK_LIMITS := {
 }
 
 const TRIAL_POWER_STACK_LIMITS := {}
+
+const BOSS_REWARD_STACK_LIMITS := {
+	"apex_predator": 2,
+	"void_echo": 2,
+	"apex_momentum": 2,
+	"convergence_surge": 2,
+	"indomitable_spirit": 2
+}
 
 # Unified power data structure
 class Power:
@@ -492,12 +577,50 @@ func get_objective_upgrade_pool(player_reference: Node = null) -> Array[Dictiona
 	return favored
 
 
+## Return boss-exclusive reward pool
+func get_boss_reward_pool(player_reference: Node = null) -> Array[Dictionary]:
+	var apex_pred_desc := _get_upgrade_fallback_description("apex_predator")
+	var void_echo_desc := _get_upgrade_fallback_description("void_echo")
+	var apex_mom_desc := _get_upgrade_fallback_description("apex_momentum")
+	var conv_surge_desc := _get_upgrade_fallback_description("convergence_surge")
+	var indom_desc := _get_upgrade_fallback_description("indomitable_spirit")
+	if is_instance_valid(player_reference):
+		apex_pred_desc = String(player_reference.get_upgrade_card_desc("apex_predator"))
+		void_echo_desc = String(player_reference.get_upgrade_card_desc("void_echo"))
+		apex_mom_desc = String(player_reference.get_upgrade_card_desc("apex_momentum"))
+		conv_surge_desc = String(player_reference.get_upgrade_card_desc("convergence_surge"))
+		indom_desc = String(player_reference.get_upgrade_card_desc("indomitable_spirit"))
+	return [
+		Power.new("apex_predator", "Apex Predator", apex_pred_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("apex_predator"), get_power_balance("apex_predator")).to_dict(),
+		Power.new("void_echo", "Void Echo", void_echo_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("void_echo"), get_power_balance("void_echo")).to_dict(),
+		Power.new("apex_momentum", "Apex Momentum", apex_mom_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("apex_momentum"), get_power_balance("apex_momentum")).to_dict(),
+		Power.new("convergence_surge", "Convergence Surge", conv_surge_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("convergence_surge"), get_power_balance("convergence_surge")).to_dict(),
+		Power.new("indomitable_spirit", "Indomitable Spirit", indom_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("indomitable_spirit"), get_power_balance("indomitable_spirit")).to_dict(),
+	]
+
+
 ## Get all powers (upgrades + trial powers)
 func get_all_powers(player_reference: Node = null) -> Array[Dictionary]:
 	var all_powers: Array[Dictionary] = []
 	all_powers.append_array(get_upgrade_pool(player_reference))
 	all_powers.append_array(get_trial_power_pool(player_reference))
 	return all_powers
+
+
+## Get boss epitaph line for a defeated boss
+func get_boss_epitaph(boss_id: String, character_id: String = "") -> String:
+	var boss_key := boss_id.strip_edges().to_lower()
+	if not BOSS_EPITAPHS.has(boss_key):
+		return ""
+	var epitaph_dict: Variant = BOSS_EPITAPHS[boss_key]
+	if epitaph_dict is Dictionary:
+		var char_key := character_id.strip_edges().to_lower()
+		if not char_key.is_empty() and epitaph_dict.has(char_key):
+			return String(epitaph_dict[char_key])
+		if epitaph_dict.has("default"):
+			return String(epitaph_dict["default"])
+		return ""
+	return String(epitaph_dict)
 
 
 ## Check if a power ID exists
@@ -542,6 +665,8 @@ func get_power_balance(power_id: String) -> Dictionary:
 		return (UPGRADE_BALANCE[id] as Dictionary).duplicate(true)
 	if TRIAL_POWER_BALANCE.has(id):
 		return (TRIAL_POWER_BALANCE[id] as Dictionary).duplicate(true)
+	if BOSS_REWARD_BALANCE.has(id):
+		return (BOSS_REWARD_BALANCE[id] as Dictionary).duplicate(true)
 	return {}
 
 
@@ -551,6 +676,8 @@ func get_power_stack_limit(power_id: String) -> int:
 		return int(UPGRADE_STACK_LIMITS[id])
 	if TRIAL_POWER_STACK_LIMITS.has(id):
 		return int(TRIAL_POWER_STACK_LIMITS[id])
+	if BOSS_REWARD_STACK_LIMITS.has(id):
+		return int(BOSS_REWARD_STACK_LIMITS[id])
 	return 0
 
 

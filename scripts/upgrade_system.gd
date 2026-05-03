@@ -343,6 +343,19 @@ func _damage_kind_prefix(_power_id: String) -> String:
 	return ""
 
 
+func _variant_to_number(value: Variant, fallback: float = 0.0) -> float:
+	if value is float:
+		return value
+	if value is int:
+		return value
+	if value is String:
+		var text := String(value).strip_edges()
+		if text.is_empty():
+			return fallback
+		return text.to_float()
+	return fallback
+
+
 func _build_upgrade_preview(upgrade_id: String) -> Dictionary:
 	if not is_instance_valid(player_reference):
 		return {}
@@ -354,16 +367,21 @@ func _build_upgrade_preview(upgrade_id: String) -> Dictionary:
 		return {}
 
 	var current_value: Variant = player_reference.get(property_name)
+	var current_number := _variant_to_number(current_value)
 	var next_value: Variant = current_value
 	match String(data.get("kind", "")):
 		"mul_min":
-			next_value = maxf(float(data.get("min", 0.0)), float(current_value) * float(data.get("mult", 1.0)))
+			next_value = maxf(_variant_to_number(data.get("min", 0.0)), current_number * _variant_to_number(data.get("mult", 1.0), 1.0))
 		"add_int":
-			next_value = int(current_value) + int(data.get("add", 0))
+			next_value = floori(current_number) + floori(_variant_to_number(data.get("add", 0.0)))
 		"add_float":
-			next_value = float(current_value) + float(data.get("add", 0.0))
+			next_value = current_number + _variant_to_number(data.get("add", 0.0))
 		"add_clamp":
-			next_value = clampf(float(current_value) + float(data.get("add", 0.0)), float(data.get("min", -INF)), float(data.get("max", INF)))
+			next_value = clampf(
+				current_number + _variant_to_number(data.get("add", 0.0)),
+				_variant_to_number(data.get("min", -INF), -INF),
+				_variant_to_number(data.get("max", INF), INF)
+			)
 		_:
 			return {}
 

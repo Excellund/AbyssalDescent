@@ -12,12 +12,14 @@ enum RewardMode {
 	OBJECTIVE,
 	ARCANA,
 	MISSION,
+	BOSS,
 }
 
 const REWARD_MODE_NONE := RewardMode.NONE
 const REWARD_MODE_BOON := RewardMode.BOON
 const REWARD_MODE_ARCANA := RewardMode.ARCANA
 const REWARD_MODE_MISSION := RewardMode.MISSION
+const REWARD_MODE_BOSS := RewardMode.BOSS
 
 enum DoorKind {
 	ENCOUNTER,
@@ -71,6 +73,8 @@ static func reward_mode_from_legacy(value: String) -> int:
 			return REWARD_MODE_MISSION
 		"arcana_reward", "trial_reward":
 			return REWARD_MODE_ARCANA
+		"boss", "boss_reward":
+			return REWARD_MODE_BOSS
 		"hard_reward":
 			return REWARD_MODE_MISSION
 		_:
