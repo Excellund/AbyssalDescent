@@ -2,6 +2,7 @@ extends CharacterBody2D
 
 const HEALTH_STATE_SCRIPT := preload("res://scripts/health_state.gd")
 const PLAYER_FEEDBACK_SCRIPT := preload("res://scripts/player_feedback.gd")
+const STATIC_WAKE_TRAIL_RENDERER_SCRIPT := preload("res://scripts/static_wake_trail_renderer.gd")
 const UPGRADE_SYSTEM_SCRIPT_PATH := "res://scripts/upgrade_system.gd"
 const POWER_REGISTRY_SCRIPT := preload("res://scripts/power_registry.gd")
 const ENEMY_BASE := preload("res://scripts/enemy_base.gd")
@@ -148,6 +149,7 @@ var attack_cooldown_left: float = 0.0
 var first_strike_bonus_damage: int = 0
 var health_state
 var player_feedback
+var static_wake_trail_renderer: Node2D
 var upgrade_system
 var attack_anim_time_left: float = 0.0
 var attack_anim_duration: float = 0.12
@@ -232,6 +234,9 @@ var phantom_step_ghost_positions: Array[Dictionary] = []
 var phantom_step_ghost_emit_cd: float = 0.0
 var static_wake_trails: Array[Dictionary] = []
 var static_wake_trail_emit_cooldown: float = 0.0
+var static_wake_dots_at_default_dash: int = 4
+var static_wake_last_emit_position: Vector2 = Vector2.ZERO
+var static_wake_has_last_emit_position: bool = false
 var void_dash_reset_pulse_left: float = 0.0
 var void_dash_reset_pulse_duration: float = 0.28
 var storm_crown_hit_counter: int = 0
@@ -362,6 +367,7 @@ func _ready() -> void:
 	upgrade_system.initialize(self, null, POWER_REGISTRY_SCRIPT.new())
 	_create_health_state()
 	_create_player_feedback()
+	_create_static_wake_trail_renderer()
 	var sprite := get_node_or_null("Sprite2D") as Sprite2D
 	if sprite != null:
 		sprite.visible = false
@@ -471,6 +477,7 @@ func _try_start_dash(direction: Vector2) -> void:
 	phantom_step_ghost_positions.clear()
 	phantom_step_ghost_emit_cd = 0.0
 	static_wake_trail_emit_cooldown = 0.0
+	static_wake_has_last_emit_position = false
 	_set_dash_phasing(true)
 	if passive_sigil_burst:
 		sigil_burst_ready = true
@@ -602,11 +609,8 @@ func _process_active_dash(delta: float) -> bool:
 		queue_redraw()
 
 	if reward_static_wake:
-		static_wake_trail_emit_cooldown = maxf(0.0, static_wake_trail_emit_cooldown - delta)
-		if static_wake_trail_emit_cooldown <= 0.0:
-			static_wake_trails.append({"pos": global_position, "life": static_wake_lifetime})
-			static_wake_trail_emit_cooldown = 0.035
-		queue_redraw()
+		if _emit_static_wake_trails_along_dash_segment(dash_start, dash_end, dash_direction):
+			queue_redraw()
 
 	if reward_wraithstep:
 		_apply_wraithstep_marks_during_dash(dash_start, dash_end)
@@ -964,6 +968,8 @@ func apply_run_snapshot(snapshot: Dictionary) -> void:
 	phantom_step_hit_ids.clear()
 	phantom_step_ghost_positions.clear()
 	static_wake_trails.clear()
+	static_wake_has_last_emit_position = false
+	_sync_static_wake_trail_renderer()
 	void_dash_reset_pulse_left = 0.0
 	execution_edge_proc_display_left = 0.0
 	storm_crown_hit_counter = 0
@@ -1392,6 +1398,8 @@ func clear_lingering_combat_effects() -> void:
 	phantom_step_ghost_emit_cd = 0.0
 	static_wake_trails.clear()
 	static_wake_trail_emit_cooldown = 0.0
+	static_wake_has_last_emit_position = false
+	_sync_static_wake_trail_renderer()
 	wraithstep_marked_enemy_expiry.clear()
 	storm_crown_discharge_flash_left = 0.0
 	void_dash_reset_pulse_left = 0.0
@@ -1628,6 +1636,7 @@ func _apply_phantom_step_during_dash() -> void:
 
 func _update_static_wake_trails(delta: float) -> void:
 	if static_wake_trails.is_empty():
+		_sync_static_wake_trail_renderer()
 		return
 	var i := static_wake_trails.size() - 1
 	while i >= 0:
@@ -1650,6 +1659,84 @@ func _update_static_wake_trails(delta: float) -> void:
 				DAMAGEABLE.apply_damage(enemy_node, wake_tick_damage)
 
 	queue_redraw()
+	_sync_static_wake_trail_renderer()
+
+
+func _emit_static_wake_trails_along_dash_segment(segment_start: Vector2, segment_end: Vector2, dash_dir: Vector2) -> bool:
+	var forward_dir := dash_dir.normalized()
+	if forward_dir.length_squared() <= 0.000001:
+		return false
+	var forward_progress := (segment_end - segment_start).dot(forward_dir)
+	if forward_progress <= 0.001:
+		return false
+	var emitted := false
+	if not static_wake_has_last_emit_position:
+		static_wake_last_emit_position = segment_start
+		static_wake_has_last_emit_position = true
+		_append_static_wake_trail(static_wake_last_emit_position)
+		emitted = true
+	var spacing := _get_static_wake_trail_spacing()
+	var projected_distance_to_end := (segment_end - static_wake_last_emit_position).dot(forward_dir)
+	var safety := 0
+	while projected_distance_to_end >= spacing and safety < 64:
+		static_wake_last_emit_position += forward_dir * spacing
+		_append_static_wake_trail(static_wake_last_emit_position)
+		emitted = true
+		projected_distance_to_end = (segment_end - static_wake_last_emit_position).dot(forward_dir)
+		safety += 1
+	if safety >= 64:
+		static_wake_last_emit_position = segment_start + forward_dir * forward_progress
+	return emitted
+
+
+func _get_static_wake_trail_spacing() -> float:
+	var clamped_dot_count := maxi(2, static_wake_dots_at_default_dash)
+	return maxf(4.0, dash_distance / float(clamped_dot_count - 1))
+
+
+func _append_static_wake_trail(world_position: Vector2) -> void:
+	var clamped_position := _clamp_static_wake_position_to_arena(world_position, 0.0)
+	if not static_wake_trails.is_empty():
+		var previous_pos: Vector2 = (static_wake_trails[static_wake_trails.size() - 1] as Dictionary).get("pos", clamped_position)
+		if previous_pos.distance_to(clamped_position) < 2.0:
+			return
+	static_wake_trails.append({"pos": clamped_position, "life": static_wake_lifetime})
+	_sync_static_wake_trail_renderer()
+
+
+func _clamp_static_wake_position_to_arena(world_position: Vector2, margin: float) -> Vector2:
+	var bounds := _get_static_wake_bounds_rect()
+	if bounds.size == Vector2.ZERO:
+		return world_position
+	var min_x := bounds.position.x + margin
+	var max_x := bounds.position.x + bounds.size.x - margin
+	if min_x > max_x:
+		var center_x := bounds.position.x + bounds.size.x * 0.5
+		min_x = center_x
+		max_x = center_x
+	var min_y := bounds.position.y + margin
+	var max_y := bounds.position.y + bounds.size.y - margin
+	if min_y > max_y:
+		var center_y := bounds.position.y + bounds.size.y * 0.5
+		min_y = center_y
+		max_y = center_y
+	return Vector2(clampf(world_position.x, min_x, max_x), clampf(world_position.y, min_y, max_y))
+
+
+func _get_static_wake_bounds_rect() -> Rect2:
+	var camera_node := get_node_or_null("Camera2D")
+	if camera_node != null and bool(camera_node.get("has_world_bounds")):
+		var camera_bounds: Variant = camera_node.get("world_bounds_rect")
+		if camera_bounds is Rect2:
+			return camera_bounds as Rect2
+	var parent_node := get_parent()
+	if parent_node != null:
+		var room_size_value: Variant = parent_node.get("current_room_size")
+		if room_size_value is Vector2:
+			var room_size := room_size_value as Vector2
+			if room_size != Vector2.ZERO:
+				return Rect2(-room_size * 0.5, room_size)
+	return Rect2()
 
 
 func notify_enemy_killed(kill_position: Vector2 = Vector2.ZERO) -> void:
@@ -1734,6 +1821,32 @@ func _create_player_feedback() -> void:
 	player_feedback = PLAYER_FEEDBACK_SCRIPT.new()
 	add_child(player_feedback)
 	player_feedback.setup(max_health, _get_current_health())
+
+
+func _create_static_wake_trail_renderer() -> void:
+	static_wake_trail_renderer = STATIC_WAKE_TRAIL_RENDERER_SCRIPT.new()
+	static_wake_trail_renderer.set_as_top_level(true)
+	static_wake_trail_renderer.z_as_relative = false
+	static_wake_trail_renderer.z_index = 10
+	var world_parent := get_parent()
+	if world_parent != null:
+		world_parent.add_child.call_deferred(static_wake_trail_renderer)
+	else:
+		add_child.call_deferred(static_wake_trail_renderer)
+	call_deferred("_sync_static_wake_trail_renderer")
+
+
+func _sync_static_wake_trail_renderer() -> void:
+	if static_wake_trail_renderer == null:
+		return
+	if static_wake_trail_renderer.has_method("set_trails"):
+		static_wake_trail_renderer.call("set_trails", static_wake_trails, static_wake_lifetime)
+
+
+func _exit_tree() -> void:
+	if static_wake_trail_renderer != null and is_instance_valid(static_wake_trail_renderer):
+		static_wake_trail_renderer.queue_free()
+		static_wake_trail_renderer = null
 
 func set_sfx_volume_db(volume_db: float) -> void:
 	if player_feedback == null:
@@ -2517,12 +2630,6 @@ func _draw_trial_reward_state() -> void:
 	if reward_static_wake:
 		var pulse := 0.5 + 0.5 * sin(t * 9.0 + 2.0)
 		draw_arc(Vector2.ZERO, 17.0, 0.0, TAU, 20, Color(0.96, 0.96, 0.36, 0.2 + pulse * 0.18), 1.4)
-		for trail_entry in static_wake_trails:
-			var trail_pos: Vector2 = trail_entry["pos"]
-			var life_ratio: float = clampf(trail_entry["life"] / maxf(0.001, static_wake_lifetime), 0.0, 1.0)
-			var local_pos := to_local(trail_pos)
-			draw_circle(local_pos, 10.0 * life_ratio, Color(0.96, 0.96, 0.36, 0.28 * life_ratio))
-			draw_arc(local_pos, 13.0 * life_ratio, 0.0, TAU, 14, Color(1.0, 1.0, 0.5, 0.42 * life_ratio), 1.2)
 
 	if reward_storm_crown:
 		var crown_pulse := 0.5 + 0.5 * sin(t * 7.8 + 0.9)
