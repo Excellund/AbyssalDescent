@@ -294,13 +294,16 @@ func get_trial_power_card_description(power_id: String) -> String:
 			return "[color=#c8daf0]Reaper Step:[/color] range/speed [color=#e8c96a]x%.2f[/color] [color=#8899aa]->[/color] [color=#7de882]x%.2f[/color], kill refresh [color=#7de882]full[/color]." % [cur_range, next_range]
 		"static_wake":
 			var wake_prefix := _damage_kind_prefix("static_wake")
-			var next_damage := int(next_values.get("damage", 0))
 			var next_lifetime := float(next_values.get("lifetime", 0.0))
-			var cur_damage := int(cur.get("damage", 0))
 			var cur_lifetime := float(cur.get("lifetime", 0.0))
+			var wake_data := _get_power_balance_data("static_wake")
+			var wake_ratio_base := float(wake_data.get("damage_ratio_base", 0.0))
+			var wake_ratio_per_stack := float(wake_data.get("damage_ratio_per_stack", 0.0))
+			var cur_damage_ratio := wake_ratio_base + wake_ratio_per_stack * float(current_stack)
+			var next_damage_ratio := wake_ratio_base + wake_ratio_per_stack * float(next_stack)
 			if current_stack <= 0:
-				return "[color=#9ab8d8]Leaves an electrified trail as you move that shocks any enemy who steps into it.[/color]\n[color=#9ab8d8]Initial:[/color] damage per pulse [color=#7de882]%d[/color], lasts [color=#7de882]%.2fs[/color]." % [next_damage, next_lifetime]
-			return "%s[color=#c8daf0]Static Wake:[/color] damage per pulse [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color], trail [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [wake_prefix, cur_damage, next_damage, cur_lifetime, next_lifetime]
+				return "[color=#9ab8d8]Leaves an electrified trail as you move that shocks any enemy who steps into it.[/color]\n[color=#9ab8d8]Initial:[/color] damage per pulse [color=#7de882]%.0f%%[/color] of damage stat, lasts [color=#7de882]%.2fs[/color]." % [next_damage_ratio * 100.0, next_lifetime]
+			return "%s[color=#c8daf0]Static Wake:[/color] damage per pulse [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color] of damage stat, trail [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [wake_prefix, cur_damage_ratio * 100.0, next_damage_ratio * 100.0, cur_lifetime, next_lifetime]
 		"storm_crown":
 			var next_every := int(next_values.get("proc_every", 1))
 			var next_targets := int(next_values.get("chain_targets", 1))
