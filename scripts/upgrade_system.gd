@@ -191,7 +191,7 @@ func _desc(is_initial: bool, flavor: String, template: String, args: Array = [])
 	return "%s[color=#9ab8d8]%s[/color] %s" % [_initial_prefix(is_initial), flavor, body]
 
 
-func _trial_reward_desc(is_initial: bool, flavor: String, body: String) -> String:
+func _reward_flavor_first_desc(is_initial: bool, flavor: String, body: String) -> String:
 	return "[color=#9ab8d8]%s[/color]\n%s%s" % [flavor, _initial_prefix(is_initial), body]
 
 
@@ -497,73 +497,73 @@ func get_trial_power_card_description(power_id: String) -> String:
 		"razor_wind":
 			var range_stat := _stat("x%.2f", float(cur.get("range_scale", 1.0)), float(next_values.get("range_scale", 1.0)), is_initial)
 			var damage_stat := _stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0, float(next_values.get("damage_ratio", 0.0)) * 100.0, is_initial)
-			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [range_stat, damage_stat], "reward_card"))
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [range_stat, damage_stat], "reward_card"))
 		"execution_edge":
 			var every_stat := _stat("%d", int(cur.get("every", 2)), int(next_values.get("every", 2)), is_initial)
 			var mult_stat := _stat("x%.2f", float(cur.get("damage_mult", 1.0)), float(next_values.get("damage_mult", 1.0)), is_initial)
-			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [every_stat, mult_stat], "reward_card"))
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [every_stat, mult_stat], "reward_card"))
 		"rupture_wave":
 			var radius_stat := _stat("%.0f", float(cur.get("radius", 0.0)), float(next_values.get("radius", 0.0)), is_initial)
 			var damage_stat := _stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0, float(next_values.get("damage_ratio", 0.0)) * 100.0, is_initial)
-			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [radius_stat, damage_stat], "reward_card"))
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [radius_stat, damage_stat], "reward_card"))
 		"aegis_field":
 			var resist_stat := _stat("%.0f%%", float(cur.get("resist", 0.0)) * 100.0, float(next_values.get("resist", 0.0)) * 100.0, is_initial)
 			var duration_stat := _stat("%.2fs", float(cur.get("duration", 0.0)), float(next_values.get("duration", 0.0)), is_initial)
 			var radius_stat := _stat("%.0f", float(cur.get("radius", 0.0)), float(next_values.get("radius", 0.0)), is_initial)
 			var cooldown_stat := _stat("%.2fs", float(cur.get("cooldown", 0.0)), float(next_values.get("cooldown", 0.0)), is_initial)
-			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [resist_stat, duration_stat, radius_stat, cooldown_stat], "reward_card"))
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [resist_stat, duration_stat, radius_stat, cooldown_stat], "reward_card"))
 		"hunters_snare":
 			var slow_stat := _stat("%.2fs", float(cur.get("slow_duration", 0.0)), float(next_values.get("slow_duration", 0.0)), is_initial)
 			var speed_stat := _stat("%.0f%%", float(cur.get("slow_mult", 1.0)) * 100.0, float(next_values.get("slow_mult", 1.0)) * 100.0, is_initial)
 			var bonus_stat := _stat("+%d", int(cur.get("bonus_damage", 0)), int(next_values.get("bonus_damage", 0)), is_initial)
-			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [slow_stat, speed_stat, bonus_stat], "reward_card"))
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [slow_stat, speed_stat, bonus_stat], "reward_card"))
 		"phantom_step":
 			var damage_stat := _stat("%d", int(cur.get("damage", 0)), int(next_values.get("damage", 0)), is_initial)
 			var slow_stat := _stat("%.2fs", float(cur.get("slow_duration", 0.0)), float(next_values.get("slow_duration", 0.0)), is_initial)
-			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [damage_stat, slow_stat], "reward_card"))
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [damage_stat, slow_stat], "reward_card"))
 		"reaper_step":
 			var range_stat := _stat("x%.2f", float(cur.get("range_mult", 1.0)), float(next_values.get("range_mult", 1.0)), is_initial)
-			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [range_stat, _const("full")], "reward_card"))
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [range_stat, _const("full")], "reward_card"))
 		"static_wake":
 			var wake_data := _get_power_balance_data("static_wake")
 			var wake_ratio_base := float(wake_data.get("damage_ratio_base", 0.0))
 			var wake_ratio_per_stack := float(wake_data.get("damage_ratio_per_stack", 0.0))
 			var wake_damage_stat := _stat("%.0f%%", (wake_ratio_base + wake_ratio_per_stack * float(current_stack)) * 100.0, (wake_ratio_base + wake_ratio_per_stack * float(next_stack)) * 100.0, is_initial)
 			var wake_life_stat := _stat("%.2fs", float(cur.get("lifetime", 0.0)), float(next_values.get("lifetime", 0.0)), is_initial)
-			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [wake_damage_stat, wake_life_stat], "reward_card"))
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [wake_damage_stat, wake_life_stat], "reward_card"))
 		"storm_crown":
 			var every_stat := _stat("%d", int(cur.get("proc_every", 1)), int(next_values.get("proc_every", 1)), is_initial)
 			var targets_stat := _stat("%d", int(cur.get("chain_targets", 1)), int(next_values.get("chain_targets", 1)), is_initial)
 			var radius_stat := _stat("%.0f", float(cur.get("chain_radius", 0.0)), float(next_values.get("chain_radius", 0.0)), is_initial)
 			var damage_stat := _stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0, float(next_values.get("damage_ratio", 0.0)) * 100.0, is_initial)
-			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [every_stat, targets_stat, radius_stat, damage_stat], "reward_card"))
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [every_stat, targets_stat, radius_stat, damage_stat], "reward_card"))
 		"wraithstep":
 			var mark_stat := _stat("%.2fs", float(cur.get("mark_duration", 0.0)), float(next_values.get("mark_duration", 0.0)), is_initial)
 			var bonus_stat := _stat("+%d", int(cur.get("bonus_damage", 0)), int(next_values.get("bonus_damage", 0)), is_initial)
 			var cleave_stat := _stat("%.0f%%", float(cur.get("splash_ratio", 0.0)) * 100.0, float(next_values.get("splash_ratio", 0.0)) * 100.0, is_initial)
-			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [mark_stat, bonus_stat, cleave_stat], "reward_card"))
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [mark_stat, bonus_stat, cleave_stat], "reward_card"))
 		"voidfire":
 			var amp_stat := _stat("+%.0f%%", float(cur.get("danger_zone_amp", 0.0)) * 100.0, float(next_values.get("danger_zone_amp", 0.0)) * 100.0, is_initial)
 			var det_stat := _stat("%.0f%%", float(cur.get("detonate_ratio", 0.0)) * 100.0, float(next_values.get("detonate_ratio", 0.0)) * 100.0, is_initial)
 			var lockout_stat := _stat("%.2fs", float(cur.get("lockout_duration", 0.0)), float(next_values.get("lockout_duration", 0.0)), is_initial)
-			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [amp_stat, det_stat, lockout_stat], "reward_card"))
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [amp_stat, det_stat, lockout_stat], "reward_card"))
 		"dread_resonance":
 			var bonus_stat := _stat("+%d", int(cur.get("bonus_per_stack", 0)), int(next_values.get("bonus_per_stack", 0)), is_initial)
 			var max_stacks_dr := int(player_reference.get("dread_resonance_max_stacks"))
-			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [bonus_stat, _const(str(max_stacks_dr))], "reward_card"))
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [bonus_stat, _const(str(max_stacks_dr))], "reward_card"))
 		"vow_shatter":
 			var mult_stat := _stat("x%.2f", float(cur.get("damage_mult", 1.0)), float(next_values.get("damage_mult", 1.0)), is_initial)
-			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [mult_stat], "reward_card"))
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [mult_stat], "reward_card"))
 		"eclipse_mark":
 			var radius_stat := _stat("%.0f", float(cur.get("radius", 0.0)), float(next_values.get("radius", 0.0)), is_initial)
 			var dur_stat := _stat("%.2fs", float(cur.get("mark_duration", 0.0)), float(next_values.get("mark_duration", 0.0)), is_initial)
 			var ratio_stat := _stat("%.0f%%", float(cur.get("bonus_ratio", 0.0)) * 100.0, float(next_values.get("bonus_ratio", 0.0)) * 100.0, is_initial)
-			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [radius_stat, dur_stat, ratio_stat], "reward_card"))
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [radius_stat, dur_stat, ratio_stat], "reward_card"))
 		"fracture_field":
 			var length_stat := _stat("%.0f", float(cur.get("radius", 0.0)), float(next_values.get("radius", 0.0)), is_initial)
 			var damage_stat := _stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0, float(next_values.get("damage_ratio", 0.0)) * 100.0, is_initial)
 			var slow_stat := _stat("%.2fs", float(cur.get("slow_duration", 0.0)), float(next_values.get("slow_duration", 0.0)), is_initial)
-			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [length_stat, damage_stat, slow_stat], "reward_card"))
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [length_stat, damage_stat, slow_stat], "reward_card"))
 		_:
 			return "[color=#9ab8d8]Enhances this power.[/color]"
 
@@ -617,7 +617,7 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 		"apex_predator":
 			var is_initial := int(cur_val) == 0
 			var stat := _stat("+%d", int(cur_val), int(next_val), is_initial)
-			return _desc(is_initial, flavor, _power_sentence(id, [stat], "reward_card"))
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [stat], "reward_card"))
 		"void_echo":
 			var cur_void_echo := int(cur_val)
 			var next_void_echo := int(next_val)
@@ -626,13 +626,13 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 			var is_initial := cur_void_echo == 0
 			var power_stat := _stat("+%d", cur_void_echo, next_void_echo, is_initial)
 			var radius_stat := _stat("%.0f", cur_echo_radius, next_echo_radius, is_initial)
-			return _desc(is_initial, flavor, _power_sentence(id, [power_stat, radius_stat], "reward_card"))
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [power_stat, radius_stat], "reward_card"))
 		"apex_momentum":
 			var cur_momentum := float(cur_val) * 100.0
 			var next_momentum := float(next_val) * 100.0
 			var is_initial := cur_momentum == 0.0
 			var stat := _stat("+%.0f%%", cur_momentum, next_momentum, is_initial)
-			return _desc(is_initial, flavor, _power_sentence(id, [stat], "reward_card"))
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [stat], "reward_card"))
 		"convergence_surge":
 			var cur_ratio := float(cur_val)
 			var next_ratio := float(next_val)
@@ -646,7 +646,7 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 			var hits_stat := _stat("%d", cur_hits_needed, next_hits_needed, is_initial)
 			var window_stat := _stat("%.2fs", cur_window, next_window, is_initial)
 			var pulse_stat := _stat("%.2fs", cur_pulse_every, next_pulse_every, is_initial)
-			return _desc(is_initial, flavor, _power_sentence(id, [hits_stat, window_stat, pulse_stat], "reward_card"))
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [hits_stat, window_stat, pulse_stat], "reward_card"))
 		"indomitable_spirit":
 			var cur_resist := float(cur_val) * 100.0
 			var next_resist := float(next_val) * 100.0
@@ -655,7 +655,7 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 			var is_initial := cur_resist == 0.0
 			var resist_stat := _stat("%.0f%%", cur_resist, next_resist, is_initial)
 			var ratio_stat := _stat("%.0f%%", cur_base_ratio, next_base_ratio, is_initial)
-			return _desc(is_initial, flavor, _power_sentence(id, [resist_stat, ratio_stat, _const("1%")], "reward_card"))
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [resist_stat, ratio_stat, _const("1%")], "reward_card"))
 		_:
 			return "[color=#c8daf0]Upgrade your stats.[/color]"
 
