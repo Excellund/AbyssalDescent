@@ -193,6 +193,14 @@ func _draw_superior_door_marks(door: Dictionary, door_pulse: float, is_focused: 
 	draw_polyline(PackedVector2Array([left + Vector2(3.0, -5.5), left + Vector2(-3.0, 0.0), left + Vector2(3.0, 5.5)]), Color(color.r, color.g, color.b, alpha), 2.0)
 	draw_polyline(PackedVector2Array([right + Vector2(-3.0, -5.5), right + Vector2(3.0, 0.0), right + Vector2(-3.0, 5.5)]), Color(color.r, color.g, color.b, alpha), 2.0)
 
+func _draw_colored_polygon_safe(points: PackedVector2Array, color: Color) -> void:
+	if points.size() < 3:
+		return
+	var indices := Geometry2D.triangulate_polygon(points)
+	if indices.is_empty():
+		return
+	draw_colored_polygon(points, color)
+
 func _draw_warden_boss_door_vfx(door_pos: Vector2, door_pulse: float, focus_boost: float, slow: float, fast: float, spin: float) -> void:
 	var core := Color(1.0, 0.5, 0.18, 1.0)
 	var hot := Color(1.0, 0.86, 0.38, 1.0)
@@ -228,7 +236,7 @@ func _draw_warden_boss_door_vfx(door_pos: Vector2, door_pulse: float, focus_boos
 	var radius_diff := wedge_outer - wedge_inner
 	var wedge_angle := half_wedge * 2.0
 	if wedge.size() >= 6 and radius_diff >= 10.0 and wedge_angle > 0.05:
-		draw_colored_polygon(wedge, Color(core.r, core.g, core.b, 0.14 + focus_boost * 0.25))
+		_draw_colored_polygon_safe(wedge, Color(core.r, core.g, core.b, 0.14 + focus_boost * 0.25))
 
 	# Charge lane pulse.
 	var lane_dir := Vector2.RIGHT.rotated(spin * 0.94)
