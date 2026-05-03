@@ -26,6 +26,10 @@ var hard_room_enemy_bonus: int = 4
 const INTRO_ROOM_SIZE := Vector2(940.0, 700.0)
 const POOL_ROOM_SIZE := Vector2(1040.0, 760.0)
 const TRIAL_ROOM_SIZE := Vector2(1160.0, 860.0)
+
+# BEARING_LABELS must stay in sync with registry entries that have a "bearing_label" field.
+# When adding a new bearing: add it to ENCOUNTER_CONTRACTS._build_encounter_registry() with
+# a bearing_label, then add the label name here, then add composition definitions below.
 const BEARING_LABELS: Array[String] = [
 	"Crossfire",
 	"Onslaught",
@@ -43,6 +47,17 @@ const MUTATOR_DAMAGE_STAT_KEYS: Array[String] = [
 	ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_PROJECTILE_DAMAGE_MULT,
 	ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_DAMAGE_MULT
 ]
+
+static func validate_bearing_sync() -> Array[String]:
+	var issues: Array[String] = []
+	var registry_labels := ENCOUNTER_CONTRACTS.get_bearing_labels_from_registry()
+	for label in registry_labels:
+		if not BEARING_LABELS.has(label):
+			issues.append("Registry has bearing '%s' but BEARING_LABELS does not." % label)
+	for label in BEARING_LABELS:
+		if not registry_labels.has(label):
+			issues.append("BEARING_LABELS has '%s' but registry does not have a bearing with that name." % label)
+	return issues
 const CONTROL_CURVE_MAX_EFFECTIVE_DEPTH := 12.0
 const CONTROL_CURVE_BY_RANK := {
 	0: {

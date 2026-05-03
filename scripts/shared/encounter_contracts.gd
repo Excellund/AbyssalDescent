@@ -96,121 +96,18 @@ const MUTATOR_STAT_SPECTRE_STRIKE_DELAY_MULT := "spectre_strike_delay_mult"
 
 const DEBUG_ENCOUNTER_NONE := DEBUG_ENUMS.Encounter.NONE
 
-const DEBUG_ENCOUNTER_MAP := [
-	{"id": DEBUG_ENUMS.Encounter.NONE, "key": "none", "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.REST_SITE, "key": "rest", "is_boss": false, "is_rest": true, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.SKIRMISH, "key": "skirmish", "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.CROSSFIRE, "key": "crossfire", "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.FORTRESS, "key": "fortress", "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.ONSLAUGHT, "key": "onslaught", "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.VANGUARD, "key": "vanguard", "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.BLITZ, "key": "blitz", "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.AMBUSH, "key": "ambush", "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.SUPPRESSION, "key": "suppression", "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.GAUNTLET, "key": "gauntlet", "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.CONVERGENCE, "key": "convergence", "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.OBJECTIVE_LAST_STAND, "key": "last_stand", "is_boss": false, "is_rest": false, "is_objective": true},
-	{"id": DEBUG_ENUMS.Encounter.OBJECTIVE_PRIORITY_TARGET, "key": "cut_the_signal", "is_boss": false, "is_rest": false, "is_objective": true},
-	{"id": DEBUG_ENUMS.Encounter.OBJECTIVE_HOLD_THE_LINE, "key": "hold_the_line", "is_boss": false, "is_rest": false, "is_objective": true},
-	{"id": DEBUG_ENUMS.Encounter.OBJECTIVE_RANDOM, "key": "random_objective", "is_boss": false, "is_rest": false, "is_objective": true},
-	{"id": DEBUG_ENUMS.Encounter.TRIAL, "key": "trial", "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.BOSS_1, "key": "warden", "is_boss": true, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.BOSS_2, "key": "sovereign", "is_boss": true, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.BOSS_3, "key": "lacuna", "is_boss": true, "is_rest": false, "is_objective": false},
-]
+# These are now derived from the encounter registry. Keep them for backward compatibility.
+# They are populated dynamically to stay in sync with _build_encounter_registry().
+static var DEBUG_ENCOUNTER_MAP: Array[Dictionary]
+static var DEBUG_OBJECTIVE_DISPLAY_LABELS: Dictionary
+static var DEBUG_ENCOUNTER_GLOSSARY_LABELS: Dictionary
+static var ENCOUNTER_DOOR_PRESENTATION: Dictionary
 
-const DEBUG_OBJECTIVE_DISPLAY_LABELS := {
-	"last_stand": "Objective - Last Stand",
-	"cut_the_signal": "Objective - Cut the Signal",
-	"hold_the_line": "Objective - Hold the Line",
-	"random_objective": "Objective - Random"
-}
-
-const DEBUG_ENCOUNTER_GLOSSARY_LABELS := {
-	"rest": "Rest Site",
-	"trial": "Trial",
-	"last_stand": "Last Stand",
-	"cut_the_signal": "Cut the Signal",
-	"hold_the_line": "Hold the Line",
-	"warden": "Warden",
-	"sovereign": "Sovereign",
-	"lacuna": "Lacuna"
-}
-
-const ENCOUNTER_DOOR_PRESENTATION := {
-	"skirmish": {
-		"label": "Skirmish"
-	},
-	"pursuit": {
-		"label": "Pursuit"
-	},
-	"crossfire": {
-		"label": "Crossfire"
-	},
-	"onslaught": {
-		"label": "Onslaught"
-	},
-	"fortress": {
-		"label": "Fortress"
-	},
-	"blitz": {
-		"label": "Blitz"
-	},
-	"suppression": {
-		"label": "Suppression"
-	},
-	"vanguard": {
-		"label": "Vanguard"
-	},
-	"ambush": {
-		"label": "Ambush"
-	},
-	"gauntlet": {
-		"label": "Gauntlet"
-	},
-	"convergence": {
-		"label": "Convergence"
-	},
-	"rest": {
-		"label": "Rest Site",
-		"short_label": "Rest",
-		"color": Color(0.66, 1.0, 0.76, 0.92),
-		"icon": "rest",
-		"kind": DOOR_KIND_REST,
-		"reward": ENUMS.RewardMode.NONE,
-		"prompt_name_suffix": ""
-	},
-	"trial": {
-		"short_label": "Trial"
-	},
-	"warden": {
-		"label": "Warden",
-		"short_label": "Boss",
-		"color": Color(0.96, 0.46, 0.18, 0.98),
-		"icon": "boss",
-		"kind": DOOR_KIND_BOSS,
-		"reward": ENUMS.RewardMode.NONE,
-		"prompt_name_suffix": " Gate"
-	},
-	"sovereign": {
-		"label": "Sovereign",
-		"short_label": "Boss",
-		"color": Color(0.92, 0.28, 0.1, 0.98),
-		"icon": "boss",
-		"kind": DOOR_KIND_BOSS,
-		"reward": ENUMS.RewardMode.NONE,
-		"prompt_name_suffix": " Gate"
-	},
-	"lacuna": {
-		"label": "Lacuna",
-		"short_label": "Boss",
-		"color": Color(0.34, 0.92, 0.74, 0.98),
-		"icon": "boss",
-		"kind": DOOR_KIND_BOSS,
-		"reward": ENUMS.RewardMode.NONE,
-		"prompt_name_suffix": " Gate"
-	}
-}
+static func _init_registry_derived_data() -> void:
+	DEBUG_ENCOUNTER_MAP = _derive_debug_encounter_map()
+	DEBUG_OBJECTIVE_DISPLAY_LABELS = _derive_display_labels()
+	DEBUG_ENCOUNTER_GLOSSARY_LABELS = _derive_glossary_labels()
+	ENCOUNTER_DOOR_PRESENTATION = _derive_door_presentation()
 
 const INTRO_ENCOUNTER_DOOR_KEYS := {
 	"skirmish": true,
@@ -219,6 +116,302 @@ const INTRO_ENCOUNTER_DOOR_KEYS := {
 
 const INTRO_ENCOUNTER_DOOR_COLOR := Color(0.34, 0.8, 1.0, 0.95)
 const STANDARD_ENCOUNTER_DOOR_COLOR := Color(0.93, 0.62, 0.28, 0.95)
+
+# ===== ENCOUNTER REGISTRY (Centralized Single Source of Truth) =====
+# All encounter metadata is defined here: debug IDs, display labels, door presentation,
+# bearing definitions, and identity. This eliminates sync bugs when adding/changing encounters.
+static func _build_encounter_registry() -> Array[Dictionary]:
+	return [
+		{
+			"key": "none",
+			"id": DEBUG_ENUMS.Encounter.NONE,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "None",
+			"glossary_label": "",
+		},
+		{
+			"key": "rest",
+			"id": DEBUG_ENUMS.Encounter.REST_SITE,
+			"is_boss": false, "is_rest": true, "is_objective": false,
+			"display_label": "Rest Site",
+			"glossary_label": "Rest Site",
+			"door_presentation": {
+				"label": "Rest Site",
+				"short_label": "Rest",
+				"color": Color(0.66, 1.0, 0.76, 0.92),
+				"icon": "rest",
+				"kind": DOOR_KIND_REST,
+				"reward": ENUMS.RewardMode.NONE,
+				"prompt_name_suffix": ""
+			}
+		},
+		{
+			"key": "skirmish",
+			"id": DEBUG_ENUMS.Encounter.SKIRMISH,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Skirmish",
+			"glossary_label": "",
+			"door_presentation": {
+				"label": "Skirmish"
+			},
+			"bearing_label": ""
+		},
+		{
+			"key": "crossfire",
+			"id": DEBUG_ENUMS.Encounter.CROSSFIRE,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Crossfire",
+			"glossary_label": "",
+			"door_presentation": {
+				"label": "Crossfire"
+			},
+			"bearing_label": "Crossfire",
+			"identity": "Ranged firing line with flanking disruption."
+		},
+		{
+			"key": "fortress",
+			"id": DEBUG_ENUMS.Encounter.FORTRESS,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Fortress",
+			"glossary_label": "",
+			"door_presentation": {
+				"label": "Fortress"
+			},
+			"bearing_label": "Fortress",
+			"identity": "Defensive wall built around shielders."
+		},
+		{
+			"key": "onslaught",
+			"id": DEBUG_ENUMS.Encounter.ONSLAUGHT,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Onslaught",
+			"glossary_label": "",
+			"door_presentation": {
+				"label": "Onslaught"
+			},
+			"bearing_label": "Onslaught",
+			"identity": "Melee flood: relentless close-range pressure."
+		},
+		{
+			"key": "vanguard",
+			"id": DEBUG_ENUMS.Encounter.VANGUARD,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Vanguard",
+			"glossary_label": "",
+			"door_presentation": {
+				"label": "Vanguard"
+			},
+			"bearing_label": "Vanguard",
+			"identity": "Shielded advance and structured frontline push."
+		},
+		{
+			"key": "blitz",
+			"id": DEBUG_ENUMS.Encounter.BLITZ,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Blitz",
+			"glossary_label": "",
+			"door_presentation": {
+				"label": "Blitz"
+			},
+			"bearing_label": "Blitz",
+			"identity": "Fast assault. Hesitation gets punished."
+		},
+		{
+			"key": "ambush",
+			"id": DEBUG_ENUMS.Encounter.AMBUSH,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Ambush",
+			"glossary_label": "",
+			"door_presentation": {
+				"label": "Ambush"
+			},
+			"bearing_label": "Ambush",
+			"identity": "Predator pack that collapses escape routes."
+		},
+		{
+			"key": "suppression",
+			"id": DEBUG_ENUMS.Encounter.SUPPRESSION,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Suppression",
+			"glossary_label": "",
+			"door_presentation": {
+				"label": "Suppression"
+			},
+			"bearing_label": "Suppression",
+			"identity": "Lancer zone saturation. Archers reinforce the denial field."
+		},
+		{
+			"key": "convergence",
+			"id": DEBUG_ENUMS.Encounter.CONVERGENCE,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Convergence",
+			"glossary_label": "",
+			"door_presentation": {
+				"label": "Convergence"
+			},
+			"bearing_label": "Convergence",
+			"identity": "Spectres predict escape routes while pursuit pressure collapses the seam."
+		},
+		{
+			"key": "gauntlet",
+			"id": DEBUG_ENUMS.Encounter.GAUNTLET,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Gauntlet",
+			"glossary_label": "",
+			"door_presentation": {
+				"label": "Gauntlet"
+			},
+			"bearing_label": "Gauntlet",
+			"identity": "Mixed-threat test of every enemy role."
+		},
+		{
+			"key": "trial",
+			"id": DEBUG_ENUMS.Encounter.TRIAL,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Trial",
+			"glossary_label": "Trial",
+			"door_presentation": {
+				"short_label": "Trial"
+			}
+		},
+		{
+			"key": "last_stand",
+			"id": DEBUG_ENUMS.Encounter.OBJECTIVE_LAST_STAND,
+			"is_boss": false, "is_rest": false, "is_objective": true,
+			"display_label": "Objective - Last Stand",
+			"glossary_label": "Last Stand"
+		},
+		{
+			"key": "cut_the_signal",
+			"id": DEBUG_ENUMS.Encounter.OBJECTIVE_PRIORITY_TARGET,
+			"is_boss": false, "is_rest": false, "is_objective": true,
+			"display_label": "Objective - Cut the Signal",
+			"glossary_label": "Cut the Signal"
+		},
+		{
+			"key": "hold_the_line",
+			"id": DEBUG_ENUMS.Encounter.OBJECTIVE_HOLD_THE_LINE,
+			"is_boss": false, "is_rest": false, "is_objective": true,
+			"display_label": "Objective - Hold the Line",
+			"glossary_label": "Hold the Line"
+		},
+		{
+			"key": "random_objective",
+			"id": DEBUG_ENUMS.Encounter.OBJECTIVE_RANDOM,
+			"is_boss": false, "is_rest": false, "is_objective": true,
+			"display_label": "Objective - Random",
+			"glossary_label": ""
+		},
+		{
+			"key": "warden",
+			"id": DEBUG_ENUMS.Encounter.BOSS_1,
+			"is_boss": true, "is_rest": false, "is_objective": false,
+			"display_label": "Warden",
+			"glossary_label": "Warden",
+			"door_presentation": {
+				"label": "Warden",
+				"short_label": "Boss",
+				"color": Color(0.96, 0.46, 0.18, 0.98),
+				"icon": "boss",
+				"kind": DOOR_KIND_BOSS,
+				"reward": ENUMS.RewardMode.NONE,
+				"prompt_name_suffix": " Gate"
+			}
+		},
+		{
+			"key": "sovereign",
+			"id": DEBUG_ENUMS.Encounter.BOSS_2,
+			"is_boss": true, "is_rest": false, "is_objective": false,
+			"display_label": "Sovereign",
+			"glossary_label": "Sovereign",
+			"door_presentation": {
+				"label": "Sovereign",
+				"short_label": "Boss",
+				"color": Color(0.92, 0.28, 0.1, 0.98),
+				"icon": "boss",
+				"kind": DOOR_KIND_BOSS,
+				"reward": ENUMS.RewardMode.NONE,
+				"prompt_name_suffix": " Gate"
+			}
+		},
+		{
+			"key": "lacuna",
+			"id": DEBUG_ENUMS.Encounter.BOSS_3,
+			"is_boss": true, "is_rest": false, "is_objective": false,
+			"display_label": "Lacuna",
+			"glossary_label": "Lacuna",
+			"door_presentation": {
+				"label": "Lacuna",
+				"short_label": "Boss",
+				"color": Color(0.34, 0.92, 0.74, 0.98),
+				"icon": "boss",
+				"kind": DOOR_KIND_BOSS,
+				"reward": ENUMS.RewardMode.NONE,
+				"prompt_name_suffix": " Gate"
+			}
+		},
+	]
+
+static var _encounter_registry_cache: Array[Dictionary] = []
+
+static func _get_encounter_registry() -> Array[Dictionary]:
+	if _encounter_registry_cache.is_empty():
+		_encounter_registry_cache = _build_encounter_registry()
+	return _encounter_registry_cache
+
+static func _ensure_registry_initialized() -> void:
+	if DEBUG_ENCOUNTER_MAP.is_empty():
+		_init_registry_derived_data()
+
+static func _derive_debug_encounter_map() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for entry in _get_encounter_registry():
+		result.append({
+			"id": entry.get("id", 0),
+			"key": entry.get("key", ""),
+			"is_boss": entry.get("is_boss", false),
+			"is_rest": entry.get("is_rest", false),
+			"is_objective": entry.get("is_objective", false),
+		})
+	return result
+
+static func _derive_door_presentation() -> Dictionary:
+	var result := {}
+	for entry in _get_encounter_registry():
+		var key: String = entry.get("key", "")
+		if not key.is_empty():
+			var presentation = entry.get("door_presentation", {})
+			if presentation is Dictionary and not (presentation as Dictionary).is_empty():
+				result[key] = presentation
+	return result
+
+static func _derive_glossary_labels() -> Dictionary:
+	var result := {}
+	for entry in _get_encounter_registry():
+		var key: String = entry.get("key", "")
+		var label: String = entry.get("glossary_label", "")
+		if not key.is_empty() and not label.is_empty():
+			result[key] = label
+	return result
+
+static func get_bearing_labels_from_registry() -> Array[String]:
+	var labels: Array[String] = []
+	for entry in _get_encounter_registry():
+		var bearing_label: String = entry.get("bearing_label", "")
+		if not bearing_label.is_empty() and not labels.has(bearing_label):
+			labels.append(bearing_label)
+	return labels
+
+static func _derive_display_labels() -> Dictionary:
+	var result := {}
+	for entry in _get_encounter_registry():
+		var key: String = entry.get("key", "")
+		var label: String = entry.get("display_label", "")
+		if not key.is_empty() and not label.is_empty():
+			result[key] = label
+	return result
+
+# ===== END ENCOUNTER REGISTRY =====
 
 static func _door_kind_from_legacy(value: String) -> int:
 	match value.to_lower():
@@ -289,6 +482,7 @@ static func normalize_reward_mode(value: Variant) -> int:
 	return ENUMS.reward_mode_from_legacy(String(value).to_lower())
 
 static func debug_encounter_entry(encounter_key: String) -> Dictionary:
+	_ensure_registry_initialized()
 	var normalized := encounter_key.strip_edges().to_lower()
 	for entry in DEBUG_ENCOUNTER_MAP:
 		if String(entry.get("key", "")) == normalized:
@@ -296,12 +490,14 @@ static func debug_encounter_entry(encounter_key: String) -> Dictionary:
 	return {}
 
 static func debug_encounter_entries() -> Array[Dictionary]:
+	_ensure_registry_initialized()
 	var entries: Array[Dictionary] = []
 	for entry in DEBUG_ENCOUNTER_MAP:
 		entries.append((entry as Dictionary).duplicate(true))
 	return entries
 
 static func debug_encounter_display_name(encounter_key: String) -> String:
+	_ensure_registry_initialized()
 	var normalized := canonicalize_debug_encounter_key(encounter_key)
 	if normalized.is_empty():
 		return ""
@@ -317,6 +513,7 @@ static func debug_encounter_display_name(encounter_key: String) -> String:
 	return ""
 
 static func debug_encounter_glossary_name(encounter_key: String) -> String:
+	_ensure_registry_initialized()
 	var normalized := canonicalize_debug_encounter_key(encounter_key)
 	if normalized.is_empty() or normalized == "none" or normalized == "random_objective":
 		return ""
@@ -328,6 +525,7 @@ static func debug_encounter_glossary_name(encounter_key: String) -> String:
 	return ""
 
 static func validate_encounter_sync(glossary_rows: Array[Dictionary]) -> Array[String]:
+	_ensure_registry_initialized()
 	var issues: Array[String] = []
 	var ids_seen := {}
 	var keys_seen := {}
@@ -371,6 +569,7 @@ static func canonicalize_debug_encounter_key(encounter_key: String) -> String:
 	return String(entry.get("key", ""))
 
 static func debug_encounter_key_from_id(encounter_id: int) -> String:
+	_ensure_registry_initialized()
 	for entry in DEBUG_ENCOUNTER_MAP:
 		if int(entry.get("id", -1)) == encounter_id:
 			return String(entry.get("key", ""))
@@ -383,6 +582,7 @@ static func debug_encounter_is_objective(encounter_key: String) -> bool:
 	return bool(entry.get("is_objective", false))
 
 static func _door_presentation(encounter_key: String) -> Dictionary:
+	_ensure_registry_initialized()
 	return ENCOUNTER_DOOR_PRESENTATION.get(encounter_key.strip_edges().to_lower(), {}) as Dictionary
 
 static func _normalize_encounter_key(value: String, fallback: String = "unknown") -> String:
