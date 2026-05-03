@@ -255,6 +255,32 @@ static func get_reward_flag(power_id: String) -> String:
 		return ""
 	return TRIAL_POWER_PARAM_MAP[power_id].get("reward_flag", "")
 
+## Reads all current parameter values for a trial power from player_reference.
+## Returns a Dictionary keyed by param name (same keys as build_trial_values output).
+## Enables symmetric cur/next access without hardcoding player property names at call sites.
+static func get_current_values(power_id: String, player_reference: Node) -> Dictionary:
+	if not TRIAL_POWER_PARAM_MAP.has(power_id):
+		return {}
+	var power_map: Dictionary = TRIAL_POWER_PARAM_MAP[power_id]
+	var parameters: Dictionary = power_map.get("parameters", {})
+	var result: Dictionary = {}
+	for param_name: String in parameters:
+		var param_def: Dictionary = parameters[param_name]
+		var property_name: String = param_def.get("property", "")
+		if property_name.is_empty():
+			continue
+		var raw_value: Variant = player_reference.get(property_name)
+		if raw_value == null:
+			continue
+		match param_def.get("type", "float"):
+			"int":
+				result[param_name] = int(raw_value)
+			"float":
+				result[param_name] = float(raw_value)
+			_:
+				result[param_name] = raw_value
+	return result
+
 ## Gets the stack count property name for a trial power (e.g. "razor_wind_stacks")
 static func get_stack_property(power_id: String) -> String:
 	if not TRIAL_POWER_PARAM_MAP.has(power_id):
