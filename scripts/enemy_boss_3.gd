@@ -36,7 +36,7 @@ const ATTACK_ECHO_CROSS := 2
 @export var null_ring_pull_fx_duration: float = 0.26
 
 @export var echo_cross_windup: float = 0.86
-@export var echo_cross_length: float = 280.0
+@export var echo_cross_length: float = 340.0
 @export var echo_cross_width: float = 34.0
 @export var echo_cross_damage: int = 34
 @export var echo_cross_follow_delay: float = 0.26
