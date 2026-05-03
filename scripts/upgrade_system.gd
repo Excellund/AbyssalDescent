@@ -13,62 +13,8 @@ var game_state: Node = null  # GameStateManager instance
 var power_registry: Node = null  # power_registry.gd instance
 var upgrade_stacks: Dictionary = {}
 
-# Track stacks for trial powers (upgrades don't track stacks for mechanics, but could)
-var trial_power_stacks: Dictionary = {
-	"razor_wind": 0,
-	"execution_edge": 0,
-	"rupture_wave": 0,
-	"aegis_field": 0,
-	"hunters_snare": 0,
-	"phantom_step": 0,
-	"reaper_step": 0,
-	"static_wake": 0,
-	"storm_crown": 0,
-	"wraithstep": 0,
-	"voidfire": 0,
-	"dread_resonance": 0,
-	"vow_shatter": 0,
-	"eclipse_mark": 0,
-	"fracture_field": 0
-}
-
-const UPGRADE_IDS := {
-	"first_strike": true,
-	"heavy_blow": true,
-	"wide_arc": true,
-	"long_reach": true,
-	"fleet_foot": true,
-	"blink_dash": true,
-	"iron_skin": true,
-	"battle_trance": true,
-	"surge_step": true,
-	"heartstone": true,
-	"crushed_vow": true,
-	"severing_edge": true,
-	"apex_predator": true,
-	"void_echo": true,
-	"apex_momentum": true,
-	"convergence_surge": true,
-	"indomitable_spirit": true
-}
-
-const TRIAL_POWER_IDS := {
-	"razor_wind": true,
-	"execution_edge": true,
-	"rupture_wave": true,
-	"aegis_field": true,
-	"hunters_snare": true,
-	"phantom_step": true,
-	"reaper_step": true,
-	"static_wake": true,
-	"storm_crown": true,
-	"wraithstep": true,
-	"voidfire": true,
-	"dread_resonance": true,
-	"vow_shatter": true,
-	"eclipse_mark": true,
-	"fracture_field": true
-}
+# Track stacks for trial powers as backup when player_reference is unavailable
+var trial_power_stacks: Dictionary = {}
 
 
 func _ready() -> void:
@@ -138,7 +84,7 @@ func apply_trial_power(power_id: String) -> bool:
 		trial_power_stacks[id] += 1
 
 	var next_stack := get_trial_power_stack_count(id) + 1
-	var next_values := _build_trial_values(id, next_stack)
+	var next_values := POWER_PARAMETER_MAPPER.build_trial_values(id, next_stack, _get_power_balance_data(id), player_reference)
 	if next_values.is_empty():
 		return false
 	
@@ -197,7 +143,7 @@ func get_trial_runtime_values(power_id: String) -> Dictionary:
 	if id.is_empty():
 		return {}
 	var stack_count := get_trial_power_stack_count(id)
-	return _build_trial_values(id, stack_count)
+	return POWER_PARAMETER_MAPPER.build_trial_values(id, stack_count, _get_power_balance_data(id), player_reference)
 
 
 func _get_power_balance_data(power_id: String) -> Dictionary:
@@ -270,127 +216,6 @@ func _build_upgrade_preview(upgrade_id: String) -> Dictionary:
 	}
 
 
-func _build_trial_values(power_id: String, stack_count: int) -> Dictionary:
-	if not is_instance_valid(player_reference):
-		return {}
-	var data := _get_power_balance_data(power_id)
-	if data.is_empty():
-		return {}
-
-	match power_id:
-		"razor_wind":
-			# Damage scales as ratio of damage. Heavy Blow (+8 DMG) directly increases this output.
-			return {
-				"range_scale": float(data.get("range_base", 0.0)) + float(data.get("range_per_stack", 0.0)) * float(stack_count),
-				"damage_ratio": float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count),
-				"attack_cooldown": maxf(float(data.get("attack_cooldown_min", 0.0)), float(player_reference.get("attack_cooldown")) * float(data.get("attack_cooldown_mult", 1.0)))
-			}
-		"execution_edge":
-			# Damage multiplier applies to the current melee damage. Heavy Blow boosts this indirectly.
-			return {
-				"every": maxi(int(data.get("every_floor", 1)), int(data.get("every_base", 1)) - stack_count),
-				"damage_mult": float(data.get("damage_mult_base", 0.0)) + float(data.get("damage_mult_per_stack", 0.0)) * float(stack_count),
-				"attack_lock_duration": maxf(float(data.get("attack_lock_min", 0.0)), float(player_reference.get("attack_lock_duration")) * float(data.get("attack_lock_mult", 1.0)))
-			}
-		"rupture_wave":
-			# Damage scales as ratio of damage. Heavy Blow (+8 DMG) increases the shockwave output.
-			return {
-				"radius": float(data.get("radius_base", 0.0)) + float(data.get("radius_per_stack", 0.0)) * float(stack_count),
-				"damage_ratio": float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count)
-			}
-		"aegis_field":
-			return {
-				"resist": minf(float(data.get("resist_cap", 1.0)), float(data.get("resist_base", 0.0)) + float(data.get("resist_per_stack", 0.0)) * float(stack_count)),
-				"duration": float(data.get("resist_duration_base", 0.0)) + float(data.get("resist_duration_per_stack", 0.0)) * float(stack_count),
-				"radius": float(data.get("pulse_radius_base", 0.0)) + float(data.get("pulse_radius_per_stack", 0.0)) * float(stack_count),
-				"slow_duration": float(data.get("slow_duration_base", 0.0)) + float(data.get("slow_duration_per_stack", 0.0)) * float(stack_count),
-				"slow_mult": maxf(float(data.get("slow_mult_min", 0.0)), float(data.get("slow_mult_base", 1.0)) + float(data.get("slow_mult_per_stack", 0.0)) * float(stack_count)),
-				"cooldown": maxf(float(data.get("cooldown_min", 0.0)), float(data.get("cooldown_base", 0.0)) + float(data.get("cooldown_per_stack", 0.0)) * float(stack_count))
-			}
-		"hunters_snare":
-			return {
-				"bonus_damage": int(data.get("bonus_damage_base", 0)) + stack_count * int(data.get("bonus_damage_per_stack", 0)),
-				"slow_duration": float(data.get("slow_duration_base", 0.0)) + float(data.get("slow_duration_per_stack", 0.0)) * float(stack_count),
-				"slow_mult": maxf(float(data.get("slow_mult_min", 0.0)), float(data.get("slow_mult_base", 1.0)) + float(data.get("slow_mult_per_stack", 0.0)) * float(stack_count))
-			}
-		"phantom_step":
-			# Damage scales as ratio of damage. Heavy Blow (+8 DMG) directly increases this output.
-			# Objective mutators (Hunter's Focus, Fortified, Combo Relay) also apply to this damage.
-			var damage_ratio := float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count)
-			return {
-				"damage": int(ceil(float(player_reference.get("damage")) * damage_ratio)),
-				"slow_duration": float(data.get("slow_duration_base", 0.0)) + float(data.get("slow_duration_per_stack", 0.0)) * float(stack_count),
-				"dash_cooldown": maxf(float(data.get("dash_cooldown_min", 0.0)), float(player_reference.get("dash_cooldown")) * float(data.get("dash_cooldown_mult", 1.0)))
-			}
-		"reaper_step":
-			return {
-				"range_mult": float(data.get("range_mult_base", 0.0)) + float(data.get("range_mult_per_stack", 0.0)) * float(stack_count)
-			}
-		"static_wake":
-			# Damage scales as ratio of damage. Heavy Blow (+8 DMG) directly increases this output.
-			# Objective mutators (Hunter's Focus, Fortified, Combo Relay) also apply to this damage.
-			var damage_ratio := float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count)
-			return {
-				"damage": int(ceil(float(player_reference.get("damage")) * damage_ratio)),
-				"lifetime": float(data.get("lifetime_base", 0.0)) + float(data.get("lifetime_per_stack", 0.0)) * float(stack_count)
-			}
-		"storm_crown":
-			# Damage scales as ratio of damage. Heavy Blow (+8 DMG) increases chain damage output.
-			return {
-				"proc_every": maxi(int(data.get("proc_every_floor", 1)), int(data.get("proc_every_base", 1)) - stack_count),
-				"chain_targets": mini(int(data.get("chain_targets_cap", 6)), int(data.get("chain_targets_base", 1)) + stack_count * int(data.get("chain_targets_per_stack", 0))),
-				"chain_radius": float(data.get("chain_radius_base", 0.0)) + float(data.get("chain_radius_per_stack", 0.0)) * float(stack_count),
-				"damage_ratio": minf(float(data.get("damage_ratio_cap", 1.0)), float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count))
-			}
-		"wraithstep":
-			return {
-				"mark_duration": float(data.get("mark_duration_base", 0.0)) + float(data.get("mark_duration_per_stack", 0.0)) * float(stack_count),
-				"dash_mark_radius": float(data.get("dash_mark_radius_base", 0.0)) + float(data.get("dash_mark_radius_per_stack", 0.0)) * float(stack_count),
-				"bonus_damage": int(data.get("bonus_damage_base", 0)) + stack_count * int(data.get("bonus_damage_per_stack", 0)),
-				"splash_radius": float(data.get("splash_radius_base", 0.0)) + float(data.get("splash_radius_per_stack", 0.0)) * float(stack_count),
-				"splash_ratio": minf(float(data.get("splash_ratio_cap", 1.0)), float(data.get("splash_ratio_base", 0.0)) + float(data.get("splash_ratio_per_stack", 0.0)) * float(stack_count))
-			}
-		"voidfire":
-			return {
-				"heat_per_hit": float(data.get("heat_per_hit", 12.0)),
-				"heat_cap": float(data.get("heat_cap", 100.0)),
-				"danger_zone_threshold": float(data.get("danger_zone_threshold", 70.0)),
-				"danger_zone_amp": float(data.get("danger_zone_amp_base", 0.0)) + float(data.get("danger_zone_amp_per_stack", 0.0)) * float(stack_count),
-				"detonate_ratio": float(data.get("detonate_ratio_base", 0.0)) + float(data.get("detonate_ratio_per_stack", 0.0)) * float(stack_count),
-				"detonate_radius": float(data.get("detonate_radius_base", 0.0)) + float(data.get("detonate_radius_per_stack", 0.0)) * float(stack_count),
-				"lockout_duration": maxf(float(data.get("lockout_min", 0.0)), float(data.get("lockout_base", 0.0)) + float(data.get("lockout_per_stack", 0.0)) * float(stack_count)),
-				"overheat_move_mult": float(data.get("overheat_move_mult", 1.0)),
-				"heat_decay_rate": float(data.get("heat_decay_rate", 8.0)),
-				"danger_zone_heat_gain_mult": float(data.get("danger_zone_heat_gain_mult", 1.0)),
-				"reckless_heat_ratio": float(data.get("reckless_heat_ratio", 0.9)),
-				"reckless_heat_gain_mult": float(data.get("reckless_heat_gain_mult", 1.0)),
-				"danger_zone_decay_mult": float(data.get("danger_zone_decay_mult", 1.0)),
-				"reckless_decay_mult": float(data.get("reckless_decay_mult", 1.0))
-			}
-		"dread_resonance":
-			return {
-				"bonus_per_stack": int(data.get("bonus_per_resonance_base", 0)) + stack_count * int(data.get("bonus_per_resonance_per_stack", 0))
-			}
-		"vow_shatter":
-			return {
-				"damage_mult": float(data.get("damage_mult_base", 1.0)) + float(data.get("damage_mult_per_stack", 0.0)) * float(stack_count)
-			}
-		"eclipse_mark":
-			return {
-				"radius": float(data.get("radius_base", 0.0)) + float(data.get("radius_per_stack", 0.0)) * float(stack_count),
-				"mark_duration": float(data.get("mark_duration_base", 0.0)) + float(data.get("mark_duration_per_stack", 0.0)) * float(stack_count),
-				"bonus_ratio": float(data.get("bonus_ratio_base", 0.0)) + float(data.get("bonus_ratio_per_stack", 0.0)) * float(stack_count)
-			}
-		"fracture_field":
-			return {
-				"radius": float(data.get("radius_base", 0.0)) + float(data.get("radius_per_stack", 0.0)) * float(stack_count),
-				"damage_ratio": float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count),
-				"slow_duration": float(data.get("slow_duration_base", 0.0)) + float(data.get("slow_duration_per_stack", 0.0)) * float(stack_count)
-			}
-		_:
-			return {}
-
-
 ## Get trial power description with next stack info from the current player state.
 func get_trial_power_card_description(power_id: String) -> String:
 	if not is_instance_valid(player_reference):
@@ -398,7 +223,7 @@ func get_trial_power_card_description(power_id: String) -> String:
 	var id := power_id.strip_edges().to_lower()
 	var current_stack := get_trial_power_stack_count(id)
 	var next_stack := current_stack + 1
-	var next_values := _build_trial_values(id, next_stack)
+	var next_values := POWER_PARAMETER_MAPPER.build_trial_values(id, next_stack, _get_power_balance_data(id), player_reference)
 	match id:
 		"razor_wind":
 			if next_values.is_empty():
@@ -698,8 +523,7 @@ func build_razor_wind_attack_context(melee_context: Dictionary, razor_wind_damag
 ## Reset for new run
 func reset() -> void:
 	upgrade_stacks.clear()
-	for key in trial_power_stacks.keys():
-		trial_power_stacks[key] = 0
+	trial_power_stacks.clear()
 	
 	if is_instance_valid(game_state):
 		game_state.reset()
@@ -727,9 +551,9 @@ func _get_power_stack_limit(power_id: String) -> int:
 func _is_upgrade_id(power_id: String) -> bool:
 	if power_registry != null:
 		return bool(power_registry.is_upgrade(power_id))
-	return UPGRADE_IDS.has(power_id)
+	return false
 
 func _is_trial_power_id(power_id: String) -> bool:
 	if power_registry != null:
 		return bool(power_registry.is_trial_power(power_id))
-	return TRIAL_POWER_IDS.has(power_id)
+	return POWER_PARAMETER_MAPPER.TRIAL_POWER_PARAM_MAP.has(power_id)
