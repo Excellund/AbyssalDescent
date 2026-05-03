@@ -26,6 +26,11 @@ const STATE_RECOVER := 3
 @export var recover_time: float = 0.42
 @export var arena_size: Vector2 = Vector2(940.0, 700.0)
 
+const BLINK_RESERVATION_RADIUS: float = 24.0
+
+static var _blink_reserved_positions: Array[Vector2] = []
+static var _blink_reservation_frame: int = -1
+
 var spectre_state: int = STATE_STALK
 var state_time_left: float = 0.0
 var attack_cooldown_left: float = 0.0
@@ -120,7 +125,9 @@ func _update_blink_target() -> void:
 		visual_facing_direction = to_blink.normalized()
 
 func _find_safe_blink_position(target_pos: Vector2) -> Vector2:
-	if not _is_position_occupied(target_pos):
+	_prepare_blink_reservations_for_current_frame()
+	if not _is_position_blocked_for_blink(target_pos):
+		_reserve_blink_position(target_pos)
 		return target_pos
 	
 	var search_radius := 48.0
@@ -137,7 +144,8 @@ func _find_safe_blink_position(target_pos: Vector2) -> Vector2:
 		var candidate := target_pos + offset
 		candidate = _clamp_to_arena(candidate)
 		
-		if not _is_position_occupied(candidate):
+		if not _is_position_blocked_for_blink(candidate):
+			_reserve_blink_position(candidate)
 			return candidate
 		
 		# Prefer positions further from occupied areas, with margin for safety
@@ -155,7 +163,8 @@ func _find_safe_blink_position(target_pos: Vector2) -> Vector2:
 			var candidate := target_pos + offset
 			candidate = _clamp_to_arena(candidate)
 			
-			if not _is_position_occupied(candidate):
+			if not _is_position_blocked_for_blink(candidate):
+				_reserve_blink_position(candidate)
 				return candidate
 			
 			var dist_to_occupied := _get_min_occupied_distance(candidate)
@@ -167,8 +176,38 @@ func _find_safe_blink_position(target_pos: Vector2) -> Vector2:
 	if best_pos == target_pos:
 		var random_offset := Vector2(randf() - 0.5, randf() - 0.5).normalized() * 20.0
 		best_pos = _clamp_to_arena(target_pos + random_offset)
+	if _is_position_blocked_for_blink(best_pos):
+		for attempt in range(16):
+			var angle := start_angle + (float(attempt) / 16.0) * TAU
+			var candidate := _clamp_to_arena(best_pos + Vector2(cos(angle), sin(angle)) * 18.0)
+			if not _is_position_blocked_for_blink(candidate):
+				best_pos = candidate
+				break
+	_reserve_blink_position(best_pos)
 	
 	return best_pos
+
+func _prepare_blink_reservations_for_current_frame() -> void:
+	var frame := Engine.get_physics_frames()
+	if frame == _blink_reservation_frame:
+		return
+	_blink_reservation_frame = frame
+	_blink_reserved_positions.clear()
+
+func _is_position_reserved(check_pos: Vector2) -> bool:
+	_prepare_blink_reservations_for_current_frame()
+	var reservation_radius_sq := BLINK_RESERVATION_RADIUS * BLINK_RESERVATION_RADIUS
+	for reserved_pos in _blink_reserved_positions:
+		if reserved_pos.distance_squared_to(check_pos) <= reservation_radius_sq:
+			return true
+	return false
+
+func _reserve_blink_position(position_to_reserve: Vector2) -> void:
+	_prepare_blink_reservations_for_current_frame()
+	_blink_reserved_positions.append(position_to_reserve)
+
+func _is_position_blocked_for_blink(check_pos: Vector2) -> bool:
+	return _is_position_occupied(check_pos) or _is_position_reserved(check_pos)
 
 func _is_position_occupied(check_pos: Vector2) -> bool:
 	var space_state := get_world_2d().direct_space_state
