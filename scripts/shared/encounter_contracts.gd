@@ -96,103 +96,18 @@ const MUTATOR_STAT_SPECTRE_STRIKE_DELAY_MULT := "spectre_strike_delay_mult"
 
 const DEBUG_ENCOUNTER_NONE := DEBUG_ENUMS.Encounter.NONE
 
-const DEBUG_ENCOUNTER_MAP := [
-	{"id": DEBUG_ENUMS.Encounter.NONE, "key": "none", "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.REST_SITE, "key": "rest", "is_boss": false, "is_rest": true, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.SKIRMISH, "key": "skirmish", "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.CROSSFIRE, "key": "crossfire", "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.FORTRESS, "key": "fortress", "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.ONSLAUGHT, "key": "onslaught", "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.VANGUARD, "key": "vanguard", "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.BLITZ, "key": "blitz", "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.AMBUSH, "key": "ambush", "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.SUPPRESSION, "key": "suppression", "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.GAUNTLET, "key": "gauntlet", "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.CONVERGENCE, "key": "convergence", "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.OBJECTIVE_LAST_STAND, "key": "last_stand", "is_boss": false, "is_rest": false, "is_objective": true},
-	{"id": DEBUG_ENUMS.Encounter.OBJECTIVE_PRIORITY_TARGET, "key": "cut_the_signal", "is_boss": false, "is_rest": false, "is_objective": true},
-	{"id": DEBUG_ENUMS.Encounter.OBJECTIVE_HOLD_THE_LINE, "key": "hold_the_line", "is_boss": false, "is_rest": false, "is_objective": true},
-	{"id": DEBUG_ENUMS.Encounter.OBJECTIVE_RANDOM, "key": "random_objective", "is_boss": false, "is_rest": false, "is_objective": true},
-	{"id": DEBUG_ENUMS.Encounter.TRIAL, "key": "trial", "is_boss": false, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.BOSS_1, "key": "warden", "is_boss": true, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.BOSS_2, "key": "sovereign", "is_boss": true, "is_rest": false, "is_objective": false},
-	{"id": DEBUG_ENUMS.Encounter.BOSS_3, "key": "lacuna", "is_boss": true, "is_rest": false, "is_objective": false},
-]
+# These are now derived from the encounter registry. Keep them for backward compatibility.
+# They are populated dynamically to stay in sync with _build_encounter_registry().
+static var DEBUG_ENCOUNTER_MAP: Array[Dictionary]
+static var DEBUG_OBJECTIVE_DISPLAY_LABELS: Dictionary
+static var DEBUG_ENCOUNTER_GLOSSARY_LABELS: Dictionary
+static var ENCOUNTER_DOOR_PRESENTATION: Dictionary
 
-const ENCOUNTER_DOOR_PRESENTATION := {
-	"skirmish": {
-		"label": "Skirmish"
-	},
-	"pursuit": {
-		"label": "Pursuit"
-	},
-	"crossfire": {
-		"label": "Crossfire"
-	},
-	"onslaught": {
-		"label": "Onslaught"
-	},
-	"fortress": {
-		"label": "Fortress"
-	},
-	"blitz": {
-		"label": "Blitz"
-	},
-	"suppression": {
-		"label": "Suppression"
-	},
-	"vanguard": {
-		"label": "Vanguard"
-	},
-	"ambush": {
-		"label": "Ambush"
-	},
-	"gauntlet": {
-		"label": "Gauntlet"
-	},
-	"convergence": {
-		"label": "Convergence"
-	},
-	"rest": {
-		"label": "Rest Site",
-		"short_label": "Rest",
-		"color": Color(0.66, 1.0, 0.76, 0.92),
-		"icon": "rest",
-		"kind": DOOR_KIND_REST,
-		"reward": ENUMS.RewardMode.NONE,
-		"prompt_name_suffix": ""
-	},
-	"trial": {
-		"short_label": "Trial"
-	},
-	"warden": {
-		"label": "Warden",
-		"short_label": "Boss",
-		"color": Color(0.96, 0.46, 0.18, 0.98),
-		"icon": "boss",
-		"kind": DOOR_KIND_BOSS,
-		"reward": ENUMS.RewardMode.NONE,
-		"prompt_name_suffix": " Gate"
-	},
-	"sovereign": {
-		"label": "Sovereign",
-		"short_label": "Boss",
-		"color": Color(0.92, 0.28, 0.1, 0.98),
-		"icon": "boss",
-		"kind": DOOR_KIND_BOSS,
-		"reward": ENUMS.RewardMode.NONE,
-		"prompt_name_suffix": " Gate"
-	},
-	"lacuna": {
-		"label": "Lacuna",
-		"short_label": "Boss",
-		"color": Color(0.34, 0.92, 0.74, 0.98),
-		"icon": "boss",
-		"kind": DOOR_KIND_BOSS,
-		"reward": ENUMS.RewardMode.NONE,
-		"prompt_name_suffix": " Gate"
-	}
-}
+static func _init_registry_derived_data() -> void:
+	DEBUG_ENCOUNTER_MAP = _derive_debug_encounter_map()
+	DEBUG_OBJECTIVE_DISPLAY_LABELS = _derive_display_labels()
+	DEBUG_ENCOUNTER_GLOSSARY_LABELS = _derive_glossary_labels()
+	ENCOUNTER_DOOR_PRESENTATION = _derive_door_presentation()
 
 const INTRO_ENCOUNTER_DOOR_KEYS := {
 	"skirmish": true,
@@ -201,6 +116,302 @@ const INTRO_ENCOUNTER_DOOR_KEYS := {
 
 const INTRO_ENCOUNTER_DOOR_COLOR := Color(0.34, 0.8, 1.0, 0.95)
 const STANDARD_ENCOUNTER_DOOR_COLOR := Color(0.93, 0.62, 0.28, 0.95)
+
+# ===== ENCOUNTER REGISTRY (Centralized Single Source of Truth) =====
+# All encounter metadata is defined here: debug IDs, display labels, door presentation,
+# bearing definitions, and identity. This eliminates sync bugs when adding/changing encounters.
+static func _build_encounter_registry() -> Array[Dictionary]:
+	return [
+		{
+			"key": "none",
+			"id": DEBUG_ENUMS.Encounter.NONE,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "None",
+			"glossary_label": "",
+		},
+		{
+			"key": "rest",
+			"id": DEBUG_ENUMS.Encounter.REST_SITE,
+			"is_boss": false, "is_rest": true, "is_objective": false,
+			"display_label": "Rest Site",
+			"glossary_label": "Rest Site",
+			"door_presentation": {
+				"label": "Rest Site",
+				"short_label": "Rest",
+				"color": Color(0.66, 1.0, 0.76, 0.92),
+				"icon": "rest",
+				"kind": DOOR_KIND_REST,
+				"reward": ENUMS.RewardMode.NONE,
+				"prompt_name_suffix": ""
+			}
+		},
+		{
+			"key": "skirmish",
+			"id": DEBUG_ENUMS.Encounter.SKIRMISH,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Skirmish",
+			"glossary_label": "",
+			"door_presentation": {
+				"label": "Skirmish"
+			},
+			"bearing_label": ""
+		},
+		{
+			"key": "crossfire",
+			"id": DEBUG_ENUMS.Encounter.CROSSFIRE,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Crossfire",
+			"glossary_label": "",
+			"door_presentation": {
+				"label": "Crossfire"
+			},
+			"bearing_label": "Crossfire",
+			"identity": "Ranged firing line with flanking disruption."
+		},
+		{
+			"key": "fortress",
+			"id": DEBUG_ENUMS.Encounter.FORTRESS,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Fortress",
+			"glossary_label": "",
+			"door_presentation": {
+				"label": "Fortress"
+			},
+			"bearing_label": "Fortress",
+			"identity": "Defensive wall built around shielders."
+		},
+		{
+			"key": "onslaught",
+			"id": DEBUG_ENUMS.Encounter.ONSLAUGHT,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Onslaught",
+			"glossary_label": "",
+			"door_presentation": {
+				"label": "Onslaught"
+			},
+			"bearing_label": "Onslaught",
+			"identity": "Melee flood: relentless close-range pressure."
+		},
+		{
+			"key": "vanguard",
+			"id": DEBUG_ENUMS.Encounter.VANGUARD,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Vanguard",
+			"glossary_label": "",
+			"door_presentation": {
+				"label": "Vanguard"
+			},
+			"bearing_label": "Vanguard",
+			"identity": "Shielded advance and structured frontline push."
+		},
+		{
+			"key": "blitz",
+			"id": DEBUG_ENUMS.Encounter.BLITZ,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Blitz",
+			"glossary_label": "",
+			"door_presentation": {
+				"label": "Blitz"
+			},
+			"bearing_label": "Blitz",
+			"identity": "Fast assault. Hesitation gets punished."
+		},
+		{
+			"key": "ambush",
+			"id": DEBUG_ENUMS.Encounter.AMBUSH,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Ambush",
+			"glossary_label": "",
+			"door_presentation": {
+				"label": "Ambush"
+			},
+			"bearing_label": "Ambush",
+			"identity": "Predator pack that collapses escape routes."
+		},
+		{
+			"key": "suppression",
+			"id": DEBUG_ENUMS.Encounter.SUPPRESSION,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Suppression",
+			"glossary_label": "",
+			"door_presentation": {
+				"label": "Suppression"
+			},
+			"bearing_label": "Suppression",
+			"identity": "Lancer zone saturation. Archers reinforce the denial field."
+		},
+		{
+			"key": "convergence",
+			"id": DEBUG_ENUMS.Encounter.CONVERGENCE,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Convergence",
+			"glossary_label": "",
+			"door_presentation": {
+				"label": "Convergence"
+			},
+			"bearing_label": "Convergence",
+			"identity": "Spectres predict escape routes while pursuit pressure collapses the seam."
+		},
+		{
+			"key": "gauntlet",
+			"id": DEBUG_ENUMS.Encounter.GAUNTLET,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Gauntlet",
+			"glossary_label": "",
+			"door_presentation": {
+				"label": "Gauntlet"
+			},
+			"bearing_label": "Gauntlet",
+			"identity": "Mixed-threat test of every enemy role."
+		},
+		{
+			"key": "trial",
+			"id": DEBUG_ENUMS.Encounter.TRIAL,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Trial",
+			"glossary_label": "Trial",
+			"door_presentation": {
+				"short_label": "Trial"
+			}
+		},
+		{
+			"key": "last_stand",
+			"id": DEBUG_ENUMS.Encounter.OBJECTIVE_LAST_STAND,
+			"is_boss": false, "is_rest": false, "is_objective": true,
+			"display_label": "Objective - Last Stand",
+			"glossary_label": "Last Stand"
+		},
+		{
+			"key": "cut_the_signal",
+			"id": DEBUG_ENUMS.Encounter.OBJECTIVE_PRIORITY_TARGET,
+			"is_boss": false, "is_rest": false, "is_objective": true,
+			"display_label": "Objective - Cut the Signal",
+			"glossary_label": "Cut the Signal"
+		},
+		{
+			"key": "hold_the_line",
+			"id": DEBUG_ENUMS.Encounter.OBJECTIVE_HOLD_THE_LINE,
+			"is_boss": false, "is_rest": false, "is_objective": true,
+			"display_label": "Objective - Hold the Line",
+			"glossary_label": "Hold the Line"
+		},
+		{
+			"key": "random_objective",
+			"id": DEBUG_ENUMS.Encounter.OBJECTIVE_RANDOM,
+			"is_boss": false, "is_rest": false, "is_objective": true,
+			"display_label": "Objective - Random",
+			"glossary_label": ""
+		},
+		{
+			"key": "warden",
+			"id": DEBUG_ENUMS.Encounter.BOSS_1,
+			"is_boss": true, "is_rest": false, "is_objective": false,
+			"display_label": "Warden",
+			"glossary_label": "Warden",
+			"door_presentation": {
+				"label": "Warden",
+				"short_label": "Boss",
+				"color": Color(0.96, 0.46, 0.18, 0.98),
+				"icon": "boss",
+				"kind": DOOR_KIND_BOSS,
+				"reward": ENUMS.RewardMode.NONE,
+				"prompt_name_suffix": " Gate"
+			}
+		},
+		{
+			"key": "sovereign",
+			"id": DEBUG_ENUMS.Encounter.BOSS_2,
+			"is_boss": true, "is_rest": false, "is_objective": false,
+			"display_label": "Sovereign",
+			"glossary_label": "Sovereign",
+			"door_presentation": {
+				"label": "Sovereign",
+				"short_label": "Boss",
+				"color": Color(0.92, 0.28, 0.1, 0.98),
+				"icon": "boss",
+				"kind": DOOR_KIND_BOSS,
+				"reward": ENUMS.RewardMode.NONE,
+				"prompt_name_suffix": " Gate"
+			}
+		},
+		{
+			"key": "lacuna",
+			"id": DEBUG_ENUMS.Encounter.BOSS_3,
+			"is_boss": true, "is_rest": false, "is_objective": false,
+			"display_label": "Lacuna",
+			"glossary_label": "Lacuna",
+			"door_presentation": {
+				"label": "Lacuna",
+				"short_label": "Boss",
+				"color": Color(0.34, 0.92, 0.74, 0.98),
+				"icon": "boss",
+				"kind": DOOR_KIND_BOSS,
+				"reward": ENUMS.RewardMode.NONE,
+				"prompt_name_suffix": " Gate"
+			}
+		},
+	]
+
+static var _encounter_registry_cache: Array[Dictionary] = []
+
+static func _get_encounter_registry() -> Array[Dictionary]:
+	if _encounter_registry_cache.is_empty():
+		_encounter_registry_cache = _build_encounter_registry()
+	return _encounter_registry_cache
+
+static func _ensure_registry_initialized() -> void:
+	if DEBUG_ENCOUNTER_MAP.is_empty():
+		_init_registry_derived_data()
+
+static func _derive_debug_encounter_map() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for entry in _get_encounter_registry():
+		result.append({
+			"id": entry.get("id", 0),
+			"key": entry.get("key", ""),
+			"is_boss": entry.get("is_boss", false),
+			"is_rest": entry.get("is_rest", false),
+			"is_objective": entry.get("is_objective", false),
+		})
+	return result
+
+static func _derive_door_presentation() -> Dictionary:
+	var result := {}
+	for entry in _get_encounter_registry():
+		var key: String = entry.get("key", "")
+		if not key.is_empty():
+			var presentation = entry.get("door_presentation", {})
+			if presentation is Dictionary and not (presentation as Dictionary).is_empty():
+				result[key] = presentation
+	return result
+
+static func _derive_glossary_labels() -> Dictionary:
+	var result := {}
+	for entry in _get_encounter_registry():
+		var key: String = entry.get("key", "")
+		var label: String = entry.get("glossary_label", "")
+		if not key.is_empty() and not label.is_empty():
+			result[key] = label
+	return result
+
+static func get_bearing_labels_from_registry() -> Array[String]:
+	var labels: Array[String] = []
+	for entry in _get_encounter_registry():
+		var bearing_label: String = entry.get("bearing_label", "")
+		if not bearing_label.is_empty() and not labels.has(bearing_label):
+			labels.append(bearing_label)
+	return labels
+
+static func _derive_display_labels() -> Dictionary:
+	var result := {}
+	for entry in _get_encounter_registry():
+		var key: String = entry.get("key", "")
+		var label: String = entry.get("display_label", "")
+		if not key.is_empty() and not label.is_empty():
+			result[key] = label
+	return result
+
+# ===== END ENCOUNTER REGISTRY =====
 
 static func _door_kind_from_legacy(value: String) -> int:
 	match value.to_lower():
@@ -271,11 +482,85 @@ static func normalize_reward_mode(value: Variant) -> int:
 	return ENUMS.reward_mode_from_legacy(String(value).to_lower())
 
 static func debug_encounter_entry(encounter_key: String) -> Dictionary:
+	_ensure_registry_initialized()
 	var normalized := encounter_key.strip_edges().to_lower()
 	for entry in DEBUG_ENCOUNTER_MAP:
 		if String(entry.get("key", "")) == normalized:
 			return entry
 	return {}
+
+static func debug_encounter_entries() -> Array[Dictionary]:
+	_ensure_registry_initialized()
+	var entries: Array[Dictionary] = []
+	for entry in DEBUG_ENCOUNTER_MAP:
+		entries.append((entry as Dictionary).duplicate(true))
+	return entries
+
+static func debug_encounter_display_name(encounter_key: String) -> String:
+	_ensure_registry_initialized()
+	var normalized := canonicalize_debug_encounter_key(encounter_key)
+	if normalized.is_empty():
+		return ""
+	if normalized == "none":
+		return "None"
+	if DEBUG_OBJECTIVE_DISPLAY_LABELS.has(normalized):
+		return String(DEBUG_OBJECTIVE_DISPLAY_LABELS.get(normalized, ""))
+	if normalized == "trial":
+		return "Trial"
+	var presentation := _door_presentation(normalized)
+	if not presentation.is_empty() and presentation.has("label"):
+		return String(presentation.get("label", ""))
+	return ""
+
+static func debug_encounter_glossary_name(encounter_key: String) -> String:
+	_ensure_registry_initialized()
+	var normalized := canonicalize_debug_encounter_key(encounter_key)
+	if normalized.is_empty() or normalized == "none" or normalized == "random_objective":
+		return ""
+	if DEBUG_ENCOUNTER_GLOSSARY_LABELS.has(normalized):
+		return String(DEBUG_ENCOUNTER_GLOSSARY_LABELS.get(normalized, ""))
+	var presentation := _door_presentation(normalized)
+	if not presentation.is_empty() and presentation.has("label"):
+		return String(presentation.get("label", ""))
+	return ""
+
+static func validate_encounter_sync(glossary_rows: Array[Dictionary]) -> Array[String]:
+	_ensure_registry_initialized()
+	var issues: Array[String] = []
+	var ids_seen := {}
+	var keys_seen := {}
+	for entry in DEBUG_ENCOUNTER_MAP:
+		var encounter_id := int(entry.get("id", -1))
+		var encounter_key := String(entry.get("key", ""))
+		if ids_seen.has(encounter_id):
+			issues.append("Duplicate debug encounter id %d." % encounter_id)
+		else:
+			ids_seen[encounter_id] = true
+		if encounter_key.is_empty():
+			issues.append("Debug encounter entry with id %d has empty key." % encounter_id)
+			continue
+		if keys_seen.has(encounter_key):
+			issues.append("Duplicate debug encounter key '%s'." % encounter_key)
+		else:
+			keys_seen[encounter_key] = true
+		if debug_encounter_display_name(encounter_key).is_empty():
+			issues.append("Debug encounter key '%s' is missing a display label mapping." % encounter_key)
+
+	var glossary_names := {}
+	for row in glossary_rows:
+		var glossary_name := String((row as Dictionary).get("name", "")).strip_edges().to_lower()
+		if not glossary_name.is_empty():
+			glossary_names[glossary_name] = true
+
+	for entry in DEBUG_ENCOUNTER_MAP:
+		var encounter_key := String(entry.get("key", ""))
+		var expected_glossary_name := debug_encounter_glossary_name(encounter_key)
+		if expected_glossary_name.is_empty():
+			continue
+		if not glossary_names.has(expected_glossary_name.to_lower()):
+			issues.append("Glossary is missing '%s' for debug encounter key '%s'." % [expected_glossary_name, encounter_key])
+
+	return issues
 
 static func canonicalize_debug_encounter_key(encounter_key: String) -> String:
 	var entry := debug_encounter_entry(encounter_key)
@@ -284,6 +569,7 @@ static func canonicalize_debug_encounter_key(encounter_key: String) -> String:
 	return String(entry.get("key", ""))
 
 static func debug_encounter_key_from_id(encounter_id: int) -> String:
+	_ensure_registry_initialized()
 	for entry in DEBUG_ENCOUNTER_MAP:
 		if int(entry.get("id", -1)) == encounter_id:
 			return String(entry.get("key", ""))
@@ -296,6 +582,7 @@ static func debug_encounter_is_objective(encounter_key: String) -> bool:
 	return bool(entry.get("is_objective", false))
 
 static func _door_presentation(encounter_key: String) -> Dictionary:
+	_ensure_registry_initialized()
 	return ENCOUNTER_DOOR_PRESENTATION.get(encounter_key.strip_edges().to_lower(), {}) as Dictionary
 
 static func _normalize_encounter_key(value: String, fallback: String = "unknown") -> String:
@@ -395,35 +682,51 @@ static func profile_room_size(profile_value: Dictionary) -> Vector2:
 static func profile_static_camera(profile_value: Dictionary) -> bool:
 	return bool(profile_value.get(PROFILE_KEY_STATIC_CAMERA, true))
 
+# Enemy count metadata: list of all enemy types for data-driven access
+static func _get_enemy_count_keys() -> Array[String]:
+	return ["chaser", "charger", "archer", "shielder", "lurker", "ram", "lancer", "spectre", "pyre", "tether"]
+
+static func _get_enemy_count_key_for_type(enemy_type: String) -> String:
+	return "%s_count" % enemy_type.strip_edges().to_lower()
+
+static func _get_enemy_count(enemy_type: String, profile_value: Dictionary) -> int:
+	var key = _get_enemy_count_key_for_type(enemy_type)
+	return int(profile_value.get(key, 0))
+
+static func _set_enemy_count(enemy_type: String, count: int, profile_value: Dictionary) -> void:
+	var key = _get_enemy_count_key_for_type(enemy_type)
+	profile_value[key] = count
+
+# Backward-compatible wrappers for individual enemy type getters
 static func profile_chaser_count(profile_value: Dictionary) -> int:
-	return int(profile_value.get(PROFILE_KEY_CHASER_COUNT, 0))
+	return _get_enemy_count("chaser", profile_value)
 
 static func profile_charger_count(profile_value: Dictionary) -> int:
-	return int(profile_value.get(PROFILE_KEY_CHARGER_COUNT, 0))
+	return _get_enemy_count("charger", profile_value)
 
 static func profile_archer_count(profile_value: Dictionary) -> int:
-	return int(profile_value.get(PROFILE_KEY_ARCHER_COUNT, 0))
+	return _get_enemy_count("archer", profile_value)
 
 static func profile_shielder_count(profile_value: Dictionary) -> int:
-	return int(profile_value.get(PROFILE_KEY_SHIELDER_COUNT, 0))
+	return _get_enemy_count("shielder", profile_value)
 
 static func profile_lurker_count(profile_value: Dictionary) -> int:
-	return int(profile_value.get(PROFILE_KEY_LURKER_COUNT, 0))
+	return _get_enemy_count("lurker", profile_value)
 
 static func profile_ram_count(profile_value: Dictionary) -> int:
-	return int(profile_value.get(PROFILE_KEY_RAM_COUNT, 0))
+	return _get_enemy_count("ram", profile_value)
 
 static func profile_lancer_count(profile_value: Dictionary) -> int:
-	return int(profile_value.get(PROFILE_KEY_LANCER_COUNT, 0))
+	return _get_enemy_count("lancer", profile_value)
 
 static func profile_spectre_count(profile_value: Dictionary) -> int:
-	return int(profile_value.get(PROFILE_KEY_SPECTRE_COUNT, 0))
+	return _get_enemy_count("spectre", profile_value)
 
 static func profile_pyre_count(profile_value: Dictionary) -> int:
-	return int(profile_value.get(PROFILE_KEY_PYRE_COUNT, 0))
+	return _get_enemy_count("pyre", profile_value)
 
 static func profile_tether_count(profile_value: Dictionary) -> int:
-	return int(profile_value.get(PROFILE_KEY_TETHER_COUNT, 0))
+	return _get_enemy_count("tether", profile_value)
 
 static func profile_enemy_mutator(profile_value: Dictionary) -> Dictionary:
 	return profile_value.get(PROFILE_KEY_ENEMY_MUTATOR, {}) as Dictionary
@@ -438,18 +741,15 @@ static func profile_set_static_camera(profile_value: Dictionary, value: bool) ->
 	profile_value[PROFILE_KEY_STATIC_CAMERA] = value
 
 static func profile_set_counts(profile_value: Dictionary, chasers: int, chargers: int, archers: int, shielders: int) -> void:
-	profile_value[PROFILE_KEY_CHASER_COUNT] = chasers
-	profile_value[PROFILE_KEY_CHARGER_COUNT] = chargers
-	profile_value[PROFILE_KEY_ARCHER_COUNT] = archers
-	profile_value[PROFILE_KEY_SHIELDER_COUNT] = shielders
+	_set_enemy_count("chaser", chasers, profile_value)
+	_set_enemy_count("charger", chargers, profile_value)
+	_set_enemy_count("archer", archers, profile_value)
+	_set_enemy_count("shielder", shielders, profile_value)
 
 static func profile_set_specialist_counts(profile_value: Dictionary, lurkers: int, rams: int, lancers: int, spectres: int = 0, pyres: int = 0, tethers: int = 0) -> void:
-	profile_value[PROFILE_KEY_LURKER_COUNT] = lurkers
-	profile_value[PROFILE_KEY_RAM_COUNT] = rams
-	profile_value[PROFILE_KEY_LANCER_COUNT] = lancers
-	profile_value[PROFILE_KEY_SPECTRE_COUNT] = spectres
-	profile_value[PROFILE_KEY_PYRE_COUNT] = pyres
-	profile_value[PROFILE_KEY_TETHER_COUNT] = tethers
+	var specialist_counts = {"lurker": lurkers, "ram": rams, "lancer": lancers, "spectre": spectres, "pyre": pyres, "tether": tethers}
+	for enemy_type: String in specialist_counts:
+		_set_enemy_count(enemy_type, specialist_counts[enemy_type], profile_value)
 
 static func profile_counts(chasers: int, chargers: int, archers: int, shielders: int, lurkers: int = 0, rams: int = 0, lancers: int = 0, spectres: int = 0, pyres: int = 0, tethers: int = 0) -> Dictionary:
 	return {
@@ -482,6 +782,19 @@ static func profile_counts_from_profile(profile_value: Dictionary) -> Dictionary
 		profile_tether_count(profile_value)
 	)
 
+# Helper function: get all enemy counts as a dict indexed by enemy type
+static func _get_all_enemy_counts(profile_value: Dictionary) -> Dictionary:
+	var result := {}
+	for enemy_type: String in _get_enemy_count_keys():
+		result[enemy_type] = _get_enemy_count(enemy_type, profile_value)
+	return result
+
+# Helper function: set all enemy counts from a dict indexed by enemy type
+static func _set_all_enemy_counts(profile_value: Dictionary, counts: Dictionary) -> void:
+	for enemy_type: String in _get_enemy_count_keys():
+		if counts.has(enemy_type):
+			_set_enemy_count(enemy_type, int(counts[enemy_type]), profile_value)
+
 static func profile_set_counts_from_dict(profile_value: Dictionary, counts: Dictionary) -> void:
 	profile_set_counts(
 		profile_value,
@@ -513,41 +826,21 @@ static func profile_scaled_counts(profile_value: Dictionary, pressure_mult: floa
 	if profile_value.is_empty():
 		return profile_value
 	var modified := profile_value.duplicate(true)
-	profile_set_counts(
-		modified,
-		profile_scale_count(profile_chaser_count(modified), pressure_mult),
-		profile_scale_count(profile_charger_count(modified), pressure_mult),
-		profile_scale_count(profile_archer_count(modified), pressure_mult),
-		profile_scale_count(profile_shielder_count(modified), pressure_mult)
-	)
-	profile_set_specialist_counts(
-		modified,
-		profile_scale_count(profile_lurker_count(modified), pressure_mult),
-		profile_scale_count(profile_ram_count(modified), pressure_mult),
-		profile_scale_count(profile_lancer_count(modified), pressure_mult),
-		profile_scale_count(profile_spectre_count(modified), pressure_mult),
-		profile_scale_count(profile_pyre_count(modified), pressure_mult),
-		profile_scale_count(profile_tether_count(modified), pressure_mult)
-	)
+	for enemy_type: String in _get_enemy_count_keys():
+		var current = _get_enemy_count(enemy_type, modified)
+		var scaled = profile_scale_count(current, pressure_mult)
+		_set_enemy_count(enemy_type, scaled, modified)
 	if minimum_total > 0:
 		var current_total := profile_total_enemy_count(modified)
 		if current_total < minimum_total:
 			var delta := minimum_total - current_total
-			modified[PROFILE_KEY_CHASER_COUNT] = profile_chaser_count(modified) + delta
+			_set_enemy_count("chaser", _get_enemy_count("chaser", modified) + delta, modified)
 	return modified
 
 static func profile_total_enemy_count(profile_value: Dictionary) -> int:
 	var total := 0
-	total += profile_chaser_count(profile_value)
-	total += profile_charger_count(profile_value)
-	total += profile_archer_count(profile_value)
-	total += profile_shielder_count(profile_value)
-	total += profile_lurker_count(profile_value)
-	total += profile_ram_count(profile_value)
-	total += profile_lancer_count(profile_value)
-	total += profile_spectre_count(profile_value)
-	total += profile_pyre_count(profile_value)
-	total += profile_tether_count(profile_value)
+	for enemy_type: String in _get_enemy_count_keys():
+		total += _get_enemy_count(enemy_type, profile_value)
 	return total
 
 static func profile_set_enemy_mutator(profile_value: Dictionary, enemy_mutator: Dictionary) -> void:

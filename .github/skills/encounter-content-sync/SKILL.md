@@ -48,6 +48,7 @@ Use this skill whenever an encounter is added, renamed, removed, or meaningfully
 
 7. Run diagnostics for all touched scripts.
 8. Report a sync checklist in the final summary.
+9. Run startup encounter sync validation via `ENCOUNTER_CONTRACTS.validate_encounter_sync(GLOSSARY_DATA._encounter_rows())` (wired in `world_generator.gd`) and resolve any `[Encounter Sync]` errors in the same change.
 
 ## Done Criteria
 
