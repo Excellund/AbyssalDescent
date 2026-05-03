@@ -98,7 +98,7 @@ const CHARACTER_DEFINITIONS := {
 			"max_health": 64,
 			"max_speed": 228.0,
 			"damage": 20,
-			"attack_range": 190.0,
+			"attack_range": 132.0,
 			"attack_arc_degrees": 16.0,
 			"attack_cooldown": 0.26,
 			"dash_cooldown": 0.44
