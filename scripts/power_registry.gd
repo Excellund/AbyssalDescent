@@ -311,7 +311,7 @@ const TRIAL_POWER_BALANCE := {
 		"damage_ratio_cap": 0.82
 	},
 	"voidfire": {
-		"heat_per_hit": 10.0,
+		"heat_per_hit": 11.0,
 		"heat_cap": 110.0,
 		"danger_zone_threshold": 68.0,
 		"danger_zone_amp_base": 0.20,
