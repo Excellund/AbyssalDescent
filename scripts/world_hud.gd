@@ -939,15 +939,29 @@ func _update_build_strip(state: Dictionary, player: Node) -> void:
 			stack_label.text = ""
 
 func _get_passive_display_name(passive_id: String) -> String:
-	match passive_id:
+	var normalized_id := passive_id.strip_edges().to_lower()
+	match normalized_id:
 		"iron_retort":
 			return "Iron Retort"
 		"sigil_burst":
 			return "Sigil Burst"
 		"death_tempo":
 			return "Death's Tempo"
-		_:
+		"farline_focus":
+			return "Farline Focus"
+		"", "passive":
 			return "Passive"
+		_:
+			var words := normalized_id.split("_", false)
+			var formatted := ""
+			for i in range(words.size()):
+				if i > 0:
+					formatted += " "
+				formatted += String(words[i]).capitalize()
+			var fallback := formatted.strip_edges()
+			if fallback.is_empty():
+				return "Passive"
+			return fallback
 
 func _get_power_display_name(power_id: String) -> String:
 	match power_id:

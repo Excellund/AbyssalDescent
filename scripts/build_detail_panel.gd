@@ -273,7 +273,7 @@ func _update_passive_section(character_id: String) -> void:
 		passive_desc_label.text = "No passive available"
 		return
 	
-	var passive_id := String(char_data.get("passive_id", "")).strip_edges().to_lower()
+	var passive_id := _resolve_passive_id(character_id, char_data)
 	passive_name_label.text = _format_passive_name(passive_id)
 	
 	# Get passive description based on ID
@@ -291,6 +291,23 @@ func _update_passive_section(character_id: String) -> void:
 			desc = "Passive ability"
 	
 	passive_desc_label.text = desc
+
+func _resolve_passive_id(character_id: String, char_data: Dictionary) -> String:
+	var passive_id := String(char_data.get("passive_id", "")).strip_edges().to_lower()
+	if not passive_id.is_empty() and passive_id != "passive":
+		return passive_id
+	var normalized_character_id := character_id.strip_edges().to_lower()
+	match normalized_character_id:
+		"bastion":
+			return "iron_retort"
+		"hexweaver":
+			return "sigil_burst"
+		"veilstrider":
+			return "death_tempo"
+		"riftlancer":
+			return "farline_focus"
+		_:
+			return passive_id
 
 func _update_power_section(container: VBoxContainer, power_ids: Array, power_type: String, player: Node = null) -> void:
 	# Clear existing entries

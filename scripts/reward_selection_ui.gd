@@ -33,6 +33,11 @@ var pending_mission_upgrade_choice: Dictionary = {}
 var current_player: Node2D
 var current_character_id: String = ""
 
+func _is_upgrade_blocked_for_character(upgrade_id: String) -> bool:
+	var normalized_character_id := current_character_id.strip_edges().to_lower()
+	var normalized_upgrade_id := upgrade_id.strip_edges().to_lower()
+	return normalized_character_id == "riftlancer" and normalized_upgrade_id == "wide_arc"
+
 var boon_layer: CanvasLayer
 var boon_title_label: Label
 var boon_subtitle_label: Label
@@ -498,6 +503,8 @@ func _roll_boon_choices(choice_count: int, power_registry: Node, player: Node2D,
 	var pool: Array[Dictionary] = power_registry.get_upgrade_pool(player)
 	var available: Array[Dictionary] = []
 	for entry in pool:
+		if _is_upgrade_blocked_for_character(String(entry.get("id", ""))):
+			continue
 		var limit := int(entry.get("stack_limit", 0))
 		if limit > 0 and is_instance_valid(player):
 			var current := int(player.get_upgrade_stack_count(String(entry["id"])))
@@ -559,6 +566,8 @@ func _roll_objective_choices(choice_count: int, power_registry: Node, player: No
 	var available_priority: Array[Dictionary] = []
 	var available_regular: Array[Dictionary] = []
 	for entry in prioritized_pool:
+		if _is_upgrade_blocked_for_character(String(entry.get("id", ""))):
+			continue
 		var limit := int(entry.get("stack_limit", 0))
 		if limit > 0 and is_instance_valid(player):
 			var current := int(player.get_upgrade_stack_count(String(entry["id"])))
@@ -566,6 +575,8 @@ func _roll_objective_choices(choice_count: int, power_registry: Node, player: No
 				continue
 		available_priority.append(entry)
 	for entry in regular_pool:
+		if _is_upgrade_blocked_for_character(String(entry.get("id", ""))):
+			continue
 		var limit := int(entry.get("stack_limit", 0))
 		if limit > 0 and is_instance_valid(player):
 			var current := int(player.get_upgrade_stack_count(String(entry["id"])))

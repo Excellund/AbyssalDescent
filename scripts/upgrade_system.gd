@@ -370,7 +370,7 @@ func get_power_flavor_text(power_id: String) -> String:
 		"vow_shatter":
 			return "Taking a hit primes a vow. Your next attack multiplies damage and consumes the vow."
 		"eclipse_mark":
-			return "Kills inflicted by hits mark all nearby enemies. First hit on each marked enemy deals amplified damage. Marks expire quickly."
+			return "Kills inflicted by hits mark nearby enemies. First hit on each deals bonus damage."
 		"fracture_field":
 			return "Kills inflicted by hits rupture fault lines from the slain enemy, striking enemies along each line."
 		_:
