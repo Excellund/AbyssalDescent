@@ -119,6 +119,24 @@ const DEBUG_ENCOUNTER_MAP := [
 	{"id": DEBUG_ENUMS.Encounter.BOSS_3, "key": "lacuna", "is_boss": true, "is_rest": false, "is_objective": false},
 ]
 
+const DEBUG_OBJECTIVE_DISPLAY_LABELS := {
+	"last_stand": "Objective - Last Stand",
+	"cut_the_signal": "Objective - Cut the Signal",
+	"hold_the_line": "Objective - Hold the Line",
+	"random_objective": "Objective - Random"
+}
+
+const DEBUG_ENCOUNTER_GLOSSARY_LABELS := {
+	"rest": "Rest Site",
+	"trial": "Trial",
+	"last_stand": "Last Stand",
+	"cut_the_signal": "Cut the Signal",
+	"hold_the_line": "Hold the Line",
+	"warden": "Warden",
+	"sovereign": "Sovereign",
+	"lacuna": "Lacuna"
+}
+
 const ENCOUNTER_DOOR_PRESENTATION := {
 	"skirmish": {
 		"label": "Skirmish"
@@ -276,6 +294,75 @@ static func debug_encounter_entry(encounter_key: String) -> Dictionary:
 		if String(entry.get("key", "")) == normalized:
 			return entry
 	return {}
+
+static func debug_encounter_entries() -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	for entry in DEBUG_ENCOUNTER_MAP:
+		entries.append((entry as Dictionary).duplicate(true))
+	return entries
+
+static func debug_encounter_display_name(encounter_key: String) -> String:
+	var normalized := canonicalize_debug_encounter_key(encounter_key)
+	if normalized.is_empty():
+		return ""
+	if normalized == "none":
+		return "None"
+	if DEBUG_OBJECTIVE_DISPLAY_LABELS.has(normalized):
+		return String(DEBUG_OBJECTIVE_DISPLAY_LABELS.get(normalized, ""))
+	if normalized == "trial":
+		return "Trial"
+	var presentation := _door_presentation(normalized)
+	if not presentation.is_empty() and presentation.has("label"):
+		return String(presentation.get("label", ""))
+	return ""
+
+static func debug_encounter_glossary_name(encounter_key: String) -> String:
+	var normalized := canonicalize_debug_encounter_key(encounter_key)
+	if normalized.is_empty() or normalized == "none" or normalized == "random_objective":
+		return ""
+	if DEBUG_ENCOUNTER_GLOSSARY_LABELS.has(normalized):
+		return String(DEBUG_ENCOUNTER_GLOSSARY_LABELS.get(normalized, ""))
+	var presentation := _door_presentation(normalized)
+	if not presentation.is_empty() and presentation.has("label"):
+		return String(presentation.get("label", ""))
+	return ""
+
+static func validate_encounter_sync(glossary_rows: Array[Dictionary]) -> Array[String]:
+	var issues: Array[String] = []
+	var ids_seen := {}
+	var keys_seen := {}
+	for entry in DEBUG_ENCOUNTER_MAP:
+		var encounter_id := int(entry.get("id", -1))
+		var encounter_key := String(entry.get("key", ""))
+		if ids_seen.has(encounter_id):
+			issues.append("Duplicate debug encounter id %d." % encounter_id)
+		else:
+			ids_seen[encounter_id] = true
+		if encounter_key.is_empty():
+			issues.append("Debug encounter entry with id %d has empty key." % encounter_id)
+			continue
+		if keys_seen.has(encounter_key):
+			issues.append("Duplicate debug encounter key '%s'." % encounter_key)
+		else:
+			keys_seen[encounter_key] = true
+		if debug_encounter_display_name(encounter_key).is_empty():
+			issues.append("Debug encounter key '%s' is missing a display label mapping." % encounter_key)
+
+	var glossary_names := {}
+	for row in glossary_rows:
+		var glossary_name := String((row as Dictionary).get("name", "")).strip_edges().to_lower()
+		if not glossary_name.is_empty():
+			glossary_names[glossary_name] = true
+
+	for entry in DEBUG_ENCOUNTER_MAP:
+		var encounter_key := String(entry.get("key", ""))
+		var expected_glossary_name := debug_encounter_glossary_name(encounter_key)
+		if expected_glossary_name.is_empty():
+			continue
+		if not glossary_names.has(expected_glossary_name.to_lower()):
+			issues.append("Glossary is missing '%s' for debug encounter key '%s'." % [expected_glossary_name, encounter_key])
+
+	return issues
 
 static func canonicalize_debug_encounter_key(encounter_key: String) -> String:
 	var entry := debug_encounter_entry(encounter_key)

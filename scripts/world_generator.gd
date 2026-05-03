@@ -33,6 +33,7 @@ const RUN_SNAPSHOT_SERVICE := preload("res://scripts/run_snapshot_service.gd")
 const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
 const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 const DEBUG_ENUMS := preload("res://scripts/shared/debug_enums.gd")
+const GLOSSARY_DATA := preload("res://scripts/shared/glossary_data.gd")
 const DEBUG_SETTINGS_SCRIPT := preload("res://scripts/debug_settings.gd")
 const RUN_CONTEXT_PATH := "/root/RunContext"
 const MENU_SCENE_PATH := "res://scenes/Menu.tscn"
@@ -248,6 +249,9 @@ func _apply_debug_settings_from_node() -> void:
 	telemetry_spike_timeout_seconds = float(telemetry_timeout_value) if telemetry_timeout_value != null else 8.0
 
 func _ready() -> void:
+	var encounter_sync_issues := ENCOUNTER_CONTRACTS.validate_encounter_sync(GLOSSARY_DATA._encounter_rows())
+	for issue in encounter_sync_issues:
+		push_error("[Encounter Sync] %s" % issue)
 	rng.randomize()
 	_apply_debug_settings_from_node()
 	_maybe_start_telemetry_spike_probe()
