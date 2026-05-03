@@ -12,7 +12,6 @@ const STATE_RECOVER := 3
 @export var deceleration: float = 1140.0
 @export var preferred_range: float = 176.0
 @export var range_tolerance: float = 40.0
-@export var tether_range: float = 260.0
 @export var beam_thickness: float = 18.0
 @export var beam_damage: int = 9
 @export var beam_tick_interval: float = 0.34
@@ -37,6 +36,9 @@ func _ready() -> void:
 
 func is_tether_enemy() -> bool:
 	return true
+
+func is_beam_state_active() -> bool:
+	return tether_state == STATE_BEAM
 
 func _process_behavior(delta: float) -> void:
 	if beam_cooldown_left > 0.0:
@@ -64,7 +66,7 @@ func _find_beam_partner() -> CharacterBody2D:
 		if not bool(enemy_body.call("is_tether_enemy")):
 			continue
 		var distance := global_position.distance_to(enemy_body.global_position)
-		if distance > tether_range or distance >= nearest_distance:
+		if distance >= nearest_distance:
 			continue
 		nearest = enemy_body
 		nearest_distance = distance
@@ -164,11 +166,14 @@ func _draw() -> void:
 	var body_color := Color(0.3, 0.42, 0.92, 0.94)
 	var core_color := Color(0.86, 0.92, 1.0, 0.94)
 	var state_charge := 0.0
+	var beam_link_active := tether_state == STATE_BEAM
+	if not beam_link_active and is_instance_valid(beam_partner) and beam_partner.has_method("is_beam_state_active"):
+		beam_link_active = bool(beam_partner.call("is_beam_state_active"))
 	if tether_state == STATE_WINDUP:
 		body_color = Color(0.4, 0.58, 1.0, 0.96)
 		core_color = Color(1.0, 1.0, 1.0, 0.96)
 		state_charge = 1.0 - clampf(state_time_left / maxf(0.001, beam_windup_time), 0.0, 1.0)
-	elif tether_state == STATE_BEAM:
+	elif beam_link_active:
 		body_color = Color(0.22, 0.9, 0.96, 0.96)
 		core_color = Color(0.94, 1.0, 1.0, 0.98)
 		state_charge = 1.0
@@ -178,7 +183,7 @@ func _draw() -> void:
 	var link_factor := 0.0
 	if has_partner:
 		link_factor = 0.4
-	if tether_state == STATE_BEAM:
+	if beam_link_active:
 		link_factor = 1.0
 
 	draw_circle(Vector2.ZERO, body_radius + 10.0, Color(body_color.r, body_color.g + 0.08, 1.0, 0.08 + pulse * 0.06 + link_factor * 0.1))
@@ -228,12 +233,12 @@ func _draw() -> void:
 		if tether_state == STATE_WINDUP:
 			alpha = 0.46
 			width = 2.2
-		elif tether_state == STATE_BEAM:
+		elif beam_link_active:
 			alpha = 0.9
 			width = 4.4
 		draw_line(Vector2.ZERO, partner_local, Color(0.46, 0.94, 1.0, alpha), width)
 		draw_line(side * anchor_offset, partner_local, Color(0.66, 0.96, 1.0, alpha * 0.35), 1.2)
 		draw_line(-side * anchor_offset, partner_local, Color(0.66, 0.96, 1.0, alpha * 0.35), 1.2)
-		if tether_state == STATE_BEAM:
+		if beam_link_active:
 			draw_line(Vector2.ZERO, partner_local, Color(0.92, 1.0, 1.0, 0.52), 1.8)
 	_draw_slow_indicator(body_radius)
