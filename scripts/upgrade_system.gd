@@ -5,6 +5,7 @@
 extends Node
 
 const DESCRIPTION_CAP_GUARD := preload("res://scripts/shared/description_cap_guard.gd")
+const POWER_PARAMETER_MAPPER := preload("res://scripts/power_parameter_mapper.gd")
 
 # Dependencies (injected)
 var player_reference: Node = null
@@ -141,109 +142,8 @@ func apply_trial_power(power_id: String) -> bool:
 	if next_values.is_empty():
 		return false
 	
-	match id:
-		"razor_wind":
-			player_reference.set("reward_razor_wind", true)
-			player_reference.set("razor_wind_stacks", next_stack)
-			player_reference.set("razor_wind_range_scale", float(next_values.get("range_scale", player_reference.get("razor_wind_range_scale"))))
-			player_reference.set("razor_wind_damage_ratio", float(next_values.get("damage_ratio", player_reference.get("razor_wind_damage_ratio"))))
-			player_reference.set("attack_cooldown", float(next_values.get("attack_cooldown", player_reference.get("attack_cooldown"))))
-		"execution_edge":
-			player_reference.set("reward_execution_edge", true)
-			player_reference.set("execution_edge_stacks", next_stack)
-			player_reference.set("execution_every", int(next_values.get("every", player_reference.get("execution_every"))))
-			player_reference.set("execution_damage_mult", float(next_values.get("damage_mult", player_reference.get("execution_damage_mult"))))
-			player_reference.set("attack_lock_duration", float(next_values.get("attack_lock_duration", player_reference.get("attack_lock_duration"))))
-		"rupture_wave":
-			player_reference.set("reward_rupture_wave", true)
-			player_reference.set("rupture_wave_stacks", next_stack)
-			player_reference.set("rupture_wave_radius", float(next_values.get("radius", player_reference.get("rupture_wave_radius"))))
-			player_reference.set("rupture_wave_damage_ratio", float(next_values.get("damage_ratio", player_reference.get("rupture_wave_damage_ratio"))))
-		"aegis_field":
-			player_reference.set("reward_aegis_field", true)
-			player_reference.set("aegis_field_stacks", next_stack)
-			player_reference.set("aegis_field_resist_ratio", float(next_values.get("resist", player_reference.get("aegis_field_resist_ratio"))))
-			player_reference.set("aegis_field_resist_duration", float(next_values.get("duration", player_reference.get("aegis_field_resist_duration"))))
-			player_reference.set("aegis_field_pulse_radius", float(next_values.get("radius", player_reference.get("aegis_field_pulse_radius"))))
-			player_reference.set("aegis_field_slow_duration", float(next_values.get("slow_duration", player_reference.get("aegis_field_slow_duration"))))
-			player_reference.set("aegis_field_slow_mult", float(next_values.get("slow_mult", player_reference.get("aegis_field_slow_mult"))))
-			player_reference.set("aegis_field_cooldown", float(next_values.get("cooldown", player_reference.get("aegis_field_cooldown"))))
-		"hunters_snare":
-			player_reference.set("reward_hunters_snare", true)
-			player_reference.set("hunters_snare_stacks", next_stack)
-			player_reference.set("hunters_snare_bonus_damage", int(next_values.get("bonus_damage", player_reference.get("hunters_snare_bonus_damage"))))
-			player_reference.set("hunters_snare_slow_duration", float(next_values.get("slow_duration", player_reference.get("hunters_snare_slow_duration"))))
-			player_reference.set("hunters_snare_slow_mult", float(next_values.get("slow_mult", player_reference.get("hunters_snare_slow_mult"))))
-		"phantom_step":
-			player_reference.set("reward_phantom_step", true)
-			player_reference.set("phantom_step_stacks", next_stack)
-			player_reference.set("phantom_step_damage", int(next_values.get("damage", player_reference.get("phantom_step_damage"))))
-			player_reference.set("phantom_step_slow_duration", float(next_values.get("slow_duration", player_reference.get("phantom_step_slow_duration"))))
-			player_reference.set("dash_cooldown", float(next_values.get("dash_cooldown", player_reference.get("dash_cooldown"))))
-		"reaper_step":
-			player_reference.set("reward_void_dash", true)
-			player_reference.set("void_dash_stacks", next_stack)
-			player_reference.set("void_dash_range_mult", float(next_values.get("range_mult", player_reference.get("void_dash_range_mult"))))
-		"static_wake":
-			player_reference.set("reward_static_wake", true)
-			player_reference.set("static_wake_stacks", next_stack)
-			player_reference.set("static_wake_damage", int(next_values.get("damage", player_reference.get("static_wake_damage"))))
-			player_reference.set("static_wake_lifetime", float(next_values.get("lifetime", player_reference.get("static_wake_lifetime"))))
-		"storm_crown":
-			player_reference.set("reward_storm_crown", true)
-			player_reference.set("storm_crown_stacks", next_stack)
-			player_reference.set("storm_crown_proc_every", int(next_values.get("proc_every", player_reference.get("storm_crown_proc_every"))))
-			player_reference.set("storm_crown_chain_targets", int(next_values.get("chain_targets", player_reference.get("storm_crown_chain_targets"))))
-			player_reference.set("storm_crown_chain_radius", float(next_values.get("chain_radius", player_reference.get("storm_crown_chain_radius"))))
-			player_reference.set("storm_crown_damage_ratio", float(next_values.get("damage_ratio", player_reference.get("storm_crown_damage_ratio"))))
-		"wraithstep":
-			player_reference.set("reward_wraithstep", true)
-			player_reference.set("wraithstep_stacks", next_stack)
-			player_reference.set("wraithstep_mark_duration", float(next_values.get("mark_duration", player_reference.get("wraithstep_mark_duration"))))
-			player_reference.set("wraithstep_dash_mark_radius", float(next_values.get("dash_mark_radius", player_reference.get("wraithstep_dash_mark_radius"))))
-			player_reference.set("wraithstep_mark_bonus_damage", int(next_values.get("bonus_damage", player_reference.get("wraithstep_mark_bonus_damage"))))
-			player_reference.set("wraithstep_mark_splash_radius", float(next_values.get("splash_radius", player_reference.get("wraithstep_mark_splash_radius"))))
-			player_reference.set("wraithstep_mark_splash_ratio", float(next_values.get("splash_ratio", player_reference.get("wraithstep_mark_splash_ratio"))))
-		"voidfire":
-			player_reference.set("reward_voidfire", true)
-			player_reference.set("voidfire_stacks", next_stack)
-			player_reference.set("voidfire_heat_per_hit", float(next_values.get("heat_per_hit", player_reference.get("voidfire_heat_per_hit"))))
-			player_reference.set("void_heat_cap", float(next_values.get("heat_cap", player_reference.get("void_heat_cap"))))
-			player_reference.set("voidfire_danger_zone_threshold", float(next_values.get("danger_zone_threshold", player_reference.get("voidfire_danger_zone_threshold"))))
-			player_reference.set("voidfire_danger_zone_amp", float(next_values.get("danger_zone_amp", player_reference.get("voidfire_danger_zone_amp"))))
-			player_reference.set("voidfire_detonate_ratio", float(next_values.get("detonate_ratio", player_reference.get("voidfire_detonate_ratio"))))
-			player_reference.set("voidfire_detonate_radius", float(next_values.get("detonate_radius", player_reference.get("voidfire_detonate_radius"))))
-			player_reference.set("voidfire_lockout_duration", float(next_values.get("lockout_duration", player_reference.get("voidfire_lockout_duration"))))
-			player_reference.set("voidfire_overheat_move_mult", float(next_values.get("overheat_move_mult", player_reference.get("voidfire_overheat_move_mult"))))
-			player_reference.set("void_heat_decay_rate", float(next_values.get("heat_decay_rate", player_reference.get("void_heat_decay_rate"))))
-			player_reference.set("voidfire_danger_zone_heat_gain_mult", float(next_values.get("danger_zone_heat_gain_mult", player_reference.get("voidfire_danger_zone_heat_gain_mult"))))
-			player_reference.set("voidfire_reckless_heat_ratio", float(next_values.get("reckless_heat_ratio", player_reference.get("voidfire_reckless_heat_ratio"))))
-			player_reference.set("voidfire_reckless_heat_gain_mult", float(next_values.get("reckless_heat_gain_mult", player_reference.get("voidfire_reckless_heat_gain_mult"))))
-			player_reference.set("voidfire_danger_zone_decay_mult", float(next_values.get("danger_zone_decay_mult", player_reference.get("voidfire_danger_zone_decay_mult"))))
-			player_reference.set("voidfire_reckless_decay_mult", float(next_values.get("reckless_decay_mult", player_reference.get("voidfire_reckless_decay_mult"))))
-		"dread_resonance":
-			player_reference.set("reward_dread_resonance", true)
-			player_reference.set("dread_resonance_stacks", next_stack)
-			player_reference.set("dread_resonance_bonus_per_stack", int(next_values.get("bonus_per_stack", player_reference.get("dread_resonance_bonus_per_stack"))))
-		"vow_shatter":
-			player_reference.set("reward_vow_shatter", true)
-			player_reference.set("vow_shatter_stacks", next_stack)
-			player_reference.set("vow_shatter_damage_mult", float(next_values.get("damage_mult", player_reference.get("vow_shatter_damage_mult"))))
-		"eclipse_mark":
-			player_reference.set("reward_eclipse_mark", true)
-			player_reference.set("eclipse_mark_stacks", next_stack)
-			player_reference.set("eclipse_mark_radius", float(next_values.get("radius", player_reference.get("eclipse_mark_radius"))))
-			player_reference.set("eclipse_mark_duration", float(next_values.get("mark_duration", player_reference.get("eclipse_mark_duration"))))
-			player_reference.set("eclipse_mark_bonus_ratio", float(next_values.get("bonus_ratio", player_reference.get("eclipse_mark_bonus_ratio"))))
-		"fracture_field":
-			player_reference.set("reward_fracture_field", true)
-			player_reference.set("fracture_field_stacks", next_stack)
-			player_reference.set("fracture_field_radius", float(next_values.get("radius", player_reference.get("fracture_field_radius"))))
-			player_reference.set("fracture_field_damage_ratio", float(next_values.get("damage_ratio", player_reference.get("fracture_field_damage_ratio"))))
-			player_reference.set("fracture_field_slow_duration", float(next_values.get("slow_duration", player_reference.get("fracture_field_slow_duration"))))
-		_:
-			return false
-	return true
+	# Use data-driven mapper to apply all parameter values to player
+	return POWER_PARAMETER_MAPPER.apply_trial_power_values(player_reference, id, next_stack, next_values)
 
 
 ## Apply any power (upgrade or trial power)
