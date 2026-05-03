@@ -74,14 +74,6 @@ func apply_trial_power(power_id: String) -> bool:
 	
 	if not _is_trial_power_id(id):
 		return false
-	
-	# Track in game state
-	if is_instance_valid(game_state):
-		game_state.add_trial_power(id)
-	
-	# Update local stack
-	if trial_power_stacks.has(id):
-		trial_power_stacks[id] += 1
 
 	var next_stack := get_trial_power_stack_count(id) + 1
 	var next_values := POWER_PARAMETER_MAPPER.build_trial_values(id, next_stack, _get_power_balance_data(id), player_reference)
@@ -89,7 +81,16 @@ func apply_trial_power(power_id: String) -> bool:
 		return false
 	
 	# Use data-driven mapper to apply all parameter values to player
-	return POWER_PARAMETER_MAPPER.apply_trial_power_values(player_reference, id, next_stack, next_values)
+	var applied := POWER_PARAMETER_MAPPER.apply_trial_power_values(player_reference, id, next_stack, next_values)
+	if not applied:
+		return false
+
+	# Commit run-state tracking only after successful application.
+	if is_instance_valid(game_state):
+		game_state.add_trial_power(id)
+	trial_power_stacks[id] = next_stack
+
+	return true
 
 
 ## Apply any power (upgrade or trial power)
