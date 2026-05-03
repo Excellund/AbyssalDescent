@@ -12,7 +12,7 @@ var time_left: float = 0.0
 var tick_left: float = 0.0
 var spawn_flash_left: float = 0.22
 var tick_flash_left: float = 0.0
-var expansion_duration: float = 0.45
+var expansion_duration: float = 0.75
 
 func initialize(target_node: Node2D, field_radius: float, field_duration: float, field_tick_interval: float, field_tick_damage: int) -> void:
 	target = target_node

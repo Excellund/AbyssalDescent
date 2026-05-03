@@ -157,6 +157,12 @@ static func _mutator_rows() -> Array[Dictionary]:
 			"desc": "Pyres seed lingering burn zones that turn careless clears into traps.",
 		},
 		{
+			"name": "Tether Web",
+			"color": Color(0.34, 0.84, 1.0, 1.0),
+			"icon": "res://assets/ui/mutators/tether_web.svg",
+			"desc": "Tethers multiply into linked sentries that flood lanes with cross-beam denial.",
+		},
+		{
 			"name": "Killbox",
 			"color": Color(0.98, 0.72, 0.2, 1.0),
 			"icon": "res://assets/ui/mutators/killbox.svg",

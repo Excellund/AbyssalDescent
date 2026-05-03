@@ -258,6 +258,39 @@ func _enemy_script_key(enemy_script: Script) -> String:
 			return String(enemy_key)
 	return ""
 
+func _enemy_matches_archetype(enemy_key: String, archetype: String) -> bool:
+	match archetype:
+		"melee":
+			return enemy_key == "chaser" or enemy_key == "lurker"
+		"charger":
+			return enemy_key == "charger" or enemy_key == "ram"
+		"archer":
+			return enemy_key == "archer" or enemy_key == "lancer"
+		"shielder":
+			return enemy_key == "shielder"
+		"spectre":
+			return enemy_key == "spectre"
+		"pyre":
+			return enemy_key == "pyre"
+		"tether":
+			return enemy_key == "tether"
+		_:
+			return false
+
+func _enemy_affected_by_mutator(enemy_key: String, mutator: Dictionary) -> bool:
+	if enemy_key.is_empty():
+		return false
+	var archetypes_variant: Variant = mutator.get("affected_archetypes", [])
+	if not (archetypes_variant is Array):
+		return true
+	var archetypes := archetypes_variant as Array
+	if archetypes.is_empty():
+		return true
+	for archetype_variant in archetypes:
+		if _enemy_matches_archetype(enemy_key, String(archetype_variant)):
+			return true
+	return false
+
 func _apply_mutator_specs(enemy: CharacterBody2D, mutator: Dictionary, specs: Array) -> bool:
 	var is_affected := false
 	for spec_variant in specs:
@@ -284,6 +317,14 @@ func _apply_enemy_mutator(enemy: CharacterBody2D, enemy_script: Script) -> void:
 	var applied_mutator := _compose_active_enemy_mutator()
 	if applied_mutator.is_empty():
 		return
+	var enemy_key := _enemy_script_key(enemy_script)
+	if not _enemy_affected_by_mutator(enemy_key, applied_mutator):
+		enemy.modulate = Color(1.0, 1.0, 1.0, 1.0)
+		if enemy.get("has_mutator_overlay") != null:
+			enemy.set("has_mutator_overlay", false)
+		if enemy.get("mutator_icon_shape_id") != null:
+			enemy.set("mutator_icon_shape_id", "")
+		return
 	var is_affected: bool = false
 	var enemy_health_mult := ENCOUNTER_CONTRACTS.mutator_stat(applied_mutator, ENCOUNTER_CONTRACTS.MUTATOR_STAT_ENEMY_HEALTH_MULT, 1.0)
 	if not is_equal_approx(enemy_health_mult, 1.0):
@@ -291,7 +332,6 @@ func _apply_enemy_mutator(enemy: CharacterBody2D, enemy_script: Script) -> void:
 		var scaled_max_health := maxi(1, int(round(float(base_max_health) * enemy_health_mult)))
 		enemy.set_max_health_and_current(scaled_max_health, scaled_max_health)
 		is_affected = true
-	var enemy_key := _enemy_script_key(enemy_script)
 	var specs := ENEMY_MUTATOR_STAT_MAP.get(enemy_key, []) as Array
 	is_affected = _apply_mutator_specs(enemy, applied_mutator, specs) or is_affected
 
@@ -300,6 +340,8 @@ func _apply_enemy_mutator(enemy: CharacterBody2D, enemy_script: Script) -> void:
 		enemy.set("has_mutator_overlay", is_affected)
 	if enemy.get("mutator_theme_color") != null:
 		enemy.set("mutator_theme_color", ENCOUNTER_CONTRACTS.mutator_theme_color(applied_mutator, Color(1.0, 0.4, 0.4, 1.0)))
+	if enemy.get("mutator_icon_shape_id") != null:
+		enemy.set("mutator_icon_shape_id", ENCOUNTER_CONTRACTS.mutator_icon_shape_id(applied_mutator))
 
 func _pick_spawn_position_in_current_room(min_player_distance: float = -1.0, min_enemy_spacing: float = 86.0) -> Vector2:
 	if rng == null:

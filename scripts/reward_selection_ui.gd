@@ -12,6 +12,7 @@ const MUTATOR_ICON_KILLBOX_PATH := "res://assets/ui/mutators/killbox.svg"
 const MUTATOR_ICON_COMBO_RELAY_PATH := "res://assets/ui/mutators/combo_relay.svg"
 const MUTATOR_ICON_CONVERGENCE_PATH := "res://assets/ui/mutators/convergence.svg"
 const MUTATOR_ICON_CONFLAGRATION_PATH := "res://assets/ui/mutators/conflagration.svg"
+const MUTATOR_ICON_TETHER_WEB_PATH := "res://assets/ui/mutators/tether_web.svg"
 
 signal reward_selected(choice: Dictionary, mode: int, is_initial: bool)
 signal reward_offers_presented(offers: Array[Dictionary], mode: int, is_initial: bool, stage: int)
@@ -52,6 +53,7 @@ var _mutator_icon_hunters_focus: Texture2D
 var _mutator_icon_combo_relay: Texture2D
 var _mutator_icon_convergence: Texture2D
 var _mutator_icon_conflagration: Texture2D
+var _mutator_icon_tether_web: Texture2D
 const EPITAPH_COLOR_COOL := Color(0.72, 0.86, 1.0, 0.9)
 const EPITAPH_COLOR_WARM := Color(1.0, 0.95, 0.84, 1.0)
 const EPITAPH_PULSE_SPEED := 2.1
@@ -782,6 +784,8 @@ func _get_mutator_icon_texture(icon_shape_id: String) -> Texture2D:
 			return _get_convergence_icon_texture()
 		"conflagration":
 			return _get_conflagration_icon_texture()
+		"tether_web":
+			return _get_tether_web_icon_texture()
 		_:
 			return null
 
@@ -838,3 +842,12 @@ func _get_conflagration_icon_texture() -> Texture2D:
 		_mutator_icon_conflagration = icon_resource as Texture2D
 		return _mutator_icon_conflagration
 	return MUTATOR_ICON_SIEGEBREAK
+
+func _get_tether_web_icon_texture() -> Texture2D:
+	if _mutator_icon_tether_web != null:
+		return _mutator_icon_tether_web
+	var icon_resource := load(MUTATOR_ICON_TETHER_WEB_PATH)
+	if icon_resource is Texture2D:
+		_mutator_icon_tether_web = icon_resource as Texture2D
+		return _mutator_icon_tether_web
+	return _get_convergence_icon_texture()

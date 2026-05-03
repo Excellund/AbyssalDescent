@@ -12,9 +12,11 @@ const STATE_RECOVER := 3
 @export var deceleration: float = 1140.0
 @export var preferred_range: float = 176.0
 @export var range_tolerance: float = 40.0
-@export var beam_thickness: float = 18.0
+@export var partner_refresh_interval: float = 0.22
+@export var partner_switch_margin: float = 34.0
+@export var beam_thickness: float = 24.0
 @export var beam_damage: int = 9
-@export var beam_tick_interval: float = 0.34
+@export var beam_tick_interval: float = 0.2
 @export var beam_windup_time: float = 0.78
 @export var beam_duration: float = 2.1
 @export var beam_cooldown: float = 3.0
@@ -26,6 +28,12 @@ var beam_cooldown_left: float = 0.0
 var beam_tick_left: float = 0.0
 var beam_partner: CharacterBody2D
 var _orbit_sign: float = 1.0
+var _partner_refresh_left: float = 0.0
+var _last_beam_sample_target_position: Vector2 = Vector2.ZERO
+var _has_last_beam_sample_target_position: bool = false
+var _last_beam_sample_a: Vector2 = Vector2.ZERO
+var _last_beam_sample_b: Vector2 = Vector2.ZERO
+var _has_last_beam_sample_segment: bool = false
 
 func _ready() -> void:
 	super()
@@ -40,10 +48,17 @@ func is_tether_enemy() -> bool:
 func is_beam_state_active() -> bool:
 	return tether_state == STATE_BEAM
 
+func is_on_kill_run() -> bool:
+	if tether_state == STATE_BEAM or tether_state == STATE_WINDUP:
+		return true
+	if _is_valid_tether_partner(beam_partner) and beam_partner.has_method("is_beam_state_active") and bool(beam_partner.call("is_beam_state_active")):
+		return true
+	return false
+
 func _process_behavior(delta: float) -> void:
 	if beam_cooldown_left > 0.0:
 		beam_cooldown_left = maxf(0.0, beam_cooldown_left - delta)
-	beam_partner = _find_beam_partner()
+	_update_beam_partner(delta)
 	match tether_state:
 		STATE_STALK:
 			_process_stalk(delta)
@@ -54,16 +69,59 @@ func _process_behavior(delta: float) -> void:
 		STATE_RECOVER:
 			_process_recover(delta)
 
+func _update_beam_partner(delta: float) -> void:
+	_partner_refresh_left = maxf(0.0, _partner_refresh_left - delta)
+	if tether_state == STATE_WINDUP or tether_state == STATE_BEAM:
+		if _is_valid_tether_partner(beam_partner):
+			return
+		beam_partner = _find_beam_partner()
+		return
+	if _partner_refresh_left > 0.0 and _is_valid_tether_partner(beam_partner):
+		return
+	beam_partner = _find_beam_partner_with_hysteresis(beam_partner)
+	_partner_refresh_left = partner_refresh_interval
+
+func _is_valid_tether_partner(candidate: Variant) -> bool:
+	if typeof(candidate) != TYPE_OBJECT:
+		return false
+	if not is_instance_valid(candidate):
+		return false
+	var candidate_body := candidate as CharacterBody2D
+	if candidate_body == null:
+		return false
+	if candidate_body == self:
+		return false
+	if not candidate_body.has_method("is_tether_enemy"):
+		return false
+	return bool(candidate_body.call("is_tether_enemy"))
+
+func _find_beam_partner_with_hysteresis(current_partner: Variant) -> CharacterBody2D:
+	var nearest := _find_beam_partner()
+	if not _is_valid_tether_partner(current_partner):
+		return nearest
+	var current_partner_body := current_partner as CharacterBody2D
+	if current_partner_body == null:
+		return nearest
+	if nearest == null or nearest == current_partner:
+		return current_partner_body
+	var current_distance := global_position.distance_to(current_partner_body.global_position)
+	var nearest_distance := global_position.distance_to(nearest.global_position)
+	if nearest_distance + partner_switch_margin < current_distance:
+		return nearest
+	return current_partner_body
+
 func _find_beam_partner() -> CharacterBody2D:
 	var nearest: CharacterBody2D = null
 	var nearest_distance := INF
 	for enemy in get_tree().get_nodes_in_group("enemies"):
-		if enemy == self or not (enemy is CharacterBody2D):
+		if not is_instance_valid(enemy):
+			continue
+		if enemy == self:
 			continue
 		var enemy_body := enemy as CharacterBody2D
-		if not enemy_body.has_method("is_tether_enemy"):
+		if enemy_body == null:
 			continue
-		if not bool(enemy_body.call("is_tether_enemy")):
+		if not _is_valid_tether_partner(enemy_body):
 			continue
 		var distance := global_position.distance_to(enemy_body.global_position)
 		if distance >= nearest_distance:
@@ -76,11 +134,144 @@ func _is_primary_pair() -> bool:
 	return is_instance_valid(beam_partner) and get_instance_id() < beam_partner.get_instance_id()
 
 func _process_stalk(delta: float) -> void:
-	var desired := _orbit_desired_velocity() * slow_speed_mult
+	var desired := _stalk_desired_velocity() * slow_speed_mult
 	velocity = velocity.move_toward(desired, (acceleration if desired != Vector2.ZERO else deceleration) * delta)
 	move_and_slide()
 	if beam_cooldown_left <= 0.0 and _is_primary_pair():
 		_enter_windup_state()
+
+func _stalk_desired_velocity() -> Vector2:
+	if not is_instance_valid(target):
+		return Vector2.ZERO
+	if _is_valid_tether_partner(beam_partner) and beam_partner.has_method("is_beam_state_active") and bool(beam_partner.call("is_beam_state_active")):
+		return _beam_crossing_support_velocity()
+	return _web_desired_velocity()
+
+func _beam_crossing_support_velocity() -> Vector2:
+	var player_pos := target.global_position
+	var partner_pos := beam_partner.global_position
+	var from_partner := player_pos - partner_pos
+	if from_partner.length_squared() <= 0.000001:
+		return Vector2.ZERO
+	var cross_anchor := player_pos + from_partner.normalized() * (preferred_range * 1.45)
+	var to_cross := cross_anchor - global_position
+	if to_cross.length_squared() <= 0.000001:
+		return Vector2.ZERO
+	return to_cross.normalized() * move_speed * slow_speed_mult
+
+func _web_desired_velocity() -> Vector2:
+	var player_pos := target.global_position
+	var to_player := player_pos - global_position
+	if to_player.length_squared() <= 0.000001:
+		return Vector2.ZERO
+	var player_dist := to_player.length()
+	var to_player_dir := to_player / player_dist
+
+	# Slots are anchored far out to fill the arena — not a ring around the player
+	var ring_radius := preferred_range * 3.6
+	var slot_target := _hivemind_slot_position(player_pos, ring_radius)
+	var to_slot := slot_target - global_position
+	var desired_vec := Vector2.ZERO
+	if to_slot.length_squared() > 0.000001:
+		desired_vec += to_slot.normalized() * 1.1
+
+	# Repulsion from peers is the dominant spreading force
+	desired_vec += _tether_group_repulsion()
+
+	# Only hard-push if the player walks directly underneath
+	if player_dist < preferred_range * 0.7:
+		desired_vec += (-to_player_dir) * 2.2
+
+	# Partner spacing — keep beam pairs linkable but not fused
+	if _is_valid_tether_partner(beam_partner):
+		var partner_dist := global_position.distance_to(beam_partner.global_position)
+		var min_partner_dist := preferred_range * 1.2
+		var max_partner_dist := preferred_range * 3.2
+		if partner_dist < min_partner_dist:
+			var away := global_position - beam_partner.global_position
+			if away.length_squared() > 0.000001:
+				desired_vec += (away / partner_dist) * 1.8
+		elif partner_dist > max_partner_dist:
+			var toward_partner := beam_partner.global_position - global_position
+			if toward_partner.length_squared() > 0.000001:
+				desired_vec += toward_partner.normalized() * 0.6
+
+	if desired_vec.length_squared() <= 0.000001:
+		return Vector2.ZERO
+	return desired_vec.normalized() * move_speed
+
+func _hivemind_slot_position(player_pos: Vector2, ring_radius: float) -> Vector2:
+	var tether_total: int = _count_tether_enemies()
+	var slot_count: int = clampi(tether_total, 4, 12)
+	var slot_index: int = absi(int(get_instance_id())) % slot_count
+	var time_s := float(Time.get_ticks_msec()) * 0.001
+	# Each slot drifts on its own slow sine so slots don't all pulse in/out together
+	var drift := 0.5 + 0.5 * sin(time_s * 0.55 + float(slot_index) * 1.1)
+	var spread_mult := lerpf(0.7, 1.0, drift)
+	var angle := (TAU * float(slot_index) / float(slot_count)) + sin(time_s * 0.3 + float(slot_index) * 0.9) * 0.22
+	return player_pos + Vector2(cos(angle), sin(angle)) * ring_radius * spread_mult
+
+func _count_tether_enemies() -> int:
+	var total := 0
+	for enemy in get_tree().get_nodes_in_group("enemies"):
+		if not is_instance_valid(enemy):
+			continue
+		var enemy_body := enemy as CharacterBody2D
+		if enemy_body == null:
+			continue
+		if enemy_body == self:
+			total += 1
+			continue
+		if not _is_valid_tether_partner(enemy_body):
+			continue
+		total += 1
+	return maxi(1, total)
+
+func _tether_group_repulsion() -> Vector2:
+	# Kill-committed tethers (beaming or crossing support) don't get pushed off their aim.
+	if is_on_kill_run():
+		return Vector2.ZERO
+	var repel_sum := Vector2.ZERO
+	var contributors := 0
+	var spacing_radius := preferred_range * 3.2
+	for enemy in get_tree().get_nodes_in_group("enemies"):
+		if not is_instance_valid(enemy):
+			continue
+		if enemy == self:
+			continue
+		var enemy_body := enemy as CharacterBody2D
+		if enemy_body == null:
+			continue
+		if not _is_valid_tether_partner(enemy_body):
+			continue
+		var offset := global_position - enemy_body.global_position
+		var distance := offset.length()
+		if distance < 0.000001 or distance >= spacing_radius:
+			continue
+		var push_scale := clampf((spacing_radius - distance) / maxf(1.0, spacing_radius), 0.0, 1.0)
+		# Idle tethers spread much harder away from kill-committed pairs.
+		var enemy_on_kill_run := enemy_body.has_method("is_on_kill_run") and bool(enemy_body.call("is_on_kill_run"))
+		var push_strength := 3.2 if enemy_on_kill_run else 2.4
+		repel_sum += (offset / distance) * (push_strength * push_scale)
+		contributors += 1
+	if contributors <= 0:
+		return Vector2.ZERO
+	return repel_sum / float(contributors)
+
+func _beam_aim_velocity() -> Vector2:
+	if not is_instance_valid(target) or not _is_valid_tether_partner(beam_partner):
+		return _orbit_desired_velocity()
+	var player_pos := target.global_position
+	var partner_pos := beam_partner.global_position
+	var from_partner := player_pos - partner_pos
+	if from_partner.length_squared() <= 0.000001:
+		return _orbit_desired_velocity()
+	# Move to the opposite side of the player from our partner so the beam segment crosses through them
+	var aim_pos := player_pos + from_partner.normalized() * (preferred_range * 1.45)
+	var to_aim := aim_pos - global_position
+	if to_aim.length_squared() <= 0.000001:
+		return Vector2.ZERO
+	return to_aim.normalized() * move_speed * 1.1 * slow_speed_mult
 
 func _orbit_desired_velocity() -> Vector2:
 	if not is_instance_valid(target):
@@ -119,10 +310,21 @@ func _enter_beam_state() -> void:
 	tether_state = STATE_BEAM
 	state_time_left = beam_duration
 	beam_tick_left = 0.0
+	if is_instance_valid(target):
+		_last_beam_sample_target_position = target.global_position
+		_has_last_beam_sample_target_position = true
+	else:
+		_has_last_beam_sample_target_position = false
+	if is_instance_valid(beam_partner):
+		_last_beam_sample_a = global_position
+		_last_beam_sample_b = beam_partner.global_position
+		_has_last_beam_sample_segment = true
+	else:
+		_has_last_beam_sample_segment = false
 	queue_redraw()
 
 func _process_beam(delta: float) -> void:
-	velocity = velocity.move_toward(_orbit_desired_velocity() * 0.82 * slow_speed_mult, acceleration * delta)
+	velocity = velocity.move_toward(_beam_aim_velocity(), acceleration * delta)
 	move_and_slide()
 	if not _is_primary_pair():
 		_enter_recover_state()
@@ -139,16 +341,58 @@ func _process_beam(delta: float) -> void:
 func _try_apply_beam_damage() -> void:
 	if not is_instance_valid(target) or not is_instance_valid(beam_partner):
 		return
-	var closest := Geometry2D.get_closest_point_to_segment(target.global_position, global_position, beam_partner.global_position)
-	if closest.distance_to(target.global_position) > beam_thickness:
+	var target_pos := target.global_position
+	var current_beam_a := global_position
+	var current_beam_b := beam_partner.global_position
+	var sweep_start := target_pos
+	if _has_last_beam_sample_target_position:
+		sweep_start = _last_beam_sample_target_position
+	var nearest_distance := _segment_to_segment_distance(sweep_start, target_pos, current_beam_a, current_beam_b)
+	if _has_last_beam_sample_segment:
+		nearest_distance = minf(nearest_distance, _moving_beam_sweep_nearest_distance(sweep_start, target_pos, _last_beam_sample_a, _last_beam_sample_b, current_beam_a, current_beam_b))
+	_last_beam_sample_target_position = target_pos
+	_has_last_beam_sample_target_position = true
+	_last_beam_sample_a = current_beam_a
+	_last_beam_sample_b = current_beam_b
+	_has_last_beam_sample_segment = true
+	if nearest_distance > beam_thickness:
 		return
 	if DAMAGEABLE.apply_damage(target, beam_damage, {"source": "enemy_ability", "ability": "tether_beam_tick"}):
 		attack_anim_time_left = attack_anim_duration
+
+func _distance_to_segment(point: Vector2, seg_a: Vector2, seg_b: Vector2) -> float:
+	var closest := Geometry2D.get_closest_point_to_segment(point, seg_a, seg_b)
+	return closest.distance_to(point)
+
+func _segment_to_segment_distance(a0: Vector2, a1: Vector2, b0: Vector2, b1: Vector2) -> float:
+	if Geometry2D.segment_intersects_segment(a0, a1, b0, b1) != null:
+		return 0.0
+	var nearest := _distance_to_segment(a0, b0, b1)
+	nearest = minf(nearest, _distance_to_segment(a1, b0, b1))
+	nearest = minf(nearest, _distance_to_segment(b0, a0, a1))
+	nearest = minf(nearest, _distance_to_segment(b1, a0, a1))
+	return nearest
+
+func _moving_beam_sweep_nearest_distance(player_from: Vector2, player_to: Vector2, beam_prev_a: Vector2, beam_prev_b: Vector2, beam_current_a: Vector2, beam_current_b: Vector2) -> float:
+	var player_path_length := player_from.distance_to(player_to)
+	var beam_motion := maxf(beam_prev_a.distance_to(beam_current_a), beam_prev_b.distance_to(beam_current_b))
+	var sample_budget := maxf(player_path_length, beam_motion)
+	var sample_step := maxf(beam_thickness * 0.4, 6.0)
+	var steps := maxi(2, mini(24, int(ceil(sample_budget / sample_step))))
+	var nearest := INF
+	for i in range(0, steps + 1):
+		var t := float(i) / float(steps)
+		var beam_a := beam_prev_a.lerp(beam_current_a, t)
+		var beam_b := beam_prev_b.lerp(beam_current_b, t)
+		nearest = minf(nearest, _segment_to_segment_distance(player_from, player_to, beam_a, beam_b))
+	return nearest
 
 func _enter_recover_state() -> void:
 	tether_state = STATE_RECOVER
 	state_time_left = recover_time
 	beam_cooldown_left = beam_cooldown
+	_has_last_beam_sample_target_position = false
+	_has_last_beam_sample_segment = false
 
 func _process_recover(delta: float) -> void:
 	velocity = velocity.move_toward(_orbit_desired_velocity() * 0.4 * slow_speed_mult, deceleration * delta)
@@ -230,15 +474,16 @@ func _draw() -> void:
 		var partner_local := beam_partner.global_position - global_position
 		var alpha := 0.22
 		var width := 1.6
+		var beam_visual_width := clampf(beam_thickness * 0.48, 3.6, 14.0)
 		if tether_state == STATE_WINDUP:
 			alpha = 0.46
 			width = 2.2
 		elif beam_link_active:
 			alpha = 0.9
-			width = 4.4
+			width = beam_visual_width
 		draw_line(Vector2.ZERO, partner_local, Color(0.46, 0.94, 1.0, alpha), width)
 		draw_line(side * anchor_offset, partner_local, Color(0.66, 0.96, 1.0, alpha * 0.35), 1.2)
 		draw_line(-side * anchor_offset, partner_local, Color(0.66, 0.96, 1.0, alpha * 0.35), 1.2)
 		if beam_link_active:
-			draw_line(Vector2.ZERO, partner_local, Color(0.92, 1.0, 1.0, 0.52), 1.8)
+			draw_line(Vector2.ZERO, partner_local, Color(0.92, 1.0, 1.0, 0.52), maxf(1.8, beam_visual_width * 0.34))
 	_draw_slow_indicator(body_radius)

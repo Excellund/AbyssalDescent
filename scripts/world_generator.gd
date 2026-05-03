@@ -565,6 +565,8 @@ func _debug_mutator_key(state_value: int) -> String:
 			return "convergence"
 		DEBUG_ENUMS.MutatorOverride.CONFLAGRATION:
 			return "conflagration"
+		DEBUG_ENUMS.MutatorOverride.TETHER_WEB:
+			return "tether_web"
 		DEBUG_ENUMS.MutatorOverride.RANDOM_HARD:
 			return "random_hard"
 		_:

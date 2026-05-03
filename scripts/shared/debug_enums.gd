@@ -10,6 +10,7 @@ enum MutatorOverride {
 	KILLBOX,
 	PHASE_COLLAPSE,
 	CONFLAGRATION,
+	TETHER_WEB,
 	RANDOM_HARD,
 }
 

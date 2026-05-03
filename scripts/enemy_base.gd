@@ -103,6 +103,7 @@ var slow_time_left: float = 0.0
 var slow_speed_mult: float = 1.0
 var has_mutator_overlay: bool = false
 var mutator_theme_color: Color = Color(1.0, 0.4, 0.4, 1.0)
+var mutator_icon_shape_id: String = ""
 var damage_blocked: bool = false
 var dread_resonance_visual_stacks: int = 0
 var dread_resonance_visual_max_stacks: int = 3
@@ -622,11 +623,23 @@ func _draw_mutator_overlay(body_radius: float) -> void:
 		return
 	var t := float(Time.get_ticks_msec()) * 0.001
 	var pulse := 0.5 + 0.5 * sin(t * 3.4)
-	# Outer ring: theme-colored, slow pulse — persistent identity marker
+	if mutator_icon_shape_id == "tether_web":
+		var fill_color := mutator_theme_color
+		fill_color.a = 0.10 + pulse * 0.07
+		draw_circle(Vector2.ZERO, body_radius + 13.0, fill_color)
+		var ring_color := mutator_theme_color
+		ring_color.a = 0.62 + pulse * 0.28
+		draw_arc(Vector2.ZERO, body_radius + 11.0, 0.0, TAU, 48, ring_color, 2.8)
+		for i in range(4):
+			var angle := t * 0.85 + float(i) * TAU / 4.0
+			var dir := Vector2(cos(angle), sin(angle))
+			var spoke_color := mutator_theme_color
+			spoke_color.a = 0.55 + pulse * 0.3
+			draw_line(Vector2.ZERO, dir * (body_radius + 14.0), spoke_color, 1.8)
+		return
 	var ring_color := mutator_theme_color
 	ring_color.a = 0.44 + pulse * 0.22
 	draw_arc(Vector2.ZERO, body_radius + 9.0, 0.0, TAU, 32, ring_color, 2.2)
-	# Inner accent fill: very subtle so role silhouette stays primary
 	var fill_color := mutator_theme_color
 	fill_color.a = 0.06 + pulse * 0.04
 	draw_circle(Vector2.ZERO, body_radius + 8.0, fill_color)

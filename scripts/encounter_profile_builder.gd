@@ -540,6 +540,8 @@ func _pick_trial_base_profile(mutator: Dictionary) -> Dictionary:
 			return _build_profile("Convergence", POOL_ROOM_SIZE, 3, 0, 0, 0)
 		"conflagration":
 			return _build_profile("Onslaught", POOL_ROOM_SIZE, 6, 2, 0, 0)
+		"tether_web":
+			return _build_profile("Convergence", POOL_ROOM_SIZE, 2, 0, 0, 1)
 		_:
 			return hard_pool[rng.randi_range(0, hard_pool.size() - 1)]
 
@@ -594,6 +596,13 @@ func _trial_specialist_counts(mutator: Dictionary, depth: int, chasers: int, cha
 				"chargers": maxi(2, chargers),
 				"archers": 0,
 				"shielders": 0
+			}
+		"tether_web":
+			return {
+				"chasers": maxi(2, chasers),
+				"chargers": 0,
+				"archers": 0,
+				"shielders": mini(1, shielders)
 			}
 		_:
 			return {
@@ -650,6 +659,9 @@ func _apply_trial_elite_conversion(mutator: Dictionary, depth: int, tier: int, b
 		"conflagration":
 			mins["chasers"] = 4
 			mins["chargers"] = 2
+		"tether_web":
+			mins["chasers"] = 1
+			mins["shielders"] = 0
 	var reduction_order: Array[String] = ["chasers", "chargers", "archers", "shielders"]
 	match icon:
 		"iron_volley":
@@ -664,6 +676,8 @@ func _apply_trial_elite_conversion(mutator: Dictionary, depth: int, tier: int, b
 			reduction_order = ["chasers", "chargers", "archers", "shielders"]
 		"conflagration":
 			reduction_order = ["chasers", "chargers", "archers", "shielders"]
+		"tether_web":
+			reduction_order = ["shielders", "archers", "chargers", "chasers"]
 	var adjusted := {
 		"chasers": int(base_counts.get("chasers", 0)),
 		"chargers": int(base_counts.get("chargers", 0)),
@@ -727,6 +741,18 @@ func _trial_specialist_enemies(mutator: Dictionary, depth: int, tier: int = BEAR
 			lancer_count = 0
 			pyre_count = 2 + int(floor(float(maxi(0, effective_depth - 3)) * 0.4))
 			tether_count = 2 if effective_depth >= 8 else 0
+		"tether_web":
+			lurker_count = 0
+			ram_count = 0
+			lancer_count = 0
+			spectre_count = 0
+			pyre_count = 0
+			var tether_pairs := 2 + int(floor(float(maxi(0, effective_depth - 2)) * 0.5))
+			if tier >= BEARING_ENUMS.BearingTier.HARBINGER:
+				tether_pairs += 1
+			if tier == BEARING_ENUMS.BearingTier.FORSWORN and effective_depth >= 8:
+				tether_pairs += 1
+			tether_count = tether_pairs * 2
 	lurker_count = int(floor(float(maxi(0, lurker_count)) * specialist_pressure_mult))
 	ram_count = int(floor(float(maxi(0, ram_count)) * specialist_pressure_mult))
 	lancer_count = int(floor(float(maxi(0, lancer_count)) * specialist_pressure_mult))
@@ -1076,5 +1102,17 @@ func _hard_mutator_pool() -> Array[Dictionary]:
 			C.MUTATOR_STAT_CHASER_SPEED_MULT: 1.08,
 			C.MUTATOR_STAT_PYRE_FIELD_RADIUS_MULT: 1.22,
 			C.MUTATOR_STAT_PYRE_FIELD_DURATION_MULT: 1.55
+		},
+		{
+			C.MUTATOR_KEY_NAME: "Tether Web",
+			C.MUTATOR_KEY_THEME_COLOR: Color(0.34, 0.84, 1.0, 1.0),
+			C.MUTATOR_KEY_ICON_SHAPE_ID: "tether_web",
+			"affected_archetypes": ["tether"],
+			C.MUTATOR_KEY_BANNER_SUFFIX: "Tether links surge and sweep, turning safe lanes into kill corridors",
+			C.MUTATOR_KEY_ENEMY_TINT: Color(0.84, 0.96, 1.0, 1.0),
+			C.MUTATOR_STAT_ENEMY_HEALTH_MULT: 1.14,
+			C.MUTATOR_STAT_ARCHER_WINDUP_MULT: 0.46,
+			C.MUTATOR_STAT_ARCHER_COOLDOWN_MULT: 0.54,
+			C.MUTATOR_STAT_CHASER_SPEED_MULT: 1.2
 		}
 	]

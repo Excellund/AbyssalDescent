@@ -9,6 +9,7 @@ const MUTATOR_ICON_SIEGEBREAK: Texture2D = preload("res://assets/ui/mutators/sie
 const MUTATOR_ICON_IRON_VOLLEY: Texture2D = preload("res://assets/ui/mutators/iron_volley.svg")
 const MUTATOR_ICON_CONVERGENCE: Texture2D = preload("res://assets/ui/mutators/convergence.svg")
 const MUTATOR_ICON_CONFLAGRATION: Texture2D = preload("res://assets/ui/mutators/conflagration.svg")
+const MUTATOR_ICON_TETHER_WEB: Texture2D = preload("res://assets/ui/mutators/tether_web.svg")
 
 # Draw state — updated each frame by world_generator
 var room_size: Vector2 = Vector2.ZERO
@@ -428,6 +429,13 @@ func _draw_mutator_identity_motion(door_pos: Vector2, theme: Color, shape_id: St
 				var tip := door_pos + Vector2.RIGHT.rotated(flame_phase + 0.16 * sin(spin + float(i))) * (18.0 + 3.0 * pulse)
 				draw_line(base, tip, Color(accent.r, accent.g, accent.b, 0.8), 2.4)
 				draw_circle(base, 2.4, Color(accent.r, accent.g, accent.b, 0.54))
+		"tether_web":
+			for i in range(3):
+				var node_angle := spin * 0.78 + float(i) * TAU / 3.0
+				var node_pos := door_pos + Vector2.RIGHT.rotated(node_angle) * (16.0 + 2.0 * pulse)
+				draw_line(door_pos, node_pos, Color(accent.r, accent.g, accent.b, 0.74), 2.0)
+				draw_circle(node_pos, 2.3, Color(accent.r, accent.g, accent.b, 0.84))
+			draw_arc(door_pos, 11.0 + pulse * 2.2, spin * 0.45, spin * 0.45 + TAU * 0.82, 26, Color(accent.r, accent.g, accent.b, 0.66), 1.8)
 		_:
 			draw_arc(door_pos, 20.0 + 3.0 * pulse, spin, spin + 0.9, 18, Color(accent.r, accent.g, accent.b, 0.7), 2.2)
 
@@ -770,6 +778,18 @@ func _draw_trial_mutator_icon(door_pos: Vector2, shape_id: String, theme: Color,
 			])
 			draw_colored_polygon(flame_inner, theme)
 
+		"tether_web":
+			var tri_a := door_pos + Vector2(0.0, -9.0)
+			var tri_b := door_pos + Vector2(8.0, 5.0)
+			var tri_c := door_pos + Vector2(-8.0, 5.0)
+			draw_polyline(PackedVector2Array([tri_a, tri_b, tri_c, tri_a]), outline_color, 4.0)
+			draw_polyline(PackedVector2Array([tri_a, tri_b, tri_c, tri_a]), theme, 2.2)
+			draw_line(door_pos, tri_a, Color(theme.r, theme.g, theme.b, 0.76), 1.6)
+			draw_line(door_pos, tri_b, Color(theme.r, theme.g, theme.b, 0.76), 1.6)
+			draw_line(door_pos, tri_c, Color(theme.r, theme.g, theme.b, 0.76), 1.6)
+			draw_circle(door_pos, 2.2, outline_color)
+			draw_circle(door_pos, 1.3, theme)
+
 		_:
 			var top := door_pos + Vector2(0.0, -10.0)
 			var right := door_pos + Vector2(10.0, 0.0)
@@ -795,5 +815,7 @@ func _get_mutator_icon_texture(icon_shape_id: String) -> Texture2D:
 			return MUTATOR_ICON_CONVERGENCE
 		"conflagration":
 			return MUTATOR_ICON_CONFLAGRATION
+		"tether_web":
+			return MUTATOR_ICON_TETHER_WEB
 		_:
 			return null

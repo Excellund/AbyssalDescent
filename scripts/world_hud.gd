@@ -10,6 +10,7 @@ const MUTATOR_ICON_FORTIFIED_PATH := "res://assets/ui/mutators/fortified.svg"
 const MUTATOR_ICON_HUNTERS_FOCUS_PATH := "res://assets/ui/mutators/hunters_focus.svg"
 const MUTATOR_ICON_KILLBOX_PATH := "res://assets/ui/mutators/killbox.svg"
 const MUTATOR_ICON_COMBO_RELAY_PATH := "res://assets/ui/mutators/combo_relay.svg"
+const MUTATOR_ICON_TETHER_WEB_PATH := "res://assets/ui/mutators/tether_web.svg"
 const HUD_INFO_PANEL_WIDTH := 302.0
 
 var status_panel: Panel
@@ -31,6 +32,7 @@ var _mutator_icon_killbox: Texture2D
 var _mutator_icon_fortified: Texture2D
 var _mutator_icon_hunters_focus: Texture2D
 var _mutator_icon_combo_relay: Texture2D
+var _mutator_icon_tether_web: Texture2D
 
 var build_strip_panel: Panel
 var build_strip_content: VBoxContainer
@@ -1060,6 +1062,8 @@ func _get_mutator_icon_texture(icon_shape_id: String) -> Texture2D:
 			return _get_combo_relay_icon_texture()
 		"breach_momentum":
 			return _get_combo_relay_icon_texture()
+		"tether_web":
+			return _get_tether_web_icon_texture()
 		_:
 			return null
 
@@ -1099,3 +1103,12 @@ func _get_combo_relay_icon_texture() -> Texture2D:
 		_mutator_icon_combo_relay = icon_resource as Texture2D
 		return _mutator_icon_combo_relay
 	return _get_hunters_focus_icon_texture()
+
+func _get_tether_web_icon_texture() -> Texture2D:
+	if _mutator_icon_tether_web != null:
+		return _mutator_icon_tether_web
+	var icon_resource := load(MUTATOR_ICON_TETHER_WEB_PATH)
+	if icon_resource is Texture2D:
+		_mutator_icon_tether_web = icon_resource as Texture2D
+		return _mutator_icon_tether_web
+	return MUTATOR_ICON_FLASHPOINT
