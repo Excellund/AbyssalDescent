@@ -1847,7 +1847,7 @@ func _play_room_music(is_boss_room: bool, instant: bool = false, fade_duration: 
 func _on_room_enemy_died(kill_pos: Vector2 = Vector2.ZERO) -> void:
 	active_room_enemy_count = maxi(0, active_room_enemy_count - 1)
 	_apply_objective_engagement_bonus_on_kill(kill_pos)
-	if active_objective_kind == "last_stand":
+	if active_objective_kind == "last_stand" or active_objective_kind == "hold_the_line":
 		objective_kills += 1
 	if active_objective_kind == "cut_the_signal" and is_instance_valid(objective_target_enemy):
 		if objective_exposure_left <= 0.0:

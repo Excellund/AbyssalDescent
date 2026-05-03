@@ -495,7 +495,7 @@ func _update_status_panel_text(state: Dictionary) -> void:
 		var control_seconds := maxi(0, int(ceil(objective_time_left)))
 		var control_goal := maxf(0.01, objective_control_goal)
 		var control_ratio := clampf(objective_control_progress / control_goal, 0.0, 1.0)
-		if objective_overtime:
+		if objective_overtime or objective_time_left <= 0.0:
 			status_label.text += "\n[center][color=#FFB36D]Objective: Hold the Line  %d%% secured[/color][/center]" % int(round(control_ratio * 100.0))
 		else:
 			status_label.text += "\n[center][color=#FCD77A]Objective: Hold %ds  Secure %d%%[/color][/center]" % [control_seconds, int(round(control_ratio * 100.0))]

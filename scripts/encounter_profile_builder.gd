@@ -43,126 +43,56 @@ const MUTATOR_DAMAGE_STAT_KEYS: Array[String] = [
 	ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_PROJECTILE_DAMAGE_MULT,
 	ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_DAMAGE_MULT
 ]
-const CONTROL_TUNING_BY_RANK := {
+const CONTROL_CURVE_MAX_EFFECTIVE_DEPTH := 12.0
+const CONTROL_CURVE_BY_RANK := {
 	0: {
-		"pressure_mult": 0.93,
-		"spawn_interval_bias": 0.24,
-		"radius_bias": 8.0,
-		"goal_bias": 0.95,
-		"decay_bias": 0.04
+		"pressure_mult_start": 0.93,
+		"pressure_mult_end": 0.88,
+		"spawn_interval_bias_start": 0.24,
+		"spawn_interval_bias_end": 0.32,
+		"radius_bias_start": 8.0,
+		"radius_bias_end": 0.0,
+		"goal_bias_start": 0.95,
+		"goal_bias_end": 0.75,
+		"decay_bias_start": 0.04,
+		"decay_bias_end": 0.025
 	},
 	1: {
-		"pressure_mult": 0.81,
-		"spawn_interval_bias": 0.24,
-		"radius_bias": 6.0,
-		"goal_bias": 0.15,
-		"decay_bias": -0.025
+		"pressure_mult_start": 0.84,
+		"pressure_mult_end": 0.73,
+		"spawn_interval_bias_start": 0.21,
+		"spawn_interval_bias_end": 0.36,
+		"radius_bias_start": 6.0,
+		"radius_bias_end": -14.0,
+		"goal_bias_start": 0.25,
+		"goal_bias_end": -0.25,
+		"decay_bias_start": -0.015,
+		"decay_bias_end": -0.055
 	},
 	2: {
-		"pressure_mult": 0.75,
-		"spawn_interval_bias": 0.16,
-		"radius_bias": 8.0,
-		"goal_bias": -0.28,
-		"decay_bias": -0.045
+		"pressure_mult_start": 0.77,
+		"pressure_mult_end": 0.66,
+		"spawn_interval_bias_start": 0.11,
+		"spawn_interval_bias_end": 0.3,
+		"radius_bias_start": 8.0,
+		"radius_bias_end": -8.0,
+		"goal_bias_start": -0.14,
+		"goal_bias_end": -0.6,
+		"decay_bias_start": -0.03,
+		"decay_bias_end": -0.075
 	},
 	3: {
-		"pressure_mult": 0.79,
-		"spawn_interval_bias": 0.16,
-		"radius_bias": 10.0,
-		"goal_bias": 0.05,
-		"decay_bias": -0.01
+		"pressure_mult_start": 0.79,
+		"pressure_mult_end": 0.75,
+		"spawn_interval_bias_start": 0.16,
+		"spawn_interval_bias_end": 0.26,
+		"radius_bias_start": 10.0,
+		"radius_bias_end": 8.0,
+		"goal_bias_start": 0.05,
+		"goal_bias_end": -0.03,
+		"decay_bias_start": -0.01,
+		"decay_bias_end": -0.025
 	}
-}
-const CONTROL_DEPTH_WINDOWS_BY_RANK := {
-	0: [
-		{
-			"start_depth": 9,
-			"end_depth": 12,
-			"pressure_bias": -0.05,
-			"spawn_interval_bias": 0.08,
-			"radius_bias": -8.0,
-			"goal_bias": -0.2,
-			"decay_bias": -0.015
-		}
-	],
-	1: [
-		{
-			"start_depth": 1,
-			"end_depth": 3,
-			"pressure_bias": 0.03,
-			"spawn_interval_bias": -0.03,
-			"radius_bias": 0.0,
-			"goal_bias": 0.1,
-			"decay_bias": 0.01
-		},
-		{
-			"start_depth": 6,
-			"end_depth": 9,
-			"pressure_bias": -0.08,
-			"spawn_interval_bias": 0.1,
-			"radius_bias": -4.0,
-			"goal_bias": -0.24,
-			"decay_bias": -0.02
-		},
-		{
-			"start_depth": 10,
-			"end_depth": 13,
-			"pressure_bias": -0.07,
-			"spawn_interval_bias": 0.12,
-			"radius_bias": -16.0,
-			"goal_bias": -0.45,
-			"decay_bias": -0.03
-		}
-	],
-	2: [
-		{
-			"start_depth": 1,
-			"end_depth": 3,
-			"pressure_bias": 0.02,
-			"spawn_interval_bias": -0.05,
-			"radius_bias": 0.0,
-			"goal_bias": 0.14,
-			"decay_bias": 0.015
-		},
-		{
-			"start_depth": 6,
-			"end_depth": 8,
-			"pressure_bias": -0.06,
-			"spawn_interval_bias": 0.1,
-			"radius_bias": -4.0,
-			"goal_bias": -0.24,
-			"decay_bias": -0.02
-		},
-		{
-			"start_depth": 9,
-			"end_depth": 12,
-			"pressure_bias": -0.05,
-			"spawn_interval_bias": 0.08,
-			"radius_bias": -10.0,
-			"goal_bias": -0.26,
-			"decay_bias": -0.02
-		}
-	],
-	3: [
-		{
-			"start_depth": 7,
-			"end_depth": 10,
-			"pressure_bias": -0.03,
-			"spawn_interval_bias": 0.05,
-			"radius_bias": -2.0,
-			"goal_bias": -0.08,
-			"decay_bias": -0.01
-		},
-		{
-			"start_depth": 11,
-			"end_depth": 14,
-			"pressure_bias": -0.04,
-			"spawn_interval_bias": 0.1,
-			"radius_bias": -2.0,
-			"goal_bias": -0.05,
-			"decay_bias": -0.015
-		}
-	]
 }
 
 var _bearing_definitions_cache: Dictionary = {}
@@ -862,14 +792,13 @@ func _build_priority_target_profile(depth: int) -> Dictionary:
 func _build_control_profile(depth: int) -> Dictionary:
 	var effective_depth := _effective_depth(depth)
 	var difficulty_rank := _difficulty_rank()
-	var rank_tuning := _control_rank_tuning(difficulty_rank)
-	var depth_tuning := _control_depth_tuning(difficulty_rank, depth)
-	var control_pressure_mult := float(rank_tuning.get("pressure_mult", 0.8)) + float(depth_tuning.get("pressure_bias", 0.0))
+	var control_tuning := _control_curve_tuning(difficulty_rank, effective_depth)
+	var control_pressure_mult := float(control_tuning.get("pressure_mult", 0.8))
 	var contest_threshold := 0
-	var tier_spawn_interval_bias := float(rank_tuning.get("spawn_interval_bias", 0.0)) + float(depth_tuning.get("spawn_interval_bias", 0.0))
-	var tier_radius_bias := float(rank_tuning.get("radius_bias", 0.0)) + float(depth_tuning.get("radius_bias", 0.0))
-	var tier_goal_bias := float(rank_tuning.get("goal_bias", 0.0)) + float(depth_tuning.get("goal_bias", 0.0))
-	var tier_decay_bias := float(rank_tuning.get("decay_bias", 0.0)) + float(depth_tuning.get("decay_bias", 0.0))
+	var tier_spawn_interval_bias := float(control_tuning.get("spawn_interval_bias", 0.0))
+	var tier_radius_bias := float(control_tuning.get("radius_bias", 0.0))
+	var tier_goal_bias := float(control_tuning.get("goal_bias", 0.0))
+	var tier_decay_bias := float(control_tuning.get("decay_bias", 0.0))
 	var room_size := Vector2(1000.0, 760.0)
 	var chasers := 2 + int(floor(float(effective_depth) * 0.32))
 	var chargers := 1 + int(floor(float(effective_depth) / 6.0)) if effective_depth >= 2 else 0
@@ -887,34 +816,33 @@ func _build_control_profile(depth: int) -> Dictionary:
 	ENCOUNTER_CONTRACTS.profile_set_control_objective(profile, duration, spawn_interval, spawn_batch, zone_radius, progress_goal, progress_decay, contest_threshold)
 	return _apply_bearing_count_scaling(profile, control_pressure_mult)
 
-func _control_rank_tuning(difficulty_rank: int) -> Dictionary:
-	if CONTROL_TUNING_BY_RANK.has(difficulty_rank):
-		return (CONTROL_TUNING_BY_RANK[difficulty_rank] as Dictionary).duplicate(true)
-	return (CONTROL_TUNING_BY_RANK[1] as Dictionary).duplicate(true)
-
-func _control_depth_tuning(difficulty_rank: int, depth: int) -> Dictionary:
-	var result := {
-		"pressure_bias": 0.0,
-		"spawn_interval_bias": 0.0,
-		"radius_bias": 0.0,
-		"goal_bias": 0.0,
-		"decay_bias": 0.0
+func _control_curve_tuning(difficulty_rank: int, effective_depth: int) -> Dictionary:
+	var rank_curve := _control_rank_curve(difficulty_rank)
+	var depth_curve := _control_depth_curve(effective_depth)
+	return {
+		"pressure_mult": _control_curve_value(rank_curve, "pressure_mult", depth_curve),
+		"spawn_interval_bias": _control_curve_value(rank_curve, "spawn_interval_bias", depth_curve),
+		"radius_bias": _control_curve_value(rank_curve, "radius_bias", depth_curve),
+		"goal_bias": _control_curve_value(rank_curve, "goal_bias", depth_curve),
+		"decay_bias": _control_curve_value(rank_curve, "decay_bias", depth_curve)
 	}
-	if not CONTROL_DEPTH_WINDOWS_BY_RANK.has(difficulty_rank):
-		return result
-	var windows := CONTROL_DEPTH_WINDOWS_BY_RANK[difficulty_rank] as Array
-	for window_variant in windows:
-		var window := window_variant as Dictionary
-		var start_depth := int(window.get("start_depth", 1))
-		var end_depth := int(window.get("end_depth", start_depth))
-		if depth < start_depth or depth > end_depth:
-			continue
-		result["pressure_bias"] = float(result.get("pressure_bias", 0.0)) + float(window.get("pressure_bias", 0.0))
-		result["spawn_interval_bias"] = float(result.get("spawn_interval_bias", 0.0)) + float(window.get("spawn_interval_bias", 0.0))
-		result["radius_bias"] = float(result.get("radius_bias", 0.0)) + float(window.get("radius_bias", 0.0))
-		result["goal_bias"] = float(result.get("goal_bias", 0.0)) + float(window.get("goal_bias", 0.0))
-		result["decay_bias"] = float(result.get("decay_bias", 0.0)) + float(window.get("decay_bias", 0.0))
-	return result
+
+func _control_rank_curve(difficulty_rank: int) -> Dictionary:
+	if CONTROL_CURVE_BY_RANK.has(difficulty_rank):
+		return (CONTROL_CURVE_BY_RANK[difficulty_rank] as Dictionary).duplicate(true)
+	return (CONTROL_CURVE_BY_RANK[1] as Dictionary).duplicate(true)
+
+func _control_depth_curve(effective_depth: int) -> float:
+	var normalized := clampf((float(maxi(1, effective_depth)) - 1.0) / maxf(1.0, CONTROL_CURVE_MAX_EFFECTIVE_DEPTH - 1.0), 0.0, 1.0)
+	var smoothed := normalized * normalized * (3.0 - 2.0 * normalized)
+	return pow(smoothed, 0.7)
+
+func _control_curve_value(rank_curve: Dictionary, key: String, depth_curve: float) -> float:
+	var start_key := "%s_start" % key
+	var end_key := "%s_end" % key
+	var start_value := float(rank_curve.get(start_key, 0.0))
+	var end_value := float(rank_curve.get(end_key, start_value))
+	return lerpf(start_value, end_value, depth_curve)
 
 func _normalize_route_context(route_context: Variant) -> Dictionary:
 	if route_context is Dictionary:

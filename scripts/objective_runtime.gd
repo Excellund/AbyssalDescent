@@ -91,10 +91,9 @@ class HoldTheLineConfig:
 	const SPAWN_INTERVAL_BASE = 1.36
 	const SPAWN_INTERVAL_CLAMP_MIN = 0.98
 	const SPAWN_INTERVAL_CLAMP_MAX = 1.24
-	const SPAWN_INTERVAL_OVERTIME_MULT = 0.985
-	const SPAWN_INTERVAL_OVERTIME_MIN = 1.34
-	const SPAWN_BATCH_OVERTIME_CAP = 3
-	const SPAWN_TIMER_OVERTIME = 1.0
+	const SPAWN_INTERVAL_RELIEF_PER_SECOND = 0.08
+	const SPAWN_INTERVAL_RELIEF_PER_KILL = 0.04
+	const SPAWN_INTERVAL_RELIEF_MAX_BONUS = 0.6
 	const SPAWN_ZONE_EXCLUSION_PADDING = 42.0
 
 # === COLORS ===
@@ -132,6 +131,10 @@ const VFX_MARKER_DIAMOND_SIZE = 8.0
 
 var world: Node
 var rng: RandomNumberGenerator
+var _control_relief_kills_applied: int = 0
+var _control_spawn_interval_base: float = 0.0
+var _control_spawn_interval_relief_cap: float = 0.0
+var _control_relief_phase_announced: bool = false
 
 func initialize(world_generator: Node, random_number_generator: RandomNumberGenerator) -> void:
 	world = world_generator
@@ -167,6 +170,10 @@ func _clear_all_objective_state() -> void:
 	world.objective_control_enemies_in_zone = 0
 	world.objective_control_player_inside = false
 	world.objective_control_contested = false
+	_control_relief_kills_applied = 0
+	_control_spawn_interval_base = 0.0
+	_control_spawn_interval_relief_cap = 0.0
+	_control_relief_phase_announced = false
 	world.objective_exposure_left = 0.0
 	world.objective_exposure_push_left = 0.0
 	world.objective_last_relocated_escort_count = 0
@@ -226,11 +233,15 @@ func _begin_control_objective(profile: Dictionary) -> void:
 	world.objective_time_left = ENCOUNTER_CONTRACTS.profile_objective_duration(profile)
 	world.objective_spawn_interval = ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
 	var objective_pressure_mult: float = world._objective_pressure_mult()
+	var difficulty_rank := DIFFICULTY_CONFIG.get_difficulty_rank(int(world.current_difficulty_tier))
 	world.objective_spawn_timer = maxf(HoldTheLineConfig.SPAWN_TIMER_MIN, world.objective_spawn_interval * clampf(HoldTheLineConfig.SPAWN_INTERVAL_BASE - objective_pressure_mult * 0.12, HoldTheLineConfig.SPAWN_INTERVAL_CLAMP_MIN, HoldTheLineConfig.SPAWN_INTERVAL_CLAMP_MAX))
 	world.objective_spawn_batch = ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
 	world.objective_spawn_batch = maxi(1, int(round(float(world.objective_spawn_batch) * objective_pressure_mult)))
 	world.objective_max_enemies = HoldTheLineConfig.MAX_ENEMIES_BASE + int(floor(float(world.room_depth) * HoldTheLineConfig.MAX_ENEMIES_DEPTH_MULT))
 	world.objective_max_enemies = maxi(HoldTheLineConfig.MAX_ENEMIES_MIN, int(round(float(world.objective_max_enemies) * objective_pressure_mult)))
+	if difficulty_rank == 2:
+		world.objective_spawn_batch = mini(world.objective_spawn_batch, 3)
+		world.objective_max_enemies = mini(world.objective_max_enemies, 9)
 	world.objective_control_anchor = Vector2.ZERO
 	world.objective_control_radius = ENCOUNTER_CONTRACTS.profile_objective_zone_radius(profile)
 	world.objective_control_progress = 0.0
@@ -242,6 +253,10 @@ func _begin_control_objective(profile: Dictionary) -> void:
 	world.objective_control_contested = false
 	world.objective_control_kill_baseline = world.objective_kills
 	world.objective_overtime = false
+	_control_relief_kills_applied = 0
+	_control_spawn_interval_base = world.objective_spawn_interval
+	_control_spawn_interval_relief_cap = world.objective_spawn_interval + HoldTheLineConfig.SPAWN_INTERVAL_RELIEF_MAX_BONUS
+	_control_relief_phase_announced = false
 	world.hud.show_banner("Hold the Line", "Secure the control zone")
 	world.queue_redraw()
 
@@ -332,35 +347,23 @@ func update_priority_target_objective_state(delta: float) -> void:
 		world.hud.show_banner("Signal Escalating", "")
 
 func _get_control_objective_difficulty_params(difficulty_rank: int) -> Dictionary:
+	var rank_curve := _control_rank_curve_progress(difficulty_rank)
+	var delver_recovery_bump := exp(-pow((rank_curve - 0.33) / 0.22, 2.0))
 	var params := {
-		"progress_gain_mult": 1.36,
-		"contested_decay_mult": 0.08,
-		"out_of_zone_decay_mult": 0.72,
-		"refill_spawn_cap": 1.0,
-		"pressure_floor_bonus": 0
+		"progress_gain_mult": lerpf(1.5, 1.34, rank_curve),
+		"contested_decay_mult": lerpf(0.05, 0.08, rank_curve),
+		"out_of_zone_decay_mult": 0.6 + 0.12 * rank_curve + 0.04 * rank_curve * rank_curve,
+		"refill_spawn_cap": lerpf(1.08, 1.0, rank_curve) + 0.24 * delver_recovery_bump,
+		"pressure_floor_bonus": 1 if difficulty_rank >= 3 else 0
 	}
-	if difficulty_rank == 0:
-		params["progress_gain_mult"] = 1.5
-		params["contested_decay_mult"] = 0.05
-		params["out_of_zone_decay_mult"] = 0.6
-		params["refill_spawn_cap"] = 1.08
-	elif difficulty_rank == 1:
-		params["progress_gain_mult"] = 1.46
-		params["contested_decay_mult"] = 0.06
-		params["out_of_zone_decay_mult"] = 0.64
-		params["refill_spawn_cap"] = 1.2
-	elif difficulty_rank == 2:
-		params["progress_gain_mult"] = 1.4
-		params["contested_decay_mult"] = 0.07
-		params["out_of_zone_decay_mult"] = 0.68
-		params["refill_spawn_cap"] = 1.1
-	elif difficulty_rank == 3:
-		params["progress_gain_mult"] = 1.34
-		params["contested_decay_mult"] = 0.08
-		params["out_of_zone_decay_mult"] = 0.76
-		params["refill_spawn_cap"] = 1.0
-		params["pressure_floor_bonus"] = 1
+	if difficulty_rank == 2:
+		params["progress_gain_mult"] = float(params["progress_gain_mult"]) + 0.06
+		params["contested_decay_mult"] = maxf(0.01, float(params["contested_decay_mult"]) - 0.01)
+		params["refill_spawn_cap"] = float(params["refill_spawn_cap"]) + 0.12
 	return params
+
+func _control_rank_curve_progress(difficulty_rank: int) -> float:
+	return clampf(float(clampi(difficulty_rank, 0, 3)) / 3.0, 0.0, 1.0)
 
 func update_control_objective_state(delta: float) -> void:
 	if world.choosing_next_room or world.run_cleared:
@@ -373,17 +376,17 @@ func update_control_objective_state(delta: float) -> void:
 	var refill_spawn_cap: float = params["refill_spawn_cap"]
 	if world.objective_time_left > 0.0:
 		world.objective_time_left = maxf(0.0, world.objective_time_left - delta)
-	if world.objective_time_left <= 0.0 and not world.objective_overtime:
-		world.objective_overtime = true
-		world.objective_spawn_interval = maxf(HoldTheLineConfig.SPAWN_INTERVAL_OVERTIME_MIN, world.objective_spawn_interval * HoldTheLineConfig.SPAWN_INTERVAL_OVERTIME_MULT)
-		if world.active_room_enemy_count <= maxi(1, world.objective_spawn_batch):
-			world.objective_spawn_batch = mini(HoldTheLineConfig.SPAWN_BATCH_OVERTIME_CAP, world.objective_spawn_batch + 1)
-		world.objective_spawn_timer = HoldTheLineConfig.SPAWN_TIMER_OVERTIME
-		world.hud.show_banner("Line Breaking", "Zone pressure escalating")
+	elif not _control_relief_phase_announced:
+		_control_relief_phase_announced = true
+		world.hud.show_banner("Line Stabilizing", "Hold on and reclaim the zone")
+	if world.objective_time_left <= 0.0:
+		world.objective_spawn_interval = minf(_control_spawn_interval_relief_cap, world.objective_spawn_interval + delta * HoldTheLineConfig.SPAWN_INTERVAL_RELIEF_PER_SECOND)
 	var kills_this_room: int = world.objective_kills - world.objective_control_kill_baseline
-	if kills_this_room > 0:
-		var kill_spawn_reduction: float = float(kills_this_room) * -0.04
-		world.objective_spawn_interval = maxf(HoldTheLineConfig.SPAWN_INTERVAL_CLAMP_MIN, world.objective_spawn_interval + kill_spawn_reduction)
+	var relief_kills := maxi(0, kills_this_room - _control_relief_kills_applied)
+	if relief_kills > 0:
+		var relief_amount := float(relief_kills) * HoldTheLineConfig.SPAWN_INTERVAL_RELIEF_PER_KILL
+		world.objective_spawn_interval = minf(_control_spawn_interval_relief_cap, world.objective_spawn_interval + relief_amount)
+		_control_relief_kills_applied += relief_kills
 	var has_player := is_instance_valid(world.player)
 	var anchor: Vector2 = world.objective_control_anchor
 	var radius := maxf(1.0, world.objective_control_radius)
@@ -402,8 +405,10 @@ func update_control_objective_state(delta: float) -> void:
 	var pressure_floor: int = world.objective_spawn_batch + params["pressure_floor_bonus"]
 	if world.objective_max_enemies > 0:
 		pressure_floor = mini(pressure_floor, world.objective_max_enemies)
+	var relief_interval_bonus := maxf(0.0, world.objective_spawn_interval - _control_spawn_interval_base)
+	var effective_refill_spawn_cap := minf(world.objective_spawn_interval, refill_spawn_cap + relief_interval_bonus)
 	if world.active_room_enemy_count < pressure_floor:
-		world.objective_spawn_timer = minf(world.objective_spawn_timer, refill_spawn_cap)
+		world.objective_spawn_timer = minf(world.objective_spawn_timer, effective_refill_spawn_cap)
 	world.objective_spawn_timer = maxf(0.0, world.objective_spawn_timer - delta)
 	if world.objective_spawn_timer <= 0.0:
 		world.objective_spawn_timer = world.objective_spawn_interval
