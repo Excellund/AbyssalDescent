@@ -1179,6 +1179,12 @@ func get_trial_power_card_desc(reward_id: String) -> String:
 func get_upgrade_card_desc(boon_id: String) -> String:
 	return upgrade_system.get_upgrade_card_description(boon_id)
 
+func get_power_flavor_text(power_id: String) -> String:
+	return upgrade_system.get_power_flavor_text(power_id)
+
+func get_power_current_desc(power_id: String) -> String:
+	return upgrade_system.get_power_current_description(power_id)
+
 func get_trial_power_stack_count(reward_id: String) -> int:
 	return upgrade_system.get_trial_power_stack_count(reward_id)
 
@@ -1743,12 +1749,13 @@ func notify_enemy_killed(kill_position: Vector2 = Vector2.ZERO) -> void:
 	_trigger_combo_relay_kill()
 	if void_echo_damage > 0 and _void_echo_pulse_kill_suppression_depth <= 0:
 		_apply_void_echo(kill_position)
-	if reward_eclipse_mark:
-		_apply_eclipse_mark(kill_position)
-	if reward_fracture_field and not _fracture_field_resolving:
-		_apply_fracture_field(kill_position)
-	if reward_dread_resonance:
-		_reset_dread_resonance_tracking()
+	if _void_echo_pulse_kill_suppression_depth <= 0:
+		if reward_eclipse_mark:
+			_apply_eclipse_mark(kill_position)
+		if reward_fracture_field and not _fracture_field_resolving:
+			_apply_fracture_field(kill_position)
+		if reward_dread_resonance:
+			_reset_dread_resonance_tracking()
 	if passive_death_tempo and dash_cooldown_left > 0.0:
 		dash_cooldown_left = 0.0
 		if player_feedback != null:

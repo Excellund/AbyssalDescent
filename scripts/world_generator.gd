@@ -1589,6 +1589,8 @@ func _spawn_door_options() -> void:
 		return
 	if choosing_next_room and not door_options.is_empty():
 		return
+	if is_instance_valid(player) and player.has_method("clear_lingering_combat_effects"):
+		player.clear_lingering_combat_effects()
 	door_options.clear()
 	choosing_next_room = true
 	var route_options := _roll_route_options(_build_route_context(room_depth))

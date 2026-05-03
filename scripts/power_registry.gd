@@ -521,11 +521,6 @@ func _build_power_pool(ids: Array, power_type: String, player_reference: Node) -
 				desc = String(player_reference.get_trial_power_card_desc(id))
 			else:
 				desc = String(player_reference.get_upgrade_card_desc(id))
-		else:
-			if power_type == POWER_TYPE_TRIAL:
-				desc = _get_trial_fallback_description(id)
-			else:
-				desc = _get_upgrade_fallback_description(id)
 		result.append(Power.new(id, display_name, desc, power_type, get_power_stack_limit(id), get_power_balance(id)).to_dict())
 	return result
 
@@ -665,86 +660,3 @@ func get_damage_model_label(power_id: String) -> String:
 
 func _damage_kind_bracket(_power_id: String) -> String:
 	return ""
-
-
-func _get_upgrade_fallback_description(upgrade_id: String) -> String:
-	var data := get_power_balance(upgrade_id)
-	match upgrade_id:
-		"first_strike":
-			return "%sExtra hit damage versus enemies above 80%% HP: +%d." % [_damage_kind_bracket(upgrade_id), int(data.get("add", 0))]
-		"heavy_blow":
-			return "%sDamage +%d (to Damage stat)." % [_damage_kind_bracket(upgrade_id), int(data.get("add", 0))]
-		"wide_arc":
-			return "Attack arc +%.0f degrees." % [float(data.get("add", 0.0))]
-		"long_reach":
-			return "Attack range +%.0f." % [float(data.get("add", 0.0))]
-		"fleet_foot":
-			return "Move speed +%.0f." % [float(data.get("add", 0.0))]
-		"blink_dash":
-			return "Dash cooldown reduced by %.0f%%." % [(1.0 - float(data.get("mult", 1.0))) * 100.0]
-		"iron_skin":
-			return "Armor +%d." % [int(data.get("add", 0))]
-		"battle_trance":
-			return "Hitting an enemy grants +%.0f%% move speed for a short time." % [float(data.get("add", 0.0)) * 100.0]
-		"surge_step":
-			return "Dash speed +%.0f." % [float(data.get("add", 0.0))]
-		"heartstone":
-			return "Max health +%d." % [int(data.get("add", 0))]
-		"crushed_vow":
-			return "After being hit, next attack deals +%d damage (consumes on hit)." % [int(data.get("add", 0))]
-		"severing_edge":
-			return "Bonus damage on hits against enemies below 55%% HP: +%d." % [int(data.get("add", 0))]
-		"apex_predator":
-			return "Warden's Verdict: every hit builds predator cadence; every 4th hit triggers an impact burst and mauls nearby enemies (power +%d)." % [int(data.get("add", 0))]
-		"void_echo":
-			return "Lacuna Echo: kills create a void zone that pulses damage and empowers attacks inside it. Zone pulse kills do not spawn additional zones (%d power)." % [int(data.get("add", 0))]
-		"apex_momentum":
-			return "Sovereign Tempo: hits build tempo; dash end releases a momentum wave. Hitting enemies refunds dash cooldown (+%.0f%% stack speed)." % [float(data.get("add", 0.0)) * 100.0]
-		"convergence_surge":
-			return "Pillar Convergence: every 4 damaging hits, enter Convergence for ~1.6s and pulse around you. At higher stacks it triggers every 2 hits, lasts ~2.0s, and pulses faster (+%.0f%% window power)." % [float(data.get("add", 0.0)) * 100.0]
-		"indomitable_spirit":
-			var resist_percent := float(data.get("add", 0.0)) * 100.0
-			var retaliation_base := 45.0 + resist_percent
-			return "Unbroken Oath: gain %.0f%% DR. Taking damage banks Oath; damaging hits consume all bank for %.0f%% of damage stat + 1%% per banked damage." % [resist_percent, retaliation_base]
-		_:
-			return "Upgrade your stats."
-
-
-func _get_trial_fallback_description(power_id: String) -> String:
-	match power_id:
-		"razor_wind":
-			return "%sAttacks launch a piercing wind slash that deals %% of hit damage." % [_damage_kind_bracket(power_id)]
-		"execution_edge":
-			return "%sEvery few swings become execution strikes that multiply hit damage." % [_damage_kind_bracket(power_id)]
-		"rupture_wave":
-			return "%sHits detonate a shockwave that deals %% of hit damage." % [_damage_kind_bracket(power_id)]
-		"aegis_field":
-			return "Taking damage triggers a guard pulse that slows nearby enemies and grants brief damage resistance."
-		"hunters_snare":
-			return "%sHits slow enemies. Striking slowed enemies deals extra hit damage." % [_damage_kind_bracket(power_id)]
-		"phantom_step":
-			return "%sDashing through enemies damages and slows them. Damage uses a percentage value." % [_damage_kind_bracket(power_id)]
-		"reaper_step":
-			return "Dash range and dash speed scale together. Kills refresh dash cooldown."
-		"static_wake":
-			return "%sDashing leaves an electrified trail that burns enemies. Damage per pulse uses a percentage value." % [_damage_kind_bracket(power_id)]
-		"storm_crown":
-			return "%sEvery few hits unleash chain lightning that deals %% of hit damage." % [_damage_kind_bracket(power_id)]
-		"wraithstep":
-			return "%sDash marks enemies. Marked hits deal extra hit damage and trigger splash chains that deal a percentage of hit damage." % [_damage_kind_bracket(power_id)]
-		"voidfire":
-			var voidfire_desc := "Heat attacks. Danger Zone boosts hit damage. At cap, overheat detonates and briefly locks attacks."
-			return DESCRIPTION_CAP_GUARD.assert_visible_cap(voidfire_desc, "voidfire", "fallback")
-		"dread_resonance":
-			var data := get_power_balance("dread_resonance")
-			var max_stacks := int(data.get("max_stacks", 3))
-			return "%sChain hits on one enemy build resonance up to %d stacks. Swapping targets resets to 1." % [_damage_kind_bracket(power_id), max_stacks]
-		"vow_shatter":
-			return "%sTaking a hit primes a vow. Next attack multiplies damage and consumes it. Must be hit again to reload." % [_damage_kind_bracket(power_id)]
-		"eclipse_mark":
-			return "%sKilling an enemy marks all nearby enemies. First hit on each marked enemy deals amplified damage. Marks expire quickly." % [_damage_kind_bracket(power_id)]
-		"fracture_field":
-			var fracture_desc := "%sKills rupture fault lines from the slain enemy, striking enemies along each line." % [_damage_kind_bracket(power_id)]
-			return DESCRIPTION_CAP_GUARD.assert_visible_cap(fracture_desc, "fracture_field", "fallback")
-		_:
-			return "Enhances this power."

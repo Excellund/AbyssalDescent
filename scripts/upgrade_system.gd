@@ -162,8 +162,121 @@ func get_power_damage_model(power_id: String) -> Dictionary:
 	}
 
 
-func _damage_kind_prefix(_power_id: String) -> String:
-	return ""
+## Formats a single stat value for either the initial pick (green) or an upgrade (orange -> green).
+## Use _stat("+%d", cur, nxt, is_initial) and embed the result in your description string.
+func _stat(fmt: String, cur: Variant, nxt: Variant, is_initial: bool) -> String:
+	if is_initial:
+		return "[color=#7de882]%s[/color]" % (fmt % nxt)
+	return "[color=#e8c96a]%s[/color] [color=#8899aa]->[/color] [color=#7de882]%s[/color]" % [fmt % cur, fmt % nxt]
+
+
+func _initial_prefix(is_initial: bool) -> String:
+	return "[color=#9ab8d8]Initial:[/color] " if is_initial else ""
+
+
+func _const(value: String) -> String:
+	return "[color=#7de882]%s[/color]" % value
+
+
+func _current_const(value: String) -> String:
+	return "[color=#e8c96a]%s[/color]" % value
+
+
+func _current_stat(fmt: String, value: Variant) -> String:
+	return "[color=#e8c96a]%s[/color]" % (fmt % value)
+
+
+func _desc(is_initial: bool, flavor: String, template: String, args: Array = []) -> String:
+	var body: String = template % args if not args.is_empty() else template
+	return "%s[color=#9ab8d8]%s[/color] %s" % [_initial_prefix(is_initial), flavor, body]
+
+
+func _trial_reward_desc(is_initial: bool, flavor: String, body: String) -> String:
+	return "[color=#9ab8d8]%s[/color]\n%s%s" % [flavor, _initial_prefix(is_initial), body]
+
+
+func _power_sentence_template(power_id: String) -> String:
+	match power_id:
+		"first_strike":
+			return "Extra hit damage vs enemies above 80%% HP %s."
+		"heavy_blow":
+			return "Damage %s."
+		"wide_arc":
+			return "Attack arc %s."
+		"long_reach":
+			return "Attack range %s."
+		"fleet_foot":
+			return "Move speed %s."
+		"blink_dash":
+			return "Dash cooldown %s."
+		"iron_skin":
+			return "Armor %s."
+		"battle_trance":
+			return "On hit gain %s move speed for %s."
+		"surge_step":
+			return "Dash speed %s."
+		"heartstone":
+			return "Max HP %s."
+		"crushed_vow":
+			return "After being hit, next attack bonus damage %s."
+		"severing_edge":
+			return "Bonus damage on hits against enemies below 55%% HP %s."
+		"apex_predator":
+			return "Predator power %s."
+		"void_echo":
+			return "Zone power %s, radius %s."
+		"apex_momentum":
+			return "Tempo per stack %s."
+		"convergence_surge":
+			return "Every %s hits, lasts %s, pulses every %s."
+		"indomitable_spirit":
+			return "Damage reduction %s, retaliate %s damage + %s per stored Oath."
+		"razor_wind":
+			return "Range %s, damage %s of hit."
+		"execution_edge":
+			return "Every %s swings for %s damage."
+		"rupture_wave":
+			return "Radius %s, damage %s of hit."
+		"aegis_field":
+			return "Resist %s for %s, pulse radius %s, cooldown %s."
+		"hunters_snare":
+			return "Slow %s at %s speed, extra hit damage %s."
+		"phantom_step":
+			return "Damage %s, slow %s."
+		"reaper_step":
+			return "Range/speed %s, kill refresh %s."
+		"static_wake":
+			return "Damage per pulse %s of damage stat, lasts %s."
+		"storm_crown":
+			return "Every %s hits, chains to %s targets within %s, for %s damage."
+		"wraithstep":
+			return "Mark %s, marked-hit damage %s, cleave %s of hit."
+		"voidfire":
+			return "Damage %s, detonate %s, lockout %s."
+		"dread_resonance":
+			return "Bonus per resonance stack %s, up to %s stacks."
+		"vow_shatter":
+			return "Primed hit damage %s."
+		"eclipse_mark":
+			return "Mark radius %s, duration %s, bonus %s of hit."
+		"fracture_field":
+			return "Length %s, damage %s, slow %s."
+		_:
+			return ""
+
+
+func _power_sentence(power_id: String, args: Array = [], surface: String = "") -> String:
+	var template := _power_sentence_template(power_id)
+	if template.is_empty():
+		return ""
+	var sentence: String = template % args if not args.is_empty() else template
+	if not surface.is_empty():
+		return DESCRIPTION_CAP_GUARD.assert_visible_cap(sentence, power_id, surface)
+	return sentence
+
+
+func _flavor_detail(flavor: String, body: String) -> String:
+	return "[color=#9ab8d8]%s[/color]\n    %s" % [flavor, body]
 
 
 func _variant_to_number(value: Variant, fallback: float = 0.0) -> float:
@@ -216,6 +329,157 @@ func _build_upgrade_preview(upgrade_id: String) -> Dictionary:
 	}
 
 
+## Single source of truth for the flavor sentence of every power.
+## Change a description here and it updates everywhere: reward cards and build detail.
+func get_power_flavor_text(power_id: String) -> String:
+	match power_id:
+		"apex_predator":
+			return "Every few hits build predator cadence. The 4th hit triggers an impact burst and mauls nearby enemies."
+		"void_echo":
+			return "Kills create a void zone that pulses damage and empowers attacks inside it."
+		"apex_momentum":
+			return "Hits build tempo stacks. Finishing a dash releases a momentum wave; hitting enemies refunds dash cooldown."
+		"convergence_surge":
+			return "Every few damaging hits you enter Convergence, pulsing damage around you until it expires."
+		"indomitable_spirit":
+			return "Gain damage reduction. Taking damage banks Oath; damaging hits consume all bank for bonus damage."
+		"razor_wind":
+			return "Each swing fires a slicing projectile through enemies."
+		"execution_edge":
+			return "Every few swings, an execution strike multiplies hit damage."
+		"rupture_wave":
+			return "Hits send a shockwave rippling outward, damaging all nearby enemies."
+		"aegis_field":
+			return "Taking damage triggers a guard pulse that slows nearby enemies and grants brief damage resistance."
+		"hunters_snare":
+			return "Hits slow enemies. Striking slowed targets deals extra hit damage."
+		"phantom_step":
+			return "Dashing through enemies deals damage and leaves them slowed."
+		"reaper_step":
+			return "Kills fully refresh your dash. Dash range and speed scale together."
+		"static_wake":
+			return "Moving leaves an electrified trail that shocks any enemy who steps into it."
+		"storm_crown":
+			return "Every few hits discharge chain lightning from your target to nearby foes."
+		"wraithstep":
+			return "Dash marks enemies. Marked hits deal extra hit damage and chain-splash nearby foes."
+		"voidfire":
+			return "Heat attacks. Danger Zone boosts hit damage. At cap, overheat detonates and briefly locks attacks."
+		"dread_resonance":
+			return "Chain hits on one enemy build resonance. Swapping targets resets to 1."
+		"vow_shatter":
+			return "Taking a hit primes a vow. Your next attack multiplies damage and consumes the vow."
+		"eclipse_mark":
+			return "Kills inflicted by hits mark all nearby enemies. First hit on each marked enemy deals amplified damage. Marks expire quickly."
+		"fracture_field":
+			return "Kills inflicted by hits rupture fault lines from the slain enemy, striking enemies along each line."
+		_:
+			return ""
+
+
+## Current-state description for the build detail panel.
+## Reads actual live player values — no stack approximations.
+func get_power_current_description(power_id: String) -> String:
+	if not is_instance_valid(player_reference):
+		return ""
+	var id := power_id.strip_edges().to_lower()
+	var flavor := get_power_flavor_text(id)
+	match id:
+		"apex_predator":
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("+%d", int(player_reference.get("apex_predator_bonus_damage")))], "build_detail"))
+		"void_echo":
+			var val := int(player_reference.get("void_echo_damage"))
+			var radius := clampf(96.0 + float(val) * 1.05, 96.0, 260.0)
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%d", val), _current_stat("%.0f", radius)], "build_detail"))
+		"apex_momentum":
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("+%.0f%%", float(player_reference.get("apex_momentum_speed_bonus")) * 100.0)], "build_detail"))
+		"convergence_surge":
+			var cs_ratio := float(player_reference.get("convergence_surge_damage_ratio"))
+			var cs_hits := maxi(2, 6 - int(round(cs_ratio * 8.0)))
+			var cs_window := 1.2 + cs_ratio * 1.8
+			var cs_pulse := maxf(0.14, 0.3 - cs_ratio * 0.25)
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%d", cs_hits), _current_stat("%.2fs", cs_window), _current_stat("%.2fs", cs_pulse)], "build_detail"))
+		"indomitable_spirit":
+			var resist := float(player_reference.get("indomitable_spirit_damage_reduction")) * 100.0
+			var ratio := 45.0 + resist
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f%%", resist), _current_stat("%.0f%%", ratio), _current_const("1%")], "build_detail"))
+		"first_strike":
+			return _power_sentence(id, [_current_stat("+%d", int(player_reference.get("first_strike_bonus_damage")))], "build_detail")
+		"heavy_blow":
+			return _power_sentence(id, [_current_stat("+%d", 7 * get_upgrade_stack_count("heavy_blow"))], "build_detail")
+		"wide_arc":
+			return _power_sentence(id, [_current_stat("+%d deg", 28 * get_upgrade_stack_count("wide_arc"))], "build_detail")
+		"long_reach":
+			return _power_sentence(id, [_current_stat("+%d", 11 * get_upgrade_stack_count("long_reach"))], "build_detail")
+		"fleet_foot":
+			return _power_sentence(id, [_current_stat("+%d", 17 * get_upgrade_stack_count("fleet_foot"))], "build_detail")
+		"blink_dash":
+			return _power_sentence(id, [_current_stat("%.2fs", float(player_reference.get("dash_cooldown")))], "build_detail")
+		"iron_skin":
+			return _power_sentence(id, [_current_stat("+%d", int(player_reference.get("iron_skin_armor")))], "build_detail")
+		"battle_trance":
+			var bt_duration := 1.25
+			if player_reference.get("battle_trance_duration") != null:
+				bt_duration = float(player_reference.get("battle_trance_duration"))
+			return _power_sentence(id, [_current_stat("+%.0f%%", float(player_reference.get("battle_trance_move_speed_bonus")) * 100.0), _current_stat("%.2fs", bt_duration)], "build_detail")
+		"surge_step":
+			return _power_sentence(id, [_current_stat("+%d", 85 * get_upgrade_stack_count("surge_step"))], "build_detail")
+		"heartstone":
+			return _power_sentence(id, [_current_stat("+%d", 10 * get_upgrade_stack_count("heartstone"))], "build_detail")
+		"crushed_vow":
+			return _power_sentence(id, [_current_stat("+%d", int(player_reference.get("crushed_vow_bonus_damage")))], "build_detail")
+		"severing_edge":
+			return _power_sentence(id, [_current_stat("+%d", int(player_reference.get("severing_edge_bonus_damage")))], "build_detail")
+		"razor_wind":
+			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("x%.2f", float(cur.get("range_scale", 1.0))), _current_stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0)], "build_detail"))
+		"execution_edge":
+			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%d", int(cur.get("every", 2))), _current_stat("x%.2f", float(cur.get("damage_mult", 1.0)))], "build_detail"))
+		"rupture_wave":
+			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f", float(cur.get("radius", 0.0))), _current_stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0)], "build_detail"))
+		"aegis_field":
+			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f%%", float(cur.get("resist", 0.0)) * 100.0), _current_stat("%.2fs", float(cur.get("duration", 0.0))), _current_stat("%.0f", float(cur.get("radius", 0.0))), _current_stat("%.2fs", float(cur.get("cooldown", 0.0)))], "build_detail"))
+		"hunters_snare":
+			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.2fs", float(cur.get("slow_duration", 0.0))), _current_stat("%.0f%%", float(cur.get("slow_mult", 1.0)) * 100.0), _current_stat("+%d", int(cur.get("bonus_damage", 0)))], "build_detail"))
+		"phantom_step":
+			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0), _current_stat("%.2fs", float(cur.get("slow_duration", 0.0)))], "build_detail"))
+		"reaper_step":
+			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("x%.2f", float(cur.get("range_mult", 1.0))), _current_const("full")], "build_detail"))
+		"static_wake":
+			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0), _current_stat("%.2fs", float(cur.get("lifetime", 0.0)))], "build_detail"))
+		"storm_crown":
+			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%d", int(cur.get("proc_every", 1))), _current_stat("%d", int(cur.get("chain_targets", 1))), _current_stat("%.0f", float(cur.get("chain_radius", 0.0))), _current_stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0)], "build_detail"))
+		"wraithstep":
+			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.2fs", float(cur.get("mark_duration", 0.0))), _current_stat("+%d", int(cur.get("bonus_damage", 0))), _current_stat("%.0f%%", float(cur.get("splash_ratio", 0.0)) * 100.0)], "build_detail"))
+		"voidfire":
+			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("+%.0f%%", float(cur.get("danger_zone_amp", 0.0)) * 100.0), _current_stat("%.0f%%", float(cur.get("detonate_ratio", 0.0)) * 100.0), _current_stat("%.2fs", float(cur.get("lockout_duration", 0.0)))] , "build_detail"))
+		"dread_resonance":
+			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
+			var max_stacks_dr := int(player_reference.get("dread_resonance_max_stacks"))
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("+%d", int(cur.get("bonus_per_stack", 0))), _current_const(str(max_stacks_dr))], "build_detail"))
+		"vow_shatter":
+			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("x%.2f", float(cur.get("damage_mult", 1.0)))], "build_detail"))
+		"eclipse_mark":
+			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f", float(cur.get("radius", 0.0))), _current_stat("%.2fs", float(cur.get("mark_duration", 0.0))), _current_stat("%.0f%%", float(cur.get("bonus_ratio", 0.0)) * 100.0)], "build_detail"))
+		"fracture_field":
+			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f", float(cur.get("radius", 0.0))), _current_stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0), _current_stat("%.2fs", float(cur.get("slow_duration", 0.0)))] , "build_detail"))
+		_:
+			return ""
+
+
 ## Get trial power description with next stack info from the current player state.
 func get_trial_power_card_description(power_id: String) -> String:
 	if not is_instance_valid(player_reference):
@@ -227,153 +491,79 @@ func get_trial_power_card_description(power_id: String) -> String:
 	if next_values.is_empty():
 		return "[color=#9ab8d8]Enhances this power.[/color]"
 	var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
+	var flavor := get_power_flavor_text(id)
+	var is_initial := current_stack <= 0
 	match id:
 		"razor_wind":
-			var next_range_scale := float(next_values.get("range_scale", 1.0))
-			var next_damage_ratio := float(next_values.get("damage_ratio", 0.0))
-			var cur_range_scale := float(cur.get("range_scale", 1.0))
-			var cur_damage_ratio := float(cur.get("damage_ratio", 0.0))
-			if current_stack <= 0:
-				return "[color=#9ab8d8]Each swing fires a slicing projectile that travels through enemies at range.[/color]\n[color=#9ab8d8]Initial:[/color] range [color=#7de882]x%.2f[/color], damage [color=#7de882]%.0f%%[/color] of hit." % [next_range_scale, next_damage_ratio * 100.0]
-			var razor_prefix := _damage_kind_prefix("razor_wind")
-			return "%s[color=#c8daf0]Wind Slash:[/color] range [color=#e8c96a]x%.2f[/color] [color=#8899aa]->[/color] [color=#7de882]x%.2f[/color], damage [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color] of hit." % [razor_prefix, cur_range_scale, next_range_scale, cur_damage_ratio * 100.0, next_damage_ratio * 100.0]
+			var range_stat := _stat("x%.2f", float(cur.get("range_scale", 1.0)), float(next_values.get("range_scale", 1.0)), is_initial)
+			var damage_stat := _stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0, float(next_values.get("damage_ratio", 0.0)) * 100.0, is_initial)
+			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [range_stat, damage_stat], "reward_card"))
 		"execution_edge":
-			var next_every := int(next_values.get("every", 2))
-			var next_mult := float(next_values.get("damage_mult", 1.0))
-			var cur_every := int(cur.get("every", 2))
-			var cur_mult := float(cur.get("damage_mult", 1.0))
-			if current_stack <= 0:
-				return "[color=#9ab8d8]Every few swings builds to a devastating strike that deals massive extra damage.[/color]\n[color=#9ab8d8]Initial:[/color] every [color=#7de882]%d[/color] swings for [color=#7de882]x%.2f[/color] damage." % [next_every, next_mult]
-			var execution_prefix := _damage_kind_prefix("execution_edge")
-			return "%s[color=#c8daf0]Execution:[/color] every [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color] swings, damage [color=#e8c96a]x%.2f[/color] [color=#8899aa]->[/color] [color=#7de882]x%.2f[/color] on hit." % [execution_prefix, cur_every, next_every, cur_mult, next_mult]
+			var every_stat := _stat("%d", int(cur.get("every", 2)), int(next_values.get("every", 2)), is_initial)
+			var mult_stat := _stat("x%.2f", float(cur.get("damage_mult", 1.0)), float(next_values.get("damage_mult", 1.0)), is_initial)
+			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [every_stat, mult_stat], "reward_card"))
 		"rupture_wave":
-			var next_radius := float(next_values.get("radius", 0.0))
-			var next_ratio := float(next_values.get("damage_ratio", 0.0))
-			var cur_radius := float(cur.get("radius", 0.0))
-			var cur_ratio := float(cur.get("damage_ratio", 0.0))
-			if current_stack <= 0:
-				return "[color=#9ab8d8]Your hits send a shockwave rippling outward, damaging all nearby enemies.[/color]\n[color=#9ab8d8]Initial:[/color] radius [color=#7de882]%.0f[/color], damage [color=#7de882]%.0f%%[/color] of hit." % [next_radius, next_ratio * 100.0]
-			return "[color=#c8daf0]Rupture:[/color] radius [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color], damage [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color]." % [cur_radius, next_radius, cur_ratio * 100.0, next_ratio * 100.0]
+			var radius_stat := _stat("%.0f", float(cur.get("radius", 0.0)), float(next_values.get("radius", 0.0)), is_initial)
+			var damage_stat := _stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0, float(next_values.get("damage_ratio", 0.0)) * 100.0, is_initial)
+			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [radius_stat, damage_stat], "reward_card"))
 		"aegis_field":
-			var next_resist := float(next_values.get("resist", 0.0))
-			var next_duration := float(next_values.get("duration", 0.0))
-			var next_radius := float(next_values.get("radius", 0.0))
-			var next_cooldown := float(next_values.get("cooldown", 0.0))
-			var cur_resist := float(cur.get("resist", 0.0))
-			var cur_duration := float(cur.get("duration", 0.0))
-			var cur_radius := float(cur.get("radius", 0.0))
-			var cur_cooldown := float(cur.get("cooldown", 0.0))
-			if current_stack <= 0:
-				return "[color=#9ab8d8]Taking damage triggers a guard pulse that slows nearby enemies and grants brief damage resistance.[/color]\n[color=#9ab8d8]Initial:[/color] resist [color=#7de882]%.0f%%[/color] for [color=#7de882]%.2fs[/color], pulse radius [color=#7de882]%.0f[/color], cooldown [color=#7de882]%.2fs[/color]." % [next_resist * 100.0, next_duration, next_radius, next_cooldown]
-			return "[color=#c8daf0]Aegis Field:[/color] resist [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color], guard [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color], pulse radius [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color], cooldown [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_resist * 100.0, next_resist * 100.0, cur_duration, next_duration, cur_radius, next_radius, cur_cooldown, next_cooldown]
+			var resist_stat := _stat("%.0f%%", float(cur.get("resist", 0.0)) * 100.0, float(next_values.get("resist", 0.0)) * 100.0, is_initial)
+			var duration_stat := _stat("%.2fs", float(cur.get("duration", 0.0)), float(next_values.get("duration", 0.0)), is_initial)
+			var radius_stat := _stat("%.0f", float(cur.get("radius", 0.0)), float(next_values.get("radius", 0.0)), is_initial)
+			var cooldown_stat := _stat("%.2fs", float(cur.get("cooldown", 0.0)), float(next_values.get("cooldown", 0.0)), is_initial)
+			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [resist_stat, duration_stat, radius_stat, cooldown_stat], "reward_card"))
 		"hunters_snare":
-			var next_bonus := int(next_values.get("bonus_damage", 0))
-			var next_duration := float(next_values.get("slow_duration", 0.0))
-			var next_slow_mult := float(next_values.get("slow_mult", 1.0))
-			var cur_bonus := int(cur.get("bonus_damage", 0))
-			var cur_duration := float(cur.get("slow_duration", 0.0))
-			var cur_slow_mult := float(cur.get("slow_mult", 1.0))
-			if current_stack <= 0:
-				return "[color=#9ab8d8]Hits slow enemies, and striking slowed targets deals extra hit damage.[/color]\n[color=#9ab8d8]Initial:[/color] slow [color=#7de882]%.2fs[/color] at [color=#7de882]%.0f%%[/color] speed, extra hit damage [color=#7de882]+%d[/color]." % [next_duration, next_slow_mult * 100.0, next_bonus]
-			var snare_prefix := _damage_kind_prefix("hunters_snare")
-			return "%s[color=#c8daf0]Hunter's Snare:[/color] slow [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color], speed [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color], extra hit damage [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]." % [snare_prefix, cur_duration, next_duration, cur_slow_mult * 100.0, next_slow_mult * 100.0, cur_bonus, next_bonus]
+			var slow_stat := _stat("%.2fs", float(cur.get("slow_duration", 0.0)), float(next_values.get("slow_duration", 0.0)), is_initial)
+			var speed_stat := _stat("%.0f%%", float(cur.get("slow_mult", 1.0)) * 100.0, float(next_values.get("slow_mult", 1.0)) * 100.0, is_initial)
+			var bonus_stat := _stat("+%d", int(cur.get("bonus_damage", 0)), int(next_values.get("bonus_damage", 0)), is_initial)
+			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [slow_stat, speed_stat, bonus_stat], "reward_card"))
 		"phantom_step":
-			var phantom_prefix := _damage_kind_prefix("phantom_step")
-			var next_damage := int(next_values.get("damage", 0))
-			var next_slow := float(next_values.get("slow_duration", 0.0))
-			var cur_damage := int(cur.get("damage", 0))
-			var cur_slow := float(cur.get("slow_duration", 0.0))
-			if current_stack <= 0:
-				return "[color=#9ab8d8]Dashing through enemies deals damage and leaves them slowed in your wake.[/color]\n[color=#9ab8d8]Initial:[/color] damage [color=#7de882]%d[/color], slow [color=#7de882]%.2fs[/color]." % [next_damage, next_slow]
-			return "%s[color=#c8daf0]Phantom Step:[/color] damage [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color], slow [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [phantom_prefix, cur_damage, next_damage, cur_slow, next_slow]
+			var damage_stat := _stat("%d", int(cur.get("damage", 0)), int(next_values.get("damage", 0)), is_initial)
+			var slow_stat := _stat("%.2fs", float(cur.get("slow_duration", 0.0)), float(next_values.get("slow_duration", 0.0)), is_initial)
+			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [damage_stat, slow_stat], "reward_card"))
 		"reaper_step":
-			var next_range := float(next_values.get("range_mult", 1.0))
-			var cur_range := float(cur.get("range_mult", 1.0))
-			if current_stack <= 0:
-				return "[color=#9ab8d8]Kills fully refresh your dash. Each stack scales dash range and dash speed together.[/color]\n[color=#9ab8d8]Initial:[/color] range/speed [color=#7de882]x%.2f[/color], kill refresh [color=#7de882]full[/color]." % [next_range]
-			return "[color=#c8daf0]Reaper Step:[/color] range/speed [color=#e8c96a]x%.2f[/color] [color=#8899aa]->[/color] [color=#7de882]x%.2f[/color], kill refresh [color=#7de882]full[/color]." % [cur_range, next_range]
+			var range_stat := _stat("x%.2f", float(cur.get("range_mult", 1.0)), float(next_values.get("range_mult", 1.0)), is_initial)
+			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [range_stat, _const("full")], "reward_card"))
 		"static_wake":
-			var wake_prefix := _damage_kind_prefix("static_wake")
-			var next_lifetime := float(next_values.get("lifetime", 0.0))
-			var cur_lifetime := float(cur.get("lifetime", 0.0))
 			var wake_data := _get_power_balance_data("static_wake")
 			var wake_ratio_base := float(wake_data.get("damage_ratio_base", 0.0))
 			var wake_ratio_per_stack := float(wake_data.get("damage_ratio_per_stack", 0.0))
-			var cur_damage_ratio := wake_ratio_base + wake_ratio_per_stack * float(current_stack)
-			var next_damage_ratio := wake_ratio_base + wake_ratio_per_stack * float(next_stack)
-			if current_stack <= 0:
-				return "[color=#9ab8d8]Leaves an electrified trail as you move that shocks any enemy who steps into it.[/color]\n[color=#9ab8d8]Initial:[/color] damage per pulse [color=#7de882]%.0f%%[/color] of damage stat, lasts [color=#7de882]%.2fs[/color]." % [next_damage_ratio * 100.0, next_lifetime]
-			return "%s[color=#c8daf0]Static Wake:[/color] damage per pulse [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color] of damage stat, trail [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [wake_prefix, cur_damage_ratio * 100.0, next_damage_ratio * 100.0, cur_lifetime, next_lifetime]
+			var wake_damage_stat := _stat("%.0f%%", (wake_ratio_base + wake_ratio_per_stack * float(current_stack)) * 100.0, (wake_ratio_base + wake_ratio_per_stack * float(next_stack)) * 100.0, is_initial)
+			var wake_life_stat := _stat("%.2fs", float(cur.get("lifetime", 0.0)), float(next_values.get("lifetime", 0.0)), is_initial)
+			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [wake_damage_stat, wake_life_stat], "reward_card"))
 		"storm_crown":
-			var next_every := int(next_values.get("proc_every", 1))
-			var next_targets := int(next_values.get("chain_targets", 1))
-			var next_radius := float(next_values.get("chain_radius", 0.0))
-			var next_ratio := float(next_values.get("damage_ratio", 0.0))
-			var cur_every := int(cur.get("proc_every", 1))
-			var cur_targets := int(cur.get("chain_targets", 1))
-			var cur_radius := float(cur.get("chain_radius", 0.0))
-			var cur_ratio := float(cur.get("damage_ratio", 0.0))
-			if current_stack <= 0:
-				return "[color=#9ab8d8]Every few hits discharge chain lightning from your target to nearby foes.[/color]\n[color=#9ab8d8]Initial:[/color] every [color=#7de882]%d[/color] hits, chains to [color=#7de882]%d[/color] targets within [color=#7de882]%.0f[/color], for [color=#7de882]%.0f%%[/color] damage." % [next_every, next_targets, next_radius, next_ratio * 100.0]
-			return "[color=#c8daf0]Storm Crown:[/color] proc [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color], chains [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color], radius [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color], damage [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color]." % [cur_every, next_every, cur_targets, next_targets, cur_radius, next_radius, cur_ratio * 100.0, next_ratio * 100.0]
+			var every_stat := _stat("%d", int(cur.get("proc_every", 1)), int(next_values.get("proc_every", 1)), is_initial)
+			var targets_stat := _stat("%d", int(cur.get("chain_targets", 1)), int(next_values.get("chain_targets", 1)), is_initial)
+			var radius_stat := _stat("%.0f", float(cur.get("chain_radius", 0.0)), float(next_values.get("chain_radius", 0.0)), is_initial)
+			var damage_stat := _stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0, float(next_values.get("damage_ratio", 0.0)) * 100.0, is_initial)
+			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [every_stat, targets_stat, radius_stat, damage_stat], "reward_card"))
 		"wraithstep":
-			var next_mark_duration := float(next_values.get("mark_duration", 0.0))
-			var next_bonus_damage := int(next_values.get("bonus_damage", 0))
-			var next_splash_ratio := float(next_values.get("splash_ratio", 0.0))
-			var cur_mark_duration := float(cur.get("mark_duration", 0.0))
-			var cur_bonus_damage := int(cur.get("bonus_damage", 0))
-			var cur_splash_ratio := float(cur.get("splash_ratio", 0.0))
-			if current_stack <= 0:
-				return "[color=#9ab8d8]Dash marks enemies. Marked hits deal extra hit damage and chain splashes nearby.[/color]\n[color=#9ab8d8]Initial:[/color] mark [color=#7de882]%.2fs[/color], marked-hit damage [color=#7de882]+%d[/color], cleave [color=#7de882]%.0f%%[/color]." % [next_mark_duration, next_bonus_damage, next_splash_ratio * 100.0]
-			var wraith_prefix := _damage_kind_prefix("wraithstep")
-			return "%s[color=#c8daf0]Wraithstep:[/color] mark [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color], marked-hit damage [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color], cleave [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color] of hit." % [wraith_prefix, cur_mark_duration, next_mark_duration, cur_bonus_damage, next_bonus_damage, cur_splash_ratio * 100.0, next_splash_ratio * 100.0]
+			var mark_stat := _stat("%.2fs", float(cur.get("mark_duration", 0.0)), float(next_values.get("mark_duration", 0.0)), is_initial)
+			var bonus_stat := _stat("+%d", int(cur.get("bonus_damage", 0)), int(next_values.get("bonus_damage", 0)), is_initial)
+			var cleave_stat := _stat("%.0f%%", float(cur.get("splash_ratio", 0.0)) * 100.0, float(next_values.get("splash_ratio", 0.0)) * 100.0, is_initial)
+			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [mark_stat, bonus_stat, cleave_stat], "reward_card"))
 		"voidfire":
-			var next_amp := float(next_values.get("danger_zone_amp", 0.0))
-			var next_det_ratio := float(next_values.get("detonate_ratio", 0.0))
-			var next_lockout := float(next_values.get("lockout_duration", 0.0))
-			var cur_amp := float(cur.get("danger_zone_amp", 0.0))
-			var cur_det_ratio := float(cur.get("detonate_ratio", 0.0))
-			var cur_lockout := float(cur.get("lockout_duration", 0.0))
-			if current_stack <= 0:
-				var voidfire_initial := "[color=#9ab8d8]Heat attacks. Danger Zone boosts hit damage.[/color]\n[color=#9ab8d8]Initial:[/color] damage [color=#7de882]+%.0f%%[/color], detonate [color=#7de882]%.0f%%[/color], lockout [color=#7de882]%.2fs[/color]." % [next_amp * 100.0, next_det_ratio * 100.0, next_lockout]
-				return DESCRIPTION_CAP_GUARD.assert_visible_cap(voidfire_initial, "voidfire", "reward_card")
-			var voidfire_stack_desc := "[color=#c8daf0]Voidfire:[/color] damage [color=#e8c96a]+%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]+%.0f%%[/color], detonate [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color], lockout [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_amp * 100.0, next_amp * 100.0, cur_det_ratio * 100.0, next_det_ratio * 100.0, cur_lockout, next_lockout]
-			return DESCRIPTION_CAP_GUARD.assert_visible_cap(voidfire_stack_desc, "voidfire", "reward_card")
+			var amp_stat := _stat("+%.0f%%", float(cur.get("danger_zone_amp", 0.0)) * 100.0, float(next_values.get("danger_zone_amp", 0.0)) * 100.0, is_initial)
+			var det_stat := _stat("%.0f%%", float(cur.get("detonate_ratio", 0.0)) * 100.0, float(next_values.get("detonate_ratio", 0.0)) * 100.0, is_initial)
+			var lockout_stat := _stat("%.2fs", float(cur.get("lockout_duration", 0.0)), float(next_values.get("lockout_duration", 0.0)), is_initial)
+			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [amp_stat, det_stat, lockout_stat], "reward_card"))
 		"dread_resonance":
-			var next_bonus := int(next_values.get("bonus_per_stack", 0))
-			var cur_bonus_dr := int(cur.get("bonus_per_stack", 0))
+			var bonus_stat := _stat("+%d", int(cur.get("bonus_per_stack", 0)), int(next_values.get("bonus_per_stack", 0)), is_initial)
 			var max_stacks_dr := int(player_reference.get("dread_resonance_max_stacks"))
-			if current_stack <= 0:
-				return "[color=#9ab8d8]Chain hits on one enemy build resonance to [color=#e8c96a]%d[/color] stacks. Swapping targets resets to 1.[/color]\n[color=#9ab8d8]Initial:[/color] bonus per resonance stack [color=#7de882]+%d[/color]." % [max_stacks_dr, next_bonus]
-			return "[color=#c8daf0]Dread Resonance:[/color] bonus per resonance stack [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color] (cap [color=#e8c96a]%d[/color])." % [cur_bonus_dr, next_bonus, max_stacks_dr]
+			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [bonus_stat, _const(str(max_stacks_dr))], "reward_card"))
 		"vow_shatter":
-			var next_mult_vs := float(next_values.get("damage_mult", 1.0))
-			var cur_mult_vs := float(cur.get("damage_mult", 1.0))
-			if current_stack <= 0:
-				return "[color=#9ab8d8]Taking a hit primes a vow. Your next attack multiplies damage and consumes the vow.[/color]\n[color=#9ab8d8]Initial:[/color] primed hit damage [color=#7de882]x%.2f[/color]." % [next_mult_vs]
-			return "[color=#c8daf0]Vow Shatter:[/color] primed hit damage [color=#e8c96a]x%.2f[/color] [color=#8899aa]->[/color] [color=#7de882]x%.2f[/color]." % [cur_mult_vs, next_mult_vs]
+			var mult_stat := _stat("x%.2f", float(cur.get("damage_mult", 1.0)), float(next_values.get("damage_mult", 1.0)), is_initial)
+			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [mult_stat], "reward_card"))
 		"eclipse_mark":
-			var next_radius_em := float(next_values.get("radius", 0.0))
-			var next_dur_em := float(next_values.get("mark_duration", 0.0))
-			var next_ratio_em := float(next_values.get("bonus_ratio", 0.0))
-			var cur_radius_em := float(cur.get("radius", 0.0))
-			var cur_dur_em := float(cur.get("mark_duration", 0.0))
-			var cur_ratio_em := float(cur.get("bonus_ratio", 0.0))
-			if current_stack <= 0:
-				return "[color=#9ab8d8]Kills mark all nearby enemies. First hit on each marked enemy deals amplified damage. Marks expire quickly.[/color]\n[color=#9ab8d8]Initial:[/color] mark radius [color=#7de882]%.0f[/color], mark duration [color=#7de882]%.2fs[/color], bonus [color=#7de882]%.0f%%[/color] of hit." % [next_radius_em, next_dur_em, next_ratio_em * 100.0]
-			return "[color=#c8daf0]Eclipse Mark:[/color] radius [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color], duration [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color], bonus [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color] of hit." % [cur_radius_em, next_radius_em, cur_dur_em, next_dur_em, cur_ratio_em * 100.0, next_ratio_em * 100.0]
+			var radius_stat := _stat("%.0f", float(cur.get("radius", 0.0)), float(next_values.get("radius", 0.0)), is_initial)
+			var dur_stat := _stat("%.2fs", float(cur.get("mark_duration", 0.0)), float(next_values.get("mark_duration", 0.0)), is_initial)
+			var ratio_stat := _stat("%.0f%%", float(cur.get("bonus_ratio", 0.0)) * 100.0, float(next_values.get("bonus_ratio", 0.0)) * 100.0, is_initial)
+			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [radius_stat, dur_stat, ratio_stat], "reward_card"))
 		"fracture_field":
-			var next_radius_ff := float(next_values.get("radius", 0.0))
-			var next_ratio_ff := float(next_values.get("damage_ratio", 0.0))
-			var next_slow_ff := float(next_values.get("slow_duration", 0.0))
-			var cur_radius_ff := float(cur.get("radius", 0.0))
-			var cur_ratio_ff := float(cur.get("damage_ratio", 0.0))
-			var cur_slow_ff := float(cur.get("slow_duration", 0.0))
-			if current_stack <= 0:
-				var fracture_initial := "[color=#9ab8d8]Kill ruptures fault lines from the slain enemy.[/color]\n[color=#9ab8d8]Initial:[/color] length [color=#7de882]%.0f[/color], damage [color=#7de882]%.0f%%[/color], slow [color=#7de882]%.2fs[/color]." % [next_radius_ff, next_ratio_ff * 100.0, next_slow_ff]
-				return DESCRIPTION_CAP_GUARD.assert_visible_cap(fracture_initial, "fracture_field", "reward_card")
-			var fracture_stack_desc := "[color=#c8daf0]Fracture:[/color] length [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color], damage [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color], slow [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_radius_ff, next_radius_ff, cur_ratio_ff * 100.0, next_ratio_ff * 100.0, cur_slow_ff, next_slow_ff]
-			return DESCRIPTION_CAP_GUARD.assert_visible_cap(fracture_stack_desc, "fracture_field", "reward_card")
+			var length_stat := _stat("%.0f", float(cur.get("radius", 0.0)), float(next_values.get("radius", 0.0)), is_initial)
+			var damage_stat := _stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0, float(next_values.get("damage_ratio", 0.0)) * 100.0, is_initial)
+			var slow_stat := _stat("%.2fs", float(cur.get("slow_duration", 0.0)), float(next_values.get("slow_duration", 0.0)), is_initial)
+			return _trial_reward_desc(is_initial, flavor, _power_sentence(id, [length_stat, damage_stat, slow_stat], "reward_card"))
 		_:
 			return "[color=#9ab8d8]Enhances this power.[/color]"
 
@@ -387,15 +577,12 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 		return "[color=#c8daf0]Upgrade your stats.[/color]"
 	var cur_val: Variant = preview.get("current")
 	var next_val: Variant = preview.get("next")
+	var flavor := get_power_flavor_text(id)
 	match id:
 		"first_strike":
-			var cur_bonus := int(cur_val)
-			var next_bonus := int(next_val)
-			var first_strike_prefix := _damage_kind_prefix("first_strike")
-			return "%s[color=#c8daf0]Extra hit damage vs enemies above 80%% HP:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [first_strike_prefix, cur_bonus, next_bonus]
+			return "[color=#c8daf0]Extra hit damage vs enemies above 80%% HP:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
 		"heavy_blow":
-			var heavy_blow_prefix := _damage_kind_prefix("heavy_blow")
-			return "%s[color=#c8daf0]Damage:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [heavy_blow_prefix, int(cur_val), int(next_val)]
+			return "[color=#c8daf0]Damage:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [int(cur_val), int(next_val)]
 		"wide_arc":
 			var cur_arc := float(cur_val)
 			var next_arc := float(next_val)
@@ -428,17 +615,24 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 		"severing_edge":
 			return "[color=#c8daf0]Bonus damage on hits against enemies below 55%% HP:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
 		"apex_predator":
-			return "[color=#c8daf0]Warden's Verdict:[/color] every hit builds predator cadence; every 4th hit triggers a burst at impact and mauls nearby enemies. Predator power [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]." % [int(cur_val), int(next_val)]
+			var is_initial := int(cur_val) == 0
+			var stat := _stat("+%d", int(cur_val), int(next_val), is_initial)
+			return _desc(is_initial, flavor, _power_sentence(id, [stat], "reward_card"))
 		"void_echo":
 			var cur_void_echo := int(cur_val)
 			var next_void_echo := int(next_val)
 			var cur_echo_radius := clampf(96.0 + float(cur_void_echo) * 1.05, 96.0, 260.0)
 			var next_echo_radius := clampf(96.0 + float(next_void_echo) * 1.05, 96.0, 260.0)
-			return "[color=#c8daf0]Lacuna Echo:[/color] kills create lingering void zones that pulse damage and empower hits inside them. Zone power [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color], radius [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]." % [cur_void_echo, next_void_echo, cur_echo_radius, next_echo_radius]
+			var is_initial := cur_void_echo == 0
+			var power_stat := _stat("+%d", cur_void_echo, next_void_echo, is_initial)
+			var radius_stat := _stat("%.0f", cur_echo_radius, next_echo_radius, is_initial)
+			return _desc(is_initial, flavor, _power_sentence(id, [power_stat, radius_stat], "reward_card"))
 		"apex_momentum":
 			var cur_momentum := float(cur_val) * 100.0
 			var next_momentum := float(next_val) * 100.0
-			return "[color=#c8daf0]Sovereign Tempo:[/color] hits build tempo stacks; finishing a dash releases a momentum wave. Hitting enemies refunds dash cooldown based on stacks. Tempo per stack [color=#e8c96a]+%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]+%.0f%%[/color]." % [cur_momentum, next_momentum]
+			var is_initial := cur_momentum == 0.0
+			var stat := _stat("+%.0f%%", cur_momentum, next_momentum, is_initial)
+			return _desc(is_initial, flavor, _power_sentence(id, [stat], "reward_card"))
 		"convergence_surge":
 			var cur_ratio := float(cur_val)
 			var next_ratio := float(next_val)
@@ -448,13 +642,20 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 			var next_window := 1.2 + next_ratio * 1.8
 			var cur_pulse_every := maxf(0.14, 0.3 - cur_ratio * 0.25)
 			var next_pulse_every := maxf(0.14, 0.3 - next_ratio * 0.25)
-			return "[color=#c8daf0]Pillar Convergence:[/color] every [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color] damaging hits, you enter Convergence for [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color], pulsing every [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_hits_needed, next_hits_needed, cur_window, next_window, cur_pulse_every, next_pulse_every]
+			var is_initial := cur_ratio == 0.0
+			var hits_stat := _stat("%d", cur_hits_needed, next_hits_needed, is_initial)
+			var window_stat := _stat("%.2fs", cur_window, next_window, is_initial)
+			var pulse_stat := _stat("%.2fs", cur_pulse_every, next_pulse_every, is_initial)
+			return _desc(is_initial, flavor, _power_sentence(id, [hits_stat, window_stat, pulse_stat], "reward_card"))
 		"indomitable_spirit":
 			var cur_resist := float(cur_val) * 100.0
 			var next_resist := float(next_val) * 100.0
 			var cur_base_ratio := 45.0 + cur_resist
 			var next_base_ratio := 45.0 + next_resist
-			return "[color=#c8daf0]Unbroken Oath:[/color] DR [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color]. Taking damage banks Oath; damaging hits consume all bank for bonus = [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color] of damage stat + [color=#e8c96a]1%% per banked damage[/color]." % [cur_resist, next_resist, cur_base_ratio, next_base_ratio]
+			var is_initial := cur_resist == 0.0
+			var resist_stat := _stat("%.0f%%", cur_resist, next_resist, is_initial)
+			var ratio_stat := _stat("%.0f%%", cur_base_ratio, next_base_ratio, is_initial)
+			return _desc(is_initial, flavor, _power_sentence(id, [resist_stat, ratio_stat, _const("1%")], "reward_card"))
 		_:
 			return "[color=#c8daf0]Upgrade your stats.[/color]"
 
