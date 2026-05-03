@@ -8,6 +8,7 @@ const META_PROGRESS_STORE := preload("res://scripts/meta_progress_store.gd")
 const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
 const TELEMETRY_UPLOADER_SCRIPT := preload("res://scripts/telemetry_uploader.gd")
 const ACTIVE_RUN_SAVE_PATH := "user://active_run.save"
+const ACTIVE_RUN_DEBUG_SAVE_PATH := "user://active_run_debug.save"
 const ACTIVE_RUN_VERSION := 1
 const AUDIO_VOLUME_MIN_DB := -80.0
 const AUDIO_VOLUME_MAX_DB := 6.0
@@ -245,18 +246,27 @@ func _normalize_display_mode(mode: String) -> String:
 		return DISPLAY_MODE_WINDOWED
 	return DISPLAY_MODE_FULLSCREEN
 
+func _is_editor_session() -> bool:
+	return OS.has_feature("editor")
+
+func _active_run_save_path() -> String:
+	if _is_editor_session():
+		return ACTIVE_RUN_DEBUG_SAVE_PATH
+	return ACTIVE_RUN_SAVE_PATH
+
 func has_saved_run() -> bool:
-	return FileAccess.file_exists(ACTIVE_RUN_SAVE_PATH)
+	return FileAccess.file_exists(_active_run_save_path())
 
 func save_active_run(snapshot: Dictionary) -> bool:
 	if snapshot.is_empty():
 		return false
-	var file := FileAccess.open(ACTIVE_RUN_SAVE_PATH, FileAccess.WRITE)
+	var file := FileAccess.open(_active_run_save_path(), FileAccess.WRITE)
 	if file == null:
 		return false
 	var payload := {
 		"version": ACTIVE_RUN_VERSION,
 		"saved_at_unix": int(Time.get_unix_time_from_system()),
+		"editor_session": _is_editor_session(),
 		"snapshot": snapshot.duplicate(true)
 	}
 	file.store_var(payload)
@@ -265,7 +275,7 @@ func save_active_run(snapshot: Dictionary) -> bool:
 func load_active_run() -> Dictionary:
 	if not has_saved_run():
 		return {}
-	var file := FileAccess.open(ACTIVE_RUN_SAVE_PATH, FileAccess.READ)
+	var file := FileAccess.open(_active_run_save_path(), FileAccess.READ)
 	if file == null:
 		return {}
 	var payload_raw: Variant = file.get_var()
@@ -282,7 +292,7 @@ func load_active_run() -> Dictionary:
 func clear_active_run() -> void:
 	if not has_saved_run():
 		return
-	DirAccess.remove_absolute(ProjectSettings.globalize_path(ACTIVE_RUN_SAVE_PATH))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(_active_run_save_path()))
 
 func request_resume_saved_run() -> void:
 	resume_saved_run_requested = true
