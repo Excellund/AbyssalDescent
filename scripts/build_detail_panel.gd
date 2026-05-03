@@ -1,6 +1,7 @@
 extends Node
 
 const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
+const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
 const DESCRIPTION_CAP_GUARD := preload("res://scripts/shared/description_cap_guard.gd")
 
 signal build_detail_opened
@@ -361,202 +362,17 @@ func _damage_kind_prefix(_power_id: String, _player: Node) -> String:
 func _get_power_current_desc(power_id: String, power_type: String, player: Node) -> String:
 	if not is_instance_valid(player):
 		return ""
-	var stacks := 1
-	if power_type == "boon" and player.has_method("get_upgrade_stack_count"):
-		stacks = maxi(1, int(player.get_upgrade_stack_count(power_id)))
-	elif power_type == "boss" and player.has_method("get_upgrade_stack_count"):
-		stacks = maxi(1, int(player.get_upgrade_stack_count(power_id)))
-	elif power_type == "arcana" and player.has_method("get_trial_power_stack_count"):
-		stacks = maxi(1, int(player.get_trial_power_stack_count(power_id)))
-	match power_id:
-		# Boss rewards
-		"apex_predator":
-			return "[color=#9ab8d8]Every hit builds predator cadence. Every 4th hit bursts at impact and mauls nearby enemies.[/color]\n    [color=#c8daf0]Predator power:[/color] [color=#e8c96a]+%d[/color]" % (34 * stacks)
-		"void_echo":
-			var ve_radius := clampf(96.0 + 52.0 * float(stacks), 96.0, 260.0)
-			return "[color=#9ab8d8]Kills create a void zone that pulses damage and empowers hits inside it. Zone pulse kills do not create extra zones.[/color]\n    [color=#c8daf0]Zone radius:[/color] [color=#e8c96a]%.0f[/color], [color=#c8daf0]Zone power:[/color] [color=#e8c96a]%d[/color]" % [ve_radius, (52 * stacks)]
-		"apex_momentum":
-			return "[color=#9ab8d8]Hits build tempo. Dash end releases a momentum wave; hit enemies to refund dash cooldown.[/color]\n    [color=#c8daf0]Tempo per stack:[/color] [color=#e8c96a]+%.0f%%[/color]" % (9.0 * float(stacks))
-		"convergence_surge":
-			var cs_ratio := 0.22 * float(stacks)
-			var cs_hits_needed := maxi(2, 6 - int(round(cs_ratio * 8.0)))
-			var cs_window := 1.2 + cs_ratio * 1.8
-			var cs_pulse_every := maxf(0.14, 0.3 - cs_ratio * 0.25)
-			var cs_pulse_radius := clampf(92.0 + 120.0 * cs_ratio, 92.0, 250.0)
-			var cs_pulse_damage := (0.28 + cs_ratio * 0.8) * 100.0
-			return "[color=#9ab8d8]Every %d damaging hits, you enter Convergence.[/color]\n    [color=#c8daf0]Convergence:[/color] [color=#e8c96a]%.2fs[/color], [color=#c8daf0]Pulse every:[/color] [color=#e8c96a]%.2fs[/color], [color=#c8daf0]Pulse radius:[/color] [color=#e8c96a]%.0f[/color], [color=#c8daf0]Pulse damage:[/color] [color=#e8c96a]%.0f%%[/color] of damage stat" % [cs_hits_needed, cs_window, cs_pulse_every, cs_pulse_radius, cs_pulse_damage]
-		"indomitable_spirit":
-			var io_resist := 14.0 * float(stacks)
-			var io_base_ratio := 45.0 + io_resist
-			return "[color=#9ab8d8]Taking damage banks Oath. Damaging hits consume all Oath for bonus damage.[/color]\n    [color=#c8daf0]Damage Reduction:[/color] [color=#e8c96a]%.0f%%[/color], [color=#c8daf0]Oath attack:[/color] [color=#e8c96a]%.0f%%[/color] damage + [color=#e8c96a]1%% per banked Oath[/color]" % [io_resist, io_base_ratio]
-
-		# Boons
-		"first_strike":
-			return "[color=#c8daf0]%sExtra hit damage vs enemies above 80%% HP:[/color] [color=#e8c96a]+%d[/color]" % [_damage_kind_prefix(power_id, player), (16 * stacks)]
-		"heavy_blow":
-			return "[color=#c8daf0]%sDamage stat:[/color] [color=#e8c96a]+%d[/color]" % [_damage_kind_prefix(power_id, player), (7 * stacks)]
-		"wide_arc":
-			return "[color=#c8daf0]Attack arc:[/color] [color=#e8c96a]+%d deg[/color]" % (28 * stacks)
-		"long_reach":
-			return "[color=#c8daf0]Attack range:[/color] [color=#e8c96a]+%d[/color]" % (11 * stacks)
-		"fleet_foot":
-			return "[color=#c8daf0]Move speed:[/color] [color=#e8c96a]+%d[/color]" % (17 * stacks)
-		"blink_dash":
-			var cooldown_reduction := (1.0 - pow(0.80, float(stacks))) * 100.0
-			return "[color=#c8daf0]Dash cooldown:[/color] [color=#e8c96a]-%.0f%%[/color] (min 0.14s)" % cooldown_reduction
-		"iron_skin":
-			return "[color=#c8daf0]Armor:[/color] [color=#e8c96a]+%d[/color]" % (4 * stacks)
-		"battle_trance":
-			return "[color=#c8daf0]On-hit move speed:[/color] [color=#e8c96a]+%.0f%%[/color]" % (22.0 * float(stacks))
-		"surge_step":
-			return "[color=#c8daf0]Dash speed:[/color] [color=#e8c96a]+%d[/color]" % (85 * stacks)
-		"heartstone":
-			return "[color=#c8daf0]Max HP:[/color] [color=#e8c96a]+%d[/color]" % (10 * stacks)
-		"crushed_vow":
-			return "[color=#c8daf0]After taking damage, next-hit bonus:[/color] [color=#e8c96a]+%d[/color]" % (18 * stacks)
-		"severing_edge":
-			return "[color=#c8daf0]Bonus damage on hits against enemies below 55%% HP:[/color] [color=#e8c96a]+%d[/color]" % (14 * stacks)
-		# Arcana
-		"razor_wind":
-			var rw_range := 1.25 + 0.10 * float(stacks)
-			var rw_damage := 0.60 + 0.12 * float(stacks)
-			return "[color=#9ab8d8]Each swing fires a slicing projectile through enemies.[/color]\n    [color=#c8daf0]%sRange:[/color] [color=#e8c96a]x%.2f[/color], [color=#c8daf0]Damage:[/color] [color=#e8c96a]%.0f%%[/color] of hit" % [_damage_kind_prefix(power_id, player), rw_range, rw_damage * 100.0]
-		"execution_edge":
-			var ex_every := maxi(2, 4 - stacks)
-			var ex_mult := 2.20 + 0.45 * float(stacks)
-			return "[color=#9ab8d8]Every [color=#e8c96a]%d[/color] hits, your strike lands for [color=#e8c96a]x%.2f[/color] damage.[/color]\n    [color=#c8daf0]%sDamage multiplier applies to hit damage[/color]" % [ex_every, ex_mult, _damage_kind_prefix(power_id, player)]
-		"rupture_wave":
-			var rp_radius := 72.0 + 10.0 * float(stacks)
-			var rp_damage := 0.34 + 0.10 * float(stacks)
-			return "[color=#9ab8d8]Hits release a shockwave that damages nearby enemies.[/color]\n    [color=#c8daf0]%sRadius:[/color] [color=#e8c96a]%.0f[/color], [color=#c8daf0]Damage:[/color] [color=#e8c96a]%.0f%%[/color] of hit" % [_damage_kind_prefix(power_id, player), rp_radius, rp_damage * 100.0]
-		"aegis_field":
-			var ag_resist := minf(0.42, 0.12 + 0.06 * float(stacks))
-			var ag_guard := 0.90 + 0.20 * float(stacks)
-			var ag_radius := 92.0 + 14.0 * float(stacks)
-			var ag_cd := maxf(1.70, 3.00 - 0.20 * float(stacks))
-			return "[color=#9ab8d8]Taking damage triggers a guard pulse that slows enemies and grants resistance.[/color]\n    [color=#c8daf0]Resist:[/color] [color=#e8c96a]%.0f%%[/color], [color=#c8daf0]Guard:[/color] [color=#e8c96a]%.2fs[/color], [color=#c8daf0]Radius:[/color] [color=#e8c96a]%.0f[/color], [color=#c8daf0]Cooldown:[/color] [color=#e8c96a]%.2fs[/color]" % [ag_resist * 100.0, ag_guard, ag_radius, ag_cd]
-		"hunters_snare":
-			var hs_bonus := 4 + 3 * stacks
-			var hs_slow := 0.55 + 0.12 * float(stacks)
-			var hs_speed := maxf(0.42, 0.72 - 0.06 * float(stacks))
-			return "[color=#9ab8d8]Hits slow enemies; striking slowed targets deals extra hit damage.[/color]\n    [color=#c8daf0]%sSlow:[/color] [color=#e8c96a]%.2fs[/color] at [color=#e8c96a]%.0f%%[/color] speed, [color=#c8daf0]Extra hit damage:[/color] [color=#e8c96a]+%d[/color]" % [_damage_kind_prefix(power_id, player), hs_slow, hs_speed * 100.0, hs_bonus]
-		"phantom_step":
-			var ph_ratio := 0.40 + 0.08 * float(stacks)
-			var ph_slow := 0.60 + 0.15 * float(stacks)
-			return "[color=#9ab8d8]Dashing through enemies deals damage and leaves them slowed.[/color]\n    [color=#c8daf0]%sDash damage:[/color] [color=#e8c96a]%.0f%%[/color], [color=#c8daf0]Slow:[/color] [color=#e8c96a]%.2fs[/color]" % [_damage_kind_prefix(power_id, player), ph_ratio * 100.0, ph_slow]
-		"reaper_step":
-			var rp_mult := 1.36 + 0.12 * float(stacks)
-			return "[color=#9ab8d8]Kills fully refresh your dash. Dash range and speed scale together.[/color]\n    [color=#c8daf0]Range/speed:[/color] [color=#e8c96a]x%.2f[/color]" % rp_mult
-		"static_wake":
-			var sw_ratio := 0.35 + 0.10 * float(stacks)
-			var sw_life := 1.60 + 0.35 * float(stacks)
-			return "[color=#9ab8d8]Moving leaves an electrified trail that shocks enemies.[/color]\n    [color=#c8daf0]%sDamage per pulse:[/color] [color=#e8c96a]%.0f%%[/color], [color=#c8daf0]Trail duration:[/color] [color=#e8c96a]%.2fs[/color]" % [_damage_kind_prefix(power_id, player), sw_ratio * 100.0, sw_life]
-		"storm_crown":
-			var sc_every := maxi(2, 5 - stacks)
-			var sc_targets := mini(5, 2 + stacks)
-			var sc_radius := 120.0 + 12.0 * float(stacks)
-			var sc_damage := minf(0.82, 0.38 + 0.08 * float(stacks))
-			return "[color=#9ab8d8]Every few hits discharge chain lightning to nearby foes.[/color]\n    [color=#c8daf0]%sEvery:[/color] [color=#e8c96a]%d[/color] hits, [color=#c8daf0]Chains:[/color] [color=#e8c96a]%d[/color], [color=#c8daf0]Radius:[/color] [color=#e8c96a]%.0f[/color], [color=#c8daf0]Damage:[/color] [color=#e8c96a]%.0f%%[/color] of hit" % [_damage_kind_prefix(power_id, player), sc_every, sc_targets, sc_radius, sc_damage * 100.0]
-		"wraithstep":
-			var ws_mark := 2.80 + 0.55 * float(stacks)
-			var ws_bonus := 14 + 8 * stacks
-			var ws_splash := minf(0.95, 0.55 + 0.12 * float(stacks))
-			return "[color=#9ab8d8]Dashing marks enemies. Marked hits deal extra hit damage and splash nearby.[/color]\n    [color=#c8daf0]%sMark:[/color] [color=#e8c96a]%.2fs[/color], [color=#c8daf0]Marked-hit damage:[/color] [color=#e8c96a]+%d[/color], [color=#c8daf0]Cleave:[/color] [color=#e8c96a]%.0f%%[/color] of hit" % [_damage_kind_prefix(power_id, player), ws_mark, ws_bonus, ws_splash * 100.0]
-		"voidfire":
-			var vf_amp := 0.20 + 0.08 * float(stacks)
-			var vf_det := 0.80 + 0.15 * float(stacks)
-			var vf_lockout := 1.60
-			var vf_desc := "[color=#9ab8d8]Heat attacks. Danger Zone boosts hit damage.[/color]\n    [color=#c8daf0]Damage:[/color] [color=#e8c96a]+%.0f%%[/color], [color=#c8daf0]Detonate:[/color] [color=#e8c96a]%.0f%%[/color], [color=#c8daf0]Lockout:[/color] [color=#e8c96a]%.2fs[/color]" % [vf_amp * 100.0, vf_det * 100.0, vf_lockout]
-			return DESCRIPTION_CAP_GUARD.assert_visible_cap(vf_desc, "voidfire", "build_detail")
-		"dread_resonance":
-			var dr_bonus := 10 + 4 * stacks
-			return "[color=#9ab8d8]Chain hits on one enemy build resonance. Swapping targets resets it.[/color]\n    [color=#c8daf0]%sBonus per resonance stack:[/color] [color=#e8c96a]+%d[/color]" % [_damage_kind_prefix(power_id, player), dr_bonus]
-		"vow_shatter":
-			var vs_mult := 1.80 + 0.25 * float(stacks)
-			return "[color=#9ab8d8]Taking damage primes your next attack, then consumes the vow.[/color]\n    [color=#c8daf0]%sPrimed hit damage:[/color] [color=#e8c96a]x%.2f[/color]" % [_damage_kind_prefix(power_id, player), vs_mult]
-		"eclipse_mark":
-			var em_radius := 110.0 + 14.0 * float(stacks)
-			var em_duration := 1.40 + 0.20 * float(stacks)
-			var em_bonus := 0.65 + 0.12 * float(stacks)
-			return "[color=#9ab8d8]Kills mark nearby enemies. First hit on each mark gains burst damage.[/color]\n    [color=#c8daf0]%sRadius:[/color] [color=#e8c96a]%.0f[/color], [color=#c8daf0]Duration:[/color] [color=#e8c96a]%.2fs[/color], [color=#c8daf0]Bonus:[/color] [color=#e8c96a]%.0f%%[/color] of hit" % [_damage_kind_prefix(power_id, player), em_radius, em_duration, em_bonus * 100.0]
-		"fracture_field":
-			var ff_radius := 80.0 + 10.0 * float(stacks)
-			var ff_damage := 0.50 + 0.10 * float(stacks)
-			var ff_slow := 0.60 + 0.10 * float(stacks)
-			var ff_desc := "[color=#9ab8d8]Kills rupture fault lines from slain enemies.[/color]\n    [color=#c8daf0]Length:[/color] [color=#e8c96a]%.0f[/color], [color=#c8daf0]Damage:[/color] [color=#e8c96a]%.0f%%[/color], [color=#c8daf0]Slow:[/color] [color=#e8c96a]%.2fs[/color]" % [ff_radius, ff_damage * 100.0, ff_slow]
-			return DESCRIPTION_CAP_GUARD.assert_visible_cap(ff_desc, "fracture_field", "build_detail")
-		_:
-			return ""
+	if power_type == "arcana" and player.has_method("get_trial_power_card_desc"):
+		return String(player.get_trial_power_card_desc(power_id))
+	if player.has_method("get_upgrade_card_desc"):
+		return String(player.get_upgrade_card_desc(power_id))
+	return ""
 
 func _power_display_name(power_id: String) -> String:
-	match power_id:
-		# Map power IDs to display names
-		"first_strike":
-			return "First Strike"
-		"heavy_blow":
-			return "Heavy Blow"
-		"wide_arc":
-			return "Wide Arc"
-		"long_reach":
-			return "Long Reach"
-		"fleet_foot":
-			return "Fleet Foot"
-		"blink_dash":
-			return "Blink Dash"
-		"iron_skin":
-			return "Iron Skin"
-		"battle_trance":
-			return "Battle Trance"
-		"surge_step":
-			return "Surge Step"
-		"heartstone":
-			return "Heartstone"
-		"crushed_vow":
-			return "Crushed Vow"
-		"severing_edge":
-			return "Severing Edge"
-		"razor_wind":
-			return "Razor Wind"
-		"execution_edge":
-			return "Execution Edge"
-		"rupture_wave":
-			return "Rupture Wave"
-		"aegis_field":
-			return "Aegis Field"
-		"hunters_snare":
-			return "Hunter's Snare"
-		"phantom_step":
-			return "Phantom Step"
-		"reaper_step":
-			return "Reaper Step"
-		"static_wake":
-			return "Static Wake"
-		"storm_crown":
-			return "Storm Crown"
-		"wraithstep":
-			return "Wraithstep"
-		"voidfire":
-			return "Voidfire"
-		"dread_resonance":
-			return "Dread Resonance"
-		"vow_shatter":
-			return "Vow Shatter"
-		"eclipse_mark":
-			return "Eclipse Mark"
-		"fracture_field":
-			return "Fracture Field"
-		"apex_predator":
-			return "Warden's Verdict"
-		"void_echo":
-			return "Lacuna Echo"
-		"apex_momentum":
-			return "Sovereign Tempo"
-		"convergence_surge":
-			return "Pillar Convergence"
-		"indomitable_spirit":
-			return "Unbroken Oath"
-		_:
-			return power_id.capitalize()
+	var id := power_id.strip_edges().to_lower()
+	if POWER_REGISTRY.POWER_DISPLAY_NAMES.has(id):
+		return String(POWER_REGISTRY.POWER_DISPLAY_NAMES[id])
+	return id.capitalize()
 
 func _format_passive_name(passive_id: String) -> String:
 	match passive_id:

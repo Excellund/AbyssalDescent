@@ -2,6 +2,7 @@ extends Node
 
 const ENUMS := preload("res://scripts/shared/enums.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
+const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
 const MUTATOR_ICON_BLOOD_RUSH: Texture2D = preload("res://assets/ui/mutators/blood_rush.svg")
 const MUTATOR_ICON_FLASHPOINT: Texture2D = preload("res://assets/ui/mutators/flashpoint.svg")
 const MUTATOR_ICON_SIEGEBREAK: Texture2D = preload("res://assets/ui/mutators/siegebreak.svg")
@@ -449,8 +450,8 @@ func _refresh_boon_ui(player: Node2D) -> void:
 			label.position = Vector2(BOON_LABEL_X, 6.0)
 			icon_node.texture = null
 			icon_node.visible = false
-			var boon_desc := String(boon.get("desc", boon.get("description", "")))
 			var choice_name := _choice_display_name(boon)
+			var boon_desc := _get_choice_description(boon, player)
 			label.text = "[b][color=#ddeeff]%d. %s[/color][/b]\n%s" % [i + 1, choice_name, boon_desc]
 		label.modulate = Color(1.0, 1.0, 1.0, 0.95)
 
@@ -616,6 +617,8 @@ func _choice_display_name(choice: Dictionary) -> String:
 	var id := String(choice.get("id", "")).strip_edges().to_lower()
 	if id.is_empty():
 		return "Power"
+	if POWER_REGISTRY.POWER_DISPLAY_NAMES.has(id):
+		return String(POWER_REGISTRY.POWER_DISPLAY_NAMES[id])
 	match id:
 		"hunters_snare":
 			return "Hunter's Snare"
@@ -629,6 +632,23 @@ func _choice_display_name(choice: Dictionary) -> String:
 					result += " "
 				result += String(words[i]).capitalize()
 			return result.strip_edges()
+
+func _get_choice_description(choice: Dictionary, player: Node2D) -> String:
+	var desc := String(choice.get("desc", choice.get("description", ""))).strip_edges()
+	if not desc.is_empty() and desc.to_lower() != "unknown":
+		return desc
+	if not is_instance_valid(player):
+		return ""
+	var id := String(choice.get("id", "")).strip_edges()
+	if id.is_empty():
+		return ""
+	if reward_selection_mode == ENUMS.RewardMode.ARCANA:
+		if player.has_method("get_trial_power_card_desc"):
+			return player.get_trial_power_card_desc(id)
+	else:
+		if player.has_method("get_upgrade_card_desc"):
+			return player.get_upgrade_card_desc(id)
+	return ""
 
 func _build_offer_payload(choice: Dictionary) -> Dictionary:
 	var id := String(choice.get("id", "")).strip_edges()

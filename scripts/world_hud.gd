@@ -1,6 +1,7 @@
 extends Node
 
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
+const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
 
 const MUTATOR_ICON_BLOOD_RUSH: Texture2D = preload("res://assets/ui/mutators/blood_rush.svg")
 const MUTATOR_ICON_FLASHPOINT: Texture2D = preload("res://assets/ui/mutators/flashpoint.svg")
@@ -948,97 +949,17 @@ func _get_passive_display_name(passive_id: String) -> String:
 			return "Passive"
 
 func _get_power_display_name(power_id: String) -> String:
-	match power_id:
-		# Upgrades
-		"first_strike":
-			return "First Strike"
-		"heavy_blow":
-			return "Heavy Blow"
-		"wide_arc":
-			return "Wide Arc"
-		"long_reach":
-			return "Long Reach"
-		"fleet_foot":
-			return "Fleet Foot"
-		"blink_dash":
-			return "Blink Dash"
-		"iron_skin":
-			return "Iron Skin"
-		"battle_trance":
-			return "Battle Trance"
-		"surge_step":
-			return "Surge Step"
-		"backstab":
-			return "Backstab"
-		"executioner":
-			return "Executioner"
-		"bleeding_edge":
-			return "Bleeding Edge"
-		"ricochet":
-			return "Ricochet"
-		"piercing_shot":
-			return "Piercing Shot"
-		"frostbite":
-			return "Frostbite"
-		"weakpoint":
-			return "Weakpoint"
-		"hardened_skin":
-			return "Hardened Skin"
-		"last_stand":
-			return "Last Stand"
-		"adrenaline":
-			return "Adrenaline"
-		"counter_strike":
-			return "Counter Strike"
-		"heartstone":
-			return "Heartstone"
-		"crushed_vow":
-			return "Crushed Vow"
-		"severing_edge":
-			return "Severing Edge"
-		# Trial Powers (Arcana)
-		"razor_wind":
-			return "Razor Wind"
-		"execution_edge":
-			return "Execution Edge"
-		"rupture_wave":
-			return "Rupture Wave"
-		"aegis_field":
-			return "Aegis Field"
-		"hunters_snare":
-			return "Hunters Snare"
-		"phantom_step":
-			return "Phantom Step"
-		"reaper_step":
-			return "Reaper Step"
-		"static_wake":
-			return "Static Wake"
-		"storm_crown":
-			return "Storm Crown"
-		"wraithstep":
-			return "Wraithstep"
-		"voidfire":
-			return "Voidfire"
-		"dread_resonance":
-			return "Dread Resonance"
-		"vow_shatter":
-			return "Vow Shatter"
-		"eclipse_mark":
-			return "Eclipse Mark"
-		"fracture_field":
-			return "Fracture Field"
-		"apex_predator":
-			return "Warden's Verdict"
-		"void_echo":
-			return "Lacuna Echo"
-		"apex_momentum":
-			return "Sovereign Tempo"
-		"convergence_surge":
-			return "Pillar Convergence"
-		"indomitable_spirit":
-			return "Unbroken Oath"
-		_:
-			return "Unknown"
+	var id := power_id.strip_edges().to_lower()
+	if POWER_REGISTRY.POWER_DISPLAY_NAMES.has(id):
+		return String(POWER_REGISTRY.POWER_DISPLAY_NAMES[id])
+	# Fallback for unregistered powers
+	var words := id.split("_", false)
+	var result := ""
+	for i in range(words.size()):
+		if i > 0:
+			result += " "
+		result += String(words[i]).capitalize()
+	return result.strip_edges() if not result.is_empty() else "Unknown"
 
 func _get_mutator_icon_texture(icon_shape_id: String) -> Texture2D:
 	match icon_shape_id:

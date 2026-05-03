@@ -46,21 +46,21 @@ func apply_upgrade(upgrade_id: String) -> bool:
 	upgrade_stacks[id] = current_stacks + 1
 
 	match id:
-		"first_strike", "heavy_blow", "wide_arc", "long_reach", "fleet_foot", "blink_dash", "battle_trance", "surge_step", "apex_predator", "void_echo", "apex_momentum", "convergence_surge", "indomitable_spirit":
+		"shard_strike", "hammered_impact", "cracking_arc", "fracture_reach", "quarry_step", "swift_reach", "battle_echo", "relentless_surge", "apex_predator", "void_echo", "apex_momentum", "convergence_surge", "indomitable_spirit":
 			player_reference.set(String(preview.get("property", "")), preview.get("next", player_reference.get(String(preview.get("property", "")))))
-		"heartstone":
+		"vital_covenant":
 			var next_max := int(preview.get("next", player_reference.get_max_health()))
 			var current_max: int = int(player_reference.get_max_health())
 			var max_gain := maxi(0, next_max - current_max)
 			var next_current: int = int(player_reference.get_current_health()) + max_gain
 			player_reference.set_max_health_and_current(next_max, next_current)
-		"iron_skin":
+		"iron_oath":
 			player_reference.set("iron_skin_armor", int(preview.get("next", int(player_reference.get("iron_skin_armor")))))
 			player_reference.set("iron_skin_stacks", int(player_reference.get("iron_skin_stacks")) + 1)
-		"crushed_vow":
-			player_reference.set("crushed_vow_bonus_damage", int(preview.get("next", int(player_reference.get("crushed_vow_bonus_damage")))))
-		"severing_edge":
-			player_reference.set("severing_edge_bonus_damage", int(preview.get("next", int(player_reference.get("severing_edge_bonus_damage")))))
+		"sworn_blade":
+			player_reference.set("sworn_blade_bonus_damage", int(preview.get("next", int(player_reference.get("sworn_blade_bonus_damage")))))
+		"resonant_edge":
+			player_reference.set("resonant_edge_bonus_damage", int(preview.get("next", int(player_reference.get("resonant_edge_bonus_damage")))))
 		_:
 			return false
 	return true
@@ -254,7 +254,7 @@ func get_trial_power_card_description(power_id: String) -> String:
 			if current_stack <= 0:
 				return "[color=#9ab8d8]Your hits send a shockwave rippling outward, damaging all nearby enemies.[/color]\n[color=#9ab8d8]Initial:[/color] radius [color=#7de882]%.0f[/color], damage [color=#7de882]%.0f%%[/color] of hit." % [next_radius, next_ratio * 100.0]
 			return "[color=#c8daf0]Rupture:[/color] radius [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color], damage [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color]." % [cur_radius, next_radius, cur_ratio * 100.0, next_ratio * 100.0]
-		"aegis_field":
+		"aegis_retort":
 			var next_resist := float(next_values.get("resist", 0.0))
 			var next_duration := float(next_values.get("duration", 0.0))
 			var next_radius := float(next_values.get("radius", 0.0))
@@ -264,8 +264,8 @@ func get_trial_power_card_description(power_id: String) -> String:
 			var cur_radius := float(cur.get("radius", 0.0))
 			var cur_cooldown := float(cur.get("cooldown", 0.0))
 			if current_stack <= 0:
-				return "[color=#9ab8d8]Taking damage triggers a guard pulse that slows nearby enemies and grants brief damage resistance.[/color]\n[color=#9ab8d8]Initial:[/color] resist [color=#7de882]%.0f%%[/color] for [color=#7de882]%.2fs[/color], pulse radius [color=#7de882]%.0f[/color], cooldown [color=#7de882]%.2fs[/color]." % [next_resist * 100.0, next_duration, next_radius, next_cooldown]
-			return "[color=#c8daf0]Aegis Field:[/color] resist [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color], guard [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color], pulse radius [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color], cooldown [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_resist * 100.0, next_resist * 100.0, cur_duration, next_duration, cur_radius, next_radius, cur_cooldown, next_cooldown]
+				return "[color=#9ab8d8]Taking damage triggers a guard pulse: slows nearby enemies, grants brief resistance, and binds a Vow.[/color]\n[color=#9ab8d8]Initial:[/color] resist [color=#7de882]%.0f%%[/color] for [color=#7de882]%.2fs[/color], pulse radius [color=#7de882]%.0f[/color], cooldown [color=#7de882]%.2fs[/color]." % [next_resist * 100.0, next_duration, next_radius, next_cooldown]
+			return "[color=#c8daf0]Aegis Retort:[/color] resist [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color], guard [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color], pulse radius [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color], cooldown [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_resist * 100.0, next_resist * 100.0, cur_duration, next_duration, cur_radius, next_radius, cur_cooldown, next_cooldown]
 		"hunters_snare":
 			var next_bonus := int(next_values.get("bonus_damage", 0))
 			var next_duration := float(next_values.get("slow_duration", 0.0))
@@ -286,12 +286,14 @@ func get_trial_power_card_description(power_id: String) -> String:
 			if current_stack <= 0:
 				return "[color=#9ab8d8]Dashing through enemies deals damage and leaves them slowed in your wake.[/color]\n[color=#9ab8d8]Initial:[/color] damage [color=#7de882]%d[/color], slow [color=#7de882]%.2fs[/color]." % [next_damage, next_slow]
 			return "%s[color=#c8daf0]Phantom Step:[/color] damage [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color], slow [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [phantom_prefix, cur_damage, next_damage, cur_slow, next_slow]
-		"reaper_step":
-			var next_range := float(next_values.get("range_mult", 1.0))
-			var cur_range := float(cur.get("range_mult", 1.0))
+		"apex_surge":
+			var next_weave_range := float(next_values.get("weave_taut_range_mult", 1.0))
+			var next_weave_dmg := float(next_values.get("weave_taut_damage_mult", 0.0))
+			var cur_weave_range := float(cur.get("weave_taut_range_mult", 1.0))
+			var cur_weave_dmg := float(cur.get("weave_taut_damage_mult", 0.0))
 			if current_stack <= 0:
-				return "[color=#9ab8d8]Kills fully refresh your dash. Each stack scales dash range and dash speed together.[/color]\n[color=#9ab8d8]Initial:[/color] range/speed [color=#7de882]x%.2f[/color], kill refresh [color=#7de882]full[/color]." % [next_range]
-			return "[color=#c8daf0]Reaper Step:[/color] range/speed [color=#e8c96a]x%.2f[/color] [color=#8899aa]->[/color] [color=#7de882]x%.2f[/color], kill refresh [color=#7de882]full[/color]." % [cur_range, next_range]
+				return "[color=#9ab8d8]While Weave is Taut, attack range and hit damage are amplified.[/color]\n[color=#9ab8d8]Initial:[/color] range [color=#7de882]x%.2f[/color], bonus damage [color=#7de882]+%.0f%%[/color]." % [next_weave_range, next_weave_dmg * 100.0]
+			return "[color=#c8daf0]Apex Surge (Taut):[/color] range [color=#e8c96a]x%.2f[/color] [color=#8899aa]->[/color] [color=#7de882]x%.2f[/color], bonus dmg [color=#e8c96a]+%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]+%.0f%%[/color]." % [cur_weave_range, next_weave_range, cur_weave_dmg * 100.0, next_weave_dmg * 100.0]
 		"static_wake":
 			var wake_prefix := _damage_kind_prefix("static_wake")
 			var next_lifetime := float(next_values.get("lifetime", 0.0))
@@ -339,13 +341,14 @@ func get_trial_power_card_description(power_id: String) -> String:
 				return DESCRIPTION_CAP_GUARD.assert_visible_cap(voidfire_initial, "voidfire", "reward_card")
 			var voidfire_stack_desc := "[color=#c8daf0]Voidfire:[/color] damage [color=#e8c96a]+%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]+%.0f%%[/color], detonate [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color], lockout [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_amp * 100.0, next_amp * 100.0, cur_det_ratio * 100.0, next_det_ratio * 100.0, cur_lockout, next_lockout]
 			return DESCRIPTION_CAP_GUARD.assert_visible_cap(voidfire_stack_desc, "voidfire", "reward_card")
-		"dread_resonance":
-			var next_bonus := int(next_values.get("bonus_per_stack", 0))
-			var cur_bonus_dr := int(cur.get("bonus_per_stack", 0))
-			var max_stacks_dr := int(player_reference.get("dread_resonance_max_stacks"))
+		"oath_burst":
+			var next_pulse_radius := float(next_values.get("pulse_radius", 78.0))
+			var next_pulse_ratio := float(next_values.get("pulse_ratio", 0.0))
+			var cur_pulse_radius := float(cur.get("pulse_radius", 78.0))
+			var cur_pulse_ratio := float(cur.get("pulse_ratio", 0.0))
 			if current_stack <= 0:
-				return "[color=#9ab8d8]Chain hits on one enemy build resonance to [color=#e8c96a]%d[/color] stacks. Swapping targets resets to 1.[/color]\n[color=#9ab8d8]Initial:[/color] bonus per resonance stack [color=#7de882]+%d[/color]." % [max_stacks_dr, next_bonus]
-			return "[color=#c8daf0]Dread Resonance:[/color] bonus per resonance stack [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color] (cap [color=#e8c96a]%d[/color])." % [cur_bonus_dr, next_bonus, max_stacks_dr]
+				return "[color=#9ab8d8]Fulfilling a Vow detonates a radial burst around you.[/color]\n[color=#9ab8d8]Initial:[/color] radius [color=#7de882]%.0f[/color], damage [color=#7de882]%.0f%%[/color] of hit." % [next_pulse_radius, next_pulse_ratio * 100.0]
+			return "[color=#c8daf0]Oath Burst:[/color] radius [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color], damage [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color] of hit." % [cur_pulse_radius, next_pulse_radius, cur_pulse_ratio * 100.0, next_pulse_ratio * 100.0]
 		"vow_shatter":
 			var next_mult_vs := float(next_values.get("damage_mult", 1.0))
 			var cur_mult_vs := float(cur.get("damage_mult", 1.0))
@@ -362,7 +365,7 @@ func get_trial_power_card_description(power_id: String) -> String:
 			if current_stack <= 0:
 				return "[color=#9ab8d8]Kills mark all nearby enemies. First hit on each marked enemy deals amplified damage. Marks expire quickly.[/color]\n[color=#9ab8d8]Initial:[/color] mark radius [color=#7de882]%.0f[/color], mark duration [color=#7de882]%.2fs[/color], bonus [color=#7de882]%.0f%%[/color] of hit." % [next_radius_em, next_dur_em, next_ratio_em * 100.0]
 			return "[color=#c8daf0]Eclipse Mark:[/color] radius [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color], duration [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color], bonus [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color] of hit." % [cur_radius_em, next_radius_em, cur_dur_em, next_dur_em, cur_ratio_em * 100.0, next_ratio_em * 100.0]
-		"fracture_field":
+		"fault_line":
 			var next_radius_ff := float(next_values.get("radius", 0.0))
 			var next_ratio_ff := float(next_values.get("damage_ratio", 0.0))
 			var next_slow_ff := float(next_values.get("slow_duration", 0.0))
@@ -370,10 +373,10 @@ func get_trial_power_card_description(power_id: String) -> String:
 			var cur_ratio_ff := float(cur.get("damage_ratio", 0.0))
 			var cur_slow_ff := float(cur.get("slow_duration", 0.0))
 			if current_stack <= 0:
-				var fracture_initial := "[color=#9ab8d8]Kill ruptures fault lines from the slain enemy.[/color]\n[color=#9ab8d8]Initial:[/color] length [color=#7de882]%.0f[/color], damage [color=#7de882]%.0f%%[/color], slow [color=#7de882]%.2fs[/color]." % [next_radius_ff, next_ratio_ff * 100.0, next_slow_ff]
-				return DESCRIPTION_CAP_GUARD.assert_visible_cap(fracture_initial, "fracture_field", "reward_card")
-			var fracture_stack_desc := "[color=#c8daf0]Fracture:[/color] length [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color], damage [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color], slow [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_radius_ff, next_radius_ff, cur_ratio_ff * 100.0, next_ratio_ff * 100.0, cur_slow_ff, next_slow_ff]
-			return DESCRIPTION_CAP_GUARD.assert_visible_cap(fracture_stack_desc, "fracture_field", "reward_card")
+				var fault_initial := "[color=#9ab8d8]Kill makes a fault zone. Entrants are Sharded and pulsed.[/color]\n[color=#9ab8d8]Initial:[/color] r [color=#7de882]%.0f[/color], d [color=#7de882]%.0f%%[/color], s [color=#7de882]%.2fs[/color]." % [next_radius_ff, next_ratio_ff * 100.0, next_slow_ff]
+				return DESCRIPTION_CAP_GUARD.assert_visible_cap(fault_initial, "fault_line", "reward_card")
+			var fault_stack_desc := "[color=#c8daf0]Fault:[/color] r [color=#e8c96a]%.0f[/color][color=#8899aa]->[/color][color=#7de882]%.0f[/color], d [color=#e8c96a]%.0f%%[/color][color=#8899aa]->[/color][color=#7de882]%.0f%%[/color], s [color=#e8c96a]%.2f[/color][color=#8899aa]->[/color][color=#7de882]%.2fs[/color]." % [cur_radius_ff, next_radius_ff, cur_ratio_ff * 100.0, next_ratio_ff * 100.0, cur_slow_ff, next_slow_ff]
+			return DESCRIPTION_CAP_GUARD.assert_visible_cap(fault_stack_desc, "fault_line", "reward_card")
 		_:
 			return "[color=#9ab8d8]Enhances this power.[/color]"
 
@@ -388,45 +391,41 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 	var cur_val: Variant = preview.get("current")
 	var next_val: Variant = preview.get("next")
 	match id:
-		"first_strike":
-			var cur_bonus := int(cur_val)
-			var next_bonus := int(next_val)
-			var first_strike_prefix := _damage_kind_prefix("first_strike")
-			return "%s[color=#c8daf0]Extra hit damage vs enemies above 80%% HP:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [first_strike_prefix, cur_bonus, next_bonus]
-		"heavy_blow":
-			var heavy_blow_prefix := _damage_kind_prefix("heavy_blow")
-			return "%s[color=#c8daf0]Damage:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [heavy_blow_prefix, int(cur_val), int(next_val)]
-		"wide_arc":
-			var cur_arc := float(cur_val)
-			var next_arc := float(next_val)
-			return "[color=#c8daf0]Attack arc:[/color] [color=#e8c96a]%.0f°[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f°[/color]" % [cur_arc, next_arc]
-		"long_reach":
-			return "[color=#c8daf0]Attack range:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [float(cur_val), float(next_val)]
-		"fleet_foot":
-			return "[color=#c8daf0]Move speed:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [float(cur_val), float(next_val)]
-		"blink_dash":
-			var cur_dash_cd := float(cur_val)
-			var next_dash_cd := float(next_val)
-			return "[color=#c8daf0]Dash cooldown:[/color] [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]" % [cur_dash_cd, next_dash_cd]
-		"iron_skin":
-			return "[color=#c8daf0]Armor:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [int(cur_val), int(next_val)]
-		"battle_trance":
+		# FRACTURE CONSTELLATIONS cluster boons
+		"shard_strike":
+			return "[color=#9ab8d8]Shard-consumed hits crack harder.[/color] [color=#c8daf0]Bonus damage:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
+		"cracking_arc":
+			return "[color=#9ab8d8]Wide swings that hit 3+ enemies Shard all of them.[/color] [color=#c8daf0]Arc:[/color] [color=#e8c96a]%.0f°[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f°[/color]" % [float(cur_val), float(next_val)]
+		"fracture_reach":
+			return "[color=#9ab8d8]Max-range kills chain Shards to nearby enemies.[/color] [color=#c8daf0]Range:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [float(cur_val), float(next_val)]
+		# HUNT WEAVE cluster boons
+		"quarry_step":
+			return "[color=#9ab8d8]Weave threads hold longer before they decay.[/color] [color=#c8daf0]Move speed:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [float(cur_val), float(next_val)]
+		"swift_reach":
+			return "[color=#9ab8d8]Each dash plants a Weave thread on a fresh target.[/color] [color=#c8daf0]Dash distance:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [float(cur_val), float(next_val)]
+		"relentless_surge":
+			return "[color=#9ab8d8]Cascade detonations hit harder and wider.[/color] [color=#c8daf0]Dash speed:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [float(cur_val), float(next_val)]
+		# VOW LEDGER cluster boons
+		"sworn_blade":
+			return "[color=#9ab8d8]Taking damage primes a Vow-finisher strike.[/color] [color=#c8daf0]Next-hit bonus:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
+		"iron_oath":
+			return "[color=#9ab8d8]Active Vows harden your guard by +1 absorb per hit.[/color] [color=#c8daf0]Armor:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [int(cur_val), int(next_val)]
+		"vital_covenant":
+			var cur_max := int(cur_val)
+			var next_max := int(next_val)
+			return "[color=#9ab8d8]Damage taken above 60%% HP now binds a Vow.[/color] [color=#c8daf0]Max HP:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [cur_max, next_max]
+		# ECHO FORGE cluster boons
+		"hammered_impact":
+			return "[color=#9ab8d8]Every 5th hit now emits an Echo charge.[/color] [color=#c8daf0]Damage:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [int(cur_val), int(next_val)]
+		"battle_echo":
 			var cur_speed_bonus := float(cur_val) * 100.0
 			var next_speed_bonus := float(next_val) * 100.0
 			var trance_duration := 1.25
 			if player_reference.get("battle_trance_duration") != null:
 				trance_duration = float(player_reference.get("battle_trance_duration"))
-			return "[color=#c8daf0]On hit:[/color] gain [color=#e8c96a]+%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]+%.0f%%[/color] move speed for [color=#7de882]%.2fs[/color]." % [cur_speed_bonus, next_speed_bonus, trance_duration]
-		"surge_step":
-			return "[color=#c8daf0]Dash speed:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [float(cur_val), float(next_val)]
-		"heartstone":
-			var cur_max := int(cur_val)
-			var next_max := int(next_val)
-			return "[color=#c8daf0]Max HP:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [cur_max, next_max]
-		"crushed_vow":
-			return "[color=#c8daf0]After being hit, next attack bonus damage:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
-		"severing_edge":
-			return "[color=#c8daf0]Bonus damage on hits against enemies below 55%% HP:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
+			return "[color=#9ab8d8]Moving hits build Echo charge toward Forge bursts.[/color] [color=#c8daf0]Move speed:[/color] [color=#e8c96a]+%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]+%.0f%%[/color] for [color=#7de882]%.2fs[/color]." % [cur_speed_bonus, next_speed_bonus, trance_duration]
+		"resonant_edge":
+			return "[color=#9ab8d8]Low-HP kills emit 2 Echoes to spike Forge tempo.[/color] [color=#c8daf0]Bonus vs <55%% HP:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
 		"apex_predator":
 			return "[color=#c8daf0]Warden's Verdict:[/color] every hit builds predator cadence; every 4th hit triggers a burst at impact and mauls nearby enemies. Predator power [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]." % [int(cur_val), int(next_val)]
 		"void_echo":

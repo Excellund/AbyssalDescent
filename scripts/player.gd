@@ -16,7 +16,7 @@ const RUN_SNAPSHOT_PROPERTIES := [
 	"damage",
 	"attack_range",
 	"attack_arc_degrees",
-	"first_strike_bonus_damage",
+	"shard_strike_bonus_damage",
 	"attack_cooldown",
 	"attack_lock_duration",
 	"battle_trance_move_speed_bonus",
@@ -27,12 +27,12 @@ const RUN_SNAPSHOT_PROPERTIES := [
 	"reward_razor_wind",
 	"reward_execution_edge",
 	"reward_rupture_wave",
-	"reward_aegis_field",
+	"reward_aegis_retort",
 	"reward_hunters_snare",
 	"razor_wind_stacks",
 	"execution_edge_stacks",
 	"rupture_wave_stacks",
-	"aegis_field_stacks",
+	"aegis_retort_stacks",
 	"hunters_snare_stacks",
 	"execution_every",
 	"execution_damage_mult",
@@ -53,10 +53,10 @@ const RUN_SNAPSHOT_PROPERTIES := [
 	"hunters_snare_slow_duration",
 	"hunters_snare_slow_mult",
 	"reward_phantom_step",
-	"reward_void_dash",
+	"reward_apex_surge",
 	"reward_static_wake",
 	"phantom_step_stacks",
-	"void_dash_stacks",
+	"apex_surge_stacks",
 	"static_wake_stacks",
 	"phantom_step_damage",
 	"phantom_step_slow_duration",
@@ -77,15 +77,15 @@ const RUN_SNAPSHOT_PROPERTIES := [
 	"wraithstep_mark_splash_radius",
 	"wraithstep_mark_splash_ratio",
 	"reward_voidfire",
-	"reward_dread_resonance",
+	"reward_oath_burst",
 	"reward_vow_shatter",
 	"reward_eclipse_mark",
-	"reward_fracture_field",
+	"reward_fault_line",
 	"voidfire_stacks",
-	"dread_resonance_stacks",
+	"oath_burst_stacks",
 	"vow_shatter_stacks",
 	"eclipse_mark_stacks",
-	"fracture_field_stacks",
+	"fault_line_stacks",
 	"voidfire_danger_zone_amp",
 	"voidfire_detonate_ratio",
 	"voidfire_detonate_radius",
@@ -101,15 +101,16 @@ const RUN_SNAPSHOT_PROPERTIES := [
 	"void_heat_cap",
 	"void_heat_decay_rate",
 	"dread_resonance_bonus_per_stack",
+	# (kept as stub: oath_burst runtime replaces dread_resonance in Phase 5)
 	"vow_shatter_damage_mult",
 	"eclipse_mark_radius",
 	"eclipse_mark_duration",
 	"eclipse_mark_bonus_ratio",
 	"fracture_field_radius",
-	"fracture_field_damage_ratio",
+	"fault_line_damage_ratio",
 	"fracture_field_slow_duration",
-	"crushed_vow_bonus_damage",
-	"severing_edge_bonus_damage",
+	"sworn_blade_bonus_damage",
+	"resonant_edge_bonus_damage",
 	"apex_predator_bonus_damage",
 	"void_echo_damage",
 	"apex_momentum_speed_bonus",
@@ -146,7 +147,7 @@ var dash_cooldown_left: float = 0.0
 var last_move_direction: Vector2 = Vector2.RIGHT
 var dash_direction: Vector2 = Vector2.ZERO
 var attack_cooldown_left: float = 0.0
-var first_strike_bonus_damage: int = 0
+var shard_strike_bonus_damage: int = 0
 var health_state
 var player_feedback
 var static_wake_trail_renderer: Node2D
@@ -171,12 +172,12 @@ var iron_skin_stacks: int = 0
 var reward_razor_wind: bool = false
 var reward_execution_edge: bool = false
 var reward_rupture_wave: bool = false
-var reward_aegis_field: bool = false
+var reward_aegis_retort: bool = false
 var reward_hunters_snare: bool = false
 var razor_wind_stacks: int = 0
 var execution_edge_stacks: int = 0
 var rupture_wave_stacks: int = 0
-var aegis_field_stacks: int = 0
+var aegis_retort_stacks: int = 0
 var hunters_snare_stacks: int = 0
 var execution_every: int = 3
 var execution_damage_mult: float = 2.6
@@ -200,18 +201,21 @@ var hunters_snare_slow_mult: float = 0.66
 
 # Dash archetype trial powers
 var reward_phantom_step: bool = false
-var reward_void_dash: bool = false
+var reward_apex_surge: bool = false
 var reward_static_wake: bool = false
 var reward_storm_crown: bool = false
 var reward_wraithstep: bool = false
 var phantom_step_stacks: int = 0
-var void_dash_stacks: int = 0
+var apex_surge_stacks: int = 0
 var static_wake_stacks: int = 0
 var storm_crown_stacks: int = 0
 var wraithstep_stacks: int = 0
 # Phantom Step: damage and slow duration scale with stacks
 var phantom_step_damage: int = 10
 var phantom_step_slow_duration: float = 0.7
+# Apex Surge (Hunt Weave): amplify range and damage while Weave is Taut
+var apex_surge_weave_taut_range_mult: float = 1.0
+var apex_surge_weave_taut_damage_mult: float = 0.0
 # Void Dash: extra distance multiplier and kill-reset tracking
 var void_dash_range_mult: float = 1.42
 # Static Wake: trail damage and lifetime
@@ -248,15 +252,15 @@ var polar_shift_dash_lockout_duration: float = 0.0
 
 # Voidfire archetype trial powers
 var reward_voidfire: bool = false
-var reward_dread_resonance: bool = false
+var reward_oath_burst: bool = false
 var reward_vow_shatter: bool = false
 var reward_eclipse_mark: bool = false
-var reward_fracture_field: bool = false
+var reward_fault_line: bool = false
 var voidfire_stacks: int = 0
-var dread_resonance_stacks: int = 0
+var oath_burst_stacks: int = 0
 var vow_shatter_stacks: int = 0
 var eclipse_mark_stacks: int = 0
-var fracture_field_stacks: int = 0
+var fault_line_stacks: int = 0
 # Voidfire: heat-based overheat mechanic
 var voidfire_danger_zone_amp: float = 0.20
 var voidfire_detonate_ratio: float = 0.80
@@ -275,11 +279,14 @@ var void_heat_cap: float = 110.0
 var void_heat_decay_rate: float = 10.0
 var _voidfire_last_hit_time: float = -999.0
 var _voidfire_lockout_left: float = 0.0
-# Dread Resonance: same-target streak bonus
-var dread_resonance_bonus_per_stack: int = 6
+# Compatibility stubs for legacy dread_resonance helpers (superseded by oath_burst)
+var dread_resonance_bonus_per_stack: int = 0
 var dread_resonance_max_stacks: int = 3
 var _dread_resonance_target_id: int = -1
 var _dread_resonance_target_stacks: int = 0
+# Oath Burst (Vow Ledger): Vow fulfill detonates a radial pulse
+var oath_burst_pulse_radius: float = 78.0
+var oath_burst_pulse_ratio: float = 0.38
 # Vow Shatter: primed multiplier after being hit
 var vow_shatter_damage_mult: float = 1.8
 var _vow_shatter_primed: bool = false
@@ -288,15 +295,50 @@ var eclipse_mark_radius: float = 110.0
 var eclipse_mark_duration: float = 1.4
 var eclipse_mark_bonus_ratio: float = 0.65
 var _eclipse_marked_enemies: Dictionary = {}
-# Fracture Field: kill-triggered fault lines (non-chain)
-var fracture_field_radius: float = 80.0
-var fracture_field_damage_ratio: float = 0.50
-var fracture_field_slow_duration: float = 0.6
-var _fracture_field_resolving: bool = false
-# New boons
-var crushed_vow_bonus_damage: int = 0
-var _crushed_vow_primed: bool = false
-var severing_edge_bonus_damage: int = 0
+# Fault Line (Fracture): kill leaves a zone that auto-Shards enemies entering it
+var fault_line_radius: float = 80.0
+var fracture_field_damage_ratio: float = 0.0  # stub — superseded by fault_line_damage_ratio
+var fault_line_damage_ratio: float = 0.50
+var fault_line_slow_duration: float = 0.6
+var _fault_line_resolving: bool = false
+# Cluster boon fields
+var sworn_blade_bonus_damage: int = 0
+var cracking_arc_multi_shard: bool = false
+var fracture_reach_chain: bool = false
+var quarry_thread_window_bonus: float = 0.0
+var swift_reach_weave_thread: bool = false
+var relentless_surge_stacks: int = 0
+var vital_covenant_vow_bind: bool = false
+var resonant_edge_echo_on_kill: bool = false
+var resonant_edge_bonus_damage: int = 0
+var _sworn_blade_primed: bool = false
+var _fracture_cluster_unlocked: bool = false
+var _weave_cluster_unlocked: bool = false
+var _vow_cluster_unlocked: bool = false
+var _echo_cluster_unlocked: bool = false
+
+# ENGINE CLUSTER RUNTIME STATE
+# --- Fracture Constellations ---
+var _shard_marks: Dictionary = {}     # enemy_id → expiry_time
+var shard_mark_duration: float = 3.5
+var _shard_constellation_threshold: int = 3
+var _shard_constellation_cooldown: float = 0.0
+var _shard_constellation_cooldown_duration: float = 0.5
+# --- Hunt Weave ---
+var _weave_threads: Dictionary = {}   # enemy_id → expiry_time
+var weave_thread_base_window: float = 2.5
+var _weave_taut: bool = false
+var _weave_taut_kill_ready: bool = false
+# --- Echo Forge ---
+var _echo_charges: Array[float] = []  # each entry is expiry_time
+var echo_charge_lifetime: float = 5.5
+var echo_forge_threshold: int = 3
+var _hammered_impact_hit_count: int = 0
+var _battle_echo_partial: int = 0
+# --- Vow Ledger ---
+var _vow_active: bool = false
+var _vow_fulfillment_left: float = 0.0
+var vow_window_duration: float = 4.0
 var apex_predator_bonus_damage: int = 0
 var void_echo_damage: int = 0
 var apex_momentum_speed_bonus: float = 0.0
@@ -401,6 +443,8 @@ func _physics_process(delta: float) -> void:
 	_update_indomitable_damage_bank(delta)
 	_update_voidfire_heat(delta)
 	_update_voidfire_lockout(delta)
+	_sync_engine_cluster_upgrade_state()
+	_update_engine_cluster_placeholder_state(delta)
 	_sync_voidfire_ui()
 	_sync_oath_ui()
 	_update_eclipse_marks()
@@ -455,6 +499,346 @@ func _update_execution_edge_proc_display(delta: float) -> void:
 	if execution_edge_proc_display_left == 0.0:
 		queue_redraw()
 
+func _update_engine_cluster_placeholder_state(delta: float) -> void:
+	var now := float(Time.get_ticks_msec()) * 0.001
+
+	if _shard_constellation_cooldown > 0.0:
+		_shard_constellation_cooldown = maxf(0.0, _shard_constellation_cooldown - delta)
+	var expired_shards: Array = []
+	for shard_key in _shard_marks.keys():
+		if float(_shard_marks.get(shard_key, 0.0)) <= now:
+			expired_shards.append(shard_key)
+	for shard_key in expired_shards:
+		_shard_marks.erase(shard_key)
+	var fracture_threshold := _get_fracture_threshold()
+	if player_feedback != null and player_feedback.has_method("sync_fracture_shard_decals"):
+		player_feedback.sync_fracture_shard_decals(_shard_marks.keys(), fracture_threshold)
+	if _shard_marks.size() >= fracture_threshold and _shard_constellation_cooldown <= 0.0:
+		_shard_constellation_cooldown = _shard_constellation_cooldown_duration
+
+	var expired_threads: Array = []
+	for thread_key in _weave_threads.keys():
+		if float(_weave_threads.get(thread_key, 0.0)) <= now:
+			expired_threads.append(thread_key)
+	for thread_key in expired_threads:
+		_weave_threads.erase(thread_key)
+	var weave_threshold := _get_weave_threshold()
+	_weave_taut = _weave_threads.size() >= weave_threshold
+	if not _weave_taut:
+		_weave_taut_kill_ready = false
+
+	var echo_idx := _echo_charges.size() - 1
+	while echo_idx >= 0:
+		if float(_echo_charges[echo_idx]) <= now:
+			_echo_charges.remove_at(echo_idx)
+		echo_idx -= 1
+
+	_hammered_impact_hit_count = maxi(0, _hammered_impact_hit_count)
+	_battle_echo_partial = maxi(0, _battle_echo_partial)
+
+	if _vow_active:
+		_vow_fulfillment_left = maxf(0.0, _vow_fulfillment_left - delta)
+		if _vow_fulfillment_left <= 0.0:
+			_vow_active = false
+
+func _sync_engine_cluster_upgrade_state() -> void:
+	if upgrade_system == null:
+		return
+	var shard_strike_stacks := int(upgrade_system.get_upgrade_stack_count("shard_strike"))
+	var swift_reach_stacks := int(upgrade_system.get_upgrade_stack_count("swift_reach"))
+	var sworn_blade_stacks := int(upgrade_system.get_upgrade_stack_count("sworn_blade"))
+	var hammered_impact_stacks := int(upgrade_system.get_upgrade_stack_count("hammered_impact"))
+	_fracture_cluster_unlocked = shard_strike_stacks > 0
+	_weave_cluster_unlocked = swift_reach_stacks > 0
+	_vow_cluster_unlocked = sworn_blade_stacks > 0
+	_echo_cluster_unlocked = hammered_impact_stacks > 0
+	quarry_thread_window_bonus = float(upgrade_system.get_upgrade_stack_count("quarry_step")) * 0.25
+	swift_reach_weave_thread = _weave_cluster_unlocked
+	relentless_surge_stacks = maxi(0, upgrade_system.get_upgrade_stack_count("relentless_surge"))
+	if not _fracture_cluster_unlocked:
+		if not _shard_marks.is_empty():
+			_shard_marks.clear()
+			if player_feedback != null and player_feedback.has_method("clear_all_fracture_shard_decals"):
+				player_feedback.clear_all_fracture_shard_decals()
+	if not _weave_cluster_unlocked:
+		_weave_threads.clear()
+		_weave_taut = false
+		_weave_taut_kill_ready = false
+	if not _vow_cluster_unlocked:
+		_vow_active = false
+		_vow_fulfillment_left = 0.0
+	if not _echo_cluster_unlocked:
+		_echo_charges.clear()
+
+func _get_weave_thread_window() -> float:
+	return weave_thread_base_window + quarry_thread_window_bonus
+
+func _hunt_weave_enabled() -> bool:
+	return _weave_cluster_unlocked
+
+func _vow_cluster_enabled() -> bool:
+	return _vow_cluster_unlocked
+
+func _echo_cluster_enabled() -> bool:
+	return _echo_cluster_unlocked
+
+func _get_live_enemy_count() -> int:
+	var live_count := 0
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if not DAMAGEABLE.can_take_damage(enemy_node):
+			continue
+		live_count += 1
+	return live_count
+
+func _get_adaptive_cluster_threshold(base_threshold: int) -> int:
+	var clamped_base := maxi(1, base_threshold)
+	var live_enemies := _get_live_enemy_count()
+	if live_enemies <= 1:
+		return 1
+	if live_enemies <= 3:
+		return maxi(2, clamped_base - 1)
+	return clamped_base
+
+func _get_fracture_threshold() -> int:
+	return _get_adaptive_cluster_threshold(_shard_constellation_threshold)
+
+func _get_weave_threshold() -> int:
+	return _get_adaptive_cluster_threshold(3)
+
+func _get_echo_threshold() -> int:
+	return _get_adaptive_cluster_threshold(echo_forge_threshold)
+
+func _register_weave_thread(enemy_id: int) -> void:
+	if enemy_id <= 0:
+		return
+	if not _hunt_weave_enabled():
+		return
+	var weave_threshold := _get_weave_threshold()
+	var expiry := float(Time.get_ticks_msec()) * 0.001 + _get_weave_thread_window()
+	_weave_threads[enemy_id] = expiry
+	# Show thread plant on the enemy
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if (enemy_node as Node2D).get_instance_id() == enemy_id:
+			if player_feedback != null and player_feedback.has_method("play_weave_thread_plant"):
+				player_feedback.play_weave_thread_plant((enemy_node as Node2D).global_position)
+			break
+	if _weave_threads.size() >= weave_threshold:
+		if not _weave_taut:
+			if player_feedback != null and player_feedback.has_method("play_weave_taut_activated"):
+				player_feedback.play_weave_taut_activated(global_position)
+			if player_feedback != null and player_feedback.has_method("play_cluster_callout"):
+				player_feedback.play_cluster_callout("weave_taut", "WEAVE TAUT", Color(1.0, 0.86, 0.34, 0.96), 0.62, 0.55)
+		_weave_taut = true
+		_weave_taut_kill_ready = true
+
+func _register_weave_thread_from_dash() -> void:
+	var nearest_enemy_id := -1
+	var nearest_dist := INF
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if not DAMAGEABLE.can_take_damage(enemy_node):
+			continue
+		var enemy_body := enemy_node as Node2D
+		var enemy_id := enemy_body.get_instance_id()
+		if _weave_threads.has(enemy_id):
+			continue
+		var dist := global_position.distance_to(enemy_body.global_position)
+		if dist < nearest_dist:
+			nearest_dist = dist
+			nearest_enemy_id = enemy_id
+	if nearest_enemy_id > 0:
+		_register_weave_thread(nearest_enemy_id)
+
+func _try_consume_weave_cascade(kill_position: Vector2) -> void:
+	if not _hunt_weave_enabled():
+		return
+	if not _weave_taut or not _weave_taut_kill_ready:
+		return
+	var epicenter := kill_position
+	if epicenter == Vector2.ZERO:
+		epicenter = global_position
+	var surge_bonus := 0.06 * float(mini(3, relentless_surge_stacks))
+	var cascade_ratio := 0.40 + surge_bonus
+	var cascade_radius := 92.0 + 10.0 * float(mini(3, relentless_surge_stacks))
+	var cascade_damage := _apply_objective_mutator_damage_mult(maxi(1, int(round(float(damage) * cascade_ratio))))
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if not DAMAGEABLE.can_take_damage(enemy_node):
+			continue
+		var enemy_body := enemy_node as Node2D
+		if enemy_body.global_position.distance_to(epicenter) > cascade_radius:
+			continue
+		DAMAGEABLE.apply_damage(enemy_node, cascade_damage, {"attack_type": "hunt_weave_cascade", "is_ground_attack": true})
+	if player_feedback != null and player_feedback.has_method("play_weave_cascade_burst"):
+		player_feedback.play_weave_cascade_burst(epicenter, cascade_radius)
+	if player_feedback != null and player_feedback.has_method("play_cluster_callout"):
+		player_feedback.play_cluster_callout("weave_cascade", "CASCADE", Color(1.0, 0.80, 0.34, 0.98), 0.64, 0.5)
+	_weave_threads.clear()
+	_weave_taut = false
+	_weave_taut_kill_ready = false
+
+# ═══════════════════════════════════════════════════════════════════════════
+# FRACTURE CONSTELLATIONS: Plant Shards → Link at 3+ → fire Constellation burst
+# ═══════════════════════════════════════════════════════════════════════════
+
+func _plant_fracture_shard(enemy_id: int) -> void:
+	if enemy_id <= 0 or upgrade_system == null:
+		return
+	var shard_strike_stacks := int(upgrade_system.get_upgrade_stack_count("shard_strike"))
+	if shard_strike_stacks <= 0:
+		return
+	var expiry := float(Time.get_ticks_msec()) * 0.001 + shard_mark_duration
+	_shard_marks[enemy_id] = expiry
+	var fracture_threshold := _get_fracture_threshold()
+	var shard_count := _shard_marks.size()
+	if player_feedback != null and player_feedback.has_method("play_fracture_shard_progress"):
+		player_feedback.play_fracture_shard_progress(global_position, shard_count, fracture_threshold)
+	if shard_count == maxi(1, fracture_threshold - 1) and player_feedback != null and player_feedback.has_method("play_cluster_callout"):
+		player_feedback.play_cluster_callout("fracture_ready", "CONSTELLATION READY", Color(0.64, 1.0, 1.0, 0.98), 0.58, 0.5)
+	if shard_count >= fracture_threshold and _shard_constellation_cooldown <= 0.0:
+		_fire_fracture_constellation()
+	else:
+		# Show shard plant on the enemy
+		for enemy_node in get_tree().get_nodes_in_group("enemies"):
+			if (enemy_node as Node2D).get_instance_id() == enemy_id:
+				if player_feedback != null and player_feedback.has_method("play_fracture_shard_plant"):
+					player_feedback.play_fracture_shard_plant((enemy_node as Node2D).global_position)
+				break
+
+func _fire_fracture_constellation() -> void:
+	if _shard_marks.is_empty() or upgrade_system == null:
+		return
+	var constellation_damage_ratio := 0.65
+	var constellation_radius := 110.0
+	var constellation_damage := _apply_objective_mutator_damage_mult(maxi(1, int(round(float(damage) * constellation_damage_ratio))))
+	var epicenter := global_position
+	var marked_enemies := _shard_marks.keys()
+	if marked_enemies.size() > 0:
+		var first_enemy_id = marked_enemies[0]
+		for enemy_node in get_tree().get_nodes_in_group("enemies"):
+			if (enemy_node as Node2D).get_instance_id() == first_enemy_id:
+				epicenter = (enemy_node as Node2D).global_position
+				break
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if not DAMAGEABLE.can_take_damage(enemy_node):
+			continue
+		var enemy_body := enemy_node as Node2D
+		if enemy_body.global_position.distance_to(epicenter) > constellation_radius:
+			continue
+		DAMAGEABLE.apply_damage(enemy_node, constellation_damage, {"attack_type": "fracture_constellation", "is_ground_attack": true})
+	if player_feedback != null and player_feedback.has_method("play_fracture_constellation_burst"):
+		player_feedback.play_fracture_constellation_burst(epicenter, constellation_radius)
+	if player_feedback != null and player_feedback.has_method("play_cluster_callout"):
+		player_feedback.play_cluster_callout("fracture_burst", "CONSTELLATION", Color(0.50, 0.98, 1.0, 0.98), 0.66, 0.5)
+	_shard_marks.clear()
+	if player_feedback != null and player_feedback.has_method("clear_all_fracture_shard_decals"):
+		player_feedback.clear_all_fracture_shard_decals()
+	_shard_constellation_cooldown = _shard_constellation_cooldown_duration
+
+# ═══════════════════════════════════════════════════════════════════════════
+# VOW LEDGER: Bind Vow on damage → Fulfill on hit → collect payoff
+# ═══════════════════════════════════════════════════════════════════════════
+
+func _bind_vow_ledger_on_damage() -> void:
+	if upgrade_system == null or not _vow_cluster_enabled():
+		return
+	var sworn_blade_stacks := int(upgrade_system.get_upgrade_stack_count("sworn_blade"))
+	var iron_oath_stacks := int(upgrade_system.get_upgrade_stack_count("iron_oath"))
+	var vital_covenant_stacks := int(upgrade_system.get_upgrade_stack_count("vital_covenant"))
+	if sworn_blade_stacks <= 0 and iron_oath_stacks <= 0 and vital_covenant_stacks <= 0:
+		return
+	if _vow_active:
+		return  # Only one vow at a time
+	_vow_active = true
+	_vow_fulfillment_left = vow_window_duration
+	if player_feedback != null and player_feedback.has_method("play_vow_ledger_bind"):
+		player_feedback.play_vow_ledger_bind(global_position)
+	if player_feedback != null and player_feedback.has_method("play_cluster_callout"):
+		player_feedback.play_cluster_callout("vow_primed", "VOW PRIMED", Color(1.0, 0.92, 0.52, 0.98), 0.64, 0.6)
+
+func _try_fulfill_vow_ledger_on_hit() -> void:
+	if not _vow_active or upgrade_system == null or not _vow_cluster_enabled():
+		return
+	var sworn_blade_stacks := int(upgrade_system.get_upgrade_stack_count("sworn_blade"))
+	var iron_oath_stacks := int(upgrade_system.get_upgrade_stack_count("iron_oath"))
+	if sworn_blade_stacks <= 0 and iron_oath_stacks <= 0:
+		_vow_active = false
+		return
+	var payoff_damage_ratio := 0.55 * float(sworn_blade_stacks)
+	var payoff_damage := _apply_objective_mutator_damage_mult(maxi(1, int(round(float(damage) * payoff_damage_ratio))))
+	var payoff_radius := 88.0
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if not DAMAGEABLE.can_take_damage(enemy_node):
+			continue
+		var enemy_body := enemy_node as Node2D
+		if enemy_body.global_position.distance_to(global_position) > payoff_radius:
+			continue
+		DAMAGEABLE.apply_damage(enemy_node, payoff_damage, {"attack_type": "vow_ledger_payoff", "is_ground_attack": true})
+	if player_feedback != null and player_feedback.has_method("play_vow_ledger_payoff"):
+		player_feedback.play_vow_ledger_payoff(global_position, payoff_radius)
+	if player_feedback != null and player_feedback.has_method("play_cluster_callout"):
+		player_feedback.play_cluster_callout("vow_payoff", "VOW FULFILLED", Color(1.0, 0.90, 0.42, 0.98), 0.64, 0.55)
+	_vow_active = false
+	_vow_fulfillment_left = 0.0
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ECHO FORGE: Generate Echoes → Accumulate → Forge fires at threshold
+# ═══════════════════════════════════════════════════════════════════════════
+
+func _generate_echo_charge() -> void:
+	if upgrade_system == null or not _echo_cluster_enabled():
+		return
+	var hammered_impact_stacks := int(upgrade_system.get_upgrade_stack_count("hammered_impact"))
+	var battle_echo_stacks := int(upgrade_system.get_upgrade_stack_count("battle_echo"))
+	var resonant_edge_stacks := int(upgrade_system.get_upgrade_stack_count("resonant_edge"))
+	if hammered_impact_stacks <= 0 and battle_echo_stacks <= 0 and resonant_edge_stacks <= 0:
+		return
+	var echo_threshold := _get_echo_threshold()
+	var expiry := float(Time.get_ticks_msec()) * 0.001 + echo_charge_lifetime
+	_echo_charges.append(expiry)
+	var echo_count := _echo_charges.size()
+	if player_feedback != null and player_feedback.has_method("play_echo_forge_accumulate"):
+		player_feedback.play_echo_forge_accumulate(global_position, echo_count, echo_threshold)
+	if echo_count == maxi(1, echo_threshold - 1) and player_feedback != null and player_feedback.has_method("play_cluster_callout"):
+		player_feedback.play_cluster_callout("forge_ready", "FORGE READY", Color(1.0, 0.84, 0.48, 0.98), 0.58, 0.5)
+	if echo_count == echo_threshold and player_feedback != null and player_feedback.has_method("play_echo_forge_primed"):
+		player_feedback.play_echo_forge_primed(global_position, 120.0)
+	if echo_count == echo_threshold and player_feedback != null and player_feedback.has_method("play_cluster_callout"):
+		player_feedback.play_cluster_callout("forge_primed", "FORGE PRIMED", Color(1.0, 0.90, 0.56, 0.98), 0.6, 0.5)
+	if echo_count >= echo_threshold:
+		_try_fire_echo_forge(global_position)
+
+func _try_fire_echo_forge(epicenter: Vector2) -> void:
+	var echo_threshold := _get_echo_threshold()
+	if _echo_charges.size() < echo_threshold or upgrade_system == null:
+		return
+	var resonant_edge_stacks := int(upgrade_system.get_upgrade_stack_count("resonant_edge"))
+	var forge_damage_ratio := 0.72 + 0.15 * float(mini(3, resonant_edge_stacks))
+	var forge_radius := 120.0 + 8.0 * float(mini(3, resonant_edge_stacks))
+	var forge_damage := _apply_objective_mutator_damage_mult(maxi(1, int(round(float(damage) * forge_damage_ratio))))
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if not DAMAGEABLE.can_take_damage(enemy_node):
+			continue
+		var enemy_body := enemy_node as Node2D
+		if enemy_body.global_position.distance_to(epicenter) > forge_radius:
+			continue
+		DAMAGEABLE.apply_damage(enemy_node, forge_damage, {"attack_type": "echo_forge_burst", "is_ground_attack": true})
+	if player_feedback != null and player_feedback.has_method("play_echo_forge_burst"):
+		player_feedback.play_echo_forge_burst(epicenter, forge_radius)
+	if player_feedback != null and player_feedback.has_method("play_cluster_callout"):
+		player_feedback.play_cluster_callout("forge_burst", "FORGE BURST", Color(1.0, 0.76, 0.38, 0.98), 0.64, 0.5)
+	_echo_charges.clear()
+
 func _try_start_dash(direction: Vector2) -> void:
 	if _is_attack_locked():
 		return
@@ -466,7 +850,7 @@ func _try_start_dash(direction: Vector2) -> void:
 		return
 
 	dash_direction = direction if direction != Vector2.ZERO else last_move_direction
-	var range_mult := void_dash_range_mult if reward_void_dash else 1.0
+	var range_mult := 1.0
 	dash_remaining_distance = dash_distance * range_mult
 	var effective_dash_speed := maxf(1.0, dash_speed * range_mult)
 	var effective_duration := dash_remaining_distance / effective_dash_speed
@@ -481,6 +865,8 @@ func _try_start_dash(direction: Vector2) -> void:
 	_set_dash_phasing(true)
 	if passive_sigil_burst:
 		sigil_burst_ready = true
+	if swift_reach_weave_thread:
+		_register_weave_thread_from_dash()
 
 func _try_attack_input() -> void:
 	if not Input.is_action_just_pressed("attack"):
@@ -568,7 +954,7 @@ func _process_active_dash(delta: float) -> bool:
 
 	var dash_start := global_position
 	dash_time_left = maxf(0.0, dash_time_left - delta)
-	var dash_speed_mult := void_dash_range_mult if reward_void_dash else 1.0
+	var dash_speed_mult := 1.0
 	var max_step := maxf(0.0, dash_speed * dash_speed_mult * delta)
 	var desired_step := minf(dash_remaining_distance, max_step)
 	if desired_step <= 0.0:
@@ -785,7 +1171,7 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 	var raw_amount := amount
 	var reduced := maxi(1, amount - iron_skin_armor)
 	var total_resist := objective_mutator_damage_resist
-	if reward_aegis_field and aegis_field_active_left > 0.0:
+	if reward_aegis_retort and aegis_field_active_left > 0.0:
 		total_resist += aegis_field_resist_ratio
 	if indomitable_spirit_damage_reduction > 0.0:
 		total_resist += indomitable_spirit_damage_reduction
@@ -798,6 +1184,7 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 	var health_before := _get_current_health()
 	health_state.take_damage(reduced)
 	if _get_current_health() < health_before:
+		_bind_vow_ledger_on_damage()
 		var context_copy := damage_context.duplicate(true)
 		context_copy["source"] = source
 		context_copy["ability"] = ability
@@ -818,8 +1205,8 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 			queue_redraw()
 		if reward_vow_shatter:
 			_vow_shatter_primed = true
-		if crushed_vow_bonus_damage > 0:
-			_crushed_vow_primed = true
+		if sworn_blade_bonus_damage > 0:
+			_sworn_blade_primed = true
 		if indomitable_spirit_damage_reduction > 0.0:
 			indomitable_damage_bank += float(reduced)
 			if player_feedback != null and player_feedback.has_method("play_boss_unbroken_bank_gain"):
@@ -978,13 +1365,18 @@ func apply_run_snapshot(snapshot: Dictionary) -> void:
 	combo_relay_stacks = 0
 	combo_relay_stack_timer = 0.0
 	_eclipse_marked_enemies.clear()
+	if player_feedback != null and player_feedback.has_method("clear_all_fracture_shard_decals"):
+		player_feedback.clear_all_fracture_shard_decals()
 	if player_feedback != null and player_feedback.has_method("clear_all_eclipse_mark_decals"):
 		player_feedback.clear_all_eclipse_mark_decals()
 	_reset_dread_resonance_tracking()
 	void_heat = 0.0
 	_voidfire_lockout_left = 0.0
 	_vow_shatter_primed = false
-	_crushed_vow_primed = false
+	_sworn_blade_primed = false
+	_weave_threads.clear()
+	_weave_taut = false
+	_weave_taut_kill_ready = false
 	_set_dash_phasing(false)
 	velocity = Vector2.ZERO
 	queue_redraw()
@@ -1104,7 +1496,7 @@ func _apply_objective_mutator_damage_mult(base_damage: int) -> int:
 	return maxi(1, int(ceil(float(base_damage) * (1.0 + total_damage_mult))))
 
 func _trigger_aegis_field() -> void:
-	if not reward_aegis_field:
+	if not reward_aegis_retort:
 		return
 	if aegis_field_cooldown_left > 0.0:
 		return
@@ -1131,36 +1523,36 @@ func apply_power_for_test(power_id: String) -> bool:
 		"razor_wind": true,
 		"execution_edge": true,
 		"rupture_wave": true,
-		"aegis_field": true,
+		"aegis_retort": true,
 		"hunters_snare": true,
 		"phantom_step": true,
-		"reaper_step": true,
+		"apex_surge": true,
 		"static_wake": true,
 		"storm_crown": true,
 		"wraithstep": true,
 		"voidfire": true,
-		"dread_resonance": true,
+		"oath_burst": true,
 		"vow_shatter": true,
 		"eclipse_mark": true,
-		"fracture_field": true
+		"fault_line": true
 	}
 	if hard_ids.has(id):
 		apply_trial_power(id)
 		return true
 
 	var boon_ids := {
-		"first_strike": true,
-		"heavy_blow": true,
-		"wide_arc": true,
-		"long_reach": true,
-		"fleet_foot": true,
-		"blink_dash": true,
-		"iron_skin": true,
-		"battle_trance": true,
-		"surge_step": true,
-		"heartstone": true,
-		"crushed_vow": true,
-		"severing_edge": true,
+		"shard_strike": true,
+		"cracking_arc": true,
+		"fracture_reach": true,
+		"quarry_step": true,
+		"swift_reach": true,
+		"relentless_surge": true,
+		"sworn_blade": true,
+		"iron_oath": true,
+		"vital_covenant": true,
+		"hammered_impact": true,
+		"battle_echo": true,
+		"resonant_edge": true,
 		"apex_predator": true,
 		"void_echo": true,
 		"apex_momentum": true,
@@ -1199,10 +1591,10 @@ func get_last_damage_breakdown() -> Dictionary:
 # This makes Flat vs Scaling behavior explicit and easy to audit.
 func _build_damage_breakdown(base_scaling_damage: int, enemy_node: Object, hit_position: Vector2, source: String) -> Dictionary:
 	var flat_bonus_damage := _get_hunters_snare_bonus_damage(enemy_node)
-	flat_bonus_damage += _get_first_strike_bonus_damage(enemy_node)
+	flat_bonus_damage += _get_shard_strike_bonus_damage(enemy_node)
 	flat_bonus_damage += _consume_wraithstep_mark(enemy_node, hit_position, base_scaling_damage)
-	flat_bonus_damage += _get_crushed_vow_bonus()
-	flat_bonus_damage += _get_severing_edge_bonus(enemy_node)
+	flat_bonus_damage += _get_sworn_blade_bonus()
+	flat_bonus_damage += _get_resonant_edge_bonus(enemy_node)
 	flat_bonus_damage += _get_apex_predator_bonus(enemy_node, hit_position, base_scaling_damage)
 	flat_bonus_damage += _get_void_echo_zone_bonus(enemy_node, base_scaling_damage)
 	flat_bonus_damage += _get_dread_resonance_bonus(enemy_node)
@@ -1234,6 +1626,9 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		if player_feedback != null:
 			player_feedback.play_world_ring(global_position, 30.0, Color(0.46, 0.62, 0.82, 0.88), 0.18)
 	var strike_range := float(melee_context.get("range", attack_range))
+	if _weave_taut and reward_apex_surge:
+		strike_range *= maxf(1.0, apex_surge_weave_taut_range_mult)
+		strike_damage = int(round(float(strike_damage) * (1.0 + maxf(0.0, apex_surge_weave_taut_damage_mult))))
 	var retort_active: bool = passive_iron_retort and iron_retort_window_left > 0.0
 	if retort_active:
 		strike_damage = int(round(float(strike_damage) * 1.7))
@@ -1290,8 +1685,11 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		if reward_rupture_wave and not rupture_triggered_enemy_ids.has(enemy_id):
 			rupture_triggered_enemy_ids[enemy_id] = true
 			_apply_rupture_wave(enemy_body.global_position, final_strike_damage, rupture_hit_enemy_ids)
-		if reward_dread_resonance:
+		if reward_oath_burst:
 			_update_dread_resonance_target(enemy_node, enemy_id)
+		_register_weave_thread(enemy_id)
+		_plant_fracture_shard(enemy_id)
+		_generate_echo_charge()
 		did_hit = true
 
 	if reward_razor_wind:
@@ -1302,6 +1700,7 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		did_hit = _apply_razor_wind(attack_direction, wind_context, rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags) or did_hit
 	if did_hit:
 		_trigger_battle_trance()
+		_try_fulfill_vow_ledger_on_hit()
 		# Voidfire: gain heat on any hit
 		if reward_voidfire and _voidfire_lockout_left <= 0.0:
 			_voidfire_last_hit_time = Time.get_ticks_msec() / 1000.0
@@ -1357,6 +1756,7 @@ func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupt
 		if reward_rupture_wave and not rupture_triggered_enemy_ids.has(enemy_id):
 			rupture_triggered_enemy_ids[enemy_id] = true
 			_apply_rupture_wave(enemy_body.global_position, final_wind_damage, rupture_hit_enemy_ids)
+		_register_weave_thread(enemy_id)
 		did_hit = true
 	return did_hit
 
@@ -1379,8 +1779,8 @@ func _trigger_battle_trance() -> void:
 		return
 	battle_trance_active_left = battle_trance_duration
 
-func _get_first_strike_bonus_damage(enemy_node: Object) -> int:
-	if first_strike_bonus_damage <= 0:
+func _get_shard_strike_bonus_damage(enemy_node: Object) -> int:
+	if shard_strike_bonus_damage <= 0:
 		return 0
 	if not is_instance_valid(enemy_node):
 		return 0
@@ -1389,7 +1789,7 @@ func _get_first_strike_bonus_damage(enemy_node: Object) -> int:
 		return 0
 	var enemy_current: int = int(enemy_node.get_current_health())
 	if float(enemy_current) / float(enemy_max) >= 0.8:
-		return first_strike_bonus_damage
+		return shard_strike_bonus_damage
 	return 0
 
 func clear_lingering_combat_effects() -> void:
@@ -1407,9 +1807,11 @@ func clear_lingering_combat_effects() -> void:
 	_eclipse_marked_enemies.clear()
 	if player_feedback != null and player_feedback.has_method("clear_all_eclipse_mark_decals"):
 		player_feedback.clear_all_eclipse_mark_decals()
-	_reset_dread_resonance_tracking()
 	_vow_shatter_primed = false
-	_crushed_vow_primed = false
+	_sworn_blade_primed = false
+	_weave_threads.clear()
+	_weave_taut = false
+	_weave_taut_kill_ready = false
 	_indomitable_spirit_primed = false
 	indomitable_damage_bank = 0.0
 	apex_predator_combo_hits = 0
@@ -1422,7 +1824,7 @@ func clear_lingering_combat_effects() -> void:
 	convergence_surge_hit_counter = 0
 	convergence_window_left = 0.0
 	convergence_pulse_cooldown = 0.0
-	_fracture_field_resolving = false
+	_fault_line_resolving = false
 	queue_redraw()
 
 func _apply_rupture_wave(epicenter: Vector2, source_damage: int, rupture_hit_enemy_ids: Dictionary = {}) -> void:
@@ -1745,24 +2147,29 @@ func notify_enemy_killed(kill_position: Vector2 = Vector2.ZERO) -> void:
 		_apply_void_echo(kill_position)
 	if reward_eclipse_mark:
 		_apply_eclipse_mark(kill_position)
-	if reward_fracture_field and not _fracture_field_resolving:
-		_apply_fracture_field(kill_position)
-	if reward_dread_resonance:
-		_reset_dread_resonance_tracking()
+	if reward_fault_line and not _fault_line_resolving:
+		_apply_fault_line(kill_position)
+	if reward_oath_burst:
+		pass  # oath_burst runtime: Vow fulfillment pulse — wired in Phase 5
+	# Fracture: plant shard on kill for potential constellation
+	var cracking_arc_stacks := int(upgrade_system.get_upgrade_stack_count("cracking_arc")) if upgrade_system != null else 0
+	if cracking_arc_stacks > 0:
+		var kill_shard_enemy_id := -1
+		for enemy_node in get_tree().get_nodes_in_group("enemies"):
+			if not (enemy_node is Node2D):
+				continue
+			if (enemy_node as Node2D).global_position.distance_to(kill_position) < 8.0:
+				kill_shard_enemy_id = (enemy_node as Node2D).get_instance_id()
+				break
+		if kill_shard_enemy_id > 0:
+			_plant_fracture_shard(kill_shard_enemy_id)
+	# Echo Forge: generate echo on kill
+	_generate_echo_charge()
+	_try_consume_weave_cascade(kill_position)
 	if passive_death_tempo and dash_cooldown_left > 0.0:
 		dash_cooldown_left = 0.0
 		if player_feedback != null:
 			player_feedback.play_world_ring(global_position, 38.0, Color(player_body_color.r, player_body_color.g, player_body_color.b, 0.88), 0.18)
-		queue_redraw()
-	if not reward_void_dash:
-		return
-	var dash_was_active := dash_cooldown_left > 0.0
-	if dash_was_active:
-		dash_cooldown_left = 0.0
-		void_dash_reset_pulse_left = void_dash_reset_pulse_duration
-		if player_feedback != null:
-			player_feedback.play_world_ring(global_position, 42.0, Color(0.92, 0.54, 1.0, 0.92), 0.18)
-			player_feedback.play_world_ring(global_position, 26.0, Color(1.0, 0.82, 1.0, 0.72), 0.12)
 		queue_redraw()
 
 func _has_combo_relay_mutator_active() -> bool:
@@ -2140,7 +2547,7 @@ func _reset_dread_resonance_tracking() -> void:
 	_dread_resonance_target_stacks = 0
 
 func _get_dread_resonance_bonus(enemy_node: Object) -> int:
-	if not reward_dread_resonance:
+	if not reward_oath_burst:
 		return 0
 	if not is_instance_valid(enemy_node):
 		return 0
@@ -2148,18 +2555,18 @@ func _get_dread_resonance_bonus(enemy_node: Object) -> int:
 		return 0
 	return dread_resonance_bonus_per_stack * _dread_resonance_target_stacks
 
-# --- Crushed Vow (boon) ---
+# --- Sworn Blade (boon, replaces Crushed Vow) ---
 
-func _get_crushed_vow_bonus() -> int:
-	if crushed_vow_bonus_damage <= 0 or not _crushed_vow_primed:
+func _get_sworn_blade_bonus() -> int:
+	if sworn_blade_bonus_damage <= 0 or not _sworn_blade_primed:
 		return 0
-	_crushed_vow_primed = false
-	return crushed_vow_bonus_damage
+	_sworn_blade_primed = false
+	return sworn_blade_bonus_damage
 
-# --- Severing Edge (boon) ---
+# --- Resonant Edge (boon, replaces Severing Edge) ---
 
-func _get_severing_edge_bonus(enemy_node: Object) -> int:
-	if severing_edge_bonus_damage <= 0:
+func _get_resonant_edge_bonus(enemy_node: Object) -> int:
+	if resonant_edge_bonus_damage <= 0:
 		return 0
 	if not is_instance_valid(enemy_node):
 		return 0
@@ -2168,8 +2575,10 @@ func _get_severing_edge_bonus(enemy_node: Object) -> int:
 		return 0
 	var enemy_current: int = int(enemy_node.get_current_health())
 	if float(enemy_current) / float(enemy_max) < 0.55:
-		return severing_edge_bonus_damage
+		return resonant_edge_bonus_damage
 	return 0
+
+# --- Legacy stubs (oath_burst replaces dread_resonance in Phase 5) ---
 
 func _update_apex_predator_combo(delta: float) -> void:
 	if apex_predator_combo_left <= 0.0:
@@ -2235,7 +2644,7 @@ func _get_void_echo_zone_bonus(enemy_node: Object, base_damage: int) -> int:
 func _consume_indomitable_spirit_bonus(hit_position: Vector2) -> int:
 	if indomitable_spirit_damage_reduction <= 0.0:
 		return 0
-	var bank_bonus := maxi(0.0, indomitable_damage_bank)
+	var bank_bonus := maxf(0.0, indomitable_damage_bank)
 	if bank_bonus <= 0.0:
 		return 0
 	indomitable_damage_bank = 0.0
@@ -2445,23 +2854,23 @@ func _consume_eclipse_mark_bonus(enemy_node: Object, base_damage: int) -> int:
 	_eclipse_marked_enemies.erase(enemy_id)
 	return maxi(1, int(round(float(base_damage) * eclipse_mark_bonus_ratio)))
 
-# --- Fracture Field ---
+# --- Fault Line (replaces Fracture Field) ---
 
-func _apply_fracture_field(kill_pos: Vector2) -> void:
+func _apply_fault_line(kill_pos: Vector2) -> void:
 	if kill_pos == Vector2.ZERO:
 		return
-	if _fracture_field_resolving:
+	if _fault_line_resolving:
 		return
 
-	_fracture_field_resolving = true
-	var field_damage := maxi(1, int(round(float(damage) * fracture_field_damage_ratio)))
+	_fault_line_resolving = true
+	var field_damage := maxi(1, int(round(float(damage) * fault_line_damage_ratio)))
 	field_damage = _apply_objective_mutator_damage_mult(field_damage)
-	var beam_count := 3 + mini(2, maxi(0, fracture_field_stacks - 1))
-	var beam_width := 12.0 + float(maxi(0, fracture_field_stacks - 1)) * 2.0
+	var beam_count := 3 + mini(2, maxi(0, fault_line_stacks - 1))
+	var beam_width := 12.0 + float(maxi(0, fault_line_stacks - 1)) * 2.0
 	var base_angle := randf_range(0.0, TAU)
 
 	if player_feedback != null and player_feedback.has_method("play_fracture_field_fault_lines"):
-		player_feedback.play_fracture_field_fault_lines(kill_pos, fracture_field_radius, beam_count, base_angle, beam_width)
+		player_feedback.play_fracture_field_fault_lines(kill_pos, fault_line_radius, beam_count, base_angle, beam_width)
 
 	var hit_enemy_ids: Dictionary = {}
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
@@ -2473,14 +2882,14 @@ func _apply_fracture_field(kill_pos: Vector2) -> void:
 		var enemy_id := enemy_body.get_instance_id()
 		if hit_enemy_ids.has(enemy_id):
 			continue
-		if enemy_body.global_position.distance_to(kill_pos) > fracture_field_radius + beam_width:
+		if enemy_body.global_position.distance_to(kill_pos) > fault_line_radius + beam_width:
 			continue
 
 		var hit_by_fault := false
 		for i in range(beam_count):
 			var ang := base_angle + TAU * (float(i) / float(beam_count))
 			var dir := Vector2.RIGHT.rotated(ang)
-			var seg_end := kill_pos + dir * fracture_field_radius
+			var seg_end := kill_pos + dir * fault_line_radius
 			var closest := Geometry2D.get_closest_point_to_segment(enemy_body.global_position, kill_pos, seg_end)
 			if enemy_body.global_position.distance_to(closest) <= beam_width:
 				hit_by_fault = true
@@ -2491,9 +2900,9 @@ func _apply_fracture_field(kill_pos: Vector2) -> void:
 
 		hit_enemy_ids[enemy_id] = true
 		DAMAGEABLE.apply_damage(enemy_node, field_damage, {"is_ground_attack": true, "attack_type": "fracture_fault_line"})
-		enemy_node.apply_slow(fracture_field_slow_duration, 0.45)
+		enemy_node.apply_slow(fault_line_slow_duration, 0.45)
 
-	_fracture_field_resolving = false
+	_fault_line_resolving = false
 
 
 
@@ -2578,7 +2987,7 @@ func _draw_trial_reward_state() -> void:
 		rupture_color.a = 0.3 + pulse * 0.18
 		draw_arc(Vector2.ZERO, 20.0 + pulse * 2.8, 0.0, TAU, 42, rupture_color, 1.8)
 
-	if reward_aegis_field:
+	if reward_aegis_retort:
 		var aegis_pulse := 0.5 + 0.5 * sin(t * 3.8 + 0.4)
 		var aegis_radius := 22.0 + aegis_pulse * 3.0
 		var aegis_alpha := 0.22 + aegis_pulse * 0.14
@@ -2612,7 +3021,7 @@ func _draw_trial_reward_state() -> void:
 			draw_line(-facing * 8.0 + side * 4.0, -facing * 18.0 + side * 4.0, Color(0.46, 1.0, 0.92, 0.36 + pulse * 0.2), 1.4)
 			draw_line(-facing * 8.0 - side * 4.0, -facing * 18.0 - side * 4.0, Color(0.46, 1.0, 0.92, 0.36 + pulse * 0.2), 1.4)
 
-	if reward_void_dash and void_dash_reset_pulse_left > 0.0:
+	if reward_apex_surge and void_dash_reset_pulse_left > 0.0:
 		var pulse_t := clampf(void_dash_reset_pulse_left / maxf(0.001, void_dash_reset_pulse_duration), 0.0, 1.0)
 		var glow_t := 1.0 - pulse_t
 		var reset_radius := 22.0 + glow_t * 34.0

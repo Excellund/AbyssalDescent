@@ -62,10 +62,16 @@ var attack_swing_sound_player: AudioStreamPlayer2D
 var damage_flash_layer: CanvasLayer
 var damage_flash_rect: ColorRect
 var damage_flash_tween: Tween
+var cluster_callout_layer: CanvasLayer
+var cluster_callout_root: Control
+var cluster_callout_label: Label
+var cluster_callout_tween: Tween
+var _cluster_callout_cooldown_until: Dictionary = {}
 var _eclipse_mark_decals: Dictionary = {}
 var _eclipse_mark_decal_token_seed: int = 1
 var _eclipse_mark_pulse_tweens: Dictionary = {}
 var _eclipse_mark_life_tweens: Dictionary = {}
+var _fracture_shard_decals: Dictionary = {}
 var _tempo_indicator_root: Node2D
 var _tempo_outer_ring: Line2D
 var _tempo_inner_ring: Line2D
@@ -87,7 +93,45 @@ func setup(max_health: int, current_health: int) -> void:
 	_create_impact_sound_player()
 	_create_attack_swing_sound_player()
 	_create_damage_flash()
+	_create_cluster_callout_ui()
 	_apply_sfx_volume()
+
+func play_cluster_callout(callout_key: String, text: String, color: Color, duration: float = 0.6, cooldown: float = 0.45) -> void:
+	if cluster_callout_label == null:
+		return
+	if cluster_callout_root != null:
+		cluster_callout_root.size = get_viewport_rect().size
+	var now := float(Time.get_ticks_msec()) * 0.001
+	var cooldown_until := float(_cluster_callout_cooldown_until.get(callout_key, 0.0))
+	if now < cooldown_until:
+		return
+	_cluster_callout_cooldown_until[callout_key] = now + maxf(0.05, cooldown)
+	if cluster_callout_tween != null and cluster_callout_tween.is_valid():
+		cluster_callout_tween.kill()
+	cluster_callout_label.text = text
+	cluster_callout_label.add_theme_color_override("font_color", color)
+	cluster_callout_label.modulate = Color(1.0, 1.0, 1.0, 0.0)
+	cluster_callout_label.scale = Vector2(0.94, 0.94)
+	cluster_callout_label.offset_left = -300.0
+	cluster_callout_label.offset_top = 78.0
+	cluster_callout_label.offset_right = 300.0
+	cluster_callout_label.offset_bottom = 132.0
+	cluster_callout_root.visible = true
+	cluster_callout_tween = create_tween()
+	cluster_callout_tween.set_parallel(true)
+	cluster_callout_tween.tween_property(cluster_callout_label, "modulate:a", 1.0, 0.10)
+	cluster_callout_tween.tween_property(cluster_callout_label, "scale", Vector2(1.0, 1.0), 0.12)
+	cluster_callout_tween.set_parallel(false)
+	cluster_callout_tween.tween_interval(maxf(0.14, duration))
+	cluster_callout_tween.set_parallel(true)
+	cluster_callout_tween.tween_property(cluster_callout_label, "modulate:a", 0.0, 0.20)
+	cluster_callout_tween.tween_property(cluster_callout_label, "offset_top", 60.0, 0.20)
+	cluster_callout_tween.tween_property(cluster_callout_label, "offset_bottom", 114.0, 0.20)
+	cluster_callout_tween.set_parallel(false)
+	cluster_callout_tween.tween_callback(func() -> void:
+		if cluster_callout_root != null:
+			cluster_callout_root.visible = false
+	)
 
 func set_sfx_volume_db(volume_db: float) -> void:
 	sfx_volume_db = AUDIO_LEVELS.clamp_db(volume_db)
@@ -292,6 +336,142 @@ func update_oath_bank_bar(bank: float, bank_reference: float, enabled: bool) -> 
 		var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.001 * 8.0)
 		var glow_alpha := 0.06 + bank_ratio * 0.16 + pulse * 0.08 * bank_ratio
 		oath_bar_glow.color = Color(0.88, 0.66, 1.0, glow_alpha)
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ENGINE CLUSTER VFX — Fracture, Vow, Echo, Weave
+# ═══════════════════════════════════════════════════════════════════════════
+
+func play_fracture_shard_plant(enemy_global: Vector2) -> void:
+	"""Shard plant on enemy: cyan sparkle burst with core highlight."""
+	_play_world_soft_pulse(enemy_global, 18.0, Color(0.0, 0.88, 1.0, 0.16), 0.12, 0.68, 1.18)
+	play_world_ring(enemy_global, 14.0, Color(0.0, 0.95, 1.0, 0.72), 0.09)
+	play_world_ring(enemy_global, 8.0, Color(0.4, 1.0, 1.0, 0.62), 0.08)
+	_play_world_star_burst(enemy_global, 16.0, 6, Color(0.0, 0.9, 1.0, 0.78), 0.10)
+
+func play_fracture_shard_progress(player_global: Vector2, shard_count: int, threshold: int) -> void:
+	var clamped_threshold := maxi(1, threshold)
+	var clamped_count := clampi(shard_count, 0, clamped_threshold)
+	var ratio := clampf(float(clamped_count) / float(clamped_threshold), 0.0, 1.0)
+	var radius := 22.0 + 14.0 * ratio
+	play_world_ring(player_global, radius, Color(0.0, 0.92, 1.0, 0.34 + 0.28 * ratio), 0.11)
+	if clamped_count == clamped_threshold - 1:
+		play_world_ring(player_global, radius + 10.0, Color(0.64, 1.0, 1.0, 0.82), 0.13)
+		_play_world_star_burst(player_global, radius + 12.0, 6, Color(0.72, 1.0, 1.0, 0.66), 0.11)
+
+func sync_fracture_shard_decals(marked_enemy_ids: Array, threshold: int) -> void:
+	var marked_lookup: Dictionary = {}
+	for id_variant in marked_enemy_ids:
+		var enemy_id := int(id_variant)
+		if enemy_id > 0:
+			marked_lookup[enemy_id] = true
+
+	var remove_ids: Array = []
+	for enemy_id_variant in _fracture_shard_decals.keys():
+		var enemy_id := int(enemy_id_variant)
+		if not marked_lookup.has(enemy_id):
+			remove_ids.append(enemy_id)
+	for enemy_id in remove_ids:
+		_clear_fracture_shard_decal_by_id(int(enemy_id))
+
+	var marked_count := marked_lookup.size()
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		var enemy_body := enemy_node as Node2D
+		var enemy_id := enemy_body.get_instance_id()
+		if not marked_lookup.has(enemy_id):
+			continue
+		if not _fracture_shard_decals.has(enemy_id):
+			_create_fracture_shard_decal(enemy_body)
+		_update_fracture_shard_decal(enemy_id, marked_count, threshold)
+
+func clear_all_fracture_shard_decals() -> void:
+	for enemy_id_variant in _fracture_shard_decals.keys():
+		var entry: Dictionary = _fracture_shard_decals[enemy_id_variant] as Dictionary
+		var marker_variant: Variant = entry.get("node", null)
+		if is_instance_valid(marker_variant) and marker_variant is Node:
+			(marker_variant as Node).queue_free()
+	_fracture_shard_decals.clear()
+
+func play_fracture_constellation_burst(epicenter: Vector2, radius: float) -> void:
+	"""Constellation burst: layered cyan rings with star pattern."""
+	_play_world_soft_pulse(epicenter, radius * 0.72, Color(0.0, 0.86, 1.0, 0.14), 0.20, 0.74, 1.12)
+	play_world_ring(epicenter, radius * 0.32, Color(0.2, 1.0, 1.0, 0.86), 0.10)
+	play_world_ring(epicenter, radius * 0.56, Color(0.0, 0.92, 1.0, 0.74), 0.14)
+	play_world_ring(epicenter, radius * 0.80, Color(0.0, 0.88, 1.0, 0.52), 0.18)
+	_play_world_star_burst(epicenter, radius * 0.68, 8, Color(0.0, 0.94, 1.0, 0.64), 0.16)
+
+func play_weave_thread_plant(enemy_global: Vector2) -> void:
+	"""Thread plant on enemy: amber shimmer with subtle glow."""
+	_play_world_soft_pulse(enemy_global, 16.0, Color(1.0, 0.78, 0.26, 0.14), 0.10, 0.70, 1.16)
+	play_world_ring(enemy_global, 12.0, Color(1.0, 0.80, 0.26, 0.58), 0.09)
+	play_world_ring(enemy_global, 7.0, Color(1.0, 0.88, 0.44, 0.48), 0.08)
+	_play_world_star_burst(enemy_global, 14.0, 5, Color(1.0, 0.78, 0.26, 0.72), 0.09)
+
+func play_weave_taut_activated(player_global: Vector2) -> void:
+	"""Taut state: strong amber pulse indicating 3+ threads active."""
+	_play_world_soft_pulse(player_global, 48.0, Color(1.0, 0.78, 0.26, 0.22), 0.18, 0.62, 1.14)
+	play_world_ring(player_global, 34.0, Color(1.0, 0.86, 0.26, 0.92), 0.14)
+	play_world_ring(player_global, 22.0, Color(1.0, 0.92, 0.44, 0.72), 0.11)
+	_play_world_star_burst(player_global, 40.0, 6, Color(1.0, 0.88, 0.34, 0.66), 0.13)
+
+func play_weave_cascade_burst(epicenter: Vector2, radius: float) -> void:
+	"""Cascade burst: layered amber rings with kill-ready intensity."""
+	_play_world_soft_pulse(epicenter, radius * 0.70, Color(1.0, 0.78, 0.26, 0.16), 0.20, 0.72, 1.10)
+	play_world_ring(epicenter, radius * 0.30, Color(1.0, 0.88, 0.26, 0.88), 0.10)
+	play_world_ring(epicenter, radius * 0.54, Color(1.0, 0.82, 0.26, 0.76), 0.14)
+	play_world_ring(epicenter, radius * 0.78, Color(1.0, 0.74, 0.24, 0.54), 0.18)
+	_play_world_star_burst(epicenter, radius * 0.66, 7, Color(1.0, 0.84, 0.30, 0.68), 0.16)
+
+func play_vow_ledger_bind(player_global: Vector2) -> void:
+	"""Vow binding on player: gold aura + glow indicating vulnerability."""
+	_play_world_soft_pulse(player_global, 44.0, Color(1.0, 0.90, 0.4, 0.18), 0.16, 0.78, 1.12)
+	play_world_ring(player_global, 30.0, Color(1.0, 0.90, 0.34, 0.68), 0.12)
+	play_world_ring(player_global, 18.0, Color(1.0, 0.96, 0.56, 0.52), 0.10)
+
+func play_vow_ledger_payoff(epicenter: Vector2, radius: float) -> void:
+	"""Vow payoff: gold radial burst with cross-line pattern."""
+	_play_world_soft_pulse(epicenter, radius * 0.68, Color(1.0, 0.90, 0.4, 0.16), 0.18, 0.76, 1.08)
+	play_world_ring(epicenter, radius * 0.28, Color(1.0, 0.94, 0.34, 0.90), 0.09)
+	play_world_ring(epicenter, radius * 0.52, Color(1.0, 0.88, 0.30, 0.76), 0.13)
+	play_world_ring(epicenter, radius * 0.76, Color(1.0, 0.84, 0.26, 0.54), 0.17)
+	_play_world_line(PackedVector2Array([
+		epicenter + Vector2(-radius * 0.3, 0.0),
+		epicenter + Vector2(radius * 0.3, 0.0)
+	]), Color(1.0, 0.96, 0.56, 0.68), 2.4, 0.12, 0.8)
+	_play_world_line(PackedVector2Array([
+		epicenter + Vector2(0.0, -radius * 0.3),
+		epicenter + Vector2(0.0, radius * 0.3)
+	]), Color(1.0, 0.96, 0.56, 0.68), 2.4, 0.12, 0.8)
+
+func play_echo_forge_accumulate(player_global: Vector2, charge_count: int, threshold: int) -> void:
+	"""Echo accumulation: stacking orange rings showing progress."""
+	var ratio := clampf(float(charge_count) / float(maxi(1, threshold)), 0.0, 1.0)
+	var pulse_radius := 26.0 + 14.0 * ratio
+	var pulse_color := Color(1.0, 0.62 + 0.18 * ratio, 0.3, 0.20 + 0.30 * ratio)
+	_play_world_soft_pulse(player_global, pulse_radius, pulse_color, 0.12, 0.70, 1.12)
+	play_world_ring(player_global, pulse_radius * 0.6, Color(1.0, 0.68, 0.34, 0.54), 0.10)
+	play_world_ring(player_global, pulse_radius, Color(1.0, 0.62, 0.30, 0.40), 0.12)
+	var ready_count := maxi(1, threshold - 1)
+	if charge_count == ready_count:
+		# Explicit "one more hit" cue.
+		play_world_ring(player_global, pulse_radius + 10.0, Color(1.0, 0.82, 0.44, 0.84), 0.14)
+		_play_world_star_burst(player_global, pulse_radius + 12.0, 6, Color(1.0, 0.84, 0.48, 0.64), 0.12)
+
+func play_echo_forge_primed(player_global: Vector2, radius: float) -> void:
+	"""Moment-before-burst cue so the forge trigger is clearly readable."""
+	var cue_radius := maxf(36.0, radius * 0.42)
+	play_world_ring(player_global, cue_radius, Color(1.0, 0.86, 0.46, 0.94), 0.08)
+	play_world_ring(player_global, cue_radius * 0.68, Color(1.0, 0.96, 0.66, 0.76), 0.07)
+	_play_world_star_burst(player_global, cue_radius * 0.9, 7, Color(1.0, 0.88, 0.56, 0.70), 0.09)
+
+func play_echo_forge_burst(epicenter: Vector2, radius: float) -> void:
+	"""Forge burst: intense multi-ring orange explosion."""
+	_play_world_soft_pulse(epicenter, radius * 0.74, Color(1.0, 0.60, 0.30, 0.18), 0.22, 0.68, 1.14)
+	play_world_ring(epicenter, radius * 0.26, Color(1.0, 0.72, 0.34, 0.94), 0.09)
+	play_world_ring(epicenter, radius * 0.48, Color(1.0, 0.64, 0.28, 0.80), 0.13)
+	play_world_ring(epicenter, radius * 0.70, Color(1.0, 0.58, 0.24, 0.58), 0.17)
+	_play_world_star_burst(epicenter, radius * 0.64, 8, Color(1.0, 0.70, 0.36, 0.70), 0.16)
 
 func play_impact_sound() -> void:
 	if impact_sound_player == null:
@@ -952,6 +1132,89 @@ func clear_all_eclipse_mark_decals() -> void:
 			(marker_variant as Node).queue_free()
 	_eclipse_mark_decals.clear()
 
+func _create_fracture_shard_decal(enemy_node: Node2D) -> void:
+	var enemy_id := enemy_node.get_instance_id()
+	var marker_root := Node2D.new()
+	marker_root.position = Vector2(0.0, -22.0)
+	marker_root.z_as_relative = false
+	marker_root.z_index = 222
+
+	var outer_ring := Line2D.new()
+	outer_ring.name = "Outer"
+	outer_ring.width = 2.0
+	outer_ring.default_color = Color(0.0, 0.90, 1.0, 0.72)
+	outer_ring.closed = true
+	outer_ring.antialiased = true
+	outer_ring.points = _build_circle_polygon(10.0, 20)
+	marker_root.add_child(outer_ring)
+
+	var core_ring := Line2D.new()
+	core_ring.name = "Core"
+	core_ring.width = 1.1
+	core_ring.default_color = Color(0.72, 1.0, 1.0, 0.76)
+	core_ring.closed = true
+	core_ring.antialiased = true
+	core_ring.points = _build_circle_polygon(5.8, 16)
+	core_ring.rotation = PI * 0.25
+	marker_root.add_child(core_ring)
+
+	var pip_row := Node2D.new()
+	pip_row.name = "Pips"
+	pip_row.position = Vector2(0.0, -13.0)
+	marker_root.add_child(pip_row)
+	for i in range(3):
+		var pip := Polygon2D.new()
+		pip.name = "Pip%d" % i
+		pip.position = Vector2(-8.0 + 8.0 * float(i), 0.0)
+		pip.polygon = _build_circle_polygon(1.9, 10)
+		pip.color = Color(0.52, 0.86, 1.0, 0.26)
+		pip_row.add_child(pip)
+
+	enemy_node.add_child(marker_root)
+	_fracture_shard_decals[enemy_id] = {"node": marker_root}
+
+func _update_fracture_shard_decal(enemy_id: int, marked_count: int, threshold: int) -> void:
+	if not _fracture_shard_decals.has(enemy_id):
+		return
+	var entry: Dictionary = _fracture_shard_decals[enemy_id] as Dictionary
+	var marker_variant: Variant = entry.get("node", null)
+	if not (is_instance_valid(marker_variant) and marker_variant is Node2D):
+		_fracture_shard_decals.erase(enemy_id)
+		return
+	var marker_root := marker_variant as Node2D
+	var outer_ring := marker_root.get_node_or_null("Outer") as Line2D
+	var core_ring := marker_root.get_node_or_null("Core") as Line2D
+	var pip_row := marker_root.get_node_or_null("Pips") as Node2D
+	var clamped_threshold := maxi(1, threshold)
+	var clamped_count := clampi(marked_count, 0, clamped_threshold)
+	var ratio := clampf(float(clamped_count) / float(clamped_threshold), 0.0, 1.0)
+	var time := float(Time.get_ticks_msec()) * 0.001
+	var pulse := 0.5 + 0.5 * sin(time * 8.0)
+	if outer_ring != null:
+		outer_ring.default_color = Color(0.0, 0.90, 1.0, 0.44 + 0.30 * ratio + 0.18 * pulse * ratio)
+		outer_ring.width = 1.8 + ratio * 0.9
+	if core_ring != null:
+		core_ring.default_color = Color(0.70, 1.0, 1.0, 0.42 + 0.28 * ratio)
+		core_ring.width = 1.0 + ratio * 0.5
+	if pip_row != null:
+		for i in range(3):
+			var pip := pip_row.get_node_or_null("Pip%d" % i) as Polygon2D
+			if pip == null:
+				continue
+			if i < clamped_count:
+				pip.color = Color(0.32, 0.96, 1.0, 0.46 + 0.36 * pulse)
+			else:
+				pip.color = Color(0.52, 0.86, 1.0, 0.20)
+
+func _clear_fracture_shard_decal_by_id(enemy_id: int) -> void:
+	if not _fracture_shard_decals.has(enemy_id):
+		return
+	var entry: Dictionary = _fracture_shard_decals[enemy_id] as Dictionary
+	var marker_variant: Variant = entry.get("node", null)
+	if is_instance_valid(marker_variant) and marker_variant is Node:
+		(marker_variant as Node).queue_free()
+	_fracture_shard_decals.erase(enemy_id)
+
 func _clear_eclipse_mark_decal_by_id(enemy_id: int) -> void:
 	if not _eclipse_mark_decals.has(enemy_id):
 		return
@@ -1206,3 +1469,36 @@ func _create_damage_flash() -> void:
 
 	damage_flash_layer.add_child(damage_flash_rect)
 	add_child(damage_flash_layer)
+
+func _create_cluster_callout_ui() -> void:
+	cluster_callout_layer = CanvasLayer.new()
+	cluster_callout_layer.layer = 115
+	cluster_callout_root = Control.new()
+	cluster_callout_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	cluster_callout_root.size = get_viewport_rect().size
+	cluster_callout_root.offset_left = 0.0
+	cluster_callout_root.offset_top = 0.0
+	cluster_callout_root.offset_right = 0.0
+	cluster_callout_root.offset_bottom = 0.0
+	cluster_callout_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cluster_callout_root.visible = false
+	cluster_callout_label = Label.new()
+	cluster_callout_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cluster_callout_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	cluster_callout_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	cluster_callout_label.offset_left = -300.0
+	cluster_callout_label.offset_top = 78.0
+	cluster_callout_label.offset_right = 300.0
+	cluster_callout_label.offset_bottom = 132.0
+	cluster_callout_label.add_theme_font_size_override("font_size", 30)
+	cluster_callout_label.add_theme_color_override("font_outline_color", Color(0.01, 0.02, 0.05, 0.98))
+	cluster_callout_label.add_theme_constant_override("outline_size", 6)
+	cluster_callout_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.72))
+	cluster_callout_label.add_theme_constant_override("shadow_outline_size", 2)
+	cluster_callout_label.add_theme_constant_override("shadow_offset_x", 0)
+	cluster_callout_label.add_theme_constant_override("shadow_offset_y", 2)
+	cluster_callout_label.modulate = Color(1.0, 1.0, 1.0, 0.0)
+	cluster_callout_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cluster_callout_root.add_child(cluster_callout_label)
+	cluster_callout_layer.add_child(cluster_callout_root)
+	add_child(cluster_callout_layer)

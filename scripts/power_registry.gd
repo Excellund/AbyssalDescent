@@ -20,6 +20,40 @@ const DAMAGE_SCALE_SOURCE_NONE = "none"
 const DAMAGE_SCALE_SOURCE_DAMAGE = "damage_stat"
 const DAMAGE_SCALE_SOURCE_HIT = "hit_damage"
 
+# Engine cluster identifiers — four hidden synergy families discoverable through play
+const ENGINE_CLUSTER_FRACTURE = "fracture"       # Plant Shards → Link Constellation → fire burst
+const ENGINE_CLUSTER_HUNT_WEAVE = "hunt_weave"   # Thread unique targets → Taut → Cascade
+const ENGINE_CLUSTER_VOW_LEDGER = "vow_ledger"   # Bind Vow → Fulfill condition → collect payoff
+const ENGINE_CLUSTER_ECHO_FORGE = "echo_forge"   # Generate Echoes → reach threshold → Forge fires
+
+# Engine cluster metadata — design grammar for each hidden cluster
+const ENGINE_CLUSTER_METADATA := {
+	ENGINE_CLUSTER_FRACTURE: {
+		"trigger": "Plant Shards via hits, dash, or kills. 3+ live Shards Link and fire a Constellation burst.",
+		"opportunity_loss": "Shards expire after ~3.5s. Missing the Link just loses the burst.",
+		"visual_key": "shard_cyan",
+		"cross_links": [ENGINE_CLUSTER_HUNT_WEAVE, ENGINE_CLUSTER_ECHO_FORGE]
+	},
+	ENGINE_CLUSTER_HUNT_WEAVE: {
+		"trigger": "Hit unique enemies within 2.5s to build Weave threads. 3 threads = Taut. Next kill fires Cascade.",
+		"opportunity_loss": "Threads decay individually. Missing the kill while Taut just resets threads.",
+		"visual_key": "thread_amber",
+		"cross_links": [ENGINE_CLUSTER_FRACTURE, ENGINE_CLUSTER_VOW_LEDGER]
+	},
+	ENGINE_CLUSTER_VOW_LEDGER: {
+		"trigger": "Taking damage binds a Vow. Fulfill it (hit, or meet condition) for a payoff.",
+		"opportunity_loss": "Taking damage again before fulfilling resets the current Vow.",
+		"visual_key": "vow_gold",
+		"cross_links": [ENGINE_CLUSTER_ECHO_FORGE, ENGINE_CLUSTER_HUNT_WEAVE]
+	},
+	ENGINE_CLUSTER_ECHO_FORGE: {
+		"trigger": "Combat events generate Echoes. Echoes accumulate and decay. At threshold the Forge fires an amplified burst.",
+		"opportunity_loss": "Echoes decay over time. Slower combat = smaller or missed Forge.",
+		"visual_key": "echo_violet",
+		"cross_links": [ENGINE_CLUSTER_VOW_LEDGER, ENGINE_CLUSTER_FRACTURE]
+	}
+}
+
 # Boss epitaph lines - displayed on boss defeat
 const BOSS_EPITAPHS := {
 	"warden": {
@@ -43,16 +77,69 @@ const BOSS_EPITAPHS := {
 }
 
 const DAMAGE_MODEL_BY_POWER := {
-	# Upgrades
-	"first_strike": {
+	# Boons — FRACTURE CONSTELLATIONS cluster
+	"shard_strike": {
 		"kind": DAMAGE_KIND_FLAT,
 		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
-		"formula_note": "+X extra hit damage vs enemies above 80% HP"
+		"formula_note": "+X on first hit per target and on Shard-consumed hits"
 	},
-	"heavy_blow": {
+	"cracking_arc": {
+		"kind": DAMAGE_KIND_NONE,
+		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
+		"formula_note": "Arc stat only; Shard embeds on multi-hit swings (3+ enemies)"
+	},
+	"fracture_reach": {
+		"kind": DAMAGE_KIND_NONE,
+		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
+		"formula_note": "Range stat only; Shard chains on kill at max range"
+	},
+	# Boons — HUNT WEAVE cluster
+	"quarry_step": {
+		"kind": DAMAGE_KIND_NONE,
+		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
+		"formula_note": "Speed stat only; extends Weave thread window"
+	},
+	"swift_reach": {
+		"kind": DAMAGE_KIND_NONE,
+		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
+		"formula_note": "Dash distance stat only; plants Weave thread on dash"
+	},
+	"relentless_surge": {
+		"kind": DAMAGE_KIND_NONE,
+		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
+		"formula_note": "Dash speed stat only; post-Cascade speed surge"
+	},
+	# Boons — VOW LEDGER cluster
+	"sworn_blade": {
 		"kind": DAMAGE_KIND_FLAT,
 		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
-		"formula_note": "+X to Damage stat"
+		"formula_note": "+X on next hit after being hit (Vow primed)"
+	},
+	"iron_oath": {
+		"kind": DAMAGE_KIND_NONE,
+		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
+		"formula_note": "Armor stat only; extra absorb while Vow is active"
+	},
+	"vital_covenant": {
+		"kind": DAMAGE_KIND_NONE,
+		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
+		"formula_note": "Max HP stat only; Vow binds on damage above 60% HP"
+	},
+	# Boons — ECHO FORGE cluster
+	"hammered_impact": {
+		"kind": DAMAGE_KIND_FLAT,
+		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
+		"formula_note": "+X flat to Damage stat; every 5th hit emits 1 Echo"
+	},
+	"battle_echo": {
+		"kind": DAMAGE_KIND_NONE,
+		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
+		"formula_note": "Speed bonus while moving; hits-while-moving build Echo charge"
+	},
+	"resonant_edge": {
+		"kind": DAMAGE_KIND_FLAT,
+		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
+		"formula_note": "+X on hits vs enemies below 55% HP; kills emit 2 Echoes"
 	},
 	# Trial powers
 	"razor_wind": {
@@ -101,10 +188,10 @@ const DAMAGE_MODEL_BY_POWER := {
 		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
 		"formula_note": "Y% of hit damage on detonation burst"
 	},
-	"dread_resonance": {
-		"kind": DAMAGE_KIND_FLAT,
-		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
-		"formula_note": "+X per resonance stack on same target"
+	"oath_burst": {
+		"kind": DAMAGE_KIND_SCALING,
+		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
+		"formula_note": "Vow fulfill detonates a radial pulse at Y% of hit damage"
 	},
 	# Character-lore bridges
 	"vow_shatter": {
@@ -117,21 +204,10 @@ const DAMAGE_MODEL_BY_POWER := {
 		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
 		"formula_note": "Y% bonus damage on first hit vs marked enemy"
 	},
-	"fracture_field": {
+	"fault_line": {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
-		"formula_note": "Y% of hit damage along non-chaining fault lines from kill position"
-	},
-	# Boons
-	"crushed_vow": {
-		"kind": DAMAGE_KIND_FLAT,
-		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
-		"formula_note": "+X flat damage on next hit after being hit"
-	},
-	"severing_edge": {
-		"kind": DAMAGE_KIND_FLAT,
-		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
-		"formula_note": "+X bonus damage on hits against enemies below 55% HP"
+		"formula_note": "Y% of hit damage along fault lines from kill position; auto-Shards enemies entering zone"
 	},
 	# Boss rewards
 	"apex_predator": {
@@ -162,68 +238,71 @@ const DAMAGE_MODEL_BY_POWER := {
 }
 
 const UPGRADE_BALANCE := {
-	"first_strike": {
+	# FRACTURE CONSTELLATIONS cluster
+	"shard_strike": {
 		"kind": "add_int",
-		"property": "first_strike_bonus_damage",
-		"add": 16
+		"property": "shard_strike_bonus_damage",
+		"add": 20
 	},
-	"heavy_blow": {
-		"kind": "add_int",
-		"property": "damage",
-		"add": 7
-	},
-	"wide_arc": {
+	"cracking_arc": {
 		"kind": "add_clamp",
 		"property": "attack_arc_degrees",
 		"add": 28.0,
 		"min": 60.0,
 		"max": 280.0
 	},
-	"long_reach": {
+	"fracture_reach": {
 		"kind": "add_float",
 		"property": "attack_range",
-		"add": 11.0
+		"add": 13.0
 	},
-	"fleet_foot": {
+	# HUNT WEAVE cluster
+	"quarry_step": {
 		"kind": "add_float",
 		"property": "max_speed",
-		"add": 17.0
+		"add": 20.0
 	},
-	"blink_dash": {
-		"kind": "mul_min",
-		"property": "dash_cooldown",
-		"mult": 0.80,
-		"min": 0.14
+	"swift_reach": {
+		"kind": "add_float",
+		"property": "dash_distance",
+		"add": 45.0
 	},
-	"iron_skin": {
+	"relentless_surge": {
+		"kind": "add_float",
+		"property": "dash_speed",
+		"add": 90.0
+	},
+	# VOW LEDGER cluster
+	"sworn_blade": {
+		"kind": "add_int",
+		"property": "sworn_blade_bonus_damage",
+		"add": 24
+	},
+	"iron_oath": {
 		"kind": "add_int",
 		"property": "iron_skin_armor",
-		"add": 4,
+		"add": 5,
 		"stack_property": "iron_skin_stacks"
 	},
-	"battle_trance": {
+	"vital_covenant": {
+		"kind": "add_int",
+		"property": "max_health",
+		"add": 12
+	},
+	# ECHO FORGE cluster
+	"hammered_impact": {
+		"kind": "add_int",
+		"property": "damage",
+		"add": 8
+	},
+	"battle_echo": {
 		"kind": "add_float",
 		"property": "battle_trance_move_speed_bonus",
 		"add": 0.22
 	},
-	"surge_step": {
-		"kind": "add_float",
-		"property": "dash_speed",
-		"add": 85.0
-	},
-	"heartstone": {
+	"resonant_edge": {
 		"kind": "add_int",
-		"property": "max_health",
-		"add": 10
-	},
-	"crushed_vow": {
-		"kind": "add_int",
-		"property": "crushed_vow_bonus_damage",
-		"add": 18
-	},
-	"severing_edge": {
-		"kind": "add_int",
-		"property": "severing_edge_bonus_damage",
+		"property": "resonant_edge_bonus_damage",
 		"add": 14
 	}
 }
@@ -252,7 +331,7 @@ const TRIAL_POWER_BALANCE := {
 		"damage_ratio_per_stack": 0.1,
 		"damage_add": 2
 	},
-	"aegis_field": {
+	"aegis_retort": {
 		"resist_base": 0.12,
 		"resist_per_stack": 0.06,
 		"resist_cap": 0.42,
@@ -287,9 +366,11 @@ const TRIAL_POWER_BALANCE := {
 		"dash_cooldown_mult": 0.92,
 		"dash_cooldown_min": 0.18
 	},
-	"reaper_step": {
-		"range_mult_base": 1.36,
-		"range_mult_per_stack": 0.12
+	"apex_surge": {
+		"weave_taut_range_mult_base": 1.20,
+		"weave_taut_range_mult_per_stack": 0.07,
+		"weave_taut_damage_mult_base": 0.18,
+		"weave_taut_damage_mult_per_stack": 0.06
 	},
 	"static_wake": {
 		# Damage scales as a ratio of damage. Affected by all damage boons and objective mutators.
@@ -331,10 +412,11 @@ const TRIAL_POWER_BALANCE := {
 		"danger_zone_decay_mult": 1.45,
 		"reckless_decay_mult": 1.9
 	},
-	"dread_resonance": {
-		"max_stacks": 3,
-		"bonus_per_resonance_base": 10,
-		"bonus_per_resonance_per_stack": 4
+	"oath_burst": {
+		"pulse_radius_base": 78.0,
+		"pulse_radius_per_stack": 12.0,
+		"pulse_ratio_base": 0.38,
+		"pulse_ratio_per_stack": 0.08
 	},
 	"vow_shatter": {
 		"damage_mult_base": 1.8,
@@ -348,7 +430,7 @@ const TRIAL_POWER_BALANCE := {
 		"bonus_ratio_base": 0.65,
 		"bonus_ratio_per_stack": 0.12
 	},
-	"fracture_field": {
+	"fault_line": {
 		"radius_base": 80.0,
 		"radius_per_stack": 10.0,
 		"damage_ratio_base": 0.50,
@@ -400,15 +482,22 @@ const BOSS_REWARD_BALANCE := {
 }
 
 const UPGRADE_STACK_LIMITS := {
-	"first_strike": 3,
-	"heavy_blow": 3,
-	"long_reach": 3,
-	"iron_skin": 3,
-	"battle_trance": 3,
-	"surge_step": 3,
-	"heartstone": 2,
-	"crushed_vow": 3,
-	"severing_edge": 3
+	# Fracture cluster boons
+	"shard_strike": 3,
+	"cracking_arc": 3,
+	"fracture_reach": 3,
+	# Hunt Weave cluster boons
+	"quarry_step": 3,
+	"swift_reach": 2,
+	"relentless_surge": 3,
+	# Vow Ledger cluster boons
+	"sworn_blade": 3,
+	"iron_oath": 3,
+	"vital_covenant": 2,
+	# Echo Forge cluster boons
+	"hammered_impact": 3,
+	"battle_echo": 3,
+	"resonant_edge": 3
 }
 
 const TRIAL_POWER_STACK_LIMITS := {}
@@ -452,34 +541,34 @@ class Power:
 ## Display names for all powers — single source of truth for UI labels
 const POWER_DISPLAY_NAMES := {
 	# Upgrades
-	"first_strike": "First Strike",
-	"heavy_blow": "Heavy Blow",
-	"wide_arc": "Wide Arc",
-	"long_reach": "Long Reach",
-	"fleet_foot": "Fleet Foot",
-	"blink_dash": "Blink Dash",
-	"iron_skin": "Iron Skin",
-	"battle_trance": "Battle Trance",
-	"surge_step": "Surge Step",
-	"heartstone": "Heartstone",
-	"crushed_vow": "Crushed Vow",
-	"severing_edge": "Severing Edge",
+	"shard_strike": "Shard Strike",
+	"cracking_arc": "Cracking Arc",
+	"fracture_reach": "Fracture Reach",
+	"quarry_step": "Quarry Step",
+	"swift_reach": "Swift Reach",
+	"relentless_surge": "Relentless Surge",
+	"sworn_blade": "Sworn Blade",
+	"iron_oath": "Iron Oath",
+	"vital_covenant": "Vital Covenant",
+	"hammered_impact": "Hammered Impact",
+	"battle_echo": "Battle Echo",
+	"resonant_edge": "Resonant Edge",
 	# Trial powers
 	"razor_wind": "Razor Wind",
 	"execution_edge": "Execution Edge",
 	"rupture_wave": "Rupture Wave",
-	"aegis_field": "Aegis Field",
+	"aegis_retort": "Aegis Retort",
 	"hunters_snare": "Hunter's Snare",
 	"phantom_step": "Phantom Step",
-	"reaper_step": "Reaper Step",
+	"apex_surge": "Apex Surge",
 	"static_wake": "Static Wake",
 	"storm_crown": "Storm Crown",
 	"wraithstep": "Wraithstep",
 	"voidfire": "Voidfire",
-	"dread_resonance": "Dread Resonance",
+	"oath_burst": "Oath Burst",
 	"vow_shatter": "Vow Shatter",
 	"eclipse_mark": "Eclipse Mark",
-	"fracture_field": "Fracture Field",
+	"fault_line": "Fault Line",
 	# Boss rewards
 	"apex_predator": "Warden's Verdict",
 	"void_echo": "Lacuna Echo",
@@ -490,15 +579,25 @@ const POWER_DISPLAY_NAMES := {
 
 ## Ordered pool membership arrays — define which IDs belong to each pool and in what order
 const UPGRADE_POOL_IDS: Array[String] = [
-	"first_strike", "heavy_blow", "wide_arc", "long_reach", "fleet_foot",
-	"blink_dash", "iron_skin", "battle_trance", "surge_step", "heartstone",
-	"crushed_vow", "severing_edge",
+	# Fracture cluster
+	"shard_strike", "cracking_arc", "fracture_reach",
+	# Hunt Weave cluster
+	"quarry_step", "swift_reach", "relentless_surge",
+	# Vow Ledger cluster
+	"sworn_blade", "iron_oath", "vital_covenant",
+	# Echo Forge cluster
+	"hammered_impact", "battle_echo", "resonant_edge",
 ]
 
 const TRIAL_POWER_POOL_IDS: Array[String] = [
-	"razor_wind", "execution_edge", "rupture_wave", "aegis_field", "hunters_snare",
-	"phantom_step", "reaper_step", "static_wake", "storm_crown", "wraithstep",
-	"voidfire", "dread_resonance", "vow_shatter", "eclipse_mark", "fracture_field",
+	# Fracture cluster
+	"wraithstep", "rupture_wave", "eclipse_mark", "fault_line",
+	# Hunt Weave cluster
+	"execution_edge", "hunters_snare", "phantom_step", "apex_surge",
+	# Vow Ledger cluster
+	"vow_shatter", "aegis_retort", "oath_burst",
+	# Echo Forge cluster
+	"razor_wind", "static_wake", "storm_crown", "voidfire",
 ]
 
 const BOSS_REWARD_POOL_IDS: Array[String] = [
@@ -543,13 +642,13 @@ func get_trial_power_pool(player_reference: Node = null) -> Array[Dictionary]:
 func get_objective_upgrade_pool(player_reference: Node = null) -> Array[Dictionary]:
 	var pool := get_upgrade_pool(player_reference)
 	var favored_ids := {
-		"first_strike": true,
-		"heavy_blow": true,
-		"long_reach": true,
-		"fleet_foot": true,
-		"blink_dash": true,
-		"battle_trance": true,
-		"surge_step": true,
+		"shard_strike": true,
+		"hammered_impact": true,
+		"fracture_reach": true,
+		"quarry_step": true,
+		"swift_reach": true,
+		"battle_echo": true,
+		"relentless_surge": true,
 	}
 	var favored: Array[Dictionary] = []
 	var fallback: Array[Dictionary] = []
@@ -670,30 +769,30 @@ func _damage_kind_bracket(_power_id: String) -> String:
 func _get_upgrade_fallback_description(upgrade_id: String) -> String:
 	var data := get_power_balance(upgrade_id)
 	match upgrade_id:
-		"first_strike":
-			return "%sExtra hit damage versus enemies above 80%% HP: +%d." % [_damage_kind_bracket(upgrade_id), int(data.get("add", 0))]
-		"heavy_blow":
-			return "%sDamage +%d (to Damage stat)." % [_damage_kind_bracket(upgrade_id), int(data.get("add", 0))]
-		"wide_arc":
-			return "Attack arc +%.0f degrees." % [float(data.get("add", 0.0))]
-		"long_reach":
-			return "Attack range +%.0f." % [float(data.get("add", 0.0))]
-		"fleet_foot":
-			return "Move speed +%.0f." % [float(data.get("add", 0.0))]
-		"blink_dash":
-			return "Dash cooldown reduced by %.0f%%." % [(1.0 - float(data.get("mult", 1.0))) * 100.0]
-		"iron_skin":
-			return "Armor +%d." % [int(data.get("add", 0))]
-		"battle_trance":
-			return "Hitting an enemy grants +%.0f%% move speed for a short time." % [float(data.get("add", 0.0)) * 100.0]
-		"surge_step":
-			return "Dash speed +%.0f." % [float(data.get("add", 0.0))]
-		"heartstone":
-			return "Max health +%d." % [int(data.get("add", 0))]
-		"crushed_vow":
-			return "After being hit, next attack deals +%d damage (consumes on hit)." % [int(data.get("add", 0))]
-		"severing_edge":
-			return "Bonus damage on hits against enemies below 55%% HP: +%d." % [int(data.get("add", 0))]
+		"shard_strike":
+			return "Enables Fracture Constellation. First hit on each target plants a Shard. Starter loop: hit 3 targets (2 in small packs) to trigger Constellation. Shard-consumed hits deal +%d damage." % [int(data.get("add", 0))]
+		"cracking_arc":
+			return "Attack arc +%.0f degrees. Hitting 3+ enemies in one swing plants Shards in each." % [float(data.get("add", 0.0))]
+		"fracture_reach":
+			return "Attack range +%.0f. Killing a Sharded enemy chains their Shard to 1 nearby enemy." % [float(data.get("add", 0.0))]
+		"quarry_step":
+			return "Move speed +%.0f. Weave modifier only: threads stay active 1s longer while 2+ threads are live (requires Swift Reach)." % [float(data.get("add", 0.0))]
+		"swift_reach":
+			return "Enables Hunt Weave. Dash distance +%.0f. Each dash plants a Weave thread on the nearest unchained target. Starter loop: seed threads, then kill while Taut for Cascade." % [float(data.get("add", 0.0))]
+		"relentless_surge":
+			return "Dash speed +%.0f. Weave modifier only: after a Cascade fires, dash speed surges for 1.5s (requires Swift Reach)." % [float(data.get("add", 0.0))]
+		"sworn_blade":
+			return "Enables Vow Ledger. After being hit, next attack deals +%d damage (Vow primed; consumes on hit). Starter loop: take one hit, strike back immediately." % [int(data.get("add", 0))]
+		"iron_oath":
+			return "Armor +%d. Vow modifier only: while a Vow is active, armor absorbs 1 extra damage per hit (requires Sworn Blade)." % [int(data.get("add", 0))]
+		"vital_covenant":
+			return "Max health +%d. Vow modifier only: taking damage above 60%% HP binds a Vow (requires Sworn Blade)." % [int(data.get("add", 0))]
+		"hammered_impact":
+			return "Enables Echo Forge. Damage +%d. Hits build Echoes; at threshold Forge bursts. Starter loop: stay aggressive, watch the orange ready cue, then cash out." % [int(data.get("add", 0))]
+		"battle_echo":
+			return "Hitting while moving grants +%.0f%% move speed. Echo modifier only: hits-while-moving build toward Echo generation (requires Hammered Impact)." % [float(data.get("add", 0.0)) * 100.0]
+		"resonant_edge":
+			return "Bonus damage on hits against enemies below 55%% HP: +%d. Echo modifier only: kills below that threshold emit 2 Echoes (requires Hammered Impact)." % [int(data.get("add", 0))]
 		"apex_predator":
 			return "Warden's Verdict: every hit builds predator cadence; every 4th hit triggers an impact burst and mauls nearby enemies (power +%d)." % [int(data.get("add", 0))]
 		"void_echo":
@@ -718,14 +817,14 @@ func _get_trial_fallback_description(power_id: String) -> String:
 			return "%sEvery few swings become execution strikes that multiply hit damage." % [_damage_kind_bracket(power_id)]
 		"rupture_wave":
 			return "%sHits detonate a shockwave that deals %% of hit damage." % [_damage_kind_bracket(power_id)]
-		"aegis_field":
-			return "Taking damage triggers a guard pulse that slows nearby enemies and grants brief damage resistance."
+		"aegis_retort":
+			return "Taking damage triggers a guard pulse that slows nearby enemies, grants brief damage resistance, and binds a Vow."
 		"hunters_snare":
 			return "%sHits slow enemies. Striking slowed enemies deals extra hit damage." % [_damage_kind_bracket(power_id)]
 		"phantom_step":
 			return "%sDashing through enemies damages and slows them. Damage uses a percentage value." % [_damage_kind_bracket(power_id)]
-		"reaper_step":
-			return "Dash range and dash speed scale together. Kills refresh dash cooldown."
+		"apex_surge":
+			return "While Weave is Taut (3+ threads), attack range and hit damage are amplified. Ends after Cascade fires."
 		"static_wake":
 			return "%sDashing leaves an electrified trail that burns enemies. Damage per pulse uses a percentage value." % [_damage_kind_bracket(power_id)]
 		"storm_crown":
@@ -735,16 +834,14 @@ func _get_trial_fallback_description(power_id: String) -> String:
 		"voidfire":
 			var voidfire_desc := "Heat attacks. Danger Zone boosts hit damage. At cap, overheat detonates and briefly locks attacks."
 			return DESCRIPTION_CAP_GUARD.assert_visible_cap(voidfire_desc, "voidfire", "fallback")
-		"dread_resonance":
-			var data := get_power_balance("dread_resonance")
-			var max_stacks := int(data.get("max_stacks", 3))
-			return "%sChain hits on one enemy build resonance up to %d stacks. Swapping targets resets to 1." % [_damage_kind_bracket(power_id), max_stacks]
+		"oath_burst":
+			return "Fulfilling a Vow detonates a radial burst that deals a percentage of hit damage to all nearby enemies."
 		"vow_shatter":
 			return "%sTaking a hit primes a vow. Next attack multiplies damage and consumes it. Must be hit again to reload." % [_damage_kind_bracket(power_id)]
 		"eclipse_mark":
 			return "%sKilling an enemy marks all nearby enemies. First hit on each marked enemy deals amplified damage. Marks expire quickly." % [_damage_kind_bracket(power_id)]
-		"fracture_field":
-			var fracture_desc := "%sKills rupture fault lines from the slain enemy, striking enemies along each line." % [_damage_kind_bracket(power_id)]
-			return DESCRIPTION_CAP_GUARD.assert_visible_cap(fracture_desc, "fracture_field", "fallback")
+		"fault_line":
+			var fault_desc := "%sKills leave a fault zone. Enemies entering the zone are automatically Sharded and take pulse damage." % [_damage_kind_bracket(power_id)]
+			return DESCRIPTION_CAP_GUARD.assert_visible_cap(fault_desc, "fault_line", "fallback")
 		_:
 			return "Enhances this power."

@@ -33,9 +33,9 @@ const TRIAL_POWER_PARAM_MAP := {
 			"damage_ratio": {"property": "rupture_wave_damage_ratio", "type": "float"}
 		}
 	},
-	"aegis_field": {
-		"reward_flag": "reward_aegis_field",
-		"stack_property": "aegis_field_stacks",
+	"aegis_retort": {
+		"reward_flag": "reward_aegis_retort",
+		"stack_property": "aegis_retort_stacks",
 		"parameters": {
 			"resist": {"property": "aegis_field_resist_ratio", "type": "float"},
 			"duration": {"property": "aegis_field_resist_duration", "type": "float"},
@@ -63,11 +63,12 @@ const TRIAL_POWER_PARAM_MAP := {
 			"dash_cooldown": {"property": "dash_cooldown", "type": "float"}
 		}
 	},
-	"reaper_step": {
-		"reward_flag": "reward_void_dash",
-		"stack_property": "void_dash_stacks",
+	"apex_surge": {
+		"reward_flag": "reward_apex_surge",
+		"stack_property": "apex_surge_stacks",
 		"parameters": {
-			"range_mult": {"property": "void_dash_range_mult", "type": "float"}
+			"weave_taut_range_mult": {"property": "apex_surge_weave_taut_range_mult", "type": "float"},
+			"weave_taut_damage_mult": {"property": "apex_surge_weave_taut_damage_mult", "type": "float"}
 		}
 	},
 	"static_wake": {
@@ -119,11 +120,12 @@ const TRIAL_POWER_PARAM_MAP := {
 			"reckless_decay_mult": {"property": "voidfire_reckless_decay_mult", "type": "float"}
 		}
 	},
-	"dread_resonance": {
-		"reward_flag": "reward_dread_resonance",
-		"stack_property": "dread_resonance_stacks",
+	"oath_burst": {
+		"reward_flag": "reward_oath_burst",
+		"stack_property": "oath_burst_stacks",
 		"parameters": {
-			"bonus_per_stack": {"property": "dread_resonance_bonus_per_stack", "type": "int"}
+			"pulse_radius": {"property": "oath_burst_pulse_radius", "type": "float"},
+			"pulse_ratio": {"property": "oath_burst_pulse_ratio", "type": "float"}
 		}
 	},
 	"vow_shatter": {
@@ -142,31 +144,31 @@ const TRIAL_POWER_PARAM_MAP := {
 			"bonus_ratio": {"property": "eclipse_mark_bonus_ratio", "type": "float"}
 		}
 	},
-	"fracture_field": {
-		"reward_flag": "reward_fracture_field",
-		"stack_property": "fracture_field_stacks",
+	"fault_line": {
+		"reward_flag": "reward_fault_line",
+		"stack_property": "fault_line_stacks",
 		"parameters": {
-			"radius": {"property": "fracture_field_radius", "type": "float"},
-			"damage_ratio": {"property": "fracture_field_damage_ratio", "type": "float"},
-			"slow_duration": {"property": "fracture_field_slow_duration", "type": "float"}
+			"radius": {"property": "fault_line_radius", "type": "float"},
+			"damage_ratio": {"property": "fault_line_damage_ratio", "type": "float"},
+			"slow_duration": {"property": "fault_line_slow_duration", "type": "float"}
 		}
 	}
 }
 
 ## Maps upgrade IDs to their property definitions
 const UPGRADE_PARAM_MAP := {
-	"first_strike": {"property": "first_strike_bonus_damage"},
-	"heavy_blow": {"property": "damage"},
-	"wide_arc": {"property": "attack_arc_degrees"},
-	"long_reach": {"property": "attack_range"},
-	"fleet_foot": {"property": "max_speed"},
-	"blink_dash": {"property": "dash_cooldown"},
-	"iron_skin": {"properties": ["iron_skin_armor", "iron_skin_stacks"], "special": "iron_skin"},
-	"battle_trance": {"property": "battle_trance_move_speed_bonus"},
-	"surge_step": {"property": "dash_speed"},
-	"heartstone": {"special": "heartstone"},
-	"crushed_vow": {"property": "crushed_vow_bonus_damage"},
-	"severing_edge": {"property": "severing_edge_bonus_damage"},
+	"shard_strike": {"property": "shard_strike_bonus_damage"},
+	"cracking_arc": {"property": "attack_arc_degrees"},
+	"fracture_reach": {"property": "attack_range"},
+	"quarry_step": {"property": "max_speed"},
+	"swift_reach": {"property": "dash_distance"},
+	"relentless_surge": {"property": "dash_speed"},
+	"sworn_blade": {"property": "sworn_blade_bonus_damage"},
+	"iron_oath": {"properties": ["iron_skin_armor", "iron_skin_stacks"], "special": "iron_skin"},
+	"vital_covenant": {"special": "heartstone"},
+	"hammered_impact": {"property": "damage"},
+	"battle_echo": {"property": "battle_trance_move_speed_bonus"},
+	"resonant_edge": {"property": "resonant_edge_bonus_damage"},
 	"apex_predator": {"property": "apex_predator_bonus_damage"},
 	"void_echo": {"property": "void_echo_damage"},
 	"apex_momentum": {"property": "apex_momentum_speed_bonus"},
@@ -347,7 +349,7 @@ static func build_trial_values(power_id: String, stack_count: int, balance_data:
 				"radius": float(data.get("radius_base", 0.0)) + float(data.get("radius_per_stack", 0.0)) * float(stack_count),
 				"damage_ratio": float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count)
 			}
-		"aegis_field":
+		"aegis_retort":
 			return {
 				"resist": minf(float(data.get("resist_cap", 1.0)), float(data.get("resist_base", 0.0)) + float(data.get("resist_per_stack", 0.0)) * float(stack_count)),
 				"duration": float(data.get("resist_duration_base", 0.0)) + float(data.get("resist_duration_per_stack", 0.0)) * float(stack_count),
@@ -369,9 +371,10 @@ static func build_trial_values(power_id: String, stack_count: int, balance_data:
 				"slow_duration": float(data.get("slow_duration_base", 0.0)) + float(data.get("slow_duration_per_stack", 0.0)) * float(stack_count),
 				"dash_cooldown": maxf(float(data.get("dash_cooldown_min", 0.0)), float(player_reference.get("dash_cooldown")) * float(data.get("dash_cooldown_mult", 1.0)))
 			}
-		"reaper_step":
+		"apex_surge":
 			return {
-				"range_mult": float(data.get("range_mult_base", 0.0)) + float(data.get("range_mult_per_stack", 0.0)) * float(stack_count)
+				"weave_taut_range_mult": float(data.get("weave_taut_range_mult_base", 1.0)) + float(data.get("weave_taut_range_mult_per_stack", 0.0)) * float(stack_count),
+				"weave_taut_damage_mult": float(data.get("weave_taut_damage_mult_base", 0.0)) + float(data.get("weave_taut_damage_mult_per_stack", 0.0)) * float(stack_count)
 			}
 		"static_wake":
 			var wake_damage_ratio := float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count)
@@ -411,13 +414,10 @@ static func build_trial_values(power_id: String, stack_count: int, balance_data:
 				"danger_zone_decay_mult": float(data.get("danger_zone_decay_mult", 1.0)),
 				"reckless_decay_mult": float(data.get("reckless_decay_mult", 1.0))
 			}
-		"dread_resonance":
+		"oath_burst":
 			return {
-				"bonus_per_stack": int(data.get("bonus_per_resonance_base", 0)) + stack_count * int(data.get("bonus_per_resonance_per_stack", 0))
-			}
-		"vow_shatter":
-			return {
-				"damage_mult": float(data.get("damage_mult_base", 1.0)) + float(data.get("damage_mult_per_stack", 0.0)) * float(stack_count)
+				"pulse_radius": float(data.get("pulse_radius_base", 78.0)) + float(data.get("pulse_radius_per_stack", 0.0)) * float(stack_count),
+				"pulse_ratio": minf(float(data.get("pulse_ratio_cap", 1.0)), float(data.get("pulse_ratio_base", 0.0)) + float(data.get("pulse_ratio_per_stack", 0.0)) * float(stack_count))
 			}
 		"eclipse_mark":
 			return {
@@ -425,7 +425,7 @@ static func build_trial_values(power_id: String, stack_count: int, balance_data:
 				"mark_duration": float(data.get("mark_duration_base", 0.0)) + float(data.get("mark_duration_per_stack", 0.0)) * float(stack_count),
 				"bonus_ratio": float(data.get("bonus_ratio_base", 0.0)) + float(data.get("bonus_ratio_per_stack", 0.0)) * float(stack_count)
 			}
-		"fracture_field":
+		"fault_line":
 			return {
 				"radius": float(data.get("radius_base", 0.0)) + float(data.get("radius_per_stack", 0.0)) * float(stack_count),
 				"damage_ratio": float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count),
