@@ -137,27 +137,27 @@ const DAMAGE_MODEL_BY_POWER := {
 	"apex_predator": {
 		"kind": DAMAGE_KIND_FLAT,
 		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
-		"formula_note": "+X bonus damage on enemies below 50% HP"
+		"formula_note": "Every hit builds cadence; every 4th hit detonates an impact burst and mauls nearby enemies"
 	},
 	"void_echo": {
-		"kind": DAMAGE_KIND_FLAT,
-		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
-		"formula_note": "+X damage spawned at kill location"
+		"kind": DAMAGE_KIND_HYBRID,
+		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
+		"formula_note": "Kill zones pulse damage over time and amplify hits inside zone"
 	},
 	"apex_momentum": {
-		"kind": DAMAGE_KIND_NONE,
-		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
-		"formula_note": "+Y% movement speed on consecutive hits"
+		"kind": DAMAGE_KIND_SCALING,
+		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
+		"formula_note": "Hit stacks convert into dash-finish momentum wave damage"
 	},
 	"convergence_surge": {
-		"kind": DAMAGE_KIND_NONE,
-		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
-		"formula_note": "-Y% chain cooldown reduction"
+		"kind": DAMAGE_KIND_SCALING,
+		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
+		"formula_note": "Every N damaging hits, enter Convergence for ~1.6-2.0s and pulse around player for ~46%-63% damage"
 	},
 	"indomitable_spirit": {
-		"kind": DAMAGE_KIND_NONE,
-		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
-		"formula_note": "+Y% damage reduction after heavy hit"
+		"kind": DAMAGE_KIND_HYBRID,
+		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
+		"formula_note": "Taking damage banks Oath; damaging hits consume all bank for (45% + DR% + 1%*bank) of damage stat"
 	}
 }
 
@@ -375,28 +375,27 @@ const BOSS_REWARD_BALANCE := {
 	"apex_predator": {
 		"kind": "add_int",
 		"property": "apex_predator_bonus_damage",
-		"add": 22
+		"add": 34
 	},
 	"void_echo": {
 		"kind": "add_int",
 		"property": "void_echo_damage",
-		"add": 28
+		"add": 52
 	},
 	"apex_momentum": {
 		"kind": "add_float",
 		"property": "apex_momentum_speed_bonus",
-		"add": 0.18
+		"add": 0.09
 	},
 	"convergence_surge": {
-		"kind": "mul_min",
-		"property": "storm_crown_chain_cooldown",
-		"mult": 0.82,
-		"min": 1.2
+		"kind": "add_float",
+		"property": "convergence_surge_damage_ratio",
+		"add": 0.22
 	},
 	"indomitable_spirit": {
 		"kind": "add_float",
 		"property": "indomitable_spirit_damage_reduction",
-		"add": 0.12
+		"add": 0.14
 	}
 }
 
@@ -591,11 +590,11 @@ func get_boss_reward_pool(player_reference: Node = null) -> Array[Dictionary]:
 		conv_surge_desc = String(player_reference.get_upgrade_card_desc("convergence_surge"))
 		indom_desc = String(player_reference.get_upgrade_card_desc("indomitable_spirit"))
 	return [
-		Power.new("apex_predator", "Apex Predator", apex_pred_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("apex_predator"), get_power_balance("apex_predator")).to_dict(),
-		Power.new("void_echo", "Void Echo", void_echo_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("void_echo"), get_power_balance("void_echo")).to_dict(),
-		Power.new("apex_momentum", "Apex Momentum", apex_mom_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("apex_momentum"), get_power_balance("apex_momentum")).to_dict(),
-		Power.new("convergence_surge", "Convergence Surge", conv_surge_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("convergence_surge"), get_power_balance("convergence_surge")).to_dict(),
-		Power.new("indomitable_spirit", "Indomitable Spirit", indom_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("indomitable_spirit"), get_power_balance("indomitable_spirit")).to_dict(),
+		Power.new("apex_predator", "Warden's Verdict", apex_pred_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("apex_predator"), get_power_balance("apex_predator")).to_dict(),
+		Power.new("void_echo", "Lacuna Echo", void_echo_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("void_echo"), get_power_balance("void_echo")).to_dict(),
+		Power.new("apex_momentum", "Sovereign Tempo", apex_mom_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("apex_momentum"), get_power_balance("apex_momentum")).to_dict(),
+		Power.new("convergence_surge", "Pillar Convergence", conv_surge_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("convergence_surge"), get_power_balance("convergence_surge")).to_dict(),
+		Power.new("indomitable_spirit", "Unbroken Oath", indom_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("indomitable_spirit"), get_power_balance("indomitable_spirit")).to_dict(),
 	]
 
 
@@ -603,6 +602,7 @@ func get_boss_reward_pool(player_reference: Node = null) -> Array[Dictionary]:
 func get_all_powers(player_reference: Node = null) -> Array[Dictionary]:
 	var all_powers: Array[Dictionary] = []
 	all_powers.append_array(get_upgrade_pool(player_reference))
+	all_powers.append_array(get_boss_reward_pool(player_reference))
 	all_powers.append_array(get_trial_power_pool(player_reference))
 	return all_powers
 
@@ -636,6 +636,9 @@ func is_valid_power_id(power_id: String) -> bool:
 func is_upgrade(power_id: String) -> bool:
 	var id := power_id.strip_edges().to_lower()
 	for power in get_upgrade_pool():
+		if power["id"] == id:
+			return true
+	for power in get_boss_reward_pool():
 		if power["id"] == id:
 			return true
 	return false
@@ -736,6 +739,18 @@ func _get_upgrade_fallback_description(upgrade_id: String) -> String:
 			return "After being hit, next attack deals +%d damage (consumes on hit)." % [int(data.get("add", 0))]
 		"severing_edge":
 			return "Bonus damage on hits against enemies below 55%% HP: +%d." % [int(data.get("add", 0))]
+		"apex_predator":
+			return "Warden's Verdict: every hit builds predator cadence; every 4th hit triggers an impact burst and mauls nearby enemies (power +%d)." % [int(data.get("add", 0))]
+		"void_echo":
+			return "Lacuna Echo: kills create a void zone that pulses damage and empowers attacks inside it. Zone pulse kills do not spawn additional zones (%d power)." % [int(data.get("add", 0))]
+		"apex_momentum":
+			return "Sovereign Tempo: hits build tempo; dash end releases a momentum wave. Hitting enemies refunds dash cooldown (+%.0f%% stack speed)." % [float(data.get("add", 0.0)) * 100.0]
+		"convergence_surge":
+			return "Pillar Convergence: every 4 damaging hits, enter Convergence for ~1.6s and pulse around you. At higher stacks it triggers every 2 hits, lasts ~2.0s, and pulses faster (+%.0f%% window power)." % [float(data.get("add", 0.0)) * 100.0]
+		"indomitable_spirit":
+			var resist_percent := float(data.get("add", 0.0)) * 100.0
+			var retaliation_base := 45.0 + resist_percent
+			return "Unbroken Oath: gain %.0f%% DR. Taking damage banks Oath; damaging hits consume all bank for %.0f%% of damage stat + 1%% per banked damage." % [resist_percent, retaliation_base]
 		_:
 			return "Upgrade your stats."
 

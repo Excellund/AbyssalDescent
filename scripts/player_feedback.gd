@@ -34,6 +34,8 @@ var health_bar_size: Vector2 = Vector2(80.0, 10.0)
 var health_bar_offset: Vector2 = Vector2(-40.0, -42.0)
 var voidfire_bar_size: Vector2 = Vector2(80.0, 6.0)
 var voidfire_bar_offset: Vector2 = Vector2(-40.0, -51.0)
+var oath_bar_size: Vector2 = Vector2(80.0, 5.0)
+var oath_bar_offset: Vector2 = Vector2(-40.0, -51.0)
 const VOIDFIRE_DANGER_RATIO: float = 0.70
 var impact_sound: AudioStream = DEFAULT_IMPACT_SOUND
 var impact_volume_db: float = -6.0
@@ -51,6 +53,10 @@ var voidfire_threshold_line: ColorRect
 var voidfire_glow: ColorRect
 var voidfire_bar_background_style: StyleBoxFlat
 var voidfire_bar_fill_style: StyleBoxFlat
+var oath_bar: ProgressBar
+var oath_bar_background_style: StyleBoxFlat
+var oath_bar_fill_style: StyleBoxFlat
+var oath_bar_glow: ColorRect
 var impact_sound_player: AudioStreamPlayer2D
 var attack_swing_sound_player: AudioStreamPlayer2D
 var damage_flash_layer: CanvasLayer
@@ -60,10 +66,24 @@ var _eclipse_mark_decals: Dictionary = {}
 var _eclipse_mark_decal_token_seed: int = 1
 var _eclipse_mark_pulse_tweens: Dictionary = {}
 var _eclipse_mark_life_tweens: Dictionary = {}
+var _tempo_indicator_root: Node2D
+var _tempo_outer_ring: Line2D
+var _tempo_inner_ring: Line2D
+var _tempo_ready_ring: Line2D
+var _tempo_pips: Array[Polygon2D] = []
+var _tempo_state_active: bool = false
+var _tempo_stacks: int = 0
+var _tempo_max_stacks: int = 0
+var _tempo_time_left: float = 0.0
+var _tempo_duration: float = 0.0
+var _tempo_phase: float = 0.0
+var _tempo_ready_flash_left: float = 0.0
+var _tempo_urgency_triggered: bool = false
 
 func setup(max_health: int, current_health: int) -> void:
 	_create_health_bar(max_health, current_health)
 	_create_voidfire_bar()
+	_create_oath_bank_bar()
 	_create_impact_sound_player()
 	_create_attack_swing_sound_player()
 	_create_damage_flash()
@@ -72,6 +92,114 @@ func setup(max_health: int, current_health: int) -> void:
 func set_sfx_volume_db(volume_db: float) -> void:
 	sfx_volume_db = AUDIO_LEVELS.clamp_db(volume_db)
 	_apply_sfx_volume()
+
+func _process(delta: float) -> void:
+	if not _tempo_state_active:
+		return
+	_ensure_tempo_indicator()
+	if _tempo_indicator_root == null:
+		return
+	_tempo_phase += delta
+	_tempo_ready_flash_left = maxf(0.0, _tempo_ready_flash_left - delta)
+	var max_stacks := maxi(1, _tempo_max_stacks)
+	var stack_ratio := clampf(float(_tempo_stacks) / float(max_stacks), 0.0, 1.0)
+	var life_ratio := clampf(_tempo_time_left / maxf(0.001, _tempo_duration), 0.0, 1.0)
+	var urgency := clampf((0.35 - life_ratio) / 0.35, 0.0, 1.0)
+	var pulse := 0.5 + 0.5 * sin(_tempo_phase * (5.5 + urgency * 4.5))
+	var outer_color := Color(1.0, 0.82 - urgency * 0.20, 0.42 + urgency * 0.10, 0.34 + 0.22 * pulse)
+	var inner_color := Color(1.0, 0.94 - urgency * 0.20, 0.70, 0.24 + 0.18 * pulse)
+	_tempo_outer_ring.default_color = outer_color
+	_tempo_outer_ring.width = 1.4 + stack_ratio * 1.8 + urgency * 0.8
+	_tempo_inner_ring.default_color = inner_color
+	_tempo_inner_ring.width = 1.0 + stack_ratio * 1.0
+	var show_ready := _tempo_stacks >= max_stacks
+	_tempo_ready_ring.visible = show_ready
+	if show_ready:
+		var ready_pulse := 0.5 + 0.5 * sin(_tempo_phase * 9.0)
+		var flash_boost := clampf(_tempo_ready_flash_left / 0.26, 0.0, 1.0)
+		_tempo_ready_ring.default_color = Color(1.0, 0.96, 0.76, 0.18 + ready_pulse * 0.32 + flash_boost * 0.36)
+		_tempo_ready_ring.width = 1.4 + ready_pulse * 1.6 + flash_boost * 1.2
+	for i in range(_tempo_pips.size()):
+		var pip := _tempo_pips[i]
+		if pip == null:
+			continue
+		var filled := i < _tempo_stacks
+		if filled:
+			pip.color = Color(1.0, 0.88, 0.56, 0.44 + 0.42 * pulse)
+			pip.scale = Vector2.ONE * (1.0 + 0.08 * pulse)
+		else:
+			pip.color = Color(0.96, 0.86, 0.70, 0.14)
+			pip.scale = Vector2.ONE * 0.92
+
+func _ensure_tempo_indicator() -> void:
+	if is_instance_valid(_tempo_indicator_root):
+		return
+	_tempo_indicator_root = Node2D.new()
+	_tempo_indicator_root.z_index = 58
+	_tempo_indicator_root.visible = false
+	add_child(_tempo_indicator_root)
+	_tempo_outer_ring = Line2D.new()
+	_tempo_outer_ring.width = 2.0
+	_tempo_outer_ring.closed = true
+	_tempo_outer_ring.antialiased = true
+	_tempo_outer_ring.default_color = Color(1.0, 0.84, 0.48, 0.42)
+	_tempo_outer_ring.points = _build_circle_polygon(22.0, 26)
+	_tempo_indicator_root.add_child(_tempo_outer_ring)
+	_tempo_inner_ring = Line2D.new()
+	_tempo_inner_ring.width = 1.2
+	_tempo_inner_ring.closed = true
+	_tempo_inner_ring.antialiased = true
+	_tempo_inner_ring.default_color = Color(1.0, 0.94, 0.72, 0.3)
+	_tempo_inner_ring.points = _build_circle_polygon(15.0, 22)
+	_tempo_indicator_root.add_child(_tempo_inner_ring)
+	_tempo_ready_ring = Line2D.new()
+	_tempo_ready_ring.width = 1.8
+	_tempo_ready_ring.closed = true
+	_tempo_ready_ring.antialiased = true
+	_tempo_ready_ring.default_color = Color(1.0, 0.98, 0.84, 0.0)
+	_tempo_ready_ring.points = _build_circle_polygon(29.0, 30)
+	_tempo_ready_ring.visible = false
+	_tempo_indicator_root.add_child(_tempo_ready_ring)
+	_tempo_pips.clear()
+	for i in range(6):
+		var pip := Polygon2D.new()
+		var angle := -PI * 0.5 + TAU * float(i) / 6.0
+		pip.position = Vector2.RIGHT.rotated(angle) * 26.0
+		pip.polygon = _build_circle_polygon(2.2, 10)
+		pip.color = Color(0.96, 0.86, 0.70, 0.14)
+		_tempo_indicator_root.add_child(pip)
+		_tempo_pips.append(pip)
+
+func update_boss_tempo_state(stacks: int, max_stacks: int, time_left: float, stack_duration: float) -> void:
+	_ensure_tempo_indicator()
+	_tempo_stacks = maxi(0, stacks)
+	_tempo_max_stacks = maxi(1, max_stacks)
+	_tempo_time_left = maxf(0.0, time_left)
+	_tempo_duration = maxf(0.001, stack_duration)
+	var active := _tempo_stacks > 0
+	_tempo_state_active = active
+	if _tempo_indicator_root != null:
+		_tempo_indicator_root.visible = active
+	if not active:
+		_tempo_urgency_triggered = false
+		return
+	if _tempo_stacks >= _tempo_max_stacks:
+		_tempo_ready_flash_left = maxf(_tempo_ready_flash_left, 0.26)
+	var life_ratio := clampf(_tempo_time_left / _tempo_duration, 0.0, 1.0)
+	if life_ratio <= 0.22 and not _tempo_urgency_triggered:
+		_tempo_urgency_triggered = true
+		play_world_ring(global_position, 30.0, Color(1.0, 0.64, 0.34, 0.56), 0.14)
+	if life_ratio > 0.30:
+		_tempo_urgency_triggered = false
+
+func clear_boss_tempo_state() -> void:
+	_tempo_state_active = false
+	_tempo_stacks = 0
+	_tempo_time_left = 0.0
+	_tempo_urgency_triggered = false
+	_tempo_ready_flash_left = 0.0
+	if _tempo_indicator_root != null:
+		_tempo_indicator_root.visible = false
 
 func update_health_bar(new_health: int, new_max_health: int) -> void:
 	if health_bar == null:
@@ -89,6 +217,7 @@ func update_voidfire_heat_bar(heat: float, heat_cap: float, enabled: bool, locko
 		voidfire_threshold_line.visible = enabled
 	if voidfire_glow != null:
 		voidfire_glow.visible = enabled
+	_layout_status_bars()
 	if not enabled:
 		return
 
@@ -139,6 +268,30 @@ func update_voidfire_heat_bar(heat: float, heat_cap: float, enabled: bool, locko
 		else:
 			glow_alpha = 0.08 + heat_ratio * 0.1
 			voidfire_glow.color = Color(0.48, 0.78, 1.0, glow_alpha)
+
+func update_oath_bank_bar(bank: float, bank_reference: float, enabled: bool) -> void:
+	if oath_bar == null:
+		return
+	var clamped_bank := maxf(0.0, bank)
+	var max_bank := maxf(1.0, bank_reference)
+	var visible := enabled or clamped_bank > 0.0
+	oath_bar.visible = visible
+	if oath_bar_glow != null:
+		oath_bar_glow.visible = visible
+	_layout_status_bars()
+	if not visible:
+		return
+	var bank_ratio := clampf(clamped_bank / max_bank, 0.0, 1.0)
+	oath_bar.max_value = max_bank
+	oath_bar.value = minf(clamped_bank, max_bank)
+	var cold_fill := Color(0.64, 0.46, 0.94, 0.88)
+	var hot_fill := Color(0.96, 0.72, 1.0, 0.96)
+	if oath_bar_fill_style != null:
+		oath_bar_fill_style.bg_color = cold_fill.lerp(hot_fill, bank_ratio)
+	if oath_bar_glow != null:
+		var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.001 * 8.0)
+		var glow_alpha := 0.06 + bank_ratio * 0.16 + pulse * 0.08 * bank_ratio
+		oath_bar_glow.color = Color(0.88, 0.66, 1.0, glow_alpha)
 
 func play_impact_sound() -> void:
 	if impact_sound_player == null:
@@ -227,6 +380,32 @@ func _play_world_line(points: PackedVector2Array, color: Color, width: float, li
 	tween.set_parallel(false)
 	tween.tween_interval(lifetime)
 	tween.tween_callback(line.queue_free)
+
+func _play_world_soft_pulse(epicenter_global: Vector2, radius: float, color: Color, lifetime: float, start_scale: float = 0.7, end_scale: float = 1.16) -> void:
+	var pulse := Polygon2D.new()
+	pulse.top_level = true
+	pulse.global_position = epicenter_global
+	pulse.polygon = _build_circle_polygon(radius, 28)
+	pulse.color = color
+	pulse.z_index = 39
+	pulse.scale = Vector2.ONE * start_scale
+	add_child(pulse)
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(pulse, "modulate:a", 0.0, lifetime)
+	tween.tween_property(pulse, "scale", Vector2.ONE * end_scale, lifetime)
+	tween.set_parallel(false)
+	tween.tween_interval(lifetime)
+	tween.tween_callback(pulse.queue_free)
+
+func _play_world_star_burst(epicenter_global: Vector2, radius: float, ray_count: int, color: Color, lifetime: float) -> void:
+	var clamped_rays := maxi(4, ray_count)
+	for i in range(clamped_rays):
+		var angle := TAU * float(i) / float(clamped_rays)
+		var dir := Vector2.RIGHT.rotated(angle)
+		var inner := epicenter_global + dir * (radius * 0.18)
+		var outer := epicenter_global + dir * (radius * 0.72)
+		_play_world_line(PackedVector2Array([inner, outer]), color, 2.2, lifetime, 0.7)
 
 func _build_circle_polygon(radius: float, segments: int = 20) -> PackedVector2Array:
 	var polygon := PackedVector2Array()
@@ -597,6 +776,112 @@ func play_storm_crown_discharge(epicenter_global: Vector2) -> void:
 	# Outer blue-white drift ring
 	play_world_ring(epicenter_global, 62.0, Color(0.82, 0.94, 1.0, 0.44), 0.26)
 
+func play_boss_predator_mark(enemy_global: Vector2, stack_count: int, required_stacks: int) -> void:
+	var ratio := clampf(float(stack_count) / maxf(1.0, float(required_stacks)), 0.0, 1.0)
+	var clamped_required := maxi(1, required_stacks)
+	var clamped_stack := clampi(stack_count, 1, clamped_required)
+	var radius := 14.0 + ratio * 6.0
+	# Charge-only visuals: soft rings + cadence pips (no slash/star burst language).
+	play_world_ring(enemy_global, radius, Color(0.96, 0.78, 0.54, 0.22 + ratio * 0.14), 0.14)
+	play_world_ring(enemy_global, radius * 0.68, Color(1.0, 0.94, 0.76, 0.16 + ratio * 0.10), 0.11)
+	for i in range(clamped_required):
+		var angle := -PI * 0.5 + TAU * float(i) / float(clamped_required)
+		var pip_pos := enemy_global + Vector2.RIGHT.rotated(angle) * (radius * 0.9)
+		if i < clamped_stack:
+			play_world_ring(pip_pos, 2.4, Color(1.0, 0.90, 0.68, 0.50), 0.10)
+		else:
+			play_world_ring(pip_pos, 1.9, Color(0.94, 0.84, 0.68, 0.18), 0.10)
+
+func play_boss_predator_burst(enemy_global: Vector2) -> void:
+	_play_world_soft_pulse(enemy_global, 34.0, Color(0.96, 0.24, 0.16, 0.24), 0.18, 0.64, 1.2)
+	_play_world_soft_pulse(enemy_global, 24.0, Color(1.0, 0.76, 0.42, 0.2), 0.14, 0.72, 1.16)
+	play_world_ring(enemy_global, 24.0, Color(1.0, 0.52, 0.24, 0.98), 0.12)
+	play_world_ring(enemy_global, 40.0, Color(1.0, 0.72, 0.38, 0.78), 0.16)
+	play_world_ring(enemy_global, 58.0, Color(1.0, 0.88, 0.62, 0.46), 0.22)
+	_play_world_star_burst(enemy_global, 54.0, 10, Color(1.0, 0.82, 0.56, 0.62), 0.12)
+	_play_world_line(PackedVector2Array([
+		enemy_global + Vector2(-28.0, -28.0),
+		enemy_global + Vector2(28.0, 28.0)
+	]), Color(1.0, 0.92, 0.74, 0.66), 2.8, 0.11, 0.8)
+	_play_world_line(PackedVector2Array([
+		enemy_global + Vector2(-28.0, 28.0),
+		enemy_global + Vector2(28.0, -28.0)
+	]), Color(1.0, 0.92, 0.74, 0.66), 2.8, 0.11, 0.8)
+
+func play_boss_void_zone_spawn(epicenter_global: Vector2, radius: float) -> void:
+	_play_world_soft_pulse(epicenter_global, radius * 0.94, Color(0.14, 0.48, 0.78, 0.18), 0.34, 0.78, 1.08)
+	play_world_ring(epicenter_global, radius * 0.96, Color(0.22, 0.72, 1.0, 0.48), 0.3)
+	play_world_ring(epicenter_global, radius * 0.72, Color(0.56, 0.92, 1.0, 0.82), 0.24)
+	play_world_ring(epicenter_global, radius * 0.44, Color(0.92, 1.0, 1.0, 0.7), 0.17)
+	_play_world_star_burst(epicenter_global, radius, 8, Color(0.72, 0.96, 1.0, 0.54), 0.22)
+
+func play_boss_void_zone_pulse(epicenter_global: Vector2, radius: float) -> void:
+	_play_world_soft_pulse(epicenter_global, radius * 0.64, Color(0.18, 0.56, 0.92, 0.2), 0.18, 0.76, 1.12)
+	play_world_ring(epicenter_global, radius * 0.72, Color(0.18, 0.68, 1.0, 0.4), 0.18)
+	play_world_ring(epicenter_global, radius * 0.56, Color(0.44, 0.86, 1.0, 0.7), 0.13)
+	play_world_ring(epicenter_global, radius * 0.34, Color(0.9, 1.0, 1.0, 0.56), 0.1)
+	_play_world_star_burst(epicenter_global, radius * 0.62, 6, Color(0.8, 0.98, 1.0, 0.42), 0.14)
+
+func play_boss_void_zone_empowered_hit(target_global: Vector2) -> void:
+	_play_world_soft_pulse(target_global, 14.0, Color(0.24, 0.78, 1.0, 0.26), 0.14, 0.72, 1.14)
+	play_world_ring(target_global, 20.0, Color(0.46, 0.88, 1.0, 0.84), 0.13)
+	play_world_ring(target_global, 11.0, Color(0.98, 1.0, 1.0, 0.8), 0.09)
+	_play_world_line(PackedVector2Array([
+		target_global + Vector2(-8.0, 0.0),
+		target_global + Vector2(8.0, 0.0)
+	]), Color(0.92, 1.0, 1.0, 0.62), 2.0, 0.09, 0.8)
+	_play_world_line(PackedVector2Array([
+		target_global + Vector2(0.0, -8.0),
+		target_global + Vector2(0.0, 8.0)
+	]), Color(0.92, 1.0, 1.0, 0.62), 2.0, 0.09, 0.8)
+	_play_world_star_burst(target_global, 14.0, 4, Color(0.84, 1.0, 1.0, 0.58), 0.08)
+
+func play_boss_tempo_stack(player_global: Vector2, stacks: int, max_stacks: int) -> void:
+	var ratio := clampf(float(stacks) / maxf(1.0, float(max_stacks)), 0.0, 1.0)
+	var radius := 12.0 + ratio * 10.0
+	play_world_ring(player_global, radius, Color(1.0, 0.86, 0.42, 0.44 + ratio * 0.34), 0.1)
+	play_world_ring(player_global, radius * 0.56, Color(1.0, 0.96, 0.74, 0.24 + ratio * 0.22), 0.08)
+
+func play_boss_tempo_dash_wave(epicenter_global: Vector2, radius: float, landed: bool) -> void:
+	if landed:
+		play_world_ring(epicenter_global, radius * 0.74, Color(1.0, 0.84, 0.46, 0.9), 0.16)
+		play_world_ring(epicenter_global, radius * 0.42, Color(1.0, 0.96, 0.74, 0.62), 0.1)
+	else:
+		play_world_ring(epicenter_global, radius * 0.6, Color(1.0, 0.48, 0.3, 0.8), 0.14)
+		play_world_ring(epicenter_global, radius * 0.34, Color(1.0, 0.74, 0.56, 0.54), 0.1)
+
+func play_boss_convergence_start(epicenter_global: Vector2, power_ratio: float) -> void:
+	var ratio := clampf(power_ratio, 0.0, 1.0)
+	var radius := 24.0 + 52.0 * ratio
+	_play_world_soft_pulse(epicenter_global, radius * 1.06, Color(0.56, 0.34, 0.96, 0.20 + ratio * 0.14), 0.24, 0.72, 1.14)
+	_play_world_soft_pulse(epicenter_global, radius * 0.74, Color(0.82, 0.72, 1.0, 0.18 + ratio * 0.12), 0.18, 0.76, 1.10)
+	play_world_ring(epicenter_global, radius * 0.96, Color(0.90, 0.72, 1.0, 0.92), 0.20)
+	play_world_ring(epicenter_global, radius * 0.66, Color(0.78, 0.92, 1.0, 0.66), 0.15)
+	play_world_ring(epicenter_global, radius * 0.42, Color(0.98, 0.98, 1.0, 0.56), 0.10)
+	_play_world_star_burst(epicenter_global, radius * 0.92, 10, Color(0.90, 0.80, 1.0, 0.54), 0.14)
+	for i in range(4):
+		var angle := PI * 0.25 + PI * 0.5 * float(i)
+		var dir := Vector2.RIGHT.rotated(angle)
+		var start_pos := epicenter_global + dir * (radius * 0.26)
+		var end_pos := epicenter_global + dir * (radius * 0.88)
+		_play_world_line(PackedVector2Array([start_pos, end_pos]), Color(1.0, 0.94, 1.0, 0.58), 2.4, 0.12, 0.8)
+
+func play_boss_convergence_pulse(epicenter_global: Vector2, radius: float) -> void:
+	_play_world_soft_pulse(epicenter_global, radius * 0.62, Color(0.44, 0.32, 0.90, 0.16), 0.16, 0.74, 1.12)
+	play_world_ring(epicenter_global, radius * 0.66, Color(0.78, 0.88, 1.0, 0.76), 0.14)
+	play_world_ring(epicenter_global, radius * 0.50, Color(0.66, 0.84, 1.0, 0.66), 0.11)
+	play_world_ring(epicenter_global, radius * 0.32, Color(0.98, 1.0, 1.0, 0.52), 0.08)
+	_play_world_star_burst(epicenter_global, radius * 0.64, 8, Color(0.86, 0.96, 1.0, 0.48), 0.10)
+
+func play_boss_unbroken_bank_gain(epicenter_global: Vector2, bank_ratio: float) -> void:
+	var r := clampf(bank_ratio, 0.0, 1.0)
+	play_world_ring(epicenter_global, 18.0 + 16.0 * r, Color(0.92, 0.98, 1.0, 0.36 + 0.32 * r), 0.11)
+
+func play_boss_unbroken_retaliation(epicenter_global: Vector2, bonus_ratio: float) -> void:
+	var r := clampf(bonus_ratio, 0.0, 1.6)
+	play_world_ring(epicenter_global, 20.0 + 26.0 * r, Color(0.84, 0.96, 1.0, 0.86), 0.14)
+	play_world_ring(epicenter_global, 12.0 + 12.0 * r, Color(1.0, 1.0, 1.0, 0.6), 0.08)
+
 func show_eclipse_mark_decal(enemy_node: Node2D, duration: float) -> void:
 	if not is_instance_valid(enemy_node):
 		return
@@ -804,6 +1089,88 @@ func _create_voidfire_bar() -> void:
 	add_child(voidfire_glow)
 
 	update_voidfire_heat_bar(0.0, 100.0, false, 0.0)
+
+func _create_oath_bank_bar() -> void:
+	oath_bar = ProgressBar.new()
+	oath_bar.min_value = 0.0
+	oath_bar.max_value = 100.0
+	oath_bar.value = 0.0
+	oath_bar.show_percentage = false
+	oath_bar.position = oath_bar_offset
+	oath_bar.custom_minimum_size = oath_bar_size
+	oath_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	oath_bar.z_index = 10
+
+	oath_bar_background_style = StyleBoxFlat.new()
+	oath_bar_background_style.bg_color = Color(0.12, 0.08, 0.16, 0.72)
+	oath_bar_background_style.corner_radius_top_left = 2
+	oath_bar_background_style.corner_radius_top_right = 2
+	oath_bar_background_style.corner_radius_bottom_left = 2
+	oath_bar_background_style.corner_radius_bottom_right = 2
+	oath_bar_background_style.border_width_left = 1
+	oath_bar_background_style.border_width_top = 1
+	oath_bar_background_style.border_width_right = 1
+	oath_bar_background_style.border_width_bottom = 1
+	oath_bar_background_style.border_color = Color(0.86, 0.7, 0.98, 0.74)
+
+	oath_bar_fill_style = StyleBoxFlat.new()
+	oath_bar_fill_style.bg_color = Color(0.76, 0.58, 0.98, 0.9)
+	oath_bar_fill_style.corner_radius_top_left = 2
+	oath_bar_fill_style.corner_radius_top_right = 2
+	oath_bar_fill_style.corner_radius_bottom_left = 2
+	oath_bar_fill_style.corner_radius_bottom_right = 2
+
+	oath_bar.add_theme_stylebox_override("background", oath_bar_background_style)
+	oath_bar.add_theme_stylebox_override("fill", oath_bar_fill_style)
+	add_child(oath_bar)
+
+	oath_bar_glow = ColorRect.new()
+	oath_bar_glow.position = oath_bar_offset + Vector2(-1.0, -1.0)
+	oath_bar_glow.size = oath_bar_size + Vector2(2.0, 2.0)
+	oath_bar_glow.color = Color(0.88, 0.66, 1.0, 0.0)
+	oath_bar_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	oath_bar_glow.z_index = 11
+	add_child(oath_bar_glow)
+
+	update_oath_bank_bar(0.0, 100.0, false)
+
+func _layout_status_bars() -> void:
+	if health_bar == null:
+		return
+	health_bar.position = health_bar_offset
+	var row_gap := 2.0
+	var first_row_y := health_bar_offset.y - voidfire_bar_size.y - row_gap
+	var second_row_y := first_row_y - oath_bar_size.y - row_gap
+	var voidfire_visible := voidfire_bar != null and voidfire_bar.visible
+	var oath_visible := oath_bar != null and oath_bar.visible
+	if voidfire_visible and oath_visible:
+		_set_voidfire_bar_y(first_row_y)
+		_set_oath_bar_y(second_row_y)
+	elif voidfire_visible:
+		_set_voidfire_bar_y(first_row_y)
+		_set_oath_bar_y(first_row_y)
+	elif oath_visible:
+		_set_oath_bar_y(first_row_y)
+		_set_voidfire_bar_y(first_row_y)
+	else:
+		_set_voidfire_bar_y(first_row_y)
+		_set_oath_bar_y(first_row_y)
+
+func _set_voidfire_bar_y(y: float) -> void:
+	if voidfire_bar != null:
+		voidfire_bar.position.y = y
+	if voidfire_sweetspot_zone != null:
+		voidfire_sweetspot_zone.position.y = y
+	if voidfire_threshold_line != null:
+		voidfire_threshold_line.position.y = y - 1.0
+	if voidfire_glow != null:
+		voidfire_glow.position.y = y - 1.0
+
+func _set_oath_bar_y(y: float) -> void:
+	if oath_bar != null:
+		oath_bar.position.y = y
+	if oath_bar_glow != null:
+		oath_bar_glow.position.y = y - 1.0
 
 func _create_impact_sound_player() -> void:
 	impact_sound_player = AudioStreamPlayer2D.new()

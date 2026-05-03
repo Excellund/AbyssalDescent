@@ -19,6 +19,9 @@ var boons_list_container: VBoxContainer
 var arcana_section: VBoxContainer
 var arcana_list_container: VBoxContainer
 
+var boss_section: VBoxContainer
+var boss_list_container: VBoxContainer
+
 func setup() -> void:
 	_create_panel()
 
@@ -83,8 +86,8 @@ func _create_panel() -> void:
 	var passive_panel_style := StyleBoxFlat.new()
 	passive_panel_style.bg_color = Color(0.07, 0.04, 0.13, 0.78)
 	passive_panel_style.border_color = Color(0.72, 0.52, 1.0, 0.90)
-	passive_panel_style.set_border_width_all(2)
-	passive_panel_style.set_corner_radius_all(12)
+	passive_panel_style.bg_color = Color(0.03, 0.10, 0.12, 0.78)
+	passive_panel_style.border_color = Color(0.44, 0.86, 0.92, 0.90)
 	passive_panel_style.content_margin_left = 14.0
 	passive_panel_style.content_margin_right = 14.0
 	passive_panel_style.content_margin_top = 12.0
@@ -102,7 +105,7 @@ func _create_panel() -> void:
 	passive_header.add_theme_font_size_override("font_size", 18)
 	passive_header.add_theme_color_override("font_color", Color(0.78, 0.60, 1.0, 0.98))
 	passive_header.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
-	passive_header.add_theme_constant_override("shadow_offset_x", 2)
+	passive_header.add_theme_color_override("font_color", Color(0.58, 0.94, 1.0, 0.98))
 	passive_header.add_theme_constant_override("shadow_offset_y", 2)
 	passive_section.add_child(passive_header)
 
@@ -128,6 +131,39 @@ func _create_panel() -> void:
 	passive_desc_label.add_theme_constant_override("shadow_offset_y", 1)
 	passive_desc_label.text = "No passive selected"
 	passive_section.add_child(passive_desc_label)
+
+	# Boss rewards section panel
+	var boss_panel := PanelContainer.new()
+	boss_panel.custom_minimum_size = Vector2(790.0, 0.0)
+	var boss_panel_style := StyleBoxFlat.new()
+	boss_panel_style.bg_color = Color(0.10, 0.04, 0.12, 0.76)
+	boss_panel_style.border_color = Color(0.92, 0.72, 1.0, 0.9)
+	boss_panel_style.set_border_width_all(2)
+	boss_panel_style.set_corner_radius_all(12)
+	boss_panel_style.content_margin_left = 14.0
+	boss_panel_style.content_margin_right = 14.0
+	boss_panel_style.content_margin_top = 12.0
+	boss_panel_style.content_margin_bottom = 12.0
+	boss_panel.add_theme_stylebox_override("panel", boss_panel_style)
+	content_vbox.add_child(boss_panel)
+
+	boss_section = VBoxContainer.new()
+	boss_section.custom_minimum_size = Vector2(760.0, 0.0)
+	boss_section.add_theme_constant_override("separation", 6)
+	boss_panel.add_child(boss_section)
+
+	var boss_header := Label.new()
+	boss_header.text = "Boss"
+	boss_header.add_theme_font_size_override("font_size", 18)
+	boss_header.add_theme_color_override("font_color", Color(0.92, 0.72, 1.0, 0.98))
+	boss_header.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
+	boss_header.add_theme_constant_override("shadow_offset_x", 2)
+	boss_header.add_theme_constant_override("shadow_offset_y", 2)
+	boss_section.add_child(boss_header)
+
+	boss_list_container = VBoxContainer.new()
+	boss_list_container.add_theme_constant_override("separation", 3)
+	boss_section.add_child(boss_list_container)
 
 	# Arcana section panel
 	var arcana_panel := PanelContainer.new()
@@ -214,7 +250,7 @@ func close() -> void:
 func is_open() -> bool:
 	return is_visible
 
-func refresh(character_id: String, active_boons: Array, active_arcana: Array, player: Node = null) -> void:
+func refresh(character_id: String, active_boons: Array, active_arcana: Array, active_boss_rewards: Array = [], player: Node = null) -> void:
 	if panel == null:
 		return
 	
@@ -226,6 +262,9 @@ func refresh(character_id: String, active_boons: Array, active_arcana: Array, pl
 	
 	# Update arcana list
 	_update_power_section(arcana_list_container, active_arcana, "arcana", player)
+
+	# Update boss rewards list
+	_update_power_section(boss_list_container, active_boss_rewards, "boss", player)
 
 func _update_passive_section(character_id: String) -> void:
 	var char_data := CHARACTER_REGISTRY.get_character(character_id)
@@ -325,9 +364,32 @@ func _get_power_current_desc(power_id: String, power_type: String, player: Node)
 	var stacks := 1
 	if power_type == "boon" and player.has_method("get_upgrade_stack_count"):
 		stacks = maxi(1, int(player.get_upgrade_stack_count(power_id)))
+	elif power_type == "boss" and player.has_method("get_upgrade_stack_count"):
+		stacks = maxi(1, int(player.get_upgrade_stack_count(power_id)))
 	elif power_type == "arcana" and player.has_method("get_trial_power_stack_count"):
 		stacks = maxi(1, int(player.get_trial_power_stack_count(power_id)))
 	match power_id:
+		# Boss rewards
+		"apex_predator":
+			return "[color=#9ab8d8]Every hit builds predator cadence. Every 4th hit bursts at impact and mauls nearby enemies.[/color]\n    [color=#c8daf0]Predator power:[/color] [color=#e8c96a]+%d[/color]" % (34 * stacks)
+		"void_echo":
+			var ve_radius := clampf(96.0 + 52.0 * float(stacks), 96.0, 260.0)
+			return "[color=#9ab8d8]Kills create a void zone that pulses damage and empowers hits inside it. Zone pulse kills do not create extra zones.[/color]\n    [color=#c8daf0]Zone radius:[/color] [color=#e8c96a]%.0f[/color], [color=#c8daf0]Zone power:[/color] [color=#e8c96a]%d[/color]" % [ve_radius, (52 * stacks)]
+		"apex_momentum":
+			return "[color=#9ab8d8]Hits build tempo. Dash end releases a momentum wave; hit enemies to refund dash cooldown.[/color]\n    [color=#c8daf0]Tempo per stack:[/color] [color=#e8c96a]+%.0f%%[/color]" % (9.0 * float(stacks))
+		"convergence_surge":
+			var cs_ratio := 0.22 * float(stacks)
+			var cs_hits_needed := maxi(2, 6 - int(round(cs_ratio * 8.0)))
+			var cs_window := 1.2 + cs_ratio * 1.8
+			var cs_pulse_every := maxf(0.14, 0.3 - cs_ratio * 0.25)
+			var cs_pulse_radius := clampf(92.0 + 120.0 * cs_ratio, 92.0, 250.0)
+			var cs_pulse_damage := (0.28 + cs_ratio * 0.8) * 100.0
+			return "[color=#9ab8d8]Every %d damaging hits, you enter Convergence.[/color]\n    [color=#c8daf0]Convergence:[/color] [color=#e8c96a]%.2fs[/color], [color=#c8daf0]Pulse every:[/color] [color=#e8c96a]%.2fs[/color], [color=#c8daf0]Pulse radius:[/color] [color=#e8c96a]%.0f[/color], [color=#c8daf0]Pulse damage:[/color] [color=#e8c96a]%.0f%%[/color] of damage stat" % [cs_hits_needed, cs_window, cs_pulse_every, cs_pulse_radius, cs_pulse_damage]
+		"indomitable_spirit":
+			var io_resist := 14.0 * float(stacks)
+			var io_base_ratio := 45.0 + io_resist
+			return "[color=#9ab8d8]Taking damage banks Oath. Damaging hits consume all Oath for bonus damage.[/color]\n    [color=#c8daf0]Damage Reduction:[/color] [color=#e8c96a]%.0f%%[/color], [color=#c8daf0]Oath attack:[/color] [color=#e8c96a]%.0f%%[/color] damage + [color=#e8c96a]1%% per banked Oath[/color]" % [io_resist, io_base_ratio]
+
 		# Boons
 		"first_strike":
 			return "[color=#c8daf0]%sExtra hit damage vs enemies above 80%% HP:[/color] [color=#e8c96a]+%d[/color]" % [_damage_kind_prefix(power_id, player), (16 * stacks)]
@@ -483,6 +545,16 @@ func _power_display_name(power_id: String) -> String:
 			return "Eclipse Mark"
 		"fracture_field":
 			return "Fracture Field"
+		"apex_predator":
+			return "Warden's Verdict"
+		"void_echo":
+			return "Lacuna Echo"
+		"apex_momentum":
+			return "Sovereign Tempo"
+		"convergence_surge":
+			return "Pillar Convergence"
+		"indomitable_spirit":
+			return "Unbroken Oath"
 		_:
 			return power_id.capitalize()
 

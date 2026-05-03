@@ -38,12 +38,16 @@ var build_strip_passive_chip: Panel
 var build_strip_passive_label: RichTextLabel
 var build_strip_boon_container: VBoxContainer
 var build_strip_arcana_container: VBoxContainer
+var build_strip_boss_container: VBoxContainer
 var build_strip_boon_chips: Array[Panel] = []
 var build_strip_boon_labels: Array[Label] = []
 var build_strip_boon_stack_labels: Array[Label] = []
 var build_strip_arcana_chips: Array[Panel] = []
 var build_strip_arcana_labels: Array[Label] = []
 var build_strip_arcana_stack_labels: Array[Label] = []
+var build_strip_boss_chips: Array[Panel] = []
+var build_strip_boss_labels: Array[Label] = []
+var build_strip_boss_stack_labels: Array[Label] = []
 
 var _encounter_count: int = 5
 var _banner_top_margin: float = 18.0
@@ -631,8 +635,8 @@ func _create_build_strip(layer: CanvasLayer) -> void:
 	build_strip_passive_chip.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	build_strip_passive_chip.custom_minimum_size = Vector2(120.0, 40.0)
 	var passive_style := StyleBoxFlat.new()
-	passive_style.bg_color = Color(0.08, 0.04, 0.14, 0.80)
-	passive_style.border_color = Color(0.72, 0.52, 1.0, 0.96)
+	passive_style.bg_color = Color(0.04, 0.14, 0.16, 0.80)
+	passive_style.border_color = Color(0.44, 0.86, 0.92, 0.96)
 	passive_style.set_border_width_all(2)
 	passive_style.set_corner_radius_all(6)
 	build_strip_passive_chip.add_theme_stylebox_override("panel", passive_style)
@@ -655,6 +659,11 @@ func _create_build_strip(layer: CanvasLayer) -> void:
 	build_strip_passive_label.add_theme_constant_override("shadow_offset_y", 1)
 	build_strip_passive_label.text = "[center][b]Passive[/b][/center]"
 	passive_center.add_child(build_strip_passive_label)
+
+	# Boss reward section
+	build_strip_boss_container = VBoxContainer.new()
+	build_strip_boss_container.add_theme_constant_override("separation", 4)
+	build_strip_content.add_child(build_strip_boss_container)
 
 	# Arcana section
 	build_strip_arcana_container = VBoxContainer.new()
@@ -724,6 +733,34 @@ func _create_build_strip(layer: CanvasLayer) -> void:
 		arcana_chip.add_child(arcana_stack_label)
 		build_strip_arcana_stack_labels.append(arcana_stack_label)
 
+		var boss_chip := _create_build_strip_chip()
+		boss_chip.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		build_strip_boss_chips.append(boss_chip)
+		build_strip_boss_container.add_child(boss_chip)
+		boss_chip.visible = false
+		var boss_label := Label.new()
+		boss_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+		boss_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		boss_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		boss_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		boss_label.add_theme_font_size_override("font_size", 12)
+		boss_label.add_theme_color_override("font_color", Color(0.95, 0.78, 1.0, 0.97))
+		boss_chip.add_child(boss_label)
+		build_strip_boss_labels.append(boss_label)
+		var boss_stack_label := Label.new()
+		boss_stack_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+		boss_stack_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		boss_stack_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		boss_stack_label.add_theme_font_size_override("font_size", 11)
+		boss_stack_label.add_theme_color_override("font_color", Color(0.98, 0.86, 1.0, 0.98))
+		boss_stack_label.add_theme_constant_override("outline_size", 1)
+		boss_stack_label.add_theme_color_override("font_outline_color", Color(0.02, 0.04, 0.06, 0.95))
+		boss_stack_label.offset_left = 4.0
+		boss_stack_label.offset_right = -8.0
+		boss_stack_label.text = ""
+		boss_chip.add_child(boss_stack_label)
+		build_strip_boss_stack_labels.append(boss_stack_label)
+
 func _create_build_strip_chip() -> Panel:
 	var chip := Panel.new()
 	chip.custom_minimum_size = Vector2(120.0, 32.0)
@@ -755,6 +792,9 @@ func _update_build_strip_layout() -> void:
 		if chip != null:
 			chip.custom_minimum_size = Vector2(chip_width, 32.0)
 	for chip in build_strip_arcana_chips:
+		if chip != null:
+			chip.custom_minimum_size = Vector2(chip_width, 32.0)
+	for chip in build_strip_boss_chips:
 		if chip != null:
 			chip.custom_minimum_size = Vector2(chip_width, 32.0)
 
@@ -834,6 +874,7 @@ func _update_build_strip(state: Dictionary, player: Node) -> void:
 	# Get active boons and arcana from state
 	var active_boons := state.get("active_boons", []) as Array
 	var active_arcana := state.get("active_arcana", []) as Array
+	var active_boss_rewards := state.get("active_boss_rewards", []) as Array
 	# Update boon chips
 	for i in range(build_strip_boon_chips.size()):
 		var chip := build_strip_boon_chips[i]
@@ -865,6 +906,26 @@ func _update_build_strip(state: Dictionary, player: Node) -> void:
 			if is_instance_valid(player):
 				var stack_count := int(player.get_trial_power_stack_count(arcana_id))
 				var display_name := _get_power_display_name(arcana_id)
+				label.text = display_name
+				stack_label.text = "x%d" % stack_count if stack_count > 1 else ""
+			else:
+				label.text = "?"
+				stack_label.text = ""
+		else:
+			chip.visible = false
+			label.text = ""
+			stack_label.text = ""
+	# Update boss reward chips
+	for i in range(build_strip_boss_chips.size()):
+		var chip := build_strip_boss_chips[i]
+		var label := build_strip_boss_labels[i]
+		var stack_label := build_strip_boss_stack_labels[i]
+		if i < active_boss_rewards.size():
+			var reward_id = active_boss_rewards[i]
+			chip.visible = true
+			if is_instance_valid(player):
+				var stack_count := int(player.get_upgrade_stack_count(reward_id))
+				var display_name := _get_power_display_name(reward_id)
 				label.text = display_name
 				stack_label.text = "x%d" % stack_count if stack_count > 1 else ""
 			else:
@@ -966,6 +1027,16 @@ func _get_power_display_name(power_id: String) -> String:
 			return "Eclipse Mark"
 		"fracture_field":
 			return "Fracture Field"
+		"apex_predator":
+			return "Warden's Verdict"
+		"void_echo":
+			return "Lacuna Echo"
+		"apex_momentum":
+			return "Sovereign Tempo"
+		"convergence_surge":
+			return "Pillar Convergence"
+		"indomitable_spirit":
+			return "Unbroken Oath"
 		_:
 			return "Unknown"
 

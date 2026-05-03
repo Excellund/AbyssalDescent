@@ -401,7 +401,7 @@ func start_run_with_powers(power_ids: Array[String]) -> Dictionary:
 		}
 
 	for power_id in power_ids:
-		var id := power_id.strip_edges().to_lower()
+		var id := _resolve_debug_power_id(power_id)
 		if id.is_empty():
 			continue
 		if not _is_known_power_id(id):
@@ -729,7 +729,32 @@ func _parse_power_command(command: String) -> Array[String]:
 	return ids
 
 func _is_known_power_id(power_id: String) -> bool:
-	return power_registry_instance.is_valid_power_id(power_id)
+	return power_registry_instance.is_valid_power_id(_resolve_debug_power_id(power_id))
+
+func _resolve_debug_power_id(raw_power_id: String) -> String:
+	var id := raw_power_id.strip_edges().to_lower()
+	if id.is_empty():
+		return ""
+	if power_registry_instance != null and power_registry_instance.is_valid_power_id(id):
+		return id
+
+	var canonical := id.replace("-", "_").replace(" ", "_").replace("'", "")
+	if power_registry_instance != null and power_registry_instance.is_valid_power_id(canonical):
+		return canonical
+
+	match canonical:
+		"wardens_verdict":
+			return "apex_predator"
+		"lacuna_echo", "lucana_echo":
+			return "void_echo"
+		"sovereign_tempo":
+			return "apex_momentum"
+		"pillar_convergence":
+			return "convergence_surge"
+		"unbroken_oath":
+			return "indomitable_spirit"
+		_:
+			return canonical
 
 func _unhandled_input(event: InputEvent) -> void:
 	# Hold Tab to show build details; release Tab to close.
@@ -744,7 +769,7 @@ func _unhandled_input(event: InputEvent) -> void:
 					return
 				if not build_detail_panel.is_open():
 					var active_powers := _get_active_player_powers()
-					build_detail_panel.refresh(current_character_id, active_powers["boons"], active_powers["arcana"], player)
+					build_detail_panel.refresh(current_character_id, active_powers["boons"], active_powers["arcana"], active_powers["boss_rewards"], player)
 					build_detail_panel.open()
 				get_viewport().set_input_as_handled()
 				return
@@ -1148,6 +1173,7 @@ func _get_hud_state() -> Dictionary:
 	var active_powers := _get_active_player_powers()
 	hud_state["active_boons"] = active_powers["boons"]
 	hud_state["active_arcana"] = active_powers["arcana"]
+	hud_state["active_boss_rewards"] = active_powers["boss_rewards"]
 	return hud_state
 
 func _get_priority_target_health() -> int:
@@ -1161,8 +1187,8 @@ func _get_priority_target_max_health() -> int:
 	return objective_target_enemy.get_max_health()
 
 func _get_active_player_powers() -> Dictionary:
-	# Returns {"boons": [id1, id2, ...], "arcana": [id1, id2, ...]}
-	var result := {"boons": [], "arcana": []}
+	# Returns {"boons": [id1, id2, ...], "arcana": [id1, id2, ...], "boss_rewards": [id1, id2, ...]}
+	var result := {"boons": [], "arcana": [], "boss_rewards": []}
 	if not is_instance_valid(player):
 		return result
 	
@@ -1177,6 +1203,12 @@ func _get_active_player_powers() -> Dictionary:
 		var stack_count := int(player.get_trial_power_stack_count(power_id))
 		if stack_count > 0:
 			result["arcana"].append(power_id)
+
+	# Check boss rewards (boss-exclusive upgrades)
+	for power_id in POWER_REGISTRY.BOSS_REWARD_BALANCE.keys():
+		var stack_count := int(player.get_upgrade_stack_count(power_id))
+		if stack_count > 0:
+			result["boss_rewards"].append(power_id)
 	
 	return result
 
@@ -1726,6 +1758,11 @@ func _pick_boss_spawn_position(min_player_distance: float = 260.0, wall_margin: 
 	return fallback
 
 func _begin_configured_boss_room(boss_stage: int, room_size: Vector2, room_label: String, room_entry_key: String, banner_title: String, boss_script, collision_radius: float, min_player_distance: float, wall_margin: float) -> void:
+	encounter_intro_grace_active = false
+	_set_player_combat_damage_enabled(true)
+	_clear_enemy_lingering_effects()
+	if is_instance_valid(player):
+		player.clear_lingering_combat_effects()
 	in_boss_room = boss_stage == 1
 	in_second_boss_room = boss_stage == 2
 	in_third_boss_room = boss_stage == 3

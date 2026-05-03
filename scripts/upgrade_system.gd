@@ -43,7 +43,12 @@ const UPGRADE_IDS := {
 	"surge_step": true,
 	"heartstone": true,
 	"crushed_vow": true,
-	"severing_edge": true
+	"severing_edge": true,
+	"apex_predator": true,
+	"void_echo": true,
+	"apex_momentum": true,
+	"convergence_surge": true,
+	"indomitable_spirit": true
 }
 
 const TRIAL_POWER_IDS := {
@@ -94,7 +99,7 @@ func apply_upgrade(upgrade_id: String) -> bool:
 	upgrade_stacks[id] = current_stacks + 1
 
 	match id:
-		"first_strike", "heavy_blow", "wide_arc", "long_reach", "fleet_foot", "blink_dash", "battle_trance", "surge_step":
+		"first_strike", "heavy_blow", "wide_arc", "long_reach", "fleet_foot", "blink_dash", "battle_trance", "surge_step", "apex_predator", "void_echo", "apex_momentum", "convergence_surge", "indomitable_spirit":
 			player_reference.set(String(preview.get("property", "")), preview.get("next", player_reference.get(String(preview.get("property", "")))))
 		"heartstone":
 			var next_max := int(preview.get("next", player_reference.get_max_health()))
@@ -749,6 +754,34 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 			return "[color=#c8daf0]After being hit, next attack bonus damage:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
 		"severing_edge":
 			return "[color=#c8daf0]Bonus damage on hits against enemies below 55%% HP:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
+		"apex_predator":
+			return "[color=#c8daf0]Warden's Verdict:[/color] every hit builds predator cadence; every 4th hit triggers a burst at impact and mauls nearby enemies. Predator power [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]." % [int(cur_val), int(next_val)]
+		"void_echo":
+			var cur_void_echo := int(cur_val)
+			var next_void_echo := int(next_val)
+			var cur_echo_radius := clampf(96.0 + float(cur_void_echo) * 1.05, 96.0, 260.0)
+			var next_echo_radius := clampf(96.0 + float(next_void_echo) * 1.05, 96.0, 260.0)
+			return "[color=#c8daf0]Lacuna Echo:[/color] kills create lingering void zones that pulse damage and empower hits inside them. Zone power [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color], radius [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]." % [cur_void_echo, next_void_echo, cur_echo_radius, next_echo_radius]
+		"apex_momentum":
+			var cur_momentum := float(cur_val) * 100.0
+			var next_momentum := float(next_val) * 100.0
+			return "[color=#c8daf0]Sovereign Tempo:[/color] hits build tempo stacks; finishing a dash releases a momentum wave. Hitting enemies refunds dash cooldown based on stacks. Tempo per stack [color=#e8c96a]+%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]+%.0f%%[/color]." % [cur_momentum, next_momentum]
+		"convergence_surge":
+			var cur_ratio := float(cur_val)
+			var next_ratio := float(next_val)
+			var cur_hits_needed := maxi(2, 6 - int(round(cur_ratio * 8.0)))
+			var next_hits_needed := maxi(2, 6 - int(round(next_ratio * 8.0)))
+			var cur_window := 1.2 + cur_ratio * 1.8
+			var next_window := 1.2 + next_ratio * 1.8
+			var cur_pulse_every := maxf(0.14, 0.3 - cur_ratio * 0.25)
+			var next_pulse_every := maxf(0.14, 0.3 - next_ratio * 0.25)
+			return "[color=#c8daf0]Pillar Convergence:[/color] every [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color] damaging hits, you enter Convergence for [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color], pulsing every [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]." % [cur_hits_needed, next_hits_needed, cur_window, next_window, cur_pulse_every, next_pulse_every]
+		"indomitable_spirit":
+			var cur_resist := float(cur_val) * 100.0
+			var next_resist := float(next_val) * 100.0
+			var cur_base_ratio := 45.0 + cur_resist
+			var next_base_ratio := 45.0 + next_resist
+			return "[color=#c8daf0]Unbroken Oath:[/color] DR [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color]. Taking damage banks Oath; damaging hits consume all bank for bonus = [color=#e8c96a]%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f%%[/color] of damage stat + [color=#e8c96a]1%% per banked damage[/color]." % [cur_resist, next_resist, cur_base_ratio, next_base_ratio]
 		_:
 			return "[color=#c8daf0]Upgrade your stats.[/color]"
 

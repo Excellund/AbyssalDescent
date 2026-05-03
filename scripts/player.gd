@@ -108,7 +108,14 @@ const RUN_SNAPSHOT_PROPERTIES := [
 	"fracture_field_damage_ratio",
 	"fracture_field_slow_duration",
 	"crushed_vow_bonus_damage",
-	"severing_edge_bonus_damage"
+	"severing_edge_bonus_damage",
+	"apex_predator_bonus_damage",
+	"void_echo_damage",
+	"apex_momentum_speed_bonus",
+	"apex_momentum_stacks",
+	"convergence_surge_damage_ratio",
+	"convergence_surge_hit_counter",
+	"indomitable_spirit_damage_reduction"
 ]
 
 signal health_changed(current_health: int, max_health: int)
@@ -285,6 +292,25 @@ var _fracture_field_resolving: bool = false
 var crushed_vow_bonus_damage: int = 0
 var _crushed_vow_primed: bool = false
 var severing_edge_bonus_damage: int = 0
+var apex_predator_bonus_damage: int = 0
+var void_echo_damage: int = 0
+var apex_momentum_speed_bonus: float = 0.0
+var apex_momentum_stacks: int = 0
+var apex_momentum_stack_duration: float = 1.8
+var apex_momentum_stack_left: float = 0.0
+var apex_momentum_max_stacks: int = 6
+var convergence_surge_damage_ratio: float = 0.0
+var convergence_surge_hit_counter: int = 0
+var indomitable_spirit_damage_reduction: float = 0.0
+var _indomitable_spirit_primed: bool = false
+var apex_predator_combo_hits: int = 0
+var apex_predator_combo_window: float = 2.2
+var apex_predator_combo_left: float = 0.0
+var void_echo_zones: Array[Dictionary] = []
+var _void_echo_pulse_kill_suppression_depth: int = 0
+var convergence_window_left: float = 0.0
+var convergence_pulse_cooldown: float = 0.0
+var indomitable_damage_bank: float = 0.0
 
 # Objective mutators
 var active_objective_mutators: Array[Dictionary] = []
@@ -362,9 +388,15 @@ func _physics_process(delta: float) -> void:
 	_update_storm_crown_discharge(delta)
 	_update_combo_relay_state(delta)
 	_update_iron_retort(delta)
+	_update_apex_predator_combo(delta)
+	_update_apex_momentum(delta)
+	_update_void_echo_zones(delta)
+	_update_convergence_window(delta)
+	_update_indomitable_damage_bank(delta)
 	_update_voidfire_heat(delta)
 	_update_voidfire_lockout(delta)
 	_sync_voidfire_ui()
+	_sync_oath_ui()
 	_update_eclipse_marks()
 	_try_start_dash(direction)
 	_try_attack_input()
@@ -546,9 +578,11 @@ func _process_active_dash(delta: float) -> bool:
 		velocity = Vector2.ZERO
 		return false
 	dash_remaining_distance = maxf(0.0, dash_remaining_distance - moved)
+	var dash_finished := false
 	if dash_remaining_distance <= 0.001:
 		dash_time_left = 0.0
 		dash_remaining_distance = 0.0
+		dash_finished = true
 		# End dash with a small consistent carry velocity to avoid occasional hard-brake feel.
 		velocity = dash_direction * minf(max_speed * 0.9, dash_speed * 0.22)
 
@@ -576,6 +610,8 @@ func _process_active_dash(delta: float) -> bool:
 
 	if reward_wraithstep:
 		_apply_wraithstep_marks_during_dash(dash_start, dash_end)
+	if dash_finished:
+		_release_apex_momentum_dash_wave(dash_end)
 
 	return true
 
@@ -668,11 +704,12 @@ func _update_ground_movement(direction: Vector2, delta: float) -> void:
 			trance_ratio = trance_ratio / maxf(1.0, max_speed)
 		trance_ratio = clampf(trance_ratio, 0.0, 1.5)
 		trance_speed_bonus = max_speed * trance_ratio
+	var momentum_speed_bonus := max_speed * apex_momentum_speed_bonus * float(apex_momentum_stacks)
 	var combo_relay_speed_bonus := max_speed * combo_relay_speed_per_stack * float(combo_relay_stacks)
 	var overheat_move_mult := 1.0
 	if reward_voidfire and _voidfire_lockout_left > 0.0:
 		overheat_move_mult = clampf(voidfire_overheat_move_mult, 0.2, 1.0)
-	var target_velocity := direction * (max_speed + trance_speed_bonus + combo_relay_speed_bonus) * overheat_move_mult
+	var target_velocity := direction * (max_speed + trance_speed_bonus + momentum_speed_bonus + combo_relay_speed_bonus) * overheat_move_mult
 	var applied_acceleration := _get_applied_acceleration(target_velocity)
 	var move_rate := applied_acceleration if direction != Vector2.ZERO else deceleration
 	velocity = velocity.move_toward(target_velocity, move_rate * delta)
@@ -746,6 +783,8 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 	var total_resist := objective_mutator_damage_resist
 	if reward_aegis_field and aegis_field_active_left > 0.0:
 		total_resist += aegis_field_resist_ratio
+	if indomitable_spirit_damage_reduction > 0.0:
+		total_resist += indomitable_spirit_damage_reduction
 	total_resist = clampf(total_resist, 0.0, 0.92)
 	reduced = int(ceil(float(reduced) * (1.0 - total_resist)))
 	reduced = int(ceil(float(reduced) * incoming_damage_taken_mult))
@@ -777,6 +816,11 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 			_vow_shatter_primed = true
 		if crushed_vow_bonus_damage > 0:
 			_crushed_vow_primed = true
+		if indomitable_spirit_damage_reduction > 0.0:
+			indomitable_damage_bank += float(reduced)
+			if player_feedback != null and player_feedback.has_method("play_boss_unbroken_bank_gain"):
+				var bank_ratio := clampf(indomitable_damage_bank / maxf(1.0, float(max_health)), 0.0, 1.0)
+				player_feedback.play_boss_unbroken_bank_gain(global_position, bank_ratio)
 		if source == "enemy_contact":
 			_contact_damage_grace_left = contact_damage_grace_duration
 			_contact_damage_grace_ability = ability
@@ -1110,7 +1154,12 @@ func apply_power_for_test(power_id: String) -> bool:
 		"surge_step": true,
 		"heartstone": true,
 		"crushed_vow": true,
-		"severing_edge": true
+		"severing_edge": true,
+		"apex_predator": true,
+		"void_echo": true,
+		"apex_momentum": true,
+		"convergence_surge": true,
+		"indomitable_spirit": true
 	}
 	if boon_ids.has(id):
 		apply_upgrade(id)
@@ -1148,7 +1197,10 @@ func _build_damage_breakdown(base_scaling_damage: int, enemy_node: Object, hit_p
 	flat_bonus_damage += _consume_wraithstep_mark(enemy_node, hit_position, base_scaling_damage)
 	flat_bonus_damage += _get_crushed_vow_bonus()
 	flat_bonus_damage += _get_severing_edge_bonus(enemy_node)
+	flat_bonus_damage += _get_apex_predator_bonus(enemy_node, hit_position, base_scaling_damage)
+	flat_bonus_damage += _get_void_echo_zone_bonus(enemy_node, base_scaling_damage)
 	flat_bonus_damage += _get_dread_resonance_bonus(enemy_node)
+	flat_bonus_damage += _consume_indomitable_spirit_bonus(hit_position)
 	flat_bonus_damage += _consume_eclipse_mark_bonus(enemy_node, base_scaling_damage)
 	var breakdown := {
 		"source": source,
@@ -1188,6 +1240,10 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 	var melee_hit_enemy_ids: Dictionary = {}
 	var rupture_triggered_enemy_ids: Dictionary = {}
 	var rupture_hit_enemy_ids: Dictionary = {}
+	var proc_flags := {
+		"convergence_registered": false,
+		"tempo_registered": false
+	}
 
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		if not (enemy_node is Node2D):
@@ -1219,6 +1275,12 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		melee_hit_enemy_ids[enemy_id] = true
 		if reward_storm_crown:
 			_apply_storm_crown_hit(enemy_body.global_position, enemy_id, final_strike_damage)
+		if not bool(proc_flags.get("convergence_registered", false)):
+			_try_apply_convergence_surge(enemy_body.global_position, final_strike_damage, enemy_id)
+			proc_flags["convergence_registered"] = true
+		if not bool(proc_flags.get("tempo_registered", false)):
+			_register_apex_momentum_hit()
+			proc_flags["tempo_registered"] = true
 		if reward_rupture_wave and not rupture_triggered_enemy_ids.has(enemy_id):
 			rupture_triggered_enemy_ids[enemy_id] = true
 			_apply_rupture_wave(enemy_body.global_position, final_strike_damage, rupture_hit_enemy_ids)
@@ -1231,7 +1293,7 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		var wind_damage := int(wind_context.get("damage", maxi(1, int(round(float(damage) * razor_wind_damage_ratio)))))
 		wind_damage = _apply_objective_mutator_damage_mult(wind_damage)
 		wind_context["damage"] = wind_damage
-		did_hit = _apply_razor_wind(attack_direction, wind_context, rupture_triggered_enemy_ids, rupture_hit_enemy_ids) or did_hit
+		did_hit = _apply_razor_wind(attack_direction, wind_context, rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags) or did_hit
 	if did_hit:
 		_trigger_battle_trance()
 		# Voidfire: gain heat on any hit
@@ -1247,7 +1309,7 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 
 	return did_hit
 
-func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupture_triggered_enemy_ids: Dictionary = {}, rupture_hit_enemy_ids: Dictionary = {}) -> bool:
+func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupture_triggered_enemy_ids: Dictionary = {}, rupture_hit_enemy_ids: Dictionary = {}, proc_flags: Dictionary = {}) -> bool:
 	var did_hit := false
 	var wind_range := float(wind_context.get("range", attack_range * razor_wind_range_scale))
 	var wind_arc_degrees := float(wind_context.get("arc_degrees", razor_wind_arc_degrees))
@@ -1280,6 +1342,12 @@ func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupt
 		wind_hit_enemy_ids[enemy_id] = true
 		if reward_storm_crown:
 			_apply_storm_crown_hit(enemy_body.global_position, enemy_id, final_wind_damage)
+		if not bool(proc_flags.get("convergence_registered", false)):
+			_try_apply_convergence_surge(enemy_body.global_position, final_wind_damage, enemy_id)
+			proc_flags["convergence_registered"] = true
+		if not bool(proc_flags.get("tempo_registered", false)):
+			_register_apex_momentum_hit()
+			proc_flags["tempo_registered"] = true
 		if reward_rupture_wave and not rupture_triggered_enemy_ids.has(enemy_id):
 			rupture_triggered_enemy_ids[enemy_id] = true
 			_apply_rupture_wave(enemy_body.global_position, final_wind_damage, rupture_hit_enemy_ids)
@@ -1334,6 +1402,18 @@ func clear_lingering_combat_effects() -> void:
 	_reset_dread_resonance_tracking()
 	_vow_shatter_primed = false
 	_crushed_vow_primed = false
+	_indomitable_spirit_primed = false
+	indomitable_damage_bank = 0.0
+	apex_predator_combo_hits = 0
+	apex_predator_combo_left = 0.0
+	void_echo_zones.clear()
+	apex_momentum_stacks = 0
+	apex_momentum_stack_left = 0.0
+	if player_feedback != null and player_feedback.has_method("clear_boss_tempo_state"):
+		player_feedback.clear_boss_tempo_state()
+	convergence_surge_hit_counter = 0
+	convergence_window_left = 0.0
+	convergence_pulse_cooldown = 0.0
 	_fracture_field_resolving = false
 	queue_redraw()
 
@@ -1574,6 +1654,8 @@ func _update_static_wake_trails(delta: float) -> void:
 
 func notify_enemy_killed(kill_position: Vector2 = Vector2.ZERO) -> void:
 	_trigger_combo_relay_kill()
+	if void_echo_damage > 0 and _void_echo_pulse_kill_suppression_depth <= 0:
+		_apply_void_echo(kill_position)
 	if reward_eclipse_mark:
 		_apply_eclipse_mark(kill_position)
 	if reward_fracture_field and not _fracture_field_resolving:
@@ -1889,6 +1971,14 @@ func _sync_voidfire_ui() -> void:
 	var danger_ratio := clampf(voidfire_danger_zone_threshold / maxf(1.0, void_heat_cap), 0.0, 1.0)
 	player_feedback.update_voidfire_heat_bar(void_heat, void_heat_cap, reward_voidfire, _voidfire_lockout_left, danger_ratio)
 
+func _sync_oath_ui() -> void:
+	if player_feedback == null:
+		return
+	if not player_feedback.has_method("update_oath_bank_bar"):
+		return
+	var oath_enabled := indomitable_spirit_damage_reduction > 0.0
+	player_feedback.update_oath_bank_bar(indomitable_damage_bank, float(max_health), oath_enabled)
+
 # --- Dread Resonance ---
 
 func _update_dread_resonance_target(enemy_node: Object, enemy_id: int) -> void:
@@ -1967,6 +2057,228 @@ func _get_severing_edge_bonus(enemy_node: Object) -> int:
 	if float(enemy_current) / float(enemy_max) < 0.55:
 		return severing_edge_bonus_damage
 	return 0
+
+func _update_apex_predator_combo(delta: float) -> void:
+	if apex_predator_combo_left <= 0.0:
+		return
+	apex_predator_combo_left = maxf(0.0, apex_predator_combo_left - delta)
+	if apex_predator_combo_left <= 0.0:
+		apex_predator_combo_hits = 0
+
+func _trigger_apex_predator_burst(epicenter: Vector2, primary_enemy_id: int, base_damage: int) -> void:
+	var burst_radius := clampf(72.0 + float(apex_predator_bonus_damage) * 0.35, 72.0, 126.0)
+	var burst_damage := _apply_objective_mutator_damage_mult(maxi(1, int(round(float(apex_predator_bonus_damage) * 0.9 + float(base_damage) * 0.55))))
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if not DAMAGEABLE.can_take_damage(enemy_node):
+			continue
+		var enemy_body := enemy_node as Node2D
+		if enemy_body.get_instance_id() == primary_enemy_id:
+			continue
+		if enemy_body.global_position.distance_to(epicenter) > burst_radius:
+			continue
+		DAMAGEABLE.apply_damage(enemy_node, burst_damage, {"is_ground_attack": true, "attack_type": "apex_predator_burst"})
+
+func _get_apex_predator_bonus(enemy_node: Object, hit_position: Vector2, base_damage: int) -> int:
+	if apex_predator_bonus_damage <= 0:
+		return 0
+	if not is_instance_valid(enemy_node):
+		return 0
+	if not (enemy_node is Node2D):
+		return 0
+	apex_predator_combo_hits += 1
+	apex_predator_combo_left = apex_predator_combo_window
+	var cadence := 4
+	var cadence_step := ((apex_predator_combo_hits - 1) % cadence) + 1
+	var enemy_pos := (enemy_node as Node2D).global_position
+	if player_feedback != null and player_feedback.has_method("play_boss_predator_mark"):
+		player_feedback.play_boss_predator_mark(enemy_pos, cadence_step, cadence)
+	var per_hit_bonus := maxi(1, int(round(float(apex_predator_bonus_damage) * (0.22 + float(cadence_step) * 0.12))))
+	if cadence_step < cadence:
+		return per_hit_bonus
+	if player_feedback != null and player_feedback.has_method("play_boss_predator_burst"):
+		player_feedback.play_boss_predator_burst(hit_position)
+	_trigger_apex_predator_burst(hit_position, (enemy_node as Node2D).get_instance_id(), base_damage)
+	return per_hit_bonus + maxi(1, int(round(float(base_damage) * 0.42)))
+
+func _get_void_echo_zone_bonus(enemy_node: Object, base_damage: int) -> int:
+	if void_echo_damage <= 0:
+		return 0
+	if not is_instance_valid(enemy_node):
+		return 0
+	if not (enemy_node is Node2D):
+		return 0
+	var enemy_pos := (enemy_node as Node2D).global_position
+	for zone in void_echo_zones:
+		var zone_pos: Vector2 = zone.get("pos", Vector2.ZERO)
+		var radius: float = float(zone.get("radius", 0.0))
+		if enemy_pos.distance_to(zone_pos) <= radius:
+			if player_feedback != null and player_feedback.has_method("play_boss_void_zone_empowered_hit"):
+				player_feedback.play_boss_void_zone_empowered_hit(enemy_pos)
+			return maxi(1, int(round(float(base_damage) * (0.22 + float(void_echo_damage) * 0.002))))
+	return 0
+
+func _consume_indomitable_spirit_bonus(hit_position: Vector2) -> int:
+	if indomitable_spirit_damage_reduction <= 0.0:
+		return 0
+	var bank_bonus := maxi(0.0, indomitable_damage_bank)
+	if bank_bonus <= 0.0:
+		return 0
+	indomitable_damage_bank = 0.0
+	var ratio := 0.45 + indomitable_spirit_damage_reduction + bank_bonus * 0.01
+	if player_feedback != null and player_feedback.has_method("play_boss_unbroken_retaliation"):
+		player_feedback.play_boss_unbroken_retaliation(hit_position, ratio)
+	return maxi(1, int(round(float(damage) * ratio)))
+
+func _register_apex_momentum_hit() -> void:
+	if apex_momentum_speed_bonus <= 0.0:
+		return
+	apex_momentum_stacks = mini(apex_momentum_max_stacks, apex_momentum_stacks + 1)
+	apex_momentum_stack_left = apex_momentum_stack_duration
+	if player_feedback != null and player_feedback.has_method("play_boss_tempo_stack"):
+		player_feedback.play_boss_tempo_stack(global_position, apex_momentum_stacks, apex_momentum_max_stacks)
+	if player_feedback != null and player_feedback.has_method("update_boss_tempo_state"):
+		player_feedback.update_boss_tempo_state(apex_momentum_stacks, apex_momentum_max_stacks, apex_momentum_stack_left, apex_momentum_stack_duration)
+
+func _update_apex_momentum(delta: float) -> void:
+	if apex_momentum_stacks <= 0:
+		if player_feedback != null and player_feedback.has_method("clear_boss_tempo_state"):
+			player_feedback.clear_boss_tempo_state()
+		return
+	apex_momentum_stack_left = maxf(0.0, apex_momentum_stack_left - delta)
+	if player_feedback != null and player_feedback.has_method("update_boss_tempo_state"):
+		player_feedback.update_boss_tempo_state(apex_momentum_stacks, apex_momentum_max_stacks, apex_momentum_stack_left, apex_momentum_stack_duration)
+	if apex_momentum_stack_left <= 0.0:
+		apex_momentum_stacks = 0
+		if player_feedback != null and player_feedback.has_method("clear_boss_tempo_state"):
+			player_feedback.clear_boss_tempo_state()
+
+func _release_apex_momentum_dash_wave(epicenter: Vector2) -> void:
+	if apex_momentum_stacks <= 0 or apex_momentum_speed_bonus <= 0.0:
+		return
+	var stacks := apex_momentum_stacks
+	apex_momentum_stacks = 0
+	apex_momentum_stack_left = 0.0
+	if player_feedback != null and player_feedback.has_method("clear_boss_tempo_state"):
+		player_feedback.clear_boss_tempo_state()
+	var slash_radius := 68.0 + 20.0 * float(stacks)
+	var slash_ratio := 0.4 + apex_momentum_speed_bonus * float(stacks) * 1.8
+	var slash_damage := _apply_objective_mutator_damage_mult(maxi(1, int(round(float(damage) * slash_ratio))))
+	var hit_any := false
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if not DAMAGEABLE.can_take_damage(enemy_node):
+			continue
+		var enemy_pos := (enemy_node as Node2D).global_position
+		if enemy_pos.distance_to(epicenter) > slash_radius:
+			continue
+		DAMAGEABLE.apply_damage(enemy_node, slash_damage, {"is_ground_attack": true, "attack_type": "apex_momentum_wave"})
+		hit_any = true
+	if hit_any:
+		dash_cooldown_left = maxf(0.0, dash_cooldown_left - 0.12 * float(stacks))
+	if player_feedback != null and player_feedback.has_method("play_boss_tempo_dash_wave"):
+		player_feedback.play_boss_tempo_dash_wave(epicenter, slash_radius, hit_any)
+
+func _update_void_echo_zones(delta: float) -> void:
+	if void_echo_zones.is_empty():
+		return
+	var remove_indices: Array[int] = []
+	for i in range(void_echo_zones.size()):
+		var zone := void_echo_zones[i]
+		var life := maxf(0.0, float(zone.get("life", 0.0)) - delta)
+		if life <= 0.0:
+			remove_indices.append(i)
+			continue
+		zone["life"] = life
+		var pulse_left := maxf(0.0, float(zone.get("pulse_left", 0.0)) - delta)
+		if pulse_left <= 0.0:
+			pulse_left = 0.32
+			var zone_pos: Vector2 = zone.get("pos", Vector2.ZERO)
+			var radius := float(zone.get("radius", 0.0))
+			var pulse_damage := _apply_objective_mutator_damage_mult(maxi(1, int(round(float(void_echo_damage) * 0.45 + float(damage) * 0.2))))
+			if player_feedback != null and player_feedback.has_method("play_boss_void_zone_pulse"):
+				player_feedback.play_boss_void_zone_pulse(zone_pos, radius)
+			_void_echo_pulse_kill_suppression_depth += 1
+			for enemy_node in get_tree().get_nodes_in_group("enemies"):
+				if not (enemy_node is Node2D):
+					continue
+				if not DAMAGEABLE.can_take_damage(enemy_node):
+					continue
+				var enemy_body := enemy_node as Node2D
+				if enemy_body.global_position.distance_to(zone_pos) > radius:
+					continue
+				DAMAGEABLE.apply_damage(enemy_node, pulse_damage, {"is_ground_attack": true, "attack_type": "void_echo_zone"})
+			_void_echo_pulse_kill_suppression_depth = maxi(0, _void_echo_pulse_kill_suppression_depth - 1)
+		zone["pulse_left"] = pulse_left
+		void_echo_zones[i] = zone
+	while not remove_indices.is_empty():
+		void_echo_zones.remove_at(remove_indices.pop_back())
+
+func _update_indomitable_damage_bank(_delta: float) -> void:
+	return
+
+func _update_convergence_window(delta: float) -> void:
+	if convergence_window_left <= 0.0 or convergence_surge_damage_ratio <= 0.0:
+		return
+	convergence_window_left = maxf(0.0, convergence_window_left - delta)
+	convergence_pulse_cooldown = maxf(0.0, convergence_pulse_cooldown - delta)
+	if convergence_pulse_cooldown > 0.0:
+		return
+	convergence_pulse_cooldown = maxf(0.14, 0.3 - convergence_surge_damage_ratio * 0.25)
+	var pulse_radius := clampf(92.0 + 120.0 * convergence_surge_damage_ratio, 92.0, 250.0)
+	var pulse_damage := _apply_objective_mutator_damage_mult(maxi(1, int(round(float(damage) * (0.28 + convergence_surge_damage_ratio * 0.8)))))
+	if player_feedback != null and player_feedback.has_method("play_boss_convergence_pulse"):
+		player_feedback.play_boss_convergence_pulse(global_position, pulse_radius)
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if not DAMAGEABLE.can_take_damage(enemy_node):
+			continue
+		var enemy_body := enemy_node as Node2D
+		if enemy_body.global_position.distance_to(global_position) > pulse_radius:
+			continue
+		DAMAGEABLE.apply_damage(enemy_node, pulse_damage, {"is_ground_attack": true, "attack_type": "convergence_window"})
+
+
+func _apply_void_echo(kill_pos: Vector2) -> void:
+	if kill_pos == Vector2.ZERO:
+		return
+	var echo_radius := clampf(96.0 + float(void_echo_damage) * 1.05, 96.0, 260.0)
+	var zone_data := {
+		"pos": kill_pos,
+		"life": 3.6,
+		"radius": echo_radius,
+		"pulse_left": 0.0
+	}
+	if void_echo_zones.is_empty():
+		void_echo_zones.append(zone_data)
+	else:
+		void_echo_zones[0] = zone_data
+		if void_echo_zones.size() > 1:
+			void_echo_zones.resize(1)
+	if player_feedback != null:
+		if player_feedback.has_method("play_boss_void_zone_spawn"):
+			player_feedback.play_boss_void_zone_spawn(kill_pos, echo_radius)
+
+func _try_apply_convergence_surge(epicenter: Vector2, _source_damage: int, _primary_enemy_id: int) -> void:
+	if convergence_surge_damage_ratio <= 0.0:
+		return
+	# Convergence cannot refresh while active; rearm only after it ends.
+	if convergence_window_left > 0.0:
+		return
+	convergence_surge_hit_counter += 1
+	var proc_every := 4
+	if convergence_surge_hit_counter < proc_every:
+		return
+	convergence_surge_hit_counter = 0
+	convergence_window_left = maxf(convergence_window_left, 1.2 + convergence_surge_damage_ratio * 1.8)
+	convergence_pulse_cooldown = 0.0
+	var dash_refund := 0.12 + 0.24 * convergence_surge_damage_ratio
+	dash_cooldown_left = maxf(0.0, dash_cooldown_left - dash_refund)
+	if player_feedback != null and player_feedback.has_method("play_boss_convergence_start"):
+		player_feedback.play_boss_convergence_start(epicenter, convergence_surge_damage_ratio)
 
 # --- Eclipse Mark ---
 
