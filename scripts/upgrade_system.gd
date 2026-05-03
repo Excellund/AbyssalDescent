@@ -184,37 +184,9 @@ func apply_powers(power_ids: Array[String]) -> Dictionary:
 func get_trial_power_stack_count(power_id: String) -> int:
 	var id := power_id.strip_edges().to_lower()
 	if is_instance_valid(player_reference):
-		match id:
-			"razor_wind":
-				return int(player_reference.get("razor_wind_stacks"))
-			"execution_edge":
-				return int(player_reference.get("execution_edge_stacks"))
-			"rupture_wave":
-				return int(player_reference.get("rupture_wave_stacks"))
-			"aegis_field":
-				return int(player_reference.get("aegis_field_stacks"))
-			"hunters_snare":
-				return int(player_reference.get("hunters_snare_stacks"))
-			"phantom_step":
-				return int(player_reference.get("phantom_step_stacks"))
-			"reaper_step":
-				return int(player_reference.get("void_dash_stacks"))
-			"static_wake":
-				return int(player_reference.get("static_wake_stacks"))
-			"storm_crown":
-				return int(player_reference.get("storm_crown_stacks"))
-			"wraithstep":
-				return int(player_reference.get("wraithstep_stacks"))
-			"voidfire":
-				return int(player_reference.get("voidfire_stacks"))
-			"dread_resonance":
-				return int(player_reference.get("dread_resonance_stacks"))
-			"vow_shatter":
-				return int(player_reference.get("vow_shatter_stacks"))
-			"eclipse_mark":
-				return int(player_reference.get("eclipse_mark_stacks"))
-			"fracture_field":
-				return int(player_reference.get("fracture_field_stacks"))
+		var stack_property := POWER_PARAMETER_MAPPER.get_stack_property(id)
+		if not stack_property.is_empty():
+			return int(player_reference.get(stack_property))
 	if trial_power_stacks.has(id):
 		return trial_power_stacks[id]
 	return 0

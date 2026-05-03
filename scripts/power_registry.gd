@@ -449,109 +449,95 @@ class Power:
 		}
 
 
+## Display names for all powers — single source of truth for UI labels
+const POWER_DISPLAY_NAMES := {
+	# Upgrades
+	"first_strike": "First Strike",
+	"heavy_blow": "Heavy Blow",
+	"wide_arc": "Wide Arc",
+	"long_reach": "Long Reach",
+	"fleet_foot": "Fleet Foot",
+	"blink_dash": "Blink Dash",
+	"iron_skin": "Iron Skin",
+	"battle_trance": "Battle Trance",
+	"surge_step": "Surge Step",
+	"heartstone": "Heartstone",
+	"crushed_vow": "Crushed Vow",
+	"severing_edge": "Severing Edge",
+	# Trial powers
+	"razor_wind": "Razor Wind",
+	"execution_edge": "Execution Edge",
+	"rupture_wave": "Rupture Wave",
+	"aegis_field": "Aegis Field",
+	"hunters_snare": "Hunter's Snare",
+	"phantom_step": "Phantom Step",
+	"reaper_step": "Reaper Step",
+	"static_wake": "Static Wake",
+	"storm_crown": "Storm Crown",
+	"wraithstep": "Wraithstep",
+	"voidfire": "Voidfire",
+	"dread_resonance": "Dread Resonance",
+	"vow_shatter": "Vow Shatter",
+	"eclipse_mark": "Eclipse Mark",
+	"fracture_field": "Fracture Field",
+	# Boss rewards
+	"apex_predator": "Warden's Verdict",
+	"void_echo": "Lacuna Echo",
+	"apex_momentum": "Sovereign Tempo",
+	"convergence_surge": "Pillar Convergence",
+	"indomitable_spirit": "Unbroken Oath",
+}
+
+## Ordered pool membership arrays — define which IDs belong to each pool and in what order
+const UPGRADE_POOL_IDS: Array[String] = [
+	"first_strike", "heavy_blow", "wide_arc", "long_reach", "fleet_foot",
+	"blink_dash", "iron_skin", "battle_trance", "surge_step", "heartstone",
+	"crushed_vow", "severing_edge",
+]
+
+const TRIAL_POWER_POOL_IDS: Array[String] = [
+	"razor_wind", "execution_edge", "rupture_wave", "aegis_field", "hunters_snare",
+	"phantom_step", "reaper_step", "static_wake", "storm_crown", "wraithstep",
+	"voidfire", "dread_resonance", "vow_shatter", "eclipse_mark", "fracture_field",
+]
+
+const BOSS_REWARD_POOL_IDS: Array[String] = [
+	"apex_predator", "void_echo", "apex_momentum", "convergence_surge", "indomitable_spirit",
+]
+
+
 func _ready() -> void:
 	# No initialization needed; registry is purely static data
 	pass
 
 
+func _build_power_pool(ids: Array, power_type: String, player_reference: Node) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for id: String in ids:
+		var display_name := String(POWER_DISPLAY_NAMES.get(id, id))
+		var desc: String
+		if is_instance_valid(player_reference):
+			if power_type == POWER_TYPE_TRIAL:
+				desc = String(player_reference.get_trial_power_card_desc(id))
+			else:
+				desc = String(player_reference.get_upgrade_card_desc(id))
+		else:
+			if power_type == POWER_TYPE_TRIAL:
+				desc = _get_trial_fallback_description(id)
+			else:
+				desc = _get_upgrade_fallback_description(id)
+		result.append(Power.new(id, display_name, desc, power_type, get_power_stack_limit(id), get_power_balance(id)).to_dict())
+	return result
+
+
 ## Return all upgrades (stat boosts)
 func get_upgrade_pool(player_reference: Node = null) -> Array[Dictionary]:
-	var first_strike_desc := _get_upgrade_fallback_description("first_strike")
-	var heavy_desc := _get_upgrade_fallback_description("heavy_blow")
-	var wide_desc := _get_upgrade_fallback_description("wide_arc")
-	var reach_desc := _get_upgrade_fallback_description("long_reach")
-	var fleet_desc := _get_upgrade_fallback_description("fleet_foot")
-	var blink_desc := _get_upgrade_fallback_description("blink_dash")
-	var iron_desc := _get_upgrade_fallback_description("iron_skin")
-	var trance_desc := _get_upgrade_fallback_description("battle_trance")
-	var surge_desc := _get_upgrade_fallback_description("surge_step")
-	var heartstone_desc := _get_upgrade_fallback_description("heartstone")
-	var crushed_vow_desc := _get_upgrade_fallback_description("crushed_vow")
-	var severing_edge_desc := _get_upgrade_fallback_description("severing_edge")
-	if is_instance_valid(player_reference):
-		first_strike_desc = String(player_reference.get_upgrade_card_desc("first_strike"))
-		heavy_desc = String(player_reference.get_upgrade_card_desc("heavy_blow"))
-		wide_desc = String(player_reference.get_upgrade_card_desc("wide_arc"))
-		reach_desc = String(player_reference.get_upgrade_card_desc("long_reach"))
-		fleet_desc = String(player_reference.get_upgrade_card_desc("fleet_foot"))
-		blink_desc = String(player_reference.get_upgrade_card_desc("blink_dash"))
-		iron_desc = String(player_reference.get_upgrade_card_desc("iron_skin"))
-		trance_desc = String(player_reference.get_upgrade_card_desc("battle_trance"))
-		surge_desc = String(player_reference.get_upgrade_card_desc("surge_step"))
-		heartstone_desc = String(player_reference.get_upgrade_card_desc("heartstone"))
-		crushed_vow_desc = String(player_reference.get_upgrade_card_desc("crushed_vow"))
-		severing_edge_desc = String(player_reference.get_upgrade_card_desc("severing_edge"))
-	return [
-		Power.new("first_strike", "First Strike", first_strike_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("first_strike"), get_power_balance("first_strike")).to_dict(),
-		Power.new("heavy_blow", "Heavy Blow", heavy_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("heavy_blow"), get_power_balance("heavy_blow")).to_dict(),
-		Power.new("wide_arc", "Wide Arc", wide_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("wide_arc"), get_power_balance("wide_arc")).to_dict(),
-		Power.new("long_reach", "Long Reach", reach_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("long_reach"), get_power_balance("long_reach")).to_dict(),
-		Power.new("fleet_foot", "Fleet Foot", fleet_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("fleet_foot"), get_power_balance("fleet_foot")).to_dict(),
-		Power.new("blink_dash", "Blink Dash", blink_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("blink_dash"), get_power_balance("blink_dash")).to_dict(),
-		Power.new("iron_skin", "Iron Skin", iron_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("iron_skin"), get_power_balance("iron_skin")).to_dict(),
-		Power.new("battle_trance", "Battle Trance", trance_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("battle_trance"), get_power_balance("battle_trance")).to_dict(),
-		Power.new("surge_step", "Surge Step", surge_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("surge_step"), get_power_balance("surge_step")).to_dict(),
-		Power.new("heartstone", "Heartstone", heartstone_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("heartstone"), get_power_balance("heartstone")).to_dict(),
-		Power.new("crushed_vow", "Crushed Vow", crushed_vow_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("crushed_vow"), get_power_balance("crushed_vow")).to_dict(),
-		Power.new("severing_edge", "Severing Edge", severing_edge_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("severing_edge"), get_power_balance("severing_edge")).to_dict(),
-	]
+	return _build_power_pool(UPGRADE_POOL_IDS, POWER_TYPE_UPGRADE, player_reference)
 
 
 ## Return all trial powers (combat abilities)
 func get_trial_power_pool(player_reference: Node = null) -> Array[Dictionary]:
-	var razor_desc := _get_trial_fallback_description("razor_wind")
-	var execution_desc := _get_trial_fallback_description("execution_edge")
-	var rupture_desc := _get_trial_fallback_description("rupture_wave")
-	var aegis_desc := _get_trial_fallback_description("aegis_field")
-	var snare_desc := _get_trial_fallback_description("hunters_snare")
-	
-	# Try to get dynamic descriptions from player stack counts
-	if is_instance_valid(player_reference):
-		razor_desc = String(player_reference.get_trial_power_card_desc("razor_wind"))
-		execution_desc = String(player_reference.get_trial_power_card_desc("execution_edge"))
-		rupture_desc = String(player_reference.get_trial_power_card_desc("rupture_wave"))
-		aegis_desc = String(player_reference.get_trial_power_card_desc("aegis_field"))
-		snare_desc = String(player_reference.get_trial_power_card_desc("hunters_snare"))
-	
-	var phantom_desc := _get_trial_fallback_description("phantom_step")
-	var void_desc := _get_trial_fallback_description("reaper_step")
-	var static_desc := _get_trial_fallback_description("static_wake")
-	var storm_desc := _get_trial_fallback_description("storm_crown")
-	var wraith_desc := _get_trial_fallback_description("wraithstep")
-	var voidfire_desc := _get_trial_fallback_description("voidfire")
-	var dread_desc := _get_trial_fallback_description("dread_resonance")
-	var vow_desc := _get_trial_fallback_description("vow_shatter")
-	var eclipse_desc := _get_trial_fallback_description("eclipse_mark")
-	var fracture_desc := _get_trial_fallback_description("fracture_field")
-	if is_instance_valid(player_reference):
-		phantom_desc = String(player_reference.get_trial_power_card_desc("phantom_step"))
-		void_desc = String(player_reference.get_trial_power_card_desc("reaper_step"))
-		static_desc = String(player_reference.get_trial_power_card_desc("static_wake"))
-		storm_desc = String(player_reference.get_trial_power_card_desc("storm_crown"))
-		wraith_desc = String(player_reference.get_trial_power_card_desc("wraithstep"))
-		voidfire_desc = String(player_reference.get_trial_power_card_desc("voidfire"))
-		dread_desc = String(player_reference.get_trial_power_card_desc("dread_resonance"))
-		vow_desc = String(player_reference.get_trial_power_card_desc("vow_shatter"))
-		eclipse_desc = String(player_reference.get_trial_power_card_desc("eclipse_mark"))
-		fracture_desc = String(player_reference.get_trial_power_card_desc("fracture_field"))
-
-	return [
-		Power.new("razor_wind", "Razor Wind", razor_desc, POWER_TYPE_TRIAL, get_power_stack_limit("razor_wind"), get_power_balance("razor_wind")).to_dict(),
-		Power.new("execution_edge", "Execution Edge", execution_desc, POWER_TYPE_TRIAL, get_power_stack_limit("execution_edge"), get_power_balance("execution_edge")).to_dict(),
-		Power.new("rupture_wave", "Rupture Wave", rupture_desc, POWER_TYPE_TRIAL, get_power_stack_limit("rupture_wave"), get_power_balance("rupture_wave")).to_dict(),
-		Power.new("aegis_field", "Aegis Field", aegis_desc, POWER_TYPE_TRIAL, get_power_stack_limit("aegis_field"), get_power_balance("aegis_field")).to_dict(),
-		Power.new("hunters_snare", "Hunter's Snare", snare_desc, POWER_TYPE_TRIAL, get_power_stack_limit("hunters_snare"), get_power_balance("hunters_snare")).to_dict(),
-		Power.new("phantom_step", "Phantom Step", phantom_desc, POWER_TYPE_TRIAL, get_power_stack_limit("phantom_step"), get_power_balance("phantom_step")).to_dict(),
-		Power.new("reaper_step", "Reaper Step", void_desc, POWER_TYPE_TRIAL, get_power_stack_limit("reaper_step"), get_power_balance("reaper_step")).to_dict(),
-		Power.new("static_wake", "Static Wake", static_desc, POWER_TYPE_TRIAL, get_power_stack_limit("static_wake"), get_power_balance("static_wake")).to_dict(),
-		Power.new("storm_crown", "Storm Crown", storm_desc, POWER_TYPE_TRIAL, get_power_stack_limit("storm_crown"), get_power_balance("storm_crown")).to_dict(),
-		Power.new("wraithstep", "Wraithstep", wraith_desc, POWER_TYPE_TRIAL, get_power_stack_limit("wraithstep"), get_power_balance("wraithstep")).to_dict(),
-		Power.new("voidfire", "Voidfire", voidfire_desc, POWER_TYPE_TRIAL, get_power_stack_limit("voidfire"), get_power_balance("voidfire")).to_dict(),
-		Power.new("dread_resonance", "Dread Resonance", dread_desc, POWER_TYPE_TRIAL, get_power_stack_limit("dread_resonance"), get_power_balance("dread_resonance")).to_dict(),
-		Power.new("vow_shatter", "Vow Shatter", vow_desc, POWER_TYPE_TRIAL, get_power_stack_limit("vow_shatter"), get_power_balance("vow_shatter")).to_dict(),
-		Power.new("eclipse_mark", "Eclipse Mark", eclipse_desc, POWER_TYPE_TRIAL, get_power_stack_limit("eclipse_mark"), get_power_balance("eclipse_mark")).to_dict(),
-		Power.new("fracture_field", "Fracture Field", fracture_desc, POWER_TYPE_TRIAL, get_power_stack_limit("fracture_field"), get_power_balance("fracture_field")).to_dict(),
-	]
+	return _build_power_pool(TRIAL_POWER_POOL_IDS, POWER_TYPE_TRIAL, player_reference)
 
 
 func get_objective_upgrade_pool(player_reference: Node = null) -> Array[Dictionary]:
@@ -578,24 +564,7 @@ func get_objective_upgrade_pool(player_reference: Node = null) -> Array[Dictiona
 
 ## Return boss-exclusive reward pool
 func get_boss_reward_pool(player_reference: Node = null) -> Array[Dictionary]:
-	var apex_pred_desc := _get_upgrade_fallback_description("apex_predator")
-	var void_echo_desc := _get_upgrade_fallback_description("void_echo")
-	var apex_mom_desc := _get_upgrade_fallback_description("apex_momentum")
-	var conv_surge_desc := _get_upgrade_fallback_description("convergence_surge")
-	var indom_desc := _get_upgrade_fallback_description("indomitable_spirit")
-	if is_instance_valid(player_reference):
-		apex_pred_desc = String(player_reference.get_upgrade_card_desc("apex_predator"))
-		void_echo_desc = String(player_reference.get_upgrade_card_desc("void_echo"))
-		apex_mom_desc = String(player_reference.get_upgrade_card_desc("apex_momentum"))
-		conv_surge_desc = String(player_reference.get_upgrade_card_desc("convergence_surge"))
-		indom_desc = String(player_reference.get_upgrade_card_desc("indomitable_spirit"))
-	return [
-		Power.new("apex_predator", "Warden's Verdict", apex_pred_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("apex_predator"), get_power_balance("apex_predator")).to_dict(),
-		Power.new("void_echo", "Lacuna Echo", void_echo_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("void_echo"), get_power_balance("void_echo")).to_dict(),
-		Power.new("apex_momentum", "Sovereign Tempo", apex_mom_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("apex_momentum"), get_power_balance("apex_momentum")).to_dict(),
-		Power.new("convergence_surge", "Pillar Convergence", conv_surge_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("convergence_surge"), get_power_balance("convergence_surge")).to_dict(),
-		Power.new("indomitable_spirit", "Unbroken Oath", indom_desc, POWER_TYPE_UPGRADE, get_power_stack_limit("indomitable_spirit"), get_power_balance("indomitable_spirit")).to_dict(),
-	]
+	return _build_power_pool(BOSS_REWARD_POOL_IDS, POWER_TYPE_UPGRADE, player_reference)
 
 
 ## Get all powers (upgrades + trial powers)
@@ -625,32 +594,18 @@ func get_boss_epitaph(boss_id: String, character_id: String = "") -> String:
 
 ## Check if a power ID exists
 func is_valid_power_id(power_id: String) -> bool:
-	var id := power_id.strip_edges().to_lower()
-	for power in get_all_powers():
-		if power["id"] == id:
-			return true
-	return false
+	return POWER_DISPLAY_NAMES.has(power_id.strip_edges().to_lower())
 
 
 ## Check if a power ID is an upgrade
 func is_upgrade(power_id: String) -> bool:
 	var id := power_id.strip_edges().to_lower()
-	for power in get_upgrade_pool():
-		if power["id"] == id:
-			return true
-	for power in get_boss_reward_pool():
-		if power["id"] == id:
-			return true
-	return false
+	return UPGRADE_POOL_IDS.has(id) or BOSS_REWARD_POOL_IDS.has(id)
 
 
 ## Check if a power ID is a trial power
 func is_trial_power(power_id: String) -> bool:
-	var id := power_id.strip_edges().to_lower()
-	for power in get_trial_power_pool():
-		if power["id"] == id:
-			return true
-	return false
+	return TRIAL_POWER_POOL_IDS.has(power_id.strip_edges().to_lower())
 
 
 ## Get power by ID
