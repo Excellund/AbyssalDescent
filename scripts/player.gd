@@ -1279,8 +1279,8 @@ func _resolve_attack_hit(enemy_body: Node2D, base_damage: int, source: String, r
 	var enemy_id := enemy_body.get_instance_id()
 	var strike_breakdown := _build_damage_breakdown(base_damage, enemy_body, enemy_body.global_position, source)
 	var final_damage := int(strike_breakdown.get("final_damage", base_damage))
-	DAMAGEABLE.apply_damage(enemy_body, final_damage)
 	_apply_hunters_snare(enemy_body)
+	DAMAGEABLE.apply_damage(enemy_body, final_damage)
 	if passive_sigil_burst and sigil_burst_ready and not bool(sigil_burst_state.get("fired", false)):
 		sigil_burst_ready = false
 		sigil_burst_state["fired"] = true
