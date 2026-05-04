@@ -104,43 +104,38 @@ static func _append_limited_event(run_entry: Dictionary, key: String, event_data
 		events.remove_at(0)
 	run_entry[key] = events
 
-static func append_damage_event(run_id: String, event_data: Dictionary) -> void:
+static func _append_run_event(
+	run_id: String,
+	key: String,
+	event_data: Dictionary,
+	max_events: int,
+	track_max_depth: bool = false,
+	track_rooms_cleared: bool = false
+) -> void:
 	if run_id.is_empty():
 		return
 	_mutate_run_entry(run_id, func(run_entry: Dictionary) -> void:
-		_append_limited_event(run_entry, "damage_events", event_data, MAX_DAMAGE_EVENTS_PER_RUN)
-		run_entry["max_depth"] = maxi(int(run_entry.get("max_depth", 0)), int(event_data.get("room_depth", 0)))
+		_append_limited_event(run_entry, key, event_data, max_events)
+		if track_max_depth:
+			run_entry["max_depth"] = maxi(int(run_entry.get("max_depth", 0)), int(event_data.get("room_depth", 0)))
+		if track_rooms_cleared:
+			run_entry["rooms_cleared"] = maxi(int(run_entry.get("rooms_cleared", 0)), int(event_data.get("rooms_cleared", 0)))
 	)
+
+static func append_damage_event(run_id: String, event_data: Dictionary) -> void:
+	_append_run_event(run_id, "damage_events", event_data, MAX_DAMAGE_EVENTS_PER_RUN, true)
 
 static func append_reward_choice(run_id: String, event_data: Dictionary) -> void:
-	if run_id.is_empty():
-		return
-	_mutate_run_entry(run_id, func(run_entry: Dictionary) -> void:
-		_append_limited_event(run_entry, "reward_choices", event_data, 180)
-	)
+	_append_run_event(run_id, "reward_choices", event_data, 180)
 
 static func append_reward_offers(run_id: String, event_data: Dictionary) -> void:
-	if run_id.is_empty():
-		return
-	_mutate_run_entry(run_id, func(run_entry: Dictionary) -> void:
-		_append_limited_event(run_entry, "reward_offers", event_data, 220)
-	)
+	_append_run_event(run_id, "reward_offers", event_data, 220)
 
 static func append_room_entry(run_id: String, event_data: Dictionary) -> void:
-	if run_id.is_empty():
-		return
-	_mutate_run_entry(run_id, func(run_entry: Dictionary) -> void:
-		_append_limited_event(run_entry, "room_entries", event_data, 220)
-		run_entry["max_depth"] = maxi(int(run_entry.get("max_depth", 0)), int(event_data.get("room_depth", 0)))
-		run_entry["rooms_cleared"] = maxi(int(run_entry.get("rooms_cleared", 0)), int(event_data.get("rooms_cleared", 0)))
-	)
+	_append_run_event(run_id, "room_entries", event_data, 220, true, true)
 
 static func append_door_choice(run_id: String, event_data: Dictionary) -> void:
-	if run_id.is_empty():
-		return
-	_mutate_run_entry(run_id, func(run_entry: Dictionary) -> void:
-		_append_limited_event(run_entry, "door_choices", event_data, 180)
-	)
+	_append_run_event(run_id, "door_choices", event_data, 180)
 
 static func mark_run_debug(run_id: String) -> void:
 	if run_id.is_empty():
