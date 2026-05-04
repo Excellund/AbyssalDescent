@@ -787,6 +787,8 @@ func _resolve_debug_power_id(raw_power_id: String) -> String:
 			return "sovereign_tempo"
 		"pillar_convergence":
 			return "pillar_convergence"
+		"bastions_oath":
+			return "unbroken_oath"
 		"unbroken_oath":
 			return "unbroken_oath"
 		_:

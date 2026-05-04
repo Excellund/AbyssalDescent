@@ -10,6 +10,9 @@ const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const RUN_SNAPSHOT_VERSION := 1
 const EXECUTION_EDGE_PROC_DISPLAY_HOLD: float = 0.24
+const INDOMITABLE_OATH_FILL_REQUIREMENT: float = 52.0
+const INDOMITABLE_OATH_PRIMED_REACH_SCALE: float = 1.35
+const INDOMITABLE_OATH_DAMAGE_SCALE: float = 1.35
 const RUN_SNAPSHOT_PROPERTIES := [
 	"max_speed",
 	"dash_cooldown",
@@ -317,6 +320,10 @@ var _void_echo_pulse_kill_suppression_depth: int = 0
 var convergence_window_left: float = 0.0
 var convergence_pulse_cooldown: float = 0.0
 var indomitable_damage_bank: float = 0.0
+var _indomitable_last_bank_gain_time: float = -999.0
+var _indomitable_attack_hit_count: int = 0
+var _indomitable_primed_this_attack: bool = false
+var _indomitable_pending_melee_bonus: int = 0
 
 # Objective mutators
 var active_objective_mutators: Array[Dictionary] = []
@@ -865,11 +872,6 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 			_vow_shatter_primed = true
 		if crushed_vow_bonus_damage > 0:
 			_crushed_vow_primed = true
-		if indomitable_spirit_damage_reduction > 0.0:
-			indomitable_damage_bank += float(reduced)
-			if player_feedback != null and player_feedback.has_method("play_boss_unbroken_bank_gain"):
-				var bank_ratio := clampf(indomitable_damage_bank / maxf(1.0, float(max_health)), 0.0, 1.0)
-				player_feedback.play_boss_unbroken_bank_gain(global_position, bank_ratio)
 		if source == "enemy_contact":
 			_contact_damage_grace_left = contact_damage_grace_duration
 			_contact_damage_grace_ability = ability
@@ -1278,7 +1280,11 @@ func _build_damage_breakdown(base_scaling_damage: int, enemy_node: Object, hit_p
 	flat_bonus_damage += _get_apex_predator_bonus(enemy_node, hit_position, base_scaling_damage)
 	flat_bonus_damage += _get_void_echo_zone_bonus(enemy_node, base_scaling_damage)
 	flat_bonus_damage += _get_dread_resonance_bonus(enemy_node)
-	flat_bonus_damage += _consume_indomitable_spirit_bonus(hit_position)
+	if source == "melee" and _indomitable_pending_melee_bonus > 0:
+		flat_bonus_damage += _indomitable_pending_melee_bonus
+		_indomitable_pending_melee_bonus = 0
+	else:
+		_gain_indomitable_oath_from_hit(enemy_node, source)
 	flat_bonus_damage += _consume_eclipse_mark_bonus(enemy_node, base_scaling_damage)
 	var breakdown := {
 		"source": source,
@@ -1289,8 +1295,8 @@ func _build_damage_breakdown(base_scaling_damage: int, enemy_node: Object, hit_p
 	last_damage_breakdown = breakdown.duplicate(true)
 	return breakdown
 
-func _get_damageable_enemies_in_cone(origin: Vector2, attack_direction: Vector2, range_limit: float, half_arc_radians: float) -> Array[Node2D]:
-	var result: Array[Node2D] = []
+func _get_damageable_enemies_in_cone(origin: Vector2, attack_direction: Vector2, range_limit: float, half_arc_radians: float) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
 	var seen_ids: Dictionary = {}
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		if not (enemy_node is Node2D):
@@ -1301,11 +1307,42 @@ func _get_damageable_enemies_in_cone(origin: Vector2, attack_direction: Vector2,
 		var enemy_id := enemy_body.get_instance_id()
 		if seen_ids.has(enemy_id):
 			continue
-		if not _is_enemy_in_attack_cone(enemy_body, origin, attack_direction, range_limit, half_arc_radians):
+		var hit_sample := _get_enemy_cone_hit_position(enemy_body, origin, attack_direction, range_limit, half_arc_radians)
+		if hit_sample.x == INF:
 			continue
 		seen_ids[enemy_id] = true
-		result.append(enemy_body)
+		result.append({
+			"enemy": enemy_body,
+			"hit_position": hit_sample
+		})
 	return result
+
+
+func _get_enemy_cone_hit_position(enemy_body: Node2D, origin: Vector2, attack_direction: Vector2, range_limit: float, half_arc_radians: float) -> Vector2:
+	var sample_positions: Array[Vector2] = [enemy_body.global_position]
+	var enemy_radius := _get_body_radius_for(enemy_body, 13.0)
+	if enemy_body is CharacterBody2D:
+		var moving_enemy := enemy_body as CharacterBody2D
+		var enemy_velocity := moving_enemy.velocity
+		if enemy_velocity.length_squared() > 1.0:
+			var rewind_window := clampf(melee_target_sweep_window, 0.0, 0.18)
+			if rewind_window > 0.0:
+				var rewind_position := enemy_body.global_position - enemy_velocity * rewind_window
+				sample_positions.append(rewind_position)
+				sample_positions.append((enemy_body.global_position + rewind_position) * 0.5)
+
+	for sample_position in sample_positions:
+		var to_enemy := sample_position - origin
+		var distance := to_enemy.length()
+		if distance > range_limit + enemy_radius:
+			continue
+		if to_enemy.length_squared() > 0.000001:
+			var angle_error := absf(attack_direction.angle_to(to_enemy.normalized()))
+			var angular_grace := asin(clampf(enemy_radius / maxf(0.001, distance), 0.0, 1.0))
+			if angle_error > half_arc_radians + angular_grace:
+				continue
+		return sample_position
+	return Vector2(INF, INF)
 
 func _is_enemy_in_attack_cone(enemy_body: Node2D, origin: Vector2, attack_direction: Vector2, range_limit: float, half_arc_radians: float) -> bool:
 	var sample_positions: Array[Vector2] = [enemy_body.global_position]
@@ -1333,9 +1370,9 @@ func _is_enemy_in_attack_cone(enemy_body: Node2D, origin: Vector2, attack_direct
 		return true
 	return false
 
-func _resolve_attack_hit(enemy_body: Node2D, base_damage: int, source: String, rupture_triggered_enemy_ids: Dictionary, rupture_hit_enemy_ids: Dictionary, proc_flags: Dictionary, sigil_burst_state: Dictionary) -> int:
+func _resolve_attack_hit(enemy_body: Node2D, hit_position: Vector2, base_damage: int, source: String, rupture_triggered_enemy_ids: Dictionary, rupture_hit_enemy_ids: Dictionary, proc_flags: Dictionary, sigil_burst_state: Dictionary) -> int:
 	var enemy_id := enemy_body.get_instance_id()
-	var strike_breakdown := _build_damage_breakdown(base_damage, enemy_body, enemy_body.global_position, source)
+	var strike_breakdown := _build_damage_breakdown(base_damage, enemy_body, hit_position, source)
 	var final_damage := int(strike_breakdown.get("final_damage", base_damage))
 	_apply_hunters_snare(enemy_body)
 	DAMAGEABLE.apply_damage(enemy_body, final_damage)
@@ -1358,6 +1395,9 @@ func _resolve_attack_hit(enemy_body: Node2D, base_damage: int, source: String, r
 
 func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary) -> bool:
 	var did_hit := false
+	_indomitable_attack_hit_count = 0
+	_indomitable_primed_this_attack = false
+	_indomitable_pending_melee_bonus = 0
 	var strike_damage := int(melee_context.get("damage", damage))
 	strike_damage = _apply_objective_mutator_damage_mult(strike_damage)
 	# Voidfire: apply Danger Zone amp to base damage before breakdowns
@@ -1373,6 +1413,11 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		if player_feedback != null:
 			player_feedback.play_world_ring(global_position, 30.0, Color(0.46, 0.62, 0.82, 0.88), 0.18)
 	var strike_range := float(melee_context.get("range", attack_range))
+	if _indomitable_spirit_primed:
+		strike_range *= INDOMITABLE_OATH_PRIMED_REACH_SCALE
+	var oath_target_point := global_position + attack_direction * strike_range
+	if _indomitable_spirit_primed:
+		_indomitable_pending_melee_bonus = _consume_indomitable_spirit_bonus(oath_target_point)
 	var retort_active: bool = passive_iron_retort and iron_retort_window_left > 0.0
 	if retort_active:
 		strike_damage = int(round(float(strike_damage) * 1.7))
@@ -1390,9 +1435,13 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		"tempo_registered": false
 	}
 
-	for enemy_body in _get_damageable_enemies_in_cone(global_position, attack_direction, strike_range, max_angle_radians):
+	for hit_entry in _get_damageable_enemies_in_cone(global_position, attack_direction, strike_range, max_angle_radians):
+		var enemy_body := hit_entry.get("enemy") as Node2D
+		if enemy_body == null:
+			continue
+		var hit_position := hit_entry.get("hit_position", enemy_body.global_position) as Vector2
 		var enemy_id := enemy_body.get_instance_id()
-		var to_enemy := enemy_body.global_position - global_position
+		var to_enemy := hit_position - global_position
 		var enemy_strike_damage := strike_damage
 		if passive_farline_focus and _is_farline_focus_hit(attack_direction, to_enemy):
 			enemy_strike_damage = int(round(float(enemy_strike_damage) * farline_focus_damage_mult))
@@ -1400,10 +1449,10 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 				farline_focus_proc_fired = true
 				farline_focus_proc_flash_left = farline_focus_proc_flash_duration
 				if player_feedback != null:
-					player_feedback.play_world_ring(enemy_body.global_position, 36.0, Color(1.0, 0.88, 0.44, 0.92), 0.14)
-		_resolve_attack_hit(enemy_body, enemy_strike_damage, "melee", rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags, sigil_burst_state)
+					player_feedback.play_world_ring(hit_position, 36.0, Color(1.0, 0.88, 0.44, 0.92), 0.14)
+		_resolve_attack_hit(enemy_body, hit_position, enemy_strike_damage, "melee", rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags, sigil_burst_state)
 		if retort_active and not did_hit:
-			retort_impact_position = enemy_body.global_position
+			retort_impact_position = hit_position
 		if reward_dread_resonance:
 			_update_dread_resonance_target(enemy_body, enemy_id)
 		did_hit = true
@@ -1428,6 +1477,7 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		queue_redraw()
 	if farline_focus_proc_fired:
 		queue_redraw()
+	_indomitable_pending_melee_bonus = 0
 
 	return did_hit
 
@@ -1459,8 +1509,12 @@ func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupt
 	var wind_half_arc := deg_to_rad(wind_arc_degrees * 0.5)
 	var wind_damage := int(wind_context.get("damage", maxi(1, int(round(float(damage) * razor_wind_damage_ratio)))))
 	var sigil_burst_state := {"fired": false}
-	for enemy_body in _get_damageable_enemies_in_cone(global_position, attack_direction, wind_range, wind_half_arc):
-		_resolve_attack_hit(enemy_body, wind_damage, "razor_wind", rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags, sigil_burst_state)
+	for hit_entry in _get_damageable_enemies_in_cone(global_position, attack_direction, wind_range, wind_half_arc):
+		var enemy_body := hit_entry.get("enemy") as Node2D
+		if enemy_body == null:
+			continue
+		var hit_position := hit_entry.get("hit_position", enemy_body.global_position) as Vector2
+		_resolve_attack_hit(enemy_body, hit_position, wind_damage, "razor_wind", rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags, sigil_burst_state)
 		did_hit = true
 	return did_hit
 
@@ -1516,6 +1570,10 @@ func clear_lingering_combat_effects() -> void:
 	_crushed_vow_primed = false
 	_indomitable_spirit_primed = false
 	indomitable_damage_bank = 0.0
+	_indomitable_last_bank_gain_time = -999.0
+	_indomitable_attack_hit_count = 0
+	_indomitable_primed_this_attack = false
+	_indomitable_pending_melee_bonus = 0
 	apex_predator_combo_hits = 0
 	apex_predator_combo_left = 0.0
 	void_echo_zones.clear()
@@ -2243,7 +2301,12 @@ func _sync_oath_ui() -> void:
 	if not player_feedback.has_method("update_oath_bank_bar"):
 		return
 	var oath_enabled := indomitable_spirit_damage_reduction > 0.0
-	player_feedback.update_oath_bank_bar(indomitable_damage_bank, float(max_health), oath_enabled)
+	player_feedback.update_oath_bank_bar(
+		indomitable_damage_bank,
+		_get_indomitable_fill_requirement(),
+		oath_enabled,
+		_get_indomitable_fill_requirement()
+	)
 
 # --- Dread Resonance ---
 
@@ -2385,17 +2448,56 @@ func _get_void_echo_zone_bonus(enemy_node: Object, base_damage: int) -> int:
 			return maxi(1, int(round(float(base_damage) * (0.22 + float(void_echo_damage) * 0.002))))
 	return 0
 
+func _gain_indomitable_oath_from_hit(enemy_node: Object, source: String) -> void:
+	if indomitable_spirit_damage_reduction <= 0.0:
+		return
+	if not is_instance_valid(enemy_node):
+		return
+	if not (enemy_node is Node2D):
+		return
+	if source != "melee" and source != "razor_wind":
+		return
+	var combo_index := _indomitable_attack_hit_count
+	_indomitable_attack_hit_count += 1
+	var combo_mult := 1.0
+	if combo_index > 0:
+		combo_mult = pow(2.1, float(combo_index))
+	var health_ratio := clampf(float(_get_current_health()) / maxf(1.0, float(max_health)), 0.0, 1.0)
+	var missing_mult := 1.0 + (1.0 - health_ratio) * 0.45
+	var base_gain := 2.6 + indomitable_spirit_damage_reduction * 8.0
+	var gain := base_gain * combo_mult * missing_mult
+	var bank_cap := _get_indomitable_fill_requirement()
+	var before := indomitable_damage_bank
+	indomitable_damage_bank = minf(bank_cap, indomitable_damage_bank + gain)
+	if indomitable_damage_bank <= before + 0.01:
+		return
+	_indomitable_last_bank_gain_time = Time.get_ticks_msec() / 1000.0
+	if not _indomitable_spirit_primed and indomitable_damage_bank >= bank_cap - 0.01:
+		_indomitable_spirit_primed = true
+		_indomitable_primed_this_attack = true
+	if player_feedback != null and player_feedback.has_method("play_boss_unbroken_bank_gain"):
+		var bank_ratio := clampf(indomitable_damage_bank / bank_cap, 0.0, 1.0)
+		player_feedback.play_boss_unbroken_bank_gain(global_position, bank_ratio)
+
+
 func _consume_indomitable_spirit_bonus(hit_position: Vector2) -> int:
 	if indomitable_spirit_damage_reduction <= 0.0:
 		return 0
-	var bank_bonus := maxf(0.0, indomitable_damage_bank)
-	if bank_bonus <= 0.0:
+	if not _indomitable_spirit_primed:
 		return 0
+	if _indomitable_primed_this_attack:
+		return 0
+	var spend := _get_indomitable_fill_requirement()
+	_indomitable_spirit_primed = false
 	indomitable_damage_bank = 0.0
-	var ratio := 0.45 + indomitable_spirit_damage_reduction + bank_bonus * 0.01
+	var ratio := (1.8 + indomitable_spirit_damage_reduction * 2.2 + spend * 0.009) * INDOMITABLE_OATH_DAMAGE_SCALE
 	if player_feedback != null and player_feedback.has_method("play_boss_unbroken_retaliation"):
-		player_feedback.play_boss_unbroken_retaliation(hit_position, ratio)
+		player_feedback.play_boss_unbroken_retaliation(global_position, hit_position, ratio)
 	return maxi(1, int(round(float(damage) * ratio)))
+
+
+func _get_indomitable_fill_requirement() -> float:
+	return INDOMITABLE_OATH_FILL_REQUIREMENT
 
 func _register_apex_momentum_hit() -> void:
 	if apex_momentum_speed_bonus <= 0.0:
@@ -2486,8 +2588,21 @@ func _update_void_echo_zones(delta: float) -> void:
 	while not remove_indices.is_empty():
 		void_echo_zones.remove_at(remove_indices.pop_back())
 
-func _update_indomitable_damage_bank(_delta: float) -> void:
-	return
+func _update_indomitable_damage_bank(delta: float) -> void:
+	if indomitable_spirit_damage_reduction <= 0.0:
+		_indomitable_spirit_primed = false
+		indomitable_damage_bank = 0.0
+		return
+	if _indomitable_spirit_primed:
+		indomitable_damage_bank = _get_indomitable_fill_requirement()
+		return
+	if indomitable_damage_bank <= 0.0:
+		return
+	var now := Time.get_ticks_msec() / 1000.0
+	if now - _indomitable_last_bank_gain_time <= 1.2:
+		return
+	var decay_per_second := maxf(1.4, 3.2 - indomitable_spirit_damage_reduction * 2.6)
+	indomitable_damage_bank = maxf(0.0, indomitable_damage_bank - decay_per_second * delta)
 
 func _update_convergence_window(delta: float) -> void:
 	if convergence_window_left <= 0.0 or convergence_surge_damage_ratio <= 0.0:

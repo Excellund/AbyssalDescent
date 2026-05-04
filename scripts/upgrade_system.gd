@@ -6,6 +6,8 @@ extends Node
 
 const DESCRIPTION_CAP_GUARD := preload("res://scripts/shared/description_cap_guard.gd")
 const POWER_PARAMETER_MAPPER := preload("res://scripts/power_parameter_mapper.gd")
+const INDOMITABLE_OATH_FILL_REQUIREMENT: float = 52.0
+const INDOMITABLE_OATH_DAMAGE_SCALE: float = 1.35
 
 # Dependencies (injected)
 var player_reference: Node = null
@@ -231,7 +233,7 @@ func _power_sentence_template(power_id: String) -> String:
 		"pillar_convergence":
 			return "Every %s hits, lasts %s, pulses every %s."
 		"unbroken_oath":
-			return "Damage reduction %s, retaliate %s damage + %s per stored Oath."
+			return "Damage reduction %s. Fill Oath at %s; next hit deals %s bonus damage."
 		"razor_wind":
 			return "Range %s, damage %s of hit."
 		"execution_edge":
@@ -343,7 +345,7 @@ func get_power_flavor_text(power_id: String) -> String:
 		"pillar_convergence":
 			return "Every few damaging hits you enter Convergence, pulsing damage around you until it expires."
 		"unbroken_oath":
-			return "Gain damage reduction. Taking damage banks Oath; damaging hits consume all bank for bonus damage."
+			return "Single hits trickle Oath; multihits scale exponentially. Fill the bar, then unleash a massive sword strike."
 		"razor_wind":
 			return "Each swing fires a slicing projectile through enemies."
 		"execution_edge":
@@ -402,8 +404,9 @@ func get_power_current_description(power_id: String) -> String:
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%d", cs_hits), _current_stat("%.2fs", cs_window), _current_stat("%.2fs", cs_pulse)], "build_detail"))
 		"unbroken_oath":
 			var resist := float(player_reference.get("indomitable_spirit_damage_reduction")) * 100.0
-			var ratio := 45.0 + resist
-			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f%%", resist), _current_stat("%.0f%%", ratio), _current_const("1%")], "build_detail"))
+			var fill_req := INDOMITABLE_OATH_FILL_REQUIREMENT
+			var ratio := (1.8 + float(player_reference.get("indomitable_spirit_damage_reduction")) * 2.2 + fill_req * 0.009) * INDOMITABLE_OATH_DAMAGE_SCALE * 100.0
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f%%", resist), _current_stat("%.0f", fill_req), _current_stat("%.0f%%", ratio)], "build_detail"))
 		"first_strike":
 			return _power_sentence(id, [_current_stat("+%d", int(player_reference.get("first_strike_bonus_damage")))], "build_detail")
 		"heavy_blow":
@@ -651,12 +654,14 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 		"unbroken_oath":
 			var cur_resist := float(cur_val) * 100.0
 			var next_resist := float(next_val) * 100.0
-			var cur_base_ratio := 45.0 + cur_resist
-			var next_base_ratio := 45.0 + next_resist
+			var fill_req := INDOMITABLE_OATH_FILL_REQUIREMENT
+			var cur_ratio := (1.8 + float(cur_val) * 2.2 + fill_req * 0.009) * INDOMITABLE_OATH_DAMAGE_SCALE * 100.0
+			var next_ratio := (1.8 + float(next_val) * 2.2 + fill_req * 0.009) * INDOMITABLE_OATH_DAMAGE_SCALE * 100.0
 			var is_initial := cur_resist == 0.0
 			var resist_stat := _stat("%.0f%%", cur_resist, next_resist, is_initial)
-			var ratio_stat := _stat("%.0f%%", cur_base_ratio, next_base_ratio, is_initial)
-			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [resist_stat, ratio_stat, _const("1%")], "reward_card"))
+			var fill_stat := _const("%.0f" % fill_req)
+			var ratio_stat := _stat("%.0f%%", cur_ratio, next_ratio, is_initial)
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [resist_stat, fill_stat, ratio_stat], "reward_card"))
 		_:
 			return "[color=#c8daf0]Upgrade your stats.[/color]"
 

@@ -57,6 +57,8 @@ var oath_bar: ProgressBar
 var oath_bar_background_style: StyleBoxFlat
 var oath_bar_fill_style: StyleBoxFlat
 var oath_bar_glow: ColorRect
+var oath_threshold_line: ColorRect
+var oath_ready_glow: ColorRect
 var impact_sound_player: AudioStreamPlayer2D
 var attack_swing_sound_player: AudioStreamPlayer2D
 var damage_flash_layer: CanvasLayer
@@ -269,29 +271,53 @@ func update_voidfire_heat_bar(heat: float, heat_cap: float, enabled: bool, locko
 			glow_alpha = 0.08 + heat_ratio * 0.1
 			voidfire_glow.color = Color(0.48, 0.78, 1.0, glow_alpha)
 
-func update_oath_bank_bar(bank: float, bank_reference: float, enabled: bool) -> void:
+func update_oath_bank_bar(bank: float, bank_reference: float, enabled: bool, spend_threshold: float = 0.0) -> void:
 	if oath_bar == null:
 		return
 	var clamped_bank := maxf(0.0, bank)
 	var max_bank := maxf(1.0, bank_reference)
+	var threshold := clampf(spend_threshold, 0.0, max_bank)
+	var threshold_ratio := threshold / max_bank if max_bank > 0.0 else 0.0
 	var bar_visible := enabled or clamped_bank > 0.0
 	oath_bar.visible = bar_visible
 	if oath_bar_glow != null:
 		oath_bar_glow.visible = bar_visible
+	if oath_ready_glow != null:
+		oath_ready_glow.visible = bar_visible
+	if oath_threshold_line != null:
+		oath_threshold_line.visible = bar_visible and threshold > 0.0
 	_layout_status_bars()
 	if not bar_visible:
 		return
 	var bank_ratio := clampf(clamped_bank / max_bank, 0.0, 1.0)
+	var ready := threshold > 0.0 and clamped_bank >= threshold
 	oath_bar.max_value = max_bank
 	oath_bar.value = minf(clamped_bank, max_bank)
 	var cold_fill := Color(0.64, 0.46, 0.94, 0.88)
 	var hot_fill := Color(0.96, 0.72, 1.0, 0.96)
 	if oath_bar_fill_style != null:
-		oath_bar_fill_style.bg_color = cold_fill.lerp(hot_fill, bank_ratio)
+		var fill_color := cold_fill.lerp(hot_fill, bank_ratio)
+		if ready:
+			fill_color = Color(0.96, 0.86, 1.0, 0.98)
+		oath_bar_fill_style.bg_color = fill_color
+	if oath_bar_background_style != null:
+		oath_bar_background_style.border_color = Color(1.0, 0.92, 0.76, 0.98) if ready else Color(0.86, 0.7, 0.98, 0.74)
+	if oath_threshold_line != null:
+		oath_threshold_line.position = oath_bar.position + Vector2(oath_bar_size.x * threshold_ratio - 1.0, -1.0)
+		oath_threshold_line.size.x = 3.0 if ready else 2.0
+		oath_threshold_line.color = Color(1.0, 0.96, 0.78, 1.0) if ready else Color(0.86, 0.7, 0.98, 0.78)
 	if oath_bar_glow != null:
 		var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.001 * 8.0)
 		var glow_alpha := 0.06 + bank_ratio * 0.16 + pulse * 0.08 * bank_ratio
-		oath_bar_glow.color = Color(0.88, 0.66, 1.0, glow_alpha)
+		if ready:
+			glow_alpha = 0.44 + pulse * 0.42
+		oath_bar_glow.color = Color(1.0, 0.9, 0.74, glow_alpha if ready else glow_alpha)
+	if oath_ready_glow != null:
+		if ready:
+			var ready_pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.001 * 15.0)
+			oath_ready_glow.color = Color(1.0, 0.98, 0.82, 0.24 + ready_pulse * 0.32)
+		else:
+			oath_ready_glow.color = Color(1.0, 0.98, 0.82, 0.0)
 
 func play_impact_sound() -> void:
 	if impact_sound_player == null:
@@ -920,10 +946,142 @@ func play_boss_unbroken_bank_gain(epicenter_global: Vector2, bank_ratio: float) 
 	var r := clampf(bank_ratio, 0.0, 1.0)
 	play_world_ring(epicenter_global, 18.0 + 16.0 * r, Color(0.92, 0.98, 1.0, 0.36 + 0.32 * r), 0.11)
 
-func play_boss_unbroken_retaliation(epicenter_global: Vector2, bonus_ratio: float) -> void:
-	var r := clampf(bonus_ratio, 0.0, 1.6)
-	play_world_ring(epicenter_global, 20.0 + 26.0 * r, Color(0.84, 0.96, 1.0, 0.86), 0.14)
-	play_world_ring(epicenter_global, 12.0 + 12.0 * r, Color(1.0, 1.0, 1.0, 0.6), 0.08)
+func play_boss_unbroken_retaliation(player_global: Vector2, impact_global: Vector2, bonus_ratio: float) -> void:
+	var r := clampf(bonus_ratio, 0.8, 3.8)
+	var dir := impact_global - player_global
+	if dir.length_squared() < 0.0001:
+		dir = Vector2.RIGHT
+	var forward := dir.normalized()
+	var side := Vector2(-forward.y, forward.x)
+	var blade_start := player_global - forward * 20.0
+	var blade_tip := impact_global
+	var swing_reach := maxf(24.0, blade_start.distance_to(blade_tip))
+	var blade_mid := blade_start + forward * (swing_reach * 0.62)
+	var blade_width := 14.0 + 3.8 * r
+
+	var halo_poly := Polygon2D.new()
+	halo_poly.top_level = true
+	halo_poly.global_position = Vector2.ZERO
+	halo_poly.z_index = 41
+	halo_poly.color = Color(0.62, 0.9, 1.0, 0.42)
+	var halo_guard_l := blade_start + side * (blade_width * 1.45)
+	var halo_guard_r := blade_start - side * (blade_width * 1.45)
+	var halo_mid_l := blade_mid + side * (blade_width * 0.9)
+	var halo_mid_r := blade_mid - side * (blade_width * 0.9)
+	var halo_tip := blade_tip + forward * 14.0
+	halo_poly.polygon = PackedVector2Array([
+		halo_guard_l,
+		halo_mid_l,
+		halo_tip,
+		halo_mid_r,
+		halo_guard_r
+	])
+	add_child(halo_poly)
+
+	var blade_poly := Polygon2D.new()
+	blade_poly.top_level = true
+	blade_poly.global_position = Vector2.ZERO
+	blade_poly.z_index = 43
+	blade_poly.color = Color(0.94, 1.0, 1.0, 0.94)
+	var guard_l := blade_start + side * (blade_width * 0.9)
+	var guard_r := blade_start - side * (blade_width * 0.9)
+	var spine_l := blade_mid + side * (blade_width * 0.38)
+	var spine_r := blade_mid - side * (blade_width * 0.38)
+	var tip_l := blade_tip - forward * 10.0 + side * (blade_width * 0.11)
+	var tip_r := blade_tip - forward * 10.0 - side * (blade_width * 0.11)
+	blade_poly.polygon = PackedVector2Array([
+		guard_l,
+		spine_l,
+		tip_l,
+		blade_tip,
+		tip_r,
+		spine_r,
+		guard_r
+	])
+	add_child(blade_poly)
+
+	var hilt_poly := Polygon2D.new()
+	hilt_poly.top_level = true
+	hilt_poly.global_position = Vector2.ZERO
+	hilt_poly.z_index = 42
+	hilt_poly.color = Color(0.88, 0.96, 1.0, 0.84)
+	var hilt_len := 24.0 + 4.0 * r
+	var hilt_width := blade_width * 0.22
+	var hilt_tip := blade_start - forward * hilt_len
+	hilt_poly.polygon = PackedVector2Array([
+		blade_start + side * hilt_width,
+		blade_start - side * hilt_width,
+		hilt_tip - side * (hilt_width * 0.7),
+		hilt_tip + side * (hilt_width * 0.7)
+	])
+	add_child(hilt_poly)
+
+	var guard_poly := Polygon2D.new()
+	guard_poly.top_level = true
+	guard_poly.global_position = Vector2.ZERO
+	guard_poly.z_index = 44
+	guard_poly.color = Color(1.0, 0.98, 0.86, 0.88)
+	var guard_span := blade_width * 1.75
+	var guard_forward := 3.0
+	guard_poly.polygon = PackedVector2Array([
+		blade_start + side * guard_span - forward * 1.0,
+		blade_start + side * (guard_span * 0.35) + forward * guard_forward,
+		blade_start - side * (guard_span * 0.35) + forward * guard_forward,
+		blade_start - side * guard_span - forward * 1.0,
+		blade_start - side * (guard_span * 0.35) - forward * 4.0,
+		blade_start + side * (guard_span * 0.35) - forward * 4.0
+	])
+	add_child(guard_poly)
+
+	var blade_core := Polygon2D.new()
+	blade_core.top_level = true
+	blade_core.global_position = Vector2.ZERO
+	blade_core.z_index = 44
+	blade_core.color = Color(1.0, 1.0, 1.0, 0.9)
+	var core_start := blade_start + forward * 6.0
+	var core_tip := blade_tip - forward * 6.0
+	var core_mid := core_start + forward * ((core_tip - core_start).length() * 0.58)
+	blade_core.polygon = PackedVector2Array([
+		core_start + side * (blade_width * 0.2),
+		core_mid + side * (blade_width * 0.1),
+		core_tip,
+		core_mid - side * (blade_width * 0.1),
+		core_start - side * (blade_width * 0.2)
+	])
+	add_child(blade_core)
+
+	var guard_line_l := blade_start + side * (blade_width * 1.3)
+	var guard_line_r := blade_start - side * (blade_width * 1.3)
+	_play_world_line(PackedVector2Array([guard_line_l, guard_line_r]), Color(1.0, 0.96, 0.8, 0.94), 4.0, 0.18, 1.4)
+	_play_world_line(PackedVector2Array([blade_start - forward * (hilt_len + 8.0), blade_start + forward * 8.0]), Color(0.92, 0.98, 1.0, 0.76), 3.4, 0.16, 1.1)
+	_play_world_line(
+		PackedVector2Array([blade_start, blade_tip]),
+		Color(1.0, 1.0, 1.0, 0.95),
+		4.6,
+		0.20,
+		0.82
+	)
+	_play_world_soft_pulse(impact_global, 28.0 + 22.0 * r, Color(0.72, 0.94, 1.0, 0.34), 0.24, 0.66, 1.34)
+	play_world_ring(impact_global, 24.0 + 14.0 * r, Color(0.92, 1.0, 1.0, 0.98), 0.14)
+	play_world_ring(impact_global, 46.0 + 13.0 * r, Color(0.74, 0.96, 1.0, 0.8), 0.22)
+	play_world_ring(impact_global, 72.0 + 16.0 * r, Color(0.58, 0.86, 1.0, 0.5), 0.30)
+	_play_world_star_burst(impact_global, 56.0 + 14.0 * r, 16, Color(1.0, 0.96, 0.78, 0.66), 0.18)
+
+	var blade_tween := create_tween()
+	blade_tween.set_parallel(true)
+	blade_tween.tween_property(blade_poly, "modulate:a", 0.0, 0.22)
+	blade_tween.tween_property(blade_poly, "scale", Vector2(1.08, 1.08), 0.22)
+	blade_tween.tween_property(halo_poly, "modulate:a", 0.0, 0.26)
+	blade_tween.tween_property(blade_core, "modulate:a", 0.0, 0.18)
+	blade_tween.tween_property(hilt_poly, "modulate:a", 0.0, 0.2)
+	blade_tween.tween_property(guard_poly, "modulate:a", 0.0, 0.2)
+	blade_tween.set_parallel(false)
+	blade_tween.tween_interval(0.22)
+	blade_tween.tween_callback(halo_poly.queue_free)
+	blade_tween.tween_callback(blade_core.queue_free)
+	blade_tween.tween_callback(hilt_poly.queue_free)
+	blade_tween.tween_callback(guard_poly.queue_free)
+	blade_tween.tween_callback(blade_poly.queue_free)
 
 func show_eclipse_mark_decal(enemy_node: Node2D, duration: float) -> void:
 	if not is_instance_valid(enemy_node):
@@ -1175,6 +1333,22 @@ func _create_oath_bank_bar() -> void:
 	oath_bar_glow.z_index = 11
 	add_child(oath_bar_glow)
 
+	oath_ready_glow = ColorRect.new()
+	oath_ready_glow.position = oath_bar_offset + Vector2(-4.0, -4.0)
+	oath_ready_glow.size = oath_bar_size + Vector2(8.0, 8.0)
+	oath_ready_glow.color = Color(1.0, 0.98, 0.82, 0.0)
+	oath_ready_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	oath_ready_glow.z_index = 10
+	add_child(oath_ready_glow)
+
+	oath_threshold_line = ColorRect.new()
+	oath_threshold_line.position = oath_bar_offset + Vector2(oath_bar_size.x * 0.5 - 1.0, -1.0)
+	oath_threshold_line.size = Vector2(2.0, oath_bar_size.y + 2.0)
+	oath_threshold_line.color = Color(0.86, 0.7, 0.98, 0.78)
+	oath_threshold_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	oath_threshold_line.z_index = 12
+	add_child(oath_threshold_line)
+
 	update_oath_bank_bar(0.0, 100.0, false)
 
 func _layout_status_bars() -> void:
@@ -1214,6 +1388,10 @@ func _set_oath_bar_y(y: float) -> void:
 		oath_bar.position.y = y
 	if oath_bar_glow != null:
 		oath_bar_glow.position.y = y - 1.0
+	if oath_ready_glow != null:
+		oath_ready_glow.position.y = y - 4.0
+	if oath_threshold_line != null:
+		oath_threshold_line.position.y = y - 1.0
 
 func _create_impact_sound_player() -> void:
 	impact_sound_player = AudioStreamPlayer2D.new()

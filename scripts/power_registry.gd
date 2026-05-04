@@ -160,7 +160,7 @@ const DAMAGE_MODEL_BY_POWER := {
 	"unbroken_oath": {
 		"kind": DAMAGE_KIND_HYBRID,
 		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
-		"formula_note": "Taking damage banks Oath; damaging hits consume all bank for (45% + DR% + 1%*bank) of damage stat"
+		"formula_note": "Single-target hits trickle Oath; multihits scale exponentially. Fill bar to prime next-hit sword strike"
 	}
 }
 
@@ -398,7 +398,7 @@ const BOSS_REWARD_BALANCE := {
 	"unbroken_oath": {
 		"kind": "add_float",
 		"property": "indomitable_spirit_damage_reduction",
-		"add": 0.14
+		"add": 0.12
 	}
 }
 

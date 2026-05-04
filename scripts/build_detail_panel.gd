@@ -447,7 +447,7 @@ func _power_display_name(power_id: String) -> String:
 			return "Sovereign Tempo"
 		"pillar_convergence":
 			return "Pillar Convergence"
-		"unbroken_oath":
+		"unbroken_oath", "bastions_oath":
 			return "Unbroken Oath"
 		_:
 			return power_id.capitalize()
