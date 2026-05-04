@@ -290,30 +290,30 @@ func update_oath_bank_bar(bank: float, bank_reference: float, enabled: bool, spe
 	if not bar_visible:
 		return
 	var bank_ratio := clampf(clamped_bank / max_bank, 0.0, 1.0)
-	var ready := threshold > 0.0 and clamped_bank >= threshold
+	var oath_ready := threshold > 0.0 and clamped_bank >= threshold
 	oath_bar.max_value = max_bank
 	oath_bar.value = minf(clamped_bank, max_bank)
 	var cold_fill := Color(0.64, 0.46, 0.94, 0.88)
 	var hot_fill := Color(0.96, 0.72, 1.0, 0.96)
 	if oath_bar_fill_style != null:
 		var fill_color := cold_fill.lerp(hot_fill, bank_ratio)
-		if ready:
+		if oath_ready:
 			fill_color = Color(0.96, 0.86, 1.0, 0.98)
 		oath_bar_fill_style.bg_color = fill_color
 	if oath_bar_background_style != null:
-		oath_bar_background_style.border_color = Color(1.0, 0.92, 0.76, 0.98) if ready else Color(0.86, 0.7, 0.98, 0.74)
+		oath_bar_background_style.border_color = Color(1.0, 0.92, 0.76, 0.98) if oath_ready else Color(0.86, 0.7, 0.98, 0.74)
 	if oath_threshold_line != null:
 		oath_threshold_line.position = oath_bar.position + Vector2(oath_bar_size.x * threshold_ratio - 1.0, -1.0)
-		oath_threshold_line.size.x = 3.0 if ready else 2.0
-		oath_threshold_line.color = Color(1.0, 0.96, 0.78, 1.0) if ready else Color(0.86, 0.7, 0.98, 0.78)
+		oath_threshold_line.size.x = 3.0 if oath_ready else 2.0
+		oath_threshold_line.color = Color(1.0, 0.96, 0.78, 1.0) if oath_ready else Color(0.86, 0.7, 0.98, 0.78)
 	if oath_bar_glow != null:
 		var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.001 * 8.0)
 		var glow_alpha := 0.06 + bank_ratio * 0.16 + pulse * 0.08 * bank_ratio
-		if ready:
+		if oath_ready:
 			glow_alpha = 0.44 + pulse * 0.42
-		oath_bar_glow.color = Color(1.0, 0.9, 0.74, glow_alpha if ready else glow_alpha)
+		oath_bar_glow.color = Color(1.0, 0.9, 0.74, glow_alpha)
 	if oath_ready_glow != null:
-		if ready:
+		if oath_ready:
 			var ready_pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.001 * 15.0)
 			oath_ready_glow.color = Color(1.0, 0.98, 0.82, 0.24 + ready_pulse * 0.32)
 		else:
@@ -846,7 +846,11 @@ func play_boss_void_zone_pulse(epicenter_global: Vector2, radius: float) -> void
 	play_world_ring(epicenter_global, radius, Color(0.18, 0.68, 1.0, 0.4), 0.18)
 	play_world_ring(epicenter_global, radius * 0.72, Color(0.44, 0.86, 1.0, 0.7), 0.13)
 	play_world_ring(epicenter_global, radius * 0.34, Color(0.9, 1.0, 1.0, 0.56), 0.1)
-	_play_world_star_burst(epicenter_global, radius * 0.62, 6, Color(0.8, 0.98, 1.0, 0.42), 0.14)
+	var seam_color := Color(0.8, 0.98, 1.0, 0.42)
+	for i in range(4):
+		var angle := TAU * float(i) / 4.0
+		var dir := Vector2.RIGHT.rotated(angle)
+		_play_world_line(PackedVector2Array([epicenter_global + dir * (radius * 0.22), epicenter_global + dir * (radius * 0.78)]), seam_color, 2.2, 0.17, 0.7)
 
 func play_boss_void_zone_empowered_hit(target_global: Vector2) -> void:
 	_play_world_soft_pulse(target_global, 14.0, Color(0.24, 0.78, 1.0, 0.26), 0.14, 0.72, 1.14)

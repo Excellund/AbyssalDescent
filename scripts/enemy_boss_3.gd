@@ -331,10 +331,18 @@ func _apply_echo_cross_hit() -> void:
 	var primary_dir := Vector2.RIGHT.rotated(_echo_cross_angle)
 	var secondary_dir := primary_dir.orthogonal()
 	var arm_reach := echo_cross_length * 0.5 - seam_radius * 0.5
-	_spawn_seam(global_position + primary_dir * arm_reach)
-	_spawn_seam(global_position - primary_dir * arm_reach)
-	_spawn_seam(global_position + secondary_dir * arm_reach)
-	_spawn_seam(global_position - secondary_dir * arm_reach)
+	for dir in [primary_dir, -primary_dir, secondary_dir, -secondary_dir]:
+		var clamped := _clamp_to_arena(global_position + dir * arm_reach, seam_radius + 18.0)
+		seam_zones.append({
+			"pos": clamped,
+			"time_left": seam_duration,
+			"tick_left": seam_tick_interval * 0.5,
+			"tick_interval": seam_tick_interval,
+			"pulse": 0.0,
+			"evicting": false
+		})
+	var cap := seam_spawn_limit_base + (1 if _get_enrage_ratio() >= 0.52 else 0) + (1 if _get_enrage_ratio() >= 0.84 else 0)
+	_evict_excess_seams(maxi(cap, 4))
 
 func _spawn_seam(seam_position: Vector2, duration_mult: float = 1.0, tick_interval_mult: float = 1.0) -> void:
 	var clamped := _clamp_to_arena(seam_position, seam_radius + 18.0)
@@ -345,15 +353,35 @@ func _spawn_seam(seam_position: Vector2, duration_mult: float = 1.0, tick_interv
 		"time_left": seam_time,
 		"tick_left": seam_tick * 0.5,
 		"tick_interval": seam_tick,
-		"pulse": 0.0
+		"pulse": 0.0,
+		"evicting": false
 	})
 	var max_seams := seam_spawn_limit_base
 	if _get_enrage_ratio() >= 0.52:
 		max_seams += 1
 	if _get_enrage_ratio() >= 0.84:
 		max_seams += 1
-	while seam_zones.size() > max_seams:
-		seam_zones.remove_at(0)
+	_evict_excess_seams(max_seams)
+
+func _evict_excess_seams(limit: int) -> void:
+	var active_seams := 0
+	for seam_variant in seam_zones:
+		var seam := seam_variant as Dictionary
+		if not bool(seam.get("evicting", false)):
+			active_seams += 1
+	var to_evict := active_seams - limit
+	if to_evict <= 0:
+		return
+	for seam_variant in seam_zones:
+		if to_evict <= 0:
+			break
+		var seam := seam_variant as Dictionary
+		if bool(seam.get("evicting", false)):
+			continue
+		seam["evicting"] = true
+		seam["time_left"] = minf(float(seam.get("time_left", 0.0)), 0.4)
+		seam["tick_left"] = maxf(float(seam.get("tick_left", seam_tick_interval)), 0.4)
+		to_evict -= 1
 
 func _process_seam_zones(delta: float) -> void:
 	if seam_zones.is_empty():
@@ -361,10 +389,11 @@ func _process_seam_zones(delta: float) -> void:
 	var expired: Array[int] = []
 	for i in range(seam_zones.size()):
 		var seam := seam_zones[i] as Dictionary
+		var evicting := bool(seam.get("evicting", false))
 		seam["time_left"] = float(seam.get("time_left", 0.0)) - delta
 		seam["tick_left"] = float(seam.get("tick_left", 0.0)) - delta
 		seam["pulse"] = maxf(0.0, float(seam.get("pulse", 0.0)) - delta)
-		if float(seam.get("tick_left", 0.0)) <= 0.0:
+		if not evicting and float(seam.get("tick_left", 0.0)) <= 0.0:
 			seam["tick_left"] = float(seam.get("tick_interval", seam_tick_interval))
 			seam["pulse"] = 0.12
 			if is_instance_valid(target):
@@ -590,25 +619,27 @@ func _draw_seam_zones() -> void:
 		var local_pos := seam_pos - global_position
 		var time_left := float(seam.get("time_left", 0.0))
 		var fade := clampf(time_left / maxf(0.001, seam_duration), 0.0, 1.0)
+		var draw_scale := clampf(time_left / 0.4, 0.0, 1.0)
+		var draw_r := seam_radius * draw_scale
 		var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.016 + seam_pos.x * 0.02)
 		var tick_pulse := clampf(float(seam.get("pulse", 0.0)) / 0.12, 0.0, 1.0)
-		draw_circle(local_pos, seam_radius + 8.0, Color(0.14, 0.82, 0.62, (0.06 + tick_pulse * 0.08) * fade))
-		draw_circle(local_pos, seam_radius, Color(0.14, 0.94, 0.72, (0.16 + tick_pulse * 0.1) * fade))
-		draw_arc(local_pos, seam_radius + 6.0, 0.0, TAU, 32, Color(0.62, 0.94, 0.82, (0.14 + tick_pulse * 0.18) * fade), 2.0)
-		draw_arc(local_pos, seam_radius - 2.0 + pulse * 2.0, 0.0, TAU, 36, Color(0.76, 1.0, 0.92, (0.48 + tick_pulse * 0.44) * fade), 3.0)
-		draw_arc(local_pos, seam_radius * 0.62, 0.0, TAU, 26, Color(0.2, 0.88, 0.74, 0.2 * fade), 1.4)
-		draw_circle(local_pos, seam_radius * 0.22, Color(0.84, 1.0, 0.95, (0.18 + tick_pulse * 0.46) * fade))
+		draw_circle(local_pos, draw_r + 8.0 * draw_scale, Color(0.14, 0.82, 0.62, (0.06 + tick_pulse * 0.08) * fade))
+		draw_circle(local_pos, draw_r, Color(0.14, 0.94, 0.72, (0.16 + tick_pulse * 0.1) * fade))
+		draw_arc(local_pos, draw_r + 6.0 * draw_scale, 0.0, TAU, 32, Color(0.62, 0.94, 0.82, (0.14 + tick_pulse * 0.18) * fade), 2.0)
+		draw_arc(local_pos, (seam_radius - 2.0 + pulse * 2.0) * draw_scale, 0.0, TAU, 36, Color(0.76, 1.0, 0.92, (0.48 + tick_pulse * 0.44) * fade), 3.0)
+		draw_arc(local_pos, draw_r * 0.62, 0.0, TAU, 26, Color(0.2, 0.88, 0.74, 0.2 * fade), 1.4)
+		draw_circle(local_pos, draw_r * 0.22, Color(0.84, 1.0, 0.95, (0.18 + tick_pulse * 0.46) * fade))
 		var seam_axis := Vector2.RIGHT.rotated(seam_pos.angle() + pulse * 0.45)
 		var seam_cross := seam_axis.orthogonal()
-		draw_line(local_pos - seam_axis * (seam_radius * 0.72), local_pos - seam_axis * (seam_radius * 0.16), Color(0.94, 1.0, 0.98, (0.22 + tick_pulse * 0.34) * fade), 1.8)
-		draw_line(local_pos + seam_axis * (seam_radius * 0.16), local_pos + seam_axis * (seam_radius * 0.72), Color(0.94, 1.0, 0.98, (0.22 + tick_pulse * 0.34) * fade), 1.8)
-		draw_line(local_pos - seam_cross * (seam_radius * 0.3), local_pos + seam_cross * (seam_radius * 0.3), Color(0.7, 1.0, 0.88, (0.12 + tick_pulse * 0.22) * fade), 1.2)
+		draw_line(local_pos - seam_axis * (draw_r * 0.72), local_pos - seam_axis * (draw_r * 0.16), Color(0.94, 1.0, 0.98, (0.22 + tick_pulse * 0.34) * fade), 1.8)
+		draw_line(local_pos + seam_axis * (draw_r * 0.16), local_pos + seam_axis * (draw_r * 0.72), Color(0.94, 1.0, 0.98, (0.22 + tick_pulse * 0.34) * fade), 1.8)
+		draw_line(local_pos - seam_cross * (draw_r * 0.3), local_pos + seam_cross * (draw_r * 0.3), Color(0.7, 1.0, 0.88, (0.12 + tick_pulse * 0.22) * fade), 1.2)
 		if tick_pulse > 0.0:
 			for spoke_i in range(6):
 				var spoke_angle := float(spoke_i) * TAU / 6.0 + pulse * 0.5
 				var spoke_dir := Vector2.RIGHT.rotated(spoke_angle)
-				var spoke_start := local_pos + spoke_dir * (seam_radius * 0.38)
-				var spoke_end := local_pos + spoke_dir * (seam_radius + 6.0 + tick_pulse * 8.0)
+				var spoke_start := local_pos + spoke_dir * (draw_r * 0.38)
+				var spoke_end := local_pos + spoke_dir * (draw_r + (6.0 + tick_pulse * 8.0) * draw_scale)
 				draw_line(spoke_start, spoke_end, Color(0.92, 1.0, 0.98, (0.34 + tick_pulse * 0.4) * fade), 1.8)
 
 func _draw_role_state_icon(facing: Vector2, body_radius: float) -> void:

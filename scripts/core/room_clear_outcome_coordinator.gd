@@ -70,7 +70,7 @@ func process_outcome(state: Dictionary) -> Dictionary:
 			if endless_mode and endless_boss_defeated:
 				next_boss_unlocked = false
 			next_pending_room_reward = ENCOUNTER_CONTRACTS.outcome_pending_room_reward(outcome)
-			open_reward_mode = ENCOUNTER_CONTRACTS.outcome_open_reward_mode(outcome)
+			open_reward_mode = ENCOUNTER_CONTRACTS.outcome_open_reward_mode(outcome) as ENUMS.RewardMode
 			if open_reward_mode == ENUMS.RewardMode.NONE and ENCOUNTER_CONTRACTS.outcome_spawn_doors(outcome):
 				spawn_doors = true
 
