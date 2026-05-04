@@ -40,6 +40,7 @@ How to apply:
 - Extract shared behavior into focused helpers.
 - Consolidate repeated guard logic and repeated control-flow scaffolding.
 - When several functions only differ by event key/limits, route them through one helper and pass the small deltas as explicit parameters.
+- For repeated combat or area-hit loops, centralize target selection and on-hit effect/proc resolution so damage packet rules cannot drift between variants.
 - Prefer one canonical implementation per behavior.
 
 ### 2. Reduce Cognitive Load

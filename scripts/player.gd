@@ -1254,6 +1254,50 @@ func _build_damage_breakdown(base_scaling_damage: int, enemy_node: Object, hit_p
 	last_damage_breakdown = breakdown.duplicate(true)
 	return breakdown
 
+func _get_damageable_enemies_in_cone(origin: Vector2, attack_direction: Vector2, range_limit: float, half_arc_radians: float) -> Array[Node2D]:
+	var result: Array[Node2D] = []
+	var seen_ids: Dictionary = {}
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if not DAMAGEABLE.can_take_damage(enemy_node):
+			continue
+		var enemy_body := enemy_node as Node2D
+		var enemy_id := enemy_body.get_instance_id()
+		if seen_ids.has(enemy_id):
+			continue
+		var to_enemy := enemy_body.global_position - origin
+		if to_enemy.length() > range_limit:
+			continue
+		if to_enemy.length_squared() > 0.000001 and absf(attack_direction.angle_to(to_enemy.normalized())) > half_arc_radians:
+			continue
+		seen_ids[enemy_id] = true
+		result.append(enemy_body)
+	return result
+
+func _resolve_attack_hit(enemy_body: Node2D, base_damage: int, source: String, rupture_triggered_enemy_ids: Dictionary, rupture_hit_enemy_ids: Dictionary, proc_flags: Dictionary, sigil_burst_state: Dictionary) -> int:
+	var enemy_id := enemy_body.get_instance_id()
+	var strike_breakdown := _build_damage_breakdown(base_damage, enemy_body, enemy_body.global_position, source)
+	var final_damage := int(strike_breakdown.get("final_damage", base_damage))
+	DAMAGEABLE.apply_damage(enemy_body, final_damage)
+	_apply_hunters_snare(enemy_body)
+	if passive_sigil_burst and sigil_burst_ready and not bool(sigil_burst_state.get("fired", false)):
+		sigil_burst_ready = false
+		sigil_burst_state["fired"] = true
+		_apply_sigil_burst(enemy_body.global_position, base_damage)
+	if reward_storm_crown:
+		_apply_storm_crown_hit(enemy_body.global_position, enemy_id, final_damage)
+	if not bool(proc_flags.get("convergence_registered", false)):
+		_try_apply_convergence_surge(enemy_body.global_position, final_damage, enemy_id)
+		proc_flags["convergence_registered"] = true
+	if not bool(proc_flags.get("tempo_registered", false)):
+		_register_apex_momentum_hit()
+		proc_flags["tempo_registered"] = true
+	if reward_rupture_wave and not rupture_triggered_enemy_ids.has(enemy_id):
+		rupture_triggered_enemy_ids[enemy_id] = true
+		_apply_rupture_wave(enemy_body.global_position, final_damage, rupture_hit_enemy_ids)
+	return final_damage
+
 func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary) -> bool:
 	var did_hit := false
 	var strike_damage := int(melee_context.get("damage", damage))
@@ -1275,37 +1319,22 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 	if retort_active:
 		strike_damage = int(round(float(strike_damage) * 1.7))
 		iron_retort_window_left = 0.0
-	var sigil_burst_fired: bool = false
 	var farline_focus_proc_fired: bool = false
 	var retort_impact_position: Vector2 = global_position + attack_direction * (strike_range * 0.45)
 	var strike_arc_degrees := float(melee_context.get("arc_degrees", attack_arc_degrees))
 	var max_angle_radians := deg_to_rad(strike_arc_degrees * 0.5)
 
-	var melee_hit_enemy_ids: Dictionary = {}
 	var rupture_triggered_enemy_ids: Dictionary = {}
 	var rupture_hit_enemy_ids: Dictionary = {}
+	var sigil_burst_state := {"fired": false}
 	var proc_flags := {
 		"convergence_registered": false,
 		"tempo_registered": false
 	}
 
-	for enemy_node in get_tree().get_nodes_in_group("enemies"):
-		if not (enemy_node is Node2D):
-			continue
-		if not DAMAGEABLE.can_take_damage(enemy_node):
-			continue
-
-		var enemy_body := enemy_node as Node2D
+	for enemy_body in _get_damageable_enemies_in_cone(global_position, attack_direction, strike_range, max_angle_radians):
 		var enemy_id := enemy_body.get_instance_id()
-		if melee_hit_enemy_ids.has(enemy_id):
-			continue
-
 		var to_enemy := enemy_body.global_position - global_position
-		if to_enemy.length() > strike_range:
-			continue
-		if absf(attack_direction.angle_to(to_enemy.normalized())) > max_angle_radians:
-			continue
-
 		var enemy_strike_damage := strike_damage
 		if passive_farline_focus and _is_farline_focus_hit(attack_direction, to_enemy):
 			enemy_strike_damage = int(round(float(enemy_strike_damage) * farline_focus_damage_mult))
@@ -1314,30 +1343,11 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 				farline_focus_proc_flash_left = farline_focus_proc_flash_duration
 				if player_feedback != null:
 					player_feedback.play_world_ring(enemy_body.global_position, 36.0, Color(1.0, 0.88, 0.44, 0.92), 0.14)
-		var strike_breakdown := _build_damage_breakdown(enemy_strike_damage, enemy_node, enemy_body.global_position, "melee")
-		var final_strike_damage := int(strike_breakdown.get("final_damage", strike_damage))
-		DAMAGEABLE.apply_damage(enemy_node, final_strike_damage)
+		_resolve_attack_hit(enemy_body, enemy_strike_damage, "melee", rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags, sigil_burst_state)
 		if retort_active and not did_hit:
 			retort_impact_position = enemy_body.global_position
-		_apply_hunters_snare(enemy_node)
-		if passive_sigil_burst and sigil_burst_ready and not sigil_burst_fired:
-			sigil_burst_ready = false
-			sigil_burst_fired = true
-			_apply_sigil_burst(enemy_body.global_position, strike_damage)
-		melee_hit_enemy_ids[enemy_id] = true
-		if reward_storm_crown:
-			_apply_storm_crown_hit(enemy_body.global_position, enemy_id, final_strike_damage)
-		if not bool(proc_flags.get("convergence_registered", false)):
-			_try_apply_convergence_surge(enemy_body.global_position, final_strike_damage, enemy_id)
-			proc_flags["convergence_registered"] = true
-		if not bool(proc_flags.get("tempo_registered", false)):
-			_register_apex_momentum_hit()
-			proc_flags["tempo_registered"] = true
-		if reward_rupture_wave and not rupture_triggered_enemy_ids.has(enemy_id):
-			rupture_triggered_enemy_ids[enemy_id] = true
-			_apply_rupture_wave(enemy_body.global_position, final_strike_damage, rupture_hit_enemy_ids)
 		if reward_dread_resonance:
-			_update_dread_resonance_target(enemy_node, enemy_id)
+			_update_dread_resonance_target(enemy_body, enemy_id)
 		did_hit = true
 
 	if reward_razor_wind:
@@ -1390,42 +1400,9 @@ func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupt
 	var wind_arc_degrees := float(wind_context.get("arc_degrees", razor_wind_arc_degrees))
 	var wind_half_arc := deg_to_rad(wind_arc_degrees * 0.5)
 	var wind_damage := int(wind_context.get("damage", maxi(1, int(round(float(damage) * razor_wind_damage_ratio)))))
-	var wind_hit_enemy_ids: Dictionary = {}
-	var sigil_burst_fired: bool = false
-	for enemy_node in get_tree().get_nodes_in_group("enemies"):
-		if not (enemy_node is Node2D):
-			continue
-		if not DAMAGEABLE.can_take_damage(enemy_node):
-			continue
-		var enemy_body := enemy_node as Node2D
-		var enemy_id := enemy_body.get_instance_id()
-		if wind_hit_enemy_ids.has(enemy_id):
-			continue
-		var to_enemy := enemy_body.global_position - global_position
-		if to_enemy.length() > wind_range:
-			continue
-		if absf(attack_direction.angle_to(to_enemy.normalized())) > wind_half_arc:
-			continue
-		var wind_breakdown := _build_damage_breakdown(wind_damage, enemy_node, enemy_body.global_position, "razor_wind")
-		var final_wind_damage := int(wind_breakdown.get("final_damage", wind_damage))
-		DAMAGEABLE.apply_damage(enemy_node, final_wind_damage)
-		_apply_hunters_snare(enemy_node)
-		if passive_sigil_burst and sigil_burst_ready and not sigil_burst_fired:
-			sigil_burst_ready = false
-			sigil_burst_fired = true
-			_apply_sigil_burst(enemy_body.global_position, wind_damage)
-		wind_hit_enemy_ids[enemy_id] = true
-		if reward_storm_crown:
-			_apply_storm_crown_hit(enemy_body.global_position, enemy_id, final_wind_damage)
-		if not bool(proc_flags.get("convergence_registered", false)):
-			_try_apply_convergence_surge(enemy_body.global_position, final_wind_damage, enemy_id)
-			proc_flags["convergence_registered"] = true
-		if not bool(proc_flags.get("tempo_registered", false)):
-			_register_apex_momentum_hit()
-			proc_flags["tempo_registered"] = true
-		if reward_rupture_wave and not rupture_triggered_enemy_ids.has(enemy_id):
-			rupture_triggered_enemy_ids[enemy_id] = true
-			_apply_rupture_wave(enemy_body.global_position, final_wind_damage, rupture_hit_enemy_ids)
+	var sigil_burst_state := {"fired": false}
+	for enemy_body in _get_damageable_enemies_in_cone(global_position, attack_direction, wind_range, wind_half_arc):
+		_resolve_attack_hit(enemy_body, wind_damage, "razor_wind", rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags, sigil_burst_state)
 		did_hit = true
 	return did_hit
 
