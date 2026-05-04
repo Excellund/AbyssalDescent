@@ -76,6 +76,8 @@ Mutators match a profile if any declared archetype is present. If a filtered poo
 - Build control-overlay draw payload from `objective_manager` snapshot helpers (for example `get_control_overlay_state`) rather than reading many control fields directly in world draw code.
 - Build objective telemetry payload fields from `objective_manager` snapshot helpers (for example `get_telemetry_state`) instead of direct world-side field access.
 - Keep objective kind and control-overlay predicates on `objective_manager` helpers (for example `has_active_objective`, `should_draw_control_overlay`) rather than hardcoded world-side string checks.
+- Route room-clear outcome resolution and state transition shaping through a dedicated coordinator surface (for example `scripts/core/room_clear_outcome_coordinator.gd`) rather than inline world-side branching.
+- Route room objective reset-and-begin sequencing through the objective lifecycle coordinator (for example `reset_and_begin_for_new_room`) rather than split calls in world flow.
 
 8. If an encounter name or gameplay meaning changes, update `scripts/shared/glossary_data.gd` in the same change.
 

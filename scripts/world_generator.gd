@@ -43,6 +43,7 @@ const ENCOUNTER_ROUTE_CONTROLLER_SCRIPT := preload("res://scripts/core/encounter
 const OBJECTIVE_LIFECYCLE_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_lifecycle_coordinator.gd")
 const OBJECTIVE_FRAME_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_frame_coordinator.gd")
 const OBJECTIVE_PROGRESS_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_progress_coordinator.gd")
+const ROOM_CLEAR_OUTCOME_COORDINATOR_SCRIPT := preload("res://scripts/core/room_clear_outcome_coordinator.gd")
 const RUN_CONTEXT_PATH := "/root/RunContext"
 const MENU_SCENE_PATH := "res://scenes/Menu.tscn"
 const RUN_SNAPSHOT_VERSION := 1
@@ -184,6 +185,7 @@ var encounter_route_controller
 var objective_lifecycle_coordinator
 var objective_frame_coordinator
 var objective_progress_coordinator
+var room_clear_outcome_coordinator
 
 func _apply_debug_settings_from_node() -> void:
 	var debug_settings := get_node_or_null("DebugSettings")
@@ -248,6 +250,7 @@ func _initialize_bootstrap_context() -> void:
 	objective_lifecycle_coordinator = OBJECTIVE_LIFECYCLE_COORDINATOR_SCRIPT.new()
 	objective_frame_coordinator = OBJECTIVE_FRAME_COORDINATOR_SCRIPT.new()
 	objective_progress_coordinator = OBJECTIVE_PROGRESS_COORDINATOR_SCRIPT.new()
+	room_clear_outcome_coordinator = ROOM_CLEAR_OUTCOME_COORDINATOR_SCRIPT.new()
 	power_registry_instance = POWER_REGISTRY.new()
 	player = get_node_or_null(player_path) as Node2D
 	_setup_player_runtime_bindings()
@@ -1065,37 +1068,48 @@ func _on_room_cleared() -> void:
 		return
 	if is_instance_valid(player):
 		player.tick_objective_mutators_for_encounter()
-	var raw_outcome: Variant = encounter_flow_system.resolve_room_cleared(in_boss_room, pending_room_reward, rooms_cleared, room_depth, encounter_count)
-	var outcome: Dictionary = ENCOUNTER_CONTRACTS.normalize_room_cleared_outcome(raw_outcome)
-	run_cleared = ENCOUNTER_CONTRACTS.outcome_run_cleared(outcome)
-	if run_cleared and _is_endless_mode() and in_boss_room:
-		run_cleared = false
-		in_boss_room = false
-		endless_boss_defeated = true
-		rooms_cleared += 1
-		room_depth += 1
-		boss_unlocked = false
-		pending_room_reward = ENUMS.RewardMode.NONE
+	var outcome: Dictionary = room_clear_outcome_coordinator.resolve_outcome(
+		encounter_flow_system,
+		in_boss_room,
+		pending_room_reward,
+		rooms_cleared,
+		room_depth,
+		encounter_count
+	)
+	if outcome.is_empty():
+		return
+	var outcome_state := room_clear_outcome_coordinator.process_outcome({
+		"outcome": outcome,
+		"in_boss_room": in_boss_room,
+		"endless_mode": _is_endless_mode(),
+		"endless_boss_defeated": endless_boss_defeated,
+		"first_boss_defeated": first_boss_defeated,
+		"second_boss_defeated": second_boss_defeated,
+		"can_unlock_second": _is_second_boss_unlocked(),
+		"can_unlock_third": _is_third_boss_unlocked(),
+		"rooms_cleared": rooms_cleared,
+		"room_depth": room_depth,
+		"boss_unlocked": boss_unlocked,
+		"pending_room_reward": pending_room_reward,
+		"choosing_next_room": choosing_next_room
+	})
+	if not bool(outcome_state.get("ok", false)):
+		return
+	run_cleared = bool(outcome_state.get("run_cleared", run_cleared))
+	in_boss_room = bool(outcome_state.get("in_boss_room", in_boss_room))
+	endless_boss_defeated = bool(outcome_state.get("endless_boss_defeated", endless_boss_defeated))
+	rooms_cleared = int(outcome_state.get("rooms_cleared", rooms_cleared))
+	room_depth = int(outcome_state.get("room_depth", room_depth))
+	boss_unlocked = bool(outcome_state.get("boss_unlocked", boss_unlocked))
+	pending_room_reward = int(outcome_state.get("pending_room_reward", pending_room_reward))
+	choosing_next_room = bool(outcome_state.get("choosing_next_room", choosing_next_room))
+	phase_two_rooms_cleared += int(outcome_state.get("phase_two_increment", 0))
+	phase_three_rooms_cleared += int(outcome_state.get("phase_three_increment", 0))
+	if bool(outcome_state.get("show_endless_boss_banner", false)):
 		hud.show_banner("Boss Defeated", "")
-		_spawn_door_options()
+	if bool(outcome_state.get("terminal_run_cleared", false)):
 		return
-	if run_cleared:
-		choosing_next_room = false
-		return
-	rooms_cleared = ENCOUNTER_CONTRACTS.outcome_rooms_cleared(outcome)
-	room_depth = ENCOUNTER_CONTRACTS.outcome_room_depth(outcome)
-	if second_boss_defeated:
-		phase_three_rooms_cleared += 1
-		boss_unlocked = _is_third_boss_unlocked()
-	elif first_boss_defeated:
-		phase_two_rooms_cleared += 1
-		boss_unlocked = _is_second_boss_unlocked()
-	else:
-		boss_unlocked = ENCOUNTER_CONTRACTS.outcome_boss_unlocked(outcome)
-	if _is_endless_mode() and endless_boss_defeated:
-		boss_unlocked = false
-	pending_room_reward = ENCOUNTER_CONTRACTS.outcome_pending_room_reward(outcome)
-	var reward_mode: int = ENCOUNTER_CONTRACTS.outcome_open_reward_mode(outcome)
+	var reward_mode: int = int(outcome_state.get("open_reward_mode", ENUMS.RewardMode.NONE))
 	if reward_mode == ENUMS.RewardMode.BOON:
 		_open_boon_selection("Choose Boon Reward", false, ENUMS.RewardMode.BOON, {}, "", current_character_id)
 		return
@@ -1105,7 +1119,7 @@ func _on_room_cleared() -> void:
 	if reward_mode == ENUMS.RewardMode.ARCANA:
 		_open_boon_selection("Choose Arcana", false, ENUMS.RewardMode.ARCANA, {}, "", current_character_id)
 		return
-	if ENCOUNTER_CONTRACTS.outcome_spawn_doors(outcome):
+	if bool(outcome_state.get("spawn_doors", false)):
 		_spawn_door_options()
 
 func _finish_first_boss_clear() -> void:
@@ -1460,7 +1474,7 @@ func _begin_room(profile: Dictionary) -> void:
 	in_boss_room = false
 	in_second_boss_room = false
 	in_third_boss_room = false
-	objective_lifecycle_coordinator.reset_for_new_room(objective_manager, objective_runtime)
+	objective_lifecycle_coordinator.reset_and_begin_for_new_room(objective_manager, objective_runtime, profile)
 	_play_room_music(false)
 	current_room_size = ENCOUNTER_CONTRACTS.profile_room_size(profile)
 	current_room_static_camera = ENCOUNTER_CONTRACTS.profile_static_camera(profile)
@@ -1483,8 +1497,6 @@ func _begin_room(profile: Dictionary) -> void:
 		enemy_spawner.configure_room(current_room_size, spawn_padding, spawn_safe_radius, current_room_enemy_mutator, _get_active_enemy_mutators_for_room())
 	_apply_camera_bounds_for_room(current_room_size)
 	active_room_enemy_count = _spawn_profile_enemies(profile)
-	if is_instance_valid(objective_runtime):
-		objective_runtime.begin_room_objective(profile)
 	_start_encounter_intro_grace()
 
 func _enter_rest_site() -> void:
