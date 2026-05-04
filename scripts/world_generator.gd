@@ -44,6 +44,7 @@ const OBJECTIVE_LIFECYCLE_COORDINATOR_SCRIPT := preload("res://scripts/core/obje
 const OBJECTIVE_FRAME_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_frame_coordinator.gd")
 const OBJECTIVE_PROGRESS_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_progress_coordinator.gd")
 const ROOM_CLEAR_OUTCOME_COORDINATOR_SCRIPT := preload("res://scripts/core/room_clear_outcome_coordinator.gd")
+const COMBAT_PHASE_COORDINATOR_SCRIPT := preload("res://scripts/core/combat_phase_coordinator.gd")
 const RUN_CONTEXT_PATH := "/root/RunContext"
 const MENU_SCENE_PATH := "res://scenes/Menu.tscn"
 const RUN_SNAPSHOT_VERSION := 1
@@ -186,6 +187,7 @@ var objective_lifecycle_coordinator
 var objective_frame_coordinator
 var objective_progress_coordinator
 var room_clear_outcome_coordinator
+var combat_phase_coordinator
 
 func _apply_debug_settings_from_node() -> void:
 	var debug_settings := get_node_or_null("DebugSettings")
@@ -251,6 +253,7 @@ func _initialize_bootstrap_context() -> void:
 	objective_frame_coordinator = OBJECTIVE_FRAME_COORDINATOR_SCRIPT.new()
 	objective_progress_coordinator = OBJECTIVE_PROGRESS_COORDINATOR_SCRIPT.new()
 	room_clear_outcome_coordinator = ROOM_CLEAR_OUTCOME_COORDINATOR_SCRIPT.new()
+	combat_phase_coordinator = COMBAT_PHASE_COORDINATOR_SCRIPT.new()
 	power_registry_instance = POWER_REGISTRY.new()
 	player = get_node_or_null(player_path) as Node2D
 	_setup_player_runtime_bindings()
@@ -1383,8 +1386,7 @@ func _on_pause_exit_game_requested() -> void:
 func _spawn_door_options() -> void:
 	if not is_instance_valid(encounter_flow_system):
 		return
-	if is_instance_valid(player) and player.has_method("clear_lingering_combat_effects"):
-		player.clear_lingering_combat_effects()
+	combat_phase_coordinator.clear_player_lingering_effects(player)
 	door_options.clear()
 	var route_options := _roll_route_options(_build_route_context(room_depth))
 	var route_state := encounter_route_controller.build_route_state(
@@ -1467,10 +1469,7 @@ func _begin_room(profile: Dictionary) -> void:
 	if profile.is_empty():
 		return
 	encounter_intro_grace_active = false
-	_set_player_combat_damage_enabled(true)
-	_clear_enemy_lingering_effects()
-	if is_instance_valid(player):
-		player.clear_lingering_combat_effects()
+	combat_phase_coordinator.begin_combat_phase(player, get_tree())
 	in_boss_room = false
 	in_second_boss_room = false
 	in_third_boss_room = false
@@ -1556,10 +1555,7 @@ func _pick_boss_spawn_position(min_player_distance: float = 260.0, wall_margin: 
 
 func _begin_configured_boss_room(boss_stage: int, room_size: Vector2, room_label: String, room_entry_key: String, banner_title: String, boss_script, collision_radius: float, min_player_distance: float, wall_margin: float) -> void:
 	encounter_intro_grace_active = false
-	_set_player_combat_damage_enabled(true)
-	_clear_enemy_lingering_effects()
-	if is_instance_valid(player):
-		player.clear_lingering_combat_effects()
+	combat_phase_coordinator.begin_combat_phase(player, get_tree())
 	in_boss_room = boss_stage == 1
 	in_second_boss_room = boss_stage == 2
 	in_third_boss_room = boss_stage == 3
@@ -1654,17 +1650,13 @@ func _clear_all_enemies() -> void:
 		enemy_spawner.clear_all_enemies()
 
 func _clear_enemy_lingering_effects() -> void:
-	for effect in get_tree().get_nodes_in_group("enemy_lingering_effects"):
-		if effect is Node:
-			(effect as Node).queue_free()
+	combat_phase_coordinator.clear_enemy_lingering_effects(get_tree())
 
 func _set_player_combat_damage_enabled(enabled: bool) -> void:
-	if is_instance_valid(player) and player.has_method("set_combat_damage_enabled"):
-		player.set_combat_damage_enabled(enabled)
+	combat_phase_coordinator.set_player_combat_damage_enabled(player, enabled)
 
 func _end_combat_phase() -> void:
-	_set_player_combat_damage_enabled(false)
-	_clear_enemy_lingering_effects()
+	combat_phase_coordinator.end_combat_phase(player, get_tree())
 
 func _apply_camera_bounds_for_room(room_size: Vector2) -> void:
 	if not is_instance_valid(player_camera):
@@ -2080,14 +2072,7 @@ func _apply_objective_mutator(choice: Dictionary) -> void:
 		hud.show_banner("Objective Reward", mutator_name)
 
 func _set_combat_paused(paused: bool) -> void:
-	if is_instance_valid(player):
-		if player is CharacterBody2D:
-			(player as CharacterBody2D).velocity = Vector2.ZERO
-		player.set_physics_process(not paused)
-	for enemy in get_tree().get_nodes_in_group("enemies"):
-		if enemy is Node:
-			(enemy as Node).set_physics_process(not paused)
-			(enemy as Node).set_process(not paused)
+	combat_phase_coordinator.set_combat_paused(player, get_tree(), paused)
 
 func _is_spawn_transport_active(enemy: Node) -> bool:
 	return bool(enemy.is_spawn_transporting())
