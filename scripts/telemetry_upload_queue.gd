@@ -71,37 +71,41 @@ static func get_ready_entries(max_entries: int = 3) -> Array[Dictionary]:
 			break
 	return ready
 
+static func _mutate_pending(mutator: Callable) -> void:
+	var queue_payload := load_queue()
+	var pending := queue_payload.get("pending", []) as Array
+	mutator.callv([pending])
+	queue_payload["pending"] = pending
+	save_queue(queue_payload)
+
+static func _find_pending_entry_index(pending: Array, entry_id: String) -> int:
+	for index in range(pending.size()):
+		var entry := pending[index] as Dictionary
+		if String(entry.get("id", "")) == entry_id:
+			return index
+	return -1
+
 static func mark_success(entry_id: String) -> void:
 	if entry_id.is_empty():
 		return
-	var queue_payload := load_queue()
-	var pending := queue_payload.get("pending", []) as Array
-	var updated: Array = []
-	for entry_variant in pending:
-		var entry := entry_variant as Dictionary
-		if String(entry.get("id", "")) == entry_id:
-			continue
-		updated.append(entry)
-	queue_payload["pending"] = updated
-	save_queue(queue_payload)
+	_mutate_pending(func(pending: Array) -> void:
+		var index := _find_pending_entry_index(pending, entry_id)
+		if index >= 0:
+			pending.remove_at(index)
+	)
 
 static func mark_failure(entry_id: String, attempt_count: int, next_retry_unix: int, error_message: String) -> void:
 	if entry_id.is_empty():
 		return
-	var queue_payload := load_queue()
-	var pending := queue_payload.get("pending", []) as Array
-	for index in range(pending.size()):
+	_mutate_pending(func(pending: Array) -> void:
+		var index := _find_pending_entry_index(pending, entry_id)
+		if index < 0:
+			return
 		var entry := pending[index] as Dictionary
-		if String(entry.get("id", "")) != entry_id:
-			continue
-		var updated_entry := entry.duplicate(true)
-		updated_entry["attempt_count"] = maxi(1, attempt_count)
-		updated_entry["next_retry_unix"] = maxi(_now_unix() + 5, next_retry_unix)
-		updated_entry["last_error"] = error_message
-		pending[index] = updated_entry
-		break
-	queue_payload["pending"] = pending
-	save_queue(queue_payload)
+		entry["attempt_count"] = maxi(1, attempt_count)
+		entry["next_retry_unix"] = maxi(_now_unix() + 5, next_retry_unix)
+		entry["last_error"] = error_message
+	)
 
 static func pending_count() -> int:
 	var queue_payload := load_queue()

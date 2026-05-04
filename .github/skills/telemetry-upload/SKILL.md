@@ -22,16 +22,16 @@ Run end
 
 ## Key Files
 
-| File | Role |
-|---|---|
-| scripts/run_telemetry_store.gd | `build_upload_payload(run_id)` — assembles full remote payload |
-| scripts/telemetry_upload_queue.gd | Durable local queue: `enqueue()`, `get_ready_entries()`, `mark_success()`, `mark_failure()` |
-| scripts/telemetry_uploader.gd | Background node; 10s timer flush + immediate flush on enqueue. Exponential backoff capped at 900s. |
-| scripts/run_context.gd | Consent state (`telemetry_upload_enabled`, `telemetry_consent_asked`). Instantiates uploader as child. |
-| scripts/settings_store.gd | Persists consent flags under `[telemetry]` section in `user://settings.cfg` |
-| scripts/menu_controller.gd | First-launch consent prompt (`_maybe_show_telemetry_consent_prompt`), options toggle |
-| scripts/pause_menu_controller.gd | In-run telemetry toggle checkbox |
-| playtester_telemetry/supabase_production_setup.sql | Live schema; safe to rerun as migration |
+| File                                               | Role                                                                                                   |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| scripts/run_telemetry_store.gd                     | `build_upload_payload(run_id)` — assembles full remote payload                                         |
+| scripts/telemetry_upload_queue.gd                  | Durable local queue: `enqueue()`, `get_ready_entries()`, `mark_success()`, `mark_failure()`            |
+| scripts/telemetry_uploader.gd                      | Background node; 10s timer flush + immediate flush on enqueue. Exponential backoff capped at 900s.     |
+| scripts/run_context.gd                             | Consent state (`telemetry_upload_enabled`, `telemetry_consent_asked`). Instantiates uploader as child. |
+| scripts/settings_store.gd                          | Persists consent flags under `[telemetry]` section in `user://settings.cfg`                            |
+| scripts/menu_controller.gd                         | First-launch consent prompt (`_maybe_show_telemetry_consent_prompt`), options toggle                   |
+| scripts/pause_menu_controller.gd                   | In-run telemetry toggle checkbox                                                                       |
+| playtester_telemetry/supabase_production_setup.sql | Live schema; safe to rerun as migration                                                                |
 
 ## Supabase Configuration
 
@@ -111,6 +111,7 @@ door_choices          # Array of raw door choice dicts
 ```
 
 When adding a new telemetry field:
+
 1. Record it in `run_telemetry_store.gd` (event recording path)
 2. Add it to `build_upload_payload()` in `run_telemetry_store.gd`
 3. Add the column to `playtester_telemetry/supabase_production_setup.sql` using `ADD COLUMN IF NOT EXISTS`
@@ -128,6 +129,7 @@ When adding a new telemetry field:
 
 - Queue file: `user://telemetry_upload_queue.save` (binary, versioned)
 - Each entry has: payload, `retry_count`, `next_retry_at` (unix timestamp)
+- When changing queue mutation paths (`mark_success`, `mark_failure`, similar), centralize load/mutate/save into one helper to prevent drift between retry and success behavior.
 - Uploader sends one entry per tick; on HTTP success calls `mark_success()`
 - On failure: `mark_failure()` applies exponential backoff with jitter, capped at 900s
 - Upload is skipped entirely if `run_context.is_telemetry_upload_enabled()` returns false
