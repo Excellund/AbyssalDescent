@@ -58,11 +58,11 @@ func validate_encounter_sync() -> ValidationResult:
 		registry_keys.append(entry.get("key", ""))
 	
 	var expected_keys := ["none", "rest", "skirmish", "crossfire", "fortress", "onslaught", "vanguard", "blitz", "ambush", "suppression", "pursuit", "gauntlet"]
-	var found_all := true
+	var _found_all := true
 	for key in expected_keys:
 		if key not in registry_keys:
 			result.add_warning("Encounter '%s' not in registry (may be valid if retired)" % key)
-			found_all = false
+			_found_all = false
 	
 	# Verify glossary sync
 	var glossary_rows := GLOSSARY_DATA._encounter_rows()
@@ -110,13 +110,13 @@ func validate_character_registry() -> ValidationResult:
 	if character_count < 3:
 		result.add_warning("Only %d characters defined (expected at least 3)" % character_count)
 	
-	for char in characters:
-		if not char.has("id"):
-			result.add_error("Character missing 'id' field: %s" % str(char))
-		if not char.has("name"):
-			result.add_error("Character missing 'name' field: %s" % str(char))
-		if not char.has("stat_modifiers"):
-			result.add_error("Character missing 'stat_modifiers' field: %s" % str(char.get("id", "unknown")))
+	for char_dict in characters:
+		if not char_dict.has("id"):
+			result.add_error("Character missing 'id' field: %s" % str(char_dict))
+		if not char_dict.has("name"):
+			result.add_error("Character missing 'name' field: %s" % str(char_dict))
+		if not char_dict.has("stat_modifiers"):
+			result.add_error("Character missing 'stat_modifiers' field: %s" % str(char_dict.get("id", "unknown")))
 	
 	result.report("character_registry")
 	return result
@@ -158,7 +158,7 @@ func validate_debug_entry_points() -> ValidationResult:
 	
 	# Verify all encounter types are selectable via debug
 	var debug_encounters: Array[Dictionary] = ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_MAP
-	var expected_debug_count := 12  # Approximately, adjust as needed
+	var _expected_debug_count := 12  # Approximately, adjust as needed
 	if debug_encounters.size() < 8:
 		result.add_warning("Only %d debug encounters available (expected ~12)" % debug_encounters.size())
 	
