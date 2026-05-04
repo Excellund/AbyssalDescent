@@ -28,7 +28,7 @@ Use this skill whenever work involves multiple steps, code edits, diagnostics, o
 3. Immediately mark finished items as `completed` after verification.
 4. If scope changes, update todo titles/statuses to match the new scope.
 5. Before final response, make a final synchronization pass and ensure all finished work is marked `completed`.
-6. Before final response, check whether new user guidance from this task should update a relevant skill; only update when it is durable, validated, and likely to add future value.
+6. Before final response, run the `refactor-learning-routing` checkpoint for any validated refactor learnings and update the best-fit skill(s).
 7. If any work remains, keep at least one item as `in-progress` and do not close the task.
 
 ## Safety Rules

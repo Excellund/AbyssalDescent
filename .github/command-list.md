@@ -8,6 +8,7 @@ Use these natural-language commands in chat. Phrases do not need to match exactl
 - Run Refactor Steward on [scope]
 - Simplify this system without behavior changes
 - Reduce duplication in [file or subsystem]
+- Route refactor learnings to the right skill
 
 ## Balance And Encounter Tuning
 
