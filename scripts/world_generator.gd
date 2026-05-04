@@ -39,6 +39,8 @@ const DEBUG_SETTINGS_SCRIPT := preload("res://scripts/debug_settings.gd")
 const VALIDATION_HARNESS_SCRIPT := preload("res://scripts/validation_harness.gd")
 const RUN_SESSION_SCRIPT := preload("res://scripts/core/run_session.gd")
 const WORLD_BOOTSTRAP_COORDINATOR_SCRIPT := preload("res://scripts/core/world_bootstrap_coordinator.gd")
+const ENCOUNTER_ROUTE_CONTROLLER_SCRIPT := preload("res://scripts/core/encounter_route_controller.gd")
+const OBJECTIVE_LIFECYCLE_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_lifecycle_coordinator.gd")
 const RUN_CONTEXT_PATH := "/root/RunContext"
 const MENU_SCENE_PATH := "res://scenes/Menu.tscn"
 const RUN_SNAPSHOT_VERSION := 1
@@ -176,6 +178,8 @@ var telemetry_spike_sender
 var telemetry_spike_requested: bool = false
 var run_session
 var bootstrap_coordinator
+var encounter_route_controller
+var objective_lifecycle_coordinator
 
 func _apply_debug_settings_from_node() -> void:
 	var debug_settings := get_node_or_null("DebugSettings")
@@ -237,6 +241,7 @@ func _initialize_bootstrap_context() -> void:
 	_maybe_start_telemetry_spike_probe()
 	run_session = RUN_SESSION_SCRIPT.new()
 	run_session.reset_for_new_run()
+	objective_lifecycle_coordinator = OBJECTIVE_LIFECYCLE_COORDINATOR_SCRIPT.new()
 	power_registry_instance = POWER_REGISTRY.new()
 	player = get_node_or_null(player_path) as Node2D
 	_setup_player_runtime_bindings()
@@ -267,6 +272,8 @@ func _setup_run_systems_phase() -> void:
 	music_system.initialize(normal_room_music, boss_room_music, music_volume_db, music_crossfade_duration)
 	encounter_flow_system = ENCOUNTER_FLOW_SYSTEM_SCRIPT.new()
 	add_child(encounter_flow_system)
+	encounter_route_controller = ENCOUNTER_ROUTE_CONTROLLER_SCRIPT.new()
+	encounter_route_controller.set_encounter_flow_system(encounter_flow_system)
 	_setup_reward_selection_system()
 	_setup_encounter_profile_builder_system()
 	_setup_enemy_spawner_system()
@@ -1356,24 +1363,27 @@ func _on_pause_exit_game_requested() -> void:
 func _spawn_door_options() -> void:
 	if not is_instance_valid(encounter_flow_system):
 		return
-	if choosing_next_room and not door_options.is_empty():
-		return
 	if is_instance_valid(player) and player.has_method("clear_lingering_combat_effects"):
 		player.clear_lingering_combat_effects()
 	door_options.clear()
-	choosing_next_room = true
 	var route_options := _roll_route_options(_build_route_context(room_depth))
-	var show_boss_door := boss_unlocked
-	var boss_encounter_key := "warden"
-	if second_boss_defeated:
-		show_boss_door = _is_third_boss_unlocked()
-		boss_unlocked = show_boss_door
-		boss_encounter_key = "lacuna"
-	elif first_boss_defeated:
-		show_boss_door = _is_second_boss_unlocked()
-		boss_unlocked = show_boss_door
-		boss_encounter_key = "sovereign"
-	door_options = encounter_flow_system.build_door_options(show_boss_door, room_depth, door_distance_from_center, route_options, boss_encounter_key)
+	var route_state := encounter_route_controller.build_route_state(
+		choosing_next_room,
+		door_options,
+		boss_unlocked,
+		first_boss_defeated,
+		second_boss_defeated,
+		room_depth,
+		door_distance_from_center,
+		route_options,
+		_is_second_boss_unlocked(),
+		_is_third_boss_unlocked()
+	)
+	if not bool(route_state.get("ok", false)):
+		return
+	choosing_next_room = bool(route_state.get("choosing_next_room", true))
+	door_options = route_state.get("door_options", [])
+	boss_unlocked = bool(route_state.get("boss_unlocked", boss_unlocked))
 	_save_active_run_checkpoint()
 
 func _try_use_door() -> void:
@@ -1385,11 +1395,9 @@ func _try_use_door() -> void:
 		return
 	if not is_instance_valid(encounter_flow_system):
 		return
-	var raw_result: Variant = encounter_flow_system.find_used_door(player.global_position, door_options, door_use_radius)
-	var result: Dictionary = ENCOUNTER_CONTRACTS.normalize_door_use_result(raw_result)
-	if not ENCOUNTER_CONTRACTS.door_use_is_used(result):
+	var used_door := encounter_route_controller.find_used_door(player.global_position, door_options, door_use_radius)
+	if used_door.is_empty():
 		return
-	var used_door := ENCOUNTER_CONTRACTS.door_use_get_door(result)
 	_choose_door(used_door)
 
 func _choose_door(door: Dictionary) -> void:
@@ -1402,8 +1410,9 @@ func _choose_door(door: Dictionary) -> void:
 	player.global_position = Vector2.ZERO
 	if not is_instance_valid(encounter_flow_system):
 		return
-	var raw_choice: Variant = encounter_flow_system.resolve_chosen_door(door)
-	var choice: Dictionary = ENCOUNTER_CONTRACTS.normalize_door_choice(raw_choice)
+	var choice: Dictionary = encounter_route_controller.resolve_choice(door)
+	if choice.is_empty():
+		return
 	_record_door_choice(choice)
 	var action_id: int = ENCOUNTER_CONTRACTS.door_choice_action_id(choice)
 	if action_id == ENUMS.EncounterAction.BOSS:
@@ -1445,10 +1454,7 @@ func _begin_room(profile: Dictionary) -> void:
 	in_boss_room = false
 	in_second_boss_room = false
 	in_third_boss_room = false
-	if is_instance_valid(objective_manager):
-		objective_manager.reset()
-	if is_instance_valid(objective_runtime):
-		objective_runtime.reset_room_objective_state()
+	objective_lifecycle_coordinator.reset_for_new_room(objective_manager, objective_runtime)
 	_play_room_music(false)
 	current_room_size = ENCOUNTER_CONTRACTS.profile_room_size(profile)
 	current_room_static_camera = ENCOUNTER_CONTRACTS.profile_static_camera(profile)
@@ -2002,7 +2008,7 @@ func _on_player_died() -> void:
 		pause_menu_controller.close()
 	run_cleared = true
 	choosing_next_room = false
-	objective_manager.active_objective_kind = ""
+	objective_lifecycle_coordinator.clear_on_player_defeat(objective_manager)
 	active_room_enemy_count = 0
 	var run_context := _get_run_context()
 	if run_context != null:
