@@ -785,49 +785,16 @@ static func profile_count_from_counts(counts: Dictionary, key: String) -> int:
 	return int(counts.get(key, 0))
 
 static func profile_counts_from_profile(profile_value: Dictionary) -> Dictionary:
-	return profile_counts(
-		profile_chaser_count(profile_value),
-		profile_charger_count(profile_value),
-		profile_archer_count(profile_value),
-		profile_shielder_count(profile_value),
-		profile_lurker_count(profile_value),
-		profile_ram_count(profile_value),
-		profile_lancer_count(profile_value),
-		profile_spectre_count(profile_value),
-		profile_pyre_count(profile_value),
-		profile_tether_count(profile_value)
-	)
-
-# Helper function: get all enemy counts as a dict indexed by enemy type
-static func _get_all_enemy_counts(profile_value: Dictionary) -> Dictionary:
-	var result := {}
+	var mapped_counts := {}
 	for enemy_type: String in _get_enemy_count_keys():
-		result[enemy_type] = _get_enemy_count(enemy_type, profile_value)
-	return result
-
-# Helper function: set all enemy counts from a dict indexed by enemy type
-static func _set_all_enemy_counts(profile_value: Dictionary, counts: Dictionary) -> void:
-	for enemy_type: String in _get_enemy_count_keys():
-		if counts.has(enemy_type):
-			_set_enemy_count(enemy_type, int(counts[enemy_type]), profile_value)
+		var key := _get_enemy_count_key_for_type(enemy_type)
+		mapped_counts[key] = _get_enemy_count(enemy_type, profile_value)
+	return mapped_counts
 
 static func profile_set_counts_from_dict(profile_value: Dictionary, counts: Dictionary) -> void:
-	profile_set_counts(
-		profile_value,
-		profile_count_from_counts(counts, PROFILE_KEY_CHASER_COUNT),
-		profile_count_from_counts(counts, PROFILE_KEY_CHARGER_COUNT),
-		profile_count_from_counts(counts, PROFILE_KEY_ARCHER_COUNT),
-		profile_count_from_counts(counts, PROFILE_KEY_SHIELDER_COUNT)
-	)
-	profile_set_specialist_counts(
-		profile_value,
-		profile_count_from_counts(counts, PROFILE_KEY_LURKER_COUNT),
-		profile_count_from_counts(counts, PROFILE_KEY_RAM_COUNT),
-		profile_count_from_counts(counts, PROFILE_KEY_LANCER_COUNT),
-		profile_count_from_counts(counts, PROFILE_KEY_SPECTRE_COUNT),
-		profile_count_from_counts(counts, PROFILE_KEY_PYRE_COUNT),
-		profile_count_from_counts(counts, PROFILE_KEY_TETHER_COUNT)
-	)
+	for enemy_type: String in _get_enemy_count_keys():
+		var key := _get_enemy_count_key_for_type(enemy_type)
+		_set_enemy_count(enemy_type, profile_count_from_counts(counts, key), profile_value)
 
 static func profile_with_counts(profile_value: Dictionary, counts: Dictionary) -> Dictionary:
 	var modified := profile_value.duplicate(true)
