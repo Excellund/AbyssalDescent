@@ -22,13 +22,14 @@ const ENEMY_STATE_ENUMS := preload("res://scripts/shared/enemy_state_enums.gd")
 @export var gravity_damage: int = 56
 
 @export var echo_dash_windup: float = 0.45
+@export var echo_dash_first_windup: float = 0.65
 @export var echo_dash_speed: float = 680.0
 @export var echo_dash_duration: float = 0.24
 @export var echo_dash_count: int = 3
 @export var echo_dash_width: float = 44.0
 @export var echo_dash_damage: int = 38
 @export var echo_dash_retarget_pause: float = 0.14
-@export var echo_dash_max_turn_degrees: float = 40.0
+@export var echo_dash_max_turn_degrees: float = 60.0
 @export var reposition_dash_chance: float = 0.46
 @export var reposition_dash_speed: float = 760.0
 @export var reposition_dash_duration: float = 0.23
@@ -788,6 +789,8 @@ func _get_windup_time(attack_id: int) -> float:
 		ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH:
 			if _echo_dash_reposition_only:
 				return maxf(0.24, echo_dash_windup * 0.68)
+			if boss_state == ENEMY_STATE_ENUMS.Boss2State.WINDUP and not _echo_dash_retargeting and _echo_dash_remaining <= 0:
+				return echo_dash_first_windup * lerpf(1.0, 0.8, enrage_t)
 			return echo_dash_windup * lerpf(1.0, 0.8, enrage_t)
 		ENEMY_STATE_ENUMS.Boss2Attack.ORBITAL_LANCE:
 			return orbital_lance_windup * lerpf(1.0, 0.84, enrage_t)
