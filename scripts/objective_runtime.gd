@@ -355,7 +355,6 @@ func update_control_objective_state(delta: float) -> void:
 	if objective_manager.time_left <= 0.0:
 		objective_manager.spawn_interval = minf(_control_spawn_interval_relief_cap, objective_manager.spawn_interval + delta * HoldTheLineConfig.SPAWN_INTERVAL_RELIEF_PER_SECOND)
 	var kills_this_room: int = objective_manager.kills - objective_manager.control_kill_baseline
-	var kills_this_room: int = objective_manager.kills - objective_manager.control_kill_baseline
 	var relief_kills := maxi(0, kills_this_room - _control_relief_kills_applied)
 	if relief_kills > 0:
 		var relief_amount := float(relief_kills) * HoldTheLineConfig.SPAWN_INTERVAL_RELIEF_PER_KILL
@@ -389,10 +388,47 @@ func update_control_objective_state(delta: float) -> void:
 		spawn_control_wave()
 	world.queue_redraw()
 
-func spawn_survival_wave() -> void:
+func _can_spawn_objective_wave() -> bool:
 	if not is_instance_valid(world.enemy_spawner):
-		return
+		return false
 	if objective_manager.max_enemies > 0 and world.active_room_enemy_count >= objective_manager.max_enemies:
+		return false
+	return true
+
+func _clamp_objective_wave_spawn_count(requested_count: int, wave_cap: int = -1) -> int:
+	var spawn_count := maxi(0, requested_count)
+	if wave_cap > 0:
+		spawn_count = mini(spawn_count, wave_cap)
+	if objective_manager.max_enemies > 0:
+		spawn_count = mini(spawn_count, maxi(0, objective_manager.max_enemies - world.active_room_enemy_count))
+	return spawn_count
+
+func _spawn_random_wave_enemies(roster: Array[String], spawn_count: int) -> int:
+	if spawn_count <= 0 or roster.is_empty():
+		return 0
+	var spawned_total := 0
+	for _i in range(spawn_count):
+		var enemy_type := roster[rng.randi_range(0, roster.size() - 1)]
+		spawned_total += int(world.enemy_spawner.spawn_enemy_type(enemy_type, 1))
+	world.active_room_enemy_count += spawned_total
+	return spawned_total
+
+func _spawn_random_control_wave_enemies(roster: Array[String], spawn_count: int) -> int:
+	if spawn_count <= 0 or roster.is_empty():
+		return 0
+	var spawned_total := 0
+	for _i in range(spawn_count):
+		var enemy_type := roster[rng.randi_range(0, roster.size() - 1)]
+		var spawned_enemy: CharacterBody2D = world.enemy_spawner.spawn_enemy_node_type(enemy_type) as CharacterBody2D
+		if not is_instance_valid(spawned_enemy):
+			continue
+		_reposition_control_spawn_outside_zone(spawned_enemy)
+		spawned_total += 1
+	world.active_room_enemy_count += spawned_total
+	return spawned_total
+
+func spawn_survival_wave() -> void:
+	if not _can_spawn_objective_wave():
 		return
 	var roster: Array[String] = ["charger", "archer", "chaser", "charger", "shielder", "archer"]
 	if objective_manager.overtime:
@@ -402,19 +438,11 @@ func spawn_survival_wave() -> void:
 		spawn_count += 1
 	if objective_manager.overtime:
 		spawn_count += 1
-	spawn_count = mini(8, spawn_count)
-	if objective_manager.max_enemies > 0:
-		spawn_count = mini(spawn_count, maxi(0, objective_manager.max_enemies - world.active_room_enemy_count))
-	if spawn_count <= 0:
-		return
-	for _i in range(spawn_count):
-		var enemy_type := roster[rng.randi_range(0, roster.size() - 1)]
-		world.active_room_enemy_count += int(world.enemy_spawner.spawn_enemy_type(enemy_type, 1))
+	spawn_count = _clamp_objective_wave_spawn_count(spawn_count, 8)
+	_spawn_random_wave_enemies(roster, spawn_count)
 
 func spawn_priority_target_wave() -> void:
-	if not is_instance_valid(world.enemy_spawner):
-		return
-	if objective_manager.max_enemies > 0 and world.active_room_enemy_count >= objective_manager.max_enemies:
+	if not _can_spawn_objective_wave():
 		return
 	var roster: Array[String] = ["chaser", "shielder", "chaser", "charger", "shielder"]
 	if objective_manager.overtime:
@@ -422,18 +450,11 @@ func spawn_priority_target_wave() -> void:
 	var spawn_count: int = objective_manager.spawn_batch
 	if objective_manager.overtime:
 		spawn_count += 1
-	if objective_manager.max_enemies > 0:
-		spawn_count = mini(spawn_count, maxi(0, objective_manager.max_enemies - world.active_room_enemy_count))
-	if spawn_count <= 0:
-		return
-	for _i in range(spawn_count):
-		var enemy_type := roster[rng.randi_range(0, roster.size() - 1)]
-		world.active_room_enemy_count += int(world.enemy_spawner.spawn_enemy_type(enemy_type, 1))
+	spawn_count = _clamp_objective_wave_spawn_count(spawn_count)
+	_spawn_random_wave_enemies(roster, spawn_count)
 
 func spawn_control_wave() -> void:
-	if not is_instance_valid(world.enemy_spawner):
-		return
-	if objective_manager.max_enemies > 0 and world.active_room_enemy_count >= objective_manager.max_enemies:
+	if not _can_spawn_objective_wave():
 		return
 	var roster: Array[String] = ["shielder", "charger", "archer", "chaser", "archer"]
 	if objective_manager.overtime:
@@ -441,17 +462,8 @@ func spawn_control_wave() -> void:
 	var spawn_count: int = objective_manager.spawn_batch
 	if objective_manager.overtime and world.active_room_enemy_count <= 0:
 		spawn_count += 1
-	if objective_manager.max_enemies > 0:
-		spawn_count = mini(spawn_count, maxi(0, objective_manager.max_enemies - world.active_room_enemy_count))
-	if spawn_count <= 0:
-		return
-	for _i in range(spawn_count):
-		var enemy_type := roster[rng.randi_range(0, roster.size() - 1)]
-		var spawned_enemy: CharacterBody2D = world.enemy_spawner.spawn_enemy_node_type(enemy_type) as CharacterBody2D
-		if not is_instance_valid(spawned_enemy):
-			continue
-		_reposition_control_spawn_outside_zone(spawned_enemy)
-		world.active_room_enemy_count += 1
+	spawn_count = _clamp_objective_wave_spawn_count(spawn_count)
+	_spawn_random_control_wave_enemies(roster, spawn_count)
 
 func _reposition_control_spawn_outside_zone(enemy: CharacterBody2D) -> void:
 	if not is_instance_valid(enemy):

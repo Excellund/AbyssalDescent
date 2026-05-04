@@ -403,6 +403,25 @@ When multiple functions repeat the same compound precondition check (e.g., "if e
 
 ---
 
+### 15. Centralize Wave Spawn Capacity Logic
+
+When multiple objective or encounter wave functions share the same spawn eligibility and max-enemy clamping rules, move that shared logic into one helper path and keep only mode-specific tuning at each call site.
+
+**Why it matters:**
+
+- Spawn caps are high-risk gameplay constraints; duplicated checks drift and cause pressure spikes.
+- Shared capacity helpers reduce bug surface area while preserving encounter identity.
+- Mode-level functions become easier to reason about because only roster/timing deltas remain local.
+
+**How to apply:**
+
+- Extract one helper for spawn eligibility (spawner validity + max-enemy gate).
+- Extract one helper for clamping requested spawn counts against global caps.
+- Keep objective-specific modifiers local (for example overtime bumps or per-mode hard caps) before calling the shared clamp helper.
+- If one mode needs extra post-processing (for example control-zone repositioning), keep that as a mode-specific spawn helper layered on top of the shared guards.
+
+---
+
 ## Procedure: Code Quality Review Checklist
 
 When reviewing or refactoring code, ask these questions in order:
