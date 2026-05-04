@@ -16,7 +16,8 @@ Use this skill when working on the refactored encounter-generation surfaces.
 
 ## Source Of Truth
 
-- Encounter compositions live in `BEARING_DEFINITIONS` in `scripts/encounter_profile_builder.gd`.
+- Canonical encounter compositions live in `scripts/shared/encounter_definition_data.gd`.
+- `scripts/encounter_profile_builder.gd` must consume those definitions directly and must not duplicate composition tables.
 - Random hard mutator compatibility is decided by each mutator's `affected_archetypes` entry in `_hard_mutator_pool()`.
 - Enemy mutator stat application lives in `ENEMY_MUTATOR_STAT_MAP` in `scripts/enemy_spawner.gd`.
 - Canonical debug encounter keys live in `DEBUG_ENCOUNTER_MAP` in `scripts/shared/encounter_contracts.gd`.
@@ -28,7 +29,7 @@ Use this skill when working on the refactored encounter-generation surfaces.
 ## When To Edit What
 
 - Add or retune an encounter:
-  - Update `BEARING_DEFINITIONS`.
+  - Update canonical definitions in `scripts/shared/encounter_definition_data.gd`.
   - Preserve the encounter's signature threat pattern across all 4 difficulty ranks (Pilgrim/Delver/Harbinger/Forsworn).
   - Keep labels aligned with glossary/debug naming.
   - If canonical debug encounter keys or objective kind strings are renamed, update all contract consumers in the same change (builder dispatch, world runtime checks, objective runtime, HUD, telemetry bearing keys).
@@ -80,7 +81,7 @@ Mutators match a profile if any declared archetype is present. If a filtered poo
 
 ## Pitfalls
 
-- Do not reintroduce encounter-specific build/scaling helper sprawl when `BEARING_DEFINITIONS` can express the change.
+- Do not reintroduce encounter-specific build/scaling helper sprawl when canonical encounter definition data can express the change.
 - When building a profile shell that will immediately have all counts filled by `_apply_profile_counts`, do not pass placeholder count values. Use default parameters so the shell call is honest about what it owns (label and room size only).
 - Do not add a random hard mutator without `affected_archetypes`, or invalid rooms can roll it.
 - Do not duplicate per-enemy mutator logic outside `ENEMY_MUTATOR_STAT_MAP` unless the behavior is genuinely exceptional.

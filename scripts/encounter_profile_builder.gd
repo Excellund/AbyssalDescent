@@ -3,6 +3,7 @@ extends Node
 const ENUMS := preload("res://scripts/shared/enums.gd")
 const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
+const ENCOUNTER_DEFINITION_DATA := preload("res://scripts/shared/encounter_definition_data.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
 
@@ -28,8 +29,6 @@ const POOL_ROOM_SIZE := Vector2(1040.0, 760.0)
 const TRIAL_ROOM_SIZE := Vector2(1160.0, 860.0)
 
 # BEARING_LABELS must stay in sync with registry entries that have a "bearing_label" field.
-# When adding a new bearing: add it to ENCOUNTER_CONTRACTS._build_encounter_registry() with
-# a bearing_label, then add the label name here, then add composition definitions below.
 const BEARING_LABELS: Array[String] = [
 	"Crossfire",
 	"Onslaught",
@@ -51,6 +50,7 @@ const MUTATOR_DAMAGE_STAT_KEYS: Array[String] = [
 static func validate_bearing_sync() -> Array[String]:
 	var issues: Array[String] = []
 	var registry_labels := ENCOUNTER_CONTRACTS.get_bearing_labels_from_registry()
+	issues.append_array(ENCOUNTER_DEFINITION_DATA.validate_bearing_definitions(BEARING_LABELS))
 	for label in registry_labels:
 		if not BEARING_LABELS.has(label):
 			issues.append("Registry has bearing '%s' but BEARING_LABELS does not." % label)
@@ -112,72 +112,10 @@ const CONTROL_CURVE_BY_RANK := {
 
 var _bearing_definitions_cache: Dictionary = {}
 
-func _bearing_definition(room_size: Vector2, base_counts: Dictionary, rank_counts: Array[Dictionary]) -> Dictionary:
-	return {
-		"room_size": room_size,
-		"base_counts": base_counts,
-		"rank_counts": rank_counts
-	}
-
 func _get_bearing_definitions() -> Dictionary:
 	if not _bearing_definitions_cache.is_empty():
 		return _bearing_definitions_cache
-	_bearing_definitions_cache = {
-		"Crossfire": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(1, 1, 4, 0), [
-			ENCOUNTER_CONTRACTS.profile_counts(1, 1, 3, 0),
-			ENCOUNTER_CONTRACTS.profile_counts(1, 1, 4, 0),
-			ENCOUNTER_CONTRACTS.profile_counts(1, 2, 7, 0),
-			ENCOUNTER_CONTRACTS.profile_counts(1, 2, 9, 0)
-		]),
-		"Onslaught": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(7, 2, 0, 0), [
-			ENCOUNTER_CONTRACTS.profile_counts(4, 1, 0, 0, 0, 0, 0, 0, 1, 0),
-			ENCOUNTER_CONTRACTS.profile_counts(6, 2, 0, 0, 0, 0, 0, 0, 2, 0),
-			ENCOUNTER_CONTRACTS.profile_counts(7, 2, 0, 0, 0, 0, 0, 0, 3, 0),
-			ENCOUNTER_CONTRACTS.profile_counts(8, 3, 0, 0, 0, 0, 0, 0, 4, 0)
-		]),
-		"Fortress": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(1, 0, 1, 4), [
-			ENCOUNTER_CONTRACTS.profile_counts(1, 0, 1, 2),
-			ENCOUNTER_CONTRACTS.profile_counts(1, 0, 1, 5),
-			ENCOUNTER_CONTRACTS.profile_counts(2, 0, 1, 7),
-			ENCOUNTER_CONTRACTS.profile_counts(2, 0, 2, 9)
-		]),
-		"Blitz": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(1, 0, 0, 0, 3, 1), [
-			ENCOUNTER_CONTRACTS.profile_counts(1, 0, 0, 0, 2, 1),
-			ENCOUNTER_CONTRACTS.profile_counts(2, 0, 0, 0, 3, 1),
-			ENCOUNTER_CONTRACTS.profile_counts(3, 0, 0, 0, 3, 1),
-			ENCOUNTER_CONTRACTS.profile_counts(4, 0, 0, 0, 3, 2)
-		]),
-		"Suppression": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(1, 1, 2, 1, 0, 0, 2), [
-			ENCOUNTER_CONTRACTS.profile_counts(1, 1, 1, 1, 0, 0, 2),
-			ENCOUNTER_CONTRACTS.profile_counts(1, 1, 2, 1, 0, 0, 3),
-			ENCOUNTER_CONTRACTS.profile_counts(2, 1, 3, 2, 0, 0, 3),
-			ENCOUNTER_CONTRACTS.profile_counts(2, 2, 4, 2, 0, 0, 4)
-		]),
-		"Vanguard": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(2, 2, 0, 3), [
-			ENCOUNTER_CONTRACTS.profile_counts(1, 2, 0, 2),
-			ENCOUNTER_CONTRACTS.profile_counts(2, 3, 0, 3),
-			ENCOUNTER_CONTRACTS.profile_counts(2, 4, 0, 4),
-			ENCOUNTER_CONTRACTS.profile_counts(3, 5, 0, 4)
-		]),
-		"Ambush": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(2, 0, 0, 0, 4, 0, 1, 0, 0, 1), [
-			ENCOUNTER_CONTRACTS.profile_counts(1, 0, 0, 0, 3, 0, 1, 0, 0, 1),
-			ENCOUNTER_CONTRACTS.profile_counts(2, 0, 0, 0, 4, 0, 1, 0, 0, 1),
-			ENCOUNTER_CONTRACTS.profile_counts(3, 0, 0, 0, 4, 0, 2, 0, 0, 2),
-			ENCOUNTER_CONTRACTS.profile_counts(4, 0, 0, 0, 5, 0, 3, 0, 0, 2)
-		]),
-		"Convergence": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(3, 0, 0, 0, 0, 0, 0, 2, 0, 0), [
-			ENCOUNTER_CONTRACTS.profile_counts(2, 0, 0, 0, 0, 0, 0, 1, 0, 0),
-			ENCOUNTER_CONTRACTS.profile_counts(3, 0, 0, 0, 0, 0, 0, 2, 0, 0),
-			ENCOUNTER_CONTRACTS.profile_counts(4, 0, 0, 0, 0, 0, 0, 3, 0, 0),
-			ENCOUNTER_CONTRACTS.profile_counts(5, 0, 0, 0, 0, 0, 0, 4, 0, 0)
-		]),
-		"Gauntlet": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(1, 1, 1, 1, 1, 0, 1), [
-			ENCOUNTER_CONTRACTS.profile_counts(1, 1, 1, 1, 1, 0, 1),
-			ENCOUNTER_CONTRACTS.profile_counts(2, 1, 1, 1, 1, 0, 1),
-			ENCOUNTER_CONTRACTS.profile_counts(3, 1, 1, 1, 2, 0, 1),
-			ENCOUNTER_CONTRACTS.profile_counts(4, 2, 1, 1, 2, 0, 1)
-		])
-	}
+	_bearing_definitions_cache = ENCOUNTER_DEFINITION_DATA.get_bearing_definitions().duplicate(true)
 	return _bearing_definitions_cache
 
 func _get_bearing_definition(label: String) -> Dictionary:
