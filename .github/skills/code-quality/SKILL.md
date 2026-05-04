@@ -221,6 +221,25 @@ Do not pass placeholder or immediately-overwritten values to a function just to 
 
 ---
 
+### 9. Keep One Runtime Owner Per Behavior
+
+When behavior is extracted into a dedicated runtime module, remove mirrored logic from the old host script instead of keeping both paths alive.
+
+**Why it matters:**
+
+- Dual implementations drift over time and silently diverge.
+- Readers cannot tell which file is authoritative for bug fixes.
+- Every tuning change becomes a multi-file risk.
+
+**How to apply:**
+
+- Choose one owner (for example objective runtime) for each behavior loop and VFX state machine.
+- Replace old pass-through wrappers and copied update blocks with a single direct call path.
+- Keep host scripts focused on orchestration/state ownership, not duplicated behavior internals.
+- After consolidation, grep for removed method names to ensure no stale call sites remain.
+
+---
+
 ### 9. Encode Damage Semantics as Data
 
 When gameplay distinguishes flat, scaling, and hybrid damage, store that classification in a shared data source and consume it from UI/runtime code.
@@ -228,7 +247,7 @@ When gameplay distinguishes flat, scaling, and hybrid damage, store that classif
 **Why it matters:**
 
 - Prevents wording drift between card text, HUD, and runtime behavior.
-- Makes balancing safer by separating *what kind of damage* from per-skill numbers.
+- Makes balancing safer by separating _what kind of damage_ from per-skill numbers.
 - Reduces copy-pasted labels like `[Flat]`/`[Scaling]` across multiple files.
 
 **How to apply:**
