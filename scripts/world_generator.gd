@@ -41,6 +41,7 @@ const RUN_SESSION_SCRIPT := preload("res://scripts/core/run_session.gd")
 const WORLD_BOOTSTRAP_COORDINATOR_SCRIPT := preload("res://scripts/core/world_bootstrap_coordinator.gd")
 const ENCOUNTER_ROUTE_CONTROLLER_SCRIPT := preload("res://scripts/core/encounter_route_controller.gd")
 const OBJECTIVE_LIFECYCLE_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_lifecycle_coordinator.gd")
+const OBJECTIVE_FRAME_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_frame_coordinator.gd")
 const OBJECTIVE_PROGRESS_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_progress_coordinator.gd")
 const RUN_CONTEXT_PATH := "/root/RunContext"
 const MENU_SCENE_PATH := "res://scenes/Menu.tscn"
@@ -181,6 +182,7 @@ var run_session
 var bootstrap_coordinator
 var encounter_route_controller
 var objective_lifecycle_coordinator
+var objective_frame_coordinator
 var objective_progress_coordinator
 
 func _apply_debug_settings_from_node() -> void:
@@ -244,6 +246,7 @@ func _initialize_bootstrap_context() -> void:
 	run_session = RUN_SESSION_SCRIPT.new()
 	run_session.reset_for_new_run()
 	objective_lifecycle_coordinator = OBJECTIVE_LIFECYCLE_COORDINATOR_SCRIPT.new()
+	objective_frame_coordinator = OBJECTIVE_FRAME_COORDINATOR_SCRIPT.new()
 	objective_progress_coordinator = OBJECTIVE_PROGRESS_COORDINATOR_SCRIPT.new()
 	power_registry_instance = POWER_REGISTRY.new()
 	player = get_node_or_null(player_path) as Node2D
@@ -833,10 +836,8 @@ func _process(delta: float) -> void:
 	_keep_enemies_inside_current_room()
 	_keep_player_inside_camera_view()
 	var _grace_active := _update_encounter_intro_grace()
-	if not _grace_active:
-		_update_objective_state(delta)
-	_update_priority_target_marker(delta)
-	if objective_manager.active_objective_kind == "hold_the_line" or objective_manager.control_radius > 0.0:
+	var objective_frame_result := objective_frame_coordinator.tick(objective_manager, objective_runtime, delta, _grace_active)
+	if bool(objective_frame_result.get("should_redraw", false)):
 		queue_redraw()
 	_try_use_door()
 	_update_encounter_state()
@@ -864,9 +865,7 @@ func _refresh_frame_ui() -> void:
 	_sync_renderer()
 
 func _draw() -> void:
-	if objective_manager.control_radius <= 0.0:
-		return
-	if objective_manager.active_objective_kind != "hold_the_line" and objective_manager.control_progress <= 0.0:
+	if not objective_manager.should_draw_control_overlay():
 		return
 	var goal := maxf(0.01, objective_manager.control_goal)
 	var progress_ratio := clampf(objective_manager.control_progress / goal, 0.0, 1.0)
@@ -886,10 +885,6 @@ func _draw() -> void:
 	draw_arc(objective_manager.control_anchor, objective_manager.control_radius - 8.0, -PI * 0.5, -PI * 0.5 + TAU * progress_ratio, 64, progress_color, 6.0)
 	draw_circle(objective_manager.control_anchor, 8.0, Color(1.0, 0.96, 0.72, 0.75))
 
-func _update_objective_state(delta: float) -> void:
-	if is_instance_valid(objective_runtime):
-		objective_runtime.update_objective_state(delta)
-
 func _clamp_position_to_current_room(target_position: Vector2, margin: float = 28.0) -> Vector2:
 	if current_room_size == Vector2.ZERO:
 		return target_position
@@ -898,10 +893,6 @@ func _clamp_position_to_current_room(target_position: Vector2, margin: float = 2
 		clampf(target_position.x, -half.x, half.x),
 		clampf(target_position.y, -half.y, half.y)
 	)
-
-func _update_priority_target_marker(delta: float) -> void:
-	if is_instance_valid(objective_runtime):
-		objective_runtime.update_priority_target_marker(delta)
 
 func _get_hud_state() -> Dictionary:
 	var display_room_depth := room_depth
@@ -1045,7 +1036,7 @@ func _keep_player_inside_camera_view() -> void:
 func _update_encounter_state() -> void:
 	if choosing_next_room or run_cleared:
 		return
-	if objective_manager.active_objective_kind == "last_stand" or objective_manager.active_objective_kind == "cut_the_signal" or objective_manager.active_objective_kind == "hold_the_line":
+	if objective_manager.has_active_objective():
 		return
 	if active_room_enemy_count > 0:
 		return

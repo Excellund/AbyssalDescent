@@ -67,15 +67,15 @@ Mutators match a profile if any declared archetype is present. If a filtered poo
 3. Prefer data edits over new branching logic.
 4. Preserve encounter identity first: do not flatten distinct encounters into similar mixes.
 5. Keep debug encounter and mutator entry points working.
-
-- Respect `DebugSettings.enabled` gating for startup debug behavior.
-
-6. Keep `scripts/world_generator.gd` as an orchestrator only for objectives:
+6. Respect `DebugSettings.enabled` gating for startup debug behavior.
+7. Keep `scripts/world_generator.gd` as an orchestrator only for objectives:
 
 - Route enemy-kill objective mutations through a dedicated coordinator/runtime surface (for example `scripts/core/objective_progress_coordinator.gd`) instead of writing objective-manager internals inline.
+- Route per-frame objective tick and control-overlay redraw decisions through a coordinator surface (for example `scripts/core/objective_frame_coordinator.gd`) instead of inline world loop checks.
 - Build HUD objective fields from `objective_manager.get_hud_state()` instead of duplicating direct field reads in world orchestration code.
+- Keep objective kind and control-overlay predicates on `objective_manager` helpers (for example `has_active_objective`, `should_draw_control_overlay`) rather than hardcoded world-side string checks.
 
-6. If an encounter name or gameplay meaning changes, update `scripts/shared/glossary_data.gd` in the same change.
+8. If an encounter name or gameplay meaning changes, update `scripts/shared/glossary_data.gd` in the same change.
 
 ## Verification
 

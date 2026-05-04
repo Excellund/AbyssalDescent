@@ -171,6 +171,20 @@ func get_hunt_target_max_health() -> int:
 	return hunt_target_enemy.get_max_health()
 
 
+## Whether any room objective is currently active
+func has_active_objective() -> bool:
+	return active_objective_kind == "last_stand" or active_objective_kind == "cut_the_signal" or active_objective_kind == "hold_the_line"
+
+
+## Whether hold-the-line control overlay should currently render
+func should_draw_control_overlay() -> bool:
+	if control_radius <= 0.0:
+		return false
+	if active_objective_kind == "hold_the_line":
+		return true
+	return control_progress > 0.0
+
+
 ## Get as HUD-compatible dictionary
 func get_hud_state() -> Dictionary:
 	return {
