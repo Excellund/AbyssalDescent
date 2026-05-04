@@ -138,6 +138,7 @@ signal damage_taken(raw_amount: int, final_amount: int, damage_context: Dictiona
 @export var attack_arc_degrees: float = 130.0
 @export var attack_cooldown: float = 0.28
 @export var attack_lock_duration: float = 0.12
+@export var melee_target_sweep_window: float = 0.1
 @export var battle_trance_duration: float = 1.25
 
 var dash_time_left: float = 0.0
@@ -701,13 +702,47 @@ func _is_overlapping_enemy_body() -> bool:
 	return false
 
 func _get_body_radius_for(node: Node, fallback: float) -> float:
-	for child in node.get_children():
-		if not (child is CollisionShape2D):
-			continue
-		var shape_node := child as CollisionShape2D
-		if shape_node.shape is CircleShape2D:
-			return maxf(1.0, (shape_node.shape as CircleShape2D).radius)
+	var owner_position := Vector2.ZERO
+	if node is Node2D:
+		owner_position = (node as Node2D).global_position
+	var max_radius := 0.0
+	var pending: Array[Node] = [node]
+	while not pending.is_empty():
+		var current: Node = pending.pop_back() as Node
+		for child in current.get_children():
+			pending.append(child)
+			if not (child is CollisionShape2D):
+				continue
+			var shape_node := child as CollisionShape2D
+			if shape_node.shape == null:
+				continue
+			var shape_radius := _get_collision_shape_radius(shape_node.shape)
+			if shape_radius <= 0.0:
+				continue
+			var scale_factor := 1.0
+			var offset := 0.0
+			if shape_node is Node2D:
+				var shape_node_2d := shape_node as Node2D
+				var shape_scale := shape_node_2d.global_scale.abs()
+				scale_factor = maxf(shape_scale.x, shape_scale.y)
+				offset = owner_position.distance_to(shape_node_2d.global_position)
+			max_radius = maxf(max_radius, shape_radius * scale_factor + offset)
+	if max_radius > 0.0:
+		return maxf(1.0, max_radius)
 	return fallback
+
+func _get_collision_shape_radius(shape: Shape2D) -> float:
+	if shape is CircleShape2D:
+		return maxf(0.0, (shape as CircleShape2D).radius)
+	if shape is RectangleShape2D:
+		return ((shape as RectangleShape2D).size).length() * 0.5
+	if shape is CapsuleShape2D:
+		var capsule := shape as CapsuleShape2D
+		return capsule.radius + capsule.height * 0.5
+	if shape is SegmentShape2D:
+		var segment := shape as SegmentShape2D
+		return maxf(segment.a.length(), segment.b.length())
+	return 0.0
 
 func _update_ground_movement(direction: Vector2, delta: float) -> void:
 	var trance_speed_bonus := 0.0
@@ -1266,14 +1301,37 @@ func _get_damageable_enemies_in_cone(origin: Vector2, attack_direction: Vector2,
 		var enemy_id := enemy_body.get_instance_id()
 		if seen_ids.has(enemy_id):
 			continue
-		var to_enemy := enemy_body.global_position - origin
-		if to_enemy.length() > range_limit:
-			continue
-		if to_enemy.length_squared() > 0.000001 and absf(attack_direction.angle_to(to_enemy.normalized())) > half_arc_radians:
+		if not _is_enemy_in_attack_cone(enemy_body, origin, attack_direction, range_limit, half_arc_radians):
 			continue
 		seen_ids[enemy_id] = true
 		result.append(enemy_body)
 	return result
+
+func _is_enemy_in_attack_cone(enemy_body: Node2D, origin: Vector2, attack_direction: Vector2, range_limit: float, half_arc_radians: float) -> bool:
+	var sample_positions: Array[Vector2] = [enemy_body.global_position]
+	var enemy_radius := _get_body_radius_for(enemy_body, 13.0)
+	if enemy_body is CharacterBody2D:
+		var moving_enemy := enemy_body as CharacterBody2D
+		var enemy_velocity := moving_enemy.velocity
+		if enemy_velocity.length_squared() > 1.0:
+			var rewind_window := clampf(melee_target_sweep_window, 0.0, 0.18)
+			if rewind_window > 0.0:
+				var rewind_position := enemy_body.global_position - enemy_velocity * rewind_window
+				sample_positions.append(rewind_position)
+				sample_positions.append((enemy_body.global_position + rewind_position) * 0.5)
+
+	for sample_position in sample_positions:
+		var to_enemy := sample_position - origin
+		var distance := to_enemy.length()
+		if distance > range_limit + enemy_radius:
+			continue
+		if to_enemy.length_squared() > 0.000001:
+			var angle_error := absf(attack_direction.angle_to(to_enemy.normalized()))
+			var angular_grace := asin(clampf(enemy_radius / maxf(0.001, distance), 0.0, 1.0))
+			if angle_error > half_arc_radians + angular_grace:
+				continue
+		return true
+	return false
 
 func _resolve_attack_hit(enemy_body: Node2D, base_damage: int, source: String, rupture_triggered_enemy_ids: Dictionary, rupture_hit_enemy_ids: Dictionary, proc_flags: Dictionary, sigil_burst_state: Dictionary) -> int:
 	var enemy_id := enemy_body.get_instance_id()

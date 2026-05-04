@@ -114,6 +114,12 @@ func _ready() -> void:
 			var shape_node := child as CollisionShape2D
 			if shape_node.shape is CircleShape2D:
 				(shape_node.shape as CircleShape2D).radius = 38.0
+			elif shape_node.shape is RectangleShape2D:
+				(shape_node.shape as RectangleShape2D).size = Vector2(76.0, 76.0)
+			elif shape_node.shape is CapsuleShape2D:
+				var capsule := shape_node.shape as CapsuleShape2D
+				capsule.radius = 26.0
+				capsule.height = 24.0
 				break
 	configure_health_bar_visuals(Vector2(-74.0, -82.0), Vector2(148.0, 12.0))
 
