@@ -323,6 +323,7 @@ var indomitable_damage_bank: float = 0.0
 var _indomitable_last_bank_gain_time: float = -999.0
 var _indomitable_attack_hit_count: int = 0
 var _indomitable_primed_this_attack: bool = false
+var _indomitable_oath_spent_this_attack: bool = false
 var _indomitable_pending_melee_bonus: int = 0
 
 # Objective mutators
@@ -1397,6 +1398,7 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 	var did_hit := false
 	_indomitable_attack_hit_count = 0
 	_indomitable_primed_this_attack = false
+	_indomitable_oath_spent_this_attack = false
 	_indomitable_pending_melee_bonus = 0
 	var strike_damage := int(melee_context.get("damage", damage))
 	strike_damage = _apply_objective_mutator_damage_mult(strike_damage)
@@ -1418,6 +1420,8 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 	var oath_target_point := global_position + attack_direction * strike_range
 	if _indomitable_spirit_primed:
 		_indomitable_pending_melee_bonus = _consume_indomitable_spirit_bonus(oath_target_point)
+		if _indomitable_pending_melee_bonus > 0:
+			_indomitable_oath_spent_this_attack = true
 	var retort_active: bool = passive_iron_retort and iron_retort_window_left > 0.0
 	if retort_active:
 		strike_damage = int(round(float(strike_damage) * 1.7))
@@ -1573,6 +1577,7 @@ func clear_lingering_combat_effects() -> void:
 	_indomitable_last_bank_gain_time = -999.0
 	_indomitable_attack_hit_count = 0
 	_indomitable_primed_this_attack = false
+	_indomitable_oath_spent_this_attack = false
 	_indomitable_pending_melee_bonus = 0
 	apex_predator_combo_hits = 0
 	apex_predator_combo_left = 0.0
@@ -2456,6 +2461,8 @@ func _gain_indomitable_oath_from_hit(enemy_node: Object, source: String) -> void
 	if not (enemy_node is Node2D):
 		return
 	if source != "melee" and source != "razor_wind":
+		return
+	if _indomitable_oath_spent_this_attack and (source == "melee" or source == "razor_wind"):
 		return
 	var combo_index := _indomitable_attack_hit_count
 	_indomitable_attack_hit_count += 1
