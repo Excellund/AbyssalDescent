@@ -802,65 +802,38 @@ func _get_mutator_icon_texture(icon_shape_id: String) -> Texture2D:
 		_:
 			return null
 
-func _get_killbox_icon_texture() -> Texture2D:
-	if _mutator_icon_killbox != null:
-		return _mutator_icon_killbox
-	var icon_resource := load(MUTATOR_ICON_KILLBOX_PATH)
+func _load_cached_mutator_icon(cached_icon: Texture2D, icon_path: String, fallback_icon: Texture2D) -> Texture2D:
+	if cached_icon != null:
+		return cached_icon
+	var icon_resource := load(icon_path)
 	if icon_resource is Texture2D:
-		_mutator_icon_killbox = icon_resource as Texture2D
-		return _mutator_icon_killbox
-	return MUTATOR_ICON_SIEGEBREAK
+		return icon_resource as Texture2D
+	return fallback_icon
+
+func _get_killbox_icon_texture() -> Texture2D:
+	_mutator_icon_killbox = _load_cached_mutator_icon(_mutator_icon_killbox, MUTATOR_ICON_KILLBOX_PATH, MUTATOR_ICON_SIEGEBREAK)
+	return _mutator_icon_killbox
 
 func _get_fortified_icon_texture() -> Texture2D:
-	if _mutator_icon_fortified != null:
-		return _mutator_icon_fortified
-	var icon_resource := load(MUTATOR_ICON_FORTIFIED_PATH)
-	if icon_resource is Texture2D:
-		_mutator_icon_fortified = icon_resource as Texture2D
-		return _mutator_icon_fortified
-	return MUTATOR_ICON_SIEGEBREAK
+	_mutator_icon_fortified = _load_cached_mutator_icon(_mutator_icon_fortified, MUTATOR_ICON_FORTIFIED_PATH, MUTATOR_ICON_SIEGEBREAK)
+	return _mutator_icon_fortified
 
 func _get_hunters_focus_icon_texture() -> Texture2D:
-	if _mutator_icon_hunters_focus != null:
-		return _mutator_icon_hunters_focus
-	var icon_resource := load(MUTATOR_ICON_HUNTERS_FOCUS_PATH)
-	if icon_resource is Texture2D:
-		_mutator_icon_hunters_focus = icon_resource as Texture2D
-		return _mutator_icon_hunters_focus
-	return MUTATOR_ICON_IRON_VOLLEY
+	_mutator_icon_hunters_focus = _load_cached_mutator_icon(_mutator_icon_hunters_focus, MUTATOR_ICON_HUNTERS_FOCUS_PATH, MUTATOR_ICON_IRON_VOLLEY)
+	return _mutator_icon_hunters_focus
 
 func _get_combo_relay_icon_texture() -> Texture2D:
-	if _mutator_icon_combo_relay != null:
-		return _mutator_icon_combo_relay
-	var icon_resource := load(MUTATOR_ICON_COMBO_RELAY_PATH)
-	if icon_resource is Texture2D:
-		_mutator_icon_combo_relay = icon_resource as Texture2D
-		return _mutator_icon_combo_relay
-	return _get_hunters_focus_icon_texture()
+	_mutator_icon_combo_relay = _load_cached_mutator_icon(_mutator_icon_combo_relay, MUTATOR_ICON_COMBO_RELAY_PATH, _get_hunters_focus_icon_texture())
+	return _mutator_icon_combo_relay
 
 func _get_convergence_icon_texture() -> Texture2D:
-	if _mutator_icon_convergence != null:
-		return _mutator_icon_convergence
-	var icon_resource := load(MUTATOR_ICON_CONVERGENCE_PATH)
-	if icon_resource is Texture2D:
-		_mutator_icon_convergence = icon_resource as Texture2D
-		return _mutator_icon_convergence
-	return MUTATOR_ICON_FLASHPOINT
+	_mutator_icon_convergence = _load_cached_mutator_icon(_mutator_icon_convergence, MUTATOR_ICON_CONVERGENCE_PATH, MUTATOR_ICON_FLASHPOINT)
+	return _mutator_icon_convergence
 
 func _get_conflagration_icon_texture() -> Texture2D:
-	if _mutator_icon_conflagration != null:
-		return _mutator_icon_conflagration
-	var icon_resource := load(MUTATOR_ICON_CONFLAGRATION_PATH)
-	if icon_resource is Texture2D:
-		_mutator_icon_conflagration = icon_resource as Texture2D
-		return _mutator_icon_conflagration
-	return MUTATOR_ICON_SIEGEBREAK
+	_mutator_icon_conflagration = _load_cached_mutator_icon(_mutator_icon_conflagration, MUTATOR_ICON_CONFLAGRATION_PATH, MUTATOR_ICON_SIEGEBREAK)
+	return _mutator_icon_conflagration
 
 func _get_tether_web_icon_texture() -> Texture2D:
-	if _mutator_icon_tether_web != null:
-		return _mutator_icon_tether_web
-	var icon_resource := load(MUTATOR_ICON_TETHER_WEB_PATH)
-	if icon_resource is Texture2D:
-		_mutator_icon_tether_web = icon_resource as Texture2D
-		return _mutator_icon_tether_web
-	return _get_convergence_icon_texture()
+	_mutator_icon_tether_web = _load_cached_mutator_icon(_mutator_icon_tether_web, MUTATOR_ICON_TETHER_WEB_PATH, _get_convergence_icon_texture())
+	return _mutator_icon_tether_web
