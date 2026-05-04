@@ -249,14 +249,34 @@ func _apply_debug_settings_from_node() -> void:
 	telemetry_spike_timeout_seconds = float(telemetry_timeout_value) if telemetry_timeout_value != null else 8.0
 
 func _ready() -> void:
+	_validate_encounter_content_sync()
+	_initialize_bootstrap_context()
+	_setup_world_bootstrap_state()
+	_setup_run_systems_phase()
+	_setup_ui_phase()
+	_setup_objective_runtime_system()
+	if _run_resume_flow():
+		return
+	if _run_debug_boot_flow():
+		return
+	_begin_new_run_flow()
+
+func _validate_encounter_content_sync() -> void:
 	var encounter_sync_issues := ENCOUNTER_CONTRACTS.validate_encounter_sync(GLOSSARY_DATA._encounter_rows())
 	for issue in encounter_sync_issues:
 		push_error("[Encounter Sync] %s" % issue)
+
+func _initialize_bootstrap_context() -> void:
 	rng.randomize()
 	_apply_debug_settings_from_node()
 	_maybe_start_telemetry_spike_probe()
 	power_registry_instance = POWER_REGISTRY.new()
 	player = get_node_or_null(player_path) as Node2D
+	_setup_player_runtime_bindings()
+	_sync_audio_settings_from_context()
+	endless_boss_defeated = false
+
+func _setup_player_runtime_bindings() -> void:
 	if is_instance_valid(player):
 		player.set_power_registry(power_registry_instance)
 	if is_instance_valid(player):
@@ -268,17 +288,24 @@ func _ready() -> void:
 		if player.has_signal("died"):
 			player.connect("died", Callable(self, "_on_player_died_for_telemetry"))
 			player.connect("died", Callable(self, "_on_player_died"))
-	_sync_audio_settings_from_context()
-	endless_boss_defeated = false
 
+func _setup_world_bootstrap_state() -> void:
 	current_room_size = room_base_size
 	current_room_label = "Starting Chamber"
 	_apply_camera_bounds_for_room(current_room_size)
+
+func _setup_run_systems_phase() -> void:
 	music_system = MUSIC_SYSTEM_SCRIPT.new()
 	add_child(music_system)
 	music_system.initialize(normal_room_music, boss_room_music, music_volume_db, music_crossfade_duration)
 	encounter_flow_system = ENCOUNTER_FLOW_SYSTEM_SCRIPT.new()
 	add_child(encounter_flow_system)
+	_setup_reward_selection_system()
+	_setup_encounter_profile_builder_system()
+	_setup_enemy_spawner_system()
+	_play_room_music(false, false, music_intro_fade_duration)
+
+func _setup_reward_selection_system() -> void:
 	reward_selection_ui = REWARD_SELECTION_UI_SCRIPT.new()
 	add_child(reward_selection_ui)
 	reward_selection_ui.initialize(boon_choice_count, boon_reveal_duration)
@@ -286,6 +313,8 @@ func _ready() -> void:
 		reward_selection_ui.connect("reward_selected", Callable(self, "_on_reward_selected"))
 	if reward_selection_ui.has_signal("reward_offers_presented"):
 		reward_selection_ui.connect("reward_offers_presented", Callable(self, "_on_reward_offers_presented"))
+
+func _setup_encounter_profile_builder_system() -> void:
 	encounter_profile_builder = ENCOUNTER_PROFILE_BUILDER_SCRIPT.new()
 	add_child(encounter_profile_builder)
 	encounter_profile_builder.initialize(rng)
@@ -320,6 +349,8 @@ func _ready() -> void:
 		"shielders_per_room": shielders_per_room,
 		"hard_room_enemy_bonus": hard_room_enemy_bonus
 	})
+
+func _setup_enemy_spawner_system() -> void:
 	enemy_spawner = ENEMY_SPAWNER_SCRIPT.new()
 	add_child(enemy_spawner)
 	enemy_spawner.initialize(self, player, rng, {
@@ -334,7 +365,8 @@ func _ready() -> void:
 		"pyre": ENEMY_PYRE_SCRIPT,
 		"tether": ENEMY_TETHER_SCRIPT
 	}, Callable(self, "_on_room_enemy_died"))
-	_play_room_music(false, false, music_intro_fade_duration)
+
+func _setup_ui_phase() -> void:
 	hud = WORLD_HUD_SCRIPT.new()
 	add_child(hud)
 	hud.setup(encounter_count, 18.0)
@@ -369,26 +401,34 @@ func _ready() -> void:
 	build_detail_panel.setup()
 	build_detail_panel.connect("build_detail_opened", Callable(self, "_on_build_detail_opened"))
 	build_detail_panel.connect("build_detail_closed", Callable(self, "_on_build_detail_closed"))
+
+func _setup_objective_runtime_system() -> void:
 	objective_runtime = OBJECTIVE_RUNTIME_SCRIPT.new()
 	add_child(objective_runtime)
 	objective_runtime.initialize(self, rng)
+
+func _run_resume_flow() -> bool:
 	var resumed_run := _try_resume_saved_run()
 	_initialize_run_telemetry(not _is_debug_boot_session())
 	hud.refresh(_get_hud_state(), player)
-	if resumed_run:
-		return
+	return resumed_run
+
+func _run_debug_boot_flow() -> bool:
 	_apply_debug_start_powers_if_needed()
 	if settings_enabled:
 		match end_screen_preview:
 			DEBUG_ENUMS.EndScreenPreview.VICTORY:
 				victory_screen.show_victory(0, victory_unlock_tier)
-				return
+				return true
 			DEBUG_ENUMS.EndScreenPreview.DEFEAT:
 				defeat_screen.show_defeat("Debug Arena", max(1, start_depth))
-				return
+				return true
 		if start_encounter != ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_NONE:
 			_start_debug_selected_encounter(start_encounter)
-			return
+			return true
+	return false
+
+func _begin_new_run_flow() -> void:
 	if settings_enabled and skip_starting_boon_selection:
 		pending_room_reward = ENUMS.RewardMode.BOON
 		_begin_room(_build_skirmish_profile(room_depth))
