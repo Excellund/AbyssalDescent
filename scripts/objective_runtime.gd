@@ -338,15 +338,7 @@ func _get_control_objective_difficulty_params(difficulty_rank: int) -> Dictionar
 func _control_rank_curve_progress(difficulty_rank: int) -> float:
 	return clampf(float(clampi(difficulty_rank, 0, 3)) / 3.0, 0.0, 1.0)
 
-func update_control_objective_state(delta: float) -> void:
-	if world.choosing_next_room or world.run_cleared:
-		return
-	var difficulty_rank := DIFFICULTY_CONFIG.get_difficulty_rank(int(world.current_difficulty_tier))
-	var params := _get_control_objective_difficulty_params(difficulty_rank)
-	var progress_gain_mult: float = params["progress_gain_mult"]
-	var contested_decay_mult: float = params["contested_decay_mult"]
-	var out_of_zone_decay_mult: float = params["out_of_zone_decay_mult"]
-	var refill_spawn_cap: float = params["refill_spawn_cap"]
+func _update_control_relief_phase_timers(delta: float) -> void:
 	if objective_manager.time_left > 0.0:
 		objective_manager.time_left = maxf(0.0, objective_manager.time_left - delta)
 	elif not _control_relief_phase_announced:
@@ -354,28 +346,35 @@ func update_control_objective_state(delta: float) -> void:
 		world.hud.show_banner("Line Stabilizing", "Hold on and reclaim the zone")
 	if objective_manager.time_left <= 0.0:
 		objective_manager.spawn_interval = minf(_control_spawn_interval_relief_cap, objective_manager.spawn_interval + delta * HoldTheLineConfig.SPAWN_INTERVAL_RELIEF_PER_SECOND)
+
+func _apply_control_kill_relief() -> void:
 	var kills_this_room: int = objective_manager.kills - objective_manager.control_kill_baseline
 	var relief_kills := maxi(0, kills_this_room - _control_relief_kills_applied)
-	if relief_kills > 0:
-		var relief_amount := float(relief_kills) * HoldTheLineConfig.SPAWN_INTERVAL_RELIEF_PER_KILL
-		objective_manager.spawn_interval = minf(_control_spawn_interval_relief_cap, objective_manager.spawn_interval + relief_amount)
-		_control_relief_kills_applied += relief_kills
+	if relief_kills <= 0:
+		return
+	var relief_amount := float(relief_kills) * HoldTheLineConfig.SPAWN_INTERVAL_RELIEF_PER_KILL
+	objective_manager.spawn_interval = minf(_control_spawn_interval_relief_cap, objective_manager.spawn_interval + relief_amount)
+	_control_relief_kills_applied += relief_kills
+
+func _update_control_zone_state() -> void:
 	var has_player := is_instance_valid(world.player)
 	var anchor: Vector2 = objective_manager.control_anchor
 	var radius := maxf(1.0, objective_manager.control_radius)
 	objective_manager.control_player_inside = has_player and world.player.global_position.distance_to(anchor) <= radius
 	objective_manager.control_enemies_in_zone = _count_control_zone_enemies(anchor, radius)
 	objective_manager.control_contested = objective_manager.control_enemies_in_zone > objective_manager.control_contest_threshold
+
+func _apply_control_progress(delta: float, progress_gain_mult: float, contested_decay_mult: float, out_of_zone_decay_mult: float) -> bool:
 	if objective_manager.control_player_inside and not objective_manager.control_contested:
 		objective_manager.control_progress = minf(objective_manager.control_goal, objective_manager.control_progress + delta * progress_gain_mult)
 	elif objective_manager.control_player_inside:
 		objective_manager.control_progress = maxf(0.0, objective_manager.control_progress - objective_manager.control_decay_rate * delta * contested_decay_mult)
 	else:
 		objective_manager.control_progress = maxf(0.0, objective_manager.control_progress - objective_manager.control_decay_rate * delta * out_of_zone_decay_mult)
-	if objective_manager.control_progress >= objective_manager.control_goal:
-		complete_current_objective("Objective Complete", "Control secured")
-		return
-	var pressure_floor: int = objective_manager.spawn_batch + params["pressure_floor_bonus"]
+	return objective_manager.control_progress >= objective_manager.control_goal
+
+func _update_control_spawn_cycle(delta: float, refill_spawn_cap: float, pressure_floor_bonus: int) -> void:
+	var pressure_floor: int = objective_manager.spawn_batch + pressure_floor_bonus
 	if objective_manager.max_enemies > 0:
 		pressure_floor = mini(pressure_floor, objective_manager.max_enemies)
 	var relief_interval_bonus := maxf(0.0, objective_manager.spawn_interval - _control_spawn_interval_base)
@@ -386,6 +385,24 @@ func update_control_objective_state(delta: float) -> void:
 	if objective_manager.spawn_timer <= 0.0:
 		objective_manager.spawn_timer = objective_manager.spawn_interval
 		spawn_control_wave()
+
+func update_control_objective_state(delta: float) -> void:
+	if world.choosing_next_room or world.run_cleared:
+		return
+	var difficulty_rank := DIFFICULTY_CONFIG.get_difficulty_rank(int(world.current_difficulty_tier))
+	var params := _get_control_objective_difficulty_params(difficulty_rank)
+	var progress_gain_mult: float = params["progress_gain_mult"]
+	var contested_decay_mult: float = params["contested_decay_mult"]
+	var out_of_zone_decay_mult: float = params["out_of_zone_decay_mult"]
+	var refill_spawn_cap: float = params["refill_spawn_cap"]
+	var pressure_floor_bonus := int(params["pressure_floor_bonus"])
+	_update_control_relief_phase_timers(delta)
+	_apply_control_kill_relief()
+	_update_control_zone_state()
+	if _apply_control_progress(delta, progress_gain_mult, contested_decay_mult, out_of_zone_decay_mult):
+		complete_current_objective("Objective Complete", "Control secured")
+		return
+	_update_control_spawn_cycle(delta, refill_spawn_cap, pressure_floor_bonus)
 	world.queue_redraw()
 
 func _can_spawn_objective_wave() -> bool:

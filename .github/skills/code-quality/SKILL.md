@@ -258,6 +258,23 @@ When gameplay distinguishes flat, scaling, and hybrid damage, store that classif
 - Keep runtime breakdowns explicit (`base`, `flat_bonus`, `final`) for debugging and telemetry sanity checks.
 
 - Give parameters default values when a sensible default exists and most call sites don't need to override them.
+
+### 10. Split Tick/Update Methods By Phase
+
+When a per-frame or per-tick method starts handling multiple gameplay phases (timer updates, state sampling, progress math, spawn pacing), split it into small private phase methods and keep the orchestration method short.
+
+**Why it matters:**
+
+- Tick methods are high-churn and high-risk; long blocks hide ordering bugs.
+- Phase helpers make side effects explicit and easier to reason about.
+- Balancing changes become safer because each lever lives in one local function.
+
+**How to apply:**
+
+- Keep the top-level tick method as a readable sequence of phase calls.
+- Extract one helper per concern (e.g., relief timers, zone state, progress resolution, spawn cycle).
+- Preserve behavior by moving logic verbatim first, then making small naming-only improvements.
+- Return narrow signals from helpers (for example a `bool` for completion) instead of mutating unrelated state.
 - If a call site overwrites all of a function's outputs immediately after calling it, restructure so the caller passes only what it owns.
 - Prefer a narrow, honest signature over a broad one padded with zeros or empty dicts.
 
