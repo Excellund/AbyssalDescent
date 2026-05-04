@@ -1,6 +1,7 @@
 extends Node
 
 const TELEMETRY_UPLOAD_QUEUE := preload("res://scripts/telemetry_upload_queue.gd")
+const RUN_TELEMETRY_STORE := preload("res://scripts/run_telemetry_store.gd")
 const TELEMETRY_ENDPOINT_SETTING := "application/config/telemetry_upload_endpoint"
 const TELEMETRY_API_KEY_SETTING := "application/config/telemetry_upload_api_key"
 
@@ -109,15 +110,4 @@ func _upload_api_key() -> String:
 	return String(ProjectSettings.get_setting(TELEMETRY_API_KEY_SETTING, "")).strip_edges()
 
 func _is_payload_uploadable(payload: Dictionary) -> bool:
-	if bool(payload.get("is_debug", false)):
-		return false
-	var version := String(payload.get("game_version", "")).strip_edges().to_lower()
-	if version.is_empty():
-		return false
-	if version == "dev":
-		return false
-	if version.contains("debug"):
-		return false
-	if version.contains("dev"):
-		return false
-	return true
+	return RUN_TELEMETRY_STORE.is_upload_payload_eligible(payload)

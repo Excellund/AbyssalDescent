@@ -20,6 +20,20 @@ static func _current_game_version() -> String:
 		return "dev"
 	return configured_version
 
+static func is_upload_payload_eligible(payload: Dictionary) -> bool:
+	if bool(payload.get("is_debug", false)):
+		return false
+	var version := String(payload.get("game_version", "")).strip_edges().to_lower()
+	if version.is_empty():
+		return false
+	if version == "dev":
+		return false
+	if version.contains("debug"):
+		return false
+	if version.contains("dev"):
+		return false
+	return true
+
 static func load_store() -> Dictionary:
 	if not FileAccess.file_exists(TELEMETRY_SAVE_PATH):
 		return _default_store()
