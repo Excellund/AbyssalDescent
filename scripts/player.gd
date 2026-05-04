@@ -2330,7 +2330,7 @@ func _get_void_echo_zone_bonus(enemy_node: Object, base_damage: int) -> int:
 func _consume_indomitable_spirit_bonus(hit_position: Vector2) -> int:
 	if indomitable_spirit_damage_reduction <= 0.0:
 		return 0
-	var bank_bonus := maxi(0.0, indomitable_damage_bank)
+	var bank_bonus := maxf(0.0, indomitable_damage_bank)
 	if bank_bonus <= 0.0:
 		return 0
 	indomitable_damage_bank = 0.0
@@ -2387,7 +2387,7 @@ func _release_apex_momentum_dash_wave(epicenter: Vector2) -> void:
 	if hit_any:
 		dash_cooldown_left = maxf(0.0, dash_cooldown_left - 0.12 * float(stacks))
 	if player_feedback != null and player_feedback.has_method("play_boss_tempo_dash_wave"):
-		player_feedback.play_boss_tempo_dash_wave(epicenter, slash_radius, hit_any)
+		player_feedback.play_boss_tempo_dash_wave(epicenter, slash_radius, hit_any, stacks, apex_momentum_max_stacks)
 
 func _update_void_echo_zones(delta: float) -> void:
 	if void_echo_zones.is_empty():

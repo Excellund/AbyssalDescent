@@ -312,11 +312,11 @@ func _apply_null_ring_hit() -> void:
 
 func _apply_echo_cross_hit() -> void:
 	if is_instance_valid(target) and DAMAGEABLE.can_take_damage(target):
-		var primary_dir := Vector2.RIGHT.rotated(_echo_cross_angle)
-		var secondary_dir := primary_dir.orthogonal()
+		var hit_primary_dir := Vector2.RIGHT.rotated(_echo_cross_angle)
+		var hit_secondary_dir := hit_primary_dir.orthogonal()
 		var half_len := echo_cross_length * 0.5
-		var hit_primary := _distance_point_to_segment(target.global_position, global_position - primary_dir * half_len, global_position + primary_dir * half_len) <= echo_cross_width
-		var hit_secondary := _distance_point_to_segment(target.global_position, global_position - secondary_dir * half_len, global_position + secondary_dir * half_len) <= echo_cross_width
+		var hit_primary := _distance_point_to_segment(target.global_position, global_position - hit_primary_dir * half_len, global_position + hit_primary_dir * half_len) <= echo_cross_width
+		var hit_secondary := _distance_point_to_segment(target.global_position, global_position - hit_secondary_dir * half_len, global_position + hit_secondary_dir * half_len) <= echo_cross_width
 		if hit_primary or hit_secondary:
 			DAMAGEABLE.apply_damage(target, echo_cross_damage, {"source": "enemy_ability", "ability": "lacuna_echo_cross"})
 			_hit_flash_pos = target.global_position
@@ -330,8 +330,8 @@ func _apply_echo_cross_hit() -> void:
 	_spawn_seam(global_position + secondary_dir * arm_reach)
 	_spawn_seam(global_position - secondary_dir * arm_reach)
 
-func _spawn_seam(position: Vector2, duration_mult: float = 1.0, tick_interval_mult: float = 1.0) -> void:
-	var clamped := _clamp_to_arena(position, seam_radius + 18.0)
+func _spawn_seam(seam_position: Vector2, duration_mult: float = 1.0, tick_interval_mult: float = 1.0) -> void:
+	var clamped := _clamp_to_arena(seam_position, seam_radius + 18.0)
 	var seam_time := seam_duration * maxf(0.1, duration_mult)
 	var seam_tick := seam_tick_interval * maxf(0.1, tick_interval_mult)
 	seam_zones.append({
@@ -371,17 +371,17 @@ func _process_seam_zones(delta: float) -> void:
 	for idx in range(expired.size() - 1, -1, -1):
 		seam_zones.remove_at(expired[idx])
 
-func _predict_target_position(scale: float, speed_cap: float = 0.0) -> Vector2:
+func _predict_target_position(prediction_scale: float, speed_cap: float = 0.0) -> Vector2:
 	if not is_instance_valid(target):
 		return global_position
 	var predicted_velocity := _tracked_target_velocity
 	if speed_cap > 0.0 and predicted_velocity.length() > speed_cap:
 		predicted_velocity = predicted_velocity.normalized() * speed_cap
-	return _clamp_to_arena(target.global_position + predicted_velocity * scale, 36.0)
+	return _clamp_to_arena(target.global_position + predicted_velocity * prediction_scale, 36.0)
 
-func _clamp_to_arena(position: Vector2, margin: float) -> Vector2:
+func _clamp_to_arena(world_position: Vector2, margin: float) -> Vector2:
 	var half := arena_size * 0.5 - Vector2.ONE * margin
-	return Vector2(clampf(position.x, -half.x, half.x), clampf(position.y, -half.y, half.y))
+	return Vector2(clampf(world_position.x, -half.x, half.x), clampf(world_position.y, -half.y, half.y))
 
 func _can_move_in_direction(direction: Vector2, probe_distance: float) -> bool:
 	if direction.length_squared() <= 0.000001:

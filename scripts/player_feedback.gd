@@ -274,12 +274,12 @@ func update_oath_bank_bar(bank: float, bank_reference: float, enabled: bool) -> 
 		return
 	var clamped_bank := maxf(0.0, bank)
 	var max_bank := maxf(1.0, bank_reference)
-	var visible := enabled or clamped_bank > 0.0
-	oath_bar.visible = visible
+	var bar_visible := enabled or clamped_bank > 0.0
+	oath_bar.visible = bar_visible
 	if oath_bar_glow != null:
-		oath_bar_glow.visible = visible
+		oath_bar_glow.visible = bar_visible
 	_layout_status_bars()
-	if not visible:
+	if not bar_visible:
 		return
 	var bank_ratio := clampf(clamped_bank / max_bank, 0.0, 1.0)
 	oath_bar.max_value = max_bank
@@ -842,13 +842,56 @@ func play_boss_tempo_stack(player_global: Vector2, stacks: int, max_stacks: int)
 	play_world_ring(player_global, radius, Color(1.0, 0.86, 0.42, 0.44 + ratio * 0.34), 0.1)
 	play_world_ring(player_global, radius * 0.56, Color(1.0, 0.96, 0.74, 0.24 + ratio * 0.22), 0.08)
 
-func play_boss_tempo_dash_wave(epicenter_global: Vector2, radius: float, landed: bool) -> void:
-	if landed:
-		play_world_ring(epicenter_global, radius * 0.74, Color(1.0, 0.84, 0.46, 0.9), 0.16)
-		play_world_ring(epicenter_global, radius * 0.42, Color(1.0, 0.96, 0.74, 0.62), 0.1)
-	else:
-		play_world_ring(epicenter_global, radius * 0.6, Color(1.0, 0.48, 0.3, 0.8), 0.14)
-		play_world_ring(epicenter_global, radius * 0.34, Color(1.0, 0.74, 0.56, 0.54), 0.1)
+func play_boss_tempo_dash_wave(epicenter_global: Vector2, radius: float, landed: bool, stacks: int, max_stacks: int) -> void:
+	var clamped_max := maxi(1, max_stacks)
+	var clamped_stacks := clampi(stacks, 1, clamped_max)
+	var stack_ratio := clampf(float(clamped_stacks) / float(clamped_max), 0.0, 1.0)
+	var full_stack := clamped_stacks >= clamped_max
+
+	var core_tint := Color(1.0, 0.94, 0.76, 0.24 + stack_ratio * 0.22)
+	var impact_tint := Color(1.0, 0.78 + stack_ratio * 0.14, 0.36 + stack_ratio * 0.2, 0.58 + stack_ratio * 0.24)
+	if not landed:
+		impact_tint = Color(1.0, 0.5, 0.32, 0.56 + stack_ratio * 0.16)
+
+	_play_world_soft_pulse(epicenter_global, radius * (0.28 + stack_ratio * 0.16), core_tint, 0.16 + stack_ratio * 0.08, 0.62, 1.24 + stack_ratio * 0.16)
+	play_world_ring(epicenter_global, radius * (0.44 + stack_ratio * 0.2), Color(1.0, 0.96, 0.78, 0.44 + stack_ratio * 0.26), 0.12 + stack_ratio * 0.06)
+	play_world_ring(epicenter_global, radius * (0.66 + stack_ratio * 0.12), impact_tint, 0.15 + stack_ratio * 0.1)
+
+	var burst_rays := maxi(6, int(round(6.0 + stack_ratio * 8.0)))
+	_play_world_star_burst(epicenter_global, radius * (0.5 + stack_ratio * 0.22), burst_rays, Color(1.0, 0.88, 0.56, 0.32 + stack_ratio * 0.34), 0.12 + stack_ratio * 0.06)
+
+	var afterglow := Line2D.new()
+	afterglow.top_level = true
+	afterglow.global_position = Vector2.ZERO
+	afterglow.width = 1.4 + stack_ratio * 2.4
+	afterglow.default_color = Color(1.0, 0.7 + stack_ratio * 0.22, 0.3 + stack_ratio * 0.3, 0.2 + stack_ratio * 0.28)
+	afterglow.closed = true
+	afterglow.antialiased = true
+	afterglow.z_index = 39
+	var afterglow_points := PackedVector2Array()
+	var afterglow_segments := 40
+	var afterglow_radius := radius * (0.72 + stack_ratio * 0.2)
+	for i in range(afterglow_segments):
+		var angle := TAU * float(i) / float(afterglow_segments)
+		afterglow_points.append(epicenter_global + Vector2.RIGHT.rotated(angle) * afterglow_radius)
+	afterglow.points = afterglow_points
+	add_child(afterglow)
+
+	var afterglow_life := 0.22 + stack_ratio * 0.2
+	if full_stack:
+		afterglow_life += 0.1
+	var afterglow_tween := create_tween()
+	afterglow_tween.set_parallel(true)
+	afterglow_tween.tween_property(afterglow, "modulate:a", 0.0, afterglow_life)
+	afterglow_tween.tween_property(afterglow, "width", 0.8, afterglow_life)
+	afterglow_tween.set_parallel(false)
+	afterglow_tween.tween_interval(afterglow_life)
+	afterglow_tween.tween_callback(afterglow.queue_free)
+
+	if full_stack:
+		play_world_ring(epicenter_global, radius * 0.92, Color(1.0, 0.96, 0.84, 0.9), 0.18)
+		_play_world_soft_pulse(epicenter_global, radius * 0.86, Color(1.0, 0.78, 0.4, 0.26), 0.3, 0.78, 1.34)
+		_play_world_star_burst(epicenter_global, radius * 0.94, 14, Color(1.0, 0.92, 0.7, 0.54), 0.16)
 
 func play_boss_convergence_start(epicenter_global: Vector2, power_ratio: float) -> void:
 	var ratio := clampf(power_ratio, 0.0, 1.0)
