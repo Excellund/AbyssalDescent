@@ -802,22 +802,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	get_viewport().set_input_as_handled()
 
 func _process(delta: float) -> void:
-	if is_instance_valid(defeat_screen) and bool(defeat_screen.is_open()):
-		hud.refresh(_get_hud_state(), player)
-		_sync_renderer()
-		return
-	if is_instance_valid(build_detail_panel) and bool(build_detail_panel.is_open()):
-		hud.refresh(_get_hud_state(), player)
-		_sync_renderer()
-		return
-	if is_instance_valid(pause_menu_controller) and bool(pause_menu_controller.is_open()):
-		hud.refresh(_get_hud_state(), player)
-		_sync_renderer()
-		return
-	if is_instance_valid(reward_selection_ui) and reward_selection_ui.is_active():
-		reward_selection_ui.process_input(delta)
-		hud.refresh(_get_hud_state(), player)
-		_sync_renderer()
+	if _handle_modal_frame(delta):
 		return
 
 	_keep_player_inside_current_room()
@@ -832,6 +817,25 @@ func _process(delta: float) -> void:
 	_try_use_door()
 	_update_encounter_state()
 	_update_camera_mode()
+	_refresh_frame_ui()
+
+func _handle_modal_frame(delta: float) -> bool:
+	if is_instance_valid(defeat_screen) and bool(defeat_screen.is_open()):
+		_refresh_frame_ui()
+		return true
+	if is_instance_valid(build_detail_panel) and bool(build_detail_panel.is_open()):
+		_refresh_frame_ui()
+		return true
+	if is_instance_valid(pause_menu_controller) and bool(pause_menu_controller.is_open()):
+		_refresh_frame_ui()
+		return true
+	if is_instance_valid(reward_selection_ui) and reward_selection_ui.is_active():
+		reward_selection_ui.process_input(delta)
+		_refresh_frame_ui()
+		return true
+	return false
+
+func _refresh_frame_ui() -> void:
 	hud.refresh(_get_hud_state(), player)
 	_sync_renderer()
 

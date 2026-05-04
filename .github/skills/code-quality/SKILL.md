@@ -365,6 +365,24 @@ Avoid per-file ladders like `const STATE_X := 0`, `const STATE_Y := 1` for finit
 
 ---
 
+### 13. Centralize Modal Frame Gating In Main Loops
+
+When multiple UI/modal states pause gameplay progression but still require HUD/render refresh, route those checks through a single helper instead of repeating the same refresh-and-return block.
+
+**Why it matters:**
+
+- Main frame loops are high-impact entry points where duplication quickly drifts.
+- Consolidation lowers cognitive load by making pause/modal precedence explicit.
+- A single refresh helper reduces bug surface area when UI sync behavior changes.
+
+**How to apply:**
+
+- Extract a small `_handle_modal_frame(...) -> bool` helper that owns modal precedence and early-return decisions.
+- Extract a single `_refresh_frame_ui()` helper for HUD + renderer synchronization.
+- Keep modal behavior unchanged during refactor; only move duplicated control-flow scaffolding.
+
+---
+
 ## Procedure: Code Quality Review Checklist
 
 When reviewing or refactoring code, ask these questions in order:
