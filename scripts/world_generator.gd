@@ -865,25 +865,33 @@ func _refresh_frame_ui() -> void:
 	_sync_renderer()
 
 func _draw() -> void:
-	if not objective_manager.should_draw_control_overlay():
+	var control_overlay: Dictionary = {}
+	if is_instance_valid(objective_manager) and objective_manager.has_method("get_control_overlay_state"):
+		control_overlay = objective_manager.get_control_overlay_state()
+	if not bool(control_overlay.get("should_draw", false)):
 		return
-	var goal := maxf(0.01, objective_manager.control_goal)
-	var progress_ratio := clampf(objective_manager.control_progress / goal, 0.0, 1.0)
+	var goal := maxf(0.01, float(control_overlay.get("goal", 0.0)))
+	var progress := float(control_overlay.get("progress", 0.0))
+	var progress_ratio := clampf(progress / goal, 0.0, 1.0)
+	var anchor := Vector2(control_overlay.get("anchor", Vector2.ZERO))
+	var radius := float(control_overlay.get("radius", 0.0))
+	var player_inside := bool(control_overlay.get("player_inside", false))
+	var contested := bool(control_overlay.get("contested", false))
 	var fill_color := Color(0.32, 0.72, 0.96, 0.08)
 	var ring_color := Color(0.46, 0.86, 1.0, 0.4)
 	var progress_color := Color(0.98, 0.86, 0.42, 0.92)
-	if objective_manager.control_player_inside and not objective_manager.control_contested:
+	if player_inside and not contested:
 		fill_color = Color(0.38, 0.92, 0.62, 0.1)
 		ring_color = Color(0.56, 1.0, 0.74, 0.5)
 		progress_color = Color(0.92, 1.0, 0.7, 0.98)
-	elif objective_manager.control_contested:
+	elif contested:
 		fill_color = Color(0.98, 0.46, 0.34, 0.08)
 		ring_color = Color(1.0, 0.64, 0.44, 0.54)
 		progress_color = Color(1.0, 0.8, 0.52, 0.94)
-	draw_circle(objective_manager.control_anchor, objective_manager.control_radius, fill_color)
-	draw_arc(objective_manager.control_anchor, objective_manager.control_radius, 0.0, TAU, 72, ring_color, 3.0)
-	draw_arc(objective_manager.control_anchor, objective_manager.control_radius - 8.0, -PI * 0.5, -PI * 0.5 + TAU * progress_ratio, 64, progress_color, 6.0)
-	draw_circle(objective_manager.control_anchor, 8.0, Color(1.0, 0.96, 0.72, 0.75))
+	draw_circle(anchor, radius, fill_color)
+	draw_arc(anchor, radius, 0.0, TAU, 72, ring_color, 3.0)
+	draw_arc(anchor, radius - 8.0, -PI * 0.5, -PI * 0.5 + TAU * progress_ratio, 64, progress_color, 6.0)
+	draw_circle(anchor, 8.0, Color(1.0, 0.96, 0.72, 0.75))
 
 func _clamp_position_to_current_room(target_position: Vector2, margin: float = 28.0) -> Vector2:
 	if current_room_size == Vector2.ZERO:
@@ -1958,13 +1966,16 @@ func _on_player_died_for_telemetry() -> void:
 	var death_event: Dictionary = {}
 	if is_instance_valid(player):
 		death_event = player.get_last_damage_event() as Dictionary
+	var objective_telemetry: Dictionary = {}
+	if is_instance_valid(objective_manager) and objective_manager.has_method("get_telemetry_state"):
+		objective_telemetry = objective_manager.get_telemetry_state()
 	death_event["room_label"] = current_room_label
 	death_event["bearing_key"] = _bearing_key_from_label(current_room_label, "unknown")
 	death_event["room_depth"] = room_depth
-	death_event["objective_kind"] = objective_manager.active_objective_kind
+	death_event["objective_kind"] = String(objective_telemetry.get("objective_kind", ""))
 	death_event["active_enemies"] = active_room_enemy_count
-	death_event["objective_player_inside"] = objective_manager.control_player_inside
-	death_event["objective_contested"] = objective_manager.control_contested
+	death_event["objective_player_inside"] = bool(objective_telemetry.get("objective_player_inside", false))
+	death_event["objective_contested"] = bool(objective_telemetry.get("objective_contested", false))
 	death_event["difficulty_tier"] = current_difficulty_tier
 	death_event["character_id"] = current_character_id
 	_finish_active_run_telemetry("death", death_event)
