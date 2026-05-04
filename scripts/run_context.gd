@@ -7,6 +7,7 @@ const SETTINGS_STORE := preload("res://scripts/settings_store.gd")
 const META_PROGRESS_STORE := preload("res://scripts/meta_progress_store.gd")
 const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
 const TELEMETRY_UPLOADER_SCRIPT := preload("res://scripts/telemetry_uploader.gd")
+const RUN_RESUME_REQUEST_STATE_SCRIPT := preload("res://scripts/core/run_resume_request_state.gd")
 const ACTIVE_RUN_SAVE_PATH := "user://active_run.save"
 const ACTIVE_RUN_DEBUG_SAVE_PATH := "user://active_run_debug.save"
 const ACTIVE_RUN_VERSION := 1
@@ -38,8 +39,8 @@ var resolution_height: int = SETTINGS_STORE.DEFAULT_RESOLUTION_HEIGHT
 var telemetry_upload_enabled: bool = SETTINGS_STORE.DEFAULT_TELEMETRY_UPLOAD_ENABLED
 var telemetry_consent_asked: bool = SETTINGS_STORE.DEFAULT_TELEMETRY_CONSENT_ASKED
 var skipped_update_version: String = SETTINGS_STORE.DEFAULT_SKIPPED_UPDATE_VERSION
-var resume_saved_run_requested: bool = false
 var telemetry_uploader
+var run_resume_request_state
 
 ## Meta-progression state
 var meta_progress_profile: Dictionary = {}
@@ -56,6 +57,7 @@ func _ready() -> void:
 	load_meta_progress()
 	_apply_master_volume()
 	_apply_resolution()
+	run_resume_request_state = RUN_RESUME_REQUEST_STATE_SCRIPT.new()
 	telemetry_uploader = TELEMETRY_UPLOADER_SCRIPT.new()
 	add_child(telemetry_uploader)
 	telemetry_uploader.initialize(self)
@@ -279,16 +281,19 @@ func clear_active_run() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(_active_run_save_path()))
 
 func request_resume_saved_run() -> void:
-	resume_saved_run_requested = true
+	if run_resume_request_state == null:
+		run_resume_request_state = RUN_RESUME_REQUEST_STATE_SCRIPT.new()
+	run_resume_request_state.request_resume_saved_run()
 
 func consume_resume_saved_run_request() -> bool:
-	if not resume_saved_run_requested:
-		return false
-	resume_saved_run_requested = false
-	return true
+	if run_resume_request_state == null:
+		run_resume_request_state = RUN_RESUME_REQUEST_STATE_SCRIPT.new()
+	return run_resume_request_state.consume_resume_saved_run_request()
 
 func clear_resume_saved_run_request() -> void:
-	resume_saved_run_requested = false
+	if run_resume_request_state == null:
+		run_resume_request_state = RUN_RESUME_REQUEST_STATE_SCRIPT.new()
+	run_resume_request_state.clear_resume_saved_run_request()
 
 
 ## Load meta-progression profile from disk

@@ -37,6 +37,8 @@ const DEBUG_ENUMS := preload("res://scripts/shared/debug_enums.gd")
 const GLOSSARY_DATA := preload("res://scripts/shared/glossary_data.gd")
 const DEBUG_SETTINGS_SCRIPT := preload("res://scripts/debug_settings.gd")
 const VALIDATION_HARNESS_SCRIPT := preload("res://scripts/validation_harness.gd")
+const RUN_SESSION_SCRIPT := preload("res://scripts/core/run_session.gd")
+const WORLD_BOOTSTRAP_COORDINATOR_SCRIPT := preload("res://scripts/core/world_bootstrap_coordinator.gd")
 const RUN_CONTEXT_PATH := "/root/RunContext"
 const MENU_SCENE_PATH := "res://scenes/Menu.tscn"
 const RUN_SNAPSHOT_VERSION := 1
@@ -139,9 +141,6 @@ var run_cleared: bool = false
 var boss_reward_pending: bool = false
 var last_defeated_boss_id: String = ""
 
-var boons_taken: Array[String] = []
-var arcana_rewards_taken: Array[String] = []
-
 var current_room_size: Vector2 = Vector2.ZERO
 var current_room_static_camera: bool = true
 var current_room_label: String = ""
@@ -175,6 +174,8 @@ var telemetry_spike_api_key: String = ""
 var telemetry_spike_timeout_seconds: float = 8.0
 var telemetry_spike_sender
 var telemetry_spike_requested: bool = false
+var run_session
+var bootstrap_coordinator
 
 func _apply_debug_settings_from_node() -> void:
 	var debug_settings := get_node_or_null("DebugSettings")
@@ -204,15 +205,19 @@ func _apply_debug_settings_from_node() -> void:
 	telemetry_spike_timeout_seconds = float(telemetry_timeout_value) if telemetry_timeout_value != null else 8.0
 
 func _ready() -> void:
-	_validate_encounter_content_sync()
-	_initialize_bootstrap_context()
-	_setup_world_bootstrap_state()
-	_setup_run_systems_phase()
-	_setup_ui_phase()
-	_setup_objective_runtime_system()
-	if _run_resume_flow():
-		return
-	if _run_debug_boot_flow():
+	bootstrap_coordinator = WORLD_BOOTSTRAP_COORDINATOR_SCRIPT.new()
+	bootstrap_coordinator.run_bootstrap([
+		Callable(self, "_validate_encounter_content_sync"),
+		Callable(self, "_initialize_bootstrap_context"),
+		Callable(self, "_setup_world_bootstrap_state"),
+		Callable(self, "_setup_run_systems_phase"),
+		Callable(self, "_setup_ui_phase"),
+		Callable(self, "_setup_objective_runtime_system")
+	])
+	if bootstrap_coordinator.run_first_success([
+		Callable(self, "_run_resume_flow"),
+		Callable(self, "_run_debug_boot_flow")
+	]):
 		return
 	_begin_new_run_flow()
 
@@ -230,6 +235,8 @@ func _initialize_bootstrap_context() -> void:
 	rng.randomize()
 	_apply_debug_settings_from_node()
 	_maybe_start_telemetry_spike_probe()
+	run_session = RUN_SESSION_SCRIPT.new()
+	run_session.reset_for_new_run()
 	power_registry_instance = POWER_REGISTRY.new()
 	player = get_node_or_null(player_path) as Node2D
 	_setup_player_runtime_bindings()
@@ -1707,16 +1714,16 @@ func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> voi
 	_record_reward_choice(choice, mode, is_initial)
 	if mode == ENUMS.RewardMode.ARCANA:
 		_apply_arcana_to_player(String(choice["id"]))
-		arcana_rewards_taken.append(String(choice["name"]))
+		run_session.record_arcana(String(choice["name"]))
 	elif mode == ENUMS.RewardMode.MISSION:
 		_apply_mission_reward(choice)
 	elif mode == ENUMS.RewardMode.BOSS:
 		_apply_boon_to_player(String(choice["id"]))
-		boons_taken.append(String(choice["name"]))
+		run_session.record_boon(String(choice["name"]))
 		boss_reward_pending = false
 	else:
 		_apply_boon_to_player(String(choice["id"]))
-		boons_taken.append(String(choice["name"]))
+		run_session.record_boon(String(choice["name"]))
 	_set_combat_paused(false)
 	if is_initial:
 		pending_room_reward = ENUMS.RewardMode.BOON
@@ -2018,7 +2025,7 @@ func _apply_mission_reward(choice: Dictionary) -> void:
 	if chosen_id.is_empty():
 		return
 	_apply_boon_to_player(chosen_id)
-	boons_taken.append(String(chosen_upgrade.get("name", chosen_id)))
+	run_session.record_boon(String(chosen_upgrade.get("name", chosen_id)))
 	if is_instance_valid(hud):
 		hud.show_banner("Mission Reward", String(chosen_upgrade.get("name", chosen_id)))
 	if not chosen_mutator.is_empty():
