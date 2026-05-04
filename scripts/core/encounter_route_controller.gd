@@ -44,7 +44,7 @@ func build_route_state(
 		show_boss_door = show_second_boss
 		boss_encounter_key = "sovereign"
 
-	var next_door_options := encounter_flow_system.build_door_options(
+	var next_door_options: Array[Dictionary] = encounter_flow_system.build_door_options(
 		show_boss_door,
 		room_depth,
 		door_distance_from_center,

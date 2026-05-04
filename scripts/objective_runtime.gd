@@ -185,7 +185,7 @@ func _begin_survival_objective(profile: Dictionary) -> void:
 	var raw_kill_target := maxi(LastStandConfig.KILL_TARGET_BASE, int(round(objective_time_left * LastStandConfig.KILL_TARGET_TIME_MULT)) + LastStandConfig.KILL_TARGET_BASE_BONUS + int(floor(float(world.room_depth) * LastStandConfig.KILL_TARGET_DEPTH_MULT)))
 	raw_kill_target = maxi(LastStandConfig.KILL_TARGET_MIN, int(round(float(raw_kill_target) * objective_pressure_mult)))
 	var kill_target := int(ceil(float(raw_kill_target) / float(LastStandConfig.KILL_TARGET_ROUND_TO))) * LastStandConfig.KILL_TARGET_ROUND_TO
-	objective_state_setup.apply_survival_setup(world, profile, spawn_interval, spawn_interval, spawn_batch, max_enemies, kill_target)
+	objective_state_setup.apply_survival_setup(objective_manager, profile, spawn_interval, spawn_interval, spawn_batch, max_enemies, kill_target)
 
 func _begin_priority_target_objective(profile: Dictionary) -> void:
 	var target_type := ENCOUNTER_CONTRACTS.profile_objective_target_type(profile)
@@ -199,7 +199,7 @@ func _begin_priority_target_objective(profile: Dictionary) -> void:
 	var max_enemies := CutTheSignalConfig.MAX_ENEMIES_BASE + int(floor(float(world.room_depth) * CutTheSignalConfig.MAX_ENEMIES_DEPTH_MULT))
 	max_enemies = maxi(CutTheSignalConfig.MAX_ENEMIES_MIN, int(round(float(max_enemies) * objective_pressure_mult)))
 	var hunt_kill_goal := clampi(int(round(CutTheSignalConfig.HUNT_KILL_MULT * objective_pressure_mult)), CutTheSignalConfig.HUNT_KILL_GOAL_MIN, CutTheSignalConfig.HUNT_KILL_GOAL_MAX)
-	objective_state_setup.apply_priority_target_setup(world, profile, target_type, "Signal", spawn_interval, spawn_timer, spawn_batch, max_enemies, hunt_kill_goal)
+	objective_state_setup.apply_priority_target_setup(objective_manager, profile, target_type, "Signal", spawn_interval, spawn_timer, spawn_batch, max_enemies, hunt_kill_goal)
 	spawn_priority_target_enemy()
 
 func _begin_control_objective(profile: Dictionary) -> void:
@@ -215,7 +215,7 @@ func _begin_control_objective(profile: Dictionary) -> void:
 		spawn_batch = mini(spawn_batch, 3)
 		max_enemies = mini(max_enemies, 9)
 	objective_state_setup.apply_control_setup(
-		world,
+		objective_manager,
 		profile,
 		spawn_interval,
 		spawn_timer,

@@ -24,7 +24,7 @@ func on_enemy_killed(objective_manager: Node, objective_runtime: Node, kill_pos:
 
 	if active_kind == "hold_the_line":
 		if objective_manager.control_goal > 0.0 and objective_manager.control_player_inside and not objective_manager.control_contested and kill_pos != Vector2.ZERO:
-			var anchor := objective_manager.control_anchor
+			var anchor: Vector2 = objective_manager.control_anchor
 			var bonus_radius := maxf(1.0, objective_manager.control_radius * objective_manager.engagement_bonus_radius_scale)
 			if kill_pos.distance_to(anchor) <= bonus_radius:
 				objective_manager.control_progress = minf(objective_manager.control_goal, objective_manager.control_progress + objective_manager.engagement_kill_progress_bonus)

@@ -101,9 +101,9 @@ func validate_power_registry() -> ValidationResult:
 func validate_character_registry() -> ValidationResult:
 	var result := ValidationResult.new()
 	
-	var characters: Array = CHARACTER_REGISTRY.CHARACTERS
+	var characters: Array[Dictionary] = CHARACTER_REGISTRY.get_launch_characters()
 	if characters.is_empty():
-		result.add_error("CHARACTER_REGISTRY.CHARACTERS is empty")
+		result.add_error("CHARACTER_REGISTRY.get_launch_characters() returned no entries")
 		return result
 	
 	var character_count := characters.size()
@@ -115,8 +115,8 @@ func validate_character_registry() -> ValidationResult:
 			result.add_error("Character missing 'id' field: %s" % str(char))
 		if not char.has("name"):
 			result.add_error("Character missing 'name' field: %s" % str(char))
-		if not char.has("stat_baselines"):
-			result.add_error("Character missing 'stat_baselines' field: %s" % str(char.get("id", "unknown")))
+		if not char.has("stat_modifiers"):
+			result.add_error("Character missing 'stat_modifiers' field: %s" % str(char.get("id", "unknown")))
 	
 	result.report("character_registry")
 	return result
@@ -124,20 +124,26 @@ func validate_character_registry() -> ValidationResult:
 ## Check 4: Difficulty tier definitions
 func validate_difficulty_config() -> ValidationResult:
 	var result := ValidationResult.new()
-	
-	var bearing_defs: Dictionary = DIFFICULTY_CONFIG.BEARING_DEFINITIONS
-	if bearing_defs.is_empty():
-		result.add_error("BEARING_DEFINITIONS is empty")
-		return result
-	
-	var expected_bearings := ["pilgrim", "delver", "harbinger", "forsworn"]
-	for bearing_key in expected_bearings:
-		if bearing_key not in bearing_defs:
-			result.add_error("Missing bearing definition: %s" % bearing_key)
-		else:
-			var bearing_def: Dictionary = bearing_defs[bearing_key]
-			if not bearing_def.has("label"):
-				result.add_error("Bearing '%s' missing 'label'" % bearing_key)
+
+	var expected_tiers := [
+		{"id": 0, "name": "pilgrim"},
+		{"id": 1, "name": "delver"},
+		{"id": 2, "name": "harbinger"},
+		{"id": 3, "name": "forsworn"}
+	]
+	for tier in expected_tiers:
+		var tier_id: int = int(tier.get("id", 1))
+		var tier_name: String = String(tier.get("name", "unknown"))
+		var tier_config: Dictionary = DIFFICULTY_CONFIG.get_tier_config(tier_id)
+		if tier_config.is_empty():
+			result.add_error("Missing tier config for %s (%d)" % [tier_name, tier_id])
+			continue
+		if String(tier_config.get("name", "")).is_empty():
+			result.add_error("Tier '%s' missing 'name'" % tier_name)
+		if String(tier_config.get("description", "")).is_empty():
+			result.add_error("Tier '%s' missing 'description'" % tier_name)
+		if not tier_config.has("difficulty_rank"):
+			result.add_error("Tier '%s' missing 'difficulty_rank'" % tier_name)
 	
 	result.report("difficulty_config")
 	return result
@@ -151,7 +157,7 @@ func validate_debug_entry_points() -> ValidationResult:
 	var result := ValidationResult.new()
 	
 	# Verify all encounter types are selectable via debug
-	var debug_encounters: Dictionary = ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_MAP
+	var debug_encounters: Array[Dictionary] = ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_MAP
 	var expected_debug_count := 12  # Approximately, adjust as needed
 	if debug_encounters.size() < 8:
 		result.add_warning("Only %d debug encounters available (expected ~12)" % debug_encounters.size())
@@ -170,9 +176,14 @@ func validate_autoload_access() -> ValidationResult:
 		"GameBalance",
 		"ColorPalette"
 	]
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null:
+		result.add_error("SceneTree is unavailable; cannot validate autoloads")
+		result.report("autoload_access")
+		return result
 	
 	for path in autoload_paths:
-		var node = get_tree().root.get_node_or_null(path)
+		var node := tree.root.get_node_or_null(path)
 		if node == null:
 			result.add_error("Autoload '%s' not found" % path)
 		else:

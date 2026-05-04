@@ -220,18 +220,20 @@ func _apply_debug_settings_from_node() -> void:
 
 func _ready() -> void:
 	bootstrap_coordinator = WORLD_BOOTSTRAP_COORDINATOR_SCRIPT.new()
-	bootstrap_coordinator.run_bootstrap([
+	var bootstrap_stages: Array[Callable] = [
 		Callable(self, "_validate_encounter_content_sync"),
 		Callable(self, "_initialize_bootstrap_context"),
 		Callable(self, "_setup_world_bootstrap_state"),
 		Callable(self, "_setup_run_systems_phase"),
 		Callable(self, "_setup_ui_phase"),
 		Callable(self, "_setup_objective_runtime_system")
-	])
-	if bootstrap_coordinator.run_first_success([
+	]
+	bootstrap_coordinator.run_bootstrap(bootstrap_stages)
+	var boot_flows: Array[Callable] = [
 		Callable(self, "_run_resume_flow"),
 		Callable(self, "_run_debug_boot_flow")
-	]):
+	]
+	if bootstrap_coordinator.run_first_success(boot_flows):
 		return
 	_begin_new_run_flow()
 
@@ -842,7 +844,7 @@ func _process(delta: float) -> void:
 	_keep_enemies_inside_current_room()
 	_keep_player_inside_camera_view()
 	var _grace_active := _update_encounter_intro_grace()
-	var objective_frame_result := objective_frame_coordinator.tick(objective_manager, objective_runtime, delta, _grace_active)
+	var objective_frame_result: Dictionary = objective_frame_coordinator.tick(objective_manager, objective_runtime, delta, _grace_active)
 	if bool(objective_frame_result.get("should_redraw", false)):
 		queue_redraw()
 	_try_use_door()
@@ -1081,7 +1083,7 @@ func _on_room_cleared() -> void:
 	)
 	if outcome.is_empty():
 		return
-	var outcome_state := room_clear_outcome_coordinator.process_outcome({
+	var outcome_state: Dictionary = room_clear_outcome_coordinator.process_outcome({
 		"outcome": outcome,
 		"in_boss_room": in_boss_room,
 		"endless_mode": _is_endless_mode(),
@@ -1385,7 +1387,7 @@ func _spawn_door_options() -> void:
 	combat_phase_coordinator.clear_player_lingering_effects(player)
 	door_options.clear()
 	var route_options := _roll_route_options(_build_route_context(room_depth))
-	var route_state := encounter_route_controller.build_route_state(
+	var route_state: Dictionary = encounter_route_controller.build_route_state(
 		choosing_next_room,
 		door_options,
 		boss_unlocked,
@@ -1413,7 +1415,7 @@ func _try_use_door() -> void:
 		return
 	if not is_instance_valid(encounter_flow_system):
 		return
-	var used_door := encounter_route_controller.find_used_door(player.global_position, door_options, door_use_radius)
+	var used_door: Dictionary = encounter_route_controller.find_used_door(player.global_position, door_options, door_use_radius)
 	if used_door.is_empty():
 		return
 	_choose_door(used_door)
@@ -1635,7 +1637,7 @@ func _play_room_music(is_boss_room: bool, instant: bool = false, fade_duration: 
 
 func _on_room_enemy_died(kill_pos: Vector2 = Vector2.ZERO) -> void:
 	active_room_enemy_count = maxi(0, active_room_enemy_count - 1)
-	var objective_progress_result := objective_progress_coordinator.on_enemy_killed(objective_manager, objective_runtime, kill_pos)
+	var objective_progress_result: Dictionary = objective_progress_coordinator.on_enemy_killed(objective_manager, objective_runtime, kill_pos)
 	if bool(objective_progress_result.get("should_redraw", false)):
 		queue_redraw()
 	if is_instance_valid(player):
@@ -1943,6 +1945,9 @@ func _on_player_damage_taken(raw_amount: int, final_amount: int, damage_context:
 		return
 	var context_copy := damage_context.duplicate(true)
 	var current_bearing_key := _bearing_key_from_label(current_room_label, "unknown")
+	var objective_kind: String = ""
+	if is_instance_valid(objective_manager):
+		objective_kind = String(objective_manager.active_objective_kind)
 	RUN_TELEMETRY_STORE.append_damage_event(telemetry_run_id, {
 		"unix_time": int(context_copy.get("unix_time", Time.get_unix_time_from_system())),
 		"source": String(context_copy.get("source", "unknown")),
@@ -1954,7 +1959,7 @@ func _on_player_damage_taken(raw_amount: int, final_amount: int, damage_context:
 		"room_label": current_room_label,
 		"bearing_key": current_bearing_key,
 		"room_depth": room_depth,
-		"objective_kind": active_objective_kind,
+		"objective_kind": objective_kind,
 		"active_enemies": active_room_enemy_count,
 		"difficulty_tier": current_difficulty_tier,
 		"character_id": current_character_id
