@@ -70,6 +70,11 @@ Mutators match a profile if any declared archetype is present. If a filtered poo
 
 - Respect `DebugSettings.enabled` gating for startup debug behavior.
 
+6. Keep `scripts/world_generator.gd` as an orchestrator only for objectives:
+
+- Route enemy-kill objective mutations through a dedicated coordinator/runtime surface (for example `scripts/core/objective_progress_coordinator.gd`) instead of writing objective-manager internals inline.
+- Build HUD objective fields from `objective_manager.get_hud_state()` instead of duplicating direct field reads in world orchestration code.
+
 6. If an encounter name or gameplay meaning changes, update `scripts/shared/glossary_data.gd` in the same change.
 
 ## Verification

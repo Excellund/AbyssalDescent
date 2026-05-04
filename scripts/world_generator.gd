@@ -41,6 +41,7 @@ const RUN_SESSION_SCRIPT := preload("res://scripts/core/run_session.gd")
 const WORLD_BOOTSTRAP_COORDINATOR_SCRIPT := preload("res://scripts/core/world_bootstrap_coordinator.gd")
 const ENCOUNTER_ROUTE_CONTROLLER_SCRIPT := preload("res://scripts/core/encounter_route_controller.gd")
 const OBJECTIVE_LIFECYCLE_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_lifecycle_coordinator.gd")
+const OBJECTIVE_PROGRESS_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_progress_coordinator.gd")
 const RUN_CONTEXT_PATH := "/root/RunContext"
 const MENU_SCENE_PATH := "res://scenes/Menu.tscn"
 const RUN_SNAPSHOT_VERSION := 1
@@ -180,6 +181,7 @@ var run_session
 var bootstrap_coordinator
 var encounter_route_controller
 var objective_lifecycle_coordinator
+var objective_progress_coordinator
 
 func _apply_debug_settings_from_node() -> void:
 	var debug_settings := get_node_or_null("DebugSettings")
@@ -242,6 +244,7 @@ func _initialize_bootstrap_context() -> void:
 	run_session = RUN_SESSION_SCRIPT.new()
 	run_session.reset_for_new_run()
 	objective_lifecycle_coordinator = OBJECTIVE_LIFECYCLE_COORDINATOR_SCRIPT.new()
+	objective_progress_coordinator = OBJECTIVE_PROGRESS_COORDINATOR_SCRIPT.new()
 	power_registry_instance = POWER_REGISTRY.new()
 	player = get_node_or_null(player_path) as Node2D
 	_setup_player_runtime_bindings()
@@ -917,6 +920,10 @@ func _get_hud_state() -> Dictionary:
 		if char_data != null and char_data.has("passive_id"):
 			current_character_passive_name = String(char_data.get("passive_id", "Passive"))
 	
+	var objective_hud_state: Dictionary = {}
+	if is_instance_valid(objective_manager) and objective_manager.has_method("get_hud_state"):
+		objective_hud_state = objective_manager.get_hud_state()
+	
 	var hud_state := {
 		"room_size": current_room_size,
 		"current_room_label": current_room_label,
@@ -927,27 +934,27 @@ func _get_hud_state() -> Dictionary:
 		"current_room_enemy_mutator": display_enemy_mutator,
 		"in_boss_room": in_boss_room,
 		"active_room_enemy_count": active_room_enemy_count,
-		"active_objective_kind": objective_manager.active_objective_kind,
-		"objective_time_left": objective_manager.time_left,
-		"objective_kills": objective_manager.kills,
-		"objective_kill_target": objective_manager.kill_target,
-		"objective_overtime": objective_manager.overtime,
-		"objective_target_name": objective_manager.hunt_target_name,
-		"objective_target_health": objective_manager.get_hunt_target_health(),
-		"objective_target_max_health": objective_manager.get_hunt_target_max_health(),
-		"objective_hunt_kill_progress": objective_manager.hunt_target_kill_progress,
-		"objective_hunt_kill_goal": objective_manager.hunt_target_kill_goal,
-		"objective_control_progress": objective_manager.control_progress,
-		"objective_control_goal": objective_manager.control_goal,
-		"objective_control_enemies_in_zone": objective_manager.control_enemies_in_zone,
-		"objective_control_contested": objective_manager.control_contested,
-		"objective_control_player_inside": objective_manager.control_player_inside,
-		"objective_exposure_left": objective_manager.exposure_left,
-		"objective_last_relocated_escort_count": objective_manager.last_relocated_escort_count,
-		"objective_relocation_hint_left": objective_manager.relocation_hint_left,
+		"active_objective_kind": String(objective_hud_state.get("active_objective_kind", "")),
+		"objective_time_left": float(objective_hud_state.get("time_left", 0.0)),
+		"objective_kills": int(objective_hud_state.get("kills", 0)),
+		"objective_kill_target": int(objective_hud_state.get("kill_target", 0)),
+		"objective_overtime": bool(objective_hud_state.get("overtime", false)),
+		"objective_target_name": String(objective_hud_state.get("hunt_target_name", "")),
+		"objective_target_health": int(objective_hud_state.get("hunt_target_health", 0)),
+		"objective_target_max_health": int(objective_hud_state.get("hunt_target_max_health", 0)),
+		"objective_hunt_kill_progress": int(objective_hud_state.get("hunt_target_kill_progress", 0)),
+		"objective_hunt_kill_goal": int(objective_hud_state.get("hunt_target_kill_goal", 0)),
+		"objective_control_progress": float(objective_hud_state.get("control_progress", 0.0)),
+		"objective_control_goal": float(objective_hud_state.get("control_goal", 0.0)),
+		"objective_control_enemies_in_zone": int(objective_hud_state.get("control_enemies_in_zone", 0)),
+		"objective_control_contested": bool(objective_hud_state.get("control_contested", false)),
+		"objective_control_player_inside": bool(objective_hud_state.get("control_player_inside", false)),
+		"objective_exposure_left": float(objective_hud_state.get("exposure_left", 0.0)),
+		"objective_last_relocated_escort_count": int(objective_hud_state.get("last_relocated_escort_count", 0)),
+		"objective_relocation_hint_left": float(objective_hud_state.get("relocation_hint_left", 0.0)),
 		"active_player_mutators": _get_active_player_mutators_for_hud(),
-		"objective_target_flee_thresholds": objective_manager.hunt_target_flee_thresholds,
-		"objective_target_next_flee_index": objective_manager.hunt_target_next_flee_index,
+		"objective_target_flee_thresholds": objective_hud_state.get("hunt_target_flee_thresholds", [0.75, 0.5, 0.25]),
+		"objective_target_next_flee_index": int(objective_hud_state.get("hunt_target_next_flee_index", 0)),
 		"encounter_intro_grace_active": encounter_intro_grace_active,
 		"boss_unlocked": boss_unlocked,
 		"first_boss_defeated": first_boss_defeated,
@@ -1625,37 +1632,11 @@ func _play_room_music(is_boss_room: bool, instant: bool = false, fade_duration: 
 
 func _on_room_enemy_died(kill_pos: Vector2 = Vector2.ZERO) -> void:
 	active_room_enemy_count = maxi(0, active_room_enemy_count - 1)
-	_apply_objective_engagement_bonus_on_kill(kill_pos)
-	if objective_manager.active_objective_kind == "last_stand" or objective_manager.active_objective_kind == "hold_the_line":
-		objective_manager.kills += 1
-	if objective_manager.active_objective_kind == "cut_the_signal" and is_instance_valid(objective_manager.hunt_target_enemy):
-		if objective_manager.exposure_left <= 0.0:
-			objective_manager.hunt_target_kill_progress += 1
-			if objective_manager.hunt_target_kill_progress >= objective_manager.hunt_target_kill_goal:
-				if is_instance_valid(objective_runtime):
-					objective_runtime.trigger_priority_target_exposure()
-	if objective_manager.active_objective_kind == "cut_the_signal" and objective_manager.overtime and objective_manager.spawn_timer > 0.2:
-		objective_manager.spawn_timer = maxf(0.2, objective_manager.spawn_timer - 0.08)
+	var objective_progress_result := objective_progress_coordinator.on_enemy_killed(objective_manager, objective_runtime, kill_pos)
+	if bool(objective_progress_result.get("should_redraw", false)):
+		queue_redraw()
 	if is_instance_valid(player):
 		player.notify_enemy_killed(kill_pos)
-
-func _apply_objective_engagement_bonus_on_kill(kill_pos: Vector2) -> void:
-	if objective_manager.active_objective_kind != "hold_the_line":
-		return
-	if objective_manager.control_goal <= 0.0:
-		return
-	if not objective_manager.control_player_inside or objective_manager.control_contested:
-		return
-	if not is_instance_valid(player):
-		return
-	if kill_pos == Vector2.ZERO:
-		return
-	var anchor := objective_manager.control_anchor
-	var bonus_radius := maxf(1.0, objective_manager.control_radius * objective_manager.engagement_bonus_radius_scale)
-	if kill_pos.distance_to(anchor) > bonus_radius:
-		return
-	objective_manager.control_progress = minf(objective_manager.control_goal, objective_manager.control_progress + objective_manager.engagement_kill_progress_bonus)
-	queue_redraw()
 
 func _clear_all_enemies() -> void:
 	if is_instance_valid(enemy_spawner):
