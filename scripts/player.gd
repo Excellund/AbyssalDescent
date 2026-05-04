@@ -1192,11 +1192,11 @@ func apply_power_for_test(power_id: String) -> bool:
 		"heartstone": true,
 		"crushed_vow": true,
 		"severing_edge": true,
-		"apex_predator": true,
-		"void_echo": true,
-		"apex_momentum": true,
-		"convergence_surge": true,
-		"indomitable_spirit": true
+		"wardens_verdict": true,
+		"lacuna_echo": true,
+		"sovereign_tempo": true,
+		"pillar_convergence": true,
+		"unbroken_oath": true
 	}
 	if boon_ids.has(id):
 		apply_upgrade(id)

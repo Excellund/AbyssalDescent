@@ -1043,15 +1043,15 @@ func _get_power_display_name(power_id: String) -> String:
 			return "Eclipse Mark"
 		"fracture_field":
 			return "Fracture Field"
-		"apex_predator":
+		"wardens_verdict":
 			return "Warden's Verdict"
-		"void_echo":
+		"lacuna_echo":
 			return "Lacuna Echo"
-		"apex_momentum":
+		"sovereign_tempo":
 			return "Sovereign Tempo"
-		"convergence_surge":
+		"pillar_convergence":
 			return "Pillar Convergence"
-		"indomitable_spirit":
+		"unbroken_oath":
 			return "Unbroken Oath"
 		_:
 			return "Unknown"

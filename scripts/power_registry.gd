@@ -137,27 +137,27 @@ const DAMAGE_MODEL_BY_POWER := {
 		"formula_note": "+X bonus damage on hits against enemies below 55% HP"
 	},
 	# Boss rewards
-	"apex_predator": {
+	"wardens_verdict": {
 		"kind": DAMAGE_KIND_FLAT,
 		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
 		"formula_note": "Every hit builds cadence; every 4th hit detonates an impact burst and mauls nearby enemies"
 	},
-	"void_echo": {
+	"lacuna_echo": {
 		"kind": DAMAGE_KIND_HYBRID,
 		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
 		"formula_note": "Kill zones pulse damage over time and amplify hits inside zone"
 	},
-	"apex_momentum": {
+	"sovereign_tempo": {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
 		"formula_note": "Hit stacks convert into dash-finish momentum wave damage"
 	},
-	"convergence_surge": {
+	"pillar_convergence": {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
 		"formula_note": "Every N damaging hits, enter Convergence for ~1.6-2.0s and pulse around player for ~46%-63% damage"
 	},
-	"indomitable_spirit": {
+	"unbroken_oath": {
 		"kind": DAMAGE_KIND_HYBRID,
 		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
 		"formula_note": "Taking damage banks Oath; damaging hits consume all bank for (45% + DR% + 1%*bank) of damage stat"
@@ -375,27 +375,27 @@ const TRIAL_POWER_BALANCE := {
 }
 
 const BOSS_REWARD_BALANCE := {
-	"apex_predator": {
+	"wardens_verdict": {
 		"kind": "add_int",
 		"property": "apex_predator_bonus_damage",
 		"add": 34
 	},
-	"void_echo": {
+	"lacuna_echo": {
 		"kind": "add_int",
 		"property": "void_echo_damage",
 		"add": 52
 	},
-	"apex_momentum": {
+	"sovereign_tempo": {
 		"kind": "add_float",
 		"property": "apex_momentum_speed_bonus",
 		"add": 0.09
 	},
-	"convergence_surge": {
+	"pillar_convergence": {
 		"kind": "add_float",
 		"property": "convergence_surge_damage_ratio",
 		"add": 0.22
 	},
-	"indomitable_spirit": {
+	"unbroken_oath": {
 		"kind": "add_float",
 		"property": "indomitable_spirit_damage_reduction",
 		"add": 0.14
@@ -417,11 +417,11 @@ const UPGRADE_STACK_LIMITS := {
 const TRIAL_POWER_STACK_LIMITS := {}
 
 const BOSS_REWARD_STACK_LIMITS := {
-	"apex_predator": 2,
-	"void_echo": 2,
-	"apex_momentum": 2,
-	"convergence_surge": 2,
-	"indomitable_spirit": 2
+	"wardens_verdict": 2,
+	"lacuna_echo": 2,
+	"sovereign_tempo": 2,
+	"pillar_convergence": 2,
+	"unbroken_oath": 2
 }
 
 # Unified power data structure
@@ -484,11 +484,11 @@ const POWER_DISPLAY_NAMES := {
 	"eclipse_mark": "Eclipse Mark",
 	"fracture_field": "Fracture Field",
 	# Boss rewards
-	"apex_predator": "Warden's Verdict",
-	"void_echo": "Lacuna Echo",
-	"apex_momentum": "Sovereign Tempo",
-	"convergence_surge": "Pillar Convergence",
-	"indomitable_spirit": "Unbroken Oath",
+	"wardens_verdict": "Warden's Verdict",
+	"lacuna_echo": "Lacuna Echo",
+	"sovereign_tempo": "Sovereign Tempo",
+	"pillar_convergence": "Pillar Convergence",
+	"unbroken_oath": "Unbroken Oath",
 }
 
 ## Ordered pool membership arrays — define which IDs belong to each pool and in what order
@@ -505,7 +505,7 @@ const TRIAL_POWER_POOL_IDS: Array[String] = [
 ]
 
 const BOSS_REWARD_POOL_IDS: Array[String] = [
-	"apex_predator", "void_echo", "apex_momentum", "convergence_surge", "indomitable_spirit",
+	"wardens_verdict", "lacuna_echo", "sovereign_tempo", "pillar_convergence", "unbroken_oath",
 ]
 
 

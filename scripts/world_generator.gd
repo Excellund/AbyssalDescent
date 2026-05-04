@@ -780,15 +780,15 @@ func _resolve_debug_power_id(raw_power_id: String) -> String:
 
 	match canonical:
 		"wardens_verdict":
-			return "apex_predator"
-		"lacuna_echo", "lucana_echo":
-			return "void_echo"
+			return "wardens_verdict"
+		"lacuna_echo":
+			return "lacuna_echo"
 		"sovereign_tempo":
-			return "apex_momentum"
+			return "sovereign_tempo"
 		"pillar_convergence":
-			return "convergence_surge"
+			return "pillar_convergence"
 		"unbroken_oath":
-			return "indomitable_spirit"
+			return "unbroken_oath"
 		_:
 			return canonical
 

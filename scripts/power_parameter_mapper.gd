@@ -167,11 +167,11 @@ const UPGRADE_PARAM_MAP := {
 	"heartstone": {"special": "heartstone"},
 	"crushed_vow": {"property": "crushed_vow_bonus_damage"},
 	"severing_edge": {"property": "severing_edge_bonus_damage"},
-	"apex_predator": {"property": "apex_predator_bonus_damage"},
-	"void_echo": {"property": "void_echo_damage"},
-	"apex_momentum": {"property": "apex_momentum_speed_bonus"},
-	"convergence_surge": {"property": "convergence_surge_damage_ratio"},
-	"indomitable_spirit": {"property": "indomitable_spirit_damage_reduction"}
+	"wardens_verdict": {"property": "apex_predator_bonus_damage"},
+	"lacuna_echo": {"property": "void_echo_damage"},
+	"sovereign_tempo": {"property": "apex_momentum_speed_bonus"},
+	"pillar_convergence": {"property": "convergence_surge_damage_ratio"},
+	"unbroken_oath": {"property": "indomitable_spirit_damage_reduction"}
 }
 
 ## Applies precomputed power values to a player reference

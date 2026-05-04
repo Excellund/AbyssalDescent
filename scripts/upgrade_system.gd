@@ -46,7 +46,7 @@ func apply_upgrade(upgrade_id: String) -> bool:
 	upgrade_stacks[id] = current_stacks + 1
 
 	match id:
-		"first_strike", "heavy_blow", "wide_arc", "long_reach", "fleet_foot", "blink_dash", "battle_trance", "surge_step", "apex_predator", "void_echo", "apex_momentum", "convergence_surge", "indomitable_spirit":
+		"first_strike", "heavy_blow", "wide_arc", "long_reach", "fleet_foot", "blink_dash", "battle_trance", "surge_step", "wardens_verdict", "lacuna_echo", "sovereign_tempo", "pillar_convergence", "unbroken_oath":
 			player_reference.set(String(preview.get("property", "")), preview.get("next", player_reference.get(String(preview.get("property", "")))))
 		"heartstone":
 			var next_max := int(preview.get("next", player_reference.get_max_health()))
@@ -222,15 +222,15 @@ func _power_sentence_template(power_id: String) -> String:
 			return "After being hit, next attack bonus damage %s."
 		"severing_edge":
 			return "Bonus damage on hits against enemies below 55%% HP %s."
-		"apex_predator":
+		"wardens_verdict":
 			return "Predator power %s."
-		"void_echo":
+		"lacuna_echo":
 			return "Zone power %s, radius %s."
-		"apex_momentum":
+		"sovereign_tempo":
 			return "Tempo per stack %s."
-		"convergence_surge":
+		"pillar_convergence":
 			return "Every %s hits, lasts %s, pulses every %s."
-		"indomitable_spirit":
+		"unbroken_oath":
 			return "Damage reduction %s, retaliate %s damage + %s per stored Oath."
 		"razor_wind":
 			return "Range %s, damage %s of hit."
@@ -334,15 +334,15 @@ func _build_upgrade_preview(upgrade_id: String) -> Dictionary:
 ## Change a description here and it updates everywhere: reward cards and build detail.
 func get_power_flavor_text(power_id: String) -> String:
 	match power_id:
-		"apex_predator":
+		"wardens_verdict":
 			return "Every few hits build predator cadence. The 4th hit triggers an impact burst and mauls nearby enemies."
-		"void_echo":
+		"lacuna_echo":
 			return "Kills create a void zone that pulses damage and empowers attacks inside it."
-		"apex_momentum":
+		"sovereign_tempo":
 			return "Hits build tempo. Ending a dash releases a wave; hits refund dash cooldown."
-		"convergence_surge":
+		"pillar_convergence":
 			return "Every few damaging hits you enter Convergence, pulsing damage around you until it expires."
-		"indomitable_spirit":
+		"unbroken_oath":
 			return "Gain damage reduction. Taking damage banks Oath; damaging hits consume all bank for bonus damage."
 		"razor_wind":
 			return "Each swing fires a slicing projectile through enemies."
@@ -386,21 +386,21 @@ func get_power_current_description(power_id: String) -> String:
 	var id := power_id.strip_edges().to_lower()
 	var flavor := get_power_flavor_text(id)
 	match id:
-		"apex_predator":
+		"wardens_verdict":
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("+%d", int(player_reference.get("apex_predator_bonus_damage")))], "build_detail"))
-		"void_echo":
+		"lacuna_echo":
 			var val := int(player_reference.get("void_echo_damage"))
 			var radius := clampf(96.0 + float(val) * 1.05, 96.0, 260.0)
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%d", val), _current_stat("%.0f", radius)], "build_detail"))
-		"apex_momentum":
+		"sovereign_tempo":
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("+%.0f%%", float(player_reference.get("apex_momentum_speed_bonus")) * 100.0)], "build_detail"))
-		"convergence_surge":
+		"pillar_convergence":
 			var cs_ratio := float(player_reference.get("convergence_surge_damage_ratio"))
 			var cs_hits := maxi(2, 6 - int(round(cs_ratio * 8.0)))
 			var cs_window := 1.2 + cs_ratio * 1.8
 			var cs_pulse := maxf(0.14, 0.3 - cs_ratio * 0.25)
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%d", cs_hits), _current_stat("%.2fs", cs_window), _current_stat("%.2fs", cs_pulse)], "build_detail"))
-		"indomitable_spirit":
+		"unbroken_oath":
 			var resist := float(player_reference.get("indomitable_spirit_damage_reduction")) * 100.0
 			var ratio := 45.0 + resist
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f%%", resist), _current_stat("%.0f%%", ratio), _current_const("1%")], "build_detail"))
@@ -615,11 +615,11 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 			return "[color=#c8daf0]After being hit, next attack bonus damage:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
 		"severing_edge":
 			return "[color=#c8daf0]Bonus damage on hits against enemies below 55%% HP:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
-		"apex_predator":
+		"wardens_verdict":
 			var is_initial := int(cur_val) == 0
 			var stat := _stat("+%d", int(cur_val), int(next_val), is_initial)
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [stat], "reward_card"))
-		"void_echo":
+		"lacuna_echo":
 			var cur_void_echo := int(cur_val)
 			var next_void_echo := int(next_val)
 			var cur_echo_radius := clampf(96.0 + float(cur_void_echo) * 1.05, 96.0, 260.0)
@@ -628,13 +628,13 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 			var power_stat := _stat("+%d", cur_void_echo, next_void_echo, is_initial)
 			var radius_stat := _stat("%.0f", cur_echo_radius, next_echo_radius, is_initial)
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [power_stat, radius_stat], "reward_card"))
-		"apex_momentum":
+		"sovereign_tempo":
 			var cur_momentum := float(cur_val) * 100.0
 			var next_momentum := float(next_val) * 100.0
 			var is_initial := cur_momentum == 0.0
 			var stat := _stat("+%.0f%%", cur_momentum, next_momentum, is_initial)
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [stat], "reward_card"))
-		"convergence_surge":
+		"pillar_convergence":
 			var cur_ratio := float(cur_val)
 			var next_ratio := float(next_val)
 			var cur_hits_needed := maxi(2, 6 - int(round(cur_ratio * 8.0)))
@@ -648,7 +648,7 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 			var window_stat := _stat("%.2fs", cur_window, next_window, is_initial)
 			var pulse_stat := _stat("%.2fs", cur_pulse_every, next_pulse_every, is_initial)
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [hits_stat, window_stat, pulse_stat], "reward_card"))
-		"indomitable_spirit":
+		"unbroken_oath":
 			var cur_resist := float(cur_val) * 100.0
 			var next_resist := float(next_val) * 100.0
 			var cur_base_ratio := 45.0 + cur_resist
