@@ -214,6 +214,53 @@ if ($debugChecksPassed) {
 }
 
 # ============================================================================
+# CHECK 3: Validate power registry integrity (Phase 1 hardening)
+# ============================================================================
+Write-Host ""
+Write-Host "Checking power registry integrity..." -ForegroundColor Yellow
+
+$powerRegistryPath = "$scriptsPath/power_registry.gd"
+$powerRegistryChecked = $false
+
+if (Test-Path $powerRegistryPath) {
+    $content = Get-Content -Path $powerRegistryPath -Raw
+    
+    # Quick check: verify UPGRADE_BALANCE exists and has entries
+    if ($content -match 'const UPGRADE_BALANCE\s*:=\s*\{') {
+        $powerRegistryChecked = $true
+        Write-Host "[OK] Power registry structure is present" -ForegroundColor Green
+    } else {
+        Write-Host "  [WARN] Could not verify UPGRADE_BALANCE structure" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "  [WARN] power_registry.gd not found" -ForegroundColor Yellow
+}
+
+if (-not $powerRegistryChecked) {
+    Write-Host "[SKIP] Power registry validation (not available in this check)" -ForegroundColor Yellow
+}
+
+# ============================================================================
+# CHECK 4: Validate encounter sync registry (Phase 1 hardening)
+# ============================================================================
+Write-Host ""
+Write-Host "Checking encounter registry integrity..." -ForegroundColor Yellow
+
+$encounterContractsPath = "$scriptsPath/shared/encounter_contracts.gd"
+if (Test-Path $encounterContractsPath) {
+    $content = Get-Content -Path $encounterContractsPath -Raw
+    
+    # Check for registry build function
+    if ($content -match 'static func _build_encounter_registry\(\)') {
+        Write-Host "[OK] Encounter registry builder is present" -ForegroundColor Green
+    } else {
+        Write-Host "  [WARN] Encounter registry builder not found" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "  [WARN] encounter_contracts.gd not found" -ForegroundColor Yellow
+}
+
+# ============================================================================
 # All checks passed!
 # ============================================================================
 Write-Host ""

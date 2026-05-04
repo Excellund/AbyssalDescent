@@ -36,9 +36,11 @@ const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 const DEBUG_ENUMS := preload("res://scripts/shared/debug_enums.gd")
 const GLOSSARY_DATA := preload("res://scripts/shared/glossary_data.gd")
 const DEBUG_SETTINGS_SCRIPT := preload("res://scripts/debug_settings.gd")
+const VALIDATION_HARNESS_SCRIPT := preload("res://scripts/validation_harness.gd")
 const RUN_CONTEXT_PATH := "/root/RunContext"
 const MENU_SCENE_PATH := "res://scenes/Menu.tscn"
 const RUN_SNAPSHOT_VERSION := 1
+const ENABLE_FULL_VALIDATION := false  # Set to true to run comprehensive validation harness on startup (debug only)
 const BOSS_SPAWN_TRANSPORT_DURATION := 0.40
 const INTRO_SURVEY_TRANSPORT_PULSE_DURATION := 0.24
 const WORLD_HUD_SCRIPT := preload("res://scripts/world_hud.gd")
@@ -218,6 +220,11 @@ func _validate_encounter_content_sync() -> void:
 	var encounter_sync_issues := ENCOUNTER_CONTRACTS.validate_encounter_sync(GLOSSARY_DATA._encounter_rows())
 	for issue in encounter_sync_issues:
 		push_error("[Encounter Sync] %s" % issue)
+	
+	# Run comprehensive validation harness if enabled (debug mode only)
+	if ENABLE_FULL_VALIDATION:
+		var harness := VALIDATION_HARNESS_SCRIPT.new()
+		harness.run_full_validation()
 
 func _initialize_bootstrap_context() -> void:
 	rng.randomize()
