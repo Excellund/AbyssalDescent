@@ -817,8 +817,8 @@ func play_boss_void_zone_spawn(epicenter_global: Vector2, radius: float) -> void
 
 func play_boss_void_zone_pulse(epicenter_global: Vector2, radius: float) -> void:
 	_play_world_soft_pulse(epicenter_global, radius * 0.64, Color(0.18, 0.56, 0.92, 0.2), 0.18, 0.76, 1.12)
-	play_world_ring(epicenter_global, radius * 0.72, Color(0.18, 0.68, 1.0, 0.4), 0.18)
-	play_world_ring(epicenter_global, radius * 0.56, Color(0.44, 0.86, 1.0, 0.7), 0.13)
+	play_world_ring(epicenter_global, radius, Color(0.18, 0.68, 1.0, 0.4), 0.18)
+	play_world_ring(epicenter_global, radius * 0.72, Color(0.44, 0.86, 1.0, 0.7), 0.13)
 	play_world_ring(epicenter_global, radius * 0.34, Color(0.9, 1.0, 1.0, 0.56), 0.1)
 	_play_world_star_burst(epicenter_global, radius * 0.62, 6, Color(0.8, 0.98, 1.0, 0.42), 0.14)
 

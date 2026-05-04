@@ -28,9 +28,9 @@ const ATTACK_ECHO_CROSS := 2
 
 @export var null_ring_windup: float = 1.32
 @export var null_ring_radius: float = 160.0
-@export var null_ring_damage: int = 30
+@export var null_ring_damage: int = 26
 @export var null_ring_safe_radius: float = 96.0
-@export var null_ring_pull_force: float = 680.0
+@export var null_ring_pull_force: float = 500.0
 @export var null_ring_prediction_speed_cap: float = 300.0
 @export var null_ring_pull_delay: float = 0.56
 @export var null_ring_pull_fx_duration: float = 0.26
@@ -48,8 +48,8 @@ const ATTACK_ECHO_CROSS := 2
 @export var seam_duration: float = 4.0
 @export var seam_tick_interval: float = 0.35
 @export var seam_radius: float = 54.0
-@export var seam_tick_damage: int = 8
-@export var seam_spawn_limit_base: int = 4
+@export var seam_tick_damage: int = 6
+@export var seam_spawn_limit_base: int = 3
 
 var boss_state: int = STATE_STALK
 var state_time_left: float = 0.0
@@ -76,6 +76,10 @@ var impact_burst_time_left: float = 0.0
 var impact_burst_duration: float = 0.2
 var last_attack_for_fx: int = ATTACK_SEVER
 var seam_zones: Array[Dictionary] = []
+var _hit_flash_pos: Vector2 = Vector2.ZERO
+var hit_flash_time_left: float = 0.0
+var hit_flash_duration: float = 0.3
+var hit_flash_attack: int = ATTACK_SEVER
 
 func _ready() -> void:
 	max_health = boss_max_health
@@ -115,6 +119,7 @@ func _process_behavior(delta: float) -> void:
 	attack_afterglow_time_left = maxf(0.0, attack_afterglow_time_left - delta)
 	impact_burst_time_left = maxf(0.0, impact_burst_time_left - delta)
 	_null_ring_pull_fx_time_left = maxf(0.0, _null_ring_pull_fx_time_left - delta)
+	hit_flash_time_left = maxf(0.0, hit_flash_time_left - delta)
 	_update_edge_escape_state(delta)
 	queue_redraw()
 
@@ -285,6 +290,9 @@ func _apply_sever_hit() -> void:
 		if DAMAGEABLE.apply_damage(target, sever_damage, {"source": "enemy_ability", "ability": "lacuna_sever"}):
 			_sever_hit_applied = true
 			_spawn_seam(target.global_position)
+			_hit_flash_pos = target.global_position
+			hit_flash_time_left = hit_flash_duration
+			hit_flash_attack = ATTACK_SEVER
 
 func _apply_null_ring_hit() -> void:
 	if not is_instance_valid(target) or not DAMAGEABLE.can_take_damage(target):
@@ -292,6 +300,9 @@ func _apply_null_ring_hit() -> void:
 	var distance := target.global_position.distance_to(_locked_null_ring_center)
 	if distance > null_ring_safe_radius and distance <= null_ring_radius:
 		DAMAGEABLE.apply_damage(target, null_ring_damage, {"source": "enemy_ability", "ability": "lacuna_null_ring"})
+		_hit_flash_pos = target.global_position
+		hit_flash_time_left = hit_flash_duration
+		hit_flash_attack = ATTACK_NULL_RING
 	var to_center := _locked_null_ring_center - target.global_position
 	if distance > 0.000001 and distance <= null_ring_radius:
 		target.velocity += to_center.normalized() * null_ring_pull_force
@@ -308,6 +319,9 @@ func _apply_echo_cross_hit() -> void:
 		var hit_secondary := _distance_point_to_segment(target.global_position, global_position - secondary_dir * half_len, global_position + secondary_dir * half_len) <= echo_cross_width
 		if hit_primary or hit_secondary:
 			DAMAGEABLE.apply_damage(target, echo_cross_damage, {"source": "enemy_ability", "ability": "lacuna_echo_cross"})
+			_hit_flash_pos = target.global_position
+			hit_flash_time_left = hit_flash_duration
+			hit_flash_attack = ATTACK_ECHO_CROSS
 	var primary_dir := Vector2.RIGHT.rotated(_echo_cross_angle)
 	var secondary_dir := primary_dir.orthogonal()
 	var arm_reach := echo_cross_length * 0.5 - seam_radius * 0.5
@@ -450,6 +464,7 @@ func _draw() -> void:
 	_draw_attack_afterglow(facing)
 	_draw_null_ring_pull_fx()
 	_draw_attack_impact_burst(facing)
+	_draw_hit_flash()
 	if boss_state == STATE_WINDUP or (boss_state == STATE_ATTACK and active_attack == ATTACK_NULL_RING and _null_ring_pull_timer > 0.0):
 		_draw_attack_telegraph()
 		_draw_role_state_icon(facing, body_radius)
@@ -571,8 +586,10 @@ func _draw_seam_zones() -> void:
 		var fade := clampf(time_left / maxf(0.001, seam_duration), 0.0, 1.0)
 		var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.016 + seam_pos.x * 0.02)
 		var tick_pulse := clampf(float(seam.get("pulse", 0.0)) / 0.12, 0.0, 1.0)
-		draw_circle(local_pos, seam_radius, Color(0.14, 0.94, 0.72, (0.08 + tick_pulse * 0.06) * fade))
-		draw_arc(local_pos, seam_radius - 2.0 + pulse * 2.0, 0.0, TAU, 36, Color(0.76, 1.0, 0.92, (0.34 + tick_pulse * 0.4) * fade), 2.2)
+		draw_circle(local_pos, seam_radius + 8.0, Color(0.14, 0.82, 0.62, (0.06 + tick_pulse * 0.08) * fade))
+		draw_circle(local_pos, seam_radius, Color(0.14, 0.94, 0.72, (0.16 + tick_pulse * 0.1) * fade))
+		draw_arc(local_pos, seam_radius + 6.0, 0.0, TAU, 32, Color(0.62, 0.94, 0.82, (0.14 + tick_pulse * 0.18) * fade), 2.0)
+		draw_arc(local_pos, seam_radius - 2.0 + pulse * 2.0, 0.0, TAU, 36, Color(0.76, 1.0, 0.92, (0.48 + tick_pulse * 0.44) * fade), 3.0)
 		draw_arc(local_pos, seam_radius * 0.62, 0.0, TAU, 26, Color(0.2, 0.88, 0.74, 0.2 * fade), 1.4)
 		draw_circle(local_pos, seam_radius * 0.22, Color(0.84, 1.0, 0.95, (0.18 + tick_pulse * 0.46) * fade))
 		var seam_axis := Vector2.RIGHT.rotated(seam_pos.angle() + pulse * 0.45)
@@ -620,11 +637,11 @@ func _draw_attack_telegraph() -> void:
 		ATTACK_NULL_RING:
 			var local_center := _locked_null_ring_center - global_position
 			var danger_mid := (null_ring_safe_radius + null_ring_radius) * 0.5
-			draw_circle(local_center, null_ring_radius, Color(0.16, 0.96, 0.74, alpha * 0.14))
+			draw_circle(local_center, null_ring_radius, Color(0.16, 0.96, 0.74, alpha * 0.24))
 			draw_arc(local_center, null_ring_radius, 0.0, TAU, 60, Color(0.76, 1.0, 0.92, alpha), 3.2)
 			draw_arc(local_center, danger_mid, 0.0, TAU, 54, Color(0.84, 1.0, 0.96, alpha * 0.6), 8.0)
-			draw_circle(local_center, null_ring_safe_radius, Color(0.14, 0.94, 0.72, alpha * 0.08))
-			draw_arc(local_center, null_ring_safe_radius, 0.0, TAU, 36, Color(0.76, 1.0, 0.92, alpha * 0.34), 2.2)
+			draw_circle(local_center, null_ring_safe_radius, Color(0.04, 0.08, 0.07, alpha * 0.22))
+			draw_arc(local_center, null_ring_safe_radius, 0.0, TAU, 36, Color(0.76, 1.0, 0.92, alpha * 0.52), 3.0)
 			draw_arc(local_center, null_ring_safe_radius * 0.62, 0.0, TAU, 26, Color(0.2, 0.88, 0.74, alpha * 0.2), 1.4)
 			draw_circle(local_center, null_ring_safe_radius * 0.22, Color(0.84, 1.0, 0.95, alpha * 0.18))
 			draw_line(local_center + Vector2(-null_ring_safe_radius * 0.4, 0.0), local_center + Vector2(null_ring_safe_radius * 0.4, 0.0), Color(0.84, 1.0, 0.95, alpha * 0.46), 1.6)
@@ -649,6 +666,11 @@ func _draw_attack_telegraph() -> void:
 			var echo_offset := (0.1 + telegraph_alpha * 0.18) * echo_cross_width
 			draw_line(-primary_dir * half_len + secondary_dir * echo_offset, primary_dir * half_len + secondary_dir * echo_offset, Color(0.86, 1.0, 0.96, alpha * 0.26), 1.6)
 			draw_line(-secondary_dir * half_len - primary_dir * echo_offset, secondary_dir * half_len - primary_dir * echo_offset, Color(0.86, 1.0, 0.96, alpha * 0.2), 1.4)
+			var hw := echo_cross_width * 0.5
+			draw_line(-primary_dir * half_len + secondary_dir * hw, primary_dir * half_len + secondary_dir * hw, Color(0.9, 1.0, 0.96, alpha * 0.54), 1.6)
+			draw_line(-primary_dir * half_len - secondary_dir * hw, primary_dir * half_len - secondary_dir * hw, Color(0.9, 1.0, 0.96, alpha * 0.54), 1.6)
+			draw_line(-secondary_dir * half_len + primary_dir * hw, secondary_dir * half_len + primary_dir * hw, Color(0.9, 1.0, 0.96, alpha * 0.46), 1.6)
+			draw_line(-secondary_dir * half_len - primary_dir * hw, secondary_dir * half_len - primary_dir * hw, Color(0.9, 1.0, 0.96, alpha * 0.46), 1.6)
 
 func _draw_attack_afterglow(facing: Vector2) -> void:
 	if attack_afterglow_time_left <= 0.0:
@@ -698,8 +720,10 @@ func _draw_attack_impact_burst(_facing: Vector2) -> void:
 		return
 	var t := clampf(impact_burst_time_left / maxf(impact_burst_duration, 0.001), 0.0, 1.0)
 	var radius := 42.0 + (1.0 - t) * 36.0
-	draw_arc(Vector2.ZERO, radius, 0.0, TAU, 42, Color(0.92, 1.0, 0.98, 0.34 * t), 3.4)
-	draw_circle(Vector2.ZERO, radius * 0.44, Color(0.26, 0.98, 0.8, 0.08 * t))
+	draw_circle(Vector2.ZERO, radius * 0.26, Color(1.0, 1.0, 1.0, 0.44 * t * t))
+	draw_circle(Vector2.ZERO, radius * 0.54, Color(0.26, 0.98, 0.8, 0.14 * t))
+	draw_arc(Vector2.ZERO, radius, 0.0, TAU, 42, Color(0.92, 1.0, 0.98, 0.52 * t), 4.2)
+	draw_arc(Vector2.ZERO, radius + 10.0, 0.0, TAU, 32, Color(0.68, 1.0, 0.9, 0.22 * t), 2.0)
 	if active_attack == ATTACK_ECHO_CROSS:
 		var primary_dir := Vector2.RIGHT.rotated(_echo_cross_angle)
 		var secondary_dir := primary_dir.orthogonal()
@@ -714,3 +738,40 @@ func _draw_attack_impact_burst(_facing: Vector2) -> void:
 		for pos in arm_positions:
 			var burst_radius := 18.0 + (1.0 - t) * 22.0
 			draw_arc(pos, burst_radius, 0.0, TAU, 24, burst_color, 2.8)
+
+func _draw_hit_flash() -> void:
+	if hit_flash_time_left <= 0.0:
+		return
+	var t := clampf(hit_flash_time_left / maxf(hit_flash_duration, 0.001), 0.0, 1.0)
+	var expand := 1.0 - t
+	var local_pos := _hit_flash_pos - global_position
+	match hit_flash_attack:
+		ATTACK_SEVER:
+			var slash_radius := 22.0 + expand * 28.0
+			draw_circle(local_pos, slash_radius, Color(0.94, 1.0, 0.98, 0.18 * t))
+			draw_arc(local_pos, slash_radius, 0.0, TAU, 28, Color(0.88, 1.0, 0.96, 0.72 * t), 3.2)
+			draw_circle(local_pos, 8.0 + expand * 8.0, Color(1.0, 1.0, 1.0, 0.62 * t))
+			var slash_dir := locked_direction
+			var slash_side := slash_dir.orthogonal()
+			draw_line(local_pos - slash_dir * (slash_radius * 0.5), local_pos + slash_dir * (slash_radius * 0.5), Color(0.94, 1.0, 0.98, 0.58 * t * t), 3.0)
+			for mark_i in range(3):
+				var mark_offset := slash_side * lerpf(-sever_width * 0.5, sever_width * 0.5, float(mark_i) / 2.0)
+				draw_line(local_pos + mark_offset - slash_dir * 6.0, local_pos + mark_offset + slash_dir * 6.0, Color(0.92, 1.0, 0.97, 0.34 * t), 1.6)
+		ATTACK_NULL_RING:
+			var ring_r := 28.0 + expand * 20.0
+			draw_circle(local_pos, ring_r, Color(0.16, 0.94, 0.74, 0.16 * t))
+			draw_arc(local_pos, ring_r, 0.0, TAU, 32, Color(0.88, 1.0, 0.95, 0.76 * t), 3.6)
+			draw_circle(local_pos, 10.0 * t, Color(1.0, 1.0, 1.0, 0.54 * t))
+			for spoke_i in range(6):
+				var a := float(spoke_i) * TAU / 6.0
+				var d := Vector2.RIGHT.rotated(a)
+				draw_line(local_pos + d * (ring_r - 2.0), local_pos + d * (ring_r + 8.0 + expand * 10.0), Color(0.94, 1.0, 0.98, 0.52 * t), 2.0)
+		ATTACK_ECHO_CROSS:
+			var primary_dir := Vector2.RIGHT.rotated(_echo_cross_angle)
+			var secondary_dir := primary_dir.orthogonal()
+			var arm := 26.0 + expand * 20.0
+			draw_line(local_pos - primary_dir * arm, local_pos + primary_dir * arm, Color(0.24, 1.0, 0.82, 0.22 * t), 18.0)
+			draw_line(local_pos - secondary_dir * arm, local_pos + secondary_dir * arm, Color(0.24, 1.0, 0.82, 0.18 * t), 14.0)
+			draw_line(local_pos - primary_dir * arm, local_pos + primary_dir * arm, Color(0.94, 1.0, 0.98, 0.72 * t), 3.0)
+			draw_line(local_pos - secondary_dir * arm, local_pos + secondary_dir * arm, Color(0.94, 1.0, 0.98, 0.66 * t), 3.0)
+			draw_circle(local_pos, 12.0 * t + expand * 6.0, Color(1.0, 1.0, 1.0, 0.58 * t))

@@ -2415,8 +2415,12 @@ func _update_void_echo_zones(delta: float) -> void:
 				if not DAMAGEABLE.can_take_damage(enemy_node):
 					continue
 				var enemy_body := enemy_node as Node2D
-				if enemy_body.global_position.distance_to(zone_pos) > radius:
+				var dist := enemy_body.global_position.distance_to(zone_pos)
+				if dist > radius:
 					continue
+				var to_center := zone_pos - enemy_body.global_position
+				if dist > 0.001:
+					enemy_body.velocity += to_center.normalized() * 315.0
 				DAMAGEABLE.apply_damage(enemy_node, pulse_damage, {"is_ground_attack": true, "attack_type": "void_echo_zone"})
 			_void_echo_pulse_kill_suppression_depth = maxi(0, _void_echo_pulse_kill_suppression_depth - 1)
 		zone["pulse_left"] = pulse_left
@@ -2453,7 +2457,7 @@ func _update_convergence_window(delta: float) -> void:
 func _apply_void_echo(kill_pos: Vector2) -> void:
 	if kill_pos == Vector2.ZERO:
 		return
-	var echo_radius := clampf(96.0 + float(void_echo_damage) * 1.05, 96.0, 260.0)
+	var echo_radius := clampf(54.0 + float(void_echo_damage) * 0.6, 54.0, 110.0)
 	var zone_data := {
 		"pos": kill_pos,
 		"life": 3.6,
