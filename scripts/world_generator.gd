@@ -45,6 +45,7 @@ const OBJECTIVE_FRAME_COORDINATOR_SCRIPT := preload("res://scripts/core/objectiv
 const OBJECTIVE_PROGRESS_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_progress_coordinator.gd")
 const ROOM_CLEAR_OUTCOME_COORDINATOR_SCRIPT := preload("res://scripts/core/room_clear_outcome_coordinator.gd")
 const COMBAT_PHASE_COORDINATOR_SCRIPT := preload("res://scripts/core/combat_phase_coordinator.gd")
+const PLAYER_FLOW_COORDINATOR_SCRIPT := preload("res://scripts/core/player_flow_coordinator.gd")
 const RUN_CONTEXT_PATH := "/root/RunContext"
 const MENU_SCENE_PATH := "res://scenes/Menu.tscn"
 const RUN_SNAPSHOT_VERSION := 1
@@ -188,6 +189,7 @@ var objective_frame_coordinator
 var objective_progress_coordinator
 var room_clear_outcome_coordinator
 var combat_phase_coordinator
+var player_flow_coordinator
 
 func _apply_debug_settings_from_node() -> void:
 	var debug_settings := get_node_or_null("DebugSettings")
@@ -254,6 +256,7 @@ func _initialize_bootstrap_context() -> void:
 	objective_progress_coordinator = OBJECTIVE_PROGRESS_COORDINATOR_SCRIPT.new()
 	room_clear_outcome_coordinator = ROOM_CLEAR_OUTCOME_COORDINATOR_SCRIPT.new()
 	combat_phase_coordinator = COMBAT_PHASE_COORDINATOR_SCRIPT.new()
+	player_flow_coordinator = PLAYER_FLOW_COORDINATOR_SCRIPT.new()
 	power_registry_instance = POWER_REGISTRY.new()
 	player = get_node_or_null(player_path) as Node2D
 	_setup_player_runtime_bindings()
@@ -627,8 +630,7 @@ func _apply_debug_mutator_override(profile: Dictionary) -> Dictionary:
 	return encounter_profile_builder.apply_mutator_variant_to_profile(profile, mutator, room_depth)
 
 func _reset_for_debug_jump() -> void:
-	if is_instance_valid(reward_selection_ui):
-		reward_selection_ui.close_selection()
+	player_flow_coordinator.close_reward_selection_if_active(reward_selection_ui)
 	_set_combat_paused(false)
 	choosing_next_room = false
 	door_options.clear()
@@ -646,9 +648,7 @@ func _reset_for_debug_jump() -> void:
 	boss_reward_pending = false
 	last_defeated_boss_id = ""
 	_clear_all_enemies()
-
-	if is_instance_valid(player):
-		player.global_position = Vector2.ZERO
+	player_flow_coordinator.reset_player_position(player)
 
 func _start_debug_objective_room(kind: String = "") -> Dictionary:
 	_mark_telemetry_debug_mode()
@@ -1300,7 +1300,7 @@ func _apply_active_run_snapshot(snapshot: Dictionary) -> bool:
 		return false
 
 	_clear_all_enemies()
-	player.global_position = Vector2.ZERO
+	player_flow_coordinator.reset_player_position(player)
 	_apply_camera_bounds_for_room(current_room_size)
 	_play_room_music(false, false)
 	hud.refresh(_get_hud_state(), player)
@@ -1363,15 +1363,11 @@ func _on_defeat_back_to_menu() -> void:
 
 func _on_pause_back_to_menu_requested() -> void:
 	_finish_active_run_telemetry("menu_exit")
-	_set_combat_paused(false)
-	if is_instance_valid(pause_menu_controller):
-		pause_menu_controller.close()
+	player_flow_coordinator.prepare_for_menu_transition(combat_phase_coordinator, player, get_tree(), pause_menu_controller)
 	get_tree().change_scene_to_file(MENU_SCENE_PATH)
 
 func _on_pause_abandon_run_requested() -> void:
-	_set_combat_paused(false)
-	if is_instance_valid(pause_menu_controller):
-		pause_menu_controller.close()
+	player_flow_coordinator.prepare_for_menu_transition(combat_phase_coordinator, player, get_tree(), pause_menu_controller)
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context != null:
 		run_context.set_last_run_outcome("death")
@@ -1429,7 +1425,7 @@ func _choose_door(door: Dictionary) -> void:
 
 	if not is_instance_valid(player):
 		return
-	player.global_position = Vector2.ZERO
+	player_flow_coordinator.reset_player_position(player)
 	if not is_instance_valid(encounter_flow_system):
 		return
 	var choice: Dictionary = encounter_route_controller.resolve_choice(door)
@@ -1989,10 +1985,8 @@ func _on_player_died() -> void:
 		return
 	player_defeated = true
 	_set_combat_paused(true)
-	if is_instance_valid(reward_selection_ui):
-		reward_selection_ui.close_selection()
-	if is_instance_valid(pause_menu_controller) and bool(pause_menu_controller.is_open()):
-		pause_menu_controller.close()
+	player_flow_coordinator.close_reward_selection_if_active(reward_selection_ui)
+	player_flow_coordinator.close_pause_menu_if_open(pause_menu_controller)
 	run_cleared = true
 	choosing_next_room = false
 	objective_lifecycle_coordinator.clear_on_player_defeat(objective_manager)
@@ -2002,9 +1996,7 @@ func _on_player_died() -> void:
 		run_context.set_last_run_outcome("death")
 		run_context.clear_active_run()
 		run_context.clear_resume_saved_run_request()
-	hud.show_banner("Defeat", "")
-	if is_instance_valid(defeat_screen):
-		defeat_screen.show_defeat(current_room_label, room_depth)
+	player_flow_coordinator.show_defeat_feedback(hud, defeat_screen, current_room_label, room_depth)
 
 func _apply_boon_to_player(boon_id: String) -> void:
 	if not is_instance_valid(player):
