@@ -3,6 +3,7 @@ extends Node
 const ENUMS := preload("res://scripts/shared/enums.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
+const OBJECTIVE_STATE_SETUP := preload("res://scripts/objective_state_setup.gd")
 
 # Objective roles are stable internal IDs. Encounter kind strings can change in one place below.
 const OBJECTIVE_ROLE_LAST_STAND = "last_stand_role"
@@ -131,6 +132,7 @@ const VFX_MARKER_DIAMOND_SIZE = 8.0
 
 var world: Node
 var rng: RandomNumberGenerator
+var objective_state_setup: RefCounted = OBJECTIVE_STATE_SETUP.new()
 var _control_relief_kills_applied: int = 0
 var _control_spawn_interval_base: float = 0.0
 var _control_spawn_interval_relief_cap: float = 0.0
@@ -147,37 +149,11 @@ func _is_active_objective_role(role: String) -> bool:
 	return world.active_objective_kind == _objective_kind_for_role(role)
 
 func _clear_all_objective_state() -> void:
-	world.active_objective_kind = ""
-	world.objective_time_left = 0.0
-	world.objective_spawn_interval = 0.0
-	world.objective_spawn_timer = 0.0
-	world.objective_spawn_batch = 1
-	world.objective_max_enemies = 0
-	world.objective_kill_target = 0
-	world.objective_kills = 0
-	world.objective_overtime = false
-	world.objective_survival_quota_announced = false
-	world.objective_target_enemy = null
-	world.objective_target_type = ""
-	world.objective_target_name = ""
-	world.objective_hunt_kill_progress = 0
-	world.objective_control_anchor = Vector2.ZERO
-	world.objective_control_radius = 0.0
-	world.objective_control_progress = 0.0
-	world.objective_control_goal = 0.0
-	world.objective_control_decay_rate = 0.0
-	world.objective_control_contest_threshold = 0
-	world.objective_control_enemies_in_zone = 0
-	world.objective_control_player_inside = false
-	world.objective_control_contested = false
+	objective_state_setup.clear_world_state(world)
 	_control_relief_kills_applied = 0
 	_control_spawn_interval_base = 0.0
 	_control_spawn_interval_relief_cap = 0.0
 	_control_relief_phase_announced = false
-	world.objective_exposure_left = 0.0
-	world.objective_exposure_push_left = 0.0
-	world.objective_last_relocated_escort_count = 0
-	world.objective_relocation_hint_left = 0.0
 	clear_priority_target_escort_dash_lines()
 	clear_priority_target_exposure_vfx()
 
@@ -185,7 +161,7 @@ func reset_room_objective_state() -> void:
 	_clear_all_objective_state()
 
 func begin_room_objective(profile: Dictionary) -> void:
-	world.active_objective_kind = ENCOUNTER_CONTRACTS.profile_objective_kind(profile)
+	objective_state_setup.activate_profile_objective_kind(world, profile)
 	if _is_active_objective_role(OBJECTIVE_ROLE_LAST_STAND):
 		_begin_survival_objective(profile)
 		return
@@ -196,63 +172,58 @@ func begin_room_objective(profile: Dictionary) -> void:
 		_begin_control_objective(profile)
 
 func _begin_survival_objective(profile: Dictionary) -> void:
-	world.objective_time_left = ENCOUNTER_CONTRACTS.profile_objective_duration(profile)
-	world.objective_spawn_interval = ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
+	var spawn_interval := ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
 	var objective_pressure_mult: float = world._objective_pressure_mult()
-	world.objective_spawn_interval *= clampf(LastStandConfig.SPAWN_INTERVAL_MULT_BASE - objective_pressure_mult * LastStandConfig.SPAWN_INTERVAL_MULT_PRESSURE, LastStandConfig.SPAWN_INTERVAL_CLAMP_MIN, LastStandConfig.SPAWN_INTERVAL_CLAMP_MAX)
-	world.objective_spawn_timer = world.objective_spawn_interval
-	world.objective_spawn_batch = ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
-	world.objective_spawn_batch = maxi(1, int(round(float(world.objective_spawn_batch) * objective_pressure_mult)))
-	world.objective_max_enemies = mini(LastStandConfig.MAX_ENEMIES_HARD_CAP, LastStandConfig.MAX_ENEMIES_BASE + int(floor(float(world.room_depth) * LastStandConfig.MAX_ENEMIES_DEPTH_MULT)))
-	world.objective_max_enemies = maxi(8, int(round(float(world.objective_max_enemies) * objective_pressure_mult)))
-	var raw_kill_target := maxi(LastStandConfig.KILL_TARGET_BASE, int(round(world.objective_time_left * LastStandConfig.KILL_TARGET_TIME_MULT)) + LastStandConfig.KILL_TARGET_BASE_BONUS + int(floor(float(world.room_depth) * LastStandConfig.KILL_TARGET_DEPTH_MULT)))
+	spawn_interval *= clampf(LastStandConfig.SPAWN_INTERVAL_MULT_BASE - objective_pressure_mult * LastStandConfig.SPAWN_INTERVAL_MULT_PRESSURE, LastStandConfig.SPAWN_INTERVAL_CLAMP_MIN, LastStandConfig.SPAWN_INTERVAL_CLAMP_MAX)
+	var spawn_batch := ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
+	spawn_batch = maxi(1, int(round(float(spawn_batch) * objective_pressure_mult)))
+	var max_enemies := mini(LastStandConfig.MAX_ENEMIES_HARD_CAP, LastStandConfig.MAX_ENEMIES_BASE + int(floor(float(world.room_depth) * LastStandConfig.MAX_ENEMIES_DEPTH_MULT)))
+	max_enemies = maxi(8, int(round(float(max_enemies) * objective_pressure_mult)))
+	var objective_time_left := ENCOUNTER_CONTRACTS.profile_objective_duration(profile)
+	var raw_kill_target := maxi(LastStandConfig.KILL_TARGET_BASE, int(round(objective_time_left * LastStandConfig.KILL_TARGET_TIME_MULT)) + LastStandConfig.KILL_TARGET_BASE_BONUS + int(floor(float(world.room_depth) * LastStandConfig.KILL_TARGET_DEPTH_MULT)))
 	raw_kill_target = maxi(LastStandConfig.KILL_TARGET_MIN, int(round(float(raw_kill_target) * objective_pressure_mult)))
-	world.objective_kill_target = int(ceil(float(raw_kill_target) / 5.0)) * 5
-	world.objective_kills = 0
-	world.objective_overtime = false
-	world.objective_survival_quota_announced = false
+	var kill_target := int(ceil(float(raw_kill_target) / float(LastStandConfig.KILL_TARGET_ROUND_TO))) * LastStandConfig.KILL_TARGET_ROUND_TO
+	objective_state_setup.apply_survival_setup(world, profile, spawn_interval, spawn_interval, spawn_batch, max_enemies, kill_target)
 
 func _begin_priority_target_objective(profile: Dictionary) -> void:
-	world.objective_target_type = ENCOUNTER_CONTRACTS.profile_objective_target_type(profile)
-	if world.objective_target_type.is_empty():
-		world.objective_target_type = CutTheSignalConfig.DEFAULT_TYPE
-	world.objective_target_name = "Signal"
-	world.objective_time_left = ENCOUNTER_CONTRACTS.profile_objective_duration(profile)
-	world.objective_spawn_interval = ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
+	var target_type := ENCOUNTER_CONTRACTS.profile_objective_target_type(profile)
+	if target_type.is_empty():
+		target_type = CutTheSignalConfig.DEFAULT_TYPE
+	var spawn_interval := ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
 	var objective_pressure_mult: float = world._objective_pressure_mult()
-	world.objective_spawn_timer = maxf(CutTheSignalConfig.SPAWN_TIMER_MIN, world.objective_spawn_interval * clampf(CutTheSignalConfig.SPAWN_INTERVAL_BASE - objective_pressure_mult * 0.45, CutTheSignalConfig.SPAWN_INTERVAL_CLAMP_MIN, CutTheSignalConfig.SPAWN_INTERVAL_CLAMP_MAX))
-	world.objective_spawn_batch = ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
-	world.objective_spawn_batch = maxi(1, int(round(float(world.objective_spawn_batch) * objective_pressure_mult)))
-	world.objective_max_enemies = 12 + int(floor(float(world.room_depth) * CutTheSignalConfig.MAX_ENEMIES_DEPTH_MULT))
-	world.objective_max_enemies = maxi(CutTheSignalConfig.MAX_ENEMIES_MIN, int(round(float(world.objective_max_enemies) * objective_pressure_mult)))
-	world.objective_hunt_kill_goal = clampi(int(round(CutTheSignalConfig.HUNT_KILL_MULT * objective_pressure_mult)), CutTheSignalConfig.HUNT_KILL_GOAL_MIN, CutTheSignalConfig.HUNT_KILL_GOAL_MAX)
-	world.objective_overtime = false
+	var spawn_timer := maxf(CutTheSignalConfig.SPAWN_TIMER_MIN, spawn_interval * clampf(CutTheSignalConfig.SPAWN_INTERVAL_BASE - objective_pressure_mult * 0.45, CutTheSignalConfig.SPAWN_INTERVAL_CLAMP_MIN, CutTheSignalConfig.SPAWN_INTERVAL_CLAMP_MAX))
+	var spawn_batch := ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
+	spawn_batch = maxi(1, int(round(float(spawn_batch) * objective_pressure_mult)))
+	var max_enemies := CutTheSignalConfig.MAX_ENEMIES_BASE + int(floor(float(world.room_depth) * CutTheSignalConfig.MAX_ENEMIES_DEPTH_MULT))
+	max_enemies = maxi(CutTheSignalConfig.MAX_ENEMIES_MIN, int(round(float(max_enemies) * objective_pressure_mult)))
+	var hunt_kill_goal := clampi(int(round(CutTheSignalConfig.HUNT_KILL_MULT * objective_pressure_mult)), CutTheSignalConfig.HUNT_KILL_GOAL_MIN, CutTheSignalConfig.HUNT_KILL_GOAL_MAX)
+	objective_state_setup.apply_priority_target_setup(world, profile, target_type, "Signal", spawn_interval, spawn_timer, spawn_batch, max_enemies, hunt_kill_goal)
 	spawn_priority_target_enemy()
 
 func _begin_control_objective(profile: Dictionary) -> void:
-	world.objective_time_left = ENCOUNTER_CONTRACTS.profile_objective_duration(profile)
-	world.objective_spawn_interval = ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
+	var spawn_interval := ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
 	var objective_pressure_mult: float = world._objective_pressure_mult()
 	var difficulty_rank := DIFFICULTY_CONFIG.get_difficulty_rank(int(world.current_difficulty_tier))
-	world.objective_spawn_timer = maxf(HoldTheLineConfig.SPAWN_TIMER_MIN, world.objective_spawn_interval * clampf(HoldTheLineConfig.SPAWN_INTERVAL_BASE - objective_pressure_mult * 0.12, HoldTheLineConfig.SPAWN_INTERVAL_CLAMP_MIN, HoldTheLineConfig.SPAWN_INTERVAL_CLAMP_MAX))
-	world.objective_spawn_batch = ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
-	world.objective_spawn_batch = maxi(1, int(round(float(world.objective_spawn_batch) * objective_pressure_mult)))
-	world.objective_max_enemies = HoldTheLineConfig.MAX_ENEMIES_BASE + int(floor(float(world.room_depth) * HoldTheLineConfig.MAX_ENEMIES_DEPTH_MULT))
-	world.objective_max_enemies = maxi(HoldTheLineConfig.MAX_ENEMIES_MIN, int(round(float(world.objective_max_enemies) * objective_pressure_mult)))
+	var spawn_timer := maxf(HoldTheLineConfig.SPAWN_TIMER_MIN, spawn_interval * clampf(HoldTheLineConfig.SPAWN_INTERVAL_BASE - objective_pressure_mult * 0.12, HoldTheLineConfig.SPAWN_INTERVAL_CLAMP_MIN, HoldTheLineConfig.SPAWN_INTERVAL_CLAMP_MAX))
+	var spawn_batch := ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
+	spawn_batch = maxi(1, int(round(float(spawn_batch) * objective_pressure_mult)))
+	var max_enemies := HoldTheLineConfig.MAX_ENEMIES_BASE + int(floor(float(world.room_depth) * HoldTheLineConfig.MAX_ENEMIES_DEPTH_MULT))
+	max_enemies = maxi(HoldTheLineConfig.MAX_ENEMIES_MIN, int(round(float(max_enemies) * objective_pressure_mult)))
 	if difficulty_rank == 2:
-		world.objective_spawn_batch = mini(world.objective_spawn_batch, 3)
-		world.objective_max_enemies = mini(world.objective_max_enemies, 9)
-	world.objective_control_anchor = Vector2.ZERO
-	world.objective_control_radius = ENCOUNTER_CONTRACTS.profile_objective_zone_radius(profile)
-	world.objective_control_progress = 0.0
-	world.objective_control_goal = ENCOUNTER_CONTRACTS.profile_objective_progress_goal(profile)
-	world.objective_control_decay_rate = ENCOUNTER_CONTRACTS.profile_objective_progress_decay(profile)
-	world.objective_control_contest_threshold = ENCOUNTER_CONTRACTS.profile_objective_contest_threshold(profile)
-	world.objective_control_enemies_in_zone = 0
-	world.objective_control_player_inside = false
-	world.objective_control_contested = false
-	world.objective_control_kill_baseline = world.objective_kills
-	world.objective_overtime = false
+		spawn_batch = mini(spawn_batch, 3)
+		max_enemies = mini(max_enemies, 9)
+	objective_state_setup.apply_control_setup(
+		world,
+		profile,
+		spawn_interval,
+		spawn_timer,
+		spawn_batch,
+		max_enemies,
+		ENCOUNTER_CONTRACTS.profile_objective_zone_radius(profile),
+		ENCOUNTER_CONTRACTS.profile_objective_progress_goal(profile),
+		ENCOUNTER_CONTRACTS.profile_objective_progress_decay(profile),
+		ENCOUNTER_CONTRACTS.profile_objective_contest_threshold(profile)
+	)
 	_control_relief_kills_applied = 0
 	_control_spawn_interval_base = world.objective_spawn_interval
 	_control_spawn_interval_relief_cap = world.objective_spawn_interval + HoldTheLineConfig.SPAWN_INTERVAL_RELIEF_MAX_BONUS
