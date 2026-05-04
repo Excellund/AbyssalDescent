@@ -171,6 +171,42 @@ func get_hunt_target_max_health() -> int:
 	return hunt_target_enemy.get_max_health()
 
 
+## Whether any room objective is currently active
+func has_active_objective() -> bool:
+	return active_objective_kind == "last_stand" or active_objective_kind == "cut_the_signal" or active_objective_kind == "hold_the_line"
+
+
+## Whether hold-the-line control overlay should currently render
+func should_draw_control_overlay() -> bool:
+	if control_radius <= 0.0:
+		return false
+	if active_objective_kind == "hold_the_line":
+		return true
+	return control_progress > 0.0
+
+
+## Get objective telemetry fields used by world-level run events
+func get_telemetry_state() -> Dictionary:
+	return {
+		"objective_kind": active_objective_kind,
+		"objective_player_inside": control_player_inside,
+		"objective_contested": control_contested,
+	}
+
+
+## Get control overlay render state for world drawing
+func get_control_overlay_state() -> Dictionary:
+	return {
+		"should_draw": should_draw_control_overlay(),
+		"anchor": control_anchor,
+		"radius": control_radius,
+		"progress": control_progress,
+		"goal": control_goal,
+		"player_inside": control_player_inside,
+		"contested": control_contested,
+	}
+
+
 ## Get as HUD-compatible dictionary
 func get_hud_state() -> Dictionary:
 	return {

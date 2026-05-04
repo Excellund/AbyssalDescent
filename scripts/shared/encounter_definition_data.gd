@@ -82,7 +82,7 @@ static func validate_bearing_definitions(valid_labels: Array[String]) -> Array[S
 			issues.append("Canonical definition '%s' is missing Vector2 room_size." % label)
 		if not definition.has("base_counts") or not (definition.get("base_counts") is Dictionary):
 			issues.append("Canonical definition '%s' is missing base_counts dictionary." % label)
-		var rank_counts_variant := definition.get("rank_counts", [])
+		var rank_counts_variant: Variant = definition.get("rank_counts", [])
 		if not (rank_counts_variant is Array):
 			issues.append("Canonical definition '%s' rank_counts is not an array." % label)
 			continue

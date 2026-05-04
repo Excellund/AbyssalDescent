@@ -71,6 +71,7 @@ How to apply:
 
 - Split orchestration from implementation details.
 - Keep one runtime owner per behavior.
+- For repeated pause/start/end combat side effects (damage toggles, lingering-effect cleanup, physics process gating), route through a focused coordinator instead of duplicating world-level branches.
 - Remove mirrored or legacy paths after extraction.
 
 ### 4. Prefer Explicit Contracts

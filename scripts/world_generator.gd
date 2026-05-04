@@ -36,9 +36,20 @@ const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 const DEBUG_ENUMS := preload("res://scripts/shared/debug_enums.gd")
 const GLOSSARY_DATA := preload("res://scripts/shared/glossary_data.gd")
 const DEBUG_SETTINGS_SCRIPT := preload("res://scripts/debug_settings.gd")
+const VALIDATION_HARNESS_SCRIPT := preload("res://scripts/validation_harness.gd")
+const RUN_SESSION_SCRIPT := preload("res://scripts/core/run_session.gd")
+const WORLD_BOOTSTRAP_COORDINATOR_SCRIPT := preload("res://scripts/core/world_bootstrap_coordinator.gd")
+const ENCOUNTER_ROUTE_CONTROLLER_SCRIPT := preload("res://scripts/core/encounter_route_controller.gd")
+const OBJECTIVE_LIFECYCLE_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_lifecycle_coordinator.gd")
+const OBJECTIVE_FRAME_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_frame_coordinator.gd")
+const OBJECTIVE_PROGRESS_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_progress_coordinator.gd")
+const ROOM_CLEAR_OUTCOME_COORDINATOR_SCRIPT := preload("res://scripts/core/room_clear_outcome_coordinator.gd")
+const COMBAT_PHASE_COORDINATOR_SCRIPT := preload("res://scripts/core/combat_phase_coordinator.gd")
+const PLAYER_FLOW_COORDINATOR_SCRIPT := preload("res://scripts/core/player_flow_coordinator.gd")
 const RUN_CONTEXT_PATH := "/root/RunContext"
 const MENU_SCENE_PATH := "res://scenes/Menu.tscn"
 const RUN_SNAPSHOT_VERSION := 1
+const ENABLE_FULL_VALIDATION := false  # Set to true to run comprehensive validation harness on startup (debug only)
 const BOSS_SPAWN_TRANSPORT_DURATION := 0.40
 const INTRO_SURVEY_TRANSPORT_PULSE_DURATION := 0.24
 const WORLD_HUD_SCRIPT := preload("res://scripts/world_hud.gd")
@@ -137,9 +148,6 @@ var run_cleared: bool = false
 var boss_reward_pending: bool = false
 var last_defeated_boss_id: String = ""
 
-var boons_taken: Array[String] = []
-var arcana_rewards_taken: Array[String] = []
-
 var current_room_size: Vector2 = Vector2.ZERO
 var current_room_static_camera: bool = true
 var current_room_label: String = ""
@@ -173,6 +181,15 @@ var telemetry_spike_api_key: String = ""
 var telemetry_spike_timeout_seconds: float = 8.0
 var telemetry_spike_sender
 var telemetry_spike_requested: bool = false
+var run_session
+var bootstrap_coordinator
+var encounter_route_controller
+var objective_lifecycle_coordinator
+var objective_frame_coordinator
+var objective_progress_coordinator
+var room_clear_outcome_coordinator
+var combat_phase_coordinator
+var player_flow_coordinator
 
 func _apply_debug_settings_from_node() -> void:
 	var debug_settings := get_node_or_null("DebugSettings")
@@ -202,15 +219,21 @@ func _apply_debug_settings_from_node() -> void:
 	telemetry_spike_timeout_seconds = float(telemetry_timeout_value) if telemetry_timeout_value != null else 8.0
 
 func _ready() -> void:
-	_validate_encounter_content_sync()
-	_initialize_bootstrap_context()
-	_setup_world_bootstrap_state()
-	_setup_run_systems_phase()
-	_setup_ui_phase()
-	_setup_objective_runtime_system()
-	if _run_resume_flow():
-		return
-	if _run_debug_boot_flow():
+	bootstrap_coordinator = WORLD_BOOTSTRAP_COORDINATOR_SCRIPT.new()
+	var bootstrap_stages: Array[Callable] = [
+		Callable(self, "_validate_encounter_content_sync"),
+		Callable(self, "_initialize_bootstrap_context"),
+		Callable(self, "_setup_world_bootstrap_state"),
+		Callable(self, "_setup_run_systems_phase"),
+		Callable(self, "_setup_ui_phase"),
+		Callable(self, "_setup_objective_runtime_system")
+	]
+	bootstrap_coordinator.run_bootstrap(bootstrap_stages)
+	var boot_flows: Array[Callable] = [
+		Callable(self, "_run_resume_flow"),
+		Callable(self, "_run_debug_boot_flow")
+	]
+	if bootstrap_coordinator.run_first_success(boot_flows):
 		return
 	_begin_new_run_flow()
 
@@ -218,11 +241,24 @@ func _validate_encounter_content_sync() -> void:
 	var encounter_sync_issues := ENCOUNTER_CONTRACTS.validate_encounter_sync(GLOSSARY_DATA._encounter_rows())
 	for issue in encounter_sync_issues:
 		push_error("[Encounter Sync] %s" % issue)
+	
+	# Run comprehensive validation harness if enabled (debug mode only)
+	if ENABLE_FULL_VALIDATION:
+		var harness := VALIDATION_HARNESS_SCRIPT.new()
+		harness.run_full_validation()
 
 func _initialize_bootstrap_context() -> void:
 	rng.randomize()
 	_apply_debug_settings_from_node()
 	_maybe_start_telemetry_spike_probe()
+	run_session = RUN_SESSION_SCRIPT.new()
+	run_session.reset_for_new_run()
+	objective_lifecycle_coordinator = OBJECTIVE_LIFECYCLE_COORDINATOR_SCRIPT.new()
+	objective_frame_coordinator = OBJECTIVE_FRAME_COORDINATOR_SCRIPT.new()
+	objective_progress_coordinator = OBJECTIVE_PROGRESS_COORDINATOR_SCRIPT.new()
+	room_clear_outcome_coordinator = ROOM_CLEAR_OUTCOME_COORDINATOR_SCRIPT.new()
+	combat_phase_coordinator = COMBAT_PHASE_COORDINATOR_SCRIPT.new()
+	player_flow_coordinator = PLAYER_FLOW_COORDINATOR_SCRIPT.new()
 	power_registry_instance = POWER_REGISTRY.new()
 	player = get_node_or_null(player_path) as Node2D
 	_setup_player_runtime_bindings()
@@ -253,6 +289,8 @@ func _setup_run_systems_phase() -> void:
 	music_system.initialize(normal_room_music, boss_room_music, music_volume_db, music_crossfade_duration)
 	encounter_flow_system = ENCOUNTER_FLOW_SYSTEM_SCRIPT.new()
 	add_child(encounter_flow_system)
+	encounter_route_controller = ENCOUNTER_ROUTE_CONTROLLER_SCRIPT.new()
+	encounter_route_controller.set_encounter_flow_system(encounter_flow_system)
 	_setup_reward_selection_system()
 	_setup_encounter_profile_builder_system()
 	_setup_enemy_spawner_system()
@@ -594,8 +632,7 @@ func _apply_debug_mutator_override(profile: Dictionary) -> Dictionary:
 	return encounter_profile_builder.apply_mutator_variant_to_profile(profile, mutator, room_depth)
 
 func _reset_for_debug_jump() -> void:
-	if is_instance_valid(reward_selection_ui):
-		reward_selection_ui.close_selection()
+	player_flow_coordinator.close_reward_selection_if_active(reward_selection_ui)
 	_set_combat_paused(false)
 	choosing_next_room = false
 	door_options.clear()
@@ -613,9 +650,7 @@ func _reset_for_debug_jump() -> void:
 	boss_reward_pending = false
 	last_defeated_boss_id = ""
 	_clear_all_enemies()
-
-	if is_instance_valid(player):
-		player.global_position = Vector2.ZERO
+	player_flow_coordinator.reset_player_position(player)
 
 func _start_debug_objective_room(kind: String = "") -> Dictionary:
 	_mark_telemetry_debug_mode()
@@ -809,10 +844,8 @@ func _process(delta: float) -> void:
 	_keep_enemies_inside_current_room()
 	_keep_player_inside_camera_view()
 	var _grace_active := _update_encounter_intro_grace()
-	if not _grace_active:
-		_update_objective_state(delta)
-	_update_priority_target_marker(delta)
-	if objective_manager.active_objective_kind == "hold_the_line" or objective_manager.control_radius > 0.0:
+	var objective_frame_result: Dictionary = objective_frame_coordinator.tick(objective_manager, objective_runtime, delta, _grace_active)
+	if bool(objective_frame_result.get("should_redraw", false)):
 		queue_redraw()
 	_try_use_door()
 	_update_encounter_state()
@@ -840,31 +873,33 @@ func _refresh_frame_ui() -> void:
 	_sync_renderer()
 
 func _draw() -> void:
-	if objective_manager.control_radius <= 0.0:
+	var control_overlay: Dictionary = {}
+	if is_instance_valid(objective_manager) and objective_manager.has_method("get_control_overlay_state"):
+		control_overlay = objective_manager.get_control_overlay_state()
+	if not bool(control_overlay.get("should_draw", false)):
 		return
-	if objective_manager.active_objective_kind != "hold_the_line" and objective_manager.control_progress <= 0.0:
-		return
-	var goal := maxf(0.01, objective_manager.control_goal)
-	var progress_ratio := clampf(objective_manager.control_progress / goal, 0.0, 1.0)
+	var goal := maxf(0.01, float(control_overlay.get("goal", 0.0)))
+	var progress := float(control_overlay.get("progress", 0.0))
+	var progress_ratio := clampf(progress / goal, 0.0, 1.0)
+	var anchor := Vector2(control_overlay.get("anchor", Vector2.ZERO))
+	var radius := float(control_overlay.get("radius", 0.0))
+	var player_inside := bool(control_overlay.get("player_inside", false))
+	var contested := bool(control_overlay.get("contested", false))
 	var fill_color := Color(0.32, 0.72, 0.96, 0.08)
 	var ring_color := Color(0.46, 0.86, 1.0, 0.4)
 	var progress_color := Color(0.98, 0.86, 0.42, 0.92)
-	if objective_manager.control_player_inside and not objective_manager.control_contested:
+	if player_inside and not contested:
 		fill_color = Color(0.38, 0.92, 0.62, 0.1)
 		ring_color = Color(0.56, 1.0, 0.74, 0.5)
 		progress_color = Color(0.92, 1.0, 0.7, 0.98)
-	elif objective_manager.control_contested:
+	elif contested:
 		fill_color = Color(0.98, 0.46, 0.34, 0.08)
 		ring_color = Color(1.0, 0.64, 0.44, 0.54)
 		progress_color = Color(1.0, 0.8, 0.52, 0.94)
-	draw_circle(objective_manager.control_anchor, objective_manager.control_radius, fill_color)
-	draw_arc(objective_manager.control_anchor, objective_manager.control_radius, 0.0, TAU, 72, ring_color, 3.0)
-	draw_arc(objective_manager.control_anchor, objective_manager.control_radius - 8.0, -PI * 0.5, -PI * 0.5 + TAU * progress_ratio, 64, progress_color, 6.0)
-	draw_circle(objective_manager.control_anchor, 8.0, Color(1.0, 0.96, 0.72, 0.75))
-
-func _update_objective_state(delta: float) -> void:
-	if is_instance_valid(objective_runtime):
-		objective_runtime.update_objective_state(delta)
+	draw_circle(anchor, radius, fill_color)
+	draw_arc(anchor, radius, 0.0, TAU, 72, ring_color, 3.0)
+	draw_arc(anchor, radius - 8.0, -PI * 0.5, -PI * 0.5 + TAU * progress_ratio, 64, progress_color, 6.0)
+	draw_circle(anchor, 8.0, Color(1.0, 0.96, 0.72, 0.75))
 
 func _clamp_position_to_current_room(target_position: Vector2, margin: float = 28.0) -> Vector2:
 	if current_room_size == Vector2.ZERO:
@@ -874,10 +909,6 @@ func _clamp_position_to_current_room(target_position: Vector2, margin: float = 2
 		clampf(target_position.x, -half.x, half.x),
 		clampf(target_position.y, -half.y, half.y)
 	)
-
-func _update_priority_target_marker(delta: float) -> void:
-	if is_instance_valid(objective_runtime):
-		objective_runtime.update_priority_target_marker(delta)
 
 func _get_hud_state() -> Dictionary:
 	var display_room_depth := room_depth
@@ -896,6 +927,10 @@ func _get_hud_state() -> Dictionary:
 		if char_data != null and char_data.has("passive_id"):
 			current_character_passive_name = String(char_data.get("passive_id", "Passive"))
 	
+	var objective_hud_state: Dictionary = {}
+	if is_instance_valid(objective_manager) and objective_manager.has_method("get_hud_state"):
+		objective_hud_state = objective_manager.get_hud_state()
+	
 	var hud_state := {
 		"room_size": current_room_size,
 		"current_room_label": current_room_label,
@@ -906,27 +941,27 @@ func _get_hud_state() -> Dictionary:
 		"current_room_enemy_mutator": display_enemy_mutator,
 		"in_boss_room": in_boss_room,
 		"active_room_enemy_count": active_room_enemy_count,
-		"active_objective_kind": objective_manager.active_objective_kind,
-		"objective_time_left": objective_manager.time_left,
-		"objective_kills": objective_manager.kills,
-		"objective_kill_target": objective_manager.kill_target,
-		"objective_overtime": objective_manager.overtime,
-		"objective_target_name": objective_manager.hunt_target_name,
-		"objective_target_health": objective_manager.get_hunt_target_health(),
-		"objective_target_max_health": objective_manager.get_hunt_target_max_health(),
-		"objective_hunt_kill_progress": objective_manager.hunt_target_kill_progress,
-		"objective_hunt_kill_goal": objective_manager.hunt_target_kill_goal,
-		"objective_control_progress": objective_manager.control_progress,
-		"objective_control_goal": objective_manager.control_goal,
-		"objective_control_enemies_in_zone": objective_manager.control_enemies_in_zone,
-		"objective_control_contested": objective_manager.control_contested,
-		"objective_control_player_inside": objective_manager.control_player_inside,
-		"objective_exposure_left": objective_manager.exposure_left,
-		"objective_last_relocated_escort_count": objective_manager.last_relocated_escort_count,
-		"objective_relocation_hint_left": objective_manager.relocation_hint_left,
+		"active_objective_kind": String(objective_hud_state.get("active_objective_kind", "")),
+		"objective_time_left": float(objective_hud_state.get("time_left", 0.0)),
+		"objective_kills": int(objective_hud_state.get("kills", 0)),
+		"objective_kill_target": int(objective_hud_state.get("kill_target", 0)),
+		"objective_overtime": bool(objective_hud_state.get("overtime", false)),
+		"objective_target_name": String(objective_hud_state.get("hunt_target_name", "")),
+		"objective_target_health": int(objective_hud_state.get("hunt_target_health", 0)),
+		"objective_target_max_health": int(objective_hud_state.get("hunt_target_max_health", 0)),
+		"objective_hunt_kill_progress": int(objective_hud_state.get("hunt_target_kill_progress", 0)),
+		"objective_hunt_kill_goal": int(objective_hud_state.get("hunt_target_kill_goal", 0)),
+		"objective_control_progress": float(objective_hud_state.get("control_progress", 0.0)),
+		"objective_control_goal": float(objective_hud_state.get("control_goal", 0.0)),
+		"objective_control_enemies_in_zone": int(objective_hud_state.get("control_enemies_in_zone", 0)),
+		"objective_control_contested": bool(objective_hud_state.get("control_contested", false)),
+		"objective_control_player_inside": bool(objective_hud_state.get("control_player_inside", false)),
+		"objective_exposure_left": float(objective_hud_state.get("exposure_left", 0.0)),
+		"objective_last_relocated_escort_count": int(objective_hud_state.get("last_relocated_escort_count", 0)),
+		"objective_relocation_hint_left": float(objective_hud_state.get("relocation_hint_left", 0.0)),
 		"active_player_mutators": _get_active_player_mutators_for_hud(),
-		"objective_target_flee_thresholds": objective_manager.hunt_target_flee_thresholds,
-		"objective_target_next_flee_index": objective_manager.hunt_target_next_flee_index,
+		"objective_target_flee_thresholds": objective_hud_state.get("hunt_target_flee_thresholds", [0.75, 0.5, 0.25]),
+		"objective_target_next_flee_index": int(objective_hud_state.get("hunt_target_next_flee_index", 0)),
 		"encounter_intro_grace_active": encounter_intro_grace_active,
 		"boss_unlocked": boss_unlocked,
 		"first_boss_defeated": first_boss_defeated,
@@ -1017,7 +1052,7 @@ func _keep_player_inside_camera_view() -> void:
 func _update_encounter_state() -> void:
 	if choosing_next_room or run_cleared:
 		return
-	if objective_manager.active_objective_kind == "last_stand" or objective_manager.active_objective_kind == "cut_the_signal" or objective_manager.active_objective_kind == "hold_the_line":
+	if objective_manager.has_active_objective():
 		return
 	if active_room_enemy_count > 0:
 		return
@@ -1038,37 +1073,48 @@ func _on_room_cleared() -> void:
 		return
 	if is_instance_valid(player):
 		player.tick_objective_mutators_for_encounter()
-	var raw_outcome: Variant = encounter_flow_system.resolve_room_cleared(in_boss_room, pending_room_reward, rooms_cleared, room_depth, encounter_count)
-	var outcome: Dictionary = ENCOUNTER_CONTRACTS.normalize_room_cleared_outcome(raw_outcome)
-	run_cleared = ENCOUNTER_CONTRACTS.outcome_run_cleared(outcome)
-	if run_cleared and _is_endless_mode() and in_boss_room:
-		run_cleared = false
-		in_boss_room = false
-		endless_boss_defeated = true
-		rooms_cleared += 1
-		room_depth += 1
-		boss_unlocked = false
-		pending_room_reward = ENUMS.RewardMode.NONE
+	var outcome: Dictionary = room_clear_outcome_coordinator.resolve_outcome(
+		encounter_flow_system,
+		in_boss_room,
+		pending_room_reward,
+		rooms_cleared,
+		room_depth,
+		encounter_count
+	)
+	if outcome.is_empty():
+		return
+	var outcome_state: Dictionary = room_clear_outcome_coordinator.process_outcome({
+		"outcome": outcome,
+		"in_boss_room": in_boss_room,
+		"endless_mode": _is_endless_mode(),
+		"endless_boss_defeated": endless_boss_defeated,
+		"first_boss_defeated": first_boss_defeated,
+		"second_boss_defeated": second_boss_defeated,
+		"can_unlock_second": _is_second_boss_unlocked(),
+		"can_unlock_third": _is_third_boss_unlocked(),
+		"rooms_cleared": rooms_cleared,
+		"room_depth": room_depth,
+		"boss_unlocked": boss_unlocked,
+		"pending_room_reward": pending_room_reward,
+		"choosing_next_room": choosing_next_room
+	})
+	if not bool(outcome_state.get("ok", false)):
+		return
+	run_cleared = bool(outcome_state.get("run_cleared", run_cleared))
+	in_boss_room = bool(outcome_state.get("in_boss_room", in_boss_room))
+	endless_boss_defeated = bool(outcome_state.get("endless_boss_defeated", endless_boss_defeated))
+	rooms_cleared = int(outcome_state.get("rooms_cleared", rooms_cleared))
+	room_depth = int(outcome_state.get("room_depth", room_depth))
+	boss_unlocked = bool(outcome_state.get("boss_unlocked", boss_unlocked))
+	pending_room_reward = int(outcome_state.get("pending_room_reward", pending_room_reward))
+	choosing_next_room = bool(outcome_state.get("choosing_next_room", choosing_next_room))
+	phase_two_rooms_cleared += int(outcome_state.get("phase_two_increment", 0))
+	phase_three_rooms_cleared += int(outcome_state.get("phase_three_increment", 0))
+	if bool(outcome_state.get("show_endless_boss_banner", false)):
 		hud.show_banner("Boss Defeated", "")
-		_spawn_door_options()
+	if bool(outcome_state.get("terminal_run_cleared", false)):
 		return
-	if run_cleared:
-		choosing_next_room = false
-		return
-	rooms_cleared = ENCOUNTER_CONTRACTS.outcome_rooms_cleared(outcome)
-	room_depth = ENCOUNTER_CONTRACTS.outcome_room_depth(outcome)
-	if second_boss_defeated:
-		phase_three_rooms_cleared += 1
-		boss_unlocked = _is_third_boss_unlocked()
-	elif first_boss_defeated:
-		phase_two_rooms_cleared += 1
-		boss_unlocked = _is_second_boss_unlocked()
-	else:
-		boss_unlocked = ENCOUNTER_CONTRACTS.outcome_boss_unlocked(outcome)
-	if _is_endless_mode() and endless_boss_defeated:
-		boss_unlocked = false
-	pending_room_reward = ENCOUNTER_CONTRACTS.outcome_pending_room_reward(outcome)
-	var reward_mode: int = ENCOUNTER_CONTRACTS.outcome_open_reward_mode(outcome)
+	var reward_mode: int = int(outcome_state.get("open_reward_mode", ENUMS.RewardMode.NONE))
 	if reward_mode == ENUMS.RewardMode.BOON:
 		_open_boon_selection("Choose Boon Reward", false, ENUMS.RewardMode.BOON, {}, "", current_character_id)
 		return
@@ -1078,7 +1124,7 @@ func _on_room_cleared() -> void:
 	if reward_mode == ENUMS.RewardMode.ARCANA:
 		_open_boon_selection("Choose Arcana", false, ENUMS.RewardMode.ARCANA, {}, "", current_character_id)
 		return
-	if ENCOUNTER_CONTRACTS.outcome_spawn_doors(outcome):
+	if bool(outcome_state.get("spawn_doors", false)):
 		_spawn_door_options()
 
 func _finish_first_boss_clear() -> void:
@@ -1256,7 +1302,7 @@ func _apply_active_run_snapshot(snapshot: Dictionary) -> bool:
 		return false
 
 	_clear_all_enemies()
-	player.global_position = Vector2.ZERO
+	player_flow_coordinator.reset_player_position(player)
 	_apply_camera_bounds_for_room(current_room_size)
 	_play_room_music(false, false)
 	hud.refresh(_get_hud_state(), player)
@@ -1319,15 +1365,11 @@ func _on_defeat_back_to_menu() -> void:
 
 func _on_pause_back_to_menu_requested() -> void:
 	_finish_active_run_telemetry("menu_exit")
-	_set_combat_paused(false)
-	if is_instance_valid(pause_menu_controller):
-		pause_menu_controller.close()
+	player_flow_coordinator.prepare_for_menu_transition(combat_phase_coordinator, player, get_tree(), pause_menu_controller)
 	get_tree().change_scene_to_file(MENU_SCENE_PATH)
 
 func _on_pause_abandon_run_requested() -> void:
-	_set_combat_paused(false)
-	if is_instance_valid(pause_menu_controller):
-		pause_menu_controller.close()
+	player_flow_coordinator.prepare_for_menu_transition(combat_phase_coordinator, player, get_tree(), pause_menu_controller)
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context != null:
 		run_context.set_last_run_outcome("death")
@@ -1342,24 +1384,26 @@ func _on_pause_exit_game_requested() -> void:
 func _spawn_door_options() -> void:
 	if not is_instance_valid(encounter_flow_system):
 		return
-	if choosing_next_room and not door_options.is_empty():
-		return
-	if is_instance_valid(player) and player.has_method("clear_lingering_combat_effects"):
-		player.clear_lingering_combat_effects()
+	combat_phase_coordinator.clear_player_lingering_effects(player)
 	door_options.clear()
-	choosing_next_room = true
 	var route_options := _roll_route_options(_build_route_context(room_depth))
-	var show_boss_door := boss_unlocked
-	var boss_encounter_key := "warden"
-	if second_boss_defeated:
-		show_boss_door = _is_third_boss_unlocked()
-		boss_unlocked = show_boss_door
-		boss_encounter_key = "lacuna"
-	elif first_boss_defeated:
-		show_boss_door = _is_second_boss_unlocked()
-		boss_unlocked = show_boss_door
-		boss_encounter_key = "sovereign"
-	door_options = encounter_flow_system.build_door_options(show_boss_door, room_depth, door_distance_from_center, route_options, boss_encounter_key)
+	var route_state: Dictionary = encounter_route_controller.build_route_state(
+		choosing_next_room,
+		door_options,
+		boss_unlocked,
+		first_boss_defeated,
+		second_boss_defeated,
+		room_depth,
+		door_distance_from_center,
+		route_options,
+		_is_second_boss_unlocked(),
+		_is_third_boss_unlocked()
+	)
+	if not bool(route_state.get("ok", false)):
+		return
+	choosing_next_room = bool(route_state.get("choosing_next_room", true))
+	door_options = route_state.get("door_options", [])
+	boss_unlocked = bool(route_state.get("boss_unlocked", boss_unlocked))
 	_save_active_run_checkpoint()
 
 func _try_use_door() -> void:
@@ -1371,11 +1415,9 @@ func _try_use_door() -> void:
 		return
 	if not is_instance_valid(encounter_flow_system):
 		return
-	var raw_result: Variant = encounter_flow_system.find_used_door(player.global_position, door_options, door_use_radius)
-	var result: Dictionary = ENCOUNTER_CONTRACTS.normalize_door_use_result(raw_result)
-	if not ENCOUNTER_CONTRACTS.door_use_is_used(result):
+	var used_door: Dictionary = encounter_route_controller.find_used_door(player.global_position, door_options, door_use_radius)
+	if used_door.is_empty():
 		return
-	var used_door := ENCOUNTER_CONTRACTS.door_use_get_door(result)
 	_choose_door(used_door)
 
 func _choose_door(door: Dictionary) -> void:
@@ -1385,11 +1427,12 @@ func _choose_door(door: Dictionary) -> void:
 
 	if not is_instance_valid(player):
 		return
-	player.global_position = Vector2.ZERO
+	player_flow_coordinator.reset_player_position(player)
 	if not is_instance_valid(encounter_flow_system):
 		return
-	var raw_choice: Variant = encounter_flow_system.resolve_chosen_door(door)
-	var choice: Dictionary = ENCOUNTER_CONTRACTS.normalize_door_choice(raw_choice)
+	var choice: Dictionary = encounter_route_controller.resolve_choice(door)
+	if choice.is_empty():
+		return
 	_record_door_choice(choice)
 	var action_id: int = ENCOUNTER_CONTRACTS.door_choice_action_id(choice)
 	if action_id == ENUMS.EncounterAction.BOSS:
@@ -1424,17 +1467,11 @@ func _begin_room(profile: Dictionary) -> void:
 	if profile.is_empty():
 		return
 	encounter_intro_grace_active = false
-	_set_player_combat_damage_enabled(true)
-	_clear_enemy_lingering_effects()
-	if is_instance_valid(player):
-		player.clear_lingering_combat_effects()
+	combat_phase_coordinator.begin_combat_phase(player, get_tree())
 	in_boss_room = false
 	in_second_boss_room = false
 	in_third_boss_room = false
-	if is_instance_valid(objective_manager):
-		objective_manager.reset()
-	if is_instance_valid(objective_runtime):
-		objective_runtime.reset_room_objective_state()
+	objective_lifecycle_coordinator.reset_and_begin_for_new_room(objective_manager, objective_runtime, profile)
 	_play_room_music(false)
 	current_room_size = ENCOUNTER_CONTRACTS.profile_room_size(profile)
 	current_room_static_camera = ENCOUNTER_CONTRACTS.profile_static_camera(profile)
@@ -1457,8 +1494,6 @@ func _begin_room(profile: Dictionary) -> void:
 		enemy_spawner.configure_room(current_room_size, spawn_padding, spawn_safe_radius, current_room_enemy_mutator, _get_active_enemy_mutators_for_room())
 	_apply_camera_bounds_for_room(current_room_size)
 	active_room_enemy_count = _spawn_profile_enemies(profile)
-	if is_instance_valid(objective_runtime):
-		objective_runtime.begin_room_objective(profile)
 	_start_encounter_intro_grace()
 
 func _enter_rest_site() -> void:
@@ -1518,10 +1553,7 @@ func _pick_boss_spawn_position(min_player_distance: float = 260.0, wall_margin: 
 
 func _begin_configured_boss_room(boss_stage: int, room_size: Vector2, room_label: String, room_entry_key: String, banner_title: String, boss_script, collision_radius: float, min_player_distance: float, wall_margin: float) -> void:
 	encounter_intro_grace_active = false
-	_set_player_combat_damage_enabled(true)
-	_clear_enemy_lingering_effects()
-	if is_instance_valid(player):
-		player.clear_lingering_combat_effects()
+	combat_phase_coordinator.begin_combat_phase(player, get_tree())
 	in_boss_room = boss_stage == 1
 	in_second_boss_room = boss_stage == 2
 	in_third_boss_room = boss_stage == 3
@@ -1605,54 +1637,24 @@ func _play_room_music(is_boss_room: bool, instant: bool = false, fade_duration: 
 
 func _on_room_enemy_died(kill_pos: Vector2 = Vector2.ZERO) -> void:
 	active_room_enemy_count = maxi(0, active_room_enemy_count - 1)
-	_apply_objective_engagement_bonus_on_kill(kill_pos)
-	if objective_manager.active_objective_kind == "last_stand" or objective_manager.active_objective_kind == "hold_the_line":
-		objective_manager.kills += 1
-	if objective_manager.active_objective_kind == "cut_the_signal" and is_instance_valid(objective_manager.hunt_target_enemy):
-		if objective_manager.exposure_left <= 0.0:
-			objective_manager.hunt_target_kill_progress += 1
-			if objective_manager.hunt_target_kill_progress >= objective_manager.hunt_target_kill_goal:
-				if is_instance_valid(objective_runtime):
-					objective_runtime.trigger_priority_target_exposure()
-	if objective_manager.active_objective_kind == "cut_the_signal" and objective_manager.overtime and objective_manager.spawn_timer > 0.2:
-		objective_manager.spawn_timer = maxf(0.2, objective_manager.spawn_timer - 0.08)
+	var objective_progress_result: Dictionary = objective_progress_coordinator.on_enemy_killed(objective_manager, objective_runtime, kill_pos)
+	if bool(objective_progress_result.get("should_redraw", false)):
+		queue_redraw()
 	if is_instance_valid(player):
 		player.notify_enemy_killed(kill_pos)
-
-func _apply_objective_engagement_bonus_on_kill(kill_pos: Vector2) -> void:
-	if objective_manager.active_objective_kind != "hold_the_line":
-		return
-	if objective_manager.control_goal <= 0.0:
-		return
-	if not objective_manager.control_player_inside or objective_manager.control_contested:
-		return
-	if not is_instance_valid(player):
-		return
-	if kill_pos == Vector2.ZERO:
-		return
-	var anchor := objective_manager.control_anchor
-	var bonus_radius := maxf(1.0, objective_manager.control_radius * objective_manager.engagement_bonus_radius_scale)
-	if kill_pos.distance_to(anchor) > bonus_radius:
-		return
-	objective_manager.control_progress = minf(objective_manager.control_goal, objective_manager.control_progress + objective_manager.engagement_kill_progress_bonus)
-	queue_redraw()
 
 func _clear_all_enemies() -> void:
 	if is_instance_valid(enemy_spawner):
 		enemy_spawner.clear_all_enemies()
 
 func _clear_enemy_lingering_effects() -> void:
-	for effect in get_tree().get_nodes_in_group("enemy_lingering_effects"):
-		if effect is Node:
-			(effect as Node).queue_free()
+	combat_phase_coordinator.clear_enemy_lingering_effects(get_tree())
 
 func _set_player_combat_damage_enabled(enabled: bool) -> void:
-	if is_instance_valid(player) and player.has_method("set_combat_damage_enabled"):
-		player.set_combat_damage_enabled(enabled)
+	combat_phase_coordinator.set_player_combat_damage_enabled(player, enabled)
 
 func _end_combat_phase() -> void:
-	_set_player_combat_damage_enabled(false)
-	_clear_enemy_lingering_effects()
+	combat_phase_coordinator.end_combat_phase(player, get_tree())
 
 func _apply_camera_bounds_for_room(room_size: Vector2) -> void:
 	if not is_instance_valid(player_camera):
@@ -1700,16 +1702,16 @@ func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> voi
 	_record_reward_choice(choice, mode, is_initial)
 	if mode == ENUMS.RewardMode.ARCANA:
 		_apply_arcana_to_player(String(choice["id"]))
-		arcana_rewards_taken.append(String(choice["name"]))
+		run_session.record_arcana(String(choice["name"]))
 	elif mode == ENUMS.RewardMode.MISSION:
 		_apply_mission_reward(choice)
 	elif mode == ENUMS.RewardMode.BOSS:
 		_apply_boon_to_player(String(choice["id"]))
-		boons_taken.append(String(choice["name"]))
+		run_session.record_boon(String(choice["name"]))
 		boss_reward_pending = false
 	else:
 		_apply_boon_to_player(String(choice["id"]))
-		boons_taken.append(String(choice["name"]))
+		run_session.record_boon(String(choice["name"]))
 	_set_combat_paused(false)
 	if is_initial:
 		pending_room_reward = ENUMS.RewardMode.BOON
@@ -1943,6 +1945,9 @@ func _on_player_damage_taken(raw_amount: int, final_amount: int, damage_context:
 		return
 	var context_copy := damage_context.duplicate(true)
 	var current_bearing_key := _bearing_key_from_label(current_room_label, "unknown")
+	var objective_kind: String = ""
+	if is_instance_valid(objective_manager):
+		objective_kind = String(objective_manager.active_objective_kind)
 	RUN_TELEMETRY_STORE.append_damage_event(telemetry_run_id, {
 		"unix_time": int(context_copy.get("unix_time", Time.get_unix_time_from_system())),
 		"source": String(context_copy.get("source", "unknown")),
@@ -1954,7 +1959,7 @@ func _on_player_damage_taken(raw_amount: int, final_amount: int, damage_context:
 		"room_label": current_room_label,
 		"bearing_key": current_bearing_key,
 		"room_depth": room_depth,
-		"objective_kind": active_objective_kind,
+		"objective_kind": objective_kind,
 		"active_enemies": active_room_enemy_count,
 		"difficulty_tier": current_difficulty_tier,
 		"character_id": current_character_id
@@ -1966,13 +1971,16 @@ func _on_player_died_for_telemetry() -> void:
 	var death_event: Dictionary = {}
 	if is_instance_valid(player):
 		death_event = player.get_last_damage_event() as Dictionary
+	var objective_telemetry: Dictionary = {}
+	if is_instance_valid(objective_manager) and objective_manager.has_method("get_telemetry_state"):
+		objective_telemetry = objective_manager.get_telemetry_state()
 	death_event["room_label"] = current_room_label
 	death_event["bearing_key"] = _bearing_key_from_label(current_room_label, "unknown")
 	death_event["room_depth"] = room_depth
-	death_event["objective_kind"] = objective_manager.active_objective_kind
+	death_event["objective_kind"] = String(objective_telemetry.get("objective_kind", ""))
 	death_event["active_enemies"] = active_room_enemy_count
-	death_event["objective_player_inside"] = objective_manager.control_player_inside
-	death_event["objective_contested"] = objective_manager.control_contested
+	death_event["objective_player_inside"] = bool(objective_telemetry.get("objective_player_inside", false))
+	death_event["objective_contested"] = bool(objective_telemetry.get("objective_contested", false))
 	death_event["difficulty_tier"] = current_difficulty_tier
 	death_event["character_id"] = current_character_id
 	_finish_active_run_telemetry("death", death_event)
@@ -1982,22 +1990,18 @@ func _on_player_died() -> void:
 		return
 	player_defeated = true
 	_set_combat_paused(true)
-	if is_instance_valid(reward_selection_ui):
-		reward_selection_ui.close_selection()
-	if is_instance_valid(pause_menu_controller) and bool(pause_menu_controller.is_open()):
-		pause_menu_controller.close()
+	player_flow_coordinator.close_reward_selection_if_active(reward_selection_ui)
+	player_flow_coordinator.close_pause_menu_if_open(pause_menu_controller)
 	run_cleared = true
 	choosing_next_room = false
-	objective_manager.active_objective_kind = ""
+	objective_lifecycle_coordinator.clear_on_player_defeat(objective_manager)
 	active_room_enemy_count = 0
 	var run_context := _get_run_context()
 	if run_context != null:
 		run_context.set_last_run_outcome("death")
 		run_context.clear_active_run()
 		run_context.clear_resume_saved_run_request()
-	hud.show_banner("Defeat", "")
-	if is_instance_valid(defeat_screen):
-		defeat_screen.show_defeat(current_room_label, room_depth)
+	player_flow_coordinator.show_defeat_feedback(hud, defeat_screen, current_room_label, room_depth)
 
 func _apply_boon_to_player(boon_id: String) -> void:
 	if not is_instance_valid(player):
@@ -2011,7 +2015,7 @@ func _apply_mission_reward(choice: Dictionary) -> void:
 	if chosen_id.is_empty():
 		return
 	_apply_boon_to_player(chosen_id)
-	boons_taken.append(String(chosen_upgrade.get("name", chosen_id)))
+	run_session.record_boon(String(chosen_upgrade.get("name", chosen_id)))
 	if is_instance_valid(hud):
 		hud.show_banner("Mission Reward", String(chosen_upgrade.get("name", chosen_id)))
 	if not chosen_mutator.is_empty():
@@ -2065,14 +2069,7 @@ func _apply_objective_mutator(choice: Dictionary) -> void:
 		hud.show_banner("Objective Reward", mutator_name)
 
 func _set_combat_paused(paused: bool) -> void:
-	if is_instance_valid(player):
-		if player is CharacterBody2D:
-			(player as CharacterBody2D).velocity = Vector2.ZERO
-		player.set_physics_process(not paused)
-	for enemy in get_tree().get_nodes_in_group("enemies"):
-		if enemy is Node:
-			(enemy as Node).set_physics_process(not paused)
-			(enemy as Node).set_process(not paused)
+	combat_phase_coordinator.set_combat_paused(player, get_tree(), paused)
 
 func _is_spawn_transport_active(enemy: Node) -> bool:
 	return bool(enemy.is_spawn_transporting())
