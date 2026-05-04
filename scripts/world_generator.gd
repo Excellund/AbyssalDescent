@@ -1809,9 +1809,7 @@ func _mark_telemetry_debug_mode() -> void:
 	telemetry_run_finished = true
 
 func _finish_active_run_telemetry(outcome: String, death_event: Dictionary = {}) -> void:
-	if not telemetry_enabled:
-		return
-	if telemetry_run_id.is_empty() or telemetry_run_finished:
+	if not _can_record_telemetry():
 		return
 	var summary := {
 		"max_depth": room_depth,
@@ -1833,8 +1831,11 @@ func _bearing_key_from_label(label: String, fallback: String = "unknown") -> Str
 func _bearing_key_from_profile(profile: Dictionary, fallback: String = "unknown") -> String:
 	return BEARING_KEY_NORMALIZER.from_profile(profile, fallback)
 
+func _can_record_telemetry() -> bool:
+	return telemetry_enabled and not telemetry_run_id.is_empty() and not telemetry_run_finished
+
 func _record_room_entry(room_kind: String, profile: Dictionary) -> void:
-	if not telemetry_enabled or telemetry_run_id.is_empty() or telemetry_run_finished:
+	if not _can_record_telemetry():
 		return
 	var mutator_name := "none"
 	var objective_kind := ""
@@ -1861,7 +1862,7 @@ func _record_room_entry(room_kind: String, profile: Dictionary) -> void:
 	})
 
 func _record_reward_choice(choice: Dictionary, mode: int, is_initial: bool) -> void:
-	if not telemetry_enabled or telemetry_run_id.is_empty() or telemetry_run_finished:
+	if not _can_record_telemetry():
 		return
 	var choice_id := String(choice.get("id", ""))
 	var choice_name := String(choice.get("name", choice_id))
@@ -1883,7 +1884,7 @@ func _record_reward_choice(choice: Dictionary, mode: int, is_initial: bool) -> v
 	RUN_TELEMETRY_STORE.append_reward_choice(telemetry_run_id, event_data)
 
 func _record_reward_offers(offers: Array[Dictionary], mode: int, is_initial: bool, stage: int) -> void:
-	if not telemetry_enabled or telemetry_run_id.is_empty() or telemetry_run_finished:
+	if not _can_record_telemetry():
 		return
 	if offers.is_empty():
 		return
@@ -1900,7 +1901,7 @@ func _record_reward_offers(offers: Array[Dictionary], mode: int, is_initial: boo
 	RUN_TELEMETRY_STORE.append_reward_offers(telemetry_run_id, event_data)
 
 func _record_door_choice(choice: Dictionary) -> void:
-	if not telemetry_enabled or telemetry_run_id.is_empty() or telemetry_run_finished:
+	if not _can_record_telemetry():
 		return
 	var profile := ENCOUNTER_CONTRACTS.door_choice_profile(choice)
 	var action_id := ENCOUNTER_CONTRACTS.door_choice_action_id(choice)
@@ -1938,7 +1939,7 @@ func _record_door_choice(choice: Dictionary) -> void:
 	})
 
 func _on_player_damage_taken(raw_amount: int, final_amount: int, damage_context: Dictionary) -> void:
-	if not telemetry_enabled or telemetry_run_id.is_empty() or telemetry_run_finished:
+	if not _can_record_telemetry():
 		return
 	var context_copy := damage_context.duplicate(true)
 	var current_bearing_key := _bearing_key_from_label(current_room_label, "unknown")
@@ -1960,7 +1961,7 @@ func _on_player_damage_taken(raw_amount: int, final_amount: int, damage_context:
 	})
 
 func _on_player_died_for_telemetry() -> void:
-	if not telemetry_enabled or telemetry_run_id.is_empty() or telemetry_run_finished:
+	if not _can_record_telemetry():
 		return
 	var death_event: Dictionary = {}
 	if is_instance_valid(player):

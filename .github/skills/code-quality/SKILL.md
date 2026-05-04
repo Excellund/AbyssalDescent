@@ -383,6 +383,26 @@ When multiple UI/modal states pause gameplay progression but still require HUD/r
 
 ---
 
+### 14. Centralize Repetitive Eligibility Guards
+
+When multiple functions repeat the same compound precondition check (e.g., "if enabled AND run_id not empty AND not finished"), extract into a single guard helper to own the eligibility logic.
+
+**Why it matters:**
+
+- Repeated guards are error-prone — divergence happens silently over time.
+- Centralized guards reduce cognitive load and make precondition intent explicit.
+- Future eligibility changes propagate to all call sites automatically.
+- One canonical location for the rule makes it easier to audit and debug.
+
+**How to apply:**
+
+- Create a helper like `_can_record_telemetry() -> bool` that returns the compound condition result.
+- Replace all repeat guard patterns with `if not _can_record_telemetry(): return`.
+- Document the eligibility semantics (e.g., "returns true when telemetry is enabled AND run ID is populated AND run is not finished").
+- If guard conditions change in the future, update only the helper; all call sites inherit the change automatically.
+
+---
+
 ## Procedure: Code Quality Review Checklist
 
 When reviewing or refactoring code, ask these questions in order:
