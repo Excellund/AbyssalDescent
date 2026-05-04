@@ -131,6 +131,7 @@ const VFX_EXPOSURE_PULSE_AMPLITUDE = 0.5
 const VFX_MARKER_DIAMOND_SIZE = 8.0
 
 var world: Node
+var objective_manager: Node
 var rng: RandomNumberGenerator
 var objective_state_setup: RefCounted = OBJECTIVE_STATE_SETUP.new()
 var _control_relief_kills_applied: int = 0
@@ -138,18 +139,19 @@ var _control_spawn_interval_base: float = 0.0
 var _control_spawn_interval_relief_cap: float = 0.0
 var _control_relief_phase_announced: bool = false
 
-func initialize(world_generator: Node, random_number_generator: RandomNumberGenerator) -> void:
+func initialize(world_generator: Node, random_number_generator: RandomNumberGenerator, objective_mgr: Node) -> void:
 	world = world_generator
+	objective_manager = objective_mgr
 	rng = random_number_generator
 
 func _objective_kind_for_role(role: String) -> String:
 	return String(OBJECTIVE_KIND_BY_ROLE.get(role, ""))
 
 func _is_active_objective_role(role: String) -> bool:
-	return world.active_objective_kind == _objective_kind_for_role(role)
+	return objective_manager.active_objective_kind == _objective_kind_for_role(role)
 
 func _clear_all_objective_state() -> void:
-	objective_state_setup.clear_world_state(world)
+	objective_state_setup.clear_world_state(objective_manager)
 	_control_relief_kills_applied = 0
 	_control_spawn_interval_base = 0.0
 	_control_spawn_interval_relief_cap = 0.0
@@ -158,10 +160,10 @@ func _clear_all_objective_state() -> void:
 	clear_priority_target_exposure_vfx()
 
 func reset_room_objective_state() -> void:
-	_clear_all_objective_state()
+	objective_state_setup.clear_world_state(objective_manager)
 
 func begin_room_objective(profile: Dictionary) -> void:
-	objective_state_setup.activate_profile_objective_kind(world, profile)
+	objective_state_setup.activate_profile_objective_kind(objective_manager, profile)
 	if _is_active_objective_role(OBJECTIVE_ROLE_LAST_STAND):
 		_begin_survival_objective(profile)
 		return
@@ -225,8 +227,8 @@ func _begin_control_objective(profile: Dictionary) -> void:
 		ENCOUNTER_CONTRACTS.profile_objective_contest_threshold(profile)
 	)
 	_control_relief_kills_applied = 0
-	_control_spawn_interval_base = world.objective_spawn_interval
-	_control_spawn_interval_relief_cap = world.objective_spawn_interval + HoldTheLineConfig.SPAWN_INTERVAL_RELIEF_MAX_BONUS
+	_control_spawn_interval_base = objective_manager.spawn_interval
+	_control_spawn_interval_relief_cap = objective_manager.spawn_interval + HoldTheLineConfig.SPAWN_INTERVAL_RELIEF_MAX_BONUS
 	_control_relief_phase_announced = false
 	world.hud.show_banner("Hold the Line", "Secure the control zone")
 	world.queue_redraw()
@@ -243,28 +245,28 @@ func update_objective_state(delta: float) -> void:
 		return
 
 func update_survival_objective_state(delta: float) -> void:
-	var quota_met: bool = world.objective_kill_target > 0 and world.objective_kills >= world.objective_kill_target
+	var quota_met: bool = objective_manager.kill_target > 0 and objective_manager.kills >= objective_manager.kill_target
 	if world.choosing_next_room or world.run_cleared:
 		return
-	if quota_met and not world.objective_survival_quota_announced and world.objective_time_left > 0.0 and not world.objective_overtime:
-		world.objective_survival_quota_announced = true
+	if quota_met and not objective_manager.survival_quota_announced and objective_manager.time_left > 0.0 and not objective_manager.overtime:
+		objective_manager.survival_quota_announced = true
 		# Shift into a short cleanup window once quota is met so the player is rewarded for engaging.
-		world.objective_time_left = minf(world.objective_time_left, 8.0)
+		objective_manager.time_left = minf(objective_manager.time_left, 8.0)
 		world.hud.show_banner("Kill Quota Fulfilled", "Cleanup phase: hold briefly")
-	if world.objective_time_left > 0.0:
-		world.objective_time_left = maxf(0.0, world.objective_time_left - delta)
-	if quota_met and world.objective_time_left > 0.0 and not world.objective_overtime:
-		world.objective_time_left = maxf(0.0, world.objective_time_left - delta * LastStandConfig.QUOTA_MET_DECAY_MULT)
-	if world.objective_time_left <= 0.0 and not world.objective_overtime:
+	if objective_manager.time_left > 0.0:
+		objective_manager.time_left = maxf(0.0, objective_manager.time_left - delta)
+	if quota_met and objective_manager.time_left > 0.0 and not objective_manager.overtime:
+		objective_manager.time_left = maxf(0.0, objective_manager.time_left - delta * LastStandConfig.QUOTA_MET_DECAY_MULT)
+	if objective_manager.time_left <= 0.0 and not objective_manager.overtime:
 		if quota_met:
 			complete_current_objective("Objective Complete", "Survived the timer")
 			return
-		world.objective_overtime = true
-		world.objective_spawn_interval = maxf(0.45, world.objective_spawn_interval * LastStandConfig.OVERTIME_SPAWN_INTERVAL_MULT)
-		world.objective_spawn_batch = mini(LastStandConfig.OVERTIME_SPAWN_BATCH_CAP, world.objective_spawn_batch + 1)
-		world.objective_spawn_timer = 0.1
+		objective_manager.overtime = true
+		objective_manager.spawn_interval = maxf(0.45, objective_manager.spawn_interval * LastStandConfig.OVERTIME_SPAWN_INTERVAL_MULT)
+		objective_manager.spawn_batch = mini(LastStandConfig.OVERTIME_SPAWN_BATCH_CAP, objective_manager.spawn_batch + 1)
+		objective_manager.spawn_timer = 0.1
 		world.hud.show_banner("Overtime", "")
-	if world.objective_overtime and quota_met:
+	if objective_manager.overtime and quota_met:
 		complete_current_objective("Objective Complete", "Kill quota reached")
 		return
 
@@ -274,46 +276,46 @@ func update_survival_objective_state(delta: float) -> void:
 			return
 		return
 
-	var pressure_floor: int = mini(18, 5 + int(floor(float(world.room_depth) * 0.45)) + world.objective_spawn_batch)
-	if world.objective_max_enemies > 0:
-		pressure_floor = mini(pressure_floor, world.objective_max_enemies)
-	if world.active_room_enemy_count < pressure_floor and (world.objective_time_left > 0.0 or world.objective_overtime):
-		world.objective_spawn_timer = minf(world.objective_spawn_timer, 0.4)
-	world.objective_spawn_timer = maxf(0.0, world.objective_spawn_timer - delta)
-	if world.objective_spawn_timer <= 0.0 and (world.objective_time_left > 0.0 or world.objective_overtime):
-		world.objective_spawn_timer = world.objective_spawn_interval
+	var pressure_floor: int = mini(18, 5 + int(floor(float(world.room_depth) * 0.45)) + objective_manager.spawn_batch)
+	if objective_manager.max_enemies > 0:
+		pressure_floor = mini(pressure_floor, objective_manager.max_enemies)
+	if world.active_room_enemy_count < pressure_floor and (objective_manager.time_left > 0.0 or objective_manager.overtime):
+		objective_manager.spawn_timer = minf(objective_manager.spawn_timer, 0.4)
+	objective_manager.spawn_timer = maxf(0.0, objective_manager.spawn_timer - delta)
+	if objective_manager.spawn_timer <= 0.0 and (objective_manager.time_left > 0.0 or objective_manager.overtime):
+		objective_manager.spawn_timer = objective_manager.spawn_interval
 		spawn_survival_wave()
 
 func update_priority_target_objective_state(delta: float) -> void:
 	if world.choosing_next_room or world.run_cleared:
 		return
-	if not is_instance_valid(world.objective_target_enemy):
-		complete_current_objective("Target Eliminated", "%s down" % world.objective_target_name)
+	if not is_instance_valid(objective_manager.hunt_target_enemy):
+		complete_current_objective("Target Eliminated", "%s down" % objective_manager.hunt_target_name)
 		return
 	update_priority_target_exposure_state(delta)
 	check_priority_target_relocation_threshold()
-	var pressure_floor: int = 5 + world.objective_spawn_batch
-	if world.objective_overtime:
+	var pressure_floor: int = 5 + objective_manager.spawn_batch
+	if objective_manager.overtime:
 		pressure_floor += 2
-	if world.objective_max_enemies > 0:
-		pressure_floor = mini(pressure_floor, world.objective_max_enemies)
+	if objective_manager.max_enemies > 0:
+		pressure_floor = mini(pressure_floor, objective_manager.max_enemies)
 	if world.active_room_enemy_count < pressure_floor:
-		world.objective_spawn_timer = minf(world.objective_spawn_timer, 0.45)
-	if world.objective_time_left > 0.0:
-		world.objective_time_left = maxf(0.0, world.objective_time_left - delta)
-	if world.objective_relocation_hint_left > 0.0:
-		world.objective_relocation_hint_left = maxf(0.0, world.objective_relocation_hint_left - delta)
-	if world.objective_exposure_left > 0.0:
+		objective_manager.spawn_timer = minf(objective_manager.spawn_timer, 0.45)
+	if objective_manager.time_left > 0.0:
+		objective_manager.time_left = maxf(0.0, objective_manager.time_left - delta)
+	if objective_manager.relocation_hint_left > 0.0:
+		objective_manager.relocation_hint_left = maxf(0.0, objective_manager.relocation_hint_left - delta)
+	if objective_manager.exposure_left > 0.0:
 		return
-	world.objective_spawn_timer = maxf(0.0, world.objective_spawn_timer - delta)
-	if world.objective_spawn_timer <= 0.0:
-		world.objective_spawn_timer = world.objective_spawn_interval
+	objective_manager.spawn_timer = maxf(0.0, objective_manager.spawn_timer - delta)
+	if objective_manager.spawn_timer <= 0.0:
+		objective_manager.spawn_timer = objective_manager.spawn_interval
 		spawn_priority_target_wave()
-	if world.objective_time_left <= 0.0 and not world.objective_overtime:
-		world.objective_overtime = true
-		world.objective_spawn_interval = maxf(0.55, world.objective_spawn_interval * 0.7)
-		world.objective_spawn_batch = mini(CutTheSignalConfig.SPAWN_BATCH_OVERTIME_CAP, world.objective_spawn_batch + 1)
-		world.objective_spawn_timer = CutTheSignalConfig.SPAWN_TIMER_OVERTIME
+	if objective_manager.time_left <= 0.0 and not objective_manager.overtime:
+		objective_manager.overtime = true
+		objective_manager.spawn_interval = maxf(0.55, objective_manager.spawn_interval * 0.7)
+		objective_manager.spawn_batch = mini(CutTheSignalConfig.SPAWN_BATCH_OVERTIME_CAP, objective_manager.spawn_batch + 1)
+		objective_manager.spawn_timer = CutTheSignalConfig.SPAWN_TIMER_OVERTIME
 		enrage_priority_target()
 		world.hud.show_banner("Signal Escalating", "")
 
@@ -345,63 +347,64 @@ func update_control_objective_state(delta: float) -> void:
 	var contested_decay_mult: float = params["contested_decay_mult"]
 	var out_of_zone_decay_mult: float = params["out_of_zone_decay_mult"]
 	var refill_spawn_cap: float = params["refill_spawn_cap"]
-	if world.objective_time_left > 0.0:
-		world.objective_time_left = maxf(0.0, world.objective_time_left - delta)
+	if objective_manager.time_left > 0.0:
+		objective_manager.time_left = maxf(0.0, objective_manager.time_left - delta)
 	elif not _control_relief_phase_announced:
 		_control_relief_phase_announced = true
 		world.hud.show_banner("Line Stabilizing", "Hold on and reclaim the zone")
-	if world.objective_time_left <= 0.0:
-		world.objective_spawn_interval = minf(_control_spawn_interval_relief_cap, world.objective_spawn_interval + delta * HoldTheLineConfig.SPAWN_INTERVAL_RELIEF_PER_SECOND)
-	var kills_this_room: int = world.objective_kills - world.objective_control_kill_baseline
+	if objective_manager.time_left <= 0.0:
+		objective_manager.spawn_interval = minf(_control_spawn_interval_relief_cap, objective_manager.spawn_interval + delta * HoldTheLineConfig.SPAWN_INTERVAL_RELIEF_PER_SECOND)
+	var kills_this_room: int = objective_manager.kills - objective_manager.control_kill_baseline
+	var kills_this_room: int = objective_manager.kills - objective_manager.control_kill_baseline
 	var relief_kills := maxi(0, kills_this_room - _control_relief_kills_applied)
 	if relief_kills > 0:
 		var relief_amount := float(relief_kills) * HoldTheLineConfig.SPAWN_INTERVAL_RELIEF_PER_KILL
-		world.objective_spawn_interval = minf(_control_spawn_interval_relief_cap, world.objective_spawn_interval + relief_amount)
+		objective_manager.spawn_interval = minf(_control_spawn_interval_relief_cap, objective_manager.spawn_interval + relief_amount)
 		_control_relief_kills_applied += relief_kills
 	var has_player := is_instance_valid(world.player)
-	var anchor: Vector2 = world.objective_control_anchor
-	var radius := maxf(1.0, world.objective_control_radius)
-	world.objective_control_player_inside = has_player and world.player.global_position.distance_to(anchor) <= radius
-	world.objective_control_enemies_in_zone = _count_control_zone_enemies(anchor, radius)
-	world.objective_control_contested = world.objective_control_enemies_in_zone > world.objective_control_contest_threshold
-	if world.objective_control_player_inside and not world.objective_control_contested:
-		world.objective_control_progress = minf(world.objective_control_goal, world.objective_control_progress + delta * progress_gain_mult)
-	elif world.objective_control_player_inside:
-		world.objective_control_progress = maxf(0.0, world.objective_control_progress - world.objective_control_decay_rate * delta * contested_decay_mult)
+	var anchor: Vector2 = objective_manager.control_anchor
+	var radius := maxf(1.0, objective_manager.control_radius)
+	objective_manager.control_player_inside = has_player and world.player.global_position.distance_to(anchor) <= radius
+	objective_manager.control_enemies_in_zone = _count_control_zone_enemies(anchor, radius)
+	objective_manager.control_contested = objective_manager.control_enemies_in_zone > objective_manager.control_contest_threshold
+	if objective_manager.control_player_inside and not objective_manager.control_contested:
+		objective_manager.control_progress = minf(objective_manager.control_goal, objective_manager.control_progress + delta * progress_gain_mult)
+	elif objective_manager.control_player_inside:
+		objective_manager.control_progress = maxf(0.0, objective_manager.control_progress - objective_manager.control_decay_rate * delta * contested_decay_mult)
 	else:
-		world.objective_control_progress = maxf(0.0, world.objective_control_progress - world.objective_control_decay_rate * delta * out_of_zone_decay_mult)
-	if world.objective_control_progress >= world.objective_control_goal:
+		objective_manager.control_progress = maxf(0.0, objective_manager.control_progress - objective_manager.control_decay_rate * delta * out_of_zone_decay_mult)
+	if objective_manager.control_progress >= objective_manager.control_goal:
 		complete_current_objective("Objective Complete", "Control secured")
 		return
-	var pressure_floor: int = world.objective_spawn_batch + params["pressure_floor_bonus"]
-	if world.objective_max_enemies > 0:
-		pressure_floor = mini(pressure_floor, world.objective_max_enemies)
-	var relief_interval_bonus := maxf(0.0, world.objective_spawn_interval - _control_spawn_interval_base)
-	var effective_refill_spawn_cap := minf(world.objective_spawn_interval, refill_spawn_cap + relief_interval_bonus)
+	var pressure_floor: int = objective_manager.spawn_batch + params["pressure_floor_bonus"]
+	if objective_manager.max_enemies > 0:
+		pressure_floor = mini(pressure_floor, objective_manager.max_enemies)
+	var relief_interval_bonus := maxf(0.0, objective_manager.spawn_interval - _control_spawn_interval_base)
+	var effective_refill_spawn_cap := minf(objective_manager.spawn_interval, refill_spawn_cap + relief_interval_bonus)
 	if world.active_room_enemy_count < pressure_floor:
-		world.objective_spawn_timer = minf(world.objective_spawn_timer, effective_refill_spawn_cap)
-	world.objective_spawn_timer = maxf(0.0, world.objective_spawn_timer - delta)
-	if world.objective_spawn_timer <= 0.0:
-		world.objective_spawn_timer = world.objective_spawn_interval
+		objective_manager.spawn_timer = minf(objective_manager.spawn_timer, effective_refill_spawn_cap)
+	objective_manager.spawn_timer = maxf(0.0, objective_manager.spawn_timer - delta)
+	if objective_manager.spawn_timer <= 0.0:
+		objective_manager.spawn_timer = objective_manager.spawn_interval
 		spawn_control_wave()
 	world.queue_redraw()
 
 func spawn_survival_wave() -> void:
 	if not is_instance_valid(world.enemy_spawner):
 		return
-	if world.objective_max_enemies > 0 and world.active_room_enemy_count >= world.objective_max_enemies:
+	if objective_manager.max_enemies > 0 and world.active_room_enemy_count >= objective_manager.max_enemies:
 		return
 	var roster: Array[String] = ["charger", "archer", "chaser", "charger", "shielder", "archer"]
-	if world.objective_overtime:
+	if objective_manager.overtime:
 		roster = ["charger", "archer", "charger", "archer", "shielder", "chaser", "charger"]
-	var spawn_count: int = world.objective_spawn_batch
-	if world.active_room_enemy_count <= world.objective_spawn_batch:
+	var spawn_count: int = objective_manager.spawn_batch
+	if world.active_room_enemy_count <= objective_manager.spawn_batch:
 		spawn_count += 1
-	if world.objective_overtime:
+	if objective_manager.overtime:
 		spawn_count += 1
 	spawn_count = mini(8, spawn_count)
-	if world.objective_max_enemies > 0:
-		spawn_count = mini(spawn_count, maxi(0, world.objective_max_enemies - world.active_room_enemy_count))
+	if objective_manager.max_enemies > 0:
+		spawn_count = mini(spawn_count, maxi(0, objective_manager.max_enemies - world.active_room_enemy_count))
 	if spawn_count <= 0:
 		return
 	for _i in range(spawn_count):
@@ -411,16 +414,16 @@ func spawn_survival_wave() -> void:
 func spawn_priority_target_wave() -> void:
 	if not is_instance_valid(world.enemy_spawner):
 		return
-	if world.objective_max_enemies > 0 and world.active_room_enemy_count >= world.objective_max_enemies:
+	if objective_manager.max_enemies > 0 and world.active_room_enemy_count >= objective_manager.max_enemies:
 		return
 	var roster: Array[String] = ["chaser", "shielder", "chaser", "charger", "shielder"]
-	if world.objective_overtime:
+	if objective_manager.overtime:
 		roster = ["charger", "shielder", "chaser", "charger", "shielder", "archer"]
-	var spawn_count: int = world.objective_spawn_batch
-	if world.objective_overtime:
+	var spawn_count: int = objective_manager.spawn_batch
+	if objective_manager.overtime:
 		spawn_count += 1
-	if world.objective_max_enemies > 0:
-		spawn_count = mini(spawn_count, maxi(0, world.objective_max_enemies - world.active_room_enemy_count))
+	if objective_manager.max_enemies > 0:
+		spawn_count = mini(spawn_count, maxi(0, objective_manager.max_enemies - world.active_room_enemy_count))
 	if spawn_count <= 0:
 		return
 	for _i in range(spawn_count):
@@ -430,16 +433,16 @@ func spawn_priority_target_wave() -> void:
 func spawn_control_wave() -> void:
 	if not is_instance_valid(world.enemy_spawner):
 		return
-	if world.objective_max_enemies > 0 and world.active_room_enemy_count >= world.objective_max_enemies:
+	if objective_manager.max_enemies > 0 and world.active_room_enemy_count >= objective_manager.max_enemies:
 		return
 	var roster: Array[String] = ["shielder", "charger", "archer", "chaser", "archer"]
-	if world.objective_overtime:
+	if objective_manager.overtime:
 		roster = ["charger", "shielder", "archer", "chaser", "archer", "charger"]
-	var spawn_count: int = world.objective_spawn_batch
-	if world.objective_overtime and world.active_room_enemy_count <= 0:
+	var spawn_count: int = objective_manager.spawn_batch
+	if objective_manager.overtime and world.active_room_enemy_count <= 0:
 		spawn_count += 1
-	if world.objective_max_enemies > 0:
-		spawn_count = mini(spawn_count, maxi(0, world.objective_max_enemies - world.active_room_enemy_count))
+	if objective_manager.max_enemies > 0:
+		spawn_count = mini(spawn_count, maxi(0, objective_manager.max_enemies - world.active_room_enemy_count))
 	if spawn_count <= 0:
 		return
 	for _i in range(spawn_count):
@@ -453,8 +456,8 @@ func spawn_control_wave() -> void:
 func _reposition_control_spawn_outside_zone(enemy: CharacterBody2D) -> void:
 	if not is_instance_valid(enemy):
 		return
-	var radius := maxf(1.0, world.objective_control_radius)
-	var anchor: Vector2 = world.objective_control_anchor
+	var radius := maxf(1.0, objective_manager.control_radius)
+	var anchor: Vector2 = objective_manager.control_anchor
 	var exclusion_radius := radius + HoldTheLineConfig.SPAWN_ZONE_EXCLUSION_PADDING
 	var offset := enemy.global_position - anchor
 	if offset.length() >= exclusion_radius:
@@ -475,47 +478,47 @@ func _count_control_zone_enemies(anchor: Vector2, radius: float) -> int:
 	return count
 
 func update_priority_target_exposure_state(delta: float) -> void:
-	if world.objective_signal_fx_left > 0.0:
-		world.objective_signal_fx_left = maxf(0.0, world.objective_signal_fx_left - delta)
-		world.objective_signal_fx_phase += delta
+	if objective_manager.signal_fx_left > 0.0:
+		objective_manager.signal_fx_left = maxf(0.0, objective_manager.signal_fx_left - delta)
+		objective_manager.signal_fx_phase += delta
 		refresh_priority_target_exposure_vfx()
-		if world.objective_signal_fx_left <= 0.0:
+		if objective_manager.signal_fx_left <= 0.0:
 			clear_priority_target_exposure_vfx()
-	if world.objective_exposure_left <= 0.0:
+	if objective_manager.exposure_left <= 0.0:
 		return
-	world.objective_exposure_left = maxf(0.0, world.objective_exposure_left - delta)
-	if world.objective_exposure_push_left > 0.0:
-		world.objective_exposure_push_left = maxf(0.0, world.objective_exposure_push_left - delta)
+	objective_manager.exposure_left = maxf(0.0, objective_manager.exposure_left - delta)
+	if objective_manager.exposure_push_left > 0.0:
+		objective_manager.exposure_push_left = maxf(0.0, objective_manager.exposure_push_left - delta)
 		apply_priority_target_exposure_push(delta)
-	if world.objective_exposure_left <= 0.0:
+	if objective_manager.exposure_left <= 0.0:
 		world.hud.show_banner("Signal Recovered", "")
 
 func trigger_priority_target_exposure(banner_title: String = "Signal Exposed", banner_subtitle: String = "Take the shot", duration_override: float = -1.0, fx_strength: float = 1.0) -> void:
-	if not is_instance_valid(world.objective_target_enemy):
+	if not is_instance_valid(objective_manager.hunt_target_enemy):
 		return
-	var duration: float = world.objective_exposure_duration if duration_override <= 0.0 else duration_override
-	world.objective_exposure_left = maxf(world.objective_exposure_left, duration)
-	world.objective_exposure_push_left = maxf(world.objective_exposure_push_left, world.objective_exposure_push_duration)
-	world.objective_hunt_kill_progress = 0
-	world.objective_spawn_timer = maxf(world.objective_spawn_timer, 1.2)
+	var duration: float = objective_manager.exposure_duration if duration_override <= 0.0 else duration_override
+	objective_manager.exposure_left = maxf(objective_manager.exposure_left, duration)
+	objective_manager.exposure_push_left = maxf(objective_manager.exposure_push_left, objective_manager.exposure_push_duration)
+	objective_manager.hunt_target_kill_progress = 0
+	objective_manager.spawn_timer = maxf(objective_manager.spawn_timer, 1.2)
 	show_priority_target_exposure_vfx(fx_strength, duration)
 	world.hud.show_banner(banner_title, banner_subtitle)
 
 func apply_priority_target_exposure_push(delta: float) -> void:
-	if not is_instance_valid(world.objective_target_enemy):
+	if not is_instance_valid(objective_manager.hunt_target_enemy):
 		return
-	var origin: Vector2 = world.objective_target_enemy.global_position
+	var origin: Vector2 = objective_manager.hunt_target_enemy.global_position
 	var player_position: Vector2 = world.player.global_position if is_instance_valid(world.player) else Vector2.ZERO
 	var has_player := is_instance_valid(world.player)
-	var push_t := clampf(world.objective_exposure_push_left / maxf(0.01, world.objective_exposure_push_duration), 0.0, 1.0)
-	var push_strength := lerpf(world.objective_exposure_push_strength * CutTheSignalConfig.EXPOSURE_PUSH_LERP_A, world.objective_exposure_push_strength * CutTheSignalConfig.EXPOSURE_PUSH_LERP_B, push_t)
+	var push_t := clampf(objective_manager.exposure_push_left / maxf(0.01, objective_manager.exposure_push_duration), 0.0, 1.0)
+	var push_strength := lerpf(objective_manager.exposure_push_strength * CutTheSignalConfig.EXPOSURE_PUSH_LERP_A, objective_manager.exposure_push_strength * CutTheSignalConfig.EXPOSURE_PUSH_LERP_B, push_t)
 	for enemy_node in world.get_tree().get_nodes_in_group("enemies"):
-		if enemy_node == world.objective_target_enemy or not (enemy_node is CharacterBody2D):
+		if enemy_node == objective_manager.hunt_target_enemy or not (enemy_node is CharacterBody2D):
 			continue
 		var enemy := enemy_node as CharacterBody2D
 		var to_enemy: Vector2 = enemy.global_position - origin
 		var dist := maxf(0.001, to_enemy.length())
-		if dist > world.objective_exposure_push_radius:
+		if dist > objective_manager.exposure_push_radius:
 			continue
 		var dir: Vector2 = to_enemy / dist
 		var tuned_strength := push_strength
@@ -534,9 +537,9 @@ func apply_priority_target_exposure_push(delta: float) -> void:
 					tuned_strength *= CutTheSignalConfig.EXPOSURE_PUSH_CLOSE_MULT
 			if player_dist < CutTheSignalConfig.EXPOSURE_PUSH_VERY_CLOSE_THRESHOLD:
 				dir = (enemy.global_position - player_position).normalized()
-				tuned_strength = maxf(tuned_strength, world.objective_exposure_push_strength * CutTheSignalConfig.EXPOSURE_PUSH_VERY_CLOSE_MULT)
+				tuned_strength = maxf(tuned_strength, objective_manager.exposure_push_strength * CutTheSignalConfig.EXPOSURE_PUSH_VERY_CLOSE_MULT)
 		var target_velocity: Vector2 = dir * tuned_strength
-		enemy.velocity = enemy.velocity.move_toward(target_velocity, delta * world.objective_exposure_push_accel)
+		enemy.velocity = enemy.velocity.move_toward(target_velocity, delta * objective_manager.exposure_push_accel)
 		enemy.apply_slow(0.2, 0.74)
 
 func complete_current_objective(title: String, _subtitle: String) -> void:
@@ -544,20 +547,20 @@ func complete_current_objective(title: String, _subtitle: String) -> void:
 	clear_priority_target_dash_line()
 	world._clear_all_enemies()
 	world.active_room_enemy_count = 0
-	world.objective_target_next_flee_index = 0
+	objective_manager.hunt_target_next_flee_index = 0
 	world.hud.show_banner(title, "")
 	world.queue_redraw()
 	world._on_room_cleared()
 
 func spawn_priority_target_enemy() -> void:
-	var target_type: String = world.objective_target_type if not world.objective_target_type.is_empty() else "archer"
+	var target_type: String = objective_manager.hunt_target_type if not objective_manager.hunt_target_type.is_empty() else "archer"
 	if not is_instance_valid(world.enemy_spawner):
 		return
 	var target_spawn_distance := maxf(world.spawn_safe_radius + CutTheSignalConfig.SPAWN_DISTANCE_BASE, CutTheSignalConfig.SPAWN_DISTANCE_MIN)
 	var spawned_target := world.enemy_spawner.spawn_enemy_node_type(target_type, target_spawn_distance) as CharacterBody2D
 	if not is_instance_valid(spawned_target):
 		return
-	world.objective_target_enemy = spawned_target
+	objective_manager.hunt_target_enemy = spawned_target
 	world.active_room_enemy_count += 1
 	var boosted_max := maxi(CutTheSignalConfig.HEALTH_BOOST_MIN, int(round(float(spawned_target.get_max_health()) * CutTheSignalConfig.HEALTH_BOOST_MULT)))
 	spawned_target.set_max_health_and_current(boosted_max, boosted_max)
@@ -566,15 +569,15 @@ func spawn_priority_target_enemy() -> void:
 	if spawned_target.get("mutator_theme_color") != null:
 		spawned_target.set("mutator_theme_color", COLOR_SIGNAL_MUTATOR)
 	spawned_target.scale *= CutTheSignalConfig.SCALE_MULT
-	world.objective_target_next_flee_index = 0
+	objective_manager.hunt_target_next_flee_index = 0
 	spawned_target.configure_health_bar_visuals(CutTheSignalConfig.HEALTH_BAR_OFFSET, CutTheSignalConfig.HEALTH_BAR_SIZE)
-	spawned_target.set_health_threshold_markers(world.objective_target_flee_thresholds, world.objective_target_next_flee_index)
-	world.objective_hunt_kill_progress = 0
-	world.objective_hunt_kill_goal = maxi(2, world.objective_hunt_kill_goal)
-	world.objective_exposure_left = 0.0
-	world.objective_exposure_push_left = 0.0
-	world.objective_last_relocated_escort_count = 0
-	world.objective_relocation_hint_left = 0.0
+	spawned_target.set_health_threshold_markers(objective_manager.hunt_target_flee_thresholds, objective_manager.hunt_target_next_flee_index)
+	objective_manager.hunt_target_kill_progress = 0
+	objective_manager.hunt_target_kill_goal = maxi(2, objective_manager.hunt_target_kill_goal)
+	objective_manager.exposure_left = 0.0
+	objective_manager.exposure_push_left = 0.0
+	objective_manager.last_relocated_escort_count = 0
+	objective_manager.relocation_hint_left = 0.0
 	clear_priority_target_exposure_vfx()
 	attach_priority_target_marker(spawned_target)
 	spawn_priority_target_opening_escorts()
@@ -582,7 +585,7 @@ func spawn_priority_target_enemy() -> void:
 		spawned_target.died.connect(Callable(self, "_on_priority_target_died"))
 
 func spawn_priority_target_opening_escorts() -> void:
-	if not is_instance_valid(world.objective_target_enemy):
+	if not is_instance_valid(objective_manager.hunt_target_enemy):
 		return
 	if not is_instance_valid(world.enemy_spawner):
 		return
@@ -591,12 +594,12 @@ func spawn_priority_target_opening_escorts() -> void:
 		escort_types.append("shielder")
 	if world.room_depth >= 4:
 		escort_types[escort_types.size() - 1] = "charger"
-	while escort_types.size() < world.objective_hunt_kill_goal:
+	while escort_types.size() < objective_manager.hunt_target_kill_goal:
 		escort_types.append("charger" if world.room_depth >= 4 else "chaser")
-	var anchor: Vector2 = world.objective_target_enemy.global_position
+	var anchor: Vector2 = objective_manager.hunt_target_enemy.global_position
 	var base_angle := rng.randf_range(0.0, TAU)
 	for escort_index in range(escort_types.size()):
-		if world.objective_max_enemies > 0 and world.active_room_enemy_count >= world.objective_max_enemies:
+		if objective_manager.max_enemies > 0 and world.active_room_enemy_count >= objective_manager.max_enemies:
 			break
 		var escort := world.enemy_spawner.spawn_enemy_node_type(escort_types[escort_index]) as CharacterBody2D
 		if not is_instance_valid(escort):
@@ -605,52 +608,52 @@ func spawn_priority_target_opening_escorts() -> void:
 		var radius := CutTheSignalConfig.OPENING_ESCORT_RADIUS_SHIELDER if escort_types[escort_index] == "shielder" else CutTheSignalConfig.OPENING_ESCORT_RADIUS_OTHER
 		escort.global_position = world._clamp_position_to_current_room(anchor + Vector2.RIGHT.rotated(angle) * radius, 44.0)
 		world.active_room_enemy_count += 1
-	world.objective_spawn_timer = maxf(world.objective_spawn_timer, world.objective_spawn_interval)
-	world.hud.show_banner("Mark Spotted  Kill %d escorts to expose" % world.objective_hunt_kill_goal, "")
+	objective_manager.spawn_timer = maxf(objective_manager.spawn_timer, objective_manager.spawn_interval)
+	world.hud.show_banner("Mark Spotted  Kill %d escorts to expose" % objective_manager.hunt_target_kill_goal, "")
 
 func check_priority_target_relocation_threshold() -> void:
-	if not is_instance_valid(world.objective_target_enemy):
+	if not is_instance_valid(objective_manager.hunt_target_enemy):
 		return
-	if world.objective_target_next_flee_index >= world.objective_target_flee_thresholds.size():
+	if objective_manager.hunt_target_next_flee_index >= objective_manager.hunt_target_flee_thresholds.size():
 		return
 	var current_health := get_priority_target_health()
 	var max_health := get_priority_target_max_health()
 	if current_health <= 0 or max_health <= 0:
 		return
-	var threshold_ratio: float = world.objective_target_flee_thresholds[world.objective_target_next_flee_index]
+	var threshold_ratio: float = objective_manager.hunt_target_flee_thresholds[objective_manager.hunt_target_next_flee_index]
 	var current_ratio := float(current_health) / float(max_health)
 	if current_ratio > threshold_ratio:
 		return
-	world.objective_target_next_flee_index += 1
-	world.objective_target_enemy.set_health_threshold_marker_progress(world.objective_target_next_flee_index)
+	objective_manager.hunt_target_next_flee_index += 1
+	objective_manager.hunt_target_enemy.set_health_threshold_marker_progress(objective_manager.hunt_target_next_flee_index)
 	trigger_priority_target_threshold_phase(threshold_ratio)
 
 func trigger_priority_target_threshold_phase(_threshold_ratio: float) -> void:
-	var phase_index: int = world.objective_target_next_flee_index
-	if not is_instance_valid(world.objective_target_enemy):
+	var phase_index: int = objective_manager.hunt_target_next_flee_index
+	if not is_instance_valid(objective_manager.hunt_target_enemy):
 		return
 	relocate_priority_target(_threshold_ratio)
 	var goal_drop := maxi(1, int(round(world._objective_pressure_mult() - 0.4)))
-	world.objective_hunt_kill_goal = maxi(2, world.objective_hunt_kill_goal - goal_drop)
+	objective_manager.hunt_target_kill_goal = maxi(2, objective_manager.hunt_target_kill_goal - goal_drop)
 	var duration := clampf(CutTheSignalConfig.EXPOSURE_THRESHOLD_PHASE_BASE + float(phase_index) * CutTheSignalConfig.EXPOSURE_THRESHOLD_PHASE_STEP, CutTheSignalConfig.EXPOSURE_THRESHOLD_PHASE_BASE, CutTheSignalConfig.EXPOSURE_THRESHOLD_PHASE_MAX)
 	var fx_strength := clampf(CutTheSignalConfig.EXPOSURE_FX_STRENGTH_BASE + float(phase_index) * CutTheSignalConfig.EXPOSURE_FX_STRENGTH_STEP, CutTheSignalConfig.EXPOSURE_FX_STRENGTH_BASE, CutTheSignalConfig.EXPOSURE_FX_STRENGTH_MAX)
 	trigger_priority_target_exposure("Signal Cracked", "Push through", duration, fx_strength)
-	if is_instance_valid(world.objective_target_enemy):
-		world.objective_target_enemy.velocity = Vector2.ZERO
+	if is_instance_valid(objective_manager.hunt_target_enemy):
+		objective_manager.hunt_target_enemy.velocity = Vector2.ZERO
 
 func relocate_priority_target(_threshold_ratio: float) -> void:
-	if not is_instance_valid(world.objective_target_enemy):
+	if not is_instance_valid(objective_manager.hunt_target_enemy):
 		return
-	var old_position: Vector2 = world.objective_target_enemy.global_position
+	var old_position: Vector2 = objective_manager.hunt_target_enemy.global_position
 	var new_position := pick_priority_target_relocation_position(old_position)
 	if old_position.distance_to(new_position) < CutTheSignalConfig.RELOCATION_MIN_DISTANCE:
 		return
-	world.objective_target_enemy.global_position = new_position
-	world.objective_target_enemy.velocity = Vector2.ZERO
+	objective_manager.hunt_target_enemy.global_position = new_position
+	objective_manager.hunt_target_enemy.velocity = Vector2.ZERO
 	var relocated_count := relocate_priority_target_nearby_escorts(old_position, new_position)
 	show_priority_target_dash_line(old_position, new_position)
-	world.objective_last_relocated_escort_count = relocated_count
-	world.objective_relocation_hint_left = 3.2 if relocated_count > 0 else 0.0
+	objective_manager.last_relocated_escort_count = relocated_count
+	objective_manager.relocation_hint_left = 3.2 if relocated_count > 0 else 0.0
 	if relocated_count > 0:
 		world.hud.show_banner("Signal Breakaway +%d Escorts" % relocated_count, "")
 	else:
@@ -659,11 +662,11 @@ func relocate_priority_target(_threshold_ratio: float) -> void:
 func relocate_priority_target_nearby_escorts(old_position: Vector2, new_position: Vector2) -> int:
 	var candidates: Array[Dictionary] = []
 	for enemy_node in world.get_tree().get_nodes_in_group("enemies"):
-		if enemy_node == world.objective_target_enemy or not (enemy_node is CharacterBody2D):
+		if enemy_node == objective_manager.hunt_target_enemy or not (enemy_node is CharacterBody2D):
 			continue
 		var escort := enemy_node as CharacterBody2D
 		var dist := escort.global_position.distance_to(old_position)
-		if dist > world.objective_relocation_escort_radius:
+		if dist > objective_manager.relocation_escort_radius:
 			continue
 		candidates.append({"enemy": escort, "distance": dist})
 	if candidates.is_empty():
@@ -676,13 +679,13 @@ func relocate_priority_target_nearby_escorts(old_position: Vector2, new_position
 	var carry_paths: Array[Dictionary] = []
 	var base_angle := rng.randf_range(0.0, TAU)
 	for entry in candidates:
-		if moved >= world.objective_relocation_escort_cap:
+		if moved >= objective_manager.relocation_escort_cap:
 			break
 		var escort := entry.get("enemy") as CharacterBody2D
 		if not is_instance_valid(escort):
 			continue
 		var from_position := escort.global_position
-		var slot_t := float(moved) / float(maxi(1, world.objective_relocation_escort_cap))
+		var slot_t := float(moved) / float(maxi(1, objective_manager.relocation_escort_cap))
 		var angle := base_angle + TAU * slot_t
 		var radius := CutTheSignalConfig.OPENING_ESCORT_RADIUS_OTHER + 14.0 * float(moved)
 		escort.global_position = world._clamp_position_to_current_room(new_position + Vector2.RIGHT.rotated(angle) * radius, 44.0)
@@ -710,7 +713,7 @@ func pick_priority_target_relocation_position(old_position: Vector2) -> Vector2:
 		if is_instance_valid(world.player):
 			score += candidate.distance_to(world.player.global_position) * CutTheSignalConfig.RELOCATION_SCORE_PLAYER_MULT
 		for enemy in world.get_tree().get_nodes_in_group("enemies"):
-			if enemy == world.objective_target_enemy or not (enemy is Node2D):
+			if enemy == objective_manager.hunt_target_enemy or not (enemy is Node2D):
 				continue
 			var neighbor := enemy as Node2D
 			score += minf(CutTheSignalConfig.RELOCATION_SCORE_NEIGHBOR_CAP, candidate.distance_to(neighbor.global_position)) * CutTheSignalConfig.RELOCATION_SCORE_NEIGHBOR_MULT
@@ -723,12 +726,12 @@ func spawn_priority_target_relocation_escorts(anchor: Vector2) -> void:
 	if not is_instance_valid(world.enemy_spawner):
 		return
 	var escort_types: Array[String] = ["chaser"]
-	if world.objective_target_next_flee_index == 1:
+	if objective_manager.hunt_target_next_flee_index == 1:
 		escort_types = ["shielder", "chaser"]
-	elif world.objective_target_next_flee_index >= 2:
+	elif objective_manager.hunt_target_next_flee_index >= 2:
 		escort_types = ["shielder", "charger"]
 	for escort_type in escort_types:
-		if world.objective_max_enemies > 0 and world.active_room_enemy_count >= world.objective_max_enemies:
+		if objective_manager.max_enemies > 0 and world.active_room_enemy_count >= objective_manager.max_enemies:
 			return
 		var escort := world.enemy_spawner.spawn_enemy_node_type(escort_type) as CharacterBody2D
 		if not is_instance_valid(escort):
@@ -749,15 +752,15 @@ func _create_line_2d(width: float, color: Color, z_index: int, points: PackedVec
 
 func show_priority_target_dash_line(from_position: Vector2, to_position: Vector2) -> void:
 	clear_priority_target_dash_line()
-	world.objective_target_dash_line = _create_line_2d(VFX_DASH_LINE_WIDTH, COLOR_DASH_LINE, VFX_DASH_LINE_Z_INDEX, PackedVector2Array([from_position, to_position]))
-	world.objective_target_dash_line.name = "PriorityTargetDashLine"
-	world.add_child(world.objective_target_dash_line)
-	world.objective_target_dash_line_time_left = VFX_DASH_LINE_FADE_TIME
+	objective_manager.hunt_target_dash_line = _create_line_2d(VFX_DASH_LINE_WIDTH, COLOR_DASH_LINE, VFX_DASH_LINE_Z_INDEX, PackedVector2Array([from_position, to_position]))
+	objective_manager.hunt_target_dash_line.name = "PriorityTargetDashLine"
+	world.add_child(objective_manager.hunt_target_dash_line)
+	objective_manager.hunt_target_dash_line_time_left = VFX_DASH_LINE_FADE_TIME
 
 func clear_priority_target_dash_line() -> void:
-	if is_instance_valid(world.objective_target_dash_line):
-		world.objective_target_dash_line.queue_free()
-		world.objective_target_dash_line = null
+	if is_instance_valid(objective_manager.hunt_target_dash_line):
+		objective_manager.hunt_target_dash_line.queue_free()
+		objective_manager.hunt_target_dash_line = null
 
 func show_priority_target_escort_carry_lines(paths: Array[Dictionary]) -> void:
 	clear_priority_target_escort_dash_lines()
@@ -766,38 +769,38 @@ func show_priority_target_escort_carry_lines(paths: Array[Dictionary]) -> void:
 		var to_pos := path_info.get("to", Vector2.ZERO) as Vector2
 		var line := _create_line_2d(VFX_ESCORT_LINE_WIDTH, COLOR_ESCORT_CARRY_LINE, VFX_ESCORT_LINE_Z_INDEX, PackedVector2Array([from_pos, to_pos]))
 		world.add_child(line)
-		world.objective_escort_dash_lines.append(line)
-	world.objective_escort_dash_line_time_left = VFX_ESCORT_LINE_FADE_TIME
+		objective_manager.relocation_escort_dash_lines.append(line)
+	objective_manager.relocation_escort_dash_line_time_left = VFX_ESCORT_LINE_FADE_TIME
 
 func clear_priority_target_escort_dash_lines() -> void:
-	for line in world.objective_escort_dash_lines:
+	for line in objective_manager.relocation_escort_dash_lines:
 		if is_instance_valid(line):
 			line.queue_free()
-	world.objective_escort_dash_lines.clear()
-	world.objective_escort_dash_line_time_left = 0.0
+	objective_manager.relocation_escort_dash_lines.clear()
+	objective_manager.relocation_escort_dash_line_time_left = 0.0
 
 func update_priority_target_marker(delta: float) -> void:
-	if world.objective_escort_dash_line_time_left > 0.0:
-		world.objective_escort_dash_line_time_left = maxf(0.0, world.objective_escort_dash_line_time_left - delta)
-		var escort_alpha := clampf(world.objective_escort_dash_line_time_left / VFX_ESCORT_LINE_FADE_TIME, 0.0, 1.0)
-		for line in world.objective_escort_dash_lines:
+	if objective_manager.relocation_escort_dash_line_time_left > 0.0:
+		objective_manager.relocation_escort_dash_line_time_left = maxf(0.0, objective_manager.relocation_escort_dash_line_time_left - delta)
+		var escort_alpha := clampf(objective_manager.relocation_escort_dash_line_time_left / VFX_ESCORT_LINE_FADE_TIME, 0.0, 1.0)
+		for line in objective_manager.relocation_escort_dash_lines:
 			if not is_instance_valid(line):
 				continue
 			line.default_color = COLOR_ESCORT_CARRY_LINE * Color(1.0, 1.0, 1.0, escort_alpha)
 			line.width = VFX_ESCORT_LINE_WIDTH + 2.8 * escort_alpha
-		if world.objective_escort_dash_line_time_left <= 0.0:
+		if objective_manager.relocation_escort_dash_line_time_left <= 0.0:
 			clear_priority_target_escort_dash_lines()
-	if world.objective_target_dash_line_time_left > 0.0:
-		world.objective_target_dash_line_time_left = maxf(0.0, world.objective_target_dash_line_time_left - delta)
-		if is_instance_valid(world.objective_target_dash_line):
-			var alpha := clampf(world.objective_target_dash_line_time_left / VFX_DASH_LINE_FADE_TIME, 0.0, 1.0)
-			world.objective_target_dash_line.default_color = COLOR_DASH_LINE * Color(1.0, 1.0, 1.0, alpha)
-			world.objective_target_dash_line.width = 3.6 + 3.0 * alpha
-		if world.objective_target_dash_line_time_left <= 0.0:
+	if objective_manager.hunt_target_dash_line_time_left > 0.0:
+		objective_manager.hunt_target_dash_line_time_left = maxf(0.0, objective_manager.hunt_target_dash_line_time_left - delta)
+		if is_instance_valid(objective_manager.hunt_target_dash_line):
+			var alpha := clampf(objective_manager.hunt_target_dash_line_time_left / VFX_DASH_LINE_FADE_TIME, 0.0, 1.0)
+			objective_manager.hunt_target_dash_line.default_color = COLOR_DASH_LINE * Color(1.0, 1.0, 1.0, alpha)
+			objective_manager.hunt_target_dash_line.width = 3.6 + 3.0 * alpha
+		if objective_manager.hunt_target_dash_line_time_left <= 0.0:
 			clear_priority_target_dash_line()
-	if not is_instance_valid(world.objective_target_enemy):
+	if not is_instance_valid(objective_manager.hunt_target_enemy):
 		return
-	var marker := world.objective_target_enemy.get_node_or_null("PriorityTargetMarker") as Node2D
+	var marker := objective_manager.hunt_target_enemy.get_node_or_null("PriorityTargetMarker") as Node2D
 	if marker == null:
 		return
 	var t := float(Time.get_ticks_msec()) * 0.001
@@ -805,16 +808,16 @@ func update_priority_target_marker(delta: float) -> void:
 	var diamond := marker.get_child(0) as Polygon2D
 	var stem := marker.get_child(1) as Line2D
 	if diamond != null:
-		if world.objective_exposure_left > 0.0:
+		if objective_manager.exposure_left > 0.0:
 			diamond.color = COLOR_MARKER_DIAMOND_EXPOSED
-		elif world.objective_overtime:
+		elif objective_manager.overtime:
 			diamond.color = COLOR_MARKER_DIAMOND_OVERTIME
 		else:
 			diamond.color = COLOR_MARKER_DIAMOND_BASE
 	if stem != null:
-		if world.objective_exposure_left > 0.0:
+		if objective_manager.exposure_left > 0.0:
 			stem.default_color = COLOR_MARKER_STEM_EXPOSED
-		elif world.objective_overtime:
+		elif objective_manager.overtime:
 			stem.default_color = COLOR_MARKER_STEM_OVERTIME
 		else:
 			stem.default_color = COLOR_MARKER_STEM_BASE
@@ -845,31 +848,31 @@ func attach_priority_target_marker(enemy: CharacterBody2D) -> void:
 	enemy.add_child(marker)
 
 func enrage_priority_target() -> void:
-	if not is_instance_valid(world.objective_target_enemy):
+	if not is_instance_valid(objective_manager.hunt_target_enemy):
 		return
-	if world.objective_target_enemy.get("seek_speed") != null:
-		world.objective_target_enemy.set("seek_speed", float(world.objective_target_enemy.get("seek_speed")) * 1.2)
-	if world.objective_target_enemy.get("move_speed") != null:
-		world.objective_target_enemy.set("move_speed", float(world.objective_target_enemy.get("move_speed")) * 1.18)
-	if world.objective_target_enemy.get("windup_time") != null:
-		world.objective_target_enemy.set("windup_time", maxf(0.18, float(world.objective_target_enemy.get("windup_time")) * 0.8))
-	if world.objective_target_enemy.get("attack_cooldown") != null:
-		world.objective_target_enemy.set("attack_cooldown", maxf(0.45, float(world.objective_target_enemy.get("attack_cooldown")) * 0.8))
+	if objective_manager.hunt_target_enemy.get("seek_speed") != null:
+		objective_manager.hunt_target_enemy.set("seek_speed", float(objective_manager.hunt_target_enemy.get("seek_speed")) * 1.2)
+	if objective_manager.hunt_target_enemy.get("move_speed") != null:
+		objective_manager.hunt_target_enemy.set("move_speed", float(objective_manager.hunt_target_enemy.get("move_speed")) * 1.18)
+	if objective_manager.hunt_target_enemy.get("windup_time") != null:
+		objective_manager.hunt_target_enemy.set("windup_time", maxf(0.18, float(objective_manager.hunt_target_enemy.get("windup_time")) * 0.8))
+	if objective_manager.hunt_target_enemy.get("attack_cooldown") != null:
+		objective_manager.hunt_target_enemy.set("attack_cooldown", maxf(0.45, float(objective_manager.hunt_target_enemy.get("attack_cooldown")) * 0.8))
 
 func _on_priority_target_died() -> void:
 	if not _is_active_objective_role(OBJECTIVE_ROLE_CUT_THE_SIGNAL):
 		return
-	world.objective_target_enemy = null
-	complete_current_objective("Target Eliminated", "%s down" % world.objective_target_name)
+	objective_manager.hunt_target_enemy = null
+	complete_current_objective("Target Eliminated", "%s down" % objective_manager.hunt_target_name)
 
 func show_priority_target_exposure_vfx(strength: float, duration: float) -> void:
 	clear_priority_target_exposure_vfx()
-	world.objective_signal_fx_left = duration
-	world.objective_signal_fx_duration = duration
-	world.objective_signal_fx_strength = strength
-	world.objective_signal_fx_phase = 0.0
-	world.objective_signal_fx_node = Node2D.new()
-	world.objective_signal_fx_node.name = "SignalExposureFX"
+	objective_manager.signal_fx_left = duration
+	objective_manager.signal_fx_duration = duration
+	objective_manager.signal_fx_strength = strength
+	objective_manager.signal_fx_phase = 0.0
+	objective_manager.signal_fx_node = Node2D.new()
+	objective_manager.signal_fx_node.name = "SignalExposureFX"
 	for _circle_index in range(VFX_EXPOSURE_CIRCLE_COUNT):
 		var circle := Line2D.new()
 		circle.width = 1.0
@@ -883,38 +886,38 @@ func show_priority_target_exposure_vfx(strength: float, duration: float) -> void
 		circle.points = points
 		circle.z_as_relative = false
 		circle.z_index = VFX_EXPOSURE_Z_INDEX
-		world.objective_signal_fx_node.add_child(circle)
-	if is_instance_valid(world.objective_target_enemy):
-		world.objective_signal_fx_node.global_position = world.objective_target_enemy.global_position
-	world.add_child(world.objective_signal_fx_node)
+		objective_manager.signal_fx_node.add_child(circle)
+	if is_instance_valid(objective_manager.hunt_target_enemy):
+		objective_manager.signal_fx_node.global_position = objective_manager.hunt_target_enemy.global_position
+	world.add_child(objective_manager.signal_fx_node)
 
 func refresh_priority_target_exposure_vfx() -> void:
-	if not is_instance_valid(world.objective_signal_fx_node):
+	if not is_instance_valid(objective_manager.signal_fx_node):
 		return
-	var progress := clampf(1.0 - world.objective_signal_fx_left / maxf(0.01, world.objective_signal_fx_duration), 0.0, 1.0)
-	var phase_offset: float = world.objective_signal_fx_phase
-	for circle_index in range(world.objective_signal_fx_node.get_child_count()):
-		var circle := world.objective_signal_fx_node.get_child(circle_index) as Line2D
+	var progress := clampf(1.0 - objective_manager.signal_fx_left / maxf(0.01, objective_manager.signal_fx_duration), 0.0, 1.0)
+	var phase_offset: float = objective_manager.signal_fx_phase
+	for circle_index in range(objective_manager.signal_fx_node.get_child_count()):
+		var circle := objective_manager.signal_fx_node.get_child(circle_index) as Line2D
 		if circle == null:
 			continue
 		var pulse_phase := fmod(phase_offset * VFX_EXPOSURE_PULSE_PHASE_MULT - float(circle_index) * VFX_EXPOSURE_PULSE_PHASE_OFFSET, TAU)
 		var pulse_strength := VFX_EXPOSURE_PULSE_AMPLITUDE + VFX_EXPOSURE_PULSE_AMPLITUDE * sin(pulse_phase)
 		var alpha_base := 1.0 - progress
-		var alpha_pulse: float = alpha_base * pulse_strength * world.objective_signal_fx_strength
+		var alpha_pulse: float = alpha_base * pulse_strength * objective_manager.signal_fx_strength
 		circle.default_color = COLOR_SIGNAL_FX_CIRCLE * Color(1.0, 1.0, 1.0, alpha_pulse)
 
 func clear_priority_target_exposure_vfx() -> void:
-	if is_instance_valid(world.objective_signal_fx_node):
-		world.objective_signal_fx_node.queue_free()
-		world.objective_signal_fx_node = null
-	world.objective_signal_fx_left = 0.0
+	if is_instance_valid(objective_manager.signal_fx_node):
+		objective_manager.signal_fx_node.queue_free()
+		objective_manager.signal_fx_node = null
+	objective_manager.signal_fx_left = 0.0
 
 func get_priority_target_health() -> int:
-	if not is_instance_valid(world.objective_target_enemy):
+	if not is_instance_valid(objective_manager.hunt_target_enemy):
 		return 0
-	return world.objective_target_enemy.get_current_health()
+	return objective_manager.hunt_target_enemy.get_current_health()
 
 func get_priority_target_max_health() -> int:
-	if not is_instance_valid(world.objective_target_enemy):
+	if not is_instance_valid(objective_manager.hunt_target_enemy):
 		return 0
-	return world.objective_target_enemy.get_max_health()
+	return objective_manager.hunt_target_enemy.get_max_health()
