@@ -99,12 +99,16 @@ const DEBUG_ENCOUNTER_NONE := DEBUG_ENUMS.Encounter.NONE
 # These are now derived from the encounter registry. Keep them for backward compatibility.
 # They are populated dynamically to stay in sync with _build_encounter_registry().
 static var DEBUG_ENCOUNTER_MAP: Array[Dictionary]
+static var DEBUG_ENCOUNTER_BY_KEY: Dictionary
+static var DEBUG_ENCOUNTER_KEY_BY_ID: Dictionary
 static var DEBUG_OBJECTIVE_DISPLAY_LABELS: Dictionary
 static var DEBUG_ENCOUNTER_GLOSSARY_LABELS: Dictionary
 static var ENCOUNTER_DOOR_PRESENTATION: Dictionary
 
 static func _init_registry_derived_data() -> void:
 	DEBUG_ENCOUNTER_MAP = _derive_debug_encounter_map()
+	DEBUG_ENCOUNTER_BY_KEY = _derive_debug_encounter_index_by_key()
+	DEBUG_ENCOUNTER_KEY_BY_ID = _derive_debug_encounter_key_by_id()
 	DEBUG_OBJECTIVE_DISPLAY_LABELS = _derive_display_labels()
 	DEBUG_ENCOUNTER_GLOSSARY_LABELS = _derive_glossary_labels()
 	ENCOUNTER_DOOR_PRESENTATION = _derive_door_presentation()
@@ -375,6 +379,24 @@ static func _derive_debug_encounter_map() -> Array[Dictionary]:
 		})
 	return result
 
+static func _derive_debug_encounter_index_by_key() -> Dictionary:
+	var result := {}
+	for entry in DEBUG_ENCOUNTER_MAP:
+		var encounter_key := String((entry as Dictionary).get("key", ""))
+		if encounter_key.is_empty():
+			continue
+		result[encounter_key] = entry
+	return result
+
+static func _derive_debug_encounter_key_by_id() -> Dictionary:
+	var result := {}
+	for entry in DEBUG_ENCOUNTER_MAP:
+		var encounter_id := int((entry as Dictionary).get("id", -1))
+		if encounter_id < 0:
+			continue
+		result[encounter_id] = String((entry as Dictionary).get("key", ""))
+	return result
+
 static func _derive_door_presentation() -> Dictionary:
 	var result := {}
 	for entry in _get_encounter_registry():
@@ -484,10 +506,7 @@ static func normalize_reward_mode(value: Variant) -> int:
 static func debug_encounter_entry(encounter_key: String) -> Dictionary:
 	_ensure_registry_initialized()
 	var normalized := encounter_key.strip_edges().to_lower()
-	for entry in DEBUG_ENCOUNTER_MAP:
-		if String(entry.get("key", "")) == normalized:
-			return entry
-	return {}
+	return DEBUG_ENCOUNTER_BY_KEY.get(normalized, {}) as Dictionary
 
 static func debug_encounter_entries() -> Array[Dictionary]:
 	_ensure_registry_initialized()
@@ -570,10 +589,7 @@ static func canonicalize_debug_encounter_key(encounter_key: String) -> String:
 
 static func debug_encounter_key_from_id(encounter_id: int) -> String:
 	_ensure_registry_initialized()
-	for entry in DEBUG_ENCOUNTER_MAP:
-		if int(entry.get("id", -1)) == encounter_id:
-			return String(entry.get("key", ""))
-	return ""
+	return String(DEBUG_ENCOUNTER_KEY_BY_ID.get(encounter_id, ""))
 
 static func debug_encounter_is_objective(encounter_key: String) -> bool:
 	var entry := debug_encounter_entry(encounter_key)
