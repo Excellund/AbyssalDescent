@@ -2098,6 +2098,31 @@ func _on_network_enemy_died(enemy_id: int) -> void:
 	if is_multiplayer and MultiplayerSessionManager.is_host():
 		_sync_enemy_died.rpc(enemy_id)
 
+
+func request_enemy_damage_from_client(enemy_id: int, amount: int, damage_context: Dictionary = {}) -> void:
+	if not is_multiplayer or MultiplayerSessionManager.is_host():
+		return
+	if enemy_id <= 0 or amount <= 0:
+		return
+	_sync_request_enemy_damage.rpc_id(1, enemy_id, amount, damage_context)
+
+
+@rpc("reliable", "any_peer")
+func _sync_request_enemy_damage(enemy_id: int, amount: int, damage_context: Dictionary = {}) -> void:
+	if not is_multiplayer or not MultiplayerSessionManager.is_host():
+		return
+	if enemy_id <= 0 or amount <= 0:
+		return
+	var enemy := _network_enemy_nodes.get(enemy_id) as Node
+	if not is_instance_valid(enemy):
+		return
+	if not enemy.has_method("take_damage"):
+		return
+	if damage_context.is_empty():
+		enemy.call("take_damage", amount)
+	else:
+		enemy.call("take_damage", amount, damage_context)
+
 func _spawn_boss_for_stage(boss_stage: int, spawn_position: Vector2) -> Node2D:
 	var boss_script = null
 	var collision_radius := 34.0
