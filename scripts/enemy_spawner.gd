@@ -165,10 +165,10 @@ func _compose_active_enemy_mutator() -> Dictionary:
 	return composed
 
 func spawn_profile_enemies(profile: Dictionary) -> int:
-	## Multiplayer: Only host spawns enemies
+	## Multiplayer: only host decides encounter spawns and broadcasts them.
 	if MultiplayerSessionManager.is_session_connected() and not MultiplayerSessionManager.is_host():
-		return 0  ## Clients don't spawn; they listen for RPC broadcasts
-	
+		return 0
+
 	var total := 0
 	for enemy_type in ENEMY_SPAWN_ORDER:
 		var count := _profile_count_for_enemy_type(profile, enemy_type)
@@ -176,6 +176,23 @@ func spawn_profile_enemies(profile: Dictionary) -> int:
 			_spawn_enemy_in_current_room(scripts.get(enemy_type))
 			total += 1
 	return total
+
+func spawn_profile_enemies_report(profile: Dictionary) -> Array[Dictionary]:
+	var report: Array[Dictionary] = []
+	if MultiplayerSessionManager.is_session_connected() and not MultiplayerSessionManager.is_host():
+		return report
+
+	for enemy_type in ENEMY_SPAWN_ORDER:
+		var count := _profile_count_for_enemy_type(profile, enemy_type)
+		for _i in range(maxi(0, count)):
+			var enemy := _spawn_enemy_in_current_room(scripts.get(enemy_type))
+			if not is_instance_valid(enemy):
+				continue
+			report.append({
+				"enemy_type": enemy_type,
+				"enemy": enemy
+			})
+	return report
 
 func _profile_count_for_enemy_type(profile: Dictionary, enemy_type: String) -> int:
 	match enemy_type:
@@ -227,6 +244,32 @@ func spawn_enemy_node_type(enemy_type: String, min_player_distance: float = -1.0
 	if enemy_script == null:
 		return null
 	return _spawn_enemy_in_current_room(enemy_script, min_player_distance)
+
+func spawn_enemy_from_sync(enemy_type: String, world_position: Vector2) -> CharacterBody2D:
+	var enemy_script: Script = scripts.get(enemy_type)
+	if enemy_script == null:
+		return null
+	if not is_instance_valid(world_root):
+		return null
+	var enemy := CharacterBody2D.new()
+	enemy.set_script(enemy_script)
+	_apply_enemy_mutator(enemy, enemy_script)
+
+	var collision_shape := CollisionShape2D.new()
+	collision_shape.shape = CircleShape2D.new()
+	collision_shape.shape.radius = 13.0
+	enemy.add_child(collision_shape)
+
+	enemy.global_position = world_position
+	world_root.add_child(enemy)
+	enemy.begin_spawn_transport(spawn_transport_duration)
+	enemy.set("target", player)
+	if enemy.get("arena_size") != null:
+		enemy.set("arena_size", current_room_size)
+	if enemy.has_signal("died") and on_enemy_died.is_valid():
+		var captured := enemy
+		enemy.died.connect(func(): on_enemy_died.call(captured.global_position if is_instance_valid(captured) else Vector2.ZERO))
+	return enemy
 
 func pick_room_position(min_player_distance: float = -1.0, min_enemy_spacing: float = 86.0) -> Vector2:
 	return _pick_spawn_position_in_current_room(min_player_distance, min_enemy_spacing)

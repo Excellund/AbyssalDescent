@@ -289,6 +289,11 @@ func heal(amount: int) -> void:
 		return
 	health_state.heal(amount)
 
+func set_health(value: float) -> void:
+	if not is_instance_valid(health_state):
+		return
+	health_state.set_health(int(round(value)))
+
 func get_current_health() -> int:
 	return _get_current_health()
 

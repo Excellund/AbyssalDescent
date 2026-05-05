@@ -115,6 +115,8 @@ func _get_debug_encounter_reward_mode(encounter_key: String) -> int:
 @export var multiplayer_camera_padding: Vector2 = Vector2(220.0, 180.0)
 @export var multiplayer_camera_min_zoom: float = 0.58
 @export var multiplayer_camera_max_zoom: float = 1.05
+@export var multiplayer_use_shared_camera: bool = false
+@export var multiplayer_force_static_arena_camera: bool = true
 var settings_enabled: bool = false
 var apply_test_powers_on_start: bool = false
 var skip_starting_boon_selection: bool = false
@@ -200,6 +202,10 @@ var is_multiplayer: bool = false
 var multiplayer_session_id: String = ""
 var multiplayer_encounter_seed: int = 0
 var game_state_replication_service: Node = null
+var enemy_state_sync_interval_sec: float = 0.08
+var _enemy_state_sync_elapsed: float = 0.0
+var _next_network_enemy_id: int = 1
+var _network_enemy_nodes: Dictionary = {}  ## enemy_id -> Node2D
 
 var second_player: Node2D = null
 func _apply_debug_settings_from_node() -> void:
@@ -302,6 +308,7 @@ func _setup_player_runtime_bindings() -> void:
 			player.connect("died", Callable(self, "_on_player_died"))
 
 		player_camera.set_room_fit_zoom_scale(camera_base_zoom_in)
+	_bind_camera_to_local_player()
 
 func _setup_multiplayer_second_player() -> void:
 	"""Create second player node for multiplayer co-op."""
@@ -368,9 +375,53 @@ func _setup_multiplayer_second_player() -> void:
 	if second_player.has_signal("died"):
 		second_player.connect("died", Callable(self, "_on_player_died"))
 	if is_instance_valid(player_camera):
-		player_camera.set_room_fit_zoom_scale(camera_base_zoom_in * 0.65)
+		var zoom_scale := camera_base_zoom_in * 0.65 if multiplayer_use_shared_camera else camera_base_zoom_in
+		player_camera.set_room_fit_zoom_scale(zoom_scale)
+	_bind_camera_to_local_player()
 	
 	print_debug("[Multiplayer] Second player created (peer %d)" % remote_peer)
+
+
+func _bind_camera_to_local_player() -> void:
+	var local_player_node := _find_local_player_node()
+	var primary_camera := player.get_node_or_null("Camera2D") as Camera2D if is_instance_valid(player) else null
+	var secondary_camera := second_player.get_node_or_null("Camera2D") as Camera2D if is_instance_valid(second_player) else null
+	var local_camera := local_player_node.get_node_or_null("Camera2D") as Camera2D if is_instance_valid(local_player_node) else null
+
+	if is_instance_valid(primary_camera):
+		primary_camera.enabled = false
+	if is_instance_valid(secondary_camera):
+		secondary_camera.enabled = false
+
+	if not is_instance_valid(local_camera):
+		player_camera = primary_camera
+		return
+
+	local_camera.enabled = true
+	local_camera.make_current()
+	player_camera = local_camera
+
+
+func _find_local_player_node() -> Node2D:
+	if is_instance_valid(player) and _is_local_control_owner(player):
+		return player
+	if is_instance_valid(second_player) and _is_local_control_owner(second_player):
+		return second_player
+	if is_instance_valid(player):
+		return player
+	if is_instance_valid(second_player):
+		return second_player
+	return null
+
+
+func _is_local_control_owner(player_node: Node) -> bool:
+	if player_node == null:
+		return false
+	if player_node.has_method("_is_local_control_owner"):
+		return bool(player_node.call("_is_local_control_owner"))
+	if player_node.has_method("is_multiplayer_authority"):
+		return bool(player_node.call("is_multiplayer_authority"))
+	return true
 
 func _setup_world_bootstrap_state() -> void:
 	current_room_size = room_base_size
@@ -962,8 +1013,10 @@ func _process(delta: float) -> void:
 	_try_use_door()
 	_update_encounter_state()
 	_update_camera_mode()
-	if is_multiplayer:
+	if is_multiplayer and multiplayer_use_shared_camera:
 		_update_multiplayer_camera()
+	if is_multiplayer:
+		_sync_enemy_state_tick(delta)
 	_refresh_frame_ui()
 
 func _handle_modal_frame(delta: float) -> bool:
@@ -1164,6 +1217,8 @@ func _keep_player_inside_camera_view() -> void:
 	player.global_position.y = clampf(player.global_position.y, min_visible.y, max_visible.y)
 
 func _update_encounter_state() -> void:
+	if is_multiplayer and not MultiplayerSessionManager.is_host():
+		return
 	if choosing_next_room or run_cleared:
 		return
 	if objective_manager.has_active_objective():
@@ -1509,6 +1564,8 @@ func _on_pause_exit_game_requested() -> void:
 	get_tree().quit()
 
 func _spawn_door_options() -> void:
+	if is_multiplayer and not MultiplayerSessionManager.is_host():
+		return
 	if not is_instance_valid(encounter_flow_system):
 		return
 	if _is_reward_selection_active():
@@ -1535,6 +1592,8 @@ func _spawn_door_options() -> void:
 	choosing_next_room = bool(route_state.get("choosing_next_room", true))
 	door_options = route_state.get("door_options", [])
 	boss_unlocked = bool(route_state.get("boss_unlocked", boss_unlocked))
+	if is_multiplayer and MultiplayerSessionManager.is_host():
+		_sync_door_options.rpc(door_options, choosing_next_room, boss_unlocked)
 	_save_active_run_checkpoint()
 
 func _try_use_door() -> void:
@@ -1546,10 +1605,55 @@ func _try_use_door() -> void:
 		return
 	if not is_instance_valid(encounter_flow_system):
 		return
+	if is_multiplayer and not MultiplayerSessionManager.is_host():
+		_request_use_door.rpc_id(1)
+		return
 	var used_door: Dictionary = encounter_route_controller.find_used_door(player.global_position, door_options, door_use_radius)
 	if used_door.is_empty():
 		return
+	if is_multiplayer and MultiplayerSessionManager.is_host():
+		_sync_chosen_door.rpc(used_door)
+		return
 	_choose_door(used_door)
+
+@rpc("reliable", "any_peer")
+func _request_use_door() -> void:
+	if not is_multiplayer or not MultiplayerSessionManager.is_host():
+		return
+	if not choosing_next_room:
+		return
+	var sender_peer_id := get_tree().get_multiplayer().get_remote_sender_id()
+	if sender_peer_id <= 0:
+		return
+	var peer_player := _get_player_for_peer(sender_peer_id)
+	if not is_instance_valid(peer_player):
+		return
+	var used_door: Dictionary = encounter_route_controller.find_used_door(peer_player.global_position, door_options, door_use_radius)
+	if used_door.is_empty():
+		return
+	_sync_chosen_door.rpc(used_door)
+
+@rpc("reliable", "authority", "call_local")
+func _sync_door_options(synced_door_options: Array, synced_choosing_next_room: bool, synced_boss_unlocked: bool) -> void:
+	if not is_multiplayer:
+		return
+	door_options.clear()
+	for option in synced_door_options:
+		if option is Dictionary:
+			door_options.append((option as Dictionary).duplicate(true))
+	choosing_next_room = synced_choosing_next_room
+	boss_unlocked = synced_boss_unlocked
+
+@rpc("reliable", "authority", "call_local")
+func _sync_chosen_door(chosen_door: Dictionary) -> void:
+	_choose_door(chosen_door)
+
+func _get_player_for_peer(peer_id: int) -> Node2D:
+	if is_instance_valid(player) and int(player.player_id) == peer_id:
+		return player
+	if is_instance_valid(second_player) and int(second_player.player_id) == peer_id:
+		return second_player
+	return null
 
 func _choose_door(door: Dictionary) -> void:
 	choosing_next_room = false
@@ -1624,7 +1728,26 @@ func _begin_room(profile: Dictionary) -> void:
 	if is_instance_valid(enemy_spawner):
 		enemy_spawner.configure_room(current_room_size, spawn_padding, spawn_safe_radius, current_room_enemy_mutator, _get_active_enemy_mutators_for_room())
 	_apply_camera_bounds_for_room(current_room_size)
-	active_room_enemy_count = _spawn_profile_enemies(profile)
+	if is_multiplayer:
+		if MultiplayerSessionManager.is_host():
+			var spawn_report: Array[Dictionary] = enemy_spawner.spawn_profile_enemies_report(profile)
+			active_room_enemy_count = spawn_report.size()
+			var spawn_batch: Array = []
+			for spawn_entry in spawn_report:
+				var enemy: Node2D = spawn_entry.get("enemy") as Node2D
+				if not is_instance_valid(enemy):
+					continue
+				var enemy_id := _register_network_enemy(enemy)
+				spawn_batch.append({
+					"enemy_id": enemy_id,
+					"enemy_type": String(spawn_entry.get("enemy_type", "")),
+					"position": enemy.global_position
+				})
+			_sync_spawn_enemy_batch.rpc(spawn_batch, active_room_enemy_count)
+		else:
+			active_room_enemy_count = 0
+	else:
+		active_room_enemy_count = _spawn_profile_enemies(profile)
 	_start_encounter_intro_grace()
 
 func _enter_rest_site() -> void:
@@ -1698,6 +1821,9 @@ func _begin_configured_boss_room(boss_stage: int, room_size: Vector2, room_label
 	hud.show_banner(banner_title, "")
 	_apply_camera_bounds_for_room(current_room_size)
 	active_room_enemy_count = 1
+	if is_multiplayer and not MultiplayerSessionManager.is_host():
+		_start_encounter_intro_grace()
+		return
 	var boss := CharacterBody2D.new()
 	boss.set_script(boss_script)
 
@@ -1712,9 +1838,16 @@ func _begin_configured_boss_room(boss_stage: int, room_size: Vector2, room_label
 	boss.set("target", player)
 	boss.set("arena_size", current_room_size)
 	_apply_boss_difficulty_scaling(boss)
+	var boss_enemy_id := _register_network_enemy(boss)
 	if boss.has_signal("died"):
 		var captured_boss := boss
 		boss.died.connect(func(): _on_room_enemy_died(captured_boss.global_position if is_instance_valid(captured_boss) else Vector2.ZERO))
+	if is_multiplayer and MultiplayerSessionManager.is_host():
+		_sync_spawn_boss.rpc({
+			"boss_stage": boss_stage,
+			"enemy_id": boss_enemy_id,
+			"position": boss.global_position
+		})
 	_start_encounter_intro_grace()
 
 func _begin_boss_room() -> void:
@@ -1775,8 +1908,165 @@ func _on_room_enemy_died(kill_pos: Vector2 = Vector2.ZERO) -> void:
 		player.notify_enemy_killed(kill_pos)
 
 func _clear_all_enemies() -> void:
+	_network_enemy_nodes.clear()
 	if is_instance_valid(enemy_spawner):
 		enemy_spawner.clear_all_enemies()
+
+func _sync_enemy_state_tick(delta: float) -> void:
+	if not is_multiplayer:
+		return
+	if not MultiplayerSessionManager.is_host():
+		return
+	_enemy_state_sync_elapsed += delta
+	if _enemy_state_sync_elapsed < enemy_state_sync_interval_sec:
+		return
+	_enemy_state_sync_elapsed = 0.0
+	var synced_states: Array = []
+	var stale_ids: Array = []
+	for enemy_id_variant in _network_enemy_nodes.keys():
+		var enemy_id := int(enemy_id_variant)
+		var enemy := _network_enemy_nodes.get(enemy_id) as Node2D
+		if not is_instance_valid(enemy):
+			stale_ids.append(enemy_id)
+			continue
+		var enemy_health := 0.0
+		if enemy.has_method("get_current_health"):
+			enemy_health = float(enemy.call("get_current_health"))
+		synced_states.append({
+			"enemy_id": enemy_id,
+			"position": enemy.global_position,
+			"health": enemy_health
+		})
+	for stale_id in stale_ids:
+		_network_enemy_nodes.erase(int(stale_id))
+	_sync_enemy_states.rpc(synced_states, active_room_enemy_count)
+
+func _register_network_enemy(enemy: Node2D, forced_enemy_id: int = -1) -> int:
+	if not is_instance_valid(enemy):
+		return -1
+	var enemy_id := forced_enemy_id
+	if enemy_id <= 0:
+		enemy_id = _next_network_enemy_id
+		_next_network_enemy_id += 1
+	else:
+		_next_network_enemy_id = maxi(_next_network_enemy_id, enemy_id + 1)
+	enemy.set_meta("network_enemy_id", enemy_id)
+	_network_enemy_nodes[enemy_id] = enemy
+	if enemy.has_signal("died") and not enemy.died.is_connected(Callable(self, "_on_network_enemy_died").bind(enemy_id)):
+		enemy.died.connect(Callable(self, "_on_network_enemy_died").bind(enemy_id))
+	return enemy_id
+
+func _on_network_enemy_died(enemy_id: int) -> void:
+	_network_enemy_nodes.erase(enemy_id)
+	if is_multiplayer and MultiplayerSessionManager.is_host():
+		_sync_enemy_died.rpc(enemy_id)
+
+func _spawn_boss_for_stage(boss_stage: int, spawn_position: Vector2) -> Node2D:
+	var boss_script = null
+	var collision_radius := 34.0
+	match boss_stage:
+		1:
+			boss_script = ENEMY_BOSS_SCRIPT
+			collision_radius = 34.0
+		2:
+			boss_script = ENEMY_BOSS_2_SCRIPT
+			collision_radius = 38.0
+		3:
+			boss_script = ENEMY_BOSS_3_SCRIPT
+			collision_radius = 40.0
+		_:
+			return null
+	var boss := CharacterBody2D.new()
+	boss.set_script(boss_script)
+	var collision_shape := CollisionShape2D.new()
+	collision_shape.shape = CircleShape2D.new()
+	collision_shape.shape.radius = collision_radius
+	boss.add_child(collision_shape)
+	boss.global_position = spawn_position
+	add_child(boss)
+	boss.begin_spawn_transport(BOSS_SPAWN_TRANSPORT_DURATION)
+	boss.set("target", player)
+	boss.set("arena_size", current_room_size)
+	_apply_boss_difficulty_scaling(boss)
+	if boss.has_signal("died"):
+		var captured_boss := boss
+		boss.died.connect(func(): _on_room_enemy_died(captured_boss.global_position if is_instance_valid(captured_boss) else Vector2.ZERO))
+	return boss
+
+@rpc("reliable", "authority")
+func _sync_spawn_enemy_batch(spawn_batch: Array, synced_enemy_count: int) -> void:
+	if not is_multiplayer or MultiplayerSessionManager.is_host():
+		return
+	for spawn_entry_variant in spawn_batch:
+		if not (spawn_entry_variant is Dictionary):
+			continue
+		var spawn_entry := spawn_entry_variant as Dictionary
+		var enemy_type := String(spawn_entry.get("enemy_type", ""))
+		var enemy_position := spawn_entry.get("position", Vector2.ZERO) as Vector2
+		var enemy_id := int(spawn_entry.get("enemy_id", -1))
+		if enemy_type.is_empty() or enemy_id <= 0:
+			continue
+		var enemy: CharacterBody2D = enemy_spawner.spawn_enemy_from_sync(enemy_type, enemy_position)
+		if is_instance_valid(enemy):
+			_register_network_enemy(enemy, enemy_id)
+	active_room_enemy_count = synced_enemy_count
+
+@rpc("reliable", "authority")
+func _sync_spawn_boss(spawn_data: Dictionary) -> void:
+	if not is_multiplayer or MultiplayerSessionManager.is_host():
+		return
+	var boss_stage := int(spawn_data.get("boss_stage", 0))
+	var enemy_id := int(spawn_data.get("enemy_id", -1))
+	var spawn_position := spawn_data.get("position", Vector2.ZERO) as Vector2
+	if boss_stage <= 0 or enemy_id <= 0:
+		return
+	var boss := _spawn_boss_for_stage(boss_stage, spawn_position)
+	if is_instance_valid(boss):
+		_register_network_enemy(boss, enemy_id)
+	active_room_enemy_count = 1
+
+@rpc("unreliable", "authority")
+func _sync_enemy_states(synced_states: Array, synced_enemy_count: int) -> void:
+	if not is_multiplayer or MultiplayerSessionManager.is_host():
+		return
+	var seen_ids: Dictionary = {}
+	for state_variant in synced_states:
+		if not (state_variant is Dictionary):
+			continue
+		var state := state_variant as Dictionary
+		var enemy_id := int(state.get("enemy_id", -1))
+		if enemy_id <= 0:
+			continue
+		seen_ids[enemy_id] = true
+		var enemy := _network_enemy_nodes.get(enemy_id) as Node2D
+		if not is_instance_valid(enemy):
+			continue
+		var synced_position := state.get("position", enemy.global_position) as Vector2
+		enemy.global_position = enemy.global_position.lerp(synced_position, 0.55)
+		if enemy.has_method("set_health"):
+			enemy.call("set_health", float(state.get("health", 0.0)))
+	var stale_ids: Array = []
+	for enemy_id_variant in _network_enemy_nodes.keys():
+		var existing_id := int(enemy_id_variant)
+		if seen_ids.has(existing_id):
+			continue
+		stale_ids.append(existing_id)
+	for stale_id_variant in stale_ids:
+		var stale_id := int(stale_id_variant)
+		var stale_enemy := _network_enemy_nodes.get(stale_id) as Node2D
+		if is_instance_valid(stale_enemy):
+			stale_enemy.queue_free()
+		_network_enemy_nodes.erase(stale_id)
+	active_room_enemy_count = synced_enemy_count
+
+@rpc("reliable", "authority")
+func _sync_enemy_died(enemy_id: int) -> void:
+	if not is_multiplayer or MultiplayerSessionManager.is_host():
+		return
+	var enemy := _network_enemy_nodes.get(enemy_id) as Node2D
+	if is_instance_valid(enemy):
+		enemy.queue_free()
+	_network_enemy_nodes.erase(enemy_id)
 
 func _clear_enemy_lingering_effects() -> void:
 	combat_phase_coordinator.clear_enemy_lingering_effects(get_tree())
@@ -1795,6 +2085,9 @@ func _apply_camera_bounds_for_room(room_size: Vector2) -> void:
 
 func _update_camera_mode() -> void:
 	if not is_instance_valid(player_camera):
+		return
+	if is_multiplayer and multiplayer_force_static_arena_camera:
+		player_camera.set_static_mode(Vector2.ZERO)
 		return
 	if (is_instance_valid(reward_selection_ui) and reward_selection_ui.is_active()) or choosing_next_room:
 		player_camera.set_static_mode(Vector2.ZERO)

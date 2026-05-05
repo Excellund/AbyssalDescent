@@ -2101,6 +2101,27 @@ func _is_local_control_owner() -> bool:
 		return true
 	return active_peer_id == player_id
 
+
+func get_network_facing_angle() -> float:
+	var facing := visual_facing_direction
+	if facing.length_squared() <= 0.000001:
+		facing = Vector2.RIGHT
+	return facing.angle()
+
+
+func set_network_facing_angle(facing_radians: float) -> void:
+	if _is_local_control_owner():
+		return
+	var target_facing := Vector2.RIGHT.rotated(facing_radians)
+	if target_facing.length_squared() <= 0.000001:
+		return
+	if visual_facing_direction.length_squared() <= 0.000001:
+		visual_facing_direction = target_facing.normalized()
+	else:
+		var blended_facing := visual_facing_direction.slerp(target_facing.normalized(), 0.55)
+		visual_facing_direction = blended_facing.normalized() if blended_facing.length_squared() > 0.000001 else target_facing.normalized()
+	queue_redraw()
+
 func _get_current_health() -> int:
 	if health_state == null:
 		return max_health

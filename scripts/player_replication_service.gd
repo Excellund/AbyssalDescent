@@ -3,8 +3,12 @@ extends Node
 ## Handles position, health, alive status, and upgrade state replication via RPC.
 
 ## Configuration
-var position_sync_interval_sec: float = 0.1  ## ~10 Hz position updates
-var position_broadcast_threshold_px: float = 10.0  ## Only broadcast if moved >threshold
+var position_sync_interval_sec: float = 0.05  ## ~20 Hz position updates
+var position_broadcast_threshold_px: float = 2.0  ## Broadcast low-latency movement updates
+var rotation_broadcast_threshold_rad: float = deg_to_rad(2.0)
+var remote_position_lerp_speed: float = 18.0
+var remote_rotation_lerp_speed: float = 20.0
+var remote_position_snap_distance_px: float = 180.0
 
 ## References to player nodes (populated by caller)
 var player_nodes: Dictionary = {}  ## peer_id -> Player node reference
@@ -14,6 +18,9 @@ var multiplayer_session_manager
 ## Internal state
 var _last_sync_time: float = 0.0
 var _last_sync_positions: Dictionary = {}  ## peer_id -> last_synced_position
+var _last_sync_rotations: Dictionary = {}  ## peer_id -> last_synced_facing_radians
+var _remote_target_positions: Dictionary = {}  ## peer_id -> latest replicated position
+var _remote_target_rotations: Dictionary = {}  ## peer_id -> latest replicated facing
 
 
 func _ready() -> void:
@@ -39,23 +46,39 @@ func _process(delta: float) -> void:
 	if _last_sync_time >= position_sync_interval_sec:
 		_last_sync_time = 0.0
 		_sync_all_player_positions()
+	_interpolate_remote_players(delta)
 
 
 ## Register a player node for a specific peer.
 func register_player(peer_id: int, player_node: Node) -> void:
 	player_nodes[peer_id] = player_node
-	_last_sync_positions[peer_id] = Vector2.ZERO
+	var player_body := player_node as Node2D
+	if player_body != null:
+		_last_sync_positions[peer_id] = player_body.position
+		_remote_target_positions[peer_id] = player_body.position
+		var initial_rotation := _get_player_facing_angle(player_node)
+		_last_sync_rotations[peer_id] = initial_rotation
+		_remote_target_rotations[peer_id] = initial_rotation
+	else:
+		_last_sync_positions[peer_id] = Vector2.ZERO
+		_last_sync_rotations[peer_id] = 0.0
 
 
 ## Unregister a player node.
 func unregister_player(peer_id: int) -> void:
 	player_nodes.erase(peer_id)
 	_last_sync_positions.erase(peer_id)
+	_last_sync_rotations.erase(peer_id)
+	_remote_target_positions.erase(peer_id)
+	_remote_target_rotations.erase(peer_id)
 
 
 func _remove_invalid_player(peer_id: int) -> void:
 	player_nodes.erase(peer_id)
 	_last_sync_positions.erase(peer_id)
+	_last_sync_rotations.erase(peer_id)
+	_remote_target_positions.erase(peer_id)
+	_remote_target_rotations.erase(peer_id)
 
 
 ## Sync all registered player positions if they've moved significantly.
@@ -72,20 +95,27 @@ func _sync_all_player_positions() -> void:
 		
 		if peer_id == local_peer_id:
 			## Local player: broadcast own position to peers
-			if player_node.has_property("position"):
-				var current_pos: Vector2 = player_node.position
+			var player_body := player_node as Node2D
+			if player_body != null:
+				var current_pos: Vector2 = player_body.position
 				var last_pos: Vector2 = _last_sync_positions.get(peer_id, Vector2.ZERO)
 				var distance := current_pos.distance_to(last_pos)
+				var current_rotation := _get_player_facing_angle(player_node)
+				var last_rotation := float(_last_sync_rotations.get(peer_id, current_rotation))
+				var rotation_delta := absf(wrapf(current_rotation - last_rotation, -PI, PI))
 				
-				if distance >= position_broadcast_threshold_px:
+				if distance >= position_broadcast_threshold_px or rotation_delta >= rotation_broadcast_threshold_rad:
 					_last_sync_positions[peer_id] = current_pos
-					_sync_player_position.rpc(peer_id, current_pos)
+					_last_sync_rotations[peer_id] = current_rotation
+					_sync_player_transform.rpc(peer_id, current_pos, current_rotation)
 
 
-## RPC: Broadcast a player's position to all peers.
-@rpc("reliable")
-func _sync_player_position(peer_id: int, position: Vector2) -> void:
+## RPC: Broadcast a player's transform to all peers.
+@rpc("unreliable", "any_peer", "call_local")
+func _sync_player_transform(peer_id: int, position: Vector2, facing_radians: float) -> void:
 	if peer_id not in player_nodes:
+		return
+	if peer_id == local_peer_id:
 		return
 	
 	var player_node_variant: Variant = player_nodes.get(peer_id)
@@ -96,12 +126,58 @@ func _sync_player_position(peer_id: int, position: Vector2) -> void:
 	if player_node == null:
 		_remove_invalid_player(peer_id)
 		return
-	if player_node.has_property("position"):
-		player_node.position = position
+	var player_body := player_node as Node2D
+	if player_body != null:
+		var distance_to_target := player_body.position.distance_to(position)
+		if distance_to_target >= remote_position_snap_distance_px:
+			player_body.position = position
+		_remote_target_positions[peer_id] = position
+	_remote_target_rotations[peer_id] = facing_radians
+
+
+func _interpolate_remote_players(delta: float) -> void:
+	var position_weight := clampf(delta * remote_position_lerp_speed, 0.0, 1.0)
+	var rotation_weight := clampf(delta * remote_rotation_lerp_speed, 0.0, 1.0)
+	for peer_id in player_nodes.keys():
+		if peer_id == local_peer_id:
+			continue
+		var player_node_variant: Variant = player_nodes.get(peer_id)
+		if not is_instance_valid(player_node_variant):
+			_remove_invalid_player(peer_id)
+			continue
+		var player_node := player_node_variant as Node
+		if player_node == null:
+			_remove_invalid_player(peer_id)
+			continue
+		var player_body := player_node as Node2D
+		if player_body == null:
+			continue
+		var target_pos: Vector2 = _remote_target_positions.get(peer_id, player_body.position)
+		player_body.position = player_body.position.lerp(target_pos, position_weight)
+		var current_rotation := _get_player_facing_angle(player_node)
+		var target_rotation := float(_remote_target_rotations.get(peer_id, current_rotation))
+		var smoothed_rotation := lerp_angle(current_rotation, target_rotation, rotation_weight)
+		_set_player_facing_angle(player_node, smoothed_rotation)
+
+
+func _get_player_facing_angle(player_node: Node) -> float:
+	if player_node.has_method("get_network_facing_angle"):
+		return float(player_node.get_network_facing_angle())
+	if player_node is Node2D:
+		return (player_node as Node2D).rotation
+	return 0.0
+
+
+func _set_player_facing_angle(player_node: Node, facing_radians: float) -> void:
+	if player_node.has_method("set_network_facing_angle"):
+		player_node.set_network_facing_angle(facing_radians)
+		return
+	if player_node is Node2D:
+		(player_node as Node2D).rotation = facing_radians
 
 
 ## RPC: Sync a player's health.
-@rpc("reliable")
+@rpc("reliable", "any_peer", "call_local")
 func _sync_player_health(peer_id: int, health: float) -> void:
 	if peer_id not in player_nodes:
 		return
@@ -123,7 +199,7 @@ func _sync_player_health(peer_id: int, health: float) -> void:
 
 
 ## RPC: Sync a player's alive/dead status.
-@rpc("reliable")
+@rpc("reliable", "any_peer", "call_local")
 func _sync_player_alive_status(peer_id: int, is_alive: bool) -> void:
 	if peer_id not in player_nodes:
 		return
@@ -141,7 +217,7 @@ func _sync_player_alive_status(peer_id: int, is_alive: bool) -> void:
 
 
 ## RPC: Sync a player's revived status.
-@rpc("reliable")
+@rpc("reliable", "any_peer", "call_local")
 func _sync_player_revived(peer_id: int, revived_health: float = 1.0) -> void:
 	if peer_id not in player_nodes:
 		return

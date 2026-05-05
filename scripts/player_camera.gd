@@ -29,7 +29,8 @@ var cached_viewport_size: Vector2 = Vector2.ZERO
 
 func _ready() -> void:
 	target_body = get_parent() as CharacterBody2D
-	enabled = true
+	var should_activate := _should_activate_for_target()
+	enabled = should_activate
 	top_level = true
 	position_smoothing_enabled = false
 	if is_instance_valid(target_body):
@@ -37,10 +38,21 @@ func _ready() -> void:
 		static_center_global = global_position
 	cached_viewport_size = get_viewport_rect().size
 	target_zoom = zoom
-	make_current()
+	if should_activate:
+		make_current()
+
+
+func _should_activate_for_target() -> bool:
+	if not is_instance_valid(target_body):
+		return true
+	if target_body.has_method("_is_local_control_owner"):
+		return bool(target_body.call("_is_local_control_owner"))
+	return true
 
 func _physics_process(delta: float) -> void:
 	if not is_instance_valid(target_body):
+		return
+	if not is_current():
 		return
 	_refresh_world_bounds_for_viewport_change()
 
