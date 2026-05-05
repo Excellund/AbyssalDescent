@@ -84,6 +84,7 @@ const COLOR_BOSS_CLEAVE_OUTLINE := COLOR_PALETTE.COLOR_BOSS_CLEAVE_OUTLINE
 @export var crowd_separation_strength: float = 68.0
 @export var edge_escape_phase_duration: float = 0.32
 @export var edge_escape_nudge_speed: float = 340.0
+@export var network_runtime_direction_blend: float = 0.58
 
 var target: Node2D
 var target_candidates: Array = []
@@ -122,6 +123,33 @@ var _edge_escape_phase_left: float = 0.0
 var _ignoring_target_collision: bool = false
 var network_simulation_enabled: bool = true
 
+const NETWORK_ATTACK_STATE_KEYWORDS: PackedStringArray = [
+	"state",
+	"cooldown",
+	"attack",
+	"windup",
+	"recover",
+	"slam",
+	"beam",
+	"shield",
+	"telegraph",
+	"charge",
+	"time_left",
+	"direction",
+	"facing"
+]
+const NETWORK_ATTACK_STATE_EXCLUDED: Dictionary = {
+	"target": true,
+	"target_candidates": true,
+	"health_bar": true,
+	"health_bar_recent_damage_overlay": true,
+	"health_bar_threshold_overlay": true,
+	"health_bar_threshold_markers": true,
+	"health_state": true,
+	"projectiles": true,
+	"projectile_directions": true
+}
+
 func _ready() -> void:
 	motion_mode = CharacterBody2D.MOTION_MODE_FLOATING
 	platform_floor_layers = 0
@@ -147,6 +175,7 @@ func _physics_process(delta: float) -> void:
 		return
 	if not network_simulation_enabled:
 		velocity = Vector2.ZERO
+		_process_network_visuals(delta)
 		_update_visual_facing_direction()
 		return
 	_apply_crowd_separation(delta)
@@ -207,6 +236,141 @@ func set_network_simulation_enabled(enabled: bool) -> void:
 		velocity = Vector2.ZERO
 
 
+func get_network_runtime_state() -> Dictionary:
+	var runtime_state := {
+		"attack_anim_time_left": attack_anim_time_left,
+		"attack_anim_duration": attack_anim_duration,
+		"visual_facing_direction": visual_facing_direction,
+		"slow_time_left": slow_time_left,
+		"slow_speed_mult": slow_speed_mult,
+		"spawn_transport_time_left": spawn_transport_time_left,
+		"spawn_transport_duration": spawn_transport_duration,
+		"spawn_transport_seed": spawn_transport_seed,
+		"damage_blocked": damage_blocked,
+		"custom": _get_custom_network_runtime_state()
+	}
+	return runtime_state
+
+
+func apply_network_runtime_state(runtime_state: Dictionary) -> void:
+	if runtime_state.is_empty():
+		return
+	if runtime_state.has("attack_anim_time_left"):
+		attack_anim_time_left = float(runtime_state.get("attack_anim_time_left", attack_anim_time_left))
+	if runtime_state.has("attack_anim_duration"):
+		attack_anim_duration = float(runtime_state.get("attack_anim_duration", attack_anim_duration))
+	if runtime_state.has("visual_facing_direction"):
+		visual_facing_direction = (runtime_state.get("visual_facing_direction", visual_facing_direction) as Vector2)
+	if runtime_state.has("slow_time_left"):
+		slow_time_left = float(runtime_state.get("slow_time_left", slow_time_left))
+	if runtime_state.has("slow_speed_mult"):
+		slow_speed_mult = float(runtime_state.get("slow_speed_mult", slow_speed_mult))
+	if runtime_state.has("spawn_transport_time_left"):
+		spawn_transport_time_left = float(runtime_state.get("spawn_transport_time_left", spawn_transport_time_left))
+	if runtime_state.has("spawn_transport_duration"):
+		spawn_transport_duration = float(runtime_state.get("spawn_transport_duration", spawn_transport_duration))
+	if runtime_state.has("spawn_transport_seed"):
+		spawn_transport_seed = float(runtime_state.get("spawn_transport_seed", spawn_transport_seed))
+	if runtime_state.has("damage_blocked"):
+		damage_blocked = bool(runtime_state.get("damage_blocked", damage_blocked))
+	var custom_state := runtime_state.get("custom", {}) as Dictionary
+	_apply_custom_network_runtime_state(custom_state)
+	queue_redraw()
+
+
+func _get_custom_network_runtime_state() -> Dictionary:
+	return _collect_attack_network_state()
+
+
+func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
+	if custom_state.is_empty():
+		return
+	for key_variant in custom_state.keys():
+		var property_name := String(key_variant)
+		if NETWORK_ATTACK_STATE_EXCLUDED.has(property_name):
+			continue
+		if not _has_script_property(property_name):
+			continue
+		var value: Variant = custom_state.get(property_name)
+		if _is_serializable_network_value(value):
+			if typeof(value) == TYPE_VECTOR2 and _is_directional_property_name(property_name):
+				var current_value: Variant = get(property_name)
+				if typeof(current_value) == TYPE_VECTOR2:
+					var current_direction := current_value as Vector2
+					var target_direction := value as Vector2
+					if current_direction.length_squared() > 0.000001 and target_direction.length_squared() > 0.000001:
+						var blend_weight := clampf(network_runtime_direction_blend, 0.0, 1.0)
+						var blended_direction := current_direction.slerp(target_direction.normalized() * target_direction.length(), blend_weight)
+						set(property_name, blended_direction)
+						continue
+			set(property_name, value)
+
+
+func _collect_attack_network_state() -> Dictionary:
+	var state: Dictionary = {}
+	for property_variant in get_property_list():
+		if not (property_variant is Dictionary):
+			continue
+		var property := property_variant as Dictionary
+		var usage := int(property.get("usage", 0))
+		if (usage & PROPERTY_USAGE_SCRIPT_VARIABLE) == 0:
+			continue
+		var property_name := String(property.get("name", ""))
+		if property_name.is_empty():
+			continue
+		if NETWORK_ATTACK_STATE_EXCLUDED.has(property_name):
+			continue
+		if not _is_attack_state_property_name(property_name):
+			continue
+		var value: Variant = get(property_name)
+		if _is_serializable_network_value(value):
+			state[property_name] = value
+	return state
+
+
+func _has_script_property(property_name: String) -> bool:
+	for property_variant in get_property_list():
+		if not (property_variant is Dictionary):
+			continue
+		var property := property_variant as Dictionary
+		if String(property.get("name", "")) != property_name:
+			continue
+		var usage := int(property.get("usage", 0))
+		return (usage & PROPERTY_USAGE_SCRIPT_VARIABLE) != 0
+	return false
+
+
+func _is_attack_state_property_name(property_name: String) -> bool:
+	var lowered := property_name.to_lower()
+	for keyword in NETWORK_ATTACK_STATE_KEYWORDS:
+		if lowered.findn(String(keyword)) >= 0:
+			return true
+	return false
+
+
+func _is_directional_property_name(property_name: String) -> bool:
+	var lowered := property_name.to_lower()
+	return lowered.findn("facing") >= 0 or lowered.findn("direction") >= 0
+
+
+func _is_serializable_network_value(value: Variant) -> bool:
+	match typeof(value):
+		TYPE_NIL, TYPE_BOOL, TYPE_INT, TYPE_FLOAT, TYPE_STRING, TYPE_VECTOR2, TYPE_VECTOR2I, TYPE_VECTOR3, TYPE_VECTOR3I, TYPE_COLOR:
+			return true
+		TYPE_ARRAY:
+			for item in value:
+				if not _is_serializable_network_value(item):
+					return false
+			return true
+		TYPE_DICTIONARY:
+			for key_variant in value.keys():
+				if not _is_serializable_network_value(value.get(key_variant)):
+					return false
+			return true
+		_:
+			return false
+
+
 func get_network_facing_angle() -> float:
 	var facing := visual_facing_direction
 	if facing.length_squared() <= 0.000001:
@@ -245,6 +409,9 @@ func rng_seed_from_instance() -> float:
 	return float(int(get_instance_id()) % 10000) * 0.0137
 
 func _process_behavior(_delta: float) -> void:
+	pass
+
+func _process_network_visuals(_delta: float) -> void:
 	pass
 
 func _get_inward_edge_bias() -> Vector2:

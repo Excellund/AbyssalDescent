@@ -202,12 +202,13 @@ var is_multiplayer: bool = false
 var multiplayer_session_id: String = ""
 var multiplayer_encounter_seed: int = 0
 var game_state_replication_service: Node = null
-var enemy_state_sync_interval_sec: float = 0.08
+var enemy_state_sync_interval_sec: float = 0.06
 var _enemy_state_sync_elapsed: float = 0.0
 var _next_network_enemy_id: int = 1
 var _network_enemy_nodes: Dictionary = {}  ## enemy_id -> Node2D
 var _enemy_target_positions: Dictionary = {}  ## enemy_id -> target global position
 var _enemy_target_facing_angles: Dictionary = {}  ## enemy_id -> target facing angle
+var _previous_enemy_runtime_states: Dictionary = {}  ## enemy_id -> previous runtime_state (for conditional sync)
 var enemy_remote_position_lerp_speed: float = 14.0
 var enemy_remote_rotation_lerp_speed: float = 18.0
 var enemy_remote_snap_distance_px: float = 180.0
@@ -2278,8 +2279,19 @@ func _on_room_enemy_died(kill_pos: Vector2 = Vector2.ZERO) -> void:
 
 func _clear_all_enemies() -> void:
 	_network_enemy_nodes.clear()
+	_previous_enemy_runtime_states.clear()
 	if is_instance_valid(enemy_spawner):
 		enemy_spawner.clear_all_enemies()
+
+func _compute_runtime_state_delta(current_state: Dictionary, previous_state: Dictionary) -> Dictionary:
+	var delta := {}
+	for key_variant in current_state.keys():
+		var key := String(key_variant)
+		var current_val: Variant = current_state.get(key)
+		var previous_val: Variant = previous_state.get(key)
+		if current_val != previous_val:
+			delta[key] = current_val
+	return delta
 
 func _sync_enemy_state_tick(delta: float) -> void:
 	if not is_multiplayer:
@@ -2299,21 +2311,30 @@ func _sync_enemy_state_tick(delta: float) -> void:
 			stale_ids.append(enemy_id)
 			continue
 		var enemy_health := 0.0
+		var runtime_state: Dictionary = {}
 		if enemy.has_method("get_current_health"):
 			enemy_health = float(enemy.call("get_current_health"))
+		if enemy.has_method("get_network_runtime_state"):
+			runtime_state = enemy.call("get_network_runtime_state") as Dictionary
 		var enemy_facing_angle := enemy.global_rotation
 		if enemy.has_method("get_network_facing_angle"):
 			enemy_facing_angle = float(enemy.call("get_network_facing_angle"))
+		# Compute delta from previous state to reduce payload
+		var previous_state := _previous_enemy_runtime_states.get(enemy_id, {}) as Dictionary
+		var runtime_state_delta := _compute_runtime_state_delta(runtime_state, previous_state)
+		_previous_enemy_runtime_states[enemy_id] = runtime_state.duplicate(true)
 		synced_states.append({
 			"enemy_id": enemy_id,
 			"position": enemy.global_position,
 			"facing_angle": enemy_facing_angle,
-			"health": enemy_health
+			"health": enemy_health,
+			"runtime_state_delta": runtime_state_delta
 		})
 	for stale_id in stale_ids:
 		_network_enemy_nodes.erase(int(stale_id))
 		_enemy_target_positions.erase(int(stale_id))
 		_enemy_target_facing_angles.erase(int(stale_id))
+		_previous_enemy_runtime_states.erase(int(stale_id))
 	_sync_enemy_states.rpc(synced_states, active_room_enemy_count)
 
 func _register_network_enemy(enemy: Node2D, forced_enemy_id: int = -1) -> int:
@@ -2342,6 +2363,7 @@ func _on_network_enemy_died(enemy_id: int) -> void:
 	_network_enemy_nodes.erase(enemy_id)
 	_enemy_target_positions.erase(enemy_id)
 	_enemy_target_facing_angles.erase(enemy_id)
+	_previous_enemy_runtime_states.erase(enemy_id)
 	if is_multiplayer and MultiplayerSessionManager.is_host():
 		_sync_enemy_died.rpc(enemy_id)
 
@@ -2460,6 +2482,9 @@ func _sync_enemy_states(synced_states: Array, synced_enemy_count: int) -> void:
 		_enemy_target_facing_angles[enemy_id] = synced_facing_angle
 		if enemy.has_method("set_health"):
 			enemy.call("set_health", float(state.get("health", 0.0)))
+		if enemy.has_method("apply_network_runtime_state"):
+			var runtime_state_delta := state.get("runtime_state_delta", {}) as Dictionary
+			enemy.call("apply_network_runtime_state", runtime_state_delta)
 	var stale_ids: Array = []
 	for enemy_id_variant in _network_enemy_nodes.keys():
 		var existing_id := int(enemy_id_variant)
