@@ -2324,6 +2324,14 @@ func _update_farline_focus_state(delta: float) -> void:
 			farline_focus_proc_flash_left = 0.0
 			queue_redraw()
 		return
+	if not _is_local_control_owner():
+		if farline_focus_ready:
+			farline_focus_ready = false
+			queue_redraw()
+		if farline_focus_proc_flash_left > 0.0:
+			farline_focus_proc_flash_left = maxf(0.0, farline_focus_proc_flash_left - delta)
+			queue_redraw()
+		return
 	var focus_band := _get_farline_focus_range_band()
 	var focus_min_range := focus_band.x
 	var focus_max_range := focus_band.y
@@ -2927,7 +2935,7 @@ func _draw_passive_state(body_radius: float) -> void:
 		var range_color := Color(1.0, 0.86, 0.38, 0.26)
 		draw_arc(Vector2.ZERO, focus_min_range, 0.0, TAU, 72, range_color, 1.3)
 		draw_arc(Vector2.ZERO, focus_max_range, 0.0, TAU, 72, range_color, 1.3)
-		var facing := _get_mouse_attack_direction()
+		var facing := _get_focus_visual_facing()
 		if facing.length_squared() <= 0.000001:
 			facing = visual_facing_direction if visual_facing_direction.length_squared() > 0.000001 else Vector2.RIGHT
 		var center_angle := facing.angle()
@@ -2938,6 +2946,14 @@ func _draw_passive_state(body_radius: float) -> void:
 		if farline_focus_proc_flash_left > 0.0:
 			var flash_t := clampf(farline_focus_proc_flash_left / farline_focus_proc_flash_duration, 0.0, 1.0)
 			draw_circle(Vector2.ZERO, body_radius + 18.0 + (1.0 - flash_t) * 6.0, Color(1.0, 0.92, 0.58, 0.22 * flash_t))
+
+
+func _get_focus_visual_facing() -> Vector2:
+	if _is_local_control_owner():
+		return _get_mouse_attack_direction()
+	if visual_facing_direction.length_squared() > 0.000001:
+		return visual_facing_direction
+	return Vector2.RIGHT
 
 
 func _draw_objective_mutator_aura(body_radius: float) -> void:
