@@ -211,6 +211,10 @@ var _enemy_target_facing_angles: Dictionary = {}  ## enemy_id -> target facing a
 var enemy_remote_position_lerp_speed: float = 14.0
 var enemy_remote_rotation_lerp_speed: float = 18.0
 var enemy_remote_snap_distance_px: float = 180.0
+var _reward_phase_active: bool = false
+var _reward_phase_is_initial: bool = false
+var _reward_phase_mode: int = ENUMS.RewardMode.NONE
+var _reward_phase_completed_peers: Dictionary = {}  ## peer_id -> bool
 
 var second_player: Node2D = null
 func _apply_debug_settings_from_node() -> void:
@@ -2295,6 +2299,7 @@ func _roll_route_options(route_context: Variant) -> Array[Dictionary]:
 
 func _open_boon_selection(title: String, is_initial: bool, mode: int = ENUMS.RewardMode.BOON, player_mutator: Dictionary = {}, epitaph: String = "", character_id: String = "") -> void:
 	if is_instance_valid(reward_selection_ui):
+		_begin_reward_phase_sync(is_initial, mode)
 		reward_selection_ui.open_selection(title, is_initial, mode, power_registry_instance, player, rng, player_mutator, epitaph, character_id)
 		_set_combat_paused(true)
 
@@ -2312,13 +2317,98 @@ func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> voi
 	else:
 		_apply_boon_to_player(String(choice["id"]))
 		run_session.record_boon(String(choice["name"]))
+	if is_multiplayer:
+		_mark_local_reward_phase_complete(is_initial, mode)
+	elif is_initial:
+		_set_combat_paused(false)
+		pending_room_reward = ENUMS.RewardMode.BOON
+		_begin_room(_build_skirmish_profile(room_depth))
+	else:
+		_set_combat_paused(false)
+		_spawn_door_options()
+	hud.refresh(_get_hud_state(), player)
+
+
+func _begin_reward_phase_sync(is_initial: bool, mode: int) -> void:
+	if not is_multiplayer:
+		_reward_phase_active = false
+		_reward_phase_completed_peers.clear()
+		return
+	_reward_phase_active = true
+	_reward_phase_is_initial = is_initial
+	_reward_phase_mode = mode
+	_reward_phase_completed_peers.clear()
+	if is_instance_valid(hud):
+		hud.hide_persistent_banner()
+
+
+func _mark_local_reward_phase_complete(is_initial: bool, mode: int) -> void:
+	if not is_multiplayer:
+		return
+	var local_peer_id := _resolve_local_peer_id()
+	if local_peer_id <= 0:
+		return
+	if is_instance_valid(hud):
+		hud.show_persistent_banner("Reward Locked In", "Waiting for other player...", Color(0.78, 0.9, 1.0, 0.92))
+	_sync_reward_phase_complete.rpc(local_peer_id, is_initial, mode)
+
+
+func _all_reward_phase_peers_completed() -> bool:
+	var multiplayer_session_manager := get_node_or_null("/root/MultiplayerSessionManager")
+	if multiplayer_session_manager == null:
+		return false
+	var required_peers: Array = multiplayer_session_manager.get_peer_ids()
+	if required_peers.is_empty():
+		return false
+	for peer_id_variant in required_peers:
+		var peer_id := int(peer_id_variant)
+		if not bool(_reward_phase_completed_peers.get(peer_id, false)):
+			return false
+	return true
+
+
+func _finalize_reward_phase_and_advance(is_initial: bool, mode: int) -> void:
+	if not _reward_phase_active:
+		return
+	_reward_phase_active = false
+	_reward_phase_completed_peers.clear()
+	_reward_phase_mode = ENUMS.RewardMode.NONE
+	_reward_phase_is_initial = false
+	if is_instance_valid(hud):
+		hud.hide_persistent_banner()
 	_set_combat_paused(false)
 	if is_initial:
 		pending_room_reward = ENUMS.RewardMode.BOON
 		_begin_room(_build_skirmish_profile(room_depth))
 	else:
+		if mode == ENUMS.RewardMode.BOSS:
+			boss_reward_pending = false
 		_spawn_door_options()
 	hud.refresh(_get_hud_state(), player)
+
+
+@rpc("reliable", "any_peer", "call_local")
+func _sync_reward_phase_complete(peer_id: int, is_initial: bool, mode: int) -> void:
+	if not is_multiplayer:
+		return
+	if not _reward_phase_active:
+		return
+	if _reward_phase_is_initial != is_initial or _reward_phase_mode != mode:
+		return
+	_reward_phase_completed_peers[int(peer_id)] = true
+	if not MultiplayerSessionManager.is_host():
+		return
+	if not _all_reward_phase_peers_completed():
+		return
+	_finalize_reward_phase_and_advance(is_initial, mode)
+	_sync_reward_phase_advance.rpc(is_initial, mode)
+
+
+@rpc("reliable", "authority")
+func _sync_reward_phase_advance(is_initial: bool, mode: int) -> void:
+	if not is_multiplayer or MultiplayerSessionManager.is_host():
+		return
+	_finalize_reward_phase_and_advance(is_initial, mode)
 
 func _on_reward_offers_presented(offers: Array[Dictionary], mode: int, is_initial: bool, stage: int) -> void:
 	_record_reward_offers(offers, mode, is_initial, stage)

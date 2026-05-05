@@ -28,6 +28,7 @@ var player_mutator_labels: Array[Label] = []
 var room_banner_title_label: Label
 var room_banner_subtitle_label: Label
 var room_banner_tween: Tween
+var room_banner_persistent_visible: bool = false
 var _mutator_icon_killbox: Texture2D
 var _mutator_icon_fortified: Texture2D
 var _mutator_icon_hunters_focus: Texture2D
@@ -76,6 +77,7 @@ func refresh(state: Dictionary, player: Node) -> void:
 func show_banner(title: String, subtitle: String, subtitle_color: Color = Color(0.78, 0.9, 1.0, 0.92)) -> void:
 	if room_banner_title_label == null or room_banner_subtitle_label == null:
 		return
+	room_banner_persistent_visible = false
 	if subtitle_color.a < -1.0:
 		room_banner_title_label.text = subtitle
 	if is_instance_valid(room_banner_tween):
@@ -98,6 +100,37 @@ func show_banner(title: String, subtitle: String, subtitle_color: Color = Color(
 	room_banner_tween.tween_property(room_banner_title_label, "modulate:a", 0.0, 0.24)
 	if has_subtitle:
 		room_banner_tween.parallel().tween_property(room_banner_subtitle_label, "modulate:a", 0.0, 0.24)
+
+
+func show_persistent_banner(title: String, subtitle: String, subtitle_color: Color = Color(0.78, 0.9, 1.0, 0.92)) -> void:
+	if room_banner_title_label == null or room_banner_subtitle_label == null:
+		return
+	if is_instance_valid(room_banner_tween):
+		room_banner_tween.kill()
+	var has_subtitle := not subtitle.strip_edges().is_empty()
+	room_banner_persistent_visible = true
+	room_banner_title_label.text = title
+	room_banner_subtitle_label.text = subtitle
+	room_banner_subtitle_label.add_theme_color_override("font_color", subtitle_color)
+	var viewport := get_viewport()
+	if viewport != null:
+		_update_banner_layout(_cached_room_size, viewport.get_canvas_transform(), viewport.get_visible_rect().size)
+	room_banner_title_label.modulate.a = 1.0
+	room_banner_subtitle_label.modulate.a = 1.0 if has_subtitle else 0.0
+	room_banner_subtitle_label.visible = has_subtitle
+
+
+func hide_persistent_banner() -> void:
+	if room_banner_title_label == null or room_banner_subtitle_label == null:
+		return
+	if not room_banner_persistent_visible:
+		return
+	room_banner_persistent_visible = false
+	if is_instance_valid(room_banner_tween):
+		room_banner_tween.kill()
+	room_banner_title_label.modulate.a = 0.0
+	room_banner_subtitle_label.modulate.a = 0.0
+	room_banner_subtitle_label.visible = false
 
 func show_notice(text: String, text_color: Color = Color(0.78, 0.9, 1.0, 0.92), duration: float = -1.0) -> void:
 	# Transient combat notices were removed to keep gameplay readable.
