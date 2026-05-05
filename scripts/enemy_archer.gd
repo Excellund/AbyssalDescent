@@ -16,6 +16,7 @@ const ENEMY_STATE_ENUMS := preload("res://scripts/shared/enemy_state_enums.gd")
 @export var fire_interval: float = 0.22
 @export var arena_size: Vector2 = Vector2(940.0, 700.0)
 @export var remote_projectile_lerp_speed: float = 20.0
+@export var windup_redraw_interval_sec: float = 0.05
 
 var attack_cooldown_left: float = 0.0
 var archer_state: int = ENEMY_STATE_ENUMS.ArcherState.SEEK
@@ -29,6 +30,7 @@ var _remote_projectile_target_positions: Dictionary = {}
 var _next_projectile_network_id: int = 1
 var fire_time_left: float = 0.0
 var arrows_fired: int = 0
+var _windup_redraw_left: float = 0.0
 
 func _process_behavior(delta: float) -> void:
 	_update_attack_cooldown(delta)
@@ -86,9 +88,10 @@ func _process_windup_state(delta: float) -> void:
 	velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
 	move_and_slide()
 	archer_state_time_left = maxf(0.0, archer_state_time_left - delta)
-	
-	# Draw telegraph line during windup
-	queue_redraw()
+	_windup_redraw_left = maxf(0.0, _windup_redraw_left - delta)
+	if _windup_redraw_left <= 0.0:
+		_windup_redraw_left = maxf(0.016, windup_redraw_interval_sec)
+		queue_redraw()
 	
 	if archer_state_time_left <= 0.0:
 		_enter_fire_state()
@@ -118,20 +121,24 @@ func _process_recover_state(delta: float) -> void:
 func _enter_windup_state() -> void:
 	archer_state = ENEMY_STATE_ENUMS.ArcherState.WINDUP
 	archer_state_time_left = windup_time
+	_windup_redraw_left = 0.0
 	var to_target := target.global_position - global_position
 	if to_target.length_squared() > 0.000001:
 		arrow_direction = to_target.normalized()
 	visual_facing_direction = arrow_direction
+	queue_redraw()
 
 func _enter_fire_state() -> void:
 	archer_state = ENEMY_STATE_ENUMS.ArcherState.FIRE
 	archer_state_time_left = fire_interval * 3.5
 	fire_time_left = 0.0
 	arrows_fired = 0
+	_windup_redraw_left = 0.0
 
 func _enter_recover_state() -> void:
 	archer_state = ENEMY_STATE_ENUMS.ArcherState.RECOVER
 	archer_state_time_left = 0.4
+	_windup_redraw_left = 0.0
 
 func _fire_arrow() -> void:
 	var projectile := Node2D.new()
@@ -285,13 +292,19 @@ func _process_network_visuals(delta: float) -> void:
 	if _remote_projectiles_by_network_id.is_empty():
 		return
 	var weight := clampf(delta * remote_projectile_lerp_speed, 0.0, 1.0)
+	var projectile_visual_changed := false
 	for network_id_variant in _remote_projectiles_by_network_id.keys():
 		var network_id := int(network_id_variant)
 		var projectile := _remote_projectiles_by_network_id.get(network_id) as Node2D
 		if not is_instance_valid(projectile):
 			continue
 		var target_position := _remote_projectile_target_positions.get(network_id, projectile.global_position) as Vector2
+		var prev_position := projectile.global_position
 		projectile.global_position = projectile.global_position.lerp(target_position, weight)
+		if projectile.global_position.distance_squared_to(prev_position) > 0.04:
+			projectile_visual_changed = true
+	if projectile_visual_changed:
+		queue_redraw()
 
 func _draw() -> void:
 	var body_radius := 12.8
@@ -328,32 +341,36 @@ func _draw() -> void:
 	
 	# Draw telegraph during windup
 	if archer_state == ENEMY_STATE_ENUMS.ArcherState.WINDUP:
+		var low_detail_telegraph := _is_high_load_visual_lod_active()
 		var windup_phase := 1.0 - (archer_state_time_left / windup_time) if windup_time > 0.0 else 1.0
 		var line_length := 400.0
 		var line_end := arrow_direction * line_length
 		var bracket_size := 20.0
 		var aim_side := Vector2(-arrow_direction.y, arrow_direction.x)  
 		var aim_pos := arrow_direction * 100.0
-		
-		# Background aim guide (subtle inner line)
-		draw_line(Vector2.ZERO, line_end * 0.8, Color(COLOR_ARCHER_AIM.r, COLOR_ARCHER_AIM.g, COLOR_ARCHER_AIM.b, 0.3), 1.0)
-		
-		# Main aiming line (thicker, more prominent)
-		draw_line(Vector2.ZERO, line_end, COLOR_ARCHER_AIM, 2.2)
-		
-		# Pulsing impact zone bracket (gets brighter as shot prepares)
 		var bracket_pulse := 0.6 + 0.4 * sin(windup_phase * PI * 2.0)
 		var bracket_alpha := COLOR_ARCHER_AIM_BRACKET.a * bracket_pulse
-		draw_line(aim_pos - aim_side * bracket_size, aim_pos + aim_side * bracket_size, Color(COLOR_ARCHER_AIM_BRACKET.r, COLOR_ARCHER_AIM_BRACKET.g, COLOR_ARCHER_AIM_BRACKET.b, bracket_alpha), 2.0)
-		
-		# Corner accent marks for target box
-		var corner_len := 8.0
-		draw_line(aim_pos + aim_side * bracket_size - arrow_direction * corner_len, aim_pos + aim_side * bracket_size, Color(COLOR_ARCHER_AIM.r, COLOR_ARCHER_AIM.g, COLOR_ARCHER_AIM.b, 0.7), 1.4)
-		draw_line(aim_pos - aim_side * bracket_size - arrow_direction * corner_len, aim_pos - aim_side * bracket_size, Color(COLOR_ARCHER_AIM.r, COLOR_ARCHER_AIM.g, COLOR_ARCHER_AIM.b, 0.7), 1.4)
+		draw_line(Vector2.ZERO, line_end, COLOR_ARCHER_AIM, 2.0)
+		draw_line(aim_pos - aim_side * bracket_size, aim_pos + aim_side * bracket_size, Color(COLOR_ARCHER_AIM_BRACKET.r, COLOR_ARCHER_AIM_BRACKET.g, COLOR_ARCHER_AIM_BRACKET.b, bracket_alpha), 1.8)
+		if not low_detail_telegraph:
+			# Background aim guide (subtle inner line)
+			draw_line(Vector2.ZERO, line_end * 0.8, Color(COLOR_ARCHER_AIM.r, COLOR_ARCHER_AIM.g, COLOR_ARCHER_AIM.b, 0.3), 1.0)
+			# Corner accent marks for target box
+			var corner_len := 8.0
+			draw_line(aim_pos + aim_side * bracket_size - arrow_direction * corner_len, aim_pos + aim_side * bracket_size, Color(COLOR_ARCHER_AIM.r, COLOR_ARCHER_AIM.g, COLOR_ARCHER_AIM.b, 0.7), 1.4)
+			draw_line(aim_pos - aim_side * bracket_size - arrow_direction * corner_len, aim_pos - aim_side * bracket_size, Color(COLOR_ARCHER_AIM.r, COLOR_ARCHER_AIM.g, COLOR_ARCHER_AIM.b, 0.7), 1.4)
 	
 	# Draw projectiles
+	var viewport := get_viewport()
+	var screen_rect := viewport.get_visible_rect() if viewport != null else Rect2()
+	var canvas_transform := viewport.get_canvas_transform() if viewport != null else Transform2D.IDENTITY
+	var offscreen_margin := 16.0
 	for projectile in projectiles:
 		if is_instance_valid(projectile):
+			if viewport != null:
+				var projectile_screen_pos := canvas_transform * projectile.global_position
+				if projectile_screen_pos.x < -offscreen_margin or projectile_screen_pos.x > screen_rect.size.x + offscreen_margin or projectile_screen_pos.y < -offscreen_margin or projectile_screen_pos.y > screen_rect.size.y + offscreen_margin:
+					continue
 			var offset := projectile.global_position - global_position
 			draw_circle(offset, 4.0, COLOR_ARCHER_PROJECTILE)
 			draw_circle(offset, 2.2, Color(1.0, 0.92, 0.6, 0.9))

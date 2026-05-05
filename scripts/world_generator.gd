@@ -213,8 +213,10 @@ var _previous_enemy_runtime_states: Dictionary = {}  ## enemy_id -> previous run
 var _previous_enemy_positions: Dictionary = {}  ## enemy_id -> previous synced position
 var _previous_enemy_facing_angles: Dictionary = {}  ## enemy_id -> previous synced facing angle
 var _previous_enemy_health_values: Dictionary = {}  ## enemy_id -> previous synced health
-var enemy_state_sync_batch_size: int = 1
+var enemy_state_sync_batch_size: int = 2
 var enemy_state_sync_payload_budget_bytes: int = 550
+var enemy_state_transport_mtu_bytes: int = 1392
+var enemy_state_transport_safety_margin_bytes: int = 340
 var enemy_state_far_sync_distance_px: float = 520.0
 var enemy_state_far_sync_interval_mult: float = 2.0
 var enemy_state_position_change_threshold_sq: float = 4.0
@@ -224,14 +226,37 @@ var enemy_state_transmit_facing_quantum: float = 0.1
 var enemy_runtime_float_quantum: float = 0.05
 var enemy_runtime_vector_quantum: float = 0.5
 var _enemy_far_sync_elapsed_by_id: Dictionary = {}  ## enemy_id -> elapsed seconds toward reduced far sync interval
+var _enemy_far_combat_hint_by_id: Dictionary = {}  ## enemy_id -> bool hint for far enemy combat activity
+var _enemy_sync_scan_cursor: int = 0
 var multiplayer_perf_logging_enabled: bool = false
 var multiplayer_perf_log_interval_sec: float = 2.0
 var _multiplayer_perf_log_elapsed: float = 0.0
+var _multiplayer_client_perf_report_interval_sec: float = 0.5
+var _multiplayer_client_perf_report_elapsed: float = 0.0
+var _multiplayer_latest_client_perf_by_peer: Dictionary = {}
 var _multiplayer_last_sync_enemy_count: int = 0
 var _multiplayer_last_sync_batch_count: int = 0
 var _multiplayer_last_sync_estimated_bytes: int = 0
 var _multiplayer_last_sync_tether_enemy_count: int = 0
 var _multiplayer_last_sync_tether_estimated_bytes: int = 0
+var _perf_attribution_enabled: bool = false
+var _perf_attribution_sample_ms: float = 1000.0
+var _perf_attribution_elapsed: float = 0.0
+var _perf_attr_frame_count: int = 0
+var _perf_attr_total_pre_ms: float = 0.0
+var _perf_attr_total_sim_ms: float = 0.0
+var _perf_attr_total_post_ms: float = 0.0
+var _perf_attr_total_frame_ms: float = 0.0
+var _perf_attr_total_ui_ms: float = 0.0
+var _perf_attr_total_enemy_drawn: int = 0
+var _perf_attr_last_sample: Dictionary = {}
+var _perf_attr_live_snapshot: Dictionary = {}
+var _enemy_clamp_cached_nodes: Array[Node2D] = []
+var _enemy_clamp_refresh_elapsed: float = 0.0
+var _enemy_clamp_refresh_interval_sec: float = 0.25
+var _enemy_clamp_frame_stride: int = 2
+var _enemy_clamp_frame_cursor: int = 0
+var _enemy_clamp_last_room_size: Vector2 = Vector2.ZERO
 var enemy_remote_position_lerp_speed: float = 14.0
 var enemy_remote_rotation_lerp_speed: float = 18.0
 var enemy_remote_snap_distance_px: float = 180.0
@@ -250,6 +275,12 @@ var _pending_boss_spawn_sync_payload: Dictionary = {}
 var _current_room_sync_id: int = 0
 var _last_applied_spawn_sync_id: int = 0
 var _last_objective_cleared_room_sync_id: int = 0
+
+## ============================================================================
+## STRESS TEST METRICS (debug only)
+## ============================================================================
+var _stress_test_active: bool = false
+var _stress_test_coordinator: RefCounted = null
 
 var second_player: Node2D = null
 func _apply_debug_settings_from_node() -> void:
@@ -278,6 +309,13 @@ func _apply_debug_settings_from_node() -> void:
 	telemetry_spike_endpoint = String(telemetry_endpoint_value) if telemetry_endpoint_value != null else ""
 	telemetry_spike_api_key = String(telemetry_api_key_value) if telemetry_api_key_value != null else ""
 	telemetry_spike_timeout_seconds = float(telemetry_timeout_value) if telemetry_timeout_value != null else 8.0
+	multiplayer_perf_logging_enabled = bool(debug_settings.get("multiplayer_perf_logging_enabled"))
+	_perf_attribution_enabled = bool(debug_settings.get("perf_attribution_enabled"))
+	var perf_attr_interval_value: Variant = debug_settings.get("perf_attribution_sample_ms")
+	if perf_attr_interval_value != null:
+		_perf_attribution_sample_ms = maxf(250.0, float(perf_attr_interval_value))
+	else:
+		_perf_attribution_sample_ms = 1000.0
 
 func _ready() -> void:
 	bootstrap_coordinator = WORLD_BOOTSTRAP_COORDINATOR_SCRIPT.new()
@@ -727,7 +765,30 @@ func _run_debug_boot_flow() -> bool:
 		if start_encounter != ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_NONE:
 			_start_debug_selected_encounter(start_encounter)
 			return true
+		# Stress test gets its own clean arena - bypass normal encounter flow
+		var debug_settings := get_node_or_null("DebugSettings")
+		if debug_settings != null and bool(debug_settings.get("stress_test_enabled")):
+			_start_stress_test_arena()
+			return true
 	return false
+
+func _start_stress_test_arena() -> void:
+	_mark_telemetry_debug_mode()
+	_reset_for_debug_jump()
+	current_room_size = Vector2(1200.0, 900.0)
+	current_room_label = "Stress Test Arena"
+	current_room_static_camera = true
+	active_room_enemy_count = 0
+	_apply_camera_bounds_for_room(current_room_size)
+	if is_instance_valid(enemy_spawner):
+		enemy_spawner.configure_room(current_room_size, spawn_padding, spawn_safe_radius, {}, [] as Array[Dictionary])
+	if is_instance_valid(player_camera):
+		player_camera.position = Vector2.ZERO
+	hud.show_banner("Stress Test Arena", "")
+	_initialize_run_telemetry(false)
+	hud.refresh(_get_hud_state(), player)
+	print_debug("[StressTest] Clean arena ready — scheduling stress test start")
+	call_deferred("_maybe_start_stress_test")
 
 func _begin_new_run_flow() -> void:
 	_current_room_sync_id = 0
@@ -1178,9 +1239,10 @@ func _unhandled_input(event: InputEvent) -> void:
 func _process(delta: float) -> void:
 	if _handle_modal_frame(delta):
 		return
+	var perf_frame_start_usec := Time.get_ticks_usec() if _perf_attribution_enabled and is_multiplayer else 0
 
 	_keep_player_inside_current_room()
-	_keep_enemies_inside_current_room()
+	_keep_enemies_inside_current_room(delta)
 	_keep_player_inside_camera_view()
 	var _grace_active := _update_encounter_intro_grace()
 	var objective_frame_result: Dictionary = objective_frame_coordinator.tick(objective_manager, objective_runtime, delta, _grace_active)
@@ -1192,13 +1254,33 @@ func _process(delta: float) -> void:
 	if is_multiplayer and multiplayer_use_shared_camera:
 		_update_multiplayer_camera()
 	if is_multiplayer:
+		var sim_start_usec := Time.get_ticks_usec() if _perf_attribution_enabled else 0
 		_sync_enemy_state_tick(delta)
 		_interpolate_remote_enemy_states(delta)
 		_flush_pending_client_door_syncs()
 		_flush_pending_client_boss_spawn_syncs()
 		_flush_pending_client_spawn_syncs()
 		_flush_pending_client_objective_spawn_syncs()
+		_report_client_perf_sample(delta)
 		_update_multiplayer_perf_logging(delta)
+		var sim_elapsed_ms := 0.0
+		if sim_start_usec > 0:
+			sim_elapsed_ms = float(Time.get_ticks_usec() - sim_start_usec) / 1000.0
+		var post_start_usec := Time.get_ticks_usec() if sim_start_usec > 0 else 0
+		
+		# Update stress test metrics if active
+		if _stress_test_active:
+			if _stress_test_coordinator == null:
+				_stress_test_coordinator = load("res://scripts/multiplayer_stress_test.gd").new()
+				_stress_test_coordinator.world_gen = self
+			_stress_test_coordinator.tick_frame(delta, _multiplayer_last_sync_estimated_bytes, _multiplayer_last_sync_batch_count)
+		_refresh_frame_ui()
+		if post_start_usec > 0 and perf_frame_start_usec > 0:
+			var post_elapsed_ms := float(Time.get_ticks_usec() - post_start_usec) / 1000.0
+			var frame_elapsed_ms := float(Time.get_ticks_usec() - perf_frame_start_usec) / 1000.0
+			var pre_elapsed_ms := maxf(0.0, frame_elapsed_ms - sim_elapsed_ms - post_elapsed_ms)
+			_record_perf_attribution_sample(delta, pre_elapsed_ms, sim_elapsed_ms, post_elapsed_ms, frame_elapsed_ms)
+		return
 	_refresh_frame_ui()
 
 func _update_multiplayer_perf_logging(delta: float) -> void:
@@ -1221,6 +1303,138 @@ func _update_multiplayer_perf_logging(delta: float) -> void:
 		_multiplayer_last_sync_tether_enemy_count,
 		_multiplayer_last_sync_tether_estimated_bytes
 	])
+	if not _perf_attr_last_sample.is_empty():
+		print("[MP PERF][ATTR] pre_ms=%.2f sync_ms=%.2f post_ms=%.2f frame_ms=%.2f ui_ms=%.2f enemy_drawn_avg=%.1f" % [
+			float(_perf_attr_last_sample.get("avg_pre_ms", 0.0)),
+			float(_perf_attr_last_sample.get("avg_sim_ms", 0.0)),
+			float(_perf_attr_last_sample.get("avg_post_ms", 0.0)),
+			float(_perf_attr_last_sample.get("avg_frame_ms", 0.0)),
+			float(_perf_attr_last_sample.get("avg_ui_ms", 0.0)),
+			float(_perf_attr_last_sample.get("avg_enemy_drawn", 0.0))
+		])
+	if not _multiplayer_latest_client_perf_by_peer.is_empty():
+		for peer_id_variant in _multiplayer_latest_client_perf_by_peer.keys():
+			var peer_id := int(peer_id_variant)
+			var sample := _multiplayer_latest_client_perf_by_peer.get(peer_id, {}) as Dictionary
+			print("[MP PERF][CLIENT %d] fps=%.1f enemy_nodes=%d room=%s pre_ms=%.2f sync_ms=%.2f post_ms=%.2f frame_ms=%.2f ui_ms=%.2f enemy_drawn_avg=%.1f" % [
+				peer_id,
+				float(sample.get("fps", 0.0)),
+				int(sample.get("enemy_nodes", 0)),
+				String(sample.get("room_label", "")),
+				float(sample.get("pre_ms", 0.0)),
+				float(sample.get("sim_ms", 0.0)),
+				float(sample.get("post_ms", 0.0)),
+				float(sample.get("frame_ms", 0.0)),
+				float(sample.get("ui_ms", 0.0)),
+				float(sample.get("enemy_drawn_avg", 0.0))
+			])
+
+func _record_perf_attribution_sample(delta: float, pre_elapsed_ms: float, sim_elapsed_ms: float, post_elapsed_ms: float, frame_elapsed_ms: float) -> void:
+	if not _perf_attribution_enabled:
+		return
+	if not is_multiplayer:
+		return
+	if delta <= 0.0:
+		return
+	var frame_ms := frame_elapsed_ms if frame_elapsed_ms > 0.0 else delta * 1000.0
+	var pre_ms := maxf(0.0, pre_elapsed_ms)
+	var sim_ms := maxf(0.0, sim_elapsed_ms)
+	var post_ms := maxf(0.0, post_elapsed_ms)
+	var ui_ms := pre_ms + post_ms
+	_perf_attr_live_snapshot = {
+		"avg_pre_ms": pre_ms,
+		"avg_sim_ms": sim_ms,
+		"avg_sync_ms": sim_ms,
+		"avg_post_ms": post_ms,
+		"avg_frame_ms": frame_ms,
+		"avg_ui_ms": ui_ms,
+		"avg_enemy_drawn": float(_network_enemy_nodes.size()),
+		"sample_frames": 1
+	}
+	_perf_attr_frame_count += 1
+	_perf_attr_total_pre_ms += pre_ms
+	_perf_attr_total_sim_ms += sim_ms
+	_perf_attr_total_post_ms += post_ms
+	_perf_attr_total_frame_ms += frame_ms
+	_perf_attr_total_ui_ms += ui_ms
+	_perf_attr_total_enemy_drawn += _network_enemy_nodes.size()
+	_perf_attribution_elapsed += frame_ms
+	if _perf_attribution_elapsed < _perf_attribution_sample_ms:
+		return
+	var samples := maxf(1.0, float(_perf_attr_frame_count))
+	_perf_attr_last_sample = {
+		"avg_pre_ms": _perf_attr_total_pre_ms / samples,
+		"avg_sim_ms": _perf_attr_total_sim_ms / samples,
+		"avg_sync_ms": _perf_attr_total_sim_ms / samples,
+		"avg_post_ms": _perf_attr_total_post_ms / samples,
+		"avg_frame_ms": _perf_attr_total_frame_ms / samples,
+		"avg_ui_ms": _perf_attr_total_ui_ms / samples,
+		"avg_enemy_drawn": float(_perf_attr_total_enemy_drawn) / samples,
+		"sample_frames": _perf_attr_frame_count
+	}
+	_perf_attribution_elapsed = 0.0
+	_perf_attr_frame_count = 0
+	_perf_attr_total_pre_ms = 0.0
+	_perf_attr_total_sim_ms = 0.0
+	_perf_attr_total_post_ms = 0.0
+	_perf_attr_total_frame_ms = 0.0
+	_perf_attr_total_ui_ms = 0.0
+	_perf_attr_total_enemy_drawn = 0
+
+func _get_perf_attribution_snapshot() -> Dictionary:
+	if not _perf_attr_last_sample.is_empty():
+		return _perf_attr_last_sample.duplicate(true)
+	return _perf_attr_live_snapshot.duplicate(true)
+
+func _report_client_perf_sample(delta: float) -> void:
+	if not is_multiplayer or MultiplayerSessionManager.is_host():
+		return
+	# Keep this traffic to active diagnostics windows only.
+	if not multiplayer_perf_logging_enabled and not _perf_attribution_enabled:
+		return
+	_multiplayer_client_perf_report_elapsed += delta
+	if _multiplayer_client_perf_report_elapsed < _multiplayer_client_perf_report_interval_sec:
+		return
+	_multiplayer_client_perf_report_elapsed = 0.0
+	var fps := float(Engine.get_frames_per_second())
+	var perf_sample := _get_perf_attribution_snapshot()
+	var pre_ms := float(perf_sample.get("avg_pre_ms", 0.0))
+	var sim_ms := float(perf_sample.get("avg_sim_ms", 0.0))
+	var post_ms := float(perf_sample.get("avg_post_ms", 0.0))
+	var frame_ms := float(perf_sample.get("avg_frame_ms", 0.0))
+	var ui_ms := float(perf_sample.get("avg_ui_ms", 0.0))
+	var enemy_drawn_avg := float(perf_sample.get("avg_enemy_drawn", 0.0))
+	_sync_client_perf_sample.rpc_id(1, fps, _network_enemy_nodes.size(), current_room_label, pre_ms, sim_ms, post_ms, frame_ms, ui_ms, enemy_drawn_avg)
+
+@rpc("unreliable", "any_peer")
+func _sync_client_perf_sample(
+	fps: float,
+	enemy_nodes: int,
+	room_label: String,
+	pre_ms: float = 0.0,
+	sim_ms: float = 0.0,
+	post_ms: float = 0.0,
+	frame_ms: float = 0.0,
+	ui_ms: float = 0.0,
+	enemy_drawn_avg: float = 0.0
+) -> void:
+	if not is_multiplayer or not MultiplayerSessionManager.is_host():
+		return
+	var sender_peer_id := int(multiplayer.get_remote_sender_id())
+	if sender_peer_id <= 0:
+		return
+	_multiplayer_latest_client_perf_by_peer[sender_peer_id] = {
+		"fps": fps,
+		"enemy_nodes": enemy_nodes,
+		"room_label": room_label,
+		"pre_ms": pre_ms,
+		"sim_ms": sim_ms,
+		"post_ms": post_ms,
+		"frame_ms": frame_ms,
+		"ui_ms": ui_ms,
+		"enemy_drawn_avg": enemy_drawn_avg,
+		"timestamp_ms": Time.get_ticks_msec()
+	}
 
 func _can_apply_client_door_sync() -> bool:
 	if not is_multiplayer or MultiplayerSessionManager.is_host():
@@ -1588,16 +1802,37 @@ func _keep_player_inside_current_room() -> void:
 	player.global_position.x = clampf(player.global_position.x, -half.x, half.x)
 	player.global_position.y = clampf(player.global_position.y, -half.y, half.y)
 
-func _keep_enemies_inside_current_room() -> void:
+func _refresh_enemy_clamp_cache() -> void:
+	_enemy_clamp_cached_nodes.clear()
+	for enemy in get_tree().get_nodes_in_group("enemies"):
+		if enemy is Node2D:
+			_enemy_clamp_cached_nodes.append(enemy as Node2D)
+
+func _keep_enemies_inside_current_room(delta: float) -> void:
 	if current_room_size == Vector2.ZERO:
+		_enemy_clamp_last_room_size = current_room_size
+		return
+	var room_size_changed := _enemy_clamp_last_room_size != current_room_size
+	_enemy_clamp_last_room_size = current_room_size
+	_enemy_clamp_refresh_elapsed += maxf(0.0, delta)
+	_enemy_clamp_frame_cursor += 1
+	var should_refresh_cache := room_size_changed or _enemy_clamp_cached_nodes.is_empty() or _enemy_clamp_refresh_elapsed >= _enemy_clamp_refresh_interval_sec
+	if should_refresh_cache:
+		_refresh_enemy_clamp_cache()
+		_enemy_clamp_refresh_elapsed = 0.0
+	var stride := maxi(1, _enemy_clamp_frame_stride)
+	if not room_size_changed and (_enemy_clamp_frame_cursor % stride) != 0:
 		return
 	var half := current_room_size * 0.5
-	for enemy in get_tree().get_nodes_in_group("enemies"):
-		if not (enemy is Node2D):
+	var stale_entries := false
+	for enemy_body in _enemy_clamp_cached_nodes:
+		if not is_instance_valid(enemy_body):
+			stale_entries = true
 			continue
-		var enemy_body := enemy as Node2D
 		enemy_body.global_position.x = clampf(enemy_body.global_position.x, -half.x, half.x)
 		enemy_body.global_position.y = clampf(enemy_body.global_position.y, -half.y, half.y)
+	if stale_entries:
+		_refresh_enemy_clamp_cache()
 
 func _keep_player_inside_camera_view() -> void:
 	if not is_instance_valid(player):
@@ -2514,7 +2749,17 @@ func _on_room_enemy_died(kill_pos: Vector2 = Vector2.ZERO) -> void:
 
 func _clear_all_enemies() -> void:
 	_network_enemy_nodes.clear()
+	_enemy_target_positions.clear()
+	_enemy_target_facing_angles.clear()
 	_previous_enemy_runtime_states.clear()
+	_previous_enemy_positions.clear()
+	_previous_enemy_facing_angles.clear()
+	_previous_enemy_health_values.clear()
+	_enemy_far_sync_elapsed_by_id.clear()
+	_enemy_far_combat_hint_by_id.clear()
+	_enemy_sync_scan_cursor = 0
+	_enemy_clamp_cached_nodes.clear()
+	_enemy_clamp_refresh_elapsed = 0.0
 	if is_instance_valid(enemy_spawner):
 		enemy_spawner.clear_all_enemies()
 
@@ -2568,7 +2813,7 @@ func _enemy_is_far_from_all_players(enemy_position: Vector2) -> bool:
 			return false
 	return true
 
-func _enemy_is_combat_active(enemy: Node2D, runtime_state_delta: Dictionary) -> bool:
+func _enemy_is_combat_active(_enemy: Node2D, runtime_state_delta: Dictionary) -> bool:
 	if runtime_state_delta.has("custom"):
 		var custom_state := runtime_state_delta.get("custom", {}) as Dictionary
 		if not custom_state.is_empty():
@@ -2608,12 +2853,79 @@ func _estimate_sync_variant_size_bytes(value: Variant) -> int:
 func _estimate_enemy_sync_state_size_bytes(state: Dictionary) -> int:
 	return _estimate_sync_variant_size_bytes(state) + 24
 
+func _fit_enemy_sync_state_to_size_limit(synced_state: Dictionary, max_estimated_bytes: int) -> Dictionary:
+	var fitted_state := synced_state.duplicate(true)
+	var estimated_size := _estimate_enemy_sync_state_size_bytes(fitted_state)
+	if estimated_size <= max_estimated_bytes:
+		return fitted_state
+	var runtime_delta := fitted_state.get("runtime_state_delta", {}) as Dictionary
+	if runtime_delta.has("custom"):
+		runtime_delta.erase("custom")
+		fitted_state["runtime_state_delta"] = runtime_delta
+		estimated_size = _estimate_enemy_sync_state_size_bytes(fitted_state)
+		if estimated_size <= max_estimated_bytes:
+			return fitted_state
+	if not runtime_delta.is_empty():
+		fitted_state["runtime_state_delta"] = {}
+	return fitted_state
+
+func _get_adaptive_enemy_sync_batch_params() -> Dictionary:
+	var max_batch_size := maxi(1, enemy_state_sync_batch_size)
+	var payload_budget := maxi(256, enemy_state_sync_payload_budget_bytes - 200)
+	if active_room_enemy_count >= 60:
+		max_batch_size = maxi(max_batch_size, 12)
+		payload_budget = maxi(payload_budget, 1600)
+	elif active_room_enemy_count >= 50:
+		max_batch_size = maxi(max_batch_size, 10)
+		payload_budget = maxi(payload_budget, 1450)
+	if active_room_enemy_count >= 40:
+		max_batch_size = maxi(max_batch_size, 8)
+		payload_budget = maxi(payload_budget, 1300)
+	elif active_room_enemy_count >= 30:
+		max_batch_size = maxi(max_batch_size, 5)
+		payload_budget = maxi(payload_budget, 980)
+	elif active_room_enemy_count >= 20:
+		max_batch_size = maxi(max_batch_size, 4)
+		payload_budget = maxi(payload_budget, 820)
+	var mtu_safe_payload_budget := maxi(512, enemy_state_transport_mtu_bytes - enemy_state_transport_safety_margin_bytes)
+	payload_budget = mini(payload_budget, mtu_safe_payload_budget)
+	return {
+		"max_batch_size": max_batch_size,
+		"payload_budget": payload_budget
+	}
+
+func _get_adaptive_enemy_sync_scan_limit(total_enemy_count: int) -> int:
+	if total_enemy_count <= 0:
+		return 0
+	if active_room_enemy_count >= 60:
+		return mini(total_enemy_count, 28)
+	if active_room_enemy_count >= 50:
+		return mini(total_enemy_count, 30)
+	if active_room_enemy_count >= 40:
+		return mini(total_enemy_count, 32)
+	if active_room_enemy_count >= 30:
+		return mini(total_enemy_count, 40)
+	return total_enemy_count
+
+func _get_adaptive_enemy_sync_state_size_limit() -> int:
+	if active_room_enemy_count >= 60:
+		return 480
+	if active_room_enemy_count >= 50:
+		return 540
+	if active_room_enemy_count >= 40:
+		return 620
+	return 900
+
 func _sync_enemy_state_tick(delta: float) -> void:
 	if not is_multiplayer:
 		return
 	if not MultiplayerSessionManager.is_host():
 		return
 	var sync_interval := enemy_state_sync_interval_sec
+	if active_room_enemy_count >= 40:
+		sync_interval *= 1.45
+	elif active_room_enemy_count >= 30:
+		sync_interval *= 1.2
 	if is_instance_valid(objective_manager) and String(objective_manager.active_objective_kind) == "cut_the_signal":
 		if active_room_enemy_count >= 10:
 			sync_interval *= 1.35
@@ -2626,42 +2938,75 @@ func _sync_enemy_state_tick(delta: float) -> void:
 	var synced_states: Array = []
 	var synced_state_sizes: Array[int] = []
 	var stale_ids: Array = []
+	var enemy_ids: Array = _network_enemy_nodes.keys()
+	var total_enemy_ids := enemy_ids.size()
+	if total_enemy_ids <= 0:
+		_multiplayer_last_sync_enemy_count = 0
+		_multiplayer_last_sync_batch_count = 0
+		_multiplayer_last_sync_estimated_bytes = 0
+		_multiplayer_last_sync_tether_enemy_count = 0
+		_multiplayer_last_sync_tether_estimated_bytes = 0
+		_enemy_sync_scan_cursor = 0
+		return
+	var scan_limit := _get_adaptive_enemy_sync_scan_limit(total_enemy_ids)
+	if scan_limit <= 0:
+		scan_limit = total_enemy_ids
+	var state_size_limit := _get_adaptive_enemy_sync_state_size_limit()
 	var tether_synced_enemy_count := 0
 	var tether_synced_estimated_bytes := 0
-	for enemy_id_variant in _network_enemy_nodes.keys():
+	for scan_index in range(scan_limit):
+		var enemy_index := (_enemy_sync_scan_cursor + scan_index) % total_enemy_ids
+		var enemy_id_variant: Variant = enemy_ids[enemy_index]
 		var enemy_id := int(enemy_id_variant)
 		var enemy := _network_enemy_nodes.get(enemy_id) as Node2D
 		if not is_instance_valid(enemy):
 			stale_ids.append(enemy_id)
 			_enemy_far_sync_elapsed_by_id.erase(enemy_id)
+			_enemy_far_combat_hint_by_id.erase(enemy_id)
 			continue
-		var enemy_health := 0.0
-		var runtime_state: Dictionary = {}
-		if enemy.has_method("get_current_health"):
-			enemy_health = float(enemy.call("get_current_health"))
-		if enemy.has_method("get_network_runtime_state"):
-			runtime_state = enemy.call("get_network_runtime_state") as Dictionary
-		runtime_state = _quantize_runtime_state_for_network(runtime_state)
-		var enemy_facing_angle := enemy.global_rotation
-		if enemy.has_method("get_network_facing_angle"):
-			enemy_facing_angle = float(enemy.call("get_network_facing_angle"))
 		var quantized_position_quantum := maxf(0.0001, enemy_state_transmit_position_quantum)
-		var quantized_facing_quantum := maxf(0.0001, enemy_state_transmit_facing_quantum)
 		var quantized_position := Vector2(
 			snappedf(enemy.global_position.x, quantized_position_quantum),
 			snappedf(enemy.global_position.y, quantized_position_quantum)
 		)
+		var is_far_enemy := _enemy_is_far_from_all_players(quantized_position)
+		if is_far_enemy:
+			var far_elapsed_fast := float(_enemy_far_sync_elapsed_by_id.get(enemy_id, 0.0)) + sync_interval
+			var required_far_interval_fast := maxf(0.001, sync_interval * maxf(1.0, enemy_state_far_sync_interval_mult))
+			var far_combat_hint := bool(_enemy_far_combat_hint_by_id.get(enemy_id, false))
+			if far_elapsed_fast < required_far_interval_fast and not far_combat_hint:
+				_enemy_far_sync_elapsed_by_id[enemy_id] = far_elapsed_fast
+				continue
+			_enemy_far_sync_elapsed_by_id[enemy_id] = 0.0
+		var enemy_health := 0.0
+		if enemy.has_method("get_current_health"):
+			enemy_health = float(enemy.call("get_current_health"))
+		var enemy_facing_angle := enemy.global_rotation
+		if enemy.has_method("get_network_facing_angle"):
+			enemy_facing_angle = float(enemy.call("get_network_facing_angle"))
+		var quantized_facing_quantum := maxf(0.0001, enemy_state_transmit_facing_quantum)
 		var quantized_facing_angle := snappedf(enemy_facing_angle, quantized_facing_quantum)
 		var previous_position := _previous_enemy_positions.get(enemy_id, quantized_position) as Vector2
 		var previous_facing_angle := float(_previous_enemy_facing_angles.get(enemy_id, quantized_facing_angle))
 		var previous_health := float(_previous_enemy_health_values.get(enemy_id, enemy_health))
-		var previous_state := _previous_enemy_runtime_states.get(enemy_id, {}) as Dictionary
-		var runtime_state_delta := _compute_runtime_state_delta(runtime_state, previous_state)
 		var position_changed := previous_position.distance_squared_to(quantized_position) > maxf(0.0001, enemy_state_position_change_threshold_sq)
 		var facing_changed := absf(wrapf(quantized_facing_angle - previous_facing_angle, -PI, PI)) > maxf(0.0001, enemy_state_facing_change_threshold_rad)
 		var health_changed := not is_equal_approx(enemy_health, previous_health)
-		var is_far_enemy := _enemy_is_far_from_all_players(quantized_position)
+		var previous_combat_hint := bool(_enemy_far_combat_hint_by_id.get(enemy_id, false))
+		var should_sample_runtime_state := position_changed or facing_changed or health_changed or previous_combat_hint or not is_far_enemy
+		var runtime_state_delta: Dictionary = {}
+		if should_sample_runtime_state:
+			var runtime_state: Dictionary = {}
+			if enemy.has_method("get_network_runtime_state"):
+				runtime_state = enemy.call("get_network_runtime_state") as Dictionary
+			runtime_state = _quantize_runtime_state_for_network(runtime_state)
+			var previous_state := _previous_enemy_runtime_states.get(enemy_id, {}) as Dictionary
+			runtime_state_delta = _compute_runtime_state_delta(runtime_state, previous_state)
+			_previous_enemy_runtime_states[enemy_id] = runtime_state
+		elif not _previous_enemy_runtime_states.has(enemy_id):
+			_previous_enemy_runtime_states[enemy_id] = {}
 		var combat_active := _enemy_is_combat_active(enemy, runtime_state_delta)
+		_enemy_far_combat_hint_by_id[enemy_id] = combat_active
 		if is_far_enemy and not combat_active:
 			var far_elapsed := float(_enemy_far_sync_elapsed_by_id.get(enemy_id, 0.0)) + _enemy_state_sync_elapsed
 			var required_far_interval := maxf(0.001, sync_interval * maxf(1.0, enemy_state_far_sync_interval_mult))
@@ -2671,7 +3016,6 @@ func _sync_enemy_state_tick(delta: float) -> void:
 			_enemy_far_sync_elapsed_by_id[enemy_id] = 0.0
 		else:
 			_enemy_far_sync_elapsed_by_id[enemy_id] = 0.0
-		_previous_enemy_runtime_states[enemy_id] = runtime_state.duplicate(true)
 		_previous_enemy_positions[enemy_id] = quantized_position
 		_previous_enemy_facing_angles[enemy_id] = quantized_facing_angle
 		_previous_enemy_health_values[enemy_id] = enemy_health
@@ -2687,8 +3031,9 @@ func _sync_enemy_state_tick(delta: float) -> void:
 			synced_state["facing_angle"] = quantized_facing_angle
 		if health_changed:
 			synced_state["health"] = enemy_health
-		synced_states.append(synced_state)
-		var synced_state_size := _estimate_enemy_sync_state_size_bytes(synced_state)
+		var fitted_synced_state := _fit_enemy_sync_state_to_size_limit(synced_state, state_size_limit)
+		synced_states.append(fitted_synced_state)
+		var synced_state_size := _estimate_enemy_sync_state_size_bytes(fitted_synced_state)
 		synced_state_sizes.append(synced_state_size)
 		if enemy.get_script() == ENEMY_TETHER_SCRIPT:
 			tether_synced_enemy_count += 1
@@ -2702,6 +3047,8 @@ func _sync_enemy_state_tick(delta: float) -> void:
 		_previous_enemy_facing_angles.erase(int(stale_id))
 		_previous_enemy_health_values.erase(int(stale_id))
 		_enemy_far_sync_elapsed_by_id.erase(int(stale_id))
+		_enemy_far_combat_hint_by_id.erase(int(stale_id))
+	_enemy_sync_scan_cursor = (_enemy_sync_scan_cursor + scan_limit) % maxi(1, total_enemy_ids)
 	if synced_states.is_empty() and stale_ids.is_empty():
 		_multiplayer_last_sync_enemy_count = 0
 		_multiplayer_last_sync_batch_count = 0
@@ -2709,17 +3056,19 @@ func _sync_enemy_state_tick(delta: float) -> void:
 		_multiplayer_last_sync_tether_enemy_count = 0
 		_multiplayer_last_sync_tether_estimated_bytes = 0
 		return
-	var max_batch_size := maxi(1, enemy_state_sync_batch_size)
-	var payload_budget := maxi(256, enemy_state_sync_payload_budget_bytes - 200)
+	var batch_params := _get_adaptive_enemy_sync_batch_params()
+	var max_batch_size := int(batch_params.get("max_batch_size", maxi(1, enemy_state_sync_batch_size)))
+	var payload_budget := int(batch_params.get("payload_budget", maxi(256, enemy_state_sync_payload_budget_bytes - 200)))
 	var current_batch: Array = []
 	var current_batch_bytes := 0
 	var total_estimated_bytes := 0
 	var total_batch_count := 0
+	var per_batch_overhead := 220
 	for sync_index in range(synced_states.size()):
 		var synced_state := synced_states[sync_index] as Dictionary
 		var state_size := int(synced_state_sizes[sync_index])
 		total_estimated_bytes += state_size
-		var would_exceed_budget := not current_batch.is_empty() and (current_batch_bytes + state_size + 150 > payload_budget)
+		var would_exceed_budget := not current_batch.is_empty() and (current_batch_bytes + state_size + per_batch_overhead > payload_budget)
 		var would_exceed_count := current_batch.size() >= max_batch_size
 		if would_exceed_budget or would_exceed_count:
 			_sync_enemy_states.rpc(current_batch, active_room_enemy_count)
@@ -2758,6 +3107,7 @@ func _register_network_enemy(enemy: Node2D, forced_enemy_id: int = -1) -> int:
 	if enemy.has_method("get_current_health"):
 		_previous_enemy_health_values[enemy_id] = float(enemy.call("get_current_health"))
 	_enemy_far_sync_elapsed_by_id[enemy_id] = 0.0
+	_enemy_far_combat_hint_by_id[enemy_id] = false
 	if is_multiplayer and not MultiplayerSessionManager.is_host() and enemy.has_method("set_network_simulation_enabled"):
 		enemy.call("set_network_simulation_enabled", false)
 	if enemy.has_signal("died") and not enemy.died.is_connected(Callable(self, "_on_network_enemy_died").bind(enemy_id)):
@@ -2805,6 +3155,7 @@ func _on_network_enemy_died(enemy_id: int) -> void:
 	_previous_enemy_facing_angles.erase(enemy_id)
 	_previous_enemy_health_values.erase(enemy_id)
 	_enemy_far_sync_elapsed_by_id.erase(enemy_id)
+	_enemy_far_combat_hint_by_id.erase(enemy_id)
 	if is_multiplayer and MultiplayerSessionManager.is_host():
 		_sync_enemy_died.rpc(enemy_id, death_effect_payload)
 
@@ -2960,6 +3311,7 @@ func _interpolate_remote_enemy_states(delta: float) -> void:
 		return
 	var position_weight := clampf(delta * enemy_remote_position_lerp_speed, 0.0, 1.0)
 	var rotation_weight := clampf(delta * enemy_remote_rotation_lerp_speed, 0.0, 1.0)
+	var facing_update_threshold := 0.01
 	for enemy_id_variant in _network_enemy_nodes.keys():
 		var enemy_id := int(enemy_id_variant)
 		var enemy := _network_enemy_nodes.get(enemy_id) as Node2D
@@ -2972,10 +3324,12 @@ func _interpolate_remote_enemy_states(delta: float) -> void:
 		var target_facing_angle := float(_enemy_target_facing_angles.get(enemy_id, current_facing_angle))
 		enemy.global_position = enemy.global_position.lerp(target_position, position_weight)
 		var smoothed_facing_angle := lerp_angle(current_facing_angle, target_facing_angle, rotation_weight)
-		if enemy.has_method("set_network_facing_angle"):
-			enemy.call("set_network_facing_angle", smoothed_facing_angle)
-		else:
-			enemy.global_rotation = smoothed_facing_angle
+		var facing_delta := absf(wrapf(smoothed_facing_angle - current_facing_angle, -PI, PI))
+		if facing_delta > facing_update_threshold:
+			if enemy.has_method("set_network_facing_angle"):
+				enemy.call("set_network_facing_angle", smoothed_facing_angle)
+			else:
+				enemy.global_rotation = smoothed_facing_angle
 
 func _clear_enemy_lingering_effects() -> void:
 	combat_phase_coordinator.clear_enemy_lingering_effects(get_tree())
@@ -3222,6 +3576,9 @@ func _on_reward_offers_presented(offers: Array[Dictionary], mode: int, is_initia
 func _is_debug_boot_session() -> bool:
 	if not settings_enabled:
 		return false
+	var debug_settings := get_node_or_null("DebugSettings")
+	if debug_settings != null and bool(debug_settings.get("stress_test_enabled")):
+		return true
 	if end_screen_preview != DEBUG_ENUMS.EndScreenPreview.NONE:
 		return true
 	if start_encounter != ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_NONE:
@@ -3274,6 +3631,14 @@ func _initialize_run_telemetry(allow_collection: bool) -> void:
 	telemetry_run_finished = false
 	if not telemetry_enabled:
 		return
+	# In multiplayer, only the host should write telemetry to avoid file corruption races.
+	if is_multiplayer and not MultiplayerSessionManager.is_host():
+		telemetry_enabled = false
+		return
+	var debug_settings := get_node_or_null("DebugSettings")
+	if debug_settings != null and bool(debug_settings.get("stress_test_enabled")):
+		telemetry_enabled = false
+		return
 	var run_context := _get_run_context()
 	var run_mode := int(ENUMS.RunMode.STANDARD)
 	if run_context != null:
@@ -3292,6 +3657,9 @@ func _initialize_run_telemetry(allow_collection: bool) -> void:
 	telemetry_run_id = RUN_TELEMETRY_STORE.start_run(run_seed)
 
 func _mark_telemetry_debug_mode() -> void:
+	if is_multiplayer and not MultiplayerSessionManager.is_host():
+		telemetry_enabled = false
+		return
 	if telemetry_run_id.is_empty():
 		telemetry_enabled = false
 		return
@@ -3538,6 +3906,81 @@ func _refresh_all_enemy_target_candidates() -> void:
 		if not (enemy_node is Node2D):
 			continue
 		_assign_enemy_target_candidates(enemy_node as Node2D)
+
+func _spawn_test_enemies(count: int) -> void:
+	"""Spawn N test enemies for stress testing"""
+	if not is_instance_valid(player):
+		return
+	if not is_instance_valid(enemy_spawner):
+		return
+	
+	# Tether excluded: its complex state (tether connections, anchors) inflates per-packet size
+	# beyond regular enemies, making it unrepresentative for bandwidth testing.
+	var enemy_types := ["chaser", "archer", "charger", "shielder"]
+	var spawn_batch: Array = []
+	
+	for i in range(count):
+		var enemy_type = enemy_types[i % enemy_types.size()]
+		var angle = (TAU / maxf(count, 1)) * i
+		var distance = 150.0 + (i / 5.0) * 50.0
+		var spawn_pos = player.global_position + Vector2(cos(angle), sin(angle)) * distance
+		
+		if enemy_spawner.has_method("_create_test_enemy"):
+			var enemy: CharacterBody2D = enemy_spawner._create_test_enemy(enemy_type, spawn_pos)
+			if is_instance_valid(enemy):
+				var enemy_id := _register_network_enemy(enemy)
+				spawn_batch.append({
+					"enemy_id": enemy_id,
+					"enemy_type": enemy_type,
+					"position": enemy.global_position
+				})
+				active_room_enemy_count += 1
+
+	if is_multiplayer and MultiplayerSessionManager.is_host() and not spawn_batch.is_empty():
+		_sync_spawn_enemy_batch.rpc(spawn_batch, active_room_enemy_count, current_room_label, room_depth, _current_room_sync_id)
+
+func start_network_stress_test(initial_count: int = 10, increment: int = 10, max_count: int = 100) -> void:
+	"""Start the multiplayer network stress test (debug only)"""
+	if not is_multiplayer:
+		print_debug("[StressTest] Stress test requires multiplayer mode")
+		return
+	
+	if _stress_test_active:
+		print_debug("[StressTest] Stress test already running")
+		return
+	
+	if _stress_test_coordinator == null:
+		_stress_test_coordinator = load("res://scripts/multiplayer_stress_test.gd").new()
+		_stress_test_coordinator.world_gen = self
+	var debug_settings := get_node_or_null("DebugSettings")
+	if debug_settings != null:
+		_stress_test_coordinator.fps_drop_stop_below_fps = float(debug_settings.get("stress_test_drop_stop_below_fps"))
+	
+	_stress_test_coordinator.start_test(initial_count, increment, max_count)
+
+func _maybe_start_stress_test() -> void:
+	"""Check debug settings and start stress test if enabled"""
+	var debug_settings := get_node_or_null("DebugSettings")
+	if not debug_settings:
+		return
+	
+	if not bool(debug_settings.get("stress_test_enabled")):
+		return
+	
+	if not is_multiplayer:
+		print_debug("[StressTest] Stress test is enabled but game is not in multiplayer mode")
+		return
+	
+	if not MultiplayerSessionManager.is_host():
+		print_debug("[StressTest] Skipping on client — host only")
+		return
+	
+	var initial: int = int(debug_settings.get("stress_test_initial_enemies"))
+	var increment: int = int(debug_settings.get("stress_test_increment"))
+	var max_count: int = int(debug_settings.get("stress_test_max_enemies"))
+	
+	print_debug("[StressTest] Starting from debug settings (initial:%d, increment:%d, max:%d)" % [initial, increment, max_count])
+	start_network_stress_test(initial, increment, max_count)
 
 func _count_alive_players() -> int:
 	var alive_count := 0

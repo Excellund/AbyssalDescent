@@ -313,6 +313,10 @@ func _resolve_target_players() -> Array:
 		targets.append(player)
 	return targets
 
+func _create_test_enemy(enemy_type: String, world_position: Vector2) -> CharacterBody2D:
+	"""Create a test enemy for stress testing at a specific position"""
+	return spawn_enemy_from_sync(enemy_type, world_position)
+
 func _assign_enemy_targets(enemy: CharacterBody2D) -> void:
 	if not is_instance_valid(enemy):
 		return

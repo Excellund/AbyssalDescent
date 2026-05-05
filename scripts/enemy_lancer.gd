@@ -26,6 +26,7 @@ const ENEMY_STATE_ENUMS := preload("res://scripts/shared/enemy_state_enums.gd")
 @export var attack_cooldown: float = 3.0
 @export var reposition_duration: float = 0.52
 @export var arena_size: Vector2 = Vector2(940.0, 700.0)
+@export var active_visual_redraw_interval_sec: float = 0.05
 
 var lancer_state: int = ENEMY_STATE_ENUMS.LancerState.STALK
 var state_time_left: float = 0.0
@@ -47,6 +48,7 @@ var zones: Array[Dictionary] = []
 
 # Reposition direction locked at entry.
 var _reposition_dir: Vector2 = Vector2.ZERO
+var _active_visual_redraw_left: float = 0.0
 
 func _ready() -> void:
 	super()
@@ -136,7 +138,7 @@ func _process_windup(delta: float) -> void:
 	velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
 	move_and_slide()
 	state_time_left = maxf(0.0, state_time_left - delta)
-	queue_redraw()
+	_request_active_visual_redraw(delta)
 	if state_time_left <= 0.0:
 		_fire_bolt()
 
@@ -204,7 +206,7 @@ func _process_bolt(delta: float) -> void:
 	var move := bolt_direction * bolt_speed * delta
 	bolt.global_position += move
 	bolt_distance_traveled += move.length()
-	queue_redraw()
+	_request_active_visual_redraw(delta)
 
 	# Check player hit.
 	if is_instance_valid(target):
@@ -298,7 +300,14 @@ func _process_zones(delta: float) -> void:
 		zones.remove_at(expired[i])
 
 	if not zones.is_empty():
-		queue_redraw()
+		_request_active_visual_redraw(delta)
+
+func _request_active_visual_redraw(delta: float) -> void:
+	_active_visual_redraw_left = maxf(0.0, _active_visual_redraw_left - delta)
+	if _active_visual_redraw_left > 0.0:
+		return
+	_active_visual_redraw_left = maxf(0.016, active_visual_redraw_interval_sec)
+	queue_redraw()
 
 # ---------------------------------------------------------------------------
 # Drawing

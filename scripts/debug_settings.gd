@@ -30,3 +30,15 @@ const DEBUG_ENUMS := preload("res://scripts/shared/debug_enums.gd")
 @export var telemetry_spike_endpoint: String = ""
 @export var telemetry_spike_api_key: String = ""
 @export_range(3.0, 20.0, 0.5) var telemetry_spike_timeout_seconds: float = 8.0
+
+@export_group("Network Stress Test")
+@export var stress_test_enabled: bool = false
+@export_range(5, 50, 1) var stress_test_initial_enemies: int = 10
+@export_range(5, 30, 1) var stress_test_increment: int = 10
+@export_range(20, 200, 5) var stress_test_max_enemies: int = 100
+@export_range(30.0, 144.0, 1.0) var stress_test_drop_stop_below_fps: float = 75.0
+
+@export_group("Multiplayer Perf Diagnostics")
+@export var multiplayer_perf_logging_enabled: bool = false
+@export var perf_attribution_enabled: bool = false
+@export_range(250.0, 5000.0, 50.0) var perf_attribution_sample_ms: float = 1000.0

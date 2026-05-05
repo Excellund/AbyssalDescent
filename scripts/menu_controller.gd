@@ -153,8 +153,7 @@ func _create_local_dev_lobby() -> bool:
 		push_error("[Menu] MultiplayerSessionManager autoload is missing")
 		return false
 	if not multiplayer_session_manager.create_room().is_empty():
-		if get_tree() != null:
-			get_tree().change_scene_to_file(LOBBY_SCENE_PATH)
+		call_deferred("_change_to_lobby_scene")
 		return true
 	push_error("[Menu] Failed to create local dev lobby")
 	return false
@@ -166,11 +165,14 @@ func _join_local_dev_lobby() -> bool:
 		push_error("[Menu] MultiplayerSessionManager autoload is missing")
 		return false
 	if multiplayer_session_manager.join_room("127.0.0.1", 9999, true):
-		if get_tree() != null:
-			get_tree().change_scene_to_file(LOBBY_SCENE_PATH)
+		call_deferred("_change_to_lobby_scene")
 		return true
 	push_error("[Menu] Failed to join local dev lobby")
 	return false
+
+func _change_to_lobby_scene() -> void:
+	if get_tree() != null:
+		get_tree().change_scene_to_file(LOBBY_SCENE_PATH)
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED:

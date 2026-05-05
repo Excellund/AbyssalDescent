@@ -86,6 +86,12 @@ const COLOR_BOSS_CLEAVE_OUTLINE := COLOR_PALETTE.COLOR_BOSS_CLEAVE_OUTLINE
 @export var edge_escape_phase_duration: float = 0.32
 @export var edge_escape_nudge_speed: float = 340.0
 @export var network_runtime_direction_blend: float = 0.58
+@export var target_refresh_interval_sec: float = 0.12
+@export var attack_visual_redraw_interval_sec: float = 0.033
+@export var remote_ui_update_interval_sec: float = 0.08
+@export var visual_lod_enemy_threshold: int = 28
+@export var visual_lod_refresh_interval_sec: float = 0.2
+@export var remote_visual_update_interval_sec: float = 0.033
 
 var target: Node2D
 var target_candidates: Array = []
@@ -122,9 +128,18 @@ var spawn_transport_duration: float = 0.0
 var spawn_transport_seed: float = 0.0
 var _edge_escape_phase_left: float = 0.0
 var _ignoring_target_collision: bool = false
+var _target_refresh_left: float = 0.0
+var _attack_visual_redraw_left: float = 0.0
+var _remote_ui_update_left: float = 0.0
+var _remote_ui_update_accum: float = 0.0
 var _crowd_separation_recompute_left: float = 0.0
 var _crowd_separation_cached_impulse: Vector2 = Vector2.ZERO
 var network_simulation_enabled: bool = true
+var _draw_time_sec: float = 0.0
+var _visual_lod_enemy_count: int = 0
+var _visual_lod_refresh_left: float = 0.0
+var _remote_visual_update_left: float = 0.0
+var _remote_visual_update_accum: float = 0.0
 
 const NETWORK_ATTACK_STATE_KEYWORDS: PackedStringArray = [
 	"state",
@@ -158,7 +173,12 @@ func _ready() -> void:
 	platform_floor_layers = 0
 	platform_wall_layers = 0
 	_crowd_separation_recompute_left = fmod(float(get_instance_id()) * 0.0017, maxf(0.001, crowd_separation_recompute_interval_sec))
+	_target_refresh_left = fmod(float(get_instance_id()) * 0.0011, maxf(0.02, target_refresh_interval_sec))
+	_remote_ui_update_left = fmod(float(get_instance_id()) * 0.0019, maxf(0.02, remote_ui_update_interval_sec))
+	_visual_lod_refresh_left = fmod(float(get_instance_id()) * 0.0013, maxf(0.05, visual_lod_refresh_interval_sec))
+	_remote_visual_update_left = fmod(float(get_instance_id()) * 0.0015, maxf(0.016, remote_visual_update_interval_sec))
 	add_to_group("enemies")
+	_visual_lod_enemy_count = get_tree().get_node_count_in_group("enemies")
 	health_changed.connect(_update_health_bar)
 	_create_health_bar()
 	_create_health_state()
@@ -168,10 +188,21 @@ func _ready() -> void:
 	queue_redraw()
 
 func _physics_process(delta: float) -> void:
-	_refresh_target()
+	_refresh_visual_lod_metrics(delta)
 	_update_attack_animation(delta)
-	_update_recent_damage_overlay(delta)
-	_update_dread_resonance_visual(delta)
+	if network_simulation_enabled:
+		_update_recent_damage_overlay(delta)
+		_update_dread_resonance_visual(delta)
+	else:
+		var remote_ui_interval := _get_remote_ui_update_interval_for_enemy_load()
+		_remote_ui_update_accum += delta
+		_remote_ui_update_left -= delta
+		if _remote_ui_update_left <= 0.0:
+			var ui_delta := _remote_ui_update_accum
+			_remote_ui_update_accum = 0.0
+			_remote_ui_update_left = remote_ui_interval
+			_update_recent_damage_overlay(ui_delta)
+			_update_dread_resonance_visual(ui_delta)
 	_update_spawn_transport(delta)
 	if is_spawn_transporting():
 		velocity = Vector2.ZERO
@@ -179,12 +210,56 @@ func _physics_process(delta: float) -> void:
 		return
 	if not network_simulation_enabled:
 		velocity = Vector2.ZERO
-		_process_network_visuals(delta)
-		_update_visual_facing_direction()
+		var remote_visual_interval := _get_remote_visual_update_interval_for_enemy_load()
+		_remote_visual_update_accum += delta
+		_remote_visual_update_left -= delta
+		if _remote_visual_update_left <= 0.0:
+			var visual_delta := _remote_visual_update_accum
+			_remote_visual_update_accum = 0.0
+			_remote_visual_update_left = remote_visual_interval
+			_process_network_visuals(visual_delta)
 		return
+	_maybe_refresh_target(delta)
 	_apply_crowd_separation(delta)
 	_process_behavior(delta)
 	_update_visual_facing_direction()
+
+func _refresh_visual_lod_metrics(delta: float) -> void:
+	_visual_lod_refresh_left -= delta
+	if _visual_lod_refresh_left > 0.0:
+		return
+	_visual_lod_refresh_left = maxf(0.05, visual_lod_refresh_interval_sec)
+	_visual_lod_enemy_count = get_tree().get_node_count_in_group("enemies")
+
+func _is_high_load_visual_lod_active() -> bool:
+	return _visual_lod_enemy_count >= maxi(1, visual_lod_enemy_threshold)
+
+func _get_facing_redraw_threshold_sq() -> float:
+	if _is_high_load_visual_lod_active():
+		return 0.0012
+	return 0.0001
+
+func _get_remote_ui_update_interval_for_enemy_load() -> float:
+	var interval := maxf(0.02, remote_ui_update_interval_sec)
+	var enemy_count := _visual_lod_enemy_count
+	if enemy_count >= 40:
+		return maxf(interval, 0.13)
+	if enemy_count >= 30:
+		return maxf(interval, 0.11)
+	if enemy_count >= 20:
+		return maxf(interval, 0.095)
+	return interval
+
+func _get_remote_visual_update_interval_for_enemy_load() -> float:
+	var interval := maxf(0.016, remote_visual_update_interval_sec)
+	var enemy_count := _visual_lod_enemy_count
+	if enemy_count >= 40:
+		return maxf(interval, 0.066)
+	if enemy_count >= 30:
+		return maxf(interval, 0.05)
+	if enemy_count >= 20:
+		return maxf(interval, 0.04)
+	return interval
 
 
 func set_target_candidates(candidates: Array) -> void:
@@ -216,6 +291,18 @@ func _refresh_target() -> void:
 	if best_target == null and _is_target_valid(target):
 		best_target = target
 	_set_target_node(best_target)
+
+func _maybe_refresh_target(delta: float) -> void:
+	if target_candidates.is_empty():
+		if _is_target_valid(target):
+			return
+		_set_target_node(null)
+		return
+	_target_refresh_left -= delta
+	if _target_refresh_left > 0.0 and _is_target_valid(target):
+		return
+	_target_refresh_left = maxf(0.02, target_refresh_interval_sec)
+	_refresh_target()
 
 
 func _is_target_valid(candidate: Node2D) -> bool:
@@ -386,12 +473,15 @@ func set_network_facing_angle(facing_radians: float) -> void:
 	var target_facing := Vector2.RIGHT.rotated(facing_radians)
 	if target_facing.length_squared() <= 0.000001:
 		return
+	var previous_facing := visual_facing_direction
 	if visual_facing_direction.length_squared() <= 0.000001:
 		visual_facing_direction = target_facing.normalized()
 	else:
 		var blended_facing := visual_facing_direction.slerp(target_facing.normalized(), 0.65)
 		visual_facing_direction = blended_facing.normalized() if blended_facing.length_squared() > 0.000001 else target_facing.normalized()
-	queue_redraw()
+	var redraw_threshold_sq := _get_facing_redraw_threshold_sq()
+	if previous_facing.length_squared() <= 0.000001 or visual_facing_direction.distance_squared_to(previous_facing) > redraw_threshold_sq:
+		queue_redraw()
 
 func _update_spawn_transport(delta: float) -> void:
 	if spawn_transport_time_left <= 0.0:
@@ -422,16 +512,25 @@ func _get_inward_edge_bias() -> Vector2:
 	return Vector2.ZERO
 
 func _update_attack_animation(delta: float) -> void:
+	var attack_visual_active := false
 	if attack_anim_time_left > 0.0:
 		attack_anim_time_left = maxf(0.0, attack_anim_time_left - delta)
-		queue_redraw()
+		attack_visual_active = true
 	if slow_time_left > 0.0:
 		slow_time_left -= delta
 		if slow_time_left <= 0.0:
 			slow_time_left = 0.0
 			slow_speed_mult = 1.0
+	if attack_visual_active:
+		_attack_visual_redraw_left -= delta
+		if _attack_visual_redraw_left <= 0.0:
+			_attack_visual_redraw_left = maxf(0.01, attack_visual_redraw_interval_sec)
+			queue_redraw()
+	else:
+		_attack_visual_redraw_left = 0.0
 
 func _update_visual_facing_direction() -> void:
+	var previous_facing := visual_facing_direction
 	if velocity.length_squared() > 1.0:
 		var move_facing := velocity.normalized()
 		var blended_facing := visual_facing_direction.slerp(move_facing, 0.28)
@@ -439,7 +538,9 @@ func _update_visual_facing_direction() -> void:
 			visual_facing_direction = blended_facing.normalized()
 		else:
 			visual_facing_direction = move_facing
-	queue_redraw()
+	var redraw_threshold_sq := _get_facing_redraw_threshold_sq()
+	if previous_facing.length_squared() <= 0.000001 or visual_facing_direction.distance_squared_to(previous_facing) > redraw_threshold_sq:
+		queue_redraw()
 
 func take_damage(amount: int, _damage_context: Dictionary = {}) -> void:
 	if amount <= 0:
@@ -459,28 +560,50 @@ func _apply_crowd_separation(delta: float) -> void:
 	else:
 		_crowd_separation_recompute_left -= delta
 		if _crowd_separation_recompute_left <= 0.0:
-			_crowd_separation_recompute_left = recompute_interval
-			_crowd_separation_cached_impulse = _compute_crowd_separation_impulse()
+			var neighbors := get_tree().get_nodes_in_group("enemies")
+			var neighbor_count := neighbors.size()
+			var effective_recompute_interval := recompute_interval
+			if neighbor_count >= 36:
+				effective_recompute_interval *= 2.0
+			elif neighbor_count >= 24:
+				effective_recompute_interval *= 1.5
+			_crowd_separation_recompute_left = effective_recompute_interval
+			_crowd_separation_cached_impulse = _compute_crowd_separation_impulse(neighbors)
 	if _crowd_separation_cached_impulse.length_squared() <= 0.000001:
 		return
 	velocity = velocity.move_toward(velocity + _crowd_separation_cached_impulse, crowd_separation_strength * delta)
 
-func _compute_crowd_separation_impulse() -> Vector2:
+func _compute_crowd_separation_impulse(neighbors: Array = []) -> Vector2:
 	var total_push := Vector2.ZERO
-	for enemy in get_tree().get_nodes_in_group("enemies"):
+	if neighbors.is_empty():
+		neighbors = get_tree().get_nodes_in_group("enemies")
+	var radius_sq := crowd_separation_radius * crowd_separation_radius
+	var max_neighbors := 14
+	if neighbors.size() >= 36:
+		max_neighbors = 8
+	elif neighbors.size() >= 24:
+		max_neighbors = 10
+	var sampled_neighbors := 0
+	for enemy in neighbors:
 		if enemy == self or not (enemy is Node2D):
 			continue
 		var neighbor := enemy as Node2D
 		var offset := global_position - neighbor.global_position
+		# Fast AABB reject before sqrt.
+		if absf(offset.x) >= crowd_separation_radius or absf(offset.y) >= crowd_separation_radius:
+			continue
 		var dist_sq := offset.length_squared()
 		if dist_sq <= 0.0001:
 			offset = Vector2.RIGHT.rotated(float(get_instance_id() % 360) * 0.0174533)
 			dist_sq = 1.0
-		var distance := sqrt(dist_sq)
-		if distance >= crowd_separation_radius:
+		if dist_sq >= radius_sq:
 			continue
+		var distance := sqrt(dist_sq)
 		var weight := 1.0 - (distance / crowd_separation_radius)
 		total_push += (offset / distance) * weight
+		sampled_neighbors += 1
+		if sampled_neighbors >= max_neighbors:
+			break
 	if total_push.length_squared() <= 0.000001:
 		return Vector2.ZERO
 	return total_push.normalized() * crowd_separation_strength
@@ -541,10 +664,12 @@ func is_slowed() -> bool:
 func _draw_slow_indicator(body_radius: float) -> void:
 	if slow_time_left <= 0.0:
 		return
-	var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.011)
+	var t := _draw_time_sec if _draw_time_sec > 0.0 else float(Time.get_ticks_msec()) * 0.001
+	var pulse := 0.5 + 0.5 * sin(t * 11.0)
 	var fade := clampf(slow_time_left * 4.0, 0.0, 1.0)
 	draw_circle(Vector2.ZERO, body_radius + 8.0, Color(0.46, 1.0, 0.92, 0.07 * fade))
-	draw_arc(Vector2.ZERO, body_radius + 7.0, 0.0, TAU, 32,
+	var slow_segments := 32 if network_simulation_enabled else 24
+	draw_arc(Vector2.ZERO, body_radius + 7.0, 0.0, TAU, slow_segments,
 		Color(0.46, 1.0, 0.92, (0.52 + pulse * 0.28) * fade), 2.6)
 
 func heal(amount: int) -> void:
@@ -680,6 +805,13 @@ func _update_recent_damage_overlay(delta: float) -> void:
 	if health_bar_recent_damage_overlay == null:
 		return
 	var current_health := float(health_bar.value)
+	if health_recent_damage_time_since_last_hit > health_recent_damage_hold_time \
+		and not health_recent_damage_burst_active \
+		and health_recent_damage_flash_strength <= 0.0001 \
+		and absf(health_recent_damage_display_health - current_health) <= 0.001:
+		if health_bar_recent_damage_overlay.visible:
+			health_bar_recent_damage_overlay.visible = false
+		return
 	var max_health_value := maxf(1.0, float(health_bar.max_value))
 	health_recent_damage_time_since_last_hit += delta
 
@@ -787,11 +919,27 @@ func _get_current_health() -> int:
 	return health_state.current_health
 
 func _draw_common_body(body_radius: float, body_color: Color, core_color: Color, facing: Vector2) -> void:
+	_draw_time_sec = float(Time.get_ticks_msec()) * 0.001
 	if is_spawn_transporting():
 		_draw_spawn_transport_fx(body_radius, facing)
 		return
 	var side := Vector2(-facing.y, facing.x)
 	var outer_color := COLOR_BODY_OUTER_GLOW
+	if _is_high_load_visual_lod_active():
+		draw_circle(Vector2.ZERO, body_radius + 3.6, outer_color)
+		draw_circle(Vector2.ZERO, body_radius, body_color)
+		draw_circle(Vector2.ZERO, body_radius * 0.68, core_color)
+		var lod_horn_tip := facing * (body_radius + 6.6)
+		var lod_horn_base := facing * (body_radius - 1.2)
+		var lod_horn_w := 3.8
+		var lod_horn := PackedVector2Array([lod_horn_tip, lod_horn_base + side * lod_horn_w, lod_horn_base - side * lod_horn_w])
+		draw_colored_polygon(lod_horn, COLOR_BODY_HORN)
+		var lod_eye := facing * (body_radius * 0.32) + side * 1.6
+		draw_circle(lod_eye, 1.5, COLOR_BODY_EYE)
+		_draw_mutator_overlay(body_radius)
+		_draw_dread_resonance_overlay(body_radius)
+		_draw_damage_blocked_indicator(body_radius)
+		return
 	
 	draw_circle(Vector2.ZERO, body_radius + 6.2, Color(body_color.r * 0.6, body_color.g * 0.3, body_color.b * 0.3, 0.14))
 	draw_circle(Vector2.ZERO, body_radius + 3.0, outer_color)
@@ -824,6 +972,7 @@ func _draw_spawn_transport_fx(body_radius: float, _facing: Vector2) -> void:
 	var t := 1.0 - clampf(spawn_transport_time_left / duration, 0.0, 1.0)
 	var transport_seed := spawn_transport_seed
 	var tint := _get_transport_color()
+	var ring_segments := 48 if network_simulation_enabled else 32
 
 	# Soft outer glow — tinted, atmospheric, bell-curves through the full animation
 	var glow_a := sin(clampf(t / 0.88, 0.0, 1.0) * PI) * 0.32
@@ -845,9 +994,9 @@ func _draw_spawn_transport_fx(body_radius: float, _facing: Vector2) -> void:
 	var ring_t := clampf((t - 0.26) / 0.62, 0.0, 1.0)
 	if ring_t > 0.0:
 		var ring_a := sin(ring_t * PI)
-		draw_arc(Vector2.ZERO, body_radius + 3.0, 0.0, TAU, 48,
+		draw_arc(Vector2.ZERO, body_radius + 3.0, 0.0, TAU, ring_segments,
 				Color(tint.r * 0.68, tint.g * 0.84, tint.b, ring_a * 0.38), 11.0)
-		draw_arc(Vector2.ZERO, body_radius + 3.0, 0.0, TAU, 48,
+		draw_arc(Vector2.ZERO, body_radius + 3.0, 0.0, TAU, ring_segments,
 				Color(1.0, 1.0, 1.0, ring_a * 0.86), 2.0)
 
 	# 4 radial streaks (t 0.30→0.80) — directed outward, not orbiting
@@ -889,8 +1038,10 @@ func _draw_spawn_transport_fx(body_radius: float, _facing: Vector2) -> void:
 func _draw_mutator_overlay(body_radius: float) -> void:
 	if not has_mutator_overlay:
 		return
-	var t := float(Time.get_ticks_msec()) * 0.001
+	var t := _draw_time_sec if _draw_time_sec > 0.0 else float(Time.get_ticks_msec()) * 0.001
 	var pulse := 0.5 + 0.5 * sin(t * 3.4)
+	var ring_segments := 48 if network_simulation_enabled else 32
+	var default_segments := 32 if network_simulation_enabled else 24
 	var ring_color := mutator_theme_color
 	var fill_color := mutator_theme_color
 	if mutator_icon_shape_id == "tether_web":
@@ -899,7 +1050,7 @@ func _draw_mutator_overlay(body_radius: float) -> void:
 		draw_circle(Vector2.ZERO, body_radius + 13.0, web_fill)
 		var web_ring := ring_color
 		web_ring.a = 0.62 + pulse * 0.28
-		draw_arc(Vector2.ZERO, body_radius + 11.0, 0.0, TAU, 48, web_ring, 2.8)
+		draw_arc(Vector2.ZERO, body_radius + 11.0, 0.0, TAU, ring_segments, web_ring, 2.8)
 		for i in range(4):
 			var angle := t * 0.85 + float(i) * TAU / 4.0
 			var dir := Vector2(cos(angle), sin(angle))
@@ -908,16 +1059,18 @@ func _draw_mutator_overlay(body_radius: float) -> void:
 			draw_line(Vector2.ZERO, dir * (body_radius + 14.0), spoke_color, 1.8)
 		return
 	ring_color.a = 0.44 + pulse * 0.22
-	draw_arc(Vector2.ZERO, body_radius + 9.0, 0.0, TAU, 32, ring_color, 2.2)
+	draw_arc(Vector2.ZERO, body_radius + 9.0, 0.0, TAU, default_segments, ring_color, 2.2)
 	fill_color.a = 0.06 + pulse * 0.04
 	draw_circle(Vector2.ZERO, body_radius + 8.0, fill_color)
 
 func _draw_damage_blocked_indicator(body_radius: float) -> void:
 	if not damage_blocked:
 		return
-	var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.009)
+	var t := _draw_time_sec if _draw_time_sec > 0.0 else float(Time.get_ticks_msec()) * 0.001
+	var pulse := 0.5 + 0.5 * sin(t * 9.0)
+	var ring_segments := 40 if network_simulation_enabled else 28
 	var ring_color := Color(0.7, 0.94, 1.0, 0.56 + pulse * 0.2)
-	draw_arc(Vector2.ZERO, body_radius + 13.0, 0.0, TAU, 40, ring_color, 2.6)
+	draw_arc(Vector2.ZERO, body_radius + 13.0, 0.0, TAU, ring_segments, ring_color, 2.6)
 	draw_circle(Vector2.ZERO, body_radius + 11.2, Color(0.64, 0.9, 1.0, 0.05 + pulse * 0.03))
 
 func set_dread_resonance_visual(stack_count: int, max_stacks: int = 3, peak_flash: bool = false) -> void:
@@ -967,8 +1120,10 @@ func _draw_dread_resonance_overlay(body_radius: float) -> void:
 		fade = clampf(dread_resonance_visual_decay_left / maxf(0.001, dread_resonance_visual_decay_duration), 0.0, 1.0)
 	if fade <= 0.0:
 		return
-	var t := float(Time.get_ticks_msec()) * 0.001
+	var t := _draw_time_sec if _draw_time_sec > 0.0 else float(Time.get_ticks_msec()) * 0.001
 	var pulse := 0.5 + 0.5 * sin(t * 6.2)
+	var main_arc_segments := 24 if network_simulation_enabled else 18
+	var emphasis_arc_segments := 36 if network_simulation_enabled else 26
 	var emphasis := 1.4 if dread_resonance_visual_boss_emphasis else 1.0
 	var ring_color := Color(0.92, 0.76, 1.0, (0.24 + pulse * 0.06) * fade * emphasis)
 	var aura_color := Color(0.6, 0.36, 0.94, (0.04 + pulse * 0.03) * fade * emphasis)
@@ -977,13 +1132,13 @@ func _draw_dread_resonance_overlay(body_radius: float) -> void:
 	draw_circle(Vector2.ZERO, body_radius + 8.0, aura_color)
 	var arc_start := -PI * 0.5
 	var arc_end := arc_start + TAU * stack_ratio
-	draw_arc(Vector2.ZERO, arc_radius, arc_start, arc_end, 24, ring_color, arc_width)
+	draw_arc(Vector2.ZERO, arc_radius, arc_start, arc_end, main_arc_segments, ring_color, arc_width)
 	if dread_resonance_visual_boss_emphasis:
-		draw_arc(Vector2.ZERO, arc_radius + 3.0, 0.0, TAU, 36, Color(0.76, 0.48, 0.98, (0.12 + pulse * 0.05) * fade), 1.2)
+		draw_arc(Vector2.ZERO, arc_radius + 3.0, 0.0, TAU, emphasis_arc_segments, Color(0.76, 0.48, 0.98, (0.12 + pulse * 0.05) * fade), 1.2)
 	if dread_resonance_visual_peak_left > 0.0:
 		var peak_t := clampf(dread_resonance_visual_peak_left / maxf(0.001, dread_resonance_visual_peak_duration), 0.0, 1.0)
 		var burst_radius := arc_radius + (1.0 - peak_t) * 10.0
-		draw_arc(Vector2.ZERO, burst_radius, 0.0, TAU, 36, Color(1.0, 0.92, 1.0, 0.5 * peak_t * fade), 2.0)
+		draw_arc(Vector2.ZERO, burst_radius, 0.0, TAU, emphasis_arc_segments, Color(1.0, 0.92, 1.0, 0.5 * peak_t * fade), 2.0)
 
 func _get_attack_pulse() -> float:
 	var attack_t := 1.0 - (attack_anim_time_left / attack_anim_duration) if attack_anim_duration > 0.0 else 1.0
