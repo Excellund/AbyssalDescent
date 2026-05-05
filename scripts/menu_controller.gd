@@ -117,6 +117,10 @@ func _ready() -> void:
 
 
 func _try_multiplayer_dev_autostart() -> bool:
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context != null and run_context.has_method("consume_menu_multiplayer_dev_autostart_suppression"):
+		if bool(run_context.consume_menu_multiplayer_dev_autostart_suppression()):
+			return false
 	var merged_args: PackedStringArray = []
 	for arg in OS.get_cmdline_user_args():
 		merged_args.append(String(arg).strip_edges())

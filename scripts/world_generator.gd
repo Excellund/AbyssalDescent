@@ -215,6 +215,7 @@ var _reward_phase_active: bool = false
 var _reward_phase_is_initial: bool = false
 var _reward_phase_mode: int = ENUMS.RewardMode.NONE
 var _reward_phase_completed_peers: Dictionary = {}  ## peer_id -> bool
+var _doors_spawn_ready: bool = false
 
 var second_player: Node2D = null
 func _apply_debug_settings_from_node() -> void:
@@ -697,6 +698,7 @@ func _run_debug_boot_flow() -> bool:
 func _begin_new_run_flow() -> void:
 	choosing_next_room = false
 	door_options.clear()
+	_doors_spawn_ready = false
 	if settings_enabled and skip_starting_boon_selection:
 		pending_room_reward = ENUMS.RewardMode.BOON
 		_begin_room(_build_skirmish_profile(room_depth))
@@ -910,6 +912,7 @@ func _apply_debug_mutator_override(profile: Dictionary) -> Dictionary:
 func _reset_for_debug_jump() -> void:
 	player_flow_coordinator.close_reward_selection_if_active(reward_selection_ui)
 	_set_combat_paused(false)
+	_doors_spawn_ready = false
 	choosing_next_room = false
 	door_options.clear()
 	pending_room_reward = ENUMS.RewardMode.NONE
@@ -1661,22 +1664,26 @@ func _on_build_detail_closed() -> void:
 	_set_combat_paused(false)
 
 func _on_victory_back_to_menu() -> void:
+	_teardown_multiplayer_session_for_menu_transition()
 	_finish_active_run_telemetry("clear")
 	_clear_active_run_checkpoint()
 	get_tree().change_scene_to_file(MENU_SCENE_PATH)
 
 func _on_defeat_back_to_menu() -> void:
+	_teardown_multiplayer_session_for_menu_transition()
 	_set_combat_paused(false)
 	_finish_active_run_telemetry("death")
 	_clear_active_run_checkpoint()
 	get_tree().change_scene_to_file(MENU_SCENE_PATH)
 
 func _on_pause_back_to_menu_requested() -> void:
+	_teardown_multiplayer_session_for_menu_transition()
 	_finish_active_run_telemetry("menu_exit")
 	player_flow_coordinator.prepare_for_menu_transition(combat_phase_coordinator, player, get_tree(), pause_menu_controller)
 	get_tree().change_scene_to_file(MENU_SCENE_PATH)
 
 func _on_pause_abandon_run_requested() -> void:
+	_teardown_multiplayer_session_for_menu_transition()
 	player_flow_coordinator.prepare_for_menu_transition(combat_phase_coordinator, player, get_tree(), pause_menu_controller)
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context != null:
@@ -1684,6 +1691,19 @@ func _on_pause_abandon_run_requested() -> void:
 	_finish_active_run_telemetry("abandon")
 	_clear_active_run_checkpoint()
 	get_tree().change_scene_to_file(MENU_SCENE_PATH)
+
+func _teardown_multiplayer_session_for_menu_transition() -> void:
+	if not is_multiplayer:
+		return
+	var multiplayer_session_manager := get_node_or_null("/root/MultiplayerSessionManager")
+	if multiplayer_session_manager != null and multiplayer_session_manager.has_method("leave_room"):
+		multiplayer_session_manager.leave_room()
+	var run_context := _get_run_context()
+	if run_context != null:
+		if run_context.has_method("clear_multiplayer_session"):
+			run_context.clear_multiplayer_session()
+		if run_context.has_method("suppress_menu_multiplayer_dev_autostart"):
+			run_context.suppress_menu_multiplayer_dev_autostart()
 
 func _on_pause_exit_game_requested() -> void:
 	_finish_active_run_telemetry("quit")
@@ -1695,6 +1715,8 @@ func _spawn_door_options() -> void:
 	if not is_instance_valid(encounter_flow_system):
 		return
 	if _is_reward_selection_active():
+		return
+	if is_multiplayer and not _doors_spawn_ready:
 		return
 	if choosing_next_room and not door_options.is_empty():
 		return
@@ -1780,6 +1802,19 @@ func _sync_chosen_door(chosen_door: Dictionary, progress_state: Dictionary = {})
 	_choose_door(chosen_door)
 	_apply_progress_sync_state(progress_state)
 
+@rpc("reliable", "authority")
+func _sync_objective_control_zone(control_anchor: Vector2, control_radius: float, control_goal: float, control_decay_rate: float, control_contest_threshold: int) -> void:
+	if not is_multiplayer or MultiplayerSessionManager.is_host():
+		return
+	if not is_instance_valid(objective_manager):
+		return
+	objective_manager.control_anchor = control_anchor
+	objective_manager.control_radius = control_radius
+	objective_manager.control_goal = control_goal
+	objective_manager.control_decay_rate = control_decay_rate
+	objective_manager.control_contest_threshold = control_contest_threshold
+	queue_redraw()
+
 func _build_progress_sync_state() -> Dictionary:
 	return {
 		"rooms_cleared": rooms_cleared,
@@ -1864,6 +1899,7 @@ func _apply_endless_scaling_to_profile(profile: Dictionary) -> Dictionary:
 	)
 
 func _begin_room(profile: Dictionary) -> void:
+	_doors_spawn_ready = false
 	if profile.is_empty():
 		return
 	choosing_next_room = false
@@ -2483,6 +2519,11 @@ func _finalize_reward_phase_and_advance(is_initial: bool, mode: int) -> void:
 	else:
 		if mode == ENUMS.RewardMode.BOSS:
 			boss_reward_pending = false
+		if is_multiplayer and MultiplayerSessionManager.is_host():
+			_doors_spawn_ready = true
+			_sync_doors_spawn_ready.rpc()
+		else:
+			_doors_spawn_ready = true
 		_spawn_door_options()
 	hud.refresh(_get_hud_state(), player)
 
@@ -2510,6 +2551,12 @@ func _sync_reward_phase_advance(is_initial: bool, mode: int) -> void:
 		return
 	_finalize_reward_phase_and_advance(is_initial, mode)
 
+@rpc("reliable", "authority")
+func _sync_doors_spawn_ready() -> void:
+	if not is_multiplayer:
+		return
+	_doors_spawn_ready = true
+	_spawn_door_options()
 func _on_reward_offers_presented(offers: Array[Dictionary], mode: int, is_initial: bool, stage: int) -> void:
 	_record_reward_offers(offers, mode, is_initial, stage)
 

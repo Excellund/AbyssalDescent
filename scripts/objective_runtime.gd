@@ -226,6 +226,14 @@ func _begin_control_objective(profile: Dictionary) -> void:
 		ENCOUNTER_CONTRACTS.profile_objective_progress_decay(profile),
 		ENCOUNTER_CONTRACTS.profile_objective_contest_threshold(profile)
 	)
+	if world.is_multiplayer and MultiplayerSessionManager.is_host():
+		world._sync_objective_control_zone.rpc(
+			objective_manager.control_anchor,
+			objective_manager.control_radius,
+			objective_manager.control_goal,
+			objective_manager.control_decay_rate,
+			objective_manager.control_contest_threshold
+		)
 	_control_relief_kills_applied = 0
 	_control_spawn_interval_base = objective_manager.spawn_interval
 	_control_spawn_interval_relief_cap = objective_manager.spawn_interval + HoldTheLineConfig.SPAWN_INTERVAL_RELIEF_MAX_BONUS
