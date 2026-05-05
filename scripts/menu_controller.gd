@@ -47,6 +47,7 @@ const CHARACTER_SELECTOR_BACK_BUTTON_HEIGHT := 46.0
 var root_panel: Panel
 var options_panel: Panel
 var glossary_panel: Panel
+var multiplayer_panel: Panel
 var difficulty_selector_panel: Panel
 var character_selector_panel: Panel
 var master_slider: HSlider
@@ -88,6 +89,8 @@ var update_check_was_manual: bool = false
 var update_service
 var multiplayer_room_code_input: LineEdit
 var multiplayer_status_label: Label
+var multiplayer_host_button: Button
+var multiplayer_join_button: Button
 
 func _ready() -> void:
 	if _should_autostart_debug_encounter():
@@ -207,6 +210,18 @@ func _exit_tree() -> void:
 	if menu_music_player != null and menu_music_player.playing:
 		menu_music_player.stop()
 
+func _input(event: InputEvent) -> void:
+	if not (event is InputEventMouseButton):
+		return
+	var mouse_event := event as InputEventMouseButton
+	if mouse_event == null or not mouse_event.pressed or mouse_event.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if multiplayer_room_code_input == null or not multiplayer_room_code_input.has_focus():
+		return
+	var room_code_rect := multiplayer_room_code_input.get_global_rect()
+	if not room_code_rect.has_point(get_global_mouse_position()):
+		multiplayer_room_code_input.release_focus()
+
 func _unhandled_input(event: InputEvent) -> void:
 	if update_prompt_layer != null and update_prompt_layer.visible:
 		return
@@ -217,6 +232,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed("ui_cancel") and glossary_panel != null and glossary_panel.visible:
+		_show_root_panel()
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed("ui_cancel") and multiplayer_panel != null and multiplayer_panel.visible:
 		_show_root_panel()
 		get_viewport().set_input_as_handled()
 		return
@@ -328,6 +347,10 @@ func _build_ui() -> void:
 	endless_button.pressed.connect(_on_endless_pressed)
 	actions.add_child(endless_button)
 
+	var multiplayer_button := _make_menu_button("Multiplayer")
+	multiplayer_button.pressed.connect(_on_multiplayer_pressed)
+	actions.add_child(multiplayer_button)
+
 	var options_button := _make_menu_button("Options")
 	options_button.pressed.connect(_on_options_pressed)
 	actions.add_child(options_button)
@@ -335,42 +358,6 @@ func _build_ui() -> void:
 	var glossary_button := _make_menu_button("Glossary")
 	glossary_button.pressed.connect(_on_glossary_pressed)
 	actions.add_child(glossary_button)
-
-	var multiplayer_section := VBoxContainer.new()
-	multiplayer_section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	multiplayer_section.add_theme_constant_override("separation", 8)
-	actions.add_child(multiplayer_section)
-
-	var multiplayer_title := Label.new()
-	multiplayer_title.text = "Co-op"
-	multiplayer_title.add_theme_font_size_override("font_size", 18)
-	multiplayer_title.add_theme_color_override("font_color", Color(0.78, 0.90, 1.0, 0.90))
-	multiplayer_section.add_child(multiplayer_title)
-
-	var host_button := _make_menu_button("Host Co-op Lobby")
-	host_button.custom_minimum_size = Vector2(470.0, 56.0)
-	host_button.pressed.connect(_on_host_lobby_pressed)
-	multiplayer_section.add_child(host_button)
-
-	multiplayer_room_code_input = LineEdit.new()
-	multiplayer_room_code_input.placeholder_text = "Enter room code"
-	multiplayer_room_code_input.max_length = 12
-	multiplayer_room_code_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	multiplayer_room_code_input.custom_minimum_size = Vector2(470.0, 40.0)
-	multiplayer_room_code_input.add_theme_font_size_override("font_size", 16)
-	multiplayer_section.add_child(multiplayer_room_code_input)
-
-	var join_button := _make_menu_button("Join Co-op Lobby")
-	join_button.custom_minimum_size = Vector2(470.0, 56.0)
-	join_button.pressed.connect(_on_join_lobby_pressed)
-	multiplayer_section.add_child(join_button)
-
-	multiplayer_status_label = Label.new()
-	multiplayer_status_label.text = ""
-	multiplayer_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	multiplayer_status_label.add_theme_font_size_override("font_size", 15)
-	multiplayer_status_label.add_theme_color_override("font_color", Color(0.82, 0.92, 1.0, 0.84))
-	multiplayer_section.add_child(multiplayer_status_label)
 
 	var exit_button := _make_menu_button("Exit Game")
 	exit_button.pressed.connect(_on_exit_pressed)
@@ -394,6 +381,10 @@ func _build_ui() -> void:
 	glossary_panel = _build_glossary_panel()
 	glossary_panel.visible = false
 	add_child(glossary_panel)
+
+	multiplayer_panel = _build_multiplayer_panel()
+	multiplayer_panel.visible = false
+	add_child(multiplayer_panel)
 	
 	difficulty_selector_panel = _build_difficulty_selector_panel()
 	difficulty_selector_panel.visible = false
@@ -423,6 +414,8 @@ func _apply_menu_layout() -> void:
 		_set_centered_panel_layout(options_panel, Vector2(760.0, 700.0), fit_scale, viewport_size)
 	if glossary_panel != null:
 		_set_centered_panel_layout(glossary_panel, Vector2(980.0, 680.0), fit_scale, viewport_size)
+	if multiplayer_panel != null:
+		_set_centered_panel_layout(multiplayer_panel, Vector2(980.0, 700.0), fit_scale, viewport_size)
 	if difficulty_selector_panel != null:
 		_set_centered_panel_layout(difficulty_selector_panel, Vector2(1020.0, 720.0), fit_scale, viewport_size)
 	if character_selector_panel != null:
@@ -531,6 +524,18 @@ func _apply_option_selector_theme(selector: OptionButton) -> void:
 	selector.add_theme_stylebox_override("focus", _make_button_style(Color(0.13, 0.20, 0.29, 0.98), Color(0.86, 0.96, 1.0, 1.0), 14, 2))
 	selector.add_theme_stylebox_override("disabled", _make_button_style(Color(0.08, 0.10, 0.14, 0.82), Color(0.22, 0.26, 0.32, 0.54), 14, 2))
 
+func _apply_line_edit_theme(line_edit: LineEdit) -> void:
+	if line_edit == null:
+		return
+	line_edit.add_theme_font_size_override("font_size", 20)
+	line_edit.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 0.98))
+	line_edit.add_theme_color_override("font_placeholder_color", Color(0.66, 0.78, 0.90, 0.58))
+	line_edit.add_theme_color_override("font_selected_color", Color(0.98, 1.0, 1.0, 1.0))
+	line_edit.add_theme_color_override("selection_color", Color(0.24, 0.42, 0.64, 0.92))
+	line_edit.add_theme_stylebox_override("normal", _make_button_style(Color(0.06, 0.10, 0.16, 0.96), Color(0.26, 0.44, 0.66, 0.74), 16, 2))
+	line_edit.add_theme_stylebox_override("focus", _make_button_style(Color(0.10, 0.16, 0.24, 0.98), Color(0.82, 0.94, 1.0, 1.0), 16, 2))
+	line_edit.add_theme_stylebox_override("read_only", _make_button_style(Color(0.06, 0.10, 0.16, 0.82), Color(0.18, 0.24, 0.32, 0.60), 16, 2))
+
 func _apply_difficulty_button_theme(button: Button, state: String) -> void:
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.add_theme_font_size_override("font_size", 22)
@@ -583,10 +588,14 @@ func _show_root_panel(animate: bool = true) -> void:
 		options_panel.visible = false
 	if glossary_panel != null:
 		glossary_panel.visible = false
+	if multiplayer_panel != null:
+		multiplayer_panel.visible = false
 	if difficulty_selector_panel != null:
 		difficulty_selector_panel.visible = false
 	if character_selector_panel != null:
 		character_selector_panel.visible = false
+	if primary_run_button != null:
+		primary_run_button.grab_focus()
 
 func _show_options_panel() -> void:
 	if root_panel != null:
@@ -595,6 +604,8 @@ func _show_options_panel() -> void:
 		options_panel.visible = true
 	if glossary_panel != null:
 		glossary_panel.visible = false
+	if multiplayer_panel != null:
+		multiplayer_panel.visible = false
 	if difficulty_selector_panel != null:
 		difficulty_selector_panel.visible = false
 	if character_selector_panel != null:
@@ -607,10 +618,31 @@ func _show_glossary_panel() -> void:
 		options_panel.visible = false
 	if glossary_panel != null:
 		glossary_panel.visible = true
+	if multiplayer_panel != null:
+		multiplayer_panel.visible = false
 	if difficulty_selector_panel != null:
 		difficulty_selector_panel.visible = false
 	if character_selector_panel != null:
 		character_selector_panel.visible = false
+
+func _show_multiplayer_panel() -> void:
+	if root_panel != null:
+		root_panel.visible = false
+	if options_panel != null:
+		options_panel.visible = false
+	if glossary_panel != null:
+		glossary_panel.visible = false
+	if multiplayer_panel != null:
+		multiplayer_panel.visible = true
+		_animate_panel_in(multiplayer_panel, Vector2(0.0, 28.0))
+	if difficulty_selector_panel != null:
+		difficulty_selector_panel.visible = false
+	if character_selector_panel != null:
+		character_selector_panel.visible = false
+	if multiplayer_status_label != null:
+		multiplayer_status_label.text = ""
+	if multiplayer_host_button != null:
+		multiplayer_host_button.grab_focus()
 
 func _show_difficulty_selector() -> void:
 	if root_panel != null:
@@ -619,6 +651,8 @@ func _show_difficulty_selector() -> void:
 		options_panel.visible = false
 	if glossary_panel != null:
 		glossary_panel.visible = false
+	if multiplayer_panel != null:
+		multiplayer_panel.visible = false
 	if difficulty_selector_panel != null:
 		difficulty_selector_panel.visible = true
 		_animate_panel_in(difficulty_selector_panel, Vector2(0.0, 28.0))
@@ -632,12 +666,176 @@ func _show_character_selector() -> void:
 		options_panel.visible = false
 	if glossary_panel != null:
 		glossary_panel.visible = false
+	if multiplayer_panel != null:
+		multiplayer_panel.visible = false
 	if difficulty_selector_panel != null:
 		difficulty_selector_panel.visible = false
 	if character_selector_panel != null:
 		_update_character_selector()
 		character_selector_panel.visible = true
 		_animate_panel_in(character_selector_panel, Vector2(0.0, 28.0))
+
+func _build_multiplayer_panel() -> Panel:
+	var panel := Panel.new()
+	panel.custom_minimum_size = Vector2(980.0, 700.0)
+	panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.04, 0.06, 0.1, 0.97), Color(0.44, 0.7, 0.96, 0.74), 20, 2))
+
+	var shell := VBoxContainer.new()
+	shell.position = Vector2(34.0, 30.0)
+	shell.custom_minimum_size = Vector2(912.0, 640.0)
+	shell.add_theme_constant_override("separation", 14)
+	panel.add_child(shell)
+
+	var eyebrow := Label.new()
+	eyebrow.text = "MULTIPLAYER"
+	eyebrow.add_theme_font_size_override("font_size", 18)
+	eyebrow.add_theme_color_override("font_color", Color(0.72, 0.88, 1.0, 0.78))
+	shell.add_child(eyebrow)
+
+	var title := Label.new()
+	title.text = "Bring another vessel with you."
+	title.add_theme_font_size_override("font_size", 34)
+	title.add_theme_color_override("font_color", Color(0.96, 0.99, 1.0, 0.98))
+	shell.add_child(title)
+
+	var subtitle := Label.new()
+	subtitle.text = "Host a room or join with a code."
+	subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	subtitle.custom_minimum_size = Vector2(912.0, 34.0)
+	subtitle.add_theme_font_size_override("font_size", 18)
+	subtitle.add_theme_color_override("font_color", Color(0.78, 0.88, 0.96, 0.86))
+	shell.add_child(subtitle)
+
+	var columns := HBoxContainer.new()
+	columns.custom_minimum_size = Vector2(912.0, 324.0)
+	columns.add_theme_constant_override("separation", 20)
+	shell.add_child(columns)
+
+	var host_card := Panel.new()
+	host_card.custom_minimum_size = Vector2(0.0, 324.0)
+	host_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	host_card.add_theme_stylebox_override("panel", _make_panel_style(Color(0.08, 0.14, 0.22, 0.90), Color(0.46, 0.72, 0.96, 0.64), 18, 2))
+	columns.add_child(host_card)
+
+	var host_layout := MarginContainer.new()
+	host_layout.set_anchors_preset(Control.PRESET_FULL_RECT)
+	host_layout.add_theme_constant_override("margin_left", 22)
+	host_layout.add_theme_constant_override("margin_right", 22)
+	host_layout.add_theme_constant_override("margin_top", 22)
+	host_layout.add_theme_constant_override("margin_bottom", 22)
+	host_card.add_child(host_layout)
+
+	var host_stack := VBoxContainer.new()
+	host_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	host_stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	host_stack.add_theme_constant_override("separation", 12)
+	host_layout.add_child(host_stack)
+
+	var host_title := Label.new()
+	host_title.text = "Host a Room"
+	host_title.add_theme_font_size_override("font_size", 28)
+	host_title.add_theme_color_override("font_color", Color(0.96, 0.99, 1.0, 0.98))
+	host_stack.add_child(host_title)
+
+	var host_body := Label.new()
+	host_body.text = "Create a room code and choose the lobby settings."
+	host_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	host_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	host_body.custom_minimum_size = Vector2(0.0, 58.0)
+	host_body.add_theme_font_size_override("font_size", 17)
+	host_body.add_theme_color_override("font_color", Color(0.80, 0.90, 0.98, 0.84))
+	host_stack.add_child(host_body)
+
+	var host_form_placeholder := Control.new()
+	host_form_placeholder.custom_minimum_size = Vector2(0.0, 58.0)
+	host_form_placeholder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	host_stack.add_child(host_form_placeholder)
+
+	var host_button_gap := Control.new()
+	host_button_gap.custom_minimum_size = Vector2(0.0, 12.0)
+	host_stack.add_child(host_button_gap)
+
+	multiplayer_host_button = _make_menu_button("Host Multiplayer", true)
+	multiplayer_host_button.custom_minimum_size = Vector2(0.0, 64.0)
+	multiplayer_host_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	multiplayer_host_button.pressed.connect(_on_host_lobby_pressed)
+	host_stack.add_child(multiplayer_host_button)
+
+	var join_card := Panel.new()
+	join_card.custom_minimum_size = Vector2(0.0, 324.0)
+	join_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	join_card.add_theme_stylebox_override("panel", _make_panel_style(Color(0.07, 0.11, 0.17, 0.90), Color(0.30, 0.48, 0.70, 0.58), 18, 2))
+	columns.add_child(join_card)
+
+	var join_layout := MarginContainer.new()
+	join_layout.set_anchors_preset(Control.PRESET_FULL_RECT)
+	join_layout.add_theme_constant_override("margin_left", 22)
+	join_layout.add_theme_constant_override("margin_right", 22)
+	join_layout.add_theme_constant_override("margin_top", 22)
+	join_layout.add_theme_constant_override("margin_bottom", 22)
+	join_card.add_child(join_layout)
+
+	var join_stack := VBoxContainer.new()
+	join_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	join_stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	join_stack.add_theme_constant_override("separation", 12)
+	join_layout.add_child(join_stack)
+
+	var join_title := Label.new()
+	join_title.text = "Join a Room"
+	join_title.add_theme_font_size_override("font_size", 28)
+	join_title.add_theme_color_override("font_color", Color(0.96, 0.99, 1.0, 0.98))
+	join_stack.add_child(join_title)
+
+	var join_body := Label.new()
+	join_body.text = "Enter the room code from your host."
+	join_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	join_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	join_body.custom_minimum_size = Vector2(0.0, 58.0)
+	join_body.add_theme_font_size_override("font_size", 17)
+	join_body.add_theme_color_override("font_color", Color(0.80, 0.90, 0.98, 0.84))
+	join_stack.add_child(join_body)
+
+	var join_form := VBoxContainer.new()
+	join_form.custom_minimum_size = Vector2(0.0, 58.0)
+	join_form.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	join_form.add_theme_constant_override("separation", 10)
+	join_stack.add_child(join_form)
+
+	multiplayer_room_code_input = LineEdit.new()
+	multiplayer_room_code_input.placeholder_text = "ROOM CODE"
+	multiplayer_room_code_input.max_length = 12
+	multiplayer_room_code_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	multiplayer_room_code_input.custom_minimum_size = Vector2(0.0, 58.0)
+	multiplayer_room_code_input.caret_blink = true
+	multiplayer_room_code_input.context_menu_enabled = false
+	_apply_line_edit_theme(multiplayer_room_code_input)
+	multiplayer_room_code_input.text_submitted.connect(_on_multiplayer_room_code_submitted)
+	join_form.add_child(multiplayer_room_code_input)
+
+	var join_button_gap := Control.new()
+	join_button_gap.custom_minimum_size = Vector2(0.0, 12.0)
+	join_stack.add_child(join_button_gap)
+
+	multiplayer_join_button = _make_menu_button("Join Multiplayer")
+	multiplayer_join_button.custom_minimum_size = Vector2(0.0, 64.0)
+	multiplayer_join_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	multiplayer_join_button.pressed.connect(_on_join_lobby_pressed)
+	join_stack.add_child(multiplayer_join_button)
+
+	multiplayer_status_label = Label.new()
+	multiplayer_status_label.text = ""
+	multiplayer_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	multiplayer_status_label.custom_minimum_size = Vector2(912.0, 34.0)
+	multiplayer_status_label.add_theme_font_size_override("font_size", 16)
+	multiplayer_status_label.add_theme_color_override("font_color", Color(0.86, 0.94, 1.0, 0.88))
+	shell.add_child(multiplayer_status_label)
+
+	var back_button := _make_panel_back_button()
+	back_button.pressed.connect(_show_root_panel)
+	shell.add_child(back_button)
+
+	return panel
 
 func _play_menu_intro() -> void:
 	if atmosphere_band != null:
@@ -1232,10 +1430,16 @@ func _on_options_pressed() -> void:
 func _on_glossary_pressed() -> void:
 	_show_glossary_panel()
 
+func _on_multiplayer_pressed() -> void:
+	_show_multiplayer_panel()
+
 func _on_host_lobby_pressed() -> void:
 	if multiplayer_status_label != null:
 		multiplayer_status_label.text = "Creating room registration..."
 	_create_multiplayer_room()
+
+func _on_multiplayer_room_code_submitted(_text: String) -> void:
+	_on_join_lobby_pressed()
 
 func _on_join_lobby_pressed() -> void:
 	var room_code := ""
