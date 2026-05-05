@@ -401,11 +401,26 @@ func get_multiplayer_difficulty_tier() -> int:
 
 
 func set_peer_character_selection(peer_id: int, character_id: String) -> void:
-	multiplayer_peer_characters[peer_id] = character_id
+	var normalized_peer_id := int(peer_id)
+	var normalized_character_id := character_id.strip_edges().to_lower()
+	if normalized_character_id.is_empty():
+		normalized_character_id = get_selected_character_id()
+	multiplayer_peer_characters[normalized_peer_id] = normalized_character_id
+	multiplayer_peer_characters[str(normalized_peer_id)] = normalized_character_id
 
 
 func get_peer_character_selection(peer_id: int) -> String:
-	return multiplayer_peer_characters.get(peer_id, "bastion")
+	var normalized_peer_id := int(peer_id)
+	var by_int := String(multiplayer_peer_characters.get(normalized_peer_id, "")).strip_edges().to_lower()
+	if not by_int.is_empty():
+		return by_int
+	var by_string := String(multiplayer_peer_characters.get(str(normalized_peer_id), "")).strip_edges().to_lower()
+	if not by_string.is_empty():
+		return by_string
+	var selected := get_selected_character_id().strip_edges().to_lower()
+	if not selected.is_empty():
+		return selected
+	return "bastion"
 
 
 func clear_multiplayer_session() -> void:

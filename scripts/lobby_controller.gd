@@ -263,7 +263,7 @@ func _update_player_list() -> void:
 
 
 func _update_debug_status() -> void:
-	var is_connected = multiplayer_session_manager.session_connected
+	var session_connected = multiplayer_session_manager.session_connected
 	var is_host = multiplayer_session_manager.is_host()
 	var peer_count = peer_state.keys().size()
 	var role = "HOST" if is_host else "CLIENT"
@@ -271,7 +271,7 @@ func _update_debug_status() -> void:
 		role,
 		local_peer_id,
 		peer_count,
-		"YES" if is_connected else "NO"
+		"YES" if session_connected else "NO"
 	]
 	status_label.text = status_text
 	print("[Lobby] Debug status: %s" % status_text)
@@ -407,14 +407,25 @@ func _launch_main_game() -> void:
 @rpc("reliable", "authority", "call_local")
 func _start_game(host_peer_id: int, session_identifier: String, difficulty_tier: int, synced_peer_state: Dictionary) -> void:
 	peer_state = synced_peer_state.duplicate(true)
+	var multiplayer_api := get_tree().get_multiplayer()
+	if multiplayer_api != null:
+		var active_peer_id := int(multiplayer_api.get_unique_id())
+		if active_peer_id > 0:
+			local_peer_id = active_peer_id
 	if local_peer_id <= 0:
 		local_peer_id = int(multiplayer_session_manager.local_peer_id)
 	RunContext.set_multiplayer_session(session_identifier, local_peer_id == host_peer_id)
 	RunContext.set_multiplayer_difficulty_tier(difficulty_tier)
-	for peer_id in peer_state:
-		var char_id: String = peer_state[peer_id].get("character_id", "bastion")
+	for peer_id_key in peer_state.keys():
+		var peer_id := int(peer_id_key)
+		var state := peer_state.get(peer_id_key, {}) as Dictionary
+		var char_id: String = String(state.get("character_id", "bastion")).strip_edges().to_lower()
+		if char_id.is_empty():
+			char_id = "bastion"
 		RunContext.set_peer_character_selection(peer_id, char_id)
 	var local_char_id := String(peer_state.get(local_peer_id, {}).get("character_id", local_character_id)).strip_edges().to_lower()
+	if local_char_id.is_empty():
+			local_char_id = String(peer_state.get(str(local_peer_id), {}).get("character_id", local_character_id)).strip_edges().to_lower()
 	if local_char_id.is_empty():
 		local_char_id = "bastion"
 	local_character_id = local_char_id

@@ -423,6 +423,80 @@ func _is_local_control_owner(player_node: Node) -> bool:
 		return bool(player_node.call("is_multiplayer_authority"))
 	return true
 
+
+func _resolve_local_peer_id() -> int:
+	var active_multiplayer := get_tree().get_multiplayer()
+	if active_multiplayer != null:
+		var active_peer_id := int(active_multiplayer.get_unique_id())
+		if active_peer_id > 0:
+			return active_peer_id
+	var multiplayer_session_manager := get_node_or_null("/root/MultiplayerSessionManager")
+	if multiplayer_session_manager != null:
+		return int(multiplayer_session_manager.local_peer_id)
+	if is_instance_valid(player) and player.has_method("get"):
+		return int(player.get("player_id"))
+	return 0
+
+
+func _resolve_local_character_id(run_context: Node, fallback_character_id: String) -> String:
+	if run_context == null:
+		return fallback_character_id
+	var resolved_character_id := fallback_character_id
+	var selected_character_id := String(run_context.get_selected_character_id()).strip_edges().to_lower()
+	if not selected_character_id.is_empty():
+		resolved_character_id = selected_character_id
+	var local_peer_id := _resolve_local_peer_id()
+	if local_peer_id > 0:
+		var peer_character_id := String(run_context.get_peer_character_selection(local_peer_id)).strip_edges().to_lower()
+		if not peer_character_id.is_empty() and peer_character_id == selected_character_id:
+			resolved_character_id = peer_character_id
+	if resolved_character_id.is_empty():
+		resolved_character_id = fallback_character_id
+	return resolved_character_id
+
+
+func _apply_multiplayer_character_packages(run_context: Node) -> void:
+	if run_context == null:
+		return
+	if is_instance_valid(player) and player.has_method("apply_character_package"):
+		var local_selected_id := String(run_context.get_selected_character_id()).strip_edges().to_lower()
+		if local_selected_id.is_empty():
+			local_selected_id = current_character_id
+		var local_data: Dictionary = CHARACTER_REGISTRY.get_character(local_selected_id)
+		if not local_data.is_empty():
+			player.apply_character_package(local_data)
+			current_character_id = local_selected_id
+	if is_instance_valid(second_player) and second_player.has_method("apply_character_package"):
+		var remote_peer_id := int(second_player.get("player_id"))
+		var remote_character_id := String(run_context.get_peer_character_selection(remote_peer_id)).strip_edges().to_lower()
+		if remote_character_id.is_empty() or remote_character_id == current_character_id:
+			var fallback_remote_id := ""
+			for peer_key in run_context.multiplayer_peer_characters.keys():
+				var candidate_id := String(run_context.multiplayer_peer_characters.get(peer_key, "")).strip_edges().to_lower()
+				if not candidate_id.is_empty() and candidate_id != current_character_id:
+					fallback_remote_id = candidate_id
+					break
+			remote_character_id = fallback_remote_id
+		if not remote_character_id.is_empty():
+			var remote_data: Dictionary = CHARACTER_REGISTRY.get_character(remote_character_id)
+			if not remote_data.is_empty():
+				second_player.apply_character_package(remote_data)
+
+
+func _log_multiplayer_player_stats(stage: String) -> void:
+	if not is_multiplayer:
+		return
+	for player_node in [player, second_player]:
+		if not is_instance_valid(player_node):
+			continue
+		var node_name := String(player_node.name)
+		var peer_id := int(player_node.get("player_id")) if player_node.has_method("get") else 0
+		var is_local_owner := _is_local_control_owner(player_node)
+		var character_id := String(player_node.get("active_character_id")) if player_node.has_method("get") else ""
+		var attack_range_value := float(player_node.get("attack_range")) if player_node.has_method("get") else 0.0
+		var attack_arc_value := float(player_node.get("attack_arc_degrees")) if player_node.has_method("get") else 0.0
+		print_debug("[Multiplayer][%s] %s peer=%d local_owner=%s character=%s range=%.1f arc=%.1f" % [stage, node_name, peer_id, str(is_local_owner), character_id, attack_range_value, attack_arc_value])
+
 func _setup_world_bootstrap_state() -> void:
 	current_room_size = room_base_size
 	current_room_label = "Starting Chamber"
@@ -467,15 +541,11 @@ func _setup_encounter_profile_builder_system() -> void:
 	var difficulty_tier := current_difficulty_tier
 	if run_context != null:
 		difficulty_tier = int(run_context.get_current_difficulty_tier())
-		current_character_id = String(run_context.get_selected_character_id()).strip_edges().to_lower()
+		var fallback_character_id := String(run_context.get_selected_character_id()).strip_edges().to_lower()
 		if is_multiplayer:
-			var multiplayer_session_manager := get_node_or_null("/root/MultiplayerSessionManager")
-			var local_peer_id := 0
-			if multiplayer_session_manager != null:
-				local_peer_id = int(multiplayer_session_manager.local_peer_id)
-			var mapped_character_id := String(run_context.get_peer_character_selection(local_peer_id)).strip_edges().to_lower()
-			if not mapped_character_id.is_empty():
-				current_character_id = mapped_character_id
+			current_character_id = _resolve_local_character_id(run_context, fallback_character_id)
+		else:
+			current_character_id = fallback_character_id
 		should_apply_difficulty = true
 	var debug_bearing_tier := _debug_bearing_override_tier()
 	if debug_bearing_tier >= 0:
@@ -484,6 +554,9 @@ func _setup_encounter_profile_builder_system() -> void:
 	if is_instance_valid(player) and player.has_method("apply_character_package"):
 		var char_data: Dictionary = CHARACTER_REGISTRY.get_character(current_character_id)
 		player.apply_character_package(char_data)
+	if is_multiplayer:
+		_apply_multiplayer_character_packages(run_context)
+		_log_multiplayer_player_stats("post_character_apply")
 	if should_apply_difficulty:
 		encounter_profile_builder.set_difficulty_tier(difficulty_tier)
 		_apply_difficulty_tier_bonuses(difficulty_tier)
@@ -1431,6 +1504,15 @@ func _try_resume_saved_run() -> bool:
 		current_difficulty_tier = int(run_context.get_multiplayer_difficulty_tier())
 		multiplayer_encounter_seed = rng.randi_range(1, 999999)
 		encounter_profile_builder.initialize_with_seed(rng, multiplayer_encounter_seed)
+		## Never apply singleplayer run snapshots in multiplayer sessions.
+		## Snapshot payload can contain stale per-character combat stats from prior runs.
+		current_character_id = String(run_context.get_selected_character_id()).strip_edges().to_lower()
+		if current_character_id.is_empty():
+			current_character_id = CHARACTER_REGISTRY.get_default_character_id()
+		should_apply_difficulty = true
+		if should_apply_difficulty:
+			_apply_difficulty_tier_bonuses(current_difficulty_tier)
+		return false
 	else:
 		current_difficulty_tier = int(run_context.get_current_difficulty_tier())
 	current_character_id = String(run_context.get_selected_character_id()).strip_edges().to_lower()
