@@ -487,3 +487,41 @@ func _draw() -> void:
 		if beam_link_active:
 			draw_line(Vector2.ZERO, partner_local, Color(0.92, 1.0, 1.0, 0.52), maxf(1.8, beam_visual_width * 0.34))
 	_draw_slow_indicator(body_radius)
+
+func _get_custom_network_runtime_state() -> Dictionary:
+	var partner_enemy_id := -1
+	if is_instance_valid(beam_partner):
+		partner_enemy_id = int(beam_partner.get_meta("network_enemy_id", -1))
+	return {
+		"tether_state": tether_state,
+		"state_time_left": state_time_left,
+		"beam_cooldown_left": beam_cooldown_left,
+		"partner_enemy_id": partner_enemy_id
+	}
+
+func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
+	if custom_state.is_empty():
+		return
+	if custom_state.has("tether_state"):
+		tether_state = int(custom_state.get("tether_state", tether_state))
+	if custom_state.has("state_time_left"):
+		state_time_left = float(custom_state.get("state_time_left", state_time_left))
+	if custom_state.has("beam_cooldown_left"):
+		beam_cooldown_left = float(custom_state.get("beam_cooldown_left", beam_cooldown_left))
+	if custom_state.has("partner_enemy_id"):
+		var partner_enemy_id := int(custom_state.get("partner_enemy_id", -1))
+		beam_partner = _resolve_partner_by_network_enemy_id(partner_enemy_id)
+
+func _resolve_partner_by_network_enemy_id(partner_enemy_id: int) -> CharacterBody2D:
+	if partner_enemy_id <= 0:
+		return null
+	for enemy in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy is CharacterBody2D):
+			continue
+		if enemy == self:
+			continue
+		var enemy_body := enemy as CharacterBody2D
+		if int(enemy_body.get_meta("network_enemy_id", -1)) != partner_enemy_id:
+			continue
+		return enemy_body
+	return null

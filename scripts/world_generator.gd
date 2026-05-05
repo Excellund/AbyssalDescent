@@ -10,6 +10,7 @@ const ENEMY_LANCER_SCRIPT := preload("res://scripts/enemy_lancer.gd")
 const ENEMY_SPECTRE_SCRIPT := preload("res://scripts/enemy_spectre.gd")
 const ENEMY_PYRE_SCRIPT := preload("res://scripts/enemy_pyre.gd")
 const ENEMY_TETHER_SCRIPT := preload("res://scripts/enemy_tether.gd")
+const PYRE_FIELD_SCRIPT := preload("res://scripts/pyre_field.gd")
 const ENEMY_BOSS_SCRIPT := preload("res://scripts/enemy_boss.gd")
 const ENEMY_BOSS_2_SCRIPT := preload("res://scripts/enemy_boss_2.gd")
 const ENEMY_BOSS_3_SCRIPT := preload("res://scripts/enemy_boss_3.gd")
@@ -202,13 +203,35 @@ var is_multiplayer: bool = false
 var multiplayer_session_id: String = ""
 var multiplayer_encounter_seed: int = 0
 var game_state_replication_service: Node = null
-var enemy_state_sync_interval_sec: float = 0.06
+var enemy_state_sync_interval_sec: float = 0.08
 var _enemy_state_sync_elapsed: float = 0.0
 var _next_network_enemy_id: int = 1
 var _network_enemy_nodes: Dictionary = {}  ## enemy_id -> Node2D
 var _enemy_target_positions: Dictionary = {}  ## enemy_id -> target global position
 var _enemy_target_facing_angles: Dictionary = {}  ## enemy_id -> target facing angle
 var _previous_enemy_runtime_states: Dictionary = {}  ## enemy_id -> previous runtime_state (for conditional sync)
+var _previous_enemy_positions: Dictionary = {}  ## enemy_id -> previous synced position
+var _previous_enemy_facing_angles: Dictionary = {}  ## enemy_id -> previous synced facing angle
+var _previous_enemy_health_values: Dictionary = {}  ## enemy_id -> previous synced health
+var enemy_state_sync_batch_size: int = 1
+var enemy_state_sync_payload_budget_bytes: int = 550
+var enemy_state_far_sync_distance_px: float = 520.0
+var enemy_state_far_sync_interval_mult: float = 2.0
+var enemy_state_position_change_threshold_sq: float = 4.0
+var enemy_state_facing_change_threshold_rad: float = 0.06
+var enemy_state_transmit_position_quantum: float = 1.0
+var enemy_state_transmit_facing_quantum: float = 0.1
+var enemy_runtime_float_quantum: float = 0.05
+var enemy_runtime_vector_quantum: float = 0.5
+var _enemy_far_sync_elapsed_by_id: Dictionary = {}  ## enemy_id -> elapsed seconds toward reduced far sync interval
+var multiplayer_perf_logging_enabled: bool = false
+var multiplayer_perf_log_interval_sec: float = 2.0
+var _multiplayer_perf_log_elapsed: float = 0.0
+var _multiplayer_last_sync_enemy_count: int = 0
+var _multiplayer_last_sync_batch_count: int = 0
+var _multiplayer_last_sync_estimated_bytes: int = 0
+var _multiplayer_last_sync_tether_enemy_count: int = 0
+var _multiplayer_last_sync_tether_estimated_bytes: int = 0
 var enemy_remote_position_lerp_speed: float = 14.0
 var enemy_remote_rotation_lerp_speed: float = 18.0
 var enemy_remote_snap_distance_px: float = 180.0
@@ -222,8 +245,11 @@ var _pending_chosen_door: Dictionary = {}
 var _pending_chosen_progress_state: Dictionary = {}
 var _awaiting_authoritative_door_choice: bool = false
 var _pending_spawn_sync_payload: Dictionary = {}
+var _pending_objective_spawn_sync_payloads: Array[Dictionary] = []
+var _pending_boss_spawn_sync_payload: Dictionary = {}
 var _current_room_sync_id: int = 0
 var _last_applied_spawn_sync_id: int = 0
+var _last_objective_cleared_room_sync_id: int = 0
 
 var second_player: Node2D = null
 func _apply_debug_settings_from_node() -> void:
@@ -1169,8 +1195,32 @@ func _process(delta: float) -> void:
 		_sync_enemy_state_tick(delta)
 		_interpolate_remote_enemy_states(delta)
 		_flush_pending_client_door_syncs()
+		_flush_pending_client_boss_spawn_syncs()
 		_flush_pending_client_spawn_syncs()
+		_flush_pending_client_objective_spawn_syncs()
+		_update_multiplayer_perf_logging(delta)
 	_refresh_frame_ui()
+
+func _update_multiplayer_perf_logging(delta: float) -> void:
+	if not multiplayer_perf_logging_enabled:
+		return
+	if not is_multiplayer or not MultiplayerSessionManager.is_host():
+		return
+	_multiplayer_perf_log_elapsed += delta
+	var log_interval := maxf(0.25, multiplayer_perf_log_interval_sec)
+	if _multiplayer_perf_log_elapsed < log_interval:
+		return
+	_multiplayer_perf_log_elapsed = 0.0
+	print("[MP PERF] tracked=%d room_active=%d sync_enemies=%d sync_batches=%d sync_est_bytes=%d" % [
+		_network_enemy_nodes.size(),
+		active_room_enemy_count,
+		_multiplayer_last_sync_enemy_count,
+		_multiplayer_last_sync_batch_count,
+		_multiplayer_last_sync_estimated_bytes
+	] + " tether_sync_enemies=%d tether_sync_est_bytes=%d" % [
+		_multiplayer_last_sync_tether_enemy_count,
+		_multiplayer_last_sync_tether_estimated_bytes
+	])
 
 func _can_apply_client_door_sync() -> bool:
 	if not is_multiplayer or MultiplayerSessionManager.is_host():
@@ -1264,6 +1314,104 @@ func _flush_pending_client_spawn_syncs() -> void:
 	var payload := _pending_spawn_sync_payload.duplicate(true)
 	_pending_spawn_sync_payload.clear()
 	_apply_synced_spawn_batch_payload(payload)
+
+func _apply_synced_objective_spawn_batch_payload(payload: Dictionary) -> void:
+	var spawn_batch: Array = payload.get("spawn_batch", []) as Array
+	var synced_enemy_count := int(payload.get("synced_enemy_count", 0))
+	for spawn_entry_variant in spawn_batch:
+		if not (spawn_entry_variant is Dictionary):
+			continue
+		var spawn_entry := spawn_entry_variant as Dictionary
+		var enemy_type := String(spawn_entry.get("enemy_type", ""))
+		var enemy_position := spawn_entry.get("position", Vector2.ZERO) as Vector2
+		var enemy_id := int(spawn_entry.get("enemy_id", -1))
+		var spawn_meta := spawn_entry.get("spawn_meta", {}) as Dictionary
+		if enemy_type.is_empty() or enemy_id <= 0:
+			continue
+		var enemy: CharacterBody2D = enemy_spawner.spawn_enemy_from_sync(enemy_type, enemy_position)
+		if is_instance_valid(enemy):
+			_register_network_enemy(enemy, enemy_id)
+			if not spawn_meta.is_empty():
+				_apply_objective_spawn_meta(enemy, spawn_meta)
+			if enemy.has_method("set_network_simulation_enabled"):
+				enemy.call("set_network_simulation_enabled", false)
+		if enemy.has_signal("died"):
+			var captured_enemy_id := enemy_id
+			if not enemy.died.is_connected(Callable(self, "_on_network_enemy_died").bind(captured_enemy_id)):
+				enemy.died.connect(Callable(self, "_on_network_enemy_died").bind(captured_enemy_id))
+	active_room_enemy_count = synced_enemy_count
+
+func _flush_pending_client_objective_spawn_syncs() -> void:
+	if _pending_objective_spawn_sync_payloads.is_empty():
+		return
+	var remaining_payloads: Array[Dictionary] = []
+	for payload in _pending_objective_spawn_sync_payloads:
+		if not _can_apply_client_spawn_sync(payload):
+			var source_room_sync_id := int(payload.get("room_sync_id", 0))
+			if source_room_sync_id > 0 and source_room_sync_id < _current_room_sync_id:
+				continue
+			remaining_payloads.append(payload)
+			continue
+		_apply_synced_objective_spawn_batch_payload(payload)
+	_pending_objective_spawn_sync_payloads = remaining_payloads
+
+func _is_current_room_boss_stage(boss_stage: int) -> bool:
+	match boss_stage:
+		1:
+			return in_boss_room and not in_second_boss_room and not in_third_boss_room
+		2:
+			return in_second_boss_room and not in_third_boss_room
+		3:
+			return in_third_boss_room
+		_:
+			return false
+
+func _can_apply_client_boss_spawn_sync(payload: Dictionary) -> bool:
+	if not is_multiplayer or MultiplayerSessionManager.is_host():
+		return false
+	if not is_instance_valid(enemy_spawner):
+		return false
+	if _is_reward_selection_active():
+		return false
+	if current_room_label == "Starting Chamber":
+		return false
+	var source_room_sync_id := int(payload.get("room_sync_id", 0))
+	if source_room_sync_id > 0:
+		if source_room_sync_id < _current_room_sync_id:
+			return false
+		if source_room_sync_id > _current_room_sync_id:
+			return false
+	var boss_stage := int(payload.get("boss_stage", 0))
+	if not _is_current_room_boss_stage(boss_stage):
+		return false
+	var payload_room_label := String(payload.get("room_label", "")).strip_edges()
+	if payload_room_label.is_empty():
+		return true
+	return payload_room_label == current_room_label
+
+func _apply_synced_boss_spawn_payload(payload: Dictionary) -> void:
+	var boss_stage := int(payload.get("boss_stage", 0))
+	var enemy_id := int(payload.get("enemy_id", -1))
+	var spawn_position := payload.get("position", Vector2.ZERO) as Vector2
+	if boss_stage <= 0 or enemy_id <= 0:
+		return
+	var existing_enemy := _network_enemy_nodes.get(enemy_id) as Node2D
+	if is_instance_valid(existing_enemy):
+		active_room_enemy_count = maxi(1, active_room_enemy_count)
+		return
+	var boss := _spawn_boss_for_stage(boss_stage, spawn_position)
+	if is_instance_valid(boss):
+		_register_network_enemy(boss, enemy_id)
+	active_room_enemy_count = 1
+
+func _flush_pending_client_boss_spawn_syncs() -> void:
+	if _pending_boss_spawn_sync_payload.is_empty():
+		return
+	if not _can_apply_client_boss_spawn_sync(_pending_boss_spawn_sync_payload):
+		return
+	var payload := _pending_boss_spawn_sync_payload.duplicate(true)
+	_pending_boss_spawn_sync_payload.clear()
+	_apply_synced_boss_spawn_payload(payload)
 
 func _handle_modal_frame(delta: float) -> bool:
 	if is_instance_valid(defeat_screen) and bool(defeat_screen.is_open()):
@@ -1881,21 +2029,22 @@ func _spawn_door_options() -> void:
 func _try_use_door() -> void:
 	if not choosing_next_room:
 		return
-	if not is_instance_valid(player):
+	var local_player := _find_local_player_node()
+	if not is_instance_valid(local_player):
 		return
 	if not Input.is_action_just_pressed("interact"):
 		return
 	if not is_instance_valid(encounter_flow_system):
+		return
+	var used_door: Dictionary = encounter_route_controller.find_used_door(local_player.global_position, door_options, door_use_radius)
+	if used_door.is_empty():
 		return
 	if is_multiplayer and not MultiplayerSessionManager.is_host():
 		# Optimistically hide doors on joiner while host resolves the authoritative choice.
 		choosing_next_room = false
 		door_options.clear()
 		_awaiting_authoritative_door_choice = true
-		_request_use_door.rpc_id(1)
-		return
-	var used_door: Dictionary = encounter_route_controller.find_used_door(player.global_position, door_options, door_use_radius)
-	if used_door.is_empty():
+		_request_use_door.rpc_id(1, used_door.duplicate(true))
 		return
 	if is_multiplayer and MultiplayerSessionManager.is_host():
 		_choose_door(used_door)
@@ -1904,7 +2053,7 @@ func _try_use_door() -> void:
 	_choose_door(used_door)
 
 @rpc("reliable", "any_peer")
-func _request_use_door() -> void:
+func _request_use_door(requested_door: Dictionary = {}) -> void:
 	if not is_multiplayer or not MultiplayerSessionManager.is_host():
 		return
 	if not choosing_next_room:
@@ -1912,14 +2061,30 @@ func _request_use_door() -> void:
 	var sender_peer_id := get_tree().get_multiplayer().get_remote_sender_id()
 	if sender_peer_id <= 0:
 		return
-	var peer_player := _get_player_for_peer(sender_peer_id)
-	if not is_instance_valid(peer_player):
-		return
-	var used_door: Dictionary = encounter_route_controller.find_used_door(peer_player.global_position, door_options, door_use_radius)
+	var used_door := _find_authoritative_door_option(requested_door)
 	if used_door.is_empty():
+		_sync_door_options.rpc(door_options, choosing_next_room, boss_unlocked, _build_progress_sync_state())
 		return
 	_choose_door(used_door)
 	_sync_chosen_door.rpc(used_door, _build_progress_sync_state())
+
+func _find_authoritative_door_option(requested_door: Dictionary) -> Dictionary:
+	if requested_door.is_empty():
+		return {}
+	for door_option in door_options:
+		if not (door_option is Dictionary):
+			continue
+		var candidate := door_option as Dictionary
+		if ENCOUNTER_CONTRACTS.door_option_kind_id(candidate) != ENCOUNTER_CONTRACTS.door_option_kind_id(requested_door):
+			continue
+		if ENCOUNTER_CONTRACTS.door_option_reward_mode(candidate) != ENCOUNTER_CONTRACTS.door_option_reward_mode(requested_door):
+			continue
+		if ENCOUNTER_CONTRACTS.door_option_get_position(candidate).distance_squared_to(ENCOUNTER_CONTRACTS.door_option_get_position(requested_door)) > 1.0:
+			continue
+		if ENCOUNTER_CONTRACTS.door_option_profile(candidate) != ENCOUNTER_CONTRACTS.door_option_profile(requested_door):
+			continue
+		return candidate.duplicate(true)
+	return {}
 
 @rpc("reliable", "authority")
 func _sync_door_options(synced_door_options: Array, synced_choosing_next_room: bool, synced_boss_unlocked: bool, progress_state: Dictionary = {}) -> void:
@@ -1963,6 +2128,25 @@ func _sync_chosen_door(chosen_door: Dictionary, progress_state: Dictionary = {})
 	_flush_pending_client_door_syncs()
 
 @rpc("reliable", "authority")
+func _sync_objective_spawn_batch(spawn_batch: Array, synced_enemy_count: int, source_room_label: String = "", source_room_sync_id: int = 0) -> void:
+	if not is_multiplayer or MultiplayerSessionManager.is_host():
+		return
+	if source_room_sync_id > 0 and source_room_sync_id <= _last_objective_cleared_room_sync_id:
+		return
+	if source_room_sync_id > 0 and source_room_sync_id < _current_room_sync_id:
+		return
+	var payload := {
+		"spawn_batch": spawn_batch.duplicate(true),
+		"synced_enemy_count": synced_enemy_count,
+		"room_label": source_room_label,
+		"room_sync_id": source_room_sync_id
+	}
+	if not _can_apply_client_spawn_sync(payload):
+		_pending_objective_spawn_sync_payloads.append(payload)
+		return
+	_apply_synced_objective_spawn_batch_payload(payload)
+
+@rpc("reliable", "authority")
 func _sync_objective_control_zone(control_anchor: Vector2, control_radius: float, control_goal: float, control_decay_rate: float, control_contest_threshold: int) -> void:
 	if not is_multiplayer or MultiplayerSessionManager.is_host():
 		return
@@ -1973,6 +2157,30 @@ func _sync_objective_control_zone(control_anchor: Vector2, control_radius: float
 	objective_manager.control_goal = control_goal
 	objective_manager.control_decay_rate = control_decay_rate
 	objective_manager.control_contest_threshold = control_contest_threshold
+	queue_redraw()
+
+@rpc("unreliable", "authority")
+func _sync_objective_control_zone_state(control_progress: float, control_enemies_in_zone: int, control_contested: bool, control_player_inside: bool) -> void:
+	if not is_multiplayer or MultiplayerSessionManager.is_host():
+		return
+	if not is_instance_valid(objective_manager):
+		return
+	objective_manager.control_progress = maxf(0.0, control_progress)
+	objective_manager.control_enemies_in_zone = maxi(0, control_enemies_in_zone)
+	objective_manager.control_contested = control_contested
+	objective_manager.control_player_inside = control_player_inside
+	queue_redraw()
+
+@rpc("reliable", "authority")
+func _sync_objective_cleared() -> void:
+	if not is_multiplayer or MultiplayerSessionManager.is_host():
+		return
+	_last_objective_cleared_room_sync_id = _current_room_sync_id
+	if is_instance_valid(objective_manager):
+		objective_manager.reset()
+	_pending_objective_spawn_sync_payloads.clear()
+	_clear_all_enemies()
+	active_room_enemy_count = 0
 	queue_redraw()
 
 func _build_progress_sync_state() -> Dictionary:
@@ -2068,6 +2276,9 @@ func _begin_room(profile: Dictionary) -> void:
 	_pending_door_sync_payload.clear()
 	_pending_chosen_door.clear()
 	_pending_chosen_progress_state.clear()
+	if not is_multiplayer or MultiplayerSessionManager.is_host():
+		_pending_spawn_sync_payload.clear()
+		_pending_objective_spawn_sync_payloads.clear()
 	choosing_next_room = false
 	door_options.clear()
 	encounter_intro_grace_active = false
@@ -2075,7 +2286,7 @@ func _begin_room(profile: Dictionary) -> void:
 	in_boss_room = false
 	in_second_boss_room = false
 	in_third_boss_room = false
-	objective_lifecycle_coordinator.reset_and_begin_for_new_room(objective_manager, objective_runtime, profile)
+	objective_lifecycle_coordinator.reset_for_new_room(objective_manager, objective_runtime)
 	_play_room_music(false)
 	current_room_size = ENCOUNTER_CONTRACTS.profile_room_size(profile)
 	current_room_static_camera = ENCOUNTER_CONTRACTS.profile_static_camera(profile)
@@ -2118,7 +2329,20 @@ func _begin_room(profile: Dictionary) -> void:
 			_flush_pending_client_spawn_syncs()
 	else:
 		active_room_enemy_count = _spawn_profile_enemies(profile)
+	objective_lifecycle_coordinator.begin_for_new_room(objective_runtime, profile)
 	_start_encounter_intro_grace()
+
+func _apply_objective_spawn_meta(enemy: CharacterBody2D, spawn_meta: Dictionary) -> void:
+	if not is_instance_valid(enemy):
+		return
+	var role := String(spawn_meta.get("role", "")).strip_edges()
+	if role.is_empty():
+		return
+	if role == "cut_signal_target":
+		if is_instance_valid(objective_runtime) and objective_runtime.has_method("configure_priority_target_enemy_from_sync"):
+			objective_runtime.call("configure_priority_target_enemy_from_sync", enemy, spawn_meta)
+		elif is_instance_valid(objective_manager):
+			objective_manager.hunt_target_enemy = enemy
 
 func _enter_rest_site() -> void:
 	in_boss_room = false
@@ -2176,6 +2400,14 @@ func _pick_boss_spawn_position(min_player_distance: float = 260.0, wall_margin: 
 	return fallback
 
 func _begin_configured_boss_room(boss_stage: int, room_size: Vector2, room_label: String, room_entry_key: String, banner_title: String, boss_script, collision_radius: float, min_player_distance: float, wall_margin: float) -> void:
+	_current_room_sync_id += 1
+	_awaiting_authoritative_door_choice = false
+	_pending_door_sync_payload.clear()
+	_pending_chosen_door.clear()
+	_pending_chosen_progress_state.clear()
+	if not is_multiplayer or MultiplayerSessionManager.is_host():
+		_pending_spawn_sync_payload.clear()
+		_pending_objective_spawn_sync_payloads.clear()
 	encounter_intro_grace_active = false
 	combat_phase_coordinator.begin_combat_phase(player, get_tree())
 	in_boss_room = boss_stage == 1
@@ -2193,6 +2425,7 @@ func _begin_configured_boss_room(boss_stage: int, room_size: Vector2, room_label
 	active_room_enemy_count = 1
 	if is_multiplayer and not MultiplayerSessionManager.is_host():
 		_start_encounter_intro_grace()
+		_flush_pending_client_boss_spawn_syncs()
 		return
 	var boss := CharacterBody2D.new()
 	boss.set_script(boss_script)
@@ -2205,7 +2438,7 @@ func _begin_configured_boss_room(boss_stage: int, room_size: Vector2, room_label
 	boss.global_position = _pick_boss_spawn_position(min_player_distance, wall_margin)
 	add_child(boss)
 	boss.begin_spawn_transport(BOSS_SPAWN_TRANSPORT_DURATION)
-	boss.set("target", player)
+	_assign_enemy_target_candidates(boss)
 	boss.set("arena_size", current_room_size)
 	_apply_boss_difficulty_scaling(boss)
 	var boss_enemy_id := _register_network_enemy(boss)
@@ -2216,7 +2449,9 @@ func _begin_configured_boss_room(boss_stage: int, room_size: Vector2, room_label
 		_sync_spawn_boss.rpc({
 			"boss_stage": boss_stage,
 			"enemy_id": boss_enemy_id,
-			"position": boss.global_position
+			"position": boss.global_position,
+			"room_label": current_room_label,
+			"room_sync_id": _current_room_sync_id
 		})
 	_start_encounter_intro_grace()
 
@@ -2293,22 +2528,112 @@ func _compute_runtime_state_delta(current_state: Dictionary, previous_state: Dic
 			delta[key] = current_val
 	return delta
 
+func _quantize_runtime_variant_for_network(value: Variant) -> Variant:
+	match typeof(value):
+		TYPE_FLOAT:
+			var quantum := maxf(0.0001, enemy_runtime_float_quantum)
+			return snappedf(float(value), quantum)
+		TYPE_VECTOR2:
+			var vector_quantum := maxf(0.0001, enemy_runtime_vector_quantum)
+			var vector_value := value as Vector2
+			return Vector2(
+				snappedf(vector_value.x, vector_quantum),
+				snappedf(vector_value.y, vector_quantum)
+			)
+		TYPE_DICTIONARY:
+			var source_dict := value as Dictionary
+			var quantized_dict := {}
+			for key_variant in source_dict.keys():
+				quantized_dict[key_variant] = _quantize_runtime_variant_for_network(source_dict.get(key_variant))
+			return quantized_dict
+		TYPE_ARRAY:
+			var source_array := value as Array
+			var quantized_array: Array = []
+			for item in source_array:
+				quantized_array.append(_quantize_runtime_variant_for_network(item))
+			return quantized_array
+		_:
+			return value
+
+func _quantize_runtime_state_for_network(runtime_state: Dictionary) -> Dictionary:
+	return _quantize_runtime_variant_for_network(runtime_state) as Dictionary
+
+func _enemy_is_far_from_all_players(enemy_position: Vector2) -> bool:
+	var far_distance_sq := maxf(0.0, enemy_state_far_sync_distance_px * enemy_state_far_sync_distance_px)
+	if is_instance_valid(player):
+		if enemy_position.distance_squared_to(player.global_position) <= far_distance_sq:
+			return false
+	if is_multiplayer and is_instance_valid(second_player):
+		if enemy_position.distance_squared_to(second_player.global_position) <= far_distance_sq:
+			return false
+	return true
+
+func _enemy_is_combat_active(enemy: Node2D, runtime_state_delta: Dictionary) -> bool:
+	if runtime_state_delta.has("custom"):
+		var custom_state := runtime_state_delta.get("custom", {}) as Dictionary
+		if not custom_state.is_empty():
+			return true
+	if runtime_state_delta.has("attack_anim_time_left") and float(runtime_state_delta.get("attack_anim_time_left", 0.0)) > 0.0:
+		return true
+	return false
+
+func _estimate_sync_variant_size_bytes(value: Variant) -> int:
+	match typeof(value):
+		TYPE_NIL:
+			return 1
+		TYPE_BOOL:
+			return 2
+		TYPE_INT, TYPE_FLOAT:
+			return 8
+		TYPE_STRING:
+			return 4 + String(value).length()
+		TYPE_VECTOR2, TYPE_VECTOR2I:
+			return 16
+		TYPE_VECTOR3, TYPE_VECTOR3I, TYPE_COLOR:
+			return 24
+		TYPE_ARRAY:
+			var total_size := 4
+			for item in value:
+				total_size += _estimate_sync_variant_size_bytes(item)
+			return total_size
+		TYPE_DICTIONARY:
+			var total_size := 8
+			for key_variant in value.keys():
+				total_size += _estimate_sync_variant_size_bytes(key_variant)
+				total_size += _estimate_sync_variant_size_bytes(value.get(key_variant))
+			return total_size
+		_:
+			return 32
+
+func _estimate_enemy_sync_state_size_bytes(state: Dictionary) -> int:
+	return _estimate_sync_variant_size_bytes(state) + 24
+
 func _sync_enemy_state_tick(delta: float) -> void:
 	if not is_multiplayer:
 		return
 	if not MultiplayerSessionManager.is_host():
 		return
+	var sync_interval := enemy_state_sync_interval_sec
+	if is_instance_valid(objective_manager) and String(objective_manager.active_objective_kind) == "cut_the_signal":
+		if active_room_enemy_count >= 10:
+			sync_interval *= 1.35
+		elif active_room_enemy_count >= 7:
+			sync_interval *= 1.2
 	_enemy_state_sync_elapsed += delta
-	if _enemy_state_sync_elapsed < enemy_state_sync_interval_sec:
+	if _enemy_state_sync_elapsed < sync_interval:
 		return
 	_enemy_state_sync_elapsed = 0.0
 	var synced_states: Array = []
+	var synced_state_sizes: Array[int] = []
 	var stale_ids: Array = []
+	var tether_synced_enemy_count := 0
+	var tether_synced_estimated_bytes := 0
 	for enemy_id_variant in _network_enemy_nodes.keys():
 		var enemy_id := int(enemy_id_variant)
 		var enemy := _network_enemy_nodes.get(enemy_id) as Node2D
 		if not is_instance_valid(enemy):
 			stale_ids.append(enemy_id)
+			_enemy_far_sync_elapsed_by_id.erase(enemy_id)
 			continue
 		var enemy_health := 0.0
 		var runtime_state: Dictionary = {}
@@ -2316,26 +2641,101 @@ func _sync_enemy_state_tick(delta: float) -> void:
 			enemy_health = float(enemy.call("get_current_health"))
 		if enemy.has_method("get_network_runtime_state"):
 			runtime_state = enemy.call("get_network_runtime_state") as Dictionary
+		runtime_state = _quantize_runtime_state_for_network(runtime_state)
 		var enemy_facing_angle := enemy.global_rotation
 		if enemy.has_method("get_network_facing_angle"):
 			enemy_facing_angle = float(enemy.call("get_network_facing_angle"))
-		# Compute delta from previous state to reduce payload
+		var quantized_position_quantum := maxf(0.0001, enemy_state_transmit_position_quantum)
+		var quantized_facing_quantum := maxf(0.0001, enemy_state_transmit_facing_quantum)
+		var quantized_position := Vector2(
+			snappedf(enemy.global_position.x, quantized_position_quantum),
+			snappedf(enemy.global_position.y, quantized_position_quantum)
+		)
+		var quantized_facing_angle := snappedf(enemy_facing_angle, quantized_facing_quantum)
+		var previous_position := _previous_enemy_positions.get(enemy_id, quantized_position) as Vector2
+		var previous_facing_angle := float(_previous_enemy_facing_angles.get(enemy_id, quantized_facing_angle))
+		var previous_health := float(_previous_enemy_health_values.get(enemy_id, enemy_health))
 		var previous_state := _previous_enemy_runtime_states.get(enemy_id, {}) as Dictionary
 		var runtime_state_delta := _compute_runtime_state_delta(runtime_state, previous_state)
+		var position_changed := previous_position.distance_squared_to(quantized_position) > maxf(0.0001, enemy_state_position_change_threshold_sq)
+		var facing_changed := absf(wrapf(quantized_facing_angle - previous_facing_angle, -PI, PI)) > maxf(0.0001, enemy_state_facing_change_threshold_rad)
+		var health_changed := not is_equal_approx(enemy_health, previous_health)
+		var is_far_enemy := _enemy_is_far_from_all_players(quantized_position)
+		var combat_active := _enemy_is_combat_active(enemy, runtime_state_delta)
+		if is_far_enemy and not combat_active:
+			var far_elapsed := float(_enemy_far_sync_elapsed_by_id.get(enemy_id, 0.0)) + _enemy_state_sync_elapsed
+			var required_far_interval := maxf(0.001, sync_interval * maxf(1.0, enemy_state_far_sync_interval_mult))
+			if far_elapsed < required_far_interval:
+				_enemy_far_sync_elapsed_by_id[enemy_id] = far_elapsed
+				continue
+			_enemy_far_sync_elapsed_by_id[enemy_id] = 0.0
+		else:
+			_enemy_far_sync_elapsed_by_id[enemy_id] = 0.0
 		_previous_enemy_runtime_states[enemy_id] = runtime_state.duplicate(true)
-		synced_states.append({
+		_previous_enemy_positions[enemy_id] = quantized_position
+		_previous_enemy_facing_angles[enemy_id] = quantized_facing_angle
+		_previous_enemy_health_values[enemy_id] = enemy_health
+		if not position_changed and not facing_changed and not health_changed and runtime_state_delta.is_empty():
+			continue
+		var synced_state := {
 			"enemy_id": enemy_id,
-			"position": enemy.global_position,
-			"facing_angle": enemy_facing_angle,
-			"health": enemy_health,
 			"runtime_state_delta": runtime_state_delta
-		})
+		}
+		if position_changed:
+			synced_state["position"] = quantized_position
+		if facing_changed:
+			synced_state["facing_angle"] = quantized_facing_angle
+		if health_changed:
+			synced_state["health"] = enemy_health
+		synced_states.append(synced_state)
+		var synced_state_size := _estimate_enemy_sync_state_size_bytes(synced_state)
+		synced_state_sizes.append(synced_state_size)
+		if enemy.get_script() == ENEMY_TETHER_SCRIPT:
+			tether_synced_enemy_count += 1
+			tether_synced_estimated_bytes += synced_state_size
 	for stale_id in stale_ids:
 		_network_enemy_nodes.erase(int(stale_id))
 		_enemy_target_positions.erase(int(stale_id))
 		_enemy_target_facing_angles.erase(int(stale_id))
 		_previous_enemy_runtime_states.erase(int(stale_id))
-	_sync_enemy_states.rpc(synced_states, active_room_enemy_count)
+		_previous_enemy_positions.erase(int(stale_id))
+		_previous_enemy_facing_angles.erase(int(stale_id))
+		_previous_enemy_health_values.erase(int(stale_id))
+		_enemy_far_sync_elapsed_by_id.erase(int(stale_id))
+	if synced_states.is_empty() and stale_ids.is_empty():
+		_multiplayer_last_sync_enemy_count = 0
+		_multiplayer_last_sync_batch_count = 0
+		_multiplayer_last_sync_estimated_bytes = 0
+		_multiplayer_last_sync_tether_enemy_count = 0
+		_multiplayer_last_sync_tether_estimated_bytes = 0
+		return
+	var max_batch_size := maxi(1, enemy_state_sync_batch_size)
+	var payload_budget := maxi(256, enemy_state_sync_payload_budget_bytes - 200)
+	var current_batch: Array = []
+	var current_batch_bytes := 0
+	var total_estimated_bytes := 0
+	var total_batch_count := 0
+	for sync_index in range(synced_states.size()):
+		var synced_state := synced_states[sync_index] as Dictionary
+		var state_size := int(synced_state_sizes[sync_index])
+		total_estimated_bytes += state_size
+		var would_exceed_budget := not current_batch.is_empty() and (current_batch_bytes + state_size + 150 > payload_budget)
+		var would_exceed_count := current_batch.size() >= max_batch_size
+		if would_exceed_budget or would_exceed_count:
+			_sync_enemy_states.rpc(current_batch, active_room_enemy_count)
+			total_batch_count += 1
+			current_batch = []
+			current_batch_bytes = 0
+		current_batch.append(synced_state)
+		current_batch_bytes += state_size
+	if not current_batch.is_empty():
+		_sync_enemy_states.rpc(current_batch, active_room_enemy_count)
+		total_batch_count += 1
+	_multiplayer_last_sync_enemy_count = synced_states.size()
+	_multiplayer_last_sync_batch_count = total_batch_count
+	_multiplayer_last_sync_estimated_bytes = total_estimated_bytes
+	_multiplayer_last_sync_tether_enemy_count = tether_synced_enemy_count
+	_multiplayer_last_sync_tether_estimated_bytes = tether_synced_estimated_bytes
 
 func _register_network_enemy(enemy: Node2D, forced_enemy_id: int = -1) -> int:
 	if not is_instance_valid(enemy):
@@ -2349,23 +2749,64 @@ func _register_network_enemy(enemy: Node2D, forced_enemy_id: int = -1) -> int:
 	enemy.set_meta("network_enemy_id", enemy_id)
 	_network_enemy_nodes[enemy_id] = enemy
 	_enemy_target_positions[enemy_id] = enemy.global_position
+	_previous_enemy_positions[enemy_id] = enemy.global_position
 	var enemy_facing_angle := enemy.global_rotation
 	if enemy.has_method("get_network_facing_angle"):
 		enemy_facing_angle = float(enemy.call("get_network_facing_angle"))
 	_enemy_target_facing_angles[enemy_id] = enemy_facing_angle
+	_previous_enemy_facing_angles[enemy_id] = enemy_facing_angle
+	if enemy.has_method("get_current_health"):
+		_previous_enemy_health_values[enemy_id] = float(enemy.call("get_current_health"))
+	_enemy_far_sync_elapsed_by_id[enemy_id] = 0.0
 	if is_multiplayer and not MultiplayerSessionManager.is_host() and enemy.has_method("set_network_simulation_enabled"):
 		enemy.call("set_network_simulation_enabled", false)
 	if enemy.has_signal("died") and not enemy.died.is_connected(Callable(self, "_on_network_enemy_died").bind(enemy_id)):
 		enemy.died.connect(Callable(self, "_on_network_enemy_died").bind(enemy_id))
 	return enemy_id
 
+func _build_enemy_death_effect_payload(enemy: Node2D) -> Dictionary:
+	if not is_instance_valid(enemy):
+		return {}
+	if enemy.get_script() == ENEMY_PYRE_SCRIPT:
+		return {
+			"effect": "pyre_death_field",
+			"position": enemy.global_position,
+			"radius": float(enemy.get("death_field_radius")),
+			"duration": float(enemy.get("death_field_duration")),
+			"tick_interval": float(enemy.get("death_field_tick_interval"))
+		}
+	return {}
+
+func _spawn_synced_pyre_death_field(effect_payload: Dictionary) -> void:
+	if effect_payload.is_empty():
+		return
+	var parent_node := get_parent()
+	if not is_instance_valid(parent_node):
+		return
+	var field := PYRE_FIELD_SCRIPT.new()
+	parent_node.add_child(field)
+	field.global_position = effect_payload.get("position", Vector2.ZERO) as Vector2
+	field.initialize(
+		null,
+		float(effect_payload.get("radius", 94.0)),
+		float(effect_payload.get("duration", 6.5)),
+		float(effect_payload.get("tick_interval", 0.42)),
+		0
+	)
+
 func _on_network_enemy_died(enemy_id: int) -> void:
+	var enemy := _network_enemy_nodes.get(enemy_id) as Node2D
+	var death_effect_payload := _build_enemy_death_effect_payload(enemy)
 	_network_enemy_nodes.erase(enemy_id)
 	_enemy_target_positions.erase(enemy_id)
 	_enemy_target_facing_angles.erase(enemy_id)
 	_previous_enemy_runtime_states.erase(enemy_id)
+	_previous_enemy_positions.erase(enemy_id)
+	_previous_enemy_facing_angles.erase(enemy_id)
+	_previous_enemy_health_values.erase(enemy_id)
+	_enemy_far_sync_elapsed_by_id.erase(enemy_id)
 	if is_multiplayer and MultiplayerSessionManager.is_host():
-		_sync_enemy_died.rpc(enemy_id)
+		_sync_enemy_died.rpc(enemy_id, death_effect_payload)
 
 
 func request_enemy_damage_from_client(enemy_id: int, amount: int, damage_context: Dictionary = {}) -> void:
@@ -2416,7 +2857,7 @@ func _spawn_boss_for_stage(boss_stage: int, spawn_position: Vector2) -> Node2D:
 	boss.global_position = spawn_position
 	add_child(boss)
 	boss.begin_spawn_transport(BOSS_SPAWN_TRANSPORT_DURATION)
-	boss.set("target", player)
+	_assign_enemy_target_candidates(boss)
 	boss.set("arena_size", current_room_size)
 	_apply_boss_difficulty_scaling(boss)
 	if boss.has_signal("died"):
@@ -2448,21 +2889,29 @@ func _sync_spawn_enemy_batch(spawn_batch: Array, synced_enemy_count: int, source
 func _sync_spawn_boss(spawn_data: Dictionary) -> void:
 	if not is_multiplayer or MultiplayerSessionManager.is_host():
 		return
-	var boss_stage := int(spawn_data.get("boss_stage", 0))
-	var enemy_id := int(spawn_data.get("enemy_id", -1))
-	var spawn_position := spawn_data.get("position", Vector2.ZERO) as Vector2
-	if boss_stage <= 0 or enemy_id <= 0:
+	var payload := {
+		"boss_stage": int(spawn_data.get("boss_stage", 0)),
+		"enemy_id": int(spawn_data.get("enemy_id", -1)),
+		"position": spawn_data.get("position", Vector2.ZERO),
+		"room_label": String(spawn_data.get("room_label", "")),
+		"room_sync_id": int(spawn_data.get("room_sync_id", 0))
+	}
+	if int(payload.get("boss_stage", 0)) <= 0 or int(payload.get("enemy_id", -1)) <= 0:
 		return
-	var boss := _spawn_boss_for_stage(boss_stage, spawn_position)
-	if is_instance_valid(boss):
-		_register_network_enemy(boss, enemy_id)
-	active_room_enemy_count = 1
+	var source_room_sync_id := int(payload.get("room_sync_id", 0))
+	if source_room_sync_id > 0 and source_room_sync_id < _current_room_sync_id:
+		return
+	if not _can_apply_client_boss_spawn_sync(payload):
+		var pending_sync_id := int(_pending_boss_spawn_sync_payload.get("room_sync_id", 0))
+		if source_room_sync_id >= pending_sync_id:
+			_pending_boss_spawn_sync_payload = payload
+		return
+	_apply_synced_boss_spawn_payload(payload)
 
 @rpc("unreliable", "authority")
 func _sync_enemy_states(synced_states: Array, synced_enemy_count: int) -> void:
 	if not is_multiplayer or MultiplayerSessionManager.is_host():
 		return
-	var seen_ids: Dictionary = {}
 	for state_variant in synced_states:
 		if not (state_variant is Dictionary):
 			continue
@@ -2470,47 +2919,40 @@ func _sync_enemy_states(synced_states: Array, synced_enemy_count: int) -> void:
 		var enemy_id := int(state.get("enemy_id", -1))
 		if enemy_id <= 0:
 			continue
-		seen_ids[enemy_id] = true
 		var enemy := _network_enemy_nodes.get(enemy_id) as Node2D
 		if not is_instance_valid(enemy):
 			continue
-		var synced_position := state.get("position", enemy.global_position) as Vector2
-		var synced_facing_angle := float(state.get("facing_angle", enemy.global_rotation))
-		if enemy.global_position.distance_to(synced_position) >= enemy_remote_snap_distance_px:
-			enemy.global_position = synced_position
-		_enemy_target_positions[enemy_id] = synced_position
-		_enemy_target_facing_angles[enemy_id] = synced_facing_angle
-		if enemy.has_method("set_health"):
+		if state.has("position"):
+			var synced_position := state.get("position", enemy.global_position) as Vector2
+			if enemy.global_position.distance_to(synced_position) >= enemy_remote_snap_distance_px:
+				enemy.global_position = synced_position
+			_enemy_target_positions[enemy_id] = synced_position
+		if state.has("facing_angle"):
+			var synced_facing_angle := float(state.get("facing_angle", enemy.global_rotation))
+			_enemy_target_facing_angles[enemy_id] = synced_facing_angle
+		if state.has("health") and enemy.has_method("set_health"):
 			enemy.call("set_health", float(state.get("health", 0.0)))
 		if enemy.has_method("apply_network_runtime_state"):
 			var runtime_state_delta := state.get("runtime_state_delta", {}) as Dictionary
 			enemy.call("apply_network_runtime_state", runtime_state_delta)
-	var stale_ids: Array = []
-	for enemy_id_variant in _network_enemy_nodes.keys():
-		var existing_id := int(enemy_id_variant)
-		if seen_ids.has(existing_id):
-			continue
-		stale_ids.append(existing_id)
-	for stale_id_variant in stale_ids:
-		var stale_id := int(stale_id_variant)
-		var stale_enemy := _network_enemy_nodes.get(stale_id) as Node2D
-		if is_instance_valid(stale_enemy):
-			stale_enemy.queue_free()
-		_network_enemy_nodes.erase(stale_id)
-		_enemy_target_positions.erase(stale_id)
-		_enemy_target_facing_angles.erase(stale_id)
 	active_room_enemy_count = synced_enemy_count
 
 @rpc("reliable", "authority")
-func _sync_enemy_died(enemy_id: int) -> void:
+func _sync_enemy_died(enemy_id: int, death_effect_payload: Dictionary = {}) -> void:
 	if not is_multiplayer or MultiplayerSessionManager.is_host():
 		return
 	var enemy := _network_enemy_nodes.get(enemy_id) as Node2D
+	if String(death_effect_payload.get("effect", "")) == "pyre_death_field":
+		_spawn_synced_pyre_death_field(death_effect_payload)
 	if is_instance_valid(enemy):
 		enemy.queue_free()
 	_network_enemy_nodes.erase(enemy_id)
 	_enemy_target_positions.erase(enemy_id)
 	_enemy_target_facing_angles.erase(enemy_id)
+	_previous_enemy_runtime_states.erase(enemy_id)
+	_previous_enemy_positions.erase(enemy_id)
+	_previous_enemy_facing_angles.erase(enemy_id)
+	_previous_enemy_health_values.erase(enemy_id)
 
 
 func _interpolate_remote_enemy_states(delta: float) -> void:
@@ -3046,6 +3488,7 @@ func _on_player_died() -> void:
 		return
 	if is_multiplayer:
 		_sync_multiplayer_fallen_player_presence()
+		_refresh_all_enemy_target_candidates()
 		_bind_camera_to_local_player()
 	if is_multiplayer and _count_alive_players() > 0:
 		if is_instance_valid(hud):
@@ -3073,6 +3516,28 @@ func _get_multiplayer_player_nodes() -> Array[Node2D]:
 	if is_instance_valid(second_player):
 		nodes.append(second_player)
 	return nodes
+
+func _assign_enemy_target_candidates(enemy: Node2D) -> void:
+	if not is_instance_valid(enemy):
+		return
+	var alive_targets: Array = []
+	for player_node in _get_multiplayer_player_nodes():
+		if _is_player_alive(player_node):
+			alive_targets.append(player_node)
+	var targets := alive_targets
+	if targets.is_empty():
+		targets = _get_multiplayer_player_nodes()
+	if targets.is_empty():
+		return
+	enemy.set("target", targets[0])
+	if enemy.has_method("set_target_candidates"):
+		enemy.call("set_target_candidates", targets)
+
+func _refresh_all_enemy_target_candidates() -> void:
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		_assign_enemy_target_candidates(enemy_node as Node2D)
 
 func _count_alive_players() -> int:
 	var alive_count := 0
@@ -3113,6 +3578,7 @@ func _try_revive_fallen_multiplayer_players() -> void:
 			var peer_id := int(player_node.get("player_id"))
 			player_replication_service.broadcast_player_revived(peer_id, 1.0)
 	_sync_multiplayer_fallen_player_presence()
+	_refresh_all_enemy_target_candidates()
 	_bind_camera_to_local_player()
 
 func _apply_boon_to_player(boon_id: String) -> void:
@@ -3205,6 +3671,10 @@ func _begin_spawn_transport_if_idle(enemy: Node, duration: float) -> void:
 
 func _start_encounter_intro_grace() -> void:
 	encounter_intro_grace_active = true
+	_intro_grace_last_player_positions.clear()
+	for player_node in _get_multiplayer_player_nodes():
+		if player_node is CharacterBody2D:
+			_intro_grace_last_player_positions[player_node] = player_node.global_position
 	if is_instance_valid(player) and player is CharacterBody2D:
 		(player as CharacterBody2D).velocity = Vector2.ZERO
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
@@ -3215,32 +3685,100 @@ func _start_encounter_intro_grace() -> void:
 	_set_enemy_targets_passive(true)
 	hud.show_banner("Survey the arena", "")
 
+var _intro_grace_last_player_positions: Dictionary = {}  # Dictionary[Node, Vector2]
+
 func _update_encounter_intro_grace() -> bool:
 	if not encounter_intro_grace_active:
 		return false
-	if not is_instance_valid(player):
+	if not is_instance_valid(player) and not is_instance_valid(second_player):
 		return false
-	var move_input := Input.get_vector("move_left", "move_right", "move_up", "move_down")
-	var player_moving := move_input.length_squared() > 0.04 or (player as CharacterBody2D).velocity.length_squared() > 64.0
+	
+	var player_moving := false
+	
+	# Check if any player has moved since last frame
+	for player_node in _get_multiplayer_player_nodes():
+		if not _is_player_alive(player_node):
+			continue
+		if not (player_node is CharacterBody2D):
+			continue
+		
+		var last_pos := _intro_grace_last_player_positions.get(player_node, player_node.global_position) as Vector2
+		var current_pos := player_node.global_position
+		var moved_distance_sq := last_pos.distance_squared_to(current_pos)
+		_intro_grace_last_player_positions[player_node] = current_pos
+		
+		if moved_distance_sq > 16.0:  # ~4 pixel threshold
+			player_moving = true
+			break
+	
 	var player_attacking := Input.is_action_just_pressed("attack")
 	if player_moving or player_attacking:
-		encounter_intro_grace_active = false
-		_set_enemy_targets_passive(false)
-		hud.show_banner("Engage", "")
+		var detected_via := "movement" if player_moving else "attack"
+		print_debug("Grace: Movement detected via %s [peer:%d]" % [detected_via, get_tree().get_multiplayer().get_unique_id()])
+		_exit_intro_grace_networked()
 		return false
+	
 	return true
 
+func _exit_intro_grace_networked() -> void:
+	# Exit grace locally immediately
+	_exit_encounter_intro_grace()
+	# If multiplayer, notify host to ensure all peers exit grace
+	if is_multiplayer and not MultiplayerSessionManager.is_host():
+		_request_host_exit_grace.rpc_id(1)
+	elif is_multiplayer and MultiplayerSessionManager.is_host():
+		# Host notifies joiner
+		_notify_joiner_exit_grace.rpc()
+
+@rpc("reliable", "any_peer")
+func _request_host_exit_grace() -> void:
+	if not is_multiplayer or not MultiplayerSessionManager.is_host():
+		return
+	var sender_peer_id := get_tree().get_multiplayer().get_remote_sender_id()
+	if sender_peer_id <= 0:
+		return
+	# Host exits grace and notifies joiner
+	_exit_encounter_intro_grace()
+	_notify_joiner_exit_grace.rpc()
+
+@rpc("reliable", "authority")
+func _notify_joiner_exit_grace() -> void:
+	_exit_encounter_intro_grace()
+
+func _exit_encounter_intro_grace() -> void:
+	if not encounter_intro_grace_active:
+		return
+	encounter_intro_grace_active = false
+	var debug_msg := "Grace exit: grace deactivated"
+	if is_multiplayer:
+		debug_msg += " [peer:%d, host:%s]" % [get_tree().get_multiplayer().get_unique_id(), MultiplayerSessionManager.is_host()]
+	print_debug(debug_msg)
+	_set_enemy_targets_passive(false)
+	hud.show_banner("Engage", "")
+
 func _set_enemy_targets_passive(passive: bool) -> void:
+	var active_targets: Array = []
+	for player_node in _get_multiplayer_player_nodes():
+		if not _is_player_alive(player_node):
+			continue
+		active_targets.append(player_node)
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		if not (enemy_node is CharacterBody2D):
 			continue
 		var enemy := enemy_node as CharacterBody2D
 		if passive:
 			enemy.set("target", null)
+			if enemy.has_method("set_target_candidates"):
+				enemy.call("set_target_candidates", [])
 			if enemy is CharacterBody2D:
 				enemy.velocity = Vector2.ZERO
 		else:
-			enemy.set("target", player)
+			if not active_targets.is_empty():
+				enemy.set("target", active_targets[0])
+				if enemy.has_method("set_target_candidates"):
+					enemy.call("set_target_candidates", active_targets)
+			else:
+				enemy.set("target", player)
 			var cooldown_key := ""
 			if enemy.get("attack_cooldown_left") != null:
 				cooldown_key = "attack_cooldown_left"

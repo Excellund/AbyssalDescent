@@ -73,6 +73,7 @@ Use this skill when adding a new objective type or introducing a new objective-f
 
 - Escalate cadence gradually.
 - Avoid unconditional +spawn spikes when current enemy count is already high.
+- For multiplayer dense waves, prefer queued/staggered spawn draining over one-frame burst spawns.
 
 4. Bearing monotonicity
 
@@ -96,6 +97,7 @@ Use this skill when adding a new objective type or introducing a new objective-f
 4. Implement runtime loop
 
 - Implement begin/update/spawn for the objective in scripts/objective_runtime.gd.
+- If objective waves can emit many enemies at once, enqueue spawn intents and drain in fixed-size steps each update tick to smooth CPU and network spikes.
 
 5. Hook presentation
 

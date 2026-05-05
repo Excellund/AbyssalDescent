@@ -813,6 +813,68 @@ func _get_enrage_ratio() -> float:
 		return 1.0
 	return clampf((0.78 - health_ratio) / 0.58, 0.0, 1.0)
 
+func _get_custom_network_runtime_state() -> Dictionary:
+	return {
+		"boss_state": boss_state,
+		"state_time_left": state_time_left,
+		"cooldown_left": cooldown_left,
+		"active_attack": active_attack,
+		"locked_direction": locked_direction,
+		"telegraph_alpha": telegraph_alpha,
+		"last_attack": _last_attack,
+		"echo_dash_remaining": _echo_dash_remaining,
+		"echo_dash_retargeting": _echo_dash_retargeting,
+		"echo_dash_retarget_time_left": _echo_dash_retarget_time_left,
+		"echo_dash_reposition_only": _echo_dash_reposition_only,
+		"attack_afterglow_time_left": attack_afterglow_time_left,
+		"impact_burst_time_left": impact_burst_time_left,
+		"last_attack_for_fx": last_attack_for_fx,
+		"polar_shift_is_pull": _polar_shift_is_pull,
+		"polar_shift_pull_damage_pending": _polar_shift_pull_damage_pending,
+		"polar_shift_pull_damage_delay_left": _polar_shift_pull_damage_delay_left,
+		"polar_shift_pull_afterglow_left": _polar_shift_pull_afterglow_left
+	}
+
+func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
+	if custom_state.is_empty():
+		return
+	if custom_state.has("boss_state"):
+		boss_state = int(custom_state.get("boss_state", boss_state))
+	if custom_state.has("state_time_left"):
+		state_time_left = float(custom_state.get("state_time_left", state_time_left))
+	if custom_state.has("cooldown_left"):
+		cooldown_left = float(custom_state.get("cooldown_left", cooldown_left))
+	if custom_state.has("active_attack"):
+		active_attack = int(custom_state.get("active_attack", active_attack))
+	if custom_state.has("locked_direction"):
+		locked_direction = custom_state.get("locked_direction", locked_direction) as Vector2
+	if custom_state.has("telegraph_alpha"):
+		telegraph_alpha = float(custom_state.get("telegraph_alpha", telegraph_alpha))
+	if custom_state.has("last_attack"):
+		_last_attack = int(custom_state.get("last_attack", _last_attack))
+	if custom_state.has("echo_dash_remaining"):
+		_echo_dash_remaining = int(custom_state.get("echo_dash_remaining", _echo_dash_remaining))
+	if custom_state.has("echo_dash_retargeting"):
+		_echo_dash_retargeting = bool(custom_state.get("echo_dash_retargeting", _echo_dash_retargeting))
+	if custom_state.has("echo_dash_retarget_time_left"):
+		_echo_dash_retarget_time_left = float(custom_state.get("echo_dash_retarget_time_left", _echo_dash_retarget_time_left))
+	if custom_state.has("echo_dash_reposition_only"):
+		_echo_dash_reposition_only = bool(custom_state.get("echo_dash_reposition_only", _echo_dash_reposition_only))
+	if custom_state.has("attack_afterglow_time_left"):
+		attack_afterglow_time_left = float(custom_state.get("attack_afterglow_time_left", attack_afterglow_time_left))
+	if custom_state.has("impact_burst_time_left"):
+		impact_burst_time_left = float(custom_state.get("impact_burst_time_left", impact_burst_time_left))
+	if custom_state.has("last_attack_for_fx"):
+		last_attack_for_fx = int(custom_state.get("last_attack_for_fx", last_attack_for_fx))
+	if custom_state.has("polar_shift_is_pull"):
+		_polar_shift_is_pull = bool(custom_state.get("polar_shift_is_pull", _polar_shift_is_pull))
+	if custom_state.has("polar_shift_pull_damage_pending"):
+		_polar_shift_pull_damage_pending = bool(custom_state.get("polar_shift_pull_damage_pending", _polar_shift_pull_damage_pending))
+	if custom_state.has("polar_shift_pull_damage_delay_left"):
+		_polar_shift_pull_damage_delay_left = float(custom_state.get("polar_shift_pull_damage_delay_left", _polar_shift_pull_damage_delay_left))
+	if custom_state.has("polar_shift_pull_afterglow_left"):
+		_polar_shift_pull_afterglow_left = float(custom_state.get("polar_shift_pull_afterglow_left", _polar_shift_pull_afterglow_left))
+
 func _draw() -> void:
 	var facing := visual_facing_direction if visual_facing_direction.length_squared() > 0.000001 else Vector2.RIGHT
 	if is_spawn_transporting():

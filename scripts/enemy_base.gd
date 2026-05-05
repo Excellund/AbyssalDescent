@@ -82,6 +82,7 @@ const COLOR_BOSS_CLEAVE_OUTLINE := COLOR_PALETTE.COLOR_BOSS_CLEAVE_OUTLINE
 @export var health_recent_damage_catchup_ratio_per_sec: float = 0.9
 @export var crowd_separation_radius: float = 42.0
 @export var crowd_separation_strength: float = 68.0
+@export var crowd_separation_recompute_interval_sec: float = 0.08
 @export var edge_escape_phase_duration: float = 0.32
 @export var edge_escape_nudge_speed: float = 340.0
 @export var network_runtime_direction_blend: float = 0.58
@@ -121,6 +122,8 @@ var spawn_transport_duration: float = 0.0
 var spawn_transport_seed: float = 0.0
 var _edge_escape_phase_left: float = 0.0
 var _ignoring_target_collision: bool = false
+var _crowd_separation_recompute_left: float = 0.0
+var _crowd_separation_cached_impulse: Vector2 = Vector2.ZERO
 var network_simulation_enabled: bool = true
 
 const NETWORK_ATTACK_STATE_KEYWORDS: PackedStringArray = [
@@ -154,6 +157,7 @@ func _ready() -> void:
 	motion_mode = CharacterBody2D.MOTION_MODE_FLOATING
 	platform_floor_layers = 0
 	platform_wall_layers = 0
+	_crowd_separation_recompute_left = fmod(float(get_instance_id()) * 0.0017, maxf(0.001, crowd_separation_recompute_interval_sec))
 	add_to_group("enemies")
 	health_changed.connect(_update_health_bar)
 	_create_health_bar()
@@ -446,7 +450,22 @@ func take_damage(amount: int, _damage_context: Dictionary = {}) -> void:
 
 func _apply_crowd_separation(delta: float) -> void:
 	if crowd_separation_radius <= 0.0 or crowd_separation_strength <= 0.0:
+		_crowd_separation_cached_impulse = Vector2.ZERO
+		_crowd_separation_recompute_left = 0.0
 		return
+	var recompute_interval := maxf(0.0, crowd_separation_recompute_interval_sec)
+	if recompute_interval <= 0.0:
+		_crowd_separation_cached_impulse = _compute_crowd_separation_impulse()
+	else:
+		_crowd_separation_recompute_left -= delta
+		if _crowd_separation_recompute_left <= 0.0:
+			_crowd_separation_recompute_left = recompute_interval
+			_crowd_separation_cached_impulse = _compute_crowd_separation_impulse()
+	if _crowd_separation_cached_impulse.length_squared() <= 0.000001:
+		return
+	velocity = velocity.move_toward(velocity + _crowd_separation_cached_impulse, crowd_separation_strength * delta)
+
+func _compute_crowd_separation_impulse() -> Vector2:
 	var total_push := Vector2.ZERO
 	for enemy in get_tree().get_nodes_in_group("enemies"):
 		if enemy == self or not (enemy is Node2D):
@@ -463,10 +482,8 @@ func _apply_crowd_separation(delta: float) -> void:
 		var weight := 1.0 - (distance / crowd_separation_radius)
 		total_push += (offset / distance) * weight
 	if total_push.length_squared() <= 0.000001:
-		return
-	# Apply separation to velocity rather than warping position after movement
-	var separation_impulse := total_push.normalized() * crowd_separation_strength
-	velocity = velocity.move_toward(velocity + separation_impulse, crowd_separation_strength * delta)
+		return Vector2.ZERO
+	return total_push.normalized() * crowd_separation_strength
 
 func _maybe_trigger_edge_escape(wall_pressure: float, inward_bias: Vector2, to_target: Vector2, edge_stall_time: float) -> void:
 	if edge_escape_phase_duration <= 0.0 or edge_escape_nudge_speed <= 0.0:

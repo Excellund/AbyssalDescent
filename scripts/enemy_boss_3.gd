@@ -468,6 +468,71 @@ func _get_enrage_ratio() -> float:
 		return 1.0
 	return clampf((0.72 - health_ratio) / 0.54, 0.0, 1.0)
 
+func _get_custom_network_runtime_state() -> Dictionary:
+	return {
+		"boss_state": boss_state,
+		"state_time_left": state_time_left,
+		"cooldown_left": cooldown_left,
+		"active_attack": active_attack,
+		"locked_direction": locked_direction,
+		"telegraph_alpha": telegraph_alpha,
+		"null_ring_center": _locked_null_ring_center,
+		"null_ring_pull_timer": _null_ring_pull_timer,
+		"null_ring_pull_fx_time_left": _null_ring_pull_fx_time_left,
+		"null_ring_pull_fx_center": _null_ring_pull_fx_center,
+		"echo_cross_angle": _echo_cross_angle,
+		"echo_cross_smoothed_dir": _echo_cross_smoothed_dir,
+		"last_attack": _last_attack,
+		"attack_afterglow_time_left": attack_afterglow_time_left,
+		"impact_burst_time_left": impact_burst_time_left,
+		"last_attack_for_fx": last_attack_for_fx,
+		"hit_flash_pos": _hit_flash_pos,
+		"hit_flash_time_left": hit_flash_time_left,
+		"hit_flash_attack": hit_flash_attack
+	}
+
+func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
+	if custom_state.is_empty():
+		return
+	if custom_state.has("boss_state"):
+		boss_state = int(custom_state.get("boss_state", boss_state))
+	if custom_state.has("state_time_left"):
+		state_time_left = float(custom_state.get("state_time_left", state_time_left))
+	if custom_state.has("cooldown_left"):
+		cooldown_left = float(custom_state.get("cooldown_left", cooldown_left))
+	if custom_state.has("active_attack"):
+		active_attack = int(custom_state.get("active_attack", active_attack))
+	if custom_state.has("locked_direction"):
+		locked_direction = custom_state.get("locked_direction", locked_direction) as Vector2
+	if custom_state.has("telegraph_alpha"):
+		telegraph_alpha = float(custom_state.get("telegraph_alpha", telegraph_alpha))
+	if custom_state.has("null_ring_center"):
+		_locked_null_ring_center = custom_state.get("null_ring_center", _locked_null_ring_center) as Vector2
+	if custom_state.has("null_ring_pull_timer"):
+		_null_ring_pull_timer = float(custom_state.get("null_ring_pull_timer", _null_ring_pull_timer))
+	if custom_state.has("null_ring_pull_fx_time_left"):
+		_null_ring_pull_fx_time_left = float(custom_state.get("null_ring_pull_fx_time_left", _null_ring_pull_fx_time_left))
+	if custom_state.has("null_ring_pull_fx_center"):
+		_null_ring_pull_fx_center = custom_state.get("null_ring_pull_fx_center", _null_ring_pull_fx_center) as Vector2
+	if custom_state.has("echo_cross_angle"):
+		_echo_cross_angle = float(custom_state.get("echo_cross_angle", _echo_cross_angle))
+	if custom_state.has("echo_cross_smoothed_dir"):
+		_echo_cross_smoothed_dir = custom_state.get("echo_cross_smoothed_dir", _echo_cross_smoothed_dir) as Vector2
+	if custom_state.has("last_attack"):
+		_last_attack = int(custom_state.get("last_attack", _last_attack))
+	if custom_state.has("attack_afterglow_time_left"):
+		attack_afterglow_time_left = float(custom_state.get("attack_afterglow_time_left", attack_afterglow_time_left))
+	if custom_state.has("impact_burst_time_left"):
+		impact_burst_time_left = float(custom_state.get("impact_burst_time_left", impact_burst_time_left))
+	if custom_state.has("last_attack_for_fx"):
+		last_attack_for_fx = int(custom_state.get("last_attack_for_fx", last_attack_for_fx))
+	if custom_state.has("hit_flash_pos"):
+		_hit_flash_pos = custom_state.get("hit_flash_pos", _hit_flash_pos) as Vector2
+	if custom_state.has("hit_flash_time_left"):
+		hit_flash_time_left = float(custom_state.get("hit_flash_time_left", hit_flash_time_left))
+	if custom_state.has("hit_flash_attack"):
+		hit_flash_attack = int(custom_state.get("hit_flash_attack", hit_flash_attack))
+
 func _draw() -> void:
 	var facing := visual_facing_direction if visual_facing_direction.length_squared() > 0.000001 else Vector2.RIGHT
 	if is_spawn_transporting():

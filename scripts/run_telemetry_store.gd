@@ -40,13 +40,21 @@ static func load_store() -> Dictionary:
 	var file := FileAccess.open(TELEMETRY_SAVE_PATH, FileAccess.READ)
 	if file == null:
 		return _default_store()
+	if file.get_length() < 4:
+		file.close()
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(TELEMETRY_SAVE_PATH))
+		return _default_store()
 	var payload_raw: Variant = file.get_var()
+	file.close()
 	if not (payload_raw is Dictionary):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(TELEMETRY_SAVE_PATH))
 		return _default_store()
 	var payload := payload_raw as Dictionary
 	if int(payload.get("version", -1)) != TELEMETRY_VERSION:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(TELEMETRY_SAVE_PATH))
 		return _default_store()
 	if not (payload.get("runs", []) is Array):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(TELEMETRY_SAVE_PATH))
 		return _default_store()
 	return payload
 

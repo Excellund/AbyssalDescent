@@ -1,7 +1,11 @@
 extends RefCounted
 
 func tick(objective_manager: Node, objective_runtime: Node, delta: float, grace_active: bool) -> Dictionary:
-	if not grace_active and is_instance_valid(objective_runtime):
+	var active_kind := ""
+	if is_instance_valid(objective_manager):
+		active_kind = String(objective_manager.active_objective_kind)
+	var should_tick_objective := not grace_active or active_kind == "hold_the_line"
+	if should_tick_objective and is_instance_valid(objective_runtime):
 		objective_runtime.update_objective_state(delta)
 	if is_instance_valid(objective_runtime):
 		objective_runtime.update_priority_target_marker(delta)
@@ -11,7 +15,6 @@ func tick(objective_manager: Node, objective_runtime: Node, delta: float, grace_
 		if objective_manager.has_method("should_draw_control_overlay"):
 			should_redraw = bool(objective_manager.should_draw_control_overlay())
 		else:
-			var active_kind := String(objective_manager.active_objective_kind)
 			should_redraw = active_kind == "hold_the_line" or float(objective_manager.control_radius) > 0.0
 
 	return {

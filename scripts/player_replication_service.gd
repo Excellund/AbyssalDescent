@@ -6,6 +6,8 @@ extends Node
 var position_sync_interval_sec: float = 0.05  ## ~20 Hz position updates
 var position_broadcast_threshold_px: float = 2.0  ## Broadcast low-latency movement updates
 var rotation_broadcast_threshold_rad: float = deg_to_rad(2.0)
+var position_transmit_quantum_px: float = 0.5
+var rotation_transmit_quantum_rad: float = deg_to_rad(2.0)
 var remote_position_lerp_speed: float = 18.0
 var remote_rotation_lerp_speed: float = 20.0
 var remote_position_snap_distance_px: float = 180.0
@@ -98,16 +100,23 @@ func _sync_all_player_positions() -> void:
 			var player_body := player_node as Node2D
 			if player_body != null:
 				var current_pos: Vector2 = player_body.position
+				var position_quantum := maxf(0.0001, position_transmit_quantum_px)
+				var quantized_pos := Vector2(
+					snappedf(current_pos.x, position_quantum),
+					snappedf(current_pos.y, position_quantum)
+				)
 				var last_pos: Vector2 = _last_sync_positions.get(peer_id, Vector2.ZERO)
-				var distance := current_pos.distance_to(last_pos)
+				var distance := quantized_pos.distance_to(last_pos)
 				var current_rotation := _get_player_facing_angle(player_node)
-				var last_rotation := float(_last_sync_rotations.get(peer_id, current_rotation))
-				var rotation_delta := absf(wrapf(current_rotation - last_rotation, -PI, PI))
+				var rotation_quantum := maxf(0.0001, rotation_transmit_quantum_rad)
+				var quantized_rotation := snappedf(current_rotation, rotation_quantum)
+				var last_rotation := float(_last_sync_rotations.get(peer_id, quantized_rotation))
+				var rotation_delta := absf(wrapf(quantized_rotation - last_rotation, -PI, PI))
 				
 				if distance >= position_broadcast_threshold_px or rotation_delta >= rotation_broadcast_threshold_rad:
-					_last_sync_positions[peer_id] = current_pos
-					_last_sync_rotations[peer_id] = current_rotation
-					_sync_player_transform.rpc(peer_id, current_pos, current_rotation)
+					_last_sync_positions[peer_id] = quantized_pos
+					_last_sync_rotations[peer_id] = quantized_rotation
+					_sync_player_transform.rpc(peer_id, quantized_pos, quantized_rotation)
 
 
 ## RPC: Broadcast a player's transform to all peers.
