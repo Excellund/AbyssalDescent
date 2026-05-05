@@ -1402,13 +1402,13 @@ func _on_room_cleared() -> void:
 		return
 	var reward_mode: int = int(outcome_state.get("open_reward_mode", ENUMS.RewardMode.NONE))
 	if reward_mode == ENUMS.RewardMode.BOON:
-		_open_boon_selection("Choose Boon Reward", false, ENUMS.RewardMode.BOON, {}, "", current_character_id)
+		_open_networked_reward_selection("Choose Boon Reward", ENUMS.RewardMode.BOON)
 		return
 	if reward_mode == ENUMS.RewardMode.MISSION:
-		_open_boon_selection("Choose Mission Reward", false, ENUMS.RewardMode.MISSION, current_room_player_mutator, "", current_character_id)
+		_open_networked_reward_selection("Choose Mission Reward", ENUMS.RewardMode.MISSION, current_room_player_mutator)
 		return
 	if reward_mode == ENUMS.RewardMode.ARCANA:
-		_open_boon_selection("Choose Arcana", false, ENUMS.RewardMode.ARCANA, {}, "", current_character_id)
+		_open_networked_reward_selection("Choose Arcana", ENUMS.RewardMode.ARCANA)
 		return
 	if bool(outcome_state.get("spawn_doors", false)):
 		_spawn_door_options()
@@ -1428,7 +1428,7 @@ func _finish_first_boss_clear() -> void:
 	boss_reward_pending = true
 	hud.show_banner("Warden Defeated", "")
 	var epitaph: String = power_registry_instance.get_boss_epitaph("warden", current_character_id)
-	_open_boon_selection("Claim Warden's Power", false, ENUMS.RewardMode.BOSS, {}, epitaph, current_character_id)
+	_open_networked_reward_selection("Claim Warden's Power", ENUMS.RewardMode.BOSS, {}, epitaph)
 
 func _finish_second_boss_clear() -> void:
 	in_second_boss_room = false
@@ -1444,7 +1444,7 @@ func _finish_second_boss_clear() -> void:
 	boss_reward_pending = true
 	hud.show_banner("Sovereign Defeated", "")
 	var epitaph: String = power_registry_instance.get_boss_epitaph("sovereign", current_character_id)
-	_open_boon_selection("Claim Sovereign's Power", false, ENUMS.RewardMode.BOSS, {}, epitaph, current_character_id)
+	_open_networked_reward_selection("Claim Sovereign's Power", ENUMS.RewardMode.BOSS, {}, epitaph)
 
 func _finish_third_boss_clear() -> void:
 	in_third_boss_room = false
@@ -2390,6 +2390,17 @@ func _open_boon_selection(title: String, is_initial: bool, mode: int = ENUMS.Rew
 		_begin_reward_phase_sync(is_initial, mode)
 		reward_selection_ui.open_selection(title, is_initial, mode, power_registry_instance, player, rng, player_mutator, epitaph, character_id)
 		_set_combat_paused(true)
+
+func _open_networked_reward_selection(title: String, mode: int, player_mutator: Dictionary = {}, epitaph: String = "") -> void:
+	if is_multiplayer and MultiplayerSessionManager.is_host():
+		_sync_open_reward_selection.rpc(title, false, mode, player_mutator, epitaph)
+	_open_boon_selection(title, false, mode, player_mutator, epitaph, current_character_id)
+
+@rpc("reliable", "authority")
+func _sync_open_reward_selection(title: String, is_initial: bool, mode: int, player_mutator: Dictionary = {}, epitaph: String = "") -> void:
+	if not is_multiplayer or MultiplayerSessionManager.is_host():
+		return
+	_open_boon_selection(title, is_initial, mode, player_mutator, epitaph, current_character_id)
 
 func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> void:
 	_record_reward_choice(choice, mode, is_initial)
