@@ -612,7 +612,7 @@ func _setup_enemy_spawner_system() -> void:
 		"spectre": ENEMY_SPECTRE_SCRIPT,
 		"pyre": ENEMY_PYRE_SCRIPT,
 		"tether": ENEMY_TETHER_SCRIPT
-	}, Callable(self, "_on_room_enemy_died"))
+	}, Callable(self, "_on_room_enemy_died"), Callable(self, "_get_multiplayer_player_nodes"))
 
 func _setup_ui_phase() -> void:
 	hud = WORLD_HUD_SCRIPT.new()

@@ -86,6 +86,7 @@ const COLOR_BOSS_CLEAVE_OUTLINE := COLOR_PALETTE.COLOR_BOSS_CLEAVE_OUTLINE
 @export var edge_escape_nudge_speed: float = 340.0
 
 var target: Node2D
+var target_candidates: Array = []
 var health_bar: ProgressBar
 var health_bar_recent_damage_overlay: Panel
 var health_bar_threshold_overlay: Control
@@ -135,6 +136,7 @@ func _ready() -> void:
 	queue_redraw()
 
 func _physics_process(delta: float) -> void:
+	_refresh_target()
 	_update_attack_animation(delta)
 	_update_recent_damage_overlay(delta)
 	_update_dread_resonance_visual(delta)
@@ -150,6 +152,53 @@ func _physics_process(delta: float) -> void:
 	_apply_crowd_separation(delta)
 	_process_behavior(delta)
 	_update_visual_facing_direction()
+
+
+func set_target_candidates(candidates: Array) -> void:
+	target_candidates.clear()
+	for candidate in candidates:
+		if candidate is Node2D:
+			target_candidates.append(candidate)
+	_refresh_target()
+
+
+func _refresh_target() -> void:
+	var best_target: Node2D = null
+	var best_dist_sq := INF
+	if target_candidates.is_empty():
+		if _is_target_valid(target):
+			return
+		_set_target_node(null)
+		return
+	for candidate_variant in target_candidates:
+		if not (candidate_variant is Node2D):
+			continue
+		var candidate := candidate_variant as Node2D
+		if not _is_target_valid(candidate):
+			continue
+		var dist_sq := global_position.distance_squared_to(candidate.global_position)
+		if dist_sq < best_dist_sq:
+			best_dist_sq = dist_sq
+			best_target = candidate
+	if best_target == null and _is_target_valid(target):
+		best_target = target
+	_set_target_node(best_target)
+
+
+func _is_target_valid(candidate: Node2D) -> bool:
+	if not is_instance_valid(candidate):
+		return false
+	if candidate.has_method("is_dead") and bool(candidate.call("is_dead")):
+		return false
+	return true
+
+
+func _set_target_node(next_target: Node2D) -> void:
+	if target == next_target:
+		return
+	if _ignoring_target_collision:
+		_set_target_collision_ignored(false)
+	target = next_target
 
 
 func set_network_simulation_enabled(enabled: bool) -> void:

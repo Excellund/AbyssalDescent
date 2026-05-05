@@ -118,6 +118,7 @@ const ENEMY_SPAWN_ORDER: Array[String] = ["chaser", "charger", "archer", "shield
 
 var world_root: Node2D
 var player: Node2D
+var player_targets_provider: Callable
 var rng: RandomNumberGenerator
 var on_enemy_died: Callable
 
@@ -129,9 +130,10 @@ var spawn_transport_duration: float = 0.36
 var current_room_enemy_mutator: Dictionary = {}
 var active_temporary_enemy_mutators: Array[Dictionary] = []
 
-func initialize(world_root_node: Node2D, player_node: Node2D, rng_instance: RandomNumberGenerator, script_map: Dictionary, enemy_died_callback: Callable) -> void:
+func initialize(world_root_node: Node2D, player_node: Node2D, rng_instance: RandomNumberGenerator, script_map: Dictionary, enemy_died_callback: Callable, player_targets_provider_callable: Callable = Callable()) -> void:
 	world_root = world_root_node
 	player = player_node
+	player_targets_provider = player_targets_provider_callable
 	rng = rng_instance
 	scripts = script_map
 	on_enemy_died = enemy_died_callback
@@ -263,7 +265,7 @@ func spawn_enemy_from_sync(enemy_type: String, world_position: Vector2) -> Chara
 	enemy.global_position = world_position
 	world_root.add_child(enemy)
 	enemy.begin_spawn_transport(spawn_transport_duration)
-	enemy.set("target", player)
+	_assign_enemy_targets(enemy)
 	if enemy.get("arena_size") != null:
 		enemy.set("arena_size", current_room_size)
 	if enemy.has_signal("died") and on_enemy_died.is_valid():
@@ -291,13 +293,35 @@ func _spawn_enemy_in_current_room(enemy_script: Script, min_player_distance: flo
 	enemy.global_position = _pick_spawn_position_in_current_room(min_player_distance)
 	world_root.add_child(enemy)
 	enemy.begin_spawn_transport(spawn_transport_duration)
-	enemy.set("target", player)
+	_assign_enemy_targets(enemy)
 	if enemy.get("arena_size") != null:
 		enemy.set("arena_size", current_room_size)
 	if enemy.has_signal("died") and on_enemy_died.is_valid():
 		var captured := enemy
 		enemy.died.connect(func(): on_enemy_died.call(captured.global_position if is_instance_valid(captured) else Vector2.ZERO))
 	return enemy
+
+func _resolve_target_players() -> Array:
+	var targets: Array = []
+	if player_targets_provider.is_valid():
+		var provider_result: Variant = player_targets_provider.call()
+		if provider_result is Array:
+			for candidate in provider_result:
+				if candidate is Node2D and is_instance_valid(candidate):
+					targets.append(candidate)
+	if targets.is_empty() and is_instance_valid(player):
+		targets.append(player)
+	return targets
+
+func _assign_enemy_targets(enemy: CharacterBody2D) -> void:
+	if not is_instance_valid(enemy):
+		return
+	var targets := _resolve_target_players()
+	if targets.is_empty():
+		return
+	enemy.set("target", targets[0])
+	if enemy.has_method("set_target_candidates"):
+		enemy.call("set_target_candidates", targets)
 
 func _enemy_script_key(enemy_script: Script) -> String:
 	for enemy_key in scripts.keys():
@@ -395,13 +419,24 @@ func _pick_spawn_position_in_current_room(min_player_distance: float = -1.0, min
 		return Vector2.ZERO
 	var half := current_room_size * 0.5 - Vector2.ONE * spawn_padding
 	var required_player_distance := spawn_safe_radius if min_player_distance < 0.0 else maxf(spawn_safe_radius, min_player_distance)
+	var target_players := _resolve_target_players()
 	var candidate := Vector2.ZERO
 	for _try in range(60):
 		candidate = Vector2(
 			rng.randf_range(-half.x, half.x),
 			rng.randf_range(-half.y, half.y)
 		)
-		if is_instance_valid(player) and candidate.distance_to(player.global_position) < required_player_distance:
+		var too_close_to_player := false
+		for target_player_variant in target_players:
+			if not (target_player_variant is Node2D):
+				continue
+			var target_player := target_player_variant as Node2D
+			if not is_instance_valid(target_player):
+				continue
+			if candidate.distance_to(target_player.global_position) < required_player_distance:
+				too_close_to_player = true
+				break
+		if too_close_to_player:
 			continue
 		var too_close_to_enemy := false
 		if is_instance_valid(world_root):
