@@ -414,6 +414,11 @@ func _start_game(host_peer_id: int, session_identifier: String, difficulty_tier:
 	for peer_id in peer_state:
 		var char_id: String = peer_state[peer_id].get("character_id", "bastion")
 		RunContext.set_peer_character_selection(peer_id, char_id)
+	var local_char_id := String(peer_state.get(local_peer_id, {}).get("character_id", local_character_id)).strip_edges().to_lower()
+	if local_char_id.is_empty():
+		local_char_id = "bastion"
+	local_character_id = local_char_id
+	RunContext.set_selected_character_id(local_char_id)
 	get_tree().change_scene_to_file("res://scenes/Main.tscn")
 
 

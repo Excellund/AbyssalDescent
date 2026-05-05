@@ -31,6 +31,9 @@ func _process(delta: float) -> void:
 		return
 	if not bool(multiplayer_session_manager.is_session_connected()):
 		return
+	var current_local_peer_id := int(multiplayer_session_manager.local_peer_id)
+	if current_local_peer_id > 0 and current_local_peer_id != local_peer_id:
+		local_peer_id = current_local_peer_id
 	
 	_last_sync_time += delta
 	if _last_sync_time >= position_sync_interval_sec:

@@ -318,6 +318,14 @@ func _setup_multiplayer_second_player() -> void:
 	## Set multiplayer identification
 	var peer_ids: Array = multiplayer_session_manager.get_peer_ids()
 	var local_peer: int = multiplayer_session_manager.local_peer_id
+	var active_multiplayer := get_tree().get_multiplayer()
+	if active_multiplayer != null:
+		var active_peer_id := int(active_multiplayer.get_unique_id())
+		if active_peer_id > 0:
+			local_peer = active_peer_id
+			if multiplayer_session_manager.local_peer_id != active_peer_id:
+				print_debug("[Multiplayer] Correcting local peer id from %d to %d" % [multiplayer_session_manager.local_peer_id, active_peer_id])
+				multiplayer_session_manager.local_peer_id = active_peer_id
 	var remote_peer: int = 0
 	for peer_id in peer_ids:
 		if peer_id != local_peer:
@@ -348,7 +356,7 @@ func _setup_multiplayer_second_player() -> void:
 	## Position second player offset from first player
 	second_player.position = player.position + Vector2(80.0, 0.0)
 	second_player.player_id = remote_peer
-	second_player.is_local_player = false
+	second_player.is_local_player = remote_peer == local_peer
 	if run_context != null and second_player.has_method("apply_character_package"):
 		var remote_character_id := String(run_context.get_peer_character_selection(remote_peer)).strip_edges().to_lower()
 		var remote_character_data: Dictionary = CHARACTER_REGISTRY.get_character(remote_character_id)
@@ -409,6 +417,14 @@ func _setup_encounter_profile_builder_system() -> void:
 	if run_context != null:
 		difficulty_tier = int(run_context.get_current_difficulty_tier())
 		current_character_id = String(run_context.get_selected_character_id()).strip_edges().to_lower()
+		if is_multiplayer:
+			var multiplayer_session_manager := get_node_or_null("/root/MultiplayerSessionManager")
+			var local_peer_id := 0
+			if multiplayer_session_manager != null:
+				local_peer_id = int(multiplayer_session_manager.local_peer_id)
+			var mapped_character_id := String(run_context.get_peer_character_selection(local_peer_id)).strip_edges().to_lower()
+			if not mapped_character_id.is_empty():
+				current_character_id = mapped_character_id
 		should_apply_difficulty = true
 	var debug_bearing_tier := _debug_bearing_override_tier()
 	if debug_bearing_tier >= 0:

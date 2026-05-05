@@ -457,7 +457,7 @@ func _physics_process(delta: float) -> void:
 		queue_redraw()
 
 func _read_movement_direction() -> Vector2:
-	if not is_local_player:
+	if not _is_local_control_owner():
 		return Vector2.ZERO  ## Remote players don't process input
 	return Input.get_vector("move_left", "move_right", "move_up", "move_down")
 
@@ -488,7 +488,7 @@ func _update_execution_edge_proc_display(delta: float) -> void:
 		queue_redraw()
 
 func _try_start_dash(direction: Vector2) -> void:
-	if not is_local_player:
+	if not _is_local_control_owner():
 		return  ## Remote players don't process input
 	if _is_attack_locked():
 		return
@@ -517,7 +517,7 @@ func _try_start_dash(direction: Vector2) -> void:
 		sigil_burst_ready = true
 
 func _try_attack_input() -> void:
-	if not is_local_player:
+	if not _is_local_control_owner():
 		return  ## Remote players don't process input
 	if not Input.is_action_just_pressed("attack"):
 		return
@@ -2086,6 +2086,20 @@ func _on_health_state_died() -> void:
 		var player_replication_service = get_node_or_null("/root/PlayerReplicationService")
 		if multiplayer_session_manager != null and bool(multiplayer_session_manager.is_session_connected()) and player_replication_service != null:
 			player_replication_service.broadcast_player_died(player_id)
+
+
+func _is_local_control_owner() -> bool:
+	if not is_local_player:
+		return false
+	if player_id <= 0:
+		return true
+	var multiplayer_api := get_tree().get_multiplayer()
+	if multiplayer_api == null:
+		return true
+	var active_peer_id := int(multiplayer_api.get_unique_id())
+	if active_peer_id <= 0:
+		return true
+	return active_peer_id == player_id
 
 func _get_current_health() -> int:
 	if health_state == null:
