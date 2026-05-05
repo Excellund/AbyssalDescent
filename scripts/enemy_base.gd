@@ -119,6 +119,7 @@ var spawn_transport_duration: float = 0.0
 var spawn_transport_seed: float = 0.0
 var _edge_escape_phase_left: float = 0.0
 var _ignoring_target_collision: bool = false
+var network_simulation_enabled: bool = true
 
 func _ready() -> void:
 	motion_mode = CharacterBody2D.MOTION_MODE_FLOATING
@@ -142,9 +143,38 @@ func _physics_process(delta: float) -> void:
 		velocity = Vector2.ZERO
 		move_and_slide()
 		return
+	if not network_simulation_enabled:
+		velocity = Vector2.ZERO
+		_update_visual_facing_direction()
+		return
 	_apply_crowd_separation(delta)
 	_process_behavior(delta)
 	_update_visual_facing_direction()
+
+
+func set_network_simulation_enabled(enabled: bool) -> void:
+	network_simulation_enabled = enabled
+	if not enabled:
+		velocity = Vector2.ZERO
+
+
+func get_network_facing_angle() -> float:
+	var facing := visual_facing_direction
+	if facing.length_squared() <= 0.000001:
+		facing = Vector2.LEFT
+	return facing.angle()
+
+
+func set_network_facing_angle(facing_radians: float) -> void:
+	var target_facing := Vector2.RIGHT.rotated(facing_radians)
+	if target_facing.length_squared() <= 0.000001:
+		return
+	if visual_facing_direction.length_squared() <= 0.000001:
+		visual_facing_direction = target_facing.normalized()
+	else:
+		var blended_facing := visual_facing_direction.slerp(target_facing.normalized(), 0.65)
+		visual_facing_direction = blended_facing.normalized() if blended_facing.length_squared() > 0.000001 else target_facing.normalized()
+	queue_redraw()
 
 func _update_spawn_transport(delta: float) -> void:
 	if spawn_transport_time_left <= 0.0:

@@ -206,6 +206,11 @@ var enemy_state_sync_interval_sec: float = 0.08
 var _enemy_state_sync_elapsed: float = 0.0
 var _next_network_enemy_id: int = 1
 var _network_enemy_nodes: Dictionary = {}  ## enemy_id -> Node2D
+var _enemy_target_positions: Dictionary = {}  ## enemy_id -> target global position
+var _enemy_target_facing_angles: Dictionary = {}  ## enemy_id -> target facing angle
+var enemy_remote_position_lerp_speed: float = 14.0
+var enemy_remote_rotation_lerp_speed: float = 18.0
+var enemy_remote_snap_distance_px: float = 180.0
 
 var second_player: Node2D = null
 func _apply_debug_settings_from_node() -> void:
@@ -1104,6 +1109,7 @@ func _process(delta: float) -> void:
 		_update_multiplayer_camera()
 	if is_multiplayer:
 		_sync_enemy_state_tick(delta)
+		_interpolate_remote_enemy_states(delta)
 	_refresh_frame_ui()
 
 func _handle_modal_frame(delta: float) -> bool:
@@ -2028,13 +2034,19 @@ func _sync_enemy_state_tick(delta: float) -> void:
 		var enemy_health := 0.0
 		if enemy.has_method("get_current_health"):
 			enemy_health = float(enemy.call("get_current_health"))
+		var enemy_facing_angle := enemy.global_rotation
+		if enemy.has_method("get_network_facing_angle"):
+			enemy_facing_angle = float(enemy.call("get_network_facing_angle"))
 		synced_states.append({
 			"enemy_id": enemy_id,
 			"position": enemy.global_position,
+			"facing_angle": enemy_facing_angle,
 			"health": enemy_health
 		})
 	for stale_id in stale_ids:
 		_network_enemy_nodes.erase(int(stale_id))
+		_enemy_target_positions.erase(int(stale_id))
+		_enemy_target_facing_angles.erase(int(stale_id))
 	_sync_enemy_states.rpc(synced_states, active_room_enemy_count)
 
 func _register_network_enemy(enemy: Node2D, forced_enemy_id: int = -1) -> int:
@@ -2048,12 +2060,21 @@ func _register_network_enemy(enemy: Node2D, forced_enemy_id: int = -1) -> int:
 		_next_network_enemy_id = maxi(_next_network_enemy_id, enemy_id + 1)
 	enemy.set_meta("network_enemy_id", enemy_id)
 	_network_enemy_nodes[enemy_id] = enemy
+	_enemy_target_positions[enemy_id] = enemy.global_position
+	var enemy_facing_angle := enemy.global_rotation
+	if enemy.has_method("get_network_facing_angle"):
+		enemy_facing_angle = float(enemy.call("get_network_facing_angle"))
+	_enemy_target_facing_angles[enemy_id] = enemy_facing_angle
+	if is_multiplayer and not MultiplayerSessionManager.is_host() and enemy.has_method("set_network_simulation_enabled"):
+		enemy.call("set_network_simulation_enabled", false)
 	if enemy.has_signal("died") and not enemy.died.is_connected(Callable(self, "_on_network_enemy_died").bind(enemy_id)):
 		enemy.died.connect(Callable(self, "_on_network_enemy_died").bind(enemy_id))
 	return enemy_id
 
 func _on_network_enemy_died(enemy_id: int) -> void:
 	_network_enemy_nodes.erase(enemy_id)
+	_enemy_target_positions.erase(enemy_id)
+	_enemy_target_facing_angles.erase(enemy_id)
 	if is_multiplayer and MultiplayerSessionManager.is_host():
 		_sync_enemy_died.rpc(enemy_id)
 
@@ -2138,7 +2159,11 @@ func _sync_enemy_states(synced_states: Array, synced_enemy_count: int) -> void:
 		if not is_instance_valid(enemy):
 			continue
 		var synced_position := state.get("position", enemy.global_position) as Vector2
-		enemy.global_position = enemy.global_position.lerp(synced_position, 0.55)
+		var synced_facing_angle := float(state.get("facing_angle", enemy.global_rotation))
+		if enemy.global_position.distance_to(synced_position) >= enemy_remote_snap_distance_px:
+			enemy.global_position = synced_position
+		_enemy_target_positions[enemy_id] = synced_position
+		_enemy_target_facing_angles[enemy_id] = synced_facing_angle
 		if enemy.has_method("set_health"):
 			enemy.call("set_health", float(state.get("health", 0.0)))
 	var stale_ids: Array = []
@@ -2153,6 +2178,8 @@ func _sync_enemy_states(synced_states: Array, synced_enemy_count: int) -> void:
 		if is_instance_valid(stale_enemy):
 			stale_enemy.queue_free()
 		_network_enemy_nodes.erase(stale_id)
+		_enemy_target_positions.erase(stale_id)
+		_enemy_target_facing_angles.erase(stale_id)
 	active_room_enemy_count = synced_enemy_count
 
 @rpc("reliable", "authority")
@@ -2163,6 +2190,31 @@ func _sync_enemy_died(enemy_id: int) -> void:
 	if is_instance_valid(enemy):
 		enemy.queue_free()
 	_network_enemy_nodes.erase(enemy_id)
+	_enemy_target_positions.erase(enemy_id)
+	_enemy_target_facing_angles.erase(enemy_id)
+
+
+func _interpolate_remote_enemy_states(delta: float) -> void:
+	if not is_multiplayer or MultiplayerSessionManager.is_host():
+		return
+	var position_weight := clampf(delta * enemy_remote_position_lerp_speed, 0.0, 1.0)
+	var rotation_weight := clampf(delta * enemy_remote_rotation_lerp_speed, 0.0, 1.0)
+	for enemy_id_variant in _network_enemy_nodes.keys():
+		var enemy_id := int(enemy_id_variant)
+		var enemy := _network_enemy_nodes.get(enemy_id) as Node2D
+		if not is_instance_valid(enemy):
+			continue
+		var target_position := _enemy_target_positions.get(enemy_id, enemy.global_position) as Vector2
+		var current_facing_angle := enemy.global_rotation
+		if enemy.has_method("get_network_facing_angle"):
+			current_facing_angle = float(enemy.call("get_network_facing_angle"))
+		var target_facing_angle := float(_enemy_target_facing_angles.get(enemy_id, current_facing_angle))
+		enemy.global_position = enemy.global_position.lerp(target_position, position_weight)
+		var smoothed_facing_angle := lerp_angle(current_facing_angle, target_facing_angle, rotation_weight)
+		if enemy.has_method("set_network_facing_angle"):
+			enemy.call("set_network_facing_angle", smoothed_facing_angle)
+		else:
+			enemy.global_rotation = smoothed_facing_angle
 
 func _clear_enemy_lingering_effects() -> void:
 	combat_phase_coordinator.clear_enemy_lingering_effects(get_tree())
