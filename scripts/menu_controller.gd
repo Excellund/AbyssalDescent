@@ -127,23 +127,45 @@ func _create_multiplayer_room() -> void:
 	if multiplayer_room_service == null:
 		push_error("[Menu] MultiplayerRoomService autoload is missing")
 		return
+	
+	## Show "Creating..." status
+	if multiplayer_status_label != null:
+		multiplayer_status_label.text = "Creating host session..."
+	
 	var config_issues: PackedStringArray = multiplayer_room_service.get_configuration_issues()
 	if not config_issues.is_empty():
 		if multiplayer_status_label != null:
 			multiplayer_status_label.text = String(config_issues[0])
+		print("[Menu] Configuration issue: %s" % config_issues[0])
 		return
+	
+	print("[Menu] No config issues. Requesting room registration...")
 	var registration_result: Dictionary = await multiplayer_room_service.create_room_registration(9999)
+	print("[Menu] Room registration result: %s" % registration_result)
+	
 	if not bool(registration_result.get("ok", false)):
+		var error_msg = _format_multiplayer_room_error(registration_result, true)
 		if multiplayer_status_label != null:
-			multiplayer_status_label.text = _format_multiplayer_room_error(registration_result, true)
+			multiplayer_status_label.text = error_msg
+		print("[Menu] Room registration failed: %s" % error_msg)
 		return
+	
 	var registration := registration_result.get("registration", {}) as Dictionary
+	print("[Menu] Registration object: %s" % registration)
+	print("[Menu] Attempting to create local host session...")
+	
 	if not multiplayer_session_manager.create_registered_room(registration):
+		var error_msg = "Failed to start local host session. Check console for details."
 		if multiplayer_status_label != null:
-			multiplayer_status_label.text = "Failed to start local host session."
+			multiplayer_status_label.text = error_msg
+		print("[Menu] ERROR: create_registered_room failed. Check MultiplayerSessionManager logs above.")
 		return
+	
+	var room_code = String(registration_result.get("room_code", ""))
+	print("[Menu] Host session created. Room code: %s" % room_code)
 	if multiplayer_status_label != null:
-		multiplayer_status_label.text = "Room code: %s" % String(registration_result.get("room_code", ""))
+		multiplayer_status_label.text = "Room code: %s" % room_code
+	
 	if get_tree() != null:
 		get_tree().change_scene_to_file("res://scenes/Lobby.tscn")
 
