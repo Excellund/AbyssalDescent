@@ -695,6 +695,8 @@ func _run_debug_boot_flow() -> bool:
 	return false
 
 func _begin_new_run_flow() -> void:
+	choosing_next_room = false
+	door_options.clear()
 	if settings_enabled and skip_starting_boon_selection:
 		pending_room_reward = ENUMS.RewardMode.BOON
 		_begin_room(_build_skirmish_profile(room_depth))
@@ -1285,9 +1287,10 @@ func _get_active_player_powers() -> Dictionary:
 func _sync_renderer() -> void:
 	if not is_instance_valid(renderer):
 		return
+	var allow_door_visibility := choosing_next_room and active_room_enemy_count <= 0 and not _is_reward_selection_active() and current_room_label != "Starting Chamber"
 	renderer.room_size = current_room_size
-	renderer.choosing_next_room = choosing_next_room
-	renderer.door_options = door_options
+	renderer.choosing_next_room = allow_door_visibility
+	renderer.door_options = door_options if allow_door_visibility else []
 	renderer.player_global_position = player.global_position if is_instance_valid(player) else Vector2.ZERO
 
 func _keep_player_inside_current_room() -> void:
@@ -1715,7 +1718,7 @@ func _spawn_door_options() -> void:
 	door_options = route_state.get("door_options", [])
 	boss_unlocked = bool(route_state.get("boss_unlocked", boss_unlocked))
 	if is_multiplayer and MultiplayerSessionManager.is_host():
-		_sync_door_options.rpc(door_options, choosing_next_room, boss_unlocked)
+		_sync_door_options.rpc(door_options, choosing_next_room, boss_unlocked, _build_progress_sync_state())
 	_save_active_run_checkpoint()
 
 func _try_use_door() -> void:
@@ -1734,7 +1737,8 @@ func _try_use_door() -> void:
 	if used_door.is_empty():
 		return
 	if is_multiplayer and MultiplayerSessionManager.is_host():
-		_sync_chosen_door.rpc(used_door)
+		_choose_door(used_door)
+		_sync_chosen_door.rpc(used_door, _build_progress_sync_state())
 		return
 	_choose_door(used_door)
 
@@ -1753,10 +1757,11 @@ func _request_use_door() -> void:
 	var used_door: Dictionary = encounter_route_controller.find_used_door(peer_player.global_position, door_options, door_use_radius)
 	if used_door.is_empty():
 		return
-	_sync_chosen_door.rpc(used_door)
+	_choose_door(used_door)
+	_sync_chosen_door.rpc(used_door, _build_progress_sync_state())
 
-@rpc("reliable", "authority", "call_local")
-func _sync_door_options(synced_door_options: Array, synced_choosing_next_room: bool, synced_boss_unlocked: bool) -> void:
+@rpc("reliable", "authority")
+func _sync_door_options(synced_door_options: Array, synced_choosing_next_room: bool, synced_boss_unlocked: bool, progress_state: Dictionary = {}) -> void:
 	if not is_multiplayer:
 		return
 	door_options.clear()
@@ -1765,10 +1770,47 @@ func _sync_door_options(synced_door_options: Array, synced_choosing_next_room: b
 			door_options.append((option as Dictionary).duplicate(true))
 	choosing_next_room = synced_choosing_next_room
 	boss_unlocked = synced_boss_unlocked
+	_apply_progress_sync_state(progress_state)
 
-@rpc("reliable", "authority", "call_local")
-func _sync_chosen_door(chosen_door: Dictionary) -> void:
+@rpc("reliable", "authority")
+func _sync_chosen_door(chosen_door: Dictionary, progress_state: Dictionary = {}) -> void:
+	if not is_multiplayer or MultiplayerSessionManager.is_host():
+		return
 	_choose_door(chosen_door)
+	_apply_progress_sync_state(progress_state)
+
+func _build_progress_sync_state() -> Dictionary:
+	return {
+		"rooms_cleared": rooms_cleared,
+		"room_depth": room_depth,
+		"phase_two_rooms_cleared": phase_two_rooms_cleared,
+		"phase_three_rooms_cleared": phase_three_rooms_cleared,
+		"boss_unlocked": boss_unlocked,
+		"first_boss_defeated": first_boss_defeated,
+		"second_boss_defeated": second_boss_defeated,
+		"in_boss_room": in_boss_room,
+		"in_second_boss_room": in_second_boss_room,
+		"in_third_boss_room": in_third_boss_room,
+		"choosing_next_room": choosing_next_room
+	}
+
+func _apply_progress_sync_state(progress_state: Dictionary) -> void:
+	if progress_state.is_empty():
+		return
+	rooms_cleared = int(progress_state.get("rooms_cleared", rooms_cleared))
+	room_depth = int(progress_state.get("room_depth", room_depth))
+	phase_two_rooms_cleared = int(progress_state.get("phase_two_rooms_cleared", phase_two_rooms_cleared))
+	phase_three_rooms_cleared = int(progress_state.get("phase_three_rooms_cleared", phase_three_rooms_cleared))
+	boss_unlocked = bool(progress_state.get("boss_unlocked", boss_unlocked))
+	first_boss_defeated = bool(progress_state.get("first_boss_defeated", first_boss_defeated))
+	second_boss_defeated = bool(progress_state.get("second_boss_defeated", second_boss_defeated))
+	in_boss_room = bool(progress_state.get("in_boss_room", in_boss_room))
+	in_second_boss_room = bool(progress_state.get("in_second_boss_room", in_second_boss_room))
+	in_third_boss_room = bool(progress_state.get("in_third_boss_room", in_third_boss_room))
+	choosing_next_room = bool(progress_state.get("choosing_next_room", choosing_next_room))
+	if active_room_enemy_count > 0 or _is_reward_selection_active():
+		choosing_next_room = false
+		door_options.clear()
 
 func _get_player_for_peer(peer_id: int) -> Node2D:
 	if is_instance_valid(player) and int(player.player_id) == peer_id:
@@ -1823,6 +1865,8 @@ func _apply_endless_scaling_to_profile(profile: Dictionary) -> Dictionary:
 func _begin_room(profile: Dictionary) -> void:
 	if profile.is_empty():
 		return
+	choosing_next_room = false
+	door_options.clear()
 	encounter_intro_grace_active = false
 	combat_phase_coordinator.begin_combat_phase(player, get_tree())
 	in_boss_room = false
@@ -2339,6 +2383,9 @@ func _roll_route_options(route_context: Variant) -> Array[Dictionary]:
 	return encounter_profile_builder.roll_route_options(route_context)
 
 func _open_boon_selection(title: String, is_initial: bool, mode: int = ENUMS.RewardMode.BOON, player_mutator: Dictionary = {}, epitaph: String = "", character_id: String = "") -> void:
+	if is_initial:
+		choosing_next_room = false
+		door_options.clear()
 	if is_instance_valid(reward_selection_ui):
 		_begin_reward_phase_sync(is_initial, mode)
 		reward_selection_ui.open_selection(title, is_initial, mode, power_registry_instance, player, rng, player_mutator, epitaph, character_id)
