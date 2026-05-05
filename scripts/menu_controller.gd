@@ -12,6 +12,11 @@ const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 const SETTINGS_STORE := preload("res://scripts/settings_store.gd")
 const UPDATE_SERVICE_SCRIPT := preload("res://scripts/update_service.gd")
 const BUILD_INFO := preload("res://scripts/build_info.gd")
+const LOBBY_SCENE_PATH := "res://scenes/Lobby.tscn"
+const DEV_ARG_LOCAL_HOST := "--mp-dev-host"
+const DEV_ARG_LOCAL_JOIN := "--mp-dev-join"
+const DEV_ARG_LOCAL_HOST_PLAIN := "mp-dev-host"
+const DEV_ARG_LOCAL_JOIN_PLAIN := "mp-dev-join"
 const MENU_QUOTE_NEUTRAL := "\"Something unfamiliar begins.\""
 const MENU_QUOTES_AFTER_DEATH := [
 	"\"Back already?\"",
@@ -93,6 +98,8 @@ var multiplayer_host_button: Button
 var multiplayer_join_button: Button
 
 func _ready() -> void:
+	if _try_multiplayer_dev_autostart():
+		return
 	if _should_autostart_debug_encounter():
 		call_deferred("_change_to_gameplay_scene")
 		return
@@ -107,6 +114,59 @@ func _ready() -> void:
 	_maybe_show_telemetry_consent_prompt()
 	_start_menu_music()
 	_start_update_check()
+
+
+func _try_multiplayer_dev_autostart() -> bool:
+	var merged_args: PackedStringArray = []
+	for arg in OS.get_cmdline_user_args():
+		merged_args.append(String(arg).strip_edges())
+	for arg in OS.get_cmdline_args():
+		merged_args.append(String(arg).strip_edges())
+	if merged_args.is_empty():
+		return false
+	var should_host := false
+	var should_join := false
+	for arg in merged_args:
+		if arg == DEV_ARG_LOCAL_HOST or arg == DEV_ARG_LOCAL_HOST_PLAIN:
+			should_host = true
+		if arg == DEV_ARG_LOCAL_JOIN or arg == DEV_ARG_LOCAL_JOIN_PLAIN:
+			should_join = true
+	if not should_host and not should_join:
+		return false
+	print_debug("[Menu] Multiplayer dev autostart args: %s" % [str(merged_args)])
+	if should_host:
+		print_debug("[Menu] Multiplayer dev autostart: host")
+		return _create_local_dev_lobby()
+	if should_join:
+		print_debug("[Menu] Multiplayer dev autostart: join")
+		return _join_local_dev_lobby()
+	return false
+
+
+func _create_local_dev_lobby() -> bool:
+	var multiplayer_session_manager = get_node_or_null("/root/MultiplayerSessionManager")
+	if multiplayer_session_manager == null:
+		push_error("[Menu] MultiplayerSessionManager autoload is missing")
+		return false
+	if not multiplayer_session_manager.create_room().is_empty():
+		if get_tree() != null:
+			get_tree().change_scene_to_file(LOBBY_SCENE_PATH)
+		return true
+	push_error("[Menu] Failed to create local dev lobby")
+	return false
+
+
+func _join_local_dev_lobby() -> bool:
+	var multiplayer_session_manager = get_node_or_null("/root/MultiplayerSessionManager")
+	if multiplayer_session_manager == null:
+		push_error("[Menu] MultiplayerSessionManager autoload is missing")
+		return false
+	if multiplayer_session_manager.join_room("127.0.0.1", 9999, true):
+		if get_tree() != null:
+			get_tree().change_scene_to_file(LOBBY_SCENE_PATH)
+		return true
+	push_error("[Menu] Failed to join local dev lobby")
+	return false
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED:
