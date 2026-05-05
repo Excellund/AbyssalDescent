@@ -426,6 +426,14 @@ func _bind_camera_to_local_player() -> void:
 
 
 func _find_local_player_node() -> Node2D:
+	if is_instance_valid(player) and _is_local_control_owner(player) and _is_player_alive(player):
+		return player
+	if is_instance_valid(second_player) and _is_local_control_owner(second_player) and _is_player_alive(second_player):
+		return second_player
+	if is_instance_valid(player) and _is_player_alive(player):
+		return player
+	if is_instance_valid(second_player) and _is_player_alive(second_player):
+		return second_player
 	if is_instance_valid(player) and _is_local_control_owner(player):
 		return player
 	if is_instance_valid(second_player) and _is_local_control_owner(second_player):
@@ -435,6 +443,14 @@ func _find_local_player_node() -> Node2D:
 	if is_instance_valid(second_player):
 		return second_player
 	return null
+
+
+func _is_player_alive(player_node: Node) -> bool:
+	if player_node == null:
+		return false
+	if not player_node.has_method("is_dead"):
+		return true
+	return not bool(player_node.call("is_dead"))
 
 
 func _is_local_control_owner(player_node: Node) -> bool:
@@ -2680,6 +2696,9 @@ func _on_player_died_for_telemetry() -> void:
 func _on_player_died() -> void:
 	if player_defeated:
 		return
+	if is_multiplayer:
+		_sync_multiplayer_fallen_player_presence()
+		_bind_camera_to_local_player()
 	if is_multiplayer and _count_alive_players() > 0:
 		if is_instance_valid(hud):
 			hud.show_banner("Ally Down", "Clear encounter to revive")
@@ -2717,6 +2736,16 @@ func _count_alive_players() -> int:
 			alive_count += 1
 	return alive_count
 
+
+func _sync_multiplayer_fallen_player_presence() -> void:
+	if not is_multiplayer:
+		return
+	for player_node in _get_multiplayer_player_nodes():
+		if not player_node.has_method("set_combat_removed") or not player_node.has_method("is_dead"):
+			continue
+		var is_dead := bool(player_node.call("is_dead"))
+		player_node.call("set_combat_removed", is_dead)
+
 func _try_revive_fallen_multiplayer_players() -> void:
 	if not is_multiplayer:
 		return
@@ -2735,6 +2764,8 @@ func _try_revive_fallen_multiplayer_players() -> void:
 		if player_replication_service != null and player_node.has_method("get"):
 			var peer_id := int(player_node.get("player_id"))
 			player_replication_service.broadcast_player_revived(peer_id, 1.0)
+	_sync_multiplayer_fallen_player_presence()
+	_bind_camera_to_local_player()
 
 func _apply_boon_to_player(boon_id: String) -> void:
 	if not is_instance_valid(player):

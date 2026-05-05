@@ -214,6 +214,8 @@ func _sync_player_alive_status(peer_id: int, is_alive: bool) -> void:
 		return
 	if player_node.has_method("set_alive"):
 		player_node.set_alive(is_alive)
+	if player_node.has_method("set_combat_removed"):
+		player_node.set_combat_removed(not is_alive)
 
 
 ## RPC: Sync a player's revived status.
@@ -232,6 +234,8 @@ func _sync_player_revived(peer_id: int, revived_health: float = 1.0) -> void:
 		return
 	if player_node.has_method("revive_with_health"):
 		player_node.revive_with_health(revived_health)
+	if player_node.has_method("set_combat_removed"):
+		player_node.set_combat_removed(false)
 
 
 ## Called by player's health_state when health changes.

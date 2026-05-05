@@ -379,6 +379,7 @@ var farline_focus_ready: bool = false
 var farline_focus_proc_flash_left: float = 0.0
 var farline_focus_proc_flash_duration: float = 0.2
 var _is_alive_state: bool = true
+var _combat_removed: bool = false
 
 func _ready() -> void:
 	body_radius_cache = _get_body_radius_for(self, 14.0)
@@ -944,12 +945,37 @@ func set_alive(is_alive: bool) -> void:
 		queued_attack_after_dash = false
 		_set_dash_phasing(false)
 
+func set_combat_removed(removed: bool) -> void:
+	if _combat_removed == removed:
+		return
+	_combat_removed = removed
+	visible = not removed
+	set_process(not removed)
+	set_physics_process(not removed)
+	if removed:
+		velocity = Vector2.ZERO
+	_set_collision_shapes_disabled(removed)
+	queue_redraw()
+
+func _set_collision_shapes_disabled(disabled: bool) -> void:
+	var collision_shapes := find_children("*", "CollisionShape2D", true, false)
+	for node in collision_shapes:
+		var shape := node as CollisionShape2D
+		if shape != null:
+			shape.set_deferred("disabled", disabled)
+	var collision_polygons := find_children("*", "CollisionPolygon2D", true, false)
+	for node in collision_polygons:
+		var polygon := node as CollisionPolygon2D
+		if polygon != null:
+			polygon.set_deferred("disabled", disabled)
+
 func revive_with_health(revived_health: float = 1.0) -> void:
 	if not is_instance_valid(health_state):
 		return
 	var clamped_health := maxi(1, int(round(revived_health)))
 	health_state.set_health(clamped_health)
 	set_alive(true)
+	set_combat_removed(false)
 
 func apply_character_package(data: Dictionary) -> void:
 	var mods: Dictionary = data.get("stat_modifiers", {}) as Dictionary
