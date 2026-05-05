@@ -216,6 +216,13 @@ var _reward_phase_is_initial: bool = false
 var _reward_phase_mode: int = ENUMS.RewardMode.NONE
 var _reward_phase_completed_peers: Dictionary = {}  ## peer_id -> bool
 var _doors_spawn_ready: bool = false
+var _pending_door_sync_payload: Dictionary = {}
+var _pending_chosen_door: Dictionary = {}
+var _pending_chosen_progress_state: Dictionary = {}
+var _awaiting_authoritative_door_choice: bool = false
+var _pending_spawn_sync_payload: Dictionary = {}
+var _current_room_sync_id: int = 0
+var _last_applied_spawn_sync_id: int = 0
 
 var second_player: Node2D = null
 func _apply_debug_settings_from_node() -> void:
@@ -696,6 +703,30 @@ func _run_debug_boot_flow() -> bool:
 	return false
 
 func _begin_new_run_flow() -> void:
+	_current_room_sync_id = 0
+	_last_applied_spawn_sync_id = 0
+	_awaiting_authoritative_door_choice = false
+	rooms_cleared = 0
+	room_depth = 0
+	boss_unlocked = false
+	in_boss_room = false
+	in_second_boss_room = false
+	in_third_boss_room = false
+	first_boss_defeated = false
+	second_boss_defeated = false
+	phase_two_rooms_cleared = 0
+	phase_three_rooms_cleared = 0
+	endless_boss_defeated = false
+	run_cleared = false
+	boss_reward_pending = false
+	last_defeated_boss_id = ""
+	pending_room_reward = ENUMS.RewardMode.NONE
+	current_room_enemy_mutator.clear()
+	current_room_player_mutator.clear()
+	_pending_door_sync_payload.clear()
+	_pending_chosen_door.clear()
+	_pending_chosen_progress_state.clear()
+	_pending_spawn_sync_payload.clear()
 	choosing_next_room = false
 	door_options.clear()
 	_doors_spawn_ready = false
@@ -1136,7 +1167,102 @@ func _process(delta: float) -> void:
 	if is_multiplayer:
 		_sync_enemy_state_tick(delta)
 		_interpolate_remote_enemy_states(delta)
+		_flush_pending_client_door_syncs()
+		_flush_pending_client_spawn_syncs()
 	_refresh_frame_ui()
+
+func _can_apply_client_door_sync() -> bool:
+	if not is_multiplayer or MultiplayerSessionManager.is_host():
+		return false
+	if _awaiting_authoritative_door_choice:
+		return false
+	if _is_reward_selection_active():
+		return false
+	if current_room_label == "Starting Chamber":
+		return false
+	return true
+
+func _apply_synced_door_options_payload(synced_door_options: Array, synced_choosing_next_room: bool, synced_boss_unlocked: bool, progress_state: Dictionary) -> void:
+	door_options.clear()
+	for option in synced_door_options:
+		if option is Dictionary:
+			door_options.append((option as Dictionary).duplicate(true))
+	choosing_next_room = synced_choosing_next_room
+	boss_unlocked = synced_boss_unlocked
+	_apply_progress_sync_state(progress_state)
+
+func _flush_pending_client_door_syncs() -> void:
+	if not _can_apply_client_door_sync():
+		return
+	if not _pending_chosen_door.is_empty():
+		var chosen_door := _pending_chosen_door.duplicate(true)
+		var progress_state := _pending_chosen_progress_state.duplicate(true)
+		_pending_chosen_door.clear()
+		_pending_chosen_progress_state.clear()
+		_awaiting_authoritative_door_choice = false
+		_choose_door(chosen_door)
+		_apply_progress_sync_state(progress_state)
+	if not _pending_door_sync_payload.is_empty():
+		var synced_door_options: Array = _pending_door_sync_payload.get("door_options", []) as Array
+		var synced_choosing_next_room := bool(_pending_door_sync_payload.get("choosing_next_room", false))
+		var synced_boss_unlocked := bool(_pending_door_sync_payload.get("boss_unlocked", boss_unlocked))
+		var progress_state := _pending_door_sync_payload.get("progress_state", {}) as Dictionary
+		_pending_door_sync_payload.clear()
+		_apply_synced_door_options_payload(synced_door_options, synced_choosing_next_room, synced_boss_unlocked, progress_state)
+
+func _can_apply_client_spawn_sync(payload: Dictionary) -> bool:
+	if not is_multiplayer or MultiplayerSessionManager.is_host():
+		return false
+	if not is_instance_valid(enemy_spawner):
+		return false
+	var source_room_sync_id := int(payload.get("room_sync_id", 0))
+	if source_room_sync_id > 0:
+		if source_room_sync_id < _current_room_sync_id:
+			return false
+		if source_room_sync_id > _current_room_sync_id:
+			if _current_room_sync_id == 0 and current_room_label == "Starting Chamber" and not _is_reward_selection_active():
+				_current_room_sync_id = source_room_sync_id
+			else:
+				return false
+	if _is_reward_selection_active():
+		return false
+	if current_room_label == "Starting Chamber":
+		return false
+	var payload_room_label := String(payload.get("room_label", "")).strip_edges()
+	if payload_room_label.is_empty():
+		return true
+	return payload_room_label == current_room_label
+
+func _apply_synced_spawn_batch_payload(payload: Dictionary) -> void:
+	var spawn_batch: Array = payload.get("spawn_batch", []) as Array
+	var synced_enemy_count := int(payload.get("synced_enemy_count", 0))
+	var source_room_sync_id := int(payload.get("room_sync_id", 0))
+	_clear_all_enemies()
+	for spawn_entry_variant in spawn_batch:
+		if not (spawn_entry_variant is Dictionary):
+			continue
+		var spawn_entry := spawn_entry_variant as Dictionary
+		var enemy_type := String(spawn_entry.get("enemy_type", ""))
+		var enemy_position := spawn_entry.get("position", Vector2.ZERO) as Vector2
+		var enemy_id := int(spawn_entry.get("enemy_id", -1))
+		if enemy_type.is_empty() or enemy_id <= 0:
+			continue
+		var enemy: CharacterBody2D = enemy_spawner.spawn_enemy_from_sync(enemy_type, enemy_position)
+		if is_instance_valid(enemy):
+			_register_network_enemy(enemy, enemy_id)
+	active_room_enemy_count = synced_enemy_count
+	if source_room_sync_id > 0:
+		_last_applied_spawn_sync_id = maxi(_last_applied_spawn_sync_id, source_room_sync_id)
+		_current_room_sync_id = maxi(_current_room_sync_id, source_room_sync_id)
+
+func _flush_pending_client_spawn_syncs() -> void:
+	if _pending_spawn_sync_payload.is_empty():
+		return
+	if not _can_apply_client_spawn_sync(_pending_spawn_sync_payload):
+		return
+	var payload := _pending_spawn_sync_payload.duplicate(true)
+	_pending_spawn_sync_payload.clear()
+	_apply_synced_spawn_batch_payload(payload)
 
 func _handle_modal_frame(delta: float) -> bool:
 	if is_instance_valid(defeat_screen) and bool(defeat_screen.is_open()):
@@ -1291,10 +1417,17 @@ func _get_active_player_powers() -> Dictionary:
 func _sync_renderer() -> void:
 	if not is_instance_valid(renderer):
 		return
-	var allow_door_visibility := choosing_next_room and active_room_enemy_count <= 0 and not _is_reward_selection_active() and current_room_label != "Starting Chamber"
+	var allow_door_visibility := false
+	if is_multiplayer and not MultiplayerSessionManager.is_host():
+		allow_door_visibility = choosing_next_room and not _is_reward_selection_active() and current_room_label != "Starting Chamber" and not door_options.is_empty()
+	else:
+		allow_door_visibility = choosing_next_room and active_room_enemy_count <= 0 and not _is_reward_selection_active() and current_room_label != "Starting Chamber"
+	var visible_door_options: Array[Dictionary] = []
+	if allow_door_visibility:
+		visible_door_options = door_options
 	renderer.room_size = current_room_size
 	renderer.choosing_next_room = allow_door_visibility
-	renderer.door_options = door_options if allow_door_visibility else []
+	renderer.door_options = visible_door_options
 	renderer.player_global_position = player.global_position if is_instance_valid(player) else Vector2.ZERO
 
 func _keep_player_inside_current_room() -> void:
@@ -1754,6 +1887,10 @@ func _try_use_door() -> void:
 	if not is_instance_valid(encounter_flow_system):
 		return
 	if is_multiplayer and not MultiplayerSessionManager.is_host():
+		# Optimistically hide doors on joiner while host resolves the authoritative choice.
+		choosing_next_room = false
+		door_options.clear()
+		_awaiting_authoritative_door_choice = true
 		_request_use_door.rpc_id(1)
 		return
 	var used_door: Dictionary = encounter_route_controller.find_used_door(player.global_position, door_options, door_use_radius)
@@ -1787,20 +1924,42 @@ func _request_use_door() -> void:
 func _sync_door_options(synced_door_options: Array, synced_choosing_next_room: bool, synced_boss_unlocked: bool, progress_state: Dictionary = {}) -> void:
 	if not is_multiplayer:
 		return
-	door_options.clear()
-	for option in synced_door_options:
-		if option is Dictionary:
-			door_options.append((option as Dictionary).duplicate(true))
-	choosing_next_room = synced_choosing_next_room
-	boss_unlocked = synced_boss_unlocked
-	_apply_progress_sync_state(progress_state)
+	if MultiplayerSessionManager.is_host():
+		return
+	var incoming_room_depth := int(progress_state.get("room_depth", room_depth))
+	if rooms_cleared <= 1 and incoming_room_depth > 3:
+		if _awaiting_authoritative_door_choice or not _pending_chosen_door.is_empty():
+			_pending_door_sync_payload = {
+				"door_options": synced_door_options.duplicate(true),
+				"choosing_next_room": synced_choosing_next_room,
+				"boss_unlocked": synced_boss_unlocked,
+				"progress_state": progress_state.duplicate(true)
+			}
+			return
+		_pending_door_sync_payload.clear()
+		return
+	if not _can_apply_client_door_sync():
+		_pending_door_sync_payload = {
+			"door_options": synced_door_options.duplicate(true),
+			"choosing_next_room": synced_choosing_next_room,
+			"boss_unlocked": synced_boss_unlocked,
+			"progress_state": progress_state.duplicate(true)
+		}
+		return
+	_apply_synced_door_options_payload(synced_door_options, synced_choosing_next_room, synced_boss_unlocked, progress_state)
 
 @rpc("reliable", "authority")
 func _sync_chosen_door(chosen_door: Dictionary, progress_state: Dictionary = {}) -> void:
 	if not is_multiplayer or MultiplayerSessionManager.is_host():
 		return
+	if _is_reward_selection_active() or current_room_label == "Starting Chamber":
+		_pending_chosen_door = chosen_door.duplicate(true)
+		_pending_chosen_progress_state = progress_state.duplicate(true)
+		return
+	_awaiting_authoritative_door_choice = false
 	_choose_door(chosen_door)
 	_apply_progress_sync_state(progress_state)
+	_flush_pending_client_door_syncs()
 
 @rpc("reliable", "authority")
 func _sync_objective_control_zone(control_anchor: Vector2, control_radius: float, control_goal: float, control_decay_rate: float, control_contest_threshold: int) -> void:
@@ -1844,7 +2003,8 @@ func _apply_progress_sync_state(progress_state: Dictionary) -> void:
 	in_second_boss_room = bool(progress_state.get("in_second_boss_room", in_second_boss_room))
 	in_third_boss_room = bool(progress_state.get("in_third_boss_room", in_third_boss_room))
 	choosing_next_room = bool(progress_state.get("choosing_next_room", choosing_next_room))
-	if active_room_enemy_count > 0 or _is_reward_selection_active():
+	var enforce_local_door_safety := not is_multiplayer or MultiplayerSessionManager.is_host()
+	if enforce_local_door_safety and (active_room_enemy_count > 0 or _is_reward_selection_active()):
 		choosing_next_room = false
 		door_options.clear()
 
@@ -1902,6 +2062,11 @@ func _begin_room(profile: Dictionary) -> void:
 	_doors_spawn_ready = false
 	if profile.is_empty():
 		return
+	_current_room_sync_id += 1
+	_awaiting_authoritative_door_choice = false
+	_pending_door_sync_payload.clear()
+	_pending_chosen_door.clear()
+	_pending_chosen_progress_state.clear()
 	choosing_next_room = false
 	door_options.clear()
 	encounter_intro_grace_active = false
@@ -1946,9 +2111,10 @@ func _begin_room(profile: Dictionary) -> void:
 					"enemy_type": String(spawn_entry.get("enemy_type", "")),
 					"position": enemy.global_position
 				})
-			_sync_spawn_enemy_batch.rpc(spawn_batch, active_room_enemy_count)
+			_sync_spawn_enemy_batch.rpc(spawn_batch, active_room_enemy_count, current_room_label, room_depth, _current_room_sync_id)
 		else:
 			active_room_enemy_count = 0
+			_flush_pending_client_spawn_syncs()
 	else:
 		active_room_enemy_count = _spawn_profile_enemies(profile)
 	_start_encounter_intro_grace()
@@ -2237,22 +2403,24 @@ func _spawn_boss_for_stage(boss_stage: int, spawn_position: Vector2) -> Node2D:
 	return boss
 
 @rpc("reliable", "authority")
-func _sync_spawn_enemy_batch(spawn_batch: Array, synced_enemy_count: int) -> void:
+func _sync_spawn_enemy_batch(spawn_batch: Array, synced_enemy_count: int, source_room_label: String = "", source_room_depth: int = 0, source_room_sync_id: int = 0) -> void:
 	if not is_multiplayer or MultiplayerSessionManager.is_host():
 		return
-	for spawn_entry_variant in spawn_batch:
-		if not (spawn_entry_variant is Dictionary):
-			continue
-		var spawn_entry := spawn_entry_variant as Dictionary
-		var enemy_type := String(spawn_entry.get("enemy_type", ""))
-		var enemy_position := spawn_entry.get("position", Vector2.ZERO) as Vector2
-		var enemy_id := int(spawn_entry.get("enemy_id", -1))
-		if enemy_type.is_empty() or enemy_id <= 0:
-			continue
-		var enemy: CharacterBody2D = enemy_spawner.spawn_enemy_from_sync(enemy_type, enemy_position)
-		if is_instance_valid(enemy):
-			_register_network_enemy(enemy, enemy_id)
-	active_room_enemy_count = synced_enemy_count
+	if source_room_sync_id > 0 and source_room_sync_id < _current_room_sync_id:
+		return
+	var payload := {
+		"spawn_batch": spawn_batch.duplicate(true),
+		"synced_enemy_count": synced_enemy_count,
+		"room_label": source_room_label,
+		"room_depth": source_room_depth,
+		"room_sync_id": source_room_sync_id
+	}
+	if not _can_apply_client_spawn_sync(payload):
+		var pending_sync_id := int(_pending_spawn_sync_payload.get("room_sync_id", 0))
+		if source_room_sync_id >= pending_sync_id:
+			_pending_spawn_sync_payload = payload
+		return
+	_apply_synced_spawn_batch_payload(payload)
 
 @rpc("reliable", "authority")
 func _sync_spawn_boss(spawn_data: Dictionary) -> void:
@@ -2456,6 +2624,7 @@ func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> voi
 	if is_multiplayer:
 		_mark_local_reward_phase_complete(is_initial, mode)
 	elif is_initial:
+		_reset_progress_for_first_encounter()
 		_set_combat_paused(false)
 		pending_room_reward = ENUMS.RewardMode.BOON
 		_begin_room(_build_skirmish_profile(room_depth))
@@ -2514,6 +2683,7 @@ func _finalize_reward_phase_and_advance(is_initial: bool, mode: int) -> void:
 		hud.hide_persistent_banner()
 	_set_combat_paused(false)
 	if is_initial:
+		_reset_progress_for_first_encounter()
 		pending_room_reward = ENUMS.RewardMode.BOON
 		_begin_room(_build_skirmish_profile(room_depth))
 	else:
@@ -2526,6 +2696,28 @@ func _finalize_reward_phase_and_advance(is_initial: bool, mode: int) -> void:
 			_doors_spawn_ready = true
 		_spawn_door_options()
 	hud.refresh(_get_hud_state(), player)
+
+
+func _reset_progress_for_first_encounter() -> void:
+	_current_room_sync_id = 0
+	_last_applied_spawn_sync_id = 0
+	_awaiting_authoritative_door_choice = false
+	rooms_cleared = 0
+	room_depth = 0
+	boss_unlocked = false
+	in_boss_room = false
+	in_second_boss_room = false
+	in_third_boss_room = false
+	first_boss_defeated = false
+	second_boss_defeated = false
+	phase_two_rooms_cleared = 0
+	phase_three_rooms_cleared = 0
+	endless_boss_defeated = false
+	boss_reward_pending = false
+	last_defeated_boss_id = ""
+	_pending_door_sync_payload.clear()
+	_pending_chosen_door.clear()
+	_pending_chosen_progress_state.clear()
 
 
 @rpc("reliable", "any_peer", "call_local")
