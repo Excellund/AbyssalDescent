@@ -151,6 +151,11 @@ var last_move_direction: Vector2 = Vector2.RIGHT
 var dash_direction: Vector2 = Vector2.ZERO
 var attack_cooldown_left: float = 0.0
 var first_strike_bonus_damage: int = 0
+
+## Multiplayer-specific fields
+var player_id: int = 0  ## Network peer ID (0 = single player)
+var is_local_player: bool = true  ## Only local player processes input
+
 var health_state
 var player_feedback
 var static_wake_trail_renderer: Node2D
@@ -446,6 +451,8 @@ func _physics_process(delta: float) -> void:
 		queue_redraw()
 
 func _read_movement_direction() -> Vector2:
+	if not is_local_player:
+		return Vector2.ZERO  ## Remote players don't process input
 	return Input.get_vector("move_left", "move_right", "move_up", "move_down")
 
 func _update_last_move_direction(direction: Vector2) -> void:
@@ -475,6 +482,8 @@ func _update_execution_edge_proc_display(delta: float) -> void:
 		queue_redraw()
 
 func _try_start_dash(direction: Vector2) -> void:
+	if not is_local_player:
+		return  ## Remote players don't process input
 	if _is_attack_locked():
 		return
 	if polar_shift_dash_lockout_left > 0.0:
@@ -502,6 +511,8 @@ func _try_start_dash(direction: Vector2) -> void:
 		sigil_burst_ready = true
 
 func _try_attack_input() -> void:
+	if not is_local_player:
+		return  ## Remote players don't process input
 	if not Input.is_action_just_pressed("attack"):
 		return
 	if _is_dash_active():
@@ -2027,9 +2038,22 @@ func _on_health_state_changed(new_health: int, new_max_health: int) -> void:
 	health_changed.emit(new_health, new_max_health)
 	if player_feedback != null:
 		player_feedback.update_health_bar(new_health, new_max_health)
+	## Broadcast health change to peers in multiplayer
+	if player_id > 0:
+		var multiplayer_session_manager = get_node_or_null("/root/MultiplayerSessionManager")
+		var player_replication_service = get_node_or_null("/root/PlayerReplicationService")
+		if multiplayer_session_manager != null and bool(multiplayer_session_manager.is_session_connected()) and player_replication_service != null:
+			player_replication_service.broadcast_health_change(player_id, float(new_health))
+
 
 func _on_health_state_died() -> void:
 	died.emit()
+	## Broadcast death to peers in multiplayer
+	if player_id > 0:
+		var multiplayer_session_manager = get_node_or_null("/root/MultiplayerSessionManager")
+		var player_replication_service = get_node_or_null("/root/PlayerReplicationService")
+		if multiplayer_session_manager != null and bool(multiplayer_session_manager.is_session_connected()) and player_replication_service != null:
+			player_replication_service.broadcast_player_died(player_id)
 
 func _get_current_health() -> int:
 	if health_state == null:

@@ -50,6 +50,12 @@ var just_unlocked_tier: int = -1  ## -1 means no new unlock, otherwise the newly
 var selected_character_id: String = "bastion"
 var unlocked_character_ids: Array[String] = []
 
+## Multiplayer session state
+var multiplayer_session_id: String = ""
+var multiplayer_is_host: bool = false
+var multiplayer_difficulty_tier: int = BEARING_ENUMS.BearingTier.PILGRIM
+var multiplayer_peer_characters: Dictionary = {}  ## peer_id -> character_id
+
 func _ready() -> void:
 	base_viewport_width = int(ProjectSettings.get_setting("display/window/size/viewport_width", 1920))
 	base_viewport_height = int(ProjectSettings.get_setting("display/window/size/viewport_height", 1080))
@@ -370,6 +376,43 @@ func set_selected_character_id(character_id: String) -> bool:
 		selected_character_id = META_PROGRESS_STORE.get_selected_character_id(meta_progress_profile)
 		return save_meta_progress()
 	return false
+
+
+## Multiplayer session management
+func set_multiplayer_session(session_id: String, is_host: bool) -> void:
+	multiplayer_session_id = session_id
+	multiplayer_is_host = is_host
+
+
+func get_multiplayer_session_id() -> String:
+	return multiplayer_session_id
+
+
+func is_multiplayer_host() -> bool:
+	return multiplayer_is_host
+
+
+func set_multiplayer_difficulty_tier(tier: int) -> void:
+	multiplayer_difficulty_tier = clampi(tier, 0, 3)
+
+
+func get_multiplayer_difficulty_tier() -> int:
+	return multiplayer_difficulty_tier
+
+
+func set_peer_character_selection(peer_id: int, character_id: String) -> void:
+	multiplayer_peer_characters[peer_id] = character_id
+
+
+func get_peer_character_selection(peer_id: int) -> String:
+	return multiplayer_peer_characters.get(peer_id, "bastion")
+
+
+func clear_multiplayer_session() -> void:
+	multiplayer_session_id = ""
+	multiplayer_is_host = false
+	multiplayer_difficulty_tier = BEARING_ENUMS.BearingTier.PILGRIM
+	multiplayer_peer_characters.clear()
 
 
 ## Award permanent difficulty unlocks for a completed run on the current tier.

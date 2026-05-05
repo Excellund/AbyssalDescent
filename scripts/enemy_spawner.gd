@@ -165,6 +165,10 @@ func _compose_active_enemy_mutator() -> Dictionary:
 	return composed
 
 func spawn_profile_enemies(profile: Dictionary) -> int:
+	## Multiplayer: Only host spawns enemies
+	if MultiplayerSessionManager.is_session_connected() and not MultiplayerSessionManager.is_host():
+		return 0  ## Clients don't spawn; they listen for RPC broadcasts
+	
 	var total := 0
 	for enemy_type in ENEMY_SPAWN_ORDER:
 		var count := _profile_count_for_enemy_type(profile, enemy_type)

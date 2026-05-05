@@ -1,0 +1,93 @@
+[gd_scene format=3 uid="uid://by3b268skggyi"]
+
+[ext_resource type="Script" path="res://scripts/lobby_controller.gd" id="1_kmcad"]
+
+[node name="Lobby" type="Control"]
+layout_mode = 3
+anchors_left = 0.0
+anchors_top = 0.0
+anchors_right = 1.0
+anchors_bottom = 1.0
+script = ExtResource("1_kmcad")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_left = 0.0
+anchors_top = 0.0
+anchors_right = 1.0
+anchors_bottom = 1.0
+offset_left = 20.0
+offset_top = 20.0
+offset_right = -20.0
+offset_bottom = -20.0
+separation = 10
+
+[node name="RoomCodePanel" type="PanelContainer" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 2
+custom_minimum_size = Vector2(0, 40)
+
+[node name="RoomCodeLabel" type="Label" parent="VBoxContainer/RoomCodePanel"]
+layout_mode = 2
+text = "Room Code: ------"
+theme_override_font_sizes/font_size = 24
+
+[node name="PlayerListPanel" type="PanelContainer" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 2
+custom_minimum_size = Vector2(0, 100)
+
+[node name="VBoxContainer2" type="VBoxContainer" parent="VBoxContainer/PlayerListPanel"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="VBoxContainer/PlayerListPanel/VBoxContainer2"]
+layout_mode = 2
+text = "Connected Players:"
+
+[node name="PlayerList" type="ItemList" parent="VBoxContainer/PlayerListPanel/VBoxContainer2"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="CharacterSelectorPanel" type="PanelContainer" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 2
+custom_minimum_size = Vector2(0, 150)
+
+[node name="VBoxContainer3" type="VBoxContainer" parent="VBoxContainer/CharacterSelectorPanel"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="VBoxContainer/CharacterSelectorPanel/VBoxContainer3"]
+layout_mode = 2
+text = "Select Your Character:"
+
+[node name="CharacterTabs" type="TabContainer" parent="VBoxContainer/CharacterSelectorPanel/VBoxContainer3"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="DifficultySelectorPanel" type="PanelContainer" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 2
+custom_minimum_size = Vector2(0, 60)
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer/DifficultySelectorPanel"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="VBoxContainer/DifficultySelectorPanel/HBoxContainer"]
+layout_mode = 2
+text = "Difficulty:"
+
+[node name="DifficultyDropdown" type="OptionButton" parent="VBoxContainer/DifficultySelectorPanel/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ReadyButton" type="Button" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 2
+custom_minimum_size = Vector2(0, 50)
+text = "READY?"
+theme_override_font_sizes/font_size = 20
+
+[node name="StatusLabel" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+text = "Waiting for all players..."
+theme_override_font_sizes/font_size = 14

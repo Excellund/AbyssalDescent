@@ -17,6 +17,9 @@ config/features=PackedStringArray("4.6", "GL Compatibility")
 config/icon="res://icon.svg"
 config/telemetry_upload_endpoint="https://aizoebowshcnqvuizava.supabase.co/rest/v1/telemetry_runs"
 config/telemetry_upload_api_key="sb_publishable_LiXb9xg1jvwUZYw1arDcag_YIzGTPGV"
+config/multiplayer_room_registry_endpoint="https://aizoebowshcnqvuizava.supabase.co/rest/v1/multiplayer_rooms"
+config/multiplayer_room_registry_api_key="sb_publishable_LiXb9xg1jvwUZYw1arDcag_YIzGTPGV"
+config/multiplayer_public_ip_lookup_url="https://api.ipify.org"
 config/update_feed_url="https://github.com/Excellund/AbyssalDescent/releases/latest/download/latest_release.json"
 config/update_release_page_url="https://github.com/Excellund/AbyssalDescent/releases/latest"
 config/update_debug_force_prompt=false
@@ -27,6 +30,10 @@ RunContext="*res://scripts/run_context.gd"
 Enums="*res://scripts/shared/enums.gd"
 GameBalance="*res://scripts/shared/game_balance.gd"
 ColorPalette="*res://scripts/shared/color_palette.gd"
+MultiplayerSessionManager="*res://scripts/multiplayer_session_manager.gd"
+MultiplayerRoomService="*res://scripts/multiplayer_room_service.gd"
+PlayerReplicationService="*res://scripts/player_replication_service.gd"
+GameStateReplicationService="*res://scripts/game_state_replication_service.gd"
 
 [display]
 

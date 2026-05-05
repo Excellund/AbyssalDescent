@@ -16,6 +16,7 @@ const ENEMY_BOSS_3_SCRIPT := preload("res://scripts/enemy_boss_3.gd")
 const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 const MUSIC_SYSTEM_SCRIPT := preload("res://scripts/music_system.gd")
+const DIFFICULTY_CONFIG_MULTIPLAYER := preload("res://scripts/encounter_difficulty_multiplayer_config.gd")
 const ENEMY_SPAWNER_SCRIPT := preload("res://scripts/enemy_spawner.gd")
 const ENCOUNTER_PROFILE_BUILDER_SCRIPT := preload("res://scripts/encounter_profile_builder.gd")
 const ENCOUNTER_FLOW_SYSTEM_SCRIPT := preload("res://scripts/encounter_flow_system.gd")
@@ -111,6 +112,9 @@ func _get_debug_encounter_reward_mode(encounter_key: String) -> int:
 @export var hard_room_enemy_bonus: int = 3
 @export var second_boss_encounter_count: int = 7
 @export var third_boss_encounter_count: int = 7
+@export var multiplayer_camera_padding: Vector2 = Vector2(220.0, 180.0)
+@export var multiplayer_camera_min_zoom: float = 0.58
+@export var multiplayer_camera_max_zoom: float = 1.05
 var settings_enabled: bool = false
 var apply_test_powers_on_start: bool = false
 var skip_starting_boon_selection: bool = false
@@ -191,6 +195,13 @@ var room_clear_outcome_coordinator
 var combat_phase_coordinator
 var player_flow_coordinator
 
+## Multiplayer state
+var is_multiplayer: bool = false
+var multiplayer_session_id: String = ""
+var multiplayer_encounter_seed: int = 0
+var game_state_replication_service: Node = null
+
+var second_player: Node2D = null
 func _apply_debug_settings_from_node() -> void:
 	var debug_settings := get_node_or_null("DebugSettings")
 	if not (is_instance_valid(debug_settings) and debug_settings.get_script() == DEBUG_SETTINGS_SCRIPT):
@@ -253,6 +264,15 @@ func _initialize_bootstrap_context() -> void:
 	_maybe_start_telemetry_spike_probe()
 	run_session = RUN_SESSION_SCRIPT.new()
 	run_session.reset_for_new_run()
+	
+	## Detect multiplayer session
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context != null:
+		multiplayer_session_id = run_context.get_multiplayer_session_id()
+		is_multiplayer = not multiplayer_session_id.is_empty()
+		if is_multiplayer:
+			print_debug("[WorldGenerator] Detected multiplayer session: %s" % multiplayer_session_id)
+	
 	objective_lifecycle_coordinator = OBJECTIVE_LIFECYCLE_COORDINATOR_SCRIPT.new()
 	objective_frame_coordinator = OBJECTIVE_FRAME_COORDINATOR_SCRIPT.new()
 	objective_progress_coordinator = OBJECTIVE_PROGRESS_COORDINATOR_SCRIPT.new()
@@ -264,6 +284,9 @@ func _initialize_bootstrap_context() -> void:
 	_setup_player_runtime_bindings()
 	_sync_audio_settings_from_context()
 	endless_boss_defeated = false
+
+	if is_multiplayer:
+		_setup_multiplayer_second_player()
 
 func _setup_player_runtime_bindings() -> void:
 	if is_instance_valid(player):
@@ -277,6 +300,67 @@ func _setup_player_runtime_bindings() -> void:
 		if player.has_signal("died"):
 			player.connect("died", Callable(self, "_on_player_died_for_telemetry"))
 			player.connect("died", Callable(self, "_on_player_died"))
+
+		player_camera.set_room_fit_zoom_scale(camera_base_zoom_in)
+
+func _setup_multiplayer_second_player() -> void:
+	"""Create second player node for multiplayer co-op."""
+	var multiplayer_session_manager := get_node_or_null("/root/MultiplayerSessionManager")
+	var player_replication_service := get_node_or_null("/root/PlayerReplicationService")
+	var run_context := _get_run_context()
+	if multiplayer_session_manager == null:
+		push_error("[Multiplayer] MultiplayerSessionManager autoload is missing")
+		return
+	if player_replication_service == null:
+		push_error("[Multiplayer] PlayerReplicationService autoload is missing")
+		return
+	
+	## Set multiplayer identification
+	var peer_ids: Array = multiplayer_session_manager.get_peer_ids()
+	var local_peer: int = multiplayer_session_manager.local_peer_id
+	var remote_peer: int = 0
+	for peer_id in peer_ids:
+		if peer_id != local_peer:
+			remote_peer = peer_id
+			break
+	
+	if local_peer > 0:
+		player.player_id = local_peer
+		player.is_local_player = true
+		player_replication_service.register_player(player.player_id, player)
+	
+	if remote_peer <= 0:
+		second_player = null
+		print_debug("[Multiplayer] No remote peer present; skipping remote avatar setup")
+		return
+	
+	const PLAYER_SCENE := "res://scenes/Player.tscn"
+	var player_scene = load(PLAYER_SCENE)
+	if player_scene == null:
+		push_error("[Multiplayer] Failed to load Player scene")
+		return
+	
+	second_player = player_scene.instantiate()
+	if second_player == null:
+		push_error("[Multiplayer] Failed to instantiate Player scene")
+		return
+	
+	## Position second player offset from first player
+	second_player.position = player.position + Vector2(80.0, 0.0)
+	second_player.player_id = remote_peer
+	second_player.is_local_player = false
+	if run_context != null and second_player.has_method("apply_character_package"):
+		var remote_character_id := String(run_context.get_peer_character_selection(remote_peer)).strip_edges().to_lower()
+		var remote_character_data: Dictionary = CHARACTER_REGISTRY.get_character(remote_character_id)
+		if not remote_character_data.is_empty():
+			second_player.apply_character_package(remote_character_data)
+	
+	add_child(second_player)
+	player_replication_service.register_player(second_player.player_id, second_player)
+	if is_instance_valid(player_camera):
+		player_camera.set_room_fit_zoom_scale(camera_base_zoom_in * 0.65)
+	
+	print_debug("[Multiplayer] Second player created (peer %d)" % remote_peer)
 
 func _setup_world_bootstrap_state() -> void:
 	current_room_size = room_base_size
@@ -295,6 +379,14 @@ func _setup_run_systems_phase() -> void:
 	_setup_encounter_profile_builder_system()
 	_setup_enemy_spawner_system()
 	_play_room_music(false, false, music_intro_fade_duration)
+	
+	if is_multiplayer:
+		game_state_replication_service = get_node_or_null("/root/GameStateReplicationService")
+		if game_state_replication_service != null:
+			game_state_replication_service.initialize(self)
+			print_debug("[WorldGenerator] Initialized GameStateReplicationService for multiplayer")
+		else:
+			push_error("[WorldGenerator] GameStateReplicationService autoload is missing")
 
 func _setup_reward_selection_system() -> void:
 	reward_selection_ui = REWARD_SELECTION_UI_SCRIPT.new()
@@ -852,6 +944,8 @@ func _process(delta: float) -> void:
 	_try_use_door()
 	_update_encounter_state()
 	_update_camera_mode()
+	if is_multiplayer:
+		_update_multiplayer_camera()
 	_refresh_frame_ui()
 
 func _handle_modal_frame(delta: float) -> bool:
@@ -1256,8 +1350,20 @@ func _try_resume_saved_run() -> bool:
 	var run_context := _get_run_context()
 	if run_context == null:
 		return false
-	if not bool(run_context.consume_resume_saved_run_request()):
-		return false
+
+	var should_apply_difficulty := false
+	if is_multiplayer:
+		## Multiplayer: get difficulty from multiplayer tier
+		current_difficulty_tier = int(run_context.get_multiplayer_difficulty_tier())
+		multiplayer_encounter_seed = rng.randi_range(1, 999999)
+		encounter_profile_builder.initialize_with_seed(rng, multiplayer_encounter_seed)
+	else:
+		current_difficulty_tier = int(run_context.get_current_difficulty_tier())
+	current_character_id = String(run_context.get_selected_character_id()).strip_edges().to_lower()
+	should_apply_difficulty = true
+	if should_apply_difficulty:
+		_apply_difficulty_tier_bonuses(current_difficulty_tier)
+
 	var snapshot := run_context.load_active_run() as Dictionary
 	if snapshot.is_empty():
 		return false
@@ -1678,6 +1784,34 @@ func _update_camera_mode() -> void:
 		player_camera.set_static_mode(Vector2.ZERO)
 		return
 	player_camera.set_follow_mode()
+
+func _update_multiplayer_camera() -> void:
+	if not is_instance_valid(player_camera):
+		return
+	if not is_instance_valid(player) or not is_instance_valid(second_player):
+		return
+	
+	## Fit camera to include both players with padding
+	var p1 := player.global_position
+	var p2 := second_player.global_position
+	var min_x := minf(p1.x, p2.x) - multiplayer_camera_padding.x
+	var max_x := maxf(p1.x, p2.x) + multiplayer_camera_padding.x
+	var min_y := minf(p1.y, p2.y) - multiplayer_camera_padding.y
+	var max_y := maxf(p1.y, p2.y) + multiplayer_camera_padding.y
+	
+	var target_center := Vector2((min_x + max_x) * 0.5, (min_y + max_y) * 0.5)
+	var viewport_size := get_viewport_rect().size
+	if viewport_size.x <= 1.0 or viewport_size.y <= 1.0:
+		return
+	
+	var required_w := maxf(1.0, max_x - min_x)
+	var required_h := maxf(1.0, max_y - min_y)
+	var zoom_x := required_w / viewport_size.x
+	var zoom_y := required_h / viewport_size.y
+	var target_zoom_scalar := clampf(maxf(zoom_x, zoom_y), multiplayer_camera_min_zoom, multiplayer_camera_max_zoom)
+	
+	player_camera.global_position = player_camera.global_position.lerp(target_center, 0.15)
+	player_camera.zoom = player_camera.zoom.lerp(Vector2(target_zoom_scalar, target_zoom_scalar), 0.12)
 
 func _build_skirmish_profile(depth: int) -> Dictionary:
 	if not is_instance_valid(encounter_profile_builder):

@@ -86,6 +86,8 @@ var update_prompt_body_label: Label
 var update_prompt_pending: bool = false
 var update_check_was_manual: bool = false
 var update_service
+var multiplayer_room_code_input: LineEdit
+var multiplayer_status_label: Label
 
 func _ready() -> void:
 	if _should_autostart_debug_encounter():
@@ -110,6 +112,67 @@ func _notification(what: int) -> void:
 func _change_to_gameplay_scene() -> void:
 	if get_tree() != null:
 		get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)
+
+
+## Multiplayer entry points
+func _create_multiplayer_room() -> void:
+	var multiplayer_session_manager = get_node_or_null("/root/MultiplayerSessionManager")
+	var multiplayer_room_service = get_node_or_null("/root/MultiplayerRoomService")
+	if multiplayer_session_manager == null:
+		push_error("[Menu] MultiplayerSessionManager autoload is missing")
+		return
+	if multiplayer_room_service == null:
+		push_error("[Menu] MultiplayerRoomService autoload is missing")
+		return
+	var config_issues: PackedStringArray = multiplayer_room_service.get_configuration_issues()
+	if not config_issues.is_empty():
+		if multiplayer_status_label != null:
+			multiplayer_status_label.text = String(config_issues[0])
+		return
+	var registration_result: Dictionary = await multiplayer_room_service.create_room_registration(9999)
+	if not bool(registration_result.get("ok", false)):
+		if multiplayer_status_label != null:
+			multiplayer_status_label.text = _format_multiplayer_room_error(registration_result, true)
+		return
+	var registration := registration_result.get("registration", {}) as Dictionary
+	if not multiplayer_session_manager.create_registered_room(registration):
+		if multiplayer_status_label != null:
+			multiplayer_status_label.text = "Failed to start local host session."
+		return
+	if multiplayer_status_label != null:
+		multiplayer_status_label.text = "Room code: %s" % String(registration_result.get("room_code", ""))
+	if get_tree() != null:
+		get_tree().change_scene_to_file("res://scenes/Lobby.tscn")
+
+
+func _join_multiplayer_room(room_code: String) -> void:
+	var multiplayer_session_manager = get_node_or_null("/root/MultiplayerSessionManager")
+	var multiplayer_room_service = get_node_or_null("/root/MultiplayerRoomService")
+	if multiplayer_session_manager == null:
+		push_error("[Menu] MultiplayerSessionManager autoload is missing")
+		return
+	if multiplayer_room_service == null:
+		push_error("[Menu] MultiplayerRoomService autoload is missing")
+		return
+	var config_issues: PackedStringArray = multiplayer_room_service.get_configuration_issues()
+	if not config_issues.is_empty():
+		if multiplayer_status_label != null:
+			multiplayer_status_label.text = String(config_issues[0])
+		return
+	var resolve_result: Dictionary = await multiplayer_room_service.resolve_room_code(room_code)
+	if not bool(resolve_result.get("ok", false)):
+		if multiplayer_status_label != null:
+			multiplayer_status_label.text = _format_multiplayer_room_error(resolve_result, false)
+		return
+	var registration := resolve_result.get("registration", {}) as Dictionary
+	if multiplayer_session_manager.join_registered_room(registration):
+		if get_tree() != null:
+			get_tree().change_scene_to_file("res://scenes/Lobby.tscn")
+	else:
+		push_error("Failed to join multiplayer room")
+		if multiplayer_status_label != null:
+			multiplayer_status_label.text = "Unable to connect to the room host."
+
 
 func _should_autostart_debug_encounter() -> bool:
 	var debug_values := _read_main_debug_settings_values()
@@ -272,6 +335,42 @@ func _build_ui() -> void:
 	var glossary_button := _make_menu_button("Glossary")
 	glossary_button.pressed.connect(_on_glossary_pressed)
 	actions.add_child(glossary_button)
+
+	var multiplayer_section := VBoxContainer.new()
+	multiplayer_section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	multiplayer_section.add_theme_constant_override("separation", 8)
+	actions.add_child(multiplayer_section)
+
+	var multiplayer_title := Label.new()
+	multiplayer_title.text = "Co-op"
+	multiplayer_title.add_theme_font_size_override("font_size", 18)
+	multiplayer_title.add_theme_color_override("font_color", Color(0.78, 0.90, 1.0, 0.90))
+	multiplayer_section.add_child(multiplayer_title)
+
+	var host_button := _make_menu_button("Host Co-op Lobby")
+	host_button.custom_minimum_size = Vector2(470.0, 56.0)
+	host_button.pressed.connect(_on_host_lobby_pressed)
+	multiplayer_section.add_child(host_button)
+
+	multiplayer_room_code_input = LineEdit.new()
+	multiplayer_room_code_input.placeholder_text = "Enter room code"
+	multiplayer_room_code_input.max_length = 12
+	multiplayer_room_code_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	multiplayer_room_code_input.custom_minimum_size = Vector2(470.0, 40.0)
+	multiplayer_room_code_input.add_theme_font_size_override("font_size", 16)
+	multiplayer_section.add_child(multiplayer_room_code_input)
+
+	var join_button := _make_menu_button("Join Co-op Lobby")
+	join_button.custom_minimum_size = Vector2(470.0, 56.0)
+	join_button.pressed.connect(_on_join_lobby_pressed)
+	multiplayer_section.add_child(join_button)
+
+	multiplayer_status_label = Label.new()
+	multiplayer_status_label.text = ""
+	multiplayer_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	multiplayer_status_label.add_theme_font_size_override("font_size", 15)
+	multiplayer_status_label.add_theme_color_override("font_color", Color(0.82, 0.92, 1.0, 0.84))
+	multiplayer_section.add_child(multiplayer_status_label)
 
 	var exit_button := _make_menu_button("Exit Game")
 	exit_button.pressed.connect(_on_exit_pressed)
@@ -1132,6 +1231,45 @@ func _on_options_pressed() -> void:
 
 func _on_glossary_pressed() -> void:
 	_show_glossary_panel()
+
+func _on_host_lobby_pressed() -> void:
+	if multiplayer_status_label != null:
+		multiplayer_status_label.text = "Creating room registration..."
+	_create_multiplayer_room()
+
+func _on_join_lobby_pressed() -> void:
+	var room_code := ""
+	if multiplayer_room_code_input != null:
+		room_code = multiplayer_room_code_input.text.strip_edges().to_upper()
+	if room_code.is_empty():
+		if multiplayer_status_label != null:
+			multiplayer_status_label.text = "Enter a room code to join."
+		return
+
+	if multiplayer_status_label != null:
+		multiplayer_status_label.text = "Resolving room code %s..." % room_code
+	_join_multiplayer_room(room_code)
+
+func _format_multiplayer_room_error(result: Dictionary, is_host_flow: bool) -> String:
+	var error_kind := String(result.get("error_kind", "unknown_error"))
+	var message := String(result.get("message", "Unknown multiplayer room error."))
+	match error_kind:
+		"missing_endpoint":
+			return "Room registry endpoint is missing in project settings."
+		"missing_api_key":
+			return "Room registry API key is missing in project settings."
+		"public_ip_lookup_failed", "public_ip_lookup_empty":
+			return "Could not determine the host's public internet address. %s" % message
+		"room_registry_create_failed":
+			return "Room creation failed at the registry service. %s" % message
+		"room_registry_lookup_failed":
+			return "Room lookup failed at the registry service. %s" % message
+		"room_not_found":
+			return "That room code was not found or is no longer open."
+		"http_request_failed", "request_start_failed":
+			return "Network request failed while %s. %s" % ["creating the room" if is_host_flow else "resolving the room code", message]
+		_:
+			return message
 
 func _on_exit_pressed() -> void:
 	get_tree().quit()

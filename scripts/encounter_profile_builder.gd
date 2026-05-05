@@ -124,6 +124,11 @@ func _get_bearing_definition(label: String) -> Dictionary:
 func initialize(rng_instance: RandomNumberGenerator) -> void:
 	rng = rng_instance
 
+func initialize_with_seed(rng_instance: RandomNumberGenerator, encounter_seed: int) -> void:
+	"""Initialize with a specific seed for deterministic generation (multiplayer)."""
+	rng = rng_instance
+	rng.seed = encounter_seed
+
 func set_difficulty_tier(tier: int) -> void:
 	current_difficulty_tier = tier
 	_refresh_difficulty_config()
