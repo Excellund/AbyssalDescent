@@ -378,6 +378,7 @@ var farline_focus_alignment_degrees: float = 8.0
 var farline_focus_ready: bool = false
 var farline_focus_proc_flash_left: float = 0.0
 var farline_focus_proc_flash_duration: float = 0.2
+var _is_alive_state: bool = true
 
 func _ready() -> void:
 	body_radius_cache = _get_body_radius_for(self, 14.0)
@@ -397,6 +398,11 @@ func _ready() -> void:
 	queue_redraw()
 
 func _physics_process(delta: float) -> void:
+	if not _is_alive_state:
+		velocity = Vector2.ZERO
+		move_and_slide()
+		return
+
 	objective_mutator_aura_phase += delta
 	var direction := _read_movement_direction()
 	_update_last_move_direction(direction)
@@ -919,6 +925,31 @@ func set_max_health_and_current(new_max_health: int, new_current_health: int = -
 		health_state.setup(max_health)
 		return
 	health_state.setup(max_health, new_current_health)
+	if health_state.current_health > 0:
+		set_alive(true)
+
+func set_health(value: float) -> void:
+	if not is_instance_valid(health_state):
+		return
+	health_state.set_health(int(round(value)))
+	if health_state.current_health > 0:
+		set_alive(true)
+
+func set_alive(is_alive: bool) -> void:
+	_is_alive_state = is_alive
+	if not is_alive:
+		velocity = Vector2.ZERO
+		dash_time_left = 0.0
+		dash_phase_release_left = 0.0
+		queued_attack_after_dash = false
+		_set_dash_phasing(false)
+
+func revive_with_health(revived_health: float = 1.0) -> void:
+	if not is_instance_valid(health_state):
+		return
+	var clamped_health := maxi(1, int(round(revived_health)))
+	health_state.set_health(clamped_health)
+	set_alive(true)
 
 func apply_character_package(data: Dictionary) -> void:
 	var mods: Dictionary = data.get("stat_modifiers", {}) as Dictionary
@@ -2047,6 +2078,7 @@ func _on_health_state_changed(new_health: int, new_max_health: int) -> void:
 
 
 func _on_health_state_died() -> void:
+	set_alive(false)
 	died.emit()
 	## Broadcast death to peers in multiplayer
 	if player_id > 0:

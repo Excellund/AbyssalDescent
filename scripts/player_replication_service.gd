@@ -158,19 +158,19 @@ func _sync_player_revived(peer_id: int, revived_health: float = 1.0) -> void:
 ## Called by player's health_state when health changes.
 ## Should be called from player.gd's health signal handler.
 func broadcast_health_change(peer_id: int, health: float) -> void:
-	if peer_id == local_peer_id:
+	if (multiplayer_session_manager != null and bool(multiplayer_session_manager.is_host())) or peer_id == local_peer_id:
 		_sync_player_health.rpc(peer_id, health)
 
 
 ## Called by player when they die.
 ## Should be called from player.gd's death signal handler.
 func broadcast_player_died(peer_id: int) -> void:
-	if peer_id == local_peer_id:
+	if (multiplayer_session_manager != null and bool(multiplayer_session_manager.is_host())) or peer_id == local_peer_id:
 		_sync_player_alive_status.rpc(peer_id, false)
 
 
 ## Called when a revived player regains control.
 ## Should be called after encounter clear or revival trigger.
 func broadcast_player_revived(peer_id: int, health: float = 1.0) -> void:
-	if peer_id == local_peer_id:
+	if (multiplayer_session_manager != null and bool(multiplayer_session_manager.is_host())) or peer_id == local_peer_id:
 		_sync_player_revived.rpc(peer_id, health)

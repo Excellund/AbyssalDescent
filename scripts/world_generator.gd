@@ -357,6 +357,8 @@ func _setup_multiplayer_second_player() -> void:
 	
 	add_child(second_player)
 	player_replication_service.register_player(second_player.player_id, second_player)
+	if second_player.has_signal("died"):
+		second_player.connect("died", Callable(self, "_on_player_died"))
 	if is_instance_valid(player_camera):
 		player_camera.set_room_fit_zoom_scale(camera_base_zoom_in * 0.65)
 	
@@ -1158,6 +1160,7 @@ func _on_room_cleared() -> void:
 	if not is_instance_valid(encounter_flow_system):
 		return
 	_end_combat_phase()
+	_try_revive_fallen_multiplayer_players()
 	if in_second_boss_room:
 		_finish_second_boss_clear()
 		return
@@ -2108,6 +2111,8 @@ func _on_player_damage_taken(raw_amount: int, final_amount: int, damage_context:
 func _on_player_died_for_telemetry() -> void:
 	if not _can_record_telemetry():
 		return
+	if is_multiplayer and _count_alive_players() > 0:
+		return
 	var death_event: Dictionary = {}
 	if is_instance_valid(player):
 		death_event = player.get_last_damage_event() as Dictionary
@@ -2128,6 +2133,10 @@ func _on_player_died_for_telemetry() -> void:
 func _on_player_died() -> void:
 	if player_defeated:
 		return
+	if is_multiplayer and _count_alive_players() > 0:
+		if is_instance_valid(hud):
+			hud.show_banner("Ally Down", "Clear encounter to revive")
+		return
 	player_defeated = true
 	_set_combat_paused(true)
 	player_flow_coordinator.close_reward_selection_if_active(reward_selection_ui)
@@ -2142,6 +2151,43 @@ func _on_player_died() -> void:
 		run_context.clear_active_run()
 		run_context.clear_resume_saved_run_request()
 	player_flow_coordinator.show_defeat_feedback(hud, defeat_screen, current_room_label, room_depth)
+
+func _get_multiplayer_player_nodes() -> Array[Node2D]:
+	var nodes: Array[Node2D] = []
+	if is_instance_valid(player):
+		nodes.append(player)
+	if is_instance_valid(second_player):
+		nodes.append(second_player)
+	return nodes
+
+func _count_alive_players() -> int:
+	var alive_count := 0
+	for player_node in _get_multiplayer_player_nodes():
+		if not player_node.has_method("is_dead"):
+			alive_count += 1
+			continue
+		if not bool(player_node.call("is_dead")):
+			alive_count += 1
+	return alive_count
+
+func _try_revive_fallen_multiplayer_players() -> void:
+	if not is_multiplayer:
+		return
+	if _count_alive_players() <= 0:
+		return
+	var multiplayer_session_manager := get_node_or_null("/root/MultiplayerSessionManager")
+	if multiplayer_session_manager == null or not bool(multiplayer_session_manager.is_host()):
+		return
+	var player_replication_service := get_node_or_null("/root/PlayerReplicationService")
+	for player_node in _get_multiplayer_player_nodes():
+		if not player_node.has_method("is_dead") or not player_node.has_method("revive_with_health"):
+			continue
+		if not bool(player_node.call("is_dead")):
+			continue
+		player_node.call("revive_with_health", 1.0)
+		if player_replication_service != null and player_node.has_method("get"):
+			var peer_id := int(player_node.get("player_id"))
+			player_replication_service.broadcast_player_revived(peer_id, 1.0)
 
 func _apply_boon_to_player(boon_id: String) -> void:
 	if not is_instance_valid(player):
