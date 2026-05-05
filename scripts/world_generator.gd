@@ -371,6 +371,7 @@ func _setup_multiplayer_second_player() -> void:
 			second_player.apply_character_package(remote_character_data)
 	
 	add_child(second_player)
+	_disable_player_collision_pair(player, second_player)
 	player_replication_service.register_player(second_player.player_id, second_player)
 	if second_player.has_signal("died"):
 		second_player.connect("died", Callable(self, "_on_player_died"))
@@ -380,6 +381,19 @@ func _setup_multiplayer_second_player() -> void:
 	_bind_camera_to_local_player()
 	
 	print_debug("[Multiplayer] Second player created (peer %d)" % remote_peer)
+
+
+func _disable_player_collision_pair(primary_player: Node, secondary_player: Node) -> void:
+	if not (primary_player is PhysicsBody2D):
+		return
+	if not (secondary_player is PhysicsBody2D):
+		return
+	var primary_body := primary_player as PhysicsBody2D
+	var secondary_body := secondary_player as PhysicsBody2D
+	if primary_body == null or secondary_body == null:
+		return
+	primary_body.add_collision_exception_with(secondary_body)
+	secondary_body.add_collision_exception_with(primary_body)
 
 
 func _bind_camera_to_local_player() -> void:
