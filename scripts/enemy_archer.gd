@@ -154,11 +154,13 @@ func _fire_arrow() -> void:
 
 func _process_projectiles(delta: float) -> void:
 	var completed_projectiles: Array[Node2D] = []
+	var projectile_visual_changed := false
 	
 	for projectile in projectiles:
 		if not is_instance_valid(projectile):
 			projectile_directions.erase(projectile.get_instance_id())
 			completed_projectiles.append(projectile)
+			projectile_visual_changed = true
 			continue
 
 		var projectile_direction: Vector2 = projectile_directions.get(projectile.get_instance_id(), arrow_direction)
@@ -166,6 +168,8 @@ func _process_projectiles(delta: float) -> void:
 		# Move projectile
 		var old_position := projectile.global_position
 		projectile.global_position += projectile_direction * projectile_speed * delta
+		if projectile.global_position.distance_squared_to(old_position) > 0.0001:
+			projectile_visual_changed = true
 		
 		# Check for environmental collision using raycast
 		var space_state := get_world_2d().direct_space_state
@@ -179,6 +183,7 @@ func _process_projectiles(delta: float) -> void:
 			# Hit something in the environment, despawn
 			projectile.queue_free()
 			completed_projectiles.append(projectile)
+			projectile_visual_changed = true
 			continue
 		
 		# Check hit on player
@@ -188,6 +193,7 @@ func _process_projectiles(delta: float) -> void:
 				DAMAGEABLE.apply_damage(target, projectile_damage, {"source": "enemy_ability", "ability": "archer_projectile"})
 				projectile.queue_free()
 				completed_projectiles.append(projectile)
+				projectile_visual_changed = true
 				continue
 
 		# Despawn when crossing room walls (arena bounds act as walls).
@@ -195,6 +201,7 @@ func _process_projectiles(delta: float) -> void:
 		if absf(projectile.global_position.x) > half_arena.x or absf(projectile.global_position.y) > half_arena.y:
 			projectile.queue_free()
 			completed_projectiles.append(projectile)
+			projectile_visual_changed = true
 			continue
 		
 		# Remove if too far away
@@ -202,6 +209,7 @@ func _process_projectiles(delta: float) -> void:
 			projectile.queue_free()
 			projectile_directions.erase(projectile.get_instance_id())
 			completed_projectiles.append(projectile)
+			projectile_visual_changed = true
 	
 	for projectile in completed_projectiles:
 		var projectile_instance_id := projectile.get_instance_id()
@@ -211,12 +219,18 @@ func _process_projectiles(delta: float) -> void:
 			_remote_projectiles_by_network_id.erase(network_id)
 		_projectile_network_ids.erase(projectile_instance_id)
 		projectiles.erase(projectile)
+	if projectile_visual_changed:
+		queue_redraw()
 
 
 func _get_custom_network_runtime_state() -> Dictionary:
 	var state := super._get_custom_network_runtime_state()
 	state["archer_projectiles"] = _build_projectile_runtime_state()
 	return state
+
+
+func should_force_network_runtime_state_sampling() -> bool:
+	return not projectiles.is_empty() or archer_state == ENEMY_STATE_ENUMS.ArcherState.WINDUP or archer_state == ENEMY_STATE_ENUMS.ArcherState.FIRE
 
 
 func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
@@ -298,7 +312,11 @@ func _process_network_visuals(delta: float) -> void:
 		var projectile := _remote_projectiles_by_network_id.get(network_id) as Node2D
 		if not is_instance_valid(projectile):
 			continue
+		var projectile_direction := projectile_directions.get(projectile.get_instance_id(), arrow_direction) as Vector2
 		var target_position := _remote_projectile_target_positions.get(network_id, projectile.global_position) as Vector2
+		if projectile_direction.length_squared() > 0.000001:
+			target_position += projectile_direction.normalized() * projectile_speed * delta
+			_remote_projectile_target_positions[network_id] = target_position
 		var prev_position := projectile.global_position
 		projectile.global_position = projectile.global_position.lerp(target_position, weight)
 		if projectile.global_position.distance_squared_to(prev_position) > 0.04:

@@ -2993,7 +2993,8 @@ func _sync_enemy_state_tick(delta: float) -> void:
 		var facing_changed := absf(wrapf(quantized_facing_angle - previous_facing_angle, -PI, PI)) > maxf(0.0001, enemy_state_facing_change_threshold_rad)
 		var health_changed := not is_equal_approx(enemy_health, previous_health)
 		var previous_combat_hint := bool(_enemy_far_combat_hint_by_id.get(enemy_id, false))
-		var should_sample_runtime_state := position_changed or facing_changed or health_changed or previous_combat_hint or not is_far_enemy
+		var force_runtime_state_sampling := enemy.has_method("should_force_network_runtime_state_sampling") and bool(enemy.call("should_force_network_runtime_state_sampling"))
+		var should_sample_runtime_state := position_changed or facing_changed or health_changed or previous_combat_hint or force_runtime_state_sampling or not is_far_enemy
 		var runtime_state_delta: Dictionary = {}
 		if should_sample_runtime_state:
 			var runtime_state: Dictionary = {}
@@ -4149,8 +4150,9 @@ func _update_encounter_intro_grace() -> bool:
 		var current_pos := player_node.global_position
 		var moved_distance_sq := last_pos.distance_squared_to(current_pos)
 		_intro_grace_last_player_positions[player_node] = current_pos
+		var current_velocity_sq: float = player_node.velocity.length_squared()
 		
-		if moved_distance_sq > 16.0:  # ~4 pixel threshold
+		if current_velocity_sq > 64.0 or moved_distance_sq > 1.0:
 			player_moving = true
 			break
 	
