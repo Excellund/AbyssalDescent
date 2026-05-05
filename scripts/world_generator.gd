@@ -725,6 +725,7 @@ func start_run_with_powers(power_ids: Array[String]) -> Dictionary:
 			unknown.append(id)
 
 	hud.refresh(_get_hud_state(), player)
+	_broadcast_local_player_build_snapshot()
 	return {
 		"applied": applied,
 		"unknown": unknown
@@ -2854,6 +2855,7 @@ func _apply_boon_to_player(boon_id: String) -> void:
 	if not is_instance_valid(player):
 		return
 	player.apply_upgrade(boon_id)
+	_broadcast_local_player_build_snapshot()
 
 func _apply_mission_reward(choice: Dictionary) -> void:
 	var chosen_upgrade := choice.get("mission_upgrade", choice) as Dictionary
@@ -2900,6 +2902,7 @@ func _apply_arcana_to_player(reward_id: String) -> void:
 	if not is_instance_valid(player):
 		return
 	player.apply_trial_power(reward_id)
+	_broadcast_local_player_build_snapshot()
 
 func _apply_objective_mutator(choice: Dictionary) -> void:
 	if not is_instance_valid(player):
@@ -2911,12 +2914,22 @@ func _apply_objective_mutator(choice: Dictionary) -> void:
 	var duration := maxi(1, int(applied_mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_DURATION_ENCOUNTERS, 3)))
 	applied_mutator[ENCOUNTER_CONTRACTS.MUTATOR_KEY_DURATION_ENCOUNTERS] = duration
 	player.apply_objective_mutator(applied_mutator)
+	_broadcast_local_player_build_snapshot()
 	var mutator_name := String(choice.get("name", "Objective Mutator"))
 	if is_instance_valid(hud):
 		hud.show_banner("Objective Reward", mutator_name)
 
 func _set_combat_paused(paused: bool) -> void:
 	combat_phase_coordinator.set_combat_paused(player, get_tree(), paused)
+
+func _broadcast_local_player_build_snapshot() -> void:
+	if not is_multiplayer:
+		return
+	if not is_instance_valid(player):
+		return
+	if not player.has_method("broadcast_network_build_snapshot"):
+		return
+	player.broadcast_network_build_snapshot()
 
 func _is_spawn_transport_active(enemy: Node) -> bool:
 	return bool(enemy.is_spawn_transporting())

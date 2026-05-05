@@ -257,3 +257,57 @@ func broadcast_player_died(peer_id: int) -> void:
 func broadcast_player_revived(peer_id: int, health: float = 1.0) -> void:
 	if (multiplayer_session_manager != null and bool(multiplayer_session_manager.is_host())) or peer_id == local_peer_id:
 		_sync_player_revived.rpc(peer_id, health)
+
+
+func broadcast_attack_indicator(peer_id: int, attack_direction: Vector2, attack_range: float, attack_arc_degrees: float, swing_color: Color, swing_duration: float = 0.12) -> void:
+	if peer_id <= 0:
+		return
+	if (multiplayer_session_manager != null and bool(multiplayer_session_manager.is_host())) or peer_id == local_peer_id:
+		_sync_attack_indicator.rpc(peer_id, attack_direction, attack_range, attack_arc_degrees, swing_color, swing_duration)
+
+
+@rpc("unreliable", "any_peer", "call_local")
+func _sync_attack_indicator(peer_id: int, attack_direction: Vector2, attack_range: float, attack_arc_degrees: float, swing_color: Color, swing_duration: float = 0.12) -> void:
+	if peer_id not in player_nodes:
+		return
+	if peer_id == local_peer_id:
+		return
+	var player_node_variant: Variant = player_nodes.get(peer_id)
+	if not is_instance_valid(player_node_variant):
+		_remove_invalid_player(peer_id)
+		return
+	var player_node := player_node_variant as Node
+	if player_node == null:
+		_remove_invalid_player(peer_id)
+		return
+	if player_node.has_method("play_network_attack_indicator"):
+		player_node.play_network_attack_indicator(attack_direction, attack_range, attack_arc_degrees, swing_color, swing_duration)
+
+
+func broadcast_player_build_snapshot(peer_id: int, snapshot: Dictionary) -> void:
+	if peer_id <= 0:
+		return
+	if snapshot.is_empty():
+		return
+	if (multiplayer_session_manager != null and bool(multiplayer_session_manager.is_host())) or peer_id == local_peer_id:
+		_sync_player_build_snapshot.rpc(peer_id, snapshot)
+
+
+@rpc("reliable", "any_peer", "call_local")
+func _sync_player_build_snapshot(peer_id: int, snapshot: Dictionary) -> void:
+	if peer_id not in player_nodes:
+		return
+	if peer_id == local_peer_id:
+		return
+	if snapshot.is_empty():
+		return
+	var player_node_variant: Variant = player_nodes.get(peer_id)
+	if not is_instance_valid(player_node_variant):
+		_remove_invalid_player(peer_id)
+		return
+	var player_node := player_node_variant as Node
+	if player_node == null:
+		_remove_invalid_player(peer_id)
+		return
+	if player_node.has_method("apply_network_build_snapshot"):
+		player_node.apply_network_build_snapshot(snapshot)

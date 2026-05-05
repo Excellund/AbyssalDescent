@@ -567,11 +567,13 @@ func _try_execute_attack(attack_direction: Vector2) -> void:
 	if reward_razor_wind:
 		swing_color = ENEMY_BASE.COLOR_SWING_RAZOR_WIND if not execution_proc else ENEMY_BASE.COLOR_EXECUTION_PROC_EXTENDED
 	player_feedback.play_attack_swing_visual(attack_direction, float(melee_context["range"]), float(melee_context["arc_degrees"]), swing_color)
+	_broadcast_attack_indicator(attack_direction, float(melee_context["range"]), float(melee_context["arc_degrees"]), swing_color)
 	if reward_razor_wind:
 		var wind_context: Dictionary = upgrade_system.build_razor_wind_attack_context(melee_context, razor_wind_damage_ratio, razor_wind_range_scale, razor_wind_arc_degrees, damage, attack_range)
 		var wind_range := float(wind_context["range"])
 		var wind_color := ENEMY_BASE.COLOR_SWING_RAZOR_WIND_EXTENDED if not execution_proc else ENEMY_BASE.COLOR_EXECUTION_WIND_EXTENDED
 		player_feedback.play_attack_swing_visual(attack_direction, wind_range, razor_wind_arc_degrees, wind_color, 0.14)
+		_broadcast_attack_indicator(attack_direction, wind_range, razor_wind_arc_degrees, wind_color, 0.14)
 	if execution_proc:
 		execution_edge_proc_display_left = EXECUTION_EDGE_PROC_DISPLAY_HOLD
 		queue_redraw()
@@ -1128,6 +1130,51 @@ func apply_run_snapshot(snapshot: Dictionary) -> void:
 
 func apply_trial_power(reward_id: String) -> void:
 	upgrade_system.apply_trial_power(reward_id)
+
+func build_network_build_snapshot() -> Dictionary:
+	return build_run_snapshot()
+
+func apply_network_build_snapshot(snapshot: Dictionary) -> void:
+	apply_run_snapshot(snapshot)
+
+func broadcast_network_build_snapshot() -> void:
+	if player_id <= 0:
+		return
+	if not _is_local_control_owner():
+		return
+	var multiplayer_session_manager = get_node_or_null("/root/MultiplayerSessionManager")
+	var player_replication_service = get_node_or_null("/root/PlayerReplicationService")
+	if multiplayer_session_manager == null or player_replication_service == null:
+		return
+	if not bool(multiplayer_session_manager.is_session_connected()):
+		return
+	player_replication_service.broadcast_player_build_snapshot(player_id, build_network_build_snapshot())
+
+func play_network_attack_indicator(attack_direction: Vector2, attack_range_value: float, attack_arc_degrees_value: float, swing_color: Color, swing_duration: float = 0.12) -> void:
+	if _is_local_control_owner():
+		return
+	var resolved_direction := attack_direction.normalized() if attack_direction.length_squared() > 0.000001 else visual_facing_direction
+	if resolved_direction.length_squared() <= 0.000001:
+		resolved_direction = Vector2.RIGHT
+	visual_facing_direction = resolved_direction
+	attack_lock_direction = resolved_direction
+	attack_anim_time_left = maxf(attack_anim_time_left, maxf(0.05, swing_duration))
+	if player_feedback != null:
+		player_feedback.play_attack_swing_visual(resolved_direction, attack_range_value, attack_arc_degrees_value, swing_color, swing_duration)
+	queue_redraw()
+
+func _broadcast_attack_indicator(attack_direction: Vector2, attack_range_value: float, attack_arc_degrees_value: float, swing_color: Color, swing_duration: float = 0.12) -> void:
+	if player_id <= 0:
+		return
+	if not _is_local_control_owner():
+		return
+	var multiplayer_session_manager = get_node_or_null("/root/MultiplayerSessionManager")
+	var player_replication_service = get_node_or_null("/root/PlayerReplicationService")
+	if multiplayer_session_manager == null or player_replication_service == null:
+		return
+	if not bool(multiplayer_session_manager.is_session_connected()):
+		return
+	player_replication_service.broadcast_attack_indicator(player_id, attack_direction, attack_range_value, attack_arc_degrees_value, swing_color, swing_duration)
 
 func apply_objective_mutator(mutator_data: Dictionary) -> void:
 	if mutator_data.is_empty():
