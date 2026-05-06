@@ -361,7 +361,7 @@ func get_power_flavor_text(power_id: String) -> String:
 		"reaper_step":
 			return "Kills fully refresh your dash. Dash range and speed scale together."
 		"static_wake":
-			return "Moving leaves an electrified trail that shocks any enemy who steps into it."
+			return "Dashing leaves an electrified trail that shocks any enemy who steps into it."
 		"storm_crown":
 			return "Every few hits discharge chain lightning from your target to nearby foes."
 		"wraithstep":
