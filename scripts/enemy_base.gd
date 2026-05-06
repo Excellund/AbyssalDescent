@@ -86,6 +86,7 @@ const COLOR_BOSS_CLEAVE_OUTLINE := COLOR_PALETTE.COLOR_BOSS_CLEAVE_OUTLINE
 @export var edge_escape_phase_duration: float = 0.32
 @export var edge_escape_nudge_speed: float = 340.0
 @export var network_runtime_direction_blend: float = 0.58
+@export var network_remote_direction_lerp_speed: float = 14.0
 @export var target_refresh_interval_sec: float = 0.12
 @export var attack_visual_redraw_interval_sec: float = 0.033
 @export var remote_ui_update_interval_sec: float = 0.08
@@ -110,6 +111,7 @@ var attack_anim_duration: float = 0.1
 var visual_facing_direction: Vector2 = Vector2.LEFT
 var _network_target_facing: Vector2 = Vector2.LEFT
 var _network_facing_lerp_speed: float = 12.0
+var _network_direction_targets: Dictionary = {}
 var slow_time_left: float = 0.0
 var slow_speed_mult: float = 1.0
 var has_mutator_overlay: bool = false
@@ -212,7 +214,7 @@ func _physics_process(delta: float) -> void:
 		return
 	if not network_simulation_enabled:
 		velocity = Vector2.ZERO
-		# Smooth facing lerp on joiner to prevent twitching
+		_update_network_direction_targets(delta)
 		_update_network_facing_lerp(delta)
 		if should_process_remote_visuals_every_frame():
 			_remote_visual_update_accum = 0.0
@@ -334,6 +336,10 @@ func set_network_simulation_enabled(enabled: bool) -> void:
 	network_simulation_enabled = enabled
 	if not enabled:
 		velocity = Vector2.ZERO
+		_network_target_facing = visual_facing_direction.normalized() if visual_facing_direction.length_squared() > 0.000001 else Vector2.LEFT
+		_network_direction_targets.clear()
+	else:
+		_network_direction_targets.clear()
 
 
 func get_network_runtime_state() -> Dictionary:
@@ -360,7 +366,11 @@ func apply_network_runtime_state(runtime_state: Dictionary) -> void:
 	if runtime_state.has("attack_anim_duration"):
 		attack_anim_duration = float(runtime_state.get("attack_anim_duration", attack_anim_duration))
 	if runtime_state.has("visual_facing_direction"):
-		visual_facing_direction = (runtime_state.get("visual_facing_direction", visual_facing_direction) as Vector2)
+		var incoming_facing := runtime_state.get("visual_facing_direction", visual_facing_direction) as Vector2
+		if network_simulation_enabled:
+			visual_facing_direction = incoming_facing
+		else:
+			_set_remote_direction_target("visual_facing_direction", incoming_facing)
 	if runtime_state.has("slow_time_left"):
 		slow_time_left = float(runtime_state.get("slow_time_left", slow_time_left))
 	if runtime_state.has("slow_speed_mult"):
@@ -394,6 +404,9 @@ func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
 		var value: Variant = custom_state.get(property_name)
 		if _is_serializable_network_value(value):
 			if typeof(value) == TYPE_VECTOR2 and _is_directional_property_name(property_name):
+				if not network_simulation_enabled:
+					_set_remote_direction_target(property_name, value as Vector2)
+					continue
 				var current_value: Variant = get(property_name)
 				if typeof(current_value) == TYPE_VECTOR2:
 					var current_direction := current_value as Vector2
@@ -476,6 +489,50 @@ func get_network_facing_angle() -> float:
 	if facing.length_squared() <= 0.000001:
 		facing = Vector2.LEFT
 	return facing.angle()
+
+
+func _set_remote_direction_target(property_name: String, target_direction: Vector2) -> void:
+	if target_direction.length_squared() <= 0.000001:
+		return
+	var normalized_target := target_direction.normalized() * target_direction.length()
+	if property_name == "visual_facing_direction":
+		_network_target_facing = normalized_target.normalized()
+		if visual_facing_direction.length_squared() <= 0.000001:
+			visual_facing_direction = _network_target_facing
+		return
+	_network_direction_targets[property_name] = normalized_target
+	var current_value: Variant = get(property_name)
+	if typeof(current_value) == TYPE_VECTOR2:
+		var current_direction := current_value as Vector2
+		if current_direction.length_squared() <= 0.000001:
+			set(property_name, normalized_target)
+			queue_redraw()
+
+
+func _update_network_direction_targets(delta: float) -> void:
+	if _network_direction_targets.is_empty():
+		return
+	var redraw_threshold_sq := _get_facing_redraw_threshold_sq()
+	var blend_weight := clampf(delta * maxf(0.001, network_remote_direction_lerp_speed), 0.0, 1.0)
+	for property_variant in _network_direction_targets.keys():
+		var property_name := String(property_variant)
+		if not _has_script_property(property_name):
+			continue
+		var target_direction := _network_direction_targets.get(property_name, Vector2.ZERO) as Vector2
+		if target_direction.length_squared() <= 0.000001:
+			continue
+		var current_value: Variant = get(property_name)
+		if typeof(current_value) != TYPE_VECTOR2:
+			continue
+		var current_direction := current_value as Vector2
+		var next_direction := target_direction
+		if current_direction.length_squared() > 0.000001:
+			var blended_direction := current_direction.slerp(target_direction, blend_weight)
+			if blended_direction.length_squared() > 0.000001:
+				next_direction = blended_direction.normalized() * target_direction.length()
+		if next_direction.distance_squared_to(current_direction) > redraw_threshold_sq:
+			set(property_name, next_direction)
+			queue_redraw()
 
 
 func _update_network_facing_lerp(delta: float) -> void:

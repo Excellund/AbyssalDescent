@@ -23,10 +23,74 @@ var charger_charge_direction: Vector2 = Vector2.LEFT
 var charger_charge_preview_length: float = 0.0
 var charger_charge_hit_applied: bool = false
 var charge_enemy_exceptions: Dictionary = {}
+var _attack_sync_was_active: bool = false
 
 func _process_behavior(delta: float) -> void:
 	_update_attack_cooldown(delta)
 	_process_state_machine(delta)
+
+
+func should_force_network_runtime_state_sampling() -> bool:
+	return charger_state == ENEMY_STATE_ENUMS.ChargerState.WINDUP or charger_state == ENEMY_STATE_ENUMS.ChargerState.CHARGE or attack_anim_time_left > 0.0
+
+
+func should_process_remote_visuals_every_frame() -> bool:
+	return not network_simulation_enabled and (charger_state == ENEMY_STATE_ENUMS.ChargerState.WINDUP or charger_state == ENEMY_STATE_ENUMS.ChargerState.CHARGE)
+
+
+func get_priority_network_sync_interval_sec() -> float:
+	if charger_state == ENEMY_STATE_ENUMS.ChargerState.WINDUP or charger_state == ENEMY_STATE_ENUMS.ChargerState.CHARGE:
+		return 0.03
+	return 0.0
+
+
+func get_projectile_network_sync_state() -> Dictionary:
+	if not network_simulation_enabled:
+		return {}
+	var active := charger_state == ENEMY_STATE_ENUMS.ChargerState.WINDUP or charger_state == ENEMY_STATE_ENUMS.ChargerState.CHARGE
+	if not active and not _attack_sync_was_active:
+		return {}
+	var payload := {
+		"active": active,
+		"charger_state": charger_state,
+		"charger_state_time_left": charger_state_time_left,
+		"charger_charge_direction": charger_charge_direction,
+		"charger_charge_preview_length": charger_charge_preview_length,
+		"visual_facing_direction": visual_facing_direction,
+		"attack_anim_time_left": attack_anim_time_left
+	}
+	_attack_sync_was_active = active
+	return payload
+
+
+func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
+	if network_simulation_enabled:
+		return
+	if sync_state.is_empty():
+		return
+	var active := bool(sync_state.get("active", false))
+	if not active:
+		if charger_state == ENEMY_STATE_ENUMS.ChargerState.WINDUP or charger_state == ENEMY_STATE_ENUMS.ChargerState.CHARGE:
+			charger_state = ENEMY_STATE_ENUMS.ChargerState.RECOVER
+			charger_state_time_left = 0.0
+		charger_charge_preview_length = 0.0
+		queue_redraw()
+		return
+	charger_state = int(sync_state.get("charger_state", charger_state))
+	charger_state_time_left = float(sync_state.get("charger_state_time_left", charger_state_time_left))
+	charger_charge_direction = sync_state.get("charger_charge_direction", charger_charge_direction) as Vector2
+	charger_charge_preview_length = float(sync_state.get("charger_charge_preview_length", charger_charge_preview_length))
+	attack_anim_time_left = float(sync_state.get("attack_anim_time_left", attack_anim_time_left))
+	visual_facing_direction = sync_state.get("visual_facing_direction", visual_facing_direction) as Vector2
+	queue_redraw()
+
+
+func _process_network_visuals(delta: float) -> void:
+	if charger_state_time_left > 0.0:
+		var previous_time_left := charger_state_time_left
+		charger_state_time_left = maxf(0.0, charger_state_time_left - delta)
+		if not is_equal_approx(previous_time_left, charger_state_time_left):
+			queue_redraw()
 
 func _update_attack_cooldown(delta: float) -> void:
 	if attack_cooldown_left > 0.0:

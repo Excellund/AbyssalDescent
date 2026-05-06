@@ -3479,12 +3479,12 @@ func _interpolate_remote_enemy_states(delta: float) -> void:
 			current_facing_angle = float(enemy.call("get_network_facing_angle"))
 		var target_facing_angle := float(_enemy_target_facing_angles.get(enemy_id, current_facing_angle))
 		enemy.global_position = enemy.global_position.lerp(target_position, position_weight)
-		var smoothed_facing_angle := lerp_angle(current_facing_angle, target_facing_angle, rotation_weight)
-		var facing_delta := absf(wrapf(smoothed_facing_angle - current_facing_angle, -PI, PI))
+		var facing_delta := absf(wrapf(target_facing_angle - current_facing_angle, -PI, PI))
 		if facing_delta > facing_update_threshold:
 			if enemy.has_method("set_network_facing_angle"):
-				enemy.call("set_network_facing_angle", smoothed_facing_angle)
+				enemy.call("set_network_facing_angle", target_facing_angle)
 			else:
+				var smoothed_facing_angle := lerp_angle(current_facing_angle, target_facing_angle, rotation_weight)
 				enemy.global_rotation = smoothed_facing_angle
 
 func _clear_enemy_lingering_effects() -> void:
