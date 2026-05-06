@@ -108,19 +108,19 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"name": "Warden",
 			"group": "Boss",
 			"color": Color(1.0, 0.68, 0.54, 1.0),
-			"desc": "First boss encounter.",
+			"desc": "Relentless bruiser that chains charge, nova, and cleave pressure.",
 		},
 		{
 			"name": "Sovereign",
 			"group": "Boss",
 			"color": Color(1.0, 0.58, 0.48, 1.0),
-			"desc": "Second boss encounter.",
+			"desc": "Cosmic control boss that punishes predictable movement lanes.",
 		},
 		{
 			"name": "Lacuna",
 			"group": "Boss",
 			"color": Color(0.46, 1.0, 0.82, 1.0),
-			"desc": "Final boss encounter. Lacuna is the Silent Threshold: a split-bodied sovereign of the missing beat that severs tempo, weaponizes silence, and turns every escape seam into a living trap.",
+			"desc": "Final boss that severs tempo and traps escape seams with silence pressure.",
 		},
 	]
 
@@ -212,6 +212,11 @@ static func _reward_rows() -> Array[Dictionary]:
 			"desc": "Trial reward tier. Rare arcana powers that stack through the run.",
 		},
 		{
+			"tier": "BOSS",
+			"color": Color(0.92, 0.72, 1.0, 1.0),
+			"desc": "Boss reward tier. Unique major powers earned from boss clears.",
+		},
+		{
 			"tier": "NONE",
 			"color": Color(0.74, 0.84, 0.95, 1.0),
 			"desc": "No immediate reward card.",
@@ -256,7 +261,10 @@ static func _encounter_group_header_bbcode(group_name: String) -> String:
 		"Trial":
 			reward_tier = "ARCANA"
 			tier_color = Color(1.0, 0.66, 0.48, 1.0)
-		"Special", "Boss":
+		"Boss":
+			reward_tier = "BOSS"
+			tier_color = Color(0.92, 0.72, 1.0, 1.0)
+		"Special":
 			reward_tier = "NONE"
 			tier_color = Color(0.74, 0.84, 0.95, 1.0)
 		_:
