@@ -210,14 +210,19 @@ func _physics_process(delta: float) -> void:
 		return
 	if not network_simulation_enabled:
 		velocity = Vector2.ZERO
-		var remote_visual_interval := _get_remote_visual_update_interval_for_enemy_load()
-		_remote_visual_update_accum += delta
-		_remote_visual_update_left -= delta
-		if _remote_visual_update_left <= 0.0:
-			var visual_delta := _remote_visual_update_accum
+		if should_process_remote_visuals_every_frame():
 			_remote_visual_update_accum = 0.0
-			_remote_visual_update_left = remote_visual_interval
-			_process_network_visuals(visual_delta)
+			_remote_visual_update_left = _get_remote_visual_update_interval_for_enemy_load()
+			_process_network_visuals(delta)
+		else:
+			var remote_visual_interval := _get_remote_visual_update_interval_for_enemy_load()
+			_remote_visual_update_accum += delta
+			_remote_visual_update_left -= delta
+			if _remote_visual_update_left <= 0.0:
+				var visual_delta := _remote_visual_update_accum
+				_remote_visual_update_accum = 0.0
+				_remote_visual_update_left = remote_visual_interval
+				_process_network_visuals(visual_delta)
 		return
 	_maybe_refresh_target(delta)
 	_apply_crowd_separation(delta)
@@ -507,6 +512,12 @@ func _process_behavior(_delta: float) -> void:
 
 func _process_network_visuals(_delta: float) -> void:
 	pass
+
+func should_process_remote_visuals_every_frame() -> bool:
+	return false
+
+func get_priority_network_sync_interval_sec() -> float:
+	return 0.0
 
 func _get_inward_edge_bias() -> Vector2:
 	return Vector2.ZERO

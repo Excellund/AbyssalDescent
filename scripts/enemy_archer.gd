@@ -27,6 +27,7 @@ var projectile_directions: Dictionary = {}
 var _projectile_network_ids: Dictionary = {}
 var _remote_projectiles_by_network_id: Dictionary = {}
 var _remote_projectile_target_positions: Dictionary = {}
+var _projectile_sync_known_network_ids: Dictionary = {}
 var _next_projectile_network_id: int = 1
 var fire_time_left: float = 0.0
 var arrows_fired: int = 0
@@ -36,6 +37,10 @@ func _process_behavior(delta: float) -> void:
 	_update_attack_cooldown(delta)
 	_process_projectiles(delta)
 	_process_state_machine(delta)
+
+
+func _exit_tree() -> void:
+	_clear_all_projectiles()
 
 func _update_attack_cooldown(delta: float) -> void:
 	if attack_cooldown_left > 0.0:
@@ -224,18 +229,95 @@ func _process_projectiles(delta: float) -> void:
 
 
 func _get_custom_network_runtime_state() -> Dictionary:
-	var state := super._get_custom_network_runtime_state()
-	state["archer_projectiles"] = _build_projectile_runtime_state()
-	return state
+	return super._get_custom_network_runtime_state()
 
 
 func should_force_network_runtime_state_sampling() -> bool:
-	return not projectiles.is_empty() or archer_state == ENEMY_STATE_ENUMS.ArcherState.WINDUP or archer_state == ENEMY_STATE_ENUMS.ArcherState.FIRE
+	return archer_state == ENEMY_STATE_ENUMS.ArcherState.WINDUP or archer_state == ENEMY_STATE_ENUMS.ArcherState.FIRE
+
+
+func should_process_remote_visuals_every_frame() -> bool:
+	return not network_simulation_enabled and not _remote_projectiles_by_network_id.is_empty()
+
+
+func get_priority_network_sync_interval_sec() -> float:
+	if archer_state == ENEMY_STATE_ENUMS.ArcherState.WINDUP or archer_state == ENEMY_STATE_ENUMS.ArcherState.FIRE:
+		return 0.03
+	return 0.0
+
+
+func get_projectile_network_sync_state() -> Dictionary:
+	if not network_simulation_enabled:
+		return {}
+	var current_network_ids: Dictionary = {}
+	var updates: Array = []
+	for projectile in projectiles:
+		if not is_instance_valid(projectile):
+			continue
+		var projectile_instance_id := projectile.get_instance_id()
+		var network_id := int(_projectile_network_ids.get(projectile_instance_id, -1))
+		if network_id <= 0:
+			network_id = _next_projectile_network_id
+			_next_projectile_network_id += 1
+			_projectile_network_ids[projectile_instance_id] = network_id
+		current_network_ids[network_id] = true
+		var projectile_direction: Vector2 = projectile_directions.get(projectile_instance_id, arrow_direction)
+		updates.append({
+			"id": network_id,
+			"position": projectile.global_position,
+			"direction": projectile_direction
+		})
+	var despawn_ids: Array = []
+	for network_id_variant in _projectile_sync_known_network_ids.keys():
+		var known_network_id := int(network_id_variant)
+		if current_network_ids.has(known_network_id):
+			continue
+		despawn_ids.append(known_network_id)
+	_projectile_sync_known_network_ids = current_network_ids
+	if updates.is_empty() and despawn_ids.is_empty():
+		return {}
+	return {
+		"updates": updates,
+		"despawn_ids": despawn_ids
+	}
+
+
+func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
+	if network_simulation_enabled:
+		return
+	if sync_state.is_empty():
+		return
+	var updates := sync_state.get("updates", []) as Array
+	for projectile_state_variant in updates:
+		if not (projectile_state_variant is Dictionary):
+			continue
+		var projectile_state := projectile_state_variant as Dictionary
+		var network_id := int(projectile_state.get("id", -1))
+		if network_id <= 0:
+			continue
+		var projectile := _remote_projectiles_by_network_id.get(network_id) as Node2D
+		if not is_instance_valid(projectile):
+			projectile = Node2D.new()
+			if is_instance_valid(get_parent()):
+				get_parent().add_child(projectile)
+			projectiles.append(projectile)
+			_remote_projectiles_by_network_id[network_id] = projectile
+			_projectile_network_ids[projectile.get_instance_id()] = network_id
+		var target_position := projectile_state.get("position", projectile.global_position) as Vector2
+		if projectile.global_position.distance_squared_to(target_position) > 2304.0:
+			projectile.global_position = target_position
+		_remote_projectile_target_positions[network_id] = target_position
+		projectile_directions[projectile.get_instance_id()] = projectile_state.get("direction", arrow_direction) as Vector2
+	var despawn_ids := sync_state.get("despawn_ids", []) as Array
+	for despawn_id_variant in despawn_ids:
+		_remove_remote_projectile_by_network_id(int(despawn_id_variant))
 
 
 func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
 	super._apply_custom_network_runtime_state(custom_state)
 	if network_simulation_enabled:
+		return
+	if not custom_state.has("archer_projectiles"):
 		return
 	var projectile_runtime_state := custom_state.get("archer_projectiles", []) as Array
 	_apply_projectile_runtime_state(projectile_runtime_state)
@@ -279,8 +361,11 @@ func _apply_projectile_runtime_state(projectile_runtime_state: Array) -> void:
 			projectiles.append(projectile)
 			_remote_projectiles_by_network_id[network_id] = projectile
 			_projectile_network_ids[projectile.get_instance_id()] = network_id
-			projectile.global_position = projectile_state.get("position", projectile.global_position) as Vector2
 		var target_position := projectile_state.get("position", projectile.global_position) as Vector2
+		if not is_instance_valid(projectile):
+			continue
+		if projectile.global_position.distance_squared_to(target_position) > 2304.0:
+			projectile.global_position = target_position
 		_remote_projectile_target_positions[network_id] = target_position
 		projectile_directions[projectile.get_instance_id()] = projectile_state.get("direction", arrow_direction) as Vector2
 
@@ -305,7 +390,6 @@ func _apply_projectile_runtime_state(projectile_runtime_state: Array) -> void:
 func _process_network_visuals(delta: float) -> void:
 	if _remote_projectiles_by_network_id.is_empty():
 		return
-	var weight := clampf(delta * remote_projectile_lerp_speed, 0.0, 1.0)
 	var projectile_visual_changed := false
 	for network_id_variant in _remote_projectiles_by_network_id.keys():
 		var network_id := int(network_id_variant)
@@ -313,16 +397,44 @@ func _process_network_visuals(delta: float) -> void:
 		if not is_instance_valid(projectile):
 			continue
 		var projectile_direction := projectile_directions.get(projectile.get_instance_id(), arrow_direction) as Vector2
-		var target_position := _remote_projectile_target_positions.get(network_id, projectile.global_position) as Vector2
-		if projectile_direction.length_squared() > 0.000001:
-			target_position += projectile_direction.normalized() * projectile_speed * delta
-			_remote_projectile_target_positions[network_id] = target_position
 		var prev_position := projectile.global_position
-		projectile.global_position = projectile.global_position.lerp(target_position, weight)
+		var target_position := _remote_projectile_target_positions.get(network_id, projectile.global_position) as Vector2
+		var step_distance := projectile_speed * delta
+		if projectile.global_position.distance_squared_to(target_position) > step_distance * step_distance * 9.0:
+			projectile.global_position = target_position
+		elif projectile_direction.length_squared() > 0.000001:
+			projectile.global_position += projectile_direction.normalized() * step_distance
+		else:
+			projectile.global_position = target_position
 		if projectile.global_position.distance_squared_to(prev_position) > 0.04:
 			projectile_visual_changed = true
 	if projectile_visual_changed:
 		queue_redraw()
+
+
+func _remove_remote_projectile_by_network_id(network_id: int) -> void:
+	if network_id <= 0:
+		return
+	var projectile := _remote_projectiles_by_network_id.get(network_id) as Node2D
+	if is_instance_valid(projectile):
+		projectile_directions.erase(projectile.get_instance_id())
+		_projectile_network_ids.erase(projectile.get_instance_id())
+		projectiles.erase(projectile)
+		projectile.queue_free()
+	_remote_projectile_target_positions.erase(network_id)
+	_remote_projectiles_by_network_id.erase(network_id)
+
+
+func _clear_all_projectiles() -> void:
+	for projectile in projectiles:
+		if is_instance_valid(projectile):
+			projectile.queue_free()
+	projectiles.clear()
+	projectile_directions.clear()
+	_projectile_network_ids.clear()
+	_remote_projectile_target_positions.clear()
+	_remote_projectiles_by_network_id.clear()
+	_projectile_sync_known_network_ids.clear()
 
 func _draw() -> void:
 	var body_radius := 12.8

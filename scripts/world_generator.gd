@@ -205,6 +205,8 @@ var multiplayer_encounter_seed: int = 0
 var game_state_replication_service: Node = null
 var enemy_state_sync_interval_sec: float = 0.08
 var _enemy_state_sync_elapsed: float = 0.0
+var archer_projectile_sync_interval_sec: float = 0.016
+var _archer_projectile_sync_elapsed: float = 0.0
 var _next_network_enemy_id: int = 1
 var _network_enemy_nodes: Dictionary = {}  ## enemy_id -> Node2D
 var _enemy_target_positions: Dictionary = {}  ## enemy_id -> target global position
@@ -1255,6 +1257,7 @@ func _process(delta: float) -> void:
 		_update_multiplayer_camera()
 	if is_multiplayer:
 		var sim_start_usec := Time.get_ticks_usec() if _perf_attribution_enabled else 0
+		_sync_archer_projectile_state_tick(delta)
 		_sync_enemy_state_tick(delta)
 		_interpolate_remote_enemy_states(delta)
 		_flush_pending_client_door_syncs()
@@ -2758,10 +2761,39 @@ func _clear_all_enemies() -> void:
 	_enemy_far_sync_elapsed_by_id.clear()
 	_enemy_far_combat_hint_by_id.clear()
 	_enemy_sync_scan_cursor = 0
+	_archer_projectile_sync_elapsed = 0.0
 	_enemy_clamp_cached_nodes.clear()
 	_enemy_clamp_refresh_elapsed = 0.0
 	if is_instance_valid(enemy_spawner):
 		enemy_spawner.clear_all_enemies()
+
+func _sync_archer_projectile_state_tick(delta: float) -> void:
+	if not is_multiplayer:
+		return
+	if not MultiplayerSessionManager.is_host():
+		return
+	_archer_projectile_sync_elapsed += delta
+	if _archer_projectile_sync_elapsed < maxf(0.008, archer_projectile_sync_interval_sec):
+		return
+	_archer_projectile_sync_elapsed = 0.0
+	var synced_archer_projectiles: Array = []
+	for enemy_id_variant in _network_enemy_nodes.keys():
+		var enemy_id := int(enemy_id_variant)
+		var enemy := _network_enemy_nodes.get(enemy_id) as Node
+		if not is_instance_valid(enemy):
+			continue
+		if not enemy.has_method("get_projectile_network_sync_state"):
+			continue
+		var projectile_sync_state := enemy.call("get_projectile_network_sync_state") as Dictionary
+		if projectile_sync_state.is_empty():
+			continue
+		synced_archer_projectiles.append({
+			"enemy_id": enemy_id,
+			"payload": projectile_sync_state
+		})
+	if synced_archer_projectiles.is_empty():
+		return
+	_sync_archer_projectile_states.rpc(synced_archer_projectiles, _current_room_sync_id)
 
 func _compute_runtime_state_delta(current_state: Dictionary, previous_state: Dictionary) -> Dictionary:
 	var delta := {}
@@ -2916,6 +2948,21 @@ func _get_adaptive_enemy_sync_state_size_limit() -> int:
 		return 620
 	return 900
 
+func _get_priority_enemy_sync_interval_sec() -> float:
+	var best_interval := 0.0
+	for enemy_variant in _network_enemy_nodes.values():
+		var enemy := enemy_variant as Node
+		if not is_instance_valid(enemy):
+			continue
+		if not enemy.has_method("get_priority_network_sync_interval_sec"):
+			continue
+		var requested_interval := float(enemy.call("get_priority_network_sync_interval_sec"))
+		if requested_interval <= 0.0:
+			continue
+		if best_interval <= 0.0 or requested_interval < best_interval:
+			best_interval = requested_interval
+	return best_interval
+
 func _sync_enemy_state_tick(delta: float) -> void:
 	if not is_multiplayer:
 		return
@@ -2931,6 +2978,9 @@ func _sync_enemy_state_tick(delta: float) -> void:
 			sync_interval *= 1.35
 		elif active_room_enemy_count >= 7:
 			sync_interval *= 1.2
+	var priority_sync_interval := _get_priority_enemy_sync_interval_sec()
+	if priority_sync_interval > 0.0:
+		sync_interval = minf(sync_interval, priority_sync_interval)
 	_enemy_state_sync_elapsed += delta
 	if _enemy_state_sync_elapsed < sync_interval:
 		return
@@ -3288,6 +3338,29 @@ func _sync_enemy_states(synced_states: Array, synced_enemy_count: int) -> void:
 			var runtime_state_delta := state.get("runtime_state_delta", {}) as Dictionary
 			enemy.call("apply_network_runtime_state", runtime_state_delta)
 	active_room_enemy_count = synced_enemy_count
+
+@rpc("unreliable", "authority")
+func _sync_archer_projectile_states(synced_archer_projectiles: Array, source_room_sync_id: int) -> void:
+	if not is_multiplayer or MultiplayerSessionManager.is_host():
+		return
+	if source_room_sync_id > 0 and source_room_sync_id < _current_room_sync_id:
+		return
+	for sync_variant in synced_archer_projectiles:
+		if not (sync_variant is Dictionary):
+			continue
+		var sync_data := sync_variant as Dictionary
+		var enemy_id := int(sync_data.get("enemy_id", -1))
+		if enemy_id <= 0:
+			continue
+		var enemy := _network_enemy_nodes.get(enemy_id) as Node
+		if not is_instance_valid(enemy):
+			continue
+		if not enemy.has_method("apply_projectile_network_sync_state"):
+			continue
+		var payload := sync_data.get("payload", {}) as Dictionary
+		if payload.is_empty():
+			continue
+		enemy.call("apply_projectile_network_sync_state", payload)
 
 @rpc("reliable", "authority")
 func _sync_enemy_died(enemy_id: int, death_effect_payload: Dictionary = {}) -> void:
