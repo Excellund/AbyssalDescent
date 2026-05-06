@@ -49,6 +49,7 @@ var body_check_cooldown_left: float = 0.0
 var body_check_anim_time_left: float = 0.0
 var body_check_dash_immunity_left: float = 0.0
 var player_was_dashing_last_frame: bool = false
+var _attack_sync_was_active: bool = false
 
 func _ready() -> void:
 	max_health = shield_max_health
@@ -91,6 +92,75 @@ func _process_behavior(delta: float) -> void:
 	_try_body_check_target()
 	_try_start_slam()
 	_try_attack_target()
+
+
+func should_force_network_runtime_state_sampling() -> bool:
+	return slam_state != ENEMY_STATE_ENUMS.ShielderSlamState.IDLE or body_check_anim_time_left > 0.0 or attack_anim_time_left > 0.0
+
+
+func should_process_remote_visuals_every_frame() -> bool:
+	return not network_simulation_enabled and (slam_state != ENEMY_STATE_ENUMS.ShielderSlamState.IDLE or body_check_anim_time_left > 0.0 or attack_anim_time_left > 0.0)
+
+
+func get_projectile_network_sync_state() -> Dictionary:
+	if not network_simulation_enabled:
+		return {}
+	var active := slam_state != ENEMY_STATE_ENUMS.ShielderSlamState.IDLE or body_check_anim_time_left > 0.0 or attack_anim_time_left > 0.0
+	if not active and not _attack_sync_was_active:
+		return {}
+	var payload := {
+		"active": active,
+		"slam_state": slam_state,
+		"slam_state_time_left": slam_state_time_left,
+		"slam_direction": slam_direction,
+		"body_check_anim_time_left": body_check_anim_time_left,
+		"attack_anim_time_left": attack_anim_time_left,
+		"visual_facing_direction": visual_facing_direction,
+		"shield_facing": shield_facing,
+		"shield_target_facing": shield_target_facing
+	}
+	_attack_sync_was_active = active
+	return payload
+
+
+func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
+	if network_simulation_enabled:
+		return
+	if sync_state.is_empty():
+		return
+	var active := bool(sync_state.get("active", false))
+	if not active:
+		slam_state = ENEMY_STATE_ENUMS.ShielderSlamState.IDLE
+		slam_state_time_left = 0.0
+		body_check_anim_time_left = 0.0
+		attack_anim_time_left = 0.0
+		queue_redraw()
+		return
+	slam_state = int(sync_state.get("slam_state", slam_state))
+	slam_state_time_left = float(sync_state.get("slam_state_time_left", slam_state_time_left))
+	slam_direction = sync_state.get("slam_direction", slam_direction) as Vector2
+	body_check_anim_time_left = float(sync_state.get("body_check_anim_time_left", body_check_anim_time_left))
+	attack_anim_time_left = float(sync_state.get("attack_anim_time_left", attack_anim_time_left))
+	visual_facing_direction = sync_state.get("visual_facing_direction", visual_facing_direction) as Vector2
+	shield_facing = sync_state.get("shield_facing", shield_facing) as Vector2
+	shield_target_facing = sync_state.get("shield_target_facing", shield_target_facing) as Vector2
+	queue_redraw()
+
+
+func _process_network_visuals(delta: float) -> void:
+	var changed := false
+	if slam_state_time_left > 0.0:
+		var prev_slam_left := slam_state_time_left
+		slam_state_time_left = maxf(0.0, slam_state_time_left - delta)
+		if not is_equal_approx(prev_slam_left, slam_state_time_left):
+			changed = true
+	if body_check_anim_time_left > 0.0:
+		var prev_body_check_anim_left := body_check_anim_time_left
+		body_check_anim_time_left = maxf(0.0, body_check_anim_time_left - delta)
+		if not is_equal_approx(prev_body_check_anim_left, body_check_anim_time_left):
+			changed = true
+	if changed:
+		queue_redraw()
 
 func _update_attack_cooldown(delta: float) -> void:
 	if attack_cooldown_left > 0.0:

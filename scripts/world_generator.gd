@@ -271,6 +271,7 @@ var _pending_door_sync_payload: Dictionary = {}
 var _pending_chosen_door: Dictionary = {}
 var _pending_chosen_progress_state: Dictionary = {}
 var _awaiting_authoritative_door_choice: bool = false
+var _joiner_awaiting_initial_sync: bool = false
 var _pending_spawn_sync_payload: Dictionary = {}
 var _pending_objective_spawn_sync_payloads: Array[Dictionary] = []
 var _pending_boss_spawn_sync_payload: Dictionary = {}
@@ -405,6 +406,10 @@ func _setup_multiplayer_second_player() -> void:
 	if player_replication_service == null:
 		push_error("[Multiplayer] PlayerReplicationService autoload is missing")
 		return
+	
+	# Joiner flag: expect initial sync from host before applying normal sanitizer logic.
+	if not multiplayer_session_manager.is_host():
+		_joiner_awaiting_initial_sync = true
 	
 	## Set multiplayer identification
 	var peer_ids: Array = multiplayer_session_manager.get_peer_ids()
@@ -1914,12 +1919,16 @@ func _on_room_cleared() -> void:
 	in_boss_room = bool(outcome_state.get("in_boss_room", in_boss_room))
 	endless_boss_defeated = bool(outcome_state.get("endless_boss_defeated", endless_boss_defeated))
 	rooms_cleared = int(outcome_state.get("rooms_cleared", rooms_cleared))
-	room_depth = int(outcome_state.get("room_depth", room_depth))
+	var outcome_depth := int(outcome_state.get("room_depth", room_depth))
+	if outcome_depth > 50:
+		push_error("[Room Outcome] Warning: extremely high room_depth from outcome: %d (rooms_cleared=%d)" % [outcome_depth, rooms_cleared])
+	room_depth = outcome_depth
 	boss_unlocked = bool(outcome_state.get("boss_unlocked", boss_unlocked))
 	pending_room_reward = int(outcome_state.get("pending_room_reward", pending_room_reward))
 	choosing_next_room = bool(outcome_state.get("choosing_next_room", choosing_next_room))
 	phase_two_rooms_cleared += int(outcome_state.get("phase_two_increment", 0))
 	phase_three_rooms_cleared += int(outcome_state.get("phase_three_increment", 0))
+	_clamp_room_depth_to_sane_range()
 	if bool(outcome_state.get("show_endless_boss_banner", false)):
 		hud.show_banner("Boss Defeated", "")
 	if bool(outcome_state.get("terminal_run_cleared", false)):
@@ -1937,6 +1946,15 @@ func _on_room_cleared() -> void:
 	if bool(outcome_state.get("spawn_doors", false)):
 		_spawn_door_options()
 
+func _clamp_room_depth_to_sane_range() -> void:
+	var max_sane := _get_third_boss_target_depth() + 2
+	if room_depth > max_sane:
+		push_error("[Depth Sanity] Clamping impossibly high room_depth %d -> %d (rooms_cleared=%d, bosses: 1st=%s, 2nd=%s, 3rd=%s)" % [
+			room_depth, max_sane, rooms_cleared,
+			first_boss_defeated, second_boss_defeated, second_boss_defeated
+		])
+		room_depth = max_sane
+
 func _finish_first_boss_clear() -> void:
 	in_boss_room = false
 	first_boss_defeated = true
@@ -1946,6 +1964,7 @@ func _finish_first_boss_clear() -> void:
 	phase_three_rooms_cleared = 0
 	rooms_cleared += 1
 	room_depth += 1
+	_clamp_room_depth_to_sane_range()
 	boss_unlocked = false
 	pending_room_reward = ENUMS.RewardMode.NONE
 	last_defeated_boss_id = "warden"
@@ -1961,6 +1980,7 @@ func _finish_second_boss_clear() -> void:
 	choosing_next_room = false
 	rooms_cleared += 1
 	room_depth += 1
+	_clamp_room_depth_to_sane_range()
 	boss_unlocked = false
 	pending_room_reward = ENUMS.RewardMode.NONE
 	phase_three_rooms_cleared = 0
@@ -2330,16 +2350,8 @@ func _sync_door_options(synced_door_options: Array, synced_choosing_next_room: b
 		return
 	if MultiplayerSessionManager.is_host():
 		return
-	var incoming_room_depth := int(progress_state.get("room_depth", room_depth))
-	if rooms_cleared <= 1 and incoming_room_depth > 3:
-		if _awaiting_authoritative_door_choice or not _pending_chosen_door.is_empty():
-			_pending_door_sync_payload = {
-				"door_options": synced_door_options.duplicate(true),
-				"choosing_next_room": synced_choosing_next_room,
-				"boss_unlocked": synced_boss_unlocked,
-				"progress_state": progress_state.duplicate(true)
-			}
-			return
+	var sanitized_progress_state := _sanitize_progress_sync_state(progress_state)
+	if bool(sanitized_progress_state.get("invalid", false)):
 		_pending_door_sync_payload.clear()
 		return
 	if not _can_apply_client_door_sync():
@@ -2347,22 +2359,25 @@ func _sync_door_options(synced_door_options: Array, synced_choosing_next_room: b
 			"door_options": synced_door_options.duplicate(true),
 			"choosing_next_room": synced_choosing_next_room,
 			"boss_unlocked": synced_boss_unlocked,
-			"progress_state": progress_state.duplicate(true)
+			"progress_state": sanitized_progress_state
 		}
 		return
-	_apply_synced_door_options_payload(synced_door_options, synced_choosing_next_room, synced_boss_unlocked, progress_state)
+	_apply_synced_door_options_payload(synced_door_options, synced_choosing_next_room, synced_boss_unlocked, sanitized_progress_state)
 
 @rpc("reliable", "authority")
 func _sync_chosen_door(chosen_door: Dictionary, progress_state: Dictionary = {}) -> void:
 	if not is_multiplayer or MultiplayerSessionManager.is_host():
 		return
+	var sanitized_progress_state := _sanitize_progress_sync_state(progress_state)
+	if bool(sanitized_progress_state.get("invalid", false)):
+		return
 	if _is_reward_selection_active() or current_room_label == "Starting Chamber":
 		_pending_chosen_door = chosen_door.duplicate(true)
-		_pending_chosen_progress_state = progress_state.duplicate(true)
+		_pending_chosen_progress_state = sanitized_progress_state
 		return
 	_awaiting_authoritative_door_choice = false
 	_choose_door(chosen_door)
-	_apply_progress_sync_state(progress_state)
+	_apply_progress_sync_state(sanitized_progress_state)
 	_flush_pending_client_door_syncs()
 
 @rpc("reliable", "authority")
@@ -2423,6 +2438,7 @@ func _sync_objective_cleared() -> void:
 
 func _build_progress_sync_state() -> Dictionary:
 	return {
+		"room_sync_id": _current_room_sync_id,
 		"rooms_cleared": rooms_cleared,
 		"room_depth": room_depth,
 		"phase_two_rooms_cleared": phase_two_rooms_cleared,
@@ -2436,20 +2452,83 @@ func _build_progress_sync_state() -> Dictionary:
 		"choosing_next_room": choosing_next_room
 	}
 
-func _apply_progress_sync_state(progress_state: Dictionary) -> void:
+func _sanitize_progress_sync_state(progress_state: Dictionary) -> Dictionary:
 	if progress_state.is_empty():
+		return {}
+	var sanitized := progress_state.duplicate(true)
+	var incoming_room_sync_id := int(sanitized.get("room_sync_id", _current_room_sync_id))
+	if incoming_room_sync_id > 0 and incoming_room_sync_id < _current_room_sync_id:
+		sanitized["invalid"] = true
+		return sanitized
+	if incoming_room_sync_id > _current_room_sync_id + 4:
+		sanitized["invalid"] = true
+		return sanitized
+	var incoming_first_boss_defeated := bool(sanitized.get("first_boss_defeated", first_boss_defeated))
+	var incoming_second_boss_defeated := bool(sanitized.get("second_boss_defeated", second_boss_defeated))
+	if not incoming_first_boss_defeated:
+		incoming_second_boss_defeated = false
+	var max_depth := _get_second_boss_target_depth()
+	if incoming_second_boss_defeated:
+		max_depth = _get_third_boss_target_depth() + 1
+	elif incoming_first_boss_defeated:
+		max_depth = _get_third_boss_target_depth()
+	var incoming_room_depth := int(sanitized.get("room_depth", room_depth))
+	incoming_room_depth = clampi(incoming_room_depth, 0, maxi(1, max_depth))
+	if rooms_cleared <= 1 and incoming_room_depth > 3:
+		sanitized["invalid"] = true
+		return sanitized
+	# Allow large depth jumps if joiner just joined (rooms_cleared == 0) OR if explicitly awaiting door choice.
+	# This permits joiners mid-run to synchronize with the host's current depth.
+	var is_joiner_initial_sync := not is_multiplayer or (MultiplayerSessionManager.is_host() == false and rooms_cleared == 0)
+	if incoming_room_depth > room_depth + 2 and not _awaiting_authoritative_door_choice and not is_joiner_initial_sync:
+		sanitized["invalid"] = true
+		return sanitized
+	var incoming_rooms_cleared := int(sanitized.get("rooms_cleared", rooms_cleared))
+	incoming_rooms_cleared = clampi(incoming_rooms_cleared, 0, incoming_room_depth)
+	var incoming_phase_two := int(sanitized.get("phase_two_rooms_cleared", phase_two_rooms_cleared))
+	incoming_phase_two = clampi(incoming_phase_two, 0, maxi(0, second_boss_encounter_count))
+	var incoming_phase_three := int(sanitized.get("phase_three_rooms_cleared", phase_three_rooms_cleared))
+	incoming_phase_three = clampi(incoming_phase_three, 0, maxi(0, third_boss_encounter_count))
+	sanitized["room_sync_id"] = incoming_room_sync_id
+	sanitized["rooms_cleared"] = incoming_rooms_cleared
+	sanitized["room_depth"] = incoming_room_depth
+	sanitized["phase_two_rooms_cleared"] = incoming_phase_two
+	sanitized["phase_three_rooms_cleared"] = incoming_phase_three
+	sanitized["first_boss_defeated"] = incoming_first_boss_defeated
+	sanitized["second_boss_defeated"] = incoming_second_boss_defeated
+	sanitized.erase("invalid")
+	return sanitized
+
+func _apply_progress_sync_state(progress_state: Dictionary) -> void:
+	var sanitized_progress_state := _sanitize_progress_sync_state(progress_state)
+	if sanitized_progress_state.is_empty():
 		return
-	rooms_cleared = int(progress_state.get("rooms_cleared", rooms_cleared))
-	room_depth = int(progress_state.get("room_depth", room_depth))
-	phase_two_rooms_cleared = int(progress_state.get("phase_two_rooms_cleared", phase_two_rooms_cleared))
-	phase_three_rooms_cleared = int(progress_state.get("phase_three_rooms_cleared", phase_three_rooms_cleared))
-	boss_unlocked = bool(progress_state.get("boss_unlocked", boss_unlocked))
-	first_boss_defeated = bool(progress_state.get("first_boss_defeated", first_boss_defeated))
-	second_boss_defeated = bool(progress_state.get("second_boss_defeated", second_boss_defeated))
-	in_boss_room = bool(progress_state.get("in_boss_room", in_boss_room))
-	in_second_boss_room = bool(progress_state.get("in_second_boss_room", in_second_boss_room))
-	in_third_boss_room = bool(progress_state.get("in_third_boss_room", in_third_boss_room))
-	choosing_next_room = bool(progress_state.get("choosing_next_room", choosing_next_room))
+	if bool(sanitized_progress_state.get("invalid", false)):
+		return
+	# Clear joiner-join flag once first valid sync is received.
+	if _joiner_awaiting_initial_sync:
+		_joiner_awaiting_initial_sync = false
+		print_debug("[Multiplayer] Joiner received initial progress sync")
+	
+	var incoming_depth := int(sanitized_progress_state.get("room_depth", room_depth))
+	var max_sane_depth := _get_third_boss_target_depth() + 2
+	if incoming_depth > max_sane_depth:
+		push_error("[Progress Sync] Rejected impossibly high incoming depth %d (max sane: %d)" % [incoming_depth, max_sane_depth])
+		return
+	
+	_current_room_sync_id = maxi(_current_room_sync_id, int(sanitized_progress_state.get("room_sync_id", _current_room_sync_id)))
+	rooms_cleared = int(sanitized_progress_state.get("rooms_cleared", rooms_cleared))
+	room_depth = incoming_depth
+	_clamp_room_depth_to_sane_range()
+	phase_two_rooms_cleared = int(sanitized_progress_state.get("phase_two_rooms_cleared", phase_two_rooms_cleared))
+	phase_three_rooms_cleared = int(sanitized_progress_state.get("phase_three_rooms_cleared", phase_three_rooms_cleared))
+	boss_unlocked = bool(sanitized_progress_state.get("boss_unlocked", boss_unlocked))
+	first_boss_defeated = bool(sanitized_progress_state.get("first_boss_defeated", first_boss_defeated))
+	second_boss_defeated = bool(sanitized_progress_state.get("second_boss_defeated", second_boss_defeated))
+	in_boss_room = bool(sanitized_progress_state.get("in_boss_room", in_boss_room))
+	in_second_boss_room = bool(sanitized_progress_state.get("in_second_boss_room", in_second_boss_room))
+	in_third_boss_room = bool(sanitized_progress_state.get("in_third_boss_room", in_third_boss_room))
+	choosing_next_room = bool(sanitized_progress_state.get("choosing_next_room", choosing_next_room))
 	var enforce_local_door_safety := not is_multiplayer or MultiplayerSessionManager.is_host()
 	if enforce_local_door_safety and (active_room_enemy_count > 0 or _is_reward_selection_active()):
 		choosing_next_room = false
@@ -2594,13 +2673,16 @@ func _enter_rest_site() -> void:
 		room_depth += 1
 		phase_three_rooms_cleared += 1
 		boss_unlocked = _is_third_boss_unlocked()
+		_clamp_room_depth_to_sane_range()
 	elif first_boss_defeated:
 		rooms_cleared += 1
 		room_depth += 1
 		phase_two_rooms_cleared += 1
 		boss_unlocked = _is_second_boss_unlocked()
+		_clamp_room_depth_to_sane_range()
 	else:
 		_advance_room_progress()
+		_clamp_room_depth_to_sane_range()
 	if is_instance_valid(player):
 		var player_max_health: int = int(player.get_max_health())
 		var heal_ratio_mult := float(current_difficulty_config.get("rest_heal_ratio_mult", 1.0))

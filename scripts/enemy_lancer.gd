@@ -150,17 +150,22 @@ func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
 
 
 func _process_network_visuals(delta: float) -> void:
-	if not is_instance_valid(bolt):
-		return
-	var previous_pos := bolt.global_position
-	var step_distance := bolt_speed * delta
-	if bolt.global_position.distance_squared_to(_remote_bolt_target_position) > step_distance * step_distance * 9.0:
-		bolt.global_position = _remote_bolt_target_position
-	elif bolt_direction.length_squared() > 0.000001:
-		bolt.global_position += bolt_direction.normalized() * step_distance
-	else:
-		bolt.global_position = _remote_bolt_target_position
-	if bolt.global_position.distance_squared_to(previous_pos) > 0.04:
+	var bolt_moved := false
+	if is_instance_valid(bolt):
+		var previous_pos := bolt.global_position
+		var step_distance := bolt_speed * delta
+		if bolt.global_position.distance_squared_to(_remote_bolt_target_position) > step_distance * step_distance * 9.0:
+			bolt.global_position = _remote_bolt_target_position
+		elif bolt_direction.length_squared() > 0.000001:
+			bolt.global_position += bolt_direction.normalized() * step_distance
+		else:
+			bolt.global_position = _remote_bolt_target_position
+		bolt_moved = bolt.global_position.distance_squared_to(previous_pos) > 0.04
+	
+	# Process zones on joiner to keep timers decaying and visual state fresh.
+	_process_zones(delta)
+	
+	if bolt_moved or not zones.is_empty():
 		queue_redraw()
 
 

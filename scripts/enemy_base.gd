@@ -108,6 +108,8 @@ var health_state
 var attack_anim_time_left: float = 0.0
 var attack_anim_duration: float = 0.1
 var visual_facing_direction: Vector2 = Vector2.LEFT
+var _network_target_facing: Vector2 = Vector2.LEFT
+var _network_facing_lerp_speed: float = 12.0
 var slow_time_left: float = 0.0
 var slow_speed_mult: float = 1.0
 var has_mutator_overlay: bool = false
@@ -210,6 +212,8 @@ func _physics_process(delta: float) -> void:
 		return
 	if not network_simulation_enabled:
 		velocity = Vector2.ZERO
+		# Smooth facing lerp on joiner to prevent twitching
+		_update_network_facing_lerp(delta)
 		if should_process_remote_visuals_every_frame():
 			_remote_visual_update_accum = 0.0
 			_remote_visual_update_left = _get_remote_visual_update_interval_for_enemy_load()
@@ -474,19 +478,29 @@ func get_network_facing_angle() -> float:
 	return facing.angle()
 
 
+func _update_network_facing_lerp(delta: float) -> void:
+	if _network_target_facing.length_squared() <= 0.000001:
+		return
+	var previous_facing := visual_facing_direction
+	var distance_to_target_sq := visual_facing_direction.distance_squared_to(_network_target_facing)
+	if distance_to_target_sq <= 0.000001:
+		return
+	var lerp_amount := minf(1.0, _network_facing_lerp_speed * delta)
+	visual_facing_direction = visual_facing_direction.slerp(_network_target_facing, lerp_amount).normalized()
+	var redraw_threshold_sq := _get_facing_redraw_threshold_sq()
+	if visual_facing_direction.distance_squared_to(previous_facing) > redraw_threshold_sq:
+		queue_redraw()
+
+
 func set_network_facing_angle(facing_radians: float) -> void:
 	var target_facing := Vector2.RIGHT.rotated(facing_radians)
 	if target_facing.length_squared() <= 0.000001:
 		return
-	var previous_facing := visual_facing_direction
+	# Store target; joiner will lerp toward it smoothly using _update_network_facing_lerp
+	_network_target_facing = target_facing.normalized()
+	# Initialize current facing if unset
 	if visual_facing_direction.length_squared() <= 0.000001:
-		visual_facing_direction = target_facing.normalized()
-	else:
-		var blended_facing := visual_facing_direction.slerp(target_facing.normalized(), 0.65)
-		visual_facing_direction = blended_facing.normalized() if blended_facing.length_squared() > 0.000001 else target_facing.normalized()
-	var redraw_threshold_sq := _get_facing_redraw_threshold_sq()
-	if previous_facing.length_squared() <= 0.000001 or visual_facing_direction.distance_squared_to(previous_facing) > redraw_threshold_sq:
-		queue_redraw()
+		visual_facing_direction = _network_target_facing
 
 func _update_spawn_transport(delta: float) -> void:
 	if spawn_transport_time_left <= 0.0:
