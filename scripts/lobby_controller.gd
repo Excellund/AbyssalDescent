@@ -26,6 +26,7 @@ var peer_state: Dictionary = {}
 ## Difficulty state (host only)
 var selected_difficulty_tier: int = 1  ## Default: Delver
 var multiplayer_session_manager
+var _host_connectivity_warning: String = ""
 
 
 func _ready() -> void:
@@ -39,6 +40,8 @@ func _ready() -> void:
 	if multiplayer_session_manager == null:
 		push_error("[LobbyController] MultiplayerSessionManager autoload is missing")
 		return
+	if bool(multiplayer_session_manager.is_host()) and multiplayer_session_manager.has_method("get_last_host_connectivity_warning"):
+		_host_connectivity_warning = String(multiplayer_session_manager.get_last_host_connectivity_warning())
 
 	local_peer_id = int(multiplayer_session_manager.local_peer_id)
 	if local_peer_id <= 0:
@@ -273,6 +276,11 @@ func _update_debug_status() -> void:
 		peer_count,
 		"YES" if session_connected else "NO"
 	]
+	if is_host and not _host_connectivity_warning.is_empty():
+		status_text += "\nHost network warning: %s" % _host_connectivity_warning
+	if bool(multiplayer_session_manager.is_host()) and multiplayer_session_manager.has_method("get_host_diagnostic_report"):
+		var diag := String(multiplayer_session_manager.get_host_diagnostic_report())
+		status_text += "\n\n" + diag
 	status_label.text = status_text
 	print("[Lobby] Debug status: %s" % status_text)
 

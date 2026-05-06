@@ -376,13 +376,13 @@ func _is_point_in_strike_lance(point_global: Vector2) -> bool:
 	var half_width := lerpf(strike_half_width_near, strike_half_width_far, width_t)
 	return absf(local.dot(side)) <= half_width
 
-func _clamp_to_arena(position: Vector2) -> Vector2:
+func _clamp_to_arena(pos: Vector2) -> Vector2:
 	if arena_size == Vector2.ZERO:
-		return position
+		return pos
 	var half := arena_size * 0.5 - Vector2.ONE * 22.0
 	return Vector2(
-		clampf(position.x, -half.x, half.x),
-		clampf(position.y, -half.y, half.y)
+		clampf(pos.x, -half.x, half.x),
+		clampf(pos.y, -half.y, half.y)
 	)
 
 func _draw() -> void:
@@ -489,7 +489,7 @@ func _draw() -> void:
 	if spectre_state == STATE_STRIKE:
 		var strike_progress := 1.0 - clampf(state_time_left / post_blink_strike_delay, 0.0, 1.0)
 		var pulse_freq := 0.014 + strike_progress * 0.006
-		var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * pulse_freq)
+		var _pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * pulse_freq)
 		
 		# Strike impact building aura
 		var impact_alpha := 0.08 + strike_progress * 0.14

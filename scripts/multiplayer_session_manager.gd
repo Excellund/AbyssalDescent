@@ -21,7 +21,8 @@ var connected_peers: Dictionary = {}  ## peer_id -> { joined_at, last_ping }
 ## Configuration
 var disconnect_timeout_sec: float = 30.0
 var ping_interval_sec: float = 1.0
-var join_attempt_timeout_sec: float = 1.5
+var join_attempt_timeout_sec: float = 120.0
+var local_join_attempt_timeout_sec: float = 120.0
 
 ## Internal state
 var _multiplayer: MultiplayerAPI
@@ -33,19 +34,28 @@ var _join_attempt_index: int = -1
 var _join_attempt_timer: Timer
 var _upnp_mapped_port: int = 0
 var _last_host_connectivity_warning: String = ""
+var _host_public_ip: String = ""
+var _host_local_ip: String = ""
+var _upnp_discovery_result: int = -1
+var _debug_log_file: String = "user://_multiplayer_debug.log"
 
 
 func _ready() -> void:
 	_multiplayer = get_tree().get_multiplayer()
+	_debug_log("[SESSION_MGR] _ready() called")
+	_debug_log("[SESSION_MGR] Log file location: user://_multiplayer_debug.log")
 	print("[MultiplayerSessionManager] _ready() called. Connecting to MultiplayerAPI signals...")
 	_multiplayer.peer_connected.connect(_on_peer_connected)
 	print("[MultiplayerSessionManager] Connected: peer_connected signal")
+	_debug_log("[SESSION_MGR] Connected peer_connected signal")
 	_multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	print("[MultiplayerSessionManager] Connected: peer_disconnected signal")
 	_multiplayer.connected_to_server.connect(_on_connected_to_server)
 	print("[MultiplayerSessionManager] Connected: connected_to_server signal")
+	_debug_log("[SESSION_MGR] Hooked connected_to_server signal")
 	_multiplayer.connection_failed.connect(_on_connection_failed)
 	print("[MultiplayerSessionManager] Connected: connection_failed signal")
+	_debug_log("[SESSION_MGR] Hooked connection_failed signal")
 	_multiplayer.server_disconnected.connect(_on_server_disconnected)
 	print("[MultiplayerSessionManager] Connected: server_disconnected signal")
 	print("[MultiplayerSessionManager] === ALL SIGNALS CONNECTED ===")
@@ -54,6 +64,7 @@ func _ready() -> void:
 	_join_attempt_timer.timeout.connect(_on_join_attempt_timeout)
 	add_child(_join_attempt_timer)
 	set_process(true)
+	_debug_log("[SESSION_MGR] _ready() completed successfully")
 
 
 func _process(delta: float) -> void:
@@ -68,6 +79,21 @@ func _process(delta: float) -> void:
 
 	_client_ping_elapsed_sec = 0.0
 	_network_ping.rpc_id(1)
+
+
+## Check if ENet client is actually connected to host (for diagnostics)
+func _is_client_actually_connected() -> bool:
+	if not session_connected or is_host_peer:
+		return false
+	var peer := _multiplayer.multiplayer_peer
+	if peer == null:
+		return false
+	if not peer is ENetMultiplayerPeer:
+		return false
+	var enet_peer := peer as ENetMultiplayerPeer
+	var state := enet_peer.get_connection_status()
+	_debug_log("[DIAG] ENet connection state: %d (0=DISCONNECTED, 2=CONNECTED)" % state)
+	return state == MultiplayerPeer.CONNECTION_CONNECTED
 
 
 ## Create a new multiplayer room (host only).
@@ -132,9 +158,11 @@ func create_registered_room(room_registration: Dictionary) -> bool:
 	room_code = String(room_registration.get("room_code", "")).strip_edges().to_upper()
 	if room_code.is_empty():
 		room_code = _generate_random_code(6).to_upper()
+	_host_public_ip = String(room_registration.get("host_address", "")).strip_edges()
+	_host_local_ip = _get_local_ip()
 	connected_peers[local_peer_id] = { "joined_at": Time.get_unix_time_from_system(), "last_ping": 0 }
 	session_created.emit(session_id, room_code)
-	print("[MultiplayerSessionManager] Host session created successfully. Room code: %s | Session ID: %s | Local peer ID: %d | Port: %d" % [room_code, session_id, local_peer_id, host_port])
+	print("[MultiplayerSessionManager] Host session created successfully. Room code: %s | Session ID: %s | Local peer ID: %d | Port: %d | Local IP: %s | Public IP: %s" % [room_code, session_id, local_peer_id, host_port, _host_local_ip, _host_public_ip])
 	return true
 
 
@@ -155,6 +183,7 @@ func join_room(host_address: String = "127.0.0.1", host_port: int = 9999, allow_
 	return _begin_join_attempts(candidate_addresses, host_port)
 
 func join_registered_room(room_registration: Dictionary) -> bool:
+	_debug_log("[JOIN] join_registered_room() called with registration: %s" % str(room_registration))
 	var transport_type := String(room_registration.get("transport_type", "direct_enet"))
 	if transport_type != "direct_enet":
 		connection_failed.emit("Unsupported transport type: %s" % transport_type)
@@ -166,6 +195,7 @@ func join_registered_room(room_registration: Dictionary) -> bool:
 		return false
 	session_id = String(room_registration.get("session_id", "")).strip_edges()
 	room_code = String(room_registration.get("room_code", "")).strip_edges().to_upper()
+	_debug_log("[JOIN] Resolved: session_id=%s room_code=%s host=%s:%d" % [session_id, room_code, host_address, host_port])
 	return join_room(host_address, host_port)
 
 
@@ -203,6 +233,45 @@ func get_last_host_connectivity_warning() -> String:
 	return _last_host_connectivity_warning
 
 
+func get_connection_state_debug() -> String:
+	var state = "=== CONNECTION STATE DEBUG ===\n"
+	state += "session_connected: %s\n" % session_connected
+	state += "is_host_peer: %s\n" % is_host_peer
+	state += "local_peer_id: %d\n" % local_peer_id
+	state += "session_id: %s\n" % session_id
+	state += "room_code: %s\n" % room_code
+	state += "connected_peers: %s\n" % str(connected_peers.keys())
+	state += "multiplayerapi connected: %s\n" % (_multiplayer.is_server() or _multiplayer.is_client())
+	state += "multiplayerapi is_server: %s\n" % _multiplayer.is_server()
+	state += "multiplayerapi is_client: %s\n" % _multiplayer.is_client()
+	
+	if _multiplayer.multiplayer_peer != null:
+		state += "multiplayer_peer: %s\n" % _multiplayer.multiplayer_peer.get_class()
+		if _multiplayer.multiplayer_peer is ENetMultiplayerPeer:
+			var enet := _multiplayer.multiplayer_peer as ENetMultiplayerPeer
+			state += "enet_status: %s\n" % enet.get_connection_status()
+	else:
+		state += "multiplayer_peer: null\n"
+	
+	return state
+
+
+func get_host_diagnostic_report() -> String:
+	var report := "=== MULTIPLAYER HOST DIAGNOSTICS ===\n"
+	report += "Session connected: %s\n" % session_connected
+	report += "Is host: %s\n" % is_host_peer
+	report += "Local peer ID: %d\n" % local_peer_id
+	report += "Room code: %s\n" % room_code
+	report += "Host port: 9999\n"
+	report += "Local IP: %s\n" % _host_local_ip
+	report += "Public IP (registered): %s\n" % _host_public_ip
+	report += "UPnP discovery result: %d (0=SUCCESS, 1=ERROR, 2=NOT_IMPLEM)\n" % _upnp_discovery_result
+	report += "UPnP mapped port: %d\n" % _upnp_mapped_port
+	if not _last_host_connectivity_warning.is_empty():
+		report += "Connectivity warning: %s\n" % _last_host_connectivity_warning
+	return report
+
+
 func _try_open_upnp_port_mapping(port: int) -> Dictionary:
 	if port <= 0:
 		return {
@@ -210,25 +279,31 @@ func _try_open_upnp_port_mapping(port: int) -> Dictionary:
 			"message": "Invalid host port for automatic router mapping."
 		}
 	var upnp := UPNP.new()
+	print("[MultiplayerSessionManager] Attempting UPnP discovery...")
 	var discover_result := upnp.discover(2000, 2, "InternetGatewayDevice")
+	_upnp_discovery_result = discover_result
+	print("[MultiplayerSessionManager] UPnP discovery result: %d (0=SUCCESS, 1=ERROR, 2=NOT_IMPLEM)" % discover_result)
 	if discover_result != UPNP.UPNP_RESULT_SUCCESS:
 		return {
 			"ok": false,
-			"message": "Could not auto-open UDP %d on your router (UPnP unavailable). Ask the host to forward UDP %d manually for internet play." % [port, port]
+			"message": "UPnP discovery failed (result=%d). Router may not support UPnP or is disabled. Manual port forwarding required: forward UDP %d to this host." % [discover_result, port]
 		}
 	var gateway := upnp.get_gateway()
 	if gateway == null or not gateway.is_valid_gateway():
 		return {
 			"ok": false,
-			"message": "Could not auto-open UDP %d on your router (no valid gateway). Ask the host to forward UDP %d manually for internet play." % [port, port]
+			"message": "UPnP gateway validation failed. Router UPnP may be misconfigured. Manual port forwarding required: forward UDP %d to this host." % [port]
 		}
+	print("[MultiplayerSessionManager] UPnP gateway found, attempting port mapping for UDP %d..." % port)
 	var add_result := upnp.add_port_mapping(port, port, "godot-2026", "UDP", 0)
+	print("[MultiplayerSessionManager] UPnP port mapping result: %d (0=SUCCESS, 1=ERROR, 2=NOT_IMPLEM)" % add_result)
 	if add_result != UPNP.UPNP_RESULT_SUCCESS:
 		return {
 			"ok": false,
-			"message": "Router rejected automatic UDP %d mapping. Ask the host to forward UDP %d manually for internet play." % [port, port]
+			"message": "Router rejected UDP %d mapping (result=%d). Manual port forwarding required: forward UDP %d to this host." % [port, add_result, port]
 		}
 	_upnp_mapped_port = port
+	print("[MultiplayerSessionManager] UPnP port mapping succeeded for UDP %d" % port)
 	return {
 		"ok": true,
 		"message": ""
@@ -290,6 +365,7 @@ func _network_ping() -> void:
 
 ## Internal: Triggered when peer connects to multiplayer session.
 func _on_peer_connected(peer_id: int) -> void:
+	_debug_log("[SIGNAL] _on_peer_connected() FIRED for peer %d" % peer_id)
 	if peer_id == _multiplayer.get_unique_id():
 		print("[MultiplayerSessionManager] Ignoring self-connection event")
 		return  ## Ignore self-connection events
@@ -297,6 +373,7 @@ func _on_peer_connected(peer_id: int) -> void:
 	connected_peers[peer_id] = { "joined_at": Time.get_unix_time_from_system(), "last_ping": 0 }
 	connected_peers[peer_id]["last_ping"] = Time.get_unix_time_from_system()
 	print("[MultiplayerSessionManager] Peer %d connected. Total peers now: %s" % [peer_id, connected_peers.keys()])
+	_debug_log("[HOST] Peer %d connected" % peer_id)
 	peer_connected.emit(peer_id)
 	
 	if is_host_peer:
@@ -319,13 +396,18 @@ func _on_peer_disconnected(peer_id: int) -> void:
 
 ## Internal: Triggered when client successfully connects to server.
 func _on_connected_to_server() -> void:
+	_debug_log("[SIGNAL] === _on_connected_to_server() FIRED ===")
+	_debug_log("[STATE] session_id='%s' room_code='%s'" % [session_id, room_code])
+	push_error("[MULTIPLAYER DEBUG] === CLIENT CONNECTED TO SERVER === (This should print visibly)")
 	print("[MultiplayerSessionManager] === CLIENT CONNECTED TO SERVER ===")
 	if _join_attempt_timer != null:
 		_join_attempt_timer.stop()
 	_join_attempt_addresses.clear()
 	_join_attempt_index = -1
 	local_peer_id = _multiplayer.get_unique_id()
+	push_error("[MULTIPLAYER DEBUG] Client connected as peer %d" % local_peer_id)
 	print("[MultiplayerSessionManager] Client connected to server as peer %d" % local_peer_id)
+	_debug_log("[CLIENT] Connected as peer %d" % local_peer_id)
 	
 	## Client must initialize host (peer 1) in connected_peers
 	if not is_host_peer:
@@ -334,12 +416,23 @@ func _on_connected_to_server() -> void:
 		print("[MultiplayerSessionManager] Client initialized connected_peers: %s" % [connected_peers.keys()])
 		_client_ping_elapsed_sec = ping_interval_sec
 	
+	print("[MultiplayerSessionManager] Client about to emit session_joined with session_id='%s'" % session_id)
+	_debug_log("[CLIENT] About to emit session_joined with session_id='%s'" % session_id)
+	
+	if session_id.is_empty():
+		_debug_log("[ERROR] session_id is EMPTY! Cannot emit valid signal!")
+		push_error("[MULTIPLAYER DEBUG] ERROR: session_id is empty - signal will have empty string!")
+	
+	push_error("[MULTIPLAYER DEBUG] About to emit session_joined signal with session_id: %s" % session_id)
 	session_joined.emit(session_id)
-	print("[MultiplayerSessionManager] Client emitting session_joined signal. session_id=%s" % session_id)
+	_debug_log("[CLIENT] session_joined signal emitted successfully with session_id='%s'" % session_id)
+	push_error("[MULTIPLAYER DEBUG] session_joined signal emitted successfully")
+	print("[MultiplayerSessionManager] Client successfully emitted session_joined signal")
 
 
 ## Internal: Triggered when client fails to connect.
 func _on_connection_failed() -> void:
+	_debug_log("[SIGNAL] _on_connection_failed() FIRED - Connection failed!")
 	if _join_attempt_index >= 0:
 		if _join_attempt_index + 1 < _join_attempt_addresses.size():
 			print("[MultiplayerSessionManager] Join attempt to %s failed. Trying next address..." % [str(_join_attempt_addresses[_join_attempt_index])])
@@ -403,6 +496,7 @@ func _is_client_connected_to_host() -> bool:
 
 
 func _begin_join_attempts(addresses: Array, host_port: int) -> bool:
+	_debug_log("[JOIN] _begin_join_attempts() called with addresses: %s port: %d" % [str(addresses), host_port])
 	_join_attempt_addresses.clear()
 	for candidate in addresses:
 		var addr := String(candidate).strip_edges()
@@ -413,10 +507,12 @@ func _begin_join_attempts(addresses: Array, host_port: int) -> bool:
 
 	if _join_attempt_addresses.is_empty():
 		connection_failed.emit("No valid host addresses to connect to.")
+		_debug_log("[JOIN] ERROR: No valid addresses provided")
 		return false
 
 	_join_attempt_port = host_port
 	_join_attempt_index = -1
+	_debug_log("[JOIN] Starting join attempts with %d candidate addresses" % _join_attempt_addresses.size())
 	return _advance_join_attempt()
 
 
@@ -427,22 +523,32 @@ func _advance_join_attempt() -> bool:
 
 	_join_attempt_index += 1
 	if _join_attempt_index < 0 or _join_attempt_index >= _join_attempt_addresses.size():
+		_debug_log("[JOIN] No more addresses to try. Join failed.")
 		return false
 
 	var host_address := String(_join_attempt_addresses[_join_attempt_index])
+	_debug_log("[JOIN] Creating ENet client for %s:%d (attempt %d/%d)" % [host_address, _join_attempt_port, _join_attempt_index + 1, _join_attempt_addresses.size()])
 	var enet_peer := ENetMultiplayerPeer.new()
+	print("[MultiplayerSessionManager] Attempting to create ENet client to %s:%d (attempt %d/%d)" % [host_address, _join_attempt_port, _join_attempt_index + 1, _join_attempt_addresses.size()])
 	var result := enet_peer.create_client(host_address, _join_attempt_port)
 	if result != OK:
-		print("[MultiplayerSessionManager] Failed to start join attempt to %s:%d (%s)" % [host_address, _join_attempt_port, error_string(result)])
+		var error_msg := error_string(result)
+		_debug_log("[JOIN] ENet create_client FAILED: %s (code %d)" % [error_msg, result])
+		print("[MultiplayerSessionManager] ENet create_client FAILED for %s:%d with error: %s (code %d)" % [host_address, _join_attempt_port, error_msg, result])
+		if host_address != "127.0.0.1" and host_address != "localhost":
+			print("[MultiplayerSessionManager]   Internet address %s unreachable. Likely causes: DNS failed, host firewall blocked, router not forwarding UDP %d, CGNAT blocking, or ISP restrictions." % [host_address, _join_attempt_port])
 		return _advance_join_attempt()
 
 	_multiplayer.multiplayer_peer = enet_peer
 	session_connected = true
 	is_host_peer = false
-	print("[MultiplayerSessionManager] Assigned ENet client peer to MultiplayerAPI. Connecting to %s:%d..." % [host_address, _join_attempt_port])
+	_debug_log("[JOIN] ENet client created successfully. Waiting for connection signal...")
+	print("[MultiplayerSessionManager] ENet client created and waiting for connection to %s:%d. Timeout: %.0fs" % [host_address, _join_attempt_port, _get_join_timeout_for_address(host_address)])
 
 	if _join_attempt_timer != null:
-		_join_attempt_timer.start(join_attempt_timeout_sec)
+		var timeout_sec := _get_join_timeout_for_address(host_address)
+		print("[MultiplayerSessionManager] Join timeout for %s:%d set to %.2fs" % [host_address, _join_attempt_port, timeout_sec])
+		_join_attempt_timer.start(timeout_sec)
 	return true
 
 
@@ -451,6 +557,8 @@ func _on_join_attempt_timeout() -> void:
 		return
 	if _is_client_connected_to_host():
 		return
+	var timed_out_address := str(_join_attempt_addresses[_join_attempt_index]) if _join_attempt_index >= 0 and _join_attempt_index < _join_attempt_addresses.size() else "unknown-host"
+	print("[MultiplayerSessionManager] Join timeout at address %s:%d after %.1f seconds" % [timed_out_address, _join_attempt_port, join_attempt_timeout_sec])
 
 	if _join_attempt_index + 1 < _join_attempt_addresses.size():
 		print("[MultiplayerSessionManager] Join attempt to %s timed out. Trying next address..." % [str(_join_attempt_addresses[_join_attempt_index])])
@@ -463,7 +571,16 @@ func _on_join_attempt_timeout() -> void:
 	if _multiplayer != null:
 		_multiplayer.multiplayer_peer = null
 	session_connected = false
-	connection_failed.emit("Connection timed out while joining room.")
+	connection_failed.emit(
+		"Connection timed out while joining room (%s:%d). Host must allow inbound UDP %d (port-forward or UPnP). If forwarding is configured and it still fails, host ISP may be behind CGNAT." % [timed_out_address, _join_attempt_port, _join_attempt_port]
+	)
+
+
+func _get_join_timeout_for_address(host_address: String) -> float:
+	var normalized := host_address.strip_edges().to_lower()
+	if normalized == "127.0.0.1" or normalized == "localhost":
+		return local_join_attempt_timeout_sec
+	return join_attempt_timeout_sec
 
 
 ## Internal: Generate a random alphanumeric code.
@@ -473,3 +590,32 @@ func _generate_random_code(length: int) -> String:
 	for i in range(length):
 		result += chars[randi() % chars.length()]
 	return result
+
+
+## Internal: Get the local (LAN) IP address of this host.
+func _get_local_ip() -> String:
+	var local_ip := IP.get_local_addresses()
+	for ip in local_ip:
+		if ip.begins_with("192.168.") or ip.begins_with("10.") or ip.begins_with("172."):
+			return ip
+	## Fallback to first non-localhost IP
+	for ip in local_ip:
+		if not ip.begins_with("127."):
+			return ip
+	return "127.0.0.1"
+
+
+## Internal: Write debug message to file for exported builds
+func _debug_log(message: String) -> void:
+	var timestamp = Time.get_ticks_msec() / 1000.0
+	var line = "[%.3f] %s\n" % [timestamp, message]
+	
+	var file = FileAccess.open(_debug_log_file, FileAccess.READ_WRITE)
+	if file == null:
+		file = FileAccess.open(_debug_log_file, FileAccess.WRITE)
+	
+	if file != null:
+		file.seek_end()
+		file.store_string(line)
+	else:
+		print("[MultiplayerSessionManager] WARNING: Could not open debug log file at %s" % _debug_log_file)
