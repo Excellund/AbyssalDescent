@@ -51,6 +51,8 @@ func open() -> void:
 	pause_menu_visible = true
 	if pause_menu_layer != null:
 		pause_menu_layer.visible = true
+	if pause_menu_panel != null:
+		_animate_pause_panel_in(pause_menu_panel, Vector2(0.0, 16.0))
 	if pause_options_panel != null:
 		pause_options_panel.visible = false
 	if pause_glossary_panel != null:
@@ -67,13 +69,13 @@ func close() -> void:
 
 func close_options() -> void:
 	if pause_options_panel != null:
-		pause_options_panel.visible = false
+		_animate_pause_panel_out(pause_options_panel, Vector2(0.0, -10.0))
 	if pause_glossary_panel != null:
-		pause_glossary_panel.visible = false
+		_animate_pause_panel_out(pause_glossary_panel, Vector2(0.0, -10.0))
 
 func close_glossary() -> void:
 	if pause_glossary_panel != null:
-		pause_glossary_panel.visible = false
+		_animate_pause_panel_out(pause_glossary_panel, Vector2(0.0, -10.0))
 
 func _create_pause_menu_ui() -> void:
 	pause_menu_layer = CanvasLayer.new()
@@ -121,19 +123,13 @@ func _create_pause_menu_ui() -> void:
 
 	var options_button := _make_pause_button("Options", Vector2(80.0, 208.0))
 	options_button.pressed.connect(func() -> void:
-		if pause_options_panel != null:
-			pause_options_panel.visible = true
-		if pause_glossary_panel != null:
-			pause_glossary_panel.visible = false
+		_show_pause_overlay_panel(pause_options_panel, pause_glossary_panel)
 	)
 	pause_menu_panel.add_child(options_button)
 
 	var glossary_button := _make_pause_button("Glossary", Vector2(80.0, 268.0))
 	glossary_button.pressed.connect(func() -> void:
-		if pause_glossary_panel != null:
-			pause_glossary_panel.visible = true
-		if pause_options_panel != null:
-			pause_options_panel.visible = false
+		_show_pause_overlay_panel(pause_glossary_panel, pause_options_panel)
 	)
 	pause_menu_panel.add_child(glossary_button)
 
@@ -388,7 +384,7 @@ func _build_pause_options_panel() -> Panel:
 	back_button.position = Vector2(250.0, 602.0)
 	back_button.pressed.connect(func() -> void:
 		if pause_options_panel != null:
-			pause_options_panel.visible = false
+			_animate_pause_panel_out(pause_options_panel, Vector2(0.0, -10.0))
 	)
 	panel.add_child(back_button)
 
@@ -427,7 +423,7 @@ func _build_pause_glossary_panel() -> Panel:
 	back_button.position = Vector2(300.0, 468.0)
 	back_button.pressed.connect(func() -> void:
 		if pause_glossary_panel != null:
-			pause_glossary_panel.visible = false
+			_animate_pause_panel_out(pause_glossary_panel, Vector2(0.0, -10.0))
 	)
 	panel.add_child(back_button)
 
@@ -594,6 +590,40 @@ func _update_pause_resolution_control_state(current_mode: String) -> void:
 			pause_resolution_hint_label.text = "Applies immediately and recenters the game window."
 		else:
 			pause_resolution_hint_label.text = "Disabled in fullscreen. Switch to Windowed to choose a resolution."
+
+func _show_pause_overlay_panel(panel_to_show: Panel, panel_to_hide: Panel) -> void:
+	if panel_to_hide != null and panel_to_hide.visible:
+		_animate_pause_panel_out(panel_to_hide, Vector2(0.0, -10.0))
+	if panel_to_show != null:
+		panel_to_show.visible = true
+		_animate_pause_panel_in(panel_to_show, Vector2(0.0, 14.0))
+
+func _animate_pause_panel_in(panel: Control, offset: Vector2) -> void:
+	if panel == null:
+		return
+	var target_position := panel.position
+	panel.modulate.a = 0.0
+	panel.position = target_position + offset
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(panel, "modulate:a", 1.0, 0.14)
+	tween.tween_property(panel, "position", target_position, 0.18).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+func _animate_pause_panel_out(panel: Control, offset: Vector2, duration: float = 0.16) -> void:
+	if panel == null or not panel.visible:
+		return
+	var start_position := panel.position
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(panel, "modulate:a", 0.0, duration)
+	tween.tween_property(panel, "position", start_position + offset, duration).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	tween.finished.connect(func() -> void:
+		if panel == null:
+			return
+		panel.visible = false
+		panel.position = start_position
+		panel.modulate.a = 1.0
+	)
 
 func _percent_to_db(percent: float) -> float:
 	return AUDIO_LEVELS.percent_to_db(percent)

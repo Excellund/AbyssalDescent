@@ -778,20 +778,34 @@ func _pick_random_quote(quotes: Array) -> String:
 	return String(quotes[rng.randi_range(0, quotes.size() - 1)])
 
 func _show_root_panel(animate: bool = true) -> void:
+	var from_panel := _current_replace_panel()
+	var closing_overlay := (options_panel != null and options_panel.visible) or (glossary_panel != null and glossary_panel.visible)
 	if root_panel != null:
 		root_panel.visible = true
 		if animate:
-			_animate_panel_in(root_panel, Vector2(0.0, 14.0))
+			if from_panel != null and from_panel != root_panel:
+				_animate_replace_transition(from_panel, root_panel, Vector2(0.0, 18.0), Vector2(0.0, -18.0))
+			elif not closing_overlay:
+				_animate_panel_in(root_panel, Vector2(0.0, 14.0))
 	if options_panel != null:
-		options_panel.visible = false
+		if options_panel.visible:
+			_animate_panel_out(options_panel, Vector2(0.0, -12.0))
+		else:
+			options_panel.visible = false
 	if glossary_panel != null:
-		glossary_panel.visible = false
+		if glossary_panel.visible:
+			_animate_panel_out(glossary_panel, Vector2(0.0, -12.0))
+		else:
+			glossary_panel.visible = false
 	if multiplayer_panel != null:
-		multiplayer_panel.visible = false
+		if not animate or multiplayer_panel != from_panel:
+			multiplayer_panel.visible = false
 	if difficulty_selector_panel != null:
-		difficulty_selector_panel.visible = false
+		if not animate or difficulty_selector_panel != from_panel:
+			difficulty_selector_panel.visible = false
 	if character_selector_panel != null:
-		character_selector_panel.visible = false
+		if not animate or character_selector_panel != from_panel:
+			character_selector_panel.visible = false
 	if primary_run_button != null:
 		primary_run_button.grab_focus()
 
@@ -800,8 +814,12 @@ func _show_options_panel() -> void:
 		root_panel.visible = true
 	if options_panel != null:
 		options_panel.visible = true
+		_animate_panel_in(options_panel, Vector2(0.0, 14.0))
 	if glossary_panel != null:
-		glossary_panel.visible = false
+		if glossary_panel.visible:
+			_animate_panel_out(glossary_panel, Vector2(0.0, -10.0))
+		else:
+			glossary_panel.visible = false
 	if multiplayer_panel != null:
 		multiplayer_panel.visible = false
 	if difficulty_selector_panel != null:
@@ -813,9 +831,13 @@ func _show_glossary_panel() -> void:
 	if root_panel != null:
 		root_panel.visible = true
 	if options_panel != null:
-		options_panel.visible = false
+		if options_panel.visible:
+			_animate_panel_out(options_panel, Vector2(0.0, -10.0))
+		else:
+			options_panel.visible = false
 	if glossary_panel != null:
 		glossary_panel.visible = true
+		_animate_panel_in(glossary_panel, Vector2(0.0, 14.0))
 	if multiplayer_panel != null:
 		multiplayer_panel.visible = false
 	if difficulty_selector_panel != null:
@@ -824,15 +846,14 @@ func _show_glossary_panel() -> void:
 		character_selector_panel.visible = false
 
 func _show_multiplayer_panel() -> void:
-	if root_panel != null:
+	if root_panel != null and multiplayer_panel != null:
+		_animate_replace_transition(root_panel, multiplayer_panel, Vector2(0.0, 24.0), Vector2(0.0, -18.0))
+	elif root_panel != null:
 		root_panel.visible = false
 	if options_panel != null:
 		options_panel.visible = false
 	if glossary_panel != null:
 		glossary_panel.visible = false
-	if multiplayer_panel != null:
-		multiplayer_panel.visible = true
-		_animate_panel_in(multiplayer_panel, Vector2(0.0, 28.0))
 	if difficulty_selector_panel != null:
 		difficulty_selector_panel.visible = false
 	if character_selector_panel != null:
@@ -843,7 +864,9 @@ func _show_multiplayer_panel() -> void:
 		multiplayer_host_button.grab_focus()
 
 func _show_difficulty_selector() -> void:
-	if root_panel != null:
+	if root_panel != null and difficulty_selector_panel != null:
+		_animate_replace_transition(root_panel, difficulty_selector_panel, Vector2(0.0, 24.0), Vector2(0.0, -18.0))
+	elif root_panel != null:
 		root_panel.visible = false
 	if options_panel != null:
 		options_panel.visible = false
@@ -851,9 +874,6 @@ func _show_difficulty_selector() -> void:
 		glossary_panel.visible = false
 	if multiplayer_panel != null:
 		multiplayer_panel.visible = false
-	if difficulty_selector_panel != null:
-		difficulty_selector_panel.visible = true
-		_animate_panel_in(difficulty_selector_panel, Vector2(0.0, 28.0))
 	if character_selector_panel != null:
 		character_selector_panel.visible = false
 
@@ -866,12 +886,15 @@ func _show_character_selector() -> void:
 		glossary_panel.visible = false
 	if multiplayer_panel != null:
 		multiplayer_panel.visible = false
-	if difficulty_selector_panel != null:
+	if difficulty_selector_panel != null and character_selector_panel != null:
+		_animate_replace_transition(difficulty_selector_panel, character_selector_panel, Vector2(0.0, 24.0), Vector2(-18.0, 0.0))
+	elif difficulty_selector_panel != null:
 		difficulty_selector_panel.visible = false
 	if character_selector_panel != null:
 		_update_character_selector()
-		character_selector_panel.visible = true
-		_animate_panel_in(character_selector_panel, Vector2(0.0, 28.0))
+		if not character_selector_panel.visible:
+			character_selector_panel.visible = true
+			_animate_panel_in(character_selector_panel, Vector2(0.0, 28.0))
 
 func _build_multiplayer_panel() -> Panel:
 	var panel := Panel.new()
@@ -1085,6 +1108,38 @@ func _animate_panel_in(panel: Control, offset: Vector2) -> void:
 	tween.set_parallel(true)
 	tween.tween_property(panel, "modulate:a", 1.0, 0.14)
 	tween.tween_property(panel, "position", target_position, 0.18).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+func _animate_panel_out(panel: Control, offset: Vector2, duration: float = 0.16) -> void:
+	if panel == null or not panel.visible:
+		return
+	var start_position := panel.position
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(panel, "modulate:a", 0.0, duration)
+	tween.tween_property(panel, "position", start_position + offset, duration).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	tween.finished.connect(func() -> void:
+		if panel == null:
+			return
+		panel.visible = false
+		panel.position = start_position
+		panel.modulate.a = 1.0
+	)
+
+func _animate_replace_transition(outgoing: Control, incoming: Control, incoming_offset: Vector2, outgoing_offset: Vector2) -> void:
+	if outgoing != null and outgoing.visible:
+		_animate_panel_out(outgoing, outgoing_offset, 0.14)
+	if incoming != null:
+		incoming.visible = true
+		_animate_panel_in(incoming, incoming_offset)
+
+func _current_replace_panel() -> Control:
+	if character_selector_panel != null and character_selector_panel.visible:
+		return character_selector_panel
+	if difficulty_selector_panel != null and difficulty_selector_panel.visible:
+		return difficulty_selector_panel
+	if multiplayer_panel != null and multiplayer_panel.visible:
+		return multiplayer_panel
+	return null
 
 func _build_menu_background_layer() -> Control:
 	var layer := Control.new()
