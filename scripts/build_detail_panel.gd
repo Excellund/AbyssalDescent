@@ -280,7 +280,7 @@ func _update_passive_section(character_id: String) -> void:
 	var desc := ""
 	match passive_id:
 		"iron_retort":
-			desc = "When you take damage, a counter window opens for 0.6s. Your next attack within the window deals 70% extra damage."
+			desc = "Hold your ground briefly to Brace. Your next melee strike while Braced is empowered (+80% damage, wider arc) and detonates an impact shockwave on hit, granting Guard (25% damage resistance for 1.5s). Dashing breaks Brace."
 		"sigil_burst":
 			desc = "Dashing arms a burst. Your next attack unleashes a 70% damage sigil explosion at the target."
 		"veilstep_rhythm":

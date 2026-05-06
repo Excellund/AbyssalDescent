@@ -370,7 +370,16 @@ var passive_sigil_burst: bool = false
 var passive_veilstep_rhythm: bool = false
 var passive_farline_focus: bool = false
 var active_character_id: String = ""
-var iron_retort_window_left: float = 0.0
+var iron_retort_brace_build_left: float = 0.0
+var iron_retort_brace_build_time: float = 0.42
+var iron_retort_brace_ready: bool = false
+var iron_retort_brace_window_left: float = 0.0
+var iron_retort_brace_window_duration: float = 2.4
+var iron_retort_dash_lockout_left: float = 0.0
+var iron_retort_dash_lockout_duration: float = 0.8
+var iron_retort_guard_left: float = 0.0
+var iron_retort_guard_duration: float = 1.5
+var iron_retort_guard_resist_ratio: float = 0.25
 var sigil_burst_ready: bool = false
 var veilstep_rhythm_shards: int = 0
 var veilstep_rhythm_shards_max: int = 3
@@ -518,6 +527,9 @@ func _try_start_dash(direction: Vector2) -> void:
 		return
 
 	dash_direction = direction if direction != Vector2.ZERO else last_move_direction
+	if passive_iron_retort:
+		iron_retort_dash_lockout_left = iron_retort_dash_lockout_duration
+		_clear_iron_retort_brace(false)
 	var range_mult := void_dash_range_mult if reward_void_dash else 1.0
 	dash_remaining_distance = dash_distance * range_mult
 	var effective_dash_speed := maxf(1.0, dash_speed * range_mult)
@@ -909,6 +921,8 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 		total_resist += aegis_field_resist_ratio
 	if indomitable_spirit_damage_reduction > 0.0:
 		total_resist += indomitable_spirit_damage_reduction
+	if passive_iron_retort and iron_retort_guard_left > 0.0:
+		total_resist += iron_retort_guard_resist_ratio
 	total_resist = clampf(total_resist, 0.0, 0.92)
 	reduced = int(ceil(float(reduced) * (1.0 - total_resist)))
 	reduced = int(ceil(float(reduced) * incoming_damage_taken_mult))
@@ -931,12 +945,6 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 		_trigger_aegis_field()
 		player_feedback.play_damage_flash()
 		player_feedback.play_impact_sound()
-		if passive_iron_retort:
-			iron_retort_window_left = 0.6
-			if player_feedback != null and player_feedback.has_method("play_iron_retort_window_open"):
-				player_feedback.play_iron_retort_window_open(global_position)
-				_broadcast_feedback_event("iron_retort_window_open", {"position": global_position})
-			queue_redraw()
 		if reward_vow_shatter:
 			_vow_shatter_primed = true
 		if crushed_vow_bonus_damage > 0:
@@ -1069,7 +1077,11 @@ func apply_character_package(data: Dictionary) -> void:
 	passive_sigil_burst = passive_id == "sigil_burst"
 	passive_veilstep_rhythm = passive_id == "veilstep_rhythm"
 	passive_farline_focus = passive_id == "farline_focus"
-	iron_retort_window_left = 0.0
+	iron_retort_brace_build_left = 0.0
+	iron_retort_brace_ready = false
+	iron_retort_brace_window_left = 0.0
+	iron_retort_dash_lockout_left = 0.0
+	iron_retort_guard_left = 0.0
 	sigil_burst_ready = false
 	veilstep_rhythm_shards = 0
 	veilstep_rhythm_surge_ready = false
@@ -1762,13 +1774,14 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		_indomitable_pending_melee_bonus = _consume_indomitable_spirit_bonus(oath_target_point)
 		if _indomitable_pending_melee_bonus > 0:
 			_indomitable_oath_spent_this_attack = true
-	var retort_active: bool = passive_iron_retort and iron_retort_window_left > 0.0
+	var retort_active: bool = passive_iron_retort and iron_retort_brace_ready
 	if retort_active:
-		strike_damage = int(round(float(strike_damage) * 1.7))
-		iron_retort_window_left = 0.0
+		strike_damage = int(round(float(strike_damage) * 1.8))
 	var farline_focus_proc_fired: bool = false
 	var retort_impact_position: Vector2 = global_position + attack_direction * (strike_range * 0.45)
 	var strike_arc_degrees := float(melee_context.get("arc_degrees", attack_arc_degrees))
+	if retort_active:
+		strike_arc_degrees += 24.0
 	var max_angle_radians := deg_to_rad(strike_arc_degrees * 0.5)
 
 	var rupture_triggered_enemy_ids: Dictionary = {}
@@ -1817,22 +1830,10 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		if reward_voidfire and _voidfire_lockout_left <= 0.0:
 			_voidfire_last_hit_time = Time.get_ticks_msec() / 1000.0
 			_gain_void_heat(voidfire_heat_per_hit)
-	if retort_active and player_feedback != null:
-		if did_hit and player_feedback.has_method("play_iron_retort_consume"):
-			player_feedback.play_iron_retort_consume(global_position, retort_impact_position)
-			_broadcast_feedback_event("iron_retort_consume", {
-				"player_position": global_position,
-				"impact_position": retort_impact_position
-			})
-		else:
-			player_feedback.play_world_ring(global_position, 36.0, Color(0.96, 0.52, 0.28, 0.88), 0.18)
-			_broadcast_feedback_event("world_ring", {
-				"position": global_position,
-				"radius": 36.0,
-				"color": Color(0.96, 0.52, 0.28, 0.88),
-				"duration": 0.18
-			})
-		queue_redraw()
+	if retort_active and did_hit:
+		_consume_iron_retort_brace(global_position, retort_impact_position)
+		iron_retort_guard_left = iron_retort_guard_duration
+		_apply_iron_retort_shockwave(retort_impact_position, strike_damage)
 	if farline_focus_proc_fired:
 		queue_redraw()
 	_indomitable_pending_melee_bonus = 0
@@ -2873,10 +2874,100 @@ func _update_farline_focus_state(delta: float) -> void:
 		queue_redraw()
 
 func _update_iron_retort(delta: float) -> void:
-	if iron_retort_window_left <= 0.0:
+	if not passive_iron_retort:
+		if iron_retort_brace_build_left > 0.0 or iron_retort_brace_ready or iron_retort_brace_window_left > 0.0 or iron_retort_dash_lockout_left > 0.0 or iron_retort_guard_left > 0.0:
+			iron_retort_brace_build_left = 0.0
+			iron_retort_brace_ready = false
+			iron_retort_brace_window_left = 0.0
+			iron_retort_dash_lockout_left = 0.0
+			iron_retort_guard_left = 0.0
+			queue_redraw()
 		return
-	iron_retort_window_left = maxf(0.0, iron_retort_window_left - delta)
+	if iron_retort_guard_left > 0.0:
+		iron_retort_guard_left = maxf(0.0, iron_retort_guard_left - delta)
+	if iron_retort_dash_lockout_left > 0.0:
+		iron_retort_dash_lockout_left = maxf(0.0, iron_retort_dash_lockout_left - delta)
+	if iron_retort_brace_ready:
+		iron_retort_brace_window_left = maxf(0.0, iron_retort_brace_window_left - delta)
+		if is_zero_approx(iron_retort_brace_window_left):
+			_clear_iron_retort_brace(true)
+		return
+	if iron_retort_dash_lockout_left > 0.0:
+		if iron_retort_brace_build_left > 0.0:
+			iron_retort_brace_build_left = 0.0
+			queue_redraw()
+		return
+	if _is_dash_active():
+		if iron_retort_brace_build_left > 0.0:
+			iron_retort_brace_build_left = 0.0
+			queue_redraw()
+		return
+	if _is_attack_locked():
+		if iron_retort_brace_build_left > 0.0:
+			iron_retort_brace_build_left = maxf(0.0, iron_retort_brace_build_left - delta * 2.2)
+			queue_redraw()
+		return
+	var brace_speed_limit := maxf(56.0, max_speed * 0.33)
+	if velocity.length() <= brace_speed_limit:
+		var old_build := iron_retort_brace_build_left
+		iron_retort_brace_build_left = minf(iron_retort_brace_build_time, iron_retort_brace_build_left + delta)
+		if old_build != iron_retort_brace_build_left:
+			queue_redraw()
+		if iron_retort_brace_build_left >= iron_retort_brace_build_time:
+			_activate_iron_retort_brace(global_position)
+	else:
+		if iron_retort_brace_build_left > 0.0:
+			iron_retort_brace_build_left = maxf(0.0, iron_retort_brace_build_left - delta * 3.0)
+			queue_redraw()
+
+func _activate_iron_retort_brace(feedback_position: Vector2) -> void:
+	iron_retort_brace_ready = true
+	iron_retort_brace_build_left = iron_retort_brace_build_time
+	iron_retort_brace_window_left = iron_retort_brace_window_duration
 	queue_redraw()
+	if player_feedback != null and player_feedback.has_method("play_iron_retort_window_open"):
+		player_feedback.play_iron_retort_window_open(feedback_position)
+		_broadcast_feedback_event("iron_retort_window_open", {"position": feedback_position})
+
+func _clear_iron_retort_brace(redraw: bool) -> void:
+	iron_retort_brace_ready = false
+	iron_retort_brace_build_left = 0.0
+	iron_retort_brace_window_left = 0.0
+	if redraw:
+		queue_redraw()
+
+func _consume_iron_retort_brace(player_position: Vector2, impact_position: Vector2) -> void:
+	iron_retort_brace_ready = false
+	iron_retort_brace_build_left = 0.0
+	iron_retort_brace_window_left = 0.0
+	queue_redraw()
+	if player_feedback != null and player_feedback.has_method("play_iron_retort_consume"):
+		player_feedback.play_iron_retort_consume(player_position, impact_position)
+		_broadcast_feedback_event("iron_retort_consume", {
+			"player_position": player_position,
+			"impact_position": impact_position
+		})
+
+func _apply_iron_retort_shockwave(epicenter: Vector2, source_damage: int) -> void:
+	var shockwave_radius := 56.0
+	var shockwave_damage := _apply_objective_mutator_damage_mult(maxi(1, int(round(float(source_damage) * 0.55))))
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if not DAMAGEABLE.can_take_damage(enemy_node):
+			continue
+		var enemy_body := enemy_node as Node2D
+		if enemy_body.global_position.distance_to(epicenter) > shockwave_radius:
+			continue
+		DAMAGEABLE.apply_damage(enemy_node, shockwave_damage, {"is_ground_attack": true, "attack_type": "iron_retort_shockwave"})
+	if player_feedback != null:
+		player_feedback.play_world_ring(epicenter, shockwave_radius, Color(0.96, 0.52, 0.28, 0.9), 0.18)
+		_broadcast_feedback_event("world_ring", {
+			"position": epicenter,
+			"radius": shockwave_radius,
+			"color": Color(0.96, 0.52, 0.28, 0.9),
+			"duration": 0.18
+		})
 
 # --- Voidfire ---
 
@@ -3570,13 +3661,16 @@ func _apply_sigil_burst(epicenter: Vector2, source_damage: int) -> void:
 		DAMAGEABLE.apply_damage(enemy_node, burst_damage, {"is_ground_attack": true, "attack_type": "sigil_burst"})
 
 func _draw_passive_state(body_radius: float) -> void:
-	if passive_iron_retort and iron_retort_window_left > 0.0:
-		var t := clampf(iron_retort_window_left / 0.6, 0.0, 1.0)
-		var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.001 * 16.0)
-		var ring_alpha := 0.38 + pulse * 0.2
-		draw_circle(Vector2.ZERO, body_radius + 10.0, Color(1.0, 0.56, 0.3, 0.07 * t))
-		draw_arc(Vector2.ZERO, body_radius + 12.0, 0.0, TAU, 48, Color(1.0, 0.58, 0.32, ring_alpha), 2.6)
-		draw_arc(Vector2.ZERO, body_radius + 15.0, -PI * 0.5, -PI * 0.5 + TAU * t, 52, Color(1.0, 0.88, 0.62, 0.72), 2.0)
+	if passive_iron_retort:
+		var brace_t := clampf(iron_retort_brace_build_left / maxf(0.01, iron_retort_brace_build_time), 0.0, 1.0)
+		draw_arc(Vector2.ZERO, body_radius + 14.0, -PI * 0.5, -PI * 0.5 + TAU * brace_t, 48, Color(0.96, 0.76, 0.42, 0.58), 2.2)
+		if iron_retort_brace_ready:
+			var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.001 * 16.0)
+			draw_arc(Vector2.ZERO, body_radius + 12.5, 0.0, TAU, 48, Color(1.0, 0.62, 0.36, 0.5 + pulse * 0.24), 2.5)
+			draw_circle(Vector2.ZERO, body_radius + 9.5, Color(1.0, 0.56, 0.3, 0.08 + pulse * 0.04))
+		if iron_retort_guard_left > 0.0:
+			var guard_t := clampf(iron_retort_guard_left / maxf(0.01, iron_retort_guard_duration), 0.0, 1.0)
+			draw_arc(Vector2.ZERO, body_radius + 18.0, -PI * 0.5, -PI * 0.5 + TAU * guard_t, 52, Color(0.58, 0.78, 1.0, 0.72), 2.0)
 	if passive_sigil_burst and sigil_burst_ready:
 		var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.001 * 14.0)
 		draw_arc(Vector2.ZERO, body_radius + 13.0, 0.0, TAU, 40, Color(0.82, 0.36, 1.0, 0.55 + pulse * 0.22), 2.6)
