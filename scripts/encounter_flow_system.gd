@@ -46,12 +46,52 @@ func build_door_options(boss_unlocked: bool, _room_depth: int, door_distance_fro
 		options.append(boss_option)
 		return options
 
+	var ordered_route_options := _sort_route_options_by_difficulty(route_options)
 	var positions := [Vector2(-door_distance_from_center, -40.0), Vector2(door_distance_from_center, -40.0)]
-	for i in range(mini(route_options.size(), positions.size())):
-		var option := ENCOUNTER_CONTRACTS.normalize_door_option(route_options[i])
+	for i in range(mini(ordered_route_options.size(), positions.size())):
+		var option := ENCOUNTER_CONTRACTS.normalize_door_option(ordered_route_options[i])
 		ENCOUNTER_CONTRACTS.door_option_set_position(option, positions[i])
 		options.append(option)
 	return options
+
+func _sort_route_options_by_difficulty(route_options: Array[Dictionary]) -> Array[Dictionary]:
+	if route_options.size() <= 1:
+		return route_options
+	var normalized: Array[Dictionary] = []
+	for option in route_options:
+		normalized.append(ENCOUNTER_CONTRACTS.normalize_door_option(option))
+	normalized.sort_custom(_compare_route_options_by_difficulty)
+	return normalized
+
+func _compare_route_options_by_difficulty(a: Dictionary, b: Dictionary) -> bool:
+	var a_rank := _route_option_difficulty_rank(a)
+	var b_rank := _route_option_difficulty_rank(b)
+	if a_rank != b_rank:
+		return a_rank < b_rank
+	var a_label := String(a.get("label", ""))
+	var b_label := String(b.get("label", ""))
+	return a_label.naturalnocasecmp_to(b_label) < 0
+
+func _route_option_difficulty_rank(option: Dictionary) -> int:
+	var kind := ENCOUNTER_CONTRACTS.door_option_kind_id(option)
+	if kind == ENCOUNTER_CONTRACTS.DOOR_KIND_BOSS:
+		return 6
+	if kind == ENCOUNTER_CONTRACTS.DOOR_KIND_REST:
+		return 0
+	var icon := String(option.get("icon", "")).strip_edges().to_lower()
+	match icon:
+		"rest":
+			return 0
+		"easy":
+			return 1
+		"hard":
+			return 2
+		"objective":
+			return 3
+		"trial":
+			return 4
+		_:
+			return 5
 
 func find_used_door(player_position: Vector2, door_options: Array[Dictionary], door_use_radius: float) -> Dictionary:
 	for door in door_options:
