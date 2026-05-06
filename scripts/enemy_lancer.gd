@@ -67,7 +67,7 @@ func _process_behavior(delta: float) -> void:
 		attack_cooldown_left = maxf(0.0, attack_cooldown_left - delta)
 
 	_process_bolt(delta)
-	_process_zones(delta)
+	_process_zones(delta, true)
 
 	match lancer_state:
 		ENEMY_STATE_ENUMS.LancerState.STALK:
@@ -82,6 +82,38 @@ func _process_behavior(delta: float) -> void:
 
 func should_process_remote_visuals_every_frame() -> bool:
 	return not network_simulation_enabled and (is_instance_valid(bolt) or not zones.is_empty())
+
+
+func should_force_network_runtime_state_sampling() -> bool:
+	return lancer_state == ENEMY_STATE_ENUMS.LancerState.WINDUP or lancer_state == ENEMY_STATE_ENUMS.LancerState.FIRE
+
+
+func get_priority_network_sync_interval_sec() -> float:
+	if lancer_state == ENEMY_STATE_ENUMS.LancerState.WINDUP or lancer_state == ENEMY_STATE_ENUMS.LancerState.FIRE:
+		return 0.03
+	return 0.0
+
+
+func _get_custom_network_runtime_state() -> Dictionary:
+	return {
+		"lancer_state": lancer_state,
+		"state_time_left": state_time_left,
+		"attack_cooldown_left": attack_cooldown_left,
+		"fire_direction": fire_direction,
+		"locked_impact_global": locked_impact_global,
+		"reposition_dir": _reposition_dir
+	}
+
+
+func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
+	if custom_state.is_empty():
+		return
+	lancer_state = int(custom_state.get("lancer_state", lancer_state))
+	state_time_left = float(custom_state.get("state_time_left", state_time_left))
+	attack_cooldown_left = float(custom_state.get("attack_cooldown_left", attack_cooldown_left))
+	fire_direction = custom_state.get("fire_direction", fire_direction) as Vector2
+	locked_impact_global = custom_state.get("locked_impact_global", locked_impact_global) as Vector2
+	_reposition_dir = custom_state.get("reposition_dir", _reposition_dir) as Vector2
 
 
 func get_projectile_network_sync_state() -> Dictionary:
@@ -163,7 +195,7 @@ func _process_network_visuals(delta: float) -> void:
 		bolt_moved = bolt.global_position.distance_squared_to(previous_pos) > 0.04
 	
 	# Process zones on joiner to keep timers decaying and visual state fresh.
-	_process_zones(delta)
+	_process_zones(delta, false)
 	
 	if bolt_moved or not zones.is_empty():
 		queue_redraw()
@@ -376,7 +408,7 @@ func _land_bolt(land_pos: Vector2) -> void:
 # Hazard zones
 # ---------------------------------------------------------------------------
 
-func _process_zones(delta: float) -> void:
+func _process_zones(delta: float, apply_damage: bool = true) -> void:
 	if zones.is_empty():
 		return
 
@@ -391,7 +423,7 @@ func _process_zones(delta: float) -> void:
 		if float(z["tick_timer"]) <= 0.0:
 			z["tick_timer"] = zone_tick_interval
 			z["tick_flash"] = 0.12
-			if is_instance_valid(target):
+			if apply_damage and is_instance_valid(target):
 				if (z["pos"] as Vector2).distance_to(target.global_position) <= zone_radius:
 					if DAMAGEABLE.can_take_damage(target):
 						DAMAGEABLE.apply_damage(target, zone_tick_damage, {"source": "enemy_ability", "ability": "lancer_zone_tick"})

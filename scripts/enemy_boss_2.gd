@@ -102,6 +102,7 @@ var _orbital_fortress_hit_flash_left: float = 0.0
 var _fortress_health_fill_default: Color = Color(0.0, 0.0, 0.0, 0.0)
 var _fortress_health_bg_default: Color = Color(0.0, 0.0, 0.0, 0.0)
 var _fortress_health_colors_cached: bool = false
+var _attack_sync_was_active: bool = false
 
 func _ready() -> void:
 	max_health = boss_max_health
@@ -155,6 +156,84 @@ func _process_behavior(delta: float) -> void:
 	_update_edge_escape_state(delta)
 
 	queue_redraw()
+
+func should_force_network_runtime_state_sampling() -> bool:
+	return boss_state == ENEMY_STATE_ENUMS.Boss2State.WINDUP or boss_state == ENEMY_STATE_ENUMS.Boss2State.ATTACK or attack_anim_time_left > 0.0
+
+func should_process_remote_visuals_every_frame() -> bool:
+	return not network_simulation_enabled and (boss_state == ENEMY_STATE_ENUMS.Boss2State.WINDUP or boss_state == ENEMY_STATE_ENUMS.Boss2State.ATTACK)
+
+func get_priority_network_sync_interval_sec() -> float:
+	if boss_state == ENEMY_STATE_ENUMS.Boss2State.WINDUP or boss_state == ENEMY_STATE_ENUMS.Boss2State.ATTACK:
+		return 0.03
+	return 0.0
+
+func get_projectile_network_sync_state() -> Dictionary:
+	if not network_simulation_enabled:
+		return {}
+	var active := boss_state != ENEMY_STATE_ENUMS.Boss2State.STALK or attack_anim_time_left > 0.0 or attack_afterglow_time_left > 0.0 or impact_burst_time_left > 0.0
+	if not active and not _attack_sync_was_active:
+		return {}
+	var payload := {
+		"active": active,
+		"boss_state": boss_state,
+		"state_time_left": state_time_left,
+		"active_attack": active_attack,
+		"locked_direction": locked_direction,
+		"telegraph_alpha": telegraph_alpha,
+		"echo_dash_remaining": _echo_dash_remaining,
+		"echo_dash_retargeting": _echo_dash_retargeting,
+		"echo_dash_retarget_time_left": _echo_dash_retarget_time_left,
+		"polar_shift_is_pull": _polar_shift_is_pull,
+		"polar_shift_pull_afterglow_left": _polar_shift_pull_afterglow_left,
+		"orbital_fortress_hit_flash_left": _orbital_fortress_hit_flash_left,
+		"attack_afterglow_time_left": attack_afterglow_time_left,
+		"impact_burst_time_left": impact_burst_time_left,
+		"last_attack_for_fx": last_attack_for_fx,
+		"visual_facing_direction": visual_facing_direction,
+		"attack_anim_time_left": attack_anim_time_left
+	}
+	_attack_sync_was_active = active
+	return payload
+
+func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
+	if network_simulation_enabled:
+		return
+	if sync_state.is_empty():
+		return
+	var active := bool(sync_state.get("active", false))
+	if not active:
+		if boss_state != ENEMY_STATE_ENUMS.Boss2State.STALK:
+			boss_state = ENEMY_STATE_ENUMS.Boss2State.STALK
+			state_time_left = 0.0
+		queue_redraw()
+		return
+	boss_state = int(sync_state.get("boss_state", boss_state))
+	state_time_left = float(sync_state.get("state_time_left", state_time_left))
+	active_attack = int(sync_state.get("active_attack", active_attack))
+	locked_direction = sync_state.get("locked_direction", locked_direction) as Vector2
+	telegraph_alpha = float(sync_state.get("telegraph_alpha", telegraph_alpha))
+	_echo_dash_remaining = int(sync_state.get("echo_dash_remaining", _echo_dash_remaining))
+	_echo_dash_retargeting = bool(sync_state.get("echo_dash_retargeting", _echo_dash_retargeting))
+	_echo_dash_retarget_time_left = float(sync_state.get("echo_dash_retarget_time_left", _echo_dash_retarget_time_left))
+	_polar_shift_is_pull = bool(sync_state.get("polar_shift_is_pull", _polar_shift_is_pull))
+	_polar_shift_pull_afterglow_left = float(sync_state.get("polar_shift_pull_afterglow_left", _polar_shift_pull_afterglow_left))
+	_orbital_fortress_hit_flash_left = float(sync_state.get("orbital_fortress_hit_flash_left", _orbital_fortress_hit_flash_left))
+	attack_afterglow_time_left = float(sync_state.get("attack_afterglow_time_left", attack_afterglow_time_left))
+	impact_burst_time_left = float(sync_state.get("impact_burst_time_left", impact_burst_time_left))
+	last_attack_for_fx = int(sync_state.get("last_attack_for_fx", last_attack_for_fx))
+	attack_anim_time_left = float(sync_state.get("attack_anim_time_left", attack_anim_time_left))
+	visual_facing_direction = sync_state.get("visual_facing_direction", visual_facing_direction) as Vector2
+	queue_redraw()
+
+func _process_network_visuals(delta: float) -> void:
+	if boss_state == ENEMY_STATE_ENUMS.Boss2State.WINDUP or boss_state == ENEMY_STATE_ENUMS.Boss2State.ATTACK or boss_state == ENEMY_STATE_ENUMS.Boss2State.RECOVER:
+		if state_time_left > 0.0:
+			state_time_left = maxf(0.0, state_time_left - delta)
+	attack_afterglow_time_left = maxf(0.0, attack_afterglow_time_left - delta)
+	impact_burst_time_left = maxf(0.0, impact_burst_time_left - delta)
+	_polar_shift_pull_afterglow_left = maxf(0.0, _polar_shift_pull_afterglow_left - delta)
+	_orbital_fortress_hit_flash_left = maxf(0.0, _orbital_fortress_hit_flash_left - delta)
 
 func take_damage(amount: int, _damage_context: Dictionary = {}) -> void:
 	if amount <= 0:

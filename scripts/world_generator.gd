@@ -247,6 +247,8 @@ var _multiplayer_last_sync_batch_count: int = 0
 var _multiplayer_last_sync_estimated_bytes: int = 0
 var _multiplayer_last_sync_tether_enemy_count: int = 0
 var _multiplayer_last_sync_tether_estimated_bytes: int = 0
+var _multiplayer_last_feedback_event_count: int = 0
+var _multiplayer_last_feedback_estimated_bytes: int = 0
 var _priority_enemy_sync_interval_cache_sec: float = 0.0
 var _priority_enemy_sync_interval_cache_elapsed: float = 0.0
 var _priority_enemy_sync_interval_cache_ttl_sec: float = 0.12
@@ -1316,15 +1318,25 @@ func _update_multiplayer_perf_logging(delta: float) -> void:
 	if _multiplayer_perf_log_elapsed < log_interval:
 		return
 	_multiplayer_perf_log_elapsed = 0.0
+	var player_replication_service := get_node_or_null("/root/PlayerReplicationService")
+	if player_replication_service != null and player_replication_service.has_method("get_last_feedback_sync_metrics"):
+		var feedback_metrics := player_replication_service.get_last_feedback_sync_metrics() as Dictionary
+		_multiplayer_last_feedback_event_count = int(feedback_metrics.get("event_count", 0))
+		_multiplayer_last_feedback_estimated_bytes = int(feedback_metrics.get("estimated_bytes", 0))
+	else:
+		_multiplayer_last_feedback_event_count = 0
+		_multiplayer_last_feedback_estimated_bytes = 0
 	print("[MP PERF] tracked=%d room_active=%d sync_enemies=%d sync_batches=%d sync_est_bytes=%d" % [
 		_network_enemy_nodes.size(),
 		active_room_enemy_count,
 		_multiplayer_last_sync_enemy_count,
 		_multiplayer_last_sync_batch_count,
 		_multiplayer_last_sync_estimated_bytes
-	] + " tether_sync_enemies=%d tether_sync_est_bytes=%d" % [
+	] + " tether_sync_enemies=%d tether_sync_est_bytes=%d feedback_events=%d feedback_est_bytes=%d" % [
 		_multiplayer_last_sync_tether_enemy_count,
-		_multiplayer_last_sync_tether_estimated_bytes
+		_multiplayer_last_sync_tether_estimated_bytes,
+		_multiplayer_last_feedback_event_count,
+		_multiplayer_last_feedback_estimated_bytes
 	])
 	if not _perf_attr_last_sample.is_empty():
 		print("[MP PERF][ATTR] pre_ms=%.2f sync_ms=%.2f post_ms=%.2f frame_ms=%.2f ui_ms=%.2f enemy_drawn_avg=%.1f runtime_delta_ms=%.2f runtime_delta_calls=%.1f" % [

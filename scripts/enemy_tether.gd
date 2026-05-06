@@ -34,6 +34,7 @@ var _has_last_beam_sample_target_position: bool = false
 var _last_beam_sample_a: Vector2 = Vector2.ZERO
 var _last_beam_sample_b: Vector2 = Vector2.ZERO
 var _has_last_beam_sample_segment: bool = false
+var _attack_sync_was_active: bool = false
 
 func _ready() -> void:
 	super()
@@ -68,6 +69,69 @@ func _process_behavior(delta: float) -> void:
 			_process_beam(delta)
 		STATE_RECOVER:
 			_process_recover(delta)
+
+func should_force_network_runtime_state_sampling() -> bool:
+	return tether_state == STATE_WINDUP or tether_state == STATE_BEAM or attack_anim_time_left > 0.0
+
+func should_process_remote_visuals_every_frame() -> bool:
+	return not network_simulation_enabled and (tether_state == STATE_WINDUP or tether_state == STATE_BEAM)
+
+func get_priority_network_sync_interval_sec() -> float:
+	if tether_state == STATE_WINDUP or tether_state == STATE_BEAM:
+		return 0.03
+	return 0.0
+
+func get_projectile_network_sync_state() -> Dictionary:
+	if not network_simulation_enabled:
+		return {}
+	var active := tether_state == STATE_WINDUP or tether_state == STATE_BEAM
+	if not active and not _attack_sync_was_active:
+		return {}
+	var partner_enemy_id := -1
+	if is_instance_valid(beam_partner):
+		partner_enemy_id = int(beam_partner.get_meta("network_enemy_id", -1))
+	var payload := {
+		"active": active,
+		"tether_state": tether_state,
+		"state_time_left": state_time_left,
+		"beam_cooldown_left": beam_cooldown_left,
+		"beam_tick_left": beam_tick_left,
+		"partner_enemy_id": partner_enemy_id,
+		"visual_facing_direction": visual_facing_direction,
+		"attack_anim_time_left": attack_anim_time_left
+	}
+	_attack_sync_was_active = active
+	return payload
+
+func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
+	if network_simulation_enabled:
+		return
+	if sync_state.is_empty():
+		return
+	var active := bool(sync_state.get("active", false))
+	if not active:
+		if tether_state == STATE_WINDUP or tether_state == STATE_BEAM:
+			tether_state = STATE_RECOVER
+			state_time_left = 0.0
+		queue_redraw()
+		return
+	tether_state = int(sync_state.get("tether_state", tether_state))
+	state_time_left = float(sync_state.get("state_time_left", state_time_left))
+	beam_cooldown_left = float(sync_state.get("beam_cooldown_left", beam_cooldown_left))
+	beam_tick_left = float(sync_state.get("beam_tick_left", beam_tick_left))
+	attack_anim_time_left = float(sync_state.get("attack_anim_time_left", attack_anim_time_left))
+	visual_facing_direction = sync_state.get("visual_facing_direction", visual_facing_direction) as Vector2
+	var partner_enemy_id := int(sync_state.get("partner_enemy_id", -1))
+	beam_partner = _resolve_partner_by_network_enemy_id(partner_enemy_id)
+	queue_redraw()
+
+func _process_network_visuals(delta: float) -> void:
+	if state_time_left <= 0.0:
+		return
+	var previous_time_left := state_time_left
+	state_time_left = maxf(0.0, state_time_left - delta)
+	if not is_equal_approx(previous_time_left, state_time_left):
+		queue_redraw()
 
 func _update_beam_partner(delta: float) -> void:
 	_partner_refresh_left = maxf(0.0, _partner_refresh_left - delta)

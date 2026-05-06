@@ -30,6 +30,7 @@ var _charge_direction: Vector2 = Vector2.LEFT
 var _charges_remaining: int = 0
 var _charge_hit_applied: bool = false
 var _charge_enemy_exceptions: Dictionary = {}
+var _attack_sync_was_active: bool = false
 
 func _ready() -> void:
 	super()
@@ -57,6 +58,63 @@ func _process_behavior(delta: float) -> void:
 			_process_charge_pause(delta)
 		ENEMY_STATE_ENUMS.RamState.RECOVER:
 			_process_recover(delta)
+
+func should_force_network_runtime_state_sampling() -> bool:
+	return ram_state == ENEMY_STATE_ENUMS.RamState.WINDUP or ram_state == ENEMY_STATE_ENUMS.RamState.CHARGE or ram_state == ENEMY_STATE_ENUMS.RamState.CHARGE_PAUSE or attack_anim_time_left > 0.0
+
+func should_process_remote_visuals_every_frame() -> bool:
+	return not network_simulation_enabled and (ram_state == ENEMY_STATE_ENUMS.RamState.WINDUP or ram_state == ENEMY_STATE_ENUMS.RamState.CHARGE or ram_state == ENEMY_STATE_ENUMS.RamState.CHARGE_PAUSE)
+
+func get_priority_network_sync_interval_sec() -> float:
+	if ram_state == ENEMY_STATE_ENUMS.RamState.WINDUP or ram_state == ENEMY_STATE_ENUMS.RamState.CHARGE or ram_state == ENEMY_STATE_ENUMS.RamState.CHARGE_PAUSE:
+		return 0.03
+	return 0.0
+
+func get_projectile_network_sync_state() -> Dictionary:
+	if not network_simulation_enabled:
+		return {}
+	var active := ram_state == ENEMY_STATE_ENUMS.RamState.WINDUP or ram_state == ENEMY_STATE_ENUMS.RamState.CHARGE or ram_state == ENEMY_STATE_ENUMS.RamState.CHARGE_PAUSE
+	if not active and not _attack_sync_was_active:
+		return {}
+	var payload := {
+		"active": active,
+		"ram_state": ram_state,
+		"state_time_left": state_time_left,
+		"charge_direction": _charge_direction,
+		"charges_remaining": _charges_remaining,
+		"visual_facing_direction": visual_facing_direction,
+		"attack_anim_time_left": attack_anim_time_left
+	}
+	_attack_sync_was_active = active
+	return payload
+
+func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
+	if network_simulation_enabled:
+		return
+	if sync_state.is_empty():
+		return
+	var active := bool(sync_state.get("active", false))
+	if not active:
+		if ram_state == ENEMY_STATE_ENUMS.RamState.WINDUP or ram_state == ENEMY_STATE_ENUMS.RamState.CHARGE or ram_state == ENEMY_STATE_ENUMS.RamState.CHARGE_PAUSE:
+			ram_state = ENEMY_STATE_ENUMS.RamState.RECOVER
+			state_time_left = 0.0
+		queue_redraw()
+		return
+	ram_state = int(sync_state.get("ram_state", ram_state))
+	state_time_left = float(sync_state.get("state_time_left", state_time_left))
+	_charge_direction = sync_state.get("charge_direction", _charge_direction) as Vector2
+	_charges_remaining = int(sync_state.get("charges_remaining", _charges_remaining))
+	attack_anim_time_left = float(sync_state.get("attack_anim_time_left", attack_anim_time_left))
+	visual_facing_direction = sync_state.get("visual_facing_direction", visual_facing_direction) as Vector2
+	queue_redraw()
+
+func _process_network_visuals(delta: float) -> void:
+	if state_time_left <= 0.0:
+		return
+	var previous_time_left := state_time_left
+	state_time_left = maxf(0.0, state_time_left - delta)
+	if not is_equal_approx(previous_time_left, state_time_left):
+		queue_redraw()
 
 func _process_seek(delta: float) -> void:
 	var to_target := target.global_position - global_position

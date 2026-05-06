@@ -16,6 +16,7 @@ const PYRE_FIELD_SCRIPT := preload("res://scripts/pyre_field.gd")
 @export var death_field_tick_damage: int = 7
 
 var attack_cooldown_left: float = 0.0
+var _attack_sync_was_active: bool = false
 
 func _ready() -> void:
 	super()
@@ -34,6 +35,54 @@ func _process_behavior(delta: float) -> void:
 	velocity = velocity.move_toward(desired, (acceleration if desired != Vector2.ZERO else deceleration) * delta)
 	move_and_slide()
 	_try_attack_target()
+
+func should_force_network_runtime_state_sampling() -> bool:
+	return attack_anim_time_left > 0.0
+
+func should_process_remote_visuals_every_frame() -> bool:
+	return not network_simulation_enabled and attack_anim_time_left > 0.0
+
+func get_priority_network_sync_interval_sec() -> float:
+	if attack_anim_time_left > 0.0:
+		return 0.03
+	return 0.0
+
+func get_projectile_network_sync_state() -> Dictionary:
+	if not network_simulation_enabled:
+		return {}
+	var active := attack_anim_time_left > 0.0
+	if not active and not _attack_sync_was_active:
+		return {}
+	var payload := {
+		"active": active,
+		"attack_anim_time_left": attack_anim_time_left,
+		"visual_facing_direction": visual_facing_direction
+	}
+	_attack_sync_was_active = active
+	return payload
+
+func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
+	if network_simulation_enabled:
+		return
+	if sync_state.is_empty():
+		return
+	var active := bool(sync_state.get("active", false))
+	if not active:
+		if attack_anim_time_left > 0.0:
+			attack_anim_time_left = 0.0
+			queue_redraw()
+		return
+	attack_anim_time_left = float(sync_state.get("attack_anim_time_left", attack_anim_time_left))
+	visual_facing_direction = sync_state.get("visual_facing_direction", visual_facing_direction) as Vector2
+	queue_redraw()
+
+func _process_network_visuals(delta: float) -> void:
+	if attack_anim_time_left <= 0.0:
+		return
+	var previous_time_left := attack_anim_time_left
+	attack_anim_time_left = maxf(0.0, attack_anim_time_left - delta)
+	if not is_equal_approx(previous_time_left, attack_anim_time_left):
+		queue_redraw()
 
 func _try_attack_target() -> void:
 	if not is_instance_valid(target):

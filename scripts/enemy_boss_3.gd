@@ -80,6 +80,7 @@ var _hit_flash_pos: Vector2 = Vector2.ZERO
 var hit_flash_time_left: float = 0.0
 var hit_flash_duration: float = 0.3
 var hit_flash_attack: int = ATTACK_SEVER
+var _attack_sync_was_active: bool = false
 
 func _ready() -> void:
 	max_health = boss_max_health
@@ -128,6 +129,90 @@ func _process_behavior(delta: float) -> void:
 	hit_flash_time_left = maxf(0.0, hit_flash_time_left - delta)
 	_update_edge_escape_state(delta)
 	queue_redraw()
+
+func should_force_network_runtime_state_sampling() -> bool:
+	return boss_state == STATE_WINDUP or boss_state == STATE_ATTACK or attack_anim_time_left > 0.0
+
+func should_process_remote_visuals_every_frame() -> bool:
+	return not network_simulation_enabled and (boss_state == STATE_WINDUP or boss_state == STATE_ATTACK)
+
+func get_priority_network_sync_interval_sec() -> float:
+	if boss_state == STATE_WINDUP or boss_state == STATE_ATTACK:
+		return 0.03
+	return 0.0
+
+func get_projectile_network_sync_state() -> Dictionary:
+	if not network_simulation_enabled:
+		return {}
+	var active := boss_state != STATE_STALK or attack_anim_time_left > 0.0 or attack_afterglow_time_left > 0.0 or impact_burst_time_left > 0.0
+	if not active and not _attack_sync_was_active:
+		return {}
+	var payload := {
+		"active": active,
+		"boss_state": boss_state,
+		"state_time_left": state_time_left,
+		"active_attack": active_attack,
+		"locked_direction": locked_direction,
+		"telegraph_alpha": telegraph_alpha,
+		"sever_hit_applied": _sever_hit_applied,
+		"locked_null_ring_center": _locked_null_ring_center,
+		"null_ring_pull_timer": _null_ring_pull_timer,
+		"null_ring_pull_fx_time_left": _null_ring_pull_fx_time_left,
+		"null_ring_pull_fx_center": _null_ring_pull_fx_center,
+		"echo_cross_angle": _echo_cross_angle,
+		"attack_afterglow_time_left": attack_afterglow_time_left,
+		"impact_burst_time_left": impact_burst_time_left,
+		"last_attack_for_fx": last_attack_for_fx,
+		"hit_flash_pos": _hit_flash_pos,
+		"hit_flash_time_left": hit_flash_time_left,
+		"hit_flash_attack": hit_flash_attack,
+		"visual_facing_direction": visual_facing_direction,
+		"attack_anim_time_left": attack_anim_time_left
+	}
+	_attack_sync_was_active = active
+	return payload
+
+func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
+	if network_simulation_enabled:
+		return
+	if sync_state.is_empty():
+		return
+	var active := bool(sync_state.get("active", false))
+	if not active:
+		if boss_state != STATE_STALK:
+			boss_state = STATE_STALK
+			state_time_left = 0.0
+		queue_redraw()
+		return
+	boss_state = int(sync_state.get("boss_state", boss_state))
+	state_time_left = float(sync_state.get("state_time_left", state_time_left))
+	active_attack = int(sync_state.get("active_attack", active_attack))
+	locked_direction = sync_state.get("locked_direction", locked_direction) as Vector2
+	telegraph_alpha = float(sync_state.get("telegraph_alpha", telegraph_alpha))
+	_sever_hit_applied = bool(sync_state.get("sever_hit_applied", _sever_hit_applied))
+	_locked_null_ring_center = sync_state.get("locked_null_ring_center", _locked_null_ring_center) as Vector2
+	_null_ring_pull_timer = float(sync_state.get("null_ring_pull_timer", _null_ring_pull_timer))
+	_null_ring_pull_fx_time_left = float(sync_state.get("null_ring_pull_fx_time_left", _null_ring_pull_fx_time_left))
+	_null_ring_pull_fx_center = sync_state.get("null_ring_pull_fx_center", _null_ring_pull_fx_center) as Vector2
+	_echo_cross_angle = float(sync_state.get("echo_cross_angle", _echo_cross_angle))
+	attack_afterglow_time_left = float(sync_state.get("attack_afterglow_time_left", attack_afterglow_time_left))
+	impact_burst_time_left = float(sync_state.get("impact_burst_time_left", impact_burst_time_left))
+	last_attack_for_fx = int(sync_state.get("last_attack_for_fx", last_attack_for_fx))
+	_hit_flash_pos = sync_state.get("hit_flash_pos", _hit_flash_pos) as Vector2
+	hit_flash_time_left = float(sync_state.get("hit_flash_time_left", hit_flash_time_left))
+	hit_flash_attack = int(sync_state.get("hit_flash_attack", hit_flash_attack))
+	attack_anim_time_left = float(sync_state.get("attack_anim_time_left", attack_anim_time_left))
+	visual_facing_direction = sync_state.get("visual_facing_direction", visual_facing_direction) as Vector2
+	queue_redraw()
+
+func _process_network_visuals(delta: float) -> void:
+	if boss_state == STATE_WINDUP or boss_state == STATE_ATTACK or boss_state == STATE_RECOVER:
+		if state_time_left > 0.0:
+			state_time_left = maxf(0.0, state_time_left - delta)
+	attack_afterglow_time_left = maxf(0.0, attack_afterglow_time_left - delta)
+	impact_burst_time_left = maxf(0.0, impact_burst_time_left - delta)
+	_null_ring_pull_fx_time_left = maxf(0.0, _null_ring_pull_fx_time_left - delta)
+	hit_flash_time_left = maxf(0.0, hit_flash_time_left - delta)
 
 func _update_target_tracking(delta: float) -> void:
 	if not is_instance_valid(target) or delta <= 0.000001:

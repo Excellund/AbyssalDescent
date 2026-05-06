@@ -44,6 +44,7 @@ var impact_burst_time_left: float = 0.0
 var impact_burst_duration: float = 0.2
 var last_attack_for_fx: int = ENEMY_STATE_ENUMS.BossAttack.CHARGE
 var _edge_stall_time: float = 0.0
+var _attack_sync_was_active: bool = false
 
 
 func _ready() -> void:
@@ -94,6 +95,66 @@ func _process_behavior(delta: float) -> void:
 	_update_edge_escape_state(delta)
 
 	queue_redraw()
+
+
+func should_force_network_runtime_state_sampling() -> bool:
+	return boss_state == ENEMY_STATE_ENUMS.BossState.TELEGRAPH or boss_state == ENEMY_STATE_ENUMS.BossState.ATTACK or attack_anim_time_left > 0.0
+
+
+func should_process_remote_visuals_every_frame() -> bool:
+	return not network_simulation_enabled and (boss_state == ENEMY_STATE_ENUMS.BossState.TELEGRAPH or boss_state == ENEMY_STATE_ENUMS.BossState.ATTACK)
+
+
+func get_priority_network_sync_interval_sec() -> float:
+	if boss_state == ENEMY_STATE_ENUMS.BossState.TELEGRAPH or boss_state == ENEMY_STATE_ENUMS.BossState.ATTACK:
+		return 0.03
+	return 0.0
+
+
+func get_projectile_network_sync_state() -> Dictionary:
+	if not network_simulation_enabled:
+		return {}
+	var active := boss_state != ENEMY_STATE_ENUMS.BossState.IDLE or attack_anim_time_left > 0.0 or attack_afterglow_time_left > 0.0 or impact_burst_time_left > 0.0
+	if not active and not _attack_sync_was_active:
+		return {}
+	var payload := {
+		"active": active,
+		"attack_afterglow_time_left": attack_afterglow_time_left,
+		"impact_burst_time_left": impact_burst_time_left,
+		"last_attack_for_fx": last_attack_for_fx,
+		"visual_facing_direction": visual_facing_direction,
+		"attack_anim_time_left": attack_anim_time_left
+	}
+	_attack_sync_was_active = active
+	return payload
+
+
+func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
+	if network_simulation_enabled:
+		return
+	if sync_state.is_empty():
+		return
+	var active := bool(sync_state.get("active", false))
+	if not active:
+		attack_anim_time_left = 0.0
+		attack_afterglow_time_left = 0.0
+		impact_burst_time_left = 0.0
+		queue_redraw()
+		return
+	attack_afterglow_time_left = float(sync_state.get("attack_afterglow_time_left", attack_afterglow_time_left))
+	impact_burst_time_left = float(sync_state.get("impact_burst_time_left", impact_burst_time_left))
+	last_attack_for_fx = int(sync_state.get("last_attack_for_fx", last_attack_for_fx))
+	attack_anim_time_left = float(sync_state.get("attack_anim_time_left", attack_anim_time_left))
+	visual_facing_direction = sync_state.get("visual_facing_direction", visual_facing_direction) as Vector2
+	queue_redraw()
+
+
+func _process_network_visuals(delta: float) -> void:
+	if boss_state == ENEMY_STATE_ENUMS.BossState.TELEGRAPH or boss_state == ENEMY_STATE_ENUMS.BossState.ATTACK or boss_state == ENEMY_STATE_ENUMS.BossState.RECOVER:
+		if state_time_left > 0.0:
+			state_time_left = maxf(0.0, state_time_left - delta)
+	attack_afterglow_time_left = maxf(0.0, attack_afterglow_time_left - delta)
+	impact_burst_time_left = maxf(0.0, impact_burst_time_left - delta)
 
 
 func _process_idle_state(delta: float) -> void:
