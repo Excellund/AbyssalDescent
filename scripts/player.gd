@@ -155,6 +155,7 @@ var first_strike_bonus_damage: int = 0
 ## Multiplayer-specific fields
 var player_id: int = 0  ## Network peer ID (0 = single player)
 var is_local_player: bool = true  ## Only local player processes input
+var encounter_input_frozen: bool = false
 
 var health_state
 var player_feedback
@@ -486,6 +487,8 @@ func _physics_process(delta: float) -> void:
 func _read_movement_direction() -> Vector2:
 	if not _is_local_control_owner():
 		return Vector2.ZERO  ## Remote players don't process input
+	if encounter_input_frozen:
+		return Vector2.ZERO
 	return Input.get_vector("move_left", "move_right", "move_up", "move_down")
 
 func _update_last_move_direction(direction: Vector2) -> void:
@@ -517,6 +520,8 @@ func _update_execution_edge_proc_display(delta: float) -> void:
 func _try_start_dash(direction: Vector2) -> void:
 	if not _is_local_control_owner():
 		return  ## Remote players don't process input
+	if encounter_input_frozen:
+		return
 	if _is_attack_locked():
 		return
 	if polar_shift_dash_lockout_left > 0.0:
@@ -559,6 +564,8 @@ func _try_start_dash(direction: Vector2) -> void:
 func _try_attack_input() -> void:
 	if not _is_local_control_owner():
 		return  ## Remote players don't process input
+	if encounter_input_frozen:
+		return
 	if not Input.is_action_just_pressed("attack"):
 		return
 	if _is_dash_active():

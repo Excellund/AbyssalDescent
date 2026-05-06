@@ -168,6 +168,8 @@ var current_room_enemy_mutator: Dictionary = {}
 var current_room_player_mutator: Dictionary = {}
 
 var encounter_intro_grace_active: bool = false
+var _encounter_ready_peers: Dictionary = {}  # Dictionary[int, bool] - host only
+var _local_player_ready: bool = false
 
 var hud: Node
 var renderer: Node2D
@@ -4547,12 +4549,13 @@ func _begin_spawn_transport_if_idle(enemy: Node, duration: float) -> void:
 
 func _start_encounter_intro_grace() -> void:
 	encounter_intro_grace_active = true
-	_intro_grace_last_player_positions.clear()
-	for player_node in _get_multiplayer_player_nodes():
-		if player_node is CharacterBody2D:
-			_intro_grace_last_player_positions[player_node] = player_node.global_position
+	_encounter_ready_peers.clear()
+	_local_player_ready = false
 	if is_instance_valid(player) and player is CharacterBody2D:
 		(player as CharacterBody2D).velocity = Vector2.ZERO
+	var local_node := _find_local_player_node()
+	if is_instance_valid(local_node) and local_node.has_method("set"):
+		local_node.set("encounter_input_frozen", true)
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		if not (enemy_node is Node):
 			continue
@@ -4561,75 +4564,85 @@ func _start_encounter_intro_grace() -> void:
 	_set_enemy_targets_passive(true)
 	hud.show_banner("Survey the arena", "")
 
-var _intro_grace_last_player_positions: Dictionary = {}  # Dictionary[Node, Vector2]
-
 func _update_encounter_intro_grace() -> bool:
 	if not encounter_intro_grace_active:
 		return false
 	if not is_instance_valid(player) and not is_instance_valid(second_player):
 		return false
 	
-	var player_moving := false
+	if _local_player_ready:
+		return true
 	
-	# Check if any player has moved since last frame
-	for player_node in _get_multiplayer_player_nodes():
-		if not _is_player_alive(player_node):
-			continue
-		if not (player_node is CharacterBody2D):
-			continue
-		
-		var last_pos := _intro_grace_last_player_positions.get(player_node, player_node.global_position) as Vector2
-		var current_pos := player_node.global_position
-		var moved_distance_sq := last_pos.distance_squared_to(current_pos)
-		_intro_grace_last_player_positions[player_node] = current_pos
-		var current_velocity_sq: float = player_node.velocity.length_squared()
-		
-		if current_velocity_sq > 64.0 or moved_distance_sq > 1.0:
-			player_moving = true
-			break
+	var local_player_node := _find_local_player_node()
+	if local_player_node == null:
+		return true
 	
+	var move_input := Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	var player_moving := move_input.length_squared() > 0.0
 	var player_attacking := Input.is_action_just_pressed("attack")
+	
 	if player_moving or player_attacking:
 		var detected_via := "movement" if player_moving else "attack"
-		print_debug("Grace: Movement detected via %s [peer:%d]" % [detected_via, get_tree().get_multiplayer().get_unique_id()])
-		_exit_intro_grace_networked()
-		return false
+		print_debug("Grace: Local player ready via %s [peer:%d]" % [detected_via, get_tree().get_multiplayer().get_unique_id()])
+		_signal_local_player_ready()
 	
 	return true
 
-func _exit_intro_grace_networked() -> void:
-	# Exit grace locally immediately
-	_exit_encounter_intro_grace()
-	# If multiplayer, notify host to ensure all peers exit grace
-	if is_multiplayer and not MultiplayerSessionManager.is_host():
-		_request_host_exit_grace.rpc_id(1)
-	elif is_multiplayer and MultiplayerSessionManager.is_host():
-		# Host notifies joiner
-		_notify_joiner_exit_grace.rpc()
+func _signal_local_player_ready() -> void:
+	if _local_player_ready:
+		return
+	_local_player_ready = true
+	
+	if not is_multiplayer:
+		_exit_encounter_intro_grace()
+		return
+	
+	hud.show_persistent_banner("Ready", "Waiting for ally...")
+	
+	var local_peer_id := _resolve_local_peer_id()
+	if MultiplayerSessionManager.is_host():
+		_on_player_ready_signal(local_peer_id)
+	else:
+		_notify_host_player_ready.rpc_id(1, local_peer_id)
 
 @rpc("reliable", "any_peer")
-func _request_host_exit_grace() -> void:
+func _notify_host_player_ready(peer_id: int) -> void:
 	if not is_multiplayer or not MultiplayerSessionManager.is_host():
 		return
-	var sender_peer_id := get_tree().get_multiplayer().get_remote_sender_id()
-	if sender_peer_id <= 0:
+	var sender := get_tree().get_multiplayer().get_remote_sender_id()
+	if sender > 0 and sender != peer_id:
 		return
-	# Host exits grace and notifies joiner
+	_on_player_ready_signal(peer_id)
+
+func _on_player_ready_signal(peer_id: int) -> void:
+	_encounter_ready_peers[peer_id] = true
+	
+	for player_node in _get_multiplayer_player_nodes():
+		if not _is_player_alive(player_node):
+			continue
+		var pid := int(player_node.get("player_id"))
+		if not _encounter_ready_peers.get(pid, false):
+			return
+	
 	_exit_encounter_intro_grace()
-	_notify_joiner_exit_grace.rpc()
+	_broadcast_all_players_ready.rpc()
 
 @rpc("reliable", "authority")
-func _notify_joiner_exit_grace() -> void:
+func _broadcast_all_players_ready() -> void:
 	_exit_encounter_intro_grace()
 
 func _exit_encounter_intro_grace() -> void:
 	if not encounter_intro_grace_active:
 		return
 	encounter_intro_grace_active = false
+	var local_node := _find_local_player_node()
+	if is_instance_valid(local_node) and local_node.has_method("set"):
+		local_node.set("encounter_input_frozen", false)
 	var debug_msg := "Grace exit: grace deactivated"
 	if is_multiplayer:
 		debug_msg += " [peer:%d, host:%s]" % [get_tree().get_multiplayer().get_unique_id(), MultiplayerSessionManager.is_host()]
 	print_debug(debug_msg)
+	hud.hide_persistent_banner()
 	_set_enemy_targets_passive(false)
 	hud.show_banner("Engage", "")
 
