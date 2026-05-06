@@ -62,11 +62,11 @@ static func get_bearing_definitions() -> Dictionary:
 			ENCOUNTER_CONTRACTS.profile_counts(4, 0, 0, 0, 0, 0, 0, 3, 0, 0),
 			ENCOUNTER_CONTRACTS.profile_counts(5, 0, 0, 0, 0, 0, 0, 4, 0, 0)
 		]),
-		"Gauntlet": _bearing_definition(ROOM_SIZE_POOL, ENCOUNTER_CONTRACTS.profile_counts(1, 1, 1, 1, 1, 0, 1), [
-			ENCOUNTER_CONTRACTS.profile_counts(1, 1, 1, 1, 1, 0, 1),
-			ENCOUNTER_CONTRACTS.profile_counts(2, 1, 1, 1, 1, 0, 1),
-			ENCOUNTER_CONTRACTS.profile_counts(3, 1, 1, 1, 2, 0, 1),
-			ENCOUNTER_CONTRACTS.profile_counts(4, 2, 1, 1, 2, 0, 1)
+		"Gauntlet": _bearing_definition(ROOM_SIZE_POOL, ENCOUNTER_CONTRACTS.profile_counts(2, 1, 1, 1, 1, 0, 1, 1, 0, 0), [
+			ENCOUNTER_CONTRACTS.profile_counts(1, 1, 1, 1, 1, 0, 0, 0, 0, 0),
+			ENCOUNTER_CONTRACTS.profile_counts(2, 1, 1, 1, 1, 0, 1, 1, 0, 0),
+			ENCOUNTER_CONTRACTS.profile_counts(3, 1, 1, 1, 1, 1, 1, 1, 1, 2),
+			ENCOUNTER_CONTRACTS.profile_counts(4, 2, 1, 1, 2, 1, 2, 1, 1, 2)
 		])
 	}
 
