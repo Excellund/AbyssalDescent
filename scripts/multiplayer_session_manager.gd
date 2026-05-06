@@ -174,11 +174,10 @@ func join_room(host_address: String = "127.0.0.1", host_port: int = 9999, allow_
 
 	var candidate_addresses: Array = [host_address]
 	if allow_localhost_retry and host_address != "127.0.0.1" and host_address != "localhost":
-		## In debug builds, prefer localhost first for same-machine testing speed.
+		## Only add localhost fallback in editor/debug runs for same-machine testing.
+		## Exported multiplayer joins should never silently retry localhost.
 		if OS.is_debug_build():
 			candidate_addresses = ["127.0.0.1", host_address]
-		else:
-			candidate_addresses.append("127.0.0.1")
 
 	return _begin_join_attempts(candidate_addresses, host_port)
 
