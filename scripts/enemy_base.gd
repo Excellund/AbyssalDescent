@@ -6,6 +6,10 @@ const COLOR_PALETTE := preload("res://scripts/shared/color_palette.gd")
 signal health_changed(current_health: int, max_health: int)
 signal died
 
+static var _shared_enemy_nodes_cache: Array[Node2D] = []
+static var _shared_enemy_count: int = 0
+static var _shared_enemy_cache_physics_frame: int = -1
+
 # === SHARED COLOR PALETTE ===
 const COLOR_HEALTH_BAR_BG := COLOR_PALETTE.COLOR_HEALTH_BAR_BG
 const COLOR_ENEMY_HEALTH_FILL := COLOR_PALETTE.COLOR_ENEMY_HEALTH_FILL
@@ -182,7 +186,7 @@ func _ready() -> void:
 	_visual_lod_refresh_left = fmod(float(get_instance_id()) * 0.0013, maxf(0.05, visual_lod_refresh_interval_sec))
 	_remote_visual_update_left = fmod(float(get_instance_id()) * 0.0015, maxf(0.016, remote_visual_update_interval_sec))
 	add_to_group("enemies")
-	_visual_lod_enemy_count = get_tree().get_node_count_in_group("enemies")
+	_visual_lod_enemy_count = _get_shared_enemy_count()
 	health_changed.connect(_update_health_bar)
 	_create_health_bar()
 	_create_health_state()
@@ -240,7 +244,34 @@ func _refresh_visual_lod_metrics(delta: float) -> void:
 	if _visual_lod_refresh_left > 0.0:
 		return
 	_visual_lod_refresh_left = maxf(0.05, visual_lod_refresh_interval_sec)
-	_visual_lod_enemy_count = get_tree().get_node_count_in_group("enemies")
+	_visual_lod_enemy_count = _get_shared_enemy_count()
+
+func _refresh_shared_enemy_cache() -> void:
+	var tree := get_tree()
+	if tree == null:
+		_shared_enemy_nodes_cache.clear()
+		_shared_enemy_count = 0
+		_shared_enemy_cache_physics_frame = -1
+		return
+	var physics_frame := Engine.get_physics_frames()
+	if _shared_enemy_cache_physics_frame == physics_frame:
+		return
+	var raw_nodes := tree.get_nodes_in_group("enemies")
+	var cached_nodes: Array[Node2D] = []
+	for node_variant in raw_nodes:
+		if node_variant is Node2D:
+			cached_nodes.append(node_variant as Node2D)
+	_shared_enemy_nodes_cache = cached_nodes
+	_shared_enemy_count = cached_nodes.size()
+	_shared_enemy_cache_physics_frame = physics_frame
+
+func _get_shared_enemy_nodes_cache() -> Array[Node2D]:
+	_refresh_shared_enemy_cache()
+	return _shared_enemy_nodes_cache
+
+func _get_shared_enemy_count() -> int:
+	_refresh_shared_enemy_cache()
+	return _shared_enemy_count
 
 func _is_high_load_visual_lod_active() -> bool:
 	return _visual_lod_enemy_count >= maxi(1, visual_lod_enemy_threshold)
@@ -642,7 +673,7 @@ func _apply_crowd_separation(delta: float) -> void:
 	else:
 		_crowd_separation_recompute_left -= delta
 		if _crowd_separation_recompute_left <= 0.0:
-			var neighbors := get_tree().get_nodes_in_group("enemies")
+			var neighbors := _get_shared_enemy_nodes_cache()
 			var neighbor_count := neighbors.size()
 			var effective_recompute_interval := recompute_interval
 			if neighbor_count >= 36:
@@ -658,7 +689,7 @@ func _apply_crowd_separation(delta: float) -> void:
 func _compute_crowd_separation_impulse(neighbors: Array = []) -> Vector2:
 	var total_push := Vector2.ZERO
 	if neighbors.is_empty():
-		neighbors = get_tree().get_nodes_in_group("enemies")
+		neighbors = _get_shared_enemy_nodes_cache()
 	var radius_sq := crowd_separation_radius * crowd_separation_radius
 	var max_neighbors := 14
 	if neighbors.size() >= 36:

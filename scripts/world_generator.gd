@@ -207,6 +207,12 @@ var enemy_state_sync_interval_sec: float = 0.08
 var _enemy_state_sync_elapsed: float = 0.0
 var archer_projectile_sync_interval_sec: float = 0.016
 var _archer_projectile_sync_elapsed: float = 0.0
+var archer_projectile_sync_payload_budget_bytes: int = 960
+var objective_state_sync_interval_sec: float = 0.05
+var _objective_state_sync_elapsed: float = 0.0
+var _objective_state_sync_sequence: int = 0
+var _last_applied_objective_state_sync_sequence: int = -1
+var _objective_state_sync_was_active: bool = false
 var _next_network_enemy_id: int = 1
 var _network_enemy_nodes: Dictionary = {}  ## enemy_id -> Node2D
 var _enemy_target_positions: Dictionary = {}  ## enemy_id -> target global position
@@ -241,6 +247,9 @@ var _multiplayer_last_sync_batch_count: int = 0
 var _multiplayer_last_sync_estimated_bytes: int = 0
 var _multiplayer_last_sync_tether_enemy_count: int = 0
 var _multiplayer_last_sync_tether_estimated_bytes: int = 0
+var _priority_enemy_sync_interval_cache_sec: float = 0.0
+var _priority_enemy_sync_interval_cache_elapsed: float = 0.0
+var _priority_enemy_sync_interval_cache_ttl_sec: float = 0.12
 var _perf_attribution_enabled: bool = false
 var _perf_attribution_sample_ms: float = 1000.0
 var _perf_attribution_elapsed: float = 0.0
@@ -251,6 +260,8 @@ var _perf_attr_total_post_ms: float = 0.0
 var _perf_attr_total_frame_ms: float = 0.0
 var _perf_attr_total_ui_ms: float = 0.0
 var _perf_attr_total_enemy_drawn: int = 0
+var _perf_attr_runtime_delta_calls: int = 0
+var _perf_attr_runtime_delta_total_usec: int = 0
 var _perf_attr_last_sample: Dictionary = {}
 var _perf_attr_live_snapshot: Dictionary = {}
 var _enemy_clamp_cached_nodes: Array[Node2D] = []
@@ -278,6 +289,9 @@ var _pending_boss_spawn_sync_payload: Dictionary = {}
 var _current_room_sync_id: int = 0
 var _last_applied_spawn_sync_id: int = 0
 var _last_objective_cleared_room_sync_id: int = 0
+var _last_room_clear_processed_sync_id: int = -1
+var _depth_sanity_last_logged_depth: int = -1
+var _depth_sanity_last_log_usec: int = 0
 
 ## ============================================================================
 ## STRESS TEST METRICS (debug only)
@@ -1262,6 +1276,7 @@ func _process(delta: float) -> void:
 		_update_multiplayer_camera()
 	if is_multiplayer:
 		var sim_start_usec := Time.get_ticks_usec() if _perf_attribution_enabled else 0
+		_sync_objective_state_tick(delta)
 		_sync_archer_projectile_state_tick(delta)
 		_sync_enemy_state_tick(delta)
 		_interpolate_remote_enemy_states(delta)
@@ -1312,13 +1327,15 @@ func _update_multiplayer_perf_logging(delta: float) -> void:
 		_multiplayer_last_sync_tether_estimated_bytes
 	])
 	if not _perf_attr_last_sample.is_empty():
-		print("[MP PERF][ATTR] pre_ms=%.2f sync_ms=%.2f post_ms=%.2f frame_ms=%.2f ui_ms=%.2f enemy_drawn_avg=%.1f" % [
+		print("[MP PERF][ATTR] pre_ms=%.2f sync_ms=%.2f post_ms=%.2f frame_ms=%.2f ui_ms=%.2f enemy_drawn_avg=%.1f runtime_delta_ms=%.2f runtime_delta_calls=%.1f" % [
 			float(_perf_attr_last_sample.get("avg_pre_ms", 0.0)),
 			float(_perf_attr_last_sample.get("avg_sim_ms", 0.0)),
 			float(_perf_attr_last_sample.get("avg_post_ms", 0.0)),
 			float(_perf_attr_last_sample.get("avg_frame_ms", 0.0)),
 			float(_perf_attr_last_sample.get("avg_ui_ms", 0.0)),
-			float(_perf_attr_last_sample.get("avg_enemy_drawn", 0.0))
+			float(_perf_attr_last_sample.get("avg_enemy_drawn", 0.0)),
+			float(_perf_attr_last_sample.get("avg_runtime_delta_ms", 0.0)),
+			float(_perf_attr_last_sample.get("avg_runtime_delta_calls", 0.0))
 		])
 	if not _multiplayer_latest_client_perf_by_peer.is_empty():
 		for peer_id_variant in _multiplayer_latest_client_perf_by_peer.keys():
@@ -1349,6 +1366,8 @@ func _record_perf_attribution_sample(delta: float, pre_elapsed_ms: float, sim_el
 	var sim_ms := maxf(0.0, sim_elapsed_ms)
 	var post_ms := maxf(0.0, post_elapsed_ms)
 	var ui_ms := pre_ms + post_ms
+	var runtime_delta_ms := float(_perf_attr_runtime_delta_total_usec) / 1000.0
+	var runtime_delta_calls := _perf_attr_runtime_delta_calls
 	_perf_attr_live_snapshot = {
 		"avg_pre_ms": pre_ms,
 		"avg_sim_ms": sim_ms,
@@ -1357,6 +1376,8 @@ func _record_perf_attribution_sample(delta: float, pre_elapsed_ms: float, sim_el
 		"avg_frame_ms": frame_ms,
 		"avg_ui_ms": ui_ms,
 		"avg_enemy_drawn": float(_network_enemy_nodes.size()),
+		"avg_runtime_delta_ms": runtime_delta_ms,
+		"avg_runtime_delta_calls": float(runtime_delta_calls),
 		"sample_frames": 1
 	}
 	_perf_attr_frame_count += 1
@@ -1378,6 +1399,8 @@ func _record_perf_attribution_sample(delta: float, pre_elapsed_ms: float, sim_el
 		"avg_frame_ms": _perf_attr_total_frame_ms / samples,
 		"avg_ui_ms": _perf_attr_total_ui_ms / samples,
 		"avg_enemy_drawn": float(_perf_attr_total_enemy_drawn) / samples,
+		"avg_runtime_delta_ms": (float(_perf_attr_runtime_delta_total_usec) / 1000.0) / samples,
+		"avg_runtime_delta_calls": float(_perf_attr_runtime_delta_calls) / samples,
 		"sample_frames": _perf_attr_frame_count
 	}
 	_perf_attribution_elapsed = 0.0
@@ -1388,6 +1411,8 @@ func _record_perf_attribution_sample(delta: float, pre_elapsed_ms: float, sim_el
 	_perf_attr_total_frame_ms = 0.0
 	_perf_attr_total_ui_ms = 0.0
 	_perf_attr_total_enemy_drawn = 0
+	_perf_attr_runtime_delta_calls = 0
+	_perf_attr_runtime_delta_total_usec = 0
 
 func _get_perf_attribution_snapshot() -> Dictionary:
 	if not _perf_attr_last_sample.is_empty():
@@ -1866,9 +1891,17 @@ func _update_encounter_state() -> void:
 		return
 	if choosing_next_room or run_cleared:
 		return
+	if _is_reward_selection_active():
+		return
+	if current_room_label == "Starting Chamber":
+		return
+	if encounter_intro_grace_active:
+		return
 	if objective_manager.has_active_objective():
 		return
 	if active_room_enemy_count > 0:
+		return
+	if _last_room_clear_processed_sync_id == _current_room_sync_id:
 		return
 	_on_room_cleared()
 
@@ -1878,12 +1911,15 @@ func _on_room_cleared() -> void:
 	_end_combat_phase()
 	_try_revive_fallen_multiplayer_players()
 	if in_second_boss_room:
+		_last_room_clear_processed_sync_id = _current_room_sync_id
 		_finish_second_boss_clear()
 		return
 	if in_third_boss_room:
+		_last_room_clear_processed_sync_id = _current_room_sync_id
 		_finish_third_boss_clear()
 		return
 	if in_boss_room and not first_boss_defeated:
+		_last_room_clear_processed_sync_id = _current_room_sync_id
 		_finish_first_boss_clear()
 		return
 	if is_instance_valid(player):
@@ -1915,6 +1951,7 @@ func _on_room_cleared() -> void:
 	})
 	if not bool(outcome_state.get("ok", false)):
 		return
+	_last_room_clear_processed_sync_id = _current_room_sync_id
 	run_cleared = bool(outcome_state.get("run_cleared", run_cleared))
 	in_boss_room = bool(outcome_state.get("in_boss_room", in_boss_room))
 	endless_boss_defeated = bool(outcome_state.get("endless_boss_defeated", endless_boss_defeated))
@@ -1949,10 +1986,15 @@ func _on_room_cleared() -> void:
 func _clamp_room_depth_to_sane_range() -> void:
 	var max_sane := _get_third_boss_target_depth() + 2
 	if room_depth > max_sane:
-		push_error("[Depth Sanity] Clamping impossibly high room_depth %d -> %d (rooms_cleared=%d, bosses: 1st=%s, 2nd=%s, 3rd=%s)" % [
-			room_depth, max_sane, rooms_cleared,
-			first_boss_defeated, second_boss_defeated, second_boss_defeated
-		])
+		var now_usec := Time.get_ticks_usec()
+		var should_log := room_depth != _depth_sanity_last_logged_depth or now_usec - _depth_sanity_last_log_usec >= 2000000
+		if should_log:
+			push_warning("[Depth Sanity] Clamping high room_depth %d -> %d (rooms_cleared=%d, bosses: 1st=%s, 2nd=%s, 3rd=%s)" % [
+				room_depth, max_sane, rooms_cleared,
+				first_boss_defeated, second_boss_defeated, second_boss_defeated
+			])
+			_depth_sanity_last_logged_depth = room_depth
+			_depth_sanity_last_log_usec = now_usec
 		room_depth = max_sane
 
 func _finish_first_boss_clear() -> void:
@@ -2436,6 +2478,45 @@ func _sync_objective_cleared() -> void:
 	active_room_enemy_count = 0
 	queue_redraw()
 
+@rpc("unreliable", "authority")
+func _sync_objective_state(objective_state: Dictionary, source_room_sync_id: int, sequence: int) -> void:
+	if not is_multiplayer or MultiplayerSessionManager.is_host():
+		return
+	if not is_instance_valid(objective_manager):
+		return
+	if objective_state.is_empty():
+		return
+	if source_room_sync_id > 0 and source_room_sync_id < _current_room_sync_id:
+		return
+	if sequence <= _last_applied_objective_state_sync_sequence:
+		return
+	_last_applied_objective_state_sync_sequence = sequence
+	objective_manager.active_objective_kind = String(objective_state.get("active_objective_kind", objective_manager.active_objective_kind))
+	objective_manager.time_left = maxf(0.0, float(objective_state.get("time_left", objective_manager.time_left)))
+	objective_manager.spawn_interval = maxf(0.0, float(objective_state.get("spawn_interval", objective_manager.spawn_interval)))
+	objective_manager.spawn_timer = maxf(0.0, float(objective_state.get("spawn_timer", objective_manager.spawn_timer)))
+	objective_manager.spawn_batch = maxi(1, int(objective_state.get("spawn_batch", objective_manager.spawn_batch)))
+	objective_manager.max_enemies = maxi(0, int(objective_state.get("max_enemies", objective_manager.max_enemies)))
+	objective_manager.overtime = bool(objective_state.get("overtime", objective_manager.overtime))
+	objective_manager.survival_quota_announced = bool(objective_state.get("survival_quota_announced", objective_manager.survival_quota_announced))
+	objective_manager.kill_target = maxi(0, int(objective_state.get("kill_target", objective_manager.kill_target)))
+	objective_manager.kills = maxi(0, int(objective_state.get("kills", objective_manager.kills)))
+	objective_manager.hunt_target_type = String(objective_state.get("hunt_target_type", objective_manager.hunt_target_type))
+	objective_manager.hunt_target_name = String(objective_state.get("hunt_target_name", objective_manager.hunt_target_name))
+	objective_manager.hunt_target_kill_progress = maxi(0, int(objective_state.get("hunt_target_kill_progress", objective_manager.hunt_target_kill_progress)))
+	objective_manager.hunt_target_kill_goal = maxi(0, int(objective_state.get("hunt_target_kill_goal", objective_manager.hunt_target_kill_goal)))
+	objective_manager.hunt_target_flee_thresholds = (objective_state.get("hunt_target_flee_thresholds", objective_manager.hunt_target_flee_thresholds) as Array).duplicate()
+	objective_manager.hunt_target_next_flee_index = maxi(0, int(objective_state.get("hunt_target_next_flee_index", objective_manager.hunt_target_next_flee_index)))
+	objective_manager.control_progress = maxf(0.0, float(objective_state.get("control_progress", objective_manager.control_progress)))
+	objective_manager.control_goal = maxf(0.0, float(objective_state.get("control_goal", objective_manager.control_goal)))
+	objective_manager.control_enemies_in_zone = maxi(0, int(objective_state.get("control_enemies_in_zone", objective_manager.control_enemies_in_zone)))
+	objective_manager.control_contested = bool(objective_state.get("control_contested", objective_manager.control_contested))
+	objective_manager.control_player_inside = bool(objective_state.get("control_player_inside", objective_manager.control_player_inside))
+	objective_manager.exposure_left = maxf(0.0, float(objective_state.get("exposure_left", objective_manager.exposure_left)))
+	objective_manager.last_relocated_escort_count = maxi(0, int(objective_state.get("last_relocated_escort_count", objective_manager.last_relocated_escort_count)))
+	objective_manager.relocation_hint_left = maxf(0.0, float(objective_state.get("relocation_hint_left", objective_manager.relocation_hint_left)))
+	queue_redraw()
+
 func _build_progress_sync_state() -> Dictionary:
 	return {
 		"room_sync_id": _current_room_sync_id,
@@ -2875,9 +2956,82 @@ func _sync_archer_projectile_state_tick(delta: float) -> void:
 		})
 	if synced_archer_projectiles.is_empty():
 		return
-	_sync_archer_projectile_states.rpc(synced_archer_projectiles, _current_room_sync_id)
+	var mtu_safe_payload_budget := maxi(512, enemy_state_transport_mtu_bytes - enemy_state_transport_safety_margin_bytes)
+	var payload_budget := mini(maxi(640, archer_projectile_sync_payload_budget_bytes), mtu_safe_payload_budget)
+	var per_batch_overhead := 160
+	var current_batch: Array = []
+	var current_batch_bytes := 0
+	for sync_entry_variant in synced_archer_projectiles:
+		if not (sync_entry_variant is Dictionary):
+			continue
+		var sync_entry := sync_entry_variant as Dictionary
+		var entry_size := _estimate_sync_variant_size_bytes(sync_entry) + 24
+		var would_exceed_budget := not current_batch.is_empty() and (current_batch_bytes + entry_size + per_batch_overhead > payload_budget)
+		if would_exceed_budget:
+			_sync_archer_projectile_states.rpc(current_batch, _current_room_sync_id)
+			current_batch.clear()
+			current_batch_bytes = 0
+		current_batch.append(sync_entry)
+		current_batch_bytes += entry_size
+	if not current_batch.is_empty():
+		_sync_archer_projectile_states.rpc(current_batch, _current_room_sync_id)
+
+func _build_objective_state_sync_payload() -> Dictionary:
+	if not is_instance_valid(objective_manager):
+		return {}
+	var objective_kind := String(objective_manager.active_objective_kind)
+	var objective_active := not objective_kind.is_empty()
+	if not objective_active and not _objective_state_sync_was_active:
+		return {}
+	var payload := {
+		"active_objective_kind": objective_kind,
+		"time_left": float(objective_manager.time_left),
+		"spawn_interval": float(objective_manager.spawn_interval),
+		"spawn_timer": float(objective_manager.spawn_timer),
+		"spawn_batch": int(objective_manager.spawn_batch),
+		"max_enemies": int(objective_manager.max_enemies),
+		"overtime": bool(objective_manager.overtime),
+		"survival_quota_announced": bool(objective_manager.survival_quota_announced),
+		"kill_target": int(objective_manager.kill_target),
+		"kills": int(objective_manager.kills),
+		"hunt_target_type": String(objective_manager.hunt_target_type),
+		"hunt_target_name": String(objective_manager.hunt_target_name),
+		"hunt_target_kill_progress": int(objective_manager.hunt_target_kill_progress),
+		"hunt_target_kill_goal": int(objective_manager.hunt_target_kill_goal),
+		"hunt_target_flee_thresholds": objective_manager.hunt_target_flee_thresholds.duplicate(),
+		"hunt_target_next_flee_index": int(objective_manager.hunt_target_next_flee_index),
+		"control_progress": float(objective_manager.control_progress),
+		"control_goal": float(objective_manager.control_goal),
+		"control_enemies_in_zone": int(objective_manager.control_enemies_in_zone),
+		"control_contested": bool(objective_manager.control_contested),
+		"control_player_inside": bool(objective_manager.control_player_inside),
+		"exposure_left": float(objective_manager.exposure_left),
+		"last_relocated_escort_count": int(objective_manager.last_relocated_escort_count),
+		"relocation_hint_left": float(objective_manager.relocation_hint_left)
+	}
+	_objective_state_sync_was_active = objective_active
+	return payload
+
+func _sync_objective_state_tick(delta: float) -> void:
+	if not is_multiplayer:
+		return
+	if not MultiplayerSessionManager.is_host():
+		return
+	if not is_instance_valid(objective_manager):
+		return
+	_objective_state_sync_elapsed += delta
+	var sync_interval := maxf(0.03, objective_state_sync_interval_sec)
+	if _objective_state_sync_elapsed < sync_interval:
+		return
+	_objective_state_sync_elapsed = 0.0
+	var objective_state := _build_objective_state_sync_payload()
+	if objective_state.is_empty():
+		return
+	_objective_state_sync_sequence += 1
+	_sync_objective_state.rpc(objective_state, _current_room_sync_id, _objective_state_sync_sequence)
 
 func _compute_runtime_state_delta(current_state: Dictionary, previous_state: Dictionary) -> Dictionary:
+	var attr_start_usec := Time.get_ticks_usec() if _perf_attribution_enabled else 0
 	var delta := {}
 	for key_variant in current_state.keys():
 		var key := String(key_variant)
@@ -2885,6 +3039,9 @@ func _compute_runtime_state_delta(current_state: Dictionary, previous_state: Dic
 		var previous_val: Variant = previous_state.get(key)
 		if current_val != previous_val:
 			delta[key] = current_val
+	if attr_start_usec > 0:
+		_perf_attr_runtime_delta_calls += 1
+		_perf_attr_runtime_delta_total_usec += Time.get_ticks_usec() - attr_start_usec
 	return delta
 
 func _quantize_runtime_variant_for_network(value: Variant) -> Variant:
@@ -2997,7 +3154,7 @@ func _get_adaptive_enemy_sync_batch_params() -> Dictionary:
 		payload_budget = maxi(payload_budget, 1300)
 	elif active_room_enemy_count >= 30:
 		max_batch_size = maxi(max_batch_size, 5)
-		payload_budget = maxi(payload_budget, 980)
+		payload_budget = maxi(payload_budget, 1052)
 	elif active_room_enemy_count >= 20:
 		max_batch_size = maxi(max_batch_size, 4)
 		payload_budget = maxi(payload_budget, 820)
@@ -3030,7 +3187,7 @@ func _get_adaptive_enemy_sync_state_size_limit() -> int:
 		return 620
 	return 900
 
-func _get_priority_enemy_sync_interval_sec() -> float:
+func _compute_priority_enemy_sync_interval_sec() -> float:
 	var best_interval := 0.0
 	for enemy_variant in _network_enemy_nodes.values():
 		var enemy := enemy_variant as Node
@@ -3044,6 +3201,14 @@ func _get_priority_enemy_sync_interval_sec() -> float:
 		if best_interval <= 0.0 or requested_interval < best_interval:
 			best_interval = requested_interval
 	return best_interval
+
+func _get_priority_enemy_sync_interval_sec(delta: float) -> float:
+	_priority_enemy_sync_interval_cache_elapsed += maxf(0.0, delta)
+	if _priority_enemy_sync_interval_cache_elapsed < _priority_enemy_sync_interval_cache_ttl_sec:
+		return _priority_enemy_sync_interval_cache_sec
+	_priority_enemy_sync_interval_cache_elapsed = 0.0
+	_priority_enemy_sync_interval_cache_sec = _compute_priority_enemy_sync_interval_sec()
+	return _priority_enemy_sync_interval_cache_sec
 
 func _sync_enemy_state_tick(delta: float) -> void:
 	if not is_multiplayer:
@@ -3060,7 +3225,7 @@ func _sync_enemy_state_tick(delta: float) -> void:
 			sync_interval *= 1.35
 		elif active_room_enemy_count >= 7:
 			sync_interval *= 1.2
-	var priority_sync_interval := _get_priority_enemy_sync_interval_sec()
+	var priority_sync_interval := _get_priority_enemy_sync_interval_sec(delta)
 	if priority_sync_interval > 0.0:
 		sync_interval = minf(sync_interval, priority_sync_interval)
 	_enemy_state_sync_elapsed += delta
@@ -3127,14 +3292,25 @@ func _sync_enemy_state_tick(delta: float) -> void:
 		var previous_combat_hint := bool(_enemy_far_combat_hint_by_id.get(enemy_id, false))
 		var force_runtime_state_sampling := enemy.has_method("should_force_network_runtime_state_sampling") and bool(enemy.call("should_force_network_runtime_state_sampling"))
 		var should_sample_runtime_state := position_changed or facing_changed or health_changed or previous_combat_hint or force_runtime_state_sampling or not is_far_enemy
+		var allow_runtime_state_sampling := should_sample_runtime_state
+		if allow_runtime_state_sampling and active_room_enemy_count >= 24 and not force_runtime_state_sampling and not previous_combat_hint:
+			var runtime_sampling_stride := 2
+			if active_room_enemy_count >= 48:
+				runtime_sampling_stride = 4
+			elif active_room_enemy_count >= 36:
+				runtime_sampling_stride = 3
+			var physics_frame := int(Engine.get_physics_frames())
+			allow_runtime_state_sampling = ((enemy_id + physics_frame) % runtime_sampling_stride) == 0
 		var runtime_state_delta: Dictionary = {}
-		if should_sample_runtime_state:
+		if allow_runtime_state_sampling:
 			var runtime_state: Dictionary = {}
 			if enemy.has_method("get_network_runtime_state"):
 				runtime_state = enemy.call("get_network_runtime_state") as Dictionary
 			runtime_state = _quantize_runtime_state_for_network(runtime_state)
 			var previous_state := _previous_enemy_runtime_states.get(enemy_id, {}) as Dictionary
 			runtime_state_delta = _compute_runtime_state_delta(runtime_state, previous_state)
+			if active_room_enemy_count >= 24 and not force_runtime_state_sampling and runtime_state_delta.has("custom"):
+				runtime_state_delta.erase("custom")
 			_previous_enemy_runtime_states[enemy_id] = runtime_state
 		elif not _previous_enemy_runtime_states.has(enemy_id):
 			_previous_enemy_runtime_states[enemy_id] = {}

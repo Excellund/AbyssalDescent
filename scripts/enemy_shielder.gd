@@ -50,6 +50,7 @@ var body_check_anim_time_left: float = 0.0
 var body_check_dash_immunity_left: float = 0.0
 var player_was_dashing_last_frame: bool = false
 var _attack_sync_was_active: bool = false
+var _shielder_visual_redraw_left: float = 0.0
 
 func _ready() -> void:
 	max_health = shield_max_health
@@ -123,6 +124,10 @@ func get_projectile_network_sync_state() -> Dictionary:
 	return payload
 
 
+func _get_custom_network_runtime_state() -> Dictionary:
+	return {}
+
+
 func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
 	if network_simulation_enabled:
 		return
@@ -160,7 +165,7 @@ func _process_network_visuals(delta: float) -> void:
 		if not is_equal_approx(prev_body_check_anim_left, body_check_anim_time_left):
 			changed = true
 	if changed:
-		queue_redraw()
+		_queue_shielder_visual_redraw()
 
 func _update_attack_cooldown(delta: float) -> void:
 	if attack_cooldown_left > 0.0:
@@ -177,7 +182,29 @@ func _update_body_check_cooldown(delta: float) -> void:
 func _update_body_check_anim(delta: float) -> void:
 	if body_check_anim_time_left > 0.0:
 		body_check_anim_time_left = maxf(0.0, body_check_anim_time_left - delta)
+		_queue_shielder_visual_redraw()
+
+func _queue_shielder_visual_redraw(force_immediate: bool = false) -> void:
+	if force_immediate:
+		_shielder_visual_redraw_left = 0.0
 		queue_redraw()
+		return
+	if _shielder_visual_redraw_left > 0.0:
+		return
+	var interval := _get_shielder_visual_redraw_interval()
+	_shielder_visual_redraw_left = interval
+	queue_redraw()
+
+func _get_shielder_visual_redraw_interval() -> float:
+	if slam_state == ENEMY_STATE_ENUMS.ShielderSlamState.THUMP:
+		return 0.012
+	if _visual_lod_enemy_count >= 48:
+		return 0.05
+	if _visual_lod_enemy_count >= 32:
+		return 0.038
+	if _visual_lod_enemy_count >= 20:
+		return 0.03
+	return 0.02
 
 func _update_body_check_dash_immunity(delta: float) -> void:
 	if not is_instance_valid(target):
@@ -202,6 +229,8 @@ func _update_body_check_dash_immunity(delta: float) -> void:
 		body_check_dash_immunity_left = maxf(0.0, body_check_dash_immunity_left - delta)
 
 func _update_shield_reaim(delta: float) -> void:
+	if _shielder_visual_redraw_left > 0.0:
+		_shielder_visual_redraw_left = maxf(0.0, _shielder_visual_redraw_left - delta)
 	if shield_reaim_left > 0.0:
 		shield_reaim_left = maxf(0.0, shield_reaim_left - delta)
 	if shield_reaim_left > 0.0:
@@ -276,7 +305,7 @@ func _try_start_slam() -> void:
 	velocity = Vector2.ZERO
 	visual_facing_direction = slam_direction
 	shield_target_facing = slam_direction
-	queue_redraw()
+	_queue_shielder_visual_redraw(true)
 
 func _process_slam_windup(delta: float) -> void:
 	velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
@@ -289,24 +318,26 @@ func _process_slam_windup(delta: float) -> void:
 			visual_facing_direction = slam_direction
 			shield_target_facing = slam_direction
 	slam_state_time_left = maxf(0.0, slam_state_time_left - delta)
-	queue_redraw()
+	_queue_shielder_visual_redraw()
 	if slam_state_time_left <= 0.0:
 		slam_state = ENEMY_STATE_ENUMS.ShielderSlamState.THUMP
 		slam_state_time_left = slam_thump_time
 		slam_hit_applied = false
 		_try_apply_slam_aoe_hit()
 		attack_anim_time_left = attack_anim_duration
+		_queue_shielder_visual_redraw(true)
 
 func _process_slam_thump(delta: float) -> void:
 	velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
 	move_and_slide()
 	_try_body_check_target()
 	slam_state_time_left = maxf(0.0, slam_state_time_left - delta)
-	queue_redraw()
+	_queue_shielder_visual_redraw()
 	if slam_state_time_left <= 0.0:
 		slam_state = ENEMY_STATE_ENUMS.ShielderSlamState.RECOVER
 		slam_state_time_left = slam_recover_time
 		slam_cooldown_left = slam_cooldown
+		_queue_shielder_visual_redraw(true)
 
 func _process_slam_recover(delta: float) -> void:
 	velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
