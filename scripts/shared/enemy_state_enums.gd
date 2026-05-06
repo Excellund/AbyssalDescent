@@ -44,6 +44,15 @@ enum LurkerState {
 	RECOVER,
 }
 
+enum SeamlockState {
+	STALK,
+	TELEPORT,
+	ILLUSION_PHASE,
+	BAND_ATTACK,
+	SPIRAL,
+	RECOVER,
+}
+
 enum BossState {
 	IDLE,
 	TELEGRAPH,

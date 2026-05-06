@@ -49,6 +49,7 @@ const PROFILE_KEY_LANCER_COUNT := "lancer_count"
 const PROFILE_KEY_SPECTRE_COUNT := "spectre_count"
 const PROFILE_KEY_PYRE_COUNT := "pyre_count"
 const PROFILE_KEY_TETHER_COUNT := "tether_count"
+const PROFILE_KEY_SEAMLOCK_COUNT := "seamlock_count"
 const PROFILE_KEY_OBJECTIVE_KIND := "objective_kind"
 const PROFILE_KEY_OBJECTIVE_DURATION := "objective_duration"
 const PROFILE_KEY_OBJECTIVE_SPAWN_INTERVAL := "objective_spawn_interval"
@@ -276,6 +277,17 @@ static func _build_encounter_registry() -> Array[Dictionary]:
 			"glossary_label": "Trial",
 			"door_presentation": {
 				"short_label": "Trial"
+			}
+		},
+		{
+			"key": "apex_trial",
+			"id": DEBUG_ENUMS.Encounter.APEX_TRIAL,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Apex Trial",
+			"glossary_label": "Apex Trial",
+			"door_presentation": {
+				"label": "Apex Trial",
+				"short_label": "Apex"
 			}
 		},
 		{
@@ -676,6 +688,7 @@ static func normalize_profile(value: Variant) -> Dictionary:
 		int(input.get(PROFILE_KEY_PYRE_COUNT, 0)),
 		int(input.get(PROFILE_KEY_TETHER_COUNT, 0))
 	)
+	normalized[PROFILE_KEY_SEAMLOCK_COUNT] = int(input.get(PROFILE_KEY_SEAMLOCK_COUNT, 0))
 	var objective_kind := String(input.get(PROFILE_KEY_OBJECTIVE_KIND, ""))
 	if not objective_kind.is_empty():
 		normalized[PROFILE_KEY_OBJECTIVE_KIND] = objective_kind
@@ -700,7 +713,7 @@ static func profile_static_camera(profile_value: Dictionary) -> bool:
 
 # Enemy count metadata: list of all enemy types for data-driven access
 static func _get_enemy_count_keys() -> Array[String]:
-	return ["chaser", "charger", "archer", "shielder", "lurker", "ram", "lancer", "spectre", "pyre", "tether"]
+	return ["chaser", "charger", "archer", "shielder", "lurker", "ram", "lancer", "spectre", "pyre", "tether", "seamlock"]
 
 static func _get_enemy_count_key_for_type(enemy_type: String) -> String:
 	return "%s_count" % enemy_type.strip_edges().to_lower()
@@ -744,6 +757,9 @@ static func profile_pyre_count(profile_value: Dictionary) -> int:
 static func profile_tether_count(profile_value: Dictionary) -> int:
 	return _get_enemy_count("tether", profile_value)
 
+static func profile_seamlock_count(profile_value: Dictionary) -> int:
+	return _get_enemy_count("seamlock", profile_value)
+
 static func profile_enemy_mutator(profile_value: Dictionary) -> Dictionary:
 	return profile_value.get(PROFILE_KEY_ENEMY_MUTATOR, {}) as Dictionary
 
@@ -767,7 +783,7 @@ static func profile_set_specialist_counts(profile_value: Dictionary, lurkers: in
 	for enemy_type: String in specialist_counts:
 		_set_enemy_count(enemy_type, specialist_counts[enemy_type], profile_value)
 
-static func profile_counts(chasers: int, chargers: int, archers: int, shielders: int, lurkers: int = 0, rams: int = 0, lancers: int = 0, spectres: int = 0, pyres: int = 0, tethers: int = 0) -> Dictionary:
+static func profile_counts(chasers: int, chargers: int, archers: int, shielders: int, lurkers: int = 0, rams: int = 0, lancers: int = 0, spectres: int = 0, pyres: int = 0, tethers: int = 0, seamlocks: int = 0) -> Dictionary:
 	return {
 		PROFILE_KEY_CHASER_COUNT: chasers,
 		PROFILE_KEY_CHARGER_COUNT: chargers,
@@ -778,7 +794,8 @@ static func profile_counts(chasers: int, chargers: int, archers: int, shielders:
 		PROFILE_KEY_LANCER_COUNT: lancers,
 		PROFILE_KEY_SPECTRE_COUNT: spectres,
 		PROFILE_KEY_PYRE_COUNT: pyres,
-		PROFILE_KEY_TETHER_COUNT: tethers
+		PROFILE_KEY_TETHER_COUNT: tethers,
+		PROFILE_KEY_SEAMLOCK_COUNT: seamlocks
 	}
 
 static func profile_count_from_counts(counts: Dictionary, key: String) -> int:
@@ -1133,6 +1150,20 @@ static func trial_door_option(encounter_profile: Dictionary, trial_mutator_name:
 		ENUMS.RewardMode.ARCANA,
 		encounter_profile,
 		"trial"
+	)
+
+static func apex_trial_door_option(encounter_profile: Dictionary, label: String, color: Color) -> Dictionary:
+	var apex_label := label.strip_edges()
+	if apex_label.is_empty():
+		apex_label = "Apex Trial"
+	return door_option(
+		apex_label,
+		color,
+		DOOR_KIND_ENCOUNTER,
+		"trial",
+		ENUMS.RewardMode.ARCANA,
+		encounter_profile,
+		"apex_trial"
 	)
 
 static func intro_encounter_door_option(encounter_profile: Dictionary) -> Dictionary:

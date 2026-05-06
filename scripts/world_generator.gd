@@ -4,6 +4,7 @@ const ENEMY_CHASER_SCRIPT := preload("res://scripts/enemy_chaser.gd")
 const ENEMY_CHARGER_SCRIPT := preload("res://scripts/enemy_charger.gd")
 const ENEMY_ARCHER_SCRIPT := preload("res://scripts/enemy_archer.gd")
 const ENEMY_SHIELDER_SCRIPT := preload("res://scripts/enemy_shielder.gd")
+const ENEMY_SEAMLOCK_SCRIPT := preload("res://scripts/enemy_seamlock.gd")
 const ENEMY_LURKER_SCRIPT := preload("res://scripts/enemy_lurker.gd")
 const ENEMY_RAM_SCRIPT := preload("res://scripts/enemy_ram.gd")
 const ENEMY_LANCER_SCRIPT := preload("res://scripts/enemy_lancer.gd")
@@ -60,12 +61,13 @@ const PAUSE_MENU_CONTROLLER_SCRIPT := preload("res://scripts/pause_menu_controll
 const VICTORY_SCREEN_SCRIPT := preload("res://scripts/victory_screen.gd")
 const DEFEAT_SCREEN_SCRIPT := preload("res://scripts/defeat_screen.gd")
 const BUILD_DETAIL_PANEL_SCRIPT := preload("res://scripts/build_detail_panel.gd")
+const SEAMLOCK_SYNC_GROUP := "seamlock_sync_group"
 
 func _find_debug_encounter_entry(key: String) -> Dictionary:
 	return ENCOUNTER_CONTRACTS.debug_encounter_entry(key)
 
 func _get_debug_encounter_reward_mode(encounter_key: String) -> int:
-	if encounter_key == "trial":
+	if encounter_key == "trial" or encounter_key == "apex_trial":
 		return ENUMS.RewardMode.ARCANA
 	if ENCOUNTER_CONTRACTS.debug_encounter_is_objective(encounter_key):
 		return ENUMS.RewardMode.MISSION
@@ -156,6 +158,8 @@ var boss_reward_pending: bool = false
 var last_defeated_boss_id: String = ""
 
 var current_room_size: Vector2 = Vector2.ZERO
+var current_effective_room_size: Vector2 = Vector2.ZERO
+var _last_applied_camera_room_size: Vector2 = Vector2.ZERO
 var current_room_static_camera: bool = true
 var current_room_label: String = ""
 var door_options: Array[Dictionary] = []
@@ -634,8 +638,9 @@ func _log_multiplayer_player_stats(stage: String) -> void:
 
 func _setup_world_bootstrap_state() -> void:
 	current_room_size = room_base_size
+	_reset_effective_room_bounds()
 	current_room_label = "Starting Chamber"
-	_apply_camera_bounds_for_room(current_room_size)
+	_apply_camera_bounds_for_room(current_effective_room_size)
 
 func _setup_run_systems_phase() -> void:
 	music_system = MUSIC_SYSTEM_SCRIPT.new()
@@ -718,6 +723,7 @@ func _setup_enemy_spawner_system() -> void:
 		"charger": ENEMY_CHARGER_SCRIPT,
 		"archer": ENEMY_ARCHER_SCRIPT,
 		"shielder": ENEMY_SHIELDER_SCRIPT,
+		"seamlock": ENEMY_SEAMLOCK_SCRIPT,
 		"lurker": ENEMY_LURKER_SCRIPT,
 		"ram": ENEMY_RAM_SCRIPT,
 		"lancer": ENEMY_LANCER_SCRIPT,
@@ -799,10 +805,11 @@ func _start_stress_test_arena() -> void:
 	_mark_telemetry_debug_mode()
 	_reset_for_debug_jump()
 	current_room_size = Vector2(1200.0, 900.0)
+	_reset_effective_room_bounds()
 	current_room_label = "Stress Test Arena"
 	current_room_static_camera = true
 	active_room_enemy_count = 0
-	_apply_camera_bounds_for_room(current_room_size)
+	_apply_camera_bounds_for_room(current_effective_room_size)
 	if is_instance_valid(enemy_spawner):
 		enemy_spawner.configure_room(current_room_size, spawn_padding, spawn_safe_radius, {}, [] as Array[Dictionary])
 	if is_instance_valid(player_camera):
@@ -1264,6 +1271,7 @@ func _process(delta: float) -> void:
 		return
 	var perf_frame_start_usec := Time.get_ticks_usec() if _perf_attribution_enabled and is_multiplayer else 0
 
+	_refresh_effective_room_bounds_from_seamlock_penalty()
 	_keep_player_inside_current_room()
 	_keep_enemies_inside_current_room(delta)
 	_keep_player_inside_camera_view()
@@ -1722,13 +1730,46 @@ func _draw() -> void:
 	draw_circle(anchor, 8.0, Color(1.0, 0.96, 0.72, 0.75))
 
 func _clamp_position_to_current_room(target_position: Vector2, margin: float = 28.0) -> Vector2:
-	if current_room_size == Vector2.ZERO:
+	if current_effective_room_size == Vector2.ZERO:
 		return target_position
-	var half := current_room_size * 0.5 - Vector2.ONE * margin
+	var half := current_effective_room_size * 0.5 - Vector2.ONE * margin
 	return Vector2(
 		clampf(target_position.x, -half.x, half.x),
 		clampf(target_position.y, -half.y, half.y)
 	)
+
+func _reset_effective_room_bounds() -> void:
+	current_effective_room_size = current_room_size
+	_last_applied_camera_room_size = Vector2.ZERO
+
+func _refresh_effective_room_bounds_from_seamlock_penalty() -> void:
+	if current_room_size == Vector2.ZERO:
+		current_effective_room_size = current_room_size
+		return
+	var effective_size := current_room_size
+	var max_applied_steps := 0.0
+	var shrink_per_step := 0.0
+	for node in get_tree().get_nodes_in_group(SEAMLOCK_SYNC_GROUP):
+		if not is_instance_valid(node):
+			continue
+		var applied_steps_variant: Variant = node.get("_arena_penalty_applied_steps")
+		var shrink_step_variant: Variant = node.get("arena_shrink_per_step")
+		if applied_steps_variant == null or shrink_step_variant == null:
+			continue
+		max_applied_steps = maxf(max_applied_steps, float(applied_steps_variant))
+		shrink_per_step = maxf(shrink_per_step, float(shrink_step_variant))
+	if max_applied_steps > 0.0 and shrink_per_step > 0.0:
+		var side_shrink := max_applied_steps * shrink_per_step * 2.0
+		effective_size = Vector2(
+			maxf(320.0, current_room_size.x - side_shrink),
+			maxf(240.0, current_room_size.y - side_shrink)
+		)
+	if effective_size == current_effective_room_size:
+		return
+	current_effective_room_size = effective_size
+	if _last_applied_camera_room_size != current_effective_room_size:
+		_last_applied_camera_room_size = current_effective_room_size
+		_apply_camera_bounds_for_room(current_effective_room_size)
 
 func _get_hud_state() -> Dictionary:
 	var display_room_depth := room_depth
@@ -1833,7 +1874,7 @@ func _sync_renderer() -> void:
 	var visible_door_options: Array[Dictionary] = []
 	if allow_door_visibility:
 		visible_door_options = door_options
-	renderer.room_size = current_room_size
+	renderer.room_size = current_effective_room_size if current_effective_room_size != Vector2.ZERO else current_room_size
 	renderer.choosing_next_room = allow_door_visibility
 	renderer.door_options = visible_door_options
 	renderer.player_global_position = player.global_position if is_instance_valid(player) else Vector2.ZERO
@@ -1841,9 +1882,9 @@ func _sync_renderer() -> void:
 func _keep_player_inside_current_room() -> void:
 	if not is_instance_valid(player):
 		return
-	if current_room_size == Vector2.ZERO:
+	if current_effective_room_size == Vector2.ZERO:
 		return
-	var half := current_room_size * 0.5
+	var half := current_effective_room_size * 0.5
 	player.global_position.x = clampf(player.global_position.x, -half.x, half.x)
 	player.global_position.y = clampf(player.global_position.y, -half.y, half.y)
 
@@ -1854,21 +1895,21 @@ func _refresh_enemy_clamp_cache() -> void:
 			_enemy_clamp_cached_nodes.append(enemy as Node2D)
 
 func _keep_enemies_inside_current_room(delta: float) -> void:
-	if current_room_size == Vector2.ZERO:
-		_enemy_clamp_last_room_size = current_room_size
+	if current_effective_room_size == Vector2.ZERO:
+		_enemy_clamp_last_room_size = current_effective_room_size
 		return
-	var room_size_changed := _enemy_clamp_last_room_size != current_room_size
-	_enemy_clamp_last_room_size = current_room_size
+	var room_size_changed := _enemy_clamp_last_room_size != current_effective_room_size
+	_enemy_clamp_last_room_size = current_effective_room_size
 	_enemy_clamp_refresh_elapsed += maxf(0.0, delta)
 	_enemy_clamp_frame_cursor += 1
 	var should_refresh_cache := room_size_changed or _enemy_clamp_cached_nodes.is_empty() or _enemy_clamp_refresh_elapsed >= _enemy_clamp_refresh_interval_sec
 	if should_refresh_cache:
 		_refresh_enemy_clamp_cache()
 		_enemy_clamp_refresh_elapsed = 0.0
-	var stride := maxi(1, _enemy_clamp_frame_stride)
+	var stride := 1 if current_effective_room_size != current_room_size else maxi(1, _enemy_clamp_frame_stride)
 	if not room_size_changed and (_enemy_clamp_frame_cursor % stride) != 0:
 		return
-	var half := current_room_size * 0.5
+	var half := current_effective_room_size * 0.5
 	var stale_entries := false
 	for enemy_body in _enemy_clamp_cached_nodes:
 		if not is_instance_valid(enemy_body):
@@ -2208,7 +2249,8 @@ func _apply_active_run_snapshot(snapshot: Dictionary) -> bool:
 
 	_clear_all_enemies()
 	player_flow_coordinator.reset_player_position(player)
-	_apply_camera_bounds_for_room(current_room_size)
+	_reset_effective_room_bounds()
+	_apply_camera_bounds_for_room(current_effective_room_size)
 	_play_room_music(false, false)
 	hud.refresh(_get_hud_state(), player)
 	_set_combat_paused(false)
@@ -2699,6 +2741,7 @@ func _begin_room(profile: Dictionary) -> void:
 	objective_lifecycle_coordinator.reset_for_new_room(objective_manager, objective_runtime)
 	_play_room_music(false)
 	current_room_size = ENCOUNTER_CONTRACTS.profile_room_size(profile)
+	_reset_effective_room_bounds()
 	current_room_static_camera = ENCOUNTER_CONTRACTS.profile_static_camera(profile)
 	current_room_label = ENCOUNTER_CONTRACTS.profile_label(profile)
 	current_room_enemy_mutator = ENCOUNTER_CONTRACTS.profile_enemy_mutator(profile)
@@ -2717,7 +2760,7 @@ func _begin_room(profile: Dictionary) -> void:
 	hud.show_banner(current_room_label, "", sub_color)
 	if is_instance_valid(enemy_spawner):
 		enemy_spawner.configure_room(current_room_size, spawn_padding, spawn_safe_radius, current_room_enemy_mutator, _get_active_enemy_mutators_for_room())
-	_apply_camera_bounds_for_room(current_room_size)
+	_apply_camera_bounds_for_room(current_effective_room_size)
 	if is_multiplayer:
 		if MultiplayerSessionManager.is_host():
 			var spawn_report: Array[Dictionary] = enemy_spawner.spawn_profile_enemies_report(profile)
@@ -2828,13 +2871,14 @@ func _begin_configured_boss_room(boss_stage: int, room_size: Vector2, room_label
 	in_third_boss_room = boss_stage == 3
 	_play_room_music(true)
 	current_room_size = room_size
+	_reset_effective_room_bounds()
 	current_room_static_camera = false
 	current_room_label = room_label
 	current_room_enemy_mutator = {}
 	current_room_player_mutator = {}
 	_record_room_entry(room_entry_key, {})
 	hud.show_banner(banner_title, "")
-	_apply_camera_bounds_for_room(current_room_size)
+	_apply_camera_bounds_for_room(current_effective_room_size)
 	active_room_enemy_count = 1
 	if is_multiplayer and not MultiplayerSessionManager.is_host():
 		_start_encounter_intro_grace()

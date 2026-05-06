@@ -69,6 +69,11 @@ const ENEMY_MUTATOR_STAT_MAP := {
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_WINDUP_MULT, "prop": "beam_windup_time", "min": 0.18},
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_COOLDOWN_MULT, "prop": "beam_cooldown", "min": 0.5},
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_SPEED_MULT, "prop": "move_speed", "min": 25.0}
+	],
+	"seamlock": [
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_DAMAGE_MULT, "prop": "band_tick_damage", "min": 1.0, "is_int": true},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_WINDUP_MULT, "prop": "teleport_windup_time", "min": 0.28},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SPEED_MULT, "prop": "move_speed", "min": 20.0}
 	]
 }
 
@@ -108,6 +113,12 @@ const ENEMY_DAMAGE_CLASSIFICATION := {
 	"tether": {
 		"beam_tick": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"}
 	},
+	"seamlock": {
+		"contact_strike": {"kind": "flat", "scales_via_mutator": true, "mutator_stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT},
+		"band_tick": {"kind": "flat", "scales_via_mutator": true, "mutator_stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_DAMAGE_MULT},
+		"spiral_hit": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"},
+		"boundary_tick": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"}
+	},
 	"boss_warden": {
 		"all_attacks": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"}
 	},
@@ -115,7 +126,7 @@ const ENEMY_DAMAGE_CLASSIFICATION := {
 		"all_attacks": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"}
 	}
 }
-const ENEMY_SPAWN_ORDER: Array[String] = ["chaser", "charger", "archer", "shielder", "lurker", "ram", "lancer", "spectre", "pyre", "tether"]
+const ENEMY_SPAWN_ORDER: Array[String] = ["chaser", "charger", "archer", "shielder", "seamlock", "lurker", "ram", "lancer", "spectre", "pyre", "tether"]
 
 var world_root: Node2D
 var player: Node2D
@@ -222,6 +233,8 @@ func _profile_count_for_enemy_type(profile: Dictionary, enemy_type: String) -> i
 			if tether_count % 2 != 0:
 				tether_count -= 1
 			return maxi(0, tether_count)
+		"seamlock":
+			return ENCOUNTER_CONTRACTS.profile_seamlock_count(profile)
 		_:
 			return 0
 
@@ -343,7 +356,9 @@ func _enemy_matches_archetype(enemy_key: String, archetype: String) -> bool:
 		"archer":
 			return enemy_key == "archer" or enemy_key == "lancer"
 		"shielder":
-			return enemy_key == "shielder"
+			return enemy_key == "shielder" or enemy_key == "seamlock"
+		"seamlock":
+			return enemy_key == "seamlock"
 		"spectre":
 			return enemy_key == "spectre"
 		"pyre":

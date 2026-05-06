@@ -206,6 +206,10 @@ func _trial_option_chance(depth: int) -> float:
 	var depth_bonus := float(maxi(0, depth - 3)) * 0.015
 	return clampf((0.45 + depth_bonus) * _difficulty_float("trial_encounter_frequency_mult", 1.0), 0.12, 0.95)
 
+func _apex_trial_option_chance(depth: int) -> float:
+	var depth_bonus := float(maxi(0, depth - 5)) * 0.01
+	return clampf((0.12 + depth_bonus) * _difficulty_float("trial_encounter_frequency_mult", 1.0), 0.04, 0.32)
+
 func _hard_mutator_chance(depth: int) -> float:
 	var depth_bonus := float(maxi(0, depth - 2)) * 0.02
 	return clampf((0.18 + depth_bonus) * _difficulty_float("mutator_frequency_mult", 1.0), 0.04, 0.9)
@@ -219,7 +223,9 @@ func _profile_has_enemy_archetype(profile: Dictionary, archetype: String) -> boo
 		"archer":
 			return ENCOUNTER_CONTRACTS.profile_archer_count(profile) > 0 or ENCOUNTER_CONTRACTS.profile_lancer_count(profile) > 0
 		"shielder":
-			return ENCOUNTER_CONTRACTS.profile_shielder_count(profile) > 0
+			return ENCOUNTER_CONTRACTS.profile_shielder_count(profile) > 0 or ENCOUNTER_CONTRACTS.profile_seamlock_count(profile) > 0
+		"seamlock":
+			return ENCOUNTER_CONTRACTS.profile_seamlock_count(profile) > 0
 		"spectre":
 			return ENCOUNTER_CONTRACTS.profile_spectre_count(profile) > 0
 		"pyre":
@@ -341,6 +347,8 @@ func build_debug_encounter_profile(encounter_key: String, depth: int) -> Diction
 			return _build_intro_profile(0)
 		"trial":
 			return _build_trial_profile(depth)
+		"apex_trial":
+			return _build_apex_trial_profile(depth)
 		"last_stand":
 			return _build_survival_profile(depth)
 		"cut_the_signal":
@@ -437,6 +445,39 @@ func _build_trial_profile(depth: int = 0) -> Dictionary:
 		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_PYRE_COUNT, 0)),
 		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_TETHER_COUNT, 0))
 	)
+	return profile
+
+func _build_apex_seamlock_mutator() -> Dictionary:
+	return {
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME: "Seamlock",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_THEME_COLOR: Color(0.96, 0.54, 0.34, 1.0),
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID: "seamlock",
+		"affected_archetypes": ["seamlock"],
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX: "Apex anchors lock lanes and punish linear retreat",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ENEMY_TINT: Color(1.0, 0.9, 0.78, 1.0),
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_ENEMY_HEALTH_MULT: 1.12,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SPEED_MULT: 1.14,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_DAMAGE_MULT: 1.18,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_WINDUP_MULT: 0.86
+	}
+
+func _build_apex_trial_profile(depth: int = 0) -> Dictionary:
+	var effective_depth := _effective_depth(depth)
+	var tier := _difficulty_rank()
+	var mutator := _build_apex_seamlock_mutator()
+	var pressure_mult := _difficulty_float("base_enemy_pressure_mult", 1.0)
+	var chasers := int(clampf(float(1 + int(floor(float(maxi(0, effective_depth - 6)) * 0.2))) * pressure_mult * 0.85, 1.0, 3.0))
+	var shielders := int(clampf(float(1 + int(floor(float(maxi(0, effective_depth - 7)) * 0.15))) * pressure_mult * 0.8, 1.0, 2.0))
+	var seamlocks := 1
+	if effective_depth >= 8:
+		seamlocks += 1
+	if tier >= BEARING_ENUMS.BearingTier.HARBINGER and effective_depth >= 10:
+		seamlocks += 1
+	if tier == BEARING_ENUMS.BearingTier.FORSWORN and effective_depth >= 12:
+		seamlocks += 1
+	seamlocks = clampi(seamlocks, 1, 4)
+	var profile := _build_profile("Apex Trial Seamlock", TRIAL_ROOM_SIZE, chasers, 0, 0, shielders, mutator)
+	profile[ENCOUNTER_CONTRACTS.PROFILE_KEY_SEAMLOCK_COUNT] = seamlocks
 	return profile
 
 func apply_mutator_variant_to_profile(profile: Dictionary, mutator: Dictionary, depth: int = 1) -> Dictionary:
@@ -862,6 +903,19 @@ func _build_trial_route_option(depth: int) -> Dictionary:
 	trial_color.a = 0.96
 	return ENCOUNTER_CONTRACTS.trial_door_option(trial_profile, trial_mutator_name, trial_color)
 
+func _build_apex_trial_route_option(depth: int) -> Dictionary:
+	if depth < 5 or rng.randf() > _apex_trial_option_chance(depth):
+		return {}
+	var apex_profile: Dictionary = _build_apex_trial_profile(depth)
+	var apex_mutator: Dictionary = ENCOUNTER_CONTRACTS.profile_enemy_mutator(apex_profile)
+	var apex_label := "Apex Trial"
+	var apex_mutator_name := ENCOUNTER_CONTRACTS.mutator_name(apex_mutator)
+	if not apex_mutator_name.is_empty():
+		apex_label = "Apex %s" % apex_mutator_name
+	var apex_color: Color = ENCOUNTER_CONTRACTS.mutator_theme_color(apex_mutator, Color(0.96, 0.54, 0.34, 0.96))
+	apex_color.a = 0.96
+	return ENCOUNTER_CONTRACTS.apex_trial_door_option(apex_profile, apex_label, apex_color)
+
 func _build_objective_route_option(depth: int) -> Dictionary:
 	var objective_profile := build_objective_profile(depth)
 	return ENCOUNTER_CONTRACTS.objective_door_option(objective_profile)
@@ -899,6 +953,9 @@ func _build_non_rest_route_options(depth: int) -> Array[Dictionary]:
 	var trial_option := _build_trial_route_option(depth)
 	if not trial_option.is_empty():
 		options.append(trial_option)
+	var apex_option := _build_apex_trial_route_option(depth)
+	if not apex_option.is_empty():
+		options.append(apex_option)
 	return options
 
 func roll_route_options(route_context: Variant) -> Array[Dictionary]:

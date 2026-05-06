@@ -75,6 +75,12 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"desc": "Hard variant with an enemy mutator.",
 		},
 		{
+			"name": "Apex Trial",
+			"group": "Trial",
+			"color": Color(0.96, 0.54, 0.34, 1.0),
+			"desc": "Elite trial category. Fewer enemies, heavier presence, and lane control pressure.",
+		},
+		{
 			"name": "Last Stand",
 			"group": "Objective",
 			"color": Color(1.0, 0.8, 0.5, 1.0),
