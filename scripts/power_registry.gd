@@ -283,16 +283,16 @@ const TRIAL_POWER_BALANCE := {
 	},
 	"phantom_step": {
 		# Damage scales as a ratio of damage. Affected by all damage boons and objective mutators.
-		"damage_ratio_base": 0.40,
-		"damage_ratio_per_stack": 0.08,
-		"slow_duration_base": 0.6,
-		"slow_duration_per_stack": 0.15,
-		"dash_cooldown_mult": 0.92,
-		"dash_cooldown_min": 0.18
+		"damage_ratio_base": 0.46,
+		"damage_ratio_per_stack": 0.10,
+		"slow_duration_base": 0.7,
+		"slow_duration_per_stack": 0.18,
+		"dash_cooldown_mult": 0.88,
+		"dash_cooldown_min": 0.16
 	},
 	"reaper_step": {
-		"range_mult_base": 1.36,
-		"range_mult_per_stack": 0.12
+		"range_mult_base": 1.42,
+		"range_mult_per_stack": 0.14
 	},
 	"static_wake": {
 		# Damage scales as a ratio of damage. Affected by all damage boons and objective mutators.
@@ -360,17 +360,17 @@ const TRIAL_POWER_BALANCE := {
 		"slow_duration_per_stack": 0.10
 	},
 	"wraithstep": {
-		"mark_duration_base": 2.8,
-		"mark_duration_per_stack": 0.55,
-		"dash_mark_radius_base": 42.0,
-		"dash_mark_radius_per_stack": 10.0,
-		"bonus_damage_base": 14,
-		"bonus_damage_per_stack": 8,
-		"splash_radius_base": 52.0,
-		"splash_radius_per_stack": 10.0,
-		"splash_ratio_base": 0.55,
+		"mark_duration_base": 3.1,
+		"mark_duration_per_stack": 0.6,
+		"dash_mark_radius_base": 46.0,
+		"dash_mark_radius_per_stack": 11.0,
+		"bonus_damage_base": 16,
+		"bonus_damage_per_stack": 9,
+		"splash_radius_base": 56.0,
+		"splash_radius_per_stack": 11.0,
+		"splash_ratio_base": 0.60,
 		"splash_ratio_per_stack": 0.12,
-		"splash_ratio_cap": 0.95
+		"splash_ratio_cap": 0.98
 	}
 }
 

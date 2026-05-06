@@ -14,10 +14,10 @@ const CHARACTER_DEFINITIONS := {
 		"passive_id": "iron_retort",
 		"stat_modifiers": {
 			"max_health": 130,
-			"max_speed": 180.0,
-			"damage": 24,
+			"max_speed": 188.0,
+			"damage": 25,
 			"attack_arc_degrees": 150.0,
-			"dash_cooldown": 0.52,
+			"dash_cooldown": 0.48,
 			"iron_skin_armor": 1
 		},
 		"visual": {
@@ -63,7 +63,7 @@ const CHARACTER_DEFINITIONS := {
 		"tagline": "Dictate tempo through execution pressure and precise disengage.",
 		"lore": "Veilstriders walk the seam between heartbeat and silence. They do not win by force but by ending turns before they begin. Where Lacuna claims the missing beat between breaths, the Veilstrider exists to sever that silence and reclaim tempo.",
 		"arcana_pool_key": "veilstrider",
-		"passive_id": "death_tempo",
+		"passive_id": "veilstep_rhythm",
 		"stat_modifiers": {
 			"max_health": 70,
 			"max_speed": 260.0,

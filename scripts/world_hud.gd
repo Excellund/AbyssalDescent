@@ -978,8 +978,8 @@ func _get_passive_display_name(passive_id: String) -> String:
 			return "Iron Retort"
 		"sigil_burst":
 			return "Sigil Burst"
-		"death_tempo":
-			return "Death's Tempo"
+		"veilstep_rhythm":
+			return "Veilstep Rhythm"
 		"farline_focus":
 			return "Farline Focus"
 		"", "passive":

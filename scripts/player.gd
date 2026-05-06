@@ -367,11 +367,20 @@ var player_dash_streak_color: Color = ENEMY_BASE.COLOR_PLAYER_DASH_STREAK
 # Character passives — set via apply_character_package(); exactly one is active per run
 var passive_iron_retort: bool = false
 var passive_sigil_burst: bool = false
-var passive_death_tempo: bool = false
+var passive_veilstep_rhythm: bool = false
 var passive_farline_focus: bool = false
 var active_character_id: String = ""
 var iron_retort_window_left: float = 0.0
 var sigil_burst_ready: bool = false
+var veilstep_rhythm_shards: int = 0
+var veilstep_rhythm_shards_max: int = 3
+var veilstep_rhythm_surge_ready: bool = false
+var veilstep_rhythm_surge_window_left: float = 0.0
+var veilstep_rhythm_surge_duration: float = 4.0
+var veilstep_rhythm_empowered_dash_active: bool = false
+var veilstep_rhythm_wave_radius: float = 84.0
+var veilstep_rhythm_wave_damage_ratio: float = 1.15
+var veilstep_rhythm_touched_enemy_ids: Dictionary = {}
 var farline_focus_min_range: float = 98.0
 var farline_focus_max_range: float = 132.0
 var farline_focus_damage_mult: float = 1.7
@@ -431,6 +440,7 @@ func _physics_process(delta: float) -> void:
 	_update_storm_crown_discharge(delta)
 	_update_combo_relay_state(delta)
 	_update_iron_retort(delta)
+	_update_veilstep_rhythm(delta)
 	_update_farline_focus_state(delta)
 	_update_apex_predator_combo(delta)
 	_update_apex_momentum(delta)
@@ -513,16 +523,26 @@ func _try_start_dash(direction: Vector2) -> void:
 	var effective_dash_speed := maxf(1.0, dash_speed * range_mult)
 	var effective_duration := dash_remaining_distance / effective_dash_speed
 	dash_time_left = effective_duration
-	dash_cooldown_left = dash_cooldown
+	veilstep_rhythm_empowered_dash_active = passive_veilstep_rhythm and veilstep_rhythm_surge_ready and veilstep_rhythm_surge_window_left > 0.0
+	dash_cooldown_left = 0.0 if veilstep_rhythm_empowered_dash_active else dash_cooldown
 	dash_phase_release_left = maxf(dash_phase_release_left, dash_phase_release_duration)
 	phantom_step_hit_ids.clear()
 	phantom_step_ghost_positions.clear()
 	phantom_step_ghost_emit_cd = 0.0
+	veilstep_rhythm_touched_enemy_ids.clear()
 	static_wake_trail_emit_cooldown = 0.0
 	static_wake_has_last_emit_position = false
 	_set_dash_phasing(true)
 	if passive_sigil_burst:
 		sigil_burst_ready = true
+	if veilstep_rhythm_empowered_dash_active and player_feedback != null:
+		player_feedback.play_world_ring(global_position, 34.0, Color(0.26, 1.0, 0.74, 0.9), 0.2)
+		_broadcast_feedback_event("world_ring", {
+			"position": global_position,
+			"radius": 34.0,
+			"color": Color(0.26, 1.0, 0.74, 0.9),
+			"duration": 0.2
+		})
 
 func _try_attack_input() -> void:
 	if not _is_local_control_owner():
@@ -677,6 +697,9 @@ func _process_active_dash(delta: float) -> bool:
 
 	if reward_wraithstep:
 		_apply_wraithstep_marks_during_dash(dash_start, dash_end)
+	_apply_veilstep_rhythm_during_dash(dash_start, dash_end)
+	if dash_finished and veilstep_rhythm_empowered_dash_active:
+		_release_veilstep_rhythm_wave(dash_end)
 	if dash_finished:
 		_release_apex_momentum_dash_wave(dash_end)
 
@@ -1041,13 +1064,18 @@ func apply_character_package(data: Dictionary) -> void:
 	if vis.has("dash_streak_color"):
 		player_dash_streak_color = vis["dash_streak_color"] as Color
 	active_character_id = String(data.get("id", "")).strip_edges().to_lower()
-	var passive_id: String = String(data.get("passive_id", ""))
+	var passive_id: String = String(data.get("passive_id", "")).strip_edges().to_lower()
 	passive_iron_retort = passive_id == "iron_retort"
 	passive_sigil_burst = passive_id == "sigil_burst"
-	passive_death_tempo = passive_id == "death_tempo"
+	passive_veilstep_rhythm = passive_id == "veilstep_rhythm"
 	passive_farline_focus = passive_id == "farline_focus"
 	iron_retort_window_left = 0.0
 	sigil_burst_ready = false
+	veilstep_rhythm_shards = 0
+	veilstep_rhythm_surge_ready = false
+	veilstep_rhythm_surge_window_left = 0.0
+	veilstep_rhythm_empowered_dash_active = false
+	veilstep_rhythm_touched_enemy_ids.clear()
 	farline_focus_ready = false
 	farline_focus_proc_flash_left = 0.0
 	queue_redraw()
@@ -1929,6 +1957,11 @@ func clear_lingering_combat_effects() -> void:
 	convergence_pulse_cooldown = 0.0
 	farline_focus_proc_flash_left = 0.0
 	farline_focus_ready = false
+	veilstep_rhythm_shards = 0
+	veilstep_rhythm_surge_ready = false
+	veilstep_rhythm_surge_window_left = 0.0
+	veilstep_rhythm_empowered_dash_active = false
+	veilstep_rhythm_touched_enemy_ids.clear()
 	_fracture_field_resolving = false
 	queue_redraw()
 
@@ -2214,6 +2247,115 @@ func _apply_storm_crown_hit(source_position: Vector2, source_enemy_id: int, sour
 	queue_redraw()
 
 
+func _apply_veilstep_rhythm_during_dash(dash_start: Vector2, dash_end: Vector2) -> void:
+	if not passive_veilstep_rhythm:
+		return
+	if veilstep_rhythm_surge_ready:
+		return
+	var touched_count := 0
+	var touch_radius := 28.0
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if not DAMAGEABLE.can_take_damage(enemy_node):
+			continue
+		var enemy_body := enemy_node as Node2D
+		var enemy_id := enemy_body.get_instance_id()
+		if veilstep_rhythm_touched_enemy_ids.has(enemy_id):
+			continue
+		var nearest := Geometry2D.get_closest_point_to_segment(enemy_body.global_position, dash_start, dash_end)
+		if enemy_body.global_position.distance_to(nearest) > touch_radius:
+			continue
+		veilstep_rhythm_touched_enemy_ids[enemy_id] = true
+		touched_count += 1
+	if touched_count <= 0:
+		return
+	var old_shards := veilstep_rhythm_shards
+	veilstep_rhythm_shards = mini(veilstep_rhythm_shards_max, veilstep_rhythm_shards + 1)
+	if player_feedback != null:
+		player_feedback.play_world_ring(global_position, 24.0, Color(0.24, 1.0, 0.74, 0.82), 0.1)
+		_broadcast_feedback_event("world_ring", {
+			"position": global_position,
+			"radius": 24.0,
+			"color": Color(0.24, 1.0, 0.74, 0.82),
+			"duration": 0.1
+		})
+	if old_shards < veilstep_rhythm_shards_max and veilstep_rhythm_shards >= veilstep_rhythm_shards_max:
+		veilstep_rhythm_surge_ready = true
+		veilstep_rhythm_surge_window_left = veilstep_rhythm_surge_duration
+		dash_cooldown_left = 0.0
+		if player_feedback != null:
+			player_feedback.play_world_ring(global_position, 58.0, Color(0.36, 1.0, 0.8, 0.9), 0.22)
+			_broadcast_feedback_event("world_ring", {
+				"position": global_position,
+				"radius": 58.0,
+				"color": Color(0.36, 1.0, 0.8, 0.9),
+				"duration": 0.22
+			})
+			player_feedback.play_world_ring(global_position, 78.0, Color(0.72, 1.0, 0.9, 0.55), 0.28)
+			_broadcast_feedback_event("world_ring", {
+				"position": global_position,
+				"radius": 78.0,
+				"color": Color(0.72, 1.0, 0.9, 0.55),
+				"duration": 0.28
+			})
+	queue_redraw()
+
+
+func _release_veilstep_rhythm_wave(epicenter: Vector2) -> void:
+	var wave_damage := _apply_objective_mutator_damage_mult(maxi(1, int(round(float(damage) * veilstep_rhythm_wave_damage_ratio))))
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if not DAMAGEABLE.can_take_damage(enemy_node):
+			continue
+		var enemy_body := enemy_node as Node2D
+		if enemy_body.global_position.distance_to(epicenter) > veilstep_rhythm_wave_radius:
+			continue
+		DAMAGEABLE.apply_damage(enemy_node, wave_damage, {"is_ground_attack": true, "attack_type": "veilstep_rhythm_wave"})
+	if player_feedback != null:
+		player_feedback.play_world_ring(epicenter, veilstep_rhythm_wave_radius, Color(0.28, 1.0, 0.78, 0.92), 0.2)
+		_broadcast_feedback_event("world_ring", {
+			"position": epicenter,
+			"radius": veilstep_rhythm_wave_radius,
+			"color": Color(0.28, 1.0, 0.78, 0.92),
+			"duration": 0.2
+		})
+		player_feedback.play_world_ring(epicenter, veilstep_rhythm_wave_radius * 1.35, Color(0.64, 1.0, 0.88, 0.45), 0.28)
+		_broadcast_feedback_event("world_ring", {
+			"position": epicenter,
+			"radius": veilstep_rhythm_wave_radius * 1.35,
+			"color": Color(0.64, 1.0, 0.88, 0.45),
+			"duration": 0.28
+		})
+	veilstep_rhythm_empowered_dash_active = false
+	veilstep_rhythm_surge_ready = false
+	veilstep_rhythm_surge_window_left = 0.0
+	veilstep_rhythm_shards = 0
+	queue_redraw()
+
+
+func _update_veilstep_rhythm(delta: float) -> void:
+	if not passive_veilstep_rhythm:
+		if veilstep_rhythm_shards != 0 or veilstep_rhythm_surge_ready or veilstep_rhythm_surge_window_left > 0.0 or veilstep_rhythm_empowered_dash_active:
+			veilstep_rhythm_shards = 0
+			veilstep_rhythm_surge_ready = false
+			veilstep_rhythm_surge_window_left = 0.0
+			veilstep_rhythm_empowered_dash_active = false
+			veilstep_rhythm_touched_enemy_ids.clear()
+			queue_redraw()
+		return
+	if not veilstep_rhythm_surge_ready:
+		return
+	if veilstep_rhythm_empowered_dash_active:
+		return
+	veilstep_rhythm_surge_window_left = maxf(0.0, veilstep_rhythm_surge_window_left - delta)
+	if is_zero_approx(veilstep_rhythm_surge_window_left):
+		veilstep_rhythm_surge_ready = false
+		veilstep_rhythm_shards = 0
+	queue_redraw()
+
+
 func _apply_phantom_step_during_dash() -> void:
 	var hit_radius := 38.0 + float(phantom_step_stacks) * 5.0
 	var phantom_damage := _apply_objective_mutator_damage_mult(phantom_step_damage)
@@ -2378,11 +2520,6 @@ func notify_enemy_killed(kill_position: Vector2 = Vector2.ZERO) -> void:
 			_apply_fracture_field(kill_position)
 		if reward_dread_resonance:
 			_reset_dread_resonance_tracking()
-	if passive_death_tempo and dash_cooldown_left > 0.0:
-		dash_cooldown_left = 0.0
-		if player_feedback != null:
-			player_feedback.play_world_ring(global_position, 38.0, Color(player_body_color.r, player_body_color.g, player_body_color.b, 0.88), 0.18)
-		queue_redraw()
 	if not reward_void_dash:
 		return
 	var dash_was_active := dash_cooldown_left > 0.0
@@ -2598,7 +2735,7 @@ func _draw_character_identity(body_radius: float, facing: Vector2, side: Vector2
 	if passive_farline_focus:
 		_draw_riftlancer_identity(body_radius, facing, side, speed_t)
 		return
-	if passive_death_tempo:
+	if passive_veilstep_rhythm:
 		_draw_veilstrider_identity(body_radius, facing, side, speed_t)
 		return
 	# Fallback silhouette for unknown/legacy character data.
@@ -3443,6 +3580,17 @@ func _draw_passive_state(body_radius: float) -> void:
 	if passive_sigil_burst and sigil_burst_ready:
 		var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.001 * 14.0)
 		draw_arc(Vector2.ZERO, body_radius + 13.0, 0.0, TAU, 40, Color(0.82, 0.36, 1.0, 0.55 + pulse * 0.22), 2.6)
+	if passive_veilstep_rhythm:
+		for i in range(veilstep_rhythm_shards_max):
+			var angle := -PI * 0.5 + TAU * (float(i) / float(veilstep_rhythm_shards_max))
+			var shard_pos := Vector2(cos(angle), sin(angle)) * (body_radius + 17.0)
+			var filled := i < veilstep_rhythm_shards
+			draw_circle(shard_pos, 2.2, Color(0.5, 1.0, 0.82, 0.88) if filled else Color(0.22, 0.56, 0.46, 0.36))
+		if veilstep_rhythm_surge_ready:
+			var surge_t := clampf(veilstep_rhythm_surge_window_left / maxf(0.01, veilstep_rhythm_surge_duration), 0.0, 1.0)
+			var surge_pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.001 * 16.0)
+			draw_arc(Vector2.ZERO, body_radius + 21.0, 0.0, TAU, 52, Color(0.28, 1.0, 0.78, 0.5 + surge_pulse * 0.32), 2.4)
+			draw_arc(Vector2.ZERO, body_radius + 25.0, -PI * 0.5, -PI * 0.5 + TAU * surge_t, 52, Color(0.72, 1.0, 0.9, 0.72), 2.0)
 	if passive_farline_focus:
 		var focus_band := _get_farline_focus_range_band()
 		var focus_min_range := focus_band.x

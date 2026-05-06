@@ -1,21 +1,21 @@
 ﻿{
-    "generated_at_utc":  "2026-05-02 23:33:08",
-    "latest_version":  "0.3.1",
-    "run_count":  24,
+    "generated_at_utc":  "2026-05-06 11:23:06",
+    "latest_version":  "0.3.9",
+    "run_count":  27,
     "outcomes":  {
-                     "abandon":  6,
-                     "clear":  1,
-                     "death":  17
+                     "abandon":  3,
+                     "clear":  4,
+                     "death":  20
                  },
     "boredom_proxy":  {
-                          "q75_duration_seconds":  247.25,
-                          "q25_damage_events_per_min":  0.95,
-                          "long_low_engagement_runs":  0
+                          "q75_duration_seconds":  315.5,
+                          "q25_damage_events_per_min":  0.65,
+                          "long_low_engagement_runs":  1
                       },
     "death_timing":  {
-                         "median_depth":  9,
-                         "q25_depth":  6,
-                         "q75_depth":  15
+                         "median_depth":  16,
+                         "q25_depth":  9.5,
+                         "q75_depth":  16.25
                      },
     "shielder":  {
                      "death_count":  0,
@@ -25,342 +25,342 @@
     "top_death_sources":  [
                               {
                                   "source":  "enemy_ability",
-                                  "deaths":  12
+                                  "deaths":  14
                               },
                               {
                                   "source":  "enemy_contact",
-                                  "deaths":  5
+                                  "deaths":  6
                               }
                           ],
     "top_damage_sources":  [
                                {
                                    "source":  "enemy_ability",
-                                   "total_damage":  1151
+                                   "total_damage":  1767
                                },
                                {
                                    "source":  "enemy_contact",
-                                   "total_damage":  521
+                                   "total_damage":  580
                                }
                            ],
     "encounter_pressure":  [
                                {
-                                   "encounter":  "silent_threshold_lacuna",
-                                   "entries":  3,
-                                   "total_damage":  141,
-                                   "deaths":  2,
-                                   "damage_per_entry":  47,
-                                   "deaths_per_100_entries":  66.67
-                               },
-                               {
-                                   "encounter":  "trial_blood_rush",
-                                   "entries":  2,
-                                   "total_damage":  14,
-                                   "deaths":  1,
-                                   "damage_per_entry":  7,
-                                   "deaths_per_100_entries":  50
-                               },
-                               {
-                                   "encounter":  "trial_siegebreak",
-                                   "entries":  2,
-                                   "total_damage":  7,
-                                   "deaths":  1,
-                                   "damage_per_entry":  3.5,
-                                   "deaths_per_100_entries":  50
-                               },
-                               {
                                    "encounter":  "abyss_core_sovereign",
-                                   "entries":  5,
-                                   "total_damage":  49,
-                                   "deaths":  2,
-                                   "damage_per_entry":  9.8,
-                                   "deaths_per_100_entries":  40
+                                   "entries":  17,
+                                   "total_damage":  366,
+                                   "deaths":  8,
+                                   "damage_per_entry":  21.53,
+                                   "deaths_per_100_entries":  47.06
                                },
                                {
-                                   "encounter":  "boss_chamber_the_warden",
-                                   "entries":  12,
-                                   "total_damage":  310,
-                                   "deaths":  3,
-                                   "damage_per_entry":  25.83,
+                                   "encounter":  "trial_iron_volley",
+                                   "entries":  8,
+                                   "total_damage":  135,
+                                   "deaths":  2,
+                                   "damage_per_entry":  16.88,
                                    "deaths_per_100_entries":  25
                                },
                                {
-                                   "encounter":  "gauntlet",
-                                   "entries":  9,
-                                   "total_damage":  72,
-                                   "deaths":  2,
-                                   "damage_per_entry":  8,
-                                   "deaths_per_100_entries":  22.22
+                                   "encounter":  "trial_siegebreak",
+                                   "entries":  13,
+                                   "total_damage":  97,
+                                   "deaths":  3,
+                                   "damage_per_entry":  7.46,
+                                   "deaths_per_100_entries":  23.08
                                },
                                {
-                                   "encounter":  "onslaught",
+                                   "encounter":  "silent_threshold_lacuna",
                                    "entries":  5,
-                                   "total_damage":  68,
+                                   "total_damage":  134,
                                    "deaths":  1,
-                                   "damage_per_entry":  13.6,
+                                   "damage_per_entry":  26.8,
                                    "deaths_per_100_entries":  20
                                },
                                {
-                                   "encounter":  "hold_the_line",
-                                   "entries":  17,
-                                   "total_damage":  197,
-                                   "deaths":  3,
-                                   "damage_per_entry":  11.59,
-                                   "deaths_per_100_entries":  17.65
+                                   "encounter":  "trial_phase_collapse",
+                                   "entries":  8,
+                                   "total_damage":  199,
+                                   "deaths":  1,
+                                   "damage_per_entry":  24.88,
+                                   "deaths_per_100_entries":  12.5
                                },
                                {
                                    "encounter":  "ambush",
-                                   "entries":  6,
-                                   "total_damage":  56,
+                                   "entries":  9,
+                                   "total_damage":  134,
                                    "deaths":  1,
-                                   "damage_per_entry":  9.33,
-                                   "deaths_per_100_entries":  16.67
+                                   "damage_per_entry":  14.89,
+                                   "deaths_per_100_entries":  11.11
                                },
                                {
-                                   "encounter":  "cut_the_signal",
-                                   "entries":  13,
-                                   "total_damage":  60,
+                                   "encounter":  "boss_chamber_the_warden",
+                                   "entries":  21,
+                                   "total_damage":  192,
+                                   "deaths":  2,
+                                   "damage_per_entry":  9.14,
+                                   "deaths_per_100_entries":  9.52
+                               },
+                               {
+                                   "encounter":  "gauntlet",
+                                   "entries":  12,
+                                   "total_damage":  54,
                                    "deaths":  1,
-                                   "damage_per_entry":  4.62,
-                                   "deaths_per_100_entries":  7.69
+                                   "damage_per_entry":  4.5,
+                                   "deaths_per_100_entries":  8.33
+                               },
+                               {
+                                   "encounter":  "trial_blood_rush",
+                                   "entries":  14,
+                                   "total_damage":  78,
+                                   "deaths":  1,
+                                   "damage_per_entry":  5.57,
+                                   "deaths_per_100_entries":  7.14
+                               },
+                               {
+                                   "encounter":  "trial_flashpoint",
+                                   "entries":  10,
+                                   "total_damage":  182,
+                                   "deaths":  0,
+                                   "damage_per_entry":  18.2,
+                                   "deaths_per_100_entries":  0
                                }
                            ],
     "top_arcana_picks":  [
                              {
-                                 "arcana":  "rupture_wave",
-                                 "picks":  5
-                             },
-                             {
                                  "arcana":  "execution_edge",
-                                 "picks":  5
+                                 "picks":  19
                              },
                              {
-                                 "arcana":  "static_wake",
-                                 "picks":  4
+                                 "arcana":  "rupture_wave",
+                                 "picks":  12
                              },
                              {
                                  "arcana":  "razor_wind",
-                                 "picks":  4
-                             },
-                             {
-                                 "arcana":  "wraithstep",
-                                 "picks":  3
-                             },
-                             {
-                                 "arcana":  "phantom_step",
-                                 "picks":  2
-                             },
-                             {
-                                 "arcana":  "hunters_snare",
-                                 "picks":  2
-                             },
-                             {
-                                 "arcana":  "voidfire",
-                                 "picks":  2
-                             },
-                             {
-                                 "arcana":  "vow_shatter",
-                                 "picks":  2
+                                 "picks":  12
                              },
                              {
                                  "arcana":  "storm_crown",
-                                 "picks":  2
+                                 "picks":  10
+                             },
+                             {
+                                 "arcana":  "fracture_field",
+                                 "picks":  9
+                             },
+                             {
+                                 "arcana":  "eclipse_mark",
+                                 "picks":  7
+                             },
+                             {
+                                 "arcana":  "hunters_snare",
+                                 "picks":  6
+                             },
+                             {
+                                 "arcana":  "voidfire",
+                                 "picks":  5
+                             },
+                             {
+                                 "arcana":  "dread_resonance",
+                                 "picks":  5
+                             },
+                             {
+                                 "arcana":  "aegis_field",
+                                 "picks":  3
                              }
                          ],
     "arcana_outcomes":  [
                             {
-                                "arcana":  "rupture_wave",
-                                "runs":  4,
-                                "clear_rate_pct":  25,
-                                "death_rate_pct":  75,
-                                "avg_max_depth":  10
-                            },
-                            {
-                                "arcana":  "static_wake",
-                                "runs":  3,
-                                "clear_rate_pct":  0,
-                                "death_rate_pct":  100,
-                                "avg_max_depth":  9.67
+                                "arcana":  "execution_edge",
+                                "runs":  6,
+                                "clear_rate_pct":  33.33,
+                                "death_rate_pct":  66.67,
+                                "avg_max_depth":  19
                             },
                             {
                                 "arcana":  "razor_wind",
-                                "runs":  3,
-                                "clear_rate_pct":  0,
-                                "death_rate_pct":  100,
-                                "avg_max_depth":  10.33
+                                "runs":  6,
+                                "clear_rate_pct":  16.67,
+                                "death_rate_pct":  83.33,
+                                "avg_max_depth":  16.5
                             },
                             {
-                                "arcana":  "execution_edge",
-                                "runs":  3,
-                                "clear_rate_pct":  0,
-                                "death_rate_pct":  100,
-                                "avg_max_depth":  14.67
+                                "arcana":  "storm_crown",
+                                "runs":  4,
+                                "clear_rate_pct":  25,
+                                "death_rate_pct":  75,
+                                "avg_max_depth":  14.25
                             },
                             {
-                                "arcana":  "wraithstep",
+                                "arcana":  "eclipse_mark",
+                                "runs":  2,
+                                "clear_rate_pct":  0,
+                                "death_rate_pct":  100,
+                                "avg_max_depth":  16
+                            },
+                            {
+                                "arcana":  "fracture_field",
+                                "runs":  2,
+                                "clear_rate_pct":  0,
+                                "death_rate_pct":  100,
+                                "avg_max_depth":  10
+                            },
+                            {
+                                "arcana":  "voidfire",
                                 "runs":  1,
                                 "clear_rate_pct":  0,
                                 "death_rate_pct":  100,
                                 "avg_max_depth":  16
                             },
                             {
-                                "arcana":  "phantom_step",
+                                "arcana":  "rupture_wave",
                                 "runs":  1,
                                 "clear_rate_pct":  0,
                                 "death_rate_pct":  100,
-                                "avg_max_depth":  7
+                                "avg_max_depth":  17
                             },
                             {
-                                "arcana":  "hunters_snare",
+                                "arcana":  "dread_resonance",
                                 "runs":  1,
                                 "clear_rate_pct":  0,
                                 "death_rate_pct":  100,
-                                "avg_max_depth":  24
+                                "avg_max_depth":  16
                             },
                             {
                                 "arcana":  "aegis_field",
                                 "runs":  1,
                                 "clear_rate_pct":  0,
                                 "death_rate_pct":  100,
-                                "avg_max_depth":  8
-                            },
-                            {
-                                "arcana":  "fracture_field",
-                                "runs":  1,
-                                "clear_rate_pct":  0,
-                                "death_rate_pct":  100,
-                                "avg_max_depth":  9
+                                "avg_max_depth":  4
                             }
                         ],
     "top_boon_picks":  [
                            {
                                "boon":  "heavy_blow",
-                               "picks":  20
-                           },
-                           {
-                               "boon":  "wide_arc",
-                               "picks":  12
-                           },
-                           {
-                               "boon":  "surge_step",
-                               "picks":  11
-                           },
-                           {
-                               "boon":  "blink_dash",
-                               "picks":  10
-                           },
-                           {
-                               "boon":  "first_strike",
-                               "picks":  10
+                               "picks":  30
                            },
                            {
                                "boon":  "long_reach",
-                               "picks":  7
+                               "picks":  23
+                           },
+                           {
+                               "boon":  "first_strike",
+                               "picks":  18
+                           },
+                           {
+                               "boon":  "heartstone",
+                               "picks":  15
+                           },
+                           {
+                               "boon":  "fleet_foot",
+                               "picks":  13
+                           },
+                           {
+                               "boon":  "battle_trance",
+                               "picks":  9
+                           },
+                           {
+                               "boon":  "severing_edge",
+                               "picks":  8
+                           },
+                           {
+                               "boon":  "wide_arc",
+                               "picks":  6
                            },
                            {
                                "boon":  "iron_skin",
                                "picks":  6
                            },
                            {
-                               "boon":  "heartstone",
+                               "boon":  "blink_dash",
                                "picks":  5
-                           },
-                           {
-                               "boon":  "fleet_foot",
-                               "picks":  2
-                           },
-                           {
-                               "boon":  "crushed_vow",
-                               "picks":  1
                            }
                        ],
     "arcana_pick_rates":  [
                               {
                                   "arcana":  "execution_edge",
-                                  "offers":  6,
-                                  "picks":  5,
-                                  "pick_rate_pct":  83.33
+                                  "offers":  23,
+                                  "picks":  19,
+                                  "pick_rate_pct":  82.61
                               },
                               {
                                   "arcana":  "rupture_wave",
-                                  "offers":  10,
-                                  "picks":  5,
-                                  "pick_rate_pct":  50
+                                  "offers":  17,
+                                  "picks":  12,
+                                  "pick_rate_pct":  70.59
                               },
                               {
                                   "arcana":  "razor_wind",
-                                  "offers":  6,
-                                  "picks":  4,
-                                  "pick_rate_pct":  66.67
-                              },
-                              {
-                                  "arcana":  "static_wake",
-                                  "offers":  12,
-                                  "picks":  4,
-                                  "pick_rate_pct":  33.33
-                              },
-                              {
-                                  "arcana":  "wraithstep",
-                                  "offers":  11,
-                                  "picks":  3,
-                                  "pick_rate_pct":  27.27
-                              },
-                              {
-                                  "arcana":  "vow_shatter",
-                                  "offers":  13,
-                                  "picks":  2,
-                                  "pick_rate_pct":  15.38
-                              },
-                              {
-                                  "arcana":  "voidfire",
-                                  "offers":  8,
-                                  "picks":  2,
-                                  "pick_rate_pct":  25
+                                  "offers":  25,
+                                  "picks":  12,
+                                  "pick_rate_pct":  48
                               },
                               {
                                   "arcana":  "storm_crown",
-                                  "offers":  9,
-                                  "picks":  2,
-                                  "pick_rate_pct":  22.22
-                              },
-                              {
-                                  "arcana":  "hunters_snare",
-                                  "offers":  10,
-                                  "picks":  2,
-                                  "pick_rate_pct":  20
-                              },
-                              {
-                                  "arcana":  "phantom_step",
-                                  "offers":  7,
-                                  "picks":  2,
-                                  "pick_rate_pct":  28.57
-                              },
-                              {
-                                  "arcana":  "aegis_field",
-                                  "offers":  5,
-                                  "picks":  1,
-                                  "pick_rate_pct":  20
+                                  "offers":  19,
+                                  "picks":  10,
+                                  "pick_rate_pct":  52.63
                               },
                               {
                                   "arcana":  "fracture_field",
-                                  "offers":  3,
-                                  "picks":  1,
-                                  "pick_rate_pct":  33.33
+                                  "offers":  22,
+                                  "picks":  9,
+                                  "pick_rate_pct":  40.91
                               },
                               {
                                   "arcana":  "eclipse_mark",
-                                  "offers":  9,
-                                  "picks":  1,
-                                  "pick_rate_pct":  11.11
+                                  "offers":  17,
+                                  "picks":  7,
+                                  "pick_rate_pct":  41.18
+                              },
+                              {
+                                  "arcana":  "hunters_snare",
+                                  "offers":  13,
+                                  "picks":  6,
+                                  "pick_rate_pct":  46.15
+                              },
+                              {
+                                  "arcana":  "voidfire",
+                                  "offers":  19,
+                                  "picks":  5,
+                                  "pick_rate_pct":  26.32
                               },
                               {
                                   "arcana":  "dread_resonance",
-                                  "offers":  5,
+                                  "offers":  19,
+                                  "picks":  5,
+                                  "pick_rate_pct":  26.32
+                              },
+                              {
+                                  "arcana":  "aegis_field",
+                                  "offers":  14,
+                                  "picks":  3,
+                                  "pick_rate_pct":  21.43
+                              },
+                              {
+                                  "arcana":  "vow_shatter",
+                                  "offers":  21,
+                                  "picks":  1,
+                                  "pick_rate_pct":  4.76
+                              },
+                              {
+                                  "arcana":  "static_wake",
+                                  "offers":  13,
+                                  "picks":  1,
+                                  "pick_rate_pct":  7.69
+                              },
+                              {
+                                  "arcana":  "wraithstep",
+                                  "offers":  22,
                                   "picks":  0,
                                   "pick_rate_pct":  0
                               },
                               {
                                   "arcana":  "reaper_step",
-                                  "offers":  6,
+                                  "offers":  12,
+                                  "picks":  0,
+                                  "pick_rate_pct":  0
+                              },
+                              {
+                                  "arcana":  "phantom_step",
+                                  "offers":  20,
                                   "picks":  0,
                                   "pick_rate_pct":  0
                               }
@@ -368,139 +368,161 @@
     "boon_pick_rates":  [
                             {
                                 "boon":  "heavy_blow",
-                                "offers":  20,
-                                "picks":  20,
+                                "offers":  30,
+                                "picks":  30,
                                 "pick_rate_pct":  100
                             },
                             {
-                                "boon":  "wide_arc",
-                                "offers":  27,
-                                "picks":  12,
-                                "pick_rate_pct":  44.44
-                            },
-                            {
-                                "boon":  "surge_step",
-                                "offers":  28,
-                                "picks":  11,
-                                "pick_rate_pct":  39.29
+                                "boon":  "long_reach",
+                                "offers":  32,
+                                "picks":  23,
+                                "pick_rate_pct":  71.88
                             },
                             {
                                 "boon":  "first_strike",
-                                "offers":  16,
-                                "picks":  10,
-                                "pick_rate_pct":  62.5
-                            },
-                            {
-                                "boon":  "blink_dash",
-                                "offers":  22,
-                                "picks":  10,
-                                "pick_rate_pct":  45.45
-                            },
-                            {
-                                "boon":  "long_reach",
-                                "offers":  15,
-                                "picks":  7,
-                                "pick_rate_pct":  46.67
-                            },
-                            {
-                                "boon":  "iron_skin",
-                                "offers":  25,
-                                "picks":  6,
-                                "pick_rate_pct":  24
+                                "offers":  34,
+                                "picks":  18,
+                                "pick_rate_pct":  52.94
                             },
                             {
                                 "boon":  "heartstone",
-                                "offers":  17,
-                                "picks":  5,
-                                "pick_rate_pct":  29.41
+                                "offers":  47,
+                                "picks":  15,
+                                "pick_rate_pct":  31.91
                             },
                             {
                                 "boon":  "fleet_foot",
-                                "offers":  23,
-                                "picks":  2,
-                                "pick_rate_pct":  8.7
-                            },
-                            {
-                                "boon":  "crushed_vow",
-                                "offers":  19,
-                                "picks":  1,
-                                "pick_rate_pct":  5.26
+                                "offers":  41,
+                                "picks":  13,
+                                "pick_rate_pct":  31.71
                             },
                             {
                                 "boon":  "battle_trance",
-                                "offers":  24,
-                                "picks":  0,
-                                "pick_rate_pct":  0
+                                "offers":  37,
+                                "picks":  9,
+                                "pick_rate_pct":  24.32
                             },
                             {
                                 "boon":  "severing_edge",
-                                "offers":  19,
+                                "offers":  34,
+                                "picks":  8,
+                                "pick_rate_pct":  23.53
+                            },
+                            {
+                                "boon":  "wide_arc",
+                                "offers":  12,
+                                "picks":  6,
+                                "pick_rate_pct":  50
+                            },
+                            {
+                                "boon":  "iron_skin",
+                                "offers":  31,
+                                "picks":  6,
+                                "pick_rate_pct":  19.35
+                            },
+                            {
+                                "boon":  "blink_dash",
+                                "offers":  34,
+                                "picks":  5,
+                                "pick_rate_pct":  14.71
+                            },
+                            {
+                                "boon":  "surge_step",
+                                "offers":  33,
+                                "picks":  1,
+                                "pick_rate_pct":  3.03
+                            },
+                            {
+                                "boon":  "crushed_vow",
+                                "offers":  37,
                                 "picks":  0,
                                 "pick_rate_pct":  0
                             }
                         ],
     "never_picked_arcana":  [
-                                "dread_resonance",
-                                "reaper_step"
+                                "wraithstep",
+                                "reaper_step",
+                                "phantom_step"
                             ],
     "character_popularity":  [
                                  {
-                                     "character":  "veilstrider",
-                                     "runs":  12,
-                                     "clear_rate_pct":  8.33,
-                                     "death_rate_pct":  66.67,
-                                     "avg_max_depth":  7.08
+                                     "character":  "riftlancer",
+                                     "runs":  21,
+                                     "clear_rate_pct":  14.29,
+                                     "death_rate_pct":  76.19,
+                                     "avg_max_depth":  14.81
                                  },
                                  {
                                      "character":  "hexweaver",
-                                     "runs":  10,
-                                     "clear_rate_pct":  0,
-                                     "death_rate_pct":  70,
-                                     "avg_max_depth":  10
+                                     "runs":  3,
+                                     "clear_rate_pct":  33.33,
+                                     "death_rate_pct":  33.33,
+                                     "avg_max_depth":  14
                                  },
                                  {
-                                     "character":  "bastion",
+                                     "character":  "veilstrider",
                                      "runs":  2,
                                      "clear_rate_pct":  0,
                                      "death_rate_pct":  100,
-                                     "avg_max_depth":  11.5
+                                     "avg_max_depth":  4
+                                 },
+                                 {
+                                     "character":  "bastion",
+                                     "runs":  1,
+                                     "clear_rate_pct":  0,
+                                     "death_rate_pct":  100,
+                                     "avg_max_depth":  16
                                  }
                              ],
     "character_by_bearing":  [
                                  {
                                      "character":  "bastion",
                                      "difficulty_tier":  "1",
-                                     "runs":  2,
-                                     "clear_rate_pct":  0,
-                                     "death_rate_pct":  100
-                                 },
-                                 {
-                                     "character":  "hexweaver",
-                                     "difficulty_tier":  "0",
                                      "runs":  1,
                                      "clear_rate_pct":  0,
                                      "death_rate_pct":  100
                                  },
                                  {
                                      "character":  "hexweaver",
-                                     "difficulty_tier":  "1",
-                                     "runs":  9,
-                                     "clear_rate_pct":  0,
-                                     "death_rate_pct":  66.67
-                                 },
-                                 {
-                                     "character":  "veilstrider",
                                      "difficulty_tier":  "0",
                                      "runs":  1,
                                      "clear_rate_pct":  100,
                                      "death_rate_pct":  0
                                  },
                                  {
+                                     "character":  "hexweaver",
+                                     "difficulty_tier":  "1",
+                                     "runs":  2,
+                                     "clear_rate_pct":  0,
+                                     "death_rate_pct":  50
+                                 },
+                                 {
+                                     "character":  "riftlancer",
+                                     "difficulty_tier":  "1",
+                                     "runs":  2,
+                                     "clear_rate_pct":  50,
+                                     "death_rate_pct":  50
+                                 },
+                                 {
+                                     "character":  "riftlancer",
+                                     "difficulty_tier":  "2",
+                                     "runs":  15,
+                                     "clear_rate_pct":  6.67,
+                                     "death_rate_pct":  86.67
+                                 },
+                                 {
+                                     "character":  "riftlancer",
+                                     "difficulty_tier":  "3",
+                                     "runs":  4,
+                                     "clear_rate_pct":  25,
+                                     "death_rate_pct":  50
+                                 },
+                                 {
                                      "character":  "veilstrider",
                                      "difficulty_tier":  "1",
-                                     "runs":  11,
+                                     "runs":  2,
                                      "clear_rate_pct":  0,
-                                     "death_rate_pct":  72.73
+                                     "death_rate_pct":  100
                                  }
                              ]
 }

@@ -283,8 +283,8 @@ func _update_passive_section(character_id: String) -> void:
 			desc = "When you take damage, a counter window opens for 0.6s. Your next attack within the window deals 70% extra damage."
 		"sigil_burst":
 			desc = "Dashing arms a burst. Your next attack unleashes a 70% damage sigil explosion at the target."
-		"death_tempo":
-			desc = "Killing an enemy instantly resets your dash cooldown, allowing immediate repositioning."
+		"veilstep_rhythm":
+			desc = "Dashing through enemies builds Veilstep shards. At full shards, your next dash is empowered and releases a high-damage surge wave at dash end."
 		"farline_focus":
 			desc = "Melee hits inside your farline band and tight aim lane deal 70% bonus damage, but hits outside deal 30% less. Keep distance and commit to precision angles."
 		_:
@@ -303,7 +303,7 @@ func _resolve_passive_id(character_id: String, char_data: Dictionary) -> String:
 		"hexweaver":
 			return "sigil_burst"
 		"veilstrider":
-			return "death_tempo"
+			return "veilstep_rhythm"
 		"riftlancer":
 			return "farline_focus"
 		_:
@@ -459,8 +459,8 @@ func _format_passive_name(passive_id: String) -> String:
 			return "Iron Retort"
 		"sigil_burst":
 			return "Sigil Burst"
-		"death_tempo":
-			return "Death's Tempo"
+		"veilstep_rhythm":
+			return "Veilstep Rhythm"
 		"farline_focus":
 			return "Farline Focus"
 		_:
