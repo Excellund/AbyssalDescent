@@ -4,8 +4,9 @@ const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 
 const STATE_STALK := 0
 const STATE_WINDUP := 1
-const STATE_STRIKE := 2
-const STATE_RECOVER := 3
+const STATE_COMMIT := 2
+const STATE_STRIKE := 3
+const STATE_RECOVER := 4
 
 @export var move_speed: float = 84.0
 @export var acceleration: float = 920.0
@@ -16,6 +17,7 @@ const STATE_RECOVER := 3
 @export var windup_time: float = 0.72
 @export var prediction_time: float = 0.52
 @export var prediction_speed_cap: float = 340.0
+@export var commit_linger_time: float = 0.4
 @export var post_blink_strike_delay: float = 0.5
 @export var strike_range: float = 54.0
 @export var strike_length: float = 78.0
@@ -55,26 +57,28 @@ func _process_behavior(delta: float) -> void:
 			_process_stalk(delta)
 		STATE_WINDUP:
 			_process_windup(delta)
+		STATE_COMMIT:
+			_process_commit(delta)
 		STATE_STRIKE:
 			_process_strike(delta)
 		STATE_RECOVER:
 			_process_recover(delta)
 
 func should_force_network_runtime_state_sampling() -> bool:
-	return spectre_state == STATE_WINDUP or spectre_state == STATE_STRIKE or attack_anim_time_left > 0.0
+	return spectre_state == STATE_WINDUP or spectre_state == STATE_COMMIT or spectre_state == STATE_STRIKE or attack_anim_time_left > 0.0
 
 func should_process_remote_visuals_every_frame() -> bool:
-	return not network_simulation_enabled and (spectre_state == STATE_WINDUP or spectre_state == STATE_STRIKE)
+	return not network_simulation_enabled and (spectre_state == STATE_WINDUP or spectre_state == STATE_COMMIT or spectre_state == STATE_STRIKE)
 
 func get_priority_network_sync_interval_sec() -> float:
-	if spectre_state == STATE_WINDUP or spectre_state == STATE_STRIKE:
+	if spectre_state == STATE_WINDUP or spectre_state == STATE_COMMIT or spectre_state == STATE_STRIKE:
 		return 0.03
 	return 0.0
 
 func get_projectile_network_sync_state() -> Dictionary:
 	if not network_simulation_enabled:
 		return {}
-	var active := spectre_state == STATE_WINDUP or spectre_state == STATE_STRIKE
+	var active := spectre_state == STATE_WINDUP or spectre_state == STATE_COMMIT or spectre_state == STATE_STRIKE
 	if not active and not _attack_sync_was_active:
 		return {}
 	var payload := {
@@ -96,7 +100,7 @@ func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
 		return
 	var active := bool(sync_state.get("active", false))
 	if not active:
-		if spectre_state == STATE_WINDUP or spectre_state == STATE_STRIKE:
+		if spectre_state == STATE_WINDUP or spectre_state == STATE_COMMIT or spectre_state == STATE_STRIKE:
 			spectre_state = STATE_RECOVER
 			state_time_left = 0.0
 		_blink_target_global = global_position
@@ -111,7 +115,7 @@ func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
 	queue_redraw()
 
 func _process_network_visuals(delta: float) -> void:
-	if spectre_state != STATE_WINDUP and spectre_state != STATE_STRIKE:
+	if spectre_state != STATE_WINDUP and spectre_state != STATE_COMMIT and spectre_state != STATE_STRIKE:
 		return
 	if state_time_left > 0.0:
 		var previous_time_left := state_time_left
@@ -166,6 +170,20 @@ func _process_windup(delta: float) -> void:
 	velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
 	move_and_slide()
 	_update_blink_target()
+	state_time_left = maxf(0.0, state_time_left - delta)
+	queue_redraw()
+	if state_time_left <= 0.0:
+		_enter_commit_state()
+
+func _enter_commit_state() -> void:
+	spectre_state = STATE_COMMIT
+	state_time_left = commit_linger_time
+	velocity = Vector2.ZERO
+	queue_redraw()
+
+func _process_commit(delta: float) -> void:
+	velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
+	move_and_slide()
 	state_time_left = maxf(0.0, state_time_left - delta)
 	queue_redraw()
 	if state_time_left <= 0.0:
@@ -387,6 +405,9 @@ func _draw() -> void:
 		# Brightening during prediction — preparing to collapse position
 		body_color = Color(0.28, 0.92, 0.92, 0.98)
 		core_color = Color(0.9, 1.0, 1.0, 0.96)
+	elif spectre_state == STATE_COMMIT:
+		body_color = Color(0.34, 0.96, 0.94, 0.98)
+		core_color = Color(0.96, 1.0, 1.0, 0.98)
 	elif spectre_state == STATE_STRIKE:
 		# Maximum brightness and saturation during strike — attack is crystallizing
 		body_color = Color(0.42, 0.98, 0.94, 0.98)
@@ -425,7 +446,11 @@ func _draw() -> void:
 		draw_line(rift_right, rift_outer, rift_color, 2.4)
 	
 	# Pulsing core with prediction intensity
-	var prediction_intensity := 1.0 - (state_time_left / maxf(0.001, windup_time)) if spectre_state == STATE_WINDUP else 0.0
+	var prediction_intensity := 0.0
+	if spectre_state == STATE_WINDUP:
+		prediction_intensity = 1.0 - (state_time_left / maxf(0.001, windup_time))
+	elif spectre_state == STATE_COMMIT:
+		prediction_intensity = 1.0
 	draw_circle(Vector2.ZERO, body_radius * 0.52, Color(core_color.r, core_color.g, core_color.b, core_color.a * (0.8 + prediction_intensity * 0.2)))
 	draw_circle(Vector2.ZERO, body_radius * 0.26, Color(1.0, 1.0, 1.0, 0.3 + prediction_intensity * 0.3))
 
@@ -444,8 +469,11 @@ func _draw() -> void:
 		draw_circle(-rift_pos, rift_size, Color(0.54, 1.0, 0.94, rift_alpha))
 
 	# Predictive targeting glow during windup — intensifies as attack builds
-	if spectre_state == STATE_WINDUP:
-		var target_lock_alpha := 0.1 + (1.0 - (state_time_left / maxf(0.001, windup_time))) * 0.22
+	if spectre_state == STATE_WINDUP or spectre_state == STATE_COMMIT:
+		var lock_progress := 1.0
+		if spectre_state == STATE_WINDUP:
+			lock_progress = 1.0 - (state_time_left / maxf(0.001, windup_time))
+		var target_lock_alpha := 0.1 + lock_progress * 0.22
 		draw_circle(Vector2.ZERO, body_radius + 8.0, Color(0.54, 0.96, 0.92, target_lock_alpha))
 		
 		# Concentric prediction rings — shows prediction is active
@@ -453,6 +481,8 @@ func _draw() -> void:
 		for ring_i in range(ring_count):
 			var ring_scale := 1.0 + float(ring_i) * 0.42
 			var ring_alpha := (0.16 - float(ring_i) * 0.08) * (aura_pulse + 0.5)
+			if spectre_state == STATE_COMMIT:
+				ring_alpha *= 1.15
 			draw_arc(Vector2.ZERO, (body_radius + 10.0) * ring_scale, 0.0, TAU, 28, Color(0.34, 0.92, 0.88, ring_alpha), 1.8)
 	
 	# Strike state — attack ready indicator with intensifying visual
@@ -485,10 +515,12 @@ func _draw() -> void:
 		draw_arc(tip, tip_arc_radius, 0.0, TAU, 24, Color(0.54, 1.0, 0.94, 0.84 + strike_progress * 0.16), 2.2)
 	
 	# Prediction windup telegraph to target
-	if spectre_state == STATE_WINDUP:
+	if spectre_state == STATE_WINDUP or spectre_state == STATE_COMMIT:
 		var telegraph_pos := _blink_target_global - global_position
 		var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.018)
-		var windup_progress := 1.0 - clampf(state_time_left / windup_time, 0.0, 1.0)
+		var windup_progress := 1.0
+		if spectre_state == STATE_WINDUP:
+			windup_progress = 1.0 - clampf(state_time_left / maxf(0.001, windup_time), 0.0, 1.0)
 		draw_line(Vector2.ZERO, telegraph_pos, Color(0.44, 1.0, 0.96, 0.52 + windup_progress * 0.3), 2.4 + pulse * 0.8)
 		draw_arc(telegraph_pos, strike_range - 8.0 + pulse * 6.0 + windup_progress * 3.0, 0.0, TAU, 32, Color(0.54, 1.0, 0.94, 0.92 + pulse * 0.08), 2.8 + pulse * 0.4)
 		draw_circle(telegraph_pos, 10.0 + pulse * 6.0 + windup_progress * 2.0, Color(0.2, 0.92, 0.86, 0.22 + pulse * 0.12))

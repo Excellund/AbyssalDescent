@@ -55,6 +55,7 @@ const ENEMY_MUTATOR_STAT_MAP := {
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_ATTACK_INTERVAL_MULT, "prop": "attack_cooldown", "min": 0.22},
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_SPEED_MULT, "prop": "move_speed", "min": 25.0},
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_SPECTRE_WINDUP_MULT, "prop": "windup_time", "min": 0.36},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_SPECTRE_WINDUP_MULT, "prop": "commit_linger_time", "min": 0.1},
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_SPECTRE_STRIKE_DELAY_MULT, "prop": "post_blink_strike_delay", "min": 0.28}
 	],
 	"pyre": [
