@@ -40,6 +40,8 @@ var bolt_distance_traveled: float = 0.0
 var bolt_travel_limit: float = 0.0
 var bolt_predicted_impact_global: Vector2 = Vector2.ZERO
 var locked_impact_global: Vector2 = Vector2.ZERO
+var _remote_bolt_target_position: Vector2 = Vector2.ZERO
+var _projectile_sync_was_active: bool = false
 
 # Hazard zones left on the arena floor.
 # Each entry: { "pos": Vector2, "time_left": float, "tick_timer": float,
@@ -55,6 +57,10 @@ func _ready() -> void:
 	max_health = 85
 	crowd_separation_radius = 58.0
 	crowd_separation_strength = 96.0
+
+
+func _exit_tree() -> void:
+	_clear_remote_lancer_attack_visuals()
 
 func _process_behavior(delta: float) -> void:
 	if attack_cooldown_left > 0.0:
@@ -72,6 +78,99 @@ func _process_behavior(delta: float) -> void:
 			_process_fire_state(delta)
 		ENEMY_STATE_ENUMS.LancerState.REPOSITION:
 			_process_reposition(delta)
+
+
+func should_process_remote_visuals_every_frame() -> bool:
+	return not network_simulation_enabled and (is_instance_valid(bolt) or not zones.is_empty())
+
+
+func get_projectile_network_sync_state() -> Dictionary:
+	if not network_simulation_enabled:
+		return {}
+	var zone_payload: Array = []
+	for zone_variant in zones:
+		if not (zone_variant is Dictionary):
+			continue
+		var zone := zone_variant as Dictionary
+		zone_payload.append({
+			"pos": zone.get("pos", Vector2.ZERO),
+			"time_left": float(zone.get("time_left", 0.0)),
+			"tick_timer": float(zone.get("tick_timer", 0.0)),
+			"spawn_flash": float(zone.get("spawn_flash", 0.0)),
+			"tick_flash": float(zone.get("tick_flash", 0.0))
+		})
+	var bolt_active := is_instance_valid(bolt)
+	var active := bolt_active or not zone_payload.is_empty()
+	if not active and not _projectile_sync_was_active:
+		return {}
+	var payload := {
+		"active": active,
+		"zones": zone_payload
+	}
+	if bolt_active:
+		payload["bolt_position"] = bolt.global_position
+		payload["bolt_direction"] = bolt_direction
+		payload["bolt_distance_traveled"] = bolt_distance_traveled
+		payload["bolt_travel_limit"] = bolt_travel_limit
+		payload["bolt_predicted_impact_global"] = bolt_predicted_impact_global
+	_projectile_sync_was_active = active
+	return payload
+
+
+func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
+	if network_simulation_enabled:
+		return
+	if sync_state.is_empty():
+		return
+	var active := bool(sync_state.get("active", false))
+	if not active:
+		_clear_remote_lancer_attack_visuals()
+		queue_redraw()
+		return
+	zones = (sync_state.get("zones", []) as Array).duplicate(true)
+	if sync_state.has("bolt_position"):
+		var bolt_pos := sync_state.get("bolt_position", global_position) as Vector2
+		if not is_instance_valid(bolt):
+			bolt = Node2D.new()
+			if is_instance_valid(get_parent()):
+				get_parent().add_child(bolt)
+		if bolt.global_position.distance_squared_to(bolt_pos) > 2304.0:
+			bolt.global_position = bolt_pos
+		_remote_bolt_target_position = bolt_pos
+		bolt_direction = sync_state.get("bolt_direction", bolt_direction) as Vector2
+		bolt_distance_traveled = float(sync_state.get("bolt_distance_traveled", bolt_distance_traveled))
+		bolt_travel_limit = maxf(0.0, float(sync_state.get("bolt_travel_limit", bolt_travel_limit)))
+		bolt_predicted_impact_global = sync_state.get("bolt_predicted_impact_global", bolt_predicted_impact_global) as Vector2
+	else:
+		if is_instance_valid(bolt):
+			bolt.queue_free()
+		bolt = null
+		_remote_bolt_target_position = Vector2.ZERO
+	queue_redraw()
+
+
+func _process_network_visuals(delta: float) -> void:
+	if not is_instance_valid(bolt):
+		return
+	var previous_pos := bolt.global_position
+	var step_distance := bolt_speed * delta
+	if bolt.global_position.distance_squared_to(_remote_bolt_target_position) > step_distance * step_distance * 9.0:
+		bolt.global_position = _remote_bolt_target_position
+	elif bolt_direction.length_squared() > 0.000001:
+		bolt.global_position += bolt_direction.normalized() * step_distance
+	else:
+		bolt.global_position = _remote_bolt_target_position
+	if bolt.global_position.distance_squared_to(previous_pos) > 0.04:
+		queue_redraw()
+
+
+func _clear_remote_lancer_attack_visuals() -> void:
+	if is_instance_valid(bolt):
+		bolt.queue_free()
+	bolt = null
+	zones.clear()
+	_remote_bolt_target_position = Vector2.ZERO
+	_projectile_sync_was_active = false
 
 # ---------------------------------------------------------------------------
 # State machine
