@@ -239,30 +239,81 @@ func _create_multiplayer_room() -> void:
 func _join_multiplayer_room(room_code: String) -> void:
 	var multiplayer_session_manager = get_node_or_null("/root/MultiplayerSessionManager")
 	var multiplayer_room_service = get_node_or_null("/root/MultiplayerRoomService")
+	if multiplayer_join_button != null:
+		multiplayer_join_button.disabled = true
 	if multiplayer_session_manager == null:
 		push_error("[Menu] MultiplayerSessionManager autoload is missing")
+		if multiplayer_join_button != null:
+			multiplayer_join_button.disabled = false
 		return
 	if multiplayer_room_service == null:
 		push_error("[Menu] MultiplayerRoomService autoload is missing")
+		if multiplayer_join_button != null:
+			multiplayer_join_button.disabled = false
 		return
 	var config_issues: PackedStringArray = multiplayer_room_service.get_configuration_issues()
 	if not config_issues.is_empty():
 		if multiplayer_status_label != null:
 			multiplayer_status_label.text = String(config_issues[0])
+		if multiplayer_join_button != null:
+			multiplayer_join_button.disabled = false
 		return
 	var resolve_result: Dictionary = await multiplayer_room_service.resolve_room_code(room_code)
 	if not bool(resolve_result.get("ok", false)):
 		if multiplayer_status_label != null:
 			multiplayer_status_label.text = _format_multiplayer_room_error(resolve_result, false)
+		if multiplayer_join_button != null:
+			multiplayer_join_button.disabled = false
 		return
 	var registration := resolve_result.get("registration", {}) as Dictionary
 	if multiplayer_session_manager.join_registered_room(registration):
-		if get_tree() != null:
-			get_tree().change_scene_to_file("res://scenes/Lobby.tscn")
+		if multiplayer_status_label != null:
+			multiplayer_status_label.text = "Connecting to host..."
+		var join_result := await _await_multiplayer_join_result(multiplayer_session_manager)
+		if bool(join_result.get("ok", false)):
+			if get_tree() != null:
+				get_tree().change_scene_to_file("res://scenes/Lobby.tscn")
+		else:
+			multiplayer_session_manager.leave_room()
+			if multiplayer_status_label != null:
+				multiplayer_status_label.text = String(join_result.get("reason", "Unable to connect to the room host."))
 	else:
 		push_error("Failed to join multiplayer room")
 		if multiplayer_status_label != null:
 			multiplayer_status_label.text = "Unable to connect to the room host."
+	if multiplayer_join_button != null:
+		multiplayer_join_button.disabled = false
+
+
+func _await_multiplayer_join_result(multiplayer_session_manager: Node, timeout_sec: float = 8.0) -> Dictionary:
+	var joined := false
+	var failed := false
+	var failure_reason := ""
+	var on_joined := func(_session_id: String) -> void:
+		joined = true
+	var on_failed := func(reason: String) -> void:
+		failed = true
+		failure_reason = reason
+	multiplayer_session_manager.session_joined.connect(on_joined, CONNECT_ONE_SHOT)
+	multiplayer_session_manager.connection_failed.connect(on_failed, CONNECT_ONE_SHOT)
+	var elapsed := 0.0
+	while elapsed < timeout_sec and not joined and not failed:
+		await get_tree().process_frame
+		elapsed += get_process_delta_time()
+	if multiplayer_session_manager.session_joined.is_connected(on_joined):
+		multiplayer_session_manager.session_joined.disconnect(on_joined)
+	if multiplayer_session_manager.connection_failed.is_connected(on_failed):
+		multiplayer_session_manager.connection_failed.disconnect(on_failed)
+	if joined:
+		return {
+			"ok": true
+		}
+	if failure_reason.is_empty():
+		failure_reason = "Connection timed out while joining room."
+	return {
+		"ok": false,
+		"reason": failure_reason
+	}
 
 
 func _should_autostart_debug_encounter() -> bool:
