@@ -77,6 +77,7 @@ var character_name_labels: Array[Label] = []
 var character_role_labels: Array[Label] = []
 var character_opposition_labels: Array[Label] = []
 var character_ids: Array[String] = []
+var menu_background_layer: Control
 var atmosphere_band: Panel
 var flavor_quote_label: RichTextLabel
 var quote_wrapper: Control
@@ -447,10 +448,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 func _build_ui() -> void:
-	var backdrop := ColorRect.new()
-	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
-	backdrop.color = Color(0.03, 0.05, 0.08, 1.0)
-	add_child(backdrop)
+	menu_background_layer = _build_menu_background_layer()
+	add_child(menu_background_layer)
 
 	atmosphere_band = Panel.new()
 	atmosphere_band.set_anchors_preset(Control.PRESET_CENTER)
@@ -1037,6 +1036,8 @@ func _build_multiplayer_panel() -> Panel:
 	return panel
 
 func _play_menu_intro() -> void:
+	if menu_background_layer != null:
+		menu_background_layer.modulate.a = 0.0
 	if atmosphere_band != null:
 		atmosphere_band.modulate.a = 0.0
 		atmosphere_band.position += Vector2(-10.0, 0.0)
@@ -1047,6 +1048,8 @@ func _play_menu_intro() -> void:
 		flavor_quote_label.modulate.a = 0.0
 	var tween := create_tween()
 	tween.set_parallel(true)
+	if menu_background_layer != null:
+		tween.tween_property(menu_background_layer, "modulate:a", 1.0, 0.24)
 	if atmosphere_band != null:
 		tween.tween_property(atmosphere_band, "modulate:a", 1.0, 0.18)
 		tween.tween_property(atmosphere_band, "position", atmosphere_band.position + Vector2(10.0, 0.0), 0.24).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
@@ -1082,6 +1085,114 @@ func _animate_panel_in(panel: Control, offset: Vector2) -> void:
 	tween.set_parallel(true)
 	tween.tween_property(panel, "modulate:a", 1.0, 0.14)
 	tween.tween_property(panel, "position", target_position, 0.18).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+func _build_menu_background_layer() -> Control:
+	var layer := Control.new()
+	layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var abyss := ColorRect.new()
+	abyss.set_anchors_preset(Control.PRESET_FULL_RECT)
+	abyss.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	abyss.color = Color(1.0, 1.0, 1.0, 1.0)
+	abyss.material = _make_menu_background_material()
+	layer.add_child(abyss)
+
+	var glow_a := Panel.new()
+	glow_a.set_anchors_preset(Control.PRESET_CENTER)
+	glow_a.position = Vector2(-520.0, -280.0)
+	glow_a.custom_minimum_size = Vector2(380.0, 380.0)
+	glow_a.add_theme_stylebox_override("panel", _make_panel_style(Color(0.16, 0.33, 0.52, 0.16), Color(0.16, 0.33, 0.52, 0.0), 190, 0))
+	layer.add_child(glow_a)
+
+	var glow_b := Panel.new()
+	glow_b.set_anchors_preset(Control.PRESET_CENTER)
+	glow_b.position = Vector2(220.0, -340.0)
+	glow_b.custom_minimum_size = Vector2(460.0, 460.0)
+	glow_b.add_theme_stylebox_override("panel", _make_panel_style(Color(0.11, 0.24, 0.40, 0.14), Color(0.11, 0.24, 0.40, 0.0), 230, 0))
+	layer.add_child(glow_b)
+
+	var glow_c := Panel.new()
+	glow_c.set_anchors_preset(Control.PRESET_CENTER)
+	glow_c.position = Vector2(-80.0, 140.0)
+	glow_c.custom_minimum_size = Vector2(320.0, 320.0)
+	glow_c.add_theme_stylebox_override("panel", _make_panel_style(Color(0.20, 0.38, 0.56, 0.12), Color(0.20, 0.38, 0.56, 0.0), 160, 0))
+	layer.add_child(glow_c)
+
+	var float_tween := create_tween()
+	float_tween.set_loops()
+	float_tween.set_parallel(true)
+	float_tween.tween_property(glow_a, "position", glow_a.position + Vector2(46.0, 22.0), 8.6).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	float_tween.tween_property(glow_b, "position", glow_b.position + Vector2(-52.0, 26.0), 10.4).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	float_tween.tween_property(glow_c, "position", glow_c.position + Vector2(36.0, -18.0), 7.4).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	float_tween.chain().tween_property(glow_a, "position", glow_a.position, 8.6).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	float_tween.parallel().tween_property(glow_b, "position", glow_b.position, 10.4).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	float_tween.parallel().tween_property(glow_c, "position", glow_c.position, 7.4).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+	return layer
+
+func _make_menu_background_material() -> ShaderMaterial:
+	var shader := Shader.new()
+	shader.code = """
+shader_type canvas_item;
+
+uniform vec4 deep_color : source_color = vec4(0.020, 0.035, 0.060, 1.0);
+uniform vec4 mid_color : source_color = vec4(0.060, 0.150, 0.250, 1.0);
+uniform vec4 accent_color : source_color = vec4(0.220, 0.450, 0.640, 1.0);
+uniform float base_alpha : hint_range(0.0, 1.0) = 1.0;
+
+float hash(vec2 p) {
+	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+
+float noise(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	vec2 u = f * f * (3.0 - 2.0 * f);
+	return mix(
+		mix(hash(i + vec2(0.0, 0.0)), hash(i + vec2(1.0, 0.0)), u.x),
+		mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x),
+		u.y
+	);
+}
+
+float fbm(vec2 p) {
+	float value = 0.0;
+	float amplitude = 0.5;
+	for (int i = 0; i < 5; i++) {
+		value += amplitude * noise(p);
+		p = p * 2.02 + vec2(9.2, 7.4);
+		amplitude *= 0.5;
+	}
+	return value;
+}
+
+void fragment() {
+	vec2 uv = UV;
+	vec2 centered_uv = uv * 2.0 - 1.0;
+	float t = TIME * 0.11;
+
+	vec2 drift = vec2(t * 0.55, -t * 0.34);
+	vec2 warp = vec2(sin(uv.y * 7.2 + t * 3.8), cos(uv.x * 6.1 - t * 3.2)) * 0.10;
+	float mist = fbm(uv * 3.2 + drift + warp);
+	float band = 0.5 + 0.5 * sin((centered_uv.x * 2.2 - centered_uv.y * 1.25) * 3.6 + t * 4.8 + mist * 3.0);
+	float radial = smoothstep(1.22, 0.08, length(centered_uv));
+
+	vec3 color = mix(deep_color.rgb, mid_color.rgb, smoothstep(0.18, 0.92, mist));
+	color = mix(color, accent_color.rgb, band * 0.24);
+
+	vec2 star_uv = (uv + drift * 0.12) * vec2(220.0, 120.0);
+	float stars = step(0.9962, hash(floor(star_uv)));
+	stars *= 0.35 + 0.65 * hash(floor(star_uv * 0.33));
+	color += vec3(stars * 0.24);
+
+	float alpha = base_alpha * (0.62 + radial * 0.38);
+	COLOR = vec4(color, alpha);
+}
+"""
+	var material := ShaderMaterial.new()
+	material.shader = shader
+	return material
 
 func _build_options_panel() -> Panel:
 	var panel := Panel.new()
