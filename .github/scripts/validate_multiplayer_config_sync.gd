@@ -17,7 +17,7 @@ func _ready() -> void:
 	# Load multiplayer config
 	var mp_config = load(MP_CONFIG_PATH)
 	if not mp_config:
-		print_error("Failed to load multiplayer config: %s" % MP_CONFIG_PATH)
+		push_error("Failed to load multiplayer config: %s" % MP_CONFIG_PATH)
 		quit(1)
 		return
 	

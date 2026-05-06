@@ -17,7 +17,8 @@ const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
 
 ## ===== MULTIPLAYER TIER DEFINITIONS (CO-OP BALANCED) =====
 ## Each tier inherits base structure from singleplayer config and applies multiplayer-specific overrides
-const BEARING_DEFINITIONS := {
+## Uses static (not const) because BEARING_DEFINITIONS contains function calls to DIFFICULTY_CONFIG
+static var BEARING_DEFINITIONS := {
 	BEARING_ENUMS.BearingTier.PILGRIM: {
 		# === BASE (from singleplayer) ===
 		"bearing_key": "Pilgrim",
