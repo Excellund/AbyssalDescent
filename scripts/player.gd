@@ -374,7 +374,8 @@ var iron_retort_window_left: float = 0.0
 var sigil_burst_ready: bool = false
 var farline_focus_min_range: float = 98.0
 var farline_focus_max_range: float = 132.0
-var farline_focus_damage_mult: float = 1.65
+var farline_focus_damage_mult: float = 1.7
+var farline_focus_outside_damage_mult: float = 0.7
 var farline_focus_alignment_degrees: float = 8.0
 var farline_focus_ready: bool = false
 var farline_focus_proc_flash_left: float = 0.0
@@ -1680,10 +1681,12 @@ func _is_enemy_in_attack_cone(enemy_body: Node2D, origin: Vector2, attack_direct
 		return true
 	return false
 
-func _resolve_attack_hit(enemy_body: Node2D, hit_position: Vector2, base_damage: int, source: String, rupture_triggered_enemy_ids: Dictionary, rupture_hit_enemy_ids: Dictionary, proc_flags: Dictionary, sigil_burst_state: Dictionary) -> int:
+func _resolve_attack_hit(enemy_body: Node2D, hit_position: Vector2, base_damage: int, source: String, rupture_triggered_enemy_ids: Dictionary, rupture_hit_enemy_ids: Dictionary, proc_flags: Dictionary, sigil_burst_state: Dictionary, final_damage_mult: float = 1.0) -> int:
 	var enemy_id := enemy_body.get_instance_id()
 	var strike_breakdown := _build_damage_breakdown(base_damage, enemy_body, hit_position, source)
 	var final_damage := int(strike_breakdown.get("final_damage", base_damage))
+	if absf(final_damage_mult - 1.0) > 0.0001:
+		final_damage = maxi(1, int(round(float(final_damage) * final_damage_mult)))
 	_apply_hunters_snare(enemy_body)
 	DAMAGEABLE.apply_damage(enemy_body, final_damage)
 	if passive_sigil_burst and sigil_burst_ready and not bool(sigil_burst_state.get("fired", false)):
@@ -1756,14 +1759,18 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		var enemy_id := enemy_body.get_instance_id()
 		var to_enemy := hit_position - global_position
 		var enemy_strike_damage := strike_damage
-		if passive_farline_focus and _is_farline_focus_hit(attack_direction, to_enemy):
-			enemy_strike_damage = int(round(float(enemy_strike_damage) * farline_focus_damage_mult))
-			if not farline_focus_proc_fired:
-				farline_focus_proc_fired = true
-				farline_focus_proc_flash_left = farline_focus_proc_flash_duration
-				if player_feedback != null:
-					player_feedback.play_world_ring(hit_position, 36.0, Color(1.0, 0.88, 0.44, 0.92), 0.14)
-		_resolve_attack_hit(enemy_body, hit_position, enemy_strike_damage, "melee", rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags, sigil_burst_state)
+		var final_damage_mult := 1.0
+		if passive_farline_focus:
+			if _is_farline_focus_hit(attack_direction, to_enemy):
+				final_damage_mult = farline_focus_damage_mult
+				if not farline_focus_proc_fired:
+					farline_focus_proc_fired = true
+					farline_focus_proc_flash_left = farline_focus_proc_flash_duration
+					if player_feedback != null:
+						player_feedback.play_world_ring(hit_position, 36.0, Color(1.0, 0.88, 0.44, 0.92), 0.14)
+			else:
+				final_damage_mult = farline_focus_outside_damage_mult
+		_resolve_attack_hit(enemy_body, hit_position, enemy_strike_damage, "melee", rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags, sigil_burst_state, final_damage_mult)
 		if retort_active and not did_hit:
 			retort_impact_position = hit_position
 		if reward_dread_resonance:

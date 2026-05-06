@@ -286,7 +286,7 @@ func _update_passive_section(character_id: String) -> void:
 		"death_tempo":
 			desc = "Killing an enemy instantly resets your dash cooldown, allowing immediate repositioning."
 		"farline_focus":
-			desc = "Hits inside your farline band and tight aim lane deal 65% bonus damage. Keep distance and commit to precision angles."
+			desc = "Melee hits inside your farline band and tight aim lane deal 70% bonus damage, but hits outside deal 30% less. Keep distance and commit to precision angles."
 		_:
 			desc = "Passive ability"
 	
