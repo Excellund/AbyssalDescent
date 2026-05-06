@@ -950,7 +950,7 @@ func _start_debug_selected_encounter(encounter_state: int) -> Dictionary:
 	profile = _apply_debug_mutator_override(profile)
 	if profile.is_empty():
 		return {"ok": false, "state": "debug_encounter", "note": "Could not build encounter profile."}
-	pending_room_reward = ENUMS.RewardMode.ARCANA if encounter_key == "trial" else ENUMS.RewardMode.BOON
+	pending_room_reward = _get_debug_encounter_reward_mode(encounter_key)
 	if ENCOUNTER_CONTRACTS.debug_encounter_is_objective(encounter_key):
 		pending_room_reward = ENUMS.RewardMode.MISSION
 	_begin_room(profile)
