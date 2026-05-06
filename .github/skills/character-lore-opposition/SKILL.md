@@ -63,3 +63,16 @@ Use this format for selection cards:
 - Each character’s one-line promise is distinguishable at a glance.
 - Opposition mapping is still correct after boss or encounter reworks.
 - In-motion gameplay silhouette test passes: each character is identifiable within ~1 second even with color desaturated.
+## Multiplayer Context
+
+**Arcana Pool Auto-Sync**: Character arcana pools defined in `character_registry.gd` automatically sync to multiplayer — both singleplayer and multiplayer load the same registry constants at startup.
+
+**Lobby & Build Replication**: Character selection in multiplayer lobby syncs to all peers via `lobby_controller.gd` RPC. Build snapshots replicate correctly via `player_replication_service.gd`.
+
+**Verification**: After adding a new character:
+1. Test singleplayer: character selectable, arcana pool powers appear in runs
+2. Test multiplayer: lobby shows new character, joiner can select it, build snapshot replicates to host and peers
+3. Verify: character playstyle feels distinct and balanced vs. other characters in both modes
+4. Sanity check: opposition mapping still holds (boss difficulty didn't change since design)
+
+Related: [Multiplayer Content Integration](../multiplayer-content-integration/SKILL.md) — explains character auto-sync and verification checklist.

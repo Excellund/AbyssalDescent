@@ -38,6 +38,15 @@ Use these natural-language commands in chat. Phrases do not need to match exactl
 - Keep glossary, debug entry points, and route labels/icons in sync
 - Update encounter meaning and propagate to glossary + route
 
+## Multiplayer Content And Validation
+
+- Add new arcana [power name] to multiplayer
+- Validate multiplayer config sync
+- Check multiplayer drift
+- Ensure multiplayer stays in sync with singleplayer
+- Add new encounter [name] and verify multiplayer scales correctly
+- Add new character [name] and sync multiplayer pool
+
 ## Engine Building And Synergy
 
 - Analyze synergies in [power pool: arcana/boons/boss-rewards/mutators]

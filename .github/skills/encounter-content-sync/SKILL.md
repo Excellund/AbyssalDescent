@@ -56,3 +56,21 @@ Use this skill whenever an encounter is added, renamed, removed, or meaningfully
 - Glossary reflects current meaning.
 - Door prompt naming/icon behavior is coherent.
 - No script errors in changed files.
+
+## Multiplayer Context
+
+**Base Definition Sync**: Encounter `encounter_count_before_boss` and `difficulty_rank` in `encounter_definition_data.gd` automatically sync to multiplayer through inherited base functions in `difficulty_config.gd`.
+
+**Difficulty Tuning Sync**: 
+- Singleplayer difficulty per bearing is defined in `difficulty_config.gd`
+- Multiplayer inherits base definitions and applies co-op-specific overrides in `encounter_difficulty_multiplayer_config.gd`
+- Both configs now share base definitions (no manual duplication needed)
+- Run sync validator after adding/modifying encounters: `.github/scripts/validate_multiplayer_config_sync.gd`
+
+**Verification**: After adding an encounter:
+1. Test singleplayer: encounter appears at correct depth in all 4 bearings (Pilgrim, Delver, Harbinger, Forsworn)
+2. Test multiplayer co-op: same encounter appears at correct depths; player pressure balanced
+3. Sanity check: hand-test one bearing to confirm difficulty matches identity
+4. Run validator: confirms base fields sync correctly
+
+Related: [Multiplayer Content Integration](../multiplayer-content-integration/SKILL.md) — explains encounter auto-sync and when manual tuning is needed.

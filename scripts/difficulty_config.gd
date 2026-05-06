@@ -6,6 +6,22 @@ extends RefCounted
 const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
 const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
 
+## ===== BASE ENCOUNTER GENERATION DEFINITIONS =====
+## Shared across singleplayer and multiplayer modes (stored here as source of truth)
+## Used by multiplayer config to inherit common structure without duplication
+
+static func get_base_encounter_count_before_boss() -> int:
+	return 8
+
+static func get_base_progression_ranks() -> Dictionary:
+	"""Returns progression rank for each bearing (used for scaling calculations)"""
+	return {
+		BEARING_ENUMS.BearingTier.PILGRIM: 0,
+		BEARING_ENUMS.BearingTier.DELVER: 1,
+		BEARING_ENUMS.BearingTier.HARBINGER: 2,
+		BEARING_ENUMS.BearingTier.FORSWORN: 3
+	}
+
 ## Difficulty config per tier: pacing, pressure, and affordances
 static func get_tier_config(tier: int) -> Dictionary:
 	match tier:
@@ -14,7 +30,7 @@ static func get_tier_config(tier: int) -> Dictionary:
 				"name": META_PROGRESS.TIER_NAMES[BEARING_ENUMS.BearingTier.PILGRIM],
 				"description": META_PROGRESS.TIER_DESCRIPTIONS[BEARING_ENUMS.BearingTier.PILGRIM],
 				## Encounter generation
-				"encounter_count_before_boss": 8,  ## Rooms to clear before boss
+				"encounter_count_before_boss": get_base_encounter_count_before_boss(),
 				"base_enemy_pressure_mult": 0.6,  ## Baseline enemy count multiplier
 				"depth_pressure_divisor": 1.5,  ## Higher = slower ramping of difficulty; Apprentice ramps slower
 				"specialist_enemy_depth_offset": 3,  ## Lurkers start at depth 5 on apprentice (vs depth 5 on standard)
@@ -36,7 +52,7 @@ static func get_tier_config(tier: int) -> Dictionary:
 				"name": META_PROGRESS.TIER_NAMES[BEARING_ENUMS.BearingTier.DELVER],
 				"description": META_PROGRESS.TIER_DESCRIPTIONS[BEARING_ENUMS.BearingTier.DELVER],
 				## Encounter generation (baseline)
-				"encounter_count_before_boss": 8,
+				"encounter_count_before_boss": get_base_encounter_count_before_boss(),
 				"base_enemy_pressure_mult": 1.0,
 				"depth_pressure_divisor": 1.0,
 				"specialist_enemy_depth_offset": 0,
@@ -59,7 +75,7 @@ static func get_tier_config(tier: int) -> Dictionary:
 				"name": META_PROGRESS.TIER_NAMES[BEARING_ENUMS.BearingTier.HARBINGER],
 				"description": META_PROGRESS.TIER_DESCRIPTIONS[BEARING_ENUMS.BearingTier.HARBINGER],
 				## Encounter generation (harder)
-				"encounter_count_before_boss": 8,
+				"encounter_count_before_boss": get_base_encounter_count_before_boss(),
 				"base_enemy_pressure_mult": 1.25,  ## More enemies per room
 				"depth_pressure_divisor": 0.8,  ## Faster ramping
 				"specialist_enemy_depth_offset": -1,  ## Specialist enemies appear 1 depth earlier
@@ -83,7 +99,7 @@ static func get_tier_config(tier: int) -> Dictionary:
 				"name": META_PROGRESS.TIER_NAMES[BEARING_ENUMS.BearingTier.FORSWORN],
 				"description": META_PROGRESS.TIER_DESCRIPTIONS[BEARING_ENUMS.BearingTier.FORSWORN],
 				## Encounter generation (extreme)
-				"encounter_count_before_boss": 8,
+				"encounter_count_before_boss": get_base_encounter_count_before_boss(),
 				"base_enemy_pressure_mult": 1.5,  ## Significantly more enemies
 				"depth_pressure_divisor": 0.6,  ## Very fast ramping
 				"specialist_enemy_depth_offset": -2,  ## Specialist enemies much earlier
@@ -141,3 +157,41 @@ static func get_difficulty_rank(tier: int) -> int:
 ## Shared objective pressure curve used by objective encounter runtime logic
 static func get_objective_pressure_mult(tier: int) -> float:
 	return 0.8 + float(get_difficulty_rank(tier)) * 0.2
+
+## ===== MULTIPLAYER SYNC VALIDATION =====
+## Verify that multiplayer config has not drifted from singleplayer base definitions
+
+static func validate_multiplayer_config_sync(multiplayer_config: Node) -> Dictionary:
+	"""
+	Validate that multiplayer config is in sync with singleplayer base definitions.
+	Returns { "valid": bool, "errors": [str], "warnings": [str] }
+	"""
+	var result := {"valid": true, "errors": [], "warnings": []}
+	
+	if not multiplayer_config:
+		result["errors"].append("Multiplayer config is null")
+		result["valid"] = false
+		return result
+	
+	# Check encounter count consistency
+	var expected_encounter_count := get_base_encounter_count_before_boss()
+	for tier in get_base_progression_ranks().keys():
+		var mp_config = multiplayer_config.get_tier_config(tier) if multiplayer_config.has_method("get_tier_config") else {}
+		var actual_encounter_count = mp_config.get("encounter_count_before_boss", -1)
+		
+		if actual_encounter_count != expected_encounter_count:
+			result["warnings"].append("Tier %d: encounter_count_before_boss mismatch (expected %d, got %d)" % [tier, expected_encounter_count, actual_encounter_count])
+	
+	# Check progression ranks
+	var expected_ranks := get_base_progression_ranks()
+	var actual_ranks := {}
+	for tier in expected_ranks.keys():
+		var mp_config = multiplayer_config.get_tier_config(tier) if multiplayer_config.has_method("get_tier_config") else {}
+		actual_ranks[tier] = mp_config.get("difficulty_rank", -1)
+	
+	for tier in expected_ranks.keys():
+		if actual_ranks[tier] != expected_ranks[tier]:
+			result["warnings"].append("Tier %d: difficulty_rank mismatch (expected %d, got %d)" % [tier, expected_ranks[tier], actual_ranks[tier]])
+	
+	return result
+

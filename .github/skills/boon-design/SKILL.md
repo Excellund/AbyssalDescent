@@ -67,3 +67,16 @@ If the backing property on the player also changes (e.g. `swift_strike_dash_cool
 - Every boon should describe itself in one card line and one mental model.
 - Players should be able to plan around boons before they trigger; boons should not pop up surprise effects.
 - A boon at max stacks should feel meaningful but never trivialize the encounter identity.
+
+## Multiplayer Context
+
+**Auto-Sync**: New boons registered in `UPGRADE_BALANCE` are automatically available in multiplayer — no separate multiplayer registry needed. Both singleplayer and multiplayer load the same `power_registry.gd` constants at startup.
+
+**Verification**: After adding a boon:
+1. Test in **singleplayer** at target difficulty — boon appears in reward screens, scales correctly.
+2. Test in **multiplayer co-op** at the same difficulty — boon appears on reward screens with identical stats, behaves consistently across peers.
+3. Run sync validator: `.github/scripts/validate_multiplayer_config_sync.gd` passes.
+
+**No-Timing Rule in Multiplayer**: Timing-based boons become more problematic in co-op (two players with different attack rhythms can create unpredictable stacks). Enforce timing rule strictly even when thinking about multiplayer scenarios.
+
+Related: [Multiplayer Content Integration](../multiplayer-content-integration/SKILL.md) — master guide for how content syncs automatically.
