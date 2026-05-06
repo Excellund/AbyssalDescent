@@ -1528,6 +1528,21 @@ func _can_apply_client_door_sync() -> bool:
 		return false
 	return true
 
+func _should_defer_client_door_sync_payload(synced_choosing_next_room: bool, progress_state: Dictionary) -> bool:
+	if not is_multiplayer or MultiplayerSessionManager.is_host():
+		return false
+	if not synced_choosing_next_room:
+		return false
+	if _awaiting_authoritative_door_choice:
+		return false
+	if not choosing_next_room:
+		return false
+	if door_options.is_empty():
+		return false
+	var incoming_rooms_cleared := int(progress_state.get("rooms_cleared", rooms_cleared))
+	var incoming_room_depth := int(progress_state.get("room_depth", room_depth))
+	return incoming_rooms_cleared != rooms_cleared or incoming_room_depth != room_depth
+
 func _apply_synced_door_options_payload(synced_door_options: Array, synced_choosing_next_room: bool, synced_boss_unlocked: bool, progress_state: Dictionary) -> void:
 	door_options.clear()
 	for option in synced_door_options:
@@ -2478,7 +2493,7 @@ func _sync_door_options(synced_door_options: Array, synced_choosing_next_room: b
 	if bool(sanitized_progress_state.get("invalid", false)):
 		_pending_door_sync_payload.clear()
 		return
-	if not _can_apply_client_door_sync():
+	if not _can_apply_client_door_sync() or _should_defer_client_door_sync_payload(synced_choosing_next_room, sanitized_progress_state):
 		_pending_door_sync_payload = {
 			"door_options": synced_door_options.duplicate(true),
 			"choosing_next_room": synced_choosing_next_room,
