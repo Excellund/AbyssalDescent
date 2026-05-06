@@ -943,8 +943,11 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 		last_damage_event = context_copy
 		damage_taken.emit(raw_amount, reduced, context_copy)
 		_trigger_aegis_field()
-		player_feedback.play_damage_flash()
-		player_feedback.play_impact_sound()
+		if _is_local_control_owner():
+			player_feedback.play_damage_flash()
+			player_feedback.play_impact_sound()
+		else:
+			_broadcast_owner_damage_feedback()
 		if reward_vow_shatter:
 			_vow_shatter_primed = true
 		if crushed_vow_bonus_damage > 0:
@@ -952,6 +955,17 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 		if source == "enemy_contact":
 			_contact_damage_grace_left = contact_damage_grace_duration
 			_contact_damage_grace_ability = ability
+
+func _broadcast_owner_damage_feedback() -> void:
+	if player_id <= 0:
+		return
+	var multiplayer_session_manager = get_node_or_null("/root/MultiplayerSessionManager")
+	var player_replication_service = get_node_or_null("/root/PlayerReplicationService")
+	if multiplayer_session_manager == null or player_replication_service == null:
+		return
+	if not bool(multiplayer_session_manager.is_session_connected()):
+		return
+	player_replication_service.broadcast_feedback_event(player_id, "local_damage_feedback", {"flash": true, "impact": true}, true)
 
 func set_combat_damage_enabled(enabled: bool) -> void:
 	combat_damage_enabled = enabled
@@ -1378,6 +1392,20 @@ func apply_network_feedback_event(event_name: String, payload: Dictionary) -> vo
 			var empowered_hit_position := payload.get("position", global_position) as Vector2
 			if player_feedback.has_method("play_boss_void_zone_empowered_hit"):
 				player_feedback.play_boss_void_zone_empowered_hit(empowered_hit_position)
+		_:
+			pass
+
+func apply_owner_feedback_event(event_name: String, payload: Dictionary) -> void:
+	if not _is_local_control_owner():
+		return
+	if player_feedback == null or event_name.is_empty() or payload.is_empty():
+		return
+	match event_name:
+		"local_damage_feedback":
+			if bool(payload.get("flash", true)):
+				player_feedback.play_damage_flash()
+			if bool(payload.get("impact", true)):
+				player_feedback.play_impact_sound()
 		_:
 			pass
 

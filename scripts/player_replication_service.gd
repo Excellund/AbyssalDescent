@@ -454,8 +454,6 @@ func _sync_player_feedback_events_reliable(peer_id: int, events: Array[Dictionar
 func _apply_network_feedback_events(peer_id: int, events: Array[Dictionary]) -> void:
 	if peer_id not in player_nodes:
 		return
-	if peer_id == local_peer_id:
-		return
 	if events.is_empty():
 		return
 	var player_node_variant: Variant = player_nodes.get(peer_id)
@@ -465,6 +463,16 @@ func _apply_network_feedback_events(peer_id: int, events: Array[Dictionary]) -> 
 	var player_node := player_node_variant as Node
 	if player_node == null:
 		_remove_invalid_player(peer_id)
+		return
+	if peer_id == local_peer_id:
+		if not player_node.has_method("apply_owner_feedback_event"):
+			return
+		for event_entry in events:
+			var local_event_name := String(event_entry.get("event", ""))
+			var local_payload := event_entry.get("payload", {}) as Dictionary
+			if local_event_name.is_empty() or local_payload.is_empty():
+				continue
+			player_node.apply_owner_feedback_event(local_event_name, local_payload)
 		return
 	if not player_node.has_method("apply_network_feedback_event"):
 		return
