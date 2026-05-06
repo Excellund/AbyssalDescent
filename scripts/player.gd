@@ -991,8 +991,6 @@ func set_health(value: float) -> void:
 	if not is_instance_valid(health_state):
 		return
 	health_state.set_health(int(round(value)))
-	if health_state.current_health > 0:
-		set_alive(true)
 
 func set_alive(is_alive: bool) -> void:
 	_is_alive_state = is_alive

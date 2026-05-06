@@ -29,6 +29,8 @@ var _feedback_sync_elapsed: float = 0.0
 var _pending_feedback_events_by_peer: Dictionary = {}  ## peer_id -> Array[Dictionary]
 var _last_feedback_event_count: int = 0
 var _last_feedback_estimated_bytes: int = 0
+var _outgoing_health_sequence_by_peer: Dictionary = {}  ## peer_id -> last emitted health sequence
+var _last_applied_health_sequence_by_peer: Dictionary = {}  ## peer_id -> last applied health sequence
 
 
 func _ready() -> void:
@@ -64,6 +66,10 @@ func _process(delta: float) -> void:
 ## Register a player node for a specific peer.
 func register_player(peer_id: int, player_node: Node) -> void:
 	player_nodes[peer_id] = player_node
+	if not _outgoing_health_sequence_by_peer.has(peer_id):
+		_outgoing_health_sequence_by_peer[peer_id] = 0
+	if not _last_applied_health_sequence_by_peer.has(peer_id):
+		_last_applied_health_sequence_by_peer[peer_id] = 0
 	var player_body := player_node as Node2D
 	if player_body != null:
 		_last_sync_positions[peer_id] = player_body.position
@@ -84,6 +90,8 @@ func unregister_player(peer_id: int) -> void:
 	_remote_target_positions.erase(peer_id)
 	_remote_target_rotations.erase(peer_id)
 	_pending_feedback_events_by_peer.erase(peer_id)
+	_outgoing_health_sequence_by_peer.erase(peer_id)
+	_last_applied_health_sequence_by_peer.erase(peer_id)
 
 
 func _remove_invalid_player(peer_id: int) -> void:
@@ -93,6 +101,8 @@ func _remove_invalid_player(peer_id: int) -> void:
 	_remote_target_positions.erase(peer_id)
 	_remote_target_rotations.erase(peer_id)
 	_pending_feedback_events_by_peer.erase(peer_id)
+	_outgoing_health_sequence_by_peer.erase(peer_id)
+	_last_applied_health_sequence_by_peer.erase(peer_id)
 
 
 func _estimate_feedback_event_bytes(event_name: String, payload: Dictionary) -> int:
@@ -286,9 +296,14 @@ func _set_player_facing_angle(player_node: Node, facing_radians: float) -> void:
 
 ## RPC: Sync a player's health.
 @rpc("reliable", "any_peer", "call_local")
-func _sync_player_health(peer_id: int, health: float) -> void:
+func _sync_player_health(peer_id: int, health: float, health_sequence: int = 0) -> void:
 	if peer_id not in player_nodes:
 		return
+	if health_sequence > 0:
+		var last_applied_sequence := int(_last_applied_health_sequence_by_peer.get(peer_id, 0))
+		if health_sequence <= last_applied_sequence:
+			return
+		_last_applied_health_sequence_by_peer[peer_id] = health_sequence
 	
 	var player_node_variant: Variant = player_nodes.get(peer_id)
 	if not is_instance_valid(player_node_variant):
@@ -297,6 +312,9 @@ func _sync_player_health(peer_id: int, health: float) -> void:
 	var player_node := player_node_variant as Node
 	if player_node == null:
 		_remove_invalid_player(peer_id)
+		return
+	if health > 0.0 and player_node.has_method("is_dead") and bool(player_node.call("is_dead")):
+		# Dead players must only transition back through explicit revive sync.
 		return
 	if player_node.has_method("set_health"):
 		player_node.set_health(health)
@@ -350,7 +368,9 @@ func _sync_player_revived(peer_id: int, revived_health: float = 1.0) -> void:
 ## Should be called from player.gd's health signal handler.
 func broadcast_health_change(peer_id: int, health: float) -> void:
 	if (multiplayer_session_manager != null and bool(multiplayer_session_manager.is_host())) or peer_id == local_peer_id:
-		_sync_player_health.rpc(peer_id, health)
+		var next_sequence := int(_outgoing_health_sequence_by_peer.get(peer_id, 0)) + 1
+		_outgoing_health_sequence_by_peer[peer_id] = next_sequence
+		_sync_player_health.rpc(peer_id, health, next_sequence)
 
 
 ## Called by player when they die.

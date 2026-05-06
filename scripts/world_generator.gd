@@ -306,6 +306,34 @@ var _stress_test_active: bool = false
 var _stress_test_coordinator: RefCounted = null
 
 var second_player: Node2D = null
+var _known_fallen_player_ids: Dictionary = {}
+
+func _get_player_network_id(player_node: Node2D) -> int:
+	if not is_instance_valid(player_node):
+		return -1
+	if player_node.has_method("get"):
+		return int(player_node.get("player_id"))
+	return -1
+
+func _refresh_fallen_player_tracking() -> bool:
+	var currently_fallen_ids: Dictionary = {}
+	var has_new_fallen := false
+	for player_node in _get_multiplayer_player_nodes():
+		if not is_instance_valid(player_node):
+			continue
+		if not player_node.has_method("is_dead"):
+			continue
+		if not bool(player_node.call("is_dead")):
+			continue
+		var player_id := _get_player_network_id(player_node)
+		if player_id <= 0:
+			continue
+		currently_fallen_ids[player_id] = true
+		if not bool(_known_fallen_player_ids.get(player_id, false)):
+			has_new_fallen = true
+	_known_fallen_player_ids = currently_fallen_ids
+	return has_new_fallen
+
 func _apply_debug_settings_from_node() -> void:
 	var debug_settings := get_node_or_null("DebugSettings")
 	if not (is_instance_valid(debug_settings) and debug_settings.get_script() == DEBUG_SETTINGS_SCRIPT):
@@ -4242,12 +4270,13 @@ func _on_player_died_for_telemetry() -> void:
 func _on_player_died() -> void:
 	if player_defeated:
 		return
+	var has_new_fallen := _refresh_fallen_player_tracking()
 	if is_multiplayer:
 		_sync_multiplayer_fallen_player_presence()
 		_refresh_all_enemy_target_candidates()
 		_bind_camera_to_local_player()
 	if is_multiplayer and _count_alive_players() > 0:
-		if is_instance_valid(hud):
+		if has_new_fallen and is_instance_valid(hud):
 			hud.show_banner("Ally Down", "Clear encounter to revive")
 		return
 	player_defeated = true
@@ -4408,6 +4437,7 @@ func _try_revive_fallen_multiplayer_players() -> void:
 		if player_replication_service != null and player_node.has_method("get"):
 			var peer_id := int(player_node.get("player_id"))
 			player_replication_service.broadcast_player_revived(peer_id, 1.0)
+	_refresh_fallen_player_tracking()
 	_sync_multiplayer_fallen_player_presence()
 	_refresh_all_enemy_target_candidates()
 	_bind_camera_to_local_player()
