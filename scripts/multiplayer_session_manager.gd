@@ -31,6 +31,8 @@ var _join_attempt_addresses: Array = []
 var _join_attempt_port: int = 9999
 var _join_attempt_index: int = -1
 var _join_attempt_timer: Timer
+var _upnp_mapped_port: int = 0
+var _last_host_connectivity_warning: String = ""
 
 
 func _ready() -> void:
@@ -94,6 +96,7 @@ func create_registered_room(room_registration: Dictionary) -> bool:
 	var host_port := int(room_registration.get("host_port", 9999))
 	var transport_type := String(room_registration.get("transport_type", "direct_enet"))
 	print("[MultiplayerSessionManager] Attempting to create host server on port %d with transport: %s" % [host_port, transport_type])
+	_last_host_connectivity_warning = ""
 	
 	if transport_type != "direct_enet":
 		var msg = "Unsupported transport type: %s" % transport_type
@@ -105,25 +108,19 @@ func create_registered_room(room_registration: Dictionary) -> bool:
 	print("[MultiplayerSessionManager] Created ENetMultiplayerPeer. Attempting create_server(port=%d)..." % host_port)
 	var result := enet_peer.create_server(host_port)
 	
-	## If port is in use, try alternative ports
+	## Registered rooms must keep the advertised port stable.
 	if result != OK:
-		print("[MultiplayerSessionManager] Port %d failed (%s). Trying alternative ports..." % [host_port, error_string(result)])
-		for alt_port in [9998, 9997, 9996, 9995, 8888, 7777]:
-			print("[MultiplayerSessionManager] Trying port %d..." % alt_port)
-			enet_peer = ENetMultiplayerPeer.new()
-			result = enet_peer.create_server(alt_port)
-			if result == OK:
-				print("[MultiplayerSessionManager] Success! Using port %d instead of %d" % [alt_port, host_port])
-				host_port = alt_port
-				break
-	
-	if result != OK:
-		var msg = "Failed to create server on port %d and all alternative ports: %s" % [host_port, error_string(result)]
+		var msg = "Failed to create server on required port %d: %s" % [host_port, error_string(result)]
 		connection_failed.emit(msg)
 		print("[MultiplayerSessionManager] ERROR: %s" % msg)
 		return false
 	
 	print("[MultiplayerSessionManager] ENet server created successfully on port %d" % host_port)
+	var upnp_result := _try_open_upnp_port_mapping(host_port)
+	if not bool(upnp_result.get("ok", false)):
+		_last_host_connectivity_warning = String(upnp_result.get("message", ""))
+		if not _last_host_connectivity_warning.is_empty():
+			print("[MultiplayerSessionManager] WARNING: %s" % _last_host_connectivity_warning)
 	_multiplayer.multiplayer_peer = enet_peer
 	print("[MultiplayerSessionManager] Assigned ENet peer to MultiplayerAPI")
 	session_connected = true
@@ -191,6 +188,7 @@ func leave_room() -> void:
 	_join_attempt_index = -1
 	if _join_attempt_timer != null:
 		_join_attempt_timer.stop()
+	_release_upnp_port_mapping()
 	
 	_multiplayer.multiplayer_peer = null
 	session_connected = false
@@ -199,6 +197,52 @@ func leave_room() -> void:
 	session_id = ""
 	room_code = ""
 	print("[MultiplayerSessionManager] Left session.")
+
+
+func get_last_host_connectivity_warning() -> String:
+	return _last_host_connectivity_warning
+
+
+func _try_open_upnp_port_mapping(port: int) -> Dictionary:
+	if port <= 0:
+		return {
+			"ok": false,
+			"message": "Invalid host port for automatic router mapping."
+		}
+	var upnp := UPNP.new()
+	var discover_result := upnp.discover(2000, 2, "InternetGatewayDevice")
+	if discover_result != UPNP.UPNP_RESULT_SUCCESS:
+		return {
+			"ok": false,
+			"message": "Could not auto-open UDP %d on your router (UPnP unavailable). Ask the host to forward UDP %d manually for internet play." % [port, port]
+		}
+	var gateway := upnp.get_gateway()
+	if gateway == null or not gateway.is_valid_gateway():
+		return {
+			"ok": false,
+			"message": "Could not auto-open UDP %d on your router (no valid gateway). Ask the host to forward UDP %d manually for internet play." % [port, port]
+		}
+	var add_result := upnp.add_port_mapping(port, port, "godot-2026", "UDP", 0)
+	if add_result != UPNP.UPNP_RESULT_SUCCESS:
+		return {
+			"ok": false,
+			"message": "Router rejected automatic UDP %d mapping. Ask the host to forward UDP %d manually for internet play." % [port, port]
+		}
+	_upnp_mapped_port = port
+	return {
+		"ok": true,
+		"message": ""
+	}
+
+
+func _release_upnp_port_mapping() -> void:
+	if _upnp_mapped_port <= 0:
+		return
+	var upnp := UPNP.new()
+	var discover_result := upnp.discover(1000, 2, "InternetGatewayDevice")
+	if discover_result == UPNP.UPNP_RESULT_SUCCESS:
+		upnp.delete_port_mapping(_upnp_mapped_port, "UDP")
+	_upnp_mapped_port = 0
 
 
 ## Get current state snapshot.

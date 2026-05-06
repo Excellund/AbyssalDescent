@@ -229,8 +229,13 @@ func _create_multiplayer_room() -> void:
 	
 	var room_code = String(registration_result.get("room_code", ""))
 	print("[Menu] Host session created. Room code: %s" % room_code)
+	var connectivity_warning := ""
+	if multiplayer_session_manager.has_method("get_last_host_connectivity_warning"):
+		connectivity_warning = String(multiplayer_session_manager.get_last_host_connectivity_warning())
 	if multiplayer_status_label != null:
 		multiplayer_status_label.text = "Room code: %s" % room_code
+		if not connectivity_warning.is_empty():
+			multiplayer_status_label.text += "\n" + connectivity_warning
 	
 	if get_tree() != null:
 		get_tree().change_scene_to_file("res://scenes/Lobby.tscn")
