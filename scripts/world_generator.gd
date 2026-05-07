@@ -3642,13 +3642,7 @@ func _sync_enemy_died(enemy_id: int, death_effect_payload: Dictionary = {}) -> v
 		_spawn_synced_pyre_death_field(death_effect_payload)
 	if is_instance_valid(enemy):
 		enemy.queue_free()
-	_network_enemy_nodes.erase(enemy_id)
-	_enemy_target_positions.erase(enemy_id)
-	_enemy_target_facing_angles.erase(enemy_id)
-	_previous_enemy_runtime_states.erase(enemy_id)
-	_previous_enemy_positions.erase(enemy_id)
-	_previous_enemy_facing_angles.erase(enemy_id)
-	_previous_enemy_health_values.erase(enemy_id)
+	_deregister_network_enemy(enemy_id)
 
 
 func _interpolate_remote_enemy_states(delta: float) -> void:
