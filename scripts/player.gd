@@ -554,7 +554,7 @@ func _try_start_dash(direction: Vector2) -> void:
 		sigil_burst_ready = true
 	if veilstep_rhythm_empowered_dash_active and player_feedback != null:
 		player_feedback.play_world_ring(global_position, 34.0, Color(0.26, 1.0, 0.74, 0.9), 0.2)
-		_broadcast_feedback_event("world_ring", {
+		_broadcast_cue_event("world_ring", {
 			"position": global_position,
 			"radius": 34.0,
 			"color": Color(0.26, 1.0, 0.74, 0.9),
@@ -601,7 +601,7 @@ func _try_execute_attack(attack_direction: Vector2) -> void:
 
 	attack_combo_counter += 1
 	if reward_execution_edge:
-		_broadcast_feedback_event("execution_edge_state", {
+		_broadcast_cue_event("execution_edge_state", {
 			"combo_counter": attack_combo_counter,
 			"execution_every": execution_every,
 			"proc_display_left": execution_edge_proc_display_left
@@ -628,14 +628,14 @@ func _try_execute_attack(attack_direction: Vector2) -> void:
 		_broadcast_attack_indicator(attack_direction, wind_range, razor_wind_arc_degrees, wind_color, 0.14)
 	if execution_proc:
 		execution_edge_proc_display_left = EXECUTION_EDGE_PROC_DISPLAY_HOLD
-		_broadcast_feedback_event("execution_edge_state", {
+		_broadcast_cue_event("execution_edge_state", {
 			"combo_counter": attack_combo_counter,
 			"execution_every": execution_every,
 			"proc_display_left": execution_edge_proc_display_left
 		})
 		queue_redraw()
 		player_feedback.play_world_ring(global_position, 40.0, ENEMY_BASE.COLOR_EXECUTION_RING, 0.16)
-		_broadcast_feedback_event("world_ring", {
+		_broadcast_cue_event("world_ring", {
 			"position": global_position,
 			"radius": 40.0,
 			"color": ENEMY_BASE.COLOR_EXECUTION_RING,
@@ -972,7 +972,7 @@ func _broadcast_owner_damage_feedback() -> void:
 		return
 	if not bool(multiplayer_session_manager.is_session_connected()):
 		return
-	player_replication_service.broadcast_feedback_event(player_id, "local_damage_feedback", {"flash": true, "impact": true}, true)
+	player_replication_service.broadcast_cue_event(player_id, "local_damage_feedback", {"flash": true, "impact": true}, true)
 
 func set_combat_damage_enabled(enabled: bool) -> void:
 	combat_damage_enabled = enabled
@@ -1200,7 +1200,7 @@ func apply_run_snapshot(snapshot: Dictionary) -> void:
 	wraithstep_marked_enemy_expiry.clear()
 	wraithstep_remote_mark_expiry_by_network_enemy_id.clear()
 	if _is_local_control_owner():
-		_broadcast_feedback_event("wraithstep_mark_clear", {"clear": true})
+		_broadcast_cue_event("wraithstep_mark_clear", {"clear": true})
 	combo_relay_stacks = 0
 	combo_relay_stack_timer = 0.0
 	_eclipse_marked_enemies.clear()
@@ -1272,8 +1272,7 @@ func apply_network_cue_event(event_name: String, payload: Dictionary) -> void:
 			var echo_from_position := payload.get("from", global_position) as Vector2
 			var echo_to_position := payload.get("to", global_position) as Vector2
 			var echo_lifetime := float(payload.get("lifetime", 0.18))
-			if player_feedback.has_method("play_wraithstep_chain_echo"):
-				player_feedback.play_wraithstep_chain_echo(echo_from_position, echo_to_position, echo_lifetime)
+			player_feedback.play_wraithstep_chain_echo(echo_from_position, echo_to_position, echo_lifetime)
 		"static_wake_dot":
 			var static_wake_position := payload.get("position", global_position) as Vector2
 			var static_wake_life := float(payload.get("life", static_wake_lifetime))
@@ -1284,20 +1283,18 @@ func apply_network_cue_event(event_name: String, payload: Dictionary) -> void:
 			execution_edge_proc_display_left = maxf(execution_edge_proc_display_left, float(payload.get("proc_display_left", 0.0)))
 			queue_redraw()
 		"oath_ui_state":
-			if player_feedback.has_method("update_oath_bank_bar"):
-				var oath_bank := float(payload.get("bank", 0.0))
-				var oath_reference := float(payload.get("reference", _get_indomitable_fill_requirement()))
-				var oath_enabled := bool(payload.get("enabled", false))
-				var oath_threshold := float(payload.get("threshold", oath_reference))
-				player_feedback.update_oath_bank_bar(oath_bank, oath_reference, oath_enabled, oath_threshold)
+			var oath_bank := float(payload.get("bank", 0.0))
+			var oath_reference := float(payload.get("reference", _get_indomitable_fill_requirement()))
+			var oath_enabled := bool(payload.get("enabled", false))
+			var oath_threshold := float(payload.get("threshold", oath_reference))
+			player_feedback.update_oath_bank_bar(oath_bank, oath_reference, oath_enabled, oath_threshold)
 		"voidfire_ui_state":
-			if player_feedback.has_method("update_voidfire_heat_bar"):
-				var vf_heat := float(payload.get("heat", 0.0))
-				var vf_cap := float(payload.get("cap", maxf(1.0, void_heat_cap)))
-				var vf_enabled := bool(payload.get("enabled", false))
-				var vf_lockout := float(payload.get("lockout_left", 0.0))
-				var vf_danger_ratio := float(payload.get("danger_ratio", 0.0))
-				player_feedback.update_voidfire_heat_bar(vf_heat, vf_cap, vf_enabled, vf_lockout, vf_danger_ratio)
+			var vf_heat := float(payload.get("heat", 0.0))
+			var vf_cap := float(payload.get("cap", maxf(1.0, void_heat_cap)))
+			var vf_enabled := bool(payload.get("enabled", false))
+			var vf_lockout := float(payload.get("lockout_left", 0.0))
+			var vf_danger_ratio := float(payload.get("danger_ratio", 0.0))
+			player_feedback.update_voidfire_heat_bar(vf_heat, vf_cap, vf_enabled, vf_lockout, vf_danger_ratio)
 		"wraithstep_mark_add":
 			var mark_enemy_network_id := int(payload.get("enemy_network_id", -1))
 			var mark_duration := maxf(0.0, float(payload.get("duration", wraithstep_mark_duration)))
@@ -1315,13 +1312,11 @@ func apply_network_cue_event(event_name: String, payload: Dictionary) -> void:
 			queue_redraw()
 		"iron_retort_window_open":
 			var window_position := payload.get("position", global_position) as Vector2
-			if player_feedback.has_method("play_iron_retort_window_open"):
-				player_feedback.play_iron_retort_window_open(window_position)
+			player_feedback.play_iron_retort_window_open(window_position)
 		"iron_retort_consume":
 			var player_position := payload.get("player_position", global_position) as Vector2
 			var impact_position := payload.get("impact_position", global_position) as Vector2
-			if player_feedback.has_method("play_iron_retort_consume"):
-				player_feedback.play_iron_retort_consume(player_position, impact_position)
+			player_feedback.play_iron_retort_consume(player_position, impact_position)
 		"storm_crown_discharge":
 			var discharge_position := payload.get("position", global_position) as Vector2
 			player_feedback.play_storm_crown_discharge(discharge_position)
@@ -1329,47 +1324,39 @@ func apply_network_cue_event(event_name: String, payload: Dictionary) -> void:
 			var tempo_stack_position := payload.get("position", global_position) as Vector2
 			var tempo_stacks := int(payload.get("stacks", 0))
 			var tempo_max_stacks := int(payload.get("max_stacks", 1))
-			if player_feedback.has_method("play_boss_tempo_stack"):
-				player_feedback.play_boss_tempo_stack(tempo_stack_position, tempo_stacks, tempo_max_stacks)
+			player_feedback.play_boss_tempo_stack(tempo_stack_position, tempo_stacks, tempo_max_stacks)
 		"boss_tempo_state":
 			var tempo_state_stacks := int(payload.get("stacks", 0))
 			var tempo_state_max := int(payload.get("max_stacks", 1))
 			var tempo_state_left := float(payload.get("time_left", 0.0))
 			var tempo_state_duration := float(payload.get("duration", 0.0))
-			if player_feedback.has_method("update_boss_tempo_state"):
-				player_feedback.update_boss_tempo_state(tempo_state_stacks, tempo_state_max, tempo_state_left, tempo_state_duration)
+			player_feedback.update_boss_tempo_state(tempo_state_stacks, tempo_state_max, tempo_state_left, tempo_state_duration)
 		"boss_tempo_clear":
-			if player_feedback.has_method("clear_boss_tempo_state"):
-				player_feedback.clear_boss_tempo_state()
+			player_feedback.clear_boss_tempo_state()
 		"boss_tempo_dash_wave":
 			var tempo_wave_position := payload.get("position", global_position) as Vector2
 			var tempo_wave_radius := float(payload.get("radius", 0.0))
 			var tempo_wave_landed := bool(payload.get("landed", false))
 			var tempo_wave_stacks := int(payload.get("stacks", 0))
 			var tempo_wave_max_stacks := int(payload.get("max_stacks", 1))
-			if player_feedback.has_method("play_boss_tempo_dash_wave"):
-				player_feedback.play_boss_tempo_dash_wave(tempo_wave_position, tempo_wave_radius, tempo_wave_landed, tempo_wave_stacks, tempo_wave_max_stacks)
+			player_feedback.play_boss_tempo_dash_wave(tempo_wave_position, tempo_wave_radius, tempo_wave_landed, tempo_wave_stacks, tempo_wave_max_stacks)
 		"boss_convergence_start":
 			var convergence_start_position := payload.get("position", global_position) as Vector2
 			var convergence_power_ratio := float(payload.get("power_ratio", 0.0))
-			if player_feedback.has_method("play_boss_convergence_start"):
-				player_feedback.play_boss_convergence_start(convergence_start_position, convergence_power_ratio)
+			player_feedback.play_boss_convergence_start(convergence_start_position, convergence_power_ratio)
 		"boss_convergence_pulse":
 			var convergence_pulse_position := payload.get("position", global_position) as Vector2
 			var convergence_pulse_radius := float(payload.get("radius", 0.0))
-			if player_feedback.has_method("play_boss_convergence_pulse"):
-				player_feedback.play_boss_convergence_pulse(convergence_pulse_position, convergence_pulse_radius)
+			player_feedback.play_boss_convergence_pulse(convergence_pulse_position, convergence_pulse_radius)
 		"unbroken_oath_bank_gain":
 			var oath_bank_position := payload.get("position", global_position) as Vector2
 			var oath_bank_ratio := float(payload.get("bank_ratio", 0.0))
-			if player_feedback.has_method("play_boss_unbroken_bank_gain"):
-				player_feedback.play_boss_unbroken_bank_gain(oath_bank_position, oath_bank_ratio)
+			player_feedback.play_boss_unbroken_bank_gain(oath_bank_position, oath_bank_ratio)
 		"unbroken_oath_retaliation":
 			var oath_player_position := payload.get("player_position", global_position) as Vector2
 			var oath_impact_position := payload.get("impact_position", global_position) as Vector2
 			var oath_bonus_ratio := float(payload.get("bonus_ratio", 1.0))
-			if player_feedback.has_method("play_boss_unbroken_retaliation"):
-				player_feedback.play_boss_unbroken_retaliation(oath_player_position, oath_impact_position, oath_bonus_ratio)
+			player_feedback.play_boss_unbroken_retaliation(oath_player_position, oath_impact_position, oath_bonus_ratio)
 		"enemy_apply_slow":
 			var slow_enemy_network_id := int(payload.get("enemy_network_id", -1))
 			var slow_duration := float(payload.get("duration", 0.0))
@@ -1383,28 +1370,20 @@ func apply_network_cue_event(event_name: String, payload: Dictionary) -> void:
 			var fracture_beam_count := int(payload.get("beam_count", 0))
 			var fracture_base_angle := float(payload.get("base_angle", 0.0))
 			var fracture_beam_width := float(payload.get("beam_width", 12.0))
-			if player_feedback.has_method("play_fracture_field_fault_lines"):
-				player_feedback.play_fracture_field_fault_lines(fracture_position, fracture_radius, fracture_beam_count, fracture_base_angle, fracture_beam_width)
+			player_feedback.play_fracture_field_fault_lines(fracture_position, fracture_radius, fracture_beam_count, fracture_base_angle, fracture_beam_width)
 		"boss_void_zone_spawn":
 			var spawn_position := payload.get("position", global_position) as Vector2
 			var spawn_radius := float(payload.get("radius", 72.0))
-			if player_feedback.has_method("play_boss_void_zone_spawn"):
-				player_feedback.play_boss_void_zone_spawn(spawn_position, spawn_radius)
+			player_feedback.play_boss_void_zone_spawn(spawn_position, spawn_radius)
 		"boss_void_zone_pulse":
 			var pulse_position := payload.get("position", global_position) as Vector2
 			var pulse_radius := float(payload.get("radius", 72.0))
-			if player_feedback.has_method("play_boss_void_zone_pulse"):
-				player_feedback.play_boss_void_zone_pulse(pulse_position, pulse_radius)
+			player_feedback.play_boss_void_zone_pulse(pulse_position, pulse_radius)
 		"boss_void_zone_empowered_hit":
 			var empowered_hit_position := payload.get("position", global_position) as Vector2
-			if player_feedback.has_method("play_boss_void_zone_empowered_hit"):
-				player_feedback.play_boss_void_zone_empowered_hit(empowered_hit_position)
+			player_feedback.play_boss_void_zone_empowered_hit(empowered_hit_position)
 		_:
 			pass
-
-func apply_network_feedback_event(event_name: String, payload: Dictionary) -> void:
-	apply_network_cue_event(event_name, payload)
-
 
 func apply_owner_cue_event(event_name: String, payload: Dictionary) -> void:
 	if not _is_local_control_owner():
@@ -1419,9 +1398,6 @@ func apply_owner_cue_event(event_name: String, payload: Dictionary) -> void:
 				player_feedback.play_impact_sound()
 		_:
 			pass
-
-func apply_owner_feedback_event(event_name: String, payload: Dictionary) -> void:
-	apply_owner_cue_event(event_name, payload)
 
 
 func _broadcast_cue_event(event_name: String, payload: Dictionary, reliable: bool = false) -> void:
@@ -1438,10 +1414,6 @@ func _broadcast_cue_event(event_name: String, payload: Dictionary, reliable: boo
 	if not bool(multiplayer_session_manager.is_session_connected()):
 		return
 	player_replication_service.broadcast_cue_event(player_id, event_name, payload, reliable)
-
-
-func _broadcast_feedback_event(event_name: String, payload: Dictionary, reliable: bool = false) -> void:
-	_broadcast_cue_event(event_name, payload, reliable)
 
 func _broadcast_attack_indicator(attack_direction: Vector2, attack_range_value: float, attack_arc_degrees_value: float, swing_color: Color, swing_duration: float = 0.12) -> void:
 	if player_id <= 0:
@@ -1939,7 +1911,7 @@ func _apply_hunters_snare(enemy_node: Object) -> void:
 		var snare_enemy := enemy_node as Node2D
 		var snare_enemy_network_id := int(snare_enemy.get_meta("network_enemy_id", -1))
 		if snare_enemy_network_id > 0:
-			_broadcast_feedback_event("enemy_apply_slow", {
+			_broadcast_cue_event("enemy_apply_slow", {
 				"enemy_network_id": snare_enemy_network_id,
 				"duration": hunters_snare_slow_duration,
 				"mult": hunters_snare_slow_mult
@@ -1974,7 +1946,7 @@ func clear_lingering_combat_effects() -> void:
 	wraithstep_marked_enemy_expiry.clear()
 	wraithstep_remote_mark_expiry_by_network_enemy_id.clear()
 	if _is_local_control_owner():
-		_broadcast_feedback_event("wraithstep_mark_clear", {"clear": true})
+		_broadcast_cue_event("wraithstep_mark_clear", {"clear": true})
 	storm_crown_discharge_flash_left = 0.0
 	void_dash_reset_pulse_left = 0.0
 	execution_edge_proc_display_left = 0.0
@@ -2016,7 +1988,7 @@ func _apply_rupture_wave(epicenter: Vector2, source_damage: int, rupture_hit_ene
 	wave_damage = _apply_objective_mutator_damage_mult(wave_damage)
 	if player_feedback != null:
 		player_feedback.play_world_ring(epicenter, rupture_wave_radius * 0.85, ENEMY_BASE.COLOR_RUPTURE_WAVE_RING, 0.2)
-		_broadcast_feedback_event("world_ring", {
+		_broadcast_cue_event("world_ring", {
 			"position": epicenter,
 			"radius": rupture_wave_radius * 0.85,
 			"color": ENEMY_BASE.COLOR_RUPTURE_WAVE_RING,
@@ -2057,7 +2029,7 @@ func _update_wraithstep_marks() -> void:
 		if float(entry.get("expiry", 0.0)) <= now or not is_instance_valid(entry.get("node")):
 			var expired_network_enemy_id := int(entry.get("network_enemy_id", -1))
 			if expired_network_enemy_id > 0:
-				_broadcast_feedback_event("wraithstep_mark_remove", {"enemy_network_id": expired_network_enemy_id})
+				_broadcast_cue_event("wraithstep_mark_remove", {"enemy_network_id": expired_network_enemy_id})
 			wraithstep_marked_enemy_expiry.erase(enemy_id)
 	queue_redraw()
 
@@ -2080,20 +2052,20 @@ func _apply_wraithstep_marks_during_dash(dash_start: Vector2, dash_end: Vector2)
 		var enemy_network_id := int(enemy_body.get_meta("network_enemy_id", -1))
 		wraithstep_marked_enemy_expiry[enemy_id] = {"expiry": expiry, "node": enemy_body, "network_enemy_id": enemy_network_id}
 		if enemy_network_id > 0:
-			_broadcast_feedback_event("wraithstep_mark_add", {
+			_broadcast_cue_event("wraithstep_mark_add", {
 				"enemy_network_id": enemy_network_id,
 				"duration": wraithstep_mark_duration
 			})
 		if is_new_mark and player_feedback != null:
 			player_feedback.play_world_ring(enemy_body.global_position, 18.0, Color(0.72, 0.96, 1.0, 0.82), 0.18)
-			_broadcast_feedback_event("world_ring", {
+			_broadcast_cue_event("world_ring", {
 				"position": enemy_body.global_position,
 				"radius": 18.0,
 				"color": Color(0.72, 0.96, 1.0, 0.82),
 				"duration": 0.18
 			})
 			player_feedback.play_world_ring(enemy_body.global_position, 30.0, Color(0.56, 0.88, 1.0, 0.42), 0.26)
-			_broadcast_feedback_event("world_ring", {
+			_broadcast_cue_event("world_ring", {
 				"position": enemy_body.global_position,
 				"radius": 30.0,
 				"color": Color(0.56, 0.88, 1.0, 0.42),
@@ -2114,7 +2086,7 @@ func _consume_wraithstep_mark(enemy_node: Object, hit_position: Vector2, base_da
 	var consumed_network_enemy_id := int(consumed_entry.get("network_enemy_id", -1))
 	wraithstep_marked_enemy_expiry.erase(enemy_id)
 	if consumed_network_enemy_id > 0:
-		_broadcast_feedback_event("wraithstep_mark_remove", {"enemy_network_id": consumed_network_enemy_id})
+		_broadcast_cue_event("wraithstep_mark_remove", {"enemy_network_id": consumed_network_enemy_id})
 	var splash_source_damage := maxi(1, int(round(float(base_damage) * wraithstep_mark_splash_ratio)))
 	var chain_damage_scale := minf(1.0, 0.72 + float(maxi(0, wraithstep_stacks - 1)) * 0.1)
 	var chain_damage := maxi(1, int(round(float(splash_source_damage) * chain_damage_scale)))
@@ -2123,7 +2095,7 @@ func _consume_wraithstep_mark(enemy_node: Object, hit_position: Vector2, base_da
 	if player_feedback != null:
 		# Tight core burst
 		player_feedback.play_world_ring(hit_position, 16.0, Color(1.0, 1.0, 1.0, 0.92), 0.08)
-		_broadcast_feedback_event("world_ring", {
+		_broadcast_cue_event("world_ring", {
 			"position": hit_position,
 			"radius": 16.0,
 			"color": Color(1.0, 1.0, 1.0, 0.92),
@@ -2131,7 +2103,7 @@ func _consume_wraithstep_mark(enemy_node: Object, hit_position: Vector2, base_da
 		})
 		# Main cleave ring
 		player_feedback.play_world_ring(hit_position, wraithstep_mark_splash_radius, Color(0.72, 0.96, 1.0, 0.86), 0.22)
-		_broadcast_feedback_event("world_ring", {
+		_broadcast_cue_event("world_ring", {
 			"position": hit_position,
 			"radius": wraithstep_mark_splash_radius,
 			"color": Color(0.72, 0.96, 1.0, 0.86),
@@ -2139,7 +2111,7 @@ func _consume_wraithstep_mark(enemy_node: Object, hit_position: Vector2, base_da
 		})
 		# Outer drift
 		player_feedback.play_world_ring(hit_position, wraithstep_mark_splash_radius * 1.35, Color(0.48, 0.78, 1.0, 0.38), 0.32)
-		_broadcast_feedback_event("world_ring", {
+		_broadcast_cue_event("world_ring", {
 			"position": hit_position,
 			"radius": wraithstep_mark_splash_radius * 1.35,
 			"color": Color(0.48, 0.78, 1.0, 0.38),
@@ -2147,7 +2119,7 @@ func _consume_wraithstep_mark(enemy_node: Object, hit_position: Vector2, base_da
 		})
 		# Inner fill ring for impact
 		player_feedback.play_world_ring(hit_position, wraithstep_mark_splash_radius * 0.46, Color(0.88, 0.98, 1.0, 0.62), 0.12)
-		_broadcast_feedback_event("world_ring", {
+		_broadcast_cue_event("world_ring", {
 			"position": hit_position,
 			"radius": wraithstep_mark_splash_radius * 0.46,
 			"color": Color(0.88, 0.98, 1.0, 0.62),
@@ -2190,19 +2162,19 @@ func _apply_wraithstep_chain(chain_origin: Vector2, consumed_enemy_id: int, chai
 			var triggered_network_enemy_id := int(triggered_entry_payload.get("network_enemy_id", -1))
 			wraithstep_marked_enemy_expiry.erase(triggered_enemy_id)
 			if triggered_network_enemy_id > 0:
-				_broadcast_feedback_event("wraithstep_mark_remove", {"enemy_network_id": triggered_network_enemy_id})
+				_broadcast_cue_event("wraithstep_mark_remove", {"enemy_network_id": triggered_network_enemy_id})
 			propagated_ids[triggered_enemy_id] = true
 			DAMAGEABLE.apply_damage(triggered_enemy, final_chain_damage)
 			pending_epicenters.append(triggered_enemy.global_position)
 			if player_feedback != null:
 				player_feedback.play_wraithstep_chain_echo(epicenter, triggered_enemy.global_position)
-				_broadcast_feedback_event("wraithstep_chain_echo", {
+				_broadcast_cue_event("wraithstep_chain_echo", {
 					"from": epicenter,
 					"to": triggered_enemy.global_position,
 					"lifetime": 0.18
 				})
 				player_feedback.play_world_ring(triggered_enemy.global_position, wraithstep_mark_splash_radius * 0.5, Color(0.72, 0.94, 1.0, 0.64), 0.14)
-				_broadcast_feedback_event("world_ring", {
+				_broadcast_cue_event("world_ring", {
 					"position": triggered_enemy.global_position,
 					"radius": wraithstep_mark_splash_radius * 0.5,
 					"color": Color(0.72, 0.94, 1.0, 0.64),
@@ -2264,21 +2236,21 @@ func _apply_storm_crown_hit(source_position: Vector2, source_enemy_id: int, sour
 		chained_enemy_ids[next_enemy_id] = true
 		if player_feedback != null:
 			player_feedback.play_chain_lightning(chain_origin, next_enemy.global_position)
-			_broadcast_feedback_event("chain_lightning", {
+			_broadcast_cue_event("chain_lightning", {
 				"from": chain_origin,
 				"to": next_enemy.global_position,
 				"color": Color(0.98, 0.98, 0.76, 0.92),
 				"lifetime": 0.14
 			})
 			player_feedback.play_world_ring(next_enemy.global_position, 16.0, Color(1.0, 0.98, 0.72, 0.82), 0.1)
-			_broadcast_feedback_event("world_ring", {
+			_broadcast_cue_event("world_ring", {
 				"position": next_enemy.global_position,
 				"radius": 16.0,
 				"color": Color(1.0, 0.98, 0.72, 0.82),
 				"duration": 0.1
 			})
 			player_feedback.play_world_ring(next_enemy.global_position, 28.0, Color(0.82, 0.94, 1.0, 0.46), 0.18)
-			_broadcast_feedback_event("world_ring", {
+			_broadcast_cue_event("world_ring", {
 				"position": next_enemy.global_position,
 				"radius": 28.0,
 				"color": Color(0.82, 0.94, 1.0, 0.46),
@@ -2288,7 +2260,7 @@ func _apply_storm_crown_hit(source_position: Vector2, source_enemy_id: int, sour
 		remaining_chains -= 1
 	if player_feedback != null:
 		player_feedback.play_storm_crown_discharge(source_position)
-		_broadcast_feedback_event("storm_crown_discharge", {"position": source_position})
+		_broadcast_cue_event("storm_crown_discharge", {"position": source_position})
 	storm_crown_discharge_flash_left = storm_crown_discharge_flash_duration
 	queue_redraw()
 
@@ -2320,7 +2292,7 @@ func _apply_veilstep_rhythm_during_dash(dash_start: Vector2, dash_end: Vector2) 
 	veilstep_rhythm_shards = mini(veilstep_rhythm_shards_max, veilstep_rhythm_shards + 1)
 	if player_feedback != null:
 		player_feedback.play_world_ring(global_position, 24.0, Color(0.24, 1.0, 0.74, 0.82), 0.1)
-		_broadcast_feedback_event("world_ring", {
+		_broadcast_cue_event("world_ring", {
 			"position": global_position,
 			"radius": 24.0,
 			"color": Color(0.24, 1.0, 0.74, 0.82),
@@ -2332,14 +2304,14 @@ func _apply_veilstep_rhythm_during_dash(dash_start: Vector2, dash_end: Vector2) 
 		dash_cooldown_left = 0.0
 		if player_feedback != null:
 			player_feedback.play_world_ring(global_position, 58.0, Color(0.36, 1.0, 0.8, 0.9), 0.22)
-			_broadcast_feedback_event("world_ring", {
+			_broadcast_cue_event("world_ring", {
 				"position": global_position,
 				"radius": 58.0,
 				"color": Color(0.36, 1.0, 0.8, 0.9),
 				"duration": 0.22
 			})
 			player_feedback.play_world_ring(global_position, 78.0, Color(0.72, 1.0, 0.9, 0.55), 0.28)
-			_broadcast_feedback_event("world_ring", {
+			_broadcast_cue_event("world_ring", {
 				"position": global_position,
 				"radius": 78.0,
 				"color": Color(0.72, 1.0, 0.9, 0.55),
@@ -2361,14 +2333,14 @@ func _release_veilstep_rhythm_wave(epicenter: Vector2) -> void:
 		DAMAGEABLE.apply_damage(enemy_node, wave_damage, {"is_ground_attack": true, "attack_type": "veilstep_rhythm_wave"})
 	if player_feedback != null:
 		player_feedback.play_world_ring(epicenter, veilstep_rhythm_wave_radius, Color(0.28, 1.0, 0.78, 0.92), 0.2)
-		_broadcast_feedback_event("world_ring", {
+		_broadcast_cue_event("world_ring", {
 			"position": epicenter,
 			"radius": veilstep_rhythm_wave_radius,
 			"color": Color(0.28, 1.0, 0.78, 0.92),
 			"duration": 0.2
 		})
 		player_feedback.play_world_ring(epicenter, veilstep_rhythm_wave_radius * 1.35, Color(0.64, 1.0, 0.88, 0.45), 0.28)
-		_broadcast_feedback_event("world_ring", {
+		_broadcast_cue_event("world_ring", {
 			"position": epicenter,
 			"radius": veilstep_rhythm_wave_radius * 1.35,
 			"color": Color(0.64, 1.0, 0.88, 0.45),
@@ -2420,7 +2392,7 @@ func _apply_phantom_step_during_dash() -> void:
 		enemy_node.apply_slow(phantom_step_slow_duration, 0.36)
 		var phantom_enemy_network_id := int(enemy_body.get_meta("network_enemy_id", -1))
 		if phantom_enemy_network_id > 0:
-			_broadcast_feedback_event("enemy_apply_slow", {
+			_broadcast_cue_event("enemy_apply_slow", {
 				"enemy_network_id": phantom_enemy_network_id,
 				"duration": phantom_step_slow_duration,
 				"mult": 0.36
@@ -2430,7 +2402,7 @@ func _apply_phantom_step_during_dash() -> void:
 			# Concentric rings: outer (slow field) + inner (damage burst)
 			player_feedback.play_world_ring(enemy_body.global_position, hit_radius * 0.82,
 				Color(0.46, 1.0, 0.92, 0.9), 0.22)
-			_broadcast_feedback_event("world_ring", {
+			_broadcast_cue_event("world_ring", {
 				"position": enemy_body.global_position,
 				"radius": hit_radius * 0.82,
 				"color": Color(0.46, 1.0, 0.92, 0.9),
@@ -2438,7 +2410,7 @@ func _apply_phantom_step_during_dash() -> void:
 			})
 			player_feedback.play_world_ring(enemy_body.global_position, hit_radius * 0.44,
 				Color(0.8, 1.0, 0.98, 0.72), 0.14)
-			_broadcast_feedback_event("world_ring", {
+			_broadcast_cue_event("world_ring", {
 				"position": enemy_body.global_position,
 				"radius": hit_radius * 0.44,
 				"color": Color(0.8, 1.0, 0.98, 0.72),
@@ -2516,7 +2488,7 @@ func _append_static_wake_trail(world_position: Vector2, should_broadcast: bool =
 	var resolved_life := static_wake_lifetime if forced_life <= 0.0 else forced_life
 	static_wake_trails.append({"pos": clamped_position, "life": resolved_life})
 	if should_broadcast and _is_local_control_owner():
-		_broadcast_feedback_event("static_wake_dot", {"position": clamped_position, "life": resolved_life})
+		_broadcast_cue_event("static_wake_dot", {"position": clamped_position, "life": resolved_life})
 	_sync_static_wake_trail_renderer()
 
 
@@ -2972,7 +2944,7 @@ func _activate_iron_retort_brace(feedback_position: Vector2) -> void:
 	queue_redraw()
 	if player_feedback != null and player_feedback.has_method("play_iron_retort_window_open"):
 		player_feedback.play_iron_retort_window_open(feedback_position)
-		_broadcast_feedback_event("iron_retort_window_open", {"position": feedback_position})
+		_broadcast_cue_event("iron_retort_window_open", {"position": feedback_position})
 
 func _clear_iron_retort_brace(redraw: bool) -> void:
 	iron_retort_brace_ready = false
@@ -2988,7 +2960,7 @@ func _consume_iron_retort_brace(player_position: Vector2, impact_position: Vecto
 	queue_redraw()
 	if player_feedback != null and player_feedback.has_method("play_iron_retort_consume"):
 		player_feedback.play_iron_retort_consume(player_position, impact_position)
-		_broadcast_feedback_event("iron_retort_consume", {
+		_broadcast_cue_event("iron_retort_consume", {
 			"player_position": player_position,
 			"impact_position": impact_position
 		})
@@ -3007,7 +2979,7 @@ func _apply_iron_retort_shockwave(epicenter: Vector2, source_damage: int) -> voi
 		DAMAGEABLE.apply_damage(enemy_node, shockwave_damage, {"is_ground_attack": true, "attack_type": "iron_retort_shockwave"})
 	if player_feedback != null:
 		player_feedback.play_world_ring(epicenter, shockwave_radius, Color(0.96, 0.52, 0.28, 0.9), 0.18)
-		_broadcast_feedback_event("world_ring", {
+		_broadcast_cue_event("world_ring", {
 			"position": epicenter,
 			"radius": shockwave_radius,
 			"color": Color(0.96, 0.52, 0.28, 0.9),
@@ -3040,21 +3012,21 @@ func _trigger_voidfire_detonation() -> void:
 		voidfire_lockout_duration = overheat_lockout
 	if player_feedback != null:
 		player_feedback.play_world_ring(global_position, voidfire_detonate_radius, Color(0.28, 0.96, 1.0, 0.90), 0.28)
-		_broadcast_feedback_event("world_ring", {
+		_broadcast_cue_event("world_ring", {
 			"position": global_position,
 			"radius": voidfire_detonate_radius,
 			"color": Color(0.28, 0.96, 1.0, 0.90),
 			"duration": 0.28
 		})
 		player_feedback.play_world_ring(global_position, voidfire_detonate_radius * 0.6, Color(0.58, 0.78, 1.0, 0.74), 0.18)
-		_broadcast_feedback_event("world_ring", {
+		_broadcast_cue_event("world_ring", {
 			"position": global_position,
 			"radius": voidfire_detonate_radius * 0.6,
 			"color": Color(0.58, 0.78, 1.0, 0.74),
 			"duration": 0.18
 		})
 		player_feedback.play_world_ring(global_position, voidfire_detonate_radius * 1.2, Color(0.34, 0.46, 0.98, 0.32), 0.34)
-		_broadcast_feedback_event("world_ring", {
+		_broadcast_cue_event("world_ring", {
 			"position": global_position,
 			"radius": voidfire_detonate_radius * 1.2,
 			"color": Color(0.34, 0.46, 0.98, 0.32),
@@ -3120,7 +3092,7 @@ func _maybe_broadcast_voidfire_ui_state(danger_ratio: float, force: bool = false
 	_last_broadcast_voidfire_heat_quantized = heat_quantized
 	_last_broadcast_voidfire_lockout_quantized = lockout_quantized
 	_last_broadcast_voidfire_enabled = reward_voidfire
-	_broadcast_feedback_event("voidfire_ui_state", {
+	_broadcast_cue_event("voidfire_ui_state", {
 		"heat": void_heat,
 		"cap": void_heat_cap,
 		"enabled": reward_voidfire,
@@ -3153,7 +3125,7 @@ func _maybe_broadcast_oath_ui_state(oath_enabled: bool, oath_reference: float, f
 		return
 	_last_broadcast_oath_bank_quantized = bank_quantized
 	_last_broadcast_oath_enabled = oath_enabled
-	_broadcast_feedback_event("oath_ui_state", {
+	_broadcast_cue_event("oath_ui_state", {
 		"bank": indomitable_damage_bank,
 		"reference": oath_reference,
 		"enabled": oath_enabled,
@@ -3308,7 +3280,7 @@ func _get_void_echo_zone_bonus(enemy_node: Object, base_damage: int) -> int:
 		if enemy_pos.distance_to(zone_pos) <= radius:
 			if player_feedback != null and player_feedback.has_method("play_boss_void_zone_empowered_hit"):
 				player_feedback.play_boss_void_zone_empowered_hit(enemy_pos)
-				_broadcast_feedback_event("boss_void_zone_empowered_hit", {"position": enemy_pos})
+				_broadcast_cue_event("boss_void_zone_empowered_hit", {"position": enemy_pos})
 			return maxi(1, int(round(float(base_damage) * (0.22 + float(void_echo_damage) * 0.002))))
 	return 0
 
@@ -3344,7 +3316,7 @@ func _gain_indomitable_oath_from_hit(enemy_node: Object, source: String) -> void
 	if player_feedback != null and player_feedback.has_method("play_boss_unbroken_bank_gain"):
 		var bank_ratio := clampf(indomitable_damage_bank / bank_cap, 0.0, 1.0)
 		player_feedback.play_boss_unbroken_bank_gain(global_position, bank_ratio)
-		_broadcast_feedback_event("unbroken_oath_bank_gain", {
+		_broadcast_cue_event("unbroken_oath_bank_gain", {
 			"position": global_position,
 			"bank_ratio": bank_ratio
 		})
@@ -3363,7 +3335,7 @@ func _consume_indomitable_spirit_bonus(hit_position: Vector2) -> int:
 	var ratio := (1.8 + indomitable_spirit_damage_reduction * 2.2 + spend * 0.009) * INDOMITABLE_OATH_DAMAGE_SCALE
 	if player_feedback != null and player_feedback.has_method("play_boss_unbroken_retaliation"):
 		player_feedback.play_boss_unbroken_retaliation(global_position, hit_position, ratio)
-		_broadcast_feedback_event("unbroken_oath_retaliation", {
+		_broadcast_cue_event("unbroken_oath_retaliation", {
 			"player_position": global_position,
 			"impact_position": hit_position,
 			"bonus_ratio": ratio
@@ -3381,14 +3353,14 @@ func _register_apex_momentum_hit() -> void:
 	apex_momentum_stack_left = apex_momentum_stack_duration
 	if player_feedback != null and player_feedback.has_method("play_boss_tempo_stack"):
 		player_feedback.play_boss_tempo_stack(global_position, apex_momentum_stacks, apex_momentum_max_stacks)
-		_broadcast_feedback_event("boss_tempo_stack", {
+		_broadcast_cue_event("boss_tempo_stack", {
 			"position": global_position,
 			"stacks": apex_momentum_stacks,
 			"max_stacks": apex_momentum_max_stacks
 		})
 	if player_feedback != null and player_feedback.has_method("update_boss_tempo_state"):
 		player_feedback.update_boss_tempo_state(apex_momentum_stacks, apex_momentum_max_stacks, apex_momentum_stack_left, apex_momentum_stack_duration)
-		_broadcast_feedback_event("boss_tempo_state", {
+		_broadcast_cue_event("boss_tempo_state", {
 			"stacks": apex_momentum_stacks,
 			"max_stacks": apex_momentum_max_stacks,
 			"time_left": apex_momentum_stack_left,
@@ -3399,7 +3371,7 @@ func _update_apex_momentum(delta: float) -> void:
 	if apex_momentum_stacks <= 0:
 		if player_feedback != null and player_feedback.has_method("clear_boss_tempo_state"):
 			player_feedback.clear_boss_tempo_state()
-			_broadcast_feedback_event("boss_tempo_clear", {"clear": true})
+			_broadcast_cue_event("boss_tempo_clear", {"clear": true})
 		return
 	apex_momentum_stack_left = maxf(0.0, apex_momentum_stack_left - delta)
 	if player_feedback != null and player_feedback.has_method("update_boss_tempo_state"):
@@ -3408,7 +3380,7 @@ func _update_apex_momentum(delta: float) -> void:
 		apex_momentum_stacks = 0
 		if player_feedback != null and player_feedback.has_method("clear_boss_tempo_state"):
 			player_feedback.clear_boss_tempo_state()
-			_broadcast_feedback_event("boss_tempo_clear", {"clear": true})
+			_broadcast_cue_event("boss_tempo_clear", {"clear": true})
 
 func _release_apex_momentum_dash_wave(epicenter: Vector2) -> void:
 	if apex_momentum_stacks <= 0 or apex_momentum_speed_bonus <= 0.0:
@@ -3418,7 +3390,7 @@ func _release_apex_momentum_dash_wave(epicenter: Vector2) -> void:
 	apex_momentum_stack_left = 0.0
 	if player_feedback != null and player_feedback.has_method("clear_boss_tempo_state"):
 		player_feedback.clear_boss_tempo_state()
-		_broadcast_feedback_event("boss_tempo_clear", {"clear": true})
+		_broadcast_cue_event("boss_tempo_clear", {"clear": true})
 	var slash_radius := 68.0 + 20.0 * float(stacks)
 	var slash_ratio := 0.4 + apex_momentum_speed_bonus * float(stacks) * 1.8
 	var slash_damage := _apply_objective_mutator_damage_mult(maxi(1, int(round(float(damage) * slash_ratio))))
@@ -3437,7 +3409,7 @@ func _release_apex_momentum_dash_wave(epicenter: Vector2) -> void:
 		dash_cooldown_left = maxf(0.0, dash_cooldown_left - 0.12 * float(stacks))
 	if player_feedback != null and player_feedback.has_method("play_boss_tempo_dash_wave"):
 		player_feedback.play_boss_tempo_dash_wave(epicenter, slash_radius, hit_any, stacks, apex_momentum_max_stacks)
-		_broadcast_feedback_event("boss_tempo_dash_wave", {
+		_broadcast_cue_event("boss_tempo_dash_wave", {
 			"position": epicenter,
 			"radius": slash_radius,
 			"landed": hit_any,
@@ -3464,7 +3436,7 @@ func _update_void_echo_zones(delta: float) -> void:
 			var pulse_damage := _apply_objective_mutator_damage_mult(maxi(1, int(round(float(void_echo_damage) * 0.45 + float(damage) * 0.2))))
 			if player_feedback != null and player_feedback.has_method("play_boss_void_zone_pulse"):
 				player_feedback.play_boss_void_zone_pulse(zone_pos, radius)
-				_broadcast_feedback_event("boss_void_zone_pulse", {"position": zone_pos, "radius": radius})
+				_broadcast_cue_event("boss_void_zone_pulse", {"position": zone_pos, "radius": radius})
 			_void_echo_pulse_kill_suppression_depth += 1
 			for enemy_node in get_tree().get_nodes_in_group("enemies"):
 				if not (enemy_node is Node2D):
@@ -3513,7 +3485,7 @@ func _update_convergence_window(delta: float) -> void:
 	var pulse_damage := _apply_objective_mutator_damage_mult(maxi(1, int(round(float(damage) * (0.28 + convergence_surge_damage_ratio * 0.8)))))
 	if player_feedback != null and player_feedback.has_method("play_boss_convergence_pulse"):
 		player_feedback.play_boss_convergence_pulse(global_position, pulse_radius)
-		_broadcast_feedback_event("boss_convergence_pulse", {
+		_broadcast_cue_event("boss_convergence_pulse", {
 			"position": global_position,
 			"radius": pulse_radius
 		})
@@ -3547,7 +3519,7 @@ func _apply_void_echo(kill_pos: Vector2) -> void:
 	if player_feedback != null:
 		if player_feedback.has_method("play_boss_void_zone_spawn"):
 			player_feedback.play_boss_void_zone_spawn(kill_pos, echo_radius)
-			_broadcast_feedback_event("boss_void_zone_spawn", {"position": kill_pos, "radius": echo_radius})
+			_broadcast_cue_event("boss_void_zone_spawn", {"position": kill_pos, "radius": echo_radius})
 
 func _try_apply_convergence_surge(epicenter: Vector2, _source_damage: int, _primary_enemy_id: int) -> void:
 	if convergence_surge_damage_ratio <= 0.0:
@@ -3566,7 +3538,7 @@ func _try_apply_convergence_surge(epicenter: Vector2, _source_damage: int, _prim
 	dash_cooldown_left = maxf(0.0, dash_cooldown_left - dash_refund)
 	if player_feedback != null and player_feedback.has_method("play_boss_convergence_start"):
 		player_feedback.play_boss_convergence_start(epicenter, convergence_surge_damage_ratio)
-		_broadcast_feedback_event("boss_convergence_start", {
+		_broadcast_cue_event("boss_convergence_start", {
 			"position": epicenter,
 			"power_ratio": convergence_surge_damage_ratio
 		})
@@ -3640,7 +3612,7 @@ func _apply_fracture_field(kill_pos: Vector2) -> void:
 
 	if player_feedback != null and player_feedback.has_method("play_fracture_field_fault_lines"):
 		player_feedback.play_fracture_field_fault_lines(kill_pos, fracture_field_radius, beam_count, base_angle, beam_width)
-		_broadcast_feedback_event("fracture_field_fault_lines", {
+		_broadcast_cue_event("fracture_field_fault_lines", {
 			"position": kill_pos,
 			"radius": fracture_field_radius,
 			"beam_count": beam_count,
@@ -3679,7 +3651,7 @@ func _apply_fracture_field(kill_pos: Vector2) -> void:
 		enemy_node.apply_slow(fracture_field_slow_duration, 0.45)
 		var fracture_enemy_network_id := int(enemy_body.get_meta("network_enemy_id", -1))
 		if fracture_enemy_network_id > 0:
-			_broadcast_feedback_event("enemy_apply_slow", {
+			_broadcast_cue_event("enemy_apply_slow", {
 				"enemy_network_id": fracture_enemy_network_id,
 				"duration": fracture_field_slow_duration,
 				"mult": 0.45
@@ -3996,3 +3968,4 @@ func _draw_trial_reward_state() -> void:
 		# Countdown sweep ring — shows remaining duration
 		var sweep_angle := -PI * 0.5 + (1.0 - debuff_t) * TAU
 		draw_arc(Vector2.ZERO, field_radius + 12.0, -PI * 0.5, sweep_angle, 32, Color(0.94, 0.98, 1.0, (0.44 + field_pulse * 0.2) * debuff_t), 2.0)
+

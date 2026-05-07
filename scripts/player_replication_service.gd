@@ -2,7 +2,7 @@ extends Node
 ## Service for syncing player state across multiplayer peers.
 ## Handles position, health, alive status, and upgrade state replication via RPC.
 
-const PLAYER_FEEDBACK_DISPATCHER_SCRIPT := preload("res://scripts/core/player_feedback_dispatcher.gd")
+const PLAYER_CUE_EVENT_DISPATCHER_SCRIPT := preload("res://scripts/core/player_feedback_dispatcher.gd")
 const PLAYER_CUE_SYNC_QUEUE_SCRIPT := preload("res://scripts/core/player_cue_sync_queue.gd")
 
 ## Configuration
@@ -17,8 +17,8 @@ var remote_position_snap_distance_px: float = 180.0
 var remote_position_lerp_half_life_sec: float = 0.04
 var remote_rotation_lerp_half_life_sec: float = 0.035
 ## "Feedback" here means player-facing cue events (VFX/UI/audio cues), not gameplay state authority.
-var feedback_sync_interval_sec: float = 0.05
-var feedback_sync_payload_budget_bytes: int = 640
+var cue_event_sync_interval_sec: float = 0.05
+var cue_event_sync_payload_budget_bytes: int = 640
 
 ## References to player nodes (populated by caller)
 var player_nodes: Dictionary = {}  ## peer_id -> Player node reference
@@ -31,13 +31,13 @@ var _last_sync_positions: Dictionary = {}  ## peer_id -> last_synced_position
 var _last_sync_rotations: Dictionary = {}  ## peer_id -> last_synced_facing_radians
 var _remote_target_positions: Dictionary = {}  ## peer_id -> latest replicated position
 var _remote_target_rotations: Dictionary = {}  ## peer_id -> latest replicated facing
-var _feedback_sync_elapsed: float = 0.0
-var _pending_feedback_events_by_peer: Dictionary = {}  ## peer_id -> Array[Dictionary]
-var _last_feedback_event_count: int = 0
-var _last_feedback_estimated_bytes: int = 0
+var _cue_event_sync_elapsed: float = 0.0
+var _pending_cue_events_by_peer: Dictionary = {}  ## peer_id -> Array[Dictionary]
+var _last_cue_event_count: int = 0
+var _last_cue_event_estimated_bytes: int = 0
 var _outgoing_health_sequence_by_peer: Dictionary = {}  ## peer_id -> last emitted health sequence
 var _last_applied_health_sequence_by_peer: Dictionary = {}  ## peer_id -> last applied health sequence
-var _feedback_dispatcher := PLAYER_FEEDBACK_DISPATCHER_SCRIPT.new()
+var _cue_event_dispatcher: PlayerFeedbackDispatcher = PLAYER_CUE_EVENT_DISPATCHER_SCRIPT.new()
 var _cue_sync_queue := PLAYER_CUE_SYNC_QUEUE_SCRIPT.new()
 
 
@@ -64,10 +64,10 @@ func _process(delta: float) -> void:
 	if _last_sync_time >= position_sync_interval_sec:
 		_last_sync_time = 0.0
 		_sync_all_player_positions()
-	_feedback_sync_elapsed += delta
-	if _feedback_sync_elapsed >= feedback_sync_interval_sec:
-		_feedback_sync_elapsed = 0.0
-		_flush_pending_feedback_events()
+	_cue_event_sync_elapsed += delta
+	if _cue_event_sync_elapsed >= cue_event_sync_interval_sec:
+		_cue_event_sync_elapsed = 0.0
+		_flush_pending_cue_events()
 	_interpolate_remote_players(delta)
 
 
@@ -97,7 +97,7 @@ func unregister_player(peer_id: int) -> void:
 	_last_sync_rotations.erase(peer_id)
 	_remote_target_positions.erase(peer_id)
 	_remote_target_rotations.erase(peer_id)
-	_pending_feedback_events_by_peer.erase(peer_id)
+	_pending_cue_events_by_peer.erase(peer_id)
 	_outgoing_health_sequence_by_peer.erase(peer_id)
 	_last_applied_health_sequence_by_peer.erase(peer_id)
 
@@ -128,24 +128,16 @@ func _remove_invalid_player(peer_id: int) -> void:
 	_last_sync_rotations.erase(peer_id)
 	_remote_target_positions.erase(peer_id)
 	_remote_target_rotations.erase(peer_id)
-	_pending_feedback_events_by_peer.erase(peer_id)
+	_pending_cue_events_by_peer.erase(peer_id)
 	_outgoing_health_sequence_by_peer.erase(peer_id)
 	_last_applied_health_sequence_by_peer.erase(peer_id)
 
 
-func get_last_feedback_sync_metrics() -> Dictionary:
-	return get_last_cue_event_sync_metrics()
-
-
 func get_last_cue_event_sync_metrics() -> Dictionary:
 	return {
-		"event_count": _last_feedback_event_count,
-		"estimated_bytes": _last_feedback_estimated_bytes
+		"event_count": _last_cue_event_count,
+		"estimated_bytes": _last_cue_event_estimated_bytes
 	}
-
-
-func broadcast_feedback_event(peer_id: int, event_name: String, payload: Dictionary, reliable: bool = false) -> void:
-	broadcast_cue_event(peer_id, event_name, payload, reliable)
 
 
 func broadcast_cue_event(peer_id: int, event_name: String, payload: Dictionary, reliable: bool = false) -> void:
@@ -156,44 +148,44 @@ func broadcast_cue_event(peer_id: int, event_name: String, payload: Dictionary, 
 		return
 	if not _is_authority_for_peer(peer_id):
 		return
-	var pending_variant: Variant = _pending_feedback_events_by_peer.get(peer_id, [])
+	var pending_variant: Variant = _pending_cue_events_by_peer.get(peer_id, [])
 	var pending_events := _cue_sync_queue.copy_pending_events(pending_variant)
 	var event_payload := payload.duplicate(true)
 	var estimated_bytes := _cue_sync_queue.estimate_event_bytes(event_name, event_payload)
-	if not _cue_sync_queue.can_fit_event(estimated_bytes, feedback_sync_payload_budget_bytes):
+	if not _cue_sync_queue.can_fit_event(estimated_bytes, cue_event_sync_payload_budget_bytes):
 		return
-	if _cue_sync_queue.requires_pre_flush(pending_events, estimated_bytes, feedback_sync_payload_budget_bytes):
-		_flush_feedback_events_for_peer(peer_id, pending_events)
+	if _cue_sync_queue.requires_pre_flush(pending_events, estimated_bytes, cue_event_sync_payload_budget_bytes):
+		_flush_cue_events_for_peer(peer_id, pending_events)
 		pending_events.clear()
 	pending_events.append(_cue_sync_queue.build_event_entry(event_name, event_payload, reliable, estimated_bytes))
-	_pending_feedback_events_by_peer[peer_id] = pending_events
+	_pending_cue_events_by_peer[peer_id] = pending_events
 
 
-func _flush_pending_feedback_events() -> void:
-	_last_feedback_event_count = 0
-	_last_feedback_estimated_bytes = 0
-	if _pending_feedback_events_by_peer.is_empty():
+func _flush_pending_cue_events() -> void:
+	_last_cue_event_count = 0
+	_last_cue_event_estimated_bytes = 0
+	if _pending_cue_events_by_peer.is_empty():
 		return
-	for peer_key in _pending_feedback_events_by_peer.keys():
+	for peer_key in _pending_cue_events_by_peer.keys():
 		var peer_id := int(peer_key)
-		var pending_variant: Variant = _pending_feedback_events_by_peer.get(peer_id, [])
+		var pending_variant: Variant = _pending_cue_events_by_peer.get(peer_id, [])
 		var pending_events := _cue_sync_queue.copy_pending_events(pending_variant)
-		_flush_feedback_events_for_peer(peer_id, pending_events)
-	_pending_feedback_events_by_peer.clear()
+		_flush_cue_events_for_peer(peer_id, pending_events)
+	_pending_cue_events_by_peer.clear()
 
 
-func _flush_feedback_events_for_peer(peer_id: int, pending_events: Array[Dictionary]) -> void:
+func _flush_cue_events_for_peer(peer_id: int, pending_events: Array[Dictionary]) -> void:
 	if pending_events.is_empty():
 		return
 	var packet_split := _cue_sync_queue.split_packets(pending_events)
 	var unreliable_events := packet_split.get("unreliable_events", []) as Array[Dictionary]
 	var reliable_events := packet_split.get("reliable_events", []) as Array[Dictionary]
-	_last_feedback_event_count += int(packet_split.get("event_count", 0))
-	_last_feedback_estimated_bytes += int(packet_split.get("estimated_bytes", 0))
+	_last_cue_event_count += int(packet_split.get("event_count", 0))
+	_last_cue_event_estimated_bytes += int(packet_split.get("estimated_bytes", 0))
 	if not unreliable_events.is_empty():
-		_sync_player_feedback_events_unreliable.rpc(peer_id, unreliable_events)
+		_sync_player_cue_events_unreliable.rpc(peer_id, unreliable_events)
 	if not reliable_events.is_empty():
-		_sync_player_feedback_events_reliable.rpc(peer_id, reliable_events)
+		_sync_player_cue_events_reliable.rpc(peer_id, reliable_events)
 
 
 ## Sync all registered player positions if they've moved significantly.
@@ -407,16 +399,16 @@ func _sync_player_build_snapshot(peer_id: int, snapshot: Dictionary) -> void:
 
 
 @rpc("unreliable", "any_peer", "call_local")
-func _sync_player_feedback_events_unreliable(peer_id: int, events: Array[Dictionary]) -> void:
-	_apply_network_feedback_events(peer_id, events)
+func _sync_player_cue_events_unreliable(peer_id: int, events: Array[Dictionary]) -> void:
+	_apply_network_cue_events(peer_id, events)
 
 
 @rpc("reliable", "any_peer", "call_local")
-func _sync_player_feedback_events_reliable(peer_id: int, events: Array[Dictionary]) -> void:
-	_apply_network_feedback_events(peer_id, events)
+func _sync_player_cue_events_reliable(peer_id: int, events: Array[Dictionary]) -> void:
+	_apply_network_cue_events(peer_id, events)
 
 
-func _apply_network_feedback_events(peer_id: int, events: Array[Dictionary]) -> void:
+func _apply_network_cue_events(peer_id: int, events: Array[Dictionary]) -> void:
 	if peer_id not in player_nodes:
 		return
 	if events.is_empty():
@@ -424,4 +416,5 @@ func _apply_network_feedback_events(peer_id: int, events: Array[Dictionary]) -> 
 	var player_node := _get_player_node(peer_id)
 	if player_node == null:
 		return
-	_feedback_dispatcher.apply_cue_events(player_node, peer_id, local_peer_id, events)
+	_cue_event_dispatcher.apply_cue_events(player_node, peer_id, local_peer_id, events)
+
