@@ -1563,15 +1563,17 @@ func _can_apply_client_spawn_sync(payload: Dictionary) -> bool:
 	if not is_instance_valid(enemy_spawner):
 		return false
 	var source_room_sync_id := int(payload.get("room_sync_id", 0))
-	var allow_initial_sync_alignment := _world_multiplayer_sync_state.current_room_sync_id == 0 and current_room_label == "Starting Chamber" and not _is_reward_selection_active()
+	var allow_initial_sync_alignment: bool = _world_multiplayer_sync_state.current_room_sync_id == 0 and current_room_label == "Starting Chamber" and not _is_reward_selection_active()
 	if not _world_multiplayer_sync_state.can_accept_source_sync_id(source_room_sync_id, allow_initial_sync_alignment):
 		return false
 	if _is_reward_selection_active():
 		return false
-	if current_room_label == "Starting Chamber":
+	if current_room_label == "Starting Chamber" and not allow_initial_sync_alignment:
 		return false
 	var payload_room_label := String(payload.get("room_label", "")).strip_edges()
 	if payload_room_label.is_empty():
+		return true
+	if allow_initial_sync_alignment:
 		return true
 	return payload_room_label == current_room_label
 
