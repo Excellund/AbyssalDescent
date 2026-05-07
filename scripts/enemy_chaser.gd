@@ -18,6 +18,16 @@ var attack_cooldown_left: float = 0.0
 var _player_was_in_range: bool = false
 var _attack_sync_was_active: bool = false
 
+func _get_custom_network_runtime_state() -> Dictionary:
+	return {"attack_cooldown_left": attack_cooldown_left}
+
+
+func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
+	if custom_state.is_empty():
+		return
+	attack_cooldown_left = float(custom_state.get("attack_cooldown_left", attack_cooldown_left))
+
+
 func _process_behavior(delta: float) -> void:
 	_update_attack_cooldown(delta)
 	var in_range := is_instance_valid(target) and global_position.distance_to(target.global_position) <= attack_range

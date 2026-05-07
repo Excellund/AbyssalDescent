@@ -179,33 +179,29 @@ func _compose_active_enemy_mutator() -> Dictionary:
 	return composed
 
 func spawn_profile_enemies(profile: Dictionary) -> int:
-	## Multiplayer: only host decides encounter spawns and broadcasts them.
-	if MultiplayerSessionManager.is_session_connected() and not MultiplayerSessionManager.is_host():
-		return 0
+	var report := _spawn_profile_enemies_internal(profile, false)
+	return report.size()
 
-	var total := 0
-	for enemy_type in ENEMY_SPAWN_ORDER:
-		var count := _profile_count_for_enemy_type(profile, enemy_type)
-		for _i in range(maxi(0, count)):
-			_spawn_enemy_in_current_room(scripts.get(enemy_type))
-			total += 1
-	return total
 
 func spawn_profile_enemies_report(profile: Dictionary) -> Array[Dictionary]:
-	var report: Array[Dictionary] = []
-	if MultiplayerSessionManager.is_session_connected() and not MultiplayerSessionManager.is_host():
-		return report
+	return _spawn_profile_enemies_internal(profile, true)
 
+
+func _spawn_profile_enemies_internal(profile: Dictionary, build_report: bool) -> Array[Dictionary]:
+	## Multiplayer: only host decides encounter spawns and broadcasts them.
+	if MultiplayerSessionManager.is_session_connected() and not MultiplayerSessionManager.is_host():
+		return []
+
+	var report: Array[Dictionary] = []
 	for enemy_type in ENEMY_SPAWN_ORDER:
 		var count := _profile_count_for_enemy_type(profile, enemy_type)
 		for _i in range(maxi(0, count)):
 			var enemy := _spawn_enemy_in_current_room(scripts.get(enemy_type))
-			if not is_instance_valid(enemy):
-				continue
-			report.append({
-				"enemy_type": enemy_type,
-				"enemy": enemy
-			})
+			if build_report:
+				if is_instance_valid(enemy):
+					report.append({"enemy_type": enemy_type, "enemy": enemy})
+			else:
+				report.append({})
 	return report
 
 func _profile_count_for_enemy_type(profile: Dictionary, enemy_type: String) -> int:

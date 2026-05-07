@@ -91,6 +91,76 @@ var _arena_center_anchor_world: Vector2 = Vector2.ZERO
 
 var _attack_sync_was_active: bool = false
 
+func _get_custom_network_runtime_state() -> Dictionary:
+	var illusion_positions: Array = []
+	for pos in _illusion_positions:
+		illusion_positions.append(pos)
+	var illusion_shatter_times: Array = []
+	for t in _illusion_shatter_times:
+		illusion_shatter_times.append(float(t))
+	var spiral_arms: Array = []
+	for arm_variant in _spiral_arms:
+		if arm_variant is Dictionary:
+			spiral_arms.append((arm_variant as Dictionary).duplicate(true))
+	var spiral_hit_cooldowns: Array = []
+	for cooldown in _spiral_hit_cooldowns:
+		spiral_hit_cooldowns.append(float(cooldown))
+	return {
+		"seamlock_state": seamlock_state,
+		"state_time_left": state_time_left,
+		"contact_attack_cooldown_left": contact_attack_cooldown_left,
+		"teleport_flash_left": _teleport_flash_left,
+		"illusion_positions": illusion_positions,
+		"illusion_shatter_times": illusion_shatter_times,
+		"illusion_phase_left": _illusion_phase_left,
+		"band_windup_left": _band_windup_left,
+		"band_duration_left": _band_duration_left,
+		"band_tick_left": _band_tick_left,
+		"band_is_active": _band_is_active,
+		"spiral_arms": spiral_arms,
+		"spiral_hit_cooldowns": spiral_hit_cooldowns,
+		"spiral_windup_left": _spiral_windup_left,
+		"spiral_active": _spiral_active,
+		"arena_penalty_steps": arena_penalty_steps,
+		"arena_center_anchor_world": _arena_center_anchor_world
+	}
+
+
+func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
+	if custom_state.is_empty():
+		return
+	seamlock_state = int(custom_state.get("seamlock_state", seamlock_state))
+	state_time_left = float(custom_state.get("state_time_left", state_time_left))
+	contact_attack_cooldown_left = float(custom_state.get("contact_attack_cooldown_left", contact_attack_cooldown_left))
+	_teleport_flash_left = float(custom_state.get("teleport_flash_left", _teleport_flash_left))
+	_illusion_positions.clear()
+	var illusion_positions := custom_state.get("illusion_positions", []) as Array
+	for pos_variant in illusion_positions:
+		if pos_variant is Vector2:
+			_illusion_positions.append(pos_variant as Vector2)
+	_illusion_shatter_times.clear()
+	var illusion_shatter_times := custom_state.get("illusion_shatter_times", []) as Array
+	for time_variant in illusion_shatter_times:
+		_illusion_shatter_times.append(float(time_variant))
+	_illusion_phase_left = float(custom_state.get("illusion_phase_left", _illusion_phase_left))
+	_band_windup_left = float(custom_state.get("band_windup_left", _band_windup_left))
+	_band_duration_left = float(custom_state.get("band_duration_left", _band_duration_left))
+	_band_tick_left = float(custom_state.get("band_tick_left", _band_tick_left))
+	_band_is_active = bool(custom_state.get("band_is_active", _band_is_active))
+	_spiral_arms.clear()
+	var spiral_arms := custom_state.get("spiral_arms", []) as Array
+	for arm_variant in spiral_arms:
+		if arm_variant is Dictionary:
+			_spiral_arms.append((arm_variant as Dictionary).duplicate(true))
+	_spiral_hit_cooldowns.clear()
+	var spiral_hit_cooldowns := custom_state.get("spiral_hit_cooldowns", []) as Array
+	for cooldown_variant in spiral_hit_cooldowns:
+		_spiral_hit_cooldowns.append(float(cooldown_variant))
+	_spiral_windup_left = float(custom_state.get("spiral_windup_left", _spiral_windup_left))
+	_spiral_active = bool(custom_state.get("spiral_active", _spiral_active))
+	arena_penalty_steps = int(custom_state.get("arena_penalty_steps", arena_penalty_steps))
+	_arena_center_anchor_world = custom_state.get("arena_center_anchor_world", _arena_center_anchor_world) as Vector2
+
 func _ready() -> void:
 	max_health = max_health_apex
 	super._ready()

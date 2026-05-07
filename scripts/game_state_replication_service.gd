@@ -27,56 +27,37 @@ func initialize(world_gen: Node) -> void:
 
 ## Called by world_generator when a new room is entered.
 ## Host broadcasts this to all peers.
-func on_room_entered(depth: int, encounter_seed: int) -> void:
-	if not MultiplayerSessionManager.is_session_connected():
-		return
-	
-	if MultiplayerSessionManager.is_host():
-		_sync_room_entered.rpc(depth, encounter_seed)
-	else:
-		pass
+func on_room_entered(depth: int) -> void:
+	_broadcast_if_host(func(): _sync_room_entered.rpc(depth))
 
 
 ## Called by world_generator when a room is cleared.
 ## Host broadcasts this to all peers.
 func on_room_cleared(new_depth: int, new_rooms_cleared: int) -> void:
-	if not MultiplayerSessionManager.is_session_connected():
-		return
-	
-	if MultiplayerSessionManager.is_host():
-		_sync_room_cleared.rpc(new_depth, new_rooms_cleared)
-	else:
-		pass
+	_broadcast_if_host(func(): _sync_room_cleared.rpc(new_depth, new_rooms_cleared))
 
 
 ## Called by world_generator when boss is unlocked.
 func on_boss_unlocked() -> void:
-	if not MultiplayerSessionManager.is_session_connected():
-		return
-	
-	if MultiplayerSessionManager.is_host():
-		_sync_boss_unlocked.rpc()
-	else:
-		pass
+	_broadcast_if_host(func(): _sync_boss_unlocked.rpc())
 
 
 ## Called by world_generator when boss is defeated (run clear).
 func on_boss_defeated() -> void:
-	if not MultiplayerSessionManager.is_session_connected():
-		return
-	
-	if MultiplayerSessionManager.is_host():
-		_sync_boss_defeated.rpc()
-	else:
-		pass
+	_broadcast_if_host(func(): _sync_boss_defeated.rpc())
 
 
-## RPC: Sync room entry (with encounter seed for deterministic generation).
+## Calls rpc_callable only when session is active and this peer is host.
+func _broadcast_if_host(rpc_callable: Callable) -> void:
+	if MultiplayerSessionManager.is_session_connected() and MultiplayerSessionManager.is_host():
+		rpc_callable.call()
+
+
+## RPC: Sync room entry.
 @rpc("reliable")
-func _sync_room_entered(depth: int, encounter_seed: int) -> void:
+func _sync_room_entered(depth: int) -> void:
 	local_room_depth = depth
 	room_depth_changed.emit(depth)
-	print_debug("[GameStateReplication] Room entered at depth %d, seed %d" % [depth, encounter_seed])
 
 
 ## RPC: Sync room clear.

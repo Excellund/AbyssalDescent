@@ -229,7 +229,13 @@ func _process_projectiles(delta: float) -> void:
 
 
 func _get_custom_network_runtime_state() -> Dictionary:
-	return super._get_custom_network_runtime_state()
+	return {
+		"attack_cooldown_left": attack_cooldown_left,
+		"archer_state": archer_state,
+		"archer_state_time_left": archer_state_time_left,
+		"arrow_direction": arrow_direction,
+		"fire_time_left": fire_time_left
+	}
 
 
 func should_force_network_runtime_state_sampling() -> bool:
@@ -314,13 +320,15 @@ func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
 
 
 func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
-	super._apply_custom_network_runtime_state(custom_state)
+	if custom_state.is_empty():
+		return
+	attack_cooldown_left = float(custom_state.get("attack_cooldown_left", attack_cooldown_left))
+	archer_state = int(custom_state.get("archer_state", archer_state))
+	archer_state_time_left = float(custom_state.get("archer_state_time_left", archer_state_time_left))
+	arrow_direction = custom_state.get("arrow_direction", arrow_direction) as Vector2
+	fire_time_left = float(custom_state.get("fire_time_left", fire_time_left))
 	if network_simulation_enabled:
 		return
-	if not custom_state.has("archer_projectiles"):
-		return
-	var projectile_runtime_state := custom_state.get("archer_projectiles", []) as Array
-	_apply_projectile_runtime_state(projectile_runtime_state)
 
 
 func _build_projectile_runtime_state() -> Array:

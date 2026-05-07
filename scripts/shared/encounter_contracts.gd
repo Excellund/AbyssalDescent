@@ -24,7 +24,6 @@ const KEY_DOOR := "door"
 const KEY_LABEL := "label"
 const KEY_COLOR := "color"
 const KEY_KIND_ID := "kind_id"
-const KEY_KIND := "kind"
 const KEY_ICON := "icon"
 const KEY_REWARD := "reward"
 const KEY_PROFILE := "profile"
@@ -145,7 +144,7 @@ static func _build_encounter_registry() -> Array[Dictionary]:
 				"short_label": "Rest",
 				"color": Color(0.66, 1.0, 0.76, 0.92),
 				"icon": "rest",
-				"kind": DOOR_KIND_REST,
+				"kind_id": DOOR_KIND_REST,
 				"reward": ENUMS.RewardMode.NONE,
 				"prompt_name_suffix": ""
 			}
@@ -329,7 +328,7 @@ static func _build_encounter_registry() -> Array[Dictionary]:
 				"short_label": "Boss",
 				"color": Color(0.96, 0.46, 0.18, 0.98),
 				"icon": "boss",
-				"kind": DOOR_KIND_BOSS,
+				"kind_id": DOOR_KIND_BOSS,
 				"reward": ENUMS.RewardMode.NONE,
 				"prompt_name_suffix": " Gate"
 			}
@@ -345,7 +344,7 @@ static func _build_encounter_registry() -> Array[Dictionary]:
 				"short_label": "Boss",
 				"color": Color(0.92, 0.28, 0.1, 0.98),
 				"icon": "boss",
-				"kind": DOOR_KIND_BOSS,
+				"kind_id": DOOR_KIND_BOSS,
 				"reward": ENUMS.RewardMode.NONE,
 				"prompt_name_suffix": " Gate"
 			}
@@ -361,7 +360,7 @@ static func _build_encounter_registry() -> Array[Dictionary]:
 				"short_label": "Boss",
 				"color": Color(0.34, 0.92, 0.74, 0.98),
 				"icon": "boss",
-				"kind": DOOR_KIND_BOSS,
+				"kind_id": DOOR_KIND_BOSS,
 				"reward": ENUMS.RewardMode.NONE,
 				"prompt_name_suffix": " Gate"
 			}
@@ -455,15 +454,6 @@ static func _door_kind_from_legacy(value: String) -> int:
 			return DOOR_KIND_REST
 		_:
 			return DOOR_KIND_ENCOUNTER
-
-static func _door_kind_to_legacy(value: int) -> String:
-	match value:
-		DOOR_KIND_BOSS:
-			return "boss"
-		DOOR_KIND_REST:
-			return "rest"
-		_:
-			return "encounter"
 
 static func normalize_door_kind(value: Variant) -> int:
 	if value is int:
@@ -1076,7 +1066,6 @@ static func door_option(label: String, color: Color, kind: Variant, icon: String
 		KEY_LABEL: label,
 		KEY_COLOR: color,
 		KEY_KIND_ID: kind_id,
-		KEY_KIND: _door_kind_to_legacy(kind_id),
 		KEY_ICON: icon,
 		KEY_REWARD: normalize_reward_mode(reward_mode),
 		KEY_PROFILE: room_profile,
@@ -1090,7 +1079,7 @@ static func normalize_door_option(value: Variant) -> Dictionary:
 	return door_option(
 		String(option.get(KEY_LABEL, "Encounter")),
 		option.get(KEY_COLOR, Color(0.85, 0.9, 1.0, 0.95)) as Color,
-		option.get(KEY_KIND_ID, option.get(KEY_KIND, DOOR_KIND_ENCOUNTER)),
+		option.get(KEY_KIND_ID, DOOR_KIND_ENCOUNTER),
 		String(option.get(KEY_ICON, "easy")),
 		int(option.get(KEY_REWARD, ENUMS.RewardMode.NONE)),
 		option.get(KEY_PROFILE, {}) as Dictionary,
@@ -1102,7 +1091,7 @@ static func rest_door_option() -> Dictionary:
 	return door_option(
 		String(presentation.get("label", "Rest Site")),
 		presentation.get("color", Color(0.66, 1.0, 0.76, 0.92)) as Color,
-		presentation.get("kind", DOOR_KIND_REST),
+		presentation.get("kind_id", DOOR_KIND_REST),
 		String(presentation.get("icon", "rest")),
 		int(presentation.get("reward", ENUMS.RewardMode.NONE)),
 		{},
@@ -1118,7 +1107,7 @@ static func boss_door_option(encounter_key: String) -> Dictionary:
 	return door_option(
 		String(presentation.get("label", "Boss")),
 		presentation.get("color", Color(0.95, 0.18, 0.22, 0.98)) as Color,
-		presentation.get("kind", DOOR_KIND_BOSS),
+		presentation.get("kind_id", DOOR_KIND_BOSS),
 		String(presentation.get("icon", "boss")),
 		int(presentation.get("reward", ENUMS.RewardMode.NONE)),
 		{},
@@ -1201,7 +1190,7 @@ static func door_option_get_position(option: Dictionary) -> Vector2:
 	return option.get(KEY_POSITION, Vector2.ZERO) as Vector2
 
 static func door_option_kind_id(option: Dictionary) -> int:
-	return normalize_door_kind(option.get(KEY_KIND_ID, option.get(KEY_KIND, DOOR_KIND_ENCOUNTER)))
+	return normalize_door_kind(option.get(KEY_KIND_ID, DOOR_KIND_ENCOUNTER))
 
 static func door_option_reward_mode(option: Dictionary) -> int:
 	return normalize_reward_mode(option.get(KEY_REWARD, ENUMS.RewardMode.NONE))

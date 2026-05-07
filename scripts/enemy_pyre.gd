@@ -18,6 +18,16 @@ const PYRE_FIELD_SCRIPT := preload("res://scripts/pyre_field.gd")
 var attack_cooldown_left: float = 0.0
 var _attack_sync_was_active: bool = false
 
+func _get_custom_network_runtime_state() -> Dictionary:
+	return {"attack_cooldown_left": attack_cooldown_left}
+
+
+func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
+	if custom_state.is_empty():
+		return
+	attack_cooldown_left = float(custom_state.get("attack_cooldown_left", attack_cooldown_left))
+
+
 func _ready() -> void:
 	super()
 	max_health = 62

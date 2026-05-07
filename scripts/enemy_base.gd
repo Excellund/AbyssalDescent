@@ -149,32 +149,6 @@ var _visual_lod_refresh_left: float = 0.0
 var _remote_visual_update_left: float = 0.0
 var _remote_visual_update_accum: float = 0.0
 
-const NETWORK_ATTACK_STATE_KEYWORDS: PackedStringArray = [
-	"state",
-	"cooldown",
-	"attack",
-	"windup",
-	"recover",
-	"slam",
-	"beam",
-	"shield",
-	"telegraph",
-	"charge",
-	"time_left",
-	"direction",
-	"facing"
-]
-const NETWORK_ATTACK_STATE_EXCLUDED: Dictionary = {
-	"target": true,
-	"target_candidates": true,
-	"health_bar": true,
-	"health_bar_recent_damage_overlay": true,
-	"health_bar_threshold_overlay": true,
-	"health_bar_threshold_markers": true,
-	"health_state": true,
-	"projectiles": true,
-	"projectile_directions": true
-}
 
 func _ready() -> void:
 	motion_mode = CharacterBody2D.MOTION_MODE_FLOATING
@@ -420,56 +394,11 @@ func apply_network_runtime_state(runtime_state: Dictionary) -> void:
 
 
 func _get_custom_network_runtime_state() -> Dictionary:
-	return _collect_attack_network_state()
+	return {}
 
 
 func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
-	if custom_state.is_empty():
-		return
-	for key_variant in custom_state.keys():
-		var property_name := String(key_variant)
-		if NETWORK_ATTACK_STATE_EXCLUDED.has(property_name):
-			continue
-		if not _has_script_property(property_name):
-			continue
-		var value: Variant = custom_state.get(property_name)
-		if _is_serializable_network_value(value):
-			if typeof(value) == TYPE_VECTOR2 and _is_directional_property_name(property_name):
-				if not network_simulation_enabled:
-					_set_remote_direction_target(property_name, value as Vector2)
-					continue
-				var current_value: Variant = get(property_name)
-				if typeof(current_value) == TYPE_VECTOR2:
-					var current_direction := current_value as Vector2
-					var target_direction := value as Vector2
-					if current_direction.length_squared() > 0.000001 and target_direction.length_squared() > 0.000001:
-						var blend_weight := clampf(network_runtime_direction_blend, 0.0, 1.0)
-						var blended_direction := current_direction.slerp(target_direction.normalized() * target_direction.length(), blend_weight)
-						set(property_name, blended_direction)
-						continue
-			set(property_name, value)
-
-
-func _collect_attack_network_state() -> Dictionary:
-	var state: Dictionary = {}
-	for property_variant in get_property_list():
-		if not (property_variant is Dictionary):
-			continue
-		var property := property_variant as Dictionary
-		var usage := int(property.get("usage", 0))
-		if (usage & PROPERTY_USAGE_SCRIPT_VARIABLE) == 0:
-			continue
-		var property_name := String(property.get("name", ""))
-		if property_name.is_empty():
-			continue
-		if NETWORK_ATTACK_STATE_EXCLUDED.has(property_name):
-			continue
-		if not _is_attack_state_property_name(property_name):
-			continue
-		var value: Variant = get(property_name)
-		if _is_serializable_network_value(value):
-			state[property_name] = value
-	return state
+	pass
 
 
 func _has_script_property(property_name: String) -> bool:
@@ -484,35 +413,9 @@ func _has_script_property(property_name: String) -> bool:
 	return false
 
 
-func _is_attack_state_property_name(property_name: String) -> bool:
-	var lowered := property_name.to_lower()
-	for keyword in NETWORK_ATTACK_STATE_KEYWORDS:
-		if lowered.findn(String(keyword)) >= 0:
-			return true
-	return false
-
-
 func _is_directional_property_name(property_name: String) -> bool:
 	var lowered := property_name.to_lower()
 	return lowered.findn("facing") >= 0 or lowered.findn("direction") >= 0
-
-
-func _is_serializable_network_value(value: Variant) -> bool:
-	match typeof(value):
-		TYPE_NIL, TYPE_BOOL, TYPE_INT, TYPE_FLOAT, TYPE_STRING, TYPE_VECTOR2, TYPE_VECTOR2I, TYPE_VECTOR3, TYPE_VECTOR3I, TYPE_COLOR:
-			return true
-		TYPE_ARRAY:
-			for item in value:
-				if not _is_serializable_network_value(item):
-					return false
-			return true
-		TYPE_DICTIONARY:
-			for key_variant in value.keys():
-				if not _is_serializable_network_value(value.get(key_variant)):
-					return false
-			return true
-		_:
-			return false
 
 
 func get_network_facing_angle() -> float:

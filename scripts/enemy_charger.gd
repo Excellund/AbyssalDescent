@@ -25,6 +25,28 @@ var charger_charge_hit_applied: bool = false
 var charge_enemy_exceptions: Dictionary = {}
 var _attack_sync_was_active: bool = false
 
+func _get_custom_network_runtime_state() -> Dictionary:
+	return {
+		"attack_cooldown_left": attack_cooldown_left,
+		"charger_state": charger_state,
+		"charger_state_time_left": charger_state_time_left,
+		"charger_charge_direction": charger_charge_direction,
+		"charger_charge_preview_length": charger_charge_preview_length,
+		"charger_charge_hit_applied": charger_charge_hit_applied
+	}
+
+
+func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
+	if custom_state.is_empty():
+		return
+	attack_cooldown_left = float(custom_state.get("attack_cooldown_left", attack_cooldown_left))
+	charger_state = int(custom_state.get("charger_state", charger_state))
+	charger_state_time_left = float(custom_state.get("charger_state_time_left", charger_state_time_left))
+	charger_charge_direction = custom_state.get("charger_charge_direction", charger_charge_direction) as Vector2
+	charger_charge_preview_length = float(custom_state.get("charger_charge_preview_length", charger_charge_preview_length))
+	charger_charge_hit_applied = bool(custom_state.get("charger_charge_hit_applied", charger_charge_hit_applied))
+
+
 func _process_behavior(delta: float) -> void:
 	_update_attack_cooldown(delta)
 	_process_state_machine(delta)

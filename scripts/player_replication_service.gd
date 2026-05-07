@@ -8,9 +8,11 @@ var position_broadcast_threshold_px: float = 2.0  ## Broadcast low-latency movem
 var rotation_broadcast_threshold_rad: float = deg_to_rad(2.0)
 var position_transmit_quantum_px: float = 0.5
 var rotation_transmit_quantum_rad: float = deg_to_rad(2.0)
-var remote_position_lerp_speed: float = 18.0
-var remote_rotation_lerp_speed: float = 20.0
 var remote_position_snap_distance_px: float = 180.0
+## Half-life in seconds for remote position/rotation interpolation (frame-rate independent).
+## Lower value = snappier; higher value = smoother.
+var remote_position_lerp_half_life_sec: float = 0.04
+var remote_rotation_lerp_half_life_sec: float = 0.035
 var feedback_sync_interval_sec: float = 0.05
 var feedback_sync_payload_budget_bytes: int = 640
 
@@ -94,6 +96,26 @@ func unregister_player(peer_id: int) -> void:
 	_last_applied_health_sequence_by_peer.erase(peer_id)
 
 
+## Returns true when this peer is authoritative for the given peer_id:
+## always true for the host, or for a client broadcasting their own peer.
+func _is_authority_for_peer(peer_id: int) -> bool:
+	return (multiplayer_session_manager != null and bool(multiplayer_session_manager.is_host())) \
+		or peer_id == local_peer_id
+
+
+## Looks up the player node for peer_id. Returns null and cleans up if invalid.
+func _get_player_node(peer_id: int) -> Node:
+	var variant: Variant = player_nodes.get(peer_id)
+	if not is_instance_valid(variant):
+		_remove_invalid_player(peer_id)
+		return null
+	var node := variant as Node
+	if node == null:
+		_remove_invalid_player(peer_id)
+		return null
+	return node
+
+
 func _remove_invalid_player(peer_id: int) -> void:
 	player_nodes.erase(peer_id)
 	_last_sync_positions.erase(peer_id)
@@ -121,7 +143,7 @@ func broadcast_feedback_event(peer_id: int, event_name: String, payload: Diction
 		return
 	if event_name.is_empty() or payload.is_empty():
 		return
-	if not ((multiplayer_session_manager != null and bool(multiplayer_session_manager.is_host())) or peer_id == local_peer_id):
+	if not _is_authority_for_peer(peer_id):
 		return
 	var pending_variant: Variant = _pending_feedback_events_by_peer.get(peer_id, [])
 	var pending_events: Array[Dictionary] = []
@@ -235,14 +257,8 @@ func _sync_player_transform(peer_id: int, position: Vector2, facing_radians: flo
 		return
 	if peer_id == local_peer_id:
 		return
-	
-	var player_node_variant: Variant = player_nodes.get(peer_id)
-	if not is_instance_valid(player_node_variant):
-		_remove_invalid_player(peer_id)
-		return
-	var player_node := player_node_variant as Node
+	var player_node := _get_player_node(peer_id)
 	if player_node == null:
-		_remove_invalid_player(peer_id)
 		return
 	var player_body := player_node as Node2D
 	if player_body != null:
@@ -254,18 +270,13 @@ func _sync_player_transform(peer_id: int, position: Vector2, facing_radians: flo
 
 
 func _interpolate_remote_players(delta: float) -> void:
-	var position_weight := clampf(delta * remote_position_lerp_speed, 0.0, 1.0)
-	var rotation_weight := clampf(delta * remote_rotation_lerp_speed, 0.0, 1.0)
+	var position_weight := 1.0 - pow(0.5, delta / maxf(0.0001, remote_position_lerp_half_life_sec))
+	var rotation_weight := 1.0 - pow(0.5, delta / maxf(0.0001, remote_rotation_lerp_half_life_sec))
 	for peer_id in player_nodes.keys():
 		if peer_id == local_peer_id:
 			continue
-		var player_node_variant: Variant = player_nodes.get(peer_id)
-		if not is_instance_valid(player_node_variant):
-			_remove_invalid_player(peer_id)
-			continue
-		var player_node := player_node_variant as Node
+		var player_node := _get_player_node(peer_id)
 		if player_node == null:
-			_remove_invalid_player(peer_id)
 			continue
 		var player_body := player_node as Node2D
 		if player_body == null:
@@ -304,14 +315,8 @@ func _sync_player_health(peer_id: int, health: float, health_sequence: int = 0) 
 		if health_sequence <= last_applied_sequence:
 			return
 		_last_applied_health_sequence_by_peer[peer_id] = health_sequence
-	
-	var player_node_variant: Variant = player_nodes.get(peer_id)
-	if not is_instance_valid(player_node_variant):
-		_remove_invalid_player(peer_id)
-		return
-	var player_node := player_node_variant as Node
+	var player_node := _get_player_node(peer_id)
 	if player_node == null:
-		_remove_invalid_player(peer_id)
 		return
 	if health > 0.0 and player_node.has_method("is_dead") and bool(player_node.call("is_dead")):
 		# Dead players must only transition back through explicit revive sync.
@@ -329,14 +334,8 @@ func _sync_player_health(peer_id: int, health: float, health_sequence: int = 0) 
 func _sync_player_alive_status(peer_id: int, is_alive: bool) -> void:
 	if peer_id not in player_nodes:
 		return
-	
-	var player_node_variant: Variant = player_nodes.get(peer_id)
-	if not is_instance_valid(player_node_variant):
-		_remove_invalid_player(peer_id)
-		return
-	var player_node := player_node_variant as Node
+	var player_node := _get_player_node(peer_id)
 	if player_node == null:
-		_remove_invalid_player(peer_id)
 		return
 	if player_node.has_method("set_alive"):
 		player_node.set_alive(is_alive)
@@ -349,14 +348,8 @@ func _sync_player_alive_status(peer_id: int, is_alive: bool) -> void:
 func _sync_player_revived(peer_id: int, revived_health: float = 1.0) -> void:
 	if peer_id not in player_nodes:
 		return
-	
-	var player_node_variant: Variant = player_nodes.get(peer_id)
-	if not is_instance_valid(player_node_variant):
-		_remove_invalid_player(peer_id)
-		return
-	var player_node := player_node_variant as Node
+	var player_node := _get_player_node(peer_id)
 	if player_node == null:
-		_remove_invalid_player(peer_id)
 		return
 	if player_node.has_method("revive_with_health"):
 		player_node.revive_with_health(revived_health)
@@ -367,7 +360,7 @@ func _sync_player_revived(peer_id: int, revived_health: float = 1.0) -> void:
 ## Called by player's health_state when health changes.
 ## Should be called from player.gd's health signal handler.
 func broadcast_health_change(peer_id: int, health: float) -> void:
-	if (multiplayer_session_manager != null and bool(multiplayer_session_manager.is_host())) or peer_id == local_peer_id:
+	if _is_authority_for_peer(peer_id):
 		var next_sequence := int(_outgoing_health_sequence_by_peer.get(peer_id, 0)) + 1
 		_outgoing_health_sequence_by_peer[peer_id] = next_sequence
 		_sync_player_health.rpc(peer_id, health, next_sequence)
@@ -376,21 +369,21 @@ func broadcast_health_change(peer_id: int, health: float) -> void:
 ## Called by player when they die.
 ## Should be called from player.gd's death signal handler.
 func broadcast_player_died(peer_id: int) -> void:
-	if (multiplayer_session_manager != null and bool(multiplayer_session_manager.is_host())) or peer_id == local_peer_id:
+	if _is_authority_for_peer(peer_id):
 		_sync_player_alive_status.rpc(peer_id, false)
 
 
 ## Called when a revived player regains control.
 ## Should be called after encounter clear or revival trigger.
 func broadcast_player_revived(peer_id: int, health: float = 1.0) -> void:
-	if (multiplayer_session_manager != null and bool(multiplayer_session_manager.is_host())) or peer_id == local_peer_id:
+	if _is_authority_for_peer(peer_id):
 		_sync_player_revived.rpc(peer_id, health)
 
 
 func broadcast_attack_indicator(peer_id: int, attack_direction: Vector2, attack_range: float, attack_arc_degrees: float, swing_color: Color, swing_duration: float = 0.12) -> void:
 	if peer_id <= 0:
 		return
-	if (multiplayer_session_manager != null and bool(multiplayer_session_manager.is_host())) or peer_id == local_peer_id:
+	if _is_authority_for_peer(peer_id):
 		_sync_attack_indicator.rpc(peer_id, attack_direction, attack_range, attack_arc_degrees, swing_color, swing_duration)
 
 
@@ -400,13 +393,8 @@ func _sync_attack_indicator(peer_id: int, attack_direction: Vector2, attack_rang
 		return
 	if peer_id == local_peer_id:
 		return
-	var player_node_variant: Variant = player_nodes.get(peer_id)
-	if not is_instance_valid(player_node_variant):
-		_remove_invalid_player(peer_id)
-		return
-	var player_node := player_node_variant as Node
+	var player_node := _get_player_node(peer_id)
 	if player_node == null:
-		_remove_invalid_player(peer_id)
 		return
 	if player_node.has_method("play_network_attack_indicator"):
 		player_node.play_network_attack_indicator(attack_direction, attack_range, attack_arc_degrees, swing_color, swing_duration)
@@ -417,7 +405,7 @@ func broadcast_player_build_snapshot(peer_id: int, snapshot: Dictionary) -> void
 		return
 	if snapshot.is_empty():
 		return
-	if (multiplayer_session_manager != null and bool(multiplayer_session_manager.is_host())) or peer_id == local_peer_id:
+	if _is_authority_for_peer(peer_id):
 		_sync_player_build_snapshot.rpc(peer_id, snapshot)
 
 
@@ -429,13 +417,8 @@ func _sync_player_build_snapshot(peer_id: int, snapshot: Dictionary) -> void:
 		return
 	if snapshot.is_empty():
 		return
-	var player_node_variant: Variant = player_nodes.get(peer_id)
-	if not is_instance_valid(player_node_variant):
-		_remove_invalid_player(peer_id)
-		return
-	var player_node := player_node_variant as Node
+	var player_node := _get_player_node(peer_id)
 	if player_node == null:
-		_remove_invalid_player(peer_id)
 		return
 	if player_node.has_method("apply_network_build_snapshot"):
 		player_node.apply_network_build_snapshot(snapshot)
@@ -456,13 +439,8 @@ func _apply_network_feedback_events(peer_id: int, events: Array[Dictionary]) -> 
 		return
 	if events.is_empty():
 		return
-	var player_node_variant: Variant = player_nodes.get(peer_id)
-	if not is_instance_valid(player_node_variant):
-		_remove_invalid_player(peer_id)
-		return
-	var player_node := player_node_variant as Node
+	var player_node := _get_player_node(peer_id)
 	if player_node == null:
-		_remove_invalid_player(peer_id)
 		return
 	if peer_id == local_peer_id:
 		if not player_node.has_method("apply_owner_feedback_event"):

@@ -42,6 +42,26 @@ var _blink_target_global: Vector2 = Vector2.ZERO
 var _strike_facing: Vector2 = Vector2.LEFT
 var _attack_sync_was_active: bool = false
 
+func _get_custom_network_runtime_state() -> Dictionary:
+	return {
+		"spectre_state": spectre_state,
+		"state_time_left": state_time_left,
+		"attack_cooldown_left": attack_cooldown_left,
+		"blink_target_global": _blink_target_global,
+		"strike_facing": _strike_facing
+	}
+
+
+func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
+	if custom_state.is_empty():
+		return
+	spectre_state = int(custom_state.get("spectre_state", spectre_state))
+	state_time_left = float(custom_state.get("state_time_left", state_time_left))
+	attack_cooldown_left = float(custom_state.get("attack_cooldown_left", attack_cooldown_left))
+	_blink_target_global = custom_state.get("blink_target_global", _blink_target_global) as Vector2
+	_strike_facing = custom_state.get("strike_facing", _strike_facing) as Vector2
+
+
 func _ready() -> void:
 	super()
 	max_health = 78

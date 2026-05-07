@@ -30,6 +30,24 @@ var _strike_hit_applied: bool = false
 var _strike_previous_position: Vector2 = Vector2.ZERO
 var _attack_sync_was_active: bool = false
 
+func _get_custom_network_runtime_state() -> Dictionary:
+	return {
+		"lurker_state": lurker_state,
+		"state_time_left": state_time_left,
+		"attack_cooldown_left": attack_cooldown_left,
+		"lunge_direction": _lunge_direction
+	}
+
+
+func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
+	if custom_state.is_empty():
+		return
+	lurker_state = int(custom_state.get("lurker_state", lurker_state))
+	state_time_left = float(custom_state.get("state_time_left", state_time_left))
+	attack_cooldown_left = float(custom_state.get("attack_cooldown_left", attack_cooldown_left))
+	_lunge_direction = custom_state.get("lunge_direction", _lunge_direction) as Vector2
+
+
 func _ready() -> void:
 	super()
 	max_health = 95

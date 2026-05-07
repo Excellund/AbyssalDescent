@@ -146,7 +146,7 @@ func _draw() -> void:
 		_focused_chip_morph = 0.0
 
 func _draw_challenge_door_vfx(door: Dictionary, door_pulse: float, is_focused: bool) -> void:
-	var kind_id: int = ENCOUNTER_CONTRACTS.normalize_door_kind(door.get("kind_id", door.get("kind", ENCOUNTER_CONTRACTS.DOOR_KIND_ENCOUNTER)))
+	var kind_id: int = ENCOUNTER_CONTRACTS.normalize_door_kind(door.get("kind_id", ENCOUNTER_CONTRACTS.DOOR_KIND_ENCOUNTER))
 	if kind_id != ENUMS.DoorKind.BOSS:
 		return
 
@@ -167,13 +167,13 @@ func _draw_challenge_door_vfx(door: Dictionary, door_pulse: float, is_focused: b
 		return
 
 func _is_superior_door(door: Dictionary) -> bool:
-	var kind_id: int = ENCOUNTER_CONTRACTS.normalize_door_kind(door.get("kind_id", door.get("kind", ENCOUNTER_CONTRACTS.DOOR_KIND_ENCOUNTER)))
+	var kind_id: int = ENCOUNTER_CONTRACTS.normalize_door_kind(door.get("kind_id", ENCOUNTER_CONTRACTS.DOOR_KIND_ENCOUNTER))
 	if kind_id == ENUMS.DoorKind.BOSS:
 		return true
 	return String(door.get("icon", "")) == "trial"
 
 func _superior_door_tag(door: Dictionary) -> String:
-	var kind_id: int = ENCOUNTER_CONTRACTS.normalize_door_kind(door.get("kind_id", door.get("kind", ENCOUNTER_CONTRACTS.DOOR_KIND_ENCOUNTER)))
+	var kind_id: int = ENCOUNTER_CONTRACTS.normalize_door_kind(door.get("kind_id", ENCOUNTER_CONTRACTS.DOOR_KIND_ENCOUNTER))
 	if kind_id == ENUMS.DoorKind.BOSS:
 		return "BOSS"
 	return "TRIAL"
@@ -589,7 +589,7 @@ func _draw_door_icon(door: Dictionary) -> void:
 	var door_pos: Vector2 = door["position"]
 	var icon_color := Color(0.97, 0.98, 1.0, 0.96)
 	var outline_color := Color(0.08, 0.1, 0.14, 0.88)
-	var kind_id: int = ENCOUNTER_CONTRACTS.normalize_door_kind(door.get("kind_id", door.get("kind", ENCOUNTER_CONTRACTS.DOOR_KIND_ENCOUNTER)))
+	var kind_id: int = ENCOUNTER_CONTRACTS.normalize_door_kind(door.get("kind_id", ENCOUNTER_CONTRACTS.DOOR_KIND_ENCOUNTER))
 	var icon := String(door.get("icon", "easy"))
 
 	if kind_id == ENUMS.DoorKind.BOSS:

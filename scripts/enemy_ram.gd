@@ -32,6 +32,28 @@ var _charge_hit_applied: bool = false
 var _charge_enemy_exceptions: Dictionary = {}
 var _attack_sync_was_active: bool = false
 
+func _get_custom_network_runtime_state() -> Dictionary:
+	return {
+		"ram_state": ram_state,
+		"state_time_left": state_time_left,
+		"attack_cooldown_left": attack_cooldown_left,
+		"charge_direction": _charge_direction,
+		"charges_remaining": _charges_remaining,
+		"charge_hit_applied": _charge_hit_applied
+	}
+
+
+func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
+	if custom_state.is_empty():
+		return
+	ram_state = int(custom_state.get("ram_state", ram_state))
+	state_time_left = float(custom_state.get("state_time_left", state_time_left))
+	attack_cooldown_left = float(custom_state.get("attack_cooldown_left", attack_cooldown_left))
+	_charge_direction = custom_state.get("charge_direction", _charge_direction) as Vector2
+	_charges_remaining = int(custom_state.get("charges_remaining", _charges_remaining))
+	_charge_hit_applied = bool(custom_state.get("charge_hit_applied", _charge_hit_applied))
+
+
 func _ready() -> void:
 	super()
 	# Override crowd separation for charging through enemy swarms
