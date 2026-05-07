@@ -167,12 +167,21 @@ func _exit_tree() -> void:
 		lobby_music_player.stop()
 
 
+func _tree_or_null() -> SceneTree:
+	if not is_inside_tree():
+		return null
+	return get_tree()
+
+
 func _client_can_send_rpcs() -> bool:
 	if multiplayer_session_manager == null or not multiplayer_session_manager.session_connected:
 		return false
 	if bool(multiplayer_session_manager.is_host()):
 		return true
-	var multiplayer_api := get_tree().get_multiplayer()
+	var tree := _tree_or_null()
+	if tree == null:
+		return false
+	var multiplayer_api := tree.get_multiplayer()
 	if multiplayer_api == null:
 		return false
 	var active_peer: MultiplayerPeer = multiplayer_api.multiplayer_peer
@@ -350,7 +359,10 @@ func _on_peer_disconnected(peer_id: int) -> void:
 func _on_host_left() -> void:
 	_disable_lobby_controls()
 	status_label.text = "The host has ended the session. Returning to menu..."
-	var timer := get_tree().create_timer(2.5)
+	var tree := _tree_or_null()
+	if tree == null:
+		return
+	var timer := tree.create_timer(2.5)
 	timer.timeout.connect(_leave_after_host_disconnect)
 
 func _disable_lobby_controls() -> void:
@@ -366,14 +378,19 @@ func _leave_after_host_disconnect() -> void:
 	if _embedded_in_menu:
 		emit_signal("leave_lobby_requested")
 	else:
-		get_tree().change_scene_to_file(MENU_SCENE_PATH)
+		var tree := _tree_or_null()
+		if tree == null:
+			return
+		tree.change_scene_to_file(MENU_SCENE_PATH)
 
 
 func _on_session_joined(_session_id: String) -> void:
 	print("[Lobby] Signal: session_joined received. session_id=%s" % _session_id)
 	local_peer_id = int(multiplayer_session_manager.local_peer_id)
 	if local_peer_id <= 0:
-		local_peer_id = int(get_tree().get_multiplayer().get_unique_id())
+		var tree := _tree_or_null()
+		if tree != null:
+			local_peer_id = int(tree.get_multiplayer().get_unique_id())
 	print("[Lobby] Local peer ID confirmed: %d" % local_peer_id)
 	_ensure_local_peer_state(local_character_id)
 	print("[Lobby] After _ensure_local_peer_state, peer_state: %s" % [str(peer_state)])
@@ -484,7 +501,10 @@ func _apply_character_selection(peer_id: int, character_id: String) -> void:
 func _request_character_selection(character_id: String) -> void:
 	if not bool(multiplayer_session_manager.is_host()):
 		return
-	var sender_peer_id := get_tree().get_multiplayer().get_remote_sender_id()
+	var tree := _tree_or_null()
+	if tree == null:
+		return
+	var sender_peer_id := tree.get_multiplayer().get_remote_sender_id()
 	if sender_peer_id <= 0:
 		return
 	_broadcast_character_selection.rpc(sender_peer_id, character_id)
@@ -558,7 +578,10 @@ func _broadcast_local_player_name() -> void:
 func _request_player_name(player_name: String) -> void:
 	if not bool(multiplayer_session_manager.is_host()):
 		return
-	var sender_peer_id := get_tree().get_multiplayer().get_remote_sender_id()
+	var tree := _tree_or_null()
+	if tree == null:
+		return
+	var sender_peer_id := tree.get_multiplayer().get_remote_sender_id()
 	if sender_peer_id <= 0:
 		return
 	_broadcast_player_name.rpc(sender_peer_id, player_name)
@@ -573,7 +596,10 @@ func _broadcast_player_name(peer_id: int, player_name: String) -> void:
 func _request_ready_state(is_ready: bool) -> void:
 	if not bool(multiplayer_session_manager.is_host()):
 		return
-	var sender_peer_id := get_tree().get_multiplayer().get_remote_sender_id()
+	var tree := _tree_or_null()
+	if tree == null:
+		return
+	var sender_peer_id := tree.get_multiplayer().get_remote_sender_id()
 	if sender_peer_id <= 0:
 		return
 	_broadcast_ready_state.rpc(sender_peer_id, is_ready)
@@ -631,7 +657,10 @@ func _launch_main_game() -> void:
 @rpc("reliable", "authority", "call_local")
 func _start_game(host_peer_id: int, session_identifier: String, difficulty_tier: int, synced_peer_state: Dictionary) -> void:
 	peer_state = synced_peer_state.duplicate(true)
-	var multiplayer_api := get_tree().get_multiplayer()
+	var tree := _tree_or_null()
+	if tree == null:
+		return
+	var multiplayer_api := tree.get_multiplayer()
 	if multiplayer_api != null:
 		var active_peer_id := int(multiplayer_api.get_unique_id())
 		if active_peer_id > 0:
@@ -654,7 +683,7 @@ func _start_game(host_peer_id: int, session_identifier: String, difficulty_tier:
 		local_char_id = "bastion"
 	local_character_id = local_char_id
 	RunContext.set_selected_character_id(local_char_id)
-	get_tree().change_scene_to_file("res://scenes/Main.tscn")
+	tree.change_scene_to_file("res://scenes/Main.tscn")
 
 
 func _on_leave_lobby_pressed() -> void:
@@ -679,7 +708,10 @@ func _on_leave_lobby_pressed() -> void:
 		return
 
 	print("[Lobby] Changing scene to Menu")
-	get_tree().change_scene_to_file(MENU_SCENE_PATH)
+	var tree := _tree_or_null()
+	if tree == null:
+		return
+	tree.change_scene_to_file(MENU_SCENE_PATH)
 
 
 func _make_panel_style(bg_color: Color, border_color: Color, corner_radius: int = 14, border_width: int = 2) -> StyleBoxFlat:

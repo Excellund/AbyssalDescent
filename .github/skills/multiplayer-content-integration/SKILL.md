@@ -149,6 +149,7 @@ These documented patterns ensure multiplayer stays stable when adding content:
 - **`same_frame_destination_reservation.md`** — Entity serialization: ensure player/enemy position updates don't create impossible states
 - **`enemy_runtime_delta_semantics.md`** — Enemy sync: projectiles and state deltas replicate correctly across peers
 - **`trial_arcana_flow.md`** — Power application lifecycle: powers (trial or otherwise) apply consistently regardless of mode
+- **SceneTree lifecycle safety** — Any multiplayer UI or session flow that uses `await ...process_frame`, delayed timers, or scene transitions must guard `get_tree()` access with `is_inside_tree()`/null checks. If the node exits tree mid-await (menu close, lobby teardown, scene swap), stale callbacks must bail early instead of calling `get_tree()`.
 
 **When adding content**, if your feature touches any of these systems (e.g., new power with projectile sync, new objective with spawn state), cross-reference the guardrails to avoid violations.
 

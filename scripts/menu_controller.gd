@@ -181,13 +181,20 @@ func _join_local_dev_lobby() -> bool:
 func _change_to_lobby_scene() -> void:
 	_show_lobby_modal()
 
+
+func _tree_or_null() -> SceneTree:
+	if not is_inside_tree():
+		return null
+	return get_tree()
+
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED:
 		_apply_menu_layout()
 
 func _change_to_gameplay_scene() -> void:
-	if get_tree() != null:
-		get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)
+	var tree := _tree_or_null()
+	if tree != null:
+		tree.change_scene_to_file(GAMEPLAY_SCENE_PATH)
 
 
 ## Multiplayer entry points
@@ -205,7 +212,12 @@ func _create_multiplayer_room() -> void:
 	if multiplayer_session_manager.session_connected:
 		print("[Menu] WARNING: Previous session still connected. Cleaning up before creating new lobby...")
 		multiplayer_session_manager.leave_room()
-		await get_tree().process_frame  ## Wait one frame for cleanup
+		var cleanup_tree := _tree_or_null()
+		if cleanup_tree == null:
+			return
+		await cleanup_tree.process_frame  ## Wait one frame for cleanup
+		if _tree_or_null() == null:
+			return
 	
 	## Show "Creating..." status
 	if multiplayer_status_label != null:
@@ -220,6 +232,8 @@ func _create_multiplayer_room() -> void:
 	
 	print("[Menu] No config issues. Requesting room registration...")
 	var registration_result: Dictionary = await multiplayer_room_service.create_room_registration(9999)
+	if _tree_or_null() == null:
+		return
 	print("[Menu] Room registration result: %s" % registration_result)
 	
 	if not bool(registration_result.get("ok", false)):
@@ -266,7 +280,16 @@ func _join_multiplayer_room(room_code: String) -> void:
 	if multiplayer_session_manager != null and multiplayer_session_manager.session_connected:
 		print("[Menu] WARNING: Previous session still connected. Cleaning up before joining new room...")
 		multiplayer_session_manager.leave_room()
-		await get_tree().process_frame  ## Wait one frame for cleanup
+		var cleanup_tree := _tree_or_null()
+		if cleanup_tree == null:
+			if multiplayer_join_button != null:
+				multiplayer_join_button.disabled = false
+			return
+		await cleanup_tree.process_frame  ## Wait one frame for cleanup
+		if _tree_or_null() == null:
+			if multiplayer_join_button != null:
+				multiplayer_join_button.disabled = false
+			return
 	
 	if multiplayer_session_manager == null:
 		push_error("[Menu] MultiplayerSessionManager autoload is missing")
@@ -286,6 +309,10 @@ func _join_multiplayer_room(room_code: String) -> void:
 			multiplayer_join_button.disabled = false
 		return
 	var resolve_result: Dictionary = await multiplayer_room_service.resolve_room_code(room_code)
+	if _tree_or_null() == null:
+		if multiplayer_join_button != null:
+			multiplayer_join_button.disabled = false
+		return
 	if not bool(resolve_result.get("ok", false)):
 		if multiplayer_status_label != null:
 			multiplayer_status_label.text = _format_multiplayer_room_error(resolve_result, false)
@@ -306,6 +333,10 @@ func _join_multiplayer_room(room_code: String) -> void:
 		resolved_host_port,
 		begin_join
 	)
+	if _tree_or_null() == null:
+		if multiplayer_join_button != null:
+			multiplayer_join_button.disabled = false
+		return
 	if bool(join_result.get("ok", false)):
 		_show_lobby_modal()
 	else:
@@ -358,6 +389,10 @@ func _await_multiplayer_join_result(multiplayer_session_manager: Node, timeout_s
 	push_error("[JOIN DEBUG] Entering join timeout loop...")
 	_debug_log_menu("[JOIN] Starting timeout loop. Waiting for session_joined or connection_failed...")
 	while elapsed < timeout_sec and not state["joined"] and not state["failed"]:
+		if _tree_or_null() == null:
+			state["failed"] = true
+			state["failure_reason"] = "Join canceled while menu was closing."
+			break
 		if bool(multiplayer_session_manager.session_connected) and int(multiplayer_session_manager.local_peer_id) > 0:
 			state["joined"] = true
 			break
@@ -368,7 +403,12 @@ func _await_multiplayer_join_result(multiplayer_session_manager: Node, timeout_s
 			if multiplayer_status_label != null:
 				multiplayer_status_label.text = "Connecting to host %s:%d... %02d:%02d remaining" % [display_address, resolved_port, remaining_min, remaining_mod_sec]
 			next_ui_update_at = elapsed + ui_update_interval_sec
-		await get_tree().process_frame
+		var frame_tree := _tree_or_null()
+		if frame_tree == null:
+			state["failed"] = true
+			state["failure_reason"] = "Join canceled while menu was closing."
+			break
+		await frame_tree.process_frame
 		elapsed += get_process_delta_time()
 	if multiplayer_session_manager.session_joined.is_connected(on_joined):
 		multiplayer_session_manager.session_joined.disconnect(on_joined)
