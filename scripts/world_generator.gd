@@ -1606,6 +1606,7 @@ func _flush_pending_client_spawn_syncs() -> void:
 func _apply_synced_objective_spawn_batch_payload(payload: Dictionary) -> void:
 	var spawn_batch: Array = payload.get("spawn_batch", []) as Array
 	var synced_enemy_count := int(payload.get("synced_enemy_count", 0))
+	var source_room_sync_id := int(payload.get("room_sync_id", 0))
 	for spawn_entry_variant in spawn_batch:
 		if not (spawn_entry_variant is Dictionary):
 			continue
@@ -1628,6 +1629,7 @@ func _apply_synced_objective_spawn_batch_payload(payload: Dictionary) -> void:
 			if not enemy.died.is_connected(Callable(self, "_on_network_enemy_died").bind(captured_enemy_id)):
 				enemy.died.connect(Callable(self, "_on_network_enemy_died").bind(captured_enemy_id))
 	active_room_enemy_count = synced_enemy_count
+	_world_multiplayer_sync_state.apply_spawn_sync_id(source_room_sync_id)
 
 func _flush_pending_client_objective_spawn_syncs() -> void:
 	if not _world_multiplayer_sync_state.has_pending_objective_spawn_sync_payloads():
@@ -1678,6 +1680,7 @@ func _apply_synced_boss_spawn_payload(payload: Dictionary) -> void:
 	var boss_stage := int(payload.get("boss_stage", 0))
 	var enemy_id := int(payload.get("enemy_id", -1))
 	var spawn_position := payload.get("position", Vector2.ZERO) as Vector2
+	var source_room_sync_id := int(payload.get("room_sync_id", 0))
 	if boss_stage <= 0 or enemy_id <= 0:
 		return
 	var existing_enemy := _network_enemy_nodes.get(enemy_id) as Node2D
@@ -1688,11 +1691,13 @@ func _apply_synced_boss_spawn_payload(payload: Dictionary) -> void:
 	if is_instance_valid(boss):
 		_register_network_enemy(boss, enemy_id)
 	active_room_enemy_count = 1
+	_world_multiplayer_sync_state.apply_spawn_sync_id(source_room_sync_id)
 
 func _flush_pending_client_boss_spawn_syncs() -> void:
 	if not _world_multiplayer_sync_state.has_pending_boss_spawn_sync_payload():
 		return
-	if not _can_apply_client_boss_spawn_sync(_world_multiplayer_sync_state.peek_pending_boss_spawn_sync_payload()):
+	var peek_payload := _world_multiplayer_sync_state.peek_pending_boss_spawn_sync_payload()
+	if not _can_apply_client_boss_spawn_sync(peek_payload):
 		return
 	var payload := _world_multiplayer_sync_state.consume_pending_boss_spawn_sync_payload()
 	_apply_synced_boss_spawn_payload(payload)
