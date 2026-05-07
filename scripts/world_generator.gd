@@ -844,8 +844,7 @@ func _start_stress_test_arena() -> void:
 	call_deferred("_maybe_start_stress_test")
 
 func _begin_new_run_flow() -> void:
-	_world_multiplayer_sync_state.current_room_sync_id = 0
-	_world_multiplayer_sync_state.last_applied_spawn_sync_id = 0
+	_world_multiplayer_sync_state.reset_for_new_run()
 	_awaiting_authoritative_door_choice = false
 	rooms_cleared = 0
 	room_depth = 0
@@ -864,10 +863,8 @@ func _begin_new_run_flow() -> void:
 	pending_room_reward = ENUMS.RewardMode.NONE
 	current_room_enemy_mutator.clear()
 	current_room_player_mutator.clear()
-	_world_multiplayer_sync_state.pending_door_sync_payload.clear()
 	_pending_chosen_door.clear()
 	_pending_chosen_progress_state.clear()
-	_world_multiplayer_sync_state.pending_spawn_sync_payload.clear()
 	choosing_next_room = false
 	door_options.clear()
 	_doors_spawn_ready = false
@@ -2767,8 +2764,7 @@ func _begin_room(profile: Dictionary) -> void:
 	_pending_chosen_door.clear()
 	_pending_chosen_progress_state.clear()
 	if not is_multiplayer or MultiplayerSessionManager.is_host():
-		_world_multiplayer_sync_state.pending_spawn_sync_payload.clear()
-		_world_multiplayer_sync_state.pending_objective_spawn_sync_payloads.clear()
+		_world_multiplayer_sync_state.clear_pending_spawn_payloads()
 	choosing_next_room = false
 	door_options.clear()
 	encounter_intro_grace_active = false
@@ -2900,8 +2896,7 @@ func _begin_configured_boss_room(boss_stage: int, room_size: Vector2, room_label
 	_pending_chosen_door.clear()
 	_pending_chosen_progress_state.clear()
 	if not is_multiplayer or MultiplayerSessionManager.is_host():
-		_world_multiplayer_sync_state.pending_spawn_sync_payload.clear()
-		_world_multiplayer_sync_state.pending_objective_spawn_sync_payloads.clear()
+		_world_multiplayer_sync_state.clear_pending_spawn_payloads()
 	encounter_intro_grace_active = false
 	combat_phase_coordinator.begin_combat_phase(player, get_tree())
 	in_boss_room = boss_stage == 1
@@ -3946,8 +3941,7 @@ func _finalize_reward_phase_and_advance(is_initial: bool, mode: int) -> void:
 
 
 func _reset_progress_for_first_encounter() -> void:
-	_world_multiplayer_sync_state.current_room_sync_id = 0
-	_world_multiplayer_sync_state.last_applied_spawn_sync_id = 0
+	_world_multiplayer_sync_state.reset_for_new_run()
 	_awaiting_authoritative_door_choice = false
 	rooms_cleared = 0
 	room_depth = 0
@@ -3962,7 +3956,6 @@ func _reset_progress_for_first_encounter() -> void:
 	endless_boss_defeated = false
 	boss_reward_pending = false
 	last_defeated_boss_id = ""
-	_world_multiplayer_sync_state.pending_door_sync_payload.clear()
 	_pending_chosen_door.clear()
 	_pending_chosen_progress_state.clear()
 
