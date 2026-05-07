@@ -397,7 +397,7 @@ func _get_custom_network_runtime_state() -> Dictionary:
 	return {}
 
 
-func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
+func _apply_custom_network_runtime_state(_custom_state: Dictionary) -> void:
 	pass
 
 

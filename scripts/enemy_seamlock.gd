@@ -230,9 +230,9 @@ func _get_effective_arena_half() -> Vector2:
 	)
 
 func _clamp_to_active_room_bounds(world_pos: Vector2) -> Vector2:
-	var owner := get_parent()
-	if owner != null:
-		var effective_size_variant: Variant = owner.get("current_effective_room_size")
+	var parent_node := get_parent()
+	if parent_node != null:
+		var effective_size_variant: Variant = parent_node.get("current_effective_room_size")
 		if effective_size_variant is Vector2 and (effective_size_variant as Vector2) != Vector2.ZERO:
 			var half := (effective_size_variant as Vector2) * 0.5
 			return Vector2(
@@ -246,9 +246,9 @@ func _clamp_to_active_room_bounds(world_pos: Vector2) -> Vector2:
 	)
 
 func _get_active_room_bounds() -> Rect2:
-	var owner := get_parent()
-	if owner != null:
-		var effective_size_variant: Variant = owner.get("current_effective_room_size")
+	var parent_node := get_parent()
+	if parent_node != null:
+		var effective_size_variant: Variant = parent_node.get("current_effective_room_size")
 		if effective_size_variant is Vector2 and (effective_size_variant as Vector2) != Vector2.ZERO:
 			var effective_size := effective_size_variant as Vector2
 			return Rect2(-effective_size * 0.5, effective_size)
@@ -725,7 +725,7 @@ func _draw() -> void:
 
 	const BODY_COLOR     := Color(0.16, 0.10, 0.38, 1.0)
 	const CORE_COLOR     := Color(0.36, 0.86, 1.0, 1.0)
-	const GLOW_COLOR     := Color(0.42, 0.22, 0.74, 0.22)
+	const _GLOW_COLOR     := Color(0.42, 0.22, 0.74, 0.22)
 	const RING_COLOR     := Color(0.44, 0.28, 0.86, 0.46)
 	const BAND_WARN      := Color(1.0, 0.88, 0.26, 0.30)
 	const BAND_ACTIVE    := Color(1.0, 0.40, 0.16, 0.64)

@@ -49,6 +49,7 @@ const OBJECTIVE_PROGRESS_COORDINATOR_SCRIPT := preload("res://scripts/core/objec
 const ROOM_CLEAR_OUTCOME_COORDINATOR_SCRIPT := preload("res://scripts/core/room_clear_outcome_coordinator.gd")
 const COMBAT_PHASE_COORDINATOR_SCRIPT := preload("res://scripts/core/combat_phase_coordinator.gd")
 const PLAYER_FLOW_COORDINATOR_SCRIPT := preload("res://scripts/core/player_flow_coordinator.gd")
+const WORLD_MULTIPLAYER_SYNC_STATE_SCRIPT := preload("res://scripts/core/world_multiplayer_sync_state.gd")
 const RUN_CONTEXT_PATH := "/root/RunContext"
 const MENU_SCENE_PATH := "res://scenes/Menu.tscn"
 const RUN_SNAPSHOT_VERSION := 1
@@ -286,18 +287,10 @@ var _reward_phase_is_initial: bool = false
 var _reward_phase_mode: int = ENUMS.RewardMode.NONE
 var _reward_phase_completed_peers: Dictionary = {}  ## peer_id -> bool
 var _doors_spawn_ready: bool = false
-var _pending_door_sync_payload: Dictionary = {}
+var _world_multiplayer_sync_state = WORLD_MULTIPLAYER_SYNC_STATE_SCRIPT.new()
 var _pending_chosen_door: Dictionary = {}
 var _pending_chosen_progress_state: Dictionary = {}
 var _awaiting_authoritative_door_choice: bool = false
-var _joiner_awaiting_initial_sync: bool = false
-var _pending_spawn_sync_payload: Dictionary = {}
-var _pending_objective_spawn_sync_payloads: Array[Dictionary] = []
-var _pending_boss_spawn_sync_payload: Dictionary = {}
-var _current_room_sync_id: int = 0
-var _last_applied_spawn_sync_id: int = 0
-var _last_objective_cleared_room_sync_id: int = 0
-var _last_room_clear_processed_sync_id: int = -1
 var _depth_sanity_last_logged_depth: int = -1
 var _depth_sanity_last_log_usec: int = 0
 
@@ -459,7 +452,7 @@ func _setup_multiplayer_second_player() -> void:
 	
 	# Joiner flag: expect initial sync from host before applying normal sanitizer logic.
 	if not multiplayer_session_manager.is_host():
-		_joiner_awaiting_initial_sync = true
+		_world_multiplayer_sync_state.joiner_awaiting_initial_sync = true
 	
 	## Set multiplayer identification
 	var peer_ids: Array = multiplayer_session_manager.get_peer_ids()
@@ -847,12 +840,12 @@ func _start_stress_test_arena() -> void:
 	hud.show_banner("Stress Test Arena", "")
 	_initialize_run_telemetry(false)
 	hud.refresh(_get_hud_state(), player)
-	print_debug("[StressTest] Clean arena ready — scheduling stress test start")
+	print_debug("[StressTest] Clean arena ready - scheduling stress test start")
 	call_deferred("_maybe_start_stress_test")
 
 func _begin_new_run_flow() -> void:
-	_current_room_sync_id = 0
-	_last_applied_spawn_sync_id = 0
+	_world_multiplayer_sync_state.current_room_sync_id = 0
+	_world_multiplayer_sync_state.last_applied_spawn_sync_id = 0
 	_awaiting_authoritative_door_choice = false
 	rooms_cleared = 0
 	room_depth = 0
@@ -871,10 +864,10 @@ func _begin_new_run_flow() -> void:
 	pending_room_reward = ENUMS.RewardMode.NONE
 	current_room_enemy_mutator.clear()
 	current_room_player_mutator.clear()
-	_pending_door_sync_payload.clear()
+	_world_multiplayer_sync_state.pending_door_sync_payload.clear()
 	_pending_chosen_door.clear()
 	_pending_chosen_progress_state.clear()
-	_pending_spawn_sync_payload.clear()
+	_world_multiplayer_sync_state.pending_spawn_sync_payload.clear()
 	choosing_next_room = false
 	door_options.clear()
 	_doors_spawn_ready = false
@@ -1565,12 +1558,12 @@ func _flush_pending_client_door_syncs() -> void:
 		_awaiting_authoritative_door_choice = false
 		_choose_door(chosen_door)
 		_apply_progress_sync_state(progress_state)
-	if not _pending_door_sync_payload.is_empty():
-		var synced_door_options: Array = _pending_door_sync_payload.get("door_options", []) as Array
-		var synced_choosing_next_room := bool(_pending_door_sync_payload.get("choosing_next_room", false))
-		var synced_boss_unlocked := bool(_pending_door_sync_payload.get("boss_unlocked", boss_unlocked))
-		var progress_state := _pending_door_sync_payload.get("progress_state", {}) as Dictionary
-		_pending_door_sync_payload.clear()
+	if not _world_multiplayer_sync_state.pending_door_sync_payload.is_empty():
+		var synced_door_options: Array = _world_multiplayer_sync_state.pending_door_sync_payload.get("door_options", []) as Array
+		var synced_choosing_next_room := bool(_world_multiplayer_sync_state.pending_door_sync_payload.get("choosing_next_room", false))
+		var synced_boss_unlocked := bool(_world_multiplayer_sync_state.pending_door_sync_payload.get("boss_unlocked", boss_unlocked))
+		var progress_state := _world_multiplayer_sync_state.pending_door_sync_payload.get("progress_state", {}) as Dictionary
+		_world_multiplayer_sync_state.pending_door_sync_payload.clear()
 		_apply_synced_door_options_payload(synced_door_options, synced_choosing_next_room, synced_boss_unlocked, progress_state)
 
 func _can_apply_client_spawn_sync(payload: Dictionary) -> bool:
@@ -1580,11 +1573,11 @@ func _can_apply_client_spawn_sync(payload: Dictionary) -> bool:
 		return false
 	var source_room_sync_id := int(payload.get("room_sync_id", 0))
 	if source_room_sync_id > 0:
-		if source_room_sync_id < _current_room_sync_id:
+		if source_room_sync_id < _world_multiplayer_sync_state.current_room_sync_id:
 			return false
-		if source_room_sync_id > _current_room_sync_id:
-			if _current_room_sync_id == 0 and current_room_label == "Starting Chamber" and not _is_reward_selection_active():
-				_current_room_sync_id = source_room_sync_id
+		if source_room_sync_id > _world_multiplayer_sync_state.current_room_sync_id:
+			if _world_multiplayer_sync_state.current_room_sync_id == 0 and current_room_label == "Starting Chamber" and not _is_reward_selection_active():
+				_world_multiplayer_sync_state.current_room_sync_id = source_room_sync_id
 			else:
 				return false
 	if _is_reward_selection_active():
@@ -1615,16 +1608,16 @@ func _apply_synced_spawn_batch_payload(payload: Dictionary) -> void:
 			_register_network_enemy(enemy, enemy_id)
 	active_room_enemy_count = synced_enemy_count
 	if source_room_sync_id > 0:
-		_last_applied_spawn_sync_id = maxi(_last_applied_spawn_sync_id, source_room_sync_id)
-		_current_room_sync_id = maxi(_current_room_sync_id, source_room_sync_id)
+		_world_multiplayer_sync_state.last_applied_spawn_sync_id = maxi(_world_multiplayer_sync_state.last_applied_spawn_sync_id, source_room_sync_id)
+		_world_multiplayer_sync_state.current_room_sync_id = maxi(_world_multiplayer_sync_state.current_room_sync_id, source_room_sync_id)
 
 func _flush_pending_client_spawn_syncs() -> void:
-	if _pending_spawn_sync_payload.is_empty():
+	if _world_multiplayer_sync_state.pending_spawn_sync_payload.is_empty():
 		return
-	if not _can_apply_client_spawn_sync(_pending_spawn_sync_payload):
+	if not _can_apply_client_spawn_sync(_world_multiplayer_sync_state.pending_spawn_sync_payload):
 		return
-	var payload := _pending_spawn_sync_payload.duplicate(true)
-	_pending_spawn_sync_payload.clear()
+	var payload: Dictionary = _world_multiplayer_sync_state.pending_spawn_sync_payload.duplicate(true) as Dictionary
+	_world_multiplayer_sync_state.pending_spawn_sync_payload.clear()
 	_apply_synced_spawn_batch_payload(payload)
 
 func _apply_synced_objective_spawn_batch_payload(payload: Dictionary) -> void:
@@ -1654,18 +1647,18 @@ func _apply_synced_objective_spawn_batch_payload(payload: Dictionary) -> void:
 	active_room_enemy_count = synced_enemy_count
 
 func _flush_pending_client_objective_spawn_syncs() -> void:
-	if _pending_objective_spawn_sync_payloads.is_empty():
+	if _world_multiplayer_sync_state.pending_objective_spawn_sync_payloads.is_empty():
 		return
 	var remaining_payloads: Array[Dictionary] = []
-	for payload in _pending_objective_spawn_sync_payloads:
+	for payload in _world_multiplayer_sync_state.pending_objective_spawn_sync_payloads:
 		if not _can_apply_client_spawn_sync(payload):
 			var source_room_sync_id := int(payload.get("room_sync_id", 0))
-			if source_room_sync_id > 0 and source_room_sync_id < _current_room_sync_id:
+			if source_room_sync_id > 0 and source_room_sync_id < _world_multiplayer_sync_state.current_room_sync_id:
 				continue
 			remaining_payloads.append(payload)
 			continue
 		_apply_synced_objective_spawn_batch_payload(payload)
-	_pending_objective_spawn_sync_payloads = remaining_payloads
+	_world_multiplayer_sync_state.pending_objective_spawn_sync_payloads = remaining_payloads
 
 func _is_current_room_boss_stage(boss_stage: int) -> bool:
 	match boss_stage:
@@ -1689,9 +1682,9 @@ func _can_apply_client_boss_spawn_sync(payload: Dictionary) -> bool:
 		return false
 	var source_room_sync_id := int(payload.get("room_sync_id", 0))
 	if source_room_sync_id > 0:
-		if source_room_sync_id < _current_room_sync_id:
+		if source_room_sync_id < _world_multiplayer_sync_state.current_room_sync_id:
 			return false
-		if source_room_sync_id > _current_room_sync_id:
+		if source_room_sync_id > _world_multiplayer_sync_state.current_room_sync_id:
 			return false
 	var boss_stage := int(payload.get("boss_stage", 0))
 	if not _is_current_room_boss_stage(boss_stage):
@@ -1717,12 +1710,12 @@ func _apply_synced_boss_spawn_payload(payload: Dictionary) -> void:
 	active_room_enemy_count = 1
 
 func _flush_pending_client_boss_spawn_syncs() -> void:
-	if _pending_boss_spawn_sync_payload.is_empty():
+	if _world_multiplayer_sync_state.pending_boss_spawn_sync_payload.is_empty():
 		return
-	if not _can_apply_client_boss_spawn_sync(_pending_boss_spawn_sync_payload):
+	if not _can_apply_client_boss_spawn_sync(_world_multiplayer_sync_state.pending_boss_spawn_sync_payload):
 		return
-	var payload := _pending_boss_spawn_sync_payload.duplicate(true)
-	_pending_boss_spawn_sync_payload.clear()
+	var payload: Dictionary = _world_multiplayer_sync_state.pending_boss_spawn_sync_payload.duplicate(true) as Dictionary
+	_world_multiplayer_sync_state.pending_boss_spawn_sync_payload.clear()
 	_apply_synced_boss_spawn_payload(payload)
 
 func _handle_modal_frame(delta: float) -> bool:
@@ -1999,7 +1992,7 @@ func _update_encounter_state() -> void:
 		return
 	if active_room_enemy_count > 0:
 		return
-	if _last_room_clear_processed_sync_id == _current_room_sync_id:
+	if _world_multiplayer_sync_state.last_room_clear_processed_sync_id == _world_multiplayer_sync_state.current_room_sync_id:
 		return
 	_on_room_cleared()
 
@@ -2009,15 +2002,15 @@ func _on_room_cleared() -> void:
 	_end_combat_phase()
 	_try_revive_fallen_multiplayer_players()
 	if in_second_boss_room:
-		_last_room_clear_processed_sync_id = _current_room_sync_id
+		_world_multiplayer_sync_state.last_room_clear_processed_sync_id = _world_multiplayer_sync_state.current_room_sync_id
 		_finish_second_boss_clear()
 		return
 	if in_third_boss_room:
-		_last_room_clear_processed_sync_id = _current_room_sync_id
+		_world_multiplayer_sync_state.last_room_clear_processed_sync_id = _world_multiplayer_sync_state.current_room_sync_id
 		_finish_third_boss_clear()
 		return
 	if in_boss_room and not first_boss_defeated:
-		_last_room_clear_processed_sync_id = _current_room_sync_id
+		_world_multiplayer_sync_state.last_room_clear_processed_sync_id = _world_multiplayer_sync_state.current_room_sync_id
 		_finish_first_boss_clear()
 		return
 	if is_instance_valid(player):
@@ -2049,7 +2042,7 @@ func _on_room_cleared() -> void:
 	})
 	if not bool(outcome_state.get("ok", false)):
 		return
-	_last_room_clear_processed_sync_id = _current_room_sync_id
+	_world_multiplayer_sync_state.last_room_clear_processed_sync_id = _world_multiplayer_sync_state.current_room_sync_id
 	run_cleared = bool(outcome_state.get("run_cleared", run_cleared))
 	in_boss_room = bool(outcome_state.get("in_boss_room", in_boss_room))
 	endless_boss_defeated = bool(outcome_state.get("endless_boss_defeated", endless_boss_defeated))
@@ -2493,10 +2486,10 @@ func _sync_door_options(synced_door_options: Array, synced_choosing_next_room: b
 		return
 	var sanitized_progress_state := _sanitize_progress_sync_state(progress_state)
 	if bool(sanitized_progress_state.get("invalid", false)):
-		_pending_door_sync_payload.clear()
+		_world_multiplayer_sync_state.pending_door_sync_payload.clear()
 		return
 	if not _can_apply_client_door_sync() or _should_defer_client_door_sync_payload(synced_choosing_next_room, sanitized_progress_state):
-		_pending_door_sync_payload = {
+		_world_multiplayer_sync_state.pending_door_sync_payload = {
 			"door_options": synced_door_options.duplicate(true),
 			"choosing_next_room": synced_choosing_next_room,
 			"boss_unlocked": synced_boss_unlocked,
@@ -2525,9 +2518,9 @@ func _sync_chosen_door(chosen_door: Dictionary, progress_state: Dictionary = {})
 func _sync_objective_spawn_batch(spawn_batch: Array, synced_enemy_count: int, source_room_label: String = "", source_room_sync_id: int = 0) -> void:
 	if not is_multiplayer or MultiplayerSessionManager.is_host():
 		return
-	if source_room_sync_id > 0 and source_room_sync_id <= _last_objective_cleared_room_sync_id:
+	if source_room_sync_id > 0 and source_room_sync_id <= _world_multiplayer_sync_state.last_objective_cleared_room_sync_id:
 		return
-	if source_room_sync_id > 0 and source_room_sync_id < _current_room_sync_id:
+	if source_room_sync_id > 0 and source_room_sync_id < _world_multiplayer_sync_state.current_room_sync_id:
 		return
 	var payload := {
 		"spawn_batch": spawn_batch.duplicate(true),
@@ -2536,7 +2529,7 @@ func _sync_objective_spawn_batch(spawn_batch: Array, synced_enemy_count: int, so
 		"room_sync_id": source_room_sync_id
 	}
 	if not _can_apply_client_spawn_sync(payload):
-		_pending_objective_spawn_sync_payloads.append(payload)
+		_world_multiplayer_sync_state.pending_objective_spawn_sync_payloads.append(payload)
 		return
 	_apply_synced_objective_spawn_batch_payload(payload)
 
@@ -2569,10 +2562,10 @@ func _sync_objective_control_zone_state(control_progress: float, control_enemies
 func _sync_objective_cleared() -> void:
 	if not is_multiplayer or MultiplayerSessionManager.is_host():
 		return
-	_last_objective_cleared_room_sync_id = _current_room_sync_id
+	_world_multiplayer_sync_state.last_objective_cleared_room_sync_id = _world_multiplayer_sync_state.current_room_sync_id
 	if is_instance_valid(objective_manager):
 		objective_manager.reset()
-	_pending_objective_spawn_sync_payloads.clear()
+	_world_multiplayer_sync_state.pending_objective_spawn_sync_payloads.clear()
 	_clear_all_enemies()
 	active_room_enemy_count = 0
 	queue_redraw()
@@ -2585,7 +2578,7 @@ func _sync_objective_state(objective_state: Dictionary, source_room_sync_id: int
 		return
 	if objective_state.is_empty():
 		return
-	if source_room_sync_id > 0 and source_room_sync_id < _current_room_sync_id:
+	if source_room_sync_id > 0 and source_room_sync_id < _world_multiplayer_sync_state.current_room_sync_id:
 		return
 	if sequence <= _last_applied_objective_state_sync_sequence:
 		return
@@ -2618,7 +2611,7 @@ func _sync_objective_state(objective_state: Dictionary, source_room_sync_id: int
 
 func _build_progress_sync_state() -> Dictionary:
 	return {
-		"room_sync_id": _current_room_sync_id,
+		"room_sync_id": _world_multiplayer_sync_state.current_room_sync_id,
 		"rooms_cleared": rooms_cleared,
 		"room_depth": room_depth,
 		"phase_two_rooms_cleared": phase_two_rooms_cleared,
@@ -2636,11 +2629,11 @@ func _sanitize_progress_sync_state(progress_state: Dictionary) -> Dictionary:
 	if progress_state.is_empty():
 		return {}
 	var sanitized := progress_state.duplicate(true)
-	var incoming_room_sync_id := int(sanitized.get("room_sync_id", _current_room_sync_id))
-	if incoming_room_sync_id > 0 and incoming_room_sync_id < _current_room_sync_id:
+	var incoming_room_sync_id := int(sanitized.get("room_sync_id", _world_multiplayer_sync_state.current_room_sync_id))
+	if incoming_room_sync_id > 0 and incoming_room_sync_id < _world_multiplayer_sync_state.current_room_sync_id:
 		sanitized["invalid"] = true
 		return sanitized
-	if incoming_room_sync_id > _current_room_sync_id + 4:
+	if incoming_room_sync_id > _world_multiplayer_sync_state.current_room_sync_id + 4:
 		sanitized["invalid"] = true
 		return sanitized
 	var incoming_first_boss_defeated := bool(sanitized.get("first_boss_defeated", first_boss_defeated))
@@ -2686,8 +2679,8 @@ func _apply_progress_sync_state(progress_state: Dictionary) -> void:
 	if bool(sanitized_progress_state.get("invalid", false)):
 		return
 	# Clear joiner-join flag once first valid sync is received.
-	if _joiner_awaiting_initial_sync:
-		_joiner_awaiting_initial_sync = false
+	if _world_multiplayer_sync_state.joiner_awaiting_initial_sync:
+		_world_multiplayer_sync_state.joiner_awaiting_initial_sync = false
 		print_debug("[Multiplayer] Joiner received initial progress sync")
 	
 	var incoming_depth := int(sanitized_progress_state.get("room_depth", room_depth))
@@ -2696,7 +2689,7 @@ func _apply_progress_sync_state(progress_state: Dictionary) -> void:
 		push_error("[Progress Sync] Rejected impossibly high incoming depth %d (max sane: %d)" % [incoming_depth, max_sane_depth])
 		return
 	
-	_current_room_sync_id = maxi(_current_room_sync_id, int(sanitized_progress_state.get("room_sync_id", _current_room_sync_id)))
+	_world_multiplayer_sync_state.current_room_sync_id = maxi(_world_multiplayer_sync_state.current_room_sync_id, int(sanitized_progress_state.get("room_sync_id", _world_multiplayer_sync_state.current_room_sync_id)))
 	rooms_cleared = int(sanitized_progress_state.get("rooms_cleared", rooms_cleared))
 	room_depth = incoming_depth
 	_clamp_room_depth_to_sane_range()
@@ -2768,14 +2761,14 @@ func _begin_room(profile: Dictionary) -> void:
 	_doors_spawn_ready = false
 	if profile.is_empty():
 		return
-	_current_room_sync_id += 1
+	_world_multiplayer_sync_state.current_room_sync_id += 1
 	_awaiting_authoritative_door_choice = false
-	_pending_door_sync_payload.clear()
+	_world_multiplayer_sync_state.pending_door_sync_payload.clear()
 	_pending_chosen_door.clear()
 	_pending_chosen_progress_state.clear()
 	if not is_multiplayer or MultiplayerSessionManager.is_host():
-		_pending_spawn_sync_payload.clear()
-		_pending_objective_spawn_sync_payloads.clear()
+		_world_multiplayer_sync_state.pending_spawn_sync_payload.clear()
+		_world_multiplayer_sync_state.pending_objective_spawn_sync_payloads.clear()
 	choosing_next_room = false
 	door_options.clear()
 	encounter_intro_grace_active = false
@@ -2821,7 +2814,7 @@ func _begin_room(profile: Dictionary) -> void:
 					"enemy_type": String(spawn_entry.get("enemy_type", "")),
 					"position": enemy.global_position
 				})
-			_sync_spawn_enemy_batch.rpc(spawn_batch, active_room_enemy_count, current_room_label, room_depth, _current_room_sync_id)
+			_sync_spawn_enemy_batch.rpc(spawn_batch, active_room_enemy_count, current_room_label, room_depth, _world_multiplayer_sync_state.current_room_sync_id)
 		else:
 			active_room_enemy_count = 0
 			_flush_pending_client_spawn_syncs()
@@ -2901,14 +2894,14 @@ func _pick_boss_spawn_position(min_player_distance: float = 260.0, wall_margin: 
 	return fallback
 
 func _begin_configured_boss_room(boss_stage: int, room_size: Vector2, room_label: String, room_entry_key: String, banner_title: String, boss_script, collision_radius: float, min_player_distance: float, wall_margin: float) -> void:
-	_current_room_sync_id += 1
+	_world_multiplayer_sync_state.current_room_sync_id += 1
 	_awaiting_authoritative_door_choice = false
-	_pending_door_sync_payload.clear()
+	_world_multiplayer_sync_state.pending_door_sync_payload.clear()
 	_pending_chosen_door.clear()
 	_pending_chosen_progress_state.clear()
 	if not is_multiplayer or MultiplayerSessionManager.is_host():
-		_pending_spawn_sync_payload.clear()
-		_pending_objective_spawn_sync_payloads.clear()
+		_world_multiplayer_sync_state.pending_spawn_sync_payload.clear()
+		_world_multiplayer_sync_state.pending_objective_spawn_sync_payloads.clear()
 	encounter_intro_grace_active = false
 	combat_phase_coordinator.begin_combat_phase(player, get_tree())
 	in_boss_room = boss_stage == 1
@@ -2953,7 +2946,7 @@ func _begin_configured_boss_room(boss_stage: int, room_size: Vector2, room_label
 			"enemy_id": boss_enemy_id,
 			"position": boss.global_position,
 			"room_label": current_room_label,
-			"room_sync_id": _current_room_sync_id
+			"room_sync_id": _world_multiplayer_sync_state.current_room_sync_id
 		})
 	_start_encounter_intro_grace()
 
@@ -3069,13 +3062,13 @@ func _sync_archer_projectile_state_tick(delta: float) -> void:
 		var entry_size := _estimate_sync_variant_size_bytes(sync_entry) + 24
 		var would_exceed_budget := not current_batch.is_empty() and (current_batch_bytes + entry_size + per_batch_overhead > payload_budget)
 		if would_exceed_budget:
-			_sync_archer_projectile_states.rpc(current_batch, _current_room_sync_id)
+			_sync_archer_projectile_states.rpc(current_batch, _world_multiplayer_sync_state.current_room_sync_id)
 			current_batch.clear()
 			current_batch_bytes = 0
 		current_batch.append(sync_entry)
 		current_batch_bytes += entry_size
 	if not current_batch.is_empty():
-		_sync_archer_projectile_states.rpc(current_batch, _current_room_sync_id)
+		_sync_archer_projectile_states.rpc(current_batch, _world_multiplayer_sync_state.current_room_sync_id)
 
 func _build_objective_state_sync_payload() -> Dictionary:
 	if not is_instance_valid(objective_manager):
@@ -3129,7 +3122,7 @@ func _sync_objective_state_tick(delta: float) -> void:
 	if objective_state.is_empty():
 		return
 	_objective_state_sync_sequence += 1
-	_sync_objective_state.rpc(objective_state, _current_room_sync_id, _objective_state_sync_sequence)
+	_sync_objective_state.rpc(objective_state, _world_multiplayer_sync_state.current_room_sync_id, _objective_state_sync_sequence)
 
 func _compute_runtime_state_delta(current_state: Dictionary, previous_state: Dictionary) -> Dictionary:
 	var attr_start_usec := Time.get_ticks_usec() if _perf_attribution_enabled else 0
@@ -3630,7 +3623,7 @@ func _spawn_boss_for_stage(boss_stage: int, spawn_position: Vector2) -> Node2D:
 func _sync_spawn_enemy_batch(spawn_batch: Array, synced_enemy_count: int, source_room_label: String = "", source_room_depth: int = 0, source_room_sync_id: int = 0) -> void:
 	if not is_multiplayer or MultiplayerSessionManager.is_host():
 		return
-	if source_room_sync_id > 0 and source_room_sync_id < _current_room_sync_id:
+	if source_room_sync_id > 0 and source_room_sync_id < _world_multiplayer_sync_state.current_room_sync_id:
 		return
 	var payload := {
 		"spawn_batch": spawn_batch.duplicate(true),
@@ -3640,9 +3633,9 @@ func _sync_spawn_enemy_batch(spawn_batch: Array, synced_enemy_count: int, source
 		"room_sync_id": source_room_sync_id
 	}
 	if not _can_apply_client_spawn_sync(payload):
-		var pending_sync_id := int(_pending_spawn_sync_payload.get("room_sync_id", 0))
+		var pending_sync_id := int(_world_multiplayer_sync_state.pending_spawn_sync_payload.get("room_sync_id", 0))
 		if source_room_sync_id >= pending_sync_id:
-			_pending_spawn_sync_payload = payload
+			_world_multiplayer_sync_state.pending_spawn_sync_payload = payload
 		return
 	_apply_synced_spawn_batch_payload(payload)
 
@@ -3660,12 +3653,12 @@ func _sync_spawn_boss(spawn_data: Dictionary) -> void:
 	if int(payload.get("boss_stage", 0)) <= 0 or int(payload.get("enemy_id", -1)) <= 0:
 		return
 	var source_room_sync_id := int(payload.get("room_sync_id", 0))
-	if source_room_sync_id > 0 and source_room_sync_id < _current_room_sync_id:
+	if source_room_sync_id > 0 and source_room_sync_id < _world_multiplayer_sync_state.current_room_sync_id:
 		return
 	if not _can_apply_client_boss_spawn_sync(payload):
-		var pending_sync_id := int(_pending_boss_spawn_sync_payload.get("room_sync_id", 0))
+		var pending_sync_id := int(_world_multiplayer_sync_state.pending_boss_spawn_sync_payload.get("room_sync_id", 0))
 		if source_room_sync_id >= pending_sync_id:
-			_pending_boss_spawn_sync_payload = payload
+			_world_multiplayer_sync_state.pending_boss_spawn_sync_payload = payload
 		return
 	_apply_synced_boss_spawn_payload(payload)
 
@@ -3702,7 +3695,7 @@ func _sync_enemy_states(synced_states: Array, synced_enemy_count: int) -> void:
 func _sync_archer_projectile_states(synced_archer_projectiles: Array, source_room_sync_id: int) -> void:
 	if not is_multiplayer or MultiplayerSessionManager.is_host():
 		return
-	if source_room_sync_id > 0 and source_room_sync_id < _current_room_sync_id:
+	if source_room_sync_id > 0 and source_room_sync_id < _world_multiplayer_sync_state.current_room_sync_id:
 		return
 	for sync_variant in synced_archer_projectiles:
 		if not (sync_variant is Dictionary):
@@ -3953,8 +3946,8 @@ func _finalize_reward_phase_and_advance(is_initial: bool, mode: int) -> void:
 
 
 func _reset_progress_for_first_encounter() -> void:
-	_current_room_sync_id = 0
-	_last_applied_spawn_sync_id = 0
+	_world_multiplayer_sync_state.current_room_sync_id = 0
+	_world_multiplayer_sync_state.last_applied_spawn_sync_id = 0
 	_awaiting_authoritative_door_choice = false
 	rooms_cleared = 0
 	room_depth = 0
@@ -3969,7 +3962,7 @@ func _reset_progress_for_first_encounter() -> void:
 	endless_boss_defeated = false
 	boss_reward_pending = false
 	last_defeated_boss_id = ""
-	_pending_door_sync_payload.clear()
+	_world_multiplayer_sync_state.pending_door_sync_payload.clear()
 	_pending_chosen_door.clear()
 	_pending_chosen_progress_state.clear()
 
@@ -4371,7 +4364,7 @@ func _spawn_test_enemies(count: int) -> void:
 				active_room_enemy_count += 1
 
 	if is_multiplayer and MultiplayerSessionManager.is_host() and not spawn_batch.is_empty():
-		_sync_spawn_enemy_batch.rpc(spawn_batch, active_room_enemy_count, current_room_label, room_depth, _current_room_sync_id)
+		_sync_spawn_enemy_batch.rpc(spawn_batch, active_room_enemy_count, current_room_label, room_depth, _world_multiplayer_sync_state.current_room_sync_id)
 
 func start_network_stress_test(initial_count: int = 10, increment: int = 10, max_count: int = 100) -> void:
 	"""Start the multiplayer network stress test (debug only)"""
@@ -4406,7 +4399,7 @@ func _maybe_start_stress_test() -> void:
 		return
 	
 	if not MultiplayerSessionManager.is_host():
-		print_debug("[StressTest] Skipping on client — host only")
+		print_debug("[StressTest] Skipping on client - host only")
 		return
 	
 	var initial: int = int(debug_settings.get("stress_test_initial_enemies"))
@@ -4676,3 +4669,4 @@ func _set_enemy_targets_passive(passive: bool) -> void:
 				var current_cd := float(enemy.get(cooldown_key))
 				if current_cd < 0.32:
 					enemy.set(cooldown_key, 0.32)
+
