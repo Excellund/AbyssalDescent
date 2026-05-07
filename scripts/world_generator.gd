@@ -1331,11 +1331,16 @@ func _process_multiplayer_sync(delta: float) -> void:
 	_flush_pending_client_objective_spawn_syncs()
 	_report_client_perf_sample(delta)
 	_update_multiplayer_perf_logging(delta)
-	if _stress_test_active:
-		if _stress_test_coordinator == null:
-			_stress_test_coordinator = load("res://scripts/multiplayer_stress_test.gd").new()
-			_stress_test_coordinator.world_gen = self
-		_stress_test_coordinator.tick_frame(delta, _multiplayer_last_sync_estimated_bytes, _multiplayer_last_sync_batch_count)
+	_tick_multiplayer_stress_test(delta)
+
+
+func _tick_multiplayer_stress_test(delta: float) -> void:
+	if not _stress_test_active:
+		return
+	if _stress_test_coordinator == null:
+		_stress_test_coordinator = load("res://scripts/multiplayer_stress_test.gd").new()
+		_stress_test_coordinator.world_gen = self
+	_stress_test_coordinator.tick_frame(delta, _multiplayer_last_sync_estimated_bytes, _multiplayer_last_sync_batch_count)
 
 
 func _update_multiplayer_perf_logging(delta: float) -> void:
