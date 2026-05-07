@@ -32,7 +32,7 @@ var room_heartbeat_interval_sec: float = 20.0
 ## State for a single in-progress join attempt sequence.
 class JoinAttemptState:
 	var addresses: Array = []
-	var port: int = 9999
+	var port: int = 7777
 	var index: int = -1
 	var timer: Timer = null
 
@@ -191,7 +191,7 @@ func create_room() -> String:
 	var registration := {
 		"room_code": _generate_random_code(6).to_upper(),
 		"session_id": "mp-session-%d-%s" % [Time.get_unix_time_from_system(), _generate_random_code(4)],
-		"host_port": 9999,
+		"host_port": 7777,
 		"transport_type": "direct_enet"
 	}
 	if not create_registered_room(registration):
@@ -205,7 +205,7 @@ func create_registered_room(room_registration: Dictionary) -> bool:
 		print("[MultiplayerSessionManager] ERROR: %s" % msg)
 		return false
 
-	var host_port := int(room_registration.get("host_port", 9999))
+	var host_port := int(room_registration.get("host_port", 7777))
 	var transport_type := String(room_registration.get("transport_type", "direct_enet"))
 	print("[MultiplayerSessionManager] Attempting to create host server on port %d with transport: %s" % [host_port, transport_type])
 	_last_host_connectivity_warning = ""
@@ -255,7 +255,7 @@ func create_registered_room(room_registration: Dictionary) -> bool:
 
 
 ## Join an existing multiplayer room (client only).
-func join_room(host_address: String = "127.0.0.1", host_port: int = 9999, allow_localhost_retry: bool = true) -> bool:
+func join_room(host_address: String = "127.0.0.1", host_port: int = 7777, allow_localhost_retry: bool = true) -> bool:
 	if session_connected:
 		push_error("Already connected to a session. Call leave_room() first.")
 		return false
@@ -280,7 +280,7 @@ func join_registered_room(room_registration: Dictionary) -> bool:
 		connection_failed.emit("Unsupported transport type: %s" % transport_type)
 		return false
 	var host_address := String(room_registration.get("host_address", "")).strip_edges()
-	var host_port := int(room_registration.get("host_port", 9999))
+	var host_port := int(room_registration.get("host_port", 7777))
 	if host_address.is_empty():
 		connection_failed.emit("Room registration is missing host address.")
 		return false
@@ -374,7 +374,7 @@ func get_host_diagnostic_report() -> String:
 	report += "Is host: %s\n" % is_host_peer
 	report += "Local peer ID: %d\n" % local_peer_id
 	report += "Room code: %s\n" % room_code
-	report += "Host port: 9999\n"
+	report += "Host port: 7777\n"
 	report += "Local IP: %s\n" % _host_local_ip
 	report += "Public IP (registered): %s\n" % _host_public_ip
 	report += "UPnP discovery result: %d (0=SUCCESS, 1=ERROR, 2=NOT_IMPLEM)\n" % _upnp_discovery_result

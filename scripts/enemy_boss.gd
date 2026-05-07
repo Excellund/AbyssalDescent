@@ -38,6 +38,8 @@ var active_attack: int = ENEMY_STATE_ENUMS.BossAttack.CHARGE
 var locked_direction: Vector2 = Vector2.RIGHT
 var telegraph_alpha: float = 0.0
 var charge_hit_applied: bool = false
+var _charge_hit_targets: Dictionary = {}
+var _cleave_locked_directions: Array[Vector2] = []
 var attack_afterglow_time_left: float = 0.0
 var attack_afterglow_duration: float = 0.54
 var impact_burst_time_left: float = 0.0
@@ -123,7 +125,8 @@ func get_projectile_network_sync_state() -> Dictionary:
 		"impact_burst_time_left": impact_burst_time_left,
 		"last_attack_for_fx": last_attack_for_fx,
 		"visual_facing_direction": visual_facing_direction,
-		"attack_anim_time_left": attack_anim_time_left
+		"attack_anim_time_left": attack_anim_time_left,
+		"global_position": global_position
 	}
 	_attack_sync_was_active = active
 	return payload
@@ -134,6 +137,9 @@ func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
 		return
 	if sync_state.is_empty():
 		return
+	if sync_state.has("global_position"):
+		var synced_pos := sync_state.get("global_position", global_position) as Vector2
+		global_position = synced_pos
 	var active := bool(sync_state.get("active", false))
 	if not active:
 		attack_anim_time_left = 0.0
@@ -246,7 +252,21 @@ func _start_next_attack(distance_to_target: float, wall_pressure: float = 0.0) -
 	state_time_left = _get_windup_time(active_attack)
 	telegraph_alpha = 0.0
 	charge_hit_applied = false
+	_charge_hit_targets.clear()
 	velocity = Vector2.ZERO
+	_cleave_locked_directions.clear()
+	if active_attack == ENEMY_STATE_ENUMS.BossAttack.CLEAVE:
+		for candidate_variant in target_candidates:
+			if not (candidate_variant is Node2D):
+				continue
+			var c := candidate_variant as Node2D
+			if not is_instance_valid(c):
+				continue
+			var to_c := c.global_position - global_position
+			if to_c.length_squared() > 0.000001:
+				_cleave_locked_directions.append(to_c.normalized())
+		if _cleave_locked_directions.is_empty():
+			_cleave_locked_directions.append(locked_direction)
 
 
 func _process_telegraph_state(delta: float) -> void:
@@ -313,58 +333,75 @@ func _process_recover_state(delta: float) -> void:
 
 
 func _apply_charge_hit() -> void:
-	if charge_hit_applied:
+	var damageable_targets := _get_damageable_targets()
+	if damageable_targets.is_empty():
 		return
-	if not DAMAGEABLE.can_take_damage(target):
-		return
-
-	for i in get_slide_collision_count():
-		var collision := get_slide_collision(i)
-		if collision.get_collider() == target:
-			DAMAGEABLE.apply_damage(target, charge_damage, {"source": "enemy_contact", "ability": "warden_charge"})
-			charge_hit_applied = true
-			# Heavy impact feedback for charge
-			if is_instance_valid(target):
-				var feedback: Object = target.get("player_feedback") as Object
-				if feedback != null:
-					feedback.play_impact_heavy(target.global_position, charge_width * 1.5)
-			return
 
 	var seg_start := global_position - locked_direction * 34.0
 	var seg_end := global_position + locked_direction * 34.0
-	if _distance_point_to_segment(target.global_position, seg_start, seg_end) <= charge_width:
-		DAMAGEABLE.apply_damage(target, charge_damage, {"source": "enemy_contact", "ability": "warden_charge"})
-		charge_hit_applied = true
-		# Heavy impact feedback for charge
-		if is_instance_valid(target):
-			var feedback: Object = target.get("player_feedback") as Object
-			if feedback != null:
-				feedback.play_impact_heavy(target.global_position, charge_width * 1.5)
+	for hit_target in damageable_targets:
+		if not is_instance_valid(hit_target):
+			continue
+		var target_id := hit_target.get_instance_id()
+		if _charge_hit_targets.has(target_id):
+			continue
+		if _distance_point_to_segment(hit_target.global_position, seg_start, seg_end) > charge_width:
+			continue
+		if DAMAGEABLE.apply_damage(hit_target, charge_damage, {"source": "enemy_contact", "ability": "warden_charge"}):
+			_charge_hit_targets[target_id] = true
+			charge_hit_applied = true
+			_play_heavy_impact_feedback(hit_target, hit_target.global_position, charge_width * 1.5)
 
 
 func _apply_nova_hit() -> void:
-	if not DAMAGEABLE.can_take_damage(target):
-		return
-	if global_position.distance_to(target.global_position) <= nova_radius:
-		DAMAGEABLE.apply_damage(target, nova_damage, {"source": "enemy_ability", "ability": "warden_nova"})
-		# Heavy impact feedback for nova
-		if is_instance_valid(target):
-			var feedback: Object = target.get("player_feedback") as Object
-			if feedback != null:
-				feedback.play_impact_heavy(global_position, nova_radius * 0.9)
+	for hit_target in _get_damageable_targets():
+		if not is_instance_valid(hit_target):
+			continue
+		if global_position.distance_to(hit_target.global_position) > nova_radius:
+			continue
+		if DAMAGEABLE.apply_damage(hit_target, nova_damage, {"source": "enemy_ability", "ability": "warden_nova"}):
+			_play_heavy_impact_feedback(hit_target, global_position, nova_radius * 0.9)
 
 
 func _apply_cleave_hit() -> void:
-	if not DAMAGEABLE.can_take_damage(target):
+	var candidates := _get_damageable_targets()
+	if candidates.is_empty():
 		return
-	if not _point_in_cone(target.global_position, global_position, locked_direction, cleave_range, cleave_arc_degrees):
+	var directions := _cleave_locked_directions if not _cleave_locked_directions.is_empty() else [locked_direction]
+	for hit_target in candidates:
+		if not is_instance_valid(hit_target):
+			continue
+		for dir in directions:
+			if not _point_in_cone(hit_target.global_position, global_position, dir, cleave_range, cleave_arc_degrees):
+				continue
+			if DAMAGEABLE.apply_damage(hit_target, cleave_damage, {"source": "enemy_ability", "ability": "warden_cleave"}):
+				_play_heavy_impact_feedback(hit_target, global_position, cleave_range * 0.7)
+			break
+
+
+func _get_damageable_targets() -> Array[Node2D]:
+	var result: Array[Node2D] = []
+	for candidate_variant in target_candidates:
+		if not (candidate_variant is Node2D):
+			continue
+		var candidate := candidate_variant as Node2D
+		if not is_instance_valid(candidate):
+			continue
+		if not DAMAGEABLE.can_take_damage(candidate):
+			continue
+		result.append(candidate)
+	if result.is_empty() and is_instance_valid(target) and DAMAGEABLE.can_take_damage(target):
+		result.append(target)
+	return result
+
+
+func _play_heavy_impact_feedback(hit_target: Node2D, effect_origin: Vector2, effect_radius: float) -> void:
+	if not is_instance_valid(hit_target):
 		return
-	DAMAGEABLE.apply_damage(target, cleave_damage, {"source": "enemy_ability", "ability": "warden_cleave"})
-	# Heavy impact feedback for cleave
-	if is_instance_valid(target):
-		var feedback: Object = target.get("player_feedback") as Object
-		if feedback != null:
-			feedback.play_impact_heavy(global_position, cleave_range * 0.7)
+	var feedback: Object = hit_target.get("player_feedback") as Object
+	if feedback == null:
+		return
+	feedback.play_impact_heavy(effect_origin, effect_radius)
 
 
 func _point_in_cone(point: Vector2, origin: Vector2, forward: Vector2, radius: float, arc_degrees: float) -> bool:
@@ -449,6 +486,7 @@ func _get_custom_network_runtime_state() -> Dictionary:
 		"locked_direction": locked_direction,
 		"telegraph_alpha": telegraph_alpha,
 		"charge_hit_applied": charge_hit_applied,
+		"cleave_locked_directions": _cleave_locked_directions,
 		"last_attack_for_fx": last_attack_for_fx,
 		"attack_afterglow_time_left": attack_afterglow_time_left,
 		"impact_burst_time_left": impact_burst_time_left
@@ -478,6 +516,13 @@ func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
 		attack_afterglow_time_left = float(custom_state.get("attack_afterglow_time_left", attack_afterglow_time_left))
 	if custom_state.has("impact_burst_time_left"):
 		impact_burst_time_left = float(custom_state.get("impact_burst_time_left", impact_burst_time_left))
+	if custom_state.has("cleave_locked_directions"):
+		var raw_dirs: Variant = custom_state.get("cleave_locked_directions")
+		if raw_dirs is Array:
+			_cleave_locked_directions.clear()
+			for v in raw_dirs:
+				if v is Vector2:
+					_cleave_locked_directions.append(v)
 
 
 func _draw() -> void:
@@ -583,24 +628,20 @@ func _draw_attack_telegraph() -> void:
 		
 		ENEMY_STATE_ENUMS.BossAttack.CLEAVE:
 			var half_arc := deg_to_rad(cleave_arc_degrees * 0.5)
-			var points := PackedVector2Array([Vector2.ZERO])
-			var segments := 26
-			for i in range(segments + 1):
-				var t := float(i) / float(segments)
-				var angle := -half_arc + (half_arc * 2.0) * t
-				points.append(locked_direction.rotated(angle) * cleave_range)
-			
-			# Main cleave fill (semi-transparent danger zone)
-			draw_colored_polygon(points, Color(COLOR_BOSS_CLEAVE_FILL.r, COLOR_BOSS_CLEAVE_FILL.g, COLOR_BOSS_CLEAVE_FILL.b, alpha * 0.4))
-			
-			# Cleave outline (sharp edges)
-			for i in range(segments):
-				draw_line(points[i + 1], points[i + 2], Color(COLOR_BOSS_CLEAVE_OUTLINE.r, COLOR_BOSS_CLEAVE_OUTLINE.g, COLOR_BOSS_CLEAVE_OUTLINE.b, alpha * 0.9), 2.5)
-			
-			# Inner sweep lines (shows slash motion)
-			var inner_radius := cleave_range * 0.4
-			draw_line(Vector2.ZERO, locked_direction.rotated(-half_arc) * inner_radius, Color(COLOR_BOSS_CLEAVE_OUTLINE.r, COLOR_BOSS_CLEAVE_OUTLINE.g, COLOR_BOSS_CLEAVE_OUTLINE.b, alpha * 0.6), 1.5)
-			draw_line(Vector2.ZERO, locked_direction.rotated(half_arc) * inner_radius, Color(COLOR_BOSS_CLEAVE_OUTLINE.r, COLOR_BOSS_CLEAVE_OUTLINE.g, COLOR_BOSS_CLEAVE_OUTLINE.b, alpha * 0.6), 1.5)
+			var draw_dirs := _cleave_locked_directions if not _cleave_locked_directions.is_empty() else [locked_direction]
+			for draw_dir in draw_dirs:
+				var points := PackedVector2Array([Vector2.ZERO])
+				var segments := 26
+				for i in range(segments + 1):
+					var t := float(i) / float(segments)
+					var angle := -half_arc + (half_arc * 2.0) * t
+					points.append(draw_dir.rotated(angle) * cleave_range)
+				draw_colored_polygon(points, Color(COLOR_BOSS_CLEAVE_FILL.r, COLOR_BOSS_CLEAVE_FILL.g, COLOR_BOSS_CLEAVE_FILL.b, alpha * 0.4))
+				for i in range(segments):
+					draw_line(points[i + 1], points[i + 2], Color(COLOR_BOSS_CLEAVE_OUTLINE.r, COLOR_BOSS_CLEAVE_OUTLINE.g, COLOR_BOSS_CLEAVE_OUTLINE.b, alpha * 0.9), 2.5)
+				var inner_radius := cleave_range * 0.4
+				draw_line(Vector2.ZERO, draw_dir.rotated(-half_arc) * inner_radius, Color(COLOR_BOSS_CLEAVE_OUTLINE.r, COLOR_BOSS_CLEAVE_OUTLINE.g, COLOR_BOSS_CLEAVE_OUTLINE.b, alpha * 0.6), 1.5)
+				draw_line(Vector2.ZERO, draw_dir.rotated(half_arc) * inner_radius, Color(COLOR_BOSS_CLEAVE_OUTLINE.r, COLOR_BOSS_CLEAVE_OUTLINE.g, COLOR_BOSS_CLEAVE_OUTLINE.b, alpha * 0.6), 1.5)
 
 
 func _draw_attack_afterglow(facing: Vector2) -> void:

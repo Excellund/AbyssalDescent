@@ -191,7 +191,8 @@ func get_projectile_network_sync_state() -> Dictionary:
 		"impact_burst_time_left": impact_burst_time_left,
 		"last_attack_for_fx": last_attack_for_fx,
 		"visual_facing_direction": visual_facing_direction,
-		"attack_anim_time_left": attack_anim_time_left
+		"attack_anim_time_left": attack_anim_time_left,
+		"global_position": global_position
 	}
 	_attack_sync_was_active = active
 	return payload
@@ -201,6 +202,9 @@ func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
 		return
 	if sync_state.is_empty():
 		return
+	if sync_state.has("global_position"):
+		var synced_pos := sync_state.get("global_position", global_position) as Vector2
+		global_position = synced_pos
 	var active := bool(sync_state.get("active", false))
 	if not active:
 		if boss_state != ENEMY_STATE_ENUMS.Boss2State.STALK:
@@ -302,10 +306,12 @@ func _process_polar_shift_pull_punish(delta: float) -> void:
 		return
 	_polar_shift_pull_damage_pending = false
 	_polar_shift_pull_afterglow_left = polar_shift_pull_afterglow_duration
-	if not DAMAGEABLE.can_take_damage(target):
-		return
-	if global_position.distance_to(target.global_position) <= polar_shift_pull_inner_radius:
-		DAMAGEABLE.apply_damage(target, polar_shift_pull_inner_damage, {"source": "enemy_ability", "ability": "polar_shift_pull"})
+	for hit_target in _get_damageable_targets():
+		if not is_instance_valid(hit_target):
+			continue
+		if global_position.distance_to(hit_target.global_position) > polar_shift_pull_inner_radius:
+			continue
+		DAMAGEABLE.apply_damage(hit_target, polar_shift_pull_inner_damage, {"source": "enemy_ability", "ability": "polar_shift_pull"})
 
 func _draw_polar_shift_pull_delayed_indicator() -> void:
 	if not _polar_shift_pull_damage_pending and _polar_shift_pull_afterglow_left <= 0.0:
@@ -615,6 +621,7 @@ func _begin_echo_dash_leg(should_retarget: bool = true) -> void:
 	_echo_dash_retargeting = false
 	_echo_dash_retarget_time_left = 0.0
 	_echo_dash_warning_line = PackedVector2Array()
+	_echo_dash_hits.clear()
 	telegraph_alpha = 0.0
 	state_time_left = reposition_dash_duration if _echo_dash_reposition_only else echo_dash_duration
 
@@ -679,94 +686,113 @@ func _get_inward_edge_bias() -> Vector2:
 	return bias.normalized() * maxf(x_pressure, y_pressure)
 
 func _apply_prism_burst() -> void:
-	if not DAMAGEABLE.can_take_damage(target):
-		return
-	var to_target := target.global_position - global_position
-	var target_distance := to_target.length()
-	if target_distance <= prism_inner_radius:
-		DAMAGEABLE.apply_damage(target, prism_damage, {"source": "enemy_ability", "ability": "prism_burst"})
-		return
-	if target_distance > prism_radius:
-		return
-	var target_angle := to_target.angle()
 	var half_arc := deg_to_rad(prism_spoke_half_angle_degrees)
-	for i in range(prism_spoke_count):
-		var spoke_angle := _prism_base_angle + TAU * float(i) / float(prism_spoke_count)
-		if absf(wrapf(target_angle - spoke_angle, -PI, PI)) <= half_arc:
-			DAMAGEABLE.apply_damage(target, prism_damage, {"source": "enemy_ability", "ability": "prism_burst"})
-			return
+	for hit_target in _get_damageable_targets():
+		if not is_instance_valid(hit_target):
+			continue
+		var to_target := hit_target.global_position - global_position
+		var target_distance := to_target.length()
+		if target_distance <= prism_inner_radius:
+			DAMAGEABLE.apply_damage(hit_target, prism_damage, {"source": "enemy_ability", "ability": "prism_burst"})
+			continue
+		if target_distance > prism_radius:
+			continue
+		var target_angle := to_target.angle()
+		for i in range(prism_spoke_count):
+			var spoke_angle := _prism_base_angle + TAU * float(i) / float(prism_spoke_count)
+			if absf(wrapf(target_angle - spoke_angle, -PI, PI)) <= half_arc:
+				DAMAGEABLE.apply_damage(hit_target, prism_damage, {"source": "enemy_ability", "ability": "prism_burst"})
+				break
 
 func _apply_gravity_burst() -> void:
-	if not DAMAGEABLE.can_take_damage(target):
-		return
-	if global_position.distance_to(target.global_position) <= gravity_radius:
-		DAMAGEABLE.apply_damage(target, gravity_damage, {"source": "enemy_ability", "ability": "gravity_burst"})
-		if target is CharacterBody2D:
-			var body := target as CharacterBody2D
+	for hit_target in _get_damageable_targets():
+		if not is_instance_valid(hit_target):
+			continue
+		if global_position.distance_to(hit_target.global_position) > gravity_radius:
+			continue
+		DAMAGEABLE.apply_damage(hit_target, gravity_damage, {"source": "enemy_ability", "ability": "gravity_burst"})
+		if hit_target is CharacterBody2D:
+			var body := hit_target as CharacterBody2D
 			var pull_dir := (global_position - body.global_position)
 			if pull_dir.length_squared() > 0.000001:
 				body.velocity += pull_dir.normalized() * 120.0
 
 func _apply_echo_dash_hit() -> void:
-	if not DAMAGEABLE.can_take_damage(target):
-		return
-	var target_id := target.get_instance_id()
-	if _echo_dash_hits.has(target_id):
-		return
-	for i in get_slide_collision_count():
-		var collision := get_slide_collision(i)
-		if collision.get_collider() == target:
-			DAMAGEABLE.apply_damage(target, echo_dash_damage, {"source": "enemy_contact", "ability": "echo_dash"})
-			_echo_dash_hits[target_id] = true
-			return
 	var seg_start := global_position - locked_direction * 40.0
 	var seg_end := global_position + locked_direction * 40.0
-	if _distance_point_to_segment(target.global_position, seg_start, seg_end) <= echo_dash_width:
-		DAMAGEABLE.apply_damage(target, echo_dash_damage, {"source": "enemy_contact", "ability": "echo_dash"})
-		_echo_dash_hits[target_id] = true
+	for hit_target in _get_damageable_targets():
+		if not is_instance_valid(hit_target):
+			continue
+		var target_id := hit_target.get_instance_id()
+		if _echo_dash_hits.has(target_id):
+			continue
+		if _distance_point_to_segment(hit_target.global_position, seg_start, seg_end) > echo_dash_width:
+			continue
+		if DAMAGEABLE.apply_damage(hit_target, echo_dash_damage, {"source": "enemy_contact", "ability": "echo_dash"}):
+			_echo_dash_hits[target_id] = true
 
 func _apply_orbital_lance_hits() -> void:
-	if not DAMAGEABLE.can_take_damage(target):
-		return
 	if _orbital_lance_positions.is_empty():
 		return
-	for orb_pos in _orbital_lance_positions:
-		var outward := orb_pos.normalized()
-		if outward.length_squared() <= 0.000001:
+	for hit_target in _get_damageable_targets():
+		if not is_instance_valid(hit_target):
 			continue
-		var beam_end := orb_pos + outward * orbital_lance_length
-		if _distance_point_to_segment(target.global_position - global_position, orb_pos, beam_end) <= orbital_lance_width:
-			DAMAGEABLE.apply_damage(target, orbital_lance_damage, {"source": "enemy_ability", "ability": "orbital_lance"})
-			return
+		var local_target := hit_target.global_position - global_position
+		for orb_pos in _orbital_lance_positions:
+			var outward := orb_pos.normalized()
+			if outward.length_squared() <= 0.000001:
+				continue
+			var beam_end := orb_pos + outward * orbital_lance_length
+			if _distance_point_to_segment(local_target, orb_pos, beam_end) > orbital_lance_width:
+				continue
+			DAMAGEABLE.apply_damage(hit_target, orbital_lance_damage, {"source": "enemy_ability", "ability": "orbital_lance"})
+			break
 
 func _apply_polar_shift() -> void:
-	if not DAMAGEABLE.can_take_damage(target):
-		return
-	var to_target := target.global_position - global_position
-	if to_target.length() > polar_shift_radius:
-		return
-	if not _polar_shift_is_pull and not _is_polar_shift_in_safe_lane(to_target.angle()):
-		DAMAGEABLE.apply_damage(target, 30, {"source": "enemy_ability", "ability": "polar_shift_burst"})
-	if target is CharacterBody2D:
-		var target_body := target as CharacterBody2D
+	for hit_target in _get_damageable_targets():
+		if not is_instance_valid(hit_target):
+			continue
+		var to_target := hit_target.global_position - global_position
+		if to_target.length() > polar_shift_radius:
+			continue
 		var in_safe_lane := _is_polar_shift_in_safe_lane(to_target.angle())
-		var dir := (global_position - target_body.global_position)
-		if dir.length_squared() <= 0.000001:
-			dir = Vector2.RIGHT
-		dir = dir.normalized()
-		if not _polar_shift_is_pull:
-			dir = -dir
-		var force_mult := 1.0
-		if _polar_shift_is_pull:
-			force_mult *= polar_shift_pull_force_mult
-		if to_target.length() <= polar_shift_anchor_radius:
-			force_mult *= polar_shift_anchor_force_mult
-		if in_safe_lane:
-			force_mult *= polar_shift_safe_force_mult
-		target_body.velocity = Vector2.ZERO
-		target_body.velocity = dir * polar_shift_force * force_mult
-		if not in_safe_lane:
-			target_body.apply_polar_shift_dash_lockout(polar_shift_dash_lockout_duration)
+		if not _polar_shift_is_pull and not in_safe_lane:
+			DAMAGEABLE.apply_damage(hit_target, 30, {"source": "enemy_ability", "ability": "polar_shift_burst"})
+		if hit_target is CharacterBody2D:
+			var target_body := hit_target as CharacterBody2D
+			var dir := (global_position - target_body.global_position)
+			if dir.length_squared() <= 0.000001:
+				dir = Vector2.RIGHT
+			dir = dir.normalized()
+			if not _polar_shift_is_pull:
+				dir = -dir
+			var force_mult := 1.0
+			if _polar_shift_is_pull:
+				force_mult *= polar_shift_pull_force_mult
+			if to_target.length() <= polar_shift_anchor_radius:
+				force_mult *= polar_shift_anchor_force_mult
+			if in_safe_lane:
+				force_mult *= polar_shift_safe_force_mult
+			target_body.velocity = Vector2.ZERO
+			target_body.velocity = dir * polar_shift_force * force_mult
+			if not in_safe_lane:
+				target_body.apply_polar_shift_dash_lockout(polar_shift_dash_lockout_duration)
+
+
+func _get_damageable_targets() -> Array[Node2D]:
+	var result: Array[Node2D] = []
+	for candidate_variant in target_candidates:
+		if not (candidate_variant is Node2D):
+			continue
+		var candidate := candidate_variant as Node2D
+		if not is_instance_valid(candidate):
+			continue
+		if not DAMAGEABLE.can_take_damage(candidate):
+			continue
+		result.append(candidate)
+	if result.is_empty() and is_instance_valid(target) and DAMAGEABLE.can_take_damage(target):
+		result.append(target)
+	return result
 
 func _capture_polar_shift_pattern() -> void:
 	_polar_shift_safe_angles.clear()

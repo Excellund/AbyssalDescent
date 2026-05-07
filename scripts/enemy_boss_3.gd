@@ -1,6 +1,8 @@
 extends "res://scripts/enemy_base.gd"
 
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
+const LACUNA_SEAM_OVERLAY_SCRIPT := preload("res://scripts/lacuna_seam_overlay.gd")
+const LACUNA_ATTACK_OVERLAY_SCRIPT := preload("res://scripts/lacuna_attack_overlay.gd")
 
 const STATE_STALK := 0
 const STATE_WINDUP := 1
@@ -58,14 +60,19 @@ var active_attack: int = ATTACK_SEVER
 var locked_direction: Vector2 = Vector2.RIGHT
 var telegraph_alpha: float = 0.0
 var _sever_hit_applied: bool = false
+var _sever_hit_targets: Dictionary = {}
 var _tracked_target_last_position: Vector2 = Vector2.ZERO
 var _tracked_target_velocity: Vector2 = Vector2.ZERO
 var _locked_null_ring_center: Vector2 = Vector2.ZERO
+var _locked_null_ring_centers: Array[Vector2] = []
 var _null_ring_pull_timer: float = 0.0
 var _null_ring_pull_fx_time_left: float = 0.0
 var _null_ring_pull_fx_center: Vector2 = Vector2.ZERO
 var _echo_cross_angle: float = 0.0
+var _remote_echo_cross_angle_target: float = 0.0
 var _echo_cross_smoothed_dir: Vector2 = Vector2.RIGHT
+var _telegraph_overlay_origin: Vector2 = Vector2.ZERO
+var _remote_telegraph_overlay_origin_target: Vector2 = Vector2.ZERO
 var _attack_cycle_step: int = 0
 var _last_attack: int = -1
 var _repeat_attack_streak: int = 0
@@ -76,17 +83,25 @@ var impact_burst_time_left: float = 0.0
 var impact_burst_duration: float = 0.2
 var last_attack_for_fx: int = ATTACK_SEVER
 var seam_zones: Array[Dictionary] = []
+var _seam_overlay: Node2D = null
+var _attack_overlay: Node2D = null
 var _hit_flash_pos: Vector2 = Vector2.ZERO
 var hit_flash_time_left: float = 0.0
 var hit_flash_duration: float = 0.3
 var hit_flash_attack: int = ATTACK_SEVER
 var _attack_sync_was_active: bool = false
+var _projectile_sync_sequence: int = 0
+var _last_received_projectile_sync_sequence: int = -1
 
 func _ready() -> void:
 	max_health = boss_max_health
 	edge_escape_nudge_speed = 380.0
 	super._ready()
 	dread_resonance_visual_boss_emphasis = true
+	_ensure_seam_overlay()
+	_ensure_attack_overlay()
+	_telegraph_overlay_origin = global_position
+	_remote_telegraph_overlay_origin_target = global_position
 	for child in get_children():
 		if child is CollisionShape2D:
 			var shape_node := child as CollisionShape2D
@@ -128,7 +143,40 @@ func _process_behavior(delta: float) -> void:
 	_null_ring_pull_fx_time_left = maxf(0.0, _null_ring_pull_fx_time_left - delta)
 	hit_flash_time_left = maxf(0.0, hit_flash_time_left - delta)
 	_update_edge_escape_state(delta)
+	_sync_attack_overlay()
 	queue_redraw()
+
+func _ensure_seam_overlay() -> void:
+	if is_instance_valid(_seam_overlay):
+		return
+	_seam_overlay = LACUNA_SEAM_OVERLAY_SCRIPT.new()
+	if is_instance_valid(get_parent()):
+		get_parent().add_child(_seam_overlay)
+
+func _sync_seam_overlay() -> void:
+	_ensure_seam_overlay()
+	if not is_instance_valid(_seam_overlay):
+		return
+	if not _seam_overlay.has_method("set_seam_state"):
+		return
+	_seam_overlay.call("set_seam_state", seam_zones, seam_radius, seam_duration)
+
+func _ensure_attack_overlay() -> void:
+	if is_instance_valid(_attack_overlay):
+		return
+	_attack_overlay = LACUNA_ATTACK_OVERLAY_SCRIPT.new()
+	if is_instance_valid(get_parent()):
+		get_parent().add_child(_attack_overlay)
+
+func _sync_attack_overlay() -> void:
+	_ensure_attack_overlay()
+	if not is_instance_valid(_attack_overlay):
+		return
+	if not _attack_overlay.has_method("set_telegraph_state"):
+		return
+	var show_telegraph := boss_state == STATE_WINDUP and (active_attack == ATTACK_SEVER or active_attack == ATTACK_ECHO_CROSS)
+	var overlay_origin := global_position if network_simulation_enabled else _telegraph_overlay_origin
+	_attack_overlay.call("set_telegraph_state", show_telegraph, active_attack, overlay_origin, telegraph_alpha, locked_direction, _echo_cross_angle, sever_speed, sever_duration, sever_width, echo_cross_length, echo_cross_width)
 
 func should_force_network_runtime_state_sampling() -> bool:
 	return boss_state == STATE_WINDUP or boss_state == STATE_ATTACK or attack_anim_time_left > 0.0
@@ -144,7 +192,7 @@ func get_priority_network_sync_interval_sec() -> float:
 func get_projectile_network_sync_state() -> Dictionary:
 	if not network_simulation_enabled:
 		return {}
-	var active := boss_state != STATE_STALK or attack_anim_time_left > 0.0 or attack_afterglow_time_left > 0.0 or impact_burst_time_left > 0.0
+	var active := boss_state != STATE_STALK or attack_anim_time_left > 0.0 or attack_afterglow_time_left > 0.0 or impact_burst_time_left > 0.0 or not seam_zones.is_empty()
 	if not active and not _attack_sync_was_active:
 		return {}
 	var payload := {
@@ -156,6 +204,7 @@ func get_projectile_network_sync_state() -> Dictionary:
 		"telegraph_alpha": telegraph_alpha,
 		"sever_hit_applied": _sever_hit_applied,
 		"locked_null_ring_center": _locked_null_ring_center,
+		"locked_null_ring_centers": _locked_null_ring_centers,
 		"null_ring_pull_timer": _null_ring_pull_timer,
 		"null_ring_pull_fx_time_left": _null_ring_pull_fx_time_left,
 		"null_ring_pull_fx_center": _null_ring_pull_fx_center,
@@ -166,9 +215,13 @@ func get_projectile_network_sync_state() -> Dictionary:
 		"hit_flash_pos": _hit_flash_pos,
 		"hit_flash_time_left": hit_flash_time_left,
 		"hit_flash_attack": hit_flash_attack,
+		"seam_zones": seam_zones,
 		"visual_facing_direction": visual_facing_direction,
-		"attack_anim_time_left": attack_anim_time_left
+		"attack_anim_time_left": attack_anim_time_left,
+		"telegraph_overlay_origin": global_position
 	}
+	_projectile_sync_sequence += 1
+	payload["seq"] = _projectile_sync_sequence
 	_attack_sync_was_active = active
 	return payload
 
@@ -177,24 +230,58 @@ func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
 		return
 	if sync_state.is_empty():
 		return
+	var incoming_seq := int(sync_state.get("seq", -1))
+	if incoming_seq >= 0:
+		if incoming_seq <= _last_received_projectile_sync_sequence:
+			return
+		_last_received_projectile_sync_sequence = incoming_seq
+	if sync_state.has("seam_zones"):
+		var raw_proj_seams: Variant = sync_state.get("seam_zones")
+		if raw_proj_seams is Array:
+			seam_zones.clear()
+			for entry in raw_proj_seams:
+				if entry is Dictionary:
+					seam_zones.append(entry as Dictionary)
 	var active := bool(sync_state.get("active", false))
 	if not active:
 		if boss_state != STATE_STALK:
 			boss_state = STATE_STALK
 			state_time_left = 0.0
+		_sync_attack_overlay()
 		queue_redraw()
 		return
 	boss_state = int(sync_state.get("boss_state", boss_state))
 	state_time_left = float(sync_state.get("state_time_left", state_time_left))
 	active_attack = int(sync_state.get("active_attack", active_attack))
-	locked_direction = sync_state.get("locked_direction", locked_direction) as Vector2
+	var incoming_locked_direction := sync_state.get("locked_direction", locked_direction) as Vector2
+	if boss_state == STATE_WINDUP and active_attack == ATTACK_SEVER:
+		_network_direction_targets.erase("locked_direction")
+		locked_direction = incoming_locked_direction
+	else:
+		_set_remote_direction_target("locked_direction", incoming_locked_direction)
 	telegraph_alpha = float(sync_state.get("telegraph_alpha", telegraph_alpha))
 	_sever_hit_applied = bool(sync_state.get("sever_hit_applied", _sever_hit_applied))
 	_locked_null_ring_center = sync_state.get("locked_null_ring_center", _locked_null_ring_center) as Vector2
+	if sync_state.has("locked_null_ring_centers"):
+		var raw_nrc: Variant = sync_state.get("locked_null_ring_centers")
+		if raw_nrc is Array:
+			var incoming_centers: Array[Vector2] = []
+			for v in raw_nrc:
+				if v is Vector2:
+					incoming_centers.append(v)
+			if not _locked_null_ring_centers.is_empty() and _locked_null_ring_centers.size() == incoming_centers.size():
+				for i in range(incoming_centers.size()):
+					var previous_center := _locked_null_ring_centers[i]
+					var incoming_center := incoming_centers[i]
+					if previous_center.distance_squared_to(incoming_center) <= 2500.0:
+						incoming_centers[i] = previous_center.lerp(incoming_center, 0.35)
+			_locked_null_ring_centers = incoming_centers
 	_null_ring_pull_timer = float(sync_state.get("null_ring_pull_timer", _null_ring_pull_timer))
 	_null_ring_pull_fx_time_left = float(sync_state.get("null_ring_pull_fx_time_left", _null_ring_pull_fx_time_left))
 	_null_ring_pull_fx_center = sync_state.get("null_ring_pull_fx_center", _null_ring_pull_fx_center) as Vector2
-	_echo_cross_angle = float(sync_state.get("echo_cross_angle", _echo_cross_angle))
+	_remote_echo_cross_angle_target = float(sync_state.get("echo_cross_angle", _echo_cross_angle))
+	if _echo_cross_angle == 0.0:
+		_echo_cross_angle = _remote_echo_cross_angle_target
 	attack_afterglow_time_left = float(sync_state.get("attack_afterglow_time_left", attack_afterglow_time_left))
 	impact_burst_time_left = float(sync_state.get("impact_burst_time_left", impact_burst_time_left))
 	last_attack_for_fx = int(sync_state.get("last_attack_for_fx", last_attack_for_fx))
@@ -202,7 +289,14 @@ func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
 	hit_flash_time_left = float(sync_state.get("hit_flash_time_left", hit_flash_time_left))
 	hit_flash_attack = int(sync_state.get("hit_flash_attack", hit_flash_attack))
 	attack_anim_time_left = float(sync_state.get("attack_anim_time_left", attack_anim_time_left))
-	visual_facing_direction = sync_state.get("visual_facing_direction", visual_facing_direction) as Vector2
+	if sync_state.has("telegraph_overlay_origin"):
+		_remote_telegraph_overlay_origin_target = sync_state.get("telegraph_overlay_origin", _remote_telegraph_overlay_origin_target) as Vector2
+		if _telegraph_overlay_origin == Vector2.ZERO:
+			_telegraph_overlay_origin = _remote_telegraph_overlay_origin_target
+	var incoming_facing := sync_state.get("visual_facing_direction", visual_facing_direction) as Vector2
+	_set_remote_direction_target("visual_facing_direction", incoming_facing)
+	_sync_seam_overlay()
+	_sync_attack_overlay()
 	queue_redraw()
 
 func _process_network_visuals(delta: float) -> void:
@@ -212,7 +306,23 @@ func _process_network_visuals(delta: float) -> void:
 	attack_afterglow_time_left = maxf(0.0, attack_afterglow_time_left - delta)
 	impact_burst_time_left = maxf(0.0, impact_burst_time_left - delta)
 	_null_ring_pull_fx_time_left = maxf(0.0, _null_ring_pull_fx_time_left - delta)
+	if boss_state == STATE_WINDUP and active_attack == ATTACK_SEVER:
+		_telegraph_overlay_origin = _remote_telegraph_overlay_origin_target
+	else:
+		_telegraph_overlay_origin = _telegraph_overlay_origin.lerp(_remote_telegraph_overlay_origin_target, clampf(delta * 24.0, 0.0, 1.0))
+	_echo_cross_angle = lerp_angle(_echo_cross_angle, _remote_echo_cross_angle_target, clampf(delta * 18.0, 0.0, 1.0))
 	hit_flash_time_left = maxf(0.0, hit_flash_time_left - delta)
+	for i in range(seam_zones.size()):
+		var seam := seam_zones[i] as Dictionary
+		seam["time_left"] = float(seam.get("time_left", 0.0)) - delta
+		seam["pulse"] = maxf(0.0, float(seam.get("pulse", 0.0)) - delta)
+	var expired_idx := seam_zones.size() - 1
+	while expired_idx >= 0:
+		if float(seam_zones[expired_idx].get("time_left", 0.0)) <= 0.0:
+			seam_zones.remove_at(expired_idx)
+		expired_idx -= 1
+	_sync_seam_overlay()
+	_sync_attack_overlay()
 
 func _update_target_tracking(delta: float) -> void:
 	if not is_instance_valid(target) or delta <= 0.000001:
@@ -290,9 +400,11 @@ func _start_next_attack(distance_to_target: float, wall_pressure: float) -> void
 	state_time_left = _get_windup_time(active_attack)
 	telegraph_alpha = 0.0
 	_sever_hit_applied = false
+	_sever_hit_targets.clear()
 	velocity = Vector2.ZERO
 	if active_attack == ATTACK_NULL_RING:
 		_locked_null_ring_center = _predict_target_position(null_ring_windup * 0.42, null_ring_prediction_speed_cap)
+		_rebuild_null_ring_centers(null_ring_windup * 0.42)
 	elif active_attack == ATTACK_ECHO_CROSS:
 		_echo_cross_smoothed_dir = locked_direction
 		_echo_cross_angle = locked_direction.angle() + PI * 0.5
@@ -307,6 +419,7 @@ func _process_windup_state(delta: float) -> void:
 			visual_facing_direction = locked_direction
 	elif active_attack == ATTACK_NULL_RING:
 		_locked_null_ring_center = _predict_target_position(null_ring_windup * 0.4, null_ring_prediction_speed_cap)
+		_rebuild_null_ring_centers(null_ring_windup * 0.4)
 	elif active_attack == ATTACK_ECHO_CROSS and is_instance_valid(target):
 		var to_target := target.global_position - global_position
 		if to_target.length_squared() > 0.000001:
@@ -373,44 +486,62 @@ func _process_recover_state(delta: float) -> void:
 		cooldown_left = action_cooldown * lerpf(1.0, 0.58, _get_enrage_ratio())
 
 func _apply_sever_hit() -> void:
-	if _sever_hit_applied or not is_instance_valid(target) or not DAMAGEABLE.can_take_damage(target):
+	var damageable_targets := _get_damageable_targets()
+	if damageable_targets.is_empty():
 		return
 	var seg_start := global_position - locked_direction * 40.0
 	var seg_end := global_position + locked_direction * 44.0
-	if _distance_point_to_segment(target.global_position, seg_start, seg_end) <= sever_width:
-		if DAMAGEABLE.apply_damage(target, sever_damage, {"source": "enemy_ability", "ability": "lacuna_sever"}):
+	for hit_target in damageable_targets:
+		if not is_instance_valid(hit_target):
+			continue
+		var target_id := hit_target.get_instance_id()
+		if _sever_hit_targets.has(target_id):
+			continue
+		if _distance_point_to_segment(hit_target.global_position, seg_start, seg_end) > sever_width:
+			continue
+		if DAMAGEABLE.apply_damage(hit_target, sever_damage, {"source": "enemy_ability", "ability": "lacuna_sever"}):
+			_sever_hit_targets[target_id] = true
 			_sever_hit_applied = true
-			_spawn_seam(target.global_position)
-			_hit_flash_pos = target.global_position
+			_spawn_seam(hit_target.global_position)
+			_hit_flash_pos = hit_target.global_position
 			hit_flash_time_left = hit_flash_duration
 			hit_flash_attack = ATTACK_SEVER
 
 func _apply_null_ring_hit() -> void:
-	if not is_instance_valid(target) or not DAMAGEABLE.can_take_damage(target):
-		return
-	var distance := target.global_position.distance_to(_locked_null_ring_center)
-	if distance > null_ring_safe_radius and distance <= null_ring_radius:
-		DAMAGEABLE.apply_damage(target, null_ring_damage, {"source": "enemy_ability", "ability": "lacuna_null_ring"})
-		_hit_flash_pos = target.global_position
-		hit_flash_time_left = hit_flash_duration
-		hit_flash_attack = ATTACK_NULL_RING
-	var to_center := _locked_null_ring_center - target.global_position
-	if distance > 0.000001 and distance <= null_ring_radius:
-		target.velocity += to_center.normalized() * null_ring_pull_force
-	_null_ring_pull_fx_center = _locked_null_ring_center
-	_null_ring_pull_fx_time_left = maxf(0.01, null_ring_pull_fx_duration)
-	_spawn_seam(_locked_null_ring_center)
+	var centers := _locked_null_ring_centers if not _locked_null_ring_centers.is_empty() else [_locked_null_ring_center]
+	var damaged: Dictionary = {}
+	for hit_target in _get_damageable_targets():
+		if not is_instance_valid(hit_target):
+			continue
+		var target_id := hit_target.get_instance_id()
+		for center in centers:
+			var distance := hit_target.global_position.distance_to(center)
+			if not damaged.has(target_id) and distance > null_ring_safe_radius and distance <= null_ring_radius:
+				DAMAGEABLE.apply_damage(hit_target, null_ring_damage, {"source": "enemy_ability", "ability": "lacuna_null_ring"})
+				_hit_flash_pos = hit_target.global_position
+				hit_flash_time_left = hit_flash_duration
+				hit_flash_attack = ATTACK_NULL_RING
+				damaged[target_id] = true
+			if hit_target is CharacterBody2D and distance > 0.000001 and distance <= null_ring_radius:
+				(hit_target as CharacterBody2D).velocity += (center - hit_target.global_position).normalized() * null_ring_pull_force
+	for center in centers:
+		_null_ring_pull_fx_center = center
+		_null_ring_pull_fx_time_left = maxf(0.01, null_ring_pull_fx_duration)
+		_spawn_seam(center)
 
 func _apply_echo_cross_hit() -> void:
-	if is_instance_valid(target) and DAMAGEABLE.can_take_damage(target):
-		var hit_primary_dir := Vector2.RIGHT.rotated(_echo_cross_angle)
-		var hit_secondary_dir := hit_primary_dir.orthogonal()
-		var half_len := echo_cross_length * 0.5
-		var hit_primary := _distance_point_to_segment(target.global_position, global_position - hit_primary_dir * half_len, global_position + hit_primary_dir * half_len) <= echo_cross_width
-		var hit_secondary := _distance_point_to_segment(target.global_position, global_position - hit_secondary_dir * half_len, global_position + hit_secondary_dir * half_len) <= echo_cross_width
-		if hit_primary or hit_secondary:
-			DAMAGEABLE.apply_damage(target, echo_cross_damage, {"source": "enemy_ability", "ability": "lacuna_echo_cross"})
-			_hit_flash_pos = target.global_position
+	var hit_primary_dir := Vector2.RIGHT.rotated(_echo_cross_angle)
+	var hit_secondary_dir := hit_primary_dir.orthogonal()
+	var half_len := echo_cross_length * 0.5
+	for hit_target in _get_damageable_targets():
+		if not is_instance_valid(hit_target):
+			continue
+		var hit_primary := _distance_point_to_segment(hit_target.global_position, global_position - hit_primary_dir * half_len, global_position + hit_primary_dir * half_len) <= echo_cross_width
+		var hit_secondary := _distance_point_to_segment(hit_target.global_position, global_position - hit_secondary_dir * half_len, global_position + hit_secondary_dir * half_len) <= echo_cross_width
+		if not (hit_primary or hit_secondary):
+			continue
+		if DAMAGEABLE.apply_damage(hit_target, echo_cross_damage, {"source": "enemy_ability", "ability": "lacuna_echo_cross"}):
+			_hit_flash_pos = hit_target.global_position
 			hit_flash_time_left = hit_flash_duration
 			hit_flash_attack = ATTACK_ECHO_CROSS
 	var primary_dir := Vector2.RIGHT.rotated(_echo_cross_angle)
@@ -447,6 +578,8 @@ func _spawn_seam(seam_position: Vector2, duration_mult: float = 1.0, tick_interv
 	if _get_enrage_ratio() >= 0.84:
 		max_seams += 1
 	_evict_excess_seams(max_seams)
+	if network_simulation_enabled:
+		_sync_seam_overlay()
 
 func _evict_excess_seams(limit: int) -> void:
 	var active_seams := 0
@@ -481,11 +614,13 @@ func _process_seam_zones(delta: float) -> void:
 		if not evicting and float(seam.get("tick_left", 0.0)) <= 0.0:
 			seam["tick_left"] = float(seam.get("tick_interval", seam_tick_interval))
 			seam["pulse"] = 0.12
-			if is_instance_valid(target):
-				var seam_pos := seam.get("pos", Vector2.ZERO) as Vector2
-				if seam_pos.distance_to(target.global_position) <= seam_radius:
-					if DAMAGEABLE.can_take_damage(target):
-						DAMAGEABLE.apply_damage(target, seam_tick_damage, {"source": "enemy_ability", "ability": "lacuna_seam_tick"})
+			var seam_pos := seam.get("pos", Vector2.ZERO) as Vector2
+			for hit_target in _get_damageable_targets():
+				if not is_instance_valid(hit_target):
+					continue
+				if seam_pos.distance_to(hit_target.global_position) > seam_radius:
+					continue
+				DAMAGEABLE.apply_damage(hit_target, seam_tick_damage, {"source": "enemy_ability", "ability": "lacuna_seam_tick"})
 		if float(seam.get("time_left", 0.0)) <= 0.0:
 			expired.append(i)
 	for idx in range(expired.size() - 1, -1, -1):
@@ -498,6 +633,26 @@ func _predict_target_position(prediction_scale: float, speed_cap: float = 0.0) -
 	if speed_cap > 0.0 and predicted_velocity.length() > speed_cap:
 		predicted_velocity = predicted_velocity.normalized() * speed_cap
 	return _clamp_to_arena(target.global_position + predicted_velocity * prediction_scale, 36.0)
+
+func _predict_position_for_node(node: Node2D, prediction_scale: float, speed_cap: float) -> Vector2:
+	var vel := Vector2.ZERO
+	if node is CharacterBody2D:
+		vel = (node as CharacterBody2D).velocity
+	if speed_cap > 0.0 and vel.length() > speed_cap:
+		vel = vel.normalized() * speed_cap
+	return _clamp_to_arena(node.global_position + vel * prediction_scale, 36.0)
+
+func _rebuild_null_ring_centers(prediction_scale: float) -> void:
+	_locked_null_ring_centers.clear()
+	for candidate_variant in target_candidates:
+		if not (candidate_variant is Node2D):
+			continue
+		var c := candidate_variant as Node2D
+		if not is_instance_valid(c):
+			continue
+		_locked_null_ring_centers.append(_predict_position_for_node(c, prediction_scale, null_ring_prediction_speed_cap))
+	if _locked_null_ring_centers.is_empty():
+		_locked_null_ring_centers.append(_locked_null_ring_center)
 
 func _clamp_to_arena(world_position: Vector2, margin: float) -> Vector2:
 	var half := arena_size * 0.5 - Vector2.ONE * margin
@@ -515,6 +670,22 @@ func _distance_point_to_segment(point: Vector2, segment_start: Vector2, segment_
 		return point.distance_to(segment_start)
 	var t := clampf((point - segment_start).dot(segment) / length_sq, 0.0, 1.0)
 	return point.distance_to(segment_start + segment * t)
+
+
+func _get_damageable_targets() -> Array[Node2D]:
+	var result: Array[Node2D] = []
+	for candidate_variant in target_candidates:
+		if not (candidate_variant is Node2D):
+			continue
+		var candidate := candidate_variant as Node2D
+		if not is_instance_valid(candidate):
+			continue
+		if not DAMAGEABLE.can_take_damage(candidate):
+			continue
+		result.append(candidate)
+	if result.is_empty() and is_instance_valid(target) and DAMAGEABLE.can_take_damage(target):
+		result.append(target)
+	return result
 
 func _get_inward_edge_bias() -> Vector2:
 	var half := arena_size * 0.5
@@ -554,29 +725,14 @@ func _get_enrage_ratio() -> float:
 	return clampf((0.72 - health_ratio) / 0.54, 0.0, 1.0)
 
 func _get_custom_network_runtime_state() -> Dictionary:
-	return {
-		"boss_state": boss_state,
-		"state_time_left": state_time_left,
-		"cooldown_left": cooldown_left,
-		"active_attack": active_attack,
-		"locked_direction": locked_direction,
-		"telegraph_alpha": telegraph_alpha,
-		"null_ring_center": _locked_null_ring_center,
-		"null_ring_pull_timer": _null_ring_pull_timer,
-		"null_ring_pull_fx_time_left": _null_ring_pull_fx_time_left,
-		"null_ring_pull_fx_center": _null_ring_pull_fx_center,
-		"echo_cross_angle": _echo_cross_angle,
-		"echo_cross_smoothed_dir": _echo_cross_smoothed_dir,
-		"last_attack": _last_attack,
-		"attack_afterglow_time_left": attack_afterglow_time_left,
-		"impact_burst_time_left": impact_burst_time_left,
-		"last_attack_for_fx": last_attack_for_fx,
-		"hit_flash_pos": _hit_flash_pos,
-		"hit_flash_time_left": hit_flash_time_left,
-		"hit_flash_attack": hit_flash_attack
-	}
+	# Lacuna attack visuals are synchronized via projectile sync payloads.
+	# Returning empty custom state prevents lower-frequency runtime snapshots
+	# from fighting high-frequency projectile updates on joiners.
+	return {}
 
 func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
+	if not network_simulation_enabled:
+		return
 	if custom_state.is_empty():
 		return
 	if custom_state.has("boss_state"):
@@ -593,6 +749,13 @@ func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
 		telegraph_alpha = float(custom_state.get("telegraph_alpha", telegraph_alpha))
 	if custom_state.has("null_ring_center"):
 		_locked_null_ring_center = custom_state.get("null_ring_center", _locked_null_ring_center) as Vector2
+	if custom_state.has("null_ring_centers"):
+		var raw_nrc_c: Variant = custom_state.get("null_ring_centers")
+		if raw_nrc_c is Array:
+			_locked_null_ring_centers.clear()
+			for v in raw_nrc_c:
+				if v is Vector2:
+					_locked_null_ring_centers.append(v)
 	if custom_state.has("null_ring_pull_timer"):
 		_null_ring_pull_timer = float(custom_state.get("null_ring_pull_timer", _null_ring_pull_timer))
 	if custom_state.has("null_ring_pull_fx_time_left"):
@@ -617,6 +780,13 @@ func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
 		hit_flash_time_left = float(custom_state.get("hit_flash_time_left", hit_flash_time_left))
 	if custom_state.has("hit_flash_attack"):
 		hit_flash_attack = int(custom_state.get("hit_flash_attack", hit_flash_attack))
+	if custom_state.has("seam_zones"):
+		var raw_seams: Variant = custom_state.get("seam_zones")
+		if raw_seams is Array:
+			seam_zones.clear()
+			for entry in raw_seams:
+				if entry is Dictionary:
+					seam_zones.append(entry as Dictionary)
 
 func _draw() -> void:
 	var facing := visual_facing_direction if visual_facing_direction.length_squared() > 0.000001 else Vector2.RIGHT
@@ -651,7 +821,8 @@ func _draw() -> void:
 	_draw_attack_impact_burst(facing)
 	_draw_hit_flash()
 	if boss_state == STATE_WINDUP or (boss_state == STATE_ATTACK and active_attack == ATTACK_NULL_RING and _null_ring_pull_timer > 0.0):
-		_draw_attack_telegraph()
+		if active_attack == ATTACK_NULL_RING:
+			_draw_attack_telegraph()
 		_draw_role_state_icon(facing, body_radius)
 
 func _draw_lacuna_body(body_radius: float, body_color: Color, core_color: Color, facing: Vector2, pulse: float, threat_t: float, enrage_t: float) -> void:
@@ -763,6 +934,9 @@ func _draw_lacuna_body(body_radius: float, body_color: Color, core_color: Color,
 	_draw_damage_blocked_indicator(body_radius)
 
 func _draw_seam_zones() -> void:
+	# On remote clients (joiners), seams are rendered by the overlay, not here
+	if not network_simulation_enabled:
+		return
 	for seam_variant in seam_zones:
 		var seam := seam_variant as Dictionary
 		var seam_pos := seam.get("pos", Vector2.ZERO) as Vector2
@@ -822,26 +996,28 @@ func _draw_attack_telegraph() -> void:
 			draw_line(start + slash_side * (sever_width * 0.7), end + slash_side * (sever_width * 0.22), Color(0.84, 1.0, 0.95, alpha * 0.36), 1.6)
 			draw_line(start - slash_side * (sever_width * 0.7), end - slash_side * (sever_width * 0.22), Color(0.84, 1.0, 0.95, alpha * 0.24), 1.2)
 		ATTACK_NULL_RING:
-			var local_center := _locked_null_ring_center - global_position
+			var tele_centers := _locked_null_ring_centers if not _locked_null_ring_centers.is_empty() else [_locked_null_ring_center]
 			var danger_mid := (null_ring_safe_radius + null_ring_radius) * 0.5
-			draw_circle(local_center, null_ring_radius, Color(0.16, 0.96, 0.74, alpha * 0.24))
-			draw_arc(local_center, null_ring_radius, 0.0, TAU, 60, Color(0.76, 1.0, 0.92, alpha), 3.2)
-			draw_arc(local_center, danger_mid, 0.0, TAU, 54, Color(0.84, 1.0, 0.96, alpha * 0.6), 8.0)
-			draw_circle(local_center, null_ring_safe_radius, Color(0.04, 0.08, 0.07, alpha * 0.22))
-			draw_arc(local_center, null_ring_safe_radius, 0.0, TAU, 36, Color(0.76, 1.0, 0.92, alpha * 0.52), 3.0)
-			draw_arc(local_center, null_ring_safe_radius * 0.62, 0.0, TAU, 26, Color(0.2, 0.88, 0.74, alpha * 0.2), 1.4)
-			draw_circle(local_center, null_ring_safe_radius * 0.22, Color(0.84, 1.0, 0.95, alpha * 0.18))
-			draw_line(local_center + Vector2(-null_ring_safe_radius * 0.4, 0.0), local_center + Vector2(null_ring_safe_radius * 0.4, 0.0), Color(0.84, 1.0, 0.95, alpha * 0.46), 1.6)
-			draw_line(local_center + Vector2(0.0, -null_ring_safe_radius * 0.4), local_center + Vector2(0.0, null_ring_safe_radius * 0.4), Color(0.84, 1.0, 0.95, alpha * 0.46), 1.6)
-			for spoke_i in range(6):
-				var spoke_angle := telegraph_alpha * 0.4 + float(spoke_i) * TAU / 6.0
-				var spoke_dir := Vector2.RIGHT.rotated(spoke_angle)
-				var spoke_start := local_center + spoke_dir * (null_ring_safe_radius + 10.0)
-				var spoke_end := local_center + spoke_dir * (null_ring_radius - 8.0)
-				draw_line(spoke_start, spoke_end, Color(0.92, 1.0, 0.98, alpha * 0.22), 1.2)
-			for seg_i in range(3):
-				var seg_start := telegraph_alpha * 0.8 + float(seg_i) * TAU / 3.0
-				draw_arc(local_center, null_ring_radius + 10.0, seg_start, seg_start + 0.52, 12, Color(0.82, 1.0, 0.94, alpha * 0.44), 1.8)
+			for ring_center in tele_centers:
+				var local_center := ring_center - global_position
+				draw_circle(local_center, null_ring_radius, Color(0.16, 0.96, 0.74, alpha * 0.24))
+				draw_arc(local_center, null_ring_radius, 0.0, TAU, 60, Color(0.76, 1.0, 0.92, alpha), 3.2)
+				draw_arc(local_center, danger_mid, 0.0, TAU, 54, Color(0.84, 1.0, 0.96, alpha * 0.6), 8.0)
+				draw_circle(local_center, null_ring_safe_radius, Color(0.04, 0.08, 0.07, alpha * 0.22))
+				draw_arc(local_center, null_ring_safe_radius, 0.0, TAU, 36, Color(0.76, 1.0, 0.92, alpha * 0.52), 3.0)
+				draw_arc(local_center, null_ring_safe_radius * 0.62, 0.0, TAU, 26, Color(0.2, 0.88, 0.74, alpha * 0.2), 1.4)
+				draw_circle(local_center, null_ring_safe_radius * 0.22, Color(0.84, 1.0, 0.95, alpha * 0.18))
+				draw_line(local_center + Vector2(-null_ring_safe_radius * 0.4, 0.0), local_center + Vector2(null_ring_safe_radius * 0.4, 0.0), Color(0.84, 1.0, 0.95, alpha * 0.46), 1.6)
+				draw_line(local_center + Vector2(0.0, -null_ring_safe_radius * 0.4), local_center + Vector2(0.0, null_ring_safe_radius * 0.4), Color(0.84, 1.0, 0.95, alpha * 0.46), 1.6)
+				for spoke_i in range(6):
+					var spoke_angle := telegraph_alpha * 0.4 + float(spoke_i) * TAU / 6.0
+					var spoke_dir := Vector2.RIGHT.rotated(spoke_angle)
+					var spoke_start := local_center + spoke_dir * (null_ring_safe_radius + 10.0)
+					var spoke_end := local_center + spoke_dir * (null_ring_radius - 8.0)
+					draw_line(spoke_start, spoke_end, Color(0.92, 1.0, 0.98, alpha * 0.22), 1.2)
+				for seg_i in range(3):
+					var seg_start := telegraph_alpha * 0.8 + float(seg_i) * TAU / 3.0
+					draw_arc(local_center, null_ring_radius + 10.0, seg_start, seg_start + 0.52, 12, Color(0.82, 1.0, 0.94, alpha * 0.44), 1.8)
 		ATTACK_ECHO_CROSS:
 			var primary_dir := Vector2.RIGHT.rotated(_echo_cross_angle)
 			var secondary_dir := primary_dir.orthogonal()
@@ -871,7 +1047,9 @@ func _draw_attack_afterglow(facing: Vector2) -> void:
 			draw_line(-facing * 2.0, -facing * (glow_len * 0.82), Color(0.9, 1.0, 0.98, 0.32 * fade), 4.0)
 		ATTACK_NULL_RING:
 			var ring_radius := null_ring_radius * (1.0 + (1.0 - t) * 0.24)
-			draw_arc(_locked_null_ring_center - global_position, ring_radius, 0.0, TAU, 56, Color(0.3, 1.0, 0.84, 0.42 * fade), 4.2)
+			var glow_centers := _locked_null_ring_centers if not _locked_null_ring_centers.is_empty() else [_locked_null_ring_center]
+			for glow_center in glow_centers:
+				draw_arc(glow_center - global_position, ring_radius, 0.0, TAU, 56, Color(0.3, 1.0, 0.84, 0.42 * fade), 4.2)
 		ATTACK_ECHO_CROSS:
 			var primary_dir := Vector2.RIGHT.rotated(_echo_cross_angle)
 			var secondary_dir := primary_dir.orthogonal()

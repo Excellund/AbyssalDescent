@@ -70,7 +70,7 @@ var _teleport_flash_left: float = 0.0
 var _illusion_positions: Array[Vector2] = []
 var _illusion_shatter_times: Array[float] = []
 var _illusion_phase_left: float = 0.0
-var _last_target_attack_anim_time: float = 0.0
+var _last_attack_anim_time_by_player_id: Dictionary = {}
 
 # Band attack
 var _band_windup_left: float = 0.0
@@ -413,7 +413,7 @@ func _spawn_illusions() -> void:
 func _process_illusion_phase(delta: float) -> void:
 	velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
 	move_and_slide()
-	_try_resolve_illusion_guess_from_player_attack()
+	_try_resolve_illusion_guesses_from_player_attacks()
 	_illusion_phase_left = maxf(0.0, _illusion_phase_left - delta)
 	for i in _illusion_shatter_times.size():
 		_illusion_shatter_times[i] = maxf(0.0, float(_illusion_shatter_times[i]) - delta)
@@ -437,26 +437,65 @@ func _is_point_inside_attack_indicator(origin: Vector2, direction: Vector2, poin
 	var angle_to_point := acos(dot_value)
 	return angle_to_point <= half_arc_radians
 
-func _try_resolve_illusion_guess_from_player_attack() -> void:
+func _get_attacking_player_candidates() -> Array[Node2D]:
+	var players: Array[Node2D] = []
+	var parent_node := get_parent()
+	if parent_node == null:
+		return players
+	if parent_node.has_method("_get_multiplayer_player_nodes"):
+		var player_nodes_variant: Variant = parent_node.call("_get_multiplayer_player_nodes")
+		if player_nodes_variant is Array:
+			for node_variant in player_nodes_variant:
+				if node_variant is Node2D and is_instance_valid(node_variant):
+					players.append(node_variant as Node2D)
+	var primary_player_variant: Variant = parent_node.get("player")
+	if primary_player_variant is Node2D and is_instance_valid(primary_player_variant):
+		var primary_player := primary_player_variant as Node2D
+		if not players.has(primary_player):
+			players.append(primary_player)
+	var second_player_variant: Variant = parent_node.get("second_player")
+	if second_player_variant is Node2D and is_instance_valid(second_player_variant):
+		var second_player := second_player_variant as Node2D
+		if not players.has(second_player):
+			players.append(second_player)
+	return players
+
+func _try_resolve_illusion_guesses_from_player_attacks() -> void:
 	if seamlock_state != ENEMY_STATE_ENUMS.SeamlockState.ILLUSION_PHASE:
-		_last_target_attack_anim_time = 0.0
+		_last_attack_anim_time_by_player_id.clear()
 		return
-	if not is_instance_valid(target) or _illusion_positions.is_empty():
-		_last_target_attack_anim_time = 0.0
+	if _illusion_positions.is_empty():
+		_last_attack_anim_time_by_player_id.clear()
 		return
-	var attack_anim_time := float(target.get("attack_anim_time_left")) if target.get("attack_anim_time_left") != null else 0.0
-	var attack_started := attack_anim_time > 0.0 and _last_target_attack_anim_time <= 0.0
-	_last_target_attack_anim_time = attack_anim_time
-	if not attack_started:
+	var candidates := _get_attacking_player_candidates()
+	var seen_player_ids: Dictionary = {}
+	for candidate in candidates:
+		if not is_instance_valid(candidate):
+			continue
+		var player_id := int(candidate.get_instance_id())
+		seen_player_ids[player_id] = true
+		var attack_anim_time := float(candidate.get("attack_anim_time_left")) if candidate.get("attack_anim_time_left") != null else 0.0
+		var previous_attack_anim_time := float(_last_attack_anim_time_by_player_id.get(player_id, attack_anim_time))
+		var attack_started := attack_anim_time > 0.0 and previous_attack_anim_time <= 0.0
+		_last_attack_anim_time_by_player_id[player_id] = attack_anim_time
+		if attack_started:
+			_try_resolve_illusion_guess_from_attacking_player(candidate)
+	for tracked_player_id_variant in _last_attack_anim_time_by_player_id.keys():
+		var tracked_player_id := int(tracked_player_id_variant)
+		if not seen_player_ids.has(tracked_player_id):
+			_last_attack_anim_time_by_player_id.erase(tracked_player_id)
+
+func _try_resolve_illusion_guess_from_attacking_player(attacking_player: Node2D) -> void:
+	if not is_instance_valid(attacking_player):
 		return
-	var attack_origin := target.global_position
-	var attack_direction := target.get("visual_facing_direction") as Vector2
+	var attack_origin := attacking_player.global_position
+	var attack_direction := attacking_player.get("visual_facing_direction") as Vector2
 	if attack_direction.length_squared() <= 0.000001:
 		attack_direction = (global_position - attack_origin).normalized()
 	if attack_direction.length_squared() <= 0.000001:
 		attack_direction = Vector2.RIGHT
-	var indicator_range := float(target.get("attack_range")) if target.get("attack_range") != null else 78.0
-	var indicator_arc := float(target.get("attack_arc_degrees")) if target.get("attack_arc_degrees") != null else 130.0
+	var indicator_range := float(attacking_player.get("attack_range")) if attacking_player.get("attack_range") != null else 78.0
+	var indicator_arc := float(attacking_player.get("attack_arc_degrees")) if attacking_player.get("attack_arc_degrees") != null else 130.0
 	var target_padding := body_draw_radius + 8.0
 	var real_hit := _is_point_inside_attack_indicator(attack_origin, attack_direction, global_position, indicator_range, indicator_arc, target_padding)
 	var nearest_illusion_dist := INF

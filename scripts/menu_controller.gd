@@ -172,7 +172,7 @@ func _join_local_dev_lobby() -> bool:
 	if multiplayer_session_manager == null:
 		push_error("[Menu] MultiplayerSessionManager autoload is missing")
 		return false
-	if multiplayer_session_manager.join_room("127.0.0.1", 9999, true):
+	if multiplayer_session_manager.join_room("127.0.0.1", 7777, true):
 		call_deferred("_show_lobby_modal")
 		return true
 	push_error("[Menu] Failed to join local dev lobby")
@@ -231,7 +231,7 @@ func _create_multiplayer_room() -> void:
 		return
 	
 	print("[Menu] No config issues. Requesting room registration...")
-	var registration_result: Dictionary = await multiplayer_room_service.create_room_registration(9999)
+	var registration_result: Dictionary = await multiplayer_room_service.create_room_registration(7777)
 	if _tree_or_null() == null:
 		return
 	print("[Menu] Room registration result: %s" % registration_result)
@@ -321,7 +321,7 @@ func _join_multiplayer_room(room_code: String) -> void:
 		return
 	var registration := resolve_result.get("registration", {}) as Dictionary
 	var resolved_host_address := String(registration.get("host_address", "")).strip_edges()
-	var resolved_host_port := int(registration.get("host_port", 9999))
+	var resolved_host_port := int(registration.get("host_port", 7777))
 	print("[Menu] Room resolved. Host address: %s:%d" % [resolved_host_address, resolved_host_port])
 	push_error("[JOIN DEBUG] Room resolved to %s:%d - Starting join attempt..." % [resolved_host_address, resolved_host_port])
 	var begin_join := func() -> bool:
@@ -349,7 +349,7 @@ func _join_multiplayer_room(room_code: String) -> void:
 		multiplayer_join_button.disabled = false
 
 
-func _await_multiplayer_join_result(multiplayer_session_manager: Node, timeout_sec: float = MULTIPLAYER_JOIN_CAP_SEC, resolved_address: String = "", resolved_port: int = 9999, begin_join: Callable = Callable()) -> Dictionary:
+func _await_multiplayer_join_result(multiplayer_session_manager: Node, timeout_sec: float = MULTIPLAYER_JOIN_CAP_SEC, resolved_address: String = "", resolved_port: int = 7777, begin_join: Callable = Callable()) -> Dictionary:
 	var state := {
 		"joined": false,
 		"failed": false,
@@ -427,7 +427,7 @@ func _await_multiplayer_join_result(multiplayer_session_manager: Node, timeout_s
 			"ok": true
 		}
 	if failure_reason.is_empty():
-		failure_reason = "Connection timed out. Could not reach host %s:%d after 2 minutes.\n\nPossible causes:\n• Host firewall is blocking UDP port 9999\n• Router has not properly forwarded port 9999 (check UPnP in host lobby)\n• CGNAT/Double NAT: ISP may use shared public IP that doesn't accept inbound connections\n• Different ISP network with firewall restrictions\n\nTroubleshooting:\n1. Ask host to check 'UPnP mapped port' in lobby - should show 9999\n2. Try hosting on same WiFi first to test basic connectivity\n3. Check Windows Firewall on host (port 9999 UDP must be allowed)" % [display_address, resolved_port]
+		failure_reason = "Connection timed out. Could not reach host %s:%d after 2 minutes.\n\nPossible causes:\n• Host firewall is blocking UDP port 7777\n• Router has not properly forwarded port 7777 (check UPnP in host lobby)\n• CGNAT/Double NAT: ISP may use shared public IP that doesn't accept inbound connections\n• Different ISP network with firewall restrictions\n\nTroubleshooting:\n1. Ask host to check 'UPnP mapped port' in lobby - should show 7777\n2. Try hosting on same WiFi first to test basic connectivity\n3. Check Windows Firewall on host (port 7777 UDP must be allowed)" % [display_address, resolved_port]
 	print("[Menu] Join failed: %s" % failure_reason)
 	return {
 		"ok": false,
