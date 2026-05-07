@@ -86,3 +86,18 @@ func consume_pending_boss_spawn_sync_payload() -> Dictionary:
 	var payload := pending_boss_spawn_sync_payload.duplicate(true) as Dictionary
 	pending_boss_spawn_sync_payload.clear()
 	return payload
+
+func apply_spawn_sync_id(source_room_sync_id: int) -> void:
+	if source_room_sync_id <= 0:
+		return
+	last_applied_spawn_sync_id = maxi(last_applied_spawn_sync_id, source_room_sync_id)
+	current_room_sync_id = maxi(current_room_sync_id, source_room_sync_id)
+
+func is_current_room_clear_processed() -> bool:
+	return last_room_clear_processed_sync_id == current_room_sync_id
+
+func mark_current_room_clear_processed() -> void:
+	last_room_clear_processed_sync_id = current_room_sync_id
+
+func mark_objective_cleared_for_current_room() -> void:
+	last_objective_cleared_room_sync_id = current_room_sync_id

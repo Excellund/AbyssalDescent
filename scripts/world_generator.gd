@@ -1598,9 +1598,7 @@ func _apply_synced_spawn_batch_payload(payload: Dictionary) -> void:
 		if is_instance_valid(enemy):
 			_register_network_enemy(enemy, enemy_id)
 	active_room_enemy_count = synced_enemy_count
-	if source_room_sync_id > 0:
-		_world_multiplayer_sync_state.last_applied_spawn_sync_id = maxi(_world_multiplayer_sync_state.last_applied_spawn_sync_id, source_room_sync_id)
-		_world_multiplayer_sync_state.current_room_sync_id = maxi(_world_multiplayer_sync_state.current_room_sync_id, source_room_sync_id)
+	_world_multiplayer_sync_state.apply_spawn_sync_id(source_room_sync_id)
 
 func _flush_pending_client_spawn_syncs() -> void:
 	if _world_multiplayer_sync_state.pending_spawn_sync_payload.is_empty():
@@ -1981,7 +1979,7 @@ func _update_encounter_state() -> void:
 		return
 	if active_room_enemy_count > 0:
 		return
-	if _world_multiplayer_sync_state.last_room_clear_processed_sync_id == _world_multiplayer_sync_state.current_room_sync_id:
+	if _world_multiplayer_sync_state.is_current_room_clear_processed():
 		return
 	_on_room_cleared()
 
@@ -1991,15 +1989,15 @@ func _on_room_cleared() -> void:
 	_end_combat_phase()
 	_try_revive_fallen_multiplayer_players()
 	if in_second_boss_room:
-		_world_multiplayer_sync_state.last_room_clear_processed_sync_id = _world_multiplayer_sync_state.current_room_sync_id
+		_world_multiplayer_sync_state.mark_current_room_clear_processed()
 		_finish_second_boss_clear()
 		return
 	if in_third_boss_room:
-		_world_multiplayer_sync_state.last_room_clear_processed_sync_id = _world_multiplayer_sync_state.current_room_sync_id
+		_world_multiplayer_sync_state.mark_current_room_clear_processed()
 		_finish_third_boss_clear()
 		return
 	if in_boss_room and not first_boss_defeated:
-		_world_multiplayer_sync_state.last_room_clear_processed_sync_id = _world_multiplayer_sync_state.current_room_sync_id
+		_world_multiplayer_sync_state.mark_current_room_clear_processed()
 		_finish_first_boss_clear()
 		return
 	if is_instance_valid(player):
@@ -2031,7 +2029,7 @@ func _on_room_cleared() -> void:
 	})
 	if not bool(outcome_state.get("ok", false)):
 		return
-	_world_multiplayer_sync_state.last_room_clear_processed_sync_id = _world_multiplayer_sync_state.current_room_sync_id
+	_world_multiplayer_sync_state.mark_current_room_clear_processed()
 	run_cleared = bool(outcome_state.get("run_cleared", run_cleared))
 	in_boss_room = bool(outcome_state.get("in_boss_room", in_boss_room))
 	endless_boss_defeated = bool(outcome_state.get("endless_boss_defeated", endless_boss_defeated))
@@ -2551,7 +2549,7 @@ func _sync_objective_control_zone_state(control_progress: float, control_enemies
 func _sync_objective_cleared() -> void:
 	if not is_multiplayer or MultiplayerSessionManager.is_host():
 		return
-	_world_multiplayer_sync_state.last_objective_cleared_room_sync_id = _world_multiplayer_sync_state.current_room_sync_id
+	_world_multiplayer_sync_state.mark_objective_cleared_for_current_room()
 	if is_instance_valid(objective_manager):
 		objective_manager.reset()
 	_world_multiplayer_sync_state.pending_objective_spawn_sync_payloads.clear()
