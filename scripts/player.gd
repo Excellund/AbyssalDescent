@@ -3968,4 +3968,3 @@ func _draw_trial_reward_state() -> void:
 		# Countdown sweep ring — shows remaining duration
 		var sweep_angle := -PI * 0.5 + (1.0 - debuff_t) * TAU
 		draw_arc(Vector2.ZERO, field_radius + 12.0, -PI * 0.5, sweep_angle, 32, Color(0.94, 0.98, 1.0, (0.44 + field_pulse * 0.2) * debuff_t), 2.0)
-

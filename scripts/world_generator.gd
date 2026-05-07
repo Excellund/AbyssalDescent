@@ -1,4 +1,4 @@
-﻿extends Node2D
+extends Node2D
 
 const ENEMY_CHASER_SCRIPT := preload("res://scripts/enemy_chaser.gd")
 const ENEMY_CHARGER_SCRIPT := preload("res://scripts/enemy_charger.gd")
@@ -4578,4 +4578,3 @@ func _set_enemy_targets_passive(passive: bool) -> void:
 				var current_cd := float(enemy.get(cooldown_key))
 				if current_cd < 0.32:
 					enemy.set(cooldown_key, 0.32)
-

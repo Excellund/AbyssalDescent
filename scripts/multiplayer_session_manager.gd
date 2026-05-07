@@ -10,6 +10,9 @@ signal session_joined(session_id: String)
 signal peer_timeout(peer_id: int)
 signal connection_failed(reason: String)
 
+## Godot ENet convention: server/host peer is always assigned ID 1.
+const HOST_PEER_ID: int = 1
+
 ## Public state
 var session_connected: bool = false
 var is_host_peer: bool = false
@@ -94,7 +97,7 @@ func _process(delta: float) -> void:
 		return
 
 	_client_ping_elapsed_sec = 0.0
-	_network_ping.rpc_id(1)
+	_network_ping.rpc_id(HOST_PEER_ID)
 
 
 ## Check if ENet client is actually connected to host (for diagnostics)
@@ -432,7 +435,7 @@ func _on_connected_to_server() -> void:
 	## In Godot ENet multiplayer, the server/host is always assigned peer ID 1.
 	if not is_host_peer:
 		connected_peers[local_peer_id] = { "joined_at": Time.get_unix_time_from_system(), "last_ping": 0 }
-		var host_peer_id := 1  ## Godot ENet server is always peer ID 1
+		var host_peer_id := HOST_PEER_ID
 		connected_peers[host_peer_id] = { "joined_at": Time.get_unix_time_from_system(), "last_ping": 0 }
 		print("[MultiplayerSessionManager] Client initialized connected_peers: %s" % [connected_peers.keys()])
 		_client_ping_elapsed_sec = ping_interval_sec

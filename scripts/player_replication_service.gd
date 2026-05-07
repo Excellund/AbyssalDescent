@@ -417,4 +417,3 @@ func _apply_network_cue_events(peer_id: int, events: Array[Dictionary]) -> void:
 	if player_node == null:
 		return
 	_cue_event_dispatcher.apply_cue_events(player_node, peer_id, local_peer_id, events)
-
