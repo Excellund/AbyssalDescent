@@ -193,6 +193,62 @@ func get_telemetry_state() -> Dictionary:
 		"objective_contested": control_contested,
 	}
 
+## Serialize all network-synced fields into a payload for transmission.
+func serialize_sync_state() -> Dictionary:
+	return {
+		"active_objective_kind": String(active_objective_kind),
+		"time_left": float(time_left),
+		"spawn_interval": float(spawn_interval),
+		"spawn_timer": float(spawn_timer),
+		"spawn_batch": int(spawn_batch),
+		"max_enemies": int(max_enemies),
+		"overtime": bool(overtime),
+		"survival_quota_announced": bool(survival_quota_announced),
+		"kill_target": int(kill_target),
+		"kills": int(kills),
+		"hunt_target_type": String(hunt_target_type),
+		"hunt_target_name": String(hunt_target_name),
+		"hunt_target_kill_progress": int(hunt_target_kill_progress),
+		"hunt_target_kill_goal": int(hunt_target_kill_goal),
+		"hunt_target_flee_thresholds": hunt_target_flee_thresholds.duplicate(),
+		"hunt_target_next_flee_index": int(hunt_target_next_flee_index),
+		"control_progress": float(control_progress),
+		"control_goal": float(control_goal),
+		"control_enemies_in_zone": int(control_enemies_in_zone),
+		"control_contested": bool(control_contested),
+		"control_player_inside": bool(control_player_inside),
+		"exposure_left": float(exposure_left),
+		"last_relocated_escort_count": int(last_relocated_escort_count),
+		"relocation_hint_left": float(relocation_hint_left),
+	}
+
+## Apply a received network sync payload, clamping all values to safe ranges.
+func apply_sync_state(state: Dictionary) -> void:
+	active_objective_kind = String(state.get("active_objective_kind", active_objective_kind))
+	time_left = maxf(0.0, float(state.get("time_left", time_left)))
+	spawn_interval = maxf(0.0, float(state.get("spawn_interval", spawn_interval)))
+	spawn_timer = maxf(0.0, float(state.get("spawn_timer", spawn_timer)))
+	spawn_batch = maxi(1, int(state.get("spawn_batch", spawn_batch)))
+	max_enemies = maxi(0, int(state.get("max_enemies", max_enemies)))
+	overtime = bool(state.get("overtime", overtime))
+	survival_quota_announced = bool(state.get("survival_quota_announced", survival_quota_announced))
+	kill_target = maxi(0, int(state.get("kill_target", kill_target)))
+	kills = maxi(0, int(state.get("kills", kills)))
+	hunt_target_type = String(state.get("hunt_target_type", hunt_target_type))
+	hunt_target_name = String(state.get("hunt_target_name", hunt_target_name))
+	hunt_target_kill_progress = maxi(0, int(state.get("hunt_target_kill_progress", hunt_target_kill_progress)))
+	hunt_target_kill_goal = maxi(0, int(state.get("hunt_target_kill_goal", hunt_target_kill_goal)))
+	hunt_target_flee_thresholds = (state.get("hunt_target_flee_thresholds", hunt_target_flee_thresholds) as Array).duplicate()
+	hunt_target_next_flee_index = maxi(0, int(state.get("hunt_target_next_flee_index", hunt_target_next_flee_index)))
+	control_progress = maxf(0.0, float(state.get("control_progress", control_progress)))
+	control_goal = maxf(0.0, float(state.get("control_goal", control_goal)))
+	control_enemies_in_zone = maxi(0, int(state.get("control_enemies_in_zone", control_enemies_in_zone)))
+	control_contested = bool(state.get("control_contested", control_contested))
+	control_player_inside = bool(state.get("control_player_inside", control_player_inside))
+	exposure_left = maxf(0.0, float(state.get("exposure_left", exposure_left)))
+	last_relocated_escort_count = maxi(0, int(state.get("last_relocated_escort_count", last_relocated_escort_count)))
+	relocation_hint_left = maxf(0.0, float(state.get("relocation_hint_left", relocation_hint_left)))
+
 
 ## Get control overlay render state for world drawing
 func get_control_overlay_state() -> Dictionary:

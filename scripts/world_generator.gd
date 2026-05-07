@@ -2569,30 +2569,7 @@ func _sync_objective_state(objective_state: Dictionary, source_room_sync_id: int
 	if sequence <= _last_applied_objective_state_sync_sequence:
 		return
 	_last_applied_objective_state_sync_sequence = sequence
-	objective_manager.active_objective_kind = String(objective_state.get("active_objective_kind", objective_manager.active_objective_kind))
-	objective_manager.time_left = maxf(0.0, float(objective_state.get("time_left", objective_manager.time_left)))
-	objective_manager.spawn_interval = maxf(0.0, float(objective_state.get("spawn_interval", objective_manager.spawn_interval)))
-	objective_manager.spawn_timer = maxf(0.0, float(objective_state.get("spawn_timer", objective_manager.spawn_timer)))
-	objective_manager.spawn_batch = maxi(1, int(objective_state.get("spawn_batch", objective_manager.spawn_batch)))
-	objective_manager.max_enemies = maxi(0, int(objective_state.get("max_enemies", objective_manager.max_enemies)))
-	objective_manager.overtime = bool(objective_state.get("overtime", objective_manager.overtime))
-	objective_manager.survival_quota_announced = bool(objective_state.get("survival_quota_announced", objective_manager.survival_quota_announced))
-	objective_manager.kill_target = maxi(0, int(objective_state.get("kill_target", objective_manager.kill_target)))
-	objective_manager.kills = maxi(0, int(objective_state.get("kills", objective_manager.kills)))
-	objective_manager.hunt_target_type = String(objective_state.get("hunt_target_type", objective_manager.hunt_target_type))
-	objective_manager.hunt_target_name = String(objective_state.get("hunt_target_name", objective_manager.hunt_target_name))
-	objective_manager.hunt_target_kill_progress = maxi(0, int(objective_state.get("hunt_target_kill_progress", objective_manager.hunt_target_kill_progress)))
-	objective_manager.hunt_target_kill_goal = maxi(0, int(objective_state.get("hunt_target_kill_goal", objective_manager.hunt_target_kill_goal)))
-	objective_manager.hunt_target_flee_thresholds = (objective_state.get("hunt_target_flee_thresholds", objective_manager.hunt_target_flee_thresholds) as Array).duplicate()
-	objective_manager.hunt_target_next_flee_index = maxi(0, int(objective_state.get("hunt_target_next_flee_index", objective_manager.hunt_target_next_flee_index)))
-	objective_manager.control_progress = maxf(0.0, float(objective_state.get("control_progress", objective_manager.control_progress)))
-	objective_manager.control_goal = maxf(0.0, float(objective_state.get("control_goal", objective_manager.control_goal)))
-	objective_manager.control_enemies_in_zone = maxi(0, int(objective_state.get("control_enemies_in_zone", objective_manager.control_enemies_in_zone)))
-	objective_manager.control_contested = bool(objective_state.get("control_contested", objective_manager.control_contested))
-	objective_manager.control_player_inside = bool(objective_state.get("control_player_inside", objective_manager.control_player_inside))
-	objective_manager.exposure_left = maxf(0.0, float(objective_state.get("exposure_left", objective_manager.exposure_left)))
-	objective_manager.last_relocated_escort_count = maxi(0, int(objective_state.get("last_relocated_escort_count", objective_manager.last_relocated_escort_count)))
-	objective_manager.relocation_hint_left = maxf(0.0, float(objective_state.get("relocation_hint_left", objective_manager.relocation_hint_left)))
+	objective_manager.apply_sync_state(objective_state)
 	queue_redraw()
 
 func _build_progress_sync_state() -> Dictionary:
@@ -3048,38 +3025,11 @@ func _sync_archer_projectile_state_tick(delta: float) -> void:
 func _build_objective_state_sync_payload() -> Dictionary:
 	if not is_instance_valid(objective_manager):
 		return {}
-	var objective_kind := String(objective_manager.active_objective_kind)
-	var objective_active := not objective_kind.is_empty()
+	var objective_active := not String(objective_manager.active_objective_kind).is_empty()
 	if not objective_active and not _objective_state_sync_was_active:
 		return {}
-	var payload := {
-		"active_objective_kind": objective_kind,
-		"time_left": float(objective_manager.time_left),
-		"spawn_interval": float(objective_manager.spawn_interval),
-		"spawn_timer": float(objective_manager.spawn_timer),
-		"spawn_batch": int(objective_manager.spawn_batch),
-		"max_enemies": int(objective_manager.max_enemies),
-		"overtime": bool(objective_manager.overtime),
-		"survival_quota_announced": bool(objective_manager.survival_quota_announced),
-		"kill_target": int(objective_manager.kill_target),
-		"kills": int(objective_manager.kills),
-		"hunt_target_type": String(objective_manager.hunt_target_type),
-		"hunt_target_name": String(objective_manager.hunt_target_name),
-		"hunt_target_kill_progress": int(objective_manager.hunt_target_kill_progress),
-		"hunt_target_kill_goal": int(objective_manager.hunt_target_kill_goal),
-		"hunt_target_flee_thresholds": objective_manager.hunt_target_flee_thresholds.duplicate(),
-		"hunt_target_next_flee_index": int(objective_manager.hunt_target_next_flee_index),
-		"control_progress": float(objective_manager.control_progress),
-		"control_goal": float(objective_manager.control_goal),
-		"control_enemies_in_zone": int(objective_manager.control_enemies_in_zone),
-		"control_contested": bool(objective_manager.control_contested),
-		"control_player_inside": bool(objective_manager.control_player_inside),
-		"exposure_left": float(objective_manager.exposure_left),
-		"last_relocated_escort_count": int(objective_manager.last_relocated_escort_count),
-		"relocation_hint_left": float(objective_manager.relocation_hint_left)
-	}
 	_objective_state_sync_was_active = objective_active
-	return payload
+	return objective_manager.serialize_sync_state()
 
 func _sync_objective_state_tick(delta: float) -> void:
 	if not is_multiplayer:
