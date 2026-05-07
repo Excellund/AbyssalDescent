@@ -2,6 +2,8 @@ extends Node
 ## Service for syncing player state across multiplayer peers.
 ## Handles position, health, alive status, and upgrade state replication via RPC.
 
+const PLAYER_FEEDBACK_DISPATCHER_SCRIPT := preload("res://scripts/core/player_feedback_dispatcher.gd")
+
 ## Configuration
 var position_sync_interval_sec: float = 0.05  ## ~20 Hz position updates
 var position_broadcast_threshold_px: float = 2.0  ## Broadcast low-latency movement updates
@@ -13,6 +15,7 @@ var remote_position_snap_distance_px: float = 180.0
 ## Lower value = snappier; higher value = smoother.
 var remote_position_lerp_half_life_sec: float = 0.04
 var remote_rotation_lerp_half_life_sec: float = 0.035
+## "Feedback" here means player-facing cue events (VFX/UI/audio cues), not gameplay state authority.
 var feedback_sync_interval_sec: float = 0.05
 var feedback_sync_payload_budget_bytes: int = 640
 
@@ -33,6 +36,7 @@ var _last_feedback_event_count: int = 0
 var _last_feedback_estimated_bytes: int = 0
 var _outgoing_health_sequence_by_peer: Dictionary = {}  ## peer_id -> last emitted health sequence
 var _last_applied_health_sequence_by_peer: Dictionary = {}  ## peer_id -> last applied health sequence
+var _feedback_dispatcher := PLAYER_FEEDBACK_DISPATCHER_SCRIPT.new()
 
 
 func _ready() -> void:
@@ -139,6 +143,7 @@ func get_last_feedback_sync_metrics() -> Dictionary:
 
 
 func broadcast_feedback_event(peer_id: int, event_name: String, payload: Dictionary, reliable: bool = false) -> void:
+	## Cue events are transient player-facing signals synced for presentation parity across peers.
 	if peer_id <= 0:
 		return
 	if event_name.is_empty() or payload.is_empty():
@@ -442,21 +447,4 @@ func _apply_network_feedback_events(peer_id: int, events: Array[Dictionary]) -> 
 	var player_node := _get_player_node(peer_id)
 	if player_node == null:
 		return
-	if peer_id == local_peer_id:
-		if not player_node.has_method("apply_owner_feedback_event"):
-			return
-		for event_entry in events:
-			var local_event_name := String(event_entry.get("event", ""))
-			var local_payload := event_entry.get("payload", {}) as Dictionary
-			if local_event_name.is_empty() or local_payload.is_empty():
-				continue
-			player_node.apply_owner_feedback_event(local_event_name, local_payload)
-		return
-	if not player_node.has_method("apply_network_feedback_event"):
-		return
-	for event_entry in events:
-		var event_name := String(event_entry.get("event", ""))
-		var payload := event_entry.get("payload", {}) as Dictionary
-		if event_name.is_empty() or payload.is_empty():
-			continue
-		player_node.apply_network_feedback_event(event_name, payload)
+	_feedback_dispatcher.apply_cue_events(player_node, peer_id, local_peer_id, events)
