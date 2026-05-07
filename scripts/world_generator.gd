@@ -1,4 +1,4 @@
-extends Node2D
+﻿extends Node2D
 
 const ENEMY_CHASER_SCRIPT := preload("res://scripts/enemy_chaser.gd")
 const ENEMY_CHARGER_SCRIPT := preload("res://scripts/enemy_charger.gd")
@@ -63,6 +63,11 @@ const VICTORY_SCREEN_SCRIPT := preload("res://scripts/victory_screen.gd")
 const DEFEAT_SCREEN_SCRIPT := preload("res://scripts/defeat_screen.gd")
 const BUILD_DETAIL_PANEL_SCRIPT := preload("res://scripts/build_detail_panel.gd")
 const SEAMLOCK_SYNC_GROUP := "seamlock_sync_group"
+const ENEMY_STATE_SYNC_INTERVAL_SEC_DEFAULT: float = 0.08
+const ARCHER_PROJECTILE_SYNC_PAYLOAD_BUDGET_BYTES_DEFAULT: int = 960
+const ENEMY_STATE_TRANSPORT_MTU_BYTES_DEFAULT: int = 1392
+const ENEMY_STATE_FAR_SYNC_DISTANCE_PX_DEFAULT: float = 520.0
+const ENEMY_REMOTE_SNAP_DISTANCE_PX_DEFAULT: float = 180.0
 
 func _find_debug_encounter_entry(key: String) -> Dictionary:
 	return ENCOUNTER_CONTRACTS.debug_encounter_entry(key)
@@ -210,11 +215,11 @@ var is_multiplayer: bool = false
 var multiplayer_session_id: String = ""
 var multiplayer_encounter_seed: int = 0
 var game_state_replication_service: Node = null
-var enemy_state_sync_interval_sec: float = 0.08
+var enemy_state_sync_interval_sec: float = ENEMY_STATE_SYNC_INTERVAL_SEC_DEFAULT
 var _enemy_state_sync_elapsed: float = 0.0
 var archer_projectile_sync_interval_sec: float = 0.016
 var _archer_projectile_sync_elapsed: float = 0.0
-var archer_projectile_sync_payload_budget_bytes: int = 960
+var archer_projectile_sync_payload_budget_bytes: int = ARCHER_PROJECTILE_SYNC_PAYLOAD_BUDGET_BYTES_DEFAULT
 var objective_state_sync_interval_sec: float = 0.05
 var _objective_state_sync_elapsed: float = 0.0
 var _objective_state_sync_sequence: int = 0
@@ -230,9 +235,9 @@ var _previous_enemy_facing_angles: Dictionary = {}  ## enemy_id -> previous sync
 var _previous_enemy_health_values: Dictionary = {}  ## enemy_id -> previous synced health
 var enemy_state_sync_batch_size: int = 2
 var enemy_state_sync_payload_budget_bytes: int = 550
-var enemy_state_transport_mtu_bytes: int = 1392
+var enemy_state_transport_mtu_bytes: int = ENEMY_STATE_TRANSPORT_MTU_BYTES_DEFAULT
 var enemy_state_transport_safety_margin_bytes: int = 340
-var enemy_state_far_sync_distance_px: float = 520.0
+var enemy_state_far_sync_distance_px: float = ENEMY_STATE_FAR_SYNC_DISTANCE_PX_DEFAULT
 var enemy_state_far_sync_interval_mult: float = 2.0
 var enemy_state_position_change_threshold_sq: float = 4.0
 var enemy_state_facing_change_threshold_rad: float = 0.06
@@ -281,7 +286,7 @@ var _enemy_clamp_frame_cursor: int = 0
 var _enemy_clamp_last_room_size: Vector2 = Vector2.ZERO
 var enemy_remote_position_lerp_speed: float = 14.0
 var enemy_remote_rotation_lerp_speed: float = 18.0
-var enemy_remote_snap_distance_px: float = 180.0
+var enemy_remote_snap_distance_px: float = ENEMY_REMOTE_SNAP_DISTANCE_PX_DEFAULT
 var _reward_phase_active: bool = false
 var _reward_phase_is_initial: bool = false
 var _reward_phase_mode: int = ENUMS.RewardMode.NONE

@@ -4,6 +4,7 @@ extends Node
 
 const PLAYER_CUE_EVENT_DISPATCHER_SCRIPT := preload("res://scripts/core/player_feedback_dispatcher.gd")
 const PLAYER_CUE_SYNC_QUEUE_SCRIPT := preload("res://scripts/core/player_cue_sync_queue.gd")
+const REMOTE_PLAYER_SNAP_DISTANCE_PX: float = 180.0
 
 ## Configuration
 var position_sync_interval_sec: float = 0.05  ## ~20 Hz position updates
@@ -11,7 +12,7 @@ var position_broadcast_threshold_px: float = 2.0  ## Broadcast low-latency movem
 var rotation_broadcast_threshold_rad: float = deg_to_rad(2.0)
 var position_transmit_quantum_px: float = 0.5
 var rotation_transmit_quantum_rad: float = deg_to_rad(2.0)
-var remote_position_snap_distance_px: float = 180.0
+var remote_position_snap_distance_px: float = REMOTE_PLAYER_SNAP_DISTANCE_PX
 ## Half-life in seconds for remote position/rotation interpolation (frame-rate independent).
 ## Lower value = snappier; higher value = smoother.
 var remote_position_lerp_half_life_sec: float = 0.04
