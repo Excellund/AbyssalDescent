@@ -12,11 +12,11 @@ func apply_cue_events(player_node: Node, peer_id: int, local_peer_id: int, event
 			var payload := event_entry.get("payload", {}) as Dictionary
 			if event_name.is_empty() or payload.is_empty():
 				continue
-			player_node.apply_owner_feedback_event(event_name, payload)
+			player_node.apply_owner_cue_event(event_name, payload)
 		return
 	for event_entry in events:
 		var event_name := String(event_entry.get("event", ""))
 		var payload := event_entry.get("payload", {}) as Dictionary
 		if event_name.is_empty() or payload.is_empty():
 			continue
-		player_node.apply_network_feedback_event(event_name, payload)
+		player_node.apply_network_cue_event(event_name, payload)

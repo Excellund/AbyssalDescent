@@ -1250,7 +1250,7 @@ func play_network_attack_indicator(attack_direction: Vector2, attack_range_value
 		player_feedback.play_attack_swing_visual(resolved_direction, attack_range_value, attack_arc_degrees_value, swing_color, swing_duration)
 	queue_redraw()
 
-func apply_network_feedback_event(event_name: String, payload: Dictionary) -> void:
+func apply_network_cue_event(event_name: String, payload: Dictionary) -> void:
 	if _is_local_control_owner():
 		return
 	if player_feedback == null or event_name.is_empty() or payload.is_empty():
@@ -1402,7 +1402,11 @@ func apply_network_feedback_event(event_name: String, payload: Dictionary) -> vo
 		_:
 			pass
 
-func apply_owner_feedback_event(event_name: String, payload: Dictionary) -> void:
+func apply_network_feedback_event(event_name: String, payload: Dictionary) -> void:
+	apply_network_cue_event(event_name, payload)
+
+
+func apply_owner_cue_event(event_name: String, payload: Dictionary) -> void:
 	if not _is_local_control_owner():
 		return
 	if player_feedback == null or event_name.is_empty() or payload.is_empty():
@@ -1416,7 +1420,11 @@ func apply_owner_feedback_event(event_name: String, payload: Dictionary) -> void
 		_:
 			pass
 
-func _broadcast_feedback_event(event_name: String, payload: Dictionary, reliable: bool = false) -> void:
+func apply_owner_feedback_event(event_name: String, payload: Dictionary) -> void:
+	apply_owner_cue_event(event_name, payload)
+
+
+func _broadcast_cue_event(event_name: String, payload: Dictionary, reliable: bool = false) -> void:
 	if player_id <= 0:
 		return
 	if not _is_local_control_owner():
@@ -1429,7 +1437,11 @@ func _broadcast_feedback_event(event_name: String, payload: Dictionary, reliable
 		return
 	if not bool(multiplayer_session_manager.is_session_connected()):
 		return
-	player_replication_service.broadcast_feedback_event(player_id, event_name, payload, reliable)
+	player_replication_service.broadcast_cue_event(player_id, event_name, payload, reliable)
+
+
+func _broadcast_feedback_event(event_name: String, payload: Dictionary, reliable: bool = false) -> void:
+	_broadcast_cue_event(event_name, payload, reliable)
 
 func _broadcast_attack_indicator(attack_direction: Vector2, attack_range_value: float, attack_arc_degrees_value: float, swing_color: Color, swing_duration: float = 0.12) -> void:
 	if player_id <= 0:
