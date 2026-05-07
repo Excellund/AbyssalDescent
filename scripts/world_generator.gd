@@ -3417,6 +3417,14 @@ func _register_network_enemy(enemy: Node2D, forced_enemy_id: int = -1) -> int:
 		_next_network_enemy_id = maxi(_next_network_enemy_id, enemy_id + 1)
 	enemy.set_meta("network_enemy_id", enemy_id)
 	_network_enemy_nodes[enemy_id] = enemy
+	_initialize_enemy_tracking_state(enemy_id, enemy)
+	if is_multiplayer and not MultiplayerSessionManager.is_host() and enemy.has_method("set_network_simulation_enabled"):
+		enemy.call("set_network_simulation_enabled", false)
+	if enemy.has_signal("died") and not enemy.died.is_connected(Callable(self, "_on_network_enemy_died").bind(enemy_id)):
+		enemy.died.connect(Callable(self, "_on_network_enemy_died").bind(enemy_id))
+	return enemy_id
+
+func _initialize_enemy_tracking_state(enemy_id: int, enemy: Node2D) -> void:
 	_enemy_target_positions[enemy_id] = enemy.global_position
 	_previous_enemy_positions[enemy_id] = enemy.global_position
 	var enemy_facing_angle := enemy.global_rotation
@@ -3428,11 +3436,6 @@ func _register_network_enemy(enemy: Node2D, forced_enemy_id: int = -1) -> int:
 		_previous_enemy_health_values[enemy_id] = float(enemy.call("get_current_health"))
 	_enemy_far_sync_elapsed_by_id[enemy_id] = 0.0
 	_enemy_far_combat_hint_by_id[enemy_id] = false
-	if is_multiplayer and not MultiplayerSessionManager.is_host() and enemy.has_method("set_network_simulation_enabled"):
-		enemy.call("set_network_simulation_enabled", false)
-	if enemy.has_signal("died") and not enemy.died.is_connected(Callable(self, "_on_network_enemy_died").bind(enemy_id)):
-		enemy.died.connect(Callable(self, "_on_network_enemy_died").bind(enemy_id))
-	return enemy_id
 
 func _build_enemy_death_effect_payload(enemy: Node2D) -> Dictionary:
 	if not is_instance_valid(enemy):
