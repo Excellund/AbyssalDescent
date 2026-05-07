@@ -1256,134 +1256,32 @@ func apply_network_cue_event(event_name: String, payload: Dictionary) -> void:
 	if player_feedback == null or event_name.is_empty() or payload.is_empty():
 		return
 	match event_name:
-		"world_ring":
-			var ring_position := payload.get("position", global_position) as Vector2
-			var ring_radius := float(payload.get("radius", 24.0))
-			var ring_color := payload.get("color", Color(1.0, 1.0, 1.0, 0.6)) as Color
-			var ring_duration := float(payload.get("duration", 0.14))
-			player_feedback.play_world_ring(ring_position, ring_radius, ring_color, ring_duration)
-		"chain_lightning":
-			var from_position := payload.get("from", global_position) as Vector2
-			var to_position := payload.get("to", global_position) as Vector2
-			var chain_color := payload.get("color", Color(0.98, 0.98, 0.76, 0.92)) as Color
-			var chain_lifetime := float(payload.get("lifetime", 0.14))
-			player_feedback.play_chain_lightning(from_position, to_position, chain_color, chain_lifetime)
-		"wraithstep_chain_echo":
-			var echo_from_position := payload.get("from", global_position) as Vector2
-			var echo_to_position := payload.get("to", global_position) as Vector2
-			var echo_lifetime := float(payload.get("lifetime", 0.18))
-			player_feedback.play_wraithstep_chain_echo(echo_from_position, echo_to_position, echo_lifetime)
-		"static_wake_dot":
-			var static_wake_position := payload.get("position", global_position) as Vector2
-			var static_wake_life := float(payload.get("life", static_wake_lifetime))
-			_append_static_wake_trail(static_wake_position, false, static_wake_life)
-		"execution_edge_state":
-			attack_combo_counter = int(payload.get("combo_counter", attack_combo_counter))
-			execution_every = maxi(1, int(payload.get("execution_every", execution_every)))
-			execution_edge_proc_display_left = maxf(execution_edge_proc_display_left, float(payload.get("proc_display_left", 0.0)))
-			queue_redraw()
-		"oath_ui_state":
-			var oath_bank := float(payload.get("bank", 0.0))
-			var oath_reference := float(payload.get("reference", _get_indomitable_fill_requirement()))
-			var oath_enabled := bool(payload.get("enabled", false))
-			var oath_threshold := float(payload.get("threshold", oath_reference))
-			player_feedback.update_oath_bank_bar(oath_bank, oath_reference, oath_enabled, oath_threshold)
-		"voidfire_ui_state":
-			var vf_heat := float(payload.get("heat", 0.0))
-			var vf_cap := float(payload.get("cap", maxf(1.0, void_heat_cap)))
-			var vf_enabled := bool(payload.get("enabled", false))
-			var vf_lockout := float(payload.get("lockout_left", 0.0))
-			var vf_danger_ratio := float(payload.get("danger_ratio", 0.0))
-			player_feedback.update_voidfire_heat_bar(vf_heat, vf_cap, vf_enabled, vf_lockout, vf_danger_ratio)
-		"wraithstep_mark_add":
-			var mark_enemy_network_id := int(payload.get("enemy_network_id", -1))
-			var mark_duration := maxf(0.0, float(payload.get("duration", wraithstep_mark_duration)))
-			if mark_enemy_network_id > 0 and mark_duration > 0.0:
-				var now_sec := Time.get_ticks_msec() / 1000.0
-				wraithstep_remote_mark_expiry_by_network_enemy_id[mark_enemy_network_id] = now_sec + mark_duration
-			queue_redraw()
-		"wraithstep_mark_remove":
-			var remove_enemy_network_id := int(payload.get("enemy_network_id", -1))
-			if remove_enemy_network_id > 0:
-				wraithstep_remote_mark_expiry_by_network_enemy_id.erase(remove_enemy_network_id)
-			queue_redraw()
-		"wraithstep_mark_clear":
-			wraithstep_remote_mark_expiry_by_network_enemy_id.clear()
-			queue_redraw()
-		"iron_retort_window_open":
-			var window_position := payload.get("position", global_position) as Vector2
-			player_feedback.play_iron_retort_window_open(window_position)
-		"iron_retort_consume":
-			var player_position := payload.get("player_position", global_position) as Vector2
-			var impact_position := payload.get("impact_position", global_position) as Vector2
-			player_feedback.play_iron_retort_consume(player_position, impact_position)
-		"storm_crown_discharge":
-			var discharge_position := payload.get("position", global_position) as Vector2
-			player_feedback.play_storm_crown_discharge(discharge_position)
-		"boss_tempo_stack":
-			var tempo_stack_position := payload.get("position", global_position) as Vector2
-			var tempo_stacks := int(payload.get("stacks", 0))
-			var tempo_max_stacks := int(payload.get("max_stacks", 1))
-			player_feedback.play_boss_tempo_stack(tempo_stack_position, tempo_stacks, tempo_max_stacks)
-		"boss_tempo_state":
-			var tempo_state_stacks := int(payload.get("stacks", 0))
-			var tempo_state_max := int(payload.get("max_stacks", 1))
-			var tempo_state_left := float(payload.get("time_left", 0.0))
-			var tempo_state_duration := float(payload.get("duration", 0.0))
-			player_feedback.update_boss_tempo_state(tempo_state_stacks, tempo_state_max, tempo_state_left, tempo_state_duration)
-		"boss_tempo_clear":
-			player_feedback.clear_boss_tempo_state()
-		"boss_tempo_dash_wave":
-			var tempo_wave_position := payload.get("position", global_position) as Vector2
-			var tempo_wave_radius := float(payload.get("radius", 0.0))
-			var tempo_wave_landed := bool(payload.get("landed", false))
-			var tempo_wave_stacks := int(payload.get("stacks", 0))
-			var tempo_wave_max_stacks := int(payload.get("max_stacks", 1))
-			player_feedback.play_boss_tempo_dash_wave(tempo_wave_position, tempo_wave_radius, tempo_wave_landed, tempo_wave_stacks, tempo_wave_max_stacks)
-		"boss_convergence_start":
-			var convergence_start_position := payload.get("position", global_position) as Vector2
-			var convergence_power_ratio := float(payload.get("power_ratio", 0.0))
-			player_feedback.play_boss_convergence_start(convergence_start_position, convergence_power_ratio)
-		"boss_convergence_pulse":
-			var convergence_pulse_position := payload.get("position", global_position) as Vector2
-			var convergence_pulse_radius := float(payload.get("radius", 0.0))
-			player_feedback.play_boss_convergence_pulse(convergence_pulse_position, convergence_pulse_radius)
-		"unbroken_oath_bank_gain":
-			var oath_bank_position := payload.get("position", global_position) as Vector2
-			var oath_bank_ratio := float(payload.get("bank_ratio", 0.0))
-			player_feedback.play_boss_unbroken_bank_gain(oath_bank_position, oath_bank_ratio)
-		"unbroken_oath_retaliation":
-			var oath_player_position := payload.get("player_position", global_position) as Vector2
-			var oath_impact_position := payload.get("impact_position", global_position) as Vector2
-			var oath_bonus_ratio := float(payload.get("bonus_ratio", 1.0))
-			player_feedback.play_boss_unbroken_retaliation(oath_player_position, oath_impact_position, oath_bonus_ratio)
-		"enemy_apply_slow":
-			var slow_enemy_network_id := int(payload.get("enemy_network_id", -1))
-			var slow_duration := float(payload.get("duration", 0.0))
-			var slow_mult := float(payload.get("mult", 1.0))
-			var slow_enemy_node := _find_enemy_node_by_network_enemy_id(slow_enemy_network_id)
-			if slow_enemy_node != null and slow_enemy_node.has_method("apply_slow"):
-				slow_enemy_node.call("apply_slow", slow_duration, slow_mult)
-		"fracture_field_fault_lines":
-			var fracture_position := payload.get("position", global_position) as Vector2
-			var fracture_radius := float(payload.get("radius", 0.0))
-			var fracture_beam_count := int(payload.get("beam_count", 0))
-			var fracture_base_angle := float(payload.get("base_angle", 0.0))
-			var fracture_beam_width := float(payload.get("beam_width", 12.0))
-			player_feedback.play_fracture_field_fault_lines(fracture_position, fracture_radius, fracture_beam_count, fracture_base_angle, fracture_beam_width)
-		"boss_void_zone_spawn":
-			var spawn_position := payload.get("position", global_position) as Vector2
-			var spawn_radius := float(payload.get("radius", 72.0))
-			player_feedback.play_boss_void_zone_spawn(spawn_position, spawn_radius)
-		"boss_void_zone_pulse":
-			var pulse_position := payload.get("position", global_position) as Vector2
-			var pulse_radius := float(payload.get("radius", 72.0))
-			player_feedback.play_boss_void_zone_pulse(pulse_position, pulse_radius)
-		"boss_void_zone_empowered_hit":
-			var empowered_hit_position := payload.get("position", global_position) as Vector2
-			player_feedback.play_boss_void_zone_empowered_hit(empowered_hit_position)
-		_:
-			pass
+		"world_ring": _on_cue_world_ring(payload)
+		"chain_lightning": _on_cue_chain_lightning(payload)
+		"wraithstep_chain_echo": _on_cue_wraithstep_chain_echo(payload)
+		"static_wake_dot": _on_cue_static_wake_dot(payload)
+		"execution_edge_state": _on_cue_execution_edge_state(payload)
+		"oath_ui_state": _on_cue_oath_ui_state(payload)
+		"voidfire_ui_state": _on_cue_voidfire_ui_state(payload)
+		"wraithstep_mark_add": _on_cue_wraithstep_mark_add(payload)
+		"wraithstep_mark_remove": _on_cue_wraithstep_mark_remove(payload)
+		"wraithstep_mark_clear": _on_cue_wraithstep_mark_clear()
+		"iron_retort_window_open": _on_cue_iron_retort_window_open(payload)
+		"iron_retort_consume": _on_cue_iron_retort_consume(payload)
+		"storm_crown_discharge": _on_cue_storm_crown_discharge(payload)
+		"boss_tempo_stack": _on_cue_boss_tempo_stack(payload)
+		"boss_tempo_state": _on_cue_boss_tempo_state(payload)
+		"boss_tempo_clear": player_feedback.clear_boss_tempo_state()
+		"boss_tempo_dash_wave": _on_cue_boss_tempo_dash_wave(payload)
+		"boss_convergence_start": _on_cue_boss_convergence_start(payload)
+		"boss_convergence_pulse": _on_cue_boss_convergence_pulse(payload)
+		"unbroken_oath_bank_gain": _on_cue_unbroken_oath_bank_gain(payload)
+		"unbroken_oath_retaliation": _on_cue_unbroken_oath_retaliation(payload)
+		"enemy_apply_slow": _on_cue_enemy_apply_slow(payload)
+		"fracture_field_fault_lines": _on_cue_fracture_field_fault_lines(payload)
+		"boss_void_zone_spawn": _on_cue_boss_void_zone_spawn(payload)
+		"boss_void_zone_pulse": _on_cue_boss_void_zone_pulse(payload)
+		"boss_void_zone_empowered_hit": _on_cue_boss_void_zone_empowered_hit(payload)
 
 func apply_owner_cue_event(event_name: String, payload: Dictionary) -> void:
 	if not _is_local_control_owner():
@@ -1398,6 +1296,180 @@ func apply_owner_cue_event(event_name: String, payload: Dictionary) -> void:
 				player_feedback.play_impact_sound()
 		_:
 			pass
+
+
+func _on_cue_world_ring(payload: Dictionary) -> void:
+	var ring_position := payload.get("position", global_position) as Vector2
+	var ring_radius := float(payload.get("radius", 24.0))
+	var ring_color := payload.get("color", Color(1.0, 1.0, 1.0, 0.6)) as Color
+	var ring_duration := float(payload.get("duration", 0.14))
+	player_feedback.play_world_ring(ring_position, ring_radius, ring_color, ring_duration)
+
+
+func _on_cue_chain_lightning(payload: Dictionary) -> void:
+	var from_position := payload.get("from", global_position) as Vector2
+	var to_position := payload.get("to", global_position) as Vector2
+	var chain_color := payload.get("color", Color(0.98, 0.98, 0.76, 0.92)) as Color
+	var chain_lifetime := float(payload.get("lifetime", 0.14))
+	player_feedback.play_chain_lightning(from_position, to_position, chain_color, chain_lifetime)
+
+
+func _on_cue_wraithstep_chain_echo(payload: Dictionary) -> void:
+	var echo_from_position := payload.get("from", global_position) as Vector2
+	var echo_to_position := payload.get("to", global_position) as Vector2
+	var echo_lifetime := float(payload.get("lifetime", 0.18))
+	player_feedback.play_wraithstep_chain_echo(echo_from_position, echo_to_position, echo_lifetime)
+
+
+func _on_cue_static_wake_dot(payload: Dictionary) -> void:
+	var static_wake_position := payload.get("position", global_position) as Vector2
+	var static_wake_life := float(payload.get("life", static_wake_lifetime))
+	_append_static_wake_trail(static_wake_position, false, static_wake_life)
+
+
+func _on_cue_execution_edge_state(payload: Dictionary) -> void:
+	attack_combo_counter = int(payload.get("combo_counter", attack_combo_counter))
+	execution_every = maxi(1, int(payload.get("execution_every", execution_every)))
+	execution_edge_proc_display_left = maxf(execution_edge_proc_display_left, float(payload.get("proc_display_left", 0.0)))
+	queue_redraw()
+
+
+func _on_cue_oath_ui_state(payload: Dictionary) -> void:
+	var oath_bank := float(payload.get("bank", 0.0))
+	var oath_reference := float(payload.get("reference", _get_indomitable_fill_requirement()))
+	var oath_enabled := bool(payload.get("enabled", false))
+	var oath_threshold := float(payload.get("threshold", oath_reference))
+	player_feedback.update_oath_bank_bar(oath_bank, oath_reference, oath_enabled, oath_threshold)
+
+
+func _on_cue_voidfire_ui_state(payload: Dictionary) -> void:
+	var vf_heat := float(payload.get("heat", 0.0))
+	var vf_cap := float(payload.get("cap", maxf(1.0, void_heat_cap)))
+	var vf_enabled := bool(payload.get("enabled", false))
+	var vf_lockout := float(payload.get("lockout_left", 0.0))
+	var vf_danger_ratio := float(payload.get("danger_ratio", 0.0))
+	player_feedback.update_voidfire_heat_bar(vf_heat, vf_cap, vf_enabled, vf_lockout, vf_danger_ratio)
+
+
+func _on_cue_wraithstep_mark_add(payload: Dictionary) -> void:
+	var mark_enemy_network_id := int(payload.get("enemy_network_id", -1))
+	var mark_duration := maxf(0.0, float(payload.get("duration", wraithstep_mark_duration)))
+	if mark_enemy_network_id > 0 and mark_duration > 0.0:
+		var now_sec := Time.get_ticks_msec() / 1000.0
+		wraithstep_remote_mark_expiry_by_network_enemy_id[mark_enemy_network_id] = now_sec + mark_duration
+	queue_redraw()
+
+
+func _on_cue_wraithstep_mark_remove(payload: Dictionary) -> void:
+	var remove_enemy_network_id := int(payload.get("enemy_network_id", -1))
+	if remove_enemy_network_id > 0:
+		wraithstep_remote_mark_expiry_by_network_enemy_id.erase(remove_enemy_network_id)
+	queue_redraw()
+
+
+func _on_cue_wraithstep_mark_clear() -> void:
+	wraithstep_remote_mark_expiry_by_network_enemy_id.clear()
+	queue_redraw()
+
+
+func _on_cue_iron_retort_window_open(payload: Dictionary) -> void:
+	var window_position := payload.get("position", global_position) as Vector2
+	player_feedback.play_iron_retort_window_open(window_position)
+
+
+func _on_cue_iron_retort_consume(payload: Dictionary) -> void:
+	var player_position := payload.get("player_position", global_position) as Vector2
+	var impact_position := payload.get("impact_position", global_position) as Vector2
+	player_feedback.play_iron_retort_consume(player_position, impact_position)
+
+
+func _on_cue_storm_crown_discharge(payload: Dictionary) -> void:
+	var discharge_position := payload.get("position", global_position) as Vector2
+	player_feedback.play_storm_crown_discharge(discharge_position)
+
+
+func _on_cue_boss_tempo_stack(payload: Dictionary) -> void:
+	var tempo_stack_position := payload.get("position", global_position) as Vector2
+	var tempo_stacks := int(payload.get("stacks", 0))
+	var tempo_max_stacks := int(payload.get("max_stacks", 1))
+	player_feedback.play_boss_tempo_stack(tempo_stack_position, tempo_stacks, tempo_max_stacks)
+
+
+func _on_cue_boss_tempo_state(payload: Dictionary) -> void:
+	var tempo_state_stacks := int(payload.get("stacks", 0))
+	var tempo_state_max := int(payload.get("max_stacks", 1))
+	var tempo_state_left := float(payload.get("time_left", 0.0))
+	var tempo_state_duration := float(payload.get("duration", 0.0))
+	player_feedback.update_boss_tempo_state(tempo_state_stacks, tempo_state_max, tempo_state_left, tempo_state_duration)
+
+
+func _on_cue_boss_tempo_dash_wave(payload: Dictionary) -> void:
+	var tempo_wave_position := payload.get("position", global_position) as Vector2
+	var tempo_wave_radius := float(payload.get("radius", 0.0))
+	var tempo_wave_landed := bool(payload.get("landed", false))
+	var tempo_wave_stacks := int(payload.get("stacks", 0))
+	var tempo_wave_max_stacks := int(payload.get("max_stacks", 1))
+	player_feedback.play_boss_tempo_dash_wave(tempo_wave_position, tempo_wave_radius, tempo_wave_landed, tempo_wave_stacks, tempo_wave_max_stacks)
+
+
+func _on_cue_boss_convergence_start(payload: Dictionary) -> void:
+	var convergence_start_position := payload.get("position", global_position) as Vector2
+	var convergence_power_ratio := float(payload.get("power_ratio", 0.0))
+	player_feedback.play_boss_convergence_start(convergence_start_position, convergence_power_ratio)
+
+
+func _on_cue_boss_convergence_pulse(payload: Dictionary) -> void:
+	var convergence_pulse_position := payload.get("position", global_position) as Vector2
+	var convergence_pulse_radius := float(payload.get("radius", 0.0))
+	player_feedback.play_boss_convergence_pulse(convergence_pulse_position, convergence_pulse_radius)
+
+
+func _on_cue_unbroken_oath_bank_gain(payload: Dictionary) -> void:
+	var oath_bank_position := payload.get("position", global_position) as Vector2
+	var oath_bank_ratio := float(payload.get("bank_ratio", 0.0))
+	player_feedback.play_boss_unbroken_bank_gain(oath_bank_position, oath_bank_ratio)
+
+
+func _on_cue_unbroken_oath_retaliation(payload: Dictionary) -> void:
+	var oath_player_position := payload.get("player_position", global_position) as Vector2
+	var oath_impact_position := payload.get("impact_position", global_position) as Vector2
+	var oath_bonus_ratio := float(payload.get("bonus_ratio", 1.0))
+	player_feedback.play_boss_unbroken_retaliation(oath_player_position, oath_impact_position, oath_bonus_ratio)
+
+
+func _on_cue_enemy_apply_slow(payload: Dictionary) -> void:
+	var slow_enemy_network_id := int(payload.get("enemy_network_id", -1))
+	var slow_duration := float(payload.get("duration", 0.0))
+	var slow_mult := float(payload.get("mult", 1.0))
+	var slow_enemy_node := _find_enemy_node_by_network_enemy_id(slow_enemy_network_id)
+	if slow_enemy_node != null and slow_enemy_node.has_method("apply_slow"):
+		slow_enemy_node.call("apply_slow", slow_duration, slow_mult)
+
+
+func _on_cue_fracture_field_fault_lines(payload: Dictionary) -> void:
+	var fracture_position := payload.get("position", global_position) as Vector2
+	var fracture_radius := float(payload.get("radius", 0.0))
+	var fracture_beam_count := int(payload.get("beam_count", 0))
+	var fracture_base_angle := float(payload.get("base_angle", 0.0))
+	var fracture_beam_width := float(payload.get("beam_width", 12.0))
+	player_feedback.play_fracture_field_fault_lines(fracture_position, fracture_radius, fracture_beam_count, fracture_base_angle, fracture_beam_width)
+
+
+func _on_cue_boss_void_zone_spawn(payload: Dictionary) -> void:
+	var spawn_position := payload.get("position", global_position) as Vector2
+	var spawn_radius := float(payload.get("radius", 72.0))
+	player_feedback.play_boss_void_zone_spawn(spawn_position, spawn_radius)
+
+
+func _on_cue_boss_void_zone_pulse(payload: Dictionary) -> void:
+	var pulse_position := payload.get("position", global_position) as Vector2
+	var pulse_radius := float(payload.get("radius", 72.0))
+	player_feedback.play_boss_void_zone_pulse(pulse_position, pulse_radius)
+
+
+func _on_cue_boss_void_zone_empowered_hit(payload: Dictionary) -> void:
+	var empowered_hit_position := payload.get("position", global_position) as Vector2
+	player_feedback.play_boss_void_zone_empowered_hit(empowered_hit_position)
 
 
 func _broadcast_cue_event(event_name: String, payload: Dictionary, reliable: bool = false) -> void:
