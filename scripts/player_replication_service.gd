@@ -3,6 +3,7 @@ extends Node
 ## Handles position, health, alive status, and upgrade state replication via RPC.
 
 const PLAYER_FEEDBACK_DISPATCHER_SCRIPT := preload("res://scripts/core/player_feedback_dispatcher.gd")
+const PLAYER_CUE_SYNC_QUEUE_SCRIPT := preload("res://scripts/core/player_cue_sync_queue.gd")
 
 ## Configuration
 var position_sync_interval_sec: float = 0.05  ## ~20 Hz position updates
@@ -37,6 +38,7 @@ var _last_feedback_estimated_bytes: int = 0
 var _outgoing_health_sequence_by_peer: Dictionary = {}  ## peer_id -> last emitted health sequence
 var _last_applied_health_sequence_by_peer: Dictionary = {}  ## peer_id -> last applied health sequence
 var _feedback_dispatcher := PLAYER_FEEDBACK_DISPATCHER_SCRIPT.new()
+var _cue_sync_queue := PLAYER_CUE_SYNC_QUEUE_SCRIPT.new()
 
 
 func _ready() -> void:
@@ -131,11 +133,11 @@ func _remove_invalid_player(peer_id: int) -> void:
 	_last_applied_health_sequence_by_peer.erase(peer_id)
 
 
-func _estimate_feedback_event_bytes(event_name: String, payload: Dictionary) -> int:
-	return event_name.length() + var_to_str(payload).length() + 16
-
-
 func get_last_feedback_sync_metrics() -> Dictionary:
+	return get_last_cue_event_sync_metrics()
+
+
+func get_last_cue_event_sync_metrics() -> Dictionary:
 	return {
 		"event_count": _last_feedback_event_count,
 		"estimated_bytes": _last_feedback_estimated_bytes
@@ -143,6 +145,10 @@ func get_last_feedback_sync_metrics() -> Dictionary:
 
 
 func broadcast_feedback_event(peer_id: int, event_name: String, payload: Dictionary, reliable: bool = false) -> void:
+	broadcast_cue_event(peer_id, event_name, payload, reliable)
+
+
+func broadcast_cue_event(peer_id: int, event_name: String, payload: Dictionary, reliable: bool = false) -> void:
 	## Cue events are transient player-facing signals synced for presentation parity across peers.
 	if peer_id <= 0:
 		return
@@ -151,27 +157,15 @@ func broadcast_feedback_event(peer_id: int, event_name: String, payload: Diction
 	if not _is_authority_for_peer(peer_id):
 		return
 	var pending_variant: Variant = _pending_feedback_events_by_peer.get(peer_id, [])
-	var pending_events: Array[Dictionary] = []
-	if pending_variant is Array:
-		for entry in pending_variant:
-			if entry is Dictionary:
-				pending_events.append((entry as Dictionary).duplicate(true))
+	var pending_events := _cue_sync_queue.copy_pending_events(pending_variant)
 	var event_payload := payload.duplicate(true)
-	var estimated_bytes := _estimate_feedback_event_bytes(event_name, event_payload)
-	if estimated_bytes > feedback_sync_payload_budget_bytes:
+	var estimated_bytes := _cue_sync_queue.estimate_event_bytes(event_name, event_payload)
+	if not _cue_sync_queue.can_fit_event(estimated_bytes, feedback_sync_payload_budget_bytes):
 		return
-	var pending_bytes := 0
-	for existing_event in pending_events:
-		pending_bytes += int(existing_event.get("estimated_bytes", 0))
-	if pending_bytes + estimated_bytes > feedback_sync_payload_budget_bytes and not pending_events.is_empty():
+	if _cue_sync_queue.requires_pre_flush(pending_events, estimated_bytes, feedback_sync_payload_budget_bytes):
 		_flush_feedback_events_for_peer(peer_id, pending_events)
 		pending_events.clear()
-	pending_events.append({
-		"event": event_name,
-		"payload": event_payload,
-		"reliable": reliable,
-		"estimated_bytes": estimated_bytes
-	})
+	pending_events.append(_cue_sync_queue.build_event_entry(event_name, event_payload, reliable, estimated_bytes))
 	_pending_feedback_events_by_peer[peer_id] = pending_events
 
 
@@ -183,12 +177,7 @@ func _flush_pending_feedback_events() -> void:
 	for peer_key in _pending_feedback_events_by_peer.keys():
 		var peer_id := int(peer_key)
 		var pending_variant: Variant = _pending_feedback_events_by_peer.get(peer_id, [])
-		if not (pending_variant is Array):
-			continue
-		var pending_events: Array[Dictionary] = []
-		for entry in pending_variant:
-			if entry is Dictionary:
-				pending_events.append((entry as Dictionary).duplicate(true))
+		var pending_events := _cue_sync_queue.copy_pending_events(pending_variant)
 		_flush_feedback_events_for_peer(peer_id, pending_events)
 	_pending_feedback_events_by_peer.clear()
 
@@ -196,23 +185,11 @@ func _flush_pending_feedback_events() -> void:
 func _flush_feedback_events_for_peer(peer_id: int, pending_events: Array[Dictionary]) -> void:
 	if pending_events.is_empty():
 		return
-	var unreliable_events: Array[Dictionary] = []
-	var reliable_events: Array[Dictionary] = []
-	for event_entry in pending_events:
-		var event_name := String(event_entry.get("event", ""))
-		var payload := event_entry.get("payload", {}) as Dictionary
-		if event_name.is_empty() or payload.is_empty():
-			continue
-		var packet := {
-			"event": event_name,
-			"payload": payload
-		}
-		if bool(event_entry.get("reliable", false)):
-			reliable_events.append(packet)
-		else:
-			unreliable_events.append(packet)
-		_last_feedback_event_count += 1
-		_last_feedback_estimated_bytes += int(event_entry.get("estimated_bytes", 0))
+	var packet_split := _cue_sync_queue.split_packets(pending_events)
+	var unreliable_events := packet_split.get("unreliable_events", []) as Array[Dictionary]
+	var reliable_events := packet_split.get("reliable_events", []) as Array[Dictionary]
+	_last_feedback_event_count += int(packet_split.get("event_count", 0))
+	_last_feedback_estimated_bytes += int(packet_split.get("estimated_bytes", 0))
 	if not unreliable_events.is_empty():
 		_sync_player_feedback_events_unreliable.rpc(peer_id, unreliable_events)
 	if not reliable_events.is_empty():

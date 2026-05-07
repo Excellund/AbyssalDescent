@@ -1342,8 +1342,8 @@ func _update_multiplayer_perf_logging(delta: float) -> void:
 		return
 	_multiplayer_perf_log_elapsed = 0.0
 	var player_replication_service := get_node_or_null("/root/PlayerReplicationService")
-	if player_replication_service != null and player_replication_service.has_method("get_last_feedback_sync_metrics"):
-		var feedback_metrics := player_replication_service.get_last_feedback_sync_metrics() as Dictionary
+	if player_replication_service != null:
+		var feedback_metrics := player_replication_service.get_last_cue_event_sync_metrics() as Dictionary
 		_multiplayer_last_feedback_event_count = int(feedback_metrics.get("event_count", 0))
 		_multiplayer_last_feedback_estimated_bytes = int(feedback_metrics.get("estimated_bytes", 0))
 	else:
