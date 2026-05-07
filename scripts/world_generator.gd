@@ -3367,15 +3367,7 @@ func _sync_enemy_state_tick(delta: float) -> void:
 			tether_synced_enemy_count += 1
 			tether_synced_estimated_bytes += synced_state_size
 	for stale_id in stale_ids:
-		_network_enemy_nodes.erase(int(stale_id))
-		_enemy_target_positions.erase(int(stale_id))
-		_enemy_target_facing_angles.erase(int(stale_id))
-		_previous_enemy_runtime_states.erase(int(stale_id))
-		_previous_enemy_positions.erase(int(stale_id))
-		_previous_enemy_facing_angles.erase(int(stale_id))
-		_previous_enemy_health_values.erase(int(stale_id))
-		_enemy_far_sync_elapsed_by_id.erase(int(stale_id))
-		_enemy_far_combat_hint_by_id.erase(int(stale_id))
+		_deregister_network_enemy(int(stale_id))
 	_enemy_sync_scan_cursor = (_enemy_sync_scan_cursor + scan_limit) % maxi(1, total_enemy_ids)
 	if synced_states.is_empty() and stale_ids.is_empty():
 		_multiplayer_last_sync_enemy_count = 0
@@ -3472,9 +3464,7 @@ func _spawn_synced_pyre_death_field(effect_payload: Dictionary) -> void:
 		0
 	)
 
-func _on_network_enemy_died(enemy_id: int) -> void:
-	var enemy := _network_enemy_nodes.get(enemy_id) as Node2D
-	var death_effect_payload := _build_enemy_death_effect_payload(enemy)
+func _deregister_network_enemy(enemy_id: int) -> void:
 	_network_enemy_nodes.erase(enemy_id)
 	_enemy_target_positions.erase(enemy_id)
 	_enemy_target_facing_angles.erase(enemy_id)
@@ -3484,6 +3474,11 @@ func _on_network_enemy_died(enemy_id: int) -> void:
 	_previous_enemy_health_values.erase(enemy_id)
 	_enemy_far_sync_elapsed_by_id.erase(enemy_id)
 	_enemy_far_combat_hint_by_id.erase(enemy_id)
+
+func _on_network_enemy_died(enemy_id: int) -> void:
+	var enemy := _network_enemy_nodes.get(enemy_id) as Node2D
+	var death_effect_payload := _build_enemy_death_effect_payload(enemy)
+	_deregister_network_enemy(enemy_id)
 	if is_multiplayer and MultiplayerSessionManager.is_host():
 		_sync_enemy_died.rpc(enemy_id, death_effect_payload)
 
