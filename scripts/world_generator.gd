@@ -2754,10 +2754,7 @@ func _apply_endless_scaling_to_profile(profile: Dictionary) -> Dictionary:
 		static_camera_room_threshold
 	)
 
-func _begin_room(profile: Dictionary) -> void:
-	_doors_spawn_ready = false
-	if profile.is_empty():
-		return
+func _prepare_room_sync_transition() -> void:
 	_world_multiplayer_sync_state.current_room_sync_id += 1
 	_awaiting_authoritative_door_choice = false
 	_world_multiplayer_sync_state.pending_door_sync_payload.clear()
@@ -2765,6 +2762,12 @@ func _begin_room(profile: Dictionary) -> void:
 	_pending_chosen_progress_state.clear()
 	if not is_multiplayer or MultiplayerSessionManager.is_host():
 		_world_multiplayer_sync_state.clear_pending_spawn_payloads()
+
+func _begin_room(profile: Dictionary) -> void:
+	_doors_spawn_ready = false
+	if profile.is_empty():
+		return
+	_prepare_room_sync_transition()
 	choosing_next_room = false
 	door_options.clear()
 	encounter_intro_grace_active = false
@@ -2890,13 +2893,7 @@ func _pick_boss_spawn_position(min_player_distance: float = 260.0, wall_margin: 
 	return fallback
 
 func _begin_configured_boss_room(boss_stage: int, room_size: Vector2, room_label: String, room_entry_key: String, banner_title: String, boss_script, collision_radius: float, min_player_distance: float, wall_margin: float) -> void:
-	_world_multiplayer_sync_state.current_room_sync_id += 1
-	_awaiting_authoritative_door_choice = false
-	_world_multiplayer_sync_state.pending_door_sync_payload.clear()
-	_pending_chosen_door.clear()
-	_pending_chosen_progress_state.clear()
-	if not is_multiplayer or MultiplayerSessionManager.is_host():
-		_world_multiplayer_sync_state.clear_pending_spawn_payloads()
+	_prepare_room_sync_transition()
 	encounter_intro_grace_active = false
 	combat_phase_coordinator.begin_combat_phase(player, get_tree())
 	in_boss_room = boss_stage == 1
