@@ -1601,9 +1601,9 @@ func _apply_synced_spawn_batch_payload(payload: Dictionary) -> void:
 	_world_multiplayer_sync_state.apply_spawn_sync_id(source_room_sync_id)
 
 func _flush_pending_client_spawn_syncs() -> void:
-	if _world_multiplayer_sync_state.pending_spawn_sync_payload.is_empty():
+	if not _world_multiplayer_sync_state.has_pending_spawn_sync_payload():
 		return
-	if not _can_apply_client_spawn_sync(_world_multiplayer_sync_state.pending_spawn_sync_payload):
+	if not _can_apply_client_spawn_sync(_world_multiplayer_sync_state.peek_pending_spawn_sync_payload()):
 		return
 	var payload := _world_multiplayer_sync_state.consume_pending_spawn_sync_payload()
 	_apply_synced_spawn_batch_payload(payload)
@@ -1698,9 +1698,9 @@ func _apply_synced_boss_spawn_payload(payload: Dictionary) -> void:
 	active_room_enemy_count = 1
 
 func _flush_pending_client_boss_spawn_syncs() -> void:
-	if _world_multiplayer_sync_state.pending_boss_spawn_sync_payload.is_empty():
+	if not _world_multiplayer_sync_state.has_pending_boss_spawn_sync_payload():
 		return
-	if not _can_apply_client_boss_spawn_sync(_world_multiplayer_sync_state.pending_boss_spawn_sync_payload):
+	if not _can_apply_client_boss_spawn_sync(_world_multiplayer_sync_state.peek_pending_boss_spawn_sync_payload()):
 		return
 	var payload := _world_multiplayer_sync_state.consume_pending_boss_spawn_sync_payload()
 	_apply_synced_boss_spawn_payload(payload)
@@ -3609,9 +3609,7 @@ func _sync_spawn_enemy_batch(spawn_batch: Array, synced_enemy_count: int, source
 		"room_sync_id": source_room_sync_id
 	}
 	if not _can_apply_client_spawn_sync(payload):
-		var pending_sync_id := int(_world_multiplayer_sync_state.pending_spawn_sync_payload.get("room_sync_id", 0))
-		if source_room_sync_id >= pending_sync_id:
-			_world_multiplayer_sync_state.pending_spawn_sync_payload = payload
+		_world_multiplayer_sync_state.queue_pending_spawn_sync_payload_if_newer(payload, source_room_sync_id)
 		return
 	_apply_synced_spawn_batch_payload(payload)
 
@@ -3632,9 +3630,7 @@ func _sync_spawn_boss(spawn_data: Dictionary) -> void:
 	if source_room_sync_id > 0 and source_room_sync_id < _world_multiplayer_sync_state.current_room_sync_id:
 		return
 	if not _can_apply_client_boss_spawn_sync(payload):
-		var pending_sync_id := int(_world_multiplayer_sync_state.pending_boss_spawn_sync_payload.get("room_sync_id", 0))
-		if source_room_sync_id >= pending_sync_id:
-			_world_multiplayer_sync_state.pending_boss_spawn_sync_payload = payload
+		_world_multiplayer_sync_state.queue_pending_boss_spawn_sync_payload_if_newer(payload, source_room_sync_id)
 		return
 	_apply_synced_boss_spawn_payload(payload)
 

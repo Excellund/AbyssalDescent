@@ -80,12 +80,34 @@ func consume_pending_spawn_sync_payload() -> Dictionary:
 	pending_spawn_sync_payload.clear()
 	return payload
 
+func has_pending_spawn_sync_payload() -> bool:
+	return not pending_spawn_sync_payload.is_empty()
+
+func peek_pending_spawn_sync_payload() -> Dictionary:
+	return pending_spawn_sync_payload
+
+func queue_pending_spawn_sync_payload_if_newer(payload: Dictionary, source_room_sync_id: int) -> void:
+	var pending_sync_id := int(pending_spawn_sync_payload.get("room_sync_id", 0))
+	if source_room_sync_id >= pending_sync_id:
+		pending_spawn_sync_payload = payload
+
 func consume_pending_boss_spawn_sync_payload() -> Dictionary:
 	if pending_boss_spawn_sync_payload.is_empty():
 		return {}
 	var payload := pending_boss_spawn_sync_payload.duplicate(true) as Dictionary
 	pending_boss_spawn_sync_payload.clear()
 	return payload
+
+func has_pending_boss_spawn_sync_payload() -> bool:
+	return not pending_boss_spawn_sync_payload.is_empty()
+
+func peek_pending_boss_spawn_sync_payload() -> Dictionary:
+	return pending_boss_spawn_sync_payload
+
+func queue_pending_boss_spawn_sync_payload_if_newer(payload: Dictionary, source_room_sync_id: int) -> void:
+	var pending_sync_id := int(pending_boss_spawn_sync_payload.get("room_sync_id", 0))
+	if source_room_sync_id >= pending_sync_id:
+		pending_boss_spawn_sync_payload = payload
 
 func apply_spawn_sync_id(source_room_sync_id: int) -> void:
 	if source_room_sync_id <= 0:
