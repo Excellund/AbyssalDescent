@@ -192,13 +192,8 @@ func _flush_cue_events_for_peer(peer_id: int, pending_events: Array[Dictionary])
 ## Sync all registered player positions if they've moved significantly.
 func _sync_all_player_positions() -> void:
 	for peer_id in player_nodes.keys():
-		var player_node_variant: Variant = player_nodes.get(peer_id)
-		if not is_instance_valid(player_node_variant):
-			_remove_invalid_player(peer_id)
-			continue
-		var player_node := player_node_variant as Node
+		var player_node := _get_player_node(peer_id)
 		if player_node == null:
-			_remove_invalid_player(peer_id)
 			continue
 		
 		if peer_id == local_peer_id:
