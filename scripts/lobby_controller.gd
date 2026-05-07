@@ -172,8 +172,13 @@ func _client_can_send_rpcs() -> bool:
 		return false
 	if bool(multiplayer_session_manager.is_host()):
 		return true
-	var actual_peers = multiplayer_session_manager.get_peer_ids()
-	return 1 in actual_peers
+	var multiplayer_api := get_tree().get_multiplayer()
+	if multiplayer_api == null:
+		return false
+	var active_peer: MultiplayerPeer = multiplayer_api.multiplayer_peer
+	if active_peer == null:
+		return false
+	return active_peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED
 
 
 ## Populate character tabs (one per character).

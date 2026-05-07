@@ -344,6 +344,9 @@ func _await_multiplayer_join_result(multiplayer_session_manager: Node, timeout_s
 	push_error("[JOIN DEBUG] Entering join timeout loop...")
 	_debug_log_menu("[JOIN] Starting timeout loop. Waiting for session_joined or connection_failed...")
 	while elapsed < timeout_sec and not state["joined"] and not state["failed"]:
+		if bool(multiplayer_session_manager.session_connected) and int(multiplayer_session_manager.local_peer_id) > 0:
+			state["joined"] = true
+			break
 		if elapsed >= next_ui_update_at:
 			var remaining_sec := maxi(0, int(ceili(timeout_sec - elapsed)))
 			var remaining_min := int(floor(float(remaining_sec) / 60.0))

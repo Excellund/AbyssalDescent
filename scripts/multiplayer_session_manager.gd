@@ -259,6 +259,10 @@ func join_room(host_address: String = "127.0.0.1", host_port: int = 9999, allow_
 	if session_connected:
 		push_error("Already connected to a session. Call leave_room() first.")
 		return false
+	if session_id.is_empty():
+		session_id = "mp-session-%d-%s" % [Time.get_unix_time_from_system(), _generate_random_code(4)]
+	if room_code.is_empty():
+		room_code = _generate_random_code(6).to_upper()
 
 	var candidate_addresses: Array = [host_address]
 	if allow_localhost_retry and host_address != "127.0.0.1" and host_address != "localhost":
@@ -518,6 +522,10 @@ func _on_peer_disconnected(peer_id: int) -> void:
 
 ## Internal: Triggered when client successfully connects to server.
 func _on_connected_to_server() -> void:
+	if session_id.is_empty():
+		session_id = "mp-session-%d-%s" % [Time.get_unix_time_from_system(), _generate_random_code(4)]
+	if room_code.is_empty():
+		room_code = _generate_random_code(6).to_upper()
 	_debug_log("[SIGNAL] === _on_connected_to_server() FIRED ===")
 	_debug_log("[STATE] session_id='%s' room_code='%s'" % [session_id, room_code])
 	push_error("[MULTIPLAYER DEBUG] === CLIENT CONNECTED TO SERVER === (This should print visibly)")
@@ -616,6 +624,8 @@ func _is_client_connected_to_host() -> bool:
 
 func _begin_join_attempts(addresses: Array, host_port: int) -> bool:
 	_debug_log("[JOIN] _begin_join_attempts() called with addresses: %s port: %d" % [str(addresses), host_port])
+	connected_peers.clear()
+	local_peer_id = 0
 	_join.addresses.clear()
 	for candidate in addresses:
 		var addr := String(candidate).strip_edges()
