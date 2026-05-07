@@ -1306,27 +1306,11 @@ func _process(delta: float) -> void:
 		_update_multiplayer_camera()
 	if is_multiplayer:
 		var sim_start_usec := Time.get_ticks_usec() if _perf_attribution_enabled else 0
-		_sync_objective_state_tick(delta)
-		_sync_archer_projectile_state_tick(delta)
-		_sync_enemy_state_tick(delta)
-		_interpolate_remote_enemy_states(delta)
-		_flush_pending_client_door_syncs()
-		_flush_pending_client_boss_spawn_syncs()
-		_flush_pending_client_spawn_syncs()
-		_flush_pending_client_objective_spawn_syncs()
-		_report_client_perf_sample(delta)
-		_update_multiplayer_perf_logging(delta)
+		_process_multiplayer_sync(delta)
 		var sim_elapsed_ms := 0.0
 		if sim_start_usec > 0:
 			sim_elapsed_ms = float(Time.get_ticks_usec() - sim_start_usec) / 1000.0
 		var post_start_usec := Time.get_ticks_usec() if sim_start_usec > 0 else 0
-		
-		# Update stress test metrics if active
-		if _stress_test_active:
-			if _stress_test_coordinator == null:
-				_stress_test_coordinator = load("res://scripts/multiplayer_stress_test.gd").new()
-				_stress_test_coordinator.world_gen = self
-			_stress_test_coordinator.tick_frame(delta, _multiplayer_last_sync_estimated_bytes, _multiplayer_last_sync_batch_count)
 		_refresh_frame_ui()
 		if post_start_usec > 0 and perf_frame_start_usec > 0:
 			var post_elapsed_ms := float(Time.get_ticks_usec() - post_start_usec) / 1000.0
@@ -1335,6 +1319,24 @@ func _process(delta: float) -> void:
 			_record_perf_attribution_sample(delta, pre_elapsed_ms, sim_elapsed_ms, post_elapsed_ms, frame_elapsed_ms)
 		return
 	_refresh_frame_ui()
+
+func _process_multiplayer_sync(delta: float) -> void:
+	_sync_objective_state_tick(delta)
+	_sync_archer_projectile_state_tick(delta)
+	_sync_enemy_state_tick(delta)
+	_interpolate_remote_enemy_states(delta)
+	_flush_pending_client_door_syncs()
+	_flush_pending_client_boss_spawn_syncs()
+	_flush_pending_client_spawn_syncs()
+	_flush_pending_client_objective_spawn_syncs()
+	_report_client_perf_sample(delta)
+	_update_multiplayer_perf_logging(delta)
+	if _stress_test_active:
+		if _stress_test_coordinator == null:
+			_stress_test_coordinator = load("res://scripts/multiplayer_stress_test.gd").new()
+			_stress_test_coordinator.world_gen = self
+		_stress_test_coordinator.tick_frame(delta, _multiplayer_last_sync_estimated_bytes, _multiplayer_last_sync_batch_count)
+
 
 func _update_multiplayer_perf_logging(delta: float) -> void:
 	if not multiplayer_perf_logging_enabled:
