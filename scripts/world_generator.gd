@@ -1563,14 +1563,9 @@ func _can_apply_client_spawn_sync(payload: Dictionary) -> bool:
 	if not is_instance_valid(enemy_spawner):
 		return false
 	var source_room_sync_id := int(payload.get("room_sync_id", 0))
-	if source_room_sync_id > 0:
-		if source_room_sync_id < _world_multiplayer_sync_state.current_room_sync_id:
-			return false
-		if source_room_sync_id > _world_multiplayer_sync_state.current_room_sync_id:
-			if _world_multiplayer_sync_state.current_room_sync_id == 0 and current_room_label == "Starting Chamber" and not _is_reward_selection_active():
-				_world_multiplayer_sync_state.current_room_sync_id = source_room_sync_id
-			else:
-				return false
+	var allow_initial_sync_alignment := _world_multiplayer_sync_state.current_room_sync_id == 0 and current_room_label == "Starting Chamber" and not _is_reward_selection_active()
+	if not _world_multiplayer_sync_state.can_accept_source_sync_id(source_room_sync_id, allow_initial_sync_alignment):
+		return false
 	if _is_reward_selection_active():
 		return false
 	if current_room_label == "Starting Chamber":
@@ -1669,11 +1664,8 @@ func _can_apply_client_boss_spawn_sync(payload: Dictionary) -> bool:
 	if current_room_label == "Starting Chamber":
 		return false
 	var source_room_sync_id := int(payload.get("room_sync_id", 0))
-	if source_room_sync_id > 0:
-		if source_room_sync_id < _world_multiplayer_sync_state.current_room_sync_id:
-			return false
-		if source_room_sync_id > _world_multiplayer_sync_state.current_room_sync_id:
-			return false
+	if not _world_multiplayer_sync_state.can_accept_source_sync_id(source_room_sync_id, false):
+		return false
 	var boss_stage := int(payload.get("boss_stage", 0))
 	if not _is_current_room_boss_stage(boss_stage):
 		return false
@@ -2620,7 +2612,7 @@ func _sanitize_progress_sync_state(progress_state: Dictionary) -> Dictionary:
 	if _world_multiplayer_sync_state.is_stale_room_sync_id(incoming_room_sync_id):
 		sanitized["invalid"] = true
 		return sanitized
-	if incoming_room_sync_id > _world_multiplayer_sync_state.current_room_sync_id + 4:
+	if _world_multiplayer_sync_state.is_sync_id_too_far_ahead(incoming_room_sync_id, 4):
 		sanitized["invalid"] = true
 		return sanitized
 	var incoming_first_boss_defeated := bool(sanitized.get("first_boss_defeated", first_boss_defeated))
@@ -2676,7 +2668,7 @@ func _apply_progress_sync_state(progress_state: Dictionary) -> void:
 		push_error("[Progress Sync] Rejected impossibly high incoming depth %d (max sane: %d)" % [incoming_depth, max_sane_depth])
 		return
 	
-	_world_multiplayer_sync_state.current_room_sync_id = maxi(_world_multiplayer_sync_state.current_room_sync_id, int(sanitized_progress_state.get("room_sync_id", _world_multiplayer_sync_state.current_room_sync_id)))
+	_world_multiplayer_sync_state.merge_current_room_sync_id(int(sanitized_progress_state.get("room_sync_id", _world_multiplayer_sync_state.current_room_sync_id)))
 	rooms_cleared = int(sanitized_progress_state.get("rooms_cleared", rooms_cleared))
 	room_depth = incoming_depth
 	_clamp_room_depth_to_sane_range()

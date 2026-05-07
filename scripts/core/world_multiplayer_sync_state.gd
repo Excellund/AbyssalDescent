@@ -147,3 +147,21 @@ func is_future_room_sync_id(source_room_sync_id: int) -> bool:
 
 func is_objective_already_cleared_for_sync_id(source_room_sync_id: int) -> bool:
 	return source_room_sync_id > 0 and source_room_sync_id <= last_objective_cleared_room_sync_id
+
+func can_accept_source_sync_id(source_room_sync_id: int, allow_future_alignment: bool) -> bool:
+	if source_room_sync_id <= 0:
+		return true
+	if is_stale_room_sync_id(source_room_sync_id):
+		return false
+	if is_future_room_sync_id(source_room_sync_id):
+		if allow_future_alignment:
+			current_room_sync_id = source_room_sync_id
+			return true
+		return false
+	return true
+
+func is_sync_id_too_far_ahead(source_room_sync_id: int, max_ahead: int) -> bool:
+	return source_room_sync_id > current_room_sync_id + max_ahead
+
+func merge_current_room_sync_id(source_room_sync_id: int) -> void:
+	current_room_sync_id = maxi(current_room_sync_id, source_room_sync_id)
