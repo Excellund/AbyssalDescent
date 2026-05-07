@@ -2776,6 +2776,9 @@ func _apply_endless_scaling_to_profile(profile: Dictionary) -> Dictionary:
 func _prepare_room_sync_transition() -> void:
 	_world_multiplayer_sync_state.begin_room_transition(not is_multiplayer or MultiplayerSessionManager.is_host())
 
+func get_current_room_sync_id() -> int:
+	return _world_multiplayer_sync_state.current_room_sync_id
+
 func _begin_room(profile: Dictionary) -> void:
 	_doors_spawn_ready = false
 	if profile.is_empty():

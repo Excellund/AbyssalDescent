@@ -150,6 +150,13 @@ var _control_zone_runtime_sync_left: float = 0.0
 var _pending_objective_spawns: Array[Dictionary] = []
 var _pending_objective_spawn_timer: float = 0.0
 
+func _get_world_room_sync_id() -> int:
+	if not is_instance_valid(world):
+		return 0
+	if world.has_method("get_current_room_sync_id"):
+		return int(world.call("get_current_room_sync_id"))
+	return int(world.get("_current_room_sync_id"))
+
 func initialize(world_generator: Node, random_number_generator: RandomNumberGenerator, objective_mgr: Node) -> void:
 	world = world_generator
 	objective_manager = objective_mgr
@@ -514,7 +521,7 @@ func _spawn_random_wave_enemies(roster: Array[String], spawn_count: int) -> int:
 		spawned_total += 1
 	world.active_room_enemy_count += spawned_total
 	if world.is_multiplayer and MultiplayerSessionManager.is_host() and not spawn_batch.is_empty():
-			world._sync_objective_spawn_batch.rpc(spawn_batch, world.active_room_enemy_count, String(world.current_room_label), int(world.get("_current_room_sync_id")))
+			world._sync_objective_spawn_batch.rpc(spawn_batch, world.active_room_enemy_count, String(world.current_room_label), _get_world_room_sync_id())
 	return spawned_total
 
 func _spawn_random_control_wave_enemies(roster: Array[String], spawn_count: int) -> int:
@@ -539,7 +546,7 @@ func _spawn_random_control_wave_enemies(roster: Array[String], spawn_count: int)
 		spawned_total += 1
 	world.active_room_enemy_count += spawned_total
 	if world.is_multiplayer and MultiplayerSessionManager.is_host() and not spawn_batch.is_empty():
-			world._sync_objective_spawn_batch.rpc(spawn_batch, world.active_room_enemy_count, String(world.current_room_label), int(world.get("_current_room_sync_id")))
+			world._sync_objective_spawn_batch.rpc(spawn_batch, world.active_room_enemy_count, String(world.current_room_label), _get_world_room_sync_id())
 	return spawned_total
 
 func _append_objective_spawn_sync(spawn_batch: Array, enemy: CharacterBody2D, enemy_type: String, spawn_meta: Dictionary = {}) -> void:
@@ -584,7 +591,7 @@ func _flush_objective_spawn_sync(spawn_batch: Array) -> void:
 		return
 	if not world.is_multiplayer or not MultiplayerSessionManager.is_host():
 		return
-	world._sync_objective_spawn_batch.rpc(spawn_batch, world.active_room_enemy_count, String(world.current_room_label), int(world.get("_current_room_sync_id")))
+	world._sync_objective_spawn_batch.rpc(spawn_batch, world.active_room_enemy_count, String(world.current_room_label), _get_world_room_sync_id())
 
 func _enqueue_objective_spawn(roster: Array[String], spawn_count: int, spawn_mode: int = OBJECTIVE_SPAWN_MODE_REGULAR, spawn_context: Dictionary = {}) -> void:
 	if spawn_count <= 0:
