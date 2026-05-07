@@ -203,7 +203,40 @@ func _populate_character_tabs() -> void:
 		stack.add_child(tagline_label)
 
 		character_selector.add_child(page)
-	
+
+	var random_page := MarginContainer.new()
+	random_page.set_anchors_preset(Control.PRESET_FULL_RECT)
+	random_page.add_theme_constant_override("margin_left", 14)
+	random_page.add_theme_constant_override("margin_right", 14)
+	random_page.add_theme_constant_override("margin_top", 12)
+	random_page.add_theme_constant_override("margin_bottom", 12)
+	random_page.name = "?"
+
+	var random_stack := VBoxContainer.new()
+	random_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	random_stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	random_stack.add_theme_constant_override("separation", 8)
+	random_page.add_child(random_stack)
+
+	var random_glyph := Label.new()
+	random_glyph.text = "?"
+	random_glyph.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	random_glyph.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	random_glyph.add_theme_font_size_override("font_size", 36)
+	random_glyph.add_theme_color_override("font_color", Color(0.70, 0.76, 0.86, 0.88))
+	random_stack.add_child(random_glyph)
+
+	var random_label := Label.new()
+	random_label.text = "Let the abyss decide"
+	random_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	random_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	random_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	random_label.add_theme_font_size_override("font_size", 15)
+	random_label.add_theme_color_override("font_color", Color(0.60, 0.66, 0.76, 0.78))
+	random_stack.add_child(random_label)
+
+	character_selector.add_child(random_page)
+
 	if not character_selector.tab_changed.is_connected(_on_character_tab_changed):
 		character_selector.tab_changed.connect(_on_character_tab_changed)
 	if not available_characters.is_empty():
@@ -229,6 +262,17 @@ func _setup_difficulty_selector() -> void:
 
 ## Called when local player changes character tab.
 func _on_character_tab_changed(tab_index: int) -> void:
+	var random_tab_index := available_characters.size()
+	if tab_index == random_tab_index:
+		local_character_id = "random"
+		if bool(multiplayer_session_manager.is_host()):
+			_broadcast_character_selection.rpc(local_peer_id, "random")
+		else:
+			if not _client_can_send_rpcs():
+				status_label.text = "Still connecting to host..."
+				return
+			_request_character_selection.rpc_id(1, "random")
+		return
 	if tab_index < 0 or tab_index >= available_characters.size():
 		return
 	local_character_id = available_characters[tab_index]
@@ -339,7 +383,8 @@ func _update_player_list() -> void:
 	var other_number := 2
 	for peer_id in peer_ids:
 		var state: Dictionary = peer_state.get(peer_id, {})
-		var char_name: String = state.get("character_id", "???")
+		var char_id_raw: String = state.get("character_id", "???")
+		var char_display: String = "?" if char_id_raw == "random" else char_id_raw.capitalize()
 		var is_ready: bool = state.get("is_ready", false)
 		var status_icon: String = "  ✓" if is_ready else "  ○"
 		var display_name: String
@@ -349,7 +394,7 @@ func _update_player_list() -> void:
 			display_name = "Player %d" % other_number
 			other_number += 1
 		var row := Label.new()
-		row.text = "%s  -  %s%s" % [display_name, char_name.capitalize(), status_icon]
+		row.text = "%s  -  %s%s" % [display_name, char_display, status_icon]
 		row.add_theme_font_size_override("font_size", 18)
 		if peer_id == local_peer_id:
 			row.add_theme_color_override("font_color", Color(0.72, 0.86, 1.0, 1.0))
@@ -403,9 +448,14 @@ func _apply_character_selection(peer_id: int, character_id: String) -> void:
 	peer_state[peer_id]["character_id"] = character_id
 	if peer_id == local_peer_id:
 		local_character_id = character_id
-		var tab_index := available_characters.find(character_id)
-		if tab_index >= 0 and tab_index < character_selector.get_tab_count():
-			character_selector.current_tab = tab_index
+		if character_id == "random":
+			var random_tab_index := available_characters.size()
+			if random_tab_index < character_selector.get_tab_count():
+				character_selector.current_tab = random_tab_index
+		else:
+			var tab_index := available_characters.find(character_id)
+			if tab_index >= 0 and tab_index < character_selector.get_tab_count():
+				character_selector.current_tab = tab_index
 	_update_player_list()
 
 
@@ -497,6 +547,13 @@ func _check_all_ready() -> void:
 	_launch_main_game()
 
 
+func _resolve_random_character() -> String:
+	var launch_ids: Array = CHARACTER_REGISTRY.get_launch_character_ids()
+	if launch_ids.is_empty():
+		return "bastion"
+	return String(launch_ids[randi() % launch_ids.size()])
+
+
 ## Transition to main game.
 func _launch_main_game() -> void:
 	if not bool(multiplayer_session_manager.is_host()):
@@ -506,6 +563,10 @@ func _launch_main_game() -> void:
 	var host_peer_id := local_peer_id
 	var session_identifier := String(multiplayer_session_manager.session_id)
 	var synced_peer_state := peer_state.duplicate(true)
+	for peer_id_key in synced_peer_state.keys():
+		var state := synced_peer_state[peer_id_key] as Dictionary
+		if String(state.get("character_id", "")) == "random":
+			state["character_id"] = _resolve_random_character()
 	_start_game.rpc(host_peer_id, session_identifier, selected_difficulty_tier, synced_peer_state)
 
 

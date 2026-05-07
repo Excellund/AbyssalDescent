@@ -48,6 +48,7 @@ const CHARACTER_SELECTOR_TITLE_HEIGHT := 44.0
 const CHARACTER_SELECTOR_ACCENT_HEIGHT := 2.0
 const CHARACTER_SELECTOR_INTRO_HEIGHT := 30.0
 const CHARACTER_SELECTOR_BACK_BUTTON_HEIGHT := 46.0
+const CHARACTER_SELECTOR_RANDOM_OPTION_HEIGHT := 148.0
 const MULTIPLAYER_JOIN_CAP_SEC := 120.0
 
 var root_panel: Panel
@@ -664,6 +665,7 @@ func _character_selector_panel_size() -> Vector2:
 	fixed_height += CHARACTER_SELECTOR_INTRO_HEIGHT
 	fixed_height += CHARACTER_SELECTOR_BACK_BUTTON_HEIGHT
 	fixed_height += CHARACTER_SELECTOR_STACK_SEPARATION * 4.0
+	fixed_height += CHARACTER_SELECTOR_RANDOM_OPTION_HEIGHT
 	var panel_height := maxf(MENU_LAYOUT_BASE_SIZE.y, rows_height + fixed_height)
 	return Vector2(CHARACTER_SELECTOR_PANEL_WIDTH, panel_height)
 
@@ -2287,6 +2289,52 @@ func _build_character_selector_panel() -> Panel:
 		character_role_labels.append(role_label)
 		character_opposition_labels.append(opposition_label)
 
+	var random_separator := ColorRect.new()
+	random_separator.custom_minimum_size = Vector2(0.0, 2.0)
+	random_separator.color = Color(0.56, 0.68, 0.82, 0.30)
+	random_separator.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button_container.add_child(random_separator)
+
+	var random_button := Button.new()
+	random_button.custom_minimum_size = Vector2(0.0, 118.0)
+	random_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	random_button.focus_mode = Control.FOCUS_ALL
+	random_button.text = ""
+	random_button.pressed.connect(_on_random_vessel_pressed)
+	_apply_random_vessel_button_theme(random_button)
+	button_container.add_child(random_button)
+
+	var random_content := VBoxContainer.new()
+	random_content.set_anchors_preset(Control.PRESET_FULL_RECT)
+	random_content.offset_left = 22
+	random_content.offset_right = -22
+	random_content.offset_top = 12
+	random_content.offset_bottom = -12
+	random_content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	random_content.add_theme_constant_override("separation", 2)
+	random_button.add_child(random_content)
+
+	var random_name_label := Label.new()
+	random_name_label.text = "?  \u2014  Random Vessel"
+	random_name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	random_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	random_name_label.add_theme_font_size_override("font_size", 26)
+	random_name_label.add_theme_color_override("font_color", Color(0.78, 0.82, 0.88, 0.92))
+	random_name_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.70))
+	random_name_label.add_theme_constant_override("shadow_offset_x", 1)
+	random_name_label.add_theme_constant_override("shadow_offset_y", 1)
+	random_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	random_content.add_child(random_name_label)
+
+	var random_sub_label := Label.new()
+	random_sub_label.text = "A vessel chosen by the abyss"
+	random_sub_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	random_sub_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	random_sub_label.add_theme_font_size_override("font_size", 16)
+	random_sub_label.add_theme_color_override("font_color", Color(0.62, 0.68, 0.78, 0.78))
+	random_sub_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	random_content.add_child(random_sub_label)
+
 	var back_button := _make_panel_back_button()
 	back_button.pressed.connect(func() -> void:
 		_show_difficulty_selector()
@@ -2338,6 +2386,28 @@ func _on_character_selected(character_id: String) -> void:
 		if character_selector_panel != null:
 			character_selector_panel.visible = false
 		get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)
+
+func _on_random_vessel_pressed() -> void:
+	_on_character_selected(_resolve_random_character())
+
+func _resolve_random_character() -> String:
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	var unlocked_ids: Array[String] = []
+	if run_context != null and run_context.has_method("get_unlocked_character_ids"):
+		unlocked_ids = run_context.get_unlocked_character_ids()
+	if unlocked_ids.is_empty():
+		unlocked_ids = CHARACTER_REGISTRY.get_launch_character_ids()
+	if unlocked_ids.is_empty():
+		return String(CHARACTER_REGISTRY.DEFAULT_CHARACTER_ID)
+	return unlocked_ids[randi() % unlocked_ids.size()]
+
+func _apply_random_vessel_button_theme(button: Button) -> void:
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.add_theme_font_size_override("font_size", 22)
+	button.add_theme_stylebox_override("normal", _make_button_style(Color(0.09, 0.11, 0.15, 0.88), Color(0.40, 0.50, 0.62, 0.60), 18, 2))
+	button.add_theme_stylebox_override("hover", _make_button_style(Color(0.13, 0.16, 0.22, 0.96), Color(0.58, 0.68, 0.82, 0.80), 18, 2))
+	button.add_theme_stylebox_override("pressed", _make_button_style(Color(0.07, 0.09, 0.13, 0.98), Color(0.66, 0.76, 0.90, 0.88), 18, 2))
+	button.add_theme_stylebox_override("focus", _make_button_style(Color(0.11, 0.14, 0.19, 0.98), Color(0.70, 0.80, 0.94, 0.90), 18, 2))
 
 func _on_master_volume_changed(value: float) -> void:
 	_apply_options(value, music_slider.value, sfx_slider.value)
