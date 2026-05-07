@@ -201,6 +201,8 @@ func _process_stalk(delta: float) -> void:
 	var desired := _stalk_desired_velocity() * slow_speed_mult
 	velocity = velocity.move_toward(desired, (acceleration if desired != Vector2.ZERO else deceleration) * delta)
 	move_and_slide()
+	if is_instance_valid(beam_partner):
+		queue_redraw()
 	if beam_cooldown_left <= 0.0 and _is_primary_pair():
 		_enter_windup_state()
 
@@ -461,6 +463,7 @@ func _enter_recover_state() -> void:
 func _process_recover(delta: float) -> void:
 	velocity = velocity.move_toward(_orbit_desired_velocity() * 0.4 * slow_speed_mult, deceleration * delta)
 	move_and_slide()
+	queue_redraw()
 	state_time_left = maxf(0.0, state_time_left - delta)
 	if state_time_left <= 0.0:
 		tether_state = STATE_STALK
@@ -535,7 +538,7 @@ func _draw() -> void:
 	draw_line(-side * 4.7, -side * 8.2 + facing * 3.9, Color(0.58, 0.9, 1.0, 0.74), 1.6)
 
 	if is_instance_valid(beam_partner):
-		var partner_local := beam_partner.global_position - global_position
+		var partner_local := to_local(beam_partner.global_position)
 		var alpha := 0.22
 		var width := 1.6
 		var beam_visual_width := clampf(beam_thickness * 0.48, 3.6, 14.0)
@@ -545,9 +548,15 @@ func _draw() -> void:
 		elif beam_link_active:
 			alpha = 0.9
 			width = beam_visual_width
+		var partner_facing_dir := beam_partner.get("visual_facing_direction") as Vector2
+		if partner_facing_dir == null or partner_facing_dir.length_squared() <= 0.000001:
+			partner_facing_dir = Vector2.LEFT
+		var partner_side := Vector2(-partner_facing_dir.y, partner_facing_dir.x)
+		var partner_anchor_plus := partner_local + partner_side * anchor_offset
+		var partner_anchor_minus := partner_local - partner_side * anchor_offset
 		draw_line(Vector2.ZERO, partner_local, Color(0.46, 0.94, 1.0, alpha), width)
-		draw_line(side * anchor_offset, partner_local, Color(0.66, 0.96, 1.0, alpha * 0.35), 1.2)
-		draw_line(-side * anchor_offset, partner_local, Color(0.66, 0.96, 1.0, alpha * 0.35), 1.2)
+		draw_line(side * anchor_offset, partner_anchor_plus, Color(0.66, 0.96, 1.0, alpha * 0.35), 1.2)
+		draw_line(-side * anchor_offset, partner_anchor_minus, Color(0.66, 0.96, 1.0, alpha * 0.35), 1.2)
 		if beam_link_active:
 			draw_line(Vector2.ZERO, partner_local, Color(0.92, 1.0, 1.0, 0.52), maxf(1.8, beam_visual_width * 0.34))
 	_draw_slow_indicator(body_radius)
