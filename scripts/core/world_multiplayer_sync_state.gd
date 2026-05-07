@@ -138,3 +138,12 @@ func enqueue_pending_objective_spawn_sync_payload(payload: Dictionary) -> void:
 
 func clear_pending_objective_spawn_sync_payloads() -> void:
 	pending_objective_spawn_sync_payloads.clear()
+
+func is_stale_room_sync_id(source_room_sync_id: int) -> bool:
+	return source_room_sync_id > 0 and source_room_sync_id < current_room_sync_id
+
+func is_future_room_sync_id(source_room_sync_id: int) -> bool:
+	return source_room_sync_id > current_room_sync_id
+
+func is_objective_already_cleared_for_sync_id(source_room_sync_id: int) -> bool:
+	return source_room_sync_id > 0 and source_room_sync_id <= last_objective_cleared_room_sync_id

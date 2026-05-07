@@ -1641,7 +1641,7 @@ func _flush_pending_client_objective_spawn_syncs() -> void:
 	for payload in _world_multiplayer_sync_state.get_pending_objective_spawn_sync_payloads():
 		if not _can_apply_client_spawn_sync(payload):
 			var source_room_sync_id := int(payload.get("room_sync_id", 0))
-			if source_room_sync_id > 0 and source_room_sync_id < _world_multiplayer_sync_state.current_room_sync_id:
+			if _world_multiplayer_sync_state.is_stale_room_sync_id(source_room_sync_id):
 				continue
 			remaining_payloads.append(payload)
 			continue
@@ -2505,9 +2505,9 @@ func _sync_chosen_door(chosen_door: Dictionary, progress_state: Dictionary = {})
 func _sync_objective_spawn_batch(spawn_batch: Array, synced_enemy_count: int, source_room_label: String = "", source_room_sync_id: int = 0) -> void:
 	if not is_multiplayer or MultiplayerSessionManager.is_host():
 		return
-	if source_room_sync_id > 0 and source_room_sync_id <= _world_multiplayer_sync_state.last_objective_cleared_room_sync_id:
+	if _world_multiplayer_sync_state.is_objective_already_cleared_for_sync_id(source_room_sync_id):
 		return
-	if source_room_sync_id > 0 and source_room_sync_id < _world_multiplayer_sync_state.current_room_sync_id:
+	if _world_multiplayer_sync_state.is_stale_room_sync_id(source_room_sync_id):
 		return
 	var payload := {
 		"spawn_batch": spawn_batch.duplicate(true),
@@ -2565,7 +2565,7 @@ func _sync_objective_state(objective_state: Dictionary, source_room_sync_id: int
 		return
 	if objective_state.is_empty():
 		return
-	if source_room_sync_id > 0 and source_room_sync_id < _world_multiplayer_sync_state.current_room_sync_id:
+	if _world_multiplayer_sync_state.is_stale_room_sync_id(source_room_sync_id):
 		return
 	if sequence <= _last_applied_objective_state_sync_sequence:
 		return
@@ -2617,7 +2617,7 @@ func _sanitize_progress_sync_state(progress_state: Dictionary) -> Dictionary:
 		return {}
 	var sanitized := progress_state.duplicate(true)
 	var incoming_room_sync_id := int(sanitized.get("room_sync_id", _world_multiplayer_sync_state.current_room_sync_id))
-	if incoming_room_sync_id > 0 and incoming_room_sync_id < _world_multiplayer_sync_state.current_room_sync_id:
+	if _world_multiplayer_sync_state.is_stale_room_sync_id(incoming_room_sync_id):
 		sanitized["invalid"] = true
 		return sanitized
 	if incoming_room_sync_id > _world_multiplayer_sync_state.current_room_sync_id + 4:
@@ -3599,7 +3599,7 @@ func _spawn_boss_for_stage(boss_stage: int, spawn_position: Vector2) -> Node2D:
 func _sync_spawn_enemy_batch(spawn_batch: Array, synced_enemy_count: int, source_room_label: String = "", source_room_depth: int = 0, source_room_sync_id: int = 0) -> void:
 	if not is_multiplayer or MultiplayerSessionManager.is_host():
 		return
-	if source_room_sync_id > 0 and source_room_sync_id < _world_multiplayer_sync_state.current_room_sync_id:
+	if _world_multiplayer_sync_state.is_stale_room_sync_id(source_room_sync_id):
 		return
 	var payload := {
 		"spawn_batch": spawn_batch.duplicate(true),
@@ -3627,7 +3627,7 @@ func _sync_spawn_boss(spawn_data: Dictionary) -> void:
 	if int(payload.get("boss_stage", 0)) <= 0 or int(payload.get("enemy_id", -1)) <= 0:
 		return
 	var source_room_sync_id := int(payload.get("room_sync_id", 0))
-	if source_room_sync_id > 0 and source_room_sync_id < _world_multiplayer_sync_state.current_room_sync_id:
+	if _world_multiplayer_sync_state.is_stale_room_sync_id(source_room_sync_id):
 		return
 	if not _can_apply_client_boss_spawn_sync(payload):
 		_world_multiplayer_sync_state.queue_pending_boss_spawn_sync_payload_if_newer(payload, source_room_sync_id)
@@ -3667,7 +3667,7 @@ func _sync_enemy_states(synced_states: Array, synced_enemy_count: int) -> void:
 func _sync_archer_projectile_states(synced_archer_projectiles: Array, source_room_sync_id: int) -> void:
 	if not is_multiplayer or MultiplayerSessionManager.is_host():
 		return
-	if source_room_sync_id > 0 and source_room_sync_id < _world_multiplayer_sync_state.current_room_sync_id:
+	if _world_multiplayer_sync_state.is_stale_room_sync_id(source_room_sync_id):
 		return
 	for sync_variant in synced_archer_projectiles:
 		if not (sync_variant is Dictionary):
