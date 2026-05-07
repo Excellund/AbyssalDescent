@@ -7,6 +7,7 @@ extends "res://scripts/enemy_base.gd"
 
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const ENEMY_STATE_ENUMS := preload("res://scripts/shared/enemy_state_enums.gd")
+const LANCER_ZONE_OVERLAY_SCRIPT := preload("res://scripts/lancer_zone_overlay.gd")
 
 @export var seek_speed: float = 72.0
 @export var acceleration: float = 740.0
@@ -42,25 +43,42 @@ var bolt_predicted_impact_global: Vector2 = Vector2.ZERO
 var locked_impact_global: Vector2 = Vector2.ZERO
 var _remote_bolt_target_position: Vector2 = Vector2.ZERO
 var _projectile_sync_was_active: bool = false
+var _projectile_sync_sequence: int = 0
+var _last_received_projectile_sync_sequence: int = -1
+var _next_zone_id: int = 1
 
 # Hazard zones left on the arena floor.
-# Each entry: { "pos": Vector2, "time_left": float, "tick_timer": float,
-#               "spawn_flash": float, "tick_flash": float }
+# Each entry: { "zone_id": int, "pos_local": Vector2, "time_left": float,
+#               "tick_timer": float, "spawn_flash": float, "tick_flash": float }
 var zones: Array[Dictionary] = []
 
 # Reposition direction locked at entry.
 var _reposition_dir: Vector2 = Vector2.ZERO
 var _active_visual_redraw_left: float = 0.0
+var _zone_overlay: Node2D = null
+
+
+func _zone_local_to_world(zone_data: Dictionary) -> Vector2:
+	var parent_node := get_parent() as Node2D
+	var local_pos := zone_data.get("pos_local", Vector2.ZERO) as Vector2
+	if is_instance_valid(parent_node):
+		return parent_node.to_global(local_pos)
+	var legacy_world := zone_data.get("pos", local_pos) as Vector2
+	return legacy_world
 
 func _ready() -> void:
 	super()
 	max_health = 85
 	crowd_separation_radius = 58.0
 	crowd_separation_strength = 96.0
+	_ensure_zone_overlay()
 
 
 func _exit_tree() -> void:
 	_clear_remote_lancer_attack_visuals()
+	if is_instance_valid(_zone_overlay):
+		_zone_overlay.queue_free()
+	_zone_overlay = null
 
 func _process_behavior(delta: float) -> void:
 	if attack_cooldown_left > 0.0:
@@ -68,6 +86,7 @@ func _process_behavior(delta: float) -> void:
 
 	_process_bolt(delta)
 	_process_zones(delta, true)
+	_sync_zone_overlay()
 
 	match lancer_state:
 		ENEMY_STATE_ENUMS.LancerState.STALK:
@@ -125,7 +144,8 @@ func get_projectile_network_sync_state() -> Dictionary:
 			continue
 		var zone := zone_variant as Dictionary
 		zone_payload.append({
-			"pos": zone.get("pos", Vector2.ZERO),
+			"zone_id": int(zone.get("zone_id", -1)),
+			"pos_local": zone.get("pos_local", Vector2.ZERO),
 			"time_left": float(zone.get("time_left", 0.0)),
 			"tick_timer": float(zone.get("tick_timer", 0.0)),
 			"spawn_flash": float(zone.get("spawn_flash", 0.0)),
@@ -139,6 +159,8 @@ func get_projectile_network_sync_state() -> Dictionary:
 		"active": active,
 		"zones": zone_payload
 	}
+	_projectile_sync_sequence += 1
+	payload["seq"] = _projectile_sync_sequence
 	if bolt_active:
 		payload["bolt_position"] = bolt.global_position
 		payload["bolt_direction"] = bolt_direction
@@ -154,12 +176,47 @@ func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
 		return
 	if sync_state.is_empty():
 		return
+	var incoming_seq := int(sync_state.get("seq", -1))
+	if incoming_seq >= 0:
+		if incoming_seq <= _last_received_projectile_sync_sequence:
+			return
+		_last_received_projectile_sync_sequence = incoming_seq
 	var active := bool(sync_state.get("active", false))
 	if not active:
 		_clear_remote_lancer_attack_visuals()
 		queue_redraw()
 		return
-	zones = (sync_state.get("zones", []) as Array).duplicate(true)
+	var incoming_zones := (sync_state.get("zones", []) as Array).duplicate(true)
+	if zones.size() == incoming_zones.size() and not zones.is_empty():
+		var merged_zones: Array[Dictionary] = []
+		var parent_node := get_parent() as Node2D
+		for i in range(incoming_zones.size()):
+			var merged_zone := (incoming_zones[i] as Dictionary).duplicate(true)
+			var incoming_local := merged_zone.get("pos_local", Vector2.ZERO) as Vector2
+			if merged_zone.has("pos") and is_instance_valid(parent_node):
+				incoming_local = parent_node.to_local(merged_zone.get("pos", Vector2.ZERO) as Vector2)
+			var existing_local := (zones[i] as Dictionary).get("pos_local", incoming_local) as Vector2
+			if existing_local.distance_squared_to(incoming_local) <= 9.0:
+				merged_zone["pos_local"] = existing_local
+			else:
+				merged_zone["pos_local"] = incoming_local.snapped(Vector2(0.5, 0.5))
+			merged_zone.erase("pos")
+			merged_zones.append(merged_zone)
+		zones = merged_zones
+	else:
+		var snapped_zones: Array[Dictionary] = []
+		var parent_node := get_parent() as Node2D
+		for zone_variant in incoming_zones:
+			if not (zone_variant is Dictionary):
+				continue
+			var snapped_zone := (zone_variant as Dictionary).duplicate(true)
+			var incoming_local := snapped_zone.get("pos_local", Vector2.ZERO) as Vector2
+			if snapped_zone.has("pos") and is_instance_valid(parent_node):
+				incoming_local = parent_node.to_local(snapped_zone.get("pos", Vector2.ZERO) as Vector2)
+			snapped_zone["pos_local"] = incoming_local.snapped(Vector2(0.5, 0.5))
+			snapped_zone.erase("pos")
+			snapped_zones.append(snapped_zone)
+		zones = snapped_zones
 	if sync_state.has("bolt_position"):
 		var bolt_pos := sync_state.get("bolt_position", global_position) as Vector2
 		if not is_instance_valid(bolt):
@@ -178,6 +235,7 @@ func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
 			bolt.queue_free()
 		bolt = null
 		_remote_bolt_target_position = Vector2.ZERO
+	_sync_zone_overlay()
 	queue_redraw()
 
 
@@ -196,8 +254,9 @@ func _process_network_visuals(delta: float) -> void:
 	
 	# Process zones on joiner to keep timers decaying and visual state fresh.
 	_process_zones(delta, false)
+	_sync_zone_overlay()
 	
-	if bolt_moved or not zones.is_empty():
+	if bolt_moved:
 		queue_redraw()
 
 
@@ -208,6 +267,44 @@ func _clear_remote_lancer_attack_visuals() -> void:
 	zones.clear()
 	_remote_bolt_target_position = Vector2.ZERO
 	_projectile_sync_was_active = false
+	if network_simulation_enabled:
+		_projectile_sync_sequence = 0
+	else:
+		_last_received_projectile_sync_sequence = -1
+	if is_instance_valid(_zone_overlay) and _zone_overlay.has_method("clear_zones"):
+		_zone_overlay.call("clear_zones")
+
+
+func _ensure_zone_overlay() -> void:
+	if is_instance_valid(_zone_overlay):
+		return
+	if not is_instance_valid(get_parent()):
+		return
+	_zone_overlay = LANCER_ZONE_OVERLAY_SCRIPT.new()
+	_zone_overlay.name = "LancerZoneOverlay_%s" % str(get_instance_id())
+	get_parent().add_child(_zone_overlay)
+
+
+func _sync_zone_overlay() -> void:
+	_ensure_zone_overlay()
+	if not is_instance_valid(_zone_overlay):
+		return
+	if not _zone_overlay.has_method("set_zone_state"):
+		return
+	_zone_overlay.call("set_zone_state", zones, zone_radius, zone_duration, zone_tick_interval)
+	if _zone_overlay.has_method("set_bolt_state"):
+		if is_instance_valid(bolt):
+			var travel_t := clampf(bolt_distance_traveled / maxf(0.001, bolt_travel_limit), 0.0, 1.0)
+			var parent_node := get_parent() as Node2D
+			if is_instance_valid(parent_node):
+				var bolt_local := parent_node.to_local(bolt.global_position)
+				var predicted_local := parent_node.to_local(bolt_predicted_impact_global)
+				var dir_local := parent_node.global_transform.basis_xform_inv(bolt_direction)
+				_zone_overlay.call("set_bolt_state", true, bolt_local, dir_local, predicted_local, travel_t)
+			else:
+				_zone_overlay.call("set_bolt_state", true, bolt.global_position, bolt_direction, bolt_predicted_impact_global, travel_t)
+		else:
+			_zone_overlay.call("set_bolt_state", false, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, 0.0)
 
 # ---------------------------------------------------------------------------
 # State machine
@@ -393,10 +490,13 @@ func _land_bolt(land_pos: Vector2) -> void:
 	var clamped := Vector2(
 		clampf(land_pos.x, -half.x + zone_radius, half.x - zone_radius),
 		clampf(land_pos.y, -half.y + zone_radius, half.y - zone_radius)
-	)
+	).snapped(Vector2(0.5, 0.5))
 
 	var zone: Dictionary = {}
-	zone["pos"] = clamped
+	var parent_node := get_parent() as Node2D
+	zone["zone_id"] = _next_zone_id
+	_next_zone_id += 1
+	zone["pos_local"] = parent_node.to_local(clamped) if is_instance_valid(parent_node) else clamped
 	zone["time_left"] = zone_duration
 	zone["tick_timer"] = zone_tick_interval * 0.5
 	zone["spawn_flash"] = 0.24
@@ -424,7 +524,8 @@ func _process_zones(delta: float, apply_damage: bool = true) -> void:
 			z["tick_timer"] = zone_tick_interval
 			z["tick_flash"] = 0.12
 			if apply_damage and is_instance_valid(target):
-				if (z["pos"] as Vector2).distance_to(target.global_position) <= zone_radius:
+				var zone_world := _zone_local_to_world(z)
+				if zone_world.distance_to(target.global_position) <= zone_radius:
 					if DAMAGEABLE.can_take_damage(target):
 						DAMAGEABLE.apply_damage(target, zone_tick_damage, {"source": "enemy_ability", "ability": "lancer_zone_tick"})
 
@@ -489,7 +590,7 @@ func _draw() -> void:
 		var charge_size := 6.0 + phase * 14.0
 		var pulse := 0.5 + 0.5 * sin(t * 12.0)
 		var preview_origin := fire_direction * 22.0
-		var lane_end := locked_impact_global - global_position
+		var lane_end := to_local(locked_impact_global)
 
 		draw_circle(Vector2.ZERO, charge_size + pulse * 2.0, Color(0.88, 0.66, 1.0, 0.24 + phase * 0.2))
 		draw_circle(Vector2.ZERO, charge_size * 0.6, Color(1.0, 0.9, 1.0, 0.5 + phase * 0.3))
@@ -513,46 +614,5 @@ func _draw() -> void:
 		var sweep_start := -PI * 0.5
 		var sweep_end := sweep_start + TAU * phase
 		draw_arc(lane_end, zone_radius + 8.0, sweep_start, sweep_end, 36, Color(1.0, 0.92, 1.0, 0.7), 2.6)
-
-	# Hazard zones — clearer lifetime + tick rhythm.
-	for z in zones:
-		var z_pos: Vector2 = z["pos"] as Vector2
-		var z_local := z_pos - global_position
-		var z_t := clampf(float(z["time_left"]) / zone_duration, 0.0, 1.0)
-		var pulse := 0.5 + 0.5 * sin(t * 4.8 + z_pos.x * 0.08)
-		var spawn_flash := float(z.get("spawn_flash", 0.0))
-		var tick_flash := float(z.get("tick_flash", 0.0))
-		var tick_progress := 1.0 - clampf(float(z["tick_timer"]) / zone_tick_interval, 0.0, 1.0)
-
-		draw_circle(z_local, zone_radius, Color(0.62, 0.3, 0.9, 0.13 * z_t + pulse * 0.05 + tick_flash * 0.9))
-		draw_arc(z_local, zone_radius, 0.0, TAU, 44, Color(0.82, 0.52, 1.0, 0.58 * z_t + tick_flash * 0.8), 3.0)
-		draw_arc(z_local, zone_radius - 6.0, 0.0, TAU, 44, Color(0.98, 0.84, 1.0, 0.22 * z_t + tick_flash * 0.55), 1.8)
-
-		var tick_start := -PI * 0.5
-		var tick_end := tick_start + TAU * tick_progress
-		draw_arc(z_local, zone_radius + 7.0, tick_start, tick_end, 36, Color(1.0, 0.94, 1.0, 0.62 * z_t), 2.0)
-
-		draw_circle(z_local, 5.0 + pulse * 2.0 + tick_flash * 2.8, Color(0.98, 0.86, 1.0, 0.56 * z_t + tick_flash * 0.9))
-
-		if spawn_flash > 0.0:
-			var impact_t := clampf(spawn_flash / 0.24, 0.0, 1.0)
-			var impact_r := zone_radius * (1.1 + (1.0 - impact_t) * 0.5)
-			draw_arc(z_local, impact_r, 0.0, TAU, 44, Color(1.0, 0.84, 1.0, 0.75 * impact_t), 3.2)
-
-	# Bolt in flight.
-	if bolt != null and is_instance_valid(bolt):
-		var b_local := bolt.global_position - global_position
-		var travel_t := clampf(bolt_distance_traveled / maxf(0.001, bolt_travel_limit), 0.0, 1.0)
-		var bolt_pulse := 0.5 + 0.5 * sin(t * 20.0)
-
-		var predicted_local := bolt_predicted_impact_global - global_position
-		draw_arc(predicted_local, zone_radius, 0.0, TAU, 40, Color(0.86, 0.58, 1.0, 0.16 + (1.0 - travel_t) * 0.18), 1.8)
-		draw_circle(predicted_local, 4.0 + bolt_pulse * 1.6, Color(1.0, 0.86, 1.0, 0.2))
-
-		draw_line(b_local - bolt_direction * 18.0, b_local, Color(0.72, 0.44, 0.96, 0.42 + travel_t * 0.14), 7.0)
-		draw_line(b_local - bolt_direction * 12.0, b_local, Color(0.98, 0.86, 1.0, 0.54), 3.2)
-		draw_circle(b_local, 8.2 + bolt_pulse * 1.8, Color(0.82, 0.52, 1.0, 0.42))
-		draw_circle(b_local, 5.2, Color(0.96, 0.76, 1.0, 0.92))
-		draw_circle(b_local, 2.5, Color(1.0, 0.98, 1.0, 0.98))
 
 	_draw_slow_indicator(body_radius)
