@@ -9,6 +9,9 @@ Use these natural-language commands in chat. Phrases do not need to match exactl
 - Simplify this system without behavior changes
 - Reduce duplication in [file or subsystem]
 - Route refactor learnings to the right skill
+- Proceed with the plan  *(executes next increment with [Phase X.Y | Task N] tag)*
+- Continue / Keep going / Next increment  *(variants of "proceed with the plan")*
+- Larger increment / Bigger step  *(batch 2–4 tasks into one tagged unit)*
 
 ## Balance And Encounter Tuning
 
