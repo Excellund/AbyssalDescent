@@ -297,25 +297,28 @@ func _join_multiplayer_room(room_code: String) -> void:
 	var resolved_host_port := int(registration.get("host_port", 9999))
 	print("[Menu] Room resolved. Host address: %s:%d" % [resolved_host_address, resolved_host_port])
 	push_error("[JOIN DEBUG] Room resolved to %s:%d - Starting join attempt..." % [resolved_host_address, resolved_host_port])
-	if multiplayer_session_manager.join_registered_room(registration):
-		var join_result := await _await_multiplayer_join_result(multiplayer_session_manager, MULTIPLAYER_JOIN_CAP_SEC, resolved_host_address, resolved_host_port)
-		if bool(join_result.get("ok", false)):
-			_show_lobby_modal()
-		else:
-			multiplayer_session_manager.leave_room()
-			if multiplayer_status_label != null:
-				var reason := String(join_result.get("reason", "Unable to connect to the room host."))
-				multiplayer_status_label.text = reason
-				print("[Menu] Join failed: %s" % reason)
+	var begin_join := func() -> bool:
+		return bool(multiplayer_session_manager.join_registered_room(registration))
+	var join_result := await _await_multiplayer_join_result(
+		multiplayer_session_manager,
+		MULTIPLAYER_JOIN_CAP_SEC,
+		resolved_host_address,
+		resolved_host_port,
+		begin_join
+	)
+	if bool(join_result.get("ok", false)):
+		_show_lobby_modal()
 	else:
-		push_error("Failed to join multiplayer room")
+		multiplayer_session_manager.leave_room()
 		if multiplayer_status_label != null:
-			multiplayer_status_label.text = "Unable to connect to the room host."
+			var reason := String(join_result.get("reason", "Unable to connect to the room host."))
+			multiplayer_status_label.text = reason
+			print("[Menu] Join failed: %s" % reason)
 	if multiplayer_join_button != null:
 		multiplayer_join_button.disabled = false
 
 
-func _await_multiplayer_join_result(multiplayer_session_manager: Node, timeout_sec: float = MULTIPLAYER_JOIN_CAP_SEC, resolved_address: String = "", resolved_port: int = 9999) -> Dictionary:
+func _await_multiplayer_join_result(multiplayer_session_manager: Node, timeout_sec: float = MULTIPLAYER_JOIN_CAP_SEC, resolved_address: String = "", resolved_port: int = 9999, begin_join: Callable = Callable()) -> Dictionary:
 	var state := {
 		"joined": false,
 		"failed": false,
@@ -340,6 +343,17 @@ func _await_multiplayer_join_result(multiplayer_session_manager: Node, timeout_s
 	multiplayer_session_manager.connection_failed.connect(on_failed, CONNECT_ONE_SHOT)
 	_debug_log_menu("[JOIN] Connected to connection_failed signal")
 	print("[Menu] Signals connected. Starting timeout loop (%.0fs)..." % timeout_sec)
+	if begin_join.is_valid():
+		var join_started := bool(begin_join.call())
+		if not join_started:
+			if multiplayer_session_manager.session_joined.is_connected(on_joined):
+				multiplayer_session_manager.session_joined.disconnect(on_joined)
+			if multiplayer_session_manager.connection_failed.is_connected(on_failed):
+				multiplayer_session_manager.connection_failed.disconnect(on_failed)
+			return {
+				"ok": false,
+				"reason": "Unable to connect to the room host."
+			}
 	var elapsed := 0.0
 	push_error("[JOIN DEBUG] Entering join timeout loop...")
 	_debug_log_menu("[JOIN] Starting timeout loop. Waiting for session_joined or connection_failed...")
