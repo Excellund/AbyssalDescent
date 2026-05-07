@@ -288,9 +288,6 @@ var _reward_phase_mode: int = ENUMS.RewardMode.NONE
 var _reward_phase_completed_peers: Dictionary = {}  ## peer_id -> bool
 var _doors_spawn_ready: bool = false
 var _world_multiplayer_sync_state = WORLD_MULTIPLAYER_SYNC_STATE_SCRIPT.new()
-var _pending_chosen_door: Dictionary = {}
-var _pending_chosen_progress_state: Dictionary = {}
-var _awaiting_authoritative_door_choice: bool = false
 var _depth_sanity_last_logged_depth: int = -1
 var _depth_sanity_last_log_usec: int = 0
 
@@ -845,7 +842,7 @@ func _start_stress_test_arena() -> void:
 
 func _begin_new_run_flow() -> void:
 	_world_multiplayer_sync_state.reset_for_new_run()
-	_awaiting_authoritative_door_choice = false
+	_world_multiplayer_sync_state.clear_authoritative_door_wait()
 	rooms_cleared = 0
 	room_depth = 0
 	boss_unlocked = false
@@ -863,8 +860,7 @@ func _begin_new_run_flow() -> void:
 	pending_room_reward = ENUMS.RewardMode.NONE
 	current_room_enemy_mutator.clear()
 	current_room_player_mutator.clear()
-	_pending_chosen_door.clear()
-	_pending_chosen_progress_state.clear()
+	_world_multiplayer_sync_state.clear_pending_chosen_door_sync()
 	choosing_next_room = false
 	door_options.clear()
 	_doors_spawn_ready = false
@@ -1512,7 +1508,7 @@ func _sync_client_perf_sample(
 func _can_apply_client_door_sync() -> bool:
 	if not is_multiplayer or MultiplayerSessionManager.is_host():
 		return false
-	if _awaiting_authoritative_door_choice:
+	if _world_multiplayer_sync_state.awaiting_authoritative_door_choice:
 		return false
 	if _is_reward_selection_active():
 		return false
@@ -1525,7 +1521,7 @@ func _should_defer_client_door_sync_payload(synced_choosing_next_room: bool, pro
 		return false
 	if not synced_choosing_next_room:
 		return false
-	if _awaiting_authoritative_door_choice:
+	if _world_multiplayer_sync_state.awaiting_authoritative_door_choice:
 		return false
 	if not choosing_next_room:
 		return false
@@ -1547,12 +1543,11 @@ func _apply_synced_door_options_payload(synced_door_options: Array, synced_choos
 func _flush_pending_client_door_syncs() -> void:
 	if not _can_apply_client_door_sync():
 		return
-	if not _pending_chosen_door.is_empty():
-		var chosen_door := _pending_chosen_door.duplicate(true)
-		var progress_state := _pending_chosen_progress_state.duplicate(true)
-		_pending_chosen_door.clear()
-		_pending_chosen_progress_state.clear()
-		_awaiting_authoritative_door_choice = false
+	if not _world_multiplayer_sync_state.pending_chosen_door.is_empty():
+		var chosen_door := _world_multiplayer_sync_state.pending_chosen_door.duplicate(true)
+		var progress_state := _world_multiplayer_sync_state.pending_chosen_progress_state.duplicate(true)
+		_world_multiplayer_sync_state.clear_pending_chosen_door_sync()
+		_world_multiplayer_sync_state.clear_authoritative_door_wait()
 		_choose_door(chosen_door)
 		_apply_progress_sync_state(progress_state)
 	if not _world_multiplayer_sync_state.pending_door_sync_payload.is_empty():
@@ -2432,7 +2427,7 @@ func _try_use_door() -> void:
 		# Optimistically hide doors on joiner while host resolves the authoritative choice.
 		choosing_next_room = false
 		door_options.clear()
-		_awaiting_authoritative_door_choice = true
+		_world_multiplayer_sync_state.begin_authoritative_door_wait()
 		_request_use_door.rpc_id(1, used_door.duplicate(true))
 		return
 	if is_multiplayer and MultiplayerSessionManager.is_host():
@@ -2503,10 +2498,10 @@ func _sync_chosen_door(chosen_door: Dictionary, progress_state: Dictionary = {})
 	if bool(sanitized_progress_state.get("invalid", false)):
 		return
 	if _is_reward_selection_active() or current_room_label == "Starting Chamber":
-		_pending_chosen_door = chosen_door.duplicate(true)
-		_pending_chosen_progress_state = sanitized_progress_state
+		_world_multiplayer_sync_state.pending_chosen_door = chosen_door.duplicate(true)
+		_world_multiplayer_sync_state.pending_chosen_progress_state = sanitized_progress_state
 		return
-	_awaiting_authoritative_door_choice = false
+	_world_multiplayer_sync_state.clear_authoritative_door_wait()
 	_choose_door(chosen_door)
 	_apply_progress_sync_state(sanitized_progress_state)
 	_flush_pending_client_door_syncs()
@@ -2650,7 +2645,7 @@ func _sanitize_progress_sync_state(progress_state: Dictionary) -> Dictionary:
 	# Allow large depth jumps if joiner just joined (rooms_cleared == 0) OR if explicitly awaiting door choice.
 	# This permits joiners mid-run to synchronize with the host's current depth.
 	var is_joiner_initial_sync := not is_multiplayer or (MultiplayerSessionManager.is_host() == false and rooms_cleared == 0)
-	if incoming_room_depth > room_depth + 2 and not _awaiting_authoritative_door_choice and not is_joiner_initial_sync:
+	if incoming_room_depth > room_depth + 2 and not _world_multiplayer_sync_state.awaiting_authoritative_door_choice and not is_joiner_initial_sync:
 		sanitized["invalid"] = true
 		return sanitized
 	var incoming_rooms_cleared := int(sanitized.get("rooms_cleared", rooms_cleared))
@@ -2756,10 +2751,9 @@ func _apply_endless_scaling_to_profile(profile: Dictionary) -> Dictionary:
 
 func _prepare_room_sync_transition() -> void:
 	_world_multiplayer_sync_state.current_room_sync_id += 1
-	_awaiting_authoritative_door_choice = false
+	_world_multiplayer_sync_state.clear_authoritative_door_wait()
 	_world_multiplayer_sync_state.pending_door_sync_payload.clear()
-	_pending_chosen_door.clear()
-	_pending_chosen_progress_state.clear()
+	_world_multiplayer_sync_state.clear_pending_chosen_door_sync()
 	if not is_multiplayer or MultiplayerSessionManager.is_host():
 		_world_multiplayer_sync_state.clear_pending_spawn_payloads()
 
@@ -3939,7 +3933,7 @@ func _finalize_reward_phase_and_advance(is_initial: bool, mode: int) -> void:
 
 func _reset_progress_for_first_encounter() -> void:
 	_world_multiplayer_sync_state.reset_for_new_run()
-	_awaiting_authoritative_door_choice = false
+	_world_multiplayer_sync_state.clear_authoritative_door_wait()
 	rooms_cleared = 0
 	room_depth = 0
 	boss_unlocked = false
@@ -3953,8 +3947,7 @@ func _reset_progress_for_first_encounter() -> void:
 	endless_boss_defeated = false
 	boss_reward_pending = false
 	last_defeated_boss_id = ""
-	_pending_chosen_door.clear()
-	_pending_chosen_progress_state.clear()
+	_world_multiplayer_sync_state.clear_pending_chosen_door_sync()
 
 
 @rpc("reliable", "any_peer", "call_local")
