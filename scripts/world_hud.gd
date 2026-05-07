@@ -71,7 +71,7 @@ func refresh(state: Dictionary, player: Node) -> void:
 	_layout_hud_panels(viewport_size, _cached_room_size, viewport.get_canvas_transform())
 	_update_status_panel_text(state)
 	_update_player_mutator_panel(state)
-	_update_stats_panel_text(player)
+	_update_stats_panel_text(player, state)
 	_update_build_strip(state, player)
 
 func show_banner(title: String, subtitle: String, subtitle_color: Color = Color(0.78, 0.9, 1.0, 0.92)) -> void:
@@ -880,11 +880,16 @@ func _update_player_mutator_panel(state: Dictionary) -> void:
 		else:
 			row_label.text = "%s  (%d enc)%s" % [mutator_name, remaining, stat_text]
 		row_label.add_theme_color_override("font_color", Color(color.r, color.g, color.b, 0.98))
-func _update_stats_panel_text(player: Node) -> void:
+func _update_stats_panel_text(player: Node, state: Dictionary) -> void:
 	if stats_label == null:
 		return
+	var timer_visible := bool(state.get("timer_visible_in_hud", true))
+	var elapsed_seconds := maxi(0, int(state.get("run_elapsed_seconds", 0)))
+	var timer_line := ""
+	if timer_visible:
+		timer_line = "\nRun Time: [color=#A8FFB0]%s[/color]" % _format_hud_timer(elapsed_seconds)
 	if not is_instance_valid(player):
-		stats_label.text = "[b]Stats[/b]\nNo player"
+		stats_label.text = "[b]Stats[/b]\nNo player%s" % timer_line
 		return
 
 	var hp: int = int(player.get_max_health())
@@ -896,7 +901,13 @@ func _update_stats_panel_text(player: Node) -> void:
 	var dash_cd := float(player.get("dash_cooldown"))
 	var armor := int(player.get("iron_skin_armor"))
 
-	stats_label.text = "[b]Stats[/b]\nHealth: [color=#C8FFD8]%d/%d[/color]\nDamage: [color=#FFD8AA]%d[/color]\nAttack Range: [color=#FFD8AA]%.0f[/color]\nAttack Speed: [color=#BFD8FF]%.2fs[/color]\nMove Speed: [color=#BFD8FF]%.0f[/color]\nDash Cooldown: [color=#BFD8FF]%.2fs[/color]\nArmor: [color=#E8E8FF]%d[/color]" % [hp_now, hp, dmg, atk_range, atk_cd, move_spd, dash_cd, armor]
+	stats_label.text = "[b]Stats[/b]\nHealth: [color=#C8FFD8]%d/%d[/color]\nDamage: [color=#FFD8AA]%d[/color]\nAttack Range: [color=#FFD8AA]%.0f[/color]\nAttack Speed: [color=#BFD8FF]%.2fs[/color]\nMove Speed: [color=#BFD8FF]%.0f[/color]\nDash Cooldown: [color=#BFD8FF]%.2fs[/color]\nArmor: [color=#E8E8FF]%d[/color]%s" % [hp_now, hp, dmg, atk_range, atk_cd, move_spd, dash_cd, armor, timer_line]
+
+func _format_hud_timer(total_seconds: int) -> String:
+	var safe_total := maxi(0, total_seconds)
+	var minutes := int(floor(float(safe_total) / 60.0))
+	var seconds := safe_total % 60
+	return "%02d:%02d" % [minutes, seconds]
 
 func _update_build_strip(state: Dictionary, player: Node) -> void:
 	if build_strip_panel == null:

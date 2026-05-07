@@ -5,6 +5,7 @@ const COLOR_PALETTE := preload("res://scripts/shared/color_palette.gd")
 
 signal health_changed(current_health: int, max_health: int)
 signal died
+signal damage_received(applied_amount: int, remaining_health: int)
 
 static var _shared_enemy_nodes_cache: Array[Node2D] = []
 static var _shared_enemy_count: int = 0
@@ -551,7 +552,12 @@ func take_damage(amount: int, _damage_context: Dictionary = {}) -> void:
 		return
 	if damage_blocked:
 		return
+	var before_health := int(health_state.current_health)
 	health_state.take_damage(amount)
+	var after_health := int(health_state.current_health)
+	var applied_amount := maxi(0, before_health - after_health)
+	if applied_amount > 0:
+		damage_received.emit(applied_amount, after_health)
 
 func _apply_crowd_separation(delta: float) -> void:
 	if crowd_separation_radius <= 0.0 or crowd_separation_strength <= 0.0:

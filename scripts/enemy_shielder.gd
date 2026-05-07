@@ -406,9 +406,14 @@ func _try_body_check_target() -> void:
 func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 	if amount <= 0:
 		return
+	var before_health := int(health_state.current_health)
 
 	if bool(damage_context.get("is_ground_attack", false)):
 		health_state.take_damage(amount)
+		var ground_after_health := int(health_state.current_health)
+		var ground_applied := maxi(0, before_health - ground_after_health)
+		if ground_applied > 0:
+			damage_received.emit(ground_applied, ground_after_health)
 		return
 	
 	# Use the same concrete shield wedge for both visuals and blocking.
@@ -426,6 +431,10 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 	if mitigated_damage <= 0:
 		return
 	health_state.take_damage(mitigated_damage)
+	var after_health := int(health_state.current_health)
+	var applied_amount := maxi(0, before_health - after_health)
+	if applied_amount > 0:
+		damage_received.emit(applied_amount, after_health)
 
 func _draw() -> void:
 	var attack_pulse := _get_attack_pulse()

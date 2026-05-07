@@ -25,6 +25,7 @@ var available_characters: Array = []
 var local_character_id: String = ""
 var local_peer_id: int = 0
 var local_is_ready: bool = false
+var local_player_name: String = "Player"
 
 ## Multiplayer state (peer_id -> { character_id, is_ready })
 var peer_state: Dictionary = {}
@@ -87,6 +88,11 @@ func _ready() -> void:
 	
 	## Initialize local peer state
 	local_character_id = available_characters[0] if not available_characters.is_empty() else "bastion"
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context != null and run_context.has_method("get_profile_name_or_default"):
+		local_player_name = String(run_context.get_profile_name_or_default()).strip_edges()
+	if local_player_name.is_empty():
+		local_player_name = "Player"
 	_ensure_local_peer_state(local_character_id)
 	print("[Lobby] After _ensure_local_peer_state in _ready, peer_state: %s" % [str(peer_state)])
 	
@@ -96,8 +102,10 @@ func _ready() -> void:
 		print("[Lobby] HOST: Querying existing peers from manager: %s" % [str(existing_peers)])
 		for peer_id in existing_peers:
 			if peer_id != local_peer_id and peer_id not in peer_state:
-				peer_state[peer_id] = { "character_id": "bastion", "is_ready": false }
+				peer_state[peer_id] = { "character_id": "bastion", "is_ready": false, "player_name": "Player" }
 				print("[Lobby] HOST: Added existing peer %d to peer_state" % peer_id)
+
+	_broadcast_local_player_name()
 	
 	_apply_lobby_style()
 	if not _embedded_in_menu:
@@ -315,7 +323,7 @@ func _on_ready_button_pressed() -> void:
 func _on_peer_connected(peer_id: int) -> void:
 	print("[Lobby] Signal: Peer %d connected. Current peer_state: %s" % [peer_id, peer_state.keys()])
 	if peer_id not in peer_state:
-		peer_state[peer_id] = { "character_id": "bastion", "is_ready": false }
+		peer_state[peer_id] = { "character_id": "bastion", "is_ready": false, "player_name": "Player" }
 		print("[Lobby] Added peer %d to peer_state. Now: %s" % [peer_id, peer_state.keys()])
 	else:
 		print("[Lobby] Peer %d already in peer_state (no change)" % peer_id)
@@ -363,12 +371,13 @@ func _on_session_joined(_session_id: String) -> void:
 	if not bool(multiplayer_session_manager.is_host()):
 		print("[Lobby] This is a CLIENT peer. Host is peer: 1")
 		if 1 not in peer_state:
-			peer_state[1] = { "character_id": "bastion", "is_ready": false }
+			peer_state[1] = { "character_id": "bastion", "is_ready": false, "player_name": "Player" }
 			print("[Lobby] CLIENT: Added host (peer 1) to peer_state. Now: %s" % [str(peer_state)])
 		else:
 			print("[Lobby] CLIENT: Host (peer 1) already in peer_state")
 	else:
 		print("[Lobby] This is a HOST peer")
+	_broadcast_local_player_name()
 	
 	_update_player_list()
 
@@ -380,19 +389,17 @@ func _update_player_list() -> void:
 
 	var peer_ids: Array = peer_state.keys()
 	peer_ids.sort()
-	var other_number := 2
 	for peer_id in peer_ids:
 		var state: Dictionary = peer_state.get(peer_id, {})
 		var char_id_raw: String = state.get("character_id", "???")
 		var char_display: String = "?" if char_id_raw == "random" else char_id_raw.capitalize()
 		var is_ready: bool = state.get("is_ready", false)
 		var status_icon: String = "  ✓" if is_ready else "  ○"
-		var display_name: String
+		var display_name := String(state.get("player_name", "")).strip_edges()
+		if display_name.is_empty():
+			display_name = "Player"
 		if peer_id == local_peer_id:
-			display_name = "You"
-		else:
-			display_name = "Player %d" % other_number
-			other_number += 1
+			display_name = "%s (You)" % display_name
 		var row := Label.new()
 		row.text = "%s  -  %s%s" % [display_name, char_display, status_icon]
 		row.add_theme_font_size_override("font_size", 18)
@@ -432,7 +439,8 @@ func _ensure_local_peer_state(default_character_id: String = "bastion") -> void:
 	if local_peer_id not in peer_state:
 		peer_state[local_peer_id] = {
 			"character_id": default_character_id,
-			"is_ready": local_is_ready
+			"is_ready": local_is_ready,
+			"player_name": local_player_name
 		}
 		print("[Lobby] Created new local peer_state entry: peer %d = %s" % [local_peer_id, peer_state[local_peer_id]])
 	elif String(peer_state[local_peer_id].get("character_id", "")).is_empty():
@@ -440,11 +448,12 @@ func _ensure_local_peer_state(default_character_id: String = "bastion") -> void:
 		print("[Lobby] Updated character_id for peer %d: now %s" % [local_peer_id, peer_state[local_peer_id]])
 	else:
 		print("[Lobby] Local peer_state already exists, no change needed")
+	peer_state[local_peer_id]["player_name"] = local_player_name
 
 
 func _apply_character_selection(peer_id: int, character_id: String) -> void:
 	if peer_id not in peer_state:
-		peer_state[peer_id] = { "character_id": character_id, "is_ready": false }
+		peer_state[peer_id] = { "character_id": character_id, "is_ready": false, "player_name": "Player" }
 	peer_state[peer_id]["character_id"] = character_id
 	if peer_id == local_peer_id:
 		local_character_id = character_id
@@ -499,7 +508,7 @@ func _broadcast_difficulty(difficulty_tier: int) -> void:
 
 func _apply_ready_state(peer_id: int, is_ready: bool) -> void:
 	if peer_id not in peer_state:
-		peer_state[peer_id] = { "character_id": "bastion", "is_ready": is_ready }
+		peer_state[peer_id] = { "character_id": "bastion", "is_ready": is_ready, "player_name": "Player" }
 	peer_state[peer_id]["is_ready"] = is_ready
 	if peer_id == local_peer_id:
 		local_is_ready = is_ready
@@ -509,6 +518,43 @@ func _apply_ready_state(peer_id: int, is_ready: bool) -> void:
 	_update_player_list()
 	if bool(multiplayer_session_manager.is_host()):
 		_check_all_ready()
+
+func _apply_player_name(peer_id: int, player_name: String) -> void:
+	var normalized_name := player_name.strip_edges()
+	if normalized_name.is_empty():
+		normalized_name = "Player"
+	if peer_id not in peer_state:
+		peer_state[peer_id] = { "character_id": "bastion", "is_ready": false, "player_name": normalized_name }
+	else:
+		peer_state[peer_id]["player_name"] = normalized_name
+	if peer_id == local_peer_id:
+		local_player_name = normalized_name
+	_update_player_list()
+
+func _broadcast_local_player_name() -> void:
+	if multiplayer_session_manager == null:
+		return
+	if local_peer_id <= 0:
+		return
+	_apply_player_name(local_peer_id, local_player_name)
+	if bool(multiplayer_session_manager.is_host()):
+		_broadcast_player_name.rpc(local_peer_id, local_player_name)
+		return
+	if _client_can_send_rpcs():
+		_request_player_name.rpc_id(1, local_player_name)
+
+@rpc("reliable", "any_peer")
+func _request_player_name(player_name: String) -> void:
+	if not bool(multiplayer_session_manager.is_host()):
+		return
+	var sender_peer_id := get_tree().get_multiplayer().get_remote_sender_id()
+	if sender_peer_id <= 0:
+		return
+	_broadcast_player_name.rpc(sender_peer_id, player_name)
+
+@rpc("reliable", "authority", "call_local")
+func _broadcast_player_name(peer_id: int, player_name: String) -> void:
+	_apply_player_name(peer_id, player_name)
 
 
 ## RPC: Client -> Host request to toggle ready.
@@ -899,6 +945,6 @@ void fragment() {
 	COLOR = vec4(color_mix, base_alpha);
 }
 """
-	var material := ShaderMaterial.new()
-	material.shader = shader
-	return material
+	var shader_material := ShaderMaterial.new()
+	shader_material.shader = shader
+	return shader_material

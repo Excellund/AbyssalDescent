@@ -240,6 +240,7 @@ func take_damage(amount: int, _damage_context: Dictionary = {}) -> void:
 		return
 	if damage_blocked:
 		return
+	var before_health := int(health_state.current_health)
 	var final_damage := amount
 	if _is_orbital_fortress_active():
 		var reduction := clampf(orbital_fortress_damage_reduction, 0.0, 0.95)
@@ -249,6 +250,10 @@ func take_damage(amount: int, _damage_context: Dictionary = {}) -> void:
 		if final_damage < amount:
 			_orbital_fortress_hit_flash_left = orbital_fortress_hit_flash_duration
 	health_state.take_damage(final_damage)
+	var after_health := int(health_state.current_health)
+	var applied_amount := maxi(0, before_health - after_health)
+	if applied_amount > 0:
+		damage_received.emit(applied_amount, after_health)
 
 func _is_orbital_fortress_active() -> bool:
 	if active_attack != ENEMY_STATE_ENUMS.Boss2Attack.ORBITAL_LANCE:

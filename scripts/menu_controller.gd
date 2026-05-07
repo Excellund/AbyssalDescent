@@ -62,6 +62,7 @@ var music_slider: HSlider
 var sfx_slider: HSlider
 var display_mode_selector: OptionButton
 var resolution_selector: OptionButton
+var timer_visibility_checkbox: CheckBox
 var telemetry_upload_checkbox: CheckBox
 var master_value_label: Label
 var music_value_label: Label
@@ -1358,9 +1359,9 @@ void fragment() {
 	COLOR = vec4(color, alpha);
 }
 """
-	var material := ShaderMaterial.new()
-	material.shader = shader
-	return material
+	var shader_material := ShaderMaterial.new()
+	shader_material.shader = shader
+	return shader_material
 
 func _build_options_panel() -> Panel:
 	var panel := Panel.new()
@@ -1553,6 +1554,27 @@ func _build_options_panel() -> Panel:
 	resolution_hint_label.add_theme_font_size_override("font_size", 14)
 	resolution_hint_label.add_theme_color_override("font_color", Color(0.70, 0.80, 0.90, 0.76))
 	resolution_row.add_child(resolution_hint_label)
+
+	var timer_row := VBoxContainer.new()
+	timer_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	timer_row.add_theme_constant_override("separation", 6)
+	rows.add_child(timer_row)
+
+	timer_visibility_checkbox = CheckBox.new()
+	timer_visibility_checkbox.text = "Show Run Timer In HUD"
+	timer_visibility_checkbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	timer_visibility_checkbox.add_theme_font_size_override("font_size", 18)
+	timer_visibility_checkbox.button_pressed = true
+	timer_visibility_checkbox.toggled.connect(_on_timer_visibility_toggled)
+	timer_row.add_child(timer_visibility_checkbox)
+
+	var timer_hint := Label.new()
+	timer_hint.text = "The run timer always tracks in the background. This only controls HUD visibility."
+	timer_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	timer_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	timer_hint.add_theme_font_size_override("font_size", 14)
+	timer_hint.add_theme_color_override("font_color", Color(0.70, 0.80, 0.90, 0.76))
+	timer_row.add_child(timer_hint)
 
 	var telemetry_row := VBoxContainer.new()
 	telemetry_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -2445,6 +2467,12 @@ func _on_telemetry_upload_toggled(enabled: bool) -> void:
 		return
 	run_context.set_telemetry_upload_enabled(enabled, true, true)
 
+func _on_timer_visibility_toggled(timer_visible: bool) -> void:
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context == null:
+		return
+	run_context.set_timer_visible_in_hud(timer_visible, true)
+
 func _sync_options_from_context() -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if master_slider != null:
@@ -2457,6 +2485,8 @@ func _sync_options_from_context() -> void:
 		display_mode_selector.set_block_signals(true)
 	if resolution_selector != null:
 		resolution_selector.set_block_signals(true)
+	if timer_visibility_checkbox != null:
+		timer_visibility_checkbox.set_block_signals(true)
 	if telemetry_upload_checkbox != null:
 		telemetry_upload_checkbox.set_block_signals(true)
 	if run_context == null:
@@ -2465,6 +2495,8 @@ func _sync_options_from_context() -> void:
 		sfx_slider.value = _db_to_percent(0.0)
 		_populate_display_mode_selector([], SETTINGS_STORE.DEFAULT_DISPLAY_MODE)
 		_populate_resolution_selector([], SETTINGS_STORE.DEFAULT_RESOLUTION_WIDTH, SETTINGS_STORE.DEFAULT_RESOLUTION_HEIGHT)
+		if timer_visibility_checkbox != null:
+			timer_visibility_checkbox.button_pressed = SETTINGS_STORE.DEFAULT_TIMER_VISIBLE
 		if telemetry_upload_checkbox != null:
 			telemetry_upload_checkbox.button_pressed = SETTINGS_STORE.DEFAULT_TELEMETRY_UPLOAD_ENABLED
 		if master_slider != null:
@@ -2477,6 +2509,8 @@ func _sync_options_from_context() -> void:
 			display_mode_selector.set_block_signals(false)
 		if resolution_selector != null:
 			resolution_selector.set_block_signals(false)
+		if timer_visibility_checkbox != null:
+			timer_visibility_checkbox.set_block_signals(false)
 		if telemetry_upload_checkbox != null:
 			telemetry_upload_checkbox.set_block_signals(false)
 		_update_resolution_control_state(SETTINGS_STORE.DEFAULT_DISPLAY_MODE)
@@ -2493,6 +2527,8 @@ func _sync_options_from_context() -> void:
 		int(run_context.get("resolution_width")),
 		int(run_context.get("resolution_height"))
 	)
+	if timer_visibility_checkbox != null:
+		timer_visibility_checkbox.button_pressed = bool(run_context.get("timer_visible_in_hud"))
 	if telemetry_upload_checkbox != null:
 		telemetry_upload_checkbox.button_pressed = bool(run_context.get("telemetry_upload_enabled"))
 	if master_slider != null:
@@ -2505,6 +2541,8 @@ func _sync_options_from_context() -> void:
 		display_mode_selector.set_block_signals(false)
 	if resolution_selector != null:
 		resolution_selector.set_block_signals(false)
+	if timer_visibility_checkbox != null:
+		timer_visibility_checkbox.set_block_signals(false)
 	if telemetry_upload_checkbox != null:
 		telemetry_upload_checkbox.set_block_signals(false)
 	_update_resolution_control_state(String(run_context.get("display_mode")))

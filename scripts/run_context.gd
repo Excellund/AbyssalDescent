@@ -26,6 +26,9 @@ const SUPPORTED_RESOLUTIONS := [
 	{"width": 1600, "height": 900, "label": "1600 x 900"},
 	{"width": 1280, "height": 720, "label": "1280 x 720"}
 ]
+const PROFILE_NAME_MIN_LEN := 3
+const PROFILE_NAME_MAX_LEN := 16
+const PROFILE_DEFAULT_NAME := "Player"
 
 var run_mode: int = ENUMS.RunMode.STANDARD
 var master_volume_db: float = 0.0
@@ -36,9 +39,12 @@ var base_viewport_height: int = 1080
 var display_mode: String = SETTINGS_STORE.DEFAULT_DISPLAY_MODE
 var resolution_width: int = SETTINGS_STORE.DEFAULT_RESOLUTION_WIDTH
 var resolution_height: int = SETTINGS_STORE.DEFAULT_RESOLUTION_HEIGHT
+var timer_visible_in_hud: bool = SETTINGS_STORE.DEFAULT_TIMER_VISIBLE
 var telemetry_upload_enabled: bool = SETTINGS_STORE.DEFAULT_TELEMETRY_UPLOAD_ENABLED
 var telemetry_consent_asked: bool = SETTINGS_STORE.DEFAULT_TELEMETRY_CONSENT_ASKED
 var skipped_update_version: String = SETTINGS_STORE.DEFAULT_SKIPPED_UPDATE_VERSION
+var profile_name: String = ""
+var profile_uuid: String = ""
 var telemetry_uploader
 var run_resume_request_state
 
@@ -97,12 +103,13 @@ func load_settings() -> void:
 	)
 	resolution_width = int(normalized.get("width", resolution_width))
 	resolution_height = int(normalized.get("height", resolution_height))
+	timer_visible_in_hud = bool(loaded.get("timer_visible", timer_visible_in_hud))
 	telemetry_upload_enabled = bool(loaded.get("telemetry_upload_enabled", telemetry_upload_enabled))
 	telemetry_consent_asked = bool(loaded.get("telemetry_consent_asked", telemetry_consent_asked))
 	skipped_update_version = String(loaded.get("skipped_update_version", skipped_update_version)).strip_edges()
 
 func _persist_settings() -> void:
-	SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, sfx_volume_db, resolution_width, resolution_height, display_mode, telemetry_upload_enabled, telemetry_consent_asked, skipped_update_version)
+	SETTINGS_STORE.save_settings(master_volume_db, music_volume_db, sfx_volume_db, resolution_width, resolution_height, display_mode, telemetry_upload_enabled, telemetry_consent_asked, skipped_update_version, timer_visible_in_hud)
 
 func set_audio_settings(master_db: float, music_db: float, sfx_db: float, persist: bool = true) -> void:
 	master_volume_db = clampf(master_db, AUDIO_VOLUME_MIN_DB, AUDIO_VOLUME_MAX_DB)
@@ -123,6 +130,14 @@ func set_resolution_settings(width: int, height: int, persist: bool = true) -> v
 func set_display_mode(mode: String, persist: bool = true) -> void:
 	display_mode = _normalize_display_mode(mode)
 	_apply_resolution()
+	if persist:
+		_persist_settings()
+
+func is_timer_visible_in_hud() -> bool:
+	return timer_visible_in_hud
+
+func set_timer_visible_in_hud(visible: bool, persist: bool = true) -> void:
+	timer_visible_in_hud = visible
 	if persist:
 		_persist_settings()
 
@@ -307,6 +322,8 @@ func clear_resume_saved_run_request() -> void:
 ## Load meta-progression profile from disk
 func load_meta_progress() -> void:
 	meta_progress_profile = META_PROGRESS_STORE.load_meta_progress()
+	if _ensure_profile_identity():
+		META_PROGRESS_STORE.save_meta_progress(meta_progress_profile)
 	current_difficulty_tier = META_PROGRESS_STORE.get_current_tier(meta_progress_profile)
 	highest_unlocked_difficulty_tier = META_PROGRESS_STORE.get_highest_unlocked_tier(meta_progress_profile)
 	selected_character_id = META_PROGRESS_STORE.get_selected_character_id(meta_progress_profile)
@@ -321,6 +338,84 @@ func load_meta_progress() -> void:
 	if unlocked_character_ids.size() != unlocked_before.size():
 		save_meta_progress()
 	just_unlocked_tier = -1
+
+func _ensure_profile_identity() -> bool:
+	var changed := false
+	var profile_state := meta_progress_profile.get("profile", {}) as Dictionary
+	if profile_state.is_empty():
+		profile_state = {}
+		changed = true
+	var loaded_uuid := String(profile_state.get("player_uuid", "")).strip_edges().to_lower()
+	if loaded_uuid.is_empty():
+		loaded_uuid = _generate_profile_uuid()
+		profile_state["player_uuid"] = loaded_uuid
+		changed = true
+	profile_uuid = loaded_uuid
+	var loaded_name := String(profile_state.get("display_name", "")).strip_edges()
+	if not loaded_name.is_empty():
+		loaded_name = _sanitize_profile_name(loaded_name)
+	if loaded_name.is_empty():
+		profile_name = ""
+		if profile_state.has("display_name"):
+			profile_state.erase("display_name")
+			changed = true
+	else:
+		profile_name = loaded_name
+		if String(profile_state.get("display_name", "")) != loaded_name:
+			profile_state["display_name"] = loaded_name
+			changed = true
+	meta_progress_profile["profile"] = profile_state
+	return changed
+
+func _generate_profile_uuid() -> String:
+	var entropy := "%s-%s-%s" % [str(Time.get_unix_time_from_system()), str(Time.get_ticks_usec()), str(randi())]
+	var hash_text := entropy.sha256_text()
+	return "%s-%s-%s-%s" % [hash_text.substr(0, 8), hash_text.substr(8, 4), hash_text.substr(12, 4), hash_text.substr(16, 12)]
+
+func _sanitize_profile_name(value: String) -> String:
+	var trimmed := value.strip_edges()
+	var sanitized := ""
+	for i in range(trimmed.length()):
+		var c := trimmed.unicode_at(i)
+		if (c >= 48 and c <= 57) or (c >= 65 and c <= 90) or (c >= 97 and c <= 122) or c == 95:
+			sanitized += String.chr(c)
+	return sanitized
+
+func is_profile_name_valid(candidate_name: String) -> bool:
+	var sanitized := _sanitize_profile_name(candidate_name)
+	if sanitized != candidate_name.strip_edges():
+		return false
+	var length := sanitized.length()
+	return length >= PROFILE_NAME_MIN_LEN and length <= PROFILE_NAME_MAX_LEN
+
+func get_profile_name() -> String:
+	return profile_name
+
+func has_profile_name() -> bool:
+	return not profile_name.is_empty()
+
+func get_profile_name_or_default() -> String:
+	if not profile_name.is_empty():
+		return profile_name
+	return PROFILE_DEFAULT_NAME
+
+func get_profile_uuid() -> String:
+	return profile_uuid
+
+func set_profile_name(new_name: String, persist: bool = true) -> bool:
+	var sanitized := _sanitize_profile_name(new_name)
+	if sanitized.length() < PROFILE_NAME_MIN_LEN or sanitized.length() > PROFILE_NAME_MAX_LEN:
+		return false
+	profile_name = sanitized
+	var profile_state := meta_progress_profile.get("profile", {}) as Dictionary
+	if profile_state.is_empty():
+		profile_state = {}
+	profile_state["player_uuid"] = get_profile_uuid()
+	profile_state["display_name"] = profile_name
+	meta_progress_profile["profile"] = profile_state
+	if persist:
+		return save_meta_progress()
+	return true
 
 
 ## Save meta-progression profile to disk

@@ -133,6 +133,7 @@ var player: Node2D
 var player_targets_provider: Callable
 var rng: RandomNumberGenerator
 var on_enemy_died: Callable
+var on_enemy_damaged: Callable
 
 var scripts: Dictionary = {}
 var current_room_size: Vector2 = Vector2.ZERO
@@ -142,13 +143,14 @@ var spawn_transport_duration: float = 0.36
 var current_room_enemy_mutator: Dictionary = {}
 var active_temporary_enemy_mutators: Array[Dictionary] = []
 
-func initialize(world_root_node: Node2D, player_node: Node2D, rng_instance: RandomNumberGenerator, script_map: Dictionary, enemy_died_callback: Callable, player_targets_provider_callable: Callable = Callable()) -> void:
+func initialize(world_root_node: Node2D, player_node: Node2D, rng_instance: RandomNumberGenerator, script_map: Dictionary, enemy_died_callback: Callable, player_targets_provider_callable: Callable = Callable(), enemy_damaged_callback: Callable = Callable()) -> void:
 	world_root = world_root_node
 	player = player_node
 	player_targets_provider = player_targets_provider_callable
 	rng = rng_instance
 	scripts = script_map
 	on_enemy_died = enemy_died_callback
+	on_enemy_damaged = enemy_damaged_callback
 
 func configure_room(room_size: Vector2, padding: float, safe_radius: float, enemy_mutator: Dictionary, temporary_enemy_mutators: Array[Dictionary] = []) -> void:
 	current_room_size = room_size
@@ -281,6 +283,8 @@ func spawn_enemy_from_sync(enemy_type: String, world_position: Vector2) -> Chara
 	if enemy.has_signal("died") and on_enemy_died.is_valid():
 		var captured := enemy
 		enemy.died.connect(func(): on_enemy_died.call(captured.global_position if is_instance_valid(captured) else Vector2.ZERO))
+	if enemy.has_signal("damage_received") and on_enemy_damaged.is_valid():
+		enemy.damage_received.connect(func(applied_amount: int, _remaining_health: int): on_enemy_damaged.call(applied_amount))
 	return enemy
 
 func pick_room_position(min_player_distance: float = -1.0, min_enemy_spacing: float = 86.0) -> Vector2:
@@ -309,6 +313,8 @@ func _spawn_enemy_in_current_room(enemy_script: Script, min_player_distance: flo
 	if enemy.has_signal("died") and on_enemy_died.is_valid():
 		var captured := enemy
 		enemy.died.connect(func(): on_enemy_died.call(captured.global_position if is_instance_valid(captured) else Vector2.ZERO))
+	if enemy.has_signal("damage_received") and on_enemy_damaged.is_valid():
+		enemy.damage_received.connect(func(applied_amount: int, _remaining_health: int): on_enemy_damaged.call(applied_amount))
 	return enemy
 
 func _resolve_target_players() -> Array:

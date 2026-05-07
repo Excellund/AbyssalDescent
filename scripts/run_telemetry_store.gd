@@ -20,6 +20,21 @@ static func _current_game_version() -> String:
 		return "dev"
 	return configured_version
 
+static func leaderboard_patch_key_from_version(game_version: String) -> String:
+	var trimmed := game_version.strip_edges().to_lower()
+	if trimmed.is_empty():
+		trimmed = _current_game_version().to_lower()
+	var without_metadata := trimmed.split("+", false, 1)[0]
+	var without_pre_release := without_metadata.split("-", false, 1)[0]
+	var segments := without_pre_release.split(".", false)
+	if segments.is_empty():
+		return without_pre_release if not without_pre_release.is_empty() else "dev"
+	if segments.size() >= 3:
+		return "%s.%s.%s" % [segments[0], segments[1], segments[2]]
+	if segments.size() == 2:
+		return "%s.%s" % [segments[0], segments[1]]
+	return segments[0]
+
 static func is_upload_payload_eligible(payload: Dictionary) -> bool:
 	if bool(payload.get("is_debug", false)):
 		return false
@@ -79,9 +94,13 @@ static func start_run(run_seed: Dictionary) -> String:
 		"started_at_unix": _now_unix(),
 		"ended_at_unix": 0,
 		"game_version": String(run_seed.get("game_version", _current_game_version())),
+		"leaderboard_patch_key": String(run_seed.get("leaderboard_patch_key", leaderboard_patch_key_from_version(String(run_seed.get("game_version", _current_game_version()))))),
 		"character_id": String(run_seed.get("character_id", "unknown")).strip_edges().to_lower(),
+		"character_name": String(run_seed.get("character_name", "Unknown")).strip_edges(),
 		"difficulty_tier": int(run_seed.get("difficulty_tier", 0)),
 		"run_mode": int(run_seed.get("run_mode", 0)),
+		"player_uuid": String(run_seed.get("player_uuid", "")).strip_edges().to_lower(),
+		"player_name": String(run_seed.get("player_name", "")).strip_edges(),
 		"is_debug": bool(run_seed.get("is_debug", false)),
 		"outcome": "in_progress",
 		"max_depth": int(run_seed.get("start_depth", 0)),
@@ -176,6 +195,18 @@ static func finish_run(run_id: String, outcome: String, summary: Dictionary = {}
 		run_entry["rooms_cleared"] = maxi(int(run_entry.get("rooms_cleared", 0)), int(summary.get("rooms_cleared", 0)))
 		if summary.has("death_event"):
 			run_entry["death_event"] = (summary.get("death_event", {}) as Dictionary).duplicate(true)
+		if summary.has("stats"):
+			run_entry["stats"] = (summary.get("stats", {}) as Dictionary).duplicate(true)
+		if summary.has("build_summary"):
+			run_entry["build_summary"] = (summary.get("build_summary", {}) as Dictionary).duplicate(true)
+		if summary.has("reward_timeline"):
+			run_entry["reward_timeline"] = (summary.get("reward_timeline", []) as Array).duplicate(true)
+		if summary.has("unlocks"):
+			run_entry["unlocks"] = (summary.get("unlocks", []) as Array).duplicate(true)
+		if summary.has("duration_seconds"):
+			run_entry["duration_seconds"] = maxi(0, int(summary.get("duration_seconds", 0)))
+		if summary.has("timestamp_text"):
+			run_entry["timestamp_text"] = String(summary.get("timestamp_text", ""))
 	)
 static func get_recent_runs(max_runs: int = 10, max_age_days: int = 21, include_debug: bool = false, game_version: String = "") -> Array[Dictionary]:
 	var store := load_store()
@@ -234,9 +265,13 @@ static func build_upload_payload(run_id: String) -> Dictionary:
 		"started_at_unix": int(run_entry.get("started_at_unix", 0)),
 		"ended_at_unix": int(run_entry.get("ended_at_unix", 0)),
 		"game_version": String(run_entry.get("game_version", _current_game_version())),
+		"leaderboard_patch_key": String(run_entry.get("leaderboard_patch_key", leaderboard_patch_key_from_version(String(run_entry.get("game_version", _current_game_version()))))),
 		"character_id": String(run_entry.get("character_id", "unknown")),
+		"character_name": String(run_entry.get("character_name", "Unknown")),
 		"difficulty_tier": int(run_entry.get("difficulty_tier", 0)),
 		"run_mode": int(run_entry.get("run_mode", 0)),
+		"player_uuid": String(run_entry.get("player_uuid", "")).strip_edges().to_lower(),
+		"player_name": String(run_entry.get("player_name", "")).strip_edges(),
 		"outcome": String(run_entry.get("outcome", "unknown")),
 		"max_depth": int(run_entry.get("max_depth", 0)),
 		"rooms_cleared": int(run_entry.get("rooms_cleared", 0)),
@@ -258,6 +293,83 @@ static func build_upload_payload(run_id: String) -> Dictionary:
 		},
 		"upload_source": "game_client"
 	}
+
+static func _difficulty_label(tier: int) -> String:
+	match tier:
+		0:
+			return "Pilgrim"
+		1:
+			return "Delver"
+		2:
+			return "Harbinger"
+		3:
+			return "Forsworn"
+		_:
+			return "Pilgrim"
+
+static func _duration_seconds(run_entry: Dictionary) -> int:
+	var started_at := int(run_entry.get("started_at_unix", 0))
+	var ended_at := int(run_entry.get("ended_at_unix", 0))
+	if ended_at <= 0 or ended_at <= started_at:
+		return 0
+	return maxi(0, ended_at - started_at)
+
+static func _aggregate_damage_taken(damage_events: Array) -> int:
+	var total := 0
+	for event_variant in damage_events:
+		var event_entry := event_variant as Dictionary
+		total += maxi(0, int(event_entry.get("final_amount", 0)))
+	return total
+
+static func build_run_summary_from_entry(run_entry: Dictionary, extra: Dictionary = {}) -> Dictionary:
+	if run_entry.is_empty():
+		return {}
+	var damage_events := run_entry.get("damage_events", []) as Array
+	var reward_choices := run_entry.get("reward_choices", []) as Array
+	var build_ids: Array[String] = []
+	for choice_variant in reward_choices:
+		var choice_entry := choice_variant as Dictionary
+		var choice_id := String(choice_entry.get("choice_id", "")).strip_edges().to_lower()
+		if choice_id.is_empty():
+			continue
+		if not build_ids.has(choice_id):
+			build_ids.append(choice_id)
+	var summary := {
+		"run_id": String(run_entry.get("id", "")),
+		"outcome": String(run_entry.get("outcome", "unknown")),
+		"character_id": String(run_entry.get("character_id", "unknown")),
+		"character_name": String(run_entry.get("character_name", "Unknown")),
+		"difficulty_tier": int(run_entry.get("difficulty_tier", 0)),
+		"difficulty_label": _difficulty_label(int(run_entry.get("difficulty_tier", 0))),
+		"duration_seconds": int(run_entry.get("duration_seconds", _duration_seconds(run_entry))),
+		"max_depth": int(run_entry.get("max_depth", 0)),
+		"rooms_cleared": int(run_entry.get("rooms_cleared", 0)),
+		"damage_taken_total": _aggregate_damage_taken(damage_events),
+		"damage_taken_hits": damage_events.size(),
+		"build_ids": build_ids,
+		"player_uuid": String(run_entry.get("player_uuid", "")),
+		"player_name": String(run_entry.get("player_name", "")),
+		"started_at_unix": int(run_entry.get("started_at_unix", 0)),
+		"ended_at_unix": int(run_entry.get("ended_at_unix", 0)),
+		"game_version": String(run_entry.get("game_version", _current_game_version())),
+		"leaderboard_patch_key": String(run_entry.get("leaderboard_patch_key", leaderboard_patch_key_from_version(String(run_entry.get("game_version", _current_game_version()))))),
+		"is_debug": bool(run_entry.get("is_debug", false)),
+		"death_event": (run_entry.get("death_event", {}) as Dictionary).duplicate(true),
+		"stats": (run_entry.get("stats", {}) as Dictionary).duplicate(true),
+		"build_summary": (run_entry.get("build_summary", {}) as Dictionary).duplicate(true),
+		"reward_timeline": (run_entry.get("reward_timeline", []) as Array).duplicate(true),
+		"unlocks": (run_entry.get("unlocks", []) as Array).duplicate(true),
+		"timestamp_text": String(run_entry.get("timestamp_text", "")),
+	}
+	for key in extra.keys():
+		summary[key] = extra[key]
+	return summary
+
+static func build_run_summary(run_id: String, extra: Dictionary = {}) -> Dictionary:
+	var run_entry := get_run_by_id(run_id)
+	if run_entry.is_empty():
+		return {}
+	return build_run_summary_from_entry(run_entry, extra)
 
 static func build_balance_summary(max_runs: int = 10, max_age_days: int = 21, include_debug: bool = false, game_version: String = "") -> Dictionary:
 	var recent_runs := get_recent_runs(max_runs, max_age_days, include_debug, game_version)

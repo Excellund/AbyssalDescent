@@ -17,8 +17,8 @@ func reset_player_position(player: Node, position: Vector2 = Vector2.ZERO) -> vo
 	if is_instance_valid(player) and player is Node2D:
 		(player as Node2D).global_position = position
 
-func show_defeat_feedback(hud: Node, defeat_screen: Node, room_label: String, room_depth: int) -> void:
+func show_defeat_feedback(hud: Node, defeat_screen: Node, room_label: String, room_depth: int, run_summary: Dictionary = {}) -> void:
 	if is_instance_valid(hud):
 		hud.show_banner("Defeat", "")
 	if is_instance_valid(defeat_screen):
-		defeat_screen.show_defeat(room_label, room_depth)
+		defeat_screen.show_defeat(room_label, room_depth, run_summary)

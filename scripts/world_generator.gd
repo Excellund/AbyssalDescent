@@ -41,6 +41,7 @@ const GLOSSARY_DATA := preload("res://scripts/shared/glossary_data.gd")
 const DEBUG_SETTINGS_SCRIPT := preload("res://scripts/debug_settings.gd")
 const VALIDATION_HARNESS_SCRIPT := preload("res://scripts/validation_harness.gd")
 const RUN_SESSION_SCRIPT := preload("res://scripts/core/run_session.gd")
+const RUN_SUMMARY_TRACKER_SCRIPT := preload("res://scripts/core/run_summary_tracker.gd")
 const WORLD_BOOTSTRAP_COORDINATOR_SCRIPT := preload("res://scripts/core/world_bootstrap_coordinator.gd")
 const ENCOUNTER_ROUTE_CONTROLLER_SCRIPT := preload("res://scripts/core/encounter_route_controller.gd")
 const OBJECTIVE_LIFECYCLE_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_lifecycle_coordinator.gd")
@@ -193,6 +194,8 @@ var build_detail_panel: Node
 var telemetry_run_id: String = ""
 var telemetry_enabled: bool = false
 var telemetry_run_finished: bool = false
+var run_started_at_msec: int = 0
+var latest_run_summary: Dictionary = {}
 var player_defeated: bool = false
 var telemetry_spike_enabled: bool = false
 var telemetry_spike_endpoint: String = ""
@@ -201,6 +204,8 @@ var telemetry_spike_timeout_seconds: float = 8.0
 var telemetry_spike_sender
 var telemetry_spike_requested: bool = false
 var run_session
+var run_summary_tracker
+var _summary_last_player_health: int = -1
 var bootstrap_coordinator
 var encounter_route_controller
 var objective_lifecycle_coordinator
@@ -400,6 +405,7 @@ func _initialize_bootstrap_context() -> void:
 	_maybe_start_telemetry_spike_probe()
 	run_session = RUN_SESSION_SCRIPT.new()
 	run_session.reset_for_new_run()
+	run_summary_tracker = RUN_SUMMARY_TRACKER_SCRIPT.new()
 	
 	## Detect multiplayer session
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
@@ -433,6 +439,8 @@ func _setup_player_runtime_bindings() -> void:
 			player_camera.set_room_fit_zoom_scale(camera_base_zoom_in)
 		if player.has_signal("damage_taken"):
 			player.connect("damage_taken", Callable(self, "_on_player_damage_taken"))
+		if player.has_signal("health_changed"):
+			player.connect("health_changed", Callable(self, "_on_player_health_changed"))
 		if player.has_signal("died"):
 			player.connect("died", Callable(self, "_on_player_died_for_telemetry"))
 			player.connect("died", Callable(self, "_on_player_died"))
@@ -784,9 +792,11 @@ func _setup_ui_phase() -> void:
 	victory_screen = VICTORY_SCREEN_SCRIPT.new()
 	add_child(victory_screen)
 	victory_screen.connect("back_to_main_menu_requested", Callable(self, "_on_victory_back_to_menu"))
+	victory_screen.connect("retry_run_requested", Callable(self, "_on_victory_retry_run"))
 	defeat_screen = DEFEAT_SCREEN_SCRIPT.new()
 	add_child(defeat_screen)
 	defeat_screen.connect("back_to_main_menu_requested", Callable(self, "_on_defeat_back_to_menu"))
+	defeat_screen.connect("retry_run_requested", Callable(self, "_on_defeat_retry_run"))
 	build_detail_panel = BUILD_DETAIL_PANEL_SCRIPT.new()
 	add_child(build_detail_panel)
 	build_detail_panel.setup()
@@ -802,6 +812,8 @@ func _setup_objective_runtime_system() -> void:
 
 func _run_resume_flow() -> bool:
 	var resumed_run := _try_resume_saved_run()
+	run_started_at_msec = Time.get_ticks_msec()
+	_reset_run_summary_tracker()
 	_initialize_run_telemetry(not _is_debug_boot_session())
 	hud.refresh(_get_hud_state(), player)
 	return resumed_run
@@ -847,6 +859,9 @@ func _start_stress_test_arena() -> void:
 
 func _begin_new_run_flow() -> void:
 	_world_multiplayer_sync_state.reset_for_new_run()
+	run_started_at_msec = Time.get_ticks_msec()
+	latest_run_summary.clear()
+	_reset_run_summary_tracker()
 	rooms_cleared = 0
 	room_depth = 0
 	boss_unlocked = false
@@ -1866,7 +1881,12 @@ func _get_hud_state() -> Dictionary:
 		"second_boss_unlocked": _is_second_boss_unlocked(),
 		"third_boss_unlocked": _is_third_boss_unlocked(),
 		"current_character_passive_name": current_character_passive_name,
+		"run_elapsed_seconds": _get_run_elapsed_seconds(),
+		"timer_visible_in_hud": true,
 	}
+	var run_context := _get_run_context()
+	if run_context != null:
+		hud_state["timer_visible_in_hud"] = bool(run_context.is_timer_visible_in_hud())
 	var active_powers := _get_active_player_powers()
 	hud_state["active_boons"] = active_powers["boons"]
 	hud_state["active_arcana"] = active_powers["arcana"]
@@ -2099,6 +2119,8 @@ func _finish_first_boss_clear() -> void:
 	boss_unlocked = false
 	pending_room_reward = ENUMS.RewardMode.NONE
 	last_defeated_boss_id = "warden"
+	if run_summary_tracker != null:
+		run_summary_tracker.record_boss_defeat(last_defeated_boss_id)
 	boss_reward_pending = true
 	hud.show_banner("Warden Defeated", "")
 	var epitaph: String = power_registry_instance.get_boss_epitaph("warden", current_character_id)
@@ -2116,6 +2138,8 @@ func _finish_second_boss_clear() -> void:
 	pending_room_reward = ENUMS.RewardMode.NONE
 	phase_three_rooms_cleared = 0
 	last_defeated_boss_id = "sovereign"
+	if run_summary_tracker != null:
+		run_summary_tracker.record_boss_defeat(last_defeated_boss_id)
 	boss_reward_pending = true
 	hud.show_banner("Sovereign Defeated", "")
 	var epitaph: String = power_registry_instance.get_boss_epitaph("sovereign", current_character_id)
@@ -2125,21 +2149,26 @@ func _finish_third_boss_clear() -> void:
 	in_third_boss_room = false
 	active_room_enemy_count = 0
 	run_cleared = true
-	_finish_active_run_telemetry("clear")
 	choosing_next_room = false
 	boss_unlocked = false
 	pending_room_reward = ENUMS.RewardMode.NONE
 	_clear_active_run_checkpoint()
 	last_defeated_boss_id = "lacuna"
+	if run_summary_tracker != null:
+		run_summary_tracker.record_boss_defeat(last_defeated_boss_id)
 	hud.show_banner("Run Complete", "")
+	var run_context := _get_run_context()
+	var unlocked_tier := -1
+	if run_context != null:
+		run_context.set_last_run_outcome("clear")
+		run_context.award_run_clear_unlocks()
+		unlocked_tier = int(run_context.consume_just_unlocked_tier())
+	if unlocked_tier >= 0 and run_summary_tracker != null:
+		var unlock_config := DIFFICULTY_CONFIG.get_tier_config(unlocked_tier)
+		run_summary_tracker.record_unlock("Unlocked Bearing: %s" % String(unlock_config.get("name", "Unknown")))
+	_finish_active_run_telemetry("clear")
 	if is_instance_valid(victory_screen):
-		var run_context := _get_run_context()
-		var unlocked_tier := -1
-		if run_context != null:
-			run_context.set_last_run_outcome("clear")
-			run_context.award_run_clear_unlocks()
-			unlocked_tier = int(run_context.consume_just_unlocked_tier())
-		victory_screen.show_victory(rooms_cleared, unlocked_tier)
+		victory_screen.show_victory(rooms_cleared, unlocked_tier, latest_run_summary)
 
 func _get_run_context() -> Node:
 	return get_node_or_null(RUN_CONTEXT_PATH)
@@ -2341,12 +2370,24 @@ func _on_victory_back_to_menu() -> void:
 	_clear_active_run_checkpoint()
 	get_tree().change_scene_to_file(MENU_SCENE_PATH)
 
+func _on_victory_retry_run() -> void:
+	_retry_current_run()
+
 func _on_defeat_back_to_menu() -> void:
 	_teardown_multiplayer_session_for_menu_transition()
 	_set_combat_paused(false)
 	_finish_active_run_telemetry("death")
 	_clear_active_run_checkpoint()
 	get_tree().change_scene_to_file(MENU_SCENE_PATH)
+
+func _on_defeat_retry_run() -> void:
+	_retry_current_run()
+
+func _retry_current_run() -> void:
+	_teardown_multiplayer_session_for_menu_transition()
+	_set_combat_paused(false)
+	_clear_active_run_checkpoint()
+	get_tree().change_scene_to_file("res://scenes/Main.tscn")
 
 func _on_pause_back_to_menu_requested() -> void:
 	_teardown_multiplayer_session_for_menu_transition()
@@ -2904,6 +2945,8 @@ func _begin_configured_boss_room(boss_stage: int, room_size: Vector2, room_label
 	if boss.has_signal("died"):
 		var captured_boss := boss
 		boss.died.connect(func(): _on_room_enemy_died(captured_boss.global_position if is_instance_valid(captured_boss) else Vector2.ZERO))
+	if boss.has_signal("damage_received"):
+		boss.damage_received.connect(func(applied_amount: int, _remaining_health: int): _on_enemy_damage_received(applied_amount))
 	if is_multiplayer and MultiplayerSessionManager.is_host():
 		_sync_spawn_boss.rpc({
 			"boss_stage": boss_stage,
@@ -2965,11 +3008,23 @@ func _play_room_music(is_boss_room: bool, instant: bool = false, fade_duration: 
 
 func _on_room_enemy_died(kill_pos: Vector2 = Vector2.ZERO) -> void:
 	active_room_enemy_count = maxi(0, active_room_enemy_count - 1)
+	if run_summary_tracker != null:
+		run_summary_tracker.record_enemy_kill()
 	var objective_progress_result: Dictionary = objective_progress_coordinator.on_enemy_killed(objective_manager, objective_runtime, kill_pos)
 	if bool(objective_progress_result.get("should_redraw", false)):
 		queue_redraw()
 	if is_instance_valid(player):
 		player.notify_enemy_killed(kill_pos)
+
+func _on_enemy_damage_received(_applied_amount: int) -> void:
+	# Damage dealt tracking is now centralized in shared damage application paths.
+	# Keep this handler for compatibility with older signal wiring.
+	pass
+
+func record_player_damage_dealt(applied_amount: int) -> void:
+	if run_summary_tracker == null:
+		return
+	run_summary_tracker.record_damage_dealt(applied_amount)
 
 func _clear_all_enemies() -> void:
 	_network_enemy_nodes.clear()
@@ -3517,10 +3572,14 @@ func _sync_request_enemy_damage(enemy_id: int, amount: int, damage_context: Dict
 		return
 	if not enemy.has_method("take_damage"):
 		return
+	var health_before := int(enemy.call("get_current_health")) if enemy.has_method("get_current_health") else -1
 	if damage_context.is_empty():
 		enemy.call("take_damage", amount)
 	else:
 		enemy.call("take_damage", amount, damage_context)
+	if health_before >= 0 and enemy.has_method("get_current_health"):
+		var health_after := int(enemy.call("get_current_health"))
+		record_player_damage_dealt(maxi(0, health_before - health_after))
 
 func _spawn_boss_for_stage(boss_stage: int, spawn_position: Vector2) -> Node2D:
 	var boss_script = null
@@ -3552,6 +3611,8 @@ func _spawn_boss_for_stage(boss_stage: int, spawn_position: Vector2) -> Node2D:
 	if boss.has_signal("died"):
 		var captured_boss := boss
 		boss.died.connect(func(): _on_room_enemy_died(captured_boss.global_position if is_instance_valid(captured_boss) else Vector2.ZERO))
+	if boss.has_signal("damage_received"):
+		boss.damage_received.connect(func(applied_amount: int, _remaining_health: int): _on_enemy_damage_received(applied_amount))
 	return boss
 
 @rpc("reliable", "authority")
@@ -3781,6 +3842,14 @@ func _sync_open_reward_selection(title: String, is_initial: bool, mode: int, pla
 
 func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> void:
 	_record_reward_choice(choice, mode, is_initial)
+	if run_summary_tracker != null:
+		var tracked_choice := choice.duplicate(true)
+		if mode == ENUMS.RewardMode.MISSION:
+			var mission_upgrade := tracked_choice.get("mission_upgrade", {}) as Dictionary
+			if not mission_upgrade.is_empty():
+				tracked_choice["id"] = String(mission_upgrade.get("id", tracked_choice.get("id", "")))
+				tracked_choice["name"] = String(mission_upgrade.get("name", tracked_choice.get("name", "")))
+		run_summary_tracker.record_reward_choice(tracked_choice, mode, room_depth)
 	if mode == ENUMS.RewardMode.ARCANA:
 		_apply_arcana_to_player(String(choice["id"]))
 		run_session.record_arcana(String(choice["name"]))
@@ -3976,6 +4045,7 @@ func _initialize_run_telemetry(allow_collection: bool) -> void:
 	telemetry_run_id = ""
 	telemetry_enabled = allow_collection
 	telemetry_run_finished = false
+	latest_run_summary.clear()
 	if not telemetry_enabled:
 		return
 	# In multiplayer, only the host should write telemetry to avoid file corruption races.
@@ -3995,13 +4065,42 @@ func _initialize_run_telemetry(allow_collection: bool) -> void:
 	var run_seed := {
 		"game_version": String(ProjectSettings.get_setting("application/config/version", "dev")).strip_edges(),
 		"character_id": current_character_id,
+		"character_name": String(CHARACTER_REGISTRY.get_character(current_character_id).get("name", current_character_id.capitalize())),
 		"difficulty_tier": current_difficulty_tier,
 		"run_mode": run_mode,
 		"start_depth": room_depth,
 		"rooms_cleared": rooms_cleared,
 		"is_debug": false
 	}
+	if run_context != null:
+		run_seed["player_uuid"] = String(run_context.get_profile_uuid())
+		run_seed["player_name"] = String(run_context.get_profile_name_or_default())
+	run_seed["leaderboard_patch_key"] = RUN_TELEMETRY_STORE.leaderboard_patch_key_from_version(String(run_seed.get("game_version", "")))
 	telemetry_run_id = RUN_TELEMETRY_STORE.start_run(run_seed)
+
+func _reset_run_summary_tracker() -> void:
+	if run_summary_tracker == null:
+		run_summary_tracker = RUN_SUMMARY_TRACKER_SCRIPT.new()
+	var run_context := _get_run_context()
+	var game_version := String(ProjectSettings.get_setting("application/config/version", "dev")).strip_edges()
+	if game_version.is_empty():
+		game_version = "dev"
+	var difficulty_label := String(DIFFICULTY_CONFIG.get_tier_config(current_difficulty_tier).get("name", "Pilgrim"))
+	var tracker_seed := {
+		"started_at_unix": int(Time.get_unix_time_from_system()),
+		"started_at_msec": int(Time.get_ticks_msec()),
+		"character_id": current_character_id,
+		"character_name": String(CHARACTER_REGISTRY.get_character(current_character_id).get("name", current_character_id.capitalize())),
+		"difficulty_tier": current_difficulty_tier,
+		"difficulty_label": difficulty_label,
+		"game_version": game_version,
+		"leaderboard_patch_key": RUN_TELEMETRY_STORE.leaderboard_patch_key_from_version(game_version),
+	}
+	if run_context != null:
+		tracker_seed["player_uuid"] = String(run_context.get_profile_uuid())
+		tracker_seed["player_name"] = String(run_context.get_profile_name_or_default())
+	run_summary_tracker.reset_for_run(tracker_seed)
+	_summary_last_player_health = int(player.get_current_health()) if is_instance_valid(player) and player.has_method("get_current_health") else -1
 
 func _mark_telemetry_debug_mode() -> void:
 	if is_multiplayer and not MultiplayerSessionManager.is_host():
@@ -4022,21 +4121,56 @@ func _mark_telemetry_debug_mode() -> void:
 	telemetry_run_finished = true
 
 func _finish_active_run_telemetry(outcome: String, death_event: Dictionary = {}) -> void:
-	if not _can_record_telemetry():
-		return
+	var death_copy := death_event.duplicate(true)
+	var active_powers := _get_active_player_powers()
+	var build_ids: Array[String] = []
+	for source_key in ["boons", "arcana", "boss_rewards"]:
+		var ids := active_powers.get(source_key, []) as Array
+		for id_variant in ids:
+			var normalized_id := String(id_variant).strip_edges().to_lower()
+			if normalized_id.is_empty():
+				continue
+			if not build_ids.has(normalized_id):
+				build_ids.append(normalized_id)
 	var summary := {
 		"max_depth": room_depth,
-		"rooms_cleared": rooms_cleared
+		"rooms_cleared": rooms_cleared,
+		"build_ids": build_ids
 	}
-	if not death_event.is_empty():
-		summary["death_event"] = death_event.duplicate(true)
+	if not death_copy.is_empty():
+		summary["death_event"] = death_copy
+	if run_summary_tracker != null:
+		var tracker_summary: Dictionary = run_summary_tracker.build_summary({
+			"run_id": telemetry_run_id,
+			"outcome": outcome,
+			"max_depth": room_depth,
+			"rooms_cleared": rooms_cleared,
+			"duration_seconds": _get_run_elapsed_seconds(),
+			"death_event": death_copy,
+		})
+		tracker_summary["build_ids"] = build_ids
+		latest_run_summary = tracker_summary
+		summary["stats"] = (tracker_summary.get("stats", {}) as Dictionary).duplicate(true)
+		summary["build_summary"] = (tracker_summary.get("build_summary", {}) as Dictionary).duplicate(true)
+		summary["reward_timeline"] = (tracker_summary.get("reward_timeline", []) as Array).duplicate(true)
+		summary["unlocks"] = (tracker_summary.get("unlocks", []) as Array).duplicate(true)
+		summary["duration_seconds"] = int(tracker_summary.get("duration_seconds", _get_run_elapsed_seconds()))
+		summary["timestamp_text"] = String(tracker_summary.get("timestamp_text", ""))
+	if not _can_record_telemetry():
+		return
 	RUN_TELEMETRY_STORE.finish_run(telemetry_run_id, outcome, summary)
+	latest_run_summary = RUN_TELEMETRY_STORE.build_run_summary(telemetry_run_id, latest_run_summary)
 	var run_context := _get_run_context()
 	if run_context != null:
 		var upload_payload := RUN_TELEMETRY_STORE.build_upload_payload(telemetry_run_id)
 		if not upload_payload.is_empty():
 			run_context.enqueue_telemetry_payload(upload_payload)
 	telemetry_run_finished = true
+
+func _get_run_elapsed_seconds() -> int:
+	if run_started_at_msec <= 0:
+		return 0
+	return maxi(0, int(round(float(Time.get_ticks_msec() - run_started_at_msec) / 1000.0)))
 
 func _bearing_key_from_label(label: String, fallback: String = "unknown") -> String:
 	return BEARING_KEY_NORMALIZER.from_label(label, fallback)
@@ -4176,7 +4310,34 @@ func _on_player_damage_taken(raw_amount: int, final_amount: int, damage_context:
 		"character_id": current_character_id
 	})
 
+func _on_player_health_changed(current_health: int, _max_health: int) -> void:
+	if run_summary_tracker == null:
+		_summary_last_player_health = current_health
+		return
+	if _summary_last_player_health < 0:
+		_summary_last_player_health = current_health
+		return
+	var health_loss := _summary_last_player_health - current_health
+	if health_loss > 0:
+		run_summary_tracker.record_damage_taken(health_loss)
+	_summary_last_player_health = current_health
+
+func _reconcile_summary_damage_taken_to_player_health() -> void:
+	if run_summary_tracker == null:
+		return
+	if not is_instance_valid(player) or not player.has_method("get_current_health"):
+		return
+	var current_health := int(player.get_current_health())
+	if _summary_last_player_health < 0:
+		_summary_last_player_health = current_health
+		return
+	var health_loss := _summary_last_player_health - current_health
+	if health_loss > 0:
+		run_summary_tracker.record_damage_taken(health_loss)
+	_summary_last_player_health = current_health
+
 func _on_player_died_for_telemetry() -> void:
+	_reconcile_summary_damage_taken_to_player_health()
 	if not _can_record_telemetry():
 		return
 	if is_multiplayer and _count_alive_players() > 0:
@@ -4199,6 +4360,7 @@ func _on_player_died_for_telemetry() -> void:
 	_finish_active_run_telemetry("death", death_event)
 
 func _on_player_died() -> void:
+	_reconcile_summary_damage_taken_to_player_health()
 	if player_defeated:
 		return
 	var has_new_fallen := _refresh_fallen_player_tracking()
@@ -4223,7 +4385,7 @@ func _on_player_died() -> void:
 		run_context.set_last_run_outcome("death")
 		run_context.clear_active_run()
 		run_context.clear_resume_saved_run_request()
-	player_flow_coordinator.show_defeat_feedback(hud, defeat_screen, current_room_label, room_depth)
+	player_flow_coordinator.show_defeat_feedback(hud, defeat_screen, current_room_label, room_depth, latest_run_summary)
 
 func _get_multiplayer_player_nodes() -> Array[Node2D]:
 	var nodes: Array[Node2D] = []
