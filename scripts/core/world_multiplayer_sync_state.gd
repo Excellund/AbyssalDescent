@@ -47,3 +47,11 @@ func begin_next_room_sync() -> void:
 	current_room_sync_id += 1
 	pending_door_sync_payload.clear()
 	clear_pending_spawn_payloads()
+
+func begin_room_transition(clear_pending_spawn_payloads: bool) -> void:
+	current_room_sync_id += 1
+	clear_authoritative_door_wait()
+	pending_door_sync_payload.clear()
+	clear_pending_chosen_door_sync()
+	if clear_pending_spawn_payloads:
+		clear_pending_spawn_payloads()

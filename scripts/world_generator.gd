@@ -842,7 +842,6 @@ func _start_stress_test_arena() -> void:
 
 func _begin_new_run_flow() -> void:
 	_world_multiplayer_sync_state.reset_for_new_run()
-	_world_multiplayer_sync_state.clear_authoritative_door_wait()
 	rooms_cleared = 0
 	room_depth = 0
 	boss_unlocked = false
@@ -2750,12 +2749,7 @@ func _apply_endless_scaling_to_profile(profile: Dictionary) -> Dictionary:
 	)
 
 func _prepare_room_sync_transition() -> void:
-	_world_multiplayer_sync_state.current_room_sync_id += 1
-	_world_multiplayer_sync_state.clear_authoritative_door_wait()
-	_world_multiplayer_sync_state.pending_door_sync_payload.clear()
-	_world_multiplayer_sync_state.clear_pending_chosen_door_sync()
-	if not is_multiplayer or MultiplayerSessionManager.is_host():
-		_world_multiplayer_sync_state.clear_pending_spawn_payloads()
+	_world_multiplayer_sync_state.begin_room_transition(not is_multiplayer or MultiplayerSessionManager.is_host())
 
 func _begin_room(profile: Dictionary) -> void:
 	_doors_spawn_ready = false
@@ -3933,7 +3927,6 @@ func _finalize_reward_phase_and_advance(is_initial: bool, mode: int) -> void:
 
 func _reset_progress_for_first_encounter() -> void:
 	_world_multiplayer_sync_state.reset_for_new_run()
-	_world_multiplayer_sync_state.clear_authoritative_door_wait()
 	rooms_cleared = 0
 	room_depth = 0
 	boss_unlocked = false
