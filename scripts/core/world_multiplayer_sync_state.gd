@@ -48,10 +48,41 @@ func begin_next_room_sync() -> void:
 	pending_door_sync_payload.clear()
 	clear_pending_spawn_payloads()
 
-func begin_room_transition(clear_pending_spawn_payloads: bool) -> void:
+func begin_room_transition(should_clear_pending_spawn_payloads: bool) -> void:
 	current_room_sync_id += 1
 	clear_authoritative_door_wait()
 	pending_door_sync_payload.clear()
 	clear_pending_chosen_door_sync()
-	if clear_pending_spawn_payloads:
+	if should_clear_pending_spawn_payloads:
 		clear_pending_spawn_payloads()
+
+func consume_pending_door_sync_payload() -> Dictionary:
+	if pending_door_sync_payload.is_empty():
+		return {}
+	var payload := pending_door_sync_payload.duplicate(true) as Dictionary
+	pending_door_sync_payload.clear()
+	return payload
+
+func consume_pending_chosen_door_sync() -> Dictionary:
+	if pending_chosen_door.is_empty():
+		return {}
+	var payload := {
+		"chosen_door": pending_chosen_door.duplicate(true),
+		"progress_state": pending_chosen_progress_state.duplicate(true)
+	}
+	clear_pending_chosen_door_sync()
+	return payload
+
+func consume_pending_spawn_sync_payload() -> Dictionary:
+	if pending_spawn_sync_payload.is_empty():
+		return {}
+	var payload := pending_spawn_sync_payload.duplicate(true) as Dictionary
+	pending_spawn_sync_payload.clear()
+	return payload
+
+func consume_pending_boss_spawn_sync_payload() -> Dictionary:
+	if pending_boss_spawn_sync_payload.is_empty():
+		return {}
+	var payload := pending_boss_spawn_sync_payload.duplicate(true) as Dictionary
+	pending_boss_spawn_sync_payload.clear()
+	return payload

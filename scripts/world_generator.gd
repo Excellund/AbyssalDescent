@@ -1543,18 +1543,18 @@ func _flush_pending_client_door_syncs() -> void:
 	if not _can_apply_client_door_sync():
 		return
 	if not _world_multiplayer_sync_state.pending_chosen_door.is_empty():
-		var chosen_door := _world_multiplayer_sync_state.pending_chosen_door.duplicate(true)
-		var progress_state := _world_multiplayer_sync_state.pending_chosen_progress_state.duplicate(true)
-		_world_multiplayer_sync_state.clear_pending_chosen_door_sync()
+		var chosen_payload := _world_multiplayer_sync_state.consume_pending_chosen_door_sync()
+		var chosen_door := chosen_payload.get("chosen_door", {}) as Dictionary
+		var progress_state := chosen_payload.get("progress_state", {}) as Dictionary
 		_world_multiplayer_sync_state.clear_authoritative_door_wait()
 		_choose_door(chosen_door)
 		_apply_progress_sync_state(progress_state)
 	if not _world_multiplayer_sync_state.pending_door_sync_payload.is_empty():
-		var synced_door_options: Array = _world_multiplayer_sync_state.pending_door_sync_payload.get("door_options", []) as Array
-		var synced_choosing_next_room := bool(_world_multiplayer_sync_state.pending_door_sync_payload.get("choosing_next_room", false))
-		var synced_boss_unlocked := bool(_world_multiplayer_sync_state.pending_door_sync_payload.get("boss_unlocked", boss_unlocked))
-		var progress_state := _world_multiplayer_sync_state.pending_door_sync_payload.get("progress_state", {}) as Dictionary
-		_world_multiplayer_sync_state.pending_door_sync_payload.clear()
+		var door_payload := _world_multiplayer_sync_state.consume_pending_door_sync_payload()
+		var synced_door_options: Array = door_payload.get("door_options", []) as Array
+		var synced_choosing_next_room := bool(door_payload.get("choosing_next_room", false))
+		var synced_boss_unlocked := bool(door_payload.get("boss_unlocked", boss_unlocked))
+		var progress_state := door_payload.get("progress_state", {}) as Dictionary
 		_apply_synced_door_options_payload(synced_door_options, synced_choosing_next_room, synced_boss_unlocked, progress_state)
 
 func _can_apply_client_spawn_sync(payload: Dictionary) -> bool:
@@ -1607,8 +1607,7 @@ func _flush_pending_client_spawn_syncs() -> void:
 		return
 	if not _can_apply_client_spawn_sync(_world_multiplayer_sync_state.pending_spawn_sync_payload):
 		return
-	var payload: Dictionary = _world_multiplayer_sync_state.pending_spawn_sync_payload.duplicate(true) as Dictionary
-	_world_multiplayer_sync_state.pending_spawn_sync_payload.clear()
+	var payload := _world_multiplayer_sync_state.consume_pending_spawn_sync_payload()
 	_apply_synced_spawn_batch_payload(payload)
 
 func _apply_synced_objective_spawn_batch_payload(payload: Dictionary) -> void:
@@ -1705,8 +1704,7 @@ func _flush_pending_client_boss_spawn_syncs() -> void:
 		return
 	if not _can_apply_client_boss_spawn_sync(_world_multiplayer_sync_state.pending_boss_spawn_sync_payload):
 		return
-	var payload: Dictionary = _world_multiplayer_sync_state.pending_boss_spawn_sync_payload.duplicate(true) as Dictionary
-	_world_multiplayer_sync_state.pending_boss_spawn_sync_payload.clear()
+	var payload := _world_multiplayer_sync_state.consume_pending_boss_spawn_sync_payload()
 	_apply_synced_boss_spawn_payload(payload)
 
 func _handle_modal_frame(delta: float) -> bool:
