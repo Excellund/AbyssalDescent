@@ -9,6 +9,7 @@ signal session_created(session_id: String, room_code: String)
 signal session_joined(session_id: String)
 signal peer_timeout(peer_id: int)
 signal connection_failed(reason: String)
+signal host_left
 
 ## Godot ENet convention: server/host peer is always assigned ID 1.
 const HOST_PEER_ID: int = 1
@@ -474,6 +475,7 @@ func _on_connection_failed() -> void:
 ## Internal: Triggered when server is shut down (only for clients).
 func _on_server_disconnected() -> void:
 	push_error("[MultiplayerSessionManager] Server disconnected.")
+	host_left.emit()
 	leave_room()
 
 

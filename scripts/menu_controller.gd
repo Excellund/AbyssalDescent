@@ -98,23 +98,27 @@ var multiplayer_room_code_input: LineEdit
 var multiplayer_status_label: Label
 var multiplayer_host_button: Button
 var multiplayer_join_button: Button
+var lobby_modal_layer: Control
+var lobby_modal_panel: Panel
+var lobby_modal_content_host: Control
+var lobby_modal_instance: Control
 
 func _ready() -> void:
-	if _try_multiplayer_dev_autostart():
-		return
-	if _should_autostart_debug_encounter():
-		call_deferred("_change_to_gameplay_scene")
-		return
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_process(false)
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	_build_ui()
 	_apply_menu_layout()
+	_start_menu_music()
+	if _try_multiplayer_dev_autostart():
+		return
+	if _should_autostart_debug_encounter():
+		call_deferred("_change_to_gameplay_scene")
+		return
 	_play_menu_intro()
 	_sync_options_from_context()
 	_maybe_show_telemetry_consent_prompt()
-	_start_menu_music()
 	_start_update_check()
 
 
@@ -155,7 +159,7 @@ func _create_local_dev_lobby() -> bool:
 		push_error("[Menu] MultiplayerSessionManager autoload is missing")
 		return false
 	if not multiplayer_session_manager.create_room().is_empty():
-		call_deferred("_change_to_lobby_scene")
+		call_deferred("_show_lobby_modal")
 		return true
 	push_error("[Menu] Failed to create local dev lobby")
 	return false
@@ -167,14 +171,13 @@ func _join_local_dev_lobby() -> bool:
 		push_error("[Menu] MultiplayerSessionManager autoload is missing")
 		return false
 	if multiplayer_session_manager.join_room("127.0.0.1", 9999, true):
-		call_deferred("_change_to_lobby_scene")
+		call_deferred("_show_lobby_modal")
 		return true
 	push_error("[Menu] Failed to join local dev lobby")
 	return false
 
 func _change_to_lobby_scene() -> void:
-	if get_tree() != null:
-		get_tree().change_scene_to_file(LOBBY_SCENE_PATH)
+	_show_lobby_modal()
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED:
@@ -242,8 +245,7 @@ func _create_multiplayer_room() -> void:
 			var diagnostics := String(multiplayer_session_manager.get_host_diagnostic_report())
 			multiplayer_status_label.text += "\n\n" + diagnostics
 	
-	if get_tree() != null:
-		get_tree().change_scene_to_file("res://scenes/Lobby.tscn")
+	_show_lobby_modal()
 
 
 func _join_multiplayer_room(room_code: String) -> void:
@@ -283,8 +285,7 @@ func _join_multiplayer_room(room_code: String) -> void:
 	if multiplayer_session_manager.join_registered_room(registration):
 		var join_result := await _await_multiplayer_join_result(multiplayer_session_manager, MULTIPLAYER_JOIN_CAP_SEC, resolved_host_address, resolved_host_port)
 		if bool(join_result.get("ok", false)):
-			if get_tree() != null:
-				get_tree().change_scene_to_file("res://scenes/Lobby.tscn")
+			_show_lobby_modal()
 		else:
 			multiplayer_session_manager.leave_room()
 			if multiplayer_status_label != null:
@@ -408,6 +409,9 @@ func _read_main_debug_settings_values() -> Dictionary:
 
 func _exit_tree() -> void:
 	if menu_music_player != null and menu_music_player.playing:
+		var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+		if run_context != null and run_context.has_method("set_menu_music_resume_position"):
+			run_context.set_menu_music_resume_position(menu_music_player.get_playback_position())
 		menu_music_player.stop()
 
 func _input(event: InputEvent) -> void:
@@ -423,6 +427,10 @@ func _input(event: InputEvent) -> void:
 		multiplayer_room_code_input.release_focus()
 
 func _unhandled_input(event: InputEvent) -> void:
+	if lobby_modal_layer != null and lobby_modal_layer.visible:
+		if event.is_action_pressed("ui_cancel"):
+			get_viewport().set_input_as_handled()
+		return
 	if update_prompt_layer != null and update_prompt_layer.visible:
 		return
 	if event.is_action_pressed("ui_cancel") and options_panel != null and options_panel.visible:
@@ -599,6 +607,10 @@ func _build_ui() -> void:
 	update_prompt_layer = _build_update_prompt_layer()
 	update_prompt_layer.visible = false
 	add_child(update_prompt_layer)
+
+	lobby_modal_layer = _build_lobby_modal_layer()
+	lobby_modal_layer.visible = false
+	add_child(lobby_modal_layer)
 	_show_root_panel(false)
 
 func _apply_menu_layout() -> void:
@@ -628,6 +640,12 @@ func _apply_menu_layout() -> void:
 		update_panel.position = Vector2(root_panel.position.x, root_panel.position.y + root_scaled_size.y + vertical_gap)
 	if atmosphere_band != null:
 		_set_centered_panel_layout(atmosphere_band, Vector2(620.0, 660.0), fit_scale, viewport_size)
+	if lobby_modal_panel != null:
+		_set_centered_panel_layout(lobby_modal_panel, Vector2(980.0, 760.0), fit_scale, viewport_size)
+	if lobby_modal_instance != null:
+		lobby_modal_instance.set_anchors_preset(Control.PRESET_FULL_RECT)
+		lobby_modal_instance.position = Vector2.ZERO
+		lobby_modal_instance.size = lobby_modal_content_host.size
 
 func _set_centered_panel_layout(panel: Panel, base_size: Vector2, panel_scale: float, viewport_size: Vector2) -> void:
 	panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
@@ -806,6 +824,8 @@ func _show_root_panel(animate: bool = true) -> void:
 	if character_selector_panel != null:
 		if not animate or character_selector_panel != from_panel:
 			character_selector_panel.visible = false
+	if lobby_modal_layer != null:
+		lobby_modal_layer.visible = false
 	if primary_run_button != null:
 		primary_run_button.grab_focus()
 
@@ -826,6 +846,8 @@ func _show_options_panel() -> void:
 		difficulty_selector_panel.visible = false
 	if character_selector_panel != null:
 		character_selector_panel.visible = false
+	if lobby_modal_layer != null:
+		lobby_modal_layer.visible = false
 
 func _show_glossary_panel() -> void:
 	if root_panel != null:
@@ -844,6 +866,8 @@ func _show_glossary_panel() -> void:
 		difficulty_selector_panel.visible = false
 	if character_selector_panel != null:
 		character_selector_panel.visible = false
+	if lobby_modal_layer != null:
+		lobby_modal_layer.visible = false
 
 func _show_multiplayer_panel() -> void:
 	if root_panel != null and multiplayer_panel != null:
@@ -858,6 +882,8 @@ func _show_multiplayer_panel() -> void:
 		difficulty_selector_panel.visible = false
 	if character_selector_panel != null:
 		character_selector_panel.visible = false
+	if lobby_modal_layer != null:
+		lobby_modal_layer.visible = false
 	if multiplayer_status_label != null:
 		multiplayer_status_label.text = ""
 	if multiplayer_host_button != null:
@@ -895,6 +921,91 @@ func _show_character_selector() -> void:
 		if not character_selector_panel.visible:
 			character_selector_panel.visible = true
 			_animate_panel_in(character_selector_panel, Vector2(0.0, 28.0))
+	if lobby_modal_layer != null:
+		lobby_modal_layer.visible = false
+
+
+func _build_lobby_modal_layer() -> Control:
+	var layer := Control.new()
+	layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.mouse_filter = Control.MOUSE_FILTER_STOP
+
+	var dim := ColorRect.new()
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0.01, 0.02, 0.03, 0.62)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	layer.add_child(dim)
+
+	lobby_modal_panel = Panel.new()
+	lobby_modal_panel.custom_minimum_size = Vector2(980.0, 760.0)
+	lobby_modal_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.04, 0.06, 0.10, 0.97), Color(0.44, 0.70, 0.96, 0.74), 20, 2))
+	layer.add_child(lobby_modal_panel)
+
+	var shell := MarginContainer.new()
+	shell.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shell.add_theme_constant_override("margin_left", 18)
+	shell.add_theme_constant_override("margin_right", 18)
+	shell.add_theme_constant_override("margin_top", 18)
+	shell.add_theme_constant_override("margin_bottom", 18)
+	lobby_modal_panel.add_child(shell)
+
+	lobby_modal_content_host = Control.new()
+	lobby_modal_content_host.set_anchors_preset(Control.PRESET_FULL_RECT)
+	lobby_modal_content_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	shell.add_child(lobby_modal_content_host)
+
+	return layer
+
+
+func _show_lobby_modal() -> void:
+	if lobby_modal_layer == null or lobby_modal_content_host == null:
+		return
+	if root_panel != null:
+		root_panel.visible = false
+	if options_panel != null:
+		options_panel.visible = false
+	if glossary_panel != null:
+		glossary_panel.visible = false
+	if multiplayer_panel != null:
+		multiplayer_panel.visible = false
+	if difficulty_selector_panel != null:
+		difficulty_selector_panel.visible = false
+	if character_selector_panel != null:
+		character_selector_panel.visible = false
+
+	if lobby_modal_instance != null:
+		lobby_modal_instance.queue_free()
+		lobby_modal_instance = null
+
+	var lobby_scene := load(LOBBY_SCENE_PATH) as PackedScene
+	if lobby_scene == null:
+		push_error("[Menu] Failed to load lobby scene for modal")
+		return
+	lobby_modal_instance = lobby_scene.instantiate() as Control
+	if lobby_modal_instance == null:
+		push_error("[Menu] Failed to instantiate lobby scene for modal")
+		return
+	if lobby_modal_instance.has_method("set_embedded_in_menu"):
+		lobby_modal_instance.call("set_embedded_in_menu", true)
+	if lobby_modal_instance.has_signal("leave_lobby_requested"):
+		lobby_modal_instance.connect("leave_lobby_requested", Callable(self, "_on_lobby_modal_leave_requested"))
+	lobby_modal_content_host.add_child(lobby_modal_instance)
+
+	lobby_modal_layer.visible = true
+	_apply_menu_layout()
+
+
+func _hide_lobby_modal() -> void:
+	if lobby_modal_instance != null:
+		lobby_modal_instance.queue_free()
+		lobby_modal_instance = null
+	if lobby_modal_layer != null:
+		lobby_modal_layer.visible = false
+
+
+func _on_lobby_modal_leave_requested() -> void:
+	_hide_lobby_modal()
+	_show_multiplayer_panel()
 
 func _build_multiplayer_panel() -> Panel:
 	var panel := Panel.new()
@@ -2495,12 +2606,16 @@ func _update_resolution_control_state(current_mode: String) -> void:
 func _start_menu_music() -> void:
 	if MENU_MUSIC == null:
 		return
+	var resume_position := 0.0
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context != null and run_context.has_method("consume_menu_music_resume_position"):
+		resume_position = float(run_context.consume_menu_music_resume_position())
 	menu_music_player = AudioStreamPlayer.new()
 	menu_music_player.stream = MENU_MUSIC
 	menu_music_player.bus = "Master"
 	menu_music_player.finished.connect(_on_menu_music_finished)
 	add_child(menu_music_player)
-	menu_music_player.play()
+	menu_music_player.play(maxf(resume_position, 0.0))
 	_apply_menu_music_volume(_percent_to_db(music_slider.value))
 
 func _on_menu_music_finished() -> void:

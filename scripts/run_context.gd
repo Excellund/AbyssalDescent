@@ -56,6 +56,7 @@ var multiplayer_is_host: bool = false
 var multiplayer_difficulty_tier: int = BEARING_ENUMS.BearingTier.PILGRIM
 var multiplayer_peer_characters: Dictionary = {}  ## peer_id -> character_id
 var suppress_menu_multiplayer_dev_autostart_once: bool = false
+var menu_music_resume_position_sec: float = -1.0
 
 func _ready() -> void:
 	base_viewport_width = int(ProjectSettings.get_setting("display/window/size/viewport_width", 1920))
@@ -437,6 +438,19 @@ func consume_menu_multiplayer_dev_autostart_suppression() -> bool:
 	var should_suppress := suppress_menu_multiplayer_dev_autostart_once
 	suppress_menu_multiplayer_dev_autostart_once = false
 	return should_suppress
+
+
+func set_menu_music_resume_position(seconds: float) -> void:
+	if not is_finite(seconds) or seconds < 0.0:
+		menu_music_resume_position_sec = -1.0
+		return
+	menu_music_resume_position_sec = seconds
+
+
+func consume_menu_music_resume_position() -> float:
+	var position := menu_music_resume_position_sec
+	menu_music_resume_position_sec = -1.0
+	return maxf(position, 0.0)
 
 
 ## Award permanent difficulty unlocks for a completed run on the current tier.

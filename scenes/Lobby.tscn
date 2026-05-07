@@ -10,21 +10,28 @@ anchors_right = 1.0
 anchors_bottom = 1.0
 script = ExtResource("1_kmcad")
 
-[node name="VBoxContainer" type="VBoxContainer" parent="."]
+[node name="Background" type="ColorRect" parent="."]
 layout_mode = 1
 anchors_left = 0.0
 anchors_top = 0.0
 anchors_right = 1.0
 anchors_bottom = 1.0
-offset_left = 20.0
-offset_top = 20.0
-offset_right = -20.0
-offset_bottom = -20.0
-separation = 10
+color = Color(0.02, 0.035, 0.06, 1.0)
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_left = 0.5
+anchors_top = 0.5
+anchors_right = 0.5
+anchors_bottom = 0.5
+offset_left = -440.0
+offset_top = -340.0
+offset_right = 440.0
+offset_bottom = 340.0
+theme_override_constants/separation = 14
 
 [node name="RoomCodePanel" type="PanelContainer" parent="VBoxContainer"]
 layout_mode = 2
-size_flags_vertical = 2
 custom_minimum_size = Vector2(0, 40)
 
 [node name="RoomCodeLabel" type="Label" parent="VBoxContainer/RoomCodePanel"]
@@ -34,23 +41,23 @@ theme_override_font_sizes/font_size = 24
 
 [node name="PlayerListPanel" type="PanelContainer" parent="VBoxContainer"]
 layout_mode = 2
-size_flags_vertical = 2
 custom_minimum_size = Vector2(0, 100)
 
 [node name="VBoxContainer2" type="VBoxContainer" parent="VBoxContainer/PlayerListPanel"]
 layout_mode = 2
+theme_override_constants/separation = 8
 
 [node name="Label" type="Label" parent="VBoxContainer/PlayerListPanel/VBoxContainer2"]
 layout_mode = 2
 text = "Connected Players:"
 
-[node name="PlayerList" type="ItemList" parent="VBoxContainer/PlayerListPanel/VBoxContainer2"]
+[node name="PlayerList" type="VBoxContainer" parent="VBoxContainer/PlayerListPanel/VBoxContainer2"]
 layout_mode = 2
 size_flags_vertical = 3
+theme_override_constants/separation = 6
 
 [node name="CharacterSelectorPanel" type="PanelContainer" parent="VBoxContainer"]
 layout_mode = 2
-size_flags_vertical = 2
 custom_minimum_size = Vector2(0, 150)
 
 [node name="VBoxContainer3" type="VBoxContainer" parent="VBoxContainer/CharacterSelectorPanel"]
@@ -66,7 +73,6 @@ size_flags_vertical = 3
 
 [node name="DifficultySelectorPanel" type="PanelContainer" parent="VBoxContainer"]
 layout_mode = 2
-size_flags_vertical = 2
 custom_minimum_size = Vector2(0, 60)
 
 [node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer/DifficultySelectorPanel"]
@@ -82,14 +88,12 @@ size_flags_horizontal = 3
 
 [node name="ReadyButton" type="Button" parent="VBoxContainer"]
 layout_mode = 2
-size_flags_vertical = 2
 custom_minimum_size = Vector2(0, 50)
 text = "READY?"
 theme_override_font_sizes/font_size = 20
 
 [node name="LeaveLobbyButton" type="Button" parent="VBoxContainer"]
 layout_mode = 2
-size_flags_vertical = 2
 custom_minimum_size = Vector2(0, 44)
 text = "Leave Lobby"
 theme_override_font_sizes/font_size = 18

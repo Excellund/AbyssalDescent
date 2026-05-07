@@ -8,8 +8,8 @@ const CHARACTER_DEFINITIONS := {
 		"name": "Bastion",
 		"archetype": "Iron Rampart",
 		"boss_opposition": "Warden",
-		"tagline": "Break brute force with iron poise and punish windows.",
-		"lore": "The Bastion was forged from crushed vows at the pit rim. Every charge that would shatter lesser steel only sharpens their resolve. Where the Warden advances, the Bastion plants ground and breaks momentum.",
+		"tagline": "Hold your ground, absorb pressure, and answer with decisive counters.",
+		"lore": "Bastion is the teammate who stabilizes the fight when things get messy. They thrive in close pressure, absorb heavy pushes, and create safe windows for the squad to reset. Against the Warden, Bastion's job is simple: stop momentum and make every overcommit costly.",
 		"arcana_pool_key": "bastion",
 		"passive_id": "iron_retort",
 		"stat_modifiers": {
@@ -34,8 +34,8 @@ const CHARACTER_DEFINITIONS := {
 		"name": "Hexweaver",
 		"archetype": "Fracture Mage",
 		"boss_opposition": "Sovereign",
-		"tagline": "Unmake control fields with volatile sigils and burst timing.",
-		"lore": "Hexweavers read the abyss as grammar, then overwrite its rules. They fracture gravitational prisons and turn rigid patterns into openings. The Sovereign commands order; the Hexweaver answers with collapse.",
+		"tagline": "Break enemy setups with burst windows and smart area control.",
+		"lore": "Hexweaver is all about control and timing. They reshape crowded fights, crack open defensive formations, and punish enemies that rely on fixed patterns. When the Sovereign tries to lock down space, Hexweaver turns that control back into opportunity.",
 		"arcana_pool_key": "hexweaver",
 		"passive_id": "sigil_burst",
 		"stat_modifiers": {
@@ -60,8 +60,8 @@ const CHARACTER_DEFINITIONS := {
 		"name": "Veilstrider",
 		"archetype": "Riftbound Blade",
 		"boss_opposition": "Lacuna",
-		"tagline": "Dictate tempo through execution pressure and precise disengage.",
-		"lore": "Veilstriders walk the seam between heartbeat and silence. They do not win by force but by ending turns before they begin. Where Lacuna claims the missing beat between breaths, the Veilstrider exists to sever that silence and reclaim tempo.",
+		"tagline": "Set the pace with clean engages, fast exits, and precise finishers.",
+		"lore": "Veilstrider rewards sharp decision-making. They dart in for high-value hits, disengage before retaliation, and keep encounters moving on their terms. Lacuna challenges that rhythm by denying clean timing, so mastering Veilstrider means staying composed under disrupted tempo.",
 		"arcana_pool_key": "veilstrider",
 		"passive_id": "veilstep_rhythm",
 		"stat_modifiers": {
@@ -85,8 +85,8 @@ const CHARACTER_DEFINITIONS := {
 		"name": "Riftlancer",
 		"archetype": "Farline Harpoon",
 		"boss_opposition": "Mirror Hunt",
-		"tagline": "Skewer from the seam where distance becomes certainty.",
-		"lore": "Riftlancers bind abyssal anchors to a single line, then force the world to answer through that seam. They do not brawl for ground; they draft kill corridors and punish any step into them. Where Mirror Hunt multiplies false targets and punishes linear commitment, the Riftlancer survives by mastering one true lane and breaking the reflection before it closes.",
+		"tagline": "Control distance, hold your angle, and punish anyone crossing your lane.",
+		"lore": "Riftlancer shines when positioning is deliberate. They create strong firing lanes, pressure from range, and force enemies to take bad paths. Mirror Hunt tries to overwhelm that focus with decoys and cross pressure, so Riftlancer play is about discipline: hold the true line and commit at the right moment.",
 		"design_lanes": {
 			"survivability": "Stabilize by maintaining farline spacing and denying contact collapse.",
 			"expression": "Pre-aim lane control and strike only when enemies enter the precision band.",
