@@ -201,6 +201,12 @@ func _create_multiplayer_room() -> void:
 		push_error("[Menu] MultiplayerRoomService autoload is missing")
 		return
 	
+	## Ensure any previous session is cleaned up before creating a new one
+	if multiplayer_session_manager.session_connected:
+		print("[Menu] WARNING: Previous session still connected. Cleaning up before creating new lobby...")
+		multiplayer_session_manager.leave_room()
+		await get_tree().process_frame  ## Wait one frame for cleanup
+	
 	## Show "Creating..." status
 	if multiplayer_status_label != null:
 		multiplayer_status_label.text = "Creating host session..."
@@ -255,6 +261,13 @@ func _join_multiplayer_room(room_code: String) -> void:
 	var multiplayer_room_service = get_node_or_null("/root/MultiplayerRoomService")
 	if multiplayer_join_button != null:
 		multiplayer_join_button.disabled = true
+	
+	## Ensure any previous session is cleaned up before joining a new one
+	if multiplayer_session_manager != null and multiplayer_session_manager.session_connected:
+		print("[Menu] WARNING: Previous session still connected. Cleaning up before joining new room...")
+		multiplayer_session_manager.leave_room()
+		await get_tree().process_frame  ## Wait one frame for cleanup
+	
 	if multiplayer_session_manager == null:
 		push_error("[Menu] MultiplayerSessionManager autoload is missing")
 		if multiplayer_join_button != null:

@@ -54,6 +54,8 @@ var _peer_timeout_timers: Dictionary = {}  ## peer_id -> Timer node
 var _client_ping_elapsed_sec: float = 0.0
 var _host_room_heartbeat_elapsed_sec: float = 0.0
 var _room_heartbeat_in_flight: bool = false
+var _room_heartbeat_failure_count: int = 0
+var _room_heartbeat_retry_timer: float = 0.0
 var _join: JoinAttemptState = JoinAttemptState.new()
 var _upnp_mapped_port: int = 0
 var _last_host_connectivity_warning: String = ""
@@ -112,14 +114,25 @@ func _process(delta: float) -> void:
 func _process_host_room_heartbeat(delta: float) -> void:
 	if not session_connected or not is_host_peer:
 		return
-	if room_code.is_empty() or _room_heartbeat_in_flight:
+	if room_code.is_empty():
 		return
 
-	_host_room_heartbeat_elapsed_sec += delta
-	if _host_room_heartbeat_elapsed_sec < room_heartbeat_interval_sec:
+	if _room_heartbeat_in_flight:
 		return
 
-	_host_room_heartbeat_elapsed_sec = 0.0
+	## Handle retry timer for failed heartbeats: attempt retry after 5 seconds
+	if _room_heartbeat_failure_count > 0:
+		_room_heartbeat_retry_timer += delta
+		if _room_heartbeat_retry_timer < 5.0:
+			return
+		_room_heartbeat_retry_timer = 0.0
+		_debug_log("[SESSION_MGR] Retrying failed room heartbeat (failure count: %d)" % _room_heartbeat_failure_count)
+	else:
+		_host_room_heartbeat_elapsed_sec += delta
+		if _host_room_heartbeat_elapsed_sec < room_heartbeat_interval_sec:
+			return
+		_host_room_heartbeat_elapsed_sec = 0.0
+
 	_room_heartbeat_in_flight = true
 	_send_room_heartbeat()
 
@@ -128,16 +141,29 @@ func _send_room_heartbeat() -> void:
 	var room_service = get_node_or_null("/root/MultiplayerRoomService")
 	if room_service == null or not room_service.has_method("heartbeat_room_registration"):
 		_room_heartbeat_in_flight = false
+		_room_heartbeat_failure_count += 1
 		return
 
 	var heartbeat_result: Dictionary = await room_service.heartbeat_room_registration(room_code)
 	if not bool(heartbeat_result.get("ok", false)):
+		_room_heartbeat_failure_count += 1
+		var error_msg := String(heartbeat_result.get("message", "unknown_error"))
 		_debug_log(
-			"[SESSION_MGR] Room heartbeat failed for %s: %s" % [
+			"[SESSION_MGR] Room heartbeat FAILED for %s (attempt %d): %s" % [
 				room_code,
-				String(heartbeat_result.get("message", "unknown_error"))
+				_room_heartbeat_failure_count,
+				error_msg
 			]
 		)
+		print("[MultiplayerSessionManager] WARNING: Room heartbeat failed - players may not be able to join. Error: %s" % error_msg)
+		if _room_heartbeat_failure_count >= 3:
+			print("[MultiplayerSessionManager] CRITICAL: Room heartbeat failing repeatedly. Check network connection and room registry endpoint.")
+	else:
+		if _room_heartbeat_failure_count > 0:
+			_debug_log("[SESSION_MGR] Room heartbeat recovered after %d failures" % _room_heartbeat_failure_count)
+			print("[MultiplayerSessionManager] Room heartbeat recovered - players can join again.")
+		_room_heartbeat_failure_count = 0
+
 	_room_heartbeat_in_flight = false
 
 
@@ -183,6 +209,8 @@ func create_registered_room(room_registration: Dictionary) -> bool:
 	var transport_type := String(room_registration.get("transport_type", "direct_enet"))
 	print("[MultiplayerSessionManager] Attempting to create host server on port %d with transport: %s" % [host_port, transport_type])
 	_last_host_connectivity_warning = ""
+	_room_heartbeat_failure_count = 0
+	_room_heartbeat_retry_timer = 0.0
 	
 	if transport_type != "direct_enet":
 		var msg = "Unsupported transport type: %s" % transport_type
@@ -275,6 +303,8 @@ func leave_room() -> void:
 	_client_ping_elapsed_sec = 0.0
 	_host_room_heartbeat_elapsed_sec = 0.0
 	_room_heartbeat_in_flight = false
+	_room_heartbeat_failure_count = 0
+	_room_heartbeat_retry_timer = 0.0
 	_join.reset()
 	_release_upnp_port_mapping()
 	
@@ -289,6 +319,26 @@ func leave_room() -> void:
 
 func get_last_host_connectivity_warning() -> String:
 	return _last_host_connectivity_warning
+
+
+func get_host_room_heartbeat_status() -> Dictionary:
+	return {
+		"is_connected": session_connected,
+		"is_host": is_host_peer,
+		"failure_count": _room_heartbeat_failure_count,
+		"is_healthy": _room_heartbeat_failure_count == 0,
+		"warning_message": _get_heartbeat_warning_message()
+	}
+
+
+func _get_heartbeat_warning_message() -> String:
+	if _room_heartbeat_failure_count == 0:
+		return ""
+	if _room_heartbeat_failure_count == 1:
+		return "⚠ Room registration unstable (1 failed heartbeat) - may affect joinability"
+	if _room_heartbeat_failure_count < 3:
+		return "⚠ Room registration at risk (%d failed heartbeats) - players may not be able to join" % _room_heartbeat_failure_count
+	return "❌ Room registration critical (%d failed heartbeats) - room is likely unreachable. Check internet connection and room registry endpoint." % _room_heartbeat_failure_count
 
 
 func get_connection_state_debug() -> String:
@@ -325,8 +375,12 @@ func get_host_diagnostic_report() -> String:
 	report += "Public IP (registered): %s\n" % _host_public_ip
 	report += "UPnP discovery result: %d (0=SUCCESS, 1=ERROR, 2=NOT_IMPLEM)\n" % _upnp_discovery_result
 	report += "UPnP mapped port: %d\n" % _upnp_mapped_port
+	report += "Room heartbeat failures: %d\n" % _room_heartbeat_failure_count
 	if not _last_host_connectivity_warning.is_empty():
 		report += "Connectivity warning: %s\n" % _last_host_connectivity_warning
+	var hb_warning := _get_heartbeat_warning_message()
+	if not hb_warning.is_empty():
+		report += "Heartbeat status: %s\n" % hb_warning
 	return report
 
 

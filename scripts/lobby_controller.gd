@@ -75,6 +75,8 @@ func _ready() -> void:
 	
 	## Ready button
 	ready_button.pressed.connect(_on_ready_button_pressed)
+	ready_button.disabled = false  ## Ensure ready button is enabled
+	ready_button.text = "READY"  ## Reset ready button text
 	leave_lobby_button.pressed.connect(_on_leave_lobby_pressed)
 	print("[Lobby] Leave button connected to _on_leave_lobby_pressed")
 	
@@ -88,6 +90,7 @@ func _ready() -> void:
 	
 	## Initialize local peer state
 	local_character_id = available_characters[0] if not available_characters.is_empty() else "bastion"
+	local_is_ready = false  ## Reset ready state when re-entering lobby
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context != null and run_context.has_method("get_profile_name_or_default"):
 		local_player_name = String(run_context.get_profile_name_or_default()).strip_edges()
@@ -98,6 +101,9 @@ func _ready() -> void:
 	
 	## HOST: Query existing connected peers from MultiplayerSessionManager
 	if bool(multiplayer_session_manager.is_host()):
+		## Clear any stale peer state from the previous session
+		peer_state.clear()
+		_ensure_local_peer_state(local_character_id)
 		var existing_peers = multiplayer_session_manager.get_peer_ids()
 		print("[Lobby] HOST: Querying existing peers from manager: %s" % [str(existing_peers)])
 		for peer_id in existing_peers:
