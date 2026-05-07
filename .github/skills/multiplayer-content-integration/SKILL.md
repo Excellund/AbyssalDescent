@@ -1,3 +1,8 @@
+---
+name: multiplayer-content-integration
+description: Multiplayer content sync and validation guardrails for Godot co-op integration tasks.
+---
+
 # Multiplayer Content Integration
 
 **When to use**: Adding new arcana, encounters, characters, or difficulty tuning to the codebase when multiplayer mode exists. Ensures content stays automatically synced across singleplayer and co-op without manual divergence.

@@ -24,11 +24,11 @@ var _action_buttons
 var _timeline_visible: bool = true
 var _input_delay_left: float = 0.0
 
-func show_result(result_title: String, subtitle: String, summary: Dictionary, defeat_theme: bool = false) -> void:
+func show_result(result_title: String, subtitle: String, summary: Dictionary, defeat_theme: bool = false, allow_retry_run: bool = true) -> void:
 	if _layer == null:
 		_build_ui()
 	_apply_theme(defeat_theme)
-	_fill_summary(result_title, subtitle, summary)
+	_fill_summary(result_title, subtitle, summary, allow_retry_run)
 	_input_delay_left = 0.2
 	_layer.visible = true
 	_root.modulate = Color(1.0, 1.0, 1.0, 0.0)
@@ -175,7 +175,7 @@ func _apply_theme(defeat_theme: bool) -> void:
 		flat.bg_color = Color(0.05, 0.08, 0.13, 0.96)
 	_card.add_theme_stylebox_override("panel", flat)
 
-func _fill_summary(result_title: String, subtitle: String, summary: Dictionary) -> void:
+func _fill_summary(result_title: String, subtitle: String, summary: Dictionary, allow_retry_run: bool) -> void:
 	_title_label.text = result_title
 	_title_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.78, 1.0) if result_title == "Victory" else Color(1.0, 0.76, 0.72, 1.0))
 	_subtitle_label.text = subtitle
@@ -195,6 +195,7 @@ func _fill_summary(result_title: String, subtitle: String, summary: Dictionary) 
 	_reward_panel.set_progression(summary.get("unlocks", []) as Array, summary.get("reward_timeline", []) as Array)
 	_reward_panel.set_timeline_visible(_timeline_visible)
 	_action_buttons.set_timeline_expanded(_timeline_visible)
+	_action_buttons.set_retry_visible(allow_retry_run)
 
 func _toggle_timeline() -> void:
 	_timeline_visible = not _timeline_visible

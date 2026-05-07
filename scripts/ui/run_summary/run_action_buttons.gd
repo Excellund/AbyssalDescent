@@ -6,6 +6,7 @@ signal retry_run_pressed
 signal toggle_timeline_pressed
 
 var _timeline_button: Button
+var _retry_button: Button
 
 func _init() -> void:
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -18,11 +19,11 @@ func _init() -> void:
 	)
 	add_child(menu_button)
 
-	var retry_button := _make_button("Retry Run")
-	retry_button.pressed.connect(func() -> void:
+	_retry_button = _make_button("Retry Run")
+	_retry_button.pressed.connect(func() -> void:
 		retry_run_pressed.emit()
 	)
-	add_child(retry_button)
+	add_child(_retry_button)
 
 	_timeline_button = _make_button("Build Timeline")
 	_timeline_button.pressed.connect(func() -> void:
@@ -32,6 +33,11 @@ func _init() -> void:
 
 func set_timeline_expanded(expanded: bool) -> void:
 	_timeline_button.text = "Hide Timeline" if expanded else "Build Timeline"
+
+func set_retry_visible(visible: bool) -> void:
+	if _retry_button == null:
+		return
+	_retry_button.visible = visible
 
 func _make_button(label: String) -> Button:
 	var button := Button.new()

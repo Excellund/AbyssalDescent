@@ -1817,7 +1817,7 @@ func _resolve_attack_hit(enemy_body: Node2D, hit_position: Vector2, base_damage:
 	if absf(final_damage_mult - 1.0) > 0.0001:
 		final_damage = maxi(1, int(round(float(final_damage) * final_damage_mult)))
 	_apply_hunters_snare(enemy_body)
-	DAMAGEABLE.apply_damage(enemy_body, final_damage)
+	DAMAGEABLE.apply_damage(enemy_body, final_damage, {"attack_type": source})
 	if passive_sigil_burst and sigil_burst_ready and not bool(sigil_burst_state.get("fired", false)):
 		sigil_burst_ready = false
 		sigil_burst_state["fired"] = true

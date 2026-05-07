@@ -1,5 +1,7 @@
 extends RefCounted
 
+const STAT_ATTRIBUTION_TRACE := false
+
 # Shared helper to enforce the take_damage contract consistently.
 static func can_take_damage(target: Object) -> bool:
 	return is_instance_valid(target)
@@ -46,6 +48,11 @@ static func _report_enemy_damage_applied(target: Object, health_before: int) -> 
 	var applied_amount := maxi(0, health_before - health_after)
 	if applied_amount <= 0:
 		return
+	var killed_enemy := health_before > 0 and health_after <= 0
+	var source_peer_id := _resolve_local_peer_id()
+	var enemy_id := 0
+	if target_node.has_meta("network_enemy_id"):
+		enemy_id = int(target_node.get_meta("network_enemy_id"))
 	var scene_tree := Engine.get_main_loop() as SceneTree
 	if scene_tree == null:
 		return
@@ -53,7 +60,20 @@ static func _report_enemy_damage_applied(target: Object, health_before: int) -> 
 	if world == null:
 		return
 	if world.has_method("record_player_damage_dealt"):
-		world.call("record_player_damage_dealt", applied_amount)
+		if STAT_ATTRIBUTION_TRACE:
+			print_debug("[StatAttribution][LocalApply] peer=%d enemy_id=%d applied=%d killed=%s" % [source_peer_id, enemy_id, applied_amount, str(killed_enemy)])
+		world.call("record_player_damage_dealt", applied_amount, source_peer_id, killed_enemy, enemy_id)
+
+
+static func _resolve_local_peer_id() -> int:
+	var scene_tree := Engine.get_main_loop() as SceneTree
+	if scene_tree != null and scene_tree.get_multiplayer() != null:
+		var active_peer_id := int(scene_tree.get_multiplayer().get_unique_id())
+		if active_peer_id > 0:
+			return active_peer_id
+	if MultiplayerSessionManager != null and MultiplayerSessionManager.is_session_connected():
+		return int(MultiplayerSessionManager.local_peer_id)
+	return 0
 
 
 static func _should_route_enemy_damage_to_host(target: Object) -> bool:
@@ -66,7 +86,9 @@ static func _should_route_enemy_damage_to_host(target: Object) -> bool:
 	var target_node := target as Node
 	if target_node == null:
 		return false
-	return target_node.is_in_group("enemies")
+	if not target_node.has_meta("network_enemy_id"):
+		return false
+	return true
 
 
 static func _route_enemy_damage_to_host(target: Object, amount: int, damage_context: Dictionary) -> void:
@@ -77,6 +99,10 @@ static func _route_enemy_damage_to_host(target: Object, amount: int, damage_cont
 		return
 	if not target_node.has_meta("network_enemy_id"):
 		return
+	var routed_context := damage_context.duplicate(true)
+	var local_peer_id := _resolve_local_peer_id()
+	if local_peer_id > 0:
+		routed_context["source_peer_id"] = local_peer_id
 	var enemy_id := int(target_node.get_meta("network_enemy_id"))
 	if enemy_id <= 0:
 		return
@@ -87,4 +113,6 @@ static func _route_enemy_damage_to_host(target: Object, amount: int, damage_cont
 	if world == null:
 		return
 	if world.has_method("request_enemy_damage_from_client"):
-		world.call("request_enemy_damage_from_client", enemy_id, amount, damage_context)
+		if STAT_ATTRIBUTION_TRACE:
+			print_debug("[StatAttribution][RouteToHost] peer=%d enemy_id=%d amount=%d attack=%s" % [local_peer_id, enemy_id, amount, String(routed_context.get("attack_type", "unknown"))])
+		world.call("request_enemy_damage_from_client", enemy_id, amount, routed_context)

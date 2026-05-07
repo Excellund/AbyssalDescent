@@ -8,7 +8,7 @@ const RUN_RESULTS_SCREEN_SCRIPT := preload("res://scripts/ui/run_summary/run_res
 
 var _results_screen
 
-func show_victory(_rooms_cleared: int, unlocked_tier: int = -1, run_summary: Dictionary = {}) -> void:
+func show_victory(_rooms_cleared: int, unlocked_tier: int = -1, run_summary: Dictionary = {}, allow_retry_run: bool = true) -> void:
 	if _results_screen == null:
 		_results_screen = RUN_RESULTS_SCREEN_SCRIPT.new()
 		add_child(_results_screen)
@@ -27,7 +27,7 @@ func show_victory(_rooms_cleared: int, unlocked_tier: int = -1, run_summary: Dic
 		if not unlocks.has(unlock_text):
 			unlocks.append(unlock_text)
 		summary["unlocks"] = unlocks
-	_results_screen.show_result("Victory", "Lacuna is defeated. The way back is clear.", summary, false)
+	_results_screen.show_result("Victory", "Lacuna is defeated. The way back is clear.", summary, false, allow_retry_run)
 
 func is_open() -> bool:
 	return _results_screen != null and bool(_results_screen.is_open())
