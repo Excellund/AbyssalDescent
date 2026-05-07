@@ -1635,10 +1635,10 @@ func _apply_synced_objective_spawn_batch_payload(payload: Dictionary) -> void:
 	active_room_enemy_count = synced_enemy_count
 
 func _flush_pending_client_objective_spawn_syncs() -> void:
-	if _world_multiplayer_sync_state.pending_objective_spawn_sync_payloads.is_empty():
+	if not _world_multiplayer_sync_state.has_pending_objective_spawn_sync_payloads():
 		return
 	var remaining_payloads: Array[Dictionary] = []
-	for payload in _world_multiplayer_sync_state.pending_objective_spawn_sync_payloads:
+	for payload in _world_multiplayer_sync_state.get_pending_objective_spawn_sync_payloads():
 		if not _can_apply_client_spawn_sync(payload):
 			var source_room_sync_id := int(payload.get("room_sync_id", 0))
 			if source_room_sync_id > 0 and source_room_sync_id < _world_multiplayer_sync_state.current_room_sync_id:
@@ -1646,7 +1646,7 @@ func _flush_pending_client_objective_spawn_syncs() -> void:
 			remaining_payloads.append(payload)
 			continue
 		_apply_synced_objective_spawn_batch_payload(payload)
-	_world_multiplayer_sync_state.pending_objective_spawn_sync_payloads = remaining_payloads
+	_world_multiplayer_sync_state.set_pending_objective_spawn_sync_payloads(remaining_payloads)
 
 func _is_current_room_boss_stage(boss_stage: int) -> bool:
 	match boss_stage:
@@ -2516,7 +2516,7 @@ func _sync_objective_spawn_batch(spawn_batch: Array, synced_enemy_count: int, so
 		"room_sync_id": source_room_sync_id
 	}
 	if not _can_apply_client_spawn_sync(payload):
-		_world_multiplayer_sync_state.pending_objective_spawn_sync_payloads.append(payload)
+		_world_multiplayer_sync_state.enqueue_pending_objective_spawn_sync_payload(payload)
 		return
 	_apply_synced_objective_spawn_batch_payload(payload)
 
@@ -2552,7 +2552,7 @@ func _sync_objective_cleared() -> void:
 	_world_multiplayer_sync_state.mark_objective_cleared_for_current_room()
 	if is_instance_valid(objective_manager):
 		objective_manager.reset()
-	_world_multiplayer_sync_state.pending_objective_spawn_sync_payloads.clear()
+	_world_multiplayer_sync_state.clear_pending_objective_spawn_sync_payloads()
 	_clear_all_enemies()
 	active_room_enemy_count = 0
 	queue_redraw()

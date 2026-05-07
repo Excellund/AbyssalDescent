@@ -101,3 +101,18 @@ func mark_current_room_clear_processed() -> void:
 
 func mark_objective_cleared_for_current_room() -> void:
 	last_objective_cleared_room_sync_id = current_room_sync_id
+
+func has_pending_objective_spawn_sync_payloads() -> bool:
+	return not pending_objective_spawn_sync_payloads.is_empty()
+
+func get_pending_objective_spawn_sync_payloads() -> Array[Dictionary]:
+	return pending_objective_spawn_sync_payloads
+
+func set_pending_objective_spawn_sync_payloads(payloads: Array[Dictionary]) -> void:
+	pending_objective_spawn_sync_payloads = payloads
+
+func enqueue_pending_objective_spawn_sync_payload(payload: Dictionary) -> void:
+	pending_objective_spawn_sync_payloads.append(payload)
+
+func clear_pending_objective_spawn_sync_payloads() -> void:
+	pending_objective_spawn_sync_payloads.clear()
