@@ -51,3 +51,44 @@ for update
 to anon
 using (true)
 with check (true);
+
+drop function if exists public.cleanup_unused_multiplayer_rooms(integer, integer);
+create or replace function public.cleanup_unused_multiplayer_rooms(
+	p_closed_hours integer default 24,
+	p_stale_open_minutes integer default 45
+)
+returns table(closed_deleted bigint, stale_open_deleted bigint, total_deleted bigint)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+	v_closed_deleted bigint := 0;
+	v_stale_open_deleted bigint := 0;
+begin
+	with deleted_closed as (
+		delete from public.multiplayer_rooms
+		where status = 'closed'
+			and updated_at < timezone('utc', now()) - make_interval(hours => greatest(p_closed_hours, 1))
+		returning room_code
+	)
+	select count(*) into v_closed_deleted from deleted_closed;
+
+	with deleted_open as (
+		delete from public.multiplayer_rooms
+		where status = 'open'
+			and updated_at < timezone('utc', now()) - make_interval(mins => greatest(p_stale_open_minutes, 5))
+		returning room_code
+	)
+	select count(*) into v_stale_open_deleted from deleted_open;
+
+	return query
+	select
+		v_closed_deleted,
+		v_stale_open_deleted,
+		v_closed_deleted + v_stale_open_deleted;
+end;
+$$;
+
+revoke all on function public.cleanup_unused_multiplayer_rooms(integer, integer) from public;
+grant execute on function public.cleanup_unused_multiplayer_rooms(integer, integer) to service_role;

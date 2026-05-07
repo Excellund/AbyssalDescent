@@ -1,0 +1,43 @@
+name: Cleanup Multiplayer Rooms
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+    inputs:
+      closed_hours:
+        description: "Delete closed rooms older than this many hours"
+        required: false
+        default: "24"
+      stale_open_minutes:
+        description: "Delete open rooms with no heartbeat older than this many minutes"
+        required: false
+        default: "45"
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: https://aizoebowshcnqvuizava.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets['SUPABASE_SERVICE_ROLE_KEY'] }}
+      CLOSED_HOURS: ${{ github.event.inputs.closed_hours || '24' }}
+      STALE_OPEN_MINUTES: ${{ github.event.inputs.stale_open_minutes || '45' }}
+    steps:
+      - name: Validate required secrets
+        run: |
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "Missing secret: SUPABASE_SERVICE_ROLE_KEY"
+            exit 1
+          fi
+
+      - name: Execute multiplayer room cleanup RPC
+        run: |
+          echo "Running cleanup with CLOSED_HOURS=$CLOSED_HOURS STALE_OPEN_MINUTES=$STALE_OPEN_MINUTES"
+          RESPONSE=$(curl --fail-with-body --silent --show-error \
+            -X POST "$SUPABASE_URL/rest/v1/rpc/cleanup_unused_multiplayer_rooms" \
+            -H "Content-Type: application/json" \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Prefer: return=representation" \
+            -d "{\"p_closed_hours\": $CLOSED_HOURS, \"p_stale_open_minutes\": $STALE_OPEN_MINUTES}")
+          echo "Cleanup response: $RESPONSE"

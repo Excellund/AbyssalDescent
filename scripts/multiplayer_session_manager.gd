@@ -27,6 +27,7 @@ var disconnect_timeout_sec: float = 30.0
 var ping_interval_sec: float = 1.0
 var join_attempt_timeout_sec: float = 120.0
 var local_join_attempt_timeout_sec: float = 120.0
+var room_heartbeat_interval_sec: float = 20.0
 
 ## State for a single in-progress join attempt sequence.
 class JoinAttemptState:
@@ -51,6 +52,8 @@ class JoinAttemptState:
 var _multiplayer: MultiplayerAPI
 var _peer_timeout_timers: Dictionary = {}  ## peer_id -> Timer node
 var _client_ping_elapsed_sec: float = 0.0
+var _host_room_heartbeat_elapsed_sec: float = 0.0
+var _room_heartbeat_in_flight: bool = false
 var _join: JoinAttemptState = JoinAttemptState.new()
 var _upnp_mapped_port: int = 0
 var _last_host_connectivity_warning: String = ""
@@ -88,8 +91,13 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if not session_connected or is_host_peer:
+	if not session_connected:
 		return
+
+	if is_host_peer:
+		_process_host_room_heartbeat(delta)
+		return
+
 	if not _is_client_connected_to_host():
 		return
 
@@ -99,6 +107,38 @@ func _process(delta: float) -> void:
 
 	_client_ping_elapsed_sec = 0.0
 	_network_ping.rpc_id(HOST_PEER_ID)
+
+
+func _process_host_room_heartbeat(delta: float) -> void:
+	if not session_connected or not is_host_peer:
+		return
+	if room_code.is_empty() or _room_heartbeat_in_flight:
+		return
+
+	_host_room_heartbeat_elapsed_sec += delta
+	if _host_room_heartbeat_elapsed_sec < room_heartbeat_interval_sec:
+		return
+
+	_host_room_heartbeat_elapsed_sec = 0.0
+	_room_heartbeat_in_flight = true
+	_send_room_heartbeat()
+
+
+func _send_room_heartbeat() -> void:
+	var room_service = get_node_or_null("/root/MultiplayerRoomService")
+	if room_service == null or not room_service.has_method("heartbeat_room_registration"):
+		_room_heartbeat_in_flight = false
+		return
+
+	var heartbeat_result: Dictionary = await room_service.heartbeat_room_registration(room_code)
+	if not bool(heartbeat_result.get("ok", false)):
+		_debug_log(
+			"[SESSION_MGR] Room heartbeat failed for %s: %s" % [
+				room_code,
+				String(heartbeat_result.get("message", "unknown_error"))
+			]
+		)
+	_room_heartbeat_in_flight = false
 
 
 ## Check if ENet client is actually connected to host (for diagnostics)
@@ -233,6 +273,8 @@ func leave_room() -> void:
 	_peer_timeout_timers.clear()
 	connected_peers.clear()
 	_client_ping_elapsed_sec = 0.0
+	_host_room_heartbeat_elapsed_sec = 0.0
+	_room_heartbeat_in_flight = false
 	_join.reset()
 	_release_upnp_port_mapping()
 	

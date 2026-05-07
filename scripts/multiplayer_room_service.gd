@@ -125,6 +125,45 @@ func close_room_registration(room_code: String) -> void:
 	var url := "%s?room_code=eq.%s" % [endpoint, normalized_room_code]
 	await _perform_request(url, _build_headers(false), HTTPClient.METHOD_PATCH, JSON.stringify({"status": "closed"}))
 
+func heartbeat_room_registration(room_code: String) -> Dictionary:
+	var normalized_room_code := room_code.strip_edges().to_upper()
+	if normalized_room_code.is_empty():
+		return {
+			"ok": false,
+			"message": "Room code is required.",
+			"error_kind": "missing_room_code"
+		}
+	var endpoint := _room_registry_endpoint()
+	if endpoint.is_empty():
+		return {
+			"ok": false,
+			"message": "Room registry endpoint is not configured.",
+			"error_kind": "missing_endpoint"
+		}
+	if _room_registry_api_key().is_empty():
+		return {
+			"ok": false,
+			"message": "Room registry API key is not configured.",
+			"error_kind": "missing_api_key"
+		}
+
+	var url := "%s?room_code=eq.%s&status=eq.open" % [endpoint, normalized_room_code]
+	var request_result := await _perform_request(
+		url,
+		_build_headers(false),
+		HTTPClient.METHOD_PATCH,
+		JSON.stringify({"status": "open"})
+	)
+	if not bool(request_result.get("ok", false)):
+		request_result["error_kind"] = String(request_result.get("error_kind", "room_registry_heartbeat_failed"))
+		return request_result
+
+	return {
+		"ok": true,
+		"message": "Room heartbeat recorded.",
+		"room_code": normalized_room_code
+	}
+
 func _discover_public_ip() -> Dictionary:
 	var lookup_url := String(ProjectSettings.get_setting(PUBLIC_IP_LOOKUP_URL_SETTING, DEFAULT_PUBLIC_IP_LOOKUP_URL)).strip_edges()
 	if lookup_url.is_empty():
