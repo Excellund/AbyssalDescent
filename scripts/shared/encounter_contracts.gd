@@ -446,24 +446,12 @@ static func _derive_display_labels() -> Dictionary:
 
 # ===== END ENCOUNTER REGISTRY =====
 
-static func _door_kind_from_legacy(value: String) -> int:
-	match value.to_lower():
-		"boss":
-			return DOOR_KIND_BOSS
-		"rest":
-			return DOOR_KIND_REST
-		_:
-			return DOOR_KIND_ENCOUNTER
-
-static func normalize_door_kind(value: Variant) -> int:
-	if value is int:
-		var kind_int := int(value)
-		if kind_int == DOOR_KIND_BOSS:
-			return DOOR_KIND_BOSS
-		if kind_int == DOOR_KIND_REST:
-			return DOOR_KIND_REST
-		return DOOR_KIND_ENCOUNTER
-	return _door_kind_from_legacy(String(value))
+static func _coerce_door_kind_id(kind_id: int) -> int:
+	if kind_id == DOOR_KIND_BOSS:
+		return DOOR_KIND_BOSS
+	if kind_id == DOOR_KIND_REST:
+		return DOOR_KIND_REST
+	return DOOR_KIND_ENCOUNTER
 
 static func _action_from_legacy(value: String) -> int:
 	match value.to_lower():
@@ -1060,12 +1048,11 @@ static func door_use_is_used(result: Dictionary) -> bool:
 static func door_use_get_door(result: Dictionary) -> Dictionary:
 	return result.get(KEY_DOOR, {}) as Dictionary
 
-static func door_option(label: String, color: Color, kind: Variant, icon: String, reward_mode: int, room_profile: Dictionary, encounter_key: String = "") -> Dictionary:
-	var kind_id := normalize_door_kind(kind)
+static func door_option(label: String, color: Color, kind_id: int, icon: String, reward_mode: int, room_profile: Dictionary, encounter_key: String = "") -> Dictionary:
 	return {
 		KEY_LABEL: label,
 		KEY_COLOR: color,
-		KEY_KIND_ID: kind_id,
+		KEY_KIND_ID: _coerce_door_kind_id(kind_id),
 		KEY_ICON: icon,
 		KEY_REWARD: normalize_reward_mode(reward_mode),
 		KEY_PROFILE: room_profile,
@@ -1190,7 +1177,7 @@ static func door_option_get_position(option: Dictionary) -> Vector2:
 	return option.get(KEY_POSITION, Vector2.ZERO) as Vector2
 
 static func door_option_kind_id(option: Dictionary) -> int:
-	return normalize_door_kind(option.get(KEY_KIND_ID, DOOR_KIND_ENCOUNTER))
+	return _coerce_door_kind_id(int(option.get(KEY_KIND_ID, DOOR_KIND_ENCOUNTER)))
 
 static func door_option_reward_mode(option: Dictionary) -> int:
 	return normalize_reward_mode(option.get(KEY_REWARD, ENUMS.RewardMode.NONE))
