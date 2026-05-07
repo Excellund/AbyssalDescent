@@ -403,18 +403,6 @@ func _apply_custom_network_runtime_state(_custom_state: Dictionary) -> void:
 	pass
 
 
-func _has_script_property(property_name: String) -> bool:
-	for property_variant in get_property_list():
-		if not (property_variant is Dictionary):
-			continue
-		var property := property_variant as Dictionary
-		if String(property.get("name", "")) != property_name:
-			continue
-		var usage := int(property.get("usage", 0))
-		return (usage & PROPERTY_USAGE_SCRIPT_VARIABLE) != 0
-	return false
-
-
 func _is_directional_property_name(property_name: String) -> bool:
 	var lowered := property_name.to_lower()
 	return lowered.findn("facing") >= 0 or lowered.findn("direction") >= 0
@@ -452,8 +440,6 @@ func _update_network_direction_targets(delta: float) -> void:
 	var blend_weight := clampf(delta * maxf(0.001, network_remote_direction_lerp_speed), 0.0, 1.0)
 	for property_variant in _network_direction_targets.keys():
 		var property_name := String(property_variant)
-		if not _has_script_property(property_name):
-			continue
 		var target_direction := _network_direction_targets.get(property_name, Vector2.ZERO) as Vector2
 		if target_direction.length_squared() <= 0.000001:
 			continue
