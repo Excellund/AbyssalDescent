@@ -578,6 +578,14 @@ func _find_local_player_node() -> Node2D:
 	return null
 
 
+func _find_local_owned_player_node() -> Node2D:
+	if is_instance_valid(player) and _is_local_control_owner(player):
+		return player
+	if is_instance_valid(second_player) and _is_local_control_owner(second_player):
+		return second_player
+	return _find_local_player_node()
+
+
 func _is_player_alive(player_node: Node) -> bool:
 	if player_node == null:
 		return false
@@ -3809,14 +3817,16 @@ func _build_skirmish_profile(depth: int) -> Dictionary:
 	return encounter_profile_builder.build_skirmish_profile(depth)
 
 func _get_active_player_mutators_for_hud() -> Array[Dictionary]:
-	if not is_instance_valid(player):
+	var local_player := _find_local_owned_player_node()
+	if not is_instance_valid(local_player):
 		return []
-	return player.get_active_objective_mutators() as Array[Dictionary]
+	return local_player.get_active_objective_mutators() as Array[Dictionary]
 
 func _get_active_enemy_mutators_for_room() -> Array[Dictionary]:
-	if not is_instance_valid(player):
+	var local_player := _find_local_owned_player_node()
+	if not is_instance_valid(local_player):
 		return []
-	return player.get_active_enemy_objective_mutators() as Array[Dictionary]
+	return local_player.get_active_enemy_objective_mutators() as Array[Dictionary]
 
 func _roll_route_options(route_context: Variant) -> Array[Dictionary]:
 	if not is_instance_valid(encounter_profile_builder):
@@ -3828,8 +3838,11 @@ func _open_boon_selection(title: String, is_initial: bool, mode: int = ENUMS.Rew
 		choosing_next_room = false
 		door_options.clear()
 	if is_instance_valid(reward_selection_ui):
+		var local_player := _find_local_owned_player_node()
+		if not is_instance_valid(local_player):
+			local_player = player
 		_begin_reward_phase_sync(is_initial, mode)
-		reward_selection_ui.open_selection(title, is_initial, mode, power_registry_instance, player, rng, player_mutator, epitaph, character_id)
+		reward_selection_ui.open_selection(title, is_initial, mode, power_registry_instance, local_player, rng, player_mutator, epitaph, character_id)
 		_set_combat_paused(true)
 
 func _open_networked_reward_selection(title: String, mode: int, player_mutator: Dictionary = {}, epitaph: String = "") -> void:
@@ -4539,9 +4552,10 @@ func _try_revive_fallen_multiplayer_players() -> void:
 	_bind_camera_to_local_player()
 
 func _apply_boon_to_player(boon_id: String) -> void:
-	if not is_instance_valid(player):
+	var local_player := _find_local_owned_player_node()
+	if not is_instance_valid(local_player):
 		return
-	player.apply_upgrade(boon_id)
+	local_player.apply_upgrade(boon_id)
 	_broadcast_local_player_build_snapshot()
 
 func _apply_mission_reward(choice: Dictionary) -> void:
@@ -4586,13 +4600,15 @@ func _roll_bonus_mission_boon(excluded_id: String) -> Dictionary:
 	return available[rng.randi_range(0, available.size() - 1)]
 
 func _apply_arcana_to_player(reward_id: String) -> void:
-	if not is_instance_valid(player):
+	var local_player := _find_local_owned_player_node()
+	if not is_instance_valid(local_player):
 		return
-	player.apply_trial_power(reward_id)
+	local_player.apply_trial_power(reward_id)
 	_broadcast_local_player_build_snapshot()
 
 func _apply_objective_mutator(choice: Dictionary) -> void:
-	if not is_instance_valid(player):
+	var local_player := _find_local_owned_player_node()
+	if not is_instance_valid(local_player):
 		return
 	var mutator_data := choice.get("full_data", {}) as Dictionary
 	if mutator_data.is_empty():
@@ -4600,7 +4616,7 @@ func _apply_objective_mutator(choice: Dictionary) -> void:
 	var applied_mutator := mutator_data.duplicate(true)
 	var duration := maxi(1, int(applied_mutator.get(ENCOUNTER_CONTRACTS.MUTATOR_KEY_DURATION_ENCOUNTERS, 3)))
 	applied_mutator[ENCOUNTER_CONTRACTS.MUTATOR_KEY_DURATION_ENCOUNTERS] = duration
-	player.apply_objective_mutator(applied_mutator)
+	local_player.apply_objective_mutator(applied_mutator)
 	_broadcast_local_player_build_snapshot()
 	var mutator_name := String(choice.get("name", "Objective Mutator"))
 	if is_instance_valid(hud):
@@ -4612,11 +4628,12 @@ func _set_combat_paused(paused: bool) -> void:
 func _broadcast_local_player_build_snapshot() -> void:
 	if not is_multiplayer:
 		return
-	if not is_instance_valid(player):
+	var local_player := _find_local_owned_player_node()
+	if not is_instance_valid(local_player):
 		return
-	if not player.has_method("broadcast_network_build_snapshot"):
+	if not local_player.has_method("broadcast_network_build_snapshot"):
 		return
-	player.broadcast_network_build_snapshot()
+	local_player.broadcast_network_build_snapshot()
 
 func _is_spawn_transport_active(enemy: Node) -> bool:
 	return bool(enemy.is_spawn_transporting())
