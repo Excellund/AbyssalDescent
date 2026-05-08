@@ -43,6 +43,9 @@ const VALIDATION_HARNESS_SCRIPT := preload("res://scripts/validation_harness.gd"
 const RUN_SESSION_SCRIPT := preload("res://scripts/core/run_session.gd")
 const RUN_SUMMARY_TRACKER_SCRIPT := preload("res://scripts/core/run_summary_tracker.gd")
 const RUN_SUMMARY_MODEL_SCRIPT := preload("res://scripts/core/run_summary_model.gd")
+const PLAYER_PROFILE_SCRIPT := preload("res://scripts/core/player_profile.gd")
+const PROFILE_PERSISTENCE_STORE_SCRIPT := preload("res://scripts/core/profile_persistence_store.gd")
+const RUN_SUMMARY_WITH_PROFILE_SCRIPT := preload("res://scripts/core/run_summary_with_profile.gd")
 const WORLD_BOOTSTRAP_COORDINATOR_SCRIPT := preload("res://scripts/core/world_bootstrap_coordinator.gd")
 const ENCOUNTER_ROUTE_CONTROLLER_SCRIPT := preload("res://scripts/core/encounter_route_controller.gd")
 const OBJECTIVE_LIFECYCLE_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_lifecycle_coordinator.gd")
@@ -208,6 +211,8 @@ var telemetry_spike_sender
 var telemetry_spike_requested: bool = false
 var run_session
 var run_summary_tracker
+var profile_persistence_store: RefCounted = null
+var current_player_profile: RefCounted = null
 var _summary_last_player_health: int = -1
 var _summary_last_player_health_by_peer: Dictionary = {}
 var _summary_stats_by_peer: Dictionary = {}
@@ -414,6 +419,8 @@ func _initialize_bootstrap_context() -> void:
 	run_session = RUN_SESSION_SCRIPT.new()
 	run_session.reset_for_new_run()
 	run_summary_tracker = RUN_SUMMARY_TRACKER_SCRIPT.new()
+	profile_persistence_store = PROFILE_PERSISTENCE_STORE_SCRIPT.new()
+	current_player_profile = profile_persistence_store.load_or_create_profile()
 	
 	## Detect multiplayer session
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
@@ -4372,6 +4379,9 @@ func _reset_run_summary_tracker() -> void:
 	if run_context != null:
 		tracker_seed["player_uuid"] = String(run_context.get_profile_uuid())
 		tracker_seed["player_name"] = String(run_context.get_profile_name_or_default())
+	if current_player_profile != null and current_player_profile.is_valid():
+		tracker_seed["player_uuid"] = current_player_profile.player_id
+		tracker_seed["player_name"] = current_player_profile.profile_name
 	run_summary_tracker.reset_for_run(tracker_seed)
 	_summary_last_player_health = int(player.get_current_health()) if is_instance_valid(player) and player.has_method("get_current_health") else -1
 	for player_node in _get_multiplayer_player_nodes():
@@ -4862,6 +4872,18 @@ func _show_victory_feedback(unlocked_tier: int, run_summary: Dictionary = {}) ->
 
 func _show_defeat_feedback(room_label: String, depth: int, run_summary: Dictionary = {}) -> void:
 	player_flow_coordinator.show_defeat_feedback(hud, defeat_screen, room_label, depth, run_summary, not is_multiplayer)
+
+func get_current_player_profile() -> RefCounted:
+	if current_player_profile != null and current_player_profile.is_valid():
+		return current_player_profile
+	if profile_persistence_store != null:
+		current_player_profile = profile_persistence_store.load_or_create_profile()
+		return current_player_profile
+	return null
+
+func wrap_summary_with_profile(summary: Dictionary) -> RefCounted:
+	var profile := get_current_player_profile()
+	return RUN_SUMMARY_WITH_PROFILE_SCRIPT.create(summary, profile)
 
 func _get_multiplayer_player_nodes() -> Array[Node2D]:
 	var nodes: Array[Node2D] = []

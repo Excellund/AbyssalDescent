@@ -34,10 +34,10 @@ func _init() -> void:
 func set_timeline_expanded(expanded: bool) -> void:
 	_timeline_button.text = "Hide Timeline" if expanded else "Build Timeline"
 
-func set_retry_visible(is_visible: bool) -> void:
+func set_retry_visible(should_show: bool) -> void:
 	if _retry_button == null:
 		return
-	_retry_button.visible = is_visible
+	_retry_button.visible = should_show
 
 func _make_button(label: String) -> Button:
 	var button := Button.new()
