@@ -258,9 +258,13 @@ func _show_detail(rec: Dictionary) -> void:
 
 	var boons := wrapped.get_boons_list()
 	var arcana := wrapped.get_arcana_list()
-	if not boons.is_empty() or not arcana.is_empty():
+	var boss_rewards := wrapped.get_boss_rewards_list()
+	if not boons.is_empty() or not arcana.is_empty() or not boss_rewards.is_empty():
 		_add_detail_separator()
 		_add_detail_label("Build", 15, Color(RARITY_RARE.r, RARITY_RARE.g, RARITY_RARE.b, 0.78), false)
+		for item in boss_rewards:
+			var d := item as Dictionary
+			_add_detail_label("◆ " + String(d.get("name", "")), 14, Color(RARITY_LEGENDARY.r, RARITY_LEGENDARY.g, RARITY_LEGENDARY.b, 0.94), false)
 		for item in arcana:
 			var d := item as Dictionary
 			_add_detail_label("\u2605 " + String(d.get("name", "")), 14, Color(RARITY_EPIC.r, RARITY_EPIC.g, RARITY_EPIC.b, 0.92), false)
