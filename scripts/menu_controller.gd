@@ -14,6 +14,7 @@ const UPDATE_SERVICE_SCRIPT := preload("res://scripts/update_service.gd")
 const BUILD_INFO := preload("res://scripts/build_info.gd")
 const PROFILE_PERSISTENCE_STORE_SCRIPT := preload("res://scripts/core/profile_persistence_store.gd")
 const PROFILE_NAME_ENTRY_MODAL_SCRIPT := preload("res://scripts/ui/profile/profile_name_entry_modal.gd")
+const RUN_HISTORY_PANEL_SCRIPT := preload("res://scripts/ui/run_history/run_history_panel.gd")
 const LOBBY_SCENE_PATH := "res://scenes/Lobby.tscn"
 const DEV_ARG_LOCAL_HOST := "--mp-dev-host"
 const DEV_ARG_LOCAL_JOIN := "--mp-dev-join"
@@ -56,6 +57,7 @@ const MULTIPLAYER_JOIN_CAP_SEC := 120.0
 var root_panel: Panel
 var options_panel: Panel
 var glossary_panel: Panel
+var history_panel: Panel
 var multiplayer_panel: Panel
 var difficulty_selector_panel: Panel
 var character_selector_panel: Panel
@@ -526,6 +528,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		_show_root_panel()
 		get_viewport().set_input_as_handled()
 		return
+	if event.is_action_pressed("ui_cancel") and history_panel != null and history_panel.visible:
+		_show_root_panel()
+		get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("ui_cancel") and glossary_panel != null and glossary_panel.visible:
 		_show_root_panel()
 		get_viewport().set_input_as_handled()
@@ -644,6 +650,10 @@ func _build_ui() -> void:
 	profile_button.pressed.connect(_on_edit_profile_name_pressed)
 	actions.add_child(profile_button)
 
+	var history_button := _make_menu_button("Run History")
+	history_button.pressed.connect(_on_history_pressed)
+	actions.add_child(history_button)
+
 	var glossary_button := _make_menu_button("Glossary")
 	glossary_button.pressed.connect(_on_glossary_pressed)
 	actions.add_child(glossary_button)
@@ -674,6 +684,10 @@ func _build_ui() -> void:
 	glossary_panel = _build_glossary_panel()
 	glossary_panel.visible = false
 	add_child(glossary_panel)
+
+	history_panel = _build_history_panel()
+	history_panel.visible = false
+	add_child(history_panel)
 
 	multiplayer_panel = _build_multiplayer_panel()
 	multiplayer_panel.visible = false
@@ -715,6 +729,8 @@ func _apply_menu_layout() -> void:
 		_set_centered_panel_layout(root_panel, Vector2(980.0, 640.0), fit_scale, viewport_size)
 	if options_panel != null:
 		_set_centered_panel_layout(options_panel, Vector2(760.0, 700.0), fit_scale, viewport_size)
+	if history_panel != null:
+		_set_centered_panel_layout(history_panel, Vector2(980.0, 680.0), fit_scale, viewport_size)
 	if glossary_panel != null:
 		_set_centered_panel_layout(glossary_panel, Vector2(980.0, 680.0), fit_scale, viewport_size)
 	if multiplayer_panel != null:
@@ -891,7 +907,7 @@ func _pick_random_quote(quotes: Array) -> String:
 
 func _show_root_panel(animate: bool = true) -> void:
 	var from_panel := _current_replace_panel()
-	var closing_overlay := (options_panel != null and options_panel.visible) or (glossary_panel != null and glossary_panel.visible)
+	var closing_overlay := (options_panel != null and options_panel.visible) or (glossary_panel != null and glossary_panel.visible) or (history_panel != null and history_panel.visible)
 	if root_panel != null:
 		root_panel.visible = true
 		if animate:
@@ -904,6 +920,11 @@ func _show_root_panel(animate: bool = true) -> void:
 			_animate_panel_out(options_panel, Vector2(0.0, -12.0))
 		else:
 			options_panel.visible = false
+	if history_panel != null:
+		if history_panel.visible:
+			_animate_panel_out(history_panel, Vector2(0.0, -12.0))
+		else:
+			history_panel.visible = false
 	if glossary_panel != null:
 		if glossary_panel.visible:
 			_animate_panel_out(glossary_panel, Vector2(0.0, -12.0))
@@ -934,6 +955,8 @@ func _show_options_panel() -> void:
 			_animate_panel_out(glossary_panel, Vector2(0.0, -10.0))
 		else:
 			glossary_panel.visible = false
+	if history_panel != null:
+		history_panel.visible = false
 	if multiplayer_panel != null:
 		multiplayer_panel.visible = false
 	if difficulty_selector_panel != null:
@@ -954,6 +977,8 @@ func _show_glossary_panel() -> void:
 	if glossary_panel != null:
 		glossary_panel.visible = true
 		_animate_panel_in(glossary_panel, Vector2(0.0, 14.0))
+	if history_panel != null:
+		history_panel.visible = false
 	if multiplayer_panel != null:
 		multiplayer_panel.visible = false
 	if difficulty_selector_panel != null:
@@ -1325,7 +1350,7 @@ func _animate_panel_out(panel: Control, offset: Vector2, duration: float = 0.16)
 	tween.tween_property(panel, "modulate:a", 0.0, duration)
 	tween.tween_property(panel, "position", start_position + offset, duration).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 	tween.finished.connect(func() -> void:
-		if panel == null:
+		if not is_instance_valid(panel):
 			return
 		panel.visible = false
 		panel.position = start_position
@@ -2031,6 +2056,9 @@ func _on_options_pressed() -> void:
 func _on_glossary_pressed() -> void:
 	_show_glossary_panel()
 
+func _on_history_pressed() -> void:
+	_show_history_panel()
+
 func _on_multiplayer_pressed() -> void:
 	_show_multiplayer_panel()
 
@@ -2078,6 +2106,35 @@ func _format_multiplayer_room_error(result: Dictionary, is_host_flow: bool) -> S
 
 func _on_exit_pressed() -> void:
 	get_tree().quit()
+
+func _build_history_panel() -> Panel:
+	var panel: Panel = RUN_HISTORY_PANEL_SCRIPT.new() as Panel
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.position = Vector2(-490.0, -340.0)
+	panel.custom_minimum_size = Vector2(980.0, 680.0)
+	panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.04, 0.06, 0.1, 0.97), Color(0.44, 0.7, 0.96, 0.74), 20, 2))
+	panel._build_ui(self)
+	panel.back_pressed.connect(_show_root_panel)
+	return panel
+
+func _show_history_panel() -> void:
+	if root_panel != null and history_panel != null:
+		_animate_replace_transition(root_panel, history_panel, Vector2(0.0, 24.0), Vector2(0.0, -18.0))
+	elif root_panel != null:
+		root_panel.visible = false
+	if options_panel != null:
+		options_panel.visible = false
+	if glossary_panel != null:
+		glossary_panel.visible = false
+	if multiplayer_panel != null:
+		multiplayer_panel.visible = false
+	if difficulty_selector_panel != null:
+		difficulty_selector_panel.visible = false
+	if character_selector_panel != null:
+		character_selector_panel.visible = false
+	if history_panel != null:
+		if history_panel.has_method("populate"):
+			history_panel.populate()
 
 func _build_glossary_panel() -> Panel:
 	var panel := Panel.new()

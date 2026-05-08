@@ -74,6 +74,8 @@ func _build_ui() -> void:
 
 	_panel_container = PanelContainer.new()
 	_panel_container.custom_minimum_size = Vector2(680.0, 0.0)
+	_panel_container.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_panel_container.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var panel_style := StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.05, 0.08, 0.12, 0.97)
 	panel_style.border_color = Color(0.44, 0.70, 0.96, 0.74)

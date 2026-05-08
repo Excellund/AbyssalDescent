@@ -46,6 +46,7 @@ const RUN_SUMMARY_MODEL_SCRIPT := preload("res://scripts/core/run_summary_model.
 const PLAYER_PROFILE_SCRIPT := preload("res://scripts/core/player_profile.gd")
 const PROFILE_PERSISTENCE_STORE_SCRIPT := preload("res://scripts/core/profile_persistence_store.gd")
 const RUN_SUMMARY_WITH_PROFILE_SCRIPT := preload("res://scripts/core/run_summary_with_profile.gd")
+const RUN_HISTORY_STORE_SCRIPT := preload("res://scripts/core/run_history_store.gd")
 const WORLD_BOOTSTRAP_COORDINATOR_SCRIPT := preload("res://scripts/core/world_bootstrap_coordinator.gd")
 const ENCOUNTER_ROUTE_CONTROLLER_SCRIPT := preload("res://scripts/core/encounter_route_controller.gd")
 const OBJECTIVE_LIFECYCLE_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_lifecycle_coordinator.gd")
@@ -4453,9 +4454,17 @@ func _finish_active_run_telemetry(outcome: String, death_event: Dictionary = {})
 			"death_event": death_copy,
 		})
 		tracker_summary["build_ids"] = build_ids
-		var local_peer_stats := _summary_stats_by_peer.get(_resolve_local_peer_id(), {}) as Dictionary
-		if not local_peer_stats.is_empty():
-			tracker_summary["stats"] = local_peer_stats.duplicate(true)
+		if is_multiplayer:
+			var local_peer_id := _resolve_local_peer_id()
+			var local_peer_stats := _summary_stats_by_peer.get(local_peer_id, {}) as Dictionary
+			if local_peer_stats.is_empty():
+				local_peer_stats = _summary_stats_by_peer.get(str(local_peer_id), {}) as Dictionary
+			if not local_peer_stats.is_empty():
+				var merged_stats := (tracker_summary.get("stats", {}) as Dictionary).duplicate(true)
+				for key_variant in local_peer_stats.keys():
+					var stat_key := String(key_variant)
+					merged_stats[stat_key] = int(local_peer_stats.get(key_variant, merged_stats.get(stat_key, 0)))
+				tracker_summary["stats"] = merged_stats
 		latest_run_summary = tracker_summary
 		summary["stats"] = (tracker_summary.get("stats", {}) as Dictionary).duplicate(true)
 		summary["build_summary"] = (tracker_summary.get("build_summary", {}) as Dictionary).duplicate(true)
@@ -4465,15 +4474,19 @@ func _finish_active_run_telemetry(outcome: String, death_event: Dictionary = {})
 		summary["timestamp_text"] = String(tracker_summary.get("timestamp_text", ""))
 	_latest_peer_summary_overrides = _build_peer_summary_overrides()
 	if not _can_record_telemetry():
+		if not telemetry_run_finished:
+			RUN_HISTORY_STORE_SCRIPT.append(latest_run_summary)
+			telemetry_run_finished = true
 		return
 	RUN_TELEMETRY_STORE.finish_run(telemetry_run_id, outcome, summary)
 	latest_run_summary = RUN_TELEMETRY_STORE.build_run_summary(telemetry_run_id, latest_run_summary)
+	RUN_HISTORY_STORE_SCRIPT.append(latest_run_summary)
+	telemetry_run_finished = true
 	var run_context := _get_run_context()
 	if run_context != null:
 		var upload_payload := RUN_TELEMETRY_STORE.build_upload_payload(telemetry_run_id)
 		if not upload_payload.is_empty():
 			run_context.enqueue_telemetry_payload(upload_payload)
-	telemetry_run_finished = true
 
 func _build_peer_summary_overrides() -> Dictionary:
 	var overrides := {}
@@ -4740,24 +4753,24 @@ func _on_player_health_changed_for_summary(current_health: int, _max_health: int
 		return
 	var tracked_player := player_node as Node2D
 	var peer_id := _get_player_network_id(tracked_player)
-	if peer_id <= 0:
-		return
-	var last_health := int(_summary_last_player_health_by_peer.get(peer_id, -1))
+	var health_key := maxi(peer_id, 0)
+	var last_health := int(_summary_last_player_health_by_peer.get(health_key, -1))
 	if last_health < 0:
-		_summary_last_player_health_by_peer[peer_id] = current_health
+		_summary_last_player_health_by_peer[health_key] = current_health
 		return
 	var health_loss := last_health - current_health
 	if health_loss > 0:
 		run_summary_tracker.record_damage_taken(health_loss)
-		var stats := _summary_stats_by_peer.get(peer_id, {
-			"damage_dealt_total": 0,
-			"damage_taken_total": 0,
-			"enemies_killed": 0,
-			"bosses_defeated": 0,
-		}) as Dictionary
-		stats["damage_taken_total"] = int(stats.get("damage_taken_total", 0)) + health_loss
-		_summary_stats_by_peer[peer_id] = stats
-	_summary_last_player_health_by_peer[peer_id] = current_health
+		if peer_id > 0:
+			var stats := _summary_stats_by_peer.get(peer_id, {
+				"damage_dealt_total": 0,
+				"damage_taken_total": 0,
+				"enemies_killed": 0,
+				"bosses_defeated": 0,
+			}) as Dictionary
+			stats["damage_taken_total"] = int(stats.get("damage_taken_total", 0)) + health_loss
+			_summary_stats_by_peer[peer_id] = stats
+	_summary_last_player_health_by_peer[health_key] = current_health
 
 func _reconcile_summary_damage_taken_to_player_health() -> void:
 	if run_summary_tracker == null:
