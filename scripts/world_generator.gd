@@ -3897,6 +3897,8 @@ func _open_boon_selection(title: String, is_initial: bool, mode: int = ENUMS.Rew
 	if is_initial:
 		choosing_next_room = false
 		door_options.clear()
+	if not is_initial:
+		_clear_enemy_lingering_effects()
 	if is_instance_valid(reward_selection_ui):
 		var local_player := _find_local_owned_player_node()
 		if not is_instance_valid(local_player):
