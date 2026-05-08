@@ -149,12 +149,17 @@ with entries as (
   from pg_temp._latest_version_runs r,
        jsonb_to_recordset(r.room_entries) as e(
          unix_time bigint,
+         room_started_at_unix bigint,
+         room_ended_at_unix bigint,
+         room_duration_seconds int,
          room_kind text,
          room_label text,
          bearing_key text,
          bearing_label text,
          enemy_mutator text,
          objective_kind text,
+         boss_id text,
+         boss_ttk_seconds int,
          room_depth int,
          rooms_cleared int
        )
@@ -201,6 +206,52 @@ from entries e
 full outer join damage d on d.encounter_key = e.encounter_key
 full outer join deaths x on x.encounter_key = coalesce(e.encounter_key, d.encounter_key)
 order by deaths_per_100_entries desc nulls last, damage_per_entry desc nulls last;
+
+-- 5b) Room duration and boss TTK by bearing
+-- ------------------------------------------------------------
+with room_metrics as (
+  select
+    r.difficulty_tier,
+    e.bearing_key,
+    nullif((e.room_duration_seconds)::int, 0) as room_duration_seconds,
+    nullif((e.boss_ttk_seconds)::int, 0) as boss_ttk_seconds,
+    e.boss_id
+  from pg_temp._latest_version_runs r,
+       jsonb_to_recordset(r.room_entries) as e(
+         unix_time bigint,
+         room_started_at_unix bigint,
+         room_ended_at_unix bigint,
+         room_duration_seconds int,
+         room_kind text,
+         room_label text,
+         bearing_key text,
+         bearing_label text,
+         enemy_mutator text,
+         objective_kind text,
+         boss_id text,
+         boss_ttk_seconds int,
+         room_depth int,
+         rooms_cleared int
+       )
+)
+select
+  case difficulty_tier
+    when 0 then 'Pilgrim'
+    when 1 then 'Delver'
+    when 2 then 'Harbinger'
+    when 3 then 'Forsworn'
+    else 'Unknown'
+  end as bearing,
+  coalesce(bearing_key, 'unknown') as encounter_key,
+  count(*) filter (where room_duration_seconds is not null) as rooms_with_duration,
+  round(avg(room_duration_seconds::numeric), 2) as avg_room_duration_seconds,
+  round(percentile_cont(0.5) within group (order by room_duration_seconds), 2) as median_room_duration_seconds,
+  count(*) filter (where boss_ttk_seconds is not null) as boss_samples,
+  round(avg(boss_ttk_seconds::numeric), 2) as avg_boss_ttk_seconds,
+  round(percentile_cont(0.5) within group (order by boss_ttk_seconds), 2) as median_boss_ttk_seconds
+from room_metrics
+group by difficulty_tier, bearing_key
+order by difficulty_tier, encounter_key;
 
 -- 6) Reward selection concentration (selection-frequency only)
 -- ------------------------------------------------------------
@@ -303,12 +354,17 @@ with room_objectives as (
   from pg_temp._latest_version_runs r,
        jsonb_to_recordset(r.room_entries) as e(
          unix_time bigint,
+         room_started_at_unix bigint,
+         room_ended_at_unix bigint,
+         room_duration_seconds int,
          room_kind text,
          room_label text,
          bearing_key text,
          bearing_label text,
          enemy_mutator text,
          objective_kind text,
+         boss_id text,
+         boss_ttk_seconds int,
          room_depth int,
          rooms_cleared int
        )

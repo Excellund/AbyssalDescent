@@ -89,14 +89,31 @@ room_path as (
     e.bearing_key                           as encounter_type,
     e.enemy_mutator,
     coalesce(e.objective_kind, 'none')      as objective_kind,
-    (e.rooms_cleared)::int                  as rooms_cleared_at_entry
+    (e.rooms_cleared)::int                  as rooms_cleared_at_entry,
+    (e.room_duration_seconds)::int          as room_duration_seconds,
+    e.boss_id,
+    (e.boss_ttk_seconds)::int               as boss_ttk_seconds
   from latest,
        jsonb_to_recordset(latest.room_entries)
          as e(room_label text, bearing_key text, bearing_label text,
               enemy_mutator text, objective_kind text,
-              room_depth int, rooms_cleared int)
+              room_depth int, rooms_cleared int,
+              room_duration_seconds int, boss_id text, boss_ttk_seconds int)
   order by rooms_cleared_at_entry, depth
 ),
+
+-- ── 5b. Duration + Boss TTK ────────────────────────────────
+duration_metrics as (
+  select
+    count(*) filter (where coalesce((e.room_duration_seconds)::int, 0) > 0) as rooms_with_duration,
+    round(avg(nullif((e.room_duration_seconds)::int, 0)::numeric), 2) as avg_room_duration_seconds,
+    round(percentile_cont(0.5) within group (order by nullif((e.room_duration_seconds)::int, 0)), 2) as median_room_duration_seconds,
+    round(avg(nullif((e.boss_ttk_seconds)::int, 0)::numeric), 2) as avg_boss_ttk_seconds,
+    round(percentile_cont(0.5) within group (order by nullif((e.boss_ttk_seconds)::int, 0)), 2) as median_boss_ttk_seconds
+  from latest,
+       jsonb_to_recordset(latest.room_entries)
+         as e(room_duration_seconds int, boss_ttk_seconds int)
+)
 
 -- ── 6. Door choices ──────────────────────────────────────────
 doors as (
@@ -149,6 +166,9 @@ select * from header;
 
 -- 5. Room path
 -- select * from room_path;
+
+-- 5b. Duration + Boss TTK
+-- select * from duration_metrics;
 
 -- 6. Door choices
 -- select * from doors;

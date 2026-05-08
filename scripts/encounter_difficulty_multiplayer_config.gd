@@ -21,6 +21,8 @@ const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
 static var BEARING_DEFINITIONS := {
 	BEARING_ENUMS.BearingTier.PILGRIM: {
 		# === BASE (from singleplayer) ===
+		"name": DIFFICULTY_CONFIG.get_tier_config(BEARING_ENUMS.BearingTier.PILGRIM).get("name", "Pilgrim"),
+		"description": DIFFICULTY_CONFIG.get_tier_config(BEARING_ENUMS.BearingTier.PILGRIM).get("description", ""),
 		"bearing_key": "Pilgrim",
 		"encounter_count_before_boss": DIFFICULTY_CONFIG.get_base_encounter_count_before_boss(),
 		"difficulty_rank": 0,
@@ -36,13 +38,26 @@ static var BEARING_DEFINITIONS := {
 		"specialist_enemy_tether_offset": 10,
 		"mutator_frequency_mult": 0.4,  ## Fewer mutators
 		"trial_encounter_frequency_mult": 0.5,  ## Fewer trials
+		"mutator_damage_mult": 0.8,
+		"boss_difficulty_mult": 0.75,
 		"player_health_mult": 1.0,
+		"player_starting_health_bonus": 35.0,
 		"player_damage_taken_mult": 0.78,  ## Co-op player damage reduction
+		"enemy_contact_damage_mult": 1.0,
 		"player_damage_dealt_mult": 1.0,
-		"player_heal_mult": 1.0
+		"player_heal_mult": 1.0,
+		"rest_heal_ratio_mult": 1.25,
+		"coop_enemy_health_per_extra_player": 0.56,
+		"coop_enemy_health_curve_power": 0.9,
+		"coop_enemy_health_max_mult": 2.5,
+		"coop_boss_health_per_extra_player": 1.0,
+		"coop_boss_health_curve_power": 0.92,
+		"coop_boss_health_max_mult": 3.4
 	},
 	BEARING_ENUMS.BearingTier.DELVER: {
 		# === BASE (from singleplayer) ===
+		"name": DIFFICULTY_CONFIG.get_tier_config(BEARING_ENUMS.BearingTier.DELVER).get("name", "Delver"),
+		"description": DIFFICULTY_CONFIG.get_tier_config(BEARING_ENUMS.BearingTier.DELVER).get("description", ""),
 		"bearing_key": "Delver",
 		"encounter_count_before_boss": DIFFICULTY_CONFIG.get_base_encounter_count_before_boss(),
 		"difficulty_rank": 1,
@@ -58,13 +73,26 @@ static var BEARING_DEFINITIONS := {
 		"specialist_enemy_tether_offset": 9,
 		"mutator_frequency_mult": 0.7,
 		"trial_encounter_frequency_mult": 0.7,
+		"mutator_damage_mult": 1.0,
+		"boss_difficulty_mult": 1.0,
 		"player_health_mult": 1.0,
+		"player_starting_health_bonus": 0.0,
 		"player_damage_taken_mult": 1.0,
+		"enemy_contact_damage_mult": 0.94,
 		"player_damage_dealt_mult": 1.0,
-		"player_heal_mult": 1.0
+		"player_heal_mult": 1.0,
+		"rest_heal_ratio_mult": 1.0,
+		"coop_enemy_health_per_extra_player": 0.62,
+		"coop_enemy_health_curve_power": 0.92,
+		"coop_enemy_health_max_mult": 2.7,
+		"coop_boss_health_per_extra_player": 1.08,
+		"coop_boss_health_curve_power": 0.95,
+		"coop_boss_health_max_mult": 3.7
 	},
 	BEARING_ENUMS.BearingTier.HARBINGER: {
 		# === BASE (from singleplayer) ===
+		"name": DIFFICULTY_CONFIG.get_tier_config(BEARING_ENUMS.BearingTier.HARBINGER).get("name", "Harbinger"),
+		"description": DIFFICULTY_CONFIG.get_tier_config(BEARING_ENUMS.BearingTier.HARBINGER).get("description", ""),
 		"bearing_key": "Harbinger",
 		"encounter_count_before_boss": DIFFICULTY_CONFIG.get_base_encounter_count_before_boss(),
 		"difficulty_rank": 2,
@@ -80,13 +108,26 @@ static var BEARING_DEFINITIONS := {
 		"specialist_enemy_tether_offset": 8,
 		"mutator_frequency_mult": 1.0,
 		"trial_encounter_frequency_mult": 1.0,
+		"mutator_damage_mult": 1.1,
+		"boss_difficulty_mult": 1.15,
 		"player_health_mult": 1.0,
+		"player_starting_health_bonus": 0.0,
 		"player_damage_taken_mult": 1.15,
+		"enemy_contact_damage_mult": 0.94,
 		"player_damage_dealt_mult": 1.0,
-		"player_heal_mult": 1.0
+		"player_heal_mult": 1.0,
+		"rest_heal_ratio_mult": 1.0,
+		"coop_enemy_health_per_extra_player": 0.68,
+		"coop_enemy_health_curve_power": 0.95,
+		"coop_enemy_health_max_mult": 2.9,
+		"coop_boss_health_per_extra_player": 1.18,
+		"coop_boss_health_curve_power": 0.98,
+		"coop_boss_health_max_mult": 4.0
 	},
 	BEARING_ENUMS.BearingTier.FORSWORN: {
 		# === BASE (from singleplayer) ===
+		"name": DIFFICULTY_CONFIG.get_tier_config(BEARING_ENUMS.BearingTier.FORSWORN).get("name", "Forsworn"),
+		"description": DIFFICULTY_CONFIG.get_tier_config(BEARING_ENUMS.BearingTier.FORSWORN).get("description", ""),
 		"bearing_key": "Forsworn",
 		"encounter_count_before_boss": DIFFICULTY_CONFIG.get_base_encounter_count_before_boss(),
 		"difficulty_rank": 3,
@@ -102,10 +143,21 @@ static var BEARING_DEFINITIONS := {
 		"specialist_enemy_tether_offset": 7,
 		"mutator_frequency_mult": 1.35,
 		"trial_encounter_frequency_mult": 1.35,
+		"mutator_damage_mult": 1.25,
+		"boss_difficulty_mult": 1.3,
 		"player_health_mult": 1.0,
+		"player_starting_health_bonus": 0.0,
 		"player_damage_taken_mult": 1.35,
+		"enemy_contact_damage_mult": 0.94,
 		"player_damage_dealt_mult": 1.0,
-		"player_heal_mult": 1.0
+		"player_heal_mult": 1.0,
+		"rest_heal_ratio_mult": 1.0,
+		"coop_enemy_health_per_extra_player": 0.74,
+		"coop_enemy_health_curve_power": 0.98,
+		"coop_enemy_health_max_mult": 3.1,
+		"coop_boss_health_per_extra_player": 1.28,
+		"coop_boss_health_curve_power": 1.0,
+		"coop_boss_health_max_mult": 4.3
 	}
 }
 

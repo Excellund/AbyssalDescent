@@ -172,8 +172,74 @@ static func append_reward_choice(run_id: String, event_data: Dictionary) -> void
 static func append_reward_offers(run_id: String, event_data: Dictionary) -> void:
 	_append_run_event(run_id, "reward_offers", event_data, 220)
 
+static func _boss_id_from_room_entry(room_entry: Dictionary) -> String:
+	var room_kind := String(room_entry.get("room_kind", "")).strip_edges().to_lower()
+	if room_kind == "warden" or room_kind == "sovereign" or room_kind == "lacuna":
+		return room_kind
+	var bearing_key := String(room_entry.get("bearing_key", "")).strip_edges().to_lower()
+	if bearing_key == "warden" or bearing_key == "sovereign" or bearing_key == "lacuna":
+		return bearing_key
+	return ""
+
+static func _close_room_entry_if_open(room_entry: Dictionary, closed_at_unix: int) -> Dictionary:
+	var updated := room_entry.duplicate(true)
+	if int(updated.get("room_ended_at_unix", 0)) > 0:
+		return updated
+	var started_at_unix := int(updated.get("room_started_at_unix", updated.get("unix_time", 0)))
+	if started_at_unix <= 0:
+		started_at_unix = closed_at_unix
+	updated["room_started_at_unix"] = started_at_unix
+	var resolved_closed_at_unix := maxi(started_at_unix, closed_at_unix)
+	updated["room_ended_at_unix"] = resolved_closed_at_unix
+	var room_duration_seconds := maxi(0, resolved_closed_at_unix - started_at_unix)
+	updated["room_duration_seconds"] = room_duration_seconds
+	var boss_id := _boss_id_from_room_entry(updated)
+	if not boss_id.is_empty():
+		updated["boss_id"] = boss_id
+		updated["boss_ttk_seconds"] = room_duration_seconds
+	return updated
+
 static func append_room_entry(run_id: String, event_data: Dictionary) -> void:
-	_append_run_event(run_id, "room_entries", event_data, 220, true, true)
+	if run_id.is_empty():
+		return
+	_mutate_run_entry(run_id, func(run_entry: Dictionary) -> void:
+		var room_entries := run_entry.get("room_entries", []) as Array
+		var new_event := event_data.duplicate(true)
+		var room_started_at_unix := int(new_event.get("room_started_at_unix", new_event.get("unix_time", _now_unix())))
+		new_event["room_started_at_unix"] = room_started_at_unix
+		if not room_entries.is_empty():
+			var last_index := room_entries.size() - 1
+			var last_entry := room_entries[last_index] as Dictionary
+			room_entries[last_index] = _close_room_entry_if_open(last_entry, room_started_at_unix)
+		room_entries.append(new_event)
+		while room_entries.size() > 220:
+			room_entries.remove_at(0)
+		run_entry["room_entries"] = room_entries
+		run_entry["max_depth"] = maxi(int(run_entry.get("max_depth", 0)), int(new_event.get("room_depth", 0)))
+		run_entry["rooms_cleared"] = maxi(int(run_entry.get("rooms_cleared", 0)), int(new_event.get("rooms_cleared", 0)))
+	)
+
+static func finalize_last_room_entry(run_id: String, event_data: Dictionary = {}) -> void:
+	if run_id.is_empty():
+		return
+	_mutate_run_entry(run_id, func(run_entry: Dictionary) -> void:
+		var room_entries := run_entry.get("room_entries", []) as Array
+		if room_entries.is_empty():
+			return
+		var last_index := room_entries.size() - 1
+		var updated_last := (room_entries[last_index] as Dictionary).duplicate(true)
+		var closed_at_unix := int(event_data.get("room_ended_at_unix", _now_unix()))
+		updated_last = _close_room_entry_if_open(updated_last, closed_at_unix)
+		for key_variant in event_data.keys():
+			var key := String(key_variant)
+			if key == "room_ended_at_unix":
+				continue
+			updated_last[key] = event_data[key_variant]
+		if updated_last.has("boss_id") and not updated_last.has("boss_ttk_seconds"):
+			updated_last["boss_ttk_seconds"] = int(updated_last.get("room_duration_seconds", 0))
+		room_entries[last_index] = updated_last
+		run_entry["room_entries"] = room_entries
+	)
 
 static func append_door_choice(run_id: String, event_data: Dictionary) -> void:
 	_append_run_event(run_id, "door_choices", event_data, 180)
@@ -189,6 +255,12 @@ static func finish_run(run_id: String, outcome: String, summary: Dictionary = {}
 	if run_id.is_empty():
 		return
 	_mutate_run_entry(run_id, func(run_entry: Dictionary) -> void:
+		var room_entries := run_entry.get("room_entries", []) as Array
+		if not room_entries.is_empty():
+			var last_index := room_entries.size() - 1
+			var last_entry := room_entries[last_index] as Dictionary
+			room_entries[last_index] = _close_room_entry_if_open(last_entry, _now_unix())
+			run_entry["room_entries"] = room_entries
 		run_entry["ended_at_unix"] = _now_unix()
 		run_entry["outcome"] = outcome
 		run_entry["max_depth"] = maxi(int(run_entry.get("max_depth", 0)), int(summary.get("max_depth", 0)))

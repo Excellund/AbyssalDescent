@@ -147,6 +147,7 @@ var rng := RandomNumberGenerator.new()
 var power_registry_instance: Node
 var current_difficulty_tier: int = 0
 var current_difficulty_config: Dictionary = {}
+var _multiplayer_difficulty_config = DIFFICULTY_CONFIG_MULTIPLAYER.new()
 var current_character_id: String = "bastion"
 
 var rooms_cleared: int = 0
@@ -726,6 +727,8 @@ func _setup_encounter_profile_builder_system() -> void:
 	encounter_profile_builder = ENCOUNTER_PROFILE_BUILDER_SCRIPT.new()
 	add_child(encounter_profile_builder)
 	encounter_profile_builder.initialize(rng)
+	if encounter_profile_builder.has_method("set_use_multiplayer_difficulty_config"):
+		encounter_profile_builder.call("set_use_multiplayer_difficulty_config", is_multiplayer)
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	var should_apply_difficulty := false
 	var difficulty_tier := current_difficulty_tier
@@ -2036,6 +2039,14 @@ func _on_room_cleared() -> void:
 		return
 	_end_combat_phase()
 	_try_revive_fallen_multiplayer_players()
+	var cleared_boss_id := _active_boss_id_for_telemetry()
+	if not cleared_boss_id.is_empty():
+		_close_active_room_telemetry({
+			"boss_id": cleared_boss_id,
+			"boss_cleared": true
+		})
+	else:
+		_close_active_room_telemetry()
 	if in_second_boss_room:
 		_world_multiplayer_sync_state.mark_current_room_clear_processed()
 		_finish_second_boss_clear()
@@ -2198,12 +2209,67 @@ func _finish_third_boss_clear() -> void:
 func _get_run_context() -> Node:
 	return get_node_or_null(RUN_CONTEXT_PATH)
 
+func _get_difficulty_config_provider() -> Object:
+	if is_multiplayer:
+		if _multiplayer_difficulty_config == null:
+			_multiplayer_difficulty_config = DIFFICULTY_CONFIG_MULTIPLAYER.new()
+		return _multiplayer_difficulty_config
+	return DIFFICULTY_CONFIG
+
+func _resolve_current_difficulty_config(tier: int) -> Dictionary:
+	var provider: Object = _get_difficulty_config_provider()
+	if provider != null and provider.has_method("get_tier_config"):
+		return provider.get_tier_config(tier)
+	return DIFFICULTY_CONFIG.get_tier_config(tier)
+
+func _get_multiplayer_party_size_for_scaling() -> int:
+	if not is_multiplayer:
+		return 1
+	if not MultiplayerSessionManager.is_session_connected():
+		return 1
+	var session_info := MultiplayerSessionManager.get_session_info() if MultiplayerSessionManager.has_method("get_session_info") else {}
+	var peer_count := int(session_info.get("connected_peer_count", 0))
+	if peer_count <= 0 and MultiplayerSessionManager.has_method("get_peer_ids"):
+		peer_count = (MultiplayerSessionManager.get_peer_ids() as Array).size()
+	if peer_count <= 0:
+		peer_count = _get_multiplayer_player_nodes().size()
+	return clampi(peer_count, 1, 4)
+
+func _get_multiplayer_health_scaling_mult(is_boss: bool) -> float:
+	var party_size := _get_multiplayer_party_size_for_scaling()
+	if party_size <= 1:
+		return 1.0
+	var per_extra_key := "coop_boss_health_per_extra_player" if is_boss else "coop_enemy_health_per_extra_player"
+	var curve_power_key := "coop_boss_health_curve_power" if is_boss else "coop_enemy_health_curve_power"
+	var cap_key := "coop_boss_health_max_mult" if is_boss else "coop_enemy_health_max_mult"
+	var per_extra := maxf(0.0, float(current_difficulty_config.get(per_extra_key, 0.0)))
+	if per_extra <= 0.0:
+		return 1.0
+	var curve_power := maxf(0.01, float(current_difficulty_config.get(curve_power_key, 1.0)))
+	var cap_mult := maxf(1.0, float(current_difficulty_config.get(cap_key, 4.0)))
+	var extras := float(party_size - 1)
+	var health_mult := 1.0 + per_extra * pow(extras, curve_power)
+	return clampf(health_mult, 1.0, cap_mult)
+
+func _build_multiplayer_enemy_durability_mutator() -> Dictionary:
+	if not is_multiplayer:
+		return {}
+	var health_mult := _get_multiplayer_health_scaling_mult(false)
+	if health_mult <= 1.001:
+		return {}
+	return {
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ID: "coop_durability_scaling",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME: "Co-op Fortification",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_TARGET_SCOPE: "enemy",
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_ENEMY_HEALTH_MULT: health_mult
+	}
+
 func _apply_difficulty_tier_bonuses(difficulty_tier: int) -> void:
 	if not is_instance_valid(player):
 		return
 	
 	current_difficulty_tier = difficulty_tier
-	current_difficulty_config = DIFFICULTY_CONFIG.get_tier_config(difficulty_tier)
+	current_difficulty_config = _resolve_current_difficulty_config(difficulty_tier)
 	var difficulty_config := current_difficulty_config
 	var encounter_target := int(difficulty_config.get("encounter_count_before_boss", encounter_count))
 	if encounter_target > 0:
@@ -2254,10 +2320,11 @@ func _apply_boss_difficulty_scaling(boss: CharacterBody2D) -> void:
 	if not is_instance_valid(boss):
 		return
 	var boss_mult := _get_boss_difficulty_mult()
-	if is_equal_approx(boss_mult, 1.0):
+	var boss_health_mult := boss_mult * _get_multiplayer_health_scaling_mult(true)
+	if is_equal_approx(boss_mult, 1.0) and is_equal_approx(boss_health_mult, 1.0):
 		return
 	var base_max_health: int = int(boss.get_max_health())
-	var scaled_max_health := maxi(1, int(round(float(base_max_health) * boss_mult)))
+	var scaled_max_health := maxi(1, int(round(float(base_max_health) * boss_health_mult)))
 	boss.set_max_health_and_current(scaled_max_health, scaled_max_health)
 	for damage_property in ["charge_damage", "nova_damage", "cleave_damage", "prism_damage", "gravity_damage", "echo_dash_damage", "orbital_lance_damage", "polar_shift_pull_inner_damage", "sever_damage", "null_ring_damage", "gap_damage", "echo_cross_damage", "seam_tick_damage"]:
 		if boss.get(damage_property) == null:
@@ -3883,10 +3950,16 @@ func _get_active_player_mutators_for_hud() -> Array[Dictionary]:
 	return local_player.get_active_objective_mutators() as Array[Dictionary]
 
 func _get_active_enemy_mutators_for_room() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
 	var local_player := _find_local_owned_player_node()
-	if not is_instance_valid(local_player):
-		return []
-	return local_player.get_active_enemy_objective_mutators() as Array[Dictionary]
+	if is_instance_valid(local_player):
+		var player_mutators := local_player.get_active_enemy_objective_mutators() as Array[Dictionary]
+		for mutator in player_mutators:
+			result.append((mutator as Dictionary).duplicate(true))
+	var coop_scaling_mutator := _build_multiplayer_enemy_durability_mutator()
+	if not coop_scaling_mutator.is_empty():
+		result.append(coop_scaling_mutator)
+	return result
 
 func _roll_route_options(route_context: Variant) -> Array[Dictionary]:
 	if not is_instance_valid(encounter_profile_builder):
@@ -4336,6 +4409,13 @@ func _mark_telemetry_debug_mode() -> void:
 
 func _finish_active_run_telemetry(outcome: String, death_event: Dictionary = {}) -> void:
 	var death_copy := death_event.duplicate(true)
+	var close_fields := {
+		"run_outcome": outcome
+	}
+	var active_boss_id := _active_boss_id_for_telemetry()
+	if not active_boss_id.is_empty():
+		close_fields["boss_id"] = active_boss_id
+	_close_active_room_telemetry(close_fields)
 	var active_powers := _get_active_player_powers()
 	var build_ids: Array[String] = []
 	for source_key in ["boons", "arcana", "boss_rewards"]:
@@ -4481,9 +4561,29 @@ func _bearing_key_from_profile(profile: Dictionary, fallback: String = "unknown"
 func _can_record_telemetry() -> bool:
 	return telemetry_enabled and not telemetry_run_id.is_empty() and not telemetry_run_finished
 
+func _active_boss_id_for_telemetry() -> String:
+	if in_third_boss_room:
+		return "lacuna"
+	if in_second_boss_room:
+		return "sovereign"
+	if in_boss_room:
+		return "warden"
+	return ""
+
+func _close_active_room_telemetry(extra_fields: Dictionary = {}) -> void:
+	if not _can_record_telemetry():
+		return
+	var event_data := {
+		"room_ended_at_unix": int(Time.get_unix_time_from_system())
+	}
+	for key_variant in extra_fields.keys():
+		event_data[key_variant] = extra_fields[key_variant]
+	RUN_TELEMETRY_STORE.finalize_last_room_entry(telemetry_run_id, event_data)
+
 func _record_room_entry(room_kind: String, profile: Dictionary) -> void:
 	if not _can_record_telemetry():
 		return
+	var started_at_unix := int(Time.get_unix_time_from_system())
 	var mutator_name := "none"
 	var objective_kind := ""
 	var bearing_label := current_room_label
@@ -4497,7 +4597,8 @@ func _record_room_entry(room_kind: String, profile: Dictionary) -> void:
 		bearing_label = ENCOUNTER_CONTRACTS.profile_label(profile)
 		bearing_key = _bearing_key_from_profile(profile, room_kind)
 	RUN_TELEMETRY_STORE.append_room_entry(telemetry_run_id, {
-		"unix_time": int(Time.get_unix_time_from_system()),
+		"unix_time": started_at_unix,
+		"room_started_at_unix": started_at_unix,
 		"room_kind": room_kind,
 		"room_label": current_room_label,
 		"bearing_key": bearing_key,

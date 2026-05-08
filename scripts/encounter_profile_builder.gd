@@ -5,11 +5,14 @@ const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const ENCOUNTER_DEFINITION_DATA := preload("res://scripts/shared/encounter_definition_data.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
+const DIFFICULTY_CONFIG_MULTIPLAYER := preload("res://scripts/encounter_difficulty_multiplayer_config.gd")
 const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
 
 var rng: RandomNumberGenerator
 var current_difficulty_tier: int = BEARING_ENUMS.BearingTier.DELVER
 var current_difficulty_config: Dictionary = DIFFICULTY_CONFIG.get_tier_config(BEARING_ENUMS.BearingTier.DELVER)
+var use_multiplayer_difficulty_config: bool = false
+var multiplayer_difficulty_config = DIFFICULTY_CONFIG_MULTIPLAYER.new()
 
 var room_base_size: Vector2 = Vector2(940.0, 700.0)
 var room_size_growth: Vector2 = Vector2(80.0, 45.0)
@@ -133,8 +136,21 @@ func set_difficulty_tier(tier: int) -> void:
 	current_difficulty_tier = tier
 	_refresh_difficulty_config()
 
+func set_use_multiplayer_difficulty_config(enabled: bool) -> void:
+	use_multiplayer_difficulty_config = enabled
+	_refresh_difficulty_config()
+
+func _get_difficulty_config_provider() -> Object:
+	if use_multiplayer_difficulty_config and multiplayer_difficulty_config != null:
+		return multiplayer_difficulty_config
+	return DIFFICULTY_CONFIG
+
 func _refresh_difficulty_config() -> void:
-	current_difficulty_config = DIFFICULTY_CONFIG.get_tier_config(current_difficulty_tier)
+	var provider: Object = _get_difficulty_config_provider()
+	if provider == null or not provider.has_method("get_tier_config"):
+		current_difficulty_config = DIFFICULTY_CONFIG.get_tier_config(current_difficulty_tier)
+		return
+	current_difficulty_config = provider.get_tier_config(current_difficulty_tier)
 
 func _difficulty_float(key: String, fallback: float = 1.0) -> float:
 	return float(current_difficulty_config.get(key, fallback))
