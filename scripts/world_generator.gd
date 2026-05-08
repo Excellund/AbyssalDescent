@@ -2157,6 +2157,7 @@ func _finish_first_boss_clear() -> void:
 	last_defeated_boss_id = "warden"
 	if run_summary_tracker != null:
 		run_summary_tracker.record_boss_defeat(last_defeated_boss_id)
+	_record_boss_defeat_for_summary_peers()
 	boss_reward_pending = true
 	hud.show_banner("Warden Defeated", "")
 	var epitaph: String = power_registry_instance.get_boss_epitaph("warden", current_character_id)
@@ -2176,6 +2177,7 @@ func _finish_second_boss_clear() -> void:
 	last_defeated_boss_id = "sovereign"
 	if run_summary_tracker != null:
 		run_summary_tracker.record_boss_defeat(last_defeated_boss_id)
+	_record_boss_defeat_for_summary_peers()
 	boss_reward_pending = true
 	hud.show_banner("Sovereign Defeated", "")
 	var epitaph: String = power_registry_instance.get_boss_epitaph("sovereign", current_character_id)
@@ -2192,6 +2194,7 @@ func _finish_third_boss_clear() -> void:
 	last_defeated_boss_id = "lacuna"
 	if run_summary_tracker != null:
 		run_summary_tracker.record_boss_defeat(last_defeated_boss_id)
+	_record_boss_defeat_for_summary_peers()
 	hud.show_banner("Run Complete", "")
 	var run_context := _get_run_context()
 	var unlocked_tier := -1
@@ -3164,6 +3167,26 @@ func _record_peer_enemy_kill(peer_id: int) -> void:
 	_summary_stats_by_peer[peer_id] = stats
 	if STAT_ATTRIBUTION_TRACE:
 		print_debug("[StatAttribution][KillCredit] peer=%d kills=%d" % [peer_id, int(stats.get("enemies_killed", 0))])
+
+func _record_boss_defeat_for_summary_peers() -> void:
+	var tracked_peer_ids: Dictionary = {}
+	for peer_id_variant in _summary_stats_by_peer.keys():
+		var peer_id := int(peer_id_variant)
+		if peer_id > 0:
+			tracked_peer_ids[peer_id] = true
+	for player_node in _get_multiplayer_player_nodes():
+		if not is_instance_valid(player_node):
+			continue
+		var peer_id := _get_player_network_id(player_node)
+		if peer_id > 0:
+			tracked_peer_ids[peer_id] = true
+	for peer_id_variant in tracked_peer_ids.keys():
+		var peer_id := int(peer_id_variant)
+		var stats := _ensure_peer_summary_stats(peer_id)
+		stats["bosses_defeated"] = int(stats.get("bosses_defeated", 0)) + 1
+		_summary_stats_by_peer[peer_id] = stats
+	if STAT_ATTRIBUTION_TRACE:
+		print_debug("[StatAttribution][BossCredit] peers=%s" % str(tracked_peer_ids.keys()))
 
 func _clear_all_enemies() -> void:
 	_network_enemy_nodes.clear()
