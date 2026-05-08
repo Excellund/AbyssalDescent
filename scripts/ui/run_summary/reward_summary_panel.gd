@@ -1,6 +1,11 @@
 extends VBoxContainer
 class_name RewardSummaryPanel
 
+const RARITY_COMMON := Color(0.62, 0.7, 0.8, 0.9)
+const RARITY_RARE := Color(0.46, 0.78, 1.0, 0.94)
+const RARITY_EPIC := Color(0.82, 0.58, 1.0, 0.96)
+const RARITY_LEGENDARY := Color(1.0, 0.74, 0.42, 1.0)
+
 var _unlocks_label: Label
 var _timeline_scroll: ScrollContainer
 var _timeline_list: VBoxContainer
@@ -13,13 +18,13 @@ func _init() -> void:
 	var title := Label.new()
 	title.text = "Progression"
 	title.add_theme_font_size_override("font_size", 22)
-	title.add_theme_color_override("font_color", Color(0.9, 0.96, 1.0, 0.98))
+	title.add_theme_color_override("font_color", RARITY_COMMON)
 	add_child(title)
 
 	_unlocks_label = Label.new()
 	_unlocks_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_unlocks_label.add_theme_font_size_override("font_size", 15)
-	_unlocks_label.add_theme_color_override("font_color", Color(0.84, 0.94, 1.0, 0.9))
+	_unlocks_label.add_theme_color_override("font_color", Color(RARITY_RARE.r, RARITY_RARE.g, RARITY_RARE.b, 0.9))
 	add_child(_unlocks_label)
 
 	_timeline_section = VBoxContainer.new()
@@ -30,7 +35,7 @@ func _init() -> void:
 	var timeline_title := Label.new()
 	timeline_title.text = "Build Timeline"
 	timeline_title.add_theme_font_size_override("font_size", 16)
-	timeline_title.add_theme_color_override("font_color", Color(0.72, 0.84, 0.98, 0.94))
+	timeline_title.add_theme_color_override("font_color", Color(RARITY_RARE.r, RARITY_RARE.g, RARITY_RARE.b, 0.94))
 	_timeline_section.add_child(timeline_title)
 
 	_timeline_scroll = ScrollContainer.new()
@@ -57,7 +62,7 @@ func set_progression(unlocks: Array, timeline: Array) -> void:
 		var empty := Label.new()
 		empty.text = "No timeline events recorded"
 		empty.add_theme_font_size_override("font_size", 13)
-		empty.add_theme_color_override("font_color", Color(0.62, 0.72, 0.84, 0.8))
+		empty.add_theme_color_override("font_color", Color(RARITY_COMMON.r, RARITY_COMMON.g, RARITY_COMMON.b, 0.82))
 		_timeline_list.add_child(empty)
 		return
 	var shown := 0
@@ -66,7 +71,7 @@ func set_progression(unlocks: Array, timeline: Array) -> void:
 		var entry := Label.new()
 		entry.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		entry.add_theme_font_size_override("font_size", 13)
-		entry.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 0.88))
+		entry.add_theme_color_override("font_color", Color(RARITY_COMMON.r, RARITY_COMMON.g, RARITY_COMMON.b, 0.9))
 		entry.text = "Depth %d · %s" % [int(event.get("depth", 0)), String(event.get("label", "Unknown"))]
 		_timeline_list.add_child(entry)
 		shown += 1

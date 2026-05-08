@@ -75,6 +75,10 @@ const BOON_LABEL_X := 52.0
 const MUTATOR_ICON_POS := Vector2(10.0, 10.0)
 const MUTATOR_ICON_SIZE := Vector2(32.0, 32.0)
 const MUTATOR_LABEL_X := 52.0
+const RARITY_COMMON := Color(0.62, 0.7, 0.8, 0.9)
+const RARITY_RARE := Color(0.46, 0.78, 1.0, 0.94)
+const RARITY_EPIC := Color(0.82, 0.58, 1.0, 0.96)
+const RARITY_LEGENDARY := Color(1.0, 0.74, 0.42, 1.0)
 
 func initialize(choice_count: int, reveal_duration: float) -> void:
 	boon_choice_count = choice_count
@@ -377,29 +381,29 @@ func _apply_mode_theme() -> void:
 	if boon_backdrop == null or boon_title_label == null:
 		return
 	if reward_selection_mode == ENUMS.RewardMode.ARCANA:
-		boon_backdrop.color = Color(0.05, 0.02, 0.01, 0.72)
-		boon_title_label.add_theme_color_override("font_color", Color(1.0, 0.9, 0.76, 1.0))
-		boon_title_label.add_theme_color_override("font_shadow_color", Color(0.08, 0.03, 0.01, 0.96))
+		boon_backdrop.color = Color(0.08, 0.04, 0.1, 0.72)
+		boon_title_label.add_theme_color_override("font_color", RARITY_EPIC)
+		boon_title_label.add_theme_color_override("font_shadow_color", Color(0.05, 0.02, 0.06, 0.96))
 		if boon_subtitle_label != null:
-			boon_subtitle_label.add_theme_color_override("font_color", Color(0.95, 0.78, 0.55, 0.65))
+			boon_subtitle_label.add_theme_color_override("font_color", Color(RARITY_EPIC.r, RARITY_EPIC.g, RARITY_EPIC.b, 0.72))
 	elif reward_selection_mode == ENUMS.RewardMode.MISSION:
-		boon_backdrop.color = Color(0.035, 0.03, 0.015, 0.7)
-		boon_title_label.add_theme_color_override("font_color", Color(1.0, 0.93, 0.76, 1.0))
-		boon_title_label.add_theme_color_override("font_shadow_color", Color(0.09, 0.06, 0.02, 0.95))
+		boon_backdrop.color = Color(0.03, 0.07, 0.1, 0.7)
+		boon_title_label.add_theme_color_override("font_color", RARITY_RARE)
+		boon_title_label.add_theme_color_override("font_shadow_color", Color(0.02, 0.04, 0.06, 0.95))
 		if boon_subtitle_label != null:
-			boon_subtitle_label.add_theme_color_override("font_color", Color(0.94, 0.82, 0.6, 0.7))
+			boon_subtitle_label.add_theme_color_override("font_color", Color(RARITY_RARE.r, RARITY_RARE.g, RARITY_RARE.b, 0.72))
 	elif reward_selection_mode == ENUMS.RewardMode.BOSS:
-		boon_backdrop.color = Color(0.04, 0.01, 0.06, 0.72)
-		boon_title_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.95, 1.0))
-		boon_title_label.add_theme_color_override("font_shadow_color", Color(0.08, 0.01, 0.08, 0.96))
+		boon_backdrop.color = Color(0.08, 0.04, 0.02, 0.72)
+		boon_title_label.add_theme_color_override("font_color", RARITY_LEGENDARY)
+		boon_title_label.add_theme_color_override("font_shadow_color", Color(0.08, 0.04, 0.01, 0.96))
 		if boon_subtitle_label != null:
-			boon_subtitle_label.add_theme_color_override("font_color", Color(0.92, 0.72, 0.98, 0.7))
+			boon_subtitle_label.add_theme_color_override("font_color", Color(RARITY_LEGENDARY.r, RARITY_LEGENDARY.g, RARITY_LEGENDARY.b, 0.72))
 	else:
 		boon_backdrop.color = Color(0.01, 0.02, 0.05, 0.7)
-		boon_title_label.add_theme_color_override("font_color", Color(0.93, 0.97, 1.0, 1.0))
+		boon_title_label.add_theme_color_override("font_color", RARITY_COMMON)
 		boon_title_label.add_theme_color_override("font_shadow_color", Color(0.01, 0.02, 0.04, 0.95))
 		if boon_subtitle_label != null:
-			boon_subtitle_label.add_theme_color_override("font_color", Color(0.72, 0.82, 1.0, 0.65))
+			boon_subtitle_label.add_theme_color_override("font_color", Color(RARITY_COMMON.r, RARITY_COMMON.g, RARITY_COMMON.b, 0.7))
 
 func _refresh_boon_ui(player: Node2D) -> void:
 	if boon_layer == null:
@@ -700,36 +704,36 @@ func _apply_boon_card_styles(hovered_index: int) -> void:
 		var panel := boon_card_panels[i]
 		var style := StyleBoxFlat.new()
 		var t := float(i) / maxf(1.0, float(maxi(1, boon_choice_count - 1)))
-		var base_color := Color(0.08, 0.17, 0.28, 0.96).lerp(Color(0.12, 0.2, 0.34, 0.96), t)
-		var border_color := Color(0.57, 0.71, 0.88, 0.86)
+		var base_color := Color(0.07, 0.11, 0.16, 0.96).lerp(Color(0.1, 0.14, 0.2, 0.96), t)
+		var border_color := Color(RARITY_COMMON.r, RARITY_COMMON.g, RARITY_COMMON.b, 0.9)
 		if reward_selection_mode == ENUMS.RewardMode.ARCANA:
-			base_color = Color(0.16, 0.11, 0.08, 0.96).lerp(Color(0.22, 0.14, 0.09, 0.96), t)
-			border_color = Color(1.0, 0.72, 0.4, 0.84)
+			base_color = Color(0.12, 0.08, 0.16, 0.96).lerp(Color(0.18, 0.11, 0.22, 0.96), t)
+			border_color = Color(RARITY_EPIC.r, RARITY_EPIC.g, RARITY_EPIC.b, 0.9)
 		elif reward_selection_mode == ENUMS.RewardMode.MISSION:
-			var mission_tint := Color(0.98, 0.78, 0.34, 1.0)
+			var mission_tint := RARITY_RARE
 			if i < boon_choices.size():
 				mission_tint = boon_choices[i].get("color", mission_tint) as Color
 			base_color = Color(0.12, 0.09, 0.06, 0.96).lerp(Color(mission_tint.r * 0.26, mission_tint.g * 0.24, mission_tint.b * 0.2, 0.97), 0.5 + t * 0.2)
 			border_color = Color(mission_tint.r, mission_tint.g, mission_tint.b, 0.9)
 		elif reward_selection_mode == ENUMS.RewardMode.BOSS:
-			base_color = Color(0.12, 0.06, 0.16, 0.96).lerp(Color(0.16, 0.08, 0.22, 0.96), t)
-			border_color = Color(0.95, 0.65, 1.0, 0.88)
+			base_color = Color(0.18, 0.11, 0.06, 0.96).lerp(Color(0.24, 0.14, 0.08, 0.96), t)
+			border_color = Color(RARITY_LEGENDARY.r, RARITY_LEGENDARY.g, RARITY_LEGENDARY.b, 0.9)
 		if i == hovered_index and boon_confirm_lock_time <= 0.0:
 			if reward_selection_mode == ENUMS.RewardMode.ARCANA:
-				style.bg_color = Color(0.33, 0.2, 0.12, 0.97)
-				style.border_color = Color(1.0, 0.9, 0.72, 1.0)
+				style.bg_color = Color(0.26, 0.16, 0.34, 0.97)
+				style.border_color = Color(RARITY_EPIC.r, RARITY_EPIC.g, RARITY_EPIC.b, 1.0)
 			elif reward_selection_mode == ENUMS.RewardMode.MISSION:
-				var hover_tint := Color(1.0, 0.9, 0.72, 1.0)
+				var hover_tint := RARITY_RARE
 				if i < boon_choices.size():
 					hover_tint = boon_choices[i].get("color", hover_tint) as Color
 				style.bg_color = Color(hover_tint.r * 0.42, hover_tint.g * 0.34, hover_tint.b * 0.22, 0.98)
 				style.border_color = Color(hover_tint.r, hover_tint.g, hover_tint.b, 1.0)
 			elif reward_selection_mode == ENUMS.RewardMode.BOSS:
-				style.bg_color = Color(0.3, 0.14, 0.38, 0.97)
-				style.border_color = Color(1.0, 0.9, 1.0, 1.0)
+				style.bg_color = Color(0.34, 0.2, 0.1, 0.97)
+				style.border_color = Color(RARITY_LEGENDARY.r, RARITY_LEGENDARY.g, RARITY_LEGENDARY.b, 1.0)
 			else:
-				style.bg_color = Color(0.22, 0.32, 0.46, 0.96)
-				style.border_color = Color(0.98, 0.99, 1.0, 1.0)
+				style.bg_color = Color(0.2, 0.28, 0.36, 0.96)
+				style.border_color = Color(RARITY_COMMON.r, RARITY_COMMON.g, RARITY_COMMON.b, 1.0)
 			style.border_width_left = 4
 			style.border_width_top = 4
 			style.border_width_right = 4

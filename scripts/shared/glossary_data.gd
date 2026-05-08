@@ -1,5 +1,10 @@
 extends RefCounted
 
+const RARITY_COMMON := Color(0.62, 0.7, 0.8, 0.9)
+const RARITY_RARE := Color(0.46, 0.78, 1.0, 0.94)
+const RARITY_EPIC := Color(0.82, 0.58, 1.0, 0.96)
+const RARITY_LEGENDARY := Color(1.0, 0.74, 0.42, 1.0)
+
 static func _encounter_rows() -> Array[Dictionary]:
 	return [
 		{
@@ -198,27 +203,27 @@ static func _reward_rows() -> Array[Dictionary]:
 	return [
 		{
 			"tier": "BOON",
-			"color": Color(0.58, 0.86, 1.0, 1.0),
+			"color": RARITY_COMMON,
 			"desc": "Standard room reward. Choose one core power upgrade.",
 		},
 		{
 			"tier": "MISSION",
-			"color": Color(0.98, 0.8, 0.44, 1.0),
+			"color": RARITY_RARE,
 			"desc": "Objective reward tier. Higher-impact upgrade path for run momentum.",
 		},
 		{
 			"tier": "ARCANA",
-			"color": Color(1.0, 0.66, 0.48, 1.0),
+			"color": RARITY_EPIC,
 			"desc": "Trial reward tier. Rare arcana powers that stack through the run.",
 		},
 		{
 			"tier": "BOSS",
-			"color": Color(0.92, 0.72, 1.0, 1.0),
+			"color": RARITY_LEGENDARY,
 			"desc": "Boss reward tier. Unique major powers earned from boss clears.",
 		},
 		{
 			"tier": "NONE",
-			"color": Color(0.74, 0.84, 0.95, 1.0),
+			"color": RARITY_COMMON,
 			"desc": "No immediate reward card.",
 		},
 	]
@@ -253,23 +258,23 @@ static func _subsection_title_bbcode(title: String) -> String:
 
 static func _encounter_group_header_bbcode(group_name: String) -> String:
 	var reward_tier := "BOON"
-	var tier_color := Color(0.58, 0.86, 1.0, 1.0)
+	var tier_color := RARITY_COMMON
 	match group_name:
 		"Objective":
 			reward_tier = "MISSION"
-			tier_color = Color(0.98, 0.8, 0.44, 1.0)
+			tier_color = RARITY_RARE
 		"Trial":
 			reward_tier = "ARCANA"
-			tier_color = Color(1.0, 0.66, 0.48, 1.0)
+			tier_color = RARITY_EPIC
 		"Boss":
 			reward_tier = "BOSS"
-			tier_color = Color(0.92, 0.72, 1.0, 1.0)
+			tier_color = RARITY_LEGENDARY
 		"Special":
 			reward_tier = "NONE"
-			tier_color = Color(0.74, 0.84, 0.95, 1.0)
+			tier_color = RARITY_COMMON
 		_:
 			reward_tier = "BOON"
-			tier_color = Color(0.58, 0.86, 1.0, 1.0)
+			tier_color = RARITY_COMMON
 	var title := "%s Encounter" % group_name
 	return "[color=#9EC9E8][b]%s[/b][/color] [color=#7F96AE]-[/color] [color=%s][b][%s][/b][/color]" % [title, _color_hex(tier_color), reward_tier]
 

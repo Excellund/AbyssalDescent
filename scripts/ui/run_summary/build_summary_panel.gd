@@ -2,6 +2,9 @@ extends VBoxContainer
 class_name BuildSummaryPanel
 
 const BUILD_ITEM_CARD_SCRIPT := preload("res://scripts/ui/run_summary/build_item_card.gd")
+const RARITY_COMMON := Color(0.62, 0.7, 0.8, 0.9)
+const RARITY_EPIC := Color(0.82, 0.58, 1.0, 0.96)
+const RARITY_LEGENDARY := Color(1.0, 0.74, 0.42, 1.0)
 
 var _boon_flow: FlowContainer
 var _arcana_flow: FlowContainer
@@ -34,7 +37,12 @@ func _add_group(group_title: String) -> FlowContainer:
 	var label := Label.new()
 	label.text = group_title
 	label.add_theme_font_size_override("font_size", 16)
-	label.add_theme_color_override("font_color", Color(0.72, 0.84, 0.98, 0.96))
+	var group_color := RARITY_COMMON
+	if group_title == "Arcana":
+		group_color = RARITY_EPIC
+	elif group_title == "Boss Rewards":
+		group_color = RARITY_LEGENDARY
+	label.add_theme_color_override("font_color", Color(group_color.r, group_color.g, group_color.b, 0.96))
 	section.add_child(label)
 
 	var flow := FlowContainer.new()

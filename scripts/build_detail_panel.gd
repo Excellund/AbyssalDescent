@@ -2,6 +2,9 @@ extends Node
 
 const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 const DESCRIPTION_CAP_GUARD := preload("res://scripts/shared/description_cap_guard.gd")
+const RARITY_COMMON := Color(0.62, 0.7, 0.8, 0.9)
+const RARITY_EPIC := Color(0.82, 0.58, 1.0, 0.96)
+const RARITY_LEGENDARY := Color(1.0, 0.74, 0.42, 1.0)
 
 signal build_detail_opened
 signal build_detail_closed
@@ -137,7 +140,7 @@ func _create_panel() -> void:
 	boss_panel.custom_minimum_size = Vector2(790.0, 0.0)
 	var boss_panel_style := StyleBoxFlat.new()
 	boss_panel_style.bg_color = Color(0.10, 0.04, 0.12, 0.76)
-	boss_panel_style.border_color = Color(0.92, 0.72, 1.0, 0.9)
+	boss_panel_style.border_color = Color(RARITY_LEGENDARY.r, RARITY_LEGENDARY.g, RARITY_LEGENDARY.b, 0.9)
 	boss_panel_style.set_border_width_all(2)
 	boss_panel_style.set_corner_radius_all(12)
 	boss_panel_style.content_margin_left = 14.0
@@ -155,7 +158,7 @@ func _create_panel() -> void:
 	var boss_header := Label.new()
 	boss_header.text = "Boss"
 	boss_header.add_theme_font_size_override("font_size", 18)
-	boss_header.add_theme_color_override("font_color", Color(0.92, 0.72, 1.0, 0.98))
+	boss_header.add_theme_color_override("font_color", Color(RARITY_LEGENDARY.r, RARITY_LEGENDARY.g, RARITY_LEGENDARY.b, 0.98))
 	boss_header.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
 	boss_header.add_theme_constant_override("shadow_offset_x", 2)
 	boss_header.add_theme_constant_override("shadow_offset_y", 2)
@@ -170,7 +173,7 @@ func _create_panel() -> void:
 	arcana_panel.custom_minimum_size = Vector2(790.0, 0.0)
 	var arcana_panel_style := StyleBoxFlat.new()
 	arcana_panel_style.bg_color = Color(0.11, 0.09, 0.03, 0.72)
-	arcana_panel_style.border_color = Color(1.0, 0.84, 0.50, 0.86)
+	arcana_panel_style.border_color = Color(RARITY_EPIC.r, RARITY_EPIC.g, RARITY_EPIC.b, 0.9)
 	arcana_panel_style.set_border_width_all(2)
 	arcana_panel_style.set_corner_radius_all(12)
 	arcana_panel_style.content_margin_left = 14.0
@@ -188,7 +191,7 @@ func _create_panel() -> void:
 	var arcana_header := Label.new()
 	arcana_header.text = "Arcana"
 	arcana_header.add_theme_font_size_override("font_size", 18)
-	arcana_header.add_theme_color_override("font_color", Color(1.0, 0.84, 0.50, 0.98))
+	arcana_header.add_theme_color_override("font_color", Color(RARITY_EPIC.r, RARITY_EPIC.g, RARITY_EPIC.b, 0.98))
 	arcana_header.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
 	arcana_header.add_theme_constant_override("shadow_offset_x", 2)
 	arcana_header.add_theme_constant_override("shadow_offset_y", 2)
@@ -203,7 +206,7 @@ func _create_panel() -> void:
 	boons_panel.custom_minimum_size = Vector2(790.0, 0.0)
 	var boons_panel_style := StyleBoxFlat.new()
 	boons_panel_style.bg_color = Color(0.04, 0.09, 0.12, 0.74)
-	boons_panel_style.border_color = Color(0.66, 0.90, 1.0, 0.88)
+	boons_panel_style.border_color = Color(RARITY_COMMON.r, RARITY_COMMON.g, RARITY_COMMON.b, 0.9)
 	boons_panel_style.set_border_width_all(2)
 	boons_panel_style.set_corner_radius_all(12)
 	boons_panel_style.content_margin_left = 14.0
@@ -221,7 +224,7 @@ func _create_panel() -> void:
 	var boons_header := Label.new()
 	boons_header.text = "Boons"
 	boons_header.add_theme_font_size_override("font_size", 18)
-	boons_header.add_theme_color_override("font_color", Color(0.66, 0.90, 1.0, 0.98))
+	boons_header.add_theme_color_override("font_color", Color(RARITY_COMMON.r, RARITY_COMMON.g, RARITY_COMMON.b, 0.98))
 	boons_header.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
 	boons_header.add_theme_constant_override("shadow_offset_x", 2)
 	boons_header.add_theme_constant_override("shadow_offset_y", 2)

@@ -8,6 +8,10 @@ const RUN_STATS_PANEL_SCRIPT := preload("res://scripts/ui/run_summary/run_stats_
 const BUILD_SUMMARY_PANEL_SCRIPT := preload("res://scripts/ui/run_summary/build_summary_panel.gd")
 const REWARD_SUMMARY_PANEL_SCRIPT := preload("res://scripts/ui/run_summary/reward_summary_panel.gd")
 const RUN_ACTION_BUTTONS_SCRIPT := preload("res://scripts/ui/run_summary/run_action_buttons.gd")
+const RARITY_COMMON := Color(0.62, 0.7, 0.8, 0.9)
+const RARITY_RARE := Color(0.46, 0.78, 1.0, 0.94)
+const RARITY_EPIC := Color(0.82, 0.58, 1.0, 0.96)
+const RARITY_LEGENDARY := Color(1.0, 0.74, 0.42, 1.0)
 
 var _layer: CanvasLayer
 var _root: Control
@@ -69,7 +73,7 @@ func _build_ui() -> void:
 
 	var card_style := StyleBoxFlat.new()
 	card_style.bg_color = Color(0.05, 0.08, 0.13, 0.96)
-	card_style.border_color = Color(0.48, 0.66, 0.92, 0.72)
+	card_style.border_color = Color(RARITY_COMMON.r, RARITY_COMMON.g, RARITY_COMMON.b, 0.78)
 	card_style.set_border_width_all(2)
 	card_style.set_corner_radius_all(20)
 	card_style.shadow_color = Color(0.0, 0.0, 0.0, 0.5)
@@ -109,7 +113,7 @@ func _build_ui() -> void:
 
 	var separator := ColorRect.new()
 	separator.custom_minimum_size = Vector2(0.0, 2.0)
-	separator.color = Color(0.58, 0.72, 0.94, 0.3)
+	separator.color = Color(RARITY_RARE.r, RARITY_RARE.g, RARITY_RARE.b, 0.3)
 	stack.add_child(separator)
 
 	_content_scroll = ScrollContainer.new()
@@ -171,22 +175,22 @@ func _apply_theme(defeat_theme: bool) -> void:
 		flat.border_color = Color(0.92, 0.46, 0.44, 0.84)
 		flat.bg_color = Color(0.12, 0.06, 0.08, 0.96)
 	else:
-		flat.border_color = Color(0.56, 0.76, 0.98, 0.84)
+		flat.border_color = Color(RARITY_COMMON.r, RARITY_COMMON.g, RARITY_COMMON.b, 0.84)
 		flat.bg_color = Color(0.05, 0.08, 0.13, 0.96)
 	_card.add_theme_stylebox_override("panel", flat)
 
 func _fill_summary(result_title: String, subtitle: String, summary: Dictionary, allow_retry_run: bool) -> void:
 	_title_label.text = result_title
-	_title_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.78, 1.0) if result_title == "Victory" else Color(1.0, 0.76, 0.72, 1.0))
+	_title_label.add_theme_color_override("font_color", RARITY_LEGENDARY if result_title == "Victory" else Color(1.0, 0.76, 0.72, 1.0))
 	_subtitle_label.text = subtitle
-	_subtitle_label.add_theme_color_override("font_color", Color(0.84, 0.9, 1.0, 0.82))
+	_subtitle_label.add_theme_color_override("font_color", Color(RARITY_RARE.r, RARITY_RARE.g, RARITY_RARE.b, 0.82))
 
 	var character_name := String(summary.get("character_name", "Unknown"))
 	var depth := int(summary.get("max_depth", 0))
 	var duration := _format_duration(int(summary.get("duration_seconds", 0)))
 	var difficulty := String(summary.get("difficulty_label", "Pilgrim"))
 	_meta_label.text = "%s  |  Depth %d  |  %s  |  %s" % [character_name, depth, duration, difficulty]
-	_meta_label.add_theme_color_override("font_color", Color(0.75, 0.86, 0.97, 0.94))
+	_meta_label.add_theme_color_override("font_color", Color(RARITY_COMMON.r, RARITY_COMMON.g, RARITY_COMMON.b, 0.94))
 
 	var stats := summary.get("stats", {}) as Dictionary
 	_stats_panel.set_stats(stats)

@@ -3,6 +3,10 @@ class_name RunHistoryPanel
 
 const RUN_HISTORY_STORE_SCRIPT := preload("res://scripts/core/run_history_store.gd")
 const RUN_SUMMARY_WITH_PROFILE_SCRIPT := preload("res://scripts/core/run_summary_with_profile.gd")
+const RARITY_COMMON := Color(0.62, 0.7, 0.8, 0.9)
+const RARITY_RARE := Color(0.46, 0.78, 1.0, 0.94)
+const RARITY_EPIC := Color(0.82, 0.58, 1.0, 0.96)
+const RARITY_LEGENDARY := Color(1.0, 0.74, 0.42, 1.0)
 
 signal back_pressed
 
@@ -42,7 +46,7 @@ func _build_ui(style_ref: Object) -> void:
 
 	var accent := ColorRect.new()
 	accent.custom_minimum_size = Vector2(180.0, 2.0)
-	accent.color = Color(0.62, 0.78, 0.96, 0.65)
+	accent.color = Color(RARITY_RARE.r, RARITY_RARE.g, RARITY_RARE.b, 0.65)
 	accent.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	stack.add_child(accent)
 
@@ -235,7 +239,7 @@ func _show_detail(rec: Dictionary) -> void:
 	var outcome_text := ("Victory" if is_clear else "Defeat") + " — " + wrapped.get_character_name()
 
 	_add_detail_label(outcome_text, 24, outcome_color, true)
-	_add_detail_label(wrapped.get_difficulty_label(), 16, Color(0.78, 0.88, 0.98, 0.86), false)
+	_add_detail_label(wrapped.get_difficulty_label(), 16, Color(RARITY_COMMON.r, RARITY_COMMON.g, RARITY_COMMON.b, 0.9), false)
 
 	_add_detail_separator()
 
@@ -256,13 +260,13 @@ func _show_detail(rec: Dictionary) -> void:
 	var arcana := wrapped.get_arcana_list()
 	if not boons.is_empty() or not arcana.is_empty():
 		_add_detail_separator()
-		_add_detail_label("Build", 15, Color(0.80, 0.90, 1.0, 0.72), false)
+		_add_detail_label("Build", 15, Color(RARITY_RARE.r, RARITY_RARE.g, RARITY_RARE.b, 0.78), false)
 		for item in arcana:
 			var d := item as Dictionary
-			_add_detail_label("\u2605 " + String(d.get("name", "")), 14, Color(0.90, 0.80, 0.55, 0.90), false)
+			_add_detail_label("\u2605 " + String(d.get("name", "")), 14, Color(RARITY_EPIC.r, RARITY_EPIC.g, RARITY_EPIC.b, 0.92), false)
 		for item in boons:
 			var d := item as Dictionary
-			_add_detail_label("\u00b7 " + String(d.get("name", "")), 14, Color(0.78, 0.88, 1.0, 0.82), false)
+			_add_detail_label("\u00b7 " + String(d.get("name", "")), 14, Color(RARITY_COMMON.r, RARITY_COMMON.g, RARITY_COMMON.b, 0.9), false)
 
 func _show_detail_placeholder() -> void:
 	for child in _detail_content.get_children():
