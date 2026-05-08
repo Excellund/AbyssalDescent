@@ -185,7 +185,9 @@ func _is_client_actually_connected() -> bool:
 ## Create a new multiplayer room (host only).
 ## Returns: room_code for other players to join
 func create_room() -> String:
-	if session_connected:
+	if has_active_session_state():
+		leave_room()
+	if has_active_session_state():
 		push_error("Already connected to a session. Call leave_room() first.")
 		return ""
 	var registration := {
@@ -199,7 +201,10 @@ func create_room() -> String:
 	return room_code
 
 func create_registered_room(room_registration: Dictionary) -> bool:
-	if session_connected:
+	if has_active_session_state():
+		print("[MultiplayerSessionManager] WARNING: Existing session state detected before hosting. Cleaning up...")
+		leave_room()
+	if has_active_session_state():
 		var msg = "Already connected to a session. Call leave_room() first."
 		push_error(msg)
 		print("[MultiplayerSessionManager] ERROR: %s" % msg)
@@ -256,7 +261,10 @@ func create_registered_room(room_registration: Dictionary) -> bool:
 
 ## Join an existing multiplayer room (client only).
 func join_room(host_address: String = "127.0.0.1", host_port: int = 7777, allow_localhost_retry: bool = true) -> bool:
-	if session_connected:
+	if has_active_session_state():
+		print("[MultiplayerSessionManager] WARNING: Existing session state detected before join. Cleaning up...")
+		leave_room()
+	if has_active_session_state():
 		push_error("Already connected to a session. Call leave_room() first.")
 		return false
 	if session_id.is_empty():
@@ -292,7 +300,7 @@ func join_registered_room(room_registration: Dictionary) -> bool:
 
 ## Leave current session and disconnect.
 func leave_room() -> void:
-	if not session_connected:
+	if not has_active_session_state():
 		return
 	if is_host_peer and not room_code.is_empty():
 		var room_service = get_node_or_null("/root/MultiplayerRoomService")
@@ -471,6 +479,18 @@ func is_session_connected() -> bool:
 	return session_connected
 
 
+func has_active_session_state() -> bool:
+	if session_connected:
+		return true
+	if _multiplayer != null and _multiplayer.multiplayer_peer != null:
+		return true
+	if not connected_peers.is_empty():
+		return true
+	if not session_id.is_empty() or not room_code.is_empty():
+		return true
+	return false
+
+
 ## Get list of connected peer IDs (including self if host).
 func get_peer_ids() -> Array:
 	return connected_peers.keys()
@@ -526,6 +546,8 @@ func _on_connected_to_server() -> void:
 		session_id = "mp-session-%d-%s" % [Time.get_unix_time_from_system(), _generate_random_code(4)]
 	if room_code.is_empty():
 		room_code = _generate_random_code(6).to_upper()
+	session_connected = true
+	is_host_peer = false
 	_debug_log("[SIGNAL] === _on_connected_to_server() FIRED ===")
 	_debug_log("[STATE] session_id='%s' room_code='%s'" % [session_id, room_code])
 	push_error("[MULTIPLAYER DEBUG] === CLIENT CONNECTED TO SERVER === (This should print visibly)")
@@ -571,7 +593,11 @@ func _on_connection_failed() -> void:
 		## No more candidates; clear attempt state and emit terminal failure.
 		_join.reset()
 
+	if _multiplayer != null:
+		_multiplayer.multiplayer_peer = null
 	session_connected = false
+	is_host_peer = false
+	local_peer_id = 0
 	push_error("[MultiplayerSessionManager] Connection failed.")
 	connection_failed.emit("Connection failed to server.")
 
@@ -649,6 +675,7 @@ func _advance_join_attempt() -> bool:
 	if _multiplayer != null:
 		_multiplayer.multiplayer_peer = null
 	session_connected = false
+	is_host_peer = false
 
 	_join.index += 1
 	if _join.index < 0 or _join.index >= _join.addresses.size():
@@ -669,7 +696,6 @@ func _advance_join_attempt() -> bool:
 		return _advance_join_attempt()
 
 	_multiplayer.multiplayer_peer = enet_peer
-	session_connected = true
 	is_host_peer = false
 	_debug_log("[JOIN] ENet client created successfully. Waiting for connection signal...")
 	print("[MultiplayerSessionManager] ENet client created and waiting for connection to %s:%d. Timeout: %.0fs" % [host_address, _join.port, _get_join_timeout_for_address(host_address)])
@@ -699,6 +725,8 @@ func _on_join_attempt_timeout() -> void:
 	if _multiplayer != null:
 		_multiplayer.multiplayer_peer = null
 	session_connected = false
+	is_host_peer = false
+	local_peer_id = 0
 	connection_failed.emit(
 		"Connection timed out while joining room (%s:%d). Host must allow inbound UDP %d (port-forward or UPnP). If forwarding is configured and it still fails, host ISP may be behind CGNAT." % [timed_out_address, _join.port, _join.port]
 	)

@@ -235,13 +235,18 @@ func _create_multiplayer_room() -> void:
 		return
 	
 	## Ensure any previous session is cleaned up before creating a new one
-	if multiplayer_session_manager.session_connected:
+	var had_active_session := false
+	if multiplayer_session_manager.has_method("has_active_session_state"):
+		had_active_session = bool(multiplayer_session_manager.has_active_session_state())
+	else:
+		had_active_session = bool(multiplayer_session_manager.session_connected)
+	if had_active_session:
 		print("[Menu] WARNING: Previous session still connected. Cleaning up before creating new lobby...")
 		multiplayer_session_manager.leave_room()
 		var cleanup_tree := _tree_or_null()
 		if cleanup_tree == null:
 			return
-		await cleanup_tree.process_frame  ## Wait one frame for cleanup
+		await cleanup_tree.create_timer(0.2).timeout
 		if _tree_or_null() == null:
 			return
 	
@@ -303,7 +308,13 @@ func _join_multiplayer_room(room_code: String) -> void:
 		multiplayer_join_button.disabled = true
 	
 	## Ensure any previous session is cleaned up before joining a new one
-	if multiplayer_session_manager != null and multiplayer_session_manager.session_connected:
+	var had_active_session := false
+	if multiplayer_session_manager != null:
+		if multiplayer_session_manager.has_method("has_active_session_state"):
+			had_active_session = bool(multiplayer_session_manager.has_active_session_state())
+		else:
+			had_active_session = bool(multiplayer_session_manager.session_connected)
+	if had_active_session:
 		print("[Menu] WARNING: Previous session still connected. Cleaning up before joining new room...")
 		multiplayer_session_manager.leave_room()
 		var cleanup_tree := _tree_or_null()
@@ -311,7 +322,7 @@ func _join_multiplayer_room(room_code: String) -> void:
 			if multiplayer_join_button != null:
 				multiplayer_join_button.disabled = false
 			return
-		await cleanup_tree.process_frame  ## Wait one frame for cleanup
+		await cleanup_tree.create_timer(0.2).timeout
 		if _tree_or_null() == null:
 			if multiplayer_join_button != null:
 				multiplayer_join_button.disabled = false
