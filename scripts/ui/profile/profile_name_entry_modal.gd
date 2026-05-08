@@ -43,12 +43,20 @@ func hide_prompt() -> void:
 
 func show_validation_error(message: String) -> void:
 	if _error_label != null:
+		if _error_label.get_parent() == null:
+			var stack = _name_input.get_parent()
+			if stack != null:
+				stack.add_child(_error_label)
+				call_deferred("_reposition")
 		_error_label.text = message.strip_edges()
 	if _name_input != null:
 		_name_input.grab_focus()
 
 func clear_error() -> void:
 	if _error_label != null:
+		if _error_label.get_parent() != null:
+			_error_label.get_parent().remove_child(_error_label)
+			call_deferred("_reposition")
 		_error_label.text = ""
 
 func is_prompt_visible() -> bool:
@@ -75,7 +83,8 @@ func _build_ui() -> void:
 	_panel_container = PanelContainer.new()
 	_panel_container.custom_minimum_size = Vector2(680.0, 0.0)
 	_panel_container.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	_panel_container.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_panel_container.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	_panel_container.clip_contents = false
 	var panel_style := StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.05, 0.08, 0.12, 0.97)
 	panel_style.border_color = Color(0.44, 0.70, 0.96, 0.74)
@@ -84,17 +93,19 @@ func _build_ui() -> void:
 	panel_style.content_margin_left = 32.0
 	panel_style.content_margin_right = 32.0
 	panel_style.content_margin_top = 22.0
-	panel_style.content_margin_bottom = 24.0
+	panel_style.content_margin_bottom = 32.0
 	_panel_container.add_theme_stylebox_override("panel", panel_style)
 	add_child(_panel_container)
 
 	var stack := VBoxContainer.new()
 	stack.add_theme_constant_override("separation", 12)
+	stack.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	_panel_container.add_child(stack)
 
 	_title_label = Label.new()
 	_title_label.text = "Profile Name"
 	_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_title_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_title_label.add_theme_font_size_override("font_size", 34)
 	_title_label.add_theme_color_override("font_color", Color(0.96, 0.99, 1.0, 0.98))
 	stack.add_child(_title_label)
@@ -102,7 +113,7 @@ func _build_ui() -> void:
 	_body_label = Label.new()
 	_body_label.text = "Choose a profile name."
 	_body_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_body_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_body_label.add_theme_font_size_override("font_size", 18)
 	_body_label.add_theme_color_override("font_color", Color(0.82, 0.90, 0.98, 0.94))
 	stack.add_child(_body_label)
@@ -118,12 +129,13 @@ func _build_ui() -> void:
 	_error_label = Label.new()
 	_error_label.text = ""
 	_error_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_error_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_error_label.add_theme_font_size_override("font_size", 15)
 	_error_label.add_theme_color_override("font_color", Color(1.0, 0.73, 0.73, 0.98))
-	stack.add_child(_error_label)
 
 	var actions := HBoxContainer.new()
 	actions.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	actions.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	actions.add_theme_constant_override("separation", 14)
 	stack.add_child(actions)
 

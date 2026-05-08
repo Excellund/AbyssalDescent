@@ -115,6 +115,7 @@ var update_check_was_manual: bool = false
 var update_service
 var profile_persistence_store
 var profile_name_prompt_modal
+var profile_name_prompt_layer
 var profile_prompt_pending: bool = false
 var profile_prompt_pending_purpose: String = ""
 var profile_prompt_pending_allow_cancel: bool = true
@@ -525,7 +526,7 @@ func _input(event: InputEvent) -> void:
 		multiplayer_room_code_input.release_focus()
 
 func _unhandled_input(event: InputEvent) -> void:
-	if profile_name_prompt_modal != null and profile_name_prompt_modal.visible:
+	if profile_name_prompt_layer != null and profile_name_prompt_layer.visible:
 		if event.is_action_pressed("ui_cancel"):
 			get_viewport().set_input_as_handled()
 		return
@@ -753,11 +754,9 @@ func _build_ui() -> void:
 	update_prompt_layer.visible = false
 	add_child(update_prompt_layer)
 
-	profile_name_prompt_modal = PROFILE_NAME_ENTRY_MODAL_SCRIPT.new()
-	profile_name_prompt_modal.visible = false
-	profile_name_prompt_modal.profile_submitted.connect(_on_profile_prompt_submitted)
-	profile_name_prompt_modal.profile_cancelled.connect(_on_profile_prompt_cancelled)
-	add_child(profile_name_prompt_modal)
+	profile_name_prompt_layer = _build_profile_name_prompt_layer()
+	profile_name_prompt_layer.visible = false
+	add_child(profile_name_prompt_layer)
 
 	lobby_modal_layer = _build_lobby_modal_layer()
 	lobby_modal_layer.visible = false
@@ -1926,6 +1925,24 @@ func _build_update_prompt_layer() -> Control:
 
 	return layer
 
+func _build_profile_name_prompt_layer() -> Control:
+	var layer := Control.new()
+	layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.mouse_filter = Control.MOUSE_FILTER_STOP
+
+	var dim := ColorRect.new()
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0.01, 0.02, 0.05, 0.78)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	layer.add_child(dim)
+
+	profile_name_prompt_modal = PROFILE_NAME_ENTRY_MODAL_SCRIPT.new()
+	profile_name_prompt_modal.profile_submitted.connect(_on_profile_prompt_submitted)
+	profile_name_prompt_modal.profile_cancelled.connect(_on_profile_prompt_cancelled)
+	layer.add_child(profile_name_prompt_modal)
+
+	return layer
+
 func _start_update_check() -> void:
 	if update_service == null:
 		update_service = UPDATE_SERVICE_SCRIPT.new()
@@ -1991,7 +2008,7 @@ func _maybe_show_update_prompt() -> void:
 		return
 	if not update_service.should_prompt_for_update(String(run_context.get_skipped_update_version())):
 		return
-	if profile_name_prompt_modal != null and profile_name_prompt_modal.visible:
+	if profile_name_prompt_layer != null and profile_name_prompt_layer.visible:
 		update_prompt_pending = true
 		return
 	if telemetry_consent_layer != null and telemetry_consent_layer.visible:
@@ -2015,7 +2032,7 @@ func _show_update_prompt() -> void:
 func _show_pending_update_prompt() -> void:
 	if not update_prompt_pending:
 		return
-	if profile_name_prompt_modal != null and profile_name_prompt_modal.visible:
+	if profile_name_prompt_layer != null and profile_name_prompt_layer.visible:
 		return
 	if telemetry_consent_layer != null and telemetry_consent_layer.visible:
 		return
@@ -2977,6 +2994,8 @@ func _show_profile_name_prompt(purpose: String, allow_cancel: bool) -> void:
 	profile_prompt_pending = false
 	profile_prompt_pending_purpose = ""
 	profile_prompt_pending_allow_cancel = true
+	if profile_name_prompt_layer != null:
+		profile_name_prompt_layer.visible = true
 	profile_name_prompt_modal.show_prompt(title_text, body_text, current_name, allow_cancel)
 
 func _show_pending_profile_prompt() -> void:
@@ -3000,11 +3019,15 @@ func _on_profile_prompt_submitted(profile_name: String) -> void:
 	_sync_options_from_context()
 	if profile_name_prompt_modal != null:
 		profile_name_prompt_modal.hide_prompt()
+	if profile_name_prompt_layer != null:
+		profile_name_prompt_layer.visible = false
 	_show_pending_update_prompt()
 
 func _on_profile_prompt_cancelled() -> void:
 	if profile_name_prompt_modal != null:
 		profile_name_prompt_modal.hide_prompt()
+	if profile_name_prompt_layer != null:
+		profile_name_prompt_layer.visible = false
 	_show_pending_update_prompt()
 
 func _on_edit_profile_name_pressed() -> void:
