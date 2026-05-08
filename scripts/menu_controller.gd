@@ -43,6 +43,15 @@ const QUOTE_COLOR_WARM := Color(1.0, 0.95, 0.84, 1.0)
 const AUDIO_DB_MIN := AUDIO_LEVELS.DB_MIN
 const AUDIO_DB_MAX := AUDIO_LEVELS.DB_MAX
 const MENU_LAYOUT_BASE_SIZE := Vector2(1020.0, 720.0)
+const MAIN_MENU_PANEL_BASE_WIDTH := 980.0
+const MAIN_MENU_PANEL_BASE_HEIGHT := 640.0
+const MAIN_MENU_SHELL_PADDING := 30.0
+const MAIN_MENU_HERO_PANEL_WIDTH := 362.0
+const MAIN_MENU_ACTION_PANEL_WIDTH := 534.0
+const MAIN_MENU_ACTION_CONTENT_PADDING_X := 32.0
+const MAIN_MENU_ACTION_CONTENT_PADDING_Y := 24.0
+const MAIN_MENU_ACTION_BUTTON_HEIGHT := 52.0
+const MAIN_MENU_ACTION_BUTTON_SPACING := 8
 const CHARACTER_SELECTOR_PANEL_WIDTH := 1020.0
 const CHARACTER_SELECTOR_ROW_HEIGHT := 118.0
 const CHARACTER_SELECTOR_ROW_SEPARATION := 14.0
@@ -91,6 +100,8 @@ var flavor_quote_label: RichTextLabel
 var quote_wrapper: Control
 var _quote_pulse_active: bool = false
 var _quote_pulse_time: float = 0.0
+var root_shell: HBoxContainer
+var root_actions: VBoxContainer
 var update_panel: Panel
 var update_status_label: Label
 var update_detail_label: Label
@@ -568,24 +579,31 @@ func _build_ui() -> void:
 	root_panel = Panel.new()
 	root_panel.set_anchors_preset(Control.PRESET_CENTER)
 	root_panel.position = Vector2(-490.0, -320.0)
-	root_panel.custom_minimum_size = Vector2(980.0, 640.0)
+	root_panel.custom_minimum_size = Vector2(MAIN_MENU_PANEL_BASE_WIDTH, MAIN_MENU_PANEL_BASE_HEIGHT)
 	root_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.06, 0.09, 0.13, 0.94), Color(0.34, 0.56, 0.84, 0.76), 22, 2))
 	add_child(root_panel)
 
-	var shell := HBoxContainer.new()
-	shell.position = Vector2(30.0, 30.0)
-	shell.custom_minimum_size = Vector2(920.0, 580.0)
-	shell.add_theme_constant_override("separation", 24)
-	root_panel.add_child(shell)
+	root_shell = HBoxContainer.new()
+	root_shell.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root_shell.offset_left = MAIN_MENU_SHELL_PADDING
+	root_shell.offset_top = MAIN_MENU_SHELL_PADDING
+	root_shell.offset_right = -MAIN_MENU_SHELL_PADDING
+	root_shell.offset_bottom = -MAIN_MENU_SHELL_PADDING
+	root_shell.add_theme_constant_override("separation", 24)
+	root_panel.add_child(root_shell)
 
 	var hero_panel := Panel.new()
-	hero_panel.custom_minimum_size = Vector2(362.0, 580.0)
+	hero_panel.custom_minimum_size = Vector2(MAIN_MENU_HERO_PANEL_WIDTH, 0.0)
+	hero_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	hero_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.09, 0.15, 0.24, 0.82), Color(0.30, 0.48, 0.72, 0.46), 20, 2))
-	shell.add_child(hero_panel)
+	root_shell.add_child(hero_panel)
 
 	var hero_content := VBoxContainer.new()
-	hero_content.position = Vector2(28.0, 26.0)
-	hero_content.custom_minimum_size = Vector2(306.0, 528.0)
+	hero_content.set_anchors_preset(Control.PRESET_FULL_RECT)
+	hero_content.offset_left = 28.0
+	hero_content.offset_top = 26.0
+	hero_content.offset_right = -28.0
+	hero_content.offset_bottom = -26.0
 	hero_content.add_theme_constant_override("separation", 10)
 	hero_panel.add_child(hero_content)
 
@@ -624,57 +642,69 @@ func _build_ui() -> void:
 	hero_content.add_child(hero_spacer)
 
 	var action_panel := Panel.new()
-	action_panel.custom_minimum_size = Vector2(534.0, 580.0)
+	action_panel.custom_minimum_size = Vector2(MAIN_MENU_ACTION_PANEL_WIDTH, 0.0)
 	action_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	action_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	action_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.07, 0.11, 0.16, 0.88), Color(0.22, 0.36, 0.52, 0.44), 20, 2))
-	shell.add_child(action_panel)
+	root_shell.add_child(action_panel)
 
 	var action_content := VBoxContainer.new()
-	action_content.position = Vector2(32.0, 30.0)
-	action_content.custom_minimum_size = Vector2(470.0, 520.0)
-	action_content.add_theme_constant_override("separation", 14)
+	action_content.set_anchors_preset(Control.PRESET_FULL_RECT)
+	action_content.offset_left = MAIN_MENU_ACTION_CONTENT_PADDING_X
+	action_content.offset_top = MAIN_MENU_ACTION_CONTENT_PADDING_Y
+	action_content.offset_right = -MAIN_MENU_ACTION_CONTENT_PADDING_X
+	action_content.offset_bottom = -MAIN_MENU_ACTION_CONTENT_PADDING_Y
+	action_content.add_theme_constant_override("separation", 10)
 	action_panel.add_child(action_content)
 
 	var action_spacer_top := Control.new()
-	action_spacer_top.custom_minimum_size = Vector2(470.0, 32.0)
+	action_spacer_top.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	action_content.add_child(action_spacer_top)
 
-	var actions := VBoxContainer.new()
-	actions.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	actions.add_theme_constant_override("separation", 14)
-	action_content.add_child(actions)
+	root_actions = VBoxContainer.new()
+	root_actions.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	root_actions.add_theme_constant_override("separation", MAIN_MENU_ACTION_BUTTON_SPACING)
+	action_content.add_child(root_actions)
 
 	primary_run_button = _make_menu_button("Begin Descent", true)
+	primary_run_button.custom_minimum_size = Vector2(470.0, MAIN_MENU_ACTION_BUTTON_HEIGHT)
 	primary_run_button.pressed.connect(_on_primary_run_pressed)
-	actions.add_child(primary_run_button)
+	root_actions.add_child(primary_run_button)
 
 	var multiplayer_button := _make_menu_button("Multiplayer")
+	multiplayer_button.custom_minimum_size = Vector2(470.0, MAIN_MENU_ACTION_BUTTON_HEIGHT)
 	multiplayer_button.pressed.connect(_on_multiplayer_pressed)
-	actions.add_child(multiplayer_button)
+	root_actions.add_child(multiplayer_button)
 
 	var profile_button := _make_menu_button("Profile")
+	profile_button.custom_minimum_size = Vector2(470.0, MAIN_MENU_ACTION_BUTTON_HEIGHT)
 	profile_button.pressed.connect(_on_edit_profile_name_pressed)
-	actions.add_child(profile_button)
+	root_actions.add_child(profile_button)
 
 	var history_button := _make_menu_button("Run History")
+	history_button.custom_minimum_size = Vector2(470.0, MAIN_MENU_ACTION_BUTTON_HEIGHT)
 	history_button.pressed.connect(_on_history_pressed)
-	actions.add_child(history_button)
+	root_actions.add_child(history_button)
 
 	var leaderboard_button := _make_menu_button("Leaderboards")
+	leaderboard_button.custom_minimum_size = Vector2(470.0, MAIN_MENU_ACTION_BUTTON_HEIGHT)
 	leaderboard_button.pressed.connect(_on_leaderboard_pressed)
-	actions.add_child(leaderboard_button)
+	root_actions.add_child(leaderboard_button)
 
 	var glossary_button := _make_menu_button("Glossary")
+	glossary_button.custom_minimum_size = Vector2(470.0, MAIN_MENU_ACTION_BUTTON_HEIGHT)
 	glossary_button.pressed.connect(_on_glossary_pressed)
-	actions.add_child(glossary_button)
+	root_actions.add_child(glossary_button)
 
 	var options_button := _make_menu_button("Options")
+	options_button.custom_minimum_size = Vector2(470.0, MAIN_MENU_ACTION_BUTTON_HEIGHT)
 	options_button.pressed.connect(_on_options_pressed)
-	actions.add_child(options_button)
+	root_actions.add_child(options_button)
 
 	var exit_button := _make_menu_button("Exit Game")
+	exit_button.custom_minimum_size = Vector2(470.0, MAIN_MENU_ACTION_BUTTON_HEIGHT)
 	exit_button.pressed.connect(_on_exit_pressed)
-	actions.add_child(exit_button)
+	root_actions.add_child(exit_button)
 
 	var action_spacer_bottom := Control.new()
 	action_spacer_bottom.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -740,7 +770,7 @@ func _apply_menu_layout() -> void:
 		return
 	var fit_scale := minf(1.0, minf(viewport_size.x / MENU_LAYOUT_BASE_SIZE.x, viewport_size.y / MENU_LAYOUT_BASE_SIZE.y))
 	if root_panel != null:
-		_set_centered_panel_layout(root_panel, Vector2(980.0, 640.0), fit_scale, viewport_size)
+		_set_centered_panel_layout(root_panel, _root_panel_base_size(), fit_scale, viewport_size)
 	if options_panel != null:
 		_set_centered_panel_layout(options_panel, Vector2(760.0, 700.0), fit_scale, viewport_size)
 	if history_panel != null:
@@ -771,6 +801,17 @@ func _apply_menu_layout() -> void:
 		lobby_modal_instance.set_anchors_preset(Control.PRESET_FULL_RECT)
 		lobby_modal_instance.position = Vector2.ZERO
 		lobby_modal_instance.size = lobby_modal_content_host.size
+
+func _root_panel_base_size() -> Vector2:
+	var base_size := Vector2(MAIN_MENU_PANEL_BASE_WIDTH, MAIN_MENU_PANEL_BASE_HEIGHT)
+	if root_shell == null:
+		return base_size
+	var min_shell_height := root_shell.get_combined_minimum_size().y
+	if min_shell_height <= 0.0:
+		return base_size
+	var required_height := min_shell_height + (MAIN_MENU_SHELL_PADDING * 2.0)
+	base_size.y = maxf(base_size.y, required_height)
+	return base_size
 
 func _set_centered_panel_layout(panel: Panel, base_size: Vector2, panel_scale: float, viewport_size: Vector2) -> void:
 	panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
