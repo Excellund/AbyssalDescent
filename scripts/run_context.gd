@@ -7,6 +7,7 @@ const SETTINGS_STORE := preload("res://scripts/settings_store.gd")
 const META_PROGRESS_STORE := preload("res://scripts/meta_progress_store.gd")
 const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
 const TELEMETRY_UPLOADER_SCRIPT := preload("res://scripts/telemetry_uploader.gd")
+const LEADERBOARD_UPLOADER_SCRIPT := preload("res://scripts/leaderboard_uploader.gd")
 const RUN_RESUME_REQUEST_STATE_SCRIPT := preload("res://scripts/core/run_resume_request_state.gd")
 const ACTIVE_RUN_SAVE_PATH := "user://active_run.save"
 const ACTIVE_RUN_DEBUG_SAVE_PATH := "user://active_run_debug.save"
@@ -46,6 +47,7 @@ var skipped_update_version: String = SETTINGS_STORE.DEFAULT_SKIPPED_UPDATE_VERSI
 var profile_name: String = ""
 var profile_uuid: String = ""
 var telemetry_uploader
+var leaderboard_uploader
 var run_resume_request_state
 
 ## Meta-progression state
@@ -75,6 +77,9 @@ func _ready() -> void:
 	telemetry_uploader = TELEMETRY_UPLOADER_SCRIPT.new()
 	add_child(telemetry_uploader)
 	telemetry_uploader.initialize(self)
+	leaderboard_uploader = LEADERBOARD_UPLOADER_SCRIPT.new()
+	add_child(leaderboard_uploader)
+	leaderboard_uploader.initialize(self)
 
 func set_run_mode(mode: Variant) -> void:
 	if mode is int:
@@ -183,6 +188,20 @@ func get_pending_telemetry_upload_count() -> int:
 	if telemetry_uploader == null:
 		return 0
 	return int(telemetry_uploader.pending_count())
+
+func enqueue_leaderboard_summary(run_summary: Dictionary) -> void:
+	if run_summary.is_empty():
+		return
+	if leaderboard_uploader == null:
+		return
+	if not telemetry_upload_enabled:
+		return
+	leaderboard_uploader.enqueue_run_summary(run_summary)
+
+func get_pending_leaderboard_upload_count() -> int:
+	if leaderboard_uploader == null:
+		return 0
+	return int(leaderboard_uploader.pending_count())
 
 func get_display_mode_options() -> Array[Dictionary]:
 	var options: Array[Dictionary] = []

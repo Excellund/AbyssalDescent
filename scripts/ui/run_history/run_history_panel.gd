@@ -315,7 +315,7 @@ func _add_detail_separator() -> void:
 func _format_duration(seconds: int) -> String:
 	if seconds <= 0:
 		return "--:--"
-	var m := int(seconds) / 60
+	var m := int(floor(float(seconds) / 60.0))
 	var s := int(seconds) % 60
 	return "%d:%02d" % [m, s]
 

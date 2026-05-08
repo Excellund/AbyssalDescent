@@ -2217,6 +2217,16 @@ func _finish_third_boss_clear() -> void:
 func _get_run_context() -> Node:
 	return get_node_or_null(RUN_CONTEXT_PATH)
 
+func _enqueue_leaderboard_submission(run_summary: Dictionary) -> void:
+	if run_summary.is_empty():
+		return
+	var run_context := _get_run_context()
+	if run_context == null:
+		return
+	if not run_context.has_method("enqueue_leaderboard_summary"):
+		return
+	run_context.enqueue_leaderboard_summary(run_summary)
+
 func _get_difficulty_config_provider() -> Object:
 	if is_multiplayer:
 		if _multiplayer_difficulty_config == null:
@@ -4476,11 +4486,13 @@ func _finish_active_run_telemetry(outcome: String, death_event: Dictionary = {})
 	if not _can_record_telemetry():
 		if not telemetry_run_finished:
 			RUN_HISTORY_STORE_SCRIPT.append(latest_run_summary)
+			_enqueue_leaderboard_submission(latest_run_summary)
 			telemetry_run_finished = true
 		return
 	RUN_TELEMETRY_STORE.finish_run(telemetry_run_id, outcome, summary)
 	latest_run_summary = RUN_TELEMETRY_STORE.build_run_summary(telemetry_run_id, latest_run_summary)
 	RUN_HISTORY_STORE_SCRIPT.append(latest_run_summary)
+	_enqueue_leaderboard_submission(latest_run_summary)
 	telemetry_run_finished = true
 	var run_context := _get_run_context()
 	if run_context != null:
