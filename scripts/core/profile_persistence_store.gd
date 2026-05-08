@@ -11,7 +11,7 @@ func load_or_create_profile() -> RefCounted:
 		return _cached_profile
 	
 	if FileAccess.file_exists(STORAGE_PATH):
-		var loaded := _load_profile_from_file()
+		var loaded: RefCounted = _load_profile_from_file()
 		if loaded != null and loaded.is_valid():
 			_cached_profile = loaded
 			return _cached_profile
@@ -70,6 +70,6 @@ func _load_profile_from_file() -> RefCounted:
 	if data.is_empty():
 		return null
 	
-	var profile := PLAYER_PROFILE_SCRIPT.from_dict(data)
+	var profile: RefCounted = PLAYER_PROFILE_SCRIPT.from_dict(data)
 	print_debug("[ProfilePersistence] Profile loaded: %s" % profile.player_id)
 	return profile

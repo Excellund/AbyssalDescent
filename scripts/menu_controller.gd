@@ -12,6 +12,8 @@ const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 const SETTINGS_STORE := preload("res://scripts/settings_store.gd")
 const UPDATE_SERVICE_SCRIPT := preload("res://scripts/update_service.gd")
 const BUILD_INFO := preload("res://scripts/build_info.gd")
+const PROFILE_PERSISTENCE_STORE_SCRIPT := preload("res://scripts/core/profile_persistence_store.gd")
+const PROFILE_NAME_ENTRY_MODAL_SCRIPT := preload("res://scripts/ui/profile/profile_name_entry_modal.gd")
 const LOBBY_SCENE_PATH := "res://scenes/Lobby.tscn"
 const DEV_ARG_LOCAL_HOST := "--mp-dev-host"
 const DEV_ARG_LOCAL_JOIN := "--mp-dev-join"
@@ -96,10 +98,16 @@ var update_prompt_body_label: Label
 var update_prompt_pending: bool = false
 var update_check_was_manual: bool = false
 var update_service
+var profile_persistence_store
+var profile_name_prompt_modal
+var profile_prompt_pending: bool = false
+var profile_prompt_pending_purpose: String = ""
+var profile_prompt_pending_allow_cancel: bool = true
 var multiplayer_room_code_input: LineEdit
 var multiplayer_status_label: Label
 var multiplayer_host_button: Button
 var multiplayer_join_button: Button
+var options_profile_name_value_label: Label
 var lobby_modal_layer: Control
 var lobby_modal_panel: Panel
 var lobby_modal_content_host: Control
@@ -120,7 +128,9 @@ func _ready() -> void:
 		return
 	_play_menu_intro()
 	_sync_options_from_context()
+	_sync_profile_store_from_run_context()
 	_maybe_show_telemetry_consent_prompt()
+	_maybe_show_first_launch_profile_prompt()
 	_start_update_check()
 
 
@@ -474,7 +484,8 @@ func _read_main_debug_settings_values() -> Dictionary:
 		values = {
 			"enabled": bool(debug_settings.get("enabled")),
 			"start_encounter": debug_settings.get("start_encounter"),
-			"force_update_prompt_on_menu": bool(debug_settings.get("force_update_prompt_on_menu"))
+			"force_update_prompt_on_menu": bool(debug_settings.get("force_update_prompt_on_menu")),
+			"force_profile_prompt_on_menu": bool(debug_settings.get("force_profile_prompt_on_menu"))
 		}
 	main_root.queue_free()
 	return values
@@ -499,6 +510,10 @@ func _input(event: InputEvent) -> void:
 		multiplayer_room_code_input.release_focus()
 
 func _unhandled_input(event: InputEvent) -> void:
+	if profile_name_prompt_modal != null and profile_name_prompt_modal.visible:
+		if event.is_action_pressed("ui_cancel"):
+			get_viewport().set_input_as_handled()
+		return
 	if lobby_modal_layer != null and lobby_modal_layer.visible:
 		if event.is_action_pressed("ui_cancel"):
 			get_viewport().set_input_as_handled()
@@ -621,21 +636,21 @@ func _build_ui() -> void:
 	primary_run_button.pressed.connect(_on_primary_run_pressed)
 	actions.add_child(primary_run_button)
 
-	var endless_button := _make_menu_button("Endless Mode")
-	endless_button.pressed.connect(_on_endless_pressed)
-	actions.add_child(endless_button)
-
 	var multiplayer_button := _make_menu_button("Multiplayer")
 	multiplayer_button.pressed.connect(_on_multiplayer_pressed)
 	actions.add_child(multiplayer_button)
 
-	var options_button := _make_menu_button("Options")
-	options_button.pressed.connect(_on_options_pressed)
-	actions.add_child(options_button)
+	var profile_button := _make_menu_button("Profile")
+	profile_button.pressed.connect(_on_edit_profile_name_pressed)
+	actions.add_child(profile_button)
 
 	var glossary_button := _make_menu_button("Glossary")
 	glossary_button.pressed.connect(_on_glossary_pressed)
 	actions.add_child(glossary_button)
+
+	var options_button := _make_menu_button("Options")
+	options_button.pressed.connect(_on_options_pressed)
+	actions.add_child(options_button)
 
 	var exit_button := _make_menu_button("Exit Game")
 	exit_button.pressed.connect(_on_exit_pressed)
@@ -679,6 +694,12 @@ func _build_ui() -> void:
 	update_prompt_layer = _build_update_prompt_layer()
 	update_prompt_layer.visible = false
 	add_child(update_prompt_layer)
+
+	profile_name_prompt_modal = PROFILE_NAME_ENTRY_MODAL_SCRIPT.new()
+	profile_name_prompt_modal.visible = false
+	profile_name_prompt_modal.profile_submitted.connect(_on_profile_prompt_submitted)
+	profile_name_prompt_modal.profile_cancelled.connect(_on_profile_prompt_cancelled)
+	add_child(profile_name_prompt_modal)
 
 	lobby_modal_layer = _build_lobby_modal_layer()
 	lobby_modal_layer.visible = false
@@ -1074,6 +1095,8 @@ func _hide_lobby_modal() -> void:
 		lobby_modal_instance = null
 	if lobby_modal_layer != null:
 		lobby_modal_layer.visible = false
+	_show_pending_profile_prompt()
+	_show_pending_update_prompt()
 
 
 func _on_lobby_modal_leave_requested() -> void:
@@ -1787,8 +1810,7 @@ func _build_update_prompt_layer() -> Control:
 	var update_now_button := _make_menu_button("Update Now", true)
 	update_now_button.custom_minimum_size = Vector2(0.0, 58.0)
 	update_now_button.pressed.connect(func() -> void:
-		if update_prompt_layer != null:
-			update_prompt_layer.visible = false
+		_close_update_prompt()
 		_on_update_action_pressed()
 	)
 	actions.add_child(update_now_button)
@@ -1799,8 +1821,7 @@ func _build_update_prompt_layer() -> Control:
 		var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 		if run_context != null and update_service != null and not String(update_service.latest_version).is_empty():
 			run_context.set_skipped_update_version(String(update_service.latest_version), true)
-		if update_prompt_layer != null:
-			update_prompt_layer.visible = false
+		_close_update_prompt()
 	)
 	actions.add_child(not_now_button)
 
@@ -1871,6 +1892,9 @@ func _maybe_show_update_prompt() -> void:
 		return
 	if not update_service.should_prompt_for_update(String(run_context.get_skipped_update_version())):
 		return
+	if profile_name_prompt_modal != null and profile_name_prompt_modal.visible:
+		update_prompt_pending = true
+		return
 	if telemetry_consent_layer != null and telemetry_consent_layer.visible:
 		update_prompt_pending = true
 		return
@@ -1892,9 +1916,16 @@ func _show_update_prompt() -> void:
 func _show_pending_update_prompt() -> void:
 	if not update_prompt_pending:
 		return
+	if profile_name_prompt_modal != null and profile_name_prompt_modal.visible:
+		return
 	if telemetry_consent_layer != null and telemetry_consent_layer.visible:
 		return
 	_show_update_prompt()
+
+func _close_update_prompt() -> void:
+	if update_prompt_layer != null:
+		update_prompt_layer.visible = false
+	_show_pending_profile_prompt()
 
 func _on_update_action_pressed() -> void:
 	if update_service == null:
@@ -2679,6 +2710,7 @@ func _build_telemetry_consent_layer() -> Control:
 		_sync_options_from_context()
 		if telemetry_consent_layer != null:
 			telemetry_consent_layer.visible = false
+		_show_pending_profile_prompt()
 		_show_pending_update_prompt()
 	)
 	actions.add_child(allow_button)
@@ -2692,6 +2724,7 @@ func _build_telemetry_consent_layer() -> Control:
 		_sync_options_from_context()
 		if telemetry_consent_layer != null:
 			telemetry_consent_layer.visible = false
+		_show_pending_profile_prompt()
 		_show_pending_update_prompt()
 	)
 	actions.add_child(not_now_button)
@@ -2706,6 +2739,110 @@ func _maybe_show_telemetry_consent_prompt() -> void:
 		return
 	if telemetry_consent_layer != null:
 		telemetry_consent_layer.visible = true
+
+func _sync_profile_store_from_run_context() -> void:
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context == null:
+		return
+	if profile_persistence_store == null:
+		profile_persistence_store = PROFILE_PERSISTENCE_STORE_SCRIPT.new()
+	var profile: RefCounted = profile_persistence_store.load_or_create_profile()
+	var changed := false
+	var run_context_uuid := String(run_context.get_profile_uuid()).strip_edges().to_lower()
+	if not run_context_uuid.is_empty() and String(profile.player_id) != run_context_uuid:
+		profile.player_id = run_context_uuid
+		changed = true
+	var run_context_name := String(run_context.get_profile_name_or_default()).strip_edges()
+	if not run_context_name.is_empty() and String(profile.profile_name) != run_context_name:
+		profile.profile_name = run_context_name
+		changed = true
+	if changed:
+		profile_persistence_store.save_profile(profile)
+
+func _is_profile_prompt_blocked() -> bool:
+	if telemetry_consent_layer != null and telemetry_consent_layer.visible:
+		return true
+	if update_prompt_layer != null and update_prompt_layer.visible:
+		return true
+	if lobby_modal_layer != null and lobby_modal_layer.visible:
+		return true
+	return false
+
+func _maybe_show_first_launch_profile_prompt() -> void:
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context == null:
+		return
+	if bool(run_context.has_profile_name()) and not _is_debug_profile_prompt_forced():
+		return
+	_request_profile_name_prompt("first_launch", false)
+
+func _is_debug_profile_prompt_forced() -> bool:
+	var debug_values := _read_main_debug_settings_values()
+	if debug_values.is_empty():
+		return false
+	if not bool(debug_values.get("enabled", false)):
+		return false
+	return bool(debug_values.get("force_profile_prompt_on_menu", false))
+
+func _request_profile_name_prompt(purpose: String, allow_cancel: bool) -> void:
+	if profile_name_prompt_modal == null:
+		return
+	if _is_profile_prompt_blocked():
+		profile_prompt_pending = true
+		profile_prompt_pending_purpose = purpose
+		profile_prompt_pending_allow_cancel = allow_cancel
+		return
+	_show_profile_name_prompt(purpose, allow_cancel)
+
+func _show_profile_name_prompt(purpose: String, allow_cancel: bool) -> void:
+	if profile_name_prompt_modal == null:
+		return
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context == null:
+		return
+	var current_name := String(run_context.get_profile_name()).strip_edges()
+	var title_text := "Profile Name"
+	var body_text := "Choose a profile name (3-16 chars, letters, numbers, underscore)."
+	if purpose == "first_launch":
+		title_text = "Choose Your Profile Name"
+		body_text = "Set your profile name to start tracking your run history and leaderboard identity."
+	elif purpose == "edit" and not current_name.is_empty():
+		body_text = "Current: %s" % current_name
+	profile_prompt_pending = false
+	profile_prompt_pending_purpose = ""
+	profile_prompt_pending_allow_cancel = true
+	profile_name_prompt_modal.show_prompt(title_text, body_text, current_name, allow_cancel)
+
+func _show_pending_profile_prompt() -> void:
+	if not profile_prompt_pending:
+		return
+	if _is_profile_prompt_blocked():
+		return
+	var purpose := profile_prompt_pending_purpose
+	var allow_cancel := profile_prompt_pending_allow_cancel
+	_show_profile_name_prompt(purpose, allow_cancel)
+
+func _on_profile_prompt_submitted(profile_name: String) -> void:
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context == null:
+		return
+	if not bool(run_context.set_profile_name(profile_name, true)):
+		if profile_name_prompt_modal != null:
+			profile_name_prompt_modal.show_validation_error("Use 3-16 chars: letters, numbers, underscore only.")
+		return
+	_sync_profile_store_from_run_context()
+	_sync_options_from_context()
+	if profile_name_prompt_modal != null:
+		profile_name_prompt_modal.hide_prompt()
+	_show_pending_update_prompt()
+
+func _on_profile_prompt_cancelled() -> void:
+	if profile_name_prompt_modal != null:
+		profile_name_prompt_modal.hide_prompt()
+	_show_pending_update_prompt()
+
+func _on_edit_profile_name_pressed() -> void:
+	_request_profile_name_prompt("edit", true)
 
 func _apply_options(master_percent: float, music_percent: float, sfx_percent: float) -> void:
 	var master_db := _percent_to_db(master_percent)

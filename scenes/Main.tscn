@@ -8,9 +8,53 @@
 
 [node name="Main" type="Node2D" unique_id=1680556229]
 script = ExtResource("2_jxm8r")
+player_path = null
+encounter_count = null
+room_base_size = null
+room_size_growth = null
+spawn_padding = null
+spawn_safe_radius = null
+static_camera_room_threshold = null
+base_chaser_count = null
+chasers_per_room = null
+chargers_start_room = null
+chargers_per_room = null
+archer_start_room = null
+archers_per_room = null
+shielder_start_room = null
+shielders_per_room = null
+boss_chaser_count = null
+boss_charger_count = null
+door_distance_from_center = null
+door_use_radius = null
+camera_room_margin = null
+camera_base_zoom_in = null
+boon_choice_count = null
+camera_player_margin = null
+boon_reveal_duration = null
+floor_grid_step = null
+floor_grid_fine_step = null
+arena_glow_strength = null
+ambient_backdrop_alpha = null
+floor_coarse_grid_alpha = null
+floor_fine_grid_alpha = null
+floor_border_alpha = null
+hud_background_alpha = null
 normal_room_music = ExtResource("2_rarhs")
 boss_room_music = ExtResource("3_vcsgt")
 music_volume_db = -50.0
+sfx_volume_db = null
+music_intro_fade_duration = null
+music_crossfade_duration = null
+rest_heal_ratio = null
+hard_room_enemy_bonus = null
+second_boss_encounter_count = null
+third_boss_encounter_count = null
+multiplayer_camera_padding = null
+multiplayer_camera_min_zoom = null
+multiplayer_camera_max_zoom = null
+multiplayer_use_shared_camera = null
+multiplayer_force_static_arena_camera = null
 
 [node name="DebugSettings" type="Node" parent="." unique_id=390124711]
 script = ExtResource("5_oxjlc")
