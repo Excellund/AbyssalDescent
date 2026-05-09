@@ -461,6 +461,7 @@ func _update_player_list() -> void:
 		player_list.add_child(row)
 
 	_update_player_status()
+	call_deferred("_apply_lobby_layout")
 
 
 func _update_debug_status() -> void:
@@ -977,6 +978,10 @@ func _apply_lobby_layout() -> void:
 	var fit_scale := minf(available_size.x / base_size.x, available_size.y / base_size.y)
 	fit_scale = clampf(fit_scale, 0.80, 1.0)
 	var target_size := base_size * fit_scale
+	## Grow vertically with content so extra player rows don't overflow the panel border.
+	var content_min := content.get_combined_minimum_size()
+	var min_height := maxf(target_size.y, content_min.y)
+	target_size.y = minf(min_height, available_size.y)
 	content.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	content.custom_minimum_size = target_size
 	content.size = target_size
