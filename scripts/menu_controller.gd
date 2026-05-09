@@ -2883,7 +2883,7 @@ func _build_telemetry_consent_layer() -> Control:
 	stack.add_child(title)
 
 	var body := Label.new()
-	body.text = "Allow anonymous run telemetry uploads? This sends run outcomes and combat summary data only."
+	body.text = "Allow run telemetry uploads? This sends run outcomes and combat summary data only."
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	body.add_theme_font_size_override("font_size", 18)
