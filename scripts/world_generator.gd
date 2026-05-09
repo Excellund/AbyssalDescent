@@ -4414,6 +4414,8 @@ func _reset_run_summary_tracker() -> void:
 		"difficulty_label": difficulty_label,
 		"game_version": game_version,
 		"leaderboard_patch_key": RUN_TELEMETRY_STORE.leaderboard_patch_key_from_version(game_version),
+		"is_multiplayer": is_multiplayer,
+		"player_count": _get_multiplayer_party_size_for_scaling(),
 	}
 	if run_context != null:
 		tracker_seed["player_uuid"] = String(run_context.get_profile_uuid())
@@ -4483,6 +4485,8 @@ func _finish_active_run_telemetry(outcome: String, death_event: Dictionary = {})
 	if not death_copy.is_empty():
 		summary["death_event"] = death_copy
 	if run_summary_tracker != null:
+		run_summary_tracker.is_multiplayer = is_multiplayer
+		run_summary_tracker.player_count = _get_multiplayer_party_size_for_scaling()
 		var tracker_summary: Dictionary = run_summary_tracker.build_summary({
 			"run_id": telemetry_run_id,
 			"outcome": outcome,

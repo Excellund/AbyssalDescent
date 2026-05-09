@@ -5,6 +5,7 @@ var _rank_label: Label
 var _bearing_label: Label
 var _player_label: Label
 var _character_label: Label
+var _party_label: Label
 var _patch_label: Label
 var _time_label: Label
 var _ended_label: Label
@@ -18,6 +19,7 @@ func _init() -> void:
 	_bearing_label = _make_column(row, 90, HORIZONTAL_ALIGNMENT_LEFT)
 	_player_label = _make_column(row, 160, HORIZONTAL_ALIGNMENT_LEFT)
 	_character_label = _make_column(row, 120, HORIZONTAL_ALIGNMENT_LEFT)
+	_party_label = _make_column(row, 64, HORIZONTAL_ALIGNMENT_CENTER)
 	_patch_label = _make_column(row, 90, HORIZONTAL_ALIGNMENT_LEFT)
 	_time_label = _make_column(row, 78, HORIZONTAL_ALIGNMENT_RIGHT)
 	_ended_label = _make_column(row, 150, HORIZONTAL_ALIGNMENT_RIGHT)
@@ -27,6 +29,8 @@ func set_entry(entry: Dictionary, current_player_uuid: String) -> void:
 	_bearing_label.text = _bearing_label_for_tier(int(entry.get("difficulty_tier", 0)))
 	_player_label.text = String(entry.get("player_name", "Player"))
 	_character_label.text = String(entry.get("character_name", "Unknown"))
+	var party_size := clampi(int(entry.get("player_count", 1)), 1, 4)
+	_party_label.text = "Solo" if party_size <= 1 else "%dP" % party_size
 	_patch_label.text = String(entry.get("leaderboard_patch_key", "dev"))
 	_time_label.text = _format_duration(int(entry.get("duration_seconds", 0)))
 	_ended_label.text = _format_timestamp(int(entry.get("ended_at_unix", 0)))

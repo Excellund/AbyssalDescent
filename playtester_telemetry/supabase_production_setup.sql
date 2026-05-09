@@ -255,21 +255,25 @@ create table if not exists public.leaderboard_runs (
   started_at_unix bigint not null,
   ended_at_unix bigint not null,
   is_debug boolean not null default false,
+  party_size int not null default 1,
+  is_multiplayer boolean not null default false,
   run_summary jsonb not null default '{}'::jsonb
 );
 
 alter table public.leaderboard_runs add column if not exists updated_at timestamptz not null default now();
 alter table public.leaderboard_runs add column if not exists run_summary jsonb not null default '{}'::jsonb;
 alter table public.leaderboard_runs add column if not exists clear_time_ms bigint not null default 0;
+alter table public.leaderboard_runs add column if not exists party_size int not null default 1;
+alter table public.leaderboard_runs add column if not exists is_multiplayer boolean not null default false;
 
 create unique index if not exists leaderboard_runs_run_id_idx
   on public.leaderboard_runs (run_id);
 
 create index if not exists leaderboard_runs_board_lookup_idx
-  on public.leaderboard_runs (leaderboard_patch_key, difficulty_tier, character_id, duration_seconds, ended_at_unix, run_id);
+  on public.leaderboard_runs (leaderboard_patch_key, difficulty_tier, character_id, party_size, duration_seconds, ended_at_unix, run_id);
 
 create index if not exists leaderboard_runs_player_lookup_idx
-  on public.leaderboard_runs (player_uuid, leaderboard_patch_key, difficulty_tier, character_id, duration_seconds);
+  on public.leaderboard_runs (player_uuid, leaderboard_patch_key, difficulty_tier, character_id, party_size, duration_seconds);
 
 alter table public.leaderboard_runs enable row level security;
 
@@ -291,6 +295,7 @@ with check (
   and started_at_unix > 0
   and ended_at_unix >= started_at_unix
   and is_debug = false
+  and party_size between 1 and 4
   and jsonb_typeof(run_summary) = 'object'
 );
 
@@ -302,8 +307,11 @@ to anon
 using (false);
 
 drop function if exists public.submit_leaderboard_run(jsonb);
+drop function if exists public.submit_leaderboard_run(jsonb, integer, boolean);
 create or replace function public.submit_leaderboard_run(
-  p_run_summary jsonb
+  p_run_summary jsonb,
+  p_party_size integer default 1,
+  p_is_multiplayer boolean default false
 )
 returns jsonb
 language plpgsql
@@ -323,6 +331,8 @@ declare
   v_ended_at_unix bigint := greatest(0, coalesce((p_run_summary->>'ended_at_unix')::bigint, 0));
   v_difficulty_tier int := coalesce((p_run_summary->>'difficulty_tier')::int, -1);
   v_is_debug boolean := coalesce((p_run_summary->>'is_debug')::boolean, false);
+  v_party_size int := greatest(1, least(coalesce(p_party_size, coalesce((p_run_summary->>'player_count')::int, 1)), 4));
+  v_is_multiplayer boolean := coalesce(p_is_multiplayer, coalesce((p_run_summary->>'is_multiplayer')::boolean, false)) or v_party_size > 1;
   v_clear_time_ms bigint;
 begin
   if v_run_id = '' then
@@ -372,6 +382,8 @@ begin
     started_at_unix,
     ended_at_unix,
     is_debug,
+    party_size,
+    is_multiplayer,
     run_summary,
     updated_at
   ) values (
@@ -388,6 +400,8 @@ begin
     v_started_at_unix,
     v_ended_at_unix,
     false,
+    v_party_size,
+    v_is_multiplayer,
     coalesce(p_run_summary, '{}'::jsonb),
     now()
   )
@@ -404,6 +418,8 @@ begin
     started_at_unix = excluded.started_at_unix,
     ended_at_unix = excluded.ended_at_unix,
     is_debug = excluded.is_debug,
+    party_size = excluded.party_size,
+    is_multiplayer = excluded.is_multiplayer,
     run_summary = excluded.run_summary,
     updated_at = now();
 
@@ -411,17 +427,19 @@ begin
 end;
 $$;
 
-revoke all on function public.submit_leaderboard_run(jsonb) from public;
-grant execute on function public.submit_leaderboard_run(jsonb) to anon;
-grant execute on function public.submit_leaderboard_run(jsonb) to authenticated;
+revoke all on function public.submit_leaderboard_run(jsonb, integer, boolean) from public;
+grant execute on function public.submit_leaderboard_run(jsonb, integer, boolean) to anon;
+grant execute on function public.submit_leaderboard_run(jsonb, integer, boolean) to authenticated;
 
 drop function if exists public.get_leaderboard_top(text, integer, text, text, integer);
+drop function if exists public.get_leaderboard_top(text, integer, text, text, integer, integer);
 create or replace function public.get_leaderboard_top(
   p_patch_key text,
   p_difficulty_tier integer,
   p_board_mode text default 'global',
   p_character_id text default '',
-  p_limit integer default 25
+  p_limit integer default 25,
+  p_party_size integer default 1
 )
 returns jsonb
 language sql
@@ -438,12 +456,15 @@ as $$
       difficulty_tier,
       duration_seconds,
       leaderboard_patch_key,
-      ended_at_unix
+      ended_at_unix,
+      party_size,
+      is_multiplayer
     from public.leaderboard_runs
     where is_debug = false
       and outcome = 'clear'
       and leaderboard_patch_key = lower(trim(p_patch_key))
       and difficulty_tier = p_difficulty_tier
+      and party_size = greatest(1, least(coalesce(p_party_size, 1), 4))
       and (
         lower(trim(coalesce(p_board_mode, 'global'))) <> 'per_character'
         or character_id = lower(trim(coalesce(p_character_id, '')))
@@ -459,7 +480,9 @@ as $$
       difficulty_tier,
       duration_seconds,
       leaderboard_patch_key,
-      ended_at_unix
+      ended_at_unix,
+      party_size,
+      is_multiplayer
     from filtered
     order by player_uuid, duration_seconds asc, ended_at_unix asc, run_id asc
   ),
@@ -474,7 +497,9 @@ as $$
       difficulty_tier,
       duration_seconds,
       leaderboard_patch_key,
-      ended_at_unix
+      ended_at_unix,
+      party_size as player_count,
+      is_multiplayer
     from best_per_player
     order by duration_seconds asc, ended_at_unix asc, run_id asc
     limit greatest(1, least(p_limit, 25))
@@ -482,9 +507,9 @@ as $$
   select coalesce((select jsonb_agg(to_jsonb(ranked)) from ranked), '[]'::jsonb);
 $$;
 
-revoke all on function public.get_leaderboard_top(text, integer, text, text, integer) from public;
-grant execute on function public.get_leaderboard_top(text, integer, text, text, integer) to anon;
-grant execute on function public.get_leaderboard_top(text, integer, text, text, integer) to authenticated;
+revoke all on function public.get_leaderboard_top(text, integer, text, text, integer, integer) from public;
+grant execute on function public.get_leaderboard_top(text, integer, text, text, integer, integer) to anon;
+grant execute on function public.get_leaderboard_top(text, integer, text, text, integer, integer) to authenticated;
 
 drop function if exists public.get_leaderboard_patch_keys(integer, integer, text);
 create or replace function public.get_leaderboard_patch_keys(

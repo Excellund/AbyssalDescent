@@ -43,13 +43,14 @@ func fetch_patch_options(current_patch_key: String, difficulty_tier: int = -1, l
 		"error": "",
 	}
 
-func fetch_top_entries(patch_key: String, difficulty_tier: int, board_mode: String, character_id: String = "", limit: int = 25) -> Dictionary:
+func fetch_top_entries(patch_key: String, difficulty_tier: int, board_mode: String, character_id: String = "", limit: int = 25, party_size: int = 1) -> Dictionary:
 	var response := await _post_rpc("get_leaderboard_top", {
 		"p_patch_key": patch_key.strip_edges().to_lower(),
 		"p_difficulty_tier": difficulty_tier,
 		"p_board_mode": board_mode.strip_edges().to_lower(),
 		"p_character_id": character_id.strip_edges().to_lower(),
 		"p_limit": maxi(1, limit),
+		"p_party_size": clampi(party_size, 1, 4),
 	})
 	if not bool(response.get("ok", false)):
 		return {

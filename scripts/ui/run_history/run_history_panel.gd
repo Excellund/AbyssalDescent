@@ -146,6 +146,8 @@ func _make_row_button(rec: Dictionary, index: int) -> Button:
 	var difficulty := String(rec.get("difficulty_label", "Pilgrim"))
 	var depth := int(rec.get("max_depth", 0))
 	var duration := int(rec.get("duration_seconds", 0))
+	var party_size := maxi(1, int(rec.get("player_count", 1)))
+	var is_mp := bool(rec.get("is_multiplayer", false)) or party_size > 1
 
 	var btn := Button.new()
 	btn.custom_minimum_size = Vector2(0.0, 58.0)
@@ -188,6 +190,8 @@ func _make_row_button(rec: Dictionary, index: int) -> Button:
 
 	var outcome_color := Color(0.52, 0.88, 0.62, 1.0) if is_clear else Color(0.90, 0.46, 0.46, 1.0)
 	var outcome_text := ("\u2713 " if is_clear else "\u2717 ") + char_name
+	if is_mp:
+		outcome_text += "  \u2014  Co-op %dP" % party_size
 	var top_label := Label.new()
 	top_label.text = outcome_text
 	top_label.add_theme_font_size_override("font_size", 15)
@@ -246,6 +250,12 @@ func _show_detail(rec: Dictionary) -> void:
 	_add_detail_row("Max Depth", str(wrapped.get_max_depth()))
 	_add_detail_row("Rooms Cleared", str(wrapped.get_rooms_cleared()))
 	_add_detail_row("Duration", _format_duration(wrapped.get_duration_seconds()))
+	var detail_party_size := maxi(1, int(rec.get("player_count", 1)))
+	var detail_is_mp := bool(rec.get("is_multiplayer", false)) or detail_party_size > 1
+	if detail_is_mp:
+		_add_detail_row("Mode", "Co-op (%d players)" % detail_party_size)
+	else:
+		_add_detail_row("Mode", "Solo")
 	_add_detail_row("Enemies Killed", str(wrapped.get_enemies_killed()))
 	_add_detail_row("Bosses Defeated", str(wrapped.get_bosses_defeated()))
 	_add_detail_row("Damage Dealt", str(wrapped.get_damage_dealt()))

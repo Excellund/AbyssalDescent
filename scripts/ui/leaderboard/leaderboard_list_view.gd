@@ -57,6 +57,7 @@ func _build_header() -> PanelContainer:
 	_add_header_column(row, "Bearing", 90, HORIZONTAL_ALIGNMENT_LEFT)
 	_add_header_column(row, "Player", 160, HORIZONTAL_ALIGNMENT_LEFT)
 	_add_header_column(row, "Character", 120, HORIZONTAL_ALIGNMENT_LEFT)
+	_add_header_column(row, "Party", 64, HORIZONTAL_ALIGNMENT_CENTER)
 	_add_header_column(row, "Patch", 90, HORIZONTAL_ALIGNMENT_LEFT)
 	_add_header_column(row, "Time", 78, HORIZONTAL_ALIGNMENT_RIGHT)
 	_add_header_column(row, "Run Ended", 150, HORIZONTAL_ALIGNMENT_RIGHT)

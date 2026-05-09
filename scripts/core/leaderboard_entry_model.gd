@@ -6,6 +6,25 @@ const RUN_SUMMARY_MODEL := preload("res://scripts/core/run_summary_model.gd")
 const BOARD_GLOBAL := "global"
 const BOARD_PER_CHARACTER := "per_character"
 
+const PARTY_SIZE_MIN := 1
+const PARTY_SIZE_MAX := 4
+
+static func clamp_party_size(value: int) -> int:
+	return clampi(value, PARTY_SIZE_MIN, PARTY_SIZE_MAX)
+
+static func party_size_label(party_size: int) -> String:
+	match clamp_party_size(party_size):
+		1:
+			return "Solo"
+		2:
+			return "Duo (2P)"
+		3:
+			return "Trio (3P)"
+		4:
+			return "Squad (4P)"
+		_:
+			return "Solo"
+
 static func normalize_run_summary(run_summary: Dictionary) -> Dictionary:
 	var summary := RUN_SUMMARY_MODEL.create_summary(run_summary)
 	summary["run_id"] = String(summary.get("run_id", "")).strip_edges()
@@ -20,6 +39,8 @@ static func normalize_run_summary(run_summary: Dictionary) -> Dictionary:
 	summary["player_name"] = String(summary.get("player_name", "Player")).strip_edges()
 	summary["leaderboard_patch_key"] = String(summary.get("leaderboard_patch_key", "dev")).strip_edges().to_lower()
 	summary["is_debug"] = bool(summary.get("is_debug", false))
+	summary["player_count"] = clamp_party_size(int(summary.get("player_count", 1)))
+	summary["is_multiplayer"] = bool(summary.get("is_multiplayer", false)) or summary["player_count"] > 1
 	return summary
 
 static func is_submission_eligible(run_summary: Dictionary) -> bool:
@@ -44,6 +65,8 @@ static func build_submission_rpc_body(run_summary: Dictionary) -> Dictionary:
 	var summary := normalize_run_summary(run_summary)
 	return {
 		"p_run_summary": summary,
+		"p_party_size": int(summary.get("player_count", 1)),
+		"p_is_multiplayer": bool(summary.get("is_multiplayer", false)),
 	}
 
 static func normalize_server_entry(entry: Dictionary) -> Dictionary:
@@ -58,6 +81,8 @@ static func normalize_server_entry(entry: Dictionary) -> Dictionary:
 		"duration_seconds": maxi(0, int(entry.get("duration_seconds", 0))),
 		"leaderboard_patch_key": String(entry.get("leaderboard_patch_key", "dev")).strip_edges().to_lower(),
 		"ended_at_unix": maxi(0, int(entry.get("ended_at_unix", 0))),
+		"player_count": clamp_party_size(int(entry.get("player_count", 1))),
+		"is_multiplayer": bool(entry.get("is_multiplayer", false)) or int(entry.get("player_count", 1)) > 1,
 	}
 
 static func sort_entries(entries: Array) -> Array:

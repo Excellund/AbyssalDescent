@@ -7,6 +7,7 @@ const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 const LEADERBOARD_SERVICE_SCRIPT := preload("res://scripts/leaderboard_service.gd")
 const TAB_STRIP_SCRIPT := preload("res://scripts/ui/leaderboard/leaderboard_tab_strip.gd")
 const LIST_VIEW_SCRIPT := preload("res://scripts/ui/leaderboard/leaderboard_list_view.gd")
+const LEADERBOARD_MODEL := preload("res://scripts/core/leaderboard_entry_model.gd")
 
 const RUN_CONTEXT_PATH := "/root/RunContext"
 
@@ -18,12 +19,14 @@ var _list_view: Control
 var _patch_selector: OptionButton
 var _bearing_selector: OptionButton
 var _character_selector: OptionButton
+var _party_size_selector: OptionButton
 var _status_label: Label
 var _refresh_button: Button
 
 var _selected_patch_key: String = ""
 var _selected_bearing: int = 0
 var _selected_character_id: String = ""
+var _selected_party_size: int = 1
 var _current_patch_key: String = "dev"
 var _current_player_uuid: String = ""
 var _request_token: int = 0
@@ -53,7 +56,7 @@ func _build_ui(style_ref: Object) -> void:
 	stack.add_child(title)
 
 	var subtitle := Label.new()
-	subtitle.text = "Current patch and archived rankings by Bearing"
+	subtitle.text = "Current patch and archived rankings by Bearing & party size"
 	subtitle.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.add_theme_font_size_override("font_size", 15)
@@ -85,6 +88,14 @@ func _build_ui(style_ref: Object) -> void:
 	_character_selector.item_selected.connect(_on_character_selected)
 	filters.add_child(_character_selector)
 	_rebuild_character_selector()
+
+	_party_size_selector = OptionButton.new()
+	_party_size_selector.custom_minimum_size = Vector2(140.0, 42.0)
+	_party_size_selector.item_selected.connect(_on_party_size_selected)
+	filters.add_child(_party_size_selector)
+	for size in range(LEADERBOARD_MODEL.PARTY_SIZE_MIN, LEADERBOARD_MODEL.PARTY_SIZE_MAX + 1):
+		_party_size_selector.add_item(LEADERBOARD_MODEL.party_size_label(size), size)
+	_select_party_size_in_selector(_selected_party_size)
 
 	_refresh_button = Button.new()
 	_refresh_button.text = "Refresh"
@@ -187,14 +198,15 @@ func _reload_entries(token: int) -> void:
 		_selected_patch_key = patch_key
 	var board_mode: String = _tab_strip.get_active() if _tab_strip != null else "global"
 	var character_id := _selected_character_id if board_mode == "per_character" else ""
-	var result: Dictionary = await _service.fetch_top_entries(patch_key, _selected_bearing, board_mode, character_id, 25)
+	var result: Dictionary = await _service.fetch_top_entries(patch_key, _selected_bearing, board_mode, character_id, 25, _selected_party_size)
 	if token != _request_token:
 		return
 	var entries := result.get("entries", []) as Array
 	if _list_view != null:
 		_list_view.set_entries(entries, _current_player_uuid)
 	if bool(result.get("ok", false)):
-		_set_status("Showing %d entries for %s board." % [entries.size(), "Global" if board_mode == "global" else "Per-Character"])
+		var mode_label := "Global" if board_mode == "global" else "Per-Character"
+		_set_status("Showing %d entries for %s board (%s)." % [entries.size(), mode_label, LEADERBOARD_MODEL.party_size_label(_selected_party_size)])
 	else:
 		_set_status(String(result.get("error", "Unable to load leaderboard.")))
 
@@ -271,6 +283,22 @@ func _on_character_selected(index: int) -> void:
 	_selected_character_id = String(_character_selector.get_item_metadata(index)).strip_edges().to_lower()
 	if _tab_strip != null and _tab_strip.get_active() == "per_character":
 		_request_reload(false)
+
+func _on_party_size_selected(index: int) -> void:
+	if _party_size_selector == null or index < 0 or index >= _party_size_selector.item_count:
+		return
+	_selected_party_size = LEADERBOARD_MODEL.clamp_party_size(int(_party_size_selector.get_item_id(index)))
+	_request_reload(false)
+
+func _select_party_size_in_selector(target_size: int) -> void:
+	if _party_size_selector == null:
+		return
+	var normalized := LEADERBOARD_MODEL.clamp_party_size(target_size)
+	for i in range(_party_size_selector.item_count):
+		if _party_size_selector.get_item_id(i) == normalized:
+			_party_size_selector.select(i)
+			_selected_party_size = normalized
+			return
 
 func _on_tab_changed(_tab_key: String) -> void:
 	_update_character_filter_visibility()

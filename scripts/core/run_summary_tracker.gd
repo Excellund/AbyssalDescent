@@ -14,6 +14,8 @@ var game_version: String = "dev"
 var leaderboard_patch_key: String = "dev"
 var player_uuid: String = ""
 var player_name: String = ""
+var is_multiplayer: bool = false
+var player_count: int = 1
 
 var total_damage_dealt: int = 0
 var total_damage_taken: int = 0
@@ -37,6 +39,8 @@ func reset_for_run(run_seed: Dictionary) -> void:
 	leaderboard_patch_key = String(run_seed.get("leaderboard_patch_key", game_version)).strip_edges()
 	player_uuid = String(run_seed.get("player_uuid", "")).strip_edges().to_lower()
 	player_name = String(run_seed.get("player_name", "")).strip_edges()
+	is_multiplayer = bool(run_seed.get("is_multiplayer", false))
+	player_count = maxi(1, int(run_seed.get("player_count", 1)))
 	total_damage_dealt = 0
 	total_damage_taken = 0
 	enemies_killed = 0
@@ -108,6 +112,8 @@ func build_summary(final_state: Dictionary) -> Dictionary:
 		"leaderboard_patch_key": leaderboard_patch_key,
 		"player_uuid": player_uuid,
 		"player_name": player_name,
+		"is_multiplayer": is_multiplayer,
+		"player_count": player_count,
 		"death_event": (final_state.get("death_event", {}) as Dictionary).duplicate(true),
 		"stats": RUN_SUMMARY_MODEL.create_stats(total_damage_dealt, total_damage_taken, enemies_killed, bosses_defeated),
 		"build_summary": {
