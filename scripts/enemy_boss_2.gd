@@ -775,10 +775,7 @@ func _apply_orbital_lance_hits() -> void:
 			break
 
 func _rpc_apply_polar_shift() -> void:
-	if not MultiplayerSessionManager.is_session_connected():
-		_apply_polar_shift()
-		return
-	if MultiplayerSessionManager.is_host():
+	if MultiplayerSessionManager.is_authoritative():
 		_apply_polar_shift()
 	else:
 		rpc_id(1, "_apply_polar_shift")

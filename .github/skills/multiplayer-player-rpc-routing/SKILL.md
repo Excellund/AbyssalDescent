@@ -36,7 +36,7 @@ func send_<effect_name>(target_peer_id: int, ...args) -> void:
 	if multiplayer_session_manager == null or not bool(multiplayer_session_manager.is_session_connected()):
 		_apply_<effect_name>_local(target_peer_id, ...args)
 		return
-	if not bool(multiplayer_session_manager.is_host()):
+	if not bool(multiplayer_session_manager.should_broadcast()):
 		return
 	if target_peer_id == local_peer_id:
 		_apply_<effect_name>_local(target_peer_id, ...args)
@@ -58,6 +58,23 @@ func _apply_<effect_name>_local(target_peer_id: int, ...args) -> void:
 ```
 
 Use `"authority"` mode + `"call_remote"` because the host calls local apply directly when the target is itself; the RPC only fires for remote peers. Use `"reliable"` for one-shot gameplay effects that must not be dropped.
+
+### Authority predicates (use these, never inline `is_host()` cocktails)
+
+`MultiplayerSessionManager` exposes four predicates that encode every common authority check. Use them in place of ad-hoc `is_multiplayer and/or is_host()` boolean combinations — those are the largest source of host/joiner divergence bugs.
+
+| Predicate | Meaning | Replaces |
+|---|---|---|
+| `is_authoritative()` | This peer owns the simulation (singleplayer or host) | `not is_multiplayer or MultiplayerSessionManager.is_host()` |
+| `is_remote_replica()` | A multiplayer session is active and this peer is **not** the host | `is_multiplayer and not MultiplayerSessionManager.is_host()` |
+| `should_broadcast()` | Active multiplayer host — guard `.rpc()` send sites with this | `is_multiplayer and MultiplayerSessionManager.is_host()` |
+| `is_authoritative_for_peer(peer_id)` | Host (always) or any peer for its own `peer_id` | per-peer authority checks |
+
+Rules of thumb:
+- Guarding a `.rpc()` send: `if not MultiplayerSessionManager.should_broadcast(): return`.
+- Guarding an authority-only RPC handler / state mutation: `if MultiplayerSessionManager.is_remote_replica(): return`.
+- Singleplayer-or-host code path: `if MultiplayerSessionManager.is_authoritative():`.
+- Never write `is_multiplayer and is_host()` style cocktails in new code; the polarity is easy to invert and the duplication drifts.
 
 ### Step 2: Mark the player methods as plain methods (no @rpc)
 

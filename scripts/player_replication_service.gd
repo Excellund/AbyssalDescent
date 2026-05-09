@@ -112,10 +112,11 @@ func unregister_player(peer_id: int) -> void:
 
 
 ## Returns true when this peer is authoritative for the given peer_id:
-## always true for the host, or for a client broadcasting their own peer.
+## always true for the host (or singleplayer), or for a client broadcasting their own peer.
 func _is_authority_for_peer(peer_id: int) -> bool:
-	return (multiplayer_session_manager != null and bool(multiplayer_session_manager.is_host())) \
-		or peer_id == local_peer_id
+	if multiplayer_session_manager == null:
+		return peer_id == local_peer_id
+	return bool(multiplayer_session_manager.is_authoritative_for_peer(peer_id))
 
 
 ## Looks up the player node for peer_id. Returns null and cleans up if invalid.
@@ -512,7 +513,7 @@ func send_polar_shift_effect(target_peer_id: int, direction: Vector2, force: flo
 	if multiplayer_session_manager == null or not bool(multiplayer_session_manager.is_session_connected()):
 		_apply_polar_shift_effect_local(target_peer_id, direction, force, dash_lockout_duration)
 		return
-	if not bool(multiplayer_session_manager.is_host()):
+	if not bool(multiplayer_session_manager.should_broadcast()):
 		return
 	if target_peer_id == local_peer_id:
 		_apply_polar_shift_effect_local(target_peer_id, direction, force, dash_lockout_duration)

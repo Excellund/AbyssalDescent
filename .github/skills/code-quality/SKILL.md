@@ -43,6 +43,8 @@ How to apply:
 - For repeated combat or area-hit loops, centralize target selection and on-hit effect/proc resolution so damage packet rules cannot drift between variants.
 - Prefer one canonical implementation per behavior.
 
+Nuance: DRY targets *true* duplication of behavior. Do not deduplicate code that merely *looks* similar but evolves for different reasons — premature consolidation creates coupling that is harder to undo than the duplication.
+
 ### 2. Reduce Cognitive Load
 
 Optimize for code that is easy to read and reason about.
@@ -73,6 +75,8 @@ How to apply:
 - Keep one runtime owner per behavior.
 - For repeated pause/start/end combat side effects (damage toggles, lingering-effect cleanup, physics process gating), route through a focused coordinator instead of duplicating world-level branches.
 - Remove mirrored or legacy paths after extraction.
+
+Nuance: splitting has a cost. If the split forces readers to jump across many files to follow one straight-line behavior, the original was clearer. Prefer local and obvious code over more files.
 
 ### 4. Prefer Explicit Contracts
 
@@ -118,6 +122,25 @@ How to apply:
 - Move logic first, then rename or simplify.
 - Validate after each step.
 - Keep feature changes separate from structural refactors.
+
+### 7. Avoid Over-Engineering
+
+A refactor should increase clarity more than it increases abstraction.
+
+Why it matters:
+
+- Over-abstraction hides data flow and inflates cognitive load.
+- Generic systems built for hypothetical future needs rarely fit the real future need.
+- Excessive splitting fragments straight-line behavior and slows debugging.
+
+How to apply:
+
+- Do not introduce patterns, registries, or indirection before there is concrete, repeated pain.
+- Do not deduplicate superficial similarity. Wait for the third occurrence with shared intent.
+- Do not extract a helper if the call site is clearer with the logic inline.
+- Do not split a module unless responsibilities have actually diverged.
+- Prefer deleting or inlining over adding new layers.
+- When a change does not make code more obvious, more local, or more predictable, drop it.
 
 ## Routing Rule For New Learnings
 

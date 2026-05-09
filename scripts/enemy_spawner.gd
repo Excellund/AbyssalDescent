@@ -191,7 +191,7 @@ func spawn_profile_enemies_report(profile: Dictionary) -> Array[Dictionary]:
 
 func _spawn_profile_enemies_internal(profile: Dictionary, build_report: bool) -> Array[Dictionary]:
 	## Multiplayer: only host decides encounter spawns and broadcasts them.
-	if MultiplayerSessionManager.is_session_connected() and not MultiplayerSessionManager.is_host():
+	if MultiplayerSessionManager.is_remote_replica():
 		return []
 
 	var report: Array[Dictionary] = []

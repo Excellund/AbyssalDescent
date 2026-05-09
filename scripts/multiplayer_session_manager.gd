@@ -479,6 +479,37 @@ func is_session_connected() -> bool:
 	return session_connected
 
 
+## True when this peer owns the authoritative simulation:
+## either no multiplayer session is active (singleplayer / pre-session) or this peer is the host.
+## Use this in place of `not is_multiplayer or MultiplayerSessionManager.is_host()`.
+func is_authoritative() -> bool:
+	return not session_connected or is_host_peer
+
+
+## True when this peer is running a replicated copy that should not drive authoritative state:
+## a multiplayer session is active and this peer is not the host.
+## Use this in place of `is_multiplayer and not MultiplayerSessionManager.is_host()`.
+func is_remote_replica() -> bool:
+	return session_connected and not is_host_peer
+
+
+## True when this peer should broadcast host RPCs:
+## a multiplayer session is active and this peer is the host.
+## Use this in place of `is_multiplayer and MultiplayerSessionManager.is_host()` when guarding `.rpc()` sends.
+func should_broadcast() -> bool:
+	return session_connected and is_host_peer
+
+
+## True when this peer is authoritative for the given peer_id's state:
+## host is authoritative for everyone, and any peer is authoritative for itself.
+func is_authoritative_for_peer(peer_id: int) -> bool:
+	if not session_connected:
+		return true
+	if is_host_peer:
+		return true
+	return peer_id == local_peer_id
+
+
 func has_active_session_state() -> bool:
 	if session_connected:
 		return true

@@ -77,9 +77,7 @@ static func _resolve_local_peer_id() -> int:
 
 
 static func _should_route_enemy_damage_to_host(target: Object) -> bool:
-	if not MultiplayerSessionManager.is_session_connected():
-		return false
-	if MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.is_remote_replica():
 		return false
 	if not (target is Node):
 		return false

@@ -222,7 +222,7 @@ func _begin_priority_target_objective(profile: Dictionary) -> void:
 	max_enemies = maxi(CutTheSignalConfig.MAX_ENEMIES_MIN, int(round(float(max_enemies) * objective_pressure_mult)))
 	var hunt_kill_goal := clampi(int(round(CutTheSignalConfig.HUNT_KILL_MULT * objective_pressure_mult)), CutTheSignalConfig.HUNT_KILL_GOAL_MIN, CutTheSignalConfig.HUNT_KILL_GOAL_MAX)
 	objective_state_setup.apply_priority_target_setup(objective_manager, profile, target_type, "Signal", spawn_interval, spawn_timer, spawn_batch, max_enemies, hunt_kill_goal)
-	if world.is_multiplayer and not MultiplayerSessionManager.is_host():
+	if MultiplayerSessionManager.is_remote_replica():
 		return
 	spawn_priority_target_enemy()
 
@@ -250,7 +250,7 @@ func _begin_control_objective(profile: Dictionary) -> void:
 		ENCOUNTER_CONTRACTS.profile_objective_progress_decay(profile),
 		ENCOUNTER_CONTRACTS.profile_objective_contest_threshold(profile)
 	)
-	if world.is_multiplayer and MultiplayerSessionManager.is_host():
+	if MultiplayerSessionManager.should_broadcast():
 		world._sync_objective_control_zone.rpc(
 			objective_manager.control_anchor,
 			objective_manager.control_radius,
@@ -278,7 +278,7 @@ func update_objective_state(delta: float) -> void:
 		return
 
 func update_survival_objective_state(delta: float) -> void:
-	if world.is_multiplayer and not MultiplayerSessionManager.is_host():
+	if MultiplayerSessionManager.is_remote_replica():
 		return
 	var quota_met: bool = objective_manager.kill_target > 0 and objective_manager.kills >= objective_manager.kill_target
 	if world.choosing_next_room or world.run_cleared:
@@ -323,7 +323,7 @@ func update_survival_objective_state(delta: float) -> void:
 		spawn_survival_wave()
 
 func update_priority_target_objective_state(delta: float) -> void:
-	if world.is_multiplayer and not MultiplayerSessionManager.is_host():
+	if MultiplayerSessionManager.is_remote_replica():
 		return
 	if world.choosing_next_room or world.run_cleared:
 		return
@@ -416,7 +416,7 @@ func _is_any_active_player_inside_control_zone(anchor: Vector2, radius: float) -
 	return false
 
 func _sync_control_zone_runtime_state(delta: float, force: bool = false) -> void:
-	if not world.is_multiplayer or not MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.should_broadcast():
 		return
 	if not is_instance_valid(objective_manager):
 		return
@@ -461,7 +461,7 @@ func _update_control_spawn_cycle(delta: float, refill_spawn_cap: float, pressure
 		spawn_control_wave()
 
 func update_control_objective_state(delta: float) -> void:
-	if world.is_multiplayer and not MultiplayerSessionManager.is_host():
+	if MultiplayerSessionManager.is_remote_replica():
 		return
 	if world.choosing_next_room or world.run_cleared:
 		return
@@ -510,7 +510,7 @@ func _spawn_random_wave_enemies(roster: Array[String], spawn_count: int) -> int:
 		var spawned_enemy: CharacterBody2D = world.enemy_spawner.spawn_enemy_node_type(enemy_type) as CharacterBody2D
 		if not is_instance_valid(spawned_enemy):
 			continue
-		if world.is_multiplayer and MultiplayerSessionManager.is_host():
+		if MultiplayerSessionManager.should_broadcast():
 			var enemy_id: int = int(world._register_network_enemy(spawned_enemy))
 			if enemy_id > 0:
 				spawn_batch.append({
@@ -520,7 +520,7 @@ func _spawn_random_wave_enemies(roster: Array[String], spawn_count: int) -> int:
 				})
 		spawned_total += 1
 	world.active_room_enemy_count += spawned_total
-	if world.is_multiplayer and MultiplayerSessionManager.is_host() and not spawn_batch.is_empty():
+	if MultiplayerSessionManager.should_broadcast() and not spawn_batch.is_empty():
 			world._sync_objective_spawn_batch.rpc(spawn_batch, world.active_room_enemy_count, String(world.current_room_label), _get_world_room_sync_id())
 	return spawned_total
 
@@ -535,7 +535,7 @@ func _spawn_random_control_wave_enemies(roster: Array[String], spawn_count: int)
 		if not is_instance_valid(spawned_enemy):
 			continue
 		_reposition_control_spawn_outside_zone(spawned_enemy)
-		if world.is_multiplayer and MultiplayerSessionManager.is_host():
+		if MultiplayerSessionManager.should_broadcast():
 			var enemy_id: int = int(world._register_network_enemy(spawned_enemy))
 			if enemy_id > 0:
 				spawn_batch.append({
@@ -545,14 +545,14 @@ func _spawn_random_control_wave_enemies(roster: Array[String], spawn_count: int)
 				})
 		spawned_total += 1
 	world.active_room_enemy_count += spawned_total
-	if world.is_multiplayer and MultiplayerSessionManager.is_host() and not spawn_batch.is_empty():
+	if MultiplayerSessionManager.should_broadcast() and not spawn_batch.is_empty():
 			world._sync_objective_spawn_batch.rpc(spawn_batch, world.active_room_enemy_count, String(world.current_room_label), _get_world_room_sync_id())
 	return spawned_total
 
 func _append_objective_spawn_sync(spawn_batch: Array, enemy: CharacterBody2D, enemy_type: String, spawn_meta: Dictionary = {}) -> void:
 	if not is_instance_valid(enemy):
 		return
-	if not world.is_multiplayer or not MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.should_broadcast():
 		return
 	var enemy_id: int = int(world._register_network_enemy(enemy))
 	if enemy_id <= 0:
@@ -589,7 +589,7 @@ func configure_priority_target_enemy_from_sync(enemy: CharacterBody2D, spawn_met
 func _flush_objective_spawn_sync(spawn_batch: Array) -> void:
 	if spawn_batch.is_empty():
 		return
-	if not world.is_multiplayer or not MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.should_broadcast():
 		return
 	world._sync_objective_spawn_batch.rpc(spawn_batch, world.active_room_enemy_count, String(world.current_room_label), _get_world_room_sync_id())
 
@@ -637,7 +637,7 @@ func _process_pending_objective_spawns(delta: float) -> void:
 		return
 	var step_interval := OBJECTIVE_SPAWN_STEP_INTERVAL
 	var step_count := OBJECTIVE_SPAWN_STEP_COUNT
-	if world.is_multiplayer and MultiplayerSessionManager.is_host() and _is_active_objective_role(OBJECTIVE_ROLE_CUT_THE_SIGNAL):
+	if MultiplayerSessionManager.should_broadcast() and _is_active_objective_role(OBJECTIVE_ROLE_CUT_THE_SIGNAL):
 		# Cut the Signal is the densest objective in co-op; drain more gradually to avoid joiner hitch spikes.
 		step_interval = 0.08
 		step_count = 1
@@ -805,7 +805,7 @@ func apply_priority_target_exposure_push(delta: float) -> void:
 
 func complete_current_objective(title: String, _subtitle: String) -> void:
 	_clear_all_objective_state()
-	if world.is_multiplayer and MultiplayerSessionManager.is_host():
+	if MultiplayerSessionManager.should_broadcast():
 		world._sync_objective_cleared.rpc()
 	clear_priority_target_dash_line()
 	world._clear_all_enemies()

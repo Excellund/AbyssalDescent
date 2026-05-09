@@ -47,9 +47,9 @@ func on_boss_defeated() -> void:
 	_broadcast_if_host(func(): _sync_boss_defeated.rpc())
 
 
-## Calls rpc_callable only when session is active and this peer is host.
+## Calls rpc_callable only when this peer should broadcast host RPCs.
 func _broadcast_if_host(rpc_callable: Callable) -> void:
-	if MultiplayerSessionManager.is_session_connected() and MultiplayerSessionManager.is_host():
+	if MultiplayerSessionManager.should_broadcast():
 		rpc_callable.call()
 
 

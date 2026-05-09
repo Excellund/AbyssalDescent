@@ -1393,7 +1393,7 @@ func _tick_multiplayer_stress_test(delta: float) -> void:
 func _update_multiplayer_perf_logging(delta: float) -> void:
 	if not multiplayer_perf_logging_enabled:
 		return
-	if not is_multiplayer or not MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.should_broadcast():
 		return
 	_multiplayer_perf_log_elapsed += delta
 	var log_interval := maxf(0.25, multiplayer_perf_log_interval_sec)
@@ -1514,7 +1514,7 @@ func _get_perf_attribution_snapshot() -> Dictionary:
 	return _perf_attr_live_snapshot.duplicate(true)
 
 func _report_client_perf_sample(delta: float) -> void:
-	if not is_multiplayer or MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.is_remote_replica():
 		return
 	# Keep this traffic to active diagnostics windows only.
 	if not multiplayer_perf_logging_enabled and not _perf_attribution_enabled:
@@ -1545,7 +1545,7 @@ func _sync_client_perf_sample(
 	ui_ms: float = 0.0,
 	enemy_drawn_avg: float = 0.0
 ) -> void:
-	if not is_multiplayer or not MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.should_broadcast():
 		return
 	var sender_peer_id := int(multiplayer.get_remote_sender_id())
 	if sender_peer_id <= 0:
@@ -1564,7 +1564,7 @@ func _sync_client_perf_sample(
 	}
 
 func _can_apply_client_door_sync() -> bool:
-	if not is_multiplayer or MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.is_remote_replica():
 		return false
 	if _world_multiplayer_sync_state.awaiting_authoritative_door_choice:
 		return false
@@ -1575,7 +1575,7 @@ func _can_apply_client_door_sync() -> bool:
 	return true
 
 func _should_defer_client_door_sync_payload(synced_choosing_next_room: bool, progress_state: Dictionary) -> bool:
-	if not is_multiplayer or MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.is_remote_replica():
 		return false
 	if not synced_choosing_next_room:
 		return false
@@ -1617,7 +1617,7 @@ func _flush_pending_client_door_syncs() -> void:
 		_apply_synced_door_options_payload(synced_door_options, synced_choosing_next_room, synced_boss_unlocked, progress_state)
 
 func _can_apply_client_spawn_sync(payload: Dictionary) -> bool:
-	if not is_multiplayer or MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.is_remote_replica():
 		return false
 	if not is_instance_valid(enemy_spawner):
 		return false
@@ -1718,7 +1718,7 @@ func _is_current_room_boss_stage(boss_stage: int) -> bool:
 			return false
 
 func _can_apply_client_boss_spawn_sync(payload: Dictionary) -> bool:
-	if not is_multiplayer or MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.is_remote_replica():
 		return false
 	if not is_instance_valid(enemy_spawner):
 		return false
@@ -1955,7 +1955,7 @@ func _sync_renderer() -> void:
 	if not is_instance_valid(renderer):
 		return
 	var allow_door_visibility := false
-	if is_multiplayer and not MultiplayerSessionManager.is_host():
+	if MultiplayerSessionManager.is_remote_replica():
 		allow_door_visibility = choosing_next_room and not _is_reward_selection_active() and current_room_label != "Starting Chamber" and not door_options.is_empty()
 	else:
 		allow_door_visibility = choosing_next_room and active_room_enemy_count <= 0 and not _is_reward_selection_active() and current_room_label != "Starting Chamber"
@@ -2028,7 +2028,7 @@ func _keep_player_inside_camera_view() -> void:
 	player.global_position.y = clampf(player.global_position.y, min_visible.y, max_visible.y)
 
 func _update_encounter_state() -> void:
-	if is_multiplayer and not MultiplayerSessionManager.is_host():
+	if MultiplayerSessionManager.is_remote_replica():
 		return
 	if choosing_next_room or run_cleared:
 		return
@@ -2215,7 +2215,7 @@ func _finish_third_boss_clear() -> void:
 		stats["bosses_defeated"] = 3
 		_summary_stats_by_peer[peer_id] = stats
 	_finish_active_run_telemetry("clear")
-	if is_multiplayer and MultiplayerSessionManager.is_host():
+	if MultiplayerSessionManager.should_broadcast():
 		if STAT_ATTRIBUTION_TRACE:
 			print_debug("[StatAttribution][OutcomeSend] outcome=clear stats=%s" % str(_summary_stats_by_peer))
 		_sync_run_outcome.rpc("clear", unlocked_tier, "", room_depth, latest_run_summary, _summary_stats_by_peer, _latest_peer_summary_overrides)
@@ -2540,7 +2540,7 @@ func _on_pause_exit_game_requested() -> void:
 	get_tree().quit()
 
 func _spawn_door_options() -> void:
-	if is_multiplayer and not MultiplayerSessionManager.is_host():
+	if MultiplayerSessionManager.is_remote_replica():
 		return
 	if not is_instance_valid(encounter_flow_system):
 		return
@@ -2570,7 +2570,7 @@ func _spawn_door_options() -> void:
 	choosing_next_room = bool(route_state.get("choosing_next_room", true))
 	door_options = route_state.get("door_options", [])
 	boss_unlocked = bool(route_state.get("boss_unlocked", boss_unlocked))
-	if is_multiplayer and MultiplayerSessionManager.is_host():
+	if MultiplayerSessionManager.should_broadcast():
 		_sync_door_options.rpc(door_options, choosing_next_room, boss_unlocked, _build_progress_sync_state())
 	_save_active_run_checkpoint()
 
@@ -2587,14 +2587,14 @@ func _try_use_door() -> void:
 	var used_door: Dictionary = encounter_route_controller.find_used_door(local_player.global_position, door_options, door_use_radius)
 	if used_door.is_empty():
 		return
-	if is_multiplayer and not MultiplayerSessionManager.is_host():
+	if MultiplayerSessionManager.is_remote_replica():
 		# Optimistically hide doors on joiner while host resolves the authoritative choice.
 		choosing_next_room = false
 		door_options.clear()
 		_world_multiplayer_sync_state.begin_authoritative_door_wait()
 		_request_use_door.rpc_id(1, used_door.duplicate(true))
 		return
-	if is_multiplayer and MultiplayerSessionManager.is_host():
+	if MultiplayerSessionManager.should_broadcast():
 		_choose_door(used_door)
 		_sync_chosen_door.rpc(used_door, _build_progress_sync_state())
 		return
@@ -2602,7 +2602,7 @@ func _try_use_door() -> void:
 
 @rpc("reliable", "any_peer")
 func _request_use_door(requested_door: Dictionary = {}) -> void:
-	if not is_multiplayer or not MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.should_broadcast():
 		return
 	if not choosing_next_room:
 		return
@@ -2636,9 +2636,7 @@ func _find_authoritative_door_option(requested_door: Dictionary) -> Dictionary:
 
 @rpc("reliable", "authority")
 func _sync_door_options(synced_door_options: Array, synced_choosing_next_room: bool, synced_boss_unlocked: bool, progress_state: Dictionary = {}) -> void:
-	if not is_multiplayer:
-		return
-	if MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.is_remote_replica():
 		return
 	var sanitized_progress_state := _sanitize_progress_sync_state(progress_state)
 	if bool(sanitized_progress_state.get("invalid", false)):
@@ -2656,7 +2654,7 @@ func _sync_door_options(synced_door_options: Array, synced_choosing_next_room: b
 
 @rpc("reliable", "authority")
 func _sync_chosen_door(chosen_door: Dictionary, progress_state: Dictionary = {}) -> void:
-	if not is_multiplayer or MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.is_remote_replica():
 		return
 	var sanitized_progress_state := _sanitize_progress_sync_state(progress_state)
 	if bool(sanitized_progress_state.get("invalid", false)):
@@ -2672,7 +2670,7 @@ func _sync_chosen_door(chosen_door: Dictionary, progress_state: Dictionary = {})
 
 @rpc("reliable", "authority")
 func _sync_objective_spawn_batch(spawn_batch: Array, synced_enemy_count: int, source_room_label: String = "", source_room_sync_id: int = 0) -> void:
-	if not is_multiplayer or MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.is_remote_replica():
 		return
 	if _world_multiplayer_sync_state.is_objective_already_cleared_for_sync_id(source_room_sync_id):
 		return
@@ -2691,7 +2689,7 @@ func _sync_objective_spawn_batch(spawn_batch: Array, synced_enemy_count: int, so
 
 @rpc("reliable", "authority")
 func _sync_objective_control_zone(control_anchor: Vector2, control_radius: float, control_goal: float, control_decay_rate: float, control_contest_threshold: int) -> void:
-	if not is_multiplayer or MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.is_remote_replica():
 		return
 	if not is_instance_valid(objective_manager):
 		return
@@ -2704,7 +2702,7 @@ func _sync_objective_control_zone(control_anchor: Vector2, control_radius: float
 
 @rpc("unreliable", "authority")
 func _sync_objective_control_zone_state(control_progress: float, control_enemies_in_zone: int, control_contested: bool, control_player_inside: bool) -> void:
-	if not is_multiplayer or MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.is_remote_replica():
 		return
 	if not is_instance_valid(objective_manager):
 		return
@@ -2716,7 +2714,7 @@ func _sync_objective_control_zone_state(control_progress: float, control_enemies
 
 @rpc("reliable", "authority")
 func _sync_objective_cleared() -> void:
-	if not is_multiplayer or MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.is_remote_replica():
 		return
 	_world_multiplayer_sync_state.mark_objective_cleared_for_current_room()
 	if is_instance_valid(objective_manager):
@@ -2728,7 +2726,7 @@ func _sync_objective_cleared() -> void:
 
 @rpc("unreliable", "authority")
 func _sync_objective_state(objective_state: Dictionary, source_room_sync_id: int, sequence: int) -> void:
-	if not is_multiplayer or MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.is_remote_replica():
 		return
 	if not is_instance_valid(objective_manager):
 		return
@@ -2785,7 +2783,7 @@ func _sanitize_progress_sync_state(progress_state: Dictionary) -> Dictionary:
 		return sanitized
 	# Allow large depth jumps if joiner just joined (rooms_cleared == 0) OR if explicitly awaiting door choice.
 	# This permits joiners mid-run to synchronize with the host's current depth.
-	var is_joiner_initial_sync := not is_multiplayer or (MultiplayerSessionManager.is_host() == false and rooms_cleared == 0)
+	var is_joiner_initial_sync := MultiplayerSessionManager.is_authoritative() or (MultiplayerSessionManager.is_remote_replica() and rooms_cleared == 0)
 	if incoming_room_depth > room_depth + 2 and not _world_multiplayer_sync_state.awaiting_authoritative_door_choice and not is_joiner_initial_sync:
 		sanitized["invalid"] = true
 		return sanitized
@@ -2835,7 +2833,7 @@ func _apply_progress_sync_state(progress_state: Dictionary) -> void:
 	in_second_boss_room = bool(sanitized_progress_state.get("in_second_boss_room", in_second_boss_room))
 	in_third_boss_room = bool(sanitized_progress_state.get("in_third_boss_room", in_third_boss_room))
 	choosing_next_room = bool(sanitized_progress_state.get("choosing_next_room", choosing_next_room))
-	var enforce_local_door_safety := not is_multiplayer or MultiplayerSessionManager.is_host()
+	var enforce_local_door_safety := MultiplayerSessionManager.is_authoritative()
 	if enforce_local_door_safety and (active_room_enemy_count > 0 or _is_reward_selection_active()):
 		choosing_next_room = false
 		door_options.clear()
@@ -2891,7 +2889,7 @@ func _apply_endless_scaling_to_profile(profile: Dictionary) -> Dictionary:
 	)
 
 func _prepare_room_sync_transition() -> void:
-	_world_multiplayer_sync_state.begin_room_transition(not is_multiplayer or MultiplayerSessionManager.is_host())
+	_world_multiplayer_sync_state.begin_room_transition(MultiplayerSessionManager.is_authoritative())
 
 func get_current_room_sync_id() -> int:
 	return _world_multiplayer_sync_state.current_room_sync_id
@@ -2932,7 +2930,7 @@ func _begin_room(profile: Dictionary) -> void:
 		enemy_spawner.configure_room(current_room_size, spawn_padding, spawn_safe_radius, current_room_enemy_mutator, _get_active_enemy_mutators_for_room())
 	_apply_camera_bounds_for_room(current_effective_room_size)
 	if is_multiplayer:
-		if MultiplayerSessionManager.is_host():
+		if MultiplayerSessionManager.should_broadcast():
 			var spawn_report: Array[Dictionary] = enemy_spawner.spawn_profile_enemies_report(profile)
 			active_room_enemy_count = spawn_report.size()
 			var spawn_batch: Array = []
@@ -3043,7 +3041,7 @@ func _begin_configured_boss_room(boss_stage: int, room_size: Vector2, room_label
 	hud.show_banner(banner_title, "")
 	_apply_camera_bounds_for_room(current_effective_room_size)
 	active_room_enemy_count = 1
-	if is_multiplayer and not MultiplayerSessionManager.is_host():
+	if MultiplayerSessionManager.is_remote_replica():
 		_start_encounter_intro_grace()
 		_flush_pending_client_boss_spawn_syncs()
 		return
@@ -3067,7 +3065,7 @@ func _begin_configured_boss_room(boss_stage: int, room_size: Vector2, room_label
 		boss.died.connect(func(): _on_room_enemy_died(captured_boss.global_position if is_instance_valid(captured_boss) else Vector2.ZERO))
 	if boss.has_signal("damage_received"):
 		boss.damage_received.connect(func(applied_amount: int, _remaining_health: int): _on_enemy_damage_received(applied_amount))
-	if is_multiplayer and MultiplayerSessionManager.is_host():
+	if MultiplayerSessionManager.should_broadcast():
 		_sync_spawn_boss.rpc({
 			"boss_stage": boss_stage,
 			"enemy_id": boss_enemy_id,
@@ -3211,9 +3209,7 @@ func _clear_all_enemies() -> void:
 		enemy_spawner.clear_all_enemies()
 
 func _sync_archer_projectile_state_tick(delta: float) -> void:
-	if not is_multiplayer:
-		return
-	if not MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.should_broadcast():
 		return
 	_archer_projectile_sync_elapsed += delta
 	if _archer_projectile_sync_elapsed < maxf(0.008, archer_projectile_sync_interval_sec):
@@ -3266,9 +3262,7 @@ func _build_objective_state_sync_payload() -> Dictionary:
 	return objective_manager.serialize_sync_state()
 
 func _sync_objective_state_tick(delta: float) -> void:
-	if not is_multiplayer:
-		return
-	if not MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.should_broadcast():
 		return
 	if not is_instance_valid(objective_manager):
 		return
@@ -3464,9 +3458,7 @@ func _get_priority_enemy_sync_interval_sec(delta: float) -> float:
 	return _priority_enemy_sync_interval_cache_sec
 
 func _sync_enemy_state_tick(delta: float) -> void:
-	if not is_multiplayer:
-		return
-	if not MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.should_broadcast():
 		return
 	var sync_interval := enemy_state_sync_interval_sec
 	if active_room_enemy_count >= 40:
@@ -3652,7 +3644,7 @@ func _register_network_enemy(enemy: Node2D, forced_enemy_id: int = -1) -> int:
 	enemy.set_meta("network_enemy_id", enemy_id)
 	_network_enemy_nodes[enemy_id] = enemy
 	_initialize_enemy_tracking_state(enemy_id, enemy)
-	if is_multiplayer and not MultiplayerSessionManager.is_host() and enemy.has_method("set_network_simulation_enabled"):
+	if MultiplayerSessionManager.is_remote_replica() and enemy.has_method("set_network_simulation_enabled"):
 		enemy.call("set_network_simulation_enabled", false)
 	if enemy.has_signal("died") and not enemy.died.is_connected(Callable(self, "_on_network_enemy_died").bind(enemy_id)):
 		enemy.died.connect(Callable(self, "_on_network_enemy_died").bind(enemy_id))
@@ -3722,12 +3714,12 @@ func _on_network_enemy_died(enemy_id: int) -> void:
 	var enemy := _network_enemy_nodes.get(enemy_id) as Node2D
 	var death_effect_payload := _build_enemy_death_effect_payload(enemy)
 	_deregister_network_enemy(enemy_id)
-	if is_multiplayer and MultiplayerSessionManager.is_host():
+	if MultiplayerSessionManager.should_broadcast():
 		_sync_enemy_died.rpc(enemy_id, death_effect_payload)
 
 
 func request_enemy_damage_from_client(enemy_id: int, amount: int, damage_context: Dictionary = {}) -> void:
-	if not is_multiplayer or MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.is_remote_replica():
 		return
 	if enemy_id <= 0 or amount <= 0:
 		return
@@ -3736,7 +3728,7 @@ func request_enemy_damage_from_client(enemy_id: int, amount: int, damage_context
 
 @rpc("reliable", "any_peer")
 func _sync_request_enemy_damage(enemy_id: int, amount: int, damage_context: Dictionary = {}) -> void:
-	if not is_multiplayer or not MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.should_broadcast():
 		return
 	if enemy_id <= 0 or amount <= 0:
 		return
@@ -3800,7 +3792,7 @@ func _spawn_boss_for_stage(boss_stage: int, spawn_position: Vector2) -> Node2D:
 
 @rpc("reliable", "authority")
 func _sync_spawn_enemy_batch(spawn_batch: Array, synced_enemy_count: int, source_room_label: String = "", source_room_depth: int = 0, source_room_sync_id: int = 0) -> void:
-	if not is_multiplayer or MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.is_remote_replica():
 		return
 	if _world_multiplayer_sync_state.is_stale_room_sync_id(source_room_sync_id):
 		return
@@ -3818,7 +3810,7 @@ func _sync_spawn_enemy_batch(spawn_batch: Array, synced_enemy_count: int, source
 
 @rpc("reliable", "authority")
 func _sync_spawn_boss(spawn_data: Dictionary) -> void:
-	if not is_multiplayer or MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.is_remote_replica():
 		return
 	var payload := {
 		"boss_stage": int(spawn_data.get("boss_stage", 0)),
@@ -3839,7 +3831,7 @@ func _sync_spawn_boss(spawn_data: Dictionary) -> void:
 
 @rpc("unreliable", "authority")
 func _sync_enemy_states(synced_states: Array, synced_enemy_count: int) -> void:
-	if not is_multiplayer or MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.is_remote_replica():
 		return
 	for state_variant in synced_states:
 		if not (state_variant is Dictionary):
@@ -3868,7 +3860,7 @@ func _sync_enemy_states(synced_states: Array, synced_enemy_count: int) -> void:
 
 @rpc("unreliable", "authority")
 func _sync_archer_projectile_states(synced_archer_projectiles: Array, source_room_sync_id: int) -> void:
-	if not is_multiplayer or MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.is_remote_replica():
 		return
 	if _world_multiplayer_sync_state.is_stale_room_sync_id(source_room_sync_id):
 		return
@@ -3891,7 +3883,7 @@ func _sync_archer_projectile_states(synced_archer_projectiles: Array, source_roo
 
 @rpc("reliable", "authority")
 func _sync_enemy_died(enemy_id: int, death_effect_payload: Dictionary = {}) -> void:
-	if not is_multiplayer or MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.is_remote_replica():
 		return
 	var enemy := _network_enemy_nodes.get(enemy_id) as Node2D
 	if String(death_effect_payload.get("effect", "")) == "pyre_death_field":
@@ -3902,7 +3894,7 @@ func _sync_enemy_died(enemy_id: int, death_effect_payload: Dictionary = {}) -> v
 
 
 func _interpolate_remote_enemy_states(delta: float) -> void:
-	if not is_multiplayer or MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.is_remote_replica():
 		return
 	var position_weight := clampf(delta * enemy_remote_position_lerp_speed, 0.0, 1.0)
 	var rotation_weight := clampf(delta * enemy_remote_rotation_lerp_speed, 0.0, 1.0)
@@ -4026,13 +4018,13 @@ func _open_boon_selection(title: String, is_initial: bool, mode: int = ENUMS.Rew
 		_set_combat_paused(true)
 
 func _open_networked_reward_selection(title: String, mode: int, player_mutator: Dictionary = {}, epitaph: String = "") -> void:
-	if is_multiplayer and MultiplayerSessionManager.is_host():
+	if MultiplayerSessionManager.should_broadcast():
 		_sync_open_reward_selection.rpc(title, false, mode, player_mutator, epitaph)
 	_open_boon_selection(title, false, mode, player_mutator, epitaph, current_character_id)
 
 @rpc("reliable", "authority")
 func _sync_open_reward_selection(title: String, is_initial: bool, mode: int, player_mutator: Dictionary = {}, epitaph: String = "") -> void:
-	if not is_multiplayer or MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.is_remote_replica():
 		return
 	_open_boon_selection(title, is_initial, mode, player_mutator, epitaph, current_character_id)
 
@@ -4101,13 +4093,13 @@ func _record_local_peer_reward_timeline_choice(choice: Dictionary, mode: int, de
 		return
 	var event_unix := int(Time.get_unix_time_from_system())
 	_record_peer_reward_timeline_choice(local_peer_id, choice, mode, depth, event_unix)
-	if MultiplayerSessionManager.is_host():
+	if MultiplayerSessionManager.should_broadcast():
 		return
 	_sync_reward_choice_for_summary.rpc_id(1, local_peer_id, choice.duplicate(true), mode, depth, event_unix)
 
 @rpc("reliable", "any_peer")
 func _sync_reward_choice_for_summary(peer_id: int, choice: Dictionary, mode: int, depth: int, event_unix: int) -> void:
-	if not is_multiplayer or not MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.should_broadcast():
 		return
 	_record_peer_reward_timeline_choice(peer_id, choice, mode, depth, event_unix)
 
@@ -4167,7 +4159,7 @@ func _finalize_reward_phase_and_advance(is_initial: bool, mode: int) -> void:
 	else:
 		if mode == ENUMS.RewardMode.BOSS:
 			boss_reward_pending = false
-		if is_multiplayer and MultiplayerSessionManager.is_host():
+		if MultiplayerSessionManager.should_broadcast():
 			_doors_spawn_ready = true
 			_sync_doors_spawn_ready.rpc()
 		else:
@@ -4203,7 +4195,7 @@ func _sync_reward_phase_complete(peer_id: int, is_initial: bool, mode: int) -> v
 	if _reward_phase_is_initial != is_initial or _reward_phase_mode != mode:
 		return
 	_reward_phase_completed_peers[int(peer_id)] = true
-	if not MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.should_broadcast():
 		return
 	if not _all_reward_phase_peers_completed():
 		return
@@ -4213,7 +4205,7 @@ func _sync_reward_phase_complete(peer_id: int, is_initial: bool, mode: int) -> v
 
 @rpc("reliable", "authority")
 func _sync_reward_phase_advance(is_initial: bool, mode: int) -> void:
-	if not is_multiplayer or MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.is_remote_replica():
 		return
 	_finalize_reward_phase_and_advance(is_initial, mode)
 
@@ -4226,7 +4218,7 @@ func _sync_doors_spawn_ready() -> void:
 
 @rpc("reliable", "authority")
 func _sync_run_outcome(outcome: String, unlocked_tier: int, room_label: String, depth: int, run_summary: Dictionary = {}, stats_by_peer: Dictionary = {}, peer_summary_overrides: Dictionary = {}) -> void:
-	if not is_multiplayer or MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.is_remote_replica():
 		return
 	if STAT_ATTRIBUTION_TRACE:
 		print_debug("[StatAttribution][OutcomeRecv] local_peer=%d outcome=%s stats_keys=%s" % [_resolve_local_peer_id(), outcome, str(stats_by_peer.keys())])
@@ -4363,7 +4355,7 @@ func _initialize_run_telemetry(allow_collection: bool) -> void:
 	if not telemetry_enabled:
 		return
 	# In multiplayer, only the host should write telemetry to avoid file corruption races.
-	if is_multiplayer and not MultiplayerSessionManager.is_host():
+	if MultiplayerSessionManager.is_remote_replica():
 		telemetry_enabled = false
 		return
 	var debug_settings := get_node_or_null("DebugSettings")
@@ -4440,7 +4432,7 @@ func _reset_run_summary_tracker() -> void:
 		_summary_reward_timeline_by_peer[peer_id] = []
 
 func _mark_telemetry_debug_mode() -> void:
-	if is_multiplayer and not MultiplayerSessionManager.is_host():
+	if MultiplayerSessionManager.is_remote_replica():
 		telemetry_enabled = false
 		return
 	if telemetry_run_id.is_empty():
@@ -4895,7 +4887,7 @@ func _on_player_died() -> void:
 		run_context.clear_resume_saved_run_request()
 	if latest_run_summary.is_empty() or String(latest_run_summary.get("outcome", "")) != "death":
 		_finish_active_run_telemetry("death", _build_death_event_snapshot())
-	if is_multiplayer and MultiplayerSessionManager.is_host():
+	if MultiplayerSessionManager.should_broadcast():
 		if STAT_ATTRIBUTION_TRACE:
 			print_debug("[StatAttribution][OutcomeSend] outcome=death stats=%s" % str(_summary_stats_by_peer))
 		_sync_run_outcome.rpc("death", -1, current_room_label, room_depth, latest_run_summary, _summary_stats_by_peer, _latest_peer_summary_overrides)
@@ -4979,7 +4971,7 @@ func _spawn_test_enemies(count: int) -> void:
 				})
 				active_room_enemy_count += 1
 
-	if is_multiplayer and MultiplayerSessionManager.is_host() and not spawn_batch.is_empty():
+	if MultiplayerSessionManager.should_broadcast() and not spawn_batch.is_empty():
 		_sync_spawn_enemy_batch.rpc(spawn_batch, active_room_enemy_count, current_room_label, room_depth, _world_multiplayer_sync_state.current_room_sync_id)
 
 func start_network_stress_test(initial_count: int = 10, increment: int = 10, max_count: int = 100) -> void:
@@ -5014,7 +5006,7 @@ func _maybe_start_stress_test() -> void:
 		print_debug("[StressTest] Stress test is enabled but game is not in multiplayer mode")
 		return
 	
-	if not MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.should_broadcast():
 		print_debug("[StressTest] Skipping on client - host only")
 		return
 	
@@ -5213,14 +5205,14 @@ func _signal_local_player_ready() -> void:
 	hud.show_persistent_banner("Ready", "Waiting for ally...")
 	
 	var local_peer_id := _resolve_local_peer_id()
-	if MultiplayerSessionManager.is_host():
+	if MultiplayerSessionManager.should_broadcast():
 		_on_player_ready_signal(local_peer_id)
 	else:
 		_notify_host_player_ready.rpc_id(1, local_peer_id)
 
 @rpc("reliable", "any_peer")
 func _notify_host_player_ready(peer_id: int) -> void:
-	if not is_multiplayer or not MultiplayerSessionManager.is_host():
+	if not MultiplayerSessionManager.should_broadcast():
 		return
 	var sender := get_tree().get_multiplayer().get_remote_sender_id()
 	if sender > 0 and sender != peer_id:
