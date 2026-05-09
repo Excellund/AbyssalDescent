@@ -71,6 +71,13 @@ Use these natural-language commands in chat. Phrases do not need to match exactl
 - Rebalance boon [id] without healing or timing changes
 - Rename boon identity and update id everywhere
 
+## Arcana Design
+
+- Add/rework arcana [id or concept]
+- Make stacking [arcana id] feel meaningful past L1
+- Apply two-knob-per-stack with one structural change to [arcana id]
+- Rename arcana identity and update id everywhere
+
 ## Power Description Sync
 
 - Sync power descriptions across reward card, build panel, and fallback

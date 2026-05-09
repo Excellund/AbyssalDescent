@@ -236,85 +236,91 @@ const UPGRADE_BALANCE := {
 	}
 }
 
+## Arcana stacking philosophy:
+## L1 is a partial taste of the power. L2 is the headline upgrade. L3 is the ceiling/mastery payoff.
+## Each stack should move at least one number knob and (where possible) one structural knob
+## (cadence floor, cap relax, arc widening, etc). Stack caps prevent runaway snowball.
 const TRIAL_POWER_BALANCE := {
 	"razor_wind": {
-		"range_base": 1.25,
+		"range_base": 1.20,
 		"range_per_stack": 0.10,
-		"damage_ratio_base": 0.6,
-		"damage_ratio_per_stack": 0.12,
+		"damage_ratio_base": 0.50,
+		"damage_ratio_per_stack": 0.20,
 		"attack_cooldown_mult": 0.96,
-		"attack_cooldown_min": 0.1
+		"attack_cooldown_min": 0.1,
+		"arc_base": 24.0,
+		"arc_match_player_at_stack": 2
 	},
 	"execution_edge": {
 		"every_base": 4,
-		"every_floor": 2,
-		"damage_mult_base": 2.2,
-		"damage_mult_per_stack": 0.45,
+		"every_floor": 1,
+		"damage_mult_base": 1.9,
+		"damage_mult_per_stack": 0.20,
 		"attack_lock_mult": 0.94,
 		"attack_lock_min": 0.08
 	},
 	"rupture_wave": {
-		"radius_base": 72.0,
-		"radius_per_stack": 10.0,
-		"damage_ratio_base": 0.34,
-		"damage_ratio_per_stack": 0.1,
+		"radius_base": 70.0,
+		"radius_per_stack": 14.0,
+		"damage_ratio_base": 0.30,
+		"damage_ratio_per_stack": 0.15,
 		"damage_add": 2
 	},
 	"aegis_field": {
-		"resist_base": 0.12,
-		"resist_per_stack": 0.06,
+		"resist_base": 0.16,
+		"resist_per_stack": 0.08,
 		"resist_cap": 0.42,
-		"resist_duration_base": 0.9,
-		"resist_duration_per_stack": 0.2,
-		"pulse_radius_base": 92.0,
-		"pulse_radius_per_stack": 14.0,
-		"slow_duration_base": 1.0,
-		"slow_duration_per_stack": 0.18,
-		"slow_mult_base": 0.7,
-		"slow_mult_per_stack": -0.06,
+		"resist_duration_base": 0.8,
+		"resist_duration_per_stack": 0.25,
+		"pulse_radius_base": 88.0,
+		"pulse_radius_per_stack": 18.0,
+		"slow_duration_base": 0.9,
+		"slow_duration_per_stack": 0.22,
+		"slow_mult_base": 0.74,
+		"slow_mult_per_stack": -0.08,
 		"slow_mult_min": 0.36,
-		"cooldown_base": 3.0,
-		"cooldown_per_stack": -0.2,
-		"cooldown_min": 1.7
+		"cooldown_base": 3.2,
+		"cooldown_per_stack": -0.30,
+		"cooldown_min": 1.5
 	},
 	"hunters_snare": {
 		"bonus_damage_base": 4,
-		"bonus_damage_per_stack": 3,
-		"slow_duration_base": 0.55,
-		"slow_duration_per_stack": 0.12,
+		"bonus_damage_per_stack": 4,
+		"slow_duration_base": 0.6,
+		"slow_duration_per_stack": 0.16,
 		"slow_mult_base": 0.72,
 		"slow_mult_per_stack": -0.06,
 		"slow_mult_min": 0.42
 	},
 	"phantom_step": {
 		# Damage scales as a ratio of damage. Affected by all damage boons and objective mutators.
-		"damage_ratio_base": 0.46,
-		"damage_ratio_per_stack": 0.10,
-		"slow_duration_base": 0.7,
-		"slow_duration_per_stack": 0.18,
-		"dash_cooldown_mult": 0.88,
+		"damage_ratio_base": 0.40,
+		"damage_ratio_per_stack": 0.16,
+		"slow_duration_base": 0.6,
+		"slow_duration_per_stack": 0.24,
+		"dash_cooldown_mult": 0.86,
 		"dash_cooldown_min": 0.16
 	},
 	"riftpunch": {
 		# Flat bonus damage on the first melee hit after a dash, inside the window.
 		# Grace duration is contact-damage immunity granted on the empowered hit so the player can disengage.
-		"bonus_damage_base": 26,
-		"bonus_damage_per_stack": 14,
-		"window_base": 1.0,
-		"window_per_stack": 0.1,
-		"grace_base": 0.45,
-		"grace_per_stack": 0.05
+		"bonus_damage_base": 24,
+		"bonus_damage_per_stack": 18,
+		"window_base": 0.9,
+		"window_per_stack": 0.15,
+		"grace_base": 0.4,
+		"grace_per_stack": 0.08
 	},
 	"reaper_step": {
-		"range_mult_base": 1.42,
-		"range_mult_per_stack": 0.14
+		"range_mult_base": 1.40,
+		"range_mult_per_stack": 0.22
 	},
 	"static_wake": {
 		# Damage scales as a ratio of damage. Affected by all damage boons and objective mutators.
-		"damage_ratio_base": 0.35,
-		"damage_ratio_per_stack": 0.10,
-		"lifetime_base": 1.6,
-		"lifetime_per_stack": 0.35
+		"damage_ratio_base": 0.30,
+		"damage_ratio_per_stack": 0.15,
+		"lifetime_base": 1.5,
+		"lifetime_per_stack": 0.50
 	},
 	"storm_crown": {
 		"proc_every_base": 5,
@@ -322,20 +328,22 @@ const TRIAL_POWER_BALANCE := {
 		"chain_targets_base": 2,
 		"chain_targets_per_stack": 1,
 		"chain_targets_cap": 5,
-		"chain_radius_base": 120.0,
-		"chain_radius_per_stack": 12.0,
-		"damage_ratio_base": 0.38,
-		"damage_ratio_per_stack": 0.08,
+		"chain_radius_base": 110.0,
+		"chain_radius_per_stack": 18.0,
+		"damage_ratio_base": 0.34,
+		"damage_ratio_per_stack": 0.12,
 		"damage_ratio_cap": 0.82
 	},
 	"voidfire": {
 		"heat_per_hit": 11.0,
 		"heat_cap": 110.0,
-		"danger_zone_threshold": 68.0,
-		"danger_zone_amp_base": 0.20,
-		"danger_zone_amp_per_stack": 0.1,
-		"detonate_ratio_base": 1.3,
-		"detonate_ratio_per_stack": 0.20,
+		"danger_zone_threshold_base": 72.0,
+		"danger_zone_threshold_per_stack": -8.0,
+		"danger_zone_threshold_min": 40.0,
+		"danger_zone_amp_base": 0.15,
+		"danger_zone_amp_per_stack": 0.18,
+		"detonate_ratio_base": 1.2,
+		"detonate_ratio_per_stack": 0.30,
 		"detonate_radius_base": 80.0,
 		"detonate_radius_per_stack": 10.0,
 		"lockout_base": 1.6,
@@ -350,41 +358,43 @@ const TRIAL_POWER_BALANCE := {
 		"reckless_decay_mult": 1.9
 	},
 	"dread_resonance": {
-		"max_stacks": 3,
-		"bonus_per_resonance_base": 10,
-		"bonus_per_resonance_per_stack": 4
+		"max_stacks_base": 2,
+		"max_stacks_per_stack": 1,
+		"max_stacks_cap": 6,
+		"bonus_per_resonance_base": 8,
+		"bonus_per_resonance_per_stack": 5
 	},
 	"vow_shatter": {
-		"damage_mult_base": 1.8,
-		"damage_mult_per_stack": 0.25
+		"damage_mult_base": 1.7,
+		"damage_mult_per_stack": 0.40
 	},
 	"eclipse_mark": {
-		"radius_base": 110.0,
-		"radius_per_stack": 14.0,
-		"mark_duration_base": 1.4,
-		"mark_duration_per_stack": 0.2,
-		"bonus_ratio_base": 0.65,
-		"bonus_ratio_per_stack": 0.12
+		"radius_base": 100.0,
+		"radius_per_stack": 18.0,
+		"mark_duration_base": 1.3,
+		"mark_duration_per_stack": 0.30,
+		"bonus_ratio_base": 0.55,
+		"bonus_ratio_per_stack": 0.20
 	},
 	"fracture_field": {
 		"radius_base": 80.0,
-		"radius_per_stack": 10.0,
-		"damage_ratio_base": 0.50,
-		"damage_ratio_per_stack": 0.10,
-		"slow_duration_base": 0.6,
-		"slow_duration_per_stack": 0.10
+		"radius_per_stack": 14.0,
+		"damage_ratio_base": 0.40,
+		"damage_ratio_per_stack": 0.20,
+		"slow_duration_base": 0.5,
+		"slow_duration_per_stack": 0.15
 	},
 	"wraithstep": {
-		"mark_duration_base": 3.1,
-		"mark_duration_per_stack": 0.6,
+		"mark_duration_base": 2.6,
+		"mark_duration_per_stack": 0.7,
 		"dash_mark_radius_base": 46.0,
-		"dash_mark_radius_per_stack": 11.0,
-		"bonus_damage_base": 16,
-		"bonus_damage_per_stack": 9,
+		"dash_mark_radius_per_stack": 14.0,
+		"bonus_damage_base": 12,
+		"bonus_damage_per_stack": 12,
 		"splash_radius_base": 56.0,
-		"splash_radius_per_stack": 11.0,
-		"splash_ratio_base": 0.60,
-		"splash_ratio_per_stack": 0.12,
+		"splash_radius_per_stack": 14.0,
+		"splash_ratio_base": 0.55,
+		"splash_ratio_per_stack": 0.15,
 		"splash_ratio_cap": 0.98
 	}
 }
@@ -420,7 +430,10 @@ const BOSS_REWARD_BALANCE := {
 const UPGRADE_STACK_LIMITS := {
 	"first_strike": 3,
 	"heavy_blow": 3,
+	"wide_arc": 3,
 	"long_reach": 3,
+	"fleet_foot": 3,
+	"blink_dash": 3,
 	"iron_skin": 3,
 	"battle_trance": 3,
 	"surge_step": 3,
@@ -429,8 +442,26 @@ const UPGRADE_STACK_LIMITS := {
 	"severing_edge": 3
 }
 
+## Stack caps prevent runaway snowball after the per-stack reshape.
+## Most arcana cap at 3; aegis_field & dread_resonance cap at 4 (their natural ceilings
+## are built into resist_cap and max_stacks_cap respectively).
 const TRIAL_POWER_STACK_LIMITS := {
-	"riftpunch": 3
+	"razor_wind": 3,
+	"execution_edge": 3,
+	"rupture_wave": 3,
+	"aegis_field": 4,
+	"hunters_snare": 3,
+	"phantom_step": 3,
+	"riftpunch": 3,
+	"reaper_step": 3,
+	"static_wake": 3,
+	"storm_crown": 3,
+	"wraithstep": 3,
+	"voidfire": 3,
+	"dread_resonance": 4,
+	"vow_shatter": 3,
+	"eclipse_mark": 3,
+	"fracture_field": 3
 }
 
 const BOSS_REWARD_STACK_LIMITS := {
@@ -527,9 +558,37 @@ const BOSS_REWARD_POOL_IDS: Array[String] = [
 ]
 
 
+## Worst-case maximum picks the run can offer per pool. If the sum of stack limits
+## ever drops below these, the reward UI can run out of legal cards.
+const MAX_BOON_PICKS_PER_RUN := 21
+const MAX_BOSS_REWARD_PICKS_PER_RUN := 2
+const MAX_ARCANA_PICKS_PER_RUN := 21
+
+
 func _ready() -> void:
-	# No initialization needed; registry is purely static data
-	pass
+	_assert_pool_capacities()
+
+
+func _assert_pool_capacities() -> void:
+	var boon_capacity := _sum_pool_capacity(UPGRADE_POOL_IDS, UPGRADE_STACK_LIMITS)
+	var boss_capacity := _sum_pool_capacity(BOSS_REWARD_POOL_IDS, BOSS_REWARD_STACK_LIMITS)
+	var arcana_capacity := _sum_pool_capacity(TRIAL_POWER_POOL_IDS, TRIAL_POWER_STACK_LIMITS)
+	assert(boon_capacity >= MAX_BOON_PICKS_PER_RUN, "Boon pool capacity %d < max picks %d - players can run out of cards" % [boon_capacity, MAX_BOON_PICKS_PER_RUN])
+	assert(boss_capacity >= MAX_BOSS_REWARD_PICKS_PER_RUN, "Boss reward pool capacity %d < max picks %d - players can run out of cards" % [boss_capacity, MAX_BOSS_REWARD_PICKS_PER_RUN])
+	assert(arcana_capacity >= MAX_ARCANA_PICKS_PER_RUN, "Arcana pool capacity %d < max picks %d - players can run out of cards" % [arcana_capacity, MAX_ARCANA_PICKS_PER_RUN])
+	for id in UPGRADE_POOL_IDS:
+		assert(UPGRADE_STACK_LIMITS.has(id), "Boon '%s' is in UPGRADE_POOL_IDS but missing UPGRADE_STACK_LIMITS entry" % id)
+	for id in TRIAL_POWER_POOL_IDS:
+		assert(TRIAL_POWER_STACK_LIMITS.has(id), "Arcana '%s' is in TRIAL_POWER_POOL_IDS but missing TRIAL_POWER_STACK_LIMITS entry" % id)
+	for id in BOSS_REWARD_POOL_IDS:
+		assert(BOSS_REWARD_STACK_LIMITS.has(id), "Boss reward '%s' is in BOSS_REWARD_POOL_IDS but missing BOSS_REWARD_STACK_LIMITS entry" % id)
+
+
+func _sum_pool_capacity(pool_ids: Array, limits: Dictionary) -> int:
+	var total := 0
+	for id in pool_ids:
+		total += int(limits.get(id, 0))
+	return total
 
 
 func _build_power_pool(ids: Array, power_type: String, player_reference: Node) -> Array[Dictionary]:

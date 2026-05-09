@@ -13,7 +13,8 @@ const TRIAL_POWER_PARAM_MAP := {
 		"parameters": {
 			"range_scale": {"property": "razor_wind_range_scale", "type": "float"},
 			"damage_ratio": {"property": "razor_wind_damage_ratio", "type": "float"},
-			"attack_cooldown": {"property": "attack_cooldown", "type": "float"}
+			"attack_cooldown": {"property": "attack_cooldown", "type": "float"},
+			"arc_degrees": {"property": "razor_wind_arc_degrees", "type": "float"}
 		}
 	},
 	"execution_edge": {
@@ -132,7 +133,8 @@ const TRIAL_POWER_PARAM_MAP := {
 		"reward_flag": "reward_dread_resonance",
 		"stack_property": "dread_resonance_stacks",
 		"parameters": {
-			"bonus_per_stack": {"property": "dread_resonance_bonus_per_stack", "type": "int"}
+			"bonus_per_stack": {"property": "dread_resonance_bonus_per_stack", "type": "int"},
+			"max_stacks": {"property": "dread_resonance_max_stacks", "type": "int"}
 		}
 	},
 	"vow_shatter": {
@@ -340,10 +342,15 @@ static func build_trial_values(power_id: String, stack_count: int, balance_data:
 	var data := balance_data
 	match power_id:
 		"razor_wind":
+			var arc_value := float(data.get("arc_base", 24.0))
+			var arc_match_at := int(data.get("arc_match_player_at_stack", 99))
+			if stack_count >= arc_match_at and is_instance_valid(player_reference):
+				arc_value = maxf(arc_value, float(player_reference.get("attack_arc_degrees")))
 			return {
 				"range_scale": float(data.get("range_base", 0.0)) + float(data.get("range_per_stack", 0.0)) * float(stack_count),
 				"damage_ratio": float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count),
-				"attack_cooldown": maxf(float(data.get("attack_cooldown_min", 0.0)), float(player_reference.get("attack_cooldown")) * float(data.get("attack_cooldown_mult", 1.0)))
+				"attack_cooldown": maxf(float(data.get("attack_cooldown_min", 0.0)), float(player_reference.get("attack_cooldown")) * float(data.get("attack_cooldown_mult", 1.0))),
+				"arc_degrees": arc_value
 			}
 		"execution_edge":
 			return {
@@ -410,10 +417,16 @@ static func build_trial_values(power_id: String, stack_count: int, balance_data:
 				"splash_ratio": minf(float(data.get("splash_ratio_cap", 1.0)), float(data.get("splash_ratio_base", 0.0)) + float(data.get("splash_ratio_per_stack", 0.0)) * float(stack_count))
 			}
 		"voidfire":
+			var threshold_value: float
+			if data.has("danger_zone_threshold_base"):
+				var threshold_min := float(data.get("danger_zone_threshold_min", 0.0))
+				threshold_value = maxf(threshold_min, float(data.get("danger_zone_threshold_base", 70.0)) + float(data.get("danger_zone_threshold_per_stack", 0.0)) * float(stack_count))
+			else:
+				threshold_value = float(data.get("danger_zone_threshold", 70.0))
 			return {
 				"heat_per_hit": float(data.get("heat_per_hit", 12.0)),
 				"heat_cap": float(data.get("heat_cap", 100.0)),
-				"danger_zone_threshold": float(data.get("danger_zone_threshold", 70.0)),
+				"danger_zone_threshold": threshold_value,
 				"danger_zone_amp": float(data.get("danger_zone_amp_base", 0.0)) + float(data.get("danger_zone_amp_per_stack", 0.0)) * float(stack_count),
 				"detonate_ratio": float(data.get("detonate_ratio_base", 0.0)) + float(data.get("detonate_ratio_per_stack", 0.0)) * float(stack_count),
 				"detonate_radius": float(data.get("detonate_radius_base", 0.0)) + float(data.get("detonate_radius_per_stack", 0.0)) * float(stack_count),
@@ -428,7 +441,8 @@ static func build_trial_values(power_id: String, stack_count: int, balance_data:
 			}
 		"dread_resonance":
 			return {
-				"bonus_per_stack": int(data.get("bonus_per_resonance_base", 0)) + stack_count * int(data.get("bonus_per_resonance_per_stack", 0))
+				"bonus_per_stack": int(data.get("bonus_per_resonance_base", 0)) + stack_count * int(data.get("bonus_per_resonance_per_stack", 0)),
+				"max_stacks": mini(int(data.get("max_stacks_cap", 99)), int(data.get("max_stacks_base", 3)) + stack_count * int(data.get("max_stacks_per_stack", 0)))
 			}
 		"vow_shatter":
 			return {

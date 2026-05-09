@@ -235,7 +235,7 @@ func _power_sentence_template(power_id: String) -> String:
 		"unbroken_oath":
 			return "Damage reduction %s. Fill Oath at %s; next hit deals %s bonus damage."
 		"razor_wind":
-			return "Range %s, damage %s of hit."
+			return "Range %s, damage %s of hit, arc %s."
 		"execution_edge":
 			return "Every %s swings for %s damage."
 		"rupture_wave":
@@ -247,7 +247,7 @@ func _power_sentence_template(power_id: String) -> String:
 		"phantom_step":
 			return "Damage %s, slow %s."
 		"riftpunch":
-			return "Bonus damage %s, window %s, grace %s."
+			return "Bonus damage %s, window %s, grace %s. %s"
 		"reaper_step":
 			return "Range/speed %s, kill refresh %s."
 		"static_wake":
@@ -255,15 +255,15 @@ func _power_sentence_template(power_id: String) -> String:
 		"storm_crown":
 			return "Every %s hits, chains to %s targets within %s, for %s damage."
 		"wraithstep":
-			return "Mark %s, marked-hit damage %s, cleave %s of hit."
+			return "Mark %s, marked-hit damage %s, cleave %s, lasts %s hits."
 		"voidfire":
 			return "Damage %s, detonate %s, lockout %s."
 		"dread_resonance":
 			return "Bonus per resonance stack %s, up to %s stacks."
 		"vow_shatter":
-			return "Primed hit damage %s."
+			return "Primed hit damage %s, lasts %s attacks."
 		"eclipse_mark":
-			return "Mark radius %s, duration %s, bonus %s of hit."
+			return "Mark radius %s, duration %s, bonus %s of hit, lasts %s hits."
 		"fracture_field":
 			return "Length %s, damage %s, slow %s."
 		_:
@@ -440,7 +440,7 @@ func get_power_current_description(power_id: String) -> String:
 			return _power_sentence(id, [_current_stat("+%d", int(player_reference.get("severing_edge_bonus_damage")))], "build_detail")
 		"razor_wind":
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
-			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("x%.2f", float(cur.get("range_scale", 1.0))), _current_stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0)], "build_detail"))
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("x%.2f", float(cur.get("range_scale", 1.0))), _current_stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0), _current_stat("%.0f deg", float(cur.get("arc_degrees", 24.0)))], "build_detail"))
 		"execution_edge":
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%d", int(cur.get("every", 2))), _current_stat("x%.2f", float(cur.get("damage_mult", 1.0)))], "build_detail"))
@@ -458,7 +458,8 @@ func get_power_current_description(power_id: String) -> String:
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0), _current_stat("%.2fs", float(cur.get("slow_duration", 0.0)))], "build_detail"))
 		"riftpunch":
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
-			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("+%d", int(cur.get("bonus_damage", 0))), _current_stat("%.2fs", float(cur.get("window_duration", 0.0))), _current_stat("%.2fs", float(cur.get("grace_duration", 0.0)))], "build_detail"))
+			var rp_unlocks := _riftpunch_unlocks_for_stack(get_trial_power_stack_count(id))
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("+%d", int(cur.get("bonus_damage", 0))), _current_stat("%.2fs", float(cur.get("window_duration", 0.0))), _current_stat("%.2fs", float(cur.get("grace_duration", 0.0))), _current_const(rp_unlocks)], "build_detail"))
 		"reaper_step":
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("x%.2f", float(cur.get("range_mult", 1.0))), _current_const("full")], "build_detail"))
@@ -470,7 +471,8 @@ func get_power_current_description(power_id: String) -> String:
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%d", int(cur.get("proc_every", 1))), _current_stat("%d", int(cur.get("chain_targets", 1))), _current_stat("%.0f", float(cur.get("chain_radius", 0.0))), _current_stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0)], "build_detail"))
 		"wraithstep":
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
-			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.2fs", float(cur.get("mark_duration", 0.0))), _current_stat("+%d", int(cur.get("bonus_damage", 0))), _current_stat("%.0f%%", float(cur.get("splash_ratio", 0.0)) * 100.0)], "build_detail"))
+			var ws_hits := _wraithstep_hits_for_stack(get_trial_power_stack_count(id))
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.2fs", float(cur.get("mark_duration", 0.0))), _current_stat("+%d", int(cur.get("bonus_damage", 0))), _current_stat("%.0f%%", float(cur.get("splash_ratio", 0.0)) * 100.0), _current_stat("%d", ws_hits)], "build_detail"))
 		"voidfire":
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("+%.0f%%", float(cur.get("danger_zone_amp", 0.0)) * 100.0), _current_stat("%.0f%%", float(cur.get("detonate_ratio", 0.0)) * 100.0), _current_stat("%.2fs", float(cur.get("lockout_duration", 0.0)))] , "build_detail"))
@@ -480,10 +482,12 @@ func get_power_current_description(power_id: String) -> String:
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("+%d", int(cur.get("bonus_per_stack", 0))), _current_const(str(max_stacks_dr))], "build_detail"))
 		"vow_shatter":
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
-			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("x%.2f", float(cur.get("damage_mult", 1.0)))], "build_detail"))
+			var vs_charges := _vow_shatter_charges_for_stack(get_trial_power_stack_count(id))
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("x%.2f", float(cur.get("damage_mult", 1.0))), _current_stat("%d", vs_charges)], "build_detail"))
 		"eclipse_mark":
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
-			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f", float(cur.get("radius", 0.0))), _current_stat("%.2fs", float(cur.get("mark_duration", 0.0))), _current_stat("%.0f%%", float(cur.get("bonus_ratio", 0.0)) * 100.0)], "build_detail"))
+			var em_hits := _eclipse_hits_for_stack(get_trial_power_stack_count(id))
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f", float(cur.get("radius", 0.0))), _current_stat("%.2fs", float(cur.get("mark_duration", 0.0))), _current_stat("%.0f%%", float(cur.get("bonus_ratio", 0.0)) * 100.0), _current_stat("%d", em_hits)], "build_detail"))
 		"fracture_field":
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f", float(cur.get("radius", 0.0))), _current_stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0), _current_stat("%.2fs", float(cur.get("slow_duration", 0.0)))] , "build_detail"))
@@ -508,7 +512,8 @@ func get_trial_power_card_description(power_id: String) -> String:
 		"razor_wind":
 			var range_stat := _stat("x%.2f", float(cur.get("range_scale", 1.0)), float(next_values.get("range_scale", 1.0)), is_initial)
 			var damage_stat := _stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0, float(next_values.get("damage_ratio", 0.0)) * 100.0, is_initial)
-			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [range_stat, damage_stat], "reward_card"))
+			var arc_stat := _stat("%.0f deg", float(cur.get("arc_degrees", 24.0)), float(next_values.get("arc_degrees", 24.0)), is_initial)
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [range_stat, damage_stat, arc_stat], "reward_card"))
 		"execution_edge":
 			var every_stat := _stat("%d", int(cur.get("every", 2)), int(next_values.get("every", 2)), is_initial)
 			var mult_stat := _stat("x%.2f", float(cur.get("damage_mult", 1.0)), float(next_values.get("damage_mult", 1.0)), is_initial)
@@ -536,7 +541,8 @@ func get_trial_power_card_description(power_id: String) -> String:
 			var bonus_stat := _stat("+%d", int(cur.get("bonus_damage", 0)), int(next_values.get("bonus_damage", 0)), is_initial)
 			var window_stat := _stat("%.2fs", float(cur.get("window_duration", 0.0)), float(next_values.get("window_duration", 0.0)), is_initial)
 			var grace_stat := _stat("%.2fs", float(cur.get("grace_duration", 0.0)), float(next_values.get("grace_duration", 0.0)), is_initial)
-			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [bonus_stat, window_stat, grace_stat], "reward_card"))
+			var unlock_stat := _const(_riftpunch_unlocks_for_stack(next_stack))
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [bonus_stat, window_stat, grace_stat, unlock_stat], "reward_card"))
 		"reaper_step":
 			var range_stat := _stat("x%.2f", float(cur.get("range_mult", 1.0)), float(next_values.get("range_mult", 1.0)), is_initial)
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [range_stat, _const("full")], "reward_card"))
@@ -557,7 +563,8 @@ func get_trial_power_card_description(power_id: String) -> String:
 			var mark_stat := _stat("%.2fs", float(cur.get("mark_duration", 0.0)), float(next_values.get("mark_duration", 0.0)), is_initial)
 			var bonus_stat := _stat("+%d", int(cur.get("bonus_damage", 0)), int(next_values.get("bonus_damage", 0)), is_initial)
 			var cleave_stat := _stat("%.0f%%", float(cur.get("splash_ratio", 0.0)) * 100.0, float(next_values.get("splash_ratio", 0.0)) * 100.0, is_initial)
-			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [mark_stat, bonus_stat, cleave_stat], "reward_card"))
+			var hits_stat := _stat("%d", _wraithstep_hits_for_stack(current_stack), _wraithstep_hits_for_stack(next_stack), is_initial)
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [mark_stat, bonus_stat, cleave_stat, hits_stat], "reward_card"))
 		"voidfire":
 			var amp_stat := _stat("+%.0f%%", float(cur.get("danger_zone_amp", 0.0)) * 100.0, float(next_values.get("danger_zone_amp", 0.0)) * 100.0, is_initial)
 			var det_stat := _stat("%.0f%%", float(cur.get("detonate_ratio", 0.0)) * 100.0, float(next_values.get("detonate_ratio", 0.0)) * 100.0, is_initial)
@@ -565,16 +572,18 @@ func get_trial_power_card_description(power_id: String) -> String:
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [amp_stat, det_stat, lockout_stat], "reward_card"))
 		"dread_resonance":
 			var bonus_stat := _stat("+%d", int(cur.get("bonus_per_stack", 0)), int(next_values.get("bonus_per_stack", 0)), is_initial)
-			var max_stacks_dr := int(player_reference.get("dread_resonance_max_stacks"))
-			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [bonus_stat, _const(str(max_stacks_dr))], "reward_card"))
+			var max_stacks_stat := _stat("%d", int(cur.get("max_stacks", int(player_reference.get("dread_resonance_max_stacks")))), int(next_values.get("max_stacks", int(player_reference.get("dread_resonance_max_stacks")))), is_initial)
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [bonus_stat, max_stacks_stat], "reward_card"))
 		"vow_shatter":
 			var mult_stat := _stat("x%.2f", float(cur.get("damage_mult", 1.0)), float(next_values.get("damage_mult", 1.0)), is_initial)
-			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [mult_stat], "reward_card"))
+			var charges_stat := _stat("%d", _vow_shatter_charges_for_stack(current_stack), _vow_shatter_charges_for_stack(next_stack), is_initial)
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [mult_stat, charges_stat], "reward_card"))
 		"eclipse_mark":
 			var radius_stat := _stat("%.0f", float(cur.get("radius", 0.0)), float(next_values.get("radius", 0.0)), is_initial)
 			var dur_stat := _stat("%.2fs", float(cur.get("mark_duration", 0.0)), float(next_values.get("mark_duration", 0.0)), is_initial)
 			var ratio_stat := _stat("%.0f%%", float(cur.get("bonus_ratio", 0.0)) * 100.0, float(next_values.get("bonus_ratio", 0.0)) * 100.0, is_initial)
-			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [radius_stat, dur_stat, ratio_stat], "reward_card"))
+			var hits_stat := _stat("%d", _eclipse_hits_for_stack(current_stack), _eclipse_hits_for_stack(next_stack), is_initial)
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [radius_stat, dur_stat, ratio_stat, hits_stat], "reward_card"))
 		"fracture_field":
 			var length_stat := _stat("%.0f", float(cur.get("radius", 0.0)), float(next_values.get("radius", 0.0)), is_initial)
 			var damage_stat := _stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0, float(next_values.get("damage_ratio", 0.0)) * 100.0, is_initial)
@@ -730,6 +739,26 @@ func initialize(player: Node, state: Node, registry: Node) -> void:
 	game_state = state
 	power_registry = registry
 
+
+func _vow_shatter_charges_for_stack(stack_count: int) -> int:
+	if stack_count <= 1:
+		return 2
+	return 3
+
+func _eclipse_hits_for_stack(stack_count: int) -> int:
+	return maxi(1, stack_count)
+
+func _wraithstep_hits_for_stack(stack_count: int) -> int:
+	if stack_count >= 3:
+		return 2
+	return 1
+
+func _riftpunch_unlocks_for_stack(stack_count: int) -> String:
+	if stack_count >= 3:
+		return "+slow +shockwave"
+	if stack_count >= 2:
+		return "+slow"
+	return ""
 
 func get_upgrade_stack_count(upgrade_id: String) -> int:
 	var id := upgrade_id.strip_edges().to_lower()

@@ -109,6 +109,7 @@ const RUN_SNAPSHOT_PROPERTIES := [
 	"void_heat_cap",
 	"void_heat_decay_rate",
 	"dread_resonance_bonus_per_stack",
+	"dread_resonance_max_stacks",
 	"vow_shatter_damage_mult",
 	"eclipse_mark_radius",
 	"eclipse_mark_duration",
@@ -305,9 +306,9 @@ var dread_resonance_bonus_per_stack: int = 6
 var dread_resonance_max_stacks: int = 3
 var _dread_resonance_target_id: int = -1
 var _dread_resonance_target_stacks: int = 0
-# Vow Shatter: primed multiplier after being hit
+# Vow Shatter: primed multiplier after being hit; charges scale with stacks (L1: 2, L2: 3, L3: 3 + longer hold)
 var vow_shatter_damage_mult: float = 1.8
-var _vow_shatter_primed: bool = false
+var _vow_shatter_charges_left: int = 0
 # Eclipse Mark: on-kill radial mark
 var eclipse_mark_radius: float = 110.0
 var eclipse_mark_duration: float = 1.4
@@ -1004,7 +1005,7 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 		else:
 			_broadcast_owner_damage_feedback()
 		if reward_vow_shatter:
-			_vow_shatter_primed = true
+			_vow_shatter_charges_left = _vow_shatter_attack_charges()
 		if crushed_vow_bonus_damage > 0:
 			_crushed_vow_primed = true
 		if source == "enemy_contact":
@@ -1259,7 +1260,7 @@ func apply_run_snapshot(snapshot: Dictionary) -> void:
 	_reset_dread_resonance_tracking()
 	void_heat = 0.0
 	_voidfire_lockout_left = 0.0
-	_vow_shatter_primed = false
+	_vow_shatter_charges_left = 0
 	_crushed_vow_primed = false
 	_set_dash_phasing(false)
 	velocity = Vector2.ZERO
@@ -1791,7 +1792,7 @@ func _build_damage_breakdown(base_scaling_damage: int, enemy_node: Object, hit_p
 	else:
 		_gain_indomitable_oath_from_hit(enemy_node, source)
 	flat_bonus_damage += _consume_eclipse_mark_bonus(enemy_node, base_scaling_damage)
-	flat_bonus_damage += _consume_riftpunch_bonus(source, hit_position)
+	flat_bonus_damage += _consume_riftpunch_bonus(source, hit_position, enemy_node)
 	var breakdown := {
 		"source": source,
 		"base_scaling_damage": base_scaling_damage,
@@ -1916,10 +1917,10 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		var danger_ratio := clampf(voidfire_danger_zone_threshold / maxf(1.0, void_heat_cap), 0.0, 1.0)
 		if heat_ratio >= danger_ratio:
 			strike_damage = int(round(float(strike_damage) * (1.0 + voidfire_danger_zone_amp)))
-	# Vow Shatter: apply multiplier if primed
-	if _vow_shatter_primed:
+	# Vow Shatter: apply multiplier if primed; consume one charge per attack
+	if _vow_shatter_charges_left > 0:
 		strike_damage = int(round(float(strike_damage) * vow_shatter_damage_mult))
-		_vow_shatter_primed = false
+		_vow_shatter_charges_left -= 1
 		if player_feedback != null:
 			player_feedback.play_world_ring(global_position, 30.0, Color(0.46, 0.62, 0.82, 0.88), 0.18)
 	var strike_range := float(melee_context.get("range", attack_range))
@@ -2072,7 +2073,7 @@ func _update_riftpunch_window(delta: float) -> void:
 	_riftpunch_window_left = maxf(0.0, _riftpunch_window_left - delta)
 	queue_redraw()
 
-func _consume_riftpunch_bonus(source: String, hit_position: Vector2) -> int:
+func _consume_riftpunch_bonus(source: String, hit_position: Vector2, enemy_node: Object = null) -> int:
 	if not reward_riftpunch:
 		return 0
 	if source != "melee":
@@ -2090,6 +2091,18 @@ func _consume_riftpunch_bonus(source: String, hit_position: Vector2) -> int:
 	var impact_position := hit_position
 	if impact_position.distance_squared_to(global_position) < 4.0:
 		impact_position = global_position + facing.normalized() * maxf(28.0, attack_range * 0.6)
+	if riftpunch_stacks >= 2 and is_instance_valid(enemy_node) and enemy_node.has_method("apply_slow"):
+		enemy_node.apply_slow(0.6, 0.6)
+		if enemy_node is Node2D:
+			var slow_target_network_id := int((enemy_node as Node2D).get_meta("network_enemy_id", -1))
+			if slow_target_network_id > 0:
+				_broadcast_cue_event("enemy_apply_slow", {
+					"enemy_network_id": slow_target_network_id,
+					"duration": 0.6,
+					"mult": 0.6
+				})
+	if riftpunch_stacks >= 3:
+		_apply_riftpunch_shockwave(impact_position, riftpunch_bonus_damage, enemy_node)
 	if player_feedback != null:
 		player_feedback.play_riftpunch_consume(global_position, impact_position)
 	_broadcast_cue_event("riftpunch_consume", {
@@ -2098,6 +2111,47 @@ func _consume_riftpunch_bonus(source: String, hit_position: Vector2) -> int:
 	})
 	queue_redraw()
 	return riftpunch_bonus_damage
+
+func _vow_shatter_attack_charges() -> int:
+	if vow_shatter_stacks <= 1:
+		return 2
+	return 3
+
+func _eclipse_mark_hits_per_enemy() -> int:
+	return maxi(1, eclipse_mark_stacks)
+
+func _wraithstep_hits_per_mark() -> int:
+	if wraithstep_stacks >= 3:
+		return 2
+	return 1
+
+func _apply_riftpunch_shockwave(epicenter: Vector2, primary_damage: int, primary_target: Object) -> void:
+	var shockwave_radius := 78.0
+	var shockwave_damage := maxi(1, int(round(float(primary_damage) * 0.45)))
+	shockwave_damage = _apply_objective_mutator_damage_mult(shockwave_damage)
+	var primary_id := -1
+	if is_instance_valid(primary_target):
+		primary_id = primary_target.get_instance_id()
+	if player_feedback != null:
+		player_feedback.play_world_ring(epicenter, shockwave_radius * 0.5, Color(0.94, 0.74, 0.42, 0.92), 0.10)
+		player_feedback.play_world_ring(epicenter, shockwave_radius, Color(0.86, 0.56, 0.28, 0.7), 0.22)
+		_broadcast_cue_event("world_ring", {
+			"position": epicenter,
+			"radius": shockwave_radius,
+			"color": Color(0.86, 0.56, 0.28, 0.7),
+			"duration": 0.22
+		})
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if not DAMAGEABLE.can_take_damage(enemy_node):
+			continue
+		var enemy_body := enemy_node as Node2D
+		if enemy_body.get_instance_id() == primary_id:
+			continue
+		if enemy_body.global_position.distance_to(epicenter) > shockwave_radius:
+			continue
+		DAMAGEABLE.apply_damage(enemy_node, shockwave_damage, {"is_ground_attack": true, "attack_type": "riftpunch_shockwave"})
 
 func _get_first_strike_bonus_damage(enemy_node: Object) -> int:
 	if first_strike_bonus_damage <= 0:
@@ -2131,7 +2185,7 @@ func clear_lingering_combat_effects() -> void:
 	if player_feedback != null and player_feedback.has_method("clear_all_eclipse_mark_decals"):
 		player_feedback.clear_all_eclipse_mark_decals()
 	_reset_dread_resonance_tracking()
-	_vow_shatter_primed = false
+	_vow_shatter_charges_left = 0
 	_crushed_vow_primed = false
 	_indomitable_spirit_primed = false
 	indomitable_damage_bank = 0.0
@@ -2227,7 +2281,11 @@ func _apply_wraithstep_marks_during_dash(dash_start: Vector2, dash_end: Vector2)
 		var enemy_id := enemy_body.get_instance_id()
 		var is_new_mark := not wraithstep_marked_enemy_expiry.has(enemy_id)
 		var enemy_network_id := int(enemy_body.get_meta("network_enemy_id", -1))
-		wraithstep_marked_enemy_expiry[enemy_id] = {"expiry": expiry, "node": enemy_body, "network_enemy_id": enemy_network_id}
+		var hits_remaining := _wraithstep_hits_per_mark()
+		if not is_new_mark:
+			var existing_entry := wraithstep_marked_enemy_expiry[enemy_id] as Dictionary
+			hits_remaining = maxi(int(existing_entry.get("hits_left", 1)), hits_remaining)
+		wraithstep_marked_enemy_expiry[enemy_id] = {"expiry": expiry, "node": enemy_body, "network_enemy_id": enemy_network_id, "hits_left": hits_remaining}
 		if enemy_network_id > 0:
 			_broadcast_cue_event("wraithstep_mark_add", {
 				"enemy_network_id": enemy_network_id,
@@ -2261,9 +2319,14 @@ func _consume_wraithstep_mark(enemy_node: Object, hit_position: Vector2, base_da
 		return 0
 	var consumed_entry := wraithstep_marked_enemy_expiry[enemy_id] as Dictionary
 	var consumed_network_enemy_id := int(consumed_entry.get("network_enemy_id", -1))
-	wraithstep_marked_enemy_expiry.erase(enemy_id)
-	if consumed_network_enemy_id > 0:
-		_broadcast_cue_event("wraithstep_mark_remove", {"enemy_network_id": consumed_network_enemy_id})
+	var hits_left := int(consumed_entry.get("hits_left", 1)) - 1
+	if hits_left <= 0:
+		wraithstep_marked_enemy_expiry.erase(enemy_id)
+		if consumed_network_enemy_id > 0:
+			_broadcast_cue_event("wraithstep_mark_remove", {"enemy_network_id": consumed_network_enemy_id})
+	else:
+		consumed_entry["hits_left"] = hits_left
+		wraithstep_marked_enemy_expiry[enemy_id] = consumed_entry
 	var splash_source_damage := maxi(1, int(round(float(base_damage) * wraithstep_mark_splash_ratio)))
 	var chain_damage_scale := minf(1.0, 0.72 + float(maxi(0, wraithstep_stacks - 1)) * 0.1)
 	var chain_damage := maxi(1, int(round(float(splash_source_damage) * chain_damage_scale)))
@@ -3746,7 +3809,7 @@ func _apply_eclipse_mark(kill_pos: Vector2) -> void:
 		if enemy_body.global_position.distance_to(kill_pos) > eclipse_mark_radius:
 			continue
 		var enemy_id := enemy_body.get_instance_id()
-		_eclipse_marked_enemies[enemy_id] = {"expiry": expiry, "node": enemy_body}
+		_eclipse_marked_enemies[enemy_id] = {"expiry": expiry, "node": enemy_body, "hits_left": _eclipse_mark_hits_per_enemy()}
 		if player_feedback != null:
 			player_feedback.play_world_ring(enemy_body.global_position, 20.0, Color(0.14, 0.94, 0.62, 0.86), 0.18)
 			if player_feedback.has_method("show_eclipse_mark_decal"):
@@ -3777,9 +3840,15 @@ func _consume_eclipse_mark_bonus(enemy_node: Object, base_damage: int) -> int:
 	var enemy_id := enemy_node.get_instance_id()
 	if not _eclipse_marked_enemies.has(enemy_id):
 		return 0
-	if player_feedback != null and player_feedback.has_method("clear_eclipse_mark_decal"):
-		player_feedback.clear_eclipse_mark_decal(enemy_node)
-	_eclipse_marked_enemies.erase(enemy_id)
+	var mark_entry: Dictionary = _eclipse_marked_enemies[enemy_id] as Dictionary
+	var hits_left := int(mark_entry.get("hits_left", 1)) - 1
+	if hits_left <= 0:
+		if player_feedback != null and player_feedback.has_method("clear_eclipse_mark_decal"):
+			player_feedback.clear_eclipse_mark_decal(enemy_node)
+		_eclipse_marked_enemies.erase(enemy_id)
+	else:
+		mark_entry["hits_left"] = hits_left
+		_eclipse_marked_enemies[enemy_id] = mark_entry
 	return maxi(1, int(round(float(base_damage) * eclipse_mark_bonus_ratio)))
 
 # --- Fracture Field ---
