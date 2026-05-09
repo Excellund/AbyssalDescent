@@ -140,7 +140,7 @@ const DAMAGE_MODEL_BY_POWER := {
 	"wardens_verdict": {
 		"kind": DAMAGE_KIND_FLAT,
 		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
-		"formula_note": "Every hit builds cadence; every 4th hit detonates an impact burst and mauls nearby enemies"
+		"formula_note": "Each hit deals escalating bonus damage; the 4th hit detonates a burst on nearby enemies"
 	},
 	"lacuna_echo": {
 		"kind": DAMAGE_KIND_HYBRID,

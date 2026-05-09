@@ -225,7 +225,7 @@ func _power_sentence_template(power_id: String) -> String:
 		"severing_edge":
 			return "Bonus damage on hits against enemies below 55%% HP %s."
 		"wardens_verdict":
-			return "Predator power %s."
+			return "Bonus damage %s; powers 4th-hit burst."
 		"lacuna_echo":
 			return "Zone power %s, radius %s."
 		"sovereign_tempo":
@@ -337,7 +337,7 @@ func _build_upgrade_preview(upgrade_id: String) -> Dictionary:
 func get_power_flavor_text(power_id: String) -> String:
 	match power_id:
 		"wardens_verdict":
-			return "Every few hits build predator cadence. The 4th hit triggers an impact burst and mauls nearby enemies."
+			return "Each consecutive hit deals more bonus damage. The 4th hit detonates a burst that hits nearby enemies."
 		"lacuna_echo":
 			return "Kills create a void zone that pulses damage and empowers attacks inside it."
 		"sovereign_tempo":
