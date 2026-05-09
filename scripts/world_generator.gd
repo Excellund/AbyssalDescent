@@ -2638,7 +2638,8 @@ func _begin_room(profile: Dictionary) -> void:
 				spawn_batch.append({
 					"enemy_id": enemy_id,
 					"enemy_type": String(spawn_entry.get("enemy_type", "")),
-					"position": enemy.global_position
+					"position": enemy.global_position,
+					"max_health": int(enemy.get_max_health()) if enemy.has_method("get_max_health") else 0
 				})
 			_sync_spawn_enemy_batch.rpc(spawn_batch, active_room_enemy_count, current_room_label, room_depth, _world_multiplayer_sync_state.current_room_sync_id)
 		else:

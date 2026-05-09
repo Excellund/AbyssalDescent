@@ -1948,7 +1948,8 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		"tempo_registered": false
 	}
 
-	for hit_entry in _get_damageable_enemies_in_cone(global_position, attack_direction, strike_range, max_angle_radians):
+	var cone_hits := _get_damageable_enemies_in_cone(global_position, attack_direction, strike_range, max_angle_radians)
+	for hit_entry in cone_hits:
 		var enemy_body := hit_entry.get("enemy") as Node2D
 		if enemy_body == null:
 			continue

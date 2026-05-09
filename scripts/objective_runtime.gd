@@ -521,7 +521,8 @@ func _spawn_random_wave_enemies(roster: Array[String], spawn_count: int) -> int:
 				spawn_batch.append({
 					"enemy_id": enemy_id,
 					"enemy_type": enemy_type,
-					"position": spawned_enemy.global_position
+					"position": spawned_enemy.global_position,
+					"max_health": int(spawned_enemy.get_max_health()) if spawned_enemy.has_method("get_max_health") else 0
 				})
 		spawned_total += 1
 	world.active_room_enemy_count += spawned_total
@@ -546,7 +547,8 @@ func _spawn_random_control_wave_enemies(roster: Array[String], spawn_count: int)
 				spawn_batch.append({
 					"enemy_id": enemy_id,
 					"enemy_type": enemy_type,
-					"position": spawned_enemy.global_position
+					"position": spawned_enemy.global_position,
+					"max_health": int(spawned_enemy.get_max_health()) if spawned_enemy.has_method("get_max_health") else 0
 				})
 		spawned_total += 1
 	world.active_room_enemy_count += spawned_total
@@ -565,7 +567,8 @@ func _append_objective_spawn_sync(spawn_batch: Array, enemy: CharacterBody2D, en
 	var spawn_entry := {
 		"enemy_id": enemy_id,
 		"enemy_type": enemy_type,
-		"position": enemy.global_position
+		"position": enemy.global_position,
+		"max_health": int(enemy.get_max_health()) if enemy.has_method("get_max_health") else 0
 	}
 	if not spawn_meta.is_empty():
 		spawn_entry["spawn_meta"] = spawn_meta.duplicate(true)

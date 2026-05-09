@@ -216,6 +216,9 @@ func _apply_spawn_batch_payload(payload: Dictionary) -> void:
 			continue
 		var enemy: CharacterBody2D = _world.enemy_spawner.spawn_enemy_from_sync(enemy_type, enemy_position)
 		if is_instance_valid(enemy):
+			var synced_max_health := int(spawn_entry.get("max_health", 0))
+			if synced_max_health > 0 and enemy.has_method("set_max_health_and_current"):
+				enemy.call("set_max_health_and_current", synced_max_health, synced_max_health)
 			_world.enemy_state_sync_broadcaster.register_enemy(enemy, enemy_id)
 	_world.active_room_enemy_count = synced_enemy_count
 	_world._world_multiplayer_sync_state.apply_spawn_sync_id(source_room_sync_id)
@@ -237,6 +240,9 @@ func _apply_objective_spawn_batch_payload(payload: Dictionary) -> void:
 			continue
 		var enemy: CharacterBody2D = _world.enemy_spawner.spawn_enemy_from_sync(enemy_type, enemy_position)
 		if is_instance_valid(enemy):
+			var synced_max_health := int(spawn_entry.get("max_health", 0))
+			if synced_max_health > 0 and enemy.has_method("set_max_health_and_current"):
+				enemy.call("set_max_health_and_current", synced_max_health, synced_max_health)
 			broadcaster.register_enemy(enemy, enemy_id)
 			if not spawn_meta.is_empty():
 				_apply_objective_spawn_meta(enemy, spawn_meta)
