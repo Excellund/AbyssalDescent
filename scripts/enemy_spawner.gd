@@ -443,22 +443,25 @@ func _pick_spawn_position_in_current_room(min_player_distance: float = -1.0, min
 	var required_player_distance := spawn_safe_radius if min_player_distance < 0.0 else maxf(spawn_safe_radius, min_player_distance)
 	var target_players := _resolve_target_players()
 	var candidate := Vector2.ZERO
+	var best_candidate := Vector2.ZERO
+	var best_player_distance := -INF
 	for _try in range(60):
 		candidate = Vector2(
 			rng.randf_range(-half.x, half.x),
 			rng.randf_range(-half.y, half.y)
 		)
-		var too_close_to_player := false
+		var min_player_dist := INF
 		for target_player_variant in target_players:
 			if not (target_player_variant is Node2D):
 				continue
 			var target_player := target_player_variant as Node2D
 			if not is_instance_valid(target_player):
 				continue
-			if candidate.distance_to(target_player.global_position) < required_player_distance:
-				too_close_to_player = true
-				break
-		if too_close_to_player:
+			min_player_dist = minf(min_player_dist, candidate.distance_to(target_player.global_position))
+		if min_player_dist > best_player_distance:
+			best_player_distance = min_player_dist
+			best_candidate = candidate
+		if min_player_dist < required_player_distance:
 			continue
 		var too_close_to_enemy := false
 		if is_instance_valid(world_root):
@@ -471,4 +474,4 @@ func _pick_spawn_position_in_current_room(min_player_distance: float = -1.0, min
 		if too_close_to_enemy:
 			continue
 		return candidate
-	return candidate
+	return best_candidate
