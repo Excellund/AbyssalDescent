@@ -1371,7 +1371,7 @@ func _process_multiplayer_sync(delta: float) -> void:
 	_sync_objective_state_tick(delta)
 	_sync_archer_projectile_state_tick(delta)
 	_sync_enemy_state_tick(delta)
-	_interpolate_remote_enemy_states(delta)
+	EnemyReplicationService.interpolate_remote_enemies(delta, enemy_remote_position_lerp_speed, enemy_remote_rotation_lerp_speed)
 	_flush_pending_client_door_syncs()
 	_flush_pending_client_boss_spawn_syncs()
 	_flush_pending_client_spawn_syncs()
@@ -3887,31 +3887,6 @@ func _sync_enemy_died(enemy_id: int, death_effect_payload: Dictionary = {}) -> v
 		enemy.queue_free()
 	_deregister_network_enemy(enemy_id)
 
-
-func _interpolate_remote_enemy_states(delta: float) -> void:
-	if not MultiplayerSessionManager.is_remote_replica():
-		return
-	var position_weight := clampf(delta * enemy_remote_position_lerp_speed, 0.0, 1.0)
-	var rotation_weight := clampf(delta * enemy_remote_rotation_lerp_speed, 0.0, 1.0)
-	var facing_update_threshold := 0.01
-	for enemy_id_variant in EnemyReplicationService.enemy_nodes_by_id.keys():
-		var enemy_id := int(enemy_id_variant)
-		var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as Node2D
-		if not is_instance_valid(enemy):
-			continue
-		var target_position := EnemyReplicationService.target_positions_by_id.get(enemy_id, enemy.global_position) as Vector2
-		var current_facing_angle := enemy.global_rotation
-		if enemy.has_method("get_network_facing_angle"):
-			current_facing_angle = float(enemy.call("get_network_facing_angle"))
-		var target_facing_angle := float(EnemyReplicationService.target_facing_angles_by_id.get(enemy_id, current_facing_angle))
-		enemy.global_position = enemy.global_position.lerp(target_position, position_weight)
-		var facing_delta := absf(wrapf(target_facing_angle - current_facing_angle, -PI, PI))
-		if facing_delta > facing_update_threshold:
-			if enemy.has_method("set_network_facing_angle"):
-				enemy.call("set_network_facing_angle", target_facing_angle)
-			else:
-				var smoothed_facing_angle := lerp_angle(current_facing_angle, target_facing_angle, rotation_weight)
-				enemy.global_rotation = smoothed_facing_angle
 
 func _clear_enemy_lingering_effects() -> void:
 	combat_phase_coordinator.clear_enemy_lingering_effects(get_tree())
