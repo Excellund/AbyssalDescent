@@ -44,6 +44,7 @@ const RUN_SUMMARY_RECORDER_SCRIPT := preload("res://scripts/core/run_summary_rec
 const ENEMY_STATE_SYNC_BROADCASTER_SCRIPT := preload("res://scripts/core/enemy_state_sync_broadcaster.gd")
 const ENEMY_STATE_SYNC_RECEIVER_SCRIPT := preload("res://scripts/core/enemy_state_sync_receiver.gd")
 const DIFFICULTY_SCALING_PROVIDER_SCRIPT := preload("res://scripts/core/difficulty_scaling_provider.gd")
+const ROOM_DEPTH_BOOKKEEPER_SCRIPT := preload("res://scripts/core/room_depth_bookkeeper.gd")
 const PLAYER_PROFILE_SCRIPT := preload("res://scripts/core/player_profile.gd")
 const PROFILE_PERSISTENCE_STORE_SCRIPT := preload("res://scripts/core/profile_persistence_store.gd")
 const RUN_SUMMARY_WITH_PROFILE_SCRIPT := preload("res://scripts/core/run_summary_with_profile.gd")
@@ -267,8 +268,7 @@ var _reward_phase_mode: int = ENUMS.RewardMode.NONE
 var _reward_phase_completed_peers: Dictionary = {}  ## peer_id -> bool
 var _doors_spawn_ready: bool = false
 var _world_multiplayer_sync_state = WORLD_MULTIPLAYER_SYNC_STATE_SCRIPT.new()
-var _depth_sanity_last_logged_depth: int = -1
-var _depth_sanity_last_log_usec: int = 0
+var room_depth_bookkeeper
 
 ## ============================================================================
 ## STRESS TEST METRICS (debug only)
@@ -385,6 +385,7 @@ func _initialize_bootstrap_context() -> void:
 	enemy_state_sync_broadcaster.perf_attribution_enabled = _perf_attribution_enabled
 	enemy_state_sync_receiver = ENEMY_STATE_SYNC_RECEIVER_SCRIPT.new(self)
 	difficulty_provider = DIFFICULTY_SCALING_PROVIDER_SCRIPT.new(self)
+	room_depth_bookkeeper = ROOM_DEPTH_BOOKKEEPER_SCRIPT.new(self)
 	profile_persistence_store = PROFILE_PERSISTENCE_STORE_SCRIPT.new()
 	current_player_profile = profile_persistence_store.load_or_create_profile()
 	
@@ -1893,18 +1894,7 @@ func _on_room_cleared() -> void:
 		_spawn_door_options()
 
 func _clamp_room_depth_to_sane_range() -> void:
-	var max_sane := _get_third_boss_target_depth() + 2
-	if room_depth > max_sane:
-		var now_usec := Time.get_ticks_usec()
-		var should_log := room_depth != _depth_sanity_last_logged_depth or now_usec - _depth_sanity_last_log_usec >= 2000000
-		if should_log:
-			push_warning("[Depth Sanity] Clamping high room_depth %d -> %d (rooms_cleared=%d, bosses: 1st=%s, 2nd=%s, 3rd=%s)" % [
-				room_depth, max_sane, rooms_cleared,
-				first_boss_defeated, second_boss_defeated, second_boss_defeated
-			])
-			_depth_sanity_last_logged_depth = room_depth
-			_depth_sanity_last_log_usec = now_usec
-		room_depth = max_sane
+	room_depth_bookkeeper.clamp_room_depth_to_sane_range()
 
 func _finish_first_boss_clear() -> void:
 	in_boss_room = false
@@ -2006,27 +1996,19 @@ func _apply_difficulty_tier_bonuses(difficulty_tier: int) -> void:
 		player.set_max_health_and_current(new_max, new_max)
 
 func _get_second_boss_target_depth() -> int:
-	return maxi(encounter_count + 1, encounter_count * 2)
+	return room_depth_bookkeeper.get_second_boss_target_depth()
 
 func _get_third_boss_target_depth() -> int:
-	return maxi(_get_second_boss_target_depth() + 1, _get_second_boss_target_depth() + third_boss_encounter_count + 1)
+	return room_depth_bookkeeper.get_third_boss_target_depth()
 
 func _build_route_context(depth: int) -> Dictionary:
-	var target_depth := encounter_count
-	if second_boss_defeated:
-		target_depth = _get_third_boss_target_depth()
-	elif first_boss_defeated:
-		target_depth = _get_second_boss_target_depth()
-	return {
-		"depth": depth,
-		"rooms_until_boss": maxi(0, target_depth - depth)
-	}
+	return room_depth_bookkeeper.build_route_context(depth)
 
 func _is_second_boss_unlocked() -> bool:
-	return first_boss_defeated and not second_boss_defeated and room_depth >= _get_second_boss_target_depth()
+	return room_depth_bookkeeper.is_second_boss_unlocked()
 
 func _is_third_boss_unlocked() -> bool:
-	return second_boss_defeated and room_depth >= _get_third_boss_target_depth()
+	return room_depth_bookkeeper.is_third_boss_unlocked()
 
 func _get_boss_difficulty_mult() -> float:
 	if current_difficulty_config.is_empty():
