@@ -243,10 +243,6 @@ var _objective_state_sync_sequence: int = 0
 var _last_applied_objective_state_sync_sequence: int = -1
 var _objective_state_sync_was_active: bool = false
 var _next_network_enemy_id: int = 1
-var _network_enemy_nodes: Dictionary = {}  ## enemy_id -> Node2D
-var _enemy_last_damage_peer_by_id: Dictionary = {}  ## enemy_id -> peer_id
-var _enemy_target_positions: Dictionary = {}  ## enemy_id -> target global position
-var _enemy_target_facing_angles: Dictionary = {}  ## enemy_id -> target facing angle
 var _previous_enemy_runtime_states: Dictionary = {}  ## enemy_id -> previous runtime_state (for conditional sync)
 var _previous_enemy_positions: Dictionary = {}  ## enemy_id -> previous synced position
 var _previous_enemy_facing_angles: Dictionary = {}  ## enemy_id -> previous synced facing angle
@@ -1413,7 +1409,7 @@ func _update_multiplayer_perf_logging(delta: float) -> void:
 		_multiplayer_last_feedback_event_count = 0
 		_multiplayer_last_feedback_estimated_bytes = 0
 	print("[MP PERF] tracked=%d room_active=%d sync_enemies=%d sync_batches=%d sync_est_bytes=%d" % [
-		_network_enemy_nodes.size(),
+		EnemyReplicationService.enemy_nodes_by_id.size(),
 		active_room_enemy_count,
 		_multiplayer_last_sync_enemy_count,
 		_multiplayer_last_sync_batch_count,
@@ -1473,7 +1469,7 @@ func _record_perf_attribution_sample(delta: float, pre_elapsed_ms: float, sim_el
 		"avg_post_ms": post_ms,
 		"avg_frame_ms": frame_ms,
 		"avg_ui_ms": ui_ms,
-		"avg_enemy_drawn": float(_network_enemy_nodes.size()),
+		"avg_enemy_drawn": float(EnemyReplicationService.enemy_nodes_by_id.size()),
 		"avg_runtime_delta_ms": runtime_delta_ms,
 		"avg_runtime_delta_calls": float(runtime_delta_calls),
 		"sample_frames": 1
@@ -1484,7 +1480,7 @@ func _record_perf_attribution_sample(delta: float, pre_elapsed_ms: float, sim_el
 	_perf_attr_total_post_ms += post_ms
 	_perf_attr_total_frame_ms += frame_ms
 	_perf_attr_total_ui_ms += ui_ms
-	_perf_attr_total_enemy_drawn += _network_enemy_nodes.size()
+	_perf_attr_total_enemy_drawn += EnemyReplicationService.enemy_nodes_by_id.size()
 	_perf_attribution_elapsed += frame_ms
 	if _perf_attribution_elapsed < _perf_attribution_sample_ms:
 		return
@@ -1535,7 +1531,7 @@ func _report_client_perf_sample(delta: float) -> void:
 	var frame_ms := float(perf_sample.get("avg_frame_ms", 0.0))
 	var ui_ms := float(perf_sample.get("avg_ui_ms", 0.0))
 	var enemy_drawn_avg := float(perf_sample.get("avg_enemy_drawn", 0.0))
-	_sync_client_perf_sample.rpc_id(1, fps, _network_enemy_nodes.size(), current_room_label, pre_ms, sim_ms, post_ms, frame_ms, ui_ms, enemy_drawn_avg)
+	_sync_client_perf_sample.rpc_id(1, fps, EnemyReplicationService.enemy_nodes_by_id.size(), current_room_label, pre_ms, sim_ms, post_ms, frame_ms, ui_ms, enemy_drawn_avg)
 
 @rpc("unreliable", "any_peer")
 func _sync_client_perf_sample(
@@ -1748,7 +1744,7 @@ func _apply_synced_boss_spawn_payload(payload: Dictionary) -> void:
 	var source_room_sync_id := int(payload.get("room_sync_id", 0))
 	if boss_stage <= 0 or enemy_id <= 0:
 		return
-	var existing_enemy := _network_enemy_nodes.get(enemy_id) as Node2D
+	var existing_enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as Node2D
 	if is_instance_valid(existing_enemy):
 		active_room_enemy_count = maxi(1, active_room_enemy_count)
 		return
@@ -3155,7 +3151,7 @@ func record_player_damage_dealt(applied_amount: int, source_peer_id: int = 0, _k
 	if STAT_ATTRIBUTION_TRACE:
 		print_debug("[StatAttribution][DamageCredit] peer=%d applied=%d total=%d enemy_id=%d" % [source_peer_id, applied_amount, int(stats.get("damage_dealt_total", 0)), enemy_id])
 	if enemy_id > 0:
-		_enemy_last_damage_peer_by_id[enemy_id] = source_peer_id
+		EnemyReplicationService.last_damage_peer_by_id[enemy_id] = source_peer_id
 
 func _ensure_peer_summary_stats(peer_id: int) -> Dictionary:
 	return _summary_stats_by_peer.get(peer_id, {
@@ -3195,10 +3191,10 @@ func _record_boss_defeat_for_summary_peers() -> void:
 		print_debug("[StatAttribution][BossCredit] peers=%s" % str(tracked_peer_ids.keys()))
 
 func _clear_all_enemies() -> void:
-	_network_enemy_nodes.clear()
-	_enemy_last_damage_peer_by_id.clear()
-	_enemy_target_positions.clear()
-	_enemy_target_facing_angles.clear()
+	EnemyReplicationService.enemy_nodes_by_id.clear()
+	EnemyReplicationService.last_damage_peer_by_id.clear()
+	EnemyReplicationService.target_positions_by_id.clear()
+	EnemyReplicationService.target_facing_angles_by_id.clear()
 	_previous_enemy_runtime_states.clear()
 	_previous_enemy_positions.clear()
 	_previous_enemy_facing_angles.clear()
@@ -3220,9 +3216,9 @@ func _sync_archer_projectile_state_tick(delta: float) -> void:
 		return
 	_archer_projectile_sync_elapsed = 0.0
 	var synced_archer_projectiles: Array = []
-	for enemy_id_variant in _network_enemy_nodes.keys():
+	for enemy_id_variant in EnemyReplicationService.enemy_nodes_by_id.keys():
 		var enemy_id := int(enemy_id_variant)
-		var enemy := _network_enemy_nodes.get(enemy_id) as Node
+		var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as Node
 		if not is_instance_valid(enemy):
 			continue
 		if not enemy.has_method("get_projectile_network_sync_state"):
@@ -3440,7 +3436,7 @@ func _get_adaptive_enemy_sync_state_size_limit() -> int:
 
 func _compute_priority_enemy_sync_interval_sec() -> float:
 	var best_interval := 0.0
-	for enemy_variant in _network_enemy_nodes.values():
+	for enemy_variant in EnemyReplicationService.enemy_nodes_by_id.values():
 		var enemy := enemy_variant as Node
 		if not is_instance_valid(enemy):
 			continue
@@ -3484,7 +3480,7 @@ func _sync_enemy_state_tick(delta: float) -> void:
 	var synced_states: Array = []
 	var synced_state_sizes: Array[int] = []
 	var stale_ids: Array = []
-	var enemy_ids: Array = _network_enemy_nodes.keys()
+	var enemy_ids: Array = EnemyReplicationService.enemy_nodes_by_id.keys()
 	var total_enemy_ids := enemy_ids.size()
 	if total_enemy_ids <= 0:
 		_multiplayer_last_sync_enemy_count = 0
@@ -3504,7 +3500,7 @@ func _sync_enemy_state_tick(delta: float) -> void:
 		var enemy_index := (_enemy_sync_scan_cursor + scan_index) % total_enemy_ids
 		var enemy_id_variant: Variant = enemy_ids[enemy_index]
 		var enemy_id := int(enemy_id_variant)
-		var enemy := _network_enemy_nodes.get(enemy_id) as Node2D
+		var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as Node2D
 		if not is_instance_valid(enemy):
 			stale_ids.append(enemy_id)
 			_enemy_far_sync_elapsed_by_id.erase(enemy_id)
@@ -3646,7 +3642,7 @@ func _register_network_enemy(enemy: Node2D, forced_enemy_id: int = -1) -> int:
 	else:
 		_next_network_enemy_id = maxi(_next_network_enemy_id, enemy_id + 1)
 	enemy.set_meta("network_enemy_id", enemy_id)
-	_network_enemy_nodes[enemy_id] = enemy
+	EnemyReplicationService.enemy_nodes_by_id[enemy_id] = enemy
 	_initialize_enemy_tracking_state(enemy_id, enemy)
 	if MultiplayerSessionManager.is_remote_replica() and enemy.has_method("set_network_simulation_enabled"):
 		enemy.call("set_network_simulation_enabled", false)
@@ -3655,12 +3651,12 @@ func _register_network_enemy(enemy: Node2D, forced_enemy_id: int = -1) -> int:
 	return enemy_id
 
 func _initialize_enemy_tracking_state(enemy_id: int, enemy: Node2D) -> void:
-	_enemy_target_positions[enemy_id] = enemy.global_position
+	EnemyReplicationService.target_positions_by_id[enemy_id] = enemy.global_position
 	_previous_enemy_positions[enemy_id] = enemy.global_position
 	var enemy_facing_angle := enemy.global_rotation
 	if enemy.has_method("get_network_facing_angle"):
 		enemy_facing_angle = float(enemy.call("get_network_facing_angle"))
-	_enemy_target_facing_angles[enemy_id] = enemy_facing_angle
+	EnemyReplicationService.target_facing_angles_by_id[enemy_id] = enemy_facing_angle
 	_previous_enemy_facing_angles[enemy_id] = enemy_facing_angle
 	if enemy.has_method("get_current_health"):
 		_previous_enemy_health_values[enemy_id] = float(enemy.call("get_current_health"))
@@ -3698,10 +3694,10 @@ func _spawn_synced_pyre_death_field(effect_payload: Dictionary) -> void:
 	)
 
 func _deregister_network_enemy(enemy_id: int) -> void:
-	_network_enemy_nodes.erase(enemy_id)
-	_enemy_last_damage_peer_by_id.erase(enemy_id)
-	_enemy_target_positions.erase(enemy_id)
-	_enemy_target_facing_angles.erase(enemy_id)
+	EnemyReplicationService.enemy_nodes_by_id.erase(enemy_id)
+	EnemyReplicationService.last_damage_peer_by_id.erase(enemy_id)
+	EnemyReplicationService.target_positions_by_id.erase(enemy_id)
+	EnemyReplicationService.target_facing_angles_by_id.erase(enemy_id)
 	_previous_enemy_runtime_states.erase(enemy_id)
 	_previous_enemy_positions.erase(enemy_id)
 	_previous_enemy_facing_angles.erase(enemy_id)
@@ -3710,12 +3706,12 @@ func _deregister_network_enemy(enemy_id: int) -> void:
 	_enemy_far_combat_hint_by_id.erase(enemy_id)
 
 func _on_network_enemy_died(enemy_id: int) -> void:
-	var killer_peer_id := int(_enemy_last_damage_peer_by_id.get(enemy_id, 0))
+	var killer_peer_id := int(EnemyReplicationService.last_damage_peer_by_id.get(enemy_id, 0))
 	if STAT_ATTRIBUTION_TRACE:
 		print_debug("[StatAttribution][EnemyDied] enemy_id=%d killer_peer=%d" % [enemy_id, killer_peer_id])
 	if killer_peer_id > 0:
 		_record_peer_enemy_kill(killer_peer_id)
-	var enemy := _network_enemy_nodes.get(enemy_id) as Node2D
+	var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as Node2D
 	var death_effect_payload := _build_enemy_death_effect_payload(enemy)
 	_deregister_network_enemy(enemy_id)
 	if MultiplayerSessionManager.should_broadcast():
@@ -3736,7 +3732,7 @@ func _sync_request_enemy_damage(enemy_id: int, amount: int, damage_context: Dict
 		return
 	if enemy_id <= 0 or amount <= 0:
 		return
-	var enemy := _network_enemy_nodes.get(enemy_id) as Node
+	var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as Node
 	if not is_instance_valid(enemy):
 		return
 	if not enemy.has_method("take_damage"):
@@ -3753,7 +3749,7 @@ func _sync_request_enemy_damage(enemy_id: int, amount: int, damage_context: Dict
 	else:
 		enemy.call("take_damage", amount, damage_context)
 	if source_peer_id > 0:
-		_enemy_last_damage_peer_by_id[enemy_id] = source_peer_id
+		EnemyReplicationService.last_damage_peer_by_id[enemy_id] = source_peer_id
 	if health_before >= 0 and enemy.has_method("get_current_health"):
 		var health_after := int(enemy.call("get_current_health"))
 		if STAT_ATTRIBUTION_TRACE:
@@ -3844,17 +3840,17 @@ func _sync_enemy_states(synced_states: Array, synced_enemy_count: int) -> void:
 		var enemy_id := int(state.get("enemy_id", -1))
 		if enemy_id <= 0:
 			continue
-		var enemy := _network_enemy_nodes.get(enemy_id) as Node2D
+		var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as Node2D
 		if not is_instance_valid(enemy):
 			continue
 		if state.has("position"):
 			var synced_position := state.get("position", enemy.global_position) as Vector2
 			if enemy.global_position.distance_to(synced_position) >= enemy_remote_snap_distance_px:
 				enemy.global_position = synced_position
-			_enemy_target_positions[enemy_id] = synced_position
+			EnemyReplicationService.target_positions_by_id[enemy_id] = synced_position
 		if state.has("facing_angle"):
 			var synced_facing_angle := float(state.get("facing_angle", enemy.global_rotation))
-			_enemy_target_facing_angles[enemy_id] = synced_facing_angle
+			EnemyReplicationService.target_facing_angles_by_id[enemy_id] = synced_facing_angle
 		if state.has("health") and enemy.has_method("set_health"):
 			enemy.call("set_health", float(state.get("health", 0.0)))
 		if enemy.has_method("apply_network_runtime_state"):
@@ -3875,7 +3871,7 @@ func _sync_archer_projectile_states(synced_archer_projectiles: Array, source_roo
 		var enemy_id := int(sync_data.get("enemy_id", -1))
 		if enemy_id <= 0:
 			continue
-		var enemy := _network_enemy_nodes.get(enemy_id) as Node
+		var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as Node
 		if not is_instance_valid(enemy):
 			continue
 		if not enemy.has_method("apply_projectile_network_sync_state"):
@@ -3889,7 +3885,7 @@ func _sync_archer_projectile_states(synced_archer_projectiles: Array, source_roo
 func _sync_enemy_died(enemy_id: int, death_effect_payload: Dictionary = {}) -> void:
 	if not MultiplayerSessionManager.is_remote_replica():
 		return
-	var enemy := _network_enemy_nodes.get(enemy_id) as Node2D
+	var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as Node2D
 	if String(death_effect_payload.get("effect", "")) == "pyre_death_field":
 		_spawn_synced_pyre_death_field(death_effect_payload)
 	if is_instance_valid(enemy):
@@ -3903,16 +3899,16 @@ func _interpolate_remote_enemy_states(delta: float) -> void:
 	var position_weight := clampf(delta * enemy_remote_position_lerp_speed, 0.0, 1.0)
 	var rotation_weight := clampf(delta * enemy_remote_rotation_lerp_speed, 0.0, 1.0)
 	var facing_update_threshold := 0.01
-	for enemy_id_variant in _network_enemy_nodes.keys():
+	for enemy_id_variant in EnemyReplicationService.enemy_nodes_by_id.keys():
 		var enemy_id := int(enemy_id_variant)
-		var enemy := _network_enemy_nodes.get(enemy_id) as Node2D
+		var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as Node2D
 		if not is_instance_valid(enemy):
 			continue
-		var target_position := _enemy_target_positions.get(enemy_id, enemy.global_position) as Vector2
+		var target_position := EnemyReplicationService.target_positions_by_id.get(enemy_id, enemy.global_position) as Vector2
 		var current_facing_angle := enemy.global_rotation
 		if enemy.has_method("get_network_facing_angle"):
 			current_facing_angle = float(enemy.call("get_network_facing_angle"))
-		var target_facing_angle := float(_enemy_target_facing_angles.get(enemy_id, current_facing_angle))
+		var target_facing_angle := float(EnemyReplicationService.target_facing_angles_by_id.get(enemy_id, current_facing_angle))
 		enemy.global_position = enemy.global_position.lerp(target_position, position_weight)
 		var facing_delta := absf(wrapf(target_facing_angle - current_facing_angle, -PI, PI))
 		if facing_delta > facing_update_threshold:
