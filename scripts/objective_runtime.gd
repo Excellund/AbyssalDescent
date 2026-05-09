@@ -101,7 +101,6 @@ class HoldTheLineConfig:
 	const SPAWN_INTERVAL_CLAMP_MAX = 1.24
 	const SPAWN_INTERVAL_RELIEF_PER_SECOND = 0.08
 	const SPAWN_INTERVAL_RELIEF_PER_KILL = 0.04
-	const SPAWN_INTERVAL_RELIEF_MAX_BONUS = 0.6
 	const SPAWN_ZONE_EXCLUSION_PADDING = 42.0
 
 # === COLORS ===
@@ -143,7 +142,6 @@ var rng: RandomNumberGenerator
 var objective_state_setup: RefCounted = OBJECTIVE_STATE_SETUP.new()
 var _control_relief_kills_applied: int = 0
 var _control_spawn_interval_base: float = 0.0
-var _control_spawn_interval_relief_cap: float = 0.0
 var _control_relief_phase_announced: bool = false
 var _control_zone_state_update_left: float = 0.0
 var _control_zone_runtime_sync_left: float = 0.0
@@ -172,7 +170,6 @@ func _clear_all_objective_state() -> void:
 	objective_state_setup.clear_world_state(objective_manager)
 	_control_relief_kills_applied = 0
 	_control_spawn_interval_base = 0.0
-	_control_spawn_interval_relief_cap = 0.0
 	_control_relief_phase_announced = false
 	_control_zone_state_update_left = 0.0
 	_control_zone_runtime_sync_left = 0.0
@@ -263,7 +260,6 @@ func _begin_control_objective(profile: Dictionary) -> void:
 		)
 	_control_relief_kills_applied = 0
 	_control_spawn_interval_base = objective_manager.spawn_interval
-	_control_spawn_interval_relief_cap = objective_manager.spawn_interval + HoldTheLineConfig.SPAWN_INTERVAL_RELIEF_MAX_BONUS
 	_control_relief_phase_announced = false
 	_control_zone_state_update_left = 0.0
 	_control_zone_runtime_sync_left = 0.0
@@ -387,8 +383,7 @@ func _update_control_relief_phase_timers(delta: float) -> void:
 	elif not _control_relief_phase_announced:
 		_control_relief_phase_announced = true
 		world.hud.show_banner("Line Stabilizing", "Hold on and reclaim the zone")
-	if objective_manager.time_left <= 0.0:
-		objective_manager.spawn_interval = minf(_control_spawn_interval_relief_cap, objective_manager.spawn_interval + delta * HoldTheLineConfig.SPAWN_INTERVAL_RELIEF_PER_SECOND)
+	objective_manager.spawn_interval += delta * HoldTheLineConfig.SPAWN_INTERVAL_RELIEF_PER_SECOND
 
 func _apply_control_kill_relief() -> void:
 	var kills_this_room: int = objective_manager.kills - objective_manager.control_kill_baseline
@@ -396,7 +391,7 @@ func _apply_control_kill_relief() -> void:
 	if relief_kills <= 0:
 		return
 	var relief_amount := float(relief_kills) * HoldTheLineConfig.SPAWN_INTERVAL_RELIEF_PER_KILL
-	objective_manager.spawn_interval = minf(_control_spawn_interval_relief_cap, objective_manager.spawn_interval + relief_amount)
+	objective_manager.spawn_interval += relief_amount
 	_control_relief_kills_applied += relief_kills
 
 func _update_control_zone_state() -> void:
@@ -451,6 +446,11 @@ func _update_control_spawn_cycle(delta: float, refill_spawn_cap: float, pressure
 	var pressure_floor: int = objective_manager.spawn_batch + pressure_floor_bonus
 	if objective_manager.max_enemies > 0:
 		pressure_floor = mini(pressure_floor, objective_manager.max_enemies)
+	var progress_ratio := 0.0
+	if objective_manager.control_goal > 0.0:
+		progress_ratio = clampf(objective_manager.control_progress / objective_manager.control_goal, 0.0, 1.0)
+	if progress_ratio > 0.0:
+		pressure_floor = maxi(1, int(round(float(pressure_floor) * (1.0 - 0.45 * progress_ratio))))
 	var relief_interval_bonus := maxf(0.0, objective_manager.spawn_interval - _control_spawn_interval_base)
 	var effective_refill_spawn_cap := minf(objective_manager.spawn_interval, refill_spawn_cap + relief_interval_bonus)
 	if world.active_room_enemy_count < pressure_floor:
