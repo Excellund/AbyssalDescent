@@ -413,3 +413,31 @@ func _apply_network_cue_events(peer_id: int, events: Array[Dictionary]) -> void:
 	if player_node == null:
 		return
 	_cue_event_dispatcher.apply_cue_events(player_node, peer_id, local_peer_id, events)
+
+
+## Host-authoritative: dispatch a polar shift impulse + dash lockout to the player owned by target_peer_id.
+func send_polar_shift_effect(target_peer_id: int, direction: Vector2, force: float, dash_lockout_duration: float) -> void:
+	if multiplayer_session_manager == null or not bool(multiplayer_session_manager.is_session_connected()):
+		_apply_polar_shift_effect_local(target_peer_id, direction, force, dash_lockout_duration)
+		return
+	if not bool(multiplayer_session_manager.is_host()):
+		return
+	if target_peer_id == local_peer_id:
+		_apply_polar_shift_effect_local(target_peer_id, direction, force, dash_lockout_duration)
+		return
+	_rpc_apply_polar_shift_effect.rpc_id(target_peer_id, target_peer_id, direction, force, dash_lockout_duration)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _rpc_apply_polar_shift_effect(target_peer_id: int, direction: Vector2, force: float, dash_lockout_duration: float) -> void:
+	_apply_polar_shift_effect_local(target_peer_id, direction, force, dash_lockout_duration)
+
+
+func _apply_polar_shift_effect_local(target_peer_id: int, direction: Vector2, force: float, dash_lockout_duration: float) -> void:
+	var player_node := _get_player_node(target_peer_id)
+	if player_node == null:
+		return
+	if player_node.has_method("apply_polar_shift_impulse"):
+		player_node.apply_polar_shift_impulse(direction, force)
+	if dash_lockout_duration > 0.0 and player_node.has_method("apply_polar_shift_dash_lockout"):
+		player_node.apply_polar_shift_dash_lockout(dash_lockout_duration)

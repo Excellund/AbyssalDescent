@@ -1753,7 +1753,8 @@ func _get_damageable_enemies_in_cone(origin: Vector2, attack_direction: Vector2,
 		seen_ids[enemy_id] = true
 		result.append({
 			"enemy": enemy_body,
-			"hit_position": hit_sample
+			"hit_position": hit_sample,
+			"enemy_radius": _get_body_radius_for(enemy_body, 13.0)
 		})
 	return result
 
@@ -1891,7 +1892,8 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		var enemy_strike_damage := strike_damage
 		var final_damage_mult := 1.0
 		if passive_farline_focus:
-			if _is_farline_focus_hit(attack_direction, to_enemy):
+			var focus_enemy_radius := float(hit_entry.get("enemy_radius", _get_body_radius_for(enemy_body, 13.0)))
+			if _is_farline_focus_hit(attack_direction, to_enemy, focus_enemy_radius):
 				final_damage_mult = farline_focus_damage_mult
 				if not farline_focus_proc_fired:
 					farline_focus_proc_fired = true
@@ -1929,12 +1931,15 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 
 	return did_hit
 
-func _is_farline_focus_hit(attack_direction: Vector2, to_enemy: Vector2) -> bool:
+func _is_farline_focus_hit(attack_direction: Vector2, to_enemy: Vector2, enemy_radius: float = 0.0) -> bool:
 	var focus_band := _get_farline_focus_range_band()
 	var focus_min_range := focus_band.x
 	var focus_max_range := focus_band.y
-	var distance := to_enemy.length()
-	if distance < focus_min_range or distance > focus_max_range:
+	var center_distance := to_enemy.length()
+	var safe_radius := maxf(0.0, enemy_radius)
+	var near_distance := maxf(0.0, center_distance - safe_radius)
+	var far_distance := center_distance + safe_radius
+	if far_distance < focus_min_range or near_distance > focus_max_range:
 		return false
 	if to_enemy.length_squared() <= 0.000001:
 		return false
@@ -2652,6 +2657,7 @@ func _update_combo_relay_state(delta: float) -> void:
 	combo_relay_stack_timer = 0.0
 	queue_redraw()
 
+@rpc("any_peer", "call_local")
 func apply_polar_shift_dash_lockout(duration: float) -> void:
 	var applied_duration := maxf(0.0, duration)
 	if applied_duration <= 0.0:
@@ -2665,6 +2671,11 @@ func apply_polar_shift_dash_lockout(duration: float) -> void:
 	if player_feedback != null:
 		player_feedback.play_polar_shift_dash_lockout(global_position)
 	queue_redraw()
+
+@rpc("any_peer", "call_local")
+func apply_polar_shift_impulse(direction: Vector2, force: float) -> void:
+	velocity = Vector2.ZERO
+	velocity = direction * force
 
 func _create_health_state() -> void:
 	health_state = HEALTH_STATE_SCRIPT.new()

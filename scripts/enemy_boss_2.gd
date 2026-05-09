@@ -184,8 +184,17 @@ func get_projectile_network_sync_state() -> Dictionary:
 		"echo_dash_remaining": _echo_dash_remaining,
 		"echo_dash_retargeting": _echo_dash_retargeting,
 		"echo_dash_retarget_time_left": _echo_dash_retarget_time_left,
+		"echo_dash_warning_line": _echo_dash_warning_line,
 		"polar_shift_is_pull": _polar_shift_is_pull,
+		"polar_shift_safe_angles": _polar_shift_safe_angles,
+		"polar_shift_pull_damage_pending": _polar_shift_pull_damage_pending,
+		"polar_shift_pull_damage_delay_left": _polar_shift_pull_damage_delay_left,
+		"polar_shift_pull_damage_just_started": _polar_shift_pull_damage_just_started,
 		"polar_shift_pull_afterglow_left": _polar_shift_pull_afterglow_left,
+		"prism_base_angle": _prism_base_angle,
+		"orbital_lance_positions": _orbital_lance_positions,
+		"orbital_lance_indices": _orbital_lance_indices,
+		"orbit_clockwise": _orbit_clockwise,
 		"orbital_fortress_hit_flash_left": _orbital_fortress_hit_flash_left,
 		"attack_afterglow_time_left": attack_afterglow_time_left,
 		"impact_burst_time_left": impact_burst_time_left,
@@ -220,8 +229,25 @@ func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
 	_echo_dash_remaining = int(sync_state.get("echo_dash_remaining", _echo_dash_remaining))
 	_echo_dash_retargeting = bool(sync_state.get("echo_dash_retargeting", _echo_dash_retargeting))
 	_echo_dash_retarget_time_left = float(sync_state.get("echo_dash_retarget_time_left", _echo_dash_retarget_time_left))
+	var synced_warning_line = sync_state.get("echo_dash_warning_line", PackedVector2Array())
+	if synced_warning_line is PackedVector2Array:
+		_echo_dash_warning_line = synced_warning_line
 	_polar_shift_is_pull = bool(sync_state.get("polar_shift_is_pull", _polar_shift_is_pull))
+	var synced_safe_angles = sync_state.get("polar_shift_safe_angles", [])
+	if synced_safe_angles is Array:
+		_polar_shift_safe_angles = synced_safe_angles as Array[float]
+	_polar_shift_pull_damage_pending = bool(sync_state.get("polar_shift_pull_damage_pending", _polar_shift_pull_damage_pending))
+	_polar_shift_pull_damage_delay_left = float(sync_state.get("polar_shift_pull_damage_delay_left", _polar_shift_pull_damage_delay_left))
+	_polar_shift_pull_damage_just_started = bool(sync_state.get("polar_shift_pull_damage_just_started", _polar_shift_pull_damage_just_started))
 	_polar_shift_pull_afterglow_left = float(sync_state.get("polar_shift_pull_afterglow_left", _polar_shift_pull_afterglow_left))
+	_prism_base_angle = float(sync_state.get("prism_base_angle", _prism_base_angle))
+	var synced_lance_positions = sync_state.get("orbital_lance_positions", PackedVector2Array())
+	if synced_lance_positions is PackedVector2Array:
+		_orbital_lance_positions = synced_lance_positions
+	var synced_lance_indices = sync_state.get("orbital_lance_indices", [])
+	if synced_lance_indices is Array:
+		_orbital_lance_indices = synced_lance_indices as Array[int]
+	_orbit_clockwise = bool(sync_state.get("orbit_clockwise", _orbit_clockwise))
 	_orbital_fortress_hit_flash_left = float(sync_state.get("orbital_fortress_hit_flash_left", _orbital_fortress_hit_flash_left))
 	attack_afterglow_time_left = float(sync_state.get("attack_afterglow_time_left", attack_afterglow_time_left))
 	impact_burst_time_left = float(sync_state.get("impact_burst_time_left", impact_burst_time_left))
@@ -559,7 +585,7 @@ func _enter_attack_state() -> void:
 		ENEMY_STATE_ENUMS.Boss2Attack.POLAR_SHIFT:
 			state_time_left = 0.08
 			velocity = Vector2.ZERO
-			_apply_polar_shift()
+			_rpc_apply_polar_shift()
 
 func _process_attack_state(delta: float) -> void:
 	if active_attack == ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH:
@@ -748,6 +774,15 @@ func _apply_orbital_lance_hits() -> void:
 			DAMAGEABLE.apply_damage(hit_target, orbital_lance_damage, {"source": "enemy_ability", "ability": "orbital_lance"})
 			break
 
+func _rpc_apply_polar_shift() -> void:
+	if not MultiplayerSessionManager.is_session_connected():
+		_apply_polar_shift()
+		return
+	if MultiplayerSessionManager.is_host():
+		_apply_polar_shift()
+	else:
+		rpc_id(1, "_apply_polar_shift")
+
 func _apply_polar_shift() -> void:
 	for hit_target in _get_damageable_targets():
 		if not is_instance_valid(hit_target):
@@ -773,10 +808,22 @@ func _apply_polar_shift() -> void:
 				force_mult *= polar_shift_anchor_force_mult
 			if in_safe_lane:
 				force_mult *= polar_shift_safe_force_mult
-			target_body.velocity = Vector2.ZERO
-			target_body.velocity = dir * polar_shift_force * force_mult
-			if not in_safe_lane:
-				target_body.apply_polar_shift_dash_lockout(polar_shift_dash_lockout_duration)
+			var impulse_force := dir * polar_shift_force * force_mult
+			var lockout_duration := polar_shift_dash_lockout_duration if not in_safe_lane else 0.0
+			var target_peer_id := 0
+			if "player_id" in target_body:
+				target_peer_id = int(target_body.player_id)
+			var replication_service := get_node_or_null("/root/PlayerReplicationService")
+			if target_peer_id > 0 and replication_service != null and replication_service.has_method("send_polar_shift_effect"):
+				replication_service.send_polar_shift_effect(target_peer_id, dir, impulse_force.length(), lockout_duration)
+			else:
+				if target_body.has_method("apply_polar_shift_impulse"):
+					target_body.apply_polar_shift_impulse(dir, impulse_force.length())
+				else:
+					target_body.velocity = Vector2.ZERO
+					target_body.velocity = impulse_force
+				if lockout_duration > 0.0 and target_body.has_method("apply_polar_shift_dash_lockout"):
+					target_body.apply_polar_shift_dash_lockout(lockout_duration)
 
 
 func _get_damageable_targets() -> Array[Node2D]:

@@ -49,6 +49,9 @@ Use these natural-language commands in chat. Phrases do not need to match exactl
 - Ensure multiplayer stays in sync with singleplayer
 - Add new encounter [name] and verify multiplayer scales correctly
 - Add new character [name] and sync multiplayer pool
+- Apply host-only effect (knockback/lockout/status) to a specific player peer
+- Joiner not affected by [boss attack / hazard / debuff] — fix RPC routing
+- Route player-targeted effect through PlayerReplicationService
 
 ## Engine Building And Synergy
 
