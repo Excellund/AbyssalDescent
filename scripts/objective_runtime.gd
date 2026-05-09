@@ -511,7 +511,7 @@ func _spawn_random_wave_enemies(roster: Array[String], spawn_count: int) -> int:
 		if not is_instance_valid(spawned_enemy):
 			continue
 		if MultiplayerSessionManager.should_broadcast():
-			var enemy_id: int = int(world._register_network_enemy(spawned_enemy))
+			var enemy_id: int = int(world.enemy_state_sync_broadcaster.register_enemy(spawned_enemy))
 			if enemy_id > 0:
 				spawn_batch.append({
 					"enemy_id": enemy_id,
@@ -536,7 +536,7 @@ func _spawn_random_control_wave_enemies(roster: Array[String], spawn_count: int)
 			continue
 		_reposition_control_spawn_outside_zone(spawned_enemy)
 		if MultiplayerSessionManager.should_broadcast():
-			var enemy_id: int = int(world._register_network_enemy(spawned_enemy))
+			var enemy_id: int = int(world.enemy_state_sync_broadcaster.register_enemy(spawned_enemy))
 			if enemy_id > 0:
 				spawn_batch.append({
 					"enemy_id": enemy_id,
@@ -554,7 +554,7 @@ func _append_objective_spawn_sync(spawn_batch: Array, enemy: CharacterBody2D, en
 		return
 	if not MultiplayerSessionManager.should_broadcast():
 		return
-	var enemy_id: int = int(world._register_network_enemy(enemy))
+	var enemy_id: int = int(world.enemy_state_sync_broadcaster.register_enemy(enemy))
 	if enemy_id <= 0:
 		return
 	var spawn_entry := {
