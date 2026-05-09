@@ -725,6 +725,8 @@ func _process_active_dash(delta: float) -> bool:
 	return true
 
 func _update_dash_phase_state(delta: float) -> void:
+	if not is_local_player:
+		return
 	if _is_dash_active():
 		dash_phase_release_left = maxf(dash_phase_release_left, dash_phase_release_duration)
 	elif dash_phase_release_left > 0.0:
@@ -745,10 +747,25 @@ func _set_dash_phasing(enabled: bool) -> void:
 	if enabled == dash_phasing_active:
 		return
 	dash_phasing_active = enabled
+	_broadcast_dash_phasing_state(enabled)
 	if enabled:
 		_sync_enemy_collision_exceptions()
 		return
 	_clear_enemy_collision_exceptions()
+
+func _broadcast_dash_phasing_state(active: bool) -> void:
+	if not is_local_player:
+		return
+	if player_id <= 0:
+		return
+	var multiplayer_session_manager = get_node_or_null("/root/MultiplayerSessionManager")
+	if multiplayer_session_manager == null or not bool(multiplayer_session_manager.is_session_connected()):
+		return
+	var player_replication_service = get_node_or_null("/root/PlayerReplicationService")
+	if player_replication_service == null:
+		return
+	if player_replication_service.has_method("broadcast_dash_phasing_state"):
+		player_replication_service.broadcast_dash_phasing_state(player_id, active)
 
 func _sync_enemy_collision_exceptions() -> void:
 	var seen_ids: Dictionary = {}

@@ -415,6 +415,29 @@ func _apply_network_cue_events(peer_id: int, events: Array[Dictionary]) -> void:
 	_cue_event_dispatcher.apply_cue_events(player_node, peer_id, local_peer_id, events)
 
 
+## Called by the local owner of a player when their dash phasing state toggles.
+## Replicates the flag to every other peer so host-side hit detection (and any other
+## peer's local copy) respects the local player's dash i-frames.
+func broadcast_dash_phasing_state(peer_id: int, active: bool) -> void:
+	if peer_id <= 0:
+		return
+	if peer_id != local_peer_id:
+		return
+	if multiplayer_session_manager == null or not bool(multiplayer_session_manager.is_session_connected()):
+		return
+	_sync_dash_phasing_state.rpc(peer_id, active)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _sync_dash_phasing_state(peer_id: int, active: bool) -> void:
+	if peer_id == local_peer_id:
+		return
+	var player_node := _get_player_node(peer_id)
+	if player_node == null:
+		return
+	player_node.set("dash_phasing_active", active)
+
+
 ## Host-authoritative: dispatch a polar shift impulse + dash lockout to the player owned by target_peer_id.
 func send_polar_shift_effect(target_peer_id: int, direction: Vector2, force: float, dash_lockout_duration: float) -> void:
 	if multiplayer_session_manager == null or not bool(multiplayer_session_manager.is_session_connected()):
