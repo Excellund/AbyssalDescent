@@ -7,7 +7,7 @@ extends Node
 ##   via difficulty_config.gd and embedded below for clarity.
 ## - Multiplayer-SPECIFIC OVERRIDES are explicitly defined:
 ##   * base_enemy_pressure_mult: tuned higher for 2-player scaling
-##   * depth_pressure_divisor: new field for depth scaling (not in singleplayer)
+##   * depth_pressure_divisor: matches singleplayer semantics (lower = faster depth ramp)
 ##   * specialist enemy offsets: per-type instead of single offset
 ##   * player multipliers: specialized for co-op player health/damage dynamics
 ## - A sync validator runs at editor/build time to catch drifts.
@@ -28,8 +28,8 @@ static var BEARING_DEFINITIONS := {
 		"difficulty_rank": 0,
 		
 		# === MULTIPLAYER OVERRIDES ===
-		"base_enemy_pressure_mult": 1.2,  ## Moderate increase for 2 players (vs 0.6 singleplayer)
-		"depth_pressure_divisor": 18,  ## Deeper scaling than singleplayer
+		"base_enemy_pressure_mult": 0.6,  ## Match singleplayer; party-size mult adds the co-op count bump
+		"depth_pressure_divisor": 1.5,  ## Match singleplayer ramp; lower = faster depth ramp
 		"specialist_enemy_lurker_offset": 5,
 		"specialist_enemy_ram_offset": 6,
 		"specialist_enemy_lancer_offset": 7,
@@ -47,6 +47,9 @@ static var BEARING_DEFINITIONS := {
 		"player_damage_dealt_mult": 1.0,
 		"player_heal_mult": 1.0,
 		"rest_heal_ratio_mult": 1.25,
+		"coop_enemy_count_per_extra_player": 0.22,
+		"coop_enemy_count_curve_power": 0.85,
+		"coop_enemy_count_max_mult": 1.55,
 		"coop_enemy_health_per_extra_player": 0.56,
 		"coop_enemy_health_curve_power": 0.9,
 		"coop_enemy_health_max_mult": 2.5,
@@ -63,8 +66,8 @@ static var BEARING_DEFINITIONS := {
 		"difficulty_rank": 1,
 		
 		# === MULTIPLAYER OVERRIDES ===
-		"base_enemy_pressure_mult": 1.35,  ## Moderate-high for co-op (vs 1.0 singleplayer)
-		"depth_pressure_divisor": 14,
+		"base_enemy_pressure_mult": 1.0,  ## Match singleplayer; party-size mult adds the co-op count bump
+		"depth_pressure_divisor": 1.0,  ## Match singleplayer ramp; lower = faster depth ramp
 		"specialist_enemy_lurker_offset": 4,
 		"specialist_enemy_ram_offset": 5,
 		"specialist_enemy_lancer_offset": 6,
@@ -82,6 +85,9 @@ static var BEARING_DEFINITIONS := {
 		"player_damage_dealt_mult": 1.0,
 		"player_heal_mult": 1.0,
 		"rest_heal_ratio_mult": 1.0,
+		"coop_enemy_count_per_extra_player": 0.25,
+		"coop_enemy_count_curve_power": 0.85,
+		"coop_enemy_count_max_mult": 1.6,
 		"coop_enemy_health_per_extra_player": 0.62,
 		"coop_enemy_health_curve_power": 0.92,
 		"coop_enemy_health_max_mult": 2.7,
@@ -98,8 +104,8 @@ static var BEARING_DEFINITIONS := {
 		"difficulty_rank": 2,
 		
 		# === MULTIPLAYER OVERRIDES ===
-		"base_enemy_pressure_mult": 1.5,  ## Higher for harder difficulty (vs 1.25 singleplayer)
-		"depth_pressure_divisor": 12,
+		"base_enemy_pressure_mult": 1.25,  ## Match singleplayer; party-size mult adds the co-op count bump
+		"depth_pressure_divisor": 0.8,  ## Match singleplayer ramp; lower = faster depth ramp
 		"specialist_enemy_lurker_offset": 3,
 		"specialist_enemy_ram_offset": 4,
 		"specialist_enemy_lancer_offset": 5,
@@ -117,6 +123,9 @@ static var BEARING_DEFINITIONS := {
 		"player_damage_dealt_mult": 1.0,
 		"player_heal_mult": 1.0,
 		"rest_heal_ratio_mult": 1.0,
+		"coop_enemy_count_per_extra_player": 0.28,
+		"coop_enemy_count_curve_power": 0.85,
+		"coop_enemy_count_max_mult": 1.65,
 		"coop_enemy_health_per_extra_player": 0.68,
 		"coop_enemy_health_curve_power": 0.95,
 		"coop_enemy_health_max_mult": 2.9,
@@ -133,8 +142,8 @@ static var BEARING_DEFINITIONS := {
 		"difficulty_rank": 3,
 		
 		# === MULTIPLAYER OVERRIDES ===
-		"base_enemy_pressure_mult": 1.7,  ## Very high for extreme difficulty (vs 1.5 singleplayer)
-		"depth_pressure_divisor": 10,
+		"base_enemy_pressure_mult": 1.5,  ## Match singleplayer; party-size mult adds the co-op count bump
+		"depth_pressure_divisor": 0.6,  ## Match singleplayer ramp; lower = faster depth ramp
 		"specialist_enemy_lurker_offset": 2,
 		"specialist_enemy_ram_offset": 3,
 		"specialist_enemy_lancer_offset": 4,
@@ -152,6 +161,9 @@ static var BEARING_DEFINITIONS := {
 		"player_damage_dealt_mult": 1.0,
 		"player_heal_mult": 1.0,
 		"rest_heal_ratio_mult": 1.0,
+		"coop_enemy_count_per_extra_player": 0.30,
+		"coop_enemy_count_curve_power": 0.85,
+		"coop_enemy_count_max_mult": 1.7,
 		"coop_enemy_health_per_extra_player": 0.74,
 		"coop_enemy_health_curve_power": 0.98,
 		"coop_enemy_health_max_mult": 3.1,

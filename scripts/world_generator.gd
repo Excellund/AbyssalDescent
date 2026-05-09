@@ -737,6 +737,8 @@ func _setup_encounter_profile_builder_system() -> void:
 	encounter_profile_builder.initialize(rng)
 	if encounter_profile_builder.has_method("set_use_multiplayer_difficulty_config"):
 		encounter_profile_builder.call("set_use_multiplayer_difficulty_config", is_multiplayer)
+	if encounter_profile_builder.has_method("set_multiplayer_party_size"):
+		encounter_profile_builder.call("set_multiplayer_party_size", _get_multiplayer_party_size_for_scaling())
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	var should_apply_difficulty := false
 	var difficulty_tier := current_difficulty_tier

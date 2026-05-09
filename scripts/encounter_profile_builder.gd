@@ -13,6 +13,7 @@ var current_difficulty_tier: int = BEARING_ENUMS.BearingTier.DELVER
 var current_difficulty_config: Dictionary = DIFFICULTY_CONFIG.get_tier_config(BEARING_ENUMS.BearingTier.DELVER)
 var use_multiplayer_difficulty_config: bool = false
 var multiplayer_difficulty_config = DIFFICULTY_CONFIG_MULTIPLAYER.new()
+var multiplayer_party_size: int = 1
 
 var room_base_size: Vector2 = Vector2(940.0, 700.0)
 var room_size_growth: Vector2 = Vector2(80.0, 45.0)
@@ -140,6 +141,9 @@ func set_use_multiplayer_difficulty_config(enabled: bool) -> void:
 	use_multiplayer_difficulty_config = enabled
 	_refresh_difficulty_config()
 
+func set_multiplayer_party_size(size: int) -> void:
+	multiplayer_party_size = clampi(size, 1, 4)
+
 func _get_difficulty_config_provider() -> Object:
 	if use_multiplayer_difficulty_config and multiplayer_difficulty_config != null:
 		return multiplayer_difficulty_config
@@ -161,12 +165,26 @@ func _difficulty_int(key: String, fallback: int = 0) -> int:
 func _difficulty_rank() -> int:
 	return clampi(_difficulty_int("difficulty_rank", 1), 0, 3)
 
+func _party_size_count_mult() -> float:
+	if not use_multiplayer_difficulty_config or multiplayer_party_size <= 1:
+		return 1.0
+	var per_extra := maxf(0.0, _difficulty_float("coop_enemy_count_per_extra_player", 0.0))
+	if per_extra <= 0.0:
+		return 1.0
+	var curve_power := maxf(0.01, _difficulty_float("coop_enemy_count_curve_power", 1.0))
+	var cap_mult := maxf(1.0, _difficulty_float("coop_enemy_count_max_mult", 2.0))
+	var extras := float(multiplayer_party_size - 1)
+	return clampf(1.0 + per_extra * pow(extras, curve_power), 1.0, cap_mult)
+
+func _pressure_mult() -> float:
+	return _difficulty_float("base_enemy_pressure_mult", 1.0) * _party_size_count_mult()
+
 func _effective_depth(depth: int) -> int:
 	var divisor := maxf(0.1, _difficulty_float("depth_pressure_divisor", 1.0))
 	return int(floor(float(maxi(0, depth)) / divisor))
 
 func _apply_bearing_count_scaling(profile: Dictionary, pressure_mult_override: float = 1.0, minimum_total: int = 0) -> Dictionary:
-	var pressure_mult := _difficulty_float("base_enemy_pressure_mult", 1.0) * pressure_mult_override
+	var pressure_mult := _pressure_mult() * pressure_mult_override
 	return ENCOUNTER_CONTRACTS.profile_scaled_counts(profile, pressure_mult, minimum_total)
 
 func _skirmish_min_total_enemies() -> int:
@@ -426,7 +444,7 @@ func _build_trial_profile(depth: int = 0) -> Dictionary:
 	var base: Dictionary = _pick_trial_base_profile(mutator)
 	var effective_depth := _effective_depth(depth)
 	var depth_pressure := maxi(0, effective_depth - 2)
-	var base_pressure_mult := _difficulty_float("base_enemy_pressure_mult", 1.0)
+	var base_pressure_mult := _pressure_mult()
 	
 	var chasers := int(float(ENCOUNTER_CONTRACTS.profile_chaser_count(base) + hard_room_enemy_bonus + int(floor(float(depth_pressure) * 0.65))) * base_pressure_mult)
 	var chargers := int(float(ENCOUNTER_CONTRACTS.profile_charger_count(base) + 2 + int(floor(float(depth_pressure) / 5.0))) * base_pressure_mult)
@@ -481,20 +499,20 @@ func _build_apex_trial_profile(depth: int = 0) -> Dictionary:
 	var effective_depth := _effective_depth(depth)
 	var tier := _difficulty_rank()
 	var mutator := _build_apex_seamlock_mutator()
-	var pressure_mult := _difficulty_float("base_enemy_pressure_mult", 1.0)
+	var pressure_mult := _pressure_mult()
 	var chasers := int(clampf(float(1 + int(floor(float(maxi(0, effective_depth - 6)) * 0.2))) * pressure_mult * 0.85, 1.0, 3.0))
 	var shielders := int(clampf(float(1 + int(floor(float(maxi(0, effective_depth - 7)) * 0.15))) * pressure_mult * 0.8, 1.0, 2.0))
-	var seamlocks := 1
-	if effective_depth >= 8:
-		seamlocks += 1
-	if tier >= BEARING_ENUMS.BearingTier.HARBINGER and effective_depth >= 10:
-		seamlocks += 1
-	if tier == BEARING_ENUMS.BearingTier.FORSWORN and effective_depth >= 12:
-		seamlocks += 1
-	seamlocks = clampi(seamlocks, 1, 4)
+	var seamlocks := _apex_trial_seamlock_count(tier, effective_depth)
 	var profile := _build_profile("Apex Trial Seamlock", TRIAL_ROOM_SIZE, chasers, 0, 0, shielders, mutator)
 	profile[ENCOUNTER_CONTRACTS.PROFILE_KEY_SEAMLOCK_COUNT] = seamlocks
 	return profile
+
+func _apex_trial_seamlock_count(tier: int, effective_depth: int) -> int:
+	## Identity ceiling: more than the per-tier max stops being an Apex Trial.
+	var per_tier_ceiling := [2, 2, 3, 4]
+	var ceiling := int(per_tier_ceiling[clampi(tier, 0, 3)])
+	var raw := 1.0 + maxf(0.0, float(effective_depth) - 6.0) * 0.5
+	return clampi(int(round(raw)), 1, ceiling)
 
 func apply_mutator_variant_to_profile(profile: Dictionary, mutator: Dictionary, depth: int = 1) -> Dictionary:
 	if profile.is_empty() or mutator.is_empty():
@@ -726,8 +744,8 @@ func _trial_specialist_enemies(mutator: Dictionary, depth: int, tier: int = BEAR
 	var ram_gate := 6 + specialist_offset
 	var lancer_gate := 7 + specialist_offset
 	
-	var lurker_count := int(floor(float(maxi(0, effective_depth - lurker_gate + 1)) * 0.6)) if effective_depth >= lurker_gate else 0
-	var ram_count := int(floor(float(maxi(0, effective_depth - ram_gate + 1)) * 0.4)) if effective_depth >= ram_gate else 0
+	var lurker_count := int(floor(float(maxi(0, effective_depth - lurker_gate + 1)) * 0.6))
+	var ram_count := int(floor(float(maxi(0, effective_depth - ram_gate + 1)) * 0.4))
 	var lancer_count := 1 if effective_depth >= lancer_gate else 0
 	var spectre_count := 0
 	var pyre_count := 0
