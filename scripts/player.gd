@@ -172,6 +172,7 @@ var combat_damage_enabled: bool = true
 var attack_combo_counter: int = 0
 var dash_phasing_active: bool = false
 var dash_phase_release_left: float = 0.0
+var _dash_damage_immune_left: float = 0.0
 var dash_enemy_exceptions: Dictionary = {}
 var body_radius_cache: float = 14.0
 var queued_attack_after_dash: bool = false
@@ -543,6 +544,7 @@ func _try_start_dash(direction: Vector2) -> void:
 	veilstep_rhythm_empowered_dash_active = passive_veilstep_rhythm and veilstep_rhythm_surge_ready and veilstep_rhythm_surge_window_left > 0.0
 	dash_cooldown_left = 0.0 if veilstep_rhythm_empowered_dash_active else dash_cooldown
 	dash_phase_release_left = maxf(dash_phase_release_left, dash_phase_release_duration)
+	_dash_damage_immune_left = maxf(_dash_damage_immune_left, dash_phase_release_duration)
 	phantom_step_hit_ids.clear()
 	phantom_step_ghost_positions.clear()
 	phantom_step_ghost_emit_cd = 0.0
@@ -729,8 +731,11 @@ func _update_dash_phase_state(delta: float) -> void:
 		return
 	if _is_dash_active():
 		dash_phase_release_left = maxf(dash_phase_release_left, dash_phase_release_duration)
+		_dash_damage_immune_left = maxf(_dash_damage_immune_left, dash_phase_release_duration)
 	elif dash_phase_release_left > 0.0:
 		dash_phase_release_left = maxf(0.0, dash_phase_release_left - delta)
+	if _dash_damage_immune_left > 0.0 and not _is_dash_active():
+		_dash_damage_immune_left = maxf(0.0, _dash_damage_immune_left - delta)
 
 	if not _is_dash_active() and not dash_phasing_active and _is_overlapping_enemy_body():
 		dash_phase_release_left = maxf(dash_phase_release_left, dash_overlap_clearance_duration)
@@ -934,7 +939,7 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 	var ability := String(damage_context.get("ability", "unknown"))
 	if not combat_damage_enabled and source.begins_with("enemy_"):
 		return
-	if dash_phasing_active and source == "enemy_contact":
+	if _dash_damage_immune_left > 0.0 and source == "enemy_contact":
 		return
 	if source == "enemy_contact" and _contact_damage_grace_left > 0.0 and ability == _contact_damage_grace_ability:
 		return
@@ -1036,6 +1041,7 @@ func set_alive(is_alive: bool) -> void:
 		velocity = Vector2.ZERO
 		dash_time_left = 0.0
 		dash_phase_release_left = 0.0
+		_dash_damage_immune_left = 0.0
 		queued_attack_after_dash = false
 		_set_dash_phasing(false)
 
@@ -1203,6 +1209,7 @@ func apply_run_snapshot(snapshot: Dictionary) -> void:
 	attack_anim_time_left = 0.0
 	attack_lock_time_left = 0.0
 	dash_phase_release_left = 0.0
+	_dash_damage_immune_left = 0.0
 	dash_enemy_exceptions.clear()
 	queued_attack_after_dash = false
 	phantom_step_hit_ids.clear()
@@ -2681,6 +2688,7 @@ func apply_polar_shift_dash_lockout(duration: float) -> void:
 		return
 	dash_time_left = 0.0
 	dash_phase_release_left = 0.0
+	_dash_damage_immune_left = 0.0
 	queued_attack_after_dash = false
 	_set_dash_phasing(false)
 	polar_shift_dash_lockout_duration = maxf(polar_shift_dash_lockout_duration, applied_duration)

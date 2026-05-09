@@ -9,8 +9,8 @@ const ATTACK_COMMIT_WINDOW := 0.15
 @export var move_speed: float = 120.0
 @export var acceleration: float = 900.0
 @export var deceleration: float = 1200.0
-@export var stop_distance: float = 30.0
-@export var attack_range: float = 32.0
+@export var stop_distance: float = 34.0
+@export var attack_range: float = 40.0
 @export var damage: int = 10
 @export var attack_interval: float = 0.85
 
