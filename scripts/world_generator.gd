@@ -276,7 +276,6 @@ var room_depth_bookkeeper
 var _stress_test_active: bool = false
 var _stress_test_coordinator: RefCounted = null
 
-var second_player: Node2D = null
 var _known_fallen_player_ids: Dictionary = {}
 
 func _get_player_network_id(player_node: Node2D) -> int:
@@ -410,7 +409,7 @@ func _initialize_bootstrap_context() -> void:
 	endless_boss_defeated = false
 
 	if is_multiplayer:
-		_setup_multiplayer_second_player()
+		_setup_multiplayer_remote_players()
 
 func _setup_player_runtime_bindings() -> void:
 	if is_instance_valid(player):
@@ -430,8 +429,10 @@ func _setup_player_runtime_bindings() -> void:
 		player_camera.set_room_fit_zoom_scale(camera_base_zoom_in)
 	_bind_camera_to_local_player()
 
-func _setup_multiplayer_second_player() -> void:
-	"""Create second player node for multiplayer co-op."""
+const REMOTE_PLAYER_SPAWN_RADIUS_PX: float = 80.0
+
+func _setup_multiplayer_remote_players() -> void:
+	"""Create remote player nodes for every connected peer in multiplayer co-op."""
 	var multiplayer_session_manager := get_node_or_null("/root/MultiplayerSessionManager")
 	var player_replication_service := get_node_or_null("/root/PlayerReplicationService")
 	var run_context := _get_run_context()
@@ -441,12 +442,11 @@ func _setup_multiplayer_second_player() -> void:
 	if player_replication_service == null:
 		push_error("[Multiplayer] PlayerReplicationService autoload is missing")
 		return
-	
+
 	# Joiner flag: expect initial sync from host before applying normal sanitizer logic.
 	if not multiplayer_session_manager.is_host():
 		_world_multiplayer_sync_state.joiner_awaiting_initial_sync = true
-	
-	## Set multiplayer identification
+
 	var peer_ids: Array = multiplayer_session_manager.get_peer_ids()
 	var local_peer: int = multiplayer_session_manager.local_peer_id
 	var active_multiplayer := get_tree().get_multiplayer()
@@ -457,56 +457,69 @@ func _setup_multiplayer_second_player() -> void:
 			if multiplayer_session_manager.local_peer_id != active_peer_id:
 				print_debug("[Multiplayer] Correcting local peer id from %d to %d" % [multiplayer_session_manager.local_peer_id, active_peer_id])
 				multiplayer_session_manager.local_peer_id = active_peer_id
-	var remote_peer: int = 0
-	for peer_id in peer_ids:
-		if peer_id != local_peer:
-			remote_peer = peer_id
-			break
-	
+
 	if local_peer > 0:
 		player.player_id = local_peer
 		player.is_local_player = true
 		player_replication_service.register_player(player.player_id, player)
-	
-	if remote_peer <= 0:
-		second_player = null
-		print_debug("[Multiplayer] No remote peer present; skipping remote avatar setup")
+
+	var remote_peer_ids: Array[int] = []
+	for peer_id_variant in peer_ids:
+		var peer_id := int(peer_id_variant)
+		if peer_id == local_peer or peer_id <= 0:
+			continue
+		remote_peer_ids.append(peer_id)
+	remote_peer_ids.sort()
+
+	if remote_peer_ids.is_empty():
+		print_debug("[Multiplayer] No remote peers present; skipping remote avatar setup")
 		return
-	
+
 	const PLAYER_SCENE := "res://scenes/Player.tscn"
 	var player_scene = load(PLAYER_SCENE)
 	if player_scene == null:
 		push_error("[Multiplayer] Failed to load Player scene")
 		return
-	
-	second_player = player_scene.instantiate()
-	if second_player == null:
-		push_error("[Multiplayer] Failed to instantiate Player scene")
-		return
-	
-	## Position second player offset from first player
-	second_player.position = player.position + Vector2(80.0, 0.0)
-	second_player.player_id = remote_peer
-	second_player.is_local_player = remote_peer == local_peer
-	if run_context != null and second_player.has_method("apply_character_package"):
-		var remote_character_id := String(run_context.get_peer_character_selection(remote_peer)).strip_edges().to_lower()
-		var remote_character_data: Dictionary = CHARACTER_REGISTRY.get_character(remote_character_id)
-		if not remote_character_data.is_empty():
-			second_player.apply_character_package(remote_character_data)
-	
-	add_child(second_player)
-	_disable_player_collision_pair(player, second_player)
-	player_replication_service.register_player(second_player.player_id, second_player)
-	if second_player.has_signal("died"):
-		second_player.connect("died", Callable(self, "_on_player_died"))
-	if second_player.has_signal("health_changed"):
-		second_player.connect("health_changed", Callable(self, "_on_player_health_changed_for_summary").bind(second_player))
+
+	var remote_count := remote_peer_ids.size()
+	for index in range(remote_count):
+		var remote_peer := remote_peer_ids[index]
+		var remote_player_node: Node2D = player_scene.instantiate()
+		if remote_player_node == null:
+			push_error("[Multiplayer] Failed to instantiate Player scene for peer %d" % remote_peer)
+			continue
+		remote_player_node.position = player.position + _remote_player_spawn_offset(index, remote_count)
+		remote_player_node.player_id = remote_peer
+		remote_player_node.is_local_player = false
+		if run_context != null and remote_player_node.has_method("apply_character_package"):
+			var remote_character_id := String(run_context.get_peer_character_selection(remote_peer)).strip_edges().to_lower()
+			if not remote_character_id.is_empty():
+				var remote_character_data: Dictionary = CHARACTER_REGISTRY.get_character(remote_character_id)
+				if not remote_character_data.is_empty():
+					remote_player_node.apply_character_package(remote_character_data)
+		add_child(remote_player_node)
+		_disable_player_collision_pair(player, remote_player_node)
+		for existing_node in player_replication_service.player_nodes.values():
+			if existing_node == remote_player_node or existing_node == player:
+				continue
+			_disable_player_collision_pair(existing_node, remote_player_node)
+		player_replication_service.register_player(remote_peer, remote_player_node)
+		if remote_player_node.has_signal("died"):
+			remote_player_node.connect("died", Callable(self, "_on_player_died"))
+		if remote_player_node.has_signal("health_changed"):
+			remote_player_node.connect("health_changed", Callable(self, "_on_player_health_changed_for_summary").bind(remote_player_node))
+		print_debug("[Multiplayer] Remote player created (peer %d)" % remote_peer)
+
 	if is_instance_valid(player_camera):
 		var zoom_scale := camera_base_zoom_in * 0.65 if multiplayer_use_shared_camera else camera_base_zoom_in
 		player_camera.set_room_fit_zoom_scale(zoom_scale)
 	_bind_camera_to_local_player()
-	
-	print_debug("[Multiplayer] Second player created (peer %d)" % remote_peer)
+
+func _remote_player_spawn_offset(index: int, total: int) -> Vector2:
+	if total <= 0:
+		return Vector2.ZERO
+	var angle := TAU * (float(index) / float(total))
+	return Vector2(cos(angle), sin(angle)) * REMOTE_PLAYER_SPAWN_RADIUS_PX
 
 
 func _disable_player_collision_pair(primary_player: Node, secondary_player: Node) -> void:
@@ -525,13 +538,12 @@ func _disable_player_collision_pair(primary_player: Node, secondary_player: Node
 func _bind_camera_to_local_player() -> void:
 	var local_player_node := _find_local_player_node()
 	var primary_camera := player.get_node_or_null("Camera2D") as Camera2D if is_instance_valid(player) else null
-	var secondary_camera := second_player.get_node_or_null("Camera2D") as Camera2D if is_instance_valid(second_player) else null
 	var local_camera := local_player_node.get_node_or_null("Camera2D") as Camera2D if is_instance_valid(local_player_node) else null
 
-	if is_instance_valid(primary_camera):
-		primary_camera.enabled = false
-	if is_instance_valid(secondary_camera):
-		secondary_camera.enabled = false
+	for party_node in _get_multiplayer_player_nodes():
+		var party_camera := party_node.get_node_or_null("Camera2D") as Camera2D
+		if is_instance_valid(party_camera):
+			party_camera.enabled = false
 
 	if not is_instance_valid(local_camera):
 		player_camera = primary_camera
@@ -543,30 +555,25 @@ func _bind_camera_to_local_player() -> void:
 
 
 func _find_local_player_node() -> Node2D:
-	if is_instance_valid(player) and _is_local_control_owner(player) and _is_player_alive(player):
-		return player
-	if is_instance_valid(second_player) and _is_local_control_owner(second_player) and _is_player_alive(second_player):
-		return second_player
-	if is_instance_valid(player) and _is_player_alive(player):
-		return player
-	if is_instance_valid(second_player) and _is_player_alive(second_player):
-		return second_player
-	if is_instance_valid(player) and _is_local_control_owner(player):
-		return player
-	if is_instance_valid(second_player) and _is_local_control_owner(second_player):
-		return second_player
-	if is_instance_valid(player):
-		return player
-	if is_instance_valid(second_player):
-		return second_player
+	var party_nodes := _get_multiplayer_player_nodes()
+	for party_node in party_nodes:
+		if _is_local_control_owner(party_node) and _is_player_alive(party_node):
+			return party_node
+	for party_node in party_nodes:
+		if _is_player_alive(party_node):
+			return party_node
+	for party_node in party_nodes:
+		if _is_local_control_owner(party_node):
+			return party_node
+	if not party_nodes.is_empty():
+		return party_nodes[0]
 	return null
 
 
 func _find_local_owned_player_node() -> Node2D:
-	if is_instance_valid(player) and _is_local_control_owner(player):
-		return player
-	if is_instance_valid(second_player) and _is_local_control_owner(second_player):
-		return second_player
+	for party_node in _get_multiplayer_player_nodes():
+		if _is_local_control_owner(party_node):
+			return party_node
 	return _find_local_player_node()
 
 
@@ -630,27 +637,25 @@ func _apply_multiplayer_character_packages(run_context: Node) -> void:
 		if not local_data.is_empty():
 			player.apply_character_package(local_data)
 			current_character_id = local_selected_id
-	if is_instance_valid(second_player) and second_player.has_method("apply_character_package"):
-		var remote_peer_id := int(second_player.get("player_id"))
+	for party_node in _get_multiplayer_player_nodes():
+		if party_node == player:
+			continue
+		if not party_node.has_method("apply_character_package"):
+			continue
+		var remote_peer_id := int(party_node.get("player_id"))
 		var remote_character_id := String(run_context.get_peer_character_selection(remote_peer_id)).strip_edges().to_lower()
-		if remote_character_id.is_empty() or remote_character_id == current_character_id:
-			var fallback_remote_id := ""
-			for peer_key in run_context.multiplayer_peer_characters.keys():
-				var candidate_id := String(run_context.multiplayer_peer_characters.get(peer_key, "")).strip_edges().to_lower()
-				if not candidate_id.is_empty() and candidate_id != current_character_id:
-					fallback_remote_id = candidate_id
-					break
-			remote_character_id = fallback_remote_id
-		if not remote_character_id.is_empty():
-			var remote_data: Dictionary = CHARACTER_REGISTRY.get_character(remote_character_id)
-			if not remote_data.is_empty():
-				second_player.apply_character_package(remote_data)
+		if remote_character_id.is_empty():
+			continue
+		var remote_data: Dictionary = CHARACTER_REGISTRY.get_character(remote_character_id)
+		if remote_data.is_empty():
+			continue
+		party_node.apply_character_package(remote_data)
 
 
 func _log_multiplayer_player_stats(stage: String) -> void:
 	if not is_multiplayer:
 		return
-	for player_node in [player, second_player]:
+	for player_node in _get_multiplayer_player_nodes():
 		if not is_instance_valid(player_node):
 			continue
 		var node_name := String(player_node.name)
@@ -2516,10 +2521,9 @@ func _apply_progress_sync_state(progress_state: Dictionary) -> void:
 		door_options.clear()
 
 func _get_player_for_peer(peer_id: int) -> Node2D:
-	if is_instance_valid(player) and int(player.player_id) == peer_id:
-		return player
-	if is_instance_valid(second_player) and int(second_player.player_id) == peer_id:
-		return second_player
+	for party_node in _get_multiplayer_player_nodes():
+		if int(party_node.get("player_id")) == peer_id:
+			return party_node
 	return null
 
 func _choose_door(door: Dictionary) -> void:
@@ -3084,16 +3088,28 @@ func _update_camera_mode() -> void:
 func _update_multiplayer_camera() -> void:
 	if not is_instance_valid(player_camera):
 		return
-	if not is_instance_valid(player) or not is_instance_valid(second_player):
+	var party_nodes := _get_multiplayer_player_nodes()
+	var alive_positions: Array[Vector2] = []
+	for party_node in party_nodes:
+		if _is_player_alive(party_node):
+			alive_positions.append(party_node.global_position)
+	if alive_positions.size() < 2:
 		return
 	
-	## Fit camera to include both players with padding
-	var p1 := player.global_position
-	var p2 := second_player.global_position
-	var min_x := minf(p1.x, p2.x) - multiplayer_camera_padding.x
-	var max_x := maxf(p1.x, p2.x) + multiplayer_camera_padding.x
-	var min_y := minf(p1.y, p2.y) - multiplayer_camera_padding.y
-	var max_y := maxf(p1.y, p2.y) + multiplayer_camera_padding.y
+	## Fit camera to include all alive players with padding
+	var min_x := alive_positions[0].x
+	var max_x := alive_positions[0].x
+	var min_y := alive_positions[0].y
+	var max_y := alive_positions[0].y
+	for pos in alive_positions:
+		min_x = minf(min_x, pos.x)
+		max_x = maxf(max_x, pos.x)
+		min_y = minf(min_y, pos.y)
+		max_y = maxf(max_y, pos.y)
+	min_x -= multiplayer_camera_padding.x
+	max_x += multiplayer_camera_padding.x
+	min_y -= multiplayer_camera_padding.y
+	max_y += multiplayer_camera_padding.y
 	
 	var target_center := Vector2((min_x + max_x) * 0.5, (min_y + max_y) * 0.5)
 	var viewport_size := get_viewport_rect().size
@@ -3476,10 +3492,32 @@ func wrap_summary_with_profile(summary: Dictionary) -> RefCounted:
 
 func _get_multiplayer_player_nodes() -> Array[Node2D]:
 	var nodes: Array[Node2D] = []
+	var seen: Dictionary = {}
 	if is_instance_valid(player):
 		nodes.append(player)
-	if is_instance_valid(second_player):
-		nodes.append(second_player)
+		seen[player.get_instance_id()] = true
+	var replication_service := get_node_or_null("/root/PlayerReplicationService")
+	if replication_service != null:
+		var registry: Dictionary = replication_service.player_nodes
+		var local_peer_id := int(replication_service.local_peer_id)
+		var peer_ids: Array = registry.keys()
+		peer_ids.sort()
+		var ordered: Array = []
+		for peer_id in peer_ids:
+			if int(peer_id) == local_peer_id:
+				continue
+			ordered.append(int(peer_id))
+		for peer_id in ordered:
+			var node_variant: Variant = registry.get(peer_id)
+			if not is_instance_valid(node_variant):
+				continue
+			var node_2d := node_variant as Node2D
+			if node_2d == null:
+				continue
+			if seen.has(node_2d.get_instance_id()):
+				continue
+			nodes.append(node_2d)
+			seen[node_2d.get_instance_id()] = true
 	return nodes
 
 func _assign_enemy_target_candidates(enemy: Node2D) -> void:
@@ -3734,7 +3772,7 @@ func _start_encounter_intro_grace() -> void:
 func _update_encounter_intro_grace() -> bool:
 	if not encounter_intro_grace_active:
 		return false
-	if not is_instance_valid(player) and not is_instance_valid(second_player):
+	if _get_multiplayer_player_nodes().is_empty():
 		return false
 	
 	if _local_player_ready:

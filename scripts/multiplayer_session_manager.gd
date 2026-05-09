@@ -14,6 +14,9 @@ signal host_left
 ## Godot ENet convention: server/host peer is always assigned ID 1.
 const HOST_PEER_ID: int = 1
 
+## Maximum supported party size (host + remote peers). Mirrors LeaderboardEntryModel.PARTY_SIZE_MAX.
+const MAX_PARTY_SIZE: int = 4
+
 ## Public state
 var session_connected: bool = false
 var is_host_peer: bool = false
@@ -546,6 +549,13 @@ func _on_peer_connected(peer_id: int) -> void:
 	if peer_id == _multiplayer.get_unique_id():
 		print("[MultiplayerSessionManager] Ignoring self-connection event")
 		return  ## Ignore self-connection events
+	
+	if is_host_peer and connected_peers.size() >= MAX_PARTY_SIZE:
+		print("[MultiplayerSessionManager] Rejecting peer %d: party is full (%d/%d)" % [peer_id, connected_peers.size(), MAX_PARTY_SIZE])
+		var multiplayer_peer := _multiplayer.multiplayer_peer if _multiplayer != null else null
+		if multiplayer_peer != null and multiplayer_peer.has_method("disconnect_peer"):
+			multiplayer_peer.disconnect_peer(peer_id)
+		return
 	
 	connected_peers[peer_id] = { "joined_at": Time.get_unix_time_from_system(), "last_ping": 0 }
 	connected_peers[peer_id]["last_ping"] = Time.get_unix_time_from_system()

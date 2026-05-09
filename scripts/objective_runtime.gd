@@ -409,10 +409,15 @@ func _update_control_zone_state() -> void:
 func _is_any_active_player_inside_control_zone(anchor: Vector2, radius: float) -> bool:
 	if is_instance_valid(world.player) and world.player.global_position.distance_to(anchor) <= radius:
 		return true
-	if world.is_multiplayer:
-		var remote_player := world.get("second_player") as Node2D
-		if is_instance_valid(remote_player) and remote_player.global_position.distance_to(anchor) <= radius:
-			return true
+	if world.is_multiplayer and world.has_method("_get_multiplayer_player_nodes"):
+		var party_nodes: Variant = world.call("_get_multiplayer_player_nodes")
+		if party_nodes is Array:
+			for party_node_variant in party_nodes:
+				var party_node := party_node_variant as Node2D
+				if party_node == world.player:
+					continue
+				if is_instance_valid(party_node) and party_node.global_position.distance_to(anchor) <= radius:
+					return true
 	return false
 
 func _sync_control_zone_runtime_state(delta: float, force: bool = false) -> void:

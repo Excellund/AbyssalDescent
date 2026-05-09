@@ -378,15 +378,20 @@ func _quantize_runtime_state_for_network(runtime_state: Dictionary) -> Dictionar
 
 func _enemy_is_far_from_all_players(enemy_position: Vector2) -> bool:
 	var far_distance_sq := maxf(0.0, far_sync_distance_px * far_sync_distance_px)
+	if bool(_world.is_multiplayer) and _world.has_method("_get_multiplayer_player_nodes"):
+		var party_nodes: Variant = _world.call("_get_multiplayer_player_nodes")
+		if party_nodes is Array:
+			for party_node_variant in party_nodes:
+				var party_node := party_node_variant as Node2D
+				if not is_instance_valid(party_node):
+					continue
+				if enemy_position.distance_squared_to(party_node.global_position) <= far_distance_sq:
+					return false
+		return true
 	var player: Node2D = _world.player
 	if is_instance_valid(player):
 		if enemy_position.distance_squared_to(player.global_position) <= far_distance_sq:
 			return false
-	if bool(_world.is_multiplayer):
-		var second_player: Node2D = _world.second_player
-		if is_instance_valid(second_player):
-			if enemy_position.distance_squared_to(second_player.global_position) <= far_distance_sq:
-				return false
 	return true
 
 func _enemy_is_combat_active(_enemy: Node2D, runtime_state_delta: Dictionary) -> bool:

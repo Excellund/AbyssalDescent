@@ -44,7 +44,7 @@ func get_party_size() -> int:
 		peer_count = (MultiplayerSessionManager.get_peer_ids() as Array).size()
 	if peer_count <= 0:
 		peer_count = _world._get_multiplayer_player_nodes().size()
-	return clampi(peer_count, 1, 4)
+	return clampi(peer_count, 1, MultiplayerSessionManager.MAX_PARTY_SIZE)
 
 func get_health_scaling_mult(is_boss: bool) -> float:
 	var party_size := get_party_size()

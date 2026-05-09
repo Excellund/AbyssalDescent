@@ -453,11 +453,6 @@ func _get_attacking_player_candidates() -> Array[Node2D]:
 		var primary_player := primary_player_variant as Node2D
 		if not players.has(primary_player):
 			players.append(primary_player)
-	var second_player_variant: Variant = parent_node.get("second_player")
-	if second_player_variant is Node2D and is_instance_valid(second_player_variant):
-		var second_player := second_player_variant as Node2D
-		if not players.has(second_player):
-			players.append(second_player)
 	return players
 
 func _try_resolve_illusion_guesses_from_player_attacks() -> void:
