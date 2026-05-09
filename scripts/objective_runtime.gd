@@ -58,6 +58,8 @@ class CutTheSignalConfig:
 	const SPAWN_TIMER_OVERTIME = 0.15
 	const HEALTH_BOOST_MULT = 2.6
 	const HEALTH_BOOST_MIN = 40
+	const HEALTH_DEPTH_MULT = 0.06
+	const HEALTH_DEPTH_MAX_MULT = 1.6
 	const SCALE_MULT = 1.14
 	const MARKER_Y_OFFSET = -62.0
 	const MARKER_Z_INDEX = 50
@@ -834,7 +836,8 @@ func spawn_priority_target_enemy() -> void:
 		return
 	objective_manager.hunt_target_enemy = spawned_target
 	world.active_room_enemy_count += 1
-	var boosted_max := maxi(CutTheSignalConfig.HEALTH_BOOST_MIN, int(round(float(spawned_target.get_max_health()) * CutTheSignalConfig.HEALTH_BOOST_MULT)))
+	var depth_health_mult := clampf(1.0 + float(maxi(0, world.room_depth)) * CutTheSignalConfig.HEALTH_DEPTH_MULT, 1.0, CutTheSignalConfig.HEALTH_DEPTH_MAX_MULT)
+	var boosted_max := maxi(CutTheSignalConfig.HEALTH_BOOST_MIN, int(round(float(spawned_target.get_max_health()) * CutTheSignalConfig.HEALTH_BOOST_MULT * depth_health_mult)))
 	spawned_target.set_max_health_and_current(boosted_max, boosted_max)
 	if spawned_target.get("has_mutator_overlay") != null:
 		spawned_target.set("has_mutator_overlay", true)

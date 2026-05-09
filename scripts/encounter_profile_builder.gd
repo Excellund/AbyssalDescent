@@ -904,7 +904,10 @@ func _build_priority_target_profile(depth: int) -> Dictionary:
 	var spawn_batch := mini(4, 2 + int(floor(float(effective_depth) / 4.0)))
 	var pressure_split := _objective_pressure_split()
 	spawn_batch = _scale_objective_spawn_batch(spawn_batch, float(pressure_split["wave_mult"]))
-	ENCOUNTER_CONTRACTS.profile_set_priority_target_objective(profile, "archer", duration, spawn_interval, spawn_batch)
+	var specialist_offset := int(current_difficulty_config.get("specialist_enemy_depth_offset", 0))
+	var lancer_gate := 7 + specialist_offset
+	var target_type := "lancer" if effective_depth >= lancer_gate else "archer"
+	ENCOUNTER_CONTRACTS.profile_set_priority_target_objective(profile, target_type, duration, spawn_interval, spawn_batch)
 	return _apply_bearing_count_scaling(profile, float(pressure_split["initial_override"]))
 
 func _build_control_profile(depth: int) -> Dictionary:
