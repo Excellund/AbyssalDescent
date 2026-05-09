@@ -58,14 +58,19 @@ const RUN_SNAPSHOT_PROPERTIES := [
 	"reward_phantom_step",
 	"reward_void_dash",
 	"reward_static_wake",
+	"reward_riftpunch",
 	"phantom_step_stacks",
 	"void_dash_stacks",
 	"static_wake_stacks",
+	"riftpunch_stacks",
 	"phantom_step_damage",
 	"phantom_step_slow_duration",
 	"void_dash_range_mult",
 	"static_wake_damage",
 	"static_wake_lifetime",
+	"riftpunch_bonus_damage",
+	"riftpunch_window_duration",
+	"riftpunch_grace_duration",
 	"reward_storm_crown",
 	"reward_wraithstep",
 	"storm_crown_stacks",
@@ -228,6 +233,14 @@ var void_dash_range_mult: float = 1.42
 # Static Wake: trail damage and lifetime
 var static_wake_damage: int = 8
 var static_wake_lifetime: float = 1.6
+
+# Riftpunch: post-dash empowered melee finisher (Veilstrider-tilted committed strike)
+var reward_riftpunch: bool = false
+var riftpunch_stacks: int = 0
+var riftpunch_bonus_damage: int = 0
+var riftpunch_window_duration: float = 1.1
+var riftpunch_grace_duration: float = 0.5
+var _riftpunch_window_left: float = 0.0
 # Storm Crown: attack cadence proc that chains from the struck target
 var storm_crown_proc_every: int = 4
 var storm_crown_chain_targets: int = 2
@@ -453,6 +466,7 @@ func _physics_process(delta: float) -> void:
 	_update_iron_retort(delta)
 	_update_veilstep_rhythm(delta)
 	_update_farline_focus_state(delta)
+	_update_riftpunch_window(delta)
 	_update_apex_predator_combo(delta)
 	_update_apex_momentum(delta)
 	_update_void_echo_zones(delta)
@@ -723,6 +737,16 @@ func _process_active_dash(delta: float) -> bool:
 		_release_veilstep_rhythm_wave(dash_end)
 	if dash_finished:
 		_release_apex_momentum_dash_wave(dash_end)
+	if dash_finished and reward_riftpunch:
+		_riftpunch_window_left = riftpunch_window_duration
+		var prime_facing := dash_direction if dash_direction.length_squared() > 0.0001 else last_move_direction
+		if player_feedback != null:
+			player_feedback.play_riftpunch_prime(global_position, prime_facing)
+		_broadcast_cue_event("riftpunch_prime", {
+			"position": global_position,
+			"facing": prime_facing
+		})
+		queue_redraw()
 
 	return true
 
@@ -1306,6 +1330,8 @@ func apply_network_cue_event(event_name: String, payload: Dictionary) -> void:
 		"boss_void_zone_spawn": _on_cue_boss_void_zone_spawn(payload)
 		"boss_void_zone_pulse": _on_cue_boss_void_zone_pulse(payload)
 		"boss_void_zone_empowered_hit": _on_cue_boss_void_zone_empowered_hit(payload)
+		"riftpunch_prime": _on_cue_riftpunch_prime(payload)
+		"riftpunch_consume": _on_cue_riftpunch_consume(payload)
 
 func apply_owner_cue_event(event_name: String, payload: Dictionary) -> void:
 	if not _is_local_control_owner():
@@ -1405,6 +1431,18 @@ func _on_cue_iron_retort_consume(payload: Dictionary) -> void:
 	var player_position := payload.get("player_position", global_position) as Vector2
 	var impact_position := payload.get("impact_position", global_position) as Vector2
 	player_feedback.play_iron_retort_consume(player_position, impact_position)
+
+
+func _on_cue_riftpunch_prime(payload: Dictionary) -> void:
+	var prime_position := payload.get("position", global_position) as Vector2
+	var prime_facing := payload.get("facing", Vector2.RIGHT) as Vector2
+	player_feedback.play_riftpunch_prime(prime_position, prime_facing)
+
+
+func _on_cue_riftpunch_consume(payload: Dictionary) -> void:
+	var consume_player_pos := payload.get("position", global_position) as Vector2
+	var consume_impact_pos := payload.get("impact", global_position) as Vector2
+	player_feedback.play_riftpunch_consume(consume_player_pos, consume_impact_pos)
 
 
 func _on_cue_storm_crown_discharge(payload: Dictionary) -> void:
@@ -1668,6 +1706,7 @@ func apply_power_for_test(power_id: String) -> bool:
 		"phantom_step": true,
 		"reaper_step": true,
 		"static_wake": true,
+		"riftpunch": true,
 		"storm_crown": true,
 		"wraithstep": true,
 		"voidfire": true,
@@ -1750,6 +1789,7 @@ func _build_damage_breakdown(base_scaling_damage: int, enemy_node: Object, hit_p
 	else:
 		_gain_indomitable_oath_from_hit(enemy_node, source)
 	flat_bonus_damage += _consume_eclipse_mark_bonus(enemy_node, base_scaling_damage)
+	flat_bonus_damage += _consume_riftpunch_bonus(source, hit_position)
 	var breakdown := {
 		"source": source,
 		"base_scaling_damage": base_scaling_damage,
@@ -2022,6 +2062,39 @@ func _trigger_battle_trance() -> void:
 	if battle_trance_move_speed_bonus <= 0.0:
 		return
 	battle_trance_active_left = battle_trance_duration
+
+func _update_riftpunch_window(delta: float) -> void:
+	if _riftpunch_window_left <= 0.0:
+		return
+	_riftpunch_window_left = maxf(0.0, _riftpunch_window_left - delta)
+	queue_redraw()
+
+func _consume_riftpunch_bonus(source: String, hit_position: Vector2) -> int:
+	if not reward_riftpunch:
+		return 0
+	if source != "melee":
+		return 0
+	if _riftpunch_window_left <= 0.0:
+		return 0
+	if riftpunch_bonus_damage <= 0:
+		return 0
+	_riftpunch_window_left = 0.0
+	if riftpunch_grace_duration > 0.0:
+		_dash_damage_immune_left = maxf(_dash_damage_immune_left, riftpunch_grace_duration)
+	var facing := visual_facing_direction if visual_facing_direction.length_squared() > 0.0001 else last_move_direction
+	if facing.length_squared() < 0.0001:
+		facing = Vector2.RIGHT
+	var impact_position := hit_position
+	if impact_position.distance_squared_to(global_position) < 4.0:
+		impact_position = global_position + facing.normalized() * maxf(28.0, attack_range * 0.6)
+	if player_feedback != null:
+		player_feedback.play_riftpunch_consume(global_position, impact_position)
+	_broadcast_cue_event("riftpunch_consume", {
+		"position": global_position,
+		"impact": impact_position
+	})
+	queue_redraw()
+	return riftpunch_bonus_damage
 
 func _get_first_strike_bonus_damage(enemy_node: Object) -> int:
 	if first_strike_bonus_damage <= 0:
@@ -3899,6 +3972,32 @@ func _draw_trial_reward_state() -> void:
 			aegis_alpha = 0.44 + aegis_pulse * 0.2
 		draw_arc(Vector2.ZERO, aegis_radius, 0.0, TAU, 48, Color(0.62, 0.98, 1.0, aegis_alpha), 2.2)
 		draw_circle(Vector2.ZERO, aegis_radius * 0.62, Color(0.62, 0.98, 1.0, aegis_alpha * 0.18))
+
+	if reward_riftpunch and _riftpunch_window_left > 0.0 and riftpunch_window_duration > 0.0:
+		var rp_remaining := clampf(_riftpunch_window_left / riftpunch_window_duration, 0.0, 1.0)
+		var rp_pulse := 0.5 + 0.5 * sin(t * 9.0)
+		var rp_facing := visual_facing_direction if visual_facing_direction.length_squared() > 0.0001 else last_move_direction
+		if rp_facing.length_squared() < 0.0001:
+			rp_facing = Vector2.RIGHT
+		rp_facing = rp_facing.normalized()
+		var rp_side := Vector2(-rp_facing.y, rp_facing.x)
+		var rp_outer_alpha := 0.45 + rp_pulse * 0.30
+		var rp_inner_alpha := 0.22 + rp_pulse * 0.18
+		var rp_outer_radius := 22.0 + rp_pulse * 2.4
+		var rp_inner_radius := 16.0 + rp_pulse * 1.4
+		var rp_color := Color(0.34, 1.0, 0.78, rp_outer_alpha)
+		var rp_dim := Color(0.18, 0.78, 0.58, rp_inner_alpha)
+		draw_arc(Vector2.ZERO, rp_outer_radius, 0.0, TAU, 48, rp_color, 2.4)
+		draw_arc(Vector2.ZERO, rp_inner_radius, 0.0, TAU, 36, rp_dim, 1.6)
+		var rp_arrow_len := 26.0 + rp_pulse * 4.0
+		var rp_tip := rp_facing * rp_arrow_len
+		var rp_wing_l := rp_facing * (rp_arrow_len - 8.0) + rp_side * 5.0
+		var rp_wing_r := rp_facing * (rp_arrow_len - 8.0) - rp_side * 5.0
+		draw_line(rp_wing_l, rp_tip, rp_color, 2.4)
+		draw_line(rp_wing_r, rp_tip, rp_color, 2.4)
+		var rp_meter_radius := rp_outer_radius + 3.4
+		var rp_meter_color := Color(0.7, 1.0, 0.92, 0.85)
+		draw_arc(Vector2.ZERO, rp_meter_radius, -PI * 0.5, -PI * 0.5 + TAU * rp_remaining, 36, rp_meter_color, 2.0)
 
 	# Dash archetype trial power visuals
 	if reward_phantom_step:

@@ -63,6 +63,15 @@ const TRIAL_POWER_PARAM_MAP := {
 			"dash_cooldown": {"property": "dash_cooldown", "type": "float"}
 		}
 	},
+	"riftpunch": {
+		"reward_flag": "reward_riftpunch",
+		"stack_property": "riftpunch_stacks",
+		"parameters": {
+			"bonus_damage": {"property": "riftpunch_bonus_damage", "type": "int"},
+			"window_duration": {"property": "riftpunch_window_duration", "type": "float"},
+			"grace_duration": {"property": "riftpunch_grace_duration", "type": "float"}
+		}
+	},
 	"reaper_step": {
 		"reward_flag": "reward_void_dash",
 		"stack_property": "void_dash_stacks",
@@ -368,6 +377,12 @@ static func build_trial_values(power_id: String, stack_count: int, balance_data:
 				"damage": int(ceil(float(player_reference.get("damage")) * phantom_damage_ratio)),
 				"slow_duration": float(data.get("slow_duration_base", 0.0)) + float(data.get("slow_duration_per_stack", 0.0)) * float(stack_count),
 				"dash_cooldown": maxf(float(data.get("dash_cooldown_min", 0.0)), float(player_reference.get("dash_cooldown")) * float(data.get("dash_cooldown_mult", 1.0)))
+			}
+		"riftpunch":
+			return {
+				"bonus_damage": int(data.get("bonus_damage_base", 0)) + stack_count * int(data.get("bonus_damage_per_stack", 0)),
+				"window_duration": float(data.get("window_base", 0.0)) + float(data.get("window_per_stack", 0.0)) * float(stack_count),
+				"grace_duration": float(data.get("grace_base", 0.0)) + float(data.get("grace_per_stack", 0.0)) * float(stack_count)
 			}
 		"reaper_step":
 			return {

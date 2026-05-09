@@ -83,6 +83,11 @@ const DAMAGE_MODEL_BY_POWER := {
 		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
 		"formula_note": "Y% dash-through damage"
 	},
+	"riftpunch": {
+		"kind": DAMAGE_KIND_FLAT,
+		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
+		"formula_note": "+X bonus damage on first melee hit after dashing; grants brief contact grace"
+	},
 	"static_wake": {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
@@ -290,6 +295,16 @@ const TRIAL_POWER_BALANCE := {
 		"dash_cooldown_mult": 0.88,
 		"dash_cooldown_min": 0.16
 	},
+	"riftpunch": {
+		# Flat bonus damage on the first melee hit after a dash, inside the window.
+		# Grace duration is contact-damage immunity granted on the empowered hit so the player can disengage.
+		"bonus_damage_base": 26,
+		"bonus_damage_per_stack": 14,
+		"window_base": 1.0,
+		"window_per_stack": 0.1,
+		"grace_base": 0.45,
+		"grace_per_stack": 0.05
+	},
 	"reaper_step": {
 		"range_mult_base": 1.42,
 		"range_mult_per_stack": 0.14
@@ -414,7 +429,9 @@ const UPGRADE_STACK_LIMITS := {
 	"severing_edge": 3
 }
 
-const TRIAL_POWER_STACK_LIMITS := {}
+const TRIAL_POWER_STACK_LIMITS := {
+	"riftpunch": 3
+}
 
 const BOSS_REWARD_STACK_LIMITS := {
 	"wardens_verdict": 2,
@@ -474,6 +491,7 @@ const POWER_DISPLAY_NAMES := {
 	"aegis_field": "Aegis Field",
 	"hunters_snare": "Hunter's Snare",
 	"phantom_step": "Phantom Step",
+	"riftpunch": "Riftpunch",
 	"reaper_step": "Reaper Step",
 	"static_wake": "Static Wake",
 	"storm_crown": "Storm Crown",
@@ -500,7 +518,7 @@ const UPGRADE_POOL_IDS: Array[String] = [
 
 const TRIAL_POWER_POOL_IDS: Array[String] = [
 	"razor_wind", "execution_edge", "rupture_wave", "aegis_field", "hunters_snare",
-	"phantom_step", "reaper_step", "static_wake", "storm_crown", "wraithstep",
+	"phantom_step", "riftpunch", "reaper_step", "static_wake", "storm_crown", "wraithstep",
 	"voidfire", "dread_resonance", "vow_shatter", "eclipse_mark", "fracture_field",
 ]
 

@@ -582,6 +582,54 @@ func play_iron_retort_consume(player_global: Vector2, impact_global: Vector2) ->
 		var end := impact_global + forward * 8.0 + offset
 		_play_world_line(PackedVector2Array([start, end]), Color(1.0, 0.74, 0.5, 0.72), 1.8, 0.09, 0.65)
 
+func play_riftpunch_prime(epicenter_global: Vector2, facing: Vector2) -> void:
+	var core := Color(0.34, 1.0, 0.78, 0.94)
+	var halo := Color(0.18, 0.86, 0.62, 0.55)
+	var dim := Color(0.12, 0.6, 0.46, 0.30)
+	play_world_ring(epicenter_global, 22.0, core, 0.14)
+	play_world_ring(epicenter_global, 38.0, halo, 0.20)
+	play_world_ring(epicenter_global, 56.0, dim, 0.26)
+	var forward := facing if facing.length_squared() > 0.0001 else Vector2.RIGHT
+	forward = forward.normalized()
+	var side := Vector2(-forward.y, forward.x)
+	for i in range(4):
+		var ang := -PI * 0.5 + TAU * float(i) / 4.0
+		var dir := Vector2(cos(ang), sin(ang))
+		var p0 := epicenter_global + dir * 24.0
+		var p1 := epicenter_global + dir * 44.0
+		_play_world_line(PackedVector2Array([p0, p1]), Color(0.46, 1.0, 0.86, 0.75), 1.8, 0.18, 0.75)
+	var tip := epicenter_global + forward * 52.0
+	var wing_l := epicenter_global + forward * 34.0 + side * 10.0
+	var wing_r := epicenter_global + forward * 34.0 - side * 10.0
+	_play_world_line(PackedVector2Array([wing_l, tip, wing_r]), Color(0.6, 1.0, 0.9, 0.85), 2.0, 0.18, 0.8)
+
+func play_riftpunch_consume(player_global: Vector2, impact_global: Vector2) -> void:
+	var dir := impact_global - player_global
+	if dir.length_squared() < 0.0001:
+		dir = Vector2.RIGHT
+	var forward := dir.normalized()
+	var side := Vector2(-forward.y, forward.x)
+	var core := Color(0.7, 1.0, 0.92, 0.96)
+	var mid := Color(0.34, 1.0, 0.78, 0.82)
+	var outer := Color(0.16, 0.78, 0.58, 0.42)
+	play_world_ring(player_global, 18.0, mid, 0.10)
+	play_world_ring(impact_global, 22.0, core, 0.10)
+	play_world_ring(impact_global, 40.0, mid, 0.16)
+	play_world_ring(impact_global, 64.0, outer, 0.24)
+	for i in range(3):
+		var lane := float(i - 1)
+		var offset := side * (lane * 9.0)
+		var start := player_global + forward * 12.0 + offset
+		var end := impact_global + forward * 8.0 + offset
+		var alpha := 0.92 if i == 1 else 0.6
+		_play_world_line(PackedVector2Array([start, end]), Color(0.5, 1.0, 0.88, alpha), 2.2, 0.12, 0.8)
+	for i in range(6):
+		var ang := -PI * 0.5 + TAU * float(i) / 6.0 + 0.18
+		var burst_dir := Vector2(cos(ang), sin(ang))
+		var p0 := impact_global + burst_dir * 10.0
+		var p1 := impact_global + burst_dir * 28.0
+		_play_world_line(PackedVector2Array([p0, p1]), Color(0.7, 1.0, 0.9, 0.7), 1.6, 0.12, 0.7)
+
 func play_fracture_field_fault_lines(epicenter_global: Vector2, radius: float, beam_count: int, base_angle: float, beam_width: float = 12.0) -> void:
 	var core_color := Color(0.86, 0.96, 1.0, 0.9)
 	var fault_color := Color(0.38, 0.86, 1.0, 0.82)

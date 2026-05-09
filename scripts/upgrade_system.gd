@@ -246,6 +246,8 @@ func _power_sentence_template(power_id: String) -> String:
 			return "Slow %s at %s speed, extra hit damage %s."
 		"phantom_step":
 			return "Damage %s, slow %s."
+		"riftpunch":
+			return "Bonus damage %s, window %s, grace %s."
 		"reaper_step":
 			return "Range/speed %s, kill refresh %s."
 		"static_wake":
@@ -358,6 +360,8 @@ func get_power_flavor_text(power_id: String) -> String:
 			return "Hits slow enemies. Striking slowed targets deals extra hit damage."
 		"phantom_step":
 			return "Dashing through enemies deals damage and leaves them slowed."
+		"riftpunch":
+			return "Ending a dash primes a finisher: your next melee hit deals bonus damage and grants brief contact grace."
 		"reaper_step":
 			return "Kills fully refresh your dash. Dash range and speed scale together."
 		"static_wake":
@@ -452,6 +456,9 @@ func get_power_current_description(power_id: String) -> String:
 		"phantom_step":
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0), _current_stat("%.2fs", float(cur.get("slow_duration", 0.0)))], "build_detail"))
+		"riftpunch":
+			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("+%d", int(cur.get("bonus_damage", 0))), _current_stat("%.2fs", float(cur.get("window_duration", 0.0))), _current_stat("%.2fs", float(cur.get("grace_duration", 0.0)))], "build_detail"))
 		"reaper_step":
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("x%.2f", float(cur.get("range_mult", 1.0))), _current_const("full")], "build_detail"))
@@ -525,6 +532,11 @@ func get_trial_power_card_description(power_id: String) -> String:
 			var damage_stat := _stat("%d", int(cur.get("damage", 0)), int(next_values.get("damage", 0)), is_initial)
 			var slow_stat := _stat("%.2fs", float(cur.get("slow_duration", 0.0)), float(next_values.get("slow_duration", 0.0)), is_initial)
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [damage_stat, slow_stat], "reward_card"))
+		"riftpunch":
+			var bonus_stat := _stat("+%d", int(cur.get("bonus_damage", 0)), int(next_values.get("bonus_damage", 0)), is_initial)
+			var window_stat := _stat("%.2fs", float(cur.get("window_duration", 0.0)), float(next_values.get("window_duration", 0.0)), is_initial)
+			var grace_stat := _stat("%.2fs", float(cur.get("grace_duration", 0.0)), float(next_values.get("grace_duration", 0.0)), is_initial)
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [bonus_stat, window_stat, grace_stat], "reward_card"))
 		"reaper_step":
 			var range_stat := _stat("x%.2f", float(cur.get("range_mult", 1.0)), float(next_values.get("range_mult", 1.0)), is_initial)
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [range_stat, _const("full")], "reward_card"))
