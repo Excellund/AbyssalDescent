@@ -471,6 +471,20 @@ func _setup_multiplayer_remote_players() -> void:
 		remote_peer_ids.append(peer_id)
 	remote_peer_ids.sort()
 
+	## Build a global, deterministic peer ordering shared by every peer:
+	## host (peer 1) is slot 0; remaining peers fan around the spawn anchor by ascending peer id.
+	var all_peers: Array[int] = []
+	if local_peer > 0:
+		all_peers.append(local_peer)
+	for remote_peer_id in remote_peer_ids:
+		all_peers.append(remote_peer_id)
+	all_peers.sort()
+	var total_players := all_peers.size()
+	var spawn_anchor: Vector2 = player.position
+	if local_peer > 0:
+		var local_slot := all_peers.find(local_peer)
+		player.position = spawn_anchor + _player_fan_offset(local_slot, total_players)
+
 	if remote_peer_ids.is_empty():
 		print_debug("[Multiplayer] No remote peers present; skipping remote avatar setup")
 		return
@@ -481,14 +495,13 @@ func _setup_multiplayer_remote_players() -> void:
 		push_error("[Multiplayer] Failed to load Player scene")
 		return
 
-	var remote_count := remote_peer_ids.size()
-	for index in range(remote_count):
-		var remote_peer := remote_peer_ids[index]
+	for remote_peer in remote_peer_ids:
 		var remote_player_node: Node2D = player_scene.instantiate()
 		if remote_player_node == null:
 			push_error("[Multiplayer] Failed to instantiate Player scene for peer %d" % remote_peer)
 			continue
-		remote_player_node.position = player.position + _remote_player_spawn_offset(index, remote_count)
+		var remote_slot := all_peers.find(remote_peer)
+		remote_player_node.position = spawn_anchor + _player_fan_offset(remote_slot, total_players)
 		remote_player_node.player_id = remote_peer
 		remote_player_node.is_local_player = false
 		if run_context != null and remote_player_node.has_method("apply_character_package"):
@@ -515,10 +528,12 @@ func _setup_multiplayer_remote_players() -> void:
 		player_camera.set_room_fit_zoom_scale(zoom_scale)
 	_bind_camera_to_local_player()
 
-func _remote_player_spawn_offset(index: int, total: int) -> Vector2:
-	if total <= 0:
+func _player_fan_offset(slot: int, total: int) -> Vector2:
+	## Slot 0 (host) stays at the spawn anchor; remaining slots fan around it.
+	if total <= 1 or slot <= 0:
 		return Vector2.ZERO
-	var angle := TAU * (float(index) / float(total))
+	var ring_count := total - 1
+	var angle := TAU * float(slot - 1) / float(ring_count)
 	return Vector2(cos(angle), sin(angle)) * REMOTE_PLAYER_SPAWN_RADIUS_PX
 
 
