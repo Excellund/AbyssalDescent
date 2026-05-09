@@ -358,6 +358,7 @@ func _on_peer_connected(peer_id: int) -> void:
 	if bool(multiplayer_session_manager.is_host()):
 		## Host first sends the late-joiner the existing roster, then announces them to everyone.
 		_sync_lobby_roster.rpc_id(peer_id, peer_state.duplicate(true))
+		_sync_room_code.rpc_id(peer_id, String(multiplayer_session_manager.room_code))
 		if peer_id not in peer_state:
 			var idx := _consume_next_join_index()
 			_broadcast_peer_register.rpc(int(peer_id), idx)
@@ -543,6 +544,7 @@ func _request_lobby_roster() -> void:
 		var idx := _consume_next_join_index()
 		_broadcast_peer_register.rpc(sender_peer_id, idx)
 	_sync_lobby_roster.rpc_id(sender_peer_id, peer_state.duplicate(true))
+	_sync_room_code.rpc_id(sender_peer_id, String(multiplayer_session_manager.room_code))
 
 
 ## RPC: Host -> specific peer. Replace local peer_state with the host's snapshot.
@@ -566,6 +568,18 @@ func _sync_lobby_roster(roster: Dictionary) -> void:
 		peer_state[local_peer_id]["player_name"] = local_player_name
 		peer_state[local_peer_id]["is_ready"] = local_is_ready
 	_update_player_list()
+
+
+## RPC: Host -> specific peer. Overwrite the displayed lobby room code with the host's authoritative value.
+@rpc("reliable", "authority")
+func _sync_room_code(host_room_code: String) -> void:
+	var normalized := host_room_code.strip_edges()
+	if normalized.is_empty():
+		return
+	if multiplayer_session_manager != null:
+		multiplayer_session_manager.room_code = normalized
+	if room_code_label != null:
+		room_code_label.text = "Room Code: %s" % normalized
 
 
 func _ensure_remote_peer_state(peer_id: int, default_character_id: String = "bastion") -> void:
