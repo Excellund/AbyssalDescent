@@ -214,7 +214,6 @@ var run_session
 var run_summary_tracker
 var profile_persistence_store: RefCounted = null
 var current_player_profile: RefCounted = null
-var _summary_last_player_health: int = -1
 var _summary_last_player_health_by_peer: Dictionary = {}
 var _summary_stats_by_peer: Dictionary = {}
 var _summary_reward_timeline_by_peer: Dictionary = {}
@@ -4424,14 +4423,14 @@ func _reset_run_summary_tracker() -> void:
 		tracker_seed["player_uuid"] = current_player_profile.player_id
 		tracker_seed["player_name"] = current_player_profile.profile_name
 	run_summary_tracker.reset_for_run(tracker_seed)
-	_summary_last_player_health = int(player.get_current_health()) if is_instance_valid(player) and player.has_method("get_current_health") else -1
 	for player_node in _get_multiplayer_player_nodes():
 		if not is_instance_valid(player_node):
 			continue
 		var peer_id := _get_player_network_id(player_node)
+		var health_key := maxi(peer_id, 0)
+		_summary_last_player_health_by_peer[health_key] = int(player_node.get_current_health()) if player_node.has_method("get_current_health") else -1
 		if peer_id <= 0:
 			continue
-		_summary_last_player_health_by_peer[peer_id] = int(player_node.get_current_health()) if player_node.has_method("get_current_health") else -1
 		_summary_stats_by_peer[peer_id] = {
 			"damage_dealt_total": 0,
 			"damage_taken_total": 0,
@@ -4778,18 +4777,6 @@ func _on_player_damage_taken(raw_amount: int, final_amount: int, damage_context:
 		"character_id": current_character_id
 	})
 
-func _on_player_health_changed(current_health: int, _max_health: int) -> void:
-	if run_summary_tracker == null:
-		_summary_last_player_health = current_health
-		return
-	if _summary_last_player_health < 0:
-		_summary_last_player_health = current_health
-		return
-	var health_loss := _summary_last_player_health - current_health
-	if health_loss > 0:
-		run_summary_tracker.record_damage_taken(health_loss)
-	_summary_last_player_health = current_health
-
 func _on_player_health_changed_for_summary(current_health: int, _max_health: int, player_node: Node) -> void:
 	if run_summary_tracker == null:
 		return
@@ -4819,40 +4806,31 @@ func _on_player_health_changed_for_summary(current_health: int, _max_health: int
 func _reconcile_summary_damage_taken_to_player_health() -> void:
 	if run_summary_tracker == null:
 		return
-	if not is_instance_valid(player) or not player.has_method("get_current_health"):
-		return
-	var current_health := int(player.get_current_health())
-	if _summary_last_player_health < 0:
-		_summary_last_player_health = current_health
-		return
-	var health_loss := _summary_last_player_health - current_health
-	if health_loss > 0:
-		run_summary_tracker.record_damage_taken(health_loss)
-	_summary_last_player_health = current_health
 	for player_node in _get_multiplayer_player_nodes():
 		if not is_instance_valid(player_node):
 			continue
 		if not player_node.has_method("get_current_health"):
 			continue
 		var peer_id := _get_player_network_id(player_node)
-		if peer_id <= 0:
-			continue
+		var health_key := maxi(peer_id, 0)
 		var peer_current_health := int(player_node.get_current_health())
-		var last_health := int(_summary_last_player_health_by_peer.get(peer_id, -1))
+		var last_health := int(_summary_last_player_health_by_peer.get(health_key, -1))
 		if last_health < 0:
-			_summary_last_player_health_by_peer[peer_id] = peer_current_health
+			_summary_last_player_health_by_peer[health_key] = peer_current_health
 			continue
 		var peer_health_loss := last_health - peer_current_health
 		if peer_health_loss > 0:
-			var stats := _summary_stats_by_peer.get(peer_id, {
-				"damage_dealt_total": 0,
-				"damage_taken_total": 0,
-				"enemies_killed": 0,
-				"bosses_defeated": 0,
-			}) as Dictionary
-			stats["damage_taken_total"] = int(stats.get("damage_taken_total", 0)) + peer_health_loss
-			_summary_stats_by_peer[peer_id] = stats
-		_summary_last_player_health_by_peer[peer_id] = peer_current_health
+			run_summary_tracker.record_damage_taken(peer_health_loss)
+			if peer_id > 0:
+				var stats := _summary_stats_by_peer.get(peer_id, {
+					"damage_dealt_total": 0,
+					"damage_taken_total": 0,
+					"enemies_killed": 0,
+					"bosses_defeated": 0,
+				}) as Dictionary
+				stats["damage_taken_total"] = int(stats.get("damage_taken_total", 0)) + peer_health_loss
+				_summary_stats_by_peer[peer_id] = stats
+		_summary_last_player_health_by_peer[health_key] = peer_current_health
 
 func _build_death_event_snapshot() -> Dictionary:
 	var death_event: Dictionary = {}
