@@ -45,7 +45,7 @@ var _pending_cue_events_by_peer: Dictionary = {}  ## peer_id -> Array[Dictionary
 var _last_cue_event_count: int = 0
 var _last_cue_event_estimated_bytes: int = 0
 var _outgoing_health_sequence_by_peer: Dictionary = {}  ## peer_id -> last emitted health sequence
-var _last_applied_health_sequence_by_peer: Dictionary = {}  ## peer_id -> last applied health sequence
+var _last_applied_health_sequence_by_sender: Dictionary = {}  ## (sender_peer_id, target_peer_id) -> last applied health sequence
 var _cue_event_dispatcher: PlayerFeedbackDispatcher = PLAYER_CUE_EVENT_DISPATCHER_SCRIPT.new()
 var _cue_sync_queue := PLAYER_CUE_SYNC_QUEUE_SCRIPT.new()
 
@@ -85,8 +85,7 @@ func register_player(peer_id: int, player_node: Node) -> void:
 	player_nodes[peer_id] = player_node
 	if not _outgoing_health_sequence_by_peer.has(peer_id):
 		_outgoing_health_sequence_by_peer[peer_id] = 0
-	if not _last_applied_health_sequence_by_peer.has(peer_id):
-		_last_applied_health_sequence_by_peer[peer_id] = 0
+	_clear_applied_health_sequences_for_target(peer_id)
 	var player_body := player_node as Node2D
 	if player_body != null:
 		_last_sync_positions[peer_id] = player_body.position
@@ -109,7 +108,7 @@ func unregister_player(peer_id: int) -> void:
 	_remote_position_samples.erase(peer_id)
 	_pending_cue_events_by_peer.erase(peer_id)
 	_outgoing_health_sequence_by_peer.erase(peer_id)
-	_last_applied_health_sequence_by_peer.erase(peer_id)
+	_clear_applied_health_sequences_for_target(peer_id)
 
 
 ## Returns true when this peer is authoritative for the given peer_id:
@@ -140,7 +139,7 @@ func _remove_invalid_player(peer_id: int) -> void:
 	_remote_target_rotations.erase(peer_id)
 	_pending_cue_events_by_peer.erase(peer_id)
 	_outgoing_health_sequence_by_peer.erase(peer_id)
-	_last_applied_health_sequence_by_peer.erase(peer_id)
+	_clear_applied_health_sequences_for_target(peer_id)
 
 
 func get_last_cue_event_sync_metrics() -> Dictionary:
@@ -324,10 +323,12 @@ func _sync_player_health(peer_id: int, health: float, health_sequence: int = 0) 
 	if peer_id not in player_nodes:
 		return
 	if health_sequence > 0:
-		var last_applied_sequence := int(_last_applied_health_sequence_by_peer.get(peer_id, 0))
+		var sender_peer_id := _resolve_health_sender_peer_id()
+		var sender_key := _make_health_sender_key(sender_peer_id, peer_id)
+		var last_applied_sequence := int(_last_applied_health_sequence_by_sender.get(sender_key, 0))
 		if health_sequence <= last_applied_sequence:
 			return
-		_last_applied_health_sequence_by_peer[peer_id] = health_sequence
+		_last_applied_health_sequence_by_sender[sender_key] = health_sequence
 	var player_node := _get_player_node(peer_id)
 	if player_node == null:
 		return
@@ -340,6 +341,31 @@ func _sync_player_health(peer_id: int, health: float, health_sequence: int = 0) 
 		var health_state = player_node.get_node("HealthState")
 		if health_state.has_method("set_current_health"):
 			health_state.set_current_health(health)
+
+
+func _resolve_health_sender_peer_id() -> int:
+	## Returns the originating peer of the current RPC, or local_peer_id when call_local triggered it.
+	var multiplayer_api := get_tree().get_multiplayer() if is_inside_tree() else null
+	if multiplayer_api == null:
+		return local_peer_id
+	var remote_sender := int(multiplayer_api.get_remote_sender_id())
+	if remote_sender > 0:
+		return remote_sender
+	return local_peer_id
+
+
+func _make_health_sender_key(sender_peer_id: int, target_peer_id: int) -> String:
+	return "%d:%d" % [sender_peer_id, target_peer_id]
+
+
+func _clear_applied_health_sequences_for_target(target_peer_id: int) -> void:
+	var suffix := ":%d" % target_peer_id
+	var keys_to_erase: Array = []
+	for key in _last_applied_health_sequence_by_sender.keys():
+		if String(key).ends_with(suffix):
+			keys_to_erase.append(key)
+	for key in keys_to_erase:
+		_last_applied_health_sequence_by_sender.erase(key)
 
 
 ## RPC: Sync a player's alive/dead status.
