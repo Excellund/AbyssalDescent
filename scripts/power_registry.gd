@@ -264,7 +264,14 @@ const TRIAL_POWER_BALANCE := {
 		"radius_per_stack": 14.0,
 		"damage_ratio_base": 0.30,
 		"damage_ratio_per_stack": 0.15,
-		"damage_add": 2
+		"damage_add": 2,
+		# L2 unlock: hits also slow. L3 unlock: chain wave from farthest hit.
+		"slow_at_stack": 2,
+		"slow_duration": 0.4,
+		"slow_mult": 0.75,
+		"chain_at_stack": 3,
+		"chain_damage_ratio": 0.6,
+		"chain_radius_ratio": 0.7
 	},
 	"aegis_field": {
 		"resist_base": 0.16,
@@ -313,14 +320,26 @@ const TRIAL_POWER_BALANCE := {
 	},
 	"reaper_step": {
 		"range_mult_base": 1.40,
-		"range_mult_per_stack": 0.22
+		"range_mult_per_stack": 0.22,
+		# L2 unlock: chain window grants stored dash on subsequent kills.
+		# L3 unlock: chain-window kills extend post-dash grace.
+		"chain_window_at_stack": 2,
+		"chain_window_duration": 1.5,
+		"chain_grace_at_stack": 3,
+		"chain_grace_duration": 0.4
 	},
 	"static_wake": {
 		# Damage scales as a ratio of damage. Affected by all damage boons and objective mutators.
 		"damage_ratio_base": 0.30,
 		"damage_ratio_per_stack": 0.15,
 		"lifetime_base": 1.5,
-		"lifetime_per_stack": 0.50
+		"lifetime_per_stack": 0.50,
+		# L2 unlock: trail damage radius widens. L3 unlock: trail also slows.
+		"trail_radius_base": 28.0,
+		"trail_radius_per_stack": 6.0,
+		"slow_at_stack": 3,
+		"slow_duration": 0.3,
+		"slow_mult": 0.8
 	},
 	"storm_crown": {
 		"proc_every_base": 5,

@@ -77,7 +77,9 @@ const TRIAL_POWER_PARAM_MAP := {
 		"reward_flag": "reward_void_dash",
 		"stack_property": "void_dash_stacks",
 		"parameters": {
-			"range_mult": {"property": "void_dash_range_mult", "type": "float"}
+			"range_mult": {"property": "void_dash_range_mult", "type": "float"},
+			"chain_window": {"property": "reaper_chain_window", "type": "float"},
+			"chain_grace": {"property": "reaper_chain_grace", "type": "float"}
 		}
 	},
 	"static_wake": {
@@ -85,7 +87,8 @@ const TRIAL_POWER_PARAM_MAP := {
 		"stack_property": "static_wake_stacks",
 		"parameters": {
 			"damage": {"property": "static_wake_damage", "type": "int"},
-			"lifetime": {"property": "static_wake_lifetime", "type": "float"}
+			"lifetime": {"property": "static_wake_lifetime", "type": "float"},
+			"trail_radius": {"property": "static_wake_trail_radius", "type": "float"}
 		}
 	},
 	"storm_crown": {
@@ -392,14 +395,23 @@ static func build_trial_values(power_id: String, stack_count: int, balance_data:
 				"grace_duration": float(data.get("grace_base", 0.0)) + float(data.get("grace_per_stack", 0.0)) * float(stack_count)
 			}
 		"reaper_step":
+			var reaper_chain_window := 0.0
+			if stack_count >= int(data.get("chain_window_at_stack", 99)):
+				reaper_chain_window = float(data.get("chain_window_duration", 0.0))
+			var reaper_chain_grace := 0.0
+			if stack_count >= int(data.get("chain_grace_at_stack", 99)):
+				reaper_chain_grace = float(data.get("chain_grace_duration", 0.0))
 			return {
-				"range_mult": float(data.get("range_mult_base", 0.0)) + float(data.get("range_mult_per_stack", 0.0)) * float(stack_count)
+				"range_mult": float(data.get("range_mult_base", 0.0)) + float(data.get("range_mult_per_stack", 0.0)) * float(stack_count),
+				"chain_window": reaper_chain_window,
+				"chain_grace": reaper_chain_grace
 			}
 		"static_wake":
 			var wake_damage_ratio := float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count)
 			return {
 				"damage": int(ceil(float(player_reference.get("damage")) * wake_damage_ratio)),
-				"lifetime": float(data.get("lifetime_base", 0.0)) + float(data.get("lifetime_per_stack", 0.0)) * float(stack_count)
+				"lifetime": float(data.get("lifetime_base", 0.0)) + float(data.get("lifetime_per_stack", 0.0)) * float(stack_count),
+				"trail_radius": float(data.get("trail_radius_base", 28.0)) + float(data.get("trail_radius_per_stack", 0.0)) * float(stack_count)
 			}
 		"storm_crown":
 			return {

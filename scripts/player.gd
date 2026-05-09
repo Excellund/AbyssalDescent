@@ -66,8 +66,11 @@ const RUN_SNAPSHOT_PROPERTIES := [
 	"phantom_step_damage",
 	"phantom_step_slow_duration",
 	"void_dash_range_mult",
+	"reaper_chain_window",
+	"reaper_chain_grace",
 	"static_wake_damage",
 	"static_wake_lifetime",
+	"static_wake_trail_radius",
 	"riftpunch_bonus_damage",
 	"riftpunch_window_duration",
 	"riftpunch_grace_duration",
@@ -231,9 +234,15 @@ var phantom_step_damage: int = 10
 var phantom_step_slow_duration: float = 0.7
 # Void Dash: extra distance multiplier and kill-reset tracking
 var void_dash_range_mult: float = 1.42
+# Reaper Step L2/L3: chain window grants stored dash on subsequent kills; L3 also extends grace.
+var reaper_chain_window: float = 0.0
+var reaper_chain_grace: float = 0.0
+var _reaper_chain_window_left: float = 0.0
+var _reaper_stored_dashes: int = 0
 # Static Wake: trail damage and lifetime
 var static_wake_damage: int = 8
 var static_wake_lifetime: float = 1.6
+var static_wake_trail_radius: float = 28.0
 
 # Riftpunch: post-dash empowered melee finisher (Veilstrider-tilted committed strike)
 var reward_riftpunch: bool = false
@@ -515,6 +524,10 @@ func _update_last_move_direction(direction: Vector2) -> void:
 func _update_dash_cooldown(delta: float) -> void:
 	if dash_cooldown_left > 0.0:
 		dash_cooldown_left = maxf(0.0, dash_cooldown_left - delta)
+	if _reaper_chain_window_left > 0.0:
+		_reaper_chain_window_left = maxf(0.0, _reaper_chain_window_left - delta)
+		if _reaper_chain_window_left <= 0.0:
+			_reaper_stored_dashes = 0
 
 func _update_contact_damage_grace(delta: float) -> void:
 	if _contact_damage_grace_left <= 0.0:
@@ -546,7 +559,10 @@ func _try_start_dash(direction: Vector2) -> void:
 	if not Input.is_action_just_pressed("dash"):
 		return
 	if dash_cooldown_left > 0.0:
-		return
+		if _reaper_stored_dashes <= 0:
+			return
+		_reaper_stored_dashes -= 1
+		dash_cooldown_left = 0.0
 
 	dash_direction = direction if direction != Vector2.ZERO else last_move_direction
 	if passive_iron_retort:
@@ -1261,6 +1277,8 @@ func apply_run_snapshot(snapshot: Dictionary) -> void:
 	void_heat = 0.0
 	_voidfire_lockout_left = 0.0
 	_vow_shatter_charges_left = 0
+	_reaper_chain_window_left = 0.0
+	_reaper_stored_dashes = 0
 	_crushed_vow_primed = false
 	_set_dash_phasing(false)
 	velocity = Vector2.ZERO
@@ -1689,7 +1707,7 @@ func _trigger_aegis_field() -> void:
 		var enemy_body := enemy_node as Node2D
 		if global_position.distance_to(enemy_body.global_position) > aegis_field_pulse_radius:
 			continue
-		enemy_node.apply_slow(aegis_field_slow_duration, aegis_field_slow_mult)
+		enemy_node.apply_slow(aegis_field_slow_duration * _global_slow_duration_mult(), aegis_field_slow_mult)
 	if player_feedback != null:
 		player_feedback.play_world_ring(global_position, aegis_field_pulse_radius, Color(0.62, 0.98, 1.0, 0.92), 0.22)
 		player_feedback.play_world_ring(global_position, aegis_field_pulse_radius * 0.64, Color(0.88, 1.0, 1.0, 0.78), 0.16)
@@ -2039,6 +2057,11 @@ func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupt
 		did_hit = true
 	return did_hit
 
+func _global_slow_duration_mult() -> float:
+	if reward_hunters_snare and hunters_snare_stacks >= 3:
+		return 2.0
+	return 1.0
+
 func _get_hunters_snare_bonus_damage(enemy_node: Object) -> int:
 	if not reward_hunters_snare:
 		return 0
@@ -2046,19 +2069,27 @@ func _get_hunters_snare_bonus_damage(enemy_node: Object) -> int:
 		return 0
 	return hunters_snare_bonus_damage if bool(enemy_node.is_slowed()) else 0
 
+func _hunters_snare_aoe_bonus_against(enemy_node: Object) -> int:
+	if not reward_hunters_snare:
+		return 0
+	if hunters_snare_stacks < 2:
+		return 0
+	return _get_hunters_snare_bonus_damage(enemy_node)
+
 func _apply_hunters_snare(enemy_node: Object) -> void:
 	if not reward_hunters_snare:
 		return
 	if not is_instance_valid(enemy_node):
 		return
-	enemy_node.apply_slow(hunters_snare_slow_duration, hunters_snare_slow_mult)
+	var snare_duration := hunters_snare_slow_duration * _global_slow_duration_mult()
+	enemy_node.apply_slow(snare_duration, hunters_snare_slow_mult)
 	if enemy_node is Node2D:
 		var snare_enemy := enemy_node as Node2D
 		var snare_enemy_network_id := int(snare_enemy.get_meta("network_enemy_id", -1))
 		if snare_enemy_network_id > 0:
 			_broadcast_cue_event("enemy_apply_slow", {
 				"enemy_network_id": snare_enemy_network_id,
-				"duration": hunters_snare_slow_duration,
+				"duration": snare_duration,
 				"mult": hunters_snare_slow_mult
 			})
 
@@ -2092,13 +2123,14 @@ func _consume_riftpunch_bonus(source: String, hit_position: Vector2, enemy_node:
 	if impact_position.distance_squared_to(global_position) < 4.0:
 		impact_position = global_position + facing.normalized() * maxf(28.0, attack_range * 0.6)
 	if riftpunch_stacks >= 2 and is_instance_valid(enemy_node) and enemy_node.has_method("apply_slow"):
-		enemy_node.apply_slow(0.6, 0.6)
+		var riftpunch_slow_duration := 0.6 * _global_slow_duration_mult()
+		enemy_node.apply_slow(riftpunch_slow_duration, 0.6)
 		if enemy_node is Node2D:
 			var slow_target_network_id := int((enemy_node as Node2D).get_meta("network_enemy_id", -1))
 			if slow_target_network_id > 0:
 				_broadcast_cue_event("enemy_apply_slow", {
 					"enemy_network_id": slow_target_network_id,
-					"duration": 0.6,
+					"duration": riftpunch_slow_duration,
 					"mult": 0.6
 				})
 	if riftpunch_stacks >= 3:
@@ -2151,7 +2183,8 @@ func _apply_riftpunch_shockwave(epicenter: Vector2, primary_damage: int, primary
 			continue
 		if enemy_body.global_position.distance_to(epicenter) > shockwave_radius:
 			continue
-		DAMAGEABLE.apply_damage(enemy_node, shockwave_damage, {"is_ground_attack": true, "attack_type": "riftpunch_shockwave"})
+		var shockwave_total_damage := shockwave_damage + _hunters_snare_aoe_bonus_against(enemy_body)
+		DAMAGEABLE.apply_damage(enemy_node, shockwave_total_damage, {"is_ground_attack": true, "attack_type": "riftpunch_shockwave"})
 
 func _get_first_strike_bonus_damage(enemy_node: Object) -> int:
 	if first_strike_bonus_damage <= 0:
@@ -2186,6 +2219,8 @@ func clear_lingering_combat_effects() -> void:
 		player_feedback.clear_all_eclipse_mark_decals()
 	_reset_dread_resonance_tracking()
 	_vow_shatter_charges_left = 0
+	_reaper_chain_window_left = 0.0
+	_reaper_stored_dashes = 0
 	_crushed_vow_primed = false
 	_indomitable_spirit_primed = false
 	indomitable_damage_bank = 0.0
@@ -2214,32 +2249,56 @@ func clear_lingering_combat_effects() -> void:
 	_fracture_field_resolving = false
 	queue_redraw()
 
-func _apply_rupture_wave(epicenter: Vector2, source_damage: int, rupture_hit_enemy_ids: Dictionary = {}) -> void:
-	var wave_damage := maxi(1, int(round(float(source_damage) * rupture_wave_damage_ratio)))
+func _apply_rupture_wave(epicenter: Vector2, source_damage: int, rupture_hit_enemy_ids: Dictionary = {}, chain_depth: int = 0) -> void:
+	var wave_radius := rupture_wave_radius
+	var wave_damage_ratio := rupture_wave_damage_ratio
+	if chain_depth > 0:
+		wave_radius *= 0.7
+		wave_damage_ratio *= 0.6
+	var wave_damage := maxi(1, int(round(float(source_damage) * wave_damage_ratio)))
 	wave_damage = _apply_objective_mutator_damage_mult(wave_damage)
 	if player_feedback != null:
-		player_feedback.play_world_ring(epicenter, rupture_wave_radius * 0.85, ENEMY_BASE.COLOR_RUPTURE_WAVE_RING, 0.2)
+		player_feedback.play_world_ring(epicenter, wave_radius * 0.85, ENEMY_BASE.COLOR_RUPTURE_WAVE_RING, 0.2)
 		_broadcast_cue_event("world_ring", {
 			"position": epicenter,
-			"radius": rupture_wave_radius * 0.85,
+			"radius": wave_radius * 0.85,
 			"color": ENEMY_BASE.COLOR_RUPTURE_WAVE_RING,
 			"duration": 0.2
 		})
+	var apply_slow := chain_depth == 0 and rupture_wave_stacks >= 2
+	var wants_chain := chain_depth == 0 and rupture_wave_stacks >= 3
+	var chain_candidate_node: Node2D = null
+	var chain_candidate_distance := 0.0
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		if not (enemy_node is Node2D):
 			continue
 		if not DAMAGEABLE.can_take_damage(enemy_node):
 			continue
 		var enemy_body := enemy_node as Node2D
-		if enemy_body.global_position.distance_to(epicenter) > rupture_wave_radius:
+		var distance_to_epicenter := enemy_body.global_position.distance_to(epicenter)
+		if distance_to_epicenter > wave_radius:
 			continue
 		var enemy_id := enemy_body.get_instance_id()
-		# Skip if this enemy already took rupture damage from a previous rupture in this swing
 		if rupture_hit_enemy_ids.has(enemy_id):
 			continue
-		# Mark this enemy as hit by rupture, preventing chain damage
 		rupture_hit_enemy_ids[enemy_id] = true
-		DAMAGEABLE.apply_damage(enemy_node, wave_damage, {"is_ground_attack": true, "attack_type": "rupture_wave"})
+		var rupture_total_damage := wave_damage + _hunters_snare_aoe_bonus_against(enemy_body)
+		DAMAGEABLE.apply_damage(enemy_node, rupture_total_damage, {"is_ground_attack": true, "attack_type": "rupture_wave"})
+		if apply_slow and enemy_body.has_method("apply_slow"):
+			var rupture_slow_duration := 0.4 * _global_slow_duration_mult()
+			enemy_body.apply_slow(rupture_slow_duration, 0.75)
+			var rupture_slow_network_id := int(enemy_body.get_meta("network_enemy_id", -1))
+			if rupture_slow_network_id > 0:
+				_broadcast_cue_event("enemy_apply_slow", {
+					"enemy_network_id": rupture_slow_network_id,
+					"duration": rupture_slow_duration,
+					"mult": 0.75
+				})
+		if wants_chain and distance_to_epicenter > chain_candidate_distance:
+			chain_candidate_distance = distance_to_epicenter
+			chain_candidate_node = enemy_body
+	if wants_chain and is_instance_valid(chain_candidate_node):
+		_apply_rupture_wave(chain_candidate_node.global_position, source_damage, rupture_hit_enemy_ids, chain_depth + 1)
 
 
 func _update_wraithstep_marks() -> void:
@@ -2632,12 +2691,13 @@ func _apply_phantom_step_during_dash() -> void:
 		if global_position.distance_to(enemy_body.global_position) > hit_radius:
 			continue
 		DAMAGEABLE.apply_damage(enemy_node, phantom_damage)
-		enemy_node.apply_slow(phantom_step_slow_duration, 0.36)
+		var phantom_slow_duration := phantom_step_slow_duration * _global_slow_duration_mult()
+		enemy_node.apply_slow(phantom_slow_duration, 0.36)
 		var phantom_enemy_network_id := int(enemy_body.get_meta("network_enemy_id", -1))
 		if phantom_enemy_network_id > 0:
 			_broadcast_cue_event("enemy_apply_slow", {
 				"enemy_network_id": phantom_enemy_network_id,
-				"duration": phantom_step_slow_duration,
+				"duration": phantom_slow_duration,
 				"mult": 0.36
 			})
 		phantom_step_hit_ids[eid] = true
@@ -2673,6 +2733,8 @@ func _update_static_wake_trails(delta: float) -> void:
 		i -= 1
 
 	if _is_local_control_owner():
+		var wake_apply_slow := static_wake_stacks >= 3
+		var wake_radius := maxf(8.0, static_wake_trail_radius)
 		for trail in static_wake_trails:
 			var trail_pos: Vector2 = trail["pos"]
 			for enemy_node in get_tree().get_nodes_in_group("enemies"):
@@ -2681,10 +2743,21 @@ func _update_static_wake_trails(delta: float) -> void:
 				if not DAMAGEABLE.can_take_damage(enemy_node):
 					continue
 				var enemy_body := enemy_node as Node2D
-				if enemy_body.global_position.distance_to(trail_pos) <= 28.0:
+				if enemy_body.global_position.distance_to(trail_pos) <= wake_radius:
 					var wake_tick_damage := maxi(1, int(round(float(static_wake_damage) * delta * 6.0)))
 					wake_tick_damage = _apply_objective_mutator_damage_mult(wake_tick_damage)
+					wake_tick_damage += _hunters_snare_aoe_bonus_against(enemy_body)
 					DAMAGEABLE.apply_damage(enemy_node, wake_tick_damage)
+					if wake_apply_slow and enemy_body.has_method("is_slowed") and not bool(enemy_body.is_slowed()) and enemy_body.has_method("apply_slow"):
+						var wake_slow_duration := 0.3 * _global_slow_duration_mult()
+						enemy_body.apply_slow(wake_slow_duration, 0.8)
+						var wake_slow_network_id := int(enemy_body.get_meta("network_enemy_id", -1))
+						if wake_slow_network_id > 0:
+							_broadcast_cue_event("enemy_apply_slow", {
+								"enemy_network_id": wake_slow_network_id,
+								"duration": wake_slow_duration,
+								"mult": 0.8
+							})
 
 	queue_redraw()
 	_sync_static_wake_trail_renderer()
@@ -2790,7 +2863,19 @@ func notify_enemy_killed(kill_position: Vector2 = Vector2.ZERO) -> void:
 		if player_feedback != null:
 			player_feedback.play_world_ring(global_position, 42.0, Color(0.92, 0.54, 1.0, 0.92), 0.18)
 			player_feedback.play_world_ring(global_position, 26.0, Color(1.0, 0.82, 1.0, 0.72), 0.12)
+		if reaper_chain_window > 0.0:
+			_reaper_chain_window_left = reaper_chain_window
 		queue_redraw()
+	elif reaper_chain_window > 0.0 and _reaper_chain_window_left > 0.0:
+		if _reaper_stored_dashes < 1:
+			_reaper_stored_dashes = 1
+		_reaper_chain_window_left = reaper_chain_window
+		void_dash_reset_pulse_left = void_dash_reset_pulse_duration
+		if player_feedback != null:
+			player_feedback.play_world_ring(global_position, 32.0, Color(0.92, 0.54, 1.0, 0.78), 0.16)
+		queue_redraw()
+	if reaper_chain_grace > 0.0 and _reaper_chain_window_left > 0.0:
+		_dash_damage_immune_left = maxf(_dash_damage_immune_left, reaper_chain_grace)
 
 func _has_combo_relay_mutator_active() -> bool:
 	for entry in active_objective_mutators:
@@ -3290,11 +3375,15 @@ func _trigger_voidfire_detonation() -> void:
 		var enemy_body := enemy_node as Node2D
 		if enemy_body.global_position.distance_to(global_position) > voidfire_detonate_radius:
 			continue
-		DAMAGEABLE.apply_damage(enemy_node, det_damage, {"is_ground_attack": true, "attack_type": "voidfire_detonate"})
+		var voidfire_total_damage := det_damage + _hunters_snare_aoe_bonus_against(enemy_body)
+		DAMAGEABLE.apply_damage(enemy_node, voidfire_total_damage, {"is_ground_attack": true, "attack_type": "voidfire_detonate"})
 	void_heat = 0.0
-	_voidfire_lockout_left = overheat_lockout
+	var effective_lockout := overheat_lockout
+	if voidfire_stacks >= 3:
+		effective_lockout *= 0.5
+	_voidfire_lockout_left = effective_lockout
 	# Overheat should lock attacks, but movement remains available.
-	apply_polar_shift_dash_lockout(overheat_lockout)
+	apply_polar_shift_dash_lockout(effective_lockout)
 	queue_redraw()
 
 func _update_voidfire_heat(delta: float) -> void:
@@ -3903,13 +3992,15 @@ func _apply_fracture_field(kill_pos: Vector2) -> void:
 			continue
 
 		hit_enemy_ids[enemy_id] = true
-		DAMAGEABLE.apply_damage(enemy_node, field_damage, {"is_ground_attack": true, "attack_type": "fracture_fault_line"})
-		enemy_node.apply_slow(fracture_field_slow_duration, 0.45)
+		var fracture_total_damage := field_damage + _hunters_snare_aoe_bonus_against(enemy_body)
+		DAMAGEABLE.apply_damage(enemy_node, fracture_total_damage, {"is_ground_attack": true, "attack_type": "fracture_fault_line"})
+		var fracture_slow_duration := fracture_field_slow_duration * _global_slow_duration_mult()
+		enemy_node.apply_slow(fracture_slow_duration, 0.45)
 		var fracture_enemy_network_id := int(enemy_body.get_meta("network_enemy_id", -1))
 		if fracture_enemy_network_id > 0:
 			_broadcast_cue_event("enemy_apply_slow", {
 				"enemy_network_id": fracture_enemy_network_id,
-				"duration": fracture_field_slow_duration,
+				"duration": fracture_slow_duration,
 				"mult": 0.45
 			})
 

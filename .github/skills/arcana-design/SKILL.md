@@ -57,6 +57,10 @@ Each stack past L1 needs a yes/no behavioral unlock. Patterns that work:
 | Extra fault lines / projectiles | `fracture_field` (3/4/5 beams) | `min(cap, base + stack)` in spawner |
 | Bigger max stack pool | `dread_resonance` (`max_stacks_base/_per_stack/_cap`) | Mapper emits `max_stacks` per stack |
 | Side-effect on hit | `riftpunch` L2 slow, L3 shockwave | Conditional branch in consumer based on `<power>_stacks` |
+| Cross-cutting global multiplier | `hunters_snare` L3 (2× duration on every player-applied slow) | Single helper (e.g. `_global_slow_duration_mult()`) consumed by all slow sites; multiplier also goes into the `enemy_apply_slow` cue payload so multiplayer mirrors it |
+| Stored consumable trigger | `reaper_step` L2 (kill within window stores 1 extra dash credit) | Window timer field + stored-count field; dash-start gate consumes credit instead of failing on cooldown; reset both on death and run reset |
+| Cooldown halving | `voidfire` L3 (overheat lockout × 0.5) | Multiply lockout at the assignment site; remember to also propagate to `apply_polar_shift_dash_lockout` if applicable |
+| Recursive AoE chain | `rupture_wave` L3 (one re-trigger from farthest hit) | Pass `chain_depth: int = 0` and a hit-id set; gate recursion on `chain_depth == 0` to cap at one chain |
 
 ### 4. Wire the data
 - Add or update fields in `TRIAL_POWER_BALANCE`. Use the `_base` / `_per_stack` / `_cap` / `_min` / `_max` suffix convention so the mapper can derive scaled values.
