@@ -9,4 +9,5 @@ When extracting a cohesive responsibility out of `scripts/world_generator.gd`:
 - Per-tick entry call from WG becomes a single delegation (`<helper>.tick(delta)`).
 - Receive-side handlers (joiner-applies-state) stay on WG next to their `@rpc` methods.
 - External callers that previously hit private WG methods (`world._foo`) must be updated to call the helper (`world.<helper>.foo`). Search the whole `scripts/` tree for stragglers — `objective_runtime.gd` is a frequent caller.
-- Existing examples: `RunSummaryRecorder` (telemetry/summary), `EnemyStateSyncBroadcaster` (host-side enemy state replication).
+- Existing examples: `RunSummaryRecorder` (telemetry/summary), `EnemyStateSyncBroadcaster` (host-side enemy state replication), `EnemyStateSyncReceiver` (joiner-side replication: door/spawn/objective spawn/boss spawn payloads + enemy state/death apply).
+- Symmetric pattern: for any host→joiner replication concern, the broadcaster owns the host-side bookkeeping/RPC fan-out and the receiver owns the joiner-side gating/payload application. RPC methods stay on WG and one-line delegate to receiver methods.
