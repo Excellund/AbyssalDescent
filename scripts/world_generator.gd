@@ -2040,7 +2040,7 @@ func _apply_boss_difficulty_scaling(boss: CharacterBody2D) -> void:
 	if not is_instance_valid(boss):
 		return
 	var boss_mult := _get_boss_difficulty_mult()
-	var boss_health_mult := boss_mult * difficulty_provider.get_health_scaling_mult(true)
+	var boss_health_mult: float = boss_mult * difficulty_provider.get_health_scaling_mult(true)
 	if is_equal_approx(boss_mult, 1.0) and is_equal_approx(boss_health_mult, 1.0):
 		return
 	var base_max_health: int = int(boss.get_max_health())
@@ -3145,7 +3145,7 @@ func _get_active_enemy_mutators_for_room() -> Array[Dictionary]:
 		var player_mutators := local_player.get_active_enemy_objective_mutators() as Array[Dictionary]
 		for mutator in player_mutators:
 			result.append((mutator as Dictionary).duplicate(true))
-	var coop_scaling_mutator := difficulty_provider.build_enemy_durability_mutator()
+	var coop_scaling_mutator: Dictionary = difficulty_provider.build_enemy_durability_mutator()
 	if not coop_scaling_mutator.is_empty():
 		result.append(coop_scaling_mutator)
 	return result
