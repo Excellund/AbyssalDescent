@@ -397,6 +397,7 @@ func _ready() -> void:
 		Callable(self, "_setup_objective_runtime_system")
 	]
 	bootstrap_coordinator.run_bootstrap(bootstrap_stages)
+	EnemyReplicationService.bind_world(self)
 	var boot_flows: Array[Callable] = [
 		Callable(self, "_run_resume_flow"),
 		Callable(self, "_run_debug_boot_flow")
@@ -404,6 +405,9 @@ func _ready() -> void:
 	if bootstrap_coordinator.run_first_success(boot_flows):
 		return
 	_begin_new_run_flow()
+
+func _exit_tree() -> void:
+	EnemyReplicationService.unbind_world(self)
 
 func _validate_encounter_content_sync() -> void:
 	var encounter_sync_issues := ENCOUNTER_CONTRACTS.validate_encounter_sync(GLOSSARY_DATA._encounter_rows())

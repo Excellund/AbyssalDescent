@@ -34,6 +34,7 @@ MultiplayerSessionManager="*res://scripts/multiplayer_session_manager.gd"
 MultiplayerRoomService="*res://scripts/multiplayer_room_service.gd"
 PlayerReplicationService="*res://scripts/player_replication_service.gd"
 GameStateReplicationService="*res://scripts/game_state_replication_service.gd"
+EnemyReplicationService="*res://scripts/enemy_replication_service.gd"
 
 [display]
 
