@@ -17,6 +17,13 @@ var remote_position_snap_distance_px: float = REMOTE_PLAYER_SNAP_DISTANCE_PX
 ## Lower value = snappier; higher value = smoother.
 var remote_position_lerp_half_life_sec: float = 0.04
 var remote_rotation_lerp_half_life_sec: float = 0.035
+## Dead-reckoning: extrapolate the remote player's authoritative position forward
+## using velocity estimated from the last two received samples. This compensates for
+## the ~50ms position sync interval so host-side hit detection (boss attacks, AOEs)
+## runs against where the remote player actually is, not where they were last sample.
+## Capped to avoid runaway extrapolation on direction changes or stalls.
+var remote_position_extrapolation_max_sec: float = 0.18
+var remote_position_extrapolation_max_speed_px: float = 1200.0
 ## "Feedback" here means player-facing cue events (VFX/UI/audio cues), not gameplay state authority.
 var cue_event_sync_interval_sec: float = 0.05
 var cue_event_sync_payload_budget_bytes: int = 640
@@ -32,6 +39,7 @@ var _last_sync_positions: Dictionary = {}  ## peer_id -> last_synced_position
 var _last_sync_rotations: Dictionary = {}  ## peer_id -> last_synced_facing_radians
 var _remote_target_positions: Dictionary = {}  ## peer_id -> latest replicated position
 var _remote_target_rotations: Dictionary = {}  ## peer_id -> latest replicated facing
+var _remote_position_samples: Dictionary = {}  ## peer_id -> {prev_pos, prev_time, last_pos, last_time}
 var _cue_event_sync_elapsed: float = 0.0
 var _pending_cue_events_by_peer: Dictionary = {}  ## peer_id -> Array[Dictionary]
 var _last_cue_event_count: int = 0
@@ -98,6 +106,7 @@ func unregister_player(peer_id: int) -> void:
 	_last_sync_rotations.erase(peer_id)
 	_remote_target_positions.erase(peer_id)
 	_remote_target_rotations.erase(peer_id)
+	_remote_position_samples.erase(peer_id)
 	_pending_cue_events_by_peer.erase(peer_id)
 	_outgoing_health_sequence_by_peer.erase(peer_id)
 	_last_applied_health_sequence_by_peer.erase(peer_id)
@@ -236,7 +245,40 @@ func _sync_player_transform(peer_id: int, position: Vector2, facing_radians: flo
 		if distance_to_target >= remote_position_snap_distance_px:
 			player_body.position = position
 		_remote_target_positions[peer_id] = position
+		_record_remote_position_sample(peer_id, position)
 	_remote_target_rotations[peer_id] = facing_radians
+
+
+func _record_remote_position_sample(peer_id: int, position: Vector2) -> void:
+	var now := float(Time.get_ticks_msec()) * 0.001
+	var sample: Dictionary = _remote_position_samples.get(peer_id, {})
+	var last_pos: Vector2 = sample.get("last_pos", position)
+	var last_time: float = float(sample.get("last_time", now))
+	sample["prev_pos"] = last_pos
+	sample["prev_time"] = last_time
+	sample["last_pos"] = position
+	sample["last_time"] = now
+	_remote_position_samples[peer_id] = sample
+
+
+func _get_extrapolated_remote_position(peer_id: int, fallback: Vector2) -> Vector2:
+	var sample: Dictionary = _remote_position_samples.get(peer_id, {})
+	if sample.is_empty():
+		return fallback
+	var last_pos: Vector2 = sample.get("last_pos", fallback)
+	var last_time: float = float(sample.get("last_time", 0.0))
+	var prev_time: float = float(sample.get("prev_time", last_time))
+	var sample_dt := last_time - prev_time
+	if sample_dt <= 0.0001:
+		return last_pos
+	var prev_pos: Vector2 = sample.get("prev_pos", last_pos)
+	var velocity := (last_pos - prev_pos) / sample_dt
+	var speed := velocity.length()
+	if speed > remote_position_extrapolation_max_speed_px:
+		velocity = velocity * (remote_position_extrapolation_max_speed_px / speed)
+	var now := float(Time.get_ticks_msec()) * 0.001
+	var elapsed := clampf(now - last_time, 0.0, remote_position_extrapolation_max_sec)
+	return last_pos + velocity * elapsed
 
 
 func _interpolate_remote_players(delta: float) -> void:
@@ -251,7 +293,8 @@ func _interpolate_remote_players(delta: float) -> void:
 		var player_body := player_node as Node2D
 		if player_body == null:
 			continue
-		var target_pos: Vector2 = _remote_target_positions.get(peer_id, player_body.position)
+		var fallback_pos: Vector2 = _remote_target_positions.get(peer_id, player_body.position)
+		var target_pos := _get_extrapolated_remote_position(peer_id, fallback_pos)
 		player_body.position = player_body.position.lerp(target_pos, position_weight)
 		var current_rotation := _get_player_facing_angle(player_node)
 		var target_rotation := float(_remote_target_rotations.get(peer_id, current_rotation))
