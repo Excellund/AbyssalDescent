@@ -282,7 +282,10 @@ var _multiplayer_last_feedback_event_count: int = 0
 var _multiplayer_last_feedback_estimated_bytes: int = 0
 var _priority_enemy_sync_interval_cache_sec: float = 0.0
 var _priority_enemy_sync_interval_cache_elapsed: float = 0.0
-var _priority_enemy_sync_interval_cache_ttl_sec: float = 0.12
+## Cache TTL must stay tight so a boss entering WINDUP escalates the network sync
+## rate within a few frames; otherwise joiners see telegraphs appear up to TTL ms
+## after the host, shrinking their dodge window.
+var _priority_enemy_sync_interval_cache_ttl_sec: float = 0.03
 var _perf_attribution_enabled: bool = false
 var _perf_attribution_sample_ms: float = 1000.0
 var _perf_attribution_elapsed: float = 0.0
