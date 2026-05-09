@@ -3150,8 +3150,7 @@ func record_player_damage_dealt(applied_amount: int, source_peer_id: int = 0, _k
 	_summary_stats_by_peer[source_peer_id] = stats
 	if STAT_ATTRIBUTION_TRACE:
 		print_debug("[StatAttribution][DamageCredit] peer=%d applied=%d total=%d enemy_id=%d" % [source_peer_id, applied_amount, int(stats.get("damage_dealt_total", 0)), enemy_id])
-	if enemy_id > 0:
-		EnemyReplicationService.last_damage_peer_by_id[enemy_id] = source_peer_id
+	EnemyReplicationService.credit_damage(enemy_id, source_peer_id)
 
 func _ensure_peer_summary_stats(peer_id: int) -> Dictionary:
 	return _summary_stats_by_peer.get(peer_id, {
@@ -3191,10 +3190,7 @@ func _record_boss_defeat_for_summary_peers() -> void:
 		print_debug("[StatAttribution][BossCredit] peers=%s" % str(tracked_peer_ids.keys()))
 
 func _clear_all_enemies() -> void:
-	EnemyReplicationService.enemy_nodes_by_id.clear()
-	EnemyReplicationService.last_damage_peer_by_id.clear()
-	EnemyReplicationService.target_positions_by_id.clear()
-	EnemyReplicationService.target_facing_angles_by_id.clear()
+	EnemyReplicationService.clear_state()
 	_previous_enemy_runtime_states.clear()
 	_previous_enemy_positions.clear()
 	_previous_enemy_facing_angles.clear()
@@ -3706,7 +3702,7 @@ func _deregister_network_enemy(enemy_id: int) -> void:
 	_enemy_far_combat_hint_by_id.erase(enemy_id)
 
 func _on_network_enemy_died(enemy_id: int) -> void:
-	var killer_peer_id := int(EnemyReplicationService.last_damage_peer_by_id.get(enemy_id, 0))
+	var killer_peer_id := EnemyReplicationService.killer_peer_for(enemy_id)
 	if STAT_ATTRIBUTION_TRACE:
 		print_debug("[StatAttribution][EnemyDied] enemy_id=%d killer_peer=%d" % [enemy_id, killer_peer_id])
 	if killer_peer_id > 0:
@@ -3748,8 +3744,7 @@ func _sync_request_enemy_damage(enemy_id: int, amount: int, damage_context: Dict
 		enemy.call("take_damage", amount)
 	else:
 		enemy.call("take_damage", amount, damage_context)
-	if source_peer_id > 0:
-		EnemyReplicationService.last_damage_peer_by_id[enemy_id] = source_peer_id
+	EnemyReplicationService.credit_damage(enemy_id, source_peer_id)
 	if health_before >= 0 and enemy.has_method("get_current_health"):
 		var health_after := int(enemy.call("get_current_health"))
 		if STAT_ATTRIBUTION_TRACE:
