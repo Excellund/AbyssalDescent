@@ -405,6 +405,7 @@ var veilstep_rhythm_empowered_dash_active: bool = false
 var veilstep_rhythm_wave_radius: float = 96.0
 var veilstep_rhythm_wave_damage_ratio: float = 1.6
 var veilstep_rhythm_touched_enemy_ids: Dictionary = {}
+var veilstep_rhythm_shard_awarded_this_dash: bool = false
 var farline_focus_min_range: float = 98.0
 var farline_focus_max_range: float = 132.0
 var farline_focus_damage_mult: float = 1.7
