@@ -145,3 +145,32 @@ static func get_launch_characters() -> Array[Dictionary]:
 	for character_id in LAUNCH_CHARACTER_IDS:
 		result.append(get_character(String(character_id)))
 	return result
+
+const DUPLICATE_VARIANT_HUE_SHIFTS_DEG := [0.0, 60.0, -60.0, 120.0, -120.0, 180.0, 90.0]
+const DUPLICATE_VARIANT_VALUE_SHIFTS := [0.0, 0.08, -0.08, 0.14, -0.14, 0.18, -0.18]
+
+static func apply_duplicate_color_variant(character_data: Dictionary, variant_index: int) -> Dictionary:
+	## Returns a copy of `character_data` with its visual color fields shifted in HSV.
+	## Variant 0 returns the data unchanged so the first picker keeps the canonical palette.
+	if variant_index <= 0:
+		return character_data
+	if not character_data.has("visual"):
+		return character_data
+	var slot: int = clampi(variant_index, 0, DUPLICATE_VARIANT_HUE_SHIFTS_DEG.size() - 1)
+	var hue_shift: float = float(DUPLICATE_VARIANT_HUE_SHIFTS_DEG[slot]) / 360.0
+	var value_shift: float = float(DUPLICATE_VARIANT_VALUE_SHIFTS[slot])
+	var shifted_data: Dictionary = character_data.duplicate(true)
+	var visual: Dictionary = (shifted_data.get("visual", {}) as Dictionary).duplicate(true)
+	for key in visual.keys():
+		var color_value = visual[key]
+		if color_value is Color:
+			visual[key] = _shift_color_hsv(color_value, hue_shift, value_shift)
+	shifted_data["visual"] = visual
+	return shifted_data
+
+static func _shift_color_hsv(source_color: Color, hue_shift: float, value_shift: float) -> Color:
+	var hue: float = fposmod(source_color.h + hue_shift, 1.0)
+	var saturation: float = source_color.s
+	var value: float = clampf(source_color.v + value_shift, 0.0, 1.0)
+	var shifted := Color.from_hsv(hue, saturation, value, source_color.a)
+	return shifted

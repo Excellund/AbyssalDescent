@@ -644,13 +644,17 @@ func _resolve_local_character_id(run_context: Node, fallback_character_id: Strin
 func _apply_multiplayer_character_packages(run_context: Node) -> void:
 	if run_context == null:
 		return
+	var duplicate_variant_by_peer := _build_duplicate_variant_map(run_context)
 	if is_instance_valid(player) and player.has_method("apply_character_package"):
 		var local_selected_id := String(run_context.get_selected_character_id()).strip_edges().to_lower()
 		if local_selected_id.is_empty():
 			local_selected_id = current_character_id
 		var local_data: Dictionary = CHARACTER_REGISTRY.get_character(local_selected_id)
 		if not local_data.is_empty():
-			player.apply_character_package(local_data)
+			var local_peer_for_variant := int(player.get("player_id"))
+			var local_variant := int(duplicate_variant_by_peer.get(local_peer_for_variant, 0))
+			var local_data_variant := CHARACTER_REGISTRY.apply_duplicate_color_variant(local_data, local_variant)
+			player.apply_character_package(local_data_variant)
 			current_character_id = local_selected_id
 	for party_node in _get_multiplayer_player_nodes():
 		if party_node == player:
@@ -664,7 +668,36 @@ func _apply_multiplayer_character_packages(run_context: Node) -> void:
 		var remote_data: Dictionary = CHARACTER_REGISTRY.get_character(remote_character_id)
 		if remote_data.is_empty():
 			continue
-		party_node.apply_character_package(remote_data)
+		var remote_variant := int(duplicate_variant_by_peer.get(remote_peer_id, 0))
+		var remote_data_variant := CHARACTER_REGISTRY.apply_duplicate_color_variant(remote_data, remote_variant)
+		party_node.apply_character_package(remote_data_variant)
+
+
+func _build_duplicate_variant_map(run_context: Node) -> Dictionary:
+	## Returns peer_id -> variant_index for all party peers.
+	## Peers sharing a character get distinct variants; the lowest peer_id (host = 1) keeps variant 0.
+	var variant_by_peer: Dictionary = {}
+	if run_context == null:
+		return variant_by_peer
+	var peers_by_character: Dictionary = {}
+	for party_node in _get_multiplayer_player_nodes():
+		if not is_instance_valid(party_node):
+			continue
+		var peer_id := int(party_node.get("player_id"))
+		if peer_id <= 0:
+			continue
+		var character_id := String(run_context.get_peer_character_selection(peer_id)).strip_edges().to_lower()
+		if character_id.is_empty():
+			continue
+		if not peers_by_character.has(character_id):
+			peers_by_character[character_id] = []
+		(peers_by_character[character_id] as Array).append(peer_id)
+	for character_key in peers_by_character.keys():
+		var peer_list: Array = peers_by_character[character_key]
+		peer_list.sort()
+		for index in peer_list.size():
+			variant_by_peer[int(peer_list[index])] = index
+	return variant_by_peer
 
 
 func _log_multiplayer_player_stats(stage: String) -> void:
