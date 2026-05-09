@@ -86,7 +86,9 @@ func _format_duration(total_seconds: int) -> String:
 func _format_timestamp(unix_time: int) -> String:
 	if unix_time <= 0:
 		return "-"
-	var dt := Time.get_datetime_dict_from_unix_time(unix_time)
+	var tz: Dictionary = Time.get_time_zone_from_system()
+	var bias_minutes := int(tz.get("bias", 0))
+	var dt := Time.get_datetime_dict_from_unix_time(unix_time + bias_minutes * 60)
 	return "%04d-%02d-%02d %02d:%02d" % [
 		int(dt.get("year", 0)),
 		int(dt.get("month", 0)),
