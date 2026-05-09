@@ -208,6 +208,40 @@ func _apply_bearing_count_scaling(profile: Dictionary, pressure_mult_override: f
 	var pressure_mult := _pressure_mult() * pressure_mult_override
 	return ENCOUNTER_CONTRACTS.profile_scaled_counts(profile, pressure_mult, minimum_total)
 
+const WAVE_AUTO_STAGGER_THRESHOLD_2 := 16
+const WAVE_AUTO_STAGGER_THRESHOLD_3 := 24
+const WAVE_PER_ENCOUNTER_OVERRIDES := {
+	"Crossfire": {"force_single": true},
+	"Fortress": {"force_single": true},
+	"Suppression": {"max_waves": 2}
+}
+
+func apply_wave_staggering(profile: Dictionary) -> Dictionary:
+	if profile.is_empty():
+		return profile
+	var label := ENCOUNTER_CONTRACTS.profile_label(profile)
+	var overrides := WAVE_PER_ENCOUNTER_OVERRIDES.get(label, {}) as Dictionary
+	if bool(overrides.get("force_single", false)):
+		return profile
+	var total := ENCOUNTER_CONTRACTS.profile_total_enemy_count(profile)
+	if total <= 0:
+		return profile
+	var max_waves := int(overrides.get("max_waves", 3))
+	var wave_count := 1
+	if total >= WAVE_AUTO_STAGGER_THRESHOLD_3 and max_waves >= 3:
+		wave_count = 3
+	elif total >= WAVE_AUTO_STAGGER_THRESHOLD_2 and max_waves >= 2:
+		wave_count = 2
+	if wave_count <= 1:
+		return profile
+	var initial_fraction := 0.6 if wave_count == 2 else 0.45
+	if multiplayer_party_size > 1:
+		initial_fraction -= 0.10
+	initial_fraction = clampf(initial_fraction, 0.40, 0.85)
+	var modified := profile.duplicate(true)
+	ENCOUNTER_CONTRACTS.profile_set_wave_staggering(modified, wave_count, initial_fraction)
+	return modified
+
 func _skirmish_min_total_enemies() -> int:
 	return 3 + _difficulty_rank()
 

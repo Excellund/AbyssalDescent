@@ -222,6 +222,34 @@ func _apply_spawn_batch_payload(payload: Dictionary) -> void:
 			_world.enemy_state_sync_broadcaster.register_enemy(enemy, enemy_id)
 	_world.active_room_enemy_count = synced_enemy_count
 	_world._world_multiplayer_sync_state.apply_spawn_sync_id(source_room_sync_id)
+	_flush_queued_additive_spawn_syncs(source_room_sync_id)
+
+func _apply_additive_spawn_batch_payload(payload: Dictionary) -> void:
+	var spawn_batch: Array = payload.get("spawn_batch", []) as Array
+	var synced_enemy_count := int(payload.get("synced_enemy_count", 0))
+	for spawn_entry_variant in spawn_batch:
+		if not (spawn_entry_variant is Dictionary):
+			continue
+		var spawn_entry := spawn_entry_variant as Dictionary
+		var enemy_type := String(spawn_entry.get("enemy_type", ""))
+		var enemy_position := spawn_entry.get("position", Vector2.ZERO) as Vector2
+		var enemy_id := int(spawn_entry.get("enemy_id", -1))
+		if enemy_type.is_empty() or enemy_id <= 0:
+			continue
+		var enemy: CharacterBody2D = _world.enemy_spawner.spawn_enemy_from_sync(enemy_type, enemy_position)
+		if is_instance_valid(enemy):
+			var synced_max_health := int(spawn_entry.get("max_health", 0))
+			if synced_max_health > 0 and enemy.has_method("set_max_health_and_current"):
+				enemy.call("set_max_health_and_current", synced_max_health, synced_max_health)
+			_world.enemy_state_sync_broadcaster.register_enemy(enemy, enemy_id)
+	if synced_enemy_count > 0:
+		_world.active_room_enemy_count = synced_enemy_count
+
+func _flush_queued_additive_spawn_syncs(room_sync_id: int) -> void:
+	var sync_state: WorldMultiplayerSyncState = _world._world_multiplayer_sync_state
+	var drained: Array[Dictionary] = sync_state.consume_pending_additive_spawn_sync_payloads_for(room_sync_id)
+	for payload in drained:
+		_apply_additive_spawn_batch_payload(payload)
 
 func _apply_objective_spawn_batch_payload(payload: Dictionary) -> void:
 	var spawn_batch: Array = payload.get("spawn_batch", []) as Array

@@ -128,6 +128,11 @@ const ENEMY_DAMAGE_CLASSIFICATION := {
 }
 const ENEMY_SPAWN_ORDER: Array[String] = ["chaser", "charger", "archer", "shielder", "seamlock", "lurker", "ram", "lancer", "spectre", "pyre", "tether"]
 
+const WAVE_KILL_THRESHOLD_RATIO: float = 0.20
+const WAVE_MIN_GAP_AFTER_SPAWN: float = 1.5
+
+signal wave_spawned(report: Array, wave_index: int, total_waves: int, is_initial: bool)
+
 var world_root: Node2D
 var player: Node2D
 var player_targets_provider: Callable
@@ -142,6 +147,18 @@ var spawn_safe_radius: float = 170.0
 var spawn_transport_duration: float = 0.36
 var current_room_enemy_mutator: Dictionary = {}
 var active_temporary_enemy_mutators: Array[Dictionary] = []
+
+var bearing_wave_interval_seconds: float = 8.0
+var wave_timer_paused: bool = false
+var multiplayer_party_size: int = 1
+
+var _pending_waves: Array = []
+var _current_wave_alive: Array = []
+var _current_wave_initial_size: int = 0
+var _wave_timer_remaining: float = 0.0
+var _wave_min_gap_remaining: float = 0.0
+var _total_wave_count: int = 1
+var _next_wave_index: int = 1
 
 func initialize(world_root_node: Node2D, player_node: Node2D, rng_instance: RandomNumberGenerator, script_map: Dictionary, enemy_died_callback: Callable, player_targets_provider_callable: Callable = Callable(), enemy_damaged_callback: Callable = Callable()) -> void:
 	world_root = world_root_node
@@ -193,18 +210,168 @@ func _spawn_profile_enemies_internal(profile: Dictionary, build_report: bool) ->
 	## Multiplayer: only host decides encounter spawns and broadcasts them.
 	if MultiplayerSessionManager.is_remote_replica():
 		return []
+	_clear_pending_waves()
 
-	var report: Array[Dictionary] = []
+	var flat_types := _flatten_profile_to_ordered_types(profile)
+	var total := flat_types.size()
+	var wave_count := ENCOUNTER_CONTRACTS.profile_wave_count(profile)
+	var initial_fraction := ENCOUNTER_CONTRACTS.profile_initial_wave_fraction(profile)
+
+	var force_single := total <= 0 \
+		or wave_count <= 1
+
+	if force_single:
+		var single_report := _spawn_types_immediate(flat_types, build_report)
+		_total_wave_count = 1
+		_next_wave_index = 1
+		wave_spawned.emit(single_report, 0, 1, true)
+		return single_report
+
+	var wave_chunks := _split_into_wave_chunks(flat_types, wave_count, initial_fraction)
+	if wave_chunks.is_empty():
+		return _spawn_types_immediate(flat_types, build_report)
+
+	var initial_chunk: Array = wave_chunks[0]
+	for i in range(1, wave_chunks.size()):
+		_pending_waves.append(wave_chunks[i])
+	_total_wave_count = wave_chunks.size()
+	_next_wave_index = 1
+
+	var initial_report := _spawn_types_immediate(initial_chunk, true)
+	_current_wave_alive = _collect_alive_from_report(initial_report)
+	_current_wave_initial_size = initial_report.size()
+	_wave_timer_remaining = bearing_wave_interval_seconds
+	_wave_min_gap_remaining = WAVE_MIN_GAP_AFTER_SPAWN
+	if not _pending_waves.is_empty():
+		set_process(true)
+	wave_spawned.emit(initial_report, 0, _total_wave_count, true)
+
+	if not build_report:
+		var stripped: Array[Dictionary] = []
+		for _i in range(initial_report.size()):
+			stripped.append({})
+		return stripped
+	return initial_report
+
+func _flatten_profile_to_ordered_types(profile: Dictionary) -> Array[String]:
+	var flat: Array[String] = []
+	var groups: Array = []
+	var tether_count := 0
 	for enemy_type in ENEMY_SPAWN_ORDER:
 		var count := _profile_count_for_enemy_type(profile, enemy_type)
-		for _i in range(maxi(0, count)):
-			var enemy := _spawn_enemy_in_current_room(scripts.get(enemy_type))
-			if build_report:
-				if is_instance_valid(enemy):
-					report.append({"enemy_type": enemy_type, "enemy": enemy})
-			else:
-				report.append({})
+		if count <= 0:
+			continue
+		if enemy_type == "tether":
+			tether_count = count
+			continue
+		groups.append({"type": enemy_type, "remaining": count})
+	while not groups.is_empty():
+		var next_groups: Array = []
+		for group in groups:
+			flat.append(String(group["type"]))
+			group["remaining"] = int(group["remaining"]) - 1
+			if int(group["remaining"]) > 0:
+				next_groups.append(group)
+		groups = next_groups
+	for _t in range(tether_count):
+		flat.append("tether")
+	return flat
+
+func _split_into_wave_chunks(flat_types: Array, wave_count: int, initial_fraction: float) -> Array:
+	var total := flat_types.size()
+	if total <= 0 or wave_count <= 1:
+		return [flat_types]
+	var first_size := clampi(int(floor(float(total) * initial_fraction)), 1, total)
+	if first_size >= total:
+		return [flat_types]
+	var chunks: Array = [flat_types.slice(0, first_size)]
+	var remaining := total - first_size
+	var remaining_waves := maxi(1, wave_count - 1)
+	var per_wave := int(ceil(float(remaining) / float(remaining_waves)))
+	var idx := first_size
+	while idx < total:
+		var end_idx := mini(total, idx + per_wave)
+		chunks.append(flat_types.slice(idx, end_idx))
+		idx = end_idx
+	return chunks
+
+func _spawn_types_immediate(types: Array, build_report: bool) -> Array[Dictionary]:
+	var report: Array[Dictionary] = []
+	for type_variant in types:
+		var enemy_type := String(type_variant)
+		var enemy_script: Script = scripts.get(enemy_type)
+		if enemy_script == null:
+			continue
+		var enemy := _spawn_enemy_in_current_room(enemy_script)
+		if build_report:
+			if is_instance_valid(enemy):
+				report.append({"enemy_type": enemy_type, "enemy": enemy})
+		else:
+			report.append({})
 	return report
+
+func _collect_alive_from_report(report: Array) -> Array:
+	var alive: Array = []
+	for entry_variant in report:
+		if not (entry_variant is Dictionary):
+			continue
+		var enemy_node: Variant = (entry_variant as Dictionary).get("enemy")
+		if is_instance_valid(enemy_node) and enemy_node is Node:
+			alive.append(enemy_node)
+	return alive
+
+func _count_alive(refs: Array) -> int:
+	var count := 0
+	for entry in refs:
+		if is_instance_valid(entry) and entry is Node:
+			count += 1
+	return count
+
+func _clear_pending_waves() -> void:
+	_pending_waves.clear()
+	_current_wave_alive.clear()
+	_current_wave_initial_size = 0
+	_wave_timer_remaining = 0.0
+	_wave_min_gap_remaining = 0.0
+	_total_wave_count = 1
+	_next_wave_index = 1
+	set_process(false)
+
+func _process(delta: float) -> void:
+	if _pending_waves.is_empty():
+		set_process(false)
+		return
+	if MultiplayerSessionManager.is_remote_replica():
+		_clear_pending_waves()
+		return
+	if wave_timer_paused:
+		return
+	if _wave_min_gap_remaining > 0.0:
+		_wave_min_gap_remaining = maxf(0.0, _wave_min_gap_remaining - delta)
+		return
+	_wave_timer_remaining = maxf(0.0, _wave_timer_remaining - delta)
+	var alive_count := _count_alive(_current_wave_alive)
+	var threshold := maxi(1, int(round(float(_current_wave_initial_size) * WAVE_KILL_THRESHOLD_RATIO)))
+	var should_fire := _wave_timer_remaining <= 0.0 or alive_count <= threshold
+	if not should_fire:
+		return
+	_fire_next_wave()
+
+func _fire_next_wave() -> void:
+	if _pending_waves.is_empty():
+		set_process(false)
+		return
+	var next_chunk: Array = _pending_waves.pop_front()
+	var report := _spawn_types_immediate(next_chunk, true)
+	_current_wave_alive = _collect_alive_from_report(report)
+	_current_wave_initial_size = report.size()
+	_wave_timer_remaining = bearing_wave_interval_seconds
+	_wave_min_gap_remaining = WAVE_MIN_GAP_AFTER_SPAWN
+	var wave_index := _next_wave_index
+	_next_wave_index += 1
+	wave_spawned.emit(report, wave_index, _total_wave_count, false)
+	if _pending_waves.is_empty():
+		set_process(false)
 
 func _profile_count_for_enemy_type(profile: Dictionary, enemy_type: String) -> int:
 	match enemy_type:
@@ -237,6 +404,7 @@ func _profile_count_for_enemy_type(profile: Dictionary, enemy_type: String) -> i
 			return 0
 
 func clear_all_enemies() -> void:
+	_clear_pending_waves()
 	if not is_instance_valid(world_root):
 		return
 	for enemy in world_root.get_tree().get_nodes_in_group("enemies"):
@@ -445,7 +613,8 @@ func _pick_spawn_position_in_current_room(min_player_distance: float = -1.0, min
 	var candidate := Vector2.ZERO
 	var best_candidate := Vector2.ZERO
 	var best_player_distance := -INF
-	for _try in range(60):
+	var max_attempts := 90 if multiplayer_party_size > 1 else 60
+	for _try in range(max_attempts):
 		candidate = Vector2(
 			rng.randf_range(-half.x, half.x),
 			rng.randf_range(-half.y, half.y)

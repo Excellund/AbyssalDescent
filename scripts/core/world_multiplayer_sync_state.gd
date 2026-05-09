@@ -7,6 +7,7 @@ var pending_chosen_progress_state: Dictionary = {}
 var awaiting_authoritative_door_choice: bool = false
 var joiner_awaiting_initial_sync: bool = false
 var pending_spawn_sync_payload: Dictionary = {}
+var pending_additive_spawn_sync_payloads: Array[Dictionary] = []
 var pending_objective_spawn_sync_payloads: Array[Dictionary] = []
 var pending_boss_spawn_sync_payload: Dictionary = {}
 var current_room_sync_id: int = 0
@@ -21,6 +22,7 @@ func reset_for_new_run() -> void:
 	awaiting_authoritative_door_choice = false
 	joiner_awaiting_initial_sync = false
 	pending_spawn_sync_payload.clear()
+	pending_additive_spawn_sync_payloads.clear()
 	pending_objective_spawn_sync_payloads.clear()
 	pending_boss_spawn_sync_payload.clear()
 	current_room_sync_id = 0
@@ -30,6 +32,7 @@ func reset_for_new_run() -> void:
 
 func clear_pending_spawn_payloads() -> void:
 	pending_spawn_sync_payload.clear()
+	pending_additive_spawn_sync_payloads.clear()
 	pending_objective_spawn_sync_payloads.clear()
 	pending_boss_spawn_sync_payload.clear()
 
@@ -90,6 +93,20 @@ func queue_pending_spawn_sync_payload_if_newer(payload: Dictionary, source_room_
 	var pending_sync_id := int(pending_spawn_sync_payload.get("room_sync_id", 0))
 	if source_room_sync_id >= pending_sync_id:
 		pending_spawn_sync_payload = payload
+
+func queue_pending_additive_spawn_sync_payload(payload: Dictionary) -> void:
+	pending_additive_spawn_sync_payloads.append(payload)
+
+func consume_pending_additive_spawn_sync_payloads_for(room_sync_id: int) -> Array[Dictionary]:
+	var drained: Array[Dictionary] = []
+	var remaining: Array[Dictionary] = []
+	for payload in pending_additive_spawn_sync_payloads:
+		if int(payload.get("room_sync_id", 0)) == room_sync_id:
+			drained.append(payload)
+		else:
+			remaining.append(payload)
+	pending_additive_spawn_sync_payloads = remaining
+	return drained
 
 func consume_pending_boss_spawn_sync_payload() -> Dictionary:
 	if pending_boss_spawn_sync_payload.is_empty():

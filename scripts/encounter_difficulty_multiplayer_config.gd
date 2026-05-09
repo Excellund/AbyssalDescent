@@ -29,6 +29,7 @@ static var BEARING_DEFINITIONS := {
 		
 		# === MULTIPLAYER OVERRIDES ===
 		"base_enemy_pressure_mult": 0.6,  ## Match singleplayer; party-size mult adds the co-op count bump
+		"wave_interval_seconds": 12.0,  ## Upper bound between waves; kill-threshold can fire earlier
 		"depth_pressure_divisor": 1.5,  ## Match singleplayer ramp; lower = faster depth ramp
 		"specialist_enemy_lurker_offset": 5,
 		"specialist_enemy_ram_offset": 6,
@@ -67,6 +68,7 @@ static var BEARING_DEFINITIONS := {
 		
 		# === MULTIPLAYER OVERRIDES ===
 		"base_enemy_pressure_mult": 1.0,  ## Match singleplayer; party-size mult adds the co-op count bump
+		"wave_interval_seconds": 10.0,
 		"depth_pressure_divisor": 1.0,  ## Match singleplayer ramp; lower = faster depth ramp
 		"specialist_enemy_lurker_offset": 4,
 		"specialist_enemy_ram_offset": 5,
@@ -105,6 +107,7 @@ static var BEARING_DEFINITIONS := {
 		
 		# === MULTIPLAYER OVERRIDES ===
 		"base_enemy_pressure_mult": 1.25,  ## Match singleplayer; party-size mult adds the co-op count bump
+		"wave_interval_seconds": 9.0,
 		"depth_pressure_divisor": 0.8,  ## Match singleplayer ramp; lower = faster depth ramp
 		"specialist_enemy_lurker_offset": 3,
 		"specialist_enemy_ram_offset": 4,
@@ -143,6 +146,7 @@ static var BEARING_DEFINITIONS := {
 		
 		# === MULTIPLAYER OVERRIDES ===
 		"base_enemy_pressure_mult": 1.5,  ## Match singleplayer; party-size mult adds the co-op count bump
+		"wave_interval_seconds": 8.0,
 		"depth_pressure_divisor": 0.6,  ## Match singleplayer ramp; lower = faster depth ramp
 		"specialist_enemy_lurker_offset": 2,
 		"specialist_enemy_ram_offset": 3,

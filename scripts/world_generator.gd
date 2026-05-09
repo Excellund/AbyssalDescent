@@ -813,6 +813,10 @@ func _setup_enemy_spawner_system() -> void:
 		"pyre": ENEMY_PYRE_SCRIPT,
 		"tether": ENEMY_TETHER_SCRIPT
 	}, Callable(self, "_on_room_enemy_died"), Callable(self, "_get_multiplayer_player_nodes"))
+	if is_instance_valid(difficulty_provider):
+		enemy_spawner.multiplayer_party_size = int(difficulty_provider.get_party_size())
+	if enemy_spawner.has_signal("wave_spawned") and not enemy_spawner.wave_spawned.is_connected(_on_enemy_spawner_wave_spawned):
+		enemy_spawner.wave_spawned.connect(_on_enemy_spawner_wave_spawned)
 
 func _setup_ui_phase() -> void:
 	hud = WORLD_HUD_SCRIPT.new()
@@ -2034,6 +2038,8 @@ func _apply_difficulty_tier_bonuses(difficulty_tier: int) -> void:
 	current_difficulty_tier = difficulty_tier
 	current_difficulty_config = difficulty_provider.resolve_tier_config(difficulty_tier)
 	var difficulty_config := current_difficulty_config
+	if is_instance_valid(enemy_spawner):
+		enemy_spawner.bearing_wave_interval_seconds = float(difficulty_config.get("wave_interval_seconds", 8.0))
 	var encounter_target := int(difficulty_config.get("encounter_count_before_boss", encounter_count))
 	if encounter_target > 0:
 		encounter_count = encounter_target
@@ -2627,6 +2633,8 @@ func _begin_room(profile: Dictionary) -> void:
 	_doors_spawn_ready = false
 	if profile.is_empty():
 		return
+	if is_instance_valid(encounter_profile_builder) and encounter_profile_builder.has_method("apply_wave_staggering"):
+		profile = encounter_profile_builder.apply_wave_staggering(profile)
 	_prepare_room_sync_transition()
 	choosing_next_room = false
 	door_options.clear()
@@ -2660,26 +2668,20 @@ func _begin_room(profile: Dictionary) -> void:
 	_apply_camera_bounds_for_room(current_effective_room_size)
 	if is_multiplayer:
 		if MultiplayerSessionManager.should_broadcast():
-			var spawn_report: Array[Dictionary] = enemy_spawner.spawn_profile_enemies_report(profile)
-			active_room_enemy_count = spawn_report.size()
-			var spawn_batch: Array = []
-			for spawn_entry in spawn_report:
-				var enemy: Node2D = spawn_entry.get("enemy") as Node2D
-				if not is_instance_valid(enemy):
-					continue
-				var enemy_id: int = enemy_state_sync_broadcaster.register_enemy(enemy)
-				spawn_batch.append({
-					"enemy_id": enemy_id,
-					"enemy_type": String(spawn_entry.get("enemy_type", "")),
-					"position": enemy.global_position,
-					"max_health": int(enemy.get_max_health()) if enemy.has_method("get_max_health") else 0
-				})
-			_sync_spawn_enemy_batch.rpc(spawn_batch, active_room_enemy_count, current_room_label, room_depth, _world_multiplayer_sync_state.current_room_sync_id)
+			var planned_total := ENCOUNTER_CONTRACTS.profile_total_enemy_count(profile)
+			active_room_enemy_count = planned_total
+			var initial_report: Array[Dictionary] = enemy_spawner.spawn_profile_enemies_report(profile)
+			if planned_total <= 0:
+				active_room_enemy_count = initial_report.size()
 		else:
 			active_room_enemy_count = 0
 			enemy_state_sync_receiver.flush_pending_spawn_syncs()
 	else:
-		active_room_enemy_count = _spawn_profile_enemies(profile)
+		var planned_total := ENCOUNTER_CONTRACTS.profile_total_enemy_count(profile)
+		active_room_enemy_count = planned_total
+		var initial_wave_count := _spawn_profile_enemies(profile)
+		if planned_total <= 0:
+			active_room_enemy_count = initial_wave_count
 	objective_lifecycle_coordinator.begin_for_new_room(objective_runtime, profile)
 	_start_encounter_intro_grace()
 
@@ -3030,8 +3032,35 @@ func _spawn_boss_for_stage(boss_stage: int, spawn_position: Vector2) -> Node2D:
 		boss.damage_received.connect(func(applied_amount: int, _remaining_health: int): _on_enemy_damage_received(applied_amount))
 	return boss
 
+func _on_enemy_spawner_wave_spawned(report: Array, _wave_index: int, _total_waves: int, is_initial: bool) -> void:
+	if not is_multiplayer:
+		return
+	if not MultiplayerSessionManager.should_broadcast():
+		return
+	if not is_instance_valid(enemy_state_sync_broadcaster):
+		return
+	var spawn_batch: Array = []
+	for entry_variant in report:
+		if not (entry_variant is Dictionary):
+			continue
+		var spawn_entry := entry_variant as Dictionary
+		var enemy: Node2D = spawn_entry.get("enemy") as Node2D
+		if not is_instance_valid(enemy):
+			continue
+		var enemy_id: int = enemy_state_sync_broadcaster.register_enemy(enemy)
+		spawn_batch.append({
+			"enemy_id": enemy_id,
+			"enemy_type": String(spawn_entry.get("enemy_type", "")),
+			"position": enemy.global_position,
+			"max_health": int(enemy.get_max_health()) if enemy.has_method("get_max_health") else 0
+		})
+	if spawn_batch.is_empty() and not is_initial:
+		return
+	var is_additive := not is_initial
+	_sync_spawn_enemy_batch.rpc(spawn_batch, active_room_enemy_count, current_room_label, room_depth, _world_multiplayer_sync_state.current_room_sync_id, is_additive)
+
 @rpc("reliable", "authority")
-func _sync_spawn_enemy_batch(spawn_batch: Array, synced_enemy_count: int, source_room_label: String = "", source_room_depth: int = 0, source_room_sync_id: int = 0) -> void:
+func _sync_spawn_enemy_batch(spawn_batch: Array, synced_enemy_count: int, source_room_label: String = "", source_room_depth: int = 0, source_room_sync_id: int = 0, is_additive_wave: bool = false) -> void:
 	if not MultiplayerSessionManager.is_remote_replica():
 		return
 	if _world_multiplayer_sync_state.is_stale_room_sync_id(source_room_sync_id):
@@ -3041,8 +3070,15 @@ func _sync_spawn_enemy_batch(spawn_batch: Array, synced_enemy_count: int, source
 		"synced_enemy_count": synced_enemy_count,
 		"room_label": source_room_label,
 		"room_depth": source_room_depth,
-		"room_sync_id": source_room_sync_id
+		"room_sync_id": source_room_sync_id,
+		"is_additive_wave": is_additive_wave
 	}
+	if is_additive_wave:
+		if int(_world_multiplayer_sync_state.last_applied_spawn_sync_id) == source_room_sync_id:
+			enemy_state_sync_receiver._apply_additive_spawn_batch_payload(payload)
+			return
+		_world_multiplayer_sync_state.queue_pending_additive_spawn_sync_payload(payload)
+		return
 	if not enemy_state_sync_receiver.can_apply_spawn_sync(payload):
 		_world_multiplayer_sync_state.queue_pending_spawn_sync_payload_if_newer(payload, source_room_sync_id)
 		return
@@ -3810,6 +3846,8 @@ func _start_encounter_intro_grace() -> void:
 	var local_node := _find_local_player_node()
 	if is_instance_valid(local_node) and local_node.has_method("set"):
 		local_node.set("encounter_input_frozen", true)
+	if is_instance_valid(enemy_spawner):
+		enemy_spawner.wave_timer_paused = true
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		if not (enemy_node is Node):
 			continue
@@ -3889,6 +3927,8 @@ func _exit_encounter_intro_grace() -> void:
 	if not encounter_intro_grace_active:
 		return
 	encounter_intro_grace_active = false
+	if is_instance_valid(enemy_spawner):
+		enemy_spawner.wave_timer_paused = false
 	var local_node := _find_local_player_node()
 	if is_instance_valid(local_node) and local_node.has_method("set"):
 		local_node.set("encounter_input_frozen", false)

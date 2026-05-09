@@ -58,6 +58,8 @@ const PROFILE_KEY_OBJECTIVE_ZONE_RADIUS := "objective_zone_radius"
 const PROFILE_KEY_OBJECTIVE_PROGRESS_GOAL := "objective_progress_goal"
 const PROFILE_KEY_OBJECTIVE_PROGRESS_DECAY := "objective_progress_decay"
 const PROFILE_KEY_OBJECTIVE_CONTEST_THRESHOLD := "objective_contest_threshold"
+const PROFILE_KEY_WAVE_COUNT := "wave_count"
+const PROFILE_KEY_INITIAL_WAVE_FRACTION := "initial_wave_fraction"
 
 const MUTATOR_KEY_NAME := "name"
 const MUTATOR_KEY_THEME_COLOR := "theme_color"
@@ -667,6 +669,10 @@ static func normalize_profile(value: Variant) -> Dictionary:
 		int(input.get(PROFILE_KEY_TETHER_COUNT, 0))
 	)
 	normalized[PROFILE_KEY_SEAMLOCK_COUNT] = int(input.get(PROFILE_KEY_SEAMLOCK_COUNT, 0))
+	if input.has(PROFILE_KEY_WAVE_COUNT):
+		normalized[PROFILE_KEY_WAVE_COUNT] = maxi(1, int(input.get(PROFILE_KEY_WAVE_COUNT, 1)))
+	if input.has(PROFILE_KEY_INITIAL_WAVE_FRACTION):
+		normalized[PROFILE_KEY_INITIAL_WAVE_FRACTION] = clampf(float(input.get(PROFILE_KEY_INITIAL_WAVE_FRACTION, 1.0)), 0.1, 1.0)
 	var objective_kind := String(input.get(PROFILE_KEY_OBJECTIVE_KIND, ""))
 	if not objective_kind.is_empty():
 		normalized[PROFILE_KEY_OBJECTIVE_KIND] = objective_kind
@@ -743,6 +749,16 @@ static func profile_enemy_mutator(profile_value: Dictionary) -> Dictionary:
 
 static func profile_player_mutator(profile_value: Dictionary) -> Dictionary:
 	return profile_value.get(PROFILE_KEY_PLAYER_MUTATOR, {}) as Dictionary
+
+static func profile_wave_count(profile_value: Dictionary) -> int:
+	return maxi(1, int(profile_value.get(PROFILE_KEY_WAVE_COUNT, 1)))
+
+static func profile_initial_wave_fraction(profile_value: Dictionary) -> float:
+	return clampf(float(profile_value.get(PROFILE_KEY_INITIAL_WAVE_FRACTION, 1.0)), 0.1, 1.0)
+
+static func profile_set_wave_staggering(profile_value: Dictionary, wave_count: int, initial_wave_fraction: float) -> void:
+	profile_value[PROFILE_KEY_WAVE_COUNT] = maxi(1, wave_count)
+	profile_value[PROFILE_KEY_INITIAL_WAVE_FRACTION] = clampf(initial_wave_fraction, 0.1, 1.0)
 
 static func profile_set_room_size(profile_value: Dictionary, room_size: Vector2) -> void:
 	profile_value[PROFILE_KEY_ROOM_SIZE] = room_size
