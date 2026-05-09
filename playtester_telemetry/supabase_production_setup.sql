@@ -31,6 +31,10 @@ alter table public.telemetry_runs add column if not exists character_id text not
 alter table public.telemetry_runs add column if not exists reward_offers jsonb not null default '[]'::jsonb;
 alter table public.telemetry_runs add column if not exists room_entries jsonb not null default '[]'::jsonb;
 alter table public.telemetry_runs add column if not exists door_choices jsonb not null default '[]'::jsonb;
+alter table public.telemetry_runs add column if not exists character_name text not null default 'Unknown';
+alter table public.telemetry_runs add column if not exists player_uuid text not null default '';
+alter table public.telemetry_runs add column if not exists player_name text not null default '';
+alter table public.telemetry_runs add column if not exists leaderboard_patch_key text not null default 'dev';
 
 create unique index if not exists telemetry_runs_run_id_idx
   on public.telemetry_runs (run_id);
