@@ -77,16 +77,35 @@ func _on_request_completed(result: int, response_code: int, _headers: PackedStri
 	var attempt_count := maxi(1, _active_attempt_count)
 	_active_entry_id = ""
 	_active_attempt_count = 0
+	var response_text := body.get_string_from_utf8()
 	if result == HTTPRequest.RESULT_SUCCESS and response_code >= 200 and response_code < 300:
-		LEADERBOARD_QUEUE.mark_success(entry_id)
+		if _is_rpc_response_ok(response_text):
+			LEADERBOARD_QUEUE.mark_success(entry_id)
+			return
+		var rpc_error := _extract_rpc_error(response_text)
+		if rpc_error.is_empty():
+			rpc_error = "rpc_returned_not_ok"
+		_mark_retry(entry_id, attempt_count, "rpc_%s" % rpc_error)
 		return
-	var response_preview := body.get_string_from_utf8()
+	var response_preview := response_text
 	if response_preview.length() > 120:
 		response_preview = response_preview.substr(0, 120)
 	var error_message := "http_result_%d_code_%d" % [result, response_code]
 	if not response_preview.is_empty():
 		error_message = "%s_%s" % [error_message, response_preview]
 	_mark_retry(entry_id, attempt_count, error_message)
+
+func _is_rpc_response_ok(response_text: String) -> bool:
+	var parsed: Variant = JSON.parse_string(response_text)
+	if parsed is Dictionary:
+		return bool((parsed as Dictionary).get("ok", false))
+	return false
+
+func _extract_rpc_error(response_text: String) -> String:
+	var parsed: Variant = JSON.parse_string(response_text)
+	if parsed is Dictionary:
+		return String((parsed as Dictionary).get("error", "")).strip_edges()
+	return ""
 
 func _mark_retry(entry_id: String, attempt_count: int, error_message: String) -> void:
 	var capped_attempt := mini(12, maxi(1, attempt_count))

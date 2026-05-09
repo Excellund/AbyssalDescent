@@ -7,7 +7,6 @@ const RARITY_EPIC := Color(0.82, 0.58, 1.0, 0.96)
 const RARITY_LEGENDARY := Color(1.0, 0.74, 0.42, 1.0)
 
 var _unlocks_label: Label
-var _timeline_scroll: ScrollContainer
 var _timeline_list: VBoxContainer
 var _timeline_section: VBoxContainer
 
@@ -38,17 +37,10 @@ func _init() -> void:
 	timeline_title.add_theme_color_override("font_color", Color(RARITY_RARE.r, RARITY_RARE.g, RARITY_RARE.b, 0.94))
 	_timeline_section.add_child(timeline_title)
 
-	_timeline_scroll = ScrollContainer.new()
-	_timeline_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_timeline_scroll.custom_minimum_size = Vector2(0.0, 160.0)
-	_timeline_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_timeline_scroll.clip_contents = true
-	_timeline_section.add_child(_timeline_scroll)
-
 	_timeline_list = VBoxContainer.new()
 	_timeline_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_timeline_list.add_theme_constant_override("separation", 3)
-	_timeline_scroll.add_child(_timeline_list)
+	_timeline_section.add_child(_timeline_list)
 
 func set_progression(unlocks: Array, timeline: Array) -> void:
 	if unlocks.is_empty():
@@ -65,7 +57,6 @@ func set_progression(unlocks: Array, timeline: Array) -> void:
 		empty.add_theme_color_override("font_color", Color(RARITY_COMMON.r, RARITY_COMMON.g, RARITY_COMMON.b, 0.82))
 		_timeline_list.add_child(empty)
 		return
-	var shown := 0
 	for i in range(timeline.size() - 1, -1, -1):
 		var event := timeline[i] as Dictionary
 		var entry := Label.new()
@@ -74,9 +65,6 @@ func set_progression(unlocks: Array, timeline: Array) -> void:
 		entry.add_theme_color_override("font_color", Color(RARITY_COMMON.r, RARITY_COMMON.g, RARITY_COMMON.b, 0.9))
 		entry.text = "Depth %d · %s" % [int(event.get("depth", 0)), String(event.get("label", "Unknown"))]
 		_timeline_list.add_child(entry)
-		shown += 1
-		if shown >= 8:
-			break
 
 func set_timeline_visible(timeline_visible: bool) -> void:
 	_timeline_section.visible = timeline_visible

@@ -252,6 +252,7 @@ create table if not exists public.leaderboard_runs (
   duration_seconds int not null,
   clear_time_ms bigint not null,
   leaderboard_patch_key text not null,
+  game_version text not null default 'dev',
   started_at_unix bigint not null,
   ended_at_unix bigint not null,
   is_debug boolean not null default false,
@@ -265,6 +266,7 @@ alter table public.leaderboard_runs add column if not exists run_summary jsonb n
 alter table public.leaderboard_runs add column if not exists clear_time_ms bigint not null default 0;
 alter table public.leaderboard_runs add column if not exists party_size int not null default 1;
 alter table public.leaderboard_runs add column if not exists is_multiplayer boolean not null default false;
+alter table public.leaderboard_runs add column if not exists game_version text not null default 'dev';
 
 create unique index if not exists leaderboard_runs_run_id_idx
   on public.leaderboard_runs (run_id);
@@ -325,6 +327,7 @@ declare
   v_character_id text := lower(trim(coalesce(p_run_summary->>'character_id', 'unknown')));
   v_character_name text := trim(coalesce(p_run_summary->>'character_name', 'Unknown'));
   v_patch_key text := lower(trim(coalesce(p_run_summary->>'leaderboard_patch_key', 'dev')));
+  v_game_version text := trim(coalesce(p_run_summary->>'game_version', 'dev'));
   v_outcome text := lower(trim(coalesce(p_run_summary->>'outcome', 'unknown')));
   v_duration_seconds int := greatest(0, coalesce((p_run_summary->>'duration_seconds')::int, 0));
   v_started_at_unix bigint := greatest(0, coalesce((p_run_summary->>'started_at_unix')::bigint, 0));
@@ -365,6 +368,9 @@ begin
   if v_patch_key = '' then
     v_patch_key := 'dev';
   end if;
+  if v_game_version = '' then
+    v_game_version := 'dev';
+  end if;
 
   v_clear_time_ms := (v_duration_seconds::bigint * 1000);
 
@@ -379,6 +385,7 @@ begin
     duration_seconds,
     clear_time_ms,
     leaderboard_patch_key,
+    game_version,
     started_at_unix,
     ended_at_unix,
     is_debug,
@@ -397,6 +404,7 @@ begin
     v_duration_seconds,
     v_clear_time_ms,
     v_patch_key,
+    v_game_version,
     v_started_at_unix,
     v_ended_at_unix,
     false,
@@ -415,6 +423,7 @@ begin
     duration_seconds = excluded.duration_seconds,
     clear_time_ms = excluded.clear_time_ms,
     leaderboard_patch_key = excluded.leaderboard_patch_key,
+    game_version = excluded.game_version,
     started_at_unix = excluded.started_at_unix,
     ended_at_unix = excluded.ended_at_unix,
     is_debug = excluded.is_debug,

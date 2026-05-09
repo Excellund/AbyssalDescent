@@ -175,19 +175,28 @@ func _reload_patch_options(token: int) -> void:
 		return
 	_patch_selector.clear()
 	var patch_rows := patch_result.get("patches", []) as Array
+	var current_key_normalized := _current_patch_key.strip_edges().to_lower()
+	var ordered_keys: Array[String] = []
+	if not current_key_normalized.is_empty():
+		ordered_keys.append(current_key_normalized)
 	for patch_variant in patch_rows:
 		var patch := patch_variant as Dictionary
 		var patch_key := String(patch.get("patch_key", "")).strip_edges().to_lower()
 		if patch_key.is_empty():
 			continue
-		var label_prefix := "Current" if bool(patch.get("is_current", false)) else "Archive"
-		_patch_selector.add_item("%s: %s" % [label_prefix, patch_key])
+		if ordered_keys.has(patch_key):
+			continue
+		ordered_keys.append(patch_key)
+	for ordered_key in ordered_keys:
+		var label_prefix := "Current" if ordered_key == current_key_normalized else "Archive"
+		_patch_selector.add_item("%s: %s" % [label_prefix, ordered_key])
 		var index := _patch_selector.item_count - 1
-		_patch_selector.set_item_metadata(index, patch_key)
+		_patch_selector.set_item_metadata(index, ordered_key)
 	if _patch_selector.item_count == 0:
 		_patch_selector.add_item("Current: %s" % _current_patch_key)
 		_patch_selector.set_item_metadata(0, _current_patch_key)
-	_select_patch_key_or_default(_selected_patch_key)
+	var preferred_key := _selected_patch_key if not _selected_patch_key.is_empty() else current_key_normalized
+	_select_patch_key_or_default(preferred_key)
 
 func _reload_entries(token: int) -> void:
 	if _service == null:
