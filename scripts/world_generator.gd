@@ -18,7 +18,6 @@ const ENEMY_BOSS_3_SCRIPT := preload("res://scripts/enemy_boss_3.gd")
 const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 const MUSIC_SYSTEM_SCRIPT := preload("res://scripts/music_system.gd")
-const DIFFICULTY_CONFIG_MULTIPLAYER := preload("res://scripts/encounter_difficulty_multiplayer_config.gd")
 const ENEMY_SPAWNER_SCRIPT := preload("res://scripts/enemy_spawner.gd")
 const ENCOUNTER_PROFILE_BUILDER_SCRIPT := preload("res://scripts/encounter_profile_builder.gd")
 const ENCOUNTER_FLOW_SYSTEM_SCRIPT := preload("res://scripts/encounter_flow_system.gd")
@@ -44,6 +43,7 @@ const RUN_SESSION_SCRIPT := preload("res://scripts/core/run_session.gd")
 const RUN_SUMMARY_RECORDER_SCRIPT := preload("res://scripts/core/run_summary_recorder.gd")
 const ENEMY_STATE_SYNC_BROADCASTER_SCRIPT := preload("res://scripts/core/enemy_state_sync_broadcaster.gd")
 const ENEMY_STATE_SYNC_RECEIVER_SCRIPT := preload("res://scripts/core/enemy_state_sync_receiver.gd")
+const DIFFICULTY_SCALING_PROVIDER_SCRIPT := preload("res://scripts/core/difficulty_scaling_provider.gd")
 const PLAYER_PROFILE_SCRIPT := preload("res://scripts/core/player_profile.gd")
 const PROFILE_PERSISTENCE_STORE_SCRIPT := preload("res://scripts/core/profile_persistence_store.gd")
 const RUN_SUMMARY_WITH_PROFILE_SCRIPT := preload("res://scripts/core/run_summary_with_profile.gd")
@@ -148,7 +148,7 @@ var rng := RandomNumberGenerator.new()
 var power_registry_instance: Node
 var current_difficulty_tier: int = 0
 var current_difficulty_config: Dictionary = {}
-var _multiplayer_difficulty_config = DIFFICULTY_CONFIG_MULTIPLAYER.new()
+var difficulty_provider
 var current_character_id: String = "bastion"
 
 var rooms_cleared: int = 0
@@ -384,6 +384,7 @@ func _initialize_bootstrap_context() -> void:
 	enemy_state_sync_broadcaster = ENEMY_STATE_SYNC_BROADCASTER_SCRIPT.new(self)
 	enemy_state_sync_broadcaster.perf_attribution_enabled = _perf_attribution_enabled
 	enemy_state_sync_receiver = ENEMY_STATE_SYNC_RECEIVER_SCRIPT.new(self)
+	difficulty_provider = DIFFICULTY_SCALING_PROVIDER_SCRIPT.new(self)
 	profile_persistence_store = PROFILE_PERSISTENCE_STORE_SCRIPT.new()
 	current_player_profile = profile_persistence_store.load_or_create_profile()
 	
@@ -702,7 +703,7 @@ func _setup_encounter_profile_builder_system() -> void:
 	if encounter_profile_builder.has_method("set_use_multiplayer_difficulty_config"):
 		encounter_profile_builder.call("set_use_multiplayer_difficulty_config", is_multiplayer)
 	if encounter_profile_builder.has_method("set_multiplayer_party_size"):
-		encounter_profile_builder.call("set_multiplayer_party_size", _get_multiplayer_party_size_for_scaling())
+		encounter_profile_builder.call("set_multiplayer_party_size", difficulty_provider.get_party_size())
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	var should_apply_difficulty := false
 	var difficulty_tier := current_difficulty_tier
@@ -1983,67 +1984,12 @@ func _enqueue_leaderboard_submission(run_summary: Dictionary) -> void:
 		return
 	run_context.enqueue_leaderboard_summary(run_summary)
 
-func _get_difficulty_config_provider() -> Object:
-	if is_multiplayer:
-		if _multiplayer_difficulty_config == null:
-			_multiplayer_difficulty_config = DIFFICULTY_CONFIG_MULTIPLAYER.new()
-		return _multiplayer_difficulty_config
-	return DIFFICULTY_CONFIG
-
-func _resolve_current_difficulty_config(tier: int) -> Dictionary:
-	var provider: Object = _get_difficulty_config_provider()
-	if provider != null and provider.has_method("get_tier_config"):
-		return provider.get_tier_config(tier)
-	return DIFFICULTY_CONFIG.get_tier_config(tier)
-
-func _get_multiplayer_party_size_for_scaling() -> int:
-	if not is_multiplayer:
-		return 1
-	if not MultiplayerSessionManager.is_session_connected():
-		return 1
-	var session_info := MultiplayerSessionManager.get_session_info() if MultiplayerSessionManager.has_method("get_session_info") else {}
-	var peer_count := int(session_info.get("connected_peer_count", 0))
-	if peer_count <= 0 and MultiplayerSessionManager.has_method("get_peer_ids"):
-		peer_count = (MultiplayerSessionManager.get_peer_ids() as Array).size()
-	if peer_count <= 0:
-		peer_count = _get_multiplayer_player_nodes().size()
-	return clampi(peer_count, 1, 4)
-
-func _get_multiplayer_health_scaling_mult(is_boss: bool) -> float:
-	var party_size := _get_multiplayer_party_size_for_scaling()
-	if party_size <= 1:
-		return 1.0
-	var per_extra_key := "coop_boss_health_per_extra_player" if is_boss else "coop_enemy_health_per_extra_player"
-	var curve_power_key := "coop_boss_health_curve_power" if is_boss else "coop_enemy_health_curve_power"
-	var cap_key := "coop_boss_health_max_mult" if is_boss else "coop_enemy_health_max_mult"
-	var per_extra := maxf(0.0, float(current_difficulty_config.get(per_extra_key, 0.0)))
-	if per_extra <= 0.0:
-		return 1.0
-	var curve_power := maxf(0.01, float(current_difficulty_config.get(curve_power_key, 1.0)))
-	var cap_mult := maxf(1.0, float(current_difficulty_config.get(cap_key, 4.0)))
-	var extras := float(party_size - 1)
-	var health_mult := 1.0 + per_extra * pow(extras, curve_power)
-	return clampf(health_mult, 1.0, cap_mult)
-
-func _build_multiplayer_enemy_durability_mutator() -> Dictionary:
-	if not is_multiplayer:
-		return {}
-	var health_mult := _get_multiplayer_health_scaling_mult(false)
-	if health_mult <= 1.001:
-		return {}
-	return {
-		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ID: "coop_durability_scaling",
-		ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME: "Co-op Fortification",
-		ENCOUNTER_CONTRACTS.MUTATOR_KEY_TARGET_SCOPE: "enemy",
-		ENCOUNTER_CONTRACTS.MUTATOR_STAT_ENEMY_HEALTH_MULT: health_mult
-	}
-
 func _apply_difficulty_tier_bonuses(difficulty_tier: int) -> void:
 	if not is_instance_valid(player):
 		return
 	
 	current_difficulty_tier = difficulty_tier
-	current_difficulty_config = _resolve_current_difficulty_config(difficulty_tier)
+	current_difficulty_config = difficulty_provider.resolve_tier_config(difficulty_tier)
 	var difficulty_config := current_difficulty_config
 	var encounter_target := int(difficulty_config.get("encounter_count_before_boss", encounter_count))
 	if encounter_target > 0:
@@ -2094,7 +2040,7 @@ func _apply_boss_difficulty_scaling(boss: CharacterBody2D) -> void:
 	if not is_instance_valid(boss):
 		return
 	var boss_mult := _get_boss_difficulty_mult()
-	var boss_health_mult := boss_mult * _get_multiplayer_health_scaling_mult(true)
+	var boss_health_mult := boss_mult * difficulty_provider.get_health_scaling_mult(true)
 	if is_equal_approx(boss_mult, 1.0) and is_equal_approx(boss_health_mult, 1.0):
 		return
 	var base_max_health: int = int(boss.get_max_health())
@@ -3199,7 +3145,7 @@ func _get_active_enemy_mutators_for_room() -> Array[Dictionary]:
 		var player_mutators := local_player.get_active_enemy_objective_mutators() as Array[Dictionary]
 		for mutator in player_mutators:
 			result.append((mutator as Dictionary).duplicate(true))
-	var coop_scaling_mutator := _build_multiplayer_enemy_durability_mutator()
+	var coop_scaling_mutator := difficulty_provider.build_enemy_durability_mutator()
 	if not coop_scaling_mutator.is_empty():
 		result.append(coop_scaling_mutator)
 	return result
