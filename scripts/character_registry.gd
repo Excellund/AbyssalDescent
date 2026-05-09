@@ -67,7 +67,7 @@ const CHARACTER_DEFINITIONS := {
 		"stat_modifiers": {
 			"max_health": 70,
 			"max_speed": 260.0,
-			"damage": 18,
+			"damage": 22,
 			"dash_cooldown": 0.30,
 			"attack_cooldown": 0.24
 		},

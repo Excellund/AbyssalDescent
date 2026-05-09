@@ -397,13 +397,13 @@ var iron_retort_guard_duration: float = 1.5
 var iron_retort_guard_resist_ratio: float = 0.25
 var sigil_burst_ready: bool = false
 var veilstep_rhythm_shards: int = 0
-var veilstep_rhythm_shards_max: int = 3
+var veilstep_rhythm_shards_max: int = 2
 var veilstep_rhythm_surge_ready: bool = false
 var veilstep_rhythm_surge_window_left: float = 0.0
 var veilstep_rhythm_surge_duration: float = 4.0
 var veilstep_rhythm_empowered_dash_active: bool = false
-var veilstep_rhythm_wave_radius: float = 84.0
-var veilstep_rhythm_wave_damage_ratio: float = 1.15
+var veilstep_rhythm_wave_radius: float = 96.0
+var veilstep_rhythm_wave_damage_ratio: float = 1.6
 var veilstep_rhythm_touched_enemy_ids: Dictionary = {}
 var farline_focus_min_range: float = 98.0
 var farline_focus_max_range: float = 132.0
@@ -563,6 +563,7 @@ func _try_start_dash(direction: Vector2) -> void:
 	phantom_step_ghost_positions.clear()
 	phantom_step_ghost_emit_cd = 0.0
 	veilstep_rhythm_touched_enemy_ids.clear()
+	veilstep_rhythm_shard_awarded_this_dash = false
 	static_wake_trail_emit_cooldown = 0.0
 	static_wake_has_last_emit_position = false
 	_set_dash_phasing(true)
@@ -2444,6 +2445,8 @@ func _apply_veilstep_rhythm_during_dash(dash_start: Vector2, dash_end: Vector2) 
 		return
 	if veilstep_rhythm_surge_ready:
 		return
+	if veilstep_rhythm_shard_awarded_this_dash:
+		return
 	var touched_count := 0
 	var touch_radius := 28.0
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
@@ -2462,6 +2465,7 @@ func _apply_veilstep_rhythm_during_dash(dash_start: Vector2, dash_end: Vector2) 
 		touched_count += 1
 	if touched_count <= 0:
 		return
+	veilstep_rhythm_shard_awarded_this_dash = true
 	var old_shards := veilstep_rhythm_shards
 	veilstep_rhythm_shards = mini(veilstep_rhythm_shards_max, veilstep_rhythm_shards + 1)
 	if player_feedback != null:
