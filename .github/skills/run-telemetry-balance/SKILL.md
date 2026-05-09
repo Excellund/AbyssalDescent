@@ -114,21 +114,27 @@ There is no direct "fun" signal in the telemetry. Use this proxy chain:
 4. **Character diversity** (`character_popularity`): when players cluster on one character, they are either optimizing heavily or the other options feel unrewarding.
 Synthesize these four signals into POSITIVE / MIXED / NEGATIVE. Always state which signals drove the assessment and note that this is not a direct player satisfaction measure.
 
-## Full Analysis Workflow (13 Dimensions)
-When a full analysis is requested, work through all 13 dimensions in order. The dedicated Telemetry Analyst agent applies this workflow automatically via `fetch_latest_version_analysis.ps1`.
+## Full Analysis Workflow (17 Dimensions)
+When a full analysis is requested, work through all 17 dimensions in order. The dedicated Telemetry Analyst agent applies this workflow automatically via `fetch_latest_version_analysis.ps1`. The framework prioritizes decision quality and strategic diversity over numerical symmetry — popularity alone is not a flag.
 
 | # | Dimension | Key Fields | Flag Threshold |
 |---|-----------|------------|----------------|
-| D1 | Dataset quality | run_count, outcomes | WARN < 10 runs; STOP < 5 |
+| D1 | Dataset quality | run_count, outcomes, character/bearing skew | WARN < 10 runs; STOP < 5 |
 | D2 | Difficulty calibration | outcomes (clear rate), death_timing | FLAG < 10% or > 70% clear rate |
-| D3 | Arcana pick concentration | top_arcana_picks | FLAG if top pick > 50% of total |
-| D4 | Arcana never picked | never_picked_arcana, arcana_pick_rates | FLAG all entries (buff/rework candidates) |
-| D5 | Arcana win rate | arcana_outcomes | FLAG death_rate > 80% with ≥3 runs |
-| D6 | Boon pick concentration | top_boon_picks, boon_pick_rates | FLAG if top boon > 40% of total |
-| D7 | Damage pressure | encounter_pressure.damage_per_entry | FLAG if ≥ 2× median |
-| D8 | Death concentration | encounter_pressure.deaths_per_100_entries | FLAG > 50; WATCH > 25 |
-| D9 | Engagement signal | boredom_proxy | FLAG if long_low_engagement > 15% of runs |
-| D10 | Character popularity | character_popularity | FLAG if any character < 15% of runs |
-| D11 | Character win rate | character_popularity, character_by_bearing | FLAG if > 30 pts below/above average |
-| D12 | Encounter selection | encounter_pressure.entries (share) | FLAG if non-boss < 5% of total entries |
-| D13 | Fun proxy | D9 + D5 + D2 + D10 synthesis | POSITIVE / MIXED / NEGATIVE |
+| D3 | Arcana dominance | top_arcana_picks, arcana_outcomes, archetype overlap | FLAG only if high pick rate + high success + cross-archetype + suppresses alternatives + low opportunity cost |
+| D4 | Arcana viability | never_picked_arcana, arcana_pick_rates | FLAG offered ≥2 and never picked; FLAG pick_rate < 20% with meaningful offers |
+| D5 | Arcana outcome correlation | arcana_outcomes | FLAG death_rate > 80% with ≥3 runs; FLAG clear_rate > 60% with ≥3 runs |
+| D6 | Strategic diversity | build variation, archetype entropy | FLAG if successful runs converge to same path |
+| D7 | Build lock-in timing | early-pick predictiveness | FLAG if first 20–30% of run predicts outcome |
+| D8 | Boon dominance & viability | top_boon_picks, boon_pick_rates | FLAG dominant boon suppressing alternatives |
+| D9 | Encounter pressure | encounter_pressure.damage_per_entry | FLAG if ≥ 2× median |
+| D10 | Death concentration | encounter_pressure.deaths_per_100_entries, top_death_sources | FLAG > 50; WATCH > 25 |
+| D11 | Learnability | first-seen lethality, repeat deaths to same source | FLAG high first-time lethality |
+| D12 | Engagement & retention proxy | boredom_proxy, low_engagement_share | FLAG > 15%; WATCH > 8% |
+| D13 | Character popularity | character_popularity | FLAG < 15% usage with meaningful availability |
+| D14 | Character performance | character_popularity, character_by_bearing | FLAG > 30 pts below/above avg clear rate |
+| D15 | Encounter selection & avoidance | encounter_pressure.entries (share) | FLAG non-boss < 5% of total entries |
+| D16 | Cognitive load proxy | low-pick / high-success options | FLAG strong options consistently ignored |
+| D17 | Fun & design health synthesis | D6 + D7 + D12 + D2 + D13 + diversity | POSITIVE / MIXED / NEGATIVE (proxy only) |
+
+After flagging, run a counterfactual pass on each major FLAG: classify as irrelevant, foundational, oppressive, diversity-enabling, or trap option to avoid overcorrecting healthy asymmetry.

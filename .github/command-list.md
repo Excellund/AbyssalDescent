@@ -24,6 +24,9 @@ Use these natural-language commands in chat. Phrases do not need to match exactl
 - Analyze latest player data
 - Pull latest telemetry and analyze
 - What does the data say
+- Analyze design health
+- Investigate dominant strategies
+- Check character balance from telemetry
 
 ## Gameplay Loop And Objective Pacing
 
