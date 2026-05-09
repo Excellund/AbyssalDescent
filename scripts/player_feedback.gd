@@ -433,6 +433,47 @@ func _play_world_star_burst(epicenter_global: Vector2, radius: float, ray_count:
 		var outer := epicenter_global + dir * (radius * 0.72)
 		_play_world_line(PackedVector2Array([inner, outer]), color, 2.2, lifetime, 0.7)
 
+func play_sigil_burst_fx(epicenter_global: Vector2, radius: float) -> void:
+	var core_color := Color(0.82, 0.36, 1.0, 0.92)
+	var halo_color := Color(1.0, 0.72, 1.0, 0.72)
+	var bloom_color := Color(0.72, 0.34, 1.0, 0.20)
+	_play_world_soft_pulse(epicenter_global, radius * 0.55, bloom_color, 0.26, 0.55, 1.04)
+	play_world_ring(epicenter_global, radius, core_color, 0.22)
+	play_world_ring(epicenter_global, radius * 0.64, halo_color, 0.14)
+	_play_world_star_burst(epicenter_global, radius * 1.06, 6, halo_color, 0.20)
+	_play_sigil_glyph(epicenter_global, radius * 0.74, halo_color, 0.22)
+
+func _play_sigil_glyph(epicenter_global: Vector2, radius: float, color: Color, lifetime: float) -> void:
+	for triangle_index in range(2):
+		var rotation_offset := PI / 3.0 if triangle_index == 1 else 0.0
+		var glyph_points := PackedVector2Array()
+		for vertex_index in range(3):
+			var angle := -PI * 0.5 + rotation_offset + TAU * float(vertex_index) / 3.0
+			glyph_points.append(epicenter_global + Vector2(cos(angle), sin(angle)) * radius)
+		glyph_points.append(glyph_points[0])
+		_play_world_line(glyph_points, color, 2.2, lifetime, 0.5)
+
+func play_rupture_wave_fx(epicenter_global: Vector2, radius: float, color: Color) -> void:
+	var visual_radius := radius * 0.85
+	var bloom_color := Color(color.r, color.g, color.b, 0.20)
+	var inner_color := Color(lerpf(color.r, 1.0, 0.45), lerpf(color.g, 1.0, 0.45), lerpf(color.b, 1.0, 0.45), 0.78)
+	_play_world_soft_pulse(epicenter_global, visual_radius * 0.55, bloom_color, 0.24, 0.42, 1.18)
+	play_world_ring(epicenter_global, visual_radius, color, 0.22)
+	play_world_ring(epicenter_global, visual_radius * 0.46, inner_color, 0.12)
+	_play_rupture_cracks(epicenter_global, visual_radius, color, 0.22)
+
+func _play_rupture_cracks(epicenter_global: Vector2, radius: float, color: Color, lifetime: float) -> void:
+	var crack_count := 5
+	var crack_color := Color(color.r, color.g, color.b, minf(1.0, color.a + 0.05))
+	for crack_index in range(crack_count):
+		var base_angle := TAU * float(crack_index) / float(crack_count) + randf_range(-0.22, 0.22)
+		var crack_direction := Vector2.RIGHT.rotated(base_angle)
+		var crack_perpendicular := crack_direction.orthogonal()
+		var crack_inner := epicenter_global + crack_direction * (radius * 0.20)
+		var crack_midpoint := epicenter_global + crack_direction * (radius * 0.58) + crack_perpendicular * randf_range(-radius * 0.10, radius * 0.10)
+		var crack_outer := epicenter_global + crack_direction * (radius * 0.96) + crack_perpendicular * randf_range(-radius * 0.06, radius * 0.06)
+		_play_world_line(PackedVector2Array([crack_inner, crack_midpoint, crack_outer]), crack_color, 2.4, lifetime, 0.5)
+
 func _build_circle_polygon(radius: float, segments: int = 20) -> PackedVector2Array:
 	var polygon := PackedVector2Array()
 	var clamped_segments := maxi(8, segments)

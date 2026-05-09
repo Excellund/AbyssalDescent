@@ -2258,7 +2258,7 @@ func _apply_rupture_wave(epicenter: Vector2, source_damage: int, rupture_hit_ene
 	var wave_damage := maxi(1, int(round(float(source_damage) * wave_damage_ratio)))
 	wave_damage = _apply_objective_mutator_damage_mult(wave_damage)
 	if player_feedback != null:
-		player_feedback.play_world_ring(epicenter, wave_radius * 0.85, ENEMY_BASE.COLOR_RUPTURE_WAVE_RING, 0.2)
+		player_feedback.play_rupture_wave_fx(epicenter, wave_radius, ENEMY_BASE.COLOR_RUPTURE_WAVE_RING)
 		_broadcast_cue_event("world_ring", {
 			"position": epicenter,
 			"radius": wave_radius * 0.85,
@@ -4012,8 +4012,7 @@ func _apply_sigil_burst(epicenter: Vector2, source_damage: int) -> void:
 	var burst_damage: int = maxi(1, int(round(float(source_damage) * 0.7)))
 	burst_damage = _apply_objective_mutator_damage_mult(burst_damage)
 	if player_feedback != null:
-		player_feedback.play_world_ring(epicenter, 72.0, Color(0.82, 0.36, 1.0, 0.92), 0.22)
-		player_feedback.play_world_ring(epicenter, 46.0, Color(1.0, 0.72, 1.0, 0.72), 0.14)
+		player_feedback.play_sigil_burst_fx(epicenter, 72.0)
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		if not (enemy_node is Node2D):
 			continue
