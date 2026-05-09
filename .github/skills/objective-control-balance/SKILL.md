@@ -42,6 +42,7 @@ Use this skill when a control objective is technically winnable but practically 
 - Raise contest threshold when contesting is too sticky.
 - If identity is being flattened by global scaling, use encounter-specific scaling override in _apply_bearing_count_scaling.
 - Prefer table-driven rank/depth tuning maps plus resolver helpers over inline one-off conditionals.
+- For wave-driven objectives (last_stand, cut_the_signal, hold_the_line), apply pressure via _objective_pressure_split so total pressure above 1.0 is distributed between initial counts and spawn_batch instead of dumped only on the opening swarm. This preserves identity and prevents front-loaded co-op spikes.
 
 3. Temporary mutator identity and bridge value
 - For Hold the Line reward mutators, preserve control fantasy while giving a clear excitement spike.

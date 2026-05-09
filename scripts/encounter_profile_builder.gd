@@ -179,6 +179,27 @@ func _party_size_count_mult() -> float:
 func _pressure_mult() -> float:
 	return _difficulty_float("base_enemy_pressure_mult", 1.0) * _party_size_count_mult()
 
+func _objective_pressure_split(extra_pressure_mult: float = 1.0) -> Dictionary:
+	var base_pressure := maxf(0.01, _pressure_mult())
+	var safe_extra := maxf(0.01, extra_pressure_mult)
+	var total_pressure := base_pressure * safe_extra
+	if total_pressure <= 1.0:
+		return {
+			"initial_override": safe_extra,
+			"wave_mult": 1.0
+		}
+	var initial_pressure := pow(total_pressure, 0.5)
+	var wave_mult := total_pressure / initial_pressure
+	return {
+		"initial_override": initial_pressure / base_pressure,
+		"wave_mult": wave_mult
+	}
+
+func _scale_objective_spawn_batch(spawn_batch: int, wave_mult: float) -> int:
+	if wave_mult <= 1.0:
+		return spawn_batch
+	return maxi(spawn_batch, int(round(float(spawn_batch) * wave_mult)))
+
 func _effective_depth(depth: int) -> int:
 	var divisor := maxf(0.1, _difficulty_float("depth_pressure_divisor", 1.0))
 	return int(floor(float(maxi(0, depth)) / divisor))
@@ -828,8 +849,10 @@ func _build_survival_profile(depth: int) -> Dictionary:
 	var duration := int(ceil(raw_duration / 5.0)) * 5
 	var spawn_interval := clampf(1.82 - float(effective_depth) * 0.06, 0.8, 1.82)
 	var spawn_batch := mini(5, 2 + int(floor(float(effective_depth) / 3.0)))
+	var pressure_split := _objective_pressure_split()
+	spawn_batch = _scale_objective_spawn_batch(spawn_batch, float(pressure_split["wave_mult"]))
 	ENCOUNTER_CONTRACTS.profile_set_survival_objective(profile, duration, spawn_interval, spawn_batch)
-	return _apply_bearing_count_scaling(profile)
+	return _apply_bearing_count_scaling(profile, float(pressure_split["initial_override"]))
 
 func _build_priority_target_profile(depth: int) -> Dictionary:
 	var effective_depth := _effective_depth(depth)
@@ -845,8 +868,10 @@ func _build_priority_target_profile(depth: int) -> Dictionary:
 	var duration := int(ceil(raw_duration / 5.0)) * 5
 	var spawn_interval := clampf(2.18 - float(effective_depth) * 0.06, 1.05, 2.18)
 	var spawn_batch := mini(4, 2 + int(floor(float(effective_depth) / 4.0)))
+	var pressure_split := _objective_pressure_split()
+	spawn_batch = _scale_objective_spawn_batch(spawn_batch, float(pressure_split["wave_mult"]))
 	ENCOUNTER_CONTRACTS.profile_set_priority_target_objective(profile, "archer", duration, spawn_interval, spawn_batch)
-	return _apply_bearing_count_scaling(profile)
+	return _apply_bearing_count_scaling(profile, float(pressure_split["initial_override"]))
 
 func _build_control_profile(depth: int) -> Dictionary:
 	var effective_depth := _effective_depth(depth)
@@ -872,8 +897,10 @@ func _build_control_profile(depth: int) -> Dictionary:
 	var zone_radius := clampf(194.0 + float(effective_depth) * 3.6 + tier_radius_bias, 184.0, 248.0)
 	var progress_goal := clampf(7.95 + float(effective_depth) * 0.2 + tier_goal_bias, 7.8, 11.8)
 	var progress_decay := clampf(0.2 + float(effective_depth) * 0.008 + tier_decay_bias, 0.16, 0.36)
+	var pressure_split := _objective_pressure_split(control_pressure_mult)
+	spawn_batch = _scale_objective_spawn_batch(spawn_batch, float(pressure_split["wave_mult"]))
 	ENCOUNTER_CONTRACTS.profile_set_control_objective(profile, duration, spawn_interval, spawn_batch, zone_radius, progress_goal, progress_decay, contest_threshold)
-	return _apply_bearing_count_scaling(profile, control_pressure_mult)
+	return _apply_bearing_count_scaling(profile, float(pressure_split["initial_override"]))
 
 func _control_curve_tuning(difficulty_rank: int, effective_depth: int) -> Dictionary:
 	var rank_curve := _control_rank_curve(difficulty_rank)
