@@ -27,8 +27,9 @@ var local_peer_id: int = 0
 var local_is_ready: bool = false
 var local_player_name: String = "Player"
 
-## Multiplayer state (peer_id -> { character_id, is_ready })
+## Multiplayer state (peer_id -> { character_id, is_ready, join_index })
 var peer_state: Dictionary = {}
+var _next_join_index: int = 0
 
 ## Difficulty state (host only)
 var selected_difficulty_tier: int = 1  ## Default: Delver
@@ -99,17 +100,23 @@ func _ready() -> void:
 	_ensure_local_peer_state(local_character_id)
 	print("[Lobby] After _ensure_local_peer_state in _ready, peer_state: %s" % [str(peer_state)])
 	
-	## HOST: Query existing connected peers from MultiplayerSessionManager
+	## HOST: Clear stale state and register self + any already-connected peers with authoritative join_index.
 	if bool(multiplayer_session_manager.is_host()):
-		## Clear any stale peer state from the previous session
 		peer_state.clear()
+		_next_join_index = 0
 		_ensure_local_peer_state(local_character_id)
-		var existing_peers = multiplayer_session_manager.get_peer_ids()
+		var existing_peers: Array = (multiplayer_session_manager.get_peer_ids() as Array).duplicate()
+		existing_peers.sort()
 		print("[Lobby] HOST: Querying existing peers from manager: %s" % [str(existing_peers)])
 		for peer_id in existing_peers:
-			if peer_id != local_peer_id and peer_id not in peer_state:
-				peer_state[peer_id] = { "character_id": "bastion", "is_ready": false, "player_name": "Player" }
-				print("[Lobby] HOST: Added existing peer %d to peer_state" % peer_id)
+			if int(peer_id) != local_peer_id and int(peer_id) not in peer_state:
+				var idx := _consume_next_join_index()
+				_broadcast_peer_register.rpc(int(peer_id), idx)
+				print("[Lobby] HOST: Registered existing peer %d with join_index=%d" % [int(peer_id), idx])
+	else:
+		## CLIENT: ask host for the authoritative roster (host owns join order).
+		if _client_can_send_rpcs():
+			_request_lobby_roster.rpc_id(1)
 
 	_broadcast_local_player_name()
 	
@@ -135,12 +142,18 @@ func _process(_delta: float) -> void:
 	if not bool(multiplayer_session_manager.is_host()) and actual_peers.is_empty():
 		return
 	
-	## Check if we're missing any peers that connected without firing signal
+	## Check if we're missing any peers that connected without firing signal.
+	## Host registers and broadcasts join_index; clients re-request roster from host.
+	var is_host_peer := bool(multiplayer_session_manager.is_host())
 	for peer_id in actual_peers:
 		if peer_id not in peer_state:
-			print("[Lobby] SYNC: Found peer %d that's not in peer_state. Adding..." % peer_id)
-			peer_state[peer_id] = { "character_id": "bastion", "is_ready": false }
-			_update_player_list()
+			print("[Lobby] SYNC: Found peer %d that's not in peer_state." % peer_id)
+			if is_host_peer:
+				var idx := _consume_next_join_index()
+				_broadcast_peer_register.rpc(int(peer_id), idx)
+			elif _client_can_send_rpcs():
+				_request_lobby_roster.rpc_id(1)
+				break
 	
 	## Check if we have stale peers that disconnected without firing signal
 	for peer_id in state_peers:
@@ -342,11 +355,17 @@ func _on_ready_button_pressed() -> void:
 ## Called when a peer connects.
 func _on_peer_connected(peer_id: int) -> void:
 	print("[Lobby] Signal: Peer %d connected. Current peer_state: %s" % [peer_id, peer_state.keys()])
-	if peer_id not in peer_state:
-		peer_state[peer_id] = { "character_id": "bastion", "is_ready": false, "player_name": "Player" }
-		print("[Lobby] Added peer %d to peer_state. Now: %s" % [peer_id, peer_state.keys()])
+	if bool(multiplayer_session_manager.is_host()):
+		## Host first sends the late-joiner the existing roster, then announces them to everyone.
+		_sync_lobby_roster.rpc_id(peer_id, peer_state.duplicate(true))
+		if peer_id not in peer_state:
+			var idx := _consume_next_join_index()
+			_broadcast_peer_register.rpc(int(peer_id), idx)
+			print("[Lobby] HOST: Registered new peer %d with join_index=%d" % [peer_id, idx])
 	else:
-		print("[Lobby] Peer %d already in peer_state (no change)" % peer_id)
+		## Client: rely on host's roster broadcast for join order; just request to ensure sync.
+		if _client_can_send_rpcs():
+			_request_lobby_roster.rpc_id(1)
 	_update_player_list()
 
 
@@ -394,15 +413,12 @@ func _on_session_joined(_session_id: String) -> void:
 	print("[Lobby] Local peer ID confirmed: %d" % local_peer_id)
 	_ensure_local_peer_state(local_character_id)
 	print("[Lobby] After _ensure_local_peer_state, peer_state: %s" % [str(peer_state)])
-	
-	## Client: also initialize host (peer 1) in peer_state so player list isn't empty
+
+	## Client: ask host for authoritative roster (includes host + all peers + join indices).
 	if not bool(multiplayer_session_manager.is_host()):
-		print("[Lobby] This is a CLIENT peer. Host is peer: 1")
-		if 1 not in peer_state:
-			peer_state[1] = { "character_id": "bastion", "is_ready": false, "player_name": "Player" }
-			print("[Lobby] CLIENT: Added host (peer 1) to peer_state. Now: %s" % [str(peer_state)])
-		else:
-			print("[Lobby] CLIENT: Host (peer 1) already in peer_state")
+		print("[Lobby] This is a CLIENT peer. Requesting lobby roster from host.")
+		if _client_can_send_rpcs():
+			_request_lobby_roster.rpc_id(1)
 	else:
 		print("[Lobby] This is a HOST peer")
 	_broadcast_local_player_name()
@@ -416,7 +432,13 @@ func _update_player_list() -> void:
 		child.free()
 
 	var peer_ids: Array = peer_state.keys()
-	peer_ids.sort()
+	peer_ids.sort_custom(func(a, b):
+		var ai := int((peer_state.get(a, {}) as Dictionary).get("join_index", 0))
+		var bi := int((peer_state.get(b, {}) as Dictionary).get("join_index", 0))
+		if ai == bi:
+			return int(a) < int(b)
+		return ai < bi
+	)
 	for peer_id in peer_ids:
 		var state: Dictionary = peer_state.get(peer_id, {})
 		var char_id_raw: String = state.get("character_id", "???")
@@ -468,7 +490,8 @@ func _ensure_local_peer_state(default_character_id: String = "bastion") -> void:
 		peer_state[local_peer_id] = {
 			"character_id": default_character_id,
 			"is_ready": local_is_ready,
-			"player_name": local_player_name
+			"player_name": local_player_name,
+			"join_index": _consume_next_join_index()
 		}
 		print("[Lobby] Created new local peer_state entry: peer %d = %s" % [local_peer_id, peer_state[local_peer_id]])
 	elif String(peer_state[local_peer_id].get("character_id", "")).is_empty():
@@ -479,9 +502,93 @@ func _ensure_local_peer_state(default_character_id: String = "bastion") -> void:
 	peer_state[local_peer_id]["player_name"] = local_player_name
 
 
+func _consume_next_join_index() -> int:
+	var index := _next_join_index
+	_next_join_index += 1
+	return index
+
+
+## RPC: Host -> all (incl. self). Authoritative announcement of a peer + its join_index.
+@rpc("reliable", "authority", "call_local")
+func _broadcast_peer_register(peer_id: int, join_index: int) -> void:
+	if peer_id <= 0:
+		return
+	if peer_id not in peer_state:
+		peer_state[peer_id] = {
+			"character_id": "bastion",
+			"is_ready": false,
+			"player_name": "Player",
+			"join_index": join_index,
+		}
+	else:
+		peer_state[peer_id]["join_index"] = join_index
+	if join_index >= _next_join_index:
+		_next_join_index = join_index + 1
+	_update_player_list()
+
+
+## RPC: Client -> Host. Request the current authoritative roster.
+@rpc("reliable", "any_peer")
+func _request_lobby_roster() -> void:
+	if not bool(multiplayer_session_manager.is_host()):
+		return
+	var tree := _tree_or_null()
+	if tree == null:
+		return
+	var sender_peer_id := tree.get_multiplayer().get_remote_sender_id()
+	if sender_peer_id <= 0:
+		return
+	## If the requester isn't yet registered, register them now so they get a stable join_index.
+	if sender_peer_id not in peer_state:
+		var idx := _consume_next_join_index()
+		_broadcast_peer_register.rpc(sender_peer_id, idx)
+	_sync_lobby_roster.rpc_id(sender_peer_id, peer_state.duplicate(true))
+
+
+## RPC: Host -> specific peer. Replace local peer_state with the host's snapshot.
+@rpc("reliable", "authority")
+func _sync_lobby_roster(roster: Dictionary) -> void:
+	for peer_id_key in roster.keys():
+		var entry: Dictionary = roster[peer_id_key]
+		var pid := int(peer_id_key)
+		var join_index := int(entry.get("join_index", 0))
+		var existing: Dictionary = peer_state.get(pid, {})
+		peer_state[pid] = {
+			"character_id": String(entry.get("character_id", existing.get("character_id", "bastion"))),
+			"is_ready": bool(entry.get("is_ready", existing.get("is_ready", false))),
+			"player_name": String(entry.get("player_name", existing.get("player_name", "Player"))),
+			"join_index": join_index,
+		}
+		if join_index >= _next_join_index:
+			_next_join_index = join_index + 1
+	if local_peer_id > 0 and local_peer_id in peer_state:
+		peer_state[local_peer_id]["character_id"] = local_character_id
+		peer_state[local_peer_id]["player_name"] = local_player_name
+		peer_state[local_peer_id]["is_ready"] = local_is_ready
+	_update_player_list()
+
+
+func _ensure_remote_peer_state(peer_id: int, default_character_id: String = "bastion") -> void:
+	if peer_id == local_peer_id or peer_id <= 0:
+		return
+	if peer_id in peer_state:
+		return
+	peer_state[peer_id] = {
+		"character_id": default_character_id,
+		"is_ready": false,
+		"player_name": "Player",
+		"join_index": _consume_next_join_index()
+	}
+
+
 func _apply_character_selection(peer_id: int, character_id: String) -> void:
 	if peer_id not in peer_state:
-		peer_state[peer_id] = { "character_id": character_id, "is_ready": false, "player_name": "Player" }
+		peer_state[peer_id] = {
+			"character_id": character_id,
+			"is_ready": false,
+			"player_name": "Player",
+			"join_index": _consume_next_join_index()
+		}
 	peer_state[peer_id]["character_id"] = character_id
 	if peer_id == local_peer_id:
 		local_character_id = character_id

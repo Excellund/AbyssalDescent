@@ -53,7 +53,7 @@ func should_defer_door_sync_payload(synced_choosing_next_room: bool, progress_st
 func flush_pending_door_syncs() -> void:
 	if not can_apply_door_sync():
 		return
-	var sync_state: Node = _world._world_multiplayer_sync_state
+	var sync_state: WorldMultiplayerSyncState = _world._world_multiplayer_sync_state
 	if not sync_state.pending_chosen_door.is_empty():
 		var chosen_payload: Dictionary = sync_state.consume_pending_chosen_door_sync()
 		var chosen_door := chosen_payload.get("chosen_door", {}) as Dictionary
@@ -78,7 +78,7 @@ func can_apply_spawn_sync(payload: Dictionary) -> bool:
 	if not is_instance_valid(_world.enemy_spawner):
 		return false
 	var source_room_sync_id := int(payload.get("room_sync_id", 0))
-	var sync_state: Node = _world._world_multiplayer_sync_state
+	var sync_state: WorldMultiplayerSyncState = _world._world_multiplayer_sync_state
 	var allow_initial_sync_alignment: bool = sync_state.current_room_sync_id == 0 and _world.current_room_label == "Starting Chamber" and not _world._is_reward_selection_active()
 	if not sync_state.can_accept_source_sync_id(source_room_sync_id, allow_initial_sync_alignment):
 		return false
@@ -94,7 +94,7 @@ func can_apply_spawn_sync(payload: Dictionary) -> bool:
 	return payload_room_label == _world.current_room_label
 
 func flush_pending_spawn_syncs() -> void:
-	var sync_state: Node = _world._world_multiplayer_sync_state
+	var sync_state: WorldMultiplayerSyncState = _world._world_multiplayer_sync_state
 	if not sync_state.has_pending_spawn_sync_payload():
 		return
 	if not can_apply_spawn_sync(sync_state.peek_pending_spawn_sync_payload()):
@@ -103,7 +103,7 @@ func flush_pending_spawn_syncs() -> void:
 	_apply_spawn_batch_payload(payload)
 
 func flush_pending_objective_spawn_syncs() -> void:
-	var sync_state: Node = _world._world_multiplayer_sync_state
+	var sync_state: WorldMultiplayerSyncState = _world._world_multiplayer_sync_state
 	if not sync_state.has_pending_objective_spawn_sync_payloads():
 		return
 	var remaining_payloads: Array[Dictionary] = []
@@ -129,7 +129,7 @@ func can_apply_boss_spawn_sync(payload: Dictionary) -> bool:
 		return false
 	if _world.current_room_label == "Starting Chamber":
 		return false
-	var sync_state: Node = _world._world_multiplayer_sync_state
+	var sync_state: WorldMultiplayerSyncState = _world._world_multiplayer_sync_state
 	var source_room_sync_id := int(payload.get("room_sync_id", 0))
 	if not sync_state.can_accept_source_sync_id(source_room_sync_id, false):
 		return false
@@ -142,7 +142,7 @@ func can_apply_boss_spawn_sync(payload: Dictionary) -> bool:
 	return payload_room_label == _world.current_room_label
 
 func flush_pending_boss_spawn_syncs() -> void:
-	var sync_state: Node = _world._world_multiplayer_sync_state
+	var sync_state: WorldMultiplayerSyncState = _world._world_multiplayer_sync_state
 	if not sync_state.has_pending_boss_spawn_sync_payload():
 		return
 	var peek_payload: Dictionary = sync_state.peek_pending_boss_spawn_sync_payload()
