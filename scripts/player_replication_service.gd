@@ -2,7 +2,7 @@ extends Node
 ## Service for syncing player state across multiplayer peers.
 ## Handles position, health, alive status, and upgrade state replication via RPC.
 
-const PLAYER_CUE_EVENT_DISPATCHER_SCRIPT := preload("res://scripts/core/player_feedback_dispatcher.gd")
+const PLAYER_CUE_EVENT_DISPATCHER_SCRIPT := preload("res://scripts/core/player_cue_event_dispatcher.gd")
 const PLAYER_CUE_SYNC_QUEUE_SCRIPT := preload("res://scripts/core/player_cue_sync_queue.gd")
 const REMOTE_PLAYER_SNAP_DISTANCE_PX: float = 180.0
 
@@ -24,7 +24,6 @@ var remote_rotation_lerp_half_life_sec: float = 0.035
 ## Capped to avoid runaway extrapolation on direction changes or stalls.
 var remote_position_extrapolation_max_sec: float = 0.18
 var remote_position_extrapolation_max_speed_px: float = 1200.0
-## "Feedback" here means player-facing cue events (VFX/UI/audio cues), not gameplay state authority.
 var cue_event_sync_interval_sec: float = 0.05
 var cue_event_sync_payload_budget_bytes: int = 640
 
@@ -46,7 +45,7 @@ var _last_cue_event_count: int = 0
 var _last_cue_event_estimated_bytes: int = 0
 var _outgoing_health_sequence_by_peer: Dictionary = {}  ## peer_id -> last emitted health sequence
 var _last_applied_health_sequence_by_sender: Dictionary = {}  ## (sender_peer_id, target_peer_id) -> last applied health sequence
-var _cue_event_dispatcher: PlayerFeedbackDispatcher = PLAYER_CUE_EVENT_DISPATCHER_SCRIPT.new()
+var _cue_event_dispatcher: PlayerCueEventDispatcher = PLAYER_CUE_EVENT_DISPATCHER_SCRIPT.new()
 var _cue_sync_queue := PLAYER_CUE_SYNC_QUEUE_SCRIPT.new()
 
 
