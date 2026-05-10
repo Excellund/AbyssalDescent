@@ -3,6 +3,7 @@ extends Node
 const GLOSSARY_DATA := preload("res://scripts/shared/glossary_data.gd")
 const SETTINGS_STORE := preload("res://scripts/settings_store.gd")
 const AUDIO_LEVELS := preload("res://scripts/shared/audio_levels.gd")
+const MENU_STYLE_FACTORY := preload("res://scripts/core/menu_style_factory.gd")
 const AUDIO_DB_MIN := AUDIO_LEVELS.DB_MIN
 const AUDIO_DB_MAX := AUDIO_LEVELS.DB_MAX
 
@@ -193,20 +194,10 @@ func _apply_destructive_button_style(button: Button) -> void:
 	button.add_theme_color_override("font_disabled_color", Color(0.72, 0.58, 0.58, 0.86))
 
 func _make_pause_panel_style(bg_color: Color, border_color: Color, corner_radius: int = 14, border_width: int = 2) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = bg_color
-	style.border_color = border_color
-	style.set_border_width_all(border_width)
-	style.set_corner_radius_all(corner_radius)
-	return style
+	return MENU_STYLE_FACTORY.make_panel_style(bg_color, border_color, corner_radius, border_width)
 
 func _make_pause_button_style(bg_color: Color, border_color: Color, corner_radius: int = 14, border_width: int = 2) -> StyleBoxFlat:
-	var style := _make_pause_panel_style(bg_color, border_color, corner_radius, border_width)
-	style.content_margin_left = 18.0
-	style.content_margin_right = 18.0
-	style.content_margin_top = 14.0
-	style.content_margin_bottom = 14.0
-	return style
+	return MENU_STYLE_FACTORY.make_button_style(bg_color, border_color, corner_radius, border_width)
 
 func _make_pause_panel_back_button() -> Button:
 	var button := Button.new()

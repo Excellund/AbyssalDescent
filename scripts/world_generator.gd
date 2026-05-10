@@ -2209,15 +2209,29 @@ func _set_sfx_volume_runtime(volume_db: float) -> void:
 
 func _on_pause_menu_opened() -> void:
 	_set_combat_paused(true)
+	_set_singleplayer_menu_wave_timer_paused(true)
 
 func _on_pause_menu_closed() -> void:
-	_set_combat_paused(_is_reward_selection_active())
+	var still_paused := _is_reward_selection_active()
+	_set_combat_paused(still_paused)
+	_set_singleplayer_menu_wave_timer_paused(still_paused)
 
 func _on_build_detail_opened() -> void:
 	_set_combat_paused(true)
+	_set_singleplayer_menu_wave_timer_paused(true)
 
 func _on_build_detail_closed() -> void:
 	_set_combat_paused(false)
+	_set_singleplayer_menu_wave_timer_paused(false)
+
+func _set_singleplayer_menu_wave_timer_paused(paused: bool) -> void:
+	if is_multiplayer:
+		return
+	if not is_instance_valid(enemy_spawner):
+		return
+	if not paused and encounter_intro_grace_active:
+		return
+	enemy_spawner.wave_timer_paused = paused
 
 func _on_victory_back_to_menu() -> void:
 	_teardown_multiplayer_session_for_menu_transition()

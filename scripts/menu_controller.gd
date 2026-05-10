@@ -12,6 +12,7 @@ const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 const SETTINGS_STORE := preload("res://scripts/settings_store.gd")
 const UPDATE_SERVICE_SCRIPT := preload("res://scripts/update_service.gd")
 const BUILD_INFO := preload("res://scripts/build_info.gd")
+const MENU_STYLE_FACTORY := preload("res://scripts/core/menu_style_factory.gd")
 const PROFILE_PERSISTENCE_STORE_SCRIPT := preload("res://scripts/core/profile_persistence_store.gd")
 const PROFILE_NAME_ENTRY_MODAL_SCRIPT := preload("res://scripts/ui/profile/profile_name_entry_modal.gd")
 const RUN_HISTORY_PANEL_SCRIPT := preload("res://scripts/ui/run_history/run_history_panel.gd")
@@ -888,20 +889,10 @@ func _make_panel_back_button() -> Button:
 	return button
 
 func _make_panel_style(bg_color: Color, border_color: Color, corner_radius: int = 14, border_width: int = 2) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = bg_color
-	style.border_color = border_color
-	style.set_border_width_all(border_width)
-	style.set_corner_radius_all(corner_radius)
-	return style
+	return MENU_STYLE_FACTORY.make_panel_style(bg_color, border_color, corner_radius, border_width)
 
 func _make_button_style(bg_color: Color, border_color: Color, corner_radius: int = 14, border_width: int = 2) -> StyleBoxFlat:
-	var style := _make_panel_style(bg_color, border_color, corner_radius, border_width)
-	style.content_margin_left = 18.0
-	style.content_margin_right = 18.0
-	style.content_margin_top = 14.0
-	style.content_margin_bottom = 14.0
-	return style
+	return MENU_STYLE_FACTORY.make_button_style(bg_color, border_color, corner_radius, border_width)
 
 func _apply_option_selector_theme(selector: OptionButton) -> void:
 	if selector == null:

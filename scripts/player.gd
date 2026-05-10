@@ -6,6 +6,7 @@ const STATIC_WAKE_TRAIL_RENDERER_SCRIPT := preload("res://scripts/static_wake_tr
 const UPGRADE_SYSTEM_SCRIPT_PATH := "res://scripts/upgrade_system.gd"
 const POWER_REGISTRY_SCRIPT := preload("res://scripts/power_registry.gd")
 const ENEMY_BASE := preload("res://scripts/enemy_base.gd")
+const PLAYER_IDENTITY_SILHOUETTE := preload("res://scripts/core/player_identity_silhouette.gd")
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const RUN_SNAPSHOT_VERSION := 1
@@ -3080,18 +3081,18 @@ func _draw() -> void:
 
 func _draw_character_identity(body_radius: float, facing: Vector2, side: Vector2, speed_t: float) -> void:
 	if passive_iron_retort:
-		PlayerIdentitySilhouette.draw_bastion(self, body_radius, facing, side, player_core_color)
+		PLAYER_IDENTITY_SILHOUETTE.draw_bastion(self, body_radius, facing, side, player_core_color)
 		return
 	if passive_sigil_burst:
-		PlayerIdentitySilhouette.draw_hexweaver(self, body_radius, facing, side)
+		PLAYER_IDENTITY_SILHOUETTE.draw_hexweaver(self, body_radius, facing, side)
 		return
 	if passive_farline_focus:
-		PlayerIdentitySilhouette.draw_riftlancer(self, body_radius, facing, side, speed_t)
+		PLAYER_IDENTITY_SILHOUETTE.draw_riftlancer(self, body_radius, facing, side, speed_t)
 		return
 	if passive_veilstep_rhythm:
-		PlayerIdentitySilhouette.draw_veilstrider(self, body_radius, facing, side, speed_t)
+		PLAYER_IDENTITY_SILHOUETTE.draw_veilstrider(self, body_radius, facing, side, speed_t)
 		return
-	PlayerIdentitySilhouette.draw_default(self, body_radius, facing, side)
+	PLAYER_IDENTITY_SILHOUETTE.draw_default(self, body_radius, facing, side)
 
 func _update_farline_focus_state(delta: float) -> void:
 	if not passive_farline_focus:

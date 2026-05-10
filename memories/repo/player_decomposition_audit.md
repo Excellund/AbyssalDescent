@@ -26,6 +26,21 @@ no clarity gain.
   execution_edge timers) or calls `player_feedback.*`. The handlers are
   already one-liners around field assignment; moving them moves the dict
   ownership too, which spreads sync state across two files.
+
+- **Cue dispatch table / registry rewrite** (the "data-driven cue
+  dispatcher" idea): also rejected. Of 28 cases, 6 are stateful
+  (`static_wake_dot`, `execution_edge_state`, `wraithstep_mark_add/remove/
+  clear`, `enemy_apply_slow`) and cannot fit a uniform table — they
+  mutate Player dicts or resolve nodes. Of the remaining 22, at least 2
+  (`voidfire_ui_state`, `oath_ui_state`) use runtime-computed defaults
+  (`maxf(1.0, void_heat_cap)`, `_get_indomitable_fill_requirement()`),
+  so entries need per-row closures, not literals. Net result: equal LOC,
+  worse navigability (Find-Refs on `play_world_ring` no longer lands on
+  the handler), parallel match block still required for the stateful 6.
+  Today's match in `apply_network_cue_event` IS the registry, with
+  maximally local data flow. Do not revisit unless cue churn becomes a
+  measurable maintenance burden (e.g. >2 cues added per week or repeated
+  copy-paste bugs in the unpacking).
 - **Static wake trail block** (`_update_static_wake_trails`,
   `_emit_static_wake_trails_along_dash_segment`,
   `_append_static_wake_trail`, `_clamp_static_wake_position_to_arena`):
