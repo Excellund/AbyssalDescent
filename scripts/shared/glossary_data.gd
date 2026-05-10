@@ -302,4 +302,12 @@ static func glossary_bbcode() -> String:
 	lines.append(_section_title_bbcode("Mutators"))
 	for row in _mutator_rows():
 		lines.append("%s: %s" % [_mutator_title_bbcode(row), row.get("desc", "")])
+	lines.append("")
+	lines.append(_section_title_bbcode("Endgame Chase"))
+	lines.append(_subsection_title_bbcode("Ascension"))
+	lines.append("[color=#BFD2E8]Stack difficulty modifiers above Forsworn for higher leaderboard standing. Each modifier adds heat (rank); your highest cleared rank is recorded per character. Some modifiers are gated behind Oaths.[/color]")
+	lines.append(_subsection_title_bbcode("Oaths"))
+	lines.append("[color=#BFD2E8]Specific run goals: per-character bearing clears, no-hit boss kills, no-boon and no-arcana clears, and reaching higher Ascension ranks. Completing an Oath unlocks a Catalyst, an Ascension modifier, or both.[/color]")
+	lines.append(_subsection_title_bbcode("Catalysts"))
+	lines.append("[color=#BFD2E8]Pre-run augments equipped per-character. Free to equip but disclosed on the leaderboard alongside your Ascension rank. Examples: extra arcana slot, shop reroll, +20 max HP, door reveal.[/color]")
 	return "\n".join(lines)

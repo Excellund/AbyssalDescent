@@ -86,6 +86,16 @@ Use these natural-language commands in chat. Phrases do not need to match exactl
 - Apply description cap policy to [power id]
 - Shorten and sync reward/build descriptions for [power id]
 
+## Endgame Chase (Ascension / Oaths / Catalysts)
+
+- Add/rework Ascension modifier [id or concept]
+- Tune Ascension rank curve
+- Add/rework Oath [id or concept]
+- Wire Oath evaluator key [name]
+- Add/rework Catalyst [id or concept]
+- Apply Catalyst payload at run boot
+- Surface Ascension rank on results / leaderboard
+
 ## Repo And Release Ops
 
 - Create new repo tag

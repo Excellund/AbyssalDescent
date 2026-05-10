@@ -197,7 +197,11 @@ func _fill_summary(result_title: String, subtitle: String, summary: Dictionary, 
 	var depth := int(summary.get("max_depth", 0))
 	var duration := _format_duration(int(summary.get("duration_seconds", 0)))
 	var difficulty := String(summary.get("difficulty_label", "Pilgrim"))
-	_meta_label.text = "%s  |  Depth %d  |  %s  |  %s" % [character_name, depth, duration, difficulty]
+	var ascension_rank := int(summary.get("ascension_rank", 0))
+	if ascension_rank > 0:
+		_meta_label.text = "%s  |  Depth %d  |  %s  |  %s  |  Ascension %d" % [character_name, depth, duration, difficulty, ascension_rank]
+	else:
+		_meta_label.text = "%s  |  Depth %d  |  %s  |  %s" % [character_name, depth, duration, difficulty]
 	_meta_label.add_theme_color_override("font_color", Color(RARITY_COMMON.r, RARITY_COMMON.g, RARITY_COMMON.b, 0.94))
 
 	var stats := summary.get("stats", {}) as Dictionary

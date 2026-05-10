@@ -41,6 +41,19 @@ static func normalize_run_summary(run_summary: Dictionary) -> Dictionary:
 	summary["is_debug"] = bool(summary.get("is_debug", false))
 	summary["player_count"] = clamp_party_size(int(summary.get("player_count", 1)))
 	summary["is_multiplayer"] = bool(summary.get("is_multiplayer", false)) or summary["player_count"] > 1
+	summary["ascension_rank"] = maxi(0, int(summary.get("ascension_rank", 0)))
+	var loadout_raw: Variant = summary.get("ascension_loadout", [])
+	var loadout_clean: Array[String] = []
+	if loadout_raw is Array:
+		for entry in loadout_raw:
+			loadout_clean.append(String(entry))
+	summary["ascension_loadout"] = loadout_clean
+	var catalysts_raw: Variant = summary.get("equipped_catalyst_ids", [])
+	var catalysts_clean: Array[String] = []
+	if catalysts_raw is Array:
+		for entry in catalysts_raw:
+			catalysts_clean.append(String(entry))
+	summary["equipped_catalyst_ids"] = catalysts_clean
 	return summary
 
 static func is_submission_eligible(run_summary: Dictionary) -> bool:
@@ -83,6 +96,7 @@ static func normalize_server_entry(entry: Dictionary) -> Dictionary:
 		"ended_at_unix": maxi(0, int(entry.get("ended_at_unix", 0))),
 		"player_count": clamp_party_size(int(entry.get("player_count", 1))),
 		"is_multiplayer": bool(entry.get("is_multiplayer", false)) or int(entry.get("player_count", 1)) > 1,
+		"ascension_rank": maxi(0, int(entry.get("ascension_rank", 0))),
 	}
 
 static func sort_entries(entries: Array) -> Array:
