@@ -75,9 +75,12 @@ func _compare_route_options_by_difficulty(a: Dictionary, b: Dictionary) -> bool:
 func _route_option_difficulty_rank(option: Dictionary) -> int:
 	var kind := ENCOUNTER_CONTRACTS.door_option_kind_id(option)
 	if kind == ENCOUNTER_CONTRACTS.DOOR_KIND_BOSS:
-		return 6
+		return 7
 	if kind == ENCOUNTER_CONTRACTS.DOOR_KIND_REST:
 		return 0
+	var encounter_key := ENCOUNTER_CONTRACTS.door_option_encounter_key(option)
+	if encounter_key.begins_with("apex_"):
+		return 5
 	var icon := String(option.get("icon", "")).strip_edges().to_lower()
 	match icon:
 		"rest":
@@ -91,7 +94,7 @@ func _route_option_difficulty_rank(option: Dictionary) -> int:
 		"trial":
 			return 4
 		_:
-			return 5
+			return 6
 
 func find_used_door(player_position: Vector2, door_options: Array[Dictionary], door_use_radius: float) -> Dictionary:
 	for door in door_options:
