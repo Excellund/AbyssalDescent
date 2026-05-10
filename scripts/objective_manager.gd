@@ -112,6 +112,8 @@ func reset() -> void:
 	hunt_target_name = ""
 	hunt_target_kill_progress = 0
 	hunt_target_kill_goal = 4
+	if is_instance_valid(hunt_target_dash_line):
+		hunt_target_dash_line.queue_free()
 	hunt_target_dash_line = null
 	hunt_target_dash_line_time_left = 0.0
 	hunt_target_flee_thresholds = [0.75, 0.5, 0.25]
@@ -144,12 +146,17 @@ func reset() -> void:
 	exposure_push_accel = 940.0
 
 	# Relocation
+	for escort_line in relocation_escort_dash_lines:
+		if is_instance_valid(escort_line):
+			escort_line.queue_free()
 	relocation_escort_dash_lines.clear()
 	relocation_escort_dash_line_time_left = 0.0
 	last_relocated_escort_count = 0
 	relocation_hint_left = 0.0
 
 	# Signal FX
+	if is_instance_valid(signal_fx_node):
+		signal_fx_node.queue_free()
 	signal_fx_node = null
 	signal_fx_left = 0.0
 	signal_fx_duration = 0.0
