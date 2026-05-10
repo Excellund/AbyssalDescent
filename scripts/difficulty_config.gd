@@ -5,6 +5,24 @@ extends RefCounted
 
 const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
 const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
+const ASCENSION_REGISTRY := preload("res://scripts/progression/ascension_modifier_registry.gd")
+
+## Maps merged ascension modifier payload keys onto base tier config keys.
+## Format: ascension_key -> [base_config_key, op]. Any modifier key not listed
+## here remains accessible via config["ascension"] for callers that want it
+## raw (e.g. encounter builder reading enemy_health_mult, reward UI reading
+## reward_choice_count_add, encounter flow reading rest_disabled_set).
+const _ASCENSION_TO_CONFIG_MAPPING := {
+	"enemy_contact_damage_mult": ["enemy_contact_damage_mult", "mul"],
+	"wave_interval_mult": ["wave_interval_seconds", "mul"],
+	"rest_heal_ratio_mult": ["rest_heal_ratio_mult", "mul"],
+	"mutator_frequency_mult": ["mutator_frequency_mult", "mul"],
+	"specialist_enemy_depth_offset_add": ["specialist_enemy_depth_offset", "add"],
+	"specialist_enemy_pressure_mult": ["specialist_enemy_pressure_mult", "mul"],
+	"boss_difficulty_mult": ["boss_difficulty_mult", "mul"],
+	"player_damage_taken_mult": ["player_damage_taken_mult", "mul"],
+	"player_starting_health_bonus_add": ["player_starting_health_bonus", "add"]
+}
 
 ## ===== BASE ENCOUNTER GENERATION DEFINITIONS =====
 ## Shared across singleplayer and multiplayer modes (stored here as source of truth)
@@ -124,6 +142,44 @@ static func get_tier_config(tier: int) -> Dictionary:
 		
 		_:
 			return get_tier_config(BEARING_ENUMS.BearingTier.DELVER)
+
+## Resolve a tier config with an ascension loadout layered on top.
+## Mutates a fresh dict; the base get_tier_config() result is untouched.
+## Returns a dict with the standard tier keys plus:
+##   "ascension_rank"     int   total heat cost of the loadout
+##   "ascension_loadout"  Array sanitized list of modifier ids applied
+##   "ascension"          Dict  raw merged modifier payload (for keys not
+##                              folded into the base config — e.g. enemy_health_mult,
+##                              reward_choice_count_add, rest_disabled_set,
+##                              arcana_pool_shrink_mult).
+static func get_tier_config_with_ascension(tier: int, ascension_loadout: Array) -> Dictionary:
+	var config: Dictionary = get_tier_config(tier).duplicate(true)
+	var sanitized: Array = []
+	for entry in ascension_loadout:
+		var id: String = String(entry)
+		if ASCENSION_REGISTRY.has_modifier(id) and not sanitized.has(id):
+			sanitized.append(id)
+	config["ascension_loadout"] = sanitized
+	config["ascension_rank"] = ASCENSION_REGISTRY.compute_loadout_rank(sanitized)
+	var merged: Dictionary = ASCENSION_REGISTRY.merge_loadout_payload(sanitized)
+	config["ascension"] = merged
+	for key in merged.keys():
+		var key_str: String = String(key)
+		if not _ASCENSION_TO_CONFIG_MAPPING.has(key_str):
+			continue
+		var mapping: Array = _ASCENSION_TO_CONFIG_MAPPING[key_str] as Array
+		var base_key: String = String(mapping[0])
+		var op: String = String(mapping[1])
+		var ascension_value: float = float(merged[key_str])
+		var existing: Variant = config.get(base_key, 0.0 if op == "add" else 1.0)
+		match op:
+			"mul":
+				config[base_key] = float(existing) * ascension_value
+			"add":
+				config[base_key] = float(existing) + ascension_value
+			"set":
+				config[base_key] = merged[key_str]
+	return config
 
 ## Get a specific multiplier for a tier
 static func get_tier_multiplier(tier: int, key: String, default: float = 1.0) -> float:

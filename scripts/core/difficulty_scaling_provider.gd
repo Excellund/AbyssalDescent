@@ -29,9 +29,32 @@ func get_config_provider() -> Object:
 
 func resolve_tier_config(tier: int) -> Dictionary:
 	var provider: Object = get_config_provider()
+	var base_config: Dictionary = {}
 	if provider != null and provider.has_method("get_tier_config"):
-		return provider.get_tier_config(tier)
-	return DIFFICULTY_CONFIG.get_tier_config(tier)
+		base_config = provider.get_tier_config(tier)
+	else:
+		base_config = DIFFICULTY_CONFIG.get_tier_config(tier)
+	var loadout: Array[String] = _get_active_ascension_loadout()
+	if loadout.is_empty():
+		return base_config
+	var ascension_config: Dictionary = DIFFICULTY_CONFIG.get_tier_config_with_ascension(tier, loadout)
+	# Re-layer multiplayer-only keys that the singleplayer ascension resolver
+	# doesn't know about (party-size scaling, etc.).
+	for key in base_config.keys():
+		if not ascension_config.has(key):
+			ascension_config[key] = base_config[key]
+	return ascension_config
+
+func _get_active_ascension_loadout() -> Array[String]:
+	var run_context := _world.get_node_or_null("/root/RunContext")
+	if run_context == null or not run_context.has_method("get_active_ascension_loadout"):
+		return []
+	var raw: Variant = run_context.get_active_ascension_loadout()
+	var out: Array[String] = []
+	if raw is Array:
+		for entry in raw:
+			out.append(String(entry))
+	return out
 
 func get_party_size() -> int:
 	if not _world.is_multiplayer:

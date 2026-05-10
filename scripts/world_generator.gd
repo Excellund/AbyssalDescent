@@ -25,6 +25,7 @@ const ENCOUNTER_FLOW_SYSTEM_SCRIPT := preload("res://scripts/encounter_flow_syst
 const OBJECTIVE_RUNTIME_SCRIPT := preload("res://scripts/objective_runtime.gd")
 const OBJECTIVE_MANAGER_SCRIPT := preload("res://scripts/objective_manager.gd")
 const REWARD_SELECTION_UI_SCRIPT := preload("res://scripts/reward_selection_ui.gd")
+const ASCENSION_REGISTRY := preload("res://scripts/progression/ascension_modifier_registry.gd")
 const ENUMS := preload("res://scripts/shared/enums.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const ENDLESS_PROFILE_SCALER := preload("res://scripts/shared/endless_profile_scaler.gd")
@@ -749,7 +750,15 @@ func _setup_run_systems_phase() -> void:
 func _setup_reward_selection_system() -> void:
 	reward_selection_ui = REWARD_SELECTION_UI_SCRIPT.new()
 	add_child(reward_selection_ui)
-	reward_selection_ui.initialize(boon_choice_count, boon_reveal_duration)
+	var effective_choice_count: int = boon_choice_count
+	var run_context_ref := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context_ref != null and run_context_ref.has_method("get_active_ascension_loadout"):
+		var loadout: Array = run_context_ref.get_active_ascension_loadout()
+		if not loadout.is_empty():
+			var ascension_payload: Dictionary = ASCENSION_REGISTRY.merge_loadout_payload(loadout)
+			var delta: int = int(round(float(ascension_payload.get("reward_choice_count_add", 0.0))))
+			effective_choice_count = maxi(1, effective_choice_count + delta)
+	reward_selection_ui.initialize(effective_choice_count, boon_reveal_duration)
 	if reward_selection_ui.has_signal("reward_selected"):
 		reward_selection_ui.connect("reward_selected", Callable(self, "_on_reward_selected"))
 	if reward_selection_ui.has_signal("reward_offers_presented"):
@@ -787,6 +796,8 @@ func _setup_encounter_profile_builder_system() -> void:
 	if should_apply_difficulty:
 		encounter_profile_builder.set_difficulty_tier(difficulty_tier)
 		_apply_difficulty_tier_bonuses(difficulty_tier)
+	if run_context != null and encounter_profile_builder.has_method("set_ascension_loadout"):
+		encounter_profile_builder.call("set_ascension_loadout", run_context.get_active_ascension_loadout())
 	encounter_profile_builder.configure({
 		"room_base_size": room_base_size,
 		"room_size_growth": room_size_growth,
@@ -2046,6 +2057,11 @@ func _apply_difficulty_tier_bonuses(difficulty_tier: int) -> void:
 	var difficulty_config := current_difficulty_config
 	if is_instance_valid(enemy_spawner):
 		enemy_spawner.bearing_wave_interval_seconds = float(difficulty_config.get("wave_interval_seconds", 8.0))
+		var ascension_payload_raw: Variant = difficulty_config.get("ascension", {})
+		var ascension_payload: Dictionary = ascension_payload_raw if ascension_payload_raw is Dictionary else {}
+		var enemy_health_mult: float = float(ascension_payload.get("enemy_health_mult", 1.0))
+		if enemy_spawner.has_method("set_ascension_enemy_health_mult"):
+			enemy_spawner.set_ascension_enemy_health_mult(enemy_health_mult)
 	var encounter_target := int(difficulty_config.get("encounter_count_before_boss", encounter_count))
 	if encounter_target > 0:
 		encounter_count = encounter_target

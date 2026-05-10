@@ -14,6 +14,7 @@ var current_difficulty_config: Dictionary = DIFFICULTY_CONFIG.get_tier_config(BE
 var use_multiplayer_difficulty_config: bool = false
 var multiplayer_difficulty_config = DIFFICULTY_CONFIG_MULTIPLAYER.new()
 var multiplayer_party_size: int = 1
+var current_ascension_loadout: Array[String] = []
 
 var room_base_size: Vector2 = Vector2(940.0, 700.0)
 var room_size_growth: Vector2 = Vector2(80.0, 45.0)
@@ -144,6 +145,30 @@ func set_use_multiplayer_difficulty_config(enabled: bool) -> void:
 func set_multiplayer_party_size(size: int) -> void:
 	multiplayer_party_size = clampi(size, 1, 4)
 
+## Set the active ascension loadout. Modifier ids are filtered against the
+## registry by difficulty_config.gd::get_tier_config_with_ascension().
+func set_ascension_loadout(modifier_ids: Array) -> void:
+	var clean: Array[String] = []
+	for entry in modifier_ids:
+		var id: String = String(entry).strip_edges()
+		if id.is_empty() or clean.has(id):
+			continue
+		clean.append(id)
+	current_ascension_loadout = clean
+	_refresh_difficulty_config()
+
+func get_ascension_loadout() -> Array[String]:
+	return current_ascension_loadout.duplicate()
+
+func get_ascension_rank() -> int:
+	return int(current_difficulty_config.get("ascension_rank", 0))
+
+func get_ascension_payload() -> Dictionary:
+	var payload_raw: Variant = current_difficulty_config.get("ascension", {})
+	if payload_raw is Dictionary:
+		return (payload_raw as Dictionary).duplicate(true)
+	return {}
+
 func _get_difficulty_config_provider() -> Object:
 	if use_multiplayer_difficulty_config and multiplayer_difficulty_config != null:
 		return multiplayer_difficulty_config
@@ -151,10 +176,25 @@ func _get_difficulty_config_provider() -> Object:
 
 func _refresh_difficulty_config() -> void:
 	var provider: Object = _get_difficulty_config_provider()
+	var base_config: Dictionary = {}
 	if provider == null or not provider.has_method("get_tier_config"):
-		current_difficulty_config = DIFFICULTY_CONFIG.get_tier_config(current_difficulty_tier)
+		base_config = DIFFICULTY_CONFIG.get_tier_config(current_difficulty_tier)
+	else:
+		base_config = provider.get_tier_config(current_difficulty_tier)
+	if current_ascension_loadout.is_empty():
+		current_difficulty_config = base_config
 		return
-	current_difficulty_config = provider.get_tier_config(current_difficulty_tier)
+	current_difficulty_config = DIFFICULTY_CONFIG.get_tier_config_with_ascension(
+		current_difficulty_tier,
+		current_ascension_loadout
+	)
+	# Re-layer the multiplayer-only keys (party-size scaling, etc.) that the
+	# multiplayer provider sets but the singleplayer ascension resolver doesn't
+	# know about. Singleplayer base_config already matches; only MP needs this.
+	if provider != null and provider != DIFFICULTY_CONFIG:
+		for key in base_config.keys():
+			if not current_difficulty_config.has(key):
+				current_difficulty_config[key] = base_config[key]
 
 func _difficulty_float(key: String, fallback: float = 1.0) -> float:
 	return float(current_difficulty_config.get(key, fallback))

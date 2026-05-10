@@ -65,6 +65,11 @@ var multiplayer_difficulty_tier: int = BEARING_ENUMS.BearingTier.PILGRIM
 var multiplayer_peer_characters: Dictionary = {}  ## peer_id -> character_id
 var multiplayer_peer_player_names: Dictionary = {}  ## peer_id -> profile name
 var multiplayer_peer_profile_uuids: Dictionary = {}  ## peer_id -> profile uuid
+
+## Active ascension loadout for the next descent. Solo: per-character from
+## meta_progress.save. MP: host-set, party-shared, mirrored to joiners through
+## the difficulty broadcast (see encounter_difficulty_multiplayer_config.gd).
+var active_ascension_loadout: Array[String] = []
 var suppress_menu_multiplayer_dev_autostart_once: bool = false
 var menu_music_resume_position_sec: float = -1.0
 
@@ -494,6 +499,39 @@ func set_selected_character_id(character_id: String) -> bool:
 		selected_character_id = META_PROGRESS_STORE.get_selected_character_id(meta_progress_profile)
 		return save_meta_progress()
 	return false
+
+
+## --- Ascension loadout ---------------------------------------------------------------
+
+## Retrieve the saved per-character loadout from meta progress.
+func get_saved_ascension_loadout(character_id: String = "") -> Array[String]:
+	var id: String = character_id if not character_id.is_empty() else get_selected_character_id()
+	return META_PROGRESS_STORE.get_ascension_loadout(meta_progress_profile, id)
+
+## Persist a per-character loadout. Filtering of unknown ids happens here.
+func save_ascension_loadout(character_id: String, modifier_ids: Array) -> bool:
+	META_PROGRESS_STORE.set_ascension_loadout(meta_progress_profile, character_id, modifier_ids)
+	return save_meta_progress()
+
+## Set the loadout that the next descent will use. The world boot reads this.
+func set_active_ascension_loadout(modifier_ids: Array) -> void:
+	var clean: Array[String] = []
+	for entry in modifier_ids:
+		var id: String = String(entry).strip_edges()
+		if id.is_empty() or clean.has(id):
+			continue
+		clean.append(id)
+	active_ascension_loadout = clean
+
+func get_active_ascension_loadout() -> Array[String]:
+	return active_ascension_loadout.duplicate()
+
+func clear_active_ascension_loadout() -> void:
+	active_ascension_loadout = []
+
+func get_ascension_highest_rank(character_id: String = "") -> int:
+	var id: String = character_id if not character_id.is_empty() else get_selected_character_id()
+	return META_PROGRESS_STORE.get_ascension_highest_rank(meta_progress_profile, id)
 
 
 ## Multiplayer session management
