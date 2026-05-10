@@ -39,6 +39,7 @@ var _host_connectivity_warning: String = ""
 var lobby_music_player: AudioStreamPlayer
 var lobby_background_layer: Control
 var _embedded_in_menu: bool = false
+var _room_code_copy_tween: Tween = null
 
 
 func set_embedded_in_menu(enabled: bool) -> void:
@@ -68,6 +69,8 @@ func _ready() -> void:
 	
 	## UI setup
 	room_code_label.text = "Room Code: %s" % String(multiplayer_session_manager.room_code)
+	if not room_code_label.gui_input.is_connected(_on_room_code_label_gui_input):
+		room_code_label.gui_input.connect(_on_room_code_label_gui_input)
 	
 	## Character selector setup
 	_populate_character_tabs()
@@ -1069,6 +1072,49 @@ func _on_lobby_music_finished() -> void:
 	if AUDIO_LEVELS.is_muted_db(lobby_music_player.volume_db):
 		return
 	lobby_music_player.play(0.0)
+
+
+func _on_room_code_label_gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		_copy_room_code_to_clipboard()
+
+
+func _copy_room_code_to_clipboard() -> void:
+	if multiplayer_session_manager == null or room_code_label == null:
+		return
+	var code := String(multiplayer_session_manager.room_code).strip_edges()
+	if code.is_empty() or code == "------":
+		return
+	DisplayServer.clipboard_set(code)
+	_play_room_code_copy_animation(code)
+
+
+func _play_room_code_copy_animation(code: String) -> void:
+	if room_code_label == null:
+		return
+	if _room_code_copy_tween != null and _room_code_copy_tween.is_valid():
+		_room_code_copy_tween.kill()
+	room_code_label.pivot_offset = room_code_label.size * 0.5
+	room_code_label.scale = Vector2.ONE
+	room_code_label.modulate = Color(1.0, 1.0, 1.0, 1.0)
+	room_code_label.text = "Copied! %s" % code
+	var flash_color := Color(0.55, 1.0, 0.7, 1.0)
+	var tw := create_tween()
+	tw.tween_property(room_code_label, "scale", Vector2(1.18, 1.18), 0.12) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(room_code_label, "modulate", flash_color, 0.12)
+	tw.tween_property(room_code_label, "scale", Vector2.ONE, 0.22) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+	tw.parallel().tween_property(room_code_label, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.55)
+	tw.tween_interval(0.55)
+	tw.tween_callback(_restore_room_code_label_text)
+	_room_code_copy_tween = tw
+
+
+func _restore_room_code_label_text() -> void:
+	if room_code_label == null or multiplayer_session_manager == null:
+		return
+	room_code_label.text = "Room Code: %s" % String(multiplayer_session_manager.room_code)
 
 
 func _apply_lobby_background() -> void:

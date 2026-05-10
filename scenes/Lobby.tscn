@@ -36,6 +36,9 @@ custom_minimum_size = Vector2(0, 40)
 
 [node name="RoomCodeLabel" type="Label" parent="VBoxContainer/RoomCodePanel"]
 layout_mode = 2
+mouse_filter = 0
+mouse_default_cursor_shape = 2
+tooltip_text = "Click to copy room code"
 text = "Room Code: ------"
 theme_override_font_sizes/font_size = 24
 
