@@ -63,6 +63,8 @@ var multiplayer_session_id: String = ""
 var multiplayer_is_host: bool = false
 var multiplayer_difficulty_tier: int = BEARING_ENUMS.BearingTier.PILGRIM
 var multiplayer_peer_characters: Dictionary = {}  ## peer_id -> character_id
+var multiplayer_peer_player_names: Dictionary = {}  ## peer_id -> profile name
+var multiplayer_peer_profile_uuids: Dictionary = {}  ## peer_id -> profile uuid
 var suppress_menu_multiplayer_dev_autostart_once: bool = false
 var menu_music_resume_position_sec: float = -1.0
 
@@ -539,11 +541,49 @@ func get_peer_character_selection(peer_id: int) -> String:
 	return "bastion"
 
 
+func set_peer_player_identity(peer_id: int, player_name: String, profile_uuid: String) -> void:
+	var normalized_peer_id := int(peer_id)
+	if normalized_peer_id <= 0:
+		return
+	var normalized_name := player_name.strip_edges()
+	if normalized_name.is_empty():
+		normalized_name = PROFILE_DEFAULT_NAME
+	var normalized_uuid := profile_uuid.strip_edges().to_lower()
+	multiplayer_peer_player_names[normalized_peer_id] = normalized_name
+	multiplayer_peer_player_names[str(normalized_peer_id)] = normalized_name
+	multiplayer_peer_profile_uuids[normalized_peer_id] = normalized_uuid
+	multiplayer_peer_profile_uuids[str(normalized_peer_id)] = normalized_uuid
+
+
+func get_peer_player_name(peer_id: int) -> String:
+	var normalized_peer_id := int(peer_id)
+	var by_int := String(multiplayer_peer_player_names.get(normalized_peer_id, "")).strip_edges()
+	if not by_int.is_empty():
+		return by_int
+	var by_string := String(multiplayer_peer_player_names.get(str(normalized_peer_id), "")).strip_edges()
+	if not by_string.is_empty():
+		return by_string
+	return ""
+
+
+func get_peer_profile_uuid(peer_id: int) -> String:
+	var normalized_peer_id := int(peer_id)
+	var by_int := String(multiplayer_peer_profile_uuids.get(normalized_peer_id, "")).strip_edges().to_lower()
+	if not by_int.is_empty():
+		return by_int
+	var by_string := String(multiplayer_peer_profile_uuids.get(str(normalized_peer_id), "")).strip_edges().to_lower()
+	if not by_string.is_empty():
+		return by_string
+	return ""
+
+
 func clear_multiplayer_session() -> void:
 	multiplayer_session_id = ""
 	multiplayer_is_host = false
 	multiplayer_difficulty_tier = BEARING_ENUMS.BearingTier.PILGRIM
 	multiplayer_peer_characters.clear()
+	multiplayer_peer_player_names.clear()
+	multiplayer_peer_profile_uuids.clear()
 
 func suppress_menu_multiplayer_dev_autostart() -> void:
 	suppress_menu_multiplayer_dev_autostart_once = true

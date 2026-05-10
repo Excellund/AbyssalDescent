@@ -110,7 +110,11 @@ static func start_run(run_seed: Dictionary) -> String:
 		"reward_offers": [],
 		"room_entries": [],
 		"door_choices": [],
-		"death_event": {}
+		"death_event": {},
+		"is_multiplayer": false,
+		"player_count": 1,
+		"host_peer_id": 0,
+		"peers": []
 	}
 	runs.append(run_entry)
 	while runs.size() > MAX_RUNS_STORED:
@@ -279,6 +283,14 @@ static func finish_run(run_id: String, outcome: String, summary: Dictionary = {}
 			run_entry["duration_seconds"] = maxi(0, int(summary.get("duration_seconds", 0)))
 		if summary.has("timestamp_text"):
 			run_entry["timestamp_text"] = String(summary.get("timestamp_text", ""))
+		if summary.has("is_multiplayer"):
+			run_entry["is_multiplayer"] = bool(summary.get("is_multiplayer", false))
+		if summary.has("player_count"):
+			run_entry["player_count"] = maxi(1, int(summary.get("player_count", 1)))
+		if summary.has("host_peer_id"):
+			run_entry["host_peer_id"] = int(summary.get("host_peer_id", 0))
+		if summary.has("peers"):
+			run_entry["peers"] = (summary.get("peers", []) as Array).duplicate(true)
 	)
 static func get_recent_runs(max_runs: int = 10, max_age_days: int = 21, include_debug: bool = false, game_version: String = "") -> Array[Dictionary]:
 	var store := load_store()
@@ -348,6 +360,10 @@ static func build_upload_payload(run_id: String) -> Dictionary:
 		"max_depth": int(run_entry.get("max_depth", 0)),
 		"rooms_cleared": int(run_entry.get("rooms_cleared", 0)),
 		"is_debug": bool(run_entry.get("is_debug", false)),
+		"is_multiplayer": bool(run_entry.get("is_multiplayer", false)),
+		"player_count": maxi(1, int(run_entry.get("player_count", 1))),
+		"host_peer_id": int(run_entry.get("host_peer_id", 0)),
+		"peers": (run_entry.get("peers", []) as Array).duplicate(true),
 		"death_event": (run_entry.get("death_event", {}) as Dictionary).duplicate(true),
 		"damage_events": damage_events.duplicate(true),
 		"reward_choices": reward_choices.duplicate(true),

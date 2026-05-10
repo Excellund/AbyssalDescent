@@ -102,6 +102,10 @@ Custom unix window example body:
 run_id, started_at_unix, ended_at_unix, game_version,
 difficulty_tier, run_mode, outcome, max_depth, rooms_cleared,
 is_debug, upload_source,
+is_multiplayer,       # bool — true for any co-op run
+player_count,         # int  — party size at run start (1 for SP)
+host_peer_id,         # int  — host peer id (0 in SP)
+peers,                # Array of per-peer dicts (see below; empty in SP)
 death_event,          # dict or null
 aggregate,            # summary dict (outcomes, damage_by_*, etc.)
 damage_events,        # Array of raw damage event dicts
@@ -109,6 +113,14 @@ reward_choices,       # Array of raw reward choice dicts
 room_entries,         # Array of raw room entry dicts
 door_choices          # Array of raw door choice dicts
 ```
+
+### Multiplayer payload notes
+
+- Only the **host** uploads in multiplayer (joiners are blocked in `run_summary_recorder.initialize` via `MultiplayerSessionManager.is_remote_replica()`). This avoids duplicate rows and local-store race conditions.
+- All players are represented inside the host's `peers` array. Each entry contains:
+  `peer_id, is_host, player_name, player_uuid, character_id, character_name, build_ids, build_summary, reward_timeline, stats`.
+- Player display name and profile UUID for joiners are propagated from the lobby (see `lobby_controller._broadcast_player_uuid` / `_broadcast_player_name`) and stored in `RunContext.multiplayer_peer_player_names` / `multiplayer_peer_profile_uuids`. The host writes them into the payload via `run_summary_recorder.build_peer_telemetry_entries()`.
+- The top-level `player_uuid` / `player_name` / `character_id` / `character_name` fields still describe the host (run owner). Use the `peers` array for per-player analysis, and `is_multiplayer` / `player_count` for filtering.
 
 When adding a new telemetry field:
 

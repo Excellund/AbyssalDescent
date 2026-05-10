@@ -26,8 +26,9 @@ var local_character_id: String = ""
 var local_peer_id: int = 0
 var local_is_ready: bool = false
 var local_player_name: String = "Player"
+var local_player_uuid: String = ""
 
-## Multiplayer state (peer_id -> { character_id, is_ready, join_index })
+## Multiplayer state (peer_id -> { character_id, is_ready, join_index, player_name, player_uuid })
 var peer_state: Dictionary = {}
 var _next_join_index: int = 0
 
@@ -97,6 +98,8 @@ func _ready() -> void:
 		local_player_name = String(run_context.get_profile_name_or_default()).strip_edges()
 	if local_player_name.is_empty():
 		local_player_name = "Player"
+	if run_context != null and run_context.has_method("get_profile_uuid"):
+		local_player_uuid = String(run_context.get_profile_uuid()).strip_edges().to_lower()
 	_ensure_local_peer_state(local_character_id)
 	print("[Lobby] After _ensure_local_peer_state in _ready, peer_state: %s" % [str(peer_state)])
 	
@@ -493,6 +496,7 @@ func _ensure_local_peer_state(default_character_id: String = "bastion") -> void:
 			"character_id": default_character_id,
 			"is_ready": local_is_ready,
 			"player_name": local_player_name,
+			"player_uuid": local_player_uuid,
 			"join_index": _consume_next_join_index()
 		}
 		print("[Lobby] Created new local peer_state entry: peer %d = %s" % [local_peer_id, peer_state[local_peer_id]])
@@ -502,6 +506,7 @@ func _ensure_local_peer_state(default_character_id: String = "bastion") -> void:
 	else:
 		print("[Lobby] Local peer_state already exists, no change needed")
 	peer_state[local_peer_id]["player_name"] = local_player_name
+	peer_state[local_peer_id]["player_uuid"] = local_player_uuid
 
 
 func _consume_next_join_index() -> int:
@@ -520,6 +525,7 @@ func _broadcast_peer_register(peer_id: int, join_index: int) -> void:
 			"character_id": "bastion",
 			"is_ready": false,
 			"player_name": "Player",
+			"player_uuid": "",
 			"join_index": join_index,
 		}
 	else:
@@ -560,6 +566,7 @@ func _sync_lobby_roster(roster: Dictionary) -> void:
 			"character_id": String(entry.get("character_id", existing.get("character_id", "bastion"))),
 			"is_ready": bool(entry.get("is_ready", existing.get("is_ready", false))),
 			"player_name": String(entry.get("player_name", existing.get("player_name", "Player"))),
+			"player_uuid": String(entry.get("player_uuid", existing.get("player_uuid", ""))).strip_edges().to_lower(),
 			"join_index": join_index,
 		}
 		if join_index >= _next_join_index:
@@ -567,6 +574,7 @@ func _sync_lobby_roster(roster: Dictionary) -> void:
 	if local_peer_id > 0 and local_peer_id in peer_state:
 		peer_state[local_peer_id]["character_id"] = local_character_id
 		peer_state[local_peer_id]["player_name"] = local_player_name
+		peer_state[local_peer_id]["player_uuid"] = local_player_uuid
 		peer_state[local_peer_id]["is_ready"] = local_is_ready
 	_update_player_list()
 
@@ -592,6 +600,7 @@ func _ensure_remote_peer_state(peer_id: int, default_character_id: String = "bas
 		"character_id": default_character_id,
 		"is_ready": false,
 		"player_name": "Player",
+		"player_uuid": "",
 		"join_index": _consume_next_join_index()
 	}
 
@@ -602,6 +611,7 @@ func _apply_character_selection(peer_id: int, character_id: String) -> void:
 			"character_id": character_id,
 			"is_ready": false,
 			"player_name": "Player",
+			"player_uuid": "",
 			"join_index": _consume_next_join_index()
 		}
 	peer_state[peer_id]["character_id"] = character_id
@@ -661,7 +671,7 @@ func _broadcast_difficulty(difficulty_tier: int) -> void:
 
 func _apply_ready_state(peer_id: int, is_ready: bool) -> void:
 	if peer_id not in peer_state:
-		peer_state[peer_id] = { "character_id": "bastion", "is_ready": is_ready, "player_name": "Player" }
+		peer_state[peer_id] = { "character_id": "bastion", "is_ready": is_ready, "player_name": "Player", "player_uuid": "" }
 	peer_state[peer_id]["is_ready"] = is_ready
 	if peer_id == local_peer_id:
 		local_is_ready = is_ready
@@ -677,12 +687,21 @@ func _apply_player_name(peer_id: int, player_name: String) -> void:
 	if normalized_name.is_empty():
 		normalized_name = "Player"
 	if peer_id not in peer_state:
-		peer_state[peer_id] = { "character_id": "bastion", "is_ready": false, "player_name": normalized_name }
+		peer_state[peer_id] = { "character_id": "bastion", "is_ready": false, "player_name": normalized_name, "player_uuid": "" }
 	else:
 		peer_state[peer_id]["player_name"] = normalized_name
 	if peer_id == local_peer_id:
 		local_player_name = normalized_name
 	_update_player_list()
+
+func _apply_player_uuid(peer_id: int, player_uuid: String) -> void:
+	var normalized_uuid := player_uuid.strip_edges().to_lower()
+	if peer_id not in peer_state:
+		peer_state[peer_id] = { "character_id": "bastion", "is_ready": false, "player_name": "Player", "player_uuid": normalized_uuid }
+	else:
+		peer_state[peer_id]["player_uuid"] = normalized_uuid
+	if peer_id == local_peer_id:
+		local_player_uuid = normalized_uuid
 
 func _broadcast_local_player_name() -> void:
 	if multiplayer_session_manager == null:
@@ -690,11 +709,14 @@ func _broadcast_local_player_name() -> void:
 	if local_peer_id <= 0:
 		return
 	_apply_player_name(local_peer_id, local_player_name)
+	_apply_player_uuid(local_peer_id, local_player_uuid)
 	if bool(multiplayer_session_manager.is_host()):
 		_broadcast_player_name.rpc(local_peer_id, local_player_name)
+		_broadcast_player_uuid.rpc(local_peer_id, local_player_uuid)
 		return
 	if _client_can_send_rpcs():
 		_request_player_name.rpc_id(1, local_player_name)
+		_request_player_uuid.rpc_id(1, local_player_uuid)
 
 @rpc("reliable", "any_peer")
 func _request_player_name(player_name: String) -> void:
@@ -711,6 +733,22 @@ func _request_player_name(player_name: String) -> void:
 @rpc("reliable", "authority", "call_local")
 func _broadcast_player_name(peer_id: int, player_name: String) -> void:
 	_apply_player_name(peer_id, player_name)
+
+@rpc("reliable", "any_peer")
+func _request_player_uuid(player_uuid: String) -> void:
+	if not bool(multiplayer_session_manager.is_host()):
+		return
+	var tree := _tree_or_null()
+	if tree == null:
+		return
+	var sender_peer_id := tree.get_multiplayer().get_remote_sender_id()
+	if sender_peer_id <= 0:
+		return
+	_broadcast_player_uuid.rpc(sender_peer_id, player_uuid)
+
+@rpc("reliable", "authority", "call_local")
+func _broadcast_player_uuid(peer_id: int, player_uuid: String) -> void:
+	_apply_player_uuid(peer_id, player_uuid)
 
 
 ## RPC: Client -> Host request to toggle ready.
@@ -798,6 +836,9 @@ func _start_game(host_peer_id: int, session_identifier: String, difficulty_tier:
 		if char_id.is_empty():
 			char_id = "bastion"
 		RunContext.set_peer_character_selection(peer_id, char_id)
+		var peer_player_name := String(state.get("player_name", "")).strip_edges()
+		var peer_player_uuid := String(state.get("player_uuid", "")).strip_edges().to_lower()
+		RunContext.set_peer_player_identity(peer_id, peer_player_name, peer_player_uuid)
 	var local_char_id := String(peer_state.get(local_peer_id, {}).get("character_id", local_character_id)).strip_edges().to_lower()
 	if local_char_id.is_empty():
 			local_char_id = String(peer_state.get(str(local_peer_id), {}).get("character_id", local_character_id)).strip_edges().to_lower()

@@ -35,6 +35,10 @@ alter table public.telemetry_runs add column if not exists character_name text n
 alter table public.telemetry_runs add column if not exists player_uuid text not null default '';
 alter table public.telemetry_runs add column if not exists player_name text not null default '';
 alter table public.telemetry_runs add column if not exists leaderboard_patch_key text not null default 'dev';
+alter table public.telemetry_runs add column if not exists is_multiplayer boolean not null default false;
+alter table public.telemetry_runs add column if not exists player_count int not null default 1;
+alter table public.telemetry_runs add column if not exists host_peer_id int not null default 0;
+alter table public.telemetry_runs add column if not exists peers jsonb not null default '[]'::jsonb;
 
 create unique index if not exists telemetry_runs_run_id_idx
   on public.telemetry_runs (run_id);
@@ -64,6 +68,8 @@ with check (
   and jsonb_typeof(room_entries) = 'array'
   and jsonb_typeof(door_choices) = 'array'
   and jsonb_typeof(aggregate) = 'object'
+  and jsonb_typeof(peers) = 'array'
+  and player_count between 1 and 8
   and upload_source = 'game_client'
 );
 
@@ -169,6 +175,10 @@ as $$
       room_entries,
       door_choices,
       aggregate,
+      is_multiplayer,
+      player_count,
+      host_peer_id,
+      peers,
       upload_source
     from public.telemetry_runs, bounds
     where started_at_unix >= bounds.day_start_unix
@@ -222,6 +232,10 @@ as $$
       room_entries,
       door_choices,
       aggregate,
+      is_multiplayer,
+      player_count,
+      host_peer_id,
+      peers,
       upload_source
     from public.telemetry_runs
     where started_at_unix >= least(p_start_unix, p_end_unix)

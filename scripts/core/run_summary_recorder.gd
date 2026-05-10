@@ -233,6 +233,11 @@ func finish_run(outcome: String, death_event: Dictionary = {}) -> void:
 		summary["duration_seconds"] = int(tracker_summary.get("duration_seconds", get_run_elapsed_seconds()))
 		summary["timestamp_text"] = String(tracker_summary.get("timestamp_text", ""))
 	_latest_peer_summary_overrides = build_peer_summary_overrides()
+	summary["is_multiplayer"] = _world.is_multiplayer
+	summary["player_count"] = int(_world.difficulty_provider.get_party_size())
+	if _world.is_multiplayer:
+		summary["host_peer_id"] = int(_world._resolve_local_peer_id())
+		summary["peers"] = build_peer_telemetry_entries()
 	if not can_record():
 		if not telemetry_run_finished:
 			RUN_HISTORY_STORE_SCRIPT.append(latest_run_summary)
@@ -577,6 +582,66 @@ func build_peer_summary_overrides() -> Dictionary:
 			"build_ids": build_ids,
 		}
 	return overrides
+
+
+func build_peer_telemetry_entries() -> Array:
+	var entries: Array = []
+	if not _world.is_multiplayer:
+		return entries
+	var run_context: Node = _world._get_run_context()
+	var host_peer_id := int(_world._resolve_local_peer_id())
+	var seen_peer_ids: Dictionary = {}
+	for player_node in _world._get_multiplayer_player_nodes():
+		if not is_instance_valid(player_node):
+			continue
+		var peer_id: int = _world._get_player_network_id(player_node)
+		if peer_id <= 0 or seen_peer_ids.has(peer_id):
+			continue
+		seen_peer_ids[peer_id] = true
+		var active_character := String(player_node.get(&"active_character_id")).strip_edges().to_lower() if player_node.has_method("get") else ""
+		if active_character.is_empty():
+			active_character = _world.current_character_id
+		var char_data := CHARACTER_REGISTRY.get_character(active_character)
+		var character_name := String(char_data.get("name", active_character.capitalize()))
+		var build_summary := build_summary_for_player(player_node)
+		var timeline := (_summary_reward_timeline_by_peer.get(peer_id, []) as Array).duplicate(true)
+		var stats := (_summary_stats_by_peer.get(peer_id, {}) as Dictionary).duplicate(true)
+		var build_ids: Array[String] = []
+		for group_key in ["boons", "arcana", "boss_rewards"]:
+			for item_variant in build_summary.get(group_key, []):
+				var item := item_variant as Dictionary
+				var item_id := String(item.get("id", "")).strip_edges().to_lower()
+				if item_id.is_empty() or build_ids.has(item_id):
+					continue
+				build_ids.append(item_id)
+		var peer_player_name := ""
+		var peer_profile_uuid := ""
+		if run_context != null:
+			peer_player_name = String(run_context.get_peer_player_name(peer_id)).strip_edges()
+			peer_profile_uuid = String(run_context.get_peer_profile_uuid(peer_id)).strip_edges().to_lower()
+		if peer_id == host_peer_id and run_context != null:
+			if peer_player_name.is_empty():
+				peer_player_name = String(run_context.get_profile_name_or_default()).strip_edges()
+			if peer_profile_uuid.is_empty():
+				peer_profile_uuid = String(run_context.get_profile_uuid()).strip_edges().to_lower()
+		if peer_player_name.is_empty():
+			peer_player_name = "Player"
+		entries.append({
+			"peer_id": peer_id,
+			"is_host": peer_id == host_peer_id,
+			"player_name": peer_player_name,
+			"player_uuid": peer_profile_uuid,
+			"character_id": active_character,
+			"character_name": character_name,
+			"build_ids": build_ids,
+			"build_summary": build_summary,
+			"reward_timeline": timeline,
+			"stats": stats,
+		})
+	entries.sort_custom(func(a, b):
+		return int(a.get("peer_id", 0)) < int(b.get("peer_id", 0))
+	)
+	return entries
 
 func build_summary_for_player(player_node: Node) -> Dictionary:
 	var boons: Array[Dictionary] = []
