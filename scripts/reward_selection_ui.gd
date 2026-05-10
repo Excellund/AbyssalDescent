@@ -60,6 +60,16 @@ var _idle_pulse_time: float = 0.0
 var _title_pulse_time: float = 0.0
 var _title_pulse_active: bool = false
 var _title_base_color: Color = Color(0.93, 0.97, 1.0, 1.0)
+var _open_fade_time: float = OPEN_FADE_DURATION
+var _close_fade_time: float = 0.0
+var _is_closing: bool = false
+var _close_snapshot_backdrop: float = 0.0
+var _close_snapshot_glow: float = 0.0
+var _close_snapshot_chip: float = 0.0
+var _close_snapshot_title: float = 0.0
+var _close_snapshot_subtitle: float = 0.0
+var _close_snapshot_epitaph: float = 0.0
+var _close_snapshot_cards: Array[float] = []
 var _mutator_icon_killbox: Texture2D
 var _mutator_icon_fortified: Texture2D
 var _mutator_icon_hunters_focus: Texture2D
@@ -99,6 +109,8 @@ const HEADER_CHIP_BOON := "BOON OFFERED"
 const HEADER_CHIP_MISSION := "OBJECTIVE CLAIMED"
 const HEADER_CHIP_ARCANA := "ARCANA AWAKENS"
 const HEADER_CHIP_BOSS := "BOSS BOUNTY"
+const OPEN_FADE_DURATION := 0.32
+const CLOSE_FADE_DURATION := 0.28
 
 func initialize(choice_count: int, reveal_duration: float) -> void:
 	boon_choice_count = choice_count
@@ -129,6 +141,9 @@ func close_selection() -> void:
 	_title_pulse_active = false
 	_title_pulse_time = 0.0
 	_idle_pulse_time = 0.0
+	_is_closing = false
+	_close_fade_time = 0.0
+	_open_fade_time = OPEN_FADE_DURATION
 	for i in range(boon_hover_weights.size()):
 		boon_hover_weights[i] = 0.0
 	_reset_title_visuals()
@@ -162,11 +177,15 @@ func open_selection(title: String, is_initial: bool, mode: int, power_registry: 
 	_idle_pulse_time = 0.0
 	_title_pulse_time = 0.0
 	_title_pulse_active = false
+	_open_fade_time = 0.0
+	_close_fade_time = 0.0
+	_is_closing = false
 	for i in range(boon_hover_weights.size()):
 		boon_hover_weights[i] = 0.0
 	_apply_boon_card_styles(-1)
 	_refresh_boon_ui(player)
 	_refresh_epitaph_display()
+	_apply_global_ui_alpha(0.0)
 	_emit_reward_offers_presented()
 
 func process_input(delta: float) -> void:
@@ -176,6 +195,8 @@ func process_input(delta: float) -> void:
 		return
 
 	_idle_pulse_time += delta
+	if _open_fade_time < OPEN_FADE_DURATION:
+		_open_fade_time = minf(OPEN_FADE_DURATION, _open_fade_time + delta)
 	if _title_pulse_active:
 		_title_pulse_time += delta
 		if _title_pulse_time >= TITLE_PULSE_DURATION:
@@ -189,6 +210,7 @@ func process_input(delta: float) -> void:
 		_advance_hover_weights(delta, -1)
 		_update_boon_reveal_visuals()
 		_apply_boon_card_styles(-1)
+		_apply_global_ui_alpha(_compute_global_ui_alpha())
 		if boon_confirm_lock_time <= 0.0:
 			_maybe_kick_title_pulse()
 		return
@@ -198,6 +220,7 @@ func process_input(delta: float) -> void:
 	_update_boon_reveal_visuals()
 	_apply_boon_card_styles(boon_hovered_index)
 	_update_title_pulse_visuals()
+	_apply_global_ui_alpha(_compute_global_ui_alpha())
 	if Input.is_action_just_pressed("attack"):
 		if boon_hovered_index >= 0 and boon_hovered_index < boon_choices.size():
 			var picked := boon_choices[boon_hovered_index]
@@ -226,9 +249,7 @@ func process_input(delta: float) -> void:
 					"mission_mutator": picked
 				}
 			boon_selection_active = false
-			boon_choices.clear()
-			if boon_layer != null:
-				boon_layer.visible = false
+			_begin_close_fade()
 			reward_selection_mode = ENUMS.RewardMode.BOON
 			mission_reward_stage = 0
 			pending_mission_upgrade_choice = {}
@@ -250,6 +271,92 @@ func _advance_hover_weights(delta: float, target_index: int) -> void:
 			boon_hover_weights[i] = target
 		else:
 			boon_hover_weights[i] = current + sign(target - current) * step
+
+
+func _process(delta: float) -> void:
+	if not _is_closing:
+		return
+	_close_fade_time = minf(CLOSE_FADE_DURATION, _close_fade_time + delta)
+	_apply_close_fade_alpha()
+	if _close_fade_time >= CLOSE_FADE_DURATION:
+		_finalize_close()
+
+
+func _begin_close_fade() -> void:
+	_is_closing = true
+	_close_fade_time = 0.0
+	_close_snapshot_backdrop = boon_backdrop.modulate.a if boon_backdrop != null else 0.0
+	_close_snapshot_glow = boon_backdrop_glow.modulate.a if boon_backdrop_glow != null else 0.0
+	_close_snapshot_chip = boon_header_chip_label.modulate.a if boon_header_chip_label != null else 0.0
+	_close_snapshot_title = boon_title_label.modulate.a if boon_title_label != null else 0.0
+	_close_snapshot_subtitle = boon_subtitle_label.modulate.a if boon_subtitle_label != null else 0.0
+	_close_snapshot_epitaph = epitaph_label.modulate.a if epitaph_label != null else 0.0
+	_close_snapshot_cards.clear()
+	for panel in boon_card_panels:
+		_close_snapshot_cards.append(panel.modulate.a)
+	_apply_close_fade_alpha()
+
+
+func _finalize_close() -> void:
+	_is_closing = false
+	_close_fade_time = 0.0
+	_open_fade_time = OPEN_FADE_DURATION
+	boon_choices.clear()
+	if boon_layer != null:
+		boon_layer.visible = false
+
+
+func _close_fade_factor() -> float:
+	if CLOSE_FADE_DURATION <= 0.0:
+		return 0.0
+	var t := clampf(_close_fade_time / CLOSE_FADE_DURATION, 0.0, 1.0)
+	return 1.0 - (t * t)
+
+
+func _apply_close_fade_alpha() -> void:
+	var f := _close_fade_factor()
+	if boon_backdrop != null:
+		boon_backdrop.modulate.a = _close_snapshot_backdrop * f
+	if boon_backdrop_glow != null:
+		boon_backdrop_glow.modulate.a = _close_snapshot_glow * f
+	if boon_header_chip_label != null:
+		boon_header_chip_label.modulate.a = _close_snapshot_chip * f
+	if boon_title_label != null:
+		boon_title_label.modulate.a = _close_snapshot_title * f
+	if boon_subtitle_label != null:
+		boon_subtitle_label.modulate.a = _close_snapshot_subtitle * f
+	if epitaph_label != null:
+		var ec := epitaph_label.modulate
+		epitaph_label.modulate = Color(ec.r, ec.g, ec.b, _close_snapshot_epitaph * f)
+	for i in range(boon_card_panels.size()):
+		if i >= _close_snapshot_cards.size():
+			continue
+		boon_card_panels[i].modulate.a = _close_snapshot_cards[i] * f
+
+
+func _compute_global_ui_alpha() -> float:
+	if OPEN_FADE_DURATION <= 0.0:
+		return 1.0
+	var open_alpha := clampf(_open_fade_time / OPEN_FADE_DURATION, 0.0, 1.0)
+	return 1.0 - pow(1.0 - open_alpha, 3.0)
+
+
+func _apply_global_ui_alpha(alpha: float) -> void:
+	if boon_backdrop != null:
+		boon_backdrop.modulate.a = alpha
+	if boon_backdrop_glow != null:
+		boon_backdrop_glow.modulate.a *= alpha
+	if boon_header_chip_label != null:
+		boon_header_chip_label.modulate.a *= alpha
+	if boon_title_label != null:
+		boon_title_label.modulate.a *= alpha
+	if boon_subtitle_label != null:
+		boon_subtitle_label.modulate.a *= alpha
+	if epitaph_label != null and epitaph_label.visible:
+		var ec := epitaph_label.modulate
+		epitaph_label.modulate = Color(ec.r, ec.g, ec.b, ec.a * alpha)
+	for panel in boon_card_panels:
+		panel.modulate.a *= alpha
 
 
 func _maybe_kick_title_pulse() -> void:
