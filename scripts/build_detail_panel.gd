@@ -442,6 +442,10 @@ func _power_display_name(power_id: String) -> String:
 			return "Eclipse Mark"
 		"fracture_field":
 			return "Fracture Field"
+		"farline_volley":
+			return "Farline Volley"
+		"sigil_chain":
+			return "Sigil Chain"
 		"wardens_verdict":
 			return "Warden's Verdict"
 		"lacuna_echo":

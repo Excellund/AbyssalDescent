@@ -266,6 +266,10 @@ func _power_sentence_template(power_id: String) -> String:
 			return "Mark radius %s, duration %s, bonus %s of hit, lasts %s hits."
 		"fracture_field":
 			return "Length %s, damage %s, slow %s."
+		"farline_volley":
+			return "Arc +%s/Volley, +%s dmg/Volley, cap %s. %s"
+		"sigil_chain":
+			return "Radius %s, %s of hit per tick. %s"
 		_:
 			return ""
 
@@ -380,6 +384,10 @@ func get_power_flavor_text(power_id: String) -> String:
 			return "Kills inflicted by hits mark nearby enemies. First hit on each deals bonus damage."
 		"fracture_field":
 			return "Kills inflicted by hits rupture fault lines from the slain enemy, striking enemies along each line."
+		"farline_volley":
+			return "Hits at the edge of your reach build Volley: wider arc and flat bonus damage. Dashing resets stacks."
+		"sigil_chain":
+			return "Hits charge a sigil. The next strike drops a brief zone — chain zones to compound damage."
 		_:
 			return ""
 
@@ -495,6 +503,14 @@ func get_power_current_description(power_id: String) -> String:
 		"fracture_field":
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f", float(cur.get("radius", 0.0))), _current_stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0), _current_stat("%.2fs", float(cur.get("slow_duration", 0.0)))] , "build_detail"))
+		"farline_volley":
+			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
+			var fv_unlocks := _farline_volley_unlocks_for_stack(get_trial_power_stack_count(id))
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f deg", float(cur.get("arc_per_stack", 0.0))), _current_stat("%d", int(cur.get("bonus_per_stack", 0))), _current_stat("%d", int(cur.get("stack_cap", 0))), _current_const(fv_unlocks)], "build_detail"))
+		"sigil_chain":
+			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
+			var sc_unlocks := _sigil_chain_unlocks_for_stack(get_trial_power_stack_count(id))
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f", float(cur.get("radius", 0.0))), _current_stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0), _current_const(sc_unlocks)], "build_detail"))
 		_:
 			return ""
 
@@ -599,6 +615,17 @@ func get_trial_power_card_description(power_id: String) -> String:
 			var damage_stat := _stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0, float(next_values.get("damage_ratio", 0.0)) * 100.0, is_initial)
 			var slow_stat := _stat("%.2fs", float(cur.get("slow_duration", 0.0)), float(next_values.get("slow_duration", 0.0)), is_initial)
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [length_stat, damage_stat, slow_stat], "reward_card"))
+		"farline_volley":
+			var arc_stat := _stat("%.0f deg", float(cur.get("arc_per_stack", 0.0)), float(next_values.get("arc_per_stack", 0.0)), is_initial)
+			var bonus_stat := _stat("%d", int(cur.get("bonus_per_stack", 0)), int(next_values.get("bonus_per_stack", 0)), is_initial)
+			var cap_stat := _stat("%d", int(cur.get("stack_cap", 0)), int(next_values.get("stack_cap", 0)), is_initial)
+			var fv_unlock := _const(_farline_volley_unlocks_for_stack(next_stack))
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [arc_stat, bonus_stat, cap_stat, fv_unlock], "reward_card"))
+		"sigil_chain":
+			var radius_stat := _stat("%.0f", float(cur.get("radius", 0.0)), float(next_values.get("radius", 0.0)), is_initial)
+			var damage_stat := _stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0, float(next_values.get("damage_ratio", 0.0)) * 100.0, is_initial)
+			var sc_unlock := _const(_sigil_chain_unlocks_for_stack(next_stack))
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [radius_stat, damage_stat, sc_unlock], "reward_card"))
 		_:
 			return "[color=#9ab8d8]Enhances this power.[/color]"
 
@@ -794,6 +821,20 @@ func _hunters_snare_unlocks_for_stack(stack_count: int) -> String:
 func _voidfire_unlocks_for_stack(stack_count: int) -> String:
 	if stack_count >= 3:
 		return "+half lockout"
+	return ""
+
+func _farline_volley_unlocks_for_stack(stack_count: int) -> String:
+	if stack_count >= 3:
+		return "+slow +dash burst"
+	if stack_count >= 2:
+		return "+slow"
+	return ""
+
+func _sigil_chain_unlocks_for_stack(stack_count: int) -> String:
+	if stack_count >= 3:
+		return "+slow +chain bonus"
+	if stack_count >= 2:
+		return "+slow"
 	return ""
 
 func get_upgrade_stack_count(upgrade_id: String) -> int:

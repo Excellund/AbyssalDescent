@@ -165,6 +165,23 @@ const TRIAL_POWER_PARAM_MAP := {
 			"damage_ratio": {"property": "fracture_field_damage_ratio", "type": "float"},
 			"slow_duration": {"property": "fracture_field_slow_duration", "type": "float"}
 		}
+	},
+	"farline_volley": {
+		"reward_flag": "reward_farline_volley",
+		"stack_property": "farline_volley_stacks",
+		"parameters": {
+			"arc_per_stack": {"property": "farline_volley_arc_per_stack", "type": "float"},
+			"bonus_per_stack": {"property": "farline_volley_bonus_per_stack", "type": "int"},
+			"stack_cap": {"property": "farline_volley_stack_cap", "type": "int"}
+		}
+	},
+	"sigil_chain": {
+		"reward_flag": "reward_sigil_chain",
+		"stack_property": "sigil_chain_stacks",
+		"parameters": {
+			"radius": {"property": "sigil_chain_radius", "type": "float"},
+			"damage_ratio": {"property": "sigil_chain_damage_ratio", "type": "float"}
+		}
 	}
 }
 
@@ -473,6 +490,17 @@ static func build_trial_values(power_id: String, stack_count: int, balance_data:
 				"radius": float(data.get("radius_base", 0.0)) + float(data.get("radius_per_stack", 0.0)) * float(stack_count),
 				"damage_ratio": float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count),
 				"slow_duration": float(data.get("slow_duration_base", 0.0)) + float(data.get("slow_duration_per_stack", 0.0)) * float(stack_count)
+			}
+		"farline_volley":
+			return {
+				"arc_per_stack": float(data.get("arc_per_stack_base", 0.0)) + float(data.get("arc_per_stack_per_stack", 0.0)) * float(stack_count),
+				"bonus_per_stack": int(data.get("bonus_per_stack_base", 0)) + stack_count * int(data.get("bonus_per_stack_per_stack", 0)),
+				"stack_cap": mini(int(data.get("stack_cap_max", 99)), int(data.get("stack_cap_base", 0)) + stack_count * int(data.get("stack_cap_per_stack", 0)))
+			}
+		"sigil_chain":
+			return {
+				"radius": float(data.get("radius_base", 0.0)) + float(data.get("radius_per_stack", 0.0)) * float(stack_count),
+				"damage_ratio": float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count)
 			}
 		_:
 			return {}

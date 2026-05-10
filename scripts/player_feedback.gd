@@ -333,7 +333,7 @@ func play_attack_swing_sound() -> void:
 		return
 	attack_swing_sound_player.play()
 
-func play_attack_swing_visual(direction: Vector2, swing_range: float, arc_degrees: float, tint: Color = ENEMY_BASE.COLOR_SWING_DEFAULT, lifetime: float = 0.11) -> void:
+func play_attack_swing_visual(direction: Vector2, swing_range: float, arc_degrees: float, tint: Color = ENEMY_BASE.COLOR_SWING_DEFAULT, lifetime: float = 0.11, inner_range: float = 0.0) -> void:
 	var swing_shape := Polygon2D.new()
 	swing_shape.visible = true
 	swing_shape.color = tint
@@ -341,13 +341,25 @@ func play_attack_swing_visual(direction: Vector2, swing_range: float, arc_degree
 	add_child(swing_shape)
 
 	var points := PackedVector2Array()
-	points.push_back(Vector2.ZERO)
 	var half_arc := deg_to_rad(arc_degrees * 0.5)
 	var segments := maxi(8, int(arc_degrees / 8.0))
-	for i in range(segments + 1):
-		var t := float(i) / float(segments)
-		var angle := lerpf(-half_arc, half_arc, t)
-		points.push_back(Vector2.RIGHT.rotated(angle) * swing_range)
+	var clamped_inner := clampf(inner_range, 0.0, maxf(0.0, swing_range - 0.5))
+	if clamped_inner > 0.0:
+		# Annular wedge: outer arc forward, inner arc back. Renders only the outer band.
+		for i in range(segments + 1):
+			var t_outer := float(i) / float(segments)
+			var angle_outer := lerpf(-half_arc, half_arc, t_outer)
+			points.push_back(Vector2.RIGHT.rotated(angle_outer) * swing_range)
+		for i in range(segments + 1):
+			var t_inner := float(i) / float(segments)
+			var angle_inner := lerpf(half_arc, -half_arc, t_inner)
+			points.push_back(Vector2.RIGHT.rotated(angle_inner) * clamped_inner)
+	else:
+		points.push_back(Vector2.ZERO)
+		for i in range(segments + 1):
+			var t := float(i) / float(segments)
+			var angle := lerpf(-half_arc, half_arc, t)
+			points.push_back(Vector2.RIGHT.rotated(angle) * swing_range)
 
 	swing_shape.polygon = points
 	swing_shape.modulate = Color(1.0, 1.0, 1.0, tint.a)
@@ -386,6 +398,137 @@ func play_world_ring(epicenter_global: Vector2, radius: float, color: Color, lif
 	tween.set_parallel(false)
 	tween.tween_interval(lifetime)
 	tween.tween_callback(ring.queue_free)
+
+func play_sigil_chain_zone(epicenter_global: Vector2, radius: float, lifetime: float, depth: int, _dormant_duration: float = 0.0) -> Node2D:
+	var safe_lifetime := maxf(0.05, lifetime)
+	var safe_depth := clampi(depth, 1, 6)
+	var depth_t := float(safe_depth - 1) / 5.0
+	var rune_color := Color(0.74, 0.58, 1.0, 0.94).lerp(Color(1.0, 0.62, 1.0, 0.96), depth_t)
+	var halo_color := Color(0.46, 0.32, 0.92, 0.42).lerp(Color(0.86, 0.42, 1.0, 0.58), depth_t)
+	var etched_color := Color(0.32, 0.30, 0.36, 0.55)
+	play_world_ring(epicenter_global, radius, halo_color, safe_lifetime)
+
+	var sigil := Node2D.new()
+	sigil.top_level = true
+	sigil.global_position = epicenter_global
+	sigil.z_index = 41
+	add_child(sigil)
+
+	var glow := Polygon2D.new()
+	glow.polygon = _build_circle_polygon(radius * 0.78, 28)
+	glow.color = Color(rune_color.r, rune_color.g, rune_color.b, 0.32)
+	glow.scale = Vector2(0.85, 0.85)
+	sigil.add_child(glow)
+
+	var inner_ring := Line2D.new()
+	inner_ring.width = 2.4
+	inner_ring.default_color = rune_color
+	inner_ring.closed = true
+	inner_ring.antialiased = true
+	var ring_points := PackedVector2Array()
+	var segments := 28
+	for i in range(segments):
+		var angle := TAU * float(i) / float(segments)
+		ring_points.append(Vector2.RIGHT.rotated(angle) * radius * 0.62)
+	inner_ring.points = ring_points
+	sigil.add_child(inner_ring)
+
+	var glyph_lines: Array[Line2D] = []
+	for triangle_index in range(2):
+		var rotation_offset := PI / 3.0 if triangle_index == 1 else 0.0
+		var glyph := Line2D.new()
+		glyph.width = 2.6
+		glyph.default_color = rune_color
+		glyph.closed = true
+		glyph.antialiased = true
+		var glyph_points := PackedVector2Array()
+		for vertex_index in range(3):
+			var glyph_angle := -PI * 0.5 + rotation_offset + TAU * float(vertex_index) / 3.0
+			glyph_points.append(Vector2(cos(glyph_angle), sin(glyph_angle)) * radius * 0.5)
+		glyph.points = glyph_points
+		sigil.add_child(glyph)
+		glyph_lines.append(glyph)
+
+	var spoke_lines: Array[Line2D] = []
+	for spoke_index in range(safe_depth):
+		var spoke := Line2D.new()
+		spoke.width = 1.6
+		spoke.default_color = Color(rune_color.r, rune_color.g, rune_color.b, 0.74)
+		spoke.antialiased = true
+		var spoke_angle := -PI * 0.5 + TAU * float(spoke_index) / float(maxi(1, safe_depth))
+		var spoke_dir := Vector2(cos(spoke_angle), sin(spoke_angle))
+		spoke.points = PackedVector2Array([spoke_dir * radius * 0.62, spoke_dir * radius * 0.92])
+		sigil.add_child(spoke)
+		spoke_lines.append(spoke)
+
+	var glow_pulse := create_tween()
+	glow_pulse.set_loops(maxi(1, int(ceil(safe_lifetime / 0.45))))
+	glow_pulse.tween_property(glow, "scale", Vector2(1.18, 1.18), 0.22).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	glow_pulse.tween_property(glow, "scale", Vector2(0.88, 0.88), 0.22).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+
+	var seq := create_tween()
+	seq.tween_interval(safe_lifetime)
+	seq.tween_callback(Callable(glow_pulse, "kill"))
+	seq.set_parallel(true)
+	seq.tween_property(glow, "modulate:a", 0.0, 0.18)
+	seq.tween_property(inner_ring, "default_color", etched_color, 0.22)
+	seq.tween_property(inner_ring, "width", 1.6, 0.22)
+	for glyph_line in glyph_lines:
+		seq.tween_property(glyph_line, "default_color", etched_color, 0.22)
+		seq.tween_property(glyph_line, "width", 1.6, 0.22)
+	for spoke_line in spoke_lines:
+		seq.tween_property(spoke_line, "default_color", Color(etched_color.r, etched_color.g, etched_color.b, 0.40), 0.22)
+		seq.tween_property(spoke_line, "width", 1.0, 0.22)
+	return sigil
+
+
+func fade_sigil_chain_node(sigil: Node2D, duration: float = 0.3) -> void:
+	if not is_instance_valid(sigil):
+		return
+	var safe_duration := maxf(0.05, duration)
+	var fade := create_tween()
+	fade.tween_property(sigil, "modulate:a", 0.0, safe_duration)
+	fade.tween_callback(sigil.queue_free)
+
+
+func play_sigil_chain_link(from_global: Vector2, to_global_pos: Vector2, depth: int) -> void:
+	var safe_depth := clampi(depth, 1, 6)
+	var depth_t := float(safe_depth - 1) / 5.0
+	var beam_color := Color(0.84, 0.62, 1.0, 0.92).lerp(Color(1.0, 0.74, 1.0, 0.98), depth_t)
+	var glow_color := Color(0.46, 0.32, 0.92, 0.46).lerp(Color(0.92, 0.42, 1.0, 0.62), depth_t)
+	var beam_width := 3.0 + 0.6 * float(safe_depth)
+	var direction := to_global_pos - from_global
+	var distance := direction.length()
+	if distance <= 0.5:
+		return
+	var perp := direction.orthogonal().normalized()
+	var jag_count := clampi(int(distance / 26.0), 2, 8)
+	var jag_points := PackedVector2Array()
+	jag_points.append(from_global)
+	for i in range(1, jag_count):
+		var t := float(i) / float(jag_count)
+		var offset_amp := minf(distance * 0.12, 18.0)
+		var offset := perp * randf_range(-offset_amp, offset_amp)
+		jag_points.append(from_global.lerp(to_global_pos, t) + offset)
+	jag_points.append(to_global_pos)
+
+	_play_world_line(jag_points, glow_color, beam_width + 4.0, 0.28, 0.6)
+	_play_world_line(jag_points, beam_color, beam_width, 0.22, 0.4)
+
+	var pop := Polygon2D.new()
+	pop.top_level = true
+	pop.global_position = to_global_pos
+	pop.polygon = _build_circle_polygon(8.0 + 2.0 * float(safe_depth), 24)
+	pop.color = Color(beam_color.r, beam_color.g, beam_color.b, 0.62)
+	pop.z_index = 42
+	pop.scale = Vector2.ONE * 0.6
+	add_child(pop)
+	var pop_tween := create_tween()
+	pop_tween.set_parallel(true)
+	pop_tween.tween_property(pop, "scale", Vector2.ONE * (1.4 + 0.12 * float(safe_depth)), 0.22)
+	pop_tween.tween_property(pop, "modulate:a", 0.0, 0.22)
+	pop_tween.set_parallel(false)
+	pop_tween.tween_callback(pop.queue_free)
 
 func _play_world_line(points: PackedVector2Array, color: Color, width: float, lifetime: float, final_width: float = 1.0) -> void:
 	if points.size() < 2:

@@ -896,12 +896,30 @@ func _update_stats_panel_text(player: Node, state: Dictionary) -> void:
 	var hp_now: int = int(player.get_current_health())
 	var dmg := int(player.get("damage"))
 	var atk_range := float(player.get("attack_range"))
+	var atk_arc := float(player.get("attack_arc_degrees"))
 	var atk_cd := float(player.get("attack_cooldown"))
 	var move_spd := float(player.get("max_speed"))
 	var dash_cd := float(player.get("dash_cooldown"))
 	var armor := int(player.get("iron_skin_armor"))
 
-	stats_label.text = "[b]Stats[/b]\nHealth: [color=#C8FFD8]%d/%d[/color]\nDamage: [color=#FFD8AA]%d[/color]\nAttack Range: [color=#FFD8AA]%.0f[/color]\nAttack Speed: [color=#BFD8FF]%.2fs[/color]\nMove Speed: [color=#BFD8FF]%.0f[/color]\nDash Cooldown: [color=#BFD8FF]%.2fs[/color]\nArmor: [color=#E8E8FF]%d[/color]%s" % [hp_now, hp, dmg, atk_range, atk_cd, move_spd, dash_cd, armor, timer_line]
+	stats_label.text = "[b]Stats[/b]\nHealth: [color=#C8FFD8]%d/%d[/color]\nDamage: [color=#FFD8AA]%d[/color]\nAttack Range: [color=#FFD8AA]%.0f[/color]\nAttack Arc: [color=#FFD8AA]%.0f°[/color]\nAttack Speed: [color=#BFD8FF]%.2fs[/color]\nMove Speed: [color=#BFD8FF]%.0f[/color]\nDash Cooldown: [color=#BFD8FF]%.2fs[/color]\nArmor: [color=#E8E8FF]%d[/color]%s" % [hp_now, hp, dmg, atk_range, atk_arc, atk_cd, move_spd, dash_cd, armor, timer_line]
+	_resize_stats_panel_to_content()
+
+
+func _resize_stats_panel_to_content() -> void:
+	if stats_panel == null or stats_label == null:
+		return
+	var content_h := stats_label.get_content_height()
+	if content_h <= 0.0:
+		return
+	var label_top := stats_label.position.y
+	var bottom_padding := 8.0
+	var target_h := label_top + content_h + bottom_padding
+	stats_label.custom_minimum_size.y = content_h
+	stats_label.size.y = content_h
+	if not is_equal_approx(stats_panel.custom_minimum_size.y, target_h):
+		stats_panel.custom_minimum_size.y = target_h
+		stats_panel.size.y = target_h
 
 func _format_hud_timer(total_seconds: int) -> String:
 	var safe_total := maxi(0, total_seconds)
@@ -1087,6 +1105,10 @@ func _get_power_display_name(power_id: String) -> String:
 			return "Eclipse Mark"
 		"fracture_field":
 			return "Fracture Field"
+		"farline_volley":
+			return "Farline Volley"
+		"sigil_chain":
+			return "Sigil Chain"
 		"wardens_verdict":
 			return "Warden's Verdict"
 		"lacuna_echo":

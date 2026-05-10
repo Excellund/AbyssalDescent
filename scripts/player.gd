@@ -14,6 +14,19 @@ const EXECUTION_EDGE_PROC_DISPLAY_HOLD: float = 0.24
 const INDOMITABLE_OATH_FILL_REQUIREMENT: float = 52.0
 const INDOMITABLE_OATH_PRIMED_REACH_SCALE: float = 1.35
 const INDOMITABLE_OATH_DAMAGE_SCALE: float = 1.35
+const FARLINE_VOLLEY_BAND_RATIO: float = 0.65
+const FARLINE_VOLLEY_SLOW_DURATION: float = 0.5
+const FARLINE_VOLLEY_SLOW_MULT: float = 0.7
+const FARLINE_VOLLEY_DASH_BURST_RADIUS: float = 110.0
+const FARLINE_VOLLEY_DASH_BURST_PER_VOLLEY_RATIO: float = 0.45
+const SIGIL_CHAIN_CHARGE_THRESHOLD: int = 4
+const SIGIL_CHAIN_ZONE_LIFETIME: float = 1.0
+const SIGIL_CHAIN_TICK_INTERVAL: float = 0.4
+const SIGIL_CHAIN_CHAIN_WINDOW: float = 4.0
+const SIGIL_CHAIN_SLOW_DURATION: float = 0.5
+const SIGIL_CHAIN_SLOW_MULT: float = 0.7
+const SIGIL_CHAIN_CHAIN_BONUS_PER_DEPTH: float = 0.40
+const SIGIL_CHAIN_CHAIN_BONUS_MAX_DEPTH: int = 6
 const RUN_SNAPSHOT_PROPERTIES := [
 	"max_speed",
 	"dash_cooldown",
@@ -93,11 +106,15 @@ const RUN_SNAPSHOT_PROPERTIES := [
 	"reward_bloodvow",
 	"reward_eclipse_mark",
 	"reward_fracture_field",
+	"reward_farline_volley",
+	"reward_sigil_chain",
 	"voidfire_stacks",
 	"dread_resonance_stacks",
 	"bloodvow_stacks",
 	"eclipse_mark_stacks",
 	"fracture_field_stacks",
+	"farline_volley_stacks",
+	"sigil_chain_stacks",
 	"voidfire_danger_zone_amp",
 	"voidfire_detonate_ratio",
 	"voidfire_detonate_radius",
@@ -122,6 +139,11 @@ const RUN_SNAPSHOT_PROPERTIES := [
 	"fracture_field_radius",
 	"fracture_field_damage_ratio",
 	"fracture_field_slow_duration",
+	"farline_volley_arc_per_stack",
+	"farline_volley_bonus_per_stack",
+	"farline_volley_stack_cap",
+	"sigil_chain_radius",
+	"sigil_chain_damage_ratio",
 	"bloodpact_bonus_damage",
 	"severing_edge_bonus_damage",
 	"apex_predator_bonus_damage",
@@ -330,6 +352,29 @@ var fracture_field_radius: float = 80.0
 var fracture_field_damage_ratio: float = 0.50
 var fracture_field_slow_duration: float = 0.6
 var _fracture_field_resolving: bool = false
+# Farline Volley: outer-band hits build Volley stacks; widens arc and adds flat damage; dash resets (or spends at L3).
+var reward_farline_volley: bool = false
+var farline_volley_stacks: int = 0
+var farline_volley_arc_per_stack: float = 6.0
+var farline_volley_bonus_per_stack: int = 2
+var farline_volley_stack_cap: int = 4
+var _farline_volley_current_stacks: int = 0
+var _farline_volley_proc_flash_left: float = 0.0
+# Sigil Chain: hits build charge; when full, the next melee hit drops a sigil zone that ticks damage in radius.
+# Consecutive zones within chain window stack chain depth; at L3 each chain step adds bonus damage.
+var reward_sigil_chain: bool = false
+var sigil_chain_stacks: int = 0
+var sigil_chain_radius: float = 70.0
+var sigil_chain_damage_ratio: float = 0.20
+var _sigil_chain_charge: int = 0
+var _sigil_chain_drop_armed: bool = false
+var _sigil_chain_zones: Array[Dictionary] = []
+var _sigil_chain_window_left: float = 0.0
+var _sigil_chain_depth: int = 0
+var _sigil_chain_charge_flash_left: float = 0.0
+var _sigil_chain_last_drop_pos: Vector2 = Vector2.ZERO
+var _sigil_chain_has_last_drop: bool = false
+var _sigil_chain_fx_nodes: Array[Node2D] = []
 # New boons
 # Blood Pact (boon): flat bonus damage on every hit while below 50% HP.
 var bloodpact_bonus_damage: int = 0
@@ -480,6 +525,10 @@ func _physics_process(delta: float) -> void:
 	_update_veilstep_rhythm(delta)
 	_update_farline_focus_state(delta)
 	_update_riftpunch_window(delta)
+	_update_sigil_chain_state(delta)
+	if _farline_volley_proc_flash_left > 0.0:
+		_farline_volley_proc_flash_left = maxf(0.0, _farline_volley_proc_flash_left - delta)
+		queue_redraw()
 	_update_apex_predator_combo(delta)
 	_update_apex_momentum(delta)
 	_update_void_echo_zones(delta)
@@ -589,6 +638,8 @@ func _try_start_dash(direction: Vector2) -> void:
 	_set_dash_phasing(true)
 	if passive_sigil_burst:
 		sigil_burst_ready = true
+	if reward_farline_volley:
+		_consume_or_reset_farline_volley_for_dash()
 	if veilstep_rhythm_empowered_dash_active and player_feedback != null:
 		player_feedback.play_world_ring(global_position, 34.0, Color(0.26, 1.0, 0.74, 0.9), 0.2)
 		_broadcast_cue_event("world_ring", {
@@ -655,14 +706,18 @@ func _try_execute_attack(attack_direction: Vector2) -> void:
 	velocity = Vector2.ZERO
 	if reward_razor_wind:
 		swing_color = ENEMY_BASE.COLOR_SWING_RAZOR_WIND if not execution_proc else ENEMY_BASE.COLOR_EXECUTION_PROC_EXTENDED
-	player_feedback.play_attack_swing_visual(attack_direction, float(melee_context["range"]), float(melee_context["arc_degrees"]), swing_color)
-	_broadcast_attack_indicator(attack_direction, float(melee_context["range"]), float(melee_context["arc_degrees"]), swing_color)
+	var visual_arc_degrees := float(melee_context["arc_degrees"])
+	if reward_farline_volley and _farline_volley_current_stacks > 0:
+		visual_arc_degrees += farline_volley_arc_per_stack * float(_farline_volley_current_stacks)
+	player_feedback.play_attack_swing_visual(attack_direction, float(melee_context["range"]), visual_arc_degrees, swing_color)
+	_broadcast_attack_indicator(attack_direction, float(melee_context["range"]), visual_arc_degrees, swing_color)
 	if reward_razor_wind:
 		var wind_context: Dictionary = upgrade_system.build_razor_wind_attack_context(melee_context, razor_wind_damage_ratio, razor_wind_range_scale, razor_wind_arc_degrees, damage, attack_range)
 		var wind_range := float(wind_context["range"])
 		var wind_color := ENEMY_BASE.COLOR_SWING_RAZOR_WIND_EXTENDED if not execution_proc else ENEMY_BASE.COLOR_EXECUTION_WIND_EXTENDED
-		player_feedback.play_attack_swing_visual(attack_direction, wind_range, razor_wind_arc_degrees, wind_color, 0.14)
-		_broadcast_attack_indicator(attack_direction, wind_range, razor_wind_arc_degrees, wind_color, 0.14)
+		var wind_arc_degrees_visual := float(wind_context.get("arc_degrees", razor_wind_arc_degrees))
+		player_feedback.play_attack_swing_visual(attack_direction, wind_range, wind_arc_degrees_visual, wind_color, 0.14, attack_range)
+		_broadcast_attack_indicator(attack_direction, wind_range, wind_arc_degrees_visual, wind_color, 0.14)
 	if execution_proc:
 		execution_edge_proc_display_left = EXECUTION_EDGE_PROC_DISPLAY_HOLD
 		_broadcast_cue_event("execution_edge_state", {
@@ -1349,6 +1404,8 @@ func apply_network_cue_event(event_name: String, payload: Dictionary) -> void:
 		"boss_void_zone_empowered_hit": _on_cue_boss_void_zone_empowered_hit(payload)
 		"riftpunch_prime": _on_cue_riftpunch_prime(payload)
 		"riftpunch_consume": _on_cue_riftpunch_consume(payload)
+		"sigil_chain_zone": _on_cue_sigil_chain_zone(payload)
+		"sigil_chain_reset": _on_cue_sigil_chain_reset(payload)
 
 func apply_owner_cue_event(event_name: String, payload: Dictionary) -> void:
 	if not _is_local_control_owner():
@@ -1460,6 +1517,24 @@ func _on_cue_riftpunch_consume(payload: Dictionary) -> void:
 	var consume_player_pos := payload.get("position", global_position) as Vector2
 	var consume_impact_pos := payload.get("impact", global_position) as Vector2
 	player_feedback.play_riftpunch_consume(consume_player_pos, consume_impact_pos)
+
+
+func _on_cue_sigil_chain_zone(payload: Dictionary) -> void:
+	var zone_position := payload.get("position", global_position) as Vector2
+	var zone_radius := float(payload.get("radius", 0.0))
+	var zone_lifetime := float(payload.get("lifetime", 1.0))
+	var zone_depth := int(payload.get("depth", 1))
+	if zone_radius <= 0.0:
+		return
+	var fx_node: Node2D = player_feedback.play_sigil_chain_zone(zone_position, zone_radius, zone_lifetime, zone_depth)
+	_register_sigil_chain_fx(fx_node)
+	if bool(payload.get("chained", false)):
+		var link_from := payload.get("link_from", zone_position) as Vector2
+		player_feedback.play_sigil_chain_link(link_from, zone_position, zone_depth)
+
+
+func _on_cue_sigil_chain_reset(_payload: Dictionary) -> void:
+	_fade_all_sigil_chain_fx(0.4)
 
 
 func _on_cue_storm_crown_discharge(payload: Dictionary) -> void:
@@ -1730,7 +1805,9 @@ func apply_power_for_test(power_id: String) -> bool:
 		"dread_resonance": true,
 		"bloodvow": true,
 		"eclipse_mark": true,
-		"fracture_field": true
+		"fracture_field": true,
+		"farline_volley": true,
+		"sigil_chain": true
 	}
 	if hard_ids.has(id):
 		apply_trial_power(id)
@@ -1796,6 +1873,7 @@ func _build_damage_breakdown(base_scaling_damage: int, enemy_node: Object, hit_p
 	flat_bonus_damage += _get_first_strike_bonus_damage(enemy_node)
 	flat_bonus_damage += _consume_wraithstep_mark(enemy_node, hit_position, base_scaling_damage)
 	flat_bonus_damage += _get_bloodpact_bonus()
+	flat_bonus_damage += _get_farline_volley_bonus()
 	flat_bonus_damage += _get_severing_edge_bonus(enemy_node)
 	flat_bonus_damage += _get_apex_predator_bonus(enemy_node, hit_position, base_scaling_damage)
 	flat_bonus_damage += _get_void_echo_zone_bonus(enemy_node, base_scaling_damage)
@@ -1952,6 +2030,8 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 	var strike_arc_degrees := float(melee_context.get("arc_degrees", attack_arc_degrees))
 	if retort_active:
 		strike_arc_degrees += 24.0
+	if reward_farline_volley and _farline_volley_current_stacks > 0:
+		strike_arc_degrees += farline_volley_arc_per_stack * float(_farline_volley_current_stacks)
 	var max_angle_radians := deg_to_rad(strike_arc_degrees * 0.5)
 
 	var rupture_triggered_enemy_ids: Dictionary = {}
@@ -1963,6 +2043,9 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 	}
 
 	var cone_hits := _get_damageable_enemies_in_cone(global_position, attack_direction, strike_range, max_angle_radians)
+	var sigil_chain_swing_hits := 0
+	var sigil_chain_first_hit_pos := Vector2.ZERO
+	var sigil_chain_first_hit_logged := false
 	for hit_entry in cone_hits:
 		var enemy_body := hit_entry.get("enemy") as Node2D
 		if enemy_body == null:
@@ -1984,11 +2067,21 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 			else:
 				final_damage_mult = farline_focus_outside_damage_mult
 		_resolve_attack_hit(enemy_body, hit_position, enemy_strike_damage, "melee", rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags, sigil_burst_state, final_damage_mult)
+		if reward_farline_volley and to_enemy.length_squared() > (strike_range * FARLINE_VOLLEY_BAND_RATIO) * (strike_range * FARLINE_VOLLEY_BAND_RATIO):
+			_on_farline_volley_outer_hit(enemy_body)
+		if reward_sigil_chain:
+			sigil_chain_swing_hits += 1
+			if not sigil_chain_first_hit_logged:
+				sigil_chain_first_hit_pos = hit_position
+				sigil_chain_first_hit_logged = true
 		if retort_active and not did_hit:
 			retort_impact_position = hit_position
 		if reward_dread_resonance:
 			_update_dread_resonance_target(enemy_body, enemy_id)
 		did_hit = true
+
+	if reward_sigil_chain and sigil_chain_first_hit_logged:
+		_progress_sigil_chain_after_swing(sigil_chain_swing_hits, sigil_chain_first_hit_pos)
 
 	if reward_razor_wind:
 		var wind_context: Dictionary = upgrade_system.build_razor_wind_attack_context(melee_context, razor_wind_damage_ratio, razor_wind_range_scale, razor_wind_arc_degrees, damage, attack_range)
@@ -2034,6 +2127,8 @@ func _get_farline_focus_range_band() -> Vector2:
 
 func _get_farline_focus_half_window_radians() -> float:
 	var attack_half_window_degrees := maxf(0.0, attack_arc_degrees * 0.5)
+	if reward_farline_volley and _farline_volley_current_stacks > 0:
+		attack_half_window_degrees += maxf(0.0, farline_volley_arc_per_stack * float(_farline_volley_current_stacks)) * 0.5
 	return deg_to_rad(attack_half_window_degrees)
 
 func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupture_triggered_enemy_ids: Dictionary = {}, rupture_hit_enemy_ids: Dictionary = {}, proc_flags: Dictionary = {}) -> bool:
@@ -2244,6 +2339,16 @@ func clear_lingering_combat_effects() -> void:
 	veilstep_rhythm_empowered_dash_active = false
 	veilstep_rhythm_touched_enemy_ids.clear()
 	_fracture_field_resolving = false
+	_farline_volley_current_stacks = 0
+	_farline_volley_proc_flash_left = 0.0
+	_sigil_chain_zones.clear()
+	_sigil_chain_charge = 0
+	_sigil_chain_drop_armed = false
+	_sigil_chain_window_left = 0.0
+	_sigil_chain_depth = 0
+	_sigil_chain_charge_flash_left = 0.0
+	_sigil_chain_has_last_drop = false
+	_fade_all_sigil_chain_fx(0.2)
 	queue_redraw()
 
 func _apply_rupture_wave(epicenter: Vector2, source_damage: int, rupture_hit_enemy_ids: Dictionary = {}, chain_depth: int = 0) -> void:
@@ -3442,6 +3547,216 @@ func _get_bloodpact_bonus() -> int:
 		return 0
 	return bloodpact_bonus_damage
 
+# --- Farline Volley (arcanum) ---
+
+func _get_farline_volley_bonus() -> int:
+	if not reward_farline_volley:
+		return 0
+	if _farline_volley_current_stacks <= 0:
+		return 0
+	return farline_volley_bonus_per_stack * _farline_volley_current_stacks
+
+func _on_farline_volley_outer_hit(enemy_body: Node2D) -> void:
+	if not reward_farline_volley:
+		return
+	var cap := maxi(1, farline_volley_stack_cap)
+	var was_below_cap := _farline_volley_current_stacks < cap
+	_farline_volley_current_stacks = mini(cap, _farline_volley_current_stacks + 1)
+	if was_below_cap:
+		_farline_volley_proc_flash_left = 0.18
+		queue_redraw()
+	if farline_volley_stacks >= 2 and _farline_volley_current_stacks >= maxi(2, int(cap / 2.0)) and is_instance_valid(enemy_body) and enemy_body.has_method("apply_slow"):
+		var volley_slow_duration := FARLINE_VOLLEY_SLOW_DURATION * _global_slow_duration_mult()
+		enemy_body.apply_slow(volley_slow_duration, FARLINE_VOLLEY_SLOW_MULT)
+		var volley_target_network_id := int(enemy_body.get_meta("network_enemy_id", -1))
+		if volley_target_network_id > 0:
+			_broadcast_cue_event("enemy_apply_slow", {
+				"enemy_network_id": volley_target_network_id,
+				"duration": volley_slow_duration,
+				"mult": FARLINE_VOLLEY_SLOW_MULT
+			})
+
+func _consume_or_reset_farline_volley_for_dash() -> void:
+	if not reward_farline_volley:
+		return
+	var stacks_at_dash := _farline_volley_current_stacks
+	var cap := maxi(1, farline_volley_stack_cap)
+	if farline_volley_stacks >= 3 and stacks_at_dash >= cap:
+		var burst_damage := maxi(1, int(round(float(farline_volley_bonus_per_stack) * float(stacks_at_dash) * FARLINE_VOLLEY_DASH_BURST_PER_VOLLEY_RATIO)))
+		_apply_farline_volley_dash_burst(burst_damage)
+	_farline_volley_current_stacks = 0
+	_farline_volley_proc_flash_left = 0.0
+	queue_redraw()
+
+func _apply_farline_volley_dash_burst(burst_damage: int) -> void:
+	var burst_origin := global_position
+	var rupture_triggered: Dictionary = {}
+	var rupture_hits: Dictionary = {}
+	var burst_proc_flags: Dictionary = {"convergence_registered": false, "tempo_registered": false}
+	var sigil_state: Dictionary = {"fired": false}
+	var radius_squared := FARLINE_VOLLEY_DASH_BURST_RADIUS * FARLINE_VOLLEY_DASH_BURST_RADIUS
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if not DAMAGEABLE.can_take_damage(enemy_node):
+			continue
+		var enemy_body := enemy_node as Node2D
+		var hit_position: Vector2 = enemy_body.global_position
+		if burst_origin.distance_squared_to(hit_position) > radius_squared:
+			continue
+		_resolve_attack_hit(enemy_body, hit_position, burst_damage, "farline_volley_burst", rupture_triggered, rupture_hits, burst_proc_flags, sigil_state, 1.0)
+	if player_feedback != null:
+		player_feedback.play_world_ring(burst_origin, FARLINE_VOLLEY_DASH_BURST_RADIUS, Color(1.0, 0.86, 0.42, 0.9), 0.22)
+	_broadcast_cue_event("world_ring", {
+		"position": burst_origin,
+		"radius": FARLINE_VOLLEY_DASH_BURST_RADIUS,
+		"color": Color(1.0, 0.86, 0.42, 0.9),
+		"duration": 0.22
+	})
+
+# --- Sigil Chain (arcanum) ---
+
+func _progress_sigil_chain_after_swing(swing_hits: int, first_hit_pos: Vector2) -> void:
+	if not reward_sigil_chain:
+		return
+	if _sigil_chain_drop_armed:
+		_drop_sigil_chain_zone(first_hit_pos)
+		_sigil_chain_drop_armed = false
+	if swing_hits > 0:
+		_sigil_chain_charge += swing_hits
+		if _sigil_chain_charge >= SIGIL_CHAIN_CHARGE_THRESHOLD:
+			_sigil_chain_charge = 0
+			_sigil_chain_drop_armed = true
+			_sigil_chain_charge_flash_left = 0.24
+			queue_redraw()
+
+func _drop_sigil_chain_zone(zone_position: Vector2) -> void:
+	var chained := _sigil_chain_window_left > 0.0 and _sigil_chain_has_last_drop
+	if _sigil_chain_window_left > 0.0:
+		_sigil_chain_depth = mini(SIGIL_CHAIN_CHAIN_BONUS_MAX_DEPTH, _sigil_chain_depth + 1)
+	else:
+		_sigil_chain_depth = 1
+	_sigil_chain_window_left = SIGIL_CHAIN_CHAIN_WINDOW
+	var damage_per_tick := maxi(1, int(round(float(damage) * sigil_chain_damage_ratio)))
+	var bonus_mult := 1.0
+	if sigil_chain_stacks >= 3:
+		bonus_mult += SIGIL_CHAIN_CHAIN_BONUS_PER_DEPTH * float(maxi(0, _sigil_chain_depth - 1))
+	damage_per_tick = maxi(1, int(round(float(damage_per_tick) * bonus_mult)))
+	damage_per_tick = _apply_objective_mutator_damage_mult(damage_per_tick)
+	var zone_data := {
+		"pos": zone_position,
+		"radius": sigil_chain_radius,
+		"life": SIGIL_CHAIN_ZONE_LIFETIME,
+		"tick_left": 0.0,
+		"damage": damage_per_tick,
+		"depth": _sigil_chain_depth
+	}
+	_sigil_chain_zones.append(zone_data)
+	var link_from := _sigil_chain_last_drop_pos if chained else zone_position
+	if player_feedback != null:
+		var fx_node: Node2D = player_feedback.play_sigil_chain_zone(zone_position, sigil_chain_radius, SIGIL_CHAIN_ZONE_LIFETIME, _sigil_chain_depth)
+		_register_sigil_chain_fx(fx_node)
+		if chained:
+			player_feedback.play_sigil_chain_link(link_from, zone_position, _sigil_chain_depth)
+	_broadcast_cue_event("sigil_chain_zone", {
+		"position": zone_position,
+		"radius": sigil_chain_radius,
+		"lifetime": SIGIL_CHAIN_ZONE_LIFETIME,
+		"depth": _sigil_chain_depth,
+		"chained": chained,
+		"link_from": link_from
+	})
+	_sigil_chain_last_drop_pos = zone_position
+	_sigil_chain_has_last_drop = true
+
+
+func _register_sigil_chain_fx(node: Node2D) -> void:
+	if node == null:
+		return
+	_sigil_chain_fx_nodes.append(node)
+	while _sigil_chain_fx_nodes.size() > SIGIL_CHAIN_CHAIN_BONUS_MAX_DEPTH:
+		var oldest: Node2D = _sigil_chain_fx_nodes.pop_front()
+		if is_instance_valid(oldest) and player_feedback != null:
+			player_feedback.fade_sigil_chain_node(oldest, 0.28)
+
+
+func _fade_all_sigil_chain_fx(duration: float = 0.4) -> void:
+	for node in _sigil_chain_fx_nodes:
+		if is_instance_valid(node) and player_feedback != null:
+			player_feedback.fade_sigil_chain_node(node, duration)
+	_sigil_chain_fx_nodes.clear()
+
+func _update_sigil_chain_state(delta: float) -> void:
+	if not _is_local_control_owner():
+		return
+	if _sigil_chain_window_left > 0.0:
+		_sigil_chain_window_left = maxf(0.0, _sigil_chain_window_left - delta)
+		if _sigil_chain_window_left <= 0.0:
+			_sigil_chain_depth = 0
+			_sigil_chain_has_last_drop = false
+			_fade_all_sigil_chain_fx(0.4)
+			_broadcast_cue_event("sigil_chain_reset", {})
+		queue_redraw()
+	if _sigil_chain_charge_flash_left > 0.0:
+		_sigil_chain_charge_flash_left = maxf(0.0, _sigil_chain_charge_flash_left - delta)
+		queue_redraw()
+	if _sigil_chain_zones.is_empty():
+		return
+	var remove_indices: Array[int] = []
+	for i in range(_sigil_chain_zones.size()):
+		var zone := _sigil_chain_zones[i]
+		var life := maxf(0.0, float(zone.get("life", 0.0)) - delta)
+		if life <= 0.0:
+			remove_indices.append(i)
+			continue
+		zone["life"] = life
+		var tick_left := maxf(0.0, float(zone.get("tick_left", 0.0)) - delta)
+		if tick_left <= 0.0:
+			tick_left = SIGIL_CHAIN_TICK_INTERVAL
+			_apply_sigil_chain_zone_tick(zone)
+		zone["tick_left"] = tick_left
+		_sigil_chain_zones[i] = zone
+	while not remove_indices.is_empty():
+		_sigil_chain_zones.remove_at(remove_indices.pop_back())
+
+func _apply_sigil_chain_zone_tick(zone: Dictionary) -> void:
+	var zone_pos: Vector2 = zone.get("pos", Vector2.ZERO)
+	var radius := float(zone.get("radius", 0.0))
+	if radius <= 0.0:
+		return
+	var tick_damage := int(zone.get("damage", 0))
+	if tick_damage <= 0:
+		return
+	if player_feedback != null:
+		player_feedback.play_world_ring(zone_pos, radius, Color(0.62, 0.42, 1.0, 0.46), SIGIL_CHAIN_TICK_INTERVAL)
+	_broadcast_cue_event("world_ring", {
+		"position": zone_pos,
+		"radius": radius,
+		"color": Color(0.62, 0.42, 1.0, 0.46),
+		"duration": SIGIL_CHAIN_TICK_INTERVAL
+	})
+	var radius_squared := radius * radius
+	var apply_slow := sigil_chain_stacks >= 2
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if not DAMAGEABLE.can_take_damage(enemy_node):
+			continue
+		var enemy_body := enemy_node as Node2D
+		if enemy_body.global_position.distance_squared_to(zone_pos) > radius_squared:
+			continue
+		DAMAGEABLE.apply_damage(enemy_node, tick_damage, {"is_ground_attack": true, "attack_type": "sigil_chain_zone"})
+		if apply_slow and enemy_body.has_method("apply_slow"):
+			var sigil_slow_duration := SIGIL_CHAIN_SLOW_DURATION * _global_slow_duration_mult()
+			enemy_body.apply_slow(sigil_slow_duration, SIGIL_CHAIN_SLOW_MULT)
+			var sigil_target_network_id := int(enemy_body.get_meta("network_enemy_id", -1))
+			if sigil_target_network_id > 0:
+				_broadcast_cue_event("enemy_apply_slow", {
+					"enemy_network_id": sigil_target_network_id,
+					"duration": sigil_slow_duration,
+					"mult": SIGIL_CHAIN_SLOW_MULT
+				})
+
 # --- Severing Edge (boon) ---
 
 func _get_severing_edge_bonus(enemy_node: Object) -> int:
@@ -3993,6 +4308,52 @@ func _draw_objective_mutator_aura(body_radius: float) -> void:
 
 func _draw_trial_reward_state() -> void:
 	var t := float(Time.get_ticks_msec()) * 0.001
+
+	if reward_sigil_chain:
+		var sigil_charge_t := clampf(float(_sigil_chain_charge) / float(maxi(1, SIGIL_CHAIN_CHARGE_THRESHOLD)), 0.0, 1.0)
+		var sigil_meter_radius := 24.0
+		var sigil_base_color := Color(0.46, 0.32, 0.92, 0.42)
+		var sigil_fill_color := Color(0.74, 0.58, 1.0, 0.92)
+		if _sigil_chain_drop_armed:
+			var arm_pulse := 0.5 + 0.5 * sin(t * 9.0)
+			sigil_fill_color = Color(0.86, 0.72, 1.0, 0.85 + arm_pulse * 0.1)
+		if _sigil_chain_charge_flash_left > 0.0:
+			sigil_fill_color.a = clampf(sigil_fill_color.a + _sigil_chain_charge_flash_left * 0.6, 0.0, 1.0)
+		draw_arc(Vector2.ZERO, sigil_meter_radius, -PI * 0.5, PI * 1.5, 36, sigil_base_color, 1.6)
+		if _sigil_chain_drop_armed:
+			draw_arc(Vector2.ZERO, sigil_meter_radius, -PI * 0.5, PI * 1.5, 36, sigil_fill_color, 2.2)
+		elif sigil_charge_t > 0.0:
+			draw_arc(Vector2.ZERO, sigil_meter_radius, -PI * 0.5, -PI * 0.5 + TAU * sigil_charge_t, 36, sigil_fill_color, 2.0)
+		if _sigil_chain_window_left > 0.0:
+			var chain_window_t := clampf(_sigil_chain_window_left / SIGIL_CHAIN_CHAIN_WINDOW, 0.0, 1.0)
+			var chain_halo_radius := sigil_meter_radius + 6.0
+			var chain_depth_t := clampf(float(_sigil_chain_depth) / float(SIGIL_CHAIN_CHAIN_BONUS_MAX_DEPTH), 0.0, 1.0)
+			var chain_halo_color := Color(0.74, 0.58, 1.0, 0.32).lerp(Color(1.0, 0.62, 1.0, 0.78), chain_depth_t)
+			draw_arc(Vector2.ZERO, chain_halo_radius, -PI * 0.5, -PI * 0.5 + TAU * chain_window_t, 40, chain_halo_color, 2.4)
+			var chain_pip_count := clampi(_sigil_chain_depth, 0, SIGIL_CHAIN_CHAIN_BONUS_MAX_DEPTH)
+			for chain_pip_index in range(chain_pip_count):
+				var chain_pip_angle := -PI * 0.5 + TAU * float(chain_pip_index) / float(maxi(1, SIGIL_CHAIN_CHAIN_BONUS_MAX_DEPTH))
+				var chain_pip_pos := Vector2(cos(chain_pip_angle), sin(chain_pip_angle)) * (chain_halo_radius + 3.0)
+				draw_circle(chain_pip_pos, 1.6, Color(chain_halo_color.r, chain_halo_color.g, chain_halo_color.b, 0.92))
+
+	if reward_farline_volley:
+		var volley_band_radius := attack_range * FARLINE_VOLLEY_BAND_RATIO
+		var volley_pulse := 0.5 + 0.5 * sin(t * 2.4)
+		var volley_alpha := 0.10 + volley_pulse * 0.06
+		if _farline_volley_current_stacks > 0:
+			volley_alpha += 0.08
+		if _farline_volley_proc_flash_left > 0.0:
+			volley_alpha += 0.18 * (_farline_volley_proc_flash_left / 0.18)
+		var volley_color := Color(1.0, 0.86, 0.42, clampf(volley_alpha, 0.0, 0.5))
+		draw_arc(Vector2.ZERO, volley_band_radius, 0.0, TAU, 56, volley_color, 1.4)
+		var cap := maxi(1, farline_volley_stack_cap)
+		var stack_color := Color(1.0, 0.92, 0.58, 0.92)
+		var stack_dim := Color(0.5, 0.42, 0.22, 0.5)
+		for i in range(cap):
+			var pip_angle := -PI * 0.5 + (float(i) - float(cap - 1) * 0.5) * 0.13
+			var pip_radius := volley_band_radius - 6.0
+			var pip_pos := Vector2(cos(pip_angle), sin(pip_angle)) * pip_radius
+			draw_circle(pip_pos, 2.6, stack_color if i < _farline_volley_current_stacks else stack_dim)
 
 	if reward_razor_wind:
 		var facing := visual_facing_direction if visual_facing_direction.length_squared() > 0.000001 else Vector2.RIGHT

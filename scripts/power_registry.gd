@@ -114,6 +114,16 @@ const DAMAGE_MODEL_BY_POWER := {
 		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
 		"formula_note": "+X per resonance stack on same target"
 	},
+	"farline_volley": {
+		"kind": DAMAGE_KIND_FLAT,
+		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
+		"formula_note": "+X flat damage per Volley stack; widens attack arc per stack; dashing resets"
+	},
+	"sigil_chain": {
+		"kind": DAMAGE_KIND_SCALING,
+		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
+		"formula_note": "Charged hits drop a sigil zone that ticks player_damage * ratio in radius"
+	},
 	# Character-lore bridges
 	"bloodvow": {
 		"kind": DAMAGE_KIND_SCALING,
@@ -418,6 +428,42 @@ const TRIAL_POWER_BALANCE := {
 		"splash_ratio_base": 0.55,
 		"splash_ratio_per_stack": 0.15,
 		"splash_ratio_cap": 0.98
+	},
+	"farline_volley": {
+		# Hits in the outer reach band (>= attack_range * band_ratio) build Volley stacks.
+		# Dashing resets all stacks. L3 cap-spend converts dash into a damage burst.
+		"arc_per_stack_base": 6.0,
+		"arc_per_stack_per_stack": 2.0,
+		"bonus_per_stack_base": 2,
+		"bonus_per_stack_per_stack": 2,
+		"stack_cap_base": 4,
+		"stack_cap_per_stack": 2,
+		"stack_cap_max": 8,
+		"band_ratio": 0.65,
+		"slow_at_stack": 2,
+		"slow_duration": 0.5,
+		"slow_mult": 0.7,
+		"dash_burst_at_stack": 3,
+		"dash_burst_radius": 110.0,
+		"dash_burst_per_volley_ratio": 0.45
+	},
+	"sigil_chain": {
+		# Hits build charge quickly; the next attack drops a short-lived sigil zone at impact.
+		# The chain window is generous so chaining is the natural play; L3 chain bonus is the primary damage payoff.
+		"radius_base": 70.0,
+		"radius_per_stack": 14.0,
+		"damage_ratio_base": 0.18,
+		"damage_ratio_per_stack": 0.10,
+		"charge_threshold": 4,
+		"zone_lifetime": 1.0,
+		"tick_interval": 0.4,
+		"chain_window": 4.0,
+		"slow_at_stack": 2,
+		"slow_duration": 0.5,
+		"slow_mult": 0.7,
+		"chain_bonus_at_stack": 3,
+		"chain_bonus_per_depth": 0.40,
+		"chain_bonus_max_depth": 6
 	}
 }
 
@@ -483,7 +529,9 @@ const TRIAL_POWER_STACK_LIMITS := {
 	"dread_resonance": 4,
 	"bloodvow": 3,
 	"eclipse_mark": 3,
-	"fracture_field": 3
+	"fracture_field": 3,
+	"farline_volley": 3,
+	"sigil_chain": 3
 }
 
 const BOSS_REWARD_STACK_LIMITS := {
@@ -554,6 +602,8 @@ const POWER_DISPLAY_NAMES := {
 	"bloodvow": "Blood Vow",
 	"eclipse_mark": "Eclipse Mark",
 	"fracture_field": "Fracture Field",
+	"farline_volley": "Farline Volley",
+	"sigil_chain": "Sigil Chain",
 	# Boss rewards
 	"wardens_verdict": "Warden's Verdict",
 	"lacuna_echo": "Lacuna Echo",
@@ -573,6 +623,7 @@ const TRIAL_POWER_POOL_IDS: Array[String] = [
 	"razor_wind", "execution_edge", "rupture_wave", "aegis_field", "hunters_snare",
 	"phantom_step", "riftpunch", "reaper_step", "static_wake", "storm_crown", "wraithstep",
 	"voidfire", "dread_resonance", "bloodvow", "eclipse_mark", "fracture_field",
+	"farline_volley", "sigil_chain",
 ]
 
 const BOSS_REWARD_POOL_IDS: Array[String] = [
