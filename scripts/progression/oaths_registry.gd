@@ -56,8 +56,8 @@ const SPECIAL_OATH_DEFINITIONS := {
 	},
 	"singular_focus": {
 		"label": "Oath of Singular Focus",
-		"description": "Clear a run using only one arcana pool key.",
-		"evaluator_key": "win_single_arcana_pool",
+		"description": "Clear a run with only one arcana picked (any number of stacks).",
+		"evaluator_key": "win_single_arcana",
 		"params": {},
 		"reward_catalyst_id": "extra_arcana_slot",
 		"reward_modifier_id": ""

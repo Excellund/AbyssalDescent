@@ -28,6 +28,15 @@ var boss_reward_items: Dictionary = {}
 var reward_timeline: Array[Dictionary] = []
 var unlocks: Array[String] = []
 
+## Endgame chase tracking (Ascension + Oaths). Host-tracked.
+var ascension_rank: int = 0
+var ascension_loadout: Array[String] = []
+var equipped_catalyst_ids: Array[String] = []
+var boss_no_hit_ids: Array[String] = []
+var hold_full_control_achieved: bool = false
+var _bosses_with_damage_taken: Dictionary = {}
+var _active_boss_id: String = ""
+
 func reset_for_run(run_seed: Dictionary) -> void:
 	started_at_unix = int(run_seed.get("started_at_unix", Time.get_unix_time_from_system()))
 	started_at_msec = int(run_seed.get("started_at_msec", Time.get_ticks_msec()))
@@ -50,18 +59,52 @@ func reset_for_run(run_seed: Dictionary) -> void:
 	boss_reward_items.clear()
 	reward_timeline.clear()
 	unlocks.clear()
+	ascension_rank = int(run_seed.get("ascension_rank", 0))
+	var loadout_raw: Variant = run_seed.get("ascension_loadout", [])
+	ascension_loadout.clear()
+	if loadout_raw is Array:
+		for entry in loadout_raw:
+			ascension_loadout.append(String(entry))
+	var catalysts_raw: Variant = run_seed.get("equipped_catalyst_ids", [])
+	equipped_catalyst_ids.clear()
+	if catalysts_raw is Array:
+		for entry in catalysts_raw:
+			equipped_catalyst_ids.append(String(entry))
+	boss_no_hit_ids.clear()
+	hold_full_control_achieved = false
+	_bosses_with_damage_taken.clear()
+	_active_boss_id = ""
 
 func record_damage_dealt(amount: int) -> void:
 	total_damage_dealt += maxi(0, amount)
 
 func record_damage_taken(amount: int) -> void:
 	total_damage_taken += maxi(0, amount)
+	if amount > 0 and not _active_boss_id.is_empty():
+		_bosses_with_damage_taken[_active_boss_id] = true
 
 func record_enemy_kill() -> void:
 	enemies_killed += 1
 
 func record_boss_defeat(_boss_id: String = "") -> void:
 	bosses_defeated += 1
+	var id: String = String(_boss_id).strip_edges().to_lower()
+	if id.is_empty():
+		id = _active_boss_id
+	if not id.is_empty() and not _bosses_with_damage_taken.has(id):
+		if not boss_no_hit_ids.has(id):
+			boss_no_hit_ids.append(id)
+	_active_boss_id = ""
+
+## Boss fight bracketing: boss enemy id is opened on engage, closed on defeat/death.
+func begin_boss_engagement(boss_id: String) -> void:
+	_active_boss_id = String(boss_id).strip_edges().to_lower()
+
+func end_boss_engagement() -> void:
+	_active_boss_id = ""
+
+func record_hold_full_control() -> void:
+	hold_full_control_achieved = true
 
 func record_unlock(unlock_label: String) -> void:
 	var label := unlock_label.strip_edges()
@@ -131,6 +174,11 @@ func build_summary(final_state: Dictionary) -> Dictionary:
 		"unlocks": unlocks.duplicate(),
 		"timestamp_text": _format_timestamp(ended_at_unix),
 	})
+	summary["ascension_rank"] = ascension_rank
+	summary["ascension_loadout"] = ascension_loadout.duplicate()
+	summary["equipped_catalyst_ids"] = equipped_catalyst_ids.duplicate()
+	summary["boss_no_hit_ids"] = boss_no_hit_ids.duplicate()
+	summary["hold_full_control_achieved"] = hold_full_control_achieved
 	return summary
 
 func _category_for_mode(mode: int) -> String:

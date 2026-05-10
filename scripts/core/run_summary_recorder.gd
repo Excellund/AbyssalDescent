@@ -17,6 +17,8 @@ const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.g
 const BEARING_KEY_NORMALIZER := preload("res://scripts/shared/bearing_key_normalizer.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
+const META_PROGRESS_STORE := preload("res://scripts/meta_progress_store.gd")
+const OATHS_EVALUATOR := preload("res://scripts/progression/oaths_evaluator.gd")
 
 const STAT_ATTRIBUTION_TRACE := false
 
@@ -146,6 +148,14 @@ func reset_summary_tracker() -> void:
 	if _world.current_player_profile != null and _world.current_player_profile.is_valid():
 		tracker_seed["player_uuid"] = _world.current_player_profile.player_id
 		tracker_seed["player_name"] = _world.current_player_profile.profile_name
+	if run_context != null and run_context.has_method("get_active_ascension_loadout"):
+		var loadout: Array = run_context.get_active_ascension_loadout()
+		tracker_seed["ascension_loadout"] = loadout
+		var ASCENSION_REGISTRY := preload("res://scripts/progression/ascension_modifier_registry.gd")
+		tracker_seed["ascension_rank"] = ASCENSION_REGISTRY.compute_loadout_rank(loadout)
+		var character_id: String = String(_world.current_character_id).strip_edges().to_lower()
+		var META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
+		tracker_seed["equipped_catalyst_ids"] = META_PROGRESS.get_equipped_catalyst_ids(run_context.meta_progress_profile, character_id)
 	run_summary_tracker.reset_for_run(tracker_seed)
 	for player_node in _world._get_multiplayer_player_nodes():
 		if not is_instance_valid(player_node):
@@ -232,6 +242,8 @@ func finish_run(outcome: String, death_event: Dictionary = {}) -> void:
 		summary["unlocks"] = (tracker_summary.get("unlocks", []) as Array).duplicate(true)
 		summary["duration_seconds"] = int(tracker_summary.get("duration_seconds", get_run_elapsed_seconds()))
 		summary["timestamp_text"] = String(tracker_summary.get("timestamp_text", ""))
+		_apply_endgame_chase_progress(latest_run_summary)
+		summary["unlocks"] = (latest_run_summary.get("unlocks", []) as Array).duplicate(true)
 	_latest_peer_summary_overrides = build_peer_summary_overrides()
 	summary["is_multiplayer"] = _world.is_multiplayer
 	summary["player_count"] = int(_world.difficulty_provider.get_party_size())
@@ -511,6 +523,14 @@ func record_boss_defeat(boss_id: String) -> void:
 		run_summary_tracker.record_boss_defeat(boss_id)
 	_record_boss_defeat_for_summary_peers()
 
+func begin_boss_engagement_for_tracker(boss_id: String) -> void:
+	if run_summary_tracker != null:
+		run_summary_tracker.begin_boss_engagement(boss_id)
+
+func record_hold_full_control_for_tracker() -> void:
+	if run_summary_tracker != null:
+		run_summary_tracker.record_hold_full_control()
+
 func record_unlock(text: String) -> void:
 	if run_summary_tracker == null:
 		return
@@ -786,6 +806,37 @@ func _empty_peer_stats() -> Dictionary:
 
 func _ensure_peer_summary_stats(peer_id: int) -> Dictionary:
 	return _summary_stats_by_peer.get(peer_id, _empty_peer_stats()) as Dictionary
+
+## Apply ascension clear records + oath completions + catalyst unlocks to the
+## meta-progress profile based on the just-built run summary. Mutates
+## `latest_run_summary["unlocks"]` to surface human-readable labels on the
+## defeat/victory screen.
+func _apply_endgame_chase_progress(run_summary: Dictionary) -> void:
+	var run_context: Node = _world._get_run_context()
+	if run_context == null:
+		return
+	var profile: Dictionary = run_context.meta_progress_profile
+	if profile.is_empty():
+		return
+	var changed: bool = false
+	var summary_unlocks: Array = run_summary.get("unlocks", []) as Array
+	var outcome: String = String(run_summary.get("outcome", "")).to_lower()
+	var is_clear: bool = outcome == "clear" or outcome == "victory" or outcome == "win"
+	var character_id: String = String(run_summary.get("character_id", "")).strip_edges().to_lower()
+	if is_clear and not character_id.is_empty():
+		var rank: int = int(run_summary.get("ascension_rank", 0))
+		if rank > 0:
+			if META_PROGRESS_STORE.record_ascension_clear(profile, character_id, rank):
+				changed = true
+				summary_unlocks.append("Ascension Rank %d cleared" % rank)
+	var results: Dictionary = OATHS_EVALUATOR.evaluate_run(run_summary, profile)
+	if OATHS_EVALUATOR.apply_results_to_profile(profile, results):
+		changed = true
+	for label_variant in results.get("labels", []):
+		summary_unlocks.append(String(label_variant))
+	run_summary["unlocks"] = summary_unlocks
+	if changed and run_context.has_method("save_meta_progress"):
+		run_context.save_meta_progress()
 
 func _record_boss_defeat_for_summary_peers() -> void:
 	var tracked_peer_ids: Dictionary = {}

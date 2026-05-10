@@ -2914,6 +2914,7 @@ func _begin_configured_boss_room(boss_stage: int, room_size: Vector2, room_label
 	current_room_enemy_mutator = {}
 	current_room_player_mutator = {}
 	run_summary_recorder.record_room_entry(room_entry_key, {})
+	run_summary_recorder.begin_boss_engagement_for_tracker(room_entry_key)
 	hud.show_banner(banner_title, "")
 	_apply_camera_bounds_for_room(current_effective_room_size)
 	active_room_enemy_count = 1
