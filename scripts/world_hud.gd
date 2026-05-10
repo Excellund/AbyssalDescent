@@ -487,11 +487,9 @@ func _update_status_panel_text(state: Dictionary) -> void:
 			status_mutator_label.visible = false
 		return
 
-	var second_boss_unlocked := bool(state.get("second_boss_unlocked", false))
-	if boss_unlocked and not first_boss_defeated:
-		status_label.text = "[center][b]Act I[/b]\n[color=#A5B6C9]Depth %d[/color][/center]" % room_depth
-	elif second_boss_unlocked:
-		status_label.text = "[center][b]Act II[/b]\n[color=#A5B6C9]Depth %d[/color][/center]" % room_depth
+	var second_boss_defeated := bool(state.get("second_boss_defeated", false))
+	if second_boss_defeated:
+		status_label.text = "[center][b]Act III[/b]\n[color=#A5B6C9]Depth %d[/color][/center]" % room_depth
 	elif first_boss_defeated:
 		status_label.text = "[center][b]Act II[/b]\n[color=#A5B6C9]Depth %d[/color][/center]" % room_depth
 	else:
