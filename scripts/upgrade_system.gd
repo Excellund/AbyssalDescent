@@ -345,7 +345,7 @@ func get_power_flavor_text(power_id: String) -> String:
 		"wardens_verdict":
 			return "Each consecutive hit deals more bonus damage. The 4th hit detonates a burst that hits nearby enemies."
 		"lacuna_echo":
-			return "Kills create a void zone that pulses damage and empowers attacks inside it."
+			return "Kills create a void zone that yanks in nearby enemies and pulses damage."
 		"sovereign_tempo":
 			return "Hits build tempo. Ending a dash releases a wave; hits refund dash cooldown."
 		"pillar_convergence":
@@ -404,7 +404,7 @@ func get_power_current_description(power_id: String) -> String:
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("+%d", int(player_reference.get("apex_predator_bonus_damage")))], "build_detail"))
 		"lacuna_echo":
 			var val := int(player_reference.get("void_echo_damage"))
-			var radius := clampf(96.0 + float(val) * 1.05, 96.0, 260.0)
+			var radius := clampf(54.0 + float(val) * 0.6, 54.0, 110.0)
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%d", val), _current_stat("%.0f", radius)], "build_detail"))
 		"sovereign_tempo":
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("+%.0f%%", float(player_reference.get("apex_momentum_speed_bonus")) * 100.0)], "build_detail"))
@@ -683,8 +683,8 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 		"lacuna_echo":
 			var cur_void_echo := int(cur_val)
 			var next_void_echo := int(next_val)
-			var cur_echo_radius := clampf(96.0 + float(cur_void_echo) * 1.05, 96.0, 260.0)
-			var next_echo_radius := clampf(96.0 + float(next_void_echo) * 1.05, 96.0, 260.0)
+			var cur_echo_radius := clampf(54.0 + float(cur_void_echo) * 0.6, 54.0, 110.0)
+			var next_echo_radius := clampf(54.0 + float(next_void_echo) * 0.6, 54.0, 110.0)
 			var is_initial := cur_void_echo == 0
 			var power_stat := _stat("+%d", cur_void_echo, next_void_echo, is_initial)
 			var radius_stat := _stat("%.0f", cur_echo_radius, next_echo_radius, is_initial)

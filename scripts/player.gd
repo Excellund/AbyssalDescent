@@ -3831,7 +3831,7 @@ func _get_void_echo_zone_bonus(enemy_node: Object, base_damage: int) -> int:
 			if player_feedback != null and player_feedback.has_method("play_boss_void_zone_empowered_hit"):
 				player_feedback.play_boss_void_zone_empowered_hit(enemy_pos)
 				_broadcast_cue_event("boss_void_zone_empowered_hit", {"position": enemy_pos})
-			return maxi(1, int(round(float(base_damage) * (0.22 + float(void_echo_damage) * 0.002))))
+			return maxi(1, int(round(float(base_damage) * (0.14 + float(void_echo_damage) * 0.0015))))
 	return 0
 
 func _gain_indomitable_oath_from_hit(enemy_node: Object, source: String) -> void:
@@ -3983,7 +3983,7 @@ func _update_void_echo_zones(delta: float) -> void:
 			pulse_left = 0.32
 			var zone_pos: Vector2 = zone.get("pos", Vector2.ZERO)
 			var radius := float(zone.get("radius", 0.0))
-			var pulse_damage := _apply_objective_mutator_damage_mult(maxi(1, int(round(float(void_echo_damage) * 0.45 + float(damage) * 0.2))))
+			var pulse_damage := _apply_objective_mutator_damage_mult(maxi(1, int(round(float(void_echo_damage) * 0.28 + float(damage) * 0.13))))
 			if player_feedback != null and player_feedback.has_method("play_boss_void_zone_pulse"):
 				player_feedback.play_boss_void_zone_pulse(zone_pos, radius)
 				_broadcast_cue_event("boss_void_zone_pulse", {"position": zone_pos, "radius": radius})
@@ -3999,7 +3999,7 @@ func _update_void_echo_zones(delta: float) -> void:
 					continue
 				var to_center := zone_pos - enemy_body.global_position
 				if dist > 0.001:
-					enemy_body.velocity += to_center.normalized() * 315.0
+					enemy_body.velocity += to_center.normalized() * 360.0
 				DAMAGEABLE.apply_damage(enemy_node, pulse_damage, {"is_ground_attack": true, "attack_type": "void_echo_zone"})
 			_void_echo_pulse_kill_suppression_depth = maxi(0, _void_echo_pulse_kill_suppression_depth - 1)
 		zone["pulse_left"] = pulse_left
@@ -4056,7 +4056,7 @@ func _apply_void_echo(kill_pos: Vector2) -> void:
 	var echo_radius := clampf(54.0 + float(void_echo_damage) * 0.6, 54.0, 110.0)
 	var zone_data := {
 		"pos": kill_pos,
-		"life": 3.6,
+		"life": 2.4,
 		"radius": echo_radius,
 		"pulse_left": 0.0
 	}

@@ -476,7 +476,7 @@ const BOSS_REWARD_BALANCE := {
 	"lacuna_echo": {
 		"kind": "add_int",
 		"property": "void_echo_damage",
-		"add": 52
+		"add": 42
 	},
 	"sovereign_tempo": {
 		"kind": "add_float",
