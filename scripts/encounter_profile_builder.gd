@@ -586,7 +586,7 @@ func _build_apex_mirrorline_mutator() -> Dictionary:
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_THEME_COLOR: Color(0.78, 0.92, 1.0, 1.0),
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID: "mirrorline",
 		"affected_archetypes": ["mirrorline"],
-		ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX: "Apex sunders below half — a perpendicular twin seam appears and incoming damage is reduced",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX: "Apex sunders below half — a perpendicular twin seam appears and it briefly resists damage as the split comes online",
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ENEMY_TINT: Color(0.92, 0.97, 1.0, 1.0),
 		ENCOUNTER_CONTRACTS.MUTATOR_STAT_ENEMY_HEALTH_MULT: tier_health,
 		ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_SPEED_MULT: tier_echo_speed,

@@ -89,7 +89,7 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"name": "Apex Mirrorline",
 			"group": "Trial",
 			"color": Color(0.78, 0.92, 1.0, 1.0),
-			"desc": "Elite seam-walker. Below half health it sunders — a perpendicular twin seam appears and damage taken is reduced. Burst it before the split.",
+			"desc": "Elite seam-walker. Below half health it sunders — a perpendicular twin seam appears and it briefly resists damage while the second seam comes online. Burst it before the split.",
 		},
 		{
 			"name": "Last Stand",

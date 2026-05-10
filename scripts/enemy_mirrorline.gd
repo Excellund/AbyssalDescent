@@ -53,6 +53,10 @@ const STATE_COOLDOWN := 3
 @export_range(0.0, 0.95, 0.05) var sundered_damage_reduction: float = 0.70
 @export_range(0.0, 1.0, 0.05) var sundered_health_threshold: float = 0.5
 @export var sundered_hit_flash_duration: float = 0.16
+# Damage reduction is a brief window — about the time it takes for the twin seam to spawn and start firing
+# (grace flash + telegraph + a beat into reflect). After it elapses the boss is vulnerable again, but the
+# twin axis remains active for the rest of the fight as the lasting Sundered consequence.
+@export var sundered_reduction_duration: float = 2.0
 
 @export var arena_size: Vector2 = Vector2(1160.0, 860.0)
 @export var arena_center_world: Vector2 = Vector2.ZERO
@@ -87,6 +91,7 @@ var _twin_pending: bool = false
 var _twin_active: bool = false
 var _sundered_flash_time_left: float = 0.0
 var _sundered_hit_flash_left: float = 0.0
+var _sundered_reduction_left: float = 0.0
 var _sundered_health_fill_default: Color = Color(0.0, 0.0, 0.0, 0.0)
 var _sundered_health_bg_default: Color = Color(0.0, 0.0, 0.0, 0.0)
 var _sundered_health_colors_cached: bool = false
@@ -129,6 +134,7 @@ func _get_custom_network_runtime_state() -> Dictionary:
 		"tp": _twin_pending,
 		"ta": _twin_active,
 		"hf": _sundered_hit_flash_left,
+		"sr": _sundered_reduction_left,
 		"e": echoes_payload
 	}
 
@@ -150,6 +156,7 @@ func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
 	_twin_pending = bool(custom_state.get("tp", _twin_pending))
 	_twin_active = bool(custom_state.get("ta", _twin_active))
 	_sundered_hit_flash_left = float(custom_state.get("hf", _sundered_hit_flash_left))
+	_sundered_reduction_left = float(custom_state.get("sr", _sundered_reduction_left))
 	_merge_remote_echoes(custom_state.get("e", []) as Array)
 	# Axis is purely derived from prev/target/time. Recompute locally so incoming snapshots never
 	# directly overwrite the visible axis position (which would shake against local extrapolation).
@@ -254,6 +261,8 @@ func _process_behavior(delta: float) -> void:
 		queue_redraw()
 	if _sundered_hit_flash_left > 0.0:
 		_sundered_hit_flash_left = maxf(0.0, _sundered_hit_flash_left - delta)
+	if _sundered_reduction_left > 0.0:
+		_sundered_reduction_left = maxf(0.0, _sundered_reduction_left - delta)
 	_update_sundered_health_bar_visuals()
 	match _state:
 		STATE_STALK:
@@ -300,6 +309,8 @@ func _process_network_visuals(delta: float) -> void:
 		_sundered_flash_time_left = maxf(0.0, _sundered_flash_time_left - delta)
 	if _sundered_hit_flash_left > 0.0:
 		_sundered_hit_flash_left = maxf(0.0, _sundered_hit_flash_left - delta)
+	if _sundered_reduction_left > 0.0:
+		_sundered_reduction_left = maxf(0.0, _sundered_reduction_left - delta)
 	_update_sundered_health_bar_visuals()
 	_state_time_left = maxf(0.0, _state_time_left - delta)
 	if _state == STATE_TELEGRAPH and _telegraph_total > 0.0:
@@ -579,7 +590,7 @@ func take_damage(amount: int, _damage_context: Dictionary = {}) -> void:
 		return
 	var before_health := int(health_state.current_health)
 	var final_damage := amount
-	if _is_sundered_active():
+	if _is_damage_reduction_active():
 		var reduction := clampf(sundered_damage_reduction, 0.0, 0.95)
 		final_damage = maxi(1, int(round(float(amount) * (1.0 - reduction))))
 		if final_damage < amount:
@@ -593,6 +604,9 @@ func take_damage(amount: int, _damage_context: Dictionary = {}) -> void:
 
 func _is_sundered_active() -> bool:
 	return _twin_pending or _twin_active
+
+func _is_damage_reduction_active() -> bool:
+	return _sundered_reduction_left > 0.0
 
 func _get_damageable_targets() -> Array[Node2D]:
 	var result: Array[Node2D] = []
@@ -629,7 +643,7 @@ func _update_sundered_health_bar_visuals() -> void:
 	var bg_style := health_bar.get_theme_stylebox("background") as StyleBoxFlat
 	if fill_style == null or bg_style == null:
 		return
-	if _is_sundered_active():
+	if _is_damage_reduction_active():
 		var hit_t := clampf(_sundered_hit_flash_left / maxf(0.001, sundered_hit_flash_duration), 0.0, 1.0)
 		var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.016)
 		var shield_fill := Color(0.62, 0.86, 1.0, 1.0)
@@ -650,6 +664,7 @@ func _check_sundered_threshold() -> void:
 		return
 	_twin_pending = true
 	_sundered_flash_time_left = 0.45
+	_sundered_reduction_left = maxf(0.05, sundered_reduction_duration)
 	queue_redraw()
 
 func _draw() -> void:
