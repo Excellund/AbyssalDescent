@@ -47,6 +47,7 @@ enum Encounter {
 	TRIAL,
 	APEX_TRIAL,
 	APEX_MIRRORLINE,
+	APEX_TOLL,
 	BOSS_1,
 	BOSS_2,
 	BOSS_3,

@@ -6,6 +6,7 @@ const ENEMY_ARCHER_SCRIPT := preload("res://scripts/enemy_archer.gd")
 const ENEMY_SHIELDER_SCRIPT := preload("res://scripts/enemy_shielder.gd")
 const ENEMY_SEAMLOCK_SCRIPT := preload("res://scripts/enemy_seamlock.gd")
 const ENEMY_MIRRORLINE_SCRIPT := preload("res://scripts/enemy_mirrorline.gd")
+const ENEMY_TOLL_SCRIPT := preload("res://scripts/enemy_toll.gd")
 const ENEMY_LURKER_SCRIPT := preload("res://scripts/enemy_lurker.gd")
 const ENEMY_RAM_SCRIPT := preload("res://scripts/enemy_ram.gd")
 const ENEMY_LANCER_SCRIPT := preload("res://scripts/enemy_lancer.gd")
@@ -80,7 +81,7 @@ func _find_debug_encounter_entry(key: String) -> Dictionary:
 	return ENCOUNTER_CONTRACTS.debug_encounter_entry(key)
 
 func _get_debug_encounter_reward_mode(encounter_key: String) -> int:
-	if encounter_key == "trial" or encounter_key == "apex_trial" or encounter_key == "apex_mirrorline":
+	if encounter_key == "trial" or encounter_key == "apex_trial" or encounter_key == "apex_mirrorline" or encounter_key == "apex_toll":
 		return ENUMS.RewardMode.ARCANA
 	if ENCOUNTER_CONTRACTS.debug_encounter_is_objective(encounter_key):
 		return ENUMS.RewardMode.MISSION
@@ -830,6 +831,7 @@ func _setup_enemy_spawner_system() -> void:
 		"shielder": ENEMY_SHIELDER_SCRIPT,
 		"seamlock": ENEMY_SEAMLOCK_SCRIPT,
 		"mirrorline": ENEMY_MIRRORLINE_SCRIPT,
+		"toll": ENEMY_TOLL_SCRIPT,
 		"lurker": ENEMY_LURKER_SCRIPT,
 		"ram": ENEMY_RAM_SCRIPT,
 		"lancer": ENEMY_LANCER_SCRIPT,

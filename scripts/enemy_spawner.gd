@@ -79,6 +79,12 @@ const ENEMY_MUTATOR_STAT_MAP := {
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_SPEED_MULT, "prop": "echo_speed_cap", "min": 80.0},
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_WINDUP_MULT, "prop": "telegraph_duration", "min": 0.30},
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT, "prop": "echo_damage", "min": 1.0, "is_int": true}
+	],
+	"toll": [
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_WINDUP_MULT, "prop": "cooldown_duration", "min": 0.10},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_DAMAGE_MULT, "prop": "heal_fraction_on_miss", "min": 0.01},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_SPEED_MULT, "prop": "slow_mult", "min": 0.10},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_WINDUP_MULT, "prop": "slow_duration", "min": 0.20}
 	]
 }
 
@@ -128,6 +134,9 @@ const ENEMY_DAMAGE_CLASSIFICATION := {
 		"contact_strike": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"},
 		"echo_strike": {"kind": "flat", "scales_via_mutator": true, "mutator_stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT}
 	},
+	"toll": {
+		"contact_strike": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"}
+	},
 	"boss_warden": {
 		"all_attacks": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"}
 	},
@@ -135,7 +144,7 @@ const ENEMY_DAMAGE_CLASSIFICATION := {
 		"all_attacks": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"}
 	}
 }
-const ENEMY_SPAWN_ORDER: Array[String] = ["chaser", "charger", "archer", "shielder", "seamlock", "mirrorline", "lurker", "ram", "lancer", "spectre", "pyre", "tether"]
+const ENEMY_SPAWN_ORDER: Array[String] = ["chaser", "charger", "archer", "shielder", "seamlock", "mirrorline", "toll", "lurker", "ram", "lancer", "spectre", "pyre", "tether"]
 
 const WAVE_KILL_THRESHOLD_RATIO: float = 0.20
 const WAVE_MIN_GAP_AFTER_SPAWN: float = 1.5
@@ -412,6 +421,8 @@ func _profile_count_for_enemy_type(profile: Dictionary, enemy_type: String) -> i
 			return ENCOUNTER_CONTRACTS.profile_seamlock_count(profile)
 		"mirrorline":
 			return ENCOUNTER_CONTRACTS.profile_mirrorline_count(profile)
+		"toll":
+			return ENCOUNTER_CONTRACTS.profile_toll_count(profile)
 		_:
 			return 0
 
@@ -485,6 +496,13 @@ func _spawn_enemy_in_current_room(enemy_script: Script, min_player_distance: flo
 	enemy.add_child(collision_shape)
 
 	enemy.global_position = _pick_spawn_position_in_current_room(min_player_distance)
+	if _enemy_script_key(enemy_script) == "toll":
+		# Offset the Toll away from the player spawn point (Vector2.ZERO) so its ring telegraph
+		# never starts on top of the player. Anchor is set from global_position in _ready.
+		# Distance is tuned so the ring (radius ~280) overlaps the player spawn enough to be reachable
+		# in a step or two but not so close that the player is inside it at idle.
+		var toll_offset_y := -current_room_size.y * 0.24
+		enemy.global_position = Vector2(0.0, toll_offset_y)
 	world_root.add_child(enemy)
 	_apply_ascension_health_scaling(enemy)
 	enemy.begin_spawn_transport(spawn_transport_duration)
@@ -544,6 +562,8 @@ func _enemy_matches_archetype(enemy_key: String, archetype: String) -> bool:
 			return enemy_key == "seamlock"
 		"mirrorline":
 			return enemy_key == "mirrorline"
+		"toll":
+			return enemy_key == "toll"
 		"spectre":
 			return enemy_key == "spectre"
 		"pyre":

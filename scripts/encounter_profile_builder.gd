@@ -484,6 +484,8 @@ func build_debug_encounter_profile(encounter_key: String, depth: int) -> Diction
 			return _build_apex_seamlock_profile(depth)
 		"apex_mirrorline":
 			return _build_apex_mirrorline_profile(depth)
+		"apex_toll":
+			return _build_apex_toll_profile(depth)
 		"last_stand":
 			return _build_survival_profile(depth)
 		"cut_the_signal":
@@ -644,11 +646,49 @@ func _build_apex_mirrorline_profile(_depth: int = 0) -> Dictionary:
 	profile[ENCOUNTER_CONTRACTS.PROFILE_KEY_MIRRORLINE_COUNT] = 1
 	return profile
 
+func _build_apex_toll_mutator() -> Dictionary:
+	# Per-bearing pressure: tighter cadence, harsher slow, bigger heal-on-miss as tier rises.
+	# Ring expand + bonus window stay constant so the telegraph remains readable; cooldown shortens.
+	# Each curve is expressed as a multiplier on the enemy script's default values (which are tuned to
+	# the Delver baseline). Stat slots reuse CHARGER channels (no semantic relationship; the spawner's
+	# spec map for "toll" rebinds them to Toll-specific properties).
+	var tier := clampi(_difficulty_rank(), 0, 3)
+	var tier_health_curve: Array[float] = [0.85, 1.0, 1.15, 1.30]
+	var tier_cooldown_curve: Array[float] = [2.0, 1.0, 0.5, 0.2]
+	var tier_heal_curve: Array[float] = [0.67, 1.0, 1.33, 1.67]
+	var tier_slow_mult_curve: Array[float] = [1.2, 1.0, 0.8, 0.6]
+	var tier_slow_duration_curve: Array[float] = [0.82, 1.0, 1.18, 1.36]
+	var tier_health: float = tier_health_curve[tier]
+	var tier_cooldown: float = tier_cooldown_curve[tier]
+	var tier_heal: float = tier_heal_curve[tier]
+	var tier_slow_mult: float = tier_slow_mult_curve[tier]
+	var tier_slow_duration: float = tier_slow_duration_curve[tier]
+	return {
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME: "Toll",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_THEME_COLOR: Color(1.0, 0.74, 0.32, 1.0),
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID: "toll",
+		"affected_archetypes": ["toll"],
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX: "Apex rings the toll — it heals every cycle and slows anyone caught inside",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ENEMY_TINT: Color(1.0, 0.92, 0.74, 1.0),
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_ENEMY_HEALTH_MULT: tier_health,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_WINDUP_MULT: tier_cooldown,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_DAMAGE_MULT: tier_heal,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_SPEED_MULT: tier_slow_mult,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_WINDUP_MULT: tier_slow_duration
+	}
+
+func _build_apex_toll_profile(_depth: int = 0) -> Dictionary:
+	var mutator := _build_apex_toll_mutator()
+	var profile := _build_profile("Apex Toll", TRIAL_ROOM_SIZE, 0, 0, 0, 0, mutator)
+	profile[ENCOUNTER_CONTRACTS.PROFILE_KEY_TOLL_COUNT] = 1
+	return profile
+
 func _pick_apex_encounter_profile(depth: int) -> Dictionary:
 	## Apex pool: each variant is a unique-identity elite encounter. Equal weight across pool.
 	var pool: Array[Callable] = [
 		Callable(self, "_build_apex_seamlock_profile"),
-		Callable(self, "_build_apex_mirrorline_profile")
+		Callable(self, "_build_apex_mirrorline_profile"),
+		Callable(self, "_build_apex_toll_profile")
 	]
 	var pick := pool[rng.randi_range(0, pool.size() - 1)]
 	return pick.call(depth) as Dictionary

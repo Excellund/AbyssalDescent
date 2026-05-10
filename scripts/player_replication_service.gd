@@ -533,3 +533,31 @@ func _apply_polar_shift_effect_local(target_peer_id: int, direction: Vector2, fo
 		player_node.apply_polar_shift_impulse(direction, force)
 	if dash_lockout_duration > 0.0 and player_node.has_method("apply_polar_shift_dash_lockout"):
 		player_node.apply_polar_shift_dash_lockout(dash_lockout_duration)
+
+
+## Host-authoritative: dispatch an external movement slow (duration, multiplier) to a specific player.
+func send_external_slow(target_peer_id: int, duration: float, mult: float) -> void:
+	if duration <= 0.0 or mult >= 1.0:
+		return
+	if multiplayer_session_manager == null or not bool(multiplayer_session_manager.is_session_connected()):
+		_apply_external_slow_local(target_peer_id, duration, mult)
+		return
+	if not bool(multiplayer_session_manager.should_broadcast()):
+		return
+	if target_peer_id == local_peer_id:
+		_apply_external_slow_local(target_peer_id, duration, mult)
+		return
+	_rpc_apply_external_slow.rpc_id(target_peer_id, target_peer_id, duration, mult)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _rpc_apply_external_slow(target_peer_id: int, duration: float, mult: float) -> void:
+	_apply_external_slow_local(target_peer_id, duration, mult)
+
+
+func _apply_external_slow_local(target_peer_id: int, duration: float, mult: float) -> void:
+	var player_node := _get_player_node(target_peer_id)
+	if player_node == null:
+		return
+	if player_node.has_method("apply_external_slow"):
+		player_node.apply_external_slow(duration, mult)

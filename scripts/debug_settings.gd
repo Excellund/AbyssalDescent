@@ -10,7 +10,7 @@ const DEBUG_ENUMS := preload("res://scripts/shared/debug_enums.gd")
 
 @export_group("Startup")
 @export var skip_starting_boon_selection: bool = false
-@export_enum("None", "Rest Site", "Skirmish", "Crossfire", "Fortress", "Onslaught", "Vanguard", "Blitz", "Ambush", "Suppression", "Gauntlet", "Convergence", "Objective - Last Stand", "Objective - Cut the Signal", "Objective - Hold the Line", "Objective - Random", "Trial", "Apex Seamlock", "Apex Mirrorline", "Warden", "Sovereign", "Lacuna") var start_encounter: int = DEBUG_ENUMS.Encounter.NONE
+@export_enum("None", "Rest Site", "Skirmish", "Crossfire", "Fortress", "Onslaught", "Vanguard", "Blitz", "Ambush", "Suppression", "Gauntlet", "Convergence", "Objective - Last Stand", "Objective - Cut the Signal", "Objective - Hold the Line", "Objective - Random", "Trial", "Apex Seamlock", "Apex Mirrorline", "Apex Toll", "Warden", "Sovereign", "Lacuna") var start_encounter: int = DEBUG_ENUMS.Encounter.NONE
 @export var start_depth: int = 1
 @export_enum("No Override:-1", "Pilgrim:0", "Delver:1", "Harbinger:2", "Forsworn:3") var start_bearing: int = -1
 

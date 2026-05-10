@@ -92,6 +92,12 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"desc": "Elite seam-walker. Below half health it sunders — a perpendicular twin seam appears and it briefly resists damage while the second seam comes online. Burst it before the split.",
 		},
 		{
+			"name": "Apex Toll",
+			"group": "Trial",
+			"color": Color(1.0, 0.74, 0.32, 1.0),
+			"desc": "Stationary elite. It rings a telegraphed expanding ring that always heals it. Caught inside the ring at trigger? You eat a heavy slow. Step out before it resolves to deny the slow, but it still pays itself. Stay close enough during the brief exposed window to land bonus damage. Pulses a short repulse so you can't stack on top.",
+		},
+		{
 			"name": "Last Stand",
 			"group": "Objective",
 			"color": Color(1.0, 0.8, 0.5, 1.0),

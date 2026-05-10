@@ -305,6 +305,11 @@ var wraithstep_remote_mark_expiry_by_network_enemy_id: Dictionary = {}
 var polar_shift_dash_lockout_left: float = 0.0
 var polar_shift_dash_lockout_duration: float = 0.0
 
+# Generic enemy-imposed movement slow. mult is the multiplier applied to target_velocity in
+# _update_ground_movement (1.0 = no slow). Stacking rule: stronger slow wins; longer duration wins.
+var external_slow_left: float = 0.0
+var external_slow_mult: float = 1.0
+
 # Voidfire archetype trial powers
 var reward_voidfire: bool = false
 var reward_dread_resonance: bool = false
@@ -518,6 +523,7 @@ func _physics_process(delta: float) -> void:
 	_update_static_wake_trails(delta)
 	_update_void_dash_reset_pulse(delta)
 	_update_polar_shift_dash_lockout(delta)
+	_update_external_slow(delta)
 	_update_wraithstep_marks()
 	_update_storm_crown_discharge(delta)
 	_update_combo_relay_state(delta)
@@ -975,6 +981,8 @@ func _update_ground_movement(direction: Vector2, delta: float) -> void:
 	if reward_voidfire and _voidfire_lockout_left > 0.0:
 		overheat_move_mult = clampf(voidfire_overheat_move_mult, 0.2, 1.0)
 	var target_velocity := direction * (max_speed + trance_speed_bonus + momentum_speed_bonus + combo_relay_speed_bonus) * overheat_move_mult
+	if external_slow_left > 0.0:
+		target_velocity *= clampf(external_slow_mult, 0.05, 1.0)
 	var applied_acceleration := _get_applied_acceleration(target_velocity)
 	var move_rate := applied_acceleration if direction != Vector2.ZERO else deceleration
 	velocity = velocity.move_toward(target_velocity, move_rate * delta)
@@ -1001,6 +1009,15 @@ func _update_polar_shift_dash_lockout(delta: float) -> void:
 	if polar_shift_dash_lockout_left <= 0.0:
 		return
 	polar_shift_dash_lockout_left = maxf(0.0, polar_shift_dash_lockout_left - delta)
+	queue_redraw()
+
+func _update_external_slow(delta: float) -> void:
+	if external_slow_left <= 0.0:
+		external_slow_mult = 1.0
+		return
+	external_slow_left = maxf(0.0, external_slow_left - delta)
+	if external_slow_left <= 0.0:
+		external_slow_mult = 1.0
 	queue_redraw()
 
 func _update_storm_crown_discharge(delta: float) -> void:
@@ -3030,6 +3047,17 @@ func apply_polar_shift_dash_lockout(duration: float) -> void:
 func apply_polar_shift_impulse(direction: Vector2, force: float) -> void:
 	velocity = Vector2.ZERO
 	velocity = direction * force
+
+@rpc("any_peer", "call_local")
+func apply_external_slow(duration: float, mult: float) -> void:
+	var applied_duration := maxf(0.0, duration)
+	var applied_mult := clampf(mult, 0.05, 1.0)
+	if applied_duration <= 0.0 or applied_mult >= 1.0:
+		return
+	if applied_mult < external_slow_mult or external_slow_left <= 0.0:
+		external_slow_mult = applied_mult
+	external_slow_left = maxf(external_slow_left, applied_duration)
+	queue_redraw()
 
 func _create_health_state() -> void:
 	health_state = HEALTH_STATE_SCRIPT.new()

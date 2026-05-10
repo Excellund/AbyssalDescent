@@ -50,6 +50,7 @@ const PROFILE_KEY_PYRE_COUNT := "pyre_count"
 const PROFILE_KEY_TETHER_COUNT := "tether_count"
 const PROFILE_KEY_SEAMLOCK_COUNT := "seamlock_count"
 const PROFILE_KEY_MIRRORLINE_COUNT := "mirrorline_count"
+const PROFILE_KEY_TOLL_COUNT := "toll_count"
 const PROFILE_KEY_OBJECTIVE_KIND := "objective_kind"
 const PROFILE_KEY_OBJECTIVE_DURATION := "objective_duration"
 const PROFILE_KEY_OBJECTIVE_SPAWN_INTERVAL := "objective_spawn_interval"
@@ -300,6 +301,17 @@ static func _build_encounter_registry() -> Array[Dictionary]:
 			"glossary_label": "Apex Mirrorline",
 			"door_presentation": {
 				"label": "Apex Mirrorline",
+				"short_label": "Apex"
+			}
+		},
+		{
+			"key": "apex_toll",
+			"id": DEBUG_ENUMS.Encounter.APEX_TOLL,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Apex Toll",
+			"glossary_label": "Apex Toll",
+			"door_presentation": {
+				"label": "Apex Toll",
 				"short_label": "Apex"
 			}
 		},
@@ -682,6 +694,7 @@ static func normalize_profile(value: Variant) -> Dictionary:
 	)
 	normalized[PROFILE_KEY_SEAMLOCK_COUNT] = int(input.get(PROFILE_KEY_SEAMLOCK_COUNT, 0))
 	normalized[PROFILE_KEY_MIRRORLINE_COUNT] = int(input.get(PROFILE_KEY_MIRRORLINE_COUNT, 0))
+	normalized[PROFILE_KEY_TOLL_COUNT] = int(input.get(PROFILE_KEY_TOLL_COUNT, 0))
 	if input.has(PROFILE_KEY_WAVE_COUNT):
 		normalized[PROFILE_KEY_WAVE_COUNT] = maxi(1, int(input.get(PROFILE_KEY_WAVE_COUNT, 1)))
 	if input.has(PROFILE_KEY_INITIAL_WAVE_FRACTION):
@@ -770,6 +783,9 @@ static func profile_seamlock_count(profile_value: Dictionary) -> int:
 
 static func profile_mirrorline_count(profile_value: Dictionary) -> int:
 	return _get_enemy_count("mirrorline", profile_value)
+
+static func profile_toll_count(profile_value: Dictionary) -> int:
+	return _get_enemy_count("toll", profile_value)
 
 static func profile_enemy_mutator(profile_value: Dictionary) -> Dictionary:
 	return profile_value.get(PROFILE_KEY_ENEMY_MUTATOR, {}) as Dictionary
