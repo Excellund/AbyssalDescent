@@ -215,6 +215,7 @@ const WAVE_PER_ENCOUNTER_OVERRIDES := {
 	"Fortress": {"force_single": true},
 	"Suppression": {"max_waves": 2}
 }
+const WAVE_TRIAL_MUTATOR_FORCE_SINGLE := ["tether_web"]
 
 func apply_wave_staggering(profile: Dictionary) -> Dictionary:
 	if profile.is_empty():
@@ -222,6 +223,9 @@ func apply_wave_staggering(profile: Dictionary) -> Dictionary:
 	var label := ENCOUNTER_CONTRACTS.profile_label(profile)
 	var overrides := WAVE_PER_ENCOUNTER_OVERRIDES.get(label, {}) as Dictionary
 	if bool(overrides.get("force_single", false)):
+		return profile
+	var trial_icon := ENCOUNTER_CONTRACTS.mutator_icon_shape_id(ENCOUNTER_CONTRACTS.profile_enemy_mutator(profile))
+	if WAVE_TRIAL_MUTATOR_FORCE_SINGLE.has(trial_icon):
 		return profile
 	var total := ENCOUNTER_CONTRACTS.profile_total_enemy_count(profile)
 	if total <= 0:
