@@ -8,7 +8,7 @@ const STATE_REFLECT := 2
 const STATE_COOLDOWN := 3
 
 # --- Scale & Health ---
-@export var max_health_apex: int = 540
+@export var max_health_apex: int = 660
 @export var body_draw_radius: float = 36.0
 @export var collision_shape_radius: float = 32.0
 
