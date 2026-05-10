@@ -804,7 +804,7 @@ func _apply_menu_layout() -> void:
 	if leaderboard_panel != null:
 		_set_centered_panel_layout(leaderboard_panel, Vector2(1080.0, 700.0), fit_scale, viewport_size)
 	if ascension_panel != null:
-		_set_centered_panel_layout(ascension_panel, Vector2(1280.0, 800.0), fit_scale, viewport_size)
+		_set_centered_panel_layout(ascension_panel, Vector2(1520.0, 920.0), fit_scale, viewport_size)
 	if glossary_panel != null:
 		_set_centered_panel_layout(glossary_panel, Vector2(980.0, 680.0), fit_scale, viewport_size)
 	if multiplayer_panel != null:
@@ -2309,8 +2309,8 @@ func _build_leaderboard_panel() -> Panel:
 func _build_ascension_panel() -> Panel:
 	var panel: Panel = ASCENSION_PANEL_SCRIPT.new() as Panel
 	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.position = Vector2(-640.0, -400.0)
-	panel.custom_minimum_size = Vector2(1280.0, 800.0)
+	panel.position = Vector2(-760.0, -460.0)
+	panel.custom_minimum_size = Vector2(1520.0, 920.0)
 	panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.04, 0.06, 0.1, 0.97), Color(0.44, 0.7, 0.96, 0.74), 20, 2))
 	panel._build_ui(self)
 	panel.back_pressed.connect(_show_root_panel)

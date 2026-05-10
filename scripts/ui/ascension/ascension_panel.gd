@@ -26,6 +26,9 @@ var _rank_label: Label
 var _modifier_list: VBoxContainer
 var _catalyst_list: VBoxContainer
 var _oath_list: VBoxContainer
+var _modifier_lock_banner: PanelContainer
+var _catalyst_wip_banner: PanelContainer
+var _collapsed_clear_groups: Dictionary = {}
 
 func _build_ui(host: Node) -> void:
 	_host = host
@@ -67,6 +70,7 @@ func _build_ui(host: Node) -> void:
 	_character_label.scroll_active = false
 	_character_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	_character_label.custom_minimum_size = Vector2(360.0, 0.0)
+	_character_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_character_label.add_theme_font_size_override("normal_font_size", 18)
 	_character_label.add_theme_color_override("default_color", Color(0.78, 0.92, 1.0, 0.92))
 	character_row.add_child(_character_label)
@@ -89,9 +93,20 @@ func _build_ui(host: Node) -> void:
 	columns.add_theme_constant_override("separation", 18)
 	stack.add_child(columns)
 
-	_modifier_list = _build_section_column(columns, "Ascension Modifiers")
-	_catalyst_list = _build_section_column(columns, "Catalysts (max %d)" % CATALYST_REGISTRY.get_slot_limit())
-	_oath_list = _build_section_column(columns, "Oaths")
+	_modifier_list = _build_section_column(columns, "Ascension Modifiers", 1.0)
+	_modifier_list.add_theme_constant_override("separation", 8)
+	_modifier_lock_banner = _build_modifier_lock_banner()
+	var modifier_column: Node = _modifier_list.get_parent().get_parent().get_parent()
+	modifier_column.add_child(_modifier_lock_banner)
+	modifier_column.move_child(_modifier_lock_banner, 1)
+	_catalyst_list = _build_section_column(columns, "Catalysts (max %d)" % CATALYST_REGISTRY.get_slot_limit(), 1.0)
+	_catalyst_list.add_theme_constant_override("separation", 8)
+	_catalyst_wip_banner = _build_catalyst_wip_banner()
+	var catalyst_column: Node = _catalyst_list.get_parent().get_parent().get_parent()
+	catalyst_column.add_child(_catalyst_wip_banner)
+	catalyst_column.move_child(_catalyst_wip_banner, 1)
+	_oath_list = _build_section_column(columns, "Oaths", 1.7)
+	_oath_list.add_theme_constant_override("separation", 8)
 
 	var back := _make_back_button()
 	back.pressed.connect(func() -> void:
@@ -168,13 +183,8 @@ func _refresh_modifier_list() -> void:
 	var loadout: Array[String] = META_PROGRESS_STORE.get_ascension_loadout(profile, _character_id)
 	var completed_oaths: Array[String] = META_PROGRESS_STORE.get_completed_oath_ids(profile)
 	var ascension_unlocked: bool = _is_ascension_unlocked()
-	if not ascension_unlocked:
-		var notice := Label.new()
-		notice.text = "Locked. Clear a Forsworn run with this character to unlock Ascension modifiers."
-		notice.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		notice.add_theme_font_size_override("font_size", 13)
-		notice.add_theme_color_override("font_color", Color(1.0, 0.78, 0.62, 0.92))
-		_modifier_list.add_child(notice)
+	if _modifier_lock_banner != null:
+		_modifier_lock_banner.visible = not ascension_unlocked
 	for id_variant in ASCENSION_REGISTRY.get_modifier_ids():
 		var modifier_id: String = String(id_variant)
 		var def: Dictionary = ASCENSION_REGISTRY.get_definition(modifier_id)
@@ -184,27 +194,61 @@ func _refresh_modifier_list() -> void:
 		var oath_unlocked: bool = locked_by.is_empty() or completed_oaths.has(locked_by)
 		var unlocked: bool = ascension_unlocked and oath_unlocked
 		var equipped: bool = loadout.has(modifier_id)
-		var row := _make_row()
-		var label := _make_row_label(String(def.get("label", modifier_id)))
-		label.tooltip_text = String(def.get("description", ""))
-		if not unlocked:
-			label.modulate = Color(0.6, 0.6, 0.7, 0.6)
-		row.add_child(label)
-		var rank_tag := _make_rank_tag_label(int(def.get("heat_cost", 1)))
-		if not unlocked:
-			rank_tag.modulate = Color(0.6, 0.6, 0.7, 0.6)
-		row.add_child(rank_tag)
-		var toggle := _make_toggle_button(equipped, unlocked)
-		if not unlocked:
-			toggle.text = "Locked"
-			toggle.disabled = true
-		else:
-			toggle.text = "Equipped" if equipped else "Equip"
-			toggle.pressed.connect(func() -> void:
-				_toggle_modifier(modifier_id)
-			)
-		row.add_child(toggle)
-		_modifier_list.add_child(row)
+		_modifier_list.add_child(_make_modifier_card(modifier_id, def, unlocked, equipped))
+
+func _make_modifier_card(modifier_id: String, def: Dictionary, unlocked: bool, equipped: bool) -> PanelContainer:
+	var card := PanelContainer.new()
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var card_state: int = 2 if equipped else (1 if unlocked else 0)
+	card.add_theme_stylebox_override("panel", _make_catalyst_card_style(card_state))
+
+	var inner := VBoxContainer.new()
+	inner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inner.add_theme_constant_override("separation", 4)
+	card.add_child(inner)
+
+	var header := HBoxContainer.new()
+	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_theme_constant_override("separation", 12)
+	inner.add_child(header)
+
+	var title_color: Color = Color(0.6, 0.6, 0.7, 0.6) if not unlocked else (Color(1.0, 0.86, 0.52, 0.98) if equipped else Color(0.86, 0.96, 1.0, 0.94))
+	var title_label := Label.new()
+	title_label.text = String(def.get("label", modifier_id))
+	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title_label.add_theme_font_size_override("font_size", 17)
+	title_label.add_theme_color_override("font_color", title_color)
+	header.add_child(title_label)
+
+	var rank_tag := _make_rank_tag_label(int(def.get("heat_cost", 1)))
+	if not unlocked:
+		rank_tag.modulate = Color(0.6, 0.6, 0.7, 0.6)
+	header.add_child(rank_tag)
+
+	var toggle := _make_toggle_button(equipped, unlocked)
+	if not unlocked:
+		toggle.text = "Locked"
+		toggle.disabled = true
+	else:
+		toggle.text = "Equipped" if equipped else "Equip"
+		toggle.pressed.connect(func() -> void:
+			_toggle_modifier(modifier_id)
+		)
+	header.add_child(toggle)
+
+	var description: String = String(def.get("description", "")).strip_edges()
+	if not description.is_empty():
+		var desc_label := Label.new()
+		desc_label.text = description
+		desc_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		desc_label.add_theme_font_size_override("font_size", 13)
+		var desc_color: Color = Color(0.62, 0.66, 0.74, 0.6) if not unlocked else Color(0.72, 0.84, 0.96, 0.82)
+		desc_label.add_theme_color_override("font_color", desc_color)
+		inner.add_child(desc_label)
+
+	return card
 
 func _toggle_modifier(modifier_id: String) -> void:
 	if not _is_ascension_unlocked():
@@ -243,29 +287,87 @@ func _refresh_catalyst_list() -> void:
 			continue
 		var unlocked: bool = unlocked_ids.has(catalyst_id)
 		var equipped: bool = equipped_ids.has(catalyst_id)
-		var row := _make_row()
-		var label := _make_row_label(String(def.get("label", catalyst_id)))
-		label.tooltip_text = String(def.get("description", ""))
-		if not unlocked:
-			label.modulate = Color(0.6, 0.6, 0.7, 0.6)
-		row.add_child(label)
-		var toggle := _make_toggle_button(equipped, unlocked)
-		if not unlocked:
-			toggle.text = "Locked"
-			toggle.disabled = true
-		elif equipped:
-			toggle.text = "Equipped"
-		elif equipped_ids.size() >= slot_limit:
-			toggle.text = "Full"
-			toggle.disabled = true
-		else:
-			toggle.text = "Equip"
-		if not toggle.disabled:
-			toggle.pressed.connect(func() -> void:
-				_toggle_catalyst(catalyst_id)
-			)
-		row.add_child(toggle)
-		_catalyst_list.add_child(row)
+		_catalyst_list.add_child(_make_catalyst_card(catalyst_id, def, unlocked, equipped, equipped_ids.size(), slot_limit))
+
+func _make_catalyst_card(catalyst_id: String, def: Dictionary, unlocked: bool, equipped: bool, equipped_count: int, slot_limit: int) -> PanelContainer:
+	var card := PanelContainer.new()
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var card_state: int = 2 if equipped else (1 if unlocked else 0)
+	card.add_theme_stylebox_override("panel", _make_catalyst_card_style(card_state))
+
+	var inner := VBoxContainer.new()
+	inner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inner.add_theme_constant_override("separation", 4)
+	card.add_child(inner)
+
+	var header := HBoxContainer.new()
+	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_theme_constant_override("separation", 12)
+	inner.add_child(header)
+
+	var title_color: Color = Color(0.6, 0.6, 0.7, 0.6) if not unlocked else (Color(1.0, 0.86, 0.52, 0.98) if equipped else Color(0.86, 0.96, 1.0, 0.94))
+	var title_label := Label.new()
+	title_label.text = String(def.get("label", catalyst_id))
+	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title_label.add_theme_font_size_override("font_size", 17)
+	title_label.add_theme_color_override("font_color", title_color)
+	header.add_child(title_label)
+
+	var toggle := _make_toggle_button(equipped, unlocked)
+	if not unlocked:
+		toggle.text = "Locked"
+		toggle.disabled = true
+	elif equipped:
+		toggle.text = "Equipped"
+	elif equipped_count >= slot_limit:
+		toggle.text = "Full"
+		toggle.disabled = true
+	else:
+		toggle.text = "Equip"
+	if not toggle.disabled:
+		toggle.pressed.connect(func() -> void:
+			_toggle_catalyst(catalyst_id)
+		)
+	header.add_child(toggle)
+
+	var description: String = String(def.get("description", "")).strip_edges()
+	if not description.is_empty():
+		var desc_label := Label.new()
+		desc_label.text = description
+		desc_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		desc_label.add_theme_font_size_override("font_size", 13)
+		var desc_color: Color = Color(0.62, 0.66, 0.74, 0.6) if not unlocked else Color(0.72, 0.84, 0.96, 0.82)
+		desc_label.add_theme_color_override("font_color", desc_color)
+		inner.add_child(desc_label)
+
+	return card
+
+func _make_catalyst_card_style(state: int) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	if state == 2:
+		style.bg_color = Color(0.20, 0.16, 0.08, 0.55)
+		style.border_color = Color(1.0, 0.78, 0.40, 0.66)
+	elif state == 1:
+		style.bg_color = Color(0.08, 0.14, 0.22, 0.50)
+		style.border_color = Color(0.40, 0.58, 0.82, 0.40)
+	else:
+		style.bg_color = Color(0.08, 0.10, 0.14, 0.40)
+		style.border_color = Color(0.32, 0.36, 0.44, 0.32)
+	style.border_width_left = 1
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 1
+	style.corner_radius_top_left = 8
+	style.corner_radius_top_right = 8
+	style.corner_radius_bottom_left = 8
+	style.corner_radius_bottom_right = 8
+	style.content_margin_left = 14.0
+	style.content_margin_right = 14.0
+	style.content_margin_top = 9.0
+	style.content_margin_bottom = 9.0
+	return style
 
 func _toggle_catalyst(catalyst_id: String) -> void:
 	var profile: Dictionary = _get_profile()
@@ -286,29 +388,286 @@ func _refresh_oath_list() -> void:
 	_clear_children(_oath_list)
 	var profile: Dictionary = _get_profile()
 	var defs: Dictionary = OATHS_REGISTRY.get_all_definitions()
+
+	var boss_ids: Array[String] = []
+	var build_ids: Array[String] = []
+	var ascension_ids: Array[String] = []
+	var clear_by_character: Dictionary = {}
+
 	var keys: Array = defs.keys()
 	keys.sort()
 	for oath_id_variant in keys:
 		var oath_id: String = String(oath_id_variant)
+		if oath_id.ends_with("_no_hit"):
+			boss_ids.append(oath_id)
+		elif oath_id.begins_with("ascension_rank_"):
+			ascension_ids.append(oath_id)
+		elif oath_id.begins_with("clear_"):
+			var trimmed: String = oath_id.substr("clear_".length())
+			var underscore_index: int = trimmed.rfind("_")
+			var character_id: String = trimmed.substr(0, underscore_index) if underscore_index > 0 else trimmed
+			if not clear_by_character.has(character_id):
+				clear_by_character[character_id] = []
+			(clear_by_character[character_id] as Array).append(oath_id)
+		else:
+			build_ids.append(oath_id)
+
+	_append_oath_group(profile, defs, "Boss Mastery", _sort_boss_oaths(boss_ids))
+	_append_oath_group(profile, defs, "Build Discipline", build_ids)
+	_append_oath_group(profile, defs, "Ascension Milestones", _sort_ascension_oaths(ascension_ids))
+	_append_clear_groups(profile, defs, clear_by_character)
+
+const _BOSS_ORDER: Array[String] = ["warden", "sovereign", "lacuna"]
+const _BEARING_ORDER: Array[String] = ["pilgrim", "delver", "harbinger", "forsworn"]
+
+func _sort_boss_oaths(oath_ids: Array[String]) -> Array[String]:
+	var ordered: Array[String] = []
+	for boss_id in _BOSS_ORDER:
+		var candidate: String = "%s_no_hit" % boss_id
+		if oath_ids.has(candidate):
+			ordered.append(candidate)
+	for oath_id in oath_ids:
+		if not ordered.has(oath_id):
+			ordered.append(oath_id)
+	return ordered
+
+func _sort_ascension_oaths(oath_ids: Array[String]) -> Array[String]:
+	var with_rank: Array = []
+	for oath_id in oath_ids:
+		var suffix: String = oath_id.substr("ascension_rank_".length())
+		var rank: int = suffix.to_int()
+		with_rank.append({"id": oath_id, "rank": rank})
+	with_rank.sort_custom(func(a, b): return int(a["rank"]) < int(b["rank"]))
+	var ordered: Array[String] = []
+	for entry in with_rank:
+		ordered.append(String((entry as Dictionary)["id"]))
+	return ordered
+
+func _sort_clear_oaths(oath_ids: Array) -> Array[String]:
+	var ordered: Array[String] = []
+	for bearing in _BEARING_ORDER:
+		var suffix: String = "_%s" % bearing
+		for oath_id_variant in oath_ids:
+			var oath_id: String = String(oath_id_variant)
+			if oath_id.ends_with(suffix) and not ordered.has(oath_id):
+				ordered.append(oath_id)
+	for oath_id_variant in oath_ids:
+		var oath_id_str: String = String(oath_id_variant)
+		if not ordered.has(oath_id_str):
+			ordered.append(oath_id_str)
+	return ordered
+
+func _append_oath_group(profile: Dictionary, defs: Dictionary, title: String, oath_ids: Array) -> void:
+	if oath_ids.is_empty():
+		return
+	_oath_list.add_child(_make_oath_group_header(title))
+	for oath_id_variant in oath_ids:
+		var oath_id: String = String(oath_id_variant)
 		var def: Dictionary = defs[oath_id] as Dictionary
 		var completed: bool = META_PROGRESS_STORE.is_oath_completed(profile, oath_id)
-		var row := _make_row()
-		var status_glyph: String = "[X]" if completed else "[ ]"
-		var label := _make_row_label("%s  %s" % [status_glyph, String(def.get("label", oath_id))])
-		label.tooltip_text = String(def.get("description", ""))
-		if completed:
-			label.add_theme_color_override("font_color", Color(0.74, 1.0, 0.78, 0.96))
-		else:
-			label.add_theme_color_override("font_color", Color(0.86, 0.92, 1.0, 0.84))
-		row.add_child(label)
-		_oath_list.add_child(row)
+		_oath_list.add_child(_make_oath_card(def, completed))
+
+func _append_clear_groups(profile: Dictionary, defs: Dictionary, clear_by_character: Dictionary) -> void:
+	if clear_by_character.is_empty():
+		return
+	_oath_list.add_child(_make_oath_group_header("Bearing Clears"))
+	var character_keys: Array = clear_by_character.keys()
+	character_keys.sort()
+	for character_id_variant in character_keys:
+		var character_id: String = String(character_id_variant)
+		var oath_ids: Array[String] = _sort_clear_oaths(clear_by_character[character_id] as Array)
+		var completed_count: int = 0
+		for oath_id_variant in oath_ids:
+			if META_PROGRESS_STORE.is_oath_completed(profile, String(oath_id_variant)):
+				completed_count += 1
+		var character_def: Dictionary = CHARACTER_REGISTRY.get_character(character_id)
+		var character_name: String = String(character_def.get("name", character_id.capitalize()))
+		var collapsed: bool = bool(_collapsed_clear_groups.get(character_id, true))
+		var header_text: String = "%s  (%d / %d)" % [character_name, completed_count, oath_ids.size()]
+		var header_button := _make_collapse_header_button(header_text, collapsed)
+		header_button.pressed.connect(func() -> void:
+			_collapsed_clear_groups[character_id] = not collapsed
+			_refresh_oath_list()
+		)
+		_oath_list.add_child(header_button)
+		if collapsed:
+			continue
+		for oath_id_variant in oath_ids:
+			var oath_id: String = String(oath_id_variant)
+			var def: Dictionary = defs[oath_id] as Dictionary
+			var completed: bool = META_PROGRESS_STORE.is_oath_completed(profile, oath_id)
+			_oath_list.add_child(_make_oath_card(def, completed))
+
+func _make_oath_group_header(title: String) -> Label:
+	var label := Label.new()
+	label.text = title
+	label.add_theme_font_size_override("font_size", 18)
+	label.add_theme_color_override("font_color", Color(1.0, 0.86, 0.52, 0.96))
+	if _oath_list.get_child_count() > 0:
+		var spacer := Control.new()
+		spacer.custom_minimum_size = Vector2(0.0, 14.0)
+		_oath_list.add_child(spacer)
+	return label
+
+func _make_collapse_header_button(text: String, collapsed: bool) -> Button:
+	var button := Button.new()
+	var arrow: String = "▶" if collapsed else "▼"
+	button.text = "%s  %s" % [arrow, text]
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.flat = true
+	button.focus_mode = Control.FOCUS_NONE
+	button.add_theme_font_size_override("font_size", 15)
+	button.add_theme_color_override("font_color", Color(0.86, 0.96, 1.0, 0.92))
+	button.add_theme_color_override("font_hover_color", Color(1.0, 1.0, 1.0, 1.0))
+	return button
+
+func _make_oath_card(def: Dictionary, completed: bool) -> PanelContainer:
+	var card := PanelContainer.new()
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	card.add_theme_stylebox_override("panel", _make_oath_card_style(completed))
+
+	var inner := VBoxContainer.new()
+	inner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inner.add_theme_constant_override("separation", 4)
+	card.add_child(inner)
+
+	var glyph: String = "◆" if completed else "◇"
+	var title_color: Color = Color(0.74, 1.0, 0.78, 0.98) if completed else Color(0.86, 0.96, 1.0, 0.94)
+	var title_label := Label.new()
+	title_label.text = "%s  %s" % [glyph, String(def.get("label", ""))]
+	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title_label.add_theme_font_size_override("font_size", 17)
+	title_label.add_theme_color_override("font_color", title_color)
+	inner.add_child(title_label)
+
+	var description: String = String(def.get("description", "")).strip_edges()
+	if not description.is_empty():
+		var desc_label := Label.new()
+		desc_label.text = description
+		desc_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		desc_label.add_theme_font_size_override("font_size", 13)
+		desc_label.add_theme_color_override("font_color", Color(0.72, 0.84, 0.96, 0.82))
+		inner.add_child(desc_label)
+
+	var reward_text: String = _format_oath_reward(def)
+	if not reward_text.is_empty():
+		var reward_label := Label.new()
+		reward_label.text = reward_text
+		reward_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		reward_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		reward_label.add_theme_font_size_override("font_size", 13)
+		reward_label.add_theme_color_override("font_color", Color(1.0, 0.84, 0.46, 0.94))
+		inner.add_child(reward_label)
+
+	return card
+
+func _make_oath_card_style(completed: bool) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	if completed:
+		style.bg_color = Color(0.10, 0.22, 0.14, 0.55)
+		style.border_color = Color(0.46, 0.84, 0.54, 0.62)
+	else:
+		style.bg_color = Color(0.08, 0.14, 0.22, 0.50)
+		style.border_color = Color(0.40, 0.58, 0.82, 0.40)
+	style.border_width_left = 1
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 1
+	style.corner_radius_top_left = 8
+	style.corner_radius_top_right = 8
+	style.corner_radius_bottom_left = 8
+	style.corner_radius_bottom_right = 8
+	style.content_margin_left = 14.0
+	style.content_margin_right = 14.0
+	style.content_margin_top = 9.0
+	style.content_margin_bottom = 9.0
+	return style
+
+func _format_oath_reward(def: Dictionary) -> String:
+	var parts: Array[String] = []
+	var catalyst_id: String = String(def.get("reward_catalyst_id", "")).strip_edges()
+	if not catalyst_id.is_empty():
+		var catalyst_def: Dictionary = CATALYST_REGISTRY.get_definition(catalyst_id)
+		var catalyst_label: String = String(catalyst_def.get("label", catalyst_id))
+		parts.append("Catalyst: %s" % catalyst_label)
+	var modifier_id: String = String(def.get("reward_modifier_id", "")).strip_edges()
+	if not modifier_id.is_empty():
+		var modifier_def: Dictionary = ASCENSION_REGISTRY.get_definition(modifier_id)
+		var modifier_label: String = String(modifier_def.get("label", modifier_id))
+		parts.append("Unlocks: %s" % modifier_label)
+	if parts.is_empty():
+		return ""
+	return "★ " + " · ".join(parts)
 
 # --- builders ---
 
-func _build_section_column(parent: HBoxContainer, header_text: String) -> VBoxContainer:
+func _build_modifier_lock_banner() -> PanelContainer:
+	return _build_notice_banner(
+		"🔒",
+		"Locked. Clear a Forsworn run with this character to unlock Ascension modifiers.",
+		Color(0.28, 0.12, 0.06, 0.78),
+		Color(1.0, 0.62, 0.32, 0.86),
+		Color(1.0, 0.78, 0.50, 1.0),
+		Color(1.0, 0.86, 0.70, 0.96)
+	)
+
+func _build_catalyst_wip_banner() -> PanelContainer:
+	return _build_notice_banner(
+		"⚙",
+		"Work in progress. Only Iron Vigil applies in-run today; other catalysts are placeholders.",
+		Color(0.10, 0.14, 0.22, 0.78),
+		Color(0.52, 0.74, 1.0, 0.78),
+		Color(0.74, 0.92, 1.0, 1.0),
+		Color(0.84, 0.92, 1.0, 0.94)
+	)
+
+func _build_notice_banner(icon_text: String, message_text: String, bg: Color, border: Color, icon_color: Color, text_color: Color) -> PanelContainer:
+	var banner := PanelContainer.new()
+	banner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var style := StyleBoxFlat.new()
+	style.bg_color = bg
+	style.border_color = border
+	style.border_width_left = 1
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 1
+	style.corner_radius_top_left = 8
+	style.corner_radius_top_right = 8
+	style.corner_radius_bottom_left = 8
+	style.corner_radius_bottom_right = 8
+	style.content_margin_left = 14.0
+	style.content_margin_right = 14.0
+	style.content_margin_top = 10.0
+	style.content_margin_bottom = 10.0
+	banner.add_theme_stylebox_override("panel", style)
+
+	var row := HBoxContainer.new()
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_theme_constant_override("separation", 10)
+	banner.add_child(row)
+
+	var icon := Label.new()
+	icon.text = icon_text
+	icon.add_theme_font_size_override("font_size", 18)
+	icon.add_theme_color_override("font_color", icon_color)
+	row.add_child(icon)
+
+	var message := Label.new()
+	message.text = message_text
+	message.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	message.add_theme_font_size_override("font_size", 14)
+	message.add_theme_color_override("font_color", text_color)
+	row.add_child(message)
+	return banner
+
+func _build_section_column(parent: HBoxContainer, header_text: String, stretch_ratio: float = 1.0) -> VBoxContainer:
 	var column := VBoxContainer.new()
 	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	column.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	column.size_flags_stretch_ratio = stretch_ratio
 	column.add_theme_constant_override("separation", 8)
 	parent.add_child(column)
 
