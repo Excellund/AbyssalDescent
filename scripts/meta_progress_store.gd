@@ -8,7 +8,12 @@ const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
 const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 
 const META_PROGRESS_PATH := "user://meta_progress.save"
-const META_PROGRESS_VERSION := 2
+const META_PROGRESS_VERSION := 3
+
+## Endgame chase state (v3): see /memories/session/plan.md
+## Ascension = stackable difficulty modifiers above Forsworn (per-character heat record).
+## Oaths    = achievement-style goals evaluated off run summary; grant catalysts/modifiers.
+## Catalysts = pre-run gameplay augments equipped per-character before a descent.
 
 const TIER_NAMES := {
 	BEARING_ENUMS.BearingTier.PILGRIM: "Pilgrim",
@@ -51,6 +56,18 @@ static func _get_default_profile() -> Dictionary:
 			"total_clears": 0,
 			"best_depth": 0,
 			"last_outcome": "none"
+		},
+		"ascension_state": {
+			"per_character": {}
+		},
+		"oaths_state": {
+			"completed_oath_ids": [],
+			"progress": {},
+			"claimed_reward_ids": []
+		},
+		"catalysts_state": {
+			"unlocked_ids": [],
+			"equipped_per_character": {}
 		}
 	}
 
@@ -129,7 +146,53 @@ static func _migrate_profile(old_payload: Dictionary, old_version: int) -> Dicti
 		if not unlocked.has(selected):
 			selected = String(unlocked[0])
 		migrated["character_state"]["selected_character_id"] = selected
-	
+
+	if "ascension_state" in old_payload and old_payload["ascension_state"] is Dictionary:
+		migrated["ascension_state"] = (old_payload["ascension_state"] as Dictionary).duplicate(true)
+		if not (migrated["ascension_state"].get("per_character") is Dictionary):
+			migrated["ascension_state"]["per_character"] = {}
+
+	if "oaths_state" in old_payload and old_payload["oaths_state"] is Dictionary:
+		var old_oaths: Dictionary = old_payload["oaths_state"] as Dictionary
+		var completed_raw: Variant = old_oaths.get("completed_oath_ids", [])
+		var completed: Array = []
+		if completed_raw is Array:
+			for entry in completed_raw:
+				completed.append(String(entry))
+		migrated["oaths_state"]["completed_oath_ids"] = completed
+		var progress_raw: Variant = old_oaths.get("progress", {})
+		if progress_raw is Dictionary:
+			migrated["oaths_state"]["progress"] = (progress_raw as Dictionary).duplicate(true)
+		var claimed_raw: Variant = old_oaths.get("claimed_reward_ids", [])
+		var claimed: Array = []
+		if claimed_raw is Array:
+			for entry in claimed_raw:
+				claimed.append(String(entry))
+		migrated["oaths_state"]["claimed_reward_ids"] = claimed
+
+	if "catalysts_state" in old_payload and old_payload["catalysts_state"] is Dictionary:
+		var old_cats: Dictionary = old_payload["catalysts_state"] as Dictionary
+		var unlocked_cat_raw: Variant = old_cats.get("unlocked_ids", [])
+		var unlocked_cats: Array = []
+		if unlocked_cat_raw is Array:
+			for entry in unlocked_cat_raw:
+				unlocked_cats.append(String(entry))
+		migrated["catalysts_state"]["unlocked_ids"] = unlocked_cats
+		var equipped_raw: Variant = old_cats.get("equipped_per_character", {})
+		if equipped_raw is Dictionary:
+			var equipped_clean: Dictionary = {}
+			for key in (equipped_raw as Dictionary).keys():
+				var char_id: String = _normalize_character_id(key)
+				if not CHARACTER_REGISTRY.is_known_character_id(char_id):
+					continue
+				var list_raw: Variant = (equipped_raw as Dictionary)[key]
+				var list_clean: Array = []
+				if list_raw is Array:
+					for entry in list_raw:
+						list_clean.append(String(entry))
+				equipped_clean[char_id] = list_clean
+			migrated["catalysts_state"]["equipped_per_character"] = equipped_clean
+
 	migrated["version"] = META_PROGRESS_VERSION
 	return migrated
 
@@ -293,3 +356,210 @@ static func get_run_stats(profile: Dictionary) -> Dictionary:
 	if not ("run_stats" in profile):
 		return {"total_runs": 0, "total_clears": 0, "best_depth": 0, "last_outcome": "none"}
 	return (profile["run_stats"] as Dictionary).duplicate()
+
+## --- Ascension state (per-character) -------------------------------------------------
+
+static func _get_ascension_state(profile: Dictionary) -> Dictionary:
+	if not ("ascension_state" in profile) or not (profile["ascension_state"] is Dictionary):
+		profile["ascension_state"] = {"per_character": {}}
+	var state: Dictionary = profile["ascension_state"] as Dictionary
+	if not (state.get("per_character") is Dictionary):
+		state["per_character"] = {}
+	return state
+
+static func _get_ascension_record(profile: Dictionary, character_id: String) -> Dictionary:
+	var normalized: String = _normalize_character_id(character_id)
+	var state: Dictionary = _get_ascension_state(profile)
+	var per_char: Dictionary = state["per_character"] as Dictionary
+	if not (per_char.get(normalized) is Dictionary):
+		per_char[normalized] = {
+			"highest_completed_rank": 0,
+			"current_loadout": [],
+			"total_runs_at_rank": {}
+		}
+	return per_char[normalized] as Dictionary
+
+static func get_ascension_highest_rank(profile: Dictionary, character_id: String) -> int:
+	var record: Dictionary = _get_ascension_record(profile, character_id)
+	return int(record.get("highest_completed_rank", 0))
+
+static func record_ascension_clear(profile: Dictionary, character_id: String, rank: int) -> bool:
+	if rank <= 0:
+		return false
+	var record: Dictionary = _get_ascension_record(profile, character_id)
+	var current: int = int(record.get("highest_completed_rank", 0))
+	if rank > current:
+		record["highest_completed_rank"] = rank
+		return true
+	return false
+
+static func get_ascension_loadout(profile: Dictionary, character_id: String) -> Array[String]:
+	var record: Dictionary = _get_ascension_record(profile, character_id)
+	var raw: Variant = record.get("current_loadout", [])
+	var out: Array[String] = []
+	if raw is Array:
+		for entry in raw:
+			out.append(String(entry))
+	return out
+
+static func set_ascension_loadout(profile: Dictionary, character_id: String, modifier_ids: Array) -> void:
+	var record: Dictionary = _get_ascension_record(profile, character_id)
+	var clean: Array = []
+	for entry in modifier_ids:
+		var id: String = String(entry).strip_edges()
+		if id.is_empty() or clean.has(id):
+			continue
+		clean.append(id)
+	record["current_loadout"] = clean
+
+static func record_ascension_attempt(profile: Dictionary, character_id: String, rank: int) -> void:
+	var record: Dictionary = _get_ascension_record(profile, character_id)
+	var counts_raw: Variant = record.get("total_runs_at_rank", {})
+	var counts: Dictionary = counts_raw if counts_raw is Dictionary else {}
+	var key: String = str(rank)
+	counts[key] = int(counts.get(key, 0)) + 1
+	record["total_runs_at_rank"] = counts
+
+## --- Oaths state ---------------------------------------------------------------------
+
+static func _get_oaths_state(profile: Dictionary) -> Dictionary:
+	if not ("oaths_state" in profile) or not (profile["oaths_state"] is Dictionary):
+		profile["oaths_state"] = {
+			"completed_oath_ids": [],
+			"progress": {},
+			"claimed_reward_ids": []
+		}
+	return profile["oaths_state"] as Dictionary
+
+static func get_completed_oath_ids(profile: Dictionary) -> Array[String]:
+	var state: Dictionary = _get_oaths_state(profile)
+	var raw: Variant = state.get("completed_oath_ids", [])
+	var out: Array[String] = []
+	if raw is Array:
+		for entry in raw:
+			out.append(String(entry))
+	return out
+
+static func is_oath_completed(profile: Dictionary, oath_id: String) -> bool:
+	return get_completed_oath_ids(profile).has(String(oath_id))
+
+static func mark_oath_completed(profile: Dictionary, oath_id: String) -> bool:
+	var id: String = String(oath_id).strip_edges()
+	if id.is_empty():
+		return false
+	var state: Dictionary = _get_oaths_state(profile)
+	var raw: Variant = state.get("completed_oath_ids", [])
+	var list: Array = raw if raw is Array else []
+	for entry in list:
+		if String(entry) == id:
+			return false
+	list.append(id)
+	state["completed_oath_ids"] = list
+	return true
+
+static func get_oath_progress(profile: Dictionary, oath_id: String) -> Dictionary:
+	var state: Dictionary = _get_oaths_state(profile)
+	var progress_raw: Variant = state.get("progress", {})
+	if not (progress_raw is Dictionary):
+		return {}
+	var progress: Dictionary = progress_raw as Dictionary
+	var entry: Variant = progress.get(oath_id, {})
+	if entry is Dictionary:
+		return (entry as Dictionary).duplicate(true)
+	return {}
+
+static func set_oath_progress(profile: Dictionary, oath_id: String, tracker: Dictionary) -> void:
+	var state: Dictionary = _get_oaths_state(profile)
+	var progress_raw: Variant = state.get("progress", {})
+	var progress: Dictionary = progress_raw if progress_raw is Dictionary else {}
+	progress[oath_id] = tracker.duplicate(true)
+	state["progress"] = progress
+
+static func mark_oath_reward_claimed(profile: Dictionary, oath_id: String) -> bool:
+	var id: String = String(oath_id).strip_edges()
+	if id.is_empty():
+		return false
+	var state: Dictionary = _get_oaths_state(profile)
+	var raw: Variant = state.get("claimed_reward_ids", [])
+	var list: Array = raw if raw is Array else []
+	for entry in list:
+		if String(entry) == id:
+			return false
+	list.append(id)
+	state["claimed_reward_ids"] = list
+	return true
+
+static func is_oath_reward_claimed(profile: Dictionary, oath_id: String) -> bool:
+	var state: Dictionary = _get_oaths_state(profile)
+	var raw: Variant = state.get("claimed_reward_ids", [])
+	if not (raw is Array):
+		return false
+	for entry in raw:
+		if String(entry) == String(oath_id):
+			return true
+	return false
+
+## --- Catalysts state -----------------------------------------------------------------
+
+static func _get_catalysts_state(profile: Dictionary) -> Dictionary:
+	if not ("catalysts_state" in profile) or not (profile["catalysts_state"] is Dictionary):
+		profile["catalysts_state"] = {
+			"unlocked_ids": [],
+			"equipped_per_character": {}
+		}
+	return profile["catalysts_state"] as Dictionary
+
+static func get_unlocked_catalyst_ids(profile: Dictionary) -> Array[String]:
+	var state: Dictionary = _get_catalysts_state(profile)
+	var raw: Variant = state.get("unlocked_ids", [])
+	var out: Array[String] = []
+	if raw is Array:
+		for entry in raw:
+			out.append(String(entry))
+	return out
+
+static func unlock_catalyst(profile: Dictionary, catalyst_id: String) -> bool:
+	var id: String = String(catalyst_id).strip_edges()
+	if id.is_empty():
+		return false
+	var state: Dictionary = _get_catalysts_state(profile)
+	var raw: Variant = state.get("unlocked_ids", [])
+	var list: Array = raw if raw is Array else []
+	for entry in list:
+		if String(entry) == id:
+			return false
+	list.append(id)
+	state["unlocked_ids"] = list
+	return true
+
+static func get_equipped_catalyst_ids(profile: Dictionary, character_id: String) -> Array[String]:
+	var state: Dictionary = _get_catalysts_state(profile)
+	var equipped_raw: Variant = state.get("equipped_per_character", {})
+	if not (equipped_raw is Dictionary):
+		return []
+	var normalized: String = _normalize_character_id(character_id)
+	var raw: Variant = (equipped_raw as Dictionary).get(normalized, [])
+	var out: Array[String] = []
+	if raw is Array:
+		for entry in raw:
+			out.append(String(entry))
+	return out
+
+static func set_equipped_catalyst_ids(profile: Dictionary, character_id: String, catalyst_ids: Array) -> void:
+	var normalized: String = _normalize_character_id(character_id)
+	if not CHARACTER_REGISTRY.is_known_character_id(normalized):
+		return
+	var state: Dictionary = _get_catalysts_state(profile)
+	var equipped_raw: Variant = state.get("equipped_per_character", {})
+	var equipped: Dictionary = equipped_raw if equipped_raw is Dictionary else {}
+	var unlocked: Array[String] = get_unlocked_catalyst_ids(profile)
+	var clean: Array = []
+	for entry in catalyst_ids:
+		var id: String = String(entry).strip_edges()
+		if id.is_empty() or clean.has(id):
+			continue
+		if not unlocked.has(id):
+			continue
+		clean.append(id)
+	equipped[normalized] = clean
+	state["equipped_per_character"] = equipped
