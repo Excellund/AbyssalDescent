@@ -115,10 +115,10 @@ const DAMAGE_MODEL_BY_POWER := {
 		"formula_note": "+X per resonance stack on same target"
 	},
 	# Character-lore bridges
-	"vow_shatter": {
+	"bloodvow": {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
-		"formula_note": "Hit damage multiplied after being hit"
+		"formula_note": "Hit damage multiplied while player is below the wounded threshold"
 	},
 	"eclipse_mark": {
 		"kind": DAMAGE_KIND_SCALING,
@@ -131,10 +131,10 @@ const DAMAGE_MODEL_BY_POWER := {
 		"formula_note": "Y% of hit damage along non-chaining fault lines from kill position"
 	},
 	# Boons
-	"crushed_vow": {
+	"bloodpact": {
 		"kind": DAMAGE_KIND_FLAT,
 		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
-		"formula_note": "+X flat damage on next hit after being hit"
+		"formula_note": "+X flat damage on every hit while below 50% HP"
 	},
 	"severing_edge": {
 		"kind": DAMAGE_KIND_FLAT,
@@ -224,10 +224,10 @@ const UPGRADE_BALANCE := {
 		"property": "max_health",
 		"add": 10
 	},
-	"crushed_vow": {
+	"bloodpact": {
 		"kind": "add_int",
-		"property": "crushed_vow_bonus_damage",
-		"add": 18
+		"property": "bloodpact_bonus_damage",
+		"add": 9
 	},
 	"severing_edge": {
 		"kind": "add_int",
@@ -249,7 +249,7 @@ const TRIAL_POWER_BALANCE := {
 		"attack_cooldown_mult": 0.96,
 		"attack_cooldown_min": 0.1,
 		"arc_base": 24.0,
-		"arc_match_player_at_stack": 2
+		"arc_match_player_at_stack": 3
 	},
 	"execution_edge": {
 		"every_base": 4,
@@ -383,9 +383,12 @@ const TRIAL_POWER_BALANCE := {
 		"bonus_per_resonance_base": 8,
 		"bonus_per_resonance_per_stack": 5
 	},
-	"vow_shatter": {
-		"damage_mult_base": 1.7,
-		"damage_mult_per_stack": 0.40
+	"bloodvow": {
+		"damage_mult_base": 1.20,
+		"damage_mult_per_stack": 0.20,
+		"threshold_base": 0.30,
+		"threshold_per_stack": 0.10,
+		"threshold_cap": 0.60
 	},
 	"eclipse_mark": {
 		"radius_base": 100.0,
@@ -457,7 +460,7 @@ const UPGRADE_STACK_LIMITS := {
 	"battle_trance": 3,
 	"surge_step": 3,
 	"heartstone": 2,
-	"crushed_vow": 3,
+	"bloodpact": 3,
 	"severing_edge": 3
 }
 
@@ -478,7 +481,7 @@ const TRIAL_POWER_STACK_LIMITS := {
 	"wraithstep": 3,
 	"voidfire": 3,
 	"dread_resonance": 4,
-	"vow_shatter": 3,
+	"bloodvow": 3,
 	"eclipse_mark": 3,
 	"fracture_field": 3
 }
@@ -532,7 +535,7 @@ const POWER_DISPLAY_NAMES := {
 	"battle_trance": "Battle Trance",
 	"surge_step": "Surge Step",
 	"heartstone": "Heartstone",
-	"crushed_vow": "Crushed Vow",
+	"bloodpact": "Blood Pact",
 	"severing_edge": "Severing Edge",
 	# Trial powers
 	"razor_wind": "Razor Wind",
@@ -548,7 +551,7 @@ const POWER_DISPLAY_NAMES := {
 	"wraithstep": "Wraithstep",
 	"voidfire": "Voidfire",
 	"dread_resonance": "Dread Resonance",
-	"vow_shatter": "Vow Shatter",
+	"bloodvow": "Blood Vow",
 	"eclipse_mark": "Eclipse Mark",
 	"fracture_field": "Fracture Field",
 	# Boss rewards
@@ -563,13 +566,13 @@ const POWER_DISPLAY_NAMES := {
 const UPGRADE_POOL_IDS: Array[String] = [
 	"first_strike", "heavy_blow", "wide_arc", "long_reach", "fleet_foot",
 	"blink_dash", "iron_skin", "battle_trance", "surge_step", "heartstone",
-	"crushed_vow", "severing_edge",
+	"bloodpact", "severing_edge",
 ]
 
 const TRIAL_POWER_POOL_IDS: Array[String] = [
 	"razor_wind", "execution_edge", "rupture_wave", "aegis_field", "hunters_snare",
 	"phantom_step", "riftpunch", "reaper_step", "static_wake", "storm_crown", "wraithstep",
-	"voidfire", "dread_resonance", "vow_shatter", "eclipse_mark", "fracture_field",
+	"voidfire", "dread_resonance", "bloodvow", "eclipse_mark", "fracture_field",
 ]
 
 const BOSS_REWARD_POOL_IDS: Array[String] = [

@@ -408,8 +408,8 @@ func _power_display_name(power_id: String) -> String:
 			return "Surge Step"
 		"heartstone":
 			return "Heartstone"
-		"crushed_vow":
-			return "Crushed Vow"
+		"bloodpact":
+			return "Blood Pact"
 		"severing_edge":
 			return "Severing Edge"
 		"razor_wind":
@@ -436,8 +436,8 @@ func _power_display_name(power_id: String) -> String:
 			return "Voidfire"
 		"dread_resonance":
 			return "Dread Resonance"
-		"vow_shatter":
-			return "Vow Shatter"
+		"bloodvow":
+			return "Blood Vow"
 		"eclipse_mark":
 			return "Eclipse Mark"
 		"fracture_field":

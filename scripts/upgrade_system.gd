@@ -59,8 +59,8 @@ func apply_upgrade(upgrade_id: String) -> bool:
 		"iron_skin":
 			player_reference.set("iron_skin_armor", int(preview.get("next", int(player_reference.get("iron_skin_armor")))))
 			player_reference.set("iron_skin_stacks", int(player_reference.get("iron_skin_stacks")) + 1)
-		"crushed_vow":
-			player_reference.set("crushed_vow_bonus_damage", int(preview.get("next", int(player_reference.get("crushed_vow_bonus_damage")))))
+		"bloodpact":
+			player_reference.set("bloodpact_bonus_damage", int(preview.get("next", int(player_reference.get("bloodpact_bonus_damage")))))
 		"severing_edge":
 			player_reference.set("severing_edge_bonus_damage", int(preview.get("next", int(player_reference.get("severing_edge_bonus_damage")))))
 		_:
@@ -220,8 +220,8 @@ func _power_sentence_template(power_id: String) -> String:
 			return "Dash speed %s."
 		"heartstone":
 			return "Max HP %s."
-		"crushed_vow":
-			return "After being hit, next attack bonus damage %s."
+		"bloodpact":
+			return "While below 50%% HP, +%s damage on every hit."
 		"severing_edge":
 			return "Bonus damage on hits against enemies below 55%% HP %s."
 		"wardens_verdict":
@@ -260,8 +260,8 @@ func _power_sentence_template(power_id: String) -> String:
 			return "Damage %s, detonate %s, lockout %s. %s"
 		"dread_resonance":
 			return "Bonus per resonance stack %s, up to %s stacks."
-		"vow_shatter":
-			return "Primed hit damage %s, lasts %s attacks."
+		"bloodvow":
+			return "Below %s HP, attacks deal x%s damage."
 		"eclipse_mark":
 			return "Mark radius %s, duration %s, bonus %s of hit, lasts %s hits."
 		"fracture_field":
@@ -349,7 +349,7 @@ func get_power_flavor_text(power_id: String) -> String:
 		"unbroken_oath":
 			return "Single hits trickle Oath; multihits scale exponentially. Fill the bar, then unleash a massive sword strike."
 		"razor_wind":
-			return "Each swing fires a slicing projectile through enemies."
+			return "Each swing extends a slicing arc that only strikes enemies past your normal melee reach."
 		"execution_edge":
 			return "Every few swings, an execution strike multiplies hit damage."
 		"rupture_wave":
@@ -374,8 +374,8 @@ func get_power_flavor_text(power_id: String) -> String:
 			return "Heat attacks. Danger Zone boosts hit damage. At cap, overheat detonates and briefly locks attacks."
 		"dread_resonance":
 			return "Chain hits on one enemy build resonance. Swapping targets resets to 1."
-		"vow_shatter":
-			return "Taking a hit primes a vow. Your next attack multiplies damage and consumes the vow."
+		"bloodvow":
+			return "While wounded, every strike hits harder. Lower HP, bigger windows."
 		"eclipse_mark":
 			return "Kills inflicted by hits mark nearby enemies. First hit on each deals bonus damage."
 		"fracture_field":
@@ -434,8 +434,8 @@ func get_power_current_description(power_id: String) -> String:
 			return _power_sentence(id, [_current_stat("+%d", 85 * get_upgrade_stack_count("surge_step"))], "build_detail")
 		"heartstone":
 			return _power_sentence(id, [_current_stat("+%d", 10 * get_upgrade_stack_count("heartstone"))], "build_detail")
-		"crushed_vow":
-			return _power_sentence(id, [_current_stat("+%d", int(player_reference.get("crushed_vow_bonus_damage")))], "build_detail")
+		"bloodpact":
+			return _power_sentence(id, [_current_stat("+%d", int(player_reference.get("bloodpact_bonus_damage")))], "build_detail")
 		"severing_edge":
 			return _power_sentence(id, [_current_stat("+%d", int(player_reference.get("severing_edge_bonus_damage")))], "build_detail")
 		"razor_wind":
@@ -485,10 +485,9 @@ func get_power_current_description(power_id: String) -> String:
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			var max_stacks_dr := int(player_reference.get("dread_resonance_max_stacks"))
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("+%d", int(cur.get("bonus_per_stack", 0))), _current_const(str(max_stacks_dr))], "build_detail"))
-		"vow_shatter":
+		"bloodvow":
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
-			var vs_charges := _vow_shatter_charges_for_stack(get_trial_power_stack_count(id))
-			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("x%.2f", float(cur.get("damage_mult", 1.0))), _current_stat("%d", vs_charges)], "build_detail"))
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f%%", float(cur.get("low_hp_threshold", 0.4)) * 100.0), _current_stat("%.2f", float(cur.get("damage_mult", 1.0)))], "build_detail"))
 		"eclipse_mark":
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			var em_hits := _eclipse_hits_for_stack(get_trial_power_stack_count(id))
@@ -585,10 +584,10 @@ func get_trial_power_card_description(power_id: String) -> String:
 			var bonus_stat := _stat("+%d", int(cur.get("bonus_per_stack", 0)), int(next_values.get("bonus_per_stack", 0)), is_initial)
 			var max_stacks_stat := _stat("%d", int(cur.get("max_stacks", int(player_reference.get("dread_resonance_max_stacks")))), int(next_values.get("max_stacks", int(player_reference.get("dread_resonance_max_stacks")))), is_initial)
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [bonus_stat, max_stacks_stat], "reward_card"))
-		"vow_shatter":
-			var mult_stat := _stat("x%.2f", float(cur.get("damage_mult", 1.0)), float(next_values.get("damage_mult", 1.0)), is_initial)
-			var charges_stat := _stat("%d", _vow_shatter_charges_for_stack(current_stack), _vow_shatter_charges_for_stack(next_stack), is_initial)
-			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [mult_stat, charges_stat], "reward_card"))
+		"bloodvow":
+			var threshold_stat := _stat("%.0f%%", float(cur.get("low_hp_threshold", 0.4)) * 100.0, float(next_values.get("low_hp_threshold", 0.4)) * 100.0, is_initial)
+			var mult_stat := _stat("%.2f", float(cur.get("damage_mult", 1.0)), float(next_values.get("damage_mult", 1.0)), is_initial)
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [threshold_stat, mult_stat], "reward_card"))
 		"eclipse_mark":
 			var radius_stat := _stat("%.0f", float(cur.get("radius", 0.0)), float(next_values.get("radius", 0.0)), is_initial)
 			var dur_stat := _stat("%.2fs", float(cur.get("mark_duration", 0.0)), float(next_values.get("mark_duration", 0.0)), is_initial)
@@ -646,8 +645,8 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 			var cur_max := int(cur_val)
 			var next_max := int(next_val)
 			return "[color=#c8daf0]Max HP:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [cur_max, next_max]
-		"crushed_vow":
-			return "[color=#c8daf0]After being hit, next attack bonus damage:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
+		"bloodpact":
+			return "[color=#c8daf0]Below 50%% HP, +damage on every hit:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
 		"severing_edge":
 			return "[color=#c8daf0]Bonus damage on hits against enemies below 55%% HP:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
 		"wardens_verdict":
@@ -750,11 +749,6 @@ func initialize(player: Node, state: Node, registry: Node) -> void:
 	game_state = state
 	power_registry = registry
 
-
-func _vow_shatter_charges_for_stack(stack_count: int) -> int:
-	if stack_count <= 1:
-		return 2
-	return 3
 
 func _eclipse_hits_for_stack(stack_count: int) -> int:
 	return maxi(1, stack_count)

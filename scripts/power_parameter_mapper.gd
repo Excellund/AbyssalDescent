@@ -140,11 +140,12 @@ const TRIAL_POWER_PARAM_MAP := {
 			"max_stacks": {"property": "dread_resonance_max_stacks", "type": "int"}
 		}
 	},
-	"vow_shatter": {
-		"reward_flag": "reward_vow_shatter",
-		"stack_property": "vow_shatter_stacks",
+	"bloodvow": {
+		"reward_flag": "reward_bloodvow",
+		"stack_property": "bloodvow_stacks",
 		"parameters": {
-			"damage_mult": {"property": "vow_shatter_damage_mult", "type": "float"}
+			"damage_mult": {"property": "bloodvow_damage_mult", "type": "float"},
+			"low_hp_threshold": {"property": "bloodvow_low_hp_threshold", "type": "float"}
 		}
 	},
 	"eclipse_mark": {
@@ -179,7 +180,7 @@ const UPGRADE_PARAM_MAP := {
 	"battle_trance": {"property": "battle_trance_move_speed_bonus"},
 	"surge_step": {"property": "dash_speed"},
 	"heartstone": {"special": "heartstone"},
-	"crushed_vow": {"property": "crushed_vow_bonus_damage"},
+	"bloodpact": {"property": "bloodpact_bonus_damage"},
 	"severing_edge": {"property": "severing_edge_bonus_damage"},
 	"wardens_verdict": {"property": "apex_predator_bonus_damage"},
 	"lacuna_echo": {"property": "void_echo_damage"},
@@ -456,9 +457,10 @@ static func build_trial_values(power_id: String, stack_count: int, balance_data:
 				"bonus_per_stack": int(data.get("bonus_per_resonance_base", 0)) + stack_count * int(data.get("bonus_per_resonance_per_stack", 0)),
 				"max_stacks": mini(int(data.get("max_stacks_cap", 99)), int(data.get("max_stacks_base", 3)) + stack_count * int(data.get("max_stacks_per_stack", 0)))
 			}
-		"vow_shatter":
+		"bloodvow":
 			return {
-				"damage_mult": float(data.get("damage_mult_base", 1.0)) + float(data.get("damage_mult_per_stack", 0.0)) * float(stack_count)
+				"damage_mult": float(data.get("damage_mult_base", 1.0)) + float(data.get("damage_mult_per_stack", 0.0)) * float(stack_count),
+				"low_hp_threshold": minf(float(data.get("threshold_cap", 0.6)), float(data.get("threshold_base", 0.3)) + float(data.get("threshold_per_stack", 0.1)) * float(stack_count))
 			}
 		"eclipse_mark":
 			return {

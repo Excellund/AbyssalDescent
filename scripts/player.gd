@@ -90,12 +90,12 @@ const RUN_SNAPSHOT_PROPERTIES := [
 	"wraithstep_mark_splash_ratio",
 	"reward_voidfire",
 	"reward_dread_resonance",
-	"reward_vow_shatter",
+	"reward_bloodvow",
 	"reward_eclipse_mark",
 	"reward_fracture_field",
 	"voidfire_stacks",
 	"dread_resonance_stacks",
-	"vow_shatter_stacks",
+	"bloodvow_stacks",
 	"eclipse_mark_stacks",
 	"fracture_field_stacks",
 	"voidfire_danger_zone_amp",
@@ -114,14 +114,15 @@ const RUN_SNAPSHOT_PROPERTIES := [
 	"void_heat_decay_rate",
 	"dread_resonance_bonus_per_stack",
 	"dread_resonance_max_stacks",
-	"vow_shatter_damage_mult",
+	"bloodvow_damage_mult",
+	"bloodvow_low_hp_threshold",
 	"eclipse_mark_radius",
 	"eclipse_mark_duration",
 	"eclipse_mark_bonus_ratio",
 	"fracture_field_radius",
 	"fracture_field_damage_ratio",
 	"fracture_field_slow_duration",
-	"crushed_vow_bonus_damage",
+	"bloodpact_bonus_damage",
 	"severing_edge_bonus_damage",
 	"apex_predator_bonus_damage",
 	"void_echo_damage",
@@ -285,12 +286,12 @@ var polar_shift_dash_lockout_duration: float = 0.0
 # Voidfire archetype trial powers
 var reward_voidfire: bool = false
 var reward_dread_resonance: bool = false
-var reward_vow_shatter: bool = false
+var reward_bloodvow: bool = false
 var reward_eclipse_mark: bool = false
 var reward_fracture_field: bool = false
 var voidfire_stacks: int = 0
 var dread_resonance_stacks: int = 0
-var vow_shatter_stacks: int = 0
+var bloodvow_stacks: int = 0
 var eclipse_mark_stacks: int = 0
 var fracture_field_stacks: int = 0
 # Voidfire: heat-based overheat mechanic
@@ -316,9 +317,9 @@ var dread_resonance_bonus_per_stack: int = 6
 var dread_resonance_max_stacks: int = 3
 var _dread_resonance_target_id: int = -1
 var _dread_resonance_target_stacks: int = 0
-# Vow Shatter: primed multiplier after being hit; charges scale with stacks (L1: 2, L2: 3, L3: 3 + longer hold)
-var vow_shatter_damage_mult: float = 1.8
-var _vow_shatter_charges_left: int = 0
+# Blood Vow: while wounded (HP fraction <= threshold), all hits gain a damage multiplier.
+var bloodvow_damage_mult: float = 1.4
+var bloodvow_low_hp_threshold: float = 0.40
 # Eclipse Mark: on-kill radial mark
 var eclipse_mark_radius: float = 110.0
 var eclipse_mark_duration: float = 1.4
@@ -330,8 +331,8 @@ var fracture_field_damage_ratio: float = 0.50
 var fracture_field_slow_duration: float = 0.6
 var _fracture_field_resolving: bool = false
 # New boons
-var crushed_vow_bonus_damage: int = 0
-var _crushed_vow_primed: bool = false
+# Blood Pact (boon): flat bonus damage on every hit while below 50% HP.
+var bloodpact_bonus_damage: int = 0
 var severing_edge_bonus_damage: int = 0
 var apex_predator_bonus_damage: int = 0
 var void_echo_damage: int = 0
@@ -1021,10 +1022,6 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 			player_feedback.play_impact_sound()
 		else:
 			_broadcast_owner_damage_feedback()
-		if reward_vow_shatter:
-			_vow_shatter_charges_left = _vow_shatter_attack_charges()
-		if crushed_vow_bonus_damage > 0:
-			_crushed_vow_primed = true
 		if source == "enemy_contact":
 			_contact_damage_grace_left = contact_damage_grace_duration
 			_contact_damage_grace_ability = ability
@@ -1277,10 +1274,8 @@ func apply_run_snapshot(snapshot: Dictionary) -> void:
 	_reset_dread_resonance_tracking()
 	void_heat = 0.0
 	_voidfire_lockout_left = 0.0
-	_vow_shatter_charges_left = 0
 	_reaper_chain_window_left = 0.0
 	_reaper_stored_dashes = 0
-	_crushed_vow_primed = false
 	_set_dash_phasing(false)
 	velocity = Vector2.ZERO
 	queue_redraw()
@@ -1733,7 +1728,7 @@ func apply_power_for_test(power_id: String) -> bool:
 		"wraithstep": true,
 		"voidfire": true,
 		"dread_resonance": true,
-		"vow_shatter": true,
+		"bloodvow": true,
 		"eclipse_mark": true,
 		"fracture_field": true
 	}
@@ -1752,7 +1747,7 @@ func apply_power_for_test(power_id: String) -> bool:
 		"battle_trance": true,
 		"surge_step": true,
 		"heartstone": true,
-		"crushed_vow": true,
+		"bloodpact": true,
 		"severing_edge": true,
 		"wardens_verdict": true,
 		"lacuna_echo": true,
@@ -1800,7 +1795,7 @@ func _build_damage_breakdown(base_scaling_damage: int, enemy_node: Object, hit_p
 	var flat_bonus_damage := _get_hunters_snare_bonus_damage(enemy_node)
 	flat_bonus_damage += _get_first_strike_bonus_damage(enemy_node)
 	flat_bonus_damage += _consume_wraithstep_mark(enemy_node, hit_position, base_scaling_damage)
-	flat_bonus_damage += _get_crushed_vow_bonus()
+	flat_bonus_damage += _get_bloodpact_bonus()
 	flat_bonus_damage += _get_severing_edge_bonus(enemy_node)
 	flat_bonus_damage += _get_apex_predator_bonus(enemy_node, hit_position, base_scaling_damage)
 	flat_bonus_damage += _get_void_echo_zone_bonus(enemy_node, base_scaling_damage)
@@ -1936,12 +1931,11 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		var danger_ratio := clampf(voidfire_danger_zone_threshold / maxf(1.0, void_heat_cap), 0.0, 1.0)
 		if heat_ratio >= danger_ratio:
 			strike_damage = int(round(float(strike_damage) * (1.0 + voidfire_danger_zone_amp)))
-	# Vow Shatter: apply multiplier if primed; consume one charge per attack
-	if _vow_shatter_charges_left > 0:
-		strike_damage = int(round(float(strike_damage) * vow_shatter_damage_mult))
-		_vow_shatter_charges_left -= 1
+	# Blood Vow: while wounded, multiply all hit damage.
+	if reward_bloodvow and _is_wounded_for_bloodvow():
+		strike_damage = int(round(float(strike_damage) * bloodvow_damage_mult))
 		if player_feedback != null:
-			player_feedback.play_world_ring(global_position, 30.0, Color(0.46, 0.62, 0.82, 0.88), 0.18)
+			player_feedback.play_world_ring(global_position, 30.0, Color(0.86, 0.18, 0.22, 0.78), 0.18)
 	var strike_range := float(melee_context.get("range", attack_range))
 	if _indomitable_spirit_primed:
 		strike_range *= INDOMITABLE_OATH_PRIMED_REACH_SCALE
@@ -2049,11 +2043,14 @@ func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupt
 	var wind_half_arc := deg_to_rad(wind_arc_degrees * 0.5)
 	var wind_damage := int(wind_context.get("damage", maxi(1, int(round(float(damage) * razor_wind_damage_ratio)))))
 	var sigil_burst_state := {"fired": false}
+	var inner_range_squared := attack_range * attack_range
 	for hit_entry in _get_damageable_enemies_in_cone(global_position, attack_direction, wind_range, wind_half_arc):
 		var enemy_body := hit_entry.get("enemy") as Node2D
 		if enemy_body == null:
 			continue
 		var hit_position := hit_entry.get("hit_position", enemy_body.global_position) as Vector2
+		if (hit_position - global_position).length_squared() <= inner_range_squared:
+			continue
 		_resolve_attack_hit(enemy_body, hit_position, wind_damage, "razor_wind", rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags, sigil_burst_state)
 		did_hit = true
 	return did_hit
@@ -2145,10 +2142,11 @@ func _consume_riftpunch_bonus(source: String, hit_position: Vector2, enemy_node:
 	queue_redraw()
 	return riftpunch_bonus_damage
 
-func _vow_shatter_attack_charges() -> int:
-	if vow_shatter_stacks <= 1:
-		return 2
-	return 3
+func _is_wounded_for_bloodvow() -> bool:
+	if max_health <= 0:
+		return false
+	var hp_ratio := float(_get_current_health()) / maxf(1.0, float(max_health))
+	return hp_ratio <= bloodvow_low_hp_threshold
 
 func _eclipse_mark_hits_per_enemy() -> int:
 	return maxi(1, eclipse_mark_stacks)
@@ -2219,10 +2217,8 @@ func clear_lingering_combat_effects() -> void:
 	if player_feedback != null and player_feedback.has_method("clear_all_eclipse_mark_decals"):
 		player_feedback.clear_all_eclipse_mark_decals()
 	_reset_dread_resonance_tracking()
-	_vow_shatter_charges_left = 0
 	_reaper_chain_window_left = 0.0
 	_reaper_stored_dashes = 0
-	_crushed_vow_primed = false
 	_indomitable_spirit_primed = false
 	indomitable_damage_bank = 0.0
 	_indomitable_last_bank_gain_time = -999.0
@@ -3434,13 +3430,17 @@ func _get_dread_resonance_bonus(enemy_node: Object) -> int:
 		return 0
 	return dread_resonance_bonus_per_stack * _dread_resonance_target_stacks
 
-# --- Crushed Vow (boon) ---
+# --- Blood Pact (boon) ---
 
-func _get_crushed_vow_bonus() -> int:
-	if crushed_vow_bonus_damage <= 0 or not _crushed_vow_primed:
+func _get_bloodpact_bonus() -> int:
+	if bloodpact_bonus_damage <= 0:
 		return 0
-	_crushed_vow_primed = false
-	return crushed_vow_bonus_damage
+	if max_health <= 0:
+		return 0
+	var hp_ratio := float(_get_current_health()) / maxf(1.0, float(max_health))
+	if hp_ratio > 0.50:
+		return 0
+	return bloodpact_bonus_damage
 
 # --- Severing Edge (boon) ---
 

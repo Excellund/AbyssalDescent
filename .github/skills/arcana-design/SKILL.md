@@ -50,7 +50,7 @@ Each stack past L1 needs a yes/no behavioral unlock. Patterns that work:
 
 | Pattern | Example arcana | Implementation hook |
 |---|---|---|
-| Extra charges per trigger | `vow_shatter` (2→3 attack charges) | Counter field on player, decremented in attack handler |
+| Wider conditional band | `bloodvow` (low-HP threshold widens per stack) | `threshold_base/_per_stack/_cap` in balance, mapper emits `low_hp_threshold` |
 | Extra hits per mark | `eclipse_mark`, `wraithstep` | `hits_left` on the per-enemy dict entry; only erase at 0 |
 | Wider attack shape | `razor_wind` (matches player arc at L2) | `arc_match_player_at_stack` in balance, mapper reads `attack_arc_degrees` |
 | Faster threshold | `voidfire` (`danger_zone_threshold_base/_per_stack/_min`) | Scaling threshold via mapper |
@@ -79,10 +79,8 @@ Each stack past L1 needs a yes/no behavioral unlock. Patterns that work:
 Sentence templates in `_power_sentence_template`. Both `get_power_current_description` (build detail) and `get_trial_power_card_description` (reward card) MUST emit the structural unlocks visibly so players see what L2/L3 actually grants. Helpers go at the end of `upgrade_system.gd`:
 
 ```gdscript
-func _vow_shatter_charges_for_stack(stack_count: int) -> int:
-    if stack_count <= 1:
-        return 2
-    return 3
+func _eclipse_hits_for_stack(stack_count: int) -> int:
+    return maxi(1, stack_count)
 ```
 
 Helper logic in `upgrade_system.gd` MUST match the corresponding runtime helper in `player.gd` exactly. If the player picks differently from the card, the system is lying.
