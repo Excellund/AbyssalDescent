@@ -49,6 +49,7 @@ const PROFILE_KEY_SPECTRE_COUNT := "spectre_count"
 const PROFILE_KEY_PYRE_COUNT := "pyre_count"
 const PROFILE_KEY_TETHER_COUNT := "tether_count"
 const PROFILE_KEY_SEAMLOCK_COUNT := "seamlock_count"
+const PROFILE_KEY_MIRRORLINE_COUNT := "mirrorline_count"
 const PROFILE_KEY_OBJECTIVE_KIND := "objective_kind"
 const PROFILE_KEY_OBJECTIVE_DURATION := "objective_duration"
 const PROFILE_KEY_OBJECTIVE_SPAWN_INTERVAL := "objective_spawn_interval"
@@ -284,10 +285,21 @@ static func _build_encounter_registry() -> Array[Dictionary]:
 			"key": "apex_trial",
 			"id": DEBUG_ENUMS.Encounter.APEX_TRIAL,
 			"is_boss": false, "is_rest": false, "is_objective": false,
-			"display_label": "Apex Trial",
-			"glossary_label": "Apex Trial",
+			"display_label": "Apex Seamlock",
+			"glossary_label": "Apex Seamlock",
 			"door_presentation": {
-				"label": "Apex Trial",
+				"label": "Apex Seamlock",
+				"short_label": "Apex"
+			}
+		},
+		{
+			"key": "apex_mirrorline",
+			"id": DEBUG_ENUMS.Encounter.APEX_MIRRORLINE,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Apex Mirrorline",
+			"glossary_label": "Apex Mirrorline",
+			"door_presentation": {
+				"label": "Apex Mirrorline",
 				"short_label": "Apex"
 			}
 		},
@@ -669,6 +681,7 @@ static func normalize_profile(value: Variant) -> Dictionary:
 		int(input.get(PROFILE_KEY_TETHER_COUNT, 0))
 	)
 	normalized[PROFILE_KEY_SEAMLOCK_COUNT] = int(input.get(PROFILE_KEY_SEAMLOCK_COUNT, 0))
+	normalized[PROFILE_KEY_MIRRORLINE_COUNT] = int(input.get(PROFILE_KEY_MIRRORLINE_COUNT, 0))
 	if input.has(PROFILE_KEY_WAVE_COUNT):
 		normalized[PROFILE_KEY_WAVE_COUNT] = maxi(1, int(input.get(PROFILE_KEY_WAVE_COUNT, 1)))
 	if input.has(PROFILE_KEY_INITIAL_WAVE_FRACTION):
@@ -697,7 +710,7 @@ static func profile_static_camera(profile_value: Dictionary) -> bool:
 
 # Enemy count metadata: list of all enemy types for data-driven access
 static func _get_enemy_count_keys() -> Array[String]:
-	return ["chaser", "charger", "archer", "shielder", "lurker", "ram", "lancer", "spectre", "pyre", "tether", "seamlock"]
+	return ["chaser", "charger", "archer", "shielder", "lurker", "ram", "lancer", "spectre", "pyre", "tether", "seamlock", "mirrorline"]
 
 static func _get_enemy_count_key_for_type(enemy_type: String) -> String:
 	return "%s_count" % enemy_type.strip_edges().to_lower()
@@ -743,6 +756,9 @@ static func profile_tether_count(profile_value: Dictionary) -> int:
 
 static func profile_seamlock_count(profile_value: Dictionary) -> int:
 	return _get_enemy_count("seamlock", profile_value)
+
+static func profile_mirrorline_count(profile_value: Dictionary) -> int:
+	return _get_enemy_count("mirrorline", profile_value)
 
 static func profile_enemy_mutator(profile_value: Dictionary) -> Dictionary:
 	return profile_value.get(PROFILE_KEY_ENEMY_MUTATOR, {}) as Dictionary

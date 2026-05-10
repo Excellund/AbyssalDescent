@@ -295,7 +295,7 @@ func _trial_option_chance(depth: int) -> float:
 	var depth_bonus := float(maxi(0, depth - 3)) * 0.015
 	return clampf((0.45 + depth_bonus) * _difficulty_float("trial_encounter_frequency_mult", 1.0), 0.12, 0.95)
 
-func _apex_trial_option_chance(depth: int) -> float:
+func _apex_encounter_chance(depth: int) -> float:
 	var depth_bonus := float(maxi(0, depth - 5)) * 0.01
 	return clampf((0.12 + depth_bonus) * _difficulty_float("trial_encounter_frequency_mult", 1.0), 0.04, 0.32)
 
@@ -437,7 +437,9 @@ func build_debug_encounter_profile(encounter_key: String, depth: int) -> Diction
 		"trial":
 			return _build_trial_profile(depth)
 		"apex_trial":
-			return _build_apex_trial_profile(depth)
+			return _build_apex_seamlock_profile(depth)
+		"apex_mirrorline":
+			return _build_apex_mirrorline_profile(depth)
 		"last_stand":
 			return _build_survival_profile(depth)
 		"cut_the_signal":
@@ -550,24 +552,62 @@ func _build_apex_seamlock_mutator() -> Dictionary:
 		ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_WINDUP_MULT: 0.86
 	}
 
-func _build_apex_trial_profile(depth: int = 0) -> Dictionary:
+func _build_apex_seamlock_profile(depth: int = 0) -> Dictionary:
 	var effective_depth := _effective_depth(depth)
 	var tier := _difficulty_rank()
 	var mutator := _build_apex_seamlock_mutator()
 	var pressure_mult := _pressure_mult()
 	var chasers := int(clampf(float(1 + int(floor(float(maxi(0, effective_depth - 6)) * 0.2))) * pressure_mult * 0.85, 1.0, 3.0))
 	var shielders := int(clampf(float(1 + int(floor(float(maxi(0, effective_depth - 7)) * 0.15))) * pressure_mult * 0.8, 1.0, 2.0))
-	var seamlocks := _apex_trial_seamlock_count(tier, effective_depth)
-	var profile := _build_profile("Apex Trial Seamlock", TRIAL_ROOM_SIZE, chasers, 0, 0, shielders, mutator)
+	var seamlocks := _apex_seamlock_count(tier, effective_depth)
+	var profile := _build_profile("Apex Seamlock", TRIAL_ROOM_SIZE, chasers, 0, 0, shielders, mutator)
 	profile[ENCOUNTER_CONTRACTS.PROFILE_KEY_SEAMLOCK_COUNT] = seamlocks
 	return profile
 
-func _apex_trial_seamlock_count(tier: int, effective_depth: int) -> int:
+func _apex_seamlock_count(tier: int, effective_depth: int) -> int:
 	## Identity ceiling: more than the per-tier max stops being an Apex Trial.
 	var per_tier_ceiling := [2, 2, 3, 4]
 	var ceiling := int(per_tier_ceiling[clampi(tier, 0, 3)])
 	var raw := 1.0 + maxf(0.0, float(effective_depth) - 6.0) * 0.5
 	return clampi(int(round(raw)), 1, ceiling)
+
+func _build_apex_mirrorline_mutator() -> Dictionary:
+	var tier := clampi(_difficulty_rank(), 0, 3)
+	var tier_health_curve: Array[float] = [0.85, 1.0, 1.15, 1.30]
+	var tier_echo_speed_curve: Array[float] = [0.70, 0.83, 0.95, 1.08]
+	var tier_telegraph_curve: Array[float] = [1.20, 1.0, 0.86, 0.74]
+	var tier_echo_damage_curve: Array[float] = [0.74, 0.88, 0.98, 1.10]
+	var tier_health: float = tier_health_curve[tier]
+	var tier_echo_speed: float = tier_echo_speed_curve[tier]
+	var tier_telegraph: float = tier_telegraph_curve[tier]
+	var tier_echo_damage: float = tier_echo_damage_curve[tier]
+	return {
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME: "Mirrorline",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_THEME_COLOR: Color(0.78, 0.92, 1.0, 1.0),
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID: "mirrorline",
+		"affected_archetypes": ["mirrorline"],
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX: "Apex sunders below half — a perpendicular twin seam appears and incoming damage is reduced",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ENEMY_TINT: Color(0.92, 0.97, 1.0, 1.0),
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_ENEMY_HEALTH_MULT: tier_health,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_SPEED_MULT: tier_echo_speed,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_WINDUP_MULT: tier_telegraph,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT: tier_echo_damage
+	}
+
+func _build_apex_mirrorline_profile(_depth: int = 0) -> Dictionary:
+	var mutator := _build_apex_mirrorline_mutator()
+	var profile := _build_profile("Apex Mirrorline", TRIAL_ROOM_SIZE, 0, 0, 0, 0, mutator)
+	profile[ENCOUNTER_CONTRACTS.PROFILE_KEY_MIRRORLINE_COUNT] = 1
+	return profile
+
+func _pick_apex_encounter_profile(depth: int) -> Dictionary:
+	## Apex pool: each variant is a unique-identity elite encounter. Equal weight across pool.
+	var pool: Array[Callable] = [
+		Callable(self, "_build_apex_seamlock_profile"),
+		Callable(self, "_build_apex_mirrorline_profile")
+	]
+	var pick := pool[rng.randi_range(0, pool.size() - 1)]
+	return pick.call(depth) as Dictionary
 
 func apply_mutator_variant_to_profile(profile: Dictionary, mutator: Dictionary, depth: int = 1) -> Dictionary:
 	if profile.is_empty() or mutator.is_empty():
@@ -1002,9 +1042,9 @@ func _build_trial_route_option(depth: int) -> Dictionary:
 	return ENCOUNTER_CONTRACTS.trial_door_option(trial_profile, trial_mutator_name, trial_color)
 
 func _build_apex_trial_route_option(depth: int) -> Dictionary:
-	if depth < 5 or rng.randf() > _apex_trial_option_chance(depth):
+	if depth < 5 or rng.randf() > _apex_encounter_chance(depth):
 		return {}
-	var apex_profile: Dictionary = _build_apex_trial_profile(depth)
+	var apex_profile: Dictionary = _pick_apex_encounter_profile(depth)
 	var apex_mutator: Dictionary = ENCOUNTER_CONTRACTS.profile_enemy_mutator(apex_profile)
 	var apex_label := "Apex Trial"
 	var apex_mutator_name := ENCOUNTER_CONTRACTS.mutator_name(apex_mutator)

@@ -80,10 +80,16 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"desc": "Hard variant with an enemy mutator.",
 		},
 		{
-			"name": "Apex Trial",
+			"name": "Apex Seamlock",
 			"group": "Trial",
 			"color": Color(0.96, 0.54, 0.34, 1.0),
-			"desc": "Elite trial category. Fewer enemies, heavier presence, and lane control pressure.",
+			"desc": "Elite anchor lord. Lane-control pressure punishes linear retreat.",
+		},
+		{
+			"name": "Apex Mirrorline",
+			"group": "Trial",
+			"color": Color(0.78, 0.92, 1.0, 1.0),
+			"desc": "Elite seam-walker. Below half health it sunders — a perpendicular twin seam appears and damage taken is reduced. Burst it before the split.",
 		},
 		{
 			"name": "Last Stand",
