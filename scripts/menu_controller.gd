@@ -1166,6 +1166,8 @@ func _show_lobby_modal() -> void:
 		character_selector_panel.visible = false
 
 	if lobby_modal_instance != null:
+		if lobby_modal_instance.is_inside_tree():
+			lobby_modal_content_host.remove_child(lobby_modal_instance)
 		lobby_modal_instance.queue_free()
 		lobby_modal_instance = null
 
@@ -1189,6 +1191,8 @@ func _show_lobby_modal() -> void:
 
 func _hide_lobby_modal() -> void:
 	if lobby_modal_instance != null:
+		if lobby_modal_instance.is_inside_tree() and lobby_modal_content_host != null:
+			lobby_modal_content_host.remove_child(lobby_modal_instance)
 		lobby_modal_instance.queue_free()
 		lobby_modal_instance = null
 	if lobby_modal_layer != null:

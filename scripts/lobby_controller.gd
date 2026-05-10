@@ -82,7 +82,8 @@ func _ready() -> void:
 	leave_lobby_button.pressed.connect(_on_leave_lobby_pressed)
 	print("[Lobby] Leave button connected to _on_leave_lobby_pressed")
 	
-	## Connect to multiplayer signals
+	## Connect to multiplayer signals (idempotent: clear any stale connections first)
+	_disconnect_session_signals()
 	multiplayer_session_manager.peer_connected.connect(_on_peer_connected)
 	multiplayer_session_manager.peer_disconnected.connect(_on_peer_disconnected)
 	multiplayer_session_manager.session_joined.connect(_on_session_joined)
@@ -174,6 +175,7 @@ func _notification(what: int) -> void:
 
 
 func _exit_tree() -> void:
+	_disconnect_session_signals()
 	if _embedded_in_menu:
 		return
 	if lobby_music_player != null and lobby_music_player.playing:
@@ -181,6 +183,19 @@ func _exit_tree() -> void:
 		if run_context != null and run_context.has_method("set_menu_music_resume_position"):
 			run_context.set_menu_music_resume_position(lobby_music_player.get_playback_position())
 		lobby_music_player.stop()
+
+
+func _disconnect_session_signals() -> void:
+	if multiplayer_session_manager == null:
+		return
+	if multiplayer_session_manager.peer_connected.is_connected(_on_peer_connected):
+		multiplayer_session_manager.peer_connected.disconnect(_on_peer_connected)
+	if multiplayer_session_manager.peer_disconnected.is_connected(_on_peer_disconnected):
+		multiplayer_session_manager.peer_disconnected.disconnect(_on_peer_disconnected)
+	if multiplayer_session_manager.session_joined.is_connected(_on_session_joined):
+		multiplayer_session_manager.session_joined.disconnect(_on_session_joined)
+	if multiplayer_session_manager.host_left.is_connected(_on_host_left):
+		multiplayer_session_manager.host_left.disconnect(_on_host_left)
 
 
 func _tree_or_null() -> SceneTree:
