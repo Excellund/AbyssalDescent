@@ -6,6 +6,8 @@ const MENU_SCENE_PATH := "res://scenes/Menu.tscn"
 const RUN_CONTEXT_PATH := "/root/RunContext"
 const MENU_MUSIC := preload("res://music/msx1.mp3")
 const AUDIO_LEVELS := preload("res://scripts/shared/audio_levels.gd")
+const ASCENSION_REGISTRY := preload("res://scripts/progression/ascension_modifier_registry.gd")
+const META_PROGRESS_STORE := preload("res://scripts/meta_progress_store.gd")
 
 signal leave_lobby_requested
 
@@ -34,6 +36,10 @@ var _next_join_index: int = 0
 
 ## Difficulty state (host only)
 var selected_difficulty_tier: int = 1  ## Default: Delver
+## Ascension loadout shared by the party. Host derives it from their saved meta progress for the
+## host's selected character and broadcasts to joiners; joiners apply via RunContext on game start.
+var selected_ascension_loadout: Array[String] = []
+var ascension_info_label: Label = null
 var multiplayer_session_manager
 var _host_connectivity_warning: String = ""
 var lobby_music_player: AudioStreamPlayer
@@ -77,6 +83,7 @@ func _ready() -> void:
 	
 	## Difficulty selector setup (host only)
 	_setup_difficulty_selector()
+	_setup_ascension_info()
 	
 	## Ready button
 	ready_button.pressed.connect(_on_ready_button_pressed)
@@ -320,6 +327,69 @@ func _setup_difficulty_selector() -> void:
 	if not bool(multiplayer_session_manager.is_host()):
 		difficulty_selector.disabled = true
 		status_label.text = "Waiting for host to select difficulty..."
+
+
+## Setup the host-side ascension info label and seed the initial loadout from saved meta.
+func _setup_ascension_info() -> void:
+	var vbox := get_node_or_null("VBoxContainer") as VBoxContainer
+	if vbox == null:
+		return
+	ascension_info_label = Label.new()
+	ascension_info_label.name = "AscensionInfoLabel"
+	ascension_info_label.add_theme_font_size_override("font_size", 14)
+	ascension_info_label.add_theme_color_override("font_color", Color(0.94, 0.86, 0.62, 0.94))
+	ascension_info_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ascension_info_label.text = "Ascension Rank: 0"
+	var ready_index := ready_button.get_index() if ready_button != null else vbox.get_child_count()
+	vbox.add_child(ascension_info_label)
+	vbox.move_child(ascension_info_label, ready_index)
+	if bool(multiplayer_session_manager.is_host()):
+		_refresh_host_ascension_loadout(local_character_id)
+	_update_ascension_info_label()
+
+
+## Recompute host's saved loadout for the given character and broadcast it to all peers.
+func _refresh_host_ascension_loadout(character_id: String) -> void:
+	if not bool(multiplayer_session_manager.is_host()):
+		return
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context == null:
+		return
+	var character_key: String = String(character_id).strip_edges().to_lower()
+	if character_key.is_empty() or character_key == "random":
+		selected_ascension_loadout = []
+		_broadcast_ascension_loadout.rpc(selected_ascension_loadout)
+		return
+	var profile: Dictionary = run_context.meta_progress_profile
+	var loadout: Array[String] = META_PROGRESS_STORE.get_ascension_loadout(profile, character_key)
+	selected_ascension_loadout = loadout
+	_broadcast_ascension_loadout.rpc(selected_ascension_loadout)
+
+
+func _apply_ascension_loadout(loadout: Array) -> void:
+	var typed_loadout: Array[String] = []
+	for entry_variant in loadout:
+		var entry := String(entry_variant).strip_edges()
+		if not entry.is_empty():
+			typed_loadout.append(entry)
+	selected_ascension_loadout = typed_loadout
+	_update_ascension_info_label()
+
+
+func _update_ascension_info_label() -> void:
+	if ascension_info_label == null:
+		return
+	var rank: int = ASCENSION_REGISTRY.compute_loadout_rank(selected_ascension_loadout)
+	if selected_ascension_loadout.is_empty():
+		ascension_info_label.text = "Ascension Rank: 0"
+	else:
+		ascension_info_label.text = "Ascension Rank: %d  (%d modifier%s)" % [rank, selected_ascension_loadout.size(), "" if selected_ascension_loadout.size() == 1 else "s"]
+
+
+## RPC: Host -> All broadcast for ascension loadout updates.
+@rpc("reliable", "authority", "call_local")
+func _broadcast_ascension_loadout(loadout: Array) -> void:
+	_apply_ascension_loadout(loadout)
 
 
 ## Called when local player changes character tab.
@@ -643,6 +713,8 @@ func _apply_character_selection(peer_id: int, character_id: String) -> void:
 			var tab_index := available_characters.find(character_id)
 			if tab_index >= 0 and tab_index < character_selector.get_tab_count():
 				character_selector.current_tab = tab_index
+		if bool(multiplayer_session_manager.is_host()):
+			_refresh_host_ascension_loadout(character_id)
 	_update_player_list()
 
 
@@ -828,12 +900,12 @@ func _launch_main_game() -> void:
 		var state := synced_peer_state[peer_id_key] as Dictionary
 		if String(state.get("character_id", "")) == "random":
 			state["character_id"] = _resolve_random_character()
-	_start_game.rpc(host_peer_id, session_identifier, selected_difficulty_tier, synced_peer_state)
+	_start_game.rpc(host_peer_id, session_identifier, selected_difficulty_tier, synced_peer_state, selected_ascension_loadout)
 
 
 ## RPC: Host -> All transition to main scene with synced lobby state.
 @rpc("reliable", "authority", "call_local")
-func _start_game(host_peer_id: int, session_identifier: String, difficulty_tier: int, synced_peer_state: Dictionary) -> void:
+func _start_game(host_peer_id: int, session_identifier: String, difficulty_tier: int, synced_peer_state: Dictionary, ascension_loadout: Array = []) -> void:
 	peer_state = synced_peer_state.duplicate(true)
 	var tree := _tree_or_null()
 	if tree == null:
@@ -847,6 +919,13 @@ func _start_game(host_peer_id: int, session_identifier: String, difficulty_tier:
 		local_peer_id = int(multiplayer_session_manager.local_peer_id)
 	RunContext.set_multiplayer_session(session_identifier, local_peer_id == host_peer_id)
 	RunContext.set_multiplayer_difficulty_tier(difficulty_tier)
+	if RunContext.has_method("set_active_ascension_loadout"):
+		var typed_loadout: Array[String] = []
+		for entry_variant in ascension_loadout:
+			var entry := String(entry_variant).strip_edges()
+			if not entry.is_empty():
+				typed_loadout.append(entry)
+		RunContext.set_active_ascension_loadout(typed_loadout)
 	for peer_id_key in peer_state.keys():
 		var peer_id := int(peer_id_key)
 		var state := peer_state.get(peer_id_key, {}) as Dictionary
