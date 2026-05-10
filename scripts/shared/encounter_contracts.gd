@@ -721,7 +721,18 @@ static func _get_enemy_count(enemy_type: String, profile_value: Dictionary) -> i
 
 static func _set_enemy_count(enemy_type: String, count: int, profile_value: Dictionary) -> void:
 	var key = _get_enemy_count_key_for_type(enemy_type)
-	profile_value[key] = count
+	profile_value[key] = _normalize_enemy_count(enemy_type, count)
+
+## Tethers spawn as linked pairs (see enemy_spawner.gd `_profile_count_for_enemy_type`),
+## so the profile must store an even count. Storing an odd tether count would cause
+## `profile_total_enemy_count` to overshoot what is actually spawned and the active
+## room enemy counter would never decrement to zero — leaving the encounter unable
+## to complete after every enemy is dead.
+static func _normalize_enemy_count(enemy_type: String, count: int) -> int:
+	var clamped := maxi(0, count)
+	if enemy_type == "tether" and clamped % 2 != 0:
+		clamped -= 1
+	return maxi(0, clamped)
 
 # Backward-compatible wrappers for individual enemy type getters
 static func profile_chaser_count(profile_value: Dictionary) -> int:

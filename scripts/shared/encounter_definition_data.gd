@@ -50,9 +50,9 @@ static func get_bearing_definitions() -> Dictionary:
 			ENCOUNTER_CONTRACTS.profile_counts(2, 4, 0, 4),
 			ENCOUNTER_CONTRACTS.profile_counts(3, 5, 0, 4)
 		]),
-		"Ambush": _bearing_definition(ROOM_SIZE_POOL, ENCOUNTER_CONTRACTS.profile_counts(2, 0, 0, 0, 4, 0, 1, 0, 0, 1), [
-			ENCOUNTER_CONTRACTS.profile_counts(1, 0, 0, 0, 3, 0, 1, 0, 0, 1),
-			ENCOUNTER_CONTRACTS.profile_counts(2, 0, 0, 0, 4, 0, 1, 0, 0, 1),
+		"Ambush": _bearing_definition(ROOM_SIZE_POOL, ENCOUNTER_CONTRACTS.profile_counts(2, 0, 0, 0, 4, 0, 1, 0, 0, 0), [
+			ENCOUNTER_CONTRACTS.profile_counts(1, 0, 0, 0, 3, 0, 1, 0, 0, 0),
+			ENCOUNTER_CONTRACTS.profile_counts(2, 0, 0, 0, 4, 0, 1, 0, 0, 0),
 			ENCOUNTER_CONTRACTS.profile_counts(3, 0, 0, 0, 4, 0, 2, 0, 0, 2),
 			ENCOUNTER_CONTRACTS.profile_counts(4, 0, 0, 0, 5, 0, 3, 0, 0, 2)
 		]),
