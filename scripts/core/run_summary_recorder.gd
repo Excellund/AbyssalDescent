@@ -546,6 +546,21 @@ func record_peer_reward_timeline_choice(peer_id: int, choice: Dictionary, mode: 
 	timeline.append(RUN_SUMMARY_MODEL_SCRIPT.create_timeline_entry(depth, mode, item_name, summary_category_for_mode(mode), resolved_unix))
 	_summary_reward_timeline_by_peer[peer_id] = timeline
 
+func record_rest_visit(depth: int) -> void:
+	var event_unix := int(Time.get_unix_time_from_system())
+	if run_summary_tracker != null:
+		run_summary_tracker.record_rest_visit(depth, event_unix)
+	if not _world.is_multiplayer:
+		return
+	var rest_entry := RUN_SUMMARY_MODEL_SCRIPT.create_timeline_entry(depth, ENUMS.RewardMode.NONE, RUN_SUMMARY_MODEL_SCRIPT.REST_TIMELINE_LABEL, RUN_SUMMARY_MODEL_SCRIPT.CATEGORY_REST, event_unix)
+	for peer_id_variant in _summary_reward_timeline_by_peer.keys():
+		var peer_id := int(peer_id_variant)
+		if peer_id <= 0:
+			continue
+		var timeline := _summary_reward_timeline_by_peer.get(peer_id, []) as Array
+		timeline.append(rest_entry.duplicate(true))
+		_summary_reward_timeline_by_peer[peer_id] = timeline
+
 
 # --- summaries --------------------------------------------------------------
 

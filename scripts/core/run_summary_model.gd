@@ -4,6 +4,9 @@ class_name RunSummaryModel
 const CATEGORY_BOON := "boon"
 const CATEGORY_ARCANA := "arcana"
 const CATEGORY_BOSS_REWARD := "boss_reward"
+const CATEGORY_REST := "rest"
+
+const REST_TIMELINE_LABEL := "Rest Site"
 
 const RARITY_COMMON := "common"
 const RARITY_RARE := "rare"

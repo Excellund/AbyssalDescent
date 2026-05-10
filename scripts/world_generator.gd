@@ -2715,6 +2715,7 @@ func _enter_rest_site() -> void:
 		var heal_amount := maxi(8, int(round(float(player_max_health) * rest_heal_ratio * heal_ratio_mult)))
 		player.heal(heal_amount)
 		player.play_rest_site_heal_feedback()
+	run_summary_recorder.record_rest_visit(room_depth)
 	_spawn_door_options()
 
 func _advance_room_progress() -> void:

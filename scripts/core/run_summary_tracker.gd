@@ -91,6 +91,12 @@ func record_reward_choice(choice: Dictionary, mode: int, depth: int, unix_time: 
 		event_unix = int(Time.get_unix_time_from_system())
 	reward_timeline.append(RUN_SUMMARY_MODEL.create_timeline_entry(depth, mode, item_name, category, event_unix))
 
+func record_rest_visit(depth: int, unix_time: int = 0) -> void:
+	var event_unix := unix_time
+	if event_unix <= 0:
+		event_unix = int(Time.get_unix_time_from_system())
+	reward_timeline.append(RUN_SUMMARY_MODEL.create_timeline_entry(depth, ENUMS.RewardMode.NONE, RUN_SUMMARY_MODEL.REST_TIMELINE_LABEL, RUN_SUMMARY_MODEL.CATEGORY_REST, event_unix))
+
 func build_summary(final_state: Dictionary) -> Dictionary:
 	var ended_at_unix := int(final_state.get("ended_at_unix", Time.get_unix_time_from_system()))
 	var duration_seconds := int(final_state.get("duration_seconds", 0))
