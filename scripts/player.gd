@@ -4078,7 +4078,7 @@ func _try_apply_convergence_surge(epicenter: Vector2, _source_damage: int, _prim
 	if convergence_window_left > 0.0:
 		return
 	convergence_surge_hit_counter += 1
-	var proc_every := 4
+	var proc_every := maxi(2, 6 - int(round(convergence_surge_damage_ratio * 8.0)))
 	if convergence_surge_hit_counter < proc_every:
 		return
 	convergence_surge_hit_counter = 0
