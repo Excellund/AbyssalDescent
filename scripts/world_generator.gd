@@ -758,6 +758,11 @@ func _setup_reward_selection_system() -> void:
 			var ascension_payload: Dictionary = ASCENSION_REGISTRY.merge_loadout_payload(loadout)
 			var delta: int = int(round(float(ascension_payload.get("reward_choice_count_add", 0.0))))
 			effective_choice_count = maxi(1, effective_choice_count + delta)
+	if run_context_ref != null and run_context_ref.has_method("get_active_catalyst_payload"):
+		var catalyst_payload: Dictionary = run_context_ref.get_active_catalyst_payload("")
+		var catalyst_delta: int = int(round(float(catalyst_payload.get("reward_choice_count_add", 0.0))))
+		if catalyst_delta != 0:
+			effective_choice_count = maxi(1, effective_choice_count + catalyst_delta)
 	reward_selection_ui.initialize(effective_choice_count, boon_reveal_duration)
 	if reward_selection_ui.has_signal("reward_selected"):
 		reward_selection_ui.connect("reward_selected", Callable(self, "_on_reward_selected"))
@@ -2071,6 +2076,10 @@ func _apply_difficulty_tier_bonuses(difficulty_tier: int) -> void:
 	player.set_incoming_damage_taken_mult(float(difficulty_config.get("player_damage_taken_mult", 1.0)))
 	player.set_incoming_contact_damage_mult(float(difficulty_config.get("enemy_contact_damage_mult", 1.0)))
 	var health_bonus := float(difficulty_config.get("player_starting_health_bonus", 0.0))
+	var run_context_for_catalysts := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context_for_catalysts != null and run_context_for_catalysts.has_method("get_active_catalyst_payload"):
+		var catalyst_payload: Dictionary = run_context_for_catalysts.get_active_catalyst_payload(current_character_id)
+		health_bonus += float(catalyst_payload.get("starting_max_hp_add", 0.0))
 	if health_bonus > 0.0:
 		var current_max: int = int(player.get_max_health())
 		var new_max: int = current_max + int(health_bonus)

@@ -5,6 +5,7 @@ const MODE_STANDARD := "standard"
 const MODE_ENDLESS := "endless"
 const SETTINGS_STORE := preload("res://scripts/settings_store.gd")
 const META_PROGRESS_STORE := preload("res://scripts/meta_progress_store.gd")
+const CATALYST_REGISTRY := preload("res://scripts/progression/catalyst_registry.gd")
 const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
 const TELEMETRY_UPLOADER_SCRIPT := preload("res://scripts/telemetry_uploader.gd")
 const LEADERBOARD_UPLOADER_SCRIPT := preload("res://scripts/leaderboard_uploader.gd")
@@ -532,6 +533,15 @@ func clear_active_ascension_loadout() -> void:
 func get_ascension_highest_rank(character_id: String = "") -> int:
 	var id: String = character_id if not character_id.is_empty() else get_selected_character_id()
 	return META_PROGRESS_STORE.get_ascension_highest_rank(meta_progress_profile, id)
+
+## Equipped catalysts for the given character (defaults to the active selection).
+func get_equipped_catalyst_ids(character_id: String = "") -> Array[String]:
+	var id: String = character_id if not character_id.is_empty() else get_selected_character_id()
+	return META_PROGRESS_STORE.get_equipped_catalyst_ids(meta_progress_profile, id)
+
+## Merged catalyst payload for the given character. Subsystems read this at run boot.
+func get_active_catalyst_payload(character_id: String = "") -> Dictionary:
+	return CATALYST_REGISTRY.merge_payloads(get_equipped_catalyst_ids(character_id))
 
 
 ## Multiplayer session management
