@@ -444,8 +444,12 @@ func _apply_control_progress(delta: float, progress_gain_mult: float, contested_
 	if objective_manager.control_player_inside and not objective_manager.control_contested:
 		objective_manager.control_progress = minf(objective_manager.control_goal, objective_manager.control_progress + delta * progress_gain_mult)
 	elif objective_manager.control_player_inside:
+		if objective_manager.control_progress > 0.0:
+			objective_manager.control_unbroken = false
 		objective_manager.control_progress = maxf(0.0, objective_manager.control_progress - objective_manager.control_decay_rate * delta * contested_decay_mult)
 	else:
+		if objective_manager.control_progress > 0.0:
+			objective_manager.control_unbroken = false
 		objective_manager.control_progress = maxf(0.0, objective_manager.control_progress - objective_manager.control_decay_rate * delta * out_of_zone_decay_mult)
 	return objective_manager.control_progress >= objective_manager.control_goal
 
@@ -486,6 +490,8 @@ func update_control_objective_state(delta: float) -> void:
 	_update_control_zone_state()
 	if _apply_control_progress(delta, progress_gain_mult, contested_decay_mult, out_of_zone_decay_mult):
 		_sync_control_zone_runtime_state(delta, true)
+		if objective_manager.control_unbroken and is_instance_valid(world) and world.run_summary_recorder != null:
+			world.run_summary_recorder.record_hold_full_control_for_tracker()
 		complete_current_objective("Objective Complete", "Control secured")
 		return
 	_update_control_spawn_cycle(delta, refill_spawn_cap, pressure_floor_bonus)

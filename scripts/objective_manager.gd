@@ -59,6 +59,7 @@ var control_enemies_in_zone: int = 0
 var control_player_inside: bool = false
 var control_contested: bool = false
 var control_kill_baseline: int = 0
+var control_unbroken: bool = false
 var engagement_kill_progress_bonus: float = 0.4
 var engagement_bonus_radius_scale: float = 1.18
 
@@ -135,6 +136,7 @@ func reset() -> void:
 	control_player_inside = false
 	control_contested = false
 	control_kill_baseline = 0
+	control_unbroken = false
 
 	# Exposure
 	exposure_duration = 2.0

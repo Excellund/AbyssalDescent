@@ -39,6 +39,10 @@ alter table public.telemetry_runs add column if not exists is_multiplayer boolea
 alter table public.telemetry_runs add column if not exists player_count int not null default 1;
 alter table public.telemetry_runs add column if not exists host_peer_id int not null default 0;
 alter table public.telemetry_runs add column if not exists peers jsonb not null default '[]'::jsonb;
+alter table public.telemetry_runs add column if not exists ascension_rank int not null default 0;
+alter table public.telemetry_runs add column if not exists ascension_loadout jsonb not null default '[]'::jsonb;
+alter table public.telemetry_runs add column if not exists completed_oath_ids jsonb not null default '[]'::jsonb;
+alter table public.telemetry_runs add column if not exists equipped_catalyst_ids jsonb not null default '[]'::jsonb;
 
 create unique index if not exists telemetry_runs_run_id_idx
   on public.telemetry_runs (run_id);

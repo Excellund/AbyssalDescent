@@ -32,6 +32,7 @@ func apply_control_setup(objective_manager: Node, profile: Dictionary, spawn_int
 	objective_manager.control_player_inside = false
 	objective_manager.control_contested = false
 	objective_manager.control_kill_baseline = objective_manager.kills
+	objective_manager.control_unbroken = true
 
 func _apply_common_setup(objective_manager: Node, profile: Dictionary, spawn_interval: float, spawn_timer: float, spawn_batch: int, max_enemies: int) -> void:
 	objective_manager.time_left = ENCOUNTER_CONTRACTS.profile_objective_duration(profile)
