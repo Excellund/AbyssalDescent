@@ -622,10 +622,13 @@ func _pick_spawn_position_in_current_room(min_player_distance: float = -1.0, min
 		return Vector2.ZERO
 	var half := current_room_size * 0.5 - Vector2.ONE * spawn_padding
 	var required_player_distance := spawn_safe_radius if min_player_distance < 0.0 else maxf(spawn_safe_radius, min_player_distance)
+	var comfortable_player_distance := required_player_distance * 1.6
 	var target_players := _resolve_target_players()
 	var candidate := Vector2.ZERO
-	var best_candidate := Vector2.ZERO
-	var best_player_distance := -INF
+	var best_valid_candidate := Vector2.ZERO
+	var best_valid_player_distance := -INF
+	var fallback_candidate := Vector2.ZERO
+	var fallback_player_distance := -INF
 	var max_attempts := 90 if multiplayer_party_size > 1 else 60
 	for _try in range(max_attempts):
 		candidate = Vector2(
@@ -640,9 +643,9 @@ func _pick_spawn_position_in_current_room(min_player_distance: float = -1.0, min
 			if not is_instance_valid(target_player):
 				continue
 			min_player_dist = minf(min_player_dist, candidate.distance_to(target_player.global_position))
-		if min_player_dist > best_player_distance:
-			best_player_distance = min_player_dist
-			best_candidate = candidate
+		if min_player_dist > fallback_player_distance:
+			fallback_player_distance = min_player_dist
+			fallback_candidate = candidate
 		if min_player_dist < required_player_distance:
 			continue
 		var too_close_to_enemy := false
@@ -655,5 +658,11 @@ func _pick_spawn_position_in_current_room(min_player_distance: float = -1.0, min
 					break
 		if too_close_to_enemy:
 			continue
-		return candidate
-	return best_candidate
+		if min_player_dist > best_valid_player_distance:
+			best_valid_player_distance = min_player_dist
+			best_valid_candidate = candidate
+		if min_player_dist >= comfortable_player_distance:
+			return best_valid_candidate
+	if best_valid_player_distance > -INF:
+		return best_valid_candidate
+	return fallback_candidate
