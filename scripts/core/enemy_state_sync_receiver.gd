@@ -62,6 +62,17 @@ func flush_pending_door_syncs() -> void:
 		_world._choose_door(chosen_door)
 		_world._apply_progress_sync_state(progress_state)
 	if not sync_state.pending_door_sync_payload.is_empty():
+		var peek_payload: Dictionary = sync_state.pending_door_sync_payload
+		var peek_choosing := bool(peek_payload.get("choosing_next_room", false))
+		var peek_progress := peek_payload.get("progress_state", {}) as Dictionary
+		# Keep the payload parked until the joiner's progress catches up to the
+		# host's snapshot. Otherwise a payload that was deferred because it
+		# describes a future room (e.g., the boss door spawned by the host
+		# entering a rest site) would be applied before the matching
+		# `_sync_chosen_door` arrives, and the subsequent `_choose_door` would
+		# clear the freshly-applied doors with nothing left to re-apply.
+		if should_defer_door_sync_payload(peek_choosing, peek_progress):
+			return
 		var door_payload: Dictionary = sync_state.consume_pending_door_sync_payload()
 		var synced_door_options: Array = door_payload.get("door_options", []) as Array
 		var synced_choosing_next_room := bool(door_payload.get("choosing_next_room", false))
