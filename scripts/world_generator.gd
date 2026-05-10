@@ -3454,6 +3454,8 @@ func _sync_run_outcome(outcome: String, unlocked_tier: int, room_label: String, 
 	var synced_summary: Dictionary = run_summary_recorder.summary_with_local_peer_stats(run_summary, stats_by_peer)
 	synced_summary = run_summary_recorder.summary_with_local_peer_overrides(synced_summary, peer_summary_overrides)
 	run_summary_recorder.latest_run_summary = synced_summary
+	run_summary_recorder.finalize_synced_run_summary_for_joiner(synced_summary, outcome)
+	synced_summary = run_summary_recorder.latest_run_summary
 	if outcome == "clear":
 		run_cleared = true
 		choosing_next_room = false

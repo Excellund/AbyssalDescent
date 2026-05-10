@@ -743,6 +743,36 @@ func summary_with_local_peer_overrides(run_summary: Dictionary, peer_summary_ove
 			summary[key] = override.get(key)
 	return summary
 
+func finalize_synced_run_summary_for_joiner(synced_summary: Dictionary, outcome: String) -> void:
+	if MultiplayerSessionManager.should_broadcast():
+		return
+	if telemetry_run_finished:
+		return
+	if synced_summary.is_empty():
+		return
+	var augmented := synced_summary.duplicate(true)
+	if String(augmented.get("outcome", "")).strip_edges().is_empty():
+		augmented["outcome"] = outcome
+	var local_peer_id: int = _world._resolve_local_peer_id()
+	var host_run_id := String(augmented.get("run_id", "")).strip_edges()
+	if local_peer_id > 0 and not host_run_id.is_empty():
+		augmented["run_id"] = "%s-p%d" % [host_run_id, local_peer_id]
+	var run_context: Node = _world._get_run_context()
+	if run_context != null:
+		var local_uuid := String(run_context.get_profile_uuid()).strip_edges().to_lower()
+		var local_name := String(run_context.get_profile_name_or_default()).strip_edges()
+		if not local_uuid.is_empty():
+			augmented["player_uuid"] = local_uuid
+		if not local_name.is_empty():
+			augmented["player_name"] = local_name
+	if _world.current_player_profile != null and _world.current_player_profile.is_valid():
+		augmented["player_uuid"] = _world.current_player_profile.player_id
+		augmented["player_name"] = _world.current_player_profile.profile_name
+	latest_run_summary = augmented
+	RUN_HISTORY_STORE_SCRIPT.append(latest_run_summary)
+	_world._enqueue_leaderboard_submission(latest_run_summary)
+	telemetry_run_finished = true
+
 
 # --- internals --------------------------------------------------------------
 
