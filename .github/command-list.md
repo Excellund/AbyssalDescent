@@ -55,6 +55,8 @@ Use these natural-language commands in chat. Phrases do not need to match exactl
 - Apply host-only effect (knockback/lockout/status) to a specific player peer
 - Joiner not affected by [boss attack / hazard / debuff] — fix RPC routing
 - Route player-targeted effect through PlayerReplicationService
+- Joiner missing projectiles / shaking telegraph / chunky boss — design custom enemy state for multiplayer
+- Add elite/boss with custom per-tick state for multiplayer
 
 ## Engine Building And Synergy
 

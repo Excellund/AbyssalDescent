@@ -198,6 +198,7 @@ Result: New arcana is now live in both modes, balanced consistently, no duplicat
 
 - **`boon-design`** — When designing new powers/upgrades; includes multiplayer note
 - **`encounter-content-sync`** — When adding new encounter types; includes multiplayer verification
+- **`multiplayer-enemy-custom-state`** — When adding an elite/boss with custom per-tick payload (projectile arrays, animated telegraphs, multi-stage timers). Different concern from registry sync: this skill covers the runtime wire format and joiner-side ticking that keeps gameplay state visible.
 - **`character-lore-opposition`** — When designing new characters; includes multiplayer pool sync check
 - **`difficulty-config`** (future) — If depth tuning and multiplayer scaling needs refactoring
 

@@ -41,17 +41,25 @@ func _is_upgrade_blocked_for_character(upgrade_id: String) -> bool:
 var boon_layer: CanvasLayer
 var boon_title_label: Label
 var boon_subtitle_label: Label
+var boon_header_chip_label: Label
 var epitaph_label: RichTextLabel
 var boon_card_panels: Array[Panel] = []
 var boon_card_labels: Array[RichTextLabel] = []
 var boon_card_stack_labels: Array[Label] = []
 var boon_card_icon_nodes: Array[TextureRect] = []
+var boon_card_accent_bars: Array[ColorRect] = []
 var boon_card_rects: Array[Rect2] = []
+var boon_hover_weights: Array[float] = []
 var boon_backdrop: ColorRect
+var boon_backdrop_glow: ColorRect
 var current_player_mutator: Dictionary = {}
 var _epitaph_text: String = ""
 var _epitaph_pulse_active: bool = false
 var _epitaph_pulse_time: float = 0.0
+var _idle_pulse_time: float = 0.0
+var _title_pulse_time: float = 0.0
+var _title_pulse_active: bool = false
+var _title_base_color: Color = Color(0.93, 0.97, 1.0, 1.0)
 var _mutator_icon_killbox: Texture2D
 var _mutator_icon_fortified: Texture2D
 var _mutator_icon_hunters_focus: Texture2D
@@ -64,21 +72,33 @@ const EPITAPH_COLOR_WARM := Color(1.0, 0.95, 0.84, 1.0)
 const EPITAPH_PULSE_SPEED := 2.1
 const BOON_CARD_MAX_WIDTH := 1460.0
 const BOON_CARD_MIN_WIDTH := 860.0
-const BOON_CARD_HEIGHT := 118.0
-const BOON_CARD_GAP := 20.0
-const BOON_TOP_SAFE_Y := 156.0
-const BOON_TOP_MAX_Y := 210.0
+const BOON_CARD_HEIGHT := 128.0
+const BOON_CARD_GAP := 22.0
+const BOON_TOP_SAFE_Y := 168.0
+const BOON_TOP_MAX_Y := 224.0
 const BOON_SIDE_MARGIN_RATIO := 0.08
-const BOON_ICON_POS := Vector2(14.0, 14.0)
+const BOON_ICON_POS := Vector2(20.0, 18.0)
 const BOON_ICON_SIZE := Vector2(24.0, 24.0)
-const BOON_LABEL_X := 52.0
-const MUTATOR_ICON_POS := Vector2(10.0, 10.0)
+const BOON_LABEL_X := 58.0
+const MUTATOR_ICON_POS := Vector2(16.0, 14.0)
 const MUTATOR_ICON_SIZE := Vector2(32.0, 32.0)
-const MUTATOR_LABEL_X := 52.0
+const MUTATOR_LABEL_X := 58.0
 const RARITY_COMMON := Color(0.62, 0.7, 0.8, 0.9)
 const RARITY_RARE := Color(0.46, 0.78, 1.0, 0.94)
 const RARITY_EPIC := Color(0.82, 0.58, 1.0, 0.96)
 const RARITY_LEGENDARY := Color(1.0, 0.74, 0.42, 1.0)
+const ACCENT_BAR_WIDTH := 5.0
+const ACCENT_BAR_INSET := 10.0
+const HOVER_WEIGHT_SPEED := 9.0
+const HOVER_LIFT_PIXELS := 4.0
+const HOVER_SCALE_BONUS := 0.025
+const IDLE_PULSE_SPEED := 2.2
+const TITLE_PULSE_DURATION := 0.55
+const REVEAL_FLASH_DURATION := 0.18
+const HEADER_CHIP_BOON := "BOON OFFERED"
+const HEADER_CHIP_MISSION := "OBJECTIVE CLAIMED"
+const HEADER_CHIP_ARCANA := "ARCANA AWAKENS"
+const HEADER_CHIP_BOSS := "BOSS BOUNTY"
 
 func initialize(choice_count: int, reveal_duration: float) -> void:
 	boon_choice_count = choice_count
@@ -106,6 +126,12 @@ func close_selection() -> void:
 	boon_choices.clear()
 	_epitaph_text = ""
 	_epitaph_pulse_active = false
+	_title_pulse_active = false
+	_title_pulse_time = 0.0
+	_idle_pulse_time = 0.0
+	for i in range(boon_hover_weights.size()):
+		boon_hover_weights[i] = 0.0
+	_reset_title_visuals()
 	if boon_layer != null:
 		boon_layer.visible = false
 
@@ -133,6 +159,11 @@ func open_selection(title: String, is_initial: bool, mode: int, power_registry: 
 	boon_confirm_lock_time = boon_reveal_duration + 0.08
 	boon_reveal_time = 0.0
 	boon_hovered_index = -1
+	_idle_pulse_time = 0.0
+	_title_pulse_time = 0.0
+	_title_pulse_active = false
+	for i in range(boon_hover_weights.size()):
+		boon_hover_weights[i] = 0.0
 	_apply_boon_card_styles(-1)
 	_refresh_boon_ui(player)
 	_refresh_epitaph_display()
@@ -144,13 +175,29 @@ func process_input(delta: float) -> void:
 	if boon_choices.is_empty():
 		return
 
+	_idle_pulse_time += delta
+	if _title_pulse_active:
+		_title_pulse_time += delta
+		if _title_pulse_time >= TITLE_PULSE_DURATION:
+			_title_pulse_active = false
+			_title_pulse_time = 0.0
+			_reset_title_visuals()
+
 	if boon_confirm_lock_time > 0.0:
 		boon_confirm_lock_time = maxf(0.0, boon_confirm_lock_time - delta)
 		boon_reveal_time += delta
+		_advance_hover_weights(delta, -1)
 		_update_boon_reveal_visuals()
+		_apply_boon_card_styles(-1)
+		if boon_confirm_lock_time <= 0.0:
+			_maybe_kick_title_pulse()
 		return
 
 	_update_boon_hover()
+	_advance_hover_weights(delta, boon_hovered_index)
+	_update_boon_reveal_visuals()
+	_apply_boon_card_styles(boon_hovered_index)
+	_update_title_pulse_visuals()
 	if Input.is_action_just_pressed("attack"):
 		if boon_hovered_index >= 0 and boon_hovered_index < boon_choices.size():
 			var picked := boon_choices[boon_hovered_index]
@@ -161,6 +208,11 @@ func process_input(delta: float) -> void:
 				boon_confirm_lock_time = boon_reveal_duration + 0.08
 				boon_reveal_time = 0.0
 				boon_hovered_index = -1
+				_idle_pulse_time = 0.0
+				_title_pulse_time = 0.0
+				_title_pulse_active = false
+				for hi in range(boon_hover_weights.size()):
+					boon_hover_weights[hi] = 0.0
 				_apply_boon_card_styles(-1)
 				_refresh_boon_ui(current_player)
 				_emit_reward_offers_presented()
@@ -187,6 +239,43 @@ func process_input(delta: float) -> void:
 			return
 	
 	_update_epitaph_pulse(delta)
+
+
+func _advance_hover_weights(delta: float, target_index: int) -> void:
+	for i in range(boon_hover_weights.size()):
+		var target := 1.0 if i == target_index else 0.0
+		var current := boon_hover_weights[i]
+		var step := HOVER_WEIGHT_SPEED * delta
+		if absf(target - current) <= step:
+			boon_hover_weights[i] = target
+		else:
+			boon_hover_weights[i] = current + sign(target - current) * step
+
+
+func _maybe_kick_title_pulse() -> void:
+	if reward_selection_mode != ENUMS.RewardMode.ARCANA and reward_selection_mode != ENUMS.RewardMode.BOSS:
+		return
+	_title_pulse_active = true
+	_title_pulse_time = 0.0
+
+
+func _update_title_pulse_visuals() -> void:
+	if boon_title_label == null:
+		return
+	if not _title_pulse_active:
+		return
+	var t := clampf(_title_pulse_time / TITLE_PULSE_DURATION, 0.0, 1.0)
+	var pulse := sin(t * PI)
+	var flash_target := Color(1.0, 1.0, 0.95, 1.0) if reward_selection_mode == ENUMS.RewardMode.BOSS else Color(1.0, 0.92, 1.0, 1.0)
+	var flash_color := _title_base_color.lerp(flash_target, pulse)
+	boon_title_label.add_theme_color_override("font_color", flash_color)
+
+
+func _reset_title_visuals() -> void:
+	if boon_title_label == null:
+		return
+	boon_title_label.scale = Vector2.ONE
+	boon_title_label.add_theme_color_override("font_color", _title_base_color)
 
 
 func _update_epitaph_pulse(delta: float) -> void:
@@ -227,10 +316,33 @@ func _create_ui() -> void:
 	boon_backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	boon_layer.add_child(boon_backdrop)
 
+	boon_backdrop_glow = ColorRect.new()
+	boon_backdrop_glow.set_anchors_preset(Control.PRESET_FULL_RECT)
+	boon_backdrop_glow.offset_left = 0.0
+	boon_backdrop_glow.offset_top = 0.0
+	boon_backdrop_glow.offset_right = 0.0
+	boon_backdrop_glow.offset_bottom = 0.0
+	boon_backdrop_glow.color = Color(0.0, 0.0, 0.0, 0.0)
+	boon_backdrop_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	boon_layer.add_child(boon_backdrop_glow)
+
+	boon_header_chip_label = Label.new()
+	boon_header_chip_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	boon_header_chip_label.offset_top = 18.0
+	boon_header_chip_label.offset_bottom = 44.0
+	boon_header_chip_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	boon_header_chip_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	boon_header_chip_label.add_theme_font_size_override("font_size", 18)
+	boon_header_chip_label.add_theme_color_override("font_color", Color(0.72, 0.82, 1.0, 0.85))
+	boon_header_chip_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
+	boon_header_chip_label.add_theme_constant_override("shadow_offset_x", 2)
+	boon_header_chip_label.add_theme_constant_override("shadow_offset_y", 2)
+	boon_layer.add_child(boon_header_chip_label)
+
 	boon_title_label = Label.new()
 	boon_title_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	boon_title_label.offset_top = 44.0
-	boon_title_label.offset_bottom = 108.0
+	boon_title_label.offset_top = 50.0
+	boon_title_label.offset_bottom = 114.0
 	boon_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	boon_title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	boon_title_label.add_theme_font_size_override("font_size", 46)
@@ -242,8 +354,8 @@ func _create_ui() -> void:
 
 	boon_subtitle_label = Label.new()
 	boon_subtitle_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	boon_subtitle_label.offset_top = 108.0
-	boon_subtitle_label.offset_bottom = 148.0
+	boon_subtitle_label.offset_top = 116.0
+	boon_subtitle_label.offset_bottom = 156.0
 	boon_subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	boon_subtitle_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	boon_subtitle_label.add_theme_font_size_override("font_size", 20)
@@ -257,12 +369,22 @@ func _create_ui() -> void:
 	boon_card_labels.clear()
 	boon_card_stack_labels.clear()
 	boon_card_icon_nodes.clear()
+	boon_card_accent_bars.clear()
 	boon_card_rects.clear()
+	boon_hover_weights.clear()
 	for i in range(boon_choice_count):
 		var panel := Panel.new()
 		panel.position = Vector2.ZERO
 		panel.custom_minimum_size = Vector2(BOON_CARD_MAX_WIDTH, BOON_CARD_HEIGHT)
+		panel.pivot_offset = Vector2(BOON_CARD_MAX_WIDTH * 0.5, BOON_CARD_HEIGHT * 0.5)
 		boon_layer.add_child(panel)
+
+		var accent_bar := ColorRect.new()
+		accent_bar.position = Vector2(0.0, ACCENT_BAR_INSET)
+		accent_bar.size = Vector2(ACCENT_BAR_WIDTH, BOON_CARD_HEIGHT - ACCENT_BAR_INSET * 2.0)
+		accent_bar.color = RARITY_COMMON
+		accent_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		panel.add_child(accent_bar)
 
 		var icon_node := TextureRect.new()
 		icon_node.position = BOON_ICON_POS
@@ -274,8 +396,8 @@ func _create_ui() -> void:
 		panel.add_child(icon_node)
 
 		var option_label := RichTextLabel.new()
-		option_label.position = Vector2(BOON_LABEL_X, 6.0)
-		option_label.custom_minimum_size = Vector2(1158.0, 106.0)
+		option_label.position = Vector2(BOON_LABEL_X, 10.0)
+		option_label.custom_minimum_size = Vector2(1158.0, BOON_CARD_HEIGHT - 20.0)
 		option_label.bbcode_enabled = true
 		option_label.scroll_active = false
 		option_label.fit_content = false
@@ -286,10 +408,10 @@ func _create_ui() -> void:
 		panel.add_child(option_label)
 
 		var stack_label := Label.new()
-		stack_label.position = Vector2(1230.0, 10.0)
-		stack_label.custom_minimum_size = Vector2(210.0, 28.0)
+		stack_label.position = Vector2(1230.0, 14.0)
+		stack_label.custom_minimum_size = Vector2(210.0, 30.0)
 		stack_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		stack_label.add_theme_font_size_override("font_size", 21)
+		stack_label.add_theme_font_size_override("font_size", 24)
 		stack_label.add_theme_color_override("font_color", Color(0.98, 0.9, 0.68, 0.95))
 		stack_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.9))
 		stack_label.add_theme_constant_override("shadow_offset_x", 2)
@@ -301,7 +423,9 @@ func _create_ui() -> void:
 		boon_card_labels.append(option_label)
 		boon_card_stack_labels.append(stack_label)
 		boon_card_icon_nodes.append(icon_node)
+		boon_card_accent_bars.append(accent_bar)
 		boon_card_rects.append(Rect2(Vector2.ZERO, Vector2.ZERO))
+		boon_hover_weights.append(0.0)
 
 	epitaph_label = RichTextLabel.new()
 	epitaph_label.set_anchors_preset(Control.PRESET_TOP_LEFT)
@@ -346,18 +470,23 @@ func _layout_boon_cards() -> void:
 		var base_pos := Vector2(start_x, start_y + float(i) * (BOON_CARD_HEIGHT + BOON_CARD_GAP))
 		panel.position = base_pos
 		panel.custom_minimum_size = Vector2(card_width, BOON_CARD_HEIGHT)
+		panel.pivot_offset = Vector2(card_width * 0.5, BOON_CARD_HEIGHT * 0.5)
 		if i < boon_card_rects.size():
 			boon_card_rects[i] = Rect2(base_pos, Vector2(card_width, BOON_CARD_HEIGHT))
+		if i < boon_card_accent_bars.size():
+			var accent_bar := boon_card_accent_bars[i]
+			accent_bar.position = Vector2(0.0, ACCENT_BAR_INSET)
+			accent_bar.size = Vector2(ACCENT_BAR_WIDTH, BOON_CARD_HEIGHT - ACCENT_BAR_INSET * 2.0)
 		if i < boon_card_labels.size():
 			var label := boon_card_labels[i]
 			var stack_w := 210.0
 			var stack_x := card_width - stack_w - 18.0
 			var text_x := BOON_LABEL_X
-			label.position = Vector2(text_x, 6.0)
-			label.custom_minimum_size = Vector2(maxf(320.0, stack_x - text_x - 12.0), 106.0)
+			label.position = Vector2(text_x, 10.0)
+			label.custom_minimum_size = Vector2(maxf(320.0, stack_x - text_x - 12.0), BOON_CARD_HEIGHT - 20.0)
 		if i < boon_card_stack_labels.size():
 			var stack_label := boon_card_stack_labels[i]
-			stack_label.position = Vector2(card_width - stack_label.custom_minimum_size.x - 18.0, 10.0)
+			stack_label.position = Vector2(card_width - stack_label.custom_minimum_size.x - 18.0, 14.0)
 
 func _position_epitaph_label() -> void:
 	if epitaph_label == null or boon_card_rects.is_empty() or get_viewport() == null:
@@ -380,30 +509,61 @@ func _position_epitaph_label() -> void:
 func _apply_mode_theme() -> void:
 	if boon_backdrop == null or boon_title_label == null:
 		return
+	var chip_text := HEADER_CHIP_BOON
+	var chip_color := RARITY_COMMON
+	var accent_color := RARITY_COMMON
+	var glow_color := Color(0.0, 0.0, 0.0, 0.0)
 	if reward_selection_mode == ENUMS.RewardMode.ARCANA:
-		boon_backdrop.color = Color(0.08, 0.04, 0.1, 0.72)
-		boon_title_label.add_theme_color_override("font_color", RARITY_EPIC)
+		boon_backdrop.color = Color(0.08, 0.04, 0.1, 0.74)
+		_title_base_color = RARITY_EPIC
+		boon_title_label.add_theme_color_override("font_color", _title_base_color)
 		boon_title_label.add_theme_color_override("font_shadow_color", Color(0.05, 0.02, 0.06, 0.96))
 		if boon_subtitle_label != null:
 			boon_subtitle_label.add_theme_color_override("font_color", Color(RARITY_EPIC.r, RARITY_EPIC.g, RARITY_EPIC.b, 0.72))
+		chip_text = HEADER_CHIP_ARCANA
+		chip_color = RARITY_EPIC
+		accent_color = RARITY_EPIC
+		glow_color = Color(RARITY_EPIC.r * 0.32, RARITY_EPIC.g * 0.18, RARITY_EPIC.b * 0.42, 0.38)
 	elif reward_selection_mode == ENUMS.RewardMode.MISSION:
-		boon_backdrop.color = Color(0.03, 0.07, 0.1, 0.7)
-		boon_title_label.add_theme_color_override("font_color", RARITY_RARE)
+		boon_backdrop.color = Color(0.03, 0.07, 0.1, 0.72)
+		_title_base_color = RARITY_RARE
+		boon_title_label.add_theme_color_override("font_color", _title_base_color)
 		boon_title_label.add_theme_color_override("font_shadow_color", Color(0.02, 0.04, 0.06, 0.95))
 		if boon_subtitle_label != null:
 			boon_subtitle_label.add_theme_color_override("font_color", Color(RARITY_RARE.r, RARITY_RARE.g, RARITY_RARE.b, 0.72))
+		chip_text = HEADER_CHIP_MISSION
+		chip_color = RARITY_RARE
+		accent_color = RARITY_RARE
+		glow_color = Color(0.0, RARITY_RARE.g * 0.28, RARITY_RARE.b * 0.36, 0.22)
 	elif reward_selection_mode == ENUMS.RewardMode.BOSS:
-		boon_backdrop.color = Color(0.08, 0.04, 0.02, 0.72)
-		boon_title_label.add_theme_color_override("font_color", RARITY_LEGENDARY)
+		boon_backdrop.color = Color(0.08, 0.04, 0.02, 0.74)
+		_title_base_color = RARITY_LEGENDARY
+		boon_title_label.add_theme_color_override("font_color", _title_base_color)
 		boon_title_label.add_theme_color_override("font_shadow_color", Color(0.08, 0.04, 0.01, 0.96))
 		if boon_subtitle_label != null:
 			boon_subtitle_label.add_theme_color_override("font_color", Color(RARITY_LEGENDARY.r, RARITY_LEGENDARY.g, RARITY_LEGENDARY.b, 0.72))
+		chip_text = HEADER_CHIP_BOSS
+		chip_color = RARITY_LEGENDARY
+		accent_color = RARITY_LEGENDARY
+		glow_color = Color(RARITY_LEGENDARY.r * 0.42, RARITY_LEGENDARY.g * 0.22, RARITY_LEGENDARY.b * 0.08, 0.4)
 	else:
-		boon_backdrop.color = Color(0.01, 0.02, 0.05, 0.7)
-		boon_title_label.add_theme_color_override("font_color", RARITY_COMMON)
+		boon_backdrop.color = Color(0.01, 0.02, 0.05, 0.72)
+		_title_base_color = Color(0.93, 0.97, 1.0, 1.0)
+		boon_title_label.add_theme_color_override("font_color", _title_base_color)
 		boon_title_label.add_theme_color_override("font_shadow_color", Color(0.01, 0.02, 0.04, 0.95))
 		if boon_subtitle_label != null:
 			boon_subtitle_label.add_theme_color_override("font_color", Color(RARITY_COMMON.r, RARITY_COMMON.g, RARITY_COMMON.b, 0.7))
+		chip_text = HEADER_CHIP_BOON
+		chip_color = RARITY_COMMON
+		accent_color = RARITY_COMMON
+
+	if boon_header_chip_label != null:
+		boon_header_chip_label.text = chip_text
+		boon_header_chip_label.add_theme_color_override("font_color", Color(chip_color.r, chip_color.g, chip_color.b, 0.92))
+	if boon_backdrop_glow != null:
+		boon_backdrop_glow.color = glow_color
+	for accent in boon_card_accent_bars:
+		accent.color = accent_color
 
 func _refresh_boon_ui(player: Node2D) -> void:
 	if boon_layer == null:
@@ -693,68 +853,102 @@ func _update_boon_hover() -> void:
 		if boon_card_rects[i].has_point(mouse_pos):
 			hovered = i
 			break
-
-	if hovered == boon_hovered_index:
-		return
 	boon_hovered_index = hovered
-	_apply_boon_card_styles(boon_hovered_index)
 
-func _apply_boon_card_styles(hovered_index: int) -> void:
+func _apply_boon_card_styles(_hovered_index: int) -> void:
+	var is_arcana := reward_selection_mode == ENUMS.RewardMode.ARCANA
+	var is_boss := reward_selection_mode == ENUMS.RewardMode.BOSS
+	var is_mission := reward_selection_mode == ENUMS.RewardMode.MISSION
+	var hype_mode := is_arcana or is_boss
+	var pulse := 0.0
+	if hype_mode or is_mission:
+		pulse = (sin(_idle_pulse_time * IDLE_PULSE_SPEED) + 1.0) * 0.5
+	if boon_backdrop_glow != null:
+		var glow_alpha := 1.0
+		if hype_mode:
+			glow_alpha = 0.78 + 0.22 * pulse
+		elif is_mission:
+			glow_alpha = 0.85 + 0.12 * pulse
+		boon_backdrop_glow.modulate.a = glow_alpha
 	for i in range(boon_card_panels.size()):
 		var panel := boon_card_panels[i]
-		var style := StyleBoxFlat.new()
+		var weight := 0.0
+		if i < boon_hover_weights.size():
+			weight = boon_hover_weights[i]
 		var t := float(i) / maxf(1.0, float(maxi(1, boon_choice_count - 1)))
-		var base_color := Color(0.07, 0.11, 0.16, 0.96).lerp(Color(0.1, 0.14, 0.2, 0.96), t)
-		var border_color := Color(RARITY_COMMON.r, RARITY_COMMON.g, RARITY_COMMON.b, 0.9)
-		if reward_selection_mode == ENUMS.RewardMode.ARCANA:
-			base_color = Color(0.12, 0.08, 0.16, 0.96).lerp(Color(0.18, 0.11, 0.22, 0.96), t)
-			border_color = Color(RARITY_EPIC.r, RARITY_EPIC.g, RARITY_EPIC.b, 0.9)
-		elif reward_selection_mode == ENUMS.RewardMode.MISSION:
+
+		var idle_bg := Color(0.07, 0.11, 0.16, 0.96).lerp(Color(0.1, 0.14, 0.2, 0.96), t)
+		var hover_bg := Color(0.2, 0.28, 0.36, 0.97)
+		var border := Color(RARITY_COMMON.r, RARITY_COMMON.g, RARITY_COMMON.b, 0.9)
+		var rarity := RARITY_COMMON
+		if is_arcana:
+			idle_bg = Color(0.14, 0.08, 0.18, 0.97).lerp(Color(0.2, 0.12, 0.26, 0.97), t)
+			hover_bg = Color(0.3, 0.18, 0.4, 0.98)
+			rarity = RARITY_EPIC
+			border = Color(RARITY_EPIC.r, RARITY_EPIC.g, RARITY_EPIC.b, 0.95)
+		elif is_mission:
 			var mission_tint := RARITY_RARE
 			if i < boon_choices.size():
 				mission_tint = boon_choices[i].get("color", mission_tint) as Color
-			base_color = Color(0.12, 0.09, 0.06, 0.96).lerp(Color(mission_tint.r * 0.26, mission_tint.g * 0.24, mission_tint.b * 0.2, 0.97), 0.5 + t * 0.2)
-			border_color = Color(mission_tint.r, mission_tint.g, mission_tint.b, 0.9)
-		elif reward_selection_mode == ENUMS.RewardMode.BOSS:
-			base_color = Color(0.18, 0.11, 0.06, 0.96).lerp(Color(0.24, 0.14, 0.08, 0.96), t)
-			border_color = Color(RARITY_LEGENDARY.r, RARITY_LEGENDARY.g, RARITY_LEGENDARY.b, 0.9)
-		if i == hovered_index and boon_confirm_lock_time <= 0.0:
-			if reward_selection_mode == ENUMS.RewardMode.ARCANA:
-				style.bg_color = Color(0.26, 0.16, 0.34, 0.97)
-				style.border_color = Color(RARITY_EPIC.r, RARITY_EPIC.g, RARITY_EPIC.b, 1.0)
-			elif reward_selection_mode == ENUMS.RewardMode.MISSION:
-				var hover_tint := RARITY_RARE
-				if i < boon_choices.size():
-					hover_tint = boon_choices[i].get("color", hover_tint) as Color
-				style.bg_color = Color(hover_tint.r * 0.42, hover_tint.g * 0.34, hover_tint.b * 0.22, 0.98)
-				style.border_color = Color(hover_tint.r, hover_tint.g, hover_tint.b, 1.0)
-			elif reward_selection_mode == ENUMS.RewardMode.BOSS:
-				style.bg_color = Color(0.34, 0.2, 0.1, 0.97)
-				style.border_color = Color(RARITY_LEGENDARY.r, RARITY_LEGENDARY.g, RARITY_LEGENDARY.b, 1.0)
-			else:
-				style.bg_color = Color(0.2, 0.28, 0.36, 0.96)
-				style.border_color = Color(RARITY_COMMON.r, RARITY_COMMON.g, RARITY_COMMON.b, 1.0)
-			style.border_width_left = 4
-			style.border_width_top = 4
-			style.border_width_right = 4
-			style.border_width_bottom = 4
+			idle_bg = Color(0.12, 0.09, 0.06, 0.97).lerp(Color(mission_tint.r * 0.26, mission_tint.g * 0.24, mission_tint.b * 0.2, 0.97), 0.5 + t * 0.2)
+			hover_bg = Color(mission_tint.r * 0.46, mission_tint.g * 0.38, mission_tint.b * 0.26, 0.98)
+			rarity = mission_tint
+			border = Color(mission_tint.r, mission_tint.g, mission_tint.b, 0.95)
+		elif is_boss:
+			idle_bg = Color(0.2, 0.12, 0.06, 0.97).lerp(Color(0.28, 0.16, 0.08, 0.97), t)
+			hover_bg = Color(0.4, 0.24, 0.12, 0.98)
+			rarity = RARITY_LEGENDARY
+			border = Color(RARITY_LEGENDARY.r, RARITY_LEGENDARY.g, RARITY_LEGENDARY.b, 0.95)
+
+		var bg := idle_bg.lerp(hover_bg, weight)
+
+		var reveal_flash := 0.0
+		var card_reveal_t := boon_reveal_time - float(i) * (0.10 if hype_mode else 0.06)
+		if card_reveal_t >= 0.0 and card_reveal_t <= REVEAL_FLASH_DURATION + 0.4:
+			var settle := clampf((card_reveal_t - 0.4) / REVEAL_FLASH_DURATION, 0.0, 1.0)
+			reveal_flash = sin(settle * PI)
+
+		var border_alpha := border.a + (1.0 - border.a) * weight
+		if hype_mode:
+			border_alpha = clampf(border_alpha + 0.08 * pulse, 0.0, 1.0)
+		border_alpha = clampf(border_alpha + 0.4 * reveal_flash, 0.0, 1.0)
+		var border_final := Color(border.r, border.g, border.b, border_alpha)
+
+		var border_w := 2.0 + 2.0 * weight
+		if hype_mode:
+			border_w += 0.6 * pulse
+		border_w += 1.5 * reveal_flash
+
+		var shadow_size := 8
+		var shadow_color := Color(0.0, 0.0, 0.0, 0.45)
+		if hype_mode:
+			shadow_size = int(round(10.0 + 4.0 * pulse + 4.0 * weight + 6.0 * reveal_flash))
+			shadow_color = Color(rarity.r, rarity.g, rarity.b, 0.32 + 0.18 * pulse + 0.2 * weight)
+		elif is_mission:
+			shadow_size = int(round(8.0 + 2.0 * pulse + 3.0 * weight))
+			shadow_color = Color(rarity.r * 0.7, rarity.g * 0.7, rarity.b * 0.7, 0.3 + 0.12 * weight)
 		else:
-			style.bg_color = base_color
-			style.border_color = border_color
-			style.border_width_left = 2
-			style.border_width_top = 2
-			style.border_width_right = 2
-			style.border_width_bottom = 2
-		style.corner_radius_top_left = 12
-		style.corner_radius_top_right = 12
-		style.corner_radius_bottom_left = 12
-		style.corner_radius_bottom_right = 12
-		style.shadow_color = Color(0.0, 0.0, 0.0, 0.35)
-		style.shadow_size = 6
+			shadow_size = int(round(8.0 + 4.0 * weight))
+
+		var style := StyleBoxFlat.new()
+		style.bg_color = bg
+		style.border_color = border_final
+		style.border_width_left = int(round(border_w))
+		style.border_width_top = int(round(border_w))
+		style.border_width_right = int(round(border_w))
+		style.border_width_bottom = int(round(border_w))
+		style.corner_radius_top_left = 14
+		style.corner_radius_top_right = 14
+		style.corner_radius_bottom_left = 14
+		style.corner_radius_bottom_right = 14
+		style.shadow_color = shadow_color
+		style.shadow_size = shadow_size
 		style.shadow_offset = Vector2(0.0, 4.0)
 		panel.add_theme_stylebox_override("panel", style)
 
 func _update_boon_reveal_visuals() -> void:
+	var hype_mode := reward_selection_mode == ENUMS.RewardMode.ARCANA or reward_selection_mode == ENUMS.RewardMode.BOSS
+	var stagger := 0.10 if hype_mode else 0.06
 	var reveal_t := clampf(boon_reveal_time / maxf(0.001, boon_reveal_duration), 0.0, 1.0)
 	for i in range(boon_card_panels.size()):
 		if i >= boon_choices.size():
@@ -762,20 +956,36 @@ func _update_boon_reveal_visuals() -> void:
 		var panel := boon_card_panels[i]
 		var label := boon_card_labels[i]
 		var stack_label := boon_card_stack_labels[i]
-		var delay := float(i) * 0.06
+		var weight := 0.0
+		if i < boon_hover_weights.size():
+			weight = boon_hover_weights[i]
+		var delay := float(i) * stagger
 		var local_t := clampf((reveal_t - delay) / 0.6, 0.0, 1.0)
 		var eased := 1.0 - pow(1.0 - local_t, 3.0)
+		var scale_amt := 0.94 + 0.06 * eased
+		if hype_mode and local_t > 0.0:
+			var overshoot := sin(local_t * PI) * 0.04 * eased
+			scale_amt = 0.94 + 0.06 * eased + overshoot
+		var hover_lift := -HOVER_LIFT_PIXELS * weight
+		var hover_scale_bonus := HOVER_SCALE_BONUS * weight
 		var base_pos := panel.position
 		if i < boon_card_rects.size():
 			base_pos = boon_card_rects[i].position
-		panel.position = base_pos + Vector2(0.0, (1.0 - eased) * 18.0)
+		panel.position = base_pos + Vector2(0.0, (1.0 - eased) * 18.0 + hover_lift)
 		panel.modulate = Color(1.0, 1.0, 1.0, eased)
-		panel.scale = Vector2(0.94 + 0.06 * eased, 0.94 + 0.06 * eased)
+		var final_scale := scale_amt + hover_scale_bonus
+		panel.scale = Vector2(final_scale, final_scale)
 		label.modulate.a = eased
 		stack_label.modulate.a = eased
 
+	var header_alpha := clampf(reveal_t * 1.6, 0.0, 1.0)
+	if boon_header_chip_label != null:
+		boon_header_chip_label.modulate.a = header_alpha
+	if boon_title_label != null and not _title_pulse_active:
+		boon_title_label.modulate.a = header_alpha
 	if boon_subtitle_label != null:
 		boon_subtitle_label.text = _get_boon_subtitle_text()
+		boon_subtitle_label.modulate.a = header_alpha
 
 func _get_mutator_icon_texture(icon_shape_id: String) -> Texture2D:
 	match icon_shape_id:
