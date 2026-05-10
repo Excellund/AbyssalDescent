@@ -469,6 +469,7 @@ func play_sigil_chain_zone(epicenter_global: Vector2, radius: float, lifetime: f
 	var seq := create_tween()
 	seq.tween_interval(safe_lifetime)
 	seq.tween_callback(Callable(glow_pulse, "kill"))
+	seq.tween_callback(Callable(sigil, "set_z_index").bind(-1))
 	seq.set_parallel(true)
 	seq.tween_property(glow, "modulate:a", 0.0, 0.18)
 	seq.tween_property(inner_ring, "default_color", etched_color, 0.22)
