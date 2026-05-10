@@ -31,3 +31,11 @@ func show_victory(_rooms_cleared: int, unlocked_tier: int = -1, run_summary: Dic
 
 func is_open() -> bool:
 	return _results_screen != null and bool(_results_screen.is_open())
+
+func set_retry_label(text: String) -> void:
+	if _results_screen != null:
+		_results_screen.set_retry_label(text)
+
+func set_retry_disabled(disabled: bool) -> void:
+	if _results_screen != null:
+		_results_screen.set_retry_disabled(disabled)

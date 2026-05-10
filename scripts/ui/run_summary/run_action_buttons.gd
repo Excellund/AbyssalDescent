@@ -39,6 +39,16 @@ func set_retry_visible(should_show: bool) -> void:
 		return
 	_retry_button.visible = should_show
 
+func set_retry_label(text: String) -> void:
+	if _retry_button == null:
+		return
+	_retry_button.text = text
+
+func set_retry_disabled(disabled: bool) -> void:
+	if _retry_button == null:
+		return
+	_retry_button.disabled = disabled
+
 func _make_button(label: String) -> Button:
 	var button := Button.new()
 	button.text = label

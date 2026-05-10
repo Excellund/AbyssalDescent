@@ -30,3 +30,11 @@ func show_defeat(room_label: String = "", depth: int = 0, run_summary: Dictionar
 
 func is_open() -> bool:
 	return _results_screen != null and bool(_results_screen.is_open())
+
+func set_retry_label(text: String) -> void:
+	if _results_screen != null:
+		_results_screen.set_retry_label(text)
+
+func set_retry_disabled(disabled: bool) -> void:
+	if _results_screen != null:
+		_results_screen.set_retry_disabled(disabled)

@@ -46,6 +46,14 @@ func show_result(result_title: String, subtitle: String, summary: Dictionary, de
 func is_open() -> bool:
 	return _layer != null and _layer.visible
 
+func set_retry_label(text: String) -> void:
+	if _action_buttons != null:
+		_action_buttons.set_retry_label(text)
+
+func set_retry_disabled(disabled: bool) -> void:
+	if _action_buttons != null:
+		_action_buttons.set_retry_disabled(disabled)
+
 func _process(delta: float) -> void:
 	if _input_delay_left > 0.0:
 		_input_delay_left = maxf(0.0, _input_delay_left - delta)

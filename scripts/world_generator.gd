@@ -221,6 +221,8 @@ var player_flow_coordinator
 var is_multiplayer: bool = false
 var multiplayer_session_id: String = ""
 var multiplayer_encounter_seed: int = 0
+var _multiplayer_retry_votes: Dictionary = {}  ## peer_id -> true (yes vote)
+var _multiplayer_retry_in_progress: bool = false
 var game_state_replication_service: Node = null
 var enemy_state_sync_broadcaster
 var enemy_state_sync_receiver
@@ -396,6 +398,8 @@ func _initialize_bootstrap_context() -> void:
 		is_multiplayer = not multiplayer_session_id.is_empty()
 		if is_multiplayer:
 			print_debug("[WorldGenerator] Detected multiplayer session: %s" % multiplayer_session_id)
+			if not MultiplayerSessionManager.peer_disconnected.is_connected(_on_multiplayer_peer_disconnected):
+				MultiplayerSessionManager.peer_disconnected.connect(_on_multiplayer_peer_disconnected)
 	
 	objective_lifecycle_coordinator = OBJECTIVE_LIFECYCLE_COORDINATOR_SCRIPT.new()
 	objective_frame_coordinator = OBJECTIVE_FRAME_COORDINATOR_SCRIPT.new()
@@ -878,10 +882,10 @@ func _run_debug_boot_flow() -> bool:
 	if settings_enabled:
 		match end_screen_preview:
 			DEBUG_ENUMS.EndScreenPreview.VICTORY:
-				victory_screen.show_victory(0, victory_unlock_tier, {}, not is_multiplayer)
+				victory_screen.show_victory(0, victory_unlock_tier, {}, true)
 				return true
 			DEBUG_ENUMS.EndScreenPreview.DEFEAT:
-				defeat_screen.show_defeat("Debug Arena", max(1, start_depth), {}, not is_multiplayer)
+				defeat_screen.show_defeat("Debug Arena", max(1, start_depth), {}, true)
 				return true
 		if start_encounter != ENCOUNTER_CONTRACTS.DEBUG_ENCOUNTER_NONE:
 			_start_debug_selected_encounter(start_encounter)
@@ -2240,6 +2244,9 @@ func _on_victory_back_to_menu() -> void:
 	get_tree().change_scene_to_file(MENU_SCENE_PATH)
 
 func _on_victory_retry_run() -> void:
+	if is_multiplayer:
+		_request_multiplayer_retry_run()
+		return
 	_retry_current_run()
 
 func _on_defeat_back_to_menu() -> void:
@@ -2250,6 +2257,9 @@ func _on_defeat_back_to_menu() -> void:
 	get_tree().change_scene_to_file(MENU_SCENE_PATH)
 
 func _on_defeat_retry_run() -> void:
+	if is_multiplayer:
+		_request_multiplayer_retry_run()
+		return
 	_retry_current_run()
 
 func _retry_current_run() -> void:
@@ -2257,6 +2267,119 @@ func _retry_current_run() -> void:
 	_set_combat_paused(false)
 	_clear_active_run_checkpoint()
 	get_tree().change_scene_to_file("res://scenes/Main.tscn")
+
+## Multiplayer retry voting: collect a yes vote from every connected peer; once
+## everyone agrees, host broadcasts a coordinated scene reload that keeps the
+## active session, character selections, and difficulty intact.
+func _request_multiplayer_retry_run() -> void:
+	if _multiplayer_retry_in_progress:
+		return
+	if MultiplayerSessionManager.should_broadcast():
+		_register_multiplayer_retry_vote(MultiplayerSessionManager.local_peer_id)
+		return
+	_apply_local_retry_vote_pending_ui()
+	if _multiplayer_can_send_client_rpcs():
+		_request_retry_vote.rpc_id(MultiplayerSessionManager.HOST_PEER_ID)
+
+func _multiplayer_can_send_client_rpcs() -> bool:
+	if not is_inside_tree():
+		return false
+	var multiplayer_api := get_tree().get_multiplayer()
+	if multiplayer_api == null:
+		return false
+	var peer: MultiplayerPeer = multiplayer_api.multiplayer_peer
+	if peer == null:
+		return false
+	return peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED
+
+func _expected_retry_voter_ids() -> Array:
+	var peer_ids: Array = MultiplayerSessionManager.get_peer_ids().duplicate()
+	if peer_ids.is_empty():
+		peer_ids.append(MultiplayerSessionManager.local_peer_id)
+	return peer_ids
+
+func _register_multiplayer_retry_vote(peer_id: int) -> void:
+	if not MultiplayerSessionManager.should_broadcast():
+		return
+	if _multiplayer_retry_in_progress:
+		return
+	if peer_id <= 0:
+		return
+	if not _expected_retry_voter_ids().has(peer_id):
+		return
+	_multiplayer_retry_votes[peer_id] = true
+	var expected := _expected_retry_voter_ids()
+	var votes_yes := 0
+	for voter in expected:
+		if _multiplayer_retry_votes.get(voter, false):
+			votes_yes += 1
+	_broadcast_retry_vote_status.rpc(votes_yes, expected.size())
+	if votes_yes >= expected.size():
+		_multiplayer_retry_in_progress = true
+		_start_multiplayer_retry_run.rpc()
+
+func _apply_retry_vote_status_ui(votes_yes: int = -1, total: int = -1) -> void:
+	if not is_multiplayer:
+		return
+	var local_voted: bool = bool(_multiplayer_retry_votes.get(MultiplayerSessionManager.local_peer_id, false))
+	if total < 0:
+		total = _expected_retry_voter_ids().size()
+	if votes_yes < 0:
+		votes_yes = 1 if local_voted else 0
+	var label_text := "Retry Run"
+	if local_voted or votes_yes > 0:
+		label_text = "Waiting for retry vote (%d/%d)" % [votes_yes, max(total, 1)]
+	if is_instance_valid(victory_screen) and victory_screen.is_open():
+		victory_screen.set_retry_label(label_text)
+		victory_screen.set_retry_disabled(local_voted)
+	if is_instance_valid(defeat_screen) and defeat_screen.is_open():
+		defeat_screen.set_retry_label(label_text)
+		defeat_screen.set_retry_disabled(local_voted)
+
+func _apply_local_retry_vote_pending_ui() -> void:
+	_multiplayer_retry_votes[MultiplayerSessionManager.local_peer_id] = true
+	var total := _expected_retry_voter_ids().size()
+	_apply_retry_vote_status_ui(1, total)
+
+@rpc("reliable", "any_peer")
+func _request_retry_vote() -> void:
+	if not MultiplayerSessionManager.should_broadcast():
+		return
+	var sender_peer_id := get_tree().get_multiplayer().get_remote_sender_id()
+	if sender_peer_id <= 0:
+		return
+	_register_multiplayer_retry_vote(sender_peer_id)
+
+@rpc("reliable", "authority", "call_local")
+func _broadcast_retry_vote_status(votes_yes: int, total: int) -> void:
+	_apply_retry_vote_status_ui(votes_yes, total)
+
+@rpc("reliable", "authority", "call_local")
+func _start_multiplayer_retry_run() -> void:
+	_multiplayer_retry_in_progress = true
+	_multiplayer_retry_votes.clear()
+	_set_combat_paused(false)
+	_clear_active_run_checkpoint()
+	get_tree().change_scene_to_file("res://scenes/Main.tscn")
+
+func _on_multiplayer_peer_disconnected(peer_id: int) -> void:
+	if _multiplayer_retry_in_progress:
+		return
+	if int(peer_id) in _multiplayer_retry_votes:
+		_multiplayer_retry_votes.erase(int(peer_id))
+	if not MultiplayerSessionManager.should_broadcast():
+		return
+	if _multiplayer_retry_votes.is_empty():
+		return
+	var expected := _expected_retry_voter_ids()
+	var votes_yes := 0
+	for voter in expected:
+		if _multiplayer_retry_votes.get(voter, false):
+			votes_yes += 1
+	_broadcast_retry_vote_status.rpc(votes_yes, expected.size())
+	if votes_yes >= expected.size() and votes_yes > 0:
+		_multiplayer_retry_in_progress = true
+		_start_multiplayer_retry_run.rpc()
 
 func _on_pause_back_to_menu_requested() -> void:
 	_teardown_multiplayer_session_for_menu_transition()
@@ -3577,10 +3700,12 @@ func _on_player_died() -> void:
 
 func _show_victory_feedback(unlocked_tier: int, run_summary: Dictionary = {}) -> void:
 	if is_instance_valid(victory_screen):
-		victory_screen.show_victory(rooms_cleared, unlocked_tier, run_summary, not is_multiplayer)
+		victory_screen.show_victory(rooms_cleared, unlocked_tier, run_summary, true)
+		_apply_retry_vote_status_ui()
 
 func _show_defeat_feedback(room_label: String, depth: int, run_summary: Dictionary = {}) -> void:
-	player_flow_coordinator.show_defeat_feedback(hud, defeat_screen, room_label, depth, run_summary, not is_multiplayer)
+	player_flow_coordinator.show_defeat_feedback(hud, defeat_screen, room_label, depth, run_summary, true)
+	_apply_retry_vote_status_ui()
 
 func get_current_player_profile() -> RefCounted:
 	if current_player_profile != null and current_player_profile.is_valid():
