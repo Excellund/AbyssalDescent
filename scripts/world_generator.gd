@@ -768,6 +768,8 @@ func _setup_reward_selection_system() -> void:
 		reward_selection_ui.connect("reward_selected", Callable(self, "_on_reward_selected"))
 	if reward_selection_ui.has_signal("reward_offers_presented"):
 		reward_selection_ui.connect("reward_offers_presented", Callable(self, "_on_reward_offers_presented"))
+	if reward_selection_ui.has_signal("reward_skipped"):
+		reward_selection_ui.connect("reward_skipped", Callable(self, "_on_reward_skipped"))
 
 func _setup_encounter_profile_builder_system() -> void:
 	encounter_profile_builder = ENCOUNTER_PROFILE_BUILDER_SCRIPT.new()
@@ -3451,6 +3453,22 @@ func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> voi
 	else:
 		_apply_boon_to_player(String(choice["id"]))
 		run_session.record_boon(String(choice["name"]))
+	if is_multiplayer:
+		_mark_local_reward_phase_complete(is_initial, mode)
+	elif is_initial:
+		_reset_progress_for_first_encounter()
+		_set_combat_paused(false)
+		pending_room_reward = ENUMS.RewardMode.BOON
+		_begin_room(_build_skirmish_profile(room_depth))
+	else:
+		_set_combat_paused(false)
+		_spawn_door_options()
+	hud.refresh(_get_hud_state(), player)
+
+func _on_reward_skipped(mode: int, is_initial: bool) -> void:
+	run_summary_recorder.record_reward_skip(mode, is_initial, room_depth)
+	if mode == ENUMS.RewardMode.BOSS:
+		boss_reward_pending = false
 	if is_multiplayer:
 		_mark_local_reward_phase_complete(is_initial, mode)
 	elif is_initial:

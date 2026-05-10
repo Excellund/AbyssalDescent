@@ -331,6 +331,20 @@ func record_reward_choice(choice: Dictionary, mode: int, is_initial: bool) -> vo
 		event_data["boss_id"] = _world.last_defeated_boss_id
 	RUN_TELEMETRY_STORE.append_reward_choice(telemetry_run_id, event_data)
 
+func record_reward_skip(mode: int, is_initial: bool, depth: int) -> void:
+	if not can_record():
+		return
+	var event_data := {
+		"unix_time": int(Time.get_unix_time_from_system()),
+		"mode": mode,
+		"choice_id": "",
+		"choice_name": "skip",
+		"is_initial": is_initial,
+		"room_depth": depth,
+		"skipped": true
+	}
+	RUN_TELEMETRY_STORE.append_reward_choice(telemetry_run_id, event_data)
+
 func record_reward_offers(offers: Array[Dictionary], mode: int, is_initial: bool, stage: int) -> void:
 	if not can_record():
 		return

@@ -16,6 +16,7 @@ const MUTATOR_ICON_TETHER_WEB_PATH := "res://assets/ui/mutators/tether_web.svg"
 
 signal reward_selected(choice: Dictionary, mode: int, is_initial: bool)
 signal reward_offers_presented(offers: Array[Dictionary], mode: int, is_initial: bool, stage: int)
+signal reward_skipped(mode: int, is_initial: bool)
 
 var boon_choice_count: int = 3
 var boon_reveal_duration: float = 0.22
@@ -43,6 +44,7 @@ var boon_title_label: Label
 var boon_subtitle_label: Label
 var boon_header_chip_label: Label
 var epitaph_label: RichTextLabel
+var skip_button: Button
 var boon_card_panels: Array[Panel] = []
 var boon_card_labels: Array[RichTextLabel] = []
 var boon_card_stack_labels: Array[Label] = []
@@ -149,6 +151,7 @@ func close_selection() -> void:
 	_reset_title_visuals()
 	if boon_layer != null:
 		boon_layer.visible = false
+	_set_skip_button_visible(false)
 
 
 func open_selection(title: String, is_initial: bool, mode: int, power_registry: Node, player: Node2D, rng: RandomNumberGenerator, player_mutator: Dictionary = {}, epitaph: String = "", character_id: String = "") -> void:
@@ -186,6 +189,8 @@ func open_selection(title: String, is_initial: bool, mode: int, power_registry: 
 	_refresh_boon_ui(player)
 	_refresh_epitaph_display()
 	_apply_global_ui_alpha(0.0)
+	_set_skip_button_visible(false)
+	_position_skip_button()
 	_emit_reward_offers_presented()
 
 func process_input(delta: float) -> void:
@@ -215,6 +220,7 @@ func process_input(delta: float) -> void:
 			_maybe_kick_title_pulse()
 		return
 
+	_set_skip_button_visible(_can_skip_current_offer())
 	_update_boon_hover()
 	_advance_hover_weights(delta, boon_hovered_index)
 	_update_boon_reveal_visuals()
@@ -304,6 +310,7 @@ func _finalize_close() -> void:
 	boon_choices.clear()
 	if boon_layer != null:
 		boon_layer.visible = false
+	_set_skip_button_visible(false)
 
 
 func _close_fade_factor() -> float:
@@ -364,6 +371,37 @@ func _maybe_kick_title_pulse() -> void:
 		return
 	_title_pulse_active = true
 	_title_pulse_time = 0.0
+
+
+func _can_skip_current_offer() -> bool:
+	if not boon_selection_active or _is_closing:
+		return false
+	if boon_confirm_lock_time > 0.0:
+		return false
+	return true
+
+
+func _set_skip_button_visible(value: bool) -> void:
+	if skip_button == null:
+		return
+	skip_button.visible = value
+
+
+func _on_skip_button_pressed() -> void:
+	if not _can_skip_current_offer():
+		return
+	var mode := reward_selection_mode
+	var initial := pending_initial_boon
+	boon_selection_active = false
+	_set_skip_button_visible(false)
+	_begin_close_fade()
+	reward_selection_mode = ENUMS.RewardMode.BOON
+	mission_reward_stage = 0
+	pending_mission_upgrade_choice = {}
+	current_player = null
+	current_player_mutator = {}
+	pending_initial_boon = false
+	emit_signal("reward_skipped", mode, initial)
 
 
 func _update_title_pulse_visuals() -> void:
@@ -552,6 +590,27 @@ func _create_ui() -> void:
 	epitaph_label.visible = false
 	boon_layer.add_child(epitaph_label)
 
+	skip_button = Button.new()
+	skip_button.text = "Skip  ›"
+	skip_button.custom_minimum_size = Vector2(220.0, 60.0)
+	skip_button.add_theme_font_size_override("font_size", 22)
+	skip_button.add_theme_color_override("font_color", Color(0.74, 0.82, 0.94, 0.66))
+	skip_button.add_theme_color_override("font_hover_color", Color(0.94, 0.98, 1.0, 0.95))
+	skip_button.add_theme_color_override("font_pressed_color", Color(0.86, 0.92, 1.0, 0.95))
+	skip_button.add_theme_color_override("font_focus_color", Color(0.94, 0.98, 1.0, 0.95))
+	skip_button.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.7))
+	skip_button.add_theme_constant_override("shadow_offset_x", 1)
+	skip_button.add_theme_constant_override("shadow_offset_y", 1)
+	skip_button.add_theme_stylebox_override("normal", _make_skip_button_style(0.0))
+	skip_button.add_theme_stylebox_override("hover", _make_skip_button_style(1.0))
+	skip_button.add_theme_stylebox_override("pressed", _make_skip_button_style(0.6))
+	skip_button.add_theme_stylebox_override("focus", _make_skip_button_style(0.8))
+	skip_button.tooltip_text = "Skip this reward. Counts as no pick."
+	skip_button.focus_mode = Control.FOCUS_NONE
+	skip_button.visible = false
+	skip_button.pressed.connect(_on_skip_button_pressed)
+	boon_layer.add_child(skip_button)
+
 	_layout_boon_cards()
 	_position_epitaph_label()
 	boon_layer.visible = false
@@ -559,6 +618,7 @@ func _create_ui() -> void:
 func _on_viewport_size_changed() -> void:
 	_layout_boon_cards()
 	_position_epitaph_label()
+	_position_skip_button()
 	if boon_selection_active:
 		_update_boon_reveal_visuals()
 
@@ -612,6 +672,40 @@ func _position_epitaph_label() -> void:
 	epitaph_label.offset_top = halfway_y - epitaph_height * 0.5
 	epitaph_label.position = Vector2(epitaph_label.position.x, halfway_y - epitaph_height * 0.5)
 	epitaph_label.size = Vector2(viewport_size.x - 120.0, epitaph_height)
+
+func _position_skip_button() -> void:
+	if skip_button == null or get_viewport() == null:
+		return
+	var viewport_size := get_viewport().get_visible_rect().size
+	var button_width: float = skip_button.custom_minimum_size.x
+	var button_height: float = skip_button.custom_minimum_size.y
+	var y_pos: float = viewport_size.y * 0.8 - button_height * 0.5
+	var x_pos: float = (viewport_size.x - button_width) * 0.5
+	skip_button.position = Vector2(x_pos, y_pos)
+	skip_button.size = Vector2(button_width, button_height)
+
+func _make_skip_button_style(hover_weight: float) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	var bg_alpha: float = lerpf(0.32, 0.55, hover_weight)
+	var border_alpha: float = lerpf(0.28, 0.62, hover_weight)
+	style.bg_color = Color(0.06, 0.09, 0.14, bg_alpha)
+	style.border_color = Color(0.46, 0.58, 0.78, border_alpha)
+	style.border_width_left = 1
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 1
+	style.corner_radius_top_left = 10
+	style.corner_radius_top_right = 10
+	style.corner_radius_bottom_left = 10
+	style.corner_radius_bottom_right = 10
+	style.content_margin_left = 16.0
+	style.content_margin_right = 16.0
+	style.content_margin_top = 6.0
+	style.content_margin_bottom = 6.0
+	style.shadow_color = Color(0.0, 0.0, 0.0, 0.35)
+	style.shadow_size = 4
+	style.shadow_offset = Vector2(0.0, 2.0)
+	return style
 
 func _apply_mode_theme() -> void:
 	if boon_backdrop == null or boon_title_label == null:
