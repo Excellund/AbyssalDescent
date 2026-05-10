@@ -46,7 +46,7 @@ const AUDIO_DB_MIN := AUDIO_LEVELS.DB_MIN
 const AUDIO_DB_MAX := AUDIO_LEVELS.DB_MAX
 const MENU_LAYOUT_BASE_SIZE := Vector2(1020.0, 720.0)
 const MAIN_MENU_PANEL_BASE_WIDTH := 980.0
-const MAIN_MENU_PANEL_BASE_HEIGHT := 640.0
+const MAIN_MENU_PANEL_BASE_HEIGHT := 720.0
 const MAIN_MENU_SHELL_PADDING := 30.0
 const MAIN_MENU_HERO_PANEL_WIDTH := 362.0
 const MAIN_MENU_ACTION_PANEL_WIDTH := 534.0
@@ -597,7 +597,7 @@ func _build_ui() -> void:
 
 	root_panel = Panel.new()
 	root_panel.set_anchors_preset(Control.PRESET_CENTER)
-	root_panel.position = Vector2(-490.0, -320.0)
+	root_panel.position = Vector2(-MAIN_MENU_PANEL_BASE_WIDTH * 0.5, -MAIN_MENU_PANEL_BASE_HEIGHT * 0.5)
 	root_panel.custom_minimum_size = Vector2(MAIN_MENU_PANEL_BASE_WIDTH, MAIN_MENU_PANEL_BASE_HEIGHT)
 	root_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.06, 0.09, 0.13, 0.94), Color(0.34, 0.56, 0.84, 0.76), 22, 2))
 	add_child(root_panel)
@@ -695,6 +695,11 @@ func _build_ui() -> void:
 	multiplayer_button.pressed.connect(_on_multiplayer_pressed)
 	root_actions.add_child(multiplayer_button)
 
+	var ascension_button := _make_menu_button("Ascension & Oaths")
+	ascension_button.custom_minimum_size = Vector2(470.0, MAIN_MENU_ACTION_BUTTON_HEIGHT)
+	ascension_button.pressed.connect(_on_ascension_pressed)
+	root_actions.add_child(ascension_button)
+
 	var profile_button := _make_menu_button("Profile")
 	profile_button.custom_minimum_size = Vector2(470.0, MAIN_MENU_ACTION_BUTTON_HEIGHT)
 	profile_button.pressed.connect(_on_edit_profile_name_pressed)
@@ -714,11 +719,6 @@ func _build_ui() -> void:
 	glossary_button.custom_minimum_size = Vector2(470.0, MAIN_MENU_ACTION_BUTTON_HEIGHT)
 	glossary_button.pressed.connect(_on_glossary_pressed)
 	root_actions.add_child(glossary_button)
-
-	var ascension_button := _make_menu_button("Ascension & Oaths")
-	ascension_button.custom_minimum_size = Vector2(470.0, MAIN_MENU_ACTION_BUTTON_HEIGHT)
-	ascension_button.pressed.connect(_on_ascension_pressed)
-	root_actions.add_child(ascension_button)
 
 	var options_button := _make_menu_button("Options")
 	options_button.custom_minimum_size = Vector2(470.0, MAIN_MENU_ACTION_BUTTON_HEIGHT)
@@ -804,7 +804,7 @@ func _apply_menu_layout() -> void:
 	if leaderboard_panel != null:
 		_set_centered_panel_layout(leaderboard_panel, Vector2(1080.0, 700.0), fit_scale, viewport_size)
 	if ascension_panel != null:
-		_set_centered_panel_layout(ascension_panel, Vector2(1020.0, 720.0), fit_scale, viewport_size)
+		_set_centered_panel_layout(ascension_panel, Vector2(1280.0, 800.0), fit_scale, viewport_size)
 	if glossary_panel != null:
 		_set_centered_panel_layout(glossary_panel, Vector2(980.0, 680.0), fit_scale, viewport_size)
 	if multiplayer_panel != null:
@@ -2309,8 +2309,8 @@ func _build_leaderboard_panel() -> Panel:
 func _build_ascension_panel() -> Panel:
 	var panel: Panel = ASCENSION_PANEL_SCRIPT.new() as Panel
 	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.position = Vector2(-510.0, -360.0)
-	panel.custom_minimum_size = Vector2(1020.0, 720.0)
+	panel.position = Vector2(-640.0, -400.0)
+	panel.custom_minimum_size = Vector2(1280.0, 800.0)
 	panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.04, 0.06, 0.1, 0.97), Color(0.44, 0.7, 0.96, 0.74), 20, 2))
 	panel._build_ui(self)
 	panel.back_pressed.connect(_show_root_panel)

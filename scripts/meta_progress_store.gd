@@ -393,6 +393,17 @@ static func record_ascension_clear(profile: Dictionary, character_id: String, ra
 		return true
 	return false
 
+static func record_forsworn_clear(profile: Dictionary, character_id: String) -> bool:
+	var record: Dictionary = _get_ascension_record(profile, character_id)
+	if bool(record.get("cleared_forsworn", false)):
+		return false
+	record["cleared_forsworn"] = true
+	return true
+
+static func has_cleared_forsworn(profile: Dictionary, character_id: String) -> bool:
+	var record: Dictionary = _get_ascension_record(profile, character_id)
+	return bool(record.get("cleared_forsworn", false))
+
 static func get_ascension_loadout(profile: Dictionary, character_id: String) -> Array[String]:
 	var record: Dictionary = _get_ascension_record(profile, character_id)
 	var raw: Variant = record.get("current_loadout", [])

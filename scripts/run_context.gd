@@ -670,6 +670,10 @@ func award_run_clear_unlocks() -> int:
 		set_milestone("first_clear_on_veteran", true)
 		if highest_unlocked_difficulty_tier < BEARING_ENUMS.BearingTier.FORSWORN and unlock_difficulty_tier(BEARING_ENUMS.BearingTier.FORSWORN):
 			unlocked_tier = BEARING_ENUMS.BearingTier.FORSWORN
+	if current_difficulty_tier == BEARING_ENUMS.BearingTier.FORSWORN:
+		var character_id: String = get_selected_character_id()
+		if not character_id.is_empty() and META_PROGRESS_STORE.record_forsworn_clear(meta_progress_profile, character_id):
+			save_meta_progress()
 	return unlocked_tier
 
 

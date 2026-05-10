@@ -131,6 +131,12 @@ func _resolve_active_character_id() -> String:
 			return id
 	return CHARACTER_REGISTRY.get_default_character_id()
 
+func _is_ascension_unlocked() -> bool:
+	var profile: Dictionary = _get_profile()
+	if profile.is_empty() or _character_id.is_empty():
+		return false
+	return META_PROGRESS_STORE.has_cleared_forsworn(profile, _character_id)
+
 func _get_profile() -> Dictionary:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context != null:
@@ -161,20 +167,33 @@ func _refresh_modifier_list() -> void:
 	var profile: Dictionary = _get_profile()
 	var loadout: Array[String] = META_PROGRESS_STORE.get_ascension_loadout(profile, _character_id)
 	var completed_oaths: Array[String] = META_PROGRESS_STORE.get_completed_oath_ids(profile)
+	var ascension_unlocked: bool = _is_ascension_unlocked()
+	if not ascension_unlocked:
+		var notice := Label.new()
+		notice.text = "Locked. Clear a Forsworn run with this character to unlock Ascension modifiers."
+		notice.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		notice.add_theme_font_size_override("font_size", 13)
+		notice.add_theme_color_override("font_color", Color(1.0, 0.78, 0.62, 0.92))
+		_modifier_list.add_child(notice)
 	for id_variant in ASCENSION_REGISTRY.get_modifier_ids():
 		var modifier_id: String = String(id_variant)
 		var def: Dictionary = ASCENSION_REGISTRY.get_definition(modifier_id)
 		if def.is_empty():
 			continue
 		var locked_by: String = String(def.get("locked_by_oath_id", ""))
-		var unlocked: bool = locked_by.is_empty() or completed_oaths.has(locked_by)
+		var oath_unlocked: bool = locked_by.is_empty() or completed_oaths.has(locked_by)
+		var unlocked: bool = ascension_unlocked and oath_unlocked
 		var equipped: bool = loadout.has(modifier_id)
 		var row := _make_row()
-		var label := _make_row_label("%s  (rank +%d)" % [String(def.get("label", modifier_id)), int(def.get("heat_cost", 1))])
+		var label := _make_row_label(String(def.get("label", modifier_id)))
 		label.tooltip_text = String(def.get("description", ""))
 		if not unlocked:
 			label.modulate = Color(0.6, 0.6, 0.7, 0.6)
 		row.add_child(label)
+		var rank_tag := _make_rank_tag_label(int(def.get("heat_cost", 1)))
+		if not unlocked:
+			rank_tag.modulate = Color(0.6, 0.6, 0.7, 0.6)
+		row.add_child(rank_tag)
 		var toggle := _make_toggle_button(equipped, unlocked)
 		if not unlocked:
 			toggle.text = "Locked"
@@ -188,6 +207,8 @@ func _refresh_modifier_list() -> void:
 		_modifier_list.add_child(row)
 
 func _toggle_modifier(modifier_id: String) -> void:
+	if not _is_ascension_unlocked():
+		return
 	var profile: Dictionary = _get_profile()
 	var loadout: Array[String] = META_PROGRESS_STORE.get_ascension_loadout(profile, _character_id)
 	if loadout.has(modifier_id):
@@ -303,16 +324,22 @@ func _build_section_column(parent: HBoxContainer, header_text: String) -> VBoxCo
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	column.add_child(scroll)
 
+	var inner_margin := MarginContainer.new()
+	inner_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inner_margin.add_theme_constant_override("margin_right", 14)
+	inner_margin.add_theme_constant_override("margin_left", 2)
+	scroll.add_child(inner_margin)
+
 	var inner := VBoxContainer.new()
 	inner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inner.add_theme_constant_override("separation", 4)
-	scroll.add_child(inner)
+	inner_margin.add_child(inner)
 	return inner
 
 func _make_row() -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_theme_constant_override("separation", 8)
+	row.add_theme_constant_override("separation", 16)
 	return row
 
 func _make_row_label(text: String) -> Label:
@@ -322,6 +349,16 @@ func _make_row_label(text: String) -> Label:
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.add_theme_font_size_override("font_size", 14)
 	label.add_theme_color_override("font_color", Color(0.92, 0.96, 1.0, 0.96))
+	return label
+
+func _make_rank_tag_label(rank: int) -> Label:
+	var label := Label.new()
+	label.text = "+%d" % rank
+	label.custom_minimum_size = Vector2(44.0, 0.0)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 14)
+	label.add_theme_color_override("font_color", Color(0.96, 0.86, 0.62, 0.96))
 	return label
 
 func _make_toggle_button(equipped: bool, unlocked: bool) -> Button:
