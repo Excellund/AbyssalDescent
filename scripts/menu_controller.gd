@@ -17,6 +17,7 @@ const PROFILE_PERSISTENCE_STORE_SCRIPT := preload("res://scripts/core/profile_pe
 const PROFILE_NAME_ENTRY_MODAL_SCRIPT := preload("res://scripts/ui/profile/profile_name_entry_modal.gd")
 const RUN_HISTORY_PANEL_SCRIPT := preload("res://scripts/ui/run_history/run_history_panel.gd")
 const LEADERBOARD_PANEL_SCRIPT := preload("res://scripts/ui/leaderboard/leaderboard_panel.gd")
+const ASCENSION_PANEL_SCRIPT := preload("res://scripts/ui/ascension/ascension_panel.gd")
 const LOBBY_SCENE_PATH := "res://scenes/Lobby.tscn"
 const DEV_ARG_LOCAL_HOST := "--mp-dev-host"
 const DEV_ARG_LOCAL_JOIN := "--mp-dev-join"
@@ -70,6 +71,7 @@ var options_panel: Panel
 var glossary_panel: Panel
 var history_panel: Panel
 var leaderboard_panel: Panel
+var ascension_panel: Panel
 var multiplayer_panel: Panel
 var difficulty_selector_panel: Panel
 var character_selector_panel: Panel
@@ -562,6 +564,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		_show_root_panel()
 		get_viewport().set_input_as_handled()
 		return
+	if event.is_action_pressed("ui_cancel") and ascension_panel != null and ascension_panel.visible:
+		_show_root_panel()
+		get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("ui_cancel") and glossary_panel != null and glossary_panel.visible:
 		_show_root_panel()
 		get_viewport().set_input_as_handled()
@@ -709,6 +715,11 @@ func _build_ui() -> void:
 	glossary_button.pressed.connect(_on_glossary_pressed)
 	root_actions.add_child(glossary_button)
 
+	var ascension_button := _make_menu_button("Ascension & Oaths")
+	ascension_button.custom_minimum_size = Vector2(470.0, MAIN_MENU_ACTION_BUTTON_HEIGHT)
+	ascension_button.pressed.connect(_on_ascension_pressed)
+	root_actions.add_child(ascension_button)
+
 	var options_button := _make_menu_button("Options")
 	options_button.custom_minimum_size = Vector2(470.0, MAIN_MENU_ACTION_BUTTON_HEIGHT)
 	options_button.pressed.connect(_on_options_pressed)
@@ -745,6 +756,10 @@ func _build_ui() -> void:
 	leaderboard_panel = _build_leaderboard_panel()
 	leaderboard_panel.visible = false
 	add_child(leaderboard_panel)
+
+	ascension_panel = _build_ascension_panel()
+	ascension_panel.visible = false
+	add_child(ascension_panel)
 
 	multiplayer_panel = _build_multiplayer_panel()
 	multiplayer_panel.visible = false
@@ -788,6 +803,8 @@ func _apply_menu_layout() -> void:
 		_set_centered_panel_layout(history_panel, Vector2(980.0, 680.0), fit_scale, viewport_size)
 	if leaderboard_panel != null:
 		_set_centered_panel_layout(leaderboard_panel, Vector2(1080.0, 700.0), fit_scale, viewport_size)
+	if ascension_panel != null:
+		_set_centered_panel_layout(ascension_panel, Vector2(1020.0, 720.0), fit_scale, viewport_size)
 	if glossary_panel != null:
 		_set_centered_panel_layout(glossary_panel, Vector2(980.0, 680.0), fit_scale, viewport_size)
 	if multiplayer_panel != null:
@@ -1002,6 +1019,9 @@ func _show_root_panel(animate: bool = true) -> void:
 	if character_selector_panel != null:
 		if not animate or character_selector_panel != from_panel:
 			character_selector_panel.visible = false
+	if ascension_panel != null:
+		if not animate or ascension_panel != from_panel:
+			ascension_panel.visible = false
 	if lobby_modal_layer != null:
 		lobby_modal_layer.visible = false
 	if primary_run_button != null:
@@ -1022,6 +1042,8 @@ func _show_options_panel() -> void:
 		history_panel.visible = false
 	if leaderboard_panel != null:
 		leaderboard_panel.visible = false
+	if ascension_panel != null:
+		ascension_panel.visible = false
 	if multiplayer_panel != null:
 		multiplayer_panel.visible = false
 	if difficulty_selector_panel != null:
@@ -1046,6 +1068,8 @@ func _show_glossary_panel() -> void:
 		history_panel.visible = false
 	if leaderboard_panel != null:
 		leaderboard_panel.visible = false
+	if ascension_panel != null:
+		ascension_panel.visible = false
 	if multiplayer_panel != null:
 		multiplayer_panel.visible = false
 	if difficulty_selector_panel != null:
@@ -1054,6 +1078,30 @@ func _show_glossary_panel() -> void:
 		character_selector_panel.visible = false
 	if lobby_modal_layer != null:
 		lobby_modal_layer.visible = false
+
+func _show_ascension_panel() -> void:
+	if root_panel != null and ascension_panel != null:
+		_animate_replace_transition(root_panel, ascension_panel, Vector2(0.0, 24.0), Vector2(0.0, -18.0))
+	elif root_panel != null:
+		root_panel.visible = false
+	if options_panel != null:
+		options_panel.visible = false
+	if glossary_panel != null:
+		glossary_panel.visible = false
+	if history_panel != null:
+		history_panel.visible = false
+	if leaderboard_panel != null:
+		leaderboard_panel.visible = false
+	if multiplayer_panel != null:
+		multiplayer_panel.visible = false
+	if difficulty_selector_panel != null:
+		difficulty_selector_panel.visible = false
+	if character_selector_panel != null:
+		character_selector_panel.visible = false
+	if lobby_modal_layer != null:
+		lobby_modal_layer.visible = false
+	if ascension_panel != null and ascension_panel.has_method("populate"):
+		ascension_panel.populate()
 
 func _show_multiplayer_panel() -> void:
 	if root_panel != null and multiplayer_panel != null:
@@ -1064,6 +1112,8 @@ func _show_multiplayer_panel() -> void:
 		options_panel.visible = false
 	if glossary_panel != null:
 		glossary_panel.visible = false
+	if ascension_panel != null:
+		ascension_panel.visible = false
 	if difficulty_selector_panel != null:
 		difficulty_selector_panel.visible = false
 	if character_selector_panel != null:
@@ -1084,6 +1134,8 @@ func _show_difficulty_selector() -> void:
 		options_panel.visible = false
 	if glossary_panel != null:
 		glossary_panel.visible = false
+	if ascension_panel != null:
+		ascension_panel.visible = false
 	if leaderboard_panel != null:
 		leaderboard_panel.visible = false
 	if multiplayer_panel != null:
@@ -1100,6 +1152,8 @@ func _show_character_selector() -> void:
 		options_panel.visible = false
 	if glossary_panel != null:
 		glossary_panel.visible = false
+	if ascension_panel != null:
+		ascension_panel.visible = false
 	if multiplayer_panel != null:
 		multiplayer_panel.visible = false
 	if leaderboard_panel != null:
@@ -1450,6 +1504,8 @@ func _current_replace_panel() -> Control:
 		return multiplayer_panel
 	if leaderboard_panel != null and leaderboard_panel.visible:
 		return leaderboard_panel
+	if ascension_panel != null and ascension_panel.visible:
+		return ascension_panel
 	return null
 
 func _build_menu_background_layer() -> Control:
@@ -2226,6 +2282,8 @@ func _show_history_panel() -> void:
 		options_panel.visible = false
 	if leaderboard_panel != null:
 		leaderboard_panel.visible = false
+	if ascension_panel != null:
+		ascension_panel.visible = false
 	if glossary_panel != null:
 		glossary_panel.visible = false
 	if multiplayer_panel != null:
@@ -2248,6 +2306,19 @@ func _build_leaderboard_panel() -> Panel:
 	panel.back_pressed.connect(_show_root_panel)
 	return panel
 
+func _build_ascension_panel() -> Panel:
+	var panel: Panel = ASCENSION_PANEL_SCRIPT.new() as Panel
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.position = Vector2(-510.0, -360.0)
+	panel.custom_minimum_size = Vector2(1020.0, 720.0)
+	panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.04, 0.06, 0.1, 0.97), Color(0.44, 0.7, 0.96, 0.74), 20, 2))
+	panel._build_ui(self)
+	panel.back_pressed.connect(_show_root_panel)
+	return panel
+
+func _on_ascension_pressed() -> void:
+	_show_ascension_panel()
+
 func _show_leaderboard_panel() -> void:
 	if root_panel != null and leaderboard_panel != null:
 		_animate_replace_transition(root_panel, leaderboard_panel, Vector2(0.0, 24.0), Vector2(0.0, -18.0))
@@ -2259,6 +2330,8 @@ func _show_leaderboard_panel() -> void:
 		glossary_panel.visible = false
 	if history_panel != null:
 		history_panel.visible = false
+	if ascension_panel != null:
+		ascension_panel.visible = false
 	if multiplayer_panel != null:
 		multiplayer_panel.visible = false
 	if difficulty_selector_panel != null:
