@@ -21,7 +21,7 @@ var _host: Node = null
 var _character_id: String = ""
 
 var _title_label: Label
-var _character_label: Label
+var _character_label: RichTextLabel
 var _rank_label: Label
 var _modifier_list: VBoxContainer
 var _catalyst_list: VBoxContainer
@@ -50,11 +50,32 @@ func _build_ui(host: Node) -> void:
 	_title_label.add_theme_color_override("font_color", Color(1.0, 0.95, 0.78, 1.0))
 	stack.add_child(_title_label)
 
-	_character_label = Label.new()
-	_character_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_character_label.add_theme_font_size_override("font_size", 18)
-	_character_label.add_theme_color_override("font_color", Color(0.78, 0.92, 1.0, 0.92))
-	stack.add_child(_character_label)
+	var character_row := HBoxContainer.new()
+	character_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	character_row.add_theme_constant_override("separation", 14)
+	stack.add_child(character_row)
+
+	var prev_button := _make_character_arrow_button("<")
+	prev_button.pressed.connect(func() -> void:
+		_step_character(-1)
+	)
+	character_row.add_child(prev_button)
+
+	_character_label = RichTextLabel.new()
+	_character_label.bbcode_enabled = true
+	_character_label.fit_content = true
+	_character_label.scroll_active = false
+	_character_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_character_label.custom_minimum_size = Vector2(360.0, 0.0)
+	_character_label.add_theme_font_size_override("normal_font_size", 18)
+	_character_label.add_theme_color_override("default_color", Color(0.78, 0.92, 1.0, 0.92))
+	character_row.add_child(_character_label)
+
+	var next_button := _make_character_arrow_button(">")
+	next_button.pressed.connect(func() -> void:
+		_step_character(1)
+	)
+	character_row.add_child(next_button)
 
 	_rank_label = Label.new()
 	_rank_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -79,11 +100,26 @@ func _build_ui(host: Node) -> void:
 	stack.add_child(back)
 
 func populate() -> void:
-	_character_id = _resolve_active_character_id()
+	if _character_id.is_empty():
+		_character_id = _resolve_active_character_id()
+	_refresh_all()
+
+func _refresh_all() -> void:
 	_refresh_header()
 	_refresh_modifier_list()
 	_refresh_catalyst_list()
 	_refresh_oath_list()
+
+func _step_character(direction: int) -> void:
+	var ids: Array[String] = CHARACTER_REGISTRY.get_launch_character_ids()
+	if ids.is_empty():
+		return
+	var current_index: int = ids.find(_character_id)
+	if current_index < 0:
+		current_index = 0
+	var next_index: int = (current_index + direction + ids.size()) % ids.size()
+	_character_id = String(ids[next_index])
+	_refresh_all()
 
 # --- header / data ---
 
@@ -109,7 +145,10 @@ func _save_profile() -> void:
 func _refresh_header() -> void:
 	var char_data: Dictionary = CHARACTER_REGISTRY.get_character(_character_id)
 	var char_name: String = String(char_data.get("name", _character_id.capitalize()))
-	_character_label.text = "Character: %s" % char_name
+	var visual: Dictionary = char_data.get("visual", {}) as Dictionary
+	var body_color: Color = visual.get("body_color", Color(0.78, 0.92, 1.0, 0.92)) as Color
+	var tinted: Color = _readable_label_color(body_color)
+	_character_label.text = "[center]Character: [color=#%s]%s[/color][/center]" % [tinted.to_html(false), char_name]
 	var loadout: Array[String] = META_PROGRESS_STORE.get_ascension_loadout(_get_profile(), _character_id)
 	var rank: int = ASCENSION_REGISTRY.compute_loadout_rank(loadout)
 	var highest: int = META_PROGRESS_STORE.get_ascension_highest_rank(_get_profile(), _character_id)
@@ -300,6 +339,19 @@ func _make_toggle_button(equipped: bool, unlocked: bool) -> Button:
 	button.add_theme_stylebox_override("disabled", MENU_STYLE_FACTORY.make_button_style(Color(0.08, 0.10, 0.14, 0.82), Color(0.22, 0.26, 0.32, 0.54), 10, 1))
 	return button
 
+func _make_character_arrow_button(label: String) -> Button:
+	var button := Button.new()
+	button.text = label
+	button.custom_minimum_size = Vector2(48.0, 36.0)
+	button.add_theme_font_size_override("font_size", 18)
+	button.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 0.98))
+	var bg := Color(0.10, 0.15, 0.22, 0.95)
+	var border := Color(0.34, 0.56, 0.84, 0.72)
+	button.add_theme_stylebox_override("normal", MENU_STYLE_FACTORY.make_button_style(bg, border, 10, 1))
+	button.add_theme_stylebox_override("hover", MENU_STYLE_FACTORY.make_button_style(bg.lightened(0.10), border, 10, 1))
+	button.add_theme_stylebox_override("pressed", MENU_STYLE_FACTORY.make_button_style(bg.darkened(0.10), border, 10, 1))
+	return button
+
 func _make_back_button() -> Button:
 	var button := Button.new()
 	button.text = "Back"
@@ -315,3 +367,14 @@ func _make_back_button() -> Button:
 func _clear_children(node: Node) -> void:
 	for child in node.get_children():
 		child.queue_free()
+
+func _readable_label_color(source: Color) -> Color:
+	# Lift dim character body colors so they remain legible on the dark panel background
+	# without losing the character's identity hue.
+	var brightness: float = maxf(maxf(source.r, source.g), source.b)
+	var lift: float = 0.0
+	if brightness < 0.7:
+		lift = clampf(0.7 - brightness, 0.0, 0.5)
+	var result: Color = source.lightened(lift)
+	result.a = 1.0
+	return result
