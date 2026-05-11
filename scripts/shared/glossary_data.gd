@@ -95,7 +95,7 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"name": "Apex Toll",
 			"group": "Trial",
 			"color": Color(1.0, 0.74, 0.32, 1.0),
-			"desc": "Stationary elite. It rings a telegraphed expanding ring that always heals it. Caught inside the ring at trigger? You eat a heavy slow. Step out before it resolves to deny the slow, but it still pays itself. Stay close enough during the brief exposed window to land bonus damage. Pulses a short repulse so you can't stack on top.",
+			"desc": "Stationary altar. Its outer aura constantly slows you. Periodic tribute pulses radiate outward — sidestep or burst inward to dodge or eat damage and a brief stun. Every few seconds it channels a self-heal; stand inside the inner sanctum when the channel ends to silence it. Letting heals resolve is the fastest way to lose.",
 		},
 		{
 			"name": "Last Stand",

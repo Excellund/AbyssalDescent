@@ -647,34 +647,35 @@ func _build_apex_mirrorline_profile(_depth: int = 0) -> Dictionary:
 	return profile
 
 func _build_apex_toll_mutator() -> Dictionary:
-	# Per-bearing pressure: tighter cadence, harsher slow, bigger heal-on-miss as tier rises.
-	# Ring expand + bonus window stay constant so the telegraph remains readable; cooldown shortens.
-	# Each curve is expressed as a multiplier on the enemy script's default values (which are tuned to
-	# the Delver baseline). Stat slots reuse CHARGER channels (no semantic relationship; the spawner's
-	# spec map for "toll" rebinds them to Toll-specific properties).
+	# Per-bearing pressure: faster pulses, larger heal, harsher aura slow, longer stun as tier rises.
+	# Pulse telegraph + expand durations stay constant so the dodge window remains readable; only the
+	# cadence between pulses tightens. Each curve is expressed as a multiplier on the enemy script's
+	# default values (which are tuned to the Delver baseline). Stat slots reuse CHARGER/SHIELDER
+	# channels (no semantic relationship; the spawner's spec map for "toll" rebinds them to
+	# Toll-specific properties: pulse_interval, heal_fraction, aura_slow_mult, stun_duration).
 	var tier := clampi(_difficulty_rank(), 0, 3)
 	var tier_health_curve: Array[float] = [0.85, 1.0, 1.15, 1.30]
-	var tier_cooldown_curve: Array[float] = [2.0, 1.0, 0.5, 0.2]
-	var tier_heal_curve: Array[float] = [0.67, 1.0, 1.33, 1.67]
-	var tier_slow_mult_curve: Array[float] = [1.2, 1.0, 0.8, 0.6]
-	var tier_slow_duration_curve: Array[float] = [0.82, 1.0, 1.18, 1.36]
+	var tier_pulse_interval_curve: Array[float] = [1.43, 1.0, 0.71, 0.57]
+	var tier_heal_curve: Array[float] = [0.67, 1.0, 1.50, 2.0]
+	var tier_aura_slow_curve: Array[float] = [1.13, 1.0, 0.91, 0.80]
+	var tier_stun_duration_curve: Array[float] = [0.60, 1.0, 1.40, 1.80]
 	var tier_health: float = tier_health_curve[tier]
-	var tier_cooldown: float = tier_cooldown_curve[tier]
+	var tier_pulse_interval: float = tier_pulse_interval_curve[tier]
 	var tier_heal: float = tier_heal_curve[tier]
-	var tier_slow_mult: float = tier_slow_mult_curve[tier]
-	var tier_slow_duration: float = tier_slow_duration_curve[tier]
+	var tier_aura_slow: float = tier_aura_slow_curve[tier]
+	var tier_stun_duration: float = tier_stun_duration_curve[tier]
 	return {
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME: "Toll",
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_THEME_COLOR: Color(1.0, 0.74, 0.32, 1.0),
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID: "toll",
 		"affected_archetypes": ["toll"],
-		ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX: "Apex rings the toll — it heals every cycle and slows anyone caught inside",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX: "Apex tolls a tribute pulse — its aura slows you, and its heal channel only ends when you stand inside the inner sanctum",
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ENEMY_TINT: Color(1.0, 0.92, 0.74, 1.0),
 		ENCOUNTER_CONTRACTS.MUTATOR_STAT_ENEMY_HEALTH_MULT: tier_health,
-		ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_WINDUP_MULT: tier_cooldown,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_WINDUP_MULT: tier_pulse_interval,
 		ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_DAMAGE_MULT: tier_heal,
-		ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_SPEED_MULT: tier_slow_mult,
-		ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_WINDUP_MULT: tier_slow_duration
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_SPEED_MULT: tier_aura_slow,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_WINDUP_MULT: tier_stun_duration
 	}
 
 func _build_apex_toll_profile(_depth: int = 0) -> Dictionary:

@@ -82,10 +82,10 @@ const ENEMY_MUTATOR_STAT_MAP := {
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT, "prop": "echo_damage", "min": 1.0, "is_int": true}
 	],
 	"toll": [
-		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_WINDUP_MULT, "prop": "cooldown_duration", "min": 0.10},
-		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_DAMAGE_MULT, "prop": "heal_fraction_on_miss", "min": 0.01},
-		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_SPEED_MULT, "prop": "slow_mult", "min": 0.10},
-		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_WINDUP_MULT, "prop": "slow_duration", "min": 0.20}
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_WINDUP_MULT, "prop": "pulse_interval", "min": 0.50},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_DAMAGE_MULT, "prop": "heal_fraction", "min": 0.01},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_SPEED_MULT, "prop": "aura_slow_mult", "min": 0.20},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_WINDUP_MULT, "prop": "stun_duration", "min": 0.10}
 	]
 }
 
@@ -136,7 +136,8 @@ const ENEMY_DAMAGE_CLASSIFICATION := {
 		"echo_strike": {"kind": "flat", "scales_via_mutator": true, "mutator_stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT}
 	},
 	"toll": {
-		"contact_strike": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"}
+		"toll_strike": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"},
+		"pulse_hit": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"}
 	},
 	"boss_warden": {
 		"all_attacks": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"}

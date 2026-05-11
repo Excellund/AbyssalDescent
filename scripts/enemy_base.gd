@@ -44,6 +44,9 @@ const COLOR_RUPTURE_WAVE_AURA := COLOR_PALETTE.COLOR_RUPTURE_WAVE_AURA
 const COLOR_RAZOR_WIND_TRIANGLE := COLOR_PALETTE.COLOR_RAZOR_WIND_TRIANGLE
 const COLOR_RAZOR_WIND_LINE := COLOR_PALETTE.COLOR_RAZOR_WIND_LINE
 const COLOR_DAMAGE_FLASH := COLOR_PALETTE.COLOR_DAMAGE_FLASH
+const COLOR_PHASE_RESIST_RING := COLOR_PALETTE.COLOR_PHASE_RESIST_RING
+const COLOR_PHASE_RESIST_GLOW := COLOR_PALETTE.COLOR_PHASE_RESIST_GLOW
+const COLOR_PHASE_RESIST_MARK := COLOR_PALETTE.COLOR_PHASE_RESIST_MARK
 const COLOR_CHASER_BODY := COLOR_PALETTE.COLOR_CHASER_BODY
 const COLOR_CHASER_CORE := COLOR_PALETTE.COLOR_CHASER_CORE
 const COLOR_CHARGER_BODY := COLOR_PALETTE.COLOR_CHARGER_BODY
@@ -1103,6 +1106,30 @@ func _draw_mutator_overlay(body_radius: float) -> void:
 	draw_arc(Vector2.ZERO, body_radius + 9.0, 0.0, TAU, default_segments, ring_color, 2.2)
 	fill_color.a = 0.06 + pulse * 0.04
 	draw_circle(Vector2.ZERO, body_radius + 8.0, fill_color)
+
+func _draw_phase_resistant_notches(
+		local_center: Vector2,
+		lane_angle: float,
+		start_radius: float,
+		end_radius: float,
+		alpha: float,
+		exclusion_radius: float = 10.0,
+		notch_count: int = 4,
+		notch_half_width: float = 5.0,
+		line_width: float = 1.5,
+		marker_color: Color = COLOR_PHASE_RESIST_MARK
+	) -> void:
+	var count := maxi(1, notch_count)
+	var min_start := maxf(start_radius, exclusion_radius)
+	var max_end := maxf(min_start + 12.0, end_radius)
+	var dir := Vector2(cos(lane_angle), sin(lane_angle))
+	var perp := Vector2(-dir.y, dir.x)
+	var color := Color(marker_color.r, marker_color.g, marker_color.b, marker_color.a * clampf(alpha, 0.2, 1.0))
+	for ni in range(count):
+		var t := float(ni + 1) / float(count + 1)
+		var r := lerpf(min_start, max_end, t)
+		var notch_center := local_center + dir * r
+		draw_line(notch_center - perp * notch_half_width, notch_center + perp * notch_half_width, color, line_width)
 
 func _draw_damage_blocked_indicator(body_radius: float) -> void:
 	if not damage_blocked:

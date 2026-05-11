@@ -59,6 +59,7 @@ How to apply:
 - Consolidate repeated guard logic and repeated control-flow scaffolding.
 - When several functions only differ by event key/limits, route them through one helper and pass the small deltas as explicit parameters.
 - For repeated combat or area-hit loops, centralize target selection and on-hit effect/proc resolution so damage packet rules cannot drift between variants.
+- For repeated telegraph motifs (for example phase-resistant lane notch marks), extract one base drawing helper and parameterize color/width/count/range so future enemies reuse the same readability language instead of re-implementing per enemy.
 - For long-lived collaborators that can be unavailable during boot/teardown (for example run recorders, replication services, or session stores), centralize readiness checks and common accessors (latest snapshot, finish/flush) behind one helper API instead of scattering null checks at call sites.
 - Prefer one canonical implementation per behavior.
 

@@ -44,6 +44,11 @@ const COLOR_RAZOR_WIND_LINE := Color(0.86, 1.0, 0.93, 0.86)
 # Damage feedback
 const COLOR_DAMAGE_FLASH := Color(0.95, 0.12, 0.12, 1.0)
 
+# Phase-resistant hazard cues (standardized across enemies)
+const COLOR_PHASE_RESIST_RING := Color(1.0, 0.34, 0.28, 0.98)
+const COLOR_PHASE_RESIST_GLOW := Color(1.0, 0.22, 0.18, 0.30)
+const COLOR_PHASE_RESIST_MARK := Color(1.0, 0.88, 0.72, 0.95)
+
 # Enemy-specific colors (chaser = red)
 const COLOR_CHASER_BODY := Color(0.95, 0.18, 0.26, 1.0)
 const COLOR_CHASER_CORE := Color(0.62, 0.06, 0.12, 1.0)
