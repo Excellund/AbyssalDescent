@@ -23,6 +23,41 @@ static func _get_objective_manager(world: Node) -> Node:
 		return objective_manager_value as Node
 	return null
 
+static func _has_property(target: Object, property_name: String) -> bool:
+	if target == null:
+		return false
+	for prop_info_variant in target.get_property_list():
+		var prop_info := prop_info_variant as Dictionary
+		if String(prop_info.get("name", "")) == property_name:
+			return true
+	return false
+
+static func _get_world_run_cleared(world: Node) -> bool:
+	if _has_property(world, "run_cleared"):
+		return bool(world.get("run_cleared"))
+	var outcome_coordinator: Variant = world.get("_run_outcome_coordinator")
+	if outcome_coordinator != null and outcome_coordinator.has_method("is_run_cleared"):
+		return bool(outcome_coordinator.call("is_run_cleared"))
+	return false
+
+static func _set_world_run_cleared(world: Node, next_value: bool) -> void:
+	if _has_property(world, "run_cleared"):
+		world.set("run_cleared", next_value)
+		return
+	var outcome_coordinator: Variant = world.get("_run_outcome_coordinator")
+	if outcome_coordinator == null:
+		return
+	if next_value:
+		if outcome_coordinator.has_method("apply_synced_outcome"):
+			outcome_coordinator.call("apply_synced_outcome", "clear")
+		elif _has_property(outcome_coordinator, "_run_cleared"):
+			outcome_coordinator.set("_run_cleared", true)
+		return
+	if outcome_coordinator.has_method("reset_for_new_run"):
+		outcome_coordinator.call("reset_for_new_run")
+	elif _has_property(outcome_coordinator, "_run_cleared"):
+		outcome_coordinator.set("_run_cleared", false)
+
 static func build_snapshot(world: Node, player: Node, run_context: Node, snapshot_version: int, fallback_run_mode: Variant) -> Dictionary:
 	if not is_instance_valid(player):
 		return {}
@@ -78,7 +113,7 @@ static func build_snapshot(world: Node, player: Node, run_context: Node, snapsho
 		"phase_three_rooms_cleared": world.phase_three_rooms_cleared,
 		"endless_boss_defeated": world.endless_boss_defeated,
 		"choosing_next_room": world.choosing_next_room,
-		"run_cleared": world.run_cleared,
+		"run_cleared": _get_world_run_cleared(world),
 		"boons_taken": boons_taken.duplicate(),
 		"arcana_rewards_taken": arcana_rewards_taken.duplicate(),
 		"boss_rewards_taken": boss_rewards_taken.duplicate(),
@@ -121,7 +156,7 @@ static func apply_snapshot(world: Node, player: Node, run_context: Node, snapsho
 	world.phase_two_rooms_cleared = int(snapshot.get("phase_two_rooms_cleared", world.phase_two_rooms_cleared))
 	world.phase_three_rooms_cleared = int(snapshot.get("phase_three_rooms_cleared", world.phase_three_rooms_cleared))
 	world.endless_boss_defeated = bool(snapshot.get("endless_boss_defeated", world.endless_boss_defeated))
-	world.run_cleared = bool(snapshot.get("run_cleared", false))
+	_set_world_run_cleared(world, bool(snapshot.get("run_cleared", false)))
 	world.choosing_next_room = bool(snapshot.get("choosing_next_room", true))
 	if not world.choosing_next_room:
 		world.choosing_next_room = true

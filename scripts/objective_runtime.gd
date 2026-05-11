@@ -278,11 +278,17 @@ func update_objective_state(delta: float) -> void:
 		update_control_objective_state(delta)
 		return
 
+func _is_world_run_cleared() -> bool:
+	var outcome_coordinator: Variant = world.get("_run_outcome_coordinator")
+	if outcome_coordinator != null and outcome_coordinator.has_method("is_run_cleared"):
+		return bool(outcome_coordinator.call("is_run_cleared"))
+	return false
+
 func update_survival_objective_state(delta: float) -> void:
 	if MultiplayerSessionManager.is_remote_replica():
 		return
 	var quota_met: bool = objective_manager.kill_target > 0 and objective_manager.kills >= objective_manager.kill_target
-	if world.choosing_next_room or world.run_cleared:
+	if world.choosing_next_room or _is_world_run_cleared():
 		return
 	_process_pending_objective_spawns(delta)
 	if quota_met and not objective_manager.survival_quota_announced and objective_manager.time_left > 0.0 and not objective_manager.overtime:
@@ -326,7 +332,7 @@ func update_survival_objective_state(delta: float) -> void:
 func update_priority_target_objective_state(delta: float) -> void:
 	if MultiplayerSessionManager.is_remote_replica():
 		return
-	if world.choosing_next_room or world.run_cleared:
+	if world.choosing_next_room or _is_world_run_cleared():
 		return
 	_process_pending_objective_spawns(delta)
 	if not is_instance_valid(objective_manager.hunt_target_enemy):
@@ -473,7 +479,7 @@ func _update_control_spawn_cycle(delta: float, refill_spawn_cap: float, pressure
 func update_control_objective_state(delta: float) -> void:
 	if MultiplayerSessionManager.is_remote_replica():
 		return
-	if world.choosing_next_room or world.run_cleared:
+	if world.choosing_next_room or _is_world_run_cleared():
 		return
 	_process_pending_objective_spawns(delta)
 	var difficulty_rank := DIFFICULTY_CONFIG.get_difficulty_rank(int(world.current_difficulty_tier))

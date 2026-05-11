@@ -326,6 +326,27 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "[OK] Full GDScript compile validation passed" -ForegroundColor Green
 
 # ============================================================================
+# CHECK 6: Forbidden world property access lint
+# ============================================================================
+Write-Host ""
+Write-Host "Checking forbidden world property access patterns..." -ForegroundColor Yellow
+
+$propertyAccessValidatorScript = Join-Path $projectRoot ".github/scripts/validate_world_property_access.gd"
+if (-not (Test-Path $propertyAccessValidatorScript)) {
+    Write-Host "  [ERROR] Property access validator script not found: $propertyAccessValidatorScript" -ForegroundColor Red
+    exit 1
+}
+
+& $godotExecutable --headless --path $projectRoot -s $propertyAccessValidatorScript
+if ($LASTEXITCODE -ne 0) {
+    Write-Host ""
+    Write-Host "[FAIL] Forbidden world property access validation failed." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "[OK] Forbidden world property access validation passed" -ForegroundColor Green
+
+# ============================================================================
 # All checks passed!
 # ============================================================================
 Write-Host ""
