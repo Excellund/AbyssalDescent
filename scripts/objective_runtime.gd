@@ -637,7 +637,7 @@ func _spawn_priority_target_escort_entries(spawn_context: Dictionary, start_inde
 		var escort_type := String(entry.get("type", ""))
 		if escort_type.is_empty():
 			continue
-		var escort := world.enemy_spawner.spawn_enemy_node_type(escort_type)
+		var escort: ENEMY_BASE_SCRIPT = world.enemy_spawner.spawn_enemy_node_type(escort_type)
 		if not is_instance_valid(escort):
 			continue
 		var escort_position := entry.get("position", Vector2.ZERO) as Vector2
