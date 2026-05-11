@@ -87,10 +87,10 @@ const MODIFIER_DEFINITIONS := {
 		"locked_by_oath_id": "ascension_rank_5"
 	},
 	"shrunken_arcana": {
-		"label": "Shrunken Arcana",
-		"description": "Your arcana pool offers 25% fewer unique powers.",
+		"label": "Razor Sigils",
+		"description": "Mutator-driven damage is increased by 35%.",
 		"heat_cost": 2,
-		"payload": {"arcana_pool_shrink_mult": 0.75},
+		"payload": {"mutator_damage_mult": 1.35},
 		"locked_by_oath_id": "ascension_rank_5"
 	},
 	"pilgrims_burden": {

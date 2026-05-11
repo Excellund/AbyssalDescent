@@ -21,6 +21,7 @@ const _ASCENSION_TO_CONFIG_MAPPING := {
 	"specialist_enemy_pressure_mult": ["specialist_enemy_pressure_mult", "mul"],
 	"boss_difficulty_mult": ["boss_difficulty_mult", "mul"],
 	"player_damage_taken_mult": ["player_damage_taken_mult", "mul"],
+	"mutator_damage_mult": ["mutator_damage_mult", "mul"],
 	"player_starting_health_bonus_add": ["player_starting_health_bonus", "add"]
 }
 

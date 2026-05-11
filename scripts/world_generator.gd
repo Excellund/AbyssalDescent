@@ -1999,6 +1999,16 @@ func _apply_difficulty_tier_bonuses(difficulty_tier: int) -> void:
 	current_difficulty_tier = difficulty_tier
 	current_difficulty_config = difficulty_provider.resolve_tier_config(difficulty_tier)
 	var difficulty_config := current_difficulty_config
+	var catalyst_payload: Dictionary = {}
+	var run_context_for_catalysts := _get_run_context()
+	if run_context_for_catalysts != null:
+		catalyst_payload = run_context_for_catalysts.get_active_catalyst_payload(current_character_id)
+		if not catalyst_payload.is_empty():
+			difficulty_config["wave_interval_seconds"] = float(difficulty_config.get("wave_interval_seconds", 8.0)) * float(catalyst_payload.get("wave_interval_mult", 1.0))
+			difficulty_config["boss_difficulty_mult"] = float(difficulty_config.get("boss_difficulty_mult", 1.0)) * float(catalyst_payload.get("boss_difficulty_mult", 1.0))
+			difficulty_config["player_damage_taken_mult"] = float(difficulty_config.get("player_damage_taken_mult", 1.0)) * float(catalyst_payload.get("player_damage_taken_mult", 1.0))
+			difficulty_config["enemy_contact_damage_mult"] = float(difficulty_config.get("enemy_contact_damage_mult", 1.0)) * float(catalyst_payload.get("enemy_contact_damage_mult", 1.0))
+			difficulty_config["rest_heal_ratio_mult"] = float(difficulty_config.get("rest_heal_ratio_mult", 1.0)) * float(catalyst_payload.get("rest_heal_ratio_mult", 1.0))
 	if is_instance_valid(enemy_spawner):
 		enemy_spawner.bearing_wave_interval_seconds = float(difficulty_config.get("wave_interval_seconds", 8.0))
 		var ascension_payload_raw: Variant = difficulty_config.get("ascension", {})
@@ -2014,9 +2024,7 @@ func _apply_difficulty_tier_bonuses(difficulty_tier: int) -> void:
 	player.set_incoming_damage_taken_mult(float(difficulty_config.get("player_damage_taken_mult", 1.0)))
 	player.set_incoming_contact_damage_mult(float(difficulty_config.get("enemy_contact_damage_mult", 1.0)))
 	var health_bonus := float(difficulty_config.get("player_starting_health_bonus", 0.0))
-	var run_context_for_catalysts := _get_run_context()
 	if run_context_for_catalysts != null:
-		var catalyst_payload: Dictionary = run_context_for_catalysts.get_active_catalyst_payload(current_character_id)
 		health_bonus += float(catalyst_payload.get("starting_max_hp_add", 0.0))
 	if health_bonus > 0.0:
 		var current_max: int = int(player.get_max_health())

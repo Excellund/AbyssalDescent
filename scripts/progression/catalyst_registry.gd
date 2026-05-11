@@ -34,22 +34,22 @@ const CATALYST_DEFINITIONS := {
 		"payload": {"reward_rerolls_per_encounter_add": 1}
 	},
 	"door_reveal": {
-		"label": "Cartographer's Eye",
-		"description": "Doors reveal their next encounter type before you commit.",
-		"category": CATEGORY_DISCOVERY,
-		"payload": {"door_reveal_enabled": true}
+		"label": "Lacuna's Veil",
+		"description": "Take 10% less damage from all sources.",
+		"category": CATEGORY_SURVIVAL,
+		"payload": {"player_damage_taken_mult": 0.90}
 	},
 	"starting_arcana_pick": {
-		"label": "Starting Arcana",
-		"description": "Pick one arcana from a small offering before the run begins.",
-		"category": CATEGORY_PREP,
-		"payload": {"starting_arcana_pick_count": 1}
+		"label": "Draft Compass",
+		"description": "Reward picks offer one additional option.",
+		"category": CATEGORY_REWARD,
+		"payload": {"reward_choice_count_add": 1}
 	},
 	"starting_boon_pick": {
-		"label": "Starting Boon",
-		"description": "Pick one boon from a small offering before the run begins.",
-		"category": CATEGORY_PREP,
-		"payload": {"starting_boon_pick_count": 1}
+		"label": "Pilgrim's Tonic",
+		"description": "Rest Sites heal 35% more.",
+		"category": CATEGORY_SURVIVAL,
+		"payload": {"rest_heal_ratio_mult": 1.35}
 	},
 	"starting_max_hp_bonus": {
 		"label": "Iron Vigil",
@@ -58,16 +58,16 @@ const CATALYST_DEFINITIONS := {
 		"payload": {"starting_max_hp_add": 20}
 	},
 	"personal_best_seed": {
-		"label": "Echo of Triumph",
-		"description": "Replay the seed of your best clear at this Bearing.",
-		"category": CATEGORY_REPLAY,
-		"payload": {"use_personal_best_seed": true}
+		"label": "Calm Before Surge",
+		"description": "Waves arrive 12% slower.",
+		"category": CATEGORY_SURVIVAL,
+		"payload": {"wave_interval_mult": 1.12}
 	},
 	"ascension_loadout_preset": {
-		"label": "Pact Bookmark",
-		"description": "Save and recall your Ascension loadout in one click.",
-		"category": CATEGORY_REPLAY,
-		"payload": {"loadout_preset_slots_add": 1}
+		"label": "Cinder Aegis",
+		"description": "Enemy contact damage is reduced by 12%.",
+		"category": CATEGORY_SURVIVAL,
+		"payload": {"enemy_contact_damage_mult": 0.88}
 	}
 }
 
