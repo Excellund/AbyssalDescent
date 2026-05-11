@@ -62,6 +62,7 @@ const REWARD_PHASE_COORDINATOR_SCRIPT := preload("res://scripts/core/reward_phas
 const PLAYER_ROSTER_HELPERS := preload("res://scripts/core/player_roster_helpers.gd")
 const WORLD_MULTIPLAYER_SYNC_STATE_SCRIPT := preload("res://scripts/core/world_multiplayer_sync_state.gd")
 const WORLD_PROGRESS_SYNC_POLICY_SCRIPT := preload("res://scripts/core/world_progress_sync_policy.gd")
+const RUN_OUTCOME_COORDINATOR_SCRIPT := preload("res://scripts/core/run_outcome_coordinator.gd")
 const RUN_CONTEXT_SCRIPT := preload("res://scripts/run_context.gd")
 const MULTIPLAYER_SESSION_MANAGER_SCRIPT := preload("res://scripts/multiplayer_session_manager.gd")
 const PLAYER_SCRIPT := preload("res://scripts/player.gd")
@@ -173,7 +174,6 @@ var phase_two_rooms_cleared: int = 0
 var phase_three_rooms_cleared: int = 0
 var endless_boss_defeated: bool = false
 var choosing_next_room: bool = false
-var run_cleared: bool = false
 var boss_reward_pending: bool = false
 var last_defeated_boss_id: String = ""
 
@@ -206,7 +206,6 @@ var victory_screen: Node
 var defeat_screen: Node
 var build_detail_panel: Node
 var run_summary_recorder
-var player_defeated: bool = false
 var telemetry_spike_enabled: bool = false
 var telemetry_spike_endpoint: String = ""
 var telemetry_spike_api_key: String = ""
@@ -229,8 +228,6 @@ var player_flow_coordinator
 var is_multiplayer: bool = false
 var multiplayer_session_id: String = ""
 var multiplayer_encounter_seed: int = 0
-var _multiplayer_retry_votes: Dictionary = {}  ## peer_id -> true (yes vote)
-var _multiplayer_retry_in_progress: bool = false
 var game_state_replication_service: Node = null
 var enemy_state_sync_broadcaster
 var enemy_state_sync_receiver
@@ -276,6 +273,7 @@ var _doors_spawn_ready: bool = false
 var _world_multiplayer_sync_state = WORLD_MULTIPLAYER_SYNC_STATE_SCRIPT.new()
 var _world_progress_sync_policy = WORLD_PROGRESS_SYNC_POLICY_SCRIPT.new()
 var _reward_phase_coordinator = REWARD_PHASE_COORDINATOR_SCRIPT.new()
+var _run_outcome_coordinator = RUN_OUTCOME_COORDINATOR_SCRIPT.new()
 var room_depth_bookkeeper
 
 ## ============================================================================
@@ -882,7 +880,7 @@ func _begin_new_run_flow() -> void:
 	first_boss_defeated = false
 	second_boss_defeated = false
 	endless_boss_defeated = false
-	run_cleared = false
+	_run_outcome_coordinator.reset_for_new_run()
 	boss_reward_pending = false
 	last_defeated_boss_id = ""
 	pending_room_reward = ENUMS.RewardMode.NONE
@@ -1101,7 +1099,7 @@ func _reset_for_debug_jump() -> void:
 	choosing_next_room = false
 	door_options.clear()
 	pending_room_reward = ENUMS.RewardMode.NONE
-	run_cleared = false
+	_run_outcome_coordinator.reset_for_new_run()
 	in_boss_room = false
 	in_second_boss_room = false
 	in_third_boss_room = false
@@ -1596,7 +1594,7 @@ func _get_hud_state() -> Dictionary:
 	if between_rooms:
 		display_enemy_mutator = {}
 	# Keep the visible depth anchored to the cleared room until the next room is entered.
-	if between_rooms and not run_cleared and current_room_label != "Rest Site":
+	if between_rooms and not _run_outcome_coordinator.is_run_cleared() and current_room_label != "Rest Site":
 		display_room_depth = maxi(0, room_depth - 1)
 	
 	# Get current character passive name
@@ -1616,7 +1614,7 @@ func _get_hud_state() -> Dictionary:
 		"current_difficulty_tier": current_difficulty_tier,
 		"rooms_cleared": rooms_cleared,
 		"room_depth": display_room_depth,
-		"run_cleared": run_cleared,
+		"run_cleared": _run_outcome_coordinator.is_run_cleared(),
 		"current_room_enemy_mutator": display_enemy_mutator,
 		"in_boss_room": in_boss_room,
 		"active_room_enemy_count": active_room_enemy_count,
@@ -1765,7 +1763,7 @@ func _keep_player_inside_camera_view() -> void:
 func _update_encounter_state() -> void:
 	if MultiplayerSessionManager.is_remote_replica():
 		return
-	if choosing_next_room or run_cleared:
+	if choosing_next_room or _run_outcome_coordinator.is_run_cleared():
 		return
 	if _is_reward_selection_active():
 		return
@@ -1836,7 +1834,8 @@ func _on_room_cleared() -> void:
 	if not bool(outcome_state.get("ok", false)):
 		return
 	_world_multiplayer_sync_state.mark_current_room_clear_processed()
-	run_cleared = bool(outcome_state.get("run_cleared", run_cleared))
+	if bool(outcome_state.get("run_cleared", _run_outcome_coordinator.is_run_cleared())):
+		_run_outcome_coordinator.apply_synced_outcome("clear")
 	in_boss_room = bool(outcome_state.get("in_boss_room", in_boss_room))
 	endless_boss_defeated = bool(outcome_state.get("endless_boss_defeated", endless_boss_defeated))
 	var next_rooms_cleared := int(outcome_state.get("rooms_cleared", rooms_cleared))
@@ -1906,7 +1905,6 @@ func _finish_second_boss_clear() -> void:
 func _finish_third_boss_clear() -> void:
 	in_third_boss_room = false
 	active_room_enemy_count = 0
-	run_cleared = true
 	choosing_next_room = false
 	boss_unlocked = false
 	pending_room_reward = ENUMS.RewardMode.NONE
@@ -1927,6 +1925,7 @@ func _finish_third_boss_clear() -> void:
 	if _run_summary_ready():
 		run_summary_recorder.mark_full_clear_boss_credits()
 	_run_summary_finish_run("clear")
+	_run_outcome_coordinator.register_victory(is_multiplayer, unlocked_tier)
 	_broadcast_run_outcome_if_needed("clear", unlocked_tier, "", room_depth)
 	_show_victory_feedback(unlocked_tier, _latest_run_summary())
 
@@ -2216,7 +2215,7 @@ func _retry_current_run() -> void:
 ## everyone agrees, host broadcasts a coordinated scene reload that keeps the
 ## active session, character selections, and difficulty intact.
 func _request_multiplayer_retry_run() -> void:
-	if _multiplayer_retry_in_progress:
+	if _run_outcome_coordinator.is_retry_in_progress():
 		return
 	if MultiplayerSessionManager.should_broadcast():
 		_register_multiplayer_retry_vote(MultiplayerSessionManager.local_peer_id)
@@ -2245,27 +2244,21 @@ func _expected_retry_voter_ids() -> Array:
 func _register_multiplayer_retry_vote(peer_id: int) -> void:
 	if not MultiplayerSessionManager.should_broadcast():
 		return
-	if _multiplayer_retry_in_progress:
-		return
-	if peer_id <= 0:
-		return
-	if not _expected_retry_voter_ids().has(peer_id):
-		return
-	_multiplayer_retry_votes[peer_id] = true
 	var expected := _expected_retry_voter_ids()
-	var votes_yes := 0
-	for voter in expected:
-		if _multiplayer_retry_votes.get(voter, false):
-			votes_yes += 1
-	_broadcast_retry_vote_status.rpc(votes_yes, expected.size())
-	if votes_yes >= expected.size():
-		_multiplayer_retry_in_progress = true
+	var vote_result := _run_outcome_coordinator.register_retry_vote(peer_id, expected)
+	if not bool(vote_result.get("all_voted", false)):
+		var votes_yes: int = vote_result.get("votes_yes", 0)
+		var total: int = vote_result.get("total_peers", 0)
+		_broadcast_retry_vote_status.rpc(votes_yes, total)
+		return
+	var finalize_result := _run_outcome_coordinator.finalize_retry(expected)
+	if bool(finalize_result.get("ok", false)):
 		_start_multiplayer_retry_run.rpc()
 
 func _apply_retry_vote_status_ui(votes_yes: int = -1, total: int = -1) -> void:
 	if not is_multiplayer:
 		return
-	var local_voted: bool = bool(_multiplayer_retry_votes.get(MultiplayerSessionManager.local_peer_id, false))
+	var local_voted: bool = _run_outcome_coordinator.has_local_voted(MultiplayerSessionManager.local_peer_id)
 	if total < 0:
 		total = _expected_retry_voter_ids().size()
 	if votes_yes < 0:
@@ -2281,7 +2274,7 @@ func _apply_retry_vote_status_ui(votes_yes: int = -1, total: int = -1) -> void:
 		defeat_screen.set_retry_disabled(local_voted)
 
 func _apply_local_retry_vote_pending_ui() -> void:
-	_multiplayer_retry_votes[MultiplayerSessionManager.local_peer_id] = true
+	_run_outcome_coordinator.apply_local_retry_vote(MultiplayerSessionManager.local_peer_id)
 	var total := _expected_retry_voter_ids().size()
 	_apply_retry_vote_status_ui(1, total)
 
@@ -2300,29 +2293,21 @@ func _broadcast_retry_vote_status(votes_yes: int, total: int) -> void:
 
 @rpc("reliable", "authority", "call_local")
 func _start_multiplayer_retry_run() -> void:
-	_multiplayer_retry_in_progress = true
-	_multiplayer_retry_votes.clear()
+	_run_outcome_coordinator.clear_retry_state()
 	_set_combat_paused(false)
 	_clear_active_run_checkpoint()
 	get_tree().change_scene_to_file("res://scenes/Main.tscn")
 
 func _on_multiplayer_peer_disconnected(peer_id: int) -> void:
-	if _multiplayer_retry_in_progress:
-		return
-	if int(peer_id) in _multiplayer_retry_votes:
-		_multiplayer_retry_votes.erase(int(peer_id))
-	if not MultiplayerSessionManager.should_broadcast():
-		return
-	if _multiplayer_retry_votes.is_empty():
-		return
 	var expected := _expected_retry_voter_ids()
-	var votes_yes := 0
-	for voter in expected:
-		if _multiplayer_retry_votes.get(voter, false):
-			votes_yes += 1
-	_broadcast_retry_vote_status.rpc(votes_yes, expected.size())
-	if votes_yes >= expected.size() and votes_yes > 0:
-		_multiplayer_retry_in_progress = true
+	var disconnect_result := _run_outcome_coordinator.on_peer_disconnected(int(peer_id), expected)
+	if not bool(disconnect_result.get("all_voted", false)):
+		var votes_yes: int = disconnect_result.get("votes_yes", 0)
+		var total: int = disconnect_result.get("total_peers", 0)
+		_broadcast_retry_vote_status.rpc(votes_yes, total)
+		return
+	var finalize_result := _run_outcome_coordinator.finalize_retry(expected)
+	if bool(finalize_result.get("ok", false)):
 		_start_multiplayer_retry_run.rpc()
 
 func _on_pause_back_to_menu_requested() -> void:
@@ -3441,8 +3426,8 @@ func _sync_run_outcome(outcome: String, unlocked_tier: int, room_label: String, 
 	run_summary_recorder.latest_run_summary = synced_summary
 	run_summary_recorder.finalize_synced_run_summary_for_joiner(synced_summary, outcome)
 	synced_summary = run_summary_recorder.latest_run_summary
+	_run_outcome_coordinator.apply_synced_outcome(outcome)
 	if outcome == "clear":
-		run_cleared = true
 		choosing_next_room = false
 		active_room_enemy_count = 0
 		_set_combat_paused(true)
@@ -3451,8 +3436,6 @@ func _sync_run_outcome(outcome: String, unlocked_tier: int, room_label: String, 
 		_show_victory_feedback(unlocked_tier, synced_summary)
 		return
 	if outcome == "death":
-		player_defeated = true
-		run_cleared = true
 		choosing_next_room = false
 		active_room_enemy_count = 0
 		_set_combat_paused(true)
@@ -3534,7 +3517,7 @@ func _on_player_died_for_telemetry() -> void:
 func _on_player_died() -> void:
 	if _run_summary_ready():
 		run_summary_recorder.reconcile_damage_taken_to_player_health()
-	if player_defeated:
+	if _run_outcome_coordinator.is_player_defeated():
 		return
 	var has_new_fallen := _refresh_fallen_player_tracking()
 	if is_multiplayer:
@@ -3545,11 +3528,12 @@ func _on_player_died() -> void:
 		if has_new_fallen and is_instance_valid(hud):
 			hud.show_banner("Ally Down", "Clear encounter to revive")
 		return
-	player_defeated = true
+	var outcome_result := _run_outcome_coordinator.register_player_death(is_multiplayer)
+	if not bool(outcome_result.get("ok", false)):
+		return
 	_set_combat_paused(true)
 	player_flow_coordinator.close_reward_selection_if_active(reward_selection_ui)
 	player_flow_coordinator.close_pause_menu_if_open(pause_menu_controller)
-	run_cleared = true
 	choosing_next_room = false
 	objective_lifecycle_coordinator.clear_on_player_defeat(objective_manager)
 	active_room_enemy_count = 0
