@@ -29,9 +29,9 @@ var shielder_start_room: int = 2
 var shielders_per_room: int = 1
 var hard_room_enemy_bonus: int = 4
 
-const INTRO_ROOM_SIZE := Vector2(940.0, 700.0)
-const POOL_ROOM_SIZE := Vector2(1040.0, 760.0)
-const TRIAL_ROOM_SIZE := Vector2(1160.0, 860.0)
+const INTRO_ROOM_SIZE := ENCOUNTER_DEFINITION_DATA.INTRO_ROOM_SIZE
+const POOL_ROOM_SIZE := ENCOUNTER_DEFINITION_DATA.POOL_ROOM_SIZE
+const TRIAL_ROOM_SIZE := ENCOUNTER_DEFINITION_DATA.TRIAL_ROOM_SIZE
 
 # BEARING_LABELS must stay in sync with registry entries that have a "bearing_label" field.
 const BEARING_LABELS: Array[String] = [
