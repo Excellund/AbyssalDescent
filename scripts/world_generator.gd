@@ -2036,14 +2036,27 @@ func _finish_third_boss_clear() -> void:
 		run_summary_recorder.record_unlock("Unlocked Bearing: %s" % String(unlock_config.get("name", "Unknown")))
 	run_summary_recorder.mark_full_clear_boss_credits()
 	run_summary_recorder.finish_run("clear")
-	if MultiplayerSessionManager.should_broadcast():
-		if STAT_ATTRIBUTION_TRACE:
-			print_debug("[StatAttribution][OutcomeSend] outcome=clear stats=%s" % str(run_summary_recorder.get_stats_by_peer()))
-		_sync_run_outcome.rpc("clear", unlocked_tier, "", room_depth, run_summary_recorder.latest_run_summary, run_summary_recorder.get_stats_by_peer(), run_summary_recorder.get_latest_peer_summary_overrides())
+	_broadcast_run_outcome_if_needed("clear", unlocked_tier, "", room_depth)
 	_show_victory_feedback(unlocked_tier, run_summary_recorder.latest_run_summary)
 
 func _get_run_context() -> Node:
 	return get_node_or_null(RUN_CONTEXT_PATH)
+
+func _broadcast_run_outcome_if_needed(outcome: String, unlocked_tier: int, room_label: String, depth: int) -> void:
+	if not MultiplayerSessionManager.should_broadcast():
+		return
+	var stats_by_peer: Dictionary = run_summary_recorder.get_stats_by_peer()
+	if STAT_ATTRIBUTION_TRACE:
+		print_debug("[StatAttribution][OutcomeSend] outcome=%s stats=%s" % [outcome, str(stats_by_peer)])
+	_sync_run_outcome.rpc(
+		outcome,
+		unlocked_tier,
+		room_label,
+		depth,
+		run_summary_recorder.latest_run_summary,
+		stats_by_peer,
+		run_summary_recorder.get_latest_peer_summary_overrides()
+	)
 
 func _enqueue_leaderboard_submission(run_summary: Dictionary) -> void:
 	if run_summary.is_empty():
@@ -3736,10 +3749,7 @@ func _on_player_died() -> void:
 	var current_summary: Dictionary = run_summary_recorder.latest_run_summary
 	if current_summary.is_empty() or String(current_summary.get("outcome", "")) != "death":
 		run_summary_recorder.finish_run("death", run_summary_recorder.build_death_event_snapshot())
-	if MultiplayerSessionManager.should_broadcast():
-		if STAT_ATTRIBUTION_TRACE:
-			print_debug("[StatAttribution][OutcomeSend] outcome=death stats=%s" % str(run_summary_recorder.get_stats_by_peer()))
-		_sync_run_outcome.rpc("death", -1, current_room_label, room_depth, run_summary_recorder.latest_run_summary, run_summary_recorder.get_stats_by_peer(), run_summary_recorder.get_latest_peer_summary_overrides())
+	_broadcast_run_outcome_if_needed("death", -1, current_room_label, room_depth)
 	_show_defeat_feedback(current_room_label, room_depth, run_summary_recorder.latest_run_summary)
 
 func _show_victory_feedback(unlocked_tier: int, run_summary: Dictionary = {}) -> void:
