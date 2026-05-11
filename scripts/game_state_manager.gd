@@ -70,7 +70,8 @@ func _check_and_award_unlocks() -> void:
 		return
 
 	var current_tier: int = int(run_context.get_current_difficulty_tier())
-	var highest_unlocked: int = int(run_context.get_highest_unlocked_difficulty_tier())
+	var character_id := String(run_context.get_selected_character_id()).strip_edges().to_lower()
+	var highest_unlocked: int = int(run_context.get_character_highest_unlocked_difficulty_tier(character_id))
 
 	for entry in TIER_UNLOCK_CHAIN:
 		var required_tier: int = int(entry["required_tier"])
@@ -83,8 +84,9 @@ func _check_and_award_unlocks() -> void:
 		run_context.set_milestone(milestone, true)
 		emit_signal("milestone_achieved", milestone)
 		if highest_unlocked < unlocks_tier:
-			run_context.unlock_difficulty_tier(unlocks_tier)
+			run_context.unlock_difficulty_tier_for_character(character_id, unlocks_tier)
 			emit_signal("tier_unlocked", unlocks_tier)
+			highest_unlocked = unlocks_tier
 
 
 

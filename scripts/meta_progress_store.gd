@@ -8,7 +8,14 @@ const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
 const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 
 const META_PROGRESS_PATH := "user://meta_progress.save"
-const META_PROGRESS_VERSION := 3
+const META_PROGRESS_VERSION := 4
+
+const CHARACTER_UNLOCK_CHAIN := [
+	"bastion",
+	"hexweaver",
+	"veilstrider",
+	"riftlancer"
+]
 
 ## Endgame chase state (v3): see /memories/session/plan.md
 ## Ascension = stackable difficulty modifiers above Forsworn (per-character heat record).
@@ -37,11 +44,12 @@ static func _get_default_profile() -> Dictionary:
 		"last_modified_unix": int(Time.get_unix_time_from_system()),
 		"difficulty_state": {
 			"current_tier": BEARING_ENUMS.BearingTier.PILGRIM,
-			"highest_unlocked_tier": BEARING_ENUMS.BearingTier.PILGRIM
+			"highest_unlocked_tier": BEARING_ENUMS.BearingTier.PILGRIM,
+			"per_character": _default_per_character_difficulty_state()
 		},
 		"character_state": {
 			"selected_character_id": CHARACTER_REGISTRY.get_default_character_id(),
-			"unlocked_character_ids": CHARACTER_REGISTRY.get_launch_character_ids()
+			"unlocked_character_ids": [CHARACTER_REGISTRY.get_default_character_id()]
 		},
 		"milestones": {
 			"first_clear": false,
@@ -70,6 +78,16 @@ static func _get_default_profile() -> Dictionary:
 			"equipped_per_character": {}
 		}
 	}
+
+static func _default_per_character_difficulty_state() -> Dictionary:
+	var per_character: Dictionary = {}
+	for character_id in CHARACTER_UNLOCK_CHAIN:
+		if CHARACTER_REGISTRY.is_known_character_id(character_id):
+			per_character[character_id] = {"highest_unlocked_tier": BEARING_ENUMS.BearingTier.PILGRIM}
+	for character_id in CHARACTER_REGISTRY.get_launch_character_ids():
+		if not per_character.has(character_id):
+			per_character[character_id] = {"highest_unlocked_tier": BEARING_ENUMS.BearingTier.PILGRIM}
+	return per_character
 
 ## Load profile from disk; if missing or corrupted, return default
 static func load_meta_progress() -> Dictionary:
@@ -117,6 +135,8 @@ static func _migrate_profile(old_payload: Dictionary, old_version: int) -> Dicti
 		var old_state := old_payload["difficulty_state"] as Dictionary
 		migrated["difficulty_state"]["current_tier"] = int(old_state.get("current_tier", BEARING_ENUMS.BearingTier.PILGRIM))
 		migrated["difficulty_state"]["highest_unlocked_tier"] = int(old_state.get("highest_unlocked_tier", BEARING_ENUMS.BearingTier.PILGRIM))
+		if old_state.get("per_character") is Dictionary:
+			migrated["difficulty_state"]["per_character"] = (old_state.get("per_character") as Dictionary).duplicate(true)
 
 	if "milestones" in old_payload:
 		var old_milestones := old_payload["milestones"] as Dictionary
@@ -140,7 +160,7 @@ static func _migrate_profile(old_payload: Dictionary, old_version: int) -> Dicti
 				if CHARACTER_REGISTRY.is_known_character_id(id) and not unlocked.has(id):
 					unlocked.append(id)
 		if unlocked.is_empty():
-			unlocked = CHARACTER_REGISTRY.get_launch_character_ids()
+			unlocked = [CHARACTER_REGISTRY.get_default_character_id()]
 		migrated["character_state"]["unlocked_character_ids"] = unlocked
 		var selected: String = _normalize_character_id(old_character_state.get("selected_character_id", CHARACTER_REGISTRY.get_default_character_id()))
 		if not unlocked.has(selected):
@@ -193,6 +213,15 @@ static func _migrate_profile(old_payload: Dictionary, old_version: int) -> Dicti
 				equipped_clean[char_id] = list_clean
 			migrated["catalysts_state"]["equipped_per_character"] = equipped_clean
 
+	if old_version < 4:
+		var old_global_highest := int(migrated["difficulty_state"].get("highest_unlocked_tier", BEARING_ENUMS.BearingTier.PILGRIM))
+		var per_character_migrated: Dictionary = {}
+		for character_id in CHARACTER_REGISTRY.get_launch_character_ids():
+			per_character_migrated[character_id] = {"highest_unlocked_tier": old_global_highest}
+		migrated["difficulty_state"]["per_character"] = per_character_migrated
+
+	_ensure_difficulty_state_integrity(migrated)
+
 	migrated["version"] = META_PROGRESS_VERSION
 	return migrated
 
@@ -203,7 +232,7 @@ static func _get_character_state(profile: Dictionary) -> Dictionary:
 	if not ("character_state" in profile):
 		profile["character_state"] = {
 			"selected_character_id": CHARACTER_REGISTRY.get_default_character_id(),
-			"unlocked_character_ids": CHARACTER_REGISTRY.get_launch_character_ids()
+			"unlocked_character_ids": [CHARACTER_REGISTRY.get_default_character_id()]
 		}
 	return profile["character_state"] as Dictionary
 
@@ -216,14 +245,37 @@ static func get_unlocked_character_ids(profile: Dictionary) -> Array[String]:
 			var id: String = _normalize_character_id(id_value)
 			if CHARACTER_REGISTRY.is_known_character_id(id) and not unlocked.has(id):
 				unlocked.append(id)
-	var launch_ids: Array[String] = CHARACTER_REGISTRY.get_launch_character_ids()
-	for launch_id in launch_ids:
-		if not unlocked.has(launch_id):
-			unlocked.append(launch_id)
+	var default_character_id := CHARACTER_REGISTRY.get_default_character_id()
+	if not unlocked.has(default_character_id):
+		unlocked.append(default_character_id)
 	if unlocked.is_empty():
-		unlocked = launch_ids
+		unlocked = [default_character_id]
 	state["unlocked_character_ids"] = unlocked
 	return unlocked
+
+static func get_next_character_unlock_for_clear(profile: Dictionary, cleared_character_id: String) -> String:
+	var cleared: String = _normalize_character_id(cleared_character_id)
+	if cleared.is_empty():
+		return ""
+	var chain_index := CHARACTER_UNLOCK_CHAIN.find(cleared)
+	if chain_index < 0:
+		return ""
+	if chain_index + 1 >= CHARACTER_UNLOCK_CHAIN.size():
+		return ""
+	var next_character_id := String(CHARACTER_UNLOCK_CHAIN[chain_index + 1])
+	if not CHARACTER_REGISTRY.is_known_character_id(next_character_id):
+		return ""
+	if is_character_unlocked(profile, next_character_id):
+		return ""
+	return next_character_id
+
+static func unlock_next_character_for_clear(profile: Dictionary, cleared_character_id: String) -> String:
+	var next_character_id := get_next_character_unlock_for_clear(profile, cleared_character_id)
+	if next_character_id.is_empty():
+		return ""
+	if unlock_character(profile, next_character_id):
+		return next_character_id
+	return ""
 
 static func is_character_unlocked(profile: Dictionary, character_id: String) -> bool:
 	var normalized: String = _normalize_character_id(character_id)
@@ -263,20 +315,94 @@ static func set_selected_character_id(profile: Dictionary, character_id: String)
 	state["selected_character_id"] = normalized
 	return true
 
+static func _get_difficulty_state(profile: Dictionary) -> Dictionary:
+	if not ("difficulty_state" in profile) or not (profile["difficulty_state"] is Dictionary):
+		profile["difficulty_state"] = {
+			"current_tier": BEARING_ENUMS.BearingTier.PILGRIM,
+			"highest_unlocked_tier": BEARING_ENUMS.BearingTier.PILGRIM,
+			"per_character": _default_per_character_difficulty_state()
+		}
+	var state := profile["difficulty_state"] as Dictionary
+	if not (state.get("per_character") is Dictionary):
+		state["per_character"] = _default_per_character_difficulty_state()
+	_ensure_difficulty_state_integrity(profile)
+	return state
+
+static func _ensure_difficulty_state_integrity(profile: Dictionary) -> void:
+	if not ("difficulty_state" in profile) or not (profile["difficulty_state"] is Dictionary):
+		return
+	var state := profile["difficulty_state"] as Dictionary
+	if not (state.get("per_character") is Dictionary):
+		state["per_character"] = _default_per_character_difficulty_state()
+	var per_character := state["per_character"] as Dictionary
+	for character_id in CHARACTER_REGISTRY.get_launch_character_ids():
+		if not (per_character.get(character_id) is Dictionary):
+			per_character[character_id] = {"highest_unlocked_tier": BEARING_ENUMS.BearingTier.PILGRIM}
+		else:
+			var entry := per_character[character_id] as Dictionary
+			entry["highest_unlocked_tier"] = clampi(int(entry.get("highest_unlocked_tier", BEARING_ENUMS.BearingTier.PILGRIM)), BEARING_ENUMS.BearingTier.PILGRIM, BEARING_ENUMS.BearingTier.FORSWORN)
+	state["highest_unlocked_tier"] = _compute_global_highest_unlocked_tier(state)
+
+static func _compute_global_highest_unlocked_tier(state: Dictionary) -> int:
+	if not (state.get("per_character") is Dictionary):
+		return clampi(int(state.get("highest_unlocked_tier", BEARING_ENUMS.BearingTier.PILGRIM)), BEARING_ENUMS.BearingTier.PILGRIM, BEARING_ENUMS.BearingTier.FORSWORN)
+	var per_character := state["per_character"] as Dictionary
+	var highest := BEARING_ENUMS.BearingTier.PILGRIM
+	for character_id in per_character.keys():
+		if not (per_character[character_id] is Dictionary):
+			continue
+		var entry := per_character[character_id] as Dictionary
+		highest = maxi(highest, clampi(int(entry.get("highest_unlocked_tier", BEARING_ENUMS.BearingTier.PILGRIM)), BEARING_ENUMS.BearingTier.PILGRIM, BEARING_ENUMS.BearingTier.FORSWORN))
+	return highest
+
+static func get_character_highest_unlocked_tier(profile: Dictionary, character_id: String) -> int:
+	var normalized: String = _normalize_character_id(character_id)
+	if normalized.is_empty() or not CHARACTER_REGISTRY.is_known_character_id(normalized):
+		normalized = CHARACTER_REGISTRY.get_default_character_id()
+	var state := _get_difficulty_state(profile)
+	var per_character := state["per_character"] as Dictionary
+	if not (per_character.get(normalized) is Dictionary):
+		per_character[normalized] = {"highest_unlocked_tier": BEARING_ENUMS.BearingTier.PILGRIM}
+	var record := per_character[normalized] as Dictionary
+	return clampi(int(record.get("highest_unlocked_tier", BEARING_ENUMS.BearingTier.PILGRIM)), BEARING_ENUMS.BearingTier.PILGRIM, BEARING_ENUMS.BearingTier.FORSWORN)
+
+static func is_character_tier_unlocked(profile: Dictionary, character_id: String, tier: int) -> bool:
+	var target_tier := clampi(tier, BEARING_ENUMS.BearingTier.PILGRIM, BEARING_ENUMS.BearingTier.FORSWORN)
+	return get_character_highest_unlocked_tier(profile, character_id) >= target_tier
+
+static func unlock_character_tier(profile: Dictionary, character_id: String, tier: int) -> bool:
+	var normalized: String = _normalize_character_id(character_id)
+	if normalized.is_empty() or not CHARACTER_REGISTRY.is_known_character_id(normalized):
+		return false
+	var target_tier := clampi(tier, BEARING_ENUMS.BearingTier.PILGRIM, BEARING_ENUMS.BearingTier.FORSWORN)
+	var state := _get_difficulty_state(profile)
+	var per_character := state["per_character"] as Dictionary
+	if not (per_character.get(normalized) is Dictionary):
+		per_character[normalized] = {"highest_unlocked_tier": BEARING_ENUMS.BearingTier.PILGRIM}
+	var record := per_character[normalized] as Dictionary
+	var highest_for_character := clampi(int(record.get("highest_unlocked_tier", BEARING_ENUMS.BearingTier.PILGRIM)), BEARING_ENUMS.BearingTier.PILGRIM, BEARING_ENUMS.BearingTier.FORSWORN)
+	if target_tier <= highest_for_character:
+		return false
+	record["highest_unlocked_tier"] = target_tier
+	state["highest_unlocked_tier"] = _compute_global_highest_unlocked_tier(state)
+	return true
+
+static func set_current_tier_for_character(profile: Dictionary, character_id: String, tier: int) -> bool:
+	if not is_character_tier_unlocked(profile, character_id, tier):
+		return false
+	var state := _get_difficulty_state(profile)
+	state["current_tier"] = clampi(tier, BEARING_ENUMS.BearingTier.PILGRIM, BEARING_ENUMS.BearingTier.FORSWORN)
+	return true
+
 ## Check if a tier is unlocked (i.e., highest_unlocked_tier >= tier)
 static func is_tier_unlocked(profile: Dictionary, tier: int) -> bool:
-	if not ("difficulty_state" in profile):
-		return false
-	var state := profile["difficulty_state"] as Dictionary
+	var state := _get_difficulty_state(profile)
 	var highest := int(state.get("highest_unlocked_tier", BEARING_ENUMS.BearingTier.PILGRIM))
 	return highest >= tier
 
 ## Unlock a tier by raising highest_unlocked_tier if needed
 static func unlock_tier(profile: Dictionary, tier: int) -> bool:
-	if not ("difficulty_state" in profile):
-		return false
-	
-	var state := profile["difficulty_state"] as Dictionary
+	var state := _get_difficulty_state(profile)
 	var highest := int(state.get("highest_unlocked_tier", BEARING_ENUMS.BearingTier.PILGRIM))
 	
 	if tier > highest:
@@ -289,23 +415,18 @@ static func unlock_tier(profile: Dictionary, tier: int) -> bool:
 static func set_current_tier(profile: Dictionary, tier: int) -> bool:
 	if not is_tier_unlocked(profile, tier):
 		return false
-	
-	var state := profile["difficulty_state"] as Dictionary
+	var state := _get_difficulty_state(profile)
 	state["current_tier"] = tier
 	return true
 
 ## Get current selected tier
 static func get_current_tier(profile: Dictionary) -> int:
-	if not ("difficulty_state" in profile):
-		return BEARING_ENUMS.BearingTier.PILGRIM
-	var state := profile["difficulty_state"] as Dictionary
+	var state := _get_difficulty_state(profile)
 	return int(state.get("current_tier", BEARING_ENUMS.BearingTier.PILGRIM))
 
 ## Get highest unlocked tier
 static func get_highest_unlocked_tier(profile: Dictionary) -> int:
-	if not ("difficulty_state" in profile):
-		return BEARING_ENUMS.BearingTier.PILGRIM
-	var state := profile["difficulty_state"] as Dictionary
+	var state := _get_difficulty_state(profile)
 	return int(state.get("highest_unlocked_tier", BEARING_ENUMS.BearingTier.PILGRIM))
 
 ## Set a milestone flag

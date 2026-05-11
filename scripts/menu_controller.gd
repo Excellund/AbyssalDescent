@@ -569,11 +569,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed("ui_cancel") and difficulty_selector_panel != null and difficulty_selector_panel.visible:
-		_show_root_panel()
+		_show_character_selector()
 		get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed("ui_cancel") and character_selector_panel != null and character_selector_panel.visible:
-		_show_difficulty_selector()
+		_show_root_panel()
 		get_viewport().set_input_as_handled()
 
 func _build_ui() -> void:
@@ -1141,7 +1141,9 @@ func _show_multiplayer_panel() -> void:
 		multiplayer_host_button.grab_focus()
 
 func _show_difficulty_selector() -> void:
-	if root_panel != null and difficulty_selector_panel != null:
+	if character_selector_panel != null and character_selector_panel.visible and difficulty_selector_panel != null:
+		_animate_replace_transition(character_selector_panel, difficulty_selector_panel, Vector2(0.0, 24.0), Vector2(18.0, 0.0))
+	elif root_panel != null and difficulty_selector_panel != null:
 		_animate_replace_transition(root_panel, difficulty_selector_panel, Vector2(0.0, 24.0), Vector2(0.0, -18.0))
 	elif root_panel != null:
 		root_panel.visible = false
@@ -1161,8 +1163,6 @@ func _show_difficulty_selector() -> void:
 		character_selector_panel.visible = false
 
 func _show_character_selector() -> void:
-	if root_panel != null:
-		root_panel.visible = false
 	if options_panel != null:
 		options_panel.visible = false
 	if glossary_panel != null:
@@ -1173,8 +1173,10 @@ func _show_character_selector() -> void:
 		multiplayer_panel.visible = false
 	if leaderboard_panel != null:
 		leaderboard_panel.visible = false
-	if difficulty_selector_panel != null and character_selector_panel != null:
+	if difficulty_selector_panel != null and difficulty_selector_panel.visible and character_selector_panel != null:
 		_animate_replace_transition(difficulty_selector_panel, character_selector_panel, Vector2(0.0, 24.0), Vector2(-18.0, 0.0))
+	elif root_panel != null and character_selector_panel != null:
+		_animate_replace_transition(root_panel, character_selector_panel, Vector2(0.0, 24.0), Vector2(0.0, -18.0))
 	elif difficulty_selector_panel != null:
 		difficulty_selector_panel.visible = false
 	if character_selector_panel != null:
@@ -1865,7 +1867,7 @@ func _build_options_panel() -> Panel:
 
 	var back_button := _make_panel_back_button()
 	back_button.pressed.connect(func() -> void:
-		_show_root_panel()
+		_show_character_selector()
 	)
 	stack.add_child(back_button)
 
@@ -2200,9 +2202,8 @@ func _on_primary_run_pressed() -> void:
 		return
 	_clear_saved_run()
 	_set_run_mode(ENUMS.RunMode.STANDARD)
-	if difficulty_selector_panel != null:
-		_update_difficulty_selector()
-		_show_difficulty_selector()
+	if character_selector_panel != null:
+		_show_character_selector()
 
 func _on_continue_pressed() -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
@@ -2534,7 +2535,8 @@ func _update_difficulty_selector() -> void:
 	if run_context == null:
 		return
 	var current_tier: int = int(run_context.get_current_difficulty_tier())
-	var highest_unlocked_tier: int = int(run_context.get_highest_unlocked_difficulty_tier())
+	var selected_character_id := String(run_context.get_selected_character_id()).strip_edges().to_lower()
+	var highest_unlocked_tier: int = int(run_context.get_character_highest_unlocked_difficulty_tier(selected_character_id))
 	for i in range(difficulty_tier_buttons.size()):
 		var button := difficulty_tier_buttons[i]
 		var name_label := difficulty_tier_name_labels[i]
@@ -2566,8 +2568,9 @@ func _on_difficulty_tier_selected(tier: int) -> void:
 		return
 	
 	if run_context.set_difficulty_tier(tier):
-		difficulty_selector_panel.visible = false
-		_show_character_selector()
+		if difficulty_selector_panel != null:
+			difficulty_selector_panel.visible = false
+		get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)
 
 func _build_character_selector_panel() -> Panel:
 	var panel := Panel.new()
@@ -2734,7 +2737,7 @@ func _build_character_selector_panel() -> Panel:
 
 	var back_button := _make_panel_back_button()
 	back_button.pressed.connect(func() -> void:
-		_show_difficulty_selector()
+		_show_root_panel()
 	)
 	stack.add_child(back_button)
 
@@ -2780,9 +2783,8 @@ func _on_character_selected(character_id: String) -> void:
 	if run_context == null:
 		return
 	if run_context.set_selected_character_id(character_id):
-		if character_selector_panel != null:
-			character_selector_panel.visible = false
-		get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)
+		_update_difficulty_selector()
+		_show_difficulty_selector()
 
 func _on_random_vessel_pressed() -> void:
 	_on_character_selected(_resolve_random_character())

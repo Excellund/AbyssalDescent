@@ -5,6 +5,7 @@ const MODE_STANDARD := "standard"
 const MODE_ENDLESS := "endless"
 const SETTINGS_STORE := preload("res://scripts/settings_store.gd")
 const META_PROGRESS_STORE := preload("res://scripts/meta_progress_store.gd")
+const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 const CATALYST_REGISTRY := preload("res://scripts/progression/catalyst_registry.gd")
 const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
 const TELEMETRY_UPLOADER_SCRIPT := preload("res://scripts/telemetry_uploader.gd")
@@ -56,6 +57,7 @@ var meta_progress_profile: Dictionary = {}
 var current_difficulty_tier: int = BEARING_ENUMS.BearingTier.PILGRIM
 var highest_unlocked_difficulty_tier: int = BEARING_ENUMS.BearingTier.PILGRIM
 var just_unlocked_tier: int = -1  ## -1 means no new unlock, otherwise the newly unlocked tier
+var just_unlocked_character_id: String = ""
 var selected_character_id: String = "bastion"
 var unlocked_character_ids: Array[String] = []
 
@@ -354,6 +356,11 @@ func load_meta_progress() -> void:
 	current_difficulty_tier = META_PROGRESS_STORE.get_current_tier(meta_progress_profile)
 	highest_unlocked_difficulty_tier = META_PROGRESS_STORE.get_highest_unlocked_tier(meta_progress_profile)
 	selected_character_id = META_PROGRESS_STORE.get_selected_character_id(meta_progress_profile)
+	var selected_character_highest := META_PROGRESS_STORE.get_character_highest_unlocked_tier(meta_progress_profile, selected_character_id)
+	if current_difficulty_tier > selected_character_highest:
+		current_difficulty_tier = selected_character_highest
+		META_PROGRESS_STORE.set_current_tier(meta_progress_profile, current_difficulty_tier)
+		save_meta_progress()
 	var unlocked_before: Array[String] = []
 	var character_state_raw: Variant = meta_progress_profile.get("character_state", {})
 	if character_state_raw is Dictionary:
@@ -365,6 +372,7 @@ func load_meta_progress() -> void:
 	if unlocked_character_ids.size() != unlocked_before.size():
 		save_meta_progress()
 	just_unlocked_tier = -1
+	just_unlocked_character_id = ""
 
 func _ensure_profile_identity() -> bool:
 	var changed := false
@@ -452,7 +460,14 @@ func save_meta_progress() -> bool:
 
 ## Set the current difficulty tier (must be unlocked or same as current)
 func set_difficulty_tier(tier: int) -> bool:
-	if META_PROGRESS_STORE.set_current_tier(meta_progress_profile, tier):
+	return set_difficulty_tier_for_character(tier, get_selected_character_id())
+
+
+func set_difficulty_tier_for_character(tier: int, character_id: String = "") -> bool:
+	var target_character_id := character_id
+	if target_character_id.is_empty():
+		target_character_id = get_selected_character_id()
+	if META_PROGRESS_STORE.set_current_tier_for_character(meta_progress_profile, target_character_id, tier):
 		current_difficulty_tier = tier
 		return save_meta_progress()
 	return false
@@ -462,6 +477,16 @@ func set_difficulty_tier(tier: int) -> bool:
 func unlock_difficulty_tier(tier: int) -> bool:
 	var was_unlocked := META_PROGRESS_STORE.is_tier_unlocked(meta_progress_profile, tier)
 	if META_PROGRESS_STORE.unlock_tier(meta_progress_profile, tier):
+		highest_unlocked_difficulty_tier = META_PROGRESS_STORE.get_highest_unlocked_tier(meta_progress_profile)
+		if not was_unlocked:
+			just_unlocked_tier = tier
+		return save_meta_progress()
+	return false
+
+
+func unlock_difficulty_tier_for_character(character_id: String, tier: int) -> bool:
+	var was_unlocked := META_PROGRESS_STORE.is_character_tier_unlocked(meta_progress_profile, character_id, tier)
+	if META_PROGRESS_STORE.unlock_character_tier(meta_progress_profile, character_id, tier):
 		highest_unlocked_difficulty_tier = META_PROGRESS_STORE.get_highest_unlocked_tier(meta_progress_profile)
 		if not was_unlocked:
 			just_unlocked_tier = tier
@@ -479,9 +504,20 @@ func get_highest_unlocked_difficulty_tier() -> int:
 	return highest_unlocked_difficulty_tier
 
 
+func get_character_highest_unlocked_difficulty_tier(character_id: String = "") -> int:
+	var target_character_id := character_id
+	if target_character_id.is_empty():
+		target_character_id = get_selected_character_id()
+	return META_PROGRESS_STORE.get_character_highest_unlocked_tier(meta_progress_profile, target_character_id)
+
+
 ## Check if a tier is unlocked
 func is_difficulty_tier_unlocked(tier: int) -> bool:
-	return META_PROGRESS_STORE.is_tier_unlocked(meta_progress_profile, tier)
+	return META_PROGRESS_STORE.is_character_tier_unlocked(meta_progress_profile, get_selected_character_id(), tier)
+
+
+func is_character_difficulty_tier_unlocked(character_id: String, tier: int) -> bool:
+	return META_PROGRESS_STORE.is_character_tier_unlocked(meta_progress_profile, character_id, tier)
 
 
 func get_selected_character_id() -> String:
@@ -498,6 +534,10 @@ func get_unlocked_character_ids() -> Array[String]:
 func set_selected_character_id(character_id: String) -> bool:
 	if META_PROGRESS_STORE.set_selected_character_id(meta_progress_profile, character_id):
 		selected_character_id = META_PROGRESS_STORE.get_selected_character_id(meta_progress_profile)
+		var selected_highest := META_PROGRESS_STORE.get_character_highest_unlocked_tier(meta_progress_profile, selected_character_id)
+		if current_difficulty_tier > selected_highest:
+			current_difficulty_tier = selected_highest
+			META_PROGRESS_STORE.set_current_tier(meta_progress_profile, current_difficulty_tier)
 		return save_meta_progress()
 	return false
 
@@ -658,22 +698,49 @@ func consume_menu_music_resume_position() -> float:
 ## Award permanent difficulty unlocks for a completed run on the current tier.
 func award_run_clear_unlocks() -> int:
 	var unlocked_tier := -1
-	if not get_milestone("first_clear"):
-		set_milestone("first_clear", true)
-		if highest_unlocked_difficulty_tier < BEARING_ENUMS.BearingTier.DELVER and unlock_difficulty_tier(BEARING_ENUMS.BearingTier.DELVER):
-			unlocked_tier = BEARING_ENUMS.BearingTier.DELVER
-	if current_difficulty_tier == BEARING_ENUMS.BearingTier.DELVER and not get_milestone("first_clear_on_standard"):
-		set_milestone("first_clear_on_standard", true)
-		if highest_unlocked_difficulty_tier < BEARING_ENUMS.BearingTier.HARBINGER and unlock_difficulty_tier(BEARING_ENUMS.BearingTier.HARBINGER):
-			unlocked_tier = BEARING_ENUMS.BearingTier.HARBINGER
-	if current_difficulty_tier == BEARING_ENUMS.BearingTier.HARBINGER and not get_milestone("first_clear_on_veteran"):
-		set_milestone("first_clear_on_veteran", true)
-		if highest_unlocked_difficulty_tier < BEARING_ENUMS.BearingTier.FORSWORN and unlock_difficulty_tier(BEARING_ENUMS.BearingTier.FORSWORN):
-			unlocked_tier = BEARING_ENUMS.BearingTier.FORSWORN
+	just_unlocked_tier = -1
+	just_unlocked_character_id = ""
+	var changed := false
+	var character_id := get_selected_character_id()
+	if character_id.is_empty():
+		character_id = CHARACTER_REGISTRY.get_default_character_id()
+
+	if current_difficulty_tier <= BEARING_ENUMS.BearingTier.PILGRIM and not META_PROGRESS_STORE.get_milestone(meta_progress_profile, "first_clear"):
+		META_PROGRESS_STORE.set_milestone(meta_progress_profile, "first_clear", true)
+		changed = true
+	if current_difficulty_tier == BEARING_ENUMS.BearingTier.DELVER and not META_PROGRESS_STORE.get_milestone(meta_progress_profile, "first_clear_on_standard"):
+		META_PROGRESS_STORE.set_milestone(meta_progress_profile, "first_clear_on_standard", true)
+		changed = true
+	if current_difficulty_tier == BEARING_ENUMS.BearingTier.HARBINGER and not META_PROGRESS_STORE.get_milestone(meta_progress_profile, "first_clear_on_veteran"):
+		META_PROGRESS_STORE.set_milestone(meta_progress_profile, "first_clear_on_veteran", true)
+		changed = true
+
+	var next_tier := -1
+	if current_difficulty_tier <= BEARING_ENUMS.BearingTier.PILGRIM:
+		next_tier = BEARING_ENUMS.BearingTier.DELVER
+	elif current_difficulty_tier == BEARING_ENUMS.BearingTier.DELVER:
+		next_tier = BEARING_ENUMS.BearingTier.HARBINGER
+	elif current_difficulty_tier == BEARING_ENUMS.BearingTier.HARBINGER:
+		next_tier = BEARING_ENUMS.BearingTier.FORSWORN
+
+	if next_tier >= 0 and META_PROGRESS_STORE.unlock_character_tier(meta_progress_profile, character_id, next_tier):
+		highest_unlocked_difficulty_tier = META_PROGRESS_STORE.get_highest_unlocked_tier(meta_progress_profile)
+		just_unlocked_tier = next_tier
+		unlocked_tier = next_tier
+		changed = true
+
+	var newly_unlocked_character := META_PROGRESS_STORE.unlock_next_character_for_clear(meta_progress_profile, character_id)
+	if not newly_unlocked_character.is_empty():
+		just_unlocked_character_id = newly_unlocked_character
+		unlocked_character_ids = META_PROGRESS_STORE.get_unlocked_character_ids(meta_progress_profile)
+		changed = true
+
 	if current_difficulty_tier == BEARING_ENUMS.BearingTier.FORSWORN:
-		var character_id: String = get_selected_character_id()
 		if not character_id.is_empty() and META_PROGRESS_STORE.record_forsworn_clear(meta_progress_profile, character_id):
-			save_meta_progress()
+			changed = true
+
+	if changed:
+		save_meta_progress()
 	return unlocked_tier
 
 
@@ -681,6 +748,12 @@ func award_run_clear_unlocks() -> int:
 func consume_just_unlocked_tier() -> int:
 	var result := just_unlocked_tier
 	just_unlocked_tier = -1
+	return result
+
+
+func consume_just_unlocked_character_id() -> String:
+	var result := just_unlocked_character_id
+	just_unlocked_character_id = ""
 	return result
 
 

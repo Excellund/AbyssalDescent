@@ -1926,14 +1926,22 @@ func _finish_third_boss_clear() -> void:
 	hud.show_banner("Run Complete", "")
 	var run_context := _get_run_context()
 	var unlocked_tier := -1
+	var unlocked_character_id := ""
 	if run_context != null:
 		run_context.set_last_run_outcome("clear")
 		run_context.award_run_clear_unlocks()
 		unlocked_tier = int(run_context.consume_just_unlocked_tier())
+		unlocked_character_id = String(run_context.consume_just_unlocked_character_id()).strip_edges().to_lower()
 	if unlocked_tier >= 0:
 		var unlock_config := DIFFICULTY_CONFIG.get_tier_config(unlocked_tier)
 		if _run_summary_ready():
 			run_summary_recorder.record_unlock("Unlocked Bearing: %s" % String(unlock_config.get("name", "Unknown")))
+	if not unlocked_character_id.is_empty() and _run_summary_ready():
+		var unlocked_character_data := CHARACTER_REGISTRY.get_character(unlocked_character_id)
+		var unlocked_character_name := String(unlocked_character_data.get("name", unlocked_character_id.capitalize())).strip_edges()
+		if unlocked_character_name.is_empty():
+			unlocked_character_name = unlocked_character_id.capitalize()
+		run_summary_recorder.record_unlock("Unlocked Character: %s" % unlocked_character_name)
 	if _run_summary_ready():
 		run_summary_recorder.mark_full_clear_boss_credits()
 	_run_summary_finish_run("clear")
