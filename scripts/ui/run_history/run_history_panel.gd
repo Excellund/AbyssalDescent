@@ -81,7 +81,7 @@ func _build_ui(style_ref: Object) -> void:
 	_detail_panel = Panel.new()
 	_detail_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_detail_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	if style_ref != null and style_ref.has_method("_make_panel_style"):
+	if style_ref != null:
 		_detail_panel.add_theme_stylebox_override("panel", style_ref._make_panel_style(Color(0.03, 0.05, 0.08, 0.72), Color(0.26, 0.40, 0.58, 0.56), 12, 1))
 	else:
 		var s := StyleBoxFlat.new()

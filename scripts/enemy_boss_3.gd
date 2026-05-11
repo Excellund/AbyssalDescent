@@ -83,8 +83,8 @@ var impact_burst_time_left: float = 0.0
 var impact_burst_duration: float = 0.2
 var last_attack_for_fx: int = ATTACK_SEVER
 var seam_zones: Array[Dictionary] = []
-var _seam_overlay: Node2D = null
-var _attack_overlay: Node2D = null
+var _seam_overlay: LACUNA_SEAM_OVERLAY_SCRIPT = null
+var _attack_overlay: LACUNA_ATTACK_OVERLAY_SCRIPT = null
 var _hit_flash_pos: Vector2 = Vector2.ZERO
 var hit_flash_time_left: float = 0.0
 var hit_flash_duration: float = 0.3
@@ -157,9 +157,7 @@ func _sync_seam_overlay() -> void:
 	_ensure_seam_overlay()
 	if not is_instance_valid(_seam_overlay):
 		return
-	if not _seam_overlay.has_method("set_seam_state"):
-		return
-	_seam_overlay.call("set_seam_state", seam_zones, seam_radius, seam_duration)
+	_seam_overlay.set_seam_state(seam_zones, seam_radius, seam_duration)
 
 func _ensure_attack_overlay() -> void:
 	if is_instance_valid(_attack_overlay):
@@ -172,11 +170,9 @@ func _sync_attack_overlay() -> void:
 	_ensure_attack_overlay()
 	if not is_instance_valid(_attack_overlay):
 		return
-	if not _attack_overlay.has_method("set_telegraph_state"):
-		return
 	var show_telegraph := boss_state == STATE_WINDUP and (active_attack == ATTACK_SEVER or active_attack == ATTACK_ECHO_CROSS)
 	var overlay_origin := global_position if network_simulation_enabled else _telegraph_overlay_origin
-	_attack_overlay.call("set_telegraph_state", show_telegraph, active_attack, overlay_origin, telegraph_alpha, locked_direction, _echo_cross_angle, sever_speed, sever_duration, sever_width, echo_cross_length, echo_cross_width)
+	_attack_overlay.set_telegraph_state(show_telegraph, active_attack, overlay_origin, telegraph_alpha, locked_direction, _echo_cross_angle, sever_speed, sever_duration, sever_width, echo_cross_length, echo_cross_width)
 
 func _is_in_priority_attack_state() -> bool:
 	return boss_state == STATE_WINDUP or boss_state == STATE_ATTACK

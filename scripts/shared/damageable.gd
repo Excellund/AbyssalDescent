@@ -26,8 +26,6 @@ static func apply_damage(target: Object, amount: int, damage_context: Dictionary
 static func _read_target_health(target: Object) -> int:
 	if target == null:
 		return -1
-	if target.has_method("get_current_health"):
-		return int(target.call("get_current_health"))
 	var health_state_node := target.get("health_state") as Object
 	if health_state_node != null:
 		return int(health_state_node.get("current_health"))
@@ -59,10 +57,9 @@ static func _report_enemy_damage_applied(target: Object, health_before: int) -> 
 	var world := scene_tree.current_scene
 	if world == null:
 		return
-	if world.has_method("record_player_damage_dealt"):
-		if STAT_ATTRIBUTION_TRACE:
-			print_debug("[StatAttribution][LocalApply] peer=%d enemy_id=%d applied=%d killed=%s" % [source_peer_id, enemy_id, applied_amount, str(killed_enemy)])
-		world.call("record_player_damage_dealt", applied_amount, source_peer_id, killed_enemy, enemy_id)
+	if STAT_ATTRIBUTION_TRACE:
+		print_debug("[StatAttribution][LocalApply] peer=%d enemy_id=%d applied=%d killed=%s" % [source_peer_id, enemy_id, applied_amount, str(killed_enemy)])
+	world.record_player_damage_dealt(applied_amount, source_peer_id, killed_enemy, enemy_id)
 
 
 static func _resolve_local_peer_id() -> int:
@@ -110,7 +107,6 @@ static func _route_enemy_damage_to_host(target: Object, amount: int, damage_cont
 	var world := scene_tree.current_scene
 	if world == null:
 		return
-	if world.has_method("request_enemy_damage_from_client"):
-		if STAT_ATTRIBUTION_TRACE:
-			print_debug("[StatAttribution][RouteToHost] peer=%d enemy_id=%d amount=%d attack=%s" % [local_peer_id, enemy_id, amount, String(routed_context.get("attack_type", "unknown"))])
-		world.call("request_enemy_damage_from_client", enemy_id, amount, routed_context)
+	if STAT_ATTRIBUTION_TRACE:
+		print_debug("[StatAttribution][RouteToHost] peer=%d enemy_id=%d amount=%d attack=%s" % [local_peer_id, enemy_id, amount, String(routed_context.get("attack_type", "unknown"))])
+	world.request_enemy_damage_from_client(enemy_id, amount, routed_context)

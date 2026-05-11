@@ -63,7 +63,7 @@ func _ready() -> void:
 	if multiplayer_session_manager == null:
 		push_error("[LobbyController] MultiplayerSessionManager autoload is missing")
 		return
-	if bool(multiplayer_session_manager.is_host()) and multiplayer_session_manager.has_method("get_last_host_connectivity_warning"):
+	if bool(multiplayer_session_manager.is_host()):
 		_host_connectivity_warning = String(multiplayer_session_manager.get_last_host_connectivity_warning())
 
 	local_peer_id = int(multiplayer_session_manager.local_peer_id)
@@ -105,11 +105,11 @@ func _ready() -> void:
 	local_character_id = available_characters[0] if not available_characters.is_empty() else "bastion"
 	local_is_ready = false  ## Reset ready state when re-entering lobby
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
-	if run_context != null and run_context.has_method("get_profile_name_or_default"):
+	if run_context != null:
 		local_player_name = String(run_context.get_profile_name_or_default()).strip_edges()
 	if local_player_name.is_empty():
 		local_player_name = "Player"
-	if run_context != null and run_context.has_method("get_profile_uuid"):
+	if run_context != null:
 		local_player_uuid = String(run_context.get_profile_uuid()).strip_edges().to_lower()
 	_ensure_local_peer_state(local_character_id)
 	print("[Lobby] After _ensure_local_peer_state in _ready, peer_state: %s" % [str(peer_state)])
@@ -190,7 +190,7 @@ func _exit_tree() -> void:
 		return
 	if lobby_music_player != null and lobby_music_player.playing:
 		var run_context := get_node_or_null(RUN_CONTEXT_PATH)
-		if run_context != null and run_context.has_method("set_menu_music_resume_position"):
+		if run_context != null:
 			run_context.set_menu_music_resume_position(lobby_music_player.get_playback_position())
 		lobby_music_player.stop()
 
@@ -367,12 +367,12 @@ func _refresh_host_ascension_loadout(character_id: String) -> void:
 
 
 func _apply_ascension_loadout(loadout: Array) -> void:
-	var typed_loadout: Array[String] = []
+	var sanitized_loadout: Array[String] = []
 	for entry_variant in loadout:
 		var entry := String(entry_variant).strip_edges()
 		if not entry.is_empty():
-			typed_loadout.append(entry)
-	selected_ascension_loadout = typed_loadout
+			sanitized_loadout.append(entry)
+	selected_ascension_loadout = sanitized_loadout
 	_update_ascension_info_label()
 
 
@@ -484,7 +484,7 @@ func _disable_lobby_controls() -> void:
 
 func _leave_after_host_disconnect() -> void:
 	var run_context = get_node_or_null(RUN_CONTEXT_PATH)
-	if run_context != null and run_context.has_method("clear_multiplayer_session"):
+	if run_context != null:
 		run_context.clear_multiplayer_session()
 	if _embedded_in_menu:
 		emit_signal("leave_lobby_requested")
@@ -919,13 +919,12 @@ func _start_game(host_peer_id: int, session_identifier: String, difficulty_tier:
 		local_peer_id = int(multiplayer_session_manager.local_peer_id)
 	RunContext.set_multiplayer_session(session_identifier, local_peer_id == host_peer_id)
 	RunContext.set_multiplayer_difficulty_tier(difficulty_tier)
-	if RunContext.has_method("set_active_ascension_loadout"):
-		var typed_loadout: Array[String] = []
-		for entry_variant in ascension_loadout:
-			var entry := String(entry_variant).strip_edges()
-			if not entry.is_empty():
-				typed_loadout.append(entry)
-		RunContext.set_active_ascension_loadout(typed_loadout)
+	var sanitized_loadout: Array[String] = []
+	for entry_variant in ascension_loadout:
+		var entry := String(entry_variant).strip_edges()
+		if not entry.is_empty():
+			sanitized_loadout.append(entry)
+	RunContext.set_active_ascension_loadout(sanitized_loadout)
 	for peer_id_key in peer_state.keys():
 		var peer_id := int(peer_id_key)
 		var state := peer_state.get(peer_id_key, {}) as Dictionary
@@ -958,8 +957,7 @@ func _on_leave_lobby_pressed() -> void:
 	var run_context = get_node_or_null("/root/RunContext")
 	if run_context != null:
 		print("[Lobby] Calling RunContext.clear_multiplayer_session()")
-		if run_context.has_method("clear_multiplayer_session"):
-			run_context.clear_multiplayer_session()
+		run_context.clear_multiplayer_session()
 	else:
 		print("[Lobby] WARNING: RunContext not found")
 	
@@ -1133,7 +1131,7 @@ func _start_lobby_music() -> void:
 		return
 	var resume_position := 0.0
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
-	if run_context != null and run_context.has_method("consume_menu_music_resume_position"):
+	if run_context != null:
 		resume_position = float(run_context.consume_menu_music_resume_position())
 	lobby_music_player = AudioStreamPlayer.new()
 	lobby_music_player.stream = MENU_MUSIC

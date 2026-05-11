@@ -240,16 +240,16 @@ static func apply_trial_power_values(player_reference: Node, power_id: String, n
 			continue
 		
 		# Cast to correct type
-		var typed_value: Variant
+		var coerced_value: Variant
 		match param_type:
 			"int":
-				typed_value = int(param_value)
+				coerced_value = int(param_value)
 			"float":
-				typed_value = float(param_value)
+				coerced_value = float(param_value)
 			_:
-				typed_value = param_value
+				coerced_value = param_value
 		
-		player_reference.set(property_name, typed_value)
+		player_reference.set(property_name, coerced_value)
 	
 	return true
 

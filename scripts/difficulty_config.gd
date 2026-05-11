@@ -236,7 +236,7 @@ static func validate_multiplayer_config_sync(multiplayer_config: Node) -> Dictio
 	# Check encounter count consistency
 	var expected_encounter_count := get_base_encounter_count_before_boss()
 	for tier in get_base_progression_ranks().keys():
-		var mp_config = multiplayer_config.get_tier_config(tier) if multiplayer_config.has_method("get_tier_config") else {}
+		var mp_config := multiplayer_config.get_tier_config(tier)
 		var actual_encounter_count = mp_config.get("encounter_count_before_boss", -1)
 		
 		if actual_encounter_count != expected_encounter_count:
@@ -246,7 +246,7 @@ static func validate_multiplayer_config_sync(multiplayer_config: Node) -> Dictio
 	var expected_ranks := get_base_progression_ranks()
 	var actual_ranks := {}
 	for tier in expected_ranks.keys():
-		var mp_config = multiplayer_config.get_tier_config(tier) if multiplayer_config.has_method("get_tier_config") else {}
+		var mp_config := multiplayer_config.get_tier_config(tier)
 		actual_ranks[tier] = mp_config.get("difficulty_rank", -1)
 	
 	for tier in expected_ranks.keys():

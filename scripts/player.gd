@@ -4,11 +4,13 @@ const HEALTH_STATE_SCRIPT := preload("res://scripts/health_state.gd")
 const PLAYER_FEEDBACK_SCRIPT := preload("res://scripts/player_feedback.gd")
 const STATIC_WAKE_TRAIL_RENDERER_SCRIPT := preload("res://scripts/static_wake_trail_renderer.gd")
 const UPGRADE_SYSTEM_SCRIPT_PATH := "res://scripts/upgrade_system.gd"
+const UPGRADE_SYSTEM_SCRIPT := preload("res://scripts/upgrade_system.gd")
 const POWER_REGISTRY_SCRIPT := preload("res://scripts/power_registry.gd")
 const ENEMY_BASE := preload("res://scripts/enemy_base.gd")
 const PLAYER_IDENTITY_SILHOUETTE := preload("res://scripts/core/player_identity_silhouette.gd")
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
+const PLAYER_REPLICATION_SERVICE_SCRIPT := preload("res://scripts/player_replication_service.gd")
 const RUN_SNAPSHOT_VERSION := 1
 const EXECUTION_EDGE_PROC_DISPLAY_HOLD: float = 0.24
 const INDOMITABLE_OATH_FILL_REQUIREMENT: float = 52.0
@@ -191,9 +193,9 @@ var is_local_player: bool = true  ## Only local player processes input
 var encounter_input_frozen: bool = false
 
 var health_state
-var player_feedback
-var static_wake_trail_renderer: Node2D
-var upgrade_system
+var player_feedback: PLAYER_FEEDBACK_SCRIPT
+var static_wake_trail_renderer: STATIC_WAKE_TRAIL_RENDERER_SCRIPT
+var upgrade_system: UPGRADE_SYSTEM_SCRIPT
 var attack_anim_time_left: float = 0.0
 var attack_anim_duration: float = 0.12
 var visual_facing_direction: Vector2 = Vector2.RIGHT
@@ -866,11 +868,10 @@ func _broadcast_dash_phasing_state(active: bool) -> void:
 	var multiplayer_session_manager = get_node_or_null("/root/MultiplayerSessionManager")
 	if multiplayer_session_manager == null or not bool(multiplayer_session_manager.is_session_connected()):
 		return
-	var player_replication_service = get_node_or_null("/root/PlayerReplicationService")
+	var player_replication_service := get_node_or_null("/root/PlayerReplicationService") as PLAYER_REPLICATION_SERVICE_SCRIPT
 	if player_replication_service == null:
 		return
-	if player_replication_service.has_method("broadcast_dash_phasing_state"):
-		player_replication_service.broadcast_dash_phasing_state(player_id, active)
+	player_replication_service.broadcast_dash_phasing_state(player_id, active)
 
 func _sync_enemy_collision_exceptions() -> void:
 	var seen_ids: Dictionary = {}
@@ -1324,7 +1325,7 @@ func apply_run_snapshot(snapshot: Dictionary) -> void:
 	combo_relay_stacks = 0
 	combo_relay_stack_timer = 0.0
 	_eclipse_marked_enemies.clear()
-	if player_feedback != null and player_feedback.has_method("clear_all_eclipse_mark_decals"):
+	if player_feedback != null:
 		player_feedback.clear_all_eclipse_mark_decals()
 	_reset_dread_resonance_tracking()
 	void_heat = 0.0
@@ -1595,9 +1596,9 @@ func _on_cue_enemy_apply_slow(payload: Dictionary) -> void:
 	var slow_enemy_network_id := int(payload.get("enemy_network_id", -1))
 	var slow_duration := float(payload.get("duration", 0.0))
 	var slow_mult := float(payload.get("mult", 1.0))
-	var slow_enemy_node := _find_enemy_node_by_network_enemy_id(slow_enemy_network_id)
-	if slow_enemy_node != null and slow_enemy_node.has_method("apply_slow"):
-		slow_enemy_node.call("apply_slow", slow_duration, slow_mult)
+	var slow_enemy := _find_enemy_node_by_network_enemy_id(slow_enemy_network_id)
+	if slow_enemy != null:
+		slow_enemy.apply_slow(slow_duration, slow_mult)
 
 
 func _on_cue_fracture_field_fault_lines(payload: Dictionary) -> void:
@@ -1854,7 +1855,7 @@ func get_trial_power_stack_count(reward_id: String) -> int:
 	return upgrade_system.get_trial_power_stack_count(reward_id)
 
 func get_power_damage_model(power_id: String) -> Dictionary:
-	if upgrade_system != null and upgrade_system.has_method("get_power_damage_model"):
+	if upgrade_system != null:
 		return upgrade_system.get_power_damage_model(power_id)
 	return {
 		"kind": "none",
@@ -2047,7 +2048,7 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 	var sigil_chain_first_hit_pos := Vector2.ZERO
 	var sigil_chain_first_hit_logged := false
 	for hit_entry in cone_hits:
-		var enemy_body := hit_entry.get("enemy") as Node2D
+		var enemy_body := hit_entry.get("enemy") as ENEMY_BASE_SCRIPT
 		if enemy_body == null:
 			continue
 		var hit_position := hit_entry.get("hit_position", enemy_body.global_position) as Vector2
@@ -2215,11 +2216,12 @@ func _consume_riftpunch_bonus(source: String, hit_position: Vector2, enemy_node:
 	var impact_position := hit_position
 	if impact_position.distance_squared_to(global_position) < 4.0:
 		impact_position = global_position + facing.normalized() * maxf(28.0, attack_range * 0.6)
-	if riftpunch_stacks >= 2 and is_instance_valid(enemy_node) and enemy_node.has_method("apply_slow"):
-		var riftpunch_slow_duration := 0.6 * _global_slow_duration_mult()
-		enemy_node.apply_slow(riftpunch_slow_duration, 0.6)
-		if enemy_node is Node2D:
-			var slow_target_network_id := int((enemy_node as Node2D).get_meta("network_enemy_id", -1))
+	if riftpunch_stacks >= 2 and is_instance_valid(enemy_node):
+		var riftpunch_target := enemy_node as ENEMY_BASE_SCRIPT
+		if riftpunch_target != null:
+			var riftpunch_slow_duration := 0.6 * _global_slow_duration_mult()
+			riftpunch_target.apply_slow(riftpunch_slow_duration, 0.6)
+			var slow_target_network_id := int(riftpunch_target.get_meta("network_enemy_id", -1))
 			if slow_target_network_id > 0:
 				_broadcast_cue_event("enemy_apply_slow", {
 					"enemy_network_id": slow_target_network_id,
@@ -2309,7 +2311,7 @@ func clear_lingering_combat_effects() -> void:
 	void_dash_reset_pulse_left = 0.0
 	execution_edge_proc_display_left = 0.0
 	_eclipse_marked_enemies.clear()
-	if player_feedback != null and player_feedback.has_method("clear_all_eclipse_mark_decals"):
+	if player_feedback != null:
 		player_feedback.clear_all_eclipse_mark_decals()
 	_reset_dread_resonance_tracking()
 	_reaper_chain_window_left = 0.0
@@ -2326,7 +2328,7 @@ func clear_lingering_combat_effects() -> void:
 	void_echo_zones.clear()
 	apex_momentum_stacks = 0
 	apex_momentum_stack_left = 0.0
-	if player_feedback != null and player_feedback.has_method("clear_boss_tempo_state"):
+	if player_feedback != null:
 		player_feedback.clear_boss_tempo_state()
 	convergence_surge_hit_counter = 0
 	convergence_window_left = 0.0
@@ -2376,7 +2378,9 @@ func _apply_rupture_wave(epicenter: Vector2, source_damage: int, rupture_hit_ene
 			continue
 		if not DAMAGEABLE.can_take_damage(enemy_node):
 			continue
-		var enemy_body := enemy_node as Node2D
+		var enemy_body := enemy_node as ENEMY_BASE_SCRIPT
+		if enemy_body == null:
+			continue
 		var distance_to_epicenter := enemy_body.global_position.distance_to(epicenter)
 		if distance_to_epicenter > wave_radius:
 			continue
@@ -2386,7 +2390,7 @@ func _apply_rupture_wave(epicenter: Vector2, source_damage: int, rupture_hit_ene
 		rupture_hit_enemy_ids[enemy_id] = true
 		var rupture_total_damage := wave_damage + _hunters_snare_aoe_bonus_against(enemy_body)
 		DAMAGEABLE.apply_damage(enemy_node, rupture_total_damage, {"is_ground_attack": true, "attack_type": "rupture_wave"})
-		if apply_slow and enemy_body.has_method("apply_slow"):
+		if apply_slow:
 			var rupture_slow_duration := 0.4 * _global_slow_duration_mult()
 			enemy_body.apply_slow(rupture_slow_duration, 0.75)
 			var rupture_slow_network_id := int(enemy_body.get_meta("network_enemy_id", -1))
@@ -2840,17 +2844,17 @@ func _update_static_wake_trails(delta: float) -> void:
 		for trail in static_wake_trails:
 			var trail_pos: Vector2 = trail["pos"]
 			for enemy_node in get_tree().get_nodes_in_group("enemies"):
-				if not (enemy_node is Node2D):
-					continue
 				if not DAMAGEABLE.can_take_damage(enemy_node):
 					continue
-				var enemy_body := enemy_node as Node2D
+				var enemy_body := enemy_node as ENEMY_BASE_SCRIPT
+				if enemy_body == null:
+					continue
 				if enemy_body.global_position.distance_to(trail_pos) <= wake_radius:
 					var wake_tick_damage := maxi(1, int(round(float(static_wake_damage) * delta * 6.0)))
 					wake_tick_damage = _apply_objective_mutator_damage_mult(wake_tick_damage)
 					wake_tick_damage += _hunters_snare_aoe_bonus_against(enemy_body)
 					DAMAGEABLE.apply_damage(enemy_node, wake_tick_damage)
-					if wake_apply_slow and enemy_body.has_method("is_slowed") and not bool(enemy_body.is_slowed()) and enemy_body.has_method("apply_slow"):
+					if wake_apply_slow and not enemy_body.is_slowed():
 						var wake_slow_duration := 0.3 * _global_slow_duration_mult()
 						enemy_body.apply_slow(wake_slow_duration, 0.8)
 						var wake_slow_network_id := int(enemy_body.get_meta("network_enemy_id", -1))
@@ -3060,8 +3064,7 @@ func _create_static_wake_trail_renderer() -> void:
 func _sync_static_wake_trail_renderer() -> void:
 	if static_wake_trail_renderer == null:
 		return
-	if static_wake_trail_renderer.has_method("set_trails"):
-		static_wake_trail_renderer.call("set_trails", static_wake_trails, static_wake_lifetime)
+	static_wake_trail_renderer.set_trails(static_wake_trails, static_wake_lifetime)
 
 
 func _exit_tree() -> void:
@@ -3274,7 +3277,7 @@ func _activate_iron_retort_brace(feedback_position: Vector2) -> void:
 	iron_retort_brace_build_left = iron_retort_brace_build_time
 	iron_retort_brace_window_left = iron_retort_brace_window_duration
 	queue_redraw()
-	if player_feedback != null and player_feedback.has_method("play_iron_retort_window_open"):
+	if player_feedback != null:
 		player_feedback.play_iron_retort_window_open(feedback_position)
 		_broadcast_cue_event("iron_retort_window_open", {"position": feedback_position})
 
@@ -3290,7 +3293,7 @@ func _consume_iron_retort_brace(player_position: Vector2, impact_position: Vecto
 	iron_retort_brace_build_left = 0.0
 	iron_retort_brace_window_left = 0.0
 	queue_redraw()
-	if player_feedback != null and player_feedback.has_method("play_iron_retort_consume"):
+	if player_feedback != null:
 		player_feedback.play_iron_retort_consume(player_position, impact_position)
 		_broadcast_cue_event("iron_retort_consume", {
 			"player_position": player_position,
@@ -3338,7 +3341,7 @@ func _trigger_voidfire_detonation() -> void:
 	var det_damage := maxi(1, int(round(float(damage) * voidfire_detonate_ratio)))
 	det_damage = _apply_objective_mutator_damage_mult(det_damage)
 	var overheat_lockout := voidfire_lockout_duration
-	if is_instance_valid(upgrade_system) and upgrade_system.has_method("get_trial_runtime_values"):
+	if is_instance_valid(upgrade_system):
 		var voidfire_values: Dictionary = upgrade_system.get_trial_runtime_values("voidfire")
 		overheat_lockout = float(voidfire_values.get("lockout_duration", overheat_lockout))
 		voidfire_lockout_duration = overheat_lockout
@@ -3410,8 +3413,6 @@ func _update_voidfire_lockout(delta: float) -> void:
 func _sync_voidfire_ui() -> void:
 	if player_feedback == null:
 		return
-	if not player_feedback.has_method("update_voidfire_heat_bar"):
-		return
 	if not _is_local_control_owner():
 		return
 	var danger_ratio := clampf(voidfire_danger_zone_threshold / maxf(1.0, void_heat_cap), 0.0, 1.0)
@@ -3438,8 +3439,6 @@ func _maybe_broadcast_voidfire_ui_state(danger_ratio: float, force: bool = false
 
 func _sync_oath_ui() -> void:
 	if player_feedback == null:
-		return
-	if not player_feedback.has_method("update_oath_bank_bar"):
 		return
 	if not _is_local_control_owner():
 		return
@@ -3487,9 +3486,10 @@ func _update_dread_resonance_target(enemy_node: Object, enemy_id: int) -> void:
 func _push_dread_resonance_visual(enemy_node: Object, stack_count: int, peak_flash: bool) -> void:
 	if not is_instance_valid(enemy_node):
 		return
-	if not enemy_node.has_method("set_dread_resonance_visual"):
+	var dread_target := enemy_node as ENEMY_BASE_SCRIPT
+	if dread_target == null:
 		return
-	enemy_node.call("set_dread_resonance_visual", stack_count, dread_resonance_max_stacks, peak_flash)
+	dread_target.set_dread_resonance_visual(stack_count, dread_resonance_max_stacks, peak_flash)
 
 func _clear_dread_resonance_visual_for_enemy_id(enemy_id: int) -> void:
 	if enemy_id < 0:
@@ -3497,8 +3497,9 @@ func _clear_dread_resonance_visual_for_enemy_id(enemy_id: int) -> void:
 	var enemy_node := _find_enemy_node_by_instance_id(enemy_id)
 	if not is_instance_valid(enemy_node):
 		return
-	if enemy_node.has_method("clear_dread_resonance_visual"):
-		enemy_node.call("clear_dread_resonance_visual")
+	var dread_clear_target := enemy_node as ENEMY_BASE_SCRIPT
+	if dread_clear_target != null:
+		dread_clear_target.clear_dread_resonance_visual()
 
 func _find_enemy_node_by_instance_id(enemy_id: int) -> Object:
 	if enemy_id < 0:
@@ -3510,13 +3511,13 @@ func _find_enemy_node_by_instance_id(enemy_id: int) -> Object:
 			return enemy_node
 	return null
 
-func _find_enemy_node_by_network_enemy_id(network_enemy_id: int) -> Node2D:
+func _find_enemy_node_by_network_enemy_id(network_enemy_id: int) -> ENEMY_BASE_SCRIPT:
 	if network_enemy_id <= 0:
 		return null
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
-		if not (enemy_node is Node2D):
+		var enemy_body := enemy_node as ENEMY_BASE_SCRIPT
+		if enemy_body == null:
 			continue
-		var enemy_body := enemy_node as Node2D
 		if int(enemy_body.get_meta("network_enemy_id", -1)) == network_enemy_id:
 			return enemy_body
 	return null
@@ -3556,7 +3557,7 @@ func _get_farline_volley_bonus() -> int:
 		return 0
 	return farline_volley_bonus_per_stack * _farline_volley_current_stacks
 
-func _on_farline_volley_outer_hit(enemy_body: Node2D) -> void:
+func _on_farline_volley_outer_hit(enemy_body: ENEMY_BASE_SCRIPT) -> void:
 	if not reward_farline_volley:
 		return
 	var cap := maxi(1, farline_volley_stack_cap)
@@ -3565,7 +3566,7 @@ func _on_farline_volley_outer_hit(enemy_body: Node2D) -> void:
 	if was_below_cap:
 		_farline_volley_proc_flash_left = 0.18
 		queue_redraw()
-	if farline_volley_stacks >= 2 and _farline_volley_current_stacks >= maxi(2, int(cap / 2.0)) and is_instance_valid(enemy_body) and enemy_body.has_method("apply_slow"):
+	if farline_volley_stacks >= 2 and _farline_volley_current_stacks >= maxi(2, int(cap / 2.0)) and is_instance_valid(enemy_body):
 		var volley_slow_duration := FARLINE_VOLLEY_SLOW_DURATION * _global_slow_duration_mult()
 		enemy_body.apply_slow(volley_slow_duration, FARLINE_VOLLEY_SLOW_MULT)
 		var volley_target_network_id := int(enemy_body.get_meta("network_enemy_id", -1))
@@ -3738,15 +3739,15 @@ func _apply_sigil_chain_zone_tick(zone: Dictionary) -> void:
 	var radius_squared := radius * radius
 	var apply_slow := sigil_chain_stacks >= 2
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
-		if not (enemy_node is Node2D):
-			continue
 		if not DAMAGEABLE.can_take_damage(enemy_node):
 			continue
-		var enemy_body := enemy_node as Node2D
+		var enemy_body := enemy_node as ENEMY_BASE_SCRIPT
+		if enemy_body == null:
+			continue
 		if enemy_body.global_position.distance_squared_to(zone_pos) > radius_squared:
 			continue
 		DAMAGEABLE.apply_damage(enemy_node, tick_damage, {"is_ground_attack": true, "attack_type": "sigil_chain_zone"})
-		if apply_slow and enemy_body.has_method("apply_slow"):
+		if apply_slow:
 			var sigil_slow_duration := SIGIL_CHAIN_SLOW_DURATION * _global_slow_duration_mult()
 			enemy_body.apply_slow(sigil_slow_duration, SIGIL_CHAIN_SLOW_MULT)
 			var sigil_target_network_id := int(enemy_body.get_meta("network_enemy_id", -1))
@@ -3806,12 +3807,12 @@ func _get_apex_predator_bonus(enemy_node: Object, hit_position: Vector2, base_da
 	var cadence := 4
 	var cadence_step := ((apex_predator_combo_hits - 1) % cadence) + 1
 	var enemy_pos := (enemy_node as Node2D).global_position
-	if player_feedback != null and player_feedback.has_method("play_boss_predator_mark"):
+	if player_feedback != null:
 		player_feedback.play_boss_predator_mark(enemy_pos, cadence_step, cadence)
 	var per_hit_bonus := maxi(1, int(round(float(apex_predator_bonus_damage) * (0.22 + float(cadence_step) * 0.12))))
 	if cadence_step < cadence:
 		return per_hit_bonus
-	if player_feedback != null and player_feedback.has_method("play_boss_predator_burst"):
+	if player_feedback != null:
 		player_feedback.play_boss_predator_burst(hit_position)
 	_trigger_apex_predator_burst(hit_position, (enemy_node as Node2D).get_instance_id(), base_damage)
 	return per_hit_bonus + maxi(1, int(round(float(base_damage) * 0.42)))
@@ -3828,7 +3829,7 @@ func _get_void_echo_zone_bonus(enemy_node: Object, base_damage: int) -> int:
 		var zone_pos: Vector2 = zone.get("pos", Vector2.ZERO)
 		var radius: float = float(zone.get("radius", 0.0))
 		if enemy_pos.distance_to(zone_pos) <= radius:
-			if player_feedback != null and player_feedback.has_method("play_boss_void_zone_empowered_hit"):
+			if player_feedback != null:
 				player_feedback.play_boss_void_zone_empowered_hit(enemy_pos)
 				_broadcast_cue_event("boss_void_zone_empowered_hit", {"position": enemy_pos})
 			return maxi(1, int(round(float(base_damage) * (0.14 + float(void_echo_damage) * 0.0015))))
@@ -3863,7 +3864,7 @@ func _gain_indomitable_oath_from_hit(enemy_node: Object, source: String) -> void
 	if not _indomitable_spirit_primed and indomitable_damage_bank >= bank_cap - 0.01:
 		_indomitable_spirit_primed = true
 		_indomitable_primed_this_attack = true
-	if player_feedback != null and player_feedback.has_method("play_boss_unbroken_bank_gain"):
+	if player_feedback != null:
 		var bank_ratio := clampf(indomitable_damage_bank / bank_cap, 0.0, 1.0)
 		player_feedback.play_boss_unbroken_bank_gain(global_position, bank_ratio)
 		_broadcast_cue_event("unbroken_oath_bank_gain", {
@@ -3883,7 +3884,7 @@ func _consume_indomitable_spirit_bonus(hit_position: Vector2) -> int:
 	_indomitable_spirit_primed = false
 	indomitable_damage_bank = 0.0
 	var ratio := (1.8 + indomitable_spirit_damage_reduction * 2.2 + spend * 0.009) * INDOMITABLE_OATH_DAMAGE_SCALE
-	if player_feedback != null and player_feedback.has_method("play_boss_unbroken_retaliation"):
+	if player_feedback != null:
 		player_feedback.play_boss_unbroken_retaliation(global_position, hit_position, ratio)
 		_broadcast_cue_event("unbroken_oath_retaliation", {
 			"player_position": global_position,
@@ -3901,14 +3902,14 @@ func _register_apex_momentum_hit() -> void:
 		return
 	apex_momentum_stacks = mini(apex_momentum_max_stacks, apex_momentum_stacks + 1)
 	apex_momentum_stack_left = apex_momentum_stack_duration
-	if player_feedback != null and player_feedback.has_method("play_boss_tempo_stack"):
+	if player_feedback != null:
 		player_feedback.play_boss_tempo_stack(global_position, apex_momentum_stacks, apex_momentum_max_stacks)
 		_broadcast_cue_event("boss_tempo_stack", {
 			"position": global_position,
 			"stacks": apex_momentum_stacks,
 			"max_stacks": apex_momentum_max_stacks
 		})
-	if player_feedback != null and player_feedback.has_method("update_boss_tempo_state"):
+	if player_feedback != null:
 		player_feedback.update_boss_tempo_state(apex_momentum_stacks, apex_momentum_max_stacks, apex_momentum_stack_left, apex_momentum_stack_duration)
 		_broadcast_cue_event("boss_tempo_state", {
 			"stacks": apex_momentum_stacks,
@@ -3919,16 +3920,16 @@ func _register_apex_momentum_hit() -> void:
 
 func _update_apex_momentum(delta: float) -> void:
 	if apex_momentum_stacks <= 0:
-		if player_feedback != null and player_feedback.has_method("clear_boss_tempo_state"):
+		if player_feedback != null:
 			player_feedback.clear_boss_tempo_state()
 			_broadcast_cue_event("boss_tempo_clear", {"clear": true})
 		return
 	apex_momentum_stack_left = maxf(0.0, apex_momentum_stack_left - delta)
-	if player_feedback != null and player_feedback.has_method("update_boss_tempo_state"):
+	if player_feedback != null:
 		player_feedback.update_boss_tempo_state(apex_momentum_stacks, apex_momentum_max_stacks, apex_momentum_stack_left, apex_momentum_stack_duration)
 	if apex_momentum_stack_left <= 0.0:
 		apex_momentum_stacks = 0
-		if player_feedback != null and player_feedback.has_method("clear_boss_tempo_state"):
+		if player_feedback != null:
 			player_feedback.clear_boss_tempo_state()
 			_broadcast_cue_event("boss_tempo_clear", {"clear": true})
 
@@ -3938,7 +3939,7 @@ func _release_apex_momentum_dash_wave(epicenter: Vector2) -> void:
 	var stacks := apex_momentum_stacks
 	apex_momentum_stacks = 0
 	apex_momentum_stack_left = 0.0
-	if player_feedback != null and player_feedback.has_method("clear_boss_tempo_state"):
+	if player_feedback != null:
 		player_feedback.clear_boss_tempo_state()
 		_broadcast_cue_event("boss_tempo_clear", {"clear": true})
 	var slash_radius := 68.0 + 20.0 * float(stacks)
@@ -3957,7 +3958,7 @@ func _release_apex_momentum_dash_wave(epicenter: Vector2) -> void:
 		hit_any = true
 	if hit_any:
 		dash_cooldown_left = maxf(0.0, dash_cooldown_left - 0.12 * float(stacks))
-	if player_feedback != null and player_feedback.has_method("play_boss_tempo_dash_wave"):
+	if player_feedback != null:
 		player_feedback.play_boss_tempo_dash_wave(epicenter, slash_radius, hit_any, stacks, apex_momentum_max_stacks)
 		_broadcast_cue_event("boss_tempo_dash_wave", {
 			"position": epicenter,
@@ -3984,7 +3985,7 @@ func _update_void_echo_zones(delta: float) -> void:
 			var zone_pos: Vector2 = zone.get("pos", Vector2.ZERO)
 			var radius := float(zone.get("radius", 0.0))
 			var pulse_damage := _apply_objective_mutator_damage_mult(maxi(1, int(round(float(void_echo_damage) * 0.28 + float(damage) * 0.13))))
-			if player_feedback != null and player_feedback.has_method("play_boss_void_zone_pulse"):
+			if player_feedback != null:
 				player_feedback.play_boss_void_zone_pulse(zone_pos, radius)
 				_broadcast_cue_event("boss_void_zone_pulse", {"position": zone_pos, "radius": radius})
 			_void_echo_pulse_kill_suppression_depth += 1
@@ -4033,7 +4034,7 @@ func _update_convergence_window(delta: float) -> void:
 	convergence_pulse_cooldown = maxf(0.14, 0.3 - convergence_surge_damage_ratio * 0.25)
 	var pulse_radius := clampf(92.0 + 120.0 * convergence_surge_damage_ratio, 92.0, 250.0)
 	var pulse_damage := _apply_objective_mutator_damage_mult(maxi(1, int(round(float(damage) * (0.28 + convergence_surge_damage_ratio * 0.8)))))
-	if player_feedback != null and player_feedback.has_method("play_boss_convergence_pulse"):
+	if player_feedback != null:
 		player_feedback.play_boss_convergence_pulse(global_position, pulse_radius)
 		_broadcast_cue_event("boss_convergence_pulse", {
 			"position": global_position,
@@ -4067,9 +4068,8 @@ func _apply_void_echo(kill_pos: Vector2) -> void:
 		if void_echo_zones.size() > 1:
 			void_echo_zones.resize(1)
 	if player_feedback != null:
-		if player_feedback.has_method("play_boss_void_zone_spawn"):
-			player_feedback.play_boss_void_zone_spawn(kill_pos, echo_radius)
-			_broadcast_cue_event("boss_void_zone_spawn", {"position": kill_pos, "radius": echo_radius})
+		player_feedback.play_boss_void_zone_spawn(kill_pos, echo_radius)
+		_broadcast_cue_event("boss_void_zone_spawn", {"position": kill_pos, "radius": echo_radius})
 
 func _try_apply_convergence_surge(epicenter: Vector2, _source_damage: int, _primary_enemy_id: int) -> void:
 	if convergence_surge_damage_ratio <= 0.0:
@@ -4086,7 +4086,7 @@ func _try_apply_convergence_surge(epicenter: Vector2, _source_damage: int, _prim
 	convergence_pulse_cooldown = 0.0
 	var dash_refund := 0.12 + 0.24 * convergence_surge_damage_ratio
 	dash_cooldown_left = maxf(0.0, dash_cooldown_left - dash_refund)
-	if player_feedback != null and player_feedback.has_method("play_boss_convergence_start"):
+	if player_feedback != null:
 		player_feedback.play_boss_convergence_start(epicenter, convergence_surge_damage_ratio)
 		_broadcast_cue_event("boss_convergence_start", {
 			"position": epicenter,
@@ -4112,8 +4112,7 @@ func _apply_eclipse_mark(kill_pos: Vector2) -> void:
 		_eclipse_marked_enemies[enemy_id] = {"expiry": expiry, "node": enemy_body, "hits_left": _eclipse_mark_hits_per_enemy()}
 		if player_feedback != null:
 			player_feedback.play_world_ring(enemy_body.global_position, 20.0, Color(0.14, 0.94, 0.62, 0.86), 0.18)
-			if player_feedback.has_method("show_eclipse_mark_decal"):
-				player_feedback.show_eclipse_mark_decal(enemy_body, eclipse_mark_duration)
+			player_feedback.show_eclipse_mark_decal(enemy_body, eclipse_mark_duration)
 
 func _update_eclipse_marks() -> void:
 	if _eclipse_marked_enemies.is_empty():
@@ -4126,7 +4125,7 @@ func _update_eclipse_marks() -> void:
 		var is_expired := float(entry.get("expiry", 0.0)) <= now
 		var is_invalid := not (is_instance_valid(node_variant) and node_variant is Node)
 		if is_expired or is_invalid:
-			if is_instance_valid(node_variant) and player_feedback != null and player_feedback.has_method("clear_eclipse_mark_decal"):
+			if is_instance_valid(node_variant) and player_feedback != null:
 				player_feedback.clear_eclipse_mark_decal(node_variant)
 			expired_ids.append(enemy_id)
 	for enemy_id in expired_ids:
@@ -4143,7 +4142,7 @@ func _consume_eclipse_mark_bonus(enemy_node: Object, base_damage: int) -> int:
 	var mark_entry: Dictionary = _eclipse_marked_enemies[enemy_id] as Dictionary
 	var hits_left := int(mark_entry.get("hits_left", 1)) - 1
 	if hits_left <= 0:
-		if player_feedback != null and player_feedback.has_method("clear_eclipse_mark_decal"):
+		if player_feedback != null:
 			player_feedback.clear_eclipse_mark_decal(enemy_node)
 		_eclipse_marked_enemies.erase(enemy_id)
 	else:
@@ -4166,7 +4165,7 @@ func _apply_fracture_field(kill_pos: Vector2) -> void:
 	var beam_width := 12.0 + float(maxi(0, fracture_field_stacks - 1)) * 2.0
 	var base_angle := randf_range(0.0, TAU)
 
-	if player_feedback != null and player_feedback.has_method("play_fracture_field_fault_lines"):
+	if player_feedback != null:
 		player_feedback.play_fracture_field_fault_lines(kill_pos, fracture_field_radius, beam_count, base_angle, beam_width)
 		_broadcast_cue_event("fracture_field_fault_lines", {
 			"position": kill_pos,

@@ -19,6 +19,9 @@ const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 const META_PROGRESS_STORE := preload("res://scripts/meta_progress_store.gd")
 const OATHS_EVALUATOR := preload("res://scripts/progression/oaths_evaluator.gd")
+const PLAYER_SCRIPT := preload("res://scripts/player.gd")
+const RUN_CONTEXT_SCRIPT := preload("res://scripts/run_context.gd")
+const OBJECTIVE_MANAGER_SCRIPT := preload("res://scripts/objective_manager.gd")
 
 const STAT_ATTRIBUTION_TRACE := false
 
@@ -148,7 +151,7 @@ func reset_summary_tracker() -> void:
 	if _world.current_player_profile != null and _world.current_player_profile.is_valid():
 		tracker_seed["player_uuid"] = _world.current_player_profile.player_id
 		tracker_seed["player_name"] = _world.current_player_profile.profile_name
-	if run_context != null and run_context.has_method("get_active_ascension_loadout"):
+	if run_context != null:
 		var loadout: Array = run_context.get_active_ascension_loadout()
 		tracker_seed["ascension_loadout"] = loadout
 		var ASCENSION_REGISTRY := preload("res://scripts/progression/ascension_modifier_registry.gd")
@@ -158,11 +161,12 @@ func reset_summary_tracker() -> void:
 		tracker_seed["equipped_catalyst_ids"] = META_PROGRESS.get_equipped_catalyst_ids(run_context.meta_progress_profile, character_id)
 	run_summary_tracker.reset_for_run(tracker_seed)
 	for player_node in _world._get_multiplayer_player_nodes():
-		if not is_instance_valid(player_node):
+		var player := player_node as PLAYER_SCRIPT
+		if not is_instance_valid(player):
 			continue
-		var peer_id: int = _world._get_player_network_id(player_node)
+		var peer_id: int = _world._get_player_network_id(player)
 		var health_key := maxi(peer_id, 0)
-		_summary_last_player_health_by_peer[health_key] = int(player_node.get_current_health()) if player_node.has_method("get_current_health") else -1
+		_summary_last_player_health_by_peer[health_key] = player.get_current_health()
 		if peer_id <= 0:
 			continue
 		_summary_stats_by_peer[peer_id] = _empty_peer_stats()
@@ -450,13 +454,12 @@ func reconcile_damage_taken_to_player_health() -> void:
 	if run_summary_tracker == null:
 		return
 	for player_node in _world._get_multiplayer_player_nodes():
-		if not is_instance_valid(player_node):
+		var player := player_node as PLAYER_SCRIPT
+		if not is_instance_valid(player):
 			continue
-		if not player_node.has_method("get_current_health"):
-			continue
-		var peer_id: int = _world._get_player_network_id(player_node)
+		var peer_id: int = _world._get_player_network_id(player)
 		var health_key := maxi(peer_id, 0)
-		var peer_current_health := int(player_node.get_current_health())
+		var peer_current_health := player.get_current_health()
 		var last_health := int(_summary_last_player_health_by_peer.get(health_key, -1))
 		if last_health < 0:
 			_summary_last_player_health_by_peer[health_key] = peer_current_health
@@ -473,19 +476,20 @@ func reconcile_damage_taken_to_player_health() -> void:
 func build_death_event_snapshot() -> Dictionary:
 	var death_event: Dictionary = {}
 	for player_node in _world._get_multiplayer_player_nodes():
-		if not is_instance_valid(player_node):
+		var player := player_node as PLAYER_SCRIPT
+		if not is_instance_valid(player):
 			continue
-		if player_node.has_method("is_dead") and not bool(player_node.call("is_dead")):
+		if not player.is_dead():
 			continue
-		if player_node.has_method("get_last_damage_event"):
-			death_event = (player_node.call("get_last_damage_event") as Dictionary).duplicate(true)
-			if not death_event.is_empty():
-				break
-	if death_event.is_empty() and is_instance_valid(_world.player) and _world.player.has_method("get_last_damage_event"):
-		death_event = (_world.player.get_last_damage_event() as Dictionary).duplicate(true)
+		death_event = player.get_last_damage_event().duplicate(true)
+		if not death_event.is_empty():
+			break
+	if death_event.is_empty() and is_instance_valid(_world.player):
+		death_event = _world.player.get_last_damage_event().duplicate(true)
 	var objective_telemetry: Dictionary = {}
-	if is_instance_valid(_world.objective_manager) and _world.objective_manager.has_method("get_telemetry_state"):
-		objective_telemetry = _world.objective_manager.get_telemetry_state()
+	var objective_manager := _world.objective_manager as OBJECTIVE_MANAGER_SCRIPT
+	if is_instance_valid(objective_manager):
+		objective_telemetry = objective_manager.get_telemetry_state()
 	death_event["room_label"] = _world.current_room_label
 	death_event["bearing_key"] = _bearing_key_from_label(_world.current_room_label, "unknown")
 	death_event["room_depth"] = _world.room_depth
@@ -603,17 +607,18 @@ func build_peer_summary_overrides() -> Dictionary:
 	if not _world.is_multiplayer:
 		return overrides
 	for player_node in _world._get_multiplayer_player_nodes():
-		if not is_instance_valid(player_node):
+		var player := player_node as PLAYER_SCRIPT
+		if not is_instance_valid(player):
 			continue
-		var peer_id: int = _world._get_player_network_id(player_node)
+		var peer_id: int = _world._get_player_network_id(player)
 		if peer_id <= 0:
 			continue
-		var active_character := String(player_node.get("active_character_id")).strip_edges().to_lower() if player_node.has_method("get") else ""
+		var active_character := String(player.active_character_id).strip_edges().to_lower()
 		if active_character.is_empty():
 			active_character = _world.current_character_id
 		var char_data := CHARACTER_REGISTRY.get_character(active_character)
 		var character_name := String(char_data.get("name", active_character.capitalize()))
-		var build_summary := build_summary_for_player(player_node)
+		var build_summary := build_summary_for_player(player)
 		var timeline := (_summary_reward_timeline_by_peer.get(peer_id, []) as Array).duplicate(true)
 		var build_ids: Array[String] = []
 		for group_key in ["boons", "arcana", "boss_rewards"]:
@@ -637,22 +642,23 @@ func build_peer_telemetry_entries() -> Array:
 	var entries: Array = []
 	if not _world.is_multiplayer:
 		return entries
-	var run_context: Node = _world._get_run_context()
+	var run_context := _world._get_run_context() as RUN_CONTEXT_SCRIPT
 	var host_peer_id := int(_world._resolve_local_peer_id())
 	var seen_peer_ids: Dictionary = {}
 	for player_node in _world._get_multiplayer_player_nodes():
-		if not is_instance_valid(player_node):
+		var player := player_node as PLAYER_SCRIPT
+		if not is_instance_valid(player):
 			continue
-		var peer_id: int = _world._get_player_network_id(player_node)
+		var peer_id: int = _world._get_player_network_id(player)
 		if peer_id <= 0 or seen_peer_ids.has(peer_id):
 			continue
 		seen_peer_ids[peer_id] = true
-		var active_character := String(player_node.get(&"active_character_id")).strip_edges().to_lower() if player_node.has_method("get") else ""
+		var active_character := String(player.active_character_id).strip_edges().to_lower()
 		if active_character.is_empty():
 			active_character = _world.current_character_id
 		var char_data := CHARACTER_REGISTRY.get_character(active_character)
 		var character_name := String(char_data.get("name", active_character.capitalize()))
-		var build_summary := build_summary_for_player(player_node)
+		var build_summary := build_summary_for_player(player)
 		var timeline := (_summary_reward_timeline_by_peer.get(peer_id, []) as Array).duplicate(true)
 		var stats := (_summary_stats_by_peer.get(peer_id, {}) as Dictionary).duplicate(true)
 		var build_ids: Array[String] = []
@@ -696,23 +702,24 @@ func build_summary_for_player(player_node: Node) -> Dictionary:
 	var boons: Array[Dictionary] = []
 	var arcana: Array[Dictionary] = []
 	var boss_rewards: Array[Dictionary] = []
-	if not is_instance_valid(player_node):
+	var player := player_node as PLAYER_SCRIPT
+	if not is_instance_valid(player):
 		return {"boons": boons, "arcana": arcana, "boss_rewards": boss_rewards}
 	for power_id_variant in POWER_REGISTRY.UPGRADE_BALANCE.keys():
 		var power_id := String(power_id_variant)
-		var stacks := int(player_node.call("get_upgrade_stack_count", power_id)) if player_node.has_method("get_upgrade_stack_count") else 0
+		var stacks := player.get_upgrade_stack_count(power_id)
 		if stacks <= 0:
 			continue
 		boons.append(RUN_SUMMARY_MODEL_SCRIPT.create_build_item(power_id, _resolve_power_display_name(power_id), RUN_SUMMARY_MODEL_SCRIPT.CATEGORY_BOON, stacks))
 	for power_id_variant in POWER_REGISTRY.TRIAL_POWER_BALANCE.keys():
 		var power_id := String(power_id_variant)
-		var stacks := int(player_node.call("get_trial_power_stack_count", power_id)) if player_node.has_method("get_trial_power_stack_count") else 0
+		var stacks := player.get_trial_power_stack_count(power_id)
 		if stacks <= 0:
 			continue
 		arcana.append(RUN_SUMMARY_MODEL_SCRIPT.create_build_item(power_id, _resolve_power_display_name(power_id), RUN_SUMMARY_MODEL_SCRIPT.CATEGORY_ARCANA, stacks))
 	for power_id_variant in POWER_REGISTRY.BOSS_REWARD_BALANCE.keys():
 		var power_id := String(power_id_variant)
-		var stacks := int(player_node.call("get_upgrade_stack_count", power_id)) if player_node.has_method("get_upgrade_stack_count") else 0
+		var stacks := player.get_upgrade_stack_count(power_id)
 		if stacks <= 0:
 			continue
 		boss_rewards.append(RUN_SUMMARY_MODEL_SCRIPT.create_build_item(power_id, _resolve_power_display_name(power_id), RUN_SUMMARY_MODEL_SCRIPT.CATEGORY_BOSS_REWARD, stacks))
@@ -849,7 +856,7 @@ func _apply_endgame_chase_progress(run_summary: Dictionary) -> void:
 	for label_variant in results.get("labels", []):
 		summary_unlocks.append(String(label_variant))
 	run_summary["unlocks"] = summary_unlocks
-	if changed and run_context.has_method("save_meta_progress"):
+	if changed:
 		run_context.save_meta_progress()
 
 func _record_boss_defeat_for_summary_peers() -> void:
@@ -877,9 +884,9 @@ func _bearing_key_from_profile(profile: Dictionary, fallback: String = "unknown"
 	return BEARING_KEY_NORMALIZER.from_profile(profile, fallback)
 
 func _resolve_power_display_name(power_id: String) -> String:
-	var power_registry_instance: Node = _world.power_registry_instance
-	if power_registry_instance != null and power_registry_instance.has_method("get_power"):
-		var power_data: Dictionary = power_registry_instance.get_power(power_id) as Dictionary
+	var power_registry_instance := _world.power_registry_instance as POWER_REGISTRY
+	if power_registry_instance != null:
+		var power_data: Dictionary = power_registry_instance.get_power(power_id)
 		if not power_data.is_empty():
 			var resolved := String(power_data.get("name", "")).strip_edges()
 			if not resolved.is_empty():

@@ -91,8 +91,7 @@ func _spawn_enemy_batch(count: int) -> void:
 	# Clear previous phase enemies before spawning new batch
 	world_gen._clear_all_enemies()
 	world_gen.active_room_enemy_count = 0
-	if world_gen.has_method("_spawn_test_enemies"):
-		world_gen._spawn_test_enemies(count)
+	world_gen._spawn_test_enemies(count)
 
 func tick_frame(delta: float, last_sync_bytes: int, last_sync_count: int) -> void:
 	if not world_gen._stress_test_active:
@@ -125,8 +124,8 @@ func tick_frame(delta: float, last_sync_bytes: int, last_sync_count: int) -> voi
 		if per_packet_bytes > mtu_limit:
 			current_metric.mtu_exceeded = true
 
-	if world_gen != null and world_gen.has_method("_get_perf_attribution_snapshot"):
-		var perf_sample := world_gen.call("_get_perf_attribution_snapshot") as Dictionary
+	if world_gen != null:
+		var perf_sample := world_gen._get_perf_attribution_snapshot() as Dictionary
 		if not perf_sample.is_empty():
 			current_metric.avg_pre_ms = float(perf_sample.get("avg_pre_ms", current_metric.avg_pre_ms))
 			current_metric.avg_sim_ms = float(perf_sample.get("avg_sim_ms", current_metric.avg_sim_ms))

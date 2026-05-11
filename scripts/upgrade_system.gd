@@ -12,7 +12,9 @@ const INDOMITABLE_OATH_DAMAGE_SCALE: float = 1.35
 # Dependencies (injected)
 var player_reference: Node = null
 var game_state: Node = null  # GameStateManager instance
-var power_registry: Node = null  # power_registry.gd instance
+const POWER_REGISTRY_SCRIPT := preload("res://scripts/power_registry.gd")
+
+var power_registry: POWER_REGISTRY_SCRIPT = null  # power_registry.gd instance
 var upgrade_stacks: Dictionary = {}
 
 # Track stacks for trial powers as backup when player_reference is unavailable
@@ -156,7 +158,7 @@ func _get_power_balance_data(power_id: String) -> Dictionary:
 
 
 func get_power_damage_model(power_id: String) -> Dictionary:
-	if power_registry != null and power_registry.has_method("get_damage_model"):
+	if power_registry != null:
 		return power_registry.get_damage_model(power_id)
 	return {
 		"kind": "none",
@@ -774,7 +776,7 @@ func reset() -> void:
 func initialize(player: Node, state: Node, registry: Node) -> void:
 	player_reference = player
 	game_state = state
-	power_registry = registry
+	power_registry = registry as POWER_REGISTRY_SCRIPT
 
 
 func _eclipse_hits_for_stack(stack_count: int) -> int:

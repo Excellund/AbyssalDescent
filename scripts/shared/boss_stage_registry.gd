@@ -1,6 +1,8 @@
 class_name BossStageRegistry
 extends RefCounted
 
+const ENEMY_BASE_SCRIPT := preload("res://scripts/enemy_base.gd")
+
 ## Single source of truth for boss stage metadata and boss node construction.
 ##
 ## Used by:
@@ -67,7 +69,7 @@ static func get_descriptor(stage: int) -> Dictionary:
 ## script and circular collision shape attached, positioned at `spawn_position`.
 ## The caller is responsible for adding it to the scene tree and wiring signals.
 ## Returns null if `stage` is unknown.
-static func create_boss_node(stage: int, spawn_position: Vector2) -> CharacterBody2D:
+static func create_boss_node(stage: int, spawn_position: Vector2) -> ENEMY_BASE_SCRIPT:
 	var descriptor: Dictionary = STAGES.get(stage, {})
 	if descriptor.is_empty():
 		return null

@@ -327,7 +327,7 @@ func _maybe_refresh_target(delta: float) -> void:
 func _is_target_valid(candidate: Node2D) -> bool:
 	if not is_instance_valid(candidate):
 		return false
-	if candidate.has_method("is_dead") and bool(candidate.call("is_dead")):
+	if bool(candidate.is_dead()):
 		return false
 	return true
 
@@ -709,6 +709,25 @@ func get_current_health() -> int:
 
 func get_max_health() -> int:
 	return max_health
+
+# Virtual: enemy subtypes that own projectiles override these to participate in
+# host->client projectile state sync. Default returns empty (no projectiles to sync).
+func get_projectile_network_sync_state() -> Dictionary:
+	return {}
+
+func apply_projectile_network_sync_state(_sync_state: Dictionary) -> void:
+	pass
+
+# Virtual: tether-style enemies override is_tether_enemy/is_beam_state_active/is_on_kill_run
+# so other enemy_base-typed callers can probe them without reflection.
+func is_tether_enemy() -> bool:
+	return false
+
+func is_beam_state_active() -> bool:
+	return false
+
+func is_on_kill_run() -> bool:
+	return false
 
 func set_max_health_and_current(new_max_health: int, new_current_health: int = -1) -> void:
 	max_health = maxi(1, new_max_health)

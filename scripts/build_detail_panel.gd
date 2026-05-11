@@ -2,6 +2,7 @@ extends Node
 
 const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 const DESCRIPTION_CAP_GUARD := preload("res://scripts/shared/description_cap_guard.gd")
+const PLAYER_SCRIPT := preload("res://scripts/player.gd")
 const RARITY_COMMON := Color(0.62, 0.7, 0.8, 0.9)
 const RARITY_EPIC := Color(0.82, 0.58, 1.0, 0.96)
 const RARITY_LEGENDARY := Color(1.0, 0.74, 0.42, 1.0)
@@ -253,7 +254,7 @@ func close() -> void:
 func is_open() -> bool:
 	return is_visible
 
-func refresh(character_id: String, active_boons: Array, active_arcana: Array, active_boss_rewards: Array = [], player: Node = null) -> void:
+func refresh(character_id: String, active_boons: Array, active_arcana: Array, active_boss_rewards: Array = [], player: PLAYER_SCRIPT = null) -> void:
 	if panel == null:
 		return
 	
@@ -312,7 +313,7 @@ func _resolve_passive_id(character_id: String, char_data: Dictionary) -> String:
 		_:
 			return passive_id
 
-func _update_power_section(container: VBoxContainer, power_ids: Array, power_type: String, player: Node = null) -> void:
+func _update_power_section(container: VBoxContainer, power_ids: Array, power_type: String, player: PLAYER_SCRIPT = null) -> void:
 	# Clear existing entries
 	for child in container.get_children():
 		child.queue_free()
@@ -329,11 +330,11 @@ func _update_power_section(container: VBoxContainer, power_ids: Array, power_typ
 		var name_text := _power_display_name(power_id)
 		var desc_text := _get_power_current_desc(power_id, power_type, player)
 		var stack_count := 0
-		if is_instance_valid(player):
-			if power_type == "boon" and player.has_method("get_upgrade_stack_count"):
-				stack_count = int(player.get_upgrade_stack_count(String(power_id)))
-			elif power_type == "arcana" and player.has_method("get_trial_power_stack_count"):
-				stack_count = int(player.get_trial_power_stack_count(String(power_id)))
+		if player != null:
+			if power_type == "boon":
+				stack_count = player.get_upgrade_stack_count(String(power_id))
+			elif power_type == "arcana":
+				stack_count = player.get_trial_power_stack_count(String(power_id))
 		if stack_count <= 0:
 			stack_count = 1
 		var stack_suffix := ""
@@ -377,11 +378,11 @@ func _pf(node: Node, prop: String, fallback: float = 0.0) -> float:
 	var v = node.get(prop)
 	return v if v != null else fallback
 
-func _damage_kind_prefix(_power_id: String, _player: Node) -> String:
+func _damage_kind_prefix(_power_id: String, _player: PLAYER_SCRIPT) -> String:
 	return ""
 
-func _get_power_current_desc(power_id: String, _power_type: String, player: Node) -> String:
-	if not is_instance_valid(player) or not player.has_method("get_power_current_desc"):
+func _get_power_current_desc(power_id: String, _power_type: String, player: PLAYER_SCRIPT) -> String:
+	if player == null:
 		return ""
 	return player.get_power_current_desc(power_id)
 

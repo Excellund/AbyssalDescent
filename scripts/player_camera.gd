@@ -1,6 +1,7 @@
 extends Camera2D
 
 const CAMERA_MODE_ENUMS := preload("res://scripts/shared/camera_mode_enums.gd")
+const PLAYER_SCRIPT := preload("res://scripts/player.gd")
 
 @export var velocity_lookahead_distance: float = 72.0
 @export var mouse_lookahead_distance: float = 96.0
@@ -17,7 +18,7 @@ const CAMERA_MODE_ENUMS := preload("res://scripts/shared/camera_mode_enums.gd")
 @export var max_zoom: float = 3.0
 @export var visible_edge_margin: float = 10.0
 
-var target_body: CharacterBody2D
+var target_body: PLAYER_SCRIPT
 var smoothed_velocity_offset: Vector2 = Vector2.ZERO
 var smoothed_mouse_offset: Vector2 = Vector2.ZERO
 var camera_mode: int = CAMERA_MODE_ENUMS.CameraMode.FOLLOW
@@ -28,7 +29,7 @@ var has_world_bounds: bool = false
 var cached_viewport_size: Vector2 = Vector2.ZERO
 
 func _ready() -> void:
-	target_body = get_parent() as CharacterBody2D
+	target_body = get_parent() as PLAYER_SCRIPT
 	var should_activate := _should_activate_for_target()
 	enabled = should_activate
 	top_level = true
@@ -45,9 +46,7 @@ func _ready() -> void:
 func _should_activate_for_target() -> bool:
 	if not is_instance_valid(target_body):
 		return true
-	if target_body.has_method("_is_local_control_owner"):
-		return bool(target_body.call("_is_local_control_owner"))
-	return true
+	return target_body._is_local_control_owner()
 
 func _physics_process(delta: float) -> void:
 	if not is_instance_valid(target_body):

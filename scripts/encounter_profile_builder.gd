@@ -177,7 +177,7 @@ func _get_difficulty_config_provider() -> Object:
 func _refresh_difficulty_config() -> void:
 	var provider: Object = _get_difficulty_config_provider()
 	var base_config: Dictionary = {}
-	if provider == null or not provider.has_method("get_tier_config"):
+	if provider == null:
 		base_config = DIFFICULTY_CONFIG.get_tier_config(current_difficulty_tier)
 	else:
 		base_config = provider.get_tier_config(current_difficulty_tier)

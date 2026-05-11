@@ -14,6 +14,7 @@ const CATALYST_REGISTRY := preload("res://scripts/progression/catalyst_registry.
 const META_PROGRESS_STORE := preload("res://scripts/meta_progress_store.gd")
 const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 const MENU_STYLE_FACTORY := preload("res://scripts/core/menu_style_factory.gd")
+const RUN_CONTEXT_SCRIPT := preload("res://scripts/run_context.gd")
 
 const RUN_CONTEXT_PATH := "/root/RunContext"
 
@@ -139,8 +140,8 @@ func _step_character(direction: int) -> void:
 # --- header / data ---
 
 func _resolve_active_character_id() -> String:
-	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
-	if run_context != null and run_context.has_method("get_selected_character_id"):
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH) as RUN_CONTEXT_SCRIPT
+	if run_context != null:
 		var id: String = String(run_context.get_selected_character_id()).strip_edges().to_lower()
 		if not id.is_empty():
 			return id
@@ -159,8 +160,8 @@ func _get_profile() -> Dictionary:
 	return {}
 
 func _save_profile() -> void:
-	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
-	if run_context != null and run_context.has_method("save_meta_progress"):
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH) as RUN_CONTEXT_SCRIPT
+	if run_context != null:
 		run_context.save_meta_progress()
 
 func _refresh_header() -> void:
@@ -266,8 +267,8 @@ func _toggle_modifier(modifier_id: String) -> void:
 	_refresh_modifier_list()
 
 func _sync_active_loadout_with_selection() -> void:
-	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
-	if run_context == null or not run_context.has_method("set_active_ascension_loadout"):
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH) as RUN_CONTEXT_SCRIPT
+	if run_context == null:
 		return
 	var saved: Array[String] = META_PROGRESS_STORE.get_ascension_loadout(_get_profile(), _character_id)
 	run_context.set_active_ascension_loadout(saved)

@@ -10,6 +10,7 @@ const LIST_VIEW_SCRIPT := preload("res://scripts/ui/leaderboard/leaderboard_list
 const LEADERBOARD_MODEL := preload("res://scripts/core/leaderboard_entry_model.gd")
 
 const RUN_CONTEXT_PATH := "/root/RunContext"
+const RUN_CONTEXT_SCRIPT := preload("res://scripts/run_context.gd")
 
 signal back_pressed
 
@@ -123,7 +124,7 @@ func _build_ui(style_ref: Object) -> void:
 	back_button.text = "Back"
 	back_button.custom_minimum_size = Vector2(180.0, 46.0)
 	back_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	if style_ref != null and style_ref.has_method("_make_panel_back_button"):
+	if style_ref != null:
 		var themed_back: Variant = style_ref._make_panel_back_button()
 		if themed_back is Button:
 			back_button = themed_back
@@ -139,14 +140,12 @@ func populate() -> void:
 
 func _request_reload(sync_from_context: bool) -> void:
 	if sync_from_context:
-		var run_context := get_node_or_null(RUN_CONTEXT_PATH)
-		if run_context != null and run_context.has_method("get_profile_uuid"):
+		var run_context := get_node_or_null(RUN_CONTEXT_PATH) as RUN_CONTEXT_SCRIPT
+		if run_context != null:
 			_current_player_uuid = String(run_context.get_profile_uuid()).strip_edges().to_lower()
-		if run_context != null and run_context.has_method("get_current_difficulty_tier"):
-			_selected_bearing = int(run_context.get_current_difficulty_tier())
+			_selected_bearing = run_context.get_current_difficulty_tier()
 			if _bearing_selector != null:
 				_bearing_selector.select(_selected_bearing)
-		if run_context != null and run_context.has_method("get_selected_character_id"):
 			_selected_character_id = String(run_context.get_selected_character_id()).strip_edges().to_lower()
 			_select_character_if_available(_selected_character_id)
 	_current_patch_key = _resolve_current_patch_key()

@@ -1,8 +1,11 @@
 extends RefCounted
 
+const REWARD_SELECTION_UI_SCRIPT := preload("res://scripts/reward_selection_ui.gd")
+
 func close_reward_selection_if_active(reward_selection_ui: Node) -> void:
-	if is_instance_valid(reward_selection_ui) and reward_selection_ui.has_method("close_selection"):
-		reward_selection_ui.close_selection()
+	var typed := reward_selection_ui as REWARD_SELECTION_UI_SCRIPT
+	if is_instance_valid(typed):
+		typed.close_selection()
 
 func close_pause_menu_if_open(pause_menu_controller: Node) -> void:
 	if is_instance_valid(pause_menu_controller) and bool(pause_menu_controller.is_open()):

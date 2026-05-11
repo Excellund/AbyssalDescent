@@ -16,6 +16,7 @@ const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 const DEBUG_ENUMS := preload("res://scripts/shared/debug_enums.gd")
 const GLOSSARY_DATA := preload("res://scripts/shared/glossary_data.gd")
+const RUN_CONTEXT_SCRIPT := preload("res://scripts/run_context.gd")
 
 ## Validation result structure
 class ValidationResult:
@@ -188,8 +189,8 @@ func validate_autoload_access() -> ValidationResult:
 			result.add_error("Autoload '%s' not found" % path)
 		else:
 			if path == "RunContext":
-				if not node.has_method("load_settings"):
-					result.add_error("RunContext missing load_settings() method")
+				if (node as RUN_CONTEXT_SCRIPT) == null:
+					result.add_error("RunContext autoload is not RUN_CONTEXT_SCRIPT")
 	
 	result.report("autoload_access")
 	return result

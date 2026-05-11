@@ -212,8 +212,8 @@ func _on_health_changed(_current: int, _max_hp: int) -> void:
 func _apply_arena_penalty() -> void:
 	var next_steps := mini(arena_penalty_steps + 1, 3)
 	for node in get_tree().get_nodes_in_group(SEAMLOCK_SYNC_GROUP):
-		if node is Node and is_instance_valid(node) and node.has_method("_set_shared_arena_penalty_steps"):
-			node.call("_set_shared_arena_penalty_steps", next_steps)
+		if node is Node and is_instance_valid(node):
+			node._set_shared_arena_penalty_steps(next_steps)
 
 func _set_shared_arena_penalty_steps(steps: int) -> void:
 	var clamped := clampi(steps, 0, 3)
@@ -358,8 +358,8 @@ func _enter_illusion_phase(allow_group_sync: bool) -> void:
 		for node in get_tree().get_nodes_in_group(SEAMLOCK_SYNC_GROUP):
 			if node == self:
 				continue
-			if node is Node and is_instance_valid(node) and node.has_method("_force_synced_illusion_phase"):
-				node.call("_force_synced_illusion_phase")
+			if node is Node and is_instance_valid(node):
+				node._force_synced_illusion_phase()
 
 func _force_synced_illusion_phase() -> void:
 	# Keep other behavior unsynced: only align illusion windows when multiple Seamlocks are present.
@@ -442,12 +442,11 @@ func _get_attacking_player_candidates() -> Array[Node2D]:
 	var parent_node := get_parent()
 	if parent_node == null:
 		return players
-	if parent_node.has_method("_get_multiplayer_player_nodes"):
-		var player_nodes_variant: Variant = parent_node.call("_get_multiplayer_player_nodes")
-		if player_nodes_variant is Array:
-			for node_variant in player_nodes_variant:
-				if node_variant is Node2D and is_instance_valid(node_variant):
-					players.append(node_variant as Node2D)
+	var player_nodes_variant: Variant = parent_node._get_multiplayer_player_nodes()
+	if player_nodes_variant is Array:
+		for node_variant in player_nodes_variant:
+			if node_variant is Node2D and is_instance_valid(node_variant):
+				players.append(node_variant as Node2D)
 	var primary_player_variant: Variant = parent_node.get("player")
 	if primary_player_variant is Node2D and is_instance_valid(primary_player_variant):
 		var primary_player := primary_player_variant as Node2D

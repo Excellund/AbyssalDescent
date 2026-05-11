@@ -1,6 +1,7 @@
 extends "res://scripts/enemy_base.gd"
 
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
+const ENEMY_BASE_SCRIPT := preload("res://scripts/enemy_base.gd")
 
 const STATE_STALK := 0
 const STATE_WINDUP := 1
@@ -26,7 +27,7 @@ var tether_state: int = STATE_STALK
 var state_time_left: float = 0.0
 var beam_cooldown_left: float = 0.0
 var beam_tick_left: float = 0.0
-var beam_partner: CharacterBody2D
+var beam_partner: ENEMY_BASE_SCRIPT
 var _orbit_sign: float = 1.0
 var _partner_refresh_left: float = 0.0
 var _last_beam_sample_target_position: Vector2 = Vector2.ZERO
@@ -52,7 +53,7 @@ func is_beam_state_active() -> bool:
 func is_on_kill_run() -> bool:
 	if tether_state == STATE_BEAM or tether_state == STATE_WINDUP:
 		return true
-	if _is_valid_tether_partner(beam_partner) and beam_partner.has_method("is_beam_state_active") and bool(beam_partner.call("is_beam_state_active")):
+	if _is_valid_tether_partner(beam_partner) and beam_partner.is_beam_state_active():
 		return true
 	return false
 
@@ -142,39 +143,36 @@ func _is_valid_tether_partner(candidate: Variant) -> bool:
 		return false
 	if not is_instance_valid(candidate):
 		return false
-	var candidate_body := candidate as CharacterBody2D
+	var candidate_body := candidate as ENEMY_BASE_SCRIPT
 	if candidate_body == null:
 		return false
 	if candidate_body == self:
 		return false
-	if not candidate_body.has_method("is_tether_enemy"):
-		return false
-	return bool(candidate_body.call("is_tether_enemy"))
+	return candidate_body.is_tether_enemy()
 
-func _find_beam_partner_with_hysteresis(current_partner: Variant) -> CharacterBody2D:
+func _find_beam_partner_with_hysteresis(current_partner: ENEMY_BASE_SCRIPT) -> ENEMY_BASE_SCRIPT:
 	var nearest := _find_beam_partner()
 	if not _is_valid_tether_partner(current_partner):
 		return nearest
-	var current_partner_body := current_partner as CharacterBody2D
-	if current_partner_body == null:
+	if current_partner == null:
 		return nearest
 	if nearest == null or nearest == current_partner:
-		return current_partner_body
-	var current_distance := global_position.distance_to(current_partner_body.global_position)
+		return current_partner
+	var current_distance := global_position.distance_to(current_partner.global_position)
 	var nearest_distance := global_position.distance_to(nearest.global_position)
 	if nearest_distance + partner_switch_margin < current_distance:
 		return nearest
-	return current_partner_body
+	return current_partner
 
-func _find_beam_partner() -> CharacterBody2D:
-	var nearest: CharacterBody2D = null
+func _find_beam_partner() -> ENEMY_BASE_SCRIPT:
+	var nearest: ENEMY_BASE_SCRIPT = null
 	var nearest_distance := INF
 	for enemy in get_tree().get_nodes_in_group("enemies"):
 		if not is_instance_valid(enemy):
 			continue
 		if enemy == self:
 			continue
-		var enemy_body := enemy as CharacterBody2D
+		var enemy_body := enemy as ENEMY_BASE_SCRIPT
 		if enemy_body == null:
 			continue
 		if not _is_valid_tether_partner(enemy_body):
@@ -201,7 +199,7 @@ func _process_stalk(delta: float) -> void:
 func _stalk_desired_velocity() -> Vector2:
 	if not is_instance_valid(target):
 		return Vector2.ZERO
-	if _is_valid_tether_partner(beam_partner) and beam_partner.has_method("is_beam_state_active") and bool(beam_partner.call("is_beam_state_active")):
+	if _is_valid_tether_partner(beam_partner) and beam_partner.is_beam_state_active():
 		return _beam_crossing_support_velocity()
 	return _web_desired_velocity()
 
@@ -297,7 +295,7 @@ func _tether_group_repulsion() -> Vector2:
 			continue
 		if enemy == self:
 			continue
-		var enemy_body := enemy as CharacterBody2D
+		var enemy_body := enemy as ENEMY_BASE_SCRIPT
 		if enemy_body == null:
 			continue
 		if not _is_valid_tether_partner(enemy_body):
@@ -307,8 +305,7 @@ func _tether_group_repulsion() -> Vector2:
 		if distance < 0.000001 or distance >= spacing_radius:
 			continue
 		var push_scale := clampf((spacing_radius - distance) / maxf(1.0, spacing_radius), 0.0, 1.0)
-		# Idle tethers spread much harder away from kill-committed pairs.
-		var enemy_on_kill_run := enemy_body.has_method("is_on_kill_run") and bool(enemy_body.call("is_on_kill_run"))
+		var enemy_on_kill_run := enemy_body.is_on_kill_run()
 		var push_strength := 3.2 if enemy_on_kill_run else 2.4
 		repel_sum += (offset / distance) * (push_strength * push_scale)
 		contributors += 1
@@ -470,8 +467,9 @@ func _draw() -> void:
 	var core_color := Color(0.86, 0.92, 1.0, 0.94)
 	var state_charge := 0.0
 	var beam_link_active := tether_state == STATE_BEAM
-	if not beam_link_active and is_instance_valid(beam_partner) and beam_partner.has_method("is_beam_state_active"):
-		beam_link_active = bool(beam_partner.call("is_beam_state_active"))
+	var partner_typed_for_link := beam_partner as ENEMY_BASE_SCRIPT
+	if not beam_link_active and is_instance_valid(beam_partner) and partner_typed_for_link != null:
+		beam_link_active = partner_typed_for_link.is_beam_state_active()
 	if tether_state == STATE_WINDUP:
 		body_color = Color(0.4, 0.58, 1.0, 0.96)
 		core_color = Color(1.0, 1.0, 1.0, 0.96)
@@ -577,15 +575,15 @@ func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
 		var partner_enemy_id := int(custom_state.get("partner_enemy_id", -1))
 		beam_partner = _resolve_partner_by_network_enemy_id(partner_enemy_id)
 
-func _resolve_partner_by_network_enemy_id(partner_enemy_id: int) -> CharacterBody2D:
+func _resolve_partner_by_network_enemy_id(partner_enemy_id: int) -> ENEMY_BASE_SCRIPT:
 	if partner_enemy_id <= 0:
 		return null
 	for enemy in get_tree().get_nodes_in_group("enemies"):
-		if not (enemy is CharacterBody2D):
+		var enemy_body := enemy as ENEMY_BASE_SCRIPT
+		if enemy_body == null:
 			continue
-		if enemy == self:
+		if enemy_body == self:
 			continue
-		var enemy_body := enemy as CharacterBody2D
 		if int(enemy_body.get_meta("network_enemy_id", -1)) != partner_enemy_id:
 			continue
 		return enemy_body

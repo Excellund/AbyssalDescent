@@ -43,7 +43,7 @@ How to apply:
 - For repeated combat or area-hit loops, centralize target selection and on-hit effect/proc resolution so damage packet rules cannot drift between variants.
 - Prefer one canonical implementation per behavior.
 
-Nuance: DRY targets *true* duplication of behavior. Do not deduplicate code that merely *looks* similar but evolves for different reasons — premature consolidation creates coupling that is harder to undo than the duplication.
+Nuance: DRY targets _true_ duplication of behavior. Do not deduplicate code that merely _looks_ similar but evolves for different reasons — premature consolidation creates coupling that is harder to undo than the duplication.
 
 ### 2. Reduce Cognitive Load
 
@@ -86,12 +86,17 @@ Why it matters:
 
 - String-based dispatch or property-name access hides ownership.
 - Runtime introspection weakens refactor safety.
+- Reflection guards (`has_method`/`call`/`get(name)`) silently swallow rename and signature drift; the compiler cannot help.
 
 How to apply:
 
 - Prefer direct method calls over dynamic dispatch for internal code.
 - Prefer stable actor APIs over ad hoc property string access.
 - Keep dynamic boundaries explicit and narrowly scoped.
+- **Ban `has_method` / `call(string)` / `get(string)` for internal types.** When a function genuinely receives a Player, an enemy, or any first-party node, preload the script and cast: `var typed := node as PLAYER_SCRIPT`, then call typed methods and read typed properties directly. Use the reflection escape hatch only at true dynamic boundaries (third-party nodes, autoloads with no known script, optional duck-typed plugins).
+- When extracting helpers, pass strongly-typed parameters and rely on `as ScriptConst` casts to reach concrete fields/methods rather than `node.get("field")` or `node.call("method")`.
+- **When a preload cycle blocks a typed cast, use direct dynamic dispatch — not reflection.** GDScript only forbids string-keyed `has_method`/`call`/`get`. Calling `node.method_name()` directly on a `Node`/`Object`-typed receiver is statically resolved at runtime and is the correct fallback when adding `const X_SCRIPT := preload(...)` would create a cycle (e.g., `player.gd` ↔ `player_replication_service.gd`, `world_generator.gd` ↔ `objective_runtime.gd`). Add a virtual stub on the base class when a subclass-only method needs to be reachable through a base-typed reference.
+- **No `typed_X` / `X_typed` aliases.** The strongly-typed binding owns the natural name; if you feel the need to prefix or suffix to disambiguate, the underlying type is the bug. Fix the source: tighten the parameter type (`enemy: ENEMY_BASE_SCRIPT`, not `enemy: CharacterBody2D` + cast), tighten the return type (`spawn_enemy_node_type(...) -> ENEMY_BASE_SCRIPT`), or tighten the field type. Only when a cycle blocks the cast at the source, give the descriptive `_node`/`_body` suffix to the loose parameter and let the typed local own the natural name (e.g., `func is_player_alive(player_node: Node)` with `var player := player_node as PLAYER_SCRIPT`).
 
 ### 5. Minimize Hidden Shared State
 

@@ -18,6 +18,7 @@ const PROFILE_NAME_ENTRY_MODAL_SCRIPT := preload("res://scripts/ui/profile/profi
 const RUN_HISTORY_PANEL_SCRIPT := preload("res://scripts/ui/run_history/run_history_panel.gd")
 const LEADERBOARD_PANEL_SCRIPT := preload("res://scripts/ui/leaderboard/leaderboard_panel.gd")
 const ASCENSION_PANEL_SCRIPT := preload("res://scripts/ui/ascension/ascension_panel.gd")
+const LOBBY_CONTROLLER_SCRIPT := preload("res://scripts/lobby_controller.gd")
 const LOBBY_SCENE_PATH := "res://scenes/Lobby.tscn"
 const DEV_ARG_LOCAL_HOST := "--mp-dev-host"
 const DEV_ARG_LOCAL_JOIN := "--mp-dev-join"
@@ -69,9 +70,9 @@ const MULTIPLAYER_JOIN_CAP_SEC := 120.0
 var root_panel: Panel
 var options_panel: Panel
 var glossary_panel: Panel
-var history_panel: Panel
-var leaderboard_panel: Panel
-var ascension_panel: Panel
+var history_panel: RUN_HISTORY_PANEL_SCRIPT
+var leaderboard_panel: LEADERBOARD_PANEL_SCRIPT
+var ascension_panel: ASCENSION_PANEL_SCRIPT
 var multiplayer_panel: Panel
 var difficulty_selector_panel: Panel
 var character_selector_panel: Panel
@@ -130,7 +131,7 @@ var options_profile_name_value_label: Label
 var lobby_modal_layer: Control
 var lobby_modal_panel: Panel
 var lobby_modal_content_host: Control
-var lobby_modal_instance: Control
+var lobby_modal_instance: LOBBY_CONTROLLER_SCRIPT
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -155,7 +156,7 @@ func _ready() -> void:
 
 func _try_multiplayer_dev_autostart() -> bool:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
-	if run_context != null and run_context.has_method("consume_menu_multiplayer_dev_autostart_suppression"):
+	if run_context != null:
 		if bool(run_context.consume_menu_multiplayer_dev_autostart_suppression()):
 			return false
 	var merged_args: PackedStringArray = []
@@ -238,11 +239,7 @@ func _create_multiplayer_room() -> void:
 		return
 	
 	## Ensure any previous session is cleaned up before creating a new one
-	var had_active_session := false
-	if multiplayer_session_manager.has_method("has_active_session_state"):
-		had_active_session = bool(multiplayer_session_manager.has_active_session_state())
-	else:
-		had_active_session = bool(multiplayer_session_manager.session_connected)
+	var had_active_session := bool(multiplayer_session_manager.has_active_session_state())
 	if had_active_session:
 		print("[Menu] WARNING: Previous session still connected. Cleaning up before creating new lobby...")
 		multiplayer_session_manager.leave_room()
@@ -290,16 +287,13 @@ func _create_multiplayer_room() -> void:
 	
 	var room_code = String(registration_result.get("room_code", ""))
 	print("[Menu] Host session created. Room code: %s" % room_code)
-	var connectivity_warning := ""
-	if multiplayer_session_manager.has_method("get_last_host_connectivity_warning"):
-		connectivity_warning = String(multiplayer_session_manager.get_last_host_connectivity_warning())
+	var connectivity_warning := String(multiplayer_session_manager.get_last_host_connectivity_warning())
 	if multiplayer_status_label != null:
 		multiplayer_status_label.text = "Room code: %s" % room_code
 		if not connectivity_warning.is_empty():
 			multiplayer_status_label.text += "\n" + connectivity_warning
-		if multiplayer_session_manager.has_method("get_host_diagnostic_report"):
-			var diagnostics := String(multiplayer_session_manager.get_host_diagnostic_report())
-			multiplayer_status_label.text += "\n\n" + diagnostics
+		var diagnostics := String(multiplayer_session_manager.get_host_diagnostic_report())
+		multiplayer_status_label.text += "\n\n" + diagnostics
 	
 	_show_lobby_modal()
 
@@ -313,10 +307,7 @@ func _join_multiplayer_room(room_code: String) -> void:
 	## Ensure any previous session is cleaned up before joining a new one
 	var had_active_session := false
 	if multiplayer_session_manager != null:
-		if multiplayer_session_manager.has_method("has_active_session_state"):
-			had_active_session = bool(multiplayer_session_manager.has_active_session_state())
-		else:
-			had_active_session = bool(multiplayer_session_manager.session_connected)
+		had_active_session = bool(multiplayer_session_manager.has_active_session_state())
 	if had_active_session:
 		print("[Menu] WARNING: Previous session still connected. Cleaning up before joining new room...")
 		multiplayer_session_manager.leave_room()
@@ -523,7 +514,7 @@ func _read_main_debug_settings_values() -> Dictionary:
 func _exit_tree() -> void:
 	if menu_music_player != null and menu_music_player.playing:
 		var run_context := get_node_or_null(RUN_CONTEXT_PATH)
-		if run_context != null and run_context.has_method("set_menu_music_resume_position"):
+		if run_context != null:
 			run_context.set_menu_music_resume_position(menu_music_player.get_playback_position())
 		menu_music_player.stop()
 
@@ -1100,7 +1091,7 @@ func _show_ascension_panel() -> void:
 		character_selector_panel.visible = false
 	if lobby_modal_layer != null:
 		lobby_modal_layer.visible = false
-	if ascension_panel != null and ascension_panel.has_method("populate"):
+	if ascension_panel != null:
 		ascension_panel.populate()
 
 func _show_multiplayer_panel() -> void:
@@ -1229,14 +1220,12 @@ func _show_lobby_modal() -> void:
 	if lobby_scene == null:
 		push_error("[Menu] Failed to load lobby scene for modal")
 		return
-	lobby_modal_instance = lobby_scene.instantiate() as Control
+	lobby_modal_instance = lobby_scene.instantiate() as LOBBY_CONTROLLER_SCRIPT
 	if lobby_modal_instance == null:
 		push_error("[Menu] Failed to instantiate lobby scene for modal")
 		return
-	if lobby_modal_instance.has_method("set_embedded_in_menu"):
-		lobby_modal_instance.call("set_embedded_in_menu", true)
-	if lobby_modal_instance.has_signal("leave_lobby_requested"):
-		lobby_modal_instance.connect("leave_lobby_requested", Callable(self, "_on_lobby_modal_leave_requested"))
+	lobby_modal_instance.set_embedded_in_menu(true)
+	lobby_modal_instance.leave_lobby_requested.connect(_on_lobby_modal_leave_requested)
 	lobby_modal_content_host.add_child(lobby_modal_instance)
 
 	lobby_modal_layer.visible = true
@@ -2263,8 +2252,8 @@ func _format_multiplayer_room_error(result: Dictionary, is_host_flow: bool) -> S
 func _on_exit_pressed() -> void:
 	get_tree().quit()
 
-func _build_history_panel() -> Panel:
-	var panel: Panel = RUN_HISTORY_PANEL_SCRIPT.new() as Panel
+func _build_history_panel() -> RUN_HISTORY_PANEL_SCRIPT:
+	var panel: RUN_HISTORY_PANEL_SCRIPT = RUN_HISTORY_PANEL_SCRIPT.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.position = Vector2(-490.0, -340.0)
 	panel.custom_minimum_size = Vector2(980.0, 680.0)
@@ -2293,11 +2282,10 @@ func _show_history_panel() -> void:
 	if character_selector_panel != null:
 		character_selector_panel.visible = false
 	if history_panel != null:
-		if history_panel.has_method("populate"):
-			history_panel.populate()
+		history_panel.populate()
 
-func _build_leaderboard_panel() -> Panel:
-	var panel: Panel = LEADERBOARD_PANEL_SCRIPT.new() as Panel
+func _build_leaderboard_panel() -> LEADERBOARD_PANEL_SCRIPT:
+	var panel: LEADERBOARD_PANEL_SCRIPT = LEADERBOARD_PANEL_SCRIPT.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.position = Vector2(-540.0, -350.0)
 	panel.custom_minimum_size = Vector2(1080.0, 700.0)
@@ -2306,8 +2294,8 @@ func _build_leaderboard_panel() -> Panel:
 	panel.back_pressed.connect(_show_root_panel)
 	return panel
 
-func _build_ascension_panel() -> Panel:
-	var panel: Panel = ASCENSION_PANEL_SCRIPT.new() as Panel
+func _build_ascension_panel() -> ASCENSION_PANEL_SCRIPT:
+	var panel: ASCENSION_PANEL_SCRIPT = ASCENSION_PANEL_SCRIPT.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.position = Vector2(-760.0, -460.0)
 	panel.custom_minimum_size = Vector2(1520.0, 920.0)
@@ -2338,7 +2326,7 @@ func _show_leaderboard_panel() -> void:
 		difficulty_selector_panel.visible = false
 	if character_selector_panel != null:
 		character_selector_panel.visible = false
-	if leaderboard_panel != null and leaderboard_panel.has_method("populate"):
+	if leaderboard_panel != null:
 		leaderboard_panel.populate()
 
 func _build_glossary_panel() -> Panel:
@@ -2778,7 +2766,7 @@ func _on_random_vessel_pressed() -> void:
 func _resolve_random_character() -> String:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	var unlocked_ids: Array[String] = []
-	if run_context != null and run_context.has_method("get_unlocked_character_ids"):
+	if run_context != null:
 		unlocked_ids = run_context.get_unlocked_character_ids()
 	if unlocked_ids.is_empty():
 		unlocked_ids = CHARACTER_REGISTRY.get_launch_character_ids()
@@ -3191,7 +3179,7 @@ func _start_menu_music() -> void:
 		return
 	var resume_position := 0.0
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
-	if run_context != null and run_context.has_method("consume_menu_music_resume_position"):
+	if run_context != null:
 		resume_position = float(run_context.consume_menu_music_resume_position())
 	menu_music_player = AudioStreamPlayer.new()
 	menu_music_player.stream = MENU_MUSIC
