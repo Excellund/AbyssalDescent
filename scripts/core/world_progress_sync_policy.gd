@@ -74,3 +74,35 @@ func sanitize_progress_sync_state(progress_state: Dictionary, context: Dictionar
 	sanitized["second_boss_defeated"] = incoming_second_boss_defeated
 	sanitized.erase("invalid")
 	return sanitized
+
+func normalize_apply_progress_sync_state(sanitized_progress_state: Dictionary, context: Dictionary) -> Dictionary:
+	if sanitized_progress_state.is_empty():
+		return {}
+	if bool(sanitized_progress_state.get("invalid", false)):
+		return {"invalid": true}
+	var room_sync_id := int(sanitized_progress_state.get("room_sync_id", int(context.get("current_room_sync_id", 0))))
+	var incoming_depth := int(sanitized_progress_state.get("room_depth", int(context.get("room_depth", 0))))
+	var max_sane_depth := int(context.get("max_sane_depth", 0))
+	if max_sane_depth > 0 and incoming_depth > max_sane_depth:
+		return {
+			"invalid": true,
+			"error": "depth_above_max",
+			"incoming_depth": incoming_depth,
+			"max_sane_depth": max_sane_depth
+		}
+	var normalized := {
+		"room_sync_id": room_sync_id,
+		"rooms_cleared": int(sanitized_progress_state.get("rooms_cleared", int(context.get("rooms_cleared", 0)))),
+		"room_depth": incoming_depth,
+		"phase_two_rooms_cleared": int(sanitized_progress_state.get("phase_two_rooms_cleared", int(context.get("phase_two_rooms_cleared", 0)))),
+		"phase_three_rooms_cleared": int(sanitized_progress_state.get("phase_three_rooms_cleared", int(context.get("phase_three_rooms_cleared", 0)))),
+		"boss_unlocked": bool(sanitized_progress_state.get("boss_unlocked", bool(context.get("boss_unlocked", false)))),
+		"first_boss_defeated": bool(sanitized_progress_state.get("first_boss_defeated", bool(context.get("first_boss_defeated", false)))),
+		"second_boss_defeated": bool(sanitized_progress_state.get("second_boss_defeated", bool(context.get("second_boss_defeated", false)))),
+		"in_boss_room": bool(sanitized_progress_state.get("in_boss_room", bool(context.get("in_boss_room", false)))),
+		"in_second_boss_room": bool(sanitized_progress_state.get("in_second_boss_room", bool(context.get("in_second_boss_room", false)))),
+		"in_third_boss_room": bool(sanitized_progress_state.get("in_third_boss_room", bool(context.get("in_third_boss_room", false)))),
+		"choosing_next_room": bool(sanitized_progress_state.get("choosing_next_room", bool(context.get("choosing_next_room", false))))
+	}
+	normalized["invalid"] = false
+	return normalized

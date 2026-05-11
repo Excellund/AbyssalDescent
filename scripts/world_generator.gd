@@ -58,6 +58,7 @@ const OBJECTIVE_PROGRESS_COORDINATOR_SCRIPT := preload("res://scripts/core/objec
 const ROOM_CLEAR_OUTCOME_COORDINATOR_SCRIPT := preload("res://scripts/core/room_clear_outcome_coordinator.gd")
 const COMBAT_PHASE_COORDINATOR_SCRIPT := preload("res://scripts/core/combat_phase_coordinator.gd")
 const PLAYER_FLOW_COORDINATOR_SCRIPT := preload("res://scripts/core/player_flow_coordinator.gd")
+const REWARD_PHASE_COORDINATOR_SCRIPT := preload("res://scripts/core/reward_phase_coordinator.gd")
 const PLAYER_ROSTER_HELPERS := preload("res://scripts/core/player_roster_helpers.gd")
 const WORLD_MULTIPLAYER_SYNC_STATE_SCRIPT := preload("res://scripts/core/world_multiplayer_sync_state.gd")
 const WORLD_PROGRESS_SYNC_POLICY_SCRIPT := preload("res://scripts/core/world_progress_sync_policy.gd")
@@ -271,13 +272,10 @@ var _enemy_clamp_frame_stride: int = 2
 var _enemy_clamp_frame_cursor: int = 0
 var _enemy_clamp_last_room_size: Vector2 = Vector2.ZERO
 var enemy_remote_position_lerp_speed: float = 14.0
-var _reward_phase_active: bool = false
-var _reward_phase_is_initial: bool = false
-var _reward_phase_mode: int = ENUMS.RewardMode.NONE
-var _reward_phase_completed_peers: Dictionary = {}  ## peer_id -> bool
 var _doors_spawn_ready: bool = false
 var _world_multiplayer_sync_state = WORLD_MULTIPLAYER_SYNC_STATE_SCRIPT.new()
 var _world_progress_sync_policy = WORLD_PROGRESS_SYNC_POLICY_SCRIPT.new()
+var _reward_phase_coordinator = REWARD_PHASE_COORDINATOR_SCRIPT.new()
 var room_depth_bookkeeper
 
 ## ============================================================================
@@ -2457,7 +2455,8 @@ func _find_authoritative_door_option(requested_door: Dictionary) -> Dictionary:
 func _sync_door_options(synced_door_options: Array, synced_choosing_next_room: bool, synced_boss_unlocked: bool, progress_state: Dictionary = {}) -> void:
 	if not MultiplayerSessionManager.is_remote_replica():
 		return
-	var sanitized_progress_state := _sanitize_progress_sync_state(progress_state)
+	var incoming_room_sync_id := int(progress_state.get("room_sync_id", _world_multiplayer_sync_state.current_room_sync_id))
+	var sanitized_progress_state := _world_progress_sync_policy.sanitize_progress_sync_state(progress_state, _build_progress_sync_policy_context(incoming_room_sync_id, false))
 	if bool(sanitized_progress_state.get("invalid", false)):
 		_world_multiplayer_sync_state.pending_door_sync_payload.clear()
 		return
@@ -2475,7 +2474,8 @@ func _sync_door_options(synced_door_options: Array, synced_choosing_next_room: b
 func _sync_chosen_door(chosen_door: Dictionary, progress_state: Dictionary = {}) -> void:
 	if not MultiplayerSessionManager.is_remote_replica():
 		return
-	var sanitized_progress_state := _sanitize_progress_sync_state(progress_state)
+	var incoming_room_sync_id := int(progress_state.get("room_sync_id", _world_multiplayer_sync_state.current_room_sync_id))
+	var sanitized_progress_state := _world_progress_sync_policy.sanitize_progress_sync_state(progress_state, _build_progress_sync_policy_context(incoming_room_sync_id, false))
 	if bool(sanitized_progress_state.get("invalid", false)):
 		return
 	if _is_reward_selection_active() or current_room_label == "Starting Chamber":
@@ -2571,9 +2571,8 @@ func _build_progress_sync_state() -> Dictionary:
 		"choosing_next_room": choosing_next_room
 	})
 
-func _sanitize_progress_sync_state(progress_state: Dictionary) -> Dictionary:
-	var incoming_room_sync_id := int(progress_state.get("room_sync_id", _world_multiplayer_sync_state.current_room_sync_id))
-	return _world_progress_sync_policy.sanitize_progress_sync_state(progress_state, {
+func _build_progress_sync_policy_context(incoming_room_sync_id: int, include_apply_defaults: bool) -> Dictionary:
+	var context := {
 		"current_room_sync_id": _world_multiplayer_sync_state.current_room_sync_id,
 		"is_stale_room_sync_id": _world_multiplayer_sync_state.is_stale_room_sync_id(incoming_room_sync_id),
 		"is_sync_id_too_far_ahead": _world_multiplayer_sync_state.is_sync_id_too_far_ahead(incoming_room_sync_id, 4),
@@ -2590,40 +2589,48 @@ func _sanitize_progress_sync_state(progress_state: Dictionary) -> Dictionary:
 		"phase_three_rooms_cleared": phase_three_rooms_cleared,
 		"second_boss_encounter_count": second_boss_encounter_count,
 		"third_boss_encounter_count": third_boss_encounter_count
-	})
+	}
+	if include_apply_defaults:
+		context.merge({
+			"boss_unlocked": boss_unlocked,
+			"in_boss_room": in_boss_room,
+			"in_second_boss_room": in_second_boss_room,
+			"in_third_boss_room": in_third_boss_room,
+			"choosing_next_room": choosing_next_room,
+			"max_sane_depth": _get_third_boss_target_depth() + 2
+		})
+	return context
 
 func _apply_progress_sync_state(progress_state: Dictionary) -> void:
-	var sanitized_progress_state := _sanitize_progress_sync_state(progress_state)
-	if sanitized_progress_state.is_empty():
+	var incoming_room_sync_id := int(progress_state.get("room_sync_id", _world_multiplayer_sync_state.current_room_sync_id))
+	var context := _build_progress_sync_policy_context(incoming_room_sync_id, true)
+	var sanitized_progress_state := _world_progress_sync_policy.sanitize_progress_sync_state(progress_state, context)
+	var normalized_apply_state := _world_progress_sync_policy.normalize_apply_progress_sync_state(sanitized_progress_state, context)
+	if normalized_apply_state.is_empty():
 		return
-	if bool(sanitized_progress_state.get("invalid", false)):
+	if bool(normalized_apply_state.get("invalid", false)):
+		if String(normalized_apply_state.get("error", "")) == "depth_above_max":
+			push_error("[Progress Sync] Rejected impossibly high incoming depth %d (max sane: %d)" % [int(normalized_apply_state.get("incoming_depth", 0)), int(normalized_apply_state.get("max_sane_depth", 0))])
 		return
 	# Clear joiner-join flag once first valid sync is received.
 	if _world_multiplayer_sync_state.joiner_awaiting_initial_sync:
 		_world_multiplayer_sync_state.joiner_awaiting_initial_sync = false
 		print_debug("[Multiplayer] Joiner received initial progress sync")
-	
-	var incoming_depth := int(sanitized_progress_state.get("room_depth", room_depth))
-	var max_sane_depth := _get_third_boss_target_depth() + 2
-	if incoming_depth > max_sane_depth:
-		push_error("[Progress Sync] Rejected impossibly high incoming depth %d (max sane: %d)" % [incoming_depth, max_sane_depth])
-		return
-	
-	_world_multiplayer_sync_state.merge_current_room_sync_id(int(sanitized_progress_state.get("room_sync_id", _world_multiplayer_sync_state.current_room_sync_id)))
+	_world_multiplayer_sync_state.merge_current_room_sync_id(int(normalized_apply_state.get("room_sync_id", _world_multiplayer_sync_state.current_room_sync_id)))
 	_set_progression_counters(
-		int(sanitized_progress_state.get("rooms_cleared", rooms_cleared)),
-		incoming_depth,
-		int(sanitized_progress_state.get("phase_two_rooms_cleared", phase_two_rooms_cleared)),
-		int(sanitized_progress_state.get("phase_three_rooms_cleared", phase_three_rooms_cleared))
+		int(normalized_apply_state.get("rooms_cleared", rooms_cleared)),
+		int(normalized_apply_state.get("room_depth", room_depth)),
+		int(normalized_apply_state.get("phase_two_rooms_cleared", phase_two_rooms_cleared)),
+		int(normalized_apply_state.get("phase_three_rooms_cleared", phase_three_rooms_cleared))
 	)
 	_clamp_room_depth_to_sane_range()
-	boss_unlocked = bool(sanitized_progress_state.get("boss_unlocked", boss_unlocked))
-	first_boss_defeated = bool(sanitized_progress_state.get("first_boss_defeated", first_boss_defeated))
-	second_boss_defeated = bool(sanitized_progress_state.get("second_boss_defeated", second_boss_defeated))
-	in_boss_room = bool(sanitized_progress_state.get("in_boss_room", in_boss_room))
-	in_second_boss_room = bool(sanitized_progress_state.get("in_second_boss_room", in_second_boss_room))
-	in_third_boss_room = bool(sanitized_progress_state.get("in_third_boss_room", in_third_boss_room))
-	choosing_next_room = bool(sanitized_progress_state.get("choosing_next_room", choosing_next_room))
+	boss_unlocked = bool(normalized_apply_state.get("boss_unlocked", boss_unlocked))
+	first_boss_defeated = bool(normalized_apply_state.get("first_boss_defeated", first_boss_defeated))
+	second_boss_defeated = bool(normalized_apply_state.get("second_boss_defeated", second_boss_defeated))
+	in_boss_room = bool(normalized_apply_state.get("in_boss_room", in_boss_room))
+	in_second_boss_room = bool(normalized_apply_state.get("in_second_boss_room", in_second_boss_room))
+	in_third_boss_room = bool(normalized_apply_state.get("in_third_boss_room", in_third_boss_room))
+	choosing_next_room = bool(normalized_apply_state.get("choosing_next_room", choosing_next_room))
 	var enforce_local_door_safety := MultiplayerSessionManager.is_authoritative()
 	if enforce_local_door_safety and (active_room_enemy_count > 0 or _is_reward_selection_active()):
 		choosing_next_room = false
@@ -3342,50 +3349,28 @@ func _sync_reward_choice_for_summary(peer_id: int, choice: Dictionary, mode: int
 
 
 func _begin_reward_phase_sync(is_initial: bool, mode: int) -> void:
-	if not is_multiplayer:
-		_reward_phase_active = false
-		_reward_phase_completed_peers.clear()
-		return
-	_reward_phase_active = true
-	_reward_phase_is_initial = is_initial
-	_reward_phase_mode = mode
-	_reward_phase_completed_peers.clear()
-	if is_instance_valid(hud):
-		hud.hide_persistent_banner()
+	_reward_phase_coordinator.begin_phase(is_multiplayer, is_initial, mode, hud)
 
 
 func _mark_local_reward_phase_complete(is_initial: bool, mode: int) -> void:
-	if not is_multiplayer:
-		return
 	var local_peer_id := _resolve_local_peer_id()
-	if local_peer_id <= 0:
+	var request := _reward_phase_coordinator.build_local_completion_request(is_multiplayer, local_peer_id, is_initial, mode, hud)
+	if request.is_empty():
 		return
-	if is_instance_valid(hud):
-		hud.show_persistent_banner("Reward Locked In", "Waiting for other player...", Color(0.78, 0.9, 1.0, 0.92))
-	_sync_reward_phase_complete.rpc(local_peer_id, is_initial, mode)
+	_sync_reward_phase_complete.rpc(int(request.get("peer_id", local_peer_id)), bool(request.get("is_initial", is_initial)), int(request.get("mode", mode)))
 
 
 func _all_reward_phase_peers_completed() -> bool:
 	var multiplayer_session_manager := get_node_or_null("/root/MultiplayerSessionManager")
 	if multiplayer_session_manager == null:
 		return false
-	var required_peers: Array = multiplayer_session_manager.get_peer_ids()
-	if required_peers.is_empty():
-		return false
-	for peer_id_variant in required_peers:
-		var peer_id := int(peer_id_variant)
-		if not bool(_reward_phase_completed_peers.get(peer_id, false)):
-			return false
-	return true
+	return _reward_phase_coordinator.all_required_peers_completed(multiplayer_session_manager.get_peer_ids())
 
 
 func _finalize_reward_phase_and_advance(is_initial: bool, mode: int) -> void:
-	if not _reward_phase_active:
+	var finalize_result := _reward_phase_coordinator.finalize_phase(is_initial, mode)
+	if not bool(finalize_result.get("ok", false)):
 		return
-	_reward_phase_active = false
-	_reward_phase_completed_peers.clear()
-	_reward_phase_mode = ENUMS.RewardMode.NONE
-	_reward_phase_is_initial = false
 	if is_instance_valid(hud):
 		hud.hide_persistent_banner()
 	_set_combat_paused(false)
@@ -3394,7 +3379,7 @@ func _finalize_reward_phase_and_advance(is_initial: bool, mode: int) -> void:
 		pending_room_reward = ENUMS.RewardMode.BOON
 		_begin_room(_build_skirmish_profile(room_depth))
 	else:
-		if mode == ENUMS.RewardMode.BOSS:
+		if bool(finalize_result.get("clear_boss_reward_pending", false)):
 			boss_reward_pending = false
 		if MultiplayerSessionManager.should_broadcast():
 			_doors_spawn_ready = true
@@ -3422,13 +3407,8 @@ func _reset_progress_for_first_encounter() -> void:
 
 @rpc("reliable", "any_peer", "call_local")
 func _sync_reward_phase_complete(peer_id: int, is_initial: bool, mode: int) -> void:
-	if not is_multiplayer:
+	if not _reward_phase_coordinator.register_peer_completion(is_multiplayer, peer_id, is_initial, mode):
 		return
-	if not _reward_phase_active:
-		return
-	if _reward_phase_is_initial != is_initial or _reward_phase_mode != mode:
-		return
-	_reward_phase_completed_peers[int(peer_id)] = true
 	if not MultiplayerSessionManager.should_broadcast():
 		return
 	if not _all_reward_phase_peers_completed():
