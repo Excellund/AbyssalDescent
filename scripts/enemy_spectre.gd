@@ -84,16 +84,8 @@ func _process_behavior(delta: float) -> void:
 		STATE_RECOVER:
 			_process_recover(delta)
 
-func should_force_network_runtime_state_sampling() -> bool:
-	return spectre_state == STATE_WINDUP or spectre_state == STATE_COMMIT or spectre_state == STATE_STRIKE or attack_anim_time_left > 0.0
-
-func should_process_remote_visuals_every_frame() -> bool:
-	return not network_simulation_enabled and (spectre_state == STATE_WINDUP or spectre_state == STATE_COMMIT or spectre_state == STATE_STRIKE)
-
-func get_priority_network_sync_interval_sec() -> float:
-	if spectre_state == STATE_WINDUP or spectre_state == STATE_COMMIT or spectre_state == STATE_STRIKE:
-		return 0.03
-	return 0.0
+func _is_in_priority_attack_state() -> bool:
+	return spectre_state == STATE_WINDUP or spectre_state == STATE_COMMIT or spectre_state == STATE_STRIKE
 
 func get_projectile_network_sync_state() -> Dictionary:
 	if not network_simulation_enabled:

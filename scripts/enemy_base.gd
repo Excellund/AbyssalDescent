@@ -507,11 +507,23 @@ func _process_behavior(_delta: float) -> void:
 func _process_network_visuals(_delta: float) -> void:
 	pass
 
-func should_process_remote_visuals_every_frame() -> bool:
+## Subclasses override this single predicate to declare "I'm currently in an attack
+## window that needs tight network sampling and per-frame remote visuals."
+## The three broadcaster hooks below derive from it so subclasses don't need to
+## re-implement the same predicate three times. Override the individual hooks only
+## when an enemy needs a divergent rule (e.g. visual ticking driven by remote
+## projectile arrays rather than the attack state).
+func _is_in_priority_attack_state() -> bool:
 	return false
 
+func should_force_network_runtime_state_sampling() -> bool:
+	return _is_in_priority_attack_state() or attack_anim_time_left > 0.0
+
+func should_process_remote_visuals_every_frame() -> bool:
+	return not network_simulation_enabled and _is_in_priority_attack_state()
+
 func get_priority_network_sync_interval_sec() -> float:
-	return 0.0
+	return 0.03 if _is_in_priority_attack_state() else 0.0
 
 func _get_inward_edge_bias() -> Vector2:
 	return Vector2.ZERO

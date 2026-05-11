@@ -178,16 +178,8 @@ func _sync_attack_overlay() -> void:
 	var overlay_origin := global_position if network_simulation_enabled else _telegraph_overlay_origin
 	_attack_overlay.call("set_telegraph_state", show_telegraph, active_attack, overlay_origin, telegraph_alpha, locked_direction, _echo_cross_angle, sever_speed, sever_duration, sever_width, echo_cross_length, echo_cross_width)
 
-func should_force_network_runtime_state_sampling() -> bool:
-	return boss_state == STATE_WINDUP or boss_state == STATE_ATTACK or attack_anim_time_left > 0.0
-
-func should_process_remote_visuals_every_frame() -> bool:
-	return not network_simulation_enabled and (boss_state == STATE_WINDUP or boss_state == STATE_ATTACK)
-
-func get_priority_network_sync_interval_sec() -> float:
-	if boss_state == STATE_WINDUP or boss_state == STATE_ATTACK:
-		return 0.03
-	return 0.0
+func _is_in_priority_attack_state() -> bool:
+	return boss_state == STATE_WINDUP or boss_state == STATE_ATTACK
 
 func get_projectile_network_sync_state() -> Dictionary:
 	if not network_simulation_enabled:

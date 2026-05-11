@@ -19,6 +19,23 @@ Pair every implementation of `_process_network_visuals` with `should_process_rem
 
 Reference: `scripts/enemy_mirrorline.gd`, `scripts/enemy_boss_2.gd` (Sovereign).
 
+### 1a. Declare the priority window via `_is_in_priority_attack_state()` (preferred)
+
+`scripts/enemy_base.gd` provides defaults for the three broadcaster hooks (`should_force_network_runtime_state_sampling`, `should_process_remote_visuals_every_frame`, `get_priority_network_sync_interval_sec`) derived from a single virtual:
+
+```gdscript
+func _is_in_priority_attack_state() -> bool:
+	return my_state == STATE_WINDUP or my_state == STATE_ATTACK
+```
+
+That one override gives you:
+
+- Force-sample bypass during the attack window AND any `attack_anim_time_left > 0.0` swing.
+- Per-frame remote visuals for joiners during the window.
+- 0.03s priority sync interval during the window; idle reverts to broadcaster default.
+
+Override the three hooks individually only when an enemy needs a divergent rule (examples currently in repo: `enemy_archer.gd` ticks visuals while remote projectiles exist, `enemy_lancer.gd` ticks while a bolt or zone is alive, `enemy_seamlock.gd` adds an illusion-phase visual tick). Do **not** re-implement the boilerplate triplet for new enemies whose three predicates are the same — use the single override.
+
 ### 2. Custom payload has a hard size cap (~900 bytes)
 
 `scripts/core/enemy_state_sync_broadcaster.gd::_fit_state_to_size_limit` silently erases the entire `runtime_state_delta.custom` dict when the per-enemy synced state exceeds the adaptive cap (900B for <40 active enemies, dropping to 480B at 60+).
@@ -51,6 +68,7 @@ Pattern: sync the inputs (`prev_normal`, `target_normal`, `telegraph_total`) and
 When `custom.echoes` (or any projectile array) arrives on the joiner, do NOT replace the local array with the incoming snapshot. That rubber-bands every projectile to ~30Hz host samples.
 
 Pattern:
+
 - Allocate a stable monotonic `id` per projectile on host spawn.
 - Joiner keeps locally-simulated projectiles intact; only ADDS host-spawned ids it hasn't seen and lets locally-expired projectiles despawn naturally.
 - Implicit hit signal: host removes hit projectiles from its array, so any id missing from incoming = hit-or-expired. Don't put a `hit:bool` on the wire (rule #2).
