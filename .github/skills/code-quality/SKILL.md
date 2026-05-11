@@ -94,6 +94,7 @@ How to apply:
 - Keep one runtime owner per behavior.
 - For repeated pause/start/end combat side effects (damage toggles, lingering-effect cleanup, physics process gating), route through a focused coordinator instead of duplicating world-level branches.
 - Remove mirrored or legacy paths after extraction.
+- **Extract visual overlays from orchestrators.** If a Node2D orchestrator (e.g., world_generator.gd) grows a `_draw()` method for a specific visual subsystem, extract it to a dedicated `Node2D` overlay script (e.g., `objective_control_overlay.gd`). The overlay owns its own `queue_redraw()` cycle. The orchestrator wires the overlay to the data source and adds it as a child. See `lancer_zone_overlay.gd`, `lacuna_attack_overlay.gd`, `objective_control_overlay.gd` for the established pattern.
 
 Nuance: splitting has a cost. If the split forces readers to jump across many files to follow one straight-line behavior, the original was clearer. Prefer local and obvious code over more files.
 

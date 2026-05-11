@@ -22,6 +22,7 @@ const ENCOUNTER_PROFILE_BUILDER_SCRIPT := preload("res://scripts/encounter_profi
 const ENCOUNTER_FLOW_SYSTEM_SCRIPT := preload("res://scripts/encounter_flow_system.gd")
 const OBJECTIVE_RUNTIME_SCRIPT := preload("res://scripts/objective_runtime.gd")
 const OBJECTIVE_MANAGER_SCRIPT := preload("res://scripts/objective_manager.gd")
+const OBJECTIVE_CONTROL_OVERLAY_SCRIPT := preload("res://scripts/objective_control_overlay.gd")
 const REWARD_SELECTION_UI_SCRIPT := preload("res://scripts/reward_selection_ui.gd")
 const ASCENSION_REGISTRY := preload("res://scripts/progression/ascension_modifier_registry.gd")
 const ENUMS := preload("res://scripts/shared/enums.gd")
@@ -196,6 +197,7 @@ var encounter_profile_builder: ENCOUNTER_PROFILE_BUILDER_SCRIPT
 var encounter_flow_system
 var objective_runtime: Node
 var objective_manager: OBJECTIVE_MANAGER_SCRIPT
+var objective_control_overlay: Node2D
 var reward_selection_ui
 var pause_menu_controller: Node
 var victory_screen: Node
@@ -818,6 +820,9 @@ func _setup_objective_runtime_system() -> void:
 	objective_runtime = OBJECTIVE_RUNTIME_SCRIPT.new()
 	add_child(objective_runtime)
 	objective_runtime.initialize(self, rng, objective_manager)
+	objective_control_overlay = OBJECTIVE_CONTROL_OVERLAY_SCRIPT.new()
+	add_child(objective_control_overlay)
+	objective_control_overlay.objective_manager = objective_manager
 
 func _run_resume_flow() -> bool:
 	var resumed_run := _try_resume_saved_run()
@@ -1305,9 +1310,7 @@ func _process(delta: float) -> void:
 	_keep_enemies_inside_current_room(delta)
 	_keep_player_inside_camera_view()
 	var _grace_active := _update_encounter_intro_grace()
-	var objective_frame_result: Dictionary = objective_frame_coordinator.tick(objective_manager, objective_runtime, delta, _grace_active)
-	if bool(objective_frame_result.get("should_redraw", false)):
-		queue_redraw()
+	objective_frame_coordinator.tick(objective_manager, objective_runtime, delta, _grace_active)
 	_try_use_door()
 	_update_encounter_state()
 	_update_camera_mode()
@@ -1543,35 +1546,6 @@ func _handle_modal_frame(delta: float) -> bool:
 func _refresh_frame_ui() -> void:
 	hud.refresh(_get_hud_state(), player)
 	_sync_renderer()
-
-func _draw() -> void:
-	var control_overlay: Dictionary = {}
-	if is_instance_valid(objective_manager):
-		control_overlay = objective_manager.get_control_overlay_state()
-	if not bool(control_overlay.get("should_draw", false)):
-		return
-	var goal := maxf(0.01, float(control_overlay.get("goal", 0.0)))
-	var progress := float(control_overlay.get("progress", 0.0))
-	var progress_ratio := clampf(progress / goal, 0.0, 1.0)
-	var anchor := Vector2(control_overlay.get("anchor", Vector2.ZERO))
-	var radius := float(control_overlay.get("radius", 0.0))
-	var player_inside := bool(control_overlay.get("player_inside", false))
-	var contested := bool(control_overlay.get("contested", false))
-	var fill_color := Color(0.32, 0.72, 0.96, 0.08)
-	var ring_color := Color(0.46, 0.86, 1.0, 0.4)
-	var progress_color := Color(0.98, 0.86, 0.42, 0.92)
-	if player_inside and not contested:
-		fill_color = Color(0.38, 0.92, 0.62, 0.1)
-		ring_color = Color(0.56, 1.0, 0.74, 0.5)
-		progress_color = Color(0.92, 1.0, 0.7, 0.98)
-	elif contested:
-		fill_color = Color(0.98, 0.46, 0.34, 0.08)
-		ring_color = Color(1.0, 0.64, 0.44, 0.54)
-		progress_color = Color(1.0, 0.8, 0.52, 0.94)
-	draw_circle(anchor, radius, fill_color)
-	draw_arc(anchor, radius, 0.0, TAU, 72, ring_color, 3.0)
-	draw_arc(anchor, radius - 8.0, -PI * 0.5, -PI * 0.5 + TAU * progress_ratio, 64, progress_color, 6.0)
-	draw_circle(anchor, 8.0, Color(1.0, 0.96, 0.72, 0.75))
 
 func _clamp_position_to_current_room(target_position: Vector2, margin: float = 28.0) -> Vector2:
 	if current_effective_room_size == Vector2.ZERO:
@@ -2541,7 +2515,6 @@ func _sync_objective_control_zone(control_anchor: Vector2, control_radius: float
 	objective_manager.control_goal = control_goal
 	objective_manager.control_decay_rate = control_decay_rate
 	objective_manager.control_contest_threshold = control_contest_threshold
-	queue_redraw()
 
 @rpc("unreliable", "authority")
 func _sync_objective_control_zone_state(control_progress: float, control_enemies_in_zone: int, control_contested: bool, control_player_inside: bool) -> void:
@@ -2553,7 +2526,6 @@ func _sync_objective_control_zone_state(control_progress: float, control_enemies
 	objective_manager.control_enemies_in_zone = maxi(0, control_enemies_in_zone)
 	objective_manager.control_contested = control_contested
 	objective_manager.control_player_inside = control_player_inside
-	queue_redraw()
 
 @rpc("reliable", "authority")
 func _sync_objective_cleared() -> void:
@@ -2565,7 +2537,6 @@ func _sync_objective_cleared() -> void:
 	_world_multiplayer_sync_state.clear_pending_objective_spawn_sync_payloads()
 	_clear_all_enemies()
 	active_room_enemy_count = 0
-	queue_redraw()
 
 @rpc("unreliable", "authority")
 func _sync_objective_state(objective_state: Dictionary, source_room_sync_id: int, sequence: int) -> void:
@@ -2581,7 +2552,6 @@ func _sync_objective_state(objective_state: Dictionary, source_room_sync_id: int
 		return
 	_last_applied_objective_state_sync_sequence = sequence
 	objective_manager.apply_sync_state(objective_state)
-	queue_redraw()
 
 func _build_progress_sync_state() -> Dictionary:
 	return {
@@ -2937,9 +2907,7 @@ func _play_room_music(is_boss_room: bool, instant: bool = false, fade_duration: 
 func _on_room_enemy_died(kill_pos: Vector2 = Vector2.ZERO) -> void:
 	active_room_enemy_count = maxi(0, active_room_enemy_count - 1)
 	run_summary_recorder.record_enemy_kill_for_tracker()
-	var objective_progress_result: Dictionary = objective_progress_coordinator.on_enemy_killed(objective_manager, objective_runtime, kill_pos)
-	if bool(objective_progress_result.get("should_redraw", false)):
-		queue_redraw()
+	objective_progress_coordinator.on_enemy_killed(objective_manager, objective_runtime, kill_pos)
 	if is_instance_valid(player):
 		player.notify_enemy_killed(kill_pos)
 
