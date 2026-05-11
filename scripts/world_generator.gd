@@ -1164,41 +1164,51 @@ func _debug_preset_power_count_for_depth(depth: int) -> int:
 	return 2 + int(floor(float(clamped_depth - 1) / 2.0))
 
 func _get_debug_power_preset_pool(preset: int) -> Array[String]:
+	var raw_pool: Array[String] = []
 	match preset:
 		DEBUG_ENUMS.PowerPreset.DASH_SPECIALIST:
-			return [
+			raw_pool = [
 				"fleet_foot",
 				"blink_dash",
 				"surge_step",
 				"phantom_step",
+				"riftpunch",
 				"reaper_step",
 				"static_wake",
 				"wraithstep"
 			]
 		DEBUG_ENUMS.PowerPreset.NO_DASH_BRUISER:
-			return [
+			raw_pool = [
 				"heavy_blow",
 				"wide_arc",
 				"long_reach",
 				"iron_skin",
-				"heartstone",
 				"battle_trance",
-				"rupture_wave",
+				"heartstone",
+				"bloodpact",
+				"severing_edge",
 				"aegis_field",
 				"hunters_snare"
 			]
 		DEBUG_ENUMS.PowerPreset.HIGH_RANGE_DPS:
-			return [
+			raw_pool = [
 				"first_strike",
-				"heavy_blow",
 				"long_reach",
 				"razor_wind",
 				"execution_edge",
 				"storm_crown",
+				"farline_volley",
+				"eclipse_mark",
+				"sigil_chain",
 				"hunters_snare"
 			]
 		_:
 			return []
+	var filtered: Array[String] = []
+	for power_id in raw_pool:
+		if power_registry_instance != null and power_registry_instance.is_valid_power_id(power_id):
+			filtered.append(power_id)
+	return filtered
 
 func _get_debug_power_preset_ids(preset: int, depth: int = -1) -> Array[String]:
 	var pool := _get_debug_power_preset_pool(preset)
