@@ -135,7 +135,7 @@ func _update_beam_partner(delta: float) -> void:
 		return
 	if _partner_refresh_left > 0.0 and _is_valid_tether_partner(beam_partner):
 		return
-	beam_partner = _find_beam_partner_with_hysteresis(beam_partner)
+	beam_partner = _find_beam_partner_with_hysteresis(beam_partner as Variant)
 	_partner_refresh_left = partner_refresh_interval
 
 func _is_valid_tether_partner(candidate: Variant) -> bool:
@@ -150,19 +150,20 @@ func _is_valid_tether_partner(candidate: Variant) -> bool:
 		return false
 	return candidate_body.is_tether_enemy()
 
-func _find_beam_partner_with_hysteresis(current_partner: ENEMY_BASE_SCRIPT) -> ENEMY_BASE_SCRIPT:
+func _find_beam_partner_with_hysteresis(current_partner: Variant) -> ENEMY_BASE_SCRIPT:
 	var nearest := _find_beam_partner()
 	if not _is_valid_tether_partner(current_partner):
 		return nearest
-	if current_partner == null:
+	var current_partner_enemy := current_partner as ENEMY_BASE_SCRIPT
+	if current_partner_enemy == null:
 		return nearest
-	if nearest == null or nearest == current_partner:
-		return current_partner
-	var current_distance := global_position.distance_to(current_partner.global_position)
+	if nearest == null or nearest == current_partner_enemy:
+		return current_partner_enemy
+	var current_distance := global_position.distance_to(current_partner_enemy.global_position)
 	var nearest_distance := global_position.distance_to(nearest.global_position)
 	if nearest_distance + partner_switch_margin < current_distance:
 		return nearest
-	return current_partner
+	return current_partner_enemy
 
 func _find_beam_partner() -> ENEMY_BASE_SCRIPT:
 	var nearest: ENEMY_BASE_SCRIPT = null

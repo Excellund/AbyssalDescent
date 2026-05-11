@@ -6,12 +6,34 @@ const SEARCH_ROOTS: Array[String] = [
 	"res://.github/scripts"
 ]
 
+func _collect_live_script_paths() -> Dictionary:
+	var live_paths: Dictionary = {}
+	_collect_node_script_paths(get_root(), live_paths)
+	return live_paths
+
+func _collect_node_script_paths(node: Node, live_paths: Dictionary) -> void:
+	if node == null:
+		return
+	var script_value: Variant = node.get_script()
+	if script_value is Script:
+		var script_path := String((script_value as Script).resource_path)
+		if not script_path.is_empty():
+			live_paths[script_path] = true
+	for child in node.get_children():
+		var child_node := child as Node
+		if child_node != null:
+			_collect_node_script_paths(child_node, live_paths)
+
 func _initialize() -> void:
+	call_deferred("_run_validation")
+
+func _run_validation() -> void:
 	print("[Validator] Starting GDScript compile validation")
 	var script_paths: Array[String] = []
 	for root in SEARCH_ROOTS:
 		_collect_script_paths(root, script_paths)
 	script_paths.sort()
+	var live_script_paths := _collect_live_script_paths()
 
 	var failures: Array[String] = []
 	var skipped_in_use := 0
@@ -20,6 +42,9 @@ func _initialize() -> void:
 		var script := loaded as Script
 		if script == null:
 			failures.append("Load failed: %s" % script_path)
+			continue
+		if bool(live_script_paths.get(script_path, false)):
+			skipped_in_use += 1
 			continue
 		var reload_result := script.reload()
 		if reload_result == ERR_ALREADY_IN_USE or reload_result == ERR_BUSY:
