@@ -5,6 +5,7 @@ const RUN_CONTEXT_PATH := "/root/RunContext"
 const MENU_LOGO_TEXTURE := preload("res://assets/ui/menu_logo_mark.svg")
 const MENU_MUSIC := preload("res://music/msx1.mp3")
 const ENUMS := preload("res://scripts/shared/enums.gd")
+const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
 const AUDIO_LEVELS := preload("res://scripts/shared/audio_levels.gd")
 const GLOSSARY_DATA := preload("res://scripts/shared/glossary_data.gd")
 const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
@@ -710,7 +711,7 @@ func _build_ui() -> void:
 	multiplayer_button.pressed.connect(_on_multiplayer_pressed)
 	root_actions.add_child(multiplayer_button)
 
-	var ascension_button := _make_menu_button("Ascension & Oaths")
+	var ascension_button := _make_menu_button("Oaths")
 	ascension_button.custom_minimum_size = Vector2(470.0, MAIN_MENU_ACTION_BUTTON_HEIGHT)
 	ascension_button.pressed.connect(_on_ascension_pressed)
 	root_actions.add_child(ascension_button)
@@ -2327,10 +2328,24 @@ func _build_ascension_panel() -> ASCENSION_PANEL_SCRIPT:
 	panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.04, 0.06, 0.1, 0.97), Color(0.44, 0.7, 0.96, 0.74), 20, 2))
 	panel._build_ui(self)
 	panel.back_pressed.connect(_show_root_panel)
+	panel.begin_descent_pressed.connect(_on_ascension_begin_descent_pressed)
 	return panel
 
 func _on_ascension_pressed() -> void:
+	if ascension_panel != null:
+		ascension_panel.set_run_setup_mode(false)
+		ascension_panel.set_oaths_only_mode(true)
 	_show_ascension_panel()
+
+func _on_ascension_begin_descent_pressed() -> void:
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context == null:
+		return
+	## Finalize the ascension loadout and difficulty tier were already set via Forsworn intercept
+	if ascension_panel != null:
+		ascension_panel.visible = false
+		ascension_panel.set_run_setup_mode(false)
+	get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)
 
 func _show_leaderboard_panel() -> void:
 	if root_panel != null and leaderboard_panel != null:
@@ -2565,6 +2580,25 @@ func _update_difficulty_selector() -> void:
 func _on_difficulty_tier_selected(tier: int) -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context == null:
+		return
+	
+	## Intercept Forsworn tier to show ascension panel in run-setup mode
+	if tier == BEARING_ENUMS.BearingTier.FORSWORN:
+		if ascension_panel != null:
+			if difficulty_selector_panel != null:
+				difficulty_selector_panel.visible = false
+			var selected_char_id: String = String(run_context.get_selected_character_id())
+			ascension_panel.set_oaths_only_mode(false)
+			ascension_panel.set_character_id(selected_char_id)
+			ascension_panel.set_run_setup_mode(true)
+			ascension_panel.populate()
+			if run_context.set_difficulty_tier(tier):
+				if root_panel != null and ascension_panel != null:
+					_animate_replace_transition(root_panel, ascension_panel, Vector2(0.0, 24.0), Vector2(0.0, -18.0))
+				elif root_panel != null:
+					root_panel.visible = false
+				if character_selector_panel != null:
+					character_selector_panel.visible = false
 		return
 	
 	if run_context.set_difficulty_tier(tier):

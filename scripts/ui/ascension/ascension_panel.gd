@@ -7,6 +7,7 @@
 extends Panel
 
 signal back_pressed
+signal begin_descent_pressed
 
 const ASCENSION_REGISTRY := preload("res://scripts/progression/ascension_modifier_registry.gd")
 const OATHS_REGISTRY := preload("res://scripts/progression/oaths_registry.gd")
@@ -15,6 +16,7 @@ const META_PROGRESS_STORE := preload("res://scripts/meta_progress_store.gd")
 const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 const MENU_STYLE_FACTORY := preload("res://scripts/core/menu_style_factory.gd")
 const RUN_CONTEXT_SCRIPT := preload("res://scripts/run_context.gd")
+const SCRIPT_BUILD_MARKER := "ascension_panel_2026_05_11_guarded_style"
 
 const RUN_CONTEXT_PATH := "/root/RunContext"
 
@@ -30,21 +32,32 @@ var _oath_list: VBoxContainer
 var _modifier_lock_banner: PanelContainer
 var _catalyst_wip_banner: PanelContainer
 var _collapsed_clear_groups: Dictionary = {}
+var _run_setup_mode_enabled: bool = false
+var _oaths_only_mode_enabled: bool = false
+var _prev_char_button: Button
+var _next_char_button: Button
+var _modifier_column_root: Node
+var _catalyst_column_root: Node
+var _back_button: Button
+var _begin_descent_button: Button
+
+func _enter_tree() -> void:
+	print("[AscensionPanel] Loaded script build:", SCRIPT_BUILD_MARKER)
 
 func _build_ui(host: Node) -> void:
 	_host = host
 	var layout := MarginContainer.new()
 	layout.set_anchors_preset(Control.PRESET_FULL_RECT)
-	layout.add_theme_constant_override("margin_left", 36)
-	layout.add_theme_constant_override("margin_right", 36)
-	layout.add_theme_constant_override("margin_top", 28)
-	layout.add_theme_constant_override("margin_bottom", 22)
+	layout.add_theme_constant_override("margin_left", 44)
+	layout.add_theme_constant_override("margin_right", 44)
+	layout.add_theme_constant_override("margin_top", 32)
+	layout.add_theme_constant_override("margin_bottom", 28)
 	add_child(layout)
 
 	var stack := VBoxContainer.new()
 	stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	stack.add_theme_constant_override("separation", 12)
+	stack.add_theme_constant_override("separation", 18)
 	layout.add_child(stack)
 
 	_title_label = Label.new()
@@ -64,6 +77,7 @@ func _build_ui(host: Node) -> void:
 		_step_character(-1)
 	)
 	character_row.add_child(prev_button)
+	_prev_char_button = prev_button
 
 	_character_label = RichTextLabel.new()
 	_character_label.bbcode_enabled = true
@@ -81,6 +95,7 @@ func _build_ui(host: Node) -> void:
 		_step_character(1)
 	)
 	character_row.add_child(next_button)
+	_next_char_button = next_button
 
 	_rank_label = Label.new()
 	_rank_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -100,25 +115,93 @@ func _build_ui(host: Node) -> void:
 	var modifier_column: Node = _modifier_list.get_parent().get_parent().get_parent()
 	modifier_column.add_child(_modifier_lock_banner)
 	modifier_column.move_child(_modifier_lock_banner, 1)
+	_modifier_column_root = modifier_column
 	_catalyst_list = _build_section_column(columns, "Catalysts (max %d)" % CATALYST_REGISTRY.get_slot_limit(), 1.0)
 	_catalyst_list.add_theme_constant_override("separation", 8)
 	_catalyst_wip_banner = _build_catalyst_wip_banner()
 	var catalyst_column: Node = _catalyst_list.get_parent().get_parent().get_parent()
 	catalyst_column.add_child(_catalyst_wip_banner)
 	catalyst_column.move_child(_catalyst_wip_banner, 1)
+	_catalyst_column_root = catalyst_column
 	_oath_list = _build_section_column(columns, "Oaths", 1.7)
 	_oath_list.add_theme_constant_override("separation", 8)
+
+	var footer := HBoxContainer.new()
+	footer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	footer.alignment = BoxContainer.ALIGNMENT_CENTER
+	footer.add_theme_constant_override("separation", 18)
+	stack.add_child(footer)
 
 	var back := _make_back_button()
 	back.pressed.connect(func() -> void:
 		emit_signal("back_pressed")
 	)
-	stack.add_child(back)
+	footer.add_child(back)
+	_back_button = back
+
+	_begin_descent_button = _make_begin_descent_button()
+	_begin_descent_button.pressed.connect(func() -> void:
+		emit_signal("begin_descent_pressed")
+	)
+	_begin_descent_button.visible = false
+	footer.add_child(_begin_descent_button)
+
+func _on_back_or_descent_pressed() -> void:
+	if _run_setup_mode_enabled:
+		emit_signal("begin_descent_pressed")
+	else:
+		emit_signal("back_pressed")
 
 func populate() -> void:
 	if _character_id.is_empty():
 		_character_id = _resolve_active_character_id()
 	_refresh_all()
+
+func set_character_id(char_id: String) -> void:
+	var normalized: String = String(char_id).strip_edges().to_lower()
+	if not normalized.is_empty():
+		_character_id = normalized
+
+func set_run_setup_mode(enabled: bool) -> void:
+	_run_setup_mode_enabled = enabled
+	_apply_mode_visibility()
+
+func set_oaths_only_mode(enabled: bool) -> void:
+	_oaths_only_mode_enabled = enabled
+	_apply_mode_visibility()
+
+func _apply_mode_visibility() -> void:
+	var lock_character: bool = _run_setup_mode_enabled or _oaths_only_mode_enabled
+	if _prev_char_button != null:
+		_prev_char_button.visible = not lock_character
+	if _next_char_button != null:
+		_next_char_button.visible = not lock_character
+	if _back_button != null:
+		_back_button.text = "Back"
+	if _begin_descent_button != null:
+		_begin_descent_button.visible = _run_setup_mode_enabled
+	if _oaths_only_mode_enabled:
+		if _title_label != null:
+			_title_label.text = "Oaths"
+		if _rank_label != null:
+			_rank_label.visible = false
+		if _character_label != null:
+			_character_label.visible = false
+		if _modifier_column_root != null:
+			(_modifier_column_root as Control).visible = false
+		if _catalyst_column_root != null:
+			(_catalyst_column_root as Control).visible = false
+	else:
+		if _title_label != null:
+			_title_label.text = "Ascension & Oaths"
+		if _rank_label != null:
+			_rank_label.visible = true
+		if _character_label != null:
+			_character_label.visible = true
+		if _modifier_column_root != null:
+			(_modifier_column_root as Control).visible = true
+		if _catalyst_column_root != null:
+			(_catalyst_column_root as Control).visible = true
 
 func _refresh_all() -> void:
 	_refresh_header()
@@ -127,6 +210,8 @@ func _refresh_all() -> void:
 	_refresh_oath_list()
 
 func _step_character(direction: int) -> void:
+	if _run_setup_mode_enabled:
+		return
 	var ids: Array[String] = CHARACTER_REGISTRY.get_launch_character_ids()
 	if ids.is_empty():
 		return
@@ -201,11 +286,14 @@ func _make_modifier_card(modifier_id: String, def: Dictionary, unlocked: bool, e
 	var card := PanelContainer.new()
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var card_state: int = 2 if equipped else (1 if unlocked else 0)
-	card.add_theme_stylebox_override("panel", _make_catalyst_card_style(card_state))
+	var panel_style: StyleBoxFlat = _make_catalyst_card_style(card_state)
+	if panel_style == null:
+		panel_style = StyleBoxFlat.new()
+	card.add_theme_stylebox_override("panel", panel_style)
 
 	var inner := VBoxContainer.new()
 	inner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	inner.add_theme_constant_override("separation", 4)
+	inner.add_theme_constant_override("separation", 10)
 	card.add_child(inner)
 
 	var header := HBoxContainer.new()
@@ -217,26 +305,14 @@ func _make_modifier_card(modifier_id: String, def: Dictionary, unlocked: bool, e
 	var title_label := Label.new()
 	title_label.text = String(def.get("label", modifier_id))
 	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	title_label.add_theme_font_size_override("font_size", 17)
 	title_label.add_theme_color_override("font_color", title_color)
 	header.add_child(title_label)
 
-	var rank_tag := _make_rank_tag_label(int(def.get("heat_cost", 1)))
-	if not unlocked:
-		rank_tag.modulate = Color(0.6, 0.6, 0.7, 0.6)
+	var rank_tag := _make_rank_tag_pill(int(def.get("heat_cost", 1)), unlocked, equipped)
 	header.add_child(rank_tag)
-
-	var toggle := _make_toggle_button(equipped, unlocked)
-	if not unlocked:
-		toggle.text = "Locked"
-		toggle.disabled = true
-	else:
-		toggle.text = "Equipped" if equipped else "Equip"
-		toggle.pressed.connect(func() -> void:
-			_toggle_modifier(modifier_id)
-		)
-	header.add_child(toggle)
 
 	var description: String = String(def.get("description", "")).strip_edges()
 	if not description.is_empty():
@@ -249,9 +325,31 @@ func _make_modifier_card(modifier_id: String, def: Dictionary, unlocked: bool, e
 		desc_label.add_theme_color_override("font_color", desc_color)
 		inner.add_child(desc_label)
 
+	var footer := HBoxContainer.new()
+	footer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	footer.add_theme_constant_override("separation", 0)
+	inner.add_child(footer)
+
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	footer.add_child(spacer)
+
+	var toggle := _make_toggle_button(equipped, unlocked)
+	if not unlocked:
+		toggle.text = "Locked"
+		toggle.disabled = true
+	else:
+		toggle.text = "Equipped" if equipped else "Equip"
+		toggle.pressed.connect(func() -> void:
+			_toggle_modifier(modifier_id)
+		)
+	footer.add_child(toggle)
+
 	return card
 
 func _toggle_modifier(modifier_id: String) -> void:
+	if _run_setup_mode_enabled:
+		return
 	if not _is_ascension_unlocked():
 		return
 	var profile: Dictionary = _get_profile()
@@ -294,11 +392,14 @@ func _make_catalyst_card(catalyst_id: String, def: Dictionary, unlocked: bool, e
 	var card := PanelContainer.new()
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var card_state: int = 2 if equipped else (1 if unlocked else 0)
-	card.add_theme_stylebox_override("panel", _make_catalyst_card_style(card_state))
+	var panel_style: StyleBoxFlat = _make_catalyst_card_style(card_state)
+	if panel_style == null:
+		panel_style = StyleBoxFlat.new()
+	card.add_theme_stylebox_override("panel", panel_style)
 
 	var inner := VBoxContainer.new()
 	inner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	inner.add_theme_constant_override("separation", 4)
+	inner.add_theme_constant_override("separation", 10)
 	card.add_child(inner)
 
 	var header := HBoxContainer.new()
@@ -310,10 +411,31 @@ func _make_catalyst_card(catalyst_id: String, def: Dictionary, unlocked: bool, e
 	var title_label := Label.new()
 	title_label.text = String(def.get("label", catalyst_id))
 	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	title_label.add_theme_font_size_override("font_size", 17)
 	title_label.add_theme_color_override("font_color", title_color)
 	header.add_child(title_label)
+
+	var description: String = String(def.get("description", "")).strip_edges()
+	if not description.is_empty():
+		var desc_label := Label.new()
+		desc_label.text = description
+		desc_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		desc_label.add_theme_font_size_override("font_size", 13)
+		var desc_color: Color = Color(0.62, 0.66, 0.74, 0.6) if not unlocked else Color(0.72, 0.84, 0.96, 0.82)
+		desc_label.add_theme_color_override("font_color", desc_color)
+		inner.add_child(desc_label)
+
+	var footer := HBoxContainer.new()
+	footer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	footer.add_theme_constant_override("separation", 0)
+	inner.add_child(footer)
+
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	footer.add_child(spacer)
 
 	var toggle := _make_toggle_button(equipped, unlocked)
 	if not unlocked:
@@ -330,18 +452,7 @@ func _make_catalyst_card(catalyst_id: String, def: Dictionary, unlocked: bool, e
 		toggle.pressed.connect(func() -> void:
 			_toggle_catalyst(catalyst_id)
 		)
-	header.add_child(toggle)
-
-	var description: String = String(def.get("description", "")).strip_edges()
-	if not description.is_empty():
-		var desc_label := Label.new()
-		desc_label.text = description
-		desc_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		desc_label.add_theme_font_size_override("font_size", 13)
-		var desc_color: Color = Color(0.62, 0.66, 0.74, 0.6) if not unlocked else Color(0.72, 0.84, 0.96, 0.82)
-		desc_label.add_theme_color_override("font_color", desc_color)
-		inner.add_child(desc_label)
+	footer.add_child(toggle)
 
 	return card
 
@@ -360,14 +471,14 @@ func _make_catalyst_card_style(state: int) -> StyleBoxFlat:
 	style.border_width_top = 1
 	style.border_width_right = 1
 	style.border_width_bottom = 1
-	style.corner_radius_top_left = 8
-	style.corner_radius_top_right = 8
-	style.corner_radius_bottom_left = 8
-	style.corner_radius_bottom_right = 8
-	style.content_margin_left = 14.0
-	style.content_margin_right = 14.0
-	style.content_margin_top = 9.0
-	style.content_margin_bottom = 9.0
+	style.corner_radius_top_left = 10
+	style.corner_radius_top_right = 10
+	style.corner_radius_bottom_left = 10
+	style.corner_radius_bottom_right = 10
+	style.content_margin_left = 16.0
+	style.content_margin_right = 16.0
+	style.content_margin_top = 12.0
+	style.content_margin_bottom = 12.0
 	return style
 
 func _toggle_catalyst(catalyst_id: String) -> void:
@@ -669,7 +780,7 @@ func _build_section_column(parent: HBoxContainer, header_text: String, stretch_r
 	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	column.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	column.size_flags_stretch_ratio = stretch_ratio
-	column.add_theme_constant_override("separation", 8)
+	column.add_theme_constant_override("separation", 10)
 	parent.add_child(column)
 
 	var header := Label.new()
@@ -688,11 +799,13 @@ func _build_section_column(parent: HBoxContainer, header_text: String, stretch_r
 	inner_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inner_margin.add_theme_constant_override("margin_right", 14)
 	inner_margin.add_theme_constant_override("margin_left", 2)
+	inner_margin.add_theme_constant_override("margin_top", 2)
+	inner_margin.add_theme_constant_override("margin_bottom", 2)
 	scroll.add_child(inner_margin)
 
 	var inner := VBoxContainer.new()
 	inner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	inner.add_theme_constant_override("separation", 4)
+	inner.add_theme_constant_override("separation", 10)
 	inner_margin.add_child(inner)
 	return inner
 
@@ -720,6 +833,46 @@ func _make_rank_tag_label(rank: int) -> Label:
 	label.add_theme_font_size_override("font_size", 14)
 	label.add_theme_color_override("font_color", Color(0.96, 0.86, 0.62, 0.96))
 	return label
+
+func _make_rank_tag_pill(rank: int, unlocked: bool, equipped: bool) -> PanelContainer:
+	var pill := PanelContainer.new()
+	pill.size_flags_horizontal = Control.SIZE_SHRINK_END
+	pill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var style := StyleBoxFlat.new()
+	if not unlocked:
+		style.bg_color = Color(0.10, 0.10, 0.14, 0.70)
+		style.border_color = Color(0.32, 0.32, 0.40, 0.60)
+	elif equipped:
+		style.bg_color = Color(0.32, 0.22, 0.08, 0.80)
+		style.border_color = Color(1.0, 0.78, 0.40, 0.85)
+	else:
+		style.bg_color = Color(0.10, 0.16, 0.24, 0.80)
+		style.border_color = Color(0.52, 0.74, 0.96, 0.70)
+	style.border_width_left = 1
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 1
+	style.corner_radius_top_left = 10
+	style.corner_radius_top_right = 10
+	style.corner_radius_bottom_left = 10
+	style.corner_radius_bottom_right = 10
+	style.content_margin_left = 10.0
+	style.content_margin_right = 10.0
+	style.content_margin_top = 3.0
+	style.content_margin_bottom = 3.0
+	pill.add_theme_stylebox_override("panel", style)
+
+	var label := Label.new()
+	label.text = "+%d Heat" % rank
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 12)
+	var text_color: Color = Color(0.96, 0.86, 0.62, 0.98)
+	if not unlocked:
+		text_color = Color(0.6, 0.6, 0.7, 0.7)
+	pill.add_child(label)
+	label.add_theme_color_override("font_color", text_color)
+	return pill
 
 func _make_toggle_button(equipped: bool, unlocked: bool) -> Button:
 	var button := Button.new()
@@ -759,6 +912,18 @@ func _make_back_button() -> Button:
 	button.add_theme_stylebox_override("normal", MENU_STYLE_FACTORY.make_button_style(Color(0.10, 0.15, 0.22, 0.95), Color(0.34, 0.56, 0.84, 0.72), 14, 2))
 	button.add_theme_stylebox_override("hover", MENU_STYLE_FACTORY.make_button_style(Color(0.13, 0.19, 0.28, 0.98), Color(0.62, 0.82, 0.98, 0.88), 14, 2))
 	button.add_theme_stylebox_override("pressed", MENU_STYLE_FACTORY.make_button_style(Color(0.08, 0.12, 0.18, 0.98), Color(0.74, 0.90, 1.0, 0.92), 14, 2))
+	return button
+
+func _make_begin_descent_button() -> Button:
+	var button := Button.new()
+	button.text = "Begin Descent"
+	button.custom_minimum_size = Vector2(240.0, 42.0)
+	button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	button.add_theme_font_size_override("font_size", 18)
+	button.add_theme_color_override("font_color", Color(1.0, 0.94, 0.78, 1.0))
+	button.add_theme_stylebox_override("normal", MENU_STYLE_FACTORY.make_button_style(Color(0.28, 0.18, 0.08, 0.95), Color(1.0, 0.78, 0.42, 0.85), 14, 2))
+	button.add_theme_stylebox_override("hover", MENU_STYLE_FACTORY.make_button_style(Color(0.36, 0.22, 0.10, 0.98), Color(1.0, 0.90, 0.58, 0.95), 14, 2))
+	button.add_theme_stylebox_override("pressed", MENU_STYLE_FACTORY.make_button_style(Color(0.22, 0.14, 0.06, 0.98), Color(1.0, 0.84, 0.50, 1.0), 14, 2))
 	return button
 
 func _clear_children(node: Node) -> void:

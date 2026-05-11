@@ -35,6 +35,10 @@ func resolve_tier_config(tier: int) -> Dictionary:
 		base_config = provider.get_tier_config(tier)
 	else:
 		base_config = DIFFICULTY_CONFIG.get_tier_config(tier)
+	## Only apply ascension modifiers to Forsworn tier
+	var bearing_enums = preload("res://scripts/shared/bearing_enums.gd")
+	if tier != bearing_enums.BearingTier.FORSWORN:
+		return base_config
 	var loadout: Array[String] = _get_active_ascension_loadout()
 	if loadout.is_empty():
 		return base_config
