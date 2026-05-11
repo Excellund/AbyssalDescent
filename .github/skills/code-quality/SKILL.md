@@ -1,7 +1,25 @@
----
+### 8. Document and Enforce Mutability Contracts
+
+Always document whether a function that returns data (especially Dictionaries or Arrays) returns a deep copy, a shallow copy, or a reference to shared state. Enforce this contract in code and docstrings.
+
+Why it matters:
+
+- Unclear mutability contracts lead to accidental mutation of shared state, subtle bugs, and defensive copying everywhere.
+- Clear contracts reduce cognitive load and make code safer to change.
+
+How to apply:
+
+- For any function returning a Dictionary or Array, explicitly state in the docstring whether the result is safe to mutate.
+- Prefer returning a deep copy when mutation is expected or possible.
+- If returning a reference, document that the result must not be mutated by the caller.
+- Audit and update legacy code to clarify and enforce these contracts incrementally.
+
+## Nuance: Defensive copying everywhere is wasteful. Prefer clear contracts and only copy when mutation is required by the caller or likely in the future.
+
 name: code-quality
 description: "Apply foundational code quality principles that improve readability, safety, and maintainability across the codebase."
 argument-hint: "Area of code being reviewed or refactored"
+
 ---
 
 # Code Quality
