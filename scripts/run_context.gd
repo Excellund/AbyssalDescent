@@ -421,6 +421,14 @@ func get_profile_name() -> String:
 func has_profile_name() -> bool:
 	return not profile_name.is_empty()
 
+func clear_profile_name() -> void:
+	profile_name = ""
+	var profile_state := meta_progress_profile.get("profile", {}) as Dictionary
+	if profile_state.has("display_name"):
+		profile_state.erase("display_name")
+		meta_progress_profile["profile"] = profile_state
+		save_meta_progress()
+
 func get_profile_name_or_default() -> String:
 	if not profile_name.is_empty():
 		return profile_name

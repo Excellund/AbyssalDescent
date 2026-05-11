@@ -16,6 +16,7 @@ const BUILD_INFO := preload("res://scripts/build_info.gd")
 const MENU_STYLE_FACTORY := preload("res://scripts/core/menu_style_factory.gd")
 const PROFILE_PERSISTENCE_STORE_SCRIPT := preload("res://scripts/core/profile_persistence_store.gd")
 const PROFILE_NAME_ENTRY_MODAL_SCRIPT := preload("res://scripts/ui/profile/profile_name_entry_modal.gd")
+const PROFANITY_FILTER_SCRIPT := preload("res://scripts/shared/profanity_filter.gd")
 const RUN_HISTORY_PANEL_SCRIPT := preload("res://scripts/ui/run_history/run_history_panel.gd")
 const LEADERBOARD_PANEL_SCRIPT := preload("res://scripts/ui/leaderboard/leaderboard_panel.gd")
 const ASCENSION_PANEL_SCRIPT := preload("res://scripts/ui/ascension/ascension_panel.gd")
@@ -124,6 +125,8 @@ var profile_name_prompt_layer
 var profile_prompt_pending: bool = false
 var profile_prompt_pending_purpose: String = ""
 var profile_prompt_pending_allow_cancel: bool = true
+var profanity_filter
+var _pending_profile_name_for_check: String = ""
 var multiplayer_room_code_input: LineEdit
 var multiplayer_status_label: Label
 var multiplayer_host_button: Button
@@ -3046,7 +3049,16 @@ func _maybe_show_first_launch_profile_prompt() -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context == null:
 		return
-	if bool(run_context.has_profile_name()) and not _is_debug_profile_prompt_forced():
+	if bool(run_context.has_profile_name()):
+		if profanity_filter == null:
+			profanity_filter = PROFANITY_FILTER_SCRIPT.new(self)
+			if not profanity_filter.check_complete.is_connected(_on_profanity_check_complete):
+				profanity_filter.check_complete.connect(_on_profanity_check_complete)
+		var stored_name: String = String(run_context.get_profile_name())
+		_pending_profile_name_for_check = "CHECK_FIRST_LAUNCH:" + stored_name
+		profanity_filter.check_profanity_async(stored_name)
+		return
+	elif not _is_debug_profile_prompt_forced():
 		return
 	_request_profile_name_prompt("first_launch", false)
 
@@ -3101,6 +3113,32 @@ func _show_pending_profile_prompt() -> void:
 func _on_profile_prompt_submitted(profile_name: String) -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context == null:
+		return
+	if profanity_filter == null:
+		profanity_filter = PROFANITY_FILTER_SCRIPT.new(self)
+		if not profanity_filter.check_complete.is_connected(_on_profanity_check_complete):
+			profanity_filter.check_complete.connect(_on_profanity_check_complete)
+	_pending_profile_name_for_check = profile_name
+	profanity_filter.check_profanity_async(profile_name)
+
+func _on_profanity_check_complete(is_profane: bool) -> void:
+	var pending := _pending_profile_name_for_check
+	_pending_profile_name_for_check = ""
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context == null:
+		return
+	if pending.begins_with("CHECK_FIRST_LAUNCH:"):
+		var stored_name := pending.trim_prefix("CHECK_FIRST_LAUNCH:")
+		if is_profane:
+			run_context.clear_profile_name()
+		elif not _is_debug_profile_prompt_forced():
+			return
+		_request_profile_name_prompt("first_launch", false)
+		return
+	var profile_name := pending
+	if is_profane:
+		if profile_name_prompt_modal != null:
+			profile_name_prompt_modal.show_validation_error("That name is not allowed. Please choose a different name.")
 		return
 	if not bool(run_context.set_profile_name(profile_name, true)):
 		if profile_name_prompt_modal != null:

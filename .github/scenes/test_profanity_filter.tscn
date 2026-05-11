@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://b1r0c9axvhd7m"]
+
+[ext_resource type="Script" path="res://.github/scripts/test_profanity_filter_scene.gd" id="1_pqo6j"]
+
+[node name="ProfanityFilterTest" type="Node"]
+script = ExtResource("1_pqo6j")
