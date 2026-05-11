@@ -1,5 +1,7 @@
 extends RefCounted
 
+const RUN_SESSION_SCRIPT := preload("res://scripts/core/run_session.gd")
+
 static func _to_string_array(value: Variant) -> Array[String]:
 	var out: Array[String] = []
 	if value is Array:
@@ -7,10 +9,12 @@ static func _to_string_array(value: Variant) -> Array[String]:
 			out.append(String(entry))
 	return out
 
-static func _get_run_session(world: Node) -> RefCounted:
+static func _get_run_session(world: Node) -> RunSession:
 	var run_session_value: Variant = world.get("run_session")
-	if run_session_value is RefCounted:
-		return run_session_value as RefCounted
+	if run_session_value is RunSession:
+		return run_session_value as RunSession
+	if run_session_value is RUN_SESSION_SCRIPT:
+		return run_session_value as RunSession
 	return null
 
 static func _get_objective_manager(world: Node) -> Node:
@@ -26,9 +30,11 @@ static func build_snapshot(world: Node, player: Node, run_context: Node, snapsho
 	var objective_manager := _get_objective_manager(world)
 	var boons_taken: Array[String] = []
 	var arcana_rewards_taken: Array[String] = []
+	var boss_rewards_taken: Array[String] = []
 	if run_session != null:
-		boons_taken = _to_string_array(run_session.get("boons_taken"))
-		arcana_rewards_taken = _to_string_array(run_session.get("arcana_rewards_taken"))
+		boons_taken = run_session.get_boons_taken_snapshot()
+		arcana_rewards_taken = run_session.get_arcana_rewards_taken_snapshot()
+		boss_rewards_taken = run_session.get_boss_rewards_taken_snapshot()
 	var active_objective_kind: String = ""
 	var objective_time_left: float = 0.0
 	var objective_spawn_interval: float = 0.0
@@ -75,6 +81,7 @@ static func build_snapshot(world: Node, player: Node, run_context: Node, snapsho
 		"run_cleared": world.run_cleared,
 		"boons_taken": boons_taken.duplicate(),
 		"arcana_rewards_taken": arcana_rewards_taken.duplicate(),
+		"boss_rewards_taken": boss_rewards_taken.duplicate(),
 		"current_room_size": world.current_room_size,
 		"current_room_static_camera": world.current_room_static_camera,
 		"current_room_label": world.current_room_label,
@@ -121,8 +128,11 @@ static func apply_snapshot(world: Node, player: Node, run_context: Node, snapsho
 
 	var run_session := _get_run_session(world)
 	if run_session != null:
-		run_session.set("boons_taken", _to_string_array(snapshot.get("boons_taken", [])))
-		run_session.set("arcana_rewards_taken", _to_string_array(snapshot.get("arcana_rewards_taken", [])))
+		run_session.restore_rewards_from_snapshot(
+			_to_string_array(snapshot.get("boons_taken", [])),
+			_to_string_array(snapshot.get("arcana_rewards_taken", [])),
+			_to_string_array(snapshot.get("boss_rewards_taken", []))
+		)
 	world.current_room_size = snapshot.get("current_room_size", room_base_size) as Vector2
 	world.current_room_static_camera = bool(snapshot.get("current_room_static_camera", true))
 	world.current_room_label = String(snapshot.get("current_room_label", "Doorway"))

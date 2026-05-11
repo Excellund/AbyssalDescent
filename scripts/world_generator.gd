@@ -3312,7 +3312,7 @@ func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> voi
 		_apply_mission_reward(choice)
 	elif mode == ENUMS.RewardMode.BOSS:
 		_apply_boon_to_player(String(choice["id"]))
-		run_session.record_boon(String(choice["name"]))
+		run_session.record_boss_reward(String(choice["name"]))
 		boss_reward_pending = false
 	else:
 		_apply_boon_to_player(String(choice["id"]))
