@@ -41,6 +41,7 @@ Run end
 - Key stored in `project.godot` under:
   - `config/telemetry_upload_endpoint`
   - `config/telemetry_upload_api_key`
+- Keep all reads/parsing of these settings centralized in one shared helper (for example `scripts/core/telemetry_settings.gd`) and reuse it across telemetry uploader, leaderboard uploader, and leaderboard service to prevent endpoint-shape drift.
 - RLS insert policy validates array/object types and bounds; no read policy (write-only from client)
 - For analysis tooling without service-role secrets, use RPC `public.get_latest_balance_run(...)`.
 

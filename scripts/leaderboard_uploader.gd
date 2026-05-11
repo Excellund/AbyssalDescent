@@ -2,8 +2,7 @@ extends Node
 
 const LEADERBOARD_QUEUE := preload("res://scripts/leaderboard_upload_queue.gd")
 const LEADERBOARD_MODEL := preload("res://scripts/core/leaderboard_entry_model.gd")
-const TELEMETRY_ENDPOINT_SETTING := "application/config/telemetry_upload_endpoint"
-const TELEMETRY_API_KEY_SETTING := "application/config/telemetry_upload_api_key"
+const TELEMETRY_SETTINGS := preload("res://scripts/core/telemetry_settings.gd")
 const LEADERBOARD_SUBMIT_ENDPOINT_SETTING := "application/config/leaderboard_submit_endpoint"
 
 var _run_context
@@ -123,15 +122,10 @@ func _submit_endpoint() -> String:
 	var explicit := String(ProjectSettings.get_setting(LEADERBOARD_SUBMIT_ENDPOINT_SETTING, "")).strip_edges()
 	if not explicit.is_empty():
 		return explicit
-	var telemetry_endpoint := String(ProjectSettings.get_setting(TELEMETRY_ENDPOINT_SETTING, "")).strip_edges()
-	if telemetry_endpoint.is_empty():
+	var base := TELEMETRY_SETTINGS.rest_base_url()
+	if base.is_empty():
 		return ""
-	var marker := "/rest/v1/"
-	var idx := telemetry_endpoint.find(marker)
-	if idx < 0:
-		return ""
-	var base := telemetry_endpoint.substr(0, idx + marker.length() - 1)
 	return "%s/rpc/submit_leaderboard_run" % base.trim_suffix("/")
 
 func _upload_api_key() -> String:
-	return String(ProjectSettings.get_setting(TELEMETRY_API_KEY_SETTING, "")).strip_edges()
+	return TELEMETRY_SETTINGS.upload_api_key()

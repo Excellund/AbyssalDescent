@@ -2,8 +2,7 @@ extends Node
 class_name LeaderboardService
 
 const LEADERBOARD_MODEL := preload("res://scripts/core/leaderboard_entry_model.gd")
-const TELEMETRY_ENDPOINT_SETTING := "application/config/telemetry_upload_endpoint"
-const TELEMETRY_API_KEY_SETTING := "application/config/telemetry_upload_api_key"
+const TELEMETRY_SETTINGS := preload("res://scripts/core/telemetry_settings.gd")
 const LEADERBOARD_BASE_URL_SETTING := "application/config/leaderboard_rest_base_url"
 
 func fetch_patch_options(current_patch_key: String, difficulty_tier: int = -1, limit: int = 24) -> Dictionary:
@@ -142,14 +141,7 @@ func _rest_base_url() -> String:
 	var explicit := String(ProjectSettings.get_setting(LEADERBOARD_BASE_URL_SETTING, "")).strip_edges()
 	if not explicit.is_empty():
 		return explicit
-	var telemetry_endpoint := String(ProjectSettings.get_setting(TELEMETRY_ENDPOINT_SETTING, "")).strip_edges()
-	if telemetry_endpoint.is_empty():
-		return ""
-	var marker := "/rest/v1/"
-	var idx := telemetry_endpoint.find(marker)
-	if idx < 0:
-		return ""
-	return telemetry_endpoint.substr(0, idx + marker.length() - 1)
+	return TELEMETRY_SETTINGS.rest_base_url()
 
 func _upload_api_key() -> String:
-	return String(ProjectSettings.get_setting(TELEMETRY_API_KEY_SETTING, "")).strip_edges()
+	return TELEMETRY_SETTINGS.upload_api_key()
