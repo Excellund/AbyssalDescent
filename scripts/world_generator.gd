@@ -60,6 +60,7 @@ const COMBAT_PHASE_COORDINATOR_SCRIPT := preload("res://scripts/core/combat_phas
 const PLAYER_FLOW_COORDINATOR_SCRIPT := preload("res://scripts/core/player_flow_coordinator.gd")
 const PLAYER_ROSTER_HELPERS := preload("res://scripts/core/player_roster_helpers.gd")
 const WORLD_MULTIPLAYER_SYNC_STATE_SCRIPT := preload("res://scripts/core/world_multiplayer_sync_state.gd")
+const WORLD_PROGRESS_SYNC_POLICY_SCRIPT := preload("res://scripts/core/world_progress_sync_policy.gd")
 const RUN_CONTEXT_SCRIPT := preload("res://scripts/run_context.gd")
 const MULTIPLAYER_SESSION_MANAGER_SCRIPT := preload("res://scripts/multiplayer_session_manager.gd")
 const PLAYER_SCRIPT := preload("res://scripts/player.gd")
@@ -276,6 +277,7 @@ var _reward_phase_mode: int = ENUMS.RewardMode.NONE
 var _reward_phase_completed_peers: Dictionary = {}  ## peer_id -> bool
 var _doors_spawn_ready: bool = false
 var _world_multiplayer_sync_state = WORLD_MULTIPLAYER_SYNC_STATE_SCRIPT.new()
+var _world_progress_sync_policy = WORLD_PROGRESS_SYNC_POLICY_SCRIPT.new()
 var room_depth_bookkeeper
 
 ## ============================================================================
@@ -2554,7 +2556,7 @@ func _sync_objective_state(objective_state: Dictionary, source_room_sync_id: int
 	objective_manager.apply_sync_state(objective_state)
 
 func _build_progress_sync_state() -> Dictionary:
-	return {
+	return _world_progress_sync_policy.build_progress_sync_state({
 		"room_sync_id": _world_multiplayer_sync_state.current_room_sync_id,
 		"rooms_cleared": rooms_cleared,
 		"room_depth": room_depth,
@@ -2567,54 +2569,28 @@ func _build_progress_sync_state() -> Dictionary:
 		"in_second_boss_room": in_second_boss_room,
 		"in_third_boss_room": in_third_boss_room,
 		"choosing_next_room": choosing_next_room
-	}
+	})
 
 func _sanitize_progress_sync_state(progress_state: Dictionary) -> Dictionary:
-	if progress_state.is_empty():
-		return {}
-	var sanitized := progress_state.duplicate(true)
-	var incoming_room_sync_id := int(sanitized.get("room_sync_id", _world_multiplayer_sync_state.current_room_sync_id))
-	if _world_multiplayer_sync_state.is_stale_room_sync_id(incoming_room_sync_id):
-		sanitized["invalid"] = true
-		return sanitized
-	if _world_multiplayer_sync_state.is_sync_id_too_far_ahead(incoming_room_sync_id, 4):
-		sanitized["invalid"] = true
-		return sanitized
-	var incoming_first_boss_defeated := bool(sanitized.get("first_boss_defeated", first_boss_defeated))
-	var incoming_second_boss_defeated := bool(sanitized.get("second_boss_defeated", second_boss_defeated))
-	if not incoming_first_boss_defeated:
-		incoming_second_boss_defeated = false
-	var max_depth := _get_second_boss_target_depth()
-	if incoming_second_boss_defeated:
-		max_depth = _get_third_boss_target_depth() + 1
-	elif incoming_first_boss_defeated:
-		max_depth = _get_third_boss_target_depth()
-	var incoming_room_depth := int(sanitized.get("room_depth", room_depth))
-	incoming_room_depth = clampi(incoming_room_depth, 0, maxi(1, max_depth))
-	if rooms_cleared <= 1 and incoming_room_depth > 3:
-		sanitized["invalid"] = true
-		return sanitized
-	# Allow large depth jumps if joiner just joined (rooms_cleared == 0) OR if explicitly awaiting door choice.
-	# This permits joiners mid-run to synchronize with the host's current depth.
-	var is_joiner_initial_sync := MultiplayerSessionManager.is_authoritative() or (MultiplayerSessionManager.is_remote_replica() and rooms_cleared == 0)
-	if incoming_room_depth > room_depth + 2 and not _world_multiplayer_sync_state.awaiting_authoritative_door_choice and not is_joiner_initial_sync:
-		sanitized["invalid"] = true
-		return sanitized
-	var incoming_rooms_cleared := int(sanitized.get("rooms_cleared", rooms_cleared))
-	incoming_rooms_cleared = clampi(incoming_rooms_cleared, 0, incoming_room_depth)
-	var incoming_phase_two := int(sanitized.get("phase_two_rooms_cleared", phase_two_rooms_cleared))
-	incoming_phase_two = clampi(incoming_phase_two, 0, maxi(0, second_boss_encounter_count))
-	var incoming_phase_three := int(sanitized.get("phase_three_rooms_cleared", phase_three_rooms_cleared))
-	incoming_phase_three = clampi(incoming_phase_three, 0, maxi(0, third_boss_encounter_count))
-	sanitized["room_sync_id"] = incoming_room_sync_id
-	sanitized["rooms_cleared"] = incoming_rooms_cleared
-	sanitized["room_depth"] = incoming_room_depth
-	sanitized["phase_two_rooms_cleared"] = incoming_phase_two
-	sanitized["phase_three_rooms_cleared"] = incoming_phase_three
-	sanitized["first_boss_defeated"] = incoming_first_boss_defeated
-	sanitized["second_boss_defeated"] = incoming_second_boss_defeated
-	sanitized.erase("invalid")
-	return sanitized
+	var incoming_room_sync_id := int(progress_state.get("room_sync_id", _world_multiplayer_sync_state.current_room_sync_id))
+	return _world_progress_sync_policy.sanitize_progress_sync_state(progress_state, {
+		"current_room_sync_id": _world_multiplayer_sync_state.current_room_sync_id,
+		"is_stale_room_sync_id": _world_multiplayer_sync_state.is_stale_room_sync_id(incoming_room_sync_id),
+		"is_sync_id_too_far_ahead": _world_multiplayer_sync_state.is_sync_id_too_far_ahead(incoming_room_sync_id, 4),
+		"first_boss_defeated": first_boss_defeated,
+		"second_boss_defeated": second_boss_defeated,
+		"second_boss_target_depth": _get_second_boss_target_depth(),
+		"third_boss_target_depth": _get_third_boss_target_depth(),
+		"room_depth": room_depth,
+		"rooms_cleared": rooms_cleared,
+		"awaiting_authoritative_door_choice": _world_multiplayer_sync_state.awaiting_authoritative_door_choice,
+		"is_authoritative": MultiplayerSessionManager.is_authoritative(),
+		"is_remote_replica": MultiplayerSessionManager.is_remote_replica(),
+		"phase_two_rooms_cleared": phase_two_rooms_cleared,
+		"phase_three_rooms_cleared": phase_three_rooms_cleared,
+		"second_boss_encounter_count": second_boss_encounter_count,
+		"third_boss_encounter_count": third_boss_encounter_count
+	})
 
 func _apply_progress_sync_state(progress_state: Dictionary) -> void:
 	var sanitized_progress_state := _sanitize_progress_sync_state(progress_state)
