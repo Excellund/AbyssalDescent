@@ -2,6 +2,7 @@ extends Control
 
 const GAMEPLAY_SCENE_PATH := "res://scenes/Main.tscn"
 const RUN_CONTEXT_PATH := "/root/RunContext"
+const MENU_LOGO_TEXTURE := preload("res://assets/ui/menu_logo_mark.svg")
 const MENU_MUSIC := preload("res://music/msx1.mp3")
 const ENUMS := preload("res://scripts/shared/enums.gd")
 const AUDIO_LEVELS := preload("res://scripts/shared/audio_levels.gd")
@@ -618,20 +619,43 @@ func _build_ui() -> void:
 	hero_panel.add_child(hero_content)
 
 	var hero_spacer_top := Control.new()
-	hero_spacer_top.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	hero_spacer_top.custom_minimum_size = Vector2(0.0, 18.0)
 	hero_content.add_child(hero_spacer_top)
 
-	var title := Label.new()
-	title.text = "Abyssal Descent"
-	title.custom_minimum_size = Vector2(306.0, 72.0)
-	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	title.add_theme_font_size_override("font_size", 42)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 0.98))
-	title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.8))
-	title.add_theme_constant_override("shadow_offset_x", 2)
-	title.add_theme_constant_override("shadow_offset_y", 2)
-	hero_content.add_child(title)
+	var hero_logo := TextureRect.new()
+	hero_logo.texture = MENU_LOGO_TEXTURE
+	hero_logo.custom_minimum_size = Vector2(112.0, 112.0)
+	hero_logo.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	hero_logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	hero_logo.modulate = Color(1.0, 1.0, 1.0, 0.96)
+	hero_content.add_child(hero_logo)
+
+	var logo_title_gap := Control.new()
+	logo_title_gap.custom_minimum_size = Vector2(0.0, 8.0)
+	hero_content.add_child(logo_title_gap)
+
+	var logo_wordmark := VBoxContainer.new()
+	logo_wordmark.custom_minimum_size = Vector2(306.0, 98.0)
+	logo_wordmark.add_theme_constant_override("separation", 0)
+	logo_wordmark.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hero_content.add_child(logo_wordmark)
+
+	var logo_overline := Label.new()
+	logo_overline.text = "A B Y S S A L"
+	logo_overline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	logo_overline.add_theme_font_size_override("font_size", 18)
+	logo_overline.add_theme_color_override("font_color", Color(0.74, 0.88, 1.0, 0.86))
+	logo_wordmark.add_child(logo_overline)
+
+	var logo_title := Label.new()
+	logo_title.text = "DESCENT"
+	logo_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	logo_title.add_theme_font_size_override("font_size", 46)
+	logo_title.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 0.98))
+	logo_title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.8))
+	logo_title.add_theme_constant_override("shadow_offset_x", 2)
+	logo_title.add_theme_constant_override("shadow_offset_y", 2)
+	logo_wordmark.add_child(logo_title)
 
 	quote_wrapper = Control.new()
 	quote_wrapper.custom_minimum_size = Vector2(306.0, 72.0)
