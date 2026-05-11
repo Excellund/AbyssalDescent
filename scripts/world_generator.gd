@@ -3544,7 +3544,7 @@ func _on_player_died() -> void:
 		run_context.clear_resume_saved_run_request()
 	var current_summary: Dictionary = _latest_run_summary()
 	if current_summary.is_empty() or String(current_summary.get("outcome", "")) != "death":
-		var death_event := run_summary_recorder.build_death_event_snapshot() if _run_summary_ready() else {}
+		var death_event: Dictionary = run_summary_recorder.build_death_event_snapshot() if _run_summary_ready() else {}
 		_run_summary_finish_run("death", death_event)
 	_broadcast_run_outcome_if_needed("death", -1, current_room_label, room_depth)
 	_show_defeat_feedback(current_room_label, room_depth, _latest_run_summary())

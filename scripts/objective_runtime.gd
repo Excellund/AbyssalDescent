@@ -519,7 +519,7 @@ func _spawn_random_wave_enemies(roster: Array[String], spawn_count: int) -> int:
 	var spawn_batch: Array = []
 	for _i in range(spawn_count):
 		var enemy_type := roster[rng.randi_range(0, roster.size() - 1)]
-		var spawned_enemy := world.enemy_spawner.spawn_enemy_node_type(enemy_type)
+		var spawned_enemy: ENEMY_BASE_SCRIPT = world.enemy_spawner.spawn_enemy_node_type(enemy_type)
 		if not is_instance_valid(spawned_enemy):
 			continue
 		if MultiplayerSessionManager.should_broadcast():
@@ -836,7 +836,7 @@ func spawn_priority_target_enemy() -> void:
 		return
 	var target_spawn_distance := maxf(world.spawn_safe_radius + CutTheSignalConfig.SPAWN_DISTANCE_BASE, CutTheSignalConfig.SPAWN_DISTANCE_MIN)
 	var spawn_batch: Array = []
-	var spawned_target := world.enemy_spawner.spawn_enemy_node_type(target_type, target_spawn_distance)
+	var spawned_target: ENEMY_BASE_SCRIPT = world.enemy_spawner.spawn_enemy_node_type(target_type, target_spawn_distance)
 	if not is_instance_valid(spawned_target):
 		return
 	objective_manager.hunt_target_enemy = spawned_target

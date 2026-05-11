@@ -1,0 +1,18 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Validate GDScript Compile",
+      "type": "shell",
+      "command": "${config:godot.executablePath}",
+      "args": [
+        "--headless",
+        "--path",
+        ".",
+        "-s",
+        ".github/scripts/validate_gdscript_compile.gd"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}

@@ -13,6 +13,29 @@ This pre-commit hook system automatically blocks commits if:
    `mutator_override` must be `DEBUG_ENUMS.MutatorOverride.NONE`
    `end_screen_preview` must be `DEBUG_ENUMS.EndScreenPreview.NONE`
 2. **Syntax issues** in staged GDScript files (quick check)
+3. **Full GDScript compile validation** using `.github/scripts/validate_gdscript_compile.gd`
+
+## Full Compile Check (Recommended Before Commit)
+
+Run a full script compile pass (without launching gameplay):
+
+```powershell
+godot --headless --path . -s .github/scripts/validate_gdscript_compile.gd
+```
+
+This command force-loads and compiles all scripts under `res://scripts` and `.github/scripts`, and exits non-zero on any parse/type-inference error.
+
+In VS Code you can also run the task `Validate GDScript Compile`.
+
+Before using that task, set your Godot executable once in workspace settings:
+
+```json
+"godot.executablePath": "C:/Path/To/Godot_v4.x-stable_win64.exe"
+```
+
+This key is read by `.vscode/tasks.json` so the task does not depend on PATH.
+
+The pre-commit hook also uses this setting (or `GODOT_EXE`) when running full compile validation on commit.
 
 ## Setup (One-Time Only)
 

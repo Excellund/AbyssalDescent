@@ -7,6 +7,7 @@ const UPGRADE_SYSTEM_SCRIPT_PATH := "res://scripts/upgrade_system.gd"
 const UPGRADE_SYSTEM_SCRIPT := preload("res://scripts/upgrade_system.gd")
 const POWER_REGISTRY_SCRIPT := preload("res://scripts/power_registry.gd")
 const ENEMY_BASE := preload("res://scripts/enemy_base.gd")
+const ENEMY_BASE_SCRIPT := preload("res://scripts/enemy_base.gd")
 const PLAYER_IDENTITY_SILHOUETTE := preload("res://scripts/core/player_identity_silhouette.gd")
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
@@ -1596,7 +1597,7 @@ func _on_cue_enemy_apply_slow(payload: Dictionary) -> void:
 	var slow_enemy_network_id := int(payload.get("enemy_network_id", -1))
 	var slow_duration := float(payload.get("duration", 0.0))
 	var slow_mult := float(payload.get("mult", 1.0))
-	var slow_enemy := _find_enemy_node_by_network_enemy_id(slow_enemy_network_id)
+	var slow_enemy: ENEMY_BASE_SCRIPT = _find_enemy_node_by_network_enemy_id(slow_enemy_network_id)
 	if slow_enemy != null:
 		slow_enemy.apply_slow(slow_duration, slow_mult)
 
@@ -4535,7 +4536,7 @@ func _draw_trial_reward_state() -> void:
 		else:
 			for enemy_network_id_variant in wraithstep_remote_mark_expiry_by_network_enemy_id.keys():
 				var enemy_network_id := int(enemy_network_id_variant)
-				var enemy_ref := _find_enemy_node_by_network_enemy_id(enemy_network_id)
+				var enemy_ref: ENEMY_BASE_SCRIPT = _find_enemy_node_by_network_enemy_id(enemy_network_id)
 				if enemy_ref == null:
 					continue
 				mark_entries.append({

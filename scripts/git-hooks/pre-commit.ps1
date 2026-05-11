@@ -37,6 +37,43 @@ function Test-DebugValueAllowed {
         return ([string]$value) -match $allowedPattern
 }
 
+function Resolve-GodotExecutable {
+    param(
+        [string]$projectRoot
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($env:GODOT_EXE) -and (Test-Path $env:GODOT_EXE)) {
+        return $env:GODOT_EXE
+    }
+
+    $workspaceSettingsPath = Join-Path $projectRoot ".vscode/settings.json"
+    if (Test-Path $workspaceSettingsPath) {
+        try {
+            $settings = Get-Content -Path $workspaceSettingsPath -Raw | ConvertFrom-Json
+            if ($null -ne $settings.PSObject.Properties["godot.executablePath"]) {
+                $workspaceExe = [string]$settings."godot.executablePath"
+                if (-not [string]::IsNullOrWhiteSpace($workspaceExe) -and (Test-Path $workspaceExe)) {
+                    return $workspaceExe
+                }
+            }
+        } catch {
+            Write-Host "  [WARN] Could not parse .vscode/settings.json for godot.executablePath" -ForegroundColor Yellow
+        }
+    }
+
+    $godotCommand = Get-Command godot -ErrorAction SilentlyContinue
+    if ($null -ne $godotCommand) {
+        return $godotCommand.Source
+    }
+
+    $godot4Command = Get-Command godot4 -ErrorAction SilentlyContinue
+    if ($null -ne $godot4Command) {
+        return $godot4Command.Source
+    }
+
+    return $null
+}
+
 Write-Host "[PRE-COMMIT] Starting validation..." -ForegroundColor Cyan
 
 # ============================================================================
@@ -259,6 +296,34 @@ if (Test-Path $encounterContractsPath) {
 } else {
     Write-Host "  [WARN] encounter_contracts.gd not found" -ForegroundColor Yellow
 }
+
+# ============================================================================
+# CHECK 5: Full GDScript compile validation
+# ============================================================================
+Write-Host ""
+Write-Host "Running full GDScript compile validation..." -ForegroundColor Yellow
+
+$godotExecutable = Resolve-GodotExecutable -projectRoot $projectRoot
+if ([string]::IsNullOrWhiteSpace([string]$godotExecutable)) {
+    Write-Host "  [ERROR] Could not resolve Godot executable." -ForegroundColor Red
+    Write-Host "  [ERROR] Set GODOT_EXE or .vscode/settings.json godot.executablePath." -ForegroundColor Red
+    exit 1
+}
+
+$compileValidatorScript = Join-Path $projectRoot ".github/scripts/validate_gdscript_compile.gd"
+if (-not (Test-Path $compileValidatorScript)) {
+    Write-Host "  [ERROR] Compile validator script not found: $compileValidatorScript" -ForegroundColor Red
+    exit 1
+}
+
+& $godotExecutable --headless --path $projectRoot -s $compileValidatorScript
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "" 
+    Write-Host "[FAIL] Full GDScript compile validation failed." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "[OK] Full GDScript compile validation passed" -ForegroundColor Green
 
 # ============================================================================
 # All checks passed!
