@@ -14,14 +14,25 @@ func _initialize() -> void:
 	script_paths.sort()
 
 	var failures: Array[String] = []
+	var skipped_in_use := 0
 	for script_path in script_paths:
 		var loaded: Variant = load(script_path)
-		if not (loaded is Script):
+		var script := loaded as Script
+		if script == null:
 			failures.append("Load failed: %s" % script_path)
+			continue
+		var reload_result := script.reload()
+		if reload_result == ERR_ALREADY_IN_USE or reload_result == ERR_BUSY:
+			skipped_in_use += 1
+			continue
+		if reload_result != OK:
+			failures.append("Compile failed (%d): %s" % [reload_result, script_path])
 
 
 	if failures.is_empty():
 		print("[OK] Compiled %d GDScript files" % script_paths.size())
+		if skipped_in_use > 0:
+			print("[Validator] Skipped reload for %d in-use scripts" % skipped_in_use)
 		quit(0)
 		return
 

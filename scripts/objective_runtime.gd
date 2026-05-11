@@ -544,7 +544,7 @@ func _spawn_random_control_wave_enemies(roster: Array[String], spawn_count: int)
 	var spawn_batch: Array = []
 	for _i in range(spawn_count):
 		var enemy_type := roster[rng.randi_range(0, roster.size() - 1)]
-		var spawned_enemy := world.enemy_spawner.spawn_enemy_node_type(enemy_type)
+		var spawned_enemy: ENEMY_BASE_SCRIPT = world.enemy_spawner.spawn_enemy_node_type(enemy_type)
 		if not is_instance_valid(spawned_enemy):
 			continue
 		_reposition_control_spawn_outside_zone(spawned_enemy)
