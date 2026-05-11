@@ -1948,14 +1948,32 @@ func _finish_third_boss_clear() -> void:
 		unlocked_tier = int(run_context.consume_just_unlocked_tier())
 	if unlocked_tier >= 0:
 		var unlock_config := DIFFICULTY_CONFIG.get_tier_config(unlocked_tier)
-		run_summary_recorder.record_unlock("Unlocked Bearing: %s" % String(unlock_config.get("name", "Unknown")))
-	run_summary_recorder.mark_full_clear_boss_credits()
-	run_summary_recorder.finish_run("clear")
+		if _run_summary_ready():
+			run_summary_recorder.record_unlock("Unlocked Bearing: %s" % String(unlock_config.get("name", "Unknown")))
+	if _run_summary_ready():
+		run_summary_recorder.mark_full_clear_boss_credits()
+	_run_summary_finish_run("clear")
 	_broadcast_run_outcome_if_needed("clear", unlocked_tier, "", room_depth)
-	_show_victory_feedback(unlocked_tier, run_summary_recorder.latest_run_summary)
+	_show_victory_feedback(unlocked_tier, _latest_run_summary())
 
 func _get_run_context() -> RUN_CONTEXT_SCRIPT:
 	return get_node_or_null(RUN_CONTEXT_PATH) as RUN_CONTEXT_SCRIPT
+
+func _run_summary_ready() -> bool:
+	return run_summary_recorder != null
+
+func _latest_run_summary() -> Dictionary:
+	if not _run_summary_ready():
+		return {}
+	return run_summary_recorder.latest_run_summary
+
+func _run_summary_finish_run(outcome: String, payload: Dictionary = {}) -> void:
+	if not _run_summary_ready():
+		return
+	if payload.is_empty():
+		run_summary_recorder.finish_run(outcome)
+		return
+	run_summary_recorder.finish_run(outcome, payload)
 
 func _broadcast_run_outcome_if_needed(outcome: String, unlocked_tier: int, room_label: String, depth: int) -> void:
 	if not MultiplayerSessionManager.should_broadcast():
@@ -2191,7 +2209,7 @@ func _set_singleplayer_menu_wave_timer_paused(paused: bool) -> void:
 
 func _on_victory_back_to_menu() -> void:
 	_teardown_multiplayer_session_for_menu_transition()
-	run_summary_recorder.finish_run("clear")
+	_run_summary_finish_run("clear")
 	_clear_active_run_checkpoint()
 	get_tree().change_scene_to_file(MENU_SCENE_PATH)
 
@@ -2204,7 +2222,7 @@ func _on_victory_retry_run() -> void:
 func _on_defeat_back_to_menu() -> void:
 	_teardown_multiplayer_session_for_menu_transition()
 	_set_combat_paused(false)
-	run_summary_recorder.finish_run("death")
+	_run_summary_finish_run("death")
 	_clear_active_run_checkpoint()
 	get_tree().change_scene_to_file(MENU_SCENE_PATH)
 
@@ -2335,7 +2353,7 @@ func _on_multiplayer_peer_disconnected(peer_id: int) -> void:
 
 func _on_pause_back_to_menu_requested() -> void:
 	_teardown_multiplayer_session_for_menu_transition()
-	run_summary_recorder.finish_run("menu_exit")
+	_run_summary_finish_run("menu_exit")
 	player_flow_coordinator.prepare_for_menu_transition(combat_phase_coordinator, player, get_tree(), pause_menu_controller)
 	get_tree().change_scene_to_file(MENU_SCENE_PATH)
 
@@ -2345,7 +2363,7 @@ func _on_pause_abandon_run_requested() -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context != null:
 		run_context.set_last_run_outcome("death")
-	run_summary_recorder.finish_run("abandon")
+	_run_summary_finish_run("abandon")
 	_clear_active_run_checkpoint()
 	get_tree().change_scene_to_file(MENU_SCENE_PATH)
 
@@ -2361,7 +2379,7 @@ func _teardown_multiplayer_session_for_menu_transition() -> void:
 		run_context.suppress_menu_multiplayer_dev_autostart()
 
 func _on_pause_exit_game_requested() -> void:
-	run_summary_recorder.finish_run("quit")
+	_run_summary_finish_run("quit")
 	get_tree().quit()
 
 func _spawn_door_options() -> void:
@@ -3575,16 +3593,23 @@ func _on_telemetry_spike_probe_completed(success: bool, http_code: int, error_me
 	telemetry_spike_sender = null
 
 func _on_player_damage_taken(raw_amount: int, final_amount: int, damage_context: Dictionary) -> void:
+	if not _run_summary_ready():
+		return
 	run_summary_recorder.record_player_damage_taken(raw_amount, final_amount, damage_context)
 
 func _on_player_health_changed_for_summary(current_health: int, _max_health: int, player_node: Node) -> void:
+	if not _run_summary_ready():
+		return
 	run_summary_recorder.on_player_health_changed(current_health, _max_health, player_node)
 
 func _on_player_died_for_telemetry() -> void:
+	if not _run_summary_ready():
+		return
 	run_summary_recorder.on_player_died_for_telemetry()
 
 func _on_player_died() -> void:
-	run_summary_recorder.reconcile_damage_taken_to_player_health()
+	if _run_summary_ready():
+		run_summary_recorder.reconcile_damage_taken_to_player_health()
 	if player_defeated:
 		return
 	var has_new_fallen := _refresh_fallen_player_tracking()
@@ -3609,11 +3634,12 @@ func _on_player_died() -> void:
 		run_context.set_last_run_outcome("death")
 		run_context.clear_active_run()
 		run_context.clear_resume_saved_run_request()
-	var current_summary: Dictionary = run_summary_recorder.latest_run_summary
+	var current_summary: Dictionary = _latest_run_summary()
 	if current_summary.is_empty() or String(current_summary.get("outcome", "")) != "death":
-		run_summary_recorder.finish_run("death", run_summary_recorder.build_death_event_snapshot())
+		var death_event := run_summary_recorder.build_death_event_snapshot() if _run_summary_ready() else {}
+		_run_summary_finish_run("death", death_event)
 	_broadcast_run_outcome_if_needed("death", -1, current_room_label, room_depth)
-	_show_defeat_feedback(current_room_label, room_depth, run_summary_recorder.latest_run_summary)
+	_show_defeat_feedback(current_room_label, room_depth, _latest_run_summary())
 
 func _show_victory_feedback(unlocked_tier: int, run_summary: Dictionary = {}) -> void:
 	if is_instance_valid(victory_screen):
