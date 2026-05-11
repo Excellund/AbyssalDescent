@@ -14,9 +14,7 @@ const ENEMY_SPECTRE_SCRIPT := preload("res://scripts/enemy_spectre.gd")
 const ENEMY_PYRE_SCRIPT := preload("res://scripts/enemy_pyre.gd")
 const ENEMY_TETHER_SCRIPT := preload("res://scripts/enemy_tether.gd")
 const PYRE_FIELD_SCRIPT := preload("res://scripts/pyre_field.gd")
-const ENEMY_BOSS_SCRIPT := preload("res://scripts/enemy_boss.gd")
-const ENEMY_BOSS_2_SCRIPT := preload("res://scripts/enemy_boss_2.gd")
-const ENEMY_BOSS_3_SCRIPT := preload("res://scripts/enemy_boss_3.gd")
+const BOSS_STAGE_REGISTRY := preload("res://scripts/shared/boss_stage_registry.gd")
 const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 const MUSIC_SYSTEM_SCRIPT := preload("res://scripts/music_system.gd")
@@ -25,6 +23,7 @@ const ENCOUNTER_PROFILE_BUILDER_SCRIPT := preload("res://scripts/encounter_profi
 const ENCOUNTER_FLOW_SYSTEM_SCRIPT := preload("res://scripts/encounter_flow_system.gd")
 const OBJECTIVE_RUNTIME_SCRIPT := preload("res://scripts/objective_runtime.gd")
 const OBJECTIVE_MANAGER_SCRIPT := preload("res://scripts/objective_manager.gd")
+const OBJECTIVE_CONTROL_OVERLAY_SCRIPT := preload("res://scripts/objective_control_overlay.gd")
 const REWARD_SELECTION_UI_SCRIPT := preload("res://scripts/reward_selection_ui.gd")
 const ASCENSION_REGISTRY := preload("res://scripts/progression/ascension_modifier_registry.gd")
 const ENUMS := preload("res://scripts/shared/enums.gd")
@@ -60,7 +59,15 @@ const OBJECTIVE_PROGRESS_COORDINATOR_SCRIPT := preload("res://scripts/core/objec
 const ROOM_CLEAR_OUTCOME_COORDINATOR_SCRIPT := preload("res://scripts/core/room_clear_outcome_coordinator.gd")
 const COMBAT_PHASE_COORDINATOR_SCRIPT := preload("res://scripts/core/combat_phase_coordinator.gd")
 const PLAYER_FLOW_COORDINATOR_SCRIPT := preload("res://scripts/core/player_flow_coordinator.gd")
+const REWARD_PHASE_COORDINATOR_SCRIPT := preload("res://scripts/core/reward_phase_coordinator.gd")
+const PLAYER_ROSTER_HELPERS := preload("res://scripts/core/player_roster_helpers.gd")
 const WORLD_MULTIPLAYER_SYNC_STATE_SCRIPT := preload("res://scripts/core/world_multiplayer_sync_state.gd")
+const WORLD_PROGRESS_SYNC_POLICY_SCRIPT := preload("res://scripts/core/world_progress_sync_policy.gd")
+const RUN_OUTCOME_COORDINATOR_SCRIPT := preload("res://scripts/core/run_outcome_coordinator.gd")
+const RUN_CONTEXT_SCRIPT := preload("res://scripts/run_context.gd")
+const MULTIPLAYER_SESSION_MANAGER_SCRIPT := preload("res://scripts/multiplayer_session_manager.gd")
+const PLAYER_SCRIPT := preload("res://scripts/player.gd")
+const ENEMY_BASE_SCRIPT := preload("res://scripts/enemy_base.gd")
 const RUN_CONTEXT_PATH := "/root/RunContext"
 const MENU_SCENE_PATH := "res://scenes/Menu.tscn"
 const RUN_SNAPSHOT_VERSION := 1
@@ -146,7 +153,7 @@ var mutator_override: int = DEBUG_ENUMS.MutatorOverride.NONE
 var end_screen_preview: int = DEBUG_ENUMS.EndScreenPreview.NONE
 var victory_unlock_tier: int = -1
 
-var player: Node2D
+var player: PLAYER_SCRIPT
 var player_camera: Camera2D
 var rng := RandomNumberGenerator.new()
 var power_registry_instance: Node
@@ -168,7 +175,6 @@ var phase_two_rooms_cleared: int = 0
 var phase_three_rooms_cleared: int = 0
 var endless_boss_defeated: bool = false
 var choosing_next_room: bool = false
-var run_cleared: bool = false
 var boss_reward_pending: bool = false
 var last_defeated_boss_id: String = ""
 
@@ -189,25 +195,25 @@ var _local_player_ready: bool = false
 var hud: Node
 var renderer: Node2D
 var music_system: Node
-var enemy_spawner: Node
-var encounter_profile_builder
+var enemy_spawner: ENEMY_SPAWNER_SCRIPT
+var encounter_profile_builder: ENCOUNTER_PROFILE_BUILDER_SCRIPT
 var encounter_flow_system
 var objective_runtime: Node
-var objective_manager: Node
+var objective_manager: OBJECTIVE_MANAGER_SCRIPT
+var objective_control_overlay: Node2D
 var reward_selection_ui
 var pause_menu_controller: Node
 var victory_screen: Node
 var defeat_screen: Node
 var build_detail_panel: Node
 var run_summary_recorder
-var player_defeated: bool = false
 var telemetry_spike_enabled: bool = false
 var telemetry_spike_endpoint: String = ""
 var telemetry_spike_api_key: String = ""
 var telemetry_spike_timeout_seconds: float = 8.0
 var telemetry_spike_sender
 var telemetry_spike_requested: bool = false
-var run_session
+var run_session: RunSession
 var profile_persistence_store: RefCounted = null
 var current_player_profile: RefCounted = null
 var bootstrap_coordinator
@@ -223,8 +229,6 @@ var player_flow_coordinator
 var is_multiplayer: bool = false
 var multiplayer_session_id: String = ""
 var multiplayer_encounter_seed: int = 0
-var _multiplayer_retry_votes: Dictionary = {}  ## peer_id -> true (yes vote)
-var _multiplayer_retry_in_progress: bool = false
 var game_state_replication_service: Node = null
 var enemy_state_sync_broadcaster
 var enemy_state_sync_receiver
@@ -266,13 +270,11 @@ var _enemy_clamp_frame_stride: int = 2
 var _enemy_clamp_frame_cursor: int = 0
 var _enemy_clamp_last_room_size: Vector2 = Vector2.ZERO
 var enemy_remote_position_lerp_speed: float = 14.0
-var enemy_remote_rotation_lerp_speed: float = 18.0
-var _reward_phase_active: bool = false
-var _reward_phase_is_initial: bool = false
-var _reward_phase_mode: int = ENUMS.RewardMode.NONE
-var _reward_phase_completed_peers: Dictionary = {}  ## peer_id -> bool
 var _doors_spawn_ready: bool = false
 var _world_multiplayer_sync_state = WORLD_MULTIPLAYER_SYNC_STATE_SCRIPT.new()
+var _world_progress_sync_policy = WORLD_PROGRESS_SYNC_POLICY_SCRIPT.new()
+var _reward_phase_coordinator = REWARD_PHASE_COORDINATOR_SCRIPT.new()
+var _run_outcome_coordinator = RUN_OUTCOME_COORDINATOR_SCRIPT.new()
 var room_depth_bookkeeper
 
 ## ============================================================================
@@ -284,23 +286,19 @@ var _stress_test_coordinator: RefCounted = null
 var _known_fallen_player_ids: Dictionary = {}
 
 func _get_player_network_id(player_node: Node2D) -> int:
-	if not is_instance_valid(player_node):
+	var player := player_node as PLAYER_SCRIPT
+	if player == null:
 		return -1
-	if player_node.has_method("get"):
-		return int(player_node.get("player_id"))
-	return -1
+	return player.player_id
 
 func _refresh_fallen_player_tracking() -> bool:
 	var currently_fallen_ids: Dictionary = {}
 	var has_new_fallen := false
 	for player_node in _get_multiplayer_player_nodes():
-		if not is_instance_valid(player_node):
+		var player := player_node as PLAYER_SCRIPT
+		if player == null or not player.is_dead():
 			continue
-		if not player_node.has_method("is_dead"):
-			continue
-		if not bool(player_node.call("is_dead")):
-			continue
-		var player_id := _get_player_network_id(player_node)
+		var player_id := player.player_id
 		if player_id <= 0:
 			continue
 		currently_fallen_ids[player_id] = true
@@ -384,6 +382,7 @@ func _initialize_bootstrap_context() -> void:
 	_maybe_start_telemetry_spike_probe()
 	run_session = RUN_SESSION_SCRIPT.new()
 	run_session.reset_for_new_run()
+	_sync_progression_from_run_session()
 	run_summary_recorder = RUN_SUMMARY_RECORDER_SCRIPT.new(self)
 	enemy_state_sync_broadcaster = ENEMY_STATE_SYNC_BROADCASTER_SCRIPT.new(self)
 	enemy_state_sync_broadcaster.perf_attribution_enabled = _perf_attribution_enabled
@@ -418,6 +417,35 @@ func _initialize_bootstrap_context() -> void:
 	if is_multiplayer:
 		_setup_multiplayer_remote_players()
 
+func _sync_progression_from_run_session() -> void:
+	if run_session == null:
+		return
+	var progression := run_session.get_progression_state()
+	rooms_cleared = int(progression.get("rooms_cleared", rooms_cleared))
+	room_depth = int(progression.get("room_depth", room_depth))
+	phase_two_rooms_cleared = int(progression.get("phase_two_rooms_cleared", phase_two_rooms_cleared))
+	phase_three_rooms_cleared = int(progression.get("phase_three_rooms_cleared", phase_three_rooms_cleared))
+
+func _set_progression_counters(next_rooms_cleared: int, next_room_depth: int, next_phase_two_rooms_cleared: int, next_phase_three_rooms_cleared: int) -> void:
+	if run_session != null:
+		run_session.set_progression_counters(next_rooms_cleared, next_room_depth, next_phase_two_rooms_cleared, next_phase_three_rooms_cleared)
+		_sync_progression_from_run_session()
+		return
+	rooms_cleared = next_rooms_cleared
+	room_depth = next_room_depth
+	phase_two_rooms_cleared = next_phase_two_rooms_cleared
+	phase_three_rooms_cleared = next_phase_three_rooms_cleared
+
+func _apply_progression_increments(rooms_delta: int, room_depth_delta: int, phase_two_delta: int, phase_three_delta: int) -> void:
+	if run_session != null:
+		run_session.apply_progression_increments(rooms_delta, room_depth_delta, phase_two_delta, phase_three_delta)
+		_sync_progression_from_run_session()
+		return
+	rooms_cleared += rooms_delta
+	room_depth += room_depth_delta
+	phase_two_rooms_cleared += phase_two_delta
+	phase_three_rooms_cleared += phase_three_delta
+
 func _setup_player_runtime_bindings() -> void:
 	if is_instance_valid(player):
 		player.set_power_registry(power_registry_instance)
@@ -435,8 +463,6 @@ func _setup_player_runtime_bindings() -> void:
 
 		player_camera.set_room_fit_zoom_scale(camera_base_zoom_in)
 	_bind_camera_to_local_player()
-
-const REMOTE_PLAYER_SPAWN_RADIUS_PX: float = 80.0
 
 func _setup_multiplayer_remote_players() -> void:
 	"""Create remote player nodes for every connected peer in multiplayer co-op."""
@@ -503,7 +529,7 @@ func _setup_multiplayer_remote_players() -> void:
 		return
 
 	for remote_peer in remote_peer_ids:
-		var remote_player_node: Node2D = player_scene.instantiate()
+		var remote_player_node := player_scene.instantiate() as PLAYER_SCRIPT
 		if remote_player_node == null:
 			push_error("[Multiplayer] Failed to instantiate Player scene for peer %d" % remote_peer)
 			continue
@@ -511,7 +537,7 @@ func _setup_multiplayer_remote_players() -> void:
 		remote_player_node.position = spawn_anchor + _player_fan_offset(remote_slot, total_players)
 		remote_player_node.player_id = remote_peer
 		remote_player_node.is_local_player = false
-		if run_context != null and remote_player_node.has_method("apply_character_package"):
+		if run_context != null:
 			var remote_character_id := String(run_context.get_peer_character_selection(remote_peer)).strip_edges().to_lower()
 			if not remote_character_id.is_empty():
 				var remote_character_data: Dictionary = CHARACTER_REGISTRY.get_character(remote_character_id)
@@ -524,10 +550,8 @@ func _setup_multiplayer_remote_players() -> void:
 				continue
 			_disable_player_collision_pair(existing_node, remote_player_node)
 		player_replication_service.register_player(remote_peer, remote_player_node)
-		if remote_player_node.has_signal("died"):
-			remote_player_node.connect("died", Callable(self, "_on_player_died"))
-		if remote_player_node.has_signal("health_changed"):
-			remote_player_node.connect("health_changed", Callable(self, "_on_player_health_changed_for_summary").bind(remote_player_node))
+		remote_player_node.died.connect(Callable(self, "_on_player_died"))
+		remote_player_node.health_changed.connect(Callable(self, "_on_player_health_changed_for_summary").bind(remote_player_node))
 		print_debug("[Multiplayer] Remote player created (peer %d)" % remote_peer)
 
 	if is_instance_valid(player_camera):
@@ -536,25 +560,11 @@ func _setup_multiplayer_remote_players() -> void:
 	_bind_camera_to_local_player()
 
 func _player_fan_offset(slot: int, total: int) -> Vector2:
-	## Slot 0 (host) stays at the spawn anchor; remaining slots fan around it.
-	if total <= 1 or slot <= 0:
-		return Vector2.ZERO
-	var ring_count := total - 1
-	var angle := TAU * float(slot - 1) / float(ring_count)
-	return Vector2(cos(angle), sin(angle)) * REMOTE_PLAYER_SPAWN_RADIUS_PX
+	return PLAYER_ROSTER_HELPERS.player_fan_offset(slot, total)
 
 
 func _disable_player_collision_pair(primary_player: Node, secondary_player: Node) -> void:
-	if not (primary_player is PhysicsBody2D):
-		return
-	if not (secondary_player is PhysicsBody2D):
-		return
-	var primary_body := primary_player as PhysicsBody2D
-	var secondary_body := secondary_player as PhysicsBody2D
-	if primary_body == null or secondary_body == null:
-		return
-	primary_body.add_collision_exception_with(secondary_body)
-	secondary_body.add_collision_exception_with(primary_body)
+	PLAYER_ROSTER_HELPERS.disable_player_collision_pair(primary_player, secondary_player)
 
 
 func _bind_camera_to_local_player() -> void:
@@ -577,98 +587,57 @@ func _bind_camera_to_local_player() -> void:
 
 
 func _find_local_player_node() -> Node2D:
-	var party_nodes := _get_multiplayer_player_nodes()
-	for party_node in party_nodes:
-		if _is_local_control_owner(party_node) and _is_player_alive(party_node):
-			return party_node
-	for party_node in party_nodes:
-		if _is_player_alive(party_node):
-			return party_node
-	for party_node in party_nodes:
-		if _is_local_control_owner(party_node):
-			return party_node
-	if not party_nodes.is_empty():
-		return party_nodes[0]
-	return null
+	return PLAYER_ROSTER_HELPERS.find_local_player_node(_get_multiplayer_player_nodes())
 
 
 func _find_local_owned_player_node() -> Node2D:
-	for party_node in _get_multiplayer_player_nodes():
-		if _is_local_control_owner(party_node):
-			return party_node
-	return _find_local_player_node()
+	return PLAYER_ROSTER_HELPERS.find_local_owned_player_node(_get_multiplayer_player_nodes())
 
 
 func _is_player_alive(player_node: Node) -> bool:
-	if player_node == null:
-		return false
-	if not player_node.has_method("is_dead"):
-		return true
-	return not bool(player_node.call("is_dead"))
+	return PLAYER_ROSTER_HELPERS.is_player_alive(player_node)
 
 
 func _is_local_control_owner(player_node: Node) -> bool:
-	if player_node == null:
-		return false
-	if player_node.has_method("_is_local_control_owner"):
-		return bool(player_node.call("_is_local_control_owner"))
-	if player_node.has_method("is_multiplayer_authority"):
-		return bool(player_node.call("is_multiplayer_authority"))
-	return true
+	return PLAYER_ROSTER_HELPERS.is_local_control_owner(player_node)
 
 
 func _resolve_local_peer_id() -> int:
-	var active_multiplayer := get_tree().get_multiplayer()
-	if active_multiplayer != null:
-		var active_peer_id := int(active_multiplayer.get_unique_id())
-		if active_peer_id > 0:
-			return active_peer_id
-	var multiplayer_session_manager := get_node_or_null("/root/MultiplayerSessionManager")
-	if multiplayer_session_manager != null:
-		return int(multiplayer_session_manager.local_peer_id)
-	if is_instance_valid(player) and player.has_method("get"):
-		return int(player.get("player_id"))
-	return 0
+	return PLAYER_ROSTER_HELPERS.resolve_local_peer_id(
+		get_tree(),
+		get_node_or_null("/root/MultiplayerSessionManager"),
+		player
+	)
 
 
 func _resolve_local_character_id(run_context: Node, fallback_character_id: String) -> String:
-	if run_context == null:
-		return fallback_character_id
-	var resolved_character_id := fallback_character_id
-	var selected_character_id := String(run_context.get_selected_character_id()).strip_edges().to_lower()
-	if not selected_character_id.is_empty():
-		resolved_character_id = selected_character_id
-	var local_peer_id := _resolve_local_peer_id()
-	if local_peer_id > 0:
-		var peer_character_id := String(run_context.get_peer_character_selection(local_peer_id)).strip_edges().to_lower()
-		if not peer_character_id.is_empty() and peer_character_id == selected_character_id:
-			resolved_character_id = peer_character_id
-	if resolved_character_id.is_empty():
-		resolved_character_id = fallback_character_id
-	return resolved_character_id
+	return PLAYER_ROSTER_HELPERS.resolve_local_character_id(
+		run_context,
+		fallback_character_id,
+		_resolve_local_peer_id()
+	)
 
 
-func _apply_multiplayer_character_packages(run_context: Node) -> void:
+func _apply_multiplayer_character_packages(run_context: RUN_CONTEXT_SCRIPT) -> void:
 	if run_context == null:
 		return
 	var duplicate_variant_by_peer := _build_duplicate_variant_map(run_context)
-	if is_instance_valid(player) and player.has_method("apply_character_package"):
+	if is_instance_valid(player):
 		var local_selected_id := String(run_context.get_selected_character_id()).strip_edges().to_lower()
 		if local_selected_id.is_empty():
 			local_selected_id = current_character_id
 		var local_data: Dictionary = CHARACTER_REGISTRY.get_character(local_selected_id)
 		if not local_data.is_empty():
-			var local_peer_for_variant := int(player.get("player_id"))
+			var local_peer_for_variant := player.player_id
 			var local_variant := int(duplicate_variant_by_peer.get(local_peer_for_variant, 0))
 			var local_data_variant := CHARACTER_REGISTRY.apply_duplicate_color_variant(local_data, local_variant)
 			player.apply_character_package(local_data_variant)
 			current_character_id = local_selected_id
 	for party_node in _get_multiplayer_player_nodes():
-		if party_node == player:
+		var party_player := party_node as PLAYER_SCRIPT
+		if party_player == null or party_player == player:
 			continue
-		if not party_node.has_method("apply_character_package"):
-			continue
-		var remote_peer_id := int(party_node.get("player_id"))
+		var remote_peer_id := party_player.player_id
 		var remote_character_id := String(run_context.get_peer_character_selection(remote_peer_id)).strip_edges().to_lower()
 		if remote_character_id.is_empty():
 			continue
@@ -677,49 +646,15 @@ func _apply_multiplayer_character_packages(run_context: Node) -> void:
 			continue
 		var remote_variant := int(duplicate_variant_by_peer.get(remote_peer_id, 0))
 		var remote_data_variant := CHARACTER_REGISTRY.apply_duplicate_color_variant(remote_data, remote_variant)
-		party_node.apply_character_package(remote_data_variant)
+		party_player.apply_character_package(remote_data_variant)
 
 
-func _build_duplicate_variant_map(run_context: Node) -> Dictionary:
-	## Returns peer_id -> variant_index for all party peers.
-	## Peers sharing a character get distinct variants; the lowest peer_id (host = 1) keeps variant 0.
-	var variant_by_peer: Dictionary = {}
-	if run_context == null:
-		return variant_by_peer
-	var peers_by_character: Dictionary = {}
-	for party_node in _get_multiplayer_player_nodes():
-		if not is_instance_valid(party_node):
-			continue
-		var peer_id := int(party_node.get("player_id"))
-		if peer_id <= 0:
-			continue
-		var character_id := String(run_context.get_peer_character_selection(peer_id)).strip_edges().to_lower()
-		if character_id.is_empty():
-			continue
-		if not peers_by_character.has(character_id):
-			peers_by_character[character_id] = []
-		(peers_by_character[character_id] as Array).append(peer_id)
-	for character_key in peers_by_character.keys():
-		var peer_list: Array = peers_by_character[character_key]
-		peer_list.sort()
-		for index in peer_list.size():
-			variant_by_peer[int(peer_list[index])] = index
-	return variant_by_peer
+func _build_duplicate_variant_map(run_context: RUN_CONTEXT_SCRIPT) -> Dictionary:
+	return PLAYER_ROSTER_HELPERS.build_duplicate_variant_map(run_context, _get_multiplayer_player_nodes())
 
 
 func _log_multiplayer_player_stats(stage: String) -> void:
-	if not is_multiplayer:
-		return
-	for player_node in _get_multiplayer_player_nodes():
-		if not is_instance_valid(player_node):
-			continue
-		var node_name := String(player_node.name)
-		var peer_id := int(player_node.get("player_id")) if player_node.has_method("get") else 0
-		var is_local_owner := _is_local_control_owner(player_node)
-		var character_id := String(player_node.get("active_character_id")) if player_node.has_method("get") else ""
-		var attack_range_value := float(player_node.get("attack_range")) if player_node.has_method("get") else 0.0
-		var attack_arc_value := float(player_node.get("attack_arc_degrees")) if player_node.has_method("get") else 0.0
-		print_debug("[Multiplayer][%s] %s peer=%d local_owner=%s character=%s range=%.1f arc=%.1f" % [stage, node_name, peer_id, str(is_local_owner), character_id, attack_range_value, attack_arc_value])
+	PLAYER_ROSTER_HELPERS.log_multiplayer_player_stats(stage, _get_multiplayer_player_nodes(), is_multiplayer)
 
 func _setup_world_bootstrap_state() -> void:
 	current_room_size = room_base_size
@@ -752,14 +687,13 @@ func _setup_reward_selection_system() -> void:
 	reward_selection_ui = REWARD_SELECTION_UI_SCRIPT.new()
 	add_child(reward_selection_ui)
 	var effective_choice_count: int = boon_choice_count
-	var run_context_ref := get_node_or_null(RUN_CONTEXT_PATH)
-	if run_context_ref != null and run_context_ref.has_method("get_active_ascension_loadout"):
+	var run_context_ref := _get_run_context()
+	if run_context_ref != null:
 		var loadout: Array = run_context_ref.get_active_ascension_loadout()
 		if not loadout.is_empty():
 			var ascension_payload: Dictionary = ASCENSION_REGISTRY.merge_loadout_payload(loadout)
 			var delta: int = int(round(float(ascension_payload.get("reward_choice_count_add", 0.0))))
 			effective_choice_count = maxi(1, effective_choice_count + delta)
-	if run_context_ref != null and run_context_ref.has_method("get_active_catalyst_payload"):
 		var catalyst_payload: Dictionary = run_context_ref.get_active_catalyst_payload("")
 		var catalyst_delta: int = int(round(float(catalyst_payload.get("reward_choice_count_add", 0.0))))
 		if catalyst_delta != 0:
@@ -776,11 +710,9 @@ func _setup_encounter_profile_builder_system() -> void:
 	encounter_profile_builder = ENCOUNTER_PROFILE_BUILDER_SCRIPT.new()
 	add_child(encounter_profile_builder)
 	encounter_profile_builder.initialize(rng)
-	if encounter_profile_builder.has_method("set_use_multiplayer_difficulty_config"):
-		encounter_profile_builder.call("set_use_multiplayer_difficulty_config", is_multiplayer)
-	if encounter_profile_builder.has_method("set_multiplayer_party_size"):
-		encounter_profile_builder.call("set_multiplayer_party_size", difficulty_provider.get_party_size())
-	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	encounter_profile_builder.set_use_multiplayer_difficulty_config(is_multiplayer)
+	encounter_profile_builder.set_multiplayer_party_size(difficulty_provider.get_party_size())
+	var run_context := _get_run_context()
 	var should_apply_difficulty := false
 	var difficulty_tier := current_difficulty_tier
 	if run_context != null:
@@ -795,7 +727,7 @@ func _setup_encounter_profile_builder_system() -> void:
 	if debug_bearing_tier >= 0:
 		difficulty_tier = debug_bearing_tier
 		should_apply_difficulty = true
-	if is_instance_valid(player) and player.has_method("apply_character_package"):
+	if is_instance_valid(player):
 		var char_data: Dictionary = CHARACTER_REGISTRY.get_character(current_character_id)
 		player.apply_character_package(char_data)
 	if is_multiplayer:
@@ -804,8 +736,8 @@ func _setup_encounter_profile_builder_system() -> void:
 	if should_apply_difficulty:
 		encounter_profile_builder.set_difficulty_tier(difficulty_tier)
 		_apply_difficulty_tier_bonuses(difficulty_tier)
-	if run_context != null and encounter_profile_builder.has_method("set_ascension_loadout"):
-		encounter_profile_builder.call("set_ascension_loadout", run_context.get_active_ascension_loadout())
+	if run_context != null:
+		encounter_profile_builder.set_ascension_loadout(run_context.get_active_ascension_loadout())
 	encounter_profile_builder.configure({
 		"room_base_size": room_base_size,
 		"room_size_growth": room_size_growth,
@@ -888,6 +820,9 @@ func _setup_objective_runtime_system() -> void:
 	objective_runtime = OBJECTIVE_RUNTIME_SCRIPT.new()
 	add_child(objective_runtime)
 	objective_runtime.initialize(self, rng, objective_manager)
+	objective_control_overlay = OBJECTIVE_CONTROL_OVERLAY_SCRIPT.new()
+	add_child(objective_control_overlay)
+	objective_control_overlay.objective_manager = objective_manager
 
 func _run_resume_flow() -> bool:
 	var resumed_run := _try_resume_saved_run()
@@ -939,18 +874,15 @@ func _start_stress_test_arena() -> void:
 func _begin_new_run_flow() -> void:
 	_world_multiplayer_sync_state.reset_for_new_run()
 	run_summary_recorder.mark_run_start()
-	rooms_cleared = 0
-	room_depth = 0
+	_set_progression_counters(0, 0, 0, 0)
 	boss_unlocked = false
 	in_boss_room = false
 	in_second_boss_room = false
 	in_third_boss_room = false
 	first_boss_defeated = false
 	second_boss_defeated = false
-	phase_two_rooms_cleared = 0
-	phase_three_rooms_cleared = 0
 	endless_boss_defeated = false
-	run_cleared = false
+	_run_outcome_coordinator.reset_for_new_run()
 	boss_reward_pending = false
 	last_defeated_boss_id = ""
 	pending_room_reward = ENUMS.RewardMode.NONE
@@ -1049,8 +981,7 @@ func _start_debug_selected_encounter(encounter_state: int) -> Dictionary:
 
 	_reset_for_debug_jump()
 	var encounter_depth := start_depth
-	rooms_cleared = encounter_depth - 1
-	room_depth = encounter_depth
+	_set_progression_counters(encounter_depth - 1, encounter_depth, phase_two_rooms_cleared, phase_three_rooms_cleared)
 	boss_unlocked = false
 
 	if encounter_key == "rest":
@@ -1075,15 +1006,12 @@ func _start_debug_selected_encounter(encounter_state: int) -> Dictionary:
 
 func _start_debug_boss_room() -> Dictionary:
 	_reset_for_debug_jump()
-	rooms_cleared = encounter_count
-	room_depth = encounter_count
+	_set_progression_counters(encounter_count, encounter_count, 0, 0)
 	boss_unlocked = true
 	first_boss_defeated = false
 	second_boss_defeated = false
 	in_second_boss_room = false
 	in_third_boss_room = false
-	phase_two_rooms_cleared = 0
-	phase_three_rooms_cleared = 0
 	boss_reward_pending = false
 	last_defeated_boss_id = ""
 	_begin_boss_room()
@@ -1092,30 +1020,26 @@ func _start_debug_boss_room() -> Dictionary:
 
 func _start_debug_second_boss_room() -> Dictionary:
 	_reset_for_debug_jump()
-	rooms_cleared = encounter_count + second_boss_encounter_count
-	room_depth = rooms_cleared
+	var debug_depth := encounter_count + second_boss_encounter_count
+	_set_progression_counters(debug_depth, debug_depth, second_boss_encounter_count, 0)
 	boss_unlocked = true
 	first_boss_defeated = true
 	second_boss_defeated = false
 	in_second_boss_room = false
 	in_third_boss_room = false
-	phase_two_rooms_cleared = second_boss_encounter_count
-	phase_three_rooms_cleared = 0
 	_begin_second_boss_room()
 	hud.refresh(_get_hud_state(), player)
 	return {"ok": true, "state": "debug_encounter", "encounter": "Sovereign"}
 
 func _start_debug_third_boss_room() -> Dictionary:
 	_reset_for_debug_jump()
-	rooms_cleared = _get_third_boss_target_depth()
-	room_depth = rooms_cleared
+	var debug_depth := _get_third_boss_target_depth()
+	_set_progression_counters(debug_depth, debug_depth, second_boss_encounter_count, third_boss_encounter_count)
 	boss_unlocked = true
 	first_boss_defeated = true
 	second_boss_defeated = true
 	in_second_boss_room = false
 	in_third_boss_room = false
-	phase_two_rooms_cleared = second_boss_encounter_count
-	phase_three_rooms_cleared = third_boss_encounter_count
 	_begin_third_boss_room()
 	hud.refresh(_get_hud_state(), player)
 	return {"ok": true, "state": "debug_encounter", "encounter": "Lacuna"}
@@ -1177,14 +1101,13 @@ func _reset_for_debug_jump() -> void:
 	choosing_next_room = false
 	door_options.clear()
 	pending_room_reward = ENUMS.RewardMode.NONE
-	run_cleared = false
+	_run_outcome_coordinator.reset_for_new_run()
 	in_boss_room = false
 	in_second_boss_room = false
 	in_third_boss_room = false
 	first_boss_defeated = false
 	second_boss_defeated = false
-	phase_two_rooms_cleared = 0
-	phase_three_rooms_cleared = 0
+	_set_progression_counters(rooms_cleared, room_depth, 0, 0)
 	endless_boss_defeated = false
 	active_room_enemy_count = 0
 	boss_reward_pending = false
@@ -1196,8 +1119,7 @@ func _start_debug_objective_room(kind: String = "") -> Dictionary:
 	run_summary_recorder.mark_debug_mode()
 	_reset_for_debug_jump()
 	var objective_depth := 1
-	rooms_cleared = objective_depth - 1
-	room_depth = objective_depth
+	_set_progression_counters(objective_depth - 1, objective_depth, phase_two_rooms_cleared, phase_three_rooms_cleared)
 	boss_unlocked = false
 	var profile := _build_objective_test_profile(objective_depth, kind)
 	profile = _apply_debug_mutator_override(profile)
@@ -1388,9 +1310,7 @@ func _process(delta: float) -> void:
 	_keep_enemies_inside_current_room(delta)
 	_keep_player_inside_camera_view()
 	var _grace_active := _update_encounter_intro_grace()
-	var objective_frame_result: Dictionary = objective_frame_coordinator.tick(objective_manager, objective_runtime, delta, _grace_active)
-	if bool(objective_frame_result.get("should_redraw", false)):
-		queue_redraw()
+	objective_frame_coordinator.tick(objective_manager, objective_runtime, delta, _grace_active)
 	_try_use_door()
 	_update_encounter_state()
 	_update_camera_mode()
@@ -1416,7 +1336,7 @@ func _process_multiplayer_sync(delta: float) -> void:
 	_sync_objective_state_tick(delta)
 	_sync_archer_projectile_state_tick(delta)
 	enemy_state_sync_broadcaster.tick(delta)
-	EnemyReplicationService.interpolate_remote_enemies(delta, enemy_remote_position_lerp_speed, enemy_remote_rotation_lerp_speed)
+	EnemyReplicationService.interpolate_remote_enemies(delta, enemy_remote_position_lerp_speed)
 	enemy_state_sync_receiver.flush_pending_door_syncs()
 	enemy_state_sync_receiver.flush_pending_boss_spawn_syncs()
 	enemy_state_sync_receiver.flush_pending_spawn_syncs()
@@ -1627,35 +1547,6 @@ func _refresh_frame_ui() -> void:
 	hud.refresh(_get_hud_state(), player)
 	_sync_renderer()
 
-func _draw() -> void:
-	var control_overlay: Dictionary = {}
-	if is_instance_valid(objective_manager) and objective_manager.has_method("get_control_overlay_state"):
-		control_overlay = objective_manager.get_control_overlay_state()
-	if not bool(control_overlay.get("should_draw", false)):
-		return
-	var goal := maxf(0.01, float(control_overlay.get("goal", 0.0)))
-	var progress := float(control_overlay.get("progress", 0.0))
-	var progress_ratio := clampf(progress / goal, 0.0, 1.0)
-	var anchor := Vector2(control_overlay.get("anchor", Vector2.ZERO))
-	var radius := float(control_overlay.get("radius", 0.0))
-	var player_inside := bool(control_overlay.get("player_inside", false))
-	var contested := bool(control_overlay.get("contested", false))
-	var fill_color := Color(0.32, 0.72, 0.96, 0.08)
-	var ring_color := Color(0.46, 0.86, 1.0, 0.4)
-	var progress_color := Color(0.98, 0.86, 0.42, 0.92)
-	if player_inside and not contested:
-		fill_color = Color(0.38, 0.92, 0.62, 0.1)
-		ring_color = Color(0.56, 1.0, 0.74, 0.5)
-		progress_color = Color(0.92, 1.0, 0.7, 0.98)
-	elif contested:
-		fill_color = Color(0.98, 0.46, 0.34, 0.08)
-		ring_color = Color(1.0, 0.64, 0.44, 0.54)
-		progress_color = Color(1.0, 0.8, 0.52, 0.94)
-	draw_circle(anchor, radius, fill_color)
-	draw_arc(anchor, radius, 0.0, TAU, 72, ring_color, 3.0)
-	draw_arc(anchor, radius - 8.0, -PI * 0.5, -PI * 0.5 + TAU * progress_ratio, 64, progress_color, 6.0)
-	draw_circle(anchor, 8.0, Color(1.0, 0.96, 0.72, 0.75))
-
 func _clamp_position_to_current_room(target_position: Vector2, margin: float = 28.0) -> Vector2:
 	if current_effective_room_size == Vector2.ZERO:
 		return target_position
@@ -1705,7 +1596,7 @@ func _get_hud_state() -> Dictionary:
 	if between_rooms:
 		display_enemy_mutator = {}
 	# Keep the visible depth anchored to the cleared room until the next room is entered.
-	if between_rooms and not run_cleared and current_room_label != "Rest Site":
+	if between_rooms and not _run_outcome_coordinator.is_run_cleared() and current_room_label != "Rest Site":
 		display_room_depth = maxi(0, room_depth - 1)
 	
 	# Get current character passive name
@@ -1716,7 +1607,7 @@ func _get_hud_state() -> Dictionary:
 			current_character_passive_name = String(char_data.get("passive_id", "Passive"))
 	
 	var objective_hud_state: Dictionary = {}
-	if is_instance_valid(objective_manager) and objective_manager.has_method("get_hud_state"):
+	if is_instance_valid(objective_manager):
 		objective_hud_state = objective_manager.get_hud_state()
 	
 	var hud_state := {
@@ -1725,7 +1616,7 @@ func _get_hud_state() -> Dictionary:
 		"current_difficulty_tier": current_difficulty_tier,
 		"rooms_cleared": rooms_cleared,
 		"room_depth": display_room_depth,
-		"run_cleared": run_cleared,
+		"run_cleared": _run_outcome_coordinator.is_run_cleared(),
 		"current_room_enemy_mutator": display_enemy_mutator,
 		"in_boss_room": in_boss_room,
 		"active_room_enemy_count": active_room_enemy_count,
@@ -1874,7 +1765,7 @@ func _keep_player_inside_camera_view() -> void:
 func _update_encounter_state() -> void:
 	if MultiplayerSessionManager.is_remote_replica():
 		return
-	if choosing_next_room or run_cleared:
+	if choosing_next_room or _run_outcome_coordinator.is_run_cleared():
 		return
 	if _is_reward_selection_active():
 		return
@@ -1945,19 +1836,19 @@ func _on_room_cleared() -> void:
 	if not bool(outcome_state.get("ok", false)):
 		return
 	_world_multiplayer_sync_state.mark_current_room_clear_processed()
-	run_cleared = bool(outcome_state.get("run_cleared", run_cleared))
+	if bool(outcome_state.get("run_cleared", _run_outcome_coordinator.is_run_cleared())):
+		_run_outcome_coordinator.apply_synced_outcome("clear")
 	in_boss_room = bool(outcome_state.get("in_boss_room", in_boss_room))
 	endless_boss_defeated = bool(outcome_state.get("endless_boss_defeated", endless_boss_defeated))
-	rooms_cleared = int(outcome_state.get("rooms_cleared", rooms_cleared))
+	var next_rooms_cleared := int(outcome_state.get("rooms_cleared", rooms_cleared))
 	var outcome_depth := int(outcome_state.get("room_depth", room_depth))
 	if outcome_depth > 50:
-		push_error("[Room Outcome] Warning: extremely high room_depth from outcome: %d (rooms_cleared=%d)" % [outcome_depth, rooms_cleared])
-	room_depth = outcome_depth
+		push_error("[Room Outcome] Warning: extremely high room_depth from outcome: %d (rooms_cleared=%d)" % [outcome_depth, next_rooms_cleared])
+	_set_progression_counters(next_rooms_cleared, outcome_depth, phase_two_rooms_cleared, phase_three_rooms_cleared)
 	boss_unlocked = bool(outcome_state.get("boss_unlocked", boss_unlocked))
 	pending_room_reward = int(outcome_state.get("pending_room_reward", pending_room_reward))
 	choosing_next_room = bool(outcome_state.get("choosing_next_room", choosing_next_room))
-	phase_two_rooms_cleared += int(outcome_state.get("phase_two_increment", 0))
-	phase_three_rooms_cleared += int(outcome_state.get("phase_three_increment", 0))
+	_apply_progression_increments(0, 0, int(outcome_state.get("phase_two_increment", 0)), int(outcome_state.get("phase_three_increment", 0)))
 	_clamp_room_depth_to_sane_range()
 	if bool(outcome_state.get("show_endless_boss_banner", false)):
 		hud.show_banner("Boss Defeated", "")
@@ -1984,10 +1875,8 @@ func _finish_first_boss_clear() -> void:
 	first_boss_defeated = true
 	in_second_boss_room = false
 	in_third_boss_room = false
-	phase_two_rooms_cleared = 0
-	phase_three_rooms_cleared = 0
-	rooms_cleared += 1
-	room_depth += 1
+	_set_progression_counters(rooms_cleared, room_depth, 0, 0)
+	_apply_progression_increments(1, 1, 0, 0)
 	_clamp_room_depth_to_sane_range()
 	boss_unlocked = false
 	pending_room_reward = ENUMS.RewardMode.NONE
@@ -2003,12 +1892,11 @@ func _finish_second_boss_clear() -> void:
 	second_boss_defeated = true
 	active_room_enemy_count = 0
 	choosing_next_room = false
-	rooms_cleared += 1
-	room_depth += 1
+	_apply_progression_increments(1, 1, 0, 0)
 	_clamp_room_depth_to_sane_range()
 	boss_unlocked = false
 	pending_room_reward = ENUMS.RewardMode.NONE
-	phase_three_rooms_cleared = 0
+	_set_progression_counters(rooms_cleared, room_depth, phase_two_rooms_cleared, 0)
 	last_defeated_boss_id = "sovereign"
 	run_summary_recorder.record_boss_defeat(last_defeated_boss_id)
 	boss_reward_pending = true
@@ -2019,7 +1907,6 @@ func _finish_second_boss_clear() -> void:
 func _finish_third_boss_clear() -> void:
 	in_third_boss_room = false
 	active_room_enemy_count = 0
-	run_cleared = true
 	choosing_next_room = false
 	boss_unlocked = false
 	pending_room_reward = ENUMS.RewardMode.NONE
@@ -2035,25 +1922,55 @@ func _finish_third_boss_clear() -> void:
 		unlocked_tier = int(run_context.consume_just_unlocked_tier())
 	if unlocked_tier >= 0:
 		var unlock_config := DIFFICULTY_CONFIG.get_tier_config(unlocked_tier)
-		run_summary_recorder.record_unlock("Unlocked Bearing: %s" % String(unlock_config.get("name", "Unknown")))
-	run_summary_recorder.mark_full_clear_boss_credits()
-	run_summary_recorder.finish_run("clear")
-	if MultiplayerSessionManager.should_broadcast():
-		if STAT_ATTRIBUTION_TRACE:
-			print_debug("[StatAttribution][OutcomeSend] outcome=clear stats=%s" % str(run_summary_recorder.get_stats_by_peer()))
-		_sync_run_outcome.rpc("clear", unlocked_tier, "", room_depth, run_summary_recorder.latest_run_summary, run_summary_recorder.get_stats_by_peer(), run_summary_recorder.get_latest_peer_summary_overrides())
-	_show_victory_feedback(unlocked_tier, run_summary_recorder.latest_run_summary)
+		if _run_summary_ready():
+			run_summary_recorder.record_unlock("Unlocked Bearing: %s" % String(unlock_config.get("name", "Unknown")))
+	if _run_summary_ready():
+		run_summary_recorder.mark_full_clear_boss_credits()
+	_run_summary_finish_run("clear")
+	_run_outcome_coordinator.register_victory(is_multiplayer, unlocked_tier)
+	_broadcast_run_outcome_if_needed("clear", unlocked_tier, "", room_depth)
+	_show_victory_feedback(unlocked_tier, _latest_run_summary())
 
-func _get_run_context() -> Node:
-	return get_node_or_null(RUN_CONTEXT_PATH)
+func _get_run_context() -> RUN_CONTEXT_SCRIPT:
+	return get_node_or_null(RUN_CONTEXT_PATH) as RUN_CONTEXT_SCRIPT
+
+func _run_summary_ready() -> bool:
+	return run_summary_recorder != null
+
+func _latest_run_summary() -> Dictionary:
+	if not _run_summary_ready():
+		return {}
+	return run_summary_recorder.latest_run_summary
+
+func _run_summary_finish_run(outcome: String, payload: Dictionary = {}) -> void:
+	if not _run_summary_ready():
+		return
+	if payload.is_empty():
+		run_summary_recorder.finish_run(outcome)
+		return
+	run_summary_recorder.finish_run(outcome, payload)
+
+func _broadcast_run_outcome_if_needed(outcome: String, unlocked_tier: int, room_label: String, depth: int) -> void:
+	if not MultiplayerSessionManager.should_broadcast():
+		return
+	var stats_by_peer: Dictionary = run_summary_recorder.get_stats_by_peer()
+	if STAT_ATTRIBUTION_TRACE:
+		print_debug("[StatAttribution][OutcomeSend] outcome=%s stats=%s" % [outcome, str(stats_by_peer)])
+	_sync_run_outcome.rpc(
+		outcome,
+		unlocked_tier,
+		room_label,
+		depth,
+		run_summary_recorder.latest_run_summary,
+		stats_by_peer,
+		run_summary_recorder.get_latest_peer_summary_overrides()
+	)
 
 func _enqueue_leaderboard_submission(run_summary: Dictionary) -> void:
 	if run_summary.is_empty():
 		return
 	var run_context := _get_run_context()
 	if run_context == null:
-		return
-	if not run_context.has_method("enqueue_leaderboard_summary"):
 		return
 	run_context.enqueue_leaderboard_summary(run_summary)
 
@@ -2069,8 +1986,7 @@ func _apply_difficulty_tier_bonuses(difficulty_tier: int) -> void:
 		var ascension_payload_raw: Variant = difficulty_config.get("ascension", {})
 		var ascension_payload: Dictionary = ascension_payload_raw if ascension_payload_raw is Dictionary else {}
 		var enemy_health_mult: float = float(ascension_payload.get("enemy_health_mult", 1.0))
-		if enemy_spawner.has_method("set_ascension_enemy_health_mult"):
-			enemy_spawner.set_ascension_enemy_health_mult(enemy_health_mult)
+		enemy_spawner.set_ascension_enemy_health_mult(enemy_health_mult)
 	var encounter_target := int(difficulty_config.get("encounter_count_before_boss", encounter_count))
 	if encounter_target > 0:
 		encounter_count = encounter_target
@@ -2080,8 +1996,8 @@ func _apply_difficulty_tier_bonuses(difficulty_tier: int) -> void:
 	player.set_incoming_damage_taken_mult(float(difficulty_config.get("player_damage_taken_mult", 1.0)))
 	player.set_incoming_contact_damage_mult(float(difficulty_config.get("enemy_contact_damage_mult", 1.0)))
 	var health_bonus := float(difficulty_config.get("player_starting_health_bonus", 0.0))
-	var run_context_for_catalysts := get_node_or_null(RUN_CONTEXT_PATH)
-	if run_context_for_catalysts != null and run_context_for_catalysts.has_method("get_active_catalyst_payload"):
+	var run_context_for_catalysts := _get_run_context()
+	if run_context_for_catalysts != null:
 		var catalyst_payload: Dictionary = run_context_for_catalysts.get_active_catalyst_payload(current_character_id)
 		health_bonus += float(catalyst_payload.get("starting_max_hp_add", 0.0))
 	if health_bonus > 0.0:
@@ -2268,7 +2184,7 @@ func _set_singleplayer_menu_wave_timer_paused(paused: bool) -> void:
 
 func _on_victory_back_to_menu() -> void:
 	_teardown_multiplayer_session_for_menu_transition()
-	run_summary_recorder.finish_run("clear")
+	_run_summary_finish_run("clear")
 	_clear_active_run_checkpoint()
 	get_tree().change_scene_to_file(MENU_SCENE_PATH)
 
@@ -2281,7 +2197,7 @@ func _on_victory_retry_run() -> void:
 func _on_defeat_back_to_menu() -> void:
 	_teardown_multiplayer_session_for_menu_transition()
 	_set_combat_paused(false)
-	run_summary_recorder.finish_run("death")
+	_run_summary_finish_run("death")
 	_clear_active_run_checkpoint()
 	get_tree().change_scene_to_file(MENU_SCENE_PATH)
 
@@ -2301,7 +2217,7 @@ func _retry_current_run() -> void:
 ## everyone agrees, host broadcasts a coordinated scene reload that keeps the
 ## active session, character selections, and difficulty intact.
 func _request_multiplayer_retry_run() -> void:
-	if _multiplayer_retry_in_progress:
+	if _run_outcome_coordinator.is_retry_in_progress():
 		return
 	if MultiplayerSessionManager.should_broadcast():
 		_register_multiplayer_retry_vote(MultiplayerSessionManager.local_peer_id)
@@ -2330,27 +2246,21 @@ func _expected_retry_voter_ids() -> Array:
 func _register_multiplayer_retry_vote(peer_id: int) -> void:
 	if not MultiplayerSessionManager.should_broadcast():
 		return
-	if _multiplayer_retry_in_progress:
-		return
-	if peer_id <= 0:
-		return
-	if not _expected_retry_voter_ids().has(peer_id):
-		return
-	_multiplayer_retry_votes[peer_id] = true
 	var expected := _expected_retry_voter_ids()
-	var votes_yes := 0
-	for voter in expected:
-		if _multiplayer_retry_votes.get(voter, false):
-			votes_yes += 1
-	_broadcast_retry_vote_status.rpc(votes_yes, expected.size())
-	if votes_yes >= expected.size():
-		_multiplayer_retry_in_progress = true
+	var vote_result := _run_outcome_coordinator.register_retry_vote(peer_id, expected)
+	if not bool(vote_result.get("all_voted", false)):
+		var votes_yes: int = vote_result.get("votes_yes", 0)
+		var total: int = vote_result.get("total_peers", 0)
+		_broadcast_retry_vote_status.rpc(votes_yes, total)
+		return
+	var finalize_result := _run_outcome_coordinator.finalize_retry(expected)
+	if bool(finalize_result.get("ok", false)):
 		_start_multiplayer_retry_run.rpc()
 
 func _apply_retry_vote_status_ui(votes_yes: int = -1, total: int = -1) -> void:
 	if not is_multiplayer:
 		return
-	var local_voted: bool = bool(_multiplayer_retry_votes.get(MultiplayerSessionManager.local_peer_id, false))
+	var local_voted: bool = _run_outcome_coordinator.has_local_voted(MultiplayerSessionManager.local_peer_id)
 	if total < 0:
 		total = _expected_retry_voter_ids().size()
 	if votes_yes < 0:
@@ -2366,7 +2276,7 @@ func _apply_retry_vote_status_ui(votes_yes: int = -1, total: int = -1) -> void:
 		defeat_screen.set_retry_disabled(local_voted)
 
 func _apply_local_retry_vote_pending_ui() -> void:
-	_multiplayer_retry_votes[MultiplayerSessionManager.local_peer_id] = true
+	_run_outcome_coordinator.apply_local_retry_vote(MultiplayerSessionManager.local_peer_id)
 	var total := _expected_retry_voter_ids().size()
 	_apply_retry_vote_status_ui(1, total)
 
@@ -2385,34 +2295,26 @@ func _broadcast_retry_vote_status(votes_yes: int, total: int) -> void:
 
 @rpc("reliable", "authority", "call_local")
 func _start_multiplayer_retry_run() -> void:
-	_multiplayer_retry_in_progress = true
-	_multiplayer_retry_votes.clear()
+	_run_outcome_coordinator.clear_retry_state()
 	_set_combat_paused(false)
 	_clear_active_run_checkpoint()
 	get_tree().change_scene_to_file("res://scenes/Main.tscn")
 
 func _on_multiplayer_peer_disconnected(peer_id: int) -> void:
-	if _multiplayer_retry_in_progress:
-		return
-	if int(peer_id) in _multiplayer_retry_votes:
-		_multiplayer_retry_votes.erase(int(peer_id))
-	if not MultiplayerSessionManager.should_broadcast():
-		return
-	if _multiplayer_retry_votes.is_empty():
-		return
 	var expected := _expected_retry_voter_ids()
-	var votes_yes := 0
-	for voter in expected:
-		if _multiplayer_retry_votes.get(voter, false):
-			votes_yes += 1
-	_broadcast_retry_vote_status.rpc(votes_yes, expected.size())
-	if votes_yes >= expected.size() and votes_yes > 0:
-		_multiplayer_retry_in_progress = true
+	var disconnect_result := _run_outcome_coordinator.on_peer_disconnected(int(peer_id), expected)
+	if not bool(disconnect_result.get("all_voted", false)):
+		var votes_yes: int = disconnect_result.get("votes_yes", 0)
+		var total: int = disconnect_result.get("total_peers", 0)
+		_broadcast_retry_vote_status.rpc(votes_yes, total)
+		return
+	var finalize_result := _run_outcome_coordinator.finalize_retry(expected)
+	if bool(finalize_result.get("ok", false)):
 		_start_multiplayer_retry_run.rpc()
 
 func _on_pause_back_to_menu_requested() -> void:
 	_teardown_multiplayer_session_for_menu_transition()
-	run_summary_recorder.finish_run("menu_exit")
+	_run_summary_finish_run("menu_exit")
 	player_flow_coordinator.prepare_for_menu_transition(combat_phase_coordinator, player, get_tree(), pause_menu_controller)
 	get_tree().change_scene_to_file(MENU_SCENE_PATH)
 
@@ -2422,25 +2324,23 @@ func _on_pause_abandon_run_requested() -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context != null:
 		run_context.set_last_run_outcome("death")
-	run_summary_recorder.finish_run("abandon")
+	_run_summary_finish_run("abandon")
 	_clear_active_run_checkpoint()
 	get_tree().change_scene_to_file(MENU_SCENE_PATH)
 
 func _teardown_multiplayer_session_for_menu_transition() -> void:
 	if not is_multiplayer:
 		return
-	var multiplayer_session_manager := get_node_or_null("/root/MultiplayerSessionManager")
-	if multiplayer_session_manager != null and multiplayer_session_manager.has_method("leave_room"):
+	var multiplayer_session_manager := get_node_or_null("/root/MultiplayerSessionManager") as MULTIPLAYER_SESSION_MANAGER_SCRIPT
+	if multiplayer_session_manager != null:
 		multiplayer_session_manager.leave_room()
 	var run_context := _get_run_context()
 	if run_context != null:
-		if run_context.has_method("clear_multiplayer_session"):
-			run_context.clear_multiplayer_session()
-		if run_context.has_method("suppress_menu_multiplayer_dev_autostart"):
-			run_context.suppress_menu_multiplayer_dev_autostart()
+		run_context.clear_multiplayer_session()
+		run_context.suppress_menu_multiplayer_dev_autostart()
 
 func _on_pause_exit_game_requested() -> void:
-	run_summary_recorder.finish_run("quit")
+	_run_summary_finish_run("quit")
 	get_tree().quit()
 
 func _spawn_door_options() -> void:
@@ -2542,7 +2442,8 @@ func _find_authoritative_door_option(requested_door: Dictionary) -> Dictionary:
 func _sync_door_options(synced_door_options: Array, synced_choosing_next_room: bool, synced_boss_unlocked: bool, progress_state: Dictionary = {}) -> void:
 	if not MultiplayerSessionManager.is_remote_replica():
 		return
-	var sanitized_progress_state := _sanitize_progress_sync_state(progress_state)
+	var incoming_room_sync_id := int(progress_state.get("room_sync_id", _world_multiplayer_sync_state.current_room_sync_id))
+	var sanitized_progress_state := _world_progress_sync_policy.sanitize_progress_sync_state(progress_state, _build_progress_sync_policy_context(incoming_room_sync_id, false))
 	if bool(sanitized_progress_state.get("invalid", false)):
 		_world_multiplayer_sync_state.pending_door_sync_payload.clear()
 		return
@@ -2560,7 +2461,8 @@ func _sync_door_options(synced_door_options: Array, synced_choosing_next_room: b
 func _sync_chosen_door(chosen_door: Dictionary, progress_state: Dictionary = {}) -> void:
 	if not MultiplayerSessionManager.is_remote_replica():
 		return
-	var sanitized_progress_state := _sanitize_progress_sync_state(progress_state)
+	var incoming_room_sync_id := int(progress_state.get("room_sync_id", _world_multiplayer_sync_state.current_room_sync_id))
+	var sanitized_progress_state := _world_progress_sync_policy.sanitize_progress_sync_state(progress_state, _build_progress_sync_policy_context(incoming_room_sync_id, false))
 	if bool(sanitized_progress_state.get("invalid", false)):
 		return
 	if _is_reward_selection_active() or current_room_label == "Starting Chamber":
@@ -2602,7 +2504,6 @@ func _sync_objective_control_zone(control_anchor: Vector2, control_radius: float
 	objective_manager.control_goal = control_goal
 	objective_manager.control_decay_rate = control_decay_rate
 	objective_manager.control_contest_threshold = control_contest_threshold
-	queue_redraw()
 
 @rpc("unreliable", "authority")
 func _sync_objective_control_zone_state(control_progress: float, control_enemies_in_zone: int, control_contested: bool, control_player_inside: bool) -> void:
@@ -2614,7 +2515,6 @@ func _sync_objective_control_zone_state(control_progress: float, control_enemies
 	objective_manager.control_enemies_in_zone = maxi(0, control_enemies_in_zone)
 	objective_manager.control_contested = control_contested
 	objective_manager.control_player_inside = control_player_inside
-	queue_redraw()
 
 @rpc("reliable", "authority")
 func _sync_objective_cleared() -> void:
@@ -2626,7 +2526,6 @@ func _sync_objective_cleared() -> void:
 	_world_multiplayer_sync_state.clear_pending_objective_spawn_sync_payloads()
 	_clear_all_enemies()
 	active_room_enemy_count = 0
-	queue_redraw()
 
 @rpc("unreliable", "authority")
 func _sync_objective_state(objective_state: Dictionary, source_room_sync_id: int, sequence: int) -> void:
@@ -2642,10 +2541,9 @@ func _sync_objective_state(objective_state: Dictionary, source_room_sync_id: int
 		return
 	_last_applied_objective_state_sync_sequence = sequence
 	objective_manager.apply_sync_state(objective_state)
-	queue_redraw()
 
 func _build_progress_sync_state() -> Dictionary:
-	return {
+	return _world_progress_sync_policy.build_progress_sync_state({
 		"room_sync_id": _world_multiplayer_sync_state.current_room_sync_id,
 		"rooms_cleared": rooms_cleared,
 		"room_depth": room_depth,
@@ -2658,85 +2556,68 @@ func _build_progress_sync_state() -> Dictionary:
 		"in_second_boss_room": in_second_boss_room,
 		"in_third_boss_room": in_third_boss_room,
 		"choosing_next_room": choosing_next_room
-	}
+	})
 
-func _sanitize_progress_sync_state(progress_state: Dictionary) -> Dictionary:
-	if progress_state.is_empty():
-		return {}
-	var sanitized := progress_state.duplicate(true)
-	var incoming_room_sync_id := int(sanitized.get("room_sync_id", _world_multiplayer_sync_state.current_room_sync_id))
-	if _world_multiplayer_sync_state.is_stale_room_sync_id(incoming_room_sync_id):
-		sanitized["invalid"] = true
-		return sanitized
-	if _world_multiplayer_sync_state.is_sync_id_too_far_ahead(incoming_room_sync_id, 4):
-		sanitized["invalid"] = true
-		return sanitized
-	var incoming_first_boss_defeated := bool(sanitized.get("first_boss_defeated", first_boss_defeated))
-	var incoming_second_boss_defeated := bool(sanitized.get("second_boss_defeated", second_boss_defeated))
-	if not incoming_first_boss_defeated:
-		incoming_second_boss_defeated = false
-	var max_depth := _get_second_boss_target_depth()
-	if incoming_second_boss_defeated:
-		max_depth = _get_third_boss_target_depth() + 1
-	elif incoming_first_boss_defeated:
-		max_depth = _get_third_boss_target_depth()
-	var incoming_room_depth := int(sanitized.get("room_depth", room_depth))
-	incoming_room_depth = clampi(incoming_room_depth, 0, maxi(1, max_depth))
-	if rooms_cleared <= 1 and incoming_room_depth > 3:
-		sanitized["invalid"] = true
-		return sanitized
-	# Allow large depth jumps if joiner just joined (rooms_cleared == 0) OR if explicitly awaiting door choice.
-	# This permits joiners mid-run to synchronize with the host's current depth.
-	var is_joiner_initial_sync := MultiplayerSessionManager.is_authoritative() or (MultiplayerSessionManager.is_remote_replica() and rooms_cleared == 0)
-	if incoming_room_depth > room_depth + 2 and not _world_multiplayer_sync_state.awaiting_authoritative_door_choice and not is_joiner_initial_sync:
-		sanitized["invalid"] = true
-		return sanitized
-	var incoming_rooms_cleared := int(sanitized.get("rooms_cleared", rooms_cleared))
-	incoming_rooms_cleared = clampi(incoming_rooms_cleared, 0, incoming_room_depth)
-	var incoming_phase_two := int(sanitized.get("phase_two_rooms_cleared", phase_two_rooms_cleared))
-	incoming_phase_two = clampi(incoming_phase_two, 0, maxi(0, second_boss_encounter_count))
-	var incoming_phase_three := int(sanitized.get("phase_three_rooms_cleared", phase_three_rooms_cleared))
-	incoming_phase_three = clampi(incoming_phase_three, 0, maxi(0, third_boss_encounter_count))
-	sanitized["room_sync_id"] = incoming_room_sync_id
-	sanitized["rooms_cleared"] = incoming_rooms_cleared
-	sanitized["room_depth"] = incoming_room_depth
-	sanitized["phase_two_rooms_cleared"] = incoming_phase_two
-	sanitized["phase_three_rooms_cleared"] = incoming_phase_three
-	sanitized["first_boss_defeated"] = incoming_first_boss_defeated
-	sanitized["second_boss_defeated"] = incoming_second_boss_defeated
-	sanitized.erase("invalid")
-	return sanitized
+func _build_progress_sync_policy_context(incoming_room_sync_id: int, include_apply_defaults: bool) -> Dictionary:
+	var context := {
+		"current_room_sync_id": _world_multiplayer_sync_state.current_room_sync_id,
+		"is_stale_room_sync_id": _world_multiplayer_sync_state.is_stale_room_sync_id(incoming_room_sync_id),
+		"is_sync_id_too_far_ahead": _world_multiplayer_sync_state.is_sync_id_too_far_ahead(incoming_room_sync_id, 4),
+		"first_boss_defeated": first_boss_defeated,
+		"second_boss_defeated": second_boss_defeated,
+		"second_boss_target_depth": _get_second_boss_target_depth(),
+		"third_boss_target_depth": _get_third_boss_target_depth(),
+		"room_depth": room_depth,
+		"rooms_cleared": rooms_cleared,
+		"awaiting_authoritative_door_choice": _world_multiplayer_sync_state.awaiting_authoritative_door_choice,
+		"is_authoritative": MultiplayerSessionManager.is_authoritative(),
+		"is_remote_replica": MultiplayerSessionManager.is_remote_replica(),
+		"phase_two_rooms_cleared": phase_two_rooms_cleared,
+		"phase_three_rooms_cleared": phase_three_rooms_cleared,
+		"second_boss_encounter_count": second_boss_encounter_count,
+		"third_boss_encounter_count": third_boss_encounter_count
+	}
+	if include_apply_defaults:
+		context.merge({
+			"boss_unlocked": boss_unlocked,
+			"in_boss_room": in_boss_room,
+			"in_second_boss_room": in_second_boss_room,
+			"in_third_boss_room": in_third_boss_room,
+			"choosing_next_room": choosing_next_room,
+			"max_sane_depth": _get_third_boss_target_depth() + 2
+		})
+	return context
 
 func _apply_progress_sync_state(progress_state: Dictionary) -> void:
-	var sanitized_progress_state := _sanitize_progress_sync_state(progress_state)
-	if sanitized_progress_state.is_empty():
+	var incoming_room_sync_id := int(progress_state.get("room_sync_id", _world_multiplayer_sync_state.current_room_sync_id))
+	var context := _build_progress_sync_policy_context(incoming_room_sync_id, true)
+	var sanitized_progress_state := _world_progress_sync_policy.sanitize_progress_sync_state(progress_state, context)
+	var normalized_apply_state := _world_progress_sync_policy.normalize_apply_progress_sync_state(sanitized_progress_state, context)
+	if normalized_apply_state.is_empty():
 		return
-	if bool(sanitized_progress_state.get("invalid", false)):
+	if bool(normalized_apply_state.get("invalid", false)):
+		if String(normalized_apply_state.get("error", "")) == "depth_above_max":
+			push_error("[Progress Sync] Rejected impossibly high incoming depth %d (max sane: %d)" % [int(normalized_apply_state.get("incoming_depth", 0)), int(normalized_apply_state.get("max_sane_depth", 0))])
 		return
 	# Clear joiner-join flag once first valid sync is received.
 	if _world_multiplayer_sync_state.joiner_awaiting_initial_sync:
 		_world_multiplayer_sync_state.joiner_awaiting_initial_sync = false
 		print_debug("[Multiplayer] Joiner received initial progress sync")
-	
-	var incoming_depth := int(sanitized_progress_state.get("room_depth", room_depth))
-	var max_sane_depth := _get_third_boss_target_depth() + 2
-	if incoming_depth > max_sane_depth:
-		push_error("[Progress Sync] Rejected impossibly high incoming depth %d (max sane: %d)" % [incoming_depth, max_sane_depth])
-		return
-	
-	_world_multiplayer_sync_state.merge_current_room_sync_id(int(sanitized_progress_state.get("room_sync_id", _world_multiplayer_sync_state.current_room_sync_id)))
-	rooms_cleared = int(sanitized_progress_state.get("rooms_cleared", rooms_cleared))
-	room_depth = incoming_depth
+	_world_multiplayer_sync_state.merge_current_room_sync_id(int(normalized_apply_state.get("room_sync_id", _world_multiplayer_sync_state.current_room_sync_id)))
+	_set_progression_counters(
+		int(normalized_apply_state.get("rooms_cleared", rooms_cleared)),
+		int(normalized_apply_state.get("room_depth", room_depth)),
+		int(normalized_apply_state.get("phase_two_rooms_cleared", phase_two_rooms_cleared)),
+		int(normalized_apply_state.get("phase_three_rooms_cleared", phase_three_rooms_cleared))
+	)
 	_clamp_room_depth_to_sane_range()
-	phase_two_rooms_cleared = int(sanitized_progress_state.get("phase_two_rooms_cleared", phase_two_rooms_cleared))
-	phase_three_rooms_cleared = int(sanitized_progress_state.get("phase_three_rooms_cleared", phase_three_rooms_cleared))
-	boss_unlocked = bool(sanitized_progress_state.get("boss_unlocked", boss_unlocked))
-	first_boss_defeated = bool(sanitized_progress_state.get("first_boss_defeated", first_boss_defeated))
-	second_boss_defeated = bool(sanitized_progress_state.get("second_boss_defeated", second_boss_defeated))
-	in_boss_room = bool(sanitized_progress_state.get("in_boss_room", in_boss_room))
-	in_second_boss_room = bool(sanitized_progress_state.get("in_second_boss_room", in_second_boss_room))
-	in_third_boss_room = bool(sanitized_progress_state.get("in_third_boss_room", in_third_boss_room))
-	choosing_next_room = bool(sanitized_progress_state.get("choosing_next_room", choosing_next_room))
+	boss_unlocked = bool(normalized_apply_state.get("boss_unlocked", boss_unlocked))
+	first_boss_defeated = bool(normalized_apply_state.get("first_boss_defeated", first_boss_defeated))
+	second_boss_defeated = bool(normalized_apply_state.get("second_boss_defeated", second_boss_defeated))
+	in_boss_room = bool(normalized_apply_state.get("in_boss_room", in_boss_room))
+	in_second_boss_room = bool(normalized_apply_state.get("in_second_boss_room", in_second_boss_room))
+	in_third_boss_room = bool(normalized_apply_state.get("in_third_boss_room", in_third_boss_room))
+	choosing_next_room = bool(normalized_apply_state.get("choosing_next_room", choosing_next_room))
 	var enforce_local_door_safety := MultiplayerSessionManager.is_authoritative()
 	if enforce_local_door_safety and (active_room_enemy_count > 0 or _is_reward_selection_active()):
 		choosing_next_room = false
@@ -2801,7 +2682,7 @@ func _begin_room(profile: Dictionary) -> void:
 	_doors_spawn_ready = false
 	if profile.is_empty():
 		return
-	if is_instance_valid(encounter_profile_builder) and encounter_profile_builder.has_method("apply_wave_staggering"):
+	if is_instance_valid(encounter_profile_builder):
 		profile = encounter_profile_builder.apply_wave_staggering(profile)
 	_prepare_room_sync_transition()
 	choosing_next_room = false
@@ -2861,15 +2742,11 @@ func _enter_rest_site() -> void:
 	hud.show_banner("Rest Site", "")
 	current_room_static_camera = true
 	if second_boss_defeated:
-		rooms_cleared += 1
-		room_depth += 1
-		phase_three_rooms_cleared += 1
+		_apply_progression_increments(1, 1, 0, 1)
 		boss_unlocked = _is_third_boss_unlocked()
 		_clamp_room_depth_to_sane_range()
 	elif first_boss_defeated:
-		rooms_cleared += 1
-		room_depth += 1
-		phase_two_rooms_cleared += 1
+		_apply_progression_increments(1, 1, 1, 0)
 		boss_unlocked = _is_second_boss_unlocked()
 		_clamp_room_depth_to_sane_range()
 	else:
@@ -2888,8 +2765,12 @@ func _advance_room_progress() -> void:
 	if not is_instance_valid(encounter_flow_system):
 		return
 	var progress: Dictionary = encounter_flow_system.advance_room_progress(rooms_cleared, room_depth, encounter_count)
-	rooms_cleared = int(progress.get("rooms_cleared", rooms_cleared))
-	room_depth = int(progress.get("room_depth", room_depth))
+	_set_progression_counters(
+		int(progress.get("rooms_cleared", rooms_cleared)),
+		int(progress.get("room_depth", room_depth)),
+		phase_two_rooms_cleared,
+		phase_three_rooms_cleared
+	)
 	boss_unlocked = bool(progress.get("boss_unlocked", boss_unlocked))
 
 func _pick_boss_spawn_position(min_player_distance: float = 260.0, wall_margin: float = 210.0) -> Vector2:
@@ -2912,15 +2793,31 @@ func _pick_boss_spawn_position(min_player_distance: float = 260.0, wall_margin: 
 		return candidate
 	return fallback
 
-func _begin_configured_boss_room(boss_stage: int, room_size: Vector2, room_label: String, room_entry_key: String, banner_title: String, boss_script, collision_radius: float, min_player_distance: float, wall_margin: float) -> void:
+func _begin_boss_stage(stage: int) -> void:
+	var descriptor: Dictionary = BOSS_STAGE_REGISTRY.get_descriptor(stage)
+	if descriptor.is_empty():
+		push_warning("_begin_boss_stage: unknown boss stage %d" % stage)
+		return
+	var min_player_distance: float = maxf(
+		float(descriptor["min_player_distance_floor"]),
+		spawn_safe_radius + float(descriptor["min_player_distance_pad"])
+	)
+	var wall_margin: float = maxf(
+		float(descriptor["wall_margin_floor"]),
+		spawn_padding + float(descriptor["wall_margin_pad"])
+	)
+	var room_label := String(descriptor["room_label"])
+	var room_entry_key := String(descriptor["room_entry_key"])
+	var banner_title := String(descriptor["banner_title"])
+
 	_prepare_room_sync_transition()
 	encounter_intro_grace_active = false
 	combat_phase_coordinator.begin_combat_phase(player, get_tree())
-	in_boss_room = boss_stage == 1
-	in_second_boss_room = boss_stage == 2
-	in_third_boss_room = boss_stage == 3
+	in_boss_room = stage == 1
+	in_second_boss_room = stage == 2
+	in_third_boss_room = stage == 3
 	_play_room_music(true)
-	current_room_size = room_size
+	current_room_size = descriptor["room_size"]
 	_reset_effective_room_bounds()
 	current_room_static_camera = false
 	current_room_label = room_label
@@ -2935,15 +2832,8 @@ func _begin_configured_boss_room(boss_stage: int, room_size: Vector2, room_label
 		_start_encounter_intro_grace()
 		enemy_state_sync_receiver.flush_pending_boss_spawn_syncs()
 		return
-	var boss := CharacterBody2D.new()
-	boss.set_script(boss_script)
-
-	var collision_shape := CollisionShape2D.new()
-	collision_shape.shape = CircleShape2D.new()
-	collision_shape.shape.radius = collision_radius
-	boss.add_child(collision_shape)
-
-	boss.global_position = _pick_boss_spawn_position(min_player_distance, wall_margin)
+	var spawn_position: Vector2 = _pick_boss_spawn_position(min_player_distance, wall_margin)
+	var boss := BOSS_STAGE_REGISTRY.create_boss_node(stage, spawn_position)
 	add_child(boss)
 	boss.begin_spawn_transport(BOSS_SPAWN_TRANSPORT_DURATION)
 	_assign_enemy_target_candidates(boss)
@@ -2957,7 +2847,7 @@ func _begin_configured_boss_room(boss_stage: int, room_size: Vector2, room_label
 		boss.damage_received.connect(func(applied_amount: int, _remaining_health: int): _on_enemy_damage_received(applied_amount))
 	if MultiplayerSessionManager.should_broadcast():
 		_sync_spawn_boss.rpc({
-			"boss_stage": boss_stage,
+			"boss_stage": stage,
 			"enemy_id": boss_enemy_id,
 			"position": boss.global_position,
 			"room_label": current_room_label,
@@ -2966,43 +2856,13 @@ func _begin_configured_boss_room(boss_stage: int, room_size: Vector2, room_label
 	_start_encounter_intro_grace()
 
 func _begin_boss_room() -> void:
-	_begin_configured_boss_room(
-		1,
-		Vector2(1260.0, 900.0),
-		"Boss Chamber: The Warden",
-		"warden",
-		"The Warden",
-		ENEMY_BOSS_SCRIPT,
-		34.0,
-		maxf(260.0, spawn_safe_radius + 90.0),
-		maxf(210.0, spawn_padding + 110.0)
-	)
+	_begin_boss_stage(1)
 
 func _begin_second_boss_room() -> void:
-	_begin_configured_boss_room(
-		2,
-		Vector2(1360.0, 960.0),
-		"Abyss Core: Sovereign",
-		"sovereign",
-		"Sovereign",
-		ENEMY_BOSS_2_SCRIPT,
-		38.0,
-		maxf(280.0, spawn_safe_radius + 110.0),
-		maxf(230.0, spawn_padding + 130.0)
-	)
+	_begin_boss_stage(2)
 
 func _begin_third_boss_room() -> void:
-	_begin_configured_boss_room(
-		3,
-		Vector2(1460.0, 1040.0),
-		"Silent Threshold: Lacuna",
-		"lacuna",
-		"Lacuna",
-		ENEMY_BOSS_3_SCRIPT,
-		40.0,
-		maxf(300.0, spawn_safe_radius + 130.0),
-		maxf(250.0, spawn_padding + 150.0)
-	)
+	_begin_boss_stage(3)
 
 func _spawn_profile_enemies(profile: Dictionary) -> int:
 	if not is_instance_valid(enemy_spawner):
@@ -3017,9 +2877,7 @@ func _play_room_music(is_boss_room: bool, instant: bool = false, fade_duration: 
 func _on_room_enemy_died(kill_pos: Vector2 = Vector2.ZERO) -> void:
 	active_room_enemy_count = maxi(0, active_room_enemy_count - 1)
 	run_summary_recorder.record_enemy_kill_for_tracker()
-	var objective_progress_result: Dictionary = objective_progress_coordinator.on_enemy_killed(objective_manager, objective_runtime, kill_pos)
-	if bool(objective_progress_result.get("should_redraw", false)):
-		queue_redraw()
+	objective_progress_coordinator.on_enemy_killed(objective_manager, objective_runtime, kill_pos)
 	if is_instance_valid(player):
 		player.notify_enemy_killed(kill_pos)
 
@@ -3054,12 +2912,10 @@ func _sync_archer_projectile_state_tick(delta: float) -> void:
 	var synced_archer_projectiles: Array = []
 	for enemy_id_variant in EnemyReplicationService.enemy_nodes_by_id.keys():
 		var enemy_id := int(enemy_id_variant)
-		var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as Node
+		var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as ENEMY_BASE_SCRIPT
 		if not is_instance_valid(enemy):
 			continue
-		if not enemy.has_method("get_projectile_network_sync_state"):
-			continue
-		var projectile_sync_state := enemy.call("get_projectile_network_sync_state") as Dictionary
+		var projectile_sync_state := enemy.get_projectile_network_sync_state()
 		if projectile_sync_state.is_empty():
 			continue
 		synced_archer_projectiles.append({
@@ -3145,10 +3001,8 @@ func _sync_request_enemy_damage(enemy_id: int, amount: int, damage_context: Dict
 		return
 	if enemy_id <= 0 or amount <= 0:
 		return
-	var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as Node
+	var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as ENEMY_BASE_SCRIPT
 	if not is_instance_valid(enemy):
-		return
-	if not enemy.has_method("take_damage"):
 		return
 	var sender_peer_id := get_tree().get_multiplayer().get_remote_sender_id()
 	var source_peer_id := int(damage_context.get("source_peer_id", 0))
@@ -3156,40 +3010,21 @@ func _sync_request_enemy_damage(enemy_id: int, amount: int, damage_context: Dict
 		source_peer_id = sender_peer_id
 	if STAT_ATTRIBUTION_TRACE:
 		print_debug("[StatAttribution][HostRecv] enemy_id=%d sender=%d source=%d amount=%d attack=%s" % [enemy_id, sender_peer_id, source_peer_id, amount, String(damage_context.get("attack_type", "unknown"))])
-	var health_before := int(enemy.call("get_current_health")) if enemy.has_method("get_current_health") else -1
+	var health_before := enemy.get_current_health()
 	if damage_context.is_empty():
-		enemy.call("take_damage", amount)
+		enemy.take_damage(amount)
 	else:
-		enemy.call("take_damage", amount, damage_context)
+		enemy.take_damage(amount, damage_context)
 	EnemyReplicationService.credit_damage(enemy_id, source_peer_id)
-	if health_before >= 0 and enemy.has_method("get_current_health"):
-		var health_after := int(enemy.call("get_current_health"))
-		if STAT_ATTRIBUTION_TRACE:
-			print_debug("[StatAttribution][HostApplied] enemy_id=%d source=%d before=%d after=%d applied=%d" % [enemy_id, source_peer_id, health_before, health_after, maxi(0, health_before - health_after)])
-		record_player_damage_dealt(maxi(0, health_before - health_after), source_peer_id, false, enemy_id)
+	var health_after := enemy.get_current_health()
+	if STAT_ATTRIBUTION_TRACE:
+		print_debug("[StatAttribution][HostApplied] enemy_id=%d source=%d before=%d after=%d applied=%d" % [enemy_id, source_peer_id, health_before, health_after, maxi(0, health_before - health_after)])
+	record_player_damage_dealt(maxi(0, health_before - health_after), source_peer_id, false, enemy_id)
 
 func _spawn_boss_for_stage(boss_stage: int, spawn_position: Vector2) -> Node2D:
-	var boss_script = null
-	var collision_radius := 34.0
-	match boss_stage:
-		1:
-			boss_script = ENEMY_BOSS_SCRIPT
-			collision_radius = 34.0
-		2:
-			boss_script = ENEMY_BOSS_2_SCRIPT
-			collision_radius = 38.0
-		3:
-			boss_script = ENEMY_BOSS_3_SCRIPT
-			collision_radius = 40.0
-		_:
-			return null
-	var boss := CharacterBody2D.new()
-	boss.set_script(boss_script)
-	var collision_shape := CollisionShape2D.new()
-	collision_shape.shape = CircleShape2D.new()
-	collision_shape.shape.radius = collision_radius
-	boss.add_child(collision_shape)
-	boss.global_position = spawn_position
+	var boss := BOSS_STAGE_REGISTRY.create_boss_node(boss_stage, spawn_position)
+	if boss == null:
+		return null
 	add_child(boss)
 	boss.begin_spawn_transport(BOSS_SPAWN_TRANSPORT_DURATION)
 	_assign_enemy_target_candidates(boss)
@@ -3214,7 +3049,7 @@ func _on_enemy_spawner_wave_spawned(report: Array, _wave_index: int, _total_wave
 		if not (entry_variant is Dictionary):
 			continue
 		var spawn_entry := entry_variant as Dictionary
-		var enemy: Node2D = spawn_entry.get("enemy") as Node2D
+		var enemy := spawn_entry.get("enemy") as ENEMY_BASE_SCRIPT
 		if not is_instance_valid(enemy):
 			continue
 		var enemy_id: int = enemy_state_sync_broadcaster.register_enemy(enemy)
@@ -3222,7 +3057,7 @@ func _on_enemy_spawner_wave_spawned(report: Array, _wave_index: int, _total_wave
 			"enemy_id": enemy_id,
 			"enemy_type": String(spawn_entry.get("enemy_type", "")),
 			"position": enemy.global_position,
-			"max_health": int(enemy.get_max_health()) if enemy.has_method("get_max_health") else 0
+			"max_health": enemy.get_max_health()
 		})
 	if spawn_batch.is_empty() and not is_initial:
 		return
@@ -3294,15 +3129,13 @@ func _sync_archer_projectile_states(synced_archer_projectiles: Array, source_roo
 		var enemy_id := int(sync_data.get("enemy_id", -1))
 		if enemy_id <= 0:
 			continue
-		var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as Node
+		var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as ENEMY_BASE_SCRIPT
 		if not is_instance_valid(enemy):
-			continue
-		if not enemy.has_method("apply_projectile_network_sync_state"):
 			continue
 		var payload := sync_data.get("payload", {}) as Dictionary
 		if payload.is_empty():
 			continue
-		enemy.call("apply_projectile_network_sync_state", payload)
+		enemy.apply_projectile_network_sync_state(payload)
 
 @rpc("reliable", "authority")
 func _sync_enemy_died(enemy_id: int, death_effect_payload: Dictionary = {}) -> void:
@@ -3450,7 +3283,7 @@ func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> voi
 		_apply_mission_reward(choice)
 	elif mode == ENUMS.RewardMode.BOSS:
 		_apply_boon_to_player(String(choice["id"]))
-		run_session.record_boon(String(choice["name"]))
+		run_session.record_boss_reward(String(choice["name"]))
 		boss_reward_pending = false
 	else:
 		_apply_boon_to_player(String(choice["id"]))
@@ -3503,50 +3336,28 @@ func _sync_reward_choice_for_summary(peer_id: int, choice: Dictionary, mode: int
 
 
 func _begin_reward_phase_sync(is_initial: bool, mode: int) -> void:
-	if not is_multiplayer:
-		_reward_phase_active = false
-		_reward_phase_completed_peers.clear()
-		return
-	_reward_phase_active = true
-	_reward_phase_is_initial = is_initial
-	_reward_phase_mode = mode
-	_reward_phase_completed_peers.clear()
-	if is_instance_valid(hud):
-		hud.hide_persistent_banner()
+	_reward_phase_coordinator.begin_phase(is_multiplayer, is_initial, mode, hud)
 
 
 func _mark_local_reward_phase_complete(is_initial: bool, mode: int) -> void:
-	if not is_multiplayer:
-		return
 	var local_peer_id := _resolve_local_peer_id()
-	if local_peer_id <= 0:
+	var request := _reward_phase_coordinator.build_local_completion_request(is_multiplayer, local_peer_id, is_initial, mode, hud)
+	if request.is_empty():
 		return
-	if is_instance_valid(hud):
-		hud.show_persistent_banner("Reward Locked In", "Waiting for other player...", Color(0.78, 0.9, 1.0, 0.92))
-	_sync_reward_phase_complete.rpc(local_peer_id, is_initial, mode)
+	_sync_reward_phase_complete.rpc(int(request.get("peer_id", local_peer_id)), bool(request.get("is_initial", is_initial)), int(request.get("mode", mode)))
 
 
 func _all_reward_phase_peers_completed() -> bool:
 	var multiplayer_session_manager := get_node_or_null("/root/MultiplayerSessionManager")
 	if multiplayer_session_manager == null:
 		return false
-	var required_peers: Array = multiplayer_session_manager.get_peer_ids()
-	if required_peers.is_empty():
-		return false
-	for peer_id_variant in required_peers:
-		var peer_id := int(peer_id_variant)
-		if not bool(_reward_phase_completed_peers.get(peer_id, false)):
-			return false
-	return true
+	return _reward_phase_coordinator.all_required_peers_completed(multiplayer_session_manager.get_peer_ids())
 
 
 func _finalize_reward_phase_and_advance(is_initial: bool, mode: int) -> void:
-	if not _reward_phase_active:
+	var finalize_result := _reward_phase_coordinator.finalize_phase(is_initial, mode)
+	if not bool(finalize_result.get("ok", false)):
 		return
-	_reward_phase_active = false
-	_reward_phase_completed_peers.clear()
-	_reward_phase_mode = ENUMS.RewardMode.NONE
-	_reward_phase_is_initial = false
 	if is_instance_valid(hud):
 		hud.hide_persistent_banner()
 	_set_combat_paused(false)
@@ -3555,7 +3366,7 @@ func _finalize_reward_phase_and_advance(is_initial: bool, mode: int) -> void:
 		pending_room_reward = ENUMS.RewardMode.BOON
 		_begin_room(_build_skirmish_profile(room_depth))
 	else:
-		if mode == ENUMS.RewardMode.BOSS:
+		if bool(finalize_result.get("clear_boss_reward_pending", false)):
 			boss_reward_pending = false
 		if MultiplayerSessionManager.should_broadcast():
 			_doors_spawn_ready = true
@@ -3568,16 +3379,13 @@ func _finalize_reward_phase_and_advance(is_initial: bool, mode: int) -> void:
 
 func _reset_progress_for_first_encounter() -> void:
 	_world_multiplayer_sync_state.reset_for_new_run()
-	rooms_cleared = 0
-	room_depth = 0
+	_set_progression_counters(0, 0, 0, 0)
 	boss_unlocked = false
 	in_boss_room = false
 	in_second_boss_room = false
 	in_third_boss_room = false
 	first_boss_defeated = false
 	second_boss_defeated = false
-	phase_two_rooms_cleared = 0
-	phase_three_rooms_cleared = 0
 	endless_boss_defeated = false
 	boss_reward_pending = false
 	last_defeated_boss_id = ""
@@ -3586,13 +3394,8 @@ func _reset_progress_for_first_encounter() -> void:
 
 @rpc("reliable", "any_peer", "call_local")
 func _sync_reward_phase_complete(peer_id: int, is_initial: bool, mode: int) -> void:
-	if not is_multiplayer:
+	if not _reward_phase_coordinator.register_peer_completion(is_multiplayer, peer_id, is_initial, mode):
 		return
-	if not _reward_phase_active:
-		return
-	if _reward_phase_is_initial != is_initial or _reward_phase_mode != mode:
-		return
-	_reward_phase_completed_peers[int(peer_id)] = true
 	if not MultiplayerSessionManager.should_broadcast():
 		return
 	if not _all_reward_phase_peers_completed():
@@ -3625,8 +3428,8 @@ func _sync_run_outcome(outcome: String, unlocked_tier: int, room_label: String, 
 	run_summary_recorder.latest_run_summary = synced_summary
 	run_summary_recorder.finalize_synced_run_summary_for_joiner(synced_summary, outcome)
 	synced_summary = run_summary_recorder.latest_run_summary
+	_run_outcome_coordinator.apply_synced_outcome(outcome)
 	if outcome == "clear":
-		run_cleared = true
 		choosing_next_room = false
 		active_room_enemy_count = 0
 		_set_combat_paused(true)
@@ -3635,8 +3438,6 @@ func _sync_run_outcome(outcome: String, unlocked_tier: int, room_label: String, 
 		_show_victory_feedback(unlocked_tier, synced_summary)
 		return
 	if outcome == "death":
-		player_defeated = true
-		run_cleared = true
 		choosing_next_room = false
 		active_room_enemy_count = 0
 		_set_combat_paused(true)
@@ -3701,17 +3502,24 @@ func _on_telemetry_spike_probe_completed(success: bool, http_code: int, error_me
 	telemetry_spike_sender = null
 
 func _on_player_damage_taken(raw_amount: int, final_amount: int, damage_context: Dictionary) -> void:
+	if not _run_summary_ready():
+		return
 	run_summary_recorder.record_player_damage_taken(raw_amount, final_amount, damage_context)
 
 func _on_player_health_changed_for_summary(current_health: int, _max_health: int, player_node: Node) -> void:
+	if not _run_summary_ready():
+		return
 	run_summary_recorder.on_player_health_changed(current_health, _max_health, player_node)
 
 func _on_player_died_for_telemetry() -> void:
+	if not _run_summary_ready():
+		return
 	run_summary_recorder.on_player_died_for_telemetry()
 
 func _on_player_died() -> void:
-	run_summary_recorder.reconcile_damage_taken_to_player_health()
-	if player_defeated:
+	if _run_summary_ready():
+		run_summary_recorder.reconcile_damage_taken_to_player_health()
+	if _run_outcome_coordinator.is_player_defeated():
 		return
 	var has_new_fallen := _refresh_fallen_player_tracking()
 	if is_multiplayer:
@@ -3722,11 +3530,12 @@ func _on_player_died() -> void:
 		if has_new_fallen and is_instance_valid(hud):
 			hud.show_banner("Ally Down", "Clear encounter to revive")
 		return
-	player_defeated = true
+	var outcome_result := _run_outcome_coordinator.register_player_death(is_multiplayer)
+	if not bool(outcome_result.get("ok", false)):
+		return
 	_set_combat_paused(true)
 	player_flow_coordinator.close_reward_selection_if_active(reward_selection_ui)
 	player_flow_coordinator.close_pause_menu_if_open(pause_menu_controller)
-	run_cleared = true
 	choosing_next_room = false
 	objective_lifecycle_coordinator.clear_on_player_defeat(objective_manager)
 	active_room_enemy_count = 0
@@ -3735,14 +3544,12 @@ func _on_player_died() -> void:
 		run_context.set_last_run_outcome("death")
 		run_context.clear_active_run()
 		run_context.clear_resume_saved_run_request()
-	var current_summary: Dictionary = run_summary_recorder.latest_run_summary
+	var current_summary: Dictionary = _latest_run_summary()
 	if current_summary.is_empty() or String(current_summary.get("outcome", "")) != "death":
-		run_summary_recorder.finish_run("death", run_summary_recorder.build_death_event_snapshot())
-	if MultiplayerSessionManager.should_broadcast():
-		if STAT_ATTRIBUTION_TRACE:
-			print_debug("[StatAttribution][OutcomeSend] outcome=death stats=%s" % str(run_summary_recorder.get_stats_by_peer()))
-		_sync_run_outcome.rpc("death", -1, current_room_label, room_depth, run_summary_recorder.latest_run_summary, run_summary_recorder.get_stats_by_peer(), run_summary_recorder.get_latest_peer_summary_overrides())
-	_show_defeat_feedback(current_room_label, room_depth, run_summary_recorder.latest_run_summary)
+		var death_event: Dictionary = run_summary_recorder.build_death_event_snapshot() if _run_summary_ready() else {}
+		_run_summary_finish_run("death", death_event)
+	_broadcast_run_outcome_if_needed("death", -1, current_room_label, room_depth)
+	_show_defeat_feedback(current_room_label, room_depth, _latest_run_summary())
 
 func _show_victory_feedback(unlocked_tier: int, run_summary: Dictionary = {}) -> void:
 	if is_instance_valid(victory_screen):
@@ -3795,7 +3602,7 @@ func _get_multiplayer_player_nodes() -> Array[Node2D]:
 			seen[node_2d.get_instance_id()] = true
 	return nodes
 
-func _assign_enemy_target_candidates(enemy: Node2D) -> void:
+func _assign_enemy_target_candidates(enemy: ENEMY_BASE_SCRIPT) -> void:
 	if not is_instance_valid(enemy):
 		return
 	var alive_targets: Array = []
@@ -3807,15 +3614,15 @@ func _assign_enemy_target_candidates(enemy: Node2D) -> void:
 		targets = _get_multiplayer_player_nodes()
 	if targets.is_empty():
 		return
-	enemy.set("target", targets[0])
-	if enemy.has_method("set_target_candidates"):
-		enemy.call("set_target_candidates", targets)
+	enemy.target = targets[0]
+	enemy.set_target_candidates(targets)
 
 func _refresh_all_enemy_target_candidates() -> void:
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
-		if not (enemy_node is Node2D):
+		var enemy := enemy_node as ENEMY_BASE_SCRIPT
+		if enemy == null:
 			continue
-		_assign_enemy_target_candidates(enemy_node as Node2D)
+		_assign_enemy_target_candidates(enemy)
 
 func _spawn_test_enemies(count: int) -> void:
 	"""Spawn N test enemies for stress testing"""
@@ -3834,17 +3641,16 @@ func _spawn_test_enemies(count: int) -> void:
 		var angle = (TAU / maxf(count, 1)) * i
 		var distance = 150.0 + (i / 5.0) * 50.0
 		var spawn_pos = player.global_position + Vector2(cos(angle), sin(angle)) * distance
-		
-		if enemy_spawner.has_method("_create_test_enemy"):
-			var enemy: CharacterBody2D = enemy_spawner._create_test_enemy(enemy_type, spawn_pos)
-			if is_instance_valid(enemy):
-				var enemy_id: int = enemy_state_sync_broadcaster.register_enemy(enemy)
-				spawn_batch.append({
-					"enemy_id": enemy_id,
-					"enemy_type": enemy_type,
-					"position": enemy.global_position
-				})
-				active_room_enemy_count += 1
+
+		var enemy: CharacterBody2D = enemy_spawner._create_test_enemy(enemy_type, spawn_pos)
+		if is_instance_valid(enemy):
+			var enemy_id: int = enemy_state_sync_broadcaster.register_enemy(enemy)
+			spawn_batch.append({
+				"enemy_id": enemy_id,
+				"enemy_type": enemy_type,
+				"position": enemy.global_position
+			})
+			active_room_enemy_count += 1
 
 	if MultiplayerSessionManager.should_broadcast() and not spawn_batch.is_empty():
 		_sync_spawn_enemy_batch.rpc(spawn_batch, active_room_enemy_count, current_room_label, room_depth, _world_multiplayer_sync_state.current_room_sync_id)
@@ -3895,10 +3701,8 @@ func _maybe_start_stress_test() -> void:
 func _count_alive_players() -> int:
 	var alive_count := 0
 	for player_node in _get_multiplayer_player_nodes():
-		if not player_node.has_method("is_dead"):
-			alive_count += 1
-			continue
-		if not bool(player_node.call("is_dead")):
+		var typed := player_node as PLAYER_SCRIPT
+		if typed == null or not typed.is_dead():
 			alive_count += 1
 	return alive_count
 
@@ -3907,29 +3711,27 @@ func _sync_multiplayer_fallen_player_presence() -> void:
 	if not is_multiplayer:
 		return
 	for player_node in _get_multiplayer_player_nodes():
-		if not player_node.has_method("set_combat_removed") or not player_node.has_method("is_dead"):
+		var typed := player_node as PLAYER_SCRIPT
+		if typed == null:
 			continue
-		var is_dead := bool(player_node.call("is_dead"))
-		player_node.call("set_combat_removed", is_dead)
+		typed.set_combat_removed(typed.is_dead())
 
 func _try_revive_fallen_multiplayer_players() -> void:
 	if not is_multiplayer:
 		return
 	if _count_alive_players() <= 0:
 		return
-	var multiplayer_session_manager := get_node_or_null("/root/MultiplayerSessionManager")
-	if multiplayer_session_manager == null or not bool(multiplayer_session_manager.is_host()):
+	var multiplayer_session_manager := get_node_or_null("/root/MultiplayerSessionManager") as MULTIPLAYER_SESSION_MANAGER_SCRIPT
+	if multiplayer_session_manager == null or not multiplayer_session_manager.is_host():
 		return
 	var player_replication_service := get_node_or_null("/root/PlayerReplicationService")
 	for player_node in _get_multiplayer_player_nodes():
-		if not player_node.has_method("is_dead") or not player_node.has_method("revive_with_health"):
+		var typed := player_node as PLAYER_SCRIPT
+		if typed == null or not typed.is_dead():
 			continue
-		if not bool(player_node.call("is_dead")):
-			continue
-		player_node.call("revive_with_health", 1.0)
-		if player_replication_service != null and player_node.has_method("get"):
-			var peer_id := int(player_node.get("player_id"))
-			player_replication_service.broadcast_player_revived(peer_id, 1.0)
+		typed.revive_with_health(1.0)
+		if player_replication_service != null:
+			player_replication_service.broadcast_player_revived(typed.player_id, 1.0)
 	_refresh_fallen_player_tracking()
 	_sync_multiplayer_fallen_player_presence()
 	_refresh_all_enemy_target_candidates()
@@ -4012,17 +3814,15 @@ func _set_combat_paused(paused: bool) -> void:
 func _broadcast_local_player_build_snapshot() -> void:
 	if not is_multiplayer:
 		return
-	var local_player := _find_local_owned_player_node()
+	var local_player := _find_local_owned_player_node() as PLAYER_SCRIPT
 	if not is_instance_valid(local_player):
-		return
-	if not local_player.has_method("broadcast_network_build_snapshot"):
 		return
 	local_player.broadcast_network_build_snapshot()
 
-func _is_spawn_transport_active(enemy: Node) -> bool:
-	return bool(enemy.is_spawn_transporting())
+func _is_spawn_transport_active(enemy: ENEMY_BASE_SCRIPT) -> bool:
+	return enemy.is_spawn_transporting()
 
-func _begin_spawn_transport_if_idle(enemy: Node, duration: float) -> void:
+func _begin_spawn_transport_if_idle(enemy: ENEMY_BASE_SCRIPT, duration: float) -> void:
 	if _is_spawn_transport_active(enemy):
 		return
 	enemy.begin_spawn_transport(duration)
@@ -4031,17 +3831,17 @@ func _start_encounter_intro_grace() -> void:
 	encounter_intro_grace_active = true
 	_encounter_ready_peers.clear()
 	_local_player_ready = false
-	if is_instance_valid(player) and player is CharacterBody2D:
-		(player as CharacterBody2D).velocity = Vector2.ZERO
-	var local_node := _find_local_player_node()
-	if is_instance_valid(local_node) and local_node.has_method("set"):
-		local_node.set("encounter_input_frozen", true)
+	if is_instance_valid(player):
+		player.velocity = Vector2.ZERO
+	var local_node := _find_local_player_node() as PLAYER_SCRIPT
+	if is_instance_valid(local_node):
+		local_node.encounter_input_frozen = true
 	if is_instance_valid(enemy_spawner):
 		enemy_spawner.wave_timer_paused = true
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
-		if not (enemy_node is Node):
+		var enemy := enemy_node as ENEMY_BASE_SCRIPT
+		if enemy == null:
 			continue
-		var enemy := enemy_node as Node
 		_begin_spawn_transport_if_idle(enemy, INTRO_SURVEY_TRANSPORT_PULSE_DURATION)
 	_set_enemy_targets_passive(true)
 	hud.show_banner("Survey the arena", "")
@@ -4100,10 +3900,10 @@ func _on_player_ready_signal(peer_id: int) -> void:
 	_encounter_ready_peers[peer_id] = true
 	
 	for player_node in _get_multiplayer_player_nodes():
-		if not _is_player_alive(player_node):
+		var typed := player_node as PLAYER_SCRIPT
+		if typed == null or not _is_player_alive(typed):
 			continue
-		var pid := int(player_node.get("player_id"))
-		if not _encounter_ready_peers.get(pid, false):
+		if not _encounter_ready_peers.get(typed.player_id, false):
 			return
 	
 	_exit_encounter_intro_grace()
@@ -4119,9 +3919,9 @@ func _exit_encounter_intro_grace() -> void:
 	encounter_intro_grace_active = false
 	if is_instance_valid(enemy_spawner):
 		enemy_spawner.wave_timer_paused = false
-	var local_node := _find_local_player_node()
-	if is_instance_valid(local_node) and local_node.has_method("set"):
-		local_node.set("encounter_input_frozen", false)
+	var local_node := _find_local_player_node() as PLAYER_SCRIPT
+	if is_instance_valid(local_node):
+		local_node.encounter_input_frozen = false
 	var debug_msg := "Grace exit: grace deactivated"
 	if is_multiplayer:
 		debug_msg += " [peer:%d, host:%s]" % [get_tree().get_multiplayer().get_unique_id(), MultiplayerSessionManager.is_host()]
@@ -4137,26 +3937,20 @@ func _set_enemy_targets_passive(passive: bool) -> void:
 			continue
 		active_targets.append(player_node)
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
-		if not (enemy_node is CharacterBody2D):
+		var enemy := enemy_node as ENEMY_BASE_SCRIPT
+		if enemy == null:
 			continue
-		var enemy := enemy_node as CharacterBody2D
 		if passive:
-			enemy.set("target", null)
-			if enemy.has_method("set_target_candidates"):
-				enemy.call("set_target_candidates", [])
-			if enemy is CharacterBody2D:
-				enemy.velocity = Vector2.ZERO
+			enemy.target = null
+			enemy.set_target_candidates([])
+			enemy.velocity = Vector2.ZERO
 		else:
 			if not active_targets.is_empty():
-				enemy.set("target", active_targets[0])
-				if enemy.has_method("set_target_candidates"):
-					enemy.call("set_target_candidates", active_targets)
+				enemy.target = active_targets[0]
+				enemy.set_target_candidates(active_targets)
 			else:
-				enemy.set("target", player)
-			var cooldown_key := ""
-			if enemy.get("attack_cooldown_left") != null:
-				cooldown_key = "attack_cooldown_left"
-			if not cooldown_key.is_empty():
-				var current_cd := float(enemy.get(cooldown_key))
+				enemy.target = player
+			if "attack_cooldown_left" in enemy:
+				var current_cd := float(enemy.get("attack_cooldown_left"))
 				if current_cd < 0.32:
-					enemy.set(cooldown_key, 0.32)
+					enemy.set("attack_cooldown_left", 0.32)

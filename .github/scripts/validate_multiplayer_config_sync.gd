@@ -11,7 +11,7 @@ extends SceneTree
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 const MP_CONFIG_PATH := "res://scripts/encounter_difficulty_multiplayer_config.gd"
 
-func _ready() -> void:
+func _initialize() -> void:
 	print("\n=== Multiplayer Config Sync Validator ===\n")
 	
 	# Load multiplayer config

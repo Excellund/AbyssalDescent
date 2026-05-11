@@ -2,8 +2,7 @@ extends Node
 
 const TELEMETRY_UPLOAD_QUEUE := preload("res://scripts/telemetry_upload_queue.gd")
 const RUN_TELEMETRY_STORE := preload("res://scripts/run_telemetry_store.gd")
-const TELEMETRY_ENDPOINT_SETTING := "application/config/telemetry_upload_endpoint"
-const TELEMETRY_API_KEY_SETTING := "application/config/telemetry_upload_api_key"
+const TELEMETRY_SETTINGS := preload("res://scripts/core/telemetry_settings.gd")
 
 var _run_context
 var _timer: Timer
@@ -104,10 +103,10 @@ func _is_upload_enabled() -> bool:
 	return bool(_run_context.is_telemetry_upload_enabled())
 
 func _upload_endpoint() -> String:
-	return String(ProjectSettings.get_setting(TELEMETRY_ENDPOINT_SETTING, "")).strip_edges()
+	return TELEMETRY_SETTINGS.upload_endpoint()
 
 func _upload_api_key() -> String:
-	return String(ProjectSettings.get_setting(TELEMETRY_API_KEY_SETTING, "")).strip_edges()
+	return TELEMETRY_SETTINGS.upload_api_key()
 
 func _is_payload_uploadable(payload: Dictionary) -> bool:
 	return RUN_TELEMETRY_STORE.is_upload_payload_eligible(payload)

@@ -2,6 +2,8 @@ extends "res://scripts/enemy_base.gd"
 
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const ENEMY_STATE_ENUMS := preload("res://scripts/shared/enemy_state_enums.gd")
+const PLAYER_SCRIPT := preload("res://scripts/player.gd")
+const PLAYER_REPLICATION_SERVICE_SCRIPT := preload("res://scripts/player_replication_service.gd")
 
 @export var boss_max_health: int = 2000
 @export var move_speed: float = 168.0
@@ -157,16 +159,8 @@ func _process_behavior(delta: float) -> void:
 
 	queue_redraw()
 
-func should_force_network_runtime_state_sampling() -> bool:
-	return boss_state == ENEMY_STATE_ENUMS.Boss2State.WINDUP or boss_state == ENEMY_STATE_ENUMS.Boss2State.ATTACK or attack_anim_time_left > 0.0
-
-func should_process_remote_visuals_every_frame() -> bool:
-	return not network_simulation_enabled and (boss_state == ENEMY_STATE_ENUMS.Boss2State.WINDUP or boss_state == ENEMY_STATE_ENUMS.Boss2State.ATTACK)
-
-func get_priority_network_sync_interval_sec() -> float:
-	if boss_state == ENEMY_STATE_ENUMS.Boss2State.WINDUP or boss_state == ENEMY_STATE_ENUMS.Boss2State.ATTACK:
-		return 0.03
-	return 0.0
+func _is_in_priority_attack_state() -> bool:
+	return boss_state == ENEMY_STATE_ENUMS.Boss2State.WINDUP or boss_state == ENEMY_STATE_ENUMS.Boss2State.ATTACK
 
 func get_projectile_network_sync_state() -> Dictionary:
 	if not network_simulation_enabled:
@@ -810,17 +804,18 @@ func _apply_polar_shift() -> void:
 			var target_peer_id := 0
 			if "player_id" in target_body:
 				target_peer_id = int(target_body.player_id)
-			var replication_service := get_node_or_null("/root/PlayerReplicationService")
-			if target_peer_id > 0 and replication_service != null and replication_service.has_method("send_polar_shift_effect"):
+			var replication_service := get_node_or_null("/root/PlayerReplicationService") as PLAYER_REPLICATION_SERVICE_SCRIPT
+			if target_peer_id > 0 and replication_service != null:
 				replication_service.send_polar_shift_effect(target_peer_id, dir, impulse_force.length(), lockout_duration)
 			else:
-				if target_body.has_method("apply_polar_shift_impulse"):
-					target_body.apply_polar_shift_impulse(dir, impulse_force.length())
+				var polar_shift_player := target_body as PLAYER_SCRIPT
+				if polar_shift_player != null:
+					polar_shift_player.apply_polar_shift_impulse(dir, impulse_force.length())
 				else:
 					target_body.velocity = Vector2.ZERO
 					target_body.velocity = impulse_force
-				if lockout_duration > 0.0 and target_body.has_method("apply_polar_shift_dash_lockout"):
-					target_body.apply_polar_shift_dash_lockout(lockout_duration)
+				if lockout_duration > 0.0 and polar_shift_player != null:
+					polar_shift_player.apply_polar_shift_dash_lockout(lockout_duration)
 
 
 func _get_damageable_targets() -> Array[Node2D]:

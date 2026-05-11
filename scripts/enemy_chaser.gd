@@ -40,16 +40,8 @@ func _process_behavior(delta: float) -> void:
 	move_and_slide()
 	_try_attack_target()
 
-func should_force_network_runtime_state_sampling() -> bool:
+func _is_in_priority_attack_state() -> bool:
 	return attack_anim_time_left > 0.0
-
-func should_process_remote_visuals_every_frame() -> bool:
-	return not network_simulation_enabled and attack_anim_time_left > 0.0
-
-func get_priority_network_sync_interval_sec() -> float:
-	if attack_anim_time_left > 0.0:
-		return 0.03
-	return 0.0
 
 func get_projectile_network_sync_state() -> Dictionary:
 	if not network_simulation_enabled:

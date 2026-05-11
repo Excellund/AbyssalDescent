@@ -302,19 +302,14 @@ func _interpolate_remote_players(delta: float) -> void:
 
 
 func _get_player_facing_angle(player_node: Node) -> float:
-	if player_node.has_method("get_network_facing_angle"):
-		return float(player_node.get_network_facing_angle())
 	if player_node is Node2D:
-		return (player_node as Node2D).rotation
+		return float(player_node.get_network_facing_angle())
 	return 0.0
 
 
 func _set_player_facing_angle(player_node: Node, facing_radians: float) -> void:
-	if player_node.has_method("set_network_facing_angle"):
-		player_node.set_network_facing_angle(facing_radians)
-		return
 	if player_node is Node2D:
-		(player_node as Node2D).rotation = facing_radians
+		player_node.set_network_facing_angle(facing_radians)
 
 
 ## RPC: Sync a player's health.
@@ -332,15 +327,10 @@ func _sync_player_health(peer_id: int, health: float, health_sequence: int = 0) 
 	var player_node := _get_player_node(peer_id)
 	if player_node == null:
 		return
-	if health > 0.0 and player_node.has_method("is_dead") and bool(player_node.call("is_dead")):
+	if health > 0.0 and bool(player_node.is_dead()):
 		# Dead players must only transition back through explicit revive sync.
 		return
-	if player_node.has_method("set_health"):
-		player_node.set_health(health)
-	elif player_node.has_node("HealthState"):
-		var health_state = player_node.get_node("HealthState")
-		if health_state.has_method("set_current_health"):
-			health_state.set_current_health(health)
+	player_node.set_health(health)
 
 
 func _resolve_health_sender_peer_id() -> int:
@@ -376,10 +366,8 @@ func _sync_player_alive_status(peer_id: int, is_alive: bool) -> void:
 	var player_node := _get_player_node(peer_id)
 	if player_node == null:
 		return
-	if player_node.has_method("set_alive"):
-		player_node.set_alive(is_alive)
-	if player_node.has_method("set_combat_removed"):
-		player_node.set_combat_removed(not is_alive)
+	player_node.set_alive(is_alive)
+	player_node.set_combat_removed(not is_alive)
 
 
 ## RPC: Sync a player's revived status.
@@ -390,10 +378,8 @@ func _sync_player_revived(peer_id: int, revived_health: float = 1.0) -> void:
 	var player_node := _get_player_node(peer_id)
 	if player_node == null:
 		return
-	if player_node.has_method("revive_with_health"):
-		player_node.revive_with_health(revived_health)
-	if player_node.has_method("set_combat_removed"):
-		player_node.set_combat_removed(false)
+	player_node.revive_with_health(revived_health)
+	player_node.set_combat_removed(false)
 
 
 ## Called by player's health_state when health changes.
@@ -435,8 +421,7 @@ func _sync_attack_indicator(peer_id: int, attack_direction: Vector2, attack_rang
 	var player_node := _get_player_node(peer_id)
 	if player_node == null:
 		return
-	if player_node.has_method("play_network_attack_indicator"):
-		player_node.play_network_attack_indicator(attack_direction, attack_range, attack_arc_degrees, swing_color, swing_duration)
+	player_node.play_network_attack_indicator(attack_direction, attack_range, attack_arc_degrees, swing_color, swing_duration)
 
 
 func broadcast_player_build_snapshot(peer_id: int, snapshot: Dictionary) -> void:
@@ -459,8 +444,7 @@ func _sync_player_build_snapshot(peer_id: int, snapshot: Dictionary) -> void:
 	var player_node := _get_player_node(peer_id)
 	if player_node == null:
 		return
-	if player_node.has_method("apply_network_build_snapshot"):
-		player_node.apply_network_build_snapshot(snapshot)
+	player_node.apply_network_build_snapshot(snapshot)
 
 
 @rpc("unreliable", "any_peer", "call_local")
@@ -529,9 +513,8 @@ func _apply_polar_shift_effect_local(target_peer_id: int, direction: Vector2, fo
 	var player_node := _get_player_node(target_peer_id)
 	if player_node == null:
 		return
-	if player_node.has_method("apply_polar_shift_impulse"):
-		player_node.apply_polar_shift_impulse(direction, force)
-	if dash_lockout_duration > 0.0 and player_node.has_method("apply_polar_shift_dash_lockout"):
+	player_node.apply_polar_shift_impulse(direction, force)
+	if dash_lockout_duration > 0.0:
 		player_node.apply_polar_shift_dash_lockout(dash_lockout_duration)
 
 

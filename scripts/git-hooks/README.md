@@ -31,6 +31,21 @@ The hooks will block commits if any of these are true:
 
 2. **Syntax errors in staged GDScript files**
 
+3. **Full GDScript compile pass for the project**
+   - Runs `.github/scripts/validate_gdscript_compile.gd` on every commit.
+   - Blocks commit if any script fails to compile.
+
+## Godot Executable Resolution
+
+The pre-commit hook resolves Godot in this order:
+
+1. `GODOT_EXE` environment variable (absolute path)
+2. Workspace setting `godot.executablePath` in `.vscode/settings.json`
+3. `godot` on PATH
+4. `godot4` on PATH
+
+If none are available, commits are blocked until one is configured.
+
 ## Testing
 
 Run the validation manually:

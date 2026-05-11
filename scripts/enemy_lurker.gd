@@ -68,16 +68,8 @@ func _process_behavior(delta: float) -> void:
 		ENEMY_STATE_ENUMS.LurkerState.RECOVER:
 			_process_recover(delta)
 
-func should_force_network_runtime_state_sampling() -> bool:
-	return lurker_state == ENEMY_STATE_ENUMS.LurkerState.LURK or lurker_state == ENEMY_STATE_ENUMS.LurkerState.STRIKE or attack_anim_time_left > 0.0
-
-func should_process_remote_visuals_every_frame() -> bool:
-	return not network_simulation_enabled and (lurker_state == ENEMY_STATE_ENUMS.LurkerState.LURK or lurker_state == ENEMY_STATE_ENUMS.LurkerState.STRIKE)
-
-func get_priority_network_sync_interval_sec() -> float:
-	if lurker_state == ENEMY_STATE_ENUMS.LurkerState.LURK or lurker_state == ENEMY_STATE_ENUMS.LurkerState.STRIKE:
-		return 0.03
-	return 0.0
+func _is_in_priority_attack_state() -> bool:
+	return lurker_state == ENEMY_STATE_ENUMS.LurkerState.LURK or lurker_state == ENEMY_STATE_ENUMS.LurkerState.STRIKE
 
 func get_projectile_network_sync_state() -> Dictionary:
 	if not network_simulation_enabled:

@@ -142,7 +142,7 @@ func _process_host_room_heartbeat(delta: float) -> void:
 
 func _send_room_heartbeat() -> void:
 	var room_service = get_node_or_null("/root/MultiplayerRoomService")
-	if room_service == null or not room_service.has_method("heartbeat_room_registration"):
+	if room_service == null:
 		_room_heartbeat_in_flight = false
 		_room_heartbeat_failure_count += 1
 		return
@@ -307,7 +307,7 @@ func leave_room() -> void:
 		return
 	if is_host_peer and not room_code.is_empty():
 		var room_service = get_node_or_null("/root/MultiplayerRoomService")
-		if room_service != null and room_service.has_method("close_room_registration"):
+		if room_service != null:
 			room_service.close_room_registration(room_code)
 	
 	for timer in _peer_timeout_timers.values():
@@ -553,7 +553,7 @@ func _on_peer_connected(peer_id: int) -> void:
 	if is_host_peer and connected_peers.size() >= MAX_PARTY_SIZE:
 		print("[MultiplayerSessionManager] Rejecting peer %d: party is full (%d/%d)" % [peer_id, connected_peers.size(), MAX_PARTY_SIZE])
 		var multiplayer_peer := _multiplayer.multiplayer_peer if _multiplayer != null else null
-		if multiplayer_peer != null and multiplayer_peer.has_method("disconnect_peer"):
+		if multiplayer_peer != null:
 			multiplayer_peer.disconnect_peer(peer_id)
 		return
 	

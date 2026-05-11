@@ -1,6 +1,7 @@
 extends Node
 
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
+const ENEMY_BASE_SCRIPT := preload("res://scripts/enemy_base.gd")
 const ENEMY_MUTATOR_STACK_STAT_KEYS := [
 	ENCOUNTER_CONTRACTS.MUTATOR_STAT_ENEMY_HEALTH_MULT,
 	ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT,
@@ -444,13 +445,13 @@ func spawn_enemy_type(enemy_type: String, count: int = 1) -> int:
 			spawned += 1
 	return spawned
 
-func spawn_enemy_node_type(enemy_type: String, min_player_distance: float = -1.0) -> CharacterBody2D:
+func spawn_enemy_node_type(enemy_type: String, min_player_distance: float = -1.0) -> ENEMY_BASE_SCRIPT:
 	var enemy_script: Script = scripts.get(enemy_type)
 	if enemy_script == null:
 		return null
 	return _spawn_enemy_in_current_room(enemy_script, min_player_distance)
 
-func spawn_enemy_from_sync(enemy_type: String, world_position: Vector2) -> CharacterBody2D:
+func spawn_enemy_from_sync(enemy_type: String, world_position: Vector2) -> ENEMY_BASE_SCRIPT:
 	var enemy_script: Script = scripts.get(enemy_type)
 	if enemy_script == null:
 		return null
@@ -481,7 +482,7 @@ func spawn_enemy_from_sync(enemy_type: String, world_position: Vector2) -> Chara
 func pick_room_position(min_player_distance: float = -1.0, min_enemy_spacing: float = 86.0) -> Vector2:
 	return _pick_spawn_position_in_current_room(min_player_distance, min_enemy_spacing)
 
-func _spawn_enemy_in_current_room(enemy_script: Script, min_player_distance: float = -1.0) -> CharacterBody2D:
+func _spawn_enemy_in_current_room(enemy_script: Script, min_player_distance: float = -1.0) -> ENEMY_BASE_SCRIPT:
 	if enemy_script == null:
 		return null
 	if not is_instance_valid(world_root):
@@ -532,15 +533,14 @@ func _create_test_enemy(enemy_type: String, world_position: Vector2) -> Characte
 	"""Create a test enemy for stress testing at a specific position"""
 	return spawn_enemy_from_sync(enemy_type, world_position)
 
-func _assign_enemy_targets(enemy: CharacterBody2D) -> void:
+func _assign_enemy_targets(enemy: ENEMY_BASE_SCRIPT) -> void:
 	if not is_instance_valid(enemy):
 		return
 	var targets := _resolve_target_players()
 	if targets.is_empty():
 		return
-	enemy.set("target", targets[0])
-	if enemy.has_method("set_target_candidates"):
-		enemy.call("set_target_candidates", targets)
+	enemy.target = targets[0]
+	enemy.set_target_candidates(targets)
 
 func _enemy_script_key(enemy_script: Script) -> String:
 	for enemy_key in scripts.keys():
@@ -615,14 +615,12 @@ func _apply_mutator_specs(enemy: CharacterBody2D, mutator: Dictionary, specs: Ar
 func set_ascension_enemy_health_mult(value: float) -> void:
 	ascension_enemy_health_mult = maxf(0.01, value)
 
-func _apply_ascension_health_scaling(enemy: CharacterBody2D) -> void:
+func _apply_ascension_health_scaling(enemy: ENEMY_BASE_SCRIPT) -> void:
 	if is_equal_approx(ascension_enemy_health_mult, 1.0):
 		return
 	if not is_instance_valid(enemy):
 		return
-	if not enemy.has_method("get_max_health") or not enemy.has_method("set_max_health_and_current"):
-		return
-	var base_max_health: int = int(enemy.get_max_health())
+	var base_max_health: int = enemy.get_max_health()
 	if base_max_health <= 0:
 		return
 	var scaled := maxi(1, int(round(float(base_max_health) * ascension_enemy_health_mult)))

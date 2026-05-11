@@ -2,7 +2,9 @@ extends RefCounted
 
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 
-const ROOM_SIZE_POOL := Vector2(1040.0, 760.0)
+const INTRO_ROOM_SIZE := Vector2(940.0, 700.0)
+const POOL_ROOM_SIZE := Vector2(1040.0, 760.0)
+const TRIAL_ROOM_SIZE := Vector2(1160.0, 860.0)
 const EXPECTED_BEARING_RANK_COUNT := 4
 
 static func _bearing_definition(room_size: Vector2, base_counts: Dictionary, rank_counts: Array[Dictionary]) -> Dictionary:
@@ -14,55 +16,55 @@ static func _bearing_definition(room_size: Vector2, base_counts: Dictionary, ran
 
 static func get_bearing_definitions() -> Dictionary:
 	return {
-		"Crossfire": _bearing_definition(ROOM_SIZE_POOL, ENCOUNTER_CONTRACTS.profile_counts(1, 1, 4, 0), [
+		"Crossfire": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(1, 1, 4, 0), [
 			ENCOUNTER_CONTRACTS.profile_counts(1, 1, 3, 0),
 			ENCOUNTER_CONTRACTS.profile_counts(1, 1, 4, 0),
 			ENCOUNTER_CONTRACTS.profile_counts(1, 2, 7, 0),
 			ENCOUNTER_CONTRACTS.profile_counts(1, 2, 9, 0)
 		]),
-		"Onslaught": _bearing_definition(ROOM_SIZE_POOL, ENCOUNTER_CONTRACTS.profile_counts(7, 2, 0, 0), [
+		"Onslaught": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(7, 2, 0, 0), [
 			ENCOUNTER_CONTRACTS.profile_counts(4, 1, 0, 0, 0, 0, 0, 0, 1, 0),
 			ENCOUNTER_CONTRACTS.profile_counts(6, 2, 0, 0, 0, 0, 0, 0, 2, 0),
 			ENCOUNTER_CONTRACTS.profile_counts(7, 2, 0, 0, 0, 0, 0, 0, 3, 0),
 			ENCOUNTER_CONTRACTS.profile_counts(8, 3, 0, 0, 0, 0, 0, 0, 4, 0)
 		]),
-		"Fortress": _bearing_definition(ROOM_SIZE_POOL, ENCOUNTER_CONTRACTS.profile_counts(1, 0, 1, 4), [
+		"Fortress": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(1, 0, 1, 4), [
 			ENCOUNTER_CONTRACTS.profile_counts(1, 0, 1, 2),
 			ENCOUNTER_CONTRACTS.profile_counts(1, 0, 1, 5),
 			ENCOUNTER_CONTRACTS.profile_counts(2, 0, 1, 7),
 			ENCOUNTER_CONTRACTS.profile_counts(2, 0, 2, 9)
 		]),
-		"Blitz": _bearing_definition(ROOM_SIZE_POOL, ENCOUNTER_CONTRACTS.profile_counts(1, 0, 0, 0, 3, 1), [
+		"Blitz": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(1, 0, 0, 0, 3, 1), [
 			ENCOUNTER_CONTRACTS.profile_counts(1, 0, 0, 0, 2, 1),
 			ENCOUNTER_CONTRACTS.profile_counts(2, 0, 0, 0, 3, 1),
 			ENCOUNTER_CONTRACTS.profile_counts(3, 0, 0, 0, 3, 1),
 			ENCOUNTER_CONTRACTS.profile_counts(4, 0, 0, 0, 3, 2)
 		]),
-		"Suppression": _bearing_definition(ROOM_SIZE_POOL, ENCOUNTER_CONTRACTS.profile_counts(1, 1, 2, 1, 0, 0, 2), [
+		"Suppression": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(1, 1, 2, 1, 0, 0, 2), [
 			ENCOUNTER_CONTRACTS.profile_counts(1, 1, 1, 1, 0, 0, 2),
 			ENCOUNTER_CONTRACTS.profile_counts(1, 1, 2, 1, 0, 0, 3),
 			ENCOUNTER_CONTRACTS.profile_counts(2, 1, 3, 2, 0, 0, 3),
 			ENCOUNTER_CONTRACTS.profile_counts(2, 2, 4, 2, 0, 0, 4)
 		]),
-		"Vanguard": _bearing_definition(ROOM_SIZE_POOL, ENCOUNTER_CONTRACTS.profile_counts(2, 2, 0, 3), [
+		"Vanguard": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(2, 2, 0, 3), [
 			ENCOUNTER_CONTRACTS.profile_counts(1, 2, 0, 2),
 			ENCOUNTER_CONTRACTS.profile_counts(2, 3, 0, 3),
 			ENCOUNTER_CONTRACTS.profile_counts(2, 4, 0, 4),
 			ENCOUNTER_CONTRACTS.profile_counts(3, 5, 0, 4)
 		]),
-		"Ambush": _bearing_definition(ROOM_SIZE_POOL, ENCOUNTER_CONTRACTS.profile_counts(2, 0, 0, 0, 4, 0, 1, 0, 0, 0), [
+		"Ambush": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(2, 0, 0, 0, 4, 0, 1, 0, 0, 0), [
 			ENCOUNTER_CONTRACTS.profile_counts(1, 0, 0, 0, 3, 0, 1, 0, 0, 0),
 			ENCOUNTER_CONTRACTS.profile_counts(2, 0, 0, 0, 4, 0, 1, 0, 0, 0),
 			ENCOUNTER_CONTRACTS.profile_counts(3, 0, 0, 0, 4, 0, 2, 0, 0, 2),
 			ENCOUNTER_CONTRACTS.profile_counts(4, 0, 0, 0, 5, 0, 3, 0, 0, 2)
 		]),
-		"Convergence": _bearing_definition(ROOM_SIZE_POOL, ENCOUNTER_CONTRACTS.profile_counts(3, 0, 0, 0, 0, 0, 0, 2, 0, 0), [
+		"Convergence": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(3, 0, 0, 0, 0, 0, 0, 2, 0, 0), [
 			ENCOUNTER_CONTRACTS.profile_counts(2, 0, 0, 0, 0, 0, 0, 1, 0, 0),
 			ENCOUNTER_CONTRACTS.profile_counts(3, 0, 0, 0, 0, 0, 0, 2, 0, 0),
 			ENCOUNTER_CONTRACTS.profile_counts(4, 0, 0, 0, 0, 0, 0, 3, 0, 0),
 			ENCOUNTER_CONTRACTS.profile_counts(5, 0, 0, 0, 0, 0, 0, 4, 0, 0)
 		]),
-		"Gauntlet": _bearing_definition(ROOM_SIZE_POOL, ENCOUNTER_CONTRACTS.profile_counts(2, 1, 1, 1, 1, 0, 1, 1, 0, 0), [
+		"Gauntlet": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(2, 1, 1, 1, 1, 0, 1, 1, 0, 0), [
 			ENCOUNTER_CONTRACTS.profile_counts(1, 1, 1, 1, 1, 0, 0, 0, 0, 0),
 			ENCOUNTER_CONTRACTS.profile_counts(2, 1, 1, 1, 1, 0, 1, 1, 0, 0),
 			ENCOUNTER_CONTRACTS.profile_counts(3, 1, 1, 1, 1, 1, 1, 1, 1, 2),

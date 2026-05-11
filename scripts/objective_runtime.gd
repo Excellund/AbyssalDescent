@@ -4,6 +4,7 @@ const ENUMS := preload("res://scripts/shared/enums.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 const OBJECTIVE_STATE_SETUP := preload("res://scripts/objective_state_setup.gd")
+const ENEMY_BASE_SCRIPT := preload("res://scripts/enemy_base.gd")
 
 # Objective roles are stable internal IDs. Encounter kind strings can change in one place below.
 const OBJECTIVE_ROLE_LAST_STAND = "last_stand_role"
@@ -153,9 +154,7 @@ var _pending_objective_spawn_timer: float = 0.0
 func _get_world_room_sync_id() -> int:
 	if not is_instance_valid(world):
 		return 0
-	if world.has_method("get_current_room_sync_id"):
-		return int(world.call("get_current_room_sync_id"))
-	return int(world.get("_current_room_sync_id"))
+	return int(world.get_current_room_sync_id())
 
 func initialize(world_generator: Node, random_number_generator: RandomNumberGenerator, objective_mgr: Node) -> void:
 	world = world_generator
@@ -279,11 +278,17 @@ func update_objective_state(delta: float) -> void:
 		update_control_objective_state(delta)
 		return
 
+func _is_world_run_cleared() -> bool:
+	var outcome_coordinator: Variant = world.get("_run_outcome_coordinator")
+	if outcome_coordinator != null and outcome_coordinator.has_method("is_run_cleared"):
+		return bool(outcome_coordinator.call("is_run_cleared"))
+	return false
+
 func update_survival_objective_state(delta: float) -> void:
 	if MultiplayerSessionManager.is_remote_replica():
 		return
 	var quota_met: bool = objective_manager.kill_target > 0 and objective_manager.kills >= objective_manager.kill_target
-	if world.choosing_next_room or world.run_cleared:
+	if world.choosing_next_room or _is_world_run_cleared():
 		return
 	_process_pending_objective_spawns(delta)
 	if quota_met and not objective_manager.survival_quota_announced and objective_manager.time_left > 0.0 and not objective_manager.overtime:
@@ -327,7 +332,7 @@ func update_survival_objective_state(delta: float) -> void:
 func update_priority_target_objective_state(delta: float) -> void:
 	if MultiplayerSessionManager.is_remote_replica():
 		return
-	if world.choosing_next_room or world.run_cleared:
+	if world.choosing_next_room or _is_world_run_cleared():
 		return
 	_process_pending_objective_spawns(delta)
 	if not is_instance_valid(objective_manager.hunt_target_enemy):
@@ -411,8 +416,8 @@ func _update_control_zone_state() -> void:
 func _is_any_active_player_inside_control_zone(anchor: Vector2, radius: float) -> bool:
 	if is_instance_valid(world.player) and world.player.global_position.distance_to(anchor) <= radius:
 		return true
-	if world.is_multiplayer and world.has_method("_get_multiplayer_player_nodes"):
-		var party_nodes: Variant = world.call("_get_multiplayer_player_nodes")
+	if world.is_multiplayer:
+		var party_nodes: Variant = world._get_multiplayer_player_nodes()
 		if party_nodes is Array:
 			for party_node_variant in party_nodes:
 				var party_node := party_node_variant as Node2D
@@ -474,7 +479,7 @@ func _update_control_spawn_cycle(delta: float, refill_spawn_cap: float, pressure
 func update_control_objective_state(delta: float) -> void:
 	if MultiplayerSessionManager.is_remote_replica():
 		return
-	if world.choosing_next_room or world.run_cleared:
+	if world.choosing_next_room or _is_world_run_cleared():
 		return
 	_process_pending_objective_spawns(delta)
 	var difficulty_rank := DIFFICULTY_CONFIG.get_difficulty_rank(int(world.current_difficulty_tier))
@@ -520,7 +525,7 @@ func _spawn_random_wave_enemies(roster: Array[String], spawn_count: int) -> int:
 	var spawn_batch: Array = []
 	for _i in range(spawn_count):
 		var enemy_type := roster[rng.randi_range(0, roster.size() - 1)]
-		var spawned_enemy: CharacterBody2D = world.enemy_spawner.spawn_enemy_node_type(enemy_type) as CharacterBody2D
+		var spawned_enemy: ENEMY_BASE_SCRIPT = world.enemy_spawner.spawn_enemy_node_type(enemy_type)
 		if not is_instance_valid(spawned_enemy):
 			continue
 		if MultiplayerSessionManager.should_broadcast():
@@ -530,7 +535,7 @@ func _spawn_random_wave_enemies(roster: Array[String], spawn_count: int) -> int:
 					"enemy_id": enemy_id,
 					"enemy_type": enemy_type,
 					"position": spawned_enemy.global_position,
-					"max_health": int(spawned_enemy.get_max_health()) if spawned_enemy.has_method("get_max_health") else 0
+					"max_health": spawned_enemy.get_max_health()
 				})
 		spawned_total += 1
 	world.active_room_enemy_count += spawned_total
@@ -545,7 +550,7 @@ func _spawn_random_control_wave_enemies(roster: Array[String], spawn_count: int)
 	var spawn_batch: Array = []
 	for _i in range(spawn_count):
 		var enemy_type := roster[rng.randi_range(0, roster.size() - 1)]
-		var spawned_enemy: CharacterBody2D = world.enemy_spawner.spawn_enemy_node_type(enemy_type) as CharacterBody2D
+		var spawned_enemy: ENEMY_BASE_SCRIPT = world.enemy_spawner.spawn_enemy_node_type(enemy_type)
 		if not is_instance_valid(spawned_enemy):
 			continue
 		_reposition_control_spawn_outside_zone(spawned_enemy)
@@ -556,7 +561,7 @@ func _spawn_random_control_wave_enemies(roster: Array[String], spawn_count: int)
 					"enemy_id": enemy_id,
 					"enemy_type": enemy_type,
 					"position": spawned_enemy.global_position,
-					"max_health": int(spawned_enemy.get_max_health()) if spawned_enemy.has_method("get_max_health") else 0
+					"max_health": spawned_enemy.get_max_health()
 				})
 		spawned_total += 1
 	world.active_room_enemy_count += spawned_total
@@ -564,7 +569,7 @@ func _spawn_random_control_wave_enemies(roster: Array[String], spawn_count: int)
 			world._sync_objective_spawn_batch.rpc(spawn_batch, world.active_room_enemy_count, String(world.current_room_label), _get_world_room_sync_id())
 	return spawned_total
 
-func _append_objective_spawn_sync(spawn_batch: Array, enemy: CharacterBody2D, enemy_type: String, spawn_meta: Dictionary = {}) -> void:
+func _append_objective_spawn_sync(spawn_batch: Array, enemy: ENEMY_BASE_SCRIPT, enemy_type: String, spawn_meta: Dictionary = {}) -> void:
 	if not is_instance_valid(enemy):
 		return
 	if not MultiplayerSessionManager.should_broadcast():
@@ -576,7 +581,7 @@ func _append_objective_spawn_sync(spawn_batch: Array, enemy: CharacterBody2D, en
 		"enemy_id": enemy_id,
 		"enemy_type": enemy_type,
 		"position": enemy.global_position,
-		"max_health": int(enemy.get_max_health()) if enemy.has_method("get_max_health") else 0
+		"max_health": enemy.get_max_health()
 	}
 	if not spawn_meta.is_empty():
 		spawn_entry["spawn_meta"] = spawn_meta.duplicate(true)
@@ -638,7 +643,7 @@ func _spawn_priority_target_escort_entries(spawn_context: Dictionary, start_inde
 		var escort_type := String(entry.get("type", ""))
 		if escort_type.is_empty():
 			continue
-		var escort := world.enemy_spawner.spawn_enemy_node_type(escort_type) as CharacterBody2D
+		var escort: ENEMY_BASE_SCRIPT = world.enemy_spawner.spawn_enemy_node_type(escort_type)
 		if not is_instance_valid(escort):
 			continue
 		var escort_position := entry.get("position", Vector2.ZERO) as Vector2
@@ -837,7 +842,7 @@ func spawn_priority_target_enemy() -> void:
 		return
 	var target_spawn_distance := maxf(world.spawn_safe_radius + CutTheSignalConfig.SPAWN_DISTANCE_BASE, CutTheSignalConfig.SPAWN_DISTANCE_MIN)
 	var spawn_batch: Array = []
-	var spawned_target := world.enemy_spawner.spawn_enemy_node_type(target_type, target_spawn_distance) as CharacterBody2D
+	var spawned_target: ENEMY_BASE_SCRIPT = world.enemy_spawner.spawn_enemy_node_type(target_type, target_spawn_distance)
 	if not is_instance_valid(spawned_target):
 		return
 	objective_manager.hunt_target_enemy = spawned_target

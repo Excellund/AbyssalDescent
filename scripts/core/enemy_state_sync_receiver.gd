@@ -12,6 +12,9 @@ extends RefCounted
 # bodies delegate here.
 
 const ENEMY_REMOTE_SNAP_DISTANCE_PX_DEFAULT: float = 180.0
+const ENEMY_BASE_SCRIPT := preload("res://scripts/enemy_base.gd")
+const OBJECTIVE_RUNTIME_SCRIPT := preload("res://scripts/objective_runtime.gd")
+const OBJECTIVE_MANAGER_SCRIPT := preload("res://scripts/objective_manager.gd")
 
 var enemy_remote_snap_distance_px: float = ENEMY_REMOTE_SNAP_DISTANCE_PX_DEFAULT
 
@@ -173,7 +176,7 @@ func apply_enemy_states(synced_states: Array, synced_enemy_count: int) -> void:
 		var enemy_id := int(state.get("enemy_id", -1))
 		if enemy_id <= 0:
 			continue
-		var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as Node2D
+		var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as ENEMY_BASE_SCRIPT
 		if not is_instance_valid(enemy):
 			continue
 		if state.has("position"):
@@ -184,15 +187,14 @@ func apply_enemy_states(synced_states: Array, synced_enemy_count: int) -> void:
 		if state.has("facing_angle"):
 			var synced_facing_angle := float(state.get("facing_angle", enemy.global_rotation))
 			EnemyReplicationService.target_facing_angles_by_id[enemy_id] = synced_facing_angle
-		if state.has("health") and enemy.has_method("set_health"):
-			enemy.call("set_health", float(state.get("health", 0.0)))
-		if enemy.has_method("apply_network_runtime_state"):
-			var runtime_state_delta := state.get("runtime_state_delta", {}) as Dictionary
-			enemy.call("apply_network_runtime_state", runtime_state_delta)
+		if state.has("health"):
+			enemy.set_health(float(state.get("health", 0.0)))
+		var runtime_state_delta := state.get("runtime_state_delta", {}) as Dictionary
+		enemy.apply_network_runtime_state(runtime_state_delta)
 	_world.active_room_enemy_count = synced_enemy_count
 
 func apply_enemy_died(enemy_id: int, death_effect_payload: Dictionary) -> void:
-	var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as Node2D
+	var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as ENEMY_BASE_SCRIPT
 	if String(death_effect_payload.get("effect", "")) == "pyre_death_field":
 		_world._spawn_synced_pyre_death_field(death_effect_payload)
 	if is_instance_valid(enemy):
@@ -225,11 +227,11 @@ func _apply_spawn_batch_payload(payload: Dictionary) -> void:
 		var enemy_id := int(spawn_entry.get("enemy_id", -1))
 		if enemy_type.is_empty() or enemy_id <= 0:
 			continue
-		var enemy: CharacterBody2D = _world.enemy_spawner.spawn_enemy_from_sync(enemy_type, enemy_position)
+		var enemy := _world.enemy_spawner.spawn_enemy_from_sync(enemy_type, enemy_position) as ENEMY_BASE_SCRIPT
 		if is_instance_valid(enemy):
 			var synced_max_health := int(spawn_entry.get("max_health", 0))
-			if synced_max_health > 0 and enemy.has_method("set_max_health_and_current"):
-				enemy.call("set_max_health_and_current", synced_max_health, synced_max_health)
+			if synced_max_health > 0:
+				enemy.set_max_health_and_current(synced_max_health, synced_max_health)
 			_world.enemy_state_sync_broadcaster.register_enemy(enemy, enemy_id)
 	_world.active_room_enemy_count = synced_enemy_count
 	_world._world_multiplayer_sync_state.apply_spawn_sync_id(source_room_sync_id)
@@ -247,11 +249,11 @@ func _apply_additive_spawn_batch_payload(payload: Dictionary) -> void:
 		var enemy_id := int(spawn_entry.get("enemy_id", -1))
 		if enemy_type.is_empty() or enemy_id <= 0:
 			continue
-		var enemy: CharacterBody2D = _world.enemy_spawner.spawn_enemy_from_sync(enemy_type, enemy_position)
+		var enemy := _world.enemy_spawner.spawn_enemy_from_sync(enemy_type, enemy_position) as ENEMY_BASE_SCRIPT
 		if is_instance_valid(enemy):
 			var synced_max_health := int(spawn_entry.get("max_health", 0))
-			if synced_max_health > 0 and enemy.has_method("set_max_health_and_current"):
-				enemy.call("set_max_health_and_current", synced_max_health, synced_max_health)
+			if synced_max_health > 0:
+				enemy.set_max_health_and_current(synced_max_health, synced_max_health)
 			_world.enemy_state_sync_broadcaster.register_enemy(enemy, enemy_id)
 	if synced_enemy_count > 0:
 		_world.active_room_enemy_count = synced_enemy_count
@@ -277,17 +279,16 @@ func _apply_objective_spawn_batch_payload(payload: Dictionary) -> void:
 		var spawn_meta := spawn_entry.get("spawn_meta", {}) as Dictionary
 		if enemy_type.is_empty() or enemy_id <= 0:
 			continue
-		var enemy: CharacterBody2D = _world.enemy_spawner.spawn_enemy_from_sync(enemy_type, enemy_position)
+		var enemy := _world.enemy_spawner.spawn_enemy_from_sync(enemy_type, enemy_position) as ENEMY_BASE_SCRIPT
 		if is_instance_valid(enemy):
 			var synced_max_health := int(spawn_entry.get("max_health", 0))
-			if synced_max_health > 0 and enemy.has_method("set_max_health_and_current"):
-				enemy.call("set_max_health_and_current", synced_max_health, synced_max_health)
+			if synced_max_health > 0:
+				enemy.set_max_health_and_current(synced_max_health, synced_max_health)
 			broadcaster.register_enemy(enemy, enemy_id)
 			if not spawn_meta.is_empty():
 				_apply_objective_spawn_meta(enemy, spawn_meta)
-			if enemy.has_method("set_network_simulation_enabled"):
-				enemy.call("set_network_simulation_enabled", false)
-		if enemy.has_signal("died"):
+			enemy.set_network_simulation_enabled(false)
+		if is_instance_valid(enemy):
 			var captured_enemy_id := enemy_id
 			if not enemy.died.is_connected(Callable(broadcaster, "on_enemy_died").bind(captured_enemy_id)):
 				enemy.died.connect(Callable(broadcaster, "on_enemy_died").bind(captured_enemy_id))
@@ -301,7 +302,7 @@ func _apply_boss_spawn_payload(payload: Dictionary) -> void:
 	var source_room_sync_id := int(payload.get("room_sync_id", 0))
 	if boss_stage <= 0 or enemy_id <= 0:
 		return
-	var existing_enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as Node2D
+	var existing_enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as ENEMY_BASE_SCRIPT
 	if is_instance_valid(existing_enemy):
 		_world.active_room_enemy_count = maxi(1, _world.active_room_enemy_count)
 		return
@@ -311,18 +312,20 @@ func _apply_boss_spawn_payload(payload: Dictionary) -> void:
 	_world.active_room_enemy_count = 1
 	_world._world_multiplayer_sync_state.apply_spawn_sync_id(source_room_sync_id)
 
-func _apply_objective_spawn_meta(enemy: CharacterBody2D, spawn_meta: Dictionary) -> void:
+func _apply_objective_spawn_meta(enemy: ENEMY_BASE_SCRIPT, spawn_meta: Dictionary) -> void:
 	if not is_instance_valid(enemy):
 		return
 	var role := String(spawn_meta.get("role", "")).strip_edges()
 	if role.is_empty():
 		return
 	if role == "cut_signal_target":
-		var objective_runtime: Node = _world.objective_runtime
-		if is_instance_valid(objective_runtime) and objective_runtime.has_method("configure_priority_target_enemy_from_sync"):
-			objective_runtime.call("configure_priority_target_enemy_from_sync", enemy, spawn_meta)
-		elif is_instance_valid(_world.objective_manager):
-			_world.objective_manager.hunt_target_enemy = enemy
+		var objective_runtime := _world.objective_runtime as OBJECTIVE_RUNTIME_SCRIPT
+		if is_instance_valid(objective_runtime):
+			objective_runtime.configure_priority_target_enemy_from_sync(enemy, spawn_meta)
+		else:
+			var objective_manager := _world.objective_manager as OBJECTIVE_MANAGER_SCRIPT
+			if is_instance_valid(objective_manager):
+				objective_manager.hunt_target_enemy = enemy
 
 func _is_current_room_boss_stage(boss_stage: int) -> bool:
 	match boss_stage:

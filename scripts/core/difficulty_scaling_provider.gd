@@ -13,6 +13,7 @@ extends RefCounted
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 const DIFFICULTY_CONFIG_MULTIPLAYER := preload("res://scripts/encounter_difficulty_multiplayer_config.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
+const RUN_CONTEXT_SCRIPT := preload("res://scripts/run_context.gd")
 
 var _world: Node2D
 var _multiplayer_config: Object = null
@@ -30,7 +31,7 @@ func get_config_provider() -> Object:
 func resolve_tier_config(tier: int) -> Dictionary:
 	var provider: Object = get_config_provider()
 	var base_config: Dictionary = {}
-	if provider != null and provider.has_method("get_tier_config"):
+	if provider != null:
 		base_config = provider.get_tier_config(tier)
 	else:
 		base_config = DIFFICULTY_CONFIG.get_tier_config(tier)
@@ -46,8 +47,8 @@ func resolve_tier_config(tier: int) -> Dictionary:
 	return ascension_config
 
 func _get_active_ascension_loadout() -> Array[String]:
-	var run_context := _world.get_node_or_null("/root/RunContext")
-	if run_context == null or not run_context.has_method("get_active_ascension_loadout"):
+	var run_context := _world.get_node_or_null("/root/RunContext") as RUN_CONTEXT_SCRIPT
+	if run_context == null:
 		return []
 	var raw: Variant = run_context.get_active_ascension_loadout()
 	var out: Array[String] = []
@@ -61,10 +62,10 @@ func get_party_size() -> int:
 		return 1
 	if not MultiplayerSessionManager.is_session_connected():
 		return 1
-	var session_info := MultiplayerSessionManager.get_session_info() if MultiplayerSessionManager.has_method("get_session_info") else {}
+	var session_info := MultiplayerSessionManager.get_session_info()
 	var peer_count := int(session_info.get("connected_peer_count", 0))
-	if peer_count <= 0 and MultiplayerSessionManager.has_method("get_peer_ids"):
-		peer_count = (MultiplayerSessionManager.get_peer_ids() as Array).size()
+	if peer_count <= 0:
+		peer_count = MultiplayerSessionManager.get_peer_ids().size()
 	if peer_count <= 0:
 		peer_count = _world._get_multiplayer_player_nodes().size()
 	return clampi(peer_count, 1, MultiplayerSessionManager.MAX_PARTY_SIZE)

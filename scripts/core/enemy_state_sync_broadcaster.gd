@@ -9,6 +9,7 @@ extends RefCounted
 # count, objective manager, players) from the host WorldGenerator and emits
 # the @rpc payloads via the host's RPC methods, which remain on WG.
 
+const ENEMY_BASE_SCRIPT := preload("res://scripts/enemy_base.gd")
 const ENEMY_TETHER_SCRIPT := preload("res://scripts/enemy_tether.gd")
 const ENEMY_PYRE_SCRIPT := preload("res://scripts/enemy_pyre.gd")
 const ENEMY_STATE_SYNC_INTERVAL_SEC_DEFAULT: float = 0.08
@@ -82,7 +83,7 @@ func reset_perf_attribution() -> void:
 
 # --- enemy registry ---------------------------------------------------------
 
-func register_enemy(enemy: Node2D, forced_enemy_id: int = -1) -> int:
+func register_enemy(enemy: ENEMY_BASE_SCRIPT, forced_enemy_id: int = -1) -> int:
 	if not is_instance_valid(enemy):
 		return -1
 	var enemy_id := forced_enemy_id
@@ -94,9 +95,9 @@ func register_enemy(enemy: Node2D, forced_enemy_id: int = -1) -> int:
 	enemy.set_meta("network_enemy_id", enemy_id)
 	EnemyReplicationService.enemy_nodes_by_id[enemy_id] = enemy
 	_initialize_tracking_state(enemy_id, enemy)
-	if MultiplayerSessionManager.is_remote_replica() and enemy.has_method("set_network_simulation_enabled"):
-		enemy.call("set_network_simulation_enabled", false)
-	if enemy.has_signal("died") and not enemy.died.is_connected(Callable(self, "on_enemy_died").bind(enemy_id)):
+	if MultiplayerSessionManager.is_remote_replica():
+		enemy.set_network_simulation_enabled(false)
+	if not enemy.died.is_connected(Callable(self, "on_enemy_died").bind(enemy_id)):
 		enemy.died.connect(Callable(self, "on_enemy_died").bind(enemy_id))
 	return enemy_id
 
@@ -118,7 +119,7 @@ func on_enemy_died(enemy_id: int) -> void:
 		print_debug("[StatAttribution][EnemyDied] enemy_id=%d killer_peer=%d" % [enemy_id, killer_peer_id])
 	if killer_peer_id > 0:
 		_world._record_peer_enemy_kill(killer_peer_id)
-	var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as Node2D
+	var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as ENEMY_BASE_SCRIPT
 	var death_effect_payload := _build_enemy_death_effect_payload(enemy)
 	deregister_enemy(enemy_id)
 	if MultiplayerSessionManager.should_broadcast():
@@ -168,7 +169,7 @@ func tick(delta: float) -> void:
 		var enemy_index := (_scan_cursor + scan_index) % total_enemy_ids
 		var enemy_id_variant: Variant = enemy_ids[enemy_index]
 		var enemy_id := int(enemy_id_variant)
-		var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as Node2D
+		var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as ENEMY_BASE_SCRIPT
 		if not is_instance_valid(enemy):
 			stale_ids.append(enemy_id)
 			_far_sync_elapsed_by_id.erase(enemy_id)
@@ -189,11 +190,8 @@ func tick(delta: float) -> void:
 				continue
 			_far_sync_elapsed_by_id[enemy_id] = 0.0
 		var enemy_health := 0.0
-		if enemy.has_method("get_current_health"):
-			enemy_health = float(enemy.call("get_current_health"))
-		var enemy_facing_angle := enemy.global_rotation
-		if enemy.has_method("get_network_facing_angle"):
-			enemy_facing_angle = float(enemy.call("get_network_facing_angle"))
+		enemy_health = enemy.get_current_health()
+		var enemy_facing_angle := enemy.get_network_facing_angle()
 		var quantized_facing_quantum := maxf(0.0001, transmit_facing_quantum)
 		var quantized_facing_angle := snappedf(enemy_facing_angle, quantized_facing_quantum)
 		var previous_position := _previous_positions.get(enemy_id, quantized_position) as Vector2
@@ -203,7 +201,7 @@ func tick(delta: float) -> void:
 		var facing_changed := absf(wrapf(quantized_facing_angle - previous_facing_angle, -PI, PI)) > maxf(0.0001, facing_change_threshold_rad)
 		var health_changed := not is_equal_approx(enemy_health, previous_health)
 		var previous_combat_hint := bool(_far_combat_hint_by_id.get(enemy_id, false))
-		var force_runtime_state_sampling := enemy.has_method("should_force_network_runtime_state_sampling") and bool(enemy.call("should_force_network_runtime_state_sampling"))
+		var force_runtime_state_sampling := enemy.should_force_network_runtime_state_sampling()
 		var should_sample_runtime_state := position_changed or facing_changed or health_changed or previous_combat_hint or force_runtime_state_sampling or not is_far_enemy
 		var allow_runtime_state_sampling := should_sample_runtime_state
 		if allow_runtime_state_sampling and active_enemy_count >= 24 and not force_runtime_state_sampling and not previous_combat_hint:
@@ -216,9 +214,7 @@ func tick(delta: float) -> void:
 			allow_runtime_state_sampling = ((enemy_id + physics_frame) % runtime_sampling_stride) == 0
 		var runtime_state_delta: Dictionary = {}
 		if allow_runtime_state_sampling:
-			var runtime_state: Dictionary = {}
-			if enemy.has_method("get_network_runtime_state"):
-				runtime_state = enemy.call("get_network_runtime_state") as Dictionary
+			var runtime_state := enemy.get_network_runtime_state()
 			runtime_state = _quantize_runtime_state_for_network(runtime_state)
 			var previous_state := _previous_runtime_states.get(enemy_id, {}) as Dictionary
 			runtime_state_delta = _compute_runtime_state_delta(runtime_state, previous_state)
@@ -299,20 +295,17 @@ func tick(delta: float) -> void:
 
 # --- internals --------------------------------------------------------------
 
-func _initialize_tracking_state(enemy_id: int, enemy: Node2D) -> void:
+func _initialize_tracking_state(enemy_id: int, enemy: ENEMY_BASE_SCRIPT) -> void:
 	EnemyReplicationService.target_positions_by_id[enemy_id] = enemy.global_position
 	_previous_positions[enemy_id] = enemy.global_position
-	var enemy_facing_angle := enemy.global_rotation
-	if enemy.has_method("get_network_facing_angle"):
-		enemy_facing_angle = float(enemy.call("get_network_facing_angle"))
+	var enemy_facing_angle := enemy.get_network_facing_angle()
 	EnemyReplicationService.target_facing_angles_by_id[enemy_id] = enemy_facing_angle
 	_previous_facing_angles[enemy_id] = enemy_facing_angle
-	if enemy.has_method("get_current_health"):
-		_previous_health_values[enemy_id] = float(enemy.call("get_current_health"))
+	_previous_health_values[enemy_id] = float(enemy.get_current_health())
 	_far_sync_elapsed_by_id[enemy_id] = 0.0
 	_far_combat_hint_by_id[enemy_id] = false
 
-func _build_enemy_death_effect_payload(enemy: Node2D) -> Dictionary:
+func _build_enemy_death_effect_payload(enemy: ENEMY_BASE_SCRIPT) -> Dictionary:
 	if not is_instance_valid(enemy):
 		return {}
 	if enemy.get_script() == ENEMY_PYRE_SCRIPT:
@@ -378,15 +371,14 @@ func _quantize_runtime_state_for_network(runtime_state: Dictionary) -> Dictionar
 
 func _enemy_is_far_from_all_players(enemy_position: Vector2) -> bool:
 	var far_distance_sq := maxf(0.0, far_sync_distance_px * far_sync_distance_px)
-	if bool(_world.is_multiplayer) and _world.has_method("_get_multiplayer_player_nodes"):
-		var party_nodes: Variant = _world.call("_get_multiplayer_player_nodes")
-		if party_nodes is Array:
-			for party_node_variant in party_nodes:
-				var party_node := party_node_variant as Node2D
-				if not is_instance_valid(party_node):
-					continue
-				if enemy_position.distance_squared_to(party_node.global_position) <= far_distance_sq:
-					return false
+	if bool(_world.is_multiplayer):
+		var party_nodes: Array = _world._get_multiplayer_player_nodes()
+		for party_node_variant in party_nodes:
+			var party_node := party_node_variant as Node2D
+			if not is_instance_valid(party_node):
+				continue
+			if enemy_position.distance_squared_to(party_node.global_position) <= far_distance_sq:
+				return false
 		return true
 	var player: Node2D = _world.player
 	if is_instance_valid(player):
@@ -394,7 +386,7 @@ func _enemy_is_far_from_all_players(enemy_position: Vector2) -> bool:
 			return false
 	return true
 
-func _enemy_is_combat_active(_enemy: Node2D, runtime_state_delta: Dictionary) -> bool:
+func _enemy_is_combat_active(_enemy: ENEMY_BASE_SCRIPT, runtime_state_delta: Dictionary) -> bool:
 	if runtime_state_delta.has("custom"):
 		var custom_state := runtime_state_delta.get("custom", {}) as Dictionary
 		if not custom_state.is_empty():
@@ -500,12 +492,10 @@ func _get_adaptive_state_size_limit(active_enemy_count: int) -> int:
 func _compute_priority_sync_interval_sec() -> float:
 	var best_interval := 0.0
 	for enemy_variant in EnemyReplicationService.enemy_nodes_by_id.values():
-		var enemy := enemy_variant as Node
+		var enemy := enemy_variant as ENEMY_BASE_SCRIPT
 		if not is_instance_valid(enemy):
 			continue
-		if not enemy.has_method("get_priority_network_sync_interval_sec"):
-			continue
-		var requested_interval := float(enemy.call("get_priority_network_sync_interval_sec"))
+		var requested_interval := enemy.get_priority_network_sync_interval_sec()
 		if requested_interval <= 0.0:
 			continue
 		if best_interval <= 0.0 or requested_interval < best_interval:

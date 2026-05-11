@@ -1,6 +1,9 @@
 extends RefCounted
 
-func tick(objective_manager: Node, objective_runtime: Node, delta: float, grace_active: bool) -> Dictionary:
+const OBJECTIVE_MANAGER_SCRIPT := preload("res://scripts/objective_manager.gd")
+const OBJECTIVE_RUNTIME_SCRIPT := preload("res://scripts/objective_runtime.gd")
+
+func tick(objective_manager: OBJECTIVE_MANAGER_SCRIPT, objective_runtime: OBJECTIVE_RUNTIME_SCRIPT, delta: float, grace_active: bool) -> Dictionary:
 	var active_kind := ""
 	if is_instance_valid(objective_manager):
 		active_kind = String(objective_manager.active_objective_kind)
@@ -12,10 +15,7 @@ func tick(objective_manager: Node, objective_runtime: Node, delta: float, grace_
 
 	var should_redraw := false
 	if is_instance_valid(objective_manager):
-		if objective_manager.has_method("should_draw_control_overlay"):
-			should_redraw = bool(objective_manager.should_draw_control_overlay())
-		else:
-			should_redraw = active_kind == "hold_the_line" or float(objective_manager.control_radius) > 0.0
+		should_redraw = objective_manager.should_draw_control_overlay()
 
 	return {
 		"should_redraw": should_redraw

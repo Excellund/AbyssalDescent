@@ -55,7 +55,7 @@ var zones: Array[Dictionary] = []
 # Reposition direction locked at entry.
 var _reposition_dir: Vector2 = Vector2.ZERO
 var _active_visual_redraw_left: float = 0.0
-var _zone_overlay: Node2D = null
+var _zone_overlay: LANCER_ZONE_OVERLAY_SCRIPT = null
 
 
 func _zone_local_to_world(zone_data: Dictionary) -> Vector2:
@@ -271,8 +271,8 @@ func _clear_remote_lancer_attack_visuals() -> void:
 		_projectile_sync_sequence = 0
 	else:
 		_last_received_projectile_sync_sequence = -1
-	if is_instance_valid(_zone_overlay) and _zone_overlay.has_method("clear_zones"):
-		_zone_overlay.call("clear_zones")
+	if is_instance_valid(_zone_overlay):
+		_zone_overlay.clear_zones()
 
 
 func _ensure_zone_overlay() -> void:
@@ -289,22 +289,19 @@ func _sync_zone_overlay() -> void:
 	_ensure_zone_overlay()
 	if not is_instance_valid(_zone_overlay):
 		return
-	if not _zone_overlay.has_method("set_zone_state"):
-		return
-	_zone_overlay.call("set_zone_state", zones, zone_radius, zone_duration, zone_tick_interval)
-	if _zone_overlay.has_method("set_bolt_state"):
-		if is_instance_valid(bolt):
-			var travel_t := clampf(bolt_distance_traveled / maxf(0.001, bolt_travel_limit), 0.0, 1.0)
-			var parent_node := get_parent() as Node2D
-			if is_instance_valid(parent_node):
-				var bolt_local := parent_node.to_local(bolt.global_position)
-				var predicted_local := parent_node.to_local(bolt_predicted_impact_global)
-				var dir_local := parent_node.global_transform.basis_xform_inv(bolt_direction)
-				_zone_overlay.call("set_bolt_state", true, bolt_local, dir_local, predicted_local, travel_t)
-			else:
-				_zone_overlay.call("set_bolt_state", true, bolt.global_position, bolt_direction, bolt_predicted_impact_global, travel_t)
+	_zone_overlay.set_zone_state(zones, zone_radius, zone_duration, zone_tick_interval)
+	if is_instance_valid(bolt):
+		var travel_t := clampf(bolt_distance_traveled / maxf(0.001, bolt_travel_limit), 0.0, 1.0)
+		var parent_node := get_parent() as Node2D
+		if is_instance_valid(parent_node):
+			var bolt_local := parent_node.to_local(bolt.global_position)
+			var predicted_local := parent_node.to_local(bolt_predicted_impact_global)
+			var dir_local := parent_node.global_transform.basis_xform_inv(bolt_direction)
+			_zone_overlay.set_bolt_state(true, bolt_local, dir_local, predicted_local, travel_t)
 		else:
-			_zone_overlay.call("set_bolt_state", false, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, 0.0)
+			_zone_overlay.set_bolt_state(true, bolt.global_position, bolt_direction, bolt_predicted_impact_global, travel_t)
+	else:
+		_zone_overlay.set_bolt_state(false, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, 0.0)
 
 # ---------------------------------------------------------------------------
 # State machine
