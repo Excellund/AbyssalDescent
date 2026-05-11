@@ -647,15 +647,15 @@ func _build_ui() -> void:
 	logo_overline.add_theme_color_override("font_color", Color(0.74, 0.88, 1.0, 0.86))
 	logo_wordmark.add_child(logo_overline)
 
-	var logo_title := Label.new()
-	logo_title.text = "DESCENT"
-	logo_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	logo_title.add_theme_font_size_override("font_size", 46)
-	logo_title.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 0.98))
-	logo_title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.8))
-	logo_title.add_theme_constant_override("shadow_offset_x", 2)
-	logo_title.add_theme_constant_override("shadow_offset_y", 2)
-	logo_wordmark.add_child(logo_title)
+	var logo_subtitle := Label.new()
+	logo_subtitle.text = "DESCENT"
+	logo_subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	logo_subtitle.add_theme_font_size_override("font_size", 46)
+	logo_subtitle.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 0.98))
+	logo_subtitle.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.8))
+	logo_subtitle.add_theme_constant_override("shadow_offset_x", 2)
+	logo_subtitle.add_theme_constant_override("shadow_offset_y", 2)
+	logo_wordmark.add_child(logo_subtitle)
 
 	quote_wrapper = Control.new()
 	quote_wrapper.custom_minimum_size = Vector2(306.0, 72.0)
