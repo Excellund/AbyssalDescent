@@ -209,7 +209,7 @@ var telemetry_spike_api_key: String = ""
 var telemetry_spike_timeout_seconds: float = 8.0
 var telemetry_spike_sender
 var telemetry_spike_requested: bool = false
-var run_session
+var run_session: RunSession
 var profile_persistence_store: RefCounted = null
 var current_player_profile: RefCounted = null
 var bootstrap_coordinator
@@ -381,6 +381,7 @@ func _initialize_bootstrap_context() -> void:
 	_maybe_start_telemetry_spike_probe()
 	run_session = RUN_SESSION_SCRIPT.new()
 	run_session.reset_for_new_run()
+	_sync_progression_from_run_session()
 	run_summary_recorder = RUN_SUMMARY_RECORDER_SCRIPT.new(self)
 	enemy_state_sync_broadcaster = ENEMY_STATE_SYNC_BROADCASTER_SCRIPT.new(self)
 	enemy_state_sync_broadcaster.perf_attribution_enabled = _perf_attribution_enabled
@@ -414,6 +415,35 @@ func _initialize_bootstrap_context() -> void:
 
 	if is_multiplayer:
 		_setup_multiplayer_remote_players()
+
+func _sync_progression_from_run_session() -> void:
+	if run_session == null:
+		return
+	var progression := run_session.get_progression_state()
+	rooms_cleared = int(progression.get("rooms_cleared", rooms_cleared))
+	room_depth = int(progression.get("room_depth", room_depth))
+	phase_two_rooms_cleared = int(progression.get("phase_two_rooms_cleared", phase_two_rooms_cleared))
+	phase_three_rooms_cleared = int(progression.get("phase_three_rooms_cleared", phase_three_rooms_cleared))
+
+func _set_progression_counters(next_rooms_cleared: int, next_room_depth: int, next_phase_two_rooms_cleared: int, next_phase_three_rooms_cleared: int) -> void:
+	if run_session != null:
+		run_session.set_progression_counters(next_rooms_cleared, next_room_depth, next_phase_two_rooms_cleared, next_phase_three_rooms_cleared)
+		_sync_progression_from_run_session()
+		return
+	rooms_cleared = next_rooms_cleared
+	room_depth = next_room_depth
+	phase_two_rooms_cleared = next_phase_two_rooms_cleared
+	phase_three_rooms_cleared = next_phase_three_rooms_cleared
+
+func _apply_progression_increments(rooms_delta: int, room_depth_delta: int, phase_two_delta: int, phase_three_delta: int) -> void:
+	if run_session != null:
+		run_session.apply_progression_increments(rooms_delta, room_depth_delta, phase_two_delta, phase_three_delta)
+		_sync_progression_from_run_session()
+		return
+	rooms_cleared += rooms_delta
+	room_depth += room_depth_delta
+	phase_two_rooms_cleared += phase_two_delta
+	phase_three_rooms_cleared += phase_three_delta
 
 func _setup_player_runtime_bindings() -> void:
 	if is_instance_valid(player):
@@ -839,16 +869,13 @@ func _start_stress_test_arena() -> void:
 func _begin_new_run_flow() -> void:
 	_world_multiplayer_sync_state.reset_for_new_run()
 	run_summary_recorder.mark_run_start()
-	rooms_cleared = 0
-	room_depth = 0
+	_set_progression_counters(0, 0, 0, 0)
 	boss_unlocked = false
 	in_boss_room = false
 	in_second_boss_room = false
 	in_third_boss_room = false
 	first_boss_defeated = false
 	second_boss_defeated = false
-	phase_two_rooms_cleared = 0
-	phase_three_rooms_cleared = 0
 	endless_boss_defeated = false
 	run_cleared = false
 	boss_reward_pending = false
@@ -949,8 +976,7 @@ func _start_debug_selected_encounter(encounter_state: int) -> Dictionary:
 
 	_reset_for_debug_jump()
 	var encounter_depth := start_depth
-	rooms_cleared = encounter_depth - 1
-	room_depth = encounter_depth
+	_set_progression_counters(encounter_depth - 1, encounter_depth, phase_two_rooms_cleared, phase_three_rooms_cleared)
 	boss_unlocked = false
 
 	if encounter_key == "rest":
@@ -975,15 +1001,12 @@ func _start_debug_selected_encounter(encounter_state: int) -> Dictionary:
 
 func _start_debug_boss_room() -> Dictionary:
 	_reset_for_debug_jump()
-	rooms_cleared = encounter_count
-	room_depth = encounter_count
+	_set_progression_counters(encounter_count, encounter_count, 0, 0)
 	boss_unlocked = true
 	first_boss_defeated = false
 	second_boss_defeated = false
 	in_second_boss_room = false
 	in_third_boss_room = false
-	phase_two_rooms_cleared = 0
-	phase_three_rooms_cleared = 0
 	boss_reward_pending = false
 	last_defeated_boss_id = ""
 	_begin_boss_room()
@@ -992,30 +1015,26 @@ func _start_debug_boss_room() -> Dictionary:
 
 func _start_debug_second_boss_room() -> Dictionary:
 	_reset_for_debug_jump()
-	rooms_cleared = encounter_count + second_boss_encounter_count
-	room_depth = rooms_cleared
+	var debug_depth := encounter_count + second_boss_encounter_count
+	_set_progression_counters(debug_depth, debug_depth, second_boss_encounter_count, 0)
 	boss_unlocked = true
 	first_boss_defeated = true
 	second_boss_defeated = false
 	in_second_boss_room = false
 	in_third_boss_room = false
-	phase_two_rooms_cleared = second_boss_encounter_count
-	phase_three_rooms_cleared = 0
 	_begin_second_boss_room()
 	hud.refresh(_get_hud_state(), player)
 	return {"ok": true, "state": "debug_encounter", "encounter": "Sovereign"}
 
 func _start_debug_third_boss_room() -> Dictionary:
 	_reset_for_debug_jump()
-	rooms_cleared = _get_third_boss_target_depth()
-	room_depth = rooms_cleared
+	var debug_depth := _get_third_boss_target_depth()
+	_set_progression_counters(debug_depth, debug_depth, second_boss_encounter_count, third_boss_encounter_count)
 	boss_unlocked = true
 	first_boss_defeated = true
 	second_boss_defeated = true
 	in_second_boss_room = false
 	in_third_boss_room = false
-	phase_two_rooms_cleared = second_boss_encounter_count
-	phase_three_rooms_cleared = third_boss_encounter_count
 	_begin_third_boss_room()
 	hud.refresh(_get_hud_state(), player)
 	return {"ok": true, "state": "debug_encounter", "encounter": "Lacuna"}
@@ -1083,8 +1102,7 @@ func _reset_for_debug_jump() -> void:
 	in_third_boss_room = false
 	first_boss_defeated = false
 	second_boss_defeated = false
-	phase_two_rooms_cleared = 0
-	phase_three_rooms_cleared = 0
+	_set_progression_counters(rooms_cleared, room_depth, 0, 0)
 	endless_boss_defeated = false
 	active_room_enemy_count = 0
 	boss_reward_pending = false
@@ -1096,8 +1114,7 @@ func _start_debug_objective_room(kind: String = "") -> Dictionary:
 	run_summary_recorder.mark_debug_mode()
 	_reset_for_debug_jump()
 	var objective_depth := 1
-	rooms_cleared = objective_depth - 1
-	room_depth = objective_depth
+	_set_progression_counters(objective_depth - 1, objective_depth, phase_two_rooms_cleared, phase_three_rooms_cleared)
 	boss_unlocked = false
 	var profile := _build_objective_test_profile(objective_depth, kind)
 	profile = _apply_debug_mutator_override(profile)
@@ -1848,16 +1865,15 @@ func _on_room_cleared() -> void:
 	run_cleared = bool(outcome_state.get("run_cleared", run_cleared))
 	in_boss_room = bool(outcome_state.get("in_boss_room", in_boss_room))
 	endless_boss_defeated = bool(outcome_state.get("endless_boss_defeated", endless_boss_defeated))
-	rooms_cleared = int(outcome_state.get("rooms_cleared", rooms_cleared))
+	var next_rooms_cleared := int(outcome_state.get("rooms_cleared", rooms_cleared))
 	var outcome_depth := int(outcome_state.get("room_depth", room_depth))
 	if outcome_depth > 50:
-		push_error("[Room Outcome] Warning: extremely high room_depth from outcome: %d (rooms_cleared=%d)" % [outcome_depth, rooms_cleared])
-	room_depth = outcome_depth
+		push_error("[Room Outcome] Warning: extremely high room_depth from outcome: %d (rooms_cleared=%d)" % [outcome_depth, next_rooms_cleared])
+	_set_progression_counters(next_rooms_cleared, outcome_depth, phase_two_rooms_cleared, phase_three_rooms_cleared)
 	boss_unlocked = bool(outcome_state.get("boss_unlocked", boss_unlocked))
 	pending_room_reward = int(outcome_state.get("pending_room_reward", pending_room_reward))
 	choosing_next_room = bool(outcome_state.get("choosing_next_room", choosing_next_room))
-	phase_two_rooms_cleared += int(outcome_state.get("phase_two_increment", 0))
-	phase_three_rooms_cleared += int(outcome_state.get("phase_three_increment", 0))
+	_apply_progression_increments(0, 0, int(outcome_state.get("phase_two_increment", 0)), int(outcome_state.get("phase_three_increment", 0)))
 	_clamp_room_depth_to_sane_range()
 	if bool(outcome_state.get("show_endless_boss_banner", false)):
 		hud.show_banner("Boss Defeated", "")
@@ -1884,10 +1900,8 @@ func _finish_first_boss_clear() -> void:
 	first_boss_defeated = true
 	in_second_boss_room = false
 	in_third_boss_room = false
-	phase_two_rooms_cleared = 0
-	phase_three_rooms_cleared = 0
-	rooms_cleared += 1
-	room_depth += 1
+	_set_progression_counters(rooms_cleared, room_depth, 0, 0)
+	_apply_progression_increments(1, 1, 0, 0)
 	_clamp_room_depth_to_sane_range()
 	boss_unlocked = false
 	pending_room_reward = ENUMS.RewardMode.NONE
@@ -1903,12 +1917,11 @@ func _finish_second_boss_clear() -> void:
 	second_boss_defeated = true
 	active_room_enemy_count = 0
 	choosing_next_room = false
-	rooms_cleared += 1
-	room_depth += 1
+	_apply_progression_increments(1, 1, 0, 0)
 	_clamp_room_depth_to_sane_range()
 	boss_unlocked = false
 	pending_room_reward = ENUMS.RewardMode.NONE
-	phase_three_rooms_cleared = 0
+	_set_progression_counters(rooms_cleared, room_depth, phase_two_rooms_cleared, 0)
 	last_defeated_boss_id = "sovereign"
 	run_summary_recorder.record_boss_defeat(last_defeated_boss_id)
 	boss_reward_pending = true
@@ -2633,11 +2646,13 @@ func _apply_progress_sync_state(progress_state: Dictionary) -> void:
 		return
 	
 	_world_multiplayer_sync_state.merge_current_room_sync_id(int(sanitized_progress_state.get("room_sync_id", _world_multiplayer_sync_state.current_room_sync_id)))
-	rooms_cleared = int(sanitized_progress_state.get("rooms_cleared", rooms_cleared))
-	room_depth = incoming_depth
+	_set_progression_counters(
+		int(sanitized_progress_state.get("rooms_cleared", rooms_cleared)),
+		incoming_depth,
+		int(sanitized_progress_state.get("phase_two_rooms_cleared", phase_two_rooms_cleared)),
+		int(sanitized_progress_state.get("phase_three_rooms_cleared", phase_three_rooms_cleared))
+	)
 	_clamp_room_depth_to_sane_range()
-	phase_two_rooms_cleared = int(sanitized_progress_state.get("phase_two_rooms_cleared", phase_two_rooms_cleared))
-	phase_three_rooms_cleared = int(sanitized_progress_state.get("phase_three_rooms_cleared", phase_three_rooms_cleared))
 	boss_unlocked = bool(sanitized_progress_state.get("boss_unlocked", boss_unlocked))
 	first_boss_defeated = bool(sanitized_progress_state.get("first_boss_defeated", first_boss_defeated))
 	second_boss_defeated = bool(sanitized_progress_state.get("second_boss_defeated", second_boss_defeated))
@@ -2769,15 +2784,11 @@ func _enter_rest_site() -> void:
 	hud.show_banner("Rest Site", "")
 	current_room_static_camera = true
 	if second_boss_defeated:
-		rooms_cleared += 1
-		room_depth += 1
-		phase_three_rooms_cleared += 1
+		_apply_progression_increments(1, 1, 0, 1)
 		boss_unlocked = _is_third_boss_unlocked()
 		_clamp_room_depth_to_sane_range()
 	elif first_boss_defeated:
-		rooms_cleared += 1
-		room_depth += 1
-		phase_two_rooms_cleared += 1
+		_apply_progression_increments(1, 1, 1, 0)
 		boss_unlocked = _is_second_boss_unlocked()
 		_clamp_room_depth_to_sane_range()
 	else:
@@ -2796,8 +2807,12 @@ func _advance_room_progress() -> void:
 	if not is_instance_valid(encounter_flow_system):
 		return
 	var progress: Dictionary = encounter_flow_system.advance_room_progress(rooms_cleared, room_depth, encounter_count)
-	rooms_cleared = int(progress.get("rooms_cleared", rooms_cleared))
-	room_depth = int(progress.get("room_depth", room_depth))
+	_set_progression_counters(
+		int(progress.get("rooms_cleared", rooms_cleared)),
+		int(progress.get("room_depth", room_depth)),
+		phase_two_rooms_cleared,
+		phase_three_rooms_cleared
+	)
 	boss_unlocked = bool(progress.get("boss_unlocked", boss_unlocked))
 
 func _pick_boss_spawn_position(min_player_distance: float = 260.0, wall_margin: float = 210.0) -> Vector2:
@@ -3430,16 +3445,13 @@ func _finalize_reward_phase_and_advance(is_initial: bool, mode: int) -> void:
 
 func _reset_progress_for_first_encounter() -> void:
 	_world_multiplayer_sync_state.reset_for_new_run()
-	rooms_cleared = 0
-	room_depth = 0
+	_set_progression_counters(0, 0, 0, 0)
 	boss_unlocked = false
 	in_boss_room = false
 	in_second_boss_room = false
 	in_third_boss_room = false
 	first_boss_defeated = false
 	second_boss_defeated = false
-	phase_two_rooms_cleared = 0
-	phase_three_rooms_cleared = 0
 	endless_boss_defeated = false
 	boss_reward_pending = false
 	last_defeated_boss_id = ""

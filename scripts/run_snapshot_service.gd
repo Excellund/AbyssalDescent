@@ -128,6 +128,12 @@ static func apply_snapshot(world: Node, player: Node, run_context: Node, snapsho
 
 	var run_session := _get_run_session(world)
 	if run_session != null:
+		run_session.set_progression_counters(
+			world.rooms_cleared,
+			world.room_depth,
+			world.phase_two_rooms_cleared,
+			world.phase_three_rooms_cleared
+		)
 		run_session.restore_rewards_from_snapshot(
 			_to_string_array(snapshot.get("boons_taken", [])),
 			_to_string_array(snapshot.get("arcana_rewards_taken", [])),
