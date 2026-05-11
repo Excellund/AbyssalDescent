@@ -13,9 +13,7 @@ const ENEMY_SPECTRE_SCRIPT := preload("res://scripts/enemy_spectre.gd")
 const ENEMY_PYRE_SCRIPT := preload("res://scripts/enemy_pyre.gd")
 const ENEMY_TETHER_SCRIPT := preload("res://scripts/enemy_tether.gd")
 const PYRE_FIELD_SCRIPT := preload("res://scripts/pyre_field.gd")
-const ENEMY_BOSS_SCRIPT := preload("res://scripts/enemy_boss.gd")
-const ENEMY_BOSS_2_SCRIPT := preload("res://scripts/enemy_boss_2.gd")
-const ENEMY_BOSS_3_SCRIPT := preload("res://scripts/enemy_boss_3.gd")
+const BOSS_STAGE_REGISTRY := preload("res://scripts/shared/boss_stage_registry.gd")
 const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 const MUSIC_SYSTEM_SCRIPT := preload("res://scripts/music_system.gd")
@@ -2923,15 +2921,31 @@ func _pick_boss_spawn_position(min_player_distance: float = 260.0, wall_margin: 
 		return candidate
 	return fallback
 
-func _begin_configured_boss_room(boss_stage: int, room_size: Vector2, room_label: String, room_entry_key: String, banner_title: String, boss_script, collision_radius: float, min_player_distance: float, wall_margin: float) -> void:
+func _begin_boss_stage(stage: int) -> void:
+	var descriptor: Dictionary = BOSS_STAGE_REGISTRY.get_descriptor(stage)
+	if descriptor.is_empty():
+		push_warning("_begin_boss_stage: unknown boss stage %d" % stage)
+		return
+	var min_player_distance: float = maxf(
+		float(descriptor["min_player_distance_floor"]),
+		spawn_safe_radius + float(descriptor["min_player_distance_pad"])
+	)
+	var wall_margin: float = maxf(
+		float(descriptor["wall_margin_floor"]),
+		spawn_padding + float(descriptor["wall_margin_pad"])
+	)
+	var room_label := String(descriptor["room_label"])
+	var room_entry_key := String(descriptor["room_entry_key"])
+	var banner_title := String(descriptor["banner_title"])
+
 	_prepare_room_sync_transition()
 	encounter_intro_grace_active = false
 	combat_phase_coordinator.begin_combat_phase(player, get_tree())
-	in_boss_room = boss_stage == 1
-	in_second_boss_room = boss_stage == 2
-	in_third_boss_room = boss_stage == 3
+	in_boss_room = stage == 1
+	in_second_boss_room = stage == 2
+	in_third_boss_room = stage == 3
 	_play_room_music(true)
-	current_room_size = room_size
+	current_room_size = descriptor["room_size"]
 	_reset_effective_room_bounds()
 	current_room_static_camera = false
 	current_room_label = room_label
@@ -2946,15 +2960,8 @@ func _begin_configured_boss_room(boss_stage: int, room_size: Vector2, room_label
 		_start_encounter_intro_grace()
 		enemy_state_sync_receiver.flush_pending_boss_spawn_syncs()
 		return
-	var boss := CharacterBody2D.new()
-	boss.set_script(boss_script)
-
-	var collision_shape := CollisionShape2D.new()
-	collision_shape.shape = CircleShape2D.new()
-	collision_shape.shape.radius = collision_radius
-	boss.add_child(collision_shape)
-
-	boss.global_position = _pick_boss_spawn_position(min_player_distance, wall_margin)
+	var spawn_position: Vector2 = _pick_boss_spawn_position(min_player_distance, wall_margin)
+	var boss: CharacterBody2D = BOSS_STAGE_REGISTRY.create_boss_node(stage, spawn_position)
 	add_child(boss)
 	boss.begin_spawn_transport(BOSS_SPAWN_TRANSPORT_DURATION)
 	_assign_enemy_target_candidates(boss)
@@ -2968,7 +2975,7 @@ func _begin_configured_boss_room(boss_stage: int, room_size: Vector2, room_label
 		boss.damage_received.connect(func(applied_amount: int, _remaining_health: int): _on_enemy_damage_received(applied_amount))
 	if MultiplayerSessionManager.should_broadcast():
 		_sync_spawn_boss.rpc({
-			"boss_stage": boss_stage,
+			"boss_stage": stage,
 			"enemy_id": boss_enemy_id,
 			"position": boss.global_position,
 			"room_label": current_room_label,
@@ -2977,43 +2984,13 @@ func _begin_configured_boss_room(boss_stage: int, room_size: Vector2, room_label
 	_start_encounter_intro_grace()
 
 func _begin_boss_room() -> void:
-	_begin_configured_boss_room(
-		1,
-		Vector2(1260.0, 900.0),
-		"Boss Chamber: The Warden",
-		"warden",
-		"The Warden",
-		ENEMY_BOSS_SCRIPT,
-		34.0,
-		maxf(260.0, spawn_safe_radius + 90.0),
-		maxf(210.0, spawn_padding + 110.0)
-	)
+	_begin_boss_stage(1)
 
 func _begin_second_boss_room() -> void:
-	_begin_configured_boss_room(
-		2,
-		Vector2(1360.0, 960.0),
-		"Abyss Core: Sovereign",
-		"sovereign",
-		"Sovereign",
-		ENEMY_BOSS_2_SCRIPT,
-		38.0,
-		maxf(280.0, spawn_safe_radius + 110.0),
-		maxf(230.0, spawn_padding + 130.0)
-	)
+	_begin_boss_stage(2)
 
 func _begin_third_boss_room() -> void:
-	_begin_configured_boss_room(
-		3,
-		Vector2(1460.0, 1040.0),
-		"Silent Threshold: Lacuna",
-		"lacuna",
-		"Lacuna",
-		ENEMY_BOSS_3_SCRIPT,
-		40.0,
-		maxf(300.0, spawn_safe_radius + 130.0),
-		maxf(250.0, spawn_padding + 150.0)
-	)
+	_begin_boss_stage(3)
 
 func _spawn_profile_enemies(profile: Dictionary) -> int:
 	if not is_instance_valid(enemy_spawner):
@@ -3180,27 +3157,9 @@ func _sync_request_enemy_damage(enemy_id: int, amount: int, damage_context: Dict
 		record_player_damage_dealt(maxi(0, health_before - health_after), source_peer_id, false, enemy_id)
 
 func _spawn_boss_for_stage(boss_stage: int, spawn_position: Vector2) -> Node2D:
-	var boss_script = null
-	var collision_radius := 34.0
-	match boss_stage:
-		1:
-			boss_script = ENEMY_BOSS_SCRIPT
-			collision_radius = 34.0
-		2:
-			boss_script = ENEMY_BOSS_2_SCRIPT
-			collision_radius = 38.0
-		3:
-			boss_script = ENEMY_BOSS_3_SCRIPT
-			collision_radius = 40.0
-		_:
-			return null
-	var boss := CharacterBody2D.new()
-	boss.set_script(boss_script)
-	var collision_shape := CollisionShape2D.new()
-	collision_shape.shape = CircleShape2D.new()
-	collision_shape.shape.radius = collision_radius
-	boss.add_child(collision_shape)
-	boss.global_position = spawn_position
+	var boss: CharacterBody2D = BOSS_STAGE_REGISTRY.create_boss_node(boss_stage, spawn_position)
+	if boss == null:
+		return null
 	add_child(boss)
 	boss.begin_spawn_transport(BOSS_SPAWN_TRANSPORT_DURATION)
 	_assign_enemy_target_candidates(boss)
