@@ -83,14 +83,21 @@ func _draw() -> void:
 
 	var coarse_step := maxf(28.0, floor_grid_step)
 	var fine_step := maxf(16.0, floor_grid_fine_step)
-	for x in range(floori(room_rect.position.x), floori(room_rect.position.x + room_rect.size.x + coarse_step), floori(coarse_step)):
+	
+	# Calculate grid-aligned start positions centered at origin
+	var coarse_start_x := floori(room_rect.position.x / coarse_step) * coarse_step
+	var coarse_start_y := floori(room_rect.position.y / coarse_step) * coarse_step
+	var fine_start_x := floori(room_rect.position.x / fine_step) * fine_step
+	var fine_start_y := floori(room_rect.position.y / fine_step) * fine_step
+	
+	for x in range(coarse_start_x, floori(room_rect.position.x + room_rect.size.x + coarse_step), floori(coarse_step)):
 		draw_line(Vector2(float(x), room_rect.position.y), Vector2(float(x), room_rect.position.y + room_rect.size.y), Color(0.36, 0.56, 0.78, clampf(floor_coarse_grid_alpha, 0.01, 0.2)), 2.0)
-	for y in range(floori(room_rect.position.y), floori(room_rect.position.y + room_rect.size.y + coarse_step), floori(coarse_step)):
+	for y in range(coarse_start_y, floori(room_rect.position.y + room_rect.size.y + coarse_step), floori(coarse_step)):
 		draw_line(Vector2(room_rect.position.x, float(y)), Vector2(room_rect.position.x + room_rect.size.x, float(y)), Color(0.36, 0.56, 0.78, clampf(floor_coarse_grid_alpha, 0.01, 0.2)), 2.0)
 
-	for x in range(floori(room_rect.position.x), floori(room_rect.position.x + room_rect.size.x + fine_step), floori(fine_step)):
+	for x in range(fine_start_x, floori(room_rect.position.x + room_rect.size.x + fine_step), floori(fine_step)):
 		draw_line(Vector2(float(x), room_rect.position.y), Vector2(float(x), room_rect.position.y + room_rect.size.y), Color(0.55, 0.74, 0.92, clampf(floor_fine_grid_alpha, 0.0, 0.08)), 1.0)
-	for y in range(floori(room_rect.position.y), floori(room_rect.position.y + room_rect.size.y + fine_step), floori(fine_step)):
+	for y in range(fine_start_y, floori(room_rect.position.y + room_rect.size.y + fine_step), floori(fine_step)):
 		draw_line(Vector2(room_rect.position.x, float(y)), Vector2(room_rect.position.x + room_rect.size.x, float(y)), Color(0.55, 0.74, 0.92, clampf(floor_fine_grid_alpha, 0.0, 0.08)), 1.0)
 
 	var corners := [
