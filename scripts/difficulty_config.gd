@@ -41,108 +41,195 @@ static func get_base_progression_ranks() -> Dictionary:
 		BEARING_ENUMS.BearingTier.FORSWORN: 3
 	}
 
-## Difficulty config per tier: pacing, pressure, and affordances
-static func get_tier_config(tier: int) -> Dictionary:
-	match tier:
-		BEARING_ENUMS.BearingTier.PILGRIM:
-			return {
-				"name": META_PROGRESS.TIER_NAMES[BEARING_ENUMS.BearingTier.PILGRIM],
-				"description": META_PROGRESS.TIER_DESCRIPTIONS[BEARING_ENUMS.BearingTier.PILGRIM],
-				## Encounter generation
-				"encounter_count_before_boss": get_base_encounter_count_before_boss(),
-				"base_enemy_pressure_mult": 0.6,  ## Baseline enemy count multiplier
-				"wave_interval_seconds": 12.0,  ## Upper bound between waves; kill-threshold can fire earlier
-				"depth_pressure_divisor": 1.5,  ## Higher = slower ramping of difficulty; Apprentice ramps slower
-				"specialist_enemy_depth_offset": 3,  ## Lurkers start at depth 5 on apprentice (vs depth 5 on standard)
-				"specialist_enemy_pressure_mult": 0.75,  ## Specialist enemies ramp slower to avoid burst spikes
-				"boss_difficulty_mult": 0.75,  ## Boss health/damage multiplier
-				## Mutator and encounter complexity
-				"mutator_frequency_mult": 0.5,  ## Fewer mutators per room on lower tiers
-				"trial_encounter_frequency_mult": 0.7,  ## Fewer trial encounters
-				"mutator_damage_mult": 0.8,  ## Mutators hurt less
-				## Player affordances on easiest tier
-				"player_starting_health_bonus": 35.0,  ## Extra starting health
-				"player_damage_taken_mult": 0.78,  ## 22% damage reduction — enough to survive two slams where one would have killed
-				"rest_heal_ratio_mult": 1.25,  ## Rest Sites always heal more on Pilgrim instead of spending hidden charges
-				"difficulty_rank": 0
-			}
-		
-		BEARING_ENUMS.BearingTier.DELVER:
-			return {
-				"name": META_PROGRESS.TIER_NAMES[BEARING_ENUMS.BearingTier.DELVER],
-				"description": META_PROGRESS.TIER_DESCRIPTIONS[BEARING_ENUMS.BearingTier.DELVER],
-				## Encounter generation (baseline)
-				"encounter_count_before_boss": get_base_encounter_count_before_boss(),
-				"base_enemy_pressure_mult": 1.0,
-				"wave_interval_seconds": 10.0,
-				"depth_pressure_divisor": 1.0,
-				"specialist_enemy_depth_offset": 0,
-				"specialist_enemy_pressure_mult": 1.0,
-				"boss_difficulty_mult": 1.0,
-				## Mutator and encounter complexity
-				"mutator_frequency_mult": 1.0,
-				"trial_encounter_frequency_mult": 1.0,
-				"mutator_damage_mult": 1.0,
-			## Slight damage buffer — keeps run-ending spikes from gating players before they learn patterns
+## ===== UNIFIED BEARING DEFINITIONS =====
+## Centralized source of truth for all bearing configurations (singleplayer + multiplayer).
+## Includes base encounter generation fields, player affordances, and multiplayer-specific scaling.
+## Singleplayer uses core fields; multiplayer adds co-op scaling per extra player.
+static func _build_bearing_definitions() -> Dictionary:
+	return {
+		BEARING_ENUMS.BearingTier.PILGRIM: {
+			"name": META_PROGRESS.TIER_NAMES[BEARING_ENUMS.BearingTier.PILGRIM],
+			"description": META_PROGRESS.TIER_DESCRIPTIONS[BEARING_ENUMS.BearingTier.PILGRIM],
+			"bearing_key": "Pilgrim",
+			"difficulty_rank": 0,
+			## === Encounter Generation (Singleplayer Base) ===
+			"encounter_count_before_boss": get_base_encounter_count_before_boss(),
+			"base_enemy_pressure_mult": 0.6,
+			"wave_interval_seconds": 12.0,
+			"depth_pressure_divisor": 1.5,
+			"specialist_enemy_depth_offset": 3,
+			"specialist_enemy_pressure_mult": 0.75,
+			"boss_difficulty_mult": 0.75,
+			## === Specialist Enemy Type Offsets (Multiplayer) ===
+			"specialist_enemy_lurker_offset": 5,
+			"specialist_enemy_ram_offset": 6,
+			"specialist_enemy_lancer_offset": 7,
+			"specialist_enemy_spectre_offset": 8,
+			"specialist_enemy_pyre_offset": 9,
+			"specialist_enemy_tether_offset": 10,
+			## === Mutator and Encounter Complexity ===
+			"mutator_frequency_mult": 0.5,
+			"trial_encounter_frequency_mult": 0.7,
+			"mutator_damage_mult": 0.8,
+			## === Player Affordances ===
+			"player_health_mult": 1.0,
+			"player_starting_health_bonus": 35.0,
+			"player_damage_taken_mult": 0.78,
+			"enemy_contact_damage_mult": 1.0,
+			"player_damage_dealt_mult": 1.0,
+			"player_heal_mult": 1.0,
+			"rest_heal_ratio_mult": 1.25,
+			## === Multiplayer Co-op Scaling ===
+			"coop_enemy_count_per_extra_player": 0.22,
+			"coop_enemy_count_curve_power": 0.85,
+			"coop_enemy_count_max_mult": 1.55,
+			"coop_enemy_health_per_extra_player": 0.56,
+			"coop_enemy_health_curve_power": 0.9,
+			"coop_enemy_health_max_mult": 2.5,
+			"coop_boss_health_per_extra_player": 1.0,
+			"coop_boss_health_curve_power": 0.92,
+			"coop_boss_health_max_mult": 3.4
+		},
+		BEARING_ENUMS.BearingTier.DELVER: {
+			"name": META_PROGRESS.TIER_NAMES[BEARING_ENUMS.BearingTier.DELVER],
+			"description": META_PROGRESS.TIER_DESCRIPTIONS[BEARING_ENUMS.BearingTier.DELVER],
+			"bearing_key": "Delver",
+			"difficulty_rank": 1,
+			## === Encounter Generation (Singleplayer Base) ===
+			"encounter_count_before_boss": get_base_encounter_count_before_boss(),
+			"base_enemy_pressure_mult": 1.0,
+			"wave_interval_seconds": 10.0,
+			"depth_pressure_divisor": 1.0,
+			"specialist_enemy_depth_offset": 0,
+			"specialist_enemy_pressure_mult": 1.0,
+			"boss_difficulty_mult": 1.0,
+			## === Specialist Enemy Type Offsets (Multiplayer) ===
+			"specialist_enemy_lurker_offset": 4,
+			"specialist_enemy_ram_offset": 5,
+			"specialist_enemy_lancer_offset": 6,
+			"specialist_enemy_spectre_offset": 7,
+			"specialist_enemy_pyre_offset": 8,
+			"specialist_enemy_tether_offset": 9,
+			## === Mutator and Encounter Complexity ===
+			"mutator_frequency_mult": 1.0,
+			"trial_encounter_frequency_mult": 1.0,
+			"mutator_damage_mult": 1.0,
+			## === Player Affordances ===
+			"player_health_mult": 1.0,
 			"player_starting_health_bonus": 0.0,
 			"player_damage_taken_mult": 0.92,
-				"enemy_contact_damage_mult": 0.94,
-				"rest_heal_ratio_mult": 1.0,
-				"difficulty_rank": 1
-			}
-		
-		BEARING_ENUMS.BearingTier.HARBINGER:
-			return {
-				"name": META_PROGRESS.TIER_NAMES[BEARING_ENUMS.BearingTier.HARBINGER],
-				"description": META_PROGRESS.TIER_DESCRIPTIONS[BEARING_ENUMS.BearingTier.HARBINGER],
-				## Encounter generation (harder)
-				"encounter_count_before_boss": get_base_encounter_count_before_boss(),
-				"base_enemy_pressure_mult": 1.25,  ## More enemies per room
-				"wave_interval_seconds": 9.0,
-				"depth_pressure_divisor": 0.8,  ## Faster ramping
-				"specialist_enemy_depth_offset": -1,  ## Specialist enemies appear 1 depth earlier
-				"specialist_enemy_pressure_mult": 1.05,
-				"boss_difficulty_mult": 1.15,  ## Stronger boss
-				## Mutator and encounter complexity
-				"mutator_frequency_mult": 1.3,  ## More mutators
-				"trial_encounter_frequency_mult": 1.2,  ## More trials
-				"mutator_damage_mult": 1.1,  ## Mutators are more dangerous
-				## Contact-heavy rooms can spike too hard at this tier; keep identity while trimming touch damage.
-				"enemy_contact_damage_mult": 0.94,
-				## No player bonuses (veteran players don't need them)
-				"player_starting_health_bonus": 0.0,
-				"player_damage_taken_mult": 1.0,
-				"rest_heal_ratio_mult": 1.0,
-				"difficulty_rank": 2
-			}
-		
-		BEARING_ENUMS.BearingTier.FORSWORN:
-			return {
-				"name": META_PROGRESS.TIER_NAMES[BEARING_ENUMS.BearingTier.FORSWORN],
-				"description": META_PROGRESS.TIER_DESCRIPTIONS[BEARING_ENUMS.BearingTier.FORSWORN],
-				## Encounter generation (extreme)
-				"encounter_count_before_boss": get_base_encounter_count_before_boss(),
-				"base_enemy_pressure_mult": 1.5,  ## Significantly more enemies
-				"wave_interval_seconds": 8.0,
-				"depth_pressure_divisor": 0.6,  ## Very fast ramping
-				"specialist_enemy_depth_offset": -2,  ## Specialist enemies much earlier
-				"specialist_enemy_pressure_mult": 1.15,
-				"boss_difficulty_mult": 1.3,  ## Very strong boss
-				## Mutator and encounter complexity
-				"mutator_frequency_mult": 1.6,  ## Frequent mutators
-				"trial_encounter_frequency_mult": 1.4,  ## More trials
-				"mutator_damage_mult": 1.25,  ## Heavily damaging mutators
-				## Keep Forsworn lethal but avoid contact stack one-shots.
-				"enemy_contact_damage_mult": 0.94,
-				## No player bonuses
-				"player_starting_health_bonus": 0.0,
-				"player_damage_taken_mult": 1.0,
-				"rest_heal_ratio_mult": 1.0,
-				"difficulty_rank": 3
-			}
-		
-		_:
-			return get_tier_config(BEARING_ENUMS.BearingTier.DELVER)
+			"enemy_contact_damage_mult": 0.94,
+			"player_damage_dealt_mult": 1.0,
+			"player_heal_mult": 1.0,
+			"rest_heal_ratio_mult": 1.0,
+			## === Multiplayer Co-op Scaling ===
+			"coop_enemy_count_per_extra_player": 0.25,
+			"coop_enemy_count_curve_power": 0.85,
+			"coop_enemy_count_max_mult": 1.6,
+			"coop_enemy_health_per_extra_player": 0.62,
+			"coop_enemy_health_curve_power": 0.92,
+			"coop_enemy_health_max_mult": 2.7,
+			"coop_boss_health_per_extra_player": 1.08,
+			"coop_boss_health_curve_power": 0.95,
+			"coop_boss_health_max_mult": 3.7
+		},
+		BEARING_ENUMS.BearingTier.HARBINGER: {
+			"name": META_PROGRESS.TIER_NAMES[BEARING_ENUMS.BearingTier.HARBINGER],
+			"description": META_PROGRESS.TIER_DESCRIPTIONS[BEARING_ENUMS.BearingTier.HARBINGER],
+			"bearing_key": "Harbinger",
+			"difficulty_rank": 2,
+			## === Encounter Generation (Singleplayer Base) ===
+			"encounter_count_before_boss": get_base_encounter_count_before_boss(),
+			"base_enemy_pressure_mult": 1.25,
+			"wave_interval_seconds": 9.0,
+			"depth_pressure_divisor": 0.8,
+			"specialist_enemy_depth_offset": -1,
+			"specialist_enemy_pressure_mult": 1.05,
+			"boss_difficulty_mult": 1.15,
+			## === Specialist Enemy Type Offsets (Multiplayer) ===
+			"specialist_enemy_lurker_offset": 3,
+			"specialist_enemy_ram_offset": 4,
+			"specialist_enemy_lancer_offset": 5,
+			"specialist_enemy_spectre_offset": 6,
+			"specialist_enemy_pyre_offset": 7,
+			"specialist_enemy_tether_offset": 8,
+			## === Mutator and Encounter Complexity ===
+			"mutator_frequency_mult": 1.3,
+			"trial_encounter_frequency_mult": 1.2,
+			"mutator_damage_mult": 1.1,
+			## === Player Affordances ===
+			"player_health_mult": 1.0,
+			"player_starting_health_bonus": 0.0,
+			"player_damage_taken_mult": 1.0,
+			"enemy_contact_damage_mult": 0.94,
+			"player_damage_dealt_mult": 1.0,
+			"player_heal_mult": 1.0,
+			"rest_heal_ratio_mult": 1.0,
+			## === Multiplayer Co-op Scaling ===
+			"coop_enemy_count_per_extra_player": 0.28,
+			"coop_enemy_count_curve_power": 0.85,
+			"coop_enemy_count_max_mult": 1.65,
+			"coop_enemy_health_per_extra_player": 0.68,
+			"coop_enemy_health_curve_power": 0.95,
+			"coop_enemy_health_max_mult": 2.9,
+			"coop_boss_health_per_extra_player": 1.18,
+			"coop_boss_health_curve_power": 0.98,
+			"coop_boss_health_max_mult": 4.0
+		},
+		BEARING_ENUMS.BearingTier.FORSWORN: {
+			"name": META_PROGRESS.TIER_NAMES[BEARING_ENUMS.BearingTier.FORSWORN],
+			"description": META_PROGRESS.TIER_DESCRIPTIONS[BEARING_ENUMS.BearingTier.FORSWORN],
+			"bearing_key": "Forsworn",
+			"difficulty_rank": 3,
+			## === Encounter Generation (Singleplayer Base) ===
+			"encounter_count_before_boss": get_base_encounter_count_before_boss(),
+			"base_enemy_pressure_mult": 1.5,
+			"wave_interval_seconds": 8.0,
+			"depth_pressure_divisor": 0.6,
+			"specialist_enemy_depth_offset": -2,
+			"specialist_enemy_pressure_mult": 1.15,
+			"boss_difficulty_mult": 1.3,
+			## === Specialist Enemy Type Offsets (Multiplayer) ===
+			"specialist_enemy_lurker_offset": 2,
+			"specialist_enemy_ram_offset": 3,
+			"specialist_enemy_lancer_offset": 4,
+			"specialist_enemy_spectre_offset": 5,
+			"specialist_enemy_pyre_offset": 6,
+			"specialist_enemy_tether_offset": 7,
+			## === Mutator and Encounter Complexity ===
+			"mutator_frequency_mult": 1.6,
+			"trial_encounter_frequency_mult": 1.4,
+			"mutator_damage_mult": 1.25,
+			## === Player Affordances ===
+			"player_health_mult": 1.0,
+			"player_starting_health_bonus": 0.0,
+			"player_damage_taken_mult": 1.0,
+			"enemy_contact_damage_mult": 0.94,
+			"player_damage_dealt_mult": 1.0,
+			"player_heal_mult": 1.0,
+			"rest_heal_ratio_mult": 1.0,
+			## === Multiplayer Co-op Scaling ===
+			"coop_enemy_count_per_extra_player": 0.30,
+			"coop_enemy_count_curve_power": 0.85,
+			"coop_enemy_count_max_mult": 1.7,
+			"coop_enemy_health_per_extra_player": 0.74,
+			"coop_enemy_health_curve_power": 0.98,
+			"coop_enemy_health_max_mult": 3.1,
+			"coop_boss_health_per_extra_player": 1.28,
+			"coop_boss_health_curve_power": 1.0,
+			"coop_boss_health_max_mult": 4.3
+		}
+	}
+
+static var BEARING_DEFINITIONS = _build_bearing_definitions()
+static var _bearing_definitions_validated = (_validate_bearing_definitions(), true)[1]  ## Validates at class load time
+
+## Difficulty config per tier: pacing, pressure, and affordances
+static func get_tier_config(tier: int) -> Dictionary:
+	if BEARING_DEFINITIONS.has(tier):
+		return (BEARING_DEFINITIONS[tier] as Dictionary).duplicate(true)
+	push_error("Invalid tier %d requested in get_tier_config()" % tier)
+	return (BEARING_DEFINITIONS[BEARING_ENUMS.BearingTier.DELVER] as Dictionary).duplicate(true)
 
 ## Resolve a tier config with an ascension loadout layered on top.
 ## Mutates a fresh dict; the base get_tier_config() result is untouched.
@@ -219,12 +306,41 @@ static func get_difficulty_rank(tier: int) -> int:
 static func get_objective_pressure_mult(tier: int) -> float:
 	return 0.8 + float(get_difficulty_rank(tier)) * 0.2
 
-## ===== MULTIPLAYER SYNC VALIDATION =====
-## Verify that multiplayer config has not drifted from singleplayer base definitions
+## ===== UNIFIED BEARING DEFINITIONS VALIDATION =====
+## Verify bearing definitions have all required fields and multiplayer fields are present
+
+static func _validate_bearing_definitions() -> void:
+	"""Validate that all bearing definitions have required fields."""
+	var required_fields := [
+		"name", "description", "bearing_key", "difficulty_rank",
+		"encounter_count_before_boss", "base_enemy_pressure_mult", "wave_interval_seconds",
+		"depth_pressure_divisor", "specialist_enemy_depth_offset", "specialist_enemy_pressure_mult",
+		"boss_difficulty_mult", "mutator_frequency_mult", "trial_encounter_frequency_mult",
+		"mutator_damage_mult", "player_starting_health_bonus", "player_damage_taken_mult",
+		"enemy_contact_damage_mult", "rest_heal_ratio_mult",
+		# Multiplayer-specific fields
+		"specialist_enemy_lurker_offset", "specialist_enemy_ram_offset", "specialist_enemy_lancer_offset",
+		"specialist_enemy_spectre_offset", "specialist_enemy_pyre_offset", "specialist_enemy_tether_offset",
+		"player_health_mult", "player_damage_dealt_mult", "player_heal_mult",
+		"coop_enemy_count_per_extra_player", "coop_enemy_count_curve_power", "coop_enemy_count_max_mult",
+		"coop_enemy_health_per_extra_player", "coop_enemy_health_curve_power", "coop_enemy_health_max_mult",
+		"coop_boss_health_per_extra_player", "coop_boss_health_curve_power", "coop_boss_health_max_mult"
+	]
+	
+	for tier in get_base_progression_ranks().keys():
+		assert(BEARING_DEFINITIONS.has(tier), "Bearing tier %d missing from BEARING_DEFINITIONS" % tier)
+		var def = BEARING_DEFINITIONS[tier] as Dictionary
+		
+		for field in required_fields:
+			assert(def.has(field), "Bearing tier %d missing required field '%s'" % [tier, field])
+
+## ===== MULTIPLAYER SYNC VALIDATION (LEGACY) =====
+## These functions are now simplified since configs are unified.
+## Kept for backward compatibility with any external callers.
 
 static func validate_multiplayer_config_sync(multiplayer_config: Node) -> Dictionary:
 	"""
-	Validate that multiplayer config is in sync with singleplayer base definitions.
+	Validate that multiplayer config is in sync with unified bearing definitions.
 	Returns { "valid": bool, "errors": [str], "warnings": [str] }
 	"""
 	var result := {"valid": true, "errors": [], "warnings": []}
@@ -234,24 +350,11 @@ static func validate_multiplayer_config_sync(multiplayer_config: Node) -> Dictio
 		result["valid"] = false
 		return result
 	
-	# Check encounter count consistency
-	var expected_encounter_count := get_base_encounter_count_before_boss()
+	# Since configs are now unified, this simply checks that the multiplayer accessor works
 	for tier in get_base_progression_ranks().keys():
-		var mp_config: Dictionary = multiplayer_config.get_tier_config(tier)
-		var actual_encounter_count = mp_config.get("encounter_count_before_boss", -1)
-		
-		if actual_encounter_count != expected_encounter_count:
-			result["warnings"].append("Tier %d: encounter_count_before_boss mismatch (expected %d, got %d)" % [tier, expected_encounter_count, actual_encounter_count])
-	
-	# Check progression ranks
-	var expected_ranks := get_base_progression_ranks()
-	var actual_ranks := {}
-	for tier in expected_ranks.keys():
-		var mp_config: Dictionary = multiplayer_config.get_tier_config(tier)
-		actual_ranks[tier] = mp_config.get("difficulty_rank", -1)
-	
-	for tier in expected_ranks.keys():
-		if actual_ranks[tier] != expected_ranks[tier]:
-			result["warnings"].append("Tier %d: difficulty_rank mismatch (expected %d, got %d)" % [tier, expected_ranks[tier], actual_ranks[tier]])
+		var config: Dictionary = multiplayer_config.get_tier_config(tier)
+		if config.is_empty():
+			result["errors"].append("Tier %d returned empty config from multiplayer accessor" % tier)
+			result["valid"] = false
 	
 	return result
