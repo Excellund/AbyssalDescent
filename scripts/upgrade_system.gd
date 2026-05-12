@@ -19,6 +19,7 @@ var upgrade_stacks: Dictionary = {}
 
 # Track stacks for trial powers as backup when player_reference is unavailable
 var trial_power_stacks: Dictionary = {}
+var trial_power_prismatic_states: Dictionary = {}
 
 
 func _ready() -> void:
@@ -78,9 +79,16 @@ func apply_trial_power(power_id: String) -> bool:
 	
 	if not _is_trial_power_id(id):
 		return false
-
-	var next_stack := get_trial_power_stack_count(id) + 1
-	var next_values := POWER_PARAMETER_MAPPER.build_trial_values(id, next_stack, _get_power_balance_data(id), player_reference)
+	var current_stack := get_trial_power_stack_count(id)
+	var stack_limit := _get_power_stack_limit(id)
+	var applying_prismatic := false
+	var next_stack := current_stack + 1
+	if stack_limit > 0 and current_stack >= stack_limit:
+		if has_trial_power_prismatic(id):
+			return false
+		applying_prismatic = true
+		next_stack = current_stack
+	var next_values := POWER_PARAMETER_MAPPER.build_trial_values(id, next_stack, _get_power_balance_data(id), player_reference, applying_prismatic)
 	if next_values.is_empty():
 		return false
 	
@@ -88,11 +96,14 @@ func apply_trial_power(power_id: String) -> bool:
 	var applied := POWER_PARAMETER_MAPPER.apply_trial_power_values(player_reference, id, next_stack, next_values)
 	if not applied:
 		return false
+	if applying_prismatic:
+		trial_power_prismatic_states[id] = true
 
 	# Commit run-state tracking only after successful application.
 	if is_instance_valid(game_state):
 		game_state.add_trial_power(id)
-	trial_power_stacks[id] = next_stack
+	if not applying_prismatic:
+		trial_power_stacks[id] = next_stack
 
 	return true
 
@@ -148,7 +159,24 @@ func get_trial_runtime_values(power_id: String) -> Dictionary:
 	if id.is_empty():
 		return {}
 	var stack_count := get_trial_power_stack_count(id)
-	return POWER_PARAMETER_MAPPER.build_trial_values(id, stack_count, _get_power_balance_data(id), player_reference)
+	return POWER_PARAMETER_MAPPER.build_trial_values(id, stack_count, _get_power_balance_data(id), player_reference, has_trial_power_prismatic(id))
+
+
+func has_trial_power_prismatic(power_id: String) -> bool:
+	var id := power_id.strip_edges().to_lower()
+	return bool(trial_power_prismatic_states.get(id, false))
+
+
+func can_claim_trial_power_prismatic(power_id: String) -> bool:
+	var id := power_id.strip_edges().to_lower()
+	if id.is_empty() or not _is_trial_power_id(id):
+		return false
+	if has_trial_power_prismatic(id):
+		return false
+	var stack_limit := _get_power_stack_limit(id)
+	if stack_limit <= 0:
+		return false
+	return get_trial_power_stack_count(id) >= stack_limit
 
 
 func _get_power_balance_data(power_id: String) -> Dictionary:
@@ -523,12 +551,16 @@ func get_trial_power_card_description(power_id: String) -> String:
 		return "[color=#9ab8d8]Enhances this power.[/color]"
 	var id := power_id.strip_edges().to_lower()
 	var current_stack := get_trial_power_stack_count(id)
-	var next_stack := current_stack + 1
-	var next_values := POWER_PARAMETER_MAPPER.build_trial_values(id, next_stack, _get_power_balance_data(id), player_reference)
+	var stack_limit := _get_power_stack_limit(id)
+	var prismatic_preview := stack_limit > 0 and current_stack >= stack_limit and not has_trial_power_prismatic(id)
+	var next_stack := current_stack if prismatic_preview else current_stack + 1
+	var next_values := POWER_PARAMETER_MAPPER.build_trial_values(id, next_stack, _get_power_balance_data(id), player_reference, prismatic_preview)
 	if next_values.is_empty():
 		return "[color=#9ab8d8]Enhances this power.[/color]"
 	var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 	var flavor := get_power_flavor_text(id)
+	if prismatic_preview:
+		flavor += " Prismatic: %s" % _get_trial_prismatic_blurb(id)
 	var is_initial := current_stack <= 0
 	match id:
 		"razor_wind":
@@ -767,6 +799,7 @@ func build_razor_wind_attack_context(melee_context: Dictionary, razor_wind_damag
 func reset() -> void:
 	upgrade_stacks.clear()
 	trial_power_stacks.clear()
+	trial_power_prismatic_states.clear()
 	
 	if is_instance_valid(game_state):
 		game_state.reset()
@@ -838,6 +871,48 @@ func _sigil_chain_unlocks_for_stack(stack_count: int) -> String:
 	if stack_count >= 2:
 		return "+slow"
 	return ""
+
+
+func _get_trial_prismatic_blurb(power_id: String) -> String:
+	match power_id:
+		"razor_wind":
+			return "longer crescents with wider, faster coverage"
+		"execution_edge":
+			return "faster execution cadence and tighter follow-through"
+		"rupture_wave":
+			return "shockwaves widen for stronger zone control"
+		"aegis_field":
+			return "stronger guard pulse with denser control"
+		"hunters_snare":
+			return "snares hold longer with deeper slow control"
+		"phantom_step":
+			return "dash phantoms chill longer with faster re-engage"
+		"riftpunch":
+			return "finisher windows stay open longer with extra grace"
+		"reaper_step":
+			return "longer reap chain with deeper grace"
+		"static_wake":
+			return "wake fields linger longer and cover more ground"
+		"storm_crown":
+			return "lightning forks farther with faster utility procs"
+		"wraithstep":
+			return "marks linger longer with broader tagging coverage"
+		"voidfire":
+			return "overheat lockout shortens and blast control widens"
+		"dread_resonance":
+			return "resonance sustains at a higher stack ceiling"
+		"bloodvow":
+			return "wounded frenzy activates at safer health bands"
+		"eclipse_mark":
+			return "marks spread wider and persist longer"
+		"fracture_field":
+			return "fault lines reach farther and hold slows longer"
+		"farline_volley":
+			return "volley ceiling rises with broader edge control"
+		"sigil_chain":
+			return "sigil zones widen for stronger chain setup"
+		_:
+			return "empowered beyond mastery"
 
 func get_upgrade_stack_count(upgrade_id: String) -> int:
 	var id := upgrade_id.strip_edges().to_lower()

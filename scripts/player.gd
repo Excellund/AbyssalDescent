@@ -1283,6 +1283,11 @@ func build_run_snapshot() -> Dictionary:
 		var raw_stacks: Variant = upgrade_system.get("trial_power_stacks")
 		if raw_stacks is Dictionary:
 			trial_stacks = (raw_stacks as Dictionary).duplicate(true)
+	var trial_prismatic: Dictionary = {}
+	if is_instance_valid(upgrade_system):
+		var raw_prismatic: Variant = upgrade_system.get("trial_power_prismatic_states")
+		if raw_prismatic is Dictionary:
+			trial_prismatic = (raw_prismatic as Dictionary).duplicate(true)
 	var upgrade_stacks: Dictionary = {}
 	if is_instance_valid(upgrade_system):
 		var raw_upgrade_stacks: Variant = upgrade_system.get("upgrade_stacks")
@@ -1294,6 +1299,7 @@ func build_run_snapshot() -> Dictionary:
 		"properties": properties,
 		"active_objective_mutators": get_active_objective_mutators(),
 		"trial_power_stacks": trial_stacks,
+		"trial_power_prismatic": trial_prismatic,
 		"upgrade_stacks": upgrade_stacks
 	}
 
@@ -1312,6 +1318,9 @@ func apply_run_snapshot(snapshot: Dictionary) -> void:
 	var trial_stacks := snapshot.get("trial_power_stacks", {}) as Dictionary
 	if is_instance_valid(upgrade_system):
 		upgrade_system.set("trial_power_stacks", trial_stacks.duplicate(true))
+	var trial_prismatic := snapshot.get("trial_power_prismatic", {}) as Dictionary
+	if is_instance_valid(upgrade_system):
+		upgrade_system.set("trial_power_prismatic_states", trial_prismatic.duplicate(true))
 	var upgrade_stacks := snapshot.get("upgrade_stacks", {}) as Dictionary
 	if is_instance_valid(upgrade_system):
 		upgrade_system.set("upgrade_stacks", upgrade_stacks.duplicate(true))
@@ -1871,6 +1880,16 @@ func get_power_current_desc(power_id: String) -> String:
 
 func get_trial_power_stack_count(reward_id: String) -> int:
 	return upgrade_system.get_trial_power_stack_count(reward_id)
+
+func has_trial_power_prismatic(reward_id: String) -> bool:
+	if upgrade_system == null:
+		return false
+	return upgrade_system.has_trial_power_prismatic(reward_id)
+
+func can_claim_trial_power_prismatic(reward_id: String) -> bool:
+	if upgrade_system == null:
+		return false
+	return upgrade_system.can_claim_trial_power_prismatic(reward_id)
 
 func get_power_damage_model(power_id: String) -> Dictionary:
 	if upgrade_system != null:

@@ -33,6 +33,11 @@ var mission_reward_stage: int = 0
 var pending_mission_upgrade_choice: Dictionary = {}
 var current_player: Node2D
 var current_character_id: String = ""
+var _current_power_registry: Node = null
+var _current_rng: RandomNumberGenerator = null
+var _trial_power_stack_limit_bonus: int = 0
+var _reward_rerolls_per_offer: int = 0
+var _reward_rerolls_remaining: int = 0
 
 func _is_upgrade_blocked_for_character(upgrade_id: String) -> bool:
 	var normalized_character_id := current_character_id.strip_edges().to_lower()
@@ -119,6 +124,10 @@ func initialize(choice_count: int, reveal_duration: float) -> void:
 	boon_reveal_duration = reveal_duration
 	_create_ui()
 
+func configure_catalyst_payload(payload: Dictionary) -> void:
+	_trial_power_stack_limit_bonus = maxi(0, int(round(float(payload.get("arcana_capacity_add", 0.0)))))
+	_reward_rerolls_per_offer = maxi(0, int(round(float(payload.get("reward_rerolls_per_encounter_add", 0.0)))))
+
 func is_active() -> bool:
 	return boon_selection_active
 
@@ -137,6 +146,9 @@ func close_selection() -> void:
 	current_player = null
 	current_player_mutator = {}
 	current_character_id = ""
+	_current_power_registry = null
+	_current_rng = null
+	_reward_rerolls_remaining = 0
 	boon_choices.clear()
 	_epitaph_text = ""
 	_epitaph_pulse_active = false
@@ -164,6 +176,9 @@ func open_selection(title: String, is_initial: bool, mode: int, power_registry: 
 	current_player = player
 	current_player_mutator = player_mutator
 	current_character_id = character_id
+	_current_power_registry = power_registry
+	_current_rng = rng
+	_reward_rerolls_remaining = _reward_rerolls_per_offer if not is_initial else 0
 	_epitaph_text = epitaph
 	_apply_mode_theme()
 	if reward_selection_mode == ENUMS.RewardMode.ARCANA:
@@ -384,12 +399,22 @@ func _can_skip_current_offer() -> bool:
 func _set_skip_button_visible(value: bool) -> void:
 	if skip_button == null:
 		return
+	if value:
+		if _can_reroll_current_offer():
+			skip_button.text = "Reroll  ›"
+			skip_button.tooltip_text = "Reroll this offer (%d remaining)." % _reward_rerolls_remaining
+		else:
+			skip_button.text = "Skip  ›"
+			skip_button.tooltip_text = "Skip this reward. Counts as no pick."
 	skip_button.visible = value
 
 
 func _on_skip_button_pressed() -> void:
 	if not _can_skip_current_offer():
 		return
+	if _can_reroll_current_offer():
+		if _reroll_current_offer():
+			return
 	var mode := reward_selection_mode
 	var initial := pending_initial_boon
 	boon_selection_active = false
@@ -402,6 +427,47 @@ func _on_skip_button_pressed() -> void:
 	current_player_mutator = {}
 	pending_initial_boon = false
 	emit_signal("reward_skipped", mode, initial)
+
+
+func _can_reroll_current_offer() -> bool:
+	if _reward_rerolls_remaining <= 0:
+		return false
+	if pending_initial_boon:
+		return false
+	if reward_selection_mode == ENUMS.RewardMode.MISSION and mission_reward_stage > 0:
+		return false
+	return boon_selection_active and not boon_choices.is_empty() and _current_power_registry != null and _current_rng != null
+
+
+func _reroll_current_offer() -> bool:
+	if not _can_reroll_current_offer():
+		return false
+	var rerolled_choices: Array[Dictionary] = []
+	if reward_selection_mode == ENUMS.RewardMode.ARCANA:
+		rerolled_choices = _roll_arcana_choices(boon_choice_count, _current_power_registry, current_player, _current_rng)
+	elif reward_selection_mode == ENUMS.RewardMode.MISSION:
+		rerolled_choices = _roll_objective_choices(boon_choice_count, _current_power_registry, current_player, _current_rng)
+	elif reward_selection_mode == ENUMS.RewardMode.BOSS:
+		rerolled_choices = _roll_boss_reward_choices(boon_choice_count, _current_power_registry, current_player, _current_rng)
+	else:
+		rerolled_choices = _roll_boon_choices(boon_choice_count, _current_power_registry, current_player, _current_rng)
+	if rerolled_choices.is_empty():
+		return false
+	_reward_rerolls_remaining -= 1
+	boon_choices = rerolled_choices
+	boon_confirm_lock_time = boon_reveal_duration + 0.08
+	boon_reveal_time = 0.0
+	boon_hovered_index = -1
+	_idle_pulse_time = 0.0
+	_title_pulse_time = 0.0
+	_title_pulse_active = false
+	for i in range(boon_hover_weights.size()):
+		boon_hover_weights[i] = 0.0
+	_apply_boon_card_styles(-1)
+	_refresh_boon_ui(current_player)
+	_emit_reward_offers_presented()
+	_set_skip_button_visible(_can_skip_current_offer())
+	return true
 
 
 func _update_title_pulse_visuals() -> void:
@@ -889,9 +955,12 @@ func _roll_arcana_choices(choice_count: int, power_registry: Node, player: Node2
 	for entry in pool:
 		var limit := int(entry.get("stack_limit", 0))
 		if limit > 0 and is_instance_valid(player):
-			var current := int(player.get_trial_power_stack_count(String(entry["id"])))
+			var reward_id := String(entry.get("id", ""))
+			var current := int(player.get_trial_power_stack_count(reward_id))
 			if current >= limit:
-				continue
+				var can_offer_prismatic := _trial_power_stack_limit_bonus > 0 and _can_offer_prismatic_arcana(player, reward_id)
+				if not can_offer_prismatic:
+					continue
 		available.append(entry)
 	var picks: Array[Dictionary] = []
 	for _i in range(mini(choice_count, available.size())):
@@ -899,6 +968,14 @@ func _roll_arcana_choices(choice_count: int, power_registry: Node, player: Node2
 		picks.append(available[index])
 		available.remove_at(index)
 	return picks
+
+
+func _can_offer_prismatic_arcana(player: Node2D, reward_id: String) -> bool:
+	if reward_id.is_empty() or not is_instance_valid(player):
+		return false
+	if not player.has_method("can_claim_trial_power_prismatic"):
+		return false
+	return bool(player.call("can_claim_trial_power_prismatic", reward_id))
 
 func _roll_objective_mutator_choice(player_mutator: Dictionary) -> Array[Dictionary]:
 	if player_mutator.is_empty():

@@ -28,7 +28,6 @@ const REWARD_SELECTION_UI_SCRIPT := preload("res://scripts/reward_selection_ui.g
 const ASCENSION_REGISTRY := preload("res://scripts/progression/ascension_modifier_registry.gd")
 const ENUMS := preload("res://scripts/shared/enums.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
-const ENCOUNTER_DEFINITION_DATA := preload("res://scripts/shared/encounter_definition_data.gd")
 const ENDLESS_PROFILE_SCALER := preload("res://scripts/shared/endless_profile_scaler.gd")
 const BEARING_KEY_NORMALIZER := preload("res://scripts/shared/bearing_key_normalizer.gd")
 const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
@@ -58,7 +57,6 @@ const OBJECTIVE_LIFECYCLE_COORDINATOR_SCRIPT := preload("res://scripts/core/obje
 const OBJECTIVE_FRAME_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_frame_coordinator.gd")
 const OBJECTIVE_PROGRESS_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_progress_coordinator.gd")
 const ROOM_CLEAR_OUTCOME_COORDINATOR_SCRIPT := preload("res://scripts/core/room_clear_outcome_coordinator.gd")
-const OUTCOME_TRANSITION_ORCHESTRATOR_SCRIPT := preload("res://scripts/core/outcome_transition_orchestrator.gd")
 const COMBAT_PHASE_COORDINATOR_SCRIPT := preload("res://scripts/core/combat_phase_coordinator.gd")
 const PLAYER_FLOW_COORDINATOR_SCRIPT := preload("res://scripts/core/player_flow_coordinator.gd")
 const REWARD_PHASE_COORDINATOR_SCRIPT := preload("res://scripts/core/reward_phase_coordinator.gd")
@@ -98,10 +96,11 @@ func _get_debug_encounter_reward_mode(encounter_key: String) -> int:
 
 @export var player_path: NodePath = NodePath("Player")
 @export var encounter_count: int = 8
-@export var room_base_size: Vector2 = ENCOUNTER_DEFINITION_DATA.DEFAULT_ROOM_BASE_SIZE
+@export var room_base_size: Vector2 = Vector2(940.0, 700.0)
+@export var room_size_growth: Vector2 = Vector2(80.0, 45.0)
 @export var spawn_padding: float = 90.0
 @export var spawn_safe_radius: float = 170.0
-@export var static_camera_room_threshold: float = ENCOUNTER_DEFINITION_DATA.STATIC_CAMERA_ROOM_THRESHOLD
+@export var static_camera_room_threshold: float = 980.0
 @export var base_chaser_count: int = 5
 @export var chasers_per_room: int = 2
 @export var chargers_start_room: int = 2
@@ -223,7 +222,6 @@ var objective_lifecycle_coordinator
 var objective_frame_coordinator
 var objective_progress_coordinator
 var room_clear_outcome_coordinator
-var outcome_transition_orchestrator
 var combat_phase_coordinator
 var player_flow_coordinator
 
@@ -408,7 +406,6 @@ func _initialize_bootstrap_context() -> void:
 	objective_frame_coordinator = OBJECTIVE_FRAME_COORDINATOR_SCRIPT.new()
 	objective_progress_coordinator = OBJECTIVE_PROGRESS_COORDINATOR_SCRIPT.new()
 	room_clear_outcome_coordinator = ROOM_CLEAR_OUTCOME_COORDINATOR_SCRIPT.new()
-	outcome_transition_orchestrator = OUTCOME_TRANSITION_ORCHESTRATOR_SCRIPT.new()
 	combat_phase_coordinator = COMBAT_PHASE_COORDINATOR_SCRIPT.new()
 	player_flow_coordinator = PLAYER_FLOW_COORDINATOR_SCRIPT.new()
 	power_registry_instance = POWER_REGISTRY.new()
@@ -690,6 +687,7 @@ func _setup_reward_selection_system() -> void:
 	reward_selection_ui = REWARD_SELECTION_UI_SCRIPT.new()
 	add_child(reward_selection_ui)
 	var effective_choice_count: int = boon_choice_count
+	var catalyst_payload: Dictionary = {}
 	var run_context_ref := _get_run_context()
 	if run_context_ref != null:
 		var loadout: Array = run_context_ref.get_active_ascension_loadout()
@@ -697,11 +695,12 @@ func _setup_reward_selection_system() -> void:
 			var ascension_payload: Dictionary = ASCENSION_REGISTRY.merge_loadout_payload(loadout)
 			var delta: int = int(round(float(ascension_payload.get("reward_choice_count_add", 0.0))))
 			effective_choice_count = maxi(1, effective_choice_count + delta)
-		var catalyst_payload: Dictionary = run_context_ref.get_active_catalyst_payload("")
+		catalyst_payload = run_context_ref.get_active_catalyst_payload("")
 		var catalyst_delta: int = int(round(float(catalyst_payload.get("reward_choice_count_add", 0.0))))
 		if catalyst_delta != 0:
 			effective_choice_count = maxi(1, effective_choice_count + catalyst_delta)
 	reward_selection_ui.initialize(effective_choice_count, boon_reveal_duration)
+	reward_selection_ui.configure_catalyst_payload(catalyst_payload)
 	if reward_selection_ui.has_signal("reward_selected"):
 		reward_selection_ui.connect("reward_selected", Callable(self, "_on_reward_selected"))
 	if reward_selection_ui.has_signal("reward_offers_presented"):
@@ -743,6 +742,7 @@ func _setup_encounter_profile_builder_system() -> void:
 		encounter_profile_builder.set_ascension_loadout(run_context.get_active_ascension_loadout())
 	encounter_profile_builder.configure({
 		"room_base_size": room_base_size,
+		"room_size_growth": room_size_growth,
 		"static_camera_room_threshold": static_camera_room_threshold,
 		"base_chaser_count": base_chaser_count,
 		"chasers_per_room": chasers_per_room,
@@ -1806,44 +1806,48 @@ func _on_room_cleared() -> void:
 		})
 	else:
 		run_summary_recorder.close_active_room()
-	var transition_result: Dictionary = outcome_transition_orchestrator.resolve_room_clear_transition(
-		room_clear_outcome_coordinator,
-		encounter_flow_system,
-		{
-			"in_second_boss_room": in_second_boss_room,
-			"in_third_boss_room": in_third_boss_room,
-			"in_boss_room": in_boss_room,
-			"first_boss_defeated": first_boss_defeated,
-			"second_boss_defeated": second_boss_defeated,
-			"pending_room_reward": pending_room_reward,
-			"rooms_cleared": rooms_cleared,
-			"room_depth": room_depth,
-			"encounter_count": encounter_count,
-			"endless_mode": _is_endless_mode(),
-			"endless_boss_defeated": endless_boss_defeated,
-			"can_unlock_second": _is_second_boss_unlocked(),
-			"can_unlock_third": _is_third_boss_unlocked(),
-			"boss_unlocked": boss_unlocked,
-			"choosing_next_room": choosing_next_room
-		}
-	)
-	if not bool(transition_result.get("ok", false)):
+	if in_second_boss_room:
+		_world_multiplayer_sync_state.mark_current_room_clear_processed()
+		_finish_second_boss_clear()
 		return
-	if bool(transition_result.get("should_tick_objective_mutators", false)) and is_instance_valid(player):
+	if in_third_boss_room:
+		_world_multiplayer_sync_state.mark_current_room_clear_processed()
+		_finish_third_boss_clear()
+		return
+	if in_boss_room and not first_boss_defeated:
+		_world_multiplayer_sync_state.mark_current_room_clear_processed()
+		_finish_first_boss_clear()
+		return
+	if is_instance_valid(player):
 		player.tick_objective_mutators_for_encounter()
+	var outcome: Dictionary = room_clear_outcome_coordinator.resolve_outcome(
+		encounter_flow_system,
+		in_boss_room,
+		pending_room_reward,
+		rooms_cleared,
+		room_depth,
+		encounter_count
+	)
+	if outcome.is_empty():
+		return
+	var outcome_state: Dictionary = room_clear_outcome_coordinator.process_outcome({
+		"outcome": outcome,
+		"in_boss_room": in_boss_room,
+		"endless_mode": _is_endless_mode(),
+		"endless_boss_defeated": endless_boss_defeated,
+		"first_boss_defeated": first_boss_defeated,
+		"second_boss_defeated": second_boss_defeated,
+		"can_unlock_second": _is_second_boss_unlocked(),
+		"can_unlock_third": _is_third_boss_unlocked(),
+		"rooms_cleared": rooms_cleared,
+		"room_depth": room_depth,
+		"boss_unlocked": boss_unlocked,
+		"pending_room_reward": pending_room_reward,
+		"choosing_next_room": choosing_next_room
+	})
+	if not bool(outcome_state.get("ok", false)):
+		return
 	_world_multiplayer_sync_state.mark_current_room_clear_processed()
-	_dispatch_room_clear_transition(transition_result)
-
-func _dispatch_room_clear_transition(transition_result: Dictionary) -> void:
-	var transition_kind := String(transition_result.get("transition_kind", ""))
-	if transition_kind == "boss_clear":
-		_dispatch_boss_clear_transition(transition_result.get("boss_clear", {}) as Dictionary)
-		return
-	if transition_kind != "outcome":
-		return
-	var outcome_state := transition_result.get("outcome_state", {}) as Dictionary
-	if outcome_state.is_empty():
-		return
 	if bool(outcome_state.get("run_cleared", _run_outcome_coordinator.is_run_cleared())):
 		_run_outcome_coordinator.apply_synced_outcome("clear")
 	in_boss_room = bool(outcome_state.get("in_boss_room", in_boss_room))
@@ -1875,24 +1879,10 @@ func _dispatch_room_clear_transition(transition_result: Dictionary) -> void:
 	if bool(outcome_state.get("spawn_doors", false)):
 		_spawn_door_options()
 
-func _dispatch_boss_clear_transition(boss_clear: Dictionary) -> void:
-	if boss_clear.is_empty():
-		return
-	var completion_handler := String(boss_clear.get("completion_handler", "")).strip_edges()
-	match completion_handler:
-		"finish_first_boss_clear":
-			_finish_first_boss_clear(boss_clear)
-		"finish_second_boss_clear":
-			_finish_second_boss_clear(boss_clear)
-		"finish_third_boss_clear":
-			_finish_third_boss_clear()
-		_:
-			push_error("[Room Outcome] Unknown boss clear completion handler: %s" % completion_handler)
-
 func _clamp_room_depth_to_sane_range() -> void:
 	room_depth_bookkeeper.clamp_room_depth_to_sane_range()
 
-func _finish_first_boss_clear(boss_clear: Dictionary = {}) -> void:
+func _finish_first_boss_clear() -> void:
 	in_boss_room = false
 	first_boss_defeated = true
 	in_second_boss_room = false
@@ -1902,15 +1892,14 @@ func _finish_first_boss_clear(boss_clear: Dictionary = {}) -> void:
 	_clamp_room_depth_to_sane_range()
 	boss_unlocked = false
 	pending_room_reward = ENUMS.RewardMode.NONE
-	_apply_non_terminal_boss_clear_payload(
-		boss_clear,
-		"warden",
-		"Warden Defeated",
-		"Claim Warden's Power",
-		"warden"
-	)
+	last_defeated_boss_id = "warden"
+	run_summary_recorder.record_boss_defeat(last_defeated_boss_id)
+	boss_reward_pending = true
+	hud.show_banner("Warden Defeated", "")
+	var epitaph: String = power_registry_instance.get_boss_epitaph("warden", current_character_id)
+	_open_networked_reward_selection("Claim Warden's Power", ENUMS.RewardMode.BOSS, {}, epitaph)
 
-func _finish_second_boss_clear(boss_clear: Dictionary = {}) -> void:
+func _finish_second_boss_clear() -> void:
 	in_second_boss_room = false
 	second_boss_defeated = true
 	active_room_enemy_count = 0
@@ -1920,39 +1909,12 @@ func _finish_second_boss_clear(boss_clear: Dictionary = {}) -> void:
 	boss_unlocked = false
 	pending_room_reward = ENUMS.RewardMode.NONE
 	_set_progression_counters(rooms_cleared, room_depth, phase_two_rooms_cleared, 0)
-	_apply_non_terminal_boss_clear_payload(
-		boss_clear,
-		"sovereign",
-		"Sovereign Defeated",
-		"Claim Sovereign's Power",
-		"sovereign"
-	)
-
-func _apply_non_terminal_boss_clear_payload(
-	boss_clear: Dictionary,
-	default_boss_id: String,
-	default_banner_title: String,
-	default_reward_title: String,
-	default_epitaph_boss_id: String
-) -> void:
-	var resolved_boss_id := String(boss_clear.get("boss_id", default_boss_id)).strip_edges().to_lower()
-	if resolved_boss_id.is_empty():
-		resolved_boss_id = default_boss_id
-	last_defeated_boss_id = resolved_boss_id
+	last_defeated_boss_id = "sovereign"
 	run_summary_recorder.record_boss_defeat(last_defeated_boss_id)
 	boss_reward_pending = true
-	var banner_title := String(boss_clear.get("banner_title", default_banner_title)).strip_edges()
-	if banner_title.is_empty():
-		banner_title = default_banner_title
-	hud.show_banner(banner_title, "")
-	var reward_title := String(boss_clear.get("reward_title", default_reward_title)).strip_edges()
-	if reward_title.is_empty():
-		reward_title = default_reward_title
-	var epitaph_boss_id := String(boss_clear.get("epitaph_boss_id", default_epitaph_boss_id)).strip_edges().to_lower()
-	if epitaph_boss_id.is_empty():
-		epitaph_boss_id = default_epitaph_boss_id
-	var epitaph: String = power_registry_instance.get_boss_epitaph(epitaph_boss_id, current_character_id)
-	_open_networked_reward_selection(reward_title, ENUMS.RewardMode.BOSS, {}, epitaph)
+	hud.show_banner("Sovereign Defeated", "")
+	var epitaph: String = power_registry_instance.get_boss_epitaph("sovereign", current_character_id)
+	_open_networked_reward_selection("Claim Sovereign's Power", ENUMS.RewardMode.BOSS, {}, epitaph)
 
 func _finish_third_boss_clear() -> void:
 	in_third_boss_room = false

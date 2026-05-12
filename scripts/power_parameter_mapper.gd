@@ -180,7 +180,14 @@ static func get_all_snapshot_properties() -> Array[String]:
 ## balance_data should come from power_registry.get_power_balance(power_id).
 ## player_reference is required for player-stat-scaled formulas (e.g. phantom_step damage).
 ## Returns an empty Dictionary if power_id is unknown.
-static func build_trial_values(power_id: String, stack_count: int, balance_data: Dictionary, player_reference: Node) -> Dictionary:
+static func build_trial_values(power_id: String, stack_count: int, balance_data: Dictionary, player_reference: Node, is_prismatic: bool = false) -> Dictionary:
+	var values := _build_trial_values_base(power_id, stack_count, balance_data, player_reference)
+	if values.is_empty() or not is_prismatic:
+		return values
+	return _apply_prismatic_trial_values(power_id, values)
+
+
+static func _build_trial_values_base(power_id: String, stack_count: int, balance_data: Dictionary, player_reference: Node) -> Dictionary:
 	if balance_data.is_empty():
 		return {}
 	var data := balance_data
@@ -327,3 +334,88 @@ static func build_trial_values(power_id: String, stack_count: int, balance_data:
 			}
 		_:
 			return {}
+
+
+static func _apply_prismatic_trial_values(power_id: String, values: Dictionary) -> Dictionary:
+	var prismatic := values.duplicate(true)
+	match power_id:
+		"razor_wind":
+			prismatic["range_scale"] = float(prismatic.get("range_scale", 1.0)) * 1.15
+			prismatic["damage_ratio"] = float(prismatic.get("damage_ratio", 0.0))
+			prismatic["attack_cooldown"] = maxf(0.06, float(prismatic.get("attack_cooldown", 0.0)) * 0.88)
+			prismatic["arc_degrees"] = float(prismatic.get("arc_degrees", 0.0)) + 18.0
+		"execution_edge":
+			prismatic["every"] = maxi(1, int(prismatic.get("every", 1)) - 1)
+			prismatic["damage_mult"] = float(prismatic.get("damage_mult", 1.0))
+			prismatic["attack_lock_duration"] = maxf(0.05, float(prismatic.get("attack_lock_duration", 0.0)) * 0.9)
+		"rupture_wave":
+			prismatic["radius"] = float(prismatic.get("radius", 0.0)) * 1.2
+			prismatic["damage_ratio"] = float(prismatic.get("damage_ratio", 0.0))
+		"aegis_field":
+			prismatic["resist"] = minf(0.60, float(prismatic.get("resist", 0.0)) + 0.08)
+			prismatic["duration"] = float(prismatic.get("duration", 0.0)) * 1.25
+			prismatic["radius"] = float(prismatic.get("radius", 0.0)) * 1.2
+			prismatic["slow_duration"] = float(prismatic.get("slow_duration", 0.0)) * 1.25
+			prismatic["slow_mult"] = maxf(0.25, float(prismatic.get("slow_mult", 1.0)) * 0.82)
+			prismatic["cooldown"] = maxf(0.9, float(prismatic.get("cooldown", 0.0)) * 0.85)
+		"hunters_snare":
+			prismatic["bonus_damage"] = int(prismatic.get("bonus_damage", 0))
+			prismatic["slow_duration"] = float(prismatic.get("slow_duration", 0.0)) * 1.35
+			prismatic["slow_mult"] = maxf(0.25, float(prismatic.get("slow_mult", 1.0)) * 0.8)
+		"phantom_step":
+			prismatic["damage"] = int(prismatic.get("damage", 0))
+			prismatic["slow_duration"] = float(prismatic.get("slow_duration", 0.0)) * 1.25
+			prismatic["dash_cooldown"] = maxf(0.05, float(prismatic.get("dash_cooldown", 0.0)) * 0.85)
+		"riftpunch":
+			prismatic["bonus_damage"] = int(prismatic.get("bonus_damage", 0))
+			prismatic["window_duration"] = float(prismatic.get("window_duration", 0.0)) * 1.35
+			prismatic["grace_duration"] = float(prismatic.get("grace_duration", 0.0)) * 1.5
+		"reaper_step":
+			prismatic["range_mult"] = float(prismatic.get("range_mult", 1.0)) * 1.18
+			prismatic["chain_window"] = maxf(2.8, float(prismatic.get("chain_window", 0.0)))
+			prismatic["chain_grace"] = maxf(0.75, float(prismatic.get("chain_grace", 0.0)))
+		"static_wake":
+			prismatic["damage"] = int(prismatic.get("damage", 0))
+			prismatic["lifetime"] = float(prismatic.get("lifetime", 0.0)) * 1.25
+			prismatic["trail_radius"] = float(prismatic.get("trail_radius", 0.0)) * 1.2
+		"storm_crown":
+			prismatic["proc_every"] = maxi(1, int(prismatic.get("proc_every", 1)) - 1)
+			prismatic["chain_targets"] = int(prismatic.get("chain_targets", 1)) + 1
+			prismatic["chain_radius"] = float(prismatic.get("chain_radius", 0.0)) * 1.2
+			prismatic["damage_ratio"] = float(prismatic.get("damage_ratio", 0.0))
+		"wraithstep":
+			prismatic["mark_duration"] = float(prismatic.get("mark_duration", 0.0)) * 1.3
+			prismatic["dash_mark_radius"] = float(prismatic.get("dash_mark_radius", 0.0)) * 1.2
+			prismatic["bonus_damage"] = int(prismatic.get("bonus_damage", 0))
+			prismatic["splash_radius"] = float(prismatic.get("splash_radius", 0.0)) * 1.2
+			prismatic["splash_ratio"] = float(prismatic.get("splash_ratio", 0.0))
+		"voidfire":
+			prismatic["heat_per_hit"] = float(prismatic.get("heat_per_hit", 0.0))
+			prismatic["danger_zone_amp"] = float(prismatic.get("danger_zone_amp", 0.0))
+			prismatic["detonate_ratio"] = float(prismatic.get("detonate_ratio", 0.0))
+			prismatic["detonate_radius"] = float(prismatic.get("detonate_radius", 0.0)) * 1.2
+			prismatic["lockout_duration"] = maxf(0.06, float(prismatic.get("lockout_duration", 0.0)) * 0.6)
+		"dread_resonance":
+			prismatic["bonus_per_stack"] = int(prismatic.get("bonus_per_stack", 0))
+			prismatic["max_stacks"] = int(prismatic.get("max_stacks", 0)) + 2
+		"bloodvow":
+			prismatic["damage_mult"] = float(prismatic.get("damage_mult", 1.0))
+			prismatic["low_hp_threshold"] = minf(0.75, float(prismatic.get("low_hp_threshold", 0.0)) + 0.1)
+		"eclipse_mark":
+			prismatic["radius"] = float(prismatic.get("radius", 0.0)) * 1.2
+			prismatic["mark_duration"] = float(prismatic.get("mark_duration", 0.0)) * 1.3
+			prismatic["bonus_ratio"] = float(prismatic.get("bonus_ratio", 0.0))
+		"fracture_field":
+			prismatic["radius"] = float(prismatic.get("radius", 0.0)) * 1.22
+			prismatic["damage_ratio"] = float(prismatic.get("damage_ratio", 0.0))
+			prismatic["slow_duration"] = float(prismatic.get("slow_duration", 0.0)) * 1.25
+		"farline_volley":
+			prismatic["arc_per_stack"] = float(prismatic.get("arc_per_stack", 0.0)) * 1.25
+			prismatic["bonus_per_stack"] = int(prismatic.get("bonus_per_stack", 0))
+			prismatic["stack_cap"] = int(prismatic.get("stack_cap", 0)) + 2
+		"sigil_chain":
+			prismatic["radius"] = float(prismatic.get("radius", 0.0)) * 1.2
+			prismatic["damage_ratio"] = float(prismatic.get("damage_ratio", 0.0))
+		_:
+			pass
+	return prismatic

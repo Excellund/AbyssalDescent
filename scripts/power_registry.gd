@@ -361,7 +361,7 @@ const TRIAL_POWER_DEFINITIONS := {
 		}
 	},
 	"aegis_field": {
-		"stack_limit": 4,
+		"stack_limit": 3,
 		"balance_params": {
 			"resist_base": 0.16,
 			"resist_per_stack": 0.08,
@@ -591,7 +591,7 @@ const TRIAL_POWER_DEFINITIONS := {
 		}
 	},
 	"dread_resonance": {
-		"stack_limit": 4,
+		"stack_limit": 3,
 		"balance_params": {
 			"bonus_per_stack_base": 1,
 			"bonus_per_stack_per_level": 0,
