@@ -2354,7 +2354,9 @@ func clear_lingering_combat_effects() -> void:
 	_reaper_chain_window_left = 0.0
 	_reaper_stored_dashes = 0
 	_indomitable_spirit_primed = false
-	indomitable_damage_bank = 0.0
+	# Preserve oath bank progress between rooms if player has unbroken oath active
+	if indomitable_spirit_damage_reduction <= 0.0:
+		indomitable_damage_bank = 0.0
 	_indomitable_last_bank_gain_time = -999.0
 	_indomitable_attack_hit_count = 0
 	_indomitable_primed_this_attack = false
@@ -4059,7 +4061,6 @@ func _update_void_echo_zones(delta: float) -> void:
 func _update_indomitable_damage_bank(delta: float) -> void:
 	if indomitable_spirit_damage_reduction <= 0.0:
 		_indomitable_spirit_primed = false
-		indomitable_damage_bank = 0.0
 		return
 	if _indomitable_spirit_primed:
 		indomitable_damage_bank = _get_indomitable_fill_requirement()
