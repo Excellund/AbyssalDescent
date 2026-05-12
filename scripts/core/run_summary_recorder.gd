@@ -695,7 +695,7 @@ func build_summary_for_player(player_node: Node) -> Dictionary:
 		if stacks <= 0:
 			continue
 		boons.append(RUN_SUMMARY_MODEL_SCRIPT.create_build_item(power_id, _resolve_power_display_name(power_id), RUN_SUMMARY_MODEL_SCRIPT.CATEGORY_BOON, stacks))
-	for power_id_variant in POWER_REGISTRY.TRIAL_POWER_BALANCE.keys():
+	for power_id_variant in POWER_REGISTRY.TRIAL_POWER_POOL_IDS:
 		var power_id := String(power_id_variant)
 		var stacks := player.get_trial_power_stack_count(power_id)
 		if stacks <= 0:

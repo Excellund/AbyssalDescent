@@ -191,6 +191,30 @@ How to apply:
 - Prefer small transition enums/keys (`outcome`, `boss_first_clear`, etc.) over repeated inline branches.
 - Integrate incrementally: wire dispatcher first, then collapse duplicated branches in follow-up increments.
 
+### 9. Run A Mandatory Dead-Code Cleanup Pass After Migrations
+
+When a refactor introduces a new canonical path (registry, helper, API, or schema), immediately remove superseded constants, match blocks, adapters, and fallback paths in the same refactor phase.
+
+Why it matters:
+
+- Leaving legacy paths in place creates dual sources of truth.
+- New call sites may accidentally bind to obsolete data.
+- Temporary compatibility code hardens into permanent complexity.
+
+How to apply:
+
+- Add an explicit cleanup task after each migration step.
+- Delete old definitions once all call sites are moved.
+- Replace leftover loops over legacy dictionaries with canonical ID lists/registries.
+- Run a repository-wide symbol search for obsolete identifiers and drive matches to zero.
+- Keep the temporary bridge window short; do not defer cleanup to "later".
+
+Definition of done for a migration increment:
+
+- No runtime references to deprecated identifiers remain.
+- Deprecated definitions are deleted, not merely unused.
+- Validation/tests pass against only the canonical path.
+
 ## Routing Rule For New Learnings
 
 Before adding any new rule here, run this check:

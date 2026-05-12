@@ -246,227 +246,6 @@ const UPGRADE_BALANCE := {
 	}
 }
 
-## Arcana stacking philosophy:
-## L1 is a partial taste of the power. L2 is the headline upgrade. L3 is the ceiling/mastery payoff.
-## Each stack should move at least one number knob and (where possible) one structural knob
-## (cadence floor, cap relax, arc widening, etc). Stack caps prevent runaway snowball.
-const TRIAL_POWER_BALANCE := {
-	"razor_wind": {
-		"range_base": 1.20,
-		"range_per_stack": 0.10,
-		"damage_ratio_base": 0.50,
-		"damage_ratio_per_stack": 0.20,
-		"attack_cooldown_mult": 0.96,
-		"attack_cooldown_min": 0.1,
-		"arc_base": 24.0,
-		"arc_match_player_at_stack": 3
-	},
-	"execution_edge": {
-		"every_base": 4,
-		"every_floor": 1,
-		"damage_mult_base": 1.9,
-		"damage_mult_per_stack": 0.20,
-		"attack_lock_mult": 0.94,
-		"attack_lock_min": 0.08
-	},
-	"rupture_wave": {
-		"radius_base": 70.0,
-		"radius_per_stack": 14.0,
-		"damage_ratio_base": 0.30,
-		"damage_ratio_per_stack": 0.15,
-		"damage_add": 2,
-		# L2 unlock: hits also slow. L3 unlock: chain wave from farthest hit.
-		"slow_at_stack": 2,
-		"slow_duration": 0.4,
-		"slow_mult": 0.75,
-		"chain_at_stack": 3,
-		"chain_damage_ratio": 0.6,
-		"chain_radius_ratio": 0.7
-	},
-	"aegis_field": {
-		"resist_base": 0.16,
-		"resist_per_stack": 0.08,
-		"resist_cap": 0.42,
-		"resist_duration_base": 0.8,
-		"resist_duration_per_stack": 0.25,
-		"pulse_radius_base": 88.0,
-		"pulse_radius_per_stack": 18.0,
-		"slow_duration_base": 0.9,
-		"slow_duration_per_stack": 0.22,
-		"slow_mult_base": 0.74,
-		"slow_mult_per_stack": -0.08,
-		"slow_mult_min": 0.36,
-		"cooldown_base": 3.2,
-		"cooldown_per_stack": -0.30,
-		"cooldown_min": 1.5
-	},
-	"hunters_snare": {
-		"bonus_damage_base": 4,
-		"bonus_damage_per_stack": 4,
-		"slow_duration_base": 0.6,
-		"slow_duration_per_stack": 0.16,
-		"slow_mult_base": 0.72,
-		"slow_mult_per_stack": -0.06,
-		"slow_mult_min": 0.42
-	},
-	"phantom_step": {
-		# Damage scales as a ratio of damage. Affected by all damage boons and objective mutators.
-		"damage_ratio_base": 0.40,
-		"damage_ratio_per_stack": 0.16,
-		"slow_duration_base": 0.6,
-		"slow_duration_per_stack": 0.24,
-		"dash_cooldown_mult": 0.86,
-		"dash_cooldown_min": 0.16
-	},
-	"riftpunch": {
-		# Flat bonus damage on the first melee hit after a dash, inside the window.
-		# Grace duration is contact-damage immunity granted on the empowered hit so the player can disengage.
-		"bonus_damage_base": 24,
-		"bonus_damage_per_stack": 18,
-		"window_base": 0.9,
-		"window_per_stack": 0.15,
-		"grace_base": 0.4,
-		"grace_per_stack": 0.08
-	},
-	"reaper_step": {
-		"range_mult_base": 1.40,
-		"range_mult_per_stack": 0.22,
-		# L2 unlock: chain window grants stored dash on subsequent kills.
-		# L3 unlock: chain-window kills extend post-dash grace.
-		"chain_window_at_stack": 2,
-		"chain_window_duration": 1.5,
-		"chain_grace_at_stack": 3,
-		"chain_grace_duration": 0.4
-	},
-	"static_wake": {
-		# Damage scales as a ratio of damage. Affected by all damage boons and objective mutators.
-		"damage_ratio_base": 0.30,
-		"damage_ratio_per_stack": 0.15,
-		"lifetime_base": 1.5,
-		"lifetime_per_stack": 0.50,
-		# L2 unlock: trail damage radius widens. L3 unlock: trail also slows.
-		"trail_radius_base": 28.0,
-		"trail_radius_per_stack": 6.0,
-		"slow_at_stack": 3,
-		"slow_duration": 0.3,
-		"slow_mult": 0.8
-	},
-	"storm_crown": {
-		"proc_every_base": 5,
-		"proc_every_floor": 2,
-		"chain_targets_base": 2,
-		"chain_targets_per_stack": 1,
-		"chain_targets_cap": 5,
-		"chain_radius_base": 110.0,
-		"chain_radius_per_stack": 18.0,
-		"damage_ratio_base": 0.34,
-		"damage_ratio_per_stack": 0.12,
-		"damage_ratio_cap": 0.82
-	},
-	"voidfire": {
-		"heat_per_hit": 11.0,
-		"heat_cap": 110.0,
-		"danger_zone_threshold_base": 72.0,
-		"danger_zone_threshold_per_stack": -8.0,
-		"danger_zone_threshold_min": 40.0,
-		"danger_zone_amp_base": 0.15,
-		"danger_zone_amp_per_stack": 0.18,
-		"detonate_ratio_base": 1.2,
-		"detonate_ratio_per_stack": 0.30,
-		"detonate_radius_base": 80.0,
-		"detonate_radius_per_stack": 10.0,
-		"lockout_base": 1.6,
-		"lockout_per_stack": 0.0,
-		"lockout_min": 0,
-		"overheat_move_mult": 0.65,
-		"heat_decay_rate": 10.0,
-		"danger_zone_heat_gain_mult": 0.64,
-		"reckless_heat_ratio": 0.93,
-		"reckless_heat_gain_mult": 1.45,
-		"danger_zone_decay_mult": 1.35,
-		"reckless_decay_mult": 1.9
-	},
-	"dread_resonance": {
-		"max_stacks_base": 2,
-		"max_stacks_per_stack": 1,
-		"max_stacks_cap": 6,
-		"bonus_per_resonance_base": 8,
-		"bonus_per_resonance_per_stack": 5
-	},
-	"bloodvow": {
-		"damage_mult_base": 1.20,
-		"damage_mult_per_stack": 0.20,
-		"threshold_base": 0.30,
-		"threshold_per_stack": 0.10,
-		"threshold_cap": 0.60
-	},
-	"eclipse_mark": {
-		"radius_base": 100.0,
-		"radius_per_stack": 18.0,
-		"mark_duration_base": 1.3,
-		"mark_duration_per_stack": 0.30,
-		"bonus_ratio_base": 0.55,
-		"bonus_ratio_per_stack": 0.20
-	},
-	"fracture_field": {
-		"radius_base": 80.0,
-		"radius_per_stack": 14.0,
-		"damage_ratio_base": 0.40,
-		"damage_ratio_per_stack": 0.20,
-		"slow_duration_base": 0.5,
-		"slow_duration_per_stack": 0.15
-	},
-	"wraithstep": {
-		"mark_duration_base": 2.6,
-		"mark_duration_per_stack": 0.7,
-		"dash_mark_radius_base": 46.0,
-		"dash_mark_radius_per_stack": 14.0,
-		"bonus_damage_base": 12,
-		"bonus_damage_per_stack": 12,
-		"splash_radius_base": 56.0,
-		"splash_radius_per_stack": 14.0,
-		"splash_ratio_base": 0.55,
-		"splash_ratio_per_stack": 0.15,
-		"splash_ratio_cap": 0.98
-	},
-	"farline_volley": {
-		# Hits in the outer reach band (>= attack_range * band_ratio) build Volley stacks.
-		# Dashing resets all stacks. L3 cap-spend converts dash into a damage burst.
-		"arc_per_stack_base": 6.0,
-		"arc_per_stack_per_stack": 2.0,
-		"bonus_per_stack_base": 2,
-		"bonus_per_stack_per_stack": 2,
-		"stack_cap_base": 4,
-		"stack_cap_per_stack": 2,
-		"stack_cap_max": 8,
-		"band_ratio": 0.65,
-		"slow_at_stack": 2,
-		"slow_duration": 0.5,
-		"slow_mult": 0.7,
-		"dash_burst_at_stack": 3,
-		"dash_burst_radius": 110.0,
-		"dash_burst_per_volley_ratio": 0.45
-	},
-	"sigil_chain": {
-		# Hits build charge quickly; the next attack drops a short-lived sigil zone at impact.
-		# The chain window is generous so chaining is the natural play; L3 chain bonus is the primary damage payoff.
-		"radius_base": 70.0,
-		"radius_per_stack": 14.0,
-		"damage_ratio_base": 0.18,
-		"damage_ratio_per_stack": 0.10,
-		"charge_threshold": 4,
-		"zone_lifetime": 1.0,
-		"tick_interval": 0.4,
-		"chain_window": 4.0,
-		"slow_at_stack": 2,
-		"slow_duration": 0.5,
-		"slow_mult": 0.7,
-		"chain_bonus_at_stack": 3,
-		"chain_bonus_per_depth": 0.40,
-		"chain_bonus_max_depth": 6
-	}
-}
-
 const BOSS_REWARD_BALANCE := {
 	"wardens_verdict": {
 		"kind": "add_int",
@@ -510,28 +289,423 @@ const UPGRADE_STACK_LIMITS := {
 	"severing_edge": 3
 }
 
-## Stack caps prevent runaway snowball after the per-stack reshape.
-## Most arcana cap at 3; aegis_field & dread_resonance cap at 4 (their natural ceilings
-## are built into resist_cap and max_stacks_cap respectively).
-const TRIAL_POWER_STACK_LIMITS := {
-	"razor_wind": 3,
-	"execution_edge": 3,
-	"rupture_wave": 3,
-	"aegis_field": 4,
-	"hunters_snare": 3,
-	"phantom_step": 3,
-	"riftpunch": 3,
-	"reaper_step": 3,
-	"static_wake": 3,
-	"storm_crown": 3,
-	"wraithstep": 3,
-	"voidfire": 3,
-	"dread_resonance": 4,
-	"bloodvow": 3,
-	"eclipse_mark": 3,
-	"fracture_field": 3,
-	"farline_volley": 3,
-	"sigil_chain": 3
+## Unified trial power definitions: canonical source for trial power balance, stack limits, and parameter mapping
+## Each trial power now has complete metadata: balance params, stack limit, and parameter mapping rules
+## Single source of truth for all trial power configuration
+const TRIAL_POWER_DEFINITIONS := {
+	"razor_wind": {
+		"stack_limit": 3,
+		"balance_params": {
+			"range_base": 1.20,
+			"range_per_stack": 0.10,
+			"damage_ratio_base": 0.50,
+			"damage_ratio_per_stack": 0.20,
+			"attack_cooldown_mult": 0.96,
+			"attack_cooldown_min": 0.1,
+			"arc_base": 24.0,
+			"arc_match_player_at_stack": 3
+		},
+		"param_map": {
+			"reward_flag": "reward_razor_wind",
+			"stack_property": "razor_wind_stacks",
+			"parameters": {
+				"range_scale": {"property": "razor_wind_range_scale", "type": "float"},
+				"damage_ratio": {"property": "razor_wind_damage_ratio", "type": "float"},
+				"attack_cooldown": {"property": "attack_cooldown", "type": "float"},
+				"arc_degrees": {"property": "razor_wind_arc_degrees", "type": "float"}
+			}
+		}
+	},
+	"execution_edge": {
+		"stack_limit": 3,
+		"balance_params": {
+			"every_base": 4,
+			"every_floor": 1,
+			"damage_mult_base": 1.9,
+			"damage_mult_per_stack": 0.20,
+			"attack_lock_mult": 0.94,
+			"attack_lock_min": 0.08
+		},
+		"param_map": {
+			"reward_flag": "reward_execution_edge",
+			"stack_property": "execution_edge_stacks",
+			"parameters": {
+				"every": {"property": "execution_every", "type": "int"},
+				"damage_mult": {"property": "execution_damage_mult", "type": "float"},
+				"attack_lock_duration": {"property": "attack_lock_duration", "type": "float"}
+			}
+		}
+	},
+	"rupture_wave": {
+		"stack_limit": 3,
+		"balance_params": {
+			"radius_base": 70.0,
+			"radius_per_stack": 14.0,
+			"damage_ratio_base": 0.30,
+			"damage_ratio_per_stack": 0.15,
+			"damage_add": 2,
+			"slow_at_stack": 2,
+			"slow_duration": 0.4,
+			"slow_mult": 0.75,
+			"chain_at_stack": 3,
+			"chain_damage_ratio": 0.6,
+			"chain_radius_ratio": 0.7
+		},
+		"param_map": {
+			"reward_flag": "reward_rupture_wave",
+			"stack_property": "rupture_wave_stacks",
+			"parameters": {
+				"radius": {"property": "rupture_wave_radius", "type": "float"},
+				"damage_ratio": {"property": "rupture_wave_damage_ratio", "type": "float"}
+			}
+		}
+	},
+	"aegis_field": {
+		"stack_limit": 4,
+		"balance_params": {
+			"resist_base": 0.16,
+			"resist_per_stack": 0.08,
+			"resist_cap": 0.42,
+			"resist_duration_base": 0.8,
+			"resist_duration_per_stack": 0.25,
+			"pulse_radius_base": 88.0,
+			"pulse_radius_per_stack": 18.0,
+			"slow_duration_base": 0.9,
+			"slow_duration_per_stack": 0.22,
+			"slow_mult_base": 0.74,
+			"slow_mult_per_stack": -0.08,
+			"slow_mult_min": 0.36,
+			"cooldown_base": 3.2,
+			"cooldown_per_stack": -0.30,
+			"cooldown_min": 1.5
+		},
+		"param_map": {
+			"reward_flag": "reward_aegis_field",
+			"stack_property": "aegis_field_stacks",
+			"parameters": {
+				"resist": {"property": "aegis_field_resist_ratio", "type": "float"},
+				"duration": {"property": "aegis_field_resist_duration", "type": "float"},
+				"radius": {"property": "aegis_field_pulse_radius", "type": "float"},
+				"slow_duration": {"property": "aegis_field_slow_duration", "type": "float"},
+				"slow_mult": {"property": "aegis_field_slow_mult", "type": "float"},
+				"cooldown": {"property": "aegis_field_cooldown", "type": "float"}
+			}
+		}
+	},
+	"hunters_snare": {
+		"stack_limit": 3,
+		"balance_params": {
+			"bonus_damage_base": 4,
+			"bonus_damage_per_stack": 4,
+			"slow_duration_base": 0.6,
+			"slow_duration_per_stack": 0.16,
+			"slow_mult_base": 0.72,
+			"slow_mult_per_stack": -0.06,
+			"slow_mult_min": 0.42
+		},
+		"param_map": {
+			"reward_flag": "reward_hunters_snare",
+			"stack_property": "hunters_snare_stacks",
+			"parameters": {
+				"bonus_damage": {"property": "hunters_snare_bonus_damage", "type": "int"},
+				"slow_duration": {"property": "hunters_snare_slow_duration", "type": "float"},
+				"slow_mult": {"property": "hunters_snare_slow_mult", "type": "float"}
+			}
+		}
+	},
+	"phantom_step": {
+		"stack_limit": 3,
+		"balance_params": {
+			"damage_ratio_base": 0.40,
+			"damage_ratio_per_stack": 0.16,
+			"slow_duration_base": 0.6,
+			"slow_duration_per_stack": 0.24,
+			"dash_cooldown_mult": 0.86,
+			"dash_cooldown_min": 0.16
+		},
+		"param_map": {
+			"reward_flag": "reward_phantom_step",
+			"stack_property": "phantom_step_stacks",
+			"parameters": {
+				"damage": {"property": "phantom_step_damage", "type": "int"},
+				"slow_duration": {"property": "phantom_step_slow_duration", "type": "float"},
+				"dash_cooldown": {"property": "dash_cooldown", "type": "float"}
+			}
+		}
+	},
+	"riftpunch": {
+		"stack_limit": 3,
+		"balance_params": {
+			"bonus_damage_base": 24,
+			"bonus_damage_per_stack": 18,
+			"window_base": 0.9,
+			"window_per_stack": 0.15,
+			"grace_base": 0.4,
+			"grace_per_stack": 0.08
+		},
+		"param_map": {
+			"reward_flag": "reward_riftpunch",
+			"stack_property": "riftpunch_stacks",
+			"parameters": {
+				"bonus_damage": {"property": "riftpunch_bonus_damage", "type": "int"},
+				"window_duration": {"property": "riftpunch_window_duration", "type": "float"},
+				"grace_duration": {"property": "riftpunch_grace_duration", "type": "float"}
+			}
+		}
+	},
+	"reaper_step": {
+		"stack_limit": 3,
+		"balance_params": {
+			"range_mult_base": 1.40,
+			"range_mult_per_stack": 0.22,
+			"chain_window_at_stack": 2,
+			"chain_window_duration": 1.5,
+			"chain_grace_at_stack": 3,
+			"chain_grace_duration": 0.4
+		},
+		"param_map": {
+			"reward_flag": "reward_void_dash",
+			"stack_property": "void_dash_stacks",
+			"parameters": {
+				"range_mult": {"property": "void_dash_range_mult", "type": "float"},
+				"chain_window": {"property": "reaper_chain_window", "type": "float"},
+				"chain_grace": {"property": "reaper_chain_grace", "type": "float"}
+			}
+		}
+	},
+	"static_wake": {
+		"stack_limit": 3,
+		"balance_params": {
+			"damage_ratio_base": 0.30,
+			"damage_ratio_per_stack": 0.15,
+			"lifetime_base": 1.5,
+			"lifetime_per_stack": 0.50,
+			"trail_radius_base": 28.0,
+			"trail_radius_per_stack": 6.0,
+			"slow_at_stack": 3,
+			"slow_duration_base": 0.7,
+			"slow_duration_per_stack": 0.08,
+			"slow_mult": 0.80
+		},
+		"param_map": {
+			"reward_flag": "reward_static_wake",
+			"stack_property": "static_wake_stacks",
+			"parameters": {
+				"damage": {"property": "static_wake_damage", "type": "int"},
+				"lifetime": {"property": "static_wake_lifetime", "type": "float"},
+				"trail_radius": {"property": "static_wake_trail_radius", "type": "float"}
+			}
+		}
+	},
+	"storm_crown": {
+		"stack_limit": 3,
+		"balance_params": {
+			"proc_every_base": 4,
+			"proc_every_per_stack": -1,
+			"proc_every_floor": 1,
+			"chain_targets_base": 1,
+			"chain_targets_per_stack": 1,
+			"chain_radius_base": 160.0,
+			"chain_radius_per_stack": 32.0,
+			"damage_ratio_base": 0.45,
+			"damage_ratio_per_stack": 0.15
+		},
+		"param_map": {
+			"reward_flag": "reward_storm_crown",
+			"stack_property": "storm_crown_stacks",
+			"parameters": {
+				"proc_every": {"property": "storm_crown_proc_every", "type": "int"},
+				"chain_targets": {"property": "storm_crown_chain_targets", "type": "int"},
+				"chain_radius": {"property": "storm_crown_chain_radius", "type": "float"},
+				"damage_ratio": {"property": "storm_crown_damage_ratio", "type": "float"}
+			}
+		}
+	},
+	"wraithstep": {
+		"stack_limit": 3,
+		"balance_params": {
+			"mark_duration_base": 2.0,
+			"mark_duration_per_stack": 0.5,
+			"dash_mark_radius_base": 100.0,
+			"dash_mark_radius_per_stack": 20.0,
+			"bonus_damage_base": 8,
+			"bonus_damage_per_stack": 8,
+			"splash_radius_base": 80.0,
+			"splash_radius_per_stack": 16.0,
+			"splash_ratio_base": 0.60,
+			"splash_ratio_per_stack": 0.12
+		},
+		"param_map": {
+			"reward_flag": "reward_wraithstep",
+			"stack_property": "wraithstep_stacks",
+			"parameters": {
+				"mark_duration": {"property": "wraithstep_mark_duration", "type": "float"},
+				"dash_mark_radius": {"property": "wraithstep_dash_mark_radius", "type": "float"},
+				"bonus_damage": {"property": "wraithstep_mark_bonus_damage", "type": "int"},
+				"splash_radius": {"property": "wraithstep_mark_splash_radius", "type": "float"},
+				"splash_ratio": {"property": "wraithstep_mark_splash_ratio", "type": "float"}
+			}
+		}
+	},
+	"voidfire": {
+		"stack_limit": 3,
+		"balance_params": {
+			"heat_per_hit_base": 0.08,
+			"heat_per_hit_per_stack": 0.04,
+			"heat_cap": 100.0,
+			"danger_zone_threshold": 60.0,
+			"danger_zone_amp": 0.30,
+			"detonate_ratio_base": 0.75,
+			"detonate_ratio_per_stack": 0.15,
+			"detonate_radius_base": 110.0,
+			"detonate_radius_per_stack": 22.0,
+			"lockout_duration": 0.4,
+			"overheat_move_mult": 0.5,
+			"heat_decay_rate_base": 0.05,
+			"heat_decay_rate_per_stack": 0.02,
+			"danger_zone_heat_gain_mult": 1.5,
+			"reckless_heat_ratio": 1.25,
+			"reckless_heat_gain_mult": 2.0,
+			"danger_zone_decay_mult": 0.5,
+			"reckless_decay_mult": 0.0
+		},
+		"param_map": {
+			"reward_flag": "reward_voidfire",
+			"stack_property": "voidfire_stacks",
+			"parameters": {
+				"heat_per_hit": {"property": "voidfire_heat_per_hit", "type": "float"},
+				"heat_cap": {"property": "void_heat_cap", "type": "float"},
+				"danger_zone_threshold": {"property": "voidfire_danger_zone_threshold", "type": "float"},
+				"danger_zone_amp": {"property": "voidfire_danger_zone_amp", "type": "float"},
+				"detonate_ratio": {"property": "voidfire_detonate_ratio", "type": "float"},
+				"detonate_radius": {"property": "voidfire_detonate_radius", "type": "float"},
+				"lockout_duration": {"property": "voidfire_lockout_duration", "type": "float"},
+				"overheat_move_mult": {"property": "voidfire_overheat_move_mult", "type": "float"},
+				"heat_decay_rate": {"property": "void_heat_decay_rate", "type": "float"},
+				"danger_zone_heat_gain_mult": {"property": "voidfire_danger_zone_heat_gain_mult", "type": "float"},
+				"reckless_heat_ratio": {"property": "voidfire_reckless_heat_ratio", "type": "float"},
+				"reckless_heat_gain_mult": {"property": "voidfire_reckless_heat_gain_mult", "type": "float"},
+				"danger_zone_decay_mult": {"property": "voidfire_danger_zone_decay_mult", "type": "float"},
+				"reckless_decay_mult": {"property": "voidfire_reckless_decay_mult", "type": "float"}
+			}
+		}
+	},
+	"dread_resonance": {
+		"stack_limit": 4,
+		"balance_params": {
+			"bonus_per_stack_base": 1,
+			"bonus_per_stack_per_level": 0,
+			"max_stacks_cap": 8
+		},
+		"param_map": {
+			"reward_flag": "reward_dread_resonance",
+			"stack_property": "dread_resonance_stacks",
+			"parameters": {
+				"bonus_per_stack": {"property": "dread_resonance_bonus_per_stack", "type": "int"},
+				"max_stacks": {"property": "dread_resonance_max_stacks", "type": "int"}
+			}
+		}
+	},
+	"bloodvow": {
+		"stack_limit": 3,
+		"balance_params": {
+			"damage_mult_base": 1.15,
+			"damage_mult_per_stack": 0.10,
+			"low_hp_threshold": 0.40
+		},
+		"param_map": {
+			"reward_flag": "reward_bloodvow",
+			"stack_property": "bloodvow_stacks",
+			"parameters": {
+				"damage_mult": {"property": "bloodvow_damage_mult", "type": "float"},
+				"low_hp_threshold": {"property": "bloodvow_low_hp_threshold", "type": "float"}
+			}
+		}
+	},
+	"eclipse_mark": {
+		"stack_limit": 3,
+		"balance_params": {
+			"radius_base": 90.0,
+			"radius_per_stack": 18.0,
+			"mark_duration_base": 3.0,
+			"mark_duration_per_stack": 0.6,
+			"bonus_ratio_base": 0.25,
+			"bonus_ratio_per_stack": 0.10
+		},
+		"param_map": {
+			"reward_flag": "reward_eclipse_mark",
+			"stack_property": "eclipse_mark_stacks",
+			"parameters": {
+				"radius": {"property": "eclipse_mark_radius", "type": "float"},
+				"mark_duration": {"property": "eclipse_mark_duration", "type": "float"},
+				"bonus_ratio": {"property": "eclipse_mark_bonus_ratio", "type": "float"}
+			}
+		}
+	},
+	"fracture_field": {
+		"stack_limit": 3,
+		"balance_params": {
+			"radius_base": 100.0,
+			"radius_per_stack": 20.0,
+			"damage_ratio_base": 0.30,
+			"damage_ratio_per_stack": 0.12,
+			"slow_duration_base": 0.8,
+			"slow_duration_per_stack": 0.16
+		},
+		"param_map": {
+			"reward_flag": "reward_fracture_field",
+			"stack_property": "fracture_field_stacks",
+			"parameters": {
+				"radius": {"property": "fracture_field_radius", "type": "float"},
+				"damage_ratio": {"property": "fracture_field_damage_ratio", "type": "float"},
+				"slow_duration": {"property": "fracture_field_slow_duration", "type": "float"}
+			}
+		}
+	},
+	"farline_volley": {
+		"stack_limit": 3,
+		"balance_params": {
+			"arc_per_stack_base": 12.0,
+			"bonus_per_stack_base": 2,
+			"stack_cap": 5
+		},
+		"param_map": {
+			"reward_flag": "reward_farline_volley",
+			"stack_property": "farline_volley_stacks",
+			"parameters": {
+				"arc_per_stack": {"property": "farline_volley_arc_per_stack", "type": "float"},
+				"bonus_per_stack": {"property": "farline_volley_bonus_per_stack", "type": "int"},
+				"stack_cap": {"property": "farline_volley_stack_cap", "type": "int"}
+			}
+		}
+	},
+	"sigil_chain": {
+		"stack_limit": 3,
+		"balance_params": {
+			"radius_base": 70.0,
+			"radius_per_stack": 14.0,
+			"damage_ratio_base": 0.18,
+			"damage_ratio_per_stack": 0.10,
+			"charge_threshold": 4,
+			"zone_lifetime": 1.0,
+			"tick_interval": 0.4,
+			"chain_window": 4.0,
+			"slow_at_stack": 2,
+			"slow_duration": 0.5,
+			"slow_mult": 0.7,
+			"chain_bonus_at_stack": 3,
+			"chain_bonus_per_depth": 0.40,
+			"chain_bonus_max_depth": 6
+		},
+		"param_map": {
+			"reward_flag": "reward_sigil_chain",
+			"stack_property": "sigil_chain_stacks",
+			"parameters": {
+				"radius": {"property": "sigil_chain_radius", "type": "float"},
+				"damage_ratio": {"property": "sigil_chain_damage_ratio", "type": "float"}
+			}
+		}
+	}
 }
 
 const BOSS_REWARD_STACK_LIMITS := {
@@ -640,19 +814,46 @@ const MAX_ARCANA_PICKS_PER_RUN := 21
 
 func _ready() -> void:
 	_assert_pool_capacities()
+	_validate_trial_power_definitions()
+
+
+func _validate_trial_power_definitions() -> void:
+	"""Ensures all trial powers in TRIAL_POWER_POOL_IDS have complete definitions."""
+	for power_id in TRIAL_POWER_POOL_IDS:
+		assert(TRIAL_POWER_DEFINITIONS.has(power_id), "Trial power '%s' in pool but missing TRIAL_POWER_DEFINITIONS" % power_id)
+		
+		var def = TRIAL_POWER_DEFINITIONS[power_id] as Dictionary
+		assert(def.has("stack_limit"), "Trial power '%s' missing stack_limit in TRIAL_POWER_DEFINITIONS" % power_id)
+		assert(def.has("balance_params"), "Trial power '%s' missing balance_params in TRIAL_POWER_DEFINITIONS" % power_id)
+		assert(def.has("param_map"), "Trial power '%s' missing param_map in TRIAL_POWER_DEFINITIONS" % power_id)
+		
+		var balance = def.get("balance_params", {}) as Dictionary
+		assert(not balance.is_empty(), "Trial power '%s' has empty balance_params" % power_id)
+		
+		var param_map = def.get("param_map", {}) as Dictionary
+		assert(not param_map.is_empty(), "Trial power '%s' has empty param_map" % power_id)
+		assert(param_map.has("reward_flag"), "Trial power '%s' param_map missing reward_flag" % power_id)
+		assert(param_map.has("stack_property"), "Trial power '%s' param_map missing stack_property" % power_id)
+		assert(param_map.has("parameters"), "Trial power '%s' param_map missing parameters" % power_id)
 
 
 func _assert_pool_capacities() -> void:
 	var boon_capacity := _sum_pool_capacity(UPGRADE_POOL_IDS, UPGRADE_STACK_LIMITS)
 	var boss_capacity := _sum_pool_capacity(BOSS_REWARD_POOL_IDS, BOSS_REWARD_STACK_LIMITS)
-	var arcana_capacity := _sum_pool_capacity(TRIAL_POWER_POOL_IDS, TRIAL_POWER_STACK_LIMITS)
+	# Build trial power stack limits from unified definitions
+	var trial_limits := {}
+	for power_id in TRIAL_POWER_POOL_IDS:
+		if TRIAL_POWER_DEFINITIONS.has(power_id):
+			var def = TRIAL_POWER_DEFINITIONS[power_id] as Dictionary
+			trial_limits[power_id] = def.get("stack_limit", 0)
+	var arcana_capacity := _sum_pool_capacity(TRIAL_POWER_POOL_IDS, trial_limits)
 	assert(boon_capacity >= MAX_BOON_PICKS_PER_RUN, "Boon pool capacity %d < max picks %d - players can run out of cards" % [boon_capacity, MAX_BOON_PICKS_PER_RUN])
 	assert(boss_capacity >= MAX_BOSS_REWARD_PICKS_PER_RUN, "Boss reward pool capacity %d < max picks %d - players can run out of cards" % [boss_capacity, MAX_BOSS_REWARD_PICKS_PER_RUN])
 	assert(arcana_capacity >= MAX_ARCANA_PICKS_PER_RUN, "Arcana pool capacity %d < max picks %d - players can run out of cards" % [arcana_capacity, MAX_ARCANA_PICKS_PER_RUN])
 	for id in UPGRADE_POOL_IDS:
 		assert(UPGRADE_STACK_LIMITS.has(id), "Boon '%s' is in UPGRADE_POOL_IDS but missing UPGRADE_STACK_LIMITS entry" % id)
 	for id in TRIAL_POWER_POOL_IDS:
-		assert(TRIAL_POWER_STACK_LIMITS.has(id), "Arcana '%s' is in TRIAL_POWER_POOL_IDS but missing TRIAL_POWER_STACK_LIMITS entry" % id)
+		assert(TRIAL_POWER_DEFINITIONS.has(id), "Arcana '%s' is in TRIAL_POWER_POOL_IDS but missing TRIAL_POWER_DEFINITIONS entry" % id)
 	for id in BOSS_REWARD_POOL_IDS:
 		assert(BOSS_REWARD_STACK_LIMITS.has(id), "Boss reward '%s' is in BOSS_REWARD_POOL_IDS but missing BOSS_REWARD_STACK_LIMITS entry" % id)
 
@@ -769,8 +970,10 @@ func get_power_balance(power_id: String) -> Dictionary:
 	var id := power_id.strip_edges().to_lower()
 	if UPGRADE_BALANCE.has(id):
 		return (UPGRADE_BALANCE[id] as Dictionary).duplicate(true)
-	if TRIAL_POWER_BALANCE.has(id):
-		return (TRIAL_POWER_BALANCE[id] as Dictionary).duplicate(true)
+	if TRIAL_POWER_DEFINITIONS.has(id):
+		var def = TRIAL_POWER_DEFINITIONS[id] as Dictionary
+		var balance = def.get("balance_params", {}) as Dictionary
+		return balance.duplicate(true)
 	if BOSS_REWARD_BALANCE.has(id):
 		return (BOSS_REWARD_BALANCE[id] as Dictionary).duplicate(true)
 	return {}
@@ -780,8 +983,9 @@ func get_power_stack_limit(power_id: String) -> int:
 	var id := power_id.strip_edges().to_lower()
 	if UPGRADE_STACK_LIMITS.has(id):
 		return int(UPGRADE_STACK_LIMITS[id])
-	if TRIAL_POWER_STACK_LIMITS.has(id):
-		return int(TRIAL_POWER_STACK_LIMITS[id])
+	if TRIAL_POWER_DEFINITIONS.has(id):
+		var def = TRIAL_POWER_DEFINITIONS[id] as Dictionary
+		return int(def.get("stack_limit", 0))
 	if BOSS_REWARD_STACK_LIMITS.has(id):
 		return int(BOSS_REWARD_STACK_LIMITS[id])
 	return 0
@@ -809,6 +1013,32 @@ func get_damage_model_label(power_id: String) -> String:
 			return "Hybrid"
 		_:
 			return "None"
+
+
+## Trial Power Access Helpers
+## Centralized accessors for unified TRIAL_POWER_DEFINITIONS
+
+func get_trial_power_definition(power_id: String) -> Dictionary:
+	"""Returns the complete trial power definition including balance params, stack limit, and param map."""
+	var def := _get_trial_power_definition(power_id)
+	return def.duplicate(true) if not def.is_empty() else {}
+
+
+func get_trial_power_param_map(power_id: String) -> Dictionary:
+	"""Returns the parameter mapping configuration for a trial power (reward_flag, stack_property, parameters)."""
+	var def := _get_trial_power_definition(power_id)
+	if def.is_empty():
+		return {}
+	var param_map := def.get("param_map", {}) as Dictionary
+	return param_map.duplicate(true) if not param_map.is_empty() else {}
+
+
+func _get_trial_power_definition(power_id: String) -> Dictionary:
+	"""Private helper: fetch trial power definition from unified registry."""
+	var id := power_id.strip_edges().to_lower()
+	if TRIAL_POWER_DEFINITIONS.has(id):
+		return TRIAL_POWER_DEFINITIONS[id] as Dictionary
+	return {}
 
 
 func _damage_kind_bracket(_power_id: String) -> String:

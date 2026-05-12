@@ -65,6 +65,8 @@ If one-off or uncertain, store in session memory instead of a permanent skill.
 
 ## Anti-Patterns
 
+- Leaving deprecated constants, fallback paths, or duplicate registries after a migration instead of routing that lesson into `code-quality` and applying cleanup immediately.
+
 - Dumping all refactor lessons into code-quality.
 - Adding subsystem-specific constants or one-file tactics as global rules.
 - Creating a new skill when an existing domain skill already fits.

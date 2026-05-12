@@ -4,186 +4,7 @@
 
 extends RefCounted
 
-## Maps trial power IDs to their parameter application rules
-## Each entry specifies which parameters to apply and where (property name and type)
-const TRIAL_POWER_PARAM_MAP := {
-	"razor_wind": {
-		"reward_flag": "reward_razor_wind",
-		"stack_property": "razor_wind_stacks",
-		"parameters": {
-			"range_scale": {"property": "razor_wind_range_scale", "type": "float"},
-			"damage_ratio": {"property": "razor_wind_damage_ratio", "type": "float"},
-			"attack_cooldown": {"property": "attack_cooldown", "type": "float"},
-			"arc_degrees": {"property": "razor_wind_arc_degrees", "type": "float"}
-		}
-	},
-	"execution_edge": {
-		"reward_flag": "reward_execution_edge",
-		"stack_property": "execution_edge_stacks",
-		"parameters": {
-			"every": {"property": "execution_every", "type": "int"},
-			"damage_mult": {"property": "execution_damage_mult", "type": "float"},
-			"attack_lock_duration": {"property": "attack_lock_duration", "type": "float"}
-		}
-	},
-	"rupture_wave": {
-		"reward_flag": "reward_rupture_wave",
-		"stack_property": "rupture_wave_stacks",
-		"parameters": {
-			"radius": {"property": "rupture_wave_radius", "type": "float"},
-			"damage_ratio": {"property": "rupture_wave_damage_ratio", "type": "float"}
-		}
-	},
-	"aegis_field": {
-		"reward_flag": "reward_aegis_field",
-		"stack_property": "aegis_field_stacks",
-		"parameters": {
-			"resist": {"property": "aegis_field_resist_ratio", "type": "float"},
-			"duration": {"property": "aegis_field_resist_duration", "type": "float"},
-			"radius": {"property": "aegis_field_pulse_radius", "type": "float"},
-			"slow_duration": {"property": "aegis_field_slow_duration", "type": "float"},
-			"slow_mult": {"property": "aegis_field_slow_mult", "type": "float"},
-			"cooldown": {"property": "aegis_field_cooldown", "type": "float"}
-		}
-	},
-	"hunters_snare": {
-		"reward_flag": "reward_hunters_snare",
-		"stack_property": "hunters_snare_stacks",
-		"parameters": {
-			"bonus_damage": {"property": "hunters_snare_bonus_damage", "type": "int"},
-			"slow_duration": {"property": "hunters_snare_slow_duration", "type": "float"},
-			"slow_mult": {"property": "hunters_snare_slow_mult", "type": "float"}
-		}
-	},
-	"phantom_step": {
-		"reward_flag": "reward_phantom_step",
-		"stack_property": "phantom_step_stacks",
-		"parameters": {
-			"damage": {"property": "phantom_step_damage", "type": "int"},
-			"slow_duration": {"property": "phantom_step_slow_duration", "type": "float"},
-			"dash_cooldown": {"property": "dash_cooldown", "type": "float"}
-		}
-	},
-	"riftpunch": {
-		"reward_flag": "reward_riftpunch",
-		"stack_property": "riftpunch_stacks",
-		"parameters": {
-			"bonus_damage": {"property": "riftpunch_bonus_damage", "type": "int"},
-			"window_duration": {"property": "riftpunch_window_duration", "type": "float"},
-			"grace_duration": {"property": "riftpunch_grace_duration", "type": "float"}
-		}
-	},
-	"reaper_step": {
-		"reward_flag": "reward_void_dash",
-		"stack_property": "void_dash_stacks",
-		"parameters": {
-			"range_mult": {"property": "void_dash_range_mult", "type": "float"},
-			"chain_window": {"property": "reaper_chain_window", "type": "float"},
-			"chain_grace": {"property": "reaper_chain_grace", "type": "float"}
-		}
-	},
-	"static_wake": {
-		"reward_flag": "reward_static_wake",
-		"stack_property": "static_wake_stacks",
-		"parameters": {
-			"damage": {"property": "static_wake_damage", "type": "int"},
-			"lifetime": {"property": "static_wake_lifetime", "type": "float"},
-			"trail_radius": {"property": "static_wake_trail_radius", "type": "float"}
-		}
-	},
-	"storm_crown": {
-		"reward_flag": "reward_storm_crown",
-		"stack_property": "storm_crown_stacks",
-		"parameters": {
-			"proc_every": {"property": "storm_crown_proc_every", "type": "int"},
-			"chain_targets": {"property": "storm_crown_chain_targets", "type": "int"},
-			"chain_radius": {"property": "storm_crown_chain_radius", "type": "float"},
-			"damage_ratio": {"property": "storm_crown_damage_ratio", "type": "float"}
-		}
-	},
-	"wraithstep": {
-		"reward_flag": "reward_wraithstep",
-		"stack_property": "wraithstep_stacks",
-		"parameters": {
-			"mark_duration": {"property": "wraithstep_mark_duration", "type": "float"},
-			"dash_mark_radius": {"property": "wraithstep_dash_mark_radius", "type": "float"},
-			"bonus_damage": {"property": "wraithstep_mark_bonus_damage", "type": "int"},
-			"splash_radius": {"property": "wraithstep_mark_splash_radius", "type": "float"},
-			"splash_ratio": {"property": "wraithstep_mark_splash_ratio", "type": "float"}
-		}
-	},
-	"voidfire": {
-		"reward_flag": "reward_voidfire",
-		"stack_property": "voidfire_stacks",
-		"parameters": {
-			"heat_per_hit": {"property": "voidfire_heat_per_hit", "type": "float"},
-			"heat_cap": {"property": "void_heat_cap", "type": "float"},
-			"danger_zone_threshold": {"property": "voidfire_danger_zone_threshold", "type": "float"},
-			"danger_zone_amp": {"property": "voidfire_danger_zone_amp", "type": "float"},
-			"detonate_ratio": {"property": "voidfire_detonate_ratio", "type": "float"},
-			"detonate_radius": {"property": "voidfire_detonate_radius", "type": "float"},
-			"lockout_duration": {"property": "voidfire_lockout_duration", "type": "float"},
-			"overheat_move_mult": {"property": "voidfire_overheat_move_mult", "type": "float"},
-			"heat_decay_rate": {"property": "void_heat_decay_rate", "type": "float"},
-			"danger_zone_heat_gain_mult": {"property": "voidfire_danger_zone_heat_gain_mult", "type": "float"},
-			"reckless_heat_ratio": {"property": "voidfire_reckless_heat_ratio", "type": "float"},
-			"reckless_heat_gain_mult": {"property": "voidfire_reckless_heat_gain_mult", "type": "float"},
-			"danger_zone_decay_mult": {"property": "voidfire_danger_zone_decay_mult", "type": "float"},
-			"reckless_decay_mult": {"property": "voidfire_reckless_decay_mult", "type": "float"}
-		}
-	},
-	"dread_resonance": {
-		"reward_flag": "reward_dread_resonance",
-		"stack_property": "dread_resonance_stacks",
-		"parameters": {
-			"bonus_per_stack": {"property": "dread_resonance_bonus_per_stack", "type": "int"},
-			"max_stacks": {"property": "dread_resonance_max_stacks", "type": "int"}
-		}
-	},
-	"bloodvow": {
-		"reward_flag": "reward_bloodvow",
-		"stack_property": "bloodvow_stacks",
-		"parameters": {
-			"damage_mult": {"property": "bloodvow_damage_mult", "type": "float"},
-			"low_hp_threshold": {"property": "bloodvow_low_hp_threshold", "type": "float"}
-		}
-	},
-	"eclipse_mark": {
-		"reward_flag": "reward_eclipse_mark",
-		"stack_property": "eclipse_mark_stacks",
-		"parameters": {
-			"radius": {"property": "eclipse_mark_radius", "type": "float"},
-			"mark_duration": {"property": "eclipse_mark_duration", "type": "float"},
-			"bonus_ratio": {"property": "eclipse_mark_bonus_ratio", "type": "float"}
-		}
-	},
-	"fracture_field": {
-		"reward_flag": "reward_fracture_field",
-		"stack_property": "fracture_field_stacks",
-		"parameters": {
-			"radius": {"property": "fracture_field_radius", "type": "float"},
-			"damage_ratio": {"property": "fracture_field_damage_ratio", "type": "float"},
-			"slow_duration": {"property": "fracture_field_slow_duration", "type": "float"}
-		}
-	},
-	"farline_volley": {
-		"reward_flag": "reward_farline_volley",
-		"stack_property": "farline_volley_stacks",
-		"parameters": {
-			"arc_per_stack": {"property": "farline_volley_arc_per_stack", "type": "float"},
-			"bonus_per_stack": {"property": "farline_volley_bonus_per_stack", "type": "int"},
-			"stack_cap": {"property": "farline_volley_stack_cap", "type": "int"}
-		}
-	},
-	"sigil_chain": {
-		"reward_flag": "reward_sigil_chain",
-		"stack_property": "sigil_chain_stacks",
-		"parameters": {
-			"radius": {"property": "sigil_chain_radius", "type": "float"},
-			"damage_ratio": {"property": "sigil_chain_damage_ratio", "type": "float"}
-		}
-	}
-}
+const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
 
 ## Maps upgrade IDs to their property definitions
 const UPGRADE_PARAM_MAP := {
@@ -210,10 +31,9 @@ const UPGRADE_PARAM_MAP := {
 ## next_values should come from upgrade_system._build_trial_values()
 ## Returns true if all values were applied successfully
 static func apply_trial_power_values(player_reference: Node, power_id: String, next_stack: int, next_values: Dictionary) -> bool:
-	if not TRIAL_POWER_PARAM_MAP.has(power_id):
+	var power_map := POWER_REGISTRY.get_trial_power_param_map(power_id)
+	if power_map.is_empty():
 		return false
-	
-	var power_map: Dictionary = TRIAL_POWER_PARAM_MAP[power_id]
 	
 	# Set reward flag
 	var reward_flag: String = power_map.get("reward_flag", "")
@@ -255,9 +75,9 @@ static func apply_trial_power_values(player_reference: Node, power_id: String, n
 
 ## Gets the property name that should be set for a given trial power parameter
 static func get_property_name(power_id: String, param_name: String) -> String:
-	if not TRIAL_POWER_PARAM_MAP.has(power_id):
+	var power_map := POWER_REGISTRY.get_trial_power_param_map(power_id)
+	if power_map.is_empty():
 		return ""
-	var power_map: Dictionary = TRIAL_POWER_PARAM_MAP[power_id]
 	var parameters: Dictionary = power_map.get("parameters", {})
 	if param_name in parameters:
 		return parameters[param_name].get("property", "")
@@ -266,10 +86,10 @@ static func get_property_name(power_id: String, param_name: String) -> String:
 ## Gets all player properties that are affected by a trial power
 static func get_affected_properties(power_id: String) -> Array[String]:
 	var properties: Array[String] = []
-	if not TRIAL_POWER_PARAM_MAP.has(power_id):
+	var power_map := POWER_REGISTRY.get_trial_power_param_map(power_id)
+	if power_map.is_empty():
 		return properties
 	
-	var power_map: Dictionary = TRIAL_POWER_PARAM_MAP[power_id]
 	properties.append(power_map.get("reward_flag", ""))
 	properties.append(power_map.get("stack_property", ""))
 	
@@ -283,17 +103,18 @@ static func get_affected_properties(power_id: String) -> Array[String]:
 
 ## Gets the reward flag property name for a trial power (e.g. "reward_razor_wind")
 static func get_reward_flag(power_id: String) -> String:
-	if not TRIAL_POWER_PARAM_MAP.has(power_id):
+	var power_map := POWER_REGISTRY.get_trial_power_param_map(power_id)
+	if power_map.is_empty():
 		return ""
-	return TRIAL_POWER_PARAM_MAP[power_id].get("reward_flag", "")
+	return power_map.get("reward_flag", "")
 
 ## Reads all current parameter values for a trial power from player_reference.
 ## Returns a Dictionary keyed by param name (same keys as build_trial_values output).
 ## Enables symmetric cur/next access without hardcoding player property names at call sites.
 static func get_current_values(power_id: String, player_reference: Node) -> Dictionary:
-	if not TRIAL_POWER_PARAM_MAP.has(power_id):
+	var power_map := POWER_REGISTRY.get_trial_power_param_map(power_id)
+	if power_map.is_empty():
 		return {}
-	var power_map: Dictionary = TRIAL_POWER_PARAM_MAP[power_id]
 	var parameters: Dictionary = power_map.get("parameters", {})
 	var result: Dictionary = {}
 	for param_name: String in parameters:
@@ -315,9 +136,10 @@ static func get_current_values(power_id: String, player_reference: Node) -> Dict
 
 ## Gets the stack count property name for a trial power (e.g. "razor_wind_stacks")
 static func get_stack_property(power_id: String) -> String:
-	if not TRIAL_POWER_PARAM_MAP.has(power_id):
+	var power_map := POWER_REGISTRY.get_trial_power_param_map(power_id)
+	if power_map.is_empty():
 		return ""
-	return TRIAL_POWER_PARAM_MAP[power_id].get("stack_property", "")
+	return power_map.get("stack_property", "")
 
 ## Collects all player properties needed for power snapshots
 ## Used to auto-generate or validate RUN_SNAPSHOT_PROPERTIES
@@ -325,7 +147,7 @@ static func get_all_snapshot_properties() -> Array[String]:
 	var properties: Array[String] = []
 	
 	# Add all trial power properties
-	for power_id: String in TRIAL_POWER_PARAM_MAP.keys():
+	for power_id: String in POWER_REGISTRY.TRIAL_POWER_POOL_IDS:
 		for prop in get_affected_properties(power_id):
 			if not prop.is_empty() and prop not in properties:
 				properties.append(prop)

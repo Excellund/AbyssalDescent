@@ -1686,7 +1686,7 @@ func _get_active_player_powers() -> Dictionary:
 			result["boons"].append(power_id)
 	
 	# Check all arcana (trial powers)
-	for power_id in POWER_REGISTRY.TRIAL_POWER_BALANCE.keys():
+	for power_id in POWER_REGISTRY.TRIAL_POWER_POOL_IDS:
 		var stack_count := int(player.get_trial_power_stack_count(power_id))
 		if stack_count > 0:
 			result["arcana"].append(power_id)

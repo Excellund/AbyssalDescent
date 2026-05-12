@@ -859,4 +859,4 @@ func _is_upgrade_id(power_id: String) -> bool:
 func _is_trial_power_id(power_id: String) -> bool:
 	if power_registry != null:
 		return bool(power_registry.is_trial_power(power_id))
-	return POWER_PARAMETER_MAPPER.TRIAL_POWER_PARAM_MAP.has(power_id)
+	return false
