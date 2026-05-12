@@ -169,8 +169,8 @@ func reset_summary_tracker() -> void:
 		_summary_last_player_health_by_peer[health_key] = player.get_current_health()
 		if peer_id <= 0:
 			continue
-		_summary_stats_by_peer[peer_id] = _empty_peer_stats()
-		_summary_reward_timeline_by_peer[peer_id] = []
+		_set_peer_summary_stats(peer_id, _empty_peer_stats())
+		_set_peer_reward_timeline(peer_id, [])
 
 func mark_debug_mode() -> void:
 	if MultiplayerSessionManager.is_remote_replica():
@@ -443,9 +443,7 @@ func on_player_health_changed(current_health: int, _max_health: int, player_node
 	if health_loss > 0:
 		run_summary_tracker.record_damage_taken(health_loss)
 		if peer_id > 0:
-			var stats := _ensure_peer_summary_stats(peer_id)
-			stats["damage_taken_total"] = int(stats.get("damage_taken_total", 0)) + health_loss
-			_summary_stats_by_peer[peer_id] = stats
+			_add_peer_stat_delta(peer_id, "damage_taken_total", health_loss)
 	_summary_last_player_health_by_peer[health_key] = current_health
 
 func reconcile_damage_taken_to_player_health() -> void:
@@ -466,9 +464,7 @@ func reconcile_damage_taken_to_player_health() -> void:
 		if peer_health_loss > 0:
 			run_summary_tracker.record_damage_taken(peer_health_loss)
 			if peer_id > 0:
-				var stats := _ensure_peer_summary_stats(peer_id)
-				stats["damage_taken_total"] = int(stats.get("damage_taken_total", 0)) + peer_health_loss
-				_summary_stats_by_peer[peer_id] = stats
+				_add_peer_stat_delta(peer_id, "damage_taken_total", peer_health_loss)
 		_summary_last_player_health_by_peer[health_key] = peer_current_health
 
 func build_death_event_snapshot() -> Dictionary:
@@ -521,18 +517,14 @@ func record_damage_dealt(applied_amount: int, source_peer_id: int = 0) -> void:
 	run_summary_tracker.record_damage_dealt(applied_amount)
 	if source_peer_id <= 0:
 		return
-	var stats := _ensure_peer_summary_stats(source_peer_id)
-	stats["damage_dealt_total"] = int(stats.get("damage_dealt_total", 0)) + maxi(0, applied_amount)
-	_summary_stats_by_peer[source_peer_id] = stats
+	_add_peer_stat_delta(source_peer_id, "damage_dealt_total", maxi(0, applied_amount))
 
 func record_peer_enemy_kill(peer_id: int) -> void:
 	if peer_id <= 0:
 		return
-	var stats := _ensure_peer_summary_stats(peer_id)
-	stats["enemies_killed"] = int(stats.get("enemies_killed", 0)) + 1
-	_summary_stats_by_peer[peer_id] = stats
+	_add_peer_stat_delta(peer_id, "enemies_killed", 1)
 	if STAT_ATTRIBUTION_TRACE:
-		print_debug("[StatAttribution][KillCredit] peer=%d kills=%d" % [peer_id, int(stats.get("enemies_killed", 0))])
+		print_debug("[StatAttribution][KillCredit] peer=%d kills=%d" % [peer_id, _get_peer_stat(peer_id, "enemies_killed")])
 
 func record_boss_defeat(boss_id: String) -> void:
 	if run_summary_tracker != null:
@@ -555,9 +547,7 @@ func record_unlock(text: String) -> void:
 func mark_full_clear_boss_credits(boss_total: int = 3) -> void:
 	for peer_id_variant in _summary_stats_by_peer.keys():
 		var peer_id := int(peer_id_variant)
-		var stats := (_summary_stats_by_peer.get(peer_id, {}) as Dictionary).duplicate(true)
-		stats["bosses_defeated"] = boss_total
-		_summary_stats_by_peer[peer_id] = stats
+		_set_peer_stat(peer_id, "bosses_defeated", boss_total)
 
 func record_reward_choice_for_tracker(tracked_choice: Dictionary, mode: int, depth: int) -> void:
 	if run_summary_tracker == null:
@@ -578,9 +568,7 @@ func record_peer_reward_timeline_choice(peer_id: int, choice: Dictionary, mode: 
 	var resolved_unix := event_unix
 	if resolved_unix <= 0:
 		resolved_unix = int(Time.get_unix_time_from_system())
-	var timeline := _summary_reward_timeline_by_peer.get(peer_id, []) as Array
-	timeline.append(RUN_SUMMARY_MODEL_SCRIPT.create_timeline_entry(depth, mode, item_name, summary_category_for_mode(mode), resolved_unix))
-	_summary_reward_timeline_by_peer[peer_id] = timeline
+	_append_peer_timeline_entry(peer_id, RUN_SUMMARY_MODEL_SCRIPT.create_timeline_entry(depth, mode, item_name, summary_category_for_mode(mode), resolved_unix))
 
 func record_rest_visit(depth: int) -> void:
 	var event_unix := int(Time.get_unix_time_from_system())
@@ -593,9 +581,7 @@ func record_rest_visit(depth: int) -> void:
 		var peer_id := int(peer_id_variant)
 		if peer_id <= 0:
 			continue
-		var timeline := _summary_reward_timeline_by_peer.get(peer_id, []) as Array
-		timeline.append(rest_entry.duplicate(true))
-		_summary_reward_timeline_by_peer[peer_id] = timeline
+		_append_peer_timeline_entry(peer_id, rest_entry.duplicate(true))
 
 
 # --- summaries --------------------------------------------------------------
@@ -617,7 +603,7 @@ func build_peer_summary_overrides() -> Dictionary:
 		var char_data := CHARACTER_REGISTRY.get_character(active_character)
 		var character_name := String(char_data.get("name", active_character.capitalize()))
 		var build_summary := build_summary_for_player(player)
-		var timeline := (_summary_reward_timeline_by_peer.get(peer_id, []) as Array).duplicate(true)
+		var timeline := _ensure_peer_reward_timeline(peer_id).duplicate(true)
 		var build_ids: Array[String] = []
 		for group_key in ["boons", "arcana", "boss_rewards"]:
 			for item_variant in build_summary.get(group_key, []):
@@ -657,8 +643,8 @@ func build_peer_telemetry_entries() -> Array:
 		var char_data := CHARACTER_REGISTRY.get_character(active_character)
 		var character_name := String(char_data.get("name", active_character.capitalize()))
 		var build_summary := build_summary_for_player(player)
-		var timeline := (_summary_reward_timeline_by_peer.get(peer_id, []) as Array).duplicate(true)
-		var stats := (_summary_stats_by_peer.get(peer_id, {}) as Dictionary).duplicate(true)
+		var timeline := _ensure_peer_reward_timeline(peer_id).duplicate(true)
+		var stats := _ensure_peer_summary_stats(peer_id).duplicate(true)
 		var build_ids: Array[String] = []
 		for group_key in ["boons", "arcana", "boss_rewards"]:
 			for item_variant in build_summary.get(group_key, []):
@@ -806,7 +792,56 @@ func _empty_peer_stats() -> Dictionary:
 	}
 
 func _ensure_peer_summary_stats(peer_id: int) -> Dictionary:
-	return _summary_stats_by_peer.get(peer_id, _empty_peer_stats()) as Dictionary
+	if peer_id <= 0:
+		return _empty_peer_stats()
+	var stats := _lookup_peer_dictionary(_summary_stats_by_peer, peer_id)
+	if stats.is_empty():
+		stats = _empty_peer_stats()
+		_set_peer_summary_stats(peer_id, stats)
+	return stats
+
+func _set_peer_summary_stats(peer_id: int, stats: Dictionary) -> void:
+	if peer_id <= 0:
+		return
+	_summary_stats_by_peer[peer_id] = stats
+
+func _get_peer_stat(peer_id: int, key: String) -> int:
+	if peer_id <= 0:
+		return 0
+	var stats := _ensure_peer_summary_stats(peer_id)
+	return int(stats.get(key, 0))
+
+func _set_peer_stat(peer_id: int, key: String, value: int) -> void:
+	if peer_id <= 0:
+		return
+	var stats := _ensure_peer_summary_stats(peer_id)
+	stats[key] = value
+	_set_peer_summary_stats(peer_id, stats)
+
+func _add_peer_stat_delta(peer_id: int, key: String, delta: int) -> void:
+	if peer_id <= 0 or delta == 0:
+		return
+	_set_peer_stat(peer_id, key, _get_peer_stat(peer_id, key) + delta)
+
+func _ensure_peer_reward_timeline(peer_id: int) -> Array:
+	if peer_id <= 0:
+		return []
+	var timeline := _lookup_peer_array(_summary_reward_timeline_by_peer, peer_id)
+	if timeline.is_empty() and not _summary_reward_timeline_by_peer.has(peer_id):
+		_set_peer_reward_timeline(peer_id, timeline)
+	return timeline
+
+func _set_peer_reward_timeline(peer_id: int, timeline: Array) -> void:
+	if peer_id <= 0:
+		return
+	_summary_reward_timeline_by_peer[peer_id] = timeline
+
+func _append_peer_timeline_entry(peer_id: int, entry: Dictionary) -> void:
+	if peer_id <= 0 or entry.is_empty():
+		return
+	var timeline := _ensure_peer_reward_timeline(peer_id)
+	timeline.append(entry)
+	_set_peer_reward_timeline(peer_id, timeline)
 
 func _lookup_peer_dictionary(source: Dictionary, peer_id: int) -> Dictionary:
 	if peer_id <= 0 or source.is_empty():
@@ -824,6 +859,23 @@ func _lookup_peer_dictionary(source: Dictionary, peer_id: int) -> Dictionary:
 		if not resolved.is_empty():
 			return resolved
 	return {}
+
+func _lookup_peer_array(source: Dictionary, peer_id: int) -> Array:
+	if peer_id <= 0 or source.is_empty():
+		return []
+	var direct := source.get(peer_id, null)
+	if direct is Array:
+		return direct as Array
+	var as_string := source.get(str(peer_id), null)
+	if as_string is Array:
+		return as_string as Array
+	for key_variant in source.keys():
+		if int(key_variant) != peer_id:
+			continue
+		var resolved := source.get(key_variant, null)
+		if resolved is Array:
+			return resolved as Array
+	return []
 
 ## Apply ascension clear records + oath completions + catalyst unlocks to the
 ## meta-progress profile based on the just-built run summary. Mutates
@@ -870,9 +922,7 @@ func _record_boss_defeat_for_summary_peers() -> void:
 			tracked_peer_ids[peer_id] = true
 	for peer_id_variant in tracked_peer_ids.keys():
 		var peer_id := int(peer_id_variant)
-		var stats := _ensure_peer_summary_stats(peer_id)
-		stats["bosses_defeated"] = int(stats.get("bosses_defeated", 0)) + 1
-		_summary_stats_by_peer[peer_id] = stats
+		_add_peer_stat_delta(peer_id, "bosses_defeated", 1)
 
 func _bearing_key_from_label(label: String, fallback: String = "unknown") -> String:
 	return BEARING_KEY_NORMALIZER.from_label(label, fallback)
