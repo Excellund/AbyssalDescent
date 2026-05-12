@@ -13,6 +13,8 @@ const MUTATOR_ICON_TETHER_WEB: Texture2D = preload("res://assets/ui/mutators/tet
 
 # Draw state — updated each frame by world_generator
 var room_size: Vector2 = Vector2.ZERO
+var current_room_tutorial_active: bool = false
+var tutorial_markers: Array[Dictionary] = []
 var choosing_next_room: bool = false
 var door_options: Array[Dictionary] = []
 var door_use_radius: float = 72.0
@@ -102,6 +104,11 @@ func _draw() -> void:
 
 	draw_rect(room_rect, Color(0.56, 0.78, 0.95, clampf(floor_border_alpha, 0.2, 0.95)), false, 4.0)
 	draw_rect(room_rect.grow(-16.0), Color(0.22, 0.42, 0.62, 0.28), false, 2.0)
+
+	if current_room_tutorial_active and not tutorial_markers.is_empty():
+		for marker_variant in tutorial_markers:
+			if marker_variant is Dictionary:
+				_draw_tutorial_instruction_marker(marker_variant as Dictionary)
 
 	if choosing_next_room:
 		var nearest_door := _get_nearest_door_for_prompt()
@@ -584,6 +591,38 @@ func _draw_door_identity_chip(door: Dictionary, morph_t: float, is_focused: bool
 		draw_string(font, Vector2(chip_x, chip_y + 17.0 + detail_offset).floor(), action_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 13, Color(text_color.r, text_color.g, text_color.b, text_color.a * detail_alpha))
 		draw_string(font, Vector2(chip_x, chip_y + 46.0 + detail_offset).floor() + Vector2(1.0, 1.0), detail_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 17, Color(text_shadow.r, text_shadow.g, text_shadow.b, text_shadow.a * detail_alpha))
 		draw_string(font, Vector2(chip_x, chip_y + 46.0 + detail_offset).floor(), detail_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 17, Color(text_color.r, text_color.g, text_color.b, text_color.a * detail_alpha))
+
+func _draw_tutorial_instruction_marker(marker: Dictionary) -> void:
+	var font := ThemeDB.fallback_font
+	if font == null:
+		return
+	var marker_position := marker.get("position", Vector2.ZERO) as Vector2
+	var title := String(marker.get("title", ""))
+	var command := String(marker.get("command", ""))
+	if title.is_empty() and command.is_empty():
+		return
+	var is_done := bool(marker.get("done", false))
+	var accent_color := marker.get("accent_color", Color(0.78, 0.9, 1.0, 1.0)) as Color
+	var title_size := font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 14)
+	var command_size := font.get_string_size(command, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 22)
+	var plaque_w := clampf(maxf(title_size.x, command_size.x) + 44.0, 160.0, 260.0)
+	var plaque_h := 62.0
+	var plaque_top_left := marker_position + Vector2(-plaque_w * 0.5, -plaque_h * 0.5)
+	var glow_alpha := 0.08 if not is_done else 0.16
+	var fill_alpha := 0.62 if not is_done else 0.78
+	var border_alpha := 0.44 if not is_done else 0.92
+	var text_alpha := 0.74 if not is_done else 0.98
+	var title_color := Color(0.92, 0.96, 1.0, text_alpha)
+	var command_color := Color(1.0, 1.0, 1.0, text_alpha)
+	draw_circle(marker_position, 18.0, Color(accent_color.r, accent_color.g, accent_color.b, 0.12 + glow_alpha))
+	draw_arc(marker_position, 26.0, 0.0, TAU, 40, Color(accent_color.r, accent_color.g, accent_color.b, 0.3 + glow_alpha), 2.0)
+	draw_line(marker_position + Vector2(0.0, 16.0), plaque_top_left + Vector2(plaque_w * 0.5, plaque_h * 0.32), Color(accent_color.r, accent_color.g, accent_color.b, 0.24), 1.6)
+	draw_rect(Rect2(plaque_top_left, Vector2(plaque_w, plaque_h)), Color(0.04, 0.06, 0.09, fill_alpha), true)
+	draw_rect(Rect2(plaque_top_left, Vector2(plaque_w, plaque_h)), Color(accent_color.r, accent_color.g, accent_color.b, border_alpha), false, 1.8)
+	draw_string(font, plaque_top_left + Vector2(0.0, 17.0) + Vector2(1.0, 1.0), title, HORIZONTAL_ALIGNMENT_CENTER, plaque_w, 13, Color(0.0, 0.0, 0.0, 0.5 * text_alpha))
+	draw_string(font, plaque_top_left + Vector2(0.0, 17.0), title, HORIZONTAL_ALIGNMENT_CENTER, plaque_w, 13, title_color)
+	draw_string(font, plaque_top_left + Vector2(0.0, 43.0) + Vector2(1.0, 1.0), command, HORIZONTAL_ALIGNMENT_CENTER, plaque_w, 21, Color(0.0, 0.0, 0.0, 0.5 * text_alpha))
+	draw_string(font, plaque_top_left + Vector2(0.0, 43.0), command, HORIZONTAL_ALIGNMENT_CENTER, plaque_w, 21, command_color)
 
 func _draw_door_icon(door: Dictionary) -> void:
 	var door_pos: Vector2 = door["position"]

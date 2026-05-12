@@ -8,13 +8,13 @@ const RARITY_LEGENDARY := Color(1.0, 0.74, 0.42, 1.0)
 static func _encounter_rows() -> Array[Dictionary]:
 	return [
 		{
-			"name": "Skirmish",
-			"group": "Core",
-			"color": Color(0.62, 0.86, 1.0, 1.0),
-			"desc": "Balanced warm-up fight with mixed pressure.",
+			"name": "Tutorial",
+			"group": "Special",
+			"color": Color(0.56, 0.84, 1.0, 1.0),
+			"desc": "One-time first-descent room that teaches movement, dash, attack, and build view.",
 		},
 		{
-			"name": "Pursuit",
+			"name": "Skirmish",
 			"group": "Core",
 			"color": Color(0.66, 0.9, 1.0, 1.0),
 			"desc": "Early hunt pattern built around charger-led chase pressure.",

@@ -438,6 +438,11 @@ func _build_intro_variant_profile(depth: int) -> Dictionary:
 	var chargers_by_rank := [1, 1, 1, 1]
 	return _build_profile("Pursuit", INTRO_ROOM_SIZE, chasers_by_rank[rank], chargers_by_rank[rank], 0, 0)
 
+func build_tutorial_profile() -> Dictionary:
+	var profile := _build_profile("Tutorial", INTRO_ROOM_SIZE, 0, 0, 0, 0)
+	profile["encounter_key"] = "tutorial"
+	return profile
+
 func build_skirmish_profile(depth: int) -> Dictionary:
 	if depth < 2:
 		return _build_intro_profile(depth)
@@ -476,6 +481,8 @@ func build_debug_encounter_profile(encounter_key: String, depth: int) -> Diction
 	match key:
 		"skirmish":
 			return _build_intro_profile(0)
+		"tutorial":
+			return build_tutorial_profile()
 		"trial":
 			return _build_trial_profile(depth)
 		"apex_trial":

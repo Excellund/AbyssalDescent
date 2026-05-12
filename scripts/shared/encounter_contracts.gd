@@ -154,6 +154,22 @@ static func _build_encounter_registry() -> Array[Dictionary]:
 			}
 		},
 		{
+			"key": "tutorial",
+			"id": -1,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Tutorial",
+			"glossary_label": "Tutorial",
+			"door_presentation": {
+				"label": "Tutorial",
+				"short_label": "Intro",
+				"color": Color(0.56, 0.84, 1.0, 0.95),
+				"icon": "easy",
+				"kind_id": DOOR_KIND_ENCOUNTER,
+				"reward": ENUMS.RewardMode.NONE,
+				"prompt_name_suffix": ""
+			}
+		},
+		{
 			"key": "skirmish",
 			"id": DEBUG_ENUMS.Encounter.SKIRMISH,
 			"is_boss": false, "is_rest": false, "is_objective": false,

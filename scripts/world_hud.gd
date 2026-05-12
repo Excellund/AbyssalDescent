@@ -541,7 +541,6 @@ func _update_status_panel_text(state: Dictionary) -> void:
 		else:
 			status_label.text += "\n[center][color=#9FD6FF]Re-enter the zone before progress decays[/color][/center]"
 
-
 	var status_text_h := maxf(34.0, status_label.get_content_height())
 	var row_top := status_label.position.y + status_text_h + 4.0
 	if status_panel != null:

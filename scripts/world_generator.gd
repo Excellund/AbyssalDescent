@@ -88,6 +88,8 @@ func _find_debug_encounter_entry(key: String) -> Dictionary:
 	return ENCOUNTER_CONTRACTS.debug_encounter_entry(key)
 
 func _get_debug_encounter_reward_mode(encounter_key: String) -> int:
+	if encounter_key == "tutorial":
+		return ENUMS.RewardMode.NONE
 	if encounter_key == "trial" or encounter_key == "apex_trial" or encounter_key == "apex_mirrorline" or encounter_key == "apex_toll":
 		return ENUMS.RewardMode.ARCANA
 	if ENCOUNTER_CONTRACTS.debug_encounter_is_objective(encounter_key):
@@ -187,6 +189,9 @@ var door_options: Array[Dictionary] = []
 var pending_room_reward: int = ENUMS.RewardMode.NONE
 var current_room_enemy_mutator: Dictionary = {}
 var current_room_player_mutator: Dictionary = {}
+var current_room_tutorial_active: bool = false
+var current_room_tutorial_steps: Dictionary = {}
+var pending_initial_room_profile: Dictionary = {}
 
 var encounter_intro_grace_active: bool = false
 var _encounter_ready_peers: Dictionary = {}  # Dictionary[int, bool] - host only
@@ -890,6 +895,9 @@ func _begin_new_run_flow() -> void:
 	pending_room_reward = ENUMS.RewardMode.NONE
 	current_room_enemy_mutator.clear()
 	current_room_player_mutator.clear()
+	current_room_tutorial_active = false
+	current_room_tutorial_steps = {}
+	pending_initial_room_profile = {}
 	_world_multiplayer_sync_state.clear_pending_chosen_door_sync()
 	choosing_next_room = false
 	door_options.clear()
@@ -897,6 +905,8 @@ func _begin_new_run_flow() -> void:
 	if settings_enabled and skip_starting_boon_selection:
 		pending_room_reward = ENUMS.RewardMode.BOON
 		_begin_room(_build_skirmish_profile(room_depth))
+	elif _should_show_first_descent_tutorial():
+		_begin_tutorial_room()
 	else:
 		_open_boon_selection("Choose Starting Arcana", true, ENUMS.RewardMode.ARCANA, {}, "", current_character_id)
 
@@ -1269,6 +1279,16 @@ func _resolve_debug_power_id(raw_power_id: String) -> String:
 			return canonical
 
 func _unhandled_input(event: InputEvent) -> void:
+	if current_room_tutorial_active:
+		if event is InputEventKey and event.pressed and not event.echo:
+			if event.keycode in [KEY_W, KEY_A, KEY_S, KEY_D]:
+				_mark_tutorial_step("move")
+			elif event.keycode == KEY_SPACE:
+				_mark_tutorial_step("dash")
+			elif event.keycode == KEY_TAB:
+				_mark_tutorial_step("build")
+		elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			_mark_tutorial_step("attack")
 	# Hold Tab to show build details; release Tab to close.
 	if event is InputEventKey and event.keycode == KEY_TAB and not event.echo:
 		if is_instance_valid(build_detail_panel):
@@ -1626,6 +1646,9 @@ func _get_hud_state() -> Dictionary:
 		"room_size": current_room_size,
 		"current_room_label": current_room_label,
 		"current_difficulty_tier": current_difficulty_tier,
+		"current_room_tutorial_active": current_room_tutorial_active,
+		"tutorial_markers": _get_tutorial_markers_for_world(),
+		"tutorial_exit_ready": current_room_tutorial_active and _tutorial_is_complete(),
 		"rooms_cleared": rooms_cleared,
 		"room_depth": display_room_depth,
 		"run_cleared": _run_outcome_coordinator.is_run_cleared(),
@@ -1710,6 +1733,8 @@ func _sync_renderer() -> void:
 	if allow_door_visibility:
 		visible_door_options = door_options
 	renderer.room_size = current_effective_room_size if current_effective_room_size != Vector2.ZERO else current_room_size
+	renderer.current_room_tutorial_active = current_room_tutorial_active
+	renderer.tutorial_markers = _get_tutorial_markers_for_world()
 	renderer.choosing_next_room = allow_door_visibility
 	renderer.door_options = visible_door_options
 	renderer.player_global_position = player.global_position if is_instance_valid(player) else Vector2.ZERO
@@ -1782,6 +1807,8 @@ func _update_encounter_state() -> void:
 	if _is_reward_selection_active():
 		return
 	if current_room_label == "Starting Chamber":
+		return
+	if current_room_tutorial_active:
 		return
 	if encounter_intro_grace_active:
 		return
@@ -2671,6 +2698,14 @@ func _choose_door(door: Dictionary) -> void:
 	if choice.is_empty():
 		return
 	run_summary_recorder.record_door_choice(choice)
+	if current_room_tutorial_active:
+		var tutorial_exit_profile := ENCOUNTER_CONTRACTS.door_choice_profile(choice)
+		if tutorial_exit_profile.is_empty():
+			return
+		_complete_tutorial_profile()
+		pending_initial_room_profile = tutorial_exit_profile.duplicate(true)
+		_open_boon_selection("Choose Starting Arcana", true, ENUMS.RewardMode.ARCANA, {}, "", current_character_id)
+		return
 	var action_id: int = ENCOUNTER_CONTRACTS.door_choice_action_id(choice)
 	if action_id == ENUMS.EncounterAction.BOSS:
 		if second_boss_defeated:
@@ -2710,6 +2745,8 @@ func _begin_room(profile: Dictionary) -> void:
 	_doors_spawn_ready = false
 	if profile.is_empty():
 		return
+	current_room_tutorial_active = _is_tutorial_room_profile(profile)
+	current_room_tutorial_steps = _tutorial_step_state() if current_room_tutorial_active else {}
 	if is_instance_valid(encounter_profile_builder):
 		profile = encounter_profile_builder.apply_wave_staggering(profile)
 	_prepare_room_sync_transition()
@@ -3246,6 +3283,117 @@ func _build_skirmish_profile(depth: int) -> Dictionary:
 		return {}
 	return encounter_profile_builder.build_skirmish_profile(depth)
 
+func _build_tutorial_profile() -> Dictionary:
+	if not is_instance_valid(encounter_profile_builder):
+		return {}
+	return encounter_profile_builder.build_tutorial_profile()
+
+func _begin_tutorial_room() -> void:
+	var profile := _build_tutorial_profile()
+	if profile.is_empty():
+		_open_boon_selection("Choose Starting Arcana", true, ENUMS.RewardMode.ARCANA, {}, "", current_character_id)
+		return
+	_begin_room(profile)
+
+func _should_show_first_descent_tutorial() -> bool:
+	if is_multiplayer or MultiplayerSessionManager.is_remote_replica():
+		return false
+	var profile := get_current_player_profile()
+	if profile == null or not profile.is_valid():
+		return false
+	return not bool(profile.first_descent_tutorial_completed)
+
+func _is_tutorial_room_profile(profile: Dictionary) -> bool:
+	return String(profile.get("encounter_key", "")).strip_edges().to_lower() == "tutorial"
+
+func _tutorial_step_state() -> Dictionary:
+	return {
+		"move": false,
+		"dash": false,
+		"attack": false,
+		"build": false,
+	}
+
+func _mark_tutorial_step(step_key: String) -> void:
+	if not current_room_tutorial_active:
+		return
+	if not current_room_tutorial_steps.has(step_key):
+		return
+	if bool(current_room_tutorial_steps.get(step_key, false)):
+		return
+	current_room_tutorial_steps[step_key] = true
+	if _tutorial_is_complete():
+		_reveal_tutorial_exit_door()
+	hud.refresh(_get_hud_state(), player)
+
+func _tutorial_is_complete() -> bool:
+	if current_room_tutorial_steps.is_empty():
+		return false
+	for step_key in current_room_tutorial_steps.keys():
+		if not bool(current_room_tutorial_steps.get(step_key, false)):
+			return false
+	return true
+
+func _get_tutorial_steps_for_hud() -> Array[Dictionary]:
+	return [
+		{"label": "Move with W/A/S/D", "done": bool(current_room_tutorial_steps.get("move", false))},
+		{"label": "Dash with Space", "done": bool(current_room_tutorial_steps.get("dash", false))},
+		{"label": "Attack with Left Click", "done": bool(current_room_tutorial_steps.get("attack", false))},
+		{"label": "See build with Tab", "done": bool(current_room_tutorial_steps.get("build", false))},
+	]
+
+func _get_tutorial_markers_for_world() -> Array[Dictionary]:
+	if not current_room_tutorial_active:
+		return []
+	var room_size := current_effective_room_size if current_effective_room_size != Vector2.ZERO else current_room_size
+	if room_size == Vector2.ZERO:
+		return []
+	var half_size := room_size * 0.5
+	var x_offset := clampf(half_size.x * 0.42, 180.0, maxf(180.0, half_size.x - 120.0))
+	var y_offset := clampf(half_size.y * 0.32, 130.0, maxf(130.0, half_size.y - 110.0))
+	var command_done := current_room_tutorial_steps
+	var exit_ready := _tutorial_is_complete()
+	return [
+		{"key": "move", "title": "Move", "command": "W A S D", "position": Vector2(-x_offset, -y_offset), "done": bool(command_done.get("move", false)), "accent_color": Color(0.56, 0.84, 1.0, 1.0)},
+		{"key": "dash", "title": "Dash", "command": "Space", "position": Vector2(x_offset, -y_offset), "done": bool(command_done.get("dash", false)), "accent_color": Color(1.0, 0.87, 0.48, 1.0)},
+		{"key": "attack", "title": "Attack", "command": "Left Click", "position": Vector2(-x_offset, y_offset), "done": bool(command_done.get("attack", false)), "accent_color": Color(1.0, 0.63, 0.58, 1.0)},
+		{"key": "build", "title": "Build", "command": "Tab", "position": Vector2(x_offset, y_offset), "done": bool(command_done.get("build", false)), "accent_color": Color(0.74, 1.0, 0.84, 1.0)},
+	]
+
+func _reveal_tutorial_exit_door() -> void:
+	if not current_room_tutorial_active:
+		return
+	if not door_options.is_empty():
+		return
+	var exit_profile := _apply_endless_scaling_to_profile(_build_skirmish_profile(room_depth))
+	if exit_profile.is_empty():
+		return
+	var exit_door := ENCOUNTER_CONTRACTS.intro_encounter_door_option(exit_profile)
+	ENCOUNTER_CONTRACTS.door_option_set_position(exit_door, Vector2(0.0, -40.0))
+	door_options = [exit_door]
+	choosing_next_room = true
+	if MultiplayerSessionManager.should_broadcast():
+		_sync_door_options.rpc(door_options, choosing_next_room, boss_unlocked, _build_progress_sync_state())
+	hud.refresh(_get_hud_state(), player)
+
+func _complete_tutorial_profile() -> void:
+	var profile := get_current_player_profile()
+	if profile == null or not profile.is_valid():
+		return
+	if bool(profile.first_descent_tutorial_completed):
+		return
+	profile.first_descent_tutorial_completed = true
+	if profile_persistence_store != null:
+		profile_persistence_store.save_profile(profile)
+
+func _start_initial_encounter_from_pending_profile() -> void:
+	var profile := pending_initial_room_profile
+	if profile.is_empty():
+		profile = _build_skirmish_profile(room_depth)
+	pending_initial_room_profile = {}
+	pending_room_reward = ENUMS.RewardMode.BOON
+	_begin_room(_apply_endless_scaling_to_profile(profile))
+
 func _get_active_player_mutators_for_hud() -> Array[Dictionary]:
 	var local_player := _find_local_owned_player_node()
 	if not is_instance_valid(local_player):
@@ -3321,8 +3469,7 @@ func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> voi
 	elif is_initial:
 		_reset_progress_for_first_encounter()
 		_set_combat_paused(false)
-		pending_room_reward = ENUMS.RewardMode.BOON
-		_begin_room(_build_skirmish_profile(room_depth))
+		_start_initial_encounter_from_pending_profile()
 	else:
 		_set_combat_paused(false)
 		_spawn_door_options()
@@ -3337,8 +3484,7 @@ func _on_reward_skipped(mode: int, is_initial: bool) -> void:
 	elif is_initial:
 		_reset_progress_for_first_encounter()
 		_set_combat_paused(false)
-		pending_room_reward = ENUMS.RewardMode.BOON
-		_begin_room(_build_skirmish_profile(room_depth))
+		_start_initial_encounter_from_pending_profile()
 	else:
 		_set_combat_paused(false)
 		_spawn_door_options()
@@ -3392,7 +3538,7 @@ func _finalize_reward_phase_and_advance(is_initial: bool, mode: int) -> void:
 	if is_initial:
 		_reset_progress_for_first_encounter()
 		pending_room_reward = ENUMS.RewardMode.BOON
-		_begin_room(_build_skirmish_profile(room_depth))
+		_start_initial_encounter_from_pending_profile()
 	else:
 		if bool(finalize_result.get("clear_boss_reward_pending", false)):
 			boss_reward_pending = false
