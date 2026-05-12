@@ -87,6 +87,21 @@ text = "Difficulty:"
 layout_mode = 2
 size_flags_horizontal = 3
 
+[node name="AscensionSetupPanel" type="PanelContainer" parent="VBoxContainer"]
+visible = false
+layout_mode = 2
+custom_minimum_size = Vector2(0, 56)
+
+[node name="AscensionConfigureButton" type="Button" parent="VBoxContainer/AscensionSetupPanel"]
+layout_mode = 2
+text = "Configure Ascension & Catalysts"
+
+[node name="AscensionLockToastLabel" type="Label" parent="VBoxContainer"]
+visible = false
+layout_mode = 2
+horizontal_alignment = 1
+autowrap_mode = 3
+
 [node name="ReadyButton" type="Button" parent="VBoxContainer"]
 layout_mode = 2
 custom_minimum_size = Vector2(0, 50)
@@ -103,3 +118,12 @@ theme_override_font_sizes/font_size = 18
 layout_mode = 2
 text = "Waiting for all players..."
 theme_override_font_sizes/font_size = 14
+
+[node name="AscensionPanelOverlay" type="Control" parent="."]
+visible = false
+layout_mode = 1
+anchors_left = 0.0
+anchors_top = 0.0
+anchors_right = 1.0
+anchors_bottom = 1.0
+mouse_filter = 2

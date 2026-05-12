@@ -8,6 +8,8 @@ extends Panel
 
 signal back_pressed
 signal begin_descent_pressed
+signal ascension_loadout_changed(loadout: Array)
+signal lobby_done_pressed
 
 const ASCENSION_REGISTRY := preload("res://scripts/progression/ascension_modifier_registry.gd")
 const OATHS_REGISTRY := preload("res://scripts/progression/oaths_registry.gd")
@@ -34,10 +36,14 @@ var _catalyst_wip_banner: PanelContainer
 var _collapsed_clear_groups: Dictionary = {}
 var _run_setup_mode_enabled: bool = false
 var _oaths_only_mode_enabled: bool = false
+var _lobby_mode_enabled: bool = false
+var _lobby_is_host: bool = false
+var _host_modifier_display_loadout: Array[String] = []
 var _prev_char_button: Button
 var _next_char_button: Button
 var _modifier_column_root: Node
 var _catalyst_column_root: Node
+var _oath_column_root: Node
 var _back_button: Button
 var _begin_descent_button: Button
 
@@ -125,6 +131,7 @@ func _build_ui(host: Node) -> void:
 	_catalyst_column_root = catalyst_column
 	_oath_list = _build_section_column(columns, "Oaths", 1.7)
 	_oath_list.add_theme_constant_override("separation", 8)
+	_oath_column_root = _oath_list.get_parent().get_parent().get_parent()
 
 	var footer := HBoxContainer.new()
 	footer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -133,9 +140,7 @@ func _build_ui(host: Node) -> void:
 	stack.add_child(footer)
 
 	var back := _make_back_button()
-	back.pressed.connect(func() -> void:
-		emit_signal("back_pressed")
-	)
+	back.pressed.connect(_on_back_or_descent_pressed)
 	footer.add_child(back)
 	_back_button = back
 
@@ -147,6 +152,9 @@ func _build_ui(host: Node) -> void:
 	footer.add_child(_begin_descent_button)
 
 func _on_back_or_descent_pressed() -> void:
+	if _lobby_mode_enabled:
+		emit_signal("lobby_done_pressed")
+		return
 	if _run_setup_mode_enabled:
 		emit_signal("begin_descent_pressed")
 	else:
@@ -171,16 +179,30 @@ func set_oaths_only_mode(enabled: bool) -> void:
 	_oaths_only_mode_enabled = enabled
 	_apply_mode_visibility()
 
+func set_lobby_mode(is_host: bool) -> void:
+	_lobby_mode_enabled = true
+	_lobby_is_host = is_host
+	_apply_mode_visibility()
+
+func set_host_modifier_display_loadout(loadout: Array) -> void:
+	_host_modifier_display_loadout.clear()
+	for entry_variant in loadout:
+		var entry := String(entry_variant).strip_edges()
+		if not entry.is_empty():
+			_host_modifier_display_loadout.append(entry)
+
 func _apply_mode_visibility() -> void:
-	var lock_character: bool = _run_setup_mode_enabled or _oaths_only_mode_enabled
+	var lock_character: bool = _run_setup_mode_enabled or _oaths_only_mode_enabled or _lobby_mode_enabled
 	if _prev_char_button != null:
 		_prev_char_button.visible = not lock_character
 	if _next_char_button != null:
 		_next_char_button.visible = not lock_character
 	if _back_button != null:
-		_back_button.text = "Back"
+		_back_button.text = "Done" if _lobby_mode_enabled else "Back"
 	if _begin_descent_button != null:
-		_begin_descent_button.visible = _run_setup_mode_enabled
+		_begin_descent_button.visible = _run_setup_mode_enabled and not _lobby_mode_enabled
+	if _oath_column_root != null:
+		(_oath_column_root as Control).visible = not _lobby_mode_enabled
 	if _oaths_only_mode_enabled:
 		if _title_label != null:
 			_title_label.text = "Oaths"
@@ -194,7 +216,7 @@ func _apply_mode_visibility() -> void:
 			(_catalyst_column_root as Control).visible = false
 	else:
 		if _title_label != null:
-			_title_label.text = "Ascension & Oaths"
+			_title_label.text = "Ascension & Catalysts" if _lobby_mode_enabled else "Ascension & Oaths"
 		if _rank_label != null:
 			_rank_label.visible = true
 		if _character_label != null:
@@ -268,10 +290,12 @@ func _refresh_modifier_list() -> void:
 	_clear_children(_modifier_list)
 	var profile: Dictionary = _get_profile()
 	var loadout: Array[String] = META_PROGRESS_STORE.get_ascension_loadout(profile, _character_id)
+	if _lobby_mode_enabled and not _lobby_is_host:
+		loadout = _host_modifier_display_loadout.duplicate()
 	var completed_oaths: Array[String] = META_PROGRESS_STORE.get_completed_oath_ids(profile)
-	var ascension_unlocked: bool = _is_ascension_unlocked()
+	var ascension_unlocked: bool = _is_ascension_unlocked() or _lobby_mode_enabled
 	if _modifier_lock_banner != null:
-		_modifier_lock_banner.visible = not ascension_unlocked
+		_modifier_lock_banner.visible = not ascension_unlocked and not _lobby_mode_enabled
 	for id_variant in ASCENSION_REGISTRY.get_modifier_ids():
 		var modifier_id: String = String(id_variant)
 		var def: Dictionary = ASCENSION_REGISTRY.get_definition(modifier_id)
@@ -281,6 +305,8 @@ func _refresh_modifier_list() -> void:
 		var oath_unlocked: bool = locked_by.is_empty() or completed_oaths.has(locked_by)
 		var unlocked: bool = ascension_unlocked and oath_unlocked
 		var equipped: bool = loadout.has(modifier_id)
+		if _lobby_mode_enabled and not _lobby_is_host and equipped:
+			unlocked = true
 		_modifier_list.add_child(_make_modifier_card(modifier_id, def, unlocked, equipped))
 
 func _make_modifier_card(modifier_id: String, def: Dictionary, unlocked: bool, equipped: bool) -> PanelContainer:
@@ -339,6 +365,9 @@ func _make_modifier_card(modifier_id: String, def: Dictionary, unlocked: bool, e
 	if not unlocked:
 		toggle.text = "Locked"
 		toggle.disabled = true
+	elif _lobby_mode_enabled and not _lobby_is_host:
+		toggle.text = "Host"
+		toggle.disabled = true
 	else:
 		toggle.text = "Equipped" if equipped else "Equip"
 		toggle.pressed.connect(func() -> void:
@@ -349,7 +378,9 @@ func _make_modifier_card(modifier_id: String, def: Dictionary, unlocked: bool, e
 	return card
 
 func _toggle_modifier(modifier_id: String) -> void:
-	if not _is_ascension_unlocked():
+	if _lobby_mode_enabled and not _lobby_is_host:
+		return
+	if not _is_ascension_unlocked() and not _lobby_mode_enabled:
 		return
 	var profile: Dictionary = _get_profile()
 	var loadout: Array[String] = META_PROGRESS_STORE.get_ascension_loadout(profile, _character_id)
@@ -360,6 +391,8 @@ func _toggle_modifier(modifier_id: String) -> void:
 	META_PROGRESS_STORE.set_ascension_loadout(profile, _character_id, loadout)
 	_save_profile()
 	_sync_active_loadout_with_selection()
+	if _lobby_mode_enabled and _lobby_is_host:
+		emit_signal("ascension_loadout_changed", loadout.duplicate())
 	_refresh_header()
 	_refresh_modifier_list()
 

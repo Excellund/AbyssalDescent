@@ -8,6 +8,8 @@ const MENU_MUSIC := preload("res://music/msx1.mp3")
 const AUDIO_LEVELS := preload("res://scripts/shared/audio_levels.gd")
 const ASCENSION_REGISTRY := preload("res://scripts/progression/ascension_modifier_registry.gd")
 const META_PROGRESS_STORE := preload("res://scripts/meta_progress_store.gd")
+const ASCENSION_PANEL_SCRIPT := preload("res://scripts/ui/ascension/ascension_panel.gd")
+const FORSWORN_TIER_ID := 3
 
 signal leave_lobby_requested
 
@@ -16,9 +18,13 @@ signal leave_lobby_requested
 @onready var character_selector: TabContainer = $VBoxContainer/CharacterSelectorPanel/VBoxContainer3/CharacterTabs
 @onready var difficulty_selector: OptionButton = $VBoxContainer/DifficultySelectorPanel/HBoxContainer/DifficultyDropdown
 @onready var difficulty_panel: PanelContainer = $VBoxContainer/DifficultySelectorPanel
+@onready var ascension_setup_panel: PanelContainer = $VBoxContainer/AscensionSetupPanel
+@onready var ascension_configure_button: Button = $VBoxContainer/AscensionSetupPanel/AscensionConfigureButton
+@onready var ascension_lock_toast_label: Label = $VBoxContainer/AscensionLockToastLabel
 @onready var ready_button: Button = $VBoxContainer/ReadyButton
 @onready var leave_lobby_button: Button = $VBoxContainer/LeaveLobbyButton
 @onready var status_label: Label = $VBoxContainer/StatusLabel
+@onready var ascension_panel_overlay: Control = $AscensionPanelOverlay
 @onready var background: ColorRect = $Background
 
 var available_characters: Array = []
@@ -46,6 +52,8 @@ var lobby_music_player: AudioStreamPlayer
 var lobby_background_layer: Control
 var _embedded_in_menu: bool = false
 var _room_code_copy_tween: Tween = null
+var _ascension_lock_toast_tween: Tween = null
+var lobby_ascension_panel: Panel = null
 
 
 func set_embedded_in_menu(enabled: bool) -> void:
@@ -84,6 +92,12 @@ func _ready() -> void:
 	## Difficulty selector setup (host only)
 	_setup_difficulty_selector()
 	_setup_ascension_info()
+	_setup_lobby_ascension_panel()
+	if ascension_configure_button != null and not ascension_configure_button.pressed.is_connected(_on_ascension_configure_pressed):
+		ascension_configure_button.pressed.connect(_on_ascension_configure_pressed)
+	if ascension_setup_panel != null and not ascension_setup_panel.gui_input.is_connected(_on_ascension_setup_panel_gui_input):
+		ascension_setup_panel.gui_input.connect(_on_ascension_setup_panel_gui_input)
+	_update_ascension_visibility()
 	
 	## Ready button
 	ready_button.pressed.connect(_on_ready_button_pressed)
@@ -182,6 +196,7 @@ func _process(_delta: float) -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED:
 		_apply_lobby_layout()
+		_apply_ascension_overlay_layout()
 
 
 func _exit_tree() -> void:
@@ -318,7 +333,7 @@ func _setup_difficulty_selector() -> void:
 	difficulty_selector.add_item("Pilgrim", 0)
 	difficulty_selector.add_item("Delver", 1)
 	difficulty_selector.add_item("Harbinger", 2)
-	difficulty_selector.add_item("Forsworn", 3)
+	difficulty_selector.add_item("Forsworn", FORSWORN_TIER_ID)
 	
 	difficulty_selector.select(selected_difficulty_tier)
 	difficulty_selector.item_selected.connect(_on_difficulty_selected)
@@ -327,6 +342,236 @@ func _setup_difficulty_selector() -> void:
 	if not bool(multiplayer_session_manager.is_host()):
 		difficulty_selector.disabled = true
 		status_label.text = "Waiting for host to select difficulty..."
+	_update_ascension_visibility()
+
+
+func _setup_lobby_ascension_panel() -> void:
+	if ascension_panel_overlay == null:
+		return
+	var overlay_layer: CanvasLayer = get_node_or_null("AscensionOverlayLayer") as CanvasLayer
+	if overlay_layer == null:
+		overlay_layer = CanvasLayer.new()
+		overlay_layer.name = "AscensionOverlayLayer"
+		overlay_layer.layer = 64
+		add_child(overlay_layer)
+	if ascension_panel_overlay.get_parent() != overlay_layer:
+		ascension_panel_overlay.get_parent().remove_child(ascension_panel_overlay)
+		overlay_layer.add_child(ascension_panel_overlay)
+	ascension_panel_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	ascension_panel_overlay.position = Vector2.ZERO
+	ascension_panel_overlay.size = get_viewport_rect().size
+	ascension_panel_overlay.scale = Vector2.ONE
+	ascension_panel_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	if ascension_panel_overlay.get_node_or_null("Backdrop") == null:
+		var backdrop := ColorRect.new()
+		backdrop.name = "Backdrop"
+		backdrop.color = Color(0.02, 0.035, 0.06, 0.86)
+		backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+		backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
+		ascension_panel_overlay.add_child(backdrop)
+	var center: CenterContainer = ascension_panel_overlay.get_node_or_null("Center") as CenterContainer
+	if center == null:
+		center = CenterContainer.new()
+		center.name = "Center"
+		center.set_anchors_preset(Control.PRESET_FULL_RECT)
+		center.mouse_filter = Control.MOUSE_FILTER_PASS
+		ascension_panel_overlay.add_child(center)
+	if lobby_ascension_panel == null:
+		var frame := PanelContainer.new()
+		frame.name = "Frame"
+		frame.add_theme_stylebox_override("panel", _make_panel_style(Color(0.06, 0.09, 0.13, 0.98), Color(0.34, 0.56, 0.84, 0.78), 18, 2))
+		center.add_child(frame)
+		lobby_ascension_panel = ASCENSION_PANEL_SCRIPT.new()
+		lobby_ascension_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		lobby_ascension_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		lobby_ascension_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 0))
+		frame.add_child(lobby_ascension_panel)
+		lobby_ascension_panel._build_ui(self)
+		if not lobby_ascension_panel.back_pressed.is_connected(_on_ascension_lobby_done):
+			lobby_ascension_panel.back_pressed.connect(_on_ascension_lobby_done)
+		if not lobby_ascension_panel.lobby_done_pressed.is_connected(_on_ascension_lobby_done):
+			lobby_ascension_panel.lobby_done_pressed.connect(_on_ascension_lobby_done)
+		if not lobby_ascension_panel.ascension_loadout_changed.is_connected(_on_lobby_ascension_loadout_changed):
+			lobby_ascension_panel.ascension_loadout_changed.connect(_on_lobby_ascension_loadout_changed)
+	_apply_ascension_overlay_layout()
+	ascension_panel_overlay.visible = false
+
+
+func _apply_ascension_overlay_layout() -> void:
+	if ascension_panel_overlay == null:
+		return
+	var viewport_size := get_viewport_rect().size
+	if viewport_size.x > 0.0 and viewport_size.y > 0.0:
+		ascension_panel_overlay.position = Vector2.ZERO
+		ascension_panel_overlay.size = viewport_size
+	var frame := ascension_panel_overlay.get_node_or_null("Center/Frame") as Control
+	if frame == null:
+		return
+	var reference_size := ascension_panel_overlay.size
+	if reference_size.x <= 0.0 or reference_size.y <= 0.0:
+		reference_size = viewport_size
+	var margin := Vector2(maxf(40.0, reference_size.x * 0.08), maxf(36.0, reference_size.y * 0.08))
+	var target_size := Vector2(
+		clampf(reference_size.x - margin.x * 2.0, 640.0, reference_size.x),
+		clampf(reference_size.y - margin.y * 2.0, 420.0, reference_size.y),
+	)
+	frame.custom_minimum_size = target_size
+
+
+func _resolve_lobby_panel_character_id() -> String:
+	var candidate: String = String(local_character_id).strip_edges().to_lower()
+	if candidate.is_empty() or candidate == "random":
+		return CHARACTER_REGISTRY.get_default_character_id()
+	return candidate
+
+
+func _has_any_ready_players() -> bool:
+	for state_variant in peer_state.values():
+		var state: Dictionary = state_variant as Dictionary
+		if bool(state.get("is_ready", false)):
+			return true
+	return false
+
+
+func _is_local_ready_locked() -> bool:
+	if local_is_ready:
+		return true
+	if local_peer_id <= 0:
+		return false
+	if peer_state.has(local_peer_id):
+		return bool((peer_state.get(local_peer_id, {}) as Dictionary).get("is_ready", false))
+	return false
+
+
+func _get_ascension_ready_lock_message() -> String:
+	if _is_local_ready_locked():
+		return "You are ready. Unready before changing Forsworn setup."
+	if _has_any_ready_players():
+		return "Cannot change Forsworn setup while any player is ready."
+	return ""
+
+
+func _can_open_ascension_overlay(show_feedback: bool) -> bool:
+	if selected_difficulty_tier != FORSWORN_TIER_ID:
+		if show_feedback and status_label != null:
+			status_label.text = "Ascension setup is only available on Forsworn."
+		return false
+	if lobby_ascension_panel == null or ascension_panel_overlay == null:
+		if show_feedback and status_label != null:
+			status_label.text = "Ascension setup is not available right now."
+		return false
+	if multiplayer_session_manager == null or not multiplayer_session_manager.session_connected:
+		if show_feedback and status_label != null:
+			status_label.text = "Session is not connected yet."
+		return false
+	if local_peer_id <= 0 or not peer_state.has(local_peer_id):
+		if show_feedback and status_label != null:
+			status_label.text = "Waiting for lobby roster sync..."
+		return false
+	var ready_lock_message: String = _get_ascension_ready_lock_message()
+	if not ready_lock_message.is_empty():
+		if show_feedback and status_label != null:
+			status_label.text = ready_lock_message
+		return false
+	if not bool(multiplayer_session_manager.is_host()) and not _client_can_send_rpcs():
+		if show_feedback and status_label != null:
+			status_label.text = "Still connecting to host..."
+		return false
+	return true
+
+
+func _update_ascension_visibility() -> void:
+	var forsworn_selected: bool = selected_difficulty_tier == FORSWORN_TIER_ID
+	if ascension_setup_panel != null:
+		ascension_setup_panel.visible = forsworn_selected
+	if ascension_configure_button != null:
+		ascension_configure_button.disabled = not _can_open_ascension_overlay(false)
+		if bool(multiplayer_session_manager != null and multiplayer_session_manager.is_host()):
+			ascension_configure_button.text = "Configure Ascension & Catalysts"
+		else:
+			ascension_configure_button.text = "View Ascension / Configure Catalysts"
+	if not forsworn_selected and ascension_panel_overlay != null:
+		ascension_panel_overlay.visible = false
+	if ascension_lock_toast_label != null and (not forsworn_selected or _can_open_ascension_overlay(false)):
+		ascension_lock_toast_label.visible = false
+		ascension_lock_toast_label.modulate.a = 1.0
+	call_deferred("_apply_lobby_layout")
+	if _embedded_in_menu:
+		call_deferred("_refresh_embedded_menu_layout")
+
+func _refresh_embedded_menu_layout() -> void:
+	var menu_controller = get_tree().root.get_child(0)
+	if menu_controller != null and menu_controller.has_method("refresh_lobby_modal_layout"):
+		menu_controller.refresh_lobby_modal_layout()
+
+
+func _on_ascension_setup_panel_gui_input(event: InputEvent) -> void:
+	if not (event is InputEventMouseButton):
+		return
+	var mouse_event := event as InputEventMouseButton
+	if mouse_event.button_index != MOUSE_BUTTON_LEFT or not mouse_event.pressed:
+		return
+	if ascension_configure_button == null or not ascension_configure_button.disabled:
+		return
+	var lock_message: String = _get_ascension_ready_lock_message()
+	if lock_message.is_empty():
+		return
+	_show_ascension_ready_lock_toast(lock_message)
+
+
+func _show_ascension_ready_lock_toast(message: String) -> void:
+	if ascension_lock_toast_label == null:
+		return
+	if _ascension_lock_toast_tween != null and _ascension_lock_toast_tween.is_valid():
+		_ascension_lock_toast_tween.kill()
+	ascension_lock_toast_label.text = message
+	ascension_lock_toast_label.visible = true
+	ascension_lock_toast_label.modulate = Color(1.0, 0.90, 0.66, 0.0)
+	call_deferred("_apply_lobby_layout")
+	if _embedded_in_menu:
+		call_deferred("_refresh_embedded_menu_layout")
+	var tw := create_tween()
+	tw.tween_property(ascension_lock_toast_label, "modulate:a", 1.0, 0.12)
+	tw.tween_interval(1.45)
+	tw.tween_property(ascension_lock_toast_label, "modulate:a", 0.0, 0.24)
+	tw.tween_callback(func() -> void:
+		if ascension_lock_toast_label != null:
+			ascension_lock_toast_label.visible = false
+			ascension_lock_toast_label.modulate.a = 1.0
+			call_deferred("_apply_lobby_layout")
+			if _embedded_in_menu:
+				call_deferred("_refresh_embedded_menu_layout")
+	)
+	_ascension_lock_toast_tween = tw
+
+
+func _on_ascension_configure_pressed() -> void:
+	if not _can_open_ascension_overlay(true):
+		return
+	var is_host: bool = bool(multiplayer_session_manager.is_host())
+	var character_id: String = _resolve_lobby_panel_character_id()
+	lobby_ascension_panel.set_lobby_mode(is_host)
+	lobby_ascension_panel.set_oaths_only_mode(false)
+	lobby_ascension_panel.set_run_setup_mode(false)
+	lobby_ascension_panel.set_character_id(character_id)
+	if not is_host:
+		lobby_ascension_panel.set_host_modifier_display_loadout(selected_ascension_loadout)
+	lobby_ascension_panel.populate()
+	ascension_panel_overlay.visible = true
+	_apply_ascension_overlay_layout()
+
+
+func _on_ascension_lobby_done() -> void:
+	if ascension_panel_overlay != null:
+		ascension_panel_overlay.visible = false
+	if bool(multiplayer_session_manager.is_host()):
+		_refresh_host_ascension_loadout(_resolve_lobby_panel_character_id())
+
+
+func _on_lobby_ascension_loadout_changed(loadout: Array) -> void:
+	if not bool(multiplayer_session_manager.is_host()):
+		return
+	_broadcast_ascension_loadout.rpc(loadout)
 
 
 ## Setup the host-side ascension info label and seed the initial loadout from saved meta.
@@ -374,6 +619,9 @@ func _apply_ascension_loadout(loadout: Array) -> void:
 			sanitized_loadout.append(entry)
 	selected_ascension_loadout = sanitized_loadout
 	_update_ascension_info_label()
+	if ascension_panel_overlay != null and ascension_panel_overlay.visible and lobby_ascension_panel != null and not bool(multiplayer_session_manager.is_host()):
+		lobby_ascension_panel.set_host_modifier_display_loadout(selected_ascension_loadout)
+		lobby_ascension_panel.populate()
 
 
 func _update_ascension_info_label() -> void:
@@ -404,6 +652,11 @@ func _on_character_tab_changed(tab_index: int) -> void:
 				status_label.text = "Still connecting to host..."
 				return
 			_request_character_selection.rpc_id(1, "random")
+		if ascension_panel_overlay != null and ascension_panel_overlay.visible and lobby_ascension_panel != null:
+			lobby_ascension_panel.set_character_id(_resolve_lobby_panel_character_id())
+			if not bool(multiplayer_session_manager.is_host()):
+				lobby_ascension_panel.set_host_modifier_display_loadout(selected_ascension_loadout)
+			lobby_ascension_panel.populate()
 		return
 	if tab_index < 0 or tab_index >= available_characters.size():
 		return
@@ -415,6 +668,11 @@ func _on_character_tab_changed(tab_index: int) -> void:
 			status_label.text = "Still connecting to host..."
 			return
 		_request_character_selection.rpc_id(1, local_character_id)
+	if ascension_panel_overlay != null and ascension_panel_overlay.visible and lobby_ascension_panel != null:
+		lobby_ascension_panel.set_character_id(_resolve_lobby_panel_character_id())
+		if not bool(multiplayer_session_manager.is_host()):
+			lobby_ascension_panel.set_host_modifier_display_loadout(selected_ascension_loadout)
+		lobby_ascension_panel.populate()
 
 
 ## Called when host changes difficulty.
@@ -427,6 +685,7 @@ func _on_difficulty_selected(index: int) -> void:
 			status_label.text = "Still connecting to host..."
 			return
 		_request_difficulty_change.rpc_id(1, selected_difficulty_tier)
+	_update_ascension_visibility()
 
 
 ## Called when local player clicks Ready.
@@ -743,6 +1002,7 @@ func _apply_difficulty_selection(difficulty_tier: int) -> void:
 	difficulty_selector.select(difficulty_tier)
 	if not bool(multiplayer_session_manager.is_host()):
 		status_label.text = ""
+	_update_ascension_visibility()
 
 
 ## RPC: Client -> Host request to change difficulty.
@@ -768,7 +1028,10 @@ func _apply_ready_state(peer_id: int, is_ready: bool) -> void:
 		ready_button.disabled = is_ready
 		ready_button.text = "READY ✓" if is_ready else "READY?"
 		_apply_ready_button_style(is_ready)
+	if is_ready and ascension_panel_overlay != null and ascension_panel_overlay.visible:
+		ascension_panel_overlay.visible = false
 	_update_player_list()
+	_update_ascension_visibility()
 	if bool(multiplayer_session_manager.is_host()):
 		_check_all_ready()
 
@@ -1030,8 +1293,9 @@ func _apply_lobby_style() -> void:
 	var player_list_panel: PanelContainer = $VBoxContainer/PlayerListPanel
 	var char_selector_panel: PanelContainer = $VBoxContainer/CharacterSelectorPanel
 	var difficulty_panel_node: PanelContainer = $VBoxContainer/DifficultySelectorPanel
+	var ascension_setup_panel_node: PanelContainer = $VBoxContainer/AscensionSetupPanel
 	char_selector_panel.custom_minimum_size = Vector2(0.0, 190.0)
-	for panel_node in [room_code_panel, player_list_panel, char_selector_panel, difficulty_panel_node]:
+	for panel_node in [room_code_panel, player_list_panel, char_selector_panel, difficulty_panel_node, ascension_setup_panel_node]:
 		panel_node.add_theme_stylebox_override("panel", _make_panel_style(panel_bg, panel_border, 16, 2))
 
 	## Room code label
@@ -1074,6 +1338,18 @@ func _apply_lobby_style() -> void:
 	difficulty_selector.add_theme_stylebox_override("focus", _make_button_style(Color(0.13, 0.20, 0.29, 0.98), Color(0.86, 0.96, 1.0, 1.0), 14, 2))
 	difficulty_selector.add_theme_stylebox_override("disabled", _make_button_style(Color(0.08, 0.10, 0.14, 0.82), Color(0.22, 0.26, 0.32, 0.54), 14, 2))
 
+	if ascension_configure_button != null:
+		ascension_configure_button.add_theme_font_size_override("font_size", 18)
+		ascension_configure_button.add_theme_color_override("font_color", label_color)
+		ascension_configure_button.add_theme_color_override("font_hover_color", Color(0.98, 1.0, 1.0, 1.0))
+		ascension_configure_button.add_theme_stylebox_override("normal", _make_button_style(Color(0.16, 0.22, 0.10, 0.95), Color(0.74, 0.84, 0.42, 0.85), 14, 2))
+		ascension_configure_button.add_theme_stylebox_override("hover", _make_button_style(Color(0.20, 0.28, 0.12, 0.98), Color(0.88, 0.96, 0.58, 0.95), 14, 2))
+		ascension_configure_button.add_theme_stylebox_override("pressed", _make_button_style(Color(0.13, 0.18, 0.08, 0.98), Color(0.80, 0.90, 0.50, 0.92), 14, 2))
+
+	if ascension_lock_toast_label != null:
+		ascension_lock_toast_label.add_theme_font_size_override("font_size", 13)
+		ascension_lock_toast_label.add_theme_color_override("font_color", Color(1.0, 0.90, 0.66, 0.98))
+
 	## Ready button
 	ready_button.add_theme_font_size_override("font_size", 22)
 	ready_button.add_theme_color_override("font_color", label_color)
@@ -1114,9 +1390,10 @@ func _apply_lobby_layout() -> void:
 	var fit_scale := minf(available_size.x / base_size.x, available_size.y / base_size.y)
 	fit_scale = clampf(fit_scale, 0.80, 1.0)
 	var target_size := base_size * fit_scale
-	## Grow vertically with content so extra player rows don't overflow the panel border.
+	## Grow vertically with content so extra rows (ascension setup, ready, etc.) don't overflow.
 	var content_min := content.get_combined_minimum_size()
-	var min_height := maxf(target_size.y, content_min.y)
+	var padding_y := 48.0
+	var min_height := maxf(target_size.y, content_min.y + padding_y)
 	target_size.y = minf(min_height, available_size.y)
 	content.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	content.custom_minimum_size = target_size

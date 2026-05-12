@@ -840,7 +840,7 @@ func _apply_menu_layout() -> void:
 	if atmosphere_band != null:
 		_set_centered_panel_layout(atmosphere_band, Vector2(620.0, 660.0), fit_scale, viewport_size)
 	if lobby_modal_panel != null:
-		_set_centered_panel_layout(lobby_modal_panel, Vector2(980.0, 760.0), fit_scale, viewport_size)
+		_set_centered_panel_layout(lobby_modal_panel, _lobby_modal_size(), fit_scale, viewport_size)
 	if lobby_modal_instance != null:
 		lobby_modal_instance.set_anchors_preset(Control.PRESET_FULL_RECT)
 		lobby_modal_instance.position = Vector2.ZERO
@@ -856,6 +856,21 @@ func _root_panel_base_size() -> Vector2:
 	var required_height := min_shell_height + (MAIN_MENU_SHELL_PADDING * 2.0)
 	base_size.y = maxf(base_size.y, required_height)
 	return base_size
+
+func _lobby_modal_size() -> Vector2:
+	var base_width := 980.0
+	var base_height := 560.0
+	if lobby_modal_instance == null or not lobby_modal_instance.is_inside_tree():
+		return Vector2(base_width, base_height)
+	var content_min_size := lobby_modal_instance.get_combined_minimum_size()
+	if content_min_size.y <= 0.0:
+		return Vector2(base_width, base_height)
+	var content_height := content_min_size.y + 48.0
+	base_height = maxf(base_height, content_height)
+	return Vector2(base_width, base_height)
+
+func refresh_lobby_modal_layout() -> void:
+	call_deferred("_apply_menu_layout")
 
 func _set_centered_panel_layout(panel: Panel, base_size: Vector2, panel_scale: float, viewport_size: Vector2) -> void:
 	panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
