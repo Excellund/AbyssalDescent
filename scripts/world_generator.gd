@@ -744,7 +744,12 @@ func _setup_encounter_profile_builder_system() -> void:
 		encounter_profile_builder.set_difficulty_tier(difficulty_tier)
 		_apply_difficulty_tier_bonuses(difficulty_tier)
 	if run_context != null:
-		encounter_profile_builder.set_ascension_loadout(run_context.get_active_ascension_loadout())
+		var loadout := run_context.get_active_ascension_loadout()
+		if loadout.is_empty():
+			loadout = run_context.get_saved_ascension_loadout(current_character_id)
+			if not loadout.is_empty():
+				run_context.set_active_ascension_loadout(loadout)
+		encounter_profile_builder.set_ascension_loadout(loadout)
 	encounter_profile_builder.configure({
 		"room_base_size": room_base_size,
 		"room_size_growth": room_size_growth,
@@ -1685,10 +1690,16 @@ func _get_hud_state() -> Dictionary:
 		"current_character_passive_name": current_character_passive_name,
 		"run_elapsed_seconds": run_summary_recorder.get_run_elapsed_seconds(),
 		"timer_visible_in_hud": true,
+		"ascension_rank": encounter_profile_builder.get_ascension_rank() if encounter_profile_builder != null else 0,
+		"equipped_catalyst_count": 0,
 	}
 	var run_context := _get_run_context()
 	if run_context != null:
 		hud_state["timer_visible_in_hud"] = bool(run_context.is_timer_visible_in_hud())
+		hud_state["equipped_catalyst_count"] = run_context.get_equipped_catalyst_ids(current_character_id).size()
+		var active_loadout := run_context.get_active_ascension_loadout()
+		if not active_loadout.is_empty():
+			hud_state["ascension_rank"] = ASCENSION_REGISTRY.compute_loadout_rank(active_loadout)
 	var active_powers := _get_active_player_powers()
 	hud_state["active_boons"] = active_powers["boons"]
 	hud_state["active_arcana"] = active_powers["arcana"]

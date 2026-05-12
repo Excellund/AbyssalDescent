@@ -19,6 +19,11 @@ var status_label: RichTextLabel
 var power_registry_instance = POWER_REGISTRY.new()
 var status_bearing_badge_panel: Panel
 var status_bearing_badge_label: Label
+var status_badge_divider: Panel
+var status_badge_asc_icon: TextureRect
+var status_badge_asc_label: Label
+var status_badge_cat_icon: TextureRect
+var status_badge_cat_label: Label
 var status_mutator_icon: TextureRect
 var status_mutator_label: Label
 var stats_panel: Panel
@@ -176,32 +181,73 @@ func _create_hud() -> void:
 
 	status_bearing_badge_panel = Panel.new()
 	status_bearing_badge_panel.position = Vector2(206.0, 7.0)
-	status_bearing_badge_panel.custom_minimum_size = Vector2(88.0, 24.0)
+	status_bearing_badge_panel.custom_minimum_size = Vector2(90.0, 26.0)
 	var badge_style := StyleBoxFlat.new()
-	badge_style.bg_color = Color(0.26, 0.38, 0.34, 0.82)
+	badge_style.bg_color = Color(0.26, 0.38, 0.34, 0.88)
 	badge_style.border_color = Color(0.72, 0.9, 0.84, 0.94)
 	badge_style.border_width_left = 1
 	badge_style.border_width_top = 1
 	badge_style.border_width_right = 1
 	badge_style.border_width_bottom = 1
-	badge_style.corner_radius_top_left = 6
-	badge_style.corner_radius_top_right = 6
-	badge_style.corner_radius_bottom_left = 6
-	badge_style.corner_radius_bottom_right = 6
+	badge_style.corner_radius_top_left = 8
+	badge_style.corner_radius_top_right = 8
+	badge_style.corner_radius_bottom_left = 8
+	badge_style.corner_radius_bottom_right = 8
 	status_bearing_badge_panel.add_theme_stylebox_override("panel", badge_style)
 	status_panel.add_child(status_bearing_badge_panel)
 
 	status_bearing_badge_label = Label.new()
-	status_bearing_badge_label.position = Vector2(1.0, 0.0)
-	status_bearing_badge_label.custom_minimum_size = Vector2(72.0, 24.0)
+	status_bearing_badge_label.position = Vector2(0.0, 0.0)
+	status_bearing_badge_label.custom_minimum_size = Vector2(90.0, 26.0)
 	status_bearing_badge_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	status_bearing_badge_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	status_bearing_badge_label.add_theme_font_size_override("font_size", 13)
+	status_bearing_badge_label.add_theme_font_size_override("font_size", 14)
 	status_bearing_badge_label.add_theme_color_override("font_color", Color(0.9, 0.98, 0.94, 0.98))
 	status_bearing_badge_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.88))
-	status_bearing_badge_label.add_theme_constant_override("shadow_offset_x", 0)
-	status_bearing_badge_label.add_theme_constant_override("shadow_offset_y", 0)
+	status_bearing_badge_label.add_theme_constant_override("shadow_offset_x", 1)
+	status_bearing_badge_label.add_theme_constant_override("shadow_offset_y", 1)
 	status_bearing_badge_panel.add_child(status_bearing_badge_label)
+
+	status_badge_divider = Panel.new()
+	status_badge_divider.visible = false
+	var div_style := StyleBoxFlat.new()
+	div_style.bg_color = Color(0.72, 0.9, 0.84, 0.28)
+	status_badge_divider.add_theme_stylebox_override("panel", div_style)
+	status_bearing_badge_panel.add_child(status_badge_divider)
+
+	status_badge_asc_icon = TextureRect.new()
+	status_badge_asc_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	status_badge_asc_icon.modulate = Color("#E8925A")
+	status_badge_asc_icon.visible = false
+	status_bearing_badge_panel.add_child(status_badge_asc_icon)
+
+	status_badge_asc_label = Label.new()
+	status_badge_asc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	status_badge_asc_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	status_badge_asc_label.add_theme_font_size_override("font_size", 11)
+	status_badge_asc_label.add_theme_color_override("font_color", Color("#F0C4A8"))
+	status_badge_asc_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.75))
+	status_badge_asc_label.add_theme_constant_override("shadow_offset_x", 1)
+	status_badge_asc_label.add_theme_constant_override("shadow_offset_y", 1)
+	status_badge_asc_label.visible = false
+	status_bearing_badge_panel.add_child(status_badge_asc_label)
+
+	status_badge_cat_icon = TextureRect.new()
+	status_badge_cat_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	status_badge_cat_icon.modulate = Color("#6CB8EA")
+	status_badge_cat_icon.visible = false
+	status_bearing_badge_panel.add_child(status_badge_cat_icon)
+
+	status_badge_cat_label = Label.new()
+	status_badge_cat_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	status_badge_cat_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	status_badge_cat_label.add_theme_font_size_override("font_size", 11)
+	status_badge_cat_label.add_theme_color_override("font_color", Color("#A8D8F8"))
+	status_badge_cat_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.75))
+	status_badge_cat_label.add_theme_constant_override("shadow_offset_x", 1)
+	status_badge_cat_label.add_theme_constant_override("shadow_offset_y", 1)
+	status_badge_cat_label.visible = false
+	status_bearing_badge_panel.add_child(status_badge_cat_label)
 
 	status_mutator_icon = TextureRect.new()
 	status_mutator_icon.position = Vector2(10.0, 41.0)
@@ -474,7 +520,9 @@ func _update_status_panel_text(state: Dictionary) -> void:
 	var _encounter_intro_grace_left := float(state.get("encounter_intro_grace_left", 0.0))
 	var encounter_intro_grace_active := bool(state.get("encounter_intro_grace_active", false))
 	var current_difficulty_tier := int(state.get("current_difficulty_tier", 0))
-	_update_bearing_badge(current_difficulty_tier)
+	var ascension_rank := int(state.get("ascension_rank", 0))
+	var equipped_catalyst_count := int(state.get("equipped_catalyst_count", 0))
+	_update_bearing_badge(current_difficulty_tier, ascension_rank, equipped_catalyst_count)
 
 	var boss_unlocked := bool(state.get("boss_unlocked", false))
 	var first_boss_defeated := bool(state.get("first_boss_defeated", false))
@@ -615,31 +663,110 @@ func _bearing_color_from_tier(tier: int) -> Color:
 		_:
 			return Color("#9FE7C7")
 
-func _update_bearing_badge(tier: int) -> void:
+func _update_bearing_badge(tier: int, ascension_rank: int = 0, catalyst_count: int = 0) -> void:
 	if status_bearing_badge_panel == null or status_bearing_badge_label == null:
 		return
 	var bearing_name := _bearing_name_from_tier(tier)
 	var tier_color := _bearing_color_from_tier(tier)
-	var tier_border := Color(tier_color.r, tier_color.g, tier_color.b, 0.98)
-	var tier_fill := Color(tier_color.r * 0.24, tier_color.g * 0.24, tier_color.b * 0.24, 0.86)
+	var tier_border := Color(tier_color.r, tier_color.g, tier_color.b, 0.92)
+	var tier_fill := Color(tier_color.r * 0.16, tier_color.g * 0.16, tier_color.b * 0.16, 0.92)
 	var style := status_bearing_badge_panel.get_theme_stylebox("panel")
 	if style is StyleBoxFlat:
 		var badge_style := style as StyleBoxFlat
 		badge_style.bg_color = tier_fill
 		badge_style.border_color = tier_border
 		status_bearing_badge_panel.add_theme_stylebox_override("panel", badge_style)
-	status_bearing_badge_label.text = bearing_name
-	status_bearing_badge_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.98))
+	var has_ascension := ascension_rank > 0
+	var has_catalysts := catalyst_count > 0
+	var has_modifiers := has_ascension or has_catalysts
+	var badge_h := 44.0 if has_modifiers else 26.0
+	# Measure bearing name width
 	var hud_font := ThemeDB.fallback_font
-	var text_w := 50.0
+	var name_w := 64.0
 	if hud_font != null:
-		text_w = hud_font.get_string_size(bearing_name, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 13).x
-	var badge_w := clampf(text_w + 20.0, 78.0, 122.0)
-	status_bearing_badge_panel.custom_minimum_size = Vector2(badge_w, 24.0)
-	status_bearing_badge_panel.size = Vector2(badge_w, 24.0)
+		name_w = hud_font.get_string_size(bearing_name, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 14).x
+	var badge_w := clampf(name_w + 28.0, 90.0, 140.0)
+	status_bearing_badge_panel.custom_minimum_size = Vector2(badge_w, badge_h)
+	status_bearing_badge_panel.size = Vector2(badge_w, badge_h)
 	status_bearing_badge_panel.position = Vector2(HUD_INFO_PANEL_WIDTH - badge_w - 8.0, 7.0)
-	status_bearing_badge_label.position = Vector2(1.0, 0.0)
-	status_bearing_badge_label.custom_minimum_size = Vector2(badge_w - 1.0, 24.0)
+	# Bearing name row — full width, tier color
+	status_bearing_badge_label.text = bearing_name
+	status_bearing_badge_label.add_theme_color_override("font_color", tier_color)
+	status_bearing_badge_label.position = Vector2(0.0, 0.0)
+	status_bearing_badge_label.custom_minimum_size = Vector2(badge_w, 26.0)
+	# Divider + modifier row
+	if status_badge_divider == null or status_badge_asc_icon == null:
+		return
+	if not has_modifiers:
+		status_badge_divider.visible = false
+		status_badge_asc_icon.visible = false
+		status_badge_asc_label.visible = false
+		status_badge_cat_icon.visible = false
+		status_badge_cat_label.visible = false
+		return
+	# Divider line
+	var div_style := StyleBoxFlat.new()
+	div_style.bg_color = Color(tier_color.r, tier_color.g, tier_color.b, 0.30)
+	status_badge_divider.add_theme_stylebox_override("panel", div_style)
+	status_badge_divider.position = Vector2(8.0, 26.0)
+	status_badge_divider.custom_minimum_size = Vector2(badge_w - 16.0, 1.0)
+	status_badge_divider.size = Vector2(badge_w - 16.0, 1.0)
+	status_badge_divider.visible = true
+	# Lazy-load icon textures once
+	if has_ascension and status_badge_asc_icon.texture == null:
+		var tex: Variant = load("res://assets/ui/hud/ascension_heat.svg")
+		if tex is Texture2D:
+			status_badge_asc_icon.texture = tex as Texture2D
+	if has_catalysts and status_badge_cat_icon.texture == null:
+		var tex: Variant = load("res://assets/ui/hud/catalyst.svg")
+		if tex is Texture2D:
+			status_badge_cat_icon.texture = tex as Texture2D
+	# Layout: measure number widths, center the whole row
+	const ICON_SZ := 13.0
+	const ICON_NUM_GAP := 3.0
+	const PAIR_GAP := 10.0
+	const ROW_Y := 27.0
+	var asc_num_w := 0.0
+	var cat_num_w := 0.0
+	if hud_font != null:
+		if has_ascension:
+			asc_num_w = hud_font.get_string_size(str(ascension_rank), HORIZONTAL_ALIGNMENT_LEFT, -1.0, 11).x + 2.0
+		if has_catalysts:
+			cat_num_w = hud_font.get_string_size(str(catalyst_count), HORIZONTAL_ALIGNMENT_LEFT, -1.0, 11).x + 2.0
+	var pair_w := ICON_SZ + ICON_NUM_GAP
+	var total_w := 0.0
+	if has_ascension and has_catalysts:
+		total_w = (pair_w + asc_num_w) + PAIR_GAP + (pair_w + cat_num_w)
+	elif has_ascension:
+		total_w = pair_w + asc_num_w
+	else:
+		total_w = pair_w + cat_num_w
+	var start_x := maxf(6.0, (badge_w - total_w) * 0.5)
+	if has_ascension:
+		status_badge_asc_icon.position = Vector2(start_x, ROW_Y + 1.0)
+		status_badge_asc_icon.custom_minimum_size = Vector2(ICON_SZ, ICON_SZ)
+		status_badge_asc_icon.size = Vector2(ICON_SZ, ICON_SZ)
+		status_badge_asc_icon.visible = true
+		status_badge_asc_label.text = str(ascension_rank)
+		status_badge_asc_label.position = Vector2(start_x + ICON_SZ + ICON_NUM_GAP, ROW_Y)
+		status_badge_asc_label.custom_minimum_size = Vector2(asc_num_w + 1.0, ICON_SZ)
+		status_badge_asc_label.visible = true
+	else:
+		status_badge_asc_icon.visible = false
+		status_badge_asc_label.visible = false
+	if has_catalysts:
+		var cat_x := start_x + (pair_w + asc_num_w + PAIR_GAP if has_ascension else 0.0)
+		status_badge_cat_icon.position = Vector2(cat_x, ROW_Y + 1.0)
+		status_badge_cat_icon.custom_minimum_size = Vector2(ICON_SZ, ICON_SZ)
+		status_badge_cat_icon.size = Vector2(ICON_SZ, ICON_SZ)
+		status_badge_cat_icon.visible = true
+		status_badge_cat_label.text = str(catalyst_count)
+		status_badge_cat_label.position = Vector2(cat_x + ICON_SZ + ICON_NUM_GAP, ROW_Y)
+		status_badge_cat_label.custom_minimum_size = Vector2(cat_num_w + 1.0, ICON_SZ)
+		status_badge_cat_label.visible = true
+	else:
+		status_badge_cat_icon.visible = false
+		status_badge_cat_label.visible = false
 
 func _create_build_strip(layer: CanvasLayer) -> void:
 	build_strip_panel = Panel.new()

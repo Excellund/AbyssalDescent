@@ -155,6 +155,7 @@ func _on_back_or_descent_pressed() -> void:
 func populate() -> void:
 	if _character_id.is_empty():
 		_character_id = _resolve_active_character_id()
+	_sync_active_loadout_with_selection()
 	_refresh_all()
 
 func set_character_id(char_id: String) -> void:
@@ -348,8 +349,6 @@ func _make_modifier_card(modifier_id: String, def: Dictionary, unlocked: bool, e
 	return card
 
 func _toggle_modifier(modifier_id: String) -> void:
-	if _run_setup_mode_enabled:
-		return
 	if not _is_ascension_unlocked():
 		return
 	var profile: Dictionary = _get_profile()
