@@ -5,6 +5,7 @@
 extends RefCounted
 
 const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
+static var _power_registry_instance = POWER_REGISTRY.new()
 
 ## Maps upgrade IDs to their property definitions
 const UPGRADE_PARAM_MAP := {
@@ -31,7 +32,7 @@ const UPGRADE_PARAM_MAP := {
 ## next_values should come from upgrade_system._build_trial_values()
 ## Returns true if all values were applied successfully
 static func apply_trial_power_values(player_reference: Node, power_id: String, next_stack: int, next_values: Dictionary) -> bool:
-	var power_map := POWER_REGISTRY.get_trial_power_param_map(power_id)
+	var power_map := _power_registry_instance.get_trial_power_param_map(power_id)
 	if power_map.is_empty():
 		return false
 	
@@ -75,7 +76,7 @@ static func apply_trial_power_values(player_reference: Node, power_id: String, n
 
 ## Gets the property name that should be set for a given trial power parameter
 static func get_property_name(power_id: String, param_name: String) -> String:
-	var power_map := POWER_REGISTRY.get_trial_power_param_map(power_id)
+	var power_map := _power_registry_instance.get_trial_power_param_map(power_id)
 	if power_map.is_empty():
 		return ""
 	var parameters: Dictionary = power_map.get("parameters", {})
@@ -86,7 +87,7 @@ static func get_property_name(power_id: String, param_name: String) -> String:
 ## Gets all player properties that are affected by a trial power
 static func get_affected_properties(power_id: String) -> Array[String]:
 	var properties: Array[String] = []
-	var power_map := POWER_REGISTRY.get_trial_power_param_map(power_id)
+	var power_map := _power_registry_instance.get_trial_power_param_map(power_id)
 	if power_map.is_empty():
 		return properties
 	
@@ -103,7 +104,7 @@ static func get_affected_properties(power_id: String) -> Array[String]:
 
 ## Gets the reward flag property name for a trial power (e.g. "reward_razor_wind")
 static func get_reward_flag(power_id: String) -> String:
-	var power_map := POWER_REGISTRY.get_trial_power_param_map(power_id)
+	var power_map := _power_registry_instance.get_trial_power_param_map(power_id)
 	if power_map.is_empty():
 		return ""
 	return power_map.get("reward_flag", "")
@@ -112,7 +113,7 @@ static func get_reward_flag(power_id: String) -> String:
 ## Returns a Dictionary keyed by param name (same keys as build_trial_values output).
 ## Enables symmetric cur/next access without hardcoding player property names at call sites.
 static func get_current_values(power_id: String, player_reference: Node) -> Dictionary:
-	var power_map := POWER_REGISTRY.get_trial_power_param_map(power_id)
+	var power_map := _power_registry_instance.get_trial_power_param_map(power_id)
 	if power_map.is_empty():
 		return {}
 	var parameters: Dictionary = power_map.get("parameters", {})
@@ -136,7 +137,7 @@ static func get_current_values(power_id: String, player_reference: Node) -> Dict
 
 ## Gets the stack count property name for a trial power (e.g. "razor_wind_stacks")
 static func get_stack_property(power_id: String) -> String:
-	var power_map := POWER_REGISTRY.get_trial_power_param_map(power_id)
+	var power_map := _power_registry_instance.get_trial_power_param_map(power_id)
 	if power_map.is_empty():
 		return ""
 	return power_map.get("stack_property", "")

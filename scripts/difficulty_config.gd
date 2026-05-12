@@ -222,10 +222,17 @@ static func _build_bearing_definitions() -> Dictionary:
 	}
 
 static var BEARING_DEFINITIONS = _build_bearing_definitions()
-static var _bearing_definitions_validated = (_validate_bearing_definitions(), true)[1]  ## Validates at class load time
+static var _bearing_definitions_validated: bool = false
+
+static func _ensure_bearing_definitions_validated() -> void:
+	if _bearing_definitions_validated:
+		return
+	_validate_bearing_definitions()
+	_bearing_definitions_validated = true
 
 ## Difficulty config per tier: pacing, pressure, and affordances
 static func get_tier_config(tier: int) -> Dictionary:
+	_ensure_bearing_definitions_validated()
 	if BEARING_DEFINITIONS.has(tier):
 		return (BEARING_DEFINITIONS[tier] as Dictionary).duplicate(true)
 	push_error("Invalid tier %d requested in get_tier_config()" % tier)

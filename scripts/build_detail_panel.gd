@@ -13,6 +13,7 @@ signal build_detail_closed
 
 var panel: Panel
 var is_visible := false
+var power_registry_instance = POWER_REGISTRY.new()
 
 var passive_section: VBoxContainer
 var passive_name_label: Label
@@ -388,7 +389,7 @@ func _get_power_current_desc(power_id: String, _power_type: String, player: PLAY
 	return player.get_power_current_desc(power_id)
 
 func _power_display_name(power_id: String) -> String:
-	return POWER_REGISTRY.get_power_display_name(power_id)
+	return power_registry_instance.get_power_display_name(power_id)
 
 func _format_passive_name(passive_id: String) -> String:
 	var normalized_id := passive_id.strip_edges().to_lower()

@@ -863,16 +863,16 @@ func _lookup_peer_dictionary(source: Dictionary, peer_id: int) -> Dictionary:
 func _lookup_peer_array(source: Dictionary, peer_id: int) -> Array:
 	if peer_id <= 0 or source.is_empty():
 		return []
-	var direct := source.get(peer_id, null)
+	var direct: Variant = source.get(peer_id, null)
 	if direct is Array:
 		return direct as Array
-	var as_string := source.get(str(peer_id), null)
+	var as_string: Variant = source.get(str(peer_id), null)
 	if as_string is Array:
 		return as_string as Array
 	for key_variant in source.keys():
 		if int(key_variant) != peer_id:
 			continue
-		var resolved := source.get(key_variant, null)
+		var resolved: Variant = source.get(key_variant, null)
 		if resolved is Array:
 			return resolved as Array
 	return []

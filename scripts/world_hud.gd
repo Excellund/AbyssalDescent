@@ -16,6 +16,7 @@ const HUD_INFO_PANEL_WIDTH := 302.0
 
 var status_panel: Panel
 var status_label: RichTextLabel
+var power_registry_instance = POWER_REGISTRY.new()
 var status_bearing_badge_panel: Panel
 var status_bearing_badge_label: Label
 var status_mutator_icon: TextureRect
@@ -1033,7 +1034,7 @@ func _get_passive_display_name(passive_id: String) -> String:
 			return fallback
 
 func _get_power_display_name(power_id: String) -> String:
-	var name := POWER_REGISTRY.get_power_display_name(power_id)
+	var name := power_registry_instance.get_power_display_name(power_id)
 	return name if not name.is_empty() else "Unknown"
 
 func _get_mutator_icon_texture(icon_shape_id: String) -> Texture2D:
