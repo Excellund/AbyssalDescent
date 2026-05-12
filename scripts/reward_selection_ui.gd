@@ -180,7 +180,8 @@ func open_selection(title: String, is_initial: bool, mode: int, power_registry: 
 	current_character_id = character_id
 	_current_power_registry = power_registry
 	_current_rng = rng
-	_reward_rerolls_remaining = _reward_rerolls_per_offer if not is_initial else 0
+	var allow_initial_reroll := is_initial and mode == ENUMS.RewardMode.ARCANA
+	_reward_rerolls_remaining = _reward_rerolls_per_offer if (not is_initial or allow_initial_reroll) else 0
 	_epitaph_text = epitaph
 	_apply_mode_theme()
 	if reward_selection_mode == ENUMS.RewardMode.ARCANA:
@@ -449,7 +450,7 @@ func _on_reroll_button_pressed() -> void:
 func _can_reroll_current_offer() -> bool:
 	if _reward_rerolls_remaining <= 0:
 		return false
-	if pending_initial_boon:
+	if pending_initial_boon and reward_selection_mode != ENUMS.RewardMode.ARCANA:
 		return false
 	if reward_selection_mode == ENUMS.RewardMode.MISSION and mission_reward_stage > 0:
 		return false
