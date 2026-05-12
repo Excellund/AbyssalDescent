@@ -50,6 +50,7 @@ var boon_subtitle_label: Label
 var boon_header_chip_label: Label
 var epitaph_label: RichTextLabel
 var skip_button: Button
+var reroll_button: Button
 var boon_card_panels: Array[Panel] = []
 var boon_card_labels: Array[RichTextLabel] = []
 var boon_card_stack_labels: Array[Label] = []
@@ -164,6 +165,7 @@ func close_selection() -> void:
 	if boon_layer != null:
 		boon_layer.visible = false
 	_set_skip_button_visible(false)
+	_set_reroll_button_visible(false)
 
 
 func open_selection(title: String, is_initial: bool, mode: int, power_registry: Node, player: Node2D, rng: RandomNumberGenerator, player_mutator: Dictionary = {}, epitaph: String = "", character_id: String = "") -> void:
@@ -205,7 +207,8 @@ func open_selection(title: String, is_initial: bool, mode: int, power_registry: 
 	_refresh_epitaph_display()
 	_apply_global_ui_alpha(0.0)
 	_set_skip_button_visible(false)
-	_position_skip_button()
+	_set_reroll_button_visible(false)
+	_position_action_buttons()
 	_emit_reward_offers_presented()
 
 func process_input(delta: float) -> void:
@@ -235,7 +238,9 @@ func process_input(delta: float) -> void:
 			_maybe_kick_title_pulse()
 		return
 
-	_set_skip_button_visible(_can_skip_current_offer())
+	var can_skip := _can_skip_current_offer()
+	_set_skip_button_visible(can_skip)
+	_set_reroll_button_visible(can_skip and _can_reroll_current_offer())
 	_update_boon_hover()
 	_advance_hover_weights(delta, boon_hovered_index)
 	_update_boon_reveal_visuals()
@@ -326,6 +331,7 @@ func _finalize_close() -> void:
 	if boon_layer != null:
 		boon_layer.visible = false
 	_set_skip_button_visible(false)
+	_set_reroll_button_visible(false)
 
 
 func _close_fade_factor() -> float:
@@ -400,25 +406,30 @@ func _set_skip_button_visible(value: bool) -> void:
 	if skip_button == null:
 		return
 	if value:
-		if _can_reroll_current_offer():
-			skip_button.text = "Reroll  ›"
-			skip_button.tooltip_text = "Reroll this offer (%d remaining)." % _reward_rerolls_remaining
-		else:
-			skip_button.text = "Skip  ›"
-			skip_button.tooltip_text = "Skip this reward. Counts as no pick."
+		skip_button.text = "Skip  ›"
+		skip_button.tooltip_text = "Skip this reward. Counts as no pick."
 	skip_button.visible = value
+	_position_action_buttons()
+
+
+func _set_reroll_button_visible(value: bool) -> void:
+	if reroll_button == null:
+		return
+	if value:
+		reroll_button.text = "Reroll  ›"
+		reroll_button.tooltip_text = "Reroll this offer (%d remaining)." % _reward_rerolls_remaining
+	reroll_button.visible = value
+	_position_action_buttons()
 
 
 func _on_skip_button_pressed() -> void:
 	if not _can_skip_current_offer():
 		return
-	if _can_reroll_current_offer():
-		if _reroll_current_offer():
-			return
 	var mode := reward_selection_mode
 	var initial := pending_initial_boon
 	boon_selection_active = false
 	_set_skip_button_visible(false)
+	_set_reroll_button_visible(false)
 	_begin_close_fade()
 	reward_selection_mode = ENUMS.RewardMode.BOON
 	mission_reward_stage = 0
@@ -427,6 +438,12 @@ func _on_skip_button_pressed() -> void:
 	current_player_mutator = {}
 	pending_initial_boon = false
 	emit_signal("reward_skipped", mode, initial)
+
+
+func _on_reroll_button_pressed() -> void:
+	if not _can_skip_current_offer():
+		return
+	_reroll_current_offer()
 
 
 func _can_reroll_current_offer() -> bool:
@@ -466,7 +483,9 @@ func _reroll_current_offer() -> bool:
 	_apply_boon_card_styles(-1)
 	_refresh_boon_ui(current_player)
 	_emit_reward_offers_presented()
-	_set_skip_button_visible(_can_skip_current_offer())
+	var can_skip := _can_skip_current_offer()
+	_set_skip_button_visible(can_skip)
+	_set_reroll_button_visible(can_skip and _can_reroll_current_offer())
 	return true
 
 
@@ -677,6 +696,27 @@ func _create_ui() -> void:
 	skip_button.pressed.connect(_on_skip_button_pressed)
 	boon_layer.add_child(skip_button)
 
+	reroll_button = Button.new()
+	reroll_button.text = "Reroll  ›"
+	reroll_button.custom_minimum_size = Vector2(220.0, 60.0)
+	reroll_button.add_theme_font_size_override("font_size", 22)
+	reroll_button.add_theme_color_override("font_color", Color(0.84, 0.9, 1.0, 0.82))
+	reroll_button.add_theme_color_override("font_hover_color", Color(0.98, 1.0, 1.0, 0.98))
+	reroll_button.add_theme_color_override("font_pressed_color", Color(0.9, 0.96, 1.0, 0.98))
+	reroll_button.add_theme_color_override("font_focus_color", Color(0.98, 1.0, 1.0, 0.98))
+	reroll_button.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.7))
+	reroll_button.add_theme_constant_override("shadow_offset_x", 1)
+	reroll_button.add_theme_constant_override("shadow_offset_y", 1)
+	reroll_button.add_theme_stylebox_override("normal", _make_skip_button_style(0.5))
+	reroll_button.add_theme_stylebox_override("hover", _make_skip_button_style(1.0))
+	reroll_button.add_theme_stylebox_override("pressed", _make_skip_button_style(0.7))
+	reroll_button.add_theme_stylebox_override("focus", _make_skip_button_style(0.9))
+	reroll_button.tooltip_text = "Reroll this offer."
+	reroll_button.focus_mode = Control.FOCUS_NONE
+	reroll_button.visible = false
+	reroll_button.pressed.connect(_on_reroll_button_pressed)
+	boon_layer.add_child(reroll_button)
+
 	_layout_boon_cards()
 	_position_epitaph_label()
 	boon_layer.visible = false
@@ -684,7 +724,7 @@ func _create_ui() -> void:
 func _on_viewport_size_changed() -> void:
 	_layout_boon_cards()
 	_position_epitaph_label()
-	_position_skip_button()
+	_position_action_buttons()
 	if boon_selection_active:
 		_update_boon_reveal_visuals()
 
@@ -739,16 +779,29 @@ func _position_epitaph_label() -> void:
 	epitaph_label.position = Vector2(epitaph_label.position.x, halfway_y - epitaph_height * 0.5)
 	epitaph_label.size = Vector2(viewport_size.x - 120.0, epitaph_height)
 
-func _position_skip_button() -> void:
-	if skip_button == null or get_viewport() == null:
+func _position_action_buttons() -> void:
+	if skip_button == null or reroll_button == null or get_viewport() == null:
 		return
 	var viewport_size := get_viewport().get_visible_rect().size
-	var button_width: float = skip_button.custom_minimum_size.x
-	var button_height: float = skip_button.custom_minimum_size.y
-	var y_pos: float = viewport_size.y * 0.8 - button_height * 0.5
-	var x_pos: float = (viewport_size.x - button_width) * 0.5
-	skip_button.position = Vector2(x_pos, y_pos)
-	skip_button.size = Vector2(button_width, button_height)
+	var button_height := skip_button.custom_minimum_size.y
+	var button_width := skip_button.custom_minimum_size.x
+	var gap := 18.0
+	var y_pos := viewport_size.y * 0.8 - button_height * 0.5
+	if skip_button.visible and reroll_button.visible:
+		var total_width := button_width * 2.0 + gap
+		var start_x := (viewport_size.x - total_width) * 0.5
+		reroll_button.position = Vector2(start_x, y_pos)
+		reroll_button.size = Vector2(button_width, button_height)
+		skip_button.position = Vector2(start_x + button_width + gap, y_pos)
+		skip_button.size = Vector2(button_width, button_height)
+	elif reroll_button.visible:
+		var x_reroll := (viewport_size.x - button_width) * 0.5
+		reroll_button.position = Vector2(x_reroll, y_pos)
+		reroll_button.size = Vector2(button_width, button_height)
+	elif skip_button.visible:
+		var x_skip := (viewport_size.x - button_width) * 0.5
+		skip_button.position = Vector2(x_skip, y_pos)
+		skip_button.size = Vector2(button_width, button_height)
 
 func _make_skip_button_style(hover_weight: float) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
