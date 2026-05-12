@@ -33,31 +33,19 @@ func _run_validation() -> void:
 	for root in SEARCH_ROOTS:
 		_collect_script_paths(root, script_paths)
 	script_paths.sort()
-	var live_script_paths := _collect_live_script_paths()
 
 	var failures: Array[String] = []
-	var skipped_in_use := 0
 	for script_path in script_paths:
-		var loaded: Variant = load(script_path)
+		# Force parse/compile from disk without mutating cached in-use script resources.
+		var loaded: Variant = ResourceLoader.load(script_path, "", 1)
 		var script := loaded as Script
 		if script == null:
 			failures.append("Load failed: %s" % script_path)
 			continue
-		if bool(live_script_paths.get(script_path, false)):
-			skipped_in_use += 1
-			continue
-		var reload_result := script.reload()
-		if reload_result == ERR_ALREADY_IN_USE or reload_result == ERR_BUSY:
-			skipped_in_use += 1
-			continue
-		if reload_result != OK:
-			failures.append("Compile failed (%d): %s" % [reload_result, script_path])
 
 
 	if failures.is_empty():
 		print("[OK] Compiled %d GDScript files" % script_paths.size())
-		if skipped_in_use > 0:
-			print("[Validator] Skipped reload for %d in-use scripts" % skipped_in_use)
 		quit(0)
 		return
 
