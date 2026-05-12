@@ -775,6 +775,7 @@ func finalize_synced_run_summary_for_joiner(synced_summary: Dictionary, outcome:
 	if _world.current_player_profile != null and _world.current_player_profile.is_valid():
 		augmented["player_uuid"] = _world.current_player_profile.player_id
 		augmented["player_name"] = _world.current_player_profile.profile_name
+	_apply_endgame_chase_progress(augmented)
 	latest_run_summary = augmented
 	RUN_HISTORY_STORE_SCRIPT.append(latest_run_summary)
 	_world._enqueue_leaderboard_submission(latest_run_summary)
