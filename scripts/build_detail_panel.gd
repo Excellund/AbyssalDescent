@@ -3,6 +3,7 @@ extends Node
 const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 const DESCRIPTION_CAP_GUARD := preload("res://scripts/shared/description_cap_guard.gd")
 const PLAYER_SCRIPT := preload("res://scripts/player.gd")
+const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
 const RARITY_COMMON := Color(0.62, 0.7, 0.8, 0.9)
 const RARITY_EPIC := Color(0.82, 0.58, 1.0, 0.96)
 const RARITY_LEGENDARY := Color(1.0, 0.74, 0.42, 1.0)
@@ -387,78 +388,7 @@ func _get_power_current_desc(power_id: String, _power_type: String, player: PLAY
 	return player.get_power_current_desc(power_id)
 
 func _power_display_name(power_id: String) -> String:
-	match power_id:
-		# Map power IDs to display names
-		"first_strike":
-			return "First Strike"
-		"heavy_blow":
-			return "Heavy Blow"
-		"wide_arc":
-			return "Wide Arc"
-		"long_reach":
-			return "Long Reach"
-		"fleet_foot":
-			return "Fleet Foot"
-		"blink_dash":
-			return "Blink Dash"
-		"iron_skin":
-			return "Iron Skin"
-		"battle_trance":
-			return "Battle Trance"
-		"surge_step":
-			return "Surge Step"
-		"heartstone":
-			return "Heartstone"
-		"bloodpact":
-			return "Blood Pact"
-		"severing_edge":
-			return "Severing Edge"
-		"razor_wind":
-			return "Razor Wind"
-		"execution_edge":
-			return "Execution Edge"
-		"rupture_wave":
-			return "Rupture Wave"
-		"aegis_field":
-			return "Aegis Field"
-		"hunters_snare":
-			return "Hunter's Snare"
-		"phantom_step":
-			return "Phantom Step"
-		"reaper_step":
-			return "Reaper Step"
-		"static_wake":
-			return "Static Wake"
-		"storm_crown":
-			return "Storm Crown"
-		"wraithstep":
-			return "Wraithstep"
-		"voidfire":
-			return "Voidfire"
-		"dread_resonance":
-			return "Dread Resonance"
-		"bloodvow":
-			return "Blood Vow"
-		"eclipse_mark":
-			return "Eclipse Mark"
-		"fracture_field":
-			return "Fracture Field"
-		"farline_volley":
-			return "Farline Volley"
-		"sigil_chain":
-			return "Sigil Chain"
-		"wardens_verdict":
-			return "Warden's Verdict"
-		"lacuna_echo":
-			return "Lacuna Echo"
-		"sovereign_tempo":
-			return "Sovereign Tempo"
-		"pillar_convergence":
-			return "Pillar Convergence"
-		"unbroken_oath", "bastions_oath":
-			return "Unbroken Oath"
-		_:
-			return power_id.capitalize()
+	return POWER_REGISTRY.get_power_display_name(power_id)
 
 func _format_passive_name(passive_id: String) -> String:
 	var normalized_id := passive_id.strip_edges().to_lower()
