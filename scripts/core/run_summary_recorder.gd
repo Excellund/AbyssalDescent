@@ -933,9 +933,8 @@ func _bearing_key_from_profile(profile: Dictionary, fallback: String = "unknown"
 func _resolve_power_display_name(power_id: String) -> String:
 	var power_registry_instance := _world.power_registry_instance as POWER_REGISTRY
 	if power_registry_instance != null:
-		var power_data: Dictionary = power_registry_instance.get_power(power_id)
-		if not power_data.is_empty():
-			var resolved := String(power_data.get("name", "")).strip_edges()
-			if not resolved.is_empty():
-				return resolved
-	return String(POWER_REGISTRY.POWER_DISPLAY_NAMES.get(power_id.strip_edges().to_lower(), power_id))
+		var resolved := String(power_registry_instance.get_power_display_name(power_id)).strip_edges()
+		if not resolved.is_empty():
+			return resolved
+	var fallback := power_id.strip_edges().to_lower()
+	return fallback.capitalize() if not fallback.is_empty() else power_id

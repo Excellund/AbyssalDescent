@@ -744,46 +744,53 @@ class Power:
 		}
 
 
-## Display names for all powers — single source of truth for UI labels
-const POWER_DISPLAY_NAMES := {
+const POWER_DISPLAY_CATEGORY_BOSS_REWARD := "boss_reward"
+
+## Canonical display metadata for all powers.
+## This supersedes ad-hoc name match blocks in UI scripts.
+const POWER_DISPLAY_METADATA := {
 	# Upgrades
-	"first_strike": "First Strike",
-	"heavy_blow": "Heavy Blow",
-	"wide_arc": "Wide Arc",
-	"long_reach": "Long Reach",
-	"fleet_foot": "Fleet Foot",
-	"blink_dash": "Blink Dash",
-	"iron_skin": "Iron Skin",
-	"battle_trance": "Battle Trance",
-	"surge_step": "Surge Step",
-	"heartstone": "Heartstone",
-	"bloodpact": "Blood Pact",
-	"severing_edge": "Severing Edge",
+	"first_strike": {"name": "First Strike", "category": POWER_TYPE_UPGRADE},
+	"heavy_blow": {"name": "Heavy Blow", "category": POWER_TYPE_UPGRADE},
+	"wide_arc": {"name": "Wide Arc", "category": POWER_TYPE_UPGRADE},
+	"long_reach": {"name": "Long Reach", "category": POWER_TYPE_UPGRADE},
+	"fleet_foot": {"name": "Fleet Foot", "category": POWER_TYPE_UPGRADE},
+	"blink_dash": {"name": "Blink Dash", "category": POWER_TYPE_UPGRADE},
+	"iron_skin": {"name": "Iron Skin", "category": POWER_TYPE_UPGRADE},
+	"battle_trance": {"name": "Battle Trance", "category": POWER_TYPE_UPGRADE},
+	"surge_step": {"name": "Surge Step", "category": POWER_TYPE_UPGRADE},
+	"heartstone": {"name": "Heartstone", "category": POWER_TYPE_UPGRADE},
+	"bloodpact": {"name": "Blood Pact", "category": POWER_TYPE_UPGRADE},
+	"severing_edge": {"name": "Severing Edge", "category": POWER_TYPE_UPGRADE},
 	# Trial powers
-	"razor_wind": "Razor Wind",
-	"execution_edge": "Execution Edge",
-	"rupture_wave": "Rupture Wave",
-	"aegis_field": "Aegis Field",
-	"hunters_snare": "Hunter's Snare",
-	"phantom_step": "Phantom Step",
-	"riftpunch": "Riftpunch",
-	"reaper_step": "Reaper Step",
-	"static_wake": "Static Wake",
-	"storm_crown": "Storm Crown",
-	"wraithstep": "Wraithstep",
-	"voidfire": "Voidfire",
-	"dread_resonance": "Dread Resonance",
-	"bloodvow": "Blood Vow",
-	"eclipse_mark": "Eclipse Mark",
-	"fracture_field": "Fracture Field",
-	"farline_volley": "Farline Volley",
-	"sigil_chain": "Sigil Chain",
+	"razor_wind": {"name": "Razor Wind", "category": POWER_TYPE_TRIAL},
+	"execution_edge": {"name": "Execution Edge", "category": POWER_TYPE_TRIAL},
+	"rupture_wave": {"name": "Rupture Wave", "category": POWER_TYPE_TRIAL},
+	"aegis_field": {"name": "Aegis Field", "category": POWER_TYPE_TRIAL},
+	"hunters_snare": {"name": "Hunter's Snare", "category": POWER_TYPE_TRIAL},
+	"phantom_step": {"name": "Phantom Step", "category": POWER_TYPE_TRIAL},
+	"riftpunch": {"name": "Riftpunch", "category": POWER_TYPE_TRIAL},
+	"reaper_step": {"name": "Reaper Step", "category": POWER_TYPE_TRIAL},
+	"static_wake": {"name": "Static Wake", "category": POWER_TYPE_TRIAL},
+	"storm_crown": {"name": "Storm Crown", "category": POWER_TYPE_TRIAL},
+	"wraithstep": {"name": "Wraithstep", "category": POWER_TYPE_TRIAL},
+	"voidfire": {"name": "Voidfire", "category": POWER_TYPE_TRIAL},
+	"dread_resonance": {"name": "Dread Resonance", "category": POWER_TYPE_TRIAL},
+	"bloodvow": {"name": "Blood Vow", "category": POWER_TYPE_TRIAL},
+	"eclipse_mark": {"name": "Eclipse Mark", "category": POWER_TYPE_TRIAL},
+	"fracture_field": {"name": "Fracture Field", "category": POWER_TYPE_TRIAL},
+	"farline_volley": {"name": "Farline Volley", "category": POWER_TYPE_TRIAL},
+	"sigil_chain": {"name": "Sigil Chain", "category": POWER_TYPE_TRIAL},
 	# Boss rewards
-	"wardens_verdict": "Warden's Verdict",
-	"lacuna_echo": "Lacuna Echo",
-	"sovereign_tempo": "Sovereign Tempo",
-	"pillar_convergence": "Pillar Convergence",
-	"unbroken_oath": "Unbroken Oath",
+	"wardens_verdict": {"name": "Warden's Verdict", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
+	"lacuna_echo": {"name": "Lacuna Echo", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
+	"sovereign_tempo": {"name": "Sovereign Tempo", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
+	"pillar_convergence": {"name": "Pillar Convergence", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
+	"unbroken_oath": {"name": "Unbroken Oath", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
+}
+
+const POWER_ID_ALIASES := {
+	"bastions_oath": "unbroken_oath"
 }
 
 ## Ordered pool membership arrays — define which IDs belong to each pool and in what order
@@ -868,8 +875,8 @@ func _sum_pool_capacity(pool_ids: Array, limits: Dictionary) -> int:
 func _build_power_pool(ids: Array, power_type: String, player_reference: Node) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	for id: String in ids:
-		var display_name := String(POWER_DISPLAY_NAMES.get(id, id))
-		var desc: String
+		var display_name := get_power_display_name(id)
+		var desc := ""
 		if is_instance_valid(player_reference):
 			if power_type == POWER_TYPE_TRIAL:
 				desc = String(player_reference.get_trial_power_card_desc(id))
@@ -941,25 +948,52 @@ func get_boss_epitaph(boss_id: String, character_id: String = "") -> String:
 	return String(epitaph_dict)
 
 
+func _normalize_power_id_for_display(power_id: String) -> String:
+	var normalized := power_id.strip_edges().to_lower()
+	if POWER_ID_ALIASES.has(normalized):
+		return String(POWER_ID_ALIASES[normalized])
+	return normalized
+
+
+func get_power_display_metadata(power_id: String) -> Dictionary:
+	var normalized := _normalize_power_id_for_display(power_id)
+	if POWER_DISPLAY_METADATA.has(normalized):
+		return (POWER_DISPLAY_METADATA[normalized] as Dictionary).duplicate(true)
+	return {}
+
+
+func get_power_display_name(power_id: String) -> String:
+	var metadata := get_power_display_metadata(power_id)
+	if not metadata.is_empty():
+		var name := String(metadata.get("name", "")).strip_edges()
+		if not name.is_empty():
+			return name
+	var normalized := _normalize_power_id_for_display(power_id)
+	if normalized.is_empty():
+		return ""
+	return normalized.capitalize()
+
+
 ## Check if a power ID exists
 func is_valid_power_id(power_id: String) -> bool:
-	return POWER_DISPLAY_NAMES.has(power_id.strip_edges().to_lower())
+	var normalized := _normalize_power_id_for_display(power_id)
+	return POWER_DISPLAY_METADATA.has(normalized)
 
 
 ## Check if a power ID is an upgrade
 func is_upgrade(power_id: String) -> bool:
-	var id := power_id.strip_edges().to_lower()
+	var id := _normalize_power_id_for_display(power_id)
 	return UPGRADE_POOL_IDS.has(id) or BOSS_REWARD_POOL_IDS.has(id)
 
 
 ## Check if a power ID is a trial power
 func is_trial_power(power_id: String) -> bool:
-	return TRIAL_POWER_POOL_IDS.has(power_id.strip_edges().to_lower())
+	return TRIAL_POWER_POOL_IDS.has(_normalize_power_id_for_display(power_id))
 
 
 ## Get power by ID
 func get_power(power_id: String) -> Dictionary:
-	var id := power_id.strip_edges().to_lower()
+	var id := _normalize_power_id_for_display(power_id)
 	for power in get_all_powers():
 		if power["id"] == id:
 			return power.duplicate()
