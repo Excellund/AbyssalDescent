@@ -514,7 +514,7 @@ func _advance_echoes(delta: float) -> void:
 					hit_player = player
 					break
 			if hit_player != null:
-				if DAMAGEABLE.apply_damage(hit_player, echo_damage, {"source": "enemy_contact", "ability": "mirrorline_echo"}):
+				if DAMAGEABLE.apply_damage(hit_player, echo_damage, {"source": "enemy_ability", "ability": "mirrorline_echo"}):
 					echo["hit"] = true
 					echo["time_left"] = 0.0
 					continue
