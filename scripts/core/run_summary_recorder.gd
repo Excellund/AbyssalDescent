@@ -230,9 +230,7 @@ func finish_run(outcome: String, death_event: Dictionary = {}) -> void:
 		tracker_summary["build_ids"] = build_ids
 		if _world.is_multiplayer:
 			var local_peer_id: int = _world._resolve_local_peer_id()
-			var local_peer_stats := _summary_stats_by_peer.get(local_peer_id, {}) as Dictionary
-			if local_peer_stats.is_empty():
-				local_peer_stats = _summary_stats_by_peer.get(str(local_peer_id), {}) as Dictionary
+			var local_peer_stats := _lookup_peer_dictionary(_summary_stats_by_peer, local_peer_id)
 			if not local_peer_stats.is_empty():
 				var merged_stats := (tracker_summary.get("stats", {}) as Dictionary).duplicate(true)
 				for key_variant in local_peer_stats.keys():
@@ -745,16 +743,7 @@ func summary_with_local_peer_stats(run_summary: Dictionary, stats_by_peer: Dicti
 	var local_peer_id: int = _world._resolve_local_peer_id()
 	if local_peer_id <= 0:
 		return summary
-	var local_stats := stats_by_peer.get(local_peer_id, {}) as Dictionary
-	if local_stats.is_empty():
-		local_stats = stats_by_peer.get(str(local_peer_id), {}) as Dictionary
-	if local_stats.is_empty():
-		for key_variant in stats_by_peer.keys():
-			if int(key_variant) != local_peer_id:
-				continue
-			local_stats = stats_by_peer.get(key_variant, {}) as Dictionary
-			if not local_stats.is_empty():
-				break
+	var local_stats := _lookup_peer_dictionary(stats_by_peer, local_peer_id)
 	if local_stats.is_empty():
 		return summary
 	summary["stats"] = local_stats.duplicate(true)
@@ -767,16 +756,7 @@ func summary_with_local_peer_overrides(run_summary: Dictionary, peer_summary_ove
 	var local_peer_id: int = _world._resolve_local_peer_id()
 	if local_peer_id <= 0:
 		return summary
-	var override := peer_summary_overrides.get(local_peer_id, {}) as Dictionary
-	if override.is_empty():
-		override = peer_summary_overrides.get(str(local_peer_id), {}) as Dictionary
-	if override.is_empty():
-		for key_variant in peer_summary_overrides.keys():
-			if int(key_variant) != local_peer_id:
-				continue
-			override = peer_summary_overrides.get(key_variant, {}) as Dictionary
-			if not override.is_empty():
-				break
+	var override := _lookup_peer_dictionary(peer_summary_overrides, local_peer_id)
 	if override.is_empty():
 		return summary
 	for key in ["character_id", "character_name", "build_summary", "reward_timeline", "build_ids"]:
@@ -827,6 +807,23 @@ func _empty_peer_stats() -> Dictionary:
 
 func _ensure_peer_summary_stats(peer_id: int) -> Dictionary:
 	return _summary_stats_by_peer.get(peer_id, _empty_peer_stats()) as Dictionary
+
+func _lookup_peer_dictionary(source: Dictionary, peer_id: int) -> Dictionary:
+	if peer_id <= 0 or source.is_empty():
+		return {}
+	var direct := source.get(peer_id, {}) as Dictionary
+	if not direct.is_empty():
+		return direct
+	var as_string := source.get(str(peer_id), {}) as Dictionary
+	if not as_string.is_empty():
+		return as_string
+	for key_variant in source.keys():
+		if int(key_variant) != peer_id:
+			continue
+		var resolved := source.get(key_variant, {}) as Dictionary
+		if not resolved.is_empty():
+			return resolved
+	return {}
 
 ## Apply ascension clear records + oath completions + catalyst unlocks to the
 ## meta-progress profile based on the just-built run summary. Mutates

@@ -61,6 +61,7 @@ How to apply:
 - For repeated combat or area-hit loops, centralize target selection and on-hit effect/proc resolution so damage packet rules cannot drift between variants.
 - For repeated telegraph motifs (for example phase-resistant lane notch marks), extract one base drawing helper and parameterize color/width/count/range so future enemies reuse the same readability language instead of re-implementing per enemy.
 - For long-lived collaborators that can be unavailable during boot/teardown (for example run recorders, replication services, or session stores), centralize readiness checks and common accessors (latest snapshot, finish/flush) behind one helper API instead of scattering null checks at call sites.
+- When dictionaries are keyed by runtime IDs that may be serialized as either numbers or strings (for example peer IDs), centralize lookup/fallback logic in one helper so key-shape drift cannot desynchronize call sites.
 - Prefer one canonical implementation per behavior.
 
 Nuance: DRY targets _true_ duplication of behavior. Do not deduplicate code that merely _looks_ similar but evolves for different reasons — premature consolidation creates coupling that is harder to undo than the duplication.
