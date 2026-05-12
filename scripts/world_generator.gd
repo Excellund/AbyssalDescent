@@ -1882,9 +1882,9 @@ func _dispatch_boss_clear_transition(boss_clear: Dictionary) -> void:
 	var completion_handler := String(boss_clear.get("completion_handler", "")).strip_edges()
 	match completion_handler:
 		"finish_first_boss_clear":
-			_finish_first_boss_clear()
+			_finish_first_boss_clear(boss_clear)
 		"finish_second_boss_clear":
-			_finish_second_boss_clear()
+			_finish_second_boss_clear(boss_clear)
 		"finish_third_boss_clear":
 			_finish_third_boss_clear()
 		_:
@@ -1893,7 +1893,7 @@ func _dispatch_boss_clear_transition(boss_clear: Dictionary) -> void:
 func _clamp_room_depth_to_sane_range() -> void:
 	room_depth_bookkeeper.clamp_room_depth_to_sane_range()
 
-func _finish_first_boss_clear() -> void:
+func _finish_first_boss_clear(boss_clear: Dictionary = {}) -> void:
 	in_boss_room = false
 	first_boss_defeated = true
 	in_second_boss_room = false
@@ -1903,14 +1903,15 @@ func _finish_first_boss_clear() -> void:
 	_clamp_room_depth_to_sane_range()
 	boss_unlocked = false
 	pending_room_reward = ENUMS.RewardMode.NONE
-	last_defeated_boss_id = "warden"
-	run_summary_recorder.record_boss_defeat(last_defeated_boss_id)
-	boss_reward_pending = true
-	hud.show_banner("Warden Defeated", "")
-	var epitaph: String = power_registry_instance.get_boss_epitaph("warden", current_character_id)
-	_open_networked_reward_selection("Claim Warden's Power", ENUMS.RewardMode.BOSS, {}, epitaph)
+	_apply_non_terminal_boss_clear_payload(
+		boss_clear,
+		"warden",
+		"Warden Defeated",
+		"Claim Warden's Power",
+		"warden"
+	)
 
-func _finish_second_boss_clear() -> void:
+func _finish_second_boss_clear(boss_clear: Dictionary = {}) -> void:
 	in_second_boss_room = false
 	second_boss_defeated = true
 	active_room_enemy_count = 0
@@ -1920,12 +1921,39 @@ func _finish_second_boss_clear() -> void:
 	boss_unlocked = false
 	pending_room_reward = ENUMS.RewardMode.NONE
 	_set_progression_counters(rooms_cleared, room_depth, phase_two_rooms_cleared, 0)
-	last_defeated_boss_id = "sovereign"
+	_apply_non_terminal_boss_clear_payload(
+		boss_clear,
+		"sovereign",
+		"Sovereign Defeated",
+		"Claim Sovereign's Power",
+		"sovereign"
+	)
+
+func _apply_non_terminal_boss_clear_payload(
+	boss_clear: Dictionary,
+	default_boss_id: String,
+	default_banner_title: String,
+	default_reward_title: String,
+	default_epitaph_boss_id: String
+) -> void:
+	var resolved_boss_id := String(boss_clear.get("boss_id", default_boss_id)).strip_edges().to_lower()
+	if resolved_boss_id.is_empty():
+		resolved_boss_id = default_boss_id
+	last_defeated_boss_id = resolved_boss_id
 	run_summary_recorder.record_boss_defeat(last_defeated_boss_id)
 	boss_reward_pending = true
-	hud.show_banner("Sovereign Defeated", "")
-	var epitaph: String = power_registry_instance.get_boss_epitaph("sovereign", current_character_id)
-	_open_networked_reward_selection("Claim Sovereign's Power", ENUMS.RewardMode.BOSS, {}, epitaph)
+	var banner_title := String(boss_clear.get("banner_title", default_banner_title)).strip_edges()
+	if banner_title.is_empty():
+		banner_title = default_banner_title
+	hud.show_banner(banner_title, "")
+	var reward_title := String(boss_clear.get("reward_title", default_reward_title)).strip_edges()
+	if reward_title.is_empty():
+		reward_title = default_reward_title
+	var epitaph_boss_id := String(boss_clear.get("epitaph_boss_id", default_epitaph_boss_id)).strip_edges().to_lower()
+	if epitaph_boss_id.is_empty():
+		epitaph_boss_id = default_epitaph_boss_id
+	var epitaph: String = power_registry_instance.get_boss_epitaph(epitaph_boss_id, current_character_id)
+	_open_networked_reward_selection(reward_title, ENUMS.RewardMode.BOSS, {}, epitaph)
 
 func _finish_third_boss_clear() -> void:
 	in_third_boss_room = false
