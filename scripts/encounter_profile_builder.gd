@@ -1190,14 +1190,18 @@ func roll_route_options(route_context: Variant) -> Array[Dictionary]:
 	var context := _normalize_route_context(route_context)
 	var depth := int(context.get("depth", 0))
 	var rooms_until_boss := int(context.get("rooms_until_boss", -1))
+	var rest_disabled: bool = bool(current_difficulty_config.get("rest_disabled", false))
 	if depth < 2:
 		return _build_intro_route_options(depth)
 	if rooms_until_boss == 1:
 		var pre_boss_options := _build_non_rest_route_options(depth)
+		if rest_disabled:
+			return _pick_two_route_options(pre_boss_options)
 		var alternate := pre_boss_options[rng.randi_range(0, pre_boss_options.size() - 1)]
 		return _shuffle_route_options([alternate, _build_rest_route_option()])
 	var options := _build_non_rest_route_options(depth)
-	options.append(_build_rest_route_option())
+	if not rest_disabled:
+		options.append(_build_rest_route_option())
 	return _pick_two_route_options(options)
 
 func roll_hard_enemy_mutator() -> Dictionary:
