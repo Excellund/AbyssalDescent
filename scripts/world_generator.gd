@@ -57,6 +57,7 @@ const OBJECTIVE_LIFECYCLE_COORDINATOR_SCRIPT := preload("res://scripts/core/obje
 const OBJECTIVE_FRAME_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_frame_coordinator.gd")
 const OBJECTIVE_PROGRESS_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_progress_coordinator.gd")
 const ROOM_CLEAR_OUTCOME_COORDINATOR_SCRIPT := preload("res://scripts/core/room_clear_outcome_coordinator.gd")
+const OUTCOME_TRANSITION_ORCHESTRATOR_SCRIPT := preload("res://scripts/core/outcome_transition_orchestrator.gd")
 const COMBAT_PHASE_COORDINATOR_SCRIPT := preload("res://scripts/core/combat_phase_coordinator.gd")
 const PLAYER_FLOW_COORDINATOR_SCRIPT := preload("res://scripts/core/player_flow_coordinator.gd")
 const REWARD_PHASE_COORDINATOR_SCRIPT := preload("res://scripts/core/reward_phase_coordinator.gd")
@@ -222,6 +223,7 @@ var objective_lifecycle_coordinator
 var objective_frame_coordinator
 var objective_progress_coordinator
 var room_clear_outcome_coordinator
+var outcome_transition_orchestrator
 var combat_phase_coordinator
 var player_flow_coordinator
 
@@ -406,6 +408,7 @@ func _initialize_bootstrap_context() -> void:
 	objective_frame_coordinator = OBJECTIVE_FRAME_COORDINATOR_SCRIPT.new()
 	objective_progress_coordinator = OBJECTIVE_PROGRESS_COORDINATOR_SCRIPT.new()
 	room_clear_outcome_coordinator = ROOM_CLEAR_OUTCOME_COORDINATOR_SCRIPT.new()
+	outcome_transition_orchestrator = OUTCOME_TRANSITION_ORCHESTRATOR_SCRIPT.new()
 	combat_phase_coordinator = COMBAT_PHASE_COORDINATOR_SCRIPT.new()
 	player_flow_coordinator = PLAYER_FLOW_COORDINATOR_SCRIPT.new()
 	power_registry_instance = POWER_REGISTRY.new()
@@ -1804,48 +1807,50 @@ func _on_room_cleared() -> void:
 		})
 	else:
 		run_summary_recorder.close_active_room()
-	if in_second_boss_room:
-		_world_multiplayer_sync_state.mark_current_room_clear_processed()
+	var transition_result: Dictionary = outcome_transition_orchestrator.resolve_room_clear_transition(
+		room_clear_outcome_coordinator,
+		encounter_flow_system,
+		{
+			"in_second_boss_room": in_second_boss_room,
+			"in_third_boss_room": in_third_boss_room,
+			"in_boss_room": in_boss_room,
+			"first_boss_defeated": first_boss_defeated,
+			"second_boss_defeated": second_boss_defeated,
+			"pending_room_reward": pending_room_reward,
+			"rooms_cleared": rooms_cleared,
+			"room_depth": room_depth,
+			"encounter_count": encounter_count,
+			"endless_mode": _is_endless_mode(),
+			"endless_boss_defeated": endless_boss_defeated,
+			"can_unlock_second": _is_second_boss_unlocked(),
+			"can_unlock_third": _is_third_boss_unlocked(),
+			"boss_unlocked": boss_unlocked,
+			"choosing_next_room": choosing_next_room
+		}
+	)
+	if not bool(transition_result.get("ok", false)):
+		return
+	if bool(transition_result.get("should_tick_objective_mutators", false)) and is_instance_valid(player):
+		player.tick_objective_mutators_for_encounter()
+	_world_multiplayer_sync_state.mark_current_room_clear_processed()
+	_dispatch_room_clear_transition(transition_result)
+
+func _dispatch_room_clear_transition(transition_result: Dictionary) -> void:
+	var transition_kind := String(transition_result.get("transition_kind", ""))
+	if transition_kind == "boss_second_clear":
 		_finish_second_boss_clear()
 		return
-	if in_third_boss_room:
-		_world_multiplayer_sync_state.mark_current_room_clear_processed()
+	if transition_kind == "boss_third_clear":
 		_finish_third_boss_clear()
 		return
-	if in_boss_room and not first_boss_defeated:
-		_world_multiplayer_sync_state.mark_current_room_clear_processed()
+	if transition_kind == "boss_first_clear":
 		_finish_first_boss_clear()
 		return
-	if is_instance_valid(player):
-		player.tick_objective_mutators_for_encounter()
-	var outcome: Dictionary = room_clear_outcome_coordinator.resolve_outcome(
-		encounter_flow_system,
-		in_boss_room,
-		pending_room_reward,
-		rooms_cleared,
-		room_depth,
-		encounter_count
-	)
-	if outcome.is_empty():
+	if transition_kind != "outcome":
 		return
-	var outcome_state: Dictionary = room_clear_outcome_coordinator.process_outcome({
-		"outcome": outcome,
-		"in_boss_room": in_boss_room,
-		"endless_mode": _is_endless_mode(),
-		"endless_boss_defeated": endless_boss_defeated,
-		"first_boss_defeated": first_boss_defeated,
-		"second_boss_defeated": second_boss_defeated,
-		"can_unlock_second": _is_second_boss_unlocked(),
-		"can_unlock_third": _is_third_boss_unlocked(),
-		"rooms_cleared": rooms_cleared,
-		"room_depth": room_depth,
-		"boss_unlocked": boss_unlocked,
-		"pending_room_reward": pending_room_reward,
-		"choosing_next_room": choosing_next_room
-	})
-	if not bool(outcome_state.get("ok", false)):
+	var outcome_state := transition_result.get("outcome_state", {}) as Dictionary
+	if outcome_state.is_empty():
 		return
-	_world_multiplayer_sync_state.mark_current_room_clear_processed()
 	if bool(outcome_state.get("run_cleared", _run_outcome_coordinator.is_run_cleared())):
 		_run_outcome_coordinator.apply_synced_outcome("clear")
 	in_boss_room = bool(outcome_state.get("in_boss_room", in_boss_room))

@@ -170,6 +170,27 @@ How to apply:
 - Prefer deleting or inlining over adding new layers.
 - When a change does not make code more obvious, more local, or more predictable, drop it.
 
+### 8. Split Transition Logic From Side Effects
+
+In state-heavy orchestrators, isolate transition decisions into pure helpers and keep side effects in a narrow dispatcher.
+
+Why it matters:
+
+- Long event handlers become fragile when state mutation, branching, and side effects are interleaved.
+- Pure transition logic is easy to snapshot-test and compare for behavior parity.
+- Keeping side effects localized preserves runtime ownership and lowers multiplayer/UI regression risk.
+
+How to apply:
+
+- In large handlers (for example room-clear, run-outcome, phase-change flows), extract a pure transition resolver that returns:
+  - transition kind,
+  - normalized next-state fields,
+  - minimal dispatch hints.
+- Keep side effects (RPC, HUD updates, scene/node actions, telemetry writes) in the orchestrator dispatcher.
+- Apply state mutations from transition output in one place before branching side effects.
+- Prefer small transition enums/keys (`outcome`, `boss_first_clear`, etc.) over repeated inline branches.
+- Integrate incrementally: wire dispatcher first, then collapse duplicated branches in follow-up increments.
+
 ## Routing Rule For New Learnings
 
 Before adding any new rule here, run this check:
