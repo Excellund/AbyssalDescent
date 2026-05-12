@@ -28,6 +28,7 @@ const REWARD_SELECTION_UI_SCRIPT := preload("res://scripts/reward_selection_ui.g
 const ASCENSION_REGISTRY := preload("res://scripts/progression/ascension_modifier_registry.gd")
 const ENUMS := preload("res://scripts/shared/enums.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
+const ENCOUNTER_DEFINITION_DATA := preload("res://scripts/shared/encounter_definition_data.gd")
 const ENDLESS_PROFILE_SCALER := preload("res://scripts/shared/endless_profile_scaler.gd")
 const BEARING_KEY_NORMALIZER := preload("res://scripts/shared/bearing_key_normalizer.gd")
 const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
@@ -97,11 +98,10 @@ func _get_debug_encounter_reward_mode(encounter_key: String) -> int:
 
 @export var player_path: NodePath = NodePath("Player")
 @export var encounter_count: int = 8
-@export var room_base_size: Vector2 = Vector2(940.0, 700.0)
-@export var room_size_growth: Vector2 = Vector2(80.0, 45.0)
+@export var room_base_size: Vector2 = ENCOUNTER_DEFINITION_DATA.DEFAULT_ROOM_BASE_SIZE
 @export var spawn_padding: float = 90.0
 @export var spawn_safe_radius: float = 170.0
-@export var static_camera_room_threshold: float = 980.0
+@export var static_camera_room_threshold: float = ENCOUNTER_DEFINITION_DATA.STATIC_CAMERA_ROOM_THRESHOLD
 @export var base_chaser_count: int = 5
 @export var chasers_per_room: int = 2
 @export var chargers_start_room: int = 2
@@ -743,7 +743,6 @@ func _setup_encounter_profile_builder_system() -> void:
 		encounter_profile_builder.set_ascension_loadout(run_context.get_active_ascension_loadout())
 	encounter_profile_builder.configure({
 		"room_base_size": room_base_size,
-		"room_size_growth": room_size_growth,
 		"static_camera_room_threshold": static_camera_room_threshold,
 		"base_chaser_count": base_chaser_count,
 		"chasers_per_room": chasers_per_room,

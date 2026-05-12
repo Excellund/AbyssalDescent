@@ -17,6 +17,7 @@ Use this skill when working on the refactored encounter-generation surfaces.
 ## Source Of Truth
 
 - Canonical encounter compositions live in `scripts/shared/encounter_definition_data.gd`.
+- Canonical room defaults (intro/pool/trial sizes, base room size fallback, static-camera threshold) must live in `scripts/shared/encounter_definition_data.gd`.
 - `scripts/encounter_profile_builder.gd` must consume those definitions directly and must not duplicate composition tables.
 - Random hard mutator compatibility is decided by each mutator's `affected_archetypes` entry in `_hard_mutator_pool()`.
 - Enemy mutator stat application lives in `ENEMY_MUTATOR_STAT_MAP` in `scripts/enemy_spawner.gd`.
@@ -91,6 +92,7 @@ Mutators match a profile if any declared archetype is present. If a filtered poo
 ## Pitfalls
 
 - Do not reintroduce encounter-specific build/scaling helper sprawl when canonical encounter definition data can express the change.
+- Do not reintroduce legacy room-size knobs that are no longer consumed (for example orphaned `room_size_growth` plumbing between world and builder).
 - When building a profile shell that will immediately have all counts filled by `_apply_profile_counts`, do not pass placeholder count values. Use default parameters so the shell call is honest about what it owns (label and room size only).
 - Do not add a random hard mutator without `affected_archetypes`, or invalid rooms can roll it.
 - Do not duplicate per-enemy mutator logic outside `ENEMY_MUTATOR_STAT_MAP` unless the behavior is genuinely exceptional.

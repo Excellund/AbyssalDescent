@@ -5,6 +5,8 @@ const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.g
 const INTRO_ROOM_SIZE := Vector2(940.0, 700.0)
 const POOL_ROOM_SIZE := Vector2(1040.0, 760.0)
 const TRIAL_ROOM_SIZE := Vector2(1160.0, 860.0)
+const DEFAULT_ROOM_BASE_SIZE := INTRO_ROOM_SIZE
+const STATIC_CAMERA_ROOM_THRESHOLD := 980.0
 const EXPECTED_BEARING_RANK_COUNT := 4
 
 static func _bearing_definition(room_size: Vector2, base_counts: Dictionary, rank_counts: Array[Dictionary]) -> Dictionary:

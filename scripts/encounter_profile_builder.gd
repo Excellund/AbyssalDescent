@@ -16,9 +16,8 @@ var multiplayer_difficulty_config = DIFFICULTY_CONFIG_MULTIPLAYER.new()
 var multiplayer_party_size: int = 1
 var current_ascension_loadout: Array[String] = []
 
-var room_base_size: Vector2 = Vector2(940.0, 700.0)
-var room_size_growth: Vector2 = Vector2(80.0, 45.0)
-var static_camera_room_threshold: float = 980.0
+var room_base_size: Vector2 = ENCOUNTER_DEFINITION_DATA.DEFAULT_ROOM_BASE_SIZE
+var static_camera_room_threshold: float = ENCOUNTER_DEFINITION_DATA.STATIC_CAMERA_ROOM_THRESHOLD
 var base_chaser_count: int = 5
 var chasers_per_room: int = 2
 var chargers_start_room: int = 2
@@ -400,7 +399,6 @@ func _maybe_apply_hard_mutator(profile: Dictionary, depth: int) -> Dictionary:
 
 func configure(settings: Dictionary) -> void:
 	room_base_size = settings.get("room_base_size", room_base_size)
-	room_size_growth = settings.get("room_size_growth", room_size_growth)
 	static_camera_room_threshold = float(settings.get("static_camera_room_threshold", static_camera_room_threshold))
 	base_chaser_count = int(settings.get("base_chaser_count", base_chaser_count))
 	chasers_per_room = int(settings.get("chasers_per_room", chasers_per_room))
