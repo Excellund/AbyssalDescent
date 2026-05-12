@@ -1837,14 +1837,8 @@ func _on_room_cleared() -> void:
 
 func _dispatch_room_clear_transition(transition_result: Dictionary) -> void:
 	var transition_kind := String(transition_result.get("transition_kind", ""))
-	if transition_kind == "boss_second_clear":
-		_finish_second_boss_clear()
-		return
-	if transition_kind == "boss_third_clear":
-		_finish_third_boss_clear()
-		return
-	if transition_kind == "boss_first_clear":
-		_finish_first_boss_clear()
+	if transition_kind == "boss_clear":
+		_dispatch_boss_clear_transition(transition_result.get("boss_clear", {}) as Dictionary)
 		return
 	if transition_kind != "outcome":
 		return
@@ -1881,6 +1875,20 @@ func _dispatch_room_clear_transition(transition_result: Dictionary) -> void:
 		return
 	if bool(outcome_state.get("spawn_doors", false)):
 		_spawn_door_options()
+
+func _dispatch_boss_clear_transition(boss_clear: Dictionary) -> void:
+	if boss_clear.is_empty():
+		return
+	var completion_handler := String(boss_clear.get("completion_handler", "")).strip_edges()
+	match completion_handler:
+		"finish_first_boss_clear":
+			_finish_first_boss_clear()
+		"finish_second_boss_clear":
+			_finish_second_boss_clear()
+		"finish_third_boss_clear":
+			_finish_third_boss_clear()
+		_:
+			push_error("[Room Outcome] Unknown boss clear completion handler: %s" % completion_handler)
 
 func _clamp_room_depth_to_sane_range() -> void:
 	room_depth_bookkeeper.clamp_room_depth_to_sane_range()
