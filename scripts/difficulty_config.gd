@@ -22,7 +22,8 @@ const _ASCENSION_TO_CONFIG_MAPPING := {
 	"boss_difficulty_mult": ["boss_difficulty_mult", "mul"],
 	"player_damage_taken_mult": ["player_damage_taken_mult", "mul"],
 	"mutator_damage_mult": ["mutator_damage_mult", "mul"],
-	"player_starting_health_bonus_add": ["player_starting_health_bonus", "add"]
+	"player_starting_health_bonus_add": ["player_starting_health_bonus", "add"],
+	"player_max_health_mult": ["player_max_health_mult", "mul"]
 }
 
 ## ===== BASE ENCOUNTER GENERATION DEFINITIONS =====

@@ -2032,7 +2032,7 @@ func _enqueue_leaderboard_submission(run_summary: Dictionary) -> void:
 		return
 	run_context.enqueue_leaderboard_summary(run_summary)
 
-func _apply_difficulty_tier_bonuses(difficulty_tier: int) -> void:
+func _apply_difficulty_tier_bonuses(difficulty_tier: int, apply_player_health: bool = true) -> void:
 	if not is_instance_valid(player):
 		return
 	
@@ -2066,10 +2066,15 @@ func _apply_difficulty_tier_bonuses(difficulty_tier: int) -> void:
 	var health_bonus := float(difficulty_config.get("player_starting_health_bonus", 0.0))
 	if run_context_for_catalysts != null:
 		health_bonus += float(catalyst_payload.get("starting_max_hp_add", 0.0))
-	if health_bonus > 0.0:
+	if apply_player_health:
+		var health_max_mult := float(difficulty_config.get("player_max_health_mult", 1.0))
 		var current_max: int = int(player.get_max_health())
-		var new_max: int = current_max + int(health_bonus)
-		player.set_max_health_and_current(new_max, new_max)
+		if not is_zero_approx(health_bonus):
+			current_max = maxi(1, current_max + int(health_bonus))
+			player.set_max_health_and_current(current_max, current_max)
+		if not is_equal_approx(health_max_mult, 1.0):
+			var scaled_max: int = maxi(1, int(round(float(current_max) * health_max_mult)))
+			player.set_max_health_and_current(scaled_max, scaled_max)
 
 func _get_second_boss_target_depth() -> int:
 	return room_depth_bookkeeper.get_second_boss_target_depth()
@@ -2128,14 +2133,14 @@ func _try_resume_saved_run() -> bool:
 			current_character_id = CHARACTER_REGISTRY.get_default_character_id()
 		should_apply_difficulty = true
 		if should_apply_difficulty:
-			_apply_difficulty_tier_bonuses(current_difficulty_tier)
+			_apply_difficulty_tier_bonuses(current_difficulty_tier, false)
 		return false
 	else:
 		current_difficulty_tier = int(run_context.get_current_difficulty_tier())
 	current_character_id = String(run_context.get_selected_character_id()).strip_edges().to_lower()
 	should_apply_difficulty = true
 	if should_apply_difficulty:
-		_apply_difficulty_tier_bonuses(current_difficulty_tier)
+		_apply_difficulty_tier_bonuses(current_difficulty_tier, false)
 
 	var snapshot := run_context.load_active_run() as Dictionary
 	if snapshot.is_empty():

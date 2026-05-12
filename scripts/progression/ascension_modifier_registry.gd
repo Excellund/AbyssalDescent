@@ -97,7 +97,7 @@ const MODIFIER_DEFINITIONS := {
 		"label": "Pilgrim's Burden",
 		"description": "Begin each run with 25% less maximum health.",
 		"heat_cost": 2,
-		"payload": {"player_starting_health_bonus_add": -25},
+		"payload": {"player_max_health_mult": 0.75},
 		"locked_by_oath_id": "ascension_rank_5"
 	}
 }
