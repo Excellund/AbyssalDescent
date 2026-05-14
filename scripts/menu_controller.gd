@@ -3077,7 +3077,7 @@ func _sync_profile_store_from_run_context() -> void:
 	if not run_context_uuid.is_empty() and String(profile.player_id) != run_context_uuid:
 		profile.player_id = run_context_uuid
 		changed = true
-	var run_context_name := String(run_context.get_profile_name_or_default()).strip_edges()
+	var run_context_name := String(run_context.get_profile_name()).strip_edges()
 	if not run_context_name.is_empty() and String(profile.profile_name) != run_context_name:
 		profile.profile_name = run_context_name
 		changed = true

@@ -220,6 +220,9 @@ static func _migrate_profile(old_payload: Dictionary, old_version: int) -> Dicti
 			per_character_migrated[character_id] = {"highest_unlocked_tier": old_global_highest}
 		migrated["difficulty_state"]["per_character"] = per_character_migrated
 
+	if "profile" in old_payload and old_payload["profile"] is Dictionary:
+		migrated["profile"] = (old_payload["profile"] as Dictionary).duplicate(true)
+
 	_ensure_difficulty_state_integrity(migrated)
 
 	migrated["version"] = META_PROGRESS_VERSION
