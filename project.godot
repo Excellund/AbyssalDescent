@@ -43,6 +43,10 @@ window/size/viewport_height=1440
 window/size/mode=3
 window/stretch/mode="canvas_items"
 
+[dotnet]
+
+project/assembly_name="AbyssalDescent"
+
 [input]
 
 ui_cancel={
