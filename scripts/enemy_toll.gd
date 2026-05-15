@@ -5,7 +5,7 @@ const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 # No global state machine — pulses and heals run independently on their own clocks.
 
 # --- Scale & Health ---
-@export var max_health_apex: int = 900
+@export var max_health_apex: int = 1500
 @export var body_draw_radius: float = 38.0
 @export var collision_shape_radius: float = 34.0
 
