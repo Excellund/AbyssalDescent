@@ -667,7 +667,7 @@ const TRIAL_POWER_DEFINITIONS := {
 		"balance_params": {
 			"arc_per_stack_base": 12.0,
 			"bonus_per_stack_base": 2,
-			"stack_cap": 5
+			"stack_cap_base": 5
 		},
 		"param_map": {
 			"reward_flag": "reward_farline_volley",
