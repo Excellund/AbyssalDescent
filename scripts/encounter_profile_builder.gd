@@ -1122,7 +1122,7 @@ func _control_curve_value(rank_curve: Dictionary, key: String, depth_curve: floa
 func _build_circuit_sweep_profile(depth: int) -> Dictionary:
 	var effective_depth := _effective_depth(depth)
 	var room_size := Vector2(960.0, 720.0)
-	var chasers := 4 + int(floor(float(effective_depth) * 0.6))
+	var chasers := 3 + int(floor(float(effective_depth) * 0.5))
 	var chargers := 2 + int(floor(float(effective_depth) / 5.0))
 	var archers := 2 + int(floor(float(effective_depth) / 4.0))
 	var shielders := 1 + int(floor(float(effective_depth) / 6.0))
@@ -1172,7 +1172,7 @@ func _build_intercept_run_profile(depth: int) -> Dictionary:
 	var duration := int(ceil(raw_duration / 5.0)) * 5
 	var spawn_interval := clampf(2.6 - float(effective_depth) * 0.06, 0.95, 2.6)
 	var spawn_batch := mini(4, 2 + int(floor(float(effective_depth) / 5.0)))
-	var traversal_time := clampf(42.0 - float(effective_depth) * 0.8, 30.0, 42.0)
+	var traversal_time := clampf(42.0 - float(effective_depth) * 0.7, 33.0, 42.0)
 	var pressure_split := _objective_pressure_split()
 	spawn_batch = _scale_objective_spawn_batch(spawn_batch, float(pressure_split["wave_mult"]))
 	ENCOUNTER_CONTRACTS.profile_set_intercept_run_objective(profile, duration, spawn_interval, spawn_batch, traversal_time)
