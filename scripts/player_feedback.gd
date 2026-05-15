@@ -434,16 +434,16 @@ func play_sigil_chain_zone(epicenter_global: Vector2, radius: float, lifetime: f
 	sigil.add_child(inner_ring)
 
 	var glyph_lines: Array[Line2D] = []
-	for triangle_index in range(2):
-		var rotation_offset := PI / 3.0 if triangle_index == 1 else 0.0
+	for square_index in range(2):
+		var rotation_offset := PI / 4.0 if square_index == 1 else 0.0
 		var glyph := Line2D.new()
 		glyph.width = 2.6
 		glyph.default_color = rune_color
 		glyph.closed = true
 		glyph.antialiased = true
 		var glyph_points := PackedVector2Array()
-		for vertex_index in range(3):
-			var glyph_angle := -PI * 0.5 + rotation_offset + TAU * float(vertex_index) / 3.0
+		for vertex_index in range(4):
+			var glyph_angle := -PI * 0.5 + rotation_offset + TAU * float(vertex_index) / 4.0
 			glyph_points.append(Vector2(cos(glyph_angle), sin(glyph_angle)) * radius * 0.5)
 		glyph.points = glyph_points
 		sigil.add_child(glyph)
