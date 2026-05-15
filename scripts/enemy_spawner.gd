@@ -616,6 +616,18 @@ func _apply_mutator_specs(enemy: CharacterBody2D, mutator: Dictionary, specs: Ar
 func set_ascension_enemy_health_mult(value: float) -> void:
 	ascension_enemy_health_mult = maxf(0.01, value)
 
+func apply_pulse_mutator_to_all_live_enemies(mutator: Dictionary, duration: float) -> void:
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not is_instance_valid(enemy_node) or not (enemy_node is CharacterBody2D):
+			continue
+		var enemy := enemy_node as CharacterBody2D
+		var enemy_key := _enemy_script_key(enemy.get_script() as Script)
+		if enemy_key.is_empty():
+			continue
+		var specs: Array = ENEMY_MUTATOR_STAT_MAP.get(enemy_key, [])
+		if enemy_node.has_method("apply_pulse_mutator_stats"):
+			enemy_node.call("apply_pulse_mutator_stats", specs, mutator, duration)
+
 func _apply_ascension_health_scaling(enemy: ENEMY_BASE_SCRIPT) -> void:
 	if is_equal_approx(ascension_enemy_health_mult, 1.0):
 		return

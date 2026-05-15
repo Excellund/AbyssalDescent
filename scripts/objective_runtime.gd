@@ -10,10 +10,16 @@ const ENEMY_BASE_SCRIPT := preload("res://scripts/enemy_base.gd")
 const OBJECTIVE_ROLE_LAST_STAND = "last_stand_role"
 const OBJECTIVE_ROLE_CUT_THE_SIGNAL = "cut_the_signal_role"
 const OBJECTIVE_ROLE_HOLD_THE_LINE = "hold_the_line_role"
+const OBJECTIVE_ROLE_CIRCUIT_SWEEP = "circuit_sweep_role"
+const OBJECTIVE_ROLE_PULSE_WINDOW = "pulse_window_role"
+const OBJECTIVE_ROLE_INTERCEPT_RUN = "intercept_run_role"
 const OBJECTIVE_KIND_BY_ROLE := {
 	OBJECTIVE_ROLE_LAST_STAND: "last_stand",
 	OBJECTIVE_ROLE_CUT_THE_SIGNAL: "cut_the_signal",
-	OBJECTIVE_ROLE_HOLD_THE_LINE: "hold_the_line"
+	OBJECTIVE_ROLE_HOLD_THE_LINE: "hold_the_line",
+	OBJECTIVE_ROLE_CIRCUIT_SWEEP: "circuit_sweep",
+	OBJECTIVE_ROLE_PULSE_WINDOW: "pulse_window",
+	OBJECTIVE_ROLE_INTERCEPT_RUN: "intercept_run"
 }
 const OBJECTIVE_SPAWN_ROLE_CUT_SIGNAL_TARGET := "cut_signal_target"
 const OBJECTIVE_SPAWN_MODE_REGULAR := 0
@@ -106,6 +112,52 @@ class HoldTheLineConfig:
 	const SPAWN_INTERVAL_RELIEF_PER_KILL = 0.04
 	const SPAWN_ZONE_EXCLUSION_PADDING = 42.0
 
+class CircuitSweepConfig:
+	const NODE_COUNT = 3
+	const CAPTURE_GOAL_BASE = 2.2
+	const CAPTURE_GOAL_DEPTH_MIN = 1.5
+	const CAPTURE_DECAY_RATE = 0.3
+	const NODE_RADIUS = 88.0
+	const NODE_SPREAD_RADIUS = 200.0
+	const NODE_REGION_MARGIN = 80.0
+	const SPAWN_INTERVAL_CLAMP_MIN = 0.8
+	const SPAWN_INTERVAL_CLAMP_MAX = 1.3
+	const MAX_ENEMIES_BASE = 10
+	const MAX_ENEMIES_DEPTH_MULT = 0.5
+	const MAX_ENEMIES_MIN = 8
+	const MAX_ENEMIES_HARD_CAP = 22
+	const OVERTIME_SPAWN_INTERVAL_MULT = 0.65
+	const OVERTIME_SPAWN_BATCH_CAP = 6
+
+class PulseWindowConfig:
+	const PULSE_INTERVAL_BASE = 10.0
+	const PULSE_INTERVAL_DEPTH_CLAMP_MIN = 7.0
+	const PULSE_ACTIVE_DURATION = 6.0
+	const RING_DURATION = 0.65
+	const SPAWN_INTERVAL_CLAMP_MIN = 0.9
+	const SPAWN_INTERVAL_CLAMP_MAX = 1.6
+	const MAX_ENEMIES_BASE = 12
+	const MAX_ENEMIES_DEPTH_MULT = 0.4
+	const MAX_ENEMIES_MIN = 8
+	const OVERTIME_SPAWN_INTERVAL_MULT = 0.7
+	const OVERTIME_SPAWN_BATCH_CAP = 5
+
+class InterceptRunConfig:
+	const TRAVERSAL_TIME_BASE = 42.0
+	const DRONE_RADIUS = 80.0
+	const ROOM_MARGIN = 100.0
+	const SPAWN_INTERVAL_CLAMP_MIN = 0.85
+	const SPAWN_INTERVAL_CLAMP_MAX = 1.5
+	const MAX_ENEMIES_BASE = 8
+	const MAX_ENEMIES_DEPTH_MULT = 0.35
+	const MAX_ENEMIES_MIN = 6
+	const OVERTIME_DRONE_SPEED_MULT = 1.8
+	const OVERTIME_SPAWN_INTERVAL_MULT = 0.7
+	const DRONE_EXCLUSION_PADDING = 40.0
+	const SPAWN_INTERVAL_RELIEF_PER_KILL = 0.05
+	const SPAWN_INTERVAL_RELIEF_CAP = 4.5
+	const ESCORT_RADIUS = 240.0
+
 # === COLORS ===
 const COLOR_SIGNAL_BASE = Color(1.0, 0.84, 0.3, 0.95)
 const COLOR_SIGNAL_MUTATOR = Color(1.0, 0.84, 0.3, 1.0)
@@ -146,8 +198,10 @@ var objective_state_setup: RefCounted = OBJECTIVE_STATE_SETUP.new()
 var _control_relief_kills_applied: int = 0
 var _control_spawn_interval_base: float = 0.0
 var _control_relief_phase_announced: bool = false
+var _intercept_relief_kills_applied: int = 0
 var _control_zone_state_update_left: float = 0.0
 var _control_zone_runtime_sync_left: float = 0.0
+var _sweep_pending_node_positions: Array[Vector2] = []
 var _pending_objective_spawns: Array[Dictionary] = []
 var _pending_objective_spawn_timer: float = 0.0
 
@@ -172,6 +226,7 @@ func _clear_all_objective_state() -> void:
 	_control_relief_kills_applied = 0
 	_control_spawn_interval_base = 0.0
 	_control_relief_phase_announced = false
+	_intercept_relief_kills_applied = 0
 	_control_zone_state_update_left = 0.0
 	_control_zone_runtime_sync_left = 0.0
 	_pending_objective_spawns.clear()
@@ -181,6 +236,7 @@ func _clear_all_objective_state() -> void:
 
 func reset_room_objective_state() -> void:
 	objective_state_setup.clear_world_state(objective_manager)
+	_intercept_relief_kills_applied = 0
 	_control_zone_runtime_sync_left = 0.0
 	_pending_objective_spawns.clear()
 	_pending_objective_spawn_timer = 0.0
@@ -195,6 +251,15 @@ func begin_room_objective(profile: Dictionary) -> void:
 		return
 	if _is_active_objective_role(OBJECTIVE_ROLE_HOLD_THE_LINE):
 		_begin_control_objective(profile)
+		return
+	if _is_active_objective_role(OBJECTIVE_ROLE_CIRCUIT_SWEEP):
+		_begin_circuit_sweep_objective(profile)
+		return
+	if _is_active_objective_role(OBJECTIVE_ROLE_PULSE_WINDOW):
+		_begin_pulse_window_objective(profile)
+		return
+	if _is_active_objective_role(OBJECTIVE_ROLE_INTERCEPT_RUN):
+		_begin_intercept_run_objective(profile)
 
 func _begin_survival_objective(profile: Dictionary) -> void:
 	var spawn_interval := ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
@@ -277,6 +342,14 @@ func update_objective_state(delta: float) -> void:
 	if _is_active_objective_role(OBJECTIVE_ROLE_HOLD_THE_LINE):
 		update_control_objective_state(delta)
 		return
+	if _is_active_objective_role(OBJECTIVE_ROLE_CIRCUIT_SWEEP):
+		update_circuit_sweep_objective_state(delta)
+		return
+	if _is_active_objective_role(OBJECTIVE_ROLE_PULSE_WINDOW):
+		update_pulse_window_objective_state(delta)
+		return
+	if _is_active_objective_role(OBJECTIVE_ROLE_INTERCEPT_RUN):
+		update_intercept_run_objective_state(delta)
 
 func _is_world_run_cleared() -> bool:
 	var outcome_coordinator: Variant = world.get("_run_outcome_coordinator")
@@ -1224,3 +1297,337 @@ func get_priority_target_max_health() -> int:
 	if not is_instance_valid(objective_manager.hunt_target_enemy):
 		return 0
 	return objective_manager.hunt_target_enemy.get_max_health()
+
+# =============================================================================
+# PURGE PROTOCOL
+# =============================================================================
+
+# =============================================================================
+# CIRCUIT SWEEP
+# =============================================================================
+
+func _begin_circuit_sweep_objective(profile: Dictionary) -> void:
+	var spawn_interval := ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
+	var objective_pressure_mult: float = world._objective_pressure_mult()
+	spawn_interval *= clampf(1.1 - objective_pressure_mult * 0.12, CircuitSweepConfig.SPAWN_INTERVAL_CLAMP_MIN, CircuitSweepConfig.SPAWN_INTERVAL_CLAMP_MAX)
+	var spawn_batch := ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
+	spawn_batch = maxi(1, int(round(float(spawn_batch) * objective_pressure_mult)))
+	var max_enemies := mini(CircuitSweepConfig.MAX_ENEMIES_HARD_CAP, CircuitSweepConfig.MAX_ENEMIES_BASE + int(floor(float(world.room_depth) * CircuitSweepConfig.MAX_ENEMIES_DEPTH_MULT)))
+	max_enemies = maxi(CircuitSweepConfig.MAX_ENEMIES_MIN, int(round(float(max_enemies) * objective_pressure_mult)))
+	var capture_goal := maxf(CircuitSweepConfig.CAPTURE_GOAL_DEPTH_MIN, CircuitSweepConfig.CAPTURE_GOAL_BASE - float(world.room_depth) * 0.04)
+
+	_sweep_pending_node_positions.clear()
+	var base_angle := rng.randf_range(0.0, TAU)
+	for i in range(CircuitSweepConfig.NODE_COUNT):
+		var angle := base_angle + float(i) * (TAU / float(CircuitSweepConfig.NODE_COUNT))
+		var spread := rng.randf_range(CircuitSweepConfig.NODE_SPREAD_RADIUS * 0.75, CircuitSweepConfig.NODE_SPREAD_RADIUS)
+		var offset := Vector2(cos(angle), sin(angle)) * spread
+		var pos: Vector2 = world._clamp_position_to_current_room(offset, CircuitSweepConfig.NODE_REGION_MARGIN)
+		_sweep_pending_node_positions.append(pos)
+
+	objective_state_setup.apply_circuit_sweep_setup(objective_manager, profile, spawn_interval, spawn_interval, spawn_batch, max_enemies, CircuitSweepConfig.NODE_COUNT, capture_goal, CircuitSweepConfig.NODE_RADIUS)
+	if not _sweep_pending_node_positions.is_empty():
+		objective_manager.sweep_node_position = _sweep_pending_node_positions.pop_front()
+	world.hud.show_banner("Circuit Sweep", "Capture each signal node")
+	world.queue_redraw()
+
+func update_circuit_sweep_objective_state(delta: float) -> void:
+	if MultiplayerSessionManager.is_remote_replica():
+		return
+	if world.choosing_next_room or _is_world_run_cleared():
+		return
+	_process_pending_objective_spawns(delta)
+
+	var player_in_zone := _is_any_active_player_inside_control_zone(objective_manager.sweep_node_position, objective_manager.sweep_node_radius)
+	if player_in_zone:
+		objective_manager.sweep_capture_progress = minf(objective_manager.sweep_capture_goal, objective_manager.sweep_capture_progress + delta)
+	else:
+		objective_manager.sweep_capture_progress = maxf(0.0, objective_manager.sweep_capture_progress - delta * CircuitSweepConfig.CAPTURE_DECAY_RATE)
+
+	if objective_manager.sweep_capture_progress >= objective_manager.sweep_capture_goal:
+		objective_manager.sweep_nodes_completed += 1
+		objective_manager.sweep_capture_progress = 0.0
+		if _sweep_pending_node_positions.is_empty():
+			complete_current_objective("Circuit Complete", "All nodes swept")
+			return
+		objective_manager.sweep_node_position = _sweep_pending_node_positions.pop_front()
+		var next_display: int = int(objective_manager.sweep_nodes_completed) + 1
+		world.hud.show_banner("Node Captured", "Advance to node %d" % next_display)
+		world.queue_redraw()
+
+	if objective_manager.time_left > 0.0:
+		objective_manager.time_left = maxf(0.0, objective_manager.time_left - delta)
+	if objective_manager.time_left <= 0.0 and not objective_manager.overtime:
+		objective_manager.overtime = true
+		objective_manager.spawn_interval = maxf(0.4, objective_manager.spawn_interval * CircuitSweepConfig.OVERTIME_SPAWN_INTERVAL_MULT)
+		objective_manager.spawn_batch = mini(CircuitSweepConfig.OVERTIME_SPAWN_BATCH_CAP, objective_manager.spawn_batch + 1)
+		objective_manager.spawn_timer = 0.1
+		world.hud.show_banner("Overtime", "Reach the remaining nodes")
+
+	var pressure_floor: int = mini(16, 3 + int(floor(float(world.room_depth) * 0.4)) + objective_manager.spawn_batch)
+	if objective_manager.max_enemies > 0:
+		pressure_floor = mini(pressure_floor, objective_manager.max_enemies)
+	if world.active_room_enemy_count < pressure_floor and (objective_manager.time_left > 0.0 or objective_manager.overtime):
+		objective_manager.spawn_timer = minf(objective_manager.spawn_timer, 0.5)
+	objective_manager.spawn_timer = maxf(0.0, objective_manager.spawn_timer - delta)
+	if objective_manager.spawn_timer <= 0.0 and (objective_manager.time_left > 0.0 or objective_manager.overtime):
+		objective_manager.spawn_timer = objective_manager.spawn_interval
+		spawn_circuit_sweep_wave()
+
+func spawn_circuit_sweep_wave() -> void:
+	if not _can_spawn_objective_wave():
+		return
+	var roster: Array[String] = ["chaser", "archer", "chaser", "charger", "archer", "chaser"]
+	if objective_manager.overtime:
+		roster = ["chaser", "archer", "charger", "chaser", "archer", "charger", "chaser"]
+	var spawn_count: int = _clamp_objective_wave_spawn_count(objective_manager.spawn_batch, CircuitSweepConfig.OVERTIME_SPAWN_BATCH_CAP)
+	_enqueue_objective_spawn(roster, spawn_count, OBJECTIVE_SPAWN_MODE_REGULAR)
+
+# =============================================================================
+# PULSE WINDOW
+# =============================================================================
+
+func _begin_pulse_window_objective(profile: Dictionary) -> void:
+	var spawn_interval := ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
+	var objective_pressure_mult: float = world._objective_pressure_mult()
+	spawn_interval *= clampf(1.1 - objective_pressure_mult * 0.1, PulseWindowConfig.SPAWN_INTERVAL_CLAMP_MIN, PulseWindowConfig.SPAWN_INTERVAL_CLAMP_MAX)
+	var spawn_batch := ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
+	spawn_batch = maxi(1, int(round(float(spawn_batch) * objective_pressure_mult)))
+	var max_enemies := PulseWindowConfig.MAX_ENEMIES_BASE + int(floor(float(world.room_depth) * PulseWindowConfig.MAX_ENEMIES_DEPTH_MULT))
+	max_enemies = maxi(PulseWindowConfig.MAX_ENEMIES_MIN, int(round(float(max_enemies) * objective_pressure_mult)))
+	var kill_target := maxi(1, int(profile.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_OBJECTIVE_PROGRESS_GOAL, 20)))
+	kill_target = maxi(kill_target, int(round(float(kill_target) * objective_pressure_mult)))
+	var pulse_interval := maxf(PulseWindowConfig.PULSE_INTERVAL_DEPTH_CLAMP_MIN, float(profile.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_OBJECTIVE_PULSE_INTERVAL, PulseWindowConfig.PULSE_INTERVAL_BASE)))
+	pulse_interval = maxf(PulseWindowConfig.PULSE_INTERVAL_DEPTH_CLAMP_MIN, pulse_interval / objective_pressure_mult)
+	objective_state_setup.apply_pulse_window_setup(objective_manager, profile, spawn_interval, spawn_interval, spawn_batch, max_enemies, kill_target, pulse_interval)
+	world.hud.show_banner("Pulse Window", "Each pulse reshapes the fight — read the surge")
+	world.queue_redraw()
+
+func update_pulse_window_objective_state(delta: float) -> void:
+	if MultiplayerSessionManager.is_remote_replica():
+		return
+	if world.choosing_next_room or _is_world_run_cleared():
+		return
+	_process_pending_objective_spawns(delta)
+	var quota_met: bool = objective_manager.kill_target > 0 and objective_manager.kills >= objective_manager.kill_target
+
+	# Pulse countdown — continues in overtime
+	if not (quota_met and objective_manager.overtime):
+		if not objective_manager.overtime:
+			objective_manager.pulse_next_timer = maxf(0.0, objective_manager.pulse_next_timer - delta)
+			if objective_manager.pulse_next_timer <= 0.0:
+				_fire_pulse()
+				objective_manager.pulse_next_timer = objective_manager.pulse_interval
+		else:
+			objective_manager.pulse_next_timer = maxf(0.0, objective_manager.pulse_next_timer - delta)
+			if objective_manager.pulse_next_timer <= 0.0:
+				_fire_pulse()
+				objective_manager.pulse_next_timer = objective_manager.pulse_interval
+	if objective_manager.pulse_ring_time_left > 0.0:
+		objective_manager.pulse_ring_time_left = maxf(0.0, objective_manager.pulse_ring_time_left - delta)
+	if objective_manager.pulse_active:
+		objective_manager.pulse_active_timer = maxf(0.0, objective_manager.pulse_active_timer - delta)
+		if objective_manager.pulse_active_timer <= 0.0:
+			objective_manager.pulse_active = false
+			objective_manager.pulse_mode = ""
+
+	# Timer
+	if objective_manager.time_left > 0.0:
+		objective_manager.time_left = maxf(0.0, objective_manager.time_left - delta)
+	if not quota_met and objective_manager.time_left <= 0.0 and not objective_manager.overtime:
+		objective_manager.overtime = true
+		objective_manager.spawn_interval = maxf(0.5, objective_manager.spawn_interval * PulseWindowConfig.OVERTIME_SPAWN_INTERVAL_MULT)
+		objective_manager.spawn_batch = mini(PulseWindowConfig.OVERTIME_SPAWN_BATCH_CAP, objective_manager.spawn_batch + 1)
+		objective_manager.spawn_timer = 0.1
+		world.hud.show_banner("Overtime", "Reach the kill quota")
+
+	# Completion — clear immediately when quota is reached
+	if quota_met:
+		complete_current_objective("Objective Complete", "Kill quota reached")
+		return
+
+	# Pressure floor
+	var pressure_floor: int = mini(16, 4 + int(floor(float(world.room_depth) * 0.4)) + objective_manager.spawn_batch)
+	if objective_manager.max_enemies > 0:
+		pressure_floor = mini(pressure_floor, objective_manager.max_enemies)
+	if world.active_room_enemy_count < pressure_floor:
+		objective_manager.spawn_timer = minf(objective_manager.spawn_timer, 0.5)
+	objective_manager.spawn_timer = maxf(0.0, objective_manager.spawn_timer - delta)
+	if objective_manager.spawn_timer <= 0.0:
+		objective_manager.spawn_timer = objective_manager.spawn_interval
+		spawn_pulse_window_wave()
+	world.queue_redraw()
+
+func _fire_pulse() -> void:
+	objective_manager.pulse_count += 1
+	var pool: Array[Dictionary] = world.encounter_profile_builder.get_hard_enemy_mutator_pool()
+	if pool.is_empty():
+		return
+	var mutator: Dictionary = pool[randi() % pool.size()]
+	var duration := PulseWindowConfig.PULSE_ACTIVE_DURATION
+	var mutator_name: String = ENCOUNTER_CONTRACTS.mutator_name(mutator)
+	objective_manager.pulse_mode = mutator_name
+	objective_manager.pulse_active = true
+	objective_manager.pulse_active_timer = duration
+	objective_manager.pulse_ring_time_left = PulseWindowConfig.RING_DURATION
+	objective_manager.pulse_ring_color = ENCOUNTER_CONTRACTS.mutator_theme_color(mutator, Color.WHITE)
+	world.enemy_spawner.apply_pulse_mutator_to_all_live_enemies(mutator, duration)
+	objective_manager.pulse_active_mutator = mutator
+	world.hud.show_banner(mutator_name, ENCOUNTER_CONTRACTS.mutator_banner_suffix(mutator))
+
+func spawn_pulse_window_wave() -> void:
+	if not _can_spawn_objective_wave():
+		return
+	var roster: Array[String] = _pulse_window_roster_for_mutator(objective_manager.pulse_active_mutator)
+	var spawn_count: int = _clamp_objective_wave_spawn_count(objective_manager.spawn_batch, PulseWindowConfig.OVERTIME_SPAWN_BATCH_CAP)
+	_enqueue_objective_spawn(roster, spawn_count, OBJECTIVE_SPAWN_MODE_REGULAR)
+	# Apply current pulse mutator to enemies just queued if a pulse is active
+	if objective_manager.pulse_active and not objective_manager.pulse_active_mutator.is_empty():
+		var remaining: float = objective_manager.pulse_active_timer
+		if remaining > 0.2:
+			world.enemy_spawner.apply_pulse_mutator_to_all_live_enemies(objective_manager.pulse_active_mutator, remaining)
+
+func _pulse_window_roster_for_mutator(mutator: Dictionary) -> Array[String]:
+	var archetypes_variant: Variant = mutator.get("affected_archetypes", [])
+	var archetypes: Array = archetypes_variant as Array if archetypes_variant is Array else []
+	var roster: Array[String] = []
+	for archetype_variant in archetypes:
+		var a := String(archetype_variant)
+		match a:
+			"melee":
+				roster.append_array(["chaser", "chaser", "chaser"])
+			"charger":
+				roster.append_array(["charger", "charger", "charger"])
+			"archer":
+				roster.append_array(["archer", "archer", "archer"])
+			"shielder":
+				roster.append_array(["shielder", "shielder"])
+			"spectre":
+				roster.append_array(["spectre", "spectre"])
+			"pyre":
+				roster.append_array(["pyre", "pyre", "chaser"])
+			"tether":
+				roster.append_array(["tether", "tether", "chaser"])
+	if roster.is_empty():
+		roster = ["chaser", "charger", "shielder", "chaser", "charger", "archer"]
+	return roster
+
+# =============================================================================
+# INTERCEPT RUN
+# =============================================================================
+
+func _apply_intercept_kill_relief() -> void:
+	var relief_kills := maxi(0, objective_manager.kills - _intercept_relief_kills_applied)
+	if relief_kills <= 0:
+		return
+	var relief_amount := float(relief_kills) * InterceptRunConfig.SPAWN_INTERVAL_RELIEF_PER_KILL
+	objective_manager.spawn_interval = minf(
+		InterceptRunConfig.SPAWN_INTERVAL_RELIEF_CAP,
+		objective_manager.spawn_interval + relief_amount
+	)
+	_intercept_relief_kills_applied += relief_kills
+
+func _begin_intercept_run_objective(profile: Dictionary) -> void:
+	var spawn_interval := ENCOUNTER_CONTRACTS.profile_objective_spawn_interval(profile)
+	var objective_pressure_mult: float = world._objective_pressure_mult()
+	spawn_interval *= clampf(1.1 - objective_pressure_mult * 0.1, InterceptRunConfig.SPAWN_INTERVAL_CLAMP_MIN, InterceptRunConfig.SPAWN_INTERVAL_CLAMP_MAX)
+	var spawn_batch := ENCOUNTER_CONTRACTS.profile_objective_spawn_batch(profile)
+	spawn_batch = maxi(1, int(round(float(spawn_batch) * objective_pressure_mult)))
+	var max_enemies := InterceptRunConfig.MAX_ENEMIES_BASE + int(floor(float(world.room_depth) * InterceptRunConfig.MAX_ENEMIES_DEPTH_MULT))
+	max_enemies = maxi(InterceptRunConfig.MAX_ENEMIES_MIN, int(round(float(max_enemies) * objective_pressure_mult)))
+	var traversal_time := maxf(20.0, float(profile.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_OBJECTIVE_INTERCEPT_TRAVERSAL_TIME, InterceptRunConfig.TRAVERSAL_TIME_BASE)))
+	traversal_time = traversal_time / maxf(0.5, objective_pressure_mult)
+	var drone_speed := 1.0 / traversal_time
+	objective_state_setup.apply_intercept_run_setup(objective_manager, profile, spawn_interval, spawn_interval, spawn_batch, max_enemies, drone_speed, InterceptRunConfig.DRONE_RADIUS)
+	var room_half_x := 480.0 - InterceptRunConfig.ROOM_MARGIN
+	objective_manager.intercept_start = Vector2(-room_half_x, 0.0)
+	objective_manager.intercept_end = Vector2(room_half_x, 0.0)
+	objective_manager.intercept_drone_position = objective_manager.intercept_start
+	if MultiplayerSessionManager.should_broadcast():
+		world._sync_objective_control_zone.rpc(
+			objective_manager.intercept_drone_position,
+			objective_manager.intercept_drone_radius,
+			0.0,
+			0.0,
+			0
+		)
+	world.hud.show_banner("Intercept Run", "Keep the path clear — block the drone and you fail")
+	world.queue_redraw()
+
+func update_intercept_run_objective_state(delta: float) -> void:
+	if MultiplayerSessionManager.is_remote_replica():
+		return
+	if world.choosing_next_room or _is_world_run_cleared():
+		return
+	_process_pending_objective_spawns(delta)
+	if not objective_manager.overtime:
+		_apply_intercept_kill_relief()
+
+	# Check player proximity to drone (escort zone)
+	var drone_pos: Vector2 = objective_manager.intercept_drone_position
+	var escort_radius := float(objective_manager.intercept_escort_radius)
+	var player_in_zone := false
+	if is_instance_valid(world.player) and (world.player as Node2D).global_position.distance_to(drone_pos) <= escort_radius:
+		player_in_zone = true
+	if not player_in_zone and world.is_multiplayer:
+		var party_nodes: Variant = world._get_multiplayer_player_nodes()
+		if party_nodes is Array:
+			for party_node_variant in party_nodes:
+				var party_node := party_node_variant as Node2D
+				if is_instance_valid(party_node) and party_node.global_position.distance_to(drone_pos) <= escort_radius:
+					player_in_zone = true
+					break
+	objective_manager.intercept_player_in_escort_zone = player_in_zone
+
+	# Count enemies near drone
+	var near_count := 0
+	for enemy_node in world.get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if (enemy_node as Node2D).global_position.distance_to(drone_pos) <= objective_manager.intercept_drone_radius:
+			near_count += 1
+	objective_manager.intercept_enemies_near_drone = near_count
+	objective_manager.intercept_drone_stalled = near_count > 0 or not player_in_zone
+
+	# Advance drone when path is clear and player is escorting
+	var advance_speed: float = float(objective_manager.intercept_drone_speed)
+	if objective_manager.overtime:
+		advance_speed *= InterceptRunConfig.OVERTIME_DRONE_SPEED_MULT
+	if not objective_manager.intercept_drone_stalled:
+		objective_manager.intercept_drone_progress = minf(1.0, objective_manager.intercept_drone_progress + advance_speed * delta)
+		objective_manager.intercept_drone_position = objective_manager.intercept_start.lerp(objective_manager.intercept_end, objective_manager.intercept_drone_progress)
+
+	if objective_manager.intercept_drone_progress >= 1.0:
+		complete_current_objective("Drone Delivered", "Path held — run complete")
+		return
+
+	# Timer
+	if objective_manager.time_left > 0.0:
+		objective_manager.time_left = maxf(0.0, objective_manager.time_left - delta)
+	if objective_manager.time_left <= 0.0 and not objective_manager.overtime:
+		objective_manager.overtime = true
+		objective_manager.spawn_interval = maxf(0.5, objective_manager.spawn_interval * InterceptRunConfig.OVERTIME_SPAWN_INTERVAL_MULT)
+		objective_manager.spawn_batch = mini(6, objective_manager.spawn_batch + 1)
+		objective_manager.spawn_timer = 0.1
+		world.hud.show_banner("Overtime", "Drone accelerating — clear the path now")
+
+	# Pressure floor
+	var pressure_floor: int = mini(14, 3 + int(floor(float(world.room_depth) * 0.35)) + objective_manager.spawn_batch)
+	if objective_manager.max_enemies > 0:
+		pressure_floor = mini(pressure_floor, objective_manager.max_enemies)
+	if world.active_room_enemy_count < pressure_floor:
+		objective_manager.spawn_timer = minf(objective_manager.spawn_timer, 0.6)
+	objective_manager.spawn_timer = maxf(0.0, objective_manager.spawn_timer - delta)
+	if objective_manager.spawn_timer <= 0.0:
+		objective_manager.spawn_timer = objective_manager.spawn_interval
+		spawn_intercept_run_wave()
+	world.queue_redraw()
+
+func spawn_intercept_run_wave() -> void:
+	if not _can_spawn_objective_wave():
+		return
+	var roster: Array[String] = ["charger", "chaser", "shielder", "charger", "chaser", "archer"]
+	if objective_manager.overtime:
+		roster = ["charger", "charger", "chaser", "shielder", "charger", "chaser"]
+	var spawn_count: int = _clamp_objective_wave_spawn_count(objective_manager.spawn_batch, 6)
+	_enqueue_objective_spawn(roster, spawn_count, OBJECTIVE_SPAWN_MODE_REGULAR)

@@ -2,6 +2,7 @@ extends CharacterBody2D
 
 const HEALTH_STATE_SCRIPT := preload("res://scripts/health_state.gd")
 const COLOR_PALETTE := preload("res://scripts/shared/color_palette.gd")
+const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 
 signal health_changed(current_health: int, max_health: int)
 signal died
@@ -124,6 +125,14 @@ var _network_facing_lerp_speed: float = 12.0
 var _network_direction_targets: Dictionary = {}
 var slow_time_left: float = 0.0
 var slow_speed_mult: float = 1.0
+var pulse_damage_taken_mult: float = 1.0
+var pulse_damage_taken_timer: float = 0.0
+var pulse_overlay_timer: float = 0.0
+var pulse_stat_timer: float = 0.0
+var pulse_hit_timer: float = 0.0
+const PULSE_HIT_DURATION: float = 0.38
+var _pulse_stat_originals: Dictionary = {}
+var _pulse_overlay_color: Color = Color.WHITE
 var has_mutator_overlay: bool = false
 var mutator_theme_color: Color = Color(1.0, 0.4, 0.4, 1.0)
 var mutator_icon_shape_id: String = ""
@@ -541,6 +550,22 @@ func _update_attack_animation(delta: float) -> void:
 		if slow_time_left <= 0.0:
 			slow_time_left = 0.0
 			slow_speed_mult = 1.0
+			queue_redraw()
+	if pulse_damage_taken_timer > 0.0:
+		pulse_damage_taken_timer = maxf(0.0, pulse_damage_taken_timer - delta)
+		if pulse_damage_taken_timer <= 0.0:
+			pulse_damage_taken_mult = 1.0
+	if pulse_stat_timer > 0.0:
+		pulse_stat_timer = maxf(0.0, pulse_stat_timer - delta)
+		if pulse_stat_timer <= 0.0:
+			_revert_pulse_stats()
+	if pulse_hit_timer > 0.0:
+		pulse_hit_timer = maxf(0.0, pulse_hit_timer - delta)
+		queue_redraw()
+	if pulse_overlay_timer > 0.0:
+		pulse_overlay_timer = maxf(0.0, pulse_overlay_timer - delta)
+		if pulse_overlay_timer <= 0.0:
+			queue_redraw()
 	if attack_visual_active:
 		_attack_visual_redraw_left -= delta
 		if _attack_visual_redraw_left <= 0.0:
@@ -567,6 +592,8 @@ func take_damage(amount: int, _damage_context: Dictionary = {}) -> void:
 		return
 	if damage_blocked:
 		return
+	if pulse_damage_taken_mult > 1.0:
+		amount = maxi(1, int(round(float(amount) * pulse_damage_taken_mult)))
 	var before_health := int(health_state.current_health)
 	health_state.take_damage(amount)
 	var after_health := int(health_state.current_health)
@@ -686,16 +713,91 @@ func apply_slow(duration: float, mult: float) -> void:
 func is_slowed() -> bool:
 	return slow_time_left > 0.0
 
+func apply_pulse_mutator_stats(specs: Array, mutator: Dictionary, duration: float) -> void:
+	_revert_pulse_stats()
+	for spec_variant in specs:
+		var spec := spec_variant as Dictionary
+		var stat_key := String(spec.get("stat", ""))
+		if stat_key.is_empty():
+			continue
+		var multiplier := ENCOUNTER_CONTRACTS.mutator_stat(mutator, stat_key, 1.0)
+		if is_equal_approx(multiplier, 1.0):
+			continue
+		var prop := String(spec.get("prop", ""))
+		if prop.is_empty() or get(prop) == null:
+			continue
+		_pulse_stat_originals[prop] = get(prop)
+		var min_val := float(spec.get("min", 0.0))
+		var scaled := maxf(min_val, float(get(prop)) * multiplier)
+		if bool(spec.get("is_int", false)):
+			set(prop, maxi(int(round(min_val)), int(round(scaled))))
+		else:
+			set(prop, scaled)
+	pulse_stat_timer = duration
+	pulse_hit_timer = PULSE_HIT_DURATION
+	pulse_overlay_timer = duration
+	_pulse_overlay_color = ENCOUNTER_CONTRACTS.mutator_theme_color(mutator, Color(1.0, 0.9, 0.4, 1.0))
+	queue_redraw()
+
+func _revert_pulse_stats() -> void:
+	if _pulse_stat_originals.is_empty():
+		return
+	for prop_variant in _pulse_stat_originals.keys():
+		var prop := String(prop_variant)
+		if get(prop) != null:
+			set(prop, _pulse_stat_originals[prop])
+	_pulse_stat_originals.clear()
+	pulse_stat_timer = 0.0
+	queue_redraw()
+
+func clear_pulse_mutator() -> void:
+	_revert_pulse_stats()
+	pulse_damage_taken_mult = 1.0
+	pulse_damage_taken_timer = 0.0
+	pulse_overlay_timer = 0.0
+	queue_redraw()
+
 func _draw_slow_indicator(body_radius: float) -> void:
-	if slow_time_left <= 0.0:
+	if slow_time_left <= 0.0 and pulse_overlay_timer <= 0.0 and pulse_hit_timer <= 0.0:
 		return
 	var t := _draw_time_sec if _draw_time_sec > 0.0 else float(Time.get_ticks_msec()) * 0.001
-	var pulse := 0.5 + 0.5 * sin(t * 11.0)
-	var fade := clampf(slow_time_left * 4.0, 0.0, 1.0)
-	draw_circle(Vector2.ZERO, body_radius + 8.0, Color(0.46, 1.0, 0.92, 0.07 * fade))
-	var slow_segments := 32 if network_simulation_enabled else 24
-	draw_arc(Vector2.ZERO, body_radius + 7.0, 0.0, TAU, slow_segments,
-		Color(0.46, 1.0, 0.92, (0.52 + pulse * 0.28) * fade), 2.6)
+	if slow_time_left > 0.0 and slow_speed_mult < 1.0:
+		var slow_pulse := 0.5 + 0.5 * sin(t * 11.0)
+		var slow_fade := clampf(slow_time_left * 4.0, 0.0, 1.0)
+		draw_circle(Vector2.ZERO, body_radius + 8.0, Color(0.46, 1.0, 0.92, 0.07 * slow_fade))
+		var slow_segments := 32 if network_simulation_enabled else 24
+		draw_arc(Vector2.ZERO, body_radius + 7.0, 0.0, TAU, slow_segments,
+			Color(0.46, 1.0, 0.92, (0.52 + slow_pulse * 0.28) * slow_fade), 2.6)
+	if pulse_hit_timer > 0.0:
+		var ht := 1.0 - (pulse_hit_timer / PULSE_HIT_DURATION)
+		var hit_radius := body_radius + 2.0 + ht * body_radius * 3.0
+		var hit_alpha := (1.0 - ht) * 0.84
+		var hc := _pulse_overlay_color
+		hc.a = hit_alpha
+		var hit_segs := 28 if network_simulation_enabled else 18
+		draw_arc(Vector2.ZERO, hit_radius, 0.0, TAU, hit_segs, hc, 3.5)
+		var wc := Color(1.0, 1.0, 1.0, maxf(0.0, (1.0 - ht * 2.2)) * 0.55)
+		if wc.a > 0.02:
+			draw_arc(Vector2.ZERO, hit_radius * 0.55, 0.0, TAU, hit_segs, wc, 2.0)
+	if pulse_overlay_timer > 0.0:
+		var pulse_anim := 0.5 + 0.5 * sin(t * 4.5)
+		var pulse_fade := clampf(pulse_overlay_timer * 2.0, 0.0, 1.0)
+		var ring_r := body_radius + 13.0
+		var ring_c := _pulse_overlay_color
+		ring_c.a = (0.38 + pulse_anim * 0.24) * pulse_fade
+		var seg_count := 32 if network_simulation_enabled else 20
+		draw_arc(Vector2.ZERO, ring_r, 0.0, TAU, seg_count, ring_c, 2.5)
+		var fill_c := _pulse_overlay_color
+		fill_c.a = 0.07 * pulse_fade
+		draw_circle(Vector2.ZERO, ring_r - 1.0, fill_c)
+		var tick_alpha := (0.6 + pulse_anim * 0.22) * pulse_fade
+		for i in range(4):
+			var angle := t * 1.2 + float(i) * TAU * 0.25
+			var inner_pt := Vector2.RIGHT.rotated(angle) * ring_r
+			var outer_pt := Vector2.RIGHT.rotated(angle) * (ring_r + 5.5)
+			var tc := _pulse_overlay_color
+			tc.a = tick_alpha
+			draw_line(inner_pt, outer_pt, tc, 2.2)
 
 func heal(amount: int) -> void:
 	if amount <= 0:

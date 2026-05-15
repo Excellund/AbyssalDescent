@@ -9,7 +9,7 @@ func on_enemy_killed(objective_manager: Node, objective_runtime: Node, kill_pos:
 	var should_redraw := false
 	var active_kind := String(objective_manager.active_objective_kind)
 
-	if active_kind == "last_stand" or active_kind == "hold_the_line":
+	if active_kind == "last_stand" or active_kind == "hold_the_line" or active_kind == "pulse_window":
 		objective_manager.kills += 1
 
 	if active_kind == "cut_the_signal" and is_instance_valid(objective_manager.hunt_target_enemy):

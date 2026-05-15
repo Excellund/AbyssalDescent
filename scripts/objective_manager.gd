@@ -96,6 +96,47 @@ var signal_fx_duration: float = 0.0
 var signal_fx_strength: float = 1.0
 var signal_fx_phase: float = 0.0
 
+# ============================================================================
+# CIRCUIT SWEEP STATE
+# ============================================================================
+
+var sweep_node_count: int = 3
+var sweep_nodes_completed: int = 0
+var sweep_capture_progress: float = 0.0
+var sweep_capture_goal: float = 2.0
+var sweep_node_position: Vector2 = Vector2.ZERO
+var sweep_node_radius: float = 88.0
+
+# ============================================================================
+# PULSE WINDOW STATE
+# ============================================================================
+
+var pulse_next_timer: float = 9.0
+var pulse_interval: float = 9.0
+var pulse_active: bool = false
+var pulse_active_timer: float = 0.0
+var pulse_mode: String = ""
+var pulse_active_mutator: Dictionary = {}
+var pulse_ring_time_left: float = 0.0
+var pulse_ring_duration: float = 0.65
+var pulse_ring_color: Color = Color.WHITE
+var pulse_count: int = 0
+
+# ============================================================================
+# INTERCEPT RUN STATE
+# ============================================================================
+
+var intercept_drone_progress: float = 0.0
+var intercept_drone_position: Vector2 = Vector2.ZERO
+var intercept_start: Vector2 = Vector2.ZERO
+var intercept_end: Vector2 = Vector2.ZERO
+var intercept_drone_speed: float = 0.025
+var intercept_enemies_near_drone: int = 0
+var intercept_drone_stalled: bool = false
+var intercept_drone_radius: float = 80.0
+var intercept_escort_radius: float = 240.0
+var intercept_player_in_escort_zone: bool = true
+
 
 ## Reset all state to defaults (call when entering a room without objectives)
 func reset() -> void:
@@ -165,6 +206,37 @@ func reset() -> void:
 	signal_fx_strength = 1.0
 	signal_fx_phase = 0.0
 
+	# Circuit Sweep
+	sweep_node_count = 3
+	sweep_nodes_completed = 0
+	sweep_capture_progress = 0.0
+	sweep_capture_goal = 2.0
+	sweep_node_position = Vector2.ZERO
+	sweep_node_radius = 88.0
+
+	# Pulse Window
+	pulse_next_timer = 9.0
+	pulse_interval = 9.0
+	pulse_active = false
+	pulse_active_timer = 0.0
+	pulse_mode = ""
+	pulse_active_mutator = {}
+	pulse_ring_time_left = 0.0
+	pulse_ring_color = Color.WHITE
+	pulse_count = 0
+
+	# Intercept Run
+	intercept_drone_progress = 0.0
+	intercept_drone_position = Vector2.ZERO
+	intercept_start = Vector2.ZERO
+	intercept_end = Vector2.ZERO
+	intercept_drone_speed = 0.025
+	intercept_enemies_near_drone = 0
+	intercept_drone_stalled = false
+	intercept_drone_radius = 80.0
+	intercept_escort_radius = 240.0
+	intercept_player_in_escort_zone = true
+
 
 ## Get hunt target's health for HUD display
 func get_hunt_target_health() -> int:
@@ -182,15 +254,21 @@ func get_hunt_target_max_health() -> int:
 
 ## Whether any room objective is currently active
 func has_active_objective() -> bool:
-	return active_objective_kind == "last_stand" or active_objective_kind == "cut_the_signal" or active_objective_kind == "hold_the_line"
+	return active_objective_kind == "last_stand" or active_objective_kind == "cut_the_signal" or active_objective_kind == "hold_the_line" or active_objective_kind == "circuit_sweep" or active_objective_kind == "pulse_window" or active_objective_kind == "intercept_run"
 
 
 ## Whether hold-the-line control overlay should currently render
 func should_draw_control_overlay() -> bool:
-	if control_radius <= 0.0:
+	if active_objective_kind == "pulse_window":
+		return pulse_ring_time_left > 0.0
+	if control_radius <= 0.0 and intercept_drone_radius <= 0.0 and sweep_node_radius <= 0.0:
 		return false
 	if active_objective_kind == "hold_the_line":
 		return true
+	if active_objective_kind == "circuit_sweep":
+		return sweep_node_radius > 0.0 and sweep_nodes_completed < sweep_node_count
+	if active_objective_kind == "intercept_run":
+		return intercept_drone_progress < 1.0 and intercept_drone_speed > 0.0
 	return control_progress > 0.0
 
 
@@ -229,6 +307,23 @@ func serialize_sync_state() -> Dictionary:
 		"exposure_left": float(exposure_left),
 		"last_relocated_escort_count": int(last_relocated_escort_count),
 		"relocation_hint_left": float(relocation_hint_left),
+		"purge_kill_target": 0,  # removed — kept as 0 for legacy save compat
+		"sweep_nodes_completed": int(sweep_nodes_completed),
+		"sweep_capture_progress": float(sweep_capture_progress),
+		"sweep_node_position": sweep_node_position,
+		"pulse_next_timer": float(pulse_next_timer),
+		"pulse_active": bool(pulse_active),
+		"pulse_active_timer": float(pulse_active_timer),
+		"pulse_mode": String(pulse_mode),
+		"pulse_active_mutator": pulse_active_mutator.duplicate(true),
+		"pulse_ring_time_left": float(pulse_ring_time_left),
+		"pulse_ring_color": pulse_ring_color,
+		"pulse_count": int(pulse_count),
+		"intercept_drone_progress": float(intercept_drone_progress),
+		"intercept_drone_position": intercept_drone_position,
+		"intercept_enemies_near_drone": int(intercept_enemies_near_drone),
+		"intercept_drone_stalled": bool(intercept_drone_stalled),
+		"intercept_player_in_escort_zone": bool(intercept_player_in_escort_zone),
 	}
 
 ## Apply a received network sync payload, clamping all values to safe ranges.
@@ -257,12 +352,57 @@ func apply_sync_state(state: Dictionary) -> void:
 	exposure_left = maxf(0.0, float(state.get("exposure_left", exposure_left)))
 	last_relocated_escort_count = maxi(0, int(state.get("last_relocated_escort_count", last_relocated_escort_count)))
 	relocation_hint_left = maxf(0.0, float(state.get("relocation_hint_left", relocation_hint_left)))
+	sweep_nodes_completed = maxi(0, int(state.get("sweep_nodes_completed", sweep_nodes_completed)))
+	sweep_capture_progress = maxf(0.0, float(state.get("sweep_capture_progress", sweep_capture_progress)))
+	var raw_sweep_pos: Variant = state.get("sweep_node_position", sweep_node_position)
+	if raw_sweep_pos is Vector2:
+		sweep_node_position = raw_sweep_pos
+	pulse_next_timer = maxf(0.0, float(state.get("pulse_next_timer", pulse_next_timer)))
+	pulse_active = bool(state.get("pulse_active", pulse_active))
+	pulse_active_timer = maxf(0.0, float(state.get("pulse_active_timer", pulse_active_timer)))
+	pulse_mode = String(state.get("pulse_mode", pulse_mode))
+	pulse_ring_time_left = maxf(0.0, float(state.get("pulse_ring_time_left", pulse_ring_time_left)))
+	var raw_ring_color: Variant = state.get("pulse_ring_color", pulse_ring_color)
+	if raw_ring_color is Color:
+		pulse_ring_color = raw_ring_color
+	pulse_count = maxi(0, int(state.get("pulse_count", pulse_count)))
+	intercept_drone_progress = clampf(float(state.get("intercept_drone_progress", intercept_drone_progress)), 0.0, 1.0)
+	var raw_intercept_pos: Variant = state.get("intercept_drone_position", intercept_drone_position)
+	if raw_intercept_pos is Vector2:
+		intercept_drone_position = raw_intercept_pos
+	intercept_enemies_near_drone = maxi(0, int(state.get("intercept_enemies_near_drone", intercept_enemies_near_drone)))
+	intercept_drone_stalled = bool(state.get("intercept_drone_stalled", intercept_drone_stalled))
+	intercept_player_in_escort_zone = bool(state.get("intercept_player_in_escort_zone", intercept_player_in_escort_zone))
 
 
 ## Get control overlay render state for world drawing
 func get_control_overlay_state() -> Dictionary:
+	if active_objective_kind == "circuit_sweep":
+		return {
+			"should_draw": should_draw_control_overlay(),
+			"overlay_mode": "sweep",
+			"anchor": sweep_node_position,
+			"radius": sweep_node_radius,
+			"capture_progress": sweep_capture_progress,
+			"capture_goal": sweep_capture_goal,
+		}
+	if active_objective_kind == "intercept_run":
+		return {
+			"should_draw": should_draw_control_overlay(),
+			"overlay_mode": "intercept",
+			"drone_progress": intercept_drone_progress,
+			"drone_position": intercept_drone_position,
+			"drone_start": intercept_start,
+			"drone_end": intercept_end,
+			"drone_radius": intercept_drone_radius,
+			"stalled": intercept_drone_stalled,
+			"enemies_near": intercept_enemies_near_drone,
+			"escort_radius": intercept_escort_radius,
+			"player_in_escort_zone": intercept_player_in_escort_zone,
+		}
 	return {
 		"should_draw": should_draw_control_overlay(),
+		"overlay_mode": "control",
 		"anchor": control_anchor,
 		"radius": control_radius,
 		"progress": control_progress,
@@ -295,4 +435,19 @@ func get_hud_state() -> Dictionary:
 		"exposure_left": exposure_left,
 		"last_relocated_escort_count": last_relocated_escort_count,
 		"relocation_hint_left": relocation_hint_left,
+		"sweep_nodes_completed": sweep_nodes_completed,
+		"sweep_node_count": sweep_node_count,
+		"sweep_capture_progress": sweep_capture_progress,
+		"sweep_capture_goal": sweep_capture_goal,
+		"pulse_next_timer": pulse_next_timer,
+		"pulse_active": pulse_active,
+		"pulse_active_timer": pulse_active_timer,
+		"pulse_mode": pulse_mode,
+		"pulse_ring_time_left": pulse_ring_time_left,
+		"pulse_count": pulse_count,
+		"intercept_drone_progress": intercept_drone_progress,
+		"intercept_drone_position": intercept_drone_position,
+		"intercept_enemies_near_drone": intercept_enemies_near_drone,
+		"intercept_drone_stalled": intercept_drone_stalled,
+		"intercept_player_in_escort_zone": intercept_player_in_escort_zone,
 	}

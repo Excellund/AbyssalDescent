@@ -60,6 +60,9 @@ const PROFILE_KEY_OBJECTIVE_ZONE_RADIUS := "objective_zone_radius"
 const PROFILE_KEY_OBJECTIVE_PROGRESS_GOAL := "objective_progress_goal"
 const PROFILE_KEY_OBJECTIVE_PROGRESS_DECAY := "objective_progress_decay"
 const PROFILE_KEY_OBJECTIVE_CONTEST_THRESHOLD := "objective_contest_threshold"
+const PROFILE_KEY_OBJECTIVE_NODE_MAX_INTEGRITY := "objective_node_max_integrity"
+const PROFILE_KEY_OBJECTIVE_PULSE_INTERVAL := "objective_pulse_interval"
+const PROFILE_KEY_OBJECTIVE_INTERCEPT_TRAVERSAL_TIME := "objective_intercept_traversal_time"
 const PROFILE_KEY_WAVE_COUNT := "wave_count"
 const PROFILE_KEY_INITIAL_WAVE_FRACTION := "initial_wave_fraction"
 
@@ -351,6 +354,27 @@ static func _build_encounter_registry() -> Array[Dictionary]:
 			"is_boss": false, "is_rest": false, "is_objective": true,
 			"display_label": "Objective - Hold the Line",
 			"glossary_label": "Hold the Line"
+		},
+		{
+			"key": "circuit_sweep",
+			"id": DEBUG_ENUMS.Encounter.OBJECTIVE_CIRCUIT_SWEEP,
+			"is_boss": false, "is_rest": false, "is_objective": true,
+			"display_label": "Objective - Circuit Sweep",
+			"glossary_label": "Circuit Sweep"
+		},
+		{
+			"key": "pulse_window",
+			"id": DEBUG_ENUMS.Encounter.OBJECTIVE_PULSE_WINDOW,
+			"is_boss": false, "is_rest": false, "is_objective": true,
+			"display_label": "Objective - Pulse Window",
+			"glossary_label": "Pulse Window"
+		},
+		{
+			"key": "intercept_run",
+			"id": DEBUG_ENUMS.Encounter.OBJECTIVE_INTERCEPT_RUN,
+			"is_boss": false, "is_rest": false, "is_objective": true,
+			"display_label": "Objective - Intercept Run",
+			"glossary_label": "Intercept Run"
 		},
 		{
 			"key": "random_objective",
@@ -968,6 +992,44 @@ static func profile_set_control_objective(profile_value: Dictionary, duration: f
 	profile_value[PROFILE_KEY_OBJECTIVE_PROGRESS_DECAY] = maxf(0.0, progress_decay)
 	profile_value[PROFILE_KEY_OBJECTIVE_CONTEST_THRESHOLD] = maxi(0, contest_threshold)
 	profile_value.erase(PROFILE_KEY_OBJECTIVE_TARGET_TYPE)
+
+static func profile_set_circuit_sweep_objective(profile_value: Dictionary, duration: float, spawn_interval: float, spawn_batch: int = 1) -> void:
+	profile_value[PROFILE_KEY_OBJECTIVE_KIND] = "circuit_sweep"
+	profile_value[PROFILE_KEY_OBJECTIVE_DURATION] = maxf(1.0, duration)
+	profile_value[PROFILE_KEY_OBJECTIVE_SPAWN_INTERVAL] = maxf(0.25, spawn_interval)
+	profile_value[PROFILE_KEY_OBJECTIVE_SPAWN_BATCH] = maxi(1, spawn_batch)
+	profile_value.erase(PROFILE_KEY_OBJECTIVE_TARGET_TYPE)
+	profile_value.erase(PROFILE_KEY_OBJECTIVE_ZONE_RADIUS)
+	profile_value.erase(PROFILE_KEY_OBJECTIVE_PROGRESS_GOAL)
+	profile_value.erase(PROFILE_KEY_OBJECTIVE_PROGRESS_DECAY)
+	profile_value.erase(PROFILE_KEY_OBJECTIVE_CONTEST_THRESHOLD)
+	profile_value.erase(PROFILE_KEY_OBJECTIVE_NODE_MAX_INTEGRITY)
+
+static func profile_set_pulse_window_objective(profile_value: Dictionary, duration: float, spawn_interval: float, spawn_batch: int, kill_target: int, pulse_interval: float) -> void:
+	profile_value[PROFILE_KEY_OBJECTIVE_KIND] = "pulse_window"
+	profile_value[PROFILE_KEY_OBJECTIVE_DURATION] = maxf(1.0, duration)
+	profile_value[PROFILE_KEY_OBJECTIVE_SPAWN_INTERVAL] = maxf(0.25, spawn_interval)
+	profile_value[PROFILE_KEY_OBJECTIVE_SPAWN_BATCH] = maxi(1, spawn_batch)
+	profile_value[PROFILE_KEY_OBJECTIVE_PULSE_INTERVAL] = maxf(3.0, pulse_interval)
+	profile_value[PROFILE_KEY_OBJECTIVE_PROGRESS_GOAL] = maxi(1, kill_target)
+	profile_value.erase(PROFILE_KEY_OBJECTIVE_TARGET_TYPE)
+	profile_value.erase(PROFILE_KEY_OBJECTIVE_ZONE_RADIUS)
+	profile_value.erase(PROFILE_KEY_OBJECTIVE_PROGRESS_DECAY)
+	profile_value.erase(PROFILE_KEY_OBJECTIVE_CONTEST_THRESHOLD)
+	profile_value.erase(PROFILE_KEY_OBJECTIVE_NODE_MAX_INTEGRITY)
+
+static func profile_set_intercept_run_objective(profile_value: Dictionary, duration: float, spawn_interval: float, spawn_batch: int, traversal_time: float) -> void:
+	profile_value[PROFILE_KEY_OBJECTIVE_KIND] = "intercept_run"
+	profile_value[PROFILE_KEY_OBJECTIVE_DURATION] = maxf(1.0, duration)
+	profile_value[PROFILE_KEY_OBJECTIVE_SPAWN_INTERVAL] = maxf(0.25, spawn_interval)
+	profile_value[PROFILE_KEY_OBJECTIVE_SPAWN_BATCH] = maxi(1, spawn_batch)
+	profile_value[PROFILE_KEY_OBJECTIVE_INTERCEPT_TRAVERSAL_TIME] = maxf(10.0, traversal_time)
+	profile_value.erase(PROFILE_KEY_OBJECTIVE_TARGET_TYPE)
+	profile_value.erase(PROFILE_KEY_OBJECTIVE_ZONE_RADIUS)
+	profile_value.erase(PROFILE_KEY_OBJECTIVE_PROGRESS_GOAL)
+	profile_value.erase(PROFILE_KEY_OBJECTIVE_PROGRESS_DECAY)
+	profile_value.erase(PROFILE_KEY_OBJECTIVE_CONTEST_THRESHOLD)
+	profile_value.erase(PROFILE_KEY_OBJECTIVE_NODE_MAX_INTEGRITY)
 
 static func mutator_name(mutator: Dictionary) -> String:
 	return String(mutator.get(MUTATOR_KEY_NAME, ""))

@@ -116,6 +116,24 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"desc": "Control the center zone long enough to secure it under pressure.",
 		},
 		{
+			"name": "Circuit Sweep",
+			"group": "Objective",
+			"color": Color(0.62, 1.0, 0.62, 1.0),
+			"desc": "Three signal nodes appear one at a time. Stand inside each node's zone to capture it before the timer runs out.",
+		},
+		{
+			"name": "Pulse Window",
+			"group": "Objective",
+			"color": Color(1.0, 0.9, 0.4, 1.0),
+			"desc": "Every few seconds a pulse fires and randomly applies a mode to all enemies: SURGE (enemies run faster), EXPOSED (enemies take more damage), or SLOWED (enemies slowed). Adapt to each mode and kill the quota.",
+		},
+		{
+			"name": "Intercept Run",
+			"group": "Objective",
+			"color": Color(0.62, 0.88, 1.0, 1.0),
+			"desc": "A drone travels across the room. Keep its path clear — enemies that reach it stall its progress. Escort it to the far side to win.",
+		},
+		{
 			"name": "Rest Site",
 			"group": "Special",
 			"color": Color(0.64, 1.0, 0.76, 1.0),
@@ -192,6 +210,12 @@ static func _mutator_rows() -> Array[Dictionary]:
 			"desc": "Arena pressure grows over time. Stalling shrinks your safe space.",
 		},
 		{
+			"name": "Surge",
+			"color": Color(0.54, 0.92, 0.72, 1.0),
+			"icon": "res://assets/ui/mutators/surge.svg",
+			"desc": "Enemies move faster and converge on active capture points.",
+		},
+		{
 			"name": "Fortified",
 			"color": Color(0.76, 0.82, 0.98, 1.0),
 			"icon": "res://assets/ui/mutators/fortified.svg",
@@ -208,6 +232,24 @@ static func _mutator_rows() -> Array[Dictionary]:
 			"color": Color(0.98, 0.72, 0.3, 1.0),
 			"icon": "res://assets/ui/mutators/combo_relay.svg",
 			"desc": "Player buff for objective rooms. Consecutive kills build damage momentum.",
+		},
+		{
+			"name": "Relay Boost",
+			"color": Color(0.62, 1.0, 0.62, 1.0),
+			"icon": "res://assets/ui/mutators/relay_boost.svg",
+			"desc": "Killing an enemy triggers a brief speed surge, letting you chase down the next target or dash to a node.",
+		},
+		{
+			"name": "Node Shield",
+			"color": Color(0.46, 0.86, 1.0, 1.0),
+			"icon": "res://assets/ui/mutators/node_shield.svg",
+			"desc": "Each nearby enemy (within 180px) grants +6% damage resistance, up to a maximum of 30%. Standing your ground while intercepting clusters earns more protection.",
+		},
+		{
+			"name": "Overcharge",
+			"color": Color(1.0, 0.9, 0.4, 1.0),
+			"icon": "",
+			"desc": "Kill chains charge your weapon (up to 5 stacks, +10% damage each). Reach max charge to enter CHARGED state. Your next kill discharges a nova burst that damages nearby enemies and resets to 2 stacks. Stacks decay by 2 if the chain breaks.",
 		},
 	]
 

@@ -10,6 +10,9 @@ const MUTATOR_ICON_IRON_VOLLEY: Texture2D = preload("res://assets/ui/mutators/ir
 const MUTATOR_ICON_FORTIFIED_PATH := "res://assets/ui/mutators/fortified.svg"
 const MUTATOR_ICON_HUNTERS_FOCUS_PATH := "res://assets/ui/mutators/hunters_focus.svg"
 const MUTATOR_ICON_KILLBOX_PATH := "res://assets/ui/mutators/killbox.svg"
+const MUTATOR_ICON_SURGE_PATH := "res://assets/ui/mutators/surge.svg"
+const MUTATOR_ICON_RELAY_BOOST_PATH := "res://assets/ui/mutators/relay_boost.svg"
+const MUTATOR_ICON_NODE_SHIELD_PATH := "res://assets/ui/mutators/node_shield.svg"
 const MUTATOR_ICON_COMBO_RELAY_PATH := "res://assets/ui/mutators/combo_relay.svg"
 const MUTATOR_ICON_TETHER_WEB_PATH := "res://assets/ui/mutators/tether_web.svg"
 const HUD_INFO_PANEL_WIDTH := 302.0
@@ -37,6 +40,9 @@ var room_banner_subtitle_label: Label
 var room_banner_tween: Tween
 var room_banner_persistent_visible: bool = false
 var _mutator_icon_killbox: Texture2D
+var _mutator_icon_surge: Texture2D
+var _mutator_icon_relay_boost: Texture2D
+var _mutator_icon_node_shield: Texture2D
 var _mutator_icon_fortified: Texture2D
 var _mutator_icon_hunters_focus: Texture2D
 var _mutator_icon_combo_relay: Texture2D
@@ -517,6 +523,13 @@ func _update_status_panel_text(state: Dictionary) -> void:
 	var objective_exposure_left := float(state.get("objective_exposure_left", 0.0))
 	var objective_last_relocated_escort_count := int(state.get("objective_last_relocated_escort_count", 0))
 	var objective_relocation_hint_left := float(state.get("objective_relocation_hint_left", 0.0))
+	var objective_sweep_nodes_completed := int(state.get("objective_sweep_nodes_completed", 0))
+	var objective_sweep_node_count := maxi(1, int(state.get("objective_sweep_node_count", 3)))
+	var objective_sweep_capture_progress := float(state.get("objective_sweep_capture_progress", 0.0))
+	var objective_sweep_capture_goal := maxf(0.01, float(state.get("objective_sweep_capture_goal", 2.0)))
+	var objective_node_integrity := float(state.get("objective_node_integrity", 100.0))
+	var objective_node_max_integrity := float(state.get("objective_node_max_integrity", 100.0))
+	var objective_node_enemies_in_range := int(state.get("objective_node_enemies_in_range", 0))
 	var _encounter_intro_grace_left := float(state.get("encounter_intro_grace_left", 0.0))
 	var encounter_intro_grace_active := bool(state.get("encounter_intro_grace_active", false))
 	var current_difficulty_tier := int(state.get("current_difficulty_tier", 0))
@@ -588,6 +601,52 @@ func _update_status_panel_text(state: Dictionary) -> void:
 			status_label.text += "\n[center][color=#FFCAA0]Zone contested: clear %d enemies from the point[/color][/center]" % objective_control_enemies_in_zone
 		else:
 			status_label.text += "\n[center][color=#9FD6FF]Re-enter the zone before progress decays[/color][/center]"
+	elif objective_kind == "circuit_sweep":
+		var sweep_seconds := maxi(0, int(ceil(objective_time_left)))
+		var capture_pct := int(round(clampf(objective_sweep_capture_progress / objective_sweep_capture_goal, 0.0, 1.0) * 100.0))
+		var node_display := objective_sweep_nodes_completed + 1
+		if objective_overtime:
+			status_label.text += "\n[center][color=#FFB36D]Objective: Overtime  Node %d/%d  Capture %d%%[/color][/center]" % [node_display, objective_sweep_node_count, capture_pct]
+		else:
+			status_label.text += "\n[center][color=#FCD77A]Objective: Sweep %ds  Node %d/%d  Capture %d%%[/color][/center]" % [sweep_seconds, node_display, objective_sweep_node_count, capture_pct]
+		if capture_pct >= 100:
+			status_label.text += "\n[center][color=#A8FFB0]Node locked — moving to next position[/color][/center]"
+		elif capture_pct > 0:
+			status_label.text += "\n[center][color=#C8F0FF]Stay in the ring to capture[/color][/center]"
+		else:
+			status_label.text += "\n[center][color=#9FD6FF]Reach the active node to begin capture[/color][/center]"
+	elif objective_kind == "pulse_window":
+		var pulse_seconds := maxi(0, int(ceil(objective_time_left)))
+		var pulse_next := float(state.get("objective_pulse_next_timer", 0.0))
+		var pulse_active: bool = bool(state.get("objective_pulse_active", false))
+		var pulse_mode := String(state.get("objective_pulse_mode", ""))
+		var kills := int(state.get("objective_kills", 0))
+		var kill_target := int(state.get("objective_kill_target", 0))
+		if objective_overtime:
+			status_label.text += "\n[center][color=#FFB36D]Objective: Kill %d/%d — Overtime[/color][/center]" % [kills, kill_target]
+		else:
+			status_label.text += "\n[center][color=#FCD77A]Objective: Kill %d/%d  Timer %ds[/color][/center]" % [kills, kill_target, pulse_seconds]
+		if not pulse_active:
+			if pulse_next <= 2.0:
+				status_label.text += "\n[center][color=#FFB060]Next pulse in %.1fs[/color][/center]" % pulse_next
+			else:
+				status_label.text += "\n[center][color=#9FD6FF]Next pulse in %.0fs[/color][/center]" % pulse_next
+	elif objective_kind == "intercept_run":
+		var intercept_pct := int(round(float(state.get("objective_intercept_progress", 0.0)) * 100.0))
+		var stalled: bool = bool(state.get("objective_intercept_stalled", false))
+		var enemies_near := int(state.get("objective_intercept_enemies_near", 0))
+		var player_in_escort: bool = bool(state.get("objective_intercept_player_in_escort_zone", true))
+		if objective_overtime:
+			status_label.text += "\n[center][color=#FFB36D]Objective: Intercept Overtime  Drone %d%%[/color][/center]" % intercept_pct
+		else:
+			status_label.text += "\n[center][color=#FCD77A]Objective: Intercept  Drone %d%%[/color][/center]" % intercept_pct
+		if stalled:
+			if enemies_near > 0:
+				status_label.text += "\n[center][color=#FFCAA0]%d enemies blocking — clear the path[/color][/center]" % enemies_near
+			else:
+				status_label.text += "\n[center][color=#FFD080]Stay close to the drone[/color][/center]"
+		else:
+			status_label.text += "\n[center][color=#A8FFB0]Path clear — drone advancing[/color][/center]"
 
 	var status_text_h := maxf(34.0, status_label.get_content_height())
 	var row_top := status_label.position.y + status_text_h + 4.0
@@ -1003,6 +1062,10 @@ func _update_player_mutator_panel(state: Dictionary) -> void:
 			stat_text = "  [" + ", ".join(stat_parts) + "]"
 		if mutator_id == "combo_relay" and runtime_max_stacks > 0:
 			row_label.text = "%s  (%d enc)  x%d/%d%s" % [mutator_name, remaining, runtime_stacks, runtime_max_stacks, stat_text]
+		elif mutator_id == "relay_boost":
+			row_label.text = "%s  (%d enc)  [speed on kill]" % [mutator_name, remaining]
+		elif mutator_id == "node_shield":
+			row_label.text = "%s  (%d enc)  [resist vs crowds]" % [mutator_name, remaining]
 		else:
 			row_label.text = "%s  (%d enc)%s" % [mutator_name, remaining, stat_text]
 		row_label.add_theme_color_override("font_color", Color(color.r, color.g, color.b, 0.98))
@@ -1175,6 +1238,12 @@ func _get_mutator_icon_texture(icon_shape_id: String) -> Texture2D:
 			return MUTATOR_ICON_IRON_VOLLEY
 		"killbox":
 			return _get_killbox_icon_texture()
+		"surge":
+			return _get_surge_icon_texture()
+		"relay_boost":
+			return _get_relay_boost_icon_texture()
+		"node_shield":
+			return _get_node_shield_icon_texture()
 		"fortified":
 			return _get_fortified_icon_texture()
 		"hunters_focus":
@@ -1196,6 +1265,33 @@ func _get_killbox_icon_texture() -> Texture2D:
 		_mutator_icon_killbox = icon_resource as Texture2D
 		return _mutator_icon_killbox
 	# Keep UI stable if the asset import is temporarily unavailable.
+	return MUTATOR_ICON_SIEGEBREAK
+
+func _get_surge_icon_texture() -> Texture2D:
+	if _mutator_icon_surge != null:
+		return _mutator_icon_surge
+	var icon_resource := load(MUTATOR_ICON_SURGE_PATH)
+	if icon_resource is Texture2D:
+		_mutator_icon_surge = icon_resource as Texture2D
+		return _mutator_icon_surge
+	return MUTATOR_ICON_SIEGEBREAK
+
+func _get_relay_boost_icon_texture() -> Texture2D:
+	if _mutator_icon_relay_boost != null:
+		return _mutator_icon_relay_boost
+	var icon_resource := load(MUTATOR_ICON_RELAY_BOOST_PATH)
+	if icon_resource is Texture2D:
+		_mutator_icon_relay_boost = icon_resource as Texture2D
+		return _mutator_icon_relay_boost
+	return MUTATOR_ICON_SIEGEBREAK
+
+func _get_node_shield_icon_texture() -> Texture2D:
+	if _mutator_icon_node_shield != null:
+		return _mutator_icon_node_shield
+	var icon_resource := load(MUTATOR_ICON_NODE_SHIELD_PATH)
+	if icon_resource is Texture2D:
+		_mutator_icon_node_shield = icon_resource as Texture2D
+		return _mutator_icon_node_shield
 	return MUTATOR_ICON_SIEGEBREAK
 
 func _get_fortified_icon_texture() -> Texture2D:

@@ -838,6 +838,10 @@ func _setup_objective_runtime_system() -> void:
 
 func _run_resume_flow() -> bool:
 	var resumed_run := _try_resume_saved_run()
+	var debug_bearing_tier := _debug_bearing_override_tier()
+	if debug_bearing_tier >= 0:
+		encounter_profile_builder.set_difficulty_tier(debug_bearing_tier)
+		_apply_difficulty_tier_bonuses(debug_bearing_tier, false)
 	run_summary_recorder.run_started_at_msec = Time.get_ticks_msec()
 	run_summary_recorder.reset_summary_tracker()
 	run_summary_recorder.initialize(not _is_debug_boot_session())
@@ -1646,6 +1650,12 @@ func _get_hud_state() -> Dictionary:
 	var objective_hud_state: Dictionary = {}
 	if is_instance_valid(objective_manager):
 		objective_hud_state = objective_manager.get_hud_state()
+	# During an active pulse, show the pulse mutator in the act box instead of the room mutator
+	if not between_rooms and String(objective_hud_state.get("active_objective_kind", "")) == "pulse_window":
+		if bool(objective_hud_state.get("pulse_active", false)):
+			var pulse_mut := objective_hud_state.get("pulse_active_mutator", {}) as Dictionary
+			if not pulse_mut.is_empty():
+				display_enemy_mutator = pulse_mut
 	
 	var hud_state := {
 		"room_size": current_room_size,
@@ -1678,6 +1688,18 @@ func _get_hud_state() -> Dictionary:
 		"objective_exposure_left": float(objective_hud_state.get("exposure_left", 0.0)),
 		"objective_last_relocated_escort_count": int(objective_hud_state.get("last_relocated_escort_count", 0)),
 		"objective_relocation_hint_left": float(objective_hud_state.get("relocation_hint_left", 0.0)),
+		"objective_sweep_nodes_completed": int(objective_hud_state.get("sweep_nodes_completed", 0)),
+		"objective_sweep_node_count": int(objective_hud_state.get("sweep_node_count", 3)),
+		"objective_sweep_capture_progress": float(objective_hud_state.get("sweep_capture_progress", 0.0)),
+		"objective_sweep_capture_goal": float(objective_hud_state.get("sweep_capture_goal", 2.0)),
+		"objective_pulse_next_timer": float(objective_hud_state.get("pulse_next_timer", 0.0)),
+		"objective_pulse_active": bool(objective_hud_state.get("pulse_active", false)),
+		"objective_pulse_mode": String(objective_hud_state.get("pulse_mode", "")),
+		"objective_pulse_count": int(objective_hud_state.get("pulse_count", 0)),
+		"objective_intercept_progress": float(objective_hud_state.get("intercept_drone_progress", 0.0)),
+		"objective_intercept_stalled": bool(objective_hud_state.get("intercept_drone_stalled", false)),
+		"objective_intercept_enemies_near": int(objective_hud_state.get("intercept_enemies_near_drone", 0)),
+		"objective_intercept_player_in_escort_zone": bool(objective_hud_state.get("intercept_player_in_escort_zone", true)),
 		"active_player_mutators": _get_active_player_mutators_for_hud(),
 		"objective_target_flee_thresholds": objective_hud_state.get("hunt_target_flee_thresholds", [0.75, 0.5, 0.25]),
 		"objective_target_next_flee_index": int(objective_hud_state.get("hunt_target_next_flee_index", 0)),
@@ -1844,6 +1866,8 @@ func _on_room_cleared() -> void:
 		})
 	else:
 		run_summary_recorder.close_active_room()
+	if is_instance_valid(player):
+		player.tick_objective_mutators_for_encounter()
 	if in_second_boss_room:
 		_world_multiplayer_sync_state.mark_current_room_clear_processed()
 		_finish_second_boss_clear()
@@ -1856,8 +1880,6 @@ func _on_room_cleared() -> void:
 		_world_multiplayer_sync_state.mark_current_room_clear_processed()
 		_finish_first_boss_clear()
 		return
-	if is_instance_valid(player):
-		player.tick_objective_mutators_for_encounter()
 	var outcome: Dictionary = room_clear_outcome_coordinator.resolve_outcome(
 		encounter_flow_system,
 		in_boss_room,

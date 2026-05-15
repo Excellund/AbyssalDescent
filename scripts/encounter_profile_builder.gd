@@ -27,6 +27,7 @@ var archers_per_room: int = 1
 var shielder_start_room: int = 2
 var shielders_per_room: int = 1
 var hard_room_enemy_bonus: int = 4
+var last_objective_kind: String = ""
 
 const INTRO_ROOM_SIZE := ENCOUNTER_DEFINITION_DATA.INTRO_ROOM_SIZE
 const POOL_ROOM_SIZE := ENCOUNTER_DEFINITION_DATA.POOL_ROOM_SIZE
@@ -459,6 +460,12 @@ func _build_objective_profile_for_kind(kind: String, depth: int) -> Dictionary:
 			return _build_priority_target_profile(depth)
 		"hold_the_line":
 			return _build_control_profile(depth)
+		"circuit_sweep":
+			return _build_circuit_sweep_profile(depth)
+		"pulse_window":
+			return _build_pulse_window_profile(depth)
+		"intercept_run":
+			return _build_intercept_run_profile(depth)
 		_:
 			return {}
 
@@ -466,9 +473,18 @@ func build_objective_profile(depth: int, preferred: String = "") -> Dictionary:
 	var canonical_kind := preferred.strip_edges().to_lower()
 	var explicit_profile := _build_objective_profile_for_kind(canonical_kind, depth)
 	if not explicit_profile.is_empty():
+		last_objective_kind = canonical_kind
 		return explicit_profile
-	var objective_profiles: Array[Dictionary] = [_build_survival_profile(depth), _build_priority_target_profile(depth), _build_control_profile(depth)]
-	return objective_profiles[rng.randi_range(0, objective_profiles.size() - 1)]
+	var all_kinds: Array[String] = ["last_stand", "cut_the_signal", "hold_the_line", "circuit_sweep", "pulse_window", "intercept_run"]
+	var pool: Array[String] = []
+	for kind in all_kinds:
+		if kind != last_objective_kind:
+			pool.append(kind)
+	if pool.is_empty():
+		pool = all_kinds.duplicate()
+	var chosen_kind: String = pool[rng.randi_range(0, pool.size() - 1)]
+	last_objective_kind = chosen_kind
+	return _build_objective_profile_for_kind(chosen_kind, depth)
 
 func _canonicalize_debug_encounter_key(encounter_key: String) -> String:
 	return ENCOUNTER_CONTRACTS.canonicalize_debug_encounter_key(encounter_key)
@@ -497,6 +513,12 @@ func build_debug_encounter_profile(encounter_key: String, depth: int) -> Diction
 			return _build_priority_target_profile(depth)
 		"hold_the_line":
 			return _build_control_profile(depth)
+		"circuit_sweep":
+			return _build_circuit_sweep_profile(depth)
+		"pulse_window":
+			return _build_pulse_window_profile(depth)
+		"intercept_run":
+			return _build_intercept_run_profile(depth)
 		"random_objective":
 			return build_objective_profile(depth)
 		_:
@@ -1097,6 +1119,65 @@ func _control_curve_value(rank_curve: Dictionary, key: String, depth_curve: floa
 	var end_value := float(rank_curve.get(end_key, start_value))
 	return lerpf(start_value, end_value, depth_curve)
 
+func _build_circuit_sweep_profile(depth: int) -> Dictionary:
+	var effective_depth := _effective_depth(depth)
+	var room_size := Vector2(960.0, 720.0)
+	var chasers := 4 + int(floor(float(effective_depth) * 0.6))
+	var chargers := 2 + int(floor(float(effective_depth) / 5.0))
+	var archers := 2 + int(floor(float(effective_depth) / 4.0))
+	var shielders := 1 + int(floor(float(effective_depth) / 6.0))
+	var pressure_mutator := _build_surge_mutator()
+	var profile := _build_profile("Circuit Sweep", room_size, chasers, chargers, archers, shielders, pressure_mutator)
+	ENCOUNTER_CONTRACTS.profile_set_player_mutator(profile, _build_relay_boost_mutator())
+	var raw_duration := clampf(40.0 + float(effective_depth) * 0.8, 40.0, 55.0)
+	var duration := int(ceil(raw_duration / 5.0)) * 5
+	var spawn_interval := clampf(2.1 - float(effective_depth) * 0.06, 0.8, 2.1)
+	var spawn_batch := mini(5, 2 + int(floor(float(effective_depth) / 4.0)))
+	var pressure_split := _objective_pressure_split()
+	spawn_batch = _scale_objective_spawn_batch(spawn_batch, float(pressure_split["wave_mult"]))
+	ENCOUNTER_CONTRACTS.profile_set_circuit_sweep_objective(profile, duration, spawn_interval, spawn_batch)
+	return _apply_bearing_count_scaling(profile, float(pressure_split["initial_override"]))
+
+func _build_pulse_window_profile(depth: int) -> Dictionary:
+	var effective_depth := _effective_depth(depth)
+	var room_size := Vector2(960.0, 720.0)
+	var chasers := 3 + int(floor(float(effective_depth) * 0.5))
+	var chargers := 2 + int(floor(float(effective_depth) / 3.0))
+	var archers := 1 if effective_depth >= 3 else 0
+	var shielders := 1 + int(floor(float(effective_depth) / 5.0))
+	var profile := _build_profile("Pulse Window", room_size, chasers, chargers, archers, shielders)
+	ENCOUNTER_CONTRACTS.profile_set_player_mutator(profile, _build_overcharge_mutator())
+	var raw_duration := clampf(35.0 + float(effective_depth) * 0.5, 35.0, 45.0)
+	var duration := int(ceil(raw_duration / 5.0)) * 5
+	var spawn_interval := clampf(2.2 - float(effective_depth) * 0.06, 0.9, 2.2)
+	var spawn_batch := mini(4, 2 + int(floor(float(effective_depth) / 4.0)))
+	var raw_kill_target := clampi(18 + int(floor(float(effective_depth) * 0.6)), 18, 35)
+	var kill_target := int(ceil(float(raw_kill_target) / 5.0)) * 5
+	var pulse_interval := clampf(10.0 - float(effective_depth) * 0.22, 7.0, 10.0)
+	var pressure_split := _objective_pressure_split()
+	spawn_batch = _scale_objective_spawn_batch(spawn_batch, float(pressure_split["wave_mult"]))
+	ENCOUNTER_CONTRACTS.profile_set_pulse_window_objective(profile, duration, spawn_interval, spawn_batch, kill_target, pulse_interval)
+	return _apply_bearing_count_scaling(profile, float(pressure_split["initial_override"]))
+
+func _build_intercept_run_profile(depth: int) -> Dictionary:
+	var effective_depth := _effective_depth(depth)
+	var room_size := Vector2(960.0, 720.0)
+	var chasers := 2 + int(floor(float(effective_depth) * 0.35))
+	var chargers := 1 + int(floor(float(effective_depth) / 4.0))
+	var archers := 1 if effective_depth >= 4 else 0
+	var shielders := 0 if effective_depth < 3 else 1 + int(floor(float(effective_depth - 2) / 5.0))
+	var profile := _build_profile("Intercept Run", room_size, chasers, chargers, archers, shielders)
+	ENCOUNTER_CONTRACTS.profile_set_player_mutator(profile, _build_node_shield_mutator())
+	var raw_duration := clampf(50.0 + float(effective_depth) * 0.5, 50.0, 65.0)
+	var duration := int(ceil(raw_duration / 5.0)) * 5
+	var spawn_interval := clampf(2.6 - float(effective_depth) * 0.06, 0.95, 2.6)
+	var spawn_batch := mini(4, 2 + int(floor(float(effective_depth) / 5.0)))
+	var traversal_time := clampf(42.0 - float(effective_depth) * 0.8, 30.0, 42.0)
+	var pressure_split := _objective_pressure_split()
+	spawn_batch = _scale_objective_spawn_batch(spawn_batch, float(pressure_split["wave_mult"]))
+	ENCOUNTER_CONTRACTS.profile_set_intercept_run_objective(profile, duration, spawn_interval, spawn_batch, traversal_time)
+	return _apply_bearing_count_scaling(profile, float(pressure_split["initial_override"]))
+
 func _normalize_route_context(route_context: Variant) -> Dictionary:
 	if route_context is Dictionary:
 		var context_dict := route_context as Dictionary
@@ -1208,6 +1289,17 @@ func roll_hard_enemy_mutator() -> Dictionary:
 	var pool := _hard_mutator_pool()
 	return _scale_mutator_damage(pool[rng.randi_range(0, pool.size() - 1)])
 
+func _build_surge_mutator() -> Dictionary:
+	return _scale_mutator_damage({
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME: "Surge",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_THEME_COLOR: Color(0.54, 0.92, 0.72, 1.0),
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID: "surge",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX: "Enemies converge faster on the signal",
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_SPEED_MULT: 1.22,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_SPEED_MULT: 1.18,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SPEED_MULT: 1.14,
+	})
+
 func _build_killbox_mutator() -> Dictionary:
 	return _scale_mutator_damage({
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME: "Killbox",
@@ -1230,6 +1322,43 @@ func _build_fortified_mutator() -> Dictionary:
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID: "fortified",
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX: "Incoming damage reduced by 15%",
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_PLAYER_DAMAGE_RESIST: 0.15,
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_DURATION_ENCOUNTERS: 3
+	}
+
+func _build_relay_boost_mutator() -> Dictionary:
+	return {
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ID: "relay_boost",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME: "Relay Boost",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_SOURCE_ENCOUNTER: "Circuit Sweep",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_SOURCE_OBJECTIVE_KIND: "circuit_sweep",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_THEME_COLOR: Color(0.62, 1.0, 0.62, 1.0),
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID: "relay_boost",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX: "Kills trigger a brief speed surge",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_DURATION_ENCOUNTERS: 3
+	}
+
+func _build_node_shield_mutator() -> Dictionary:
+	return {
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ID: "node_shield",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME: "Node Shield",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_SOURCE_ENCOUNTER: "Intercept Run",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_SOURCE_OBJECTIVE_KIND: "intercept_run",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_THEME_COLOR: Color(0.46, 0.86, 1.0, 1.0),
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID: "node_shield",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX: "Each nearby enemy grants +6% damage resist (max 30%)",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_DURATION_ENCOUNTERS: 3
+	}
+
+func _build_overcharge_mutator() -> Dictionary:
+	return {
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ID: "overcharge",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME: "Overcharge",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_SOURCE_ENCOUNTER: "Pulse Window",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_SOURCE_OBJECTIVE_KIND: "pulse_window",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_THEME_COLOR: Color(1.0, 0.9, 0.4, 1.0),
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID: "overcharge",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX: "Kill chains stack +10% damage (5 stacks max) — reach max to discharge a nova burst on your next kill",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_PLAYER_DAMAGE_MULT: 0.0,
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_DURATION_ENCOUNTERS: 3
 	}
 
@@ -1259,6 +1388,9 @@ func _build_combo_relay_mutator() -> Dictionary:
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_EFFECTS: [],
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_DURATION_ENCOUNTERS: 3
 	}
+
+func get_hard_enemy_mutator_pool() -> Array[Dictionary]:
+	return _hard_mutator_pool()
 
 func _hard_mutator_pool() -> Array[Dictionary]:
 	var C := ENCOUNTER_CONTRACTS

@@ -423,6 +423,26 @@ var combo_relay_stack_window: float = 2.8
 var combo_relay_max_stacks: int = 4
 var combo_relay_damage_per_stack: float = 0.05
 var combo_relay_speed_per_stack: float = 0.05
+# Relay Boost — on-kill speed surge
+var relay_boost_speed_left: float = 0.0
+const RELAY_BOOST_SPEED_MULT: float = 0.28
+const RELAY_BOOST_DURATION: float = 1.4
+# Node Shield — proximity-based damage resist
+var node_shield_resist: float = 0.0
+const NODE_SHIELD_RESIST_PER_ENEMY: float = 0.06
+const NODE_SHIELD_RADIUS: float = 180.0
+const NODE_SHIELD_MAX_RESIST: float = 0.30
+const NODE_SHIELD_LERP_RATE: float = 4.0
+# Overcharge — kill-chain discharge
+var overcharge_kill_stacks: int = 0
+var overcharge_stack_timer: float = 0.0
+var overcharge_is_charged: bool = false
+var overcharge_discharge_cooldown: float = 0.0
+const OVERCHARGE_STACK_WINDOW: float = 2.5
+const OVERCHARGE_STACK_DAMAGE_PER_STACK: float = 0.10
+const OVERCHARGE_MAX_STACKS: int = 5
+const OVERCHARGE_NOVA_RADIUS: float = 110.0
+const OVERCHARGE_DISCHARGE_COOLDOWN_DURATION: float = 0.5
 var incoming_damage_taken_mult: float = 1.0
 var incoming_contact_damage_mult: float = 1.0
 var contact_damage_grace_duration: float = 0.22
@@ -530,6 +550,9 @@ func _physics_process(delta: float) -> void:
 	_update_wraithstep_marks()
 	_update_storm_crown_discharge(delta)
 	_update_combo_relay_state(delta)
+	_update_relay_boost_state(delta)
+	_update_node_shield_state(delta)
+	_update_overcharge_state(delta)
 	_update_iron_retort(delta)
 	_update_veilstep_rhythm(delta)
 	_update_farline_focus_state(delta)
@@ -979,10 +1002,11 @@ func _update_ground_movement(direction: Vector2, delta: float) -> void:
 		trance_speed_bonus = max_speed * trance_ratio
 	var momentum_speed_bonus := max_speed * apex_momentum_speed_bonus * float(apex_momentum_stacks)
 	var combo_relay_speed_bonus := max_speed * combo_relay_speed_per_stack * float(combo_relay_stacks)
+	var relay_boost_speed_bonus := max_speed * RELAY_BOOST_SPEED_MULT if relay_boost_speed_left > 0.0 else 0.0
 	var overheat_move_mult := 1.0
 	if reward_voidfire and _voidfire_lockout_left > 0.0:
 		overheat_move_mult = clampf(voidfire_overheat_move_mult, 0.2, 1.0)
-	var target_velocity := direction * (max_speed + trance_speed_bonus + momentum_speed_bonus + combo_relay_speed_bonus) * overheat_move_mult
+	var target_velocity := direction * (max_speed + trance_speed_bonus + momentum_speed_bonus + combo_relay_speed_bonus + relay_boost_speed_bonus) * overheat_move_mult
 	if external_slow_left > 0.0:
 		target_velocity *= clampf(external_slow_mult, 0.05, 1.0)
 	var applied_acceleration := _get_applied_acceleration(target_velocity)
@@ -1064,7 +1088,7 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 		return
 	var raw_amount := amount
 	var reduced := maxi(1, amount - iron_skin_armor)
-	var total_resist := objective_mutator_damage_resist
+	var total_resist := objective_mutator_damage_resist + node_shield_resist
 	if reward_aegis_field and aegis_field_active_left > 0.0:
 		total_resist += aegis_field_resist_ratio
 	if indomitable_spirit_damage_reduction > 0.0:
@@ -1789,6 +1813,7 @@ func _recalculate_objective_mutator_totals() -> void:
 
 func _apply_objective_mutator_damage_mult(base_damage: int) -> int:
 	var total_damage_mult := objective_mutator_damage_mult + combo_relay_damage_per_stack * float(combo_relay_stacks)
+	total_damage_mult += OVERCHARGE_STACK_DAMAGE_PER_STACK * float(overcharge_kill_stacks)
 	if total_damage_mult <= 0.0:
 		return base_damage
 	return maxi(1, int(ceil(float(base_damage) * (1.0 + total_damage_mult))))
@@ -2990,6 +3015,8 @@ func _get_static_wake_bounds_rect() -> Rect2:
 
 func notify_enemy_killed(kill_position: Vector2 = Vector2.ZERO) -> void:
 	_trigger_combo_relay_kill()
+	_trigger_relay_boost_kill()
+	_trigger_overcharge_kill(kill_position)
 	if void_echo_damage > 0 and _void_echo_pulse_kill_suppression_depth <= 0:
 		_apply_void_echo(kill_position)
 	if _void_echo_pulse_kill_suppression_depth <= 0:
@@ -3052,6 +3079,119 @@ func _update_combo_relay_state(delta: float) -> void:
 	combo_relay_stacks = 0
 	combo_relay_stack_timer = 0.0
 	queue_redraw()
+
+func _has_relay_boost_mutator_active() -> bool:
+	for entry in active_objective_mutators:
+		var mutator := entry as Dictionary
+		if ENCOUNTER_CONTRACTS.mutator_id(mutator) == "relay_boost":
+			return true
+	return false
+
+func _trigger_relay_boost_kill() -> void:
+	if not _has_relay_boost_mutator_active():
+		return
+	relay_boost_speed_left = RELAY_BOOST_DURATION
+	if player_feedback != null:
+		player_feedback.play_world_ring(global_position, 28.0, Color(0.62, 1.0, 0.62, 0.72), 0.18)
+
+func _update_relay_boost_state(delta: float) -> void:
+	if relay_boost_speed_left <= 0.0:
+		return
+	if not _has_relay_boost_mutator_active():
+		relay_boost_speed_left = 0.0
+		return
+	relay_boost_speed_left = maxf(0.0, relay_boost_speed_left - delta)
+
+func _has_node_shield_mutator_active() -> bool:
+	for entry in active_objective_mutators:
+		var mutator := entry as Dictionary
+		if ENCOUNTER_CONTRACTS.mutator_id(mutator) == "node_shield":
+			return true
+	return false
+
+func _update_node_shield_state(delta: float) -> void:
+	if not _has_node_shield_mutator_active():
+		if node_shield_resist > 0.0:
+			node_shield_resist = 0.0
+		return
+	var nearby := 0
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if (enemy_node as Node2D).global_position.distance_to(global_position) <= NODE_SHIELD_RADIUS:
+			nearby += 1
+	var target_resist := minf(NODE_SHIELD_MAX_RESIST, float(nearby) * NODE_SHIELD_RESIST_PER_ENEMY)
+	node_shield_resist = lerpf(node_shield_resist, target_resist, NODE_SHIELD_LERP_RATE * delta)
+
+func _has_overcharge_mutator_active() -> bool:
+	for entry in active_objective_mutators:
+		var mutator := entry as Dictionary
+		if ENCOUNTER_CONTRACTS.mutator_id(mutator) == "overcharge":
+			return true
+	return false
+
+func _trigger_overcharge_kill(kill_position: Vector2) -> void:
+	if not _has_overcharge_mutator_active():
+		overcharge_kill_stacks = 0
+		overcharge_stack_timer = 0.0
+		overcharge_is_charged = false
+		return
+	if overcharge_is_charged and overcharge_discharge_cooldown <= 0.0 and kill_position != Vector2.ZERO:
+		_fire_overcharge_discharge(kill_position)
+		return
+	overcharge_kill_stacks = mini(OVERCHARGE_MAX_STACKS, overcharge_kill_stacks + 1)
+	overcharge_stack_timer = OVERCHARGE_STACK_WINDOW
+	if overcharge_kill_stacks >= OVERCHARGE_MAX_STACKS and not overcharge_is_charged:
+		overcharge_is_charged = true
+		if player_feedback != null:
+			player_feedback.play_world_ring(global_position, 32.0, Color(1.0, 0.92, 0.28, 0.88), 0.22)
+			player_feedback.play_world_ring(global_position, 18.0, Color(1.0, 1.0, 0.6, 0.62), 0.14)
+	else:
+		if player_feedback != null:
+			player_feedback.play_combo_relay_kill(global_position, overcharge_kill_stacks, OVERCHARGE_MAX_STACKS, Color(1.0, 0.88, 0.28, 0.72), 0.18)
+	queue_redraw()
+
+func _fire_overcharge_discharge(kill_pos: Vector2) -> void:
+	overcharge_is_charged = false
+	overcharge_kill_stacks = 2
+	overcharge_stack_timer = OVERCHARGE_STACK_WINDOW
+	overcharge_discharge_cooldown = OVERCHARGE_DISCHARGE_COOLDOWN_DURATION
+	var nova_damage := maxi(1, int(round(float(damage) * 1.2)))
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		if not DAMAGEABLE.can_take_damage(enemy_node):
+			continue
+		var enemy_body := enemy_node as Node2D
+		if kill_pos.distance_squared_to(enemy_body.global_position) > OVERCHARGE_NOVA_RADIUS * OVERCHARGE_NOVA_RADIUS:
+			continue
+		DAMAGEABLE.apply_damage(enemy_node, nova_damage, {"attack_type": "overcharge_discharge"})
+	if player_feedback != null:
+		player_feedback.play_world_ring(kill_pos, OVERCHARGE_NOVA_RADIUS * 0.42, Color(1.0, 0.98, 0.56, 0.92), 0.16)
+		player_feedback.play_world_ring(kill_pos, OVERCHARGE_NOVA_RADIUS, Color(1.0, 0.86, 0.22, 0.68), 0.24)
+		player_feedback.play_world_ring(kill_pos, OVERCHARGE_NOVA_RADIUS * 1.18, Color(1.0, 0.72, 0.16, 0.34), 0.30)
+		player_feedback.play_world_ring(global_position, 26.0, Color(1.0, 0.94, 0.42, 0.82), 0.14)
+	queue_redraw()
+
+func _update_overcharge_state(delta: float) -> void:
+	if overcharge_discharge_cooldown > 0.0:
+		overcharge_discharge_cooldown = maxf(0.0, overcharge_discharge_cooldown - delta)
+	if overcharge_kill_stacks <= 0:
+		return
+	if not _has_overcharge_mutator_active():
+		overcharge_kill_stacks = 0
+		overcharge_stack_timer = 0.0
+		overcharge_is_charged = false
+		queue_redraw()
+		return
+	overcharge_stack_timer = maxf(0.0, overcharge_stack_timer - delta)
+	if overcharge_stack_timer <= 0.0:
+		overcharge_kill_stacks = maxi(0, overcharge_kill_stacks - 2)
+		if overcharge_kill_stacks > 0:
+			overcharge_stack_timer = OVERCHARGE_STACK_WINDOW
+		if overcharge_is_charged and overcharge_kill_stacks < OVERCHARGE_MAX_STACKS:
+			overcharge_is_charged = false
+		queue_redraw()
 
 @rpc("any_peer", "call_local")
 func apply_polar_shift_dash_lockout(duration: float) -> void:
@@ -3212,6 +3352,7 @@ func _draw() -> void:
 			draw_circle(offset, body_radius * (1.0 - float(i) * 0.08), streak_color)
 
 	_draw_objective_mutator_aura(body_radius)
+	_draw_overcharge_state(body_radius)
 
 	draw_circle(Vector2.ZERO, body_radius + 8.0 + speed_t * 2.0, Color(player_glow_color.r, player_glow_color.g, player_glow_color.b, 0.16 + aura * 0.18))
 	draw_circle(Vector2.ZERO, body_radius + 3.4, ENEMY_BASE.COLOR_PLAYER_OUTER)
@@ -4334,6 +4475,30 @@ func _get_focus_visual_facing() -> Vector2:
 		return visual_facing_direction
 	return Vector2.RIGHT
 
+
+func _draw_overcharge_state(body_radius: float) -> void:
+	if not _has_overcharge_mutator_active():
+		return
+	if overcharge_kill_stacks <= 0:
+		return
+	var t := float(Time.get_ticks_msec()) * 0.001
+	var ring_radius := body_radius + 20.0
+	if overcharge_is_charged:
+		var charged_pulse := 0.5 + 0.5 * sin(t * 6.5)
+		draw_arc(Vector2.ZERO, ring_radius, 0.0, TAU, 44, Color(1.0, 0.88, 0.2, 0.18 + charged_pulse * 0.14), 8.0)
+		draw_arc(Vector2.ZERO, ring_radius, 0.0, TAU, 44, Color(1.0, 0.92, 0.3, 0.68 + charged_pulse * 0.24), 2.4)
+	else:
+		var stack_fill := float(overcharge_kill_stacks) / float(OVERCHARGE_MAX_STACKS)
+		draw_arc(Vector2.ZERO, ring_radius, -PI * 0.5, -PI * 0.5 + TAU * stack_fill, 40, Color(1.0, 0.85, 0.22, 0.72), 2.2)
+	for i in range(OVERCHARGE_MAX_STACKS):
+		var pip_angle := -PI * 0.5 + TAU * (float(i) + 0.5) / float(OVERCHARGE_MAX_STACKS)
+		var pip_pos := Vector2(cos(pip_angle), sin(pip_angle)) * (ring_radius + 3.8)
+		var lit := i < overcharge_kill_stacks
+		if lit and overcharge_is_charged:
+			var charged_pip_pulse := 0.5 + 0.5 * sin(t * 6.5 + float(i) * 0.4)
+			draw_circle(pip_pos, 2.5, Color(1.0, 0.96, 0.5, 0.72 + charged_pip_pulse * 0.26))
+		else:
+			draw_circle(pip_pos, 2.2, Color(1.0, 0.9, 0.3, 0.88) if lit else Color(0.4, 0.35, 0.12, 0.35))
 
 func _draw_objective_mutator_aura(body_radius: float) -> void:
 	if active_objective_mutators.is_empty():
