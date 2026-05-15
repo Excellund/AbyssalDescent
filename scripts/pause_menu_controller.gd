@@ -384,15 +384,15 @@ func _build_pause_options_panel() -> Panel:
 func _build_pause_glossary_panel() -> Panel:
 	var panel := Panel.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.custom_minimum_size = Vector2(760.0, 520.0)
-	panel.position = Vector2(-380.0, -260.0)
+	panel.custom_minimum_size = Vector2(820.0, 570.0)
+	panel.position = Vector2(-410.0, -285.0)
 	var style := _make_pause_panel_style(Color(0.04, 0.06, 0.1, 0.96), Color(0.44, 0.7, 0.96, 0.74), 12, 2)
 	panel.add_theme_stylebox_override("panel", style)
 
 	var title := Label.new()
 	title.text = "Glossary"
 	title.position = Vector2(0.0, 16.0)
-	title.custom_minimum_size = Vector2(760.0, 32.0)
+	title.custom_minimum_size = Vector2(820.0, 32.0)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 30)
 	title.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 0.98))
@@ -400,18 +400,18 @@ func _build_pause_glossary_panel() -> Panel:
 
 	var body := RichTextLabel.new()
 	body.position = Vector2(28.0, 62.0)
-	body.custom_minimum_size = Vector2(704.0, 396.0)
+	body.custom_minimum_size = Vector2(764.0, 438.0)
 	body.bbcode_enabled = true
 	body.fit_content = false
 	body.scroll_active = true
 	body.selection_enabled = false
-	body.add_theme_font_size_override("normal_font_size", 16)
+	body.add_theme_font_size_override("normal_font_size", 18)
 	body.add_theme_color_override("default_color", Color(0.86, 0.94, 1.0, 0.96))
 	body.text = GLOSSARY_DATA.glossary_bbcode()
 	panel.add_child(body)
 
 	var back_button := _make_pause_panel_back_button()
-	back_button.position = Vector2(300.0, 468.0)
+	back_button.position = Vector2(320.0, 516.0)
 	back_button.pressed.connect(func() -> void:
 		if pause_glossary_panel != null:
 			_animate_pause_panel_out(pause_glossary_panel, Vector2(0.0, -10.0))

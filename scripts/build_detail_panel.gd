@@ -38,8 +38,8 @@ func _create_panel() -> void:
 
 	panel = Panel.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.custom_minimum_size = Vector2(860.0, 640.0)
-	panel.position = Vector2(-430.0, -320.0)
+	panel.custom_minimum_size = Vector2(940.0, 700.0)
+	panel.position = Vector2(-470.0, -350.0)
 	var panel_style := StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.01, 0.02, 0.06, 0.98)
 	panel_style.border_color = Color(0.70, 0.85, 1.0, 0.92)
@@ -60,8 +60,8 @@ func _create_panel() -> void:
 
 	var container := VBoxContainer.new()
 	container.position = Vector2(24.0, 24.0)
-	container.custom_minimum_size = Vector2(812.0, 592.0)
-	container.add_theme_constant_override("separation", 14)
+	container.custom_minimum_size = Vector2(892.0, 652.0)
+	container.add_theme_constant_override("separation", 16)
 	panel.add_child(container)
 
 	# Title
@@ -77,18 +77,18 @@ func _create_panel() -> void:
 
 	# Scroll container for content
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(812.0, 530.0)
+	scroll.custom_minimum_size = Vector2(892.0, 590.0)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	container.add_child(scroll)
 
 	var content_vbox := VBoxContainer.new()
-	content_vbox.custom_minimum_size = Vector2(790.0, 0.0)
-	content_vbox.add_theme_constant_override("separation", 10)
+	content_vbox.custom_minimum_size = Vector2(870.0, 0.0)
+	content_vbox.add_theme_constant_override("separation", 14)
 	scroll.add_child(content_vbox)
 
 	# Passive section panel
 	var passive_panel := PanelContainer.new()
-	passive_panel.custom_minimum_size = Vector2(790.0, 0.0)
+	passive_panel.custom_minimum_size = Vector2(870.0, 0.0)
 	var passive_panel_style := StyleBoxFlat.new()
 	passive_panel_style.bg_color = Color(0.07, 0.04, 0.13, 0.78)
 	passive_panel_style.border_color = Color(0.72, 0.52, 1.0, 0.90)
@@ -96,19 +96,19 @@ func _create_panel() -> void:
 	passive_panel_style.border_color = Color(0.44, 0.86, 0.92, 0.90)
 	passive_panel_style.content_margin_left = 14.0
 	passive_panel_style.content_margin_right = 14.0
-	passive_panel_style.content_margin_top = 12.0
-	passive_panel_style.content_margin_bottom = 12.0
+	passive_panel_style.content_margin_top = 14.0
+	passive_panel_style.content_margin_bottom = 14.0
 	passive_panel.add_theme_stylebox_override("panel", passive_panel_style)
 	content_vbox.add_child(passive_panel)
 
 	passive_section = VBoxContainer.new()
-	passive_section.custom_minimum_size = Vector2(760.0, 0.0)
-	passive_section.add_theme_constant_override("separation", 6)
+	passive_section.custom_minimum_size = Vector2(840.0, 0.0)
+	passive_section.add_theme_constant_override("separation", 8)
 	passive_panel.add_child(passive_section)
 
 	var passive_header := Label.new()
 	passive_header.text = "Passive"
-	passive_header.add_theme_font_size_override("font_size", 18)
+	passive_header.add_theme_font_size_override("font_size", 20)
 	passive_header.add_theme_color_override("font_color", Color(0.78, 0.60, 1.0, 0.98))
 	passive_header.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
 	passive_header.add_theme_color_override("font_color", Color(0.58, 0.94, 1.0, 0.98))
@@ -117,7 +117,7 @@ func _create_panel() -> void:
 
 	passive_name_label = Label.new()
 	passive_name_label.text = "—"
-	passive_name_label.add_theme_font_size_override("font_size", 16)
+	passive_name_label.add_theme_font_size_override("font_size", 18)
 	passive_name_label.add_theme_color_override("font_color", Color(0.82, 0.68, 1.0, 0.98))
 	passive_name_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
 	passive_name_label.add_theme_constant_override("shadow_offset_x", 2)
@@ -125,12 +125,13 @@ func _create_panel() -> void:
 	passive_section.add_child(passive_name_label)
 
 	passive_desc_label = RichTextLabel.new()
-	passive_desc_label.custom_minimum_size = Vector2(640.0, 70.0)
+	passive_desc_label.custom_minimum_size = Vector2(720.0, 70.0)
 	passive_desc_label.bbcode_enabled = true
 	passive_desc_label.fit_content = true
 	passive_desc_label.scroll_active = false
 	passive_desc_label.selection_enabled = false
-	passive_desc_label.add_theme_font_size_override("normal_font_size", 13)
+	passive_desc_label.add_theme_font_size_override("normal_font_size", 16)
+	passive_desc_label.add_theme_constant_override("line_separation", 4)
 	passive_desc_label.add_theme_color_override("default_color", Color(0.88, 0.96, 1.0, 0.92))
 	passive_desc_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
 	passive_desc_label.add_theme_constant_override("shadow_offset_x", 1)
@@ -140,7 +141,7 @@ func _create_panel() -> void:
 
 	# Boss rewards section panel
 	var boss_panel := PanelContainer.new()
-	boss_panel.custom_minimum_size = Vector2(790.0, 0.0)
+	boss_panel.custom_minimum_size = Vector2(870.0, 0.0)
 	var boss_panel_style := StyleBoxFlat.new()
 	boss_panel_style.bg_color = Color(0.10, 0.04, 0.12, 0.76)
 	boss_panel_style.border_color = Color(RARITY_LEGENDARY.r, RARITY_LEGENDARY.g, RARITY_LEGENDARY.b, 0.9)
@@ -148,19 +149,19 @@ func _create_panel() -> void:
 	boss_panel_style.set_corner_radius_all(12)
 	boss_panel_style.content_margin_left = 14.0
 	boss_panel_style.content_margin_right = 14.0
-	boss_panel_style.content_margin_top = 12.0
-	boss_panel_style.content_margin_bottom = 12.0
+	boss_panel_style.content_margin_top = 14.0
+	boss_panel_style.content_margin_bottom = 14.0
 	boss_panel.add_theme_stylebox_override("panel", boss_panel_style)
 	content_vbox.add_child(boss_panel)
 
 	boss_section = VBoxContainer.new()
-	boss_section.custom_minimum_size = Vector2(760.0, 0.0)
-	boss_section.add_theme_constant_override("separation", 6)
+	boss_section.custom_minimum_size = Vector2(840.0, 0.0)
+	boss_section.add_theme_constant_override("separation", 8)
 	boss_panel.add_child(boss_section)
 
 	var boss_header := Label.new()
 	boss_header.text = "Boss"
-	boss_header.add_theme_font_size_override("font_size", 18)
+	boss_header.add_theme_font_size_override("font_size", 20)
 	boss_header.add_theme_color_override("font_color", Color(RARITY_LEGENDARY.r, RARITY_LEGENDARY.g, RARITY_LEGENDARY.b, 0.98))
 	boss_header.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
 	boss_header.add_theme_constant_override("shadow_offset_x", 2)
@@ -168,12 +169,12 @@ func _create_panel() -> void:
 	boss_section.add_child(boss_header)
 
 	boss_list_container = VBoxContainer.new()
-	boss_list_container.add_theme_constant_override("separation", 3)
+	boss_list_container.add_theme_constant_override("separation", 6)
 	boss_section.add_child(boss_list_container)
 
 	# Arcana section panel
 	var arcana_panel := PanelContainer.new()
-	arcana_panel.custom_minimum_size = Vector2(790.0, 0.0)
+	arcana_panel.custom_minimum_size = Vector2(870.0, 0.0)
 	var arcana_panel_style := StyleBoxFlat.new()
 	arcana_panel_style.bg_color = Color(0.11, 0.09, 0.03, 0.72)
 	arcana_panel_style.border_color = Color(RARITY_EPIC.r, RARITY_EPIC.g, RARITY_EPIC.b, 0.9)
@@ -181,19 +182,19 @@ func _create_panel() -> void:
 	arcana_panel_style.set_corner_radius_all(12)
 	arcana_panel_style.content_margin_left = 14.0
 	arcana_panel_style.content_margin_right = 14.0
-	arcana_panel_style.content_margin_top = 12.0
-	arcana_panel_style.content_margin_bottom = 12.0
+	arcana_panel_style.content_margin_top = 14.0
+	arcana_panel_style.content_margin_bottom = 14.0
 	arcana_panel.add_theme_stylebox_override("panel", arcana_panel_style)
 	content_vbox.add_child(arcana_panel)
 
 	arcana_section = VBoxContainer.new()
-	arcana_section.custom_minimum_size = Vector2(760.0, 0.0)
-	arcana_section.add_theme_constant_override("separation", 6)
+	arcana_section.custom_minimum_size = Vector2(840.0, 0.0)
+	arcana_section.add_theme_constant_override("separation", 8)
 	arcana_panel.add_child(arcana_section)
 
 	var arcana_header := Label.new()
 	arcana_header.text = "Arcana"
-	arcana_header.add_theme_font_size_override("font_size", 18)
+	arcana_header.add_theme_font_size_override("font_size", 20)
 	arcana_header.add_theme_color_override("font_color", Color(RARITY_EPIC.r, RARITY_EPIC.g, RARITY_EPIC.b, 0.98))
 	arcana_header.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
 	arcana_header.add_theme_constant_override("shadow_offset_x", 2)
@@ -201,12 +202,12 @@ func _create_panel() -> void:
 	arcana_section.add_child(arcana_header)
 
 	arcana_list_container = VBoxContainer.new()
-	arcana_list_container.add_theme_constant_override("separation", 3)
+	arcana_list_container.add_theme_constant_override("separation", 6)
 	arcana_section.add_child(arcana_list_container)
 
 	# Boons section panel
 	var boons_panel := PanelContainer.new()
-	boons_panel.custom_minimum_size = Vector2(790.0, 0.0)
+	boons_panel.custom_minimum_size = Vector2(870.0, 0.0)
 	var boons_panel_style := StyleBoxFlat.new()
 	boons_panel_style.bg_color = Color(0.04, 0.09, 0.12, 0.74)
 	boons_panel_style.border_color = Color(RARITY_COMMON.r, RARITY_COMMON.g, RARITY_COMMON.b, 0.9)
@@ -214,19 +215,19 @@ func _create_panel() -> void:
 	boons_panel_style.set_corner_radius_all(12)
 	boons_panel_style.content_margin_left = 14.0
 	boons_panel_style.content_margin_right = 14.0
-	boons_panel_style.content_margin_top = 12.0
-	boons_panel_style.content_margin_bottom = 12.0
+	boons_panel_style.content_margin_top = 14.0
+	boons_panel_style.content_margin_bottom = 14.0
 	boons_panel.add_theme_stylebox_override("panel", boons_panel_style)
 	content_vbox.add_child(boons_panel)
 
 	boons_section = VBoxContainer.new()
-	boons_section.custom_minimum_size = Vector2(760.0, 0.0)
-	boons_section.add_theme_constant_override("separation", 6)
+	boons_section.custom_minimum_size = Vector2(840.0, 0.0)
+	boons_section.add_theme_constant_override("separation", 8)
 	boons_panel.add_child(boons_section)
 
 	var boons_header := Label.new()
 	boons_header.text = "Boons"
-	boons_header.add_theme_font_size_override("font_size", 18)
+	boons_header.add_theme_font_size_override("font_size", 20)
 	boons_header.add_theme_color_override("font_color", Color(RARITY_COMMON.r, RARITY_COMMON.g, RARITY_COMMON.b, 0.98))
 	boons_header.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
 	boons_header.add_theme_constant_override("shadow_offset_x", 2)
@@ -234,7 +235,7 @@ func _create_panel() -> void:
 	boons_section.add_child(boons_header)
 
 	boons_list_container = VBoxContainer.new()
-	boons_list_container.add_theme_constant_override("separation", 3)
+	boons_list_container.add_theme_constant_override("separation", 6)
 	boons_section.add_child(boons_list_container)
 
 func open() -> void:
@@ -323,7 +324,7 @@ func _update_power_section(container: VBoxContainer, power_ids: Array, power_typ
 	if power_ids.is_empty():
 		var empty_label := Label.new()
 		empty_label.text = "—  None acquired"
-		empty_label.add_theme_font_size_override("font_size", 12)
+		empty_label.add_theme_font_size_override("font_size", 14)
 		empty_label.add_theme_color_override("font_color", Color(0.62, 0.77, 0.9, 0.56))
 		container.add_child(empty_label)
 		return
@@ -345,12 +346,12 @@ func _update_power_section(container: VBoxContainer, power_ids: Array, power_typ
 		
 		# Add power entry
 		var entry_vbox := VBoxContainer.new()
-		entry_vbox.add_theme_constant_override("separation", 2)
+		entry_vbox.add_theme_constant_override("separation", 4)
 		container.add_child(entry_vbox)
 		
 		var power_name := Label.new()
 		power_name.text = "  • %s%s" % [name_text, stack_suffix]
-		power_name.add_theme_font_size_override("font_size", 13)
+		power_name.add_theme_font_size_override("font_size", 15)
 		power_name.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.98))
 		power_name.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
 		power_name.add_theme_constant_override("shadow_offset_x", 1)
@@ -359,12 +360,13 @@ func _update_power_section(container: VBoxContainer, power_ids: Array, power_typ
 		
 		if not desc_text.is_empty():
 			var power_desc := RichTextLabel.new()
-			power_desc.custom_minimum_size = Vector2(640.0, 0.0)
+			power_desc.custom_minimum_size = Vector2(720.0, 0.0)
 			power_desc.bbcode_enabled = true
 			power_desc.fit_content = true
 			power_desc.scroll_active = false
 			power_desc.selection_enabled = false
-			power_desc.add_theme_font_size_override("normal_font_size", 12)
+			power_desc.add_theme_font_size_override("normal_font_size", 14)
+			power_desc.add_theme_constant_override("line_separation", 3)
 			power_desc.add_theme_color_override("default_color", Color(0.85, 0.90, 0.96, 0.88))
 			power_desc.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
 			power_desc.add_theme_constant_override("shadow_offset_x", 1)

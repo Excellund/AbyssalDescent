@@ -2438,7 +2438,7 @@ func _build_glossary_panel() -> Panel:
 	body.fit_content = false
 	body.scroll_active = true
 	body.selection_enabled = false
-	body.add_theme_font_size_override("normal_font_size", 16)
+	body.add_theme_font_size_override("normal_font_size", 18)
 	body.add_theme_color_override("default_color", Color(0.86, 0.94, 1.0, 0.96))
 	body.text = GLOSSARY_DATA.glossary_bbcode()
 	body_panel.add_child(body)
@@ -2543,7 +2543,7 @@ func _build_difficulty_selector_panel() -> Panel:
 		desc_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		desc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		desc_label.add_theme_font_size_override("font_size", 15)
+		desc_label.add_theme_font_size_override("font_size", 17)
 		desc_label.add_theme_color_override("font_color", Color(0.78, 0.86, 0.96, 0.78))
 		desc_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		content.add_child(desc_label)
