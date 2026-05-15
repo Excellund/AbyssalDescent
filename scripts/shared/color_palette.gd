@@ -102,6 +102,22 @@ const COLOR_RAM_HORN := Color(1.0, 0.76, 0.36, 1.0)
 const COLOR_RAM_TRAJECTORY := Color(1.0, 0.7, 0.2, 1.0)
 const COLOR_RAM_CHARGE_GLOW := Color(1.0, 0.44, 0.08, 1.0)
 
+# Drifter (teal/aqua — slow pursuer with ring waves)
+const COLOR_DRIFTER_BODY := Color(0.22, 0.72, 0.78, 1.0)
+const COLOR_DRIFTER_CORE := Color(0.52, 0.96, 1.0, 1.0)
+const COLOR_DRIFTER_RING := Color(0.32, 0.88, 0.96, 0.7)
+
+# Weaver (purple/violet — web-zone thrower)
+const COLOR_WEAVER_BODY := Color(0.54, 0.22, 0.74, 1.0)
+const COLOR_WEAVER_CORE := Color(0.76, 0.52, 1.0, 1.0)
+const COLOR_WEAVER_PROJECTILE := Color(0.64, 0.32, 0.92, 0.8)
+
+# Sentinel (olive/yellow-green — near-stationary rotating cone)
+const COLOR_SENTINEL_BODY := Color(0.28, 0.48, 0.22, 1.0)
+const COLOR_SENTINEL_CORE := Color(0.70, 0.86, 0.28, 1.0)
+const COLOR_SENTINEL_CONE_FILL := Color(0.78, 0.92, 0.24, 0.10)
+const COLOR_SENTINEL_CONE_OUTLINE := Color(0.86, 0.98, 0.30, 0.72)
+
 # Boss (dark red)
 const COLOR_BOSS_BODY := Color(0.78, 0.15, 0.16, 1.0)
 const COLOR_BOSS_BODY_TELEGRAPH := Color(0.95, 0.25, 0.22, 1.0)

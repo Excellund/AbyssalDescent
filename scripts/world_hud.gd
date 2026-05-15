@@ -29,6 +29,24 @@ var status_badge_cat_icon: TextureRect
 var status_badge_cat_label: Label
 var status_mutator_icon: TextureRect
 var status_mutator_label: Label
+# Modular status panel block nodes
+var _status_act_label: Label
+var _status_depth_label: Label
+var _status_biome_bg: Panel
+var _status_biome_label: RichTextLabel
+var _status_hint_label: Label
+var _status_obj_divider: Panel
+var _status_obj_line1: Label
+var _status_obj_line2: Label
+var _status_obj_line3: Label
+# Header bar above act box (bearing + biome, side by side)
+var _status_header_bar: Panel
+var _status_header_bear_bg: Panel
+var _status_header_bear_micro: Label
+var _status_header_bear_name: Label
+var _status_header_biome_bg: Panel
+var _status_header_biome_micro: Label
+var _status_header_biome_name: Label
 var stats_panel: Panel
 var stats_label: RichTextLabel
 var player_mutator_panel: Panel
@@ -82,6 +100,7 @@ func refresh(state: Dictionary, player: Node) -> void:
 	var viewport_size := viewport.get_visible_rect().size
 	_update_banner_layout(_cached_room_size, viewport.get_canvas_transform(), viewport_size)
 	_layout_hud_panels(viewport_size, _cached_room_size, viewport.get_canvas_transform())
+	_update_header_bar(state)
 	_update_status_panel_text(state)
 	_update_player_mutator_panel(state)
 	_update_stats_panel_text(player, state)
@@ -413,7 +432,248 @@ func _create_hud() -> void:
 	room_banner_subtitle_label.modulate.a = 0.0
 	banner_container.add_child(room_banner_subtitle_label)
 
+	_create_status_header_bar(layer)
+	_create_status_blocks()
 	_create_build_strip(layer)
+
+
+func _create_status_blocks() -> void:
+	# Hide the legacy dense text label — layout now handled by block nodes
+	if status_label != null:
+		status_label.visible = false
+	# Hide old bearing badge — replaced by header bar
+	if status_bearing_badge_panel != null:
+		status_bearing_badge_panel.visible = false
+
+	_status_act_label = Label.new()
+	_status_act_label.custom_minimum_size = Vector2(HUD_INFO_PANEL_WIDTH, 24.0)
+	_status_act_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_status_act_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_status_act_label.add_theme_font_size_override("font_size", 19)
+	_status_act_label.add_theme_color_override("font_color", Color(0.97, 1.0, 1.0, 1.0))
+	_status_act_label.add_theme_color_override("font_shadow_color", Color(0.02, 0.04, 0.06, 0.95))
+	_status_act_label.add_theme_constant_override("shadow_offset_x", 1)
+	_status_act_label.add_theme_constant_override("shadow_offset_y", 1)
+	status_panel.add_child(_status_act_label)
+
+	_status_depth_label = Label.new()
+	_status_depth_label.custom_minimum_size = Vector2(HUD_INFO_PANEL_WIDTH, 17.0)
+	_status_depth_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_status_depth_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_status_depth_label.add_theme_font_size_override("font_size", 12)
+	_status_depth_label.add_theme_color_override("font_color", Color(0.50, 0.58, 0.64, 0.68))
+	_status_depth_label.add_theme_color_override("font_shadow_color", Color(0.02, 0.04, 0.06, 0.80))
+	_status_depth_label.add_theme_constant_override("shadow_offset_x", 1)
+	_status_depth_label.add_theme_constant_override("shadow_offset_y", 1)
+	status_panel.add_child(_status_depth_label)
+
+	# Biome pill — elevated world state indicator
+	_status_biome_bg = Panel.new()
+	_status_biome_bg.custom_minimum_size = Vector2(HUD_INFO_PANEL_WIDTH - 20.0, 26.0)
+	var biome_style := StyleBoxFlat.new()
+	biome_style.bg_color = Color(0.04, 0.20, 0.26, 0.82)
+	biome_style.border_color = Color(0.45, 0.80, 0.88, 0.78)
+	biome_style.border_width_left = 1
+	biome_style.border_width_top = 1
+	biome_style.border_width_right = 1
+	biome_style.border_width_bottom = 1
+	biome_style.corner_radius_top_left = 10
+	biome_style.corner_radius_top_right = 10
+	biome_style.corner_radius_bottom_left = 10
+	biome_style.corner_radius_bottom_right = 10
+	_status_biome_bg.add_theme_stylebox_override("panel", biome_style)
+	_status_biome_bg.visible = false
+	status_panel.add_child(_status_biome_bg)
+
+	_status_biome_label = RichTextLabel.new()
+	_status_biome_label.position = Vector2(0.0, 0.0)
+	_status_biome_label.custom_minimum_size = Vector2(HUD_INFO_PANEL_WIDTH - 20.0, 26.0)
+	_status_biome_label.bbcode_enabled = true
+	_status_biome_label.fit_content = false
+	_status_biome_label.scroll_active = false
+	_status_biome_label.selection_enabled = false
+	_status_biome_label.add_theme_font_size_override("normal_font_size", 15)
+	_status_biome_label.add_theme_color_override("default_color", Color(0.62, 0.88, 0.94, 0.98))
+	_status_biome_label.add_theme_color_override("font_shadow_color", Color(0.02, 0.06, 0.08, 0.88))
+	_status_biome_label.add_theme_constant_override("shadow_offset_x", 1)
+	_status_biome_label.add_theme_constant_override("shadow_offset_y", 1)
+	_status_biome_bg.add_child(_status_biome_label)
+
+	# Encounter intro hint
+	_status_hint_label = Label.new()
+	_status_hint_label.custom_minimum_size = Vector2(HUD_INFO_PANEL_WIDTH, 18.0)
+	_status_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_status_hint_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_status_hint_label.add_theme_font_size_override("font_size", 13)
+	_status_hint_label.add_theme_color_override("font_color", Color(0.72, 0.90, 1.0, 0.88))
+	_status_hint_label.add_theme_color_override("font_shadow_color", Color(0.02, 0.04, 0.06, 0.88))
+	_status_hint_label.add_theme_constant_override("shadow_offset_x", 1)
+	_status_hint_label.add_theme_constant_override("shadow_offset_y", 1)
+	_status_hint_label.text = "Move to engage"
+	_status_hint_label.visible = false
+	status_panel.add_child(_status_hint_label)
+
+	# Thin divider above objective block
+	_status_obj_divider = Panel.new()
+	_status_obj_divider.custom_minimum_size = Vector2(HUD_INFO_PANEL_WIDTH - 20.0, 1.0)
+	var obj_div_style := StyleBoxFlat.new()
+	obj_div_style.bg_color = Color(0.5, 0.65, 0.8, 0.22)
+	_status_obj_divider.add_theme_stylebox_override("panel", obj_div_style)
+	_status_obj_divider.visible = false
+	status_panel.add_child(_status_obj_divider)
+
+	# Three objective lines (primary, hint, secondary hint)
+	var obj_labels: Array[Label] = []
+	for _i in range(3):
+		var obj_label := Label.new()
+		obj_label.custom_minimum_size = Vector2(HUD_INFO_PANEL_WIDTH, 19.0)
+		obj_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		obj_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		obj_label.add_theme_font_size_override("font_size", 14)
+		obj_label.add_theme_color_override("font_color", Color(0.86, 0.94, 1.0, 0.92))
+		obj_label.add_theme_color_override("font_shadow_color", Color(0.02, 0.04, 0.06, 0.90))
+		obj_label.add_theme_constant_override("shadow_offset_x", 1)
+		obj_label.add_theme_constant_override("shadow_offset_y", 1)
+		obj_label.visible = false
+		status_panel.add_child(obj_label)
+		obj_labels.append(obj_label)
+	_status_obj_line1 = obj_labels[0]
+	_status_obj_line2 = obj_labels[1]
+	_status_obj_line3 = obj_labels[2]
+
+
+func _create_status_header_bar(layer: CanvasLayer) -> void:
+	const CELL_X_L := 8.0
+	const CELL_X_R := 156.0
+	const CELL_W := 138.0
+	const CELL_Y := 4.0
+	const CELL_H := 45.0
+	const BAR_H := 53.0
+
+	_status_header_bar = Panel.new()
+	_status_header_bar.custom_minimum_size = Vector2(HUD_INFO_PANEL_WIDTH, BAR_H)
+	var bar_style := StyleBoxFlat.new()
+	bar_style.bg_color = Color(0.03, 0.06, 0.1, 0.56)
+	bar_style.border_color = Color(0.62, 0.77, 0.9, 0.32)
+	bar_style.border_width_left = 1
+	bar_style.border_width_top = 1
+	bar_style.border_width_right = 1
+	bar_style.border_width_bottom = 1
+	bar_style.corner_radius_top_left = 12
+	bar_style.corner_radius_top_right = 12
+	bar_style.corner_radius_bottom_left = 12
+	bar_style.corner_radius_bottom_right = 12
+	_status_header_bar.add_theme_stylebox_override("panel", bar_style)
+	layer.add_child(_status_header_bar)
+
+	# Bearing cell (left half)
+	_status_header_bear_bg = Panel.new()
+	_status_header_bear_bg.position = Vector2(CELL_X_L, CELL_Y)
+	_status_header_bear_bg.custom_minimum_size = Vector2(CELL_W, CELL_H)
+	var bear_style := StyleBoxFlat.new()
+	bear_style.bg_color = Color(0.06, 0.14, 0.10, 0.80)
+	bear_style.border_color = Color(0.56, 0.86, 0.70, 0.72)
+	bear_style.border_width_left = 1
+	bear_style.border_width_top = 1
+	bear_style.border_width_right = 1
+	bear_style.border_width_bottom = 1
+	bear_style.corner_radius_top_left = 8
+	bear_style.corner_radius_top_right = 8
+	bear_style.corner_radius_bottom_left = 8
+	bear_style.corner_radius_bottom_right = 8
+	_status_header_bear_bg.add_theme_stylebox_override("panel", bear_style)
+	_status_header_bar.add_child(_status_header_bear_bg)
+
+	_status_header_bear_micro = Label.new()
+	_status_header_bear_micro.custom_minimum_size = Vector2(CELL_W, 11.0)
+	_status_header_bear_micro.position = Vector2(0.0, 3.0)
+	_status_header_bear_micro.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_status_header_bear_micro.text = "BEARING"
+	_status_header_bear_micro.add_theme_font_size_override("font_size", 9)
+	_status_header_bear_micro.add_theme_color_override("font_color", Color(0.56, 0.86, 0.70, 0.55))
+	_status_header_bear_micro.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.80))
+	_status_header_bear_micro.add_theme_constant_override("shadow_offset_x", 1)
+	_status_header_bear_micro.add_theme_constant_override("shadow_offset_y", 1)
+	_status_header_bear_bg.add_child(_status_header_bear_micro)
+
+	_status_header_bear_name = Label.new()
+	_status_header_bear_name.custom_minimum_size = Vector2(CELL_W, 18.0)
+	_status_header_bear_name.position = Vector2(0.0, 16.0)
+	_status_header_bear_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_status_header_bear_name.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_status_header_bear_name.add_theme_font_size_override("font_size", 15)
+	_status_header_bear_name.add_theme_color_override("font_color", Color(0.72, 0.96, 0.82, 0.96))
+	_status_header_bear_name.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.88))
+	_status_header_bear_name.add_theme_constant_override("shadow_offset_x", 1)
+	_status_header_bear_name.add_theme_constant_override("shadow_offset_y", 1)
+	_status_header_bear_bg.add_child(_status_header_bear_name)
+
+	# Biome cell (right half)
+	_status_header_biome_bg = Panel.new()
+	_status_header_biome_bg.position = Vector2(CELL_X_R, CELL_Y)
+	_status_header_biome_bg.custom_minimum_size = Vector2(CELL_W, CELL_H)
+	var biome_style := StyleBoxFlat.new()
+	biome_style.bg_color = Color(0.04, 0.18, 0.24, 0.80)
+	biome_style.border_color = Color(0.45, 0.80, 0.88, 0.72)
+	biome_style.border_width_left = 1
+	biome_style.border_width_top = 1
+	biome_style.border_width_right = 1
+	biome_style.border_width_bottom = 1
+	biome_style.corner_radius_top_left = 8
+	biome_style.corner_radius_top_right = 8
+	biome_style.corner_radius_bottom_left = 8
+	biome_style.corner_radius_bottom_right = 8
+	_status_header_biome_bg.add_theme_stylebox_override("panel", biome_style)
+	_status_header_bar.add_child(_status_header_biome_bg)
+
+	_status_header_biome_micro = Label.new()
+	_status_header_biome_micro.custom_minimum_size = Vector2(CELL_W, 11.0)
+	_status_header_biome_micro.position = Vector2(0.0, 3.0)
+	_status_header_biome_micro.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_status_header_biome_micro.text = "BIOME"
+	_status_header_biome_micro.add_theme_font_size_override("font_size", 9)
+	_status_header_biome_micro.add_theme_color_override("font_color", Color(0.45, 0.80, 0.88, 0.55))
+	_status_header_biome_micro.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.80))
+	_status_header_biome_micro.add_theme_constant_override("shadow_offset_x", 1)
+	_status_header_biome_micro.add_theme_constant_override("shadow_offset_y", 1)
+	_status_header_biome_bg.add_child(_status_header_biome_micro)
+
+	_status_header_biome_name = Label.new()
+	_status_header_biome_name.custom_minimum_size = Vector2(CELL_W, 18.0)
+	_status_header_biome_name.position = Vector2(0.0, 16.0)
+	_status_header_biome_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_status_header_biome_name.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_status_header_biome_name.add_theme_font_size_override("font_size", 15)
+	_status_header_biome_name.add_theme_color_override("font_color", Color(0.62, 0.88, 0.94, 0.96))
+	_status_header_biome_name.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.88))
+	_status_header_biome_name.add_theme_constant_override("shadow_offset_x", 1)
+	_status_header_biome_name.add_theme_constant_override("shadow_offset_y", 1)
+	_status_header_biome_bg.add_child(_status_header_biome_name)
+
+
+func _update_header_bar(state: Dictionary) -> void:
+	if _status_header_bear_name == null:
+		return
+	var tier := int(state.get("current_difficulty_tier", 0))
+	var tier_color := _bearing_color_from_tier(tier)
+	_status_header_bear_name.text = _bearing_name_from_tier(tier)
+	_status_header_bear_name.add_theme_color_override("font_color", tier_color)
+	_status_header_bear_micro.add_theme_color_override("font_color", Color(tier_color.r, tier_color.g, tier_color.b, 0.55))
+	var bear_style := _status_header_bear_bg.get_theme_stylebox("panel")
+	if bear_style is StyleBoxFlat:
+		var sbs := bear_style as StyleBoxFlat
+		sbs.border_color = Color(tier_color.r, tier_color.g, tier_color.b, 0.72)
+		sbs.bg_color = Color(tier_color.r * 0.08, tier_color.g * 0.08, tier_color.b * 0.08, 0.82)
+		_status_header_bear_bg.add_theme_stylebox_override("panel", sbs)
+	var active_biome_name := String(state.get("active_biome_name", ""))
+	if not active_biome_name.is_empty():
+		_status_header_biome_name.text = active_biome_name
+		_status_header_biome_name.add_theme_color_override("font_color", Color(0.62, 0.88, 0.94, 0.96))
+		_status_header_biome_micro.add_theme_color_override("font_color", Color(0.45, 0.80, 0.88, 0.55))
+	else:
+		_status_header_biome_name.text = "—"
+		_status_header_biome_name.add_theme_color_override("font_color", Color(0.35, 0.45, 0.50, 0.38))
+		_status_header_biome_micro.add_theme_color_override("font_color", Color(0.35, 0.45, 0.50, 0.30))
 
 
 func _update_banner_layout(room_size: Vector2, canvas_xform: Transform2D, viewport_size: Vector2) -> void:
@@ -439,14 +699,18 @@ func _layout_hud_panels(viewport_size: Vector2, room_size: Vector2, canvas_xform
 	if status_panel != null:
 		var panel_width := _panel_width(status_panel)
 		var panel_height := _panel_height(status_panel)
-		var status_y := edge_margin
+		var header_h := _panel_height(_status_header_bar) if _status_header_bar != null else 0.0
+		var header_gap := 4.0 if header_h > 0.0 else 0.0
+		var status_y := edge_margin + header_h + header_gap
 		if arena_top_screen < INF:
 			var candidate_y := arena_top_screen - panel_height - 8.0
-			if candidate_y >= edge_margin:
+			if candidate_y >= edge_margin + header_h + header_gap:
 				status_y = candidate_y
 		if panel_width <= 0.0:
 			panel_width = status_panel.custom_minimum_size.x
 		status_panel.position = Vector2(edge_margin, status_y)
+		if _status_header_bar != null:
+			_status_header_bar.position = Vector2(edge_margin, status_y - header_h - header_gap)
 	if stats_panel != null:
 		var stats_h := _panel_height(stats_panel)
 		var status_bottom := edge_margin
@@ -499,176 +763,259 @@ func _panel_height(panel: Control) -> float:
 	return panel.custom_minimum_size.y
 
 func _update_status_panel_text(state: Dictionary) -> void:
-	if status_label == null:
+	if _status_act_label == null:
 		return
 	var run_cleared := bool(state.get("run_cleared", false))
-	var _rooms_cleared := int(state.get("rooms_cleared", 0))
 	var room_depth := int(state.get("room_depth", 0))
-	var current_room_enemy_mutator := state.get("current_room_enemy_mutator", {}) as Dictionary
-	var objective_kind := String(state.get("active_objective_kind", ""))
-	var objective_time_left := float(state.get("objective_time_left", 0.0))
-	var objective_kills := int(state.get("objective_kills", 0))
-	var objective_kill_target := int(state.get("objective_kill_target", 0))
-	var objective_overtime := bool(state.get("objective_overtime", false))
-	var objective_target_name := String(state.get("objective_target_name", "Target"))
-	var objective_target_health := int(state.get("objective_target_health", 0))
-	var objective_target_max_health := int(state.get("objective_target_max_health", 0))
-	var objective_hunt_kill_progress := int(state.get("objective_hunt_kill_progress", 0))
-	var objective_hunt_kill_goal := int(state.get("objective_hunt_kill_goal", 0))
-	var objective_control_progress := float(state.get("objective_control_progress", 0.0))
-	var objective_control_goal := float(state.get("objective_control_goal", 0.0))
-	var objective_control_enemies_in_zone := int(state.get("objective_control_enemies_in_zone", 0))
-	var objective_control_contested := bool(state.get("objective_control_contested", false))
-	var objective_control_player_inside := bool(state.get("objective_control_player_inside", false))
-	var objective_exposure_left := float(state.get("objective_exposure_left", 0.0))
-	var objective_last_relocated_escort_count := int(state.get("objective_last_relocated_escort_count", 0))
-	var objective_relocation_hint_left := float(state.get("objective_relocation_hint_left", 0.0))
-	var objective_sweep_nodes_completed := int(state.get("objective_sweep_nodes_completed", 0))
-	var objective_sweep_node_count := maxi(1, int(state.get("objective_sweep_node_count", 3)))
-	var objective_sweep_capture_progress := float(state.get("objective_sweep_capture_progress", 0.0))
-	var objective_sweep_capture_goal := maxf(0.01, float(state.get("objective_sweep_capture_goal", 2.0)))
-	var objective_node_integrity := float(state.get("objective_node_integrity", 100.0))
-	var objective_node_max_integrity := float(state.get("objective_node_max_integrity", 100.0))
-	var objective_node_enemies_in_range := int(state.get("objective_node_enemies_in_range", 0))
-	var _encounter_intro_grace_left := float(state.get("encounter_intro_grace_left", 0.0))
-	var encounter_intro_grace_active := bool(state.get("encounter_intro_grace_active", false))
-	var current_difficulty_tier := int(state.get("current_difficulty_tier", 0))
-	var ascension_rank := int(state.get("ascension_rank", 0))
-	var equipped_catalyst_count := int(state.get("equipped_catalyst_count", 0))
-	_update_bearing_badge(current_difficulty_tier, ascension_rank, equipped_catalyst_count)
 
-	var boss_unlocked := bool(state.get("boss_unlocked", false))
-	var first_boss_defeated := bool(state.get("first_boss_defeated", false))
+	var y := 8.0
+
+	# ── Run-cleared override: only act/clear shown ────────────────────────────
 	if run_cleared:
-		status_label.text = "[center][b]Depth %d[/b]\n[color=#A8FFB0]Run Clear[/color][/center]" % room_depth
-		var run_clear_text_h := maxf(34.0, status_label.get_content_height())
-		if status_panel != null:
-			status_panel.custom_minimum_size.y = maxf(84.0, status_label.position.y + run_clear_text_h + 30.0)
+		_status_act_label.text = "Depth %d" % room_depth
+		_status_act_label.add_theme_font_size_override("font_size", 16)
+		_status_act_label.position = Vector2(0.0, y)
+		_status_act_label.visible = true
+		y += 22.0 + 3.0
+		_status_depth_label.text = "Run Clear"
+		_status_depth_label.add_theme_color_override("font_color", Color(0.66, 1.0, 0.69, 0.96))
+		_status_depth_label.position = Vector2(0.0, y)
+		_status_depth_label.visible = true
+		y += 20.0 + 4.0
+		_status_biome_bg.visible = false
+		_status_hint_label.visible = false
+		_status_obj_divider.visible = false
+		_status_obj_line1.visible = false
+		_status_obj_line2.visible = false
+		_status_obj_line3.visible = false
 		if status_mutator_icon != null:
 			status_mutator_icon.visible = false
 		if status_mutator_label != null:
 			status_mutator_label.visible = false
+		if status_panel != null:
+			status_panel.custom_minimum_size.y = maxf(84.0, y + 8.0)
 		return
 
+	# ── Block 1: Act header ───────────────────────────────────────────────────
+	var first_boss_defeated := bool(state.get("first_boss_defeated", false))
 	var second_boss_defeated := bool(state.get("second_boss_defeated", false))
 	if second_boss_defeated:
-		status_label.text = "[center][b]Act III[/b]\n[color=#A5B6C9]Depth %d[/color][/center]" % room_depth
+		_status_act_label.text = "Act III"
 	elif first_boss_defeated:
-		status_label.text = "[center][b]Act II[/b]\n[color=#A5B6C9]Depth %d[/color][/center]" % room_depth
+		_status_act_label.text = "Act II"
 	else:
-		status_label.text = "[center][b]Act I[/b]\n[color=#A5B6C9]Depth %d[/color][/center]" % room_depth
+		_status_act_label.text = "Act I"
+	_status_act_label.add_theme_font_size_override("font_size", 19)
+	_status_act_label.position = Vector2(0.0, y)
+	_status_act_label.visible = true
+	y += 24.0 + 3.0
 
+	# ── Block 2: Depth (secondary — small and muted) ──────────────────────────
+	_status_depth_label.text = "Depth %d" % room_depth
+	_status_depth_label.add_theme_color_override("font_color", Color(0.50, 0.58, 0.64, 0.68))
+	_status_depth_label.position = Vector2(0.0, y)
+	_status_depth_label.visible = true
+	y += 17.0 + 4.0
+
+	# ── Block 4: Intro hint ───────────────────────────────────────────────────
+	var encounter_intro_grace_active := bool(state.get("encounter_intro_grace_active", false))
 	if encounter_intro_grace_active:
-		status_label.text += "\n[center][color=#C8F0FF]Move to engage[/color][/center]"
+		_status_hint_label.position = Vector2(0.0, y)
+		_status_hint_label.visible = true
+		y += 18.0 + 3.0
+	else:
+		_status_hint_label.visible = false
 
-	if objective_kind == "last_stand":
-		if objective_overtime:
-			status_label.text += "\n[center][color=#FFB36D]Objective: Overtime  Kills %d/%d[/color][/center]" % [objective_kills, objective_kill_target]
-		else:
-			var objective_seconds := maxi(0, int(ceil(objective_time_left)))
-			var quota_met := objective_kill_target > 0 and objective_kills >= objective_kill_target
-			if quota_met:
-				status_label.text += "\n[center][color=#A8FFB0]Objective: Cleanup %ds  Hold position[/color][/center]" % objective_seconds
-				status_label.text += "\n[center][color=#C8F0FF]Quota met: timer is accelerating[/color][/center]"
-			else:
-				status_label.text += "\n[center][color=#FCD77A]Objective: Survive %ds  Kills %d/%d[/color][/center]" % [objective_seconds, objective_kills, objective_kill_target]
-	elif objective_kind == "cut_the_signal":
-		var target_seconds := maxi(0, int(ceil(objective_time_left)))
-		if objective_overtime:
-			status_label.text += "\n[center][color=#FFB36D]Objective: Eliminate %s  HP %d/%d[/color][/center]" % [objective_target_name, objective_target_health, objective_target_max_health]
-		else:
-			status_label.text += "\n[center][color=#FCD77A]Objective: Kill %s %ds  HP %d/%d[/color][/center]" % [objective_target_name, target_seconds, objective_target_health, objective_target_max_health]
-		var safe_goal := maxi(1, objective_hunt_kill_goal)
-		var safe_progress := mini(maxi(0, objective_hunt_kill_progress), safe_goal)
-		var remaining_kills := maxi(0, safe_goal - safe_progress)
-		if objective_exposure_left > 0.0:
-			status_label.text += "\n[center][color=#FFECA8]Signal Exposed: attack the mark[/color][/center]"
-		else:
-			status_label.text += "\n[center][color=#9FD6FF]Expose Signal: escort kills %d/%d  (%d left)[/color][/center]" % [safe_progress, safe_goal, remaining_kills]
-		if objective_relocation_hint_left > 0.0 and objective_last_relocated_escort_count > 0:
-			status_label.text += "\n[center][color=#A9E6FF]Breakaway carried %d nearby escorts[/color][/center]" % objective_last_relocated_escort_count
-	elif objective_kind == "hold_the_line":
-		var control_seconds := maxi(0, int(ceil(objective_time_left)))
-		var control_goal := maxf(0.01, objective_control_goal)
-		var control_ratio := clampf(objective_control_progress / control_goal, 0.0, 1.0)
-		if objective_overtime or objective_time_left <= 0.0:
-			status_label.text += "\n[center][color=#FFB36D]Objective: Hold the Line  %d%% secured[/color][/center]" % int(round(control_ratio * 100.0))
-		else:
-			status_label.text += "\n[center][color=#FCD77A]Objective: Hold %ds  Secure %d%%[/color][/center]" % [control_seconds, int(round(control_ratio * 100.0))]
-		if objective_control_player_inside and not objective_control_contested:
-			status_label.text += "\n[center][color=#A8FFB0]Zone stable: keep pressure inside the ring[/color][/center]"
-		elif objective_control_contested:
-			status_label.text += "\n[center][color=#FFCAA0]Zone contested: clear %d enemies from the point[/color][/center]" % objective_control_enemies_in_zone
-		else:
-			status_label.text += "\n[center][color=#9FD6FF]Re-enter the zone before progress decays[/color][/center]"
-	elif objective_kind == "circuit_sweep":
-		var sweep_seconds := maxi(0, int(ceil(objective_time_left)))
-		var capture_pct := int(round(clampf(objective_sweep_capture_progress / objective_sweep_capture_goal, 0.0, 1.0) * 100.0))
-		var node_display := objective_sweep_nodes_completed + 1
-		if objective_overtime:
-			status_label.text += "\n[center][color=#FFB36D]Objective: Overtime  Node %d/%d  Capture %d%%[/color][/center]" % [node_display, objective_sweep_node_count, capture_pct]
-		else:
-			status_label.text += "\n[center][color=#FCD77A]Objective: Sweep %ds  Node %d/%d  Capture %d%%[/color][/center]" % [sweep_seconds, node_display, objective_sweep_node_count, capture_pct]
-		if capture_pct >= 100:
-			status_label.text += "\n[center][color=#A8FFB0]Node locked — moving to next position[/color][/center]"
-		elif capture_pct > 0:
-			status_label.text += "\n[center][color=#C8F0FF]Stay in the ring to capture[/color][/center]"
-		else:
-			status_label.text += "\n[center][color=#9FD6FF]Reach the active node to begin capture[/color][/center]"
-	elif objective_kind == "pulse_window":
-		var pulse_seconds := maxi(0, int(ceil(objective_time_left)))
-		var pulse_next := float(state.get("objective_pulse_next_timer", 0.0))
-		var pulse_active: bool = bool(state.get("objective_pulse_active", false))
-		var pulse_mode := String(state.get("objective_pulse_mode", ""))
-		var kills := int(state.get("objective_kills", 0))
-		var kill_target := int(state.get("objective_kill_target", 0))
-		if objective_overtime:
-			status_label.text += "\n[center][color=#FFB36D]Objective: Kill %d/%d — Overtime[/color][/center]" % [kills, kill_target]
-		else:
-			status_label.text += "\n[center][color=#FCD77A]Objective: Kill %d/%d  Timer %ds[/color][/center]" % [kills, kill_target, pulse_seconds]
-		if not pulse_active:
-			if pulse_next <= 2.0:
-				status_label.text += "\n[center][color=#FFB060]Next pulse in %.1fs[/color][/center]" % pulse_next
-			else:
-				status_label.text += "\n[center][color=#9FD6FF]Next pulse in %.0fs[/color][/center]" % pulse_next
-	elif objective_kind == "intercept_run":
-		var intercept_pct := int(round(float(state.get("objective_intercept_progress", 0.0)) * 100.0))
-		var stalled: bool = bool(state.get("objective_intercept_stalled", false))
-		var enemies_near := int(state.get("objective_intercept_enemies_near", 0))
-		var player_in_escort: bool = bool(state.get("objective_intercept_player_in_escort_zone", true))
-		if objective_overtime:
-			status_label.text += "\n[center][color=#FFB36D]Objective: Intercept Overtime  Drone %d%%[/color][/center]" % intercept_pct
-		else:
-			status_label.text += "\n[center][color=#FCD77A]Objective: Intercept  Drone %d%%[/color][/center]" % intercept_pct
-		if stalled:
-			if enemies_near > 0:
-				status_label.text += "\n[center][color=#FFCAA0]%d enemies blocking — clear the path[/color][/center]" % enemies_near
-			else:
-				status_label.text += "\n[center][color=#FFD080]Stay close to the drone[/color][/center]"
-		else:
-			status_label.text += "\n[center][color=#A8FFB0]Path clear — drone advancing[/color][/center]"
+	# ── Block 5: Objective card ───────────────────────────────────────────────
+	var objective_kind := String(state.get("active_objective_kind", ""))
+	var has_objective := not objective_kind.is_empty()
+	if has_objective:
+		y += 2.0
+		_status_obj_divider.position = Vector2(10.0, y)
+		_status_obj_divider.visible = true
+		y += 1.0 + 4.0
+	else:
+		_status_obj_divider.visible = false
+		_status_obj_line1.visible = false
+		_status_obj_line2.visible = false
+		_status_obj_line3.visible = false
 
-	var status_text_h := maxf(34.0, status_label.get_content_height())
-	var row_top := status_label.position.y + status_text_h + 4.0
-	if status_panel != null:
-		status_panel.custom_minimum_size.y = maxf(84.0, row_top + 30.0)
+	if has_objective:
+		# Colour conventions: yellow = urgent/active, blue = contextual, green = positive
+		var C_URGENT  := Color(0.99, 0.86, 0.48, 0.95)
+		var C_WARN    := Color(1.00, 0.79, 0.63, 0.92)
+		var C_HINT    := Color(0.62, 0.84, 1.00, 0.88)
+		var C_GOOD    := Color(0.66, 1.00, 0.69, 0.88)
+		var C_HOT     := Color(1.00, 0.70, 0.43, 0.95)
+		var line1 := ""
+		var line1_color := C_URGENT
+		var line2 := ""
+		var line2_color := C_HINT
+		var line3 := ""
+		var line3_color := C_GOOD
 
+		var objective_time_left       := float(state.get("objective_time_left", 0.0))
+		var objective_kills           := int(state.get("objective_kills", 0))
+		var objective_kill_target     := int(state.get("objective_kill_target", 0))
+		var objective_overtime        := bool(state.get("objective_overtime", false))
+		var objective_target_name     := String(state.get("objective_target_name", "Target"))
+		var objective_target_health   := int(state.get("objective_target_health", 0))
+		var objective_target_max_hp   := int(state.get("objective_target_max_health", 0))
+		var obj_hunt_progress         := int(state.get("objective_hunt_kill_progress", 0))
+		var obj_hunt_goal             := int(state.get("objective_hunt_kill_goal", 0))
+		var obj_ctrl_progress         := float(state.get("objective_control_progress", 0.0))
+		var obj_ctrl_goal             := float(state.get("objective_control_goal", 0.0))
+		var obj_ctrl_enemies          := int(state.get("objective_control_enemies_in_zone", 0))
+		var obj_ctrl_contested        := bool(state.get("objective_control_contested", false))
+		var obj_ctrl_player_inside    := bool(state.get("objective_control_player_inside", false))
+		var obj_exposure_left         := float(state.get("objective_exposure_left", 0.0))
+		var obj_reloc_count           := int(state.get("objective_last_relocated_escort_count", 0))
+		var obj_reloc_hint_left       := float(state.get("objective_relocation_hint_left", 0.0))
+		var obj_sweep_done            := int(state.get("objective_sweep_nodes_completed", 0))
+		var obj_sweep_total           := maxi(1, int(state.get("objective_sweep_node_count", 3)))
+		var obj_sweep_capture         := float(state.get("objective_sweep_capture_progress", 0.0))
+		var obj_sweep_goal            := maxf(0.01, float(state.get("objective_sweep_capture_goal", 2.0)))
+
+		match objective_kind:
+			"last_stand":
+				if objective_overtime:
+					line1 = "Overtime  ·  Kills %d/%d" % [objective_kills, objective_kill_target]
+					line1_color = C_HOT
+				else:
+					var secs := maxi(0, int(ceil(objective_time_left)))
+					var quota_met := objective_kill_target > 0 and objective_kills >= objective_kill_target
+					if quota_met:
+						line1 = "Cleanup %ds  ·  Hold position" % secs
+						line1_color = C_GOOD
+						line2 = "Quota met — timer accelerating"
+					else:
+						line1 = "Survive %ds  ·  Kills %d/%d" % [secs, objective_kills, objective_kill_target]
+			"cut_the_signal":
+				var secs := maxi(0, int(ceil(objective_time_left)))
+				if objective_overtime:
+					line1 = "Eliminate %s  HP %d/%d" % [objective_target_name, objective_target_health, objective_target_max_hp]
+					line1_color = C_HOT
+				else:
+					line1 = "Kill %s  %ds  HP %d/%d" % [objective_target_name, secs, objective_target_health, objective_target_max_hp]
+				var safe_goal := maxi(1, obj_hunt_goal)
+				var remaining := maxi(0, safe_goal - mini(maxi(0, obj_hunt_progress), safe_goal))
+				if obj_exposure_left > 0.0:
+					line2 = "Signal Exposed — attack the mark"
+					line2_color = Color(1.0, 0.92, 0.67, 0.92)
+				else:
+					line2 = "Expose Signal: escorts %d/%d  (%d left)" % [obj_hunt_progress, safe_goal, remaining]
+				if obj_reloc_hint_left > 0.0 and obj_reloc_count > 0:
+					line3 = "Breakaway carried %d escorts" % obj_reloc_count
+			"hold_the_line":
+				var secs := maxi(0, int(ceil(objective_time_left)))
+				var pct := int(round(clampf(obj_ctrl_progress / maxf(0.01, obj_ctrl_goal), 0.0, 1.0) * 100.0))
+				if objective_overtime or objective_time_left <= 0.0:
+					line1 = "Hold the Line  —  %d%% secured" % pct
+					line1_color = C_HOT
+				else:
+					line1 = "Hold %ds  ·  Secure %d%%" % [secs, pct]
+				if obj_ctrl_player_inside and not obj_ctrl_contested:
+					line2 = "Zone stable — keep pressure inside"
+					line2_color = C_GOOD
+				elif obj_ctrl_contested:
+					line2 = "Contested — clear %d enemies" % obj_ctrl_enemies
+					line2_color = C_WARN
+				else:
+					line2 = "Re-enter the zone before decay"
+			"circuit_sweep":
+				var secs := maxi(0, int(ceil(objective_time_left)))
+				var cap_pct := int(round(clampf(obj_sweep_capture / obj_sweep_goal, 0.0, 1.0) * 100.0))
+				var node_num := obj_sweep_done + 1
+				if objective_overtime:
+					line1 = "Overtime  ·  Node %d/%d  ·  %d%%" % [node_num, obj_sweep_total, cap_pct]
+					line1_color = C_HOT
+				else:
+					line1 = "Sweep %ds  ·  Node %d/%d  ·  %d%%" % [secs, node_num, obj_sweep_total, cap_pct]
+				if cap_pct >= 100:
+					line2 = "Node locked — moving to next"
+					line2_color = C_GOOD
+				elif cap_pct > 0:
+					line2 = "Stay in the ring to capture"
+				else:
+					line2 = "Reach the active node to begin"
+			"pulse_window":
+				var secs := maxi(0, int(ceil(objective_time_left)))
+				if objective_overtime:
+					line1 = "Kill %d/%d — Overtime" % [objective_kills, objective_kill_target]
+					line1_color = C_HOT
+				else:
+					line1 = "Kill %d/%d  ·  %ds" % [objective_kills, objective_kill_target, secs]
+				var pulse_next := float(state.get("objective_pulse_next_timer", 0.0))
+				var pulse_active := bool(state.get("objective_pulse_active", false))
+				if not pulse_active:
+					if pulse_next <= 2.0:
+						line2 = "Next pulse in %.1fs" % pulse_next
+						line2_color = Color(1.0, 0.69, 0.38, 0.95)
+					else:
+						line2 = "Next pulse in %.0fs" % pulse_next
+			"intercept_run":
+				var intercept_pct := int(round(float(state.get("objective_intercept_progress", 0.0)) * 100.0))
+				var stalled := bool(state.get("objective_intercept_stalled", false))
+				var enemies_near := int(state.get("objective_intercept_enemies_near", 0))
+				if objective_overtime:
+					line1 = "Intercept Overtime  ·  Drone %d%%" % intercept_pct
+					line1_color = C_HOT
+				else:
+					line1 = "Intercept  ·  Drone %d%%" % intercept_pct
+				if stalled:
+					if enemies_near > 0:
+						line2 = "%d enemies blocking — clear the path" % enemies_near
+						line2_color = C_WARN
+					else:
+						line2 = "Stay close to the drone"
+						line2_color = C_WARN
+				else:
+					line2 = "Path clear — drone advancing"
+					line2_color = C_GOOD
+
+		if not line1.is_empty():
+			_status_obj_line1.text = line1
+			_status_obj_line1.add_theme_color_override("font_color", line1_color)
+			_status_obj_line1.position = Vector2(0.0, y)
+			_status_obj_line1.visible = true
+			y += 19.0 + 2.0
+		else:
+			_status_obj_line1.visible = false
+		if not line2.is_empty():
+			_status_obj_line2.text = line2
+			_status_obj_line2.add_theme_color_override("font_color", line2_color)
+			_status_obj_line2.position = Vector2(0.0, y)
+			_status_obj_line2.visible = true
+			y += 19.0 + 2.0
+		else:
+			_status_obj_line2.visible = false
+		if not line3.is_empty():
+			_status_obj_line3.text = line3
+			_status_obj_line3.add_theme_color_override("font_color", line3_color)
+			_status_obj_line3.position = Vector2(0.0, y)
+			_status_obj_line3.visible = true
+			y += 19.0 + 1.0
+		else:
+			_status_obj_line3.visible = false
+
+	# ── Block 6: Mutator strip ────────────────────────────────────────────────
+	var current_room_enemy_mutator := state.get("current_room_enemy_mutator", {}) as Dictionary
 	if current_room_enemy_mutator.is_empty():
 		if status_mutator_icon != null:
 			status_mutator_icon.visible = false
 		if status_mutator_label != null:
 			status_mutator_label.visible = false
 		if status_panel != null:
-			status_panel.custom_minimum_size.y = maxf(84.0, row_top + 8.0)
+			status_panel.custom_minimum_size.y = maxf(84.0, y + 8.0)
 		return
 
+	y += 4.0
 	var mutator_name := ENCOUNTER_CONTRACTS.mutator_name(current_room_enemy_mutator)
 	var mutator_color := ENCOUNTER_CONTRACTS.mutator_theme_color(current_room_enemy_mutator)
 	var ui_mutator_color := mutator_color
 	ui_mutator_color.a = 1.0
 	var icon_shape := ENCOUNTER_CONTRACTS.mutator_icon_shape_id(current_room_enemy_mutator)
 	var icon_texture := _get_mutator_icon_texture(icon_shape)
-
 	if status_mutator_icon != null:
 		status_mutator_icon.texture = icon_texture
 		status_mutator_icon.modulate = ui_mutator_color
@@ -677,7 +1024,6 @@ func _update_status_panel_text(state: Dictionary) -> void:
 		status_mutator_label.text = mutator_name
 		status_mutator_label.add_theme_color_override("font_color", ui_mutator_color)
 		status_mutator_label.visible = true
-
 	var hud_font := ThemeDB.fallback_font
 	var text_w := 0.0
 	if hud_font != null:
@@ -686,15 +1032,15 @@ func _update_status_panel_text(state: Dictionary) -> void:
 	var icon_w := 18.0 if icon_visible else 0.0
 	var gap := 6.0 if icon_visible else 0.0
 	var row_w := icon_w + gap + text_w
-	var panel_w := HUD_INFO_PANEL_WIDTH
-	var start_x := maxf(8.0, (panel_w - row_w) * 0.5)
+	var start_x := maxf(8.0, (HUD_INFO_PANEL_WIDTH - row_w) * 0.5)
 	if status_mutator_icon != null:
-		status_mutator_icon.position = Vector2(start_x, row_top + 1.0)
+		status_mutator_icon.position = Vector2(start_x, y + 1.0)
 	if status_mutator_label != null:
-		status_mutator_label.position = Vector2(start_x + icon_w + gap, row_top)
+		status_mutator_label.position = Vector2(start_x + icon_w + gap, y)
 		status_mutator_label.custom_minimum_size = Vector2(maxf(text_w + 2.0, 60.0), 24.0)
+	y += 24.0
 	if status_panel != null:
-		status_panel.custom_minimum_size.y = maxf(84.0, row_top + 32.0)
+		status_panel.custom_minimum_size.y = maxf(84.0, y + 8.0)
 
 func _bearing_name_from_tier(tier: int) -> String:
 	match tier:

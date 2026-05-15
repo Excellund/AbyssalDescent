@@ -28,6 +28,10 @@ var shielder_start_room: int = 2
 var shielders_per_room: int = 1
 var hard_room_enemy_bonus: int = 4
 var last_objective_kind: String = ""
+var active_biome: Dictionary = {}
+
+func set_active_biome(biome: Dictionary) -> void:
+	active_biome = biome
 
 const INTRO_ROOM_SIZE := ENCOUNTER_DEFINITION_DATA.INTRO_ROOM_SIZE
 const POOL_ROOM_SIZE := ENCOUNTER_DEFINITION_DATA.POOL_ROOM_SIZE
@@ -319,7 +323,15 @@ func _apply_identity_bearing_scaling(profile: Dictionary) -> Dictionary:
 	var rank := _difficulty_rank()
 	if rank_counts.is_empty() or rank >= rank_counts.size():
 		return profile.duplicate(true)
-	return _apply_profile_counts(profile, rank_counts[rank] as Dictionary)
+	var result := _apply_profile_counts(profile, rank_counts[rank] as Dictionary)
+	var weight_overrides := active_biome.get("enemy_weight_overrides", {}) as Dictionary
+	if not weight_overrides.is_empty():
+		for type_name in weight_overrides:
+			var count_key := "%s_count" % type_name
+			if result.has(count_key):
+				var mult := float(weight_overrides[type_name])
+				result[count_key] = maxi(int(result[count_key]), roundi(float(int(result[count_key])) * mult))
+	return result
 
 func _scale_mutator_damage(mutator: Dictionary) -> Dictionary:
 	if mutator.is_empty():
@@ -567,6 +579,14 @@ func _get_hard_pool_for_depth(depth: int) -> Array[Dictionary]:
 		filtered.append(profile)
 	if filtered.is_empty():
 		return pool
+	var preferred_labels := active_biome.get("preferred_encounter_labels", []) as Array
+	if not preferred_labels.is_empty():
+		var weighted: Array[Dictionary] = []
+		for profile in filtered:
+			weighted.append(profile)
+			if preferred_labels.has(ENCOUNTER_CONTRACTS.profile_label(profile)):
+				weighted.append(profile)
+		return weighted
 	return filtered
 
 func _build_trial_profile(depth: int = 0) -> Dictionary:

@@ -13,6 +13,10 @@ const ENEMY_LANCER_SCRIPT := preload("res://scripts/enemy_lancer.gd")
 const ENEMY_SPECTRE_SCRIPT := preload("res://scripts/enemy_spectre.gd")
 const ENEMY_PYRE_SCRIPT := preload("res://scripts/enemy_pyre.gd")
 const ENEMY_TETHER_SCRIPT := preload("res://scripts/enemy_tether.gd")
+const ENEMY_DRIFTER_SCRIPT := preload("res://scripts/enemy_drifter.gd")
+const ENEMY_WEAVER_SCRIPT := preload("res://scripts/enemy_weaver.gd")
+const ENEMY_SENTINEL_SCRIPT := preload("res://scripts/enemy_sentinel.gd")
+const BIOME_REGISTRY := preload("res://scripts/shared/biome_registry.gd")
 const PYRE_FIELD_SCRIPT := preload("res://scripts/pyre_field.gd")
 const BOSS_STAGE_REGISTRY := preload("res://scripts/shared/boss_stage_registry.gd")
 const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
@@ -764,6 +768,8 @@ func _setup_encounter_profile_builder_system() -> void:
 		"shielders_per_room": shielders_per_room,
 		"hard_room_enemy_bonus": hard_room_enemy_bonus
 	})
+	_roll_act_biomes()
+	_apply_active_biome(1)
 
 func _setup_enemy_spawner_system() -> void:
 	enemy_spawner = ENEMY_SPAWNER_SCRIPT.new()
@@ -781,7 +787,10 @@ func _setup_enemy_spawner_system() -> void:
 		"lancer": ENEMY_LANCER_SCRIPT,
 		"spectre": ENEMY_SPECTRE_SCRIPT,
 		"pyre": ENEMY_PYRE_SCRIPT,
-		"tether": ENEMY_TETHER_SCRIPT
+		"tether": ENEMY_TETHER_SCRIPT,
+		"drifter": ENEMY_DRIFTER_SCRIPT,
+		"weaver": ENEMY_WEAVER_SCRIPT,
+		"sentinel": ENEMY_SENTINEL_SCRIPT
 	}, Callable(self, "_on_room_enemy_died"), Callable(self, "_get_multiplayer_player_nodes"))
 	if is_instance_valid(difficulty_provider):
 		enemy_spawner.multiplayer_party_size = int(difficulty_provider.get_party_size())
@@ -1710,6 +1719,7 @@ func _get_hud_state() -> Dictionary:
 		"second_boss_unlocked": _is_second_boss_unlocked(),
 		"third_boss_unlocked": _is_third_boss_unlocked(),
 		"current_character_passive_name": current_character_passive_name,
+		"active_biome_name": _get_active_biome_name(),
 		"run_elapsed_seconds": run_summary_recorder.get_run_elapsed_seconds(),
 		"timer_visible_in_hud": true,
 		"ascension_rank": encounter_profile_builder.get_ascension_rank() if encounter_profile_builder != null else 0,
@@ -1957,6 +1967,7 @@ func _finish_first_boss_clear() -> void:
 	boss_reward_pending = true
 	hud.show_banner("Warden Defeated", "")
 	var epitaph: String = power_registry_instance.get_boss_epitaph("warden", current_character_id)
+	_apply_active_biome(2)
 	_open_networked_reward_selection("Claim Warden's Power", ENUMS.RewardMode.BOSS, {}, epitaph)
 
 func _finish_second_boss_clear() -> void:
@@ -1974,6 +1985,7 @@ func _finish_second_boss_clear() -> void:
 	boss_reward_pending = true
 	hud.show_banner("Sovereign Defeated", "")
 	var epitaph: String = power_registry_instance.get_boss_epitaph("sovereign", current_character_id)
+	_apply_active_biome(3)
 	_open_networked_reward_selection("Claim Sovereign's Power", ENUMS.RewardMode.BOSS, {}, epitaph)
 
 func _finish_third_boss_clear() -> void:
@@ -3764,11 +3776,13 @@ func _on_player_died() -> void:
 	_show_defeat_feedback(current_room_label, room_depth, _latest_run_summary())
 
 func _show_victory_feedback(unlocked_tier: int, run_summary: Dictionary = {}) -> void:
+	run_summary_recorder.freeze_run_timer()
 	if is_instance_valid(victory_screen):
 		victory_screen.show_victory(rooms_cleared, unlocked_tier, run_summary, true)
 		_apply_retry_vote_status_ui()
 
 func _show_defeat_feedback(room_label: String, depth: int, run_summary: Dictionary = {}) -> void:
+	run_summary_recorder.freeze_run_timer()
 	player_flow_coordinator.show_defeat_feedback(hud, defeat_screen, room_label, depth, run_summary, true)
 	_apply_retry_vote_status_ui()
 
@@ -4166,3 +4180,44 @@ func _set_enemy_targets_passive(passive: bool) -> void:
 				var current_cd := float(enemy.get("attack_cooldown_left"))
 				if current_cd < 0.32:
 					enemy.set("attack_cooldown_left", 0.32)
+
+func _roll_act_biomes() -> void:
+	if run_session == null:
+		return
+	run_session.act_biome_ids.clear()
+	for act in [1, 2, 3]:
+		var biome_id := BIOME_REGISTRY.roll_biome_for_act(act, rng)
+		run_session.act_biome_ids.append(biome_id)
+
+func _get_current_act() -> int:
+	if second_boss_defeated:
+		return 3
+	elif first_boss_defeated:
+		return 2
+	return 1
+
+func _apply_active_biome(act: int) -> void:
+	if run_session == null or run_session.act_biome_ids.size() < act:
+		return
+	var biome_id := run_session.act_biome_ids[act - 1]
+	if biome_id.is_empty():
+		return
+	var biome := BIOME_REGISTRY.get_biome(biome_id)
+	if biome.is_empty():
+		return
+	if is_instance_valid(encounter_profile_builder):
+		encounter_profile_builder.set_active_biome(biome)
+	if is_instance_valid(renderer):
+		renderer.set_biome_color_theme(biome.get("color_theme", {}) as Dictionary)
+
+func _get_active_biome_name() -> String:
+	if run_session == null:
+		return ""
+	var act := _get_current_act()
+	if run_session.act_biome_ids.size() < act:
+		return ""
+	var biome_id := run_session.act_biome_ids[act - 1]
+	if biome_id.is_empty():
+		return ""
+	var biome := BIOME_REGISTRY.get_biome(biome_id)
+	return String(biome.get("name", ""))

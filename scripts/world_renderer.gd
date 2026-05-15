@@ -42,6 +42,11 @@ var _pending_focus_position: Vector2 = Vector2(99999.0, 99999.0)
 var _pending_focus_timer: float = 0.0
 var _focus_commit_delay: float = 0.12
 var _focus_switch_advantage: float = 14.0
+var active_color_theme: Dictionary = {}
+
+func set_biome_color_theme(theme: Dictionary) -> void:
+	active_color_theme = theme
+	queue_redraw()
 
 func _ready() -> void:
 	# Keep floor and door FX behind gameplay actors.
@@ -72,14 +77,30 @@ func _draw() -> void:
 	var viewport_rect := get_viewport().get_visible_rect()
 	var viewport_to_world := get_viewport().get_canvas_transform().affine_inverse()
 	var viewport_world_rect := viewport_to_world * viewport_rect
-	draw_rect(viewport_world_rect.grow(50.0), Color(0.01, 0.02, 0.04, clampf(ambient_backdrop_alpha, 0.7, 1.0)), true)
 
+	var biome_blend := 0.28
+	var default_backdrop := Color(0.01, 0.02, 0.04, clampf(ambient_backdrop_alpha, 0.7, 1.0))
+	var biome_backdrop_tint: Color = active_color_theme.get("backdrop_tint", default_backdrop) if not active_color_theme.is_empty() else default_backdrop
+	var backdrop_color := default_backdrop.lerp(Color(biome_backdrop_tint.r, biome_backdrop_tint.g, biome_backdrop_tint.b, default_backdrop.a), biome_blend)
+	draw_rect(viewport_world_rect.grow(50.0), backdrop_color, true)
+
+	var default_glow_inner := Color(0.03, 0.08, 0.12)
+	var default_glow_outer := Color(0.09, 0.16, 0.23)
+	var biome_glow_tint: Color = active_color_theme.get("glow_tint", default_glow_outer) if not active_color_theme.is_empty() else default_glow_outer
+	var glow_inner := default_glow_inner.lerp(Color(biome_glow_tint.r * 0.38, biome_glow_tint.g * 0.38, biome_glow_tint.b * 0.38), biome_blend)
+	var glow_outer := default_glow_outer.lerp(Color(biome_glow_tint.r * 0.68, biome_glow_tint.g * 0.68, biome_glow_tint.b * 0.68), biome_blend)
 	for i in range(10):
 		var ratio := float(i) / 9.0
 		var inset := lerpf(0.0, minf(room_rect.size.x, room_rect.size.y) * 0.22, ratio)
 		var layer_rect := room_rect.grow(-inset)
-		var layer_color := Color(0.03, 0.08, 0.12, 0.17).lerp(Color(0.09, 0.16, 0.23, 0.09 + arena_glow_strength * pulse * 0.32), 1.0 - ratio)
+		var layer_color := Color(glow_inner.r, glow_inner.g, glow_inner.b, 0.17).lerp(Color(glow_outer.r, glow_outer.g, glow_outer.b, 0.09 + arena_glow_strength * pulse * 0.32), 1.0 - ratio)
 		draw_rect(layer_rect, layer_color, true)
+
+	var default_grid_coarse := Color(0.36, 0.56, 0.78)
+	var default_grid_fine := Color(0.55, 0.74, 0.92)
+	var biome_grid_tint: Color = active_color_theme.get("grid_tint", default_grid_coarse) if not active_color_theme.is_empty() else default_grid_coarse
+	var grid_coarse := default_grid_coarse.lerp(Color(biome_grid_tint.r, biome_grid_tint.g, biome_grid_tint.b), biome_blend)
+	var grid_fine := default_grid_fine.lerp(Color(biome_grid_tint.r, biome_grid_tint.g, biome_grid_tint.b), biome_blend * 0.6)
 
 	var coarse_step := maxf(28.0, floor_grid_step)
 	var fine_step := maxf(16.0, floor_grid_fine_step)
@@ -91,14 +112,14 @@ func _draw() -> void:
 	var fine_start_y := floori(room_rect.position.y / fine_step) * fine_step
 	
 	for x in range(coarse_start_x, floori(room_rect.position.x + room_rect.size.x + coarse_step), floori(coarse_step)):
-		draw_line(Vector2(float(x), room_rect.position.y), Vector2(float(x), room_rect.position.y + room_rect.size.y), Color(0.36, 0.56, 0.78, clampf(floor_coarse_grid_alpha, 0.01, 0.2)), 2.0)
+		draw_line(Vector2(float(x), room_rect.position.y), Vector2(float(x), room_rect.position.y + room_rect.size.y), Color(grid_coarse.r, grid_coarse.g, grid_coarse.b, clampf(floor_coarse_grid_alpha, 0.01, 0.2)), 2.0)
 	for y in range(coarse_start_y, floori(room_rect.position.y + room_rect.size.y + coarse_step), floori(coarse_step)):
-		draw_line(Vector2(room_rect.position.x, float(y)), Vector2(room_rect.position.x + room_rect.size.x, float(y)), Color(0.36, 0.56, 0.78, clampf(floor_coarse_grid_alpha, 0.01, 0.2)), 2.0)
+		draw_line(Vector2(room_rect.position.x, float(y)), Vector2(room_rect.position.x + room_rect.size.x, float(y)), Color(grid_coarse.r, grid_coarse.g, grid_coarse.b, clampf(floor_coarse_grid_alpha, 0.01, 0.2)), 2.0)
 
 	for x in range(fine_start_x, floori(room_rect.position.x + room_rect.size.x + fine_step), floori(fine_step)):
-		draw_line(Vector2(float(x), room_rect.position.y), Vector2(float(x), room_rect.position.y + room_rect.size.y), Color(0.55, 0.74, 0.92, clampf(floor_fine_grid_alpha, 0.0, 0.08)), 1.0)
+		draw_line(Vector2(float(x), room_rect.position.y), Vector2(float(x), room_rect.position.y + room_rect.size.y), Color(grid_fine.r, grid_fine.g, grid_fine.b, clampf(floor_fine_grid_alpha, 0.0, 0.08)), 1.0)
 	for y in range(fine_start_y, floori(room_rect.position.y + room_rect.size.y + fine_step), floori(fine_step)):
-		draw_line(Vector2(room_rect.position.x, float(y)), Vector2(room_rect.position.x + room_rect.size.x, float(y)), Color(0.55, 0.74, 0.92, clampf(floor_fine_grid_alpha, 0.0, 0.08)), 1.0)
+		draw_line(Vector2(room_rect.position.x, float(y)), Vector2(room_rect.position.x + room_rect.size.x, float(y)), Color(grid_fine.r, grid_fine.g, grid_fine.b, clampf(floor_fine_grid_alpha, 0.0, 0.08)), 1.0)
 
 	var corners := [
 		room_rect.position,

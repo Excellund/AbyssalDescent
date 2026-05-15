@@ -34,6 +34,7 @@ var ascension_loadout: Array[String] = []
 var equipped_catalyst_ids: Array[String] = []
 var boss_no_hit_ids: Array[String] = []
 var hold_full_control_achieved: bool = false
+var rest_count: int = 0
 var _bosses_with_damage_taken: Dictionary = {}
 var _active_boss_id: String = ""
 
@@ -72,6 +73,7 @@ func reset_for_run(run_seed: Dictionary) -> void:
 			equipped_catalyst_ids.append(String(entry))
 	boss_no_hit_ids.clear()
 	hold_full_control_achieved = false
+	rest_count = 0
 	_bosses_with_damage_taken.clear()
 	_active_boss_id = ""
 
@@ -135,6 +137,7 @@ func record_reward_choice(choice: Dictionary, mode: int, depth: int, unix_time: 
 	reward_timeline.append(RUN_SUMMARY_MODEL.create_timeline_entry(depth, mode, item_name, category, event_unix))
 
 func record_rest_visit(depth: int, unix_time: int = 0) -> void:
+	rest_count += 1
 	var event_unix := unix_time
 	if event_unix <= 0:
 		event_unix = int(Time.get_unix_time_from_system())
@@ -179,6 +182,7 @@ func build_summary(final_state: Dictionary) -> Dictionary:
 	summary["equipped_catalyst_ids"] = equipped_catalyst_ids.duplicate()
 	summary["boss_no_hit_ids"] = boss_no_hit_ids.duplicate()
 	summary["hold_full_control_achieved"] = hold_full_control_achieved
+	summary["rest_count"] = rest_count
 	return summary
 
 func _category_for_mode(mode: int) -> String:

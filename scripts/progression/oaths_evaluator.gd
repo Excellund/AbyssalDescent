@@ -91,6 +91,10 @@ static func _evaluate(key: String, params: Dictionary, run_summary: Dictionary) 
 			return bool(run_summary.get("hold_full_control_achieved", false))
 		"ascension_rank_at_least":
 			return int(run_summary.get("ascension_rank", 0)) >= int(params.get("rank", 1))
+		"win_under_time_seconds":
+			return int(run_summary.get("duration_seconds", 99999)) < int(params.get("seconds", 0))
+		"win_no_rest":
+			return int(run_summary.get("rest_count", 0)) == 0
 		_:
 			return false
 

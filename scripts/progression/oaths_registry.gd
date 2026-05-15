@@ -101,6 +101,22 @@ const SPECIAL_OATH_DEFINITIONS := {
 		"params": {"rank": 10},
 		"reward_catalyst_id": "ascension_loadout_preset",
 		"reward_modifier_id": ""
+	},
+	"against_the_clock": {
+		"label": "Against the Clock",
+		"description": "Clear a run in under 8 minutes.",
+		"evaluator_key": "win_under_time_seconds",
+		"params": {"seconds": 480},
+		"reward_catalyst_id": "starting_max_hp_bonus",
+		"reward_modifier_id": ""
+	},
+	"the_unbroken_march": {
+		"label": "Oath of the Unbroken March",
+		"description": "Clear a run without visiting any rest sites.",
+		"evaluator_key": "win_no_rest",
+		"params": {},
+		"reward_catalyst_id": "starting_boon_pick",
+		"reward_modifier_id": ""
 	}
 }
 

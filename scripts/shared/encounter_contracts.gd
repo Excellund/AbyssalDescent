@@ -51,6 +51,9 @@ const PROFILE_KEY_TETHER_COUNT := "tether_count"
 const PROFILE_KEY_SEAMLOCK_COUNT := "seamlock_count"
 const PROFILE_KEY_MIRRORLINE_COUNT := "mirrorline_count"
 const PROFILE_KEY_TOLL_COUNT := "toll_count"
+const PROFILE_KEY_DRIFTER_COUNT := "drifter_count"
+const PROFILE_KEY_WEAVER_COUNT := "weaver_count"
+const PROFILE_KEY_SENTINEL_COUNT := "sentinel_count"
 const PROFILE_KEY_OBJECTIVE_KIND := "objective_kind"
 const PROFILE_KEY_OBJECTIVE_DURATION := "objective_duration"
 const PROFILE_KEY_OBJECTIVE_SPAWN_INTERVAL := "objective_spawn_interval"
@@ -735,6 +738,9 @@ static func normalize_profile(value: Variant) -> Dictionary:
 	normalized[PROFILE_KEY_SEAMLOCK_COUNT] = int(input.get(PROFILE_KEY_SEAMLOCK_COUNT, 0))
 	normalized[PROFILE_KEY_MIRRORLINE_COUNT] = int(input.get(PROFILE_KEY_MIRRORLINE_COUNT, 0))
 	normalized[PROFILE_KEY_TOLL_COUNT] = int(input.get(PROFILE_KEY_TOLL_COUNT, 0))
+	normalized[PROFILE_KEY_DRIFTER_COUNT] = int(input.get(PROFILE_KEY_DRIFTER_COUNT, 0))
+	normalized[PROFILE_KEY_WEAVER_COUNT] = int(input.get(PROFILE_KEY_WEAVER_COUNT, 0))
+	normalized[PROFILE_KEY_SENTINEL_COUNT] = int(input.get(PROFILE_KEY_SENTINEL_COUNT, 0))
 	if input.has(PROFILE_KEY_WAVE_COUNT):
 		normalized[PROFILE_KEY_WAVE_COUNT] = maxi(1, int(input.get(PROFILE_KEY_WAVE_COUNT, 1)))
 	if input.has(PROFILE_KEY_INITIAL_WAVE_FRACTION):
@@ -763,7 +769,7 @@ static func profile_static_camera(profile_value: Dictionary) -> bool:
 
 # Enemy count metadata: list of all enemy types for data-driven access
 static func _get_enemy_count_keys() -> Array[String]:
-	return ["chaser", "charger", "archer", "shielder", "lurker", "ram", "lancer", "spectre", "pyre", "tether", "seamlock", "mirrorline"]
+	return ["chaser", "charger", "archer", "shielder", "lurker", "ram", "lancer", "spectre", "pyre", "tether", "seamlock", "mirrorline", "drifter", "weaver", "sentinel"]
 
 static func _get_enemy_count_key_for_type(enemy_type: String) -> String:
 	return "%s_count" % enemy_type.strip_edges().to_lower()
@@ -827,6 +833,15 @@ static func profile_mirrorline_count(profile_value: Dictionary) -> int:
 static func profile_toll_count(profile_value: Dictionary) -> int:
 	return _get_enemy_count("toll", profile_value)
 
+static func profile_drifter_count(profile_value: Dictionary) -> int:
+	return _get_enemy_count("drifter", profile_value)
+
+static func profile_weaver_count(profile_value: Dictionary) -> int:
+	return _get_enemy_count("weaver", profile_value)
+
+static func profile_sentinel_count(profile_value: Dictionary) -> int:
+	return _get_enemy_count("sentinel", profile_value)
+
 static func profile_enemy_mutator(profile_value: Dictionary) -> Dictionary:
 	return profile_value.get(PROFILE_KEY_ENEMY_MUTATOR, {}) as Dictionary
 
@@ -860,7 +875,7 @@ static func profile_set_specialist_counts(profile_value: Dictionary, lurkers: in
 	for enemy_type: String in specialist_counts:
 		_set_enemy_count(enemy_type, specialist_counts[enemy_type], profile_value)
 
-static func profile_counts(chasers: int, chargers: int, archers: int, shielders: int, lurkers: int = 0, rams: int = 0, lancers: int = 0, spectres: int = 0, pyres: int = 0, tethers: int = 0, seamlocks: int = 0) -> Dictionary:
+static func profile_counts(chasers: int, chargers: int, archers: int, shielders: int, lurkers: int = 0, rams: int = 0, lancers: int = 0, spectres: int = 0, pyres: int = 0, tethers: int = 0, seamlocks: int = 0, drifters: int = 0, weavers: int = 0, sentinels: int = 0) -> Dictionary:
 	return {
 		PROFILE_KEY_CHASER_COUNT: chasers,
 		PROFILE_KEY_CHARGER_COUNT: chargers,
@@ -872,7 +887,10 @@ static func profile_counts(chasers: int, chargers: int, archers: int, shielders:
 		PROFILE_KEY_SPECTRE_COUNT: spectres,
 		PROFILE_KEY_PYRE_COUNT: pyres,
 		PROFILE_KEY_TETHER_COUNT: tethers,
-		PROFILE_KEY_SEAMLOCK_COUNT: seamlocks
+		PROFILE_KEY_SEAMLOCK_COUNT: seamlocks,
+		PROFILE_KEY_DRIFTER_COUNT: drifters,
+		PROFILE_KEY_WEAVER_COUNT: weavers,
+		PROFILE_KEY_SENTINEL_COUNT: sentinels
 	}
 
 static func profile_count_from_counts(counts: Dictionary, key: String) -> int:

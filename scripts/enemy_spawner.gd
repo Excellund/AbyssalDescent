@@ -86,6 +86,20 @@ const ENEMY_MUTATOR_STAT_MAP := {
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_DAMAGE_MULT, "prop": "heal_fraction", "min": 0.01},
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_SPEED_MULT, "prop": "aura_slow_mult", "min": 0.20},
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_WINDUP_MULT, "prop": "stun_duration", "min": 0.10}
+	],
+	"drifter": [
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT, "prop": "ring_damage", "min": 1.0, "is_int": true},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_SPEED_MULT, "prop": "move_speed", "min": 20.0},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_COOLDOWN_MULT, "prop": "wave_interval", "min": 1.0}
+	],
+	"weaver": [
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT, "prop": "web_zone_tick_damage", "min": 1.0, "is_int": true},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_WINDUP_MULT, "prop": "windup_time", "min": 0.20},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_COOLDOWN_MULT, "prop": "attack_cooldown", "min": 1.0}
+	],
+	"sentinel": [
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT, "prop": "cone_tick_damage", "min": 1.0, "is_int": true},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_SPEED_MULT, "prop": "move_speed", "min": 8.0}
 	]
 }
 
@@ -139,6 +153,15 @@ const ENEMY_DAMAGE_CLASSIFICATION := {
 		"toll_strike": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"},
 		"pulse_hit": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"}
 	},
+	"drifter": {
+		"ring_hit": {"kind": "flat", "scales_via_mutator": true, "mutator_stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT}
+	},
+	"weaver": {
+		"web_zone_tick": {"kind": "flat", "scales_via_mutator": true, "mutator_stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT}
+	},
+	"sentinel": {
+		"cone_tick": {"kind": "flat", "scales_via_mutator": true, "mutator_stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT}
+	},
 	"boss_warden": {
 		"all_attacks": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"}
 	},
@@ -146,7 +169,7 @@ const ENEMY_DAMAGE_CLASSIFICATION := {
 		"all_attacks": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"}
 	}
 }
-const ENEMY_SPAWN_ORDER: Array[String] = ["chaser", "charger", "archer", "shielder", "seamlock", "mirrorline", "toll", "lurker", "ram", "lancer", "spectre", "pyre", "tether"]
+const ENEMY_SPAWN_ORDER: Array[String] = ["chaser", "charger", "archer", "shielder", "seamlock", "mirrorline", "toll", "lurker", "ram", "lancer", "spectre", "pyre", "tether", "drifter", "weaver", "sentinel"]
 
 const WAVE_KILL_THRESHOLD_RATIO: float = 0.20
 const WAVE_MIN_GAP_AFTER_SPAWN: float = 1.5
@@ -425,6 +448,12 @@ func _profile_count_for_enemy_type(profile: Dictionary, enemy_type: String) -> i
 			return ENCOUNTER_CONTRACTS.profile_mirrorline_count(profile)
 		"toll":
 			return ENCOUNTER_CONTRACTS.profile_toll_count(profile)
+		"drifter":
+			return ENCOUNTER_CONTRACTS.profile_drifter_count(profile)
+		"weaver":
+			return ENCOUNTER_CONTRACTS.profile_weaver_count(profile)
+		"sentinel":
+			return ENCOUNTER_CONTRACTS.profile_sentinel_count(profile)
 		_:
 			return 0
 

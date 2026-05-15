@@ -8,11 +8,13 @@ var rooms_cleared: int = 0
 var room_depth: int = 0
 var phase_two_rooms_cleared: int = 0
 var phase_three_rooms_cleared: int = 0
+var act_biome_ids: Array[String] = []
 
 func reset_for_new_run() -> void:
 	boons_taken.clear()
 	arcana_rewards_taken.clear()
 	boss_rewards_taken.clear()
+	act_biome_ids.clear()
 	set_progression_counters(0, 0, 0, 0)
 
 func record_boon(name: String) -> void:

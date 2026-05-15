@@ -29,6 +29,7 @@ var telemetry_run_id: String = ""
 var telemetry_enabled: bool = false
 var telemetry_run_finished: bool = false
 var run_started_at_msec: int = 0
+var _run_finished_at_msec: int = 0
 var latest_run_summary: Dictionary = {}
 var run_summary_tracker
 
@@ -52,7 +53,12 @@ func can_record() -> bool:
 func get_run_elapsed_seconds() -> int:
 	if run_started_at_msec <= 0:
 		return 0
-	return maxi(0, int(round(float(Time.get_ticks_msec() - run_started_at_msec) / 1000.0)))
+	var end_msec := _run_finished_at_msec if _run_finished_at_msec > 0 else Time.get_ticks_msec()
+	return maxi(0, int(round(float(end_msec - run_started_at_msec) / 1000.0)))
+
+func freeze_run_timer() -> void:
+	if _run_finished_at_msec <= 0:
+		_run_finished_at_msec = Time.get_ticks_msec()
 
 func get_active_boss_id() -> String:
 	if _world.in_third_boss_room:
@@ -81,6 +87,7 @@ func summary_category_for_mode(mode: int) -> String:
 
 func mark_run_start() -> void:
 	run_started_at_msec = Time.get_ticks_msec()
+	_run_finished_at_msec = 0
 	latest_run_summary.clear()
 	reset_summary_tracker()
 
