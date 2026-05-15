@@ -299,6 +299,11 @@ static func _encounter_title_bbcode(row: Dictionary) -> String:
 	var color := row.get("color", Color(0.9, 0.96, 1.0, 1.0)) as Color
 	return "[color=%s][b]%s[/b][/color]" % [_color_hex(color), name]
 
+static func _biome_title_bbcode(row: Dictionary) -> String:
+	var name := String(row.get("name", ""))
+	var color := row.get("color", Color(0.9, 0.96, 1.0, 1.0)) as Color
+	return "[color=%s][b]%s[/b][/color]" % [_color_hex(color), name]
+
 static func _reward_tier_title_bbcode(row: Dictionary) -> String:
 	var tier := String(row.get("tier", ""))
 	var color := row.get("color", Color(0.9, 0.96, 1.0, 1.0)) as Color
@@ -352,6 +357,76 @@ static func _encounters_section_bbcode() -> String:
 		lines.append("")
 	return "\n".join(lines)
 
+static func _biome_rows() -> Array[Dictionary]:
+	return [
+		{
+			"name": "The Crumble",
+			"act": 1,
+			"color": Color(1.0, 0.68, 0.22, 1.0),
+			"desc": "Chargers and Shielders dominate. Expect melee-forward pressure with strong frontline formations.",
+		},
+		{
+			"name": "The Haunt",
+			"act": 1,
+			"color": Color(0.78, 0.44, 1.0, 1.0),
+			"desc": "Lurkers, Spectres, and Seamlocks cut off retreats. Ambush and disorientation define the threat.",
+		},
+		{
+			"name": "The Shatterfield",
+			"act": 1,
+			"color": Color(0.44, 0.92, 1.0, 1.0),
+			"desc": "Ranged harassment and zone hazards. Archers and Lancers punish any open ground.",
+		},
+		{
+			"name": "The Grinding Vault",
+			"act": 2,
+			"color": Color(0.96, 0.88, 0.42, 1.0),
+			"desc": "Mirrorlines and Sentinels hold every lane. Suppression and control define each room.",
+		},
+		{
+			"name": "The Storm Reach",
+			"act": 2,
+			"color": Color(1.0, 0.66, 0.24, 1.0),
+			"desc": "Fire zones and suppression fill the field. Pyres and Tethers deny any safe position.",
+		},
+		{
+			"name": "The Hollow",
+			"act": 2,
+			"color": Color(0.32, 0.86, 0.82, 1.0),
+			"desc": "Seamlocks, Lurkers, and Weavers converge. Nothing moves in a straight line.",
+		},
+		{
+			"name": "The Void Breach",
+			"act": 3,
+			"color": Color(0.96, 0.24, 0.32, 1.0),
+			"desc": "Spectres and Pyres at overwhelming density. No angle stays safe.",
+		},
+		{
+			"name": "The Maelstrom",
+			"act": 3,
+			"color": Color(1.0, 0.92, 0.38, 1.0),
+			"desc": "Every enemy type at full strength. The full arsenal, unrestricted.",
+		},
+		{
+			"name": "The Convergence",
+			"act": 3,
+			"color": Color(0.88, 0.96, 1.0, 1.0),
+			"desc": "Tethers, Lancers, and Sentinels lock down all movement. Area denial closes every gap.",
+		},
+	]
+
+static func _biomes_section_bbcode() -> String:
+	var lines: Array[String] = []
+	lines.append(_section_title_bbcode("Biomes"))
+	for act in [1, 2, 3]:
+		lines.append(_subsection_title_bbcode("Act %d" % act))
+		for row in _biome_rows():
+			if int(row.get("act", 0)) != act:
+				continue
+			lines.append("%s  [color=#BFD2E8]-[/color]  %s" % [_biome_title_bbcode(row), row.get("desc", "")])
+		lines.append("")
+	return "\n".join(lines)
+
 static func _mutators_section_bbcode() -> String:
 	var lines: Array[String] = []
 	lines.append(_section_title_bbcode("Mutators"))
@@ -376,6 +451,7 @@ static func glossary_sections() -> Array[Dictionary]:
 	return [
 		{"label": "Reward Tiers", "bbcode": _reward_tiers_section_bbcode()},
 		{"label": "Encounters", "bbcode": _encounters_section_bbcode()},
+		{"label": "Biomes", "bbcode": _biomes_section_bbcode()},
 		{"label": "Mutators", "bbcode": _mutators_section_bbcode()},
 		{"label": "Endgame Chase", "bbcode": _endgame_chase_section_bbcode()},
 	]
