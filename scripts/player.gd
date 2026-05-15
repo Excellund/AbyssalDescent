@@ -30,6 +30,7 @@ const SIGIL_CHAIN_SLOW_DURATION: float = 0.5
 const SIGIL_CHAIN_SLOW_MULT: float = 0.7
 const SIGIL_CHAIN_CHAIN_BONUS_PER_DEPTH: float = 0.40
 const SIGIL_CHAIN_CHAIN_BONUS_MAX_DEPTH: int = 6
+const SIGIL_CHAIN_BURST_DETONATION_MULT: int = 3
 const RUN_SNAPSHOT_PROPERTIES := [
 	"max_speed",
 	"dash_cooldown",
@@ -3886,6 +3887,7 @@ func _update_sigil_chain_state(delta: float) -> void:
 		if _sigil_chain_window_left <= 0.0:
 			_sigil_chain_depth = 0
 			_sigil_chain_has_last_drop = false
+			_sigil_chain_zones.clear()
 			_fade_all_sigil_chain_fx(0.4)
 			_broadcast_cue_event("sigil_chain_reset", {})
 		queue_redraw()
@@ -3894,12 +3896,14 @@ func _update_sigil_chain_state(delta: float) -> void:
 		queue_redraw()
 	if _sigil_chain_zones.is_empty():
 		return
-	var remove_indices: Array[int] = []
 	for i in range(_sigil_chain_zones.size()):
 		var zone := _sigil_chain_zones[i]
+		if bool(zone.get("dormant", false)):
+			continue
 		var life := maxf(0.0, float(zone.get("life", 0.0)) - delta)
 		if life <= 0.0:
-			remove_indices.append(i)
+			zone["dormant"] = true
+			_sigil_chain_zones[i] = zone
 			continue
 		zone["life"] = life
 		var tick_left := maxf(0.0, float(zone.get("tick_left", 0.0)) - delta)
@@ -3908,8 +3912,6 @@ func _update_sigil_chain_state(delta: float) -> void:
 			_apply_sigil_chain_zone_tick(zone)
 		zone["tick_left"] = tick_left
 		_sigil_chain_zones[i] = zone
-	while not remove_indices.is_empty():
-		_sigil_chain_zones.remove_at(remove_indices.pop_back())
 
 func _apply_sigil_chain_zone_tick(zone: Dictionary) -> void:
 	var zone_pos: Vector2 = zone.get("pos", Vector2.ZERO)
@@ -4422,6 +4424,52 @@ func _apply_sigil_burst(epicenter: Vector2, source_damage: int) -> void:
 		if enemy_body.global_position.distance_to(epicenter) > 72.0:
 			continue
 		DAMAGEABLE.apply_damage(enemy_node, burst_damage, {"is_ground_attack": true, "attack_type": "sigil_burst"})
+	_detonate_sigil_chain_zones_in_burst(epicenter, 72.0)
+
+func _detonate_sigil_chain_zones_in_burst(epicenter: Vector2, burst_radius: float) -> void:
+	if not reward_sigil_chain or _sigil_chain_zones.is_empty():
+		return
+	var catch_radius := sigil_chain_radius + burst_radius * 0.5
+	var remove_indices: Array[int] = []
+	for i in range(_sigil_chain_zones.size()):
+		var zone := _sigil_chain_zones[i]
+		var zone_pos: Vector2 = zone.get("pos", Vector2.ZERO)
+		if zone_pos.distance_to(epicenter) > catch_radius:
+			continue
+		var det_damage := maxi(1, int(zone.get("damage", 0)) * SIGIL_CHAIN_BURST_DETONATION_MULT)
+		var radius_sq := sigil_chain_radius * sigil_chain_radius
+		for enemy_node in get_tree().get_nodes_in_group("enemies"):
+			if not DAMAGEABLE.can_take_damage(enemy_node):
+				continue
+			var enemy_body := enemy_node as Node2D
+			if enemy_body == null:
+				continue
+			if enemy_body.global_position.distance_squared_to(zone_pos) > radius_sq:
+				continue
+			DAMAGEABLE.apply_damage(enemy_node, det_damage, {"is_ground_attack": true, "attack_type": "sigil_chain_detonate"})
+		if player_feedback != null:
+			player_feedback.play_world_ring(zone_pos, sigil_chain_radius * 1.3, Color(0.92, 0.62, 1.0, 0.88), 0.26)
+		_broadcast_cue_event("world_ring", {
+			"position": zone_pos,
+			"radius": sigil_chain_radius * 1.3,
+			"color": Color(0.92, 0.62, 1.0, 0.88),
+			"duration": 0.26
+		})
+		if not bool(zone.get("dormant", false)):
+			remove_indices.append(i)
+	_flash_sigil_chain_nodes_in_burst(epicenter, burst_radius)
+	while not remove_indices.is_empty():
+		_sigil_chain_zones.remove_at(remove_indices.pop_back())
+
+func _flash_sigil_chain_nodes_in_burst(epicenter: Vector2, burst_radius: float) -> void:
+	if player_feedback == null:
+		return
+	var catch_radius := sigil_chain_radius + burst_radius * 0.5
+	for fx_node in _sigil_chain_fx_nodes:
+		if not is_instance_valid(fx_node):
+			continue
+		if fx_node.global_position.distance_to(epicenter) <= catch_radius:
+			player_feedback.flash_sigil_chain_burst_react(fx_node)
 
 func _draw_passive_state(body_radius: float) -> void:
 	if passive_iron_retort:

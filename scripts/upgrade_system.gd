@@ -867,10 +867,10 @@ func _farline_volley_unlocks_for_stack(stack_count: int) -> String:
 
 func _sigil_chain_unlocks_for_stack(stack_count: int) -> String:
 	if stack_count >= 3:
-		return "+slow +chain bonus"
+		return "+slow +chain bonus | Hexweaver: detonates burst"
 	if stack_count >= 2:
-		return "+slow"
-	return ""
+		return "+slow | Hexweaver: detonates burst"
+	return "Hexweaver: detonates burst"
 
 
 func _get_trial_prismatic_blurb(power_id: String) -> String:

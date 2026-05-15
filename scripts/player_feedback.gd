@@ -399,7 +399,7 @@ func play_world_ring(epicenter_global: Vector2, radius: float, color: Color, lif
 	tween.tween_interval(lifetime)
 	tween.tween_callback(ring.queue_free)
 
-func play_sigil_chain_zone(epicenter_global: Vector2, radius: float, lifetime: float, depth: int, _dormant_duration: float = 0.0) -> Node2D:
+func play_sigil_chain_zone(epicenter_global: Vector2, radius: float, lifetime: float, depth: int) -> Node2D:
 	var safe_lifetime := maxf(0.05, lifetime)
 	var safe_depth := clampi(depth, 1, 6)
 	var depth_t := float(safe_depth - 1) / 5.0
@@ -469,7 +469,7 @@ func play_sigil_chain_zone(epicenter_global: Vector2, radius: float, lifetime: f
 	var seq := create_tween()
 	seq.tween_interval(safe_lifetime)
 	seq.tween_callback(Callable(glow_pulse, "kill"))
-	seq.tween_callback(Callable(sigil, "set_z_index").bind(-1))
+	seq.tween_callback(Callable(sigil, "set_z_index").bind(0))
 	seq.set_parallel(true)
 	seq.tween_property(glow, "modulate:a", 0.0, 0.18)
 	seq.tween_property(inner_ring, "default_color", etched_color, 0.22)
@@ -490,6 +490,13 @@ func fade_sigil_chain_node(sigil: Node2D, duration: float = 0.3) -> void:
 	var fade := create_tween()
 	fade.tween_property(sigil, "modulate:a", 0.0, safe_duration)
 	fade.tween_callback(sigil.queue_free)
+
+func flash_sigil_chain_burst_react(sigil: Node2D) -> void:
+	if not is_instance_valid(sigil):
+		return
+	var flash := create_tween()
+	flash.tween_property(sigil, "modulate", Color(1.0, 0.7, 1.0, 1.0), 0.07).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	flash.tween_property(sigil, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.30).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 
 
 func play_sigil_chain_link(from_global: Vector2, to_global_pos: Vector2, depth: int) -> void:
