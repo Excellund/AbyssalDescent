@@ -58,7 +58,7 @@ const MAIN_MENU_ACTION_CONTENT_PADDING_Y := 24.0
 const MAIN_MENU_ACTION_BUTTON_HEIGHT := 52.0
 const MAIN_MENU_ACTION_BUTTON_SPACING := 8
 const CHARACTER_SELECTOR_PANEL_WIDTH := 1020.0
-const CHARACTER_SELECTOR_ROW_HEIGHT := 118.0
+const CHARACTER_SELECTOR_ROW_HEIGHT := 158.0
 const CHARACTER_SELECTOR_ROW_SEPARATION := 14.0
 const CHARACTER_SELECTOR_STACK_SEPARATION := 18.0
 const CHARACTER_SELECTOR_MARGIN_TOP_BOTTOM := 88.0
@@ -100,6 +100,8 @@ var character_name_labels: Array[Label] = []
 var character_role_labels: Array[Label] = []
 var character_opposition_labels: Array[Label] = []
 var character_ids: Array[String] = []
+var character_accent_bars: Array[ColorRect] = []
+var character_identity_containers: Array[Control] = []
 var menu_background_layer: Control
 var atmosphere_band: Panel
 var flavor_quote_label: RichTextLabel
@@ -2681,13 +2683,20 @@ func _build_character_selector_panel() -> Panel:
 	character_role_labels.clear()
 	character_opposition_labels.clear()
 	character_ids.clear()
+	character_accent_bars.clear()
+	character_identity_containers.clear()
 	for character in CHARACTER_REGISTRY.get_launch_characters():
 		var character_id := String(character.get("id", "")).strip_edges().to_lower()
 		if character_id.is_empty():
 			continue
 		character_ids.append(character_id)
+		var visual: Dictionary = character.get("visual", {}) as Dictionary
+		var body_color: Color = visual.get("body_color", Color(0.78, 0.92, 1.0)) as Color
+		var stat_mods: Dictionary = character.get("stat_modifiers", {}) as Dictionary
+		var passive_id := String(character.get("passive_id", "")).strip_edges().to_lower()
+
 		var button := Button.new()
-		button.custom_minimum_size = Vector2(0.0, 118.0)
+		button.custom_minimum_size = Vector2(0.0, CHARACTER_SELECTOR_ROW_HEIGHT)
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.focus_mode = Control.FOCUS_ALL
 		button.text = ""
@@ -2695,48 +2704,127 @@ func _build_character_selector_panel() -> Panel:
 		_apply_difficulty_button_theme(button, "revealed")
 		button_container.add_child(button)
 
-		var content := VBoxContainer.new()
+		# --- full-button color tint using character's body_color ---
+		var bg_tint := ColorRect.new()
+		bg_tint.color = Color(body_color.r, body_color.g, body_color.b, 0.07)
+		bg_tint.set_anchors_preset(Control.PRESET_FULL_RECT)
+		bg_tint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		button.add_child(bg_tint)
+
+		# --- content: two-column HBoxContainer ---
+		var content := HBoxContainer.new()
 		content.set_anchors_preset(Control.PRESET_FULL_RECT)
-		content.offset_left = 22
-		content.offset_right = -22
+		content.offset_left = 20
+		content.offset_right = -20
 		content.offset_top = 12
 		content.offset_bottom = -12
 		content.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		content.add_theme_constant_override("separation", 2)
+		content.add_theme_constant_override("separation", 18)
 		button.add_child(content)
 
+		# --- LEFT COLUMN: name, archetype, stats ---
+		var left_col := VBoxContainer.new()
+		left_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		left_col.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		left_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		left_col.add_theme_constant_override("separation", 4)
+		content.add_child(left_col)
+
 		var name_label := Label.new()
+		name_label.text = ""
 		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		name_label.add_theme_font_size_override("font_size", 26)
-		name_label.add_theme_color_override("font_color", Color(1.0, 0.95, 0.78, 1.0))
-		name_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.7))
+		name_label.add_theme_color_override("font_color", Color(1.0, 0.96, 0.82, 1.0))
+		name_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.75))
 		name_label.add_theme_constant_override("shadow_offset_x", 1)
 		name_label.add_theme_constant_override("shadow_offset_y", 1)
 		name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		content.add_child(name_label)
+		left_col.add_child(name_label)
 
 		var role_label := Label.new()
+		role_label.text = String(character.get("archetype", ""))
 		role_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		role_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		role_label.add_theme_font_size_override("font_size", 16)
-		role_label.add_theme_color_override("font_color", Color(0.84, 0.91, 1.0, 0.9))
+		role_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		role_label.add_theme_font_size_override("font_size", 14)
+		role_label.add_theme_color_override("font_color", body_color.lerp(Color.WHITE, 0.45))
 		role_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		content.add_child(role_label)
+		left_col.add_child(role_label)
 
+		var hp_val := int(stat_mods.get("max_health", 80))
+		var spd_val := int(stat_mods.get("max_speed", 200))
+		var dmg_val := int(stat_mods.get("damage", 22))
+		var stat_label := Label.new()
+		stat_label.text = "\u2665 %d   \u26a1 %d   \u2694 %d" % [hp_val, spd_val, dmg_val]
+		stat_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		stat_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		stat_label.add_theme_font_size_override("font_size", 13)
+		stat_label.add_theme_color_override("font_color", Color(body_color.r, body_color.g, body_color.b, 0.55))
+		stat_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		left_col.add_child(stat_label)
+
+		# --- RIGHT COLUMN: passive badge + description (bounded width forces proper wrapping) ---
+		var details_box := VBoxContainer.new()
+		details_box.custom_minimum_size = Vector2(340.0, 0.0)
+		details_box.size_flags_horizontal = Control.SIZE_SHRINK_END
+		details_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		details_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		details_box.add_theme_constant_override("separation", 5)
+		content.add_child(details_box)
+
+		var badge_panel := PanelContainer.new()
+		badge_panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		badge_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var badge_style := StyleBoxFlat.new()
+		badge_style.bg_color = Color(body_color.r, body_color.g, body_color.b, 0.24)
+		badge_style.border_color = Color(body_color.r, body_color.g, body_color.b, 0.60)
+		badge_style.border_width_left = 1
+		badge_style.border_width_right = 1
+		badge_style.border_width_top = 1
+		badge_style.border_width_bottom = 1
+		badge_style.corner_radius_top_left = 4
+		badge_style.corner_radius_top_right = 4
+		badge_style.corner_radius_bottom_left = 4
+		badge_style.corner_radius_bottom_right = 4
+		badge_style.content_margin_left = 9.0
+		badge_style.content_margin_right = 9.0
+		badge_style.content_margin_top = 3.0
+		badge_style.content_margin_bottom = 3.0
+		badge_panel.add_theme_stylebox_override("panel", badge_style)
+		details_box.add_child(badge_panel)
+
+		var badge_label := Label.new()
+		badge_label.text = _passive_display_name(passive_id)
+		badge_label.add_theme_font_size_override("font_size", 14)
+		badge_label.add_theme_color_override("font_color", body_color.lerp(Color.WHITE, 0.55))
+		badge_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		badge_panel.add_child(badge_label)
+
+		var passive_desc := _passive_short_desc(passive_id)
+		if not passive_desc.is_empty():
+			var desc_label := Label.new()
+			desc_label.text = passive_desc
+			desc_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			desc_label.custom_minimum_size = Vector2(0.0, 0.0)
+			desc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+			desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			desc_label.add_theme_font_size_override("font_size", 14)
+			desc_label.add_theme_color_override("font_color", Color(0.86, 0.90, 0.95, 0.88))
+			desc_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			details_box.add_child(desc_label)
+
+		# dummy opposition_label to preserve array contract
 		var opposition_label := Label.new()
-		opposition_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		opposition_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		opposition_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		opposition_label.add_theme_font_size_override("font_size", 14)
-		opposition_label.add_theme_color_override("font_color", Color(0.78, 0.86, 0.96, 0.78))
+		opposition_label.visible = false
 		opposition_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		content.add_child(opposition_label)
+		button.add_child(opposition_label)
 
 		character_buttons.append(button)
 		character_name_labels.append(name_label)
 		character_role_labels.append(role_label)
 		character_opposition_labels.append(opposition_label)
+		character_accent_bars.append(bg_tint)
+		character_identity_containers.append(details_box)
 
 	var random_separator := ColorRect.new()
 	random_separator.custom_minimum_size = Vector2(0.0, 2.0)
@@ -2802,23 +2890,26 @@ func _update_character_selector() -> void:
 		var button := character_buttons[i]
 		var name_label := character_name_labels[i]
 		var role_label := character_role_labels[i]
-		var opposition_label := character_opposition_labels[i]
 		var character_id := String(character_ids[i])
 		var character := CHARACTER_REGISTRY.get_character(character_id)
 		var is_unlocked := unlocked_ids.has(character_id)
 		var is_selected := character_id == selected_character_id
+
+		var has_accent := i < character_accent_bars.size()
+		var has_identity := i < character_identity_containers.size()
+
 		if is_unlocked:
 			name_label.text = String(character.get("name", "Unknown"))
-			role_label.text = String(character.get("archetype", ""))
-			opposition_label.text = ""
-			role_label.visible = true
-			opposition_label.visible = false
+			if has_identity:
+				character_identity_containers[i].visible = true
+			if has_accent:
+				character_accent_bars[i].modulate.a = 1.0
 		else:
 			name_label.text = "\u2014  Sealed  \u2014"
-			role_label.text = ""
-			opposition_label.text = ""
-			role_label.visible = false
-			opposition_label.visible = false
+			if has_identity:
+				character_identity_containers[i].visible = false
+			if has_accent:
+				character_accent_bars[i].modulate.a = 0.30
 		button.disabled = not is_unlocked
 		if is_selected:
 			_apply_difficulty_button_theme(button, "current")
@@ -2848,6 +2939,65 @@ func _resolve_random_character() -> String:
 	if unlocked_ids.is_empty():
 		return String(CHARACTER_REGISTRY.DEFAULT_CHARACTER_ID)
 	return unlocked_ids[randi() % unlocked_ids.size()]
+
+func _passive_display_name(passive_id: String) -> String:
+	match passive_id.strip_edges().to_lower():
+		"iron_retort": return "Iron Retort"
+		"sigil_burst": return "Sigil Burst"
+		"veilstep_rhythm": return "Veilstep Rhythm"
+		"farline_focus": return "Farline Focus"
+	var words := passive_id.split("_", false)
+	var out := ""
+	for i in range(words.size()):
+		if i > 0:
+			out += " "
+		out += String(words[i]).capitalize()
+	return out.strip_edges()
+
+func _passive_short_desc(passive_id: String) -> String:
+	match passive_id.strip_edges().to_lower():
+		"iron_retort": return "Stand still briefly to Brace. Next attack while Braced: +80% dmg, wider arc, and a shockwave granting Guard. Dashing breaks Brace."
+		"sigil_burst": return "Dashing arms a burst. Your next attack detonates a 70% damage sigil explosion at the target."
+		"veilstep_rhythm": return "Dashing through enemies builds Veilstep shards. At full shards, your next dash releases a high-damage surge wave."
+		"farline_focus": return "Hits inside your farline band and aim lane deal +70% damage. Hits outside deal 30% less — keep distance and hold your angle."
+	return ""
+
+func _build_stat_bar(icon_text: String, fill_ratio: float, bar_color: Color) -> Control:
+	var group := HBoxContainer.new()
+	group.add_theme_constant_override("separation", 3)
+
+	var icon_lbl := Label.new()
+	icon_lbl.text = icon_text
+	icon_lbl.add_theme_font_size_override("font_size", 11)
+	icon_lbl.add_theme_color_override("font_color", bar_color.lerp(Color.WHITE, 0.3))
+	icon_lbl.custom_minimum_size = Vector2(16.0, 0.0)
+	icon_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	icon_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	group.add_child(icon_lbl)
+
+	var track := HBoxContainer.new()
+	track.custom_minimum_size = Vector2(54.0, 7.0)
+	track.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	track.add_theme_constant_override("separation", 0)
+	track.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	group.add_child(track)
+
+	var filled := ColorRect.new()
+	filled.color = bar_color
+	filled.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	filled.size_flags_stretch_ratio = clampf(fill_ratio, 0.02, 1.0)
+	filled.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	track.add_child(filled)
+
+	var empty := ColorRect.new()
+	empty.color = Color(bar_color.r, bar_color.g, bar_color.b, 0.18)
+	empty.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	empty.size_flags_stretch_ratio = clampf(1.0 - fill_ratio, 0.0, 0.98)
+	empty.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	track.add_child(empty)
+
+	group.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return group
 
 func _apply_random_vessel_button_theme(button: Button) -> void:
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
