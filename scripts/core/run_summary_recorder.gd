@@ -30,6 +30,8 @@ var telemetry_enabled: bool = false
 var telemetry_run_finished: bool = false
 var run_started_at_msec: int = 0
 var _run_finished_at_msec: int = 0
+var _total_paused_msec: int = 0
+var _pause_started_at_msec: int = 0
 var latest_run_summary: Dictionary = {}
 var run_summary_tracker
 
@@ -54,9 +56,24 @@ func get_run_elapsed_seconds() -> int:
 	if run_started_at_msec <= 0:
 		return 0
 	var end_msec := _run_finished_at_msec if _run_finished_at_msec > 0 else Time.get_ticks_msec()
-	return maxi(0, int(round(float(end_msec - run_started_at_msec) / 1000.0)))
+	var paused := _total_paused_msec
+	if _pause_started_at_msec > 0:
+		paused += end_msec - _pause_started_at_msec
+	return maxi(0, int(round(float(end_msec - run_started_at_msec - paused) / 1000.0)))
+
+func pause_run_timer() -> void:
+	if run_started_at_msec <= 0 or _pause_started_at_msec > 0:
+		return
+	_pause_started_at_msec = Time.get_ticks_msec()
+
+func resume_run_timer() -> void:
+	if _pause_started_at_msec <= 0:
+		return
+	_total_paused_msec += Time.get_ticks_msec() - _pause_started_at_msec
+	_pause_started_at_msec = 0
 
 func freeze_run_timer() -> void:
+	resume_run_timer()
 	if _run_finished_at_msec <= 0:
 		_run_finished_at_msec = Time.get_ticks_msec()
 
@@ -88,6 +105,8 @@ func summary_category_for_mode(mode: int) -> String:
 func mark_run_start() -> void:
 	run_started_at_msec = Time.get_ticks_msec()
 	_run_finished_at_msec = 0
+	_total_paused_msec = 0
+	_pause_started_at_msec = 0
 	latest_run_summary.clear()
 	reset_summary_tracker()
 

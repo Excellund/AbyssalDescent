@@ -2282,11 +2282,13 @@ func _set_sfx_volume_runtime(volume_db: float) -> void:
 func _on_pause_menu_opened() -> void:
 	_set_combat_paused(true)
 	_set_singleplayer_menu_wave_timer_paused(true)
+	run_summary_recorder.pause_run_timer()
 
 func _on_pause_menu_closed() -> void:
 	var still_paused := _is_reward_selection_active()
 	_set_combat_paused(still_paused)
 	_set_singleplayer_menu_wave_timer_paused(still_paused)
+	run_summary_recorder.resume_run_timer()
 
 func _on_build_detail_opened() -> void:
 	_set_combat_paused(true)
