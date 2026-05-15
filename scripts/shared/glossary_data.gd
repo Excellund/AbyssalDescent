@@ -89,13 +89,13 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"name": "Apex Mirrorline",
 			"group": "Trial",
 			"color": Color(0.78, 0.92, 1.0, 1.0),
-			"desc": "Elite Mirrorline. Splits into a second seam at half health and briefly resists damage. Burst it before the split.",
+			"desc": "Splits at half health and briefly resists damage. Burst it before the split.",
 		},
 		{
 			"name": "Apex Toll",
 			"group": "Trial",
 			"color": Color(1.0, 0.74, 0.32, 1.0),
-			"desc": "Elite altar. Outer aura slows you; periodic pulses deal damage. Interrupt self-heals by entering the inner ring when it channels.",
+			"desc": "Outer aura slows you; pulses deal damage. Enter the inner ring to interrupt its self-heal.",
 		},
 		{
 			"name": "Last Stand",
@@ -119,19 +119,19 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"name": "Circuit Sweep",
 			"group": "Objective",
 			"color": Color(0.62, 1.0, 0.62, 1.0),
-			"desc": "Three signal nodes appear one at a time. Stand inside each node's zone to capture it before the timer runs out.",
+			"desc": "Capture three nodes in sequence. Stand in each zone before time runs out.",
 		},
 		{
 			"name": "Pulse Window",
 			"group": "Objective",
 			"color": Color(1.0, 0.9, 0.4, 1.0),
-			"desc": "Every few seconds a pulse fires and randomly applies a mode to all enemies: SURGE (enemies run faster), EXPOSED (enemies take more damage), or SLOWED (enemies slowed). Adapt to each mode and kill the quota.",
+			"desc": "Periodic pulses apply SURGE, EXPOSED, or SLOWED to all enemies. Kill the quota through each shift.",
 		},
 		{
 			"name": "Intercept Run",
 			"group": "Objective",
 			"color": Color(0.62, 0.88, 1.0, 1.0),
-			"desc": "A drone travels across the room. Keep its path clear — enemies that reach it stall its progress. Escort it to the far side to win.",
+			"desc": "Escort a drone to the far side. Kill enemies before they reach it and stall its progress.",
 		},
 		{
 			"name": "Rest Site",
@@ -237,19 +237,19 @@ static func _mutator_rows() -> Array[Dictionary]:
 			"name": "Relay Boost",
 			"color": Color(0.62, 1.0, 0.62, 1.0),
 			"icon": "res://assets/ui/mutators/relay_boost.svg",
-			"desc": "Killing an enemy triggers a brief speed surge, letting you chase down the next target or dash to a node.",
+			"desc": "Kills trigger a brief speed surge. Reposition or close on a node quickly.",
 		},
 		{
 			"name": "Node Shield",
 			"color": Color(0.46, 0.86, 1.0, 1.0),
 			"icon": "res://assets/ui/mutators/node_shield.svg",
-			"desc": "Each nearby enemy (within 180px) grants +6% damage resistance, up to a maximum of 30%. Standing your ground while intercepting clusters earns more protection.",
+			"desc": "Nearby enemies grant stacking damage resistance, up to 30%. Stay close to clusters to earn more.",
 		},
 		{
 			"name": "Overcharge",
 			"color": Color(1.0, 0.9, 0.4, 1.0),
-			"icon": "",
-			"desc": "Kill chains charge your weapon (up to 5 stacks, +10% damage each). Reach max charge to enter CHARGED state. Your next kill discharges a nova burst that damages nearby enemies and resets to 2 stacks. Stacks decay by 2 if the chain breaks.",
+			"icon": "res://assets/ui/mutators/overcharge.svg",
+			"desc": "Kill chains build weapon charge (5 stacks). At max, your next kill fires a nova burst and resets to 2 stacks.",
 		},
 	]
 
@@ -332,13 +332,15 @@ static func _encounter_group_header_bbcode(group_name: String) -> String:
 	var title := "%s Encounter" % group_name
 	return "[font_size=18][color=#9EC9E8][b]%s[/b][/color] [color=#7F96AE]-[/color] [color=%s][b][%s][/b][/color][/font_size]" % [title, _color_hex(tier_color), reward_tier]
 
-static func glossary_bbcode() -> String:
+static func _reward_tiers_section_bbcode() -> String:
 	var lines: Array[String] = []
 	lines.append(_section_title_bbcode("Reward Tiers"))
 	for row in _reward_rows():
 		lines.append("%s  [color=#BFD2E8]-[/color]  %s" % [_reward_tier_title_bbcode(row), row.get("desc", "")])
-	lines.append("")
-	lines.append("")
+	return "\n".join(lines)
+
+static func _encounters_section_bbcode() -> String:
+	var lines: Array[String] = []
 	lines.append(_section_title_bbcode("Encounters"))
 	var encounter_groups: Array[String] = ["Core", "Advanced", "Objective", "Trial", "Special", "Boss"]
 	for group_name in encounter_groups:
@@ -348,18 +350,17 @@ static func glossary_bbcode() -> String:
 				continue
 			lines.append("%s  [color=#BFD2E8]-[/color]  %s" % [_encounter_title_bbcode(row), row.get("desc", "")])
 		lines.append("")
-	lines.append("")
+	return "\n".join(lines)
+
+static func _mutators_section_bbcode() -> String:
+	var lines: Array[String] = []
 	lines.append(_section_title_bbcode("Mutators"))
 	for row in _mutator_rows():
 		lines.append("%s: %s" % [_mutator_title_bbcode(row), row.get("desc", "")])
-	lines.append("")
-	lines.append("")
-	lines.append(_section_title_bbcode("New Enemies"))
-	lines.append("[color=#86C8E0][b]Drifter[/b][/color]  [color=#BFD2E8]-[/color]  Slow pursuer that periodically emits expanding rings of projectile nodes. Each ring has one gap — find it or take the hit.")
-	lines.append("[color=#B08AE8][b]Weaver[/b][/color]  [color=#BFD2E8]-[/color]  Aggressive rusher that closes in, stops, then fires a radial burst outward from its own feet. Escape past the ring radius before the windup completes.")
-	lines.append("[color=#A4C85A][b]Sentinel[/b][/color]  [color=#BFD2E8]-[/color]  Near-stationary enemy that sweeps a rotating cone of danger. Staying inside the arc takes repeated tick damage.")
-	lines.append("")
-	lines.append("")
+	return "\n".join(lines)
+
+static func _endgame_chase_section_bbcode() -> String:
+	var lines: Array[String] = []
 	lines.append(_section_title_bbcode("Endgame Chase"))
 	lines.append("[font_size=18][color=#F0C060][b]Ascension[/b][/color][/font_size]")
 	lines.append("[color=#BFD2E8][indent]Stack modifiers above Forsworn to raise your rank. Each modifier adds heat; your highest cleared rank is tracked per character. Some require Oaths to unlock.[/indent][/color]")
@@ -370,3 +371,17 @@ static func glossary_bbcode() -> String:
 	lines.append("[font_size=18][color=#80C0F0][b]Catalysts[/b][/color][/font_size]")
 	lines.append("[color=#BFD2E8][indent]Per-character bonuses equipped before a run. Examples: extra arcana slot, reroll, +20 max HP, door reveal. Free to use; shown on the leaderboard with your rank.[/indent][/color]")
 	return "\n".join(lines)
+
+static func glossary_sections() -> Array[Dictionary]:
+	return [
+		{"label": "Reward Tiers", "bbcode": _reward_tiers_section_bbcode()},
+		{"label": "Encounters", "bbcode": _encounters_section_bbcode()},
+		{"label": "Mutators", "bbcode": _mutators_section_bbcode()},
+		{"label": "Endgame Chase", "bbcode": _endgame_chase_section_bbcode()},
+	]
+
+static func glossary_bbcode() -> String:
+	var parts: Array[String] = []
+	for s in glossary_sections():
+		parts.append(s["bbcode"])
+	return "\n\n".join(parts)

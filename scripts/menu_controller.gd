@@ -826,7 +826,7 @@ func _apply_menu_layout() -> void:
 	if ascension_panel != null:
 		_set_centered_panel_layout(ascension_panel, Vector2(1520.0, 920.0), fit_scale, viewport_size)
 	if glossary_panel != null:
-		_set_centered_panel_layout(glossary_panel, Vector2(980.0, 680.0), fit_scale, viewport_size)
+		_set_centered_panel_layout(glossary_panel, Vector2(1360.0, 900.0), fit_scale, viewport_size)
 	if multiplayer_panel != null:
 		_set_centered_panel_layout(multiplayer_panel, Vector2(980.0, 700.0), fit_scale, viewport_size)
 	if difficulty_selector_panel != null:
@@ -946,6 +946,25 @@ func _make_panel_style(bg_color: Color, border_color: Color, corner_radius: int 
 
 func _make_button_style(bg_color: Color, border_color: Color, corner_radius: int = 14, border_width: int = 2) -> StyleBoxFlat:
 	return MENU_STYLE_FACTORY.make_button_style(bg_color, border_color, corner_radius, border_width)
+
+func _make_glossary_nav_button(label_text: String, btn_group: ButtonGroup) -> Button:
+	var btn := Button.new()
+	btn.text = label_text
+	btn.toggle_mode = true
+	btn.button_group = btn_group
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	btn.add_theme_font_size_override("font_size", 17)
+	btn.add_theme_color_override("font_color", Color(0.82, 0.92, 1.0, 0.90))
+	btn.add_theme_color_override("font_hover_color", Color(0.96, 1.0, 1.0, 1.0))
+	btn.add_theme_color_override("font_pressed_color", Color(1.0, 0.95, 0.78, 1.0))
+	btn.add_theme_color_override("font_focus_color", Color(0.96, 1.0, 1.0, 1.0))
+	btn.add_theme_stylebox_override("normal", _make_button_style(Color(0.06, 0.09, 0.14, 0.0), Color(0.0, 0.0, 0.0, 0.0), 10, 0))
+	btn.add_theme_stylebox_override("hover", _make_button_style(Color(0.10, 0.16, 0.24, 0.80), Color(0.44, 0.66, 0.90, 0.55), 10, 1))
+	btn.add_theme_stylebox_override("pressed", _make_button_style(Color(0.12, 0.22, 0.36, 0.95), Color(0.58, 0.80, 0.98, 0.85), 10, 2))
+	btn.add_theme_stylebox_override("focus", _make_button_style(Color(0.10, 0.16, 0.24, 0.80), Color(0.72, 0.88, 1.0, 0.90), 10, 1))
+	btn.add_theme_stylebox_override("disabled", _make_button_style(Color(0.04, 0.06, 0.10, 0.60), Color(0.18, 0.24, 0.32, 0.40), 10, 0))
+	return btn
 
 func _apply_option_selector_theme(selector: OptionButton) -> void:
 	if selector == null:
@@ -2410,9 +2429,9 @@ func _show_leaderboard_panel() -> void:
 
 func _build_glossary_panel() -> Panel:
 	var panel := Panel.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.position = Vector2(-490.0, -340.0)
-	panel.custom_minimum_size = Vector2(980.0, 680.0)
+	# Absolute position: (2560-1360)/2, (1440-900)/2 — centered in 2560x1440 viewport
+	panel.position = Vector2(600.0, 270.0)
+	panel.size = Vector2(1360.0, 900.0)
 	panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.04, 0.06, 0.1, 0.97), Color(0.44, 0.7, 0.96, 0.74), 20, 2))
 
 	var layout := MarginContainer.new()
@@ -2446,11 +2465,36 @@ func _build_glossary_panel() -> Panel:
 	accent.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	stack.add_child(accent)
 
+	var content_row := HBoxContainer.new()
+	content_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	content_row.add_theme_constant_override("separation", 14)
+	stack.add_child(content_row)
+
+	var nav_panel := Panel.new()
+	nav_panel.custom_minimum_size = Vector2(210.0, 0.0)
+	nav_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	nav_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.03, 0.05, 0.08, 0.72), Color(0.26, 0.4, 0.58, 0.56), 12, 1))
+	content_row.add_child(nav_panel)
+
+	var nav_margin := MarginContainer.new()
+	nav_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	nav_margin.add_theme_constant_override("margin_left", 10)
+	nav_margin.add_theme_constant_override("margin_right", 10)
+	nav_margin.add_theme_constant_override("margin_top", 14)
+	nav_margin.add_theme_constant_override("margin_bottom", 14)
+	nav_panel.add_child(nav_margin)
+
+	var nav_vbox := VBoxContainer.new()
+	nav_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	nav_vbox.add_theme_constant_override("separation", 6)
+	nav_margin.add_child(nav_vbox)
+
 	var body_panel := Panel.new()
 	body_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.03, 0.05, 0.08, 0.72), Color(0.26, 0.4, 0.58, 0.56), 12, 1))
-	stack.add_child(body_panel)
+	content_row.add_child(body_panel)
 
 	var body := RichTextLabel.new()
 	body.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -2464,8 +2508,32 @@ func _build_glossary_panel() -> Panel:
 	body.selection_enabled = false
 	body.add_theme_font_size_override("normal_font_size", 18)
 	body.add_theme_color_override("default_color", Color(0.86, 0.94, 1.0, 0.96))
-	body.text = GLOSSARY_DATA.glossary_bbcode()
 	body_panel.add_child(body)
+
+	var btn_group := ButtonGroup.new()
+	var sections := GLOSSARY_DATA.glossary_sections()
+	var first_btn: Button = null
+	var first_bbcode: String = ""
+	for section in sections:
+		var btn := _make_glossary_nav_button(section["label"], btn_group)
+		var bbcode: String = section["bbcode"]
+		if first_bbcode.is_empty():
+			first_bbcode = bbcode
+		btn.pressed.connect(func() -> void:
+			body.text = bbcode
+			body.scroll_to_line(0)
+		)
+		nav_vbox.add_child(btn)
+		if first_btn == null:
+			first_btn = btn
+
+	var nav_spacer := Control.new()
+	nav_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	nav_vbox.add_child(nav_spacer)
+
+	if first_btn != null:
+		first_btn.button_pressed = true
+		body.text = first_bbcode
 
 	var back_button := _make_panel_back_button()
 	back_button.pressed.connect(func() -> void:
