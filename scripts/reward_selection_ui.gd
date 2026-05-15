@@ -2,6 +2,8 @@ extends Node
 
 const ENUMS := preload("res://scripts/shared/enums.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
+const AUDIO_LEVELS := preload("res://scripts/shared/audio_levels.gd")
+const UI_CLICK_SOUND := preload("res://sounds/new_stuff/ui_button_click.ogg")
 const MUTATOR_ICON_BLOOD_RUSH: Texture2D = preload("res://assets/ui/mutators/blood_rush.svg")
 const MUTATOR_ICON_FLASHPOINT: Texture2D = preload("res://assets/ui/mutators/flashpoint.svg")
 const MUTATOR_ICON_SIEGEBREAK: Texture2D = preload("res://assets/ui/mutators/siegebreak.svg")
@@ -20,6 +22,8 @@ signal reward_skipped(mode: int, is_initial: bool)
 
 var boon_choice_count: int = 3
 var boon_reveal_duration: float = 0.22
+var sfx_volume_db: float = 0.0
+var _sfx_player: AudioStreamPlayer
 
 var boon_selection_active: bool = false
 var boon_title_text: String = ""
@@ -123,7 +127,15 @@ const CLOSE_FADE_DURATION := 0.28
 func initialize(choice_count: int, reveal_duration: float) -> void:
 	boon_choice_count = choice_count
 	boon_reveal_duration = reveal_duration
+	_sfx_player = AudioStreamPlayer.new()
+	_sfx_player.volume_db = AUDIO_LEVELS.clamp_db(sfx_volume_db)
+	add_child(_sfx_player)
 	_create_ui()
+
+func set_sfx_volume_db(db: float) -> void:
+	sfx_volume_db = AUDIO_LEVELS.clamp_db(db)
+	if is_instance_valid(_sfx_player):
+		_sfx_player.volume_db = sfx_volume_db
 
 func configure_catalyst_payload(payload: Dictionary) -> void:
 	_trial_power_stack_limit_bonus = maxi(0, int(round(float(payload.get("arcana_capacity_add", 0.0)))))
@@ -283,6 +295,9 @@ func process_input(delta: float) -> void:
 			current_player = null
 			current_player_mutator = {}
 			pending_initial_boon = false
+			if is_instance_valid(_sfx_player):
+				_sfx_player.stream = UI_CLICK_SOUND
+				_sfx_player.play()
 			emit_signal("reward_selected", emitted_choice, mode, initial)
 			return
 	
@@ -426,6 +441,9 @@ func _set_reroll_button_visible(value: bool) -> void:
 func _on_skip_button_pressed() -> void:
 	if not _can_skip_current_offer():
 		return
+	if is_instance_valid(_sfx_player):
+		_sfx_player.stream = UI_CLICK_SOUND
+		_sfx_player.play()
 	var mode := reward_selection_mode
 	var initial := pending_initial_boon
 	boon_selection_active = false
@@ -444,6 +462,9 @@ func _on_skip_button_pressed() -> void:
 func _on_reroll_button_pressed() -> void:
 	if not _can_skip_current_offer():
 		return
+	if is_instance_valid(_sfx_player):
+		_sfx_player.stream = UI_CLICK_SOUND
+		_sfx_player.play()
 	_reroll_current_offer()
 
 

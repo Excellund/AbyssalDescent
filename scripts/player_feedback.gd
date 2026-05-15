@@ -2,6 +2,12 @@ extends Node2D
 
 const DEFAULT_IMPACT_SOUND := preload("res://sounds/impactPunch_medium_002.ogg")
 const DEFAULT_ATTACK_SWING_SOUND := preload("res://sounds/impactSoft_medium_001.ogg")
+const PLAYER_HURT_SOUND_0 := preload("res://sounds/new_stuff/player_hurt_000.ogg")
+const PLAYER_HURT_SOUND_1 := preload("res://sounds/new_stuff/player_hurt_001.ogg")
+const PLAYER_HURT_SOUND_2 := preload("res://sounds/new_stuff/player_hurt_002.ogg")
+const PLAYER_DEATH_SOUND := preload("res://sounds/new_stuff/player_death.ogg")
+const PLAYER_REST_SOUND := preload("res://sounds/new_stuff/rest.ogg")
+const PLAYER_LOW_HP_SOUND := preload("res://sounds/new_stuff/low_hp_pulse.ogg")
 const ENEMY_BASE := preload("res://scripts/enemy_base.gd")
 const AUDIO_LEVELS := preload("res://scripts/shared/audio_levels.gd")
 
@@ -61,6 +67,8 @@ var oath_threshold_line: ColorRect
 var oath_ready_glow: ColorRect
 var impact_sound_player: AudioStreamPlayer2D
 var attack_swing_sound_player: AudioStreamPlayer2D
+var _aux_sfx_player: AudioStreamPlayer2D
+var _low_hp_sfx_player: AudioStreamPlayer2D
 var damage_flash_layer: CanvasLayer
 var damage_flash_rect: ColorRect
 var damage_flash_tween: Tween
@@ -88,6 +96,7 @@ func setup(max_health: int, current_health: int) -> void:
 	_create_oath_bank_bar()
 	_create_impact_sound_player()
 	_create_attack_swing_sound_player()
+	_create_aux_sfx_player()
 	_create_damage_flash()
 	_apply_sfx_volume()
 
@@ -332,6 +341,32 @@ func play_attack_swing_sound() -> void:
 	if attack_swing_sound_player.stream == null:
 		return
 	attack_swing_sound_player.play()
+
+func play_hurt_sound() -> void:
+	if _aux_sfx_player == null:
+		return
+	var idx := randi() % 3
+	if idx == 0:
+		_aux_sfx_player.stream = PLAYER_HURT_SOUND_0
+	elif idx == 1:
+		_aux_sfx_player.stream = PLAYER_HURT_SOUND_1
+	else:
+		_aux_sfx_player.stream = PLAYER_HURT_SOUND_2
+	_aux_sfx_player.play()
+
+func play_death_sound() -> void:
+	if _aux_sfx_player == null:
+		return
+	_aux_sfx_player.stream = PLAYER_DEATH_SOUND
+	_aux_sfx_player.play()
+
+func play_low_hp_pulse() -> void:
+	if _low_hp_sfx_player == null:
+		return
+	if _low_hp_sfx_player.playing:
+		return
+	_low_hp_sfx_player.stream = PLAYER_LOW_HP_SOUND
+	_low_hp_sfx_player.play()
 
 func play_attack_swing_visual(direction: Vector2, swing_range: float, arc_degrees: float, tint: Color = ENEMY_BASE.COLOR_SWING_DEFAULT, lifetime: float = 0.11, inner_range: float = 0.0) -> void:
 	var swing_shape := Polygon2D.new()
@@ -692,6 +727,9 @@ func _spawn_heal_pulse(epicenter_global: Vector2) -> void:
 	tween.tween_callback(pulse.queue_free)
 
 func play_rest_site_heal(epicenter_global: Vector2) -> void:
+	if _aux_sfx_player != null:
+		_aux_sfx_player.stream = PLAYER_REST_SOUND
+		_aux_sfx_player.play()
 	_spawn_heal_pulse(epicenter_global)
 	play_world_ring(epicenter_global, 20.0, Color(ENEMY_BASE.COLOR_PLAYER_HEALTH_FILL.r, ENEMY_BASE.COLOR_PLAYER_HEALTH_FILL.g, ENEMY_BASE.COLOR_PLAYER_HEALTH_FILL.b, 0.92), 0.11)
 	play_world_ring(epicenter_global, 34.0, Color(0.84, 1.0, 0.86, 0.54), 0.18)
@@ -1649,11 +1687,23 @@ func _create_attack_swing_sound_player() -> void:
 	attack_swing_sound_player.volume_db = AUDIO_LEVELS.clamp_db(attack_swing_volume_db + sfx_volume_db)
 	add_child(attack_swing_sound_player)
 
+func _create_aux_sfx_player() -> void:
+	_aux_sfx_player = AudioStreamPlayer2D.new()
+	_aux_sfx_player.volume_db = AUDIO_LEVELS.clamp_db(sfx_volume_db)
+	add_child(_aux_sfx_player)
+	_low_hp_sfx_player = AudioStreamPlayer2D.new()
+	_low_hp_sfx_player.volume_db = AUDIO_LEVELS.clamp_db(sfx_volume_db)
+	add_child(_low_hp_sfx_player)
+
 func _apply_sfx_volume() -> void:
 	if impact_sound_player != null:
 		impact_sound_player.volume_db = AUDIO_LEVELS.clamp_db(impact_volume_db + sfx_volume_db)
 	if attack_swing_sound_player != null:
 		attack_swing_sound_player.volume_db = AUDIO_LEVELS.clamp_db(attack_swing_volume_db + sfx_volume_db)
+	if _aux_sfx_player != null:
+		_aux_sfx_player.volume_db = AUDIO_LEVELS.clamp_db(sfx_volume_db)
+	if _low_hp_sfx_player != null:
+		_low_hp_sfx_player.volume_db = AUDIO_LEVELS.clamp_db(sfx_volume_db)
 
 func _create_damage_flash() -> void:
 	damage_flash_layer = CanvasLayer.new()

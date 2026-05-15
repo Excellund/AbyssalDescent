@@ -7,6 +7,7 @@ const MENU_MUSIC := preload("res://music/msx1.mp3")
 const ENUMS := preload("res://scripts/shared/enums.gd")
 const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
 const AUDIO_LEVELS := preload("res://scripts/shared/audio_levels.gd")
+const UI_CLICK_SOUND := preload("res://sounds/new_stuff/ui_button_click.ogg")
 const GLOSSARY_DATA := preload("res://scripts/shared/glossary_data.gd")
 const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
@@ -91,6 +92,7 @@ var sfx_value_label: Label
 var resolution_hint_label: Label
 var telemetry_consent_layer: Control
 var menu_music_player: AudioStreamPlayer
+var _sfx_player: AudioStreamPlayer
 var primary_run_button: Button
 var difficulty_tier_buttons: Array[Button] = []
 var difficulty_tier_name_labels: Array[Label] = []
@@ -936,6 +938,7 @@ func _make_panel_back_button() -> Button:
 	button.add_theme_stylebox_override("pressed", _make_button_style(Color(0.08, 0.12, 0.18, 0.98), Color(0.74, 0.90, 1.0, 0.92), 16, 2))
 	button.add_theme_stylebox_override("focus", _make_button_style(Color(0.13, 0.20, 0.29, 0.98), Color(0.86, 0.96, 1.0, 1.0), 16, 2))
 	button.add_theme_stylebox_override("disabled", _make_button_style(Color(0.08, 0.10, 0.14, 0.82), Color(0.22, 0.26, 0.32, 0.54), 16, 2))
+	button.pressed.connect(_play_sfx_click)
 	return button
 
 func _make_panel_style(bg_color: Color, border_color: Color, corner_radius: int = 14, border_width: int = 2) -> StyleBoxFlat:
@@ -2052,6 +2055,7 @@ func _start_update_check() -> void:
 	update_service.request_check(false)
 
 func _on_update_check_pressed() -> void:
+	_play_sfx_click()
 	if update_service == null:
 		return
 	update_check_was_manual = true
@@ -2139,6 +2143,7 @@ func _close_update_prompt() -> void:
 	_show_pending_profile_prompt()
 
 func _on_update_action_pressed() -> void:
+	_play_sfx_click()
 	if update_service == null:
 		return
 	if not bool(update_service.action_enabled):
@@ -2214,7 +2219,13 @@ func _is_debug_update_prompt_forced() -> bool:
 		return false
 	return bool(debug_values.get("force_update_prompt_on_menu", false))
 
+func _play_sfx_click() -> void:
+	if is_instance_valid(_sfx_player):
+		_sfx_player.stream = UI_CLICK_SOUND
+		_sfx_player.play()
+
 func _on_primary_run_pressed() -> void:
+	_play_sfx_click()
 	if _has_saved_run():
 		_on_continue_pressed()
 		return
@@ -2231,26 +2242,33 @@ func _on_continue_pressed() -> void:
 	get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)
 
 func _on_endless_pressed() -> void:
+	_play_sfx_click()
 	_clear_saved_run()
 	_set_run_mode(ENUMS.RunMode.ENDLESS)
 	get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)
 
 func _on_options_pressed() -> void:
+	_play_sfx_click()
 	_show_options_panel()
 
 func _on_glossary_pressed() -> void:
+	_play_sfx_click()
 	_show_glossary_panel()
 
 func _on_history_pressed() -> void:
+	_play_sfx_click()
 	_show_history_panel()
 
 func _on_leaderboard_pressed() -> void:
+	_play_sfx_click()
 	_show_leaderboard_panel()
 
 func _on_multiplayer_pressed() -> void:
+	_play_sfx_click()
 	_show_multiplayer_panel()
 
 func _on_host_lobby_pressed() -> void:
+	_play_sfx_click()
 	if multiplayer_status_label != null:
 		multiplayer_status_label.text = "Creating room registration..."
 	_create_multiplayer_room()
@@ -2259,6 +2277,7 @@ func _on_multiplayer_room_code_submitted(_text: String) -> void:
 	_on_join_lobby_pressed()
 
 func _on_join_lobby_pressed() -> void:
+	_play_sfx_click()
 	var room_code := ""
 	if multiplayer_room_code_input != null:
 		room_code = multiplayer_room_code_input.text.strip_edges().to_upper()
@@ -2293,6 +2312,7 @@ func _format_multiplayer_room_error(result: Dictionary, is_host_flow: bool) -> S
 			return message
 
 func _on_exit_pressed() -> void:
+	_play_sfx_click()
 	get_tree().quit()
 
 func _build_history_panel() -> RUN_HISTORY_PANEL_SCRIPT:
@@ -2349,12 +2369,14 @@ func _build_ascension_panel() -> ASCENSION_PANEL_SCRIPT:
 	return panel
 
 func _on_ascension_pressed() -> void:
+	_play_sfx_click()
 	if ascension_panel != null:
 		ascension_panel.set_run_setup_mode(false)
 		ascension_panel.set_oaths_only_mode(true)
 	_show_ascension_panel()
 
 func _on_ascension_begin_descent_pressed() -> void:
+	_play_sfx_click()
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context == null:
 		return
@@ -2595,6 +2617,7 @@ func _update_difficulty_selector() -> void:
 			_apply_difficulty_button_theme(button, "sealed")
 
 func _on_difficulty_tier_selected(tier: int) -> void:
+	_play_sfx_click()
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context == null:
 		return
@@ -2919,6 +2942,7 @@ func _update_character_selector() -> void:
 			_apply_difficulty_button_theme(button, "sealed")
 
 func _on_character_selected(character_id: String) -> void:
+	_play_sfx_click()
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context == null:
 		return
@@ -3323,6 +3347,7 @@ func _on_profile_prompt_cancelled() -> void:
 	_show_pending_update_prompt()
 
 func _on_edit_profile_name_pressed() -> void:
+	_play_sfx_click()
 	_request_profile_name_prompt("edit", true)
 
 func _apply_options(master_percent: float, music_percent: float, sfx_percent: float) -> void:
@@ -3333,6 +3358,8 @@ func _apply_options(master_percent: float, music_percent: float, sfx_percent: fl
 	if run_context != null:
 		run_context.set_audio_settings(master_db, music_db, sfx_db, true)
 	_apply_menu_music_volume(music_db)
+	if is_instance_valid(_sfx_player):
+		_sfx_player.volume_db = AUDIO_LEVELS.clamp_db(sfx_db)
 	_update_option_labels()
 
 func _update_option_labels() -> void:
@@ -3413,6 +3440,11 @@ func _start_menu_music() -> void:
 	add_child(menu_music_player)
 	menu_music_player.play(maxf(resume_position, 0.0))
 	_apply_menu_music_volume(_percent_to_db(music_slider.value))
+	_sfx_player = AudioStreamPlayer.new()
+	_sfx_player.bus = "Master"
+	add_child(_sfx_player)
+	if run_context != null:
+		_sfx_player.volume_db = AUDIO_LEVELS.clamp_db(float(run_context.get("sfx_volume_db")))
 
 func _on_menu_music_finished() -> void:
 	if menu_music_player == null:

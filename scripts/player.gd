@@ -206,6 +206,7 @@ var attack_lock_direction: Vector2 = Vector2.RIGHT
 var battle_trance_move_speed_bonus: float = 0.0
 var battle_trance_active_left: float = 0.0
 var combat_damage_enabled: bool = true
+var _low_hp_pulse_triggered: bool = false
 var attack_combo_counter: int = 0
 var dash_phasing_active: bool = false
 var dash_phase_release_left: float = 0.0
@@ -1118,7 +1119,7 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 		_trigger_aegis_field()
 		if _is_local_control_owner():
 			player_feedback.play_damage_flash()
-			player_feedback.play_impact_sound()
+			player_feedback.play_hurt_sound()
 		else:
 			_broadcast_owner_damage_feedback()
 		if source == "enemy_contact":
@@ -1470,7 +1471,7 @@ func apply_owner_cue_event(event_name: String, payload: Dictionary) -> void:
 			if bool(payload.get("flash", true)):
 				player_feedback.play_damage_flash()
 			if bool(payload.get("impact", true)):
-				player_feedback.play_impact_sound()
+				player_feedback.play_hurt_sound()
 		_:
 			pass
 
@@ -3272,6 +3273,13 @@ func _on_health_state_changed(new_health: int, new_max_health: int) -> void:
 	health_changed.emit(new_health, new_max_health)
 	if player_feedback != null:
 		player_feedback.update_health_bar(new_health, new_max_health)
+	if _is_local_control_owner() and player_feedback != null and new_max_health > 0:
+		var hp_ratio := float(new_health) / float(new_max_health)
+		if hp_ratio < 0.25 and not _low_hp_pulse_triggered:
+			_low_hp_pulse_triggered = true
+			player_feedback.play_low_hp_pulse()
+		elif hp_ratio >= 0.25:
+			_low_hp_pulse_triggered = false
 	## Broadcast health change to peers in multiplayer
 	if player_id > 0:
 		var multiplayer_session_manager = get_node_or_null("/root/MultiplayerSessionManager")
@@ -3283,6 +3291,8 @@ func _on_health_state_changed(new_health: int, new_max_health: int) -> void:
 func _on_health_state_died() -> void:
 	set_alive(false)
 	died.emit()
+	if _is_local_control_owner() and player_feedback != null:
+		player_feedback.play_death_sound()
 	## Broadcast death to peers in multiplayer
 	if player_id > 0:
 		var multiplayer_session_manager = get_node_or_null("/root/MultiplayerSessionManager")

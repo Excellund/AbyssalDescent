@@ -36,6 +36,11 @@ const ENDLESS_PROFILE_SCALER := preload("res://scripts/shared/endless_profile_sc
 const BEARING_KEY_NORMALIZER := preload("res://scripts/shared/bearing_key_normalizer.gd")
 const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
 const AUDIO_LEVELS := preload("res://scripts/shared/audio_levels.gd")
+const ENEMY_DEATH_SOUND_0 := preload("res://sounds/new_stuff/enemy_death_000.ogg")
+const ENEMY_DEATH_SOUND_1 := preload("res://sounds/new_stuff/enemy_death_001.ogg")
+const ENEMY_DEATH_SOUND_2 := preload("res://sounds/new_stuff/enemy_death_002.ogg")
+const BOSS_DEFEATED_SOUND := preload("res://sounds/new_stuff/boss_defeated.ogg")
+const DOOR_OPEN_SOUND := preload("res://sounds/new_stuff/door_open.ogg")
 const RUN_TELEMETRY_STORE := preload("res://scripts/run_telemetry_store.gd")
 const TELEMETRY_SPIKE_SENDER_SCRIPT := preload("res://scripts/telemetry_spike_sender.gd")
 const RUN_SNAPSHOT_SERVICE := preload("res://scripts/run_snapshot_service.gd")
@@ -204,6 +209,7 @@ var _local_player_ready: bool = false
 var hud: Node
 var renderer: Node2D
 var music_system: Node
+var _world_sfx_player: AudioStreamPlayer
 var enemy_spawner: ENEMY_SPAWNER_SCRIPT
 var encounter_profile_builder: ENCOUNTER_PROFILE_BUILDER_SCRIPT
 var encounter_flow_system
@@ -675,6 +681,9 @@ func _setup_run_systems_phase() -> void:
 	music_system = MUSIC_SYSTEM_SCRIPT.new()
 	add_child(music_system)
 	music_system.initialize(normal_room_music, boss_room_music, music_volume_db, music_crossfade_duration)
+	_world_sfx_player = AudioStreamPlayer.new()
+	_world_sfx_player.volume_db = AUDIO_LEVELS.clamp_db(sfx_volume_db)
+	add_child(_world_sfx_player)
 	encounter_flow_system = ENCOUNTER_FLOW_SYSTEM_SCRIPT.new()
 	add_child(encounter_flow_system)
 	encounter_route_controller = ENCOUNTER_ROUTE_CONTROLLER_SCRIPT.new()
@@ -1866,6 +1875,9 @@ func _update_encounter_state() -> void:
 func _on_room_cleared() -> void:
 	if not is_instance_valid(encounter_flow_system):
 		return
+	if in_boss_room and is_instance_valid(_world_sfx_player):
+		_world_sfx_player.stream = BOSS_DEFEATED_SOUND
+		_world_sfx_player.play()
 	_end_combat_phase()
 	_try_revive_fallen_multiplayer_players()
 	var cleared_boss_id: String = run_summary_recorder.get_active_boss_id()
@@ -2260,6 +2272,10 @@ func _set_sfx_volume_runtime(volume_db: float) -> void:
 	sfx_volume_db = AUDIO_LEVELS.clamp_db(volume_db)
 	if is_instance_valid(player):
 		player.set_sfx_volume_db(sfx_volume_db)
+	if is_instance_valid(_world_sfx_player):
+		_world_sfx_player.volume_db = sfx_volume_db
+	if is_instance_valid(reward_selection_ui) and reward_selection_ui.has_method("set_sfx_volume_db"):
+		reward_selection_ui.set_sfx_volume_db(sfx_volume_db)
 
 func _on_pause_menu_opened() -> void:
 	_set_combat_paused(true)
@@ -2738,7 +2754,9 @@ func _choose_door(door: Dictionary) -> void:
 	choosing_next_room = false
 	door_options.clear()
 	_clear_all_enemies()
-
+	if is_instance_valid(_world_sfx_player):
+		_world_sfx_player.stream = DOOR_OPEN_SOUND
+		_world_sfx_player.play()
 	if not is_instance_valid(player):
 		return
 	player_flow_coordinator.reset_player_position(player)
@@ -2995,6 +3013,15 @@ func _on_room_enemy_died(kill_pos: Vector2 = Vector2.ZERO) -> void:
 	objective_progress_coordinator.on_enemy_killed(objective_manager, objective_runtime, kill_pos)
 	if is_instance_valid(player):
 		player.notify_enemy_killed(kill_pos)
+	if not in_boss_room and is_instance_valid(_world_sfx_player):
+		var idx := randi() % 3
+		if idx == 0:
+			_world_sfx_player.stream = ENEMY_DEATH_SOUND_0
+		elif idx == 1:
+			_world_sfx_player.stream = ENEMY_DEATH_SOUND_1
+		else:
+			_world_sfx_player.stream = ENEMY_DEATH_SOUND_2
+		_world_sfx_player.play()
 
 func _on_enemy_damage_received(_applied_amount: int) -> void:
 	# Damage dealt tracking is now centralized in shared damage application paths.

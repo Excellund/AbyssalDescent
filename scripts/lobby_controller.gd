@@ -6,6 +6,7 @@ const MENU_SCENE_PATH := "res://scenes/Menu.tscn"
 const RUN_CONTEXT_PATH := "/root/RunContext"
 const MENU_MUSIC := preload("res://music/msx1.mp3")
 const AUDIO_LEVELS := preload("res://scripts/shared/audio_levels.gd")
+const UI_CLICK_SOUND := preload("res://sounds/new_stuff/ui_button_click.ogg")
 const ASCENSION_REGISTRY := preload("res://scripts/progression/ascension_modifier_registry.gd")
 const META_PROGRESS_STORE := preload("res://scripts/meta_progress_store.gd")
 const ASCENSION_PANEL_SCRIPT := preload("res://scripts/ui/ascension/ascension_panel.gd")
@@ -49,6 +50,7 @@ var ascension_info_label: Label = null
 var multiplayer_session_manager
 var _host_connectivity_warning: String = ""
 var lobby_music_player: AudioStreamPlayer
+var _sfx_player: AudioStreamPlayer
 var lobby_background_layer: Control
 var _embedded_in_menu: bool = false
 var _room_code_copy_tween: Tween = null
@@ -544,8 +546,13 @@ func _show_ascension_ready_lock_toast(message: String) -> void:
 	)
 	_ascension_lock_toast_tween = tw
 
+func _play_sfx_click() -> void:
+	if is_instance_valid(_sfx_player):
+		_sfx_player.stream = UI_CLICK_SOUND
+		_sfx_player.play()
 
 func _on_ascension_configure_pressed() -> void:
+	_play_sfx_click()
 	if not _can_open_ascension_overlay(true):
 		return
 	var is_host: bool = bool(multiplayer_session_manager.is_host())
@@ -690,6 +697,7 @@ func _on_difficulty_selected(index: int) -> void:
 
 ## Called when local player clicks Ready.
 func _on_ready_button_pressed() -> void:
+	_play_sfx_click()
 	if not bool(multiplayer_session_manager.is_host()) and not _client_can_send_rpcs():
 		status_label.text = "Still connecting to host..."
 		return
@@ -1209,6 +1217,7 @@ func _start_game(host_peer_id: int, session_identifier: String, difficulty_tier:
 
 
 func _on_leave_lobby_pressed() -> void:
+	_play_sfx_click()
 	print("[Lobby] Leave button pressed - attempting to leave lobby")
 	if multiplayer_session_manager != null:
 		print("[Lobby] Calling multiplayer_session_manager.leave_room()")
@@ -1418,6 +1427,11 @@ func _start_lobby_music() -> void:
 	lobby_music_player.play(maxf(resume_position, 0.0))
 	if run_context != null:
 		lobby_music_player.volume_db = AUDIO_LEVELS.menu_music_db(float(run_context.music_volume_db))
+	_sfx_player = AudioStreamPlayer.new()
+	_sfx_player.bus = "Master"
+	add_child(_sfx_player)
+	if run_context != null:
+		_sfx_player.volume_db = AUDIO_LEVELS.clamp_db(float(run_context.get("sfx_volume_db")))
 
 
 func _on_lobby_music_finished() -> void:
