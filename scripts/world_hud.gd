@@ -666,10 +666,17 @@ func _update_header_bar(state: Dictionary) -> void:
 		sbs.bg_color = Color(tier_color.r * 0.08, tier_color.g * 0.08, tier_color.b * 0.08, 0.82)
 		_status_header_bear_bg.add_theme_stylebox_override("panel", sbs)
 	var active_biome_name := String(state.get("active_biome_name", ""))
+	var active_biome_accent := state.get("active_biome_accent", Color(0.62, 0.88, 0.94, 1.0)) as Color
 	if not active_biome_name.is_empty():
 		_status_header_biome_name.text = active_biome_name
-		_status_header_biome_name.add_theme_color_override("font_color", Color(0.62, 0.88, 0.94, 0.96))
-		_status_header_biome_micro.add_theme_color_override("font_color", Color(0.45, 0.80, 0.88, 0.55))
+		_status_header_biome_name.add_theme_color_override("font_color", Color(active_biome_accent.r, active_biome_accent.g, active_biome_accent.b, 0.96))
+		_status_header_biome_micro.add_theme_color_override("font_color", Color(active_biome_accent.r, active_biome_accent.g, active_biome_accent.b, 0.55))
+		var biome_style := _status_header_biome_bg.get_theme_stylebox("panel")
+		if biome_style is StyleBoxFlat:
+			var sbs := biome_style as StyleBoxFlat
+			sbs.border_color = Color(active_biome_accent.r, active_biome_accent.g, active_biome_accent.b, 0.72)
+			sbs.bg_color = Color(active_biome_accent.r * 0.08, active_biome_accent.g * 0.08, active_biome_accent.b * 0.08, 0.82)
+			_status_header_biome_bg.add_theme_stylebox_override("panel", sbs)
 	else:
 		_status_header_biome_name.text = "—"
 		_status_header_biome_name.add_theme_color_override("font_color", Color(0.35, 0.45, 0.50, 0.38))

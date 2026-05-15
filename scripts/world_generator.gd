@@ -1729,6 +1729,7 @@ func _get_hud_state() -> Dictionary:
 		"third_boss_unlocked": _is_third_boss_unlocked(),
 		"current_character_passive_name": current_character_passive_name,
 		"active_biome_name": _get_active_biome_name(),
+		"active_biome_accent": _get_active_biome_accent(),
 		"run_elapsed_seconds": run_summary_recorder.get_run_elapsed_seconds(),
 		"timer_visible_in_hud": true,
 		"ascension_rank": encounter_profile_builder.get_ascension_rank() if encounter_profile_builder != null else 0,
@@ -4248,3 +4249,15 @@ func _get_active_biome_name() -> String:
 		return ""
 	var biome := BIOME_REGISTRY.get_biome(biome_id)
 	return String(biome.get("name", ""))
+
+func _get_active_biome_accent() -> Color:
+	if run_session == null:
+		return Color(0.62, 0.88, 0.94, 1.0)
+	var act := _get_current_act()
+	if run_session.act_biome_ids.size() < act:
+		return Color(0.62, 0.88, 0.94, 1.0)
+	var biome_id := run_session.act_biome_ids[act - 1]
+	if biome_id.is_empty():
+		return Color(0.62, 0.88, 0.94, 1.0)
+	var biome := BIOME_REGISTRY.get_biome(biome_id)
+	return biome.get("color_theme", {}).get("accent", Color(0.62, 0.88, 0.94, 1.0)) as Color
