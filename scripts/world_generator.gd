@@ -1730,6 +1730,7 @@ func _get_hud_state() -> Dictionary:
 		"current_character_passive_name": current_character_passive_name,
 		"active_biome_name": _get_active_biome_name(),
 		"active_biome_accent": _get_active_biome_accent(),
+		"active_biome_impact_text": _get_active_biome_impact_text(),
 		"run_elapsed_seconds": run_summary_recorder.get_run_elapsed_seconds(),
 		"timer_visible_in_hud": true,
 		"ascension_rank": encounter_profile_builder.get_ascension_rank() if encounter_profile_builder != null else 0,
@@ -4249,6 +4250,20 @@ func _get_active_biome_name() -> String:
 		return ""
 	var biome := BIOME_REGISTRY.get_biome(biome_id)
 	return String(biome.get("name", ""))
+
+func _get_active_biome_impact_text() -> String:
+	if run_session == null:
+		return ""
+	var act := _get_current_act()
+	if run_session.act_biome_ids.size() < act:
+		return ""
+	var biome_id := run_session.act_biome_ids[act - 1]
+	if biome_id.is_empty():
+		return ""
+	var biome := BIOME_REGISTRY.get_biome(biome_id)
+	if biome.is_empty():
+		return ""
+	return BIOME_REGISTRY.generate_impact_text(biome)
 
 func _get_active_biome_accent() -> Color:
 	if run_session == null:

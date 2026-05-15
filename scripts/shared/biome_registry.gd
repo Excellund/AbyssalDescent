@@ -199,3 +199,59 @@ static func roll_biome_for_act(act: int, rng: RandomNumberGenerator) -> String:
 
 static func get_biome(biome_id: String) -> Dictionary:
 	return BIOME_DEFINITIONS.get(biome_id, {}) as Dictionary
+
+
+static func generate_impact_text(biome: Dictionary) -> String:
+	var sections: Array[String] = []
+
+	var encounter_labels := biome.get("preferred_encounter_labels", []) as Array
+	if not encounter_labels.is_empty():
+		var names: Array[String] = []
+		for label in encounter_labels:
+			names.append(String(label))
+		sections.append("ENCOUNTER STYLE\n" + _join_mid_dot(names))
+
+	var weight_overrides := biome.get("enemy_weight_overrides", {}) as Dictionary
+	if not weight_overrides.is_empty():
+		var pairs: Array = []
+		for key in weight_overrides:
+			pairs.append([float(weight_overrides[key]), String(key)])
+		pairs.sort_custom(func(a: Array, b: Array) -> bool:
+			if not is_equal_approx(float(a[0]), float(b[0])):
+				return float(a[0]) > float(b[0])
+			return String(a[1]) < String(b[1])
+		)
+		var top: Array[String] = []
+		for i in range(mini(3, pairs.size())):
+			top.append(_enemy_display_name(String(pairs[i][1])))
+		sections.append("COMMON THREATS\n" + _join_mid_dot(top))
+
+	return "\n".join(sections)
+
+
+static func _enemy_display_name(key: String) -> String:
+	var names := {
+		"chaser": "Chasers",
+		"charger": "Chargers",
+		"archer": "Archers",
+		"lurker": "Lurkers",
+		"spectre": "Spectres",
+		"seamlock": "Seamlocks",
+		"mirrorline": "Mirror Lines",
+		"tether": "Tethers",
+		"pyre": "Pyres",
+		"drifter": "Drifters",
+		"weaver": "Weavers",
+		"sentinel": "Sentinels",
+		"shielder": "Shielders",
+		"ram": "Rams",
+		"lancer": "Lancers",
+	}
+	return String(names.get(key, key.capitalize() + "s"))
+
+
+static func _join_mid_dot(items: Array) -> String:
+	var strs: Array[String] = []
+	for item in items:
+		strs.append(String(item))
+	return "  ·  ".join(strs)

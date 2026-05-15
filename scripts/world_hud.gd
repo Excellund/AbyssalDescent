@@ -47,6 +47,12 @@ var _status_header_bear_name: Label
 var _status_header_biome_bg: Panel
 var _status_header_biome_micro: Label
 var _status_header_biome_name: Label
+var _biome_tooltip_panel: PanelContainer
+var _biome_tooltip_content: RichTextLabel
+var _active_biome_impact_text: String = ""
+var _biome_hover_pending: bool = false
+var _biome_hover_timer: float = 0.0
+const BIOME_HOVER_DELAY: float = 0.35
 var stats_panel: Panel
 var stats_label: RichTextLabel
 var player_mutator_panel: Panel
@@ -105,6 +111,28 @@ func refresh(state: Dictionary, player: Node) -> void:
 	_update_player_mutator_panel(state)
 	_update_stats_panel_text(player, state)
 	_update_build_strip(state, player)
+
+func _process(delta: float) -> void:
+	if not _biome_hover_pending:
+		return
+	_biome_hover_timer += delta
+	if _biome_hover_timer < BIOME_HOVER_DELAY:
+		return
+	_biome_hover_pending = false
+	if _biome_tooltip_panel == null or _biome_tooltip_content == null:
+		return
+	var cell_pos := _status_header_biome_bg.global_position
+	var cell_h := _status_header_biome_bg.size.y
+	if cell_h <= 0.0:
+		cell_h = _status_header_biome_bg.custom_minimum_size.y
+	_biome_tooltip_panel.position = cell_pos + Vector2(0.0, cell_h + 4.0)
+	var vp := get_viewport()
+	if vp != null:
+		var vp_w := vp.get_visible_rect().size.x
+		var tp_w := maxf(_biome_tooltip_panel.size.x, _biome_tooltip_panel.custom_minimum_size.x)
+		if _biome_tooltip_panel.position.x + tp_w > vp_w - 8.0:
+			_biome_tooltip_panel.position.x = vp_w - tp_w - 8.0
+	_biome_tooltip_panel.visible = true
 
 func show_banner(title: String, subtitle: String, subtitle_color: Color = Color(0.78, 0.9, 1.0, 0.92)) -> void:
 	if room_banner_title_label == null or room_banner_subtitle_label == null:
@@ -650,6 +678,47 @@ func _create_status_header_bar(layer: CanvasLayer) -> void:
 	_status_header_biome_name.add_theme_constant_override("shadow_offset_y", 1)
 	_status_header_biome_bg.add_child(_status_header_biome_name)
 
+	_status_header_biome_bg.mouse_filter = Control.MOUSE_FILTER_STOP
+	_status_header_biome_bg.mouse_entered.connect(_on_biome_header_entered)
+	_status_header_biome_bg.mouse_exited.connect(_on_biome_header_exited)
+
+	_biome_tooltip_panel = PanelContainer.new()
+	_biome_tooltip_panel.custom_minimum_size = Vector2(240.0, 0.0)
+	var tooltip_style := StyleBoxFlat.new()
+	tooltip_style.bg_color = Color(0.03, 0.10, 0.14, 0.96)
+	tooltip_style.border_color = Color(0.44, 0.80, 0.90, 0.72)
+	tooltip_style.border_width_left = 1
+	tooltip_style.border_width_top = 1
+	tooltip_style.border_width_right = 1
+	tooltip_style.border_width_bottom = 1
+	tooltip_style.corner_radius_top_left = 6
+	tooltip_style.corner_radius_top_right = 6
+	tooltip_style.corner_radius_bottom_left = 6
+	tooltip_style.corner_radius_bottom_right = 6
+	tooltip_style.shadow_size = 6
+	tooltip_style.shadow_color = Color(0.0, 0.0, 0.0, 0.50)
+	tooltip_style.content_margin_left = 10.0
+	tooltip_style.content_margin_right = 10.0
+	tooltip_style.content_margin_top = 8.0
+	tooltip_style.content_margin_bottom = 8.0
+	_biome_tooltip_panel.add_theme_stylebox_override("panel", tooltip_style)
+	_biome_tooltip_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_biome_tooltip_panel.visible = false
+	layer.add_child(_biome_tooltip_panel)
+
+	_biome_tooltip_content = RichTextLabel.new()
+	_biome_tooltip_content.custom_minimum_size = Vector2(220.0, 0.0)
+	_biome_tooltip_content.bbcode_enabled = true
+	_biome_tooltip_content.fit_content = true
+	_biome_tooltip_content.scroll_active = false
+	_biome_tooltip_content.selection_enabled = false
+	_biome_tooltip_content.add_theme_font_size_override("normal_font_size", 13)
+	_biome_tooltip_content.add_theme_color_override("default_color", Color(0.80, 0.95, 1.0, 0.96))
+	_biome_tooltip_content.add_theme_color_override("font_shadow_color", Color(0.02, 0.04, 0.06, 0.88))
+	_biome_tooltip_content.add_theme_constant_override("shadow_offset_x", 1)
+	_biome_tooltip_content.add_theme_constant_override("shadow_offset_y", 1)
+	_biome_tooltip_panel.add_child(_biome_tooltip_content)
+
 
 func _update_header_bar(state: Dictionary) -> void:
 	if _status_header_bear_name == null:
@@ -666,6 +735,7 @@ func _update_header_bar(state: Dictionary) -> void:
 		sbs.bg_color = Color(tier_color.r * 0.08, tier_color.g * 0.08, tier_color.b * 0.08, 0.82)
 		_status_header_bear_bg.add_theme_stylebox_override("panel", sbs)
 	var active_biome_name := String(state.get("active_biome_name", ""))
+	_active_biome_impact_text = String(state.get("active_biome_impact_text", ""))
 	var active_biome_accent := state.get("active_biome_accent", Color(0.62, 0.88, 0.94, 1.0)) as Color
 	if not active_biome_name.is_empty():
 		_status_header_biome_name.text = active_biome_name
@@ -681,6 +751,34 @@ func _update_header_bar(state: Dictionary) -> void:
 		_status_header_biome_name.text = "—"
 		_status_header_biome_name.add_theme_color_override("font_color", Color(0.35, 0.45, 0.50, 0.38))
 		_status_header_biome_micro.add_theme_color_override("font_color", Color(0.35, 0.45, 0.50, 0.30))
+
+
+func _on_biome_header_entered() -> void:
+	if _biome_tooltip_panel == null or _active_biome_impact_text.is_empty():
+		return
+	var lines := _active_biome_impact_text.split("\n")
+	var bbcode := ""
+	for i in range(lines.size()):
+		var line := lines[i]
+		if line.is_empty():
+			continue
+		if line.to_upper() == line:
+			if bbcode.length() > 0:
+				bbcode += "\n"
+			bbcode += "[color=#7099B8][font_size=9]%s[/font_size][/color]\n" % line
+		else:
+			bbcode += "%s" % line
+			if i < lines.size() - 1:
+				bbcode += "\n"
+	_biome_tooltip_content.text = bbcode
+	_biome_hover_pending = true
+	_biome_hover_timer = 0.0
+
+
+func _on_biome_header_exited() -> void:
+	_biome_hover_pending = false
+	if _biome_tooltip_panel != null:
+		_biome_tooltip_panel.visible = false
 
 
 func _update_banner_layout(room_size: Vector2, canvas_xform: Transform2D, viewport_size: Vector2) -> void:
