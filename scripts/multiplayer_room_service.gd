@@ -4,7 +4,9 @@ const ROOM_REGISTRY_ENDPOINT_SETTING := "application/config/multiplayer_room_reg
 const ROOM_REGISTRY_API_KEY_SETTING := "application/config/multiplayer_room_registry_api_key"
 const PUBLIC_IP_LOOKUP_URL_SETTING := "application/config/multiplayer_public_ip_lookup_url"
 const DEFAULT_PUBLIC_IP_LOOKUP_URL := "https://api.ipify.org"
-const TRANSPORT_TYPE_DIRECT_ENET := "direct_enet"
+const TRANSPORT_TYPE_DIRECT_ENET     := "direct_enet"
+const TRANSPORT_TYPE_WEBSOCKET_TUNNEL := "websocket_tunnel"
+const TUNNEL_ENABLED_SETTING         := "application/config/multiplayer_tunnel_enabled"
 
 func is_configured() -> bool:
 	return not _room_registry_endpoint().is_empty()
@@ -32,26 +34,54 @@ func create_room_registration(host_port: int, provided_session_id: String = "") 
 			"error_kind": "missing_api_key"
 		}
 
-	var public_ip_result := await _discover_public_ip()
-	if not bool(public_ip_result.get("ok", false)):
-		return {
-			"ok": false,
-			"message": String(public_ip_result.get("message", "Unable to determine public host address.")),
-			"error_kind": String(public_ip_result.get("error_kind", "public_ip_lookup_failed"))
-		}
-
 	var room_code := _generate_room_code()
 	var session_id := provided_session_id.strip_edges()
 	if session_id.is_empty():
 		session_id = "mp-session-%d-%s" % [Time.get_unix_time_from_system(), _generate_room_code(4)]
 
+	var transport_type: String
+	var host_address: String
+	var actual_port: int
+	if _tunnel_enabled():
+		## Cloudflare tunnel mode: spawn cloudflared, await its trycloudflare URL.
+		## No public IP / port forwarding required.
+		var session_manager := get_node_or_null("/root/MultiplayerSessionManager")
+		if session_manager == null:
+			return {
+				"ok": false,
+				"message": "Tunnel mode requires MultiplayerSessionManager autoload.",
+				"error_kind": "tunnel_session_manager_missing"
+			}
+		var tunnel_result: Dictionary = await session_manager.start_tunnel_if_enabled(host_port)
+		if not bool(tunnel_result.get("ok", false)):
+			return {
+				"ok": false,
+				"message": String(tunnel_result.get("error", "Failed to start Cloudflare tunnel.")),
+				"error_kind": "tunnel_start_failed"
+			}
+		transport_type = TRANSPORT_TYPE_WEBSOCKET_TUNNEL
+		host_address   = String(tunnel_result.get("url", "")).strip_edges()
+		actual_port    = host_port
+	else:
+		## Direct ENet mode: discover public IP so joiners can reach us directly.
+		var public_ip_result := await _discover_public_ip()
+		if not bool(public_ip_result.get("ok", false)):
+			return {
+				"ok": false,
+				"message": String(public_ip_result.get("message", "Unable to determine public host address.")),
+				"error_kind": String(public_ip_result.get("error_kind", "public_ip_lookup_failed"))
+			}
+		transport_type = TRANSPORT_TYPE_DIRECT_ENET
+		host_address   = String(public_ip_result.get("address", "")).strip_edges()
+		actual_port    = host_port
+
 	var payload := {
 		"room_code": room_code,
 		"session_id": session_id,
 		"status": "open",
-		"transport_type": TRANSPORT_TYPE_DIRECT_ENET,
-		"host_address": String(public_ip_result.get("address", "")).strip_edges(),
-		"host_port": host_port
+		"transport_type": transport_type,
+		"host_address": host_address,
+		"host_port": actual_port
 	}
 
 	var headers := _build_headers(true)
@@ -249,6 +279,9 @@ func _room_registry_endpoint() -> String:
 
 func _room_registry_api_key() -> String:
 	return String(ProjectSettings.get_setting(ROOM_REGISTRY_API_KEY_SETTING, "")).strip_edges()
+
+func _tunnel_enabled() -> bool:
+	return bool(ProjectSettings.get_setting(TUNNEL_ENABLED_SETTING, false))
 
 func _generate_room_code(length: int = 6) -> String:
 	var chars := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"

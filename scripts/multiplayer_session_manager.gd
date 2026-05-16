@@ -66,6 +66,13 @@ var _host_public_ip: String = ""
 var _host_local_ip: String = ""
 var _upnp_discovery_result: int = -1
 var _debug_log_file: String = "user://_multiplayer_debug.log"
+var _active_transport_type: String = ""
+var _tunnel_helper: Node = null  ## CloudflareTunnelHelper, instantiated lazily
+
+const CloudflareTunnelHelper := preload("res://scripts/cloudflare_tunnel_helper.gd")
+const TUNNEL_ENABLED_SETTING := "application/config/multiplayer_tunnel_enabled"
+const TRANSPORT_DIRECT_ENET := "direct_enet"
+const TRANSPORT_WEBSOCKET_TUNNEL := "websocket_tunnel"
 
 
 func _ready() -> void:
@@ -214,13 +221,15 @@ func create_registered_room(room_registration: Dictionary) -> bool:
 		return false
 
 	var host_port := int(room_registration.get("host_port", 7777))
-	var transport_type := String(room_registration.get("transport_type", "direct_enet"))
+	var transport_type := String(room_registration.get("transport_type", TRANSPORT_DIRECT_ENET))
 	print("[MultiplayerSessionManager] Attempting to create host server on port %d with transport: %s" % [host_port, transport_type])
 	_last_host_connectivity_warning = ""
 	_room_heartbeat_failure_count = 0
 	_room_heartbeat_retry_timer = 0.0
-	
-	if transport_type != "direct_enet":
+
+	if transport_type == TRANSPORT_WEBSOCKET_TUNNEL:
+		return _create_tunnel_host(room_registration)
+	if transport_type != TRANSPORT_DIRECT_ENET:
 		var msg = "Unsupported transport type: %s" % transport_type
 		connection_failed.emit(msg)
 		print("[MultiplayerSessionManager] ERROR: %s" % msg)
@@ -247,6 +256,7 @@ func create_registered_room(room_registration: Dictionary) -> bool:
 	print("[MultiplayerSessionManager] Assigned ENet peer to MultiplayerAPI")
 	session_connected = true
 	is_host_peer = true
+	_active_transport_type = TRANSPORT_DIRECT_ENET
 	local_peer_id = _multiplayer.get_unique_id()
 	session_id = String(room_registration.get("session_id", "")).strip_edges()
 	if session_id.is_empty():
@@ -286,8 +296,10 @@ func join_room(host_address: String = "127.0.0.1", host_port: int = 7777, allow_
 
 func join_registered_room(room_registration: Dictionary) -> bool:
 	_debug_log("[JOIN] join_registered_room() called with registration: %s" % str(room_registration))
-	var transport_type := String(room_registration.get("transport_type", "direct_enet"))
-	if transport_type != "direct_enet":
+	var transport_type := String(room_registration.get("transport_type", TRANSPORT_DIRECT_ENET))
+	if transport_type == TRANSPORT_WEBSOCKET_TUNNEL:
+		return _begin_tunnel_join(room_registration)
+	if transport_type != TRANSPORT_DIRECT_ENET:
 		connection_failed.emit("Unsupported transport type: %s" % transport_type)
 		return false
 	var host_address := String(room_registration.get("host_address", "")).strip_edges()
@@ -308,7 +320,121 @@ func join_registered_room(room_registration: Dictionary) -> bool:
 	## are always set before the session_joined signal is emitted.
 	session_id = reg_session_id
 	room_code = reg_room_code
+	_active_transport_type = TRANSPORT_DIRECT_ENET
 	return true
+
+
+func _create_tunnel_host(room_registration: Dictionary) -> bool:
+	var host_port := int(room_registration.get("host_port", 7777))
+	if host_port <= 0:
+		host_port = 7777
+	var ws_peer := WebSocketMultiplayerPeer.new()
+	var err := ws_peer.create_server(host_port, "127.0.0.1")
+	if err != OK:
+		var msg := "Failed to create local WebSocket server on port %d: %s" % [host_port, error_string(err)]
+		connection_failed.emit(msg)
+		push_error("[MultiplayerSessionManager] ERROR: %s" % msg)
+		return false
+
+	_multiplayer.multiplayer_peer = ws_peer
+	session_connected = true
+	is_host_peer = true
+	_active_transport_type = TRANSPORT_WEBSOCKET_TUNNEL
+	local_peer_id = _multiplayer.get_unique_id()
+	session_id = String(room_registration.get("session_id", "")).strip_edges()
+	if session_id.is_empty():
+		session_id = "mp-session-%d-%s" % [Time.get_unix_time_from_system(), _generate_random_code(4)]
+	room_code = String(room_registration.get("room_code", "")).strip_edges().to_upper()
+	if room_code.is_empty():
+		room_code = _generate_random_code(6).to_upper()
+	_host_public_ip = String(room_registration.get("host_address", "")).strip_edges()
+	_host_local_ip = _get_local_ip()
+	connected_peers[local_peer_id] = { "joined_at": Time.get_unix_time_from_system(), "last_ping": 0 }
+	session_created.emit(session_id, room_code)
+	print("[MultiplayerSessionManager] Tunnel host session created. Room: %s | Session: %s | Local peer ID: %d | Tunnel URL: %s" % [room_code, session_id, local_peer_id, _host_public_ip])
+	_debug_log("[HOST] Tunnel host session created on port %d. Tunnel URL: %s" % [host_port, _host_public_ip])
+	return true
+
+
+func _begin_tunnel_join(room_registration: Dictionary) -> bool:
+	if has_active_session_state():
+		print("[MultiplayerSessionManager] WARNING: Existing session state detected before tunnel join. Cleaning up...")
+		leave_room()
+	if has_active_session_state():
+		push_error("Already connected to a session. Call leave_room() first.")
+		return false
+
+	var tunnel_url := String(room_registration.get("host_address", "")).strip_edges()
+	if tunnel_url.is_empty():
+		connection_failed.emit("Room registration is missing tunnel URL.")
+		return false
+
+	var reg_session_id := String(room_registration.get("session_id", "")).strip_edges()
+	var reg_room_code := String(room_registration.get("room_code", "")).strip_edges().to_upper()
+
+	## Assign temporary placeholders; overwritten below before the async signal fires.
+	session_id = "mp-session-%d-%s" % [Time.get_unix_time_from_system(), _generate_random_code(4)]
+	room_code = _generate_random_code(6).to_upper()
+
+	var ws_peer := WebSocketMultiplayerPeer.new()
+	var err := ws_peer.create_client(tunnel_url)
+	if err != OK:
+		session_id = ""
+		room_code = ""
+		connection_failed.emit("Failed to initiate tunnel join: %s" % error_string(err))
+		return false
+
+	_multiplayer.multiplayer_peer = ws_peer
+	is_host_peer = false
+	_active_transport_type = TRANSPORT_WEBSOCKET_TUNNEL
+	_join.reset()
+	_debug_log("[JOIN] Tunnel join initiated for room %s via %s" % [reg_room_code, tunnel_url])
+	print("[MultiplayerSessionManager] Tunnel join initiated for room %s via %s" % [reg_room_code, tunnel_url])
+
+	## Overwrite placeholders with authoritative registration values before the
+	## async connected_to_server signal fires.
+	session_id = reg_session_id
+	room_code = reg_room_code
+	return true
+
+
+## Returns true when the project is configured to use the Cloudflare tunnel
+## transport instead of direct ENet for hosting.
+func is_tunnel_enabled() -> bool:
+	return bool(ProjectSettings.get_setting(TUNNEL_ENABLED_SETTING, false))
+
+
+## Spawn the cloudflared tunnel (if enabled) and return its public wss:// URL.
+## Returns a Dictionary { ok: bool, url: String, error: String }.
+## When tunnel mode is disabled, returns ok=true with empty url so callers can
+## fall back to direct-ENet registration paths.
+func start_tunnel_if_enabled(local_port: int) -> Dictionary:
+	if not is_tunnel_enabled():
+		return {"ok": true, "url": "", "error": ""}
+	if _tunnel_helper != null:
+		_tunnel_helper.stop()
+		_tunnel_helper.queue_free()
+		_tunnel_helper = null
+	_tunnel_helper = CloudflareTunnelHelper.new()
+	add_child(_tunnel_helper)
+	var result: Dictionary = await _tunnel_helper.start_and_get_url(local_port)
+	if not bool(result.get("ok", false)):
+		var log_tail := String(result.get("log_tail", ""))
+		if not log_tail.is_empty():
+			print("[MultiplayerSessionManager] cloudflared log tail:\n%s" % log_tail)
+		_tunnel_helper.queue_free()
+		_tunnel_helper = null
+		return {"ok": false, "url": "", "error": String(result.get("error", "Tunnel failed."))}
+	print("[MultiplayerSessionManager] Cloudflare tunnel ready at %s" % String(result.get("url", "")))
+	return {"ok": true, "url": String(result.get("url", "")), "error": ""}
+
+
+func _shutdown_tunnel_helper() -> void:
+	if _tunnel_helper == null:
+		return
+	_tunnel_helper.stop()
+	_tunnel_helper.queue_free()
+	_tunnel_helper = null
 
 
 ## Leave current session and disconnect.
@@ -332,13 +458,14 @@ func leave_room() -> void:
 	_room_heartbeat_retry_timer = 0.0
 	_join.reset()
 	_release_upnp_port_mapping()
-	
+	_shutdown_tunnel_helper()
 	_multiplayer.multiplayer_peer = null
 	session_connected = false
 	is_host_peer = false
 	local_peer_id = 0
 	session_id = ""
 	room_code = ""
+	_active_transport_type = ""
 	print("[MultiplayerSessionManager] Left session.")
 
 

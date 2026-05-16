@@ -20,6 +20,7 @@ config/telemetry_upload_api_key="sb_publishable_LiXb9xg1jvwUZYw1arDcag_YIzGTPGV"
 config/multiplayer_room_registry_endpoint="https://aizoebowshcnqvuizava.supabase.co/rest/v1/multiplayer_rooms"
 config/multiplayer_room_registry_api_key="sb_publishable_LiXb9xg1jvwUZYw1arDcag_YIzGTPGV"
 config/multiplayer_public_ip_lookup_url="https://api.ipify.org"
+config/multiplayer_tunnel_enabled=true
 config/update_feed_url="https://github.com/Excellund/AbyssalDescent/releases/latest/download/latest_release.json"
 config/update_release_page_url="https://github.com/Excellund/AbyssalDescent/releases/latest"
 config/update_debug_force_prompt=false

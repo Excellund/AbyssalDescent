@@ -258,7 +258,12 @@ func _create_multiplayer_room() -> void:
 	
 	## Show "Creating..." status
 	if multiplayer_status_label != null:
-		multiplayer_status_label.text = "Creating host session..."
+		var session_manager_for_status = get_node_or_null("/root/MultiplayerSessionManager")
+		if session_manager_for_status != null and session_manager_for_status.has_method("is_tunnel_enabled") \
+				and session_manager_for_status.is_tunnel_enabled():
+			multiplayer_status_label.text = "Setting up tunnel (first run downloads ~25 MB)..."
+		else:
+			multiplayer_status_label.text = "Creating host session..."
 	
 	var config_issues: PackedStringArray = multiplayer_room_service.get_configuration_issues()
 	if not config_issues.is_empty():
