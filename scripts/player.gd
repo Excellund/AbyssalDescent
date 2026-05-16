@@ -3327,6 +3327,10 @@ func _is_local_control_owner() -> bool:
 	var multiplayer_api := get_tree().get_multiplayer()
 	if multiplayer_api == null:
 		return true
+	## Guard: multiplayer_peer may be null after leave_room() clears the peer.
+	## Calling get_unique_id() with no peer assigned emits a Godot error every frame.
+	if multiplayer_api.multiplayer_peer == null:
+		return true
 	var active_peer_id := int(multiplayer_api.get_unique_id())
 	if active_peer_id <= 0:
 		return true

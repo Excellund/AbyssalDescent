@@ -416,6 +416,9 @@ func _initialize_bootstrap_context() -> void:
 			print_debug("[WorldGenerator] Detected multiplayer session: %s" % multiplayer_session_id)
 			if not MultiplayerSessionManager.peer_disconnected.is_connected(_on_multiplayer_peer_disconnected):
 				MultiplayerSessionManager.peer_disconnected.connect(_on_multiplayer_peer_disconnected)
+			## Joiner: return to menu if the host disconnects while in-game.
+			if not MultiplayerSessionManager.host_left.is_connected(_on_host_left_during_game):
+				MultiplayerSessionManager.host_left.connect(_on_host_left_during_game)
 	
 	objective_lifecycle_coordinator = OBJECTIVE_LIFECYCLE_COORDINATOR_SCRIPT.new()
 	objective_frame_coordinator = OBJECTIVE_FRAME_COORDINATOR_SCRIPT.new()
@@ -2438,6 +2441,16 @@ func _on_multiplayer_peer_disconnected(peer_id: int) -> void:
 	var finalize_result := _run_outcome_coordinator.finalize_retry(expected)
 	if bool(finalize_result.get("ok", false)):
 		_start_multiplayer_retry_run.rpc()
+
+func _on_host_left_during_game() -> void:
+	## Host disconnected while the joiner is in-game. Tear down the session and
+	## return to the menu so the joiner is not stranded in a peer-less game state.
+	push_error("[WorldGenerator] Host disconnected mid-game. Returning to menu.")
+	_teardown_multiplayer_session_for_menu_transition()
+	_run_summary_finish_run("host_left")
+	var tree := get_tree()
+	if tree != null:
+		tree.change_scene_to_file(MENU_SCENE_PATH)
 
 func _on_pause_back_to_menu_requested() -> void:
 	_teardown_multiplayer_session_for_menu_transition()

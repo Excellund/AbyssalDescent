@@ -1239,6 +1239,15 @@ func _start_game(host_peer_id: int, session_identifier: String, difficulty_tier:
 		local_char_id = "bastion"
 	local_character_id = local_char_id
 	RunContext.set_selected_character_id(local_char_id)
+	## Stop _process loops immediately, then detach self from the scene tree BEFORE
+	## change_scene_to_file fires. Without this, Godot's SceneRPCInterface path cache
+	## can look up this node while data.tree == null (detached) and crash at
+	## scene_rpc_interface.cpp:146 via a null-dereference on node->get_tree().
+	set_process(false)
+	var lobby_parent := get_parent()
+	if lobby_parent != null:
+		lobby_parent.remove_child(self)
+		queue_free()
 	tree.change_scene_to_file("res://scenes/Main.tscn")
 
 
