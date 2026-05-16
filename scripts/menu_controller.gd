@@ -2976,25 +2976,27 @@ func _on_difficulty_tier_selected(tier: int) -> void:
 	if run_context == null:
 		return
 	
-	## Intercept Forsworn tier to show ascension panel in run-setup mode
+	## Intercept Forsworn tier to show ascension panel in run-setup mode,
+	## but only after the selected character has cleared Forsworn at least once.
 	if tier == BEARING_ENUMS.BearingTier.FORSWORN:
-		if ascension_panel != null:
-			if difficulty_selector_panel != null:
-				difficulty_selector_panel.visible = false
-			var selected_char_id: String = String(run_context.get_selected_character_id())
-			ascension_panel.set_oaths_only_mode(false)
-			ascension_panel.set_character_id(selected_char_id)
-			ascension_panel.set_run_setup_mode(true)
-			ascension_panel.populate()
-			if run_context.set_difficulty_tier(tier):
-				if root_panel != null and ascension_panel != null:
-					_animate_replace_transition(root_panel, ascension_panel, Vector2(0.0, 24.0), Vector2(0.0, -18.0))
-				elif root_panel != null:
-					root_panel.visible = false
-				if character_selector_panel != null:
-					character_selector_panel.visible = false
-		return
-	
+		var selected_char_id: String = String(run_context.get_selected_character_id())
+		if META_PROGRESS.has_cleared_forsworn(run_context.meta_progress_profile, selected_char_id):
+			if ascension_panel != null:
+				if difficulty_selector_panel != null:
+					difficulty_selector_panel.visible = false
+				ascension_panel.set_oaths_only_mode(false)
+				ascension_panel.set_character_id(selected_char_id)
+				ascension_panel.set_run_setup_mode(true)
+				ascension_panel.populate()
+				if run_context.set_difficulty_tier(tier):
+					if root_panel != null and ascension_panel != null:
+						_animate_replace_transition(root_panel, ascension_panel, Vector2(0.0, 24.0), Vector2(0.0, -18.0))
+					elif root_panel != null:
+						root_panel.visible = false
+					if character_selector_panel != null:
+						character_selector_panel.visible = false
+			return
+
 	if run_context.set_difficulty_tier(tier):
 		if difficulty_selector_panel != null:
 			difficulty_selector_panel.visible = false
