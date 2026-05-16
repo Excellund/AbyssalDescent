@@ -3524,7 +3524,12 @@ func _start_menu_music() -> void:
 	menu_music_player.finished.connect(_on_menu_music_finished)
 	add_child(menu_music_player)
 	menu_music_player.play(maxf(resume_position, 0.0))
-	_apply_menu_music_volume(_percent_to_db(music_slider.value))
+	var initial_music_db: float
+	if run_context != null:
+		initial_music_db = AUDIO_LEVELS.clamp_db(float(run_context.get("music_volume_db")))
+	else:
+		initial_music_db = _percent_to_db(music_slider.value)
+	_apply_menu_music_volume(initial_music_db)
 	_sfx_player = AudioStreamPlayer.new()
 	_sfx_player.bus = "Master"
 	add_child(_sfx_player)
