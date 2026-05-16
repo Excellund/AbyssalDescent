@@ -855,16 +855,18 @@ func _setup_objective_runtime_system() -> void:
 	objective_control_overlay.objective_manager = objective_manager
 
 func _run_resume_flow() -> bool:
-	var resumed_run := _try_resume_saved_run()
+	var resume_snapshot := _try_resume_saved_run()
 	var debug_bearing_tier := _debug_bearing_override_tier()
 	if debug_bearing_tier >= 0:
 		encounter_profile_builder.set_difficulty_tier(debug_bearing_tier)
 		_apply_difficulty_tier_bonuses(debug_bearing_tier, false)
 	run_summary_recorder.run_started_at_msec = Time.get_ticks_msec()
 	run_summary_recorder.reset_summary_tracker()
+	if not resume_snapshot.is_empty():
+		run_summary_recorder.restore_tracker_items_from_snapshot(resume_snapshot)
 	run_summary_recorder.initialize(not _is_debug_boot_session())
 	hud.refresh(_get_hud_state(), player)
-	return resumed_run
+	return not resume_snapshot.is_empty()
 
 func _run_debug_boot_flow() -> bool:
 	_apply_debug_start_powers_if_needed()
@@ -2163,10 +2165,10 @@ func _apply_boss_difficulty_scaling(boss: CharacterBody2D) -> void:
 		var base_damage := int(boss.get(damage_property))
 		boss.set(damage_property, maxi(1, int(round(float(base_damage) * boss_mult))))
 
-func _try_resume_saved_run() -> bool:
+func _try_resume_saved_run() -> Dictionary:
 	var run_context := _get_run_context()
 	if run_context == null:
-		return false
+		return {}
 
 	var should_apply_difficulty := false
 	if is_multiplayer:
@@ -2182,7 +2184,7 @@ func _try_resume_saved_run() -> bool:
 		should_apply_difficulty = true
 		if should_apply_difficulty:
 			_apply_difficulty_tier_bonuses(current_difficulty_tier, false)
-		return false
+		return {}
 	else:
 		current_difficulty_tier = int(run_context.get_current_difficulty_tier())
 	current_character_id = String(run_context.get_selected_character_id()).strip_edges().to_lower()
@@ -2192,14 +2194,14 @@ func _try_resume_saved_run() -> bool:
 
 	var snapshot := run_context.load_active_run() as Dictionary
 	if snapshot.is_empty():
-		return false
+		return {}
 	if int(snapshot.get("version", -1)) != RUN_SNAPSHOT_VERSION:
 		run_context.clear_active_run()
-		return false
+		return {}
 	if not _apply_active_run_snapshot(snapshot):
 		run_context.clear_active_run()
-		return false
-	return true
+		return {}
+	return snapshot
 
 func _save_active_run_checkpoint() -> void:
 	var run_context := _get_run_context()

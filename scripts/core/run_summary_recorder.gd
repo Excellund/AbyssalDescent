@@ -198,6 +198,19 @@ func reset_summary_tracker() -> void:
 		_set_peer_summary_stats(peer_id, _empty_peer_stats())
 		_set_peer_reward_timeline(peer_id, [])
 
+func restore_tracker_items_from_snapshot(snapshot: Dictionary) -> void:
+	if run_summary_tracker == null:
+		return
+	var boon_raw: Variant = snapshot.get("tracker_boon_items", {})
+	if boon_raw is Dictionary:
+		run_summary_tracker.boon_items = (boon_raw as Dictionary).duplicate(true)
+	var arcana_raw: Variant = snapshot.get("tracker_arcana_items", {})
+	if arcana_raw is Dictionary:
+		run_summary_tracker.arcana_items = (arcana_raw as Dictionary).duplicate(true)
+	var boss_raw: Variant = snapshot.get("tracker_boss_reward_items", {})
+	if boss_raw is Dictionary:
+		run_summary_tracker.boss_reward_items = (boss_raw as Dictionary).duplicate(true)
+
 func mark_debug_mode() -> void:
 	if MultiplayerSessionManager.is_remote_replica():
 		telemetry_enabled = false

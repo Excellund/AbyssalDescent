@@ -97,6 +97,22 @@ static func build_snapshot(world: Node, player: Node, run_context: Node, snapsho
 		if context_mode != null:
 			run_mode_value = context_mode
 	var player_snapshot: Dictionary = player.build_run_snapshot() as Dictionary
+	var tracker_boon_items: Dictionary = {}
+	var tracker_arcana_items: Dictionary = {}
+	var tracker_boss_reward_items: Dictionary = {}
+	var recorder_value: Variant = world.get("run_summary_recorder")
+	if recorder_value != null:
+		var tracker_value: Variant = (recorder_value as Object).get("run_summary_tracker")
+		if tracker_value != null:
+			var ti_boons: Variant = (tracker_value as Object).get("boon_items")
+			if ti_boons is Dictionary:
+				tracker_boon_items = (ti_boons as Dictionary).duplicate(true)
+			var ti_arcana: Variant = (tracker_value as Object).get("arcana_items")
+			if ti_arcana is Dictionary:
+				tracker_arcana_items = (ti_arcana as Dictionary).duplicate(true)
+			var ti_boss: Variant = (tracker_value as Object).get("boss_reward_items")
+			if ti_boss is Dictionary:
+				tracker_boss_reward_items = (ti_boss as Dictionary).duplicate(true)
 	return {
 		"version": snapshot_version,
 		"run_mode": run_mode_value,
@@ -135,7 +151,10 @@ static func build_snapshot(world: Node, player: Node, run_context: Node, snapsho
 		"objective_overtime": objective_overtime,
 		"objective_survival_quota_announced": objective_survival_quota_announced,
 		"current_difficulty_tier": world.current_difficulty_tier,
-		"player_snapshot": player_snapshot
+		"player_snapshot": player_snapshot,
+		"tracker_boon_items": tracker_boon_items,
+		"tracker_arcana_items": tracker_arcana_items,
+		"tracker_boss_reward_items": tracker_boss_reward_items,
 	}
 
 static func apply_snapshot(world: Node, player: Node, run_context: Node, snapshot: Dictionary, room_base_size: Vector2, fallback_run_mode: Variant, reward_mode_none: int) -> bool:
