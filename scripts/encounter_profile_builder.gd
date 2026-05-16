@@ -331,6 +331,9 @@ func _apply_identity_bearing_scaling(profile: Dictionary) -> Dictionary:
 			if result.has(count_key):
 				var mult := float(weight_overrides[type_name])
 				result[count_key] = maxi(int(result[count_key]), roundi(float(int(result[count_key])) * mult))
+		var raw_tether: int = int(result.get("tether_count", 0))
+		if raw_tether % 2 != 0:
+			result["tether_count"] = maxi(0, raw_tether - 1)
 	return result
 
 func _scale_mutator_damage(mutator: Dictionary) -> Dictionary:
