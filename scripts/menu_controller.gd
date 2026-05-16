@@ -113,9 +113,12 @@ var _quote_pulse_time: float = 0.0
 var root_shell: HBoxContainer
 var root_actions: VBoxContainer
 var update_panel: Panel
+var update_panel_vbox: VBoxContainer
 var update_status_label: Label
 var update_detail_label: Label
 var update_action_button: Button
+var update_browser_button: Button
+var update_progress_bar: ProgressBar
 var update_check_button: Button
 var update_prompt_layer: Control
 var update_prompt_title_label: Label
@@ -839,7 +842,7 @@ func _apply_menu_layout() -> void:
 	if character_selector_panel != null:
 		_set_centered_panel_layout(character_selector_panel, _character_selector_panel_size(), fit_scale, viewport_size)
 	if update_panel != null and root_panel != null:
-		var update_base_size := Vector2(470.0, 190.0)
+		var update_base_size := Vector2(570.0, 200.0)
 		update_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		update_panel.size = update_base_size
 		update_panel.scale = Vector2(fit_scale, fit_scale)
@@ -1932,7 +1935,7 @@ func _build_options_panel() -> Panel:
 
 func _build_update_panel() -> Panel:
 	var panel := Panel.new()
-	panel.custom_minimum_size = Vector2(470.0, 170.0)
+	panel.custom_minimum_size = Vector2(570.0, 0.0)
 	panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.04, 0.08, 0.13, 0.90), Color(0.36, 0.64, 0.88, 0.74), 16, 2))
 
 	var content := MarginContainer.new()
@@ -1948,6 +1951,7 @@ func _build_update_panel() -> Panel:
 	stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	stack.add_theme_constant_override("separation", 8)
 	content.add_child(stack)
+	update_panel_vbox = stack
 
 	var title := Label.new()
 	title.text = "Game Update"
@@ -1969,6 +1973,16 @@ func _build_update_panel() -> Panel:
 	update_detail_label.add_theme_color_override("font_color", Color(0.68, 0.80, 0.92, 0.84))
 	stack.add_child(update_detail_label)
 
+	update_progress_bar = ProgressBar.new()
+	update_progress_bar.min_value = 0.0
+	update_progress_bar.max_value = 100.0
+	update_progress_bar.value = 0.0
+	update_progress_bar.custom_minimum_size = Vector2(0.0, 14.0)
+	update_progress_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	update_progress_bar.show_percentage = false
+	update_progress_bar.visible = false
+	stack.add_child(update_progress_bar)
+
 	var actions := HBoxContainer.new()
 	actions.add_theme_constant_override("separation", 10)
 	stack.add_child(actions)
@@ -1979,9 +1993,15 @@ func _build_update_panel() -> Panel:
 	update_action_button.pressed.connect(_on_update_action_pressed)
 	actions.add_child(update_action_button)
 
+	update_browser_button = _make_menu_button("In Browser")
+	update_browser_button.custom_minimum_size = Vector2(0.0, 50.0)
+	update_browser_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	update_browser_button.pressed.connect(_on_update_browser_pressed)
+	actions.add_child(update_browser_button)
+
 	update_check_button = _make_menu_button("Check Again")
-	update_check_button.custom_minimum_size = Vector2(130.0, 50.0)
-	update_check_button.size_flags_horizontal = Control.SIZE_SHRINK_END
+	update_check_button.custom_minimum_size = Vector2(0.0, 50.0)
+	update_check_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	update_check_button.pressed.connect(_on_update_check_pressed)
 	actions.add_child(update_check_button)
 
@@ -2047,6 +2067,14 @@ func _build_update_prompt_layer() -> Control:
 	)
 	actions.add_child(update_now_button)
 
+	var browser_button := _make_menu_button("In Browser")
+	browser_button.custom_minimum_size = Vector2(0.0, 58.0)
+	browser_button.pressed.connect(func() -> void:
+		_close_update_prompt()
+		_on_update_browser_pressed()
+	)
+	actions.add_child(browser_button)
+
 	var not_now_button := _make_menu_button("Not Now")
 	not_now_button.custom_minimum_size = Vector2(0.0, 58.0)
 	not_now_button.pressed.connect(func() -> void:
@@ -2104,6 +2132,17 @@ func _on_update_service_state_changed() -> void:
 		update_status_label.text = String(update_service.status_text)
 	if update_detail_label != null:
 		update_detail_label.text = String(update_service.detail_text)
+	if update_progress_bar != null:
+		var downloading := bool(update_service.download_in_progress)
+		var progress := float(update_service.download_progress)
+		update_progress_bar.visible = downloading
+		if downloading and progress >= 0.0:
+			update_progress_bar.indeterminate = false
+			update_progress_bar.value = clampf(progress * 100.0, 0.0, 100.0)
+		elif downloading:
+			update_progress_bar.indeterminate = true
+		else:
+			update_progress_bar.value = 0.0
 	_refresh_update_ui()
 
 func _on_update_service_check_finished() -> void:
@@ -2126,11 +2165,11 @@ func _on_update_service_download_finished(success: bool, _message: String) -> vo
 		_refresh_update_ui()
 		get_tree().quit()
 		return
-	if update_status_label != null:
-		update_status_label.text = "Could not install automatically. Opening release page."
-	if update_detail_label != null:
-		update_detail_label.text = "Download may have failed or installer launch was blocked."
-	update_service.open_release_page()
+	if success:
+		if update_status_label != null:
+			update_status_label.text = "Could not launch installer."
+		if update_detail_label != null:
+			update_detail_label.text = "Use \"In Browser\" to finish manually."
 	_refresh_update_ui()
 
 func _maybe_show_update_prompt() -> void:
@@ -2197,6 +2236,14 @@ func _on_update_action_pressed() -> void:
 			return
 	update_service.open_release_page()
 
+func _on_update_browser_pressed() -> void:
+	_play_sfx_click()
+	if update_service == null:
+		return
+	if not bool(update_service.action_enabled):
+		return
+	update_service.open_release_page()
+
 func _refresh_update_ui() -> void:
 	if update_action_button == null or update_panel == null:
 		return
@@ -2227,6 +2274,8 @@ func _refresh_update_ui() -> void:
 		update_action_button.disabled = controls_disabled
 	if update_check_button != null:
 		update_check_button.disabled = controls_disabled
+	if update_browser_button != null:
+		update_browser_button.disabled = not bool(update_service.action_enabled)
 
 func _current_game_version() -> String:
 	var script_version := String(BUILD_INFO.GAME_VERSION).strip_edges()

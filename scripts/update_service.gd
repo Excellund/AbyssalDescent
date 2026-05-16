@@ -13,6 +13,9 @@ const UPDATE_DOWNLOAD_DIR := "user://updates"
 const UPDATE_APPLY_SCRIPT_PATH := "user://updates/apply_update.bat"
 const UPDATE_FEED_ETAG_PATH := "user://updates/feed.etag"
 const UPDATE_FEED_CACHE_PATH := "user://updates/feed_cache.json"
+const CHECK_REQUEST_TIMEOUT_SECONDS := 20.0
+const DOWNLOAD_STALL_TIMEOUT_SECONDS := 90.0
+const DOWNLOAD_PROGRESS_POLL_INTERVAL_SECONDS := 0.5
 
 var current_version: String = ""
 var latest_version: String = ""
@@ -28,9 +31,15 @@ var download_path: String = ""
 var status_text: String = "Checking for updates..."
 var detail_text: String = "Current version: unknown"
 var check_error_detail: String = ""
+var download_progress: float = -1.0
+var download_downloaded_bytes: int = 0
+var download_total_bytes: int = 0
 
 var _check_request: HTTPRequest
 var _download_request: HTTPRequest
+var _download_progress_timer: Timer
+var _download_last_progress_bytes: int = 0
+var _download_last_progress_msec: int = 0
 
 func initialize(version: String) -> void:
 	current_version = version.strip_edges()
@@ -90,13 +99,19 @@ func request_download() -> bool:
 	download_path = "%s/%s" % [UPDATE_DOWNLOAD_DIR, file_name]
 	_download_request.download_file = download_path
 	download_in_progress = true
-	_set_status("Downloading update %s..." % _display_latest_version(), "The installer will open when download completes.")
+	download_progress = -1.0
+	download_downloaded_bytes = 0
+	download_total_bytes = 0
+	_download_last_progress_bytes = 0
+	_download_last_progress_msec = Time.get_ticks_msec()
+	_set_status("Downloading update %s..." % _display_latest_version(), "Starting download. This may take a while on a slow connection.")
 	var err := _download_request.request(download_url, PackedStringArray(), HTTPClient.METHOD_GET)
 	if err != OK:
 		download_in_progress = false
 		_set_status("Update download failed to start.", "Request error: %d" % err)
 		emit_signal("download_finished", false, "request_start_failed")
 		return false
+	_start_download_progress_timer()
 	return true
 
 func should_prompt_for_update(skipped_version: String) -> bool:
@@ -183,14 +198,78 @@ func _launch_zip_update(zip_absolute_path: String) -> bool:
 func _ensure_requests() -> void:
 	if _check_request == null:
 		_check_request = HTTPRequest.new()
-		_check_request.timeout = 8.0
+		_check_request.timeout = CHECK_REQUEST_TIMEOUT_SECONDS
 		_check_request.request_completed.connect(_on_check_completed)
 		add_child(_check_request)
 	if _download_request == null:
 		_download_request = HTTPRequest.new()
-		_download_request.timeout = 60.0
+		# timeout = 0 disables Godot's wall-clock cap so very slow connections can
+		# finish multi-minute downloads. Stall detection in _on_download_progress_tick
+		# handles dead connections instead.
+		_download_request.timeout = 0.0
+		_download_request.use_threads = true
 		_download_request.request_completed.connect(_on_download_completed)
 		add_child(_download_request)
+	if _download_progress_timer == null:
+		_download_progress_timer = Timer.new()
+		_download_progress_timer.wait_time = DOWNLOAD_PROGRESS_POLL_INTERVAL_SECONDS
+		_download_progress_timer.one_shot = false
+		_download_progress_timer.autostart = false
+		_download_progress_timer.timeout.connect(_on_download_progress_tick)
+		add_child(_download_progress_timer)
+
+func _start_download_progress_timer() -> void:
+	if _download_progress_timer == null:
+		return
+	_download_progress_timer.start()
+
+func _stop_download_progress_timer() -> void:
+	if _download_progress_timer == null:
+		return
+	_download_progress_timer.stop()
+
+func _on_download_progress_tick() -> void:
+	if not download_in_progress or _download_request == null:
+		_stop_download_progress_timer()
+		return
+	var downloaded := int(_download_request.get_downloaded_bytes())
+	var total := int(_download_request.get_body_size())
+	download_downloaded_bytes = downloaded
+	download_total_bytes = total
+	if total > 0:
+		download_progress = clampf(float(downloaded) / float(total), 0.0, 1.0)
+	else:
+		download_progress = -1.0
+	var now_msec := Time.get_ticks_msec()
+	if downloaded > _download_last_progress_bytes:
+		_download_last_progress_bytes = downloaded
+		_download_last_progress_msec = now_msec
+	elif now_msec - _download_last_progress_msec >= int(DOWNLOAD_STALL_TIMEOUT_SECONDS * 1000.0):
+		_stop_download_progress_timer()
+		_download_request.cancel_request()
+		download_in_progress = false
+		_set_status(
+			"Download stalled.",
+			"No data received for %ds. Try again or download in browser." % int(DOWNLOAD_STALL_TIMEOUT_SECONDS)
+		)
+		emit_signal("download_finished", false, "download_stalled")
+		return
+	var detail := "Downloaded %s%s. Keep the game open until it finishes." % [
+		_format_byte_count(downloaded),
+		(" / %s (%d%%)" % [_format_byte_count(total), int(round(download_progress * 100.0))]) if total > 0 else ""
+	]
+	_set_status("Downloading update %s..." % _display_latest_version(), detail)
+
+func _format_byte_count(byte_count: int) -> String:
+	if byte_count <= 0:
+		return "0 B"
+	var kib := float(byte_count) / 1024.0
+	if kib < 1024.0:
+		return "%.1f KiB" % kib
+	var mib := kib / 1024.0
+	if mib < 1024.0:
+		return "%.1f MiB" % mib
+	return "%.2f GiB" % (mib / 1024.0)
 
 func _on_check_completed(result: int, response_code: int, headers: PackedStringArray, body: PackedByteArray) -> void:
 	check_in_progress = false
@@ -244,15 +323,23 @@ func _on_check_completed(result: int, response_code: int, headers: PackedStringA
 	emit_signal("check_finished")
 
 func _on_download_completed(result: int, response_code: int, _headers: PackedStringArray, _body: PackedByteArray) -> void:
+	_stop_download_progress_timer()
+	if not download_in_progress:
+		# Already finalized by stall detection; ignore the late completion signal.
+		return
 	download_in_progress = false
 	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
-		_set_status("Download failed.", "Network result %d, HTTP %d." % [result, response_code])
+		var reason := "Network result %d, HTTP %d. Try again or download in browser." % [result, response_code]
+		if result == HTTPRequest.RESULT_TIMEOUT:
+			reason = "Connection timed out. Try again or download in browser."
+		_set_status("Download failed.", reason)
 		emit_signal("download_finished", false, "download_failed")
 		return
 	if not FileAccess.file_exists(download_path):
 		_set_status("Download finished but installer was not found.", "Open release page for manual install.")
 		emit_signal("download_finished", false, "installer_missing")
 		return
+	download_progress = 1.0
 	_set_status("Download complete.", "Installer ready to launch.")
 	emit_signal("download_finished", true, "ok")
 
