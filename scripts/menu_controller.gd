@@ -339,6 +339,7 @@ func _probe_tunnel_reachability(host_address: String) -> bool:
 	if not (url.begins_with("http://") or url.begins_with("https://")):
 		return true ## Direct ENet or unrecognised scheme; nothing to probe.
 
+	_debug_log_menu("[PROBE] Starting tunnel reachability probe for %s (max %d attempts)" % [url, PROBE_MAX_ATTEMPTS])
 	for attempt in range(PROBE_MAX_ATTEMPTS):
 		var tree := _tree_or_null()
 		if tree == null:
@@ -349,6 +350,7 @@ func _probe_tunnel_reachability(host_address: String) -> bool:
 		if err != OK:
 			req.queue_free()
 			print("[Menu/Duo] Probe attempt %d: HTTPRequest.request() error %d for %s" % [attempt + 1, err, url])
+			_debug_log_menu("[PROBE] attempt %d/%d: request() err=%d" % [attempt + 1, PROBE_MAX_ATTEMPTS, err])
 		else:
 			var probe_result: Array = await req.request_completed
 			req.queue_free()
@@ -356,8 +358,10 @@ func _probe_tunnel_reachability(host_address: String) -> bool:
 			var status_code := int(probe_result[1])
 			if result_code == HTTPRequest.RESULT_SUCCESS:
 				print("[Menu/Duo] Probe attempt %d: tunnel reachable (HTTP %d) — DNS propagated" % [attempt + 1, status_code])
+				_debug_log_menu("[PROBE] attempt %d/%d: SUCCESS http=%d — DNS propagated" % [attempt + 1, PROBE_MAX_ATTEMPTS, status_code])
 				return true
 			print("[Menu/Duo] Probe attempt %d: result=%d status=%d (DNS likely not propagated yet)" % [attempt + 1, result_code, status_code])
+			_debug_log_menu("[PROBE] attempt %d/%d: result=%d status=%d" % [attempt + 1, PROBE_MAX_ATTEMPTS, result_code, status_code])
 
 		if attempt + 1 < PROBE_MAX_ATTEMPTS:
 			var retry_tree := _tree_or_null()
@@ -365,6 +369,7 @@ func _probe_tunnel_reachability(host_address: String) -> bool:
 				return false
 			await retry_tree.create_timer(PROBE_INTERVAL_SEC).timeout
 	push_warning("[Menu/Duo] Tunnel reachability probe exhausted %d attempts for %s" % [PROBE_MAX_ATTEMPTS, url])
+	_debug_log_menu("[PROBE] EXHAUSTED %d attempts for %s — probe failed" % [PROBE_MAX_ATTEMPTS, url])
 	return false
 
 func _notification(what: int) -> void:
@@ -510,15 +515,73 @@ func _join_multiplayer_room(room_code: String) -> void:
 	var resolved_host_port := int(registration.get("host_port", 7777))
 	print("[Menu] Room resolved. Host address: %s:%d" % [resolved_host_address, resolved_host_port])
 	push_error("[JOIN DEBUG] Room resolved to %s:%d - Starting join attempt..." % [resolved_host_address, resolved_host_port])
+
+	## Probe tunnel DNS before attempting the WebSocket join. Cloudflare
+	## quick-tunnel hostnames (`*.trycloudflare.com`) take several seconds to
+	## propagate after the host opens the tunnel. Without this warmup,
+	## WebSocketMultiplayerPeer.create_client() does a synchronous DNS lookup,
+	## fails, and emits connection_failed at +15ms before the hostname is
+	## resolvable on this machine. The probe returns early as soon as the
+	## tunnel responds, so a fast DNS propagation does not waste time.
+	var is_tunnel_url := resolved_host_address.begins_with("wss://") or resolved_host_address.begins_with("ws://")
+	if is_tunnel_url:
+		if multiplayer_status_label != null:
+			multiplayer_status_label.text = "Waiting for tunnel DNS propagation..."
+		var probe_ok := await _probe_tunnel_reachability(resolved_host_address)
+		if _tree_or_null() == null:
+			if multiplayer_join_button != null:
+				multiplayer_join_button.disabled = false
+			return
+		if not probe_ok:
+			print("[Menu] Tunnel DNS probe did not resolve; will still attempt join with retries")
+
+	## Wrap the actual join in a retry loop. Even after the probe succeeds the
+	## first WSS connection sometimes fast-fails (peer_status=0 at +15ms) when
+	## the Cloudflare edge has not finished negotiating routes for the tunnel.
+	## Retry with backoff before surfacing the failure to the user.
+	const MANUAL_JOIN_RETRY_COUNT := 4
+	const MANUAL_JOIN_RETRY_BACKOFF_SEC := 3.0
 	var begin_join := func() -> bool:
 		return bool(multiplayer_session_manager.join_registered_room(registration))
-	var join_result := await _await_multiplayer_join_result(
-		multiplayer_session_manager,
-		MULTIPLAYER_JOIN_CAP_SEC,
-		resolved_host_address,
-		resolved_host_port,
-		begin_join
-	)
+	var join_result := {"ok": false, "reason": "Unable to connect to the room host."}
+	for attempt in range(MANUAL_JOIN_RETRY_COUNT):
+		if attempt > 0:
+			if multiplayer_status_label != null:
+				multiplayer_status_label.text = "Connection failed. Retrying (%d/%d)..." % [attempt + 1, MANUAL_JOIN_RETRY_COUNT]
+			print("[Menu] Manual join attempt %d/%d (previous attempt failed; retrying after backoff)" % [attempt + 1, MANUAL_JOIN_RETRY_COUNT])
+			_debug_log_menu("[JOIN] Retry attempt %d/%d after backoff" % [attempt + 1, MANUAL_JOIN_RETRY_COUNT])
+			if is_tunnel_url:
+				var reprobe_ok := await _probe_tunnel_reachability(resolved_host_address)
+				if _tree_or_null() == null:
+					if multiplayer_join_button != null:
+						multiplayer_join_button.disabled = false
+					return
+				if not reprobe_ok:
+					print("[Menu] Reprobe still failing before attempt %d; trying anyway" % (attempt + 1))
+		else:
+			_debug_log_menu("[JOIN] First attempt 1/%d" % MANUAL_JOIN_RETRY_COUNT)
+		join_result = await _await_multiplayer_join_result(
+			multiplayer_session_manager,
+			MULTIPLAYER_JOIN_CAP_SEC,
+			resolved_host_address,
+			resolved_host_port,
+			begin_join
+		)
+		if _tree_or_null() == null:
+			if multiplayer_join_button != null:
+				multiplayer_join_button.disabled = false
+			return
+		if bool(join_result.get("ok", false)):
+			break
+		## Clean peer state before the next attempt so create_client() starts fresh.
+		multiplayer_session_manager.leave_room()
+		if attempt + 1 < MANUAL_JOIN_RETRY_COUNT:
+			var backoff_tree := _tree_or_null()
+			if backoff_tree == null:
+				if multiplayer_join_button != null:
+					multiplayer_join_button.disabled = false
+				return
+			await backoff_tree.create_timer(MANUAL_JOIN_RETRY_BACKOFF_SEC).timeout
 	if _tree_or_null() == null:
 		if multiplayer_join_button != null:
 			multiplayer_join_button.disabled = false

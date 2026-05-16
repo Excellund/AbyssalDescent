@@ -384,11 +384,19 @@ func _sync_player_revived(peer_id: int, revived_health: float = 1.0) -> void:
 
 ## Called by player's health_state when health changes.
 ## Should be called from player.gd's health signal handler.
+## HP is host-authoritative for ALL players to prevent echo races where a
+## joiner's re-broadcast of an inbound RPC reverts damage the host applied
+## locally but hadn't yet round-tripped (causing visible HP desync).
 func broadcast_health_change(peer_id: int, health: float) -> void:
-	if _is_authority_for_peer(peer_id):
-		var next_sequence := int(_outgoing_health_sequence_by_peer.get(peer_id, 0)) + 1
-		_outgoing_health_sequence_by_peer[peer_id] = next_sequence
-		_sync_player_health.rpc(peer_id, health, next_sequence)
+	if multiplayer_session_manager == null:
+		return
+	if not bool(multiplayer_session_manager.is_session_connected()):
+		return
+	if not bool(multiplayer_session_manager.is_host()):
+		return
+	var next_sequence := int(_outgoing_health_sequence_by_peer.get(peer_id, 0)) + 1
+	_outgoing_health_sequence_by_peer[peer_id] = next_sequence
+	_sync_player_health.rpc(peer_id, health, next_sequence)
 
 
 ## Called by player when they die.

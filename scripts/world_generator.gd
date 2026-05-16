@@ -605,6 +605,65 @@ func _player_fan_offset(slot: int, total: int) -> Vector2:
 	return PLAYER_ROSTER_HELPERS.player_fan_offset(slot, total)
 
 
+## Compute the local player's room-spawn position (room center + that peer's
+## fan offset, derived from the same deterministic global peer ordering used
+## for initial spawn). Returns Vector2.ZERO for singleplayer.
+##
+## Without this, room transitions teleport every peer to (0, 0) which makes the
+## party stack on a single point at the start of every new encounter instead of
+## holding their assigned formation slots.
+func _compute_local_spawn_position() -> Vector2:
+	return _compute_spawn_position_for_peer(0)
+
+
+## Compute the slot-aligned spawn position for `target_peer_id` using the same
+## deterministic global peer ordering used for initial spawn. Pass 0 (default)
+## to compute the local peer's slot position. Returns Vector2.ZERO when not in
+## a multiplayer session or when the peer cannot be resolved.
+func _compute_spawn_position_for_peer(target_peer_id: int) -> Vector2:
+	if not is_multiplayer:
+		return Vector2.ZERO
+	var mp_session := get_node_or_null("/root/MultiplayerSessionManager") as MULTIPLAYER_SESSION_MANAGER_SCRIPT
+	if mp_session == null:
+		return Vector2.ZERO
+	var local_peer := int(mp_session.local_peer_id)
+	if local_peer <= 0:
+		return Vector2.ZERO
+	var resolved_peer := target_peer_id if target_peer_id > 0 else local_peer
+	var all_peers: Array[int] = []
+	all_peers.append(local_peer)
+	for peer_id in mp_session.get_peer_ids():
+		var pid := int(peer_id)
+		if pid == local_peer or pid <= 0:
+			continue
+		all_peers.append(pid)
+	all_peers.sort()
+	var slot := all_peers.find(resolved_peer)
+	if slot < 0:
+		return Vector2.ZERO
+	return _player_fan_offset(slot, all_peers.size())
+
+
+## Reset the local player AND every replicated remote-view player to their
+## slot-aligned spawn position. Without this, encounter transitions only move
+## the local player and remote views keep their previous-room coordinates until
+## the next position broadcast arrives — making party-mates appear at totally
+## unrelated positions for a frame or more on the host's view (and vice versa).
+func _reset_all_player_positions_to_slots() -> void:
+	if is_instance_valid(player):
+		var local_peer_id := int(player.get("player_id"))
+		player_flow_coordinator.reset_player_position(player, _compute_spawn_position_for_peer(local_peer_id))
+	if not is_multiplayer:
+		return
+	for party_node in _get_multiplayer_player_nodes():
+		if not is_instance_valid(party_node) or party_node == player:
+			continue
+		var party_peer_id := int(party_node.get("player_id"))
+		if party_peer_id <= 0:
+			continue
+		player_flow_coordinator.reset_player_position(party_node, _compute_spawn_position_for_peer(party_peer_id))
+
+
 func _disable_player_collision_pair(primary_player: Node, secondary_player: Node) -> void:
 	PLAYER_ROSTER_HELPERS.disable_player_collision_pair(primary_player, secondary_player)
 
@@ -809,8 +868,17 @@ func _setup_encounter_profile_builder_system() -> void:
 		"shielders_per_room": shielders_per_room,
 		"hard_room_enemy_bonus": hard_room_enemy_bonus
 	})
-	_roll_act_biomes()
-	_apply_active_biome(1)
+	## Biomes are host-authoritative in multiplayer. Each peer has its own RNG
+	## (seeded independently), so rolling locally on joiners would produce a
+	## different biome — wrong enemy weights, wrong color theme, wrong UI label.
+	## Host rolls once and broadcasts; joiners wait for the RPC.
+	var mp_session_for_biome := get_node_or_null("/root/MultiplayerSessionManager") as MULTIPLAYER_SESSION_MANAGER_SCRIPT
+	var is_joiner := is_multiplayer and mp_session_for_biome != null and not mp_session_for_biome.is_host()
+	if not is_joiner:
+		_roll_act_biomes()
+		if is_multiplayer:
+			_sync_act_biomes.rpc(PackedStringArray(run_session.act_biome_ids))
+		_apply_active_biome(1)
 
 func _setup_enemy_spawner_system() -> void:
 	enemy_spawner = ENEMY_SPAWNER_SCRIPT.new()
@@ -1186,7 +1254,7 @@ func _reset_for_debug_jump() -> void:
 	boss_reward_pending = false
 	last_defeated_boss_id = ""
 	_clear_all_enemies()
-	player_flow_coordinator.reset_player_position(player)
+	_reset_all_player_positions_to_slots()
 
 func _start_debug_objective_room(kind: String = "") -> Dictionary:
 	run_summary_recorder.mark_debug_mode()
@@ -2274,7 +2342,7 @@ func _apply_active_run_snapshot(snapshot: Dictionary) -> bool:
 		return false
 
 	_clear_all_enemies()
-	player_flow_coordinator.reset_player_position(player)
+	_reset_all_player_positions_to_slots()
 	_reset_effective_room_bounds()
 	_apply_camera_bounds_for_room(current_effective_room_size)
 	_play_room_music(false, false)
@@ -2812,7 +2880,7 @@ func _choose_door(door: Dictionary) -> void:
 		_world_sfx_player.play()
 	if not is_instance_valid(player):
 		return
-	player_flow_coordinator.reset_player_position(player)
+	_reset_all_player_positions_to_slots()
 	if not is_instance_valid(encounter_flow_system):
 		return
 	var choice: Dictionary = encounter_route_controller.resolve_choice(door)
@@ -4268,6 +4336,19 @@ func _roll_act_biomes() -> void:
 	for act in [1, 2, 3]:
 		var biome_id := BIOME_REGISTRY.roll_biome_for_act(act, rng)
 		run_session.act_biome_ids.append(biome_id)
+
+
+## Host -> joiners. Replaces the joiner's per-act biome roster with the host's
+## authoritative roll so every peer paints the same color theme, sees the same
+## biome label, and (on the host) spawns enemies using the same weight overrides.
+@rpc("authority", "call_local", "reliable")
+func _sync_act_biomes(ids: PackedStringArray) -> void:
+	if run_session == null:
+		return
+	run_session.act_biome_ids.clear()
+	for id in ids:
+		run_session.act_biome_ids.append(String(id))
+	_apply_active_biome(_get_current_act())
 
 func _get_current_act() -> int:
 	if second_boss_defeated:
