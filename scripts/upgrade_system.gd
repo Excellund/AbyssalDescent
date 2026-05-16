@@ -389,7 +389,7 @@ func get_power_flavor_text(power_id: String) -> String:
 		"edict_of_the_court":
 			return "Kills detonate a force pulse at the kill position, pushing nearby enemies outward."
 		"null_corridor":
-			return "Dashing leaves a void corridor. Enemies that enter the trail are deflected and take damage once — they cannot walk through it."
+			return "Dashes leave a void corridor. Enemies that enter are deflected and take damage once."
 		"razor_wind":
 			return "Each swing extends a slicing arc that only strikes enemies past your normal melee reach."
 		"execution_edge":
