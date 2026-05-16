@@ -772,6 +772,22 @@ func _on_connected_to_server() -> void:
 ## Internal: Triggered when client fails to connect.
 func _on_connection_failed() -> void:
 	_debug_log("[SIGNAL] _on_connection_failed() FIRED - Connection failed!")
+	## Surface low-level WebSocket / ENet peer state to help diagnose why the
+	## transport rejected the connection (Cloudflare quick-tunnel handshakes
+	## sometimes drop subprotocol/TLS in ways that show up here).
+	if _multiplayer != null:
+		var peer := _multiplayer.multiplayer_peer
+		if peer != null:
+			var status := peer.get_connection_status() if peer.has_method("get_connection_status") else -1
+			_debug_log("[SIGNAL] connection_failed diagnostics: transport=%s peer_class=%s peer_status=%d" % [_active_transport_type, peer.get_class(), int(status)])
+			if peer is WebSocketMultiplayerPeer:
+				var ws_peer := peer as WebSocketMultiplayerPeer
+				var inner := ws_peer.get_peer(1) if ws_peer.has_method("get_peer") else null
+				if inner is WebSocketPeer:
+					var ws := inner as WebSocketPeer
+					var close_code := ws.get_close_code() if ws.has_method("get_close_code") else -1
+					var close_reason := ws.get_close_reason() if ws.has_method("get_close_reason") else ""
+					_debug_log("[SIGNAL] WebSocket close diagnostics: code=%d reason='%s' ready_state=%d" % [int(close_code), close_reason, int(ws.get_ready_state())])
 	if _join.is_active():
 		if _join.index + 1 < _join.addresses.size():
 			print("[MultiplayerSessionManager] Join attempt to %s failed. Trying next address..." % [str(_join.addresses[_join.index])])

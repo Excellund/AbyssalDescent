@@ -86,22 +86,21 @@ static func resolve_local_peer_id(tree: SceneTree, mp_session_manager: Node, fal
 		return fallback.player_id
 	return 0
 
-## Resolve the active local character id, honoring the per-peer selection
-## stored in run_context when it agrees with the global selected character.
+## Resolve the active local character id. In multiplayer, the lobby's per-peer
+## selection is the authoritative source of truth — RunContext.selected_character_id
+## may have been rejected by the meta-progress unlock check even though the lobby
+## allowed the pick, so we cannot require equality between the two.
 static func resolve_local_character_id(run_context: Node, fallback_character_id: String, local_peer_id: int) -> String:
 	if run_context == null:
 		return fallback_character_id
-	var resolved_character_id := fallback_character_id
-	var selected_character_id := String(run_context.get_selected_character_id()).strip_edges().to_lower()
-	if not selected_character_id.is_empty():
-		resolved_character_id = selected_character_id
 	if local_peer_id > 0:
 		var peer_character_id := String(run_context.get_peer_character_selection(local_peer_id)).strip_edges().to_lower()
-		if not peer_character_id.is_empty() and peer_character_id == selected_character_id:
-			resolved_character_id = peer_character_id
-	if resolved_character_id.is_empty():
-		resolved_character_id = fallback_character_id
-	return resolved_character_id
+		if not peer_character_id.is_empty():
+			return peer_character_id
+	var selected_character_id := String(run_context.get_selected_character_id()).strip_edges().to_lower()
+	if not selected_character_id.is_empty():
+		return selected_character_id
+	return fallback_character_id
 
 ## Returns peer_id -> variant_index for all party peers.
 ## Peers sharing a character get distinct variants; the lowest peer_id (host = 1)

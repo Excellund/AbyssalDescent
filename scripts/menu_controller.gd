@@ -196,6 +196,9 @@ func _run_duo_host_autostart() -> void:
 		var remove_err := DirAccess.remove_absolute(abs_path)
 		if remove_err != OK:
 			push_error("[Menu/Duo] Failed to remove stale room code file (err=%d): %s" % [int(remove_err), abs_path])
+	if multiplayer_status_label != null:
+		multiplayer_status_label.text = "[Duo] Creating host room (real tunnel, ~5-10s)..."
+	print("[Menu/Duo] Host autostart: calling _create_multiplayer_room()")
 	await _create_multiplayer_room()
 	var multiplayer_session_manager = get_node_or_null("/root/MultiplayerSessionManager")
 	if multiplayer_session_manager == null:
@@ -203,7 +206,7 @@ func _run_duo_host_autostart() -> void:
 		return
 	var code := String(multiplayer_session_manager.room_code).strip_edges()
 	if code.is_empty():
-		push_error("[Menu/Duo] Host autostart: room_code is empty after create_multiplayer_room()")
+		push_error("[Menu/Duo] Host autostart: room_code is empty after create_multiplayer_room() — check status label for the underlying error")
 		return
 	var write_file := FileAccess.open(DUO_ROOM_CODE_PATH, FileAccess.WRITE)
 	if write_file == null:
@@ -212,12 +215,28 @@ func _run_duo_host_autostart() -> void:
 	write_file.store_string(code)
 	write_file.close()
 	print("[Menu/Duo] Wrote room code '%s' to %s for joiner pickup" % [code, DUO_ROOM_CODE_PATH])
+	## If create_multiplayer_room succeeded, the lobby modal is already open.
+	## Belt-and-suspenders: if for any reason it isn't, open it now so the host
+	## lands in the lobby rather than the main menu.
+	if lobby_modal_instance == null:
+		print("[Menu/Duo] Host autostart: lobby modal not yet open after create, forcing _show_lobby_modal()")
+		_show_lobby_modal()
 
 
 func _run_duo_join_autostart() -> void:
 	const POLL_INTERVAL_SEC := 0.5
 	const MAX_WAIT_SEC := 60.0
+	## Try to join as soon as the host writes its room code. If the first attempt
+	## fails (Cloudflare quick-tunnel DNS often needs a few seconds to propagate),
+	## retry with backoff. Do NOT block the user staring at the main menu with a
+	## fixed warmup — let the first attempt go immediately and let retries cover
+	## the warmup window if needed.
+	const JOIN_RETRY_COUNT := 4
+	const JOIN_RETRY_BACKOFF_SEC := 3.0
 	var elapsed := 0.0
+	var resolved_code := ""
+	if multiplayer_status_label != null:
+		multiplayer_status_label.text = "[Duo] Waiting for host room code..."
 	while elapsed < MAX_WAIT_SEC:
 		if FileAccess.file_exists(DUO_ROOM_CODE_PATH):
 			var read_file := FileAccess.open(DUO_ROOM_CODE_PATH, FileAccess.READ)
@@ -225,21 +244,119 @@ func _run_duo_join_autostart() -> void:
 				var code := read_file.get_as_text().strip_edges()
 				read_file.close()
 				if not code.is_empty():
-					print("[Menu/Duo] Joiner autostart: connecting to room '%s'" % code)
-					_join_multiplayer_room(code)
-					return
+					resolved_code = code
+					break
 		var tree := _tree_or_null()
 		if tree == null:
 			return
 		await tree.create_timer(POLL_INTERVAL_SEC).timeout
 		elapsed += POLL_INTERVAL_SEC
-	push_error("[Menu/Duo] Joiner autostart: timed out after %.1fs waiting for room code file %s" % [MAX_WAIT_SEC, DUO_ROOM_CODE_PATH])
+	if resolved_code.is_empty():
+		push_error("[Menu/Duo] Joiner autostart: timed out after %.1fs waiting for room code file %s" % [MAX_WAIT_SEC, DUO_ROOM_CODE_PATH])
+		if multiplayer_status_label != null:
+			multiplayer_status_label.text = "[Duo] Timed out waiting for host room code."
+		return
+	print("[Menu/Duo] Joiner autostart: found room code '%s', attempting join immediately" % resolved_code)
+
+	## Resolve the room once up front so we know the host_address, then probe
+	## DNS / HTTPS reachability of the tunnel URL before attempting the actual
+	## WebSocket join. Cloudflare quick-tunnel DNS records propagate to local
+	## resolvers over several seconds; without this warmup, the joiner's
+	## WebSocketMultiplayerPeer.create_client() does a synchronous DNS lookup,
+	## fails, and emits connection_failed at +15ms before the tunnel hostname
+	## is actually resolvable on this machine.
+	var multiplayer_room_service_warm = get_node_or_null("/root/MultiplayerRoomService")
+	if multiplayer_room_service_warm != null:
+		var warm_resolve: Dictionary = await multiplayer_room_service_warm.resolve_room_code(resolved_code)
+		if bool(warm_resolve.get("ok", false)):
+			var warm_reg := warm_resolve.get("registration", {}) as Dictionary
+			var warm_host := String(warm_reg.get("host_address", "")).strip_edges()
+			if not warm_host.is_empty():
+				if multiplayer_status_label != null:
+					multiplayer_status_label.text = "[Duo] Waiting for tunnel DNS propagation..."
+				var probe_ok := await _probe_tunnel_reachability(warm_host)
+				if not probe_ok:
+					print("[Menu/Duo] Joiner autostart: tunnel reachability probe failed; trying join anyway")
+
+	for attempt in range(JOIN_RETRY_COUNT):
+		var multiplayer_session_manager = get_node_or_null("/root/MultiplayerSessionManager")
+		if multiplayer_session_manager == null:
+			push_error("[Menu/Duo] Joiner autostart: MultiplayerSessionManager autoload is missing")
+			return
+		if multiplayer_status_label != null:
+			multiplayer_status_label.text = "[Duo] Joining room %s (attempt %d/%d)..." % [resolved_code, attempt + 1, JOIN_RETRY_COUNT]
+		print("[Menu/Duo] Joiner autostart: join attempt %d/%d for room '%s'" % [attempt + 1, JOIN_RETRY_COUNT, resolved_code])
+		await _join_multiplayer_room(resolved_code)
+		var retry_tree := _tree_or_null()
+		if retry_tree == null:
+			return
+		if bool(multiplayer_session_manager.has_active_session_state()) and bool(multiplayer_session_manager.session_connected):
+			print("[Menu/Duo] Joiner autostart: connected on attempt %d" % (attempt + 1))
+			## _join_multiplayer_room already opened the lobby modal; belt-and-suspenders below.
+			if lobby_modal_instance == null:
+				print("[Menu/Duo] Joiner autostart: lobby modal not yet open after join, forcing _show_lobby_modal()")
+				_show_lobby_modal()
+			return
+		if attempt + 1 < JOIN_RETRY_COUNT:
+			print("[Menu/Duo] Joiner autostart: attempt %d failed, retrying in %.1fs (tunnel may still be warming up)" % [attempt + 1, JOIN_RETRY_BACKOFF_SEC])
+			await retry_tree.create_timer(JOIN_RETRY_BACKOFF_SEC).timeout
+	push_error("[Menu/Duo] Joiner autostart: all %d join attempts failed" % JOIN_RETRY_COUNT)
+	if multiplayer_status_label != null:
+		multiplayer_status_label.text = "[Duo] All %d join attempts failed. Check host console for the room code." % JOIN_RETRY_COUNT
 
 
 func _tree_or_null() -> SceneTree:
 	if not is_inside_tree():
 		return null
 	return get_tree()
+
+
+## Probe a tunnel URL with HTTPRequest until DNS resolves and the Cloudflare
+## edge responds with ANY HTTP status (502, 426, 200 are all proof the path
+## works). Returns true once a response is received, false on timeout.
+##
+## Quick-tunnel hostnames (`*.trycloudflare.com`) take several seconds for
+## their DNS records to propagate to local resolvers after cloudflared
+## reports the tunnel as registered. The WebSocket client cannot survive
+## this gap because its DNS lookup fails synchronously.
+func _probe_tunnel_reachability(host_address: String) -> bool:
+	const PROBE_INTERVAL_SEC := 1.0
+	const PROBE_MAX_ATTEMPTS := 20
+	var url := host_address
+	if url.begins_with("wss://"):
+		url = "https://" + url.substr(6)
+	elif url.begins_with("ws://"):
+		url = "http://" + url.substr(5)
+	if not (url.begins_with("http://") or url.begins_with("https://")):
+		return true ## Direct ENet or unrecognised scheme; nothing to probe.
+
+	for attempt in range(PROBE_MAX_ATTEMPTS):
+		var tree := _tree_or_null()
+		if tree == null:
+			return false
+		var req := HTTPRequest.new()
+		add_child(req)
+		var err := req.request(url, PackedStringArray(), HTTPClient.METHOD_GET)
+		if err != OK:
+			req.queue_free()
+			print("[Menu/Duo] Probe attempt %d: HTTPRequest.request() error %d for %s" % [attempt + 1, err, url])
+		else:
+			var probe_result: Array = await req.request_completed
+			req.queue_free()
+			var result_code := int(probe_result[0])
+			var status_code := int(probe_result[1])
+			if result_code == HTTPRequest.RESULT_SUCCESS:
+				print("[Menu/Duo] Probe attempt %d: tunnel reachable (HTTP %d) — DNS propagated" % [attempt + 1, status_code])
+				return true
+			print("[Menu/Duo] Probe attempt %d: result=%d status=%d (DNS likely not propagated yet)" % [attempt + 1, result_code, status_code])
+
+		if attempt + 1 < PROBE_MAX_ATTEMPTS:
+			var retry_tree := _tree_or_null()
+			if retry_tree == null:
+				return false
+			await retry_tree.create_timer(PROBE_INTERVAL_SEC).timeout
+	push_warning("[Menu/Duo] Tunnel reachability probe exhausted %d attempts for %s" % [PROBE_MAX_ATTEMPTS, url])
+	return false
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED:

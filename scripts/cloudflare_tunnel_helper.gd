@@ -18,7 +18,9 @@ extends Node
 ##   6. `stop()` terminates the child process and joins the reader thread.
 
 const URL_REGEX_PATTERN := "https://[a-z0-9-]+\\.trycloudflare\\.com"
+const REGISTERED_MARKER := "Registered tunnel connection"
 const DEFAULT_STARTUP_TIMEOUT_SEC := 30.0
+const REGISTERED_GRACE_SEC := 25.0
 const DOWNLOAD_TIMEOUT_SEC := 120.0
 
 const RELEASE_URL_WINDOWS := "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
@@ -33,8 +35,11 @@ var _state_mutex: Mutex = Mutex.new()
 var _captured_url: String = ""
 var _capture_error: String = ""
 var _captured_log: String = ""
+var _tunnel_registered: bool = false
 var _stop_requested: bool = false
 var _download_request: HTTPRequest = null
+var _tee_log_path: String = ""
+var _tee_log_mutex: Mutex = Mutex.new()
 
 
 func is_running() -> bool:
@@ -58,9 +63,14 @@ func start_and_get_url(local_port: int, timeout_sec: float = DEFAULT_STARTUP_TIM
 		}
 	var binary_path := String(ensure_result.get("path", ""))
 
+	## Use the literal IPv4 loopback rather than "localhost". On Windows,
+	## "localhost" resolves to IPv6 ::1 first; Godot's WebSocketMultiplayerPeer
+	## binds only to 127.0.0.1, so cloudflared would otherwise hit nothing on
+	## ::1:<port> and Cloudflare's edge would return 502 Bad Gateway on every
+	## WSS handshake.
 	var args := PackedStringArray([
 		"tunnel",
-		"--url", "http://localhost:%d" % local_port,
+		"--url", "http://127.0.0.1:%d" % local_port,
 		"--no-autoupdate"
 	])
 	var spawn := OS.execute_with_pipe(binary_path, args)
@@ -79,23 +89,50 @@ func start_and_get_url(local_port: int, timeout_sec: float = DEFAULT_STARTUP_TIM
 	_captured_url = ""
 	_capture_error = ""
 	_captured_log = ""
+	_tunnel_registered = false
+
+	## Mirror cloudflared output to a dedicated file so the operator can
+	## inspect it without needing the game's console window. One file per
+	## tunnel session, kept under user://cloudflared_logs/.
+	var logs_dir := "user://cloudflared_logs"
+	DirAccess.make_dir_recursive_absolute(logs_dir)
+	var stamp := Time.get_datetime_string_from_system().replace(":", "").replace("-", "").replace("T", "-")
+	_tee_log_path = "%s/cloudflared-%s-pid%d.log" % [logs_dir, stamp, _pid]
+	print("[CloudflareTunnelHelper] cloudflared output mirror: %s -> %s" % [_tee_log_path, ProjectSettings.globalize_path(_tee_log_path)])
 
 	_reader_thread = Thread.new()
 	_reader_thread.start(_read_pipes_loop)
 
 	var elapsed := 0.0
+	var registered_wait_started := -1.0
 	var tree := get_tree()
 	while elapsed < timeout_sec:
 		await tree.create_timer(0.1).timeout
 		elapsed += 0.1
 		_state_mutex.lock()
 		var url := _captured_url
+		var registered := _tunnel_registered
 		var err := _capture_error
 		var log_tail := _captured_log
 		_state_mutex.unlock()
-		if not url.is_empty():
+		if not url.is_empty() and registered:
 			var wss_url := url.replace("https://", "wss://")
+			print("[CloudflareTunnelHelper] Tunnel ready (URL + registered connection): %s" % wss_url)
 			return {"ok": true, "url": wss_url, "error": "", "log_tail": log_tail}
+		if not url.is_empty():
+			## URL banner captured; start grace timer waiting for the edge to
+			## actually register the tunnel connection. Quick tunnels print the
+			## URL before they are reachable, so joiners must not connect yet.
+			if registered_wait_started < 0.0:
+				registered_wait_started = elapsed
+				print("[CloudflareTunnelHelper] URL captured (%s); waiting for edge registration..." % url)
+			elif elapsed - registered_wait_started >= REGISTERED_GRACE_SEC:
+				## Grace expired without seeing the registration marker. Return the
+				## URL anyway with a warning so callers can still try; some
+				## cloudflared versions phrase the registration line differently.
+				var wss_url2 := url.replace("https://", "wss://")
+				print("[CloudflareTunnelHelper] WARN: edge registration not observed after %.1fs; proceeding with %s" % [REGISTERED_GRACE_SEC, wss_url2])
+				return {"ok": true, "url": wss_url2, "error": "", "log_tail": log_tail}
 		if not err.is_empty():
 			stop()
 			return {"ok": false, "url": "", "error": err, "log_tail": log_tail}
@@ -156,6 +193,14 @@ func _read_pipes_loop() -> void:
 			break
 
 		if not line.is_empty():
+			## Mirror every cloudflared log line to the game console so the host
+			## can see connection routing, origin errors, and edge issues in real
+			## time. The background thread uses print() which is thread-safe in
+			## Godot 4.x.
+			print("[cloudflared] " + line)
+			## Also append to the dedicated mirror file so the user can read
+			## cloudflared activity even after the game window closes.
+			_append_tee_log(line)
 			log_buffer += line + "\n"
 			if log_buffer.length() > 4096:
 				log_buffer = log_buffer.substr(log_buffer.length() - 4096, 4096)
@@ -168,6 +213,10 @@ func _read_pipes_loop() -> void:
 					_captured_log = log_buffer
 					_state_mutex.unlock()
 					captured = true
+			if line.find(REGISTERED_MARKER) != -1:
+				_state_mutex.lock()
+				_tunnel_registered = true
+				_state_mutex.unlock()
 			_state_mutex.lock()
 			_captured_log = log_buffer
 			_state_mutex.unlock()
@@ -308,3 +357,18 @@ func _remove_user_file(path: String) -> void:
 	var dir := DirAccess.open(path.get_base_dir())
 	if dir != null:
 		dir.remove(path.get_file())
+
+
+## Append a single cloudflared output line to the per-session mirror file.
+## Called from the background reader thread; uses a dedicated mutex so it
+## won't contend with the state mutex used for URL/registration tracking.
+func _append_tee_log(line: String) -> void:
+	if _tee_log_path.is_empty():
+		return
+	_tee_log_mutex.lock()
+	var f := FileAccess.open(_tee_log_path, FileAccess.READ_WRITE) if FileAccess.file_exists(_tee_log_path) else FileAccess.open(_tee_log_path, FileAccess.WRITE)
+	if f != null:
+		f.seek_end()
+		f.store_line(line)
+		f.close()
+	_tee_log_mutex.unlock()
