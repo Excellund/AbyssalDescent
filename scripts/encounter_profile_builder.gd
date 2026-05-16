@@ -1058,7 +1058,13 @@ func _build_survival_profile(depth: int) -> Dictionary:
 	var pressure_split := _objective_pressure_split()
 	spawn_batch = _scale_objective_spawn_batch(spawn_batch, float(pressure_split["wave_mult"]))
 	ENCOUNTER_CONTRACTS.profile_set_survival_objective(profile, duration, spawn_interval, spawn_batch)
-	return _apply_bearing_count_scaling(profile, float(pressure_split["initial_override"]))
+	var result := _apply_bearing_count_scaling(profile, float(pressure_split["initial_override"]))
+	var rank := _difficulty_rank()
+	var lurkers := 1 if rank >= 1 and effective_depth >= 5 else 0
+	var pyres := 1 if rank >= 2 and effective_depth >= 6 else 0
+	if lurkers > 0 or pyres > 0:
+		ENCOUNTER_CONTRACTS.profile_set_specialist_counts(result, lurkers, 0, 0, 0, pyres)
+	return result
 
 func _build_priority_target_profile(depth: int) -> Dictionary:
 	var effective_depth := _effective_depth(depth)
@@ -1080,7 +1086,12 @@ func _build_priority_target_profile(depth: int) -> Dictionary:
 	var lancer_gate := 7 + specialist_offset
 	var target_type := "lancer" if effective_depth >= lancer_gate else "archer"
 	ENCOUNTER_CONTRACTS.profile_set_priority_target_objective(profile, target_type, duration, spawn_interval, spawn_batch)
-	return _apply_bearing_count_scaling(profile, float(pressure_split["initial_override"]))
+	var result := _apply_bearing_count_scaling(profile, float(pressure_split["initial_override"]))
+	var rank := _difficulty_rank()
+	var lancers := 1 if rank >= 1 and effective_depth >= 5 else 0
+	if lancers > 0:
+		ENCOUNTER_CONTRACTS.profile_set_specialist_counts(result, 0, 0, lancers)
+	return result
 
 func _build_control_profile(depth: int) -> Dictionary:
 	var effective_depth := _effective_depth(depth)
@@ -1109,7 +1120,15 @@ func _build_control_profile(depth: int) -> Dictionary:
 	var pressure_split := _objective_pressure_split(control_pressure_mult)
 	spawn_batch = _scale_objective_spawn_batch(spawn_batch, float(pressure_split["wave_mult"]))
 	ENCOUNTER_CONTRACTS.profile_set_control_objective(profile, duration, spawn_interval, spawn_batch, zone_radius, progress_goal, progress_decay, contest_threshold)
-	return _apply_bearing_count_scaling(profile, float(pressure_split["initial_override"]))
+	var result := _apply_bearing_count_scaling(profile, float(pressure_split["initial_override"]))
+	var rams := 0
+	if difficulty_rank >= 1 and effective_depth >= 4:
+		rams = 1
+	if difficulty_rank >= 2 and effective_depth >= 7:
+		rams = 2
+	if rams > 0:
+		ENCOUNTER_CONTRACTS.profile_set_specialist_counts(result, 0, rams, 0)
+	return result
 
 func _control_curve_tuning(difficulty_rank: int, effective_depth: int) -> Dictionary:
 	var rank_curve := _control_rank_curve(difficulty_rank)
@@ -1156,7 +1175,12 @@ func _build_circuit_sweep_profile(depth: int) -> Dictionary:
 	var pressure_split := _objective_pressure_split()
 	spawn_batch = _scale_objective_spawn_batch(spawn_batch, float(pressure_split["wave_mult"]))
 	ENCOUNTER_CONTRACTS.profile_set_circuit_sweep_objective(profile, duration, spawn_interval, spawn_batch)
-	return _apply_bearing_count_scaling(profile, float(pressure_split["initial_override"]))
+	var result := _apply_bearing_count_scaling(profile, float(pressure_split["initial_override"]))
+	var rank := _difficulty_rank()
+	var lurkers := 1 if rank >= 1 and effective_depth >= 5 else 0
+	if lurkers > 0:
+		ENCOUNTER_CONTRACTS.profile_set_specialist_counts(result, lurkers, 0, 0)
+	return result
 
 func _build_pulse_window_profile(depth: int) -> Dictionary:
 	var effective_depth := _effective_depth(depth)
@@ -1177,7 +1201,12 @@ func _build_pulse_window_profile(depth: int) -> Dictionary:
 	var pressure_split := _objective_pressure_split()
 	spawn_batch = _scale_objective_spawn_batch(spawn_batch, float(pressure_split["wave_mult"]))
 	ENCOUNTER_CONTRACTS.profile_set_pulse_window_objective(profile, duration, spawn_interval, spawn_batch, kill_target, pulse_interval)
-	return _apply_bearing_count_scaling(profile, float(pressure_split["initial_override"]))
+	var result := _apply_bearing_count_scaling(profile, float(pressure_split["initial_override"]))
+	var rank := _difficulty_rank()
+	var pyres := 1 if rank >= 2 and effective_depth >= 5 else 0
+	if pyres > 0:
+		ENCOUNTER_CONTRACTS.profile_set_specialist_counts(result, 0, 0, 0, 0, pyres)
+	return result
 
 func _build_intercept_run_profile(depth: int) -> Dictionary:
 	var effective_depth := _effective_depth(depth)
@@ -1196,7 +1225,12 @@ func _build_intercept_run_profile(depth: int) -> Dictionary:
 	var pressure_split := _objective_pressure_split()
 	spawn_batch = _scale_objective_spawn_batch(spawn_batch, float(pressure_split["wave_mult"]))
 	ENCOUNTER_CONTRACTS.profile_set_intercept_run_objective(profile, duration, spawn_interval, spawn_batch, traversal_time)
-	return _apply_bearing_count_scaling(profile, float(pressure_split["initial_override"]))
+	var result := _apply_bearing_count_scaling(profile, float(pressure_split["initial_override"]))
+	var rank := _difficulty_rank()
+	var rams := 1 if rank >= 1 and effective_depth >= 6 else 0
+	if rams > 0:
+		ENCOUNTER_CONTRACTS.profile_set_specialist_counts(result, 0, rams, 0)
+	return result
 
 func _normalize_route_context(route_context: Variant) -> Dictionary:
 	if route_context is Dictionary:

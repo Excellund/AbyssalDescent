@@ -33,8 +33,8 @@ static func get_bearing_definitions() -> Dictionary:
 		"Fortress": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(1, 0, 1, 4), [
 			ENCOUNTER_CONTRACTS.profile_counts(1, 0, 1, 2),
 			ENCOUNTER_CONTRACTS.profile_counts(1, 0, 1, 5),
-			ENCOUNTER_CONTRACTS.profile_counts(2, 0, 1, 7),
-			ENCOUNTER_CONTRACTS.profile_counts(2, 0, 2, 9)
+			ENCOUNTER_CONTRACTS.profile_counts(2, 0, 1, 7, 0, 0, 0, 0, 0, 0, 0, 1),
+			ENCOUNTER_CONTRACTS.profile_counts(2, 0, 2, 9, 0, 0, 0, 0, 0, 0, 0, 2)
 		]),
 		"Blitz": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(1, 0, 0, 0, 3, 1, 0, 0, 0, 0, 0, 0, 0, 1), [
 			ENCOUNTER_CONTRACTS.profile_counts(1, 0, 0, 0, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0),
@@ -51,8 +51,8 @@ static func get_bearing_definitions() -> Dictionary:
 		"Vanguard": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(2, 2, 0, 3), [
 			ENCOUNTER_CONTRACTS.profile_counts(1, 2, 0, 2),
 			ENCOUNTER_CONTRACTS.profile_counts(2, 3, 0, 3),
-			ENCOUNTER_CONTRACTS.profile_counts(2, 4, 0, 4),
-			ENCOUNTER_CONTRACTS.profile_counts(3, 5, 0, 4)
+			ENCOUNTER_CONTRACTS.profile_counts(2, 4, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1),
+			ENCOUNTER_CONTRACTS.profile_counts(3, 5, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2)
 		]),
 		"Ambush": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(2, 0, 0, 0, 4, 0, 1, 0, 0, 0, 0, 0, 0, 1), [
 			ENCOUNTER_CONTRACTS.profile_counts(1, 0, 0, 0, 3, 0, 1, 0, 0, 0, 0, 0, 0, 0),
