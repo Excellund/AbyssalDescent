@@ -387,7 +387,7 @@ func get_power_flavor_text(power_id: String) -> String:
 		"unbroken_oath":
 			return "Single hits trickle Oath; multihits scale exponentially. Fill the bar, then unleash a massive sword strike."
 		"edict_of_the_court":
-			return "Each kill detonates a force pulse at the kill position, pushing all nearby enemies outward. Enemies caught in the blast are scattered away from the epicenter — not from you."
+			return "Kills detonate a force pulse at the kill position, pushing nearby enemies outward."
 		"null_corridor":
 			return "Dashing leaves a void corridor. Enemies that enter the trail are deflected and take damage once — they cannot walk through it."
 		"razor_wind":
