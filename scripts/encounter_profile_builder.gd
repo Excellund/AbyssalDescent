@@ -1240,11 +1240,13 @@ func _normalize_route_context(route_context: Variant) -> Dictionary:
 		var context_dict := route_context as Dictionary
 		return {
 			"depth": maxi(0, int(context_dict.get("depth", 0))),
-			"rooms_until_boss": maxi(-1, int(context_dict.get("rooms_until_boss", -1)))
+			"rooms_until_boss": maxi(-1, int(context_dict.get("rooms_until_boss", -1))),
+			"all_players_full_hp": bool(context_dict.get("all_players_full_hp", false))
 		}
 	return {
 		"depth": maxi(0, int(route_context)),
-		"rooms_until_boss": -1
+		"rooms_until_boss": -1,
+		"all_players_full_hp": false
 	}
 
 func _build_intro_route_option(profile: Dictionary) -> Dictionary:
@@ -1329,6 +1331,7 @@ func roll_route_options(route_context: Variant) -> Array[Dictionary]:
 	var depth := int(context.get("depth", 0))
 	var rooms_until_boss := int(context.get("rooms_until_boss", -1))
 	var rest_disabled: bool = bool(current_difficulty_config.get("rest_disabled", false))
+	var all_players_full_hp: bool = bool(context.get("all_players_full_hp", false))
 	if depth < 2:
 		return _build_intro_route_options(depth)
 	if rooms_until_boss == 1:
@@ -1338,7 +1341,7 @@ func roll_route_options(route_context: Variant) -> Array[Dictionary]:
 		var alternate := pre_boss_options[rng.randi_range(0, pre_boss_options.size() - 1)]
 		return _shuffle_route_options([alternate, _build_rest_route_option()])
 	var options := _build_non_rest_route_options(depth)
-	if not rest_disabled:
+	if not rest_disabled and not all_players_full_hp:
 		options.append(_build_rest_route_option())
 	return _pick_two_route_options(options)
 

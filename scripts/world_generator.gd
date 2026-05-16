@@ -2243,7 +2243,18 @@ func _get_third_boss_target_depth() -> int:
 	return room_depth_bookkeeper.get_third_boss_target_depth()
 
 func _build_route_context(depth: int) -> Dictionary:
-	return room_depth_bookkeeper.build_route_context(depth)
+	var context: Dictionary = room_depth_bookkeeper.build_route_context(depth)
+	context["all_players_full_hp"] = _all_players_at_full_hp()
+	return context
+
+func _all_players_at_full_hp() -> bool:
+	for player_node in _get_multiplayer_player_nodes():
+		var p := player_node as PLAYER_SCRIPT
+		if p == null or p.is_dead():
+			continue
+		if p.get_current_health() < p.get_max_health():
+			return false
+	return true
 
 func _is_second_boss_unlocked() -> bool:
 	return room_depth_bookkeeper.is_second_boss_unlocked()
