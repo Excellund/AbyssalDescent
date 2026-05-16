@@ -95,6 +95,9 @@ static func _evaluate(key: String, params: Dictionary, run_summary: Dictionary) 
 			return int(run_summary.get("duration_seconds", 99999)) < int(params.get("seconds", 0))
 		"win_no_rest":
 			return int(run_summary.get("rest_count", 0)) == 0
+		"win_no_damage_taken":
+			var stats: Dictionary = run_summary.get("stats", {}) as Dictionary
+			return int(stats.get("damage_taken_total", 1)) == 0
 		_:
 			return false
 

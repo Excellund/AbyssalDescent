@@ -117,6 +117,14 @@ const SPECIAL_OATH_DEFINITIONS := {
 		"params": {},
 		"reward_catalyst_id": "starting_boon_pick",
 		"reward_modifier_id": ""
+	},
+	"flawless_run": {
+		"label": "Oath of the Unscathed",
+		"description": "Clear a run without taking any damage.",
+		"evaluator_key": "win_no_damage_taken",
+		"params": {},
+		"reward_catalyst_id": "extra_arcana_slot",
+		"reward_modifier_id": ""
 	}
 }
 
