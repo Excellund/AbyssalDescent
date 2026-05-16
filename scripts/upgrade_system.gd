@@ -579,7 +579,7 @@ func get_trial_power_card_description(power_id: String) -> String:
 	var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 	var flavor := get_power_flavor_text(id)
 	if prismatic_preview:
-		flavor += " Prismatic: %s" % _get_trial_prismatic_blurb(id)
+		flavor = "[color=#40C8B0]%s[/color]" % _get_trial_prismatic_blurb(id)
 	var is_initial := current_stack <= 0
 	match id:
 		"razor_wind":
@@ -923,41 +923,41 @@ func _sigil_chain_unlocks_for_stack(stack_count: int) -> String:
 func _get_trial_prismatic_blurb(power_id: String) -> String:
 	match power_id:
 		"razor_wind":
-			return "longer crescents with wider, faster coverage"
+			return "wider arcs, harder crescents"
 		"execution_edge":
-			return "faster execution cadence and tighter follow-through"
+			return "every hit lands a finisher strike"
 		"rupture_wave":
-			return "shockwaves widen for stronger zone control"
+			return "shockwaves hit as hard as the blow"
 		"aegis_field":
-			return "stronger guard pulse with denser control"
+			return "stronger guard, denser control"
 		"hunters_snare":
-			return "snares hold longer with deeper slow control"
+			return "near-freeze slow, punishing bonus"
 		"phantom_step":
-			return "dash phantoms chill longer with faster re-engage"
+			return "dash strikes hit far harder"
 		"riftpunch":
-			return "finisher windows stay open longer with extra grace"
+			return "finisher lands with crushing force"
 		"reaper_step":
-			return "longer reap chain with deeper grace"
+			return "longer chain, deeper grace"
 		"static_wake":
-			return "wake fields linger longer and cover more ground"
+			return "wake fields deal heavy damage"
 		"storm_crown":
-			return "lightning forks farther with faster utility procs"
+			return "lightning hits harder, forks wider"
 		"wraithstep":
-			return "marks linger longer with broader tagging coverage"
+			return "marks punish, splashes overwhelm"
 		"voidfire":
-			return "overheat lockout shortens and blast control widens"
+			return "danger zone surges, blasts dominate"
 		"dread_resonance":
-			return "resonance sustains at a higher stack ceiling"
+			return "deeper pool, harder stacks"
 		"bloodvow":
-			return "wounded frenzy activates at safer health bands"
+			return "frenzy activates at safer bands"
 		"eclipse_mark":
-			return "marks spread wider and persist longer"
+			return "marks land near-double damage"
 		"fracture_field":
-			return "fault lines reach farther and hold slows longer"
+			return "fault lines tear through enemies"
 		"farline_volley":
-			return "volley ceiling rises with broader edge control"
+			return "wider arc, higher stack ceiling"
 		"sigil_chain":
-			return "sigil zones widen for stronger chain setup"
+			return "zones deal devastating tick damage"
 		_:
 			return "empowered beyond mastery"
 

@@ -932,6 +932,8 @@ func _refresh_boon_ui(player: Node2D) -> void:
 		var boon := boon_choices[i]
 		var is_mutator_choice := bool(boon.get("is_mutator", false))
 		var stack_limit := int(boon.get("stack_limit", 0))
+		if reward_selection_mode == ENUMS.RewardMode.ARCANA and _trial_power_stack_limit_bonus > 0:
+			stack_limit += _trial_power_stack_limit_bonus
 		var stack_count := _get_stack_count_for_choice(boon, player)
 		var icon_line := _format_stack_progress_icons(stack_count, stack_limit)
 		if is_mutator_choice or icon_line.is_empty():
