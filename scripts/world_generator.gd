@@ -359,6 +359,16 @@ func _apply_debug_settings_from_node() -> void:
 		_perf_attribution_sample_ms = 1000.0
 
 func _ready() -> void:
+	## Unconditional entry log: writes regardless of session_connected so we can
+	## distinguish "host crashed before _ready" from "host _ready ran but the
+	## session_connected flag was unexpectedly false" in post-mortem analysis.
+	if MultiplayerSessionManager != null and MultiplayerSessionManager.has_method("debug_log"):
+		var entry_role := "UNKNOWN"
+		if MultiplayerSessionManager.session_connected:
+			entry_role = "HOST" if MultiplayerSessionManager.is_host() else "JOINER"
+		else:
+			entry_role = "SOLO_OR_DISCONNECTED"
+		MultiplayerSessionManager.debug_log("WORLD/%s" % entry_role, "WorldGenerator._ready() ENTRY (session_connected=%s, is_host=%s)" % [str(MultiplayerSessionManager.session_connected), str(MultiplayerSessionManager.is_host())])
 	if MultiplayerSessionManager != null and MultiplayerSessionManager.session_connected:
 		var role_tag := "HOST" if MultiplayerSessionManager.is_host() else "JOINER"
 		MultiplayerSessionManager.debug_log("WORLD/%s" % role_tag, "WorldGenerator._ready() entered")

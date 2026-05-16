@@ -1201,8 +1201,17 @@ func _launch_main_game() -> void:
 
 
 ## RPC: Host -> All transition to main scene with synced lobby state.
+## The body is deferred so the RPC handler returns immediately and the engine's
+## packet/scene-cache processing for the current frame completes before any
+## state mutation or scene-change runs. Without this, mid-frame RPC handlers
+## have been observed to interact badly with subsequent get_tree() / RPC path
+## lookups during the scene swap and crash the process with `data.tree is null`.
 @rpc("reliable", "authority", "call_local")
 func _start_game(host_peer_id: int, session_identifier: String, difficulty_tier: int, synced_peer_state: Dictionary, ascension_loadout: Array = []) -> void:
+	call_deferred("_perform_start_game", host_peer_id, session_identifier, difficulty_tier, synced_peer_state, ascension_loadout)
+
+
+func _perform_start_game(host_peer_id: int, session_identifier: String, difficulty_tier: int, synced_peer_state: Dictionary, ascension_loadout: Array = []) -> void:
 	peer_state = synced_peer_state.duplicate(true)
 	var tree := _tree_or_null()
 	if tree == null:
@@ -1241,7 +1250,7 @@ func _start_game(host_peer_id: int, session_identifier: String, difficulty_tier:
 	RunContext.set_selected_character_id(local_char_id)
 	var role_tag := "HOST" if (multiplayer_session_manager != null and bool(multiplayer_session_manager.is_host())) else "JOINER"
 	if multiplayer_session_manager != null and multiplayer_session_manager.has_method("debug_log"):
-		multiplayer_session_manager.debug_log("LOBBY/%s" % role_tag, "_start_game: about to detach lobby (peer=%d session=%s)" % [local_peer_id, session_identifier])
+		multiplayer_session_manager.debug_log("LOBBY/%s" % role_tag, "_perform_start_game: about to detach lobby (peer=%d session=%s)" % [local_peer_id, session_identifier])
 	## Stop _process loops immediately so the lobby doesn't queue more work, then
 	## disconnect autoload signal handlers so a peer_connected / session_joined /
 	## host_left emission can't fire a handler on this node mid-transition.
@@ -1257,10 +1266,10 @@ func _start_game(host_peer_id: int, session_identifier: String, difficulty_tier:
 	set_physics_process(false)
 	_disconnect_session_signals()
 	if multiplayer_session_manager != null and multiplayer_session_manager.has_method("debug_log"):
-		multiplayer_session_manager.debug_log("LOBBY/%s" % role_tag, "_start_game: signals detached, calling change_scene_to_file(Main.tscn)")
+		multiplayer_session_manager.debug_log("LOBBY/%s" % role_tag, "_perform_start_game: signals detached, calling change_scene_to_file(Main.tscn)")
 	var scene_err := tree.change_scene_to_file("res://scenes/Main.tscn")
 	if multiplayer_session_manager != null and multiplayer_session_manager.has_method("debug_log"):
-		multiplayer_session_manager.debug_log("LOBBY/%s" % role_tag, "_start_game: change_scene_to_file returned err=%d" % int(scene_err))
+		multiplayer_session_manager.debug_log("LOBBY/%s" % role_tag, "_perform_start_game: change_scene_to_file returned err=%d" % int(scene_err))
 
 
 func _on_leave_lobby_pressed() -> void:
