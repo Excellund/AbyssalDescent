@@ -405,6 +405,8 @@ func _setup_lobby_ascension_panel() -> void:
 
 
 func _apply_ascension_overlay_layout() -> void:
+	if not is_inside_tree():
+		return
 	if ascension_panel_overlay == null:
 		return
 	var viewport_size := get_viewport_rect().size
@@ -507,7 +509,16 @@ func _update_ascension_visibility() -> void:
 		call_deferred("_refresh_embedded_menu_layout")
 
 func _refresh_embedded_menu_layout() -> void:
-	var menu_controller = get_tree().root.get_child(0)
+	## Guarded because this is reached via call_deferred from many UI updates.
+	## If a deferred callable is dispatched after change_scene_to_file frees the
+	## lobby, get_tree() on this freed node returns null and .root.get_child(0)
+	## would null-deref (Parameter "data.tree" is null at get_tree).
+	if not is_inside_tree():
+		return
+	var tree := get_tree()
+	if tree == null or tree.root == null or tree.root.get_child_count() == 0:
+		return
+	var menu_controller = tree.root.get_child(0)
 	if menu_controller != null and menu_controller.has_method("refresh_lobby_modal_layout"):
 		menu_controller.refresh_lobby_modal_layout()
 
@@ -1443,6 +1454,11 @@ func _apply_lobby_style() -> void:
 
 
 func _apply_lobby_layout() -> void:
+	## Reached via call_deferred from many UI updates. Guard against the deferred
+	## callable firing after the scene swap frees the lobby (would hit data.tree
+	## null via get_viewport_rect()).
+	if not is_inside_tree():
+		return
 	var content: VBoxContainer = $VBoxContainer
 	if content == null:
 		return
