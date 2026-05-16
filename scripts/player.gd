@@ -164,6 +164,7 @@ const RUN_SNAPSHOT_PROPERTIES := [
 signal health_changed(current_health: int, max_health: int)
 signal died
 signal damage_taken(raw_amount: int, final_amount: int, damage_context: Dictionary)
+signal primary_attack_fired
 
 @export var max_speed: float = 220.0
 @export var acceleration: float = 1400.0
@@ -725,6 +726,7 @@ func _try_execute_attack(attack_direction: Vector2) -> void:
 	if attack_cooldown_left > 0.0:
 		return
 	queued_attack_after_dash = false
+	primary_attack_fired.emit()
 
 	attack_cooldown_left = attack_cooldown
 	attack_anim_time_left = attack_anim_duration

@@ -441,6 +441,11 @@ func record_door_choice(choice: Dictionary) -> void:
 		"room_depth": _world.room_depth
 	})
 
+func record_primary_attack_fired() -> void:
+	if run_summary_tracker == null:
+		return
+	run_summary_tracker.record_primary_attack_fired()
+
 func record_player_damage_taken(raw_amount: int, final_amount: int, damage_context: Dictionary) -> void:
 	if not can_record():
 		return

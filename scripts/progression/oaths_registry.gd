@@ -125,6 +125,14 @@ const SPECIAL_OATH_DEFINITIONS := {
 		"params": {},
 		"reward_catalyst_id": "extra_arcana_slot",
 		"reward_modifier_id": ""
+	},
+	"closed_fist": {
+		"label": "Oath of the Closed Fist",
+		"description": "Clear a run without using your primary attack even once.",
+		"evaluator_key": "win_no_primary_attack",
+		"params": {},
+		"reward_catalyst_id": "shop_reroll",
+		"reward_modifier_id": ""
 	}
 }
 

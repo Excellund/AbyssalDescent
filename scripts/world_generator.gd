@@ -508,6 +508,8 @@ func _setup_player_runtime_bindings() -> void:
 		if player.has_signal("died"):
 			player.connect("died", Callable(self, "_on_player_died_for_telemetry"))
 			player.connect("died", Callable(self, "_on_player_died"))
+		if player.has_signal("primary_attack_fired"):
+			player.connect("primary_attack_fired", Callable(self, "_on_player_primary_attack_fired"))
 
 		player_camera.set_room_fit_zoom_scale(camera_base_zoom_in)
 	_bind_camera_to_local_player()
@@ -3893,6 +3895,11 @@ func _on_telemetry_spike_probe_completed(success: bool, http_code: int, error_me
 	if is_instance_valid(telemetry_spike_sender):
 		telemetry_spike_sender.queue_free()
 	telemetry_spike_sender = null
+
+func _on_player_primary_attack_fired() -> void:
+	if not _run_summary_ready():
+		return
+	run_summary_recorder.record_primary_attack_fired()
 
 func _on_player_damage_taken(raw_amount: int, final_amount: int, damage_context: Dictionary) -> void:
 	if not _run_summary_ready():

@@ -98,6 +98,8 @@ static func _evaluate(key: String, params: Dictionary, run_summary: Dictionary) 
 		"win_no_damage_taken":
 			var stats: Dictionary = run_summary.get("stats", {}) as Dictionary
 			return int(stats.get("damage_taken_total", 1)) == 0
+		"win_no_primary_attack":
+			return int(run_summary.get("primary_attacks_fired", 1)) == 0
 		_:
 			return false
 
