@@ -1133,20 +1133,29 @@ func _broadcast_ready_state(peer_id: int, is_ready: bool) -> void:
 
 
 ## Check if all players are ready; if so, transition to main game.
+##
+## Race-safety: must compare against the live connected-peer set, not just
+## the keys currently in peer_state. _broadcast_peer_register RPCs are queued
+## for next-frame delivery, so a freshly-connected peer can exist on the
+## network but not yet appear in peer_state. Pressing Ready in that window
+## would otherwise launch the game without them.
 func _check_all_ready() -> void:
 	if not bool(multiplayer_session_manager.is_host()):
 		return
 
-	var peer_ids: Array = peer_state.keys()
-	
-	if peer_ids.is_empty():
+	var connected_peers: Array = multiplayer_session_manager.get_peer_ids() as Array
+	if connected_peers.is_empty():
 		return
-	
-	for peer_id in peer_ids:
-		var state: Dictionary = peer_state.get(peer_id, {})
+
+	for peer_id in connected_peers:
+		var state: Dictionary = peer_state.get(int(peer_id), {})
+		if state.is_empty():
+			## Peer connected at the network layer but our authoritative
+			## peer_register RPC hasn't been processed yet. Defer.
+			return
 		if not state.get("is_ready", false):
 			return  ## Not all ready yet
-	
+
 	## All ready; transition to main game
 	_launch_main_game()
 
