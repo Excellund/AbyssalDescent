@@ -1234,22 +1234,31 @@ func _show_character_selector() -> void:
 
 
 func _build_lobby_modal_layer() -> Control:
+	## Stable names on the entire chain are REQUIRED for multiplayer RPC routing.
+	## Godot dispatches RPCs by exact NodePath match; auto-generated names like
+	## @Control@404 differ per peer (they increment a global counter that depends
+	## on instantiation order), so RPCs targeting the embedded Lobby controller
+	## would fail to resolve on the joiner. See repo memory: lobby_node_path_stability.
 	var layer := Control.new()
+	layer.name = "LobbyModalLayer"
 	layer.set_anchors_preset(Control.PRESET_FULL_RECT)
 	layer.mouse_filter = Control.MOUSE_FILTER_STOP
 
 	var dim := ColorRect.new()
+	dim.name = "LobbyModalDim"
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dim.color = Color(0.01, 0.02, 0.03, 0.62)
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	layer.add_child(dim)
 
 	lobby_modal_panel = Panel.new()
+	lobby_modal_panel.name = "LobbyModalPanel"
 	lobby_modal_panel.custom_minimum_size = Vector2(980.0, 760.0)
 	lobby_modal_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.04, 0.06, 0.10, 0.97), Color(0.44, 0.70, 0.96, 0.74), 20, 2))
 	layer.add_child(lobby_modal_panel)
 
 	var shell := MarginContainer.new()
+	shell.name = "LobbyModalShell"
 	shell.set_anchors_preset(Control.PRESET_FULL_RECT)
 	shell.add_theme_constant_override("margin_left", 18)
 	shell.add_theme_constant_override("margin_right", 18)
@@ -1258,6 +1267,7 @@ func _build_lobby_modal_layer() -> Control:
 	lobby_modal_panel.add_child(shell)
 
 	lobby_modal_content_host = Control.new()
+	lobby_modal_content_host.name = "LobbyModalContentHost"
 	lobby_modal_content_host.set_anchors_preset(Control.PRESET_FULL_RECT)
 	lobby_modal_content_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	shell.add_child(lobby_modal_content_host)
@@ -1295,6 +1305,8 @@ func _show_lobby_modal() -> void:
 	if lobby_modal_instance == null:
 		push_error("[Menu] Failed to instantiate lobby scene for modal")
 		return
+	## Force a stable node name so the RPC path is identical on host and joiner.
+	lobby_modal_instance.name = "Lobby"
 	lobby_modal_instance.set_embedded_in_menu(true)
 	lobby_modal_instance.leave_lobby_requested.connect(_on_lobby_modal_leave_requested)
 	lobby_modal_content_host.add_child(lobby_modal_instance)
