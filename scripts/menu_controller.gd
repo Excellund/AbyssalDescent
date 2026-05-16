@@ -816,6 +816,30 @@ func _build_ui() -> void:
 	lobby_modal_layer = _build_lobby_modal_layer()
 	lobby_modal_layer.visible = false
 	add_child(lobby_modal_layer)
+
+	## Patch version label, anchored to bottom-right corner of the viewport.
+	## Uses anchor preset so it tracks viewport resize without needing
+	## _apply_menu_layout() bookkeeping.
+	var version_label := Label.new()
+	version_label.name = "VersionLabel"
+	version_label.text = "v%s" % _current_game_version()
+	version_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	version_label.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	version_label.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	version_label.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	version_label.offset_left = -160.0
+	version_label.offset_top = -32.0
+	version_label.offset_right = -12.0
+	version_label.offset_bottom = -8.0
+	version_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	version_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	version_label.add_theme_font_size_override("font_size", 14)
+	version_label.add_theme_color_override("font_color", Color(0.78, 0.86, 0.98, 0.72))
+	version_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.7))
+	version_label.add_theme_constant_override("shadow_offset_x", 1)
+	version_label.add_theme_constant_override("shadow_offset_y", 1)
+	add_child(version_label)
+
 	_show_root_panel(false)
 
 func _apply_menu_layout() -> void:
