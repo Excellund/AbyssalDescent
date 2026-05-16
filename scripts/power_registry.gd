@@ -613,9 +613,11 @@ const TRIAL_POWER_DEFINITIONS := {
 	"dread_resonance": {
 		"stack_limit": 3,
 		"balance_params": {
-			"bonus_per_stack_base": 1,
-			"bonus_per_stack_per_level": 0,
-			"max_stacks_cap": 8
+			"bonus_per_stack_base": 0,
+			"bonus_per_stack_per_level": 1,
+			"max_stacks_base": 6,
+			"max_stacks_per_stack": 2,
+			"max_stacks_cap": 12
 		},
 		"param_map": {
 			"reward_flag": "reward_dread_resonance",

@@ -307,7 +307,7 @@ static func _build_trial_values_base(power_id: String, stack_count: int, balance
 		"dread_resonance":
 			return {
 				"bonus_per_stack": int(data.get("bonus_per_stack_base", 0)) + stack_count * int(data.get("bonus_per_stack_per_level", 0)),
-				"max_stacks": int(data.get("max_stacks_cap", 8))
+				"max_stacks": mini(int(data.get("max_stacks_cap", 12)), int(data.get("max_stacks_base", 6)) + stack_count * int(data.get("max_stacks_per_stack", 0)))
 			}
 		"bloodvow":
 			return {
