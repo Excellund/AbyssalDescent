@@ -1224,7 +1224,7 @@ func _build_intercept_run_profile(depth: int) -> Dictionary:
 	var duration := int(ceil(raw_duration / 5.0)) * 5
 	var spawn_interval := clampf(2.6 - float(effective_depth) * 0.06, 0.95, 2.6)
 	var spawn_batch := mini(4, 2 + int(floor(float(effective_depth) / 5.0)))
-	var traversal_time := clampf(42.0 - float(effective_depth) * 0.7, 33.0, 42.0)
+	var traversal_time := clampf(39.0 - float(effective_depth) * 0.7, 30.0, 39.0)
 	var pressure_split := _objective_pressure_split()
 	spawn_batch = _scale_objective_spawn_batch(spawn_batch, float(pressure_split["wave_mult"]))
 	ENCOUNTER_CONTRACTS.profile_set_intercept_run_objective(profile, duration, spawn_interval, spawn_batch, traversal_time)

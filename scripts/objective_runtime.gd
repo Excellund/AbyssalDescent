@@ -143,7 +143,7 @@ class PulseWindowConfig:
 	const OVERTIME_SPAWN_BATCH_CAP = 5
 
 class InterceptRunConfig:
-	const TRAVERSAL_TIME_BASE = 42.0
+	const TRAVERSAL_TIME_BASE = 39.0
 	const DRONE_RADIUS = 80.0
 	const ROOM_MARGIN = 100.0
 	const SPAWN_INTERVAL_CLAMP_MIN = 1.0
