@@ -51,7 +51,7 @@ func apply_upgrade(upgrade_id: String) -> bool:
 	upgrade_stacks[id] = current_stacks + 1
 
 	match id:
-		"first_strike", "heavy_blow", "wide_arc", "long_reach", "fleet_foot", "blink_dash", "battle_trance", "surge_step", "wardens_verdict", "lacuna_echo", "sovereign_tempo", "pillar_convergence", "unbroken_oath":
+		"first_strike", "heavy_blow", "wide_arc", "long_reach", "fleet_foot", "blink_dash", "battle_trance", "surge_step", "wardens_verdict", "lacuna_echo", "sovereign_tempo", "pillar_convergence", "unbroken_oath", "edict_of_the_court", "null_corridor":
 			player_reference.set(String(preview.get("property", "")), preview.get("next", player_reference.get(String(preview.get("property", "")))))
 		"heartstone":
 			var next_max := int(preview.get("next", player_reference.get_max_health()))
@@ -264,6 +264,10 @@ func _power_sentence_template(power_id: String) -> String:
 			return "Every %s hits, lasts %s, pulses every %s."
 		"unbroken_oath":
 			return "Damage reduction %s. Fill Oath at %s; next hit deals %s bonus damage."
+		"edict_of_the_court":
+			return "Push force %s, scatter radius %s."
+		"null_corridor":
+			return "Trail width %s, duration %s, deflect %s dmg."
 		"razor_wind":
 			return "Range %s, damage %s of hit, arc %s."
 		"execution_edge":
@@ -382,6 +386,10 @@ func get_power_flavor_text(power_id: String) -> String:
 			return "Every few damaging hits you enter Convergence, pulsing damage around you until it expires."
 		"unbroken_oath":
 			return "Single hits trickle Oath; multihits scale exponentially. Fill the bar, then unleash a massive sword strike."
+		"edict_of_the_court":
+			return "Each kill detonates a force pulse at the kill position, pushing all nearby enemies outward. Enemies caught in the blast are scattered away from the epicenter — not from you."
+		"null_corridor":
+			return "Dashing leaves a void corridor. Enemies that enter the trail are deflected and take damage once — they cannot walk through it."
 		"razor_wind":
 			return "Each swing extends a slicing arc that only strikes enemies past your normal melee reach."
 		"execution_edge":
@@ -449,6 +457,17 @@ func get_power_current_description(power_id: String) -> String:
 			var fill_req := INDOMITABLE_OATH_FILL_REQUIREMENT
 			var ratio := (1.8 + float(player_reference.get("indomitable_spirit_damage_reduction")) * 2.2 + fill_req * 0.009) * INDOMITABLE_OATH_DAMAGE_SCALE * 100.0
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f%%", resist), _current_stat("%.0f", fill_req), _current_stat("%.0f%%", ratio)], "build_detail"))
+		"edict_of_the_court":
+			var edict_power := int(player_reference.get("edict_court_push_power"))
+			var edict_radius := clampf(80.0 + float(edict_power) * 1.0, 80.0, 160.0)
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f", float(edict_power) * 1.8 + 300.0), _current_stat("%.0f", edict_radius)], "build_detail"))
+		"null_corridor":
+			var nc_strength := float(player_reference.get("null_corridor_strength"))
+			var nc_width := 32.0 + nc_strength * 14.0
+			var nc_duration := 3.2 + nc_strength * 0.8
+			var nc_bounce_ratio := 0.20 + nc_strength * 0.08
+			var nc_bounce_dmg := maxi(1, int(round(float(player_reference.get("damage")) * nc_bounce_ratio)))
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f", nc_width), _current_stat("%.1fs", nc_duration), _current_stat("%d", nc_bounce_dmg)], "build_detail"))
 		"first_strike":
 			return _power_sentence(id, [_current_stat("+%d", int(player_reference.get("first_strike_bonus_damage")))], "build_detail")
 		"heavy_blow":
@@ -754,6 +773,34 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 			var fill_stat := _const("%.0f" % fill_req)
 			var ratio_stat := _stat("%.0f%%", cur_ratio, next_ratio, is_initial)
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [resist_stat, fill_stat, ratio_stat], "reward_card"))
+		"edict_of_the_court":
+			var cur_edict := int(cur_val)
+			var next_edict := int(next_val)
+			var is_initial_edict := cur_edict == 0
+			var cur_force := 300.0 + float(cur_edict) * 1.8
+			var next_force := 300.0 + float(next_edict) * 1.8
+			var cur_edict_radius := clampf(80.0 + float(cur_edict), 80.0, 160.0)
+			var next_edict_radius := clampf(80.0 + float(next_edict), 80.0, 160.0)
+			var force_stat := _stat("%.0f", cur_force, next_force, is_initial_edict)
+			var radius_stat_e := _stat("%.0f", cur_edict_radius, next_edict_radius, is_initial_edict)
+			return _reward_flavor_first_desc(is_initial_edict, flavor, _power_sentence(id, [force_stat, radius_stat_e], "reward_card"))
+		"null_corridor":
+			var cur_nc := float(cur_val)
+			var next_nc := float(next_val)
+			var is_initial_nc := cur_nc == 0.0
+			var cur_nc_width := 32.0 + cur_nc * 14.0
+			var next_nc_width := 32.0 + next_nc * 14.0
+			var cur_nc_dur := 3.2 + cur_nc * 0.8
+			var next_nc_dur := 3.2 + next_nc * 0.8
+			var cur_nc_bounce_ratio := 0.20 + cur_nc * 0.08
+			var next_nc_bounce_ratio := 0.20 + next_nc * 0.08
+			var base_dmg := float(player_reference.get("damage")) if is_instance_valid(player_reference) else 20.0
+			var cur_nc_dmg := maxi(1, int(round(base_dmg * cur_nc_bounce_ratio)))
+			var next_nc_dmg := maxi(1, int(round(base_dmg * next_nc_bounce_ratio)))
+			var width_stat := _stat("%.0f", cur_nc_width, next_nc_width, is_initial_nc)
+			var dur_stat := _stat("%.1fs", cur_nc_dur, next_nc_dur, is_initial_nc)
+			var dmg_stat := _stat("%d", cur_nc_dmg, next_nc_dmg, is_initial_nc)
+			return _reward_flavor_first_desc(is_initial_nc, flavor, _power_sentence(id, [width_stat, dur_stat, dmg_stat], "reward_card"))
 		_:
 			return "[color=#c8daf0]Upgrade your stats.[/color]"
 

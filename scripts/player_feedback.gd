@@ -573,7 +573,7 @@ func play_sigil_chain_link(from_global: Vector2, to_global_pos: Vector2, depth: 
 	pop_tween.set_parallel(false)
 	pop_tween.tween_callback(pop.queue_free)
 
-func _play_world_line(points: PackedVector2Array, color: Color, width: float, lifetime: float, final_width: float = 1.0) -> void:
+func _play_world_line(points: PackedVector2Array, color: Color, width: float, lifetime: float, final_width: float = 1.0, use_ease_in: bool = false) -> void:
 	if points.size() < 2:
 		return
 	var line := Line2D.new()
@@ -587,8 +587,12 @@ func _play_world_line(points: PackedVector2Array, color: Color, width: float, li
 	add_child(line)
 	var tween := create_tween()
 	tween.set_parallel(true)
-	tween.tween_property(line, "modulate:a", 0.0, lifetime)
-	tween.tween_property(line, "width", final_width, lifetime)
+	if use_ease_in:
+		tween.tween_property(line, "modulate:a", 0.0, lifetime).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+		tween.tween_property(line, "width", final_width, lifetime).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	else:
+		tween.tween_property(line, "modulate:a", 0.0, lifetime)
+		tween.tween_property(line, "width", final_width, lifetime)
 	tween.set_parallel(false)
 	tween.tween_interval(lifetime)
 	tween.tween_callback(line.queue_free)
@@ -1364,6 +1368,98 @@ func play_boss_unbroken_retaliation(player_global: Vector2, impact_global: Vecto
 	blade_tween.tween_callback(hilt_poly.queue_free)
 	blade_tween.tween_callback(guard_poly.queue_free)
 	blade_tween.tween_callback(blade_poly.queue_free)
+
+func play_boss_edict_court_pulse(epicenter_global: Vector2, radius: float) -> void:
+	play_world_ring(epicenter_global, radius * 0.42, Color(0.82, 0.62, 1.0, 0.88), 0.14)
+	play_world_ring(epicenter_global, radius * 0.72, Color(0.72, 0.48, 1.0, 0.64), 0.20)
+	play_world_ring(epicenter_global, radius, Color(0.58, 0.34, 0.92, 0.38), 0.28)
+	_play_world_soft_pulse(epicenter_global, radius * 0.55, Color(0.72, 0.52, 1.0, 0.28), 0.18, 0.46, 1.12)
+
+func play_boss_null_corridor_spawn(seg_start_global: Vector2, seg_end_global: Vector2, width: float, lifetime: float) -> void:
+	var mid := (seg_start_global + seg_end_global) * 0.5
+	var seg_dir := (seg_end_global - seg_start_global)
+	var seg_len := seg_dir.length()
+	if seg_len < 0.001:
+		return
+	var dir_n := seg_dir / seg_len
+	var normal := Vector2(-dir_n.y, dir_n.x)
+	var half_w := width * 0.5
+	var fade_dur := lifetime * 0.55
+	var hold_dur := lifetime - fade_dur
+
+	# Bright spine line along centre
+	var spine := Line2D.new()
+	spine.top_level = true
+	spine.global_position = Vector2.ZERO
+	spine.width = 3.4
+	spine.default_color = Color(0.56, 1.0, 0.86, 0.92)
+	spine.antialiased = true
+	spine.z_index = 41
+	spine.points = PackedVector2Array([seg_start_global, seg_end_global])
+	spine.add_to_group("null_corridor_vfx")
+	add_child(spine)
+	var spine_tw := create_tween().set_parallel(true)
+	spine_tw.tween_property(spine, "modulate:a", 0.0, lifetime).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	spine_tw.tween_property(spine, "width", 0.6, lifetime).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	spine_tw.set_parallel(false)
+	spine_tw.tween_interval(lifetime)
+	spine_tw.tween_callback(spine.queue_free)
+
+	# Soft wide glow along spine
+	var glow := Line2D.new()
+	glow.top_level = true
+	glow.global_position = Vector2.ZERO
+	glow.width = half_w * 0.65
+	glow.default_color = Color(0.28, 0.88, 0.68, 0.26)
+	glow.antialiased = true
+	glow.z_index = 40
+	glow.points = PackedVector2Array([seg_start_global, seg_end_global])
+	glow.add_to_group("null_corridor_vfx")
+	add_child(glow)
+	var glow_tw := create_tween().set_parallel(true)
+	glow_tw.tween_property(glow, "modulate:a", 0.0, lifetime).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	glow_tw.tween_property(glow, "width", 1.0, lifetime).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	glow_tw.set_parallel(false)
+	glow_tw.tween_interval(lifetime)
+	glow_tw.tween_callback(glow.queue_free)
+
+	# Periodic tick marks perpendicular to corridor showing exact deflect width
+	var step := 36.0
+	var tick_count := maxi(1, int(seg_len / step))
+	for t in range(tick_count + 1):
+		var frac := float(t) / float(tick_count)
+		var tick_pos := seg_start_global + dir_n * (seg_len * frac)
+		var p0 := tick_pos - normal * (half_w * 0.88)
+		var p1 := tick_pos + normal * (half_w * 0.88)
+		var tick := Line2D.new()
+		tick.top_level = true
+		tick.z_index = 12
+		tick.width = 1.6
+		tick.default_color = Color(0.46, 1.0, 0.82, 0.52)
+		tick.points = PackedVector2Array([p0, p1])
+		tick.add_to_group("null_corridor_vfx")
+		add_child(tick)
+		var tw := create_tween()
+		tw.tween_interval(hold_dur)
+		tw.tween_property(tick, "modulate:a", 0.0, fade_dur).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+		tw.tween_callback(tick.queue_free)
+
+	# Entry/exit cap rings
+	play_world_ring(seg_start_global, half_w * 1.1, Color(0.46, 1.0, 0.82, 0.72), 0.18)
+	play_world_ring(seg_start_global, half_w * 0.55, Color(0.72, 1.0, 0.92, 0.88), 0.12)
+	play_world_ring(seg_end_global, half_w * 1.1, Color(0.46, 1.0, 0.82, 0.72), 0.18)
+	play_world_ring(seg_end_global, half_w * 0.55, Color(0.72, 1.0, 0.92, 0.88), 0.12)
+	# Midpoint subtle pulse
+	_play_world_soft_pulse(mid, half_w * 0.7, Color(0.36, 0.88, 0.68, 0.18), 0.30, 0.6, 1.05)
+
+func clear_null_corridor_vfx() -> void:
+	for node in get_tree().get_nodes_in_group("null_corridor_vfx"):
+		if is_instance_valid(node):
+			node.queue_free()
+
+func play_boss_null_corridor_deflect(enemy_global: Vector2) -> void:
+	play_world_ring(enemy_global, 12.0, Color(0.46, 1.0, 0.82, 0.9), 0.10)
+	play_world_ring(enemy_global, 22.0, Color(0.28, 0.82, 0.62, 0.5), 0.15)
 
 func show_eclipse_mark_decal(enemy_node: Node2D, duration: float) -> void:
 	if not is_instance_valid(enemy_node):

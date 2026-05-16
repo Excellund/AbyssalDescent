@@ -2758,6 +2758,8 @@ func _choose_door(door: Dictionary) -> void:
 	choosing_next_room = false
 	door_options.clear()
 	_clear_all_enemies()
+	if is_instance_valid(player):
+		player.clear_lingering_combat_effects()
 	if is_instance_valid(_world_sfx_player):
 		_world_sfx_player.stream = DOOR_OPEN_SOUND
 		_world_sfx_player.play()

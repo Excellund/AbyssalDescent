@@ -24,6 +24,7 @@ func begin_combat_phase(player: PLAYER_SCRIPT, tree: SceneTree) -> void:
 
 func end_combat_phase(player: PLAYER_SCRIPT, tree: SceneTree) -> void:
 	set_player_combat_damage_enabled(player, false)
+	clear_player_lingering_effects(player)
 	clear_enemy_lingering_effects(tree)
 
 func set_combat_paused(player: PLAYER_SCRIPT, tree: SceneTree, paused: bool) -> void:

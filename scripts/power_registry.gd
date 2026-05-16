@@ -176,6 +176,16 @@ const DAMAGE_MODEL_BY_POWER := {
 		"kind": DAMAGE_KIND_HYBRID,
 		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
 		"formula_note": "Single-target hits trickle Oath; multihits scale exponentially. Fill bar to prime next-hit sword strike"
+	},
+	"edict_of_the_court": {
+		"kind": DAMAGE_KIND_NONE,
+		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
+		"formula_note": "Emits force pulse from kill position, scattering nearby enemies outward"
+	},
+	"null_corridor": {
+		"kind": DAMAGE_KIND_SCALING,
+		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
+		"formula_note": "Dash path becomes deflection zone; enemies crossing the trail are pushed hard and take ~20-24% of damage stat once per crossing (0.5s re-entry cooldown)"
 	}
 }
 
@@ -271,6 +281,16 @@ const BOSS_REWARD_BALANCE := {
 		"kind": "add_float",
 		"property": "indomitable_spirit_damage_reduction",
 		"add": 0.12
+	},
+	"edict_of_the_court": {
+		"kind": "add_int",
+		"property": "edict_court_push_power",
+		"add": 40
+	},
+	"null_corridor": {
+		"kind": "add_float",
+		"property": "null_corridor_strength",
+		"add": 0.5
 	}
 }
 
@@ -713,7 +733,9 @@ const BOSS_REWARD_STACK_LIMITS := {
 	"lacuna_echo": 2,
 	"sovereign_tempo": 2,
 	"pillar_convergence": 2,
-	"unbroken_oath": 2
+	"unbroken_oath": 2,
+	"edict_of_the_court": 2,
+	"null_corridor": 2
 }
 
 # Unified power data structure
@@ -787,6 +809,8 @@ const POWER_DISPLAY_METADATA := {
 	"sovereign_tempo": {"name": "Sovereign Tempo", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
 	"pillar_convergence": {"name": "Pillar Convergence", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
 	"unbroken_oath": {"name": "Unbroken Oath", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
+	"edict_of_the_court": {"name": "Edict of the Court", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
+	"null_corridor": {"name": "Null Corridor", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
 }
 
 const POWER_ID_ALIASES := {
@@ -809,6 +833,7 @@ const TRIAL_POWER_POOL_IDS: Array[String] = [
 
 const BOSS_REWARD_POOL_IDS: Array[String] = [
 	"wardens_verdict", "lacuna_echo", "sovereign_tempo", "pillar_convergence", "unbroken_oath",
+	"edict_of_the_court", "null_corridor",
 ]
 
 

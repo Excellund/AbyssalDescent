@@ -156,7 +156,9 @@ const RUN_SNAPSHOT_PROPERTIES := [
 	"apex_momentum_stacks",
 	"convergence_surge_damage_ratio",
 	"convergence_surge_hit_counter",
-	"indomitable_spirit_damage_reduction"
+	"indomitable_spirit_damage_reduction",
+	"edict_court_push_power",
+	"null_corridor_strength"
 ]
 
 signal health_changed(current_health: int, max_health: int)
@@ -399,6 +401,10 @@ var apex_momentum_max_stacks: int = 6
 var convergence_surge_damage_ratio: float = 0.0
 var convergence_surge_hit_counter: int = 0
 var indomitable_spirit_damage_reduction: float = 0.0
+var edict_court_push_power: int = 0
+var null_corridor_strength: float = 0.0
+var null_corridor_segments: Array[Dictionary] = []
+var _null_corridor_dash_origin: Vector2 = Vector2.ZERO
 var _indomitable_spirit_primed: bool = false
 var apex_predator_combo_hits: int = 0
 var apex_predator_combo_window: float = 2.2
@@ -566,6 +572,7 @@ func _physics_process(delta: float) -> void:
 	_update_apex_predator_combo(delta)
 	_update_apex_momentum(delta)
 	_update_void_echo_zones(delta)
+	_update_null_corridor_segments(delta)
 	_update_convergence_window(delta)
 	_update_indomitable_damage_bank(delta)
 	_update_voidfire_heat(delta)
@@ -674,6 +681,8 @@ func _try_start_dash(direction: Vector2) -> void:
 		sigil_burst_ready = true
 	if reward_farline_volley:
 		_consume_or_reset_farline_volley_for_dash()
+	if null_corridor_strength > 0.0:
+		_null_corridor_dash_origin = global_position
 	if veilstep_rhythm_empowered_dash_active and player_feedback != null:
 		player_feedback.play_world_ring(global_position, 34.0, Color(0.26, 1.0, 0.74, 0.9), 0.2)
 		_broadcast_cue_event("world_ring", {
@@ -847,6 +856,8 @@ func _process_active_dash(delta: float) -> bool:
 		_release_veilstep_rhythm_wave(dash_end)
 	if dash_finished:
 		_release_apex_momentum_dash_wave(dash_end)
+	if dash_finished and null_corridor_strength > 0.0:
+		_apply_null_corridor_segment(dash_start, dash_end)
 	if dash_finished and reward_riftpunch:
 		_riftpunch_window_left = riftpunch_window_duration
 		var prime_facing := dash_direction if dash_direction.length_squared() > 0.0001 else last_move_direction
@@ -1885,7 +1896,9 @@ func apply_power_for_test(power_id: String) -> bool:
 		"lacuna_echo": true,
 		"sovereign_tempo": true,
 		"pillar_convergence": true,
-		"unbroken_oath": true
+		"unbroken_oath": true,
+		"edict_of_the_court": true,
+		"null_corridor": true
 	}
 	if boon_ids.has(id):
 		apply_upgrade(id)
@@ -2377,9 +2390,11 @@ func clear_lingering_combat_effects() -> void:
 	_eclipse_marked_enemies.clear()
 	if player_feedback != null:
 		player_feedback.clear_all_eclipse_mark_decals()
+		player_feedback.clear_null_corridor_vfx()
 	_reset_dread_resonance_tracking()
 	_reaper_chain_window_left = 0.0
 	_reaper_stored_dashes = 0
+	null_corridor_segments.clear()
 	_indomitable_spirit_primed = false
 	# Preserve oath bank progress between rooms if player has unbroken oath active
 	if indomitable_spirit_damage_reduction <= 0.0:
@@ -2392,6 +2407,7 @@ func clear_lingering_combat_effects() -> void:
 	apex_predator_combo_hits = 0
 	apex_predator_combo_left = 0.0
 	void_echo_zones.clear()
+	null_corridor_segments.clear()
 	apex_momentum_stacks = 0
 	apex_momentum_stack_left = 0.0
 	if player_feedback != null:
@@ -3021,6 +3037,8 @@ func notify_enemy_killed(kill_position: Vector2 = Vector2.ZERO) -> void:
 	_trigger_overcharge_kill(kill_position)
 	if void_echo_damage > 0 and _void_echo_pulse_kill_suppression_depth <= 0:
 		_apply_void_echo(kill_position)
+	if edict_court_push_power > 0:
+		_apply_edict_court_pulse(kill_position)
 	if _void_echo_pulse_kill_suppression_depth <= 0:
 		if reward_eclipse_mark:
 			_apply_eclipse_mark(kill_position)
@@ -4272,6 +4290,124 @@ func _apply_void_echo(kill_pos: Vector2) -> void:
 	if player_feedback != null:
 		player_feedback.play_boss_void_zone_spawn(kill_pos, echo_radius)
 		_broadcast_cue_event("boss_void_zone_spawn", {"position": kill_pos, "radius": echo_radius})
+
+func _clamp_push_to_room_bounds(enemy_pos: Vector2, push_vel: Vector2) -> Vector2:
+	var parent_node := get_parent()
+	if parent_node == null:
+		return push_vel
+	var room_size_value: Variant = parent_node.get("current_effective_room_size")
+	if not (room_size_value is Vector2):
+		return push_vel
+	var room_size := room_size_value as Vector2
+	if room_size == Vector2.ZERO:
+		return push_vel
+	var half := room_size * 0.5
+	var margin := 48.0
+	var result := push_vel
+	if result.x > 0.0 and enemy_pos.x >= half.x - margin:
+		result.x = 0.0
+	elif result.x < 0.0 and enemy_pos.x <= -half.x + margin:
+		result.x = 0.0
+	if result.y > 0.0 and enemy_pos.y >= half.y - margin:
+		result.y = 0.0
+	elif result.y < 0.0 and enemy_pos.y <= -half.y + margin:
+		result.y = 0.0
+	return result
+
+func _apply_edict_court_pulse(kill_pos: Vector2) -> void:
+	if kill_pos == Vector2.ZERO:
+		return
+	var scatter_radius := clampf(80.0 + float(edict_court_push_power) * 1.0, 80.0, 160.0)
+	var push_force := 300.0 + float(edict_court_push_power) * 1.8
+	for enemy_node in get_tree().get_nodes_in_group("enemies"):
+		if not (enemy_node is Node2D):
+			continue
+		var enemy_body := enemy_node as Node2D
+		var to_enemy := enemy_body.global_position - kill_pos
+		var dist := to_enemy.length()
+		if dist > scatter_radius:
+			continue
+		var raw_dir := to_enemy.normalized() if dist > 0.001 else Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)).normalized()
+		enemy_body.velocity += _clamp_push_to_room_bounds(enemy_body.global_position, raw_dir * push_force)
+	if player_feedback != null:
+		player_feedback.play_boss_edict_court_pulse(kill_pos, scatter_radius)
+		_broadcast_cue_event("boss_edict_court_pulse", {"position": kill_pos, "radius": scatter_radius})
+
+func _apply_null_corridor_segment(seg_start: Vector2, seg_end: Vector2) -> void:
+	var origin := _null_corridor_dash_origin if _null_corridor_dash_origin != Vector2.ZERO else seg_start
+	if origin.distance_squared_to(seg_end) < 4.0:
+		return
+	var lifetime := 3.2 + null_corridor_strength * 0.8
+	var width := 32.0 + null_corridor_strength * 14.0
+	null_corridor_segments.append({"start": origin, "end": seg_end, "life": lifetime, "width": width, "deflect_cooldowns": {}})
+	if player_feedback != null:
+		player_feedback.play_boss_null_corridor_spawn(origin, seg_end, width, lifetime)
+		_broadcast_cue_event("boss_null_corridor_spawn", {
+			"start": origin, "end": seg_end, "width": width, "lifetime": lifetime
+		})
+
+func _update_null_corridor_segments(delta: float) -> void:
+	if null_corridor_segments.is_empty():
+		return
+	var remove_indices: Array[int] = []
+	for i in range(null_corridor_segments.size()):
+		var seg := null_corridor_segments[i]
+		var life := maxf(0.0, float(seg.get("life", 0.0)) - delta)
+		if life <= 0.0:
+			remove_indices.append(i)
+			continue
+		seg["life"] = life
+		# Tick down per-enemy re-entry cooldowns
+		var deflect_cooldowns := seg.get("deflect_cooldowns", {}) as Dictionary
+		var expired: Array = []
+		for eid in deflect_cooldowns:
+			var cd := float(deflect_cooldowns[eid]) - delta
+			if cd <= 0.0:
+				expired.append(eid)
+			else:
+				deflect_cooldowns[eid] = cd
+		for eid in expired:
+			deflect_cooldowns.erase(eid)
+		seg["deflect_cooldowns"] = deflect_cooldowns
+		null_corridor_segments[i] = seg
+		var seg_start: Vector2 = seg.get("start", Vector2.ZERO)
+		var seg_end: Vector2 = seg.get("end", Vector2.ZERO)
+		var seg_vec := seg_end - seg_start
+		var seg_len := seg_vec.length()
+		if seg_len < 0.001:
+			continue
+		var seg_dir := seg_vec / seg_len
+		var seg_normal := Vector2(-seg_dir.y, seg_dir.x)
+		var half_width := float(seg.get("width", 28.0)) * 0.5
+		for enemy_node in get_tree().get_nodes_in_group("enemies"):
+			if not (enemy_node is Node2D):
+				continue
+			var enemy_body := enemy_node as Node2D
+			var to_enemy := enemy_body.global_position - seg_start
+			var along := to_enemy.dot(seg_dir)
+			if along < 0.0 or along > seg_len:
+				continue
+			var perp := to_enemy.dot(seg_normal)
+			if absf(perp) > half_width:
+				continue
+			var enemy_id := enemy_body.get_instance_id()
+			var cooldowns := seg.get("deflect_cooldowns", {}) as Dictionary
+			if cooldowns.has(enemy_id):
+				continue
+			# Fresh entry: strong single impulse
+			var push_dir := seg_normal if perp >= 0.0 else -seg_normal
+			enemy_body.velocity += _clamp_push_to_room_bounds(enemy_body.global_position, push_dir * 750.0)
+			cooldowns[enemy_id] = 0.5
+			seg["deflect_cooldowns"] = cooldowns
+			null_corridor_segments[i] = seg
+			var bounce_ratio := 0.20 + null_corridor_strength * 0.08
+			var bounce_dmg := maxi(1, int(round(float(damage) * bounce_ratio)))
+			if DAMAGEABLE.can_take_damage(enemy_body):
+				DAMAGEABLE.apply_damage(enemy_body, bounce_dmg, {"attack_type": "null_corridor_deflect", "is_ground_attack": true})
+			if player_feedback != null:
+				player_feedback.play_boss_null_corridor_deflect(enemy_body.global_position)
+	while not remove_indices.is_empty():
+		null_corridor_segments.remove_at(remove_indices.pop_back())
 
 func _try_apply_convergence_surge(epicenter: Vector2, _source_damage: int, _primary_enemy_id: int) -> void:
 	if convergence_surge_damage_ratio <= 0.0:
