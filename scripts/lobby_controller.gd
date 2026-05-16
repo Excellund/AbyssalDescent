@@ -40,6 +40,10 @@ var local_player_uuid: String = ""
 ## Multiplayer state (peer_id -> { character_id, is_ready, join_index, player_name, player_uuid })
 var peer_state: Dictionary = {}
 var _next_join_index: int = 0
+## Peers that have explicitly pressed the Ready button this lobby session.
+## Set only from _on_ready_button_pressed (host) / _request_ready_state (joiner).
+## Cleared on peer disconnect. _check_all_ready requires this AND peer_state is_ready.
+var _explicit_ready_peers: Dictionary = {}
 
 ## Difficulty state (host only)
 var selected_difficulty_tier: int = 1  ## Default: Delver
@@ -134,6 +138,7 @@ func _ready() -> void:
 	if bool(multiplayer_session_manager.is_host()):
 		peer_state.clear()
 		_next_join_index = 0
+		_explicit_ready_peers = {}
 		_ensure_local_peer_state(local_character_id)
 		var existing_peers: Array = (multiplayer_session_manager.get_peer_ids() as Array).duplicate()
 		existing_peers.sort()
@@ -705,6 +710,7 @@ func _on_ready_button_pressed() -> void:
 	ready_button.disabled = true
 	ready_button.text = "READY ✓"
 	if bool(multiplayer_session_manager.is_host()):
+		_explicit_ready_peers[local_peer_id] = true
 		_broadcast_ready_state.rpc(local_peer_id, true)
 	else:
 		_request_ready_state.rpc_id(1, true)
@@ -731,6 +737,7 @@ func _on_peer_connected(peer_id: int) -> void:
 ## Called when a peer disconnects.
 func _on_peer_disconnected(peer_id: int) -> void:
 	peer_state.erase(peer_id)
+	_explicit_ready_peers.erase(peer_id)
 	_update_player_list()
 
 ## Called when the host closes the session (clients only).
@@ -1028,6 +1035,7 @@ func _broadcast_difficulty(difficulty_tier: int) -> void:
 
 
 func _apply_ready_state(peer_id: int, is_ready: bool) -> void:
+	print("[Lobby] _apply_ready_state: peer=%d is_ready=%s explicit_ready_peers=%s" % [peer_id, is_ready, _explicit_ready_peers.keys()])
 	if peer_id not in peer_state:
 		peer_state[peer_id] = { "character_id": "bastion", "is_ready": is_ready, "player_name": "Player", "player_uuid": "" }
 	peer_state[peer_id]["is_ready"] = is_ready
@@ -1123,6 +1131,8 @@ func _request_ready_state(is_ready: bool) -> void:
 	var sender_peer_id := tree.get_multiplayer().get_remote_sender_id()
 	if sender_peer_id <= 0:
 		return
+	if is_ready:
+		_explicit_ready_peers[sender_peer_id] = true
 	_broadcast_ready_state.rpc(sender_peer_id, is_ready)
 
 
@@ -1157,8 +1167,13 @@ func _check_all_ready() -> void:
 			return
 		if not state.get("is_ready", false):
 			return  ## Not all ready yet
+		## Extra guard: this peer must have explicitly pressed Ready via button
+		## press this session (not just via roster sync or any other indirect path).
+		if int(peer_id) not in _explicit_ready_peers:
+			print("[Lobby] _check_all_ready: peer %d has is_ready=true but did NOT explicitly press Ready - blocking launch" % int(peer_id))
+			return
 
-	## All ready; transition to main game
+	## All peers explicitly ready; transition to main game
 	_launch_main_game()
 
 
