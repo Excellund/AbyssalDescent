@@ -231,8 +231,8 @@ func _run_duo_join_autostart() -> void:
 	## retry with backoff. Do NOT block the user staring at the main menu with a
 	## fixed warmup — let the first attempt go immediately and let retries cover
 	## the warmup window if needed.
-	const JOIN_RETRY_COUNT := 4
-	const JOIN_RETRY_BACKOFF_SEC := 3.0
+	const JOIN_RETRY_COUNT := 6
+	const JOIN_RETRY_BACKOFF_SEC := 4.0
 	var elapsed := 0.0
 	var resolved_code := ""
 	if multiplayer_status_label != null:
@@ -266,23 +266,32 @@ func _run_duo_join_autostart() -> void:
 	## fails, and emits connection_failed at +15ms before the tunnel hostname
 	## is actually resolvable on this machine.
 	var multiplayer_room_service_warm = get_node_or_null("/root/MultiplayerRoomService")
+	var warm_host_address := ""
 	if multiplayer_room_service_warm != null:
 		var warm_resolve: Dictionary = await multiplayer_room_service_warm.resolve_room_code(resolved_code)
 		if bool(warm_resolve.get("ok", false)):
 			var warm_reg := warm_resolve.get("registration", {}) as Dictionary
-			var warm_host := String(warm_reg.get("host_address", "")).strip_edges()
-			if not warm_host.is_empty():
+			warm_host_address = String(warm_reg.get("host_address", "")).strip_edges()
+			if not warm_host_address.is_empty():
 				if multiplayer_status_label != null:
 					multiplayer_status_label.text = "[Duo] Waiting for tunnel DNS propagation..."
-				var probe_ok := await _probe_tunnel_reachability(warm_host)
+				var probe_ok := await _probe_tunnel_reachability(warm_host_address)
 				if not probe_ok:
-					print("[Menu/Duo] Joiner autostart: tunnel reachability probe failed; trying join anyway")
-
+					print("[Menu/Duo] Joiner autostart: tunnel reachability probe failed; will re-probe before each attempt")
 	for attempt in range(JOIN_RETRY_COUNT):
 		var multiplayer_session_manager = get_node_or_null("/root/MultiplayerSessionManager")
 		if multiplayer_session_manager == null:
 			push_error("[Menu/Duo] Joiner autostart: MultiplayerSessionManager autoload is missing")
 			return
+		## Re-probe DNS before every join attempt. If the up-front probe timed out,
+		## DNS may have propagated by now; if not, there is no point hammering
+		## create_client() with an unresolved hostname.
+		if attempt > 0 and not warm_host_address.is_empty():
+			if multiplayer_status_label != null:
+				multiplayer_status_label.text = "[Duo] Re-checking tunnel DNS before attempt %d/%d..." % [attempt + 1, JOIN_RETRY_COUNT]
+			var reprobe_ok := await _probe_tunnel_reachability(warm_host_address)
+			if not reprobe_ok:
+				print("[Menu/Duo] Joiner autostart: DNS still not resolving before attempt %d; trying anyway" % (attempt + 1))
 		if multiplayer_status_label != null:
 			multiplayer_status_label.text = "[Duo] Joining room %s (attempt %d/%d)..." % [resolved_code, attempt + 1, JOIN_RETRY_COUNT]
 		print("[Menu/Duo] Joiner autostart: join attempt %d/%d for room '%s'" % [attempt + 1, JOIN_RETRY_COUNT, resolved_code])
@@ -321,7 +330,7 @@ func _tree_or_null() -> SceneTree:
 ## this gap because its DNS lookup fails synchronously.
 func _probe_tunnel_reachability(host_address: String) -> bool:
 	const PROBE_INTERVAL_SEC := 1.0
-	const PROBE_MAX_ATTEMPTS := 20
+	const PROBE_MAX_ATTEMPTS := 60
 	var url := host_address
 	if url.begins_with("wss://"):
 		url = "https://" + url.substr(6)

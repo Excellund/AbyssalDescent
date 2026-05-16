@@ -665,7 +665,12 @@ func _apply_multiplayer_character_packages(run_context: RUN_CONTEXT_SCRIPT) -> v
 		return
 	var duplicate_variant_by_peer := _build_duplicate_variant_map(run_context)
 	if is_instance_valid(player):
-		var local_selected_id := String(run_context.get_selected_character_id()).strip_edges().to_lower()
+		## Use the lobby's per-peer character selection as the authoritative
+		## source. RunContext.selected_character_id may have been silently
+		## rejected by the joiner's meta-progress unlock check even though the
+		## lobby allowed the pick, which previously caused the joiner to see
+		## themselves as bastion regardless of their lobby choice.
+		var local_selected_id := _resolve_local_character_id(run_context, current_character_id)
 		if local_selected_id.is_empty():
 			local_selected_id = current_character_id
 		var local_data: Dictionary = CHARACTER_REGISTRY.get_character(local_selected_id)
@@ -2205,7 +2210,11 @@ func _try_resume_saved_run() -> Dictionary:
 		encounter_profile_builder.initialize_with_seed(rng, multiplayer_encounter_seed)
 		## Never apply singleplayer run snapshots in multiplayer sessions.
 		## Snapshot payload can contain stale per-character combat stats from prior runs.
-		current_character_id = String(run_context.get_selected_character_id()).strip_edges().to_lower()
+		## Use the lobby's per-peer selection — RunContext.selected_character_id may
+		## have been silently rejected by this peer's meta-progress unlock check
+		## even though the lobby allowed the pick.
+		var mp_fallback_character_id := String(run_context.get_selected_character_id()).strip_edges().to_lower()
+		current_character_id = _resolve_local_character_id(run_context, mp_fallback_character_id)
 		if current_character_id.is_empty():
 			current_character_id = CHARACTER_REGISTRY.get_default_character_id()
 		should_apply_difficulty = true
