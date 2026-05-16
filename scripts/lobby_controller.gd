@@ -1242,17 +1242,22 @@ func _start_game(host_peer_id: int, session_identifier: String, difficulty_tier:
 	var role_tag := "HOST" if (multiplayer_session_manager != null and bool(multiplayer_session_manager.is_host())) else "JOINER"
 	if multiplayer_session_manager != null and multiplayer_session_manager.has_method("debug_log"):
 		multiplayer_session_manager.debug_log("LOBBY/%s" % role_tag, "_start_game: about to detach lobby (peer=%d session=%s)" % [local_peer_id, session_identifier])
-	## Stop _process loops immediately, then detach self from the scene tree BEFORE
-	## change_scene_to_file fires. Without this, Godot's SceneRPCInterface path cache
-	## can look up this node while data.tree == null (detached) and crash at
-	## scene_rpc_interface.cpp:146 via a null-dereference on node->get_tree().
+	## Stop _process loops immediately so the lobby doesn't queue more work, then
+	## disconnect autoload signal handlers so a peer_connected / session_joined /
+	## host_left emission can't fire a handler on this node mid-transition.
+	## We deliberately do NOT manually remove_child + queue_free here: doing so
+	## detaches the lobby (and its children) so their data.tree becomes null
+	## while the change_scene_to_file call still runs synchronously through this
+	## RPC handler. Any code path that calls get_tree() on a lobby descendant in
+	## that window then hits a null deref and can crash the process. The benign
+	## "Node not found" RPC warnings that the manual detach was avoiding are
+	## strictly preferable to a fatal crash; change_scene_to_file will free the
+	## previous scene root naturally at end of frame.
 	set_process(false)
-	var lobby_parent := get_parent()
-	if lobby_parent != null:
-		lobby_parent.remove_child(self)
-		queue_free()
+	set_physics_process(false)
+	_disconnect_session_signals()
 	if multiplayer_session_manager != null and multiplayer_session_manager.has_method("debug_log"):
-		multiplayer_session_manager.debug_log("LOBBY/%s" % role_tag, "_start_game: lobby detached + queue_free done, calling change_scene_to_file(Main.tscn)")
+		multiplayer_session_manager.debug_log("LOBBY/%s" % role_tag, "_start_game: signals detached, calling change_scene_to_file(Main.tscn)")
 	var scene_err := tree.change_scene_to_file("res://scenes/Main.tscn")
 	if multiplayer_session_manager != null and multiplayer_session_manager.has_method("debug_log"):
 		multiplayer_session_manager.debug_log("LOBBY/%s" % role_tag, "_start_game: change_scene_to_file returned err=%d" % int(scene_err))
