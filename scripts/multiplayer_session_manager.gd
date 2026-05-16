@@ -295,10 +295,20 @@ func join_registered_room(room_registration: Dictionary) -> bool:
 	if host_address.is_empty():
 		connection_failed.emit("Room registration is missing host address.")
 		return false
-	session_id = String(room_registration.get("session_id", "")).strip_edges()
-	room_code = String(room_registration.get("room_code", "")).strip_edges().to_upper()
-	_debug_log("[JOIN] Resolved: session_id=%s room_code=%s host=%s:%d" % [session_id, room_code, host_address, host_port])
-	return join_room(host_address, host_port)
+	var reg_session_id := String(room_registration.get("session_id", "")).strip_edges()
+	var reg_room_code := String(room_registration.get("room_code", "")).strip_edges().to_upper()
+	_debug_log("[JOIN] Resolved: session_id=%s room_code=%s host=%s:%d" % [reg_session_id, reg_room_code, host_address, host_port])
+	## Start the join attempt before assigning the registration identifiers so that
+	## join_room()'s has_active_session_state() guard does not see a non-empty session_id
+	## from the registration and trigger a spurious leave_room() / new-ID generation.
+	if not join_room(host_address, host_port):
+		return false
+	## Overwrite the internally-generated placeholders with the authoritative values
+	## from the registration.  _on_connected_to_server fires asynchronously, so these
+	## are always set before the session_joined signal is emitted.
+	session_id = reg_session_id
+	room_code = reg_room_code
+	return true
 
 
 ## Leave current session and disconnect.
@@ -639,6 +649,8 @@ func _on_connection_failed() -> void:
 	session_connected = false
 	is_host_peer = false
 	local_peer_id = 0
+	session_id = ""
+	room_code = ""
 	push_error("[MultiplayerSessionManager] Connection failed.")
 	connection_failed.emit("Connection failed to server.")
 
