@@ -1139,12 +1139,14 @@ func _broadcast_ready_state(peer_id: int, is_ready: bool) -> void:
 ## for next-frame delivery, so a freshly-connected peer can exist on the
 ## network but not yet appear in peer_state. Pressing Ready in that window
 ## would otherwise launch the game without them.
+## Also requires at least 2 peers to prevent the host from solo-launching
+## while waiting for a joiner to arrive.
 func _check_all_ready() -> void:
 	if not bool(multiplayer_session_manager.is_host()):
 		return
 
 	var connected_peers: Array = multiplayer_session_manager.get_peer_ids() as Array
-	if connected_peers.is_empty():
+	if connected_peers.size() < 2:
 		return
 
 	for peer_id in connected_peers:
