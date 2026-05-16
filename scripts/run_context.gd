@@ -73,7 +73,6 @@ var multiplayer_peer_profile_uuids: Dictionary = {}  ## peer_id -> profile uuid
 ## meta_progress.save. MP: host-set, party-shared, mirrored to joiners through
 ## the difficulty broadcast (see encounter_difficulty_multiplayer_config.gd).
 var active_ascension_loadout: Array[String] = []
-var suppress_menu_multiplayer_dev_autostart_once: bool = false
 var menu_music_resume_position_sec: float = -1.0
 
 func _ready() -> void:
@@ -672,15 +671,6 @@ func clear_multiplayer_session() -> void:
 	multiplayer_peer_characters.clear()
 	multiplayer_peer_player_names.clear()
 	multiplayer_peer_profile_uuids.clear()
-
-func suppress_menu_multiplayer_dev_autostart() -> void:
-	suppress_menu_multiplayer_dev_autostart_once = true
-
-func consume_menu_multiplayer_dev_autostart_suppression() -> bool:
-	var should_suppress := suppress_menu_multiplayer_dev_autostart_once
-	suppress_menu_multiplayer_dev_autostart_once = false
-	return should_suppress
-
 
 func set_menu_music_resume_position(seconds: float) -> void:
 	if not is_finite(seconds) or seconds < 0.0:

@@ -65,9 +65,14 @@ var _last_host_connectivity_warning: String = ""
 var _host_public_ip: String = ""
 var _host_local_ip: String = ""
 var _upnp_discovery_result: int = -1
-var _debug_log_file: String = "user://_multiplayer_debug.log"
+var _debug_log_file: String = ""
+var _debug_log_role: String = "pending"  ## "pending" | "host" | "joiner"
+var _debug_log_basename: String = ""
 var _active_transport_type: String = ""
 var _tunnel_helper: Node = null  ## CloudflareTunnelHelper, instantiated lazily
+
+const MULTIPLAYER_LOG_DIR := "user://multiplayer_logs/"
+const MAX_LOG_FILES := 5
 
 const CloudflareTunnelHelper := preload("res://scripts/cloudflare_tunnel_helper.gd")
 const TUNNEL_ENABLED_SETTING := "application/config/multiplayer_tunnel_enabled"
@@ -77,8 +82,10 @@ const TRANSPORT_WEBSOCKET_TUNNEL := "websocket_tunnel"
 
 func _ready() -> void:
 	_multiplayer = get_tree().get_multiplayer()
+	_initialize_debug_log()
 	_debug_log("[SESSION_MGR] _ready() called")
-	_debug_log("[SESSION_MGR] Log file location: user://_multiplayer_debug.log")
+	_debug_log("[SESSION_MGR] Log file location: %s" % _debug_log_file)
+	print("[MultiplayerSessionManager] Per-process multiplayer log: %s" % _debug_log_file)
 	print("[MultiplayerSessionManager] _ready() called. Connecting to MultiplayerAPI signals...")
 	_multiplayer.peer_connected.connect(_on_peer_connected)
 	print("[MultiplayerSessionManager] Connected: peer_connected signal")
@@ -267,6 +274,7 @@ func create_registered_room(room_registration: Dictionary) -> bool:
 	_host_public_ip = String(room_registration.get("host_address", "")).strip_edges()
 	_host_local_ip = _get_local_ip()
 	connected_peers[local_peer_id] = { "joined_at": Time.get_unix_time_from_system(), "last_ping": 0 }
+	_set_debug_log_role("host")
 	session_created.emit(session_id, room_code)
 	print("[MultiplayerSessionManager] Host session created successfully. Room code: %s | Session ID: %s | Local peer ID: %d | Port: %d | Local IP: %s | Public IP: %s" % [room_code, session_id, local_peer_id, host_port, _host_local_ip, _host_public_ip])
 	return true
@@ -350,6 +358,7 @@ func _create_tunnel_host(room_registration: Dictionary) -> bool:
 	_host_public_ip = String(room_registration.get("host_address", "")).strip_edges()
 	_host_local_ip = _get_local_ip()
 	connected_peers[local_peer_id] = { "joined_at": Time.get_unix_time_from_system(), "last_ping": 0 }
+	_set_debug_log_role("host")
 	session_created.emit(session_id, room_code)
 	print("[MultiplayerSessionManager] Tunnel host session created. Room: %s | Session: %s | Local peer ID: %d | Tunnel URL: %s" % [room_code, session_id, local_peer_id, _host_public_ip])
 	_debug_log("[HOST] Tunnel host session created on port %d. Tunnel URL: %s" % [host_port, _host_public_ip])
@@ -726,6 +735,7 @@ func _on_connected_to_server() -> void:
 		room_code = _generate_random_code(6).to_upper()
 	session_connected = true
 	is_host_peer = false
+	_set_debug_log_role("joiner")
 	_debug_log("[SIGNAL] === _on_connected_to_server() FIRED ===")
 	_debug_log("[STATE] session_id='%s' room_code='%s'" % [session_id, room_code])
 	push_error("[MULTIPLAYER DEBUG] === CLIENT CONNECTED TO SERVER === (This should print visibly)")
@@ -945,13 +955,113 @@ func _get_local_ip() -> String:
 func _debug_log(message: String) -> void:
 	var timestamp = Time.get_ticks_msec() / 1000.0
 	var line = "[%.3f] %s\n" % [timestamp, message]
-	
+
+	if _debug_log_file.is_empty():
+		print("[MultiplayerSessionManager] (no log file) %s" % message.strip_edges())
+		return
+
 	var file = FileAccess.open(_debug_log_file, FileAccess.READ_WRITE)
 	if file == null:
 		file = FileAccess.open(_debug_log_file, FileAccess.WRITE)
-	
+
 	if file != null:
 		file.seek_end()
 		file.store_string(line)
 	else:
 		print("[MultiplayerSessionManager] WARNING: Could not open debug log file at %s" % _debug_log_file)
+
+
+## Public API: any script can route a message into the per-process multiplayer log.
+## Adds a tag prefix automatically so the source is grep-able in the file.
+func debug_log(tag: String, message: String) -> void:
+	if tag.is_empty():
+		_debug_log(message)
+	else:
+		_debug_log("[%s] %s" % [tag, message])
+
+
+## Returns the absolute (user://-resolved) path to the active log file.
+func get_debug_log_path() -> String:
+	if _debug_log_file.is_empty():
+		return ""
+	return ProjectSettings.globalize_path(_debug_log_file)
+
+
+## Internal: choose a unique log filename for this process, ensure the log dir
+## exists, and rotate older files so only the latest MAX_LOG_FILES remain.
+func _initialize_debug_log() -> void:
+	var dir_access := DirAccess.open("user://")
+	if dir_access == null:
+		push_error("[MultiplayerSessionManager] Cannot open user:// to create log dir")
+		return
+	if not dir_access.dir_exists(MULTIPLAYER_LOG_DIR):
+		var make_err := dir_access.make_dir_recursive(MULTIPLAYER_LOG_DIR)
+		if make_err != OK:
+			push_error("[MultiplayerSessionManager] Failed to create %s: %s" % [MULTIPLAYER_LOG_DIR, error_string(make_err)])
+			return
+
+	var now := Time.get_datetime_dict_from_system()
+	var timestamp_str := "%04d%02d%02d-%02d%02d%02d" % [int(now.year), int(now.month), int(now.day), int(now.hour), int(now.minute), int(now.second)]
+	var pid := OS.get_process_id()
+	_debug_log_basename = "mp-%s-pid%d" % [timestamp_str, pid]
+	_debug_log_role = "pending"
+	_debug_log_file = "%s%s-%s.log" % [MULTIPLAYER_LOG_DIR, _debug_log_basename, _debug_log_role]
+
+	_rotate_old_logs()
+
+
+## Internal: enforce MAX_LOG_FILES by deleting the oldest .log files in the dir.
+## Counts by file path; the currently-active file counts toward the limit so the
+## newly-created file shows up immediately.
+func _rotate_old_logs() -> void:
+	var dir := DirAccess.open(MULTIPLAYER_LOG_DIR)
+	if dir == null:
+		return
+	var entries: Array = []
+	dir.list_dir_begin()
+	var name := dir.get_next()
+	while name != "":
+		if not dir.current_is_dir() and name.ends_with(".log"):
+			var full_path := MULTIPLAYER_LOG_DIR + name
+			var mtime := FileAccess.get_modified_time(full_path)
+			entries.append({"path": full_path, "mtime": int(mtime)})
+		name = dir.get_next()
+	dir.list_dir_end()
+
+	## Sort newest first.
+	entries.sort_custom(func(a, b): return int(a["mtime"]) > int(b["mtime"]))
+
+	## Keep the newest MAX_LOG_FILES entries; delete the rest.
+	for i in range(MAX_LOG_FILES, entries.size()):
+		var stale_path := String(entries[i]["path"])
+		var del_err := DirAccess.remove_absolute(ProjectSettings.globalize_path(stale_path))
+		if del_err != OK:
+			## Fallback: try DirAccess.remove which is relative to the dir.
+			var rel_name := stale_path.replace(MULTIPLAYER_LOG_DIR, "")
+			dir.remove(rel_name)
+
+
+## Internal: once we know the session's role (host / joiner), rename the log
+## file to include it so the user can identify which file is which at a glance.
+func _set_debug_log_role(role: String) -> void:
+	if role.is_empty() or role == _debug_log_role:
+		return
+	if _debug_log_basename.is_empty() or _debug_log_file.is_empty():
+		return
+	var new_path := "%s%s-%s.log" % [MULTIPLAYER_LOG_DIR, _debug_log_basename, role]
+	if new_path == _debug_log_file:
+		return
+	var dir := DirAccess.open(MULTIPLAYER_LOG_DIR)
+	if dir == null:
+		return
+	var old_name := _debug_log_file.replace(MULTIPLAYER_LOG_DIR, "")
+	var new_name := new_path.replace(MULTIPLAYER_LOG_DIR, "")
+	if dir.file_exists(new_name):
+		dir.remove(new_name)
+	var rename_err := dir.rename(old_name, new_name)
+	if rename_err == OK:
+		_debug_log_file = new_path
+		_debug_log_role = role
+		_debug_log("[SESSION_MGR] Log file renamed to role=%s path=%s" % [role, _debug_log_file])
+	else:
+		push_warning("[MultiplayerSessionManager] Failed to rename log to role '%s': %s" % [role, error_string(rename_err)])

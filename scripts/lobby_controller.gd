@@ -1239,6 +1239,9 @@ func _start_game(host_peer_id: int, session_identifier: String, difficulty_tier:
 		local_char_id = "bastion"
 	local_character_id = local_char_id
 	RunContext.set_selected_character_id(local_char_id)
+	var role_tag := "HOST" if (multiplayer_session_manager != null and bool(multiplayer_session_manager.is_host())) else "JOINER"
+	if multiplayer_session_manager != null and multiplayer_session_manager.has_method("debug_log"):
+		multiplayer_session_manager.debug_log("LOBBY/%s" % role_tag, "_start_game: about to detach lobby (peer=%d session=%s)" % [local_peer_id, session_identifier])
 	## Stop _process loops immediately, then detach self from the scene tree BEFORE
 	## change_scene_to_file fires. Without this, Godot's SceneRPCInterface path cache
 	## can look up this node while data.tree == null (detached) and crash at
@@ -1248,7 +1251,11 @@ func _start_game(host_peer_id: int, session_identifier: String, difficulty_tier:
 	if lobby_parent != null:
 		lobby_parent.remove_child(self)
 		queue_free()
-	tree.change_scene_to_file("res://scenes/Main.tscn")
+	if multiplayer_session_manager != null and multiplayer_session_manager.has_method("debug_log"):
+		multiplayer_session_manager.debug_log("LOBBY/%s" % role_tag, "_start_game: lobby detached + queue_free done, calling change_scene_to_file(Main.tscn)")
+	var scene_err := tree.change_scene_to_file("res://scenes/Main.tscn")
+	if multiplayer_session_manager != null and multiplayer_session_manager.has_method("debug_log"):
+		multiplayer_session_manager.debug_log("LOBBY/%s" % role_tag, "_start_game: change_scene_to_file returned err=%d" % int(scene_err))
 
 
 func _on_leave_lobby_pressed() -> void:

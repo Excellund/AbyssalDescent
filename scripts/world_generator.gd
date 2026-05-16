@@ -359,6 +359,9 @@ func _apply_debug_settings_from_node() -> void:
 		_perf_attribution_sample_ms = 1000.0
 
 func _ready() -> void:
+	if MultiplayerSessionManager != null and MultiplayerSessionManager.session_connected:
+		var role_tag := "HOST" if MultiplayerSessionManager.is_host() else "JOINER"
+		MultiplayerSessionManager.debug_log("WORLD/%s" % role_tag, "WorldGenerator._ready() entered")
 	bootstrap_coordinator = WORLD_BOOTSTRAP_COORDINATOR_SCRIPT.new()
 	var bootstrap_stages: Array[Callable] = [
 		Callable(self, "_validate_encounter_content_sync"),
@@ -369,6 +372,9 @@ func _ready() -> void:
 		Callable(self, "_setup_objective_runtime_system")
 	]
 	bootstrap_coordinator.run_bootstrap(bootstrap_stages)
+	if MultiplayerSessionManager != null and MultiplayerSessionManager.session_connected:
+		var role_tag2 := "HOST" if MultiplayerSessionManager.is_host() else "JOINER"
+		MultiplayerSessionManager.debug_log("WORLD/%s" % role_tag2, "WorldGenerator bootstrap_coordinator finished all stages")
 	EnemyReplicationService.bind_world(self)
 	var boot_flows: Array[Callable] = [
 		Callable(self, "_run_resume_flow"),
@@ -376,7 +382,13 @@ func _ready() -> void:
 	]
 	if bootstrap_coordinator.run_first_success(boot_flows):
 		return
+	if MultiplayerSessionManager != null and MultiplayerSessionManager.session_connected:
+		var role_tag3 := "HOST" if MultiplayerSessionManager.is_host() else "JOINER"
+		MultiplayerSessionManager.debug_log("WORLD/%s" % role_tag3, "WorldGenerator._ready: about to _begin_new_run_flow")
 	_begin_new_run_flow()
+	if MultiplayerSessionManager != null and MultiplayerSessionManager.session_connected:
+		var role_tag4 := "HOST" if MultiplayerSessionManager.is_host() else "JOINER"
+		MultiplayerSessionManager.debug_log("WORLD/%s" % role_tag4, "WorldGenerator._ready: _begin_new_run_flow returned (READY COMPLETE)")
 
 func _exit_tree() -> void:
 	EnemyReplicationService.unbind_world(self)
@@ -414,6 +426,8 @@ func _initialize_bootstrap_context() -> void:
 		is_multiplayer = not multiplayer_session_id.is_empty()
 		if is_multiplayer:
 			print_debug("[WorldGenerator] Detected multiplayer session: %s" % multiplayer_session_id)
+			var role_tag := "HOST" if MultiplayerSessionManager.is_host() else "JOINER"
+			MultiplayerSessionManager.debug_log("WORLD/%s" % role_tag, "Detected multiplayer session: %s" % multiplayer_session_id)
 			if not MultiplayerSessionManager.peer_disconnected.is_connected(_on_multiplayer_peer_disconnected):
 				MultiplayerSessionManager.peer_disconnected.connect(_on_multiplayer_peer_disconnected)
 			## Joiner: return to menu if the host disconnects while in-game.
@@ -428,12 +442,18 @@ func _initialize_bootstrap_context() -> void:
 	player_flow_coordinator = PLAYER_FLOW_COORDINATOR_SCRIPT.new()
 	power_registry_instance = POWER_REGISTRY.new()
 	player = get_node_or_null(player_path) as Node2D
+	if is_multiplayer:
+		var role_tag2 := "HOST" if MultiplayerSessionManager.is_host() else "JOINER"
+		MultiplayerSessionManager.debug_log("WORLD/%s" % role_tag2, "Bootstrap: about to _setup_player_runtime_bindings (player_valid=%s)" % str(is_instance_valid(player)))
 	_setup_player_runtime_bindings()
 	_sync_audio_settings_from_context()
 	endless_boss_defeated = false
 
 	if is_multiplayer:
+		var role_tag3 := "HOST" if MultiplayerSessionManager.is_host() else "JOINER"
+		MultiplayerSessionManager.debug_log("WORLD/%s" % role_tag3, "Bootstrap: about to _setup_multiplayer_remote_players")
 		_setup_multiplayer_remote_players()
+		MultiplayerSessionManager.debug_log("WORLD/%s" % role_tag3, "Bootstrap: _setup_multiplayer_remote_players returned")
 
 func _sync_progression_from_run_session() -> void:
 	if run_session == null:
@@ -547,6 +567,8 @@ func _setup_multiplayer_remote_players() -> void:
 		return
 
 	for remote_peer in remote_peer_ids:
+		var role_tag := "HOST" if multiplayer_session_manager.is_host() else "JOINER"
+		multiplayer_session_manager.debug_log("WORLD/%s" % role_tag, "RemoteAvatars: instantiating remote player for peer %d" % remote_peer)
 		var remote_player_node := player_scene.instantiate() as PLAYER_SCRIPT
 		if remote_player_node == null:
 			push_error("[Multiplayer] Failed to instantiate Player scene for peer %d" % remote_peer)
@@ -562,6 +584,7 @@ func _setup_multiplayer_remote_players() -> void:
 				if not remote_character_data.is_empty():
 					remote_player_node.apply_character_package(remote_character_data)
 		add_child(remote_player_node)
+		multiplayer_session_manager.debug_log("WORLD/%s" % role_tag, "RemoteAvatars: peer %d add_child done, configuring collisions" % remote_peer)
 		_disable_player_collision_pair(player, remote_player_node)
 		for existing_node in player_replication_service.player_nodes.values():
 			if existing_node == remote_player_node or existing_node == player:
@@ -571,6 +594,7 @@ func _setup_multiplayer_remote_players() -> void:
 		remote_player_node.died.connect(Callable(self, "_on_player_died"))
 		remote_player_node.health_changed.connect(Callable(self, "_on_player_health_changed_for_summary").bind(remote_player_node))
 		print_debug("[Multiplayer] Remote player created (peer %d)" % remote_peer)
+		multiplayer_session_manager.debug_log("WORLD/%s" % role_tag, "RemoteAvatars: peer %d fully registered" % remote_peer)
 
 	if is_instance_valid(player_camera):
 		var zoom_scale := camera_base_zoom_in * 0.65 if multiplayer_use_shared_camera else camera_base_zoom_in
@@ -2477,7 +2501,6 @@ func _teardown_multiplayer_session_for_menu_transition() -> void:
 	var run_context := _get_run_context()
 	if run_context != null:
 		run_context.clear_multiplayer_session()
-		run_context.suppress_menu_multiplayer_dev_autostart()
 
 func _on_pause_exit_game_requested() -> void:
 	_run_summary_finish_run("quit")

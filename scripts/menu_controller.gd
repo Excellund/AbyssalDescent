@@ -23,10 +23,9 @@ const LEADERBOARD_PANEL_SCRIPT := preload("res://scripts/ui/leaderboard/leaderbo
 const ASCENSION_PANEL_SCRIPT := preload("res://scripts/ui/ascension/ascension_panel.gd")
 const LOBBY_CONTROLLER_SCRIPT := preload("res://scripts/lobby_controller.gd")
 const LOBBY_SCENE_PATH := "res://scenes/Lobby.tscn"
-const DEV_ARG_LOCAL_HOST := "--mp-dev-host"
-const DEV_ARG_LOCAL_JOIN := "--mp-dev-join"
-const DEV_ARG_LOCAL_HOST_PLAIN := "mp-dev-host"
-const DEV_ARG_LOCAL_JOIN_PLAIN := "mp-dev-join"
+const DUO_ARG_HOST := "--mp-duo-host"
+const DUO_ARG_JOIN := "--mp-duo-join"
+const DUO_ROOM_CODE_PATH := "user://mp_duo_room_code.txt"
 const MENU_QUOTE_NEUTRAL := "\"Something unfamiliar begins.\""
 const MENU_QUOTES_AFTER_DEATH := [
 	"\"Back already?\"",
@@ -150,7 +149,7 @@ func _ready() -> void:
 	_build_ui()
 	_apply_menu_layout()
 	_start_menu_music()
-	if _try_multiplayer_dev_autostart():
+	if _try_multiplayer_duo_autostart():
 		return
 	if _should_autostart_debug_encounter():
 		call_deferred("_change_to_gameplay_scene")
@@ -163,62 +162,78 @@ func _ready() -> void:
 	_start_update_check()
 
 
-func _try_multiplayer_dev_autostart() -> bool:
-	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
-	if run_context != null:
-		if bool(run_context.consume_menu_multiplayer_dev_autostart_suppression()):
-			return false
+func _change_to_lobby_scene() -> void:
+	_show_lobby_modal()
+
+
+func _try_multiplayer_duo_autostart() -> bool:
+	## Convenience dev launcher: launch_mp_duo.bat spawns two app instances. The host
+	## instance auto-creates a real tunnel room and writes its room code to
+	## user://mp_duo_room_code.txt. The joiner instance polls for that file and
+	## auto-joins via the same tunnel path real players use.
 	var merged_args: PackedStringArray = []
 	for arg in OS.get_cmdline_user_args():
 		merged_args.append(String(arg).strip_edges())
 	for arg in OS.get_cmdline_args():
 		merged_args.append(String(arg).strip_edges())
-	if merged_args.is_empty():
-		return false
-	var should_host := false
-	var should_join := false
-	for arg in merged_args:
-		if arg == DEV_ARG_LOCAL_HOST or arg == DEV_ARG_LOCAL_HOST_PLAIN:
-			should_host = true
-		if arg == DEV_ARG_LOCAL_JOIN or arg == DEV_ARG_LOCAL_JOIN_PLAIN:
-			should_join = true
+	var should_host := merged_args.has(DUO_ARG_HOST)
+	var should_join := merged_args.has(DUO_ARG_JOIN)
 	if not should_host and not should_join:
 		return false
-	print_debug("[Menu] Multiplayer dev autostart args: %s" % [str(merged_args)])
 	if should_host:
-		print_debug("[Menu] Multiplayer dev autostart: host")
-		return _create_local_dev_lobby()
-	if should_join:
-		print_debug("[Menu] Multiplayer dev autostart: join")
-		return _join_local_dev_lobby()
-	return false
+		print_debug("[Menu/Duo] Multiplayer duo autostart: host (real tunnel)")
+		call_deferred("_run_duo_host_autostart")
+		return true
+	print_debug("[Menu/Duo] Multiplayer duo autostart: join (real tunnel)")
+	call_deferred("_run_duo_join_autostart")
+	return true
 
 
-func _create_local_dev_lobby() -> bool:
+func _run_duo_host_autostart() -> void:
+	## Clear any stale handoff file so the joiner doesn't latch onto a previous run.
+	if FileAccess.file_exists(DUO_ROOM_CODE_PATH):
+		var abs_path := ProjectSettings.globalize_path(DUO_ROOM_CODE_PATH)
+		var remove_err := DirAccess.remove_absolute(abs_path)
+		if remove_err != OK:
+			push_error("[Menu/Duo] Failed to remove stale room code file (err=%d): %s" % [int(remove_err), abs_path])
+	await _create_multiplayer_room()
 	var multiplayer_session_manager = get_node_or_null("/root/MultiplayerSessionManager")
 	if multiplayer_session_manager == null:
-		push_error("[Menu] MultiplayerSessionManager autoload is missing")
-		return false
-	if not multiplayer_session_manager.create_room().is_empty():
-		call_deferred("_show_lobby_modal")
-		return true
-	push_error("[Menu] Failed to create local dev lobby")
-	return false
+		push_error("[Menu/Duo] Host autostart: MultiplayerSessionManager autoload is missing")
+		return
+	var code := String(multiplayer_session_manager.room_code).strip_edges()
+	if code.is_empty():
+		push_error("[Menu/Duo] Host autostart: room_code is empty after create_multiplayer_room()")
+		return
+	var write_file := FileAccess.open(DUO_ROOM_CODE_PATH, FileAccess.WRITE)
+	if write_file == null:
+		push_error("[Menu/Duo] Host autostart: failed to open %s for writing (err=%d)" % [DUO_ROOM_CODE_PATH, int(FileAccess.get_open_error())])
+		return
+	write_file.store_string(code)
+	write_file.close()
+	print("[Menu/Duo] Wrote room code '%s' to %s for joiner pickup" % [code, DUO_ROOM_CODE_PATH])
 
 
-func _join_local_dev_lobby() -> bool:
-	var multiplayer_session_manager = get_node_or_null("/root/MultiplayerSessionManager")
-	if multiplayer_session_manager == null:
-		push_error("[Menu] MultiplayerSessionManager autoload is missing")
-		return false
-	if multiplayer_session_manager.join_room("127.0.0.1", 7777, true):
-		call_deferred("_show_lobby_modal")
-		return true
-	push_error("[Menu] Failed to join local dev lobby")
-	return false
-
-func _change_to_lobby_scene() -> void:
-	_show_lobby_modal()
+func _run_duo_join_autostart() -> void:
+	const POLL_INTERVAL_SEC := 0.5
+	const MAX_WAIT_SEC := 60.0
+	var elapsed := 0.0
+	while elapsed < MAX_WAIT_SEC:
+		if FileAccess.file_exists(DUO_ROOM_CODE_PATH):
+			var read_file := FileAccess.open(DUO_ROOM_CODE_PATH, FileAccess.READ)
+			if read_file != null:
+				var code := read_file.get_as_text().strip_edges()
+				read_file.close()
+				if not code.is_empty():
+					print("[Menu/Duo] Joiner autostart: connecting to room '%s'" % code)
+					_join_multiplayer_room(code)
+					return
+		var tree := _tree_or_null()
+		if tree == null:
+			return
+		await tree.create_timer(POLL_INTERVAL_SEC).timeout
+		elapsed += POLL_INTERVAL_SEC
+	push_error("[Menu/Duo] Joiner autostart: timed out after %.1fs waiting for room code file %s" % [MAX_WAIT_SEC, DUO_ROOM_CODE_PATH])
 
 
 func _tree_or_null() -> SceneTree:
@@ -482,17 +497,9 @@ func _await_multiplayer_join_result(multiplayer_session_manager: Node, timeout_s
 
 ## Helper: Log to multiplayer debug file from menu
 func _debug_log_menu(message: String) -> void:
-	var debug_log_file := "user://_multiplayer_debug.log"
-	var timestamp = Time.get_ticks_msec() / 1000.0
-	var line = "[%.3f] [MENU] %s\n" % [timestamp, message]
-	
-	var file = FileAccess.open(debug_log_file, FileAccess.READ_WRITE)
-	if file == null:
-		file = FileAccess.open(debug_log_file, FileAccess.WRITE)
-	
-	if file != null:
-		file.seek_end()
-		file.store_string(line)
+	var manager := get_node_or_null("/root/MultiplayerSessionManager")
+	if manager != null and manager.has_method("debug_log"):
+		manager.debug_log("MENU", message)
 
 
 func _should_autostart_debug_encounter() -> bool:
