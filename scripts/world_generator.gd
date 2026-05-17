@@ -3829,14 +3829,25 @@ func _sync_reward_phase_complete(peer_id: int, is_initial: bool, mode: int) -> v
 		return
 	if not _all_reward_phase_peers_completed():
 		return
+	## Capture the initial encounter profile before _finalize clears pending_initial_room_profile.
+	## Both host and joiner independently seed rng, so without this the joiner rolls a different
+	## obstacle_layout from pick_layout(rng) — terrain diverges on the first encounter.
+	var broadcast_initial_profile: Dictionary = {}
+	if is_initial:
+		if pending_initial_room_profile.is_empty():
+			pending_initial_room_profile = _build_skirmish_profile(room_depth)
+		broadcast_initial_profile = pending_initial_room_profile.duplicate(true)
 	_finalize_reward_phase_and_advance(is_initial, mode)
-	_sync_reward_phase_advance.rpc(is_initial, mode)
+	_sync_reward_phase_advance.rpc(is_initial, mode, broadcast_initial_profile)
 
 
 @rpc("reliable", "authority")
-func _sync_reward_phase_advance(is_initial: bool, mode: int) -> void:
+func _sync_reward_phase_advance(is_initial: bool, mode: int, initial_profile: Dictionary = {}) -> void:
 	if not MultiplayerSessionManager.is_remote_replica():
 		return
+	## Use the host's pre-built profile so the joiner gets the same obstacle_layout.
+	if is_initial and not initial_profile.is_empty():
+		pending_initial_room_profile = initial_profile
 	_finalize_reward_phase_and_advance(is_initial, mode)
 
 @rpc("reliable", "authority")
