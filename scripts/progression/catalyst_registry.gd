@@ -16,9 +16,7 @@ const DEFAULT_SLOT_LIMIT := 2
 ## Catalyst categories drive the equip UI grouping.
 const CATEGORY_REWARD := "reward"
 const CATEGORY_PREP := "prep"
-const CATEGORY_DISCOVERY := "discovery"
 const CATEGORY_SURVIVAL := "survival"
-const CATEGORY_REPLAY := "replay"
 
 const CATALYST_DEFINITIONS := {
 	"extra_arcana_slot": {
@@ -33,19 +31,19 @@ const CATALYST_DEFINITIONS := {
 		"category": CATEGORY_REWARD,
 		"payload": {"reward_rerolls_per_encounter_add": 1}
 	},
-	"door_reveal": {
+	"damage_reduction": {
 		"label": "Lacuna's Veil",
 		"description": "Take 10% less damage from all sources.",
 		"category": CATEGORY_SURVIVAL,
 		"payload": {"player_damage_taken_mult": 0.90}
 	},
-	"starting_arcana_pick": {
+	"reward_choice_bonus": {
 		"label": "Draft Compass",
 		"description": "Reward picks offer one additional option.",
 		"category": CATEGORY_REWARD,
 		"payload": {"reward_choice_count_add": 1}
 	},
-	"starting_boon_pick": {
+	"rest_heal_bonus": {
 		"label": "Pilgrim's Tonic",
 		"description": "Rest Sites heal 35% more.",
 		"category": CATEGORY_SURVIVAL,
@@ -57,7 +55,7 @@ const CATALYST_DEFINITIONS := {
 		"category": CATEGORY_SURVIVAL,
 		"payload": {"starting_max_hp_add": 20}
 	},
-	"personal_best_seed": {
+	"wave_interval_bonus": {
 		"label": "Calm Before Surge",
 		"description": "Waves arrive 12% slower.",
 		"category": CATEGORY_SURVIVAL,

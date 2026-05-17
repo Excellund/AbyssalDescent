@@ -35,7 +35,7 @@ const SPECIAL_OATH_DEFINITIONS := {
 		"description": "Defeat Lacuna without taking damage.",
 		"evaluator_key": "boss_no_hit",
 		"params": {"boss_id": "lacuna"},
-		"reward_catalyst_id": "door_reveal",
+		"reward_catalyst_id": "damage_reduction",
 		"reward_modifier_id": ""
 	},
 	"empty_hand": {
@@ -43,7 +43,7 @@ const SPECIAL_OATH_DEFINITIONS := {
 		"description": "Clear a run without picking any boons.",
 		"evaluator_key": "win_no_boons",
 		"params": {},
-		"reward_catalyst_id": "starting_arcana_pick",
+		"reward_catalyst_id": "reward_choice_bonus",
 		"reward_modifier_id": ""
 	},
 	"silent_arcana": {
@@ -51,7 +51,7 @@ const SPECIAL_OATH_DEFINITIONS := {
 		"description": "Clear a run without picking any arcana.",
 		"evaluator_key": "win_no_arcana",
 		"params": {},
-		"reward_catalyst_id": "starting_boon_pick",
+		"reward_catalyst_id": "rest_heal_bonus",
 		"reward_modifier_id": ""
 	},
 	"singular_focus": {
@@ -83,7 +83,7 @@ const SPECIAL_OATH_DEFINITIONS := {
 		"description": "Clear any run at Ascension rank 3 or higher.",
 		"evaluator_key": "ascension_rank_at_least",
 		"params": {"rank": 3},
-		"reward_catalyst_id": "personal_best_seed",
+		"reward_catalyst_id": "wave_interval_bonus",
 		"reward_modifier_id": "crowned_bosses"
 	},
 	"ascension_rank_5": {
@@ -115,7 +115,7 @@ const SPECIAL_OATH_DEFINITIONS := {
 		"description": "Clear a run without visiting any rest sites.",
 		"evaluator_key": "win_no_rest",
 		"params": {},
-		"reward_catalyst_id": "starting_boon_pick",
+		"reward_catalyst_id": "rest_heal_bonus",
 		"reward_modifier_id": ""
 	},
 	"flawless_run": {

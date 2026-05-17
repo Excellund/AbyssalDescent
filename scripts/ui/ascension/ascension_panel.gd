@@ -155,10 +155,7 @@ func _on_back_or_descent_pressed() -> void:
 	if _lobby_mode_enabled:
 		emit_signal("lobby_done_pressed")
 		return
-	if _run_setup_mode_enabled:
-		emit_signal("begin_descent_pressed")
-	else:
-		emit_signal("back_pressed")
+	emit_signal("back_pressed")
 
 func populate() -> void:
 	if _character_id.is_empty():
