@@ -120,10 +120,16 @@ func on_enemy_died(enemy_id: int) -> void:
 	if killer_peer_id > 0:
 		_world._record_peer_enemy_kill(killer_peer_id)
 	var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as ENEMY_BASE_SCRIPT
+	var kill_pos := (enemy.global_position if is_instance_valid(enemy) else Vector2.ZERO)
 	var death_effect_payload := _build_enemy_death_effect_payload(enemy)
 	deregister_enemy(enemy_id)
 	if MultiplayerSessionManager.should_broadcast():
 		_world._sync_enemy_died.rpc(enemy_id, death_effect_payload)
+	var replication_service := (Engine.get_main_loop() as SceneTree).root.get_node_or_null("/root/PlayerReplicationService")
+	if replication_service != null and killer_peer_id > 0:
+		replication_service.send_enemy_killed(killer_peer_id, kill_pos)
+	elif is_instance_valid(_world) and _world.get("player") != null:
+		_world.player.notify_enemy_killed(kill_pos)
 
 
 # --- tick -------------------------------------------------------------------

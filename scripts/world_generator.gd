@@ -3191,8 +3191,6 @@ func _on_room_enemy_died(kill_pos: Vector2 = Vector2.ZERO) -> void:
 	active_room_enemy_count = maxi(0, active_room_enemy_count - 1)
 	run_summary_recorder.record_enemy_kill_for_tracker()
 	objective_progress_coordinator.on_enemy_killed(objective_manager, objective_runtime, kill_pos)
-	if is_instance_valid(player):
-		player.notify_enemy_killed(kill_pos)
 	if not in_boss_room and is_instance_valid(_world_sfx_player):
 		var idx := randi() % 3
 		if idx == 0:

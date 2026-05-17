@@ -552,3 +552,29 @@ func _apply_external_slow_local(target_peer_id: int, duration: float, mult: floa
 		return
 	if player_node.has_method("apply_external_slow"):
 		player_node.apply_external_slow(duration, mult)
+
+
+## Host-authoritative: dispatch an enemy-killed notification to the player who got the kill credit.
+func send_enemy_killed(target_peer_id: int, kill_pos: Vector2) -> void:
+	if multiplayer_session_manager == null or not bool(multiplayer_session_manager.is_session_connected()):
+		_apply_enemy_killed_local(target_peer_id, kill_pos)
+		return
+	if not bool(multiplayer_session_manager.should_broadcast()):
+		return
+	if target_peer_id == local_peer_id:
+		_apply_enemy_killed_local(target_peer_id, kill_pos)
+		return
+	_rpc_apply_enemy_killed.rpc_id(target_peer_id, target_peer_id, kill_pos)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _rpc_apply_enemy_killed(target_peer_id: int, kill_pos: Vector2) -> void:
+	_apply_enemy_killed_local(target_peer_id, kill_pos)
+
+
+func _apply_enemy_killed_local(target_peer_id: int, kill_pos: Vector2) -> void:
+	var player_node := _get_player_node(target_peer_id)
+	if player_node == null:
+		return
+	if player_node.has_method("notify_enemy_killed"):
+		player_node.notify_enemy_killed(kill_pos)
