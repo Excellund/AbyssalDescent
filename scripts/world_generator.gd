@@ -1920,6 +1920,8 @@ func _keep_player_inside_current_room() -> void:
 func _refresh_enemy_clamp_cache() -> void:
 	_enemy_clamp_cached_nodes.clear()
 	for enemy in get_tree().get_nodes_in_group("enemies"):
+		if not is_instance_valid(enemy):
+			continue
 		if enemy is Node2D:
 			_enemy_clamp_cached_nodes.append(enemy as Node2D)
 
@@ -4067,7 +4069,7 @@ func _assign_enemy_target_candidates(enemy: ENEMY_BASE_SCRIPT) -> void:
 func _refresh_all_enemy_target_candidates() -> void:
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		var enemy := enemy_node as ENEMY_BASE_SCRIPT
-		if enemy == null:
+		if not is_instance_valid(enemy):
 			continue
 		_assign_enemy_target_candidates(enemy)
 
@@ -4287,7 +4289,7 @@ func _start_encounter_intro_grace() -> void:
 		enemy_spawner.wave_timer_paused = true
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		var enemy := enemy_node as ENEMY_BASE_SCRIPT
-		if enemy == null:
+		if not is_instance_valid(enemy):
 			continue
 		_begin_spawn_transport_if_idle(enemy, INTRO_SURVEY_TRANSPORT_PULSE_DURATION)
 	_set_enemy_targets_passive(true)
@@ -4354,10 +4356,12 @@ func _on_player_ready_signal(peer_id: int) -> void:
 			return
 	
 	_exit_encounter_intro_grace()
-	_broadcast_all_players_ready.rpc()
+	_broadcast_all_players_ready.rpc(_world_multiplayer_sync_state.current_room_sync_id)
 
 @rpc("reliable", "authority")
-func _broadcast_all_players_ready() -> void:
+func _broadcast_all_players_ready(room_sync_id: int) -> void:
+	if room_sync_id != _world_multiplayer_sync_state.current_room_sync_id:
+		return
 	_exit_encounter_intro_grace()
 
 func _exit_encounter_intro_grace() -> void:
@@ -4373,8 +4377,11 @@ func _exit_encounter_intro_grace() -> void:
 	if is_multiplayer:
 		debug_msg += " [peer:%d, host:%s]" % [get_tree().get_multiplayer().get_unique_id(), MultiplayerSessionManager.is_host()]
 	print_debug(debug_msg)
+	print_debug("Grace exit: step A")
 	hud.hide_persistent_banner()
+	print_debug("Grace exit: step B")
 	_set_enemy_targets_passive(false)
+	print_debug("Grace exit: step C")
 	hud.show_banner("Engage", "")
 
 func _set_enemy_targets_passive(passive: bool) -> void:
@@ -4385,7 +4392,7 @@ func _set_enemy_targets_passive(passive: bool) -> void:
 		active_targets.append(player_node)
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		var enemy := enemy_node as ENEMY_BASE_SCRIPT
-		if enemy == null:
+		if not is_instance_valid(enemy):
 			continue
 		if passive:
 			enemy.target = null

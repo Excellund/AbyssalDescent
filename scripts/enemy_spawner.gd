@@ -467,6 +467,7 @@ func clear_all_enemies() -> void:
 		return
 	for enemy in world_root.get_tree().get_nodes_in_group("enemies"):
 		if enemy is Node:
+			(enemy as CanvasItem).hide()
 			(enemy as Node).queue_free()
 
 func spawn_enemy_type(enemy_type: String, count: int = 1) -> int:

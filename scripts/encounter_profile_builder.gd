@@ -1018,6 +1018,7 @@ func _trial_specialist_enemies(mutator: Dictionary, depth: int, tier: int = BEAR
 				tether_pairs += 1
 			if tier == BEARING_ENUMS.BearingTier.FORSWORN and effective_depth >= 8:
 				tether_pairs += 1
+			tether_pairs = mini(tether_pairs, 6)
 			tether_count = tether_pairs * 2
 	lurker_count = int(floor(float(maxi(0, lurker_count)) * specialist_pressure_mult))
 	ram_count = int(floor(float(maxi(0, ram_count)) * specialist_pressure_mult))
