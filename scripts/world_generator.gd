@@ -937,6 +937,7 @@ func _setup_ui_phase() -> void:
 		"floor_grid_fine_step": floor_grid_fine_step,
 		"door_use_radius": door_use_radius,
 	})
+	_apply_active_biome(_get_current_act())
 	pause_menu_controller = PAUSE_MENU_CONTROLLER_SCRIPT.new()
 	add_child(pause_menu_controller)
 	pause_menu_controller.initialize(RUN_CONTEXT_PATH, Callable(self, "_set_music_volume_runtime"), Callable(self, "_set_sfx_volume_runtime"))
