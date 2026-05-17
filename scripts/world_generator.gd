@@ -187,6 +187,7 @@ var phase_three_rooms_cleared: int = 0
 var endless_boss_defeated: bool = false
 var choosing_next_room: bool = false
 var boss_reward_pending: bool = false
+var _last_boss_reward_sync_id: int = -1
 var last_defeated_boss_id: String = ""
 
 var current_room_size: Vector2 = Vector2.ZERO
@@ -1034,6 +1035,7 @@ func _begin_new_run_flow() -> void:
 	endless_boss_defeated = false
 	_run_outcome_coordinator.reset_for_new_run()
 	boss_reward_pending = false
+	_last_boss_reward_sync_id = -1
 	last_defeated_boss_id = ""
 	pending_room_reward = ENUMS.RewardMode.NONE
 	current_room_enemy_mutator.clear()
@@ -1990,9 +1992,13 @@ func _update_encounter_state() -> void:
 		return
 	if _world_multiplayer_sync_state.is_current_room_clear_processed():
 		return
+	print_debug("[WorldGenerator] Room clear processing — is_multiplayer=%s is_remote_replica=%s peer_id=%s" % [is_multiplayer, MultiplayerSessionManager.is_remote_replica(), MultiplayerSessionManager.local_peer_id])
 	_on_room_cleared()
 
 func _on_room_cleared() -> void:
+	if MultiplayerSessionManager.is_remote_replica():
+		push_warning("[WorldGenerator] _on_room_cleared reached on joiner — guard triggered")
+		return
 	if not is_instance_valid(encounter_flow_system):
 		return
 	if in_boss_room and is_instance_valid(_world_sfx_player):
@@ -3680,6 +3686,13 @@ func _roll_route_options(route_context: Variant) -> Array[Dictionary]:
 	return encounter_profile_builder.roll_route_options(route_context)
 
 func _open_boon_selection(title: String, is_initial: bool, mode: int = ENUMS.RewardMode.BOON, player_mutator: Dictionary = {}, epitaph: String = "", character_id: String = "") -> void:
+	print_debug("[WorldGenerator] _open_boon_selection mode=%d is_initial=%s selection_active=%s is_remote_replica=%s" % [mode, is_initial, _is_reward_selection_active(), MultiplayerSessionManager.is_remote_replica()])
+	if is_multiplayer and mode == ENUMS.RewardMode.BOSS:
+		var sync_id: int = _world_multiplayer_sync_state.current_room_sync_id
+		if sync_id == _last_boss_reward_sync_id:
+			push_warning("[WorldGenerator] Duplicate boss reward UI open blocked — sync_id=%d" % sync_id)
+			return
+		_last_boss_reward_sync_id = sync_id
 	if is_initial:
 		choosing_next_room = false
 		door_options.clear()
@@ -3720,6 +3733,7 @@ func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> voi
 	elif mode == ENUMS.RewardMode.MISSION:
 		_apply_mission_reward(choice)
 	elif mode == ENUMS.RewardMode.BOSS:
+		print_debug("[WorldGenerator] Boss reward selected: id=%s peer=%s boss_reward_pending=%s" % [choice.get("id", "?"), MultiplayerSessionManager.local_peer_id, boss_reward_pending])
 		_apply_boon_to_player(String(choice["id"]))
 		run_session.record_boss_reward(String(choice["name"]))
 		boss_reward_pending = false
