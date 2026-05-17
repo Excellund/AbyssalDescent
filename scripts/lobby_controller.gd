@@ -734,6 +734,8 @@ func _on_peer_connected(peer_id: int) -> void:
 		## Host first sends the late-joiner the existing roster, then announces them to everyone.
 		_sync_lobby_roster.rpc_id(peer_id, peer_state.duplicate(true))
 		_sync_room_code.rpc_id(peer_id, String(multiplayer_session_manager.room_code))
+		_broadcast_difficulty.rpc_id(peer_id, selected_difficulty_tier)
+		_broadcast_ascension_loadout.rpc_id(peer_id, selected_ascension_loadout)
 		if peer_id not in peer_state:
 			var idx := _consume_next_join_index()
 			_broadcast_peer_register.rpc(int(peer_id), idx)
@@ -925,6 +927,8 @@ func _request_lobby_roster() -> void:
 		_broadcast_peer_register.rpc(sender_peer_id, idx)
 	_sync_lobby_roster.rpc_id(sender_peer_id, peer_state.duplicate(true))
 	_sync_room_code.rpc_id(sender_peer_id, String(multiplayer_session_manager.room_code))
+	_broadcast_difficulty.rpc_id(sender_peer_id, selected_difficulty_tier)
+	_broadcast_ascension_loadout.rpc_id(sender_peer_id, selected_ascension_loadout)
 
 
 ## RPC: Host -> specific peer. Replace local peer_state with the host's snapshot.
