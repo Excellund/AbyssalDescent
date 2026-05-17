@@ -801,6 +801,7 @@ func _setup_run_systems_phase() -> void:
 		game_state_replication_service = get_node_or_null("/root/GameStateReplicationService")
 		if game_state_replication_service != null:
 			game_state_replication_service.initialize(self)
+			game_state_replication_service.room_cleared.connect(_on_room_cleared_synced)
 			print_debug("[WorldGenerator] Initialized GameStateReplicationService for multiplayer")
 		else:
 			push_error("[WorldGenerator] GameStateReplicationService autoload is missing")
@@ -2010,6 +2011,8 @@ func _on_room_cleared() -> void:
 		run_summary_recorder.close_active_room()
 	if is_instance_valid(player):
 		player.tick_objective_mutators_for_encounter()
+	if is_instance_valid(game_state_replication_service):
+		game_state_replication_service.on_room_cleared(room_depth, rooms_cleared)
 	if in_second_boss_room:
 		_world_multiplayer_sync_state.mark_current_room_clear_processed()
 		_finish_second_boss_clear()
@@ -2101,6 +2104,10 @@ func _finish_first_boss_clear() -> void:
 	var epitaph: String = power_registry_instance.get_boss_epitaph("warden", current_character_id)
 	_apply_active_biome(2)
 	_open_networked_reward_selection("Claim Warden's Power", ENUMS.RewardMode.BOSS, {}, epitaph)
+
+func _on_room_cleared_synced() -> void:
+	if is_instance_valid(player):
+		player.tick_objective_mutators_for_encounter()
 
 func _finish_second_boss_clear() -> void:
 	in_second_boss_room = false
