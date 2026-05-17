@@ -286,6 +286,7 @@ var _enemy_clamp_frame_cursor: int = 0
 var _enemy_clamp_last_room_size: Vector2 = Vector2.ZERO
 var enemy_remote_position_lerp_speed: float = 14.0
 var _doors_spawn_ready: bool = false
+var _active_obstacle_nodes: Array[Node] = []
 var _world_multiplayer_sync_state = WORLD_MULTIPLAYER_SYNC_STATE_SCRIPT.new()
 var _world_progress_sync_policy = WORLD_PROGRESS_SYNC_POLICY_SCRIPT.new()
 var _reward_phase_coordinator = REWARD_PHASE_COORDINATOR_SCRIPT.new()
@@ -1995,6 +1996,7 @@ func _on_room_cleared() -> void:
 		_world_sfx_player.stream = BOSS_DEFEATED_SOUND
 		_world_sfx_player.play()
 	_end_combat_phase()
+	_clear_room_obstacles()
 	_try_revive_fallen_multiplayer_players()
 	var cleared_boss_id: String = run_summary_recorder.get_active_boss_id()
 	if not cleared_boss_id.is_empty():
@@ -2991,6 +2993,11 @@ func _begin_room(profile: Dictionary) -> void:
 	hud.show_banner(current_room_label, "", sub_color)
 	if is_instance_valid(enemy_spawner):
 		enemy_spawner.configure_room(current_room_size, spawn_padding, spawn_safe_radius, current_room_enemy_mutator, _get_active_enemy_mutators_for_room())
+	_clear_room_obstacles()
+	var obstacle_layout: Array[Dictionary] = profile.get("obstacle_layout", []) as Array[Dictionary]
+	_spawn_room_obstacles(obstacle_layout)
+	renderer.set_obstacle_layout(obstacle_layout)
+	enemy_spawner.set_obstacle_circles(obstacle_layout)
 	_apply_camera_bounds_for_room(current_effective_room_size)
 	if is_multiplayer:
 		if MultiplayerSessionManager.should_broadcast():
@@ -3012,6 +3019,7 @@ func _begin_room(profile: Dictionary) -> void:
 	_start_encounter_intro_grace()
 
 func _enter_rest_site() -> void:
+	_clear_room_obstacles()
 	in_boss_room = false
 	_play_room_music(false)
 	current_room_label = "Rest Site"
@@ -3037,6 +3045,31 @@ func _enter_rest_site() -> void:
 		player.play_rest_site_heal_feedback()
 	run_summary_recorder.record_rest_visit(room_depth)
 	_spawn_door_options()
+
+func _spawn_room_obstacles(layout: Array[Dictionary]) -> void:
+	for entry in layout:
+		var pos: Vector2 = (entry as Dictionary).get("pos", Vector2.ZERO) as Vector2
+		var radius: float = float((entry as Dictionary).get("radius", 28.0))
+		var body := StaticBody2D.new()
+		body.add_to_group("arena_columns")
+		body.set_meta("column_radius", radius)
+		var shape_owner := body.create_shape_owner(body)
+		var circle := CircleShape2D.new()
+		circle.radius = radius
+		body.shape_owner_add_shape(shape_owner, circle)
+		body.global_position = pos
+		add_child(body)
+		_active_obstacle_nodes.append(body)
+
+func _clear_room_obstacles() -> void:
+	for node in _active_obstacle_nodes:
+		if is_instance_valid(node):
+			node.queue_free()
+	_active_obstacle_nodes.clear()
+	if is_instance_valid(renderer):
+		renderer.set_obstacle_layout([] as Array[Dictionary])
+	if is_instance_valid(enemy_spawner):
+		enemy_spawner.set_obstacle_circles([] as Array[Dictionary])
 
 func _advance_room_progress() -> void:
 	if not is_instance_valid(encounter_flow_system):
@@ -3087,6 +3120,7 @@ func _begin_boss_stage(stage: int) -> void:
 	var room_entry_key := String(descriptor["room_entry_key"])
 	var banner_title := String(descriptor["banner_title"])
 
+	_clear_room_obstacles()
 	_prepare_room_sync_transition()
 	encounter_intro_grace_active = false
 	combat_phase_coordinator.begin_combat_phase(player, get_tree())

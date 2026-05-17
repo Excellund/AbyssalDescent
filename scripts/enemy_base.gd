@@ -167,6 +167,8 @@ var _remote_ui_update_left: float = 0.0
 var _remote_ui_update_accum: float = 0.0
 var _crowd_separation_recompute_left: float = 0.0
 var _crowd_separation_cached_impulse: Vector2 = Vector2.ZERO
+var _column_repulsion_recompute_left: float = 0.0
+var _column_repulsion_cached_impulse: Vector2 = Vector2.ZERO
 var network_simulation_enabled: bool = true
 var _draw_time_sec: float = 0.0
 var _visual_lod_enemy_count: int = 0
@@ -235,6 +237,7 @@ func _physics_process(delta: float) -> void:
 		return
 	_maybe_refresh_target(delta)
 	_apply_crowd_separation(delta)
+	_apply_column_repulsion(delta)
 	_process_behavior(delta)
 	_update_visual_facing_direction()
 
@@ -669,6 +672,39 @@ func _compute_crowd_separation_impulse(neighbors: Array = []) -> Vector2:
 	if total_push.length_squared() <= 0.000001:
 		return Vector2.ZERO
 	return total_push.normalized() * crowd_separation_strength
+
+func _apply_column_repulsion(delta: float) -> void:
+	var recompute_interval := 0.12
+	_column_repulsion_recompute_left -= delta
+	if _column_repulsion_recompute_left <= 0.0:
+		_column_repulsion_recompute_left = recompute_interval + fmod(float(get_instance_id()) * 0.0013, 0.06)
+		var total_push := Vector2.ZERO
+		var detect_radius := 84.0
+		var detect_radius_sq := detect_radius * detect_radius
+		for column in get_tree().get_nodes_in_group("arena_columns"):
+			if not (column is Node2D):
+				continue
+			var col_node := column as Node2D
+			var col_radius := float(col_node.get_meta("column_radius", 28.0))
+			var effective_radius := detect_radius + col_radius
+			var offset := global_position - col_node.global_position
+			if absf(offset.x) >= effective_radius or absf(offset.y) >= effective_radius:
+				continue
+			var dist_sq := offset.length_squared()
+			if dist_sq <= 0.0001:
+				offset = Vector2.RIGHT.rotated(float(get_instance_id() % 360) * 0.0174533)
+				dist_sq = 1.0
+			if dist_sq >= effective_radius * effective_radius:
+				continue
+			var distance := sqrt(dist_sq)
+			var weight := 1.0 - (distance / effective_radius)
+			total_push += (offset / distance) * weight
+		if total_push.length_squared() > 0.000001:
+			_column_repulsion_cached_impulse = total_push.normalized() * 90.0
+		else:
+			_column_repulsion_cached_impulse = Vector2.ZERO
+	if _column_repulsion_cached_impulse.length_squared() > 0.000001:
+		velocity = velocity.move_toward(velocity + _column_repulsion_cached_impulse, 90.0 * delta)
 
 func _maybe_trigger_edge_escape(wall_pressure: float, inward_bias: Vector2, to_target: Vector2, edge_stall_time: float) -> void:
 	if edge_escape_phase_duration <= 0.0 or edge_escape_nudge_speed <= 0.0:

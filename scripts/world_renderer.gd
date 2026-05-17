@@ -43,9 +43,14 @@ var _pending_focus_timer: float = 0.0
 var _focus_commit_delay: float = 0.12
 var _focus_switch_advantage: float = 14.0
 var active_color_theme: Dictionary = {}
+var obstacle_layout: Array[Dictionary] = []
 
 func set_biome_color_theme(theme: Dictionary) -> void:
 	active_color_theme = theme
+	queue_redraw()
+
+func set_obstacle_layout(layout: Array[Dictionary]) -> void:
+	obstacle_layout = layout
 	queue_redraw()
 
 func _ready() -> void:
@@ -137,6 +142,17 @@ func _draw() -> void:
 		for marker_variant in tutorial_markers:
 			if marker_variant is Dictionary:
 				_draw_tutorial_instruction_marker(marker_variant as Dictionary)
+
+	if not obstacle_layout.is_empty() and not choosing_next_room:
+		var glow_tint: Color = active_color_theme.get("glow_tint", Color(0.18, 0.76, 0.98, 1.0)) if not active_color_theme.is_empty() else Color(0.18, 0.76, 0.98, 1.0)
+		for entry in obstacle_layout:
+			var col_pos := (entry as Dictionary).get("pos", Vector2.ZERO) as Vector2
+			var col_radius := float((entry as Dictionary).get("radius", 28.0))
+			var obs_type := String((entry as Dictionary).get("type", "column"))
+			if obs_type == "boulder":
+				_draw_arena_boulder(col_pos, col_radius, glow_tint)
+			else:
+				_draw_arena_pillar(col_pos, col_radius, glow_tint)
 
 	if choosing_next_room:
 		var nearest_door := _get_nearest_door_for_prompt()
@@ -619,6 +635,34 @@ func _draw_door_identity_chip(door: Dictionary, morph_t: float, is_focused: bool
 		draw_string(font, Vector2(chip_x, chip_y + 17.0 + detail_offset).floor(), action_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 13, Color(text_color.r, text_color.g, text_color.b, text_color.a * detail_alpha))
 		draw_string(font, Vector2(chip_x, chip_y + 46.0 + detail_offset).floor() + Vector2(1.0, 1.0), detail_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 17, Color(text_shadow.r, text_shadow.g, text_shadow.b, text_shadow.a * detail_alpha))
 		draw_string(font, Vector2(chip_x, chip_y + 46.0 + detail_offset).floor(), detail_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 17, Color(text_color.r, text_color.g, text_color.b, text_color.a * detail_alpha))
+
+func _draw_arena_pillar(pos: Vector2, radius: float, glow_tint: Color) -> void:
+	var gr := glow_tint.r
+	var gg := glow_tint.g
+	var gb := glow_tint.b
+	var sr := 0.12 + gr * 0.05
+	var sg := 0.17 + gg * 0.04
+	var sb := 0.22 + gb * 0.05
+	draw_circle(pos + Vector2(5.0, 7.0), radius + 6.0, Color(0.0, 0.0, 0.0, 0.40))
+	draw_circle(pos, radius, Color(sr, sg, sb, 1.0))
+	draw_circle(pos + Vector2(radius * 0.18, radius * 0.22), radius * 0.78, Color(0.0, 0.0, 0.0, 0.28))
+	draw_arc(pos, radius, 0.0, TAU, 24, Color(0.40, 0.60, 0.80, 0.90), 2.5)
+	draw_circle(pos - Vector2(radius * 0.26, radius * 0.30), radius * 0.34, Color(1.0, 1.0, 1.0, 0.22))
+
+func _draw_arena_boulder(pos: Vector2, radius: float, glow_tint: Color) -> void:
+	var gr := glow_tint.r
+	var gg := glow_tint.g
+	var gb := glow_tint.b
+	var sr := 0.10 + gr * 0.05
+	var sg := 0.15 + gg * 0.04
+	var sb := 0.20 + gb * 0.05
+	draw_circle(pos + Vector2(9.0, 11.0), radius + 9.0, Color(0.0, 0.0, 0.0, 0.44))
+	draw_circle(pos, radius, Color(sr, sg, sb, 1.0))
+	draw_circle(pos + Vector2(-radius * 0.26, -radius * 0.22), radius * 0.72, Color(sr * 1.18, sg * 1.18, sb * 1.18, 1.0))
+	draw_circle(pos + Vector2(radius * 0.22, radius * 0.26), radius * 0.80, Color(0.0, 0.0, 0.0, 0.32))
+	draw_arc(pos, radius, 0.0, TAU, 24, Color(0.34, 0.54, 0.74, 0.88), 3.0)
+	draw_circle(pos - Vector2(radius * 0.28, radius * 0.33), radius * 0.30, Color(1.0, 1.0, 1.0, 0.24))
+	draw_circle(pos - Vector2(radius * 0.52, radius * 0.08), radius * 0.16, Color(1.0, 1.0, 1.0, 0.16))
 
 func _draw_tutorial_instruction_marker(marker: Dictionary) -> void:
 	var font := ThemeDB.fallback_font

@@ -190,6 +190,7 @@ var spawn_safe_radius: float = 170.0
 var spawn_transport_duration: float = 0.36
 var current_room_enemy_mutator: Dictionary = {}
 var active_temporary_enemy_mutators: Array[Dictionary] = []
+var obstacle_circles: Array[Dictionary] = []
 
 var bearing_wave_interval_seconds: float = 8.0
 var wave_timer_paused: bool = false
@@ -223,6 +224,9 @@ func configure_room(room_size: Vector2, padding: float, safe_radius: float, enem
 		if not (entry is Dictionary):
 			continue
 		active_temporary_enemy_mutators.append((entry as Dictionary).duplicate(true))
+
+func set_obstacle_circles(circles: Array[Dictionary]) -> void:
+	obstacle_circles = circles
 
 func _compose_active_enemy_mutator() -> Dictionary:
 	var composed := current_room_enemy_mutator.duplicate(true)
@@ -738,6 +742,15 @@ func _pick_spawn_position_in_current_room(min_player_distance: float = -1.0, min
 					too_close_to_enemy = true
 					break
 		if too_close_to_enemy:
+			continue
+		var too_close_to_obstacle := false
+		for obs in obstacle_circles:
+			var obs_pos := (obs as Dictionary).get("pos", Vector2.ZERO) as Vector2
+			var obs_radius := float((obs as Dictionary).get("radius", 28.0))
+			if candidate.distance_to(obs_pos) < obs_radius + 36.0:
+				too_close_to_obstacle = true
+				break
+		if too_close_to_obstacle:
 			continue
 		if min_player_dist > best_valid_player_distance:
 			best_valid_player_distance = min_player_dist

@@ -4,6 +4,7 @@ const ENUMS := preload("res://scripts/shared/enums.gd")
 const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const ENCOUNTER_DEFINITION_DATA := preload("res://scripts/shared/encounter_definition_data.gd")
+const ARENA_LAYOUT_REGISTRY := preload("res://scripts/shared/arena_layout_registry.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 const DIFFICULTY_CONFIG_MULTIPLAYER := preload("res://scripts/encounter_difficulty_multiplayer_config.gd")
 const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
@@ -427,7 +428,7 @@ func configure(settings: Dictionary) -> void:
 	hard_room_enemy_bonus = int(settings.get("hard_room_enemy_bonus", hard_room_enemy_bonus))
 
 func _build_profile(label: String, room_size: Vector2, chasers: int = 0, chargers: int = 0, archers: int = 0, shielders: int = 0, enemy_mutator: Dictionary = {}) -> Dictionary:
-	return ENCOUNTER_CONTRACTS.profile(
+	var profile := ENCOUNTER_CONTRACTS.profile(
 		label,
 		room_size,
 		room_size.x <= static_camera_room_threshold,
@@ -437,6 +438,8 @@ func _build_profile(label: String, room_size: Vector2, chasers: int = 0, charger
 		shielders,
 		enemy_mutator
 	)
+	profile["obstacle_layout"] = ARENA_LAYOUT_REGISTRY.pick_layout(label, room_size, rng)
+	return profile
 
 func _build_intro_profile(depth: int) -> Dictionary:
 	if depth <= 0:
