@@ -3796,7 +3796,7 @@ func _record_local_peer_reward_timeline_choice(choice: Dictionary, mode: int, de
 func _sync_reward_choice_for_summary(peer_id: int, choice: Dictionary, mode: int, depth: int, event_unix: int) -> void:
 	if not MultiplayerSessionManager.should_broadcast():
 		return
-	run_summary_recorder.record_peer_reward_timeline_choice(peer_id, choice, mode, depth, event_unix)
+	run_summary_recorder.record_peer_reward_timeline_choice(peer_id, choice, mode, room_depth, event_unix)
 
 
 func _begin_reward_phase_sync(is_initial: bool, mode: int) -> void:
