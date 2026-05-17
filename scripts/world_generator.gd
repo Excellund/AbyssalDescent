@@ -4006,6 +4006,7 @@ func _on_player_died() -> void:
 		_sync_multiplayer_fallen_player_presence()
 		_refresh_all_enemy_target_candidates()
 		_bind_camera_to_local_player()
+		_apply_camera_bounds_for_room(current_effective_room_size)
 	if is_multiplayer and _count_alive_players() > 0:
 		if has_new_fallen and is_instance_valid(hud):
 			hud.show_banner("Ally Down", "Clear encounter to revive")
@@ -4218,6 +4219,7 @@ func _try_revive_fallen_multiplayer_players() -> void:
 	_sync_multiplayer_fallen_player_presence()
 	_refresh_all_enemy_target_candidates()
 	_bind_camera_to_local_player()
+	_apply_camera_bounds_for_room(current_effective_room_size)
 
 func _apply_boon_to_player(boon_id: String) -> void:
 	var local_player := _find_local_owned_player_node()
