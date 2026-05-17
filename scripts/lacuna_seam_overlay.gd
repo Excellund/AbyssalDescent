@@ -1,5 +1,7 @@
 extends Node2D
 
+const VISUAL_MATH := preload("res://scripts/shared/visual_math.gd")
+
 var seam_radius: float = 54.0
 var seam_duration: float = 4.0
 var seam_zones: Array[Dictionary] = []
@@ -45,7 +47,8 @@ func _draw() -> void:
 		var seam_pos := seam.get("pos", Vector2.ZERO) as Vector2
 		var draw_pos := Vector2(roundf(seam_pos.x), roundf(seam_pos.y))
 		var time_left := float(seam.get("time_left", 0.0))
-		var fade := clampf(time_left / maxf(0.001, seam_duration), 0.0, 1.0)
+		var lifetime_ratio := 1.0 - clampf(time_left / seam_duration, 0.0, 1.0)
+		var fade := VISUAL_MATH.late_fade(lifetime_ratio, 0.90, 3.0)
 		var draw_scale := clampf(time_left / 0.4, 0.0, 1.0)
 		var draw_r := seam_radius * draw_scale
 		var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.016 + seam_pos.x * 0.02)
