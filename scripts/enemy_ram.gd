@@ -123,12 +123,10 @@ func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
 	queue_redraw()
 
 func _process_network_visuals(delta: float) -> void:
-	if state_time_left <= 0.0:
-		return
-	var previous_time_left := state_time_left
 	state_time_left = maxf(0.0, state_time_left - delta)
-	if not is_equal_approx(previous_time_left, state_time_left):
-		queue_redraw()
+	if ram_state == ENEMY_STATE_ENUMS.RamState.CHARGE and state_time_left > 0.0 and _charge_direction.length_squared() > 0.0001:
+		global_position += _charge_direction * charge_speed * delta
+	queue_redraw()
 
 func _process_seek(delta: float) -> void:
 	var to_target := target.global_position - global_position
