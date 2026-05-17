@@ -4243,6 +4243,8 @@ func _update_indomitable_damage_bank(delta: float) -> void:
 	if _indomitable_spirit_primed:
 		indomitable_damage_bank = _get_indomitable_fill_requirement()
 		return
+	if not combat_damage_enabled:
+		return
 	if indomitable_damage_bank <= 0.0:
 		return
 	var now := Time.get_ticks_msec() / 1000.0
