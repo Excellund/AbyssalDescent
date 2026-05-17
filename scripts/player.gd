@@ -3924,7 +3924,7 @@ func _update_sigil_chain_state(delta: float) -> void:
 			_sigil_chain_has_last_drop = false
 			_sigil_chain_zones.clear()
 			_fade_all_sigil_chain_fx(0.4)
-			_broadcast_cue_event("sigil_chain_reset", {})
+			_broadcast_cue_event("sigil_chain_reset", {"v": 1})
 		queue_redraw()
 	if _sigil_chain_charge_flash_left > 0.0:
 		_sigil_chain_charge_flash_left = maxf(0.0, _sigil_chain_charge_flash_left - delta)
