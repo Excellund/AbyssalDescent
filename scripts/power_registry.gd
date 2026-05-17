@@ -395,9 +395,9 @@ const TRIAL_POWER_DEFINITIONS := {
 			"slow_mult_base": 0.74,
 			"slow_mult_per_stack": -0.08,
 			"slow_mult_min": 0.36,
-			"cooldown_base": 3.2,
-			"cooldown_per_stack": -0.30,
-			"cooldown_min": 1.5
+			"cooldown_base": 5.0,
+			"cooldown_per_stack": -0.60,
+			"cooldown_min": 2.5
 		},
 		"param_map": {
 			"reward_flag": "reward_aegis_field",

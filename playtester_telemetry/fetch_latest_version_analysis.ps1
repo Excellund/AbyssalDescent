@@ -136,9 +136,9 @@ foreach ($r in $runs) {
     $rewards = @(); if ($r.reward_choices -is [System.Array]) { $rewards = $r.reward_choices }
     $arcanaThisRun = @()
     foreach ($c in $rewards) {
+        if ([bool]$c.skipped -or [string]::IsNullOrWhiteSpace([string]$c.choice_id)) { continue }
         $mode = [int]$c.mode
         $cid = [string]$c.choice_id
-        if ([string]::IsNullOrWhiteSpace($cid)) { $cid = 'unknown' }
         if ($mode -eq 3) {
             if (-not $arcanaPickCounts.ContainsKey($cid)) { $arcanaPickCounts[$cid] = 0 }
             $arcanaPickCounts[$cid]++
@@ -190,7 +190,7 @@ foreach ($r in $runs) {
         $mode = [int]$o.mode
         $innerOffers = @(); if ($o.offers -is [System.Array]) { $innerOffers = $o.offers }
         foreach ($item in $innerOffers) {
-            $oid = [string]$item.choice_id; if ([string]::IsNullOrWhiteSpace($oid)) { $oid = 'unknown' }
+            $oid = [string]$item.choice_id; if ([string]::IsNullOrWhiteSpace($oid)) { continue }
             if ($mode -eq 3) {
                 if (-not $arcanaOfferCounts.ContainsKey($oid)) { $arcanaOfferCounts[$oid] = 0 }
                 $arcanaOfferCounts[$oid]++

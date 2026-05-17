@@ -397,7 +397,7 @@ func get_power_flavor_text(power_id: String) -> String:
 		"rupture_wave":
 			return "Hits send a shockwave rippling outward, damaging all nearby enemies."
 		"aegis_field":
-			return "Taking damage triggers a guard pulse that slows nearby enemies and grants brief damage resistance."
+			return "Periodically emits a guard pulse that slows nearby enemies and grants brief damage resistance."
 		"hunters_snare":
 			return "Hits slow enemies. Striking slowed targets deals extra hit damage."
 		"phantom_step":

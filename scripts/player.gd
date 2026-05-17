@@ -1073,6 +1073,8 @@ func _update_aegis_field_state(delta: float) -> void:
 		queue_redraw()
 	if aegis_field_cooldown_left > 0.0:
 		aegis_field_cooldown_left = maxf(0.0, aegis_field_cooldown_left - delta)
+	elif reward_aegis_field:
+		_trigger_aegis_field()
 
 func _update_visual_facing_direction() -> void:
 	if _is_attack_locked():
@@ -1129,7 +1131,6 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 		context_copy["unix_time"] = int(Time.get_unix_time_from_system())
 		last_damage_event = context_copy
 		damage_taken.emit(raw_amount, reduced, context_copy)
-		_trigger_aegis_field()
 		if _is_local_control_owner():
 			player_feedback.play_damage_flash()
 			player_feedback.play_hurt_sound()
