@@ -507,6 +507,9 @@ func _setup_player_runtime_bindings() -> void:
 			player.connect("damage_taken", Callable(self, "_on_player_damage_taken"))
 		if player.has_signal("health_changed"):
 			player.connect("health_changed", Callable(self, "_on_player_health_changed_for_summary").bind(player))
+			player.connect("health_changed", func(_hp: int, _maxhp: int):
+				if is_instance_valid(hud):
+					hud.refresh(_get_hud_state(), player))
 		if player.has_signal("died"):
 			player.connect("died", Callable(self, "_on_player_died_for_telemetry"))
 			player.connect("died", Callable(self, "_on_player_died"))
@@ -3059,6 +3062,12 @@ func _enter_rest_site() -> void:
 		var heal_amount := maxi(8, int(round(float(player_max_health) * rest_heal_ratio * heal_ratio_mult)))
 		player.heal(heal_amount)
 		player.play_rest_site_heal_feedback()
+		if is_multiplayer and MultiplayerSessionManager.is_authoritative():
+			for party_node in _get_multiplayer_player_nodes():
+				if party_node == player or not is_instance_valid(party_node):
+					continue
+				var p_max := int(party_node.get_max_health())
+				party_node.heal(maxi(8, int(round(float(p_max) * rest_heal_ratio * heal_ratio_mult))))
 	run_summary_recorder.record_rest_visit(room_depth)
 	_spawn_door_options()
 
