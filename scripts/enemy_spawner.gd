@@ -494,7 +494,6 @@ func spawn_enemy_from_sync(enemy_type: String, world_position: Vector2) -> ENEMY
 		return null
 	var enemy := CharacterBody2D.new()
 	enemy.set_script(enemy_script)
-	_apply_enemy_mutator(enemy, enemy_script)
 
 	var collision_shape := CollisionShape2D.new()
 	collision_shape.shape = CircleShape2D.new()
@@ -503,6 +502,7 @@ func spawn_enemy_from_sync(enemy_type: String, world_position: Vector2) -> ENEMY
 
 	enemy.global_position = world_position
 	world_root.add_child(enemy)
+	_apply_enemy_mutator(enemy, enemy_script)
 	enemy.begin_spawn_transport(spawn_transport_duration)
 	_assign_enemy_targets(enemy)
 	if enemy.get("arena_size") != null:
@@ -522,9 +522,9 @@ func _spawn_enemy_in_current_room(enemy_script: Script, min_player_distance: flo
 		return null
 	if not is_instance_valid(world_root):
 		return null
+	var enemy_key := _enemy_script_key(enemy_script)
 	var enemy := CharacterBody2D.new()
 	enemy.set_script(enemy_script)
-	_apply_enemy_mutator(enemy, enemy_script)
 
 	var collision_shape := CollisionShape2D.new()
 	collision_shape.shape = CircleShape2D.new()
@@ -532,7 +532,7 @@ func _spawn_enemy_in_current_room(enemy_script: Script, min_player_distance: flo
 	enemy.add_child(collision_shape)
 
 	enemy.global_position = _pick_spawn_position_in_current_room(min_player_distance)
-	if _enemy_script_key(enemy_script) == "toll":
+	if enemy_key == "toll":
 		# Offset the Toll away from the player spawn point (Vector2.ZERO) so its ring telegraph
 		# never starts on top of the player. Anchor is set from global_position in _ready.
 		# Distance is tuned so the ring (radius ~280) overlaps the player spawn enough to be reachable
@@ -540,6 +540,7 @@ func _spawn_enemy_in_current_room(enemy_script: Script, min_player_distance: flo
 		var toll_offset_y := -current_room_size.y * 0.24
 		enemy.global_position = Vector2(0.0, toll_offset_y)
 	world_root.add_child(enemy)
+	_apply_enemy_mutator(enemy, enemy_script)
 	_apply_ascension_health_scaling(enemy)
 	enemy.begin_spawn_transport(spawn_transport_duration)
 	_assign_enemy_targets(enemy)
