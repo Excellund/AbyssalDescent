@@ -672,13 +672,17 @@ func _reset_all_player_positions_to_slots() -> void:
 		player_flow_coordinator.reset_player_position(player, _compute_spawn_position_for_peer(local_peer_id))
 	if not is_multiplayer:
 		return
+	var _replication_service := get_node_or_null("/root/PlayerReplicationService")
 	for party_node in _get_multiplayer_player_nodes():
 		if not is_instance_valid(party_node) or party_node == player:
 			continue
 		var party_peer_id := int(party_node.get("player_id"))
 		if party_peer_id <= 0:
 			continue
-		player_flow_coordinator.reset_player_position(party_node, _compute_spawn_position_for_peer(party_peer_id))
+		var party_spawn_pos := _compute_spawn_position_for_peer(party_peer_id)
+		player_flow_coordinator.reset_player_position(party_node, party_spawn_pos)
+		if _replication_service != null:
+			_replication_service.reset_remote_player_position(party_peer_id, party_spawn_pos)
 
 
 func _disable_player_collision_pair(primary_player: Node, secondary_player: Node) -> void:

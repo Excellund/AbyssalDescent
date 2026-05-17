@@ -97,6 +97,15 @@ func register_player(peer_id: int, player_node: Node) -> void:
 		_last_sync_rotations[peer_id] = 0.0
 
 
+## Teleport a remote peer's interpolation target to a new position.
+## Call this whenever the remote node is repositioned out-of-band (e.g. room
+## transitions) so _interpolate_remote_players does not lerp back to the
+## previous position before the first broadcast arrives.
+func reset_remote_player_position(peer_id: int, position: Vector2) -> void:
+	_remote_target_positions[peer_id] = position
+	_remote_position_samples.erase(peer_id)
+
+
 ## Unregister a player node.
 func unregister_player(peer_id: int) -> void:
 	player_nodes.erase(peer_id)
