@@ -5,6 +5,7 @@
 extends Node
 
 const DESCRIPTION_CAP_GUARD := preload("res://scripts/shared/description_cap_guard.gd")
+const ENUMS := preload("res://scripts/shared/enums.gd")
 
 # Power type constants
 const POWER_TYPE_UPGRADE = "upgrade"  # Stat boosts: Swift Strike, Heavy Blow, etc
@@ -190,66 +191,66 @@ const DAMAGE_MODEL_BY_POWER := {
 }
 
 const UPGRADE_BALANCE := {
-	"first_strike": {
+	ENUMS.POWER_ID_FIRST_STRIKE: {
 		"kind": "add_int",
 		"property": "first_strike_bonus_damage",
 		"add": 16
 	},
-	"heavy_blow": {
+	ENUMS.POWER_ID_HEAVY_BLOW: {
 		"kind": "add_int",
 		"property": "damage",
 		"add": 7
 	},
-	"wide_arc": {
+	ENUMS.POWER_ID_WIDE_ARC: {
 		"kind": "add_clamp",
 		"property": "attack_arc_degrees",
 		"add": 28.0,
 		"min": 60.0,
 		"max": 280.0
 	},
-	"long_reach": {
+	ENUMS.POWER_ID_LONG_REACH: {
 		"kind": "add_float",
 		"property": "attack_range",
 		"add": 11.0
 	},
-	"fleet_foot": {
+	ENUMS.POWER_ID_FLEET_FOOT: {
 		"kind": "add_float",
 		"property": "max_speed",
 		"add": 17.0
 	},
-	"blink_dash": {
+	ENUMS.POWER_ID_BLINK_DASH: {
 		"kind": "mul_min",
 		"property": "dash_cooldown",
 		"mult": 0.80,
 		"min": 0.14
 	},
-	"iron_skin": {
+	ENUMS.POWER_ID_IRON_SKIN: {
 		"kind": "add_int",
 		"property": "iron_skin_armor",
 		"add": 4,
 		"stack_property": "iron_skin_stacks"
 	},
-	"battle_trance": {
+	ENUMS.POWER_ID_BATTLE_TRANCE: {
 		"kind": "add_float",
 		"property": "battle_trance_move_speed_bonus",
 		"add": 0.22
 	},
-	"surge_step": {
+	ENUMS.POWER_ID_SURGE_STEP: {
 		"kind": "add_float",
 		"property": "dash_speed",
 		"add": 85.0
 	},
-	"heartstone": {
+	ENUMS.POWER_ID_HEARTSTONE: {
 		"kind": "add_int",
 		"property": "max_health",
 		"add": 10
 	},
-	"bloodpact": {
+	ENUMS.POWER_ID_BLOODPACT: {
 		"kind": "add_int",
 		"property": "bloodpact_bonus_damage",
 		"add": 9
 	},
-	"severing_edge": {
+	ENUMS.POWER_ID_SEVERING_EDGE: {
 		"kind": "add_int",
 		"property": "severing_edge_bonus_damage",
 		"add": 14
@@ -257,37 +258,37 @@ const UPGRADE_BALANCE := {
 }
 
 const BOSS_REWARD_BALANCE := {
-	"wardens_verdict": {
+	ENUMS.POWER_ID_WARDENS_VERDICT: {
 		"kind": "add_int",
 		"property": "apex_predator_bonus_damage",
 		"add": 34
 	},
-	"lacuna_echo": {
+	ENUMS.POWER_ID_LACUNA_ECHO: {
 		"kind": "add_int",
 		"property": "void_echo_damage",
 		"add": 42
 	},
-	"sovereign_tempo": {
+	ENUMS.POWER_ID_SOVEREIGN_TEMPO: {
 		"kind": "add_float",
 		"property": "apex_momentum_speed_bonus",
 		"add": 0.09
 	},
-	"pillar_convergence": {
+	ENUMS.POWER_ID_PILLAR_CONVERGENCE: {
 		"kind": "add_float",
 		"property": "convergence_surge_damage_ratio",
 		"add": 0.22
 	},
-	"unbroken_oath": {
+	ENUMS.POWER_ID_UNBROKEN_OATH: {
 		"kind": "add_float",
 		"property": "indomitable_spirit_damage_reduction",
 		"add": 0.12
 	},
-	"edict_of_the_court": {
+	ENUMS.POWER_ID_EDICT_OF_THE_COURT: {
 		"kind": "add_int",
 		"property": "edict_court_push_power",
 		"add": 40
 	},
-	"null_corridor": {
+	ENUMS.POWER_ID_NULL_CORRIDOR: {
 		"kind": "add_float",
 		"property": "null_corridor_strength",
 		"add": 0.5
@@ -295,18 +296,18 @@ const BOSS_REWARD_BALANCE := {
 }
 
 const UPGRADE_STACK_LIMITS := {
-	"first_strike": 3,
-	"heavy_blow": 3,
-	"wide_arc": 3,
-	"long_reach": 3,
-	"fleet_foot": 3,
-	"blink_dash": 3,
-	"iron_skin": 3,
-	"battle_trance": 3,
-	"surge_step": 3,
-	"heartstone": 2,
-	"bloodpact": 3,
-	"severing_edge": 3
+	ENUMS.POWER_ID_FIRST_STRIKE: 3,
+	ENUMS.POWER_ID_HEAVY_BLOW: 3,
+	ENUMS.POWER_ID_WIDE_ARC: 3,
+	ENUMS.POWER_ID_LONG_REACH: 3,
+	ENUMS.POWER_ID_FLEET_FOOT: 3,
+	ENUMS.POWER_ID_BLINK_DASH: 3,
+	ENUMS.POWER_ID_IRON_SKIN: 3,
+	ENUMS.POWER_ID_BATTLE_TRANCE: 3,
+	ENUMS.POWER_ID_SURGE_STEP: 3,
+	ENUMS.POWER_ID_HEARTSTONE: 2,
+	ENUMS.POWER_ID_BLOODPACT: 3,
+	ENUMS.POWER_ID_SEVERING_EDGE: 3
 }
 
 ## Unified trial power definitions: canonical source for trial power balance, stack limits, and parameter mapping
@@ -731,13 +732,13 @@ const TRIAL_POWER_DEFINITIONS := {
 }
 
 const BOSS_REWARD_STACK_LIMITS := {
-	"wardens_verdict": 2,
-	"lacuna_echo": 2,
-	"sovereign_tempo": 2,
-	"pillar_convergence": 2,
-	"unbroken_oath": 2,
-	"edict_of_the_court": 2,
-	"null_corridor": 2
+	ENUMS.POWER_ID_WARDENS_VERDICT: 2,
+	ENUMS.POWER_ID_LACUNA_ECHO: 2,
+	ENUMS.POWER_ID_SOVEREIGN_TEMPO: 2,
+	ENUMS.POWER_ID_PILLAR_CONVERGENCE: 2,
+	ENUMS.POWER_ID_UNBROKEN_OATH: 2,
+	ENUMS.POWER_ID_EDICT_OF_THE_COURT: 2,
+	ENUMS.POWER_ID_NULL_CORRIDOR: 2
 }
 
 # Unified power data structure
@@ -816,26 +817,26 @@ const POWER_DISPLAY_METADATA := {
 }
 
 const POWER_ID_ALIASES := {
-	"bastions_oath": "unbroken_oath"
+	"bastions_oath": ENUMS.POWER_ID_UNBROKEN_OATH
 }
 
 ## Ordered pool membership arrays — define which IDs belong to each pool and in what order
 const UPGRADE_POOL_IDS: Array[String] = [
-	"first_strike", "heavy_blow", "wide_arc", "long_reach", "fleet_foot",
-	"blink_dash", "iron_skin", "battle_trance", "surge_step", "heartstone",
-	"bloodpact", "severing_edge",
+	ENUMS.POWER_ID_FIRST_STRIKE, ENUMS.POWER_ID_HEAVY_BLOW, ENUMS.POWER_ID_WIDE_ARC, ENUMS.POWER_ID_LONG_REACH, ENUMS.POWER_ID_FLEET_FOOT,
+	ENUMS.POWER_ID_BLINK_DASH, ENUMS.POWER_ID_IRON_SKIN, ENUMS.POWER_ID_BATTLE_TRANCE, ENUMS.POWER_ID_SURGE_STEP, ENUMS.POWER_ID_HEARTSTONE,
+	ENUMS.POWER_ID_BLOODPACT, ENUMS.POWER_ID_SEVERING_EDGE,
 ]
 
 const TRIAL_POWER_POOL_IDS: Array[String] = [
-	"razor_wind", "execution_edge", "rupture_wave", "aegis_field", "hunters_snare",
-	"phantom_step", "riftpunch", "reaper_step", "static_wake", "storm_crown", "wraithstep",
-	"voidfire", "dread_resonance", "bloodvow", "eclipse_mark", "fracture_field",
-	"farline_volley", "sigil_chain",
+	ENUMS.POWER_ID_RAZOR_WIND, ENUMS.POWER_ID_EXECUTION_EDGE, ENUMS.POWER_ID_RUPTURE_WAVE, ENUMS.POWER_ID_AEGIS_FIELD, ENUMS.POWER_ID_HUNTERS_SNARE,
+	ENUMS.POWER_ID_PHANTOM_STEP, ENUMS.POWER_ID_RIFTPUNCH, ENUMS.POWER_ID_REAPER_STEP, ENUMS.POWER_ID_STATIC_WAKE, ENUMS.POWER_ID_STORM_CROWN, ENUMS.POWER_ID_WRAITHSTEP,
+	ENUMS.POWER_ID_VOIDFIRE, ENUMS.POWER_ID_DREAD_RESONANCE, ENUMS.POWER_ID_BLOODVOW, ENUMS.POWER_ID_ECLIPSE_MARK, ENUMS.POWER_ID_FRACTURE_FIELD,
+	ENUMS.POWER_ID_FARLINE_VOLLEY, ENUMS.POWER_ID_SIGIL_CHAIN,
 ]
 
 const BOSS_REWARD_POOL_IDS: Array[String] = [
-	"wardens_verdict", "lacuna_echo", "sovereign_tempo", "pillar_convergence", "unbroken_oath",
-	"edict_of_the_court", "null_corridor",
+	ENUMS.POWER_ID_WARDENS_VERDICT, ENUMS.POWER_ID_LACUNA_ECHO, ENUMS.POWER_ID_SOVEREIGN_TEMPO, ENUMS.POWER_ID_PILLAR_CONVERGENCE, ENUMS.POWER_ID_UNBROKEN_OATH,
+	ENUMS.POWER_ID_EDICT_OF_THE_COURT, ENUMS.POWER_ID_NULL_CORRIDOR,
 ]
 
 

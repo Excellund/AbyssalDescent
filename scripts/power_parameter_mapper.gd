@@ -5,6 +5,7 @@
 extends RefCounted
 
 const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
+const ENUMS := preload("res://scripts/shared/enums.gd")
 static var _power_registry_instance = null
 
 static func _get_power_registry_instance():
@@ -14,23 +15,23 @@ static func _get_power_registry_instance():
 
 ## Maps upgrade IDs to their property definitions
 const UPGRADE_PARAM_MAP := {
-	"first_strike": {"property": "first_strike_bonus_damage"},
-	"heavy_blow": {"property": "damage"},
-	"wide_arc": {"property": "attack_arc_degrees"},
-	"long_reach": {"property": "attack_range"},
-	"fleet_foot": {"property": "max_speed"},
-	"blink_dash": {"property": "dash_cooldown"},
-	"iron_skin": {"properties": ["iron_skin_armor", "iron_skin_stacks"], "special": "iron_skin"},
-	"battle_trance": {"property": "battle_trance_move_speed_bonus"},
-	"surge_step": {"property": "dash_speed"},
-	"heartstone": {"special": "heartstone"},
-	"bloodpact": {"property": "bloodpact_bonus_damage"},
-	"severing_edge": {"property": "severing_edge_bonus_damage"},
-	"wardens_verdict": {"property": "apex_predator_bonus_damage"},
-	"lacuna_echo": {"property": "void_echo_damage"},
-	"sovereign_tempo": {"property": "apex_momentum_speed_bonus"},
-	"pillar_convergence": {"property": "convergence_surge_damage_ratio"},
-	"unbroken_oath": {"property": "indomitable_spirit_damage_reduction"}
+	ENUMS.POWER_ID_FIRST_STRIKE: {"property": "first_strike_bonus_damage"},
+	ENUMS.POWER_ID_HEAVY_BLOW: {"property": "damage"},
+	ENUMS.POWER_ID_WIDE_ARC: {"property": "attack_arc_degrees"},
+	ENUMS.POWER_ID_LONG_REACH: {"property": "attack_range"},
+	ENUMS.POWER_ID_FLEET_FOOT: {"property": "max_speed"},
+	ENUMS.POWER_ID_BLINK_DASH: {"property": "dash_cooldown"},
+	ENUMS.POWER_ID_IRON_SKIN: {"properties": ["iron_skin_armor", "iron_skin_stacks"], "special": ENUMS.POWER_ID_IRON_SKIN},
+	ENUMS.POWER_ID_BATTLE_TRANCE: {"property": "battle_trance_move_speed_bonus"},
+	ENUMS.POWER_ID_SURGE_STEP: {"property": "dash_speed"},
+	ENUMS.POWER_ID_HEARTSTONE: {"special": ENUMS.POWER_ID_HEARTSTONE},
+	ENUMS.POWER_ID_BLOODPACT: {"property": "bloodpact_bonus_damage"},
+	ENUMS.POWER_ID_SEVERING_EDGE: {"property": "severing_edge_bonus_damage"},
+	ENUMS.POWER_ID_WARDENS_VERDICT: {"property": "apex_predator_bonus_damage"},
+	ENUMS.POWER_ID_LACUNA_ECHO: {"property": "void_echo_damage"},
+	ENUMS.POWER_ID_SOVEREIGN_TEMPO: {"property": "apex_momentum_speed_bonus"},
+	ENUMS.POWER_ID_PILLAR_CONVERGENCE: {"property": "convergence_surge_damage_ratio"},
+	ENUMS.POWER_ID_UNBROKEN_OATH: {"property": "indomitable_spirit_damage_reduction"}
 }
 
 ## Applies precomputed power values to a player reference
@@ -99,7 +100,7 @@ static func apply_upgrade_values(player_reference: Node, upgrade_id: String) -> 
 	
 	# Handle special cases first
 	match id:
-		"heartstone":
+		ENUMS.POWER_ID_HEARTSTONE:
 			# Special: heartstone heals the player proportionally to max health gain
 			var next_max := int(balance_data.get("add", 0)) + int(player_reference.get_max_health())
 			var current_max: int = int(player_reference.get_max_health())
@@ -108,7 +109,7 @@ static func apply_upgrade_values(player_reference: Node, upgrade_id: String) -> 
 			player_reference.set_max_health_and_current(next_max, next_current)
 			return true
 		
-		"iron_skin":
+		ENUMS.POWER_ID_IRON_SKIN:
 			# Special: iron_skin increments stacks and applies armor via kind rules
 			var current_armor: int = int(player_reference.get("iron_skin_armor"))
 			var armor_add: int = int(balance_data.get("add", 0))
@@ -264,7 +265,7 @@ static func _build_trial_values_base(power_id: String, stack_count: int, balance
 		return {}
 	var data := balance_data
 	match power_id:
-		"razor_wind":
+		ENUMS.POWER_ID_RAZOR_WIND:
 			var arc_value := float(data.get("arc_base", 24.0))
 			var arc_match_at := int(data.get("arc_match_player_at_stack", 99))
 			if stack_count >= arc_match_at and is_instance_valid(player_reference):
@@ -275,18 +276,18 @@ static func _build_trial_values_base(power_id: String, stack_count: int, balance
 				"attack_cooldown": maxf(float(data.get("attack_cooldown_min", 0.0)), float(player_reference.get("attack_cooldown")) * float(data.get("attack_cooldown_mult", 1.0))),
 				"arc_degrees": arc_value
 			}
-		"execution_edge":
+		ENUMS.POWER_ID_EXECUTION_EDGE:
 			return {
 				"every": maxi(int(data.get("every_floor", 1)), int(data.get("every_base", 1)) - stack_count),
 				"damage_mult": float(data.get("damage_mult_base", 0.0)) + float(data.get("damage_mult_per_stack", 0.0)) * float(stack_count),
 				"attack_lock_duration": maxf(float(data.get("attack_lock_min", 0.0)), float(player_reference.get("attack_lock_duration")) * float(data.get("attack_lock_mult", 1.0)))
 			}
-		"rupture_wave":
+		ENUMS.POWER_ID_RUPTURE_WAVE:
 			return {
 				"radius": float(data.get("radius_base", 0.0)) + float(data.get("radius_per_stack", 0.0)) * float(stack_count),
 				"damage_ratio": float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count)
 			}
-		"aegis_field":
+		ENUMS.POWER_ID_AEGIS_FIELD:
 			return {
 				"resist": minf(float(data.get("resist_cap", 1.0)), float(data.get("resist_base", 0.0)) + float(data.get("resist_per_stack", 0.0)) * float(stack_count)),
 				"duration": float(data.get("resist_duration_base", 0.0)) + float(data.get("resist_duration_per_stack", 0.0)) * float(stack_count),
@@ -295,26 +296,26 @@ static func _build_trial_values_base(power_id: String, stack_count: int, balance
 				"slow_mult": maxf(float(data.get("slow_mult_min", 0.0)), float(data.get("slow_mult_base", 1.0)) + float(data.get("slow_mult_per_stack", 0.0)) * float(stack_count)),
 				"cooldown": maxf(float(data.get("cooldown_min", 0.0)), float(data.get("cooldown_base", 0.0)) + float(data.get("cooldown_per_stack", 0.0)) * float(stack_count))
 			}
-		"hunters_snare":
+		ENUMS.POWER_ID_HUNTERS_SNARE:
 			return {
 				"bonus_damage": int(data.get("bonus_damage_base", 0)) + stack_count * int(data.get("bonus_damage_per_stack", 0)),
 				"slow_duration": float(data.get("slow_duration_base", 0.0)) + float(data.get("slow_duration_per_stack", 0.0)) * float(stack_count),
 				"slow_mult": maxf(float(data.get("slow_mult_min", 0.0)), float(data.get("slow_mult_base", 1.0)) + float(data.get("slow_mult_per_stack", 0.0)) * float(stack_count))
 			}
-		"phantom_step":
+		ENUMS.POWER_ID_PHANTOM_STEP:
 			var phantom_damage_ratio := float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count)
 			return {
 				"damage": int(ceil(float(player_reference.get("damage")) * phantom_damage_ratio)),
 				"slow_duration": float(data.get("slow_duration_base", 0.0)) + float(data.get("slow_duration_per_stack", 0.0)) * float(stack_count),
 				"dash_cooldown": maxf(float(data.get("dash_cooldown_min", 0.0)), float(player_reference.get("dash_cooldown")) * float(data.get("dash_cooldown_mult", 1.0)))
 			}
-		"riftpunch":
+		ENUMS.POWER_ID_RIFTPUNCH:
 			return {
 				"bonus_damage": int(data.get("bonus_damage_base", 0)) + stack_count * int(data.get("bonus_damage_per_stack", 0)),
 				"window_duration": float(data.get("window_base", 0.0)) + float(data.get("window_per_stack", 0.0)) * float(stack_count),
 				"grace_duration": float(data.get("grace_base", 0.0)) + float(data.get("grace_per_stack", 0.0)) * float(stack_count)
 			}
-		"reaper_step":
+		ENUMS.POWER_ID_REAPER_STEP:
 			var reaper_chain_window := 0.0
 			if stack_count >= int(data.get("chain_window_at_stack", 99)):
 				reaper_chain_window = float(data.get("chain_window_duration", 0.0))
@@ -326,21 +327,21 @@ static func _build_trial_values_base(power_id: String, stack_count: int, balance
 				"chain_window": reaper_chain_window,
 				"chain_grace": reaper_chain_grace
 			}
-		"static_wake":
+		ENUMS.POWER_ID_STATIC_WAKE:
 			var wake_damage_ratio := float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count)
 			return {
 				"damage": int(ceil(float(player_reference.get("damage")) * wake_damage_ratio)),
 				"lifetime": float(data.get("lifetime_base", 0.0)) + float(data.get("lifetime_per_stack", 0.0)) * float(stack_count),
 				"trail_radius": float(data.get("trail_radius_base", 28.0)) + float(data.get("trail_radius_per_stack", 0.0)) * float(stack_count)
 			}
-		"storm_crown":
+		ENUMS.POWER_ID_STORM_CROWN:
 			return {
 				"proc_every": maxi(int(data.get("proc_every_floor", 1)), int(data.get("proc_every_base", 1)) - stack_count),
 				"chain_targets": mini(int(data.get("chain_targets_cap", 6)), int(data.get("chain_targets_base", 1)) + stack_count * int(data.get("chain_targets_per_stack", 0))),
 				"chain_radius": float(data.get("chain_radius_base", 0.0)) + float(data.get("chain_radius_per_stack", 0.0)) * float(stack_count),
 				"damage_ratio": minf(float(data.get("damage_ratio_cap", 1.0)), float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count))
 			}
-		"wraithstep":
+		ENUMS.POWER_ID_WRAITHSTEP:
 			return {
 				"mark_duration": float(data.get("mark_duration_base", 0.0)) + float(data.get("mark_duration_per_stack", 0.0)) * float(stack_count),
 				"dash_mark_radius": float(data.get("dash_mark_radius_base", 0.0)) + float(data.get("dash_mark_radius_per_stack", 0.0)) * float(stack_count),
@@ -348,7 +349,7 @@ static func _build_trial_values_base(power_id: String, stack_count: int, balance
 				"splash_radius": float(data.get("splash_radius_base", 0.0)) + float(data.get("splash_radius_per_stack", 0.0)) * float(stack_count),
 				"splash_ratio": minf(float(data.get("splash_ratio_cap", 1.0)), float(data.get("splash_ratio_base", 0.0)) + float(data.get("splash_ratio_per_stack", 0.0)) * float(stack_count))
 			}
-		"voidfire":
+		ENUMS.POWER_ID_VOIDFIRE:
 			var threshold_value: float
 			if data.has("danger_zone_threshold_base"):
 				var threshold_min := float(data.get("danger_zone_threshold_min", 0.0))
@@ -371,35 +372,35 @@ static func _build_trial_values_base(power_id: String, stack_count: int, balance
 				"danger_zone_decay_mult": float(data.get("danger_zone_decay_mult", 1.0)),
 				"reckless_decay_mult": float(data.get("reckless_decay_mult", 1.0))
 			}
-		"dread_resonance":
+		ENUMS.POWER_ID_DREAD_RESONANCE:
 			return {
 				"bonus_per_stack": int(data.get("bonus_per_stack_base", 0)) + stack_count * int(data.get("bonus_per_stack_per_level", 0)),
 				"max_stacks": mini(int(data.get("max_stacks_cap", 12)), int(data.get("max_stacks_base", 6)) + stack_count * int(data.get("max_stacks_per_stack", 0)))
 			}
-		"bloodvow":
+		ENUMS.POWER_ID_BLOODVOW:
 			return {
 				"damage_mult": float(data.get("damage_mult_base", 1.0)) + float(data.get("damage_mult_per_stack", 0.0)) * float(stack_count),
 				"low_hp_threshold": minf(float(data.get("threshold_cap", 0.6)), float(data.get("threshold_base", 0.3)) + float(data.get("threshold_per_stack", 0.1)) * float(stack_count))
 			}
-		"eclipse_mark":
+		ENUMS.POWER_ID_ECLIPSE_MARK:
 			return {
 				"radius": float(data.get("radius_base", 0.0)) + float(data.get("radius_per_stack", 0.0)) * float(stack_count),
 				"mark_duration": float(data.get("mark_duration_base", 0.0)) + float(data.get("mark_duration_per_stack", 0.0)) * float(stack_count),
 				"bonus_ratio": float(data.get("bonus_ratio_base", 0.0)) + float(data.get("bonus_ratio_per_stack", 0.0)) * float(stack_count)
 			}
-		"fracture_field":
+		ENUMS.POWER_ID_FRACTURE_FIELD:
 			return {
 				"radius": float(data.get("radius_base", 0.0)) + float(data.get("radius_per_stack", 0.0)) * float(stack_count),
 				"damage_ratio": float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count),
 				"slow_duration": float(data.get("slow_duration_base", 0.0)) + float(data.get("slow_duration_per_stack", 0.0)) * float(stack_count)
 			}
-		"farline_volley":
+		ENUMS.POWER_ID_FARLINE_VOLLEY:
 			return {
 				"arc_per_stack": float(data.get("arc_per_stack_base", 0.0)) + float(data.get("arc_per_stack_per_stack", 0.0)) * float(stack_count),
 				"bonus_per_stack": int(data.get("bonus_per_stack_base", 0)) + stack_count * int(data.get("bonus_per_stack_per_stack", 0)),
 				"stack_cap": mini(int(data.get("stack_cap_max", 99)), int(data.get("stack_cap_base", 0)) + stack_count * int(data.get("stack_cap_per_stack", 0)))
 			}
-		"sigil_chain":
+		ENUMS.POWER_ID_SIGIL_CHAIN:
 			return {
 				"radius": float(data.get("radius_base", 0.0)) + float(data.get("radius_per_stack", 0.0)) * float(stack_count),
 				"damage_ratio": float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count)
@@ -411,81 +412,81 @@ static func _build_trial_values_base(power_id: String, stack_count: int, balance
 static func _apply_prismatic_trial_values(power_id: String, values: Dictionary) -> Dictionary:
 	var prismatic := values.duplicate(true)
 	match power_id:
-		"razor_wind":
+		ENUMS.POWER_ID_RAZOR_WIND:
 			prismatic["range_scale"] = float(prismatic.get("range_scale", 1.0)) * 1.15
 			prismatic["damage_ratio"] = float(prismatic.get("damage_ratio", 0.0)) * 1.3
 			prismatic["attack_cooldown"] = maxf(0.06, float(prismatic.get("attack_cooldown", 0.0)) * 0.88)
 			prismatic["arc_degrees"] = float(prismatic.get("arc_degrees", 0.0)) + 24.0
-		"execution_edge":
+		ENUMS.POWER_ID_EXECUTION_EDGE:
 			prismatic["every"] = maxi(1, int(prismatic.get("every", 1)) - 1)
 			prismatic["damage_mult"] = float(prismatic.get("damage_mult", 1.0)) * 1.3
 			prismatic["attack_lock_duration"] = maxf(0.05, float(prismatic.get("attack_lock_duration", 0.0)) * 0.9)
-		"rupture_wave":
+		ENUMS.POWER_ID_RUPTURE_WAVE:
 			prismatic["radius"] = float(prismatic.get("radius", 0.0)) * 1.2
 			prismatic["damage_ratio"] = float(prismatic.get("damage_ratio", 0.0)) * 1.35
-		"aegis_field":
+		ENUMS.POWER_ID_AEGIS_FIELD:
 			prismatic["resist"] = minf(0.60, float(prismatic.get("resist", 0.0)) + 0.08)
 			prismatic["duration"] = float(prismatic.get("duration", 0.0)) * 1.25
 			prismatic["radius"] = float(prismatic.get("radius", 0.0)) * 1.2
 			prismatic["slow_duration"] = float(prismatic.get("slow_duration", 0.0)) * 1.25
 			prismatic["slow_mult"] = maxf(0.25, float(prismatic.get("slow_mult", 1.0)) * 0.82)
 			prismatic["cooldown"] = maxf(0.9, float(prismatic.get("cooldown", 0.0)) * 0.85)
-		"hunters_snare":
+		ENUMS.POWER_ID_HUNTERS_SNARE:
 			prismatic["bonus_damage"] = int(float(prismatic.get("bonus_damage", 0)) * 1.75)
 			prismatic["slow_duration"] = float(prismatic.get("slow_duration", 0.0)) * 1.35
 			prismatic["slow_mult"] = maxf(0.25, float(prismatic.get("slow_mult", 1.0)) * 0.72)
-		"phantom_step":
+		ENUMS.POWER_ID_PHANTOM_STEP:
 			prismatic["damage"] = int(float(prismatic.get("damage", 0)) * 1.35)
 			prismatic["slow_duration"] = float(prismatic.get("slow_duration", 0.0)) * 1.25
 			prismatic["dash_cooldown"] = maxf(0.05, float(prismatic.get("dash_cooldown", 0.0)) * 0.85)
-		"riftpunch":
+		ENUMS.POWER_ID_RIFTPUNCH:
 			prismatic["bonus_damage"] = int(float(prismatic.get("bonus_damage", 0)) * 1.4)
 			prismatic["window_duration"] = float(prismatic.get("window_duration", 0.0)) * 1.35
 			prismatic["grace_duration"] = float(prismatic.get("grace_duration", 0.0)) * 1.5
-		"reaper_step":
+		ENUMS.POWER_ID_REAPER_STEP:
 			prismatic["range_mult"] = float(prismatic.get("range_mult", 1.0)) * 1.18
 			prismatic["chain_window"] = maxf(2.8, float(prismatic.get("chain_window", 0.0)))
 			prismatic["chain_grace"] = maxf(0.75, float(prismatic.get("chain_grace", 0.0)))
-		"static_wake":
+		ENUMS.POWER_ID_STATIC_WAKE:
 			prismatic["damage"] = int(float(prismatic.get("damage", 0)) * 1.4)
 			prismatic["lifetime"] = float(prismatic.get("lifetime", 0.0)) * 1.25
 			prismatic["trail_radius"] = float(prismatic.get("trail_radius", 0.0)) * 1.2
-		"storm_crown":
+		ENUMS.POWER_ID_STORM_CROWN:
 			prismatic["proc_every"] = maxi(1, int(prismatic.get("proc_every", 1)) - 1)
 			prismatic["chain_targets"] = int(prismatic.get("chain_targets", 1)) + 2
 			prismatic["chain_radius"] = float(prismatic.get("chain_radius", 0.0)) * 1.2
 			prismatic["damage_ratio"] = float(prismatic.get("damage_ratio", 0.0)) * 1.35
-		"wraithstep":
+		ENUMS.POWER_ID_WRAITHSTEP:
 			prismatic["mark_duration"] = float(prismatic.get("mark_duration", 0.0)) * 1.3
 			prismatic["dash_mark_radius"] = float(prismatic.get("dash_mark_radius", 0.0)) * 1.2
 			prismatic["bonus_damage"] = int(float(prismatic.get("bonus_damage", 0)) * 1.5)
 			prismatic["splash_radius"] = float(prismatic.get("splash_radius", 0.0)) * 1.2
 			prismatic["splash_ratio"] = float(prismatic.get("splash_ratio", 0.0)) * 1.25
-		"voidfire":
+		ENUMS.POWER_ID_VOIDFIRE:
 			prismatic["heat_per_hit"] = float(prismatic.get("heat_per_hit", 0.0)) * 1.25
 			prismatic["danger_zone_amp"] = float(prismatic.get("danger_zone_amp", 0.0)) * 1.5
 			prismatic["detonate_ratio"] = float(prismatic.get("detonate_ratio", 0.0)) * 1.3
 			prismatic["detonate_radius"] = float(prismatic.get("detonate_radius", 0.0)) * 1.2
 			prismatic["lockout_duration"] = maxf(0.06, float(prismatic.get("lockout_duration", 0.0)) * 0.6)
-		"dread_resonance":
+		ENUMS.POWER_ID_DREAD_RESONANCE:
 			prismatic["bonus_per_stack"] = int(prismatic.get("bonus_per_stack", 0)) + 1
 			prismatic["max_stacks"] = int(prismatic.get("max_stacks", 0)) + 3
-		"bloodvow":
+		ENUMS.POWER_ID_BLOODVOW:
 			prismatic["damage_mult"] = float(prismatic.get("damage_mult", 1.0)) * 1.2
 			prismatic["low_hp_threshold"] = minf(0.75, float(prismatic.get("low_hp_threshold", 0.0)) + 0.15)
-		"eclipse_mark":
+		ENUMS.POWER_ID_ECLIPSE_MARK:
 			prismatic["radius"] = float(prismatic.get("radius", 0.0)) * 1.2
 			prismatic["mark_duration"] = float(prismatic.get("mark_duration", 0.0)) * 1.3
 			prismatic["bonus_ratio"] = float(prismatic.get("bonus_ratio", 0.0)) * 1.45
-		"fracture_field":
+		ENUMS.POWER_ID_FRACTURE_FIELD:
 			prismatic["radius"] = float(prismatic.get("radius", 0.0)) * 1.22
 			prismatic["damage_ratio"] = float(prismatic.get("damage_ratio", 0.0)) * 1.35
 			prismatic["slow_duration"] = float(prismatic.get("slow_duration", 0.0)) * 1.25
-		"farline_volley":
+		ENUMS.POWER_ID_FARLINE_VOLLEY:
 			prismatic["arc_per_stack"] = float(prismatic.get("arc_per_stack", 0.0)) * 1.4
 			prismatic["bonus_per_stack"] = int(prismatic.get("bonus_per_stack", 0)) + 1
 			prismatic["stack_cap"] = int(prismatic.get("stack_cap", 0)) + 3
-		"sigil_chain":
+		ENUMS.POWER_ID_SIGIL_CHAIN:
 			prismatic["radius"] = float(prismatic.get("radius", 0.0)) * 1.2
 			prismatic["damage_ratio"] = float(prismatic.get("damage_ratio", 0.0)) * 1.5
 		_:
