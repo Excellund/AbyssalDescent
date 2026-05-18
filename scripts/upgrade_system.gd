@@ -45,29 +45,16 @@ func apply_upgrade(upgrade_id: String) -> bool:
 	if preview.is_empty():
 		return false
 
-	# Track after verifying this upgrade can apply.
+	# Apply upgrade using data-driven mapper (removes hard-coded logic)
+	var applied := POWER_PARAMETER_MAPPER.apply_upgrade_values(player_reference, id)
+	if not applied:
+		return false
+
+	# Track after successful application
 	if is_instance_valid(game_state):
 		game_state.add_upgrade(id)
 	upgrade_stacks[id] = current_stacks + 1
 
-	match id:
-		"first_strike", "heavy_blow", "wide_arc", "long_reach", "fleet_foot", "blink_dash", "battle_trance", "surge_step", "wardens_verdict", "lacuna_echo", "sovereign_tempo", "pillar_convergence", "unbroken_oath", "edict_of_the_court", "null_corridor":
-			player_reference.set(String(preview.get("property", "")), preview.get("next", player_reference.get(String(preview.get("property", "")))))
-		"heartstone":
-			var next_max := int(preview.get("next", player_reference.get_max_health()))
-			var current_max: int = int(player_reference.get_max_health())
-			var max_gain := maxi(0, next_max - current_max)
-			var next_current: int = int(player_reference.get_current_health()) + max_gain
-			player_reference.set_max_health_and_current(next_max, next_current)
-		"iron_skin":
-			player_reference.set("iron_skin_armor", int(preview.get("next", int(player_reference.get("iron_skin_armor")))))
-			player_reference.set("iron_skin_stacks", int(player_reference.get("iron_skin_stacks")) + 1)
-		"bloodpact":
-			player_reference.set("bloodpact_bonus_damage", int(preview.get("next", int(player_reference.get("bloodpact_bonus_damage")))))
-		"severing_edge":
-			player_reference.set("severing_edge_bonus_damage", int(preview.get("next", int(player_reference.get("severing_edge_bonus_damage")))))
-		_:
-			return false
 	return true
 
 

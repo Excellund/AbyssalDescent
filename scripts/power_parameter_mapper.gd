@@ -79,6 +79,73 @@ static func apply_trial_power_values(player_reference: Node, power_id: String, n
 	
 	return true
 
+## Applies an upgrade to the player using registry balance definitions.
+## Handles both simple property updates and special cases (heartstone healing, iron_skin tracking).
+## Returns true if upgrade was successfully applied.
+static func apply_upgrade_values(player_reference: Node, upgrade_id: String) -> bool:
+	if not is_instance_valid(player_reference):
+		return false
+	
+	var id := upgrade_id.strip_edges().to_lower()
+	var registry := _get_power_registry_instance()
+	
+	# Get balance data from registry (checks UPGRADE_BALANCE and BOSS_REWARD_BALANCE)
+	var balance_data: Dictionary = registry.get_power_balance(id)
+	if balance_data.is_empty():
+		return false
+	
+	var kind: String = balance_data.get("kind", "add_int")
+	var property: String = balance_data.get("property", "")
+	
+	# Handle special cases first
+	match id:
+		"heartstone":
+			# Special: heartstone heals the player proportionally to max health gain
+			var next_max := int(balance_data.get("add", 0)) + int(player_reference.get_max_health())
+			var current_max: int = int(player_reference.get_max_health())
+			var max_gain := maxi(0, next_max - current_max)
+			var next_current: int = int(player_reference.get_current_health()) + max_gain
+			player_reference.set_max_health_and_current(next_max, next_current)
+			return true
+		
+		"iron_skin":
+			# Special: iron_skin increments stacks and applies armor via kind rules
+			var current_armor: int = int(player_reference.get("iron_skin_armor"))
+			var armor_add: int = int(balance_data.get("add", 0))
+			var next_armor := current_armor + armor_add
+			player_reference.set("iron_skin_armor", next_armor)
+			player_reference.set("iron_skin_stacks", int(player_reference.get("iron_skin_stacks")) + 1)
+			return true
+	
+	# Handle standard property-based upgrades using kind rules
+	if property.is_empty():
+		return false
+	
+	var current_value: Variant = player_reference.get(property)
+	if current_value == null:
+		return false
+	
+	var next_value: Variant
+	match kind:
+		"add_int":
+			next_value = int(current_value) + int(balance_data.get("add", 0))
+		"add_float":
+			next_value = float(current_value) + float(balance_data.get("add", 0.0))
+		"add_clamp":
+			var added := float(current_value) + float(balance_data.get("add", 0.0))
+			var min_val := float(balance_data.get("min", -INF))
+			var max_val := float(balance_data.get("max", INF))
+			next_value = clampf(added, min_val, max_val)
+		"mul_min":
+			var multiplied := float(current_value) * float(balance_data.get("mult", 1.0))
+			var min_val := float(balance_data.get("min", 0.0))
+			next_value = maxf(multiplied, min_val)
+		_:
+			return false
+	
+	player_reference.set(property, next_value)
+	return true
+
 ## Gets the property name that should be set for a given trial power parameter
 static func get_property_name(power_id: String, param_name: String) -> String:
 	var power_map: Dictionary = _get_power_registry_instance().get_trial_power_param_map(power_id)
