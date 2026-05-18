@@ -6,6 +6,7 @@ extends Node
 
 const DESCRIPTION_CAP_GUARD := preload("res://scripts/shared/description_cap_guard.gd")
 const POWER_PARAMETER_MAPPER := preload("res://scripts/power_parameter_mapper.gd")
+const ENUMS := preload("res://scripts/shared/enums.gd")
 const INDOMITABLE_OATH_FILL_REQUIREMENT: float = 52.0
 const INDOMITABLE_OATH_DAMAGE_SCALE: float = 1.35
 
@@ -217,79 +218,79 @@ func _reward_flavor_first_desc(is_initial: bool, flavor: String, body: String) -
 
 func _power_sentence_template(power_id: String) -> String:
 	match power_id:
-		"first_strike":
+		ENUMS.POWER_ID_FIRST_STRIKE:
 			return "Extra hit damage vs enemies above 80%% HP %s."
-		"heavy_blow":
+		ENUMS.POWER_ID_HEAVY_BLOW:
 			return "Damage %s."
-		"wide_arc":
+		ENUMS.POWER_ID_WIDE_ARC:
 			return "Attack arc %s."
-		"long_reach":
+		ENUMS.POWER_ID_LONG_REACH:
 			return "Attack range %s."
-		"fleet_foot":
+		ENUMS.POWER_ID_FLEET_FOOT:
 			return "Move speed %s."
-		"blink_dash":
+		ENUMS.POWER_ID_BLINK_DASH:
 			return "Dash cooldown %s."
-		"iron_skin":
+		ENUMS.POWER_ID_IRON_SKIN:
 			return "Armor %s."
-		"battle_trance":
+		ENUMS.POWER_ID_BATTLE_TRANCE:
 			return "On hit gain %s move speed for %s."
-		"surge_step":
+		ENUMS.POWER_ID_SURGE_STEP:
 			return "Dash speed %s."
-		"heartstone":
+		ENUMS.POWER_ID_HEARTSTONE:
 			return "Max HP %s."
-		"bloodpact":
+		ENUMS.POWER_ID_BLOODPACT:
 			return "While below 50%% HP, +%s damage on every hit."
-		"severing_edge":
+		ENUMS.POWER_ID_SEVERING_EDGE:
 			return "Bonus damage on hits against enemies below 55%% HP %s."
-		"wardens_verdict":
+		ENUMS.POWER_ID_WARDENS_VERDICT:
 			return "Bonus damage %s; powers 4th-hit burst."
-		"lacuna_echo":
+		ENUMS.POWER_ID_LACUNA_ECHO:
 			return "Zone power %s, radius %s."
-		"sovereign_tempo":
+		ENUMS.POWER_ID_SOVEREIGN_TEMPO:
 			return "Tempo per stack %s."
-		"pillar_convergence":
+		ENUMS.POWER_ID_PILLAR_CONVERGENCE:
 			return "Every %s hits, lasts %s, pulses every %s."
-		"unbroken_oath":
+		ENUMS.POWER_ID_UNBROKEN_OATH:
 			return "Damage reduction %s. Fill Oath at %s; next hit deals %s bonus damage."
-		"edict_of_the_court":
+		ENUMS.POWER_ID_EDICT_OF_THE_COURT:
 			return "Push force %s, scatter radius %s."
-		"null_corridor":
+		ENUMS.POWER_ID_NULL_CORRIDOR:
 			return "Trail width %s, duration %s, deflect %s dmg."
-		"razor_wind":
+		ENUMS.POWER_ID_RAZOR_WIND:
 			return "Range %s, damage %s of hit, arc %s."
-		"execution_edge":
+		ENUMS.POWER_ID_EXECUTION_EDGE:
 			return "Every %s swings for %s damage."
-		"rupture_wave":
+		ENUMS.POWER_ID_RUPTURE_WAVE:
 			return "Radius %s, damage %s of hit. %s"
-		"aegis_field":
+		ENUMS.POWER_ID_AEGIS_FIELD:
 			return "Resist %s for %s, pulse radius %s, cooldown %s."
-		"hunters_snare":
+		ENUMS.POWER_ID_HUNTERS_SNARE:
 			return "Slow %s at %s speed, extra hit damage %s. %s"
-		"phantom_step":
+		ENUMS.POWER_ID_PHANTOM_STEP:
 			return "Damage %s, slow %s."
-		"riftpunch":
+		ENUMS.POWER_ID_RIFTPUNCH:
 			return "Bonus damage %s, window %s, grace %s. %s"
-		"reaper_step":
+		ENUMS.POWER_ID_REAPER_STEP:
 			return "Range/speed %s, kill refresh %s. %s"
-		"static_wake":
+		ENUMS.POWER_ID_STATIC_WAKE:
 			return "Damage %s of dmg, lasts %s, radius %s. %s"
-		"storm_crown":
+		ENUMS.POWER_ID_STORM_CROWN:
 			return "Every %s hits, chains to %s targets within %s, for %s damage."
-		"wraithstep":
+		ENUMS.POWER_ID_WRAITHSTEP:
 			return "Mark %s, marked-hit damage %s, cleave %s, lasts %s hits."
-		"voidfire":
+		ENUMS.POWER_ID_VOIDFIRE:
 			return "Damage %s, detonate %s, lockout %s. %s"
-		"dread_resonance":
+		ENUMS.POWER_ID_DREAD_RESONANCE:
 			return "Bonus per resonance stack %s, up to %s stacks."
-		"bloodvow":
+		ENUMS.POWER_ID_BLOODVOW:
 			return "Below %s HP, attacks deal x%s damage."
-		"eclipse_mark":
+		ENUMS.POWER_ID_ECLIPSE_MARK:
 			return "Mark radius %s, duration %s, bonus %s of hit, lasts %s hits."
-		"fracture_field":
+		ENUMS.POWER_ID_FRACTURE_FIELD:
 			return "Length %s, damage %s, slow %s."
-		"farline_volley":
+		ENUMS.POWER_ID_FARLINE_VOLLEY:
 			return "Arc +%s/Volley, +%s dmg/Volley, cap %s. %s"
-		"sigil_chain":
+		ENUMS.POWER_ID_SIGIL_CHAIN:
 			return "Radius %s, %s of hit per tick. %s"
 		_:
 			return ""
@@ -363,55 +364,55 @@ func _build_upgrade_preview(upgrade_id: String) -> Dictionary:
 ## Change a description here and it updates everywhere: reward cards and build detail.
 func get_power_flavor_text(power_id: String) -> String:
 	match power_id:
-		"wardens_verdict":
+		ENUMS.POWER_ID_WARDENS_VERDICT:
 			return "Each consecutive hit deals more bonus damage. The 4th hit detonates a burst that hits nearby enemies."
-		"lacuna_echo":
+		ENUMS.POWER_ID_LACUNA_ECHO:
 			return "Kills create a void zone that yanks in nearby enemies and pulses damage."
-		"sovereign_tempo":
+		ENUMS.POWER_ID_SOVEREIGN_TEMPO:
 			return "Hits build tempo. Ending a dash releases a wave; hits refund dash cooldown."
-		"pillar_convergence":
+		ENUMS.POWER_ID_PILLAR_CONVERGENCE:
 			return "Every few damaging hits you enter Convergence, pulsing damage around you until it expires."
-		"unbroken_oath":
+		ENUMS.POWER_ID_UNBROKEN_OATH:
 			return "Single hits trickle Oath; multihits scale exponentially. Fill the bar, then unleash a massive sword strike."
-		"edict_of_the_court":
+		ENUMS.POWER_ID_EDICT_OF_THE_COURT:
 			return "Kills detonate a force pulse at the kill position, pushing nearby enemies outward."
-		"null_corridor":
+		ENUMS.POWER_ID_NULL_CORRIDOR:
 			return "Dashes leave a void corridor. Enemies that enter are deflected and take damage once."
-		"razor_wind":
+		ENUMS.POWER_ID_RAZOR_WIND:
 			return "Each swing extends a slicing arc that only strikes enemies past your normal melee reach."
-		"execution_edge":
+		ENUMS.POWER_ID_EXECUTION_EDGE:
 			return "Every few swings, an execution strike multiplies hit damage."
-		"rupture_wave":
+		ENUMS.POWER_ID_RUPTURE_WAVE:
 			return "Hits send a shockwave rippling outward, damaging all nearby enemies."
-		"aegis_field":
+		ENUMS.POWER_ID_AEGIS_FIELD:
 			return "Periodically emits a guard pulse that slows nearby enemies and grants brief damage resistance."
-		"hunters_snare":
+		ENUMS.POWER_ID_HUNTERS_SNARE:
 			return "Hits slow enemies. Striking slowed targets deals extra hit damage."
-		"phantom_step":
+		ENUMS.POWER_ID_PHANTOM_STEP:
 			return "Dashing through enemies deals damage and leaves them slowed."
-		"riftpunch":
+		ENUMS.POWER_ID_RIFTPUNCH:
 			return "Ending a dash primes a finisher: your next melee hit deals bonus damage and grants brief contact grace."
-		"reaper_step":
+		ENUMS.POWER_ID_REAPER_STEP:
 			return "Kills fully refresh your dash. Dash range and speed scale together."
-		"static_wake":
+		ENUMS.POWER_ID_STATIC_WAKE:
 			return "Dashing leaves an electrified trail that shocks any enemy who steps into it."
-		"storm_crown":
+		ENUMS.POWER_ID_STORM_CROWN:
 			return "Every few hits discharge chain lightning from your target to nearby foes."
-		"wraithstep":
+		ENUMS.POWER_ID_WRAITHSTEP:
 			return "Dash marks enemies. Marked hits deal extra hit damage and chain-splash nearby foes."
-		"voidfire":
+		ENUMS.POWER_ID_VOIDFIRE:
 			return "Heat attacks. Danger Zone boosts hit damage. At cap, overheat detonates and briefly locks attacks."
-		"dread_resonance":
+		ENUMS.POWER_ID_DREAD_RESONANCE:
 			return "Chain hits on one enemy build resonance. Swapping targets resets to 1."
-		"bloodvow":
+		ENUMS.POWER_ID_BLOODVOW:
 			return "While wounded, every strike hits harder. Lower HP, bigger windows."
-		"eclipse_mark":
+		ENUMS.POWER_ID_ECLIPSE_MARK:
 			return "Kills inflicted by hits mark nearby enemies. First hit on each deals bonus damage."
-		"fracture_field":
+		ENUMS.POWER_ID_FRACTURE_FIELD:
 			return "Kills inflicted by hits rupture fault lines from the slain enemy, striking enemies along each line."
-		"farline_volley":
+		ENUMS.POWER_ID_FARLINE_VOLLEY:
 			return "Hits at the edge of your reach build Volley: wider arc and flat bonus damage. Dashing resets stacks."
-		"sigil_chain":
+		ENUMS.POWER_ID_SIGIL_CHAIN:
 			return "Hits charge a sigil. The next strike drops a brief zone — chain zones to compound damage."
 		_:
 			return ""
@@ -425,125 +426,125 @@ func get_power_current_description(power_id: String) -> String:
 	var id := power_id.strip_edges().to_lower()
 	var flavor := get_power_flavor_text(id)
 	match id:
-		"wardens_verdict":
+		ENUMS.POWER_ID_WARDENS_VERDICT:
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("+%d", int(player_reference.get("apex_predator_bonus_damage")))], "build_detail"))
-		"lacuna_echo":
+		ENUMS.POWER_ID_LACUNA_ECHO:
 			var val := int(player_reference.get("void_echo_damage"))
 			var radius := clampf(54.0 + float(val) * 0.6, 54.0, 110.0)
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%d", val), _current_stat("%.0f", radius)], "build_detail"))
-		"sovereign_tempo":
+		ENUMS.POWER_ID_SOVEREIGN_TEMPO:
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("+%.0f%%", float(player_reference.get("apex_momentum_speed_bonus")) * 100.0)], "build_detail"))
-		"pillar_convergence":
+		ENUMS.POWER_ID_PILLAR_CONVERGENCE:
 			var cs_ratio := float(player_reference.get("convergence_surge_damage_ratio"))
 			var cs_hits := maxi(2, 6 - int(round(cs_ratio * 8.0)))
 			var cs_window := 1.2 + cs_ratio * 1.8
 			var cs_pulse := maxf(0.14, 0.3 - cs_ratio * 0.25)
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%d", cs_hits), _current_stat("%.2fs", cs_window), _current_stat("%.2fs", cs_pulse)], "build_detail"))
-		"unbroken_oath":
+		ENUMS.POWER_ID_UNBROKEN_OATH:
 			var resist := float(player_reference.get("indomitable_spirit_damage_reduction")) * 100.0
 			var fill_req := INDOMITABLE_OATH_FILL_REQUIREMENT
 			var ratio := (1.8 + float(player_reference.get("indomitable_spirit_damage_reduction")) * 2.2 + fill_req * 0.009) * INDOMITABLE_OATH_DAMAGE_SCALE * 100.0
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f%%", resist), _current_stat("%.0f", fill_req), _current_stat("%.0f%%", ratio)], "build_detail"))
-		"edict_of_the_court":
+		ENUMS.POWER_ID_EDICT_OF_THE_COURT:
 			var edict_power := int(player_reference.get("edict_court_push_power"))
 			var edict_radius := clampf(80.0 + float(edict_power) * 1.0, 80.0, 160.0)
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f", float(edict_power) * 1.8 + 300.0), _current_stat("%.0f", edict_radius)], "build_detail"))
-		"null_corridor":
+		ENUMS.POWER_ID_NULL_CORRIDOR:
 			var nc_strength := float(player_reference.get("null_corridor_strength"))
 			var nc_width := 32.0 + nc_strength * 14.0
 			var nc_duration := 3.2 + nc_strength * 0.8
 			var nc_bounce_ratio := 0.20 + nc_strength * 0.08
 			var nc_bounce_dmg := maxi(1, int(round(float(player_reference.get("damage")) * nc_bounce_ratio)))
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f", nc_width), _current_stat("%.1fs", nc_duration), _current_stat("%d", nc_bounce_dmg)], "build_detail"))
-		"first_strike":
+		ENUMS.POWER_ID_FIRST_STRIKE:
 			return _power_sentence(id, [_current_stat("+%d", int(player_reference.get("first_strike_bonus_damage")))], "build_detail")
-		"heavy_blow":
-			return _power_sentence(id, [_current_stat("+%d", 7 * get_upgrade_stack_count("heavy_blow"))], "build_detail")
-		"wide_arc":
-			return _power_sentence(id, [_current_stat("+%d deg", 28 * get_upgrade_stack_count("wide_arc"))], "build_detail")
-		"long_reach":
-			return _power_sentence(id, [_current_stat("+%d", 11 * get_upgrade_stack_count("long_reach"))], "build_detail")
-		"fleet_foot":
-			return _power_sentence(id, [_current_stat("+%d", 17 * get_upgrade_stack_count("fleet_foot"))], "build_detail")
-		"blink_dash":
+		ENUMS.POWER_ID_HEAVY_BLOW:
+			return _power_sentence(id, [_current_stat("+%d", 7 * get_upgrade_stack_count(ENUMS.POWER_ID_HEAVY_BLOW))], "build_detail")
+		ENUMS.POWER_ID_WIDE_ARC:
+			return _power_sentence(id, [_current_stat("+%d deg", 28 * get_upgrade_stack_count(ENUMS.POWER_ID_WIDE_ARC))], "build_detail")
+		ENUMS.POWER_ID_LONG_REACH:
+			return _power_sentence(id, [_current_stat("+%d", 11 * get_upgrade_stack_count(ENUMS.POWER_ID_LONG_REACH))], "build_detail")
+		ENUMS.POWER_ID_FLEET_FOOT:
+			return _power_sentence(id, [_current_stat("+%d", 17 * get_upgrade_stack_count(ENUMS.POWER_ID_FLEET_FOOT))], "build_detail")
+		ENUMS.POWER_ID_BLINK_DASH:
 			return _power_sentence(id, [_current_stat("%.2fs", float(player_reference.get("dash_cooldown")))], "build_detail")
-		"iron_skin":
+		ENUMS.POWER_ID_IRON_SKIN:
 			return _power_sentence(id, [_current_stat("+%d", int(player_reference.get("iron_skin_armor")))], "build_detail")
-		"battle_trance":
+		ENUMS.POWER_ID_BATTLE_TRANCE:
 			var bt_duration := 1.25
 			if player_reference.get("battle_trance_duration") != null:
 				bt_duration = float(player_reference.get("battle_trance_duration"))
 			return _power_sentence(id, [_current_stat("+%.0f%%", float(player_reference.get("battle_trance_move_speed_bonus")) * 100.0), _current_stat("%.2fs", bt_duration)], "build_detail")
-		"surge_step":
-			return _power_sentence(id, [_current_stat("+%d", 85 * get_upgrade_stack_count("surge_step"))], "build_detail")
-		"heartstone":
-			return _power_sentence(id, [_current_stat("+%d", 10 * get_upgrade_stack_count("heartstone"))], "build_detail")
-		"bloodpact":
+		ENUMS.POWER_ID_SURGE_STEP:
+			return _power_sentence(id, [_current_stat("+%d", 85 * get_upgrade_stack_count(ENUMS.POWER_ID_SURGE_STEP))], "build_detail")
+		ENUMS.POWER_ID_HEARTSTONE:
+			return _power_sentence(id, [_current_stat("+%d", 10 * get_upgrade_stack_count(ENUMS.POWER_ID_HEARTSTONE))], "build_detail")
+		ENUMS.POWER_ID_BLOODPACT:
 			return _power_sentence(id, [_current_stat("+%d", int(player_reference.get("bloodpact_bonus_damage")))], "build_detail")
-		"severing_edge":
+		ENUMS.POWER_ID_SEVERING_EDGE:
 			return _power_sentence(id, [_current_stat("+%d", int(player_reference.get("severing_edge_bonus_damage")))], "build_detail")
-		"razor_wind":
+		ENUMS.POWER_ID_RAZOR_WIND:
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("x%.2f", float(cur.get("range_scale", 1.0))), _current_stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0), _current_stat("%.0f deg", float(cur.get("arc_degrees", 24.0)))], "build_detail"))
-		"execution_edge":
+		ENUMS.POWER_ID_EXECUTION_EDGE:
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%d", int(cur.get("every", 2))), _current_stat("x%.2f", float(cur.get("damage_mult", 1.0)))], "build_detail"))
-		"rupture_wave":
+		ENUMS.POWER_ID_RUPTURE_WAVE:
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			var rupture_unlocks := _rupture_wave_unlocks_for_stack(get_trial_power_stack_count(id))
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f", float(cur.get("radius", 0.0))), _current_stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0), _current_const(rupture_unlocks)], "build_detail"))
-		"aegis_field":
+		ENUMS.POWER_ID_AEGIS_FIELD:
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f%%", float(cur.get("resist", 0.0)) * 100.0), _current_stat("%.2fs", float(cur.get("duration", 0.0))), _current_stat("%.0f", float(cur.get("radius", 0.0))), _current_stat("%.2fs", float(cur.get("cooldown", 0.0)))], "build_detail"))
-		"hunters_snare":
+		ENUMS.POWER_ID_HUNTERS_SNARE:
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			var hunters_unlocks := _hunters_snare_unlocks_for_stack(get_trial_power_stack_count(id))
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.2fs", float(cur.get("slow_duration", 0.0))), _current_stat("%.0f%%", float(cur.get("slow_mult", 1.0)) * 100.0), _current_stat("+%d", int(cur.get("bonus_damage", 0))), _current_const(hunters_unlocks)], "build_detail"))
-		"phantom_step":
+		ENUMS.POWER_ID_PHANTOM_STEP:
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0), _current_stat("%.2fs", float(cur.get("slow_duration", 0.0)))], "build_detail"))
-		"riftpunch":
+		ENUMS.POWER_ID_RIFTPUNCH:
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			var rp_unlocks := _riftpunch_unlocks_for_stack(get_trial_power_stack_count(id))
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("+%d", int(cur.get("bonus_damage", 0))), _current_stat("%.2fs", float(cur.get("window_duration", 0.0))), _current_stat("%.2fs", float(cur.get("grace_duration", 0.0))), _current_const(rp_unlocks)], "build_detail"))
-		"reaper_step":
+		ENUMS.POWER_ID_REAPER_STEP:
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			var reaper_unlocks := _reaper_step_unlocks_for_stack(get_trial_power_stack_count(id))
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("x%.2f", float(cur.get("range_mult", 1.0))), _current_const("full"), _current_const(reaper_unlocks)], "build_detail"))
-		"static_wake":
+		ENUMS.POWER_ID_STATIC_WAKE:
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			var wake_unlocks := _static_wake_unlocks_for_stack(get_trial_power_stack_count(id))
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0), _current_stat("%.2fs", float(cur.get("lifetime", 0.0))), _current_stat("%.0f", float(cur.get("trail_radius", 28.0))), _current_const(wake_unlocks)], "build_detail"))
-		"storm_crown":
+		ENUMS.POWER_ID_STORM_CROWN:
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%d", int(cur.get("proc_every", 1))), _current_stat("%d", int(cur.get("chain_targets", 1))), _current_stat("%.0f", float(cur.get("chain_radius", 0.0))), _current_stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0)], "build_detail"))
-		"wraithstep":
+		ENUMS.POWER_ID_WRAITHSTEP:
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			var ws_hits := _wraithstep_hits_for_stack(get_trial_power_stack_count(id))
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.2fs", float(cur.get("mark_duration", 0.0))), _current_stat("+%d", int(cur.get("bonus_damage", 0))), _current_stat("%.0f%%", float(cur.get("splash_ratio", 0.0)) * 100.0), _current_stat("%d", ws_hits)], "build_detail"))
-		"voidfire":
+		ENUMS.POWER_ID_VOIDFIRE:
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			var voidfire_unlocks := _voidfire_unlocks_for_stack(get_trial_power_stack_count(id))
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("+%.0f%%", float(cur.get("danger_zone_amp", 0.0)) * 100.0), _current_stat("%.0f%%", float(cur.get("detonate_ratio", 0.0)) * 100.0), _current_stat("%.2fs", float(cur.get("lockout_duration", 0.0))), _current_const(voidfire_unlocks)] , "build_detail"))
-		"dread_resonance":
+		ENUMS.POWER_ID_DREAD_RESONANCE:
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			var max_stacks_dr := int(player_reference.get("dread_resonance_max_stacks"))
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("+%d", int(cur.get("bonus_per_stack", 0))), _current_const(str(max_stacks_dr))], "build_detail"))
-		"bloodvow":
+		ENUMS.POWER_ID_BLOODVOW:
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f%%", float(cur.get("low_hp_threshold", 0.4)) * 100.0), _current_stat("%.2f", float(cur.get("damage_mult", 1.0)))], "build_detail"))
-		"eclipse_mark":
+		ENUMS.POWER_ID_ECLIPSE_MARK:
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			var em_hits := _eclipse_hits_for_stack(get_trial_power_stack_count(id))
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f", float(cur.get("radius", 0.0))), _current_stat("%.2fs", float(cur.get("mark_duration", 0.0))), _current_stat("%.0f%%", float(cur.get("bonus_ratio", 0.0)) * 100.0), _current_stat("%d", em_hits)], "build_detail"))
-		"fracture_field":
+		ENUMS.POWER_ID_FRACTURE_FIELD:
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f", float(cur.get("radius", 0.0))), _current_stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0), _current_stat("%.2fs", float(cur.get("slow_duration", 0.0)))] , "build_detail"))
-		"farline_volley":
+		ENUMS.POWER_ID_FARLINE_VOLLEY:
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			var fv_unlocks := _farline_volley_unlocks_for_stack(get_trial_power_stack_count(id))
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f deg", float(cur.get("arc_per_stack", 0.0))), _current_stat("%d", int(cur.get("bonus_per_stack", 0))), _current_stat("%d", int(cur.get("stack_cap", 0))), _current_const(fv_unlocks)], "build_detail"))
-		"sigil_chain":
+		ENUMS.POWER_ID_SIGIL_CHAIN:
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			var sc_unlocks := _sigil_chain_unlocks_for_stack(get_trial_power_stack_count(id))
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f", float(cur.get("radius", 0.0))), _current_stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0), _current_const(sc_unlocks)], "build_detail"))
@@ -569,48 +570,48 @@ func get_trial_power_card_description(power_id: String) -> String:
 		flavor = "[color=#40C8B0]%s[/color]" % _get_trial_prismatic_blurb(id)
 	var is_initial := current_stack <= 0
 	match id:
-		"razor_wind":
+		ENUMS.POWER_ID_RAZOR_WIND:
 			var range_stat := _stat("x%.2f", float(cur.get("range_scale", 1.0)), float(next_values.get("range_scale", 1.0)), is_initial)
 			var damage_stat := _stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0, float(next_values.get("damage_ratio", 0.0)) * 100.0, is_initial)
 			var arc_stat := _stat("%.0f deg", float(cur.get("arc_degrees", 24.0)), float(next_values.get("arc_degrees", 24.0)), is_initial)
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [range_stat, damage_stat, arc_stat], "reward_card"))
-		"execution_edge":
+		ENUMS.POWER_ID_EXECUTION_EDGE:
 			var every_stat := _stat("%d", int(cur.get("every", 2)), int(next_values.get("every", 2)), is_initial)
 			var mult_stat := _stat("x%.2f", float(cur.get("damage_mult", 1.0)), float(next_values.get("damage_mult", 1.0)), is_initial)
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [every_stat, mult_stat], "reward_card"))
-		"rupture_wave":
+		ENUMS.POWER_ID_RUPTURE_WAVE:
 			var radius_stat := _stat("%.0f", float(cur.get("radius", 0.0)), float(next_values.get("radius", 0.0)), is_initial)
 			var damage_stat := _stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0, float(next_values.get("damage_ratio", 0.0)) * 100.0, is_initial)
 			var rw_unlock := _const(_rupture_wave_unlocks_for_stack(next_stack))
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [radius_stat, damage_stat, rw_unlock], "reward_card"))
-		"aegis_field":
+		ENUMS.POWER_ID_AEGIS_FIELD:
 			var resist_stat := _stat("%.0f%%", float(cur.get("resist", 0.0)) * 100.0, float(next_values.get("resist", 0.0)) * 100.0, is_initial)
 			var duration_stat := _stat("%.2fs", float(cur.get("duration", 0.0)), float(next_values.get("duration", 0.0)), is_initial)
 			var radius_stat := _stat("%.0f", float(cur.get("radius", 0.0)), float(next_values.get("radius", 0.0)), is_initial)
 			var cooldown_stat := _stat("%.2fs", float(cur.get("cooldown", 0.0)), float(next_values.get("cooldown", 0.0)), is_initial)
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [resist_stat, duration_stat, radius_stat, cooldown_stat], "reward_card"))
-		"hunters_snare":
+		ENUMS.POWER_ID_HUNTERS_SNARE:
 			var slow_stat := _stat("%.2fs", float(cur.get("slow_duration", 0.0)), float(next_values.get("slow_duration", 0.0)), is_initial)
 			var speed_stat := _stat("%.0f%%", float(cur.get("slow_mult", 1.0)) * 100.0, float(next_values.get("slow_mult", 1.0)) * 100.0, is_initial)
 			var bonus_stat := _stat("+%d", int(cur.get("bonus_damage", 0)), int(next_values.get("bonus_damage", 0)), is_initial)
 			var hs_unlock := _const(_hunters_snare_unlocks_for_stack(next_stack))
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [slow_stat, speed_stat, bonus_stat, hs_unlock], "reward_card"))
-		"phantom_step":
+		ENUMS.POWER_ID_PHANTOM_STEP:
 			var damage_stat := _stat("%d", int(cur.get("damage", 0)), int(next_values.get("damage", 0)), is_initial)
 			var slow_stat := _stat("%.2fs", float(cur.get("slow_duration", 0.0)), float(next_values.get("slow_duration", 0.0)), is_initial)
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [damage_stat, slow_stat], "reward_card"))
-		"riftpunch":
+		ENUMS.POWER_ID_RIFTPUNCH:
 			var bonus_stat := _stat("+%d", int(cur.get("bonus_damage", 0)), int(next_values.get("bonus_damage", 0)), is_initial)
 			var window_stat := _stat("%.2fs", float(cur.get("window_duration", 0.0)), float(next_values.get("window_duration", 0.0)), is_initial)
 			var grace_stat := _stat("%.2fs", float(cur.get("grace_duration", 0.0)), float(next_values.get("grace_duration", 0.0)), is_initial)
 			var unlock_stat := _const(_riftpunch_unlocks_for_stack(next_stack))
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [bonus_stat, window_stat, grace_stat, unlock_stat], "reward_card"))
-		"reaper_step":
+		ENUMS.POWER_ID_REAPER_STEP:
 			var range_stat := _stat("x%.2f", float(cur.get("range_mult", 1.0)), float(next_values.get("range_mult", 1.0)), is_initial)
 			var rs_unlock := _const(_reaper_step_unlocks_for_stack(next_stack))
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [range_stat, _const("full"), rs_unlock], "reward_card"))
-		"static_wake":
-			var wake_data := _get_power_balance_data("static_wake")
+		ENUMS.POWER_ID_STATIC_WAKE:
+			var wake_data := _get_power_balance_data(ENUMS.POWER_ID_STATIC_WAKE)
 			var wake_ratio_base := float(wake_data.get("damage_ratio_base", 0.0))
 			var wake_ratio_per_stack := float(wake_data.get("damage_ratio_per_stack", 0.0))
 			var wake_damage_stat := _stat("%.0f%%", (wake_ratio_base + wake_ratio_per_stack * float(current_stack)) * 100.0, (wake_ratio_base + wake_ratio_per_stack * float(next_stack)) * 100.0, is_initial)
@@ -618,50 +619,50 @@ func get_trial_power_card_description(power_id: String) -> String:
 			var wake_radius_stat := _stat("%.0f", float(cur.get("trail_radius", 28.0)), float(next_values.get("trail_radius", 28.0)), is_initial)
 			var sw_unlock := _const(_static_wake_unlocks_for_stack(next_stack))
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [wake_damage_stat, wake_life_stat, wake_radius_stat, sw_unlock], "reward_card"))
-		"storm_crown":
+		ENUMS.POWER_ID_STORM_CROWN:
 			var every_stat := _stat("%d", int(cur.get("proc_every", 1)), int(next_values.get("proc_every", 1)), is_initial)
 			var targets_stat := _stat("%d", int(cur.get("chain_targets", 1)), int(next_values.get("chain_targets", 1)), is_initial)
 			var radius_stat := _stat("%.0f", float(cur.get("chain_radius", 0.0)), float(next_values.get("chain_radius", 0.0)), is_initial)
 			var damage_stat := _stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0, float(next_values.get("damage_ratio", 0.0)) * 100.0, is_initial)
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [every_stat, targets_stat, radius_stat, damage_stat], "reward_card"))
-		"wraithstep":
+		ENUMS.POWER_ID_WRAITHSTEP:
 			var mark_stat := _stat("%.2fs", float(cur.get("mark_duration", 0.0)), float(next_values.get("mark_duration", 0.0)), is_initial)
 			var bonus_stat := _stat("+%d", int(cur.get("bonus_damage", 0)), int(next_values.get("bonus_damage", 0)), is_initial)
 			var cleave_stat := _stat("%.0f%%", float(cur.get("splash_ratio", 0.0)) * 100.0, float(next_values.get("splash_ratio", 0.0)) * 100.0, is_initial)
 			var hits_stat := _stat("%d", _wraithstep_hits_for_stack(current_stack), _wraithstep_hits_for_stack(next_stack), is_initial)
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [mark_stat, bonus_stat, cleave_stat, hits_stat], "reward_card"))
-		"voidfire":
+		ENUMS.POWER_ID_VOIDFIRE:
 			var amp_stat := _stat("+%.0f%%", float(cur.get("danger_zone_amp", 0.0)) * 100.0, float(next_values.get("danger_zone_amp", 0.0)) * 100.0, is_initial)
 			var det_stat := _stat("%.0f%%", float(cur.get("detonate_ratio", 0.0)) * 100.0, float(next_values.get("detonate_ratio", 0.0)) * 100.0, is_initial)
 			var lockout_stat := _stat("%.2fs", float(cur.get("lockout_duration", 0.0)), float(next_values.get("lockout_duration", 0.0)), is_initial)
 			var vf_unlock := _const(_voidfire_unlocks_for_stack(next_stack))
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [amp_stat, det_stat, lockout_stat, vf_unlock], "reward_card"))
-		"dread_resonance":
+		ENUMS.POWER_ID_DREAD_RESONANCE:
 			var bonus_stat := _stat("+%d", int(cur.get("bonus_per_stack", 0)), int(next_values.get("bonus_per_stack", 0)), is_initial)
 			var max_stacks_stat := _stat("%d", int(cur.get("max_stacks", int(player_reference.get("dread_resonance_max_stacks")))), int(next_values.get("max_stacks", int(player_reference.get("dread_resonance_max_stacks")))), is_initial)
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [bonus_stat, max_stacks_stat], "reward_card"))
-		"bloodvow":
+		ENUMS.POWER_ID_BLOODVOW:
 			var threshold_stat := _stat("%.0f%%", float(cur.get("low_hp_threshold", 0.4)) * 100.0, float(next_values.get("low_hp_threshold", 0.4)) * 100.0, is_initial)
 			var mult_stat := _stat("%.2f", float(cur.get("damage_mult", 1.0)), float(next_values.get("damage_mult", 1.0)), is_initial)
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [threshold_stat, mult_stat], "reward_card"))
-		"eclipse_mark":
+		ENUMS.POWER_ID_ECLIPSE_MARK:
 			var radius_stat := _stat("%.0f", float(cur.get("radius", 0.0)), float(next_values.get("radius", 0.0)), is_initial)
 			var dur_stat := _stat("%.2fs", float(cur.get("mark_duration", 0.0)), float(next_values.get("mark_duration", 0.0)), is_initial)
 			var ratio_stat := _stat("%.0f%%", float(cur.get("bonus_ratio", 0.0)) * 100.0, float(next_values.get("bonus_ratio", 0.0)) * 100.0, is_initial)
 			var hits_stat := _stat("%d", _eclipse_hits_for_stack(current_stack), _eclipse_hits_for_stack(next_stack), is_initial)
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [radius_stat, dur_stat, ratio_stat, hits_stat], "reward_card"))
-		"fracture_field":
+		ENUMS.POWER_ID_FRACTURE_FIELD:
 			var length_stat := _stat("%.0f", float(cur.get("radius", 0.0)), float(next_values.get("radius", 0.0)), is_initial)
 			var damage_stat := _stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0, float(next_values.get("damage_ratio", 0.0)) * 100.0, is_initial)
 			var slow_stat := _stat("%.2fs", float(cur.get("slow_duration", 0.0)), float(next_values.get("slow_duration", 0.0)), is_initial)
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [length_stat, damage_stat, slow_stat], "reward_card"))
-		"farline_volley":
+		ENUMS.POWER_ID_FARLINE_VOLLEY:
 			var arc_stat := _stat("%.0f deg", float(cur.get("arc_per_stack", 0.0)), float(next_values.get("arc_per_stack", 0.0)), is_initial)
 			var bonus_stat := _stat("%d", int(cur.get("bonus_per_stack", 0)), int(next_values.get("bonus_per_stack", 0)), is_initial)
 			var cap_stat := _stat("%d", int(cur.get("stack_cap", 0)), int(next_values.get("stack_cap", 0)), is_initial)
 			var fv_unlock := _const(_farline_volley_unlocks_for_stack(next_stack))
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [arc_stat, bonus_stat, cap_stat, fv_unlock], "reward_card"))
-		"sigil_chain":
+		ENUMS.POWER_ID_SIGIL_CHAIN:
 			var radius_stat := _stat("%.0f", float(cur.get("radius", 0.0)), float(next_values.get("radius", 0.0)), is_initial)
 			var damage_stat := _stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0, float(next_values.get("damage_ratio", 0.0)) * 100.0, is_initial)
 			var sc_unlock := _const(_sigil_chain_unlocks_for_stack(next_stack))
@@ -681,46 +682,46 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 	var next_val: Variant = preview.get("next")
 	var flavor := get_power_flavor_text(id)
 	match id:
-		"first_strike":
+		ENUMS.POWER_ID_FIRST_STRIKE:
 			return "[color=#c8daf0]Extra hit damage vs enemies above 80%% HP:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
-		"heavy_blow":
+		ENUMS.POWER_ID_HEAVY_BLOW:
 			return "[color=#c8daf0]Damage:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [int(cur_val), int(next_val)]
-		"wide_arc":
+		ENUMS.POWER_ID_WIDE_ARC:
 			var cur_arc := float(cur_val)
 			var next_arc := float(next_val)
 			return "[color=#c8daf0]Attack arc:[/color] [color=#e8c96a]%.0f°[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f°[/color]" % [cur_arc, next_arc]
-		"long_reach":
+		ENUMS.POWER_ID_LONG_REACH:
 			return "[color=#c8daf0]Attack range:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [float(cur_val), float(next_val)]
-		"fleet_foot":
+		ENUMS.POWER_ID_FLEET_FOOT:
 			return "[color=#c8daf0]Move speed:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [float(cur_val), float(next_val)]
-		"blink_dash":
+		ENUMS.POWER_ID_BLINK_DASH:
 			var cur_dash_cd := float(cur_val)
 			var next_dash_cd := float(next_val)
 			return "[color=#c8daf0]Dash cooldown:[/color] [color=#e8c96a]%.2fs[/color] [color=#8899aa]->[/color] [color=#7de882]%.2fs[/color]" % [cur_dash_cd, next_dash_cd]
-		"iron_skin":
+		ENUMS.POWER_ID_IRON_SKIN:
 			return "[color=#c8daf0]Armor:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [int(cur_val), int(next_val)]
-		"battle_trance":
+		ENUMS.POWER_ID_BATTLE_TRANCE:
 			var cur_speed_bonus := float(cur_val) * 100.0
 			var next_speed_bonus := float(next_val) * 100.0
 			var trance_duration := 1.25
 			if player_reference.get("battle_trance_duration") != null:
 				trance_duration = float(player_reference.get("battle_trance_duration"))
 			return "[color=#c8daf0]On hit:[/color] gain [color=#e8c96a]+%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]+%.0f%%[/color] move speed for [color=#7de882]%.2fs[/color]." % [cur_speed_bonus, next_speed_bonus, trance_duration]
-		"surge_step":
+		ENUMS.POWER_ID_SURGE_STEP:
 			return "[color=#c8daf0]Dash speed:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [float(cur_val), float(next_val)]
-		"heartstone":
+		ENUMS.POWER_ID_HEARTSTONE:
 			var cur_max := int(cur_val)
 			var next_max := int(next_val)
 			return "[color=#c8daf0]Max HP:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [cur_max, next_max]
-		"bloodpact":
+		ENUMS.POWER_ID_BLOODPACT:
 			return "[color=#c8daf0]Below 50%% HP, +damage on every hit:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
-		"severing_edge":
+		ENUMS.POWER_ID_SEVERING_EDGE:
 			return "[color=#c8daf0]Bonus damage on hits against enemies below 55%% HP:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
-		"wardens_verdict":
+		ENUMS.POWER_ID_WARDENS_VERDICT:
 			var is_initial := int(cur_val) == 0
 			var stat := _stat("+%d", int(cur_val), int(next_val), is_initial)
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [stat], "reward_card"))
-		"lacuna_echo":
+		ENUMS.POWER_ID_LACUNA_ECHO:
 			var cur_void_echo := int(cur_val)
 			var next_void_echo := int(next_val)
 			var cur_echo_radius := clampf(54.0 + float(cur_void_echo) * 0.6, 54.0, 110.0)
@@ -729,13 +730,13 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 			var power_stat := _stat("+%d", cur_void_echo, next_void_echo, is_initial)
 			var radius_stat := _stat("%.0f", cur_echo_radius, next_echo_radius, is_initial)
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [power_stat, radius_stat], "reward_card"))
-		"sovereign_tempo":
+		ENUMS.POWER_ID_SOVEREIGN_TEMPO:
 			var cur_momentum := float(cur_val) * 100.0
 			var next_momentum := float(next_val) * 100.0
 			var is_initial := cur_momentum == 0.0
 			var stat := _stat("+%.0f%%", cur_momentum, next_momentum, is_initial)
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [stat], "reward_card"))
-		"pillar_convergence":
+		ENUMS.POWER_ID_PILLAR_CONVERGENCE:
 			var cur_ratio := float(cur_val)
 			var next_ratio := float(next_val)
 			var cur_hits_needed := maxi(2, 6 - int(round(cur_ratio * 8.0)))
@@ -749,7 +750,7 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 			var window_stat := _stat("%.2fs", cur_window, next_window, is_initial)
 			var pulse_stat := _stat("%.2fs", cur_pulse_every, next_pulse_every, is_initial)
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [hits_stat, window_stat, pulse_stat], "reward_card"))
-		"unbroken_oath":
+		ENUMS.POWER_ID_UNBROKEN_OATH:
 			var cur_resist := float(cur_val) * 100.0
 			var next_resist := float(next_val) * 100.0
 			var fill_req := INDOMITABLE_OATH_FILL_REQUIREMENT
@@ -760,7 +761,7 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 			var fill_stat := _const("%.0f" % fill_req)
 			var ratio_stat := _stat("%.0f%%", cur_ratio, next_ratio, is_initial)
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [resist_stat, fill_stat, ratio_stat], "reward_card"))
-		"edict_of_the_court":
+		ENUMS.POWER_ID_EDICT_OF_THE_COURT:
 			var cur_edict := int(cur_val)
 			var next_edict := int(next_val)
 			var is_initial_edict := cur_edict == 0
@@ -771,7 +772,7 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 			var force_stat := _stat("%.0f", cur_force, next_force, is_initial_edict)
 			var radius_stat_e := _stat("%.0f", cur_edict_radius, next_edict_radius, is_initial_edict)
 			return _reward_flavor_first_desc(is_initial_edict, flavor, _power_sentence(id, [force_stat, radius_stat_e], "reward_card"))
-		"null_corridor":
+		ENUMS.POWER_ID_NULL_CORRIDOR:
 			var cur_nc := float(cur_val)
 			var next_nc := float(next_val)
 			var is_initial_nc := cur_nc == 0.0
@@ -909,41 +910,41 @@ func _sigil_chain_unlocks_for_stack(stack_count: int) -> String:
 
 func _get_trial_prismatic_blurb(power_id: String) -> String:
 	match power_id:
-		"razor_wind":
+		ENUMS.POWER_ID_RAZOR_WIND:
 			return "wider arcs, harder crescents"
-		"execution_edge":
+		ENUMS.POWER_ID_EXECUTION_EDGE:
 			return "every hit lands a finisher strike"
-		"rupture_wave":
+		ENUMS.POWER_ID_RUPTURE_WAVE:
 			return "shockwaves hit as hard as the blow"
-		"aegis_field":
+		ENUMS.POWER_ID_AEGIS_FIELD:
 			return "stronger guard, denser control"
-		"hunters_snare":
+		ENUMS.POWER_ID_HUNTERS_SNARE:
 			return "near-freeze slow, punishing bonus"
-		"phantom_step":
+		ENUMS.POWER_ID_PHANTOM_STEP:
 			return "dash strikes hit far harder"
-		"riftpunch":
+		ENUMS.POWER_ID_RIFTPUNCH:
 			return "finisher lands with crushing force"
-		"reaper_step":
+		ENUMS.POWER_ID_REAPER_STEP:
 			return "longer chain, deeper grace"
-		"static_wake":
+		ENUMS.POWER_ID_STATIC_WAKE:
 			return "wake fields deal heavy damage"
-		"storm_crown":
+		ENUMS.POWER_ID_STORM_CROWN:
 			return "lightning hits harder, forks wider"
-		"wraithstep":
+		ENUMS.POWER_ID_WRAITHSTEP:
 			return "marks punish, splashes overwhelm"
-		"voidfire":
+		ENUMS.POWER_ID_VOIDFIRE:
 			return "danger zone surges, blasts dominate"
-		"dread_resonance":
+		ENUMS.POWER_ID_DREAD_RESONANCE:
 			return "deeper pool, harder stacks"
-		"bloodvow":
+		ENUMS.POWER_ID_BLOODVOW:
 			return "frenzy activates at safer bands"
-		"eclipse_mark":
+		ENUMS.POWER_ID_ECLIPSE_MARK:
 			return "marks land near-double damage"
-		"fracture_field":
+		ENUMS.POWER_ID_FRACTURE_FIELD:
 			return "fault lines tear through enemies"
-		"farline_volley":
+		ENUMS.POWER_ID_FARLINE_VOLLEY:
 			return "wider arc, higher stack ceiling"
-		"sigil_chain":
+		ENUMS.POWER_ID_SIGIL_CHAIN:
 			return "zones deal devastating tick damage"
 		_:
 			return "empowered beyond mastery"

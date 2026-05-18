@@ -48,142 +48,142 @@ const BOSS_EPITAPHS := {
 
 const DAMAGE_MODEL_BY_POWER := {
 	# Upgrades
-	"first_strike": {
+	ENUMS.POWER_ID_FIRST_STRIKE: {
 		"kind": DAMAGE_KIND_FLAT,
 		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
 		"formula_note": "+X extra hit damage vs enemies above 80% HP"
 	},
-	"heavy_blow": {
+	ENUMS.POWER_ID_HEAVY_BLOW: {
 		"kind": DAMAGE_KIND_FLAT,
 		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
 		"formula_note": "+X to Damage stat"
 	},
 	# Trial powers
-	"razor_wind": {
+	ENUMS.POWER_ID_RAZOR_WIND: {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
 		"formula_note": "Y% of hit damage"
 	},
-	"execution_edge": {
+	ENUMS.POWER_ID_EXECUTION_EDGE: {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
 		"formula_note": "Hit damage multiplied every N swings"
 	},
-	"rupture_wave": {
+	ENUMS.POWER_ID_RUPTURE_WAVE: {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
 		"formula_note": "Y% of hit damage in radius"
 	},
-	"hunters_snare": {
+	ENUMS.POWER_ID_HUNTERS_SNARE: {
 		"kind": DAMAGE_KIND_FLAT,
 		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
 		"formula_note": "+X against slowed targets"
 	},
-	"phantom_step": {
+	ENUMS.POWER_ID_PHANTOM_STEP: {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
 		"formula_note": "Y% dash-through damage"
 	},
-	"riftpunch": {
+	ENUMS.POWER_ID_RIFTPUNCH: {
 		"kind": DAMAGE_KIND_FLAT,
 		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
 		"formula_note": "+X bonus damage on first melee hit after dashing; grants brief contact grace"
 	},
-	"static_wake": {
+	ENUMS.POWER_ID_STATIC_WAKE: {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
 		"formula_note": "Y% wake pulse damage"
 	},
-	"storm_crown": {
+	ENUMS.POWER_ID_STORM_CROWN: {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
 		"formula_note": "Y% of hit damage on chain proc"
 	},
-	"wraithstep": {
+	ENUMS.POWER_ID_WRAITHSTEP: {
 		"kind": DAMAGE_KIND_HYBRID,
 		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
 		"formula_note": "Flat marked-hit bonus + scaling splash/chain"
 	},
 	# Voidfire archetype
-	"voidfire": {
+	ENUMS.POWER_ID_VOIDFIRE: {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
 		"formula_note": "Y% of hit damage on detonation burst"
 	},
-	"dread_resonance": {
+	ENUMS.POWER_ID_DREAD_RESONANCE: {
 		"kind": DAMAGE_KIND_FLAT,
 		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
 		"formula_note": "+X per resonance stack on same target"
 	},
-	"farline_volley": {
+	ENUMS.POWER_ID_FARLINE_VOLLEY: {
 		"kind": DAMAGE_KIND_FLAT,
 		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
 		"formula_note": "+X flat damage per Volley stack; widens attack arc per stack; dashing resets"
 	},
-	"sigil_chain": {
+	ENUMS.POWER_ID_SIGIL_CHAIN: {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
 		"formula_note": "Charged hits drop a sigil zone that ticks player_damage * ratio in radius"
 	},
 	# Character-lore bridges
-	"bloodvow": {
+	ENUMS.POWER_ID_BLOODVOW: {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
 		"formula_note": "Hit damage multiplied while player is below the wounded threshold"
 	},
-	"eclipse_mark": {
+	ENUMS.POWER_ID_ECLIPSE_MARK: {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
 		"formula_note": "Y% bonus damage on first hit vs marked enemy"
 	},
-	"fracture_field": {
+	ENUMS.POWER_ID_FRACTURE_FIELD: {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
 		"formula_note": "Y% of hit damage along non-chaining fault lines from kill position"
 	},
 	# Boons
-	"bloodpact": {
+	ENUMS.POWER_ID_BLOODPACT: {
 		"kind": DAMAGE_KIND_FLAT,
 		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
 		"formula_note": "+X flat damage on every hit while below 50% HP"
 	},
-	"severing_edge": {
+	ENUMS.POWER_ID_SEVERING_EDGE: {
 		"kind": DAMAGE_KIND_FLAT,
 		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
 		"formula_note": "+X bonus damage on hits against enemies below 55% HP"
 	},
 	# Boss rewards
-	"wardens_verdict": {
+	ENUMS.POWER_ID_WARDENS_VERDICT: {
 		"kind": DAMAGE_KIND_FLAT,
 		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
 		"formula_note": "Each hit deals escalating bonus damage; the 4th hit detonates a burst on nearby enemies"
 	},
-	"lacuna_echo": {
+	ENUMS.POWER_ID_LACUNA_ECHO: {
 		"kind": DAMAGE_KIND_HYBRID,
 		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
 		"formula_note": "Kill zones pulse damage over time and amplify hits inside zone"
 	},
-	"sovereign_tempo": {
+	ENUMS.POWER_ID_SOVEREIGN_TEMPO: {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
 		"formula_note": "Hit stacks convert into dash-finish momentum wave damage"
 	},
-	"pillar_convergence": {
+	ENUMS.POWER_ID_PILLAR_CONVERGENCE: {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
 		"formula_note": "Every N damaging hits, enter Convergence for ~1.6-2.0s and pulse around player for ~46%-63% damage"
 	},
-	"unbroken_oath": {
+	ENUMS.POWER_ID_UNBROKEN_OATH: {
 		"kind": DAMAGE_KIND_HYBRID,
 		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
 		"formula_note": "Single-target hits trickle Oath; multihits scale exponentially. Fill bar to prime next-hit sword strike"
 	},
-	"edict_of_the_court": {
+	ENUMS.POWER_ID_EDICT_OF_THE_COURT: {
 		"kind": DAMAGE_KIND_NONE,
 		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
 		"formula_note": "Emits force pulse from kill position, scattering nearby enemies outward"
 	},
-	"null_corridor": {
+	ENUMS.POWER_ID_NULL_CORRIDOR: {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
 		"formula_note": "Dash path becomes deflection zone; enemies crossing the trail are pushed hard and take ~20-24% of damage stat once per crossing (0.5s re-entry cooldown)"
@@ -314,7 +314,7 @@ const UPGRADE_STACK_LIMITS := {
 ## Each trial power now has complete metadata: balance params, stack limit, and parameter mapping rules
 ## Single source of truth for all trial power configuration
 const TRIAL_POWER_DEFINITIONS := {
-	"razor_wind": {
+	ENUMS.POWER_ID_RAZOR_WIND: {
 		"stack_limit": 3,
 		"balance_params": {
 			"range_base": 1.20,
@@ -337,7 +337,7 @@ const TRIAL_POWER_DEFINITIONS := {
 			}
 		}
 	},
-	"execution_edge": {
+	ENUMS.POWER_ID_EXECUTION_EDGE: {
 		"stack_limit": 3,
 		"balance_params": {
 			"every_base": 4,
@@ -357,7 +357,7 @@ const TRIAL_POWER_DEFINITIONS := {
 			}
 		}
 	},
-	"rupture_wave": {
+	ENUMS.POWER_ID_RUPTURE_WAVE: {
 		"stack_limit": 3,
 		"balance_params": {
 			"radius_base": 70.0,
@@ -381,7 +381,7 @@ const TRIAL_POWER_DEFINITIONS := {
 			}
 		}
 	},
-	"aegis_field": {
+	ENUMS.POWER_ID_AEGIS_FIELD: {
 		"stack_limit": 3,
 		"balance_params": {
 			"resist_base": 0.16,
@@ -413,7 +413,7 @@ const TRIAL_POWER_DEFINITIONS := {
 			}
 		}
 	},
-	"hunters_snare": {
+	ENUMS.POWER_ID_HUNTERS_SNARE: {
 		"stack_limit": 3,
 		"balance_params": {
 			"bonus_damage_base": 4,
@@ -434,7 +434,7 @@ const TRIAL_POWER_DEFINITIONS := {
 			}
 		}
 	},
-	"phantom_step": {
+	ENUMS.POWER_ID_PHANTOM_STEP: {
 		"stack_limit": 3,
 		"balance_params": {
 			"damage_ratio_base": 0.40,
@@ -454,7 +454,7 @@ const TRIAL_POWER_DEFINITIONS := {
 			}
 		}
 	},
-	"riftpunch": {
+	ENUMS.POWER_ID_RIFTPUNCH: {
 		"stack_limit": 3,
 		"balance_params": {
 			"bonus_damage_base": 24,
@@ -474,7 +474,7 @@ const TRIAL_POWER_DEFINITIONS := {
 			}
 		}
 	},
-	"reaper_step": {
+	ENUMS.POWER_ID_REAPER_STEP: {
 		"stack_limit": 3,
 		"balance_params": {
 			"range_mult_base": 1.40,
@@ -494,7 +494,7 @@ const TRIAL_POWER_DEFINITIONS := {
 			}
 		}
 	},
-	"static_wake": {
+	ENUMS.POWER_ID_STATIC_WAKE: {
 		"stack_limit": 3,
 		"balance_params": {
 			"damage_ratio_base": 0.30,
@@ -518,7 +518,7 @@ const TRIAL_POWER_DEFINITIONS := {
 			}
 		}
 	},
-	"storm_crown": {
+	ENUMS.POWER_ID_STORM_CROWN: {
 		"stack_limit": 3,
 		"balance_params": {
 			"proc_every_base": 4,
@@ -542,7 +542,7 @@ const TRIAL_POWER_DEFINITIONS := {
 			}
 		}
 	},
-	"wraithstep": {
+	ENUMS.POWER_ID_WRAITHSTEP: {
 		"stack_limit": 3,
 		"balance_params": {
 			"mark_duration_base": 2.0,
@@ -568,7 +568,7 @@ const TRIAL_POWER_DEFINITIONS := {
 			}
 		}
 	},
-	"voidfire": {
+	ENUMS.POWER_ID_VOIDFIRE: {
 		"stack_limit": 3,
 		"balance_params": {
 			"heat_per_hit_base": 0.08,
@@ -611,7 +611,7 @@ const TRIAL_POWER_DEFINITIONS := {
 			}
 		}
 	},
-	"dread_resonance": {
+	ENUMS.POWER_ID_DREAD_RESONANCE: {
 		"stack_limit": 3,
 		"balance_params": {
 			"bonus_per_stack_base": 0,
@@ -629,7 +629,7 @@ const TRIAL_POWER_DEFINITIONS := {
 			}
 		}
 	},
-	"bloodvow": {
+	ENUMS.POWER_ID_BLOODVOW: {
 		"stack_limit": 3,
 		"balance_params": {
 			"damage_mult_base": 1.15,
@@ -645,7 +645,7 @@ const TRIAL_POWER_DEFINITIONS := {
 			}
 		}
 	},
-	"eclipse_mark": {
+	ENUMS.POWER_ID_ECLIPSE_MARK: {
 		"stack_limit": 3,
 		"balance_params": {
 			"radius_base": 90.0,
@@ -665,7 +665,7 @@ const TRIAL_POWER_DEFINITIONS := {
 			}
 		}
 	},
-	"fracture_field": {
+	ENUMS.POWER_ID_FRACTURE_FIELD: {
 		"stack_limit": 3,
 		"balance_params": {
 			"radius_base": 100.0,
@@ -685,7 +685,7 @@ const TRIAL_POWER_DEFINITIONS := {
 			}
 		}
 	},
-	"farline_volley": {
+	ENUMS.POWER_ID_FARLINE_VOLLEY: {
 		"stack_limit": 3,
 		"balance_params": {
 			"arc_per_stack_base": 12.0,
@@ -702,7 +702,7 @@ const TRIAL_POWER_DEFINITIONS := {
 			}
 		}
 	},
-	"sigil_chain": {
+	ENUMS.POWER_ID_SIGIL_CHAIN: {
 		"stack_limit": 3,
 		"balance_params": {
 			"radius_base": 70.0,
@@ -775,45 +775,45 @@ const POWER_DISPLAY_CATEGORY_BOSS_REWARD := "boss_reward"
 ## This supersedes ad-hoc name match blocks in UI scripts.
 const POWER_DISPLAY_METADATA := {
 	# Upgrades
-	"first_strike": {"name": "First Strike", "category": POWER_TYPE_UPGRADE},
-	"heavy_blow": {"name": "Heavy Blow", "category": POWER_TYPE_UPGRADE},
-	"wide_arc": {"name": "Wide Arc", "category": POWER_TYPE_UPGRADE},
-	"long_reach": {"name": "Long Reach", "category": POWER_TYPE_UPGRADE},
-	"fleet_foot": {"name": "Fleet Foot", "category": POWER_TYPE_UPGRADE},
-	"blink_dash": {"name": "Blink Dash", "category": POWER_TYPE_UPGRADE},
-	"iron_skin": {"name": "Iron Skin", "category": POWER_TYPE_UPGRADE},
-	"battle_trance": {"name": "Battle Trance", "category": POWER_TYPE_UPGRADE},
-	"surge_step": {"name": "Surge Step", "category": POWER_TYPE_UPGRADE},
-	"heartstone": {"name": "Heartstone", "category": POWER_TYPE_UPGRADE},
-	"bloodpact": {"name": "Blood Pact", "category": POWER_TYPE_UPGRADE},
-	"severing_edge": {"name": "Severing Edge", "category": POWER_TYPE_UPGRADE},
+	ENUMS.POWER_ID_FIRST_STRIKE: {"name": "First Strike", "category": POWER_TYPE_UPGRADE},
+	ENUMS.POWER_ID_HEAVY_BLOW: {"name": "Heavy Blow", "category": POWER_TYPE_UPGRADE},
+	ENUMS.POWER_ID_WIDE_ARC: {"name": "Wide Arc", "category": POWER_TYPE_UPGRADE},
+	ENUMS.POWER_ID_LONG_REACH: {"name": "Long Reach", "category": POWER_TYPE_UPGRADE},
+	ENUMS.POWER_ID_FLEET_FOOT: {"name": "Fleet Foot", "category": POWER_TYPE_UPGRADE},
+	ENUMS.POWER_ID_BLINK_DASH: {"name": "Blink Dash", "category": POWER_TYPE_UPGRADE},
+	ENUMS.POWER_ID_IRON_SKIN: {"name": "Iron Skin", "category": POWER_TYPE_UPGRADE},
+	ENUMS.POWER_ID_BATTLE_TRANCE: {"name": "Battle Trance", "category": POWER_TYPE_UPGRADE},
+	ENUMS.POWER_ID_SURGE_STEP: {"name": "Surge Step", "category": POWER_TYPE_UPGRADE},
+	ENUMS.POWER_ID_HEARTSTONE: {"name": "Heartstone", "category": POWER_TYPE_UPGRADE},
+	ENUMS.POWER_ID_BLOODPACT: {"name": "Blood Pact", "category": POWER_TYPE_UPGRADE},
+	ENUMS.POWER_ID_SEVERING_EDGE: {"name": "Severing Edge", "category": POWER_TYPE_UPGRADE},
 	# Trial powers
-	"razor_wind": {"name": "Razor Wind", "category": POWER_TYPE_TRIAL},
-	"execution_edge": {"name": "Execution Edge", "category": POWER_TYPE_TRIAL},
-	"rupture_wave": {"name": "Rupture Wave", "category": POWER_TYPE_TRIAL},
-	"aegis_field": {"name": "Aegis Field", "category": POWER_TYPE_TRIAL},
-	"hunters_snare": {"name": "Hunter's Snare", "category": POWER_TYPE_TRIAL},
-	"phantom_step": {"name": "Phantom Step", "category": POWER_TYPE_TRIAL},
-	"riftpunch": {"name": "Riftpunch", "category": POWER_TYPE_TRIAL},
-	"reaper_step": {"name": "Reaper Step", "category": POWER_TYPE_TRIAL},
-	"static_wake": {"name": "Static Wake", "category": POWER_TYPE_TRIAL},
-	"storm_crown": {"name": "Storm Crown", "category": POWER_TYPE_TRIAL},
-	"wraithstep": {"name": "Wraithstep", "category": POWER_TYPE_TRIAL},
-	"voidfire": {"name": "Voidfire", "category": POWER_TYPE_TRIAL},
-	"dread_resonance": {"name": "Dread Resonance", "category": POWER_TYPE_TRIAL},
-	"bloodvow": {"name": "Blood Vow", "category": POWER_TYPE_TRIAL},
-	"eclipse_mark": {"name": "Eclipse Mark", "category": POWER_TYPE_TRIAL},
-	"fracture_field": {"name": "Fracture Field", "category": POWER_TYPE_TRIAL},
-	"farline_volley": {"name": "Farline Volley", "category": POWER_TYPE_TRIAL},
-	"sigil_chain": {"name": "Sigil Chain", "category": POWER_TYPE_TRIAL},
+	ENUMS.POWER_ID_RAZOR_WIND: {"name": "Razor Wind", "category": POWER_TYPE_TRIAL},
+	ENUMS.POWER_ID_EXECUTION_EDGE: {"name": "Execution Edge", "category": POWER_TYPE_TRIAL},
+	ENUMS.POWER_ID_RUPTURE_WAVE: {"name": "Rupture Wave", "category": POWER_TYPE_TRIAL},
+	ENUMS.POWER_ID_AEGIS_FIELD: {"name": "Aegis Field", "category": POWER_TYPE_TRIAL},
+	ENUMS.POWER_ID_HUNTERS_SNARE: {"name": "Hunter's Snare", "category": POWER_TYPE_TRIAL},
+	ENUMS.POWER_ID_PHANTOM_STEP: {"name": "Phantom Step", "category": POWER_TYPE_TRIAL},
+	ENUMS.POWER_ID_RIFTPUNCH: {"name": "Riftpunch", "category": POWER_TYPE_TRIAL},
+	ENUMS.POWER_ID_REAPER_STEP: {"name": "Reaper Step", "category": POWER_TYPE_TRIAL},
+	ENUMS.POWER_ID_STATIC_WAKE: {"name": "Static Wake", "category": POWER_TYPE_TRIAL},
+	ENUMS.POWER_ID_STORM_CROWN: {"name": "Storm Crown", "category": POWER_TYPE_TRIAL},
+	ENUMS.POWER_ID_WRAITHSTEP: {"name": "Wraithstep", "category": POWER_TYPE_TRIAL},
+	ENUMS.POWER_ID_VOIDFIRE: {"name": "Voidfire", "category": POWER_TYPE_TRIAL},
+	ENUMS.POWER_ID_DREAD_RESONANCE: {"name": "Dread Resonance", "category": POWER_TYPE_TRIAL},
+	ENUMS.POWER_ID_BLOODVOW: {"name": "Blood Vow", "category": POWER_TYPE_TRIAL},
+	ENUMS.POWER_ID_ECLIPSE_MARK: {"name": "Eclipse Mark", "category": POWER_TYPE_TRIAL},
+	ENUMS.POWER_ID_FRACTURE_FIELD: {"name": "Fracture Field", "category": POWER_TYPE_TRIAL},
+	ENUMS.POWER_ID_FARLINE_VOLLEY: {"name": "Farline Volley", "category": POWER_TYPE_TRIAL},
+	ENUMS.POWER_ID_SIGIL_CHAIN: {"name": "Sigil Chain", "category": POWER_TYPE_TRIAL},
 	# Boss rewards
-	"wardens_verdict": {"name": "Warden's Verdict", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
-	"lacuna_echo": {"name": "Lacuna Echo", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
-	"sovereign_tempo": {"name": "Sovereign Tempo", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
-	"pillar_convergence": {"name": "Pillar Convergence", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
-	"unbroken_oath": {"name": "Unbroken Oath", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
-	"edict_of_the_court": {"name": "Edict of the Court", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
-	"null_corridor": {"name": "Null Corridor", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
+	ENUMS.POWER_ID_WARDENS_VERDICT: {"name": "Warden's Verdict", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
+	ENUMS.POWER_ID_LACUNA_ECHO: {"name": "Lacuna Echo", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
+	ENUMS.POWER_ID_SOVEREIGN_TEMPO: {"name": "Sovereign Tempo", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
+	ENUMS.POWER_ID_PILLAR_CONVERGENCE: {"name": "Pillar Convergence", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
+	ENUMS.POWER_ID_UNBROKEN_OATH: {"name": "Unbroken Oath", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
+	ENUMS.POWER_ID_EDICT_OF_THE_COURT: {"name": "Edict of the Court", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
+	ENUMS.POWER_ID_NULL_CORRIDOR: {"name": "Null Corridor", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
 }
 
 const POWER_ID_ALIASES := {
@@ -927,13 +927,13 @@ func get_trial_power_pool(player_reference: Node = null) -> Array[Dictionary]:
 func get_objective_upgrade_pool(player_reference: Node = null) -> Array[Dictionary]:
 	var pool := get_upgrade_pool(player_reference)
 	var favored_ids := {
-		"first_strike": true,
-		"heavy_blow": true,
-		"long_reach": true,
-		"fleet_foot": true,
-		"blink_dash": true,
-		"battle_trance": true,
-		"surge_step": true,
+		ENUMS.POWER_ID_FIRST_STRIKE: true,
+		ENUMS.POWER_ID_HEAVY_BLOW: true,
+		ENUMS.POWER_ID_LONG_REACH: true,
+		ENUMS.POWER_ID_FLEET_FOOT: true,
+		ENUMS.POWER_ID_BLINK_DASH: true,
+		ENUMS.POWER_ID_BATTLE_TRANCE: true,
+		ENUMS.POWER_ID_SURGE_STEP: true,
 	}
 	var favored: Array[Dictionary] = []
 	var fallback: Array[Dictionary] = []
