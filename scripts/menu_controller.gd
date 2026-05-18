@@ -3064,15 +3064,16 @@ func _build_character_selector_panel() -> Panel:
 	character_ids.clear()
 	character_accent_bars.clear()
 	character_identity_containers.clear()
-	for character in CHARACTER_REGISTRY.get_launch_characters():
-		var character_id := String(character.get("id", "")).strip_edges().to_lower()
+	for character_id_variant in CHARACTER_REGISTRY.get_launch_character_ids():
+		var character_id := String(character_id_variant).strip_edges().to_lower()
 		if character_id.is_empty():
 			continue
+		var character := CHARACTER_REGISTRY.get_character_definition(character_id)
 		character_ids.append(character_id)
-		var visual: Dictionary = character.get("visual", {}) as Dictionary
+		var visual: Dictionary = character.visual
 		var body_color: Color = visual.get("body_color", Color(0.78, 0.92, 1.0)) as Color
-		var stat_mods: Dictionary = character.get("stat_modifiers", {}) as Dictionary
-		var passive_id := String(character.get("passive_id", "")).strip_edges().to_lower()
+		var stat_mods: Dictionary = character.stat_modifiers
+		var passive_id := String(character.passive_id).strip_edges().to_lower()
 
 		var button := Button.new()
 		button.custom_minimum_size = Vector2(0.0, CHARACTER_SELECTOR_ROW_HEIGHT)
@@ -3122,7 +3123,7 @@ func _build_character_selector_panel() -> Panel:
 		left_col.add_child(name_label)
 
 		var role_label := Label.new()
-		role_label.text = String(character.get("archetype", ""))
+		role_label.text = character.archetype
 		role_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		role_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		role_label.add_theme_font_size_override("font_size", 14)
@@ -3270,7 +3271,7 @@ func _update_character_selector() -> void:
 		var name_label := character_name_labels[i]
 		var role_label := character_role_labels[i]
 		var character_id := String(character_ids[i])
-		var character := CHARACTER_REGISTRY.get_character(character_id)
+		var character := CHARACTER_REGISTRY.get_character_definition(character_id)
 		var is_unlocked := unlocked_ids.has(character_id)
 		var is_selected := character_id == selected_character_id
 
@@ -3278,7 +3279,7 @@ func _update_character_selector() -> void:
 		var has_identity := i < character_identity_containers.size()
 
 		if is_unlocked:
-			name_label.text = String(character.get("name", "Unknown"))
+			name_label.text = character.name if not character.name.is_empty() else "Unknown"
 			if has_identity:
 				character_identity_containers[i].visible = true
 			if has_accent:

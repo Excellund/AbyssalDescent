@@ -134,7 +134,7 @@ func initialize(allow_collection: bool) -> void:
 	var run_seed := {
 		"game_version": String(ProjectSettings.get_setting("application/config/version", "dev")).strip_edges(),
 		"character_id": _world.current_character_id,
-		"character_name": String(CHARACTER_REGISTRY.get_character(_world.current_character_id).get("name", String(_world.current_character_id).capitalize())),
+		"character_name": CHARACTER_REGISTRY.get_character_name(_world.current_character_id),
 		"difficulty_tier": _world.current_difficulty_tier,
 		"run_mode": run_mode,
 		"start_depth": _world.room_depth,
@@ -163,7 +163,7 @@ func reset_summary_tracker() -> void:
 		"started_at_unix": int(Time.get_unix_time_from_system()),
 		"started_at_msec": int(Time.get_ticks_msec()),
 		"character_id": _world.current_character_id,
-		"character_name": String(CHARACTER_REGISTRY.get_character(_world.current_character_id).get("name", String(_world.current_character_id).capitalize())),
+		"character_name": CHARACTER_REGISTRY.get_character_name(_world.current_character_id),
 		"difficulty_tier": _world.current_difficulty_tier,
 		"difficulty_label": difficulty_label,
 		"game_version": game_version,
@@ -644,8 +644,7 @@ func build_peer_summary_overrides() -> Dictionary:
 		var active_character := String(player.active_character_id).strip_edges().to_lower()
 		if active_character.is_empty():
 			active_character = _world.current_character_id
-		var char_data := CHARACTER_REGISTRY.get_character(active_character)
-		var character_name := String(char_data.get("name", active_character.capitalize()))
+		var character_name := CHARACTER_REGISTRY.get_character_name(active_character)
 		var build_summary := build_summary_for_player(player)
 		var timeline := _ensure_peer_reward_timeline(peer_id).duplicate(true)
 		var build_ids: Array[String] = []
@@ -684,8 +683,7 @@ func build_peer_telemetry_entries() -> Array:
 		var active_character := String(player.active_character_id).strip_edges().to_lower()
 		if active_character.is_empty():
 			active_character = _world.current_character_id
-		var char_data := CHARACTER_REGISTRY.get_character(active_character)
-		var character_name := String(char_data.get("name", active_character.capitalize()))
+		var character_name := CHARACTER_REGISTRY.get_character_name(active_character)
 		var build_summary := build_summary_for_player(player)
 		var timeline := _ensure_peer_reward_timeline(peer_id).duplicate(true)
 		var stats := _ensure_peer_summary_stats(peer_id).duplicate(true)

@@ -141,8 +141,7 @@ const SPECIAL_OATH_DEFINITIONS := {
 static func _build_clear_oaths() -> Dictionary:
 	var out: Dictionary = {}
 	for character_id in CHARACTER_REGISTRY.get_launch_character_ids():
-		var character_def: Dictionary = CHARACTER_REGISTRY.get_character(character_id)
-		var character_name: String = String(character_def.get("name", character_id.capitalize()))
+		var character_name: String = CHARACTER_REGISTRY.get_character_name(character_id)
 		for tier in [
 			BEARING_ENUMS.BearingTier.PILGRIM,
 			BEARING_ENUMS.BearingTier.DELVER,

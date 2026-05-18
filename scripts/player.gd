@@ -1271,10 +1271,10 @@ func apply_character_package(data: Dictionary) -> void:
 		player_dash_streak_color = vis["dash_streak_color"] as Color
 	active_character_id = String(data.get("id", "")).strip_edges().to_lower()
 	var passive_id: String = String(data.get("passive_id", "")).strip_edges().to_lower()
-	passive_iron_retort = passive_id == "iron_retort"
-	passive_sigil_burst = passive_id == "sigil_burst"
-	passive_veilstep_rhythm = passive_id == "veilstep_rhythm"
-	passive_farline_focus = passive_id == "farline_focus"
+	passive_iron_retort = passive_id == ENUMS.PASSIVE_ID_IRON_RETORT
+	passive_sigil_burst = passive_id == ENUMS.PASSIVE_ID_SIGIL_BURST
+	passive_veilstep_rhythm = passive_id == ENUMS.PASSIVE_ID_VEILSTEP_RHYTHM
+	passive_farline_focus = passive_id == ENUMS.PASSIVE_ID_FARLINE_FOCUS
 	iron_retort_brace_build_left = 0.0
 	iron_retort_brace_ready = false
 	iron_retort_brace_window_left = 0.0

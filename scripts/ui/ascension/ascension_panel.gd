@@ -270,9 +270,8 @@ func _save_profile() -> void:
 		run_context.save_meta_progress()
 
 func _refresh_header() -> void:
-	var char_data: Dictionary = CHARACTER_REGISTRY.get_character(_character_id)
-	var char_name: String = String(char_data.get("name", _character_id.capitalize()))
-	var visual: Dictionary = char_data.get("visual", {}) as Dictionary
+	var char_name: String = CHARACTER_REGISTRY.get_character_name(_character_id)
+	var visual: Dictionary = CHARACTER_REGISTRY.get_character_visual(_character_id)
 	var body_color: Color = visual.get("body_color", Color(0.78, 0.92, 1.0, 0.92)) as Color
 	var tinted: Color = _readable_label_color(body_color)
 	_character_label.text = "[center]Character: [color=#%s]%s[/color][/center]" % [tinted.to_html(false), char_name]
@@ -621,8 +620,7 @@ func _append_clear_groups(profile: Dictionary, defs: Dictionary, clear_by_charac
 		for oath_id_variant in oath_ids:
 			if META_PROGRESS_STORE.is_oath_completed(profile, String(oath_id_variant)):
 				completed_count += 1
-		var character_def: Dictionary = CHARACTER_REGISTRY.get_character(character_id)
-		var character_name: String = String(character_def.get("name", character_id.capitalize()))
+		var character_name: String = CHARACTER_REGISTRY.get_character_name(character_id)
 		var collapsed: bool = bool(_collapsed_clear_groups.get(character_id, true))
 		var header_text: String = "%s  (%d / %d)" % [character_name, completed_count, oath_ids.size()]
 		var header_button := _make_collapse_header_button(header_text, collapsed)

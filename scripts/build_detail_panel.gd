@@ -2,6 +2,7 @@ extends Node
 
 const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 const DESCRIPTION_CAP_GUARD := preload("res://scripts/shared/description_cap_guard.gd")
+const ENUMS := preload("res://scripts/shared/enums.gd")
 const PLAYER_SCRIPT := preload("res://scripts/player.gd")
 const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
 const RARITY_COMMON := Color(0.62, 0.7, 0.8, 0.9)
@@ -274,48 +275,29 @@ func refresh(character_id: String, active_boons: Array, active_arcana: Array, ac
 	_update_power_section(boss_list_container, active_boss_rewards, "boss", player)
 
 func _update_passive_section(character_id: String) -> void:
-	var char_data := CHARACTER_REGISTRY.get_character(character_id)
-	if char_data == null:
+	if not CHARACTER_REGISTRY.is_known_character_id(character_id):
 		passive_name_label.text = "Unknown Character"
 		passive_desc_label.text = "No passive available"
 		return
 	
-	var passive_id := _resolve_passive_id(character_id, char_data)
+	var passive_id := CHARACTER_REGISTRY.get_character_passive_id(character_id)
 	passive_name_label.text = _format_passive_name(passive_id)
 	
 	# Get passive description based on ID
 	var desc := ""
 	match passive_id:
-		"iron_retort":
+		ENUMS.PASSIVE_ID_IRON_RETORT:
 			desc = "Hold your ground briefly to Brace. Your next melee strike while Braced is empowered (+80% damage, wider arc) and detonates an impact shockwave on hit, granting Guard (25% damage resistance for 1.5s). Dashing breaks Brace."
-		"sigil_burst":
+		ENUMS.PASSIVE_ID_SIGIL_BURST:
 			desc = "Dashing arms a burst. Your next attack unleashes a 70% damage sigil explosion at the target."
-		"veilstep_rhythm":
+		ENUMS.PASSIVE_ID_VEILSTEP_RHYTHM:
 			desc = "Dashing through enemies builds Veilstep shards. At full shards, your next dash is empowered and releases a high-damage surge wave at dash end."
-		"farline_focus":
+		ENUMS.PASSIVE_ID_FARLINE_FOCUS:
 			desc = "Melee hits inside your farline band and tight aim lane deal 70% bonus damage, but hits outside deal 30% less. Keep distance and commit to precision angles."
 		_:
 			desc = "Passive ability"
 	
 	passive_desc_label.text = desc
-
-func _resolve_passive_id(character_id: String, char_data: Dictionary) -> String:
-	var passive_id := String(char_data.get("passive_id", "")).strip_edges().to_lower()
-	if not passive_id.is_empty() and passive_id != "passive":
-		return passive_id
-	var normalized_character_id := character_id.strip_edges().to_lower()
-	match normalized_character_id:
-		"bastion":
-			return "iron_retort"
-		"hexweaver":
-			return "sigil_burst"
-		"veilstrider":
-			return "veilstep_rhythm"
-		"riftlancer":
-			return "farline_focus"
-		_:
-			return passive_id
-
 func _update_power_section(container: VBoxContainer, power_ids: Array, power_type: String, player: PLAYER_SCRIPT = null) -> void:
 	# Clear existing entries
 	for child in container.get_children():
@@ -396,13 +378,13 @@ func _power_display_name(power_id: String) -> String:
 func _format_passive_name(passive_id: String) -> String:
 	var normalized_id := passive_id.strip_edges().to_lower()
 	match normalized_id:
-		"iron_retort":
+		ENUMS.PASSIVE_ID_IRON_RETORT:
 			return "Iron Retort"
-		"sigil_burst":
+		ENUMS.PASSIVE_ID_SIGIL_BURST:
 			return "Sigil Burst"
-		"veilstep_rhythm":
+		ENUMS.PASSIVE_ID_VEILSTEP_RHYTHM:
 			return "Veilstep Rhythm"
-		"farline_focus":
+		ENUMS.PASSIVE_ID_FARLINE_FOCUS:
 			return "Farline Focus"
 		_:
 			var words := normalized_id.split("_", false)

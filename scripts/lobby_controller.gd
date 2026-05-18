@@ -259,14 +259,14 @@ func _populate_character_tabs() -> void:
 		child.queue_free()
 	
 	for char_id in available_characters:
-		var char_data: Dictionary = CHARACTER_REGISTRY.get_character(String(char_id))
+		var char_def := CHARACTER_REGISTRY.get_character_definition(String(char_id))
 		var page := MarginContainer.new()
 		page.set_anchors_preset(Control.PRESET_FULL_RECT)
 		page.add_theme_constant_override("margin_left", 14)
 		page.add_theme_constant_override("margin_right", 14)
 		page.add_theme_constant_override("margin_top", 12)
 		page.add_theme_constant_override("margin_bottom", 12)
-		page.name = String(char_data.get("name", char_id))
+		page.name = char_def.name if not char_def.name.is_empty() else String(char_id)
 
 		var stack := VBoxContainer.new()
 		stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -275,19 +275,19 @@ func _populate_character_tabs() -> void:
 		page.add_child(stack)
 
 		var name_label := Label.new()
-		name_label.text = String(char_data.get("name", char_id))
+		name_label.text = char_def.name if not char_def.name.is_empty() else String(char_id)
 		name_label.add_theme_font_size_override("font_size", 24)
 		name_label.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 0.98))
 		stack.add_child(name_label)
 
 		var archetype_label := Label.new()
-		archetype_label.text = String(char_data.get("archetype", ""))
+		archetype_label.text = char_def.archetype
 		archetype_label.add_theme_font_size_override("font_size", 16)
 		archetype_label.add_theme_color_override("font_color", Color(0.72, 0.86, 1.0, 0.90))
 		stack.add_child(archetype_label)
 
 		var tagline_label := Label.new()
-		tagline_label.text = String(char_data.get("tagline", ""))
+		tagline_label.text = char_def.tagline
 		tagline_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		tagline_label.add_theme_font_size_override("font_size", 15)
 		tagline_label.add_theme_color_override("font_color", Color(0.84, 0.92, 1.0, 0.90))

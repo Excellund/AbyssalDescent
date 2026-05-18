@@ -2,6 +2,48 @@ extends RefCounted
 
 const ENUMS := preload("res://scripts/shared/enums.gd")
 
+class CharacterDefinition:
+	var id: String = ""
+	var name: String = ""
+	var archetype: String = ""
+	var boss_opposition: String = ""
+	var tagline: String = ""
+	var lore: String = ""
+	var arcana_pool_key: String = ""
+	var passive_id: String = ""
+	var stat_modifiers: Dictionary = {}
+	var visual: Dictionary = {}
+	var design_lanes: Dictionary = {}
+
+	func _init(source: Dictionary = {}) -> void:
+		var data := source.duplicate(true)
+		id = String(data.get("id", "")).strip_edges().to_lower()
+		name = String(data.get("name", "")).strip_edges()
+		archetype = String(data.get("archetype", "")).strip_edges()
+		boss_opposition = String(data.get("boss_opposition", "")).strip_edges()
+		tagline = String(data.get("tagline", "")).strip_edges()
+		lore = String(data.get("lore", "")).strip_edges()
+		arcana_pool_key = String(data.get("arcana_pool_key", "")).strip_edges().to_lower()
+		passive_id = String(data.get("passive_id", "")).strip_edges().to_lower()
+		stat_modifiers = (data.get("stat_modifiers", {}) as Dictionary).duplicate(true)
+		visual = (data.get("visual", {}) as Dictionary).duplicate(true)
+		design_lanes = (data.get("design_lanes", {}) as Dictionary).duplicate(true)
+
+	func to_dict() -> Dictionary:
+		return {
+			"id": id,
+			"name": name,
+			"archetype": archetype,
+			"boss_opposition": boss_opposition,
+			"tagline": tagline,
+			"lore": lore,
+			"arcana_pool_key": arcana_pool_key,
+			"passive_id": passive_id,
+			"stat_modifiers": stat_modifiers.duplicate(true),
+			"visual": visual.duplicate(true),
+			"design_lanes": design_lanes.duplicate(true),
+		}
+
 const CHARACTER_DEFINITIONS := {
 	ENUMS.CHARACTER_ID_BASTION: {
 		"id": ENUMS.CHARACTER_ID_BASTION,
@@ -11,7 +53,7 @@ const CHARACTER_DEFINITIONS := {
 		"tagline": "Hold your ground, absorb pressure, and answer with decisive counters.",
 		"lore": "Bastion is the teammate who stabilizes the fight when things get messy. They thrive in close pressure, absorb heavy pushes, and create safe windows for the squad to reset. Against the Warden, Bastion's job is simple: stop momentum and make every overcommit costly.",
 		"arcana_pool_key": "bastion",
-		"passive_id": "iron_retort",
+		"passive_id": ENUMS.PASSIVE_ID_IRON_RETORT,
 		"stat_modifiers": {
 			"max_health": 130,
 			"max_speed": 188.0,
@@ -37,7 +79,7 @@ const CHARACTER_DEFINITIONS := {
 		"tagline": "Break enemy setups with burst windows and smart area control.",
 		"lore": "Hexweaver is all about control and timing. They reshape crowded fights, crack open defensive formations, and punish enemies that rely on fixed patterns. When the Sovereign tries to lock down space, Hexweaver turns that control back into opportunity.",
 		"arcana_pool_key": "hexweaver",
-		"passive_id": "sigil_burst",
+		"passive_id": ENUMS.PASSIVE_ID_SIGIL_BURST,
 		"stat_modifiers": {
 			"max_health": 75,
 			"max_speed": 210.0,
@@ -63,7 +105,7 @@ const CHARACTER_DEFINITIONS := {
 		"tagline": "Set the pace with clean engages, fast exits, and precise finishers.",
 		"lore": "Veilstrider rewards sharp decision-making. They dart in for high-value hits, disengage before retaliation, and keep encounters moving on their terms. Lacuna challenges that rhythm by denying clean timing, so mastering Veilstrider means staying composed under disrupted tempo.",
 		"arcana_pool_key": "veilstrider",
-		"passive_id": "veilstep_rhythm",
+		"passive_id": ENUMS.PASSIVE_ID_VEILSTEP_RHYTHM,
 		"stat_modifiers": {
 			"max_health": 70,
 			"max_speed": 260.0,
@@ -93,7 +135,7 @@ const CHARACTER_DEFINITIONS := {
 			"mastery": "Route fights so chained farline punctures keep pressure without losing distance discipline."
 		},
 		"arcana_pool_key": "riftlancer",
-		"passive_id": "farline_focus",
+		"passive_id": ENUMS.PASSIVE_ID_FARLINE_FOCUS,
 		"stat_modifiers": {
 			"max_health": 64,
 			"max_speed": 228.0,
@@ -131,23 +173,66 @@ static func get_launch_character_ids() -> Array[String]:
 static func get_default_character_id() -> String:
 	return DEFAULT_CHARACTER_ID
 
+static func _normalize_character_id(character_id: String) -> String:
+	return character_id.strip_edges().to_lower()
+
+static func _fallback_passive_id_for_character(character_id: String) -> String:
+	match _normalize_character_id(character_id):
+		ENUMS.CHARACTER_ID_BASTION:
+			return ENUMS.PASSIVE_ID_IRON_RETORT
+		ENUMS.CHARACTER_ID_HEXWEAVER:
+			return ENUMS.PASSIVE_ID_SIGIL_BURST
+		ENUMS.CHARACTER_ID_VEILSTRIDER:
+			return ENUMS.PASSIVE_ID_VEILSTEP_RHYTHM
+		ENUMS.CHARACTER_ID_RIFTLANCER:
+			return ENUMS.PASSIVE_ID_FARLINE_FOCUS
+		_:
+			return ""
+
 static func is_known_character_id(character_id: String) -> bool:
-	return CHARACTER_DEFINITIONS.has(character_id.strip_edges().to_lower())
+	return CHARACTER_DEFINITIONS.has(_normalize_character_id(character_id))
 
 ##
 # Returns a deep copy of the character data for the given character_id.
 # The returned Dictionary is always safe to mutate.
 static func get_character(character_id: String) -> Dictionary:
-	var key: String = character_id.strip_edges().to_lower()
+	var key: String = _normalize_character_id(character_id)
 	if not CHARACTER_DEFINITIONS.has(key):
 		key = DEFAULT_CHARACTER_ID
 	return (CHARACTER_DEFINITIONS.get(key, {}) as Dictionary).duplicate(true)
+
+static func get_character_definition(character_id: String) -> CharacterDefinition:
+	return CharacterDefinition.new(get_character(character_id))
 
 static func get_launch_characters() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	for character_id in LAUNCH_CHARACTER_IDS:
 		result.append(get_character(String(character_id)))
 	return result
+
+static func get_launch_character_definitions() -> Array[CharacterDefinition]:
+	var result: Array[CharacterDefinition] = []
+	for character_id in LAUNCH_CHARACTER_IDS:
+		result.append(get_character_definition(String(character_id)))
+	return result
+
+static func get_character_name(character_id: String) -> String:
+	var definition := get_character_definition(character_id)
+	if not definition.name.is_empty():
+		return definition.name
+	return _normalize_character_id(character_id).capitalize()
+
+static func get_character_passive_id(character_id: String) -> String:
+	var definition := get_character_definition(character_id)
+	if not definition.passive_id.is_empty() and definition.passive_id != "passive":
+		return definition.passive_id
+	return _fallback_passive_id_for_character(character_id)
+
+static func get_character_stat_modifiers(character_id: String) -> Dictionary:
+	return get_character_definition(character_id).stat_modifiers.duplicate(true)
+
+static func get_character_visual(character_id: String) -> Dictionary:
+	return get_character_definition(character_id).visual.duplicate(true)
 
 const DUPLICATE_VARIANT_HUE_SHIFTS_DEG := [0.0, 60.0, -60.0, 120.0, -120.0, 180.0, 90.0]
 const DUPLICATE_VARIANT_VALUE_SHIFTS := [0.0, 0.08, -0.08, 0.14, -0.14, 0.18, -0.18]

@@ -67,6 +67,12 @@ const CHARACTER_ID_HEXWEAVER := "hexweaver"
 const CHARACTER_ID_VEILSTRIDER := "veilstrider"
 const CHARACTER_ID_RIFTLANCER := "riftlancer"
 
+# Passive IDs (character passives)
+const PASSIVE_ID_IRON_RETORT := "iron_retort"
+const PASSIVE_ID_SIGIL_BURST := "sigil_burst"
+const PASSIVE_ID_VEILSTEP_RHYTHM := "veilstep_rhythm"
+const PASSIVE_ID_FARLINE_FOCUS := "farline_focus"
+
 # Power IDs (boons/upgrades)
 const POWER_ID_FIRST_STRIKE := "first_strike"
 const POWER_ID_HEAVY_BLOW := "heavy_blow"

@@ -228,12 +228,11 @@ func _rebuild_character_selector() -> void:
 	if _character_selector == null:
 		return
 	_character_selector.clear()
-	for character_variant in CHARACTER_REGISTRY.get_launch_characters():
-		var character := character_variant as Dictionary
-		var character_id := String(character.get("id", "")).strip_edges().to_lower()
+	for character_variant in CHARACTER_REGISTRY.get_launch_character_ids():
+		var character_id := String(character_variant).strip_edges().to_lower()
 		if character_id.is_empty():
 			continue
-		var character_name := String(character.get("name", character_id.capitalize()))
+		var character_name := CHARACTER_REGISTRY.get_character_name(character_id)
 		_character_selector.add_item(character_name)
 		var index := _character_selector.item_count - 1
 		_character_selector.set_item_metadata(index, character_id)

@@ -112,22 +112,23 @@ func validate_power_registry() -> ValidationResult:
 func validate_character_registry() -> ValidationResult:
 	var result := ValidationResult.new()
 	
-	var characters: Array[Dictionary] = CHARACTER_REGISTRY.get_launch_characters()
-	if characters.is_empty():
-		result.add_error("CHARACTER_REGISTRY.get_launch_characters() returned no entries")
+	var character_ids: Array[String] = CHARACTER_REGISTRY.get_launch_character_ids()
+	if character_ids.is_empty():
+		result.add_error("CHARACTER_REGISTRY.get_launch_character_ids() returned no entries")
 		return result
 	
-	var character_count := characters.size()
+	var character_count := character_ids.size()
 	if character_count < 3:
 		result.add_warning("Only %d characters defined (expected at least 3)" % character_count)
 	
-	for char_dict in characters:
-		if not char_dict.has("id"):
-			result.add_error("Character missing 'id' field: %s" % str(char_dict))
-		if not char_dict.has("name"):
-			result.add_error("Character missing 'name' field: %s" % str(char_dict))
-		if not char_dict.has("stat_modifiers"):
-			result.add_error("Character missing 'stat_modifiers' field: %s" % str(char_dict.get("id", "unknown")))
+	for character_id in character_ids:
+		var character_def = CHARACTER_REGISTRY.get_character_definition(character_id)
+		if String(character_def.id).strip_edges().is_empty():
+			result.add_error("Character missing 'id' field: %s" % character_id)
+		if String(character_def.name).strip_edges().is_empty():
+			result.add_error("Character missing 'name' field: %s" % character_id)
+		if character_def.stat_modifiers.is_empty():
+			result.add_error("Character missing 'stat_modifiers' field: %s" % character_id)
 	
 	result.report("character_registry")
 	return result

@@ -1787,9 +1787,9 @@ func _get_hud_state() -> Dictionary:
 	# Get current character passive name
 	var current_character_passive_name := "Passive"
 	if not current_character_id.is_empty():
-		var char_data := CHARACTER_REGISTRY.get_character(current_character_id)
-		if char_data != null and char_data.has("passive_id"):
-			current_character_passive_name = String(char_data.get("passive_id", "Passive"))
+		var passive_id := CHARACTER_REGISTRY.get_character_passive_id(current_character_id)
+		if not passive_id.is_empty():
+			current_character_passive_name = passive_id
 	
 	var objective_hud_state: Dictionary = {}
 	if is_instance_valid(objective_manager):
@@ -2164,8 +2164,7 @@ func _finish_third_boss_clear() -> void:
 		if _run_summary_ready():
 			run_summary_recorder.record_unlock("Unlocked Bearing: %s" % String(unlock_config.get("name", "Unknown")))
 	if not unlocked_character_id.is_empty() and _run_summary_ready():
-		var unlocked_character_data := CHARACTER_REGISTRY.get_character(unlocked_character_id)
-		var unlocked_character_name := String(unlocked_character_data.get("name", unlocked_character_id.capitalize())).strip_edges()
+		var unlocked_character_name := CHARACTER_REGISTRY.get_character_name(unlocked_character_id).strip_edges()
 		if unlocked_character_name.is_empty():
 			unlocked_character_name = unlocked_character_id.capitalize()
 		run_summary_recorder.record_unlock("Unlocked Character: %s" % unlocked_character_name)
