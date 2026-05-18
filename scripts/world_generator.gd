@@ -1333,39 +1333,39 @@ func _get_debug_power_preset_pool(preset: int) -> Array[String]:
 	match preset:
 		DEBUG_ENUMS.PowerPreset.DASH_SPECIALIST:
 			raw_pool = [
-				"fleet_foot",
-				"blink_dash",
-				"surge_step",
-				"phantom_step",
-				"riftpunch",
-				"reaper_step",
-				"static_wake",
-				"wraithstep"
+				ENUMS.POWER_ID_FLEET_FOOT,
+				ENUMS.POWER_ID_BLINK_DASH,
+				ENUMS.POWER_ID_SURGE_STEP,
+				ENUMS.POWER_ID_PHANTOM_STEP,
+				ENUMS.POWER_ID_RIFTPUNCH,
+				ENUMS.POWER_ID_REAPER_STEP,
+				ENUMS.POWER_ID_STATIC_WAKE,
+				ENUMS.POWER_ID_WRAITHSTEP
 			]
 		DEBUG_ENUMS.PowerPreset.NO_DASH_BRUISER:
 			raw_pool = [
-				"heavy_blow",
-				"wide_arc",
-				"long_reach",
-				"iron_skin",
-				"battle_trance",
-				"heartstone",
-				"bloodpact",
-				"severing_edge",
-				"aegis_field",
-				"hunters_snare"
+				ENUMS.POWER_ID_HEAVY_BLOW,
+				ENUMS.POWER_ID_WIDE_ARC,
+				ENUMS.POWER_ID_LONG_REACH,
+				ENUMS.POWER_ID_IRON_SKIN,
+				ENUMS.POWER_ID_BATTLE_TRANCE,
+				ENUMS.POWER_ID_HEARTSTONE,
+				ENUMS.POWER_ID_BLOODPACT,
+				ENUMS.POWER_ID_SEVERING_EDGE,
+				ENUMS.POWER_ID_AEGIS_FIELD,
+				ENUMS.POWER_ID_HUNTERS_SNARE
 			]
 		DEBUG_ENUMS.PowerPreset.HIGH_RANGE_DPS:
 			raw_pool = [
-				"first_strike",
-				"long_reach",
-				"razor_wind",
-				"execution_edge",
-				"storm_crown",
-				"farline_volley",
-				"eclipse_mark",
-				"sigil_chain",
-				"hunters_snare"
+				ENUMS.POWER_ID_FIRST_STRIKE,
+				ENUMS.POWER_ID_LONG_REACH,
+				ENUMS.POWER_ID_RAZOR_WIND,
+				ENUMS.POWER_ID_EXECUTION_EDGE,
+				ENUMS.POWER_ID_STORM_CROWN,
+				ENUMS.POWER_ID_FARLINE_VOLLEY,
+				ENUMS.POWER_ID_ECLIPSE_MARK,
+				ENUMS.POWER_ID_SIGIL_CHAIN,
+				ENUMS.POWER_ID_HUNTERS_SNARE
 			]
 		_:
 			return []
@@ -1416,18 +1416,18 @@ func _resolve_debug_power_id(raw_power_id: String) -> String:
 		return canonical
 
 	match canonical:
-		"wardens_verdict":
-			return "wardens_verdict"
-		"lacuna_echo":
-			return "lacuna_echo"
-		"sovereign_tempo":
-			return "sovereign_tempo"
-		"pillar_convergence":
-			return "pillar_convergence"
+		ENUMS.POWER_ID_WARDENS_VERDICT:
+			return ENUMS.POWER_ID_WARDENS_VERDICT
+		ENUMS.POWER_ID_LACUNA_ECHO:
+			return ENUMS.POWER_ID_LACUNA_ECHO
+		ENUMS.POWER_ID_SOVEREIGN_TEMPO:
+			return ENUMS.POWER_ID_SOVEREIGN_TEMPO
+		ENUMS.POWER_ID_PILLAR_CONVERGENCE:
+			return ENUMS.POWER_ID_PILLAR_CONVERGENCE
 		"bastions_oath":
-			return "unbroken_oath"
-		"unbroken_oath":
-			return "unbroken_oath"
+			return ENUMS.POWER_ID_UNBROKEN_OATH
+		ENUMS.POWER_ID_UNBROKEN_OATH:
+			return ENUMS.POWER_ID_UNBROKEN_OATH
 		_:
 			return canonical
 
@@ -4257,7 +4257,7 @@ func _roll_bonus_mission_boon(excluded_id: String) -> Dictionary:
 		var entry_id := String(entry.get("id", ""))
 		if entry_id == excluded_id:
 			continue
-		if current_character_id == "riftlancer" and entry_id == "wide_arc":
+		if current_character_id == "riftlancer" and entry_id == ENUMS.POWER_ID_WIDE_ARC:
 			continue
 		var limit := int(entry.get("stack_limit", 0))
 		if limit > 0 and is_instance_valid(player):

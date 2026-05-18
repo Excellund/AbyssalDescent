@@ -46,7 +46,7 @@ var _reward_rerolls_remaining: int = 0
 func _is_upgrade_blocked_for_character(upgrade_id: String) -> bool:
 	var normalized_character_id := current_character_id.strip_edges().to_lower()
 	var normalized_upgrade_id := upgrade_id.strip_edges().to_lower()
-	return normalized_character_id == "riftlancer" and normalized_upgrade_id == "wide_arc"
+	return normalized_character_id == "riftlancer" and normalized_upgrade_id == ENUMS.POWER_ID_WIDE_ARC
 
 var boon_layer: CanvasLayer
 var boon_title_label: Label
@@ -1151,9 +1151,9 @@ func _choice_display_name(choice: Dictionary) -> String:
 	if id.is_empty():
 		return "Power"
 	match id:
-		"hunters_snare":
+		ENUMS.POWER_ID_HUNTERS_SNARE:
 			return "Hunter's Snare"
-		"wraithstep":
+		ENUMS.POWER_ID_WRAITHSTEP:
 			return "Wraithstep"
 		_:
 			var words := id.split("_", false)

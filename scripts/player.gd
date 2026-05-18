@@ -12,6 +12,7 @@ const PLAYER_IDENTITY_SILHOUETTE := preload("res://scripts/core/player_identity_
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const PLAYER_REPLICATION_SERVICE_SCRIPT := preload("res://scripts/player_replication_service.gd")
+const ENUMS := preload("res://scripts/shared/enums.gd")
 const RUN_SNAPSHOT_VERSION := 1
 const EXECUTION_EDGE_PROC_DISPLAY_HOLD: float = 0.24
 const INDOMITABLE_OATH_FILL_REQUIREMENT: float = 52.0
@@ -1300,12 +1301,12 @@ func is_dead() -> bool:
 func get_upgrade_stack_count(id: String) -> int:
 	if is_instance_valid(upgrade_system):
 		return int(upgrade_system.get_upgrade_stack_count(id))
-	if id == "iron_skin":
+	if id == ENUMS.POWER_ID_IRON_SKIN:
 		return iron_skin_stacks
 	return 0
 
 func apply_upgrade(boon_id: String) -> void:
-	if active_character_id == "riftlancer" and boon_id.strip_edges().to_lower() == "wide_arc":
+	if active_character_id == "riftlancer" and boon_id.strip_edges().to_lower() == ENUMS.POWER_ID_WIDE_ARC:
 		return
 	upgrade_system.apply_upgrade(boon_id)
 
@@ -1859,49 +1860,49 @@ func apply_power_for_test(power_id: String) -> bool:
 		return false
 
 	var hard_ids := {
-		"razor_wind": true,
-		"execution_edge": true,
-		"rupture_wave": true,
-		"aegis_field": true,
-		"hunters_snare": true,
-		"phantom_step": true,
-		"reaper_step": true,
-		"static_wake": true,
-		"riftpunch": true,
-		"storm_crown": true,
-		"wraithstep": true,
-		"voidfire": true,
-		"dread_resonance": true,
-		"bloodvow": true,
-		"eclipse_mark": true,
-		"fracture_field": true,
-		"farline_volley": true,
-		"sigil_chain": true
+		ENUMS.POWER_ID_RAZOR_WIND: true,
+		ENUMS.POWER_ID_EXECUTION_EDGE: true,
+		ENUMS.POWER_ID_RUPTURE_WAVE: true,
+		ENUMS.POWER_ID_AEGIS_FIELD: true,
+		ENUMS.POWER_ID_HUNTERS_SNARE: true,
+		ENUMS.POWER_ID_PHANTOM_STEP: true,
+		ENUMS.POWER_ID_REAPER_STEP: true,
+		ENUMS.POWER_ID_STATIC_WAKE: true,
+		ENUMS.POWER_ID_RIFTPUNCH: true,
+		ENUMS.POWER_ID_STORM_CROWN: true,
+		ENUMS.POWER_ID_WRAITHSTEP: true,
+		ENUMS.POWER_ID_VOIDFIRE: true,
+		ENUMS.POWER_ID_DREAD_RESONANCE: true,
+		ENUMS.POWER_ID_BLOODVOW: true,
+		ENUMS.POWER_ID_ECLIPSE_MARK: true,
+		ENUMS.POWER_ID_FRACTURE_FIELD: true,
+		ENUMS.POWER_ID_FARLINE_VOLLEY: true,
+		ENUMS.POWER_ID_SIGIL_CHAIN: true
 	}
 	if hard_ids.has(id):
 		apply_trial_power(id)
 		return true
 
 	var boon_ids := {
-		"first_strike": true,
-		"heavy_blow": true,
-		"wide_arc": true,
-		"long_reach": true,
-		"fleet_foot": true,
-		"blink_dash": true,
-		"iron_skin": true,
-		"battle_trance": true,
-		"surge_step": true,
-		"heartstone": true,
-		"bloodpact": true,
-		"severing_edge": true,
-		"wardens_verdict": true,
-		"lacuna_echo": true,
-		"sovereign_tempo": true,
-		"pillar_convergence": true,
-		"unbroken_oath": true,
-		"edict_of_the_court": true,
-		"null_corridor": true
+		ENUMS.POWER_ID_FIRST_STRIKE: true,
+		ENUMS.POWER_ID_HEAVY_BLOW: true,
+		ENUMS.POWER_ID_WIDE_ARC: true,
+		ENUMS.POWER_ID_LONG_REACH: true,
+		ENUMS.POWER_ID_FLEET_FOOT: true,
+		ENUMS.POWER_ID_BLINK_DASH: true,
+		ENUMS.POWER_ID_IRON_SKIN: true,
+		ENUMS.POWER_ID_BATTLE_TRANCE: true,
+		ENUMS.POWER_ID_SURGE_STEP: true,
+		ENUMS.POWER_ID_HEARTSTONE: true,
+		ENUMS.POWER_ID_BLOODPACT: true,
+		ENUMS.POWER_ID_SEVERING_EDGE: true,
+		ENUMS.POWER_ID_WARDENS_VERDICT: true,
+		ENUMS.POWER_ID_LACUNA_ECHO: true,
+		ENUMS.POWER_ID_SOVEREIGN_TEMPO: true,
+		ENUMS.POWER_ID_PILLAR_CONVERGENCE: true,
+		ENUMS.POWER_ID_UNBROKEN_OATH: true,
+		ENUMS.POWER_ID_EDICT_OF_THE_COURT: true,
+		ENUMS.POWER_ID_NULL_CORRIDOR: true
 	}
 	if boon_ids.has(id):
 		apply_upgrade(id)
@@ -2227,7 +2228,7 @@ func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupt
 		var hit_position := hit_entry.get("hit_position", enemy_body.global_position) as Vector2
 		if (hit_position - global_position).length_squared() <= inner_range_squared:
 			continue
-		_resolve_attack_hit(enemy_body, hit_position, wind_damage, "razor_wind", rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags, sigil_burst_state)
+		_resolve_attack_hit(enemy_body, hit_position, wind_damage, ENUMS.POWER_ID_RAZOR_WIND, rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags, sigil_burst_state)
 		did_hit = true
 	return did_hit
 
@@ -2474,7 +2475,7 @@ func _apply_rupture_wave(epicenter: Vector2, source_damage: int, rupture_hit_ene
 			continue
 		rupture_hit_enemy_ids[enemy_id] = true
 		var rupture_total_damage := wave_damage + _hunters_snare_aoe_bonus_against(enemy_body)
-		DAMAGEABLE.apply_damage(enemy_node, rupture_total_damage, {"is_ground_attack": true, "attack_type": "rupture_wave"})
+		DAMAGEABLE.apply_damage(enemy_node, rupture_total_damage, {"is_ground_attack": true, "attack_type": ENUMS.POWER_ID_RUPTURE_WAVE})
 		if apply_slow:
 			var rupture_slow_duration := 0.4 * _global_slow_duration_mult()
 			enemy_body.apply_slow(rupture_slow_duration, 0.75)
@@ -3569,7 +3570,7 @@ func _trigger_voidfire_detonation() -> void:
 	det_damage = _apply_objective_mutator_damage_mult(det_damage)
 	var overheat_lockout := voidfire_lockout_duration
 	if is_instance_valid(upgrade_system):
-		var voidfire_values: Dictionary = upgrade_system.get_trial_runtime_values("voidfire")
+		var voidfire_values: Dictionary = upgrade_system.get_trial_runtime_values(ENUMS.POWER_ID_VOIDFIRE)
 		overheat_lockout = float(voidfire_values.get("lockout_duration", overheat_lockout))
 		voidfire_lockout_duration = overheat_lockout
 	if player_feedback != null:
@@ -4070,9 +4071,9 @@ func _gain_indomitable_oath_from_hit(enemy_node: Object, source: String) -> void
 		return
 	if not (enemy_node is Node2D):
 		return
-	if source != "melee" and source != "razor_wind":
+	if source != "melee" and source != ENUMS.POWER_ID_RAZOR_WIND:
 		return
-	if _indomitable_oath_spent_this_attack and (source == "melee" or source == "razor_wind"):
+	if _indomitable_oath_spent_this_attack and (source == "melee" or source == ENUMS.POWER_ID_RAZOR_WIND):
 		return
 	var combo_index := _indomitable_attack_hit_count
 	_indomitable_attack_hit_count += 1
