@@ -12,11 +12,21 @@ extends RefCounted
 const ENUMS := preload("res://scripts/shared/enums.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
+const POWER_PARAMETER_MAPPER := preload("res://scripts/power_parameter_mapper.gd")
 const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 const DEBUG_ENUMS := preload("res://scripts/shared/debug_enums.gd")
 const GLOSSARY_DATA := preload("res://scripts/shared/glossary_data.gd")
 const RUN_CONTEXT_SCRIPT := preload("res://scripts/run_context.gd")
+
+class ProbePlayer:
+	extends RefCounted
+
+	var damage: int = 42
+	var attack_cooldown: float = 0.30
+	var attack_lock_duration: float = 0.16
+	var dash_cooldown: float = 0.80
+	var attack_arc_degrees: float = 120.0
 
 ## Validation result structure
 class ValidationResult:
@@ -209,6 +219,100 @@ func validate_save_schema() -> ValidationResult:
 	result.report("save_schema")
 	return result
 
+## Check 8: Power parity gate for Phase 1 migration
+## Validates registry coverage, mapper consistency, stack scaling calls, and description availability.
+func validate_power_parity_gate() -> ValidationResult:
+	var result := ValidationResult.new()
+	var registry := POWER_REGISTRY.new()
+	var probe_player := ProbePlayer.new()
+
+	var all_ids: Array[String] = []
+	for id in POWER_REGISTRY.UPGRADE_POOL_IDS:
+		all_ids.append(String(id))
+	for id in POWER_REGISTRY.BOSS_REWARD_POOL_IDS:
+		all_ids.append(String(id))
+	for id in POWER_REGISTRY.TRIAL_POWER_POOL_IDS:
+		all_ids.append(String(id))
+
+	for power_id in all_ids:
+		if not registry.is_valid_power_id(power_id):
+			result.add_error("Invalid power id in pool: %s" % power_id)
+			continue
+		var metadata := registry.get_power_display_metadata(power_id)
+		if metadata.is_empty():
+			result.add_error("Missing display metadata for power: %s" % power_id)
+		if registry.get_power_display_name(power_id).strip_edges().is_empty():
+			result.add_error("Empty display name for power: %s" % power_id)
+		var stack_limit := registry.get_power_stack_limit(power_id)
+		if stack_limit <= 0:
+			result.add_error("Non-positive stack limit for power: %s" % power_id)
+		var balance := registry.get_power_balance(power_id)
+		if balance.is_empty():
+			result.add_error("Missing balance entry for power: %s" % power_id)
+
+	for trial_id in POWER_REGISTRY.TRIAL_POWER_POOL_IDS:
+		var trial_power_id := String(trial_id)
+		var trial_balance := registry.get_power_balance(trial_power_id)
+		if trial_balance.is_empty():
+			continue
+		var trial_param_map := registry.get_trial_power_param_map(trial_power_id)
+		if trial_param_map.is_empty():
+			result.add_error("Trial power missing param_map: %s" % trial_power_id)
+			continue
+
+		var stack_limit := registry.get_power_stack_limit(trial_power_id)
+		var sample_stacks: Array[int] = [1]
+		if stack_limit > 1:
+			sample_stacks.append(mini(2, stack_limit))
+		if stack_limit > 2:
+			sample_stacks.append(stack_limit)
+
+		var baseline_at_cap: Dictionary = {}
+		for sample_stack in sample_stacks:
+			var values := POWER_PARAMETER_MAPPER.build_trial_values(trial_power_id, sample_stack, trial_balance, probe_player, false)
+			if values.is_empty():
+				result.add_error("Empty trial values for %s at stack %d" % [trial_power_id, sample_stack])
+				continue
+			for key in values.keys():
+				var entry := values[key]
+				if entry is float:
+					if is_nan(entry) or is_inf(entry):
+						result.add_error("Non-finite float value for %s.%s at stack %d" % [trial_power_id, String(key), sample_stack])
+				elif entry is int:
+					if entry < 0 and String(key).contains("duration"):
+						result.add_error("Negative duration value for %s.%s at stack %d" % [trial_power_id, String(key), sample_stack])
+			if sample_stack == stack_limit:
+				baseline_at_cap = values
+
+		var expected_params: Dictionary = trial_param_map.get("parameters", {})
+		for param_key in expected_params.keys():
+			if baseline_at_cap.is_empty() or not baseline_at_cap.has(param_key):
+				result.add_warning("Missing computed parameter '%s' for trial power %s at cap" % [String(param_key), trial_power_id])
+
+		if stack_limit > 0:
+			var prismatic_values := POWER_PARAMETER_MAPPER.build_trial_values(trial_power_id, stack_limit, trial_balance, probe_player, true)
+			if prismatic_values.is_empty():
+				result.add_error("Empty prismatic values for %s" % trial_power_id)
+			else:
+				var differs := false
+				for value_key in baseline_at_cap.keys():
+					if prismatic_values.has(value_key) and prismatic_values[value_key] != baseline_at_cap[value_key]:
+						differs = true
+						break
+				if not differs:
+					result.add_warning("Prismatic values identical to baseline for %s" % trial_power_id)
+
+	for mapped_upgrade in POWER_PARAMETER_MAPPER.UPGRADE_PARAM_MAP.keys():
+		var mapped_id := String(mapped_upgrade)
+		if not registry.is_valid_power_id(mapped_id):
+			result.add_error("Mapper references invalid power id: %s" % mapped_id)
+			continue
+		if registry.get_power_balance(mapped_id).is_empty():
+			result.add_error("Mapper power has no balance entry: %s" % mapped_id)
+
+	result.report("power_parity_gate")
+	return result
+
 ## ============================================================================
 ## COMBINED TEST SUITES
 ## ============================================================================
@@ -229,6 +333,7 @@ func run_phase_1_validation() -> Array[ValidationResult]:
 	results.append(validate_debug_entry_points())
 	results.append(validate_autoload_access())
 	results.append(validate_save_schema())
+	results.append(validate_power_parity_gate())
 	return results
 
 ## Run all validators and print summary
