@@ -17,6 +17,11 @@ var multiplayer_difficulty_config = DIFFICULTY_CONFIG_MULTIPLAYER.new()
 var multiplayer_party_size: int = 1
 var current_ascension_loadout: Array[String] = []
 
+var _difficulty_config_provider: Object = DIFFICULTY_CONFIG
+var _encounter_definition_provider: Object = ENCOUNTER_DEFINITION_DATA
+var _arena_layout_provider: Object = ARENA_LAYOUT_REGISTRY
+var _encounter_contracts_provider: Object = ENCOUNTER_CONTRACTS
+
 var room_base_size: Vector2 = ENCOUNTER_DEFINITION_DATA.DEFAULT_ROOM_BASE_SIZE
 var static_camera_room_threshold: float = ENCOUNTER_DEFINITION_DATA.STATIC_CAMERA_ROOM_THRESHOLD
 var base_chaser_count: int = 5
@@ -196,10 +201,36 @@ const CONTROL_CURVE_BY_RANK := {
 
 var _bearing_definitions_cache: Dictionary = {}
 
+func set_external_providers(overrides: Dictionary) -> void:
+	if overrides.has("encounter_contracts") and overrides["encounter_contracts"] is Object:
+		_encounter_contracts_provider = overrides["encounter_contracts"]
+	if overrides.has("difficulty_config") and overrides["difficulty_config"] is Object:
+		_difficulty_config_provider = overrides["difficulty_config"]
+	if overrides.has("encounter_definition_data") and overrides["encounter_definition_data"] is Object:
+		_encounter_definition_provider = overrides["encounter_definition_data"]
+	if overrides.has("arena_layout_registry") and overrides["arena_layout_registry"] is Object:
+		_arena_layout_provider = overrides["arena_layout_registry"]
+	if overrides.has("multiplayer_difficulty_config") and overrides["multiplayer_difficulty_config"] is Object:
+		multiplayer_difficulty_config = overrides["multiplayer_difficulty_config"]
+	_bearing_definitions_cache.clear()
+	_refresh_difficulty_config()
+
+func _difficulty_config_source() -> Object:
+	return _difficulty_config_provider
+
+func _encounter_definition_source() -> Object:
+	return _encounter_definition_provider
+
+func _arena_layout_source() -> Object:
+	return _arena_layout_provider
+
+func _encounter_contracts_source() -> Object:
+	return _encounter_contracts_provider
+
 func _get_bearing_definitions() -> Dictionary:
 	if not _bearing_definitions_cache.is_empty():
 		return _bearing_definitions_cache
-	_bearing_definitions_cache = ENCOUNTER_DEFINITION_DATA.get_bearing_definitions().duplicate(true)
+	_bearing_definitions_cache = _encounter_definition_source().get_bearing_definitions().duplicate(true)
 	return _bearing_definitions_cache
 
 func _get_bearing_definition(label: String) -> Dictionary:
@@ -251,29 +282,33 @@ func get_ascension_payload() -> Dictionary:
 func _get_difficulty_config_provider() -> Object:
 	if use_multiplayer_difficulty_config and multiplayer_difficulty_config != null:
 		return multiplayer_difficulty_config
-	return DIFFICULTY_CONFIG
+	return _difficulty_config_source()
 
 func _refresh_difficulty_config() -> void:
 	var provider: Object = _get_difficulty_config_provider()
 	var base_config: Dictionary = {}
 	if provider == null:
-		base_config = DIFFICULTY_CONFIG.get_tier_config(current_difficulty_tier)
+		base_config = _difficulty_config_source().get_tier_config(current_difficulty_tier)
 	else:
 		base_config = provider.get_tier_config(current_difficulty_tier)
 	if current_ascension_loadout.is_empty():
 		current_difficulty_config = base_config
 		return
-	current_difficulty_config = DIFFICULTY_CONFIG.get_tier_config_with_ascension(
+	current_difficulty_config = _difficulty_config_source().get_tier_config_with_ascension(
 		current_difficulty_tier,
 		current_ascension_loadout
 	)
 	# Re-layer the multiplayer-only keys (party-size scaling, etc.) that the
 	# multiplayer provider sets but the singleplayer ascension resolver doesn't
 	# know about. Singleplayer base_config already matches; only MP needs this.
-	if provider != null and provider != DIFFICULTY_CONFIG:
+	if provider != null and provider != _difficulty_config_source():
 		for key in base_config.keys():
 			if not current_difficulty_config.has(key):
 				current_difficulty_config[key] = base_config[key]
+
+func scale_parameter(base_value: float, multiplier: float, curve_power: float = 1.0, cap: float = INF, min_value: float = 0.0) -> float:
+	var scaled_value := base_value * pow(multiplier, curve_power)
+	return clampf(scaled_value, min_value, cap)
 
 func _difficulty_float(key: String, fallback: float = 1.0) -> float:
 	return float(current_difficulty_config.get(key, fallback))
@@ -296,12 +331,22 @@ func _party_size_count_mult() -> float:
 	return clampf(1.0 + per_extra * pow(extras, curve_power), 1.0, cap_mult)
 
 func _pressure_mult() -> float:
-	return _difficulty_float("base_enemy_pressure_mult", 1.0) * _party_size_count_mult()
+	return scale_parameter(
+		base_value = _difficulty_float("base_enemy_pressure_mult", 1.0),
+		multiplier = _party_size_count_mult(),
+		curve_power = 1.0,
+		cap = 2.0
+	)
 
 func _objective_pressure_split(extra_pressure_mult: float = 1.0) -> Dictionary:
 	var base_pressure := maxf(0.01, _pressure_mult())
 	var safe_extra := maxf(0.01, extra_pressure_mult)
-	var total_pressure := base_pressure * safe_extra
+	var total_pressure := scale_parameter(
+		base_value = base_pressure,
+		multiplier = safe_extra,
+		curve_power = 0.5,
+		cap = 10.0
+	)
 	if total_pressure <= 1.0:
 		return {
 			"initial_override": safe_extra,
@@ -324,8 +369,13 @@ func _effective_depth(depth: int) -> int:
 	return int(floor(float(maxi(0, depth)) / divisor))
 
 func _apply_bearing_count_scaling(profile: Dictionary, pressure_mult_override: float = 1.0, minimum_total: int = 0) -> Dictionary:
-	var pressure_mult := _pressure_mult() * pressure_mult_override
-	return ENCOUNTER_CONTRACTS.profile_scaled_counts(profile, pressure_mult, minimum_total)
+	var pressure_mult := scale_parameter(
+		base_value = _pressure_mult(),
+		multiplier = pressure_mult_override,
+		curve_power = 1.0,
+		cap = 5.0
+	)
+	return _encounter_contracts_source().profile_scaled_counts(profile, pressure_mult, minimum_total)
 
 const WAVE_AUTO_STAGGER_THRESHOLD_2 := 16
 const WAVE_AUTO_STAGGER_THRESHOLD_3 := 24
@@ -339,14 +389,14 @@ const WAVE_TRIAL_MUTATOR_FORCE_SINGLE := ["tether_web"]
 func apply_wave_staggering(profile: Dictionary) -> Dictionary:
 	if profile.is_empty():
 		return profile
-	var label := ENCOUNTER_CONTRACTS.profile_label(profile)
+	var label := _encounter_contracts_source().profile_label(profile)
 	var overrides := WAVE_PER_ENCOUNTER_OVERRIDES.get(label, {}) as Dictionary
 	if bool(overrides.get("force_single", false)):
 		return profile
-	var trial_icon := ENCOUNTER_CONTRACTS.mutator_icon_shape_id(ENCOUNTER_CONTRACTS.profile_enemy_mutator(profile))
+	var trial_icon := _encounter_contracts_source().mutator_icon_shape_id(_encounter_contracts_source().profile_enemy_mutator(profile))
 	if WAVE_TRIAL_MUTATOR_FORCE_SINGLE.has(trial_icon):
 		return profile
-	var total := ENCOUNTER_CONTRACTS.profile_total_enemy_count(profile)
+	var total := _encounter_contracts_source().profile_total_enemy_count(profile)
 	if total <= 0:
 		return profile
 	var max_waves := int(overrides.get("max_waves", 3))
@@ -362,14 +412,14 @@ func apply_wave_staggering(profile: Dictionary) -> Dictionary:
 		initial_fraction -= 0.10
 	initial_fraction = clampf(initial_fraction, 0.40, 0.85)
 	var modified := profile.duplicate(true)
-	ENCOUNTER_CONTRACTS.profile_set_wave_staggering(modified, wave_count, initial_fraction)
+	_encounter_contracts_source().profile_set_wave_staggering(modified, wave_count, initial_fraction)
 	return modified
 
 func _skirmish_min_total_enemies() -> int:
 	return 3 + _difficulty_rank()
 
 func _apply_profile_counts(profile: Dictionary, counts: Dictionary) -> Dictionary:
-	return ENCOUNTER_CONTRACTS.profile_with_counts(profile, counts)
+	return _encounter_contracts_source().profile_with_counts(profile, counts)
 
 func _build_bearing_profile(label: String) -> Dictionary:
 	var definition := _get_bearing_definition(label)
@@ -390,7 +440,7 @@ func _bearing_label_from_debug_key(key: String) -> String:
 	return ""
 
 func _apply_identity_bearing_scaling(profile: Dictionary) -> Dictionary:
-	var label := ENCOUNTER_CONTRACTS.profile_label(profile)
+	var label := _encounter_contracts_source().profile_label(profile)
 	var definition := _get_bearing_definition(label)
 	if definition.is_empty():
 		return _apply_bearing_count_scaling(profile, 1.0, _skirmish_min_total_enemies())
@@ -440,21 +490,21 @@ func _hard_mutator_chance(depth: int) -> float:
 func _profile_has_enemy_archetype(profile: Dictionary, archetype: String) -> bool:
 	match archetype:
 		"melee":
-			return ENCOUNTER_CONTRACTS.profile_chaser_count(profile) > 0 or ENCOUNTER_CONTRACTS.profile_lurker_count(profile) > 0
+			return _encounter_contracts_source().profile_chaser_count(profile) > 0 or _encounter_contracts_source().profile_lurker_count(profile) > 0
 		"charger":
-			return ENCOUNTER_CONTRACTS.profile_charger_count(profile) > 0 or ENCOUNTER_CONTRACTS.profile_ram_count(profile) > 0
+			return _encounter_contracts_source().profile_charger_count(profile) > 0 or _encounter_contracts_source().profile_ram_count(profile) > 0
 		"archer":
-			return ENCOUNTER_CONTRACTS.profile_archer_count(profile) > 0 or ENCOUNTER_CONTRACTS.profile_lancer_count(profile) > 0
+			return _encounter_contracts_source().profile_archer_count(profile) > 0 or _encounter_contracts_source().profile_lancer_count(profile) > 0
 		"shielder":
-			return ENCOUNTER_CONTRACTS.profile_shielder_count(profile) > 0 or ENCOUNTER_CONTRACTS.profile_seamlock_count(profile) > 0
+			return _encounter_contracts_source().profile_shielder_count(profile) > 0 or _encounter_contracts_source().profile_seamlock_count(profile) > 0
 		"seamlock":
-			return ENCOUNTER_CONTRACTS.profile_seamlock_count(profile) > 0
+			return _encounter_contracts_source().profile_seamlock_count(profile) > 0
 		"spectre":
-			return ENCOUNTER_CONTRACTS.profile_spectre_count(profile) > 0
+			return _encounter_contracts_source().profile_spectre_count(profile) > 0
 		"pyre":
-			return ENCOUNTER_CONTRACTS.profile_pyre_count(profile) > 0
+			return _encounter_contracts_source().profile_pyre_count(profile) > 0
 		"tether":
-			return ENCOUNTER_CONTRACTS.profile_tether_count(profile) > 0
+			return _encounter_contracts_source().profile_tether_count(profile) > 0
 		_:
 			return false
 
@@ -485,7 +535,7 @@ func _maybe_apply_hard_mutator(profile: Dictionary, depth: int) -> Dictionary:
 	if rng.randf() > _hard_mutator_chance(depth):
 		return profile
 	var modified := profile.duplicate(true)
-	ENCOUNTER_CONTRACTS.profile_set_enemy_mutator(modified, _roll_hard_enemy_mutator_for_profile(modified))
+	_encounter_contracts_source().profile_set_enemy_mutator(modified, _roll_hard_enemy_mutator_for_profile(modified))
 	return modified
 
 func configure(settings: Dictionary) -> void:
@@ -502,7 +552,7 @@ func configure(settings: Dictionary) -> void:
 	hard_room_enemy_bonus = int(settings.get("hard_room_enemy_bonus", hard_room_enemy_bonus))
 
 func _build_profile(label: String, room_size: Vector2, chasers: int = 0, chargers: int = 0, archers: int = 0, shielders: int = 0, enemy_mutator: Dictionary = {}) -> Dictionary:
-	var profile := ENCOUNTER_CONTRACTS.profile(
+	var profile := _encounter_contracts_source().profile(
 		label,
 		room_size,
 		room_size.x <= static_camera_room_threshold,
@@ -512,7 +562,7 @@ func _build_profile(label: String, room_size: Vector2, chasers: int = 0, charger
 		shielders,
 		enemy_mutator
 	)
-	profile["obstacle_layout"] = ARENA_LAYOUT_REGISTRY.pick_layout(label, room_size, rng)
+	profile["obstacle_layout"] = _arena_layout_source().pick_layout(label, room_size, rng)
 	return profile
 
 func _build_intro_profile(depth: int) -> Dictionary:
@@ -579,7 +629,7 @@ func build_objective_profile(depth: int, preferred: String = "") -> Dictionary:
 	return _build_objective_profile_for_kind(chosen_kind, depth)
 
 func _canonicalize_debug_encounter_key(encounter_key: String) -> String:
-	return ENCOUNTER_CONTRACTS.canonicalize_debug_encounter_key(encounter_key)
+	return _encounter_contracts_source().canonicalize_debug_encounter_key(encounter_key)
 
 func build_debug_encounter_profile(encounter_key: String, depth: int) -> Dictionary:
 	var key := _canonicalize_debug_encounter_key(encounter_key)
@@ -653,7 +703,7 @@ func _get_hard_pool_for_depth(depth: int) -> Array[Dictionary]:
 	var effective_depth := _effective_depth(depth)
 	var ambush_depth_gate := 4 if _difficulty_rank() == 0 else 3
 	for profile in pool:
-		var label := ENCOUNTER_CONTRACTS.profile_label(profile)
+		var label := _encounter_contracts_source().profile_label(profile)
 		if label == "Ambush" and effective_depth < ambush_depth_gate:
 			continue
 		filtered.append(profile)
@@ -664,7 +714,7 @@ func _get_hard_pool_for_depth(depth: int) -> Array[Dictionary]:
 		var weighted: Array[Dictionary] = []
 		for profile in filtered:
 			weighted.append(profile)
-			if preferred_labels.has(ENCOUNTER_CONTRACTS.profile_label(profile)):
+			if preferred_labels.has(_encounter_contracts_source().profile_label(profile)):
 				weighted.append(profile)
 		return weighted
 	return filtered
@@ -676,10 +726,10 @@ func _build_trial_profile(depth: int = 0) -> Dictionary:
 	var depth_pressure := maxi(0, effective_depth - 2)
 	var base_pressure_mult := _pressure_mult()
 	
-	var chasers := int(float(ENCOUNTER_CONTRACTS.profile_chaser_count(base) + hard_room_enemy_bonus + int(floor(float(depth_pressure) * 0.65))) * base_pressure_mult)
-	var chargers := int(float(ENCOUNTER_CONTRACTS.profile_charger_count(base) + 2 + int(floor(float(depth_pressure) / 5.0))) * base_pressure_mult)
-	var archers := int(float(maxi(ENCOUNTER_CONTRACTS.profile_archer_count(base), 1) + int(floor(float(depth_pressure) / 6.0))) * base_pressure_mult)
-	var shielders := int(float(ENCOUNTER_CONTRACTS.profile_shielder_count(base) + int(floor(float(depth_pressure) / 5.0))) * base_pressure_mult)
+	var chasers := int(float(_encounter_contracts_source().profile_chaser_count(base) + hard_room_enemy_bonus + int(floor(float(depth_pressure) * 0.65))) * base_pressure_mult)
+	var chargers := int(float(_encounter_contracts_source().profile_charger_count(base) + 2 + int(floor(float(depth_pressure) / 5.0))) * base_pressure_mult)
+	var archers := int(float(maxi(_encounter_contracts_source().profile_archer_count(base), 1) + int(floor(float(depth_pressure) / 6.0))) * base_pressure_mult)
+	var shielders := int(float(_encounter_contracts_source().profile_shielder_count(base) + int(floor(float(depth_pressure) / 5.0))) * base_pressure_mult)
 	var specialist_counts := _trial_specialist_counts(mutator, depth, chasers, chargers, archers, shielders)
 	chasers = int(specialist_counts.get("chasers", chasers))
 	chargers = int(specialist_counts.get("chargers", chargers))
@@ -696,11 +746,11 @@ func _build_trial_profile(depth: int = 0) -> Dictionary:
 	chargers = int(converted_counts.get("chargers", chargers))
 	archers = int(converted_counts.get("archers", archers))
 	shielders = int(converted_counts.get("shielders", shielders))
-	var mutator_name := ENCOUNTER_CONTRACTS.mutator_name(mutator)
+	var mutator_name := _encounter_contracts_source().mutator_name(mutator)
 	if mutator_name.is_empty():
 		mutator_name = "Frenzy"
 	var profile := _build_profile("Trial %s" % mutator_name, TRIAL_ROOM_SIZE, chasers, chargers, archers, shielders, mutator)
-	ENCOUNTER_CONTRACTS.profile_set_specialist_counts(
+	_encounter_contracts_source().profile_set_specialist_counts(
 		profile,
 		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_LURKER_COUNT, 0)),
 		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_RAM_COUNT, 0)),
@@ -825,11 +875,11 @@ func apply_mutator_variant_to_profile(profile: Dictionary, mutator: Dictionary, 
 	if profile.is_empty() or mutator.is_empty():
 		return profile
 	var modified := profile.duplicate(true)
-	ENCOUNTER_CONTRACTS.profile_set_enemy_mutator(modified, mutator)
-	var chasers := ENCOUNTER_CONTRACTS.profile_chaser_count(modified)
-	var chargers := ENCOUNTER_CONTRACTS.profile_charger_count(modified)
-	var archers := ENCOUNTER_CONTRACTS.profile_archer_count(modified)
-	var shielders := ENCOUNTER_CONTRACTS.profile_shielder_count(modified)
+	_encounter_contracts_source().profile_set_enemy_mutator(modified, mutator)
+	var chasers := _encounter_contracts_source().profile_chaser_count(modified)
+	var chargers := _encounter_contracts_source().profile_charger_count(modified)
+	var archers := _encounter_contracts_source().profile_archer_count(modified)
+	var shielders := _encounter_contracts_source().profile_shielder_count(modified)
 	var specialist_counts := _trial_specialist_counts(mutator, depth, chasers, chargers, archers, shielders)
 	var specialist_enemies := _trial_specialist_enemies(mutator, depth, current_difficulty_tier)
 	var converted_counts := _apply_trial_elite_conversion(mutator, depth, current_difficulty_tier, {
@@ -838,14 +888,14 @@ func apply_mutator_variant_to_profile(profile: Dictionary, mutator: Dictionary, 
 		"archers": int(specialist_counts.get("archers", archers)),
 		"shielders": int(specialist_counts.get("shielders", shielders))
 	}, specialist_enemies)
-	ENCOUNTER_CONTRACTS.profile_set_counts(
+	_encounter_contracts_source().profile_set_counts(
 		modified,
 		int(converted_counts.get("chasers", chasers)),
 		int(converted_counts.get("chargers", chargers)),
 		int(converted_counts.get("archers", archers)),
 		int(converted_counts.get("shielders", shielders))
 	)
-	ENCOUNTER_CONTRACTS.profile_set_specialist_counts(
+	_encounter_contracts_source().profile_set_specialist_counts(
 		modified,
 		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_LURKER_COUNT, 0)),
 		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_RAM_COUNT, 0)),
@@ -854,15 +904,15 @@ func apply_mutator_variant_to_profile(profile: Dictionary, mutator: Dictionary, 
 		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_PYRE_COUNT, 0)),
 		int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_TETHER_COUNT, 0))
 	)
-	var label := ENCOUNTER_CONTRACTS.profile_label(modified)
-	var mutator_name := ENCOUNTER_CONTRACTS.mutator_name(mutator)
+	var label := _encounter_contracts_source().profile_label(modified)
+	var mutator_name := _encounter_contracts_source().mutator_name(mutator)
 	if not mutator_name.is_empty() and label.begins_with("Trial"):
 		modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_LABEL] = "Trial %s" % mutator_name
 	return modified
 
 func _pick_trial_base_profile(mutator: Dictionary) -> Dictionary:
 	var hard_pool := _get_hard_pool()
-	var icon := ENCOUNTER_CONTRACTS.mutator_icon_shape_id(mutator)
+	var icon := _encounter_contracts_source().mutator_icon_shape_id(mutator)
 	if icon.is_empty():
 		return hard_pool[rng.randi_range(0, hard_pool.size() - 1)]
 	match icon:
@@ -886,7 +936,7 @@ func _pick_trial_base_profile(mutator: Dictionary) -> Dictionary:
 			return hard_pool[rng.randi_range(0, hard_pool.size() - 1)]
 
 func _trial_specialist_counts(mutator: Dictionary, depth: int, chasers: int, chargers: int, archers: int, shielders: int) -> Dictionary:
-	var icon := ENCOUNTER_CONTRACTS.mutator_icon_shape_id(mutator)
+	var icon := _encounter_contracts_source().mutator_icon_shape_id(mutator)
 	match icon:
 		"iron_volley":
 			return {
@@ -958,11 +1008,11 @@ func _trial_elite_conversion_policy(icon: String) -> Dictionary:
 	return TRIAL_ELITE_CONVERSION_POLICY_DEFAULT.duplicate(true)
 
 func _apply_trial_elite_conversion(mutator: Dictionary, depth: int, tier: int, base_counts: Dictionary, specialist_enemies: Dictionary) -> Dictionary:
-	var icon := ENCOUNTER_CONTRACTS.mutator_icon_shape_id(mutator)
+	var icon := _encounter_contracts_source().mutator_icon_shape_id(mutator)
 	var policy := _trial_elite_conversion_policy(icon)
 	var mins := (policy.get("mins", {}) as Dictionary).duplicate(true)
 	var reduction_order := (policy.get("reduction_order", []) as Array[String]).duplicate()
-	var difficulty_config := DIFFICULTY_CONFIG.get_tier_config(tier)
+	var difficulty_config := _difficulty_config_source().get_tier_config(tier)
 	var depth_pressure_divisor := maxf(0.1, float(difficulty_config.get("depth_pressure_divisor", 1.0)))
 	var effective_depth := int(floor(float(maxi(0, depth)) / depth_pressure_divisor))
 	var lurkers := int(specialist_enemies.get(ENCOUNTER_CONTRACTS.PROFILE_KEY_LURKER_COUNT, 0))
@@ -1004,8 +1054,8 @@ func _apply_trial_elite_conversion(mutator: Dictionary, depth: int, tier: int, b
 	return adjusted
 
 func _trial_specialist_enemies(mutator: Dictionary, depth: int, tier: int = BEARING_ENUMS.BearingTier.DELVER) -> Dictionary:
-	var icon := ENCOUNTER_CONTRACTS.mutator_icon_shape_id(mutator)
-	var difficulty_config := DIFFICULTY_CONFIG.get_tier_config(tier)
+	var icon := _encounter_contracts_source().mutator_icon_shape_id(mutator)
+	var difficulty_config := _difficulty_config_source().get_tier_config(tier)
 	var specialist_offset := int(difficulty_config.get("specialist_enemy_depth_offset", 0))
 	var depth_pressure_divisor := maxf(0.1, float(difficulty_config.get("depth_pressure_divisor", 1.0)))
 	var effective_depth := int(floor(float(maxi(0, depth)) / depth_pressure_divisor))
@@ -1085,31 +1135,31 @@ func _build_survival_profile(depth: int) -> Dictionary:
 	var base: Dictionary = hard_pool[rng.randi_range(0, hard_pool.size() - 1)]
 	var effective_depth := _effective_depth(depth)
 	var survival_room_size := Vector2(980.0, 740.0)
-	var chasers := maxi(5, ENCOUNTER_CONTRACTS.profile_chaser_count(base) + 2)
-	var chargers := maxi(1, ENCOUNTER_CONTRACTS.profile_charger_count(base) + 1)
-	var archers := maxi(1, ENCOUNTER_CONTRACTS.profile_archer_count(base) + 1)
+	var chasers := maxi(5, _encounter_contracts_source().profile_chaser_count(base) + 2)
+	var chargers := maxi(1, _encounter_contracts_source().profile_charger_count(base) + 1)
+	var archers := maxi(1, _encounter_contracts_source().profile_archer_count(base) + 1)
 	var shielders: int
 	if current_difficulty_tier == BEARING_ENUMS.BearingTier.PILGRIM and effective_depth < 4:
 		shielders = 0
 	else:
-		shielders = maxi(1, ENCOUNTER_CONTRACTS.profile_shielder_count(base))
+		shielders = maxi(1, _encounter_contracts_source().profile_shielder_count(base))
 	var pressure_mutator := _build_killbox_mutator()
 	var profile := _build_profile("Last Stand", survival_room_size, chasers, chargers, archers, shielders, pressure_mutator)
 	var fortified_mutator := _build_fortified_mutator()
-	ENCOUNTER_CONTRACTS.profile_set_player_mutator(profile, fortified_mutator)
+	_encounter_contracts_source().profile_set_player_mutator(profile, fortified_mutator)
 	var raw_duration := clampf(22.0 + float(effective_depth) * 0.85, 22.0, 34.0)
 	var duration := int(ceil(raw_duration / 5.0)) * 5
 	var spawn_interval := clampf(1.82 - float(effective_depth) * 0.06, 0.8, 1.82)
 	var spawn_batch := mini(5, 2 + int(floor(float(effective_depth) / 3.0)))
 	var pressure_split := _objective_pressure_split()
 	spawn_batch = _scale_objective_spawn_batch(spawn_batch, float(pressure_split["wave_mult"]))
-	ENCOUNTER_CONTRACTS.profile_set_survival_objective(profile, duration, spawn_interval, spawn_batch)
+	_encounter_contracts_source().profile_set_survival_objective(profile, duration, spawn_interval, spawn_batch)
 	var result := _apply_bearing_count_scaling(profile, float(pressure_split["initial_override"]))
 	var rank := _difficulty_rank()
 	var lurkers := 1 if rank >= 1 and effective_depth >= 5 else 0
 	var pyres := 1 if rank >= 2 and effective_depth >= 6 else 0
 	if lurkers > 0 or pyres > 0:
-		ENCOUNTER_CONTRACTS.profile_set_specialist_counts(result, lurkers, 0, 0, 0, pyres)
+		_encounter_contracts_source().profile_set_specialist_counts(result, lurkers, 0, 0, 0, pyres)
 	return result
 
 func _build_priority_target_profile(depth: int) -> Dictionary:
@@ -1121,7 +1171,7 @@ func _build_priority_target_profile(depth: int) -> Dictionary:
 	var shielders := 1 + int(floor(float(effective_depth) / 3.0))
 	var profile := _build_profile("Cut the Signal", room_size, chasers, chargers, archers, shielders)
 	var hunters_focus_mutator := _build_hunters_focus_mutator()
-	ENCOUNTER_CONTRACTS.profile_set_player_mutator(profile, hunters_focus_mutator)
+	_encounter_contracts_source().profile_set_player_mutator(profile, hunters_focus_mutator)
 	var raw_duration := clampf(20.0 + float(effective_depth) * 0.8, 20.0, 30.0)
 	var duration := int(ceil(raw_duration / 5.0)) * 5
 	var spawn_interval := clampf(2.18 - float(effective_depth) * 0.06, 1.05, 2.18)
@@ -1131,12 +1181,12 @@ func _build_priority_target_profile(depth: int) -> Dictionary:
 	var specialist_offset := int(current_difficulty_config.get("specialist_enemy_depth_offset", 0))
 	var lancer_gate := 7 + specialist_offset
 	var target_type := "lancer" if effective_depth >= lancer_gate else "archer"
-	ENCOUNTER_CONTRACTS.profile_set_priority_target_objective(profile, target_type, duration, spawn_interval, spawn_batch)
+	_encounter_contracts_source().profile_set_priority_target_objective(profile, target_type, duration, spawn_interval, spawn_batch)
 	var result := _apply_bearing_count_scaling(profile, float(pressure_split["initial_override"]))
 	var rank := _difficulty_rank()
 	var lancers := 1 if rank >= 1 and effective_depth >= 5 else 0
 	if lancers > 0:
-		ENCOUNTER_CONTRACTS.profile_set_specialist_counts(result, 0, 0, lancers)
+		_encounter_contracts_source().profile_set_specialist_counts(result, 0, 0, lancers)
 	return result
 
 func _build_control_profile(depth: int) -> Dictionary:
@@ -1155,7 +1205,7 @@ func _build_control_profile(depth: int) -> Dictionary:
 	var archers := 1 if effective_depth >= 5 else 0
 	var shielders := 1 + int(floor(float(effective_depth) / 5.0))
 	var profile := _build_profile("Hold the Line", room_size, chasers, chargers, archers, shielders)
-	ENCOUNTER_CONTRACTS.profile_set_player_mutator(profile, _build_combo_relay_mutator())
+	_encounter_contracts_source().profile_set_player_mutator(profile, _build_combo_relay_mutator())
 	var raw_duration := clampf(22.0 + float(effective_depth) * 0.75, 22.0, 30.0)
 	var duration := int(ceil(raw_duration / 5.0)) * 5
 	var spawn_interval := clampf(2.74 - float(effective_depth) * 0.03 + tier_spawn_interval_bias, 1.75, 2.95)
@@ -1165,7 +1215,7 @@ func _build_control_profile(depth: int) -> Dictionary:
 	var progress_decay := clampf(0.2 + float(effective_depth) * 0.008 + tier_decay_bias, 0.16, 0.36)
 	var pressure_split := _objective_pressure_split(control_pressure_mult)
 	spawn_batch = _scale_objective_spawn_batch(spawn_batch, float(pressure_split["wave_mult"]))
-	ENCOUNTER_CONTRACTS.profile_set_control_objective(profile, duration, spawn_interval, spawn_batch, zone_radius, progress_goal, progress_decay, contest_threshold)
+	_encounter_contracts_source().profile_set_control_objective(profile, duration, spawn_interval, spawn_batch, zone_radius, progress_goal, progress_decay, contest_threshold)
 	var result := _apply_bearing_count_scaling(profile, float(pressure_split["initial_override"]))
 	var rams := 0
 	if difficulty_rank >= 1 and effective_depth >= 4:
@@ -1173,7 +1223,7 @@ func _build_control_profile(depth: int) -> Dictionary:
 	if difficulty_rank >= 2 and effective_depth >= 7:
 		rams = 2
 	if rams > 0:
-		ENCOUNTER_CONTRACTS.profile_set_specialist_counts(result, 0, rams, 0)
+		_encounter_contracts_source().profile_set_specialist_counts(result, 0, rams, 0)
 	return result
 
 func _control_curve_tuning(difficulty_rank: int, effective_depth: int) -> Dictionary:
@@ -1213,19 +1263,19 @@ func _build_circuit_sweep_profile(depth: int) -> Dictionary:
 	var shielders := 1 + int(floor(float(effective_depth) / 6.0))
 	var pressure_mutator := _build_surge_mutator()
 	var profile := _build_profile("Circuit Sweep", room_size, chasers, chargers, archers, shielders, pressure_mutator)
-	ENCOUNTER_CONTRACTS.profile_set_player_mutator(profile, _build_relay_boost_mutator())
+	_encounter_contracts_source().profile_set_player_mutator(profile, _build_relay_boost_mutator())
 	var raw_duration := clampf(40.0 + float(effective_depth) * 0.8, 40.0, 55.0)
 	var duration := int(ceil(raw_duration / 5.0)) * 5
 	var spawn_interval := clampf(2.1 - float(effective_depth) * 0.06, 0.8, 2.1)
 	var spawn_batch := mini(5, 2 + int(floor(float(effective_depth) / 4.0)))
 	var pressure_split := _objective_pressure_split()
 	spawn_batch = _scale_objective_spawn_batch(spawn_batch, float(pressure_split["wave_mult"]))
-	ENCOUNTER_CONTRACTS.profile_set_circuit_sweep_objective(profile, duration, spawn_interval, spawn_batch)
+	_encounter_contracts_source().profile_set_circuit_sweep_objective(profile, duration, spawn_interval, spawn_batch)
 	var result := _apply_bearing_count_scaling(profile, float(pressure_split["initial_override"]))
 	var rank := _difficulty_rank()
 	var lurkers := 1 if rank >= 1 and effective_depth >= 5 else 0
 	if lurkers > 0:
-		ENCOUNTER_CONTRACTS.profile_set_specialist_counts(result, lurkers, 0, 0)
+		_encounter_contracts_source().profile_set_specialist_counts(result, lurkers, 0, 0)
 	return result
 
 func _build_pulse_window_profile(depth: int) -> Dictionary:
@@ -1236,7 +1286,7 @@ func _build_pulse_window_profile(depth: int) -> Dictionary:
 	var archers := 1 if effective_depth >= 3 else 0
 	var shielders := 1 + int(floor(float(effective_depth) / 5.0))
 	var profile := _build_profile("Pulse Window", room_size, chasers, chargers, archers, shielders)
-	ENCOUNTER_CONTRACTS.profile_set_player_mutator(profile, _build_overcharge_mutator())
+	_encounter_contracts_source().profile_set_player_mutator(profile, _build_overcharge_mutator())
 	var raw_duration := clampf(35.0 + float(effective_depth) * 0.5, 35.0, 45.0)
 	var duration := int(ceil(raw_duration / 5.0)) * 5
 	var spawn_interval := clampf(2.2 - float(effective_depth) * 0.06, 0.9, 2.2)
@@ -1246,12 +1296,12 @@ func _build_pulse_window_profile(depth: int) -> Dictionary:
 	var pulse_interval := clampf(10.0 - float(effective_depth) * 0.22, 7.0, 10.0)
 	var pressure_split := _objective_pressure_split()
 	spawn_batch = _scale_objective_spawn_batch(spawn_batch, float(pressure_split["wave_mult"]))
-	ENCOUNTER_CONTRACTS.profile_set_pulse_window_objective(profile, duration, spawn_interval, spawn_batch, kill_target, pulse_interval)
+	_encounter_contracts_source().profile_set_pulse_window_objective(profile, duration, spawn_interval, spawn_batch, kill_target, pulse_interval)
 	var result := _apply_bearing_count_scaling(profile, float(pressure_split["initial_override"]))
 	var rank := _difficulty_rank()
 	var pyres := 1 if rank >= 2 and effective_depth >= 5 else 0
 	if pyres > 0:
-		ENCOUNTER_CONTRACTS.profile_set_specialist_counts(result, 0, 0, 0, 0, pyres)
+		_encounter_contracts_source().profile_set_specialist_counts(result, 0, 0, 0, 0, pyres)
 	return result
 
 func _build_intercept_run_profile(depth: int) -> Dictionary:
@@ -1262,7 +1312,7 @@ func _build_intercept_run_profile(depth: int) -> Dictionary:
 	var archers := 1 if effective_depth >= 4 else 0
 	var shielders := 0 if effective_depth < 3 else 1 + int(floor(float(effective_depth - 2) / 5.0))
 	var profile := _build_profile("Intercept Run", room_size, chasers, chargers, archers, shielders)
-	ENCOUNTER_CONTRACTS.profile_set_player_mutator(profile, _build_node_shield_mutator())
+	_encounter_contracts_source().profile_set_player_mutator(profile, _build_node_shield_mutator())
 	var raw_duration := clampf(50.0 + float(effective_depth) * 0.5, 50.0, 65.0)
 	var duration := int(ceil(raw_duration / 5.0)) * 5
 	var spawn_interval := clampf(2.6 - float(effective_depth) * 0.06, 0.95, 2.6)
@@ -1270,12 +1320,12 @@ func _build_intercept_run_profile(depth: int) -> Dictionary:
 	var traversal_time := clampf(39.0 - float(effective_depth) * 0.7, 30.0, 39.0)
 	var pressure_split := _objective_pressure_split()
 	spawn_batch = _scale_objective_spawn_batch(spawn_batch, float(pressure_split["wave_mult"]))
-	ENCOUNTER_CONTRACTS.profile_set_intercept_run_objective(profile, duration, spawn_interval, spawn_batch, traversal_time)
+	_encounter_contracts_source().profile_set_intercept_run_objective(profile, duration, spawn_interval, spawn_batch, traversal_time)
 	var result := _apply_bearing_count_scaling(profile, float(pressure_split["initial_override"]))
 	var rank := _difficulty_rank()
 	var rams := 1 if rank >= 1 and effective_depth >= 6 else 0
 	if rams > 0:
-		ENCOUNTER_CONTRACTS.profile_set_specialist_counts(result, 0, rams, 0)
+		_encounter_contracts_source().profile_set_specialist_counts(result, 0, rams, 0)
 	return result
 
 func _normalize_route_context(route_context: Variant) -> Dictionary:
@@ -1293,46 +1343,46 @@ func _normalize_route_context(route_context: Variant) -> Dictionary:
 	}
 
 func _build_intro_route_option(profile: Dictionary) -> Dictionary:
-	return ENCOUNTER_CONTRACTS.intro_encounter_door_option(profile)
+	return _encounter_contracts_source().intro_encounter_door_option(profile)
 
 func _build_hard_route_option(depth: int) -> Dictionary:
 	var hard_pool: Array[Dictionary] = _get_hard_pool_for_depth(depth)
 	var hard_profile: Dictionary = hard_pool[rng.randi_range(0, hard_pool.size() - 1)]
 	hard_profile = _maybe_apply_hard_mutator(hard_profile, depth)
 	hard_profile = _apply_identity_bearing_scaling(hard_profile)
-	return ENCOUNTER_CONTRACTS.standard_encounter_door_option(hard_profile)
+	return _encounter_contracts_source().standard_encounter_door_option(hard_profile)
 
 func _build_trial_route_option(depth: int) -> Dictionary:
 	if depth < 3 or rng.randf() > _trial_option_chance(depth):
 		return {}
 	var trial_profile: Dictionary = _build_trial_profile(depth)
-	var trial_mutator: Dictionary = ENCOUNTER_CONTRACTS.profile_enemy_mutator(trial_profile)
-	var trial_mutator_name := ENCOUNTER_CONTRACTS.mutator_name(trial_mutator)
+	var trial_mutator: Dictionary = _encounter_contracts_source().profile_enemy_mutator(trial_profile)
+	var trial_mutator_name := _encounter_contracts_source().mutator_name(trial_mutator)
 	if trial_mutator_name.is_empty():
 		trial_mutator_name = "Trial"
-	var trial_color: Color = ENCOUNTER_CONTRACTS.mutator_theme_color(trial_mutator, Color(1.0, 0.32, 0.22, 0.96))
+	var trial_color: Color = _encounter_contracts_source().mutator_theme_color(trial_mutator, Color(1.0, 0.32, 0.22, 0.96))
 	trial_color.a = 0.96
-	return ENCOUNTER_CONTRACTS.trial_door_option(trial_profile, trial_mutator_name, trial_color)
+	return _encounter_contracts_source().trial_door_option(trial_profile, trial_mutator_name, trial_color)
 
 func _build_apex_trial_route_option(depth: int) -> Dictionary:
 	if depth < 5 or rng.randf() > _apex_encounter_chance(depth):
 		return {}
 	var apex_profile: Dictionary = _pick_apex_encounter_profile(depth)
-	var apex_mutator: Dictionary = ENCOUNTER_CONTRACTS.profile_enemy_mutator(apex_profile)
+	var apex_mutator: Dictionary = _encounter_contracts_source().profile_enemy_mutator(apex_profile)
 	var apex_label := "Apex Trial"
-	var apex_mutator_name := ENCOUNTER_CONTRACTS.mutator_name(apex_mutator)
+	var apex_mutator_name := _encounter_contracts_source().mutator_name(apex_mutator)
 	if not apex_mutator_name.is_empty():
 		apex_label = "Apex %s" % apex_mutator_name
-	var apex_color: Color = ENCOUNTER_CONTRACTS.mutator_theme_color(apex_mutator, Color(0.96, 0.54, 0.34, 0.96))
+	var apex_color: Color = _encounter_contracts_source().mutator_theme_color(apex_mutator, Color(0.96, 0.54, 0.34, 0.96))
 	apex_color.a = 0.96
-	return ENCOUNTER_CONTRACTS.apex_trial_door_option(apex_profile, apex_label, apex_color)
+	return _encounter_contracts_source().apex_trial_door_option(apex_profile, apex_label, apex_color)
 
 func _build_objective_route_option(depth: int) -> Dictionary:
 	var objective_profile := build_objective_profile(depth)
-	return ENCOUNTER_CONTRACTS.objective_door_option(objective_profile)
+	return _encounter_contracts_source().objective_door_option(objective_profile)
 
 func _build_rest_route_option() -> Dictionary:
-	return ENCOUNTER_CONTRACTS.rest_door_option()
+	return _encounter_contracts_source().rest_door_option()
 
 func _shuffle_route_options(options: Array[Dictionary]) -> Array[Dictionary]:
 	if options.size() < 2 or rng.randf() < 0.5:
