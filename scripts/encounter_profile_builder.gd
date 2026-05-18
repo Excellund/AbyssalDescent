@@ -56,6 +56,80 @@ const MUTATOR_DAMAGE_STAT_KEYS: Array[String] = [
 	ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_PROJECTILE_DAMAGE_MULT,
 	ENCOUNTER_CONTRACTS.MUTATOR_STAT_SHIELDER_SLAM_DAMAGE_MULT
 ]
+const TRIAL_ELITE_CONVERSION_POLICY_DEFAULT := {
+	"mins": {
+		"chasers": 2,
+		"chargers": 0,
+		"archers": 0,
+		"shielders": 0
+	},
+	"reduction_order": ["chasers", "chargers", "archers", "shielders"]
+}
+const TRIAL_ELITE_CONVERSION_POLICY_BY_ICON := {
+	"iron_volley": {
+		"mins": {
+			"chasers": 2,
+			"chargers": 0,
+			"archers": 4,
+			"shielders": 3
+		},
+		"reduction_order": ["chasers", "chargers", "shielders", "archers"]
+	},
+	"blood_rush": {
+		"mins": {
+			"chasers": 5,
+			"chargers": 3,
+			"archers": 0,
+			"shielders": 0
+		},
+		"reduction_order": ["archers", "shielders", "chasers", "chargers"]
+	},
+	"flashpoint": {
+		"mins": {
+			"chasers": 2,
+			"chargers": 2,
+			"archers": 3,
+			"shielders": 0
+		},
+		"reduction_order": ["chasers", "shielders", "archers", "chargers"]
+	},
+	"siegebreak": {
+		"mins": {
+			"chasers": 2,
+			"chargers": 3,
+			"archers": 0,
+			"shielders": 3
+		},
+		"reduction_order": ["chasers", "archers", "shielders", "chargers"]
+	},
+	"convergence": {
+		"mins": {
+			"chasers": 3,
+			"chargers": 0,
+			"archers": 0,
+			"shielders": 0
+		},
+		"reduction_order": ["chasers", "chargers", "archers", "shielders"]
+	},
+	"conflagration": {
+		"mins": {
+			"chasers": 4,
+			"chargers": 2,
+			"archers": 0,
+			"shielders": 0
+		},
+		"reduction_order": ["chasers", "chargers", "archers", "shielders"]
+	},
+	"tether_web": {
+		"mins": {
+			"chasers": 1,
+			"chargers": 0,
+			"archers": 0,
+			"shielders": 0
+		},
+		"reduction_order": ["shielders", "archers", "chargers", "chasers"]
+	}
+}
 
 static func validate_bearing_sync() -> Array[String]:
 	var issues: Array[String] = []
@@ -878,8 +952,16 @@ func _trial_specialist_counts(mutator: Dictionary, depth: int, chasers: int, cha
 				"shielders": shielders
 			}
 
+func _trial_elite_conversion_policy(icon: String) -> Dictionary:
+	if TRIAL_ELITE_CONVERSION_POLICY_BY_ICON.has(icon):
+		return (TRIAL_ELITE_CONVERSION_POLICY_BY_ICON[icon] as Dictionary).duplicate(true)
+	return TRIAL_ELITE_CONVERSION_POLICY_DEFAULT.duplicate(true)
+
 func _apply_trial_elite_conversion(mutator: Dictionary, depth: int, tier: int, base_counts: Dictionary, specialist_enemies: Dictionary) -> Dictionary:
 	var icon := ENCOUNTER_CONTRACTS.mutator_icon_shape_id(mutator)
+	var policy := _trial_elite_conversion_policy(icon)
+	var mins := (policy.get("mins", {}) as Dictionary).duplicate(true)
+	var reduction_order := (policy.get("reduction_order", []) as Array[String]).duplicate()
 	var difficulty_config := DIFFICULTY_CONFIG.get_tier_config(tier)
 	var depth_pressure_divisor := maxf(0.1, float(difficulty_config.get("depth_pressure_divisor", 1.0)))
 	var effective_depth := int(floor(float(maxi(0, depth)) / depth_pressure_divisor))
@@ -901,49 +983,6 @@ func _apply_trial_elite_conversion(mutator: Dictionary, depth: int, tier: int, b
 	var reduction_budget := mini(max_total_reduction, requested_reduction)
 	if reduction_budget <= 0:
 		return base_counts.duplicate(true)
-	var mins := {
-		"chasers": 2,
-		"chargers": 0,
-		"archers": 0,
-		"shielders": 0
-	}
-	match icon:
-		"iron_volley":
-			mins["archers"] = 4
-			mins["shielders"] = 3
-		"blood_rush":
-			mins["chasers"] = 5
-			mins["chargers"] = 3
-		"flashpoint":
-			mins["chargers"] = 2
-			mins["archers"] = 3
-		"siegebreak":
-			mins["chargers"] = 3
-			mins["shielders"] = 3
-		"convergence":
-			mins["chasers"] = 3
-		"conflagration":
-			mins["chasers"] = 4
-			mins["chargers"] = 2
-		"tether_web":
-			mins["chasers"] = 1
-			mins["shielders"] = 0
-	var reduction_order: Array[String] = ["chasers", "chargers", "archers", "shielders"]
-	match icon:
-		"iron_volley":
-			reduction_order = ["chasers", "chargers", "shielders", "archers"]
-		"blood_rush":
-			reduction_order = ["archers", "shielders", "chasers", "chargers"]
-		"flashpoint":
-			reduction_order = ["chasers", "shielders", "archers", "chargers"]
-		"siegebreak":
-			reduction_order = ["chasers", "archers", "shielders", "chargers"]
-		"convergence":
-			reduction_order = ["chasers", "chargers", "archers", "shielders"]
-		"conflagration":
-			reduction_order = ["chasers", "chargers", "archers", "shielders"]
-		"tether_web":
-			reduction_order = ["shielders", "archers", "chargers", "chasers"]
 	var adjusted := {
 		"chasers": int(base_counts.get("chasers", 0)),
 		"chargers": int(base_counts.get("chargers", 0)),
