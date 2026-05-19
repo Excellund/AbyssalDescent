@@ -1,6 +1,7 @@
 extends RefCounted
 
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
+const ENCOUNTER_ROUTE_STATE := preload("res://scripts/core/encounter_route_state.gd")
 
 var encounter_flow_system: Node
 
@@ -18,22 +19,12 @@ func build_route_state(
 	route_options: Array[Dictionary],
 	show_second_boss: bool,
 	show_third_boss: bool
-) -> Dictionary:
+) -> ENCOUNTER_ROUTE_STATE:
 	if not is_instance_valid(encounter_flow_system):
-		return {
-			"ok": false,
-			"choosing_next_room": choosing_next_room,
-			"door_options": door_options,
-			"boss_unlocked": boss_unlocked
-		}
+		return ENCOUNTER_ROUTE_STATE.from_values(false, choosing_next_room, door_options, boss_unlocked)
 
 	if choosing_next_room and not door_options.is_empty():
-		return {
-			"ok": false,
-			"choosing_next_room": choosing_next_room,
-			"door_options": door_options,
-			"boss_unlocked": boss_unlocked
-		}
+		return ENCOUNTER_ROUTE_STATE.from_values(false, choosing_next_room, door_options, boss_unlocked)
 
 	var show_boss_door := boss_unlocked
 	var boss_encounter_key := "warden"
@@ -52,12 +43,7 @@ func build_route_state(
 		boss_encounter_key
 	)
 
-	return {
-		"ok": true,
-		"choosing_next_room": true,
-		"door_options": next_door_options,
-		"boss_unlocked": show_boss_door
-	}
+	return ENCOUNTER_ROUTE_STATE.from_values(true, true, next_door_options, show_boss_door)
 
 func find_used_door(player_position: Vector2, door_options: Array[Dictionary], door_use_radius: float) -> Dictionary:
 	if not is_instance_valid(encounter_flow_system):

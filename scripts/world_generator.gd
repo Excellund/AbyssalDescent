@@ -62,6 +62,7 @@ const RUN_SUMMARY_WITH_PROFILE_SCRIPT := preload("res://scripts/core/run_summary
 const RUN_HISTORY_STORE_SCRIPT := preload("res://scripts/core/run_history_store.gd")
 const WORLD_BOOTSTRAP_COORDINATOR_SCRIPT := preload("res://scripts/core/world_bootstrap_coordinator.gd")
 const ENCOUNTER_ROUTE_CONTROLLER_SCRIPT := preload("res://scripts/core/encounter_route_controller.gd")
+const ENCOUNTER_ROUTE_STATE_SCRIPT := preload("res://scripts/core/encounter_route_state.gd")
 const OBJECTIVE_LIFECYCLE_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_lifecycle_coordinator.gd")
 const OBJECTIVE_FRAME_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_frame_coordinator.gd")
 const OBJECTIVE_PROGRESS_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_progress_coordinator.gd")
@@ -2641,7 +2642,7 @@ func _spawn_door_options() -> void:
 	combat_phase_coordinator.clear_player_lingering_effects(player)
 	door_options.clear()
 	var route_options := _roll_route_options(_build_route_context(room_depth))
-	var route_state: Dictionary = encounter_route_controller.build_route_state(
+	var route_state: ENCOUNTER_ROUTE_STATE_SCRIPT = encounter_route_controller.build_route_state(
 		choosing_next_room,
 		door_options,
 		boss_unlocked,
@@ -2653,11 +2654,11 @@ func _spawn_door_options() -> void:
 		_is_second_boss_unlocked(),
 		_is_third_boss_unlocked()
 	)
-	if not bool(route_state.get("ok", false)):
+	if route_state == null or not route_state.ok:
 		return
-	choosing_next_room = bool(route_state.get("choosing_next_room", true))
-	door_options = route_state.get("door_options", [])
-	boss_unlocked = bool(route_state.get("boss_unlocked", boss_unlocked))
+	choosing_next_room = route_state.choosing_next_room
+	door_options = route_state.door_options.duplicate(true)
+	boss_unlocked = route_state.boss_unlocked
 	if MultiplayerSessionManager.should_broadcast():
 		_sync_door_options.rpc(door_options, choosing_next_room, boss_unlocked, _build_progress_sync_state())
 	_save_active_run_checkpoint()
