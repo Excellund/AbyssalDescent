@@ -63,6 +63,8 @@ const RUN_HISTORY_STORE_SCRIPT := preload("res://scripts/core/run_history_store.
 const WORLD_BOOTSTRAP_COORDINATOR_SCRIPT := preload("res://scripts/core/world_bootstrap_coordinator.gd")
 const ENCOUNTER_ROUTE_CONTROLLER_SCRIPT := preload("res://scripts/core/encounter_route_controller.gd")
 const ENCOUNTER_ROUTE_STATE_SCRIPT := preload("res://scripts/core/encounter_route_state.gd")
+const ENCOUNTER_DOOR_USE_RESULT_SCRIPT := preload("res://scripts/shared/contracts/encounter_door_use_result.gd")
+const ENCOUNTER_DOOR_CHOICE_SCRIPT := preload("res://scripts/shared/contracts/encounter_door_choice.gd")
 const OBJECTIVE_LIFECYCLE_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_lifecycle_coordinator.gd")
 const OBJECTIVE_FRAME_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_frame_coordinator.gd")
 const OBJECTIVE_PROGRESS_COORDINATOR_SCRIPT := preload("res://scripts/core/objective_progress_coordinator.gd")
@@ -2673,9 +2675,10 @@ func _try_use_door() -> void:
 		return
 	if not is_instance_valid(encounter_flow_system):
 		return
-	var used_door: Dictionary = encounter_route_controller.find_used_door(local_player.global_position, door_options, door_use_radius)
-	if used_door.is_empty():
+	var used_door_result: ENCOUNTER_DOOR_USE_RESULT_SCRIPT = encounter_route_controller.find_used_door(local_player.global_position, door_options, door_use_radius)
+	if used_door_result == null or not used_door_result.used:
 		return
+	var used_door: Dictionary = used_door_result.door
 	if MultiplayerSessionManager.is_remote_replica():
 		# Optimistically hide doors on joiner while host resolves the authoritative choice.
 		choosing_next_room = false
@@ -2928,19 +2931,19 @@ func _choose_door(door: Dictionary) -> void:
 	_reset_all_player_positions_to_slots()
 	if not is_instance_valid(encounter_flow_system):
 		return
-	var choice: Dictionary = encounter_route_controller.resolve_choice(door)
-	if choice.is_empty():
+	var choice: ENCOUNTER_DOOR_CHOICE_SCRIPT = encounter_route_controller.resolve_choice(door)
+	if choice == null:
 		return
-	run_summary_recorder.record_door_choice(choice)
+	run_summary_recorder.record_door_choice(choice.to_dict())
 	if current_room_tutorial_active:
-		var tutorial_exit_profile := ENCOUNTER_CONTRACTS.door_choice_profile(choice)
+		var tutorial_exit_profile := choice.profile.duplicate(true)
 		if tutorial_exit_profile.is_empty():
 			return
 		_complete_tutorial_profile()
 		pending_initial_room_profile = tutorial_exit_profile.duplicate(true)
 		_open_boon_selection("Choose Starting Arcana", true, ENUMS.RewardMode.ARCANA, {}, "", current_character_id)
 		return
-	var action_id: int = ENCOUNTER_CONTRACTS.door_choice_action_id(choice)
+	var action_id: int = choice.action_id
 	if action_id == ENUMS.EncounterAction.BOSS:
 		if second_boss_defeated:
 			_begin_third_boss_room()
@@ -2952,9 +2955,9 @@ func _choose_door(door: Dictionary) -> void:
 	if action_id == ENUMS.EncounterAction.REST:
 		_enter_rest_site()
 		return
-	var profile: Dictionary = ENCOUNTER_CONTRACTS.door_choice_profile(choice)
+	var profile: Dictionary = choice.profile.duplicate(true)
 	profile = _apply_endless_scaling_to_profile(profile)
-	pending_room_reward = ENCOUNTER_CONTRACTS.door_choice_reward_mode(choice)
+	pending_room_reward = choice.reward
 	current_room_enemy_mutator = profile.get("enemy_mutator", {})
 	_begin_room(profile)
 

@@ -2,6 +2,9 @@ extends RefCounted
 
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const ENCOUNTER_ROUTE_STATE := preload("res://scripts/core/encounter_route_state.gd")
+const ENCOUNTER_DOOR_USE_RESULT := preload("res://scripts/shared/contracts/encounter_door_use_result.gd")
+const ENCOUNTER_DOOR_CHOICE := preload("res://scripts/shared/contracts/encounter_door_choice.gd")
+const ENUMS := preload("res://scripts/shared/enums.gd")
 
 var encounter_flow_system: Node
 
@@ -45,17 +48,23 @@ func build_route_state(
 
 	return ENCOUNTER_ROUTE_STATE.from_values(true, true, next_door_options, show_boss_door)
 
-func find_used_door(player_position: Vector2, door_options: Array[Dictionary], door_use_radius: float) -> Dictionary:
+func find_used_door(player_position: Vector2, door_options: Array[Dictionary], door_use_radius: float) -> ENCOUNTER_DOOR_USE_RESULT:
 	if not is_instance_valid(encounter_flow_system):
-		return {}
+		return ENCOUNTER_DOOR_USE_RESULT.from_values(false, {})
 	var raw_result: Variant = encounter_flow_system.find_used_door(player_position, door_options, door_use_radius)
 	var result: Dictionary = ENCOUNTER_CONTRACTS.normalize_door_use_result(raw_result)
-	if not ENCOUNTER_CONTRACTS.door_use_is_used(result):
-		return {}
-	return ENCOUNTER_CONTRACTS.door_use_get_door(result)
+	return ENCOUNTER_DOOR_USE_RESULT.from_values(
+		ENCOUNTER_CONTRACTS.door_use_is_used(result),
+		ENCOUNTER_CONTRACTS.door_use_get_door(result)
+	)
 
-func resolve_choice(door: Dictionary) -> Dictionary:
+func resolve_choice(door: Dictionary) -> ENCOUNTER_DOOR_CHOICE:
 	if not is_instance_valid(encounter_flow_system):
-		return {}
+		return ENCOUNTER_DOOR_CHOICE.from_values(ENUMS.EncounterAction.ENCOUNTER, {}, ENUMS.RewardMode.NONE)
 	var raw_choice: Variant = encounter_flow_system.resolve_chosen_door(door)
-	return ENCOUNTER_CONTRACTS.normalize_door_choice(raw_choice)
+	var choice: Dictionary = ENCOUNTER_CONTRACTS.normalize_door_choice(raw_choice)
+	return ENCOUNTER_DOOR_CHOICE.from_values(
+		ENCOUNTER_CONTRACTS.door_choice_action_id(choice),
+		ENCOUNTER_CONTRACTS.door_choice_profile(choice),
+		ENCOUNTER_CONTRACTS.door_choice_reward_mode(choice)
+	)
