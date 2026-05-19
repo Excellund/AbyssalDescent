@@ -1,3 +1,50 @@
+func apply_character_package(definition: Object) -> void:
+	# Accepts either CharacterDefinition or legacy Dictionary for migration period
+	if definition is Dictionary:
+		apply_character_package_dict(definition)
+	elif definition.has_method("to_dict"):
+		var data: Dictionary = definition.to_dict()
+		apply_character_package_dict(data)
+	else:
+		push_error("apply_character_package: Unknown type %s" % typeof(definition))
+
+func apply_character_package_dict(data: Dictionary) -> void:
+	var mods: Dictionary = data.get("stat_modifiers", {}) as Dictionary
+	for key in mods:
+		var prop: String = String(key)
+		match prop:
+			"max_health":
+				set_max_health_and_current(int(mods[key]), int(mods[key]))
+			"max_speed":
+				max_speed = float(mods[key])
+			"damage":
+				damage = int(mods[key])
+			"attack_range":
+				attack_range = float(mods[key])
+			"attack_arc_degrees":
+				attack_arc_degrees = float(mods[key])
+			"attack_cooldown":
+				attack_cooldown = float(mods[key])
+			"dash_cooldown":
+				dash_cooldown = float(mods[key])
+			"iron_skin_armor":
+				iron_skin_armor = int(mods[key])
+			_:
+				set(prop, mods[key])
+	var vis: Dictionary = data.get("visual", {}) as Dictionary
+	if vis.has("body_color"):
+		player_body_color = vis["body_color"] as Color
+	if vis.has("core_color"):
+		player_core_color = vis["core_color"] as Color
+	if vis.has("glow_color"):
+		player_glow_color = vis["glow_color"] as Color
+	if vis.has("speed_arc_color"):
+		player_speed_arc_color = vis["speed_arc_color"] as Color
+	if vis.has("dash_phase_color"):
+		player_dash_phase_color = vis["dash_phase_color"] as Color
+	if vis.has("dash_streak_color"):
+		player_dash_streak_color = vis["dash_streak_color"] as Color
+
 extends CharacterBody2D
 
 const HEALTH_STATE_SCRIPT := preload("res://scripts/health_state.gd")
@@ -1233,42 +1280,6 @@ func revive_with_health(revived_health: float = 1.0) -> void:
 	set_alive(true)
 	set_combat_removed(false)
 
-func apply_character_package(data: Dictionary) -> void:
-	var mods: Dictionary = data.get("stat_modifiers", {}) as Dictionary
-	for key in mods:
-		var prop: String = String(key)
-		match prop:
-			"max_health":
-				set_max_health_and_current(int(mods[key]), int(mods[key]))
-			"max_speed":
-				max_speed = float(mods[key])
-			"damage":
-				damage = int(mods[key])
-			"attack_range":
-				attack_range = float(mods[key])
-			"attack_arc_degrees":
-				attack_arc_degrees = float(mods[key])
-			"attack_cooldown":
-				attack_cooldown = float(mods[key])
-			"dash_cooldown":
-				dash_cooldown = float(mods[key])
-			"iron_skin_armor":
-				iron_skin_armor = int(mods[key])
-			_:
-				set(prop, mods[key])
-	var vis: Dictionary = data.get("visual", {}) as Dictionary
-	if vis.has("body_color"):
-		player_body_color = vis["body_color"] as Color
-	if vis.has("core_color"):
-		player_core_color = vis["core_color"] as Color
-	if vis.has("glow_color"):
-		player_glow_color = vis["glow_color"] as Color
-	if vis.has("speed_arc_color"):
-		player_speed_arc_color = vis["speed_arc_color"] as Color
-	if vis.has("dash_phase_color"):
-		player_dash_phase_color = vis["dash_phase_color"] as Color
-	if vis.has("dash_streak_color"):
-		player_dash_streak_color = vis["dash_streak_color"] as Color
 	active_character_id = String(data.get("id", "")).strip_edges().to_lower()
 	var passive_id: String = String(data.get("passive_id", "")).strip_edges().to_lower()
 	passive_iron_retort = passive_id == ENUMS.PASSIVE_ID_IRON_RETORT

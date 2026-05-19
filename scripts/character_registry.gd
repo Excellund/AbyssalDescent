@@ -1,3 +1,13 @@
+##
+# Returns a CharacterDefinition with color variant applied (typed package for player assignment).
+static func build_character_package(character_id: String, variant_index: int = 0) -> CharacterDefinition:
+	var base_def := get_character_definition(character_id)
+	if variant_index <= 0:
+		return base_def
+	# Apply color variant to a copy of the definition
+	var dict_package := base_def.to_dict()
+	var shifted_dict := apply_duplicate_color_variant(dict_package, variant_index)
+	return CharacterDefinition.new(shifted_dict)
 extends RefCounted
 
 const ENUMS := preload("res://scripts/shared/enums.gd")

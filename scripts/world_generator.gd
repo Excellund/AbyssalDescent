@@ -597,9 +597,11 @@ func _setup_multiplayer_remote_players() -> void:
 		if run_context != null:
 			var remote_character_id := String(run_context.get_peer_character_selection(remote_peer)).strip_edges().to_lower()
 			if not remote_character_id.is_empty():
-				var remote_character_data: Dictionary = CHARACTER_REGISTRY.get_character(remote_character_id)
-				if not remote_character_data.is_empty():
-					remote_player_node.apply_character_package(remote_character_data)
+				var remote_variant := 0
+				if typeof(all_peers) == TYPE_ARRAY:
+					remote_variant = all_peers.find(remote_peer)
+				var remote_package := CHARACTER_REGISTRY.build_character_package(remote_character_id, remote_variant)
+				remote_player_node.apply_character_package(remote_package)
 		add_child(remote_player_node)
 		multiplayer_session_manager.debug_log("WORLD/%s" % role_tag, "RemoteAvatars: peer %d add_child done, configuring collisions" % remote_peer)
 		_disable_player_collision_pair(player, remote_player_node)
@@ -753,13 +755,11 @@ func _apply_multiplayer_character_packages(run_context: RUN_CONTEXT_SCRIPT) -> v
 		var local_selected_id := _resolve_local_character_id(run_context, current_character_id)
 		if local_selected_id.is_empty():
 			local_selected_id = current_character_id
-		var local_data: Dictionary = CHARACTER_REGISTRY.get_character(local_selected_id)
-		if not local_data.is_empty():
-			var local_peer_for_variant := player.player_id
-			var local_variant := int(duplicate_variant_by_peer.get(local_peer_for_variant, 0))
-			var local_data_variant := CHARACTER_REGISTRY.apply_duplicate_color_variant(local_data, local_variant)
-			player.apply_character_package(local_data_variant)
-			current_character_id = local_selected_id
+		var local_peer_for_variant := player.player_id
+		var local_variant := int(duplicate_variant_by_peer.get(local_peer_for_variant, 0))
+		var local_package := CHARACTER_REGISTRY.build_character_package(local_selected_id, local_variant)
+		player.apply_character_package(local_package)
+		current_character_id = local_selected_id
 	for party_node in _get_multiplayer_player_nodes():
 		var party_player := party_node as PLAYER_SCRIPT
 		if party_player == null or party_player == player:
@@ -768,12 +768,9 @@ func _apply_multiplayer_character_packages(run_context: RUN_CONTEXT_SCRIPT) -> v
 		var remote_character_id := String(run_context.get_peer_character_selection(remote_peer_id)).strip_edges().to_lower()
 		if remote_character_id.is_empty():
 			continue
-		var remote_data: Dictionary = CHARACTER_REGISTRY.get_character(remote_character_id)
-		if remote_data.is_empty():
-			continue
 		var remote_variant := int(duplicate_variant_by_peer.get(remote_peer_id, 0))
-		var remote_data_variant := CHARACTER_REGISTRY.apply_duplicate_color_variant(remote_data, remote_variant)
-		party_player.apply_character_package(remote_data_variant)
+		var remote_package := CHARACTER_REGISTRY.build_character_package(remote_character_id, remote_variant)
+		party_player.apply_character_package(remote_package)
 
 
 func _build_duplicate_variant_map(run_context: RUN_CONTEXT_SCRIPT) -> Dictionary:
@@ -861,8 +858,8 @@ func _setup_encounter_profile_builder_system() -> void:
 		difficulty_tier = debug_bearing_tier
 		should_apply_difficulty = true
 	if is_instance_valid(player):
-		var char_data: Dictionary = CHARACTER_REGISTRY.get_character(current_character_id)
-		player.apply_character_package(char_data)
+		var char_package := CHARACTER_REGISTRY.build_character_package(current_character_id)
+		player.apply_character_package(char_package)
 	if is_multiplayer:
 		_apply_multiplayer_character_packages(run_context)
 		_log_multiplayer_player_stats("post_character_apply")
