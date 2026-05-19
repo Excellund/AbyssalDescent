@@ -1,50 +1,3 @@
-func apply_character_package(definition: Object) -> void:
-	# Accepts either CharacterDefinition or legacy Dictionary for migration period
-	if definition is Dictionary:
-		apply_character_package_dict(definition)
-	elif definition.has_method("to_dict"):
-		var data: Dictionary = definition.to_dict()
-		apply_character_package_dict(data)
-	else:
-		push_error("apply_character_package: Unknown type %s" % typeof(definition))
-
-func apply_character_package_dict(data: Dictionary) -> void:
-	var mods: Dictionary = data.get("stat_modifiers", {}) as Dictionary
-	for key in mods:
-		var prop: String = String(key)
-		match prop:
-			"max_health":
-				set_max_health_and_current(int(mods[key]), int(mods[key]))
-			"max_speed":
-				max_speed = float(mods[key])
-			"damage":
-				damage = int(mods[key])
-			"attack_range":
-				attack_range = float(mods[key])
-			"attack_arc_degrees":
-				attack_arc_degrees = float(mods[key])
-			"attack_cooldown":
-				attack_cooldown = float(mods[key])
-			"dash_cooldown":
-				dash_cooldown = float(mods[key])
-			"iron_skin_armor":
-				iron_skin_armor = int(mods[key])
-			_:
-				set(prop, mods[key])
-	var vis: Dictionary = data.get("visual", {}) as Dictionary
-	if vis.has("body_color"):
-		player_body_color = vis["body_color"] as Color
-	if vis.has("core_color"):
-		player_core_color = vis["core_color"] as Color
-	if vis.has("glow_color"):
-		player_glow_color = vis["glow_color"] as Color
-	if vis.has("speed_arc_color"):
-		player_speed_arc_color = vis["speed_arc_color"] as Color
-	if vis.has("dash_phase_color"):
-		player_dash_phase_color = vis["dash_phase_color"] as Color
-	if vis.has("dash_streak_color"):
-		player_dash_streak_color = vis["dash_streak_color"] as Color
-
 extends CharacterBody2D
 
 const HEALTH_STATE_SCRIPT := preload("res://scripts/health_state.gd")
@@ -60,6 +13,7 @@ const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const PLAYER_REPLICATION_SERVICE_SCRIPT := preload("res://scripts/player_replication_service.gd")
 const ENUMS := preload("res://scripts/shared/enums.gd")
+const CharacterPackage = preload("res://scripts/character_package.gd")
 const RUN_SNAPSHOT_VERSION := 1
 const EXECUTION_EDGE_PROC_DISPLAY_HOLD: float = 0.24
 const INDOMITABLE_OATH_FILL_REQUIREMENT: float = 52.0
@@ -208,6 +162,26 @@ const RUN_SNAPSHOT_PROPERTIES := [
 	"edict_court_push_power",
 	"null_corridor_strength"
 ]
+
+func apply_character_package(package: CharacterPackage) -> void:
+	var definition := package.definition
+	var mods := definition.stat_modifiers
+	set_max_health_and_current(int(mods.max_health), int(mods.max_health))
+	max_speed = float(mods.max_speed)
+	damage = int(mods.damage)
+	attack_range = float(mods.attack_range)
+	attack_arc_degrees = float(mods.attack_arc_degrees)
+	attack_cooldown = float(mods.attack_cooldown)
+	dash_cooldown = float(mods.dash_cooldown)
+	iron_skin_armor = int(mods.iron_skin_armor)
+
+	var visual := definition.visual
+	player_body_color = visual.body_color
+	player_core_color = visual.core_color
+	player_glow_color = visual.glow_color
+	player_speed_arc_color = visual.speed_arc_color
+	player_dash_phase_color = visual.dash_phase_color
+	player_dash_streak_color = visual.dash_streak_color
 
 signal health_changed(current_health: int, max_health: int)
 signal died

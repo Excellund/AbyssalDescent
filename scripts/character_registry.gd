@@ -1,88 +1,14 @@
-const CharacterPackage = preload("res://scripts/character_package.gd")
-const CharacterDefinition = preload("res://scripts/character_definition.gd")
-
-##
-# Returns a CharacterDefinition with color variant applied (typed package for player assignment).
-static func build_character_package(character_id: String, variant_index: int = 0) -> CharacterPackage:
-	var def := get_character_definition(character_id)
-	var pkg := CharacterPackage.new(def, variant_index)
-	pkg.apply_variant()
-	return pkg
 extends RefCounted
 
 const ENUMS := preload("res://scripts/shared/enums.gd")
-const CharacterStatModifiers = preload("res://scripts/character_stat_modifiers.gd")
-const CharacterVisualProfile = preload("res://scripts/character_visual_profile.gd")
 const CharacterDefinition = preload("res://scripts/character_definition.gd")
+const CharacterPackage = preload("res://scripts/character_package.gd")
 
-class StatModifiers:
-	var max_health: int = 0
-	var max_speed: float = 0.0
-	var damage: int = 0
-	var attack_range: float = 0.0
-	var attack_arc_degrees: float = 0.0
-	var attack_cooldown: float = 0.0
-	var dash_cooldown: float = 0.0
-	var iron_skin_armor: int = 0
-	# Add more fields as needed
-
-	func _init(source: Dictionary = {}) -> void:
-		max_health = int(source.get("max_health", 0))
-		max_speed = float(source.get("max_speed", 0.0))
-		damage = int(source.get("damage", 0))
-		attack_range = float(source.get("attack_range", 0.0))
-		attack_arc_degrees = float(source.get("attack_arc_degrees", 0.0))
-		attack_cooldown = float(source.get("attack_cooldown", 0.0))
-		dash_cooldown = float(source.get("dash_cooldown", 0.0))
-		iron_skin_armor = int(source.get("iron_skin_armor", 0))
-
-	func duplicate() -> StatModifiers:
-		var copy = StatModifiers.new()
-		copy.max_health = max_health
-		copy.max_speed = max_speed
-		copy.damage = damage
-		copy.attack_range = attack_range
-		copy.attack_arc_degrees = attack_arc_degrees
-		copy.attack_cooldown = attack_cooldown
-		copy.dash_cooldown = dash_cooldown
-		copy.iron_skin_armor = iron_skin_armor
-		return copy
-
-class VisualProfile:
-	var body_color: Color = Color()
-	var core_color: Color = Color()
-	var glow_color: Color = Color()
-	var speed_arc_color: Color = Color()
-	var dash_phase_color: Color = Color()
-	var dash_streak_color: Color = Color()
-
-	func _init(source: Dictionary = {}) -> void:
-		body_color = source.get("body_color", Color())
-		core_color = source.get("core_color", Color())
-		glow_color = source.get("glow_color", Color())
-		speed_arc_color = source.get("speed_arc_color", Color())
-		dash_phase_color = source.get("dash_phase_color", Color())
-		dash_streak_color = source.get("dash_streak_color", Color())
-
-	func duplicate() -> VisualProfile:
-		var copy = VisualProfile.new()
-		copy.body_color = body_color
-		copy.core_color = core_color
-		copy.glow_color = glow_color
-		copy.speed_arc_color = speed_arc_color
-		copy.dash_phase_color = dash_phase_color
-		copy.dash_streak_color = dash_streak_color
-		return copy
-
-	func apply_color_variant(hue_shift: float, value_shift: float) -> void:
-		body_color = _shift_color_hsv(body_color, hue_shift, value_shift)
-		core_color = _shift_color_hsv(core_color, hue_shift, value_shift)
-		glow_color = _shift_color_hsv(glow_color, hue_shift, value_shift)
-		speed_arc_color = _shift_color_hsv(speed_arc_color, hue_shift, value_shift)
-		dash_phase_color = _shift_color_hsv(dash_phase_color, hue_shift, value_shift)
-		dash_streak_color = _shift_color_hsv(dash_streak_color, hue_shift, value_shift)
-
-
+##
+# Returns a typed CharacterPackage for the requested character.
+static func build_character_package(character_id: String, variant_index: int = 0) -> CharacterPackage:
+	var def := get_character_definition(character_id)
+	return CharacterPackage.new(def, variant_index)
 const CHARACTER_DEFINITIONS := {
 	ENUMS.CHARACTER_ID_BASTION: {
 		"id": ENUMS.CHARACTER_ID_BASTION,
