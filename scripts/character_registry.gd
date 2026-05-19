@@ -1,15 +1,13 @@
+const CharacterPackage = preload("res://scripts/character_package.gd")
+const CharacterDefinition = preload("res://scripts/character_definition.gd")
+
 ##
 # Returns a CharacterDefinition with color variant applied (typed package for player assignment).
-static func build_character_package(character_id: String, variant_index: int = 0) -> CharacterDefinition:
-	var base_def := get_character_definition(character_id)
-	if variant_index <= 0:
-		return base_def.duplicate()
-	var copy := base_def.duplicate()
-	var slot: int = clampi(variant_index, 0, DUPLICATE_VARIANT_HUE_SHIFTS_DEG.size() - 1)
-	var hue_shift: float = float(DUPLICATE_VARIANT_HUE_SHIFTS_DEG[slot]) / 360.0
-	var value_shift: float = float(DUPLICATE_VARIANT_VALUE_SHIFTS[slot])
-	copy.apply_color_variant(hue_shift, value_shift)
-	return copy
+static func build_character_package(character_id: String, variant_index: int = 0) -> CharacterPackage:
+	var def := get_character_definition(character_id)
+	var pkg := CharacterPackage.new(def, variant_index)
+	pkg.apply_variant()
+	return pkg
 extends RefCounted
 
 const ENUMS := preload("res://scripts/shared/enums.gd")
