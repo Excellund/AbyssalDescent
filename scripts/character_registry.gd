@@ -3,14 +3,83 @@
 static func build_character_package(character_id: String, variant_index: int = 0) -> CharacterDefinition:
 	var base_def := get_character_definition(character_id)
 	if variant_index <= 0:
-		return base_def
-	# Apply color variant to a copy of the definition
-	var dict_package := base_def.to_dict()
-	var shifted_dict := apply_duplicate_color_variant(dict_package, variant_index)
-	return CharacterDefinition.new(shifted_dict)
+		return base_def.duplicate()
+	var copy := base_def.duplicate()
+	var slot: int = clampi(variant_index, 0, DUPLICATE_VARIANT_HUE_SHIFTS_DEG.size() - 1)
+	var hue_shift: float = float(DUPLICATE_VARIANT_HUE_SHIFTS_DEG[slot]) / 360.0
+	var value_shift: float = float(DUPLICATE_VARIANT_VALUE_SHIFTS[slot])
+	copy.apply_color_variant(hue_shift, value_shift)
+	return copy
 extends RefCounted
 
 const ENUMS := preload("res://scripts/shared/enums.gd")
+
+class StatModifiers:
+	var max_health: int = 0
+	var max_speed: float = 0.0
+	var damage: int = 0
+	var attack_range: float = 0.0
+	var attack_arc_degrees: float = 0.0
+	var attack_cooldown: float = 0.0
+	var dash_cooldown: float = 0.0
+	var iron_skin_armor: int = 0
+	# Add more fields as needed
+
+	func _init(source: Dictionary = {}) -> void:
+		max_health = int(source.get("max_health", 0))
+		max_speed = float(source.get("max_speed", 0.0))
+		damage = int(source.get("damage", 0))
+		attack_range = float(source.get("attack_range", 0.0))
+		attack_arc_degrees = float(source.get("attack_arc_degrees", 0.0))
+		attack_cooldown = float(source.get("attack_cooldown", 0.0))
+		dash_cooldown = float(source.get("dash_cooldown", 0.0))
+		iron_skin_armor = int(source.get("iron_skin_armor", 0))
+
+	func duplicate() -> StatModifiers:
+		var copy = StatModifiers.new()
+		copy.max_health = max_health
+		copy.max_speed = max_speed
+		copy.damage = damage
+		copy.attack_range = attack_range
+		copy.attack_arc_degrees = attack_arc_degrees
+		copy.attack_cooldown = attack_cooldown
+		copy.dash_cooldown = dash_cooldown
+		copy.iron_skin_armor = iron_skin_armor
+		return copy
+
+class VisualProfile:
+	var body_color: Color = Color()
+	var core_color: Color = Color()
+	var glow_color: Color = Color()
+	var speed_arc_color: Color = Color()
+	var dash_phase_color: Color = Color()
+	var dash_streak_color: Color = Color()
+
+	func _init(source: Dictionary = {}) -> void:
+		body_color = source.get("body_color", Color())
+		core_color = source.get("core_color", Color())
+		glow_color = source.get("glow_color", Color())
+		speed_arc_color = source.get("speed_arc_color", Color())
+		dash_phase_color = source.get("dash_phase_color", Color())
+		dash_streak_color = source.get("dash_streak_color", Color())
+
+	func duplicate() -> VisualProfile:
+		var copy = VisualProfile.new()
+		copy.body_color = body_color
+		copy.core_color = core_color
+		copy.glow_color = glow_color
+		copy.speed_arc_color = speed_arc_color
+		copy.dash_phase_color = dash_phase_color
+		copy.dash_streak_color = dash_streak_color
+		return copy
+
+	func apply_color_variant(hue_shift: float, value_shift: float) -> void:
+		body_color = _shift_color_hsv(body_color, hue_shift, value_shift)
+		core_color = _shift_color_hsv(core_color, hue_shift, value_shift)
+		glow_color = _shift_color_hsv(glow_color, hue_shift, value_shift)
+		speed_arc_color = _shift_color_hsv(speed_arc_color, hue_shift, value_shift)
+		dash_phase_color = _shift_color_hsv(dash_phase_color, hue_shift, value_shift)
+		dash_streak_color = _shift_color_hsv(dash_streak_color, hue_shift, value_shift)
 
 class CharacterDefinition:
 	var id: String = ""
@@ -21,8 +90,8 @@ class CharacterDefinition:
 	var lore: String = ""
 	var arcana_pool_key: String = ""
 	var passive_id: String = ""
-	var stat_modifiers: Dictionary = {}
-	var visual: Dictionary = {}
+	var stat_modifiers: StatModifiers = StatModifiers.new()
+	var visual: VisualProfile = VisualProfile.new()
 	var design_lanes: Dictionary = {}
 
 	func _init(source: Dictionary = {}) -> void:
@@ -35,24 +104,27 @@ class CharacterDefinition:
 		lore = String(data.get("lore", "")).strip_edges()
 		arcana_pool_key = String(data.get("arcana_pool_key", "")).strip_edges().to_lower()
 		passive_id = String(data.get("passive_id", "")).strip_edges().to_lower()
-		stat_modifiers = (data.get("stat_modifiers", {}) as Dictionary).duplicate(true)
-		visual = (data.get("visual", {}) as Dictionary).duplicate(true)
+		stat_modifiers = StatModifiers.new(data.get("stat_modifiers", {}))
+		visual = VisualProfile.new(data.get("visual", {}))
 		design_lanes = (data.get("design_lanes", {}) as Dictionary).duplicate(true)
 
-	func to_dict() -> Dictionary:
-		return {
-			"id": id,
-			"name": name,
-			"archetype": archetype,
-			"boss_opposition": boss_opposition,
-			"tagline": tagline,
-			"lore": lore,
-			"arcana_pool_key": arcana_pool_key,
-			"passive_id": passive_id,
-			"stat_modifiers": stat_modifiers.duplicate(true),
-			"visual": visual.duplicate(true),
-			"design_lanes": design_lanes.duplicate(true),
-		}
+	func duplicate() -> CharacterDefinition:
+		var copy = CharacterDefinition.new()
+		copy.id = id
+		copy.name = name
+		copy.archetype = archetype
+		copy.boss_opposition = boss_opposition
+		copy.tagline = tagline
+		copy.lore = lore
+		copy.arcana_pool_key = arcana_pool_key
+		copy.passive_id = passive_id
+		copy.stat_modifiers = stat_modifiers.duplicate()
+		copy.visual = visual.duplicate()
+		copy.design_lanes = design_lanes.duplicate(true)
+		return copy
+
+	func apply_color_variant(hue_shift: float, value_shift: float) -> void:
+		visual.apply_color_variant(hue_shift, value_shift)
 
 const CHARACTER_DEFINITIONS := {
 	ENUMS.CHARACTER_ID_BASTION: {
