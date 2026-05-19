@@ -13,6 +13,8 @@ static func build_character_package(character_id: String, variant_index: int = 0
 extends RefCounted
 
 const ENUMS := preload("res://scripts/shared/enums.gd")
+const CharacterStatModifiers = preload("res://scripts/character_stat_modifiers.gd")
+const CharacterVisualProfile = preload("res://scripts/character_visual_profile.gd")
 
 class StatModifiers:
 	var max_health: int = 0
@@ -90,8 +92,8 @@ class CharacterDefinition:
 	var lore: String = ""
 	var arcana_pool_key: String = ""
 	var passive_id: String = ""
-	var stat_modifiers: StatModifiers = StatModifiers.new()
-	var visual: VisualProfile = VisualProfile.new()
+	var stat_modifiers: CharacterStatModifiers = CharacterStatModifiers.new()
+	var visual: CharacterVisualProfile = CharacterVisualProfile.new()
 	var design_lanes: Dictionary = {}
 
 	func _init(source: Dictionary = {}) -> void:
@@ -104,8 +106,8 @@ class CharacterDefinition:
 		lore = String(data.get("lore", "")).strip_edges()
 		arcana_pool_key = String(data.get("arcana_pool_key", "")).strip_edges().to_lower()
 		passive_id = String(data.get("passive_id", "")).strip_edges().to_lower()
-		stat_modifiers = StatModifiers.new(data.get("stat_modifiers", {}))
-		visual = VisualProfile.new(data.get("visual", {}))
+		stat_modifiers = CharacterStatModifiers.new(data.get("stat_modifiers", {}))
+		visual = CharacterVisualProfile.new(data.get("visual", {}))
 		design_lanes = (data.get("design_lanes", {}) as Dictionary).duplicate(true)
 
 	func duplicate() -> CharacterDefinition:
