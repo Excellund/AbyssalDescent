@@ -6,7 +6,7 @@ const STAT_ATTRIBUTION_TRACE := false
 static func can_take_damage(target: Object) -> bool:
 	return is_instance_valid(target)
 
-static func apply_damage(target: Object, amount: int, damage_context: Dictionary = {}) -> bool:
+static func apply_damage(target: Object, amount: int, damage_context: Dictionary = {}, source_peer_id: int = 0) -> bool:
 	if amount <= 0:
 		return false
 	if not can_take_damage(target):
@@ -14,13 +14,66 @@ static func apply_damage(target: Object, amount: int, damage_context: Dictionary
 	if _should_route_enemy_damage_to_host(target):
 		_route_enemy_damage_to_host(target, amount, damage_context)
 		return true
+	if source_peer_id <= 0:
+		source_peer_id = _resolve_local_peer_id()
 	var health_before := _read_target_health(target)
+	# Death signals fire inside take_damage. Make this hit's owner visible to
+	# kill-triggered powers before those signals, then undo rejected hits.
+	var pending_credit := _prepare_enemy_damage_credit(target, health_before, source_peer_id)
 	if damage_context.is_empty():
 		target.take_damage(amount)
 	else:
 		target.take_damage(amount, damage_context)
-	_report_enemy_damage_applied(target, health_before)
+	_restore_rejected_damage_credit(target, health_before, pending_credit)
+	_report_enemy_damage_applied(target, health_before, source_peer_id)
 	return true
+
+
+static func _prepare_enemy_damage_credit(target: Object, health_before: int, source_peer_id: int) -> Dictionary:
+	if health_before <= 0 or not (target is Node):
+		return {}
+	var enemy := target as Node
+	if not enemy.is_in_group("enemies"):
+		return {}
+	var enemy_id := int(enemy.get_meta("network_enemy_id", 0))
+	if enemy_id <= 0 or source_peer_id <= 0:
+		return {}
+	var previous_peer_id := int(EnemyReplicationService.killer_peer_for(enemy_id))
+	EnemyReplicationService.credit_damage(enemy_id, source_peer_id)
+	return {"enemy_id": enemy_id, "previous_peer_id": previous_peer_id, "source_peer_id": source_peer_id}
+
+
+## Enemy movement is authoritative on the host, just like enemy health.
+static func apply_impulse(target: Object, impulse: Vector2) -> bool:
+	if not is_instance_valid(target) or not (target is CharacterBody2D) or not impulse.is_finite():
+		return false
+	var enemy := target as CharacterBody2D
+	if not enemy.is_in_group("enemies") or _read_target_health(enemy) <= 0:
+		return false
+	if _should_route_enemy_damage_to_host(enemy):
+		var enemy_id := int(enemy.get_meta("network_enemy_id", 0))
+		var scene_tree := Engine.get_main_loop() as SceneTree
+		if enemy_id <= 0 or scene_tree == null or scene_tree.current_scene == null:
+			return false
+		scene_tree.current_scene.request_enemy_impulse_from_client(enemy_id, impulse)
+		return true
+	enemy.velocity += impulse
+	return true
+
+
+static func _restore_rejected_damage_credit(target: Object, health_before: int, pending_credit: Dictionary) -> void:
+	if pending_credit.is_empty() or not is_instance_valid(target):
+		return
+	if _read_target_health(target) < health_before:
+		return
+	var enemy_id := int(pending_credit["enemy_id"])
+	if EnemyReplicationService.killer_peer_for(enemy_id) != int(pending_credit["source_peer_id"]):
+		return
+	var previous_peer_id := int(pending_credit["previous_peer_id"])
+	if previous_peer_id > 0:
+		EnemyReplicationService.credit_damage(enemy_id, previous_peer_id)
+	else:
+		EnemyReplicationService.last_damage_peer_by_id.erase(enemy_id)
 
 
 static func _read_target_health(target: Object) -> int:
@@ -32,7 +85,7 @@ static func _read_target_health(target: Object) -> int:
 	return -1
 
 
-static func _report_enemy_damage_applied(target: Object, health_before: int) -> void:
+static func _report_enemy_damage_applied(target: Object, health_before: int, source_peer_id: int) -> void:
 	if health_before < 0:
 		return
 	if not (target is Node):
@@ -47,7 +100,6 @@ static func _report_enemy_damage_applied(target: Object, health_before: int) -> 
 	if applied_amount <= 0:
 		return
 	var killed_enemy := health_before > 0 and health_after <= 0
-	var source_peer_id := _resolve_local_peer_id()
 	var enemy_id := 0
 	if target_node.has_meta("network_enemy_id"):
 		enemy_id = int(target_node.get_meta("network_enemy_id"))

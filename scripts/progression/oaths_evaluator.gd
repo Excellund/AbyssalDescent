@@ -71,24 +71,27 @@ static func apply_results_to_profile(profile: Dictionary, results: Dictionary) -
 # --- evaluator dispatch ---------------------------------------------------------------
 
 static func _evaluate(key: String, params: Dictionary, run_summary: Dictionary) -> bool:
+	if bool(run_summary.get("is_debug", false)):
+		return false
+	# These descriptions require a completed encounter, even if the descent
+	# subsequently ends in defeat. The remaining Oaths require a full run clear.
+	if key == "boss_no_hit":
+		return _eval_boss_no_hit(params, run_summary)
+	if key == "hold_zone_full_control":
+		return bool(run_summary.get("hold_full_control_achieved", false))
 	if not _is_clear(run_summary):
-		# All current oaths require a clear; the only exception is the "ascension_rank_at_least"
-		# which gates new content and should also require clear (otherwise dying on a high-rank
-		# attempt would unlock content for free).
+		return false
+	if not bool(run_summary.get("full_run_tracking_complete", true)) and key in ["win_no_damage_taken", "win_no_primary_attack", "win_no_rest", "win_under_time_seconds"]:
 		return false
 	match key:
 		"win_with_character_at_bearing":
 			return _eval_character_at_bearing(params, run_summary)
-		"boss_no_hit":
-			return _eval_boss_no_hit(params, run_summary)
 		"win_no_boons":
 			return _build_count(run_summary, "boons") == 0
 		"win_no_arcana":
 			return _build_count(run_summary, "arcana") == 0
 		"win_single_arcana":
 			return _build_unique_count(run_summary, "arcana") == 1
-		"hold_zone_full_control":
-			return bool(run_summary.get("hold_full_control_achieved", false))
 		"ascension_rank_at_least":
 			return int(run_summary.get("ascension_rank", 0)) >= int(params.get("rank", 1))
 		"win_under_time_seconds":

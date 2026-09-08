@@ -100,10 +100,14 @@ static func build_snapshot(world: Node, player: Node, run_context: Node, snapsho
 	var tracker_boon_items: Dictionary = {}
 	var tracker_arcana_items: Dictionary = {}
 	var tracker_boss_reward_items: Dictionary = {}
+	var tracker_checkpoint: Dictionary = {}
+	var run_elapsed_seconds: int = 0
 	var recorder_value: Variant = world.get("run_summary_recorder")
 	if recorder_value != null:
+		run_elapsed_seconds = int(recorder_value.get_run_elapsed_seconds())
 		var tracker_value: Variant = (recorder_value as Object).get("run_summary_tracker")
 		if tracker_value != null:
+			tracker_checkpoint = tracker_value.build_checkpoint()
 			var ti_boons: Variant = (tracker_value as Object).get("boon_items")
 			if ti_boons is Dictionary:
 				tracker_boon_items = (ti_boons as Dictionary).duplicate(true)
@@ -155,6 +159,8 @@ static func build_snapshot(world: Node, player: Node, run_context: Node, snapsho
 		"tracker_boon_items": tracker_boon_items,
 		"tracker_arcana_items": tracker_arcana_items,
 		"tracker_boss_reward_items": tracker_boss_reward_items,
+		"tracker_checkpoint": tracker_checkpoint,
+		"run_elapsed_seconds": run_elapsed_seconds,
 	}
 
 static func apply_snapshot(world: Node, player: Node, run_context: Node, snapshot: Dictionary, room_base_size: Vector2, fallback_run_mode: Variant, reward_mode_none: int) -> bool:

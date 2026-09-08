@@ -12,7 +12,7 @@ Run this once to install the hooks:
 
 ## Files
 
-- **pre-commit.ps1** - Main validation logic (checks for debug options and syntax errors)
+- **pre-commit.ps1** - Main validation logic (debug checks, syntax checks, and isolated gameplay regressions)
 - **pre-commit** - Shell wrapper that calls the PowerShell script
 - **install-hooks.ps1** - Setup script that copies hooks to `.git/hooks/` and configures Git
 
@@ -31,9 +31,17 @@ The hooks will block commits if any of these are true:
 
 2. **Syntax errors in staged GDScript files**
 
-3. **Full GDScript compile pass for the project**
-   - Runs `.github/scripts/validate_gdscript_compile.gd` on every commit.
-   - Blocks commit if any script fails to compile.
+3. **Isolated Godot validation and gameplay regressions**
+   - Runs `.github/scripts/run_gameplay_regressions.ps1` on every commit.
+   - Imports the project and compiles every GDScript, then checks forbidden world property access and multiplayer configuration synchronization.
+   - Runs the reward-input, power-reward, and Oath-tracking regression suites.
+   - Blocks commit if the runner fails, including script errors or failed assertions.
+
+Godot checks run in a temporary project copy with separate user data. Autoload
+fixtures retain production methods for compilation while disabling startup and
+background services; external endpoints are cleared in the temporary copy. The
+checks do not boot the working project, modify its import cache, or load normal
+player saves. The runner prints the retained temporary log directory for review.
 
 ## Godot Executable Resolution
 

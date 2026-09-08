@@ -68,7 +68,29 @@ func apply_upgrade(upgrade_id: String) -> bool:
 			player_reference.set("severing_edge_bonus_damage", int(preview.get("next", int(player_reference.get("severing_edge_bonus_damage")))))
 		_:
 			return false
+	refresh_derived_trial_parameters(String(preview.get("property", "")))
 	return true
+
+
+## Refresh values derived from base stats without granting another stack or
+## applying acquisition-only cooldown reductions again.
+func refresh_derived_trial_parameters(changed_property: String = "") -> void:
+	if not is_instance_valid(player_reference):
+		return
+	var derived_parameters := {}
+	if changed_property.is_empty() or changed_property == "damage":
+		derived_parameters["phantom_step"] = "damage"
+		derived_parameters["static_wake"] = "damage"
+	if changed_property.is_empty() or changed_property == "attack_arc_degrees":
+		derived_parameters["razor_wind"] = "arc_degrees"
+	for power_id: String in derived_parameters:
+		if get_trial_power_stack_count(power_id) <= 0:
+			continue
+		var values := get_trial_runtime_values(power_id)
+		var parameter: String = derived_parameters[power_id]
+		var property_name := POWER_PARAMETER_MAPPER.get_property_name(power_id, parameter)
+		if values.has(parameter) and not property_name.is_empty():
+			player_reference.set(property_name, values[parameter])
 
 
 ## Apply a trial power (combat ability) to the player
@@ -514,7 +536,7 @@ func get_power_current_description(power_id: String) -> String:
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.2fs", float(cur.get("slow_duration", 0.0))), _current_stat("%.0f%%", float(cur.get("slow_mult", 1.0)) * 100.0), _current_stat("+%d", int(cur.get("bonus_damage", 0))), _current_const(hunters_unlocks)], "build_detail"))
 		"phantom_step":
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
-			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0), _current_stat("%.2fs", float(cur.get("slow_duration", 0.0)))], "build_detail"))
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%d", int(cur.get("damage", 0))), _current_stat("%.2fs", float(cur.get("slow_duration", 0.0)))], "build_detail"))
 		"riftpunch":
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			var rp_unlocks := _riftpunch_unlocks_for_stack(get_trial_power_stack_count(id))
@@ -525,8 +547,9 @@ func get_power_current_description(power_id: String) -> String:
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("x%.2f", float(cur.get("range_mult", 1.0))), _current_const("full"), _current_const(reaper_unlocks)], "build_detail"))
 		"static_wake":
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
+			var runtime_values := get_trial_runtime_values(id)
 			var wake_unlocks := _static_wake_unlocks_for_stack(get_trial_power_stack_count(id))
-			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0), _current_stat("%.2fs", float(cur.get("lifetime", 0.0))), _current_stat("%.0f", float(cur.get("trail_radius", 28.0))), _current_const(wake_unlocks)], "build_detail"))
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f%%", float(runtime_values.get("damage_ratio", 0.0)) * 100.0), _current_stat("%.2fs", float(cur.get("lifetime", 0.0))), _current_stat("%.0f", float(cur.get("trail_radius", 28.0))), _current_const(wake_unlocks)], "build_detail"))
 		"storm_crown":
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%d", int(cur.get("proc_every", 1))), _current_stat("%d", int(cur.get("chain_targets", 1))), _current_stat("%.0f", float(cur.get("chain_radius", 0.0))), _current_stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0)], "build_detail"))
@@ -623,10 +646,8 @@ func get_trial_power_card_description(power_id: String) -> String:
 			var rs_unlock := _const(_reaper_step_unlocks_for_stack(next_stack))
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [range_stat, _const("full"), rs_unlock], "reward_card"))
 		"static_wake":
-			var wake_data := _get_power_balance_data("static_wake")
-			var wake_ratio_base := float(wake_data.get("damage_ratio_base", 0.0))
-			var wake_ratio_per_stack := float(wake_data.get("damage_ratio_per_stack", 0.0))
-			var wake_damage_stat := _stat("%.0f%%", (wake_ratio_base + wake_ratio_per_stack * float(current_stack)) * 100.0, (wake_ratio_base + wake_ratio_per_stack * float(next_stack)) * 100.0, is_initial)
+			var runtime_values := get_trial_runtime_values(id)
+			var wake_damage_stat := _stat("%.0f%%", float(runtime_values.get("damage_ratio", 0.0)) * 100.0, float(next_values.get("damage_ratio", 0.0)) * 100.0, is_initial)
 			var wake_life_stat := _stat("%.2fs", float(cur.get("lifetime", 0.0)), float(next_values.get("lifetime", 0.0)), is_initial)
 			var wake_radius_stat := _stat("%.0f", float(cur.get("trail_radius", 28.0)), float(next_values.get("trail_radius", 28.0)), is_initial)
 			var sw_unlock := _const(_static_wake_unlocks_for_stack(next_stack))

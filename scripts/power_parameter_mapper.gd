@@ -262,6 +262,7 @@ static func _build_trial_values_base(power_id: String, stack_count: int, balance
 		"static_wake":
 			var wake_damage_ratio := float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count)
 			return {
+				"damage_ratio": wake_damage_ratio,
 				"damage": int(ceil(float(player_reference.get("damage")) * wake_damage_ratio)),
 				"lifetime": float(data.get("lifetime_base", 0.0)) + float(data.get("lifetime_per_stack", 0.0)) * float(stack_count),
 				"trail_radius": float(data.get("trail_radius_base", 28.0)) + float(data.get("trail_radius_per_stack", 0.0)) * float(stack_count)
@@ -380,6 +381,7 @@ static func _apply_prismatic_trial_values(power_id: String, values: Dictionary) 
 			prismatic["chain_window"] = maxf(2.8, float(prismatic.get("chain_window", 0.0)))
 			prismatic["chain_grace"] = maxf(0.75, float(prismatic.get("chain_grace", 0.0)))
 		"static_wake":
+			prismatic["damage_ratio"] = float(prismatic.get("damage_ratio", 0.0)) * 1.4
 			prismatic["damage"] = int(float(prismatic.get("damage", 0)) * 1.4)
 			prismatic["lifetime"] = float(prismatic.get("lifetime", 0.0)) * 1.25
 			prismatic["trail_radius"] = float(prismatic.get("trail_radius", 0.0)) * 1.2

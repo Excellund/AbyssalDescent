@@ -36,8 +36,12 @@ var boss_no_hit_ids: Array[String] = []
 var hold_full_control_achieved: bool = false
 var rest_count: int = 0
 var primary_attacks_fired: int = 0
+var full_run_tracking_complete: bool = true
 var _bosses_with_damage_taken: Dictionary = {}
 var _active_boss_id: String = ""
+var _active_boss_peer_ids: Array[int] = []
+var _active_boss_damaged_peers: Dictionary = {}
+var _boss_no_hit_ids_by_peer: Dictionary = {}
 
 func reset_for_run(run_seed: Dictionary) -> void:
 	started_at_unix = int(run_seed.get("started_at_unix", Time.get_unix_time_from_system()))
@@ -76,16 +80,21 @@ func reset_for_run(run_seed: Dictionary) -> void:
 	hold_full_control_achieved = false
 	rest_count = 0
 	primary_attacks_fired = 0
+	full_run_tracking_complete = true
 	_bosses_with_damage_taken.clear()
 	_active_boss_id = ""
+	_active_boss_peer_ids.clear()
+	_active_boss_damaged_peers.clear()
+	_boss_no_hit_ids_by_peer.clear()
 
 func record_damage_dealt(amount: int) -> void:
 	total_damage_dealt += maxi(0, amount)
 
-func record_damage_taken(amount: int) -> void:
+func record_damage_taken(amount: int, peer_id: int = 0) -> void:
 	total_damage_taken += maxi(0, amount)
 	if amount > 0 and not _active_boss_id.is_empty():
 		_bosses_with_damage_taken[_active_boss_id] = true
+		_active_boss_damaged_peers[peer_id] = true
 
 func record_enemy_kill() -> void:
 	enemies_killed += 1
@@ -95,17 +104,69 @@ func record_boss_defeat(_boss_id: String = "") -> void:
 	var id: String = String(_boss_id).strip_edges().to_lower()
 	if id.is_empty():
 		id = _active_boss_id
-	if not id.is_empty() and not _bosses_with_damage_taken.has(id):
+	# A defeat without a matching engagement is not evidence of a clean fight.
+	if not id.is_empty() and id == _active_boss_id and not _bosses_with_damage_taken.has(id):
 		if not boss_no_hit_ids.has(id):
 			boss_no_hit_ids.append(id)
-	_active_boss_id = ""
+	if not id.is_empty() and id == _active_boss_id:
+		for peer_id in _active_boss_peer_ids:
+			if _active_boss_damaged_peers.has(peer_id):
+				continue
+			var peer_ids: Array = _boss_no_hit_ids_by_peer.get(peer_id, [])
+			if not peer_ids.has(id):
+				peer_ids.append(id)
+			_boss_no_hit_ids_by_peer[peer_id] = peer_ids
+	end_boss_engagement()
 
 ## Boss fight bracketing: boss enemy id is opened on engage, closed on defeat/death.
-func begin_boss_engagement(boss_id: String) -> void:
+func begin_boss_engagement(boss_id: String, participating_peer_ids: Array = [0]) -> void:
 	_active_boss_id = String(boss_id).strip_edges().to_lower()
+	_bosses_with_damage_taken.erase(_active_boss_id)
+	_active_boss_peer_ids.clear()
+	_active_boss_damaged_peers.clear()
+	for peer_id in participating_peer_ids:
+		if not _active_boss_peer_ids.has(int(peer_id)):
+			_active_boss_peer_ids.append(int(peer_id))
 
 func end_boss_engagement() -> void:
 	_active_boss_id = ""
+	_active_boss_peer_ids.clear()
+	_active_boss_damaged_peers.clear()
+
+func get_boss_no_hit_ids_for_peer(peer_id: int) -> Array:
+	return (_boss_no_hit_ids_by_peer.get(peer_id, []) as Array).duplicate()
+
+## Doorway saves preserve the evidence for whole-run Oaths, not just the build.
+func build_checkpoint() -> Dictionary:
+	return {
+		"total_damage_dealt": total_damage_dealt,
+		"total_damage_taken": total_damage_taken,
+		"enemies_killed": enemies_killed,
+		"bosses_defeated": bosses_defeated,
+		"boss_no_hit_ids": boss_no_hit_ids.duplicate(),
+		"hold_full_control_achieved": hold_full_control_achieved,
+		"rest_count": rest_count,
+		"primary_attacks_fired": primary_attacks_fired,
+		"full_run_tracking_complete": full_run_tracking_complete,
+		"reward_timeline": reward_timeline.duplicate(true),
+	}
+
+func restore_checkpoint(checkpoint: Dictionary) -> void:
+	total_damage_dealt = maxi(0, int(checkpoint.get("total_damage_dealt", 0)))
+	total_damage_taken = maxi(0, int(checkpoint.get("total_damage_taken", 0)))
+	enemies_killed = maxi(0, int(checkpoint.get("enemies_killed", 0)))
+	bosses_defeated = maxi(0, int(checkpoint.get("bosses_defeated", 0)))
+	boss_no_hit_ids.clear()
+	for id in checkpoint.get("boss_no_hit_ids", []):
+		boss_no_hit_ids.append(String(id))
+	hold_full_control_achieved = bool(checkpoint.get("hold_full_control_achieved", false))
+	rest_count = maxi(0, int(checkpoint.get("rest_count", 0)))
+	primary_attacks_fired = maxi(0, int(checkpoint.get("primary_attacks_fired", 0)))
+	full_run_tracking_complete = bool(checkpoint.get("full_run_tracking_complete", true))
+	reward_timeline.clear()
+	for entry in checkpoint.get("reward_timeline", []):
+		if entry is Dictionary:
+			reward_timeline.append((entry as Dictionary).duplicate(true))
 
 func record_hold_full_control() -> void:
 	hold_full_control_achieved = true
@@ -189,6 +250,7 @@ func build_summary(final_state: Dictionary) -> Dictionary:
 	summary["hold_full_control_achieved"] = hold_full_control_achieved
 	summary["rest_count"] = rest_count
 	summary["primary_attacks_fired"] = primary_attacks_fired
+	summary["full_run_tracking_complete"] = full_run_tracking_complete
 	return summary
 
 func _category_for_mode(mode: int) -> String:

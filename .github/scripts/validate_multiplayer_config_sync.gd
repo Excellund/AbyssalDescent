@@ -46,4 +46,6 @@ func _initialize() -> void:
 	if result.valid and result.warnings.size() == 0:
 		print("\n✓ All checks passed. Multiplayer config is in sync.")
 	
+	if is_instance_valid(mp_instance):
+		mp_instance.free()
 	quit(0 if result.valid else 1)

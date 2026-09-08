@@ -30,6 +30,7 @@ func end_combat_phase(player: PLAYER_SCRIPT, tree: SceneTree) -> void:
 func set_combat_paused(player: PLAYER_SCRIPT, tree: SceneTree, paused: bool) -> void:
 	if is_instance_valid(player):
 		player.velocity = Vector2.ZERO
+		player.discard_pending_combat_input()
 		player.set_physics_process(not paused)
 	if tree == null:
 		return

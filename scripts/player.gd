@@ -217,6 +217,7 @@ var _dash_damage_immune_left: float = 0.0
 var dash_enemy_exceptions: Dictionary = {}
 var body_radius_cache: float = 14.0
 var queued_attack_after_dash: bool = false
+var _combat_actions_awaiting_release: Array[StringName] = []
 var queued_attack_direction: Vector2 = Vector2.RIGHT
 var iron_skin_armor: int = 0
 var iron_skin_stacks: int = 0
@@ -534,6 +535,7 @@ func _ready() -> void:
 	queue_redraw()
 
 func _physics_process(delta: float) -> void:
+	_refresh_combat_input_release()
 	if not _is_alive_state:
 		velocity = Vector2.ZERO
 		move_and_slide()
@@ -610,6 +612,26 @@ func _read_movement_direction() -> Vector2:
 		return Vector2.ZERO
 	return Input.get_vector("move_left", "move_right", "move_up", "move_down")
 
+## Drop buffered attacks and require release of actions used to close a modal.
+## Input polling is global: handling a GUI event does not consume its action state.
+func discard_pending_combat_input() -> void:
+	queued_attack_after_dash = false
+	_combat_actions_awaiting_release.clear()
+	for action: StringName in [&"attack", &"dash"]:
+		if Input.is_action_pressed(action) or Input.is_action_just_pressed(action):
+			_combat_actions_awaiting_release.append(action)
+
+func _refresh_combat_input_release() -> void:
+	# Clear only in physics: an idle-frame query must not release the guard before
+	# physics has seen the confirmation click (including a quick press/release).
+	for index in range(_combat_actions_awaiting_release.size() - 1, -1, -1):
+		var action := _combat_actions_awaiting_release[index]
+		if not Input.is_action_pressed(action) and not Input.is_action_just_pressed(action):
+			_combat_actions_awaiting_release.remove_at(index)
+
+func is_combat_action_just_pressed(action: StringName) -> bool:
+	return not _combat_actions_awaiting_release.has(action) and Input.is_action_just_pressed(action)
+
 func _update_last_move_direction(direction: Vector2) -> void:
 	if direction != Vector2.ZERO:
 		last_move_direction = direction
@@ -649,7 +671,7 @@ func _try_start_dash(direction: Vector2) -> void:
 		return
 	if polar_shift_dash_lockout_left > 0.0:
 		return
-	if not Input.is_action_just_pressed("dash"):
+	if not is_combat_action_just_pressed(&"dash"):
 		return
 	if dash_cooldown_left > 0.0:
 		if _reaper_stored_dashes <= 0:
@@ -698,7 +720,7 @@ func _try_attack_input() -> void:
 		return  ## Remote players don't process input
 	if encounter_input_frozen:
 		return
-	if not Input.is_action_just_pressed("attack"):
+	if not is_combat_action_just_pressed(&"attack"):
 		return
 	if _is_dash_active():
 		queued_attack_after_dash = true
@@ -707,6 +729,8 @@ func _try_attack_input() -> void:
 	_try_execute_attack(_get_mouse_attack_direction())
 
 func _try_consume_queued_attack() -> void:
+	if encounter_input_frozen:
+		return
 	if not queued_attack_after_dash:
 		return
 	if _is_dash_active():
@@ -3034,18 +3058,19 @@ func _get_static_wake_bounds_rect() -> Rect2:
 	return Rect2()
 
 
-func notify_enemy_killed(kill_position: Vector2 = Vector2.ZERO) -> void:
+func notify_enemy_killed(kill_position: Vector2 = Vector2.INF) -> void:
+	var has_kill_position := kill_position.is_finite()
 	_trigger_combo_relay_kill()
 	_trigger_relay_boost_kill()
-	_trigger_overcharge_kill(kill_position)
-	if void_echo_damage > 0 and _void_echo_pulse_kill_suppression_depth <= 0:
+	_trigger_overcharge_kill(kill_position if has_kill_position else Vector2.ZERO)
+	if has_kill_position and void_echo_damage > 0 and _void_echo_pulse_kill_suppression_depth <= 0:
 		_apply_void_echo(kill_position)
-	if edict_court_push_power > 0:
+	if has_kill_position and edict_court_push_power > 0:
 		_apply_edict_court_pulse(kill_position)
 	if _void_echo_pulse_kill_suppression_depth <= 0:
-		if reward_eclipse_mark:
+		if has_kill_position and reward_eclipse_mark:
 			_apply_eclipse_mark(kill_position)
-		if reward_fracture_field and not _fracture_field_resolving:
+		if has_kill_position and reward_fracture_field and not _fracture_field_resolving:
 			_apply_fracture_field(kill_position)
 		if reward_dread_resonance:
 			_reset_dread_resonance_tracking()
@@ -4228,7 +4253,7 @@ func _update_void_echo_zones(delta: float) -> void:
 					continue
 				var to_center := zone_pos - enemy_body.global_position
 				if dist > 0.001:
-					enemy_body.velocity += to_center.normalized() * 360.0
+					DAMAGEABLE.apply_impulse(enemy_body, to_center.normalized() * 360.0)
 				DAMAGEABLE.apply_damage(enemy_node, pulse_damage, {"is_ground_attack": true, "attack_type": "void_echo_zone"})
 			_void_echo_pulse_kill_suppression_depth = maxi(0, _void_echo_pulse_kill_suppression_depth - 1)
 		zone["pulse_left"] = pulse_left
@@ -4281,7 +4306,7 @@ func _update_convergence_window(delta: float) -> void:
 
 
 func _apply_void_echo(kill_pos: Vector2) -> void:
-	if kill_pos == Vector2.ZERO:
+	if not kill_pos.is_finite():
 		return
 	var echo_radius := clampf(54.0 + float(void_echo_damage) * 0.6, 54.0, 110.0)
 	var zone_data := {
@@ -4324,7 +4349,7 @@ func _clamp_push_to_room_bounds(enemy_pos: Vector2, push_vel: Vector2) -> Vector
 	return result
 
 func _apply_edict_court_pulse(kill_pos: Vector2) -> void:
-	if kill_pos == Vector2.ZERO:
+	if not kill_pos.is_finite():
 		return
 	var scatter_radius := clampf(80.0 + float(edict_court_push_power) * 1.0, 80.0, 160.0)
 	var push_force := 300.0 + float(edict_court_push_power) * 1.8
@@ -4337,7 +4362,7 @@ func _apply_edict_court_pulse(kill_pos: Vector2) -> void:
 		if dist > scatter_radius:
 			continue
 		var raw_dir := to_enemy.normalized() if dist > 0.001 else Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)).normalized()
-		enemy_body.velocity += _clamp_push_to_room_bounds(enemy_body.global_position, raw_dir * push_force)
+		DAMAGEABLE.apply_impulse(enemy_body, _clamp_push_to_room_bounds(enemy_body.global_position, raw_dir * push_force))
 	if player_feedback != null:
 		player_feedback.play_boss_edict_court_pulse(kill_pos, scatter_radius)
 		_broadcast_cue_event("boss_edict_court_pulse", {"position": kill_pos, "radius": scatter_radius})
@@ -4405,7 +4430,7 @@ func _update_null_corridor_segments(delta: float) -> void:
 				continue
 			# Fresh entry: strong single impulse
 			var push_dir := seg_normal if perp >= 0.0 else -seg_normal
-			enemy_body.velocity += _clamp_push_to_room_bounds(enemy_body.global_position, push_dir * 750.0)
+			DAMAGEABLE.apply_impulse(enemy_body, _clamp_push_to_room_bounds(enemy_body.global_position, push_dir * 750.0))
 			cooldowns[enemy_id] = 0.5
 			seg["deflect_cooldowns"] = cooldowns
 			null_corridor_segments[i] = seg
@@ -4443,7 +4468,7 @@ func _try_apply_convergence_surge(epicenter: Vector2, _source_damage: int, _prim
 # --- Eclipse Mark ---
 
 func _apply_eclipse_mark(kill_pos: Vector2) -> void:
-	if kill_pos == Vector2.ZERO:
+	if not kill_pos.is_finite():
 		return
 	var now := Time.get_ticks_msec() / 1000.0
 	var expiry := now + eclipse_mark_duration
@@ -4500,7 +4525,7 @@ func _consume_eclipse_mark_bonus(enemy_node: Object, base_damage: int) -> int:
 # --- Fracture Field ---
 
 func _apply_fracture_field(kill_pos: Vector2) -> void:
-	if kill_pos == Vector2.ZERO:
+	if not kill_pos.is_finite():
 		return
 	if _fracture_field_resolving:
 		return

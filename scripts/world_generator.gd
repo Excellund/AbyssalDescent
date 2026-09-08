@@ -77,6 +77,7 @@ const RUN_CONTEXT_SCRIPT := preload("res://scripts/run_context.gd")
 const MULTIPLAYER_SESSION_MANAGER_SCRIPT := preload("res://scripts/multiplayer_session_manager.gd")
 const PLAYER_SCRIPT := preload("res://scripts/player.gd")
 const ENEMY_BASE_SCRIPT := preload("res://scripts/enemy_base.gd")
+const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const RUN_CONTEXT_PATH := "/root/RunContext"
 const MENU_SCENE_PATH := "res://scenes/Menu.tscn"
 const RUN_SNAPSHOT_VERSION := 1
@@ -2356,6 +2357,9 @@ func _try_resume_saved_run() -> Dictionary:
 	return snapshot
 
 func _save_active_run_checkpoint() -> void:
+	# Co-op cannot resume from a solo checkpoint or replace one with party state.
+	if is_multiplayer:
+		return
 	var run_context := _get_run_context()
 	if run_context == null:
 		return
@@ -2365,6 +2369,8 @@ func _save_active_run_checkpoint() -> void:
 	run_context.save_active_run(snapshot)
 
 func _clear_active_run_checkpoint() -> void:
+	if is_multiplayer:
+		return
 	var run_context := _get_run_context()
 	if run_context == null:
 		return
@@ -3217,6 +3223,8 @@ func _play_room_music(is_boss_room: bool, instant: bool = false, fade_duration: 
 func _on_room_enemy_died(kill_pos: Vector2 = Vector2.ZERO) -> void:
 	active_room_enemy_count = maxi(0, active_room_enemy_count - 1)
 	run_summary_recorder.record_enemy_kill_for_tracker()
+	if not is_multiplayer and is_instance_valid(player):
+		player.notify_enemy_killed(kill_pos)
 	objective_progress_coordinator.on_enemy_killed(objective_manager, objective_runtime, kill_pos)
 	if not in_boss_room and is_instance_valid(_world_sfx_player):
 		var idx := randi() % 3
@@ -3233,9 +3241,10 @@ func _on_enemy_damage_received(_applied_amount: int) -> void:
 	# Keep this handler for compatibility with older signal wiring.
 	pass
 
-func record_player_damage_dealt(applied_amount: int, source_peer_id: int = 0, _killed_enemy: bool = false, enemy_id: int = 0) -> void:
+func record_player_damage_dealt(applied_amount: int, source_peer_id: int = 0, killed_enemy: bool = false, enemy_id: int = 0) -> void:
 	run_summary_recorder.record_damage_dealt(applied_amount, source_peer_id)
-	EnemyReplicationService.credit_damage(enemy_id, source_peer_id)
+	if not killed_enemy:
+		EnemyReplicationService.credit_damage(enemy_id, source_peer_id)
 
 func _record_peer_enemy_kill(peer_id: int) -> void:
 	run_summary_recorder.record_peer_enemy_kill(peer_id)
@@ -3352,21 +3361,39 @@ func _sync_request_enemy_damage(enemy_id: int, amount: int, damage_context: Dict
 	if not is_instance_valid(enemy):
 		return
 	var sender_peer_id := get_tree().get_multiplayer().get_remote_sender_id()
-	var source_peer_id := int(damage_context.get("source_peer_id", 0))
-	if source_peer_id <= 0:
-		source_peer_id = sender_peer_id
+	if not MultiplayerSessionManager.get_peer_ids().has(sender_peer_id):
+		return
+	var source_peer_id := sender_peer_id
+	var routed_context := damage_context.duplicate(true)
+	routed_context["source_peer_id"] = source_peer_id
 	if STAT_ATTRIBUTION_TRACE:
 		print_debug("[StatAttribution][HostRecv] enemy_id=%d sender=%d source=%d amount=%d attack=%s" % [enemy_id, sender_peer_id, source_peer_id, amount, String(damage_context.get("attack_type", "unknown"))])
 	var health_before := enemy.get_current_health()
-	if damage_context.is_empty():
-		enemy.take_damage(amount)
-	else:
-		enemy.take_damage(amount, damage_context)
-	EnemyReplicationService.credit_damage(enemy_id, source_peer_id)
+	DAMAGEABLE.apply_damage(enemy, amount, routed_context, source_peer_id)
 	var health_after := enemy.get_current_health()
 	if STAT_ATTRIBUTION_TRACE:
 		print_debug("[StatAttribution][HostApplied] enemy_id=%d source=%d before=%d after=%d applied=%d" % [enemy_id, source_peer_id, health_before, health_after, maxi(0, health_before - health_after)])
-	record_player_damage_dealt(maxi(0, health_before - health_after), source_peer_id, false, enemy_id)
+
+func request_enemy_impulse_from_client(enemy_id: int, impulse: Vector2) -> void:
+	if not MultiplayerSessionManager.is_remote_replica():
+		return
+	if enemy_id <= 0 or not impulse.is_finite():
+		return
+	_sync_request_enemy_impulse.rpc_id(1, enemy_id, impulse)
+
+@rpc("reliable", "any_peer")
+func _sync_request_enemy_impulse(enemy_id: int, impulse: Vector2) -> void:
+	if not MultiplayerSessionManager.should_broadcast():
+		return
+	if enemy_id <= 0 or not impulse.is_finite():
+		return
+	var sender_peer_id := get_tree().get_multiplayer().get_remote_sender_id()
+	if not MultiplayerSessionManager.get_peer_ids().has(sender_peer_id):
+		return
+	var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as ENEMY_BASE_SCRIPT
+	if not is_instance_valid(enemy) or enemy.get_current_health() <= 0:
+		return
+	enemy.velocity += impulse
 
 func _spawn_boss_for_stage(boss_stage: int, spawn_position: Vector2) -> Node2D:
 	var boss := BOSS_STAGE_REGISTRY.create_boss_node(boss_stage, spawn_position)
@@ -4339,13 +4366,13 @@ func _update_encounter_intro_grace() -> bool:
 	if _local_player_ready:
 		return true
 	
-	var local_player_node := _find_local_player_node()
+	var local_player_node := _find_local_player_node() as PLAYER_SCRIPT
 	if local_player_node == null:
 		return true
 	
 	var move_input := Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	var player_moving := move_input.length_squared() > 0.0
-	var player_attacking := Input.is_action_just_pressed("attack")
+	var player_attacking := local_player_node.is_combat_action_just_pressed(&"attack")
 	
 	if player_moving or player_attacking:
 		var detected_via := "movement" if player_moving else "attack"

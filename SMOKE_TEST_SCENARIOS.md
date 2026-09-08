@@ -10,6 +10,13 @@ These are manual and automated test paths that verify the behavior invariants de
 
 ## Quick Test (Smoke Matrix)
 
+Run the automated input, power, and oath regressions from PowerShell with
+`& ./.github/scripts/run_gameplay_regressions.ps1` (or pass `-GodotPath "C:/Path/To/Godot.exe"`).
+This also compiles all scripts and checks world-property access and multiplayer
+configuration sync. It uses a temporary project with isolated user
+data and inactive service startup, preserves the real project and saves, and
+prints the location of retained logs. Manual gameplay checks below still apply.
+
 A minimal set of quick checks that can be run between commits to catch major breakage.
 
 ### QT1: Startup Validation

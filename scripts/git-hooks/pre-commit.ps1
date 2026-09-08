@@ -298,10 +298,10 @@ if (Test-Path $encounterContractsPath) {
 }
 
 # ============================================================================
-# CHECK 5: Full GDScript compile validation
+# CHECK 5: Isolated Godot validation and gameplay regressions
 # ============================================================================
 Write-Host ""
-Write-Host "Running full GDScript compile validation..." -ForegroundColor Yellow
+Write-Host "Running isolated Godot validation and gameplay regressions..." -ForegroundColor Yellow
 
 $godotExecutable = Resolve-GodotExecutable -projectRoot $projectRoot
 if ([string]::IsNullOrWhiteSpace([string]$godotExecutable)) {
@@ -310,41 +310,29 @@ if ([string]::IsNullOrWhiteSpace([string]$godotExecutable)) {
     exit 1
 }
 
-$compileValidatorScript = Join-Path $projectRoot ".github/scripts/validate_gdscript_compile.gd"
-if (-not (Test-Path $compileValidatorScript)) {
-    Write-Host "  [ERROR] Compile validator script not found: $compileValidatorScript" -ForegroundColor Red
+$regressionRunner = Join-Path $projectRoot ".github/scripts/run_gameplay_regressions.ps1"
+if (-not (Test-Path -LiteralPath $regressionRunner)) {
+    Write-Host "  [ERROR] Isolated validation runner not found: $regressionRunner" -ForegroundColor Red
     exit 1
 }
 
-& $godotExecutable --headless --path $projectRoot -s $compileValidatorScript
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "" 
-    Write-Host "[FAIL] Full GDScript compile validation failed." -ForegroundColor Red
+# Run in a separate process so the runner's temporary environment and failures
+# cannot leak into the hook. Godot must never boot against the real project here.
+try {
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $regressionRunner -GodotPath $godotExecutable
+    $validationExitCode = $LASTEXITCODE
+} catch {
+    Write-Host "  [ERROR] Could not run isolated validation: $_" -ForegroundColor Red
     exit 1
 }
 
-Write-Host "[OK] Full GDScript compile validation passed" -ForegroundColor Green
-
-# ============================================================================
-# CHECK 6: Forbidden world property access lint
-# ============================================================================
-Write-Host ""
-Write-Host "Checking forbidden world property access patterns..." -ForegroundColor Yellow
-
-$propertyAccessValidatorScript = Join-Path $projectRoot ".github/scripts/validate_world_property_access.gd"
-if (-not (Test-Path $propertyAccessValidatorScript)) {
-    Write-Host "  [ERROR] Property access validator script not found: $propertyAccessValidatorScript" -ForegroundColor Red
-    exit 1
-}
-
-& $godotExecutable --headless --path $projectRoot -s $propertyAccessValidatorScript
-if ($LASTEXITCODE -ne 0) {
+if ($validationExitCode -ne 0) {
     Write-Host ""
-    Write-Host "[FAIL] Forbidden world property access validation failed." -ForegroundColor Red
+    Write-Host "[FAIL] Isolated Godot validation or gameplay regressions failed." -ForegroundColor Red
     exit 1
 }
 
-Write-Host "[OK] Forbidden world property access validation passed" -ForegroundColor Green
+Write-Host "[OK] Isolated Godot validation and gameplay regressions passed" -ForegroundColor Green
 
 # ============================================================================
 # All checks passed!

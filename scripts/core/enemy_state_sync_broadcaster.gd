@@ -123,6 +123,9 @@ func on_enemy_died(enemy_id: int) -> void:
 	var kill_pos := (enemy.global_position if is_instance_valid(enemy) else Vector2.ZERO)
 	var death_effect_payload := _build_enemy_death_effect_payload(enemy)
 	deregister_enemy(enemy_id)
+	# Solo deaths are dispatched by the room callback, including registered bosses.
+	if not _world.is_multiplayer:
+		return
 	if MultiplayerSessionManager.should_broadcast():
 		_world._sync_enemy_died.rpc(enemy_id, death_effect_payload)
 	var replication_service := (Engine.get_main_loop() as SceneTree).root.get_node_or_null("/root/PlayerReplicationService")

@@ -135,6 +135,9 @@ How to apply:
 - Pass required context explicitly.
 - Centralize mutable state ownership.
 - Avoid temporary shared-state swapping to influence helper behavior.
+- At modal-to-gameplay handoffs, clear buffered combat commands and require release of held confirmation actions. Handling a GUI event does not consume Godot's global `Input` polling state.
+- Release consumed-action guards in the physics loop, including while encounter input is frozen. Use the same guard for attack, dash, and arena-ready checks so an idle-frame UI click cannot become a physics-frame gameplay action.
+- Run automated Godot validation through the isolated regression runner, including from Git hooks. Compilation can initialize autoloads; keep test user data, imports, and service startup separate from the player's project and saves.
 
 ### 6. Refactor Incrementally
 

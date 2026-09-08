@@ -32,6 +32,8 @@ var run_started_at_msec: int = 0
 var _run_finished_at_msec: int = 0
 var _total_paused_msec: int = 0
 var _pause_started_at_msec: int = 0
+var _resumed_elapsed_msec: int = 0
+var _run_is_debug: bool = false
 var latest_run_summary: Dictionary = {}
 var run_summary_tracker
 
@@ -59,7 +61,7 @@ func get_run_elapsed_seconds() -> int:
 	var paused := _total_paused_msec
 	if _pause_started_at_msec > 0:
 		paused += end_msec - _pause_started_at_msec
-	return maxi(0, int(round(float(end_msec - run_started_at_msec - paused) / 1000.0)))
+	return maxi(0, int(round(float(end_msec - run_started_at_msec - paused + _resumed_elapsed_msec) / 1000.0)))
 
 func pause_run_timer() -> void:
 	if run_started_at_msec <= 0 or _pause_started_at_msec > 0:
@@ -108,9 +110,11 @@ func mark_run_start() -> void:
 	_total_paused_msec = 0
 	_pause_started_at_msec = 0
 	latest_run_summary.clear()
+	_resumed_elapsed_msec = 0
 	reset_summary_tracker()
 
 func initialize(allow_collection: bool) -> void:
+	_run_is_debug = not allow_collection
 	telemetry_run_id = ""
 	telemetry_enabled = allow_collection
 	telemetry_run_finished = false
@@ -201,6 +205,14 @@ func reset_summary_tracker() -> void:
 func restore_tracker_items_from_snapshot(snapshot: Dictionary) -> void:
 	if run_summary_tracker == null:
 		return
+	var checkpoint_raw: Variant = snapshot.get("tracker_checkpoint", {})
+	if checkpoint_raw is Dictionary and not (checkpoint_raw as Dictionary).is_empty():
+		run_summary_tracker.restore_checkpoint(checkpoint_raw)
+		_resumed_elapsed_msec = maxi(0, int(snapshot.get("run_elapsed_seconds", 0))) * 1000
+	else:
+		# Legacy saves kept the build but not prior hits, attacks, rests or time.
+		# Keep the run playable without treating unknown history as zero usage.
+		run_summary_tracker.full_run_tracking_complete = false
 	var boon_raw: Variant = snapshot.get("tracker_boon_items", {})
 	if boon_raw is Dictionary:
 		run_summary_tracker.boon_items = (boon_raw as Dictionary).duplicate(true)
@@ -212,6 +224,7 @@ func restore_tracker_items_from_snapshot(snapshot: Dictionary) -> void:
 		run_summary_tracker.boss_reward_items = (boss_raw as Dictionary).duplicate(true)
 
 func mark_debug_mode() -> void:
+	_run_is_debug = true
 	if MultiplayerSessionManager.is_remote_replica():
 		telemetry_enabled = false
 		return
@@ -267,8 +280,10 @@ func finish_run(outcome: String, death_event: Dictionary = {}) -> void:
 			"death_event": death_copy,
 		})
 		tracker_summary["build_ids"] = build_ids
+		tracker_summary["is_debug"] = _run_is_debug
 		if _world.is_multiplayer:
 			var local_peer_id: int = _world._resolve_local_peer_id()
+			tracker_summary["boss_no_hit_ids"] = run_summary_tracker.get_boss_no_hit_ids_for_peer(local_peer_id)
 			var local_peer_stats := _lookup_peer_dictionary(_summary_stats_by_peer, local_peer_id)
 			if not local_peer_stats.is_empty():
 				var merged_stats := (tracker_summary.get("stats", {}) as Dictionary).duplicate(true)
@@ -485,7 +500,7 @@ func on_player_health_changed(current_health: int, _max_health: int, player_node
 		return
 	var health_loss := last_health - current_health
 	if health_loss > 0:
-		run_summary_tracker.record_damage_taken(health_loss)
+		run_summary_tracker.record_damage_taken(health_loss, peer_id)
 		if peer_id > 0:
 			_add_peer_stat_delta(peer_id, "damage_taken_total", health_loss)
 	_summary_last_player_health_by_peer[health_key] = current_health
@@ -506,7 +521,7 @@ func reconcile_damage_taken_to_player_health() -> void:
 			continue
 		var peer_health_loss := last_health - peer_current_health
 		if peer_health_loss > 0:
-			run_summary_tracker.record_damage_taken(peer_health_loss)
+			run_summary_tracker.record_damage_taken(peer_health_loss, peer_id)
 			if peer_id > 0:
 				_add_peer_stat_delta(peer_id, "damage_taken_total", peer_health_loss)
 		_summary_last_player_health_by_peer[health_key] = peer_current_health
@@ -577,7 +592,12 @@ func record_boss_defeat(boss_id: String) -> void:
 
 func begin_boss_engagement_for_tracker(boss_id: String) -> void:
 	if run_summary_tracker != null:
-		run_summary_tracker.begin_boss_engagement(boss_id)
+		var participating_peer_ids: Array = []
+		for player_node in _world._get_multiplayer_player_nodes():
+			var tracked_player := player_node as PLAYER_SCRIPT
+			if is_instance_valid(tracked_player) and not tracked_player.is_dead():
+				participating_peer_ids.append(_world._get_player_network_id(tracked_player))
+		run_summary_tracker.begin_boss_engagement(boss_id, participating_peer_ids)
 
 func record_hold_full_control_for_tracker() -> void:
 	if run_summary_tracker != null:
@@ -657,6 +677,7 @@ func build_peer_summary_overrides() -> Dictionary:
 					continue
 				build_ids.append(item_id)
 		overrides[peer_id] = {
+			"boss_no_hit_ids": run_summary_tracker.get_boss_no_hit_ids_for_peer(peer_id),
 			"character_id": active_character,
 			"character_name": character_name,
 			"build_summary": build_summary,
@@ -789,7 +810,7 @@ func summary_with_local_peer_overrides(run_summary: Dictionary, peer_summary_ove
 	var override := _lookup_peer_dictionary(peer_summary_overrides, local_peer_id)
 	if override.is_empty():
 		return summary
-	for key in ["character_id", "character_name", "build_summary", "reward_timeline", "build_ids"]:
+	for key in ["character_id", "character_name", "build_summary", "reward_timeline", "build_ids", "boss_no_hit_ids"]:
 		if override.has(key):
 			summary[key] = override.get(key)
 	return summary
@@ -802,6 +823,11 @@ func finalize_synced_run_summary_for_joiner(synced_summary: Dictionary, outcome:
 	if synced_summary.is_empty():
 		return
 	var augmented := synced_summary.duplicate(true)
+	if run_summary_tracker != null:
+		# The local input owner records its attacks; the host's count belongs to
+		# a different player and must not decide this player's Closed Fist Oath.
+		augmented["primary_attacks_fired"] = run_summary_tracker.primary_attacks_fired
+	augmented["is_debug"] = _run_is_debug or bool(augmented.get("is_debug", false))
 	if String(augmented.get("outcome", "")).strip_edges().is_empty():
 		augmented["outcome"] = outcome
 	var local_peer_id: int = _world._resolve_local_peer_id()
@@ -927,6 +953,8 @@ func _lookup_peer_array(source: Dictionary, peer_id: int) -> Array:
 ## `latest_run_summary["unlocks"]` to surface human-readable labels on the
 ## defeat/victory screen.
 func _apply_endgame_chase_progress(run_summary: Dictionary) -> void:
+	if _run_is_debug or bool(run_summary.get("is_debug", false)):
+		return
 	var run_context: Node = _world._get_run_context()
 	if run_context == null:
 		return

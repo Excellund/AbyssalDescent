@@ -487,7 +487,7 @@ func _update_control_zone_state() -> void:
 	objective_manager.control_contested = objective_manager.control_enemies_in_zone > objective_manager.control_contest_threshold
 
 func _is_any_active_player_inside_control_zone(anchor: Vector2, radius: float) -> bool:
-	if is_instance_valid(world.player) and world.player.global_position.distance_to(anchor) <= radius:
+	if _is_living_player_inside_control_zone(world.player, anchor, radius):
 		return true
 	if world.is_multiplayer:
 		var party_nodes: Variant = world._get_multiplayer_player_nodes()
@@ -496,9 +496,16 @@ func _is_any_active_player_inside_control_zone(anchor: Vector2, radius: float) -
 				var party_node := party_node_variant as Node2D
 				if party_node == world.player:
 					continue
-				if is_instance_valid(party_node) and party_node.global_position.distance_to(anchor) <= radius:
+				if _is_living_player_inside_control_zone(party_node, anchor, radius):
 					return true
 	return false
+
+func _is_living_player_inside_control_zone(player_node: Node2D, anchor: Vector2, radius: float) -> bool:
+	if not is_instance_valid(player_node):
+		return false
+	if player_node.is_dead():
+		return false
+	return player_node.global_position.distance_to(anchor) <= radius
 
 func _sync_control_zone_runtime_state(delta: float, force: bool = false) -> void:
 	if not MultiplayerSessionManager.should_broadcast():
