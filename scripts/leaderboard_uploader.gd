@@ -56,6 +56,12 @@ func _on_tick() -> void:
 	var next_attempt := int(entry.get("attempt_count", 0)) + 1
 	if entry_id.is_empty() or payload.is_empty():
 		return
+	# Old builds may already have queued dev/debug clears. Check the stored
+	# version again at delivery time; never relabel them as the current build.
+	var stored_summary: Variant = payload.get("p_run_summary", {})
+	if not (stored_summary is Dictionary) or not LEADERBOARD_MODEL.is_submission_eligible(stored_summary):
+		LEADERBOARD_QUEUE.mark_success(entry_id)
+		return
 	var headers := PackedStringArray(["Content-Type: application/json"])
 	var api_key := _upload_api_key()
 	if not api_key.is_empty():

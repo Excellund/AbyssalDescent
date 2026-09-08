@@ -92,10 +92,12 @@ Always classify likely root causes.
 Run:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File "c:\Mike\Godot Projects\godot-2026\playtester_telemetry\fetch_latest_version_analysis.ps1"
+powershell -ExecutionPolicy Bypass -File "c:\Mike\Godot Projects\godot-2026\playtester_telemetry\fetch_latest_version_analysis.ps1" -Version "<target-version>" -From "<inclusive-UTC-date>" -To "<exclusive-UTC-date>"
 ```
 
 Wait for completion.
+
+Choose the exact target version and date window first; do not pool different builds. The default output is a unique temporary file printed as `REPORT_JSON=<path>`. For local dev playtests, add `-LocalHistoryPath "<path-to-run_history.json>"`; this mode does not access the network. Missing local event/offer metrics are unavailable, not zero.
 
 If the fetch fails:
 - report the error
@@ -106,7 +108,7 @@ If the fetch fails:
 
 Read:
 
-`playtester_telemetry/latest_version_balance_report.json`
+The exact `REPORT_JSON` path printed by the completed invocation. The tracked `playtester_telemetry/latest_version_balance_report.json` is a historical artifact and is not automatically refreshed.
 
 Identify available fields.
 

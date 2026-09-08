@@ -35,7 +35,7 @@ func _run() -> void:
 	_check(META.get_equipped_catalyst_ids(profile, "bastion").is_empty(), "Locked Catalysts cannot be equipped")
 	_check(not META.unlock_catalyst(profile, "unknown_catalyst"), "Unknown Catalyst cannot become an active unlock")
 	var summary := {
-		"outcome": "clear", "character_id": "bastion", "bearing_tier": 3,
+		"outcome": "clear", "character_id": "bastion", "difficulty_tier": 3,
 		"ascension_rank": 10, "elapsed_seconds": 300,
 		"boss_no_hit_ids": ["warden", "sovereign", "lacuna"],
 		"hold_full_control_achieved": true, "primary_attacks_fired": 0, "rest_count": 0,

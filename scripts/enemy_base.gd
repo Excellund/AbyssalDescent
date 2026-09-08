@@ -3,6 +3,20 @@ extends CharacterBody2D
 const HEALTH_STATE_SCRIPT := preload("res://scripts/health_state.gd")
 const COLOR_PALETTE := preload("res://scripts/shared/color_palette.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
+const ENEMY_LAUNCH_STATE := preload("res://scripts/enemy_launch_state.gd")
+
+var _launch_state: ENEMY_LAUNCH_STATE
+
+func get_launch_state() -> ENEMY_LAUNCH_STATE:
+	if _launch_state == null:
+		_launch_state = ENEMY_LAUNCH_STATE.new()
+	return _launch_state
+
+func on_player_displaced(_impulse: Vector2) -> void:
+	pass
+
+func get_ward_damage_multiplier_for(_candidate: Variant) -> float:
+	return 1.0
 
 signal health_changed(current_health: int, max_health: int)
 signal died
@@ -234,6 +248,9 @@ func _physics_process(delta: float) -> void:
 				_remote_visual_update_accum = 0.0
 				_remote_visual_update_left = remote_visual_interval
 				_process_network_visuals(visual_delta)
+		return
+	if _launch_state != null and _launch_state.step(self, delta):
+		_update_visual_facing_direction()
 		return
 	_maybe_refresh_target(delta)
 	_apply_crowd_separation(delta)
@@ -607,12 +624,28 @@ func take_damage(amount: int, _damage_context: Dictionary = {}) -> void:
 		return
 	if pulse_damage_taken_mult > 1.0:
 		amount = maxi(1, int(round(float(amount) * pulse_damage_taken_mult)))
+	amount = _apply_keeper_ward_to_damage(amount)
 	var before_health := int(health_state.current_health)
 	health_state.take_damage(amount)
 	var after_health := int(health_state.current_health)
 	var applied_amount := maxi(0, before_health - after_health)
 	if applied_amount > 0:
 		damage_received.emit(applied_amount, after_health)
+
+func _apply_keeper_ward_to_damage(amount: int) -> int:
+	# The host resolves protection at the damage boundary, before health changes
+	# and damage/kill accounting. Replicas receive the resulting health instead.
+	if amount <= 0 or not network_simulation_enabled or not is_inside_tree() or MultiplayerSessionManager.is_remote_replica():
+		return amount
+	var damage_multiplier := 1.0
+	for keeper in get_tree().get_nodes_in_group("keepers"):
+		if not is_instance_valid(keeper) or keeper.is_queued_for_deletion():
+			continue
+		var multiplier := float(keeper.get_ward_damage_multiplier_for(self))
+		if is_finite(multiplier):
+			damage_multiplier = minf(damage_multiplier, clampf(multiplier, 0.0, 1.0))
+	# Multiple Keepers never compound protection, and wards cannot grant immunity.
+	return maxi(1, int(round(float(amount) * damage_multiplier)))
 
 func _apply_crowd_separation(delta: float) -> void:
 	if crowd_separation_radius <= 0.0 or crowd_separation_strength <= 0.0:

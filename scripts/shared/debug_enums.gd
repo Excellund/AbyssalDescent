@@ -54,4 +54,6 @@ enum Encounter {
 	BOSS_1,
 	BOSS_2,
 	BOSS_3,
+	UNDERTOW,
+	BREACH,
 }

@@ -14,13 +14,15 @@ static func _obstacle_free(label: String) -> bool:
 ## Maps encounter label to the set of layout templates eligible for selection.
 ## One template is chosen per room via the encounter RNG.
 const _ENCOUNTER_POOL: Dictionary = {
-	"Crossfire":       ["center_pair_h", "center_pair_v", "diagonal_slash", "boulder_pair_h"],
+	"Crossfire":       ["offset_firing_lanes", "center_pair_h", "center_pair_v", "diagonal_slash", "boulder_pair_h"],
 	"Onslaught":       ["scatter_3", "cross_4", "boulder_pair_h"],
-	"Fortress":        ["cross_4", "quad_corners", "boulder_spread"],
+	"Fortress":        ["broken_ring", "cross_4", "quad_corners", "boulder_spread"],
 	"Blitz":           ["diagonal_slash", "diagonal_backslash", "center_pair_h"],
 	"Suppression":     ["quad_corners", "scatter_3", "boulder_pair_v"],
-	"Vanguard":        ["center_pair_v", "diagonal_slash"],
-	"Ambush":          ["scatter_3", "diagonal_backslash"],
+	"Vanguard":        ["forked_approach", "center_pair_v", "diagonal_slash"],
+	"Ambush":          ["side_cover", "scatter_3", "diagonal_backslash"],
+	"Undertow":        ["none"],
+	"Breach":          ["side_cover", "quad_corners"],
 	"Convergence":     ["cross_4", "center_pair_v", "boulder_pair_v"],
 	"Gauntlet":        ["scatter_3", "quad_corners", "cross_4", "boulder_spread"],
 	"Last Stand":      ["center_pair_h", "cross_4", "quad_corners", "boulder_pair_h"],
@@ -35,6 +37,14 @@ const _ENCOUNTER_POOL: Dictionary = {
 ## Returns the column positions for a named template (room-center-relative).
 static func _resolve_positions(template_name: String) -> Array[Vector2]:
 	match template_name:
+		"offset_firing_lanes":
+			return [Vector2(-240.0, -150.0), Vector2(-85.0, 110.0), Vector2(110.0, -110.0), Vector2(260.0, 150.0)]
+		"broken_ring":
+			return [Vector2(-235.0, -80.0), Vector2(-135.0, -190.0), Vector2(135.0, -190.0), Vector2(235.0, -80.0), Vector2(-135.0, 190.0), Vector2(135.0, 190.0)]
+		"forked_approach":
+			return [Vector2(0.0, 140.0), Vector2(-150.0, -20.0), Vector2(150.0, -20.0), Vector2(-245.0, -155.0), Vector2(245.0, -155.0)]
+		"side_cover":
+			return [Vector2(-260.0, -155.0), Vector2(-260.0, 120.0), Vector2(260.0, -120.0), Vector2(260.0, 155.0)]
 		"center_pair_h":
 			return [Vector2(-180.0, 0.0), Vector2(180.0, 0.0)]
 		"center_pair_v":

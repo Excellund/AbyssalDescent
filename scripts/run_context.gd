@@ -7,6 +7,7 @@ const SETTINGS_STORE := preload("res://scripts/settings_store.gd")
 const META_PROGRESS_STORE := preload("res://scripts/meta_progress_store.gd")
 const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 const CATALYST_REGISTRY := preload("res://scripts/progression/catalyst_registry.gd")
+const ASCENSION_REGISTRY := preload("res://scripts/progression/ascension_modifier_registry.gd")
 const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
 const TELEMETRY_UPLOADER_SCRIPT := preload("res://scripts/telemetry_uploader.gd")
 const LEADERBOARD_UPLOADER_SCRIPT := preload("res://scripts/leaderboard_uploader.gd")
@@ -73,6 +74,9 @@ var multiplayer_peer_profile_uuids: Dictionary = {}  ## peer_id -> profile uuid
 ## meta_progress.save. MP: host-set, party-shared, mirrored to joiners through
 ## the difficulty broadcast (see encounter_difficulty_multiplayer_config.gd).
 var active_ascension_loadout: Array[String] = []
+var active_ascension_tier: int = BEARING_ENUMS.BearingTier.PILGRIM
+var ascension_tracking_complete: bool = true
+var _pending_run_retry: Dictionary = {}
 var _active_catalyst_character_id: String = ""
 var _active_catalyst_ids: Array[String] = []
 var menu_music_resume_position_sec: float = -1.0
@@ -555,21 +559,52 @@ func save_ascension_loadout(character_id: String, modifier_ids: Array) -> bool:
 	META_PROGRESS_STORE.set_ascension_loadout(meta_progress_profile, character_id, modifier_ids)
 	return save_meta_progress()
 
-## Set the loadout that the next descent will use. The world boot reads this.
-func set_active_ascension_loadout(modifier_ids: Array) -> void:
-	var clean: Array[String] = []
-	for entry in modifier_ids:
-		var id: String = String(entry).strip_edges()
-		if id.is_empty() or clean.has(id):
-			continue
-		clean.append(id)
-	active_ascension_loadout = clean
+## Freeze a run/lobby loadout using its actual tier, independently of menu preferences.
+func set_active_ascension_loadout(modifier_ids: Array, tier: int = -1, tracking_complete: bool = true) -> void:
+	if tier < 0:
+		tier = multiplayer_difficulty_tier if not multiplayer_session_id.is_empty() else current_difficulty_tier
+	active_ascension_tier = tier
+	active_ascension_loadout = ASCENSION_REGISTRY.normalize_loadout(tier, modifier_ids)
+	ascension_tracking_complete = tracking_complete
 
-func get_active_ascension_loadout() -> Array[String]:
-	return active_ascension_loadout.duplicate()
+## Begin solo from saved preferences; co-op always uses the host's explicit loadout.
+func begin_ascension_run(character_id: String, tier: int, party_shared: bool = false) -> void:
+	var loadout: Array = active_ascension_loadout if party_shared else get_saved_ascension_loadout(character_id)
+	if not party_shared and not META_PROGRESS_STORE.has_cleared_forsworn(meta_progress_profile, character_id):
+		loadout = []
+	set_active_ascension_loadout(loadout, tier)
+
+## Legacy saves remain playable, but cannot prove the modifiers used before saving.
+func restore_ascension_checkpoint(snapshot: Dictionary, character_id: String, tier: int) -> void:
+	var loadout: Array = get_saved_ascension_loadout(character_id)
+	var tracking_complete := false
+	if snapshot.get("active_ascension_loadout") is Array:
+		loadout = snapshot["active_ascension_loadout"] as Array
+		tracking_complete = bool(snapshot.get("ascension_tracking_complete", true))
+	set_active_ascension_loadout(loadout, tier, tracking_complete)
+
+## Returns a detached effective loadout; pass the world tier at gameplay boundaries.
+func get_active_ascension_loadout(tier: int = -1) -> Array[String]:
+	return ASCENSION_REGISTRY.normalize_loadout(active_ascension_tier if tier < 0 else tier, active_ascension_loadout)
 
 func clear_active_ascension_loadout() -> void:
 	active_ascension_loadout = []
+	ascension_tracking_complete = true
+
+## Retry keeps the completed run's setup without changing saved menu preferences.
+func request_run_retry(character_id: String, tier: int) -> void:
+	_pending_run_retry = {
+		"character_id": character_id,
+		"difficulty_tier": tier,
+		"ascension_loadout": get_active_ascension_loadout(tier),
+		"catalyst_ids": get_active_catalyst_ids(character_id),
+	}
+
+## Returns a detached one-use retry configuration, including an explicitly empty loadout.
+func consume_run_retry() -> Dictionary:
+	var retry := _pending_run_retry.duplicate(true)
+	_pending_run_retry.clear()
+	return retry
 
 func get_ascension_highest_rank(character_id: String = "") -> int:
 	var id: String = character_id if not character_id.is_empty() else get_selected_character_id()

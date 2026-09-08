@@ -12,6 +12,7 @@ extends RefCounted
 const OATHS_REGISTRY := preload("res://scripts/progression/oaths_registry.gd")
 const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
 const CATALYST_REGISTRY := preload("res://scripts/progression/catalyst_registry.gd")
+const ASCENSION_REGISTRY := preload("res://scripts/progression/ascension_modifier_registry.gd")
 
 ## Returns a dict:
 ## {
@@ -97,7 +98,7 @@ static func _evaluate(key: String, params: Dictionary, run_summary: Dictionary) 
 		"win_single_arcana":
 			return _build_unique_count(run_summary, "arcana") == 1
 		"ascension_rank_at_least":
-			return int(run_summary.get("ascension_rank", 0)) >= int(params.get("rank", 1))
+			return ASCENSION_REGISTRY.can_record_rank(run_summary) and int(run_summary.get("ascension_rank", 0)) >= int(params.get("rank", 1))
 		"win_under_time_seconds":
 			return int(run_summary.get("duration_seconds", 99999)) < int(params.get("seconds", 0))
 		"win_no_rest":

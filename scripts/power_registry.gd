@@ -124,6 +124,16 @@ const DAMAGE_MODEL_BY_POWER := {
 		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
 		"formula_note": "Charged hits drop a sigil zone that ticks player_damage * ratio in radius"
 	},
+	"blast_drive": {
+		"kind": DAMAGE_KIND_SCALING,
+		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
+		"formula_note": "Charged blast deals 150-250% of Damage, multiplied by its Arcana damage scale"
+	},
+	"razor_orbit": {
+		"kind": DAMAGE_KIND_SCALING,
+		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
+		"formula_note": "Orbit cuts deal 35% of Damage, multiplied by their Arcana damage scale, per contact window"
+	},
 	# Character-lore bridges
 	"bloodvow": {
 		"kind": DAMAGE_KIND_SCALING,
@@ -186,6 +196,16 @@ const DAMAGE_MODEL_BY_POWER := {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
 		"formula_note": "Dash path becomes deflection zone; enemies crossing the trail are pushed hard and take ~20-24% of damage stat once per crossing (0.5s re-entry cooldown)"
+	},
+	"ruinous_impact": {
+		"kind": DAMAGE_KIND_SCALING,
+		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
+		"formula_note": "Launched enemies burst on impact for 100%/140% of Damage; bosses and Apex enemies compress and burst in place"
+	},
+	"sovereigns_double": {
+		"kind": DAMAGE_KIND_SCALING,
+		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
+		"formula_note": "A movement shade repeats one/two deliberate attacks at 55% of their resolved strike damage"
 	}
 }
 
@@ -291,6 +311,16 @@ const BOSS_REWARD_BALANCE := {
 		"kind": "add_float",
 		"property": "null_corridor_strength",
 		"add": 0.5
+	},
+	"ruinous_impact": {
+		"kind": "add_int",
+		"property": "ruinous_impact_stacks",
+		"add": 1
+	},
+	"sovereigns_double": {
+		"kind": "add_int",
+		"property": "sovereigns_double_stacks",
+		"add": 1
 	}
 }
 
@@ -701,6 +731,40 @@ const TRIAL_POWER_DEFINITIONS := {
 			}
 		}
 	},
+	"blast_drive": {
+		"stack_limit": 3,
+		"balance_params": {
+			"damage_scale_base": 1.0,
+			"damage_scale_per_stack": 0.15,
+			"reach_scale_base": 1.0,
+			"reach_scale_per_stack": 0.15
+		},
+		"param_map": {
+			"reward_flag": "reward_blast_drive",
+			"stack_property": "blast_drive_stacks",
+			"parameters": {
+				"damage_scale": {"property": "blast_drive_damage_scale", "type": "float"},
+				"reach_scale": {"property": "blast_drive_reach_scale", "type": "float"}
+			}
+		}
+	},
+	"razor_orbit": {
+		"stack_limit": 3,
+		"balance_params": {
+			"damage_scale_base": 1.0,
+			"damage_scale_per_stack": 0.15,
+			"reach_scale_base": 1.0,
+			"reach_scale_per_stack": 0.15
+		},
+		"param_map": {
+			"reward_flag": "reward_razor_orbit",
+			"stack_property": "razor_orbit_stacks",
+			"parameters": {
+				"damage_scale": {"property": "razor_orbit_damage_scale", "type": "float"},
+				"reach_scale": {"property": "razor_orbit_reach_scale", "type": "float"}
+			}
+		}
+	},
 	"sigil_chain": {
 		"stack_limit": 3,
 		"balance_params": {
@@ -737,7 +801,9 @@ const BOSS_REWARD_STACK_LIMITS := {
 	"pillar_convergence": 2,
 	"unbroken_oath": 2,
 	"edict_of_the_court": 2,
-	"null_corridor": 2
+	"null_corridor": 2,
+	"ruinous_impact": 2,
+	"sovereigns_double": 2
 }
 
 # Unified power data structure
@@ -805,6 +871,8 @@ const POWER_DISPLAY_METADATA := {
 	"fracture_field": {"name": "Fracture Field", "category": POWER_TYPE_TRIAL},
 	"farline_volley": {"name": "Farline Volley", "category": POWER_TYPE_TRIAL},
 	"sigil_chain": {"name": "Sigil Chain", "category": POWER_TYPE_TRIAL},
+	"blast_drive": {"name": "Blast Drive", "category": POWER_TYPE_TRIAL},
+	"razor_orbit": {"name": "Razor Orbit", "category": POWER_TYPE_TRIAL},
 	# Boss rewards
 	"wardens_verdict": {"name": "Warden's Verdict", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
 	"lacuna_echo": {"name": "Lacuna Echo", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
@@ -813,6 +881,8 @@ const POWER_DISPLAY_METADATA := {
 	"unbroken_oath": {"name": "Unbroken Oath", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
 	"edict_of_the_court": {"name": "Edict of the Court", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
 	"null_corridor": {"name": "Null Corridor", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
+	"ruinous_impact": {"name": "Ruinous Impact", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
+	"sovereigns_double": {"name": "Sovereign's Double", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
 }
 
 const POWER_ID_ALIASES := {
@@ -830,12 +900,12 @@ const TRIAL_POWER_POOL_IDS: Array[String] = [
 	"razor_wind", "execution_edge", "rupture_wave", "aegis_field", "hunters_snare",
 	"phantom_step", "riftpunch", "reaper_step", "static_wake", "storm_crown", "wraithstep",
 	"voidfire", "dread_resonance", "bloodvow", "eclipse_mark", "fracture_field",
-	"farline_volley", "sigil_chain",
+	"farline_volley", "sigil_chain", "blast_drive", "razor_orbit",
 ]
 
 const BOSS_REWARD_POOL_IDS: Array[String] = [
 	"wardens_verdict", "lacuna_echo", "sovereign_tempo", "pillar_convergence", "unbroken_oath",
-	"edict_of_the_court", "null_corridor",
+	"edict_of_the_court", "null_corridor", "ruinous_impact", "sovereigns_double",
 ]
 
 

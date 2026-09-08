@@ -2685,6 +2685,8 @@ func _on_ascension_begin_descent_pressed() -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context == null:
 		return
+	if run_context.get_current_difficulty_tier() != BEARING_ENUMS.BearingTier.FORSWORN:
+		return
 	## Finalize the ascension loadout and difficulty tier were already set via Forsworn intercept
 	if ascension_panel != null:
 		ascension_panel.visible = false
@@ -2986,6 +2988,7 @@ func _on_difficulty_tier_selected(tier: int) -> void:
 					difficulty_selector_panel.visible = false
 				ascension_panel.set_oaths_only_mode(false)
 				ascension_panel.set_character_id(selected_char_id)
+				ascension_panel.set_setup_bearing(tier)
 				ascension_panel.set_run_setup_mode(true)
 				ascension_panel.populate()
 				if run_context.set_difficulty_tier(tier):
@@ -2998,6 +3001,7 @@ func _on_difficulty_tier_selected(tier: int) -> void:
 			return
 
 	if run_context.set_difficulty_tier(tier):
+		run_context.clear_active_ascension_loadout()
 		if difficulty_selector_panel != null:
 			difficulty_selector_panel.visible = false
 		get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)

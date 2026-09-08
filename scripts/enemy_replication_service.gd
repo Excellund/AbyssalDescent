@@ -37,6 +37,48 @@ func killer_peer_for(enemy_id: int) -> int:
 	return int(last_damage_peer_by_id.get(enemy_id, 0))
 
 
+## Enemy impacts belong to the host even when a joiner owns their reward.
+func broadcast_world_ring(position: Vector2, radius: float, color: Color, duration: float) -> void:
+	if MultiplayerSessionManager.is_remote_replica() or not position.is_finite() or not is_finite(radius) or not is_finite(duration):
+		return
+	var payload := {"position": position, "radius": clampf(radius, 1.0, 500.0), "color": color, "duration": clampf(duration, 0.01, 2.0)}
+	_apply_world_ring(payload)
+	if MultiplayerSessionManager.should_broadcast():
+		_sync_world_ring.rpc(payload, _current_room_sync_id())
+
+
+@rpc("authority", "call_remote", "unreliable")
+func _sync_world_ring(payload: Dictionary, room_sync_id: int) -> void:
+	if not MultiplayerSessionManager.is_remote_replica() or room_sync_id != _current_room_sync_id():
+		return
+	_apply_world_ring(payload)
+
+
+func _current_room_sync_id() -> int:
+	if not is_instance_valid(world_generator):
+		return 0
+	var sync_state: Variant = world_generator.get("_world_multiplayer_sync_state")
+	return int(sync_state.current_room_sync_id) if sync_state != null else 0
+
+
+func _apply_world_ring(payload: Dictionary) -> void:
+	var position: Vector2 = payload.get("position", Vector2.INF)
+	var radius := float(payload.get("radius", 0.0))
+	var duration := float(payload.get("duration", 0.0))
+	if not position.is_finite() or not is_finite(radius) or not is_finite(duration) or radius <= 0.0 or duration <= 0.0:
+		return
+	var candidates := get_tree().get_nodes_in_group("combat_players")
+	if is_instance_valid(world_generator):
+		var local_player: Variant = world_generator.get("player")
+		if is_instance_valid(local_player) and not candidates.has(local_player):
+			candidates.append(local_player)
+	for candidate in candidates:
+		var feedback := candidate.get("player_feedback") as Node
+		if feedback != null and feedback.has_method("play_world_ring"):
+			feedback.play_world_ring(position, clampf(radius, 1.0, 500.0), payload.get("color", Color.ORANGE), clampf(duration, 0.01, 2.0))
+			return
+
+
 func interpolate_remote_enemies(delta: float, position_lerp_speed: float) -> void:
 	if not MultiplayerSessionManager.is_remote_replica():
 		return

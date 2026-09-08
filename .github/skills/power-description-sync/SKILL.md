@@ -13,9 +13,11 @@ Use this skill whenever power description text changes or when UI wrapping/regre
 - Reward card descriptions:
   - scripts/upgrade_system.gd `get_trial_power_card_description`
 - Build detail descriptions:
-  - scripts/build_detail_panel.gd `_get_power_current_desc`
-- Fallback descriptions:
-  - scripts/power_registry.gd `_get_trial_fallback_description`
+  - scripts/upgrade_system.gd `get_power_current_description`, consumed by the build detail panel
+- Shared mechanic/flavor text:
+  - scripts/upgrade_system.gd `get_power_flavor_text`
+- Registry pool cards:
+  - scripts/power_registry.gd `_build_power_pool` asks the player for its current card description; there is no separate trial fallback description table.
 
 ## Hard Rules
 
@@ -26,6 +28,7 @@ Use this skill whenever power description text changes or when UI wrapping/regre
 5. Keep implementation caveats implicit in player-facing text (for example, avoid explicit "does not chain" wording unless requested).
 6. Keep a concise numeric stat line when the power has core quantitative levers (damage/length/lock/slow/etc).
 7. Do not abbreviate stat labels in player-facing descriptions; prefer full words like "Damage", "Detonate", "Length", and "Lockout".
+8. For motion Arcana, keep the held existing control and structural unlocks in the returned card/current text. Check the complete returned string, including markup-stripped control copy, against the cap. Put longer control instructions in the glossary rather than omitting the trigger from the card.
 
 ## Enforcement Pattern
 

@@ -51,7 +51,7 @@ func apply_upgrade(upgrade_id: String) -> bool:
 	upgrade_stacks[id] = current_stacks + 1
 
 	match id:
-		"first_strike", "heavy_blow", "wide_arc", "long_reach", "fleet_foot", "blink_dash", "battle_trance", "surge_step", "wardens_verdict", "lacuna_echo", "sovereign_tempo", "pillar_convergence", "unbroken_oath", "edict_of_the_court", "null_corridor":
+		"first_strike", "heavy_blow", "wide_arc", "long_reach", "fleet_foot", "blink_dash", "battle_trance", "surge_step", "wardens_verdict", "lacuna_echo", "sovereign_tempo", "pillar_convergence", "unbroken_oath", "edict_of_the_court", "null_corridor", "ruinous_impact", "sovereigns_double":
 			player_reference.set(String(preview.get("property", "")), preview.get("next", player_reference.get(String(preview.get("property", "")))))
 		"heartstone":
 			var next_max := int(preview.get("next", player_reference.get_max_health()))
@@ -290,6 +290,10 @@ func _power_sentence_template(power_id: String) -> String:
 			return "Push force %s, scatter radius %s."
 		"null_corridor":
 			return "Trail width %s, duration %s, deflect %s dmg."
+		"ruinous_impact":
+			return "Strikes launch foes; impacts burst. Bosses burst in place. Damage %s; radius %s."
+		"sovereigns_double":
+			return "After dash, recoil or orbit: shade repeats your next attacks. Echoes %s; damage %s; lasts %s."
 		"razor_wind":
 			return "Range %s, damage %s of hit, arc %s."
 		"execution_edge":
@@ -326,6 +330,10 @@ func _power_sentence_template(power_id: String) -> String:
 			return "Arc +%s/Volley, +%s dmg/Volley, cap %s. %s"
 		"sigil_chain":
 			return "Radius %s, %s of hit per tick. %s"
+		"blast_drive":
+			return "Hold Attack; release: short cone/recoil. Damage %s; reach %s. %s"
+		"razor_orbit":
+			return "Aim; Hold Dash: orbit; release: launch. Damage %s; reach %s. %s"
 		_:
 			return ""
 
@@ -412,6 +420,10 @@ func get_power_flavor_text(power_id: String) -> String:
 			return "Kills detonate a force pulse at the kill position, pushing nearby enemies outward."
 		"null_corridor":
 			return "Dashes leave a void corridor. Enemies that enter are deflected and take damage once."
+		"ruinous_impact":
+			return "Strikes launch foes into explosive collisions. Bosses compress and burst in place."
+		"sovereigns_double":
+			return "A dash, recoil or orbit leaves a shade that repeats your next deliberate attacks."
 		"razor_wind":
 			return "Each swing extends a slicing arc that only strikes enemies past your normal melee reach."
 		"execution_edge":
@@ -448,6 +460,10 @@ func get_power_flavor_text(power_id: String) -> String:
 			return "Hits at the edge of your reach build Volley: wider arc and flat bonus damage. Dashing resets stacks."
 		"sigil_chain":
 			return "Hits charge a sigil. The next strike drops a brief zone — chain zones to compound damage."
+		"blast_drive":
+			return "Hold Attack, then release a short, narrow blast that launches you backward. Taps still strike immediately."
+		"razor_orbit":
+			return "Aim at a foe, then hold Dash to orbit and cut. Release to launch; attack freely while orbiting."
 		_:
 			return ""
 
@@ -460,6 +476,18 @@ func get_power_current_description(power_id: String) -> String:
 	var id := power_id.strip_edges().to_lower()
 	var flavor := get_power_flavor_text(id)
 	match id:
+		"ruinous_impact":
+			var stacks := clampi(int(player_reference.get("ruinous_impact_stacks")), 1, 2)
+			return _power_sentence(id, [_current_stat("%.0f%%", 100.0 + 40.0 * (stacks - 1)), _current_stat("%.0f", 70.0 + 25.0 * (stacks - 1))], "build_detail")
+		"sovereigns_double":
+			return _power_sentence(id, [_current_stat("%d", clampi(int(player_reference.get("sovereigns_double_stacks")), 1, 2)), _current_const("55%"), _current_const("4s")], "build_detail")
+		"blast_drive", "razor_orbit":
+			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
+			return _power_sentence(id, [
+				_current_stat("x%.2f", float(cur.get("damage_scale", 1.0))),
+				_current_stat("x%.2f", float(cur.get("reach_scale", 1.0))),
+				_motion_arcana_unlocks_for_stack(id, get_trial_power_stack_count(id))
+			], "build_detail")
 		"wardens_verdict":
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("+%d", int(player_reference.get("apex_predator_bonus_damage")))], "build_detail"))
 		"lacuna_echo":
@@ -605,6 +633,12 @@ func get_trial_power_card_description(power_id: String) -> String:
 		flavor = "[color=#40C8B0]%s[/color]" % _get_trial_prismatic_blurb(id)
 	var is_initial := current_stack <= 0
 	match id:
+		"blast_drive", "razor_orbit":
+			return _power_sentence(id, [
+				_stat("x%.2f", float(cur.get("damage_scale", 1.0)), float(next_values.get("damage_scale", 1.0)), is_initial),
+				_stat("x%.2f", float(cur.get("reach_scale", 1.0)), float(next_values.get("reach_scale", 1.0)), is_initial),
+				_motion_arcana_unlocks_for_stack(id, next_stack)
+			], "reward_card")
 		"razor_wind":
 			var range_stat := _stat("x%.2f", float(cur.get("range_scale", 1.0)), float(next_values.get("range_scale", 1.0)), is_initial)
 			var damage_stat := _stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0, float(next_values.get("damage_ratio", 0.0)) * 100.0, is_initial)
@@ -754,6 +788,16 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 			var is_initial := int(cur_val) == 0
 			var stat := _stat("+%d", int(cur_val), int(next_val), is_initial)
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [stat], "reward_card"))
+		"ruinous_impact":
+			var is_initial := int(cur_val) == 0
+			var current_stack := clampi(int(cur_val), 1, 2)
+			var next_stack := clampi(int(next_val), 1, 2)
+			return _power_sentence(id, [
+				_stat("%.0f%%", 100.0 + 40.0 * (current_stack - 1), 100.0 + 40.0 * (next_stack - 1), is_initial),
+				_stat("%.0f", 70.0 + 25.0 * (current_stack - 1), 70.0 + 25.0 * (next_stack - 1), is_initial)
+			], "reward_card")
+		"sovereigns_double":
+			return _power_sentence(id, [_stat("%d", int(cur_val), clampi(int(next_val), 1, 2), int(cur_val) == 0), _const("55%"), _const("4s")], "reward_card")
 		"lacuna_echo":
 			var cur_void_echo := int(cur_val)
 			var next_void_echo := int(next_val)
@@ -941,6 +985,16 @@ func _sigil_chain_unlocks_for_stack(stack_count: int) -> String:
 	return "Hexweaver: detonates burst"
 
 
+func _motion_arcana_unlocks_for_stack(power_id: String, stack_count: int) -> String:
+	if power_id == "blast_drive":
+		if stack_count >= 3:
+			return "2 charges; steer."
+		return "2 charges." if stack_count >= 2 else "1 charge."
+	if stack_count >= 3:
+		return "Columns; kill transfer."
+	return "Foes + columns." if stack_count >= 2 else "Aim at a foe."
+
+
 func _get_trial_prismatic_blurb(power_id: String) -> String:
 	match power_id:
 		"razor_wind":
@@ -979,6 +1033,10 @@ func _get_trial_prismatic_blurb(power_id: String) -> String:
 			return "wider arc, higher stack ceiling"
 		"sigil_chain":
 			return "zones deal devastating tick damage"
+		"blast_drive":
+			return "harder blasts, farther reach"
+		"razor_orbit":
+			return "deeper cuts, farther anchors"
 		_:
 			return "empowered beyond mastery"
 

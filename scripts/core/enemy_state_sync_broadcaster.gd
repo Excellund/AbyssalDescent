@@ -12,6 +12,7 @@ extends RefCounted
 const ENEMY_BASE_SCRIPT := preload("res://scripts/enemy_base.gd")
 const ENEMY_TETHER_SCRIPT := preload("res://scripts/enemy_tether.gd")
 const ENEMY_PYRE_SCRIPT := preload("res://scripts/enemy_pyre.gd")
+const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const ENEMY_STATE_SYNC_INTERVAL_SEC_DEFAULT: float = 0.08
 const ENEMY_STATE_TRANSPORT_MTU_BYTES_DEFAULT: int = 1392
 const ENEMY_STATE_FAR_SYNC_DISTANCE_PX_DEFAULT: float = 520.0
@@ -130,7 +131,7 @@ func on_enemy_died(enemy_id: int) -> void:
 		_world._sync_enemy_died.rpc(enemy_id, death_effect_payload)
 	var replication_service := (Engine.get_main_loop() as SceneTree).root.get_node_or_null("/root/PlayerReplicationService")
 	if replication_service != null and killer_peer_id > 0:
-		replication_service.send_enemy_killed(killer_peer_id, kill_pos)
+		replication_service.send_enemy_killed(killer_peer_id, kill_pos, DAMAGEABLE.is_launch_suppressed())
 	elif is_instance_valid(_world) and _world.get("player") != null:
 		_world.player.notify_enemy_killed(kill_pos)
 

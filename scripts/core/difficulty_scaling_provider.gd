@@ -39,7 +39,7 @@ func resolve_tier_config(tier: int) -> Dictionary:
 	var bearing_enums = preload("res://scripts/shared/bearing_enums.gd")
 	if tier != bearing_enums.BearingTier.FORSWORN:
 		return base_config
-	var loadout: Array[String] = _get_active_ascension_loadout()
+	var loadout: Array[String] = _get_active_ascension_loadout(tier)
 	if loadout.is_empty():
 		return base_config
 	var ascension_config: Dictionary = DIFFICULTY_CONFIG.get_tier_config_with_ascension(tier, loadout)
@@ -50,11 +50,11 @@ func resolve_tier_config(tier: int) -> Dictionary:
 			ascension_config[key] = base_config[key]
 	return ascension_config
 
-func _get_active_ascension_loadout() -> Array[String]:
-	var run_context := _world.get_node_or_null("/root/RunContext") as RUN_CONTEXT_SCRIPT
+func _get_active_ascension_loadout(tier: int) -> Array[String]:
+	var run_context := _world._get_run_context() as RUN_CONTEXT_SCRIPT
 	if run_context == null:
 		return []
-	var raw: Variant = run_context.get_active_ascension_loadout()
+	var raw: Variant = run_context.get_active_ascension_loadout(tier)
 	var out: Array[String] = []
 	if raw is Array:
 		for entry in raw:

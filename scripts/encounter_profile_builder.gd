@@ -48,7 +48,9 @@ const BEARING_LABELS: Array[String] = [
 	"Vanguard",
 	"Ambush",
 	"Convergence",
-	"Gauntlet"
+	"Gauntlet",
+	"Undertow",
+	"Breach"
 ]
 const MUTATOR_DAMAGE_STAT_KEYS: Array[String] = [
 	ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT,
@@ -141,6 +143,7 @@ func initialize_with_seed(rng_instance: RandomNumberGenerator, encounter_seed: i
 
 func set_difficulty_tier(tier: int) -> void:
 	current_difficulty_tier = tier
+	current_ascension_loadout = DIFFICULTY_CONFIG.ASCENSION_REGISTRY.normalize_loadout(tier, current_ascension_loadout)
 	_refresh_difficulty_config()
 
 func set_use_multiplayer_difficulty_config(enabled: bool) -> void:
@@ -153,13 +156,7 @@ func set_multiplayer_party_size(size: int) -> void:
 ## Set the active ascension loadout. Modifier ids are filtered against the
 ## registry by difficulty_config.gd::get_tier_config_with_ascension().
 func set_ascension_loadout(modifier_ids: Array) -> void:
-	var clean: Array[String] = []
-	for entry in modifier_ids:
-		var id: String = String(entry).strip_edges()
-		if id.is_empty() or clean.has(id):
-			continue
-		clean.append(id)
-	current_ascension_loadout = clean
+	current_ascension_loadout = DIFFICULTY_CONFIG.ASCENSION_REGISTRY.normalize_loadout(current_difficulty_tier, modifier_ids)
 	_refresh_difficulty_config()
 
 func get_ascension_loadout() -> Array[String]:
@@ -258,6 +255,7 @@ const WAVE_AUTO_STAGGER_THRESHOLD_3 := 24
 const WAVE_PER_ENCOUNTER_OVERRIDES := {
 	"Crossfire": {"force_single": true},
 	"Fortress": {"force_single": true},
+	"Breach": {"force_single": true},
 	"Suppression": {"max_waves": 2}
 }
 const WAVE_TRIAL_MUTATOR_FORCE_SINGLE := ["tether_web"]
@@ -265,6 +263,7 @@ const WAVE_TRIAL_MUTATOR_FORCE_SINGLE := ["tether_web"]
 func apply_wave_staggering(profile: Dictionary) -> Dictionary:
 	if profile.is_empty():
 		return profile
+	profile = ENCOUNTER_CONTRACTS.profile_with_spawn_limits(profile)
 	var label := ENCOUNTER_CONTRACTS.profile_label(profile)
 	var overrides := WAVE_PER_ENCOUNTER_OVERRIDES.get(label, {}) as Dictionary
 	if bool(overrides.get("force_single", false)):
@@ -335,7 +334,7 @@ func _apply_identity_bearing_scaling(profile: Dictionary) -> Dictionary:
 		var raw_tether: int = int(result.get("tether_count", 0))
 		if raw_tether % 2 != 0:
 			result["tether_count"] = maxi(0, raw_tether - 1)
-	return result
+	return ENCOUNTER_CONTRACTS.profile_with_spawn_limits(result)
 
 func _scale_mutator_damage(mutator: Dictionary) -> Dictionary:
 	if mutator.is_empty():
@@ -366,7 +365,7 @@ func _hard_mutator_chance(depth: int) -> float:
 func _profile_has_enemy_archetype(profile: Dictionary, archetype: String) -> bool:
 	match archetype:
 		"melee":
-			return ENCOUNTER_CONTRACTS.profile_chaser_count(profile) > 0 or ENCOUNTER_CONTRACTS.profile_lurker_count(profile) > 0
+			return ENCOUNTER_CONTRACTS.profile_chaser_count(profile) > 0 or ENCOUNTER_CONTRACTS.profile_lurker_count(profile) > 0 or ENCOUNTER_CONTRACTS.profile_keeper_count(profile) > 0
 		"charger":
 			return ENCOUNTER_CONTRACTS.profile_charger_count(profile) > 0 or ENCOUNTER_CONTRACTS.profile_ram_count(profile) > 0
 		"archer":
@@ -558,7 +557,7 @@ func build_debug_mutator(mutator_key: String) -> Dictionary:
 			return mutator.duplicate(true)
 	return {}
 
-func _get_hard_pool() -> Array[Dictionary]:
+func _get_hard_pool(include_act_encounters: bool = false) -> Array[Dictionary]:
 	# Crossfire: archers pin you, charger punishes standing still.
 	# Onslaught: pure melee flood — no respite from ranged.
 	# Fortress: true defensive wall — shielders advance with no charger to bypass.
@@ -570,16 +569,24 @@ func _get_hard_pool() -> Array[Dictionary]:
 	# Gauntlet: one of everything — a comprehensive skill test.
 	var pool: Array[Dictionary] = []
 	for label in BEARING_LABELS:
+		# Trial/objective templates retain their existing mixtures. These rooms
+		# enter only the standard encounter route, where act gating applies.
+		if label in ["Undertow", "Breach"] and not include_act_encounters:
+			continue
 		pool.append(_build_bearing_profile(label))
 	return pool
 
 func _get_hard_pool_for_depth(depth: int) -> Array[Dictionary]:
-	var pool := _get_hard_pool()
+	var pool := _get_hard_pool(true)
 	var filtered: Array[Dictionary] = []
 	var effective_depth := _effective_depth(depth)
 	var ambush_depth_gate := 4 if _difficulty_rank() == 0 else 3
 	for profile in pool:
 		var label := ENCOUNTER_CONTRACTS.profile_label(profile)
+		if label == "Undertow" and int(active_biome.get("act", 1)) < 2:
+			continue
+		if label == "Breach" and int(active_biome.get("act", 1)) not in [2, 3]:
+			continue
 		if label == "Ambush" and effective_depth < ambush_depth_gate:
 			continue
 		filtered.append(profile)

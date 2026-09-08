@@ -13,14 +13,16 @@ description: Multiplayer content sync and validation guardrails for Godot co-op 
 
 ### Content Auto-Sync (Preloaded Constants)
 
-All **content** (powers, encounters, characters, mutators) is **already auto-synced** because it's preloaded as Godot constants at startup. All peers load identical code, so:
+Static content definitions are shared when peers run the same build. This makes the same registry entries available on each peer; it does not synchronize runtime effects or prove multiplayer correctness:
 
 - New power added to `power_registry.gd` → automatically available in multiplayer
 - New character added to `character_registry.gd` → automatically available in multiplayer  
 - New encounter added to `encounter_definition_data.gd` → automatically available in multiplayer
 - New arcana pool entry → automatically inherited by multiplayer
 
-**Why?** Because both singleplayer and multiplayer modes load the same GDScript files with the same constant definitions. No RPC or manual sync needed.
+New movement, damage, hazards, learned properties, and transient visuals still need explicit integration. Keep enemy displacement and damage authoritative on the host, preserve the authenticated source player, and use existing replication channels for visuals. Save learned properties while clearing holds, anchors, shades, and launches across transitions. Never infer the host's run difficulty or Ascension from a joiner's preferences.
+
+Keep secondary-effect provenance across every boundary that can trigger another launch. Scope suppression around synchronous damage and kill callbacks, carry the flag through kill-notification and impulse RPCs, and store it on persistent effects such as Void Echo zones so later pulses retain the originating cause after the original scope ends. Preserve damage, kill credit, and ordinary on-kill effects; only suppress recursive launch creation for secondary-derived effects. Void Echo zones created by ordinary primary kills must retain their normal push-and-launch behavior. Host-owned impact visuals need a host-authority channel even when a joiner owns the reward.
 
 ### Difficulty Config Inheritance (Base + Override Layer)
 
@@ -54,8 +56,9 @@ GDScript preloads power_registry.gd at startup (happens for all peers)
     ↓
 Both singleplayer and multiplayer code see the new power in their loaded constant
     ↓
-✓ Power appears in reward screens, scales correctly, works in both modes
-✓ No RPC, no manual registry update needed
+✓ Power definition is available to both reward screens
+→ Verify parameter mapping, build snapshots, authority, damage ownership, and remote visuals
+→ Exercise host and joiner paths before claiming the effect works in both modes
 ```
 
 ---

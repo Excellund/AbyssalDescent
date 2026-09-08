@@ -18,6 +18,18 @@ static func _bearing_definition(room_size: Vector2, base_counts: Dictionary, ran
 
 static func get_bearing_definitions() -> Dictionary:
 	return {
+		"Breach": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1), [
+			ENCOUNTER_CONTRACTS.profile_counts(2, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1),
+			ENCOUNTER_CONTRACTS.profile_counts(2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1),
+			ENCOUNTER_CONTRACTS.profile_counts(3, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1),
+			ENCOUNTER_CONTRACTS.profile_counts(4, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1)
+		]),
+		"Undertow": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(3, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1), [
+			ENCOUNTER_CONTRACTS.profile_counts(2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1),
+			ENCOUNTER_CONTRACTS.profile_counts(3, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1),
+			ENCOUNTER_CONTRACTS.profile_counts(3, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2),
+			ENCOUNTER_CONTRACTS.profile_counts(4, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2)
+		]),
 		"Crossfire": _bearing_definition(POOL_ROOM_SIZE, ENCOUNTER_CONTRACTS.profile_counts(1, 1, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1), [
 			ENCOUNTER_CONTRACTS.profile_counts(1, 1, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
 			ENCOUNTER_CONTRACTS.profile_counts(1, 1, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1),

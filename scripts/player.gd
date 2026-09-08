@@ -3,6 +3,8 @@ extends CharacterBody2D
 const HEALTH_STATE_SCRIPT := preload("res://scripts/health_state.gd")
 const PLAYER_FEEDBACK_SCRIPT := preload("res://scripts/player_feedback.gd")
 const STATIC_WAKE_TRAIL_RENDERER_SCRIPT := preload("res://scripts/static_wake_trail_renderer.gd")
+const ARCANA_MOTION_SCRIPT := preload("res://scripts/arcana_motion_controller.gd")
+const BOSS_COMBINATIONS_SCRIPT := preload("res://scripts/boss_combination_controller.gd")
 const UPGRADE_SYSTEM_SCRIPT_PATH := "res://scripts/upgrade_system.gd"
 const UPGRADE_SYSTEM_SCRIPT := preload("res://scripts/upgrade_system.gd")
 const POWER_REGISTRY_SCRIPT := preload("res://scripts/power_registry.gd")
@@ -32,6 +34,9 @@ const SIGIL_CHAIN_CHAIN_BONUS_PER_DEPTH: float = 0.40
 const SIGIL_CHAIN_CHAIN_BONUS_MAX_DEPTH: int = 6
 const SIGIL_CHAIN_BURST_DETONATION_MULT: int = 3
 const RUN_SNAPSHOT_PROPERTIES := [
+	"ruinous_impact_stacks", "sovereigns_double_stacks",
+	"reward_blast_drive", "blast_drive_stacks", "blast_drive_damage_scale", "blast_drive_reach_scale",
+	"reward_razor_orbit", "razor_orbit_stacks", "razor_orbit_damage_scale", "razor_orbit_reach_scale",
 	"max_health",
 	"incoming_damage_taken_mult",
 	"incoming_contact_damage_mult",
@@ -204,6 +209,18 @@ var health_state
 var player_feedback: PLAYER_FEEDBACK_SCRIPT
 var static_wake_trail_renderer: STATIC_WAKE_TRAIL_RENDERER_SCRIPT
 var upgrade_system: UPGRADE_SYSTEM_SCRIPT
+var arcana_motion: ARCANA_MOTION_SCRIPT
+var boss_combinations: BOSS_COMBINATIONS_SCRIPT
+var ruinous_impact_stacks: int = 0
+var sovereigns_double_stacks: int = 0
+var reward_blast_drive: bool = false
+var blast_drive_stacks: int = 0
+var blast_drive_damage_scale: float = 1.0
+var blast_drive_reach_scale: float = 1.0
+var reward_razor_orbit: bool = false
+var razor_orbit_stacks: int = 0
+var razor_orbit_damage_scale: float = 1.0
+var razor_orbit_reach_scale: float = 1.0
 var attack_anim_time_left: float = 0.0
 var attack_anim_duration: float = 0.12
 var visual_facing_direction: Vector2 = Vector2.RIGHT
@@ -532,6 +549,8 @@ func _ready() -> void:
 	_create_health_state()
 	_create_player_feedback()
 	_create_static_wake_trail_renderer()
+	_ensure_arcana_motion()
+	_ensure_boss_combinations()
 	var sprite := get_node_or_null("Sprite2D") as Sprite2D
 	if sprite != null:
 		sprite.visible = false
@@ -539,6 +558,8 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	_refresh_combat_input_release()
+	if boss_combinations != null and _is_local_control_owner():
+		boss_combinations.tick(delta)
 	if not _is_alive_state:
 		velocity = Vector2.ZERO
 		move_and_slide()
@@ -588,6 +609,10 @@ func _physics_process(delta: float) -> void:
 	_update_eclipse_marks()
 	_try_start_dash(direction)
 	_try_attack_input()
+	if arcana_motion != null and _is_local_control_owner():
+		arcana_motion.tick(delta)
+		if arcana_motion.process_movement(delta, direction):
+			return
 
 	if _is_attack_locked():
 		velocity = Vector2.ZERO
@@ -608,6 +633,49 @@ func _physics_process(delta: float) -> void:
 	if not active_objective_mutators.is_empty():
 		queue_redraw()
 
+func _ensure_arcana_motion() -> void:
+	if arcana_motion != null:
+		return
+	arcana_motion = ARCANA_MOTION_SCRIPT.new()
+	add_child(arcana_motion)
+	arcana_motion.initialize(self)
+
+func _ensure_boss_combinations() -> void:
+	add_to_group("combat_players")
+	if boss_combinations != null:
+		return
+	boss_combinations = BOSS_COMBINATIONS_SCRIPT.new()
+	add_child(boss_combinations)
+	boss_combinations.initialize(self)
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		discard_pending_combat_input()
+
+func on_arcana_motion_completed(origin: Vector2, last_contact: Vector2) -> void:
+	_ensure_boss_combinations()
+	boss_combinations.create_shade(origin, last_contact)
+
+func perform_motion_blast(direction: Vector2, strength: float) -> void:
+	primary_attack_fired.emit()
+	attack_combo_counter += 1
+	var execution_proc := reward_execution_edge and attack_combo_counter % maxi(1, execution_every) == 0
+	var blast_damage := maxi(1, int(round(float(damage) * lerpf(1.5, 2.5, strength) * blast_drive_damage_scale)))
+	var blast_range := ARCANA_MOTION_SCRIPT.blast_range(strength, blast_drive_reach_scale)
+	var context := upgrade_system.build_melee_attack_context(blast_damage, blast_range, ARCANA_MOTION_SCRIPT.BLAST_ARC_DEGREES, execution_proc, execution_damage_mult)
+	context["source"] = "blast_drive"
+	visual_facing_direction = direction
+	attack_cooldown_left = attack_cooldown
+	_perform_melee_attack(direction, context)
+	for entry in _get_damageable_enemies_in_cone(global_position, direction, blast_range, deg_to_rad(ARCANA_MOTION_SCRIPT.BLAST_ARC_DEGREES * 0.5)):
+		var enemy := entry.get("enemy") as Node2D
+		if enemy == null or DAMAGEABLE.is_displacement_immune(enemy):
+			continue
+		DAMAGEABLE.apply_impulse(enemy, direction * lerpf(240.0, 460.0, strength))
+	if execution_proc:
+		execution_edge_proc_display_left = EXECUTION_EDGE_PROC_DISPLAY_HOLD
+		_broadcast_cue_event("execution_edge_state", {"combo_counter": attack_combo_counter, "execution_every": execution_every, "proc_display_left": execution_edge_proc_display_left})
+
 func _read_movement_direction() -> Vector2:
 	if not _is_local_control_owner():
 		return Vector2.ZERO  ## Remote players don't process input
@@ -619,6 +687,10 @@ func _read_movement_direction() -> Vector2:
 ## Input polling is global: handling a GUI event does not consume its action state.
 func discard_pending_combat_input() -> void:
 	queued_attack_after_dash = false
+	if boss_combinations != null:
+		boss_combinations.cancel()
+	if arcana_motion != null:
+		arcana_motion.cancel()
 	_combat_actions_awaiting_release.clear()
 	for action: StringName in [&"attack", &"dash"]:
 		if Input.is_action_pressed(action) or Input.is_action_just_pressed(action):
@@ -683,6 +755,10 @@ func _try_start_dash(direction: Vector2) -> void:
 		dash_cooldown_left = 0.0
 
 	dash_direction = direction if direction != Vector2.ZERO else last_move_direction
+	_ensure_arcana_motion()
+	arcana_motion.on_dash_started()
+	_ensure_boss_combinations()
+	boss_combinations.on_dash_started()
 	if passive_iron_retort:
 		iron_retort_dash_lockout_left = iron_retort_dash_lockout_duration
 		_clear_iron_retort_brace(false)
@@ -729,7 +805,12 @@ func _try_attack_input() -> void:
 		queued_attack_after_dash = true
 		queued_attack_direction = _get_mouse_attack_direction()
 		return
+	_ensure_arcana_motion()
+	var generation := arcana_motion._cancel_generation
+	var before := attack_combo_counter
 	_try_execute_attack(_get_mouse_attack_direction())
+	if generation == arcana_motion._cancel_generation:
+		arcana_motion.on_primary_pressed(attack_combo_counter != before)
 
 func _try_consume_queued_attack() -> void:
 	if encounter_input_frozen:
@@ -772,10 +853,12 @@ func _try_execute_attack(attack_direction: Vector2) -> void:
 		execution_proc = true
 		swing_color = ENEMY_BASE.COLOR_EXECUTION_PROC
 	var melee_context: Dictionary = upgrade_system.build_melee_attack_context(damage, attack_range, attack_arc_degrees, execution_proc, execution_damage_mult)
-	attack_lock_time_left = attack_lock_duration
+	var moving_attack := arcana_motion != null and arcana_motion.owns_movement()
+	attack_lock_time_left = 0.0 if moving_attack else attack_lock_duration
 	attack_lock_direction = attack_direction
 	visual_facing_direction = attack_direction
-	velocity = Vector2.ZERO
+	if not moving_attack:
+		velocity = Vector2.ZERO
 	if reward_razor_wind:
 		swing_color = ENEMY_BASE.COLOR_SWING_RAZOR_WIND if not execution_proc else ENEMY_BASE.COLOR_EXECUTION_PROC_EXTENDED
 	var visual_arc_degrees := float(melee_context["arc_degrees"])
@@ -840,6 +923,8 @@ func _process_active_dash(delta: float) -> bool:
 	if desired_step <= 0.0:
 		dash_time_left = 0.0
 		dash_remaining_distance = 0.0
+		if boss_combinations != null:
+			boss_combinations.on_dash_completed()
 		return false
 	velocity = dash_direction * (desired_step / maxf(delta, 0.0001))
 	move_and_slide()
@@ -849,6 +934,8 @@ func _process_active_dash(delta: float) -> bool:
 		dash_time_left = 0.0
 		dash_remaining_distance = 0.0
 		velocity = Vector2.ZERO
+		if boss_combinations != null:
+			boss_combinations.on_dash_completed()
 		return false
 	dash_remaining_distance = maxf(0.0, dash_remaining_distance - moved)
 	var dash_finished := false
@@ -885,6 +972,8 @@ func _process_active_dash(delta: float) -> bool:
 		_release_veilstep_rhythm_wave(dash_end)
 	if dash_finished:
 		_release_apex_momentum_dash_wave(dash_end)
+		if boss_combinations != null:
+			boss_combinations.on_dash_completed()
 	if dash_finished and null_corridor_strength > 0.0:
 		_apply_null_corridor_segment(dash_start, dash_end)
 	if dash_finished and reward_riftpunch:
@@ -1220,8 +1309,10 @@ func set_health(value: float) -> void:
 func set_alive(is_alive: bool) -> void:
 	_is_alive_state = is_alive
 	if not is_alive:
+		discard_pending_combat_input()
 		velocity = Vector2.ZERO
 		dash_time_left = 0.0
+		dash_remaining_distance = 0.0
 		dash_phase_release_left = 0.0
 		_dash_damage_immune_left = 0.0
 		queued_attack_after_dash = false
@@ -1235,6 +1326,7 @@ func set_combat_removed(removed: bool) -> void:
 	set_process(not removed)
 	set_physics_process(not removed)
 	if removed:
+		discard_pending_combat_input()
 		velocity = Vector2.ZERO
 	_set_collision_shapes_disabled(removed)
 	queue_redraw()
@@ -1373,6 +1465,10 @@ func build_run_snapshot() -> Dictionary:
 func apply_run_snapshot(snapshot: Dictionary) -> void:
 	if snapshot.is_empty():
 		return
+	if boss_combinations != null:
+		boss_combinations.cancel()
+	if arcana_motion != null:
+		arcana_motion.cancel(true)
 	var properties := snapshot.get("properties", {}) as Dictionary
 	for property_name in properties.keys():
 		set(String(property_name), properties[property_name])
@@ -1471,6 +1567,21 @@ func apply_network_cue_event(event_name: String, payload: Dictionary) -> void:
 	if player_feedback == null or event_name.is_empty() or payload.is_empty():
 		return
 	match event_name:
+		"sovereign_double_shade":
+			_ensure_boss_combinations()
+			boss_combinations.apply_shade_visual(payload)
+		"sovereign_double_strike":
+			_ensure_boss_combinations()
+			boss_combinations.show_echo(payload)
+		"motion_arcana":
+			_ensure_arcana_motion()
+			arcana_motion.apply_visual_state(payload)
+		"motion_blast":
+			_ensure_arcana_motion()
+			arcana_motion.show_blast(Vector2(payload.get("direction", Vector2.RIGHT)), float(payload.get("range", ARCANA_MOTION_SCRIPT.BLAST_RANGE_MAX)), Vector2(payload.get("position", global_position)), float(payload.get("arc", ARCANA_MOTION_SCRIPT.BLAST_ARC_DEGREES)), int(payload.get("serial", 0)))
+		"motion_blast_hit":
+			_ensure_arcana_motion()
+			arcana_motion.show_blast_hit(Vector2(payload.get("position", global_position)), int(payload.get("serial", 0)))
 		"world_ring": _on_cue_world_ring(payload)
 		"chain_lightning": _on_cue_chain_lightning(payload)
 		"wraithstep_chain_echo": _on_cue_wraithstep_chain_echo(payload)
@@ -1886,6 +1997,8 @@ func apply_power_for_test(power_id: String) -> bool:
 		return false
 
 	var hard_ids := {
+		"blast_drive": true,
+		"razor_orbit": true,
 		"razor_wind": true,
 		"execution_edge": true,
 		"rupture_wave": true,
@@ -1910,6 +2023,8 @@ func apply_power_for_test(power_id: String) -> bool:
 		return true
 
 	var boon_ids := {
+		"ruinous_impact": true,
+		"sovereigns_double": true,
 		"first_strike": true,
 		"heavy_blow": true,
 		"wide_arc": true,
@@ -1986,7 +2101,7 @@ func _build_damage_breakdown(base_scaling_damage: int, enemy_node: Object, hit_p
 	flat_bonus_damage += _get_apex_predator_bonus(enemy_node, hit_position, base_scaling_damage)
 	flat_bonus_damage += _get_void_echo_zone_bonus(enemy_node, base_scaling_damage)
 	flat_bonus_damage += _get_dread_resonance_bonus(enemy_node)
-	if source == "melee" and _indomitable_pending_melee_bonus > 0:
+	if source in ["melee", "blast_drive"] and _indomitable_pending_melee_bonus > 0:
 		flat_bonus_damage += _indomitable_pending_melee_bonus
 		_indomitable_pending_melee_bonus = 0
 	else:
@@ -2085,7 +2200,16 @@ func _resolve_attack_hit(enemy_body: Node2D, hit_position: Vector2, base_damage:
 	if absf(final_damage_mult - 1.0) > 0.0001:
 		final_damage = maxi(1, int(round(float(final_damage) * final_damage_mult)))
 	_apply_hunters_snare(enemy_body)
-	DAMAGEABLE.apply_damage(enemy_body, final_damage, {"attack_type": source})
+	var health_before := DAMAGEABLE._read_target_health(enemy_body)
+	DAMAGEABLE.apply_damage(enemy_body, final_damage, {"attack_type": source, "secondary": false})
+	var accepted := health_before > DAMAGEABLE._read_target_health(enemy_body) or DAMAGEABLE._should_route_enemy_damage_to_host(enemy_body)
+	if accepted:
+		if arcana_motion != null:
+			arcana_motion.record_contact()
+			if source == "blast_drive":
+				arcana_motion.record_blast_hit(hit_position)
+		if boss_combinations != null:
+			boss_combinations.record_direct_hit(enemy_body, final_damage, source)
 	if passive_sigil_burst and sigil_burst_ready and not bool(sigil_burst_state.get("fired", false)):
 		sigil_burst_ready = false
 		sigil_burst_state["fired"] = true
@@ -2104,6 +2228,8 @@ func _resolve_attack_hit(enemy_body: Node2D, hit_position: Vector2, base_damage:
 	return final_damage
 
 func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary) -> bool:
+	_ensure_boss_combinations()
+	boss_combinations.begin_direct_strike()
 	var did_hit := false
 	_indomitable_attack_hit_count = 0
 	_indomitable_primed_this_attack = false
@@ -2141,6 +2267,10 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 	if reward_farline_volley and _farline_volley_current_stacks > 0:
 		strike_arc_degrees += farline_volley_arc_per_stack * float(_farline_volley_current_stacks)
 	var max_angle_radians := deg_to_rad(strike_arc_degrees * 0.5)
+	if String(melee_context.get("source", "melee")) == "blast_drive":
+		_ensure_arcana_motion()
+		arcana_motion.publish_blast(global_position, attack_direction, strike_range, strike_arc_degrees)
+	var echo_shapes: Array[Dictionary] = [{"source": String(melee_context.get("source", "melee")), "damage": strike_damage, "range": strike_range, "arc_degrees": strike_arc_degrees}]
 
 	var rupture_triggered_enemy_ids: Dictionary = {}
 	var rupture_hit_enemy_ids: Dictionary = {}
@@ -2174,7 +2304,7 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 						player_feedback.play_world_ring(hit_position, 36.0, Color(1.0, 0.88, 0.44, 0.92), 0.14)
 			else:
 				final_damage_mult = farline_focus_outside_damage_mult
-		_resolve_attack_hit(enemy_body, hit_position, enemy_strike_damage, "melee", rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags, sigil_burst_state, final_damage_mult)
+		_resolve_attack_hit(enemy_body, hit_position, enemy_strike_damage, String(melee_context.get("source", "melee")), rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags, sigil_burst_state, final_damage_mult)
 		if reward_farline_volley and to_enemy.length_squared() > (strike_range * FARLINE_VOLLEY_BAND_RATIO) * (strike_range * FARLINE_VOLLEY_BAND_RATIO):
 			_on_farline_volley_outer_hit(enemy_body)
 		if reward_sigil_chain:
@@ -2196,6 +2326,10 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		var wind_damage := int(wind_context.get("damage", maxi(1, int(round(float(damage) * razor_wind_damage_ratio)))))
 		wind_damage = _apply_objective_mutator_damage_mult(wind_damage)
 		wind_context["damage"] = wind_damage
+		var echo_wind := wind_context.duplicate()
+		echo_wind["source"] = "razor_wind"
+		echo_wind["inner_range"] = attack_range
+		echo_shapes.append(echo_wind)
 		did_hit = _apply_razor_wind(attack_direction, wind_context, rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags) or did_hit
 	if did_hit:
 		_trigger_battle_trance()
@@ -2210,6 +2344,7 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 	if farline_focus_proc_fired:
 		queue_redraw()
 	_indomitable_pending_melee_bonus = 0
+	boss_combinations.repeat_strike(attack_direction, echo_shapes)
 
 	return did_hit
 
@@ -2308,7 +2443,7 @@ func _update_riftpunch_window(delta: float) -> void:
 func _consume_riftpunch_bonus(source: String, hit_position: Vector2, enemy_node: Object = null) -> int:
 	if not reward_riftpunch:
 		return 0
-	if source != "melee":
+	if source not in ["melee", "blast_drive"]:
 		return 0
 	if _riftpunch_window_left <= 0.0:
 		return 0
@@ -2403,6 +2538,10 @@ func _get_first_strike_bonus_damage(enemy_node: Object) -> int:
 	return 0
 
 func clear_lingering_combat_effects() -> void:
+	if boss_combinations != null:
+		boss_combinations.cancel()
+	if arcana_motion != null:
+		arcana_motion.cancel()
 	phantom_step_hit_ids.clear()
 	phantom_step_ghost_positions.clear()
 	phantom_step_ghost_emit_cd = 0.0
@@ -2909,6 +3048,8 @@ func _apply_phantom_step_during_dash() -> void:
 		if global_position.distance_to(enemy_body.global_position) > hit_radius:
 			continue
 		DAMAGEABLE.apply_damage(enemy_node, phantom_damage)
+		if boss_combinations != null:
+			boss_combinations.record_dash_contact(global_position)
 		var phantom_slow_duration := phantom_step_slow_duration * _global_slow_duration_mult()
 		enemy_node.apply_slow(phantom_slow_duration, 0.36)
 		var phantom_enemy_network_id := int(enemy_body.get_meta("network_enemy_id", -1))
@@ -3317,6 +3458,8 @@ func set_sfx_volume_db(volume_db: float) -> void:
 	if player_feedback == null:
 		return
 	player_feedback.set_sfx_volume_db(volume_db)
+	if arcana_motion != null:
+		arcana_motion.set_sfx_volume_db(volume_db)
 
 func _on_health_state_changed(new_health: int, new_max_health: int) -> void:
 	health_changed.emit(new_health, new_max_health)
@@ -4098,9 +4241,9 @@ func _gain_indomitable_oath_from_hit(enemy_node: Object, source: String) -> void
 		return
 	if not (enemy_node is Node2D):
 		return
-	if source != "melee" and source != "razor_wind":
+	if source not in ["melee", "razor_wind", "blast_drive"]:
 		return
-	if _indomitable_oath_spent_this_attack and (source == "melee" or source == "razor_wind"):
+	if _indomitable_oath_spent_this_attack:
 		return
 	var combo_index := _indomitable_attack_hit_count
 	_indomitable_attack_hit_count += 1
@@ -4245,6 +4388,9 @@ func _update_void_echo_zones(delta: float) -> void:
 				player_feedback.play_boss_void_zone_pulse(zone_pos, radius)
 				_broadcast_cue_event("boss_void_zone_pulse", {"position": zone_pos, "radius": radius})
 			_void_echo_pulse_kill_suppression_depth += 1
+			var suppress_launch := bool(zone.get("suppress_launch", false))
+			if suppress_launch:
+				DAMAGEABLE.begin_secondary_scope()
 			for enemy_node in get_tree().get_nodes_in_group("enemies"):
 				if not (enemy_node is Node2D):
 					continue
@@ -4258,7 +4404,13 @@ func _update_void_echo_zones(delta: float) -> void:
 				if dist > 0.001:
 					DAMAGEABLE.apply_impulse(enemy_body, to_center.normalized() * 360.0)
 				DAMAGEABLE.apply_damage(enemy_node, pulse_damage, {"is_ground_attack": true, "attack_type": "void_echo_zone"})
+				if not void_echo_zones.has(zone):
+					break
 			_void_echo_pulse_kill_suppression_depth = maxi(0, _void_echo_pulse_kill_suppression_depth - 1)
+			if suppress_launch:
+				DAMAGEABLE.end_secondary_scope()
+			if not void_echo_zones.has(zone):
+				return
 		zone["pulse_left"] = pulse_left
 		void_echo_zones[i] = zone
 	while not remove_indices.is_empty():
@@ -4314,6 +4466,7 @@ func _apply_void_echo(kill_pos: Vector2) -> void:
 	var echo_radius := clampf(54.0 + float(void_echo_damage) * 0.6, 54.0, 110.0)
 	var zone_data := {
 		"pos": kill_pos,
+		"suppress_launch": DAMAGEABLE.is_launch_suppressed(),
 		"life": 2.4,
 		"radius": echo_radius,
 		"pulse_left": 0.0

@@ -23,7 +23,7 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"name": "Crossfire",
 			"group": "Core",
 			"color": Color(1.0, 0.78, 0.48, 1.0),
-			"desc": "Ranged units pin you while flankers close the distance.",
+			"desc": "Ranged units pin you while flankers close the distance. Offset cover can break firing lanes without sealing the center.",
 		},
 		{
 			"name": "Onslaught",
@@ -35,7 +35,7 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"name": "Fortress",
 			"group": "Core",
 			"color": Color(0.72, 0.9, 1.0, 1.0),
-			"desc": "Shielders block every approach. Find the gap or create one.",
+			"desc": "Shielders block every approach. A broken ring of cover offers gaps to cross or grapple through.",
 		},
 		{
 			"name": "Blitz",
@@ -53,13 +53,13 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"name": "Vanguard",
 			"group": "Advanced",
 			"color": Color(0.72, 0.88, 1.0, 1.0),
-			"desc": "Shielded enemies advance in formation. Break the line to move forward.",
+			"desc": "Shielded enemies advance in formation. Forked cover can split your approach around the line.",
 		},
 		{
 			"name": "Ambush",
 			"group": "Advanced",
 			"color": Color(1.0, 0.58, 0.52, 1.0),
-			"desc": "Enemies cut off exits and converge from multiple angles.",
+			"desc": "Enemies cut off exits and converge from multiple angles. Side cover gives escape routes around an open center.",
 		},
 		{
 			"name": "Gauntlet",
@@ -72,6 +72,18 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"group": "Advanced",
 			"color": Color(0.5, 0.96, 0.86, 1.0),
 			"desc": "Spectres target where you're heading. Pressure closes from every direction.",
+		},
+		{
+			"name": "Undertow",
+			"group": "Advanced",
+			"color": Color(0.42, 0.88, 0.92, 1.0),
+			"desc": "Appears in Acts 2 and 3. Drifters release staggered rings; find each gap while chasers keep you moving. At most two Drifters are active.",
+		},
+		{
+			"name": "Breach",
+			"group": "Advanced",
+			"color": Color(0.56, 0.9, 0.76, 1.0),
+			"desc": "Acts 2 and 3: one vulnerable Keeper partially protects a small firing line. Cross the open center, use cover to break ward links, or launch the Keeper. Clear the room for a normal reward.",
 		},
 		{
 			"name": "Trial",
@@ -434,6 +446,22 @@ static func _mutators_section_bbcode() -> String:
 		lines.append("%s: %s" % [_mutator_title_bbcode(row), row.get("desc", "")])
 	return "\n".join(lines)
 
+static func _motion_arcana_section_bbcode() -> String:
+	var lines: Array[String] = [_section_title_bbcode("Motion Arcana")]
+	lines.append("[b]Blast Drive[/b]")
+	lines.append("Tap Attack to strike immediately. Hold Attack for at least 0.25 seconds, then release a short, narrow cone forward and launch backward. Charge for 0.65 seconds for full power.")
+	lines.append("The blast covers a 70-degree cone. At level 1, charging increases reach from 100 to 160 and damage from 150% to 250% of Damage. Level 2 multiplies damage and reach by 1.15; level 3 by 1.30; Prismatic by 1.56.")
+	lines.append("Level 2 stores two blasts; each charge returns after 1.8 seconds. Level 3 lets movement keys steer the recoil.")
+	lines.append("")
+	lines.append("[b]Razor Orbit[/b]")
+	lines.append("Tap Dash for your normal dash. To orbit, aim at a nearby foe first, then hold Dash through the normal dash. The highlighted target is remembered while you move. If no target is highlighted, aim at a foe during the dash.")
+	lines.append("Keep holding Dash to orbit and cut. Your entry dash chooses the circling direction, which stays fixed until you detach. Attack still works. Release Dash to launch along your orbit.")
+	lines.append("Level 2 can also anchor to columns. At level 3, keep holding and aim at another foe when your anchor dies to transfer once.")
+	lines.append("")
+	lines.append("Release a charged Blast Drive while orbiting to detach with explosive recoil. Starting a new dash cancels a held blast charge. Each Arcana level increases its damage and reach; Prismatic strengthens both again.")
+	return "\n".join(lines)
+
+
 static func _endgame_chase_section_bbcode() -> String:
 	var lines: Array[String] = []
 	lines.append(_section_title_bbcode("Endgame Chase"))
@@ -444,13 +472,34 @@ static func _endgame_chase_section_bbcode() -> String:
 	lines.append("[color=#BFD2E8][indent]Run goals that unlock rewards. Types: bearing clears, no-hit boss kills, no-boon/no-arcana runs, and Ascension rank targets. Completing one grants a Catalyst, a modifier, or both.[/indent][/color]")
 	lines.append("")
 	lines.append("[font_size=18][color=#80C0F0][b]Catalysts[/b][/color][/font_size]")
-	lines.append("[color=#BFD2E8][indent]Per-character bonuses equipped before a run. Examples: extra arcana slot, reroll, +20 max HP, door reveal. Free to use; shown on the leaderboard with your rank.[/indent][/color]")
+	lines.append("[color=#BFD2E8][indent]Per-character bonuses equipped before a run, such as Prismatic Arcana, Reward Reroll, and Iron Vigil's +20 max HP. Free to use; shown on the leaderboard with your rank.[/indent][/color]")
+	return "\n".join(lines)
+
+static func _boss_combinations_section_bbcode() -> String:
+	var lines: Array[String] = [_section_title_bbcode("Boss Combinations")]
+	lines.append("[b]Ruinous Impact[/b]")
+	lines.append("Direct strikes launch enemies. A launched foe bursts when it hits another enemy, a wall or a column. Existing pushes and pulls can also start a launch, including Blast Drive, Lacuna Echo, Edict of the Court and Null Corridor.")
+	lines.append("Bosses and Apex enemies instead compress and burst in place, preserving their attacks. Each enemy can launch once every 1.1 seconds. Level 1 bursts deal 100% of Damage in a radius of 70; level 2 raises these to 140% and 95.")
+	lines.append("")
+	lines.append("[b]Sovereign's Double[/b]")
+	lines.append("Completing a dash, Blast Drive recoil or Razor Orbit leaves one shade for 4 seconds. It appears where you last made contact during that movement, or where you started if there was no contact.")
+	lines.append("Your next deliberate melee attack or charged blast repeats from the shade at 55% damage. Attack reach and strike bonuses carry through, including Razor Wind, Execution Edge and Blood Vow. Level 2 allows two echoes. Further movement replaces the shade; automatic orbit cuts leave its echoes ready.")
+	lines.append("Phantom Step helps place the shade among enemies. Reaper Step refreshes your dash on kills, giving you another chance to place it.")
+	return "\n".join(lines)
+
+static func _keeper_section_bbcode() -> String:
+	var lines: Array[String] = [_section_title_bbcode("Keeper")]
+	lines.append("A Keeper links to at most two nearby ordinary allies, reducing their damage taken by 30%. The links and marked allies show who is protected. Wards never heal or grant immunity, and the Keeper itself remains vulnerable.")
+	lines.append("Kill or launch the Keeper to interrupt its links. Cover or distance also breaks a link and creates a brief opening before it can return. Bosses, Apex enemies and other Keepers cannot be warded; multiple wards never stack.")
 	return "\n".join(lines)
 
 static func glossary_sections() -> Array[Dictionary]:
 	return [
 		{"label": "Reward Tiers", "bbcode": _reward_tiers_section_bbcode()},
+		{"label": "Motion Arcana", "bbcode": _motion_arcana_section_bbcode()},
+		{"label": "Boss Combinations", "bbcode": _boss_combinations_section_bbcode()},
 		{"label": "Encounters", "bbcode": _encounters_section_bbcode()},
+		{"label": "Keeper", "bbcode": _keeper_section_bbcode()},
 		{"label": "Biomes", "bbcode": _biomes_section_bbcode()},
 		{"label": "Mutators", "bbcode": _mutators_section_bbcode()},
 		{"label": "Endgame Chase", "bbcode": _endgame_chase_section_bbcode()},

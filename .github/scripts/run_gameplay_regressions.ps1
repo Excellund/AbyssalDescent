@@ -135,7 +135,19 @@ try {
         "res://scripts/tests/test_oath_tracking.gd",
         "res://scripts/tests/test_catalyst_profile.gd",
         "res://scripts/tests/test_catalyst_rewards.gd",
-        "res://scripts/tests/test_catalyst_runtime.gd"
+        "res://scripts/tests/test_catalyst_runtime.gd",
+        "res://scripts/tests/test_ascension_runtime.gd",
+        "res://scripts/tests/test_motion_arcana_registry.gd",
+        "res://scripts/tests/test_arcana_motion.gd",
+        "res://scripts/tests/test_blast_feedback.gd",
+        "res://scripts/tests/test_undertow_layouts.gd",
+        "res://scripts/tests/test_drifter_replication.gd",
+        "res://scripts/tests/test_keeper_runtime.gd",
+        "res://scripts/tests/test_keeper_profiles.gd",
+        "res://scripts/tests/test_boss_combination_foundation.gd",
+        "res://scripts/tests/test_boss_combinations.gd",
+        "res://scripts/tests/test_launch_authority.gd",
+        "res://scripts/tests/test_dev_upload_eligibility.gd"
     )
     foreach ($scriptPath in $checks) {
         $label = [IO.Path]::GetFileNameWithoutExtension($scriptPath)

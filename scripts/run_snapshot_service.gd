@@ -123,6 +123,8 @@ static func build_snapshot(world: Node, player: Node, run_context: Node, snapsho
 		"run_mode": run_mode_value,
 		"current_character_id": world.current_character_id,
 		"active_catalyst_ids": run_context.get_active_catalyst_ids(world.current_character_id) if run_context != null else [],
+		"active_ascension_loadout": run_context.get_active_ascension_loadout(world.current_difficulty_tier) if run_context != null else [],
+		"ascension_tracking_complete": run_context.ascension_tracking_complete if run_context != null else true,
 		"rooms_cleared": world.rooms_cleared,
 		"room_depth": world.room_depth,
 		"active_room_enemy_count": world.active_room_enemy_count,
@@ -236,6 +238,8 @@ static func apply_snapshot(world: Node, player: Node, run_context: Node, snapsho
 		objective_manager.set("hunt_target_type", "")
 		objective_manager.set("hunt_target_name", "")
 	world.current_difficulty_tier = int(snapshot.get("current_difficulty_tier", world.current_difficulty_tier))
+	if run_context != null:
+		run_context.restore_ascension_checkpoint(snapshot, world.current_character_id, world.current_difficulty_tier)
 
 	var player_snapshot: Dictionary = snapshot.get("player_snapshot", {}) as Dictionary
 	player.apply_run_snapshot(player_snapshot)

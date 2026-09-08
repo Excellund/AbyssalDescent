@@ -134,6 +134,7 @@ How to apply:
 
 - Pass required context explicitly.
 - Centralize mutable state ownership.
+- Separate saved menu preferences from the effective run setup. Resolve eligibility with the actual run/host tier before initializing gameplay; empty equipment is an explicit choice, not a request to reload saved preferences. Read-only panel population must not activate gameplay effects.
 - Avoid temporary shared-state swapping to influence helper behavior.
 - At modal-to-gameplay handoffs, clear buffered combat commands and require release of held confirmation actions. Handling a GUI event does not consume Godot's global `Input` polling state.
 - Release consumed-action guards in the physics loop, including while encounter input is frozen. Use the same guard for attack, dash, and arena-ready checks so an idle-frame UI click cannot become a physics-frame gameplay action.

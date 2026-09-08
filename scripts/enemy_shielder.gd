@@ -404,8 +404,9 @@ func _try_body_check_target() -> void:
 	body_check_cooldown_left = body_check_cooldown
 
 func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
-	if amount <= 0:
+	if amount <= 0 or damage_blocked:
 		return
+	amount = _apply_keeper_ward_to_damage(amount)
 	var before_health := int(health_state.current_health)
 
 	if bool(damage_context.get("is_ground_attack", false)):

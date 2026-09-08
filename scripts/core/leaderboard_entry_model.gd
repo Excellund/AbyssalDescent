@@ -2,6 +2,8 @@ extends RefCounted
 class_name LeaderboardEntryModel
 
 const RUN_SUMMARY_MODEL := preload("res://scripts/core/run_summary_model.gd")
+const RUN_TELEMETRY_STORE := preload("res://scripts/run_telemetry_store.gd")
+const ASCENSION_REGISTRY := preload("res://scripts/progression/ascension_modifier_registry.gd")
 
 const BOARD_GLOBAL := "global"
 const BOARD_PER_CHARACTER := "per_character"
@@ -42,12 +44,14 @@ static func normalize_run_summary(run_summary: Dictionary) -> Dictionary:
 	summary["player_count"] = clamp_party_size(int(summary.get("player_count", 1)))
 	summary["is_multiplayer"] = bool(summary.get("is_multiplayer", false)) or summary["player_count"] > 1
 	summary["ascension_rank"] = maxi(0, int(summary.get("ascension_rank", 0)))
+	if int(summary["difficulty_tier"]) != ASCENSION_REGISTRY.BEARING_ENUMS.BearingTier.FORSWORN:
+		summary["ascension_rank"] = 0
 	var loadout_raw: Variant = summary.get("ascension_loadout", [])
 	var loadout_clean: Array[String] = []
 	if loadout_raw is Array:
 		for entry in loadout_raw:
 			loadout_clean.append(String(entry))
-	summary["ascension_loadout"] = loadout_clean
+	summary["ascension_loadout"] = ASCENSION_REGISTRY.normalize_loadout(int(summary["difficulty_tier"]), loadout_clean)
 	var catalysts_raw: Variant = summary.get("equipped_catalyst_ids", [])
 	var catalysts_clean: Array[String] = []
 	if catalysts_raw is Array:
@@ -60,7 +64,7 @@ static func is_submission_eligible(run_summary: Dictionary) -> bool:
 	var summary := normalize_run_summary(run_summary)
 	if String(summary.get("outcome", "")) != "clear":
 		return false
-	if bool(summary.get("is_debug", false)):
+	if not RUN_TELEMETRY_STORE.is_upload_payload_eligible(summary):
 		return false
 	if String(summary.get("run_id", "")).is_empty():
 		return false
@@ -96,7 +100,7 @@ static func normalize_server_entry(entry: Dictionary) -> Dictionary:
 		"ended_at_unix": maxi(0, int(entry.get("ended_at_unix", 0))),
 		"player_count": clamp_party_size(int(entry.get("player_count", 1))),
 		"is_multiplayer": bool(entry.get("is_multiplayer", false)) or int(entry.get("player_count", 1)) > 1,
-		"ascension_rank": maxi(0, int(entry.get("ascension_rank", 0))),
+		"ascension_rank": maxi(0, int(entry.get("ascension_rank", 0))) if int(entry.get("difficulty_tier", 0)) == ASCENSION_REGISTRY.BEARING_ENUMS.BearingTier.FORSWORN else 0,
 	}
 
 static func sort_entries(entries: Array) -> Array:

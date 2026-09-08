@@ -19,6 +19,7 @@ const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 const META_PROGRESS_STORE := preload("res://scripts/meta_progress_store.gd")
 const OATHS_EVALUATOR := preload("res://scripts/progression/oaths_evaluator.gd")
+const ASCENSION_REGISTRY := preload("res://scripts/progression/ascension_modifier_registry.gd")
 const PLAYER_SCRIPT := preload("res://scripts/player.gd")
 const RUN_CONTEXT_SCRIPT := preload("res://scripts/run_context.gd")
 const OBJECTIVE_MANAGER_SCRIPT := preload("res://scripts/objective_manager.gd")
@@ -182,10 +183,10 @@ func reset_summary_tracker() -> void:
 		tracker_seed["player_uuid"] = _world.current_player_profile.player_id
 		tracker_seed["player_name"] = _world.current_player_profile.profile_name
 	if run_context != null:
-		var loadout: Array = run_context.get_active_ascension_loadout()
+		var loadout: Array = run_context.get_active_ascension_loadout(_world.current_difficulty_tier)
 		tracker_seed["ascension_loadout"] = loadout
-		var ASCENSION_REGISTRY := preload("res://scripts/progression/ascension_modifier_registry.gd")
 		tracker_seed["ascension_rank"] = ASCENSION_REGISTRY.compute_loadout_rank(loadout)
+		tracker_seed["ascension_tracking_complete"] = run_context.ascension_tracking_complete
 		var character_id: String = String(_world.current_character_id).strip_edges().to_lower()
 		tracker_seed["equipped_catalyst_ids"] = run_context.get_active_catalyst_ids(character_id)
 	run_summary_tracker.reset_for_run(tracker_seed)
@@ -827,6 +828,13 @@ func finalize_synced_run_summary_for_joiner(synced_summary: Dictionary, outcome:
 		# a different player and must not decide this player's Closed Fist Oath.
 		augmented["primary_attacks_fired"] = run_summary_tracker.primary_attacks_fired
 		augmented["equipped_catalyst_ids"] = run_summary_tracker.equipped_catalyst_ids.duplicate()
+		# The launch established this setup on every peer. A stale outcome must
+		# not grant Forsworn rank progress for a lower-tier local run.
+		augmented["difficulty_tier"] = run_summary_tracker.difficulty_tier
+		augmented["difficulty_label"] = run_summary_tracker.difficulty_label
+		augmented["ascension_rank"] = run_summary_tracker.ascension_rank
+		augmented["ascension_loadout"] = run_summary_tracker.ascension_loadout.duplicate()
+		augmented["ascension_tracking_complete"] = run_summary_tracker.ascension_tracking_complete and bool(augmented.get("ascension_tracking_complete", true))
 	augmented["is_debug"] = _run_is_debug or bool(augmented.get("is_debug", false))
 	if String(augmented.get("outcome", "")).strip_edges().is_empty():
 		augmented["outcome"] = outcome
@@ -966,7 +974,7 @@ func _apply_endgame_chase_progress(run_summary: Dictionary) -> void:
 	var outcome: String = String(run_summary.get("outcome", "")).to_lower()
 	var is_clear: bool = outcome == "clear" or outcome == "victory" or outcome == "win"
 	var character_id: String = String(run_summary.get("character_id", "")).strip_edges().to_lower()
-	if is_clear and not character_id.is_empty():
+	if is_clear and not character_id.is_empty() and ASCENSION_REGISTRY.can_record_rank(run_summary):
 		var rank: int = int(run_summary.get("ascension_rank", 0))
 		if rank > 0:
 			if META_PROGRESS_STORE.record_ascension_clear(profile, character_id, rank):

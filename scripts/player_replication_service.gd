@@ -4,6 +4,7 @@ extends Node
 
 const PLAYER_CUE_EVENT_DISPATCHER_SCRIPT := preload("res://scripts/core/player_cue_event_dispatcher.gd")
 const PLAYER_CUE_SYNC_QUEUE_SCRIPT := preload("res://scripts/core/player_cue_sync_queue.gd")
+const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const REMOTE_PLAYER_SNAP_DISTANCE_PX: float = 180.0
 
 ## Configuration
@@ -564,26 +565,31 @@ func _apply_external_slow_local(target_peer_id: int, duration: float, mult: floa
 
 
 ## Host-authoritative: dispatch an enemy-killed notification to the player who got the kill credit.
-func send_enemy_killed(target_peer_id: int, kill_pos: Vector2) -> void:
+func send_enemy_killed(target_peer_id: int, kill_pos: Vector2, suppress_launch: bool = false) -> void:
+	suppress_launch = suppress_launch or DAMAGEABLE.is_launch_suppressed()
 	if multiplayer_session_manager == null or not bool(multiplayer_session_manager.is_session_connected()):
-		_apply_enemy_killed_local(target_peer_id, kill_pos)
+		_apply_enemy_killed_local(target_peer_id, kill_pos, suppress_launch)
 		return
 	if not bool(multiplayer_session_manager.should_broadcast()):
 		return
 	if target_peer_id == local_peer_id:
-		_apply_enemy_killed_local(target_peer_id, kill_pos)
+		_apply_enemy_killed_local(target_peer_id, kill_pos, suppress_launch)
 		return
-	_rpc_apply_enemy_killed.rpc_id(target_peer_id, target_peer_id, kill_pos)
+	_rpc_apply_enemy_killed.rpc_id(target_peer_id, target_peer_id, kill_pos, suppress_launch)
 
 
 @rpc("authority", "call_remote", "reliable")
-func _rpc_apply_enemy_killed(target_peer_id: int, kill_pos: Vector2) -> void:
-	_apply_enemy_killed_local(target_peer_id, kill_pos)
+func _rpc_apply_enemy_killed(target_peer_id: int, kill_pos: Vector2, suppress_launch: bool = false) -> void:
+	_apply_enemy_killed_local(target_peer_id, kill_pos, suppress_launch)
 
 
-func _apply_enemy_killed_local(target_peer_id: int, kill_pos: Vector2) -> void:
+func _apply_enemy_killed_local(target_peer_id: int, kill_pos: Vector2, suppress_launch: bool = false) -> void:
 	var player_node := _get_player_node(target_peer_id)
 	if player_node == null:
 		return
 	if player_node.has_method("notify_enemy_killed"):
+		if suppress_launch:
+			DAMAGEABLE.begin_secondary_scope()
 		player_node.notify_enemy_killed(kill_pos)
+		if suppress_launch:
+			DAMAGEABLE.end_secondary_scope()

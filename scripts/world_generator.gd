@@ -14,6 +14,7 @@ const ENEMY_SPECTRE_SCRIPT := preload("res://scripts/enemy_spectre.gd")
 const ENEMY_PYRE_SCRIPT := preload("res://scripts/enemy_pyre.gd")
 const ENEMY_TETHER_SCRIPT := preload("res://scripts/enemy_tether.gd")
 const ENEMY_DRIFTER_SCRIPT := preload("res://scripts/enemy_drifter.gd")
+const ENEMY_KEEPER_SCRIPT := preload("res://scripts/enemy_keeper.gd")
 const ENEMY_WEAVER_SCRIPT := preload("res://scripts/enemy_weaver.gd")
 const ENEMY_SENTINEL_SCRIPT := preload("res://scripts/enemy_sentinel.gd")
 const BIOME_REGISTRY := preload("res://scripts/shared/biome_registry.gd")
@@ -791,12 +792,7 @@ func _setup_world_bootstrap_state() -> void:
 	_apply_camera_bounds_for_room(current_effective_room_size)
 
 func _setup_run_systems_phase() -> void:
-	var run_context := _get_run_context()
-	if run_context != null:
-		current_character_id = run_context.get_selected_character_id()
-		if is_multiplayer:
-			current_character_id = _resolve_local_character_id(run_context, current_character_id)
-		run_context.begin_catalyst_run(current_character_id)
+	_prepare_run_loadout()
 	music_system = MUSIC_SYSTEM_SCRIPT.new()
 	add_child(music_system)
 	music_system.initialize(normal_room_music, boss_room_music, music_volume_db, music_crossfade_duration)
@@ -821,6 +817,29 @@ func _setup_run_systems_phase() -> void:
 		else:
 			push_error("[WorldGenerator] GameStateReplicationService autoload is missing")
 
+## Resolve the actual run tier before rewards, character bonuses, or encounter setup.
+func _prepare_run_loadout() -> void:
+	var run_context := _get_run_context()
+	if run_context == null:
+		return
+	var retry := run_context.consume_run_retry()
+	current_character_id = run_context.get_selected_character_id()
+	current_difficulty_tier = run_context.get_multiplayer_difficulty_tier() if is_multiplayer else run_context.get_current_difficulty_tier()
+	if is_multiplayer:
+		current_character_id = _resolve_local_character_id(run_context, current_character_id)
+	if not retry.is_empty():
+		current_character_id = String(retry.get("character_id", current_character_id))
+		current_difficulty_tier = int(retry.get("difficulty_tier", current_difficulty_tier))
+	var debug_tier := _debug_bearing_override_tier()
+	if debug_tier >= 0:
+		current_difficulty_tier = debug_tier
+	if retry.is_empty():
+		run_context.begin_ascension_run(current_character_id, current_difficulty_tier, is_multiplayer)
+		run_context.begin_catalyst_run(current_character_id)
+	else:
+		run_context.set_active_ascension_loadout(retry.get("ascension_loadout", []) as Array, current_difficulty_tier)
+		run_context.restore_active_catalysts(current_character_id, retry.get("catalyst_ids", []) as Array)
+
 func _setup_reward_selection_system() -> void:
 	reward_selection_ui = REWARD_SELECTION_UI_SCRIPT.new()
 	add_child(reward_selection_ui)
@@ -837,7 +856,7 @@ func _configure_reward_selection_loadout() -> void:
 	var catalyst_payload: Dictionary = {}
 	var run_context_ref := _get_run_context()
 	if run_context_ref != null:
-		var loadout: Array = run_context_ref.get_active_ascension_loadout()
+		var loadout: Array = run_context_ref.get_active_ascension_loadout(current_difficulty_tier)
 		if not loadout.is_empty():
 			var ascension_payload: Dictionary = ASCENSION_REGISTRY.merge_loadout_payload(loadout)
 			var delta: int = int(round(float(ascension_payload.get("reward_choice_count_add", 0.0))))
@@ -856,36 +875,17 @@ func _setup_encounter_profile_builder_system() -> void:
 	encounter_profile_builder.set_use_multiplayer_difficulty_config(is_multiplayer)
 	encounter_profile_builder.set_multiplayer_party_size(difficulty_provider.get_party_size())
 	var run_context := _get_run_context()
-	var should_apply_difficulty := false
 	var difficulty_tier := current_difficulty_tier
+	encounter_profile_builder.set_difficulty_tier(difficulty_tier)
 	if run_context != null:
-		difficulty_tier = int(run_context.get_current_difficulty_tier())
-		var fallback_character_id := String(run_context.get_selected_character_id()).strip_edges().to_lower()
-		if is_multiplayer:
-			current_character_id = _resolve_local_character_id(run_context, fallback_character_id)
-		else:
-			current_character_id = fallback_character_id
-		should_apply_difficulty = true
-	var debug_bearing_tier := _debug_bearing_override_tier()
-	if debug_bearing_tier >= 0:
-		difficulty_tier = debug_bearing_tier
-		should_apply_difficulty = true
+		encounter_profile_builder.set_ascension_loadout(run_context.get_active_ascension_loadout(difficulty_tier))
 	if is_instance_valid(player):
 		var char_data: Dictionary = CHARACTER_REGISTRY.get_character(current_character_id)
 		player.apply_character_package(char_data)
 	if is_multiplayer:
 		_apply_multiplayer_character_packages(run_context)
 		_log_multiplayer_player_stats("post_character_apply")
-	if should_apply_difficulty:
-		encounter_profile_builder.set_difficulty_tier(difficulty_tier)
-		_apply_difficulty_tier_bonuses(difficulty_tier)
-	if run_context != null:
-		var loadout := run_context.get_active_ascension_loadout()
-		if loadout.is_empty():
-			loadout = run_context.get_saved_ascension_loadout(current_character_id)
-			if not loadout.is_empty():
-				run_context.set_active_ascension_loadout(loadout)
-		encounter_profile_builder.set_ascension_loadout(loadout)
+	_apply_difficulty_tier_bonuses(difficulty_tier)
 	encounter_profile_builder.configure({
 		"room_base_size": room_base_size,
 		"room_size_growth": room_size_growth,
@@ -930,6 +930,7 @@ func _setup_enemy_spawner_system() -> void:
 		"pyre": ENEMY_PYRE_SCRIPT,
 		"tether": ENEMY_TETHER_SCRIPT,
 		"drifter": ENEMY_DRIFTER_SCRIPT,
+		"keeper": ENEMY_KEEPER_SCRIPT,
 		"weaver": ENEMY_WEAVER_SCRIPT,
 		"sentinel": ENEMY_SENTINEL_SCRIPT
 	}, Callable(self, "_on_room_enemy_died"), Callable(self, "_get_multiplayer_player_nodes"))
@@ -1347,6 +1348,8 @@ func _get_debug_power_preset_pool(preset: int) -> Array[String]:
 				"blink_dash",
 				"surge_step",
 				"phantom_step",
+				"blast_drive",
+				"razor_orbit",
 				"riftpunch",
 				"reaper_step",
 				"static_wake",
@@ -1878,9 +1881,8 @@ func _get_hud_state() -> Dictionary:
 	if run_context != null:
 		hud_state["timer_visible_in_hud"] = bool(run_context.is_timer_visible_in_hud())
 		hud_state["equipped_catalyst_count"] = run_context.get_active_catalyst_ids(current_character_id).size()
-		var active_loadout := run_context.get_active_ascension_loadout()
-		if not active_loadout.is_empty():
-			hud_state["ascension_rank"] = ASCENSION_REGISTRY.compute_loadout_rank(active_loadout)
+		var active_loadout := run_context.get_active_ascension_loadout(current_difficulty_tier)
+		hud_state["ascension_rank"] = ASCENSION_REGISTRY.compute_loadout_rank(active_loadout)
 	var active_powers := _get_active_player_powers()
 	hud_state["active_boons"] = active_powers["boons"]
 	hud_state["active_arcana"] = active_powers["arcana"]
@@ -2330,31 +2332,13 @@ func _try_resume_saved_run() -> Dictionary:
 	if run_context == null:
 		return {}
 
-	var should_apply_difficulty := false
 	if is_multiplayer:
-		## Multiplayer: get difficulty from multiplayer tier
-		current_difficulty_tier = int(run_context.get_multiplayer_difficulty_tier())
 		multiplayer_encounter_seed = rng.randi_range(1, 999999)
 		encounter_profile_builder.initialize_with_seed(rng, multiplayer_encounter_seed)
-		## Never apply singleplayer run snapshots in multiplayer sessions.
-		## Snapshot payload can contain stale per-character combat stats from prior runs.
-		## Use the lobby's per-peer selection — RunContext.selected_character_id may
-		## have been silently rejected by this peer's meta-progress unlock check
-		## even though the lobby allowed the pick.
-		var mp_fallback_character_id := String(run_context.get_selected_character_id()).strip_edges().to_lower()
-		current_character_id = _resolve_local_character_id(run_context, mp_fallback_character_id)
-		if current_character_id.is_empty():
-			current_character_id = CHARACTER_REGISTRY.get_default_character_id()
-		should_apply_difficulty = true
-		if should_apply_difficulty:
-			_apply_difficulty_tier_bonuses(current_difficulty_tier, false)
-		return {}
-	else:
-		current_difficulty_tier = int(run_context.get_current_difficulty_tier())
-	current_character_id = String(run_context.get_selected_character_id()).strip_edges().to_lower()
-	should_apply_difficulty = true
-	if should_apply_difficulty:
+		# Run setup already used the host tier; never apply a solo checkpoint here.
 		_apply_difficulty_tier_bonuses(current_difficulty_tier, false)
+		return {}
+	_apply_difficulty_tier_bonuses(current_difficulty_tier, false)
 
 	var snapshot := run_context.load_active_run() as Dictionary
 	if snapshot.is_empty():
@@ -2410,6 +2394,10 @@ func _apply_active_run_snapshot(snapshot: Dictionary) -> bool:
 	# Starting-health bonuses are already included in the checkpoint maximum.
 	_apply_difficulty_tier_bonuses(current_difficulty_tier, false)
 	encounter_profile_builder.set_difficulty_tier(current_difficulty_tier)
+	if run_context != null:
+		encounter_profile_builder.set_ascension_loadout(run_context.get_active_ascension_loadout(current_difficulty_tier))
+	_apply_active_biome(_get_current_act())
+	_rebuild_legacy_ascension_doors(snapshot)
 	_configure_reward_selection_loadout()
 	_clear_all_enemies()
 	_reset_all_player_positions_to_slots()
@@ -2419,6 +2407,24 @@ func _apply_active_run_snapshot(snapshot: Dictionary) -> bool:
 	hud.refresh(_get_hud_state(), player)
 	_set_combat_paused(false)
 	return true
+
+## Older lower-tier saves may contain complete door profiles built with leaked
+## Ascension. Re-roll only those choices; keep progress, boss state and health.
+func _rebuild_legacy_ascension_doors(snapshot: Dictionary) -> void:
+	if current_difficulty_tier == BEARING_ENUMS.BearingTier.FORSWORN:
+		return
+	var saved_loadout: Variant = snapshot.get("active_ascension_loadout")
+	if saved_loadout is Array and (saved_loadout as Array).is_empty():
+		return
+	var route_options := _roll_route_options(_build_route_context(room_depth))
+	var empty_doors: Array[Dictionary] = []
+	var rebuilt: Dictionary = encounter_route_controller.build_route_state(
+		false, empty_doors, boss_unlocked, first_boss_defeated, second_boss_defeated,
+		room_depth, door_distance_from_center, route_options,
+		_is_second_boss_unlocked(), _is_third_boss_unlocked()
+	)
+	if bool(rebuilt.get("ok", false)):
+		door_options = rebuilt["door_options"]
 
 func _is_endless_mode() -> bool:
 	var run_context := _get_run_context()
@@ -2509,6 +2515,9 @@ func _on_defeat_retry_run() -> void:
 	_retry_current_run()
 
 func _retry_current_run() -> void:
+	var run_context := _get_run_context()
+	if run_context != null:
+		run_context.request_run_retry(current_character_id, current_difficulty_tier)
 	_teardown_multiplayer_session_for_menu_transition()
 	_set_combat_paused(false)
 	_clear_active_run_checkpoint()
@@ -2596,6 +2605,9 @@ func _broadcast_retry_vote_status(votes_yes: int, total: int) -> void:
 
 @rpc("reliable", "authority", "call_local")
 func _start_multiplayer_retry_run() -> void:
+	var run_context := _get_run_context()
+	if run_context != null:
+		run_context.request_run_retry(current_character_id, current_difficulty_tier)
 	_run_outcome_coordinator.clear_retry_state()
 	_set_combat_paused(false)
 	_clear_active_run_checkpoint()
@@ -3390,15 +3402,15 @@ func _sync_request_enemy_damage(enemy_id: int, amount: int, damage_context: Dict
 	if STAT_ATTRIBUTION_TRACE:
 		print_debug("[StatAttribution][HostApplied] enemy_id=%d source=%d before=%d after=%d applied=%d" % [enemy_id, source_peer_id, health_before, health_after, maxi(0, health_before - health_after)])
 
-func request_enemy_impulse_from_client(enemy_id: int, impulse: Vector2) -> void:
+func request_enemy_impulse_from_client(enemy_id: int, impulse: Vector2, suppress_launch: bool = false) -> void:
 	if not MultiplayerSessionManager.is_remote_replica():
 		return
 	if enemy_id <= 0 or not impulse.is_finite():
 		return
-	_sync_request_enemy_impulse.rpc_id(1, enemy_id, impulse)
+	_sync_request_enemy_impulse.rpc_id(1, enemy_id, impulse, suppress_launch)
 
 @rpc("reliable", "any_peer")
-func _sync_request_enemy_impulse(enemy_id: int, impulse: Vector2) -> void:
+func _sync_request_enemy_impulse(enemy_id: int, impulse: Vector2, suppress_launch: bool = false) -> void:
 	if not MultiplayerSessionManager.should_broadcast():
 		return
 	if enemy_id <= 0 or not impulse.is_finite():
@@ -3409,7 +3421,7 @@ func _sync_request_enemy_impulse(enemy_id: int, impulse: Vector2) -> void:
 	var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as ENEMY_BASE_SCRIPT
 	if not is_instance_valid(enemy) or enemy.get_current_health() <= 0:
 		return
-	enemy.velocity += impulse
+	DAMAGEABLE.apply_impulse(enemy, impulse, sender_peer_id, suppress_launch)
 
 func _spawn_boss_for_stage(boss_stage: int, spawn_position: Vector2) -> Node2D:
 	var boss := BOSS_STAGE_REGISTRY.create_boss_node(boss_stage, spawn_position)

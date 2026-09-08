@@ -4,6 +4,8 @@ const REGISTRY := preload("res://scripts/power_registry.gd")
 const UPGRADES := preload("res://scripts/upgrade_system.gd")
 const MAPPER := preload("res://scripts/power_parameter_mapper.gd")
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
+const DESCRIPTION_GUARD := preload("res://scripts/shared/description_cap_guard.gd")
+const GLOSSARY := preload("res://scripts/shared/glossary_data.gd")
 
 class TestPlayer extends Node:
 	var values: Dictionary = {
@@ -20,6 +22,11 @@ class TestPlayer extends Node:
 
 class TestHealth extends RefCounted:
 	var current_health: int = 10
+
+class CardPlayer extends TestPlayer:
+	var upgrades: Node
+	func get_upgrade_card_desc(power_id: String) -> String:
+		return upgrades.get_upgrade_card_description(power_id)
 
 class TestEnemy extends CharacterBody2D:
 	signal died
@@ -42,7 +49,7 @@ class TestWorld extends Node:
 		damage_total += amount
 		damage_events += 1
 
-	func request_enemy_impulse_from_client(enemy_id: int, impulse: Vector2) -> void:
+	func request_enemy_impulse_from_client(enemy_id: int, impulse: Vector2, _suppress_launch: bool = false) -> void:
 		impulse_requests.append({"enemy_id": enemy_id, "impulse": impulse})
 
 class CombatPlayer extends "res://scripts/player.gd":
@@ -112,6 +119,7 @@ func _run() -> void:
 	_test_all_reward_applications(registry)
 	_test_derived_damage_order(registry)
 	_test_derived_arc_and_descriptions(registry)
+	_test_boss_combination_descriptions(registry)
 	_test_killing_hit_attribution()
 	_test_enemy_impulses()
 	_test_combat_hooks()
@@ -199,6 +207,41 @@ func _test_derived_arc_and_descriptions(registry: Node) -> void:
 	_check(upgrades.get_power_current_description("static_wake").contains("105%"), "Static Wake Prismatic current description retains increase")
 	upgrades.free()
 	player.free()
+
+func _test_boss_combination_descriptions(registry: Node) -> void:
+	_check(REGISTRY.BOSS_REWARD_POOL_IDS.size() == 9, "Boss pool contains the seven existing and two new rewards")
+	var glossary := GLOSSARY.glossary_bbcode()
+	for power_id in ["ruinous_impact", "sovereigns_double"]:
+		var player := CardPlayer.new()
+		var upgrades := _make_upgrades(player, registry)
+		player.upgrades = upgrades
+		var balance: Dictionary = registry.get_power_balance(power_id)
+		_check(balance.get("kind") == "add_int" and balance.get("property") == power_id + "_stacks" and balance.get("add") == 1, "%s applies one persisted integer stack" % power_id)
+		_check(registry.get_power_stack_limit(power_id) == 2, "%s caps at two boss picks" % power_id)
+		_check(registry.get_power_display_metadata(power_id).get("category") == REGISTRY.POWER_DISPLAY_CATEGORY_BOSS_REWARD, "%s is presented as a boss reward" % power_id)
+		_check(glossary.contains(registry.get_power_display_name(power_id)), "%s has glossary instructions" % power_id)
+		_check(not upgrades.get_power_flavor_text(power_id).is_empty(), "%s has shared mechanic text" % power_id)
+		for stack in range(3):
+			var card: String = upgrades.get_upgrade_card_description(power_id)
+			var current: String = upgrades.get_power_current_description(power_id)
+			_check(DESCRIPTION_GUARD.visible_length(card) <= 109 and DESCRIPTION_GUARD.visible_length(current) <= 109, "%s level %d complete descriptions fit the visible cap" % [power_id, stack])
+			_check(not card.contains("Upgrade your stats") and not current.is_empty(), "%s level %d has specific reward/build text" % [power_id, stack])
+			if power_id == "ruinous_impact":
+				_check(card.contains("Bosses burst in place") and card.contains("impacts burst"), "Ruinous Impact explains its standalone and boss effects")
+				_check(current.contains("140%" if stack == 2 else "100%"), "Ruinous Impact displays the active damage ratio")
+				_check(current.contains("95" if stack == 2 else "70"), "Ruinous Impact displays the active radius")
+			else:
+				_check(card.contains("dash, recoil or orbit") and card.contains("next attacks"), "Sovereign's Double explains both the movement and attack triggers")
+				_check(card.contains("55%") and current.contains("4s"), "Sovereign's Double preserves echo damage and lifetime")
+				_check(DESCRIPTION_GUARD.strip_bbcode(current).contains("Echoes %d" % maxi(1, stack)), "Sovereign's Double displays the active echo count")
+			var pool: Array[Dictionary] = registry.get_boss_reward_pool(player)
+			for option in pool:
+				if option.get("id") == power_id:
+					_check(option.get("desc") == card, "%s registry card uses the same description" % power_id)
+			if stack < 2:
+				upgrades.apply_upgrade(power_id)
+		upgrades.free()
+		player.free()
 
 func _test_killing_hit_attribution() -> void:
 	var world := TestWorld.new()
@@ -353,6 +396,14 @@ func _test_combat_hooks() -> void:
 				player._drop_sigil_chain_zone(enemy.global_position)
 				player._update_sigil_chain_state(0.1)
 				activated = enemy.get_current_health() < before
+			"blast_drive":
+				player.perform_motion_blast(Vector2.RIGHT, 1.0)
+				activated = enemy.get_current_health() < before and enemy.velocity.x > 0.0
+			"razor_orbit":
+				player._ensure_arcana_motion()
+				player.arcana_motion.start_orbit(enemy)
+				player.arcana_motion._apply_cut_contacts(player.global_position, player.global_position + Vector2(5.0, 0.0))
+				activated = player.arcana_motion.owns_movement() and enemy.get_current_health() < before
 			"wardens_verdict":
 				activated = player._get_apex_predator_bonus(enemy, enemy.global_position, 20) > 0
 			"lacuna_echo":
@@ -380,6 +431,19 @@ func _test_combat_hooks() -> void:
 				player._apply_null_corridor_segment(Vector2(1.0, 0.0), Vector2(100.0, 0.0))
 				player._update_null_corridor_segments(0.1)
 				activated = enemy.get_current_health() < before and not enemy.velocity.is_zero_approx()
+			"ruinous_impact":
+				player._ensure_boss_combinations()
+				player.boss_combinations.launch_enemy(enemy, Vector2.RIGHT * 400.0, 1)
+				var launch = enemy.get_launch_state()
+				# Compression exercises the same one-shot burst without test physics.
+				launch.compression = true
+				launch.step(enemy, 0.4)
+				activated = enemy.get_current_health() < before and secondary.get_current_health() < secondary_before
+			"sovereigns_double":
+				player._ensure_boss_combinations()
+				player.boss_combinations.create_shade(Vector2.ZERO)
+				player._perform_melee_attack(Vector2.RIGHT, {"damage": 20, "range": 78.0, "arc_degrees": 130.0})
+				activated = before - enemy.get_current_health() > 20 and player.boss_combinations.shade_hits == 0
 		_check(activated, "%s production combat hook produces its advertised effect" % power_id)
 		current_scene = null
 		world.free()

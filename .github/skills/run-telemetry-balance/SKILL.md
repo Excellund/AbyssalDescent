@@ -90,13 +90,28 @@ Use this skill when you need evidence from real runs before changing encounter b
 - If no file exists yet, verify the run was not started in a debug mode that disables telemetry collection.
 - Label-based bearing normalization is stable enough for analysis, but explicit bearing_key fields should be preferred whenever present.
 - Reward telemetry records both `reward_choices` and `reward_offers`; use offer counts when available instead of treating selection frequency as pick rate.
-- Remote uploads require `telemetry_upload_enabled` in settings_store. The uploader excludes debug runs and dev/debug build versions; still filter historical data by debug status and version.
+- Remote uploads require `telemetry_upload_enabled` in settings_store. Telemetry and leaderboard submissions both exclude debug runs and dev/debug build versions, including previously queued leaderboard submissions. Still filter historical data by debug status and version.
+- Export playtests with `.github/scripts/export_playtest.ps1`. Its default `dev-<UTC timestamp>-<suffix>` identifies the exact build in local history; `-BuildVersion dev-<label>` supports a named playtest. Never replace a playtest version with a release version to collect data.
+- Maintain one desktop playtest executable at `C:/Users/mikel/Desktop/AbyssalDescent Playtest.exe` for both normal and debug runs. Each update or mode switch replaces this same file. The exporter defaults to this path and permits its replacement automatically; an existing custom `-OutputPath` still requires `-Overwrite`. Keep unique `dev-*` IDs inside builds, not in numbered desktop filenames.
+- At a user-agreed checkpoint, verify the completed changes, commit and push them, and replace the desktop playtest with a normal export (without `-DebugRun`). Preserve unrelated local work and do not create release tags unless requested. This is the user's standing checkpoint preference.
+- A normal export starts at the menu with regular saves and no debug grants. `export_playtest.ps1 -DebugRun` embeds the current powers preset and uses a separate persistent debug save directory, preserving normal progress. The current preset is Bastion on Delver with Blast Drive and Razor Orbit at level 3, and Ruinous Impact and Sovereign's Double at level 2.
+- `start_debug_playtest.ps1` is the export-and-launch wrapper for `-DebugRun`: it must launch the same packaged desktop executable. Temporary source-only debug sessions are validation fixtures, not delivery to the user. Internal staging paths may be temporary, but opening the desktop executable must run the mode most recently exported.
+
+## Safe Report Workflow
+- Run `playtester_telemetry/fetch_latest_version_analysis.ps1 -Version '<exact-build>' -From 'YYYY-MM-DD' -To 'YYYY-MM-DD'`. The version is required; dates use UTC, From is inclusive, and To is exclusive. Default window is the last 30 days.
+- The script calls only the read RPC and defaults to a unique temporary report, printing `REPORT_JSON=<path>`. Read that returned path. It does not replace the old tracked report; a chosen existing `-OutputPath` requires `-Overwrite`.
+- Add `-LocalHistoryPath '<path-to-run_history.json>'` to analyze local dev playtests without launching the game or contacting any service. JSON telemetry exports containing a `runs` array also work; binary `.save` files require a separate isolated export first.
+- Local summaries contain final builds and equipped Catalysts but not reward offers or room/damage event arrays. `final_build_presence` is not a pick rate; missing metrics are `null`, and `sample.field_coverage_runs` states the available evidence.
+- Verify the selected version, sample dates, and `cohorts` before drawing conclusions. A plain `dev` version may cover several patches, and pooled solo/co-op, Bearing, mode, and Ascension outcomes are not controlled comparisons.
+- The current remote telemetry payload/RPC omits Catalyst and Ascension loadouts even though the SQL table defines those columns. Missing data is not evidence of an empty/default loadout.
+- `-ValidateOnly` checks parameters without querying data or creating a report. `.github/scripts/test_playtest_workflow.ps1` tests local filtering, read-RPC pagination, privacy, and export parameters using temporary fixtures and mocked HTTP.
 
 ## Oath Evidence and Run Summaries
 - Trace an Oath from its gameplay event through `run_summary_tracker`, `run_summary_recorder`, peer summary overrides, and persisted progress. An evaluator fix alone does not repair missing or misattributed evidence.
 - Keep personal criteria tied to the player: local input owns primary-attack counts, and boss no-hit evidence requires a matching engagement and that participant's damage history. A teammate's hits or attacks must not decide another player's Oaths.
 - Checkpoint saves must retain prior attacks, damage, rest visits, completed encounter evidence, and elapsed run time. Legacy saves with unknown history must not treat missing counters as zero; preserve known build data and reject only criteria whose evidence is incomplete.
 - Match completion scope to the description: completed boss/Hold encounters can qualify after a later run loss, while `win_*` and Ascension-clear criteria require a full clear. Debug runs must never persist Oath or Ascension awards.
+- Ascension effects and rank awards require the actual Forsworn run tier, including host-selected co-op and restored checkpoints. Preserve the exact active modifier loadout in saves; legacy runs lacking modifier history may continue, but cannot establish new Ascension rank records or Oaths. Re-saving must preserve that incomplete evidence, while a fresh retry begins new evidence.
 - Verify both success and disqualification paths, joined-player summaries, and save/resume in isolated tests before attributing poor Oath completion rates to balance.
 
 ## Pick Rate Calculation
@@ -115,7 +130,7 @@ Character data is in `character_popularity` and `character_by_bearing` in the re
 
 ## Fun / Satisfaction Proxy
 There is no direct "fun" signal in the telemetry. Use this proxy chain:
-1. **Engagement signal** (`boredom_proxy.long_low_engagement_runs`): long runs with very few damage events. Elevated count suggests passive play (kiting, avoidance) rather than active combat.
+1. **Damage received proxy** (`boredom_proxy.long_low_engagement_runs`): long runs with very few damage events. This also describes skilled avoidance; it does not measure attacks, activity, boredom, or enjoyment. Use it only to choose a run for qualitative review.
 2. **Arcana outcome depth** (`arcana_outcomes.avg_max_depth`): how far players get with each opening arcana. Low avg depth on frequently-picked arcana suggests it felt compelling but failed to deliver.
 3. **Death timing** (`death_timing`): if median death depth is in the first quarter of rooms, players aren't reaching the designed late-game experience.
 4. **Character diversity** (`character_popularity`): when players cluster on one character, they are either optimizing heavily or the other options feel unrewarding.

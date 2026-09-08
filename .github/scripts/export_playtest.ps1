@@ -1,11 +1,45 @@
 param(
     [string]$GodotPath = "",
-    [string]$OutputPath = "AbyssalDescent.playtest.exe",
+    [string]$OutputPath = "",
+    [string]$BuildVersion = "",
+    [switch]$DebugRun,
+    [switch]$ValidateOnly,
     [switch]$Overwrite
 )
 
 $ErrorActionPreference = "Stop"
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "../..")).Path
+$desktopPlaytest = Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'AbyssalDescent Playtest.exe'
+if ([string]::IsNullOrWhiteSpace($OutputPath)) { $OutputPath = $desktopPlaytest }
+$BuildVersion = $BuildVersion.Trim().ToLowerInvariant()
+if ([string]::IsNullOrWhiteSpace($BuildVersion)) {
+    $versionPrefix = if ($DebugRun) { 'dev-debug-' } else { 'dev-' }
+    $BuildVersion = $versionPrefix + [DateTime]::UtcNow.ToString("yyyyMMdd-HHmmssfff") + "-" + [guid]::NewGuid().ToString("N").Substring(0, 8)
+}
+if ($BuildVersion -notmatch '^dev-[a-z0-9][a-z0-9.-]{0,79}$') {
+    throw "BuildVersion must begin with dev- and contain only letters, numbers, dots, and hyphens."
+}
+if (-not [IO.Path]::IsPathRooted($OutputPath)) {
+    $OutputPath = Join-Path $projectRoot $OutputPath
+}
+$OutputPath = [IO.Path]::GetFullPath($OutputPath)
+# Both playtest modes have one user-facing destination, authorized to replace.
+# Custom output paths retain the explicit overwrite safeguard.
+$isDesktopPlaytest = $OutputPath.Equals([IO.Path]::GetFullPath($desktopPlaytest), [StringComparison]::OrdinalIgnoreCase)
+if ($isDesktopPlaytest) { $Overwrite = $true }
+if ([IO.Path]::GetExtension($OutputPath) -ne ".exe") {
+    throw "OutputPath must name a Windows .exe file."
+}
+if ((Test-Path -LiteralPath $OutputPath) -and -not $Overwrite) {
+    throw "Output already exists: $OutputPath. Choose another name or explicitly pass -Overwrite."
+}
+if (-not (Test-Path -LiteralPath (Split-Path -Parent $OutputPath))) {
+    throw "The output directory does not exist: $(Split-Path -Parent $OutputPath)"
+}
+if ($ValidateOnly) {
+    [PSCustomObject]@{ BuildVersion = $BuildVersion; OutputPath = $OutputPath; Overwrite = $Overwrite.IsPresent; DebugRun = $DebugRun.IsPresent }
+    return
+}
 if ([string]::IsNullOrWhiteSpace($GodotPath)) {
     $settingsPath = Join-Path $projectRoot ".vscode/settings.json"
     if (Test-Path -LiteralPath $settingsPath) {
@@ -29,24 +63,12 @@ $templateRoots = @(
     (Join-Path $env:APPDATA "Godot/export_templates/$templateVersion"),
     (Join-Path (Split-Path -Parent $GodotPath) "editor_data/export_templates/$templateVersion")
 )
+$requiredTemplate = if ($DebugRun) { 'windows_debug_x86_64.exe' } else { 'windows_release_x86_64.exe' }
 $templateRoot = $templateRoots | Where-Object {
-    Test-Path -LiteralPath (Join-Path $_ "windows_release_x86_64.exe")
+    Test-Path -LiteralPath (Join-Path $_ $requiredTemplate)
 } | Select-Object -First 1
 if (-not $templateRoot) {
     throw "Install the Windows x86_64 export templates matching Godot $templateVersion."
-}
-if (-not [IO.Path]::IsPathRooted($OutputPath)) {
-    $OutputPath = Join-Path $projectRoot $OutputPath
-}
-$OutputPath = [IO.Path]::GetFullPath($OutputPath)
-if ([IO.Path]::GetExtension($OutputPath) -ne ".exe") {
-    throw "OutputPath must name a Windows .exe file."
-}
-if ((Test-Path -LiteralPath $OutputPath) -and -not $Overwrite) {
-    throw "Output already exists: $OutputPath. Choose another name or explicitly pass -Overwrite."
-}
-if (-not (Test-Path -LiteralPath (Split-Path -Parent $OutputPath))) {
-    throw "The output directory does not exist: $(Split-Path -Parent $OutputPath)"
 }
 
 # Import/export never runs the game. Use a fresh production copy, not the
@@ -64,6 +86,43 @@ foreach ($file in @("project.godot", "export_presets.cfg", "icon.svg", "icon.svg
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 $configPath = Join-Path $stagingProject "project.godot"
 $config = Get-Content -LiteralPath $configPath -Raw
+if ($DebugRun) {
+    $config = [regex]::Replace($config, '(?m)^config/name="[^"]*"', 'config/name="AbyssalDescent - New Powers Debug"')
+    $config = [regex]::Replace($config, '(?m)^run/main_scene="[^"]*"', 'run/main_scene="res://scenes/Main.tscn"')
+    $config = [regex]::Replace($config, '(?m)^config/(use_custom_user_dir|custom_user_dir_name)=.*\r?\n', '')
+    $config = $config.Replace('[application]', "[application]`nconfig/use_custom_user_dir=true`nconfig/custom_user_dir_name=`"AbyssalDescent Playtest Debug`"")
+    $config = [regex]::Replace($config, '(?m)^config/(telemetry_upload_endpoint|telemetry_upload_api_key|multiplayer_room_registry_endpoint|multiplayer_room_registry_api_key|multiplayer_public_ip_lookup_url|update_feed_url|update_release_page_url)="[^"]*"', 'config/$1=""')
+    $config = $config.Replace('config/multiplayer_tunnel_enabled=true', 'config/multiplayer_tunnel_enabled=false')
+} else {
+    $config = [regex]::Replace($config, '(?m)^run/main_scene="[^"]*"', 'run/main_scene="res://scenes/Menu.tscn"')
+}
+# The preset belongs to this artifact; never change the developer's source scene.
+$scenePath = Join-Path $stagingProject 'scenes/Main.tscn'
+$scene = Get-Content -LiteralPath $scenePath -Raw
+$debugNodePattern = '(?ms)(\[node name="DebugSettings"[^\]]*\]\r?\n).*?(?=\[node |\z)'
+if (-not [regex]::IsMatch($scene, $debugNodePattern)) { throw 'Main scene is missing its DebugSettings node.' }
+$debugSettings = if ($DebugRun) {
+@'
+script = ExtResource("5_oxjlc")
+enabled = true
+skip_starting_boon_selection = true
+apply_test_powers_on_start = true
+start_bearing = 1
+start_power_preset = 0
+start_encounter = 0
+end_screen_preview = 0
+start_power_ids = PackedStringArray("blast_drive", "blast_drive", "blast_drive", "razor_orbit", "razor_orbit", "razor_orbit", "ruinous_impact", "ruinous_impact", "sovereigns_double", "sovereigns_double")
+
+'@
+} else {
+@'
+script = ExtResource("5_oxjlc")
+enabled = false
+
+'@
+}
+$scene = [regex]::Replace($scene, $debugNodePattern, ('$1' + $debugSettings + "`n"))
+[IO.File]::WriteAllText($scenePath, $scene, $utf8)
 $expectedSettings = @{}
 foreach ($autoload in [regex]::Matches($config, '(?m)^(\w+)="(\*res://scripts/[^"]+)"')) {
     $expectedSettings["autoload/" + $autoload.Groups[1].Value] = $autoload.Groups[2].Value
@@ -76,14 +135,22 @@ foreach ($key in @("config/name", "run/main_scene")) {
     if (-not $match.Success) { throw "Missing application setting: $key" }
     $expectedSettings["application/" + $key] = $match.Groups[1].Value
 }
-$config = [regex]::Replace($config, '(?m)^config/version="[^"]*"', 'config/version="dev"')
+$config = [regex]::Replace($config, '(?m)^config/version="[^"]*"', ('config/version="' + $BuildVersion + '"'))
 $config = [regex]::Replace($config, '(?m)^config/update_feed_url="[^"]*"', 'config/update_feed_url=""')
-$expectedSettings["application/config/version"] = "dev"
+$expectedSettings["application/config/version"] = $BuildVersion
 $expectedSettings["application/config/update_feed_url"] = ""
+if ($DebugRun) {
+    $expectedSettings['application/config/use_custom_user_dir'] = $true
+    $expectedSettings['application/config/custom_user_dir_name'] = 'AbyssalDescent Playtest Debug'
+    foreach ($key in @('telemetry_upload_endpoint', 'telemetry_upload_api_key', 'multiplayer_room_registry_endpoint', 'multiplayer_room_registry_api_key', 'multiplayer_public_ip_lookup_url', 'update_release_page_url')) {
+        $expectedSettings['application/config/' + $key] = ''
+    }
+    $expectedSettings['application/config/multiplayer_tunnel_enabled'] = $false
+}
 [IO.File]::WriteAllText($configPath, $config, $utf8)
 $buildInfoPath = Join-Path $stagingProject "scripts/build_info.gd"
 $buildInfo = Get-Content -LiteralPath $buildInfoPath -Raw
-$buildInfo = [regex]::Replace($buildInfo, '(?m)^const GAME_VERSION := .*', 'const GAME_VERSION := "dev"')
+$buildInfo = [regex]::Replace($buildInfo, '(?m)^const GAME_VERSION := .*', ('const GAME_VERSION := "' + $BuildVersion + '"'))
 [IO.File]::WriteAllText($buildInfoPath, $buildInfo, $utf8)
 $presetPath = Join-Path $stagingProject "export_presets.cfg"
 $preset = Get-Content -LiteralPath $presetPath -Raw
@@ -95,7 +162,7 @@ if ($preset -notmatch '(?m)^exclude_filter="[^"]*scripts/tests/\*') {
     throw "The Windows export preset must exclude scripts/tests/*."
 }
 $preset = [regex]::Replace($preset, '(?m)^debug/export_console_wrapper=\d+', 'debug/export_console_wrapper=0')
-# Windows file metadata requires numbers; the game's actual version remains dev.
+# Windows file metadata requires numbers; the game retains its unique dev build ID.
 $preset = [regex]::Replace($preset, '(?m)^application/(file_version|product_version)="[^"]*"', 'application/$1="0.0.0.0"')
 [IO.File]::WriteAllText($presetPath, $preset, $utf8)
 [IO.File]::WriteAllText((Join-Path $verificationProject "expected.json"), ($expectedSettings | ConvertTo-Json), $utf8)
@@ -125,7 +192,7 @@ func _initialize() -> void:
     for index in config.get_32():
         var key := config.get_pascal_string()
         var value := config.get_buffer(config.get_32())
-        # Only decode string settings; input settings can contain Objects.
+        # Only decode manifest primitives; input settings can contain Objects.
         if expected.has(key) or key.begins_with("autoload/"):
             actual[key] = bytes_to_var(value)
     config.close()
@@ -139,12 +206,12 @@ func _initialize() -> void:
                 push_error("Missing compiled production autoload: " + path)
                 failure = true
     var build_info := load("res://scripts/build_info.gd") as Script
-    if build_info == null or build_info.get_script_constant_map().get("GAME_VERSION") != "dev":
-        push_error("The exported BuildInfo version must be dev")
+    if build_info == null or build_info.get_script_constant_map().get("GAME_VERSION") != expected["application/config/version"]:
+        push_error("The exported BuildInfo version must match the requested dev build ID")
         failure = true
     _check_directory("res://")
     if not failure:
-        print("[OK] Package verified: production autoloads, dev version, disabled update feed, no tests/fixtures")
+        print("[OK] Package verified: production autoloads, matching dev build ID, disabled update feed, no tests/fixtures")
     quit(1 if failure else 0)
 
 func _check_directory(path: String) -> void:
@@ -194,9 +261,22 @@ try {
         [Environment]::SetEnvironmentVariable($name, $isolatedPath, "Process")
     }
     Write-Host "Exporting with Godot $engineVersion"
+    Write-Host "Build version: $BuildVersion"
     Invoke-GodotExportStep -Label "import" -ProjectPath $stagingProject -Arguments @("--editor", "--import")
-    Invoke-GodotExportStep -Label "export-release" -ProjectPath $stagingProject -Arguments @("--export-release", "Windows Desktop", $stagingExecutable)
+    $exportMode = if ($DebugRun) { 'export-debug' } else { 'export-release' }
+    Invoke-GodotExportStep -Label $exportMode -ProjectPath $stagingProject -Arguments @("--$exportMode", "Windows Desktop", $stagingExecutable)
     Invoke-GodotExportStep -Label "verify-package" -ProjectPath $verificationProject -Arguments @("--script", "res://verify_package.gd", "--", $stagingExecutable)
+    if ($isDesktopPlaytest) {
+        # Replace only this exact game, after the next build is verified.
+        foreach ($game in @(Get-Process -Name 'AbyssalDescent Playtest' -ErrorAction SilentlyContinue)) {
+            if ($game.Path -ne $OutputPath) { continue }
+            $null = $game.CloseMainWindow()
+            if (-not $game.WaitForExit(3000)) {
+                $game.Kill()
+                if (-not $game.WaitForExit(3000)) { throw 'The previous desktop playtest could not be closed.' }
+            }
+        }
+    }
     # Recheck after the build, and publish only a verified artifact.
     if ((Test-Path -LiteralPath $OutputPath) -and -not $Overwrite) {
         throw "Output appeared during export; preserved existing file: $OutputPath"
@@ -207,8 +287,10 @@ try {
         throw "The output copy does not match the verified executable."
     }
     Write-Host "Playtest executable: $OutputPath"
+    Write-Host "Build version: $BuildVersion"
     Write-Host "Size: $((Get-Item -LiteralPath $OutputPath).Length) bytes"
     Write-Host "SHA256: $outputHash"
+    [PSCustomObject]@{ BuildVersion = $BuildVersion; OutputPath = $OutputPath; DebugRun = $DebugRun.IsPresent; SHA256 = $outputHash; StagingProject = $stagingProject }
 } finally {
     foreach ($name in $previousEnvironment.Keys) {
         [Environment]::SetEnvironmentVariable($name, $previousEnvironment[$name], "Process")

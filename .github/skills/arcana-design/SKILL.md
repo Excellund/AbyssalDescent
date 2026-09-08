@@ -1,13 +1,13 @@
 ---
 name: arcana-design
-description: "Design or rework arcana (trial powers) in Godot. Use when adding, renaming, or rebalancing entries in scripts/power_registry.gd TRIAL_POWER_BALANCE / TRIAL_POWER_STACK_LIMITS so that stacking past L1 feels meaningful."
+description: "Design or rework arcana (trial powers) in Godot. Use when adding, renaming, or rebalancing entries in scripts/power_registry.gd TRIAL_POWER_DEFINITIONS so that the first pick changes play and later levels add meaningful options."
 argument-hint: "Arcana id, intended identity, and stacking goal"
 ---
 
 # Arcana Design
 
 Use this skill whenever an arcana (trial power) is added, reworked, renamed, or rebalanced.
-Arcana live in [scripts/power_registry.gd](scripts/power_registry.gd) under `TRIAL_POWER_BALANCE` and `TRIAL_POWER_STACK_LIMITS`. Mapping to player runtime fields is in [scripts/power_parameter_mapper.gd](scripts/power_parameter_mapper.gd). Descriptions and current/next previews are in [scripts/upgrade_system.gd](scripts/upgrade_system.gd).
+Arcana live in `scripts/power_registry.gd` under `TRIAL_POWER_DEFINITIONS`: each entry owns its `stack_limit`, `balance_params`, and `param_map`. `TRIAL_POWER_POOL_IDS` defines the shared reward pool for every character. Mapping to player runtime fields is in `scripts/power_parameter_mapper.gd`. Descriptions and current/next previews are in `scripts/upgrade_system.gd`.
 
 ## Hard Rule: Stacking Must Feel Cool
 
@@ -15,7 +15,7 @@ A second or third pick of the same arcana MUST feel meaningfully different from 
 
 The required shape for any arcana with stack limit ≥ 2:
 
-- **L1 (baseline)**: a clearly weaker version that establishes identity. Trim the L1 numbers ~10–20% below where you'd want a "satisfying single pick" to land. This makes room for L2 to feel like a real upgrade rather than a tiny bump.
+- **L1 (baseline)**: establish the complete, satisfying combat identity on the first pick. For a run-defining Arcana, the player must immediately gain its new verb; do not withhold the promised movement or attack behavior until another level.
 - **L2 (headline)**: the version players quote when they say "this arcana is great". Two numeric knobs grow per stack, AND one structural change happens (extra charge, extra mark slot, wider arc, added side-effect, etc.).
 - **L3 (mastery)**: the ceiling. Numbers continue to grow on the same two knobs, AND a second structural unlock fires (extra hit per mark, chain detonation, shockwave, full refresh, etc.).
 
@@ -23,7 +23,7 @@ The required shape for any arcana with stack limit ≥ 2:
 
 ## Hard Rule: Stack Limits Are Mandatory
 
-Every arcana entry in `TRIAL_POWER_BALANCE` MUST have a matching entry in `TRIAL_POWER_STACK_LIMITS`. Without a limit, the arcana can be stacked unbounded and balance breaks. Default: 3. Use 4 only for arcana whose L4 is a small numeric polish, never a new mechanic.
+Every entry in `TRIAL_POWER_DEFINITIONS` MUST have an explicit `stack_limit`. Without a limit, the arcana can be stacked unbounded and balance breaks. Default: 3. Prismatic preserves that level and strengthens bounded runtime parameters once.
 
 ## Hard Rule: No Boss/Apex Stuns
 
@@ -38,12 +38,12 @@ Arcana MUST NOT stun bosses or apex enemies. Stuns trivialize telegraphs and bre
 One sentence the player would say. "Hits build resonance on one target." "Dash marks enemies for splash." If you can't say it without using the word "and" twice, the identity is muddled.
 
 ### 2. Pick two numeric knobs that scale per stack
-These are the levers in `TRIAL_POWER_BALANCE`. Examples:
+These are the levers in each definition's `balance_params`. Examples:
 - `damage_ratio_base` + `damage_ratio_per_stack`
 - `radius_base` + `radius_per_stack`
 - `bonus_damage_base` + `bonus_damage_per_stack`
 
-Trim the base, bump the per-stack growth. The stacked version should feel ~1.5–2× the L1 version on these knobs by L3.
+State whether the formula uses `stack_count` or levels above the first. Blast Drive and Razor Orbit use `1.0 + 0.15 * (stack_count - 1)` for damage and reach; L1 must therefore receive exactly 1.0, not 1.15. Their Prismatic scales both by 1.20 without adding a level or removing movement bounds.
 
 ### 3. Pick the structural change(s)
 Each stack past L1 needs a yes/no behavioral unlock. Patterns that work:
@@ -63,9 +63,9 @@ Each stack past L1 needs a yes/no behavioral unlock. Patterns that work:
 | Recursive AoE chain | `rupture_wave` L3 (one re-trigger from farthest hit) | Pass `chain_depth: int = 0` and a hit-id set; gate recursion on `chain_depth == 0` to cap at one chain |
 
 ### 4. Wire the data
-- Add or update fields in `TRIAL_POWER_BALANCE`. Use the `_base` / `_per_stack` / `_cap` / `_min` / `_max` suffix convention so the mapper can derive scaled values.
-- Update `TRIAL_POWER_STACK_LIMITS`.
-- Update `TRIAL_POWER_PARAM_MAP` in `power_parameter_mapper.gd` to declare the parameters this arcana exposes.
+- Add or update `balance_params` in `TRIAL_POWER_DEFINITIONS`. Use the `_base` / `_per_stack` / `_cap` / `_min` / `_max` suffix convention so the mapper can derive scaled values.
+- Set the definition's `stack_limit` and add its ID to `TRIAL_POWER_POOL_IDS`.
+- Declare the reward flag, stack property, and runtime parameters in the definition's `param_map`.
 - Update `build_trial_values` match arm to derive the per-stack values from base/per_stack data.
 
 ### 5. Wire the runtime
@@ -89,13 +89,17 @@ Description cap: 109 visible chars enforced by `description_cap_guard.assert_vis
 
 ### 7. Renaming requires renaming the id
 If identity, fantasy, or mechanic changes meaningfully, rename the dictionary key — not just the flavor text. Touch every site:
-- `TRIAL_POWER_BALANCE`, `TRIAL_POWER_STACK_LIMITS`, the trial-power pool
-- `TRIAL_POWER_PARAM_MAP` and `build_trial_values` match arms in `power_parameter_mapper.gd`
+- `TRIAL_POWER_DEFINITIONS`, display/damage metadata, and the trial-power pool
+- `build_trial_values` and Prismatic match arms in `power_parameter_mapper.gd`
 - Match arms in `get_power_current_description`, `get_trial_power_card_description`, `_power_sentence_template`, `get_power_flavor_text` in `upgrade_system.gd`
 - Backing player fields and `RUN_SNAPSHOT_PROPERTIES` entries
 - Glossary entries in `scripts/shared/glossary_data.gd`
 
 ## Validation
+
+- For hold gestures, preserve instant ordinary taps. Charge only from an accepted primary press; latch orbit only after an actual dash and the deliberate hold threshold. Cancel modal/death/room-transition holds without firing their release action, and require release before rearming.
+- Give special movement one explicit owner. Starting Blast recoil must detach Razor Orbit predictably; attacking while orbiting must not accidentally invoke the ordinary movement stop. Orbit/recoil must not repeatedly trigger dash hooks or extend dash damage immunity.
+- Test reward and current descriptions for each level and Prismatic, including the whole returned string's visible length. Motion Arcana use concise single descriptions so control instructions, numbers and structural upgrades all fit within 109 characters.
 
 - Run script diagnostics on `power_registry.gd`, `power_parameter_mapper.gd`, `upgrade_system.gd`, and `player.gd`.
 - Verify the reward card text shows the structural unlock at L2 and L3 (not just numbers).

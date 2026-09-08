@@ -8,6 +8,8 @@
 
 extends RefCounted
 
+const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
+
 ## Payload merge semantics:
 ##   "*_mult" keys multiply against the resolved tier value
 ##   "*_add"  keys add to the resolved tier value
@@ -113,6 +115,21 @@ static func get_modifier_ids() -> Array[String]:
 
 static func has_modifier(modifier_id: String) -> bool:
 	return MODIFIER_DEFINITIONS.has(modifier_id)
+
+## Returns a detached effective loadout. Ascension is exclusive to Forsworn.
+static func normalize_loadout(tier: int, modifier_ids: Array) -> Array[String]:
+	var clean: Array[String] = []
+	if tier != BEARING_ENUMS.BearingTier.FORSWORN:
+		return clean
+	for entry in modifier_ids:
+		var id := String(entry).strip_edges()
+		if has_modifier(id) and not clean.has(id):
+			clean.append(id)
+	return clean
+
+## Historical summaries must prove a Forsworn clear before granting rank progress.
+static func can_record_rank(summary: Dictionary) -> bool:
+	return int(summary.get("difficulty_tier", -1)) == BEARING_ENUMS.BearingTier.FORSWORN and bool(summary.get("ascension_tracking_complete", true))
 
 static func get_definition(modifier_id: String) -> Dictionary:
 	if not MODIFIER_DEFINITIONS.has(modifier_id):

@@ -251,11 +251,7 @@ static func get_tier_config(tier: int) -> Dictionary:
 ##                              arcana_pool_shrink_mult).
 static func get_tier_config_with_ascension(tier: int, ascension_loadout: Array) -> Dictionary:
 	var config: Dictionary = get_tier_config(tier).duplicate(true)
-	var sanitized: Array = []
-	for entry in ascension_loadout:
-		var id: String = String(entry)
-		if ASCENSION_REGISTRY.has_modifier(id) and not sanitized.has(id):
-			sanitized.append(id)
+	var sanitized := ASCENSION_REGISTRY.normalize_loadout(tier, ascension_loadout)
 	config["ascension_loadout"] = sanitized
 	config["ascension_rank"] = ASCENSION_REGISTRY.compute_loadout_rank(sanitized)
 	var merged: Dictionary = ASCENSION_REGISTRY.merge_loadout_payload(sanitized)

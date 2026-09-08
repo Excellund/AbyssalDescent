@@ -92,6 +92,11 @@ const ENEMY_MUTATOR_STAT_MAP := {
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_SPEED_MULT, "prop": "move_speed", "min": 20.0},
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_COOLDOWN_MULT, "prop": "wave_interval", "min": 1.0}
 	],
+	"keeper": [
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT, "prop": "contact_damage", "min": 1.0, "is_int": true},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_ATTACK_INTERVAL_MULT, "prop": "attack_interval", "min": 0.4},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_SPEED_MULT, "prop": "move_speed", "min": 20.0}
+	],
 	"weaver": [
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT, "prop": "web_zone_tick_damage", "min": 1.0, "is_int": true},
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_WINDUP_MULT, "prop": "windup_time", "min": 0.20},
@@ -156,6 +161,9 @@ const ENEMY_DAMAGE_CLASSIFICATION := {
 	"drifter": {
 		"ring_hit": {"kind": "flat", "scales_via_mutator": true, "mutator_stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT}
 	},
+	"keeper": {
+		"contact_strike": {"kind": "flat", "scales_via_mutator": true, "mutator_stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT}
+	},
 	"weaver": {
 		"web_zone_tick": {"kind": "flat", "scales_via_mutator": true, "mutator_stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_DAMAGE_MULT}
 	},
@@ -169,7 +177,9 @@ const ENEMY_DAMAGE_CLASSIFICATION := {
 		"all_attacks": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"}
 	}
 }
-const ENEMY_SPAWN_ORDER: Array[String] = ["chaser", "charger", "archer", "shielder", "seamlock", "mirrorline", "toll", "lurker", "ram", "lancer", "spectre", "pyre", "tether", "drifter", "weaver", "sentinel"]
+const ENEMY_SPAWN_ORDER: Array[String] = ["chaser", "charger", "archer", "shielder", "seamlock", "mirrorline", "toll", "lurker", "ram", "lancer", "spectre", "pyre", "tether", "drifter", "weaver", "sentinel", "keeper"]
+const DRIFTER_SCRIPT := preload("res://scripts/enemy_drifter.gd")
+const KEEPER_SCRIPT := preload("res://scripts/enemy_keeper.gd")
 
 const WAVE_KILL_THRESHOLD_RATIO: float = 0.20
 const WAVE_MIN_GAP_AFTER_SPAWN: float = 1.5
@@ -204,6 +214,9 @@ var _wave_timer_remaining: float = 0.0
 var _wave_min_gap_remaining: float = 0.0
 var _total_wave_count: int = 1
 var _next_wave_index: int = 1
+var _drifter_limit: int = 0
+var _drifter_spawn_sequence: int = 0
+var _keeper_limit: int = 0
 
 func initialize(world_root_node: Node2D, player_node: Node2D, rng_instance: RandomNumberGenerator, script_map: Dictionary, enemy_died_callback: Callable, player_targets_provider_callable: Callable = Callable(), enemy_damaged_callback: Callable = Callable()) -> void:
 	world_root = world_root_node
@@ -215,6 +228,9 @@ func initialize(world_root_node: Node2D, player_node: Node2D, rng_instance: Rand
 	on_enemy_damaged = enemy_damaged_callback
 
 func configure_room(room_size: Vector2, padding: float, safe_radius: float, enemy_mutator: Dictionary, temporary_enemy_mutators: Array[Dictionary] = []) -> void:
+	_drifter_limit = 0
+	_drifter_spawn_sequence = 0
+	_keeper_limit = 0
 	current_room_size = room_size
 	spawn_padding = padding
 	spawn_safe_radius = safe_radius
@@ -259,6 +275,10 @@ func _spawn_profile_enemies_internal(profile: Dictionary, build_report: bool) ->
 	if MultiplayerSessionManager.is_remote_replica():
 		return []
 	_clear_pending_waves()
+	_drifter_limit = ENCOUNTER_CONTRACTS.UNDERTOW_DRIFTER_LIMIT if ENCOUNTER_CONTRACTS.profile_encounter_key(profile) == "undertow" else 0
+	_keeper_limit = ENCOUNTER_CONTRACTS.BREACH_KEEPER_LIMIT if ENCOUNTER_CONTRACTS.profile_encounter_key(profile) == "breach" else 0
+	_drifter_spawn_sequence = 0
+	profile = ENCOUNTER_CONTRACTS.profile_with_spawn_limits(profile)
 
 	var flat_types := _flatten_profile_to_ordered_types(profile)
 	var total := flat_types.size()
@@ -351,9 +371,10 @@ func _spawn_types_immediate(types: Array, build_report: bool) -> Array[Dictionar
 		if enemy_script == null:
 			continue
 		var enemy := _spawn_enemy_in_current_room(enemy_script)
+		if not is_instance_valid(enemy):
+			continue
 		if build_report:
-			if is_instance_valid(enemy):
-				report.append({"enemy_type": enemy_type, "enemy": enemy})
+			report.append({"enemy_type": enemy_type, "enemy": enemy})
 		else:
 			report.append({})
 	return report
@@ -454,6 +475,8 @@ func _profile_count_for_enemy_type(profile: Dictionary, enemy_type: String) -> i
 			return ENCOUNTER_CONTRACTS.profile_toll_count(profile)
 		"drifter":
 			return ENCOUNTER_CONTRACTS.profile_drifter_count(profile)
+		"keeper":
+			return ENCOUNTER_CONTRACTS.profile_keeper_count(profile)
 		"weaver":
 			return ENCOUNTER_CONTRACTS.profile_weaver_count(profile)
 		"sentinel":
@@ -523,6 +546,13 @@ func _spawn_enemy_in_current_room(enemy_script: Script, min_player_distance: flo
 	if not is_instance_valid(world_root):
 		return null
 	var enemy_key := _enemy_script_key(enemy_script)
+	if enemy_key == "drifter" and _drifter_limit > 0 and _living_drifter_count() >= _drifter_limit:
+		return null
+	if _keeper_limit > 0:
+		if not ENCOUNTER_CONTRACTS.BREACH_ENEMY_TYPES.has(enemy_key):
+			return null
+		if enemy_key == "keeper" and _living_keeper_count() >= _keeper_limit:
+			return null
 	var enemy := CharacterBody2D.new()
 	enemy.set_script(enemy_script)
 
@@ -532,6 +562,8 @@ func _spawn_enemy_in_current_room(enemy_script: Script, min_player_distance: flo
 	enemy.add_child(collision_shape)
 
 	enemy.global_position = _pick_spawn_position_in_current_room(min_player_distance)
+	if enemy_key == "keeper" and _keeper_limit > 0:
+		enemy.global_position = _pick_breach_keeper_position(enemy.global_position, min_player_distance)
 	if enemy_key == "toll":
 		# Offset the Toll away from the player spawn point (Vector2.ZERO) so its ring telegraph
 		# never starts on top of the player. Anchor is set from global_position in _ready.
@@ -542,6 +574,10 @@ func _spawn_enemy_in_current_room(enemy_script: Script, min_player_distance: flo
 	world_root.add_child(enemy)
 	_apply_enemy_mutator(enemy, enemy_script)
 	_apply_ascension_health_scaling(enemy)
+	if enemy_key == "drifter" and _drifter_limit > 0:
+		var drifter := enemy as DRIFTER_SCRIPT
+		drifter.set_ring_start_offset(float(_drifter_spawn_sequence % 2) * drifter.wave_interval * 0.5)
+		_drifter_spawn_sequence += 1
 	enemy.begin_spawn_transport(spawn_transport_duration)
 	_assign_enemy_targets(enemy)
 	if enemy.get("arena_size") != null:
@@ -552,6 +588,61 @@ func _spawn_enemy_in_current_room(enemy_script: Script, min_player_distance: flo
 	if enemy.has_signal("damage_received") and on_enemy_damaged.is_valid():
 		enemy.damage_received.connect(func(applied_amount: int, _remaining_health: int): on_enemy_damaged.call(applied_amount))
 	return enemy
+
+func _living_drifter_count() -> int:
+	var count := 0
+	for child in world_root.get_children():
+		var drifter := child as DRIFTER_SCRIPT
+		if is_instance_valid(drifter) and not drifter.is_dead():
+			count += 1
+	return count
+
+func _living_keeper_count() -> int:
+	var count := 0
+	for child in world_root.get_children():
+		var keeper := child as KEEPER_SCRIPT
+		if is_instance_valid(keeper) and not keeper.is_dead():
+			count += 1
+	return count
+
+func _pick_breach_keeper_position(fallback: Vector2, min_player_distance: float = -1.0) -> Vector2:
+	# Interleaved spawning creates an archer before the Keeper. Prefer a clear
+	# nearby link while retaining the normal player, cover and crowd clearance.
+	var phase := rng.randf_range(0.0, TAU) if rng != null else 0.0
+	for ally_type in ["archer", "chaser"]:
+		for child in world_root.get_children():
+			var ally := child as ENEMY_BASE_SCRIPT
+			if not is_instance_valid(ally) or ally.is_dead() or _enemy_script_key(ally.get_script()) != ally_type:
+				continue
+			for radius in [110.0, 150.0, 190.0]:
+				for index in range(16):
+					var angle := phase + float(index) * TAU / 16.0
+					var candidate: Vector2 = ally.global_position + Vector2.from_angle(angle) * float(radius)
+					if _breach_keeper_position_is_clear(candidate, ally.global_position, min_player_distance):
+						return candidate
+	return fallback
+
+func _breach_keeper_position_is_clear(candidate: Vector2, ally_position: Vector2, min_player_distance: float) -> bool:
+	var half := current_room_size * 0.5 - Vector2.ONE * spawn_padding
+	if absf(candidate.x) > half.x or absf(candidate.y) > half.y or candidate.length() < 100.0:
+		return false
+	var required_distance := maxf(spawn_safe_radius, min_player_distance)
+	for target_player in _resolve_target_players():
+		if candidate.distance_to(target_player.global_position) < required_distance:
+			return false
+	for child in world_root.get_children():
+		var enemy := child as ENEMY_BASE_SCRIPT
+		if is_instance_valid(enemy) and not enemy.is_dead() and candidate.distance_to(enemy.global_position) < 86.0:
+			return false
+	for obstacle in obstacle_circles:
+		var center: Vector2 = obstacle.get("pos", Vector2.ZERO)
+		var radius := float(obstacle.get("radius", 28.0))
+		if candidate.distance_to(center) < radius + 36.0:
+			return false
+		var closest := Geometry2D.get_closest_point_to_segment(center, candidate, ally_position)
+		if closest.distance_to(center) <= radius + 4.0:
+			return false
+	return true
 
 func _resolve_target_players() -> Array:
 	var targets: Array = []
@@ -587,7 +678,7 @@ func _enemy_script_key(enemy_script: Script) -> String:
 func _enemy_matches_archetype(enemy_key: String, archetype: String) -> bool:
 	match archetype:
 		"melee":
-			return enemy_key == "chaser" or enemy_key == "lurker"
+			return enemy_key == "chaser" or enemy_key == "lurker" or enemy_key == "keeper"
 		"charger":
 			return enemy_key == "charger" or enemy_key == "ram"
 		"archer":

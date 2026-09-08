@@ -39,6 +39,7 @@ var _oaths_only_mode_enabled: bool = false
 var _lobby_mode_enabled: bool = false
 var _lobby_is_host: bool = false
 var _host_modifier_display_loadout: Array[String] = []
+var _setup_bearing: int = -1
 var _prev_char_button: Button
 var _next_char_button: Button
 var _modifier_column_root: Node
@@ -160,8 +161,16 @@ func _on_back_or_descent_pressed() -> void:
 func populate() -> void:
 	if _character_id.is_empty():
 		_character_id = _resolve_active_character_id()
-	_sync_active_loadout_with_selection()
 	_refresh_all()
+
+func set_setup_bearing(tier: int) -> void:
+	_setup_bearing = tier
+
+func _is_forsworn_setup() -> bool:
+	if _setup_bearing >= 0:
+		return _setup_bearing == ASCENSION_REGISTRY.BEARING_ENUMS.BearingTier.FORSWORN
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH) as RUN_CONTEXT_SCRIPT
+	return run_context != null and run_context.get_current_difficulty_tier() == ASCENSION_REGISTRY.BEARING_ENUMS.BearingTier.FORSWORN
 
 func set_character_id(char_id: String) -> void:
 	var normalized: String = String(char_id).strip_edges().to_lower()
@@ -277,6 +286,10 @@ func _refresh_header() -> void:
 	var tinted: Color = _readable_label_color(body_color)
 	_character_label.text = "[center]Character: [color=#%s]%s[/color][/center]" % [tinted.to_html(false), char_name]
 	var loadout: Array[String] = META_PROGRESS_STORE.get_ascension_loadout(_get_profile(), _character_id)
+	if _lobby_mode_enabled and not _lobby_is_host:
+		loadout = _host_modifier_display_loadout.duplicate()
+	if not _is_forsworn_setup():
+		loadout.clear()
 	var rank: int = ASCENSION_REGISTRY.compute_loadout_rank(loadout)
 	var highest: int = META_PROGRESS_STORE.get_ascension_highest_rank(_get_profile(), _character_id)
 	_rank_label.text = "Ascension Rank: %d  (highest cleared: %d)" % [rank, highest]
@@ -290,7 +303,7 @@ func _refresh_modifier_list() -> void:
 	if _lobby_mode_enabled and not _lobby_is_host:
 		loadout = _host_modifier_display_loadout.duplicate()
 	var completed_oaths: Array[String] = META_PROGRESS_STORE.get_completed_oath_ids(profile)
-	var ascension_unlocked: bool = _is_ascension_unlocked() or _lobby_mode_enabled
+	var ascension_unlocked: bool = _is_forsworn_setup() and (_is_ascension_unlocked() or _lobby_mode_enabled)
 	if _modifier_lock_banner != null:
 		_modifier_lock_banner.visible = not ascension_unlocked and not _lobby_mode_enabled
 	for id_variant in ASCENSION_REGISTRY.get_modifier_ids():
@@ -375,6 +388,8 @@ func _make_modifier_card(modifier_id: String, def: Dictionary, unlocked: bool, e
 	return card
 
 func _toggle_modifier(modifier_id: String) -> void:
+	if _oaths_only_mode_enabled or not _is_forsworn_setup():
+		return
 	if _lobby_mode_enabled and not _lobby_is_host:
 		return
 	if not _is_ascension_unlocked() and not _lobby_mode_enabled:
@@ -387,18 +402,10 @@ func _toggle_modifier(modifier_id: String) -> void:
 		loadout.append(modifier_id)
 	META_PROGRESS_STORE.set_ascension_loadout(profile, _character_id, loadout)
 	_save_profile()
-	_sync_active_loadout_with_selection()
 	if _lobby_mode_enabled and _lobby_is_host:
 		emit_signal("ascension_loadout_changed", loadout.duplicate())
 	_refresh_header()
 	_refresh_modifier_list()
-
-func _sync_active_loadout_with_selection() -> void:
-	var run_context := get_node_or_null(RUN_CONTEXT_PATH) as RUN_CONTEXT_SCRIPT
-	if run_context == null:
-		return
-	var saved: Array[String] = META_PROGRESS_STORE.get_ascension_loadout(_get_profile(), _character_id)
-	run_context.set_active_ascension_loadout(saved)
 
 # --- catalyst list ---
 
@@ -747,7 +754,7 @@ func _format_oath_reward(def: Dictionary) -> String:
 func _build_modifier_lock_banner() -> PanelContainer:
 	return _build_notice_banner(
 		"🔒",
-		"Locked. Clear a Forsworn run with this character to unlock Ascension modifiers.",
+		"Forsworn only. Clear a Forsworn run with this character to unlock Ascension modifiers.",
 		Color(0.28, 0.12, 0.06, 0.78),
 		Color(1.0, 0.62, 0.32, 0.86),
 		Color(1.0, 0.78, 0.50, 1.0),

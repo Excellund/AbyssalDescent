@@ -1,16 +1,44 @@
 extends RefCounted
 
+const ENEMY_BASE_SCRIPT := preload("res://scripts/enemy_base.gd")
 const STAT_ATTRIBUTION_TRACE := false
+static var _secondary_scope_depth: int = 0
+
+## Scope survives synchronous kill procs; RPC boundaries carry its boolean value.
+static func begin_secondary_scope() -> void:
+	_secondary_scope_depth += 1
+
+static func end_secondary_scope() -> void:
+	_secondary_scope_depth = maxi(0, _secondary_scope_depth - 1)
+
+static func is_launch_suppressed() -> bool:
+	return _secondary_scope_depth > 0
 
 # Shared helper to enforce the take_damage contract consistently.
 static func can_take_damage(target: Object) -> bool:
 	return is_instance_valid(target)
+
+## Boss/Apex telegraphs must never be disabled by player-created displacement.
+static func is_displacement_immune(target: Object) -> bool:
+	if not is_instance_valid(target):
+		return true
+	var script := target.get_script() as Script
+	while script != null:
+		var file := script.resource_path.get_file()
+		if file.begins_with("enemy_boss") or file in ["enemy_seamlock.gd", "enemy_mirrorline.gd", "enemy_toll.gd"]:
+			return true
+		script = script.get_base_script()
+	return false
 
 static func apply_damage(target: Object, amount: int, damage_context: Dictionary = {}, source_peer_id: int = 0) -> bool:
 	if amount <= 0:
 		return false
 	if not can_take_damage(target):
 		return false
+	var secondary := is_launch_suppressed() or bool(damage_context.get("secondary", false))
+	if secondary:
+		damage_context = damage_context.duplicate(true)
+		damage_context["secondary"] = true
 	if _should_route_enemy_damage_to_host(target):
 		_route_enemy_damage_to_host(target, amount, damage_context)
 		return true
@@ -20,12 +48,19 @@ static func apply_damage(target: Object, amount: int, damage_context: Dictionary
 	# Death signals fire inside take_damage. Make this hit's owner visible to
 	# kill-triggered powers before those signals, then undo rejected hits.
 	var pending_credit := _prepare_enemy_damage_credit(target, health_before, source_peer_id)
+	if secondary:
+		begin_secondary_scope()
 	if damage_context.is_empty():
 		target.take_damage(amount)
 	else:
 		target.take_damage(amount, damage_context)
 	_restore_rejected_damage_credit(target, health_before, pending_credit)
 	_report_enemy_damage_applied(target, health_before, source_peer_id)
+	var health_after := _read_target_health(target)
+	if not secondary and health_after > 0 and health_after < health_before and String(damage_context.get("attack_type", "")) in ["melee", "razor_wind", "blast_drive"]:
+		_arm_primary_launch(target, source_peer_id)
+	if secondary:
+		end_secondary_scope()
 	return true
 
 
@@ -44,21 +79,72 @@ static func _prepare_enemy_damage_credit(target: Object, health_before: int, sou
 
 
 ## Enemy movement is authoritative on the host, just like enemy health.
-static func apply_impulse(target: Object, impulse: Vector2) -> bool:
+static func apply_impulse(target: Object, impulse: Vector2, source_peer_id: int = 0, suppress_launch: bool = false) -> bool:
 	if not is_instance_valid(target) or not (target is CharacterBody2D) or not impulse.is_finite():
 		return false
 	var enemy := target as CharacterBody2D
 	if not enemy.is_in_group("enemies") or _read_target_health(enemy) <= 0:
 		return false
+	suppress_launch = suppress_launch or is_launch_suppressed()
 	if _should_route_enemy_damage_to_host(enemy):
 		var enemy_id := int(enemy.get_meta("network_enemy_id", 0))
 		var scene_tree := Engine.get_main_loop() as SceneTree
 		if enemy_id <= 0 or scene_tree == null or scene_tree.current_scene == null:
 			return false
-		scene_tree.current_scene.request_enemy_impulse_from_client(enemy_id, impulse)
+		scene_tree.current_scene.request_enemy_impulse_from_client(enemy_id, impulse, suppress_launch)
 		return true
-	enemy.velocity += impulse
+	if not is_displacement_immune(enemy):
+		enemy.velocity += impulse
+		notify_player_displacement(enemy, impulse)
+	if not suppress_launch and impulse.length_squared() > 0.0001:
+		if source_peer_id <= 0:
+			source_peer_id = _resolve_local_peer_id()
+		_arm_launch(enemy, impulse, source_peer_id)
 	return true
+
+
+static func notify_player_displacement(target: Object, impulse: Vector2) -> void:
+	if not is_instance_valid(target) or not (target is ENEMY_BASE_SCRIPT) or MultiplayerSessionManager.is_remote_replica():
+		return
+	(target as ENEMY_BASE_SCRIPT).on_player_displaced(impulse)
+
+
+static func _find_combat_owner(source_peer_id: int) -> CharacterBody2D:
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null:
+		return null
+	var solo := not MultiplayerSessionManager.is_session_connected()
+	for node in tree.get_nodes_in_group("combat_players"):
+		if not (node is CharacterBody2D) or node.is_queued_for_deletion():
+			continue
+		var peer_id := int(node.get("player_id"))
+		if peer_id == source_peer_id or (solo and peer_id == 0):
+			return node as CharacterBody2D
+	return null
+
+
+static func _arm_primary_launch(target: Object, source_peer_id: int) -> void:
+	if not (target is CharacterBody2D):
+		return
+	var owner := _find_combat_owner(source_peer_id)
+	if owner == null:
+		return
+	var enemy := target as CharacterBody2D
+	var direction := owner.global_position.direction_to(enemy.global_position)
+	if direction.length_squared() <= 0.0001:
+		direction = Vector2(owner.get("visual_facing_direction"))
+	_arm_launch(enemy, direction.normalized() * 540.0, source_peer_id)
+
+
+static func _arm_launch(enemy: CharacterBody2D, impulse: Vector2, source_peer_id: int) -> void:
+	if MultiplayerSessionManager.is_remote_replica() or is_launch_suppressed():
+		return
+	var owner := _find_combat_owner(source_peer_id)
+	if owner == null:
+		return
+	var combinations := owner.get("boss_combinations") as Node
+	if combinations != null:
+		combinations.launch_enemy(enemy, impulse, source_peer_id)
 
 
 static func _restore_rejected_damage_credit(target: Object, health_before: int, pending_credit: Dictionary) -> void:

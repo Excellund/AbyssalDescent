@@ -73,7 +73,7 @@ const BIOME_DEFINITIONS: Dictionary = {
 			"shielder": 1.4,
 			"sentinel": 1.6
 		},
-		"preferred_encounter_labels": ["Fortress", "Suppression", "Vanguard"],
+		"preferred_encounter_labels": ["Fortress", "Suppression", "Vanguard", "Breach"],
 		"color_theme": {
 			"glow_tint": Color(0.72, 0.66, 0.28, 1.0),
 			"grid_tint": Color(0.32, 0.28, 0.08, 0.6),
@@ -91,7 +91,7 @@ const BIOME_DEFINITIONS: Dictionary = {
 			"archer": 1.4,
 			"drifter": 1.5
 		},
-		"preferred_encounter_labels": ["Crossfire", "Blitz", "Onslaught"],
+		"preferred_encounter_labels": ["Crossfire", "Blitz", "Onslaught", "Undertow"],
 		"color_theme": {
 			"glow_tint": Color(0.98, 0.44, 0.08, 1.0),
 			"grid_tint": Color(0.46, 0.14, 0.02, 0.6),
@@ -128,7 +128,7 @@ const BIOME_DEFINITIONS: Dictionary = {
 			"pyre": 1.7,
 			"drifter": 1.5
 		},
-		"preferred_encounter_labels": ["Blitz", "Convergence", "Gauntlet"],
+		"preferred_encounter_labels": ["Blitz", "Convergence", "Gauntlet", "Undertow"],
 		"color_theme": {
 			"glow_tint": Color(0.82, 0.08, 0.14, 1.0),
 			"grid_tint": Color(0.38, 0.02, 0.06, 0.6),
@@ -170,7 +170,7 @@ const BIOME_DEFINITIONS: Dictionary = {
 			"lancer": 1.5,
 			"sentinel": 1.6
 		},
-		"preferred_encounter_labels": ["Convergence", "Suppression", "Fortress"],
+		"preferred_encounter_labels": ["Convergence", "Suppression", "Fortress", "Breach"],
 		"color_theme": {
 			"glow_tint": Color(0.82, 0.92, 1.0, 1.0),
 			"grid_tint": Color(0.24, 0.38, 0.52, 0.6),
@@ -241,6 +241,7 @@ static func _enemy_display_name(key: String) -> String:
 		"tether": "Tethers",
 		"pyre": "Pyres",
 		"drifter": "Drifters",
+		"keeper": "Keepers",
 		"weaver": "Weavers",
 		"sentinel": "Sentinels",
 		"shielder": "Shielders",

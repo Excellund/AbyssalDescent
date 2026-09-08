@@ -52,6 +52,10 @@ const PROFILE_KEY_SEAMLOCK_COUNT := "seamlock_count"
 const PROFILE_KEY_MIRRORLINE_COUNT := "mirrorline_count"
 const PROFILE_KEY_TOLL_COUNT := "toll_count"
 const PROFILE_KEY_DRIFTER_COUNT := "drifter_count"
+const UNDERTOW_DRIFTER_LIMIT := 2
+const PROFILE_KEY_KEEPER_COUNT := "keeper_count"
+const BREACH_KEEPER_LIMIT := 1
+const BREACH_ENEMY_TYPES: Array[String] = ["keeper", "archer", "chaser"]
 const PROFILE_KEY_WEAVER_COUNT := "weaver_count"
 const PROFILE_KEY_SENTINEL_COUNT := "sentinel_count"
 const PROFILE_KEY_OBJECTIVE_KIND := "objective_kind"
@@ -293,6 +297,26 @@ static func _build_encounter_registry() -> Array[Dictionary]:
 			},
 			"bearing_label": "Gauntlet",
 			"identity": "Mixed-threat test of every enemy role."
+		},
+		{
+			"key": "undertow",
+			"id": DEBUG_ENUMS.Encounter.UNDERTOW,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Undertow",
+			"glossary_label": "Undertow",
+			"door_presentation": {"label": "Undertow"},
+			"bearing_label": "Undertow",
+			"identity": "Staggered Drifter rings test gap reading while light pursuit keeps you moving."
+		},
+		{
+			"key": "breach",
+			"id": DEBUG_ENUMS.Encounter.BREACH,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Breach",
+			"glossary_label": "Breach",
+			"door_presentation": {"label": "Breach"},
+			"bearing_label": "Breach",
+			"identity": "A vulnerable Keeper partially wards a small firing line. Break its links or close the open approach."
 		},
 		{
 			"key": "trial",
@@ -673,10 +697,18 @@ static func _normalize_encounter_key(value: String, fallback: String = "unknown"
 	key = key.strip_edges().replace(" ", "_")
 	return key if not key.is_empty() else fallback
 
-static func _profile_encounter_key(encounter_profile: Dictionary, fallback: String = "unknown") -> String:
+static func profile_encounter_key(encounter_profile: Dictionary, fallback: String = "unknown") -> String:
 	if encounter_profile.is_empty():
 		return fallback
-	return _normalize_encounter_key(profile_label(encounter_profile), fallback)
+	var explicit_key := String(encounter_profile.get(KEY_ENCOUNTER_KEY, "")).strip_edges()
+	if not explicit_key.is_empty():
+		return _normalize_encounter_key(explicit_key, fallback)
+	var label := profile_label(encounter_profile)
+	# Endless appends presentation text; room identity and its limits stay the same.
+	var tier_suffix := label.rfind("  Tier ")
+	if tier_suffix >= 0 and label.substr(tier_suffix + 7).is_valid_int():
+		label = label.left(tier_suffix)
+	return _normalize_encounter_key(label, fallback)
 
 static func _objective_prompt_label(encounter_profile: Dictionary) -> String:
 	return "Objective - %s" % profile_label(encounter_profile)
@@ -739,8 +771,12 @@ static func normalize_profile(value: Variant) -> Dictionary:
 	normalized[PROFILE_KEY_MIRRORLINE_COUNT] = int(input.get(PROFILE_KEY_MIRRORLINE_COUNT, 0))
 	normalized[PROFILE_KEY_TOLL_COUNT] = int(input.get(PROFILE_KEY_TOLL_COUNT, 0))
 	normalized[PROFILE_KEY_DRIFTER_COUNT] = int(input.get(PROFILE_KEY_DRIFTER_COUNT, 0))
+	normalized[PROFILE_KEY_KEEPER_COUNT] = int(input.get(PROFILE_KEY_KEEPER_COUNT, 0))
 	normalized[PROFILE_KEY_WEAVER_COUNT] = int(input.get(PROFILE_KEY_WEAVER_COUNT, 0))
 	normalized[PROFILE_KEY_SENTINEL_COUNT] = int(input.get(PROFILE_KEY_SENTINEL_COUNT, 0))
+	normalized[KEY_ENCOUNTER_KEY] = profile_encounter_key(input)
+	if input.get("obstacle_layout", null) is Array:
+		normalized["obstacle_layout"] = (input["obstacle_layout"] as Array).duplicate(true)
 	if input.has(PROFILE_KEY_WAVE_COUNT):
 		normalized[PROFILE_KEY_WAVE_COUNT] = maxi(1, int(input.get(PROFILE_KEY_WAVE_COUNT, 1)))
 	if input.has(PROFILE_KEY_INITIAL_WAVE_FRACTION):
@@ -756,7 +792,7 @@ static func normalize_profile(value: Variant) -> Dictionary:
 		normalized[PROFILE_KEY_OBJECTIVE_PROGRESS_GOAL] = float(input.get(PROFILE_KEY_OBJECTIVE_PROGRESS_GOAL, 0.0))
 		normalized[PROFILE_KEY_OBJECTIVE_PROGRESS_DECAY] = float(input.get(PROFILE_KEY_OBJECTIVE_PROGRESS_DECAY, 0.0))
 		normalized[PROFILE_KEY_OBJECTIVE_CONTEST_THRESHOLD] = int(input.get(PROFILE_KEY_OBJECTIVE_CONTEST_THRESHOLD, 1))
-	return normalized
+	return profile_with_spawn_limits(normalized)
 
 static func profile_label(profile_value: Dictionary) -> String:
 	return String(profile_value.get(PROFILE_KEY_LABEL, "Encounter"))
@@ -769,7 +805,7 @@ static func profile_static_camera(profile_value: Dictionary) -> bool:
 
 # Enemy count metadata: list of all enemy types for data-driven access
 static func _get_enemy_count_keys() -> Array[String]:
-	return ["chaser", "charger", "archer", "shielder", "lurker", "ram", "lancer", "spectre", "pyre", "tether", "seamlock", "mirrorline", "drifter", "weaver", "sentinel"]
+	return ["chaser", "charger", "archer", "shielder", "lurker", "ram", "lancer", "spectre", "pyre", "tether", "seamlock", "mirrorline", "drifter", "weaver", "sentinel", "keeper"]
 
 static func _get_enemy_count_key_for_type(enemy_type: String) -> String:
 	return "%s_count" % enemy_type.strip_edges().to_lower()
@@ -836,6 +872,23 @@ static func profile_toll_count(profile_value: Dictionary) -> int:
 static func profile_drifter_count(profile_value: Dictionary) -> int:
 	return _get_enemy_count("drifter", profile_value)
 
+static func profile_keeper_count(profile_value: Dictionary) -> int:
+	return _get_enemy_count("keeper", profile_value)
+
+## Returns a detached profile with encounter-specific readability limits applied.
+static func profile_with_spawn_limits(profile_value: Dictionary) -> Dictionary:
+	var result := profile_value.duplicate(true)
+	if profile_encounter_key(result) == "undertow":
+		result[PROFILE_KEY_DRIFTER_COUNT] = clampi(profile_drifter_count(result), 0, UNDERTOW_DRIFTER_LIMIT)
+	elif profile_encounter_key(result) == "breach":
+		result[PROFILE_KEY_KEEPER_COUNT] = clampi(profile_keeper_count(result), 0, BREACH_KEEPER_LIMIT)
+		# Keep the support lesson readable after biome, co-op and Endless modifiers.
+		for enemy_type in _get_enemy_count_keys():
+			if not BREACH_ENEMY_TYPES.has(enemy_type):
+				result[_get_enemy_count_key_for_type(enemy_type)] = 0
+		result[PROFILE_KEY_TOLL_COUNT] = 0
+	return result
+
 static func profile_weaver_count(profile_value: Dictionary) -> int:
 	return _get_enemy_count("weaver", profile_value)
 
@@ -875,7 +928,7 @@ static func profile_set_specialist_counts(profile_value: Dictionary, lurkers: in
 	for enemy_type: String in specialist_counts:
 		_set_enemy_count(enemy_type, specialist_counts[enemy_type], profile_value)
 
-static func profile_counts(chasers: int, chargers: int, archers: int, shielders: int, lurkers: int = 0, rams: int = 0, lancers: int = 0, spectres: int = 0, pyres: int = 0, tethers: int = 0, seamlocks: int = 0, drifters: int = 0, weavers: int = 0, sentinels: int = 0) -> Dictionary:
+static func profile_counts(chasers: int, chargers: int, archers: int, shielders: int, lurkers: int = 0, rams: int = 0, lancers: int = 0, spectres: int = 0, pyres: int = 0, tethers: int = 0, seamlocks: int = 0, drifters: int = 0, weavers: int = 0, sentinels: int = 0, keepers: int = 0) -> Dictionary:
 	return {
 		PROFILE_KEY_CHASER_COUNT: chasers,
 		PROFILE_KEY_CHARGER_COUNT: chargers,
@@ -890,7 +943,8 @@ static func profile_counts(chasers: int, chargers: int, archers: int, shielders:
 		PROFILE_KEY_SEAMLOCK_COUNT: seamlocks,
 		PROFILE_KEY_DRIFTER_COUNT: drifters,
 		PROFILE_KEY_WEAVER_COUNT: weavers,
-		PROFILE_KEY_SENTINEL_COUNT: sentinels
+		PROFILE_KEY_SENTINEL_COUNT: sentinels,
+		PROFILE_KEY_KEEPER_COUNT: keepers
 	}
 
 static func profile_count_from_counts(counts: Dictionary, key: String) -> int:
@@ -1298,7 +1352,7 @@ static func apex_trial_door_option(encounter_profile: Dictionary, label: String,
 	)
 
 static func intro_encounter_door_option(encounter_profile: Dictionary) -> Dictionary:
-	var encounter_key := _profile_encounter_key(encounter_profile)
+	var encounter_key := profile_encounter_key(encounter_profile)
 	var presentation := _door_presentation(encounter_key)
 	var label := String(presentation.get("label", profile_label(encounter_profile)))
 	return door_option(
@@ -1312,7 +1366,7 @@ static func intro_encounter_door_option(encounter_profile: Dictionary) -> Dictio
 	)
 
 static func standard_encounter_door_option(encounter_profile: Dictionary) -> Dictionary:
-	var encounter_key := _profile_encounter_key(encounter_profile)
+	var encounter_key := profile_encounter_key(encounter_profile)
 	var presentation := _door_presentation(encounter_key)
 	var label := String(presentation.get("label", profile_label(encounter_profile)))
 	return door_option(

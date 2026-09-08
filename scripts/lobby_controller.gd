@@ -577,6 +577,7 @@ func _on_ascension_configure_pressed() -> void:
 	lobby_ascension_panel.set_oaths_only_mode(false)
 	lobby_ascension_panel.set_run_setup_mode(false)
 	lobby_ascension_panel.set_character_id(character_id)
+	lobby_ascension_panel.set_setup_bearing(selected_difficulty_tier)
 	if not is_host:
 		lobby_ascension_panel.set_host_modifier_display_loadout(selected_ascension_loadout)
 	lobby_ascension_panel.populate()
@@ -594,7 +595,7 @@ func _on_ascension_lobby_done() -> void:
 func _on_lobby_ascension_loadout_changed(loadout: Array) -> void:
 	if not bool(multiplayer_session_manager.is_host()):
 		return
-	_broadcast_ascension_loadout.rpc(loadout)
+	_broadcast_ascension_loadout.rpc(ASCENSION_REGISTRY.normalize_loadout(selected_difficulty_tier, loadout))
 
 
 ## Setup the host-side ascension info label and seed the initial loadout from saved meta.
@@ -630,17 +631,12 @@ func _refresh_host_ascension_loadout(character_id: String) -> void:
 		return
 	var profile: Dictionary = run_context.meta_progress_profile
 	var loadout: Array[String] = META_PROGRESS_STORE.get_ascension_loadout(profile, character_key)
-	selected_ascension_loadout = loadout
+	selected_ascension_loadout = ASCENSION_REGISTRY.normalize_loadout(selected_difficulty_tier, loadout)
 	_broadcast_ascension_loadout.rpc(selected_ascension_loadout)
 
 
 func _apply_ascension_loadout(loadout: Array) -> void:
-	var sanitized_loadout: Array[String] = []
-	for entry_variant in loadout:
-		var entry := String(entry_variant).strip_edges()
-		if not entry.is_empty():
-			sanitized_loadout.append(entry)
-	selected_ascension_loadout = sanitized_loadout
+	selected_ascension_loadout = ASCENSION_REGISTRY.normalize_loadout(selected_difficulty_tier, loadout)
 	_update_ascension_info_label()
 	if ascension_panel_overlay != null and ascension_panel_overlay.visible and lobby_ascension_panel != null and not bool(multiplayer_session_manager.is_host()):
 		lobby_ascension_panel.set_host_modifier_display_loadout(selected_ascension_loadout)
@@ -650,6 +646,7 @@ func _apply_ascension_loadout(loadout: Array) -> void:
 func _update_ascension_info_label() -> void:
 	if ascension_info_label == null:
 		return
+	ascension_info_label.visible = selected_difficulty_tier == FORSWORN_TIER_ID
 	var rank: int = ASCENSION_REGISTRY.compute_loadout_rank(selected_ascension_loadout)
 	if selected_ascension_loadout.is_empty():
 		ascension_info_label.text = "Ascension Rank: 0"
@@ -1033,6 +1030,10 @@ func _apply_difficulty_selection(difficulty_tier: int) -> void:
 	if not bool(multiplayer_session_manager.is_host()):
 		status_label.text = ""
 	_update_ascension_visibility()
+	selected_ascension_loadout = ASCENSION_REGISTRY.normalize_loadout(selected_difficulty_tier, selected_ascension_loadout)
+	if bool(multiplayer_session_manager.is_host()):
+		_refresh_host_ascension_loadout(local_character_id)
+	_update_ascension_info_label()
 
 
 ## RPC: Client -> Host request to change difficulty.
@@ -1212,7 +1213,7 @@ func _launch_main_game() -> void:
 		var state := synced_peer_state[peer_id_key] as Dictionary
 		if String(state.get("character_id", "")) == "random":
 			state["character_id"] = _resolve_random_character()
-	_start_game.rpc(host_peer_id, session_identifier, selected_difficulty_tier, synced_peer_state, selected_ascension_loadout)
+	_start_game.rpc(host_peer_id, session_identifier, selected_difficulty_tier, synced_peer_state, ASCENSION_REGISTRY.normalize_loadout(selected_difficulty_tier, selected_ascension_loadout))
 
 
 ## RPC: Host -> All transition to main scene with synced lobby state.
@@ -1245,7 +1246,7 @@ func _perform_start_game(host_peer_id: int, session_identifier: String, difficul
 		var entry := String(entry_variant).strip_edges()
 		if not entry.is_empty():
 			sanitized_loadout.append(entry)
-	RunContext.set_active_ascension_loadout(sanitized_loadout)
+	RunContext.set_active_ascension_loadout(sanitized_loadout, difficulty_tier)
 	for peer_id_key in peer_state.keys():
 		var peer_id := int(peer_id_key)
 		var state := peer_state.get(peer_id_key, {}) as Dictionary

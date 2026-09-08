@@ -3,6 +3,7 @@ class_name RunSummaryTracker
 
 const RUN_SUMMARY_MODEL := preload("res://scripts/core/run_summary_model.gd")
 const ENUMS := preload("res://scripts/shared/enums.gd")
+const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
 
 var started_at_unix: int = 0
 var started_at_msec: int = 0
@@ -30,6 +31,7 @@ var unlocks: Array[String] = []
 
 ## Endgame chase tracking (Ascension + Oaths). Host-tracked.
 var ascension_rank: int = 0
+var ascension_tracking_complete: bool = true
 var ascension_loadout: Array[String] = []
 var equipped_catalyst_ids: Array[String] = []
 var boss_no_hit_ids: Array[String] = []
@@ -66,9 +68,12 @@ func reset_for_run(run_seed: Dictionary) -> void:
 	reward_timeline.clear()
 	unlocks.clear()
 	ascension_rank = int(run_seed.get("ascension_rank", 0))
+	ascension_tracking_complete = bool(run_seed.get("ascension_tracking_complete", true))
+	if difficulty_tier != BEARING_ENUMS.BearingTier.FORSWORN:
+		ascension_rank = 0
 	var loadout_raw: Variant = run_seed.get("ascension_loadout", [])
 	ascension_loadout.clear()
-	if loadout_raw is Array:
+	if loadout_raw is Array and difficulty_tier == BEARING_ENUMS.BearingTier.FORSWORN:
 		for entry in loadout_raw:
 			ascension_loadout.append(String(entry))
 	var catalysts_raw: Variant = run_seed.get("equipped_catalyst_ids", [])
@@ -148,6 +153,7 @@ func build_checkpoint() -> Dictionary:
 		"rest_count": rest_count,
 		"primary_attacks_fired": primary_attacks_fired,
 		"full_run_tracking_complete": full_run_tracking_complete,
+		"ascension_tracking_complete": ascension_tracking_complete,
 		"reward_timeline": reward_timeline.duplicate(true),
 	}
 
@@ -163,6 +169,7 @@ func restore_checkpoint(checkpoint: Dictionary) -> void:
 	rest_count = maxi(0, int(checkpoint.get("rest_count", 0)))
 	primary_attacks_fired = maxi(0, int(checkpoint.get("primary_attacks_fired", 0)))
 	full_run_tracking_complete = bool(checkpoint.get("full_run_tracking_complete", true))
+	ascension_tracking_complete = ascension_tracking_complete and bool(checkpoint.get("ascension_tracking_complete", true))
 	reward_timeline.clear()
 	for entry in checkpoint.get("reward_timeline", []):
 		if entry is Dictionary:
@@ -244,6 +251,7 @@ func build_summary(final_state: Dictionary) -> Dictionary:
 		"timestamp_text": _format_timestamp(ended_at_unix),
 	})
 	summary["ascension_rank"] = ascension_rank
+	summary["ascension_tracking_complete"] = ascension_tracking_complete
 	summary["ascension_loadout"] = ascension_loadout.duplicate()
 	summary["equipped_catalyst_ids"] = equipped_catalyst_ids.duplicate()
 	summary["boss_no_hit_ids"] = boss_no_hit_ids.duplicate()
