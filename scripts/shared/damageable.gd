@@ -35,15 +35,17 @@ static func apply_damage(target: Object, amount: int, damage_context: Dictionary
 		return false
 	if not can_take_damage(target):
 		return false
+	var route_to_host := _should_route_enemy_damage_to_host(target)
+	if route_to_host or source_peer_id <= 0:
+		source_peer_id = _resolve_local_peer_id()
+	damage_context = _with_attack_origin(target, damage_context, source_peer_id)
 	var secondary := is_launch_suppressed() or bool(damage_context.get("secondary", false))
 	if secondary:
 		damage_context = damage_context.duplicate(true)
 		damage_context["secondary"] = true
-	if _should_route_enemy_damage_to_host(target):
+	if route_to_host:
 		_route_enemy_damage_to_host(target, amount, damage_context)
 		return true
-	if source_peer_id <= 0:
-		source_peer_id = _resolve_local_peer_id()
 	var health_before := _read_target_health(target)
 	# Death signals fire inside take_damage. Make this hit's owner visible to
 	# kill-triggered powers before those signals, then undo rejected hits.
@@ -62,6 +64,27 @@ static func apply_damage(target: Object, amount: int, damage_context: Dictionary
 	if secondary:
 		end_secondary_scope()
 	return true
+
+
+## Returns the original context when unchanged, otherwise a shallow copy.
+## Origins describe geometry only; ownership comes from the authenticated peer
+## argument, never from a caller-provided context field or an enemy's AI target.
+static func _with_attack_origin(target: Object, context: Dictionary, source_peer_id: int) -> Dictionary:
+	if not (target is Node) or not (target as Node).is_in_group("enemies"):
+		return context
+	var origin: Variant = context.get("attack_origin")
+	if origin is Vector2 and (origin as Vector2).is_finite():
+		return context
+	var owner := _find_combat_owner(source_peer_id)
+	if owner != null and owner.global_position.is_finite():
+		var resolved := context.duplicate()
+		resolved["attack_origin"] = owner.global_position
+		return resolved
+	if context.has("attack_origin"):
+		var resolved := context.duplicate()
+		resolved.erase("attack_origin")
+		return resolved
+	return context
 
 
 static func _prepare_enemy_damage_credit(target: Object, health_before: int, source_peer_id: int) -> Dictionary:

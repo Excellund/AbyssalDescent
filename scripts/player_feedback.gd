@@ -368,17 +368,26 @@ func play_low_hp_pulse() -> void:
 	_low_hp_sfx_player.stream = PLAYER_LOW_HP_SOUND
 	_low_hp_sfx_player.play()
 
-func play_attack_swing_visual(direction: Vector2, swing_range: float, arc_degrees: float, tint: Color = ENEMY_BASE.COLOR_SWING_DEFAULT, lifetime: float = 0.11, inner_range: float = 0.0) -> void:
+func play_attack_swing_visual(direction: Vector2, swing_range: float, arc_degrees: float, tint: Color = ENEMY_BASE.COLOR_SWING_DEFAULT, lifetime: float = 0.11, inner_range: float = 0.0, attack_origin: Vector2 = Vector2.INF) -> void:
+	var origin := attack_origin if attack_origin.is_finite() else global_position
+	if not origin.is_finite() or not direction.is_finite() or not is_finite(swing_range) or not is_finite(arc_degrees) or not is_finite(inner_range) or swing_range <= 0.0:
+		return
+	var clamped_inner := clampf(inner_range, 0.0, swing_range)
+	if clamped_inner >= swing_range:
+		return
 	var swing_shape := Polygon2D.new()
 	swing_shape.visible = true
 	swing_shape.color = tint
-	swing_shape.rotation = direction.angle()
+	# Damage resolves at this point once. Recoil, Orbit and replicated movement
+	# must not drag the already completed strike across more of the arena.
+	swing_shape.top_level = true
 	add_child(swing_shape)
+	swing_shape.global_position = origin
+	swing_shape.rotation = direction.angle()
 
 	var points := PackedVector2Array()
 	var half_arc := deg_to_rad(arc_degrees * 0.5)
 	var segments := maxi(8, int(arc_degrees / 8.0))
-	var clamped_inner := clampf(inner_range, 0.0, maxf(0.0, swing_range - 0.5))
 	if clamped_inner > 0.0:
 		# Annular wedge: outer arc forward, inner arc back. Renders only the outer band.
 		for i in range(segments + 1):
@@ -398,14 +407,10 @@ func play_attack_swing_visual(direction: Vector2, swing_range: float, arc_degree
 
 	swing_shape.polygon = points
 	swing_shape.modulate = Color(1.0, 1.0, 1.0, tint.a)
-	swing_shape.scale = Vector2(0.92, 0.92)
 
 	var attack_swing_tween := create_tween()
-	attack_swing_tween.set_parallel(true)
+	# Fade at the true reach; growing the polygon implies extra damage range.
 	attack_swing_tween.tween_property(swing_shape, "modulate:a", 0.0, lifetime)
-	attack_swing_tween.tween_property(swing_shape, "scale", Vector2(1.06, 1.06), lifetime)
-	attack_swing_tween.set_parallel(false)
-	attack_swing_tween.tween_interval(lifetime)
 	attack_swing_tween.tween_callback(swing_shape.queue_free)
 
 func play_world_ring(epicenter_global: Vector2, radius: float, color: Color, lifetime: float = 0.2) -> void:

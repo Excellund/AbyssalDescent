@@ -861,18 +861,18 @@ func _try_execute_attack(attack_direction: Vector2) -> void:
 		velocity = Vector2.ZERO
 	if reward_razor_wind:
 		swing_color = ENEMY_BASE.COLOR_SWING_RAZOR_WIND if not execution_proc else ENEMY_BASE.COLOR_EXECUTION_PROC_EXTENDED
-	var visual_arc_degrees := float(melee_context["arc_degrees"])
-	if reward_farline_volley and _farline_volley_current_stacks > 0:
-		visual_arc_degrees += farline_volley_arc_per_stack * float(_farline_volley_current_stacks)
-	player_feedback.play_attack_swing_visual(attack_direction, float(melee_context["range"]), visual_arc_degrees, swing_color)
-	_broadcast_attack_indicator(attack_direction, float(melee_context["range"]), visual_arc_degrees, swing_color)
+	var visual_geometry := _get_melee_attack_geometry(melee_context)
+	var visual_range := float(visual_geometry["range"])
+	var visual_arc_degrees := float(visual_geometry["arc_degrees"])
+	player_feedback.play_attack_swing_visual(attack_direction, visual_range, visual_arc_degrees, swing_color)
+	_broadcast_attack_indicator(attack_direction, visual_range, visual_arc_degrees, swing_color)
 	if reward_razor_wind:
 		var wind_context: Dictionary = upgrade_system.build_razor_wind_attack_context(melee_context, razor_wind_damage_ratio, razor_wind_range_scale, razor_wind_arc_degrees, damage, attack_range)
 		var wind_range := float(wind_context["range"])
 		var wind_color := ENEMY_BASE.COLOR_SWING_RAZOR_WIND_EXTENDED if not execution_proc else ENEMY_BASE.COLOR_EXECUTION_WIND_EXTENDED
 		var wind_arc_degrees_visual := float(wind_context.get("arc_degrees", razor_wind_arc_degrees))
 		player_feedback.play_attack_swing_visual(attack_direction, wind_range, wind_arc_degrees_visual, wind_color, 0.14, attack_range)
-		_broadcast_attack_indicator(attack_direction, wind_range, wind_arc_degrees_visual, wind_color, 0.14)
+		_broadcast_attack_indicator(attack_direction, wind_range, wind_arc_degrees_visual, wind_color, 0.14, global_position, attack_range)
 	if execution_proc:
 		execution_edge_proc_display_left = EXECUTION_EDGE_PROC_DISPLAY_HOLD
 		_broadcast_cue_event("execution_edge_state", {
@@ -1497,7 +1497,7 @@ func apply_run_snapshot(snapshot: Dictionary) -> void:
 	attack_lock_time_left = 0.0
 	dash_phase_release_left = 0.0
 	_dash_damage_immune_left = 0.0
-	dash_enemy_exceptions.clear()
+	_clear_enemy_collision_exceptions()
 	queued_attack_after_dash = false
 	phantom_step_hit_ids.clear()
 	phantom_step_ghost_positions.clear()
@@ -1548,7 +1548,7 @@ func broadcast_network_build_snapshot() -> void:
 		return
 	player_replication_service.broadcast_player_build_snapshot(player_id, build_network_build_snapshot())
 
-func play_network_attack_indicator(attack_direction: Vector2, attack_range_value: float, attack_arc_degrees_value: float, swing_color: Color, swing_duration: float = 0.12) -> void:
+func play_network_attack_indicator(attack_direction: Vector2, attack_range_value: float, attack_arc_degrees_value: float, swing_color: Color, swing_duration: float = 0.12, attack_origin: Vector2 = Vector2.INF, inner_range: float = 0.0) -> void:
 	if _is_local_control_owner():
 		return
 	var resolved_direction := attack_direction.normalized() if attack_direction.length_squared() > 0.000001 else visual_facing_direction
@@ -1558,7 +1558,7 @@ func play_network_attack_indicator(attack_direction: Vector2, attack_range_value
 	attack_lock_direction = resolved_direction
 	attack_anim_time_left = maxf(attack_anim_time_left, maxf(0.05, swing_duration))
 	if player_feedback != null:
-		player_feedback.play_attack_swing_visual(resolved_direction, attack_range_value, attack_arc_degrees_value, swing_color, swing_duration)
+		player_feedback.play_attack_swing_visual(resolved_direction, attack_range_value, attack_arc_degrees_value, swing_color, swing_duration, inner_range, attack_origin)
 	queue_redraw()
 
 func apply_network_cue_event(event_name: String, payload: Dictionary) -> void:
@@ -1847,7 +1847,7 @@ func _broadcast_cue_event(event_name: String, payload: Dictionary, reliable: boo
 		return
 	player_replication_service.broadcast_cue_event(player_id, event_name, payload, reliable)
 
-func _broadcast_attack_indicator(attack_direction: Vector2, attack_range_value: float, attack_arc_degrees_value: float, swing_color: Color, swing_duration: float = 0.12) -> void:
+func _broadcast_attack_indicator(attack_direction: Vector2, attack_range_value: float, attack_arc_degrees_value: float, swing_color: Color, swing_duration: float = 0.12, attack_origin: Vector2 = Vector2.INF, inner_range: float = 0.0) -> void:
 	if player_id <= 0:
 		return
 	if not _is_local_control_owner():
@@ -1858,7 +1858,8 @@ func _broadcast_attack_indicator(attack_direction: Vector2, attack_range_value: 
 		return
 	if not bool(multiplayer_session_manager.is_session_connected()):
 		return
-	player_replication_service.broadcast_attack_indicator(player_id, attack_direction, attack_range_value, attack_arc_degrees_value, swing_color, swing_duration)
+	var resolved_origin := attack_origin if attack_origin.is_finite() else global_position
+	player_replication_service.broadcast_attack_indicator(player_id, attack_direction, attack_range_value, attack_arc_degrees_value, swing_color, swing_duration, resolved_origin, inner_range)
 
 func apply_objective_mutator(mutator_data: Dictionary) -> void:
 	if mutator_data.is_empty():
@@ -2193,7 +2194,8 @@ func _is_enemy_in_attack_cone(enemy_body: Node2D, origin: Vector2, attack_direct
 		return true
 	return false
 
-func _resolve_attack_hit(enemy_body: Node2D, hit_position: Vector2, base_damage: int, source: String, rupture_triggered_enemy_ids: Dictionary, rupture_hit_enemy_ids: Dictionary, proc_flags: Dictionary, sigil_burst_state: Dictionary, final_damage_mult: float = 1.0) -> int:
+func _resolve_attack_hit(enemy_body: Node2D, hit_position: Vector2, base_damage: int, source: String, rupture_triggered_enemy_ids: Dictionary, rupture_hit_enemy_ids: Dictionary, proc_flags: Dictionary, sigil_burst_state: Dictionary, final_damage_mult: float = 1.0, attack_origin: Vector2 = Vector2.INF) -> int:
+	var resolved_origin := attack_origin if attack_origin.is_finite() else global_position
 	var enemy_id := enemy_body.get_instance_id()
 	var strike_breakdown := _build_damage_breakdown(base_damage, enemy_body, hit_position, source)
 	var final_damage := int(strike_breakdown.get("final_damage", base_damage))
@@ -2201,7 +2203,7 @@ func _resolve_attack_hit(enemy_body: Node2D, hit_position: Vector2, base_damage:
 		final_damage = maxi(1, int(round(float(final_damage) * final_damage_mult)))
 	_apply_hunters_snare(enemy_body)
 	var health_before := DAMAGEABLE._read_target_health(enemy_body)
-	DAMAGEABLE.apply_damage(enemy_body, final_damage, {"attack_type": source, "secondary": false})
+	DAMAGEABLE.apply_damage(enemy_body, final_damage, {"attack_type": source, "secondary": false, "attack_origin": resolved_origin})
 	var accepted := health_before > DAMAGEABLE._read_target_health(enemy_body) or DAMAGEABLE._should_route_enemy_damage_to_host(enemy_body)
 	if accepted:
 		if arcana_motion != null:
@@ -2227,6 +2229,20 @@ func _resolve_attack_hit(enemy_body: Node2D, hit_position: Vector2, base_damage:
 		_apply_rupture_wave(enemy_body.global_position, final_damage, rupture_hit_enemy_ids)
 	return final_damage
 
+## Returns a new geometry dictionary. Read before consuming empowered-hit state
+## so the local/remote indicator and hit tests describe the same attack.
+func _get_melee_attack_geometry(melee_context: Dictionary) -> Dictionary:
+	var strike_range := float(melee_context.get("range", attack_range))
+	if _indomitable_spirit_primed:
+		strike_range *= INDOMITABLE_OATH_PRIMED_REACH_SCALE
+	var strike_arc := float(melee_context.get("arc_degrees", attack_arc_degrees))
+	if passive_iron_retort and iron_retort_brace_ready:
+		strike_arc += 24.0
+	if reward_farline_volley and _farline_volley_current_stacks > 0:
+		strike_arc += farline_volley_arc_per_stack * float(_farline_volley_current_stacks)
+	return {"range": strike_range, "arc_degrees": strike_arc}
+
+
 func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary) -> bool:
 	_ensure_boss_combinations()
 	boss_combinations.begin_direct_strike()
@@ -2248,9 +2264,8 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		strike_damage = int(round(float(strike_damage) * bloodvow_damage_mult))
 		if player_feedback != null:
 			player_feedback.play_world_ring(global_position, 30.0, Color(0.86, 0.18, 0.22, 0.78), 0.18)
-	var strike_range := float(melee_context.get("range", attack_range))
-	if _indomitable_spirit_primed:
-		strike_range *= INDOMITABLE_OATH_PRIMED_REACH_SCALE
+	var strike_geometry := _get_melee_attack_geometry(melee_context)
+	var strike_range := float(strike_geometry["range"])
 	var oath_target_point := global_position + attack_direction * strike_range
 	if _indomitable_spirit_primed:
 		_indomitable_pending_melee_bonus = _consume_indomitable_spirit_bonus(oath_target_point)
@@ -2261,11 +2276,7 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		strike_damage = int(round(float(strike_damage) * 1.8))
 	var farline_focus_proc_fired: bool = false
 	var retort_impact_position: Vector2 = global_position + attack_direction * (strike_range * 0.45)
-	var strike_arc_degrees := float(melee_context.get("arc_degrees", attack_arc_degrees))
-	if retort_active:
-		strike_arc_degrees += 24.0
-	if reward_farline_volley and _farline_volley_current_stacks > 0:
-		strike_arc_degrees += farline_volley_arc_per_stack * float(_farline_volley_current_stacks)
+	var strike_arc_degrees := float(strike_geometry["arc_degrees"])
 	var max_angle_radians := deg_to_rad(strike_arc_degrees * 0.5)
 	if String(melee_context.get("source", "melee")) == "blast_drive":
 		_ensure_arcana_motion()
@@ -2820,7 +2831,7 @@ func _apply_wraithstep_chain(chain_origin: Vector2, consumed_enemy_id: int, chai
 			if triggered_network_enemy_id > 0:
 				_broadcast_cue_event("wraithstep_mark_remove", {"enemy_network_id": triggered_network_enemy_id})
 			propagated_ids[triggered_enemy_id] = true
-			DAMAGEABLE.apply_damage(triggered_enemy, final_chain_damage)
+			DAMAGEABLE.apply_damage(triggered_enemy, final_chain_damage, {"attack_origin": epicenter})
 			pending_epicenters.append(triggered_enemy.global_position)
 			if player_feedback != null:
 				player_feedback.play_wraithstep_chain_echo(epicenter, triggered_enemy.global_position)
@@ -2851,7 +2862,7 @@ func _apply_wraithstep_splash(epicenter: Vector2, splash_damage: int, excluded_e
 			continue
 		if enemy_body.global_position.distance_to(epicenter) > wraithstep_mark_splash_radius:
 			continue
-		DAMAGEABLE.apply_damage(enemy_node, final_splash_damage)
+		DAMAGEABLE.apply_damage(enemy_node, final_splash_damage, {"attack_origin": epicenter})
 
 
 func _apply_storm_crown_hit(source_position: Vector2, source_enemy_id: int, source_damage: int) -> void:
@@ -2888,7 +2899,7 @@ func _apply_storm_crown_hit(source_position: Vector2, source_enemy_id: int, sour
 				next_enemy_id = enemy_id
 		if next_enemy == null:
 			break
-		DAMAGEABLE.apply_damage(next_enemy, chain_damage)
+		DAMAGEABLE.apply_damage(next_enemy, chain_damage, {"attack_origin": chain_origin})
 		chained_enemy_ids[next_enemy_id] = true
 		if player_feedback != null:
 			player_feedback.play_chain_lightning(chain_origin, next_enemy.global_position)
@@ -3047,7 +3058,7 @@ func _apply_phantom_step_during_dash() -> void:
 			continue
 		if global_position.distance_to(enemy_body.global_position) > hit_radius:
 			continue
-		DAMAGEABLE.apply_damage(enemy_node, phantom_damage)
+		DAMAGEABLE.apply_damage(enemy_node, phantom_damage, {"attack_origin": global_position})
 		if boss_combinations != null:
 			boss_combinations.record_dash_contact(global_position)
 		var phantom_slow_duration := phantom_step_slow_duration * _global_slow_duration_mult()
@@ -3106,7 +3117,7 @@ func _update_static_wake_trails(delta: float) -> void:
 					var wake_tick_damage := maxi(1, int(round(float(static_wake_damage) * delta * 6.0)))
 					wake_tick_damage = _apply_objective_mutator_damage_mult(wake_tick_damage)
 					wake_tick_damage += _hunters_snare_aoe_bonus_against(enemy_body)
-					DAMAGEABLE.apply_damage(enemy_node, wake_tick_damage)
+					DAMAGEABLE.apply_damage(enemy_node, wake_tick_damage, {"attack_origin": trail_pos})
 					if wake_apply_slow and not enemy_body.is_slowed():
 						var wake_slow_duration := 0.3 * _global_slow_duration_mult()
 						enemy_body.apply_slow(wake_slow_duration, 0.8)
@@ -3357,7 +3368,7 @@ func _fire_overcharge_discharge(kill_pos: Vector2) -> void:
 		var enemy_body := enemy_node as Node2D
 		if kill_pos.distance_squared_to(enemy_body.global_position) > OVERCHARGE_NOVA_RADIUS * OVERCHARGE_NOVA_RADIUS:
 			continue
-		DAMAGEABLE.apply_damage(enemy_node, nova_damage, {"attack_type": "overcharge_discharge"})
+		DAMAGEABLE.apply_damage(enemy_node, nova_damage, {"attack_type": "overcharge_discharge", "attack_origin": kill_pos})
 	if player_feedback != null:
 		player_feedback.play_world_ring(kill_pos, OVERCHARGE_NOVA_RADIUS * 0.42, Color(1.0, 0.98, 0.56, 0.92), 0.16)
 		player_feedback.play_world_ring(kill_pos, OVERCHARGE_NOVA_RADIUS, Color(1.0, 0.86, 0.22, 0.68), 0.24)
@@ -4003,7 +4014,7 @@ func _apply_farline_volley_dash_burst(burst_damage: int) -> void:
 		var hit_position: Vector2 = enemy_body.global_position
 		if burst_origin.distance_squared_to(hit_position) > radius_squared:
 			continue
-		_resolve_attack_hit(enemy_body, hit_position, burst_damage, "farline_volley_burst", rupture_triggered, rupture_hits, burst_proc_flags, sigil_state, 1.0)
+		_resolve_attack_hit(enemy_body, hit_position, burst_damage, "farline_volley_burst", rupture_triggered, rupture_hits, burst_proc_flags, sigil_state, 1.0, burst_origin)
 	if player_feedback != null:
 		player_feedback.play_world_ring(burst_origin, FARLINE_VOLLEY_DASH_BURST_RADIUS, Color(1.0, 0.86, 0.42, 0.9), 0.22)
 	_broadcast_cue_event("world_ring", {

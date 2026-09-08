@@ -66,7 +66,7 @@ func repeat_strike(direction: Vector2, shapes: Array[Dictionary]) -> void:
 		var reach := float(shape.get("range", 0.0))
 		var arc := float(shape.get("arc_degrees", 0.0))
 		var inner := float(shape.get("inner_range", -1.0))
-		var visual := {"position": origin, "direction": direction, "range": reach, "arc": arc, "life": 0.20}
+		var visual := {"position": origin, "direction": direction, "range": reach, "arc": arc, "inner_range": maxf(0.0, inner), "life": 0.20}
 		show_echo(visual)
 		player._broadcast_cue_event("sovereign_double_strike", visual)
 		for hit in player._get_damageable_enemies_in_cone(origin, direction, reach, deg_to_rad(arc * 0.5)):
@@ -74,7 +74,7 @@ func repeat_strike(direction: Vector2, shapes: Array[Dictionary]) -> void:
 			var hit_position: Vector2 = hit.get("hit_position", origin)
 			if enemy == null or hit_position.distance_to(origin) <= inner:
 				continue
-			DAMAGEABLE.apply_damage(enemy, amount, {"attack_type": "sovereigns_double", "secondary": true, "is_ground_attack": true})
+			DAMAGEABLE.apply_damage(enemy, amount, {"attack_type": "sovereigns_double", "secondary": true, "is_ground_attack": true, "attack_origin": origin})
 			if generation != _cancel_generation:
 				return
 	_broadcast_shade()
@@ -187,3 +187,12 @@ func _draw() -> void:
 		var half_arc := deg_to_rad(float(effect.get("arc", 100.0)) * 0.5)
 		var reach := float(effect.get("range", 80.0))
 		draw_arc(point, reach, direction.angle() - half_arc, direction.angle() + half_arc, 30, Color(tint, float(effect["life"]) * 3.0), 3.0, true)
+		var inner := clampf(float(effect.get("inner_range", 0.0)), 0.0, reach)
+		if inner > 0.0:
+			# Razor Wind echoes damage only the outer band. Show its inner edge
+			# using the same boundary carried with the repeated attack.
+			var edge_color := Color(tint, float(effect["life"]) * 3.0)
+			draw_arc(point, inner, direction.angle() - half_arc, direction.angle() + half_arc, 30, edge_color, 1.5, true)
+			for edge_angle in [direction.angle() - half_arc, direction.angle() + half_arc]:
+				var edge_direction := Vector2.RIGHT.rotated(edge_angle)
+				draw_line(point + edge_direction * inner, point + edge_direction * reach, edge_color, 1.5, true)

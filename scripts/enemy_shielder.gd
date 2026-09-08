@@ -51,6 +51,9 @@ var body_check_dash_immunity_left: float = 0.0
 var player_was_dashing_last_frame: bool = false
 var _attack_sync_was_active: bool = false
 var _shielder_visual_redraw_left: float = 0.0
+var _shield_sync_revision: int = 0
+var _shield_sync_heartbeat_left: float = 0.0
+var _remote_shield_revision: int = -1
 
 func _ready() -> void:
 	max_health = shield_max_health
@@ -96,7 +99,9 @@ func _process_behavior(delta: float) -> void:
 
 
 func should_force_network_runtime_state_sampling() -> bool:
-	return slam_state != ENEMY_STATE_ENUMS.ShielderSlamState.IDLE or body_check_anim_time_left > 0.0 or attack_anim_time_left > 0.0
+	# The shield remains a directional defense between attacks. Its tiny custom
+	# state must survive crowded-room filtering even when the body is idle.
+	return true
 
 
 func should_process_remote_visuals_every_frame() -> bool:
@@ -116,16 +121,35 @@ func get_projectile_network_sync_state() -> Dictionary:
 		"slam_direction": slam_direction,
 		"body_check_anim_time_left": body_check_anim_time_left,
 		"attack_anim_time_left": attack_anim_time_left,
-		"visual_facing_direction": visual_facing_direction,
-		"shield_facing": shield_facing,
-		"shield_target_facing": shield_target_facing
+		"visual_facing_direction": visual_facing_direction
 	}
 	_attack_sync_was_active = active
 	return payload
 
 
 func _get_custom_network_runtime_state() -> Dictionary:
-	return {}
+	# Fresh caller-owned dictionary. One ordered channel owns shield orientation;
+	# a heartbeat recovers a lost final turn packet without enlarging attack data.
+	var facing := shield_facing.normalized() if shield_facing.is_finite() and shield_facing.length_squared() > 0.000001 else Vector2.LEFT
+	# Integers avoid the broadcaster's 0.5-pixel Vector2 quantization, which is
+	# far too coarse for a unit direction at a narrow shield edge.
+	return {"q": _shield_sync_revision, "a": int(round(facing.angle() * 10000.0))}
+
+
+func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
+	if network_simulation_enabled or not custom_state.has("q"):
+		return
+	var revision := int(custom_state["q"])
+	var incoming: Variant = custom_state.get("a")
+	if revision <= _remote_shield_revision or not (incoming is int):
+		return
+	var angle_units: int = incoming
+	if absi(angle_units) > 31416:
+		return
+	_remote_shield_revision = revision
+	shield_facing = Vector2.from_angle(float(angle_units) / 10000.0)
+	shield_target_facing = shield_facing
+	_queue_shielder_visual_redraw(true)
 
 
 func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
@@ -147,8 +171,6 @@ func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
 	body_check_anim_time_left = float(sync_state.get("body_check_anim_time_left", body_check_anim_time_left))
 	attack_anim_time_left = float(sync_state.get("attack_anim_time_left", attack_anim_time_left))
 	visual_facing_direction = sync_state.get("visual_facing_direction", visual_facing_direction) as Vector2
-	shield_facing = sync_state.get("shield_facing", shield_facing) as Vector2
-	shield_target_facing = sync_state.get("shield_target_facing", shield_target_facing) as Vector2
 	queue_redraw()
 
 
@@ -244,10 +266,18 @@ func _update_shield_reaim(delta: float) -> void:
 	shield_reaim_left = shield_reaim_interval
 
 func _update_shield_facing(delta: float) -> void:
-	if shield_target_facing.length_squared() <= 0.000001:
+	_shield_sync_heartbeat_left -= maxf(0.0, delta)
+	if _shield_sync_heartbeat_left <= 0.0:
+		_shield_sync_heartbeat_left = 0.20
+		_shield_sync_revision += 1
+	if not shield_target_facing.is_finite() or shield_target_facing.length_squared() <= 0.000001:
 		return
 	var turn_alpha := clampf(shield_turn_speed * delta * 60.0, 0.0, 1.0)
+	var previous_facing := shield_facing
 	shield_facing = shield_facing.slerp(shield_target_facing, turn_alpha)
+	if not shield_facing.is_equal_approx(previous_facing):
+		_shield_sync_revision += 1
+		_queue_shielder_visual_redraw()
 
 func _get_desired_velocity() -> Vector2:
 	if not is_instance_valid(target):
@@ -418,12 +448,15 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 		return
 	
 	# Use the same concrete shield wedge for both visuals and blocking.
-	var to_attacker := target.global_position - global_position if is_instance_valid(target) else Vector2.ZERO
+	var attack_origin: Variant = damage_context.get("attack_origin")
+	var to_attacker := Vector2.ZERO
+	if attack_origin is Vector2 and (attack_origin as Vector2).is_finite():
+		to_attacker = to_local(attack_origin as Vector2)
 	var body_radius := 13.0 * body_size_scale
 	var shield_points := _get_shield_points(body_radius)
 	var mitigated_damage := amount
 	if _is_attack_blocked_by_shield(to_attacker, shield_points):
-		# Damage from protected zone: 75% reduction (only 25% gets through)
+		# Only the path from this hit's source determines directional protection.
 		mitigated_damage = int(float(amount) * (1.0 - shield_damage_reduction))
 	else:
 		# Damage from unprotected side: full damage
@@ -488,7 +521,7 @@ func _draw() -> void:
 		shield_facing = Vector2.LEFT
 
 	# Draw shield
-	var shield_points := _get_shield_points(body_radius)
+	var shield_points := _get_shield_points(13.0 * body_size_scale)
 	var shield_front := shield_points[0]
 	var shield_shoulder_left := shield_points[1]
 	var shield_back_left := shield_points[2]

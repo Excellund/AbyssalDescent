@@ -2,6 +2,22 @@
 
 Requested after the Keeper/Breach update. Review existing systems in small passes while playtesting continues, and turn findings into verified improvements. Do not combine a broad rewrite with new content or introduce live performance/Oath prompts.
 
+## First review increment: combat pause and faithful attack shapes
+
+Implemented September 9, 2026:
+
+- Weaver webs pause damage and lifetime with combat. Closing Build Details behind Pause, or closing Pause while Build Details remains open, keeps combat, waves and the run timer paused. Reward and outcome screens also prevent accidental resume. Original processing flags are restored rather than enabling unrelated disabled actors.
+- Shielders resolve the existing directional defense from each attack's actual world origin. The enemy's AI target no longer substitutes for the attacker. Chain hops, trails and bursts retain their own origins; damage ownership remains tied to the authenticated player.
+- Idle shield orientation reaches joiners even in crowded rooms. Compact integer angles retain precision, revision ordering rejects older orientation, and heartbeats recover a lost final turn. The drawn wedge uses the same fixed body radius as mitigation.
+- Melee swings remain at the hit position during recoil/orbit, with constant reach while fading. Empowered range/arc uses the same geometry calculation as damage. Replicated Razor Wind and shade strikes show their actual inner boundary.
+- Applying a saved build clears actual dash collision exceptions before dropping their tracked IDs.
+
+Validation includes isolated gameplay regressions, 28 real pause/lifecycle checks, 62 hit-origin checks and 37 attack-feedback checks. The old hit-origin implementation reproduces failures; a separate Farline regression proves its burst retains one origin even when a hit callback moves the player. Three actual GPU frames cover moving melee, local/remote Razor Wind and the shade's inner boundary. The live ENet suite adds 35 passing checks for authenticated front/rear hits, shield orientation with 64 enemies, stale/duplicate updates, lost-turn recovery and the remote strike's fixed origin and hollow band.
+
+Sovereign's Double retains its current damage, ground bypass and proc rules. This increment corrects presentation and hit provenance without retuning the reward.
+
+Next confirmed control issue: holding Attack through a queued dash attack executes the strike but does not arm Blast Drive. Address queued attack/hold handoffs in the next bounded control pass, then continue the broader character, reward and boss-telegraph review below.
+
 ## Pass 1: combat and movement contracts
 
 Trace attacks, Arcana, boss rewards, enemy protection and pushes from input through accepted damage, kill ownership, statistics and multiplayer authority. Check each playable character at every power level and Prismatic, plus pause, reward, death, retry and resume boundaries. Start with observed inconsistencies and duplicated behavior that has already drifted.

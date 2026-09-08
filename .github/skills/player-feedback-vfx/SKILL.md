@@ -64,6 +64,12 @@ This avoids palette drift and keeps HUD/world feedback coherent.
 
 ## Integration Pattern
 
+### Instantaneous attack geometry
+
+An instantaneous strike's visual must stay at the world position where its damage resolved, even if recoil, orbit or replicated movement continues. Capture the origin, use a top-level effect node, and fade at the actual damage reach rather than scaling through smaller/larger areas. Carry inner boundaries for annular attacks such as Razor Wind.
+
+Use the same final geometry calculation for empowered hit tests and indicators, before consuming the empowering state. Send origin and inner range through replication as well; drawing at the receiving player's current position can misrepresent a completed hit. Verify moving attacks and local/remote shapes with actual damage and rendered geometry together.
+
 1. Implement effect internals in [scripts/player_feedback.gd](../../../scripts/player_feedback.gd).
 2. Expose a thin player wrapper method in [scripts/player.gd](../../../scripts/player.gd) (no VFX logic in world flow).
 3. Trigger from encounter/system flow (for rest-site heal, [scripts/world_generator.gd](../../../scripts/world_generator.gd)) right after state change is applied.

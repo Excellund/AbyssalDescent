@@ -52,6 +52,8 @@ Reference: `/memories/repo/custom_runtime_state_size_budget.md`, `scripts/enemy_
 
 ### 3. Atomic delta on top-level keys
 
+Check numeric quantization as well as payload size. The broadcaster rounds generic `Vector2` components to 0.5 and floats to 0.05 by default; that is unsuitable for precise unit directions. For a narrow directional defense, use a bounded integer angle (for example radians × 10000) and reconstruct the direction on receipt. Keep always-visible defenses in essential sampled state even between attacks, and use ordered revisions plus a bounded heartbeat when a lost final change would otherwise remain stale. A separate attack channel must not overwrite that state with older orientation.
+
 `_compute_runtime_state_delta` only checks `current_val != previous_val` per top-level key. Any sub-field change inside `custom` re-sends the WHOLE `custom` dict. So:
 
 - A scalar that changes every frame (e.g. `state_time_left`, an animation phase) makes the entire `custom` payload re-send every host tick. This both costs bandwidth and exposes you to the size-cap erasure.

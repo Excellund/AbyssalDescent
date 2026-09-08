@@ -281,7 +281,7 @@ func _test_shielder_override() -> void:
 	DAMAGE.apply_damage(shield, 100, {"attack_type": "ruinous_impact", "secondary": true, "is_ground_attack": true})
 	_check(shield.get_current_health() == 930 and world.events.back().amount == 70, "Shielder's ground-hit override also applies the ward once")
 	shield.target = null
-	DAMAGE.apply_damage(shield, 100, {"attack_type": "blast_drive"})
+	DAMAGE.apply_damage(shield, 100, {"attack_type": "blast_drive", "attack_origin": Vector2(200.0, 0.0)})
 	_check(shield.get_current_health() == 860 and world.events.back().amount == 70, "Unblocked direct Shielder damage also uses the shared ward rule")
 	shield.damage_blocked = true
 	var count := world.events.size()

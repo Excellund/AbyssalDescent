@@ -1271,13 +1271,13 @@ func _apply_debug_mutator_override(profile: Dictionary) -> Dictionary:
 	return encounter_profile_builder.apply_mutator_variant_to_profile(profile, mutator, room_depth)
 
 func _reset_for_debug_jump() -> void:
+	_run_outcome_coordinator.reset_for_new_run()
 	player_flow_coordinator.close_reward_selection_if_active(reward_selection_ui)
 	_set_combat_paused(false)
 	_doors_spawn_ready = false
 	choosing_next_room = false
 	door_options.clear()
 	pending_room_reward = ENUMS.RewardMode.NONE
-	_run_outcome_coordinator.reset_for_new_run()
 	in_boss_room = false
 	in_second_boss_room = false
 	in_third_boss_room = false
@@ -2464,13 +2464,10 @@ func _set_sfx_volume_runtime(volume_db: float) -> void:
 func _on_pause_menu_opened() -> void:
 	_set_combat_paused(true)
 	_set_singleplayer_menu_wave_timer_paused(true)
-	run_summary_recorder.pause_run_timer()
 
 func _on_pause_menu_closed() -> void:
-	var still_paused := _is_reward_selection_active()
-	_set_combat_paused(still_paused)
-	_set_singleplayer_menu_wave_timer_paused(still_paused)
-	run_summary_recorder.resume_run_timer()
+	_set_combat_paused(false)
+	_set_singleplayer_menu_wave_timer_paused(false)
 
 func _on_build_detail_opened() -> void:
 	_set_combat_paused(true)
@@ -2485,6 +2482,7 @@ func _set_singleplayer_menu_wave_timer_paused(paused: bool) -> void:
 		return
 	if not is_instance_valid(enemy_spawner):
 		return
+	paused = paused or _modal_requires_combat_pause()
 	if not paused and encounter_intro_grace_active:
 		return
 	enemy_spawner.wave_timer_paused = paused
@@ -4350,8 +4348,25 @@ func _apply_objective_mutator(choice: Dictionary) -> void:
 	if is_instance_valid(hud):
 		hud.show_banner("Objective Reward", mutator_name)
 
+func _modal_requires_combat_pause() -> bool:
+	# Closing one overlay cannot resume combat beneath another overlay or an
+	# outcome screen. Panels update their state before emitting their signals.
+	if is_instance_valid(pause_menu_controller) and pause_menu_controller.is_open():
+		return true
+	if is_instance_valid(build_detail_panel) and build_detail_panel.is_open():
+		return true
+	if _is_reward_selection_active():
+		return true
+	return _run_outcome_coordinator != null and (_run_outcome_coordinator.is_player_defeated() or _run_outcome_coordinator.is_run_cleared())
+
 func _set_combat_paused(paused: bool) -> void:
-	combat_phase_coordinator.set_combat_paused(player, get_tree(), paused)
+	var effective_pause := paused or _modal_requires_combat_pause()
+	combat_phase_coordinator.set_combat_paused(player, get_tree(), effective_pause)
+	if run_summary_recorder != null:
+		if effective_pause:
+			run_summary_recorder.pause_run_timer()
+		else:
+			run_summary_recorder.resume_run_timer()
 
 func _broadcast_local_player_build_snapshot() -> void:
 	if not is_multiplayer:

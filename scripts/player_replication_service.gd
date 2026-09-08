@@ -423,15 +423,15 @@ func broadcast_player_revived(peer_id: int, health: float = 1.0) -> void:
 		_sync_player_revived.rpc(peer_id, health)
 
 
-func broadcast_attack_indicator(peer_id: int, attack_direction: Vector2, attack_range: float, attack_arc_degrees: float, swing_color: Color, swing_duration: float = 0.12) -> void:
+func broadcast_attack_indicator(peer_id: int, attack_direction: Vector2, attack_range: float, attack_arc_degrees: float, swing_color: Color, swing_duration: float = 0.12, attack_origin: Vector2 = Vector2.INF, inner_range: float = 0.0) -> void:
 	if peer_id <= 0:
 		return
 	if _is_authority_for_peer(peer_id):
-		_sync_attack_indicator.rpc(peer_id, attack_direction, attack_range, attack_arc_degrees, swing_color, swing_duration)
+		_sync_attack_indicator.rpc(peer_id, attack_direction, attack_range, attack_arc_degrees, swing_color, swing_duration, attack_origin, inner_range)
 
 
 @rpc("unreliable", "any_peer", "call_local")
-func _sync_attack_indicator(peer_id: int, attack_direction: Vector2, attack_range: float, attack_arc_degrees: float, swing_color: Color, swing_duration: float = 0.12) -> void:
+func _sync_attack_indicator(peer_id: int, attack_direction: Vector2, attack_range: float, attack_arc_degrees: float, swing_color: Color, swing_duration: float = 0.12, attack_origin: Vector2 = Vector2.INF, inner_range: float = 0.0) -> void:
 	if peer_id not in player_nodes:
 		return
 	if peer_id == local_peer_id:
@@ -439,7 +439,7 @@ func _sync_attack_indicator(peer_id: int, attack_direction: Vector2, attack_rang
 	var player_node := _get_player_node(peer_id)
 	if player_node == null:
 		return
-	player_node.play_network_attack_indicator(attack_direction, attack_range, attack_arc_degrees, swing_color, swing_duration)
+	player_node.play_network_attack_indicator(attack_direction, attack_range, attack_arc_degrees, swing_color, swing_duration, attack_origin, inner_range)
 
 
 func broadcast_player_build_snapshot(peer_id: int, snapshot: Dictionary) -> void:

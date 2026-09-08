@@ -6,7 +6,7 @@ Open **AbyssalDescent Playtest.exe** on the desktop (`C:/Users/mikel/Desktop/Aby
 
 The delivery workflow uses `.github/scripts/export_playtest.ps1` for a normal build, which starts at the menu with regular saves and no debug grants. Add `-DebugRun` for the debug preset: Bastion on Delver with both new Arcana at level 3 and both new boss rewards at level 2, using a separate persistent debug save directory. Switching modes replaces the executable while keeping the two save sets separate.
 
-`.github/scripts/start_debug_playtest.ps1` exports the debug build and launches that same desktop executable. Debug delivery uses the packaged desktop game; temporary source sessions remain validation tools. Both export modes are verified. The desktop file currently contains normal build `dev-keeper-20260908-225119`: regular menu and progression, with no debug powers granted. Its verified SHA256 is `22D528D45CFCBBC9D6EBBDB8B7A23C76C7A76469FEBE2D41410670B2197691E8`.
+`.github/scripts/start_debug_playtest.ps1` exports the debug build and launches that same desktop executable. Debug delivery uses the packaged desktop game; temporary source sessions remain validation tools. Both export modes are verified. The desktop file currently contains normal build `dev-combat-review-20260908-231125`: regular menu and progression, with no debug powers granted. Its verified SHA256 is `2C2D83E79B3701512DC13F834706CE4FFF976A58241160FD836589A43D00C676`.
 
 At an agreed checkpoint, verify the completed work, commit and push it, and replace this file with a normal build. Keep debug builds for requested focused tests. The standing workflow is recorded in the repository's `AGENTS.md`.
 
@@ -54,7 +54,15 @@ The checkpoint adds **Keeper**, a vulnerable support enemy that wards up to two 
 
 **Breach** introduces one Keeper alongside archers and chasers in Acts 2–3, with an open center and side cover. Each Bearing has its own starting population, and co-op retains the one-Keeper limit. The route, checkpoint and ordinary reward systems include the new encounter. Full behavior and starting counts are in [next-content-update.md](next-content-update.md).
 
-Playtest whether the links make target priority clear, whether breaking them creates a useful opening, and whether ordinary attacks and movement provide enough answers without the new powers. The requested [systems implementation and visual review](systems-and-visual-review.md) is the next follow-up after feedback on this content.
+Playtest whether the links make target priority clear, whether breaking them creates a useful opening, and whether ordinary attacks and movement provide enough answers without the new powers. The requested [systems implementation and visual review](systems-and-visual-review.md) now has its first completed increment below.
+
+## Combat systems and visual review
+
+Normal build `dev-combat-review-20260908-231125` includes the content above and the first review fixes. Weaver webs pause their damage and lifetime with combat. Closing one menu while another remains open keeps combat, waves and the run timer paused. Shielders defend against each attack's actual origin, and their shield facing stays synchronized in crowded co-op rooms.
+
+Melee swings stay at the hit position during recoil and orbit. Empowered attack outlines use the actual damage geometry, while remote Razor Wind and shade strikes show their hollow inner boundary. Sovereign's Double retains its existing damage and proc rules.
+
+Try pausing inside a Weaver web, opening Build Details and Pause together, flanking Shielders in co-op, and attacking while moving with recoil or Orbit. This is an initial correction pass; the broader review continues in [systems-and-visual-review.md](systems-and-visual-review.md).
 
 ## Baseline and feedback
 
@@ -66,13 +74,14 @@ The main feedback is brief: were the holds intentional, did the powers change yo
 
 ## Verification
 
-- `.github/scripts/run_gameplay_regressions.ps1` passes in a disposable project with suppressed production autoload startup and isolated user data. It includes the existing input, power, Oath, and Catalyst checks plus Ascension, motion, formations, Drifter, Keeper/Breach, boss combinations, launch authority, and development upload eligibility. All 180 GDScript files compile.
+- `.github/scripts/run_gameplay_regressions.ps1` passes in a disposable project with suppressed production autoload startup and isolated user data. It includes the existing input, power, Oath, and Catalyst checks plus Ascension, motion, formations, Drifter, Keeper/Breach, boss combinations, launch authority, combat pause, hit origins, attack feedback, and development upload eligibility. All GDScript files compile.
 - Focused new coverage: 373 Ascension checks, 172 motion registry checks, 197 motion runtime checks, 65 Blast checks, 547 formation/Undertow checks, 72 Drifter checks, 106 boss combination checks, 29 authority checks, and 17 launch/shade lifecycle checks. The expanded power suite has 536 checks. The workflow tools have 40 checks. The direction regressions reproduce 32 failures in the old controller and pass with the fixed controller; boss combinations and the debug package were rechecked after this fix.
 - `.github/scripts/test_playtest_executable.ps1` verifies the exact exported package using Godot: 54 debug startup/loadout checks and 26 normal configuration checks passed. The debug executable also passes a separate headless startup check. Export templates ignore `--script`, so node inspection uses the matching Godot engine with `--main-pack`; normal checks do not enter Menu. Forced shutdown reports retained-resource warnings separately from runtime failures.
 - `.github/scripts/render_motion_arcana.ps1 -ValidationProject <isolated-project>` renders eleven actual GPU states with damage/movement assertions. Orange blasts/impacts and violet echoes were visually inspected alongside cyan tethers. The fixture uses process-local synthetic actions, not desktop input.
 - `.github/scripts/test_boss_combinations_enet.ps1 -ValidationProject <isolated-project>` runs two hidden localhost Godot processes. Its 28 checks cover real production damage, launch, health, effect, kill-notification, and impulse RPCs, plus Blast geometry, hit flashes, and a firing origin that stays fixed through replicated movement. Both processes also resolve Forsworn rank 2 and Delver rank 0 with conflicting menu preferences; that setup payload uses a fixture RPC.
 - Keeper runtime has 63 checks, including real Blast/shade damage, Shielder overrides, accepted damage/kill credit, exclusions, link interruptions, packet ordering and visual lease renewal. Breach has 181 profile, routing, spawning and real checkpoint checks across Bearings, biomes and co-op.
 - `.github/scripts/test_keeper_enet.ps1 -ValidationProject <isolated-project>` passes 14 host and 3 client checks using actual loopback ENet requests, authoritative protected damage, authenticated kill ownership and replicated link IDs/breaks. `.github/scripts/render_keeper.ps1` captures four actual GPU states: warming, active, broken and vulnerable. All four were visually inspected.
+- The combat review adds 28 pause/lifecycle checks, 62 hit-origin checks and 37 attack-feedback checks. `.github/scripts/test_combat_review_enet.ps1 -ValidationProject <isolated-project>` passes 35 checks using real host/joiner damage, crowded shield replication, dropped-update recovery and attack-indicator RPCs. `.github/scripts/render_attack_feedback.ps1 -ValidationProject <isolated-project>` captures three inspected GPU frames for moving melee, local/remote Razor Wind and the shade's inner boundary.
 - Exports are inspected as packages without launching production autoloads. Build IDs match, production autoloads are included, tests/fixtures are excluded, and development update feeds are disabled. Desktop copies are hash-verified.
 
 Human playtesting of feel and the complete lobby/join flow is still needed. The deterministic input and network fixtures cannot judge enjoyment, internet latency, or the full lobby experience.
