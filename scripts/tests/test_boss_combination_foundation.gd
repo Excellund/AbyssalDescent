@@ -4,15 +4,14 @@ extends SceneTree
 const LAUNCH := preload("res://scripts/enemy_launch_state.gd")
 const COMBINATIONS := preload("res://scripts/boss_combination_controller.gd")
 
-class TestHealth extends RefCounted:
-	var current_health: int = 1000
-
-class TestEnemy extends CharacterBody2D:
-	var health_state := TestHealth.new()
+class TestEnemy extends "res://scripts/enemy_base.gd":
 	var launch := LAUNCH.new()
-	func get_current_health() -> int:
-		return health_state.current_health
-	func get_launch_state() -> RefCounted:
+	func _ready() -> void:
+		max_health = 1000
+		_create_health_state()
+		set_physics_process(false)
+		add_to_group("enemies")
+	func get_launch_state() -> LAUNCH:
 		return launch
 
 class TestOwner extends CharacterBody2D:

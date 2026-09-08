@@ -5,6 +5,7 @@ const MAPPER := preload("res://scripts/power_parameter_mapper.gd")
 const UPGRADES := preload("res://scripts/upgrade_system.gd")
 const DESCRIPTION_GUARD := preload("res://scripts/shared/description_cap_guard.gd")
 const GLOSSARY := preload("res://scripts/shared/glossary_data.gd")
+const MOTION := preload("res://scripts/arcana_motion_controller.gd")
 const MOTION_IDS: Array[String] = ["blast_drive", "razor_orbit"]
 
 class TestPlayer extends Node:
@@ -70,10 +71,12 @@ func _run() -> void:
 			_check(bool(player.get("reward_" + power_id)), "%s enables the controller flag" % power_id)
 			_check(upgrades.get_trial_power_stack_count(power_id) == level, "%s writes controller level %d" % [power_id, level])
 			_check_description(upgrades.get_power_current_description(power_id), power_id, level, "current")
-			_check(DESCRIPTION_GUARD.strip_bbcode(preview).contains("x%.2f" % expected_scale), "%s card previews the scale actually applied" % power_id)
+			var expected_damage_text := "x%.2f" % (MOTION.BLAST_DAMAGE_MULT_MAX * expected_scale) if power_id == "blast_drive" else "%.1f%%" % (MOTION.ORBIT_CUT_DAMAGE_RATIO * 100.0 * expected_scale)
+			_check(DESCRIPTION_GUARD.strip_bbcode(preview).contains(expected_damage_text), "%s card previews its real hit damage ratio" % power_id)
 		var prismatic_preview := upgrades.get_trial_power_card_description(power_id)
 		_check_description(prismatic_preview, power_id, 3, "Prismatic card")
-		_check(DESCRIPTION_GUARD.strip_bbcode(prismatic_preview).contains("x1.30 -> x1.56"), "%s Prismatic previews its exact scale change" % power_id)
+		var expected_damage_upgrade := "x%.2f -> x%.2f" % [MOTION.BLAST_DAMAGE_MULT_MAX * 1.30, MOTION.BLAST_DAMAGE_MULT_MAX * 1.56] if power_id == "blast_drive" else "%.1f%% -> %.1f%%" % [MOTION.ORBIT_CUT_DAMAGE_RATIO * 130.0, MOTION.ORBIT_CUT_DAMAGE_RATIO * 156.0]
+		_check(DESCRIPTION_GUARD.strip_bbcode(prismatic_preview).contains(expected_damage_upgrade), "%s Prismatic previews its actual hit damage change" % power_id)
 		_check(upgrades.can_claim_trial_power_prismatic(power_id), "%s offers Prismatic at the cap" % power_id)
 		_check(upgrades.apply_trial_power(power_id), "%s Prismatic applies" % power_id)
 		_check(upgrades.has_trial_power_prismatic(power_id), "%s stores Prismatic state" % power_id)
@@ -85,7 +88,9 @@ func _run() -> void:
 		_check_description(upgrades.get_power_current_description(power_id), power_id, 3, "Prismatic current")
 		player.set(power_id + "_damage_scale", 1.42)
 		var live_text := DESCRIPTION_GUARD.strip_bbcode(upgrades.get_power_current_description(power_id))
-		_check(live_text.contains("Damage x1.42") and live_text.contains("reach x1.56"), "%s current text reads independent live values" % power_id)
+		var expected_live_damage := "Damage x%.2f" % (MOTION.BLAST_DAMAGE_MULT_MAX * 1.42) if power_id == "blast_drive" else "Damage %.1f%%" % (MOTION.ORBIT_CUT_DAMAGE_RATIO * 142.0)
+		var expected_live_reach := "reach %.0f" % ((MOTION.BLAST_RANGE_MAX if power_id == "blast_drive" else MOTION.ORBIT_ACQUIRE_RANGE) * 1.56)
+		_check(live_text.contains(expected_live_damage) and live_text.contains(expected_live_reach), "%s current text reads independent live values" % power_id)
 		for property in ["reward_" + power_id, power_id + "_stacks", power_id + "_damage_scale", power_id + "_reach_scale"]:
 			_check(MAPPER.get_all_snapshot_properties().has(property), "%s is declared for snapshot integration" % property)
 		upgrades.free()

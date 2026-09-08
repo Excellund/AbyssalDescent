@@ -2,6 +2,8 @@ extends RefCounted
 ## A bounded host-owned launch. Collision bursts use an explicit cause, never
 ## inferred speed, and the cooldown survives the end of an individual launch.
 
+signal ended
+
 var active: bool = false
 var cooldown_left: float = 0.0
 var remaining: float = 0.0
@@ -25,9 +27,12 @@ func arm(impulse: Vector2, immovable: bool, peer_id: int, source_owner_id: int, 
 	return true
 
 func cancel() -> void:
+	var was_active := active
 	active = false
 	_burst = Callable()
 	launch_velocity = Vector2.ZERO
+	if was_active:
+		ended.emit()
 
 ## Returns true only when launch movement replaces normal enemy movement.
 func step(enemy: CharacterBody2D, delta: float) -> bool:

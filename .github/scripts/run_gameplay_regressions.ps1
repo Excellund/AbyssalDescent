@@ -1,9 +1,15 @@
 param(
-    [string]$GodotPath = ""
+    [string]$GodotPath = "",
+    [string[]]$TestScripts = @()
 )
 
 $ErrorActionPreference = "Stop"
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "../..")).Path
+foreach ($testScript in $TestScripts) {
+    if ($testScript -notmatch '^res://scripts/tests/[a-z0-9_]+\.gd$' -or -not (Test-Path -LiteralPath (Join-Path $projectRoot $testScript.Substring(6)) -PathType Leaf)) {
+        throw "TestScripts must name existing res://scripts/tests/*.gd fixtures: $testScript"
+    }
+}
 if ([string]::IsNullOrWhiteSpace($GodotPath)) {
     $settingsPath = Join-Path $projectRoot ".vscode/settings.json"
     if (Test-Path -LiteralPath $settingsPath) {
@@ -131,9 +137,13 @@ try {
         "res://.github/scripts/validate_world_property_access.gd",
         "res://.github/scripts/validate_multiplayer_config_sync.gd",
         "res://scripts/tests/test_reward_input.gd",
+        "res://scripts/tests/test_queued_arcana_input.gd",
         "res://scripts/tests/test_combat_pause.gd",
         "res://scripts/tests/test_hit_origins.gd",
         "res://scripts/tests/test_attack_feedback.gd",
+        "res://scripts/tests/test_ruinous_feedback.gd",
+        "res://scripts/tests/test_returning_crescent.gd",
+        "res://scripts/tests/test_power_descriptions.gd",
         "res://scripts/tests/test_power_rewards.gd",
         "res://scripts/tests/test_oath_tracking.gd",
         "res://scripts/tests/test_catalyst_profile.gd",
@@ -152,6 +162,11 @@ try {
         "res://scripts/tests/test_launch_authority.gd",
         "res://scripts/tests/test_dev_upload_eligibility.gd"
     )
+    if ($TestScripts.Count -gt 0) {
+        # Focused runs retain compilation and the world/network contract checks.
+        # With no selection, including from the Git hook, the full suite runs.
+        $checks = @($checks | Where-Object { $_.StartsWith('res://.github/scripts/') }) + @($TestScripts | Select-Object -Unique)
+    }
     foreach ($scriptPath in $checks) {
         $label = [IO.Path]::GetFileNameWithoutExtension($scriptPath)
         Invoke-GodotCheck -Label $label -Arguments @("--script", "res://validation_entry.gd", "--", $scriptPath)

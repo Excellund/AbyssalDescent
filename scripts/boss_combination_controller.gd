@@ -4,6 +4,7 @@ extends Node2D
 
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const LAUNCH := preload("res://scripts/enemy_launch_state.gd")
+const ENEMY_BASE := preload("res://scripts/enemy_base.gd")
 const SHADE_LIFETIME := 4.0
 var player: CharacterBody2D
 var shade_position: Vector2 = Vector2.INF
@@ -80,27 +81,27 @@ func repeat_strike(direction: Vector2, shapes: Array[Dictionary]) -> void:
 	_broadcast_shade()
 
 ## Invoked on the host for both direct strikes and authenticated player pushes.
-func launch_enemy(enemy: CharacterBody2D, impulse: Vector2, source_peer: int) -> void:
+func launch_enemy(enemy: ENEMY_BASE, impulse: Vector2, source_peer: int) -> void:
 	var stacks := clampi(int(player.ruinous_impact_stacks), 0, 2)
 	if stacks == 0 or not bool(player.combat_damage_enabled) or not bool(player._is_alive_state) or DAMAGEABLE._read_target_health(enemy) <= 0:
-		return
-	if not enemy.has_method("get_launch_state"):
 		return
 	var state: LAUNCH = enemy.get_launch_state()
 	var amount := maxi(1, int(round(float(player.damage) * (1.0 + 0.4 * (stacks - 1)))))
 	amount = int(player._apply_objective_mutator_damage_mult(amount))
 	var radius := 70.0 + 25.0 * (stacks - 1)
-	var callback := Callable(self, "_impact").bind(amount, radius, source_peer)
+	var callback := _impact.bind(amount, radius, source_peer, impulse.normalized())
 	if state.arm(impulse, DAMAGEABLE.is_displacement_immune(enemy), source_peer, player.get_instance_id(), callback):
 		if not state.compression:
 			DAMAGEABLE.notify_player_displacement(enemy, impulse)
 		_launch_targets[enemy.get_instance_id()] = weakref(enemy)
-		_ring(enemy.global_position, 20.0, Color(1.0, 0.55, 0.22, 0.85), 0.16)
+		var serial := EnemyReplicationService.broadcast_ruinous_launch(enemy, impulse, state.compression, state.remaining)
+		if serial > 0:
+			state.ended.connect(EnemyReplicationService.finish_ruinous_launch.bind(serial), CONNECT_ONE_SHOT)
 
-func _impact(position: Vector2, amount: int, radius: float, source_peer: int) -> void:
+func _impact(position: Vector2, amount: int, radius: float, source_peer: int, direction: Vector2 = Vector2.RIGHT) -> void:
 	if not is_instance_valid(player) or not bool(player.combat_damage_enabled):
 		return
-	_ring(position, radius, Color(1.0, 0.53, 0.16, 0.85), 0.25)
+	EnemyReplicationService.broadcast_ruinous_burst(position, radius, direction)
 	var generation := _cancel_generation
 	for node in get_tree().get_nodes_in_group("enemies"):
 		if not (node is Node2D) or DAMAGEABLE._read_target_health(node) <= 0:
@@ -108,12 +109,9 @@ func _impact(position: Vector2, amount: int, radius: float, source_peer: int) ->
 		var enemy := node as Node2D
 		if enemy.global_position.distance_to(position) > radius:
 			continue
-		DAMAGEABLE.apply_damage(enemy, amount, {"attack_type": "ruinous_impact", "secondary": true, "is_ground_attack": true}, source_peer)
+		DAMAGEABLE.apply_damage(enemy, amount, {"attack_type": "ruinous_impact", "secondary": true, "is_ground_attack": true, "attack_origin": position}, source_peer)
 		if generation != _cancel_generation:
 			return
-
-func _ring(position: Vector2, radius: float, color: Color, duration: float) -> void:
-	EnemyReplicationService.broadcast_world_ring(position, radius, color, duration)
 
 func _broadcast_shade() -> void:
 	if not is_instance_valid(player):
@@ -152,8 +150,8 @@ func cancel() -> void:
 	_echo_visuals.clear()
 	_resolved_hit_damage.clear()
 	for target_ref in _launch_targets.values():
-		var target := target_ref.get_ref() as Node
-		if target != null and target.has_method("get_launch_state"):
+		var target := target_ref.get_ref() as ENEMY_BASE
+		if target != null:
 			var state: LAUNCH = target.get_launch_state()
 			if state.owner_id == player.get_instance_id():
 				state.cancel()

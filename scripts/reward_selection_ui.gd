@@ -775,6 +775,7 @@ func _layout_boon_cards() -> void:
 		var base_pos := Vector2(start_x, start_y + float(i) * (BOON_CARD_HEIGHT + BOON_CARD_GAP))
 		panel.position = base_pos
 		panel.custom_minimum_size = Vector2(card_width, BOON_CARD_HEIGHT)
+		panel.size = panel.custom_minimum_size
 		panel.pivot_offset = Vector2(card_width * 0.5, BOON_CARD_HEIGHT * 0.5)
 		if i < boon_card_rects.size():
 			boon_card_rects[i] = Rect2(base_pos, Vector2(card_width, BOON_CARD_HEIGHT))
@@ -789,6 +790,7 @@ func _layout_boon_cards() -> void:
 			var text_x := BOON_LABEL_X
 			label.position = Vector2(text_x, 10.0)
 			label.custom_minimum_size = Vector2(maxf(320.0, stack_x - text_x - 12.0), BOON_CARD_HEIGHT - 20.0)
+			label.size = label.custom_minimum_size
 		if i < boon_card_stack_labels.size():
 			var stack_label := boon_card_stack_labels[i]
 			stack_label.position = Vector2(card_width - stack_label.custom_minimum_size.x - 18.0, 14.0)

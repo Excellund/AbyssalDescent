@@ -456,9 +456,15 @@ static func _motion_arcana_section_bbcode() -> String:
 	lines.append("[b]Razor Orbit[/b]")
 	lines.append("Tap Dash for your normal dash. To orbit, aim at a nearby foe first, then hold Dash through the normal dash. The highlighted target is remembered while you move. If no target is highlighted, aim at a foe during the dash.")
 	lines.append("Keep holding Dash to orbit and cut. Your entry dash chooses the circling direction, which stays fixed until you detach. Attack still works. Release Dash to launch along your orbit.")
+	lines.append("At level 1, hook foes within 260. Each cut deals 35% of Damage, at most once per enemy every 0.3 seconds. An orbit lasts up to 1.4 seconds; a level 3 transfer can extend the whole sequence to 2.4 seconds. Cards show cut damage and hook reach; Blast cards show full-charge damage and reach.")
 	lines.append("Level 2 can also anchor to columns. At level 3, keep holding and aim at another foe when your anchor dies to transfer once.")
 	lines.append("")
 	lines.append("Release a charged Blast Drive while orbiting to detach with explosive recoil. Starting a new dash cancels a held blast charge. Each Arcana level increases its damage and reach; Prismatic strengthens both again.")
+	lines.append("")
+	lines.append("[b]Returning Crescent[/b]")
+	lines.append("Attack throws a blade alongside your strike. It flies outward, then returns toward your current position. Move or dash to pull the return path across another part of the room.")
+	lines.append("At level 1, the blade travels up to 220 and deals 45% of Damage each way. An enemy can be struck once on the outward flight and once on return. One blade can be active; level 2 allows two.")
+	lines.append("Level 3 lets each blade bounce once off a wall or column on its outward flight. A blocked return dissolves. Each level adds 15% of base damage and reach; Prismatic strengthens both by another 20%.")
 	return "\n".join(lines)
 
 

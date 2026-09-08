@@ -134,6 +134,11 @@ const DAMAGE_MODEL_BY_POWER := {
 		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
 		"formula_note": "Orbit cuts deal 35% of Damage, multiplied by their Arcana damage scale, per contact window"
 	},
+	"returning_crescent": {
+		"kind": DAMAGE_KIND_SCALING,
+		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
+		"formula_note": "Each blade deals 45% of Damage times its Arcana scale, once per enemy outbound and once on return"
+	},
 	# Character-lore bridges
 	"bloodvow": {
 		"kind": DAMAGE_KIND_SCALING,
@@ -143,7 +148,7 @@ const DAMAGE_MODEL_BY_POWER := {
 	"eclipse_mark": {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
-		"formula_note": "Y% bonus damage on first hit vs marked enemy"
+		"formula_note": "Y% bonus hit damage on the next 1/2/3 hits against each marked enemy"
 	},
 	"fracture_field": {
 		"kind": DAMAGE_KIND_SCALING,
@@ -195,7 +200,7 @@ const DAMAGE_MODEL_BY_POWER := {
 	"null_corridor": {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
-		"formula_note": "Dash path becomes deflection zone; enemies crossing the trail are pushed hard and take ~20-24% of damage stat once per crossing (0.5s re-entry cooldown)"
+		"formula_note": "Dash path becomes a deflection zone; enemies inside take 24%/28% of Damage, at most once every 0.5s per trail"
 	},
 	"ruinous_impact": {
 		"kind": DAMAGE_KIND_SCALING,
@@ -765,6 +770,23 @@ const TRIAL_POWER_DEFINITIONS := {
 			}
 		}
 	},
+	"returning_crescent": {
+		"stack_limit": 3,
+		"balance_params": {
+			"damage_scale_base": 1.0,
+			"damage_scale_per_stack": 0.15,
+			"reach_scale_base": 1.0,
+			"reach_scale_per_stack": 0.15
+		},
+		"param_map": {
+			"reward_flag": "reward_returning_crescent",
+			"stack_property": "returning_crescent_stacks",
+			"parameters": {
+				"damage_scale": {"property": "returning_crescent_damage_scale", "type": "float"},
+				"reach_scale": {"property": "returning_crescent_reach_scale", "type": "float"}
+			}
+		}
+	},
 	"sigil_chain": {
 		"stack_limit": 3,
 		"balance_params": {
@@ -873,6 +895,7 @@ const POWER_DISPLAY_METADATA := {
 	"sigil_chain": {"name": "Sigil Chain", "category": POWER_TYPE_TRIAL},
 	"blast_drive": {"name": "Blast Drive", "category": POWER_TYPE_TRIAL},
 	"razor_orbit": {"name": "Razor Orbit", "category": POWER_TYPE_TRIAL},
+	"returning_crescent": {"name": "Returning Crescent", "category": POWER_TYPE_TRIAL},
 	# Boss rewards
 	"wardens_verdict": {"name": "Warden's Verdict", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
 	"lacuna_echo": {"name": "Lacuna Echo", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
@@ -900,7 +923,7 @@ const TRIAL_POWER_POOL_IDS: Array[String] = [
 	"razor_wind", "execution_edge", "rupture_wave", "aegis_field", "hunters_snare",
 	"phantom_step", "riftpunch", "reaper_step", "static_wake", "storm_crown", "wraithstep",
 	"voidfire", "dread_resonance", "bloodvow", "eclipse_mark", "fracture_field",
-	"farline_volley", "sigil_chain", "blast_drive", "razor_orbit",
+	"farline_volley", "sigil_chain", "blast_drive", "razor_orbit", "returning_crescent",
 ]
 
 const BOSS_REWARD_POOL_IDS: Array[String] = [

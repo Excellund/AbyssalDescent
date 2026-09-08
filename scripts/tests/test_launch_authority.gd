@@ -8,16 +8,14 @@ class LaunchRecorder extends Node:
 	func launch_enemy(enemy: CharacterBody2D, impulse: Vector2, source_peer: int) -> void:
 		launches.append({"enemy": enemy, "impulse": impulse, "peer": source_peer})
 
-class RingFeedback extends Node:
-	var rings: Array[Dictionary] = []
-	func play_world_ring(position: Vector2, radius: float, color: Color, duration: float) -> void:
-		rings.append({"position": position, "radius": radius, "color": color, "duration": duration})
+class FeedbackOptions extends Node:
+	var sfx_volume_db: float = -80.0
 
 class CombatOwner extends CharacterBody2D:
 	var player_id: int = 0
 	var visual_facing_direction := Vector2.RIGHT
 	var boss_combinations := LaunchRecorder.new()
-	var player_feedback := RingFeedback.new()
+	var player_feedback := FeedbackOptions.new()
 	var push_target: CharacterBody2D
 	var kill_count := 0
 	var observed_suppression := false
@@ -91,7 +89,7 @@ func _run() -> void:
 	_test_accepted_primary_ownership()
 	_test_secondary_kill_and_push()
 	_test_remote_routing()
-	_test_authority_rings()
+	_test_authority_feedback()
 	MultiplayerSessionManager.session_connected = false
 	MultiplayerSessionManager.is_host_peer = false
 	EnemyReplicationService.unbind_world(world)
@@ -168,20 +166,21 @@ func _test_remote_routing() -> void:
 	_check(host.boss_combinations.launches.size() + joiner.boss_combinations.launches.size() == before, "Client routing never arms local enemy launches")
 	MultiplayerSessionManager.is_host_peer = true
 
-func _test_authority_rings() -> void:
+func _test_authority_feedback() -> void:
 	EnemyReplicationService.bind_world(world)
 	# Offline exercises host rendering without sending packets through a real peer.
 	MultiplayerSessionManager.session_connected = false
-	EnemyReplicationService.broadcast_world_ring(Vector2(40.0, 80.0), 90.0, Color.ORANGE, 0.25)
-	_check(host.player_feedback.rings.size() == 1 and joiner.player_feedback.rings.is_empty(), "Host-owned impact renders exactly once despite multiple player nodes")
+	EnemyReplicationService.broadcast_ruinous_burst(Vector2(40.0, 80.0), 90.0, Vector2.RIGHT)
+	var feedback := EnemyReplicationService._ruinous_feedback
+	_check(feedback.bursts.size() == 1, "Host-owned impact renders exactly once despite multiple player nodes")
 	MultiplayerSessionManager.session_connected = true
 	MultiplayerSessionManager.is_host_peer = false
-	EnemyReplicationService.broadcast_world_ring(Vector2.ZERO, 80.0, Color.ORANGE, 0.2)
-	_check(host.player_feedback.rings.size() == 1, "A remote replica cannot originate host-owned impact feedback")
-	var payload := {"position": Vector2(40.0, 80.0), "radius": 90.0, "color": Color.ORANGE, "duration": 0.25}
-	EnemyReplicationService._sync_world_ring(payload, 6)
-	_check(host.player_feedback.rings.size() == 1, "Late impact feedback from another room is ignored")
-	EnemyReplicationService._sync_world_ring(payload, 7)
-	_check(host.player_feedback.rings.size() == 2 and host.player_feedback.rings.back()["position"] == Vector2(40.0, 80.0), "Host effect reaches joiner feedback with its authoritative position")
-	EnemyReplicationService._sync_world_ring({"position": Vector2.INF, "radius": 90.0, "duration": 0.25}, 7)
-	_check(host.player_feedback.rings.size() == 2, "Invalid visual payload cannot create an unbounded ring")
+	EnemyReplicationService.broadcast_ruinous_burst(Vector2.ZERO, 80.0, Vector2.RIGHT)
+	_check(feedback.bursts.size() == 1, "A remote replica cannot originate host-owned impact feedback")
+	var payload := {"kind": "burst", "position": Vector2(40.0, 80.0), "radius": 90.0, "direction": Vector2.RIGHT}
+	EnemyReplicationService._sync_ruinous_feedback(payload, 6)
+	_check(feedback.bursts.size() == 1, "Late impact feedback from another room is ignored")
+	EnemyReplicationService._sync_ruinous_feedback(payload, 7)
+	_check(feedback.bursts.size() == 2 and feedback.bursts.back()["position"] == Vector2(40.0, 80.0), "Host effect reaches joiner feedback with its authoritative position")
+	EnemyReplicationService._sync_ruinous_feedback({"kind": "burst", "position": Vector2.INF, "radius": 90.0}, 7)
+	_check(feedback.bursts.size() == 2, "Invalid visual payload cannot create an unbounded ring")

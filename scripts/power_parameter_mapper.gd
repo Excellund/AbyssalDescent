@@ -333,7 +333,7 @@ static func _build_trial_values_base(power_id: String, stack_count: int, balance
 				"bonus_per_stack": int(data.get("bonus_per_stack_base", 0)) + stack_count * int(data.get("bonus_per_stack_per_stack", 0)),
 				"stack_cap": mini(int(data.get("stack_cap_max", 99)), int(data.get("stack_cap_base", 0)) + stack_count * int(data.get("stack_cap_per_stack", 0)))
 			}
-		"blast_drive", "razor_orbit":
+		"blast_drive", "razor_orbit", "returning_crescent":
 			var levels_above_first := float(maxi(0, stack_count - 1))
 			return {
 				"damage_scale": float(data.get("damage_scale_base", 1.0)) + float(data.get("damage_scale_per_stack", 0.15)) * levels_above_first,
@@ -429,7 +429,7 @@ static func _apply_prismatic_trial_values(power_id: String, values: Dictionary) 
 		"sigil_chain":
 			prismatic["radius"] = float(prismatic.get("radius", 0.0)) * 1.2
 			prismatic["damage_ratio"] = float(prismatic.get("damage_ratio", 0.0)) * 1.5
-		"blast_drive", "razor_orbit":
+		"blast_drive", "razor_orbit", "returning_crescent":
 			prismatic["damage_scale"] = float(prismatic.get("damage_scale", 1.0)) * 1.2
 			prismatic["reach_scale"] = float(prismatic.get("reach_scale", 1.0)) * 1.2
 		_:

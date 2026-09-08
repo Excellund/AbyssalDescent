@@ -6,11 +6,15 @@ const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const BLAST_EFFECT := preload("res://scripts/blast_impact_effect.gd")
 const BLAST_RANGE_MIN := 100.0
 const BLAST_RANGE_MAX := 160.0
+const BLAST_DAMAGE_MULT_MIN := 1.5
+const BLAST_DAMAGE_MULT_MAX := 2.5
 const BLAST_ARC_DEGREES := 70.0
 const HOLD_TIME := 0.25
 const FULL_CHARGE_TIME := 0.65
 const BLAST_RECHARGE := 1.8
 const ORBIT_SPEED := 540.0
+const ORBIT_ACQUIRE_RANGE := 260.0
+const ORBIT_CUT_DAMAGE_RATIO := 0.35
 const ORBIT_DURATION := 1.4
 const ORBIT_ACQUIRE_WINDOW := 0.70
 const TRANSFER_DURATION_CAP := 2.4
@@ -207,7 +211,7 @@ func _valid_orbit_anchor(candidate_ref: Variant) -> bool:
 			return false
 	elif not candidate.is_in_group("arena_columns") or int(player.razor_orbit_stacks) < 2:
 		return false
-	return player.global_position.distance_to(candidate.global_position) <= 260.0 * float(player.razor_orbit_reach_scale) and _anchor_visible(candidate)
+	return player.global_position.distance_to(candidate.global_position) <= ORBIT_ACQUIRE_RANGE * float(player.razor_orbit_reach_scale) and _anchor_visible(candidate)
 
 func _anchor_visible(candidate: Node2D) -> bool:
 	if player.get_world_2d() == null:
@@ -334,7 +338,7 @@ func _apply_cut_contacts(start: Vector2, finish: Vector2) -> void:
 		if enemy.global_position.distance_to(closest) > reach + _anchor_radius(enemy):
 			continue
 		contact_cooldowns[id] = 0.30
-		var amount := maxi(1, int(round(float(player.damage) * 0.35 * float(player.razor_orbit_damage_scale))))
+		var amount := maxi(1, int(round(float(player.damage) * ORBIT_CUT_DAMAGE_RATIO * float(player.razor_orbit_damage_scale))))
 		amount = int(player._apply_objective_mutator_damage_mult(amount))
 		DAMAGEABLE.apply_damage(enemy, amount, {"attack_type": "razor_orbit", "is_ground_attack": true, "secondary": true})
 		if generation != _cancel_generation:

@@ -6,6 +6,8 @@ extends Node
 
 const DESCRIPTION_CAP_GUARD := preload("res://scripts/shared/description_cap_guard.gd")
 const POWER_PARAMETER_MAPPER := preload("res://scripts/power_parameter_mapper.gd")
+const ARCANA_MOTION := preload("res://scripts/arcana_motion_controller.gd")
+const RETURNING_CRESCENT := preload("res://scripts/returning_crescent_controller.gd")
 const INDOMITABLE_OATH_FILL_REQUIREMENT: float = 52.0
 const INDOMITABLE_OATH_DAMAGE_SCALE: float = 1.35
 
@@ -273,7 +275,7 @@ func _power_sentence_template(power_id: String) -> String:
 		"heartstone":
 			return "Max HP %s."
 		"bloodpact":
-			return "While below 50%% HP, +%s damage on every hit."
+			return "While below 50%% HP, %s damage on every hit."
 		"severing_edge":
 			return "Bonus damage on hits against enemies below 55%% HP %s."
 		"wardens_verdict":
@@ -289,7 +291,7 @@ func _power_sentence_template(power_id: String) -> String:
 		"edict_of_the_court":
 			return "Push force %s, scatter radius %s."
 		"null_corridor":
-			return "Trail width %s, duration %s, deflect %s dmg."
+			return "Dash trail: push and damage at most every 0.5s. Width %s; duration %s; Damage %s."
 		"ruinous_impact":
 			return "Strikes launch foes; impacts burst. Bosses burst in place. Damage %s; radius %s."
 		"sovereigns_double":
@@ -323,7 +325,7 @@ func _power_sentence_template(power_id: String) -> String:
 		"bloodvow":
 			return "Below %s HP, attacks deal x%s damage."
 		"eclipse_mark":
-			return "Mark radius %s, duration %s, bonus %s of hit, lasts %s hits."
+			return "Kills mark foes. Radius %s; duration %s; bonus %s of hit; lasts %s hits."
 		"fracture_field":
 			return "Length %s, damage %s, slow %s."
 		"farline_volley":
@@ -331,9 +333,11 @@ func _power_sentence_template(power_id: String) -> String:
 		"sigil_chain":
 			return "Radius %s, %s of hit per tick. %s"
 		"blast_drive":
-			return "Hold Attack; release: short cone/recoil. Damage %s; reach %s. %s"
+			return "Hold Attack; release: blast/recoil. Full Damage %s; reach %s. %s"
 		"razor_orbit":
-			return "Aim; Hold Dash: orbit; release: launch. Damage %s; reach %s. %s"
+			return "Aim; Hold Dash: orbit; release: launch. Cut Damage %s; reach %s. %s"
+		"returning_crescent":
+			return "Attack throws a returning blade. Damage %s each way; reach %s. %s"
 		_:
 			return ""
 
@@ -419,7 +423,7 @@ func get_power_flavor_text(power_id: String) -> String:
 		"edict_of_the_court":
 			return "Kills detonate a force pulse at the kill position, pushing nearby enemies outward."
 		"null_corridor":
-			return "Dashes leave a void corridor. Enemies that enter are deflected and take damage once."
+			return "Dashes leave a void corridor. Enemies inside are pushed and damaged, at most once every 0.5s."
 		"ruinous_impact":
 			return "Strikes launch foes into explosive collisions. Bosses compress and burst in place."
 		"sovereigns_double":
@@ -453,7 +457,7 @@ func get_power_flavor_text(power_id: String) -> String:
 		"bloodvow":
 			return "While wounded, every strike hits harder. Lower HP, bigger windows."
 		"eclipse_mark":
-			return "Kills inflicted by hits mark nearby enemies. First hit on each deals bonus damage."
+			return "Kills inflicted by hits mark nearby enemies. Marked hits deal bonus damage until the mark is spent."
 		"fracture_field":
 			return "Kills inflicted by hits rupture fault lines from the slain enemy, striking enemies along each line."
 		"farline_volley":
@@ -464,6 +468,8 @@ func get_power_flavor_text(power_id: String) -> String:
 			return "Hold Attack, then release a short, narrow blast that launches you backward. Taps still strike immediately."
 		"razor_orbit":
 			return "Aim at a foe, then hold Dash to orbit and cut. Release to launch; attack freely while orbiting."
+		"returning_crescent":
+			return "Attacks throw a blade that returns to your current position. Move to guide its return through enemies."
 		_:
 			return ""
 
@@ -481,11 +487,12 @@ func get_power_current_description(power_id: String) -> String:
 			return _power_sentence(id, [_current_stat("%.0f%%", 100.0 + 40.0 * (stacks - 1)), _current_stat("%.0f", 70.0 + 25.0 * (stacks - 1))], "build_detail")
 		"sovereigns_double":
 			return _power_sentence(id, [_current_stat("%d", clampi(int(player_reference.get("sovereigns_double_stacks")), 1, 2)), _current_const("55%"), _current_const("4s")], "build_detail")
-		"blast_drive", "razor_orbit":
+		"blast_drive", "razor_orbit", "returning_crescent":
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
+			var metrics := _motion_arcana_description_metrics(id, cur)
 			return _power_sentence(id, [
-				_current_stat("x%.2f", float(cur.get("damage_scale", 1.0))),
-				_current_stat("x%.2f", float(cur.get("reach_scale", 1.0))),
+				_current_stat("x%.2f" if id == "blast_drive" else "%.1f%%", metrics["damage"]),
+				_current_stat("%.0f", metrics["reach"]),
 				_motion_arcana_unlocks_for_stack(id, get_trial_power_stack_count(id))
 			], "build_detail")
 		"wardens_verdict":
@@ -517,17 +524,17 @@ func get_power_current_description(power_id: String) -> String:
 			var nc_duration := 3.2 + nc_strength * 0.8
 			var nc_bounce_ratio := 0.20 + nc_strength * 0.08
 			var nc_bounce_dmg := maxi(1, int(round(float(player_reference.get("damage")) * nc_bounce_ratio)))
-			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f", nc_width), _current_stat("%.1fs", nc_duration), _current_stat("%d", nc_bounce_dmg)], "build_detail"))
+			return _power_sentence(id, [_current_stat("%.0f", nc_width), _current_stat("%.1fs", nc_duration), _current_stat("%d", nc_bounce_dmg)], "build_detail")
 		"first_strike":
 			return _power_sentence(id, [_current_stat("+%d", int(player_reference.get("first_strike_bonus_damage")))], "build_detail")
 		"heavy_blow":
-			return _power_sentence(id, [_current_stat("+%d", 7 * get_upgrade_stack_count("heavy_blow"))], "build_detail")
+			return _power_sentence(id, [_current_stat("%d", int(player_reference.get("damage")))], "build_detail")
 		"wide_arc":
-			return _power_sentence(id, [_current_stat("+%d deg", 28 * get_upgrade_stack_count("wide_arc"))], "build_detail")
+			return _power_sentence(id, [_current_stat("%.0f deg", float(player_reference.get("attack_arc_degrees")))], "build_detail")
 		"long_reach":
-			return _power_sentence(id, [_current_stat("+%d", 11 * get_upgrade_stack_count("long_reach"))], "build_detail")
+			return _power_sentence(id, [_current_stat("%.0f", float(player_reference.get("attack_range")))], "build_detail")
 		"fleet_foot":
-			return _power_sentence(id, [_current_stat("+%d", 17 * get_upgrade_stack_count("fleet_foot"))], "build_detail")
+			return _power_sentence(id, [_current_stat("%.0f", float(player_reference.get("max_speed")))], "build_detail")
 		"blink_dash":
 			return _power_sentence(id, [_current_stat("%.2fs", float(player_reference.get("dash_cooldown")))], "build_detail")
 		"iron_skin":
@@ -538,9 +545,9 @@ func get_power_current_description(power_id: String) -> String:
 				bt_duration = float(player_reference.get("battle_trance_duration"))
 			return _power_sentence(id, [_current_stat("+%.0f%%", float(player_reference.get("battle_trance_move_speed_bonus")) * 100.0), _current_stat("%.2fs", bt_duration)], "build_detail")
 		"surge_step":
-			return _power_sentence(id, [_current_stat("+%d", 85 * get_upgrade_stack_count("surge_step"))], "build_detail")
+			return _power_sentence(id, [_current_stat("%.0f", float(player_reference.get("dash_speed")))], "build_detail")
 		"heartstone":
-			return _power_sentence(id, [_current_stat("+%d", 10 * get_upgrade_stack_count("heartstone"))], "build_detail")
+			return _power_sentence(id, [_current_stat("%d", int(player_reference.get("max_health")))], "build_detail")
 		"bloodpact":
 			return _power_sentence(id, [_current_stat("+%d", int(player_reference.get("bloodpact_bonus_damage")))], "build_detail")
 		"severing_edge":
@@ -599,7 +606,7 @@ func get_power_current_description(power_id: String) -> String:
 		"eclipse_mark":
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			var em_hits := _eclipse_hits_for_stack(get_trial_power_stack_count(id))
-			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f", float(cur.get("radius", 0.0))), _current_stat("%.2fs", float(cur.get("mark_duration", 0.0))), _current_stat("%.0f%%", float(cur.get("bonus_ratio", 0.0)) * 100.0), _current_stat("%d", em_hits)], "build_detail"))
+			return _power_sentence(id, [_current_stat("%.0f", float(cur.get("radius", 0.0))), _current_stat("%.2fs", float(cur.get("mark_duration", 0.0))), _current_stat("%.0f%%", float(cur.get("bonus_ratio", 0.0)) * 100.0), _current_stat("%d", em_hits)], "build_detail")
 		"fracture_field":
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f", float(cur.get("radius", 0.0))), _current_stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0), _current_stat("%.2fs", float(cur.get("slow_duration", 0.0)))] , "build_detail"))
@@ -633,10 +640,12 @@ func get_trial_power_card_description(power_id: String) -> String:
 		flavor = "[color=#40C8B0]%s[/color]" % _get_trial_prismatic_blurb(id)
 	var is_initial := current_stack <= 0
 	match id:
-		"blast_drive", "razor_orbit":
+		"blast_drive", "razor_orbit", "returning_crescent":
+			var current_metrics := _motion_arcana_description_metrics(id, cur)
+			var next_metrics := _motion_arcana_description_metrics(id, next_values)
 			return _power_sentence(id, [
-				_stat("x%.2f", float(cur.get("damage_scale", 1.0)), float(next_values.get("damage_scale", 1.0)), is_initial),
-				_stat("x%.2f", float(cur.get("reach_scale", 1.0)), float(next_values.get("reach_scale", 1.0)), is_initial),
+				_stat("x%.2f" if id == "blast_drive" else "%.1f%%", current_metrics["damage"], next_metrics["damage"], is_initial),
+				_stat("%.0f", current_metrics["reach"], next_metrics["reach"], is_initial),
 				_motion_arcana_unlocks_for_stack(id, next_stack)
 			], "reward_card")
 		"razor_wind":
@@ -717,7 +726,7 @@ func get_trial_power_card_description(power_id: String) -> String:
 			var dur_stat := _stat("%.2fs", float(cur.get("mark_duration", 0.0)), float(next_values.get("mark_duration", 0.0)), is_initial)
 			var ratio_stat := _stat("%.0f%%", float(cur.get("bonus_ratio", 0.0)) * 100.0, float(next_values.get("bonus_ratio", 0.0)) * 100.0, is_initial)
 			var hits_stat := _stat("%d", _eclipse_hits_for_stack(current_stack), _eclipse_hits_for_stack(next_stack), is_initial)
-			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [radius_stat, dur_stat, ratio_stat, hits_stat], "reward_card"))
+			return _power_sentence(id, [radius_stat, dur_stat, ratio_stat, hits_stat], "reward_card")
 		"fracture_field":
 			var length_stat := _stat("%.0f", float(cur.get("radius", 0.0)), float(next_values.get("radius", 0.0)), is_initial)
 			var damage_stat := _stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0, float(next_values.get("damage_ratio", 0.0)) * 100.0, is_initial)
@@ -865,7 +874,7 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 			var width_stat := _stat("%.0f", cur_nc_width, next_nc_width, is_initial_nc)
 			var dur_stat := _stat("%.1fs", cur_nc_dur, next_nc_dur, is_initial_nc)
 			var dmg_stat := _stat("%d", cur_nc_dmg, next_nc_dmg, is_initial_nc)
-			return _reward_flavor_first_desc(is_initial_nc, flavor, _power_sentence(id, [width_stat, dur_stat, dmg_stat], "reward_card"))
+			return _power_sentence(id, [width_stat, dur_stat, dmg_stat], "reward_card")
 		_:
 			return "[color=#c8daf0]Upgrade your stats.[/color]"
 
@@ -985,7 +994,23 @@ func _sigil_chain_unlocks_for_stack(stack_count: int) -> String:
 	return "Hexweaver: detonates burst"
 
 
+## Describe the actual hit/anchor dimensions, not the internal level multiplier.
+## Use the runtime's constants so a later tuning change reaches every UI surface.
+func _motion_arcana_description_metrics(power_id: String, values: Dictionary) -> Dictionary:
+	var damage_scale := float(values.get("damage_scale", 1.0))
+	var reach_scale := float(values.get("reach_scale", 1.0))
+	if power_id == "blast_drive":
+		return {"damage": ARCANA_MOTION.BLAST_DAMAGE_MULT_MAX * damage_scale, "reach": ARCANA_MOTION.BLAST_RANGE_MAX * reach_scale}
+	if power_id == "returning_crescent":
+		return {"damage": RETURNING_CRESCENT.DAMAGE_RATIO * 100.0 * damage_scale, "reach": RETURNING_CRESCENT.OUTBOUND_DISTANCE * reach_scale}
+	return {"damage": ARCANA_MOTION.ORBIT_CUT_DAMAGE_RATIO * 100.0 * damage_scale, "reach": ARCANA_MOTION.ORBIT_ACQUIRE_RANGE * reach_scale}
+
+
 func _motion_arcana_unlocks_for_stack(power_id: String, stack_count: int) -> String:
+	if power_id == "returning_crescent":
+		if stack_count >= 3:
+			return "2 blades; wall bounce."
+		return "2 blades." if stack_count >= 2 else "1 blade."
 	if power_id == "blast_drive":
 		if stack_count >= 3:
 			return "2 charges; steer."
@@ -1037,6 +1062,8 @@ func _get_trial_prismatic_blurb(power_id: String) -> String:
 			return "harder blasts, farther reach"
 		"razor_orbit":
 			return "deeper cuts, farther anchors"
+		"returning_crescent":
+			return "stronger blades, longer return paths"
 		_:
 			return "empowered beyond mastery"
 

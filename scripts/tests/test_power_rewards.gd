@@ -404,6 +404,14 @@ func _test_combat_hooks() -> void:
 				player.arcana_motion.start_orbit(enemy)
 				player.arcana_motion._apply_cut_contacts(player.global_position, player.global_position + Vector2(5.0, 0.0))
 				activated = player.arcana_motion.owns_movement() and enemy.get_current_health() < before
+			"returning_crescent":
+				enemy.global_position = Vector2(150.0, 0.0)
+				player._ensure_returning_crescent()
+				player.returning_crescent.set_physics_process(false)
+				player._perform_melee_attack(Vector2.RIGHT, {"damage": 20, "range": 78.0, "arc_degrees": 130.0})
+				var missed_by_melee := enemy.get_current_health() == before
+				player.returning_crescent.tick(0.25)
+				activated = missed_by_melee and enemy.get_current_health() < before
 			"wardens_verdict":
 				activated = player._get_apex_predator_bonus(enemy, enemy.global_position, 20) > 0
 			"lacuna_echo":

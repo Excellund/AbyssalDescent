@@ -4,6 +4,7 @@ const HEALTH_STATE_SCRIPT := preload("res://scripts/health_state.gd")
 const PLAYER_FEEDBACK_SCRIPT := preload("res://scripts/player_feedback.gd")
 const STATIC_WAKE_TRAIL_RENDERER_SCRIPT := preload("res://scripts/static_wake_trail_renderer.gd")
 const ARCANA_MOTION_SCRIPT := preload("res://scripts/arcana_motion_controller.gd")
+const RETURNING_CRESCENT_SCRIPT := preload("res://scripts/returning_crescent_controller.gd")
 const BOSS_COMBINATIONS_SCRIPT := preload("res://scripts/boss_combination_controller.gd")
 const UPGRADE_SYSTEM_SCRIPT_PATH := "res://scripts/upgrade_system.gd"
 const UPGRADE_SYSTEM_SCRIPT := preload("res://scripts/upgrade_system.gd")
@@ -37,6 +38,7 @@ const RUN_SNAPSHOT_PROPERTIES := [
 	"ruinous_impact_stacks", "sovereigns_double_stacks",
 	"reward_blast_drive", "blast_drive_stacks", "blast_drive_damage_scale", "blast_drive_reach_scale",
 	"reward_razor_orbit", "razor_orbit_stacks", "razor_orbit_damage_scale", "razor_orbit_reach_scale",
+	"reward_returning_crescent", "returning_crescent_stacks", "returning_crescent_damage_scale", "returning_crescent_reach_scale",
 	"max_health",
 	"incoming_damage_taken_mult",
 	"incoming_contact_damage_mult",
@@ -210,6 +212,7 @@ var player_feedback: PLAYER_FEEDBACK_SCRIPT
 var static_wake_trail_renderer: STATIC_WAKE_TRAIL_RENDERER_SCRIPT
 var upgrade_system: UPGRADE_SYSTEM_SCRIPT
 var arcana_motion: ARCANA_MOTION_SCRIPT
+var returning_crescent: RETURNING_CRESCENT_SCRIPT
 var boss_combinations: BOSS_COMBINATIONS_SCRIPT
 var ruinous_impact_stacks: int = 0
 var sovereigns_double_stacks: int = 0
@@ -221,6 +224,10 @@ var reward_razor_orbit: bool = false
 var razor_orbit_stacks: int = 0
 var razor_orbit_damage_scale: float = 1.0
 var razor_orbit_reach_scale: float = 1.0
+var reward_returning_crescent: bool = false
+var returning_crescent_stacks: int = 0
+var returning_crescent_damage_scale: float = 1.0
+var returning_crescent_reach_scale: float = 1.0
 var attack_anim_time_left: float = 0.0
 var attack_anim_duration: float = 0.12
 var visual_facing_direction: Vector2 = Vector2.RIGHT
@@ -550,6 +557,7 @@ func _ready() -> void:
 	_create_player_feedback()
 	_create_static_wake_trail_renderer()
 	_ensure_arcana_motion()
+	_ensure_returning_crescent()
 	_ensure_boss_combinations()
 	var sprite := get_node_or_null("Sprite2D") as Sprite2D
 	if sprite != null:
@@ -611,6 +619,10 @@ func _physics_process(delta: float) -> void:
 	_try_attack_input()
 	if arcana_motion != null and _is_local_control_owner():
 		arcana_motion.tick(delta)
+	# Orbit/recoil own movement, but must not starve an attack buffered by dash.
+	# Consume after the motion tick so an immediately acquired Orbit stays mobile.
+	_try_consume_queued_attack()
+	if arcana_motion != null and _is_local_control_owner():
 		if arcana_motion.process_movement(delta, direction):
 			return
 
@@ -622,7 +634,6 @@ func _physics_process(delta: float) -> void:
 	if _process_active_dash(delta):
 		return
 
-	_try_consume_queued_attack()
 	if _is_attack_locked():
 		velocity = Vector2.ZERO
 		move_and_slide()
@@ -648,6 +659,13 @@ func _ensure_boss_combinations() -> void:
 	add_child(boss_combinations)
 	boss_combinations.initialize(self)
 
+func _ensure_returning_crescent() -> void:
+	if returning_crescent != null:
+		return
+	returning_crescent = RETURNING_CRESCENT_SCRIPT.new()
+	add_child(returning_crescent)
+	returning_crescent.initialize(self)
+
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
 		discard_pending_combat_input()
@@ -660,7 +678,7 @@ func perform_motion_blast(direction: Vector2, strength: float) -> void:
 	primary_attack_fired.emit()
 	attack_combo_counter += 1
 	var execution_proc := reward_execution_edge and attack_combo_counter % maxi(1, execution_every) == 0
-	var blast_damage := maxi(1, int(round(float(damage) * lerpf(1.5, 2.5, strength) * blast_drive_damage_scale)))
+	var blast_damage := maxi(1, int(round(float(damage) * lerpf(ARCANA_MOTION_SCRIPT.BLAST_DAMAGE_MULT_MIN, ARCANA_MOTION_SCRIPT.BLAST_DAMAGE_MULT_MAX, strength) * blast_drive_damage_scale)))
 	var blast_range := ARCANA_MOTION_SCRIPT.blast_range(strength, blast_drive_reach_scale)
 	var context := upgrade_system.build_melee_attack_context(blast_damage, blast_range, ARCANA_MOTION_SCRIPT.BLAST_ARC_DEGREES, execution_proc, execution_damage_mult)
 	context["source"] = "blast_drive"
@@ -687,6 +705,8 @@ func _read_movement_direction() -> Vector2:
 ## Input polling is global: handling a GUI event does not consume its action state.
 func discard_pending_combat_input() -> void:
 	queued_attack_after_dash = false
+	if returning_crescent != null:
+		returning_crescent.cancel()
 	if boss_combinations != null:
 		boss_combinations.cancel()
 	if arcana_motion != null:
@@ -805,12 +825,7 @@ func _try_attack_input() -> void:
 		queued_attack_after_dash = true
 		queued_attack_direction = _get_mouse_attack_direction()
 		return
-	_ensure_arcana_motion()
-	var generation := arcana_motion._cancel_generation
-	var before := attack_combo_counter
 	_try_execute_attack(_get_mouse_attack_direction())
-	if generation == arcana_motion._cancel_generation:
-		arcana_motion.on_primary_pressed(attack_combo_counter != before)
 
 func _try_consume_queued_attack() -> void:
 	if encounter_input_frozen:
@@ -833,6 +848,8 @@ func _try_execute_attack(attack_direction: Vector2) -> void:
 		return
 	if attack_cooldown_left > 0.0:
 		return
+	_ensure_arcana_motion()
+	var generation := arcana_motion._cancel_generation
 	queued_attack_after_dash = false
 	primary_attack_fired.emit()
 
@@ -890,6 +907,10 @@ func _try_execute_attack(attack_direction: Vector2) -> void:
 		})
 	if _perform_melee_attack(attack_direction, melee_context):
 		player_feedback.play_impact_sound()
+	# Immediate and buffered inputs share the same successful-attack boundary.
+	# Time spent waiting through dash/cooldown never contributes to Blast charge.
+	if generation == arcana_motion._cancel_generation and arcana_motion._held(&"attack"):
+		arcana_motion.on_primary_pressed(true)
 
 func _update_attack_lock(delta: float) -> void:
 	if attack_lock_time_left > 0.0:
@@ -1269,6 +1290,8 @@ func _broadcast_owner_damage_feedback() -> void:
 
 func set_combat_damage_enabled(enabled: bool) -> void:
 	combat_damage_enabled = enabled
+	if not enabled and returning_crescent != null:
+		returning_crescent.cancel()
 
 func get_last_damage_event() -> Dictionary:
 	return last_damage_event.duplicate(true)
@@ -1465,10 +1488,17 @@ func build_run_snapshot() -> Dictionary:
 func apply_run_snapshot(snapshot: Dictionary) -> void:
 	if snapshot.is_empty():
 		return
+	if returning_crescent != null:
+		returning_crescent.cancel()
 	if boss_combinations != null:
 		boss_combinations.cancel()
 	if arcana_motion != null:
 		arcana_motion.cancel(true)
+	# Older snapshots do not include this Arcana. Reused players must not retain it.
+	reward_returning_crescent = false
+	returning_crescent_stacks = 0
+	returning_crescent_damage_scale = 1.0
+	returning_crescent_reach_scale = 1.0
 	var properties := snapshot.get("properties", {}) as Dictionary
 	for property_name in properties.keys():
 		set(String(property_name), properties[property_name])
@@ -1567,6 +1597,9 @@ func apply_network_cue_event(event_name: String, payload: Dictionary) -> void:
 	if player_feedback == null or event_name.is_empty() or payload.is_empty():
 		return
 	match event_name:
+		"returning_crescent_state":
+			_ensure_returning_crescent()
+			returning_crescent.apply_network_state(payload)
 		"sovereign_double_shade":
 			_ensure_boss_combinations()
 			boss_combinations.apply_shade_visual(payload)
@@ -2000,6 +2033,7 @@ func apply_power_for_test(power_id: String) -> bool:
 	var hard_ids := {
 		"blast_drive": true,
 		"razor_orbit": true,
+		"returning_crescent": true,
 		"razor_wind": true,
 		"execution_edge": true,
 		"rupture_wave": true,
@@ -2244,6 +2278,9 @@ func _get_melee_attack_geometry(melee_context: Dictionary) -> Dictionary:
 
 
 func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary) -> bool:
+	if String(melee_context.get("source", "melee")) in ["melee", "blast_drive"]:
+		_ensure_returning_crescent()
+		returning_crescent.try_launch(attack_direction)
 	_ensure_boss_combinations()
 	boss_combinations.begin_direct_strike()
 	var did_hit := false
@@ -2549,6 +2586,8 @@ func _get_first_strike_bonus_damage(enemy_node: Object) -> int:
 	return 0
 
 func clear_lingering_combat_effects() -> void:
+	if returning_crescent != null:
+		returning_crescent.cancel()
 	if boss_combinations != null:
 		boss_combinations.cancel()
 	if arcana_motion != null:
@@ -3461,6 +3500,8 @@ func _sync_static_wake_trail_renderer() -> void:
 
 
 func _exit_tree() -> void:
+	if is_instance_valid(returning_crescent):
+		returning_crescent.cancel()
 	if static_wake_trail_renderer != null and is_instance_valid(static_wake_trail_renderer):
 		static_wake_trail_renderer.queue_free()
 		static_wake_trail_renderer = null
@@ -3471,6 +3512,8 @@ func set_sfx_volume_db(volume_db: float) -> void:
 	player_feedback.set_sfx_volume_db(volume_db)
 	if arcana_motion != null:
 		arcana_motion.set_sfx_volume_db(volume_db)
+	if returning_crescent != null:
+		returning_crescent.set_sfx_volume_db(volume_db)
 
 func _on_health_state_changed(new_health: int, new_max_health: int) -> void:
 	health_changed.emit(new_health, new_max_health)

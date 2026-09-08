@@ -350,7 +350,7 @@ func _test_dash_gestures() -> void:
 	_check(player.queued_attack_after_dash and motion.charge_hold < 0.0, "Attack during a dash queues its ordinary strike without charging")
 	_finish_dash_for_input_test()
 	player._try_consume_queued_attack()
-	_check(not player.queued_attack_after_dash and motion.charge_hold < 0.0, "Consuming a queued strike cannot retroactively arm Blast")
+	_check(not player.queued_attack_after_dash and is_zero_approx(motion.charge_hold), "A still-held queued strike starts Blast charge at the actual attack, with no earlier hold time")
 	await _release_actions()
 	_free_world()
 

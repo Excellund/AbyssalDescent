@@ -1,9 +1,11 @@
 param(
     [Parameter(Mandatory = $true)][string]$ValidationProject,
-    [string]$GodotPath = ''
+    [string]$GodotPath = '',
+    [ValidatePattern('^res://scripts/tests/test_[a-z0-9_]+_enet\.gd$')][string]$FixtureScript = 'res://scripts/tests/test_boss_combinations_enet.gd'
 )
 $ErrorActionPreference = 'Stop'
 $sourceRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot $FixtureScript.Substring(6)) -PathType Leaf)) { throw "The requested ENet fixture does not exist: $FixtureScript" }
 $snapshotRoot = (Resolve-Path -LiteralPath $ValidationProject).Path
 $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
 if (-not $snapshotRoot.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Use a disposable validation project inside system temp.' }
@@ -55,7 +57,7 @@ try {
     $fixturePort = ([Net.IPEndPoint]$reservation.Client.LocalEndPoint).Port
     $reservation.Dispose()
     $reportPrefix = Join-Path $testRoot 'result'
-    $common = @('--script', 'res://validation_entry.gd', '--quit-after', '2000', '--', 'res://scripts/tests/test_boss_combinations_enet.gd')
+    $common = @('--script', 'res://validation_entry.gd', '--quit-after', '2000', '--', $FixtureScript)
     $hostProcess = Start-Fixture 'host' ($common + @('host', [string]$fixturePort, $reportPrefix))
     $deadline = [DateTime]::UtcNow.AddSeconds(25)
     while (-not (Test-Path -LiteralPath ($reportPrefix + '-ready')) -and -not $hostProcess.HasExited -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 50 }
