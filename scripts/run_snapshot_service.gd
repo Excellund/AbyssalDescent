@@ -1,6 +1,7 @@
 extends RefCounted
 
 const RUN_SESSION_SCRIPT := preload("res://scripts/core/run_session.gd")
+const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 
 static func _to_string_array(value: Variant) -> Array[String]:
 	var out: Array[String] = []
@@ -120,6 +121,8 @@ static func build_snapshot(world: Node, player: Node, run_context: Node, snapsho
 	return {
 		"version": snapshot_version,
 		"run_mode": run_mode_value,
+		"current_character_id": world.current_character_id,
+		"active_catalyst_ids": run_context.get_active_catalyst_ids(world.current_character_id) if run_context != null else [],
 		"rooms_cleared": world.rooms_cleared,
 		"room_depth": world.room_depth,
 		"active_room_enemy_count": world.active_room_enemy_count,
@@ -168,6 +171,12 @@ static func apply_snapshot(world: Node, player: Node, run_context: Node, snapsho
 		return false
 	if run_context != null:
 		run_context.set_run_mode(snapshot.get("run_mode", fallback_run_mode))
+		# Old saves have no loadout history; preserve their previous menu-based
+		# behavior. New saves keep the run's original equipment, including none.
+		if snapshot.has("active_catalyst_ids"):
+			world.current_character_id = String(snapshot.get("current_character_id", world.current_character_id))
+			run_context.restore_active_catalysts(world.current_character_id, snapshot.get("active_catalyst_ids", []) as Array)
+			player.apply_character_package(CHARACTER_REGISTRY.get_character(world.current_character_id))
 
 	world.rooms_cleared = int(snapshot.get("rooms_cleared", world.rooms_cleared))
 	world.room_depth = int(snapshot.get("room_depth", world.room_depth))

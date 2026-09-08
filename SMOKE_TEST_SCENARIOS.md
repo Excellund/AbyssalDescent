@@ -10,14 +10,34 @@ These are manual and automated test paths that verify the behavior invariants de
 
 ## Quick Test (Smoke Matrix)
 
-Run the automated input, power, and oath regressions from PowerShell with
+Run the automated input, power, Oath, and Catalyst regressions from PowerShell with
 `& ./.github/scripts/run_gameplay_regressions.ps1` (or pass `-GodotPath "C:/Path/To/Godot.exe"`).
 This also compiles all scripts and checks world-property access and multiplayer
 configuration sync. It uses a temporary project with isolated user
 data and inactive service startup, preserves the real project and saves, and
 prints the location of retained logs. Manual gameplay checks below still apply.
 
+After validation passes, build a local Windows playtest with
+`& ./.github/scripts/export_playtest.ps1 -OutputPath "AbyssalDescent.playtest.exe"`.
+The script uses the same Godot path settings as the regression runner and requires
+matching installed export templates. It imports and exports a fresh production
+copy with isolated editor data, verifies the embedded package, and prints its
+SHA256 and retained log location. It preserves real saves and source configuration,
+excludes test scripts, and sets only the copied build to `dev` with automatic
+update checks disabled. It does not launch the game. Existing output files are
+preserved unless `-Overwrite` is supplied; close that executable before replacing it.
+
 A minimal set of quick checks that can be run between commits to catch major breakage.
+
+### Catalyst Playtest
+
+- Equip two unlocked Catalysts. Confirm their current names and effects appear in Tab / Build Details.
+- Reach a saved doorway with Iron Vigil and a health upgrade. Return to the menu, change equipment, then continue: the saved build, maximum/current health, and original Catalysts must return. A new run uses the changed equipment.
+- With Prismatic Arcana equipped, max an Arcana and take its final Prismatic offer. It should leave the offer pool and keep its ordinary stack count capped.
+- With Reward Reroll equipped, reroll a draft once. The next eligible draft gets a fresh reroll; an objective's fixed bonus claim must not show a leftover reroll button.
+- With Draft Compass equipped, confirm one additional choice in each randomized reward draft, including starting Arcana and boss rewards.
+- In co-op, equip different survival Catalysts. Rest healing and incoming-damage bonuses must follow each player's equipment; the host's Calm Before Surge controls the shared wave interval.
+- Older checkpoints without Catalyst history retain the legacy menu-based fallback. Use a new checkpoint to verify frozen equipment and saved maximum health.
 
 ### QT1: Startup Validation
 

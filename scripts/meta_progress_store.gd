@@ -6,6 +6,7 @@ extends RefCounted
 
 const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
 const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
+const CATALYST_REGISTRY := preload("res://scripts/progression/catalyst_registry.gd")
 
 const META_PROGRESS_PATH := "user://meta_progress.save"
 const META_PROGRESS_VERSION := 4
@@ -650,12 +651,14 @@ static func get_unlocked_catalyst_ids(profile: Dictionary) -> Array[String]:
 	var out: Array[String] = []
 	if raw is Array:
 		for entry in raw:
-			out.append(String(entry))
+			var id := String(entry).strip_edges()
+			if CATALYST_REGISTRY.has_catalyst(id) and not out.has(id):
+				out.append(id)
 	return out
 
 static func unlock_catalyst(profile: Dictionary, catalyst_id: String) -> bool:
 	var id: String = String(catalyst_id).strip_edges()
-	if id.is_empty():
+	if not CATALYST_REGISTRY.has_catalyst(id):
 		return false
 	var state: Dictionary = _get_catalysts_state(profile)
 	var raw: Variant = state.get("unlocked_ids", [])
@@ -674,10 +677,16 @@ static func get_equipped_catalyst_ids(profile: Dictionary, character_id: String)
 		return []
 	var normalized: String = _normalize_character_id(character_id)
 	var raw: Variant = (equipped_raw as Dictionary).get(normalized, [])
+	var unlocked := get_unlocked_catalyst_ids(profile)
 	var out: Array[String] = []
 	if raw is Array:
 		for entry in raw:
-			out.append(String(entry))
+			var id := String(entry).strip_edges()
+			if not unlocked.has(id) or out.has(id):
+				continue
+			out.append(id)
+			if out.size() >= CATALYST_REGISTRY.get_slot_limit():
+				break
 	return out
 
 static func set_equipped_catalyst_ids(profile: Dictionary, character_id: String, catalyst_ids: Array) -> void:
@@ -696,5 +705,7 @@ static func set_equipped_catalyst_ids(profile: Dictionary, character_id: String,
 		if not unlocked.has(id):
 			continue
 		clean.append(id)
+		if clean.size() >= CATALYST_REGISTRY.get_slot_limit():
+			break
 	equipped[normalized] = clean
 	state["equipped_per_character"] = equipped

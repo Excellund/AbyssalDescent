@@ -149,10 +149,10 @@ func _classify_unlock(unlock_text: String) -> Dictionary:
 			"detail": unlock_text,
 			"color": RARITY_EPIC
 		}
-	if unlock_text.begins_with("Oath Complete: "):
+	if unlock_text.begins_with("Oath Complete: ") or unlock_text.begins_with("Oath fulfilled: "):
 		return {
 			"title": "Oath Completed",
-			"detail": unlock_text.trim_prefix("Oath Complete: "),
+			"detail": unlock_text.trim_prefix("Oath Complete: ").trim_prefix("Oath fulfilled: "),
 			"color": RARITY_EPIC
 		}
 	if unlock_text.begins_with("Catalyst Unlocked: "):

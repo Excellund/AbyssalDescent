@@ -11,6 +11,7 @@ extends RefCounted
 
 const OATHS_REGISTRY := preload("res://scripts/progression/oaths_registry.gd")
 const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
+const CATALYST_REGISTRY := preload("res://scripts/progression/catalyst_registry.gd")
 
 ## Returns a dict:
 ## {
@@ -24,6 +25,7 @@ static func evaluate_run(run_summary: Dictionary, profile: Dictionary) -> Dictio
 	var unlocked_catalysts: Array[String] = []
 	var unlocked_modifiers: Array[String] = []
 	var labels: Array[String] = []
+	var existing_catalysts := META_PROGRESS.get_unlocked_catalyst_ids(profile)
 	var defs: Dictionary = OATHS_REGISTRY.get_all_definitions()
 	for oath_id_variant in defs.keys():
 		var oath_id: String = String(oath_id_variant)
@@ -36,10 +38,12 @@ static func evaluate_run(run_summary: Dictionary, profile: Dictionary) -> Dictio
 			continue
 		newly_completed.append(oath_id)
 		var label: String = String(def.get("label", oath_id))
-		labels.append("Oath fulfilled: %s" % label)
+		labels.append("Oath Complete: %s" % label)
 		var catalyst_id: String = String(def.get("reward_catalyst_id", ""))
-		if not catalyst_id.is_empty():
+		if not catalyst_id.is_empty() and not existing_catalysts.has(catalyst_id) and not unlocked_catalysts.has(catalyst_id):
 			unlocked_catalysts.append(catalyst_id)
+			var catalyst := CATALYST_REGISTRY.get_definition(catalyst_id)
+			labels.append("Catalyst Unlocked: %s" % String(catalyst.get("label", catalyst_id)))
 		var modifier_id: String = String(def.get("reward_modifier_id", ""))
 		if not modifier_id.is_empty():
 			unlocked_modifiers.append(modifier_id)

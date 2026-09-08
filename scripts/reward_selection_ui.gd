@@ -39,7 +39,7 @@ var current_player: Node2D
 var current_character_id: String = ""
 var _current_power_registry: Node = null
 var _current_rng: RandomNumberGenerator = null
-var _trial_power_stack_limit_bonus: int = 0
+var _prismatic_arcana_enabled: bool = false
 var _reward_rerolls_per_offer: int = 0
 var _reward_rerolls_remaining: int = 0
 
@@ -125,11 +125,19 @@ const OPEN_FADE_DURATION := 0.32
 const CLOSE_FADE_DURATION := 0.28
 
 func initialize(choice_count: int, reveal_duration: float) -> void:
-	boon_choice_count = choice_count
+	var next_choice_count := maxi(1, choice_count)
+	var rebuild_cards := not is_instance_valid(boon_layer) or next_choice_count != boon_choice_count
+	boon_choice_count = next_choice_count
 	boon_reveal_duration = reveal_duration
-	_sfx_player = AudioStreamPlayer.new()
+	if not is_instance_valid(_sfx_player):
+		_sfx_player = AudioStreamPlayer.new()
+		add_child(_sfx_player)
 	_sfx_player.volume_db = AUDIO_LEVELS.clamp_db(sfx_volume_db)
-	add_child(_sfx_player)
+	if not rebuild_cards:
+		return
+	if is_instance_valid(boon_layer):
+		close_selection()
+		boon_layer.free()
 	_create_ui()
 
 func set_sfx_volume_db(db: float) -> void:
@@ -138,7 +146,7 @@ func set_sfx_volume_db(db: float) -> void:
 		_sfx_player.volume_db = sfx_volume_db
 
 func configure_catalyst_payload(payload: Dictionary) -> void:
-	_trial_power_stack_limit_bonus = maxi(0, int(round(float(payload.get("arcana_capacity_add", 0.0)))))
+	_prismatic_arcana_enabled = float(payload.get("arcana_capacity_add", 0.0)) > 0.0
 	_reward_rerolls_per_offer = maxi(0, int(round(float(payload.get("reward_rerolls_per_encounter_add", 0.0)))))
 
 func is_active() -> bool:
@@ -277,6 +285,8 @@ func process_input(delta: float) -> void:
 					boon_hover_weights[hi] = 0.0
 				_apply_boon_card_styles(-1)
 				_refresh_boon_ui(current_player)
+				_set_skip_button_visible(false)
+				_set_reroll_button_visible(false)
 				_emit_reward_offers_presented()
 				return
 			var mode := reward_selection_mode
@@ -932,10 +942,10 @@ func _refresh_boon_ui(player: Node2D) -> void:
 		var boon := boon_choices[i]
 		var is_mutator_choice := bool(boon.get("is_mutator", false))
 		var stack_limit := int(boon.get("stack_limit", 0))
-		if reward_selection_mode == ENUMS.RewardMode.ARCANA and _trial_power_stack_limit_bonus > 0:
-			stack_limit += _trial_power_stack_limit_bonus
 		var stack_count := _get_stack_count_for_choice(boon, player)
 		var icon_line := _format_stack_progress_icons(stack_count, stack_limit)
+		if reward_selection_mode == ENUMS.RewardMode.ARCANA and _prismatic_arcana_enabled and _can_offer_prismatic_arcana(player, String(boon.get("id", ""))):
+			icon_line = "Prismatic"
 		if is_mutator_choice or icon_line.is_empty():
 			stack_label.text = ""
 			stack_label.visible = false
@@ -1035,7 +1045,7 @@ func _roll_arcana_choices(choice_count: int, power_registry: Node, player: Node2
 			var reward_id := String(entry.get("id", ""))
 			var current := int(player.get_trial_power_stack_count(reward_id))
 			if current >= limit:
-				var can_offer_prismatic := _trial_power_stack_limit_bonus > 0 and _can_offer_prismatic_arcana(player, reward_id)
+				var can_offer_prismatic := _prismatic_arcana_enabled and _can_offer_prismatic_arcana(player, reward_id)
 				if not can_offer_prismatic:
 					continue
 		available.append(entry)

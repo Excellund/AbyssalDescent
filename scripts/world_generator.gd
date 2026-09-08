@@ -791,6 +791,12 @@ func _setup_world_bootstrap_state() -> void:
 	_apply_camera_bounds_for_room(current_effective_room_size)
 
 func _setup_run_systems_phase() -> void:
+	var run_context := _get_run_context()
+	if run_context != null:
+		current_character_id = run_context.get_selected_character_id()
+		if is_multiplayer:
+			current_character_id = _resolve_local_character_id(run_context, current_character_id)
+		run_context.begin_catalyst_run(current_character_id)
 	music_system = MUSIC_SYSTEM_SCRIPT.new()
 	add_child(music_system)
 	music_system.initialize(normal_room_music, boss_room_music, music_volume_db, music_crossfade_duration)
@@ -818,6 +824,15 @@ func _setup_run_systems_phase() -> void:
 func _setup_reward_selection_system() -> void:
 	reward_selection_ui = REWARD_SELECTION_UI_SCRIPT.new()
 	add_child(reward_selection_ui)
+	_configure_reward_selection_loadout()
+	if reward_selection_ui.has_signal("reward_selected"):
+		reward_selection_ui.connect("reward_selected", Callable(self, "_on_reward_selected"))
+	if reward_selection_ui.has_signal("reward_offers_presented"):
+		reward_selection_ui.connect("reward_offers_presented", Callable(self, "_on_reward_offers_presented"))
+	if reward_selection_ui.has_signal("reward_skipped"):
+		reward_selection_ui.connect("reward_skipped", Callable(self, "_on_reward_skipped"))
+
+func _configure_reward_selection_loadout() -> void:
 	var effective_choice_count: int = boon_choice_count
 	var catalyst_payload: Dictionary = {}
 	var run_context_ref := _get_run_context()
@@ -827,18 +842,12 @@ func _setup_reward_selection_system() -> void:
 			var ascension_payload: Dictionary = ASCENSION_REGISTRY.merge_loadout_payload(loadout)
 			var delta: int = int(round(float(ascension_payload.get("reward_choice_count_add", 0.0))))
 			effective_choice_count = maxi(1, effective_choice_count + delta)
-		catalyst_payload = run_context_ref.get_active_catalyst_payload("")
+		catalyst_payload = run_context_ref.get_active_catalyst_payload(current_character_id)
 		var catalyst_delta: int = int(round(float(catalyst_payload.get("reward_choice_count_add", 0.0))))
 		if catalyst_delta != 0:
 			effective_choice_count = maxi(1, effective_choice_count + catalyst_delta)
 	reward_selection_ui.initialize(effective_choice_count, boon_reveal_duration)
 	reward_selection_ui.configure_catalyst_payload(catalyst_payload)
-	if reward_selection_ui.has_signal("reward_selected"):
-		reward_selection_ui.connect("reward_selected", Callable(self, "_on_reward_selected"))
-	if reward_selection_ui.has_signal("reward_offers_presented"):
-		reward_selection_ui.connect("reward_offers_presented", Callable(self, "_on_reward_offers_presented"))
-	if reward_selection_ui.has_signal("reward_skipped"):
-		reward_selection_ui.connect("reward_skipped", Callable(self, "_on_reward_skipped"))
 
 func _setup_encounter_profile_builder_system() -> void:
 	encounter_profile_builder = ENCOUNTER_PROFILE_BUILDER_SCRIPT.new()
@@ -1455,7 +1464,9 @@ func _unhandled_input(event: InputEvent) -> void:
 					return
 				if not build_detail_panel.is_open():
 					var active_powers := _get_active_player_powers()
-					build_detail_panel.refresh(current_character_id, active_powers["boons"], active_powers["arcana"], active_powers["boss_rewards"], player)
+					var run_context := _get_run_context()
+					var catalyst_ids: Array = run_context.get_active_catalyst_ids(current_character_id) if run_context != null else []
+					build_detail_panel.refresh(current_character_id, active_powers["boons"], active_powers["arcana"], active_powers["boss_rewards"], player, catalyst_ids)
 					build_detail_panel.open()
 				get_viewport().set_input_as_handled()
 				return
@@ -1866,7 +1877,7 @@ func _get_hud_state() -> Dictionary:
 	var run_context := _get_run_context()
 	if run_context != null:
 		hud_state["timer_visible_in_hud"] = bool(run_context.is_timer_visible_in_hud())
-		hud_state["equipped_catalyst_count"] = run_context.get_equipped_catalyst_ids(current_character_id).size()
+		hud_state["equipped_catalyst_count"] = run_context.get_active_catalyst_ids(current_character_id).size()
 		var active_loadout := run_context.get_active_ascension_loadout()
 		if not active_loadout.is_empty():
 			hud_state["ascension_rank"] = ASCENSION_REGISTRY.compute_loadout_rank(active_loadout)
@@ -2157,7 +2168,7 @@ func _finish_third_boss_clear() -> void:
 	var unlocked_character_id := ""
 	if run_context != null:
 		run_context.set_last_run_outcome("clear")
-		run_context.award_run_clear_unlocks()
+		run_context.award_run_clear_unlocks(current_character_id, current_difficulty_tier)
 		unlocked_tier = int(run_context.consume_just_unlocked_tier())
 		unlocked_character_id = String(run_context.consume_just_unlocked_character_id()).strip_edges().to_lower()
 	if unlocked_tier >= 0:
@@ -2395,6 +2406,11 @@ func _apply_active_run_snapshot(snapshot: Dictionary) -> bool:
 	):
 		return false
 
+	# Restore ongoing effects after the player's saved health/build is loaded.
+	# Starting-health bonuses are already included in the checkpoint maximum.
+	_apply_difficulty_tier_bonuses(current_difficulty_tier, false)
+	encounter_profile_builder.set_difficulty_tier(current_difficulty_tier)
+	_configure_reward_selection_loadout()
 	_clear_all_enemies()
 	_reset_all_player_positions_to_slots()
 	_reset_effective_room_bounds()
@@ -3066,20 +3082,20 @@ func _enter_rest_site() -> void:
 	else:
 		_advance_room_progress()
 		_clamp_room_depth_to_sane_range()
-	if is_instance_valid(player):
-		var player_max_health: int = int(player.get_max_health())
-		var heal_ratio_mult := float(current_difficulty_config.get("rest_heal_ratio_mult", 1.0))
-		var heal_amount := maxi(8, int(round(float(player_max_health) * rest_heal_ratio * heal_ratio_mult)))
-		player.heal(heal_amount)
-		player.play_rest_site_heal_feedback()
-		if is_multiplayer and MultiplayerSessionManager.is_authoritative():
-			for party_node in _get_multiplayer_player_nodes():
-				if party_node == player or not is_instance_valid(party_node):
-					continue
-				var p_max := int(party_node.get_max_health())
-				party_node.heal(maxi(8, int(round(float(p_max) * rest_heal_ratio * heal_ratio_mult))))
+	_heal_local_player_at_rest()
 	run_summary_recorder.record_rest_visit(room_depth)
 	_spawn_door_options()
+
+func _heal_local_player_at_rest() -> void:
+	if not is_instance_valid(player) or player.is_dead():
+		return
+	# Each peer enters this room through the chosen-door sync and heals its
+	# own player. Health replication updates the other avatars once.
+	var player_max_health: int = int(player.get_max_health())
+	var heal_ratio_mult := float(current_difficulty_config.get("rest_heal_ratio_mult", 1.0))
+	var heal_amount := maxi(8, int(round(float(player_max_health) * rest_heal_ratio * heal_ratio_mult)))
+	player.heal(heal_amount)
+	player.play_rest_site_heal_feedback()
 
 func _spawn_room_obstacles(layout: Array[Dictionary]) -> void:
 	for entry in layout:
@@ -3797,6 +3813,9 @@ func _on_reward_skipped(mode: int, is_initial: bool) -> void:
 	if mode == ENUMS.RewardMode.BOSS:
 		boss_reward_pending = false
 	if is_multiplayer:
+		# Starting stats still need to reach remote hit detection if no power
+		# was selected to trigger the usual build broadcast.
+		_broadcast_local_player_build_snapshot()
 		_mark_local_reward_phase_complete(is_initial, mode)
 	elif is_initial:
 		_reset_progress_for_first_encounter()

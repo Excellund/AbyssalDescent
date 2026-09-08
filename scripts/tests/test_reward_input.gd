@@ -30,6 +30,9 @@ func _run() -> void:
 	_player = PLAYER.new()
 	root.add_child(_player)
 	_player.set_physics_process(false)
+	# This suite checks combat input, not audio. Repeated attack sounds can leave
+	# mixer-thread playback references alive during headless process shutdown.
+	_player.player_feedback.attack_swing_sound_player.stream = null
 	_player.primary_attack_fired.connect(func(): _attacks += 1)
 	var ui := FirstChoiceUI.new()
 	root.add_child(ui)

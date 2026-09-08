@@ -47,3 +47,10 @@ Use this skill whenever power description text changes or when UI wrapping/regre
 - All updated descriptions pass visible-char cap checks.
 - Debug assertions fail if future edits exceed cap.
 - Diagnostics report no errors for touched scripts.
+
+## Catalyst Descriptions
+
+- Keep Catalyst descriptions in `scripts/progression/catalyst_registry.gd`; setup cards, Oath rewards, unlock results, and build details should use that registry.
+- Preserve saved Catalyst IDs when correcting display names. `extra_arcana_slot` / `arcana_capacity_add` enables one Prismatic enhancement per maxed Arcana; it does not add an ordinary stack. `shop_reroll` / `reward_rerolls_per_encounter_add` grants one reroll per eligible reward draft, including starting Arcana, but not the fixed mission bonus.
+- Check descriptions against the consumer that changes gameplay. For shared co-op effects, explain whose equipment applies; Calm Before Surge follows the host's wave scheduler.
+- Verify unlock, equip, active-run effects, and save/resume together. Freeze Catalyst IDs before run systems initialize, retain them in checkpoints, and restore ongoing effects without granting starting-health bonuses again.

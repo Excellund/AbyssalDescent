@@ -187,8 +187,7 @@ func reset_summary_tracker() -> void:
 		var ASCENSION_REGISTRY := preload("res://scripts/progression/ascension_modifier_registry.gd")
 		tracker_seed["ascension_rank"] = ASCENSION_REGISTRY.compute_loadout_rank(loadout)
 		var character_id: String = String(_world.current_character_id).strip_edges().to_lower()
-		var META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
-		tracker_seed["equipped_catalyst_ids"] = META_PROGRESS.get_equipped_catalyst_ids(run_context.meta_progress_profile, character_id)
+		tracker_seed["equipped_catalyst_ids"] = run_context.get_active_catalyst_ids(character_id)
 	run_summary_tracker.reset_for_run(tracker_seed)
 	for player_node in _world._get_multiplayer_player_nodes():
 		var player := player_node as PLAYER_SCRIPT
@@ -827,6 +826,7 @@ func finalize_synced_run_summary_for_joiner(synced_summary: Dictionary, outcome:
 		# The local input owner records its attacks; the host's count belongs to
 		# a different player and must not decide this player's Closed Fist Oath.
 		augmented["primary_attacks_fired"] = run_summary_tracker.primary_attacks_fired
+		augmented["equipped_catalyst_ids"] = run_summary_tracker.equipped_catalyst_ids.duplicate()
 	augmented["is_debug"] = _run_is_debug or bool(augmented.get("is_debug", false))
 	if String(augmented.get("outcome", "")).strip_edges().is_empty():
 		augmented["outcome"] = outcome

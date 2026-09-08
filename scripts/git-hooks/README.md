@@ -34,7 +34,7 @@ The hooks will block commits if any of these are true:
 3. **Isolated Godot validation and gameplay regressions**
    - Runs `.github/scripts/run_gameplay_regressions.ps1` on every commit.
    - Imports the project and compiles every GDScript, then checks forbidden world property access and multiplayer configuration synchronization.
-   - Runs the reward-input, power-reward, and Oath-tracking regression suites.
+   - Runs the reward-input, power-reward, Oath-tracking, and Catalyst profile/reward/runtime regression suites.
    - Blocks commit if the runner fails, including script errors or failed assertions.
 
 Godot checks run in a temporary project copy with separate user data. Autoload

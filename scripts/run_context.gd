@@ -73,6 +73,8 @@ var multiplayer_peer_profile_uuids: Dictionary = {}  ## peer_id -> profile uuid
 ## meta_progress.save. MP: host-set, party-shared, mirrored to joiners through
 ## the difficulty broadcast (see encounter_difficulty_multiplayer_config.gd).
 var active_ascension_loadout: Array[String] = []
+var _active_catalyst_character_id: String = ""
+var _active_catalyst_ids: Array[String] = []
 var menu_music_resume_position_sec: float = -1.0
 
 func _ready() -> void:
@@ -573,14 +575,37 @@ func get_ascension_highest_rank(character_id: String = "") -> int:
 	var id: String = character_id if not character_id.is_empty() else get_selected_character_id()
 	return META_PROGRESS_STORE.get_ascension_highest_rank(meta_progress_profile, id)
 
-## Equipped catalysts for the given character (defaults to the active selection).
+## Returns a detached copy of the saved menu loadout for the given character.
 func get_equipped_catalyst_ids(character_id: String = "") -> Array[String]:
 	var id: String = character_id if not character_id.is_empty() else get_selected_character_id()
 	return META_PROGRESS_STORE.get_equipped_catalyst_ids(meta_progress_profile, id)
 
-## Merged catalyst payload for the given character. Subsystems read this at run boot.
+## Freeze the menu loadout once, before any run systems read it.
+func begin_catalyst_run(character_id: String) -> void:
+	restore_active_catalysts(character_id, get_equipped_catalyst_ids(character_id))
+
+## Checkpoints retain the original loadout even after the menu equipment changes.
+## Unknown/duplicate entries are ignored; the input array is never retained.
+func restore_active_catalysts(character_id: String, catalyst_ids: Array) -> void:
+	_active_catalyst_character_id = character_id.strip_edges().to_lower()
+	_active_catalyst_ids.clear()
+	for entry in catalyst_ids:
+		var id := String(entry).strip_edges().to_lower()
+		if not CATALYST_REGISTRY.has_catalyst(id) or _active_catalyst_ids.has(id):
+			continue
+		_active_catalyst_ids.append(id)
+		if _active_catalyst_ids.size() >= CATALYST_REGISTRY.get_slot_limit():
+			break
+
+## Returns a detached copy of this run's loadout, never the live menu selection.
+func get_active_catalyst_ids(character_id: String = "") -> Array[String]:
+	if not character_id.is_empty() and character_id.strip_edges().to_lower() != _active_catalyst_character_id:
+		return []
+	return _active_catalyst_ids.duplicate()
+
+## Returns a freshly merged payload safe for the caller to mutate.
 func get_active_catalyst_payload(character_id: String = "") -> Dictionary:
-	return CATALYST_REGISTRY.merge_payloads(get_equipped_catalyst_ids(character_id))
+	return CATALYST_REGISTRY.merge_payloads(get_active_catalyst_ids(character_id))
 
 
 ## Multiplayer session management
@@ -685,32 +710,34 @@ func consume_menu_music_resume_position() -> float:
 	return maxf(position, 0.0)
 
 
-## Award permanent difficulty unlocks for a completed run on the current tier.
-func award_run_clear_unlocks() -> int:
+## Award unlocks for the completed run; explicit identity survives menu changes.
+## Omitted arguments preserve the menu-based behavior of older callers.
+func award_run_clear_unlocks(completed_character_id: String = "", completed_difficulty_tier: int = -1) -> int:
 	var unlocked_tier := -1
 	just_unlocked_tier = -1
 	just_unlocked_character_id = ""
 	var changed := false
-	var character_id := get_selected_character_id()
+	var character_id := completed_character_id.strip_edges().to_lower() if not completed_character_id.is_empty() else get_selected_character_id()
 	if character_id.is_empty():
 		character_id = CHARACTER_REGISTRY.get_default_character_id()
+	var cleared_tier := completed_difficulty_tier if completed_difficulty_tier >= 0 else current_difficulty_tier
 
-	if current_difficulty_tier <= BEARING_ENUMS.BearingTier.PILGRIM and not META_PROGRESS_STORE.get_milestone(meta_progress_profile, "first_clear"):
+	if cleared_tier <= BEARING_ENUMS.BearingTier.PILGRIM and not META_PROGRESS_STORE.get_milestone(meta_progress_profile, "first_clear"):
 		META_PROGRESS_STORE.set_milestone(meta_progress_profile, "first_clear", true)
 		changed = true
-	if current_difficulty_tier == BEARING_ENUMS.BearingTier.DELVER and not META_PROGRESS_STORE.get_milestone(meta_progress_profile, "first_clear_on_standard"):
+	if cleared_tier == BEARING_ENUMS.BearingTier.DELVER and not META_PROGRESS_STORE.get_milestone(meta_progress_profile, "first_clear_on_standard"):
 		META_PROGRESS_STORE.set_milestone(meta_progress_profile, "first_clear_on_standard", true)
 		changed = true
-	if current_difficulty_tier == BEARING_ENUMS.BearingTier.HARBINGER and not META_PROGRESS_STORE.get_milestone(meta_progress_profile, "first_clear_on_veteran"):
+	if cleared_tier == BEARING_ENUMS.BearingTier.HARBINGER and not META_PROGRESS_STORE.get_milestone(meta_progress_profile, "first_clear_on_veteran"):
 		META_PROGRESS_STORE.set_milestone(meta_progress_profile, "first_clear_on_veteran", true)
 		changed = true
 
 	var next_tier := -1
-	if current_difficulty_tier <= BEARING_ENUMS.BearingTier.PILGRIM:
+	if cleared_tier <= BEARING_ENUMS.BearingTier.PILGRIM:
 		next_tier = BEARING_ENUMS.BearingTier.DELVER
-	elif current_difficulty_tier == BEARING_ENUMS.BearingTier.DELVER:
+	elif cleared_tier == BEARING_ENUMS.BearingTier.DELVER:
 		next_tier = BEARING_ENUMS.BearingTier.HARBINGER
-	elif current_difficulty_tier == BEARING_ENUMS.BearingTier.HARBINGER:
+	elif cleared_tier == BEARING_ENUMS.BearingTier.HARBINGER:
 		next_tier = BEARING_ENUMS.BearingTier.FORSWORN
 
 	if next_tier >= 0 and META_PROGRESS_STORE.unlock_character_tier(meta_progress_profile, character_id, next_tier):
@@ -725,7 +752,7 @@ func award_run_clear_unlocks() -> int:
 		unlocked_character_ids = META_PROGRESS_STORE.get_unlocked_character_ids(meta_progress_profile)
 		changed = true
 
-	if current_difficulty_tier == BEARING_ENUMS.BearingTier.FORSWORN:
+	if cleared_tier == BEARING_ENUMS.BearingTier.FORSWORN:
 		if not character_id.is_empty() and META_PROGRESS_STORE.record_forsworn_clear(meta_progress_profile, character_id):
 			changed = true
 

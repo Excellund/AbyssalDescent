@@ -32,7 +32,7 @@ var _modifier_list: VBoxContainer
 var _catalyst_list: VBoxContainer
 var _oath_list: VBoxContainer
 var _modifier_lock_banner: PanelContainer
-var _catalyst_wip_banner: PanelContainer
+var _catalyst_info_banner: PanelContainer
 var _collapsed_clear_groups: Dictionary = {}
 var _run_setup_mode_enabled: bool = false
 var _oaths_only_mode_enabled: bool = false
@@ -124,10 +124,10 @@ func _build_ui(host: Node) -> void:
 	_modifier_column_root = modifier_column
 	_catalyst_list = _build_section_column(columns, "Catalysts (max %d)" % CATALYST_REGISTRY.get_slot_limit(), 1.0)
 	_catalyst_list.add_theme_constant_override("separation", 8)
-	_catalyst_wip_banner = _build_catalyst_wip_banner()
+	_catalyst_info_banner = _build_catalyst_info_banner()
 	var catalyst_column: Node = _catalyst_list.get_parent().get_parent().get_parent()
-	catalyst_column.add_child(_catalyst_wip_banner)
-	catalyst_column.move_child(_catalyst_wip_banner, 1)
+	catalyst_column.add_child(_catalyst_info_banner)
+	catalyst_column.move_child(_catalyst_info_banner, 1)
 	_catalyst_column_root = catalyst_column
 	_oath_list = _build_section_column(columns, "Oaths", 1.7)
 	_oath_list.add_theme_constant_override("separation", 8)
@@ -754,10 +754,10 @@ func _build_modifier_lock_banner() -> PanelContainer:
 		Color(1.0, 0.86, 0.70, 0.96)
 	)
 
-func _build_catalyst_wip_banner() -> PanelContainer:
+func _build_catalyst_info_banner() -> PanelContainer:
 	return _build_notice_banner(
-		"⚙",
-		"Work in progress. Only Iron Vigil applies in-run today; other catalysts are placeholders.",
+		"◆",
+		"Unlocked through Oaths. Equip up to %d for your next descent." % CATALYST_REGISTRY.get_slot_limit(),
 		Color(0.10, 0.14, 0.22, 0.78),
 		Color(0.52, 0.74, 1.0, 0.78),
 		Color(0.74, 0.92, 1.0, 1.0),

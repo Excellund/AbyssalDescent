@@ -3,13 +3,12 @@
 ## Catalysts are unlocked by completing Oaths (see oaths_registry.gd::reward_catalyst_id).
 ##
 ## Application: equipped catalysts are read at run boot and dispatched by
-## scripts/encounter_flow_system.gd during run setup.
-##
-## Per the plan (see /memories/session/plan.md), catalysts are NOT cosmetic:
-## every entry adjusts run mechanics. Player buffs are disclosed on the
-## leaderboard alongside the ascension rank so a buffed clear is distinguishable.
+## scripts/world_generator.gd during run setup. Keep saved ids stable when
+## clarifying display names so existing unlocks and equipped loadouts still work.
 
 extends RefCounted
+
+const DESCRIPTION_CAP_GUARD := preload("res://scripts/shared/description_cap_guard.gd")
 
 const DEFAULT_SLOT_LIMIT := 2
 
@@ -20,14 +19,14 @@ const CATEGORY_SURVIVAL := "survival"
 
 const CATALYST_DEFINITIONS := {
 	"extra_arcana_slot": {
-		"label": "Extra Arcana Slot",
-		"description": "Begin each run with one additional arcana stack capacity.",
+		"label": "Prismatic Arcana",
+		"description": "Maxed Arcana can be offered once more as a Prismatic upgrade.",
 		"category": CATEGORY_REWARD,
 		"payload": {"arcana_capacity_add": 1}
 	},
 	"shop_reroll": {
-		"label": "Shop Reroll",
-		"description": "Once per encounter, reroll the offered reward choices.",
+		"label": "Reward Reroll",
+		"description": "Reroll each post-encounter reward draft once, plus your starting Arcana.",
 		"category": CATEGORY_REWARD,
 		"payload": {"reward_rerolls_per_encounter_add": 1}
 	},
@@ -39,7 +38,7 @@ const CATALYST_DEFINITIONS := {
 	},
 	"reward_choice_bonus": {
 		"label": "Draft Compass",
-		"description": "Reward picks offer one additional option.",
+		"description": "Reward drafts offer one additional option.",
 		"category": CATEGORY_REWARD,
 		"payload": {"reward_choice_count_add": 1}
 	},
@@ -57,7 +56,7 @@ const CATALYST_DEFINITIONS := {
 	},
 	"wave_interval_bonus": {
 		"label": "Calm Before Surge",
-		"description": "Waves arrive 12% slower.",
+		"description": "Increase the time between enemy waves by 12%. In co-op, applies when you host.",
 		"category": CATEGORY_SURVIVAL,
 		"payload": {"wave_interval_mult": 1.12}
 	},
@@ -84,7 +83,9 @@ static func has_catalyst(catalyst_id: String) -> bool:
 static func get_definition(catalyst_id: String) -> Dictionary:
 	if not CATALYST_DEFINITIONS.has(catalyst_id):
 		return {}
-	return (CATALYST_DEFINITIONS[catalyst_id] as Dictionary).duplicate(true)
+	var definition := (CATALYST_DEFINITIONS[catalyst_id] as Dictionary).duplicate(true)
+	DESCRIPTION_CAP_GUARD.assert_visible_cap(String(definition.get("description", "")), catalyst_id, "catalyst")
+	return definition
 
 static func get_category(catalyst_id: String) -> String:
 	if not CATALYST_DEFINITIONS.has(catalyst_id):

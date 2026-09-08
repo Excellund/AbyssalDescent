@@ -32,6 +32,9 @@ const SIGIL_CHAIN_CHAIN_BONUS_PER_DEPTH: float = 0.40
 const SIGIL_CHAIN_CHAIN_BONUS_MAX_DEPTH: int = 6
 const SIGIL_CHAIN_BURST_DETONATION_MULT: int = 3
 const RUN_SNAPSHOT_PROPERTIES := [
+	"max_health",
+	"incoming_damage_taken_mult",
+	"incoming_contact_damage_mult",
 	"max_speed",
 	"dash_cooldown",
 	"damage",

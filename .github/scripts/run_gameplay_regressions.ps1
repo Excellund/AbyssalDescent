@@ -132,7 +132,10 @@ try {
         "res://.github/scripts/validate_multiplayer_config_sync.gd",
         "res://scripts/tests/test_reward_input.gd",
         "res://scripts/tests/test_power_rewards.gd",
-        "res://scripts/tests/test_oath_tracking.gd"
+        "res://scripts/tests/test_oath_tracking.gd",
+        "res://scripts/tests/test_catalyst_profile.gd",
+        "res://scripts/tests/test_catalyst_rewards.gd",
+        "res://scripts/tests/test_catalyst_runtime.gd"
     )
     foreach ($scriptPath in $checks) {
         $label = [IO.Path]::GetFileNameWithoutExtension($scriptPath)

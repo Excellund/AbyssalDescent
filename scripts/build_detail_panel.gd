@@ -4,6 +4,7 @@ const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 const DESCRIPTION_CAP_GUARD := preload("res://scripts/shared/description_cap_guard.gd")
 const PLAYER_SCRIPT := preload("res://scripts/player.gd")
 const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
+const CATALYST_REGISTRY := preload("res://scripts/progression/catalyst_registry.gd")
 const RARITY_COMMON := Color(0.62, 0.7, 0.8, 0.9)
 const RARITY_EPIC := Color(0.82, 0.58, 1.0, 0.96)
 const RARITY_LEGENDARY := Color(1.0, 0.74, 0.42, 1.0)
@@ -18,6 +19,9 @@ var power_registry_instance = POWER_REGISTRY.new()
 var passive_section: VBoxContainer
 var passive_name_label: Label
 var passive_desc_label: RichTextLabel
+
+var catalyst_panel: PanelContainer
+var catalyst_details: RichTextLabel
 
 var boons_section: VBoxContainer
 var boons_list_container: VBoxContainer
@@ -139,6 +143,8 @@ func _create_panel() -> void:
 	passive_desc_label.text = "No passive selected"
 	passive_section.add_child(passive_desc_label)
 
+	_create_catalyst_section(content_vbox)
+
 	# Boss rewards section panel
 	var boss_panel := PanelContainer.new()
 	boss_panel.custom_minimum_size = Vector2(870.0, 0.0)
@@ -257,12 +263,13 @@ func close() -> void:
 func is_open() -> bool:
 	return is_visible
 
-func refresh(character_id: String, active_boons: Array, active_arcana: Array, active_boss_rewards: Array = [], player: PLAYER_SCRIPT = null) -> void:
+func refresh(character_id: String, active_boons: Array, active_arcana: Array, active_boss_rewards: Array = [], player: PLAYER_SCRIPT = null, catalyst_ids: Array = []) -> void:
 	if panel == null:
 		return
 	
 	# Update passive
 	_update_passive_section(character_id)
+	_update_catalyst_section(catalyst_ids)
 	
 	# Update boons list
 	_update_power_section(boons_list_container, active_boons, "boon", player)
@@ -272,6 +279,48 @@ func refresh(character_id: String, active_boons: Array, active_arcana: Array, ac
 
 	# Update boss rewards list
 	_update_power_section(boss_list_container, active_boss_rewards, "boss", player)
+
+func _create_catalyst_section(content: VBoxContainer) -> void:
+	catalyst_panel = PanelContainer.new()
+	catalyst_panel.custom_minimum_size = Vector2(870.0, 0.0)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.04, 0.09, 0.12, 0.74)
+	style.border_color = Color(0.44, 0.72, 0.86, 0.70)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(12)
+	style.content_margin_left = 14.0
+	style.content_margin_right = 14.0
+	style.content_margin_top = 14.0
+	style.content_margin_bottom = 14.0
+	catalyst_panel.add_theme_stylebox_override("panel", style)
+	content.add_child(catalyst_panel)
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", 8)
+	catalyst_panel.add_child(stack)
+	var heading := Label.new()
+	heading.text = "Catalysts"
+	heading.add_theme_font_size_override("font_size", 20)
+	heading.add_theme_color_override("font_color", Color(0.58, 0.94, 1.0, 0.98))
+	stack.add_child(heading)
+	catalyst_details = RichTextLabel.new()
+	catalyst_details.bbcode_enabled = true
+	catalyst_details.fit_content = true
+	catalyst_details.scroll_active = false
+	catalyst_details.add_theme_font_size_override("normal_font_size", 16)
+	catalyst_details.add_theme_font_size_override("bold_font_size", 16)
+	catalyst_details.add_theme_color_override("default_color", Color(0.88, 0.96, 1.0, 0.92))
+	stack.add_child(catalyst_details)
+	catalyst_panel.hide()
+
+func _update_catalyst_section(catalyst_ids: Array) -> void:
+	var entries: Array[String] = []
+	for id_variant in catalyst_ids:
+		var definition := CATALYST_REGISTRY.get_definition(String(id_variant))
+		if definition.is_empty():
+			continue
+		entries.append("[b]%s[/b]\n%s" % [String(definition["label"]), String(definition["description"])])
+	catalyst_details.text = "\n\n".join(entries)
+	catalyst_panel.visible = not entries.is_empty()
 
 func _update_passive_section(character_id: String) -> void:
 	var char_data := CHARACTER_REGISTRY.get_character(character_id)
