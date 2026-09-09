@@ -15,10 +15,10 @@ The thread continuation `overnight-abyssaldescent-development` expires at the de
 
 ## Active ownership
 
-- `review_combat_lifecycle`: edge-only damage flash promoted; correcting disconnected-peer ownership exposed by integrated ENet teardown.
-- `review_combat_readability`: Tether final snapshot frozen; persistence audit complete without defects; bounded Archer projectile audit in TEMP.
-- `review_hit_context`: narrow freed-target validation correction and final Tether integration checks in TEMP.
-- Root: integration, regression registration, work log, Git and delivery; Seamlock band expiry promoted.
+- `review_combat_lifecycle`: clean permanent Main/Menu ownership regressions in TEMP.
+- `review_combat_readability`: bounded read-only Pyre/Toll attack and visual audit in TEMP.
+- `review_hit_context`: broader 16-pair actual campaign transition matrix in TEMP.
+- Root: integration, reviews, regression registration, work log, Git and normal playtest delivery.
 
 Coordinate overlapping files before editing. Agents do not commit independently.
 
@@ -167,3 +167,31 @@ Damage feedback uses the existing color, strength and fade timing at the viewpor
 Root's integrated Seamlock run passed all 51 assertions but caught a native ownership error during ENet teardown: the peer was closed while real player effects still queried its ID. The shared Player owner check now rejects assigned connecting/closed peers before ID lookup, preserving connected identity and the existing null/offline behavior. A real native-peer fixture passes 20 checks; the old code fails three and logs native errors. Existing owner checks pass 11, owner ENet passes 28 (`abyssal-enet-2519c546989e4b00820503344ab5e36c`), and corrected Seamlock ENet passes 51 cleanly (`abyssal-enet-97fdb9c71e5d4bc5bcc5ff2aa3df9dbe`). This is a production lifecycle fix, not a relaxed fixture shutdown rule.
 
 A separate persistence audit found no additional defect: all four characters, every Arcana level/Prismatic, all Boons/boss rewards and an all-Arcana Prismatic build survived real disk restoration and repeated apply with no scalar-stat differences (1,997 checks; existing snapshot 395 also passes). The audit remains TEMP (`abyssal-validation-a1cc0447aa2748be909060bcfcc2a8a3`); no speculative production change was made.
+
+## Sixth desktop checkpoint
+
+Hazard/feedback checkpoint **`917a13c`** is committed and pushed. The normal full hook passes all suites and 236-script compilation (`abyssal-validation-bb0b984eb27947cfb9f62d9fd3c64c1a`). Root's final integrated Tether ENet rerun passes 113 checks (`abyssal-enet-5e98af55083c4765ab4b0baa12131db0`).
+
+The single desktop playtest is normal **`dev-overnight-hazards-20260909-013751`**, SHA256 `76BE4B7BDCDA6AFD8134790310F9E4AE1F85A186B2D03987A387272CE95B5841`, size 114070392. Export and embedded package verification pass, along with 26 normal executable checks (`abyssal-executable-smoke-e1511fe4861a40c8ba98231eaeeeddcd`). All 161 production scripts/shaders match source; staging is `abyssal-playtest-export-21e13d5876444de380e10b78a8ad609e/project`. Desktop hash matches. Main remains at the original checkpoint, and the unrelated local scene edit remains unstaged.
+
+## Next bounded investigations
+
+An actual Main campaign smoke uses accelerated fixture kills, actual generated doors/offered rewards, normal room-clear APIs, all three bosses, terminal summaries and real victory retry. Its initial 121 transition checks pass across four character/Bearing pairs, 96 cleared rooms, 933 fixture kills and eight Main instances. This is lifecycle evidence, not player balance or enjoyment. It exposed five orphan helper Nodes per Main instance after retry/teardown; all are privately created per-instance registries or difficulty wrappers. A narrow ownership fix is being independently prepared in TEMP; the deliberately shared mapper registry is preserved. Evidence: `abyssal-campaign-smoke-77d774e7ac794989b74e6d6578e7a47c`.
+
+A separate Archer audit reproduced misses during hitches and actual recoil crossings, cover skipped behind enemies, shots beyond shrunken bounds, and replica arrows persisting after lost despawn or returning after stale state. The selected TEMP correction keeps damage, speed, radius, current AI-target eligibility, harmless non-target body consumption, and the existing moving-source 1200-pixel range rule. It will compare simultaneous movement and stop at the earliest real contact, with ordered leased replica snapshots. Null Corridor continues to affect the shooter, not reflect its arrows. No new projectile deflection or host lifetime rule is being introduced. Production promotion awaits runtime, independent network and visual review.
+
+A disposable pressure sample exercised 16 real Tether enemies against four synthetic moving targets for 1,800 actual physics frames (6,614 active-beam frames). Enemy update time averaged 1.45 ms, p95 2.17 ms, maximum 5.28 ms; per-beam histories stayed at four entries and a raw single-enemy snapshot at 108 bytes. Teardown returned to the exact 10-node scene baseline. These are instrumented headless enemy-update costs, excluding rendering and a full player/network workload; they are not a gameplay FPS claim. No further optimization was justified. Report: `abyssal-validation-6951f4b82230454588f75016a8f473ec/tether-pressure-report.json`.
+
+## Archer correction ready for checkpoint
+
+The reviewed Archer correction is promoted. It resolves continuous, simultaneous target/arrow motion against the original strict 28-pixel radius, stopping at the earliest real cover, current arena edge or original 1200-pixel distance from the moving shooter. Enemy bodies cannot hide cover behind them; non-target players retain their existing harmless arrow consumption. Damage, speed, targeting, aim/volley timing and the enemy-ability damage category are unchanged. Target identity, explicit reset generations and live bounds changes prevent invented movement histories.
+
+Existing arrow freezes during Ruinous launches are preserved on host and replicas. The final launch step marks history interrupted until actual arrow processing resumes; actors' movement during that pause cannot produce a delayed hit. Full compact sequenced room-scoped snapshots replace the active set; a 0.35-second presentation lease bounds lost final updates. Malformed or older packets cannot advance sequence or revive removed arrows. There is no new host lifetime, reflection rule or additional proc behavior.
+
+Final runtime SHA256 `90B509D0C34DF1EEE4C6E666C9C52FE3D1BCF3033AE80925761E1A5589201031` passes 80 focused checks, including actual four-Bearing and Iron Volley scaling, and 84 independent real ENet checks (`abyssal-enet-6523086577514c38b030621ab4965c00`). Six actual GPU states were inspected by root and implementer (`abyssal-gameplay-render-577f1da05f024ff3b1e0786c7f8a075b/archer_projectile_frames`). The default regression runner includes the focused fixture; separate thin wrappers retain network and GPU verification.
+
+## Main/Menu ownership review
+
+The eight-file ownership prototype passes actual normal-speed interactive Continue, death retry, abandon and fresh-start paths across ten Main instances and four menu instances. Its 119 assertions return exactly to 10 nodes, 212 resources, 1800 objects and one intentionally shared mapper registry. Another reviewer independently repeated all 119 checks and 27 borrowed-reference tests, confirming that retiring a player's private fallback does not free the borrowed World registry. Focused UI checks cover themed/fallback Back buttons and identical error-message ordering and hidden layout footprint.
+
+The narrow correction parents private registries/difficulty wrappers to their actual owner, avoids allocating a discarded fallback Back button, and keeps the profile-error label owned while hidden. The shared static mapper remains shared. An earlier accelerated fixture bypassed menu readiness and produced a native shutdown failure on both original and corrected code. Normal-speed tests now wait for the real visible/enabled/faded-in control and profile modal state; Continue passes without added gameplay delays or an engine workaround. This is a fixture limitation, not a demonstrated normal-user resume crash. Clean permanent regressions are being prepared before production promotion.

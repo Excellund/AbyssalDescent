@@ -8,7 +8,7 @@ Development is on `codex/overnight-buildcraft-20260909`. The existing desktop **
 - **Apex Breakwater:** an optional single-enemy fight. Bait its clearly locked charge into an edge or cover to earn a longer opening, then decide whether to attack or reposition.
 - **Ruinous Impact:** launches, compression and bursts now have distinct feedback at their actual positions and damage radius. It also works against the real arena perimeter.
 - **Warden and Lacuna:** their charge warnings now show the full committed path. Watch the warning and compare the charge with it, including while using recoil or Orbit nearby.
-- **Hazard clarity, next checkpoint:** Tether shows its full beam width and breaks when either enemy is launched. Seamlock bands expire correctly. Damage flashes move toward the screen edges to keep the next warning visible.
+- **Hazard clarity:** Tether shows its full beam width and breaks when either enemy is launched. Seamlock bands expire correctly. Damage flashes move toward the screen edges to keep the next warning visible.
 
 ## Reliability and clarity
 

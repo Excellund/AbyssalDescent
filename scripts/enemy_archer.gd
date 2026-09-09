@@ -1,6 +1,11 @@
 extends "res://scripts/enemy_base.gd"
 
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
+const ARENA_BOUNDARY := preload("res://scripts/shared/arena_boundary.gd")
+const PLAYER_SCRIPT := preload("res://scripts/player.gd")
+const PROJECTILE_HIT_RADIUS := 28.0
+const PROJECTILE_SOURCE_RANGE := 1200.0
+const PROJECTILE_VISUAL_LEASE := 0.35
 const ENEMY_STATE_ENUMS := preload("res://scripts/shared/enemy_state_enums.gd")
 
 @export var seek_speed: float = 78.0
@@ -26,13 +31,27 @@ var projectiles: Array[Node2D] = []
 var projectile_directions: Dictionary = {}
 var _projectile_network_ids: Dictionary = {}
 var _remote_projectiles_by_network_id: Dictionary = {}
-var _remote_projectile_target_positions: Dictionary = {}
-var _projectile_sync_known_network_ids: Dictionary = {}
+var _projectile_states: Dictionary = {}
+var _projectile_wire_sequence := 0
+var _projectile_received_sequence := -1
+var _projectile_visual_lease := 0.0
+var _projectile_sync_was_active := false
+var _projectile_generation := 0
+var _projectile_history_interrupted := false
 var _next_projectile_network_id: int = 1
 var fire_time_left: float = 0.0
 var arrows_fired: int = 0
 var _windup_redraw_left: float = 0.0
 
+func _physics_process(delta: float) -> void:
+	if network_simulation_enabled and not _projectile_states.is_empty() and _launch_freezes_projectiles():
+		# Inherited launch movement skips arrow processing, including its final
+		# step. Reseed only when processing resumes at the actors' new positions.
+		_projectile_history_interrupted = true
+	super._physics_process(delta)
+
+func _launch_freezes_projectiles() -> bool:
+	return _launch_state != null and _launch_state.active and not _launch_state.compression
 func _process_behavior(delta: float) -> void:
 	_update_attack_cooldown(delta)
 	_process_projectiles(delta)
@@ -146,87 +165,143 @@ func _enter_recover_state() -> void:
 	_windup_redraw_left = 0.0
 
 func _fire_arrow() -> void:
+	if not network_simulation_enabled:
+		return
 	var projectile := Node2D.new()
-	projectile.global_position = global_position + arrow_direction * 20.0
 	get_parent().add_child(projectile)
-	projectiles.append(projectile)
-	var projectile_instance_id := projectile.get_instance_id()
-	_projectile_network_ids[projectile_instance_id] = _next_projectile_network_id
+	projectile.global_position = global_position + arrow_direction * 20.0
+	var network_id := _next_projectile_network_id
 	_next_projectile_network_id += 1
-	projectile_directions[projectile.get_instance_id()] = arrow_direction
+	_register_projectile(projectile, network_id, arrow_direction)
+	var state := _projectile_states[network_id] as Dictionary
+	_seed_target_history(state)
+	state["source_position"] = global_position
+	state["room"] = EnemyReplicationService._current_room_sync_id()
+	state["bounds"] = _projectile_room_bounds()
 	attack_anim_time_left = attack_anim_duration
 	queue_redraw()
 
+func _register_projectile(projectile: Node2D, network_id: int, direction: Vector2) -> void:
+	projectiles.append(projectile)
+	var instance_id := projectile.get_instance_id()
+	_projectile_network_ids[instance_id] = network_id
+	projectile_directions[instance_id] = direction
+	_projectile_states[network_id] = {"node": projectile, "instance_id": instance_id}
+
+func _valid_projectile_target(candidate: Variant) -> bool:
+	if not is_instance_valid(candidate) or not (candidate is Node2D) or candidate.is_queued_for_deletion():
+		return false
+	if not _is_target_valid(candidate):
+		return false
+	return candidate.global_position.is_finite() and (not (candidate is PLAYER_SCRIPT) or not candidate._combat_removed)
+
+func _seed_target_history(state: Dictionary) -> void:
+	state["target_id"] = target.get_instance_id() if _valid_projectile_target(target) else 0
+	state["target_position"] = target.global_position if _valid_projectile_target(target) else Vector2.ZERO
+	state["target_reset"] = int(target.get_meta("combat_position_reset_generation", 0)) if _valid_projectile_target(target) else 0
+
+func _projectile_room_bounds() -> Rect2:
+	var bounds := EnemyReplicationService.get_current_room_bounds()
+	return bounds if bounds.has_area() else Rect2(-arena_size * 0.5, arena_size)
+
 func _process_projectiles(delta: float) -> void:
-	var completed_projectiles: Array[Node2D] = []
-	var projectile_visual_changed := false
-	
-	for projectile in projectiles:
-		if not is_instance_valid(projectile):
-			projectile_directions.erase(projectile.get_instance_id())
-			completed_projectiles.append(projectile)
-			projectile_visual_changed = true
+	if not network_simulation_enabled or _projectile_states.is_empty() or not is_finite(delta) or delta <= 0.0:
+		return
+	var reseed_history := _projectile_history_interrupted
+	_projectile_history_interrupted = false
+	var generation := _projectile_generation
+	var bounds := _projectile_room_bounds()
+	var room_id := EnemyReplicationService._current_room_sync_id()
+	# Enemy bodies do not stop arrows. Exclude them in the same query so a
+	# nearer enemy cannot hide real cover further along a long frame's segment.
+	var ignored: Array[RID] = []
+	for enemy in get_tree().get_nodes_in_group("enemies"):
+		if is_instance_valid(enemy) and enemy is CollisionObject2D:
+			ignored.append(enemy.get_rid())
+	var hit_target: Node2D = target if _valid_projectile_target(target) else null
+	if hit_target is CollisionObject2D:
+		ignored.append(hit_target.get_rid())
+	for network_id in _projectile_states.keys():
+		if generation != _projectile_generation or is_queued_for_deletion():
+			return
+		var state := _projectile_states[network_id] as Dictionary
+		var projectile: Variant = state.get("node")
+		if not is_instance_valid(projectile) or projectile.is_queued_for_deletion() or int(state.get("room", room_id)) != room_id:
+			_remove_projectile(network_id)
 			continue
-
-		var projectile_direction: Vector2 = projectile_directions.get(projectile.get_instance_id(), arrow_direction)
-		
-		# Move projectile
-		var old_position := projectile.global_position
-		projectile.global_position += projectile_direction * projectile_speed * delta
-		if projectile.global_position.distance_squared_to(old_position) > 0.0001:
-			projectile_visual_changed = true
-		
-		# Check for environmental collision using raycast
-		var space_state := get_world_2d().direct_space_state
-		var query := PhysicsRayQueryParameters2D.create(old_position, projectile.global_position)
+		var start: Vector2 = projectile.global_position
+		var direction: Vector2 = projectile_directions.get(int(state.instance_id), arrow_direction)
+		var step := direction * projectile_speed * delta
+		if not start.is_finite() or not step.is_finite():
+			_remove_projectile(network_id)
+			continue
+		var source_start: Vector2 = state.get("source_position", global_position)
+		var bounds_changed: bool = state.get("bounds", bounds) != bounds
+		if bounds_changed or reseed_history:
+			# World corrections and movement while arrows were frozen must not
+			# become a continuous target or source segment on the next step.
+			_seed_target_history(state)
+			source_start = global_position
+		var boundary := ARENA_BOUNDARY.sweep(start, step, bounds)
+		if bool(boundary.get("outside", false)) or start.distance_to(source_start) > PROJECTILE_SOURCE_RANGE:
+			_remove_projectile(network_id)
+			continue
+		var stop_fraction := minf(float(boundary.get("fraction", INF)), _range_exit_fraction(start - source_start, step - (global_position - source_start)))
+		var end := start + step * minf(1.0, stop_fraction)
+		var query := PhysicsRayQueryParameters2D.create(start, end)
+		query.exclude = ignored
 		query.collide_with_areas = false
-		var result := space_state.intersect_ray(query)
-		if result:
-			var collider: Object = result.get("collider", null)
-			if collider is Node and (collider as Node).is_in_group("enemies"):
-				continue
-			# Hit something in the environment, despawn
-			projectile.queue_free()
-			completed_projectiles.append(projectile)
-			projectile_visual_changed = true
-			continue
-		
-		# Check hit on player
-		if is_instance_valid(target):
-			var dist_to_player := projectile.global_position.distance_to(target.global_position)
-			if dist_to_player < 28.0:
-				DAMAGEABLE.apply_damage(target, projectile_damage, {"source": "enemy_ability", "ability": "archer_projectile"})
-				projectile.queue_free()
-				completed_projectiles.append(projectile)
-				projectile_visual_changed = true
-				continue
+		query.hit_from_inside = true
+		var terrain := get_world_2d().direct_space_state.intersect_ray(query)
+		if not terrain.is_empty():
+			var distance_fraction := start.distance_to(terrain.position) / maxf(step.length(), 0.000001)
+			stop_fraction = minf(stop_fraction, distance_fraction)
+		var hit_fraction := INF
+		if _valid_projectile_target(hit_target):
+			var target_end := hit_target.global_position
+			var target_start := target_end
+			if int(state.get("target_id", 0)) == hit_target.get_instance_id() and int(state.get("target_reset", -1)) == int(hit_target.get_meta("combat_position_reset_generation", 0)):
+				target_start = state.get("target_position", target_end)
+			hit_fraction = _target_contact_fraction(start - target_start, step - (target_end - target_start))
+		# Cover wins ties. Consume before damage, whose callbacks may destroy
+		# this enemy or clear the whole room and every remaining projectile.
+		if hit_fraction <= 1.0 and hit_fraction < stop_fraction:
+			projectile.global_position = start + step * hit_fraction
+			_remove_projectile(network_id)
+			DAMAGEABLE.apply_damage(hit_target, projectile_damage, {"source": "enemy_ability", "ability": "archer_projectile"})
+		elif stop_fraction <= 1.0:
+			projectile.global_position = start + step * stop_fraction
+			_remove_projectile(network_id)
+		else:
+			projectile.global_position = start + step
+			_seed_target_history(state)
+			state["source_position"] = global_position
+			state["bounds"] = bounds
+	queue_redraw()
 
-		# Despawn when crossing room walls (arena bounds act as walls).
-		var half_arena := arena_size * 0.5
-		if absf(projectile.global_position.x) > half_arena.x or absf(projectile.global_position.y) > half_arena.y:
-			projectile.queue_free()
-			completed_projectiles.append(projectile)
-			projectile_visual_changed = true
-			continue
-		
-		# Remove if too far away
-		if projectile.global_position.distance_to(global_position) > 1200.0:
-			projectile.queue_free()
-			projectile_directions.erase(projectile.get_instance_id())
-			completed_projectiles.append(projectile)
-			projectile_visual_changed = true
-	
-	for projectile in completed_projectiles:
-		var projectile_instance_id := projectile.get_instance_id()
-		projectile_directions.erase(projectile_instance_id)
-		var network_id := int(_projectile_network_ids.get(projectile_instance_id, -1))
-		if network_id > 0:
-			_remote_projectiles_by_network_id.erase(network_id)
-		_projectile_network_ids.erase(projectile_instance_id)
-		projectiles.erase(projectile)
-	if projectile_visual_changed:
-		queue_redraw()
+func _target_contact_fraction(relative_start: Vector2, relative_step: Vector2) -> float:
+	var c := relative_start.length_squared() - PROJECTILE_HIT_RADIUS * PROJECTILE_HIT_RADIUS
+	if c < 0.0:
+		return 0.0
+	var a := relative_step.length_squared()
+	if a <= 0.00000001:
+		return INF
+	var b := relative_start.dot(relative_step)
+	var discriminant := b * b - a * c
+	if discriminant <= 0.0:
+		return INF # Exact tangency remains outside the original strict radius.
+	var fraction := (-b - sqrt(discriminant)) / a
+	return fraction if fraction >= 0.0 and fraction < 1.0 else INF
 
+func _range_exit_fraction(relative_start: Vector2, relative_step: Vector2) -> float:
+	if (relative_start + relative_step).length_squared() <= PROJECTILE_SOURCE_RANGE * PROJECTILE_SOURCE_RANGE:
+		return INF
+	var a := relative_step.length_squared()
+	if a <= 0.00000001:
+		return 0.0
+	var b := relative_start.dot(relative_step)
+	var c := relative_start.length_squared() - PROJECTILE_SOURCE_RANGE * PROJECTILE_SOURCE_RANGE
+	return clampf((-b + sqrt(maxf(0.0, b * b - a * c))) / a, 0.0, 1.0)
 
 func _get_custom_network_runtime_state() -> Dictionary:
 	return {
@@ -255,69 +330,62 @@ func get_priority_network_sync_interval_sec() -> float:
 func get_projectile_network_sync_state() -> Dictionary:
 	if not network_simulation_enabled:
 		return {}
-	var current_network_ids: Dictionary = {}
-	var updates: Array = []
-	for projectile in projectiles:
-		if not is_instance_valid(projectile):
+	var states: Array = []
+	for network_id in _projectile_states:
+		var state := _projectile_states[network_id] as Dictionary
+		var projectile: Variant = state.get("node")
+		if not is_instance_valid(projectile) or projectile.is_queued_for_deletion():
 			continue
-		var projectile_instance_id := projectile.get_instance_id()
-		var network_id := int(_projectile_network_ids.get(projectile_instance_id, -1))
-		if network_id <= 0:
-			network_id = _next_projectile_network_id
-			_next_projectile_network_id += 1
-			_projectile_network_ids[projectile_instance_id] = network_id
-		current_network_ids[network_id] = true
-		var projectile_direction: Vector2 = projectile_directions.get(projectile_instance_id, arrow_direction)
-		updates.append({
-			"id": network_id,
-			"position": projectile.global_position,
-			"direction": projectile_direction
-		})
-	var despawn_ids: Array = []
-	for network_id_variant in _projectile_sync_known_network_ids.keys():
-		var known_network_id := int(network_id_variant)
-		if current_network_ids.has(known_network_id):
-			continue
-		despawn_ids.append(known_network_id)
-	_projectile_sync_known_network_ids = current_network_ids
-	if updates.is_empty() and despawn_ids.is_empty():
+		var direction: Vector2 = projectile_directions.get(int(state.instance_id), arrow_direction)
+		var visual_velocity := Vector2.ZERO if _launch_freezes_projectiles() or _projectile_history_interrupted else direction * projectile_speed
+		states.append([int(network_id), PackedVector2Array([projectile.global_position, visual_velocity])])
+	var active := not states.is_empty()
+	if not active and not _projectile_sync_was_active:
 		return {}
-	return {
-		"updates": updates,
-		"despawn_ids": despawn_ids
-	}
-
+	_projectile_sync_was_active = active
+	_projectile_wire_sequence += 1
+	return {"q": _projectile_wire_sequence, "r": EnemyReplicationService._current_room_sync_id(), "p": states}
 
 func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
 	if network_simulation_enabled:
 		return
-	if sync_state.is_empty():
+	var sequence: Variant = sync_state.get("q")
+	var room_id: Variant = sync_state.get("r")
+	var entries: Variant = sync_state.get("p")
+	if not (sequence is int) or not (room_id is int) or not (entries is Array):
 		return
-	var updates := sync_state.get("updates", []) as Array
-	for projectile_state_variant in updates:
-		if not (projectile_state_variant is Dictionary):
-			continue
-		var projectile_state := projectile_state_variant as Dictionary
-		var network_id := int(projectile_state.get("id", -1))
-		if network_id <= 0:
-			continue
-		var projectile := _remote_projectiles_by_network_id.get(network_id) as Node2D
+	if sequence <= _projectile_received_sequence or room_id != EnemyReplicationService._current_room_sync_id():
+		return
+	var seen := {}
+	for entry in entries:
+		if not (entry is Array) or entry.size() != 2 or not (entry[0] is int) or entry[0] <= 0 or seen.has(entry[0]):
+			return
+		if not (entry[1] is PackedVector2Array) or entry[1].size() != 2 or not entry[1][0].is_finite() or not entry[1][1].is_finite():
+			return
+		seen[entry[0]] = true
+	# Reject malformed packets before advancing sequence or touching live shots.
+	_projectile_received_sequence = sequence
+	for network_id in _projectile_states.keys():
+		if not seen.has(network_id):
+			_remove_projectile(network_id)
+	for entry in entries:
+		var network_id: int = entry[0]
+		var vectors: PackedVector2Array = entry[1]
+		var state := _projectile_states.get(network_id, {}) as Dictionary
+		var projectile: Variant = state.get("node")
 		if not is_instance_valid(projectile):
+			_remove_projectile(network_id)
 			projectile = Node2D.new()
-			if is_instance_valid(get_parent()):
-				get_parent().add_child(projectile)
-			projectiles.append(projectile)
+			get_parent().add_child(projectile)
+			_register_projectile(projectile, network_id, vectors[1].normalized())
 			_remote_projectiles_by_network_id[network_id] = projectile
-			_projectile_network_ids[projectile.get_instance_id()] = network_id
-		var target_position := projectile_state.get("position", projectile.global_position) as Vector2
-		if projectile.global_position.distance_squared_to(target_position) > 2304.0:
-			projectile.global_position = target_position
-		_remote_projectile_target_positions[network_id] = target_position
-		projectile_directions[projectile.get_instance_id()] = projectile_state.get("direction", arrow_direction) as Vector2
-	var despawn_ids := sync_state.get("despawn_ids", []) as Array
-	for despawn_id_variant in despawn_ids:
-		_remove_remote_projectile_by_network_id(int(despawn_id_variant))
-
+			state = _projectile_states[network_id]
+		projectile.global_position = vectors[0]
+		projectile_directions[int(state.instance_id)] = vectors[1].normalized()
+		state["velocity"] = vectors[1]
+		state["room"] = room_id
+	_projectile_visual_lease = PROJECTILE_VISUAL_LEASE if not entries.is_empty() else 0.0
+	queue_redraw()
 
 func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
 	if custom_state.is_empty():
@@ -331,119 +399,61 @@ func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
 		return
 
 
-func _build_projectile_runtime_state() -> Array:
-	var payload: Array = []
-	for projectile in projectiles:
-		if not is_instance_valid(projectile):
-			continue
-		var projectile_instance_id := projectile.get_instance_id()
-		var network_id := int(_projectile_network_ids.get(projectile_instance_id, -1))
-		if network_id <= 0:
-			network_id = _next_projectile_network_id
-			_next_projectile_network_id += 1
-			_projectile_network_ids[projectile_instance_id] = network_id
-		var projectile_direction: Vector2 = projectile_directions.get(projectile_instance_id, arrow_direction)
-		payload.append({
-			"id": network_id,
-			"position": projectile.global_position,
-			"direction": projectile_direction
-		})
-	return payload
-
-
-func _apply_projectile_runtime_state(projectile_runtime_state: Array) -> void:
-	var seen_network_ids: Dictionary = {}
-	for projectile_state_variant in projectile_runtime_state:
-		if not (projectile_state_variant is Dictionary):
-			continue
-		var projectile_state := projectile_state_variant as Dictionary
-		var network_id := int(projectile_state.get("id", -1))
-		if network_id <= 0:
-			continue
-		seen_network_ids[network_id] = true
-		var projectile := _remote_projectiles_by_network_id.get(network_id) as Node2D
-		if not is_instance_valid(projectile):
-			projectile = Node2D.new()
-			if is_instance_valid(get_parent()):
-				get_parent().add_child(projectile)
-			projectiles.append(projectile)
-			_remote_projectiles_by_network_id[network_id] = projectile
-			_projectile_network_ids[projectile.get_instance_id()] = network_id
-		var target_position := projectile_state.get("position", projectile.global_position) as Vector2
-		if not is_instance_valid(projectile):
-			continue
-		if projectile.global_position.distance_squared_to(target_position) > 2304.0:
-			projectile.global_position = target_position
-		_remote_projectile_target_positions[network_id] = target_position
-		projectile_directions[projectile.get_instance_id()] = projectile_state.get("direction", arrow_direction) as Vector2
-
-	var stale_network_ids: Array = []
-	for network_id_variant in _remote_projectiles_by_network_id.keys():
-		var existing_network_id := int(network_id_variant)
-		if seen_network_ids.has(existing_network_id):
-			continue
-		stale_network_ids.append(existing_network_id)
-	for stale_network_id_variant in stale_network_ids:
-		var stale_network_id := int(stale_network_id_variant)
-		var stale_projectile := _remote_projectiles_by_network_id.get(stale_network_id) as Node2D
-		if is_instance_valid(stale_projectile):
-			projectile_directions.erase(stale_projectile.get_instance_id())
-			_projectile_network_ids.erase(stale_projectile.get_instance_id())
-			projectiles.erase(stale_projectile)
-			stale_projectile.queue_free()
-		_remote_projectile_target_positions.erase(stale_network_id)
-		_remote_projectiles_by_network_id.erase(stale_network_id)
-
-
 func _process_network_visuals(delta: float) -> void:
-	if _remote_projectiles_by_network_id.is_empty():
+	if network_simulation_enabled or _projectile_states.is_empty() or not is_finite(delta) or delta <= 0.0:
 		return
-	var projectile_visual_changed := false
-	for network_id_variant in _remote_projectiles_by_network_id.keys():
-		var network_id := int(network_id_variant)
-		var projectile := _remote_projectiles_by_network_id.get(network_id) as Node2D
-		if not is_instance_valid(projectile):
+	_projectile_visual_lease = maxf(0.0, _projectile_visual_lease - delta)
+	if _projectile_visual_lease <= 0.0:
+		_clear_all_projectiles()
+		return
+	var bounds := _projectile_room_bounds()
+	for network_id in _projectile_states.keys():
+		var state := _projectile_states[network_id] as Dictionary
+		var projectile: Variant = state.get("node")
+		if not is_instance_valid(projectile) or int(state.get("room", -1)) != EnemyReplicationService._current_room_sync_id():
+			_remove_projectile(network_id)
 			continue
-		var projectile_direction := projectile_directions.get(projectile.get_instance_id(), arrow_direction) as Vector2
-		var prev_position := projectile.global_position
-		var target_position := _remote_projectile_target_positions.get(network_id, projectile.global_position) as Vector2
-		var step_distance := projectile_speed * delta
-		if projectile.global_position.distance_squared_to(target_position) > step_distance * step_distance * 9.0:
-			projectile.global_position = target_position
-		elif projectile_direction.length_squared() > 0.000001:
-			projectile.global_position += projectile_direction.normalized() * step_distance
+		var start: Vector2 = projectile.global_position
+		var step: Vector2 = state.get("velocity", Vector2.ZERO) * delta
+		if not ARENA_BOUNDARY.sweep(start, step, bounds).is_empty():
+			_remove_projectile(network_id)
 		else:
-			projectile.global_position = target_position
-		if projectile.global_position.distance_squared_to(prev_position) > 0.04:
-			projectile_visual_changed = true
-	if projectile_visual_changed:
-		queue_redraw()
+			projectile.global_position = start + step
+	queue_redraw()
 
+func _remove_projectile(network_id: int) -> void:
+	var state := _projectile_states.get(network_id, {}) as Dictionary
+	var projectile: Variant = state.get("node")
+	var instance_id := int(state.get("instance_id", 0))
+	for index in range(projectiles.size() - 1, -1, -1):
+		if not is_instance_valid(projectiles[index]) or projectiles[index] == projectile:
+			projectiles.remove_at(index)
+	if is_instance_valid(projectile):
+		projectile.queue_free()
+	projectile_directions.erase(instance_id)
+	_projectile_network_ids.erase(instance_id)
+	_remote_projectiles_by_network_id.erase(network_id)
+	_projectile_states.erase(network_id)
 
 func _remove_remote_projectile_by_network_id(network_id: int) -> void:
-	if network_id <= 0:
-		return
-	var projectile := _remote_projectiles_by_network_id.get(network_id) as Node2D
-	if is_instance_valid(projectile):
-		projectile_directions.erase(projectile.get_instance_id())
-		_projectile_network_ids.erase(projectile.get_instance_id())
-		projectiles.erase(projectile)
-		projectile.queue_free()
-	_remote_projectile_target_positions.erase(network_id)
-	_remote_projectiles_by_network_id.erase(network_id)
-
+	_remove_projectile(network_id)
 
 func _clear_all_projectiles() -> void:
-	for projectile in projectiles:
-		if is_instance_valid(projectile):
-			projectile.queue_free()
+	_projectile_generation += 1
+	_projectile_history_interrupted = false
+	for network_id in _projectile_states.keys():
+		_remove_projectile(network_id)
 	projectiles.clear()
 	projectile_directions.clear()
 	_projectile_network_ids.clear()
-	_remote_projectile_target_positions.clear()
 	_remote_projectiles_by_network_id.clear()
-	_projectile_sync_known_network_ids.clear()
+	_projectile_visual_lease = 0.0
+	queue_redraw()
 
+func set_network_simulation_enabled(enabled: bool) -> void:
+	if enabled != network_simulation_enabled:
+		_clear_all_projectiles()
+	super.set_network_simulation_enabled(enabled)
 func _draw() -> void:
 	var body_radius := 12.8
 	var facing := visual_facing_direction if visual_facing_direction.length_squared() > 0.000001 else Vector2.LEFT
