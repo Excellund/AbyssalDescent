@@ -15,10 +15,10 @@ The thread continuation `overnight-abyssaldescent-development` expires at the de
 
 ## Active ownership
 
-- `review_combat_lifecycle`: Breakwater encounter matrix and physics soak complete; testing standalone local telemetry analysis end to end.
-- `review_combat_readability`: Breakwater runtime and GPU fixtures complete; investigating the deferred Warden/Lacuna charge-warning mismatch in isolation.
-- `review_hit_context`: Breakwater combination and ENet checks complete; reviewing learned-power checkpoint restoration and relevant Oath evidence in isolation.
-- Root: independent integration review, regression registration, work log, Git and delivery; local telemetry reader/analyzer implementation.
+- `review_combat_lifecycle`: local analysis tests and bounded Oath audit complete; measuring actual crowded-room cleanup/performance in TEMP.
+- `review_combat_readability`: implementing the reviewed Warden/Lacuna committed-charge correction in TEMP.
+- `review_hit_context`: power snapshot fix promoted; independently verifying legacy boss charge networking/combinations in TEMP.
+- Root: independent review, regression registration, work log, Git and delivery; local telemetry tools complete.
 
 Coordinate overlapping files before editing. Agents do not commit independently.
 
@@ -92,8 +92,24 @@ Build combinations pass 29 checks. Real ENet passes 37 (31 host, 6 joiner) in `a
 
 The first full hook reached 218-script compilation and all new suites, then caught an active audio resource at exit in the existing 106-check boss-combination fixture. Verbose reproduction identified the lazily created shared Ruinous sound, which was being created after that fixture muted its other audio. Initializing it before the existing mute removes the shutdown leak; the same verbose fixture passes cleanly. Production sound behavior is unchanged. The full hook must pass on the corrected fixture before commit.
 
-## Rich local analysis in progress
+## Rich local analysis
 
 A standalone Godot decoder now reads a disposable copy of `run_telemetry.save`, without game autoloads, repair-on-read behavior or uploads. The existing analyzer accepts `-LocalTelemetryPath` and the same explicit build/date/output filters. Explicit debug/mixed/unknown saved provenance is excluded; legacy rows without origin evidence remain disclosed as uncertain. No actual player data or generated report is added to Git.
 
-Read-only evidence: `abyssal-local-events-99e5e803c33a4378bdf6fde9c53bf01d/keeper-direct-report.json` contains the same two `dev-keeper-20260908-225119` runs, now with room, damage and reward-offer coverage. The death run has 14 room entries, 7 damage events, 11 reward choices and 12 offers; the short quit has one offer. These remain descriptive playtest context, not grounds for numerical tuning. End-to-end synthetic tests and documentation are pending before the tooling commit.
+Read-only evidence: `abyssal-local-events-99e5e803c33a4378bdf6fde9c53bf01d/keeper-direct-report.json` contains the same two `dev-keeper-20260908-225119` runs, now with room, damage and reward-offer coverage. The death run has 14 room entries, 7 damage events, 11 reward choices and 12 offers; the short quit has one offer. These remain descriptive playtest context, not grounds for numerical tuning.
+
+End-to-end binary save verification passes 159 checks (`abyssal-local-telemetry-tests-17855bd27c3243ee85b64f0a376bf3c1`), including actual Godot serialization, rich metrics, exact build/date/debug/completion filters, duplicates, 14 incompatible provenance forms, recursive identity removal, malformed input, overwrite safety and exact environment restoration. Review corrected null environment restoration under PowerShell/.NET, typed malformed version rejection and null/numeric/invalid run IDs. The existing workflow passes 40 checks (`abyssal-workflow-tests-3dc924fee47e41f389a106861f80710e`). Usage is in `playtester_telemetry/README.md`; standalone UID came from isolated import `abyssal-reader-import-933ed7a3a2b849d3b813fa73caa5e52c`. Tools are ready for their separate commit.
+
+## Third checkpoint and current desktop build
+
+**`31995f5` is committed and pushed**. The full normal hook passed with 218 compiled scripts in `abyssal-validation-700051488d884314b7fa346f0458c31c`, including the corrected test audio cleanup. A push approval again requested destination proof; fresh authenticated-owner, existing-branch-parent and outgoing-payload checks established authorization, and the same non-force push succeeded.
+
+Normal **`dev-overnight-breakwater-20260909-0038`** now replaces the canonical desktop playtest. SHA256 **`C24FADBB2F00EDEF9F8B847FC55BF232B077B6419049E0CDA5FE6F3ED7EE56AD`**, 114049584 bytes. Export/import/package verification and 26 normal checks passed (`abyssal-executable-smoke-ee17fc36beb1455ea3974d91afd7285f`). All 159 production scripts matched the frozen source snapshot (`abyssal-playtest-export-cccc40bcdcb748789b4d4f7f3545f72f/project`). Desktop hash matches; no game launch or extra desktop filename. This package predates the next snapshot fixes.
+
+## Next reliability increment
+
+Actual World checkpoint/on-disk restore reproduced two omitted properties: Surge Step x2 retains its stacks but loses dash speed (890 to 720), and maxed/Prismatic Voidfire restores its overheat movement multiplier to .65 instead of .50. The narrow fix saves both values and reconstructs only absent legacy fields from saved upgrades/character defaults; explicit values win and repeated restore cannot add bonuses again. All 395 new checks pass, versus 113 failures with the original code, including all characters/levels/Prismatic, actual motion, World restore and final Oath/history equivalence (`abyssal-breakwater-review-b4245781f3b9465dbe065dc335e36415/test-power-snapshot.log`). The approved player/test/UID changes are now in source and registered for full validation.
+
+A separate bounded Oath review found no established blocker or incorrect award. Hold the Line correctly rejects losing control after acquisition; its pre-acquisition grace has plausible intentional spawn behavior, so no rule is changed. Existing Oath regressions remain green.
+
+The deferred charge-warning review found larger concrete mismatches: at 60 Hz Warden warns to 291 pixels but damages to 447, and Lacuna warns to 134 but damages to 251. Mid-charge enrage and body-induced sliding extend or bend the path further. The approved separate correction snapshots nominal speed/duration before warning, preserves Lacuna's tracking windup, caps straight travel, stops on terrain without shortening the nominal attack timer, and shows the full actual capsule. Enrage changes apply to later charges. Preserve existing one-attempt damage, recovery/cooldown, other attacks and Lacuna seams. Temporary combat-body exceptions must clear on every exit; host/joiner geometry and cleanup need actual ENet/GPU checks. These explicit behavior changes require a focused human boss playtest; do not call difficulty identical. Prototype policy/evidence: `abyssal-breakwater-prototype-bded8e21dd1f4b4895f824b93150fd5b/legacy-charge-policy.md`.

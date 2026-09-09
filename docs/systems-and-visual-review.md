@@ -29,6 +29,7 @@ Branch `codex/overnight-buildcraft-20260909` continues the review alongside Retu
 - Co-op defeat preserves a suspended solo save. Departing peers are unregistered and removed, with enemies retargeted and the host rechecking defeat, reward, intro and retry readiness.
 - Checkpoints and local history preserve original and observed build provenance. Development, debug, mixed-build and unknown-origin runs stay out of submissions; a release host also retains participating development/debug peers' evidence.
 - Crescent, Ruinous, recoil and Orbit now collide with the real arena perimeter, which uses logical clamps rather than physics walls. Room shrink cancels forced motion without creating damage or a shade. Tests include actual world-clamp-before-physics ordering and separate live peers.
+- Resume now preserves Surge Step's dash speed and Voidfire's overheat movement multiplier. Older saves reconstruct those omitted values from their saved upgrades, while explicit values win and repeated restoration cannot stack them again. The actual disk/world restore fixture passes 395 checks; the original code fails 113. This change awaits the next verified checkpoint export.
 
 Full verification and delivery evidence are recorded in the overnight log. Charge-preview length remains a separate issue: mid-charge enrage and the final movement tick require an explicit prediction policy before its warning can be guaranteed accurate.
 

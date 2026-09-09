@@ -144,6 +144,7 @@ try {
         "res://scripts/tests/test_ruinous_feedback.gd",
         "res://scripts/tests/test_returning_crescent.gd",
         "res://scripts/tests/test_power_descriptions.gd",
+        "res://scripts/tests/test_power_snapshot.gd",
         "res://scripts/tests/test_boss_telegraphs.gd",
         "res://scripts/tests/test_lancer_hazards.gd",
         "res://scripts/tests/test_kill_proc_provenance.gd",

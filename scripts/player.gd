@@ -6,6 +6,7 @@ const STATIC_WAKE_TRAIL_RENDERER_SCRIPT := preload("res://scripts/static_wake_tr
 const ARCANA_MOTION_SCRIPT := preload("res://scripts/arcana_motion_controller.gd")
 const RETURNING_CRESCENT_SCRIPT := preload("res://scripts/returning_crescent_controller.gd")
 const BOSS_COMBINATIONS_SCRIPT := preload("res://scripts/boss_combination_controller.gd")
+const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 const UPGRADE_SYSTEM_SCRIPT_PATH := "res://scripts/upgrade_system.gd"
 const UPGRADE_SYSTEM_SCRIPT := preload("res://scripts/upgrade_system.gd")
 const POWER_REGISTRY_SCRIPT := preload("res://scripts/power_registry.gd")
@@ -16,6 +17,8 @@ const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const PLAYER_REPLICATION_SERVICE_SCRIPT := preload("res://scripts/player_replication_service.gd")
 const RUN_SNAPSHOT_VERSION := 1
+const DEFAULT_DASH_SPEED: float = 720.0
+const DEFAULT_VOIDFIRE_OVERHEAT_MOVE_MULT: float = 0.65
 const EXECUTION_EDGE_PROC_DISPLAY_HOLD: float = 0.24
 const INDOMITABLE_OATH_FILL_REQUIREMENT: float = 52.0
 const INDOMITABLE_OATH_PRIMED_REACH_SCALE: float = 1.35
@@ -43,6 +46,7 @@ const RUN_SNAPSHOT_PROPERTIES := [
 	"incoming_damage_taken_mult",
 	"incoming_contact_damage_mult",
 	"max_speed",
+	"dash_speed",
 	"dash_cooldown",
 	"damage",
 	"attack_range",
@@ -133,6 +137,7 @@ const RUN_SNAPSHOT_PROPERTIES := [
 	"voidfire_detonate_ratio",
 	"voidfire_detonate_radius",
 	"voidfire_lockout_duration",
+	"voidfire_overheat_move_mult",
 	"voidfire_heat_per_hit",
 	"voidfire_danger_zone_threshold",
 	"voidfire_danger_zone_heat_gain_mult",
@@ -180,7 +185,7 @@ signal primary_attack_fired
 @export var acceleration: float = 1400.0
 @export var deceleration: float = 1800.0
 @export var turn_boost: float = 1.25
-@export var dash_speed: float = 720.0
+@export var dash_speed: float = DEFAULT_DASH_SPEED
 @export var dash_distance: float = 175.0
 @export var dash_cooldown: float = 0.42
 @export var dash_phase_release_duration: float = 0.1
@@ -362,7 +367,7 @@ var voidfire_danger_zone_amp: float = 0.20
 var voidfire_detonate_ratio: float = 0.80
 var voidfire_detonate_radius: float = 80.0
 var voidfire_lockout_duration: float = 1.8
-var voidfire_overheat_move_mult: float = 0.65
+var voidfire_overheat_move_mult: float = DEFAULT_VOIDFIRE_OVERHEAT_MOVE_MULT
 var voidfire_heat_per_hit: float = 10.0
 var voidfire_danger_zone_threshold: float = 68.0
 var voidfire_danger_zone_heat_gain_mult: float = 0.58
@@ -1517,6 +1522,7 @@ func apply_run_snapshot(snapshot: Dictionary) -> void:
 	var upgrade_stacks := snapshot.get("upgrade_stacks", {}) as Dictionary
 	if is_instance_valid(upgrade_system):
 		upgrade_system.set("upgrade_stacks", upgrade_stacks.duplicate(true))
+	_restore_omitted_power_snapshot_values(properties, upgrade_stacks)
 	set_max_health_and_current(max_health, int(snapshot.get("current_health", max_health)))
 
 	dash_time_left = 0.0
@@ -1555,6 +1561,22 @@ func apply_run_snapshot(snapshot: Dictionary) -> void:
 	_set_dash_phasing(false)
 	velocity = Vector2.ZERO
 	queue_redraw()
+
+func _restore_omitted_power_snapshot_values(properties: Dictionary, upgrade_stacks: Dictionary) -> void:
+	# Older checkpoints saved the learned stacks but omitted these two values.
+	# Rebuild from their acquisition rules, never from a reused player's bonuses.
+	if not properties.has("dash_speed"):
+		var character := CHARACTER_REGISTRY.get_character(active_character_id)
+		var modifiers := character.get("stat_modifiers", {}) as Dictionary
+		var base_speed := float(modifiers.get("dash_speed", DEFAULT_DASH_SPEED))
+		var surge_stacks := maxi(0, int(upgrade_stacks.get("surge_step", 0)))
+		var surge := POWER_REGISTRY_SCRIPT.UPGRADE_BALANCE["surge_step"] as Dictionary
+		dash_speed = base_speed + surge_stacks * float(surge.get("add", 0.0))
+	if not properties.has("voidfire_overheat_move_mult"):
+		voidfire_overheat_move_mult = DEFAULT_VOIDFIRE_OVERHEAT_MOVE_MULT
+		if reward_voidfire and is_instance_valid(upgrade_system):
+			var values := upgrade_system.get_trial_runtime_values("voidfire")
+			voidfire_overheat_move_mult = float(values.get("overheat_move_mult", DEFAULT_VOIDFIRE_OVERHEAT_MOVE_MULT))
 
 func apply_trial_power(reward_id: String) -> void:
 	upgrade_system.apply_trial_power(reward_id)
