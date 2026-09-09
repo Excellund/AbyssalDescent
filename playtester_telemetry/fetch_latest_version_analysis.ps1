@@ -1,11 +1,13 @@
 <#
 .SYNOPSIS
-Read one build's telemetry or local JSON history and write an aggregate report.
+Read one build's telemetry, local telemetry save, or JSON history and write an aggregate report.
 .DESCRIPTION
 From is inclusive and To is exclusive. Dates without offsets are interpreted as
 UTC. LocalHistoryPath accepts run_history.json or a JSON object containing runs.
 Local history does not contain reward offers or per-room damage events; missing
 metrics are reported as unavailable, never inferred from a final build.
+LocalTelemetryPath reads a disposable copy of run_telemetry.save with standalone
+Godot, retaining detailed events without starting the game or uploading data.
 .EXAMPLE
 .\fetch_latest_version_analysis.ps1 -Version 0.7.0 -From 2026-09-01 -To 2026-10-01
 .EXAMPLE
@@ -17,6 +19,8 @@ param(
     [string]$To = '',
     [string]$OutputPath = '',
     [string]$LocalHistoryPath = '',
+    [string]$LocalTelemetryPath = '',
+    [string]$GodotPath = '',
     [switch]$ValidateOnly,
     [switch]$Overwrite
 )
@@ -42,6 +46,13 @@ if ([IO.Path]::GetExtension($OutputPath) -ne '.json') { throw '-OutputPath must 
 if (-not (Test-Path -LiteralPath (Split-Path -Parent $OutputPath) -PathType Container)) { throw 'The output directory must already exist.' }
 if ((Test-Path -LiteralPath $OutputPath) -and -not $Overwrite) { throw 'Output already exists. Choose another path or pass -Overwrite.' }
 $sourceKind = 'supabase'
+if ($LocalHistoryPath -and $LocalTelemetryPath) { throw 'Choose either -LocalHistoryPath or -LocalTelemetryPath, not both.' }
+if ($LocalTelemetryPath) {
+    $LocalTelemetryPath = (Resolve-Path -LiteralPath $LocalTelemetryPath).Path
+    if ([IO.Path]::GetExtension($LocalTelemetryPath) -ne '.save') { throw '-LocalTelemetryPath requires a local telemetry .save file.' }
+    if ($LocalTelemetryPath -eq $OutputPath) { throw 'The analysis output must not overwrite its input telemetry.' }
+    $sourceKind = 'local_telemetry'
+}
 if ($LocalHistoryPath) {
     $LocalHistoryPath = (Resolve-Path -LiteralPath $LocalHistoryPath).Path
     if ([IO.Path]::GetExtension($LocalHistoryPath) -ne '.json') { throw '-LocalHistoryPath requires JSON history or exported JSON telemetry, not a binary .save file.' }
@@ -55,8 +66,20 @@ if ($ValidateOnly) {
 
 $allRuns = New-Object System.Collections.Generic.List[object]
 $seen = @{}
-if ($LocalHistoryPath) {
-    $raw = Get-Content -LiteralPath $LocalHistoryPath -Raw | ConvertFrom-Json
+$excludedProvenanceRuns = 0
+function Test-RunBuildEvidence($Run, [string]$ExpectedVersion) {
+    # Legacy rows keep their recorded version, with missing evidence disclosed.
+    # Explicit provenance must establish one non-debug build for the whole run.
+    if (-not $Run.PSObject.Properties['run_provenance']) { return $true }
+    $evidence = $Run.run_provenance
+    if ($null -eq $evidence -or $evidence -isnot [PSCustomObject]) { return $false }
+    if ($evidence.origin_known -isnot [bool] -or -not $evidence.origin_known -or $evidence.is_debug -isnot [bool] -or $evidence.is_debug) { return $false }
+    return $evidence.versions -is [System.Array] -and $evidence.versions.Count -eq 1 -and [string]$evidence.versions[0] -ceq $ExpectedVersion -and [string]$evidence.origin_version -ceq $ExpectedVersion
+}
+if ($LocalHistoryPath -or $LocalTelemetryPath) {
+    $raw = if ($LocalTelemetryPath) {
+        & (Join-Path $PSScriptRoot 'read_local_telemetry.ps1') -Path $LocalTelemetryPath -GodotPath $GodotPath
+    } else { Get-Content -LiteralPath $LocalHistoryPath -Raw | ConvertFrom-Json }
     if ($null -eq $raw) { throw 'The local history contains no runs.' }
     if ($raw -is [System.Array]) { $candidates = @($raw) }
     elseif ($raw.PSObject.Properties['runs']) { $candidates = @($raw.runs) }
@@ -68,6 +91,7 @@ if ($LocalHistoryPath) {
         $started = [int64]$run.started_at_unix
         if ($started -lt $startUnix -or $started -ge $windowEndUnix) { continue }
         if ([string]$run.outcome -in @('', 'in_progress', 'debug')) { continue }
+        if (-not (Test-RunBuildEvidence $run $Version)) { $excludedProvenanceRuns++; continue }
         $runId = [string]$run.run_id
         if (-not $runId) { $runId = [string]$run.id }
         if ($runId -and $seen.ContainsKey($runId)) { continue }
@@ -104,6 +128,7 @@ if ($LocalHistoryPath) {
             if ($started -lt $startUnix -or $started -ge $endUnix -or [string]$run.game_version -cne $Version -or [bool]$run.is_debug) {
                 throw 'The telemetry RPC returned a run outside the requested scope.'
             }
+            if (-not (Test-RunBuildEvidence $run $Version)) { throw 'The telemetry RPC returned incompatible build provenance.' }
             if ($started -lt $minStarted) { $minStarted = $started }
             $runId = [string]$run.run_id
             if (-not $runId) { throw 'The telemetry RPC returned a run without an ID.' }
@@ -124,10 +149,12 @@ if ($LocalHistoryPath) {
 $runs = $allRuns.ToArray()
 if ($runs.Count -eq 0) { throw "No completed non-debug runs found for $Version in the requested UTC window." }
 $coverage = [ordered]@{}
-foreach ($field in @('damage_events', 'room_entries', 'reward_choices', 'reward_offers', 'door_choices', 'build_summary', 'equipped_catalyst_ids', 'ascension_rank', 'is_multiplayer', 'full_run_tracking_complete')) {
+foreach ($field in @('damage_events', 'room_entries', 'reward_choices', 'reward_offers', 'door_choices', 'build_summary', 'equipped_catalyst_ids', 'ascension_rank', 'is_multiplayer', 'full_run_tracking_complete', 'run_provenance')) {
     $coverage[$field] = @($runs | Where-Object { $null -ne $_.PSObject.Properties[$field] }).Count
 }
 $limitations = New-Object System.Collections.Generic.List[string]
+if ($excludedProvenanceRuns -gt 0) { $limitations.Add("Excluded $excludedProvenanceRuns local rows with debug, mixed, or unknown build provenance.") }
+if ($coverage.run_provenance -lt $runs.Count) { $limitations.Add('Some legacy runs lack saved origin evidence. Their recorded version is used; cross-build resume cannot be verified.') }
 if ($runs.Count -lt 5) { $limitations.Add('Fewer than five runs: use individual playtest evidence, not numerical balance conclusions.') }
 elseif ($runs.Count -lt 10) { $limitations.Add('Fewer than ten runs: treat aggregate patterns as tentative.') }
 if ($Version -eq 'dev') { $limitations.Add('The version dev does not identify a patch. Compare dates and manual playtest notes; do not assume all dev runs used the same code.') }
@@ -438,13 +465,14 @@ if ($cohorts.Count -gt 1) { $limitations.Add('The sample spans different difficu
 $sampleStart = ($runs | Measure-Object started_at_unix -Minimum).Minimum
 $sampleEnd = ($runs | Measure-Object ended_at_unix -Maximum).Maximum
 $report = [ordered]@{
-    generated_at_utc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss')
+    generated_at_utc = [DateTime]::UtcNow.ToString('yyyy-MM-dd HH:mm:ss', [Globalization.CultureInfo]::InvariantCulture)
     source = $sourceKind
     game_version = $Version
     # Retained for existing report readers; this is the explicitly chosen version.
     latest_version = $version
     window = [ordered]@{ from_utc = $fromDate.ToString('o'); to_exclusive_utc = $toDate.ToString('o'); include_debug = $false }
     sample = [ordered]@{
+        excluded_local_provenance_rows = $excludedProvenanceRuns
         first_started_at_utc = [DateTimeOffset]::FromUnixTimeSeconds([int64]$sampleStart).ToString('o')
         last_ended_at_utc = [DateTimeOffset]::FromUnixTimeSeconds([int64]$sampleEnd).ToString('o')
         median_duration_seconds = [math]::Round((Get-Percentile $durationArr 0.5), 2)

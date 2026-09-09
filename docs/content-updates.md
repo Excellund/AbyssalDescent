@@ -6,7 +6,7 @@ Open **AbyssalDescent Playtest.exe** on the desktop (`C:/Users/mikel/Desktop/Aby
 
 The delivery workflow uses `.github/scripts/export_playtest.ps1` for a normal build, which starts at the menu with regular saves and no debug grants. Add `-DebugRun` for the debug preset: Bastion on Delver with both new Arcana at level 3 and both new boss rewards at level 2, using a separate persistent debug save directory. Switching modes replaces the executable while keeping the two save sets separate.
 
-`.github/scripts/start_debug_playtest.ps1` exports the debug build and launches that same desktop executable. Debug delivery uses the packaged desktop game; temporary source sessions remain validation tools. Both export modes are verified. The desktop file currently contains normal build `dev-combat-review-20260908-231125`: regular menu and progression, with no debug powers granted. Its verified SHA256 is `2C2D83E79B3701512DC13F834706CE4FFF976A58241160FD836589A43D00C676`.
+`.github/scripts/start_debug_playtest.ps1` exports the debug build and launches that same desktop executable. Debug delivery uses the packaged desktop game; temporary source sessions remain validation tools. Both export modes are verified. The desktop file currently contains normal build `dev-overnight-breakwater-20260909-0038`: regular menu and progression, with no debug powers granted. Its verified SHA256 is `C24FADBB2F00EDEF9F8B847FC55BF232B077B6419049E0CDA5FE6F3ED7EE56AD`.
 
 At an agreed checkpoint, verify the completed work, commit and push it, and replace this file with a normal build. Keep debug builds for requested focused tests. The standing workflow is recorded in the repository's `AGENTS.md`.
 
@@ -64,11 +64,21 @@ Melee swings stay at the hit position during recoil and orbit. Empowered attack 
 
 Try pausing inside a Weaver web, opening Build Details and Pause together, flanking Shielders in co-op, and attacking while moving with recoil or Orbit. This is an initial correction pass; the broader review continues in [systems-and-visual-review.md](systems-and-visual-review.md).
 
+## Overnight: Returning Crescent and Breakwater
+
+The overnight branch adds **Returning Crescent**: accepted attacks send a blade outward, then moving changes its return path. Level 2 allows two active blades; level 3 adds one outward ricochet from cover or the arena edge. Each enemy can be hit once on each leg. Ruinous Impact now shows attached launch streaks, compression brackets and the actual burst radius. Held attacks queued through a dash arm Blast only after the strike succeeds.
+
+The same checkpoint corrects Lacuna warning shapes/lifetimes, Lancer floor damage in co-op, secondary kill-proc consistency, room-edge collisions, co-op departure and checkpoint isolation. Saved build provenance survives resume and co-op participation, keeping development/debug/mixed or unknown-origin runs local. Reward descriptions and resizing were checked against their actual behavior. Full evidence and the next content increment are in [overnight-development-20260909.md](overnight-development-20260909.md).
+
+**Apex Breakwater** adds a fourth optional Apex encounter from depth 5. Bait its locked charge toward the arena edge, leave the lane, and use its longer recovery after impact. It stays vulnerable throughout; the open plates and cyan core show recovery. It uses the existing Arcana reward and needs no particular power to beat. [Fight details](apex-breakwater.md) include starting values and verification.
+
+Try moving to change Crescent's return path and using your movement build around Breakwater's committed lane. The main questions are whether these create useful positioning decisions and whether the warnings and recovery are clear.
+
 ## Baseline and feedback
 
 The September 1–9 UTC query for release `0.6.0` returned 35 runs: 15 clears, 19 deaths, and one quit. All were solo. Five September 8 local `dev` runs were analyzed separately; their plain version label cannot identify the exact patch. The saved May report remains historical context. No existing power tuning was changed solely from these samples.
 
-Use `playtester_telemetry/fetch_latest_version_analysis.ps1` with explicit `-Version`, `-From`, and `-To`, and a separate output file. Optional `-LocalHistoryPath` reads local runs. Keep development and release populations separate.
+Use `playtester_telemetry/fetch_latest_version_analysis.ps1` with explicit `-Version`, `-From`, and `-To`, and a separate output file. `-LocalTelemetryPath` reads detailed local events from a disposable copy of `run_telemetry.save`; `-LocalHistoryPath` reads the smaller JSON history. Keep development and release populations separate. [Analysis instructions](../playtester_telemetry/README.md) cover provenance, missing data and sample limitations.
 
 The main feedback is brief: were the holds intentional, did the powers change your decisions, and which combination felt worth building around? There is no live Oath checklist or performance prompt.
 
