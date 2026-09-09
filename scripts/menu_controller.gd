@@ -697,6 +697,8 @@ func _should_autostart_debug_encounter() -> bool:
 		return false
 	if not bool(debug_values.get("enabled", false)):
 		return false
+	if not bool(debug_values.get("autostart_from_menu", true)):
+		return false
 	var encounter_value: Variant = debug_values.get("start_encounter", null)
 	if encounter_value == null:
 		return false
@@ -714,6 +716,7 @@ func _read_main_debug_settings_values() -> Dictionary:
 	if debug_settings != null:
 		values = {
 			"enabled": bool(debug_settings.get("enabled")),
+			"autostart_from_menu": bool(debug_settings.get("autostart_from_menu")),
 			"start_encounter": debug_settings.get("start_encounter"),
 			"force_update_prompt_on_menu": bool(debug_settings.get("force_update_prompt_on_menu")),
 			"force_profile_prompt_on_menu": bool(debug_settings.get("force_profile_prompt_on_menu"))
@@ -3346,7 +3349,7 @@ func _passive_short_desc(passive_id: String) -> String:
 		"iron_retort": return "Stand still briefly to Brace. Next attack while Braced: +80% dmg, wider arc, and a shockwave granting Guard. Dashing breaks Brace."
 		"sigil_burst": return "Dashing arms a burst. Your next attack detonates a 70% damage sigil explosion at the target."
 		"veilstep_rhythm": return "Dashing through enemies builds Veilstep shards. At full shards, your next dash releases a high-damage surge wave."
-		"farline_focus": return "Hits inside your farline band and aim lane deal +70% damage. Hits outside deal 30% less — keep distance and hold your angle."
+		"farline_focus": return "Direct attack hits inside your farline band and aim lane deal +70% damage; those outside deal 30% less — keep distance and hold your angle."
 	return ""
 
 func _build_stat_bar(icon_text: String, fill_ratio: float, bar_color: Color) -> Control:

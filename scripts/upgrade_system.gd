@@ -253,10 +253,11 @@ func _reward_flavor_first_desc(is_initial: bool, flavor: String, body: String) -
 	return "[color=#9ab8d8]%s[/color]\n%s%s" % [flavor, _initial_prefix(is_initial), body]
 
 
+# Player-facing terms follow docs/combat-wording.md; internal HIT is not a copy keyword.
 func _power_sentence_template(power_id: String) -> String:
 	match power_id:
 		"first_strike":
-			return "Extra hit damage vs enemies above 80%% HP %s."
+			return "Extra attack damage vs enemies above 80%% HP %s."
 		"heavy_blow":
 			return "Damage %s."
 		"wide_arc":
@@ -270,25 +271,25 @@ func _power_sentence_template(power_id: String) -> String:
 		"iron_skin":
 			return "Armor %s."
 		"battle_trance":
-			return "On hit gain %s move speed for %s."
+			return "On attack hit gain %s move speed for %s."
 		"surge_step":
 			return "Dash speed %s."
 		"heartstone":
 			return "Max HP %s."
 		"bloodpact":
-			return "While below 50%% HP, %s damage on every hit."
+			return "While below 50%% HP, %s damage per attack hit."
 		"severing_edge":
-			return "Bonus damage on hits against enemies below 55%% HP %s."
+			return "Bonus attack damage vs enemies below 55%% HP %s."
 		"wardens_verdict":
-			return "Bonus damage %s; powers 4th-hit burst."
+			return "Bonus damage %s; burst on 4th attack hit."
 		"lacuna_echo":
 			return "Zone power %s, radius %s."
 		"sovereign_tempo":
 			return "Tempo per stack %s."
 		"pillar_convergence":
-			return "Every %s hits, lasts %s, pulses every %s."
+			return "Every %s connected attacks; lasts %s; pulse every %s."
 		"unbroken_oath":
-			return "Damage reduction %s. Fill Oath at %s; next hit deals %s bonus damage."
+			return "Damage reduction %s. Fill Oath at %s; next attack gains %s damage."
 		"edict_of_the_court":
 			return "Push force %s, scatter radius %s."
 		"null_corridor":
@@ -296,29 +297,29 @@ func _power_sentence_template(power_id: String) -> String:
 		"ruinous_impact":
 			return "Strikes launch foes; impacts burst. Bosses burst in place. Damage %s; radius %s."
 		"sovereigns_double":
-			return "After dash, recoil or orbit: shade repeats your next attacks. Echoes %s; damage %s; lasts %s."
+			return "After dash/recoil/orbit: shade echoes next %s attacks at %s damage. Lasts %s."
 		"razor_wind":
 			return "Range %s, damage %s of hit, arc %s."
 		"execution_edge":
-			return "Every %s swings for %s damage."
+			return "Every %s attacks for %s damage."
 		"rupture_wave":
 			return "Radius %s, damage %s of hit. %s"
 		"aegis_field":
 			return "Resist %s for %s, pulse radius %s, cooldown %s."
 		"hunters_snare":
-			return "Slow %s at %s speed, extra hit damage %s. %s"
+			return "Strikes Slow %s at %s speed; %s damage vs Slowed. %s"
 		"phantom_step":
-			return "Damage %s, slow %s."
+			return "Damage %s, Slow %s."
 		"riftpunch":
 			return "Bonus damage %s, window %s, grace %s. %s"
 		"reaper_step":
 			return "Range/speed %s, kill refresh %s. %s"
 		"static_wake":
-			return "Dash: Electric %s Damage/s; lasts %s; radius %s. %s"
+			return "Dash trail: %s Electric Damage/s; lasts %s; radius %s. %s"
 		"storm_crown":
-			return "Every %s Hits: %s Electric jumps; reach %s; damage %s. %s"
+			return "Deal damage %s times: %s lightning jumps; %s range; %s dmg. %s"
 		"wraithstep":
-			return "Mark %s, marked-hit damage %s, cleave %s, lasts %s hits."
+			return "Mark %s; attack bonus %s; cleave %s; lasts %s hits."
 		"voidfire":
 			return "Damage %s, detonate %s, lockout %s. %s"
 		"dread_resonance":
@@ -326,13 +327,13 @@ func _power_sentence_template(power_id: String) -> String:
 		"bloodvow":
 			return "Below %s HP, attacks deal x%s damage."
 		"eclipse_mark":
-			return "Kills mark foes. Radius %s; duration %s; bonus %s of hit; lasts %s hits."
+			return "Kills mark foes. Radius %s; duration %s; attack bonus %s; lasts %s hits."
 		"fracture_field":
-			return "Length %s, damage %s, slow %s."
+			return "Length %s, damage %s, Slow %s."
 		"farline_volley":
 			return "Arc +%s/Volley, +%s dmg/Volley, cap %s. %s"
 		"sigil_chain":
-			return "Radius %s, %s of hit per tick. %s"
+			return "Radius %s, %s of Damage per tick. %s"
 		"blast_drive":
 			return "Hold Attack; release: blast/recoil. Full Damage %s; reach %s. %s"
 		"razor_orbit":
@@ -412,15 +413,15 @@ func _build_upgrade_preview(upgrade_id: String) -> Dictionary:
 func get_power_flavor_text(power_id: String) -> String:
 	match power_id:
 		"wardens_verdict":
-			return "Each consecutive hit deals more bonus damage. The 4th hit detonates a burst that hits nearby enemies."
+			return "Each consecutive attack hit deals more bonus damage. The fourth releases a burst that damages nearby enemies."
 		"lacuna_echo":
 			return "Kills create a void zone that yanks in nearby enemies and pulses damage."
 		"sovereign_tempo":
-			return "Hits build tempo. Ending a dash releases a wave; hits refund dash cooldown."
+			return "Connected attacks build Tempo. Ending a dash releases a wave; enemies damaged by the wave refund dash cooldown."
 		"pillar_convergence":
-			return "Every few damaging hits you enter Convergence, pulsing damage around you until it expires."
+			return "After several attacks connect, you enter Convergence and pulse damage around you until it expires."
 		"unbroken_oath":
-			return "Single hits trickle Oath; multihits scale exponentially. Fill the bar, then unleash a massive sword strike."
+			return "Attacks build Oath faster when they damage several foes. Fill the bar to empower your next attack."
 		"edict_of_the_court":
 			return "Kills detonate a force pulse at the kill position, pushing nearby enemies outward."
 		"null_corridor":
@@ -432,39 +433,39 @@ func get_power_flavor_text(power_id: String) -> String:
 		"razor_wind":
 			return "Each swing extends a slicing arc that only strikes enemies past your normal melee reach."
 		"execution_edge":
-			return "Every few swings, an execution strike multiplies hit damage."
+			return "Every few attacks, an execution strike multiplies attack damage."
 		"rupture_wave":
-			return "Hits send a shockwave rippling outward, damaging all nearby enemies."
+			return "Attack hits send out shockwaves that damage nearby enemies."
 		"aegis_field":
-			return "Periodically emits a guard pulse that slows nearby enemies and grants brief damage resistance."
+			return "Periodically emits a guard pulse that Slows nearby enemies and grants brief damage resistance."
 		"hunters_snare":
-			return "Hits slow enemies. Striking slowed targets deals extra hit damage."
+			return "Your attacks Slow foes. Attack a Slowed foe for bonus damage; any source of Slow can prepare it."
 		"phantom_step":
-			return "Dashing through enemies deals damage and leaves them slowed."
+			return "Dashing through enemies deals damage and leaves them Slowed."
 		"riftpunch":
-			return "Ending a dash primes a finisher: your next melee hit deals bonus damage and grants brief contact grace."
+			return "Ending a dash primes your next melee or charged Blast hit for bonus damage and brief contact grace."
 		"reaper_step":
 			return "Kills fully refresh your dash. Dash range and speed scale together."
 		"static_wake":
-			return "Dash leaves an Electric ribbon. Overlapping sections share damage; no attack is needed."
+			return "Dashing leaves a trail of Electric damage. No attack is needed."
 		"storm_crown":
-			return "Damaging Hit contacts build a chain discharge. Fields, dash effects and echoes can contribute."
+			return "Dealing damage charges chain lightning. Attacks, dash effects, projectiles, fields and echoes can contribute."
 		"wraithstep":
-			return "Dash marks enemies. Marked hits deal extra hit damage and chain-splash nearby foes."
+			return "Dash marks enemies. Attack hits against marked foes deal bonus damage and splash nearby foes."
 		"voidfire":
-			return "Heat attacks. Danger Zone boosts hit damage. At cap, overheat detonates and briefly locks attacks."
+			return "Connected attacks build Heat. The Danger Zone boosts attack damage; overheating detonates and briefly locks attacks."
 		"dread_resonance":
-			return "Chain hits on one enemy build resonance. Swapping targets resets to 1."
+			return "Repeated direct attack hits on one enemy build resonance. Striking another target resets it to 1."
 		"bloodvow":
 			return "While wounded, every strike hits harder. Lower HP, bigger windows."
 		"eclipse_mark":
-			return "Kills inflicted by hits mark nearby enemies. Marked hits deal bonus damage until the mark is spent."
+			return "Kills mark nearby foes. Attack hits against marked foes deal bonus damage until the mark is spent."
 		"fracture_field":
-			return "Kills inflicted by hits rupture fault lines from the slain enemy, striking enemies along each line."
+			return "Kills rupture fault lines from the slain enemy, damaging and Slowing enemies along each line."
 		"farline_volley":
-			return "Hits at the edge of your reach build Volley: wider arc and flat bonus damage. Dashing resets stacks."
+			return "Direct attack hits near the edge of your reach build Volley: wider attacks and bonus damage. Dashing resets stacks."
 		"sigil_chain":
-			return "Hits charge a sigil. The next strike drops a brief zone — chain zones to compound damage."
+			return "Direct attack hits charge a sigil. Your next direct attack hit places a damaging zone; chain zones to compound damage."
 		"blast_drive":
 			return "Hold Attack, then release a short, narrow blast that launches you backward. Taps still strike immediately."
 		"razor_orbit":
@@ -674,7 +675,7 @@ func get_trial_power_card_description(power_id: String) -> String:
 			var speed_stat := _stat("%.0f%%", float(cur.get("slow_mult", 1.0)) * 100.0, float(next_values.get("slow_mult", 1.0)) * 100.0, is_initial)
 			var bonus_stat := _stat("+%d", int(cur.get("bonus_damage", 0)), int(next_values.get("bonus_damage", 0)), is_initial)
 			var hs_unlock := _const(_hunters_snare_unlocks_for_stack(next_stack))
-			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [slow_stat, speed_stat, bonus_stat, hs_unlock], "reward_card"))
+			return _power_sentence(id, [slow_stat, speed_stat, bonus_stat, hs_unlock], "reward_card")
 		"phantom_step":
 			var damage_stat := _stat("%d", int(cur.get("damage", 0)), int(next_values.get("damage", 0)), is_initial)
 			var slow_stat := _stat("%.2fs", float(cur.get("slow_duration", 0.0)), float(next_values.get("slow_duration", 0.0)), is_initial)
@@ -695,13 +696,13 @@ func get_trial_power_card_description(power_id: String) -> String:
 			var wake_life_stat := _stat("%.2fs", float(cur.get("lifetime", 0.0)), float(next_values.get("lifetime", 0.0)), is_initial)
 			var wake_radius_stat := _stat("%.0f", float(cur.get("trail_radius", 28.0)), float(next_values.get("trail_radius", 28.0)), is_initial)
 			var sw_unlock := _const(_static_wake_unlocks_for_stack(next_stack))
-			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [wake_damage_stat, wake_life_stat, wake_radius_stat, sw_unlock], "reward_card"))
+			return _power_sentence(id, [wake_damage_stat, wake_life_stat, wake_radius_stat, sw_unlock], "reward_card")
 		"storm_crown":
 			var every_stat := _stat("%d", int(cur.get("proc_every", 1)), int(next_values.get("proc_every", 1)), is_initial)
 			var targets_stat := _stat("%d", int(cur.get("chain_targets", 1)), int(next_values.get("chain_targets", 1)), is_initial)
 			var radius_stat := _stat("%.0f", float(cur.get("chain_radius", 0.0)), float(next_values.get("chain_radius", 0.0)), is_initial)
 			var damage_stat := _stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0, float(next_values.get("damage_ratio", 0.0)) * 100.0, is_initial)
-			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [every_stat, targets_stat, radius_stat, damage_stat, _const(_storm_crown_unlocks_for_stack(next_stack))], "reward_card"))
+			return _power_sentence(id, [every_stat, targets_stat, radius_stat, damage_stat, _const(_storm_crown_unlocks_for_stack(next_stack))], "reward_card")
 		"wraithstep":
 			var mark_stat := _stat("%.2fs", float(cur.get("mark_duration", 0.0)), float(next_values.get("mark_duration", 0.0)), is_initial)
 			var bonus_stat := _stat("+%d", int(cur.get("bonus_damage", 0)), int(next_values.get("bonus_damage", 0)), is_initial)
@@ -760,7 +761,7 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 	var flavor := get_power_flavor_text(id)
 	match id:
 		"first_strike":
-			return "[color=#c8daf0]Extra hit damage vs enemies above 80%% HP:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
+			return "[color=#c8daf0]Extra attack damage vs enemies above 80%% HP:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
 		"heavy_blow":
 			return "[color=#c8daf0]Damage:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [int(cur_val), int(next_val)]
 		"wide_arc":
@@ -783,7 +784,7 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 			var trance_duration := 1.25
 			if player_reference.get("battle_trance_duration") != null:
 				trance_duration = float(player_reference.get("battle_trance_duration"))
-			return "[color=#c8daf0]On hit:[/color] gain [color=#e8c96a]+%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]+%.0f%%[/color] move speed for [color=#7de882]%.2fs[/color]." % [cur_speed_bonus, next_speed_bonus, trance_duration]
+			return "[color=#c8daf0]On attack hit:[/color] gain [color=#e8c96a]+%.0f%%[/color] [color=#8899aa]->[/color] [color=#7de882]+%.0f%%[/color] move speed for [color=#7de882]%.2fs[/color]." % [cur_speed_bonus, next_speed_bonus, trance_duration]
 		"surge_step":
 			return "[color=#c8daf0]Dash speed:[/color] [color=#e8c96a]%.0f[/color] [color=#8899aa]->[/color] [color=#7de882]%.0f[/color]" % [float(cur_val), float(next_val)]
 		"heartstone":
@@ -791,9 +792,9 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 			var next_max := int(next_val)
 			return "[color=#c8daf0]Max HP:[/color] [color=#e8c96a]%d[/color] [color=#8899aa]->[/color] [color=#7de882]%d[/color]" % [cur_max, next_max]
 		"bloodpact":
-			return "[color=#c8daf0]Below 50%% HP, +damage on every hit:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
+			return "[color=#c8daf0]Below 50%% HP, +damage per attack hit:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
 		"severing_edge":
-			return "[color=#c8daf0]Bonus damage on hits against enemies below 55%% HP:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
+			return "[color=#c8daf0]Bonus attack damage vs enemies below 55%% HP:[/color] [color=#e8c96a]+%d[/color] [color=#8899aa]->[/color] [color=#7de882]+%d[/color]" % [int(cur_val), int(next_val)]
 		"wardens_verdict":
 			var is_initial := int(cur_val) == 0
 			var stat := _stat("+%d", int(cur_val), int(next_val), is_initial)
@@ -958,12 +959,12 @@ func _rupture_wave_unlocks_for_stack(stack_count: int) -> String:
 
 func _static_wake_unlocks_for_stack(stack_count: int) -> String:
 	if stack_count >= 3:
-		return "%d ribbons; Slow." % STATIC_WAKE.MAX_RIBBONS
-	return "%d ribbons." % STATIC_WAKE.MAX_RIBBONS
+		return "%d trails; Slows." % STATIC_WAKE.MAX_RIBBONS
+	return "%d trails." % STATIC_WAKE.MAX_RIBBONS
 
 
 func _storm_crown_unlocks_for_stack(stack_count: int) -> String:
-	return "+1 Slowed; 1/action." if stack_count >= 2 else "1/action."
+	return "Slow +1 jump; 1/action." if stack_count >= 2 else "1/action."
 
 func _reaper_step_unlocks_for_stack(stack_count: int) -> String:
 	if stack_count >= 3:
@@ -974,9 +975,9 @@ func _reaper_step_unlocks_for_stack(stack_count: int) -> String:
 
 func _hunters_snare_unlocks_for_stack(stack_count: int) -> String:
 	if stack_count >= 3:
-		return "+aoe +2x slow"
+		return "Area bonus; Slow time x2."
 	if stack_count >= 2:
-		return "+aoe"
+		return "Area bonus."
 	return ""
 
 func _voidfire_unlocks_for_stack(stack_count: int) -> String:
@@ -1030,7 +1031,7 @@ func _get_trial_prismatic_blurb(power_id: String) -> String:
 		"razor_wind":
 			return "wider arcs, harder crescents"
 		"execution_edge":
-			return "every hit lands a finisher strike"
+			return "every attack is an execution strike"
 		"rupture_wave":
 			return "shockwaves hit as hard as the blow"
 		"aegis_field":

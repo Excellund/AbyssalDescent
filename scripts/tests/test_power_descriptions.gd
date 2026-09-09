@@ -83,18 +83,21 @@ func _test_boon_current_values() -> void:
 	_free_world()
 
 func _test_complete_changed_cards() -> void:
-	for power_id in ["eclipse_mark", "null_corridor"]:
+	for power_id in ["eclipse_mark", "null_corridor", "static_wake", "storm_crown", "hunters_snare", "sovereigns_double"]:
 		_make_world()
-		var levels := 4 if power_id == "eclipse_mark" else 2
+		var trial: bool = REGISTRY.TRIAL_POWER_DEFINITIONS.has(power_id)
+		var levels := 4 if trial else 2
 		for level in range(1, levels + 1):
-			var trial: bool = power_id == "eclipse_mark"
 			var preview := player.get_trial_power_card_desc(power_id) if trial else player.get_upgrade_card_desc(power_id)
 			_check(DESCRIPTION_GUARD.visible_length(preview) <= 109, "%s L%d complete card fits with all controls and metrics" % [power_id, level])
 			if trial:
 				player.apply_trial_power(power_id)
 			else:
 				player.apply_upgrade(power_id)
-			_check(_text(power_id).length() <= 109, "%s L%d complete current text fits" % [power_id, level])
+			# Build details may add a separate explanatory paragraph above the capped stat sentence.
+			var current_lines := _text(power_id).split("\n")
+			var current_sentence := String(current_lines[current_lines.size() - 1]).strip_edges()
+			_check(current_sentence.length() <= 109, "%s L%d complete current stat sentence fits" % [power_id, level])
 		_free_world()
 
 func _test_returning_crescent_descriptions() -> void:

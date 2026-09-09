@@ -38,6 +38,7 @@ var failures: Array[String] = []
 var debug_run: bool = false
 var configured_main: String = ""
 var result: Dictionary = {}
+var retired_audio: Array[WeakRef] = []
 
 func check(condition: bool, message: String) -> void:
     checks += 1
@@ -47,6 +48,7 @@ func check(condition: bool, message: String) -> void:
 
 func _initialize() -> void:
     print("[Smoke] Initializing external executable probe")
+    node_added.connect(observe_audio)
     debug_run = OS.get_environment("ABYSSAL_SMOKE_DEBUG") == "1"
     configured_main = str(ProjectSettings.get_setting("application/run/main_scene", ""))
     var sandbox: String = OS.get_environment("ABYSSAL_SMOKE_ROOT").replace("\\", "/").trim_suffix("/").to_lower()
@@ -89,6 +91,7 @@ func run_probe() -> void:
         if node != null:
             check(not "validation_fixture" in node.get_script().resource_path, "Autoload must use the production script: " + singleton)
     var expected_main: String = "res://scenes/Main.tscn" if debug_run else "res://scenes/Menu.tscn"
+    check((root.get_node_or_null("DebugPlaytestBootstrap") != null) == debug_run, "Character-access bootstrap must exist only in the debug artifact")
     check(configured_main == expected_main, "Packaged default scene must match the requested mode")
     check(ResourceLoader.exists(configured_main, "PackedScene"), "Packaged default scene must exist")
     var packed: PackedScene = load("res://scenes/Main.tscn") as PackedScene
@@ -107,30 +110,60 @@ func run_probe() -> void:
         finish()
         return
     check(bool(settings.get("apply_test_powers_on_start")), "Debug scene must apply its starting powers")
+    check(not bool(settings.get("autostart_from_menu")), "Debug playtest must allow returning to the character-selection Menu")
     check(bool(settings.get("skip_starting_boon_selection")), "Debug scene must enter a room without a starting reward screen")
     check(int(settings.get("start_bearing")) == 1, "Debug scene must select Delver")
+    var context: Node = root.get_node("RunContext")
+    var available: Array = context.get_unlocked_character_ids()
+    for character_id: String in ["bastion", "hexweaver", "veilstrider", "riftlancer"]:
+        check(available.has(character_id), "Debug profile must expose character selection: " + character_id)
     root.add_child(world)
     print("[Smoke] Packaged gameplay startup finished")
     current_scene = world
-    for frame in 8:
-        await process_frame
+    check(await wait_until(func(): return is_instance_valid(world.get("player")) and get_nodes_in_group("enemies").size() >= 5), "Debug startup must finish spawning its initial encounter")
     var player: Node = world.get("player")
     check(is_instance_valid(player) and player.is_inside_tree(), "Debug startup must create a live player")
     if is_instance_valid(player):
-        var levels: Dictionary = {"returning_crescent_stacks": 3, "blast_drive_stacks": 3, "razor_orbit_stacks": 3, "ruinous_impact_stacks": 2, "sovereigns_double_stacks": 2}
+        var levels: Dictionary = {"static_wake_stacks": 1, "storm_crown_stacks": 2, "hunters_snare_stacks": 1, "sovereigns_double_stacks": 1}
         result["powers"] = {}
         for property: String in levels:
             result["powers"][property] = player.get(property)
             check(int(player.get(property)) == int(levels[property]), "Live player power level: " + property)
-        check(bool(player.get("reward_blast_drive")) and bool(player.get("reward_razor_orbit")), "Both motion Arcana must be enabled on the live player")
-        check(bool(player.get("reward_returning_crescent")), "Returning Crescent must be enabled on the live player")
+        check(bool(player.get("reward_static_wake")) and bool(player.get("reward_storm_crown")) and bool(player.get("reward_hunters_snare")), "The live player must have dash ribbons, electric chains and a deliberate Slow source")
+        check(not bool(player.get("reward_returning_crescent")) and not bool(player.get("reward_blast_drive")) and not bool(player.get("reward_razor_orbit")) and int(player.get("ruinous_impact_stacks")) == 0, "The focused electricity preset must not add unrelated damage or motion powers")
     check(int(world.get("current_difficulty_tier")) == 1, "Live run must use Delver")
     check(str(world.get("current_character_id")) == "bastion", "Fresh debug run must use Bastion")
     check(not bool(world.get("is_multiplayer")), "Debug run must be local")
-    check(str(world.get("current_room_label")) == "Apex Breakwater", "Debug startup must enter Apex Breakwater")
-    check(int(world.get("room_depth")) == 5, "Debug startup must use Breakwater's intended depth")
+    check(str(world.get("current_room_label")) == "Undertow", "Electricity debug startup must enter the standard Undertow encounter")
+    check(int(world.get("room_depth")) == 10, "Electricity debug startup must begin at its configured depth")
+    # The normal biome roll can change this encounter's population (The
+    # Crumble increases three Chasers to four). Resolve the same live builder
+    # configuration without consuming the run's future layout/random choices.
+    var saved_rng_state: int = world.rng.state
+    var resolved_profile: Dictionary = world._build_debug_encounter_profile("undertow", int(world.room_depth))
+    resolved_profile = world._apply_debug_mutator_override(resolved_profile)
+    world.rng.state = saved_rng_state
+    var expected_enemy_types: Dictionary = {}
+    for enemy_type: String in world.enemy_spawner.scripts:
+        var expected_count: int = world.enemy_spawner._profile_count_for_enemy_type(resolved_profile, enemy_type)
+        if expected_count > 0:
+            var enemy_script: Script = world.enemy_spawner.scripts[enemy_type]
+            expected_enemy_types[enemy_script.resource_path] = expected_count
     var enemies: Array[Node] = get_nodes_in_group("enemies")
-    check(enemies.size() == 1 and enemies[0].get_script().resource_path == "res://scripts/enemy_breakwater.gd", "Debug startup must spawn the actual Breakwater")
+    var enemy_types: Dictionary = {}
+    result["biome_id"] = world.encounter_profile_builder.active_biome.get("id", "")
+    result["biome_enemy_weights"] = world.encounter_profile_builder.active_biome.get("enemy_weight_overrides", {})
+    result["expected_enemy_types"] = expected_enemy_types
+    result["enemy_instances"] = []
+    var current_room_actors: bool = true
+    for enemy: Node in enemies:
+        var path: String = enemy.get_script().resource_path
+        enemy_types[path] = int(enemy_types.get(path, 0)) + 1
+        result["enemy_instances"].append({"script": path, "queued_for_deletion": enemy.is_queued_for_deletion(), "path": str(enemy.get_path())})
+        current_room_actors = current_room_actors and not enemy.is_queued_for_deletion() and enemy.get_parent() == world
+    result["enemy_types"] = enemy_types
+    check(current_room_actors, "Initial enemies must belong to the current room and not await deletion")
+    check(not expected_enemy_types.is_empty() and enemy_types == expected_enemy_types and enemies.size() == int(world.active_room_enemy_count), "Debug Undertow live roster must exactly match the resolved Delver/biome profile")
     enemies.clear()
     check(not bool(world.call("_is_reward_selection_active")), "Debug startup must bypass the starting reward screen")
     check(bool(world.call("_is_debug_boot_session")), "Live run must be identified as debug")
@@ -141,17 +174,111 @@ func run_probe() -> void:
         check(not bool(recorder.get("telemetry_enabled")), "Debug run must not collect telemetry")
     result["difficulty_tier"] = world.get("current_difficulty_tier")
     result["character_id"] = world.get("current_character_id")
-    # Release the inspected tree before quitting so probe references cannot
-    # create false leak reports while the engine unloads the package.
-    paused = true
+    # Use the actual Abandon -> Menu -> character/Bearing buttons. Directly
+    # replacing Main missed the debug Menu immediately relaunching gameplay.
+    # Onboarding is unrelated to selection; satisfy it in this disposable profile.
+    context.telemetry_consent_asked = true
+    context.set_profile_name("SmokePilot", false)
     recorder = null
     player = null
     settings = null
+    for character_id: String in ["hexweaver", "veilstrider", "riftlancer", "bastion"]:
+        world.pause_menu_controller.open()
+        world.pause_menu_controller.abandon_run_requested.emit()
+        world = null
+        var menu_ready: bool = await wait_until(func(): return menu_is_interactive())
+        check(menu_ready, "Abandon must leave an interactive Menu instead of autostarting: " + character_id)
+        if not menu_ready:
+            result["scene_after_abandon"] = current_scene.scene_file_path if is_instance_valid(current_scene) else ""
+            await clear_current_scene()
+            finish()
+            return
+        check(not current_scene._has_saved_run(), "Abandon must clear the debug checkpoint")
+        check(current_scene.primary_run_button.text == "Begin Descent", "Menu must offer a fresh descent")
+        current_scene.primary_run_button.pressed.emit()
+        var selector_ready: bool = await wait_until(func(): return current_scene.character_selector_panel.is_visible_in_tree() and current_scene.character_selector_panel.modulate.a >= 0.99)
+        check(selector_ready, "Begin Descent must open the actual character selector")
+        if not selector_ready:
+            await clear_current_scene()
+            finish()
+            return
+        var character_index: int = current_scene.character_ids.find(character_id)
+        check(character_index >= 0, "Character selector must contain: " + character_id)
+        if character_index < 0:
+            await clear_current_scene()
+            finish()
+            return
+        var character_button: Button = current_scene.character_buttons[character_index]
+        check(character_button.is_visible_in_tree() and not character_button.disabled, "Character button must be usable: " + character_id)
+        character_button.pressed.emit()
+        character_button = null
+        var bearing_ready: bool = await wait_until(func(): return current_scene.difficulty_selector_panel.is_visible_in_tree() and current_scene.difficulty_selector_panel.modulate.a >= 0.99 and not current_scene.difficulty_tier_buttons[0].disabled)
+        check(bearing_ready, "Choosing a character must open the actual Bearing selector")
+        if not bearing_ready:
+            await clear_current_scene()
+            finish()
+            return
+        # Only character access is granted. Use the available Pilgrim button;
+        # the debug scene must still apply its Delver encounter override.
+        current_scene.difficulty_tier_buttons[0].pressed.emit()
+        var gameplay_ready: bool = await wait_until(func(): return is_instance_valid(current_scene) and current_scene.scene_file_path == "res://scenes/Main.tscn" and is_instance_valid(current_scene.get("player")))
+        check(gameplay_ready, "Actual character/Bearing buttons must start Main")
+        if not gameplay_ready:
+            await clear_current_scene()
+            finish()
+            return
+        world = current_scene
+        player = world.get("player")
+        check(str(world.get("current_character_id")) == character_id and str(player.get("active_character_id")) == character_id, "New gameplay scene must apply the selected character: " + character_id)
+        check(int(world.get("current_difficulty_tier")) == 1 and str(world.get("current_room_label")) == "Undertow" and int(world.get("room_depth")) == 10, "Character switching must retain the electricity encounter preset")
+        check(int(player.get("static_wake_stacks")) == 1 and int(player.get("storm_crown_stacks")) == 2 and int(player.get("hunters_snare_stacks")) == 1 and int(player.get("sovereigns_double_stacks")) == 1, "Character switching must retain the focused electricity kit")
+        player = null
+    world = null
+    await clear_current_scene()
     packed = null
-    world.queue_free()
-    await process_frame
-    await process_frame
     finish()
+
+func menu_is_interactive() -> bool:
+    if not is_instance_valid(current_scene) or current_scene.scene_file_path != "res://scenes/Menu.tscn":
+        return false
+    return current_scene.primary_run_button.is_visible_in_tree() and not current_scene.primary_run_button.disabled and current_scene.root_panel.modulate.a >= 0.99 and not current_scene._is_profile_prompt_blocked() and not current_scene.profile_name_prompt_layer.visible
+
+func wait_until(predicate: Callable, timeout_seconds: float = 5.0) -> bool:
+    var deadline: int = Time.get_ticks_msec() + int(timeout_seconds * 1000.0)
+    while not predicate.call():
+        if Time.get_ticks_msec() >= deadline:
+            return false
+        await process_frame
+    return true
+
+func clear_current_scene() -> void:
+    paused = true
+    if is_instance_valid(current_scene):
+        current_scene.queue_free()
+        current_scene = null
+    await process_frame
+    await process_frame
+    # Main's mapper cache intentionally lives for the application lifetime.
+    # Retire it only after the final scene, matching other isolated fixtures.
+    check(await wait_until(func(): return audio_has_retired()), "Native audio playback must retire after scene teardown")
+    var mapper: Script = load("res://scripts/power_parameter_mapper.gd")
+    if is_instance_valid(mapper._power_registry_instance):
+        mapper._power_registry_instance.free()
+        mapper._power_registry_instance = null
+
+func observe_audio(node: Node) -> void:
+    if node is AudioStreamPlayer or node is AudioStreamPlayer2D:
+        node.tree_exiting.connect(capture_audio.bind(node))
+
+func capture_audio(node: Node) -> void:
+    if bool(node.call("has_stream_playback")):
+        retired_audio.append(weakref(node.call("get_stream_playback")))
+
+func audio_has_retired() -> bool:
+    for playback: WeakRef in retired_audio:
+        if playback.get_ref() != null:
+            return false
+    return true
 
 func finish() -> void:
     result["checks"] = checks

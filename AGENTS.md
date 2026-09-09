@@ -4,6 +4,13 @@
 
 When the user asks to analyze how to improve a process, speed up work, reduce friction, or keep improving, investigate and implement concrete improvements within the existing task scope. Do not stop at recommendations or ask whether to apply routine, reversible fixes. Verify the changes and report what changed and any remaining limitations. Honor an explicit analysis-only request. Preserve approval boundaries for destructive actions, external communications, and changes in project or creative scope.
 
+## Combat wording
+
+- Follow [the combat wording guide](docs/combat-wording.md) when adding or changing powers, rewards, glossary entries, tutorials or other combat text.
+- **Attack** means the deliberate Attack-control action; **attack hit** means it connects. Use **dealing damage** for any eligible damage source, including dash effects, fields and echoes. Never redefine player-facing Hit to include all damage.
+- **Electric** is a damage property. Describe generators by what they produce and receivers by the properties they accept, such as "when you deal Electric damage". Do not advertise a required named pair or imply unimplemented shared charge mechanics.
+- Preserve each power's actual source, target, timing and repeat limits. Distinguish damage scaling from activation; wording changes must not silently change mechanics. Keep internal `HIT` identifiers and serialized contexts compatible.
+
 ## Checkpoints and playtest delivery
 
 - When the user agrees that the work is at a good checkpoint or asks to commit, finish the relevant verification, commit the completed task changes and push them. Preserve unrelated local work. Do not create release tags unless requested.

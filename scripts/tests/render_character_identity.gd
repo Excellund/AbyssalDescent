@@ -78,7 +78,7 @@ func _run() -> void:
 		member._try_start_dash(Vector2.RIGHT.rotated(float(index) * 0.45))
 		member.velocity = member.dash_direction * member.dash_speed
 		_check(member._is_dash_active(), "Actual dash starts for " + member.active_character_id)
-	await _capture("pool_dash", "CHARACTER IDENTITY / DASH", "Braced shield, contracted glyphs, tapered tails and a folded lance crossbar.")
+	await _capture("pool_dash", "CHARACTER IDENTITY / DASH", "Compact shield, light glyphs, fine dash trails and a slender lance.")
 	Input.action_release("dash")
 	for character_id: String in IDS:
 		_make_party(character_id)
@@ -137,6 +137,8 @@ func _make_party(duplicate_character: String = "") -> void:
 		member.arcana_motion.set_process(false)
 		member.returning_crescent.set_physics_process(false)
 		member.boss_combinations.set_process(false)
+		# Freeze presentation time for deterministic footprint comparisons below.
+		member.static_wake_controller.renderer.set_process(false)
 		var name_label := Label.new()
 		name_label.position = Vector2(-70.0, 55.0)
 		name_label.size = Vector2(140.0, 30.0)
@@ -220,6 +222,35 @@ func _wake_footprint_frames() -> void:
 			union_brightness = _color_distance(crossed.get_pixel(x, y), baseline.get_pixel(x, y))
 	_check(union_brightness < edge_brightness * 0.8, "Interior ribbon boundary disappears inside the union")
 	wake.cancel()
+	_make_ribbon(actor, start, finish)
+	var previous := single
+	for index in range(2):
+		# Exercise the production animation clock, independently from damage time.
+		wake.renderer._process(0.13)
+		var animated: Image = await _capture("wake_static_" + str(index + 1), "ELECTRIC FOOTPRINT / LOCAL STATIC", "White-yellow forks crackle inside the fixed gold footprint; overlaps share the same static.")
+		var changed_pixels := 0
+		var bright_sparks := 0
+		var inspected_pixels := 0
+		for x in range(int(ceil(bounds_start.x)), int(floor(bounds_end.x))):
+			for y in range(int(ceil(bounds_start.y)), int(floor(bounds_end.y))):
+				if Vector2(x, y).distance_to(actor_screen) < 40.0:
+					continue
+				inspected_pixels += 1
+				var pixel := animated.get_pixel(x, y)
+				if _color_distance(pixel, previous.get_pixel(x, y)) > 0.08:
+					changed_pixels += 1
+				if pixel.r > 0.55 and pixel.g > 0.52 and pixel.r > pixel.b:
+					bright_sparks += 1
+		_check(changed_pixels > 20 and changed_pixels < inspected_pixels * 0.28, "Static moves locally without a whole-field flash: %d pixels" % changed_pixels)
+		_check(bright_sparks > 20, "Static contains visible warm-white electrical filaments")
+		_check(_color_distance(_pixel_at(animated, actor.position), _pixel_at(baseline, actor.position)) < 0.008, "Animated static stays below the actor")
+		_check(wake.renderer.get_footprint_bounds().is_equal_approx(expected_bounds), "Animation does not change the damage footprint")
+		for point: Vector2 in [Vector2(0.0, 120.0 + radius + 3.0), Vector2(100.0 + radius + 3.0, 120.0)]:
+			_check(_color_distance(_pixel_at(animated, point), _pixel_at(baseline, point)) < 0.008, "Animated static stays inside the capsule at " + str(point))
+		previous = animated
+	wake.cancel()
+	var cleared: Image = await _capture("wake_cleared", "ELECTRIC FOOTPRINT / CLEARED", "Leaving the room or canceling a field retires its footprint and all decorative static.")
+	_check(_color_distance(_pixel_at(cleared, Vector2(0.0, 120.0)), _pixel_at(baseline, Vector2(0.0, 120.0))) < 0.008, "Cancel removes the ribbon and static")
 
 func _visible_enemy(position: Vector2) -> VisibleEnemy:
 	var enemy := VisibleEnemy.new()

@@ -9,6 +9,7 @@ const DEBUG_ENUMS := preload("res://scripts/shared/debug_enums.gd")
 @export var force_profile_prompt_on_menu: bool = false
 
 @export_group("Startup")
+@export var autostart_from_menu: bool = true
 @export var skip_starting_boon_selection: bool = false
 @export_enum("None", "Rest Site", "Skirmish", "Crossfire", "Fortress", "Onslaught", "Vanguard", "Blitz", "Ambush", "Suppression", "Gauntlet", "Convergence", "Objective - Last Stand", "Objective - Cut the Signal", "Objective - Hold the Line", "Objective - Circuit Sweep", "Objective - Pulse Window", "Objective - Intercept Run", "Objective - Random", "Trial", "Apex Seamlock", "Apex Mirrorline", "Apex Toll", "Warden", "Sovereign", "Lacuna", "Undertow", "Breach", "Apex Breakwater") var start_encounter: int = DEBUG_ENUMS.Encounter.NONE
 @export var start_depth: int = 1

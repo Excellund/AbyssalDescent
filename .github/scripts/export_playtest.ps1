@@ -87,12 +87,15 @@ $utf8 = New-Object System.Text.UTF8Encoding($false)
 $configPath = Join-Path $stagingProject "project.godot"
 $config = Get-Content -LiteralPath $configPath -Raw
 if ($DebugRun) {
-    $config = [regex]::Replace($config, '(?m)^config/name="[^"]*"', 'config/name="AbyssalDescent - New Powers Debug"')
+    $config = [regex]::Replace($config, '(?m)^config/name="[^"]*"', 'config/name="AbyssalDescent - Electricity Debug"')
     $config = [regex]::Replace($config, '(?m)^run/main_scene="[^"]*"', 'run/main_scene="res://scenes/Main.tscn"')
     $config = [regex]::Replace($config, '(?m)^config/(use_custom_user_dir|custom_user_dir_name)=.*\r?\n', '')
     $config = $config.Replace('[application]', "[application]`nconfig/use_custom_user_dir=true`nconfig/custom_user_dir_name=`"AbyssalDescent Playtest Debug`"")
     $config = [regex]::Replace($config, '(?m)^config/(telemetry_upload_endpoint|telemetry_upload_api_key|multiplayer_room_registry_endpoint|multiplayer_room_registry_api_key|multiplayer_public_ip_lookup_url|update_feed_url|update_release_page_url)="[^"]*"', 'config/$1=""')
     $config = $config.Replace('config/multiplayer_tunnel_enabled=true', 'config/multiplayer_tunnel_enabled=false')
+    $contextAutoload = '(?m)^(RunContext="\*res://scripts/run_context\.gd"\r?\n)'
+    if (-not [regex]::IsMatch($config, $contextAutoload)) { throw 'Debug character access requires the production RunContext autoload.' }
+    $config = [regex]::Replace($config, $contextAutoload, ('$1' + "DebugPlaytestBootstrap=`"*res://scripts/debug_playtest_bootstrap.gd`"`n"))
 } else {
     $config = [regex]::Replace($config, '(?m)^run/main_scene="[^"]*"', 'run/main_scene="res://scenes/Menu.tscn"')
 }
@@ -105,14 +108,15 @@ $debugSettings = if ($DebugRun) {
 @'
 script = ExtResource("5_oxjlc")
 enabled = true
+autostart_from_menu = false
 skip_starting_boon_selection = true
 apply_test_powers_on_start = true
 start_bearing = 1
 start_power_preset = 0
-start_encounter = 28
-start_depth = 5
+start_encounter = 26
+start_depth = 10
 end_screen_preview = 0
-start_power_ids = PackedStringArray("returning_crescent", "returning_crescent", "returning_crescent", "blast_drive", "blast_drive", "blast_drive", "razor_orbit", "razor_orbit", "razor_orbit", "ruinous_impact", "ruinous_impact", "sovereigns_double", "sovereigns_double")
+start_power_ids = PackedStringArray("static_wake", "storm_crown", "storm_crown", "hunters_snare", "sovereigns_double")
 
 '@
 } else {

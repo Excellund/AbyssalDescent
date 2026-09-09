@@ -25,104 +25,102 @@ static func draw_default(canvas: CanvasItem, body_radius: float, facing: Vector2
 static func draw_bastion(canvas: CanvasItem, body_radius: float, facing: Vector2, side: Vector2, player_core_color: Color, attack_phase: float = -1.0, dash_amount: float = 0.0, _dash_direction: Vector2 = Vector2.ZERO) -> void:
 	var strike := _attack_extension(attack_phase)
 	var brace := clampf(dash_amount, 0.0, 1.0)
-	var shield_x := body_radius - 2.0 + strike * 4.0 + brace * 2.0
-	var shield_width := 10.0 - brace * 1.5
-	# A broad, dark-edged shield and squared shoulders remain distinct from
-	# the circular collision core. Only these decorative pieces change pose.
-	_polygon(canvas, facing, side, PackedVector2Array([
-		Vector2(shield_x + 10.0, 0.0), Vector2(shield_x + 4.0, shield_width),
-		Vector2(shield_x - 3.0, shield_width - 1.0), Vector2(shield_x - 5.0, 0.0),
-		Vector2(shield_x - 3.0, -shield_width + 1.0), Vector2(shield_x + 4.0, -shield_width)
-	]), Color(0.64, 0.79, 0.92, 0.98))
-	_line(canvas, facing, side, Vector2(shield_x + 7.0, 0.0), Vector2(shield_x - 1.0, 0.0), Color(0.94, 0.98, 1.0), 2.0)
+	var shield_offset := strike * 2.5 + brace
+	var shield_tip := facing * (body_radius + 9.0 + shield_offset)
+	var shield_mid := facing * (body_radius + 1.5 + shield_offset)
+	var shield_w := 6.0 - brace * 0.6
+	# Keep the round core dominant. The compact shield shifts with the strike;
+	# rounded shoulder accents sit inside its rim instead of adding armor blocks.
+	var shield := PackedVector2Array([
+		shield_tip,
+		shield_mid + side * shield_w,
+		facing * (body_radius - 3.0 + shield_offset) + side * 4.6,
+		facing * (body_radius - 3.0 + shield_offset) - side * 4.6,
+		shield_mid - side * shield_w
+	])
+	canvas.draw_colored_polygon(shield, Color(0.78, 0.88, 0.98, 0.94))
+	canvas.draw_line(shield_mid - facing * 1.5, shield_tip - facing * 2.0, Color(0.98, 1.0, 1.0, 0.8), 1.2, true)
+	var visor_center := facing * (body_radius * 0.32 + strike * 0.5)
+	canvas.draw_line(visor_center - side * 3.0, visor_center + side * 3.0, Color(1.0, 0.96, 0.86, 0.9), 1.8, true)
+	var shoulder_color := Color(player_core_color.r, player_core_color.g, player_core_color.b, 0.78)
 	for sign_value: float in [-1.0, 1.0]:
-		var shoulder_y := sign_value * (body_radius - brace * 1.5)
-		var shoulder_x := -2.0 + strike * 2.0 + brace * 3.0
-		_polygon(canvas, facing, side, PackedVector2Array([
-			Vector2(shoulder_x + 5.0, shoulder_y - 4.0), Vector2(shoulder_x + 4.0, shoulder_y + 4.0),
-			Vector2(shoulder_x - 5.0, shoulder_y + 4.0), Vector2(shoulder_x - 6.0, shoulder_y - 3.0)
-		]), player_core_color.lightened(0.15))
-		_line(canvas, facing, side, Vector2(shoulder_x - 3.0, shoulder_y), Vector2(shoulder_x + 2.0, shoulder_y), Color(0.75, 0.88, 1.0, 0.7), 1.4)
-	_line(canvas, facing, side, Vector2(2.0, -3.5), Vector2(2.0, 3.5), Color(1.0, 0.96, 0.86), 2.0)
+		var shoulder := side * sign_value * (body_radius - 1.0 - brace * 0.8) + facing * (-1.2 + strike * 1.4)
+		canvas.draw_circle(shoulder, 2.7, shoulder_color)
 
 
 static func draw_hexweaver(canvas: CanvasItem, body_radius: float, facing: Vector2, side: Vector2, attack_phase: float = -1.0, dash_amount: float = 0.0, _dash_direction: Vector2 = Vector2.ZERO) -> void:
+	var t := float(Time.get_ticks_msec()) * 0.001
 	var release := -sin(clampf(attack_phase, 0.0, 1.0) * TAU) if attack_phase >= 0.0 else 0.0
-	var glyph_radius := body_radius + 3.0 + release * 3.0 - clampf(dash_amount, 0.0, 1.0) * 3.0
-	# Three discrete kites replace the decorative full ring. Existing passive
-	# rings remain the source of readiness information around this silhouette.
-	for angle: float in [PI, PI / 3.0, -PI / 3.0]:
+	var contraction := release * 1.8 - clampf(dash_amount, 0.0, 1.0) * 1.2
+	var sigil_r := body_radius + 6.8 + contraction
+	# Light orbiting marks preserve the original airy outline. Their attack
+	# contraction is deliberately small beside the existing body pulse.
+	canvas.draw_arc(Vector2.ZERO, sigil_r, 0.0, TAU, 40, Color(0.96, 0.74, 1.0, 0.30), 1.2, true)
+	var forward_tip := facing * (body_radius + 9.0 + release)
+	var forward_base := facing * (body_radius + 2.0)
+	var forward_glyph := PackedVector2Array([
+		forward_tip, forward_base + side * 2.8, forward_base - side * 2.8
+	])
+	canvas.draw_colored_polygon(forward_glyph, Color(1.0, 0.9, 1.0, 0.9))
+	for i in range(3):
+		var angle := t * 0.9 + TAU * float(i) / 3.0
 		var radial := Vector2.RIGHT.rotated(angle)
-		var across := radial.orthogonal()
-		var center := radial * glyph_radius
-		_polygon(canvas, facing, side, PackedVector2Array([
-			center + radial * 5.0, center + across * 3.5,
-			center - radial * 3.0, center - across * 3.5
-		]), Color(0.85, 0.63, 1.0, 0.92))
-		_line(canvas, facing, side, center - radial, center + radial * 3.0, Color(1.0, 0.92, 1.0), 1.3)
-	_polygon(canvas, facing, side, PackedVector2Array([
-		Vector2(body_radius + 9.0 + release * 2.0, 0.0), Vector2(body_radius - 1.0, 4.0),
-		Vector2(body_radius - 5.0, 0.0), Vector2(body_radius - 1.0, -4.0)
-	]), Color(0.98, 0.87, 1.0, 0.95))
-	_line(canvas, facing, side, Vector2(2.0, -2.5), Vector2(5.0, 0.0), Color(1.0, 0.96, 1.0), 1.5)
-	_line(canvas, facing, side, Vector2(5.0, 0.0), Vector2(2.0, 2.5), Color(1.0, 0.96, 1.0), 1.5)
+		var pivot := radial * (body_radius + 4.0 + contraction)
+		var glyph_side := radial.orthogonal() * 1.9
+		var glyph := PackedVector2Array([pivot + radial * 2.8, pivot + glyph_side, pivot - glyph_side])
+		canvas.draw_colored_polygon(glyph, Color(1.0, 0.84, 1.0, 0.74))
+	var eye_center := facing * (body_radius * 0.3)
+	canvas.draw_circle(eye_center - side * 1.4, 1.4, Color(0.98, 0.92, 1.0, 0.86))
+	canvas.draw_circle(eye_center + side * 1.4, 1.4, Color(0.98, 0.92, 1.0, 0.86))
+	var rune_back := -facing * (body_radius - 1.0)
+	canvas.draw_line(rune_back - side * 3.5, rune_back + side * 3.5, Color(0.86, 0.72, 1.0, 0.62), 1.2, true)
 
 
 static func draw_veilstrider(canvas: CanvasItem, body_radius: float, facing: Vector2, side: Vector2, speed_t: float, attack_phase: float = -1.0, dash_amount: float = 0.0, dash_direction: Vector2 = Vector2.ZERO) -> void:
 	var strike := _attack_extension(attack_phase)
 	var dash := clampf(dash_amount, 0.0, 1.0)
-	var blade_side := 4.5 - strike * 5.0
-	_polygon(canvas, facing, side, PackedVector2Array([
-		Vector2(body_radius + 12.0 + strike * 2.0, blade_side - strike * 3.0),
-		Vector2(2.0, blade_side + 4.5), Vector2(-7.0, blade_side + 2.0),
-		Vector2(body_radius - 1.0, blade_side - 2.0)
-	]), Color(0.87, 1.0, 0.95, 0.97))
-	var tail_forward := dash_direction.normalized() if dash > 0.0 and dash_direction.length_squared() > 0.0001 else facing
-	var tail_side := tail_forward.orthogonal()
-	var tail_length := 8.0 + clampf(speed_t, 0.0, 1.0) * 3.0 + dash * 5.0
+	var blade_tip := facing * (body_radius + 11.0 + strike * 1.8) - side * strike * 1.5
+	var blade_mid := facing * (body_radius + 0.8)
+	var blade_w := 3.2 - dash * 0.4
+	var blade := PackedVector2Array([
+		blade_tip, blade_mid + side * blade_w,
+		facing * (body_radius - 4.0), blade_mid - side * blade_w
+	])
+	canvas.draw_colored_polygon(blade, Color(0.88, 1.0, 0.94, 0.94))
+	var slit_eye := facing * (body_radius * 0.34) + side * 1.9
+	canvas.draw_line(slit_eye - side * 2.4, slit_eye + side * 0.9, Color(0.9, 1.0, 0.94, 0.9), 1.7, true)
+	# Fine trailing strokes follow actual dash travel without filling in a cape.
+	var tail_facing := dash_direction.normalized() if dash > 0.0 and dash_direction.length_squared() > 0.0001 else facing
+	var tail_side := tail_facing.orthogonal()
+	var trail_len := 6.0 + clampf(speed_t, 0.0, 1.0) * 3.0 + dash * 2.0
 	for sign_value: float in [-1.0, 1.0]:
-		_polygon(canvas, tail_forward, tail_side, PackedVector2Array([
-			Vector2(-body_radius + 4.0, sign_value * 4.0), Vector2(-body_radius + 1.0, sign_value * 10.0),
-			Vector2(-body_radius - tail_length, sign_value * (7.0 - dash * 3.0))
-		]), Color(0.32, 0.72, 0.59, 0.9))
-	_line(canvas, facing, side, Vector2(4.0, -4.0), Vector2(4.0, -0.5), Color(0.95, 1.0, 0.97), 1.8)
+		var tail := -tail_facing * (body_radius - 1.4) + tail_side * sign_value * (5.5 - dash)
+		canvas.draw_line(tail, tail - tail_facing * trail_len + tail_side * sign_value * (1.5 - dash), Color(0.64, 1.0, 0.82, 0.56), 1.5, true)
 
 
 static func draw_riftlancer(canvas: CanvasItem, body_radius: float, facing: Vector2, side: Vector2, speed_t: float, attack_phase: float = -1.0, dash_amount: float = 0.0, _dash_direction: Vector2 = Vector2.ZERO) -> void:
-	var thrust := _attack_extension(attack_phase) * 6.0
+	var thrust := _attack_extension(attack_phase) * 2.8
 	var dash := clampf(dash_amount, 0.0, 1.0)
-	var tip_x := body_radius + 13.0 + thrust
-	_line(canvas, facing, side, Vector2(-body_radius + 1.0 + thrust, 0.0), Vector2(tip_x - 3.0, 0.0), Color(0.78, 0.61, 0.28), 3.0)
-	_polygon(canvas, facing, side, PackedVector2Array([
-		Vector2(tip_x, 0.0), Vector2(tip_x - 10.0, 3.2),
-		Vector2(tip_x - 7.0, 0.0), Vector2(tip_x - 10.0, -3.2)
-	]), Color(1.0, 0.96, 0.74, 0.98))
-	var crossbar_x := -body_radius + 4.0 + thrust * 0.35 + dash * 3.0
-	var crossbar_width := 14.0 - dash * 3.0
-	_polygon(canvas, facing, side, PackedVector2Array([
-		Vector2(crossbar_x + 2.0, -crossbar_width), Vector2(crossbar_x + 4.0, -crossbar_width + 3.0),
-		Vector2(crossbar_x + 1.0, 0.0), Vector2(crossbar_x + 4.0, crossbar_width - 3.0),
-		Vector2(crossbar_x + 2.0, crossbar_width), Vector2(crossbar_x - 2.0, crossbar_width - 1.0),
-		Vector2(crossbar_x - 2.0, -crossbar_width + 1.0)
-	]), Color(0.9, 0.73, 0.3, 0.94))
-	_line(canvas, facing, side, Vector2(crossbar_x + 1.0, -crossbar_width + 3.0), Vector2(crossbar_x + 1.0, crossbar_width - 3.0), Color(1.0, 0.93, 0.68), 1.3)
-	var rear := -body_radius - 3.0 - clampf(speed_t, 0.0, 1.0) * 2.0
-	_line(canvas, facing, side, Vector2(rear, -3.0), Vector2(rear, 3.0), Color(0.94, 0.8, 0.45, 0.7), 1.5)
-	_line(canvas, facing, side, Vector2(3.0, -3.0), Vector2(3.0, 3.0), Color(1.0, 0.96, 0.8), 1.5)
+	var lance_tip := facing * (body_radius + 13.0 + thrust)
+	var lance_base := facing * (body_radius + 1.4 + thrust)
+	var lance := PackedVector2Array([
+		lance_tip, lance_base + side * 2.2,
+		facing * (body_radius - 5.2 + thrust), lance_base - side * 2.2
+	])
+	canvas.draw_colored_polygon(lance, Color(1.0, 0.96, 0.74, 0.95))
+	# A short rear stroke gives the lance a counterweight while leaving the
+	# circular body and bright center unobscured.
+	var anchor := -facing * (body_radius - 1.8 - thrust * 0.25)
+	var fin_out := 6.0 - dash * 0.8
+	canvas.draw_line(anchor - side * fin_out, anchor + side * fin_out, Color(0.94, 0.78, 0.34, 0.82), 1.6, true)
+	var eye := facing * (body_radius * 0.36)
+	canvas.draw_circle(eye + side * 1.3, 1.45, Color(1.0, 0.95, 0.76, 0.9))
+	canvas.draw_circle(eye - side * 1.3, 1.45, Color(1.0, 0.95, 0.76, 0.9))
+	var wake_len := 4.5 + clampf(speed_t, 0.0, 1.0) * 3.2
+	for sign_value: float in [-1.0, 1.0]:
+		var wake := -facing * (body_radius - 2.0) + side * sign_value * 4.4
+		canvas.draw_line(wake, wake - facing * wake_len + side * sign_value, Color(1.0, 0.86, 0.42, 0.5), 1.3, true)
 
 
 static func _attack_extension(phase: float) -> float:
 	return sin(clampf(phase, 0.0, 1.0) * PI) if phase >= 0.0 else 0.0
-
-
-static func _polygon(canvas: CanvasItem, facing: Vector2, side: Vector2, points: PackedVector2Array, color: Color) -> void:
-	var world_points := PackedVector2Array()
-	for point in points:
-		world_points.append(facing * point.x + side * point.y)
-	canvas.draw_colored_polygon(world_points, color)
-	world_points.append(world_points[0])
-	canvas.draw_polyline(world_points, Color(0.035, 0.055, 0.075, 0.92), 1.4, true)
-
-
-static func _line(canvas: CanvasItem, facing: Vector2, side: Vector2, start: Vector2, end: Vector2, color: Color, width: float) -> void:
-	canvas.draw_line(facing * start.x + side * start.y, facing * end.x + side * end.y, color, width, true)

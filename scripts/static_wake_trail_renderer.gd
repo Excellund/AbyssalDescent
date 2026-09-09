@@ -10,9 +10,47 @@ render_mode unshaded;
 uniform int segment_count = 0;
 uniform vec4 segments[64];
 uniform vec2 radii_fades[64];
+uniform float static_time = 0.0;
 varying vec2 world_position;
 void vertex() {
     world_position = (MODEL_MATRIX * vec4(VERTEX, 0.0, 1.0)).xy;
+}
+float cell_hash(vec2 cell) {
+    return fract(sin(dot(cell, vec2(127.1, 311.7))) * 43758.5453);
+}
+float line_distance(vec2 point, vec2 a, vec2 b) {
+    vec2 ab = b - a;
+    return length(point - a - ab * clamp(dot(point - a, ab) / max(dot(ab, ab), 0.00001), 0.0, 1.0));
+}
+float static_distance(vec2 point) {
+    // One spatial pattern for the whole union. Segment count, age and overlap
+    // cannot add another spark or refresh an animation allowance.
+    vec2 cell_size = vec2(58.0, 46.0);
+    vec2 cell = floor(point / cell_size);
+    float phase = floor(static_time * 10.0 + cell_hash(cell) * 7.0);
+    vec2 phase_cell = cell + vec2(phase * 0.37, phase * 1.17);
+    float seed = cell_hash(phase_cell);
+    if (seed < 0.28) {
+        return 1000.0;
+    }
+    float bend = cell_hash(phase_cell + vec2(8.3, 2.7));
+    float kink = cell_hash(phase_cell + vec2(1.9, 7.1));
+    vec2 jitter = (vec2(bend, kink) - vec2(0.5)) * vec2(12.0, 8.0);
+    vec2 local = mod(point, cell_size) - cell_size * 0.5 - jitter;
+    float angle = cell_hash(phase_cell + vec2(19.0)) * 6.2831853;
+    local = vec2(dot(local, vec2(cos(angle), sin(angle))), dot(local, vec2(-sin(angle), cos(angle))));
+    vec2 a = vec2(-14.0, seed * 4.0 - 2.0);
+    vec2 b = vec2(-7.0, bend * 8.0 - 4.0);
+    vec2 c = vec2(-2.0, kink * 10.0 - 5.0);
+    vec2 d = vec2(4.0, -1.0 - bend * 4.0);
+    vec2 e = vec2(13.0, seed * 4.0);
+    float distance_to_spark = min(line_distance(local, a, b), line_distance(local, b, c));
+    distance_to_spark = min(distance_to_spark, line_distance(local, c, d));
+    distance_to_spark = min(distance_to_spark, line_distance(local, d, e));
+    if (seed > 0.72) {
+        distance_to_spark = min(distance_to_spark, line_distance(local, c, c + vec2(4.0, 6.0)));
+    }
+    return distance_to_spark;
 }
 void fragment() {
     float fill = 0.0;
@@ -36,8 +74,18 @@ void fragment() {
     }
     // Max coverage prevents overlap from multiplying opacity.
     float edge = (1.0 - smoothstep(-0.75, 0.0, union_distance)) * smoothstep(-1.8, -1.0, union_distance) * boundary_fade;
-    float alpha = max(fill * 0.17, edge * 0.48);
-    COLOR = vec4(mix(vec3(0.22, 0.68, 0.90), vec3(0.64, 0.94, 1.0), edge), alpha);
+    float core = 0.0;
+    float halo = 0.0;
+    if (fill > 0.0) {
+        float spark_distance = static_distance(world_position);
+        core = 1.0 - smoothstep(0.40, 1.20, spark_distance);
+        halo = (1.0 - smoothstep(1.20, 3.8, spark_distance)) * 0.24;
+    }
+    // Steady pale-gold footprint, locally crackling white-yellow filaments.
+    // Clip every layer by coverage and fade; only the union's outside has a rim.
+    float alpha = max(max(fill * 0.075, edge * 0.40), fill * max(core * 0.94, halo));
+    vec3 color = mix(vec3(0.97, 0.94, 0.54), vec3(1.0, 1.0, 0.91), max(edge * 0.6, core));
+    COLOR = vec4(color, alpha);
 }
 """
 
@@ -45,9 +93,16 @@ static var _shared_shader: Shader
 var _bounds := Rect2()
 var _segments: Array[Dictionary] = []
 var _shader_material: ShaderMaterial
+var _visual_time := 0.0
 
 func _ready() -> void:
 	_ensure_material()
+
+func _process(delta: float) -> void:
+	if _segments.is_empty() or not is_finite(delta) or delta <= 0.0:
+		return
+	_visual_time = fmod(_visual_time + delta, 1024.0)
+	_shader_material.set_shader_parameter("static_time", _visual_time)
 
 func _ensure_material() -> void:
 	if _shader_material != null:

@@ -235,9 +235,11 @@ func _test_boss_combination_descriptions(registry: Node) -> void:
 				_check(current.contains("140%" if stack == 2 else "100%"), "Ruinous Impact displays the active damage ratio")
 				_check(current.contains("95" if stack == 2 else "70"), "Ruinous Impact displays the active radius")
 			else:
-				_check(card.contains("dash, recoil or orbit") and card.contains("next attacks"), "Sovereign's Double explains both the movement and attack triggers")
+				var card_text := DESCRIPTION_GUARD.strip_bbcode(card)
+				var echo_preview := "1" if stack == 0 else "%d -> %d" % [stack, mini(2, stack + 1)]
+				_check(card_text.contains("dash") and card_text.contains("recoil") and card_text.contains("orbit") and card_text.contains("shade echoes next %s attacks" % echo_preview), "Sovereign's Double explains all movement triggers and previews its next attack count")
 				_check(card.contains("55%") and current.contains("4s"), "Sovereign's Double preserves echo damage and lifetime")
-				_check(DESCRIPTION_GUARD.strip_bbcode(current).contains("Echoes %d" % maxi(1, stack)), "Sovereign's Double displays the active echo count")
+				_check(DESCRIPTION_GUARD.strip_bbcode(current).contains("next %d attacks" % maxi(1, stack)), "Sovereign's Double displays the active echo count")
 			var pool: Array[Dictionary] = registry.get_boss_reward_pool(player)
 			for option in pool:
 				if option.get("id") == power_id:

@@ -345,7 +345,7 @@ func _update_passive_section(character_id: String) -> void:
 		"veilstep_rhythm":
 			desc = "Dashing through enemies builds Veilstep shards. At full shards, your next dash is empowered and releases a high-damage surge wave at dash end."
 		"farline_focus":
-			desc = "Melee hits inside your farline band and tight aim lane deal 70% bonus damage, but hits outside deal 30% less. Keep distance and commit to precision angles."
+			desc = "Direct attack hits inside your farline band and tight aim lane deal 70% bonus damage; those outside deal 30% less. Keep distance and commit to precision angles."
 		_:
 			desc = "Passive ability"
 	
