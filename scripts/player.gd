@@ -3576,6 +3576,10 @@ func _is_local_control_owner() -> bool:
 	## Calling get_unique_id() with no peer assigned emits a Godot error every frame.
 	if multiplayer_api.multiplayer_peer == null:
 		return true
+	# A network avatar has no control while connecting or after its peer closes.
+	# ENet still remains assigned during teardown, but cannot supply a unique ID.
+	if multiplayer_api.multiplayer_peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
+		return false
 	var active_peer_id := int(multiplayer_api.get_unique_id())
 	if active_peer_id <= 0:
 		return true

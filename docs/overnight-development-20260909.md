@@ -15,10 +15,10 @@ The thread continuation `overnight-abyssaldescent-development` expires at the de
 
 ## Active ownership
 
-- `review_combat_lifecycle`: four-process departure checks complete; independent lifecycle/network review.
-- `review_combat_readability`: Warden/Lacuna complete and promoted; implementing the Tether beam contract correction in TEMP.
-- `review_hit_context`: owner-screen feedback complete in TEMP; independent Tether networking/combinations review.
-- Root: integration, regression registration, work log, Git and delivery; Seamlock band expiry correction in TEMP.
+- `review_combat_lifecycle`: edge-only damage flash promoted; correcting disconnected-peer ownership exposed by integrated ENet teardown.
+- `review_combat_readability`: Tether final snapshot frozen; persistence audit complete without defects; bounded Archer projectile audit in TEMP.
+- `review_hit_context`: narrow freed-target validation correction and final Tether integration checks in TEMP.
+- Root: integration, regression registration, work log, Git and delivery; Seamlock band expiry promoted.
 
 Coordinate overlapping files before editing. Agents do not commit independently.
 
@@ -148,4 +148,22 @@ The reusable ENet harness now supports three joining processes, with its one-cli
 
 Tether's shared target-position history can invent a crossing when switching between two stationary players on opposite sides of the beam. Its visible core is narrower than the damage radius, late ticks can happen after expiry, and replica beams can linger. The chosen correction makes this documented area hazard evaluate each eligible player using that player's own history, once per due tick and with one pair owner, while retaining existing values and movement. This is an explicit co-op correction; ordinary targeted attacks are not being converted wholesale into area damage.
 
-Seamlock bands also tick after expiry and do not count down on replicas. A separate narrow fix preserves their existing target selection, annulus boundaries and following spiral behavior while correcting lifetime/authority and preventing older channel state from reviving expired visuals. The original focused reproduction fails eight of 35 checks. Tether and Seamlock are still TEMP work and are not included in the desktop build above.
+Seamlock bands also tick after expiry and do not count down on replicas. A separate narrow fix preserves their existing target selection, annulus boundaries and following spiral behavior while correcting lifetime/authority and preventing older channel state from reviving expired visuals. The original focused reproduction fails eight of 35 checks. The reviewed runtime passes 47 checks and 51 live ENet checks (`abyssal-enet-1d99a2e3f4d8465cb9aae94619a122de`), including lost final state, cross-channel ordering, real replica physics and preserved spiral/illusion arrays. Three GPU frames were inspected by root and reviewer (`abyssal-gameplay-render-c51c13a627654a24ad92dbed2a93f58e/seamlock_band_frames`). Conservative encoded payload estimates remain below 1,392 bytes; these are serialization estimates, not packet captures. Seamlock is promoted for the next checkpoint; Tether remains under final review.
+
+## Fifth desktop checkpoint
+
+The normal full hook passed all suites and 229-script compilation (`abyssal-validation-85aed3a98c87425fa394c36f8f9b9357`), committing owner feedback and four-process verification as **`f6c5b19`**. Both it and the committed charge correction **`7632dd7`** are pushed.
+
+The single desktop playtest is now normal **`dev-overnight-readability-20260909-012139`**, SHA256 `7A1BD02404624DA437C88B3E3FC2E6DE110EFDD609085212154E66545D5C37BA`, size 114060592. Export, embedded package checks and all 26 executable checks pass (`abyssal-executable-smoke-7594ae7553a74314a5827509defc66ff`). All 160 production script hashes match the reviewed source; staging is `abyssal-playtest-export-1a4e37aef7534b19a0cdb70ea5f77a77/project`. The exact hash was verified before and after replacing the existing desktop playtest. This build includes Warden/Lacuna charge paths and local-only screen feedback, but not the pending Tether/Seamlock corrections.
+
+## Hazard and impact checkpoint in verification
+
+Tether now tracks each eligible player's own movement history and evaluates simultaneous beam/player motion. Retargeting, explicit position resets, bounds changes and departed avatars cannot invent a crossing. One pair owner applies at most one hit per eligible player per due tick; the existing damage 9, 0.2-second tick interval, 2.1-second beam duration and movement values remain unchanged. The 24-pixel capsule is visible from windup through activity, including rounded ends. Replacing or losing an endpoint requires a fresh warning; Ruinous launches interrupt either endpoint. Both network channels share ordered exact host endpoints and an expiring presentation lease.
+
+The final Tether runtime passes 142 checks and 113 live ENet checks (`abyssal-enet-950702998f324d53bfdf014fc8f70882`). Five GPU states were inspected by root and implementer (`abyssal-gameplay-render-f153ea98e02b44a0ba10117600af51c5/tether_hazard_frames`). Independent numerical comparison covers 501 sweep cases, with maximum measured distance error 0.000076 pixels. Review also reproduced typed-argument errors when the current target or partner had already been freed. The narrow validators now check validity before typed access; inherited physics, later replacement targets and collision cleanup pass. A refreshed full dependency snapshot retains all 207 four-process departure checks (`abyssal-enet-47c18fce5b444ca78496b7c94f3ba0b0`). An earlier ancillary failure came from a stale TEMP roster helper, not current production; no extra roster change was made.
+
+Damage feedback uses the existing color, strength and fade timing at the viewport edges, leaving the central combat area clear. It adds one small CanvasItem shader and no new control, setting, camera effect or per-frame material update. Crowded Keeper/Drifter combat and actual recoil comparisons were inspected at 1280x720 and 960x720. Thirty-five GPU/pixel checks verify an unchanged center, original peak at the edges and no tint at zero alpha (`abyssal-gameplay-render-331dd83cc857484995b9b58cd7ddc4c8/damage_edge_frames`; denser melee comparison in `abyssal-gameplay-render-2a6ac5620d07457e9f6f9d32cbaa4609`).
+
+Root's integrated Seamlock run passed all 51 assertions but caught a native ownership error during ENet teardown: the peer was closed while real player effects still queried its ID. The shared Player owner check now rejects assigned connecting/closed peers before ID lookup, preserving connected identity and the existing null/offline behavior. A real native-peer fixture passes 20 checks; the old code fails three and logs native errors. Existing owner checks pass 11, owner ENet passes 28 (`abyssal-enet-2519c546989e4b00820503344ab5e36c`), and corrected Seamlock ENet passes 51 cleanly (`abyssal-enet-97fdb9c71e5d4bc5bcc5ff2aa3df9dbe`). This is a production lifecycle fix, not a relaxed fixture shutdown rule.
+
+A separate persistence audit found no additional defect: all four characters, every Arcana level/Prismatic, all Boons/boss rewards and an all-Arcana Prismatic build survived real disk restoration and repeated apply with no scalar-stat differences (1,997 checks; existing snapshot 395 also passes). The audit remains TEMP (`abyssal-validation-a1cc0447aa2748be909060bcfcc2a8a3`); no speculative production change was made.

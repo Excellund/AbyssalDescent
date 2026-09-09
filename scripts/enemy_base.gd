@@ -367,10 +367,13 @@ func _maybe_refresh_target(delta: float) -> void:
 	_refresh_target()
 
 
-func _is_target_valid(candidate: Node2D) -> bool:
-	if not is_instance_valid(candidate):
+func _is_target_valid(candidate: Variant) -> bool:
+	# A target can be freed before the next roster/physics refresh. Validate
+	# before a typed argument or cast can reject the stale reference.
+	if not is_instance_valid(candidate) or not (candidate is Node2D):
 		return false
-	if bool(candidate.is_dead()):
+	var candidate_node := candidate as Node2D
+	if bool(candidate_node.is_dead()):
 		return false
 	return true
 

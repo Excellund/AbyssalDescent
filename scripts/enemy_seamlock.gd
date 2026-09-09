@@ -90,6 +90,30 @@ var _arena_penalty_applied_steps: float = 0.0
 var _arena_center_anchor_world: Vector2 = Vector2.ZERO
 
 var _attack_sync_was_active: bool = false
+var _attack_state_sequence: int = 0
+var _received_attack_state_sequence: int = -1
+
+func _next_attack_state_sequence() -> int:
+	_attack_state_sequence += 1
+	return _attack_state_sequence
+
+func _accept_attack_state(state: Dictionary) -> bool:
+	if network_simulation_enabled or state.is_empty():
+		return false
+	# Older peers lack ordering metadata. Once a sequenced host is observed,
+	# neither its other channel nor an unsequenced packet can revive old bands.
+	if not state.has("q"):
+		return _received_attack_state_sequence < 0
+	if not state["q"] is int or not state.get("r") is int:
+		return false
+	if state["q"] <= _received_attack_state_sequence or state["r"] != EnemyReplicationService._current_room_sync_id():
+		return false
+	for key in ["band_windup_left", "band_duration_left"]:
+		var value: Variant = state.get(key)
+		if not (value is float or value is int) or not is_finite(float(value)) or float(value) < 0.0:
+			return false
+	_received_attack_state_sequence = state["q"]
+	return true
 
 func _get_custom_network_runtime_state() -> Dictionary:
 	var illusion_positions: Array = []
@@ -106,6 +130,8 @@ func _get_custom_network_runtime_state() -> Dictionary:
 	for cooldown in _spiral_hit_cooldowns:
 		spiral_hit_cooldowns.append(float(cooldown))
 	return {
+		"q": _next_attack_state_sequence(),
+		"r": EnemyReplicationService._current_room_sync_id(),
 		"seamlock_state": seamlock_state,
 		"state_time_left": state_time_left,
 		"contact_attack_cooldown_left": contact_attack_cooldown_left,
@@ -127,7 +153,7 @@ func _get_custom_network_runtime_state() -> Dictionary:
 
 
 func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
-	if custom_state.is_empty():
+	if not _accept_attack_state(custom_state):
 		return
 	seamlock_state = int(custom_state.get("seamlock_state", seamlock_state))
 	state_time_left = float(custom_state.get("state_time_left", state_time_left))
@@ -529,9 +555,12 @@ func _process_band_attack(delta: float) -> void:
 			_band_is_active = true
 			_band_tick_left = 0.0
 		return
-	_band_duration_left = maxf(0.0, _band_duration_left - delta)
-	_band_tick_left = maxf(0.0, _band_tick_left - delta)
-	if _band_tick_left <= 0.0:
+	var previous_life := maxf(0.0, _band_duration_left)
+	var previous_tick := _band_tick_left
+	_band_duration_left = maxf(0.0, previous_life - delta)
+	_band_tick_left = maxf(0.0, previous_tick - minf(delta, previous_life))
+	# Preserve one tick per update, but only if it was due before expiry.
+	if _band_tick_left <= 0.0 and previous_life > maxf(0.0, previous_tick):
 		_try_band_damage()
 		_band_tick_left = band_tick_interval
 	queue_redraw()
@@ -540,7 +569,7 @@ func _process_band_attack(delta: float) -> void:
 		_enter_spiral()
 
 func _try_band_damage() -> void:
-	if not is_instance_valid(target) or not DAMAGEABLE.can_take_damage(target):
+	if not network_simulation_enabled or not is_instance_valid(target) or not DAMAGEABLE.can_take_damage(target):
 		return
 	var dist := global_position.distance_to(target.global_position)
 	if _is_in_band_danger(dist):
@@ -678,6 +707,8 @@ func get_projectile_network_sync_state() -> Dictionary:
 	for arm in _spiral_arms:
 		arms_arr.append(arm.duplicate())
 	var payload := {
+		"q": _next_attack_state_sequence(),
+		"r": EnemyReplicationService._current_room_sync_id(),
 		"active": active,
 		"seamlock_state": seamlock_state,
 		"state_time_left": state_time_left,
@@ -700,7 +731,7 @@ func get_projectile_network_sync_state() -> Dictionary:
 func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
 	if network_simulation_enabled:
 		return
-	if sync_state.is_empty():
+	if not _accept_attack_state(sync_state):
 		return
 	seamlock_state = int(sync_state.get("seamlock_state", seamlock_state))
 	state_time_left = float(sync_state.get("state_time_left", state_time_left))
@@ -742,7 +773,15 @@ func _process_network_visuals(delta: float) -> void:
 	if seamlock_state == ENEMY_STATE_ENUMS.SeamlockState.ILLUSION_PHASE and _illusion_phase_left > 0.0:
 		_illusion_phase_left = maxf(0.0, _illusion_phase_left - delta)
 		needs_redraw = true
-	if _band_windup_left > 0.0 or (_band_is_active and _band_duration_left > 0.0):
+	if _band_windup_left > 0.0:
+		_band_windup_left = maxf(0.0, _band_windup_left - delta)
+		# Finishing a warning does not invent authoritative activation.
+		needs_redraw = true
+	elif _band_is_active:
+		_band_duration_left = maxf(0.0, _band_duration_left - delta)
+		if _band_duration_left < 0.000001:
+			_band_duration_left = 0.0
+			_band_is_active = false
 		needs_redraw = true
 	if not _spiral_arms.is_empty():
 		needs_redraw = true

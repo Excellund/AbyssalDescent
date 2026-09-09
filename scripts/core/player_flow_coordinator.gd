@@ -18,6 +18,7 @@ func prepare_for_menu_transition(combat_phase_coordinator: RefCounted, player: N
 
 func reset_player_position(player: Node, position: Vector2 = Vector2.ZERO) -> void:
 	if is_instance_valid(player) and player is Node2D:
+		player.set_meta("combat_position_reset_generation", int(player.get_meta("combat_position_reset_generation", 0)) + 1)
 		(player as Node2D).global_position = position
 
 func show_defeat_feedback(hud: Node, defeat_screen: Node, room_label: String, room_depth: int, run_summary: Dictionary = {}, allow_retry_run: bool = true) -> void:

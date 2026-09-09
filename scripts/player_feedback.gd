@@ -10,6 +10,7 @@ const PLAYER_REST_SOUND := preload("res://sounds/new_stuff/rest.ogg")
 const PLAYER_LOW_HP_SOUND := preload("res://sounds/new_stuff/low_hp_pulse.ogg")
 const ENEMY_BASE := preload("res://scripts/enemy_base.gd")
 const AUDIO_LEVELS := preload("res://scripts/shared/audio_levels.gd")
+const DAMAGE_EDGE_FLASH := preload("res://scripts/damage_edge_flash.gdshader")
 
 # === SHARED TIMING & ANIMATION HELPERS ===
 static func ease_in_out_quad(t: float) -> float:
@@ -1830,6 +1831,9 @@ func _create_damage_flash() -> void:
 	damage_flash_rect.offset_right = 0.0
 	damage_flash_rect.offset_bottom = 0.0
 	damage_flash_rect.color = damage_flash_color
+	var edge_material := ShaderMaterial.new()
+	edge_material.shader = DAMAGE_EDGE_FLASH
+	damage_flash_rect.material = edge_material
 	damage_flash_rect.modulate = Color(1.0, 1.0, 1.0, 0.0)
 	damage_flash_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
