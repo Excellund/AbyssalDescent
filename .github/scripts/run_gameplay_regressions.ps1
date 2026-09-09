@@ -156,6 +156,8 @@ try {
         "res://scripts/tests/test_seamlock_bands.gd",
         "res://scripts/tests/test_tether_hazard.gd",
         "res://scripts/tests/test_archer_projectiles.gd",
+        "res://scripts/tests/test_toll_pyre.gd",
+        "res://scripts/tests/test_toll_orbit_paths.gd",
         "res://scripts/tests/test_kill_proc_provenance.gd",
         "res://scripts/tests/test_checkpoint_isolation.gd",
         "res://scripts/tests/test_run_provenance.gd",

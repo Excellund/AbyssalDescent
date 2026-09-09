@@ -71,6 +71,19 @@ var _pulse_phase_left: float = 0.0
 var _pulse_radius: float = 0.0
 var _pulse_prev_radius: float = 0.0
 var _pulse_marked_ids: Dictionary = {}
+const PLAYER_SCRIPT := preload("res://scripts/player.gd")
+const PULSE_VISUAL_LEASE := 0.35
+var _pulse_origin := Vector2.ZERO
+var _pulse_room_id := -1
+var _pulse_room_bounds := Rect2()
+var _pulse_player_positions: Dictionary = {}
+var _pulse_player_resets: Dictionary = {}
+var _pulse_generation := 0
+var _pulse_wire_sequence := 0
+var _pulse_wire_state: Array = []
+var _pulse_wire_idle_companion: Array = []
+var _pulse_received_sequence := -1
+var _pulse_visual_lease := 0.0
 
 func should_force_network_runtime_state_sampling() -> bool:
 	return _pulse_phase != PULSE_PHASE_NONE or _heal_channel_left > 0.0 or _heal_silenced_flash > 0.0 or _heal_success_flash > 0.0 or _stagger_left > 0.0
@@ -83,30 +96,20 @@ func get_priority_network_sync_interval_sec() -> float:
 	return 0.0
 
 func _get_custom_network_runtime_state() -> Dictionary:
-	# Compact wire payload — see /memories/repo/custom_runtime_state_size_budget.md.
-	return {
-		"hc": _heal_channel_left,
-		"pp": _pulse_phase,
-		"pl": _pulse_phase_left,
-		"pr": _pulse_radius,
-		"hs": _heal_silenced_flash,
-		"hk": _heal_success_flash,
-		"st": _stagger_left,
-		"pd": _pulse_is_directed,
-		"da": _directed_spoke_angle
-	}
+	return {"hc": _heal_channel_left, "pc": _build_pulse_sync_state(), "hs": _heal_silenced_flash, "hk": _heal_success_flash, "st": _stagger_left}
 
 func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
 	if custom_state.is_empty():
 		return
+	for key in ["hc", "hs", "hk", "st"]:
+		var value: Variant = custom_state.get(key)
+		if not (value is float or value is int) or not is_finite(float(value)):
+			return
+	if not _apply_pulse_sync_state(custom_state.get("pc")):
+		return
 	_heal_channel_left = float(custom_state.get("hc", _heal_channel_left))
-	_pulse_phase = int(custom_state.get("pp", _pulse_phase))
-	_pulse_phase_left = float(custom_state.get("pl", _pulse_phase_left))
-	_pulse_radius = float(custom_state.get("pr", _pulse_radius))
 	_heal_silenced_flash = float(custom_state.get("hs", _heal_silenced_flash))
 	_stagger_left = float(custom_state.get("st", _stagger_left))
-	_pulse_is_directed = bool(custom_state.get("pd", _pulse_is_directed))
-	_directed_spoke_angle = float(custom_state.get("da", _directed_spoke_angle))
 	var incoming_success_flash := float(custom_state.get("hk", _heal_success_flash))
 	# Detect heal-success rising edge on joiner so we can fire the rest-site VFX once per cycle.
 	if incoming_success_flash > _last_heal_success_flash + 0.01 and incoming_success_flash > 0.4:
@@ -143,6 +146,8 @@ func _process_behavior(delta: float) -> void:
 		_decay_flash_timers(delta)
 		_tick_aura(delta)
 		_tick_pulse(delta)
+		if is_queued_for_deletion():
+			return
 		_tick_heal_channel(delta)
 		_tick_contact(delta)
 		if _stagger_left > 0.0:
@@ -165,22 +170,23 @@ func should_process_remote_visuals_every_frame() -> bool:
 	)
 
 func _process_network_visuals(delta: float) -> void:
-	# Joiner-side ticking — host owns gameplay, this drives smooth visuals between syncs.
+	if network_simulation_enabled or not is_finite(delta) or delta <= 0.0:
+		return
 	_decay_flash_timers(delta)
 	if _stagger_left > 0.0:
 		_stagger_left = maxf(0.0, _stagger_left - delta)
 	if _heal_channel_left > 0.0:
 		_heal_channel_left = maxf(0.0, _heal_channel_left - delta)
 	if _pulse_phase != PULSE_PHASE_NONE:
+		_pulse_visual_lease = maxf(0.0, _pulse_visual_lease - delta)
 		_pulse_phase_left = maxf(0.0, _pulse_phase_left - delta)
-		if _pulse_phase == PULSE_PHASE_EXPAND:
-			var t := 1.0 - clampf(_pulse_phase_left / maxf(0.001, pulse_expand_duration), 0.0, 1.0)
-			_pulse_radius = lerpf(0.0, pulse_max_radius, t)
-		elif _pulse_phase == PULSE_PHASE_TELEGRAPH:
-			_pulse_radius = 0.0
-		if _pulse_phase_left <= 0.0 and _pulse_phase == PULSE_PHASE_EXPAND:
-			_pulse_phase = PULSE_PHASE_NONE
-			_pulse_radius = 0.0
+		if _pulse_visual_lease <= 0.0 or _pulse_room_id != EnemyReplicationService._current_room_sync_id():
+			_clear_remote_pulse()
+		elif _pulse_phase == PULSE_PHASE_EXPAND:
+			var progress := 1.0 - clampf(_pulse_phase_left / maxf(0.001, pulse_expand_duration), 0.0, 1.0)
+			_pulse_radius = pulse_max_radius * progress
+			if _pulse_phase_left <= 0.0:
+				_clear_remote_pulse()
 	queue_redraw()
 
 func _remote_extrapolate(_delta: float) -> void:
@@ -250,24 +256,46 @@ func _tick_contact(delta: float) -> void:
 # --- Tribute Pulse -----------------------------------------------------------
 
 func _tick_pulse(delta: float) -> void:
+	if not network_simulation_enabled or is_queued_for_deletion() or not is_finite(delta) or delta <= 0.0:
+		return
 	if _pulse_phase == PULSE_PHASE_NONE:
 		_pulse_timer = maxf(0.0, _pulse_timer - delta)
 		if _pulse_timer <= 0.0:
 			_begin_pulse_telegraph()
 		return
+	if _pulse_room_id != EnemyReplicationService._current_room_sync_id():
+		_end_pulse()
+		return
+	if _pulse_origin != anchor_world_position:
+		_pulse_origin = anchor_world_position
+		_seed_pulse_player_history()
+	var previous_life := _pulse_phase_left
 	_pulse_phase_left = maxf(0.0, _pulse_phase_left - delta)
 	if _pulse_phase == PULSE_PHASE_TELEGRAPH:
 		if _pulse_phase_left <= 0.0:
 			_begin_pulse_expand()
-	elif _pulse_phase == PULSE_PHASE_EXPAND:
-		_pulse_prev_radius = _pulse_radius
-		var t := 1.0 - clampf(_pulse_phase_left / maxf(0.001, pulse_expand_duration), 0.0, 1.0)
-		_pulse_radius = lerpf(0.0, pulse_max_radius, t)
-		_resolve_pulse_band_hits()
-		if _pulse_phase_left <= 0.0:
-			_end_pulse()
+		return
+	if previous_life <= 0.0:
+		_end_pulse()
+		return
+	var bounds := EnemyReplicationService.get_current_room_bounds()
+	if bounds != _pulse_room_bounds:
+		_pulse_room_bounds = bounds
+		_seed_pulse_player_history()
+	_pulse_prev_radius = _pulse_radius
+	var progress := 1.0 - clampf(_pulse_phase_left / maxf(0.001, pulse_expand_duration), 0.0, 1.0)
+	_pulse_radius = lerpf(0.0, pulse_max_radius, progress)
+	_resolve_pulse_band_hits(minf(delta, previous_life) / delta)
+	if is_queued_for_deletion():
+		return
+	if _pulse_phase_left <= 0.0:
+		_end_pulse()
 
 func _begin_pulse_telegraph() -> void:
+	_pulse_generation += 1
+	_pulse_origin = anchor_world_position
+	_pulse_room_id = EnemyReplicationService._current_room_sync_id()
+	_pulse_room_bounds = EnemyReplicationService.get_current_room_bounds()
 	_pulse_count += 1
 	# Every 3rd pulse is a directed spoke-pulse aimed at the player.
 	_pulse_is_directed = (_pulse_count % 3 == 0)
@@ -289,8 +317,12 @@ func _begin_pulse_expand() -> void:
 	_pulse_phase_left = pulse_expand_duration
 	_pulse_radius = 0.0
 	_pulse_prev_radius = 0.0
+	_seed_pulse_player_history()
 
 func _end_pulse() -> void:
+	_pulse_generation += 1
+	_pulse_player_positions.clear()
+	_pulse_player_resets.clear()
 	_pulse_phase = PULSE_PHASE_NONE
 	_pulse_phase_left = 0.0
 	_pulse_radius = 0.0
@@ -301,42 +333,57 @@ func _end_pulse() -> void:
 	# Push the heal timer forward so it won't fire for at least half an interval.
 	_heal_timer = maxf(_heal_timer, heal_channel_interval * 0.5)
 
-func _resolve_pulse_band_hits() -> void:
-	var leading := _pulse_radius
-	var trailing := maxf(0.0, leading - pulse_band_thickness)
-	for player in _get_damageable_targets():
-		if not is_instance_valid(player):
+func _resolve_pulse_band_hits(active_fraction: float = 1.0) -> void:
+	if not network_simulation_enabled or _pulse_phase != PULSE_PHASE_EXPAND:
+		return
+	var generation := _pulse_generation
+	var positions := {}
+	var resets := {}
+	for player in _get_pulse_targets():
+		if generation != _pulse_generation or is_queued_for_deletion():
+			return
+		var id := player.get_instance_id()
+		var reset := int(player.get_meta("combat_position_reset_generation", 0))
+		var current := player.global_position
+		var previous: Vector2 = _pulse_player_positions.get(id, current) if _pulse_player_resets.get(id, -1) == reset else current
+		positions[id] = current
+		resets[id] = reset
+		if _pulse_marked_ids.has(id) or (bool(player.get("dash_phasing_active")) and not _pulse_is_directed):
 			continue
-		var pid := player.get_instance_id()
-		if _pulse_marked_ids.has(pid):
+		var step := (current - previous) * active_fraction
+		var contact := _first_pulse_contact_fraction(previous - _pulse_origin, step, _pulse_prev_radius, _pulse_radius, pulse_band_thickness, _pulse_is_directed, _directed_spoke_angle)
+		if is_inf(contact):
 			continue
-		var dist := player.global_position.distance_to(anchor_world_position)
-		var to_player := player.global_position - anchor_world_position
-		if dist < trailing or dist > leading:
+		_pulse_marked_ids[id] = true
+		_apply_pulse_hit(player, current.distance_to(_pulse_origin))
+	if generation == _pulse_generation and not is_queued_for_deletion():
+		_pulse_player_positions = positions
+		_pulse_player_resets = resets
+
+func _get_pulse_targets() -> Array[Node2D]:
+	var result: Array[Node2D] = []
+	for candidate in _get_damageable_targets():
+		if not is_instance_valid(candidate) or candidate.is_queued_for_deletion() or not _is_target_valid(candidate) or not candidate.global_position.is_finite():
 			continue
-		# Regular ring pulses can be dashed through, but directed spokes are phase-resistant.
-		if bool(player.get("dash_phasing_active")) and not _pulse_is_directed:
+		if candidate is PLAYER_SCRIPT and candidate._combat_removed:
 			continue
-		# Directed spoke-pulse: only three 60°-wide arcs hit — the gaps are safe.
-		if _pulse_is_directed:
-			var player_angle: float = to_player.angle() if dist > 0.001 else 0.0
-			var half_arc: float = PI / 6.0
-			var in_spoke := false
-			for si in range(3):
-				var spoke_ang: float = _directed_spoke_angle + float(si) / 3.0 * TAU
-				var diff: float = abs(fmod(player_angle - spoke_ang + PI * 3.0, TAU) - PI)
-				if diff < half_arc:
-					in_spoke = true
-					break
-			if not in_spoke:
-				continue
-		# Player is inside the expanding band this frame — register a hit.
-		_pulse_marked_ids[pid] = true
-		_apply_pulse_hit(player, dist)
+		if not result.has(candidate):
+			result.append(candidate)
+	return result
+
+func _seed_pulse_player_history() -> void:
+	_pulse_player_positions.clear()
+	_pulse_player_resets.clear()
+	for player in _get_pulse_targets():
+		var id := player.get_instance_id()
+		_pulse_player_positions[id] = player.global_position
+		_pulse_player_resets[id] = int(player.get_meta("combat_position_reset_generation", 0))
 
 func _apply_pulse_hit(player: Node2D, dist: float) -> void:
+	if not network_simulation_enabled or is_queued_for_deletion():
+		return
 	DAMAGEABLE.apply_damage(player, pulse_damage, {"source": "enemy_toll", "ability": "pulse_hit"})
-	if not is_instance_valid(player):
+	if not is_instance_valid(player) or is_queued_for_deletion():
 		return
 	var peer_id := 0
 	if "player_id" in player:
@@ -348,7 +395,7 @@ func _apply_pulse_hit(player: Node2D, dist: float) -> void:
 	# Outward nudge along the radial direction so players are visibly displaced by the wave.
 	var dir := Vector2.RIGHT
 	if dist > 0.001:
-		dir = (player.global_position - anchor_world_position) / dist
+		dir = (player.global_position - _pulse_origin) / dist
 	_dispatch_polar_shift(peer_id, player, dir, 360.0, 0.0)
 
 # --- Heal Channel ------------------------------------------------------------
@@ -433,15 +480,13 @@ func _emit_heal_success_vfx() -> void:
 # --- Multiplayer dispatch helpers -------------------------------------------
 
 func _dispatch_slow(peer_id: int, player_node: Node2D, duration: float, mult: float) -> void:
-	if duration <= 0.0 or mult >= 1.0:
-		return
-	# Direct call first (most reliable), then fallback to replication service.
-	if player_node.has_method("apply_external_slow"):
-		player_node.apply_external_slow(duration, mult)
+	if not network_simulation_enabled or duration <= 0.0 or mult >= 1.0:
 		return
 	var replication_service := get_node_or_null("/root/PlayerReplicationService")
-	if replication_service != null and replication_service.has_method("send_external_slow"):
+	if peer_id > 0 and replication_service != null and replication_service.has_method("send_external_slow"):
 		replication_service.send_external_slow(peer_id, duration, mult)
+	elif player_node.has_method("apply_external_slow"):
+		player_node.apply_external_slow(duration, mult)
 
 func _dispatch_polar_shift(peer_id: int, player_node: Node2D, dir: Vector2, force: float, dash_lockout: float) -> void:
 	var replication_service := get_node_or_null("/root/PlayerReplicationService")
@@ -456,6 +501,9 @@ func _dispatch_polar_shift(peer_id: int, player_node: Node2D, dir: Vector2, forc
 # --- Lifecycle ---------------------------------------------------------------
 
 func _on_health_state_died() -> void:
+	_pulse_generation += 1
+	_pulse_player_positions.clear()
+	_pulse_player_resets.clear()
 	_pulse_phase = PULSE_PHASE_NONE
 	_pulse_phase_left = 0.0
 	_pulse_radius = 0.0
@@ -559,9 +607,9 @@ func _draw_inner_sanctum() -> void:
 		draw_arc(local_center, inner_sanctum_radius, 0.0, TAU, 48, Color(0.50, 1.0, 0.72, 0.85 + 0.15 * ch_pulse), 2.8)
 
 func _draw_pulse() -> void:
-	if _pulse_phase == PULSE_PHASE_NONE:
+	if get_pulse_geometry().is_empty():
 		return
-	var local_center := anchor_world_position - global_position
+	var local_center := _pulse_origin - global_position
 	if _pulse_phase == PULSE_PHASE_TELEGRAPH:
 		# Charge-up: rings collapse inward toward the bell to read as winding tension.
 		var t := 1.0 - clampf(_pulse_phase_left / maxf(0.001, pulse_telegraph_duration), 0.0, 1.0)
@@ -785,3 +833,156 @@ func _draw_bell_crown(center: Vector2, r: float, spin: float, channeling: bool, 
 		var accent_pos := center + Vector2(cos(ang), sin(ang)) * (r + 5.0)
 		var accent_alpha := 0.35 + 0.22 * breathe
 		draw_circle(accent_pos, 1.8, Color(1.0, 0.82, 0.36, accent_alpha))
+
+## Earliest same-time contact with the closed radial band and existing strict
+## spokes. Scalar intermediates avoid rounding an outside tangent onto the rim.
+static func _first_pulse_contact_fraction(start: Vector2, step: Vector2, radius_start: float, radius_end: float, thickness: float, directed: bool, angle: float) -> float:
+	if not start.is_finite() or not step.is_finite() or not is_finite(radius_start) or not is_finite(radius_end) or not is_finite(thickness) or not is_finite(angle):
+		return INF
+	var times: Array[float] = [0.0, 1.0]
+	var growth := radius_end - radius_start
+	var step_squared := float(step.x) * step.x + float(step.y) * step.y
+	var start_squared := float(start.x) * start.x + float(start.y) * start.y
+	var start_dot_step := float(start.x) * step.x + float(start.y) * step.y
+	_append_pulse_roots(times, step_squared - growth * growth, 2.0 * (start_dot_step - radius_start * growth), start_squared - radius_start * radius_start)
+	var inner_start := radius_start - thickness
+	_append_pulse_roots(times, step_squared - growth * growth, 2.0 * (start_dot_step - inner_start * growth), start_squared - inner_start * inner_start)
+	_append_pulse_roots(times, 0.0, growth, inner_start)
+	if directed:
+		for spoke in range(3):
+			for side: float in [-1.0, 1.0]:
+				var ray_angle := angle + (float(spoke) * 4.0 + side) * PI / 6.0
+				var ray_x := cos(ray_angle)
+				var ray_y := sin(ray_angle)
+				_append_pulse_roots(times, 0.0, float(step.x) * ray_y - float(step.y) * ray_x, float(start.x) * ray_y - float(start.y) * ray_x)
+		# Preserve the old center convention: distance<=.001 uses angle zero.
+		_append_pulse_roots(times, step_squared, 2.0 * start_dot_step, start_squared - 0.000001)
+		_append_pulse_roots(times, 0.0, step.x, start.x)
+		_append_pulse_roots(times, 0.0, step.y, start.y)
+	times.sort()
+	for index in range(times.size()):
+		var time := times[index]
+		if _pulse_region_at_time(start, step, time, lerpf(radius_start, radius_end, time), thickness, directed, angle):
+			return time
+		if index + 1 < times.size() and times[index + 1] > time:
+			var middle := (time + times[index + 1]) * 0.5
+			if _pulse_region_at_time(start, step, middle, lerpf(radius_start, radius_end, middle), thickness, directed, angle):
+				return time
+	return INF
+
+static func _append_pulse_roots(times: Array[float], a: float, b: float, c: float) -> void:
+	if absf(a) <= 0.000000001:
+		if absf(b) > 0.000000001:
+			var root := -c / b
+			if root >= 0.0 and root <= 1.0:
+				times.append(root)
+		return
+	var discriminant := b * b - 4.0 * a * c
+	if discriminant < 0.0:
+		return
+	var square_root := sqrt(discriminant)
+	for root in [(-b - square_root) / (2.0 * a), (-b + square_root) / (2.0 * a)]:
+		if root >= 0.0 and root <= 1.0:
+			times.append(root)
+
+static func _pulse_region_at_time(start: Vector2, step: Vector2, time: float, leading: float, thickness: float, directed: bool, angle: float) -> bool:
+	var x := float(start.x) + float(step.x) * time
+	var y := float(start.y) + float(step.y) * time
+	var distance_squared := x * x + y * y
+	var trailing := maxf(0.0, leading - thickness)
+	if distance_squared < trailing * trailing or distance_squared > leading * leading:
+		return false
+	if not directed:
+		return true
+	var player_angle := atan2(y, x) if distance_squared > 0.000001 else 0.0
+	var relative_angle := player_angle - angle
+	if relative_angle < 0.0:
+		relative_angle += TAU
+	elif relative_angle >= TAU:
+		relative_angle -= TAU
+	# Compare canonical boundary angles directly. Subtracting a spoke center
+	# and wrapping can round an exact boundary slightly inside a strict gap.
+	for spoke in range(3):
+		var lower := (float(spoke) * 4.0 - 1.0) * PI / 6.0
+		var upper := (float(spoke) * 4.0 + 1.0) * PI / 6.0
+		var candidate := relative_angle - TAU if spoke == 0 and relative_angle > PI else relative_angle
+		if candidate > lower and candidate < upper:
+			return true
+	return false
+
+func _build_pulse_sync_state() -> Array:
+	if not network_simulation_enabled:
+		return []
+	var room_id := EnemyReplicationService._current_room_sync_id()
+	var companion: Array = [_heal_channel_left, _heal_silenced_flash, _heal_success_flash, _stagger_left]
+	if _pulse_phase == PULSE_PHASE_NONE and _pulse_wire_state.size() == 3 and _pulse_wire_state[1] == room_id and companion == _pulse_wire_idle_companion:
+		return _pulse_wire_state
+	_pulse_wire_sequence += 1
+	_pulse_wire_idle_companion = companion
+	_pulse_wire_state = [_pulse_wire_sequence, room_id, _pulse_phase]
+	if _pulse_phase != PULSE_PHASE_NONE:
+		_pulse_wire_state.append_array([
+			int(round(_pulse_phase_left * 1000.0)), _pulse_is_directed,
+			int(round(_directed_spoke_angle * 10000.0)),
+			PackedVector2Array([_pulse_origin, Vector2(_pulse_radius, pulse_band_thickness), Vector2(pulse_max_radius, pulse_expand_duration)])
+		])
+	return _pulse_wire_state
+
+func _apply_pulse_sync_state(payload: Variant) -> bool:
+	if network_simulation_enabled or not (payload is Array) or payload.size() < 3:
+		return false
+	for index in range(3):
+		if not (payload[index] is int):
+			return false
+	var sequence: int = payload[0]
+	var room_id: int = payload[1]
+	var phase: int = payload[2]
+	if sequence <= _pulse_received_sequence or room_id != EnemyReplicationService._current_room_sync_id() or phase < PULSE_PHASE_NONE or phase > PULSE_PHASE_EXPAND:
+		return false
+	if phase == PULSE_PHASE_NONE:
+		if payload.size() != 3:
+			return false
+	else:
+		if payload.size() != 7 or not (payload[3] is int) or payload[3] < 0 or not (payload[4] is bool) or not (payload[5] is int) or absi(payload[5]) > 31416:
+			return false
+		if not (payload[6] is PackedVector2Array) or payload[6].size() != 3:
+			return false
+		for vector in payload[6]:
+			if not vector.is_finite():
+				return false
+		var shape: Vector2 = payload[6][1]
+		var timing: Vector2 = payload[6][2]
+		if shape.x < 0.0 or shape.y <= 0.0 or timing.x <= 0.0 or timing.y <= 0.0 or shape.x > timing.x or payload[3] > 60000:
+			return false
+	# Validate the entire pulse before advancing sequence, so one malformed
+	# high revision cannot poison subsequent valid state or heal feedback.
+	_pulse_received_sequence = sequence
+	_pulse_room_id = room_id
+	_pulse_phase = phase
+	if phase == PULSE_PHASE_NONE:
+		_clear_remote_pulse()
+	else:
+		_pulse_phase_left = float(payload[3]) / 1000.0
+		_pulse_is_directed = payload[4]
+		_directed_spoke_angle = float(payload[5]) / 10000.0
+		_pulse_origin = payload[6][0]
+		_pulse_radius = payload[6][1].x
+		pulse_band_thickness = payload[6][1].y
+		pulse_max_radius = payload[6][2].x
+		pulse_expand_duration = payload[6][2].y
+		_pulse_visual_lease = PULSE_VISUAL_LEASE
+	queue_redraw()
+	return true
+
+func _clear_remote_pulse() -> void:
+	_pulse_phase = PULSE_PHASE_NONE
+	_pulse_phase_left = 0.0
+	_pulse_radius = 0.0
+	_pulse_visual_lease = 0.0
+
+func get_pulse_geometry() -> Dictionary:
+	if _pulse_phase == PULSE_PHASE_NONE or _pulse_room_id != EnemyReplicationService._current_room_sync_id():
+		return {}
+	if not network_simulation_enabled and _pulse_visual_lease <= 0.0:
+		return {}
+	return {"phase": _pulse_phase, "origin": _pulse_origin, "radius": _pulse_radius, "thickness": pulse_band_thickness, "maximum_radius": pulse_max_radius, "directed": _pulse_is_directed, "angle": _directed_spoke_angle}

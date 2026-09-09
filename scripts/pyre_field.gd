@@ -32,13 +32,18 @@ func _ready() -> void:
 	queue_redraw()
 
 func _process(delta: float) -> void:
+	if is_queued_for_deletion() or not is_finite(delta) or delta <= 0.0:
+		return
+	var previous_life := time_left
+	var previous_tick := tick_left
+	var active_delta := minf(delta, maxf(0.0, previous_life))
 	time_left = maxf(0.0, time_left - delta)
-	tick_left = maxf(0.0, tick_left - delta)
+	tick_left = maxf(0.0, tick_left - active_delta)
 	spawn_flash_left = maxf(0.0, spawn_flash_left - delta)
 	tick_flash_left = maxf(0.0, tick_flash_left - delta)
 	if current_radius < radius:
-		current_radius = minf(radius, current_radius + (radius / maxf(0.001, expansion_duration)) * delta)
-	if tick_left <= 0.0:
+		current_radius = minf(radius, current_radius + (radius / maxf(0.001, expansion_duration)) * active_delta)
+	if tick_left <= 0.0 and previous_life > maxf(0.0, previous_tick):
 		tick_left = tick_interval
 		tick_flash_left = 0.1
 		if is_instance_valid(target) and global_position.distance_to(target.global_position) <= current_radius:

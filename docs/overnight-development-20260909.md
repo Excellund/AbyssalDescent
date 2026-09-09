@@ -15,9 +15,9 @@ The thread continuation `overnight-abyssaldescent-development` expires at the de
 
 ## Active ownership
 
-- `review_combat_lifecycle`: clean permanent Main/Menu ownership regressions in TEMP.
-- `review_combat_readability`: bounded read-only Pyre/Toll attack and visual audit in TEMP.
-- `review_hit_context`: broader 16-pair actual campaign transition matrix in TEMP.
+- `review_combat_lifecycle`: final bounded actual input-cancellation boundary audit in TEMP.
+- `review_combat_readability`: final bounded normal-menu/reward/build-detail usability audit in TEMP.
+- `review_hit_context`: actual reward acquisition and exhausted-pool continuation audit in TEMP.
 - Root: integration, reviews, regression registration, work log, Git and normal playtest delivery.
 
 Coordinate overlapping files before editing. Agents do not commit independently.
@@ -227,3 +227,29 @@ The intermittent shutdown warning is now identified from verbose diagnostics: Au
 A read-only audit of other typed-array boundaries found no additional production defect. Sovereign's safe-angle and Orbital Lance index arrays use its unquantized native projectile channel, not the generic runtime quantizer. Actual native RPC preserves both arrays and the full snapshot across all five attacks in windup, attack, recovery and clear: 223 checks, 20 snapshots (`abyssal-enet-741f5163793b474c86c3c9add5d3c21f`). Menu options, cue queues, HUD mutators and queued objective rosters have typed local producers. No speculative cast rewrite was made.
 
 The reviewed audio fix is now promoted only under `scripts/tests`: a small shared helper captures weak playback references when audio nodes leave the tree and waits, with a five-second failure deadline, until those exact native objects retire. Native node deletion already stops playback, so no production stop call, stream mutation, guessed sleep or relaxed warning scan is needed. The room fixture's exploratory eight-frame delay is removed. Independent positives pass ownership 152 twice and room entry 62, each observing one pending native playback become zero and exiting strictly clean. Exact files/hashes and causal logs are in `abyssal-shutdown-audit-9666ae36125d4fe6a26aad1a899ca447/audio-retirement-handoff.json`. Retrying the normal full hook now includes this synchronization.
+
+## Toll and Pyre correction promoted
+
+The reviewed Pyre field clips ticking and growth to its remaining active lifetime, with no catch-up burst or tick scheduled at/after expiry. Target selection, owner-death persistence, radius, damage and cadence stay unchanged. Its existing replicated death field remains targetless and harmless on joiners.
+
+Toll now resolves simultaneous player/ring movement against its closed radial band and strict three-spoke angular gaps. Analytic interval boundaries avoid temporal sampling and preserve the original center convention; scalar intermediates prevent rounding an outside tangent onto a damaging rim. The final active fraction clips both wave growth and player travel. Target reset/departure, live bounds and anchor changes reseed history, and damage callbacks cannot continue a retired pulse. Existing regular dash bypass, directed phase resistance, once-per-player damage, pulse order, heal timing and unit outward nudge remain intact.
+
+Toll uses compact ordered room-scoped pulse state with a 0.35-second visual lease. Its existing heal/flash companion values participate in sequence generation, preventing duplicate or stale heal effects. Authority dispatches aura and heavy slow through the existing per-owner service; the host's remote avatar no longer absorbs a slow intended for its owner. No new RPC is introduced.
+
+The final Toll runtime is SHA256 `37941821C078917040FA4B0ECA25F739DFBAFDEDFC384D4014D46D4023B6A79F`; Pyre is `6CD4AD5F61A3EF8BB40AF7D9AC8249F616726670288E316692A045B61E882DB7` after a spacing-only cleanup. Focused behavior has 55 checks, the independent interval oracle 1,260 cases, and actual Orbit paths 55 checks across 24 paths (17 contacts, seven safe). Native ENet passes 76 checks, including heal rising-edge replay, actual owner slow and Pyre's real death payload (`abyssal-enet-054e75863bcf4088a8804141656ab44c`). Six GPU frames passed and were inspected by root and implementer (`abyssal-gameplay-render-d582abcb709642ec895ce2548b256a94/toll_pyre_frames`). Permanent runtime, meaningful fixtures and thin wrappers are promoted; exploratory oracle datasets remain TEMP.
+
+## Seventh desktop checkpoint
+
+Room-entry commit **`e14f2be`** passes the full normal hook with 244-script compilation (`abyssal-validation-21a6f698a44444afbd578e8f311c7c6a`), including the 152 ownership and 62 actual-room assertions with condition-based audio retirement. It is pushed alongside Archer and ownership. Main and the unrelated scene edit remain preserved.
+
+The single desktop playtest is now normal **`dev-overnight-rooms-20260909-020731`**, SHA256 `E07A27F389FEDA32D6B652D712D9AACC4C1B69440889DFF915B819C434096E86`, 114073160 bytes. Import, release export, embedded package verification and 26 normal checks passed (`abyssal-executable-smoke-a268e8652dfc4948ae4e2c9339dc4c42`). All 161 production scripts/shaders matched the reviewed room-checkpoint source in `abyssal-playtest-export-42444f5cfcde44d1a732c86192799114/project`. The exact hash was checked before and after Desktop replacement. This version includes Archer, ownership and actual Breakwater entry; Toll/Pyre await the next checkpoint.
+
+Root's integrated Toll/Pyre validation passes 248-script compilation, 55 behavior and 55 Orbit checks (`abyssal-validation-fec9070811494a7d905af34d1e848800`) and all 76 real ENet checks (`abyssal-enet-e2fb86fc617d4b0fb6ad8d17ebbd6ccb`).
+
+## Rendered combat stability sample
+
+A 174-second actual GPU run passes 19 assertions across three 55-second combat rounds and teardown. Real Player/Enemy physics, arena cover and combat coordination exercise normal melee, Crescent, Blast, Orbit, Double and Ruinous against ten replenished enemies: two each Archer, Tether, Drifter, Chaser and Pyre. Synthetic input and increased fixture health allow continuous activity; this is not a human playtest or the full Main/HUD/network workload.
+
+Across 9,899 rendered combat frames it performs 195 melee attacks and 84 charged blasts, observing active Orbit, echoes, launches and each hazard. All three teardowns return to exactly 10 Nodes, 188 Resources, 1,688 Objects, one intentional shared mapper orphan and 13,959,283 GPU bytes, with no enemies or lingering effects. Four captured frames were inspected by root. Logs are strict-clean apart from the known environment certificate message. The fixture retains measurement arrays, so its small static allocation increase is not claimed as a production leak.
+
+On this RTX 4080/Ryzen 5600X system at 1280x720 and a 60-frame cap, measured wall-frame p50/p95/p99 are 16.661/18.003/19.479 ms. PNG captures and startup introduce spikes; this supports stability for the sampled workload, not a universal FPS or balance claim. Evidence: `abyssal-gpu-combat-soak-c27702e247d141908e8d98e335196ae4/combat-soak-results.md`, rendered frames in `abyssal-gameplay-render-b66fddacc3aa4636bbe91fd4e95f128e/combat_soak_frames`. No extra optimization or visual change was justified.
