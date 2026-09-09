@@ -89,6 +89,8 @@ func _make_world() -> void:
 	player.attack_arc_degrees = 130.0
 	player.arcana_motion.set_process(false)
 	player.boss_combinations.set_process(false)
+	# Include the lazily created shared impact player in this fixture's audio mute.
+	EnemyReplicationService._get_ruinous_feedback()
 	for audio in world.find_children("*", "AudioStreamPlayer", true, false):
 		(audio as AudioStreamPlayer).stream = null
 	for audio in world.find_children("*", "AudioStreamPlayer2D", true, false):

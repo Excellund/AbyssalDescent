@@ -51,6 +51,7 @@ const PROFILE_KEY_TETHER_COUNT := "tether_count"
 const PROFILE_KEY_SEAMLOCK_COUNT := "seamlock_count"
 const PROFILE_KEY_MIRRORLINE_COUNT := "mirrorline_count"
 const PROFILE_KEY_TOLL_COUNT := "toll_count"
+const PROFILE_KEY_BREAKWATER_COUNT := "breakwater_count"
 const PROFILE_KEY_DRIFTER_COUNT := "drifter_count"
 const UNDERTOW_DRIFTER_LIMIT := 2
 const PROFILE_KEY_KEEPER_COUNT := "keeper_count"
@@ -358,6 +359,17 @@ static func _build_encounter_registry() -> Array[Dictionary]:
 			"glossary_label": "Apex Toll",
 			"door_presentation": {
 				"label": "Apex Toll",
+				"short_label": "Apex"
+			}
+		},
+		{
+			"key": "apex_breakwater",
+			"id": DEBUG_ENUMS.Encounter.APEX_BREAKWATER,
+			"is_boss": false, "is_rest": false, "is_objective": false,
+			"display_label": "Apex Breakwater",
+			"glossary_label": "Apex Breakwater",
+			"door_presentation": {
+				"label": "Apex Breakwater",
 				"short_label": "Apex"
 			}
 		},
@@ -770,6 +782,7 @@ static func normalize_profile(value: Variant) -> Dictionary:
 	normalized[PROFILE_KEY_SEAMLOCK_COUNT] = int(input.get(PROFILE_KEY_SEAMLOCK_COUNT, 0))
 	normalized[PROFILE_KEY_MIRRORLINE_COUNT] = int(input.get(PROFILE_KEY_MIRRORLINE_COUNT, 0))
 	normalized[PROFILE_KEY_TOLL_COUNT] = int(input.get(PROFILE_KEY_TOLL_COUNT, 0))
+	normalized[PROFILE_KEY_BREAKWATER_COUNT] = int(input.get(PROFILE_KEY_BREAKWATER_COUNT, 0))
 	normalized[PROFILE_KEY_DRIFTER_COUNT] = int(input.get(PROFILE_KEY_DRIFTER_COUNT, 0))
 	normalized[PROFILE_KEY_KEEPER_COUNT] = int(input.get(PROFILE_KEY_KEEPER_COUNT, 0))
 	normalized[PROFILE_KEY_WEAVER_COUNT] = int(input.get(PROFILE_KEY_WEAVER_COUNT, 0))
@@ -805,7 +818,7 @@ static func profile_static_camera(profile_value: Dictionary) -> bool:
 
 # Enemy count metadata: list of all enemy types for data-driven access
 static func _get_enemy_count_keys() -> Array[String]:
-	return ["chaser", "charger", "archer", "shielder", "lurker", "ram", "lancer", "spectre", "pyre", "tether", "seamlock", "mirrorline", "drifter", "weaver", "sentinel", "keeper"]
+	return ["chaser", "charger", "archer", "shielder", "lurker", "ram", "lancer", "spectre", "pyre", "tether", "seamlock", "mirrorline", "drifter", "weaver", "sentinel", "keeper", "breakwater"]
 
 static func _get_enemy_count_key_for_type(enemy_type: String) -> String:
 	return "%s_count" % enemy_type.strip_edges().to_lower()
@@ -869,6 +882,9 @@ static func profile_mirrorline_count(profile_value: Dictionary) -> int:
 static func profile_toll_count(profile_value: Dictionary) -> int:
 	return _get_enemy_count("toll", profile_value)
 
+static func profile_breakwater_count(profile_value: Dictionary) -> int:
+	return _get_enemy_count("breakwater", profile_value)
+
 static func profile_drifter_count(profile_value: Dictionary) -> int:
 	return _get_enemy_count("drifter", profile_value)
 
@@ -887,6 +903,15 @@ static func profile_with_spawn_limits(profile_value: Dictionary) -> Dictionary:
 			if not BREACH_ENEMY_TYPES.has(enemy_type):
 				result[_get_enemy_count_key_for_type(enemy_type)] = 0
 		result[PROFILE_KEY_TOLL_COUNT] = 0
+	elif profile_encounter_key(result) == "apex_breakwater":
+		# This Apex is a single committed threat, including after count modifiers.
+		for enemy_type in _get_enemy_count_keys():
+			result[_get_enemy_count_key_for_type(enemy_type)] = 0
+		result[PROFILE_KEY_TOLL_COUNT] = 0
+		result[PROFILE_KEY_BREAKWATER_COUNT] = 1
+		result[PROFILE_KEY_WAVE_COUNT] = 1
+		result[PROFILE_KEY_INITIAL_WAVE_FRACTION] = 1.0
+		result["obstacle_layout"] = []
 	return result
 
 static func profile_weaver_count(profile_value: Dictionary) -> int:

@@ -791,6 +791,15 @@ func _draw_trial_mutator_icon(door_pos: Vector2, shape_id: String, theme: Color,
 	draw_arc(door_pos, 11.4, 0.0, TAU, 28, Color(theme.r, theme.g, theme.b, 0.86), 2.2)
 
 	match shape_id:
+		"breakwater":
+			# A committed approach meeting a wall, matching the encounter's answer.
+			var wall_start := door_pos + Vector2(7.5, -7.0)
+			var wall_end := door_pos + Vector2(7.5, 7.0)
+			draw_line(wall_start, wall_end, outline_color, 4.5, true)
+			draw_line(wall_start, wall_end, theme, 2.5, true)
+			var arrow := PackedVector2Array([door_pos + Vector2(-7.0, -5.5), door_pos + Vector2(3.0, 0.0), door_pos + Vector2(-7.0, 5.5)])
+			draw_polyline(arrow, outline_color, 5.0, true)
+			draw_polyline(arrow, icon_color, 2.5, true)
 		"blood_rush":
 			for a in [0.0, PI * 0.667, PI * 1.333]:
 				var dir := Vector2.RIGHT.rotated(a)

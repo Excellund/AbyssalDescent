@@ -15,10 +15,10 @@ The thread continuation `overnight-abyssaldescent-development` expires at the de
 
 ## Active ownership
 
-- `review_combat_lifecycle`: co-op checkpoint/departure fixes complete; independently reviewed arena bounds and corrected world-clamp ordering.
-- `review_combat_readability`: completing real arena-edge, shrinking-room, ENet and GPU fixtures. After that, prototype Apex Breakwater only in an isolated copy until the reliability checkpoint is committed.
-- `review_hit_context`: kill-proc and party-provenance changes complete; reviewing finalization races in isolation.
-- Root: shared arena boundary/controller integration, independent review, regression registration, work log, Git and delivery. Next owns Breakwater encounter integration after the reliability checkpoint.
+- `review_combat_lifecycle`: Breakwater encounter matrix and physics soak complete; testing standalone local telemetry analysis end to end.
+- `review_combat_readability`: Breakwater runtime and GPU fixtures complete; investigating the deferred Warden/Lacuna charge-warning mismatch in isolation.
+- `review_hit_context`: Breakwater combination and ENet checks complete; reviewing learned-power checkpoint restoration and relevant Oath evidence in isolation.
+- Root: independent integration review, regression registration, work log, Git and delivery; local telemetry reader/analyzer implementation.
 
 Coordinate overlapping files before editing. Agents do not commit independently.
 
@@ -66,10 +66,34 @@ Other selected, reproduced reliability issues:
 - A disconnected player's living avatar remained registered, potentially preventing party defeat. The fix uses the existing unregister path, clears its pending actions and retargets enemies. The host rechecks reward, intro and retry readiness. Departure has 33 unit and 14 ENet checks (`abyssal-enet-bb5900474417460b88137278d1099af2`); checkpoint isolation retains all 42 checks.
 - Lancer zones only damage their current chase target in co-op, and a long frame can apply a tick scheduled after expiry. Root reproduced both failures in `abyssal-validation-bed1a26ae85943ca9bba35651f3bce07/lancer-review.log`; correcting candidates, host-only damage and active-time accounting with focused and live ENet coverage.
 
-Recent local data was analyzed without changing player files: exact build `dev-keeper-20260908-225119`, UTC September 8 through exclusive September 9, output `abyssal-overnight-analysis-81d8dd7fb76340beb73d7bd723eb76d6/keeper-local.json`. There are only two runs (one death, one quit), with no per-room damage/reward-offer data. This is insufficient for balance changes. The historical May report and older mixed `dev` population were not used for tuning.
+Recent local JSON history was analyzed without changing player files: exact build `dev-keeper-20260908-225119`, UTC September 8 through exclusive September 9, output `abyssal-overnight-analysis-81d8dd7fb76340beb73d7bd723eb76d6/keeper-local.json`. There are only two runs (one death, one quit); that history format has no per-room damage/reward-offer data. The richer local telemetry save does contain those events, as established below. Two runs remain insufficient for balance changes. The historical May report and older mixed `dev` population were not used for tuning.
 
 Real arena bounds are logical center clamps rather than physical walls. A new shared swept-boundary helper lets Crescent ricochet, Ruinous impact, and recoil/orbit stop at the actual perimeter while respecting nearer physical cover. Dynamic shrink cancels displaced blades/movement/launches without inventing damage or a shade. Independent review found that WorldGenerator clamps actors before physics; its actual displacement path now cancels interrupted motion/launch state too. Existing Crescent 86, motion 197, combinations 106 and authority 29 pass with the helper (`abyssal-validation-6d8233580348440aa2a60e75e0b04df3`). Dedicated real-edge validation passes 174 checks and 212-script compilation (`abyssal-validation-969a67501f434ddd9d7f893c78c486a1`), plus 32 ENet checks (`abyssal-enet-00178d2eec554004a887a7d90385d1eb`). Five real GPU states passed and were inspected by root and implementer; the final rerender is `abyssal-gameplay-render-0cabb30d15d34e6aa5bb6a9c17b71a88/live_arena_edge_frames`.
 
 The next selected content increment is **Apex Breakwater**, previously considered in `next-content-update.md`: one vulnerable foe commits to a clearly locked straight charge, then gives a longer punish window when it hits the arena edge or cover. Keep the existing optional Apex route, Arcana reward, open arena and controls. No extra adds, armor gate or later phase. Use the shared boundary fix and exact charge geometry; vary only health, damage and between-charge cadence across Bearings. Start production integration only after the current reliability checkpoint is frozen and committed, and retain enough time for all-Bearing, power-combination, ENet and rendered verification.
 
 Record completed increments, verification results, commits, final build version/hash and any deliberately deferred work here before the morning handoff.
+
+## Second checkpoint and current desktop build
+
+**`d11deb1` is committed and pushed** with the reliability work above. The normal mandatory hook passed all suites and 212-script compilation in `abyssal-validation-da6d8c03058847149f84c0acf301604d`. An approval check initially misread a combined staged/unstaged listing; separate index evidence proved the user scene edit was unstaged, and the unchanged commit then passed normally. `main` and the local `scenes/Main.tscn` edit are preserved.
+
+The same desktop playtest is now **normal** `dev-overnight-reliability-20260909-001803`, SHA256 `646330E27DED03A3790EA73278E1449BA384C25C5C1FBE9D6A8456C7B525B67E`, size 114031456. The production export, embedded package verification and 26 normal executable checks pass; all 158 production scripts match source. Staging: `abyssal-playtest-export-58108b3730274b58b33726f4f44c373d/project`. Desktop hash matches; no extra desktop executable or game launch was made.
+
+Breakwater production integration has started after that frozen checkpoint. Design and initial values are in [apex-breakwater.md](apex-breakwater.md). Its locked distance is target distance plus 180 pixels, clamped to 280–760: a fixed 760-pixel charge would hit the arena perimeter automatically from the center and remove the intended baiting decision. The enemy, encounter integration, and independent runtime/route/network fixtures are being developed under separate ownership. Do not claim this content delivered until the next verified normal export replaces the current checkpoint.
+
+## Breakwater verification
+
+Implementation and independent review are complete. The encounter matrix passes 2,397 checks across all four Bearings, one to four players, and all biomes, including routes/rewards, hard mutators, actual Endless scaling, contaminated profiles, real spawns and saved/legacy profiles. Keeper 181 and Ascension 373 remain green (`abyssal-breakwater-encounter-0dfdb5cfeeda437c9edcfb62e65e8157/encounter-reviewed.log`). An independent actual-physics soak passes 19 checks over 772 simulated seconds and 201 charges, including perimeter/corner crowding, 0.4-second hitches, intro transport, production pause, death and bounded collision exceptions (`physics-soak-first.log`).
+
+Final runtime passes 90 checks and compilation of 216 scripts (`abyssal-validation-27885ee6b78d43cc9ebe743784064fc6`). Review corrected target acquisition during the intro, refined long shape casts so thin columns receive the predicted impact, prevented destroyed cover from granting wall recovery, and bounded inward reset against body blocking. Seven GPU frames pass strict errors/leaks and were inspected by root and implementer: route door, tracking, host/joiner lock, charge, impact and recovery (`abyssal-gameplay-render-2bca88a0f9704e8b99f8ef87502721ca/breakwater_frames`).
+
+Build combinations pass 29 checks. Real ENet passes 37 (31 host, 6 joiner) in `abyssal-enet-822b5fd18a004ed28fd913d5f6fe6c2a`, including both players once per sweep, exact radius/endpoints, replica-only effects, lost-final expiry, stale/wrong-room/nonfinite state, client Double/Crescent/Ruinous ownership, target death and actual departure during commitment. All three unit suites are registered in the default regression runner.
+
+The first full hook reached 218-script compilation and all new suites, then caught an active audio resource at exit in the existing 106-check boss-combination fixture. Verbose reproduction identified the lazily created shared Ruinous sound, which was being created after that fixture muted its other audio. Initializing it before the existing mute removes the shutdown leak; the same verbose fixture passes cleanly. Production sound behavior is unchanged. The full hook must pass on the corrected fixture before commit.
+
+## Rich local analysis in progress
+
+A standalone Godot decoder now reads a disposable copy of `run_telemetry.save`, without game autoloads, repair-on-read behavior or uploads. The existing analyzer accepts `-LocalTelemetryPath` and the same explicit build/date/output filters. Explicit debug/mixed/unknown saved provenance is excluded; legacy rows without origin evidence remain disclosed as uncertain. No actual player data or generated report is added to Git.
+
+Read-only evidence: `abyssal-local-events-99e5e803c33a4378bdf6fde9c53bf01d/keeper-direct-report.json` contains the same two `dev-keeper-20260908-225119` runs, now with room, damage and reward-offer coverage. The death run has 14 room entries, 7 damage events, 11 reward choices and 12 offers; the short quit has one offer. These remain descriptive playtest context, not grounds for numerical tuning. End-to-end synthetic tests and documentation are pending before the tooling commit.

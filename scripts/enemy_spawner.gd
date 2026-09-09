@@ -47,6 +47,10 @@ const ENEMY_MUTATOR_STAT_MAP := {
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_SPEED_MULT, "prop": "charge_speed", "min": 60.0},
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_WINDUP_MULT, "prop": "windup_time", "min": 0.18}
 	],
+	"breakwater": [
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_DAMAGE_MULT, "prop": "charge_damage", "min": 1.0, "is_int": true},
+		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_ATTACK_INTERVAL_MULT, "prop": "attack_cooldown", "min": 0.3}
+	],
 	"lancer": [
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_WINDUP_MULT, "prop": "windup_time", "min": 0.22},
 		{"stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_ARCHER_COOLDOWN_MULT, "prop": "attack_cooldown", "min": 0.8}
@@ -131,6 +135,9 @@ const ENEMY_DAMAGE_CLASSIFICATION := {
 	"ram": {
 		"charge_hit": {"kind": "flat", "scales_via_mutator": true, "mutator_stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_DAMAGE_MULT}
 	},
+	"breakwater": {
+		"charge_hit": {"kind": "flat", "scales_via_mutator": true, "mutator_stat": ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_DAMAGE_MULT}
+	},
 	"lancer": {
 		"zone_tick": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"}
 	},
@@ -177,7 +184,7 @@ const ENEMY_DAMAGE_CLASSIFICATION := {
 		"all_attacks": {"kind": "flat", "scales_via_mutator": false, "mutator_stat": "none"}
 	}
 }
-const ENEMY_SPAWN_ORDER: Array[String] = ["chaser", "charger", "archer", "shielder", "seamlock", "mirrorline", "toll", "lurker", "ram", "lancer", "spectre", "pyre", "tether", "drifter", "weaver", "sentinel", "keeper"]
+const ENEMY_SPAWN_ORDER: Array[String] = ["chaser", "charger", "archer", "shielder", "seamlock", "mirrorline", "toll", "lurker", "ram", "lancer", "spectre", "pyre", "tether", "drifter", "weaver", "sentinel", "keeper", "breakwater"]
 const DRIFTER_SCRIPT := preload("res://scripts/enemy_drifter.gd")
 const KEEPER_SCRIPT := preload("res://scripts/enemy_keeper.gd")
 
@@ -217,6 +224,8 @@ var _next_wave_index: int = 1
 var _drifter_limit: int = 0
 var _drifter_spawn_sequence: int = 0
 var _keeper_limit: int = 0
+var _breakwater_room: bool = false
+var _breakwater_spawned: bool = false
 
 func initialize(world_root_node: Node2D, player_node: Node2D, rng_instance: RandomNumberGenerator, script_map: Dictionary, enemy_died_callback: Callable, player_targets_provider_callable: Callable = Callable(), enemy_damaged_callback: Callable = Callable()) -> void:
 	world_root = world_root_node
@@ -231,6 +240,8 @@ func configure_room(room_size: Vector2, padding: float, safe_radius: float, enem
 	_drifter_limit = 0
 	_drifter_spawn_sequence = 0
 	_keeper_limit = 0
+	_breakwater_room = false
+	_breakwater_spawned = false
 	current_room_size = room_size
 	spawn_padding = padding
 	spawn_safe_radius = safe_radius
@@ -277,6 +288,7 @@ func _spawn_profile_enemies_internal(profile: Dictionary, build_report: bool) ->
 	_clear_pending_waves()
 	_drifter_limit = ENCOUNTER_CONTRACTS.UNDERTOW_DRIFTER_LIMIT if ENCOUNTER_CONTRACTS.profile_encounter_key(profile) == "undertow" else 0
 	_keeper_limit = ENCOUNTER_CONTRACTS.BREACH_KEEPER_LIMIT if ENCOUNTER_CONTRACTS.profile_encounter_key(profile) == "breach" else 0
+	_breakwater_room = ENCOUNTER_CONTRACTS.profile_encounter_key(profile) == "apex_breakwater"
 	_drifter_spawn_sequence = 0
 	profile = ENCOUNTER_CONTRACTS.profile_with_spawn_limits(profile)
 
@@ -473,6 +485,8 @@ func _profile_count_for_enemy_type(profile: Dictionary, enemy_type: String) -> i
 			return ENCOUNTER_CONTRACTS.profile_mirrorline_count(profile)
 		"toll":
 			return ENCOUNTER_CONTRACTS.profile_toll_count(profile)
+		"breakwater":
+			return ENCOUNTER_CONTRACTS.profile_breakwater_count(profile)
 		"drifter":
 			return ENCOUNTER_CONTRACTS.profile_drifter_count(profile)
 		"keeper":
@@ -546,6 +560,8 @@ func _spawn_enemy_in_current_room(enemy_script: Script, min_player_distance: flo
 	if not is_instance_valid(world_root):
 		return null
 	var enemy_key := _enemy_script_key(enemy_script)
+	if _breakwater_room and (enemy_key != "breakwater" or _breakwater_spawned):
+		return null
 	if enemy_key == "drifter" and _drifter_limit > 0 and _living_drifter_count() >= _drifter_limit:
 		return null
 	if _keeper_limit > 0:
@@ -571,6 +587,8 @@ func _spawn_enemy_in_current_room(enemy_script: Script, min_player_distance: flo
 		# in a step or two but not so close that the player is inside it at idle.
 		var toll_offset_y := -current_room_size.y * 0.24
 		enemy.global_position = Vector2(0.0, toll_offset_y)
+	if _breakwater_room:
+		_breakwater_spawned = true
 	world_root.add_child(enemy)
 	_apply_enemy_mutator(enemy, enemy_script)
 	_apply_ascension_health_scaling(enemy)
@@ -691,6 +709,8 @@ func _enemy_matches_archetype(enemy_key: String, archetype: String) -> bool:
 			return enemy_key == "mirrorline"
 		"toll":
 			return enemy_key == "toll"
+		"breakwater":
+			return enemy_key == "breakwater"
 		"spectre":
 			return enemy_key == "spectre"
 		"pyre":

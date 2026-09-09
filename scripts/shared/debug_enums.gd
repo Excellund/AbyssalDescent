@@ -56,4 +56,5 @@ enum Encounter {
 	BOSS_3,
 	UNDERTOW,
 	BREACH,
+	APEX_BREAKWATER,
 }

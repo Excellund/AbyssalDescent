@@ -29,6 +29,9 @@ static func apply_scaling(profile: Dictionary, is_endless_mode: bool, endless_bo
 		clampf(base_room_size.x + room_growth.x, room_base_size.x, 1800.0),
 		clampf(base_room_size.y + room_growth.y, room_base_size.y, 1300.0)
 	)
+	if ENCOUNTER_CONTRACTS.profile_encounter_key(scaled) == "apex_breakwater":
+		# Preserve the distances that make this solitary wall-bait encounter work.
+		scaled_room_size = base_room_size
 	ENCOUNTER_CONTRACTS.profile_set_room_size(scaled, scaled_room_size)
 	ENCOUNTER_CONTRACTS.profile_set_static_camera(scaled, scaled_room_size.x <= static_camera_room_threshold)
 
@@ -55,4 +58,4 @@ static func apply_scaling(profile: Dictionary, is_endless_mode: bool, endless_bo
 	if base_label.find("Tier ") == -1:
 		scaled[ENCOUNTER_CONTRACTS.PROFILE_KEY_LABEL] = "%s  Tier %d" % [base_label, tier]
 
-	return scaled
+	return ENCOUNTER_CONTRACTS.profile_with_spawn_limits(scaled)

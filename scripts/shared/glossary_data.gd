@@ -110,6 +110,12 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"desc": "Outer aura slows you; pulses deal damage. Enter the inner ring to interrupt its self-heal.",
 		},
 		{
+			"name": "Apex Breakwater",
+			"group": "Trial",
+			"color": Color(1.0, 0.66, 0.38, 1.0),
+			"desc": "Bait its locked charge toward a wall, leave the marked lane, then attack during the longer recovery. Always vulnerable; rewards Arcana.",
+		},
+		{
 			"name": "Last Stand",
 			"group": "Objective",
 			"color": Color(1.0, 0.8, 0.5, 1.0),

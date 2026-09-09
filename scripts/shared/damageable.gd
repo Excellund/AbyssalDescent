@@ -50,7 +50,7 @@ static func is_displacement_immune(target: Object) -> bool:
 	var script := target.get_script() as Script
 	while script != null:
 		var file := script.resource_path.get_file()
-		if file.begins_with("enemy_boss") or file in ["enemy_seamlock.gd", "enemy_mirrorline.gd", "enemy_toll.gd"]:
+		if file.begins_with("enemy_boss") or file in ["enemy_seamlock.gd", "enemy_mirrorline.gd", "enemy_toll.gd", "enemy_breakwater.gd"]:
 			return true
 		script = script.get_base_script()
 	return false

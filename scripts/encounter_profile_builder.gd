@@ -524,6 +524,8 @@ func build_debug_encounter_profile(encounter_key: String, depth: int) -> Diction
 			return _build_apex_mirrorline_profile(depth)
 		"apex_toll":
 			return _build_apex_toll_profile(depth)
+		"apex_breakwater":
+			return _build_apex_breakwater_profile(depth)
 		"last_stand":
 			return _build_survival_profile(depth)
 		"cut_the_signal":
@@ -744,12 +746,35 @@ func _build_apex_toll_profile(_depth: int = 0) -> Dictionary:
 	profile[ENCOUNTER_CONTRACTS.PROFILE_KEY_TOLL_COUNT] = 1
 	return profile
 
+func _build_apex_breakwater_profile(_depth: int = 0) -> Dictionary:
+	var tier := clampi(_difficulty_rank(), 0, 3)
+	var health_curve: Array[float] = [0.80, 1.0, 1.20, 1.40]
+	var damage_curve: Array[float] = [0.75, 1.0, 1.125, 1.25]
+	var cooldown_curve: Array[float] = [1.35, 1.0, 0.85, 0.70]
+	var party_size := clampi(multiplayer_party_size, 1, 4) if use_multiplayer_difficulty_config else 1
+	var party_health := 1.0 + 0.6 * float(party_size - 1)
+	var mutator := {
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_NAME: "Breakwater",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_THEME_COLOR: Color(1.0, 0.66, 0.38, 1.0),
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID: "breakwater",
+		"affected_archetypes": ["breakwater"],
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX: "Bait the locked charge into a wall, then attack during its recovery",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ENEMY_TINT: Color.WHITE,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_ENEMY_HEALTH_MULT: health_curve[tier] * party_health,
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_DAMAGE_MULT: damage_curve[tier],
+		ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHASER_ATTACK_INTERVAL_MULT: cooldown_curve[tier]
+	}
+	var profile := _build_profile("Apex Breakwater", TRIAL_ROOM_SIZE, 0, 0, 0, 0, mutator)
+	profile[ENCOUNTER_CONTRACTS.KEY_ENCOUNTER_KEY] = "apex_breakwater"
+	return ENCOUNTER_CONTRACTS.profile_with_spawn_limits(profile)
+
 func _pick_apex_encounter_profile(depth: int) -> Dictionary:
 	## Apex pool: each variant is a unique-identity elite encounter. Equal weight across pool.
 	var pool: Array[Callable] = [
 		Callable(self, "_build_apex_seamlock_profile"),
 		Callable(self, "_build_apex_mirrorline_profile"),
-		Callable(self, "_build_apex_toll_profile")
+		Callable(self, "_build_apex_toll_profile"),
+		Callable(self, "_build_apex_breakwater_profile")
 	]
 	var pick := pool[rng.randi_range(0, pool.size() - 1)]
 	return pick.call(depth) as Dictionary
@@ -791,7 +816,7 @@ func apply_mutator_variant_to_profile(profile: Dictionary, mutator: Dictionary, 
 	var mutator_name := ENCOUNTER_CONTRACTS.mutator_name(mutator)
 	if not mutator_name.is_empty() and label.begins_with("Trial"):
 		modified[ENCOUNTER_CONTRACTS.PROFILE_KEY_LABEL] = "Trial %s" % mutator_name
-	return modified
+	return ENCOUNTER_CONTRACTS.profile_with_spawn_limits(modified)
 
 func _pick_trial_base_profile(mutator: Dictionary) -> Dictionary:
 	var hard_pool := _get_hard_pool()
