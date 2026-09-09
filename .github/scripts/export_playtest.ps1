@@ -109,9 +109,10 @@ skip_starting_boon_selection = true
 apply_test_powers_on_start = true
 start_bearing = 1
 start_power_preset = 0
-start_encounter = 0
+start_encounter = 28
+start_depth = 5
 end_screen_preview = 0
-start_power_ids = PackedStringArray("blast_drive", "blast_drive", "blast_drive", "razor_orbit", "razor_orbit", "razor_orbit", "ruinous_impact", "ruinous_impact", "sovereigns_double", "sovereigns_double")
+start_power_ids = PackedStringArray("returning_crescent", "returning_crescent", "returning_crescent", "blast_drive", "blast_drive", "blast_drive", "razor_orbit", "razor_orbit", "razor_orbit", "ruinous_impact", "ruinous_impact", "sovereigns_double", "sovereigns_double")
 
 '@
 } else {

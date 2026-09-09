@@ -2,7 +2,9 @@
 
 Development is on `codex/overnight-buildcraft-20260909`. The existing desktop **AbyssalDescent Playtest.exe** is replaced at verified checkpoints with a normal build: regular menu, progression and rewards. `main` and the original desktop executable are preserved. The exact current build and verification evidence are in [the development log](overnight-development-20260909.md).
 
-The finished overnight build is **`dev-overnight-final-20260909-025506`**. Open the same Desktop playtest as usual; it starts a normal run without granted debug powers.
+The accepted morning checkpoint is normal build **`dev-orbit-checkpoint-20260909-073623`**, replacing the focused debug setup in the same Desktop playtest. It opens the regular menu, uses normal progression and grants no debug powers. Tab shows the build and Esc pauses.
+
+Razor Orbit now shows a blue ring draining toward its 1.4-second release, with a brief sound and direction cue near the end. Its existing duration and transfer cap are unchanged. Breakwater tuning is deferred until a representative earned build is tested; the previous debug setup was substantially stronger than an ordinary first Apex build.
 
 ## New things to try
 

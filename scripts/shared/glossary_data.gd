@@ -462,7 +462,7 @@ static func _motion_arcana_section_bbcode() -> String:
 	lines.append("[b]Razor Orbit[/b]")
 	lines.append("Tap Dash for your normal dash. To orbit, aim at a nearby foe first, then hold Dash through the normal dash. The highlighted target is remembered while you move. If no target is highlighted, aim at a foe during the dash.")
 	lines.append("Keep holding Dash to orbit and cut. Your entry dash chooses the circling direction, which stays fixed until you detach. Attack still works. Release Dash to launch along your orbit.")
-	lines.append("At level 1, hook foes within 260. Each cut deals 35% of Damage, at most once per enemy every 0.3 seconds. An orbit lasts up to 1.4 seconds; a level 3 transfer can extend the whole sequence to 2.4 seconds. Cards show cut damage and hook reach; Blast cards show full-charge damage and reach.")
+	lines.append("At level 1, hook foes within 260. Each cut deals 35% of Damage, at most once per enemy every 0.3 seconds. An orbit lasts up to 1.4 seconds; your blue ring drains toward automatic release, with a brief sound and direction cue near the end. A level 3 transfer can extend the whole sequence to 2.4 seconds. Cards show cut damage and hook reach; Blast cards show full-charge damage and reach.")
 	lines.append("Level 2 can also anchor to columns. At level 3, keep holding and aim at another foe when your anchor dies to transfer once.")
 	lines.append("")
 	lines.append("Release a charged Blast Drive while orbiting to detach with explosive recoil. Starting a new dash cancels a held blast charge. Each Arcana level increases its damage and reach; Prismatic strengthens both again.")

@@ -335,7 +335,7 @@ func _power_sentence_template(power_id: String) -> String:
 		"blast_drive":
 			return "Hold Attack; release: blast/recoil. Full Damage %s; reach %s. %s"
 		"razor_orbit":
-			return "Aim; Hold Dash: orbit; release: launch. Cut Damage %s; reach %s. %s"
+			return "Aim; Hold Dash: orbit 1.4s or release. Damage %s; reach %s. %s"
 		"returning_crescent":
 			return "Attack throws a returning blade. Damage %s each way; reach %s. %s"
 		_:
@@ -1016,7 +1016,7 @@ func _motion_arcana_unlocks_for_stack(power_id: String, stack_count: int) -> Str
 			return "2 charges; steer."
 		return "2 charges." if stack_count >= 2 else "1 charge."
 	if stack_count >= 3:
-		return "Columns; kill transfer."
+		return "Columns; kill transfer 2.4s."
 	return "Foes + columns." if stack_count >= 2 else "Aim at a foe."
 
 

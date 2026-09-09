@@ -149,7 +149,8 @@ func _test_motion_damage_descriptions() -> void:
 				player.arcana_motion._apply_cut_contacts(origin, origin + Vector2(4.0, 0.0))
 				var actual_damage := 10000 - enemy.get_current_health()
 				_check(actual_damage == int(round(float(player.damage) * MOTION.ORBIT_CUT_DAMAGE_RATIO * damage_scale)), "Orbit L%d cut damage matches its description ratio" % level)
-				_check(text.contains("Cut Damage %.1f%%" % (MOTION.ORBIT_CUT_DAMAGE_RATIO * 100.0 * damage_scale)) and text.contains("reach %.0f" % (MOTION.ORBIT_ACQUIRE_RANGE * reach_scale)), "Orbit L%d displays cut ratio and acquisition reach" % level)
+				_check(text.contains("Damage %.1f%%" % (MOTION.ORBIT_CUT_DAMAGE_RATIO * 100.0 * damage_scale)) and text.contains("reach %.0f" % (MOTION.ORBIT_ACQUIRE_RANGE * reach_scale)), "Orbit L%d displays cut ratio and acquisition reach" % level)
+				_check(text.contains("orbit 1.4s or release") and (level < 3 or text.contains("kill transfer 2.4s")), "Orbit description states its lifetime, early release and unlocked transfer cap")
 			_check(text.length() <= 109, "%s L%d complete build text fits" % [power_id, level])
 			_free_world()
 

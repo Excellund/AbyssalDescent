@@ -38,6 +38,12 @@ class MotionPlayer extends "res://scripts/player.gd":
 class AimMotion extends "res://scripts/arcana_motion_controller.gd":
 	var aimed_anchor: Node2D
 	var acquisition_attempts: int = 0
+	var winddown_cues: int = 0
+
+	func _play_sound(hook: bool, orbit_ending: bool = false) -> void:
+		if orbit_ending:
+			winddown_cues += 1
+		super._play_sound(hook, orbit_ending)
 
 	func find_anchor(_cursor: Vector2, _enemies_only: bool = false) -> Node2D:
 		acquisition_attempts += 1
@@ -185,6 +191,8 @@ func _run() -> void:
 	await _test_contact_cadence_and_transfer()
 	await _test_fixed_orbit_direction()
 	await _test_transfer_direction()
+	await _test_orbit_release_feedback()
+	await _test_transfer_release_feedback()
 	await _release_actions()
 	for audio_node in root.find_children("*", "AudioStreamPlayer", true, false):
 		(audio_node as AudioStreamPlayer).stop()
@@ -513,6 +521,7 @@ func _test_collision_and_immunity() -> void:
 		if not player.arcana_motion.owns_movement():
 			break
 	_check(not player.arcana_motion.owns_movement(), "An obstructed orbit stops safely instead of clipping through solid cover")
+	_check(player.arcana_motion._orbit_hint_left == 0.0, "A real collision cannot show a free-flight departure hint")
 	_check(player.global_position.y > -40.0, "Orbit remains on the near side of the blocking column")
 	await _release_actions()
 	_free_world()
@@ -552,6 +561,7 @@ func _test_orbit_attack_and_blast_detach() -> void:
 	Input.action_release("attack")
 	player.arcana_motion.tick(0.01)
 	_check(player.blast_releases == 1 and player.arcana_motion.motion == MOTION.Motion.RECOIL and player.arcana_motion.anchor == null, "Charged Blast release explicitly detaches Orbit before recoil")
+	_check(player.arcana_motion.get_orbit_seconds_left() < 0.0 and player.arcana_motion._orbit_hint_left == 0.0, "Blast's different recoil direction clears Orbit's timer and departure hint")
 	_check(player.arcana_motion.dash_hold < 0.0, "Still-held Dash cannot immediately reacquire after Blast detach")
 	player.arcana_motion.cancel()
 	await _release_actions()
@@ -712,5 +722,93 @@ func _test_contact_cadence_and_transfer() -> void:
 	motion.aimed_anchor = _enemy(Vector2(65.0, -20.0))
 	motion.process_movement(0.025, Vector2.ZERO)
 	_check(motion.motion != MOTION.Motion.ORBIT, "A second anchor death detaches instead of chaining forever")
+	await _release_actions()
+	_free_world()
+
+func _advance_feedback_orbit(duration: float) -> void:
+	var remaining := duration
+	while remaining > 0.00001:
+		var step := minf(0.01, remaining)
+		player.arcana_motion.tick(step)
+		player.arcana_motion.process_movement(step, Vector2.ZERO)
+		player.arcana_motion._process(0.0)
+		remaining -= step
+
+func _test_orbit_release_feedback() -> void:
+	for level in range(1, 5):
+		_make_world("bastion", true)
+		for _pick in range(level):
+			player.apply_trial_power("razor_orbit")
+		player.attack_range = 100.0
+		player.global_position = Vector2(90.0, 0.0)
+		var target := _enemy(Vector2.ZERO)
+		var motion := player.arcana_motion as AimMotion
+		motion.aimed_anchor = target
+		await _release_actions()
+		Input.action_press("dash")
+		motion.start_orbit(target)
+		_check(is_equal_approx(motion.get_orbit_seconds_left(), 1.4), "L%d/Prismatic starts with the real 1.4-second lifetime" % level)
+		motion._process(0.25)
+		_check(is_equal_approx(motion.get_orbit_seconds_left(), 1.4) and motion.winddown_cues == 0, "Render-only time cannot shorten movement or warn early")
+		_advance_feedback_orbit(0.70)
+		_check(is_equal_approx(motion.get_orbit_seconds_left(), 0.70) and motion.winddown_cues == 0, "Halfway feedback follows actual owned movement")
+		_advance_feedback_orbit(0.37)
+		_check(motion.get_orbit_seconds_left() > 0.0 and motion.get_orbit_seconds_left() < 0.35 and motion.winddown_cues == 1, "Final warning sounds once before timed departure")
+		motion._process(0.01)
+		motion._process(0.01)
+		_check(motion.winddown_cues == 1, "Repeated rendered frames cannot repeat the wind-down sound")
+		player.local_owner = false
+		motion.apply_visual_state({"orbit": true, "anchor": target.global_position})
+		motion._process(0.01)
+		_check(motion.get_orbit_seconds_left() < 0.0 and motion.winddown_cues == 1, "Remote-owned motion cannot show or sound personal countdown feedback")
+		player.local_owner = true
+		_advance_feedback_orbit(0.35)
+		_check(motion.motion == MOTION.Motion.CARRY and motion.get_orbit_seconds_left() < 0.0, "The unchanged lifetime releases into ordinary bounded carry")
+		_check(motion._orbit_hint_left > 0.0 and motion._orbit_hint_direction.dot(motion.tangent.normalized()) > 0.99, "Timed release records its actual tangent for the departure hint")
+		var departure := motion._orbit_hint_origin
+		motion.process_movement(0.02, Vector2.ZERO)
+		_check(motion._orbit_hint_origin == departure and player.global_position.distance_to(departure) > 0.0, "Departure hint remains at the real release position while carry moves")
+		motion._process(0.16)
+		_check(motion._orbit_hint_left == 0.0, "Departure hint expires after its short visual lifetime")
+		motion.start_orbit(target)
+		_advance_feedback_orbit(0.10)
+		Input.action_release("dash")
+		motion.tick(0.001)
+		_check(motion.motion == MOTION.Motion.CARRY and motion._orbit_hint_left > 0.0 and motion.winddown_cues == 1, "Early deliberate release has direction feedback without a timed warning")
+		player.discard_pending_combat_input()
+		motion._process(0.01)
+		_check(motion._orbit_hint_left == 0.0 and motion.get_orbit_seconds_left() < 0.0 and not motion._orbit_warning_played, "Modal cancellation clears carry feedback and cannot reappear on resume")
+		await _release_actions()
+		_free_world()
+
+func _test_transfer_release_feedback() -> void:
+	_make_world("bastion", true)
+	for _pick in range(3):
+		player.apply_trial_power("razor_orbit")
+	player.attack_range = 100.0
+	player.global_position = Vector2(90.0, 0.0)
+	var first := _enemy(Vector2.ZERO)
+	var second := _enemy(Vector2(0.0, 220.0))
+	var motion := player.arcana_motion as AimMotion
+	motion.aimed_anchor = first
+	await _release_actions()
+	Input.action_press("dash")
+	motion.start_orbit(first)
+	_advance_feedback_orbit(1.20)
+	_check(motion.winddown_cues == 1, "Late transfer fixture reaches the first anchor's real warning")
+	first.health_state.set_health(0)
+	# This synthetic health change bypasses EnemyBase's ordinary death cleanup.
+	first.collision_layer = 0
+	first.collision_mask = 0
+	_check(motion.get_orbit_seconds_left() < 0.0, "A dead anchor cannot retain a misleading live countdown")
+	second.global_position = player.global_position - Vector2(90.0, 0.0)
+	motion.aimed_anchor = second
+	_advance_feedback_orbit(0.01)
+	_check(motion.anchor == second and motion.orbit_transferred and is_equal_approx(motion.orbit_limit, 2.4), "Actual late transfer retains the sequence cap")
+	_check(is_equal_approx(motion.get_orbit_seconds_left(), 1.19) and not motion._orbit_warning_played, "Transfer shows only the time remaining inside 2.4 seconds")
+	_advance_feedback_orbit(0.85)
+	_check(motion.winddown_cues == 2 and motion.get_orbit_seconds_left() < 0.35, "The transferred anchor gets one new warning at its actual deadline")
+	_advance_feedback_orbit(0.36)
+	_check(motion.motion == MOTION.Motion.CARRY and motion.winddown_cues == 2, "Transfer expires without repeated sounds or extra lifetime")
 	await _release_actions()
 	_free_world()

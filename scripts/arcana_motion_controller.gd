@@ -19,6 +19,9 @@ const ORBIT_CUT_DAMAGE_RATIO := 0.35
 const ORBIT_DURATION := 1.4
 const ORBIT_ACQUIRE_WINDOW := 0.70
 const TRANSFER_DURATION_CAP := 2.4
+const ORBIT_RELEASE_WARNING := 0.35
+const ORBIT_RELEASE_HINT := 0.15
+const ORBIT_DIAL_RADIUS := 34.0
 enum Motion { NONE, RECOIL, ORBIT, CARRY }
 
 var player: CharacterBody2D
@@ -55,6 +58,11 @@ var _active_blast_effect: BLAST_EFFECT
 var _sound: AudioStreamPlayer
 var _blast_sound: AudioStreamWAV
 var _hook_sound: AudioStreamWAV
+var _orbit_end_sound: AudioStreamWAV
+var _orbit_warning_played := false
+var _orbit_hint_left := 0.0
+var _orbit_hint_origin := Vector2.ZERO
+var _orbit_hint_direction := Vector2.RIGHT
 
 func initialize(owner_player: CharacterBody2D) -> void:
 	player = owner_player
@@ -67,9 +75,17 @@ func initialize(owner_player: CharacterBody2D) -> void:
 		add_child(_sound)
 		_blast_sound = _make_sound(false)
 		_hook_sound = _make_sound(true)
+		_orbit_end_sound = _make_sound(true, true)
 
 func owns_movement() -> bool:
 	return motion != Motion.NONE
+
+## Personal control feedback reads the movement owner's real clock. Remote
+## tethers retain their existing presentation without another player's timer.
+func get_orbit_seconds_left() -> float:
+	if not _allowed() or motion != Motion.ORBIT or not _anchor_alive():
+		return -1.0
+	return maxf(0.0, orbit_limit - orbit_elapsed)
 
 static func blast_range(strength: float, reach_scale: float) -> float:
 	return lerpf(BLAST_RANGE_MIN, BLAST_RANGE_MAX, clampf(strength, 0.0, 1.0)) * reach_scale
@@ -300,6 +316,7 @@ func process_movement(delta: float, move_input: Vector2) -> bool:
 				anchor = next_anchor
 				orbit_transferred = true
 				orbit_limit = minf(TRANSFER_DURATION_CAP, orbit_elapsed + ORBIT_DURATION)
+				_orbit_warning_played = false
 				_play_sound(true)
 			if orbit_elapsed >= orbit_limit:
 				detach(true)
@@ -365,11 +382,18 @@ func record_contact() -> void:
 		last_contact_position = player.global_position
 
 func detach(carry: bool) -> void:
+	var show_departure := carry and motion == Motion.ORBIT and _allowed()
+	var departure := player.global_position
+	var direction := tangent.normalized()
 	_finish_motion(true)
 	dash_hold = -1.0
 	if carry:
 		motion = Motion.CARRY
 		carry_left = 0.15
+	if show_departure:
+		_orbit_hint_origin = departure
+		_orbit_hint_direction = direction
+		_orbit_hint_left = ORBIT_RELEASE_HINT
 	_publish_state()
 
 func _finish_motion(completed: bool) -> void:
@@ -379,6 +403,8 @@ func _finish_motion(completed: bool) -> void:
 	anchor = null
 	recoil_left = 0.0
 	contact_cooldowns.clear()
+	_orbit_hint_left = 0.0
+	_orbit_warning_played = false
 
 func cancel(reset_charges: bool = false) -> void:
 	_cancel_generation += 1
@@ -449,6 +475,11 @@ func show_blast_hit(position: Vector2, serial: int) -> void:
 			return
 
 func _process(delta: float) -> void:
+	_orbit_hint_left = maxf(0.0, _orbit_hint_left - delta)
+	var orbit_left := get_orbit_seconds_left()
+	if orbit_left > 0.0 and orbit_left <= ORBIT_RELEASE_WARNING and not _orbit_warning_played:
+		_orbit_warning_played = true
+		_play_sound(true, true)
 	_visual_life = maxf(0.0, _visual_life - delta)
 	if _visual_life <= 0.0:
 		_visual.clear()
@@ -471,6 +502,18 @@ func _draw() -> void:
 		draw_line(Vector2.ZERO, local_anchor, Color(0.3, 0.7, 1.0, 0.24), 6.0, true)
 		draw_line(Vector2.ZERO, local_anchor, blue, 1.5, true)
 		draw_arc(local_anchor, 12.0, 0.0, TAU, 20, blue, 1.5, true)
+	var orbit_left := get_orbit_seconds_left()
+	if orbit_left >= 0.0:
+		var remaining := clampf(orbit_left / ORBIT_DURATION, 0.0, 1.0)
+		var ending := orbit_left <= ORBIT_RELEASE_WARNING
+		var cue_color := Color(0.83, 0.97, 1.0, 0.95) if ending else blue
+		draw_arc(Vector2.ZERO, ORBIT_DIAL_RADIUS, 0.0, TAU, 48, Color(blue, 0.14), 1.5, true)
+		if remaining > 0.0:
+			draw_arc(Vector2.ZERO, ORBIT_DIAL_RADIUS, -PI * 0.5, -PI * 0.5 + TAU * remaining, 48, cue_color, 2.0, true)
+		if ending:
+			_draw_orbit_departure_hint(Vector2.ZERO, tangent, cue_color)
+	elif _orbit_hint_left > 0.0 and _allowed():
+		_draw_orbit_departure_hint(to_local(_orbit_hint_origin), _orbit_hint_direction, Color(blue, 0.9 * _orbit_hint_left / ORBIT_RELEASE_HINT))
 	if _allowed() and bool(player.reward_razor_orbit) and not bool(player.encounter_input_frozen):
 		var preview := _preview_anchor
 		if is_instance_valid(preview):
@@ -479,22 +522,30 @@ func _draw() -> void:
 	for i in range(1, _trail.size()):
 		draw_line(to_local(_trail[i - 1]), to_local(_trail[i]), Color(blue, float(i) / _trail.size() * 0.30), 3.0, true)
 
-func _play_sound(hook: bool) -> void:
+func _draw_orbit_departure_hint(origin: Vector2, direction: Vector2, color: Color) -> void:
+	var forward := direction.normalized()
+	var tip := origin + forward * (ORBIT_DIAL_RADIUS + 12.0)
+	var back := tip - forward * 7.0
+	var side := forward.orthogonal() * 4.0
+	draw_line(back + side, tip, color, 2.0, true)
+	draw_line(back - side, tip, color, 2.0, true)
+
+func _play_sound(hook: bool, orbit_ending: bool = false) -> void:
 	if _sound != null:
 		if player.player_feedback != null:
 			set_sfx_volume_db(float(player.player_feedback.sfx_volume_db))
-		_sound.stream = _hook_sound if hook else _blast_sound
+		_sound.stream = _orbit_end_sound if orbit_ending else (_hook_sound if hook else _blast_sound)
 		_sound.play()
 
 func set_sfx_volume_db(value: float) -> void:
 	if _sound != null:
 		_sound.volume_db = clampf(-15.0 + value, -80.0, 6.0)
 
-func _make_sound(hook: bool) -> AudioStreamWAV:
+func _make_sound(hook: bool, orbit_ending: bool = false) -> AudioStreamWAV:
 	var sound := AudioStreamWAV.new()
 	sound.format = AudioStreamWAV.FORMAT_16_BITS
 	sound.mix_rate = 22050
-	var duration := 0.14 if hook else 0.24
+	var duration := 0.09 if orbit_ending else (0.14 if hook else 0.24)
 	var samples := int(22050 * duration)
 	var data := PackedByteArray()
 	data.resize(samples * 2)
@@ -504,8 +555,12 @@ func _make_sound(hook: bool) -> AudioStreamWAV:
 	for i in range(samples):
 		var t := float(i) / samples
 		var frequency := lerpf(1100.0, 300.0, t) if hook else lerpf(140.0, 45.0, t)
+		if orbit_ending:
+			frequency = lerpf(620.0, 240.0, t)
 		phase += TAU * frequency / 22050.0
 		var value := (sin(phase) * 0.65 + rng.randf_range(-1.0, 1.0) * (0.12 if hook else 0.35)) * pow(1.0 - t, 2.0)
+		if orbit_ending:
+			value *= 0.45
 		data.encode_s16(i * 2, int(value * 24000.0))
 	sound.data = data
 	return sound

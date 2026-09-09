@@ -117,16 +117,21 @@ func run_probe() -> void:
     var player: Node = world.get("player")
     check(is_instance_valid(player) and player.is_inside_tree(), "Debug startup must create a live player")
     if is_instance_valid(player):
-        var levels: Dictionary = {"blast_drive_stacks": 3, "razor_orbit_stacks": 3, "ruinous_impact_stacks": 2, "sovereigns_double_stacks": 2}
+        var levels: Dictionary = {"returning_crescent_stacks": 3, "blast_drive_stacks": 3, "razor_orbit_stacks": 3, "ruinous_impact_stacks": 2, "sovereigns_double_stacks": 2}
         result["powers"] = {}
         for property: String in levels:
             result["powers"][property] = player.get(property)
             check(int(player.get(property)) == int(levels[property]), "Live player power level: " + property)
         check(bool(player.get("reward_blast_drive")) and bool(player.get("reward_razor_orbit")), "Both motion Arcana must be enabled on the live player")
+        check(bool(player.get("reward_returning_crescent")), "Returning Crescent must be enabled on the live player")
     check(int(world.get("current_difficulty_tier")) == 1, "Live run must use Delver")
     check(str(world.get("current_character_id")) == "bastion", "Fresh debug run must use Bastion")
     check(not bool(world.get("is_multiplayer")), "Debug run must be local")
-    check(str(world.get("current_room_label")) == "Skirmish", "Debug startup must begin its first Skirmish")
+    check(str(world.get("current_room_label")) == "Apex Breakwater", "Debug startup must enter Apex Breakwater")
+    check(int(world.get("room_depth")) == 5, "Debug startup must use Breakwater's intended depth")
+    var enemies: Array[Node] = get_nodes_in_group("enemies")
+    check(enemies.size() == 1 and enemies[0].get_script().resource_path == "res://scripts/enemy_breakwater.gd", "Debug startup must spawn the actual Breakwater")
+    enemies.clear()
     check(not bool(world.call("_is_reward_selection_active")), "Debug startup must bypass the starting reward screen")
     check(bool(world.call("_is_debug_boot_session")), "Live run must be identified as debug")
     var recorder: RefCounted = world.get("run_summary_recorder")
