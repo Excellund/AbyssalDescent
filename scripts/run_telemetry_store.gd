@@ -1,5 +1,7 @@
 extends RefCounted
 
+const PROVENANCE := preload("res://scripts/core/run_provenance.gd")
+
 const TELEMETRY_SAVE_PATH := "user://run_telemetry.save"
 const TELEMETRY_VERSION := 1
 const MAX_RUNS_STORED := 80
@@ -37,6 +39,8 @@ static func leaderboard_patch_key_from_version(game_version: String) -> String:
 
 static func is_upload_payload_eligible(payload: Dictionary) -> bool:
 	if bool(payload.get("is_debug", false)):
+		return false
+	if payload.has("run_provenance") and not PROVENANCE.is_upload_eligible(payload["run_provenance"]):
 		return false
 	var version := String(payload.get("game_version", "")).strip_edges().to_lower()
 	if version.is_empty():
@@ -94,6 +98,7 @@ static func start_run(run_seed: Dictionary) -> String:
 		"started_at_unix": _now_unix(),
 		"ended_at_unix": 0,
 		"game_version": String(run_seed.get("game_version", _current_game_version())),
+		"run_provenance": run_seed.get("run_provenance", PROVENANCE.start(String(run_seed.get("game_version", _current_game_version())), bool(run_seed.get("is_debug", false)))).duplicate(true),
 		"leaderboard_patch_key": String(run_seed.get("leaderboard_patch_key", leaderboard_patch_key_from_version(String(run_seed.get("game_version", _current_game_version()))))),
 		"character_id": String(run_seed.get("character_id", "unknown")).strip_edges().to_lower(),
 		"character_name": String(run_seed.get("character_name", "Unknown")).strip_edges(),
@@ -253,6 +258,8 @@ static func mark_run_debug(run_id: String) -> void:
 		return
 	_mutate_run_entry(run_id, func(run_entry: Dictionary) -> void:
 		run_entry["is_debug"] = true
+		if run_entry.get("run_provenance") is Dictionary:
+			run_entry["run_provenance"]["is_debug"] = true
 	)
 
 static func finish_run(run_id: String, outcome: String, summary: Dictionary = {}) -> void:
@@ -273,6 +280,8 @@ static func finish_run(run_id: String, outcome: String, summary: Dictionary = {}
 			run_entry["death_event"] = (summary.get("death_event", {}) as Dictionary).duplicate(true)
 		if summary.has("stats"):
 			run_entry["stats"] = (summary.get("stats", {}) as Dictionary).duplicate(true)
+		if summary.has("run_provenance"):
+			run_entry["run_provenance"] = (summary["run_provenance"] as Dictionary).duplicate(true)
 		if summary.has("build_summary"):
 			run_entry["build_summary"] = (summary.get("build_summary", {}) as Dictionary).duplicate(true)
 		if summary.has("reward_timeline"):
@@ -331,7 +340,7 @@ static func get_run_by_id(run_id: String) -> Dictionary:
 
 static func build_upload_payload(run_id: String) -> Dictionary:
 	var run_entry := get_run_by_id(run_id)
-	if run_entry.is_empty():
+	if run_entry.is_empty() or not is_upload_payload_eligible(run_entry):
 		return {}
 	var damage_by_source: Dictionary = {}
 	var damage_by_ability: Dictionary = {}
@@ -451,6 +460,8 @@ static func build_run_summary_from_entry(run_entry: Dictionary, extra: Dictionar
 	}
 	for key in extra.keys():
 		summary[key] = extra[key]
+	if not summary.has("run_provenance") and run_entry.get("run_provenance") is Dictionary:
+		summary["run_provenance"] = (run_entry["run_provenance"] as Dictionary).duplicate(true)
 	return summary
 
 static func build_run_summary(run_id: String, extra: Dictionary = {}) -> Dictionary:

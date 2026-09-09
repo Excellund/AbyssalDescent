@@ -16,10 +16,10 @@ var echo_cross_length: float = 340.0
 var echo_cross_width: float = 34.0
 
 func _ready() -> void:
-	top_level = false
+	top_level = true
 	z_as_relative = false
 	z_index = -1
-	position = Vector2.ZERO
+	global_position = Vector2.ZERO
 	rotation = 0.0
 	scale = Vector2.ONE
 
@@ -41,6 +41,18 @@ func _process(_delta: float) -> void:
 	if telegraph_active:
 		queue_redraw()
 
+func get_echo_cross_polygons() -> Array[PackedVector2Array]:
+	var polygons: Array[PackedVector2Array] = []
+	if not telegraph_active or active_attack != ATTACK_ECHO_CROSS or echo_cross_width <= 0.0:
+		return polygons
+	var direction := Vector2.RIGHT.rotated(echo_cross_angle)
+	for axis in [direction, direction.orthogonal()]:
+		var segment := PackedVector2Array([boss_position - axis * echo_cross_length * 0.5, boss_position + axis * echo_cross_length * 0.5])
+		# The hit test measures distance to a segment: both ends are round, and
+		# echo_cross_width is its radius, not the line's full width.
+		polygons.append_array(Geometry2D.offset_polyline(segment, echo_cross_width, Geometry2D.JOIN_ROUND, Geometry2D.END_ROUND))
+	return polygons
+
 func _draw() -> void:
 	if not telegraph_active:
 		return
@@ -59,15 +71,15 @@ func _draw() -> void:
 		var primary_dir := Vector2.RIGHT.rotated(echo_cross_angle)
 		var secondary_dir := primary_dir.orthogonal()
 		var half_len := echo_cross_length * 0.5
-		draw_line(boss_position - primary_dir * half_len, boss_position + primary_dir * half_len, Color(0.18, 1.0, 0.8, alpha * 0.7), echo_cross_width * 1.5)
-		draw_line(boss_position - secondary_dir * half_len, boss_position + secondary_dir * half_len, Color(0.18, 1.0, 0.8, alpha * 0.7), echo_cross_width * 1.5)
+		var polygons := get_echo_cross_polygons()
+		for index in range(polygons.size()):
+			var polygon := polygons[index]
+			draw_colored_polygon(polygon, Color(0.18, 1.0, 0.8, alpha * 0.7))
+			var outline := polygon.duplicate()
+			outline.append(outline[0])
+			draw_polyline(outline, Color(0.9, 1.0, 0.96, alpha * (0.54 if index == 0 else 0.46)), 1.6)
 		draw_line(boss_position - primary_dir * half_len, boss_position + primary_dir * half_len, Color(0.92, 1.0, 0.98, alpha), 2.4)
 		draw_line(boss_position - secondary_dir * half_len, boss_position + secondary_dir * half_len, Color(0.92, 1.0, 0.98, alpha), 2.4)
 		var echo_offset := (0.1 + telegraph_alpha * 0.18) * echo_cross_width
 		draw_line(boss_position - primary_dir * half_len + secondary_dir * echo_offset, boss_position + primary_dir * half_len + secondary_dir * echo_offset, Color(0.86, 1.0, 0.96, alpha * 0.26), 1.6)
 		draw_line(boss_position - secondary_dir * half_len - primary_dir * echo_offset, boss_position + secondary_dir * half_len - primary_dir * echo_offset, Color(0.86, 1.0, 0.96, alpha * 0.2), 1.4)
-		var half_width := echo_cross_width * 0.5
-		draw_line(boss_position - primary_dir * half_len + secondary_dir * half_width, boss_position + primary_dir * half_len + secondary_dir * half_width, Color(0.9, 1.0, 0.96, alpha * 0.54), 1.6)
-		draw_line(boss_position - primary_dir * half_len - secondary_dir * half_width, boss_position + primary_dir * half_len - secondary_dir * half_width, Color(0.9, 1.0, 0.96, alpha * 0.54), 1.6)
-		draw_line(boss_position - secondary_dir * half_len + primary_dir * half_width, boss_position + secondary_dir * half_len + primary_dir * half_width, Color(0.9, 1.0, 0.96, alpha * 0.46), 1.6)
-		draw_line(boss_position - secondary_dir * half_len - primary_dir * half_width, boss_position + secondary_dir * half_len - primary_dir * half_width, Color(0.9, 1.0, 0.96, alpha * 0.46), 1.6)

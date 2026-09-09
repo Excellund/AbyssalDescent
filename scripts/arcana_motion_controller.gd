@@ -1,4 +1,5 @@
 extends Node2D
+const ARENA_BOUNDARY := preload("res://scripts/shared/arena_boundary.gd")
 ## Owns special movement, never dash immunity. The player supplies accepted input
 ## edges; held buttons cannot arm abilities after a modal or a failed action.
 
@@ -265,23 +266,29 @@ func process_movement(delta: float, move_input: Vector2) -> bool:
 	if not owns_movement():
 		return false
 	var start := player.global_position
+	var correction := ARENA_BOUNDARY.sweep(start, Vector2.ZERO, EnemyReplicationService.get_current_room_bounds())
+	if bool(correction.get("outside", false)):
+		player.global_position = correction["position"]
+		player.velocity = Vector2.ZERO
+		cancel()
+		return true # Arena shrink is a clamp, not a traveled cutting segment.
 	match motion:
 		Motion.RECOIL:
 			if int(player.blast_drive_stacks) >= 3 and not move_input.is_zero_approx():
 				var angle := clampf(recoil_initial_direction.angle_to(move_input), -PI / 4.0, PI / 4.0)
 				recoil_direction = recoil_initial_direction.rotated(angle)
 			var step := recoil_direction * minf(recoil_left, recoil_speed * delta)
-			var collision := player.move_and_collide(step)
+			var collided := _move_within_arena(step)
 			player.velocity = (player.global_position - start) / maxf(delta, 0.0001)
 			recoil_left -= player.global_position.distance_to(start)
-			if collision != null or recoil_left < 0.1:
+			if collided or recoil_left < 0.1:
 				_finish_motion(true)
 		Motion.CARRY:
 			var movement_delta := minf(maxf(delta, 0.0), maxf(carry_left, 0.0))
 			carry_left = maxf(0.0, carry_left - movement_delta)
-			var collision := player.move_and_collide(tangent * minf(ORBIT_SPEED, float(player.max_speed) * 1.5) * movement_delta)
+			var collided := _move_within_arena(tangent * minf(ORBIT_SPEED, float(player.max_speed) * 1.5) * movement_delta)
 			player.velocity = (player.global_position - start) / maxf(delta, 0.0001)
-			if collision != null or carry_left <= 0.0:
+			if collided or carry_left <= 0.0:
 				motion = Motion.NONE
 		Motion.ORBIT:
 			orbit_elapsed += delta
@@ -307,17 +314,25 @@ func process_movement(delta: float, move_input: Vector2) -> bool:
 			var next_radial := radial.rotated(angle_step * orbit_sign)
 			tangent = next_radial.rotated(PI * 0.5) * orbit_sign
 			var step := (center + next_radial * next_radius - start).limit_length(ORBIT_SPEED * delta)
-			var collision := player.move_and_collide(step)
+			var collided := _move_within_arena(step)
 			player.velocity = (player.global_position - start) / maxf(delta, 0.0001)
 			_apply_cut_contacts(start, player.global_position)
 			if motion != Motion.ORBIT:
 				return true
-			if collision != null:
+			if collided:
 				detach(false)
 	_trail.append(start)
 	if _trail.size() > 12:
 		_trail.pop_front()
 	return true
+
+func _move_within_arena(step: Vector2) -> bool:
+	var boundary := ARENA_BOUNDARY.sweep(player.global_position, step, EnemyReplicationService.get_current_room_bounds())
+	if bool(boundary.get("outside", false)):
+		player.global_position = boundary["position"]
+		return true
+	var collision := player.move_and_collide(step * float(boundary.get("fraction", 1.0)))
+	return collision != null or not boundary.is_empty()
 
 func _anchor_alive() -> bool:
 	return is_instance_valid(anchor) and not anchor.is_queued_for_deletion() and (not anchor.is_in_group("enemies") or DAMAGEABLE._read_target_health(anchor) > 0)

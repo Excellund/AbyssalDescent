@@ -3,6 +3,31 @@ extends RefCounted
 const ENEMY_BASE_SCRIPT := preload("res://scripts/enemy_base.gd")
 const STAT_ATTRIBUTION_TRACE := false
 static var _secondary_scope_depth: int = 0
+const KILL_PROC_SUPPRESS_FRACTURE := 1
+const KILL_PROC_SUPPRESS_ECHO_PULSE := 2
+const KILL_PROC_SUPPRESSION_MASK := KILL_PROC_SUPPRESS_FRACTURE | KILL_PROC_SUPPRESS_ECHO_PULSE
+static var _kill_proc_suppression: int = 0
+
+## Only the existing non-chaining kill rules belong here. This mask does not
+## change primary/secondary classification, kill credit, or other kill benefits.
+static func sanitize_kill_proc_suppression(value: Variant) -> int:
+	return int(value) & KILL_PROC_SUPPRESSION_MASK if value is int else 0
+
+static func get_kill_proc_suppression() -> int:
+	return _kill_proc_suppression
+
+static func is_kill_proc_suppressed(mask: int) -> bool:
+	return (_kill_proc_suppression & mask) != 0
+
+## Returns the previous scope to restore after synchronous damage or an RPC's
+## kill callback. Nested effects inherit the existing restrictions.
+static func begin_kill_proc_scope(mask: int) -> int:
+	var previous := _kill_proc_suppression
+	_kill_proc_suppression |= sanitize_kill_proc_suppression(mask)
+	return previous
+
+static func end_kill_proc_scope(previous: int) -> void:
+	_kill_proc_suppression = sanitize_kill_proc_suppression(previous)
 
 ## Scope survives synchronous kill procs; RPC boundaries carry its boolean value.
 static func begin_secondary_scope() -> void:
@@ -43,6 +68,10 @@ static func apply_damage(target: Object, amount: int, damage_context: Dictionary
 	if secondary:
 		damage_context = damage_context.duplicate(true)
 		damage_context["secondary"] = true
+	var kill_proc_suppression := _kill_proc_suppression | sanitize_kill_proc_suppression(damage_context.get("kill_proc_suppression", 0))
+	if kill_proc_suppression > 0 or damage_context.has("kill_proc_suppression"):
+		damage_context = damage_context.duplicate()
+		damage_context["kill_proc_suppression"] = kill_proc_suppression
 	if route_to_host:
 		_route_enemy_damage_to_host(target, amount, damage_context)
 		return true
@@ -50,6 +79,7 @@ static func apply_damage(target: Object, amount: int, damage_context: Dictionary
 	# Death signals fire inside take_damage. Make this hit's owner visible to
 	# kill-triggered powers before those signals, then undo rejected hits.
 	var pending_credit := _prepare_enemy_damage_credit(target, health_before, source_peer_id)
+	var previous_kill_scope := begin_kill_proc_scope(kill_proc_suppression)
 	if secondary:
 		begin_secondary_scope()
 	if damage_context.is_empty():
@@ -63,6 +93,7 @@ static func apply_damage(target: Object, amount: int, damage_context: Dictionary
 		_arm_primary_launch(target, source_peer_id)
 	if secondary:
 		end_secondary_scope()
+	end_kill_proc_scope(previous_kill_scope)
 	return true
 
 

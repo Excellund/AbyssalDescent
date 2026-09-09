@@ -4,6 +4,8 @@ class_name RunSummaryTracker
 const RUN_SUMMARY_MODEL := preload("res://scripts/core/run_summary_model.gd")
 const ENUMS := preload("res://scripts/shared/enums.gd")
 const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
+const PROVENANCE := preload("res://scripts/core/run_provenance.gd")
+const TELEMETRY := preload("res://scripts/run_telemetry_store.gd")
 
 var started_at_unix: int = 0
 var started_at_msec: int = 0
@@ -12,6 +14,10 @@ var character_name: String = ""
 var difficulty_tier: int = 0
 var difficulty_label: String = "Pilgrim"
 var game_version: String = "dev"
+var _runtime_game_version: String = "dev"
+var run_provenance: Dictionary = {}
+var _expected_provenance_peers: Dictionary = {}
+var _received_provenance_peers: Dictionary = {}
 var leaderboard_patch_key: String = "dev"
 var player_uuid: String = ""
 var player_name: String = ""
@@ -53,6 +59,10 @@ func reset_for_run(run_seed: Dictionary) -> void:
 	difficulty_tier = int(run_seed.get("difficulty_tier", 0))
 	difficulty_label = String(run_seed.get("difficulty_label", "Pilgrim")).strip_edges()
 	game_version = String(run_seed.get("game_version", "dev")).strip_edges()
+	_runtime_game_version = game_version
+	run_provenance = PROVENANCE.start(game_version, bool(run_seed.get("is_debug", false)))
+	_expected_provenance_peers.clear()
+	_received_provenance_peers.clear()
 	leaderboard_patch_key = String(run_seed.get("leaderboard_patch_key", game_version)).strip_edges()
 	player_uuid = String(run_seed.get("player_uuid", "")).strip_edges().to_lower()
 	player_name = String(run_seed.get("player_name", "")).strip_edges()
@@ -144,6 +154,7 @@ func get_boss_no_hit_ids_for_peer(peer_id: int) -> Array:
 ## Doorway saves preserve the evidence for whole-run Oaths, not just the build.
 func build_checkpoint() -> Dictionary:
 	return {
+		"run_provenance": resolved_run_provenance(),
 		"total_damage_dealt": total_damage_dealt,
 		"total_damage_taken": total_damage_taken,
 		"enemies_killed": enemies_killed,
@@ -158,6 +169,7 @@ func build_checkpoint() -> Dictionary:
 	}
 
 func restore_checkpoint(checkpoint: Dictionary) -> void:
+	restore_run_provenance(checkpoint.get("run_provenance"))
 	total_damage_dealt = maxi(0, int(checkpoint.get("total_damage_dealt", 0)))
 	total_damage_taken = maxi(0, int(checkpoint.get("total_damage_taken", 0)))
 	enemies_killed = maxi(0, int(checkpoint.get("enemies_killed", 0)))
@@ -174,6 +186,29 @@ func restore_checkpoint(checkpoint: Dictionary) -> void:
 	for entry in checkpoint.get("reward_timeline", []):
 		if entry is Dictionary:
 			reward_timeline.append((entry as Dictionary).duplicate(true))
+
+func restore_run_provenance(saved: Variant) -> void:
+	run_provenance = PROVENANCE.restore(saved, _runtime_game_version)
+	game_version = String(run_provenance.origin_version) if run_provenance.origin_known else "unknown"
+	leaderboard_patch_key = TELEMETRY.leaderboard_patch_key_from_version(game_version)
+
+## Keep missing announcements out of the live evidence: a delayed valid peer
+## may still arrive. Only a saved/final copy treats unknown participation as unknown.
+func expect_peer_provenance(peer_id: int) -> void:
+	if peer_id > 0:
+		_expected_provenance_peers[peer_id] = true
+
+func record_peer_provenance(peer_id: int, provenance: Dictionary) -> void:
+	if not _expected_provenance_peers.has(peer_id):
+		return
+	_received_provenance_peers[peer_id] = true
+	run_provenance = PROVENANCE.merge(run_provenance, provenance)
+
+func resolved_run_provenance() -> Dictionary:
+	for peer_id in _expected_provenance_peers:
+		if not _received_provenance_peers.has(peer_id):
+			return PROVENANCE.merge(run_provenance, null)
+	return run_provenance.duplicate(true)
 
 func record_hold_full_control() -> void:
 	hold_full_control_achieved = true
@@ -234,6 +269,7 @@ func build_summary(final_state: Dictionary) -> Dictionary:
 		"started_at_unix": started_at_unix,
 		"ended_at_unix": ended_at_unix,
 		"game_version": game_version,
+		"run_provenance": resolved_run_provenance(),
 		"leaderboard_patch_key": leaderboard_patch_key,
 		"player_uuid": player_uuid,
 		"player_name": player_name,

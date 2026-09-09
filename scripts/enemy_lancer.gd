@@ -6,6 +6,7 @@ extends "res://scripts/enemy_base.gd"
 # zones cut off escape routes.
 
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
+const PLAYER_SCRIPT := preload("res://scripts/player.gd")
 const ENEMY_STATE_ENUMS := preload("res://scripts/shared/enemy_state_enums.gd")
 const LANCER_ZONE_OVERLAY_SCRIPT := preload("res://scripts/lancer_zone_overlay.gd")
 
@@ -509,22 +510,28 @@ func _process_zones(delta: float, apply_damage: bool = true) -> void:
 	if zones.is_empty():
 		return
 
+	var damageable_targets: Array[Node2D] = []
+	if apply_damage and network_simulation_enabled:
+		damageable_targets = _get_zone_damageable_targets()
 	var expired: Array[int] = []
 	for i in range(zones.size()):
 		var z: Dictionary = zones[i]
-		z["time_left"] = float(z["time_left"]) - delta
-		z["tick_timer"] = float(z["tick_timer"]) - delta
+		var previous_life := maxf(0.0, float(z["time_left"]))
+		var previous_tick := float(z["tick_timer"])
+		# Only advance the damage clock through time when this zone existed.
+		# A long frame must not make a tick scheduled after expiry deal damage.
+		z["time_left"] = previous_life - delta
+		z["tick_timer"] = previous_tick - minf(delta, previous_life)
 		z["spawn_flash"] = maxf(0.0, float(z.get("spawn_flash", 0.0)) - delta)
 		z["tick_flash"] = maxf(0.0, float(z.get("tick_flash", 0.0)) - delta)
 
-		if float(z["tick_timer"]) <= 0.0:
+		if float(z["tick_timer"]) <= 0.0 and previous_life > maxf(0.0, previous_tick):
 			z["tick_timer"] = zone_tick_interval
 			z["tick_flash"] = 0.12
-			if apply_damage and is_instance_valid(target):
-				var zone_world := _zone_local_to_world(z)
-				if zone_world.distance_to(target.global_position) <= zone_radius:
-					if DAMAGEABLE.can_take_damage(target):
-						DAMAGEABLE.apply_damage(target, zone_tick_damage, {"source": "enemy_ability", "ability": "lancer_zone_tick"})
+			var zone_world := _zone_local_to_world(z)
+			for hit_target in damageable_targets:
+				if is_instance_valid(hit_target) and zone_world.distance_to(hit_target.global_position) <= zone_radius:
+					DAMAGEABLE.apply_damage(hit_target, zone_tick_damage, {"source": "enemy_ability", "ability": "lancer_zone_tick"})
 
 		if float(z["time_left"]) <= 0.0:
 			expired.append(i)
@@ -535,6 +542,24 @@ func _process_zones(delta: float, apply_damage: bool = true) -> void:
 
 	if not zones.is_empty():
 		_request_active_visual_redraw(delta)
+
+func _get_zone_damageable_targets() -> Array[Node2D]:
+	var result: Array[Node2D] = []
+	for candidate_variant in target_candidates:
+		if not is_instance_valid(candidate_variant) or not (candidate_variant is Node2D):
+			continue
+		var candidate := candidate_variant as Node2D
+		if _is_zone_target_valid(candidate) and not result.has(candidate):
+			result.append(candidate)
+	if result.is_empty() and _is_zone_target_valid(target):
+		result.append(target)
+	return result
+
+func _is_zone_target_valid(candidate: Node2D) -> bool:
+	if not _is_target_valid(candidate):
+		return false
+	var player := candidate as PLAYER_SCRIPT
+	return player == null or not player._combat_removed
 
 func _request_active_visual_redraw(delta: float) -> void:
 	_active_visual_redraw_left = maxf(0.0, _active_visual_redraw_left - delta)

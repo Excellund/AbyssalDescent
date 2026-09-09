@@ -16,7 +16,21 @@ Validation includes isolated gameplay regressions, 28 real pause/lifecycle check
 
 Sovereign's Double retains its current damage, ground bypass and proc rules. This increment corrects presentation and hit provenance without retuning the reward.
 
-Next confirmed control issue: holding Attack through a queued dash attack executes the strike but does not arm Blast Drive. Address queued attack/hold handoffs in the next bounded control pass, then continue the broader character, reward and boss-telegraph review below.
+The queued Attack/Blast Drive issue was corrected in the overnight branch: a held attack buffered through dash begins charging only after its strike succeeds, including when Orbit acquires movement. Released taps remain single attacks. The 127 focused checks cover all four characters, cooldown/overheat, movement and input cancellation.
+
+## Overnight review increments
+
+Branch `codex/overnight-buildcraft-20260909` continues the review alongside Returning Crescent. The current delivery record is in [overnight-development-20260909.md](overnight-development-20260909.md).
+
+- Reward descriptions now use actual motion damage/reach and current character values. Blood Pact, Eclipse Mark and Null Corridor descriptions match their existing behavior. Reward panels and labels shrink correctly after a viewport resize. The description/layout suite has 262 checks and four inspected GPU frames.
+- Ruinous Impact has attached launch streaks, inward compression brackets and a fractured burst at the real damage radius, with bounded effects and sound. Reliable room-scoped cues support the same feedback in co-op; damage and timing are unchanged. Dedicated behavior and two-process ENet checks pass.
+- Lacuna's Echo Cross warning now covers the real capsule geometry. Its active seams retain their full radius, and expired or removed-owner warnings are cleared. Host and joiner use the same synchronized seam renderer; 65 checks and four inspected GPU frames cover the corrections.
+- Lancer floor zones hit every eligible player exactly once per tick on the host. Their active-time accounting prevents a long frame from applying a tick scheduled after expiry. Fracture Field and Lacuna pulse kills preserve the same narrow non-chaining rules across the host/joiner boundary.
+- Co-op defeat preserves a suspended solo save. Departing peers are unregistered and removed, with enemies retargeted and the host rechecking defeat, reward, intro and retry readiness.
+- Checkpoints and local history preserve original and observed build provenance. Development, debug, mixed-build and unknown-origin runs stay out of submissions; a release host also retains participating development/debug peers' evidence.
+- Crescent, Ruinous, recoil and Orbit now collide with the real arena perimeter, which uses logical clamps rather than physics walls. Room shrink cancels forced motion without creating damage or a shade. Tests include actual world-clamp-before-physics ordering and separate live peers.
+
+Full verification and delivery evidence are recorded in the overnight log. Charge-preview length remains a separate issue: mid-charge enrage and the final movement tick require an explicit prediction policy before its warning can be guaranteed accurate.
 
 ## Pass 1: combat and movement contracts
 

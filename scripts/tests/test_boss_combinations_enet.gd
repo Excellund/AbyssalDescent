@@ -59,6 +59,7 @@ class Boss extends "res://scripts/enemy_boss_2.gd":
 		set_physics_process(false)
 
 class World extends "res://scripts/world_generator.gd":
+	signal fixture_result_received(key: String, value: Dictionary)
 	var harness: SceneTree
 	var damage_events: Array[Dictionary] = []
 	var kill_peers: Array[int] = []
@@ -80,6 +81,7 @@ class World extends "res://scripts/world_generator.gd":
 	@rpc("any_peer", "call_remote", "reliable")
 	func fixture_result(key: String, value: Dictionary) -> void:
 		harness.results[key] = value
+		fixture_result_received.emit(key, value)
 
 var world: World
 var peer: ENetMultiplayerPeer

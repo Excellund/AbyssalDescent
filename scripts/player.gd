@@ -3254,17 +3254,18 @@ func _get_static_wake_bounds_rect() -> Rect2:
 
 func notify_enemy_killed(kill_position: Vector2 = Vector2.INF) -> void:
 	var has_kill_position := kill_position.is_finite()
+	var suppress_echo_kill_procs := _void_echo_pulse_kill_suppression_depth > 0 or DAMAGEABLE.is_kill_proc_suppressed(DAMAGEABLE.KILL_PROC_SUPPRESS_ECHO_PULSE)
 	_trigger_combo_relay_kill()
 	_trigger_relay_boost_kill()
 	_trigger_overcharge_kill(kill_position if has_kill_position else Vector2.ZERO)
-	if has_kill_position and void_echo_damage > 0 and _void_echo_pulse_kill_suppression_depth <= 0:
+	if has_kill_position and void_echo_damage > 0 and not suppress_echo_kill_procs:
 		_apply_void_echo(kill_position)
 	if has_kill_position and edict_court_push_power > 0:
 		_apply_edict_court_pulse(kill_position)
-	if _void_echo_pulse_kill_suppression_depth <= 0:
+	if not suppress_echo_kill_procs:
 		if has_kill_position and reward_eclipse_mark:
 			_apply_eclipse_mark(kill_position)
-		if has_kill_position and reward_fracture_field and not _fracture_field_resolving:
+		if has_kill_position and reward_fracture_field and not _fracture_field_resolving and not DAMAGEABLE.is_kill_proc_suppressed(DAMAGEABLE.KILL_PROC_SUPPRESS_FRACTURE):
 			_apply_fracture_field(kill_position)
 		if reward_dread_resonance:
 			_reset_dread_resonance_tracking()
@@ -4457,7 +4458,7 @@ func _update_void_echo_zones(delta: float) -> void:
 				var to_center := zone_pos - enemy_body.global_position
 				if dist > 0.001:
 					DAMAGEABLE.apply_impulse(enemy_body, to_center.normalized() * 360.0)
-				DAMAGEABLE.apply_damage(enemy_node, pulse_damage, {"is_ground_attack": true, "attack_type": "void_echo_zone"})
+				DAMAGEABLE.apply_damage(enemy_node, pulse_damage, {"is_ground_attack": true, "attack_type": "void_echo_zone", "kill_proc_suppression": DAMAGEABLE.KILL_PROC_SUPPRESS_ECHO_PULSE})
 				if not void_echo_zones.has(zone):
 					break
 			_void_echo_pulse_kill_suppression_depth = maxi(0, _void_echo_pulse_kill_suppression_depth - 1)
@@ -4785,7 +4786,7 @@ func _apply_fracture_field(kill_pos: Vector2) -> void:
 
 		hit_enemy_ids[enemy_id] = true
 		var fracture_total_damage := field_damage + _hunters_snare_aoe_bonus_against(enemy_body)
-		DAMAGEABLE.apply_damage(enemy_node, fracture_total_damage, {"is_ground_attack": true, "attack_type": "fracture_fault_line"})
+		DAMAGEABLE.apply_damage(enemy_node, fracture_total_damage, {"is_ground_attack": true, "attack_type": "fracture_fault_line", "kill_proc_suppression": DAMAGEABLE.KILL_PROC_SUPPRESS_FRACTURE})
 		var fracture_slow_duration := fracture_field_slow_duration * _global_slow_duration_mult()
 		enemy_node.apply_slow(fracture_slow_duration, 0.45)
 		var fracture_enemy_network_id := int(enemy_body.get_meta("network_enemy_id", -1))

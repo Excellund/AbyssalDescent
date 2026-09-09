@@ -131,7 +131,7 @@ func on_enemy_died(enemy_id: int) -> void:
 		_world._sync_enemy_died.rpc(enemy_id, death_effect_payload)
 	var replication_service := (Engine.get_main_loop() as SceneTree).root.get_node_or_null("/root/PlayerReplicationService")
 	if replication_service != null and killer_peer_id > 0:
-		replication_service.send_enemy_killed(killer_peer_id, kill_pos, DAMAGEABLE.is_launch_suppressed())
+		replication_service.send_enemy_killed(killer_peer_id, kill_pos, DAMAGEABLE.is_launch_suppressed(), DAMAGEABLE.get_kill_proc_suppression())
 	elif is_instance_valid(_world) and _world.get("player") != null:
 		_world.player.notify_enemy_killed(kill_pos)
 

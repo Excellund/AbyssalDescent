@@ -1,4 +1,5 @@
 extends RefCounted
+const ARENA_BOUNDARY := preload("res://scripts/shared/arena_boundary.gd")
 ## A bounded host-owned launch. Collision bursts use an explicit cause, never
 ## inferred speed, and the cooldown survives the end of an individual launch.
 
@@ -56,10 +57,16 @@ func step(enemy: CharacterBody2D, delta: float) -> bool:
 	var step_motion := motion / float(steps)
 	for _index in range(steps):
 		var start := enemy.global_position
-		var collision := enemy.move_and_collide(step_motion)
+		var boundary := ARENA_BOUNDARY.sweep(start, step_motion, EnemyReplicationService.get_current_room_bounds())
+		if bool(boundary.get("outside", false)):
+			enemy.global_position = boundary["position"]
+			enemy.velocity = Vector2.ZERO
+			cancel() # A shrinking room is not a player-caused collision.
+			return true
+		var collision := enemy.move_and_collide(step_motion * float(boundary.get("fraction", 1.0)))
 		enemy.velocity = launch_velocity
 		var hit_player := collision != null and collision.get_collider() is Node and (collision.get_collider() as Node).is_in_group("combat_players")
-		var impact := collision != null and not hit_player
+		var impact := not hit_player and (collision != null or not boundary.is_empty())
 		if not impact:
 			for node in enemy.get_tree().get_nodes_in_group("enemies"):
 				if node == enemy or not (node is CharacterBody2D) or node.is_queued_for_deletion():

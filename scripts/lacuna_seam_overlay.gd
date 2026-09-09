@@ -7,10 +7,10 @@ var seam_duration: float = 4.0
 var seam_zones: Array[Dictionary] = []
 
 func _ready() -> void:
-	top_level = false
+	top_level = true
 	z_as_relative = false
 	z_index = -1
-	position = Vector2.ZERO
+	global_position = Vector2.ZERO
 	rotation = 0.0
 	scale = Vector2.ONE
 
@@ -25,7 +25,8 @@ func set_seam_state(incoming_zones: Array[Dictionary], incoming_radius: float, i
 		seam_zones.append({
 			"pos": src.get("pos", Vector2.ZERO) as Vector2,
 			"time_left": float(src.get("time_left", 0.0)),
-			"pulse": float(src.get("pulse", 0.0))
+			"pulse": float(src.get("pulse", 0.0)),
+			"evicting": bool(src.get("evicting", false))
 		})
 	queue_redraw()
 
@@ -39,6 +40,13 @@ func _process(_delta: float) -> void:
 	if not seam_zones.is_empty():
 		queue_redraw()
 
+func get_zone_draw_radius(zone: Dictionary) -> float:
+	var time_left := float(zone.get("time_left", 0.0))
+	if time_left <= 0.0:
+		return 0.0
+	# Only evicted, harmless seams shrink. Active final ticks retain full reach.
+	return seam_radius * clampf(time_left / 0.4, 0.0, 1.0) if bool(zone.get("evicting", false)) else seam_radius
+
 func _draw() -> void:
 	if seam_zones.is_empty():
 		return
@@ -49,8 +57,8 @@ func _draw() -> void:
 		var time_left := float(seam.get("time_left", 0.0))
 		var lifetime_ratio := 1.0 - clampf(time_left / seam_duration, 0.0, 1.0)
 		var fade := VISUAL_MATH.late_fade(lifetime_ratio, 0.90, 3.0)
-		var draw_scale := clampf(time_left / 0.4, 0.0, 1.0)
-		var draw_r := seam_radius * draw_scale
+		var draw_r := get_zone_draw_radius(seam)
+		var draw_scale := draw_r / maxf(0.001, seam_radius)
 		var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.016 + seam_pos.x * 0.02)
 		var tick_pulse := clampf(float(seam.get("pulse", 0.0)) / 0.12, 0.0, 1.0)
 		draw_circle(draw_pos, draw_r + 8.0 * draw_scale, Color(0.14, 0.82, 0.62, (0.06 + tick_pulse * 0.08) * fade))

@@ -4,6 +4,7 @@ extends Node2D
 
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const LAUNCH := preload("res://scripts/enemy_launch_state.gd")
+const ARENA_BOUNDARY := preload("res://scripts/shared/arena_boundary.gd")
 const DAMAGE_RATIO := 0.45
 const OUTBOUND_DISTANCE := 220.0
 const OUTBOUND_SPEED := 620.0
@@ -191,6 +192,8 @@ func _advance(blade: Blade, delta: float, deal_damage: bool, exclusions: Array[R
 		var start := blade.position
 		var motion := blade.direction * distance
 		var wall := _wall_sweep(start, motion, exclusions)
+		if bool(wall.get("outside", false)):
+			return false # A shrinking arena cannot teleport a blade into a new hit.
 		var fraction := float(wall.get("fraction", 1.0))
 		blade.position += motion * fraction
 		if deal_damage:
@@ -230,6 +233,11 @@ func _geometry_exclusions() -> Array[RID]:
 
 ## Returns a new dictionary with the first safe travel fraction and wall normal.
 func _wall_sweep(start: Vector2, motion: Vector2, exclusions: Array[RID]) -> Dictionary:
+	var boundary := ARENA_BOUNDARY.sweep(start, motion, EnemyReplicationService.get_current_room_bounds())
+	if bool(boundary.get("outside", false)):
+		return boundary
+	var boundary_fraction := float(boundary.get("fraction", 1.0))
+	var clipped_motion := motion * boundary_fraction
 	var space := get_world_2d().direct_space_state
 	var query := PhysicsShapeQueryParameters2D.new()
 	query.shape = _shape
@@ -239,17 +247,17 @@ func _wall_sweep(start: Vector2, motion: Vector2, exclusions: Array[RID]) -> Dic
 	query.collide_with_areas = false
 	if not space.intersect_shape(query, 1).is_empty():
 		return {"fraction": 0.0, "normal": -motion.normalized()}
-	query.motion = motion
+	query.motion = clipped_motion
 	var fractions := space.cast_motion(query)
 	if fractions.size() < 2 or fractions[0] >= 1.0:
-		return {}
-	query.transform.origin = start + motion * minf(1.0, fractions[1] + 0.005)
+		return boundary
+	query.transform.origin = start + clipped_motion * minf(1.0, fractions[1] + 0.005)
 	query.motion = Vector2.ZERO
 	var contact := space.get_rest_info(query)
 	var normal: Vector2 = contact.get("normal", -motion.normalized())
 	if not normal.is_finite() or normal.length_squared() < 0.0001:
 		normal = -motion.normalized()
-	return {"fraction": clampf(fractions[0], 0.0, 1.0), "normal": normal.normalized()}
+	return {"fraction": clampf(fractions[0], 0.0, 1.0) * boundary_fraction, "normal": normal.normalized()}
 
 func _apply_segment_hits(blade: Blade, start: Vector2, finish: Vector2, exclusions: Array[RID]) -> void:
 	var hit_ids := blade.returning_hits if blade.returning else blade.outgoing_hits

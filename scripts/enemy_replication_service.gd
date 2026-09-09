@@ -16,6 +16,16 @@ var _ruinous_event_serial: int = 0
 func bind_world(world: Node) -> void:
 	world_generator = world
 
+## The bound world owns this value rectangle, including Seamlock shrinkage.
+## An unbound service or a room that has not initialized has no perimeter.
+func get_current_room_bounds() -> Rect2:
+	if not is_instance_valid(world_generator):
+		return Rect2()
+	var size: Vector2 = world_generator.current_effective_room_size
+	if not size.is_finite() or size.x <= 0.0 or size.y <= 0.0:
+		return Rect2()
+	return Rect2(-size * 0.5, size)
+
 
 func unbind_world(world: Node) -> void:
 	if world_generator == world:

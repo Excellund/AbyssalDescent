@@ -23,6 +23,7 @@ const ASCENSION_REGISTRY := preload("res://scripts/progression/ascension_modifie
 const PLAYER_SCRIPT := preload("res://scripts/player.gd")
 const RUN_CONTEXT_SCRIPT := preload("res://scripts/run_context.gd")
 const OBJECTIVE_MANAGER_SCRIPT := preload("res://scripts/objective_manager.gd")
+const PROVENANCE := preload("res://scripts/core/run_provenance.gd")
 
 const STAT_ATTRIBUTION_TRACE := false
 
@@ -37,6 +38,8 @@ var _resumed_elapsed_msec: int = 0
 var _run_is_debug: bool = false
 var latest_run_summary: Dictionary = {}
 var run_summary_tracker
+var _provenance_initialized: bool = false
+var _provenance_token: String = ""
 
 var _summary_last_player_health_by_peer: Dictionary = {}
 var _summary_stats_by_peer: Dictionary = {}
@@ -115,11 +118,15 @@ func mark_run_start() -> void:
 	reset_summary_tracker()
 
 func initialize(allow_collection: bool) -> void:
-	_run_is_debug = not allow_collection
+	_run_is_debug = not allow_collection or bool(run_summary_tracker.run_provenance.get("is_debug", false))
+	if _run_is_debug:
+		run_summary_tracker.run_provenance["is_debug"] = true
 	telemetry_run_id = ""
-	telemetry_enabled = allow_collection
+	telemetry_enabled = allow_collection and not _run_is_debug
 	telemetry_run_finished = false
 	latest_run_summary.clear()
+	_provenance_initialized = true
+	_schedule_party_provenance()
 	if not telemetry_enabled:
 		return
 	# In multiplayer, only the host should write telemetry to avoid file corruption races.
@@ -137,7 +144,8 @@ func initialize(allow_collection: bool) -> void:
 		if run_mode_value != null:
 			run_mode = int(run_mode_value)
 	var run_seed := {
-		"game_version": String(ProjectSettings.get_setting("application/config/version", "dev")).strip_edges(),
+		"game_version": run_summary_tracker.game_version,
+		"run_provenance": run_summary_tracker.run_provenance.duplicate(true),
 		"character_id": _world.current_character_id,
 		"character_name": String(CHARACTER_REGISTRY.get_character(_world.current_character_id).get("name", String(_world.current_character_id).capitalize())),
 		"difficulty_tier": _world.current_difficulty_tier,
@@ -153,6 +161,7 @@ func initialize(allow_collection: bool) -> void:
 	telemetry_run_id = RUN_TELEMETRY_STORE.start_run(run_seed)
 
 func reset_summary_tracker() -> void:
+	_provenance_token = Crypto.new().generate_random_bytes(16).hex_encode()
 	if run_summary_tracker == null:
 		run_summary_tracker = RUN_SUMMARY_TRACKER_SCRIPT.new()
 	_summary_last_player_health_by_peer.clear()
@@ -172,6 +181,7 @@ func reset_summary_tracker() -> void:
 		"difficulty_tier": _world.current_difficulty_tier,
 		"difficulty_label": difficulty_label,
 		"game_version": game_version,
+		"is_debug": _run_is_debug,
 		"leaderboard_patch_key": RUN_TELEMETRY_STORE.leaderboard_patch_key_from_version(game_version),
 		"is_multiplayer": _world.is_multiplayer,
 		"player_count": _world.difficulty_provider.get_party_size(),
@@ -190,6 +200,11 @@ func reset_summary_tracker() -> void:
 		var character_id: String = String(_world.current_character_id).strip_edges().to_lower()
 		tracker_seed["equipped_catalyst_ids"] = run_context.get_active_catalyst_ids(character_id)
 	run_summary_tracker.reset_for_run(tracker_seed)
+	if _world.is_multiplayer and MultiplayerSessionManager.is_host():
+		for peer_id in MultiplayerSessionManager.get_peer_ids():
+			if int(peer_id) != _world._resolve_local_peer_id():
+				run_summary_tracker.expect_peer_provenance(int(peer_id))
+	_schedule_party_provenance()
 	for player_node in _world._get_multiplayer_player_nodes():
 		var player := player_node as PLAYER_SCRIPT
 		if not is_instance_valid(player):
@@ -213,6 +228,7 @@ func restore_tracker_items_from_snapshot(snapshot: Dictionary) -> void:
 		# Legacy saves kept the build but not prior hits, attacks, rests or time.
 		# Keep the run playable without treating unknown history as zero usage.
 		run_summary_tracker.full_run_tracking_complete = false
+		run_summary_tracker.restore_run_provenance(null)
 	var boon_raw: Variant = snapshot.get("tracker_boon_items", {})
 	if boon_raw is Dictionary:
 		run_summary_tracker.boon_items = (boon_raw as Dictionary).duplicate(true)
@@ -225,6 +241,8 @@ func restore_tracker_items_from_snapshot(snapshot: Dictionary) -> void:
 
 func mark_debug_mode() -> void:
 	_run_is_debug = true
+	run_summary_tracker.run_provenance["is_debug"] = true
+	_schedule_party_provenance(true)
 	if MultiplayerSessionManager.is_remote_replica():
 		telemetry_enabled = false
 		return
@@ -241,6 +259,17 @@ func mark_debug_mode() -> void:
 	})
 	telemetry_enabled = false
 	telemetry_run_finished = true
+
+func _schedule_party_provenance(immediate: bool = false) -> void:
+	if not _provenance_initialized or not is_instance_valid(_world) or not _world.is_inside_tree() or not _world.is_multiplayer:
+		return
+	var service: Node = _world.get_node_or_null("/root/GameStateReplicationService")
+	if service != null:
+		if immediate:
+			# Debug evidence must precede subsequent reliable gameplay messages.
+			service.bind_run_provenance(weakref(self), _provenance_token)
+		else:
+			service.call_deferred("bind_run_provenance", weakref(self), _provenance_token)
 
 func finish_run(outcome: String, death_event: Dictionary = {}) -> void:
 	var death_copy := death_event.duplicate(true)
@@ -297,6 +326,7 @@ func finish_run(outcome: String, death_event: Dictionary = {}) -> void:
 		summary["reward_timeline"] = (tracker_summary.get("reward_timeline", []) as Array).duplicate(true)
 		summary["unlocks"] = (tracker_summary.get("unlocks", []) as Array).duplicate(true)
 		summary["duration_seconds"] = int(tracker_summary.get("duration_seconds", get_run_elapsed_seconds()))
+		summary["run_provenance"] = tracker_summary.run_provenance.duplicate(true)
 		summary["timestamp_text"] = String(tracker_summary.get("timestamp_text", ""))
 		_apply_endgame_chase_progress(latest_run_summary)
 		summary["unlocks"] = (latest_run_summary.get("unlocks", []) as Array).duplicate(true)
@@ -836,6 +866,8 @@ func finalize_synced_run_summary_for_joiner(synced_summary: Dictionary, outcome:
 		augmented["ascension_loadout"] = run_summary_tracker.ascension_loadout.duplicate()
 		augmented["ascension_tracking_complete"] = run_summary_tracker.ascension_tracking_complete and bool(augmented.get("ascension_tracking_complete", true))
 	augmented["is_debug"] = _run_is_debug or bool(augmented.get("is_debug", false))
+	if run_summary_tracker != null:
+		augmented["run_provenance"] = PROVENANCE.merge(augmented.get("run_provenance"), run_summary_tracker.run_provenance)
 	if String(augmented.get("outcome", "")).strip_edges().is_empty():
 		augmented["outcome"] = outcome
 	var local_peer_id: int = _world._resolve_local_peer_id()

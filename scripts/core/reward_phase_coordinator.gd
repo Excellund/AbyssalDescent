@@ -7,6 +7,12 @@ var _phase_is_initial: bool = false
 var _phase_mode: int = ENUMS.RewardMode.NONE
 var _phase_completed_peers: Dictionary = {}
 
+## A fresh value snapshot; inspecting it cannot activate or mutate the phase.
+func get_active_phase() -> Dictionary:
+	if not _phase_active:
+		return {}
+	return {"is_initial": _phase_is_initial, "mode": _phase_mode}
+
 func begin_phase(is_multiplayer: bool, is_initial: bool, mode: int, hud: Node) -> void:
 	if not is_multiplayer:
 		_phase_active = false

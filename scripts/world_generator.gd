@@ -1939,8 +1939,16 @@ func _keep_player_inside_current_room() -> void:
 	if current_effective_room_size == Vector2.ZERO:
 		return
 	var half := current_effective_room_size * 0.5
-	player.global_position.x = clampf(player.global_position.x, -half.x, half.x)
-	player.global_position.y = clampf(player.global_position.y, -half.y, half.y)
+	var corrected := player.global_position.clamp(-half, half)
+	if corrected == player.global_position:
+		return
+	player.global_position = corrected
+	var typed_player := player as PLAYER_SCRIPT
+	if typed_player != null and is_instance_valid(typed_player.arcana_motion) and typed_player.arcana_motion.owns_movement():
+		# A shrinking arena moves the player before the next physics tick.
+		# Stop that interrupted motion without awarding a movement completion.
+		typed_player.arcana_motion.cancel()
+		typed_player.velocity = Vector2.ZERO
 
 func _refresh_enemy_clamp_cache() -> void:
 	_enemy_clamp_cached_nodes.clear()
@@ -1971,8 +1979,16 @@ func _keep_enemies_inside_current_room(delta: float) -> void:
 		if not is_instance_valid(enemy_body):
 			stale_entries = true
 			continue
-		enemy_body.global_position.x = clampf(enemy_body.global_position.x, -half.x, half.x)
-		enemy_body.global_position.y = clampf(enemy_body.global_position.y, -half.y, half.y)
+		var corrected := enemy_body.global_position.clamp(-half, half)
+		if corrected == enemy_body.global_position:
+			continue
+		enemy_body.global_position = corrected
+		var enemy := enemy_body as ENEMY_BASE_SCRIPT
+		if enemy != null and enemy._launch_state != null and enemy._launch_state.active:
+			# The environment caused this displacement, so it cannot trigger a
+			# Ruinous collision or leave an armed launch after the teleport.
+			enemy._launch_state.cancel()
+			enemy.velocity = Vector2.ZERO
 	if stale_entries:
 		_refresh_enemy_clamp_cache()
 
@@ -2612,8 +2628,32 @@ func _start_multiplayer_retry_run() -> void:
 	get_tree().change_scene_to_file("res://scenes/Main.tscn")
 
 func _on_multiplayer_peer_disconnected(peer_id: int) -> void:
+	if not is_multiplayer or peer_id <= 0 or peer_id == _resolve_local_peer_id():
+		return
+	var departed := PlayerReplicationService.player_nodes.get(peer_id) as PLAYER_SCRIPT
+	PlayerReplicationService.unregister_player(peer_id)
+	if is_instance_valid(departed) and departed != player:
+		departed.set_combat_damage_enabled(false)
+		departed.set_combat_removed(true)
+		departed.queue_free()
+	_encounter_ready_peers.erase(peer_id)
+	_refresh_fallen_player_tracking()
+	_refresh_all_enemy_target_candidates()
+	_bind_camera_to_local_player()
+	_apply_camera_bounds_for_room(current_effective_room_size)
+	# Host loss follows its existing menu-return path on joiners.
+	if peer_id == 1 and not MultiplayerSessionManager.is_host_peer:
+		return
+	if not _run_outcome_coordinator.is_run_cleared() and _count_alive_players() == 0:
+		_on_player_died()
+	if MultiplayerSessionManager.should_broadcast() and not _run_outcome_coordinator.is_run_cleared():
+		_try_advance_completed_reward_phase()
+		_try_finish_encounter_intro_grace()
 	var expected := _expected_retry_voter_ids()
 	var disconnect_result := _run_outcome_coordinator.on_peer_disconnected(int(peer_id), expected)
+	if not MultiplayerSessionManager.should_broadcast():
+		_apply_retry_vote_status_ui()
+		return
 	if not bool(disconnect_result.get("all_voted", false)):
 		var votes_yes: int = disconnect_result.get("votes_yes", 0)
 		var total: int = disconnect_result.get("total_peers", 0)
@@ -3916,10 +3956,16 @@ func _reset_progress_for_first_encounter() -> void:
 func _sync_reward_phase_complete(peer_id: int, is_initial: bool, mode: int) -> void:
 	if not _reward_phase_coordinator.register_peer_completion(is_multiplayer, peer_id, is_initial, mode):
 		return
+	_try_advance_completed_reward_phase()
+
+func _try_advance_completed_reward_phase() -> void:
 	if not MultiplayerSessionManager.should_broadcast():
 		return
-	if not _all_reward_phase_peers_completed():
+	var active_phase := _reward_phase_coordinator.get_active_phase()
+	if active_phase.is_empty() or not _all_reward_phase_peers_completed():
 		return
+	var is_initial := bool(active_phase.is_initial)
+	var mode := int(active_phase.mode)
 	## Capture the initial encounter profile before _finalize clears pending_initial_room_profile.
 	## Both host and joiner independently seed rng, so without this the joiner rolls a different
 	## obstacle_layout from pick_layout(rng) — terrain diverges on the first encounter.
@@ -4079,8 +4125,7 @@ func _on_player_died() -> void:
 	var run_context := _get_run_context()
 	if run_context != null:
 		run_context.set_last_run_outcome("death")
-		run_context.clear_active_run()
-		run_context.clear_resume_saved_run_request()
+	_clear_active_run_checkpoint()
 	var current_summary: Dictionary = _latest_run_summary()
 	if current_summary.is_empty() or String(current_summary.get("outcome", "")) != "death":
 		var death_event: Dictionary = run_summary_recorder.build_death_event_snapshot() if _run_summary_ready() else {}
@@ -4455,7 +4500,11 @@ func _notify_host_player_ready(peer_id: int) -> void:
 
 func _on_player_ready_signal(peer_id: int) -> void:
 	_encounter_ready_peers[peer_id] = true
-	
+	_try_finish_encounter_intro_grace()
+
+func _try_finish_encounter_intro_grace() -> void:
+	if not encounter_intro_grace_active or not MultiplayerSessionManager.should_broadcast():
+		return
 	for player_node in _get_multiplayer_player_nodes():
 		var typed := player_node as PLAYER_SCRIPT
 		if typed == null or not _is_player_alive(typed):

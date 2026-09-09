@@ -116,6 +116,17 @@ func _ready() -> void:
 				break
 	configure_health_bar_visuals(Vector2(-78.0, -86.0), Vector2(156.0, 12.0))
 
+func _exit_tree() -> void:
+	if is_instance_valid(_seam_overlay):
+		_seam_overlay.clear_seams()
+		_seam_overlay.queue_free()
+	_seam_overlay = null
+	if is_instance_valid(_attack_overlay):
+		_attack_overlay.telegraph_active = false
+		_attack_overlay.queue_redraw()
+		_attack_overlay.queue_free()
+	_attack_overlay = null
+
 func _get_transport_color() -> Color:
 	return Color(0.34, 0.96, 0.78, 1.0)
 
@@ -235,6 +246,8 @@ func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
 		if boss_state != STATE_STALK:
 			boss_state = STATE_STALK
 			state_time_left = 0.0
+		seam_zones.clear()
+		_sync_seam_overlay()
 		_sync_attack_overlay()
 		queue_redraw()
 		return
@@ -547,6 +560,7 @@ func _apply_echo_cross_hit() -> void:
 		})
 	var cap := seam_spawn_limit_base + (1 if _get_enrage_ratio() >= 0.52 else 0) + (1 if _get_enrage_ratio() >= 0.84 else 0)
 	_evict_excess_seams(maxi(cap, 4))
+	_sync_seam_overlay()
 
 func _spawn_seam(seam_position: Vector2, duration_mult: float = 1.0, tick_interval_mult: float = 1.0) -> void:
 	var clamped := _clamp_to_arena(seam_position, seam_radius + 18.0)
@@ -591,6 +605,7 @@ func _evict_excess_seams(limit: int) -> void:
 
 func _process_seam_zones(delta: float) -> void:
 	if seam_zones.is_empty():
+		_sync_seam_overlay()
 		return
 	var expired: Array[int] = []
 	for i in range(seam_zones.size()):
@@ -613,6 +628,7 @@ func _process_seam_zones(delta: float) -> void:
 			expired.append(i)
 	for idx in range(expired.size() - 1, -1, -1):
 		seam_zones.remove_at(expired[idx])
+	_sync_seam_overlay()
 
 func _predict_target_position(prediction_scale: float, speed_cap: float = 0.0) -> Vector2:
 	if not is_instance_valid(target):
@@ -781,7 +797,6 @@ func _draw() -> void:
 	if is_spawn_transporting():
 		_draw_spawn_transport_fx(40.0, facing)
 		return
-	_draw_seam_zones()
 	var pulse := _get_attack_pulse()
 	var body_radius := 46.0 + pulse * 1.2
 	var body_color := Color(0.1, 0.6, 0.44, 1.0)
@@ -920,39 +935,6 @@ func _draw_lacuna_body(body_radius: float, body_color: Color, core_color: Color,
 	_draw_mutator_overlay(body_radius)
 	_draw_dread_resonance_overlay(body_radius)
 	_draw_damage_blocked_indicator(body_radius)
-
-func _draw_seam_zones() -> void:
-	# On remote clients (joiners), seams are rendered by the overlay, not here
-	if not network_simulation_enabled:
-		return
-	for seam_variant in seam_zones:
-		var seam := seam_variant as Dictionary
-		var seam_pos := seam.get("pos", Vector2.ZERO) as Vector2
-		var local_pos := seam_pos - global_position
-		var time_left := float(seam.get("time_left", 0.0))
-		var fade := clampf(time_left / maxf(0.001, seam_duration), 0.0, 1.0)
-		var draw_scale := clampf(time_left / 0.4, 0.0, 1.0)
-		var draw_r := seam_radius * draw_scale
-		var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.016 + seam_pos.x * 0.02)
-		var tick_pulse := clampf(float(seam.get("pulse", 0.0)) / 0.12, 0.0, 1.0)
-		draw_circle(local_pos, draw_r + 8.0 * draw_scale, Color(0.14, 0.82, 0.62, (0.06 + tick_pulse * 0.08) * fade))
-		draw_circle(local_pos, draw_r, Color(0.14, 0.94, 0.72, (0.16 + tick_pulse * 0.1) * fade))
-		draw_arc(local_pos, draw_r + 6.0 * draw_scale, 0.0, TAU, 32, Color(0.62, 0.94, 0.82, (0.14 + tick_pulse * 0.18) * fade), 2.0)
-		draw_arc(local_pos, (seam_radius - 2.0 + pulse * 2.0) * draw_scale, 0.0, TAU, 36, Color(0.76, 1.0, 0.92, (0.48 + tick_pulse * 0.44) * fade), 3.0)
-		draw_arc(local_pos, draw_r * 0.62, 0.0, TAU, 26, Color(0.2, 0.88, 0.74, 0.2 * fade), 1.4)
-		draw_circle(local_pos, draw_r * 0.22, Color(0.84, 1.0, 0.95, (0.18 + tick_pulse * 0.46) * fade))
-		var seam_axis := Vector2.RIGHT.rotated(seam_pos.angle() + pulse * 0.45)
-		var seam_cross := seam_axis.orthogonal()
-		draw_line(local_pos - seam_axis * (draw_r * 0.72), local_pos - seam_axis * (draw_r * 0.16), Color(0.94, 1.0, 0.98, (0.22 + tick_pulse * 0.34) * fade), 1.8)
-		draw_line(local_pos + seam_axis * (draw_r * 0.16), local_pos + seam_axis * (draw_r * 0.72), Color(0.94, 1.0, 0.98, (0.22 + tick_pulse * 0.34) * fade), 1.8)
-		draw_line(local_pos - seam_cross * (draw_r * 0.3), local_pos + seam_cross * (draw_r * 0.3), Color(0.7, 1.0, 0.88, (0.12 + tick_pulse * 0.22) * fade), 1.2)
-		if tick_pulse > 0.0:
-			for spoke_i in range(6):
-				var spoke_angle := float(spoke_i) * TAU / 6.0 + pulse * 0.5
-				var spoke_dir := Vector2.RIGHT.rotated(spoke_angle)
-				var spoke_start := local_pos + spoke_dir * (draw_r * 0.38)
-				var spoke_end := local_pos + spoke_dir * (draw_r + (6.0 + tick_pulse * 8.0) * draw_scale)
-				draw_line(spoke_start, spoke_end, Color(0.92, 1.0, 0.98, (0.34 + tick_pulse * 0.4) * fade), 1.8)
 
 func _draw_role_state_icon(facing: Vector2, body_radius: float) -> void:
 	var icon_alpha := 0.36 + telegraph_alpha * 0.58
