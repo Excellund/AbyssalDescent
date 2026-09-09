@@ -16,6 +16,8 @@ Held attack input survives the dash-to-Orbit handoff and charges Blast only afte
 
 Archer arrows now respect fast movement crossings, nearer cover and the current arena edge, with stale shots cleaned up in co-op. Run and menu helpers are freed correctly across repeated retries and Continue.
 
+Taking a door during a dash clears pending movement and attacks before the next room's survey. Held actions require release before rearming across room changes, overlays, focus loss and retry.
+
 Toll's pulse follows fast movement while preserving its safe gaps and regular dash bypass. Its slow effects now reach the actual joining player. Pyre fire stops ticking at expiry. Use the same playtest version on every machine for co-op.
 
 Sovereign's Double keeps its current damage and proc rules. Development runs remain local and do not enter remote telemetry or leaderboards. There are no new combat prompts or Oath checklists.

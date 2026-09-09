@@ -1,6 +1,7 @@
 extends RefCounted
 
 const REWARD_SELECTION_UI_SCRIPT := preload("res://scripts/reward_selection_ui.gd")
+const PLAYER_SCRIPT := preload("res://scripts/player.gd")
 
 func close_reward_selection_if_active(reward_selection_ui: Node) -> void:
 	var typed := reward_selection_ui as REWARD_SELECTION_UI_SCRIPT
@@ -18,6 +19,16 @@ func prepare_for_menu_transition(combat_phase_coordinator: RefCounted, player: N
 
 func reset_player_position(player: Node, position: Vector2 = Vector2.ZERO) -> void:
 	if is_instance_valid(player) and player is Node2D:
+		if player is PLAYER_SCRIPT:
+			# A room/respawn reset is discontinuous: do not carry an old dash or
+			# queued strike into survey, or create a shade from the teleport.
+			player.discard_pending_combat_input()
+			player._set_dash_phasing(false)
+			player.velocity = Vector2.ZERO
+			player.dash_time_left = 0.0
+			player.dash_remaining_distance = 0.0
+			player.dash_phase_release_left = 0.0
+			player._dash_damage_immune_left = 0.0
 		player.set_meta("combat_position_reset_generation", int(player.get_meta("combat_position_reset_generation", 0)) + 1)
 		(player as Node2D).global_position = position
 

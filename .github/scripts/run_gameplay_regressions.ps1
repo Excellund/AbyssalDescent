@@ -138,6 +138,7 @@ try {
         "res://.github/scripts/validate_multiplayer_config_sync.gd",
         "res://scripts/tests/test_reward_input.gd",
         "res://scripts/tests/test_queued_arcana_input.gd",
+        "res://scripts/tests/test_input_transition_lifecycle.gd",
         "res://scripts/tests/test_combat_pause.gd",
         "res://scripts/tests/test_hit_origins.gd",
         "res://scripts/tests/test_attack_feedback.gd",
