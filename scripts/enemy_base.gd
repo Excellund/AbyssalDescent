@@ -175,6 +175,7 @@ var spawn_transport_duration: float = 0.0
 var spawn_transport_seed: float = 0.0
 var _edge_escape_phase_left: float = 0.0
 var _ignoring_target_collision: bool = false
+var _ignored_target_rid: RID
 var _target_refresh_left: float = 0.0
 var _attack_visual_redraw_left: float = 0.0
 var _remote_ui_update_left: float = 0.0
@@ -771,17 +772,16 @@ func _clear_edge_escape_state() -> void:
 	_set_target_collision_ignored(false)
 
 func _set_target_collision_ignored(should_ignore: bool) -> void:
-	if should_ignore == _ignoring_target_collision:
-		return
-	if not is_instance_valid(target) or not (target is PhysicsBody2D):
-		_ignoring_target_collision = false
-		return
-	var target_body := target as PhysicsBody2D
-	if should_ignore:
-		add_collision_exception_with(target_body)
-	else:
-		remove_collision_exception_with(target_body)
-	_ignoring_target_collision = should_ignore
+	var next_rid := RID()
+	if should_ignore and is_instance_valid(target) and target is PhysicsBody2D:
+		next_rid = (target as PhysicsBody2D).get_rid()
+	if next_rid != _ignored_target_rid:
+		if _ignored_target_rid.is_valid():
+			PhysicsServer2D.body_remove_collision_exception(get_rid(), _ignored_target_rid)
+		if next_rid.is_valid():
+			PhysicsServer2D.body_add_collision_exception(get_rid(), next_rid)
+		_ignored_target_rid = next_rid
+	_ignoring_target_collision = _ignored_target_rid.is_valid()
 
 func apply_slow(duration: float, mult: float) -> void:
 	if duration > slow_time_left:

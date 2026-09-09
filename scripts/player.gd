@@ -246,7 +246,7 @@ var attack_combo_counter: int = 0
 var dash_phasing_active: bool = false
 var dash_phase_release_left: float = 0.0
 var _dash_damage_immune_left: float = 0.0
-var dash_enemy_exceptions: Dictionary = {}
+var dash_enemy_exceptions: Dictionary = {} # Enemy instance ID -> physics RID.
 var body_radius_cache: float = 14.0
 var queued_attack_after_dash: bool = false
 var _combat_actions_awaiting_release: Array[StringName] = []
@@ -1073,25 +1073,19 @@ func _sync_enemy_collision_exceptions() -> void:
 		if dash_enemy_exceptions.has(enemy_id):
 			continue
 		add_collision_exception_with(enemy_body)
-		dash_enemy_exceptions[enemy_id] = enemy_body
+		dash_enemy_exceptions[enemy_id] = enemy_body.get_rid()
 
 	for enemy_id in dash_enemy_exceptions.keys():
 		if seen_ids.has(enemy_id):
 			continue
-		var enemy_ref = dash_enemy_exceptions[enemy_id]
-		if is_instance_valid(enemy_ref):
-			var existing: PhysicsBody2D = enemy_ref as PhysicsBody2D
-			if existing != null:
-				remove_collision_exception_with(existing)
+		PhysicsServer2D.body_remove_collision_exception(get_rid(), dash_enemy_exceptions[enemy_id])
 		dash_enemy_exceptions.erase(enemy_id)
 
 func _clear_enemy_collision_exceptions() -> void:
-	for enemy_id in dash_enemy_exceptions.keys():
-		var enemy_ref = dash_enemy_exceptions[enemy_id]
-		if is_instance_valid(enemy_ref):
-			var enemy: PhysicsBody2D = enemy_ref as PhysicsBody2D
-			if enemy != null:
-				remove_collision_exception_with(enemy)
+	# Godot retains the exception RID after its enemy node is freed. Removing by
+	# the saved handle also clears deaths during dash, without touching party peers.
+	for enemy_rid: RID in dash_enemy_exceptions.values():
+		PhysicsServer2D.body_remove_collision_exception(get_rid(), enemy_rid)
 	dash_enemy_exceptions.clear()
 
 func _is_overlapping_enemy_body() -> bool:

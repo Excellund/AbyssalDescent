@@ -9,6 +9,7 @@ extends RefCounted
 const PLAYER_SCRIPT := preload("res://scripts/player.gd")
 const MULTIPLAYER_SESSION_MANAGER_SCRIPT := preload("res://scripts/multiplayer_session_manager.gd")
 const REMOTE_PLAYER_SPAWN_RADIUS_PX: float = 80.0
+const PARTY_COLLISION_PEERS_META: StringName = &"_abyssal_party_collision_peers"
 
 ## Slot 0 (host) stays at the spawn anchor; remaining slots fan around it on a
 ## ring of radius REMOTE_PLAYER_SPAWN_RADIUS_PX.
@@ -27,6 +28,35 @@ static func disable_player_collision_pair(primary_player: Node, secondary_player
 		return
 	primary_body.add_collision_exception_with(secondary_body)
 	secondary_body.add_collision_exception_with(primary_body)
+	_track_party_collision_peer(primary_body, secondary_body)
+	_track_party_collision_peer(secondary_body, primary_body)
+
+static func _track_party_collision_peer(body: PhysicsBody2D, peer: PhysicsBody2D) -> void:
+	var peers: Dictionary = body.get_meta(PARTY_COLLISION_PEERS_META, {})
+	peers[peer.get_instance_id()] = peer.get_rid()
+	body.set_meta(PARTY_COLLISION_PEERS_META, peers)
+	# One callback per body: Godot treats static bound Callables as equal even
+	# when their bound peer IDs differ, so per-pair connections lose peers.
+	var clear_peers := _remove_departing_player_exceptions.bind(body.get_instance_id())
+	if not body.tree_exiting.is_connected(clear_peers):
+		body.tree_exiting.connect(clear_peers, CONNECT_ONE_SHOT)
+
+static func _remove_departing_player_exceptions(departing_id: int) -> void:
+	var departing := instance_from_id(departing_id) as PhysicsBody2D
+	if not is_instance_valid(departing):
+		return
+	var departing_rid := departing.get_rid()
+	var peers: Dictionary = departing.get_meta(PARTY_COLLISION_PEERS_META, {})
+	for remaining_id in peers:
+		# Captured RIDs also clean up handles whose peer has already been freed.
+		PhysicsServer2D.body_remove_collision_exception(departing_rid, peers[remaining_id])
+		var remaining := instance_from_id(remaining_id) as PhysicsBody2D
+		if not is_instance_valid(remaining):
+			continue
+		PhysicsServer2D.body_remove_collision_exception(remaining.get_rid(), departing_rid)
+		var remaining_peers: Dictionary = remaining.get_meta(PARTY_COLLISION_PEERS_META, {})
+		remaining_peers.erase(departing_id)
+	departing.remove_meta(PARTY_COLLISION_PEERS_META)
 
 static func is_player_alive(player_node: Node) -> bool:
 	var player := player_node as PLAYER_SCRIPT

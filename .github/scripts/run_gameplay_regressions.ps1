@@ -152,6 +152,8 @@ try {
         "res://scripts/tests/test_run_provenance.gd",
         "res://scripts/tests/test_party_provenance.gd",
         "res://scripts/tests/test_peer_departure.gd",
+        "res://scripts/tests/test_dash_collision_lifecycle.gd",
+        "res://scripts/tests/test_collision_exception_cleanup.gd",
         "res://scripts/tests/test_live_arena_edges.gd",
         "res://scripts/tests/test_power_rewards.gd",
         "res://scripts/tests/test_oath_tracking.gd",

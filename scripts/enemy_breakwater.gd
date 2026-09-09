@@ -310,13 +310,11 @@ func _sync_exceptions() -> void:
 			var id: int = node.get_instance_id()
 			if not _exceptions.has(id):
 				add_collision_exception_with(node)
-				_exceptions[id] = weakref(node)
+				_exceptions[id] = (node as PhysicsBody2D).get_rid()
 
 func _clear_exceptions() -> void:
-	for reference: WeakRef in _exceptions.values():
-		var node := reference.get_ref() as PhysicsBody2D
-		if is_instance_valid(node):
-			remove_collision_exception_with(node)
+	for target_rid: RID in _exceptions.values():
+		PhysicsServer2D.body_remove_collision_exception(get_rid(), target_rid)
 	_exceptions.clear()
 
 func _enter_recovery(hit_wall: bool) -> void:

@@ -252,24 +252,16 @@ func _sync_charge_exceptions() -> void:
 		if _charge_enemy_exceptions.has(enemy_id):
 			continue
 		add_collision_exception_with(enemy_body)
-		_charge_enemy_exceptions[enemy_id] = enemy_body
+		_charge_enemy_exceptions[enemy_id] = enemy_body.get_rid()
 	for enemy_id in _charge_enemy_exceptions.keys():
 		if seen_ids.has(enemy_id):
 			continue
-		var enemy_ref = _charge_enemy_exceptions[enemy_id]
-		if is_instance_valid(enemy_ref):
-			var existing: PhysicsBody2D = enemy_ref as PhysicsBody2D
-			if existing != null:
-				remove_collision_exception_with(existing)
+		PhysicsServer2D.body_remove_collision_exception(get_rid(), _charge_enemy_exceptions[enemy_id])
 		_charge_enemy_exceptions.erase(enemy_id)
 
 func _clear_charge_exceptions() -> void:
-	for enemy_id in _charge_enemy_exceptions.keys():
-		var enemy_ref = _charge_enemy_exceptions[enemy_id]
-		if is_instance_valid(enemy_ref):
-			var enemy_body: PhysicsBody2D = enemy_ref as PhysicsBody2D
-			if enemy_body != null:
-				remove_collision_exception_with(enemy_body)
+	for enemy_rid: RID in _charge_enemy_exceptions.values():
+		PhysicsServer2D.body_remove_collision_exception(get_rid(), enemy_rid)
 	_charge_enemy_exceptions.clear()
 
 func _draw() -> void:
