@@ -46,6 +46,7 @@ func _run() -> void:
 	await _test_bounded_reset_and_removal()
 	await _test_intro_and_destroyed_cover()
 	await _test_range_and_zero_length_warning()
+	_test_local_sound_setting()
 	if is_instance_valid(MAPPER._power_registry_instance):
 		MAPPER._power_registry_instance.free()
 		MAPPER._power_registry_instance = null
@@ -231,4 +232,23 @@ func _test_range_and_zero_length_warning() -> void:
 	var warning := boss.get_warning_polygons()
 	_check(warning.size() == 1 and Geometry2D.is_point_in_polygon(boss.charge_origin + Vector2(37.0, 0.0), warning[0]) and not Geometry2D.is_point_in_polygon(boss.charge_origin + Vector2(39.0, 0.0), warning[0]), "A zero-length wall-pinned charge still draws its exact contact circle")
 	_check(not Geometry2D.triangulate_polygon(warning[0]).is_empty(), "The contact-only warning is a valid rendered polygon")
+	_clear()
+
+func _test_local_sound_setting() -> void:
+	_setup()
+	var boss := _apex()
+	# Headless skips the audio device; use the same real player and generated clip.
+	if boss._sound == null:
+		boss._sound = AudioStreamPlayer.new()
+		boss._sound.stream = BREAKWATER._make_sound()
+		boss._sound.volume_db = -19.0
+		boss.add_child(boss._sound)
+	var saved_volume := RunContext.sfx_volume_db
+	for setting: float in [0.0, -24.0, -80.0]:
+		RunContext.sfx_volume_db = setting
+		boss._sound_left = 0.0
+		boss._lock_charge()
+		_check(is_equal_approx(boss._sound.volume_db, clampf(setting - 19.0, -80.0, 6.0)), "Breakwater warning follows this player's current SFX setting, including mute")
+		boss._sound.stop()
+	RunContext.sfx_volume_db = saved_volume
 	_clear()

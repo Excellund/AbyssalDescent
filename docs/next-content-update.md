@@ -39,4 +39,4 @@ Blast Drive and Razor Orbit help reach or separate targets; Sovereign's Double c
 
 The requested follow-up [systems implementation and visual review](systems-and-visual-review.md) covers combat contracts, readability, progression/UI consistency and measured performance in small verified passes.
 
-A new Apex built around baiting a committed charge into a wall would create a clear punish opportunity, but optional encounters are seen less often. Destructible-cover formations would give attacks a new traversal purpose, but require obstacle state, replication and anchor invalidation support. Both remain later possibilities after feedback on the Keeper and the systems/visual review.
+[Apex Breakwater](apex-breakwater.md) now implements the committed charge and wall-recovery idea on the overnight branch. Destructible-cover formations remain a possible later direction after feedback on the Keeper, movement builds and the systems/visual review.

@@ -4,6 +4,7 @@ extends "res://scripts/enemy_base.gd"
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const PLAYER_SCRIPT := preload("res://scripts/player.gd")
 const ARENA_BOUNDARY := preload("res://scripts/shared/arena_boundary.gd")
+const AUDIO_LEVELS := preload("res://scripts/shared/audio_levels.gd")
 const TRACK_TIME := 0.35
 const LOCK_TIME := 0.55
 const CHARGE_SPEED := 640.0
@@ -447,6 +448,7 @@ func _draw() -> void:
 func _play_sound(pitch: float) -> void:
 	if _sound == null or _sound_left > 0.0:
 		return
+	_sound.volume_db = AUDIO_LEVELS.clamp_db(RunContext.sfx_volume_db - 19.0)
 	_sound.pitch_scale = pitch
 	_sound.play()
 	_sound_left = 0.08

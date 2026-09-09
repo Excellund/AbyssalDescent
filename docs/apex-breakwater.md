@@ -1,6 +1,6 @@
 # Apex Breakwater
 
-Status: implemented and verified on `codex/overnight-buildcraft-20260909`; awaiting the next normal playtest export. Delivery is recorded in [overnight-development-20260909.md](overnight-development-20260909.md).
+Status: implemented, verified and pushed as checkpoint `31995f5` on `codex/overnight-buildcraft-20260909`. Normal playtest `dev-overnight-breakwater-20260909-0038` replaces the same desktop executable. Delivery is recorded in [overnight-development-20260909.md](overnight-development-20260909.md).
 
 Breakwater is one optional Apex foe built around a positioning decision: bait its committed charge toward the arena edge, leave the marked lane, then attack during its longer recovery. It remains vulnerable throughout the fight. Ordinary movement, dash and attack provide a complete answer; no Arcana is required.
 
@@ -30,4 +30,4 @@ Co-op multiplies health by `1 + 0.6 × (players − 1)` and preserves damage, mo
 
 Razor Orbit can use Breakwater as a moving anchor; ordinary collision rules still detach the player. Blast Drive offers another way out of the locked lane. Returning Crescent and Sovereign's Double use their existing damage rules, while Ruinous Impact compresses this displacement-immune Apex. Player effects cannot stun or launch it.
 
-Validation passes 2,397 encounter checks across all Bearings, party sizes and biomes, including routes, rewards, normalization, Endless, safe spawning and checkpoint/resume. Runtime tests pass 90 checks; build combinations pass 29; separate ENet processes pass 37 host/joiner checks. A separate physics soak exercised 201 charges over 772 simulated seconds, including long frames, corners and player body blocking. Seven real GPU states cover the route door, tracking, locked host/joiner warnings, charge, impact and recovery. Human playtesting must still establish whether baiting the charge feels satisfying and the recovery is easy to recognize.
+Validation passes 2,397 encounter checks across all Bearings, party sizes and biomes, including routes, rewards, normalization, Endless, safe spawning and checkpoint/resume. Runtime tests pass 93 checks, including local SFX volume and mute; build combinations pass 29; separate ENet processes pass 37 host/joiner checks. A separate physics soak exercised 201 charges over 772 simulated seconds, including long frames, corners and player body blocking. Seven real GPU states cover the route door, tracking, locked host/joiner warnings, charge, impact and recovery. Human playtesting must still establish whether baiting the charge feels satisfying and the recovery is easy to recognize.
