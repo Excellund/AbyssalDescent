@@ -175,6 +175,10 @@ func _run() -> void:
 	_check(compass_ui.boon_choices.is_empty(), "Fully enhanced Arcana pool is exhausted")
 	_check(not compass_ui._reroll_current_offer(), "Empty pool cannot reroll")
 	_check(compass_ui._reward_rerolls_remaining == 1, "Failed empty-pool reroll preserves allowance")
+	_check(not compass_ui.skip_button.visible and not compass_ui._can_skip_current_offer(), "Fully Prismatic pool preserves the initial confirmation guard")
+	compass_ui.process_input(compass_ui.boon_confirm_lock_time + 0.01)
+	compass_ui.process_input(0.01)
+	_check(compass_ui.skip_button.visible and compass_ui.skip_button.text.begins_with("Continue") and compass_ui._can_skip_current_offer(), "Fully Prismatic pool becomes deliberately continuable")
 	compass_ui.close_selection()
 
 	regular_ui.free()

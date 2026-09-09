@@ -6,6 +6,8 @@ const PLAYER_CUE_EVENT_DISPATCHER_SCRIPT := preload("res://scripts/core/player_c
 const PLAYER_CUE_SYNC_QUEUE_SCRIPT := preload("res://scripts/core/player_cue_sync_queue.gd")
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const REMOTE_PLAYER_SNAP_DISTANCE_PX: float = 180.0
+# Recover the final stop/turn when its unreliable movement packet is lost.
+const TRANSFORM_HEARTBEAT_SEC: float = 0.25
 
 ## Configuration
 var position_sync_interval_sec: float = 0.05  ## ~20 Hz position updates
@@ -40,6 +42,10 @@ var _last_sync_rotations: Dictionary = {}  ## peer_id -> last_synced_facing_radi
 var _remote_target_positions: Dictionary = {}  ## peer_id -> latest replicated position
 var _remote_target_rotations: Dictionary = {}  ## peer_id -> latest replicated facing
 var _remote_position_samples: Dictionary = {}  ## peer_id -> {prev_pos, prev_time, last_pos, last_time}
+var _outgoing_transform_sequence: int = 0
+var _last_received_transform_sequence: Dictionary = {}
+var _last_transform_sent_at: Dictionary = {}
+var _last_transform_sent_room: Dictionary = {}
 var _cue_event_sync_elapsed: float = 0.0
 var _pending_cue_events_by_peer: Dictionary = {}  ## peer_id -> Array[Dictionary]
 var _last_cue_event_count: int = 0
@@ -83,6 +89,10 @@ func _process(delta: float) -> void:
 ## Register a player node for a specific peer.
 func register_player(peer_id: int, player_node: Node) -> void:
 	player_nodes[peer_id] = player_node
+	_remote_position_samples.erase(peer_id)
+	_last_received_transform_sequence.erase(peer_id)
+	_last_transform_sent_at.erase(peer_id)
+	_last_transform_sent_room.erase(peer_id)
 	if not _outgoing_health_sequence_by_peer.has(peer_id):
 		_outgoing_health_sequence_by_peer[peer_id] = 0
 	_clear_applied_health_sequences_for_target(peer_id)
@@ -116,6 +126,9 @@ func unregister_player(peer_id: int) -> void:
 	_remote_target_rotations.erase(peer_id)
 	_remote_position_samples.erase(peer_id)
 	_pending_cue_events_by_peer.erase(peer_id)
+	_last_received_transform_sequence.erase(peer_id)
+	_last_transform_sent_at.erase(peer_id)
+	_last_transform_sent_room.erase(peer_id)
 	_outgoing_health_sequence_by_peer.erase(peer_id)
 	_clear_applied_health_sequences_for_target(peer_id)
 
@@ -142,14 +155,7 @@ func _get_player_node(peer_id: int) -> Node:
 
 
 func _remove_invalid_player(peer_id: int) -> void:
-	player_nodes.erase(peer_id)
-	_last_sync_positions.erase(peer_id)
-	_last_sync_rotations.erase(peer_id)
-	_remote_target_positions.erase(peer_id)
-	_remote_target_rotations.erase(peer_id)
-	_pending_cue_events_by_peer.erase(peer_id)
-	_outgoing_health_sequence_by_peer.erase(peer_id)
-	_clear_applied_health_sequences_for_target(peer_id)
+	unregister_player(peer_id)
 
 
 func get_last_cue_event_sync_metrics() -> Dictionary:
@@ -209,6 +215,9 @@ func _flush_cue_events_for_peer(peer_id: int, pending_events: Array[Dictionary])
 
 ## Sync all registered player positions if they've moved significantly.
 func _sync_all_player_positions() -> void:
+	var now := float(Time.get_ticks_msec()) * 0.001
+	var room_sync_id := EnemyReplicationService._current_room_sync_id()
+	var run_token := GameStateReplicationService.get_current_run_sync_token()
 	for peer_id in player_nodes.keys():
 		var player_node := _get_player_node(peer_id)
 		if player_node == null:
@@ -232,22 +241,37 @@ func _sync_all_player_positions() -> void:
 				var last_rotation := float(_last_sync_rotations.get(peer_id, quantized_rotation))
 				var rotation_delta := absf(wrapf(quantized_rotation - last_rotation, -PI, PI))
 				
-				if distance >= position_broadcast_threshold_px or rotation_delta >= rotation_broadcast_threshold_rad:
+				var heartbeat_due := now - float(_last_transform_sent_at.get(peer_id, -TRANSFORM_HEARTBEAT_SEC)) >= TRANSFORM_HEARTBEAT_SEC
+				var changed_room := int(_last_transform_sent_room.get(peer_id, -1)) != room_sync_id
+				if distance >= position_broadcast_threshold_px or rotation_delta >= rotation_broadcast_threshold_rad or heartbeat_due or changed_room:
 					_last_sync_positions[peer_id] = quantized_pos
 					_last_sync_rotations[peer_id] = quantized_rotation
-					_sync_player_transform.rpc(peer_id, quantized_pos, quantized_rotation)
+					_last_transform_sent_at[peer_id] = now
+					_last_transform_sent_room[peer_id] = room_sync_id
+					_outgoing_transform_sequence += 1
+					_sync_player_transform.rpc(peer_id, quantized_pos, quantized_rotation, _outgoing_transform_sequence, room_sync_id, run_token)
 
 
 ## RPC: Broadcast a player's transform to all peers.
 @rpc("unreliable", "any_peer", "call_local")
-func _sync_player_transform(peer_id: int, position: Vector2, facing_radians: float) -> void:
+func _sync_player_transform(peer_id: int, position: Vector2, facing_radians: float, sample_sequence: int, room_sync_id: int, run_token: String) -> void:
 	if peer_id not in player_nodes:
 		return
 	if peer_id == local_peer_id:
 		return
+	if multiplayer.get_remote_sender_id() != peer_id:
+		return
+	if not position.is_finite() or not is_finite(facing_radians):
+		return
+	# Room IDs repeat after retry, so ordering is also scoped to the active run.
+	if run_token != GameStateReplicationService.get_current_run_sync_token():
+		return
+	if room_sync_id != EnemyReplicationService._current_room_sync_id() or sample_sequence <= int(_last_received_transform_sequence.get(peer_id, 0)):
+		return
 	var player_node := _get_player_node(peer_id)
 	if player_node == null:
 		return
+	_last_received_transform_sequence[peer_id] = sample_sequence
 	var player_body := player_node as Node2D
 	if player_body != null:
 		var distance_to_target := player_body.position.distance_to(position)

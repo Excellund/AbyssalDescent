@@ -78,6 +78,12 @@ func _active_provenance_recorder() -> Variant:
 	return recorder
 
 
+## The existing party handshake identifies the current run independently of
+## telemetry collection. Do not expose a retired scene's token during retry.
+func get_current_run_sync_token() -> String:
+	return _host_run_token if _active_provenance_recorder() != null else ""
+
+
 func _provenance_transport_ready() -> bool:
 	var peer := multiplayer.multiplayer_peer
 	return MultiplayerSessionManager.is_session_connected() and peer != null and not peer is OfflineMultiplayerPeer and peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED

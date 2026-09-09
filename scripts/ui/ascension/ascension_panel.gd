@@ -372,6 +372,7 @@ func _make_modifier_card(modifier_id: String, def: Dictionary, unlocked: bool, e
 	footer.add_child(spacer)
 
 	var toggle := _make_toggle_button(equipped, unlocked)
+	toggle.set_meta(&"ascension_choice_id", modifier_id)
 	if not unlocked:
 		toggle.text = "Locked"
 		toggle.disabled = true
@@ -381,7 +382,10 @@ func _make_modifier_card(modifier_id: String, def: Dictionary, unlocked: bool, e
 	else:
 		toggle.text = "Equipped" if equipped else "Equip"
 		toggle.pressed.connect(func() -> void:
+			var restore_focus := toggle.has_focus()
 			_toggle_modifier(modifier_id)
+			if restore_focus:
+				_restore_toggle_focus(_modifier_list, modifier_id)
 		)
 	footer.add_child(toggle)
 
@@ -474,6 +478,7 @@ func _make_catalyst_card(catalyst_id: String, def: Dictionary, unlocked: bool, e
 	footer.add_child(spacer)
 
 	var toggle := _make_toggle_button(equipped, unlocked)
+	toggle.set_meta(&"ascension_choice_id", catalyst_id)
 	if not unlocked:
 		toggle.text = "Locked"
 		toggle.disabled = true
@@ -486,7 +491,10 @@ func _make_catalyst_card(catalyst_id: String, def: Dictionary, unlocked: bool, e
 		toggle.text = "Equip"
 	if not toggle.disabled:
 		toggle.pressed.connect(func() -> void:
+			var restore_focus := toggle.has_focus()
 			_toggle_catalyst(catalyst_id)
+			if restore_focus:
+				_restore_toggle_focus(_catalyst_list, catalyst_id)
 		)
 	footer.add_child(toggle)
 
@@ -961,6 +969,18 @@ func _make_begin_descent_button() -> Button:
 	button.add_theme_stylebox_override("hover", MENU_STYLE_FACTORY.make_button_style(Color(0.36, 0.22, 0.10, 0.98), Color(1.0, 0.90, 0.58, 0.95), 14, 2))
 	button.add_theme_stylebox_override("pressed", MENU_STYLE_FACTORY.make_button_style(Color(0.22, 0.14, 0.06, 0.98), Color(1.0, 0.84, 0.50, 1.0), 14, 2))
 	return button
+
+func _restore_toggle_focus(list: VBoxContainer, choice_id: String) -> void:
+	# Rebuilding a card retires its old Button. Restore only a focus that the
+	# activated toggle already owned; mouse changes elsewhere do not grab it.
+	for card in list.get_children():
+		if card.is_queued_for_deletion():
+			continue
+		for candidate in card.find_children("*", "Button", true, false):
+			var button := candidate as Button
+			if String(button.get_meta(&"ascension_choice_id", "")) == choice_id and not button.disabled:
+				button.grab_focus()
+				return
 
 func _clear_children(node: Node) -> void:
 	for child in node.get_children():

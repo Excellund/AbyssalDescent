@@ -3,7 +3,8 @@ param(
     [string]$GodotPath = '',
     [Parameter(Mandatory = $true)][ValidatePattern('^res://scripts/tests/[a-z0-9_]+\.gd$')][string]$FixtureScript,
     [Parameter(Mandatory = $true)][ValidatePattern('^[a-z0-9_]+$')][string]$FrameFolder,
-    [Parameter(Mandatory = $true)][ValidateRange(1, 100)][int]$ExpectedFrames
+    [Parameter(Mandatory = $true)][ValidateRange(1, 100)][int]$ExpectedFrames,
+    [ValidateRange(100, 10000)][int]$MaxFrames = 1000
 )
 
 $ErrorActionPreference = 'Stop'
@@ -88,7 +89,7 @@ try {
     # Headless uses a dummy renderer on Windows. Use a no-focus, offscreen GPU
     # window instead; synthetic Input actions remain inside this process. See
     # https://docs.godotengine.org/en/stable/classes/class_projectsettings.html#class-projectsettings-property-display-window-size-no-focus
-    Invoke-HiddenGodot 'render' @('--verbose', '--display-driver', 'windows', '--rendering-method', 'gl_compatibility', '--rendering-driver', 'opengl3', '--audio-driver', 'Dummy', '--windowed', '--resolution', '1280x720', '--position', '-20000,-20000', '--max-fps', '60', '--fixed-fps', '60', '--quit-after', '1000', '--script', 'res://validation_entry.gd', '--', $FixtureScript)
+    Invoke-HiddenGodot 'render' @('--verbose', '--display-driver', 'windows', '--rendering-method', 'gl_compatibility', '--rendering-driver', 'opengl3', '--audio-driver', 'Dummy', '--windowed', '--resolution', '1280x720', '--position', '-20000,-20000', '--max-fps', '60', '--fixed-fps', '60', '--quit-after', [string]$MaxFrames, '--script', 'res://validation_entry.gd', '--', $FixtureScript)
     $manifestPath = Join-Path $renderRoot ($FrameFolder + '/manifest.json')
     if (-not (Test-Path -LiteralPath $manifestPath)) { throw 'The GPU fixture did not complete its capture manifest.' }
     $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json

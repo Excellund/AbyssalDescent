@@ -608,7 +608,7 @@ func _setup_multiplayer_remote_players() -> void:
 		multiplayer_session_manager.debug_log("WORLD/%s" % role_tag, "RemoteAvatars: peer %d add_child done, configuring collisions" % remote_peer)
 		_disable_player_collision_pair(player, remote_player_node)
 		for existing_node in player_replication_service.player_nodes.values():
-			if existing_node == remote_player_node or existing_node == player:
+			if not is_instance_valid(existing_node) or existing_node == remote_player_node or existing_node == player:
 				continue
 			_disable_player_collision_pair(existing_node, remote_player_node)
 		player_replication_service.register_player(remote_peer, remote_player_node)

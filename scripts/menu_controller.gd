@@ -1107,8 +1107,11 @@ func refresh_lobby_modal_layout() -> void:
 func _set_centered_panel_layout(panel: Panel, base_size: Vector2, panel_scale: float, viewport_size: Vector2) -> void:
 	panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	panel.size = base_size
+	# Fit each panel's actual dimensions as well as the shared menu scale.
+	var available := (viewport_size - Vector2(24.0, 24.0)).max(Vector2.ONE)
+	panel_scale = minf(panel_scale, minf(available.x / panel.size.x, available.y / panel.size.y))
 	panel.scale = Vector2(panel_scale, panel_scale)
-	var scaled_size := base_size * panel_scale
+	var scaled_size := panel.size * panel_scale
 	panel.position = (viewport_size - scaled_size) * 0.5
 
 func _character_selector_panel_size() -> Vector2:

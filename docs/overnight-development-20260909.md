@@ -13,11 +13,11 @@ The thread continuation `overnight-abyssaldescent-development` expires at the de
 3. **Returning Crescent.** An accepted attack sends an available blade outward; moving changes its return path. L1 has one active blade, L2 allows two, and L3 adds one outbound ricochet from cover. Each blade hits an enemy once per leg, uses secondary damage, spends a fixed travel budget and expires after two seconds at most. Return contact with cover dissolves the blade. Base damage is 45% of Damage per leg, with 220-pixel outward travel; damage and reach gain 15% of base per level and the existing one-time Prismatic boost. No extra input, progression currency or combat prompt.
 4. **Combat presentation and reliability.** Improve unclear impact/state feedback and test the relevant lifecycle, save/resume and host/joiner behavior. Sovereign's Double keeps its existing proc contract unless a separately justified change is recorded.
 
-## Active ownership
+## Final verification ownership
 
-- `review_combat_lifecycle`: final bounded actual input-cancellation boundary audit in TEMP.
-- `review_combat_readability`: final bounded normal-menu/reward/build-detail usability audit in TEMP.
-- `review_hit_context`: actual reward acquisition and exhausted-pool continuation audit in TEMP.
+- `review_combat_lifecycle`: completed actual input/retry audits; preparing the isolated final packaged lifecycle smoke.
+- `review_combat_readability`: completed selection layout review; diagnosing the strict fixture shutdown diagnostic before accepting the final hook.
+- `review_hit_context`: completed acquisition/continuation audit; independently reviewing packaged-smoke profile and network isolation.
 - Root: integration, reviews, regression registration, work log, Git and normal playtest delivery.
 
 Coordinate overlapping files before editing. Agents do not commit independently.
@@ -267,3 +267,39 @@ Small TEMP corrections are being verified at their actual boundaries: clear pend
 The room-input correction is now reviewed and promoted. Its single runtime change is the existing position-reset boundary: discard pending combat input/motion, retire real dash collision exceptions, then clear remaining dash travel/immunity before repositioning. Ordinary dash duration, cooldowns, learned powers and stored charges are preserved; a reset cannot create a shade. Runtime SHA256 is `73FE7C07125A4B981662EC0BA273194B1A0402EB7825652BDF63EC2307219EAC`.
 
 The same actual Main fixture passes 32 checks after reproducing three failures on original code. It takes an offered door through Interact during a queued dash attack, then verifies survey/readiness, both nested Pause/Build orders, focus notifications and lethal health/actual retry while actions remain held. Native host/joiner checks pass 135 (`abyssal-enet-283376332f02428db5e9e09a9c6806e5`), including real chosen-door RPCs, queued/charged/orbiting holds, release-to-rearm, actual collision handles and preserved party exceptions. Canonical fixtures and generated UIDs are promoted from `abyssal-input-boundary-ebd28a9866d24121a34092926d985296`; the full hook includes the 32-check scene regression.
+
+## Ninth desktop checkpoint
+
+Room-input commit **`42a4982`** is committed and pushed after the complete 250-script hook (`abyssal-validation-fb62bdaa78db42e187676574c5301644`). Root's integrated native run passes all 135 checks (`abyssal-enet-f76519dc539342d1afdb70e93fa33add`).
+
+The single Desktop playtest is normal **`dev-overnight-transitions-20260909-023855`**, SHA256 `FA25BAD71F815796F41B8F9FB2F9E486E5D9AC9BF473B2AB3169C0981548E982`, 114081400 bytes. Export/package verification, 26 normal checks and all 161 production hash comparisons pass (`abyssal-playtest-export-fa346daf8f304bd5b15a3143db3c1c76/project`; `abyssal-executable-smoke-dd311fe414694f7a9b7aea28fd17ae41`). The same hash was verified on Desktop after replacement. Main and the unrelated local scene edit are preserved.
+
+## Player movement replication under review
+
+A separate native ENet audit reproduces late prior-room transforms undoing a spawn reset, and a lost final stop update leaving permanent extrapolated displacement. Original code still fails both assertions when the fixture calls the actual production sender at its normal cadence (`abyssal-enet-1634e49ccc914d8bb235677e8ecee1d3`). An earlier prototype fixture called the deliberately suppressed autoload `_process`; it was corrected before accepting causal results.
+
+The TEMP correction adds a 0.25-second stationary heartbeat, owner authentication, finite values, monotonic ordering and current-room metadata, while preserving existing quantization, interpolation, extrapolation limits and physics. Invalid-player cleanup shares the normal unregister path so it also removes movement history. Sixteen native checks pass. Existing boss combinations retain 52 checks and four-process departure retains 207 (`abyssal-enet-6daa44cdfeca42408b81a83824f8787c`; `abyssal-enet-8866b191a872472e93aac9dec180ffc8`).
+
+Independent actual Main retry then reproduced two additional boundaries: a freed prior avatar can reach the typed collision-pair helper before the next autoload prune, interrupting replacement registration; and an unseen late sample can enter a new run when room IDs repeat. A one-line validity guard is green with actual production process forwarding. The existing reliable party-provenance handshake provides a fresh host-run token even when telemetry collection is disabled; the candidate transform payload now also checks that active token before accepting sequence. Focused native 16 remains green (`abyssal-enet-20cdbb06366e4b94b897f934af7a1606`). Full actual retry/token review is still in progress; none of this prototype is in the delivered build yet.
+
+## Reward continuation and responsive selection promoted
+
+The reviewed UI now advances the ordinary reveal timer when a pool is exhausted, explains that no rewards remain and exposes Continue through the existing skip/readiness/accounting path. It grants no extra pick, retains confirmation/input guards, supports initial and boss progression, and lets eligible co-op partners choose normally. Actual Main acquisition, native Apex death, disk resume and all 16 character/Bearing pairs pass 761 assertions; the updated Catalyst suite passes 361. Native mixed eligible/exhausted and initial co-op rewards pass 99 (`abyssal-enet-224ae070931e448897ae76ca9dceb5a2`). Two rendered empty states and actual GUI Continue clicks pass nine assertions (`abyssal-gameplay-render-68c5959b6bf14d06bfa7e9e521c4582d/reward_availability_frames`).
+
+Character and Ascension panels fit their actual size inside the viewport. Rebuilding an activated modifier/catalyst toggle restores only its existing focus, without activating saved runtime modifiers or taking focus from another control. Sixty-seven checks pass; original code fails 14. Reward text has enough height, compact body text remains readable, and an over-tall card group scales while preserving visible width and matching click bounds. Actions follow visible choices and boss flavor text follows the actions. Draft Compass's fourth card is included: default three, Draft four, Thinned two and combined three are verified from actual World configuration.
+
+The final layout fixture passes 2,660 assertions after reproducing 332 failures on original code. It includes all characters, levels/Prismatic, long descriptions, two/three/four choices, repeated resizing, actual mouse confirmation on the last card, Skip/reroll and the longest real Warden epitaph at 960 pixels. Thirty-three actual Menu/Main/build frames pass 141 assertions across 960x720, 1280x720 and 1920x1080; representative worst-case images were inspected by root (`abyssal-gameplay-render-a6054c310f6645c29b5b0257298812cb/selection_layout_frames`). The shared renderer's optional frame cap preserves its old default and 60-second wall limit; the full capture takes about 25 seconds.
+
+Final reward UI SHA256 is `EFBBF7361F762BA838476A78230240DCBFDF442703335C0C238D5650FDAA29C3`. Exact reviewed runtime, fixtures, generated UIDs and thin helpers are promoted from `abyssal-ui-audit-7c86c0d1a87e4c6d841096791a91149e` and `abyssal-reward-boundary-audit-9831393d2b804d61859a5baaf6f9942c`; exploratory drafts remain TEMP. The new focused suites are registered in the normal hook.
+
+The first UI commit hook is rejected: compilation and all 2,660 layout assertions pass, but strict shutdown reports two resources still in use (`abyssal-validation-da010994d6874cbc8ed68e2ac3d82197`). Verbose reproduction identifies `ui_button_click.ogg`, its packet sequence and three native playback voices; no scene Node leak is reported. The existing condition-based test audio-retirement helper is being applied to this fixture. No production audio change or relaxed diagnostic filter is justified. Root's integrated reward ENet passes all 99 checks (`abyssal-enet-06571e86c5714b94b041cfad7f9baa84`).
+
+## Final co-op movement correction promoted
+
+Independent actual Main tests approve the run-token correction and the one-line freed-avatar guard. Removing only the token comparison reproduces four failures when old, unseen packets arrive after retry reuses room 1 (`abyssal-enet-583e2e473ad945b08cb84d0d9100c053`). The original collision loop fails during actual production callback forwarding; checking validity before comparing or passing the previous body lets replacement registration finish. No validation autoload changes are required: the permanent lifecycle fixture installs a small derived service with the inherited production process/RPC behavior before scene creation.
+
+Root has promoted the two reviewed replication services, the validity guard and the two native fixtures. Integrated transport passes 16 checks (`abyssal-enet-36adbb97097b43f29c4930e076251623`); actual transitions and two retries pass 259 (`abyssal-enet-77c849b5c00346cf9b8048d936ac10d2`). The latter exercises three held-input room transitions, live party collision relationships, replaced avatars, real initial reward completion, both movement directions and prior-run replay with telemetry collection disabled. Existing boss combinations retain 52 checks on the integrated token-aware runtime (`abyssal-enet-5842d99153d141c5b65f23612cfbf3a6`). Final hook, four-process compatibility and normal package delivery remain required.
+
+The layout fixture now observes its real UI playback and waits for retirement through the existing test helper. Six strict verbose runs pass 2,661 assertions with no retained objects/resources; production UI/audio hashes are unchanged. The final fixture hash is `673A6E291AF72AF5D41E2FE15DE3A2C8797ACDE81FBD23BCE3F0E7DCF88BF533`.
+
+Root's final integrated four-process departure/reward/retry run retains all 207 checks (`abyssal-enet-04a3596681b047198153d013131bc593`). The production source is frozen for final package and hook verification.

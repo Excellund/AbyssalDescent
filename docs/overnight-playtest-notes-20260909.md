@@ -18,6 +18,10 @@ Archer arrows now respect fast movement crossings, nearer cover and the current 
 
 Taking a door during a dash clears pending movement and attacks before the next room's survey. Held actions require release before rearming across room changes, overlays, focus loss and retry.
 
+Co-op movement recovers after a dropped stop update. Delayed packets cannot pull players back into earlier rooms or runs, and retry safely replaces the previous party bodies.
+
+Exhausted reward pools now offer Continue, including in co-op. Character and Ascension panels fit smaller windows; long upgrade descriptions and Draft Compass's fourth card keep their controls visible. Ascension toggles retain keyboard focus when their cards rebuild.
+
 Toll's pulse follows fast movement while preserving its safe gaps and regular dash bypass. Its slow effects now reach the actual joining player. Pyre fire stops ticking at expiry. Use the same playtest version on every machine for co-op.
 
 Sovereign's Double keeps its current damage and proc rules. Development runs remain local and do not enter remote telemetry or leaderboards. There are no new combat prompts or Oath checklists.

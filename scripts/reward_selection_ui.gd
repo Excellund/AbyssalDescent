@@ -61,6 +61,7 @@ var boon_card_stack_labels: Array[Label] = []
 var boon_card_icon_nodes: Array[TextureRect] = []
 var boon_card_accent_bars: Array[ColorRect] = []
 var boon_card_rects: Array[Rect2] = []
+var _boon_card_layout_scale: float = 1.0
 var boon_hover_weights: Array[float] = []
 var boon_backdrop: ColorRect
 var boon_backdrop_glow: ColorRect
@@ -235,9 +236,6 @@ func open_selection(title: String, is_initial: bool, mode: int, power_registry: 
 func process_input(delta: float) -> void:
 	if not boon_selection_active:
 		return
-	if boon_choices.is_empty():
-		return
-
 	_idle_pulse_time += delta
 	if _open_fade_time < OPEN_FADE_DURATION:
 		_open_fade_time = minf(OPEN_FADE_DURATION, _open_fade_time + delta)
@@ -432,8 +430,8 @@ func _set_skip_button_visible(value: bool) -> void:
 	if skip_button == null:
 		return
 	if value:
-		skip_button.text = "Skip  ›"
-		skip_button.tooltip_text = "Skip this reward. Counts as no pick."
+		skip_button.text = "Continue  ›" if boon_choices.is_empty() else "Skip  ›"
+		skip_button.tooltip_text = "Continue without a reward." if boon_choices.is_empty() else "Skip this reward. Counts as no pick."
 	skip_button.visible = value
 	_position_action_buttons()
 
@@ -695,8 +693,8 @@ func _create_ui() -> void:
 	epitaph_label.offset_right = -60.0
 	epitaph_label.bbcode_enabled = true
 	epitaph_label.scroll_active = false
-	epitaph_label.fit_content = true
-	epitaph_label.custom_minimum_size = Vector2(0.0, 100.0)
+	epitaph_label.fit_content = false
+	epitaph_label.custom_minimum_size = Vector2.ZERO
 	epitaph_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	epitaph_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	epitaph_label.add_theme_font_size_override("normal_font_size", 24)
@@ -770,26 +768,33 @@ func _layout_boon_cards() -> void:
 	var start_x := (viewport_size.x - card_width) * 0.5
 	var centered_y := (viewport_size.y - total_height) * 0.5
 	var start_y := clampf(centered_y, BOON_TOP_SAFE_Y, BOON_TOP_MAX_Y)
+	# Draft Compass can add a fourth choice. Fit the whole card group above
+	# the existing action/flavor footer, retaining each card's internal layout.
+	_boon_card_layout_scale = minf(1.0, maxf(1.0, viewport_size.y - start_y - 120.0) / total_height)
+	var visible_width := card_width
+	card_width /= _boon_card_layout_scale
 	for i in range(boon_card_panels.size()):
 		var panel := boon_card_panels[i]
-		var base_pos := Vector2(start_x, start_y + float(i) * (BOON_CARD_HEIGHT + BOON_CARD_GAP))
-		panel.position = base_pos
+		var base_pos := Vector2(start_x, start_y + float(i) * (BOON_CARD_HEIGHT + BOON_CARD_GAP) * _boon_card_layout_scale)
 		panel.custom_minimum_size = Vector2(card_width, BOON_CARD_HEIGHT)
 		panel.size = panel.custom_minimum_size
 		panel.pivot_offset = Vector2(card_width * 0.5, BOON_CARD_HEIGHT * 0.5)
+		panel.position = base_pos - panel.pivot_offset * (1.0 - _boon_card_layout_scale)
+		panel.scale = Vector2.ONE * _boon_card_layout_scale
 		if i < boon_card_rects.size():
-			boon_card_rects[i] = Rect2(base_pos, Vector2(card_width, BOON_CARD_HEIGHT))
+			boon_card_rects[i] = Rect2(base_pos, Vector2(visible_width, BOON_CARD_HEIGHT * _boon_card_layout_scale))
 		if i < boon_card_accent_bars.size():
 			var accent_bar := boon_card_accent_bars[i]
 			accent_bar.position = Vector2(0.0, ACCENT_BAR_INSET)
 			accent_bar.size = Vector2(ACCENT_BAR_WIDTH, BOON_CARD_HEIGHT - ACCENT_BAR_INSET * 2.0)
 		if i < boon_card_labels.size():
 			var label := boon_card_labels[i]
+			label.add_theme_font_size_override("normal_font_size", 20 if visible_width < 1000.0 else 22)
 			var stack_w := 210.0
 			var stack_x := card_width - stack_w - 18.0
 			var text_x := BOON_LABEL_X
-			label.position = Vector2(text_x, 10.0)
-			label.custom_minimum_size = Vector2(maxf(320.0, stack_x - text_x - 12.0), BOON_CARD_HEIGHT - 20.0)
+			label.position = Vector2(text_x, 6.0)
+			label.custom_minimum_size = Vector2(maxf(320.0, stack_x - text_x - 12.0), BOON_CARD_HEIGHT - 12.0)
 			label.size = label.custom_minimum_size
 		if i < boon_card_stack_labels.size():
 			var stack_label := boon_card_stack_labels[i]
@@ -805,10 +810,14 @@ func _position_epitaph_label() -> void:
 		var card_bottom := rect.position.y + rect.size.y
 		if card_bottom > last_card_bottom:
 			last_card_bottom = card_bottom
-	# Calculate halfway point between card bottom and viewport bottom
+	# Keep the flavor line below the actions when the footer is compact.
+	if skip_button != null and skip_button.visible:
+		last_card_bottom = maxf(last_card_bottom, skip_button.get_rect().end.y)
+	if reroll_button != null and reroll_button.visible:
+		last_card_bottom = maxf(last_card_bottom, reroll_button.get_rect().end.y)
 	var halfway_y := (last_card_bottom + viewport_size.y) * 0.5
 	# Position epitaph centered on halfway point
-	var epitaph_height := 100.0  # Approximate label height
+	var epitaph_height := minf(100.0, maxf(0.0, viewport_size.y - last_card_bottom))
 	epitaph_label.offset_top = halfway_y - epitaph_height * 0.5
 	epitaph_label.position = Vector2(epitaph_label.position.x, halfway_y - epitaph_height * 0.5)
 	epitaph_label.size = Vector2(viewport_size.x - 120.0, epitaph_height)
@@ -821,6 +830,9 @@ func _position_action_buttons() -> void:
 	var button_width := skip_button.custom_minimum_size.x
 	var gap := 18.0
 	var y_pos := viewport_size.y * 0.8 - button_height * 0.5
+	# Keep actions below the visible choices, including the third card at 720p.
+	for i in range(mini(boon_choices.size(), boon_card_rects.size())):
+		y_pos = maxf(y_pos, boon_card_rects[i].end.y + 8.0)
 	if skip_button.visible and reroll_button.visible:
 		var total_width := button_width * 2.0 + gap
 		var start_x := (viewport_size.x - total_width) * 0.5
@@ -836,6 +848,7 @@ func _position_action_buttons() -> void:
 		var x_skip := (viewport_size.x - button_width) * 0.5
 		skip_button.position = Vector2(x_skip, y_pos)
 		skip_button.size = Vector2(button_width, button_height)
+	_position_epitaph_label()
 
 func _make_skip_button_style(hover_weight: float) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
@@ -994,6 +1007,8 @@ func _get_boon_title_text() -> String:
 	return boon_title_text
 
 func _get_boon_subtitle_text() -> String:
+	if boon_choices.is_empty():
+		return "No rewards remain in this pool. Continue your descent."
 	var is_arcana := reward_selection_mode == ENUMS.RewardMode.ARCANA
 	var is_boss := reward_selection_mode == ENUMS.RewardMode.BOSS
 	var reveal_complete := boon_confirm_lock_time <= 0.0
@@ -1338,10 +1353,10 @@ func _update_boon_reveal_visuals() -> void:
 		var base_pos := panel.position
 		if i < boon_card_rects.size():
 			base_pos = boon_card_rects[i].position
-		panel.position = base_pos + Vector2(0.0, (1.0 - eased) * 18.0 + hover_lift)
+		panel.position = base_pos - panel.pivot_offset * (1.0 - _boon_card_layout_scale) + Vector2(0.0, (1.0 - eased) * 18.0 + hover_lift)
 		panel.modulate = Color(1.0, 1.0, 1.0, eased)
 		var final_scale := scale_amt + hover_scale_bonus
-		panel.scale = Vector2(final_scale, final_scale)
+		panel.scale = Vector2(final_scale, final_scale) * _boon_card_layout_scale
 		label.modulate.a = eased
 		stack_label.modulate.a = eased
 
