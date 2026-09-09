@@ -2,6 +2,8 @@
 
 [Gameplay Regressions](../.github/workflows/gameplay-regressions.yml) runs the existing [isolated regression runner](../.github/scripts/run_gameplay_regressions.ps1) on GitHub-hosted Windows 2025 with Windows PowerShell and Godot 4.6.2. It covers resource import, all-script compilation, world/network contract checks, and the runner's complete registered gameplay suite.
 
+Initial hosted proof: [7b0d470 branch run](https://github.com/Excellund/AbyssalDescent/actions/runs/34408344808), September 9, 2026, passed in 4 minutes 55 seconds. Its downloaded artifact contains 151 log files, including 71 gameplay fixture console logs, with no copied profiles/assets. Failure exit propagation and log selection were separately checked with a local mocked runner; no intentionally failing hosted gameplay run was performed.
+
 It runs for pull requests targeting `main`, pushes to `main` or `codex/**`, and manual dispatch. A `codex/**` branch with an open PR gets two checks: the push checks the branch commit; the PR checks GitHub's proposed merge commit. New runs cancel older runs for the same event and PR or branch. Manual dispatch becomes available when the workflow is present on the default branch.
 
 ## Isolation and retained evidence

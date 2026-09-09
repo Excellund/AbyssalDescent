@@ -49,7 +49,17 @@ Record source commit, internal `dev-*` ID, package hash, checks, visual evidence
 
 ## Verification / delivery record
 
-Implementation and verification are in progress. No new playtest has been exported yet.
+Gameplay and tooling are committed and pushed as `7b0d470cd9f3da66036637b88fc414f5b0ac37f4` on `codex/descent-identity`. The final full pre-commit suite passed, including 301-script compilation and all 71 registered gameplay fixtures plus contract checks. The normal desktop build was delivered at approximately 23:42 local. Hosted CI passed in 4 minutes 55 seconds; its retained artifact was downloaded and inspected. The planned pass and bounded tooling improvements are complete. Remaining acceptance is human playtest feedback; pause the overnight continuation after the delivery-record push.
+
+- **Delivered file:** `C:/Users/mikel/Desktop/AbyssalDescent Playtest.exe` (114,232,168 bytes).
+- **Internal build ID:** `dev-20260909-214203135-ea25d8ac`.
+- **SHA256:** `C1DC83BFA6BED7AA73A7C474606ECCF2D7D02BCE29EAF64426CCB62CC5C82288`.
+- **Mode:** normal Menu, debug settings disabled, ordinary progression. Exported production settings/autoloads verified; tests/fixtures excluded; development upload eligibility tests passed.
+- **Package smoke:** 27 checks passed using the development engine to inspect the actual embedded package with isolated user data. It did not launch the delivered executable or exercise the complete Menu-to-run flow.
+- **Source identity:** 764 staged source/assets match the committed working tree. The two excluded source files were independently diffed: only the internal build ID and explicit `DebugSettings.enabled = false` differ. Exporter separately verifies its intended project/preset overrides and final file hash.
+- **Hosted run:** [Gameplay Regressions for 7b0d470](https://github.com/Excellund/AbyssalDescent/actions/runs/34408344808) passed. Artifact `gameplay-logs-34408344808-1` contains 151 log files, including all 71 gameplay fixture console logs, and no copied profiles/assets. Local CI error-path proof used a mocked runner; hosted success and real artifact retention were verified, while a deliberately failing hosted game run was not performed.
+
+Human acceptance remains open: whether the three acts feel distinct during normal progression, route variety and payoffs improve decisions, music transitions feel appropriate, and crowded combat stays readable. Real internet lobby discovery/join and full combat pacing were not established by the staged loopback fixtures. No release tag or branch-protection change was made.
 
 - Native presentation validation: `C:/Users/mikel/AppData/Local/Temp/abyssal-validation-68d1ea1941d448c090f22b83c8e54338`.
 - Combined focused validation: `C:/Users/mikel/AppData/Local/Temp/abyssal-validation-30c0e8c8c0604ded875f6bb734726543`.
@@ -61,3 +71,8 @@ Implementation and verification are in progress. No new playtest has been export
 - Compile-only workflow: `C:/Users/mikel/AppData/Local/Temp/abyssal-validation-d6df8ee260df40f590d99808cd697d49`.
 - Ascension correction and remaining suite tail: `C:/Users/mikel/AppData/Local/Temp/abyssal-validation-19eaaac010fd43eeb8d36785a9b3278d`.
 - Final result/timeline behavior: `C:/Users/mikel/AppData/Local/Temp/abyssal-validation-4548129e09f148d39c7b62473206459b`.
+- Final full commit-hook verification: `C:/Users/mikel/AppData/Local/Temp/abyssal-validation-8a7147c59eb247109957bac32f1da393`.
+- Local CI tooling proof: `C:/Users/mikel/AppData/Local/Temp/abyssal-ci-tooling-fde49cefdf6e407ea2f7fdb00435463e`.
+- Normal export: `C:/Users/mikel/AppData/Local/Temp/abyssal-playtest-export-682bdafb6b994627870b7fd396610421`.
+- Embedded package smoke: `C:/Users/mikel/AppData/Local/Temp/abyssal-executable-smoke-15db87d21fad4258a2cc88e3b566bbfc`.
+- Inspected hosted logs: `C:/Users/mikel/AppData/Local/Temp/abyssal-ci-hosted-34408344808`.

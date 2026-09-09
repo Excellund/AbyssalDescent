@@ -2,11 +2,11 @@
 
 Updated September 9, 2026. This is the current entry point for priorities and the development pipeline. Feature documents retain their detailed rules and historical verification records; a file named `next-content-update.md` does not mean that feature is still unimplemented.
 
-**Active work:** the three approved sense-of-descent updates are implemented on `codex/descent-identity` and undergoing final verification: act environments and saved biome identity; entered-room variety and clear route payoffs; music, boss/act milestones and results. The [September 9–10 implementation log](overnight-descent-20260910.md) records scope, fixes, ownership, time box and delivery evidence. The authorized tooling increment adds isolated editor tasks and [branch/PR regression CI](pull-request-validation.md). Normal playtest feedback continues alongside this work.
+**Current checkpoint:** the three approved sense-of-descent updates are implemented on `codex/descent-identity` at gameplay commit `7b0d470`: act environments and saved biome identity; entered-room variety and clear route payoffs; music, boss/act milestones and results. The full local suite, staged ENet and GPU review passed, and a normal desktop playtest has been delivered. The [September 9–10 implementation log](overnight-descent-20260910.md) records the exact build, source, fixes and evidence. The authorized tooling increment adds isolated editor tasks and [branch/PR regression CI](pull-request-validation.md); its [first hosted run](https://github.com/Excellund/AbyssalDescent/actions/runs/34408344808) passed and retained logs were inspected. Next is normal playtest feedback on this checkpoint.
 
 ## Current position
 
-Source baseline: `main` at `4ee9681` (`Refine reward readability, character passives and Keeper protection`). The working tree was clean when this plan was prepared. This is a source checkpoint, not verification of which build is currently on the desktop.
+This plan was prepared from `main` at `4ee9681` (`Refine reward readability, character passives and Keeper protection`) with a clean working tree. The current gameplay checkpoint is `7b0d470` on the descent branch; the implementation log identifies and verifies its delivered desktop build.
 
 - Connected combat rules, shared keywords, conditional damage, reward-time build inspection and save/network compatibility are implemented. See [connected builds](connected-builds-implementation.md).
 - The latest source includes revised reward explanations/layouts, character passive presentation and behavior, and Keeper protection that holds linked allies at 1 HP. See the [combat roster](combat-power-roster.md) and [Keeper/Breach](next-content-update.md).
