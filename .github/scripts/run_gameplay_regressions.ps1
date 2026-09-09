@@ -146,6 +146,7 @@ try {
         "res://scripts/tests/test_power_descriptions.gd",
         "res://scripts/tests/test_power_snapshot.gd",
         "res://scripts/tests/test_boss_telegraphs.gd",
+        "res://scripts/tests/test_boss_charge.gd",
         "res://scripts/tests/test_lancer_hazards.gd",
         "res://scripts/tests/test_kill_proc_provenance.gd",
         "res://scripts/tests/test_checkpoint_isolation.gd",

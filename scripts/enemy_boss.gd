@@ -2,6 +2,7 @@ extends "res://scripts/enemy_base.gd"
 
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const ENEMY_STATE_ENUMS := preload("res://scripts/shared/enemy_state_enums.gd")
+const COMMITTED_CHARGE := preload("res://scripts/shared/committed_charge.gd")
 
 @export var boss_max_health: int = 1100
 @export var move_speed: float = 138.0
@@ -47,6 +48,34 @@ var impact_burst_duration: float = 0.2
 var last_attack_for_fx: int = ENEMY_STATE_ENUMS.BossAttack.CHARGE
 var _edge_stall_time: float = 0.0
 var _attack_sync_was_active: bool = false
+var _charge_motion: COMMITTED_CHARGE
+
+func _ensure_charge_motion() -> void:
+	if _charge_motion == null:
+		_charge_motion = COMMITTED_CHARGE.new()
+		_charge_motion.configure(self, 34.0, 34.0, 34.0, charge_width)
+
+func get_charge_warning_geometry() -> Dictionary:
+	_ensure_charge_motion()
+	return _charge_motion.geometry()
+
+func get_charge_warning_polygons() -> Array[PackedVector2Array]:
+	_ensure_charge_motion()
+	return _charge_motion.warning_polygons()
+
+func _exit_tree() -> void:
+	if _charge_motion != null:
+		_charge_motion.cancel()
+
+func _on_health_state_died() -> void:
+	if _charge_motion != null:
+		_charge_motion.cancel()
+	super._on_health_state_died()
+
+func set_network_simulation_enabled(enabled: bool) -> void:
+	if not enabled and _charge_motion != null:
+		_charge_motion.cancel()
+	super.set_network_simulation_enabled(enabled)
 
 
 func _ready() -> void:
@@ -68,12 +97,18 @@ func _ready() -> void:
 				capsule.height = 20.0
 				break
 	configure_health_bar_visuals(Vector2(-66.0, -74.0), Vector2(132.0, 12.0))
+	_ensure_charge_motion()
 
 func _get_transport_color() -> Color:
 	return Color(1.0, 0.68, 0.18, 1.0)
 
 func _process_behavior(delta: float) -> void:
-	if not is_instance_valid(target):
+	_ensure_charge_motion()
+	if not is_instance_valid(target) and _charge_motion.stage != COMMITTED_CHARGE.Stage.CHARGE:
+		if _charge_motion.stage == COMMITTED_CHARGE.Stage.WARNING:
+			boss_state = ENEMY_STATE_ENUMS.BossState.IDLE
+			cooldown_left = action_cooldown
+		_charge_motion.cancel()
 		_clear_edge_escape_state()
 		velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
 		move_and_slide()
@@ -94,7 +129,8 @@ func _process_behavior(delta: float) -> void:
 
 	attack_afterglow_time_left = maxf(0.0, attack_afterglow_time_left - delta)
 	impact_burst_time_left = maxf(0.0, impact_burst_time_left - delta)
-	_update_edge_escape_state(delta)
+	if _charge_motion.stage == COMMITTED_CHARGE.Stage.NONE:
+		_update_edge_escape_state(delta)
 
 	queue_redraw()
 
@@ -106,10 +142,12 @@ func _is_in_priority_attack_state() -> bool:
 func get_projectile_network_sync_state() -> Dictionary:
 	if not network_simulation_enabled:
 		return {}
+	_ensure_charge_motion()
 	var active := boss_state != ENEMY_STATE_ENUMS.BossState.IDLE or attack_anim_time_left > 0.0 or attack_afterglow_time_left > 0.0 or impact_burst_time_left > 0.0
 	if not active and not _attack_sync_was_active:
 		return {}
 	var payload := {
+		"cc": _charge_motion.build_network_state(),
 		"active": active,
 		"attack_afterglow_time_left": attack_afterglow_time_left,
 		"impact_burst_time_left": impact_burst_time_left,
@@ -126,6 +164,9 @@ func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
 	if network_simulation_enabled:
 		return
 	if sync_state.is_empty():
+		return
+	_ensure_charge_motion()
+	if sync_state.has("cc") and not _charge_motion.apply_network_state(sync_state["cc"]):
 		return
 	if sync_state.has("global_position"):
 		var synced_pos := sync_state.get("global_position", global_position) as Vector2
@@ -146,6 +187,8 @@ func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
 
 
 func _process_network_visuals(delta: float) -> void:
+	_ensure_charge_motion()
+	_charge_motion.tick_replica(delta)
 	if boss_state == ENEMY_STATE_ENUMS.BossState.TELEGRAPH or boss_state == ENEMY_STATE_ENUMS.BossState.ATTACK or boss_state == ENEMY_STATE_ENUMS.BossState.RECOVER:
 		if state_time_left > 0.0:
 			state_time_left = maxf(0.0, state_time_left - delta)
@@ -244,6 +287,11 @@ func _start_next_attack(distance_to_target: float, wall_pressure: float = 0.0) -
 	charge_hit_applied = false
 	_charge_hit_targets.clear()
 	velocity = Vector2.ZERO
+	_ensure_charge_motion()
+	_charge_motion.cancel()
+	if active_attack == ENEMY_STATE_ENUMS.BossAttack.CHARGE:
+		_clear_edge_escape_state()
+		_charge_motion.prepare(charge_speed * lerpf(1.0, 1.18, enrage_t), charge_duration * lerpf(1.0, 0.84, enrage_t), locked_direction)
 	_cleave_locked_directions.clear()
 	if active_attack == ENEMY_STATE_ENUMS.BossAttack.CLEAVE:
 		for candidate_variant in target_candidates:
@@ -260,8 +308,11 @@ func _start_next_attack(distance_to_target: float, wall_pressure: float = 0.0) -
 
 
 func _process_telegraph_state(delta: float) -> void:
-	velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
-	move_and_slide()
+	if active_attack == ENEMY_STATE_ENUMS.BossAttack.CHARGE:
+		velocity = Vector2.ZERO
+	else:
+		velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
+		move_and_slide()
 	state_time_left = maxf(0.0, state_time_left - delta)
 	var windup := _get_windup_time(active_attack)
 	if windup > 0.0:
@@ -282,8 +333,17 @@ func _enter_attack_state() -> void:
 	var enrage_t: float = _get_enrage_ratio()
 	match active_attack:
 		ENEMY_STATE_ENUMS.BossAttack.CHARGE:
-			state_time_left = charge_duration * lerpf(1.0, 0.84, enrage_t)
-			velocity = locked_direction * charge_speed * lerpf(1.0, 1.18, enrage_t)
+			_ensure_charge_motion()
+			if _charge_motion.stage != COMMITTED_CHARGE.Stage.WARNING:
+				_clear_edge_escape_state()
+				_charge_motion.prepare(charge_speed * lerpf(1.0, 1.18, enrage_t), charge_duration * lerpf(1.0, 0.84, enrage_t), locked_direction)
+			if not _charge_motion.begin():
+				boss_state = ENEMY_STATE_ENUMS.BossState.RECOVER
+				state_time_left = recover_time * lerpf(1.0, 0.72, enrage_t)
+				velocity = Vector2.ZERO
+				return
+			state_time_left = _charge_motion.duration
+			velocity = locked_direction * _charge_motion.speed
 		ENEMY_STATE_ENUMS.BossAttack.NOVA:
 			state_time_left = 0.05
 			velocity = Vector2.ZERO
@@ -297,9 +357,19 @@ func _enter_attack_state() -> void:
 func _process_attack_state(delta: float) -> void:
 	match active_attack:
 		ENEMY_STATE_ENUMS.BossAttack.CHARGE:
-			velocity = locked_direction * charge_speed * lerpf(1.0, 1.18, _get_enrage_ratio())
-			move_and_slide()
-			_apply_charge_hit()
+			var step := _charge_motion.advance(delta)
+			if step.is_empty():
+				return
+			if not bool(step.get("cancelled", false)):
+				_apply_charge_hit(step["start"], step["finish"])
+				if _charge_motion.generation != int(step["generation"]) or is_queued_for_deletion():
+					return
+			state_time_left = _charge_motion.time_left
+			if state_time_left <= 0.0:
+				_charge_motion.cancel()
+				boss_state = ENEMY_STATE_ENUMS.BossState.RECOVER
+				state_time_left = recover_time * lerpf(1.0, 0.72, _get_enrage_ratio())
+			return
 		_:
 			velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
 			move_and_slide()
@@ -322,13 +392,16 @@ func _process_recover_state(delta: float) -> void:
 		cooldown_left = action_cooldown * lerpf(1.0, 0.62, _get_enrage_ratio())
 
 
-func _apply_charge_hit() -> void:
+func _apply_charge_hit(start: Vector2 = Vector2.INF, finish: Vector2 = Vector2.INF) -> void:
+	if not network_simulation_enabled:
+		return
 	var damageable_targets := _get_damageable_targets()
 	if damageable_targets.is_empty():
 		return
 
-	var seg_start := global_position - locked_direction * 34.0
-	var seg_end := global_position + locked_direction * 34.0
+	var seg_start := (start if start.is_finite() else global_position) - locked_direction * 34.0
+	var seg_end := (finish if finish.is_finite() else global_position) + locked_direction * 34.0
+	var generation := _charge_motion.generation if _charge_motion != null else -1
 	for hit_target in damageable_targets:
 		if not is_instance_valid(hit_target):
 			continue
@@ -337,10 +410,15 @@ func _apply_charge_hit() -> void:
 			continue
 		if _distance_point_to_segment(hit_target.global_position, seg_start, seg_end) > charge_width:
 			continue
-		if DAMAGEABLE.apply_damage(hit_target, charge_damage, {"source": "enemy_contact", "ability": "warden_charge"}):
+		var accepted := DAMAGEABLE.apply_damage(hit_target, charge_damage, {"source": "enemy_contact", "ability": "warden_charge"})
+		if is_queued_for_deletion() or (_charge_motion != null and _charge_motion.generation != generation):
+			return
+		if accepted:
 			_charge_hit_targets[target_id] = true
 			charge_hit_applied = true
 			_play_heavy_impact_feedback(hit_target, hit_target.global_position, charge_width * 1.5)
+		if is_queued_for_deletion() or (_charge_motion != null and _charge_motion.generation != generation):
+			return
 
 
 func _apply_nova_hit() -> void:
@@ -552,8 +630,11 @@ func _draw() -> void:
 	_draw_attack_afterglow(facing)
 	_draw_attack_impact_burst(facing)
 
-	if boss_state == ENEMY_STATE_ENUMS.BossState.TELEGRAPH:
+	if not get_charge_warning_geometry().is_empty():
+		_draw_charge_warning()
+	elif boss_state == ENEMY_STATE_ENUMS.BossState.TELEGRAPH and active_attack != ENEMY_STATE_ENUMS.BossAttack.CHARGE:
 		_draw_attack_telegraph()
+	if boss_state == ENEMY_STATE_ENUMS.BossState.TELEGRAPH:
 		_draw_role_state_icon(facing, body_radius)
 
 	if boss_state == ENEMY_STATE_ENUMS.BossState.ATTACK and active_attack == ENEMY_STATE_ENUMS.BossAttack.CHARGE:
@@ -580,25 +661,7 @@ func _draw_attack_telegraph() -> void:
 	var alpha := 0.2 + telegraph_alpha * 0.7
 	match active_attack:
 		ENEMY_STATE_ENUMS.BossAttack.CHARGE:
-			var length := charge_speed * charge_duration * 0.72
-			var start := locked_direction * 24.0
-			var end := start + locked_direction * length
-			var charge_pulse := 0.5 + 0.5 * sin(telegraph_alpha * PI * 2.0)
-			
-			# Pulsing charge build-up glow
-			draw_circle(Vector2.ZERO, (end - start).length() * 0.3, Color(COLOR_BOSS_CHARGE_LINE.r, COLOR_BOSS_CHARGE_LINE.g, COLOR_BOSS_CHARGE_LINE.b, alpha * charge_pulse * 0.2))
-			
-			# Outer charge line (wider, more dramatic)
-			draw_line(start, end, Color(COLOR_BOSS_CHARGE_LINE.r, COLOR_BOSS_CHARGE_LINE.g, COLOR_BOSS_CHARGE_LINE.b, alpha * 0.6), charge_width * 2.5)
-			
-			# Inner bright core
-			draw_line(start, end, Color(COLOR_BOSS_CHARGE_LINE_INNER.r, COLOR_BOSS_CHARGE_LINE_INNER.g, COLOR_BOSS_CHARGE_LINE_INNER.b, minf(1.0, alpha + 0.15)), 4.0)
-			
-			# Impact zone accent marks
-			var side := Vector2(-locked_direction.y, locked_direction.x)
-			var impact_width := 16.0
-			draw_line(end + side * impact_width, end + side * impact_width - locked_direction * 14.0, Color(COLOR_BOSS_CHARGE_LINE_INNER.r, COLOR_BOSS_CHARGE_LINE_INNER.g, COLOR_BOSS_CHARGE_LINE_INNER.b, minf(1.0, alpha + 0.1)), 2.5)
-			draw_line(end - side * impact_width, end - side * impact_width - locked_direction * 14.0, Color(COLOR_BOSS_CHARGE_LINE_INNER.r, COLOR_BOSS_CHARGE_LINE_INNER.g, COLOR_BOSS_CHARGE_LINE_INNER.b, minf(1.0, alpha + 0.1)), 2.5)
+			_draw_charge_warning()
 		
 		ENEMY_STATE_ENUMS.BossAttack.NOVA:
 			var nova_pulse := 0.5 + 0.5 * sin(telegraph_alpha * PI * 1.5)
@@ -633,6 +696,26 @@ func _draw_attack_telegraph() -> void:
 				draw_line(Vector2.ZERO, draw_dir.rotated(-half_arc) * inner_radius, Color(COLOR_BOSS_CLEAVE_OUTLINE.r, COLOR_BOSS_CLEAVE_OUTLINE.g, COLOR_BOSS_CLEAVE_OUTLINE.b, alpha * 0.6), 1.5)
 				draw_line(Vector2.ZERO, draw_dir.rotated(half_arc) * inner_radius, Color(COLOR_BOSS_CLEAVE_OUTLINE.r, COLOR_BOSS_CLEAVE_OUTLINE.g, COLOR_BOSS_CLEAVE_OUTLINE.b, alpha * 0.6), 1.5)
 
+
+func _draw_charge_warning() -> void:
+	var geometry := get_charge_warning_geometry()
+	if geometry.is_empty():
+		return
+	var alpha := 0.2 + telegraph_alpha * 0.7
+	for polygon in get_charge_warning_polygons():
+		var local_polygon := PackedVector2Array()
+		for point in polygon:
+			local_polygon.append(to_local(point))
+		draw_colored_polygon(local_polygon, Color(COLOR_BOSS_CHARGE_LINE.r, COLOR_BOSS_CHARGE_LINE.g, COLOR_BOSS_CHARGE_LINE.b, alpha * 0.6))
+		local_polygon.append(local_polygon[0])
+		draw_polyline(local_polygon, Color(COLOR_BOSS_CHARGE_LINE_INNER.r, COLOR_BOSS_CHARGE_LINE_INNER.g, COLOR_BOSS_CHARGE_LINE_INNER.b, alpha), 2.0, true)
+	var aim: Vector2 = geometry["direction"]
+	var start := to_local(geometry["origin"] - aim * float(geometry["rear"]))
+	var end := to_local(geometry["end"] + aim * float(geometry["front"]))
+	draw_line(start, end, Color(COLOR_BOSS_CHARGE_LINE_INNER.r, COLOR_BOSS_CHARGE_LINE_INNER.g, COLOR_BOSS_CHARGE_LINE_INNER.b, minf(1.0, alpha + 0.15)), 4.0, true)
+	var side := aim.orthogonal()
+	for sign_value: float in [-1.0, 1.0]:
+		draw_line(end + side * 16.0 * sign_value, end + side * 16.0 * sign_value - aim * 14.0, Color(COLOR_BOSS_CHARGE_LINE_INNER.r, COLOR_BOSS_CHARGE_LINE_INNER.g, COLOR_BOSS_CHARGE_LINE_INNER.b, minf(1.0, alpha + 0.1)), 2.5, true)
 
 func _draw_attack_afterglow(facing: Vector2) -> void:
 	if attack_afterglow_time_left <= 0.0:

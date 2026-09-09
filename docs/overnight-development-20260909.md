@@ -15,10 +15,10 @@ The thread continuation `overnight-abyssaldescent-development` expires at the de
 
 ## Active ownership
 
-- `review_combat_lifecycle`: local analysis tests and bounded Oath audit complete; measuring actual crowded-room cleanup/performance in TEMP.
-- `review_combat_readability`: implementing the reviewed Warden/Lacuna committed-charge correction in TEMP.
-- `review_hit_context`: power snapshot fix promoted; independently verifying legacy boss charge networking/combinations in TEMP.
-- Root: independent review, regression registration, work log, Git and delivery; local telemetry tools complete.
+- `review_combat_lifecycle`: four-process departure checks complete; independent lifecycle/network review.
+- `review_combat_readability`: Warden/Lacuna complete and promoted; implementing the Tether beam contract correction in TEMP.
+- `review_hit_context`: owner-screen feedback complete in TEMP; independent Tether networking/combinations review.
+- Root: integration, regression registration, work log, Git and delivery; Seamlock band expiry correction in TEMP.
 
 Coordinate overlapping files before editing. Agents do not commit independently.
 
@@ -125,3 +125,25 @@ A 24-room production-physics soak across all Bearings, solo and four host-side a
 The deeper lifecycle checks reproduced stale physics handles after killing enemies during dash: clearing a dictionary of freed Nodes did not remove their actual collision exceptions. Player, Charger, Ram and Breakwater now retain/remove their owned RIDs. Enemy edge escape also removes the original target's RID on retarget or reference loss. Movement, damage and dash immunity are unchanged. The dash lifecycle suite passes 59 checks (17 failures before), including production death, checkpoint restore and repeated room transitions. A six-room post-fix soak passes 37 checks with only live party bodies in actual exception lists.
 
 Party collision relationships now clean up in both directions when a body leaves the tree. Independent four-player review caught Godot treating different static bound callbacks as equal; a single callback per body and an explicit ID/RID peer map fixes that engine behavior without retaining avatars. The permanent cleanup suite passes 42 checks; the rejected per-pair implementation fails seven. Repeated/reversed setup remains bounded, multiple departures clear every survivor, reparent/rejoin rearms safely, and a party departure preserves independent dash exceptions. Evidence: `abyssal-breakwater-encounter-0dfdb5cfeeda437c9edcfb62e65e8157/collision-four-party-{before,fixed}.log`. Existing live departure ENet passes 14 checks (`abyssal-enet-23390e9059ed40718efc27f0a717f752`). Both new suites are registered in the default hook.
+
+## Fourth checkpoint and current desktop build
+
+**`e715cad`, `b5a6b55`, `ff64f98` and `7a873eb` are committed and pushed.** Collision cleanup passed the complete 221-script hook (`abyssal-validation-be2e0d5bd1ea4f8e9041876b45930d5b`); local analysis tools passed their separate full hook (`abyssal-validation-d74f4be3f5844acc9623b1e54843e189`) after the 159 isolated tooling checks. The unchanged non-force push succeeded after fresh account/owner/remote-head and outgoing-payload checks. Main and the unrelated scene edit remain preserved.
+
+Normal **`dev-overnight-lifecycle-20260909-0106`** now replaces the canonical desktop playtest, SHA256 **`9B00FEDD3862CAA85D4A6BA83338D70A9A017FC96ECEC951541C2D127A3C23CD`**, 114051680 bytes. Import, release export, package checks and 26 normal checks passed (`abyssal-executable-smoke-15133a6b21f24a8c9356adb6c1b150f1`). All 159 production scripts matched source in `abyssal-playtest-export-dc9591a5a8934d468ce51d4f2206f0eb/project`. Desktop hash matches. This build includes the snapshot, SFX and collision fixes; the following charge/feedback changes await their next export.
+
+## Committed boss charge paths
+
+Warden and Lacuna now use a small shared committed-charge controller. It captures existing speed/enrage and duration before warning, follows one finite straight path, shows the full rear/front/rounded contact area, stops on geometry, and retains the nominal attack timer on early collision. Lacuna still predicts/tracks during windup; Warden locks when warning begins. Mid-charge health changes affect later charges. Swept damage prevents long frames skipping targets. Normal recovery, cooldown, one attempt per target, damage attribution, other attacks and Lacuna seams remain intact. These are explicit movement/fairness changes, so human boss difficulty/feel feedback remains necessary.
+
+Temporary combat-body collision exceptions clear by captured RID on every exit. Host-only movement and compact sequenced, room-scoped warning geometry have a 0.35-second replica lease; missed final packets clear the warning. During Sever, Lacuna omits only retained centers used by its other Null Ring attack. Actual first uncached two-player packets with two seams peak at 1,355 bytes, below the 1,392-byte threshold. Pre-existing larger overlapping seam packets can still fragment; this increment does not rewrite that protocol.
+
+The frozen prototype passes 402 focused checks, 65 existing telegraph checks and 106 real ENet checks (`abyssal-enet-89e533a2afc74f51b65eeb40292fb372`). Six real GPU frames passed and were inspected by root and implementer, including interpolation offset and expired warnings (`abyssal-gameplay-render-91cfe25b72c24b9c898b9654055a4423/boss_charge_frames`). The reviewed runtime files, fixtures and engine-generated UIDs are now promoted; the focused suite is registered for the complete hook.
+
+## Next bounded hazard/feedback corrections
+
+Actual ENet reproduced a host-screen flash when a joiner takes Warden/Shielder heavy impacts. The proposed fix restricts only screen effects to the local owner, preserving world rings and the existing reliable owner damage cue. It passes 11 focused and 28 live checks in TEMP (seven failures before), including late peer identity and ownership changes. No new RPC is needed.
+
+Tether's shared target-position history can invent a crossing when switching between two stationary players on opposite sides of the beam. Its visible core is narrower than the damage radius, late ticks can happen after expiry, and replica beams can linger. The chosen correction makes this documented area hazard evaluate each eligible player using that player's own history, once per due tick and with one pair owner, while retaining existing values and movement. This is an explicit co-op correction; ordinary targeted attacks are not being converted wholesale into area damage.
+
+Seamlock bands also tick after expiry and do not count down on replicas. A separate narrow fix preserves their existing target selection, annulus boundaries and following spiral behavior while correcting lifetime/authority and preventing older channel state from reviving expired visuals. The original focused reproduction fails eight of 35 checks. Tether and Seamlock are still TEMP work and are not included in the desktop build above.

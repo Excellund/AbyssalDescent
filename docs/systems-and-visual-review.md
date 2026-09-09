@@ -32,7 +32,9 @@ Branch `codex/overnight-buildcraft-20260909` continues the review alongside Retu
 - Resume now preserves Surge Step's dash speed and Voidfire's overheat movement multiplier. Older saves reconstruct those omitted values from their saved upgrades, while explicit values win and repeated restoration cannot stack them again. The actual disk/world restore fixture passes 395 checks; the original code fails 113. This change awaits the next verified checkpoint export.
 - Dash and enemy charges remove actual physics collision handles after an enemy is freed. Edge escape retargeting and co-op departures clear only their owned relationships, preserving other active phasing. Two regressions cover 101 expectations, including all four party bodies and repeated real room transitions. Crowded-room soaks return to exact node baselines; movement and immunity values are unchanged.
 
-Full verification and delivery evidence are recorded in the overnight log. Charge-preview length remains a separate issue: mid-charge enrage and the final movement tick require an explicit prediction policy before its warning can be guaranteed accurate.
+Warden and Lacuna now capture nominal charge speed and duration before the warning and follow a finite straight path with a full rounded contact warning. Lacuna retains tracking during windup; terrain stops travel without shortening the attack timer. Swept host damage and expiring, ordered co-op warnings match the committed geometry. The prototype passes 402 behavior checks, 106 live network checks and six inspected GPU frames. This deliberate movement correction still needs human boss feel/difficulty feedback.
+
+Full verification and delivery evidence are recorded in the overnight log. The snapshot and collision fixes are in the normal lifecycle desktop checkpoint; committed charge paths await the following export.
 
 ## Pass 1: combat and movement contracts
 

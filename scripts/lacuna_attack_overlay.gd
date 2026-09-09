@@ -14,6 +14,7 @@ var sever_duration: float = 0.2
 var sever_width: float = 42.0
 var echo_cross_length: float = 340.0
 var echo_cross_width: float = 34.0
+var charge_geometry: Dictionary = {}
 
 func _ready() -> void:
 	top_level = true
@@ -23,7 +24,7 @@ func _ready() -> void:
 	rotation = 0.0
 	scale = Vector2.ONE
 
-func set_telegraph_state(is_active: bool, next_attack: int, next_boss_position: Vector2, next_telegraph_alpha: float, next_locked_direction: Vector2, next_echo_cross_angle: float, next_sever_speed: float, next_sever_duration: float, next_sever_width: float, next_echo_cross_length: float, next_echo_cross_width: float) -> void:
+func set_telegraph_state(is_active: bool, next_attack: int, next_boss_position: Vector2, next_telegraph_alpha: float, next_locked_direction: Vector2, next_echo_cross_angle: float, next_sever_speed: float, next_sever_duration: float, next_sever_width: float, next_echo_cross_length: float, next_echo_cross_width: float, next_charge_geometry: Dictionary = {}) -> void:
 	telegraph_active = is_active
 	active_attack = next_attack
 	boss_position = next_boss_position
@@ -35,6 +36,7 @@ func set_telegraph_state(is_active: bool, next_attack: int, next_boss_position: 
 	sever_width = next_sever_width
 	echo_cross_length = next_echo_cross_length
 	echo_cross_width = next_echo_cross_width
+	charge_geometry = next_charge_geometry
 	queue_redraw()
 
 func _process(_delta: float) -> void:
@@ -53,15 +55,27 @@ func get_echo_cross_polygons() -> Array[PackedVector2Array]:
 		polygons.append_array(Geometry2D.offset_polyline(segment, echo_cross_width, Geometry2D.JOIN_ROUND, Geometry2D.END_ROUND))
 	return polygons
 
+func get_sever_polygons() -> Array[PackedVector2Array]:
+	if not telegraph_active or active_attack != ATTACK_SEVER or charge_geometry.is_empty():
+		return []
+	var aim: Vector2 = charge_geometry["direction"]
+	return Geometry2D.offset_polyline(PackedVector2Array([charge_geometry["origin"] - aim * float(charge_geometry["rear"]), charge_geometry["end"] + aim * float(charge_geometry["front"])]), float(charge_geometry["radius"]), Geometry2D.JOIN_ROUND, Geometry2D.END_ROUND)
+
 func _draw() -> void:
 	if not telegraph_active:
 		return
 	var alpha := 0.2 + telegraph_alpha * 0.72
 	if active_attack == ATTACK_SEVER:
-		var direction := locked_direction.normalized() if locked_direction.length_squared() > 0.000001 else Vector2.RIGHT
-		var start := boss_position + direction * 28.0
-		var end := start + direction * (sever_speed * sever_duration * 0.7)
-		draw_line(start, end, Color(0.2, 1.0, 0.82, alpha * 0.6), sever_width * 2.0)
+		if charge_geometry.is_empty():
+			return
+		var direction: Vector2 = charge_geometry["direction"]
+		var start: Vector2 = charge_geometry["origin"] - direction * float(charge_geometry["rear"])
+		var end: Vector2 = charge_geometry["end"] + direction * float(charge_geometry["front"])
+		for polygon in get_sever_polygons():
+			draw_colored_polygon(polygon, Color(0.2, 1.0, 0.82, alpha * 0.6))
+			var outline := polygon.duplicate()
+			outline.append(outline[0])
+			draw_polyline(outline, Color(0.92, 1.0, 0.98, alpha), 1.6, true)
 		draw_line(start, end, Color(0.92, 1.0, 0.98, alpha), 3.6)
 		var slash_side := Vector2(-direction.y, direction.x)
 		draw_line(start + slash_side * (sever_width * 0.7), end + slash_side * (sever_width * 0.22), Color(0.84, 1.0, 0.95, alpha * 0.36), 1.6)

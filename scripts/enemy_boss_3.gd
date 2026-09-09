@@ -3,6 +3,7 @@ extends "res://scripts/enemy_base.gd"
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const LACUNA_SEAM_OVERLAY_SCRIPT := preload("res://scripts/lacuna_seam_overlay.gd")
 const LACUNA_ATTACK_OVERLAY_SCRIPT := preload("res://scripts/lacuna_attack_overlay.gd")
+const COMMITTED_CHARGE := preload("res://scripts/shared/committed_charge.gd")
 
 const STATE_STALK := 0
 const STATE_WINDUP := 1
@@ -92,6 +93,30 @@ var hit_flash_attack: int = ATTACK_SEVER
 var _attack_sync_was_active: bool = false
 var _projectile_sync_sequence: int = 0
 var _last_received_projectile_sync_sequence: int = -1
+var _charge_motion: COMMITTED_CHARGE
+
+func _ensure_charge_motion() -> void:
+	if _charge_motion == null:
+		_charge_motion = COMMITTED_CHARGE.new()
+		_charge_motion.configure(self, 40.0, 40.0, 44.0, sever_width)
+
+func get_charge_warning_geometry() -> Dictionary:
+	_ensure_charge_motion()
+	return _charge_motion.geometry()
+
+func get_charge_warning_polygons() -> Array[PackedVector2Array]:
+	_ensure_charge_motion()
+	return _charge_motion.warning_polygons()
+
+func _on_health_state_died() -> void:
+	if _charge_motion != null:
+		_charge_motion.cancel()
+	super._on_health_state_died()
+
+func set_network_simulation_enabled(enabled: bool) -> void:
+	if not enabled and _charge_motion != null:
+		_charge_motion.cancel()
+	super.set_network_simulation_enabled(enabled)
 
 func _ready() -> void:
 	max_health = boss_max_health
@@ -115,8 +140,11 @@ func _ready() -> void:
 				capsule.height = 24.0
 				break
 	configure_health_bar_visuals(Vector2(-78.0, -86.0), Vector2(156.0, 12.0))
+	_ensure_charge_motion()
 
 func _exit_tree() -> void:
+	if _charge_motion != null:
+		_charge_motion.cancel()
 	if is_instance_valid(_seam_overlay):
 		_seam_overlay.clear_seams()
 		_seam_overlay.queue_free()
@@ -131,9 +159,14 @@ func _get_transport_color() -> Color:
 	return Color(0.34, 0.96, 0.78, 1.0)
 
 func _process_behavior(delta: float) -> void:
+	_ensure_charge_motion()
 	_process_seam_zones(delta)
 	_update_target_tracking(delta)
-	if not is_instance_valid(target):
+	if not is_instance_valid(target) and _charge_motion.stage != COMMITTED_CHARGE.Stage.CHARGE:
+		if _charge_motion.stage == COMMITTED_CHARGE.Stage.WARNING:
+			boss_state = STATE_STALK
+			cooldown_left = action_cooldown
+		_charge_motion.cancel()
 		_clear_edge_escape_state()
 		velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
 		move_and_slide()
@@ -153,7 +186,8 @@ func _process_behavior(delta: float) -> void:
 	impact_burst_time_left = maxf(0.0, impact_burst_time_left - delta)
 	_null_ring_pull_fx_time_left = maxf(0.0, _null_ring_pull_fx_time_left - delta)
 	hit_flash_time_left = maxf(0.0, hit_flash_time_left - delta)
-	_update_edge_escape_state(delta)
+	if _charge_motion.stage == COMMITTED_CHARGE.Stage.NONE:
+		_update_edge_escape_state(delta)
 	_sync_attack_overlay()
 	queue_redraw()
 
@@ -181,9 +215,10 @@ func _sync_attack_overlay() -> void:
 	_ensure_attack_overlay()
 	if not is_instance_valid(_attack_overlay):
 		return
-	var show_telegraph := boss_state == STATE_WINDUP and (active_attack == ATTACK_SEVER or active_attack == ATTACK_ECHO_CROSS)
+	var charge_geometry := get_charge_warning_geometry()
+	var show_telegraph := not charge_geometry.is_empty() or (boss_state == STATE_WINDUP and active_attack == ATTACK_ECHO_CROSS)
 	var overlay_origin := global_position if network_simulation_enabled else _telegraph_overlay_origin
-	_attack_overlay.set_telegraph_state(show_telegraph, active_attack, overlay_origin, telegraph_alpha, locked_direction, _echo_cross_angle, sever_speed, sever_duration, sever_width, echo_cross_length, echo_cross_width)
+	_attack_overlay.set_telegraph_state(show_telegraph, ATTACK_SEVER if not charge_geometry.is_empty() else active_attack, overlay_origin, telegraph_alpha, locked_direction, _echo_cross_angle, sever_speed, sever_duration, sever_width, echo_cross_length, echo_cross_width, charge_geometry)
 
 func _is_in_priority_attack_state() -> bool:
 	return boss_state == STATE_WINDUP or boss_state == STATE_ATTACK
@@ -191,10 +226,12 @@ func _is_in_priority_attack_state() -> bool:
 func get_projectile_network_sync_state() -> Dictionary:
 	if not network_simulation_enabled:
 		return {}
+	_ensure_charge_motion()
 	var active := boss_state != STATE_STALK or attack_anim_time_left > 0.0 or attack_afterglow_time_left > 0.0 or impact_burst_time_left > 0.0 or not seam_zones.is_empty()
 	if not active and not _attack_sync_was_active:
 		return {}
 	var payload := {
+		"cc": _charge_motion.build_network_state(),
 		"active": active,
 		"boss_state": boss_state,
 		"state_time_left": state_time_left,
@@ -219,6 +256,11 @@ func get_projectile_network_sync_state() -> Dictionary:
 		"attack_anim_time_left": attack_anim_time_left,
 		"telegraph_overlay_origin": global_position
 	}
+	# Retained centers only render Null Ring. Exclude them during Sever so its
+	# finite warning does not fragment an otherwise ordinary two-player packet.
+	# The next Null Ring snapshot sends its newly selected centers as before.
+	if active_attack == ATTACK_SEVER:
+		payload.erase("locked_null_ring_centers")
 	_projectile_sync_sequence += 1
 	payload["seq"] = _projectile_sync_sequence
 	_attack_sync_was_active = active
@@ -233,6 +275,10 @@ func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
 	if incoming_seq >= 0:
 		if incoming_seq <= _last_received_projectile_sync_sequence:
 			return
+	_ensure_charge_motion()
+	if sync_state.has("cc") and not _charge_motion.apply_network_state(sync_state["cc"]):
+		return
+	if incoming_seq >= 0:
 		_last_received_projectile_sync_sequence = incoming_seq
 	if sync_state.has("seam_zones"):
 		var raw_proj_seams: Variant = sync_state.get("seam_zones")
@@ -301,6 +347,8 @@ func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
 	queue_redraw()
 
 func _process_network_visuals(delta: float) -> void:
+	_ensure_charge_motion()
+	_charge_motion.tick_replica(delta)
 	if boss_state == STATE_WINDUP or boss_state == STATE_ATTACK or boss_state == STATE_RECOVER:
 		if state_time_left > 0.0:
 			state_time_left = maxf(0.0, state_time_left - delta)
@@ -403,6 +451,12 @@ func _start_next_attack(distance_to_target: float, wall_pressure: float) -> void
 	_sever_hit_applied = false
 	_sever_hit_targets.clear()
 	velocity = Vector2.ZERO
+	_ensure_charge_motion()
+	_charge_motion.cancel()
+	if active_attack == ATTACK_SEVER:
+		_clear_edge_escape_state()
+		var charge_enrage := _get_enrage_ratio()
+		_charge_motion.prepare(sever_speed * lerpf(1.0, 1.16, charge_enrage), sever_duration * lerpf(1.0, 0.84, charge_enrage), locked_direction)
 	if active_attack == ATTACK_NULL_RING:
 		_locked_null_ring_center = _predict_target_position(null_ring_windup * 0.42, null_ring_prediction_speed_cap)
 		_rebuild_null_ring_centers(null_ring_windup * 0.42)
@@ -411,13 +465,17 @@ func _start_next_attack(distance_to_target: float, wall_pressure: float) -> void
 		_echo_cross_angle = locked_direction.angle() + PI * 0.5
 
 func _process_windup_state(delta: float) -> void:
-	velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
-	move_and_slide()
+	if active_attack == ATTACK_SEVER:
+		velocity = Vector2.ZERO
+	else:
+		velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
+		move_and_slide()
 	if active_attack == ATTACK_SEVER:
 		var to_predicted := _predict_target_position(sever_prediction_time, sever_prediction_speed_cap) - global_position
 		if to_predicted.length_squared() > 0.000001:
 			locked_direction = to_predicted.normalized()
 			visual_facing_direction = locked_direction
+		_charge_motion.update_warning(global_position, locked_direction)
 	elif active_attack == ATTACK_NULL_RING:
 		_locked_null_ring_center = _predict_target_position(null_ring_windup * 0.4, null_ring_prediction_speed_cap)
 		_rebuild_null_ring_centers(null_ring_windup * 0.4)
@@ -446,8 +504,17 @@ func _enter_attack_state() -> void:
 	var enrage_t := _get_enrage_ratio()
 	match active_attack:
 		ATTACK_SEVER:
-			state_time_left = sever_duration * lerpf(1.0, 0.84, enrage_t)
-			velocity = locked_direction * sever_speed * lerpf(1.0, 1.16, enrage_t)
+			_ensure_charge_motion()
+			if _charge_motion.stage != COMMITTED_CHARGE.Stage.WARNING:
+				_clear_edge_escape_state()
+				_charge_motion.prepare(sever_speed * lerpf(1.0, 1.16, enrage_t), sever_duration * lerpf(1.0, 0.84, enrage_t), locked_direction)
+			if not _charge_motion.begin():
+				boss_state = STATE_RECOVER
+				state_time_left = recover_time * lerpf(1.0, 0.7, enrage_t)
+				velocity = Vector2.ZERO
+				return
+			state_time_left = _charge_motion.duration
+			velocity = locked_direction * _charge_motion.speed
 		ATTACK_NULL_RING:
 			state_time_left = null_ring_pull_delay + 0.12
 			velocity = Vector2.ZERO
@@ -466,9 +533,19 @@ func _process_attack_state(delta: float) -> void:
 					_apply_null_ring_hit()
 					_null_ring_pull_timer = -1.0
 		ATTACK_SEVER:
-			velocity = locked_direction * sever_speed * lerpf(1.0, 1.16, _get_enrage_ratio())
-			move_and_slide()
-			_apply_sever_hit()
+			var step := _charge_motion.advance(delta)
+			if step.is_empty():
+				return
+			if not bool(step.get("cancelled", false)):
+				_apply_sever_hit(step["start"], step["finish"])
+				if _charge_motion.generation != int(step["generation"]) or is_queued_for_deletion():
+					return
+			state_time_left = _charge_motion.time_left
+			if state_time_left <= 0.0:
+				_charge_motion.cancel()
+				boss_state = STATE_RECOVER
+				state_time_left = recover_time * lerpf(1.0, 0.7, _get_enrage_ratio())
+			return
 		_:
 			velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
 			move_and_slide()
@@ -486,12 +563,15 @@ func _process_recover_state(delta: float) -> void:
 		boss_state = STATE_STALK
 		cooldown_left = action_cooldown * lerpf(1.0, 0.58, _get_enrage_ratio())
 
-func _apply_sever_hit() -> void:
+func _apply_sever_hit(start: Vector2 = Vector2.INF, finish: Vector2 = Vector2.INF) -> void:
+	if not network_simulation_enabled:
+		return
 	var damageable_targets := _get_damageable_targets()
 	if damageable_targets.is_empty():
 		return
-	var seg_start := global_position - locked_direction * 40.0
-	var seg_end := global_position + locked_direction * 44.0
+	var seg_start := (start if start.is_finite() else global_position) - locked_direction * 40.0
+	var seg_end := (finish if finish.is_finite() else global_position) + locked_direction * 44.0
+	var generation := _charge_motion.generation if _charge_motion != null else -1
 	for hit_target in damageable_targets:
 		if not is_instance_valid(hit_target):
 			continue
@@ -500,13 +580,18 @@ func _apply_sever_hit() -> void:
 			continue
 		if _distance_point_to_segment(hit_target.global_position, seg_start, seg_end) > sever_width:
 			continue
-		if DAMAGEABLE.apply_damage(hit_target, sever_damage, {"source": "enemy_ability", "ability": "lacuna_sever"}):
+		var accepted := DAMAGEABLE.apply_damage(hit_target, sever_damage, {"source": "enemy_ability", "ability": "lacuna_sever"})
+		if is_queued_for_deletion() or (_charge_motion != null and _charge_motion.generation != generation):
+			return
+		if accepted:
 			_sever_hit_targets[target_id] = true
 			_sever_hit_applied = true
 			_spawn_seam(hit_target.global_position)
 			_hit_flash_pos = hit_target.global_position
 			hit_flash_time_left = hit_flash_duration
 			hit_flash_attack = ATTACK_SEVER
+		if is_queued_for_deletion() or (_charge_motion != null and _charge_motion.generation != generation):
+			return
 
 func _apply_null_ring_hit() -> void:
 	var centers := _locked_null_ring_centers if not _locked_null_ring_centers.is_empty() else [_locked_null_ring_center]
@@ -958,11 +1043,21 @@ func _draw_attack_telegraph() -> void:
 	var alpha := 0.2 + telegraph_alpha * 0.72
 	match active_attack:
 		ATTACK_SEVER:
-			var start := locked_direction * 28.0
-			var end := start + locked_direction * (sever_speed * sever_duration * 0.7)
-			draw_line(start, end, Color(0.2, 1.0, 0.82, alpha * 0.6), sever_width * 2.0)
+			var geometry := get_charge_warning_geometry()
+			if geometry.is_empty():
+				return
+			for polygon in get_charge_warning_polygons():
+				var local_polygon := PackedVector2Array()
+				for point in polygon:
+					local_polygon.append(to_local(point))
+				draw_colored_polygon(local_polygon, Color(0.2, 1.0, 0.82, alpha * 0.6))
+				local_polygon.append(local_polygon[0])
+				draw_polyline(local_polygon, Color(0.92, 1.0, 0.98, alpha), 1.6, true)
+			var aim: Vector2 = geometry["direction"]
+			var start := to_local(geometry["origin"] - aim * float(geometry["rear"]))
+			var end := to_local(geometry["end"] + aim * float(geometry["front"]))
 			draw_line(start, end, Color(0.92, 1.0, 0.98, alpha), 3.6)
-			var slash_side := Vector2(-locked_direction.y, locked_direction.x)
+			var slash_side := aim.orthogonal()
 			draw_line(start + slash_side * (sever_width * 0.7), end + slash_side * (sever_width * 0.22), Color(0.84, 1.0, 0.95, alpha * 0.36), 1.6)
 			draw_line(start - slash_side * (sever_width * 0.7), end - slash_side * (sever_width * 0.22), Color(0.84, 1.0, 0.95, alpha * 0.24), 1.2)
 		ATTACK_NULL_RING:
