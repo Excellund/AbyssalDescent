@@ -45,7 +45,7 @@ Branch `codex/overnight-buildcraft-20260909` continues the review alongside Retu
 
 Warden and Lacuna now capture nominal charge speed and duration before the warning and follow a finite straight path with a full rounded contact warning. Lacuna retains tracking during windup; terrain stops travel without shortening the attack timer. Swept host damage and expiring, ordered co-op warnings match the committed geometry. The prototype passes 402 behavior checks, 106 live network checks and six inspected GPU frames. This deliberate movement correction still needs human boss feel/difficulty feedback.
 
-Full verification and delivery evidence are recorded in the overnight log. The normal `dev-overnight-transitions-20260909-023855` desktop checkpoint includes the new content and the Archer, ownership, actual Breakwater room-entry, Toll/Pyre and room-input corrections.
+Full verification and delivery evidence are recorded in the overnight log. The final normal `dev-overnight-final-20260909-025506` Desktop checkpoint includes the new content and all reviewed combat, ownership, room-entry, reward, compact-menu and co-op retry corrections. The full regression hook, actual network checks, inspected rendered states and isolated packaged Menu-to-run lifecycle pass. The next step is human gameplay feedback before further tuning.
 
 ## Pass 1: combat and movement contracts
 

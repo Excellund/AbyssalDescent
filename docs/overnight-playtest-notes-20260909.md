@@ -2,6 +2,8 @@
 
 Development is on `codex/overnight-buildcraft-20260909`. The existing desktop **AbyssalDescent Playtest.exe** is replaced at verified checkpoints with a normal build: regular menu, progression and rewards. `main` and the original desktop executable are preserved. The exact current build and verification evidence are in [the development log](overnight-development-20260909.md).
 
+The finished overnight build is **`dev-overnight-final-20260909-025506`**. Open the same Desktop playtest as usual; it starts a normal run without granted debug powers.
+
 ## New things to try
 
 - **Returning Crescent:** attacks send a blade outward and back. Reposition to change its return path. Level 2 supports two blades; level 3 adds an outward ricochet from cover or the arena edge. Returning blades dissolve against cover.

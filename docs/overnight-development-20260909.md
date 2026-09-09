@@ -6,6 +6,8 @@ Branch: `codex/overnight-buildcraft-20260909`, based on verified checkpoint `5ee
 
 The thread continuation `overnight-abyssaldescent-development` expires at the deadline. Pause it when the overnight delivery is complete. Read this log and the current conversation before continuing; do not restart completed work.
 
+**Development complete.** The final gameplay commit is `593e973`, pushed on the development branch. The single Desktop playtest is the verified normal `dev-overnight-final-20260909-025506`. The final delivery record below contains its hash and verification evidence. Further gameplay tuning should follow the user's morning playtest.
+
 ## Intended increments
 
 1. **Reliable attack and movement handoffs.** Fix a held attack queued through dash failing to arm Blast Drive, including the handoff into Orbit. Preserve deliberate input, immediate taps and cancellation at transitions.
@@ -13,12 +15,12 @@ The thread continuation `overnight-abyssaldescent-development` expires at the de
 3. **Returning Crescent.** An accepted attack sends an available blade outward; moving changes its return path. L1 has one active blade, L2 allows two, and L3 adds one outbound ricochet from cover. Each blade hits an enemy once per leg, uses secondary damage, spends a fixed travel budget and expires after two seconds at most. Return contact with cover dissolves the blade. Base damage is 45% of Damage per leg, with 220-pixel outward travel; damage and reach gain 15% of base per level and the existing one-time Prismatic boost. No extra input, progression currency or combat prompt.
 4. **Combat presentation and reliability.** Improve unclear impact/state feedback and test the relevant lifecycle, save/resume and host/joiner behavior. Sovereign's Double keeps its existing proc contract unless a separately justified change is recorded.
 
-## Final verification ownership
+## Completed ownership
 
-- `review_combat_lifecycle`: completed actual input/retry audits; preparing the isolated final packaged lifecycle smoke.
-- `review_combat_readability`: completed selection layout review; diagnosing the strict fixture shutdown diagnostic before accepting the final hook.
-- `review_hit_context`: completed acquisition/continuation audit; independently reviewing packaged-smoke profile and network isolation.
-- Root: integration, reviews, regression registration, work log, Git and normal playtest delivery.
+- `review_combat_lifecycle`: actual input/retry audits and final packaged lifecycle smoke completed.
+- `review_combat_readability`: selection layout review and strict fixture shutdown correction completed.
+- `review_hit_context`: acquisition/continuation audit and independent packaged-smoke isolation review completed.
+- Root: integration, reviews, regressions, branch push and normal Desktop delivery completed; final handoff documentation.
 
 Coordinate overlapping files before editing. Agents do not commit independently.
 
@@ -303,3 +305,15 @@ Root has promoted the two reviewed replication services, the validity guard and 
 The layout fixture now observes its real UI playback and waits for retirement through the existing test helper. Six strict verbose runs pass 2,661 assertions with no retained objects/resources; production UI/audio hashes are unchanged. The final fixture hash is `673A6E291AF72AF5D41E2FE15DE3A2C8797ACDE81FBD23BCE3F0E7DCF88BF533`.
 
 Root's final integrated four-process departure/reward/retry run retains all 207 checks (`abyssal-enet-04a3596681b047198153d013131bc593`). The production source is frozen for final package and hook verification.
+
+## Final delivery
+
+Gameplay commit **`593e973`** passes the complete mandatory hook, including compilation of **258 GDScript files**, world/network configuration checks and every registered gameplay regression (`abyssal-validation-3046bf358c404b87aeba3879c45674aa`). It is pushed to `codex/overnight-buildcraft-20260909`. No hook was bypassed. `main` remains `5ee445efb270524150ee58c3d2806e29a64b5365`; the only unrelated working change remains the user's `scenes/Main.tscn` debug setting.
+
+The final **normal** build is **`dev-overnight-final-20260909-025506`**, **114084184 bytes**, SHA256 **`524FC9A606E79A8CA0B7E9D5107193FA409662749B0D9799F02D7CA875E48122`**. Import, release export and embedded package verification pass. All 161 production scripts/shaders match the frozen source (`abyssal-playtest-export-d569a462c1fa417ab9b9b497eaa2ccdf/project`). The standard package inspection passes 26 checks with Menu as the startup scene, ordinary progression and no debug grants (`abyssal-executable-smoke-9132159b11814c0795e6a064368fd858`).
+
+An additional independently reviewed external probe mounts this exact EXE as data in the development engine and retains all real production autoload initialization. Child-only profile directories and endpoint overrides take effect before autoload readiness. The probe passes **56 checks**: interactive normal Menu, character and Bearing selection, actual initial reward, first encounter, reward completion, generated Pursuit door through Interact, and pause-to-Menu with its disposable checkpoint retained. Native playback retires and remaining HTTPRequest nodes are disconnected. The selected ordinary rewards were Farline Volley and Blink Dash; combat is deliberately accelerated by fixture damage. This is startup/lifecycle evidence, not a human playtest or a claim about balance. Evidence: `abyssal-package-lifecycle-472bc7104a0d4bd99be8f7dbddda9adf/run-1238820a19a74991b0e92cdd8e7a3bfd`. Logs have no script or cleanup errors; the environment's known Windows certificate-store diagnostic is documented separately by the harness.
+
+After commit and push, the verified artifact replaced **only** `C:/Users/mikel/Desktop/AbyssalDescent Playtest.exe`. Its exact hash was checked before and after replacement. The original Desktop executable and the real player profile were untouched. No extra Desktop copy or debug-start session was created. Development history stays local and is excluded from remote telemetry and leaderboard submissions.
+
+The morning priorities are human feedback on Returning Crescent's return-path decisions, Breakwater's charge/recovery openings, and overlapping movement/enemy warnings. Existing recent local data is too sparse to justify further tuning; the historical May report remains context only. No additional content or balance scope is pending for this overnight batch. Pause the time-limited continuation when the final handoff is committed and pushed.
