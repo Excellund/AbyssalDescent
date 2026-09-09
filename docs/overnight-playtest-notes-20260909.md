@@ -14,6 +14,8 @@ Development is on `codex/overnight-buildcraft-20260909`. The existing desktop **
 
 Held attack input survives the dash-to-Orbit handoff and charges Blast only after the attack succeeds. Reward descriptions use actual build values. Resume preserves Surge Step and Voidfire movement bonuses. Co-op departure, reward readiness and retry have coverage with four real local network processes; co-op defeat preserves an unrelated suspended solo run.
 
+Archer arrows now respect fast movement crossings, nearer cover and the current arena edge, with stale shots cleaned up in co-op. Run and menu helpers are freed correctly across repeated retries and Continue.
+
 Sovereign's Double keeps its current damage and proc rules. Development runs remain local and do not enter remote telemetry or leaderboards. There are no new combat prompts or Oath checklists.
 
 ## Useful feedback

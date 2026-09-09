@@ -25,6 +25,7 @@ func get_config_provider() -> Object:
 	if _world.is_multiplayer:
 		if _multiplayer_config == null:
 			_multiplayer_config = DIFFICULTY_CONFIG_MULTIPLAYER.new()
+			_world.add_child(_multiplayer_config)
 		return _multiplayer_config
 	return DIFFICULTY_CONFIG
 

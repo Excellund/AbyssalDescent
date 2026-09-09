@@ -120,14 +120,16 @@ func _build_ui(style_ref: Object) -> void:
 	_list_view = LIST_VIEW_SCRIPT.new()
 	stack.add_child(_list_view)
 
-	var back_button := Button.new()
-	back_button.text = "Back"
-	back_button.custom_minimum_size = Vector2(180.0, 46.0)
-	back_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var back_button: Button
 	if style_ref != null:
 		var themed_back: Variant = style_ref._make_panel_back_button()
 		if themed_back is Button:
 			back_button = themed_back
+	if back_button == null:
+		back_button = Button.new()
+		back_button.text = "Back"
+		back_button.custom_minimum_size = Vector2(180.0, 46.0)
+		back_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	back_button.pressed.connect(func() -> void: back_pressed.emit())
 	stack.add_child(back_button)
 

@@ -557,7 +557,9 @@ func _ready() -> void:
 		return
 	upgrade_system = upgrade_system_script.new()
 	add_child(upgrade_system)
-	upgrade_system.initialize(self, null, POWER_REGISTRY_SCRIPT.new())
+	var fallback_registry := POWER_REGISTRY_SCRIPT.new()
+	add_child(fallback_registry)
+	upgrade_system.initialize(self, null, fallback_registry)
 	_create_health_state()
 	_create_player_feedback()
 	_create_static_wake_trail_renderer()

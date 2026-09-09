@@ -31,6 +31,9 @@ var hard_room_enemy_bonus: int = 4
 var last_objective_kind: String = ""
 var active_biome: Dictionary = {}
 
+func _init() -> void:
+	add_child(multiplayer_difficulty_config)
+
 func set_active_biome(biome: Dictionary) -> void:
 	active_biome = biome
 

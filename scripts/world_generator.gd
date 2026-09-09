@@ -456,6 +456,7 @@ func _initialize_bootstrap_context() -> void:
 	combat_phase_coordinator = COMBAT_PHASE_COORDINATOR_SCRIPT.new()
 	player_flow_coordinator = PLAYER_FLOW_COORDINATOR_SCRIPT.new()
 	power_registry_instance = POWER_REGISTRY.new()
+	add_child(power_registry_instance)
 	player = get_node_or_null(player_path) as Node2D
 	if is_multiplayer:
 		var role_tag2 := "HOST" if MultiplayerSessionManager.is_host() else "JOINER"

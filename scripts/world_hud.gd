@@ -93,6 +93,9 @@ var _encounter_count: int = 5
 var _banner_top_margin: float = 18.0
 var _cached_room_size: Vector2 = Vector2.ZERO
 
+func _init() -> void:
+	add_child(power_registry_instance)
+
 func setup(encounter_count: int, banner_top_margin: float = 18.0) -> void:
 	_encounter_count = encounter_count
 	_banner_top_margin = banner_top_margin

@@ -32,6 +32,9 @@ var arcana_list_container: VBoxContainer
 var boss_section: VBoxContainer
 var boss_list_container: VBoxContainer
 
+func _init() -> void:
+	add_child(power_registry_instance)
+
 func setup() -> void:
 	_create_panel()
 

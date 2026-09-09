@@ -43,19 +43,17 @@ func hide_prompt() -> void:
 
 func show_validation_error(message: String) -> void:
 	if _error_label != null:
-		if _error_label.get_parent() == null:
-			var stack = _name_input.get_parent()
-			if stack != null:
-				stack.add_child(_error_label)
-				call_deferred("_reposition")
+		if not _error_label.visible:
+			_error_label.visible = true
+			call_deferred("_reposition")
 		_error_label.text = message.strip_edges()
 	if _name_input != null:
 		_name_input.grab_focus()
 
 func clear_error() -> void:
 	if _error_label != null:
-		if _error_label.get_parent() != null:
-			_error_label.get_parent().remove_child(_error_label)
+		if _error_label.visible:
+			_error_label.visible = false
 			call_deferred("_reposition")
 		_error_label.text = ""
 
@@ -127,6 +125,7 @@ func _build_ui() -> void:
 	stack.add_child(_name_input)
 
 	_error_label = Label.new()
+	_error_label.visible = false
 	_error_label.text = ""
 	_error_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_error_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -148,6 +147,7 @@ func _build_ui() -> void:
 	_cancel_button.custom_minimum_size = Vector2(0.0, 56.0)
 	_cancel_button.pressed.connect(_emit_cancel)
 	actions.add_child(_cancel_button)
+	stack.add_child(_error_label)
 
 func _on_name_submitted(_new_text: String) -> void:
 	_emit_submit()
