@@ -105,6 +105,8 @@ func set_sfx_volume_db(volume_db: float) -> void:
 	_apply_sfx_volume()
 
 func _process(delta: float) -> void:
+	if damage_flash_layer != null and not _owns_screen_feedback():
+		_clear_damage_flash()
 	if not _tempo_state_active:
 		return
 	_ensure_tempo_indicator()
@@ -917,12 +919,7 @@ func play_impact_light(epicenter_global: Vector2, radius: float = 60.0) -> void:
 func play_impact_medium(epicenter_global: Vector2, radius: float = 80.0) -> void:
 	"""Medium impact feedback: stronger than light, cleaner than heavy (contact hits)."""
 	play_world_ring(epicenter_global, radius, Color(0.92, 0.74, 0.5, 0.56), 0.2)
-	if damage_flash_rect != null:
-		if damage_flash_tween != null and damage_flash_tween.is_valid():
-			damage_flash_tween.kill()
-		damage_flash_rect.modulate.a = damage_flash_alpha * 1.1
-		damage_flash_tween = create_tween()
-		damage_flash_tween.tween_property(damage_flash_rect, "modulate:a", 0.0, 0.18)
+	_play_damage_flash(1.1, 0.18)
 
 func play_impact_heavy(epicenter_global: Vector2, radius: float = 100.0) -> void:
 	"""Heavy impact feedback: layered rings + strong flash + pulsing afterglow (abilities)."""
@@ -981,12 +978,7 @@ func play_impact_heavy(epicenter_global: Vector2, radius: float = 100.0) -> void
 	afterglow_tween.tween_callback(afterglow.queue_free)
 
 	# Strong flash (heavier visual punch)
-	if damage_flash_rect != null:
-		if damage_flash_tween != null and damage_flash_tween.is_valid():
-			damage_flash_tween.kill()
-		damage_flash_rect.modulate.a = damage_flash_alpha * 1.3
-		damage_flash_tween = create_tween()
-		damage_flash_tween.tween_property(damage_flash_rect, "modulate:a", 0.0, 0.22)
+	_play_damage_flash(1.3, 0.22)
 
 func play_chain_lightning(from_global: Vector2, target_global: Vector2, color: Color = Color(0.98, 0.98, 0.76, 0.92), lifetime: float = 0.14) -> void:
 	var dir := target_global - from_global
@@ -1573,13 +1565,32 @@ func _pulse_eclipse_mark_decal(enemy_id: int, token: int, grow_phase: bool) -> v
 	)
 
 func play_damage_flash() -> void:
-	if damage_flash_rect == null:
+	_play_damage_flash(1.0, damage_flash_fade_time)
+
+func _owns_screen_feedback() -> bool:
+	var actor := get_parent()
+	return is_inside_tree() and actor != null and actor.has_method("_is_local_control_owner") and bool(actor.call("_is_local_control_owner"))
+
+func _play_damage_flash(strength: float, fade_time: float) -> void:
+	if not _owns_screen_feedback():
+		_clear_damage_flash()
 		return
+	_create_damage_flash()
 	if damage_flash_tween != null and damage_flash_tween.is_valid():
 		damage_flash_tween.kill()
-	damage_flash_rect.modulate.a = damage_flash_alpha
+	damage_flash_rect.modulate.a = damage_flash_alpha * strength
 	damage_flash_tween = create_tween()
-	damage_flash_tween.tween_property(damage_flash_rect, "modulate:a", 0.0, damage_flash_fade_time)
+	damage_flash_tween.tween_property(damage_flash_rect, "modulate:a", 0.0, fade_time)
+
+func _clear_damage_flash() -> void:
+	if damage_flash_tween != null and damage_flash_tween.is_valid():
+		damage_flash_tween.kill()
+	damage_flash_tween = null
+	if is_instance_valid(damage_flash_layer):
+		damage_flash_layer.hide()
+		damage_flash_layer.queue_free()
+	damage_flash_layer = null
+	damage_flash_rect = null
 
 func _create_health_bar(max_health: int, current_health: int) -> void:
 	health_bar = ProgressBar.new()
@@ -1807,6 +1818,8 @@ func _apply_sfx_volume() -> void:
 		_low_hp_sfx_player.volume_db = AUDIO_LEVELS.clamp_db(sfx_volume_db)
 
 func _create_damage_flash() -> void:
+	if is_instance_valid(damage_flash_layer) or not _owns_screen_feedback():
+		return
 	damage_flash_layer = CanvasLayer.new()
 	damage_flash_layer.layer = 100
 

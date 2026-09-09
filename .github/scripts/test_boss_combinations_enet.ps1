@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$ValidationProject,
     [string]$GodotPath = '',
-    [ValidatePattern('^res://scripts/tests/test_[a-z0-9_]+_enet\.gd$')][string]$FixtureScript = 'res://scripts/tests/test_boss_combinations_enet.gd'
+    [ValidatePattern('^res://scripts/tests/test_[a-z0-9_]+_enet\.gd$')][string]$FixtureScript = 'res://scripts/tests/test_boss_combinations_enet.gd',
+    [ValidateRange(1, 3)][int]$ClientCount = 1
 )
 $ErrorActionPreference = 'Stop'
 $sourceRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
@@ -65,18 +66,28 @@ try {
         if ($hostProcess.HasExited) { Assert-Fixture 'host' $hostProcess }
         throw 'Loopback host did not become ready.'
     }
-    $clientProcess = Start-Fixture 'client' ($common + @('client', [string]$fixturePort, $reportPrefix))
-    while ((-not $hostProcess.HasExited -or -not $clientProcess.HasExited) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 100 }
-    if (-not $hostProcess.HasExited -or -not $clientProcess.HasExited) { throw 'Two-process fixture exceeded 25 seconds.' }
+    $clientRoles = if ($ClientCount -eq 1) { @('client') } else { @(1..$ClientCount | ForEach-Object { 'client' + $_ }) }
+    $clientProcesses = @{}
+    foreach ($role in $clientRoles) { $clientProcesses[$role] = Start-Fixture $role ($common + @($role, [string]$fixturePort, $reportPrefix)) }
+    $deadline = [DateTime]::UtcNow.AddSeconds(25 + 5 * ($ClientCount - 1))
+    while ((-not $hostProcess.HasExited -or @($clientProcesses.Values | Where-Object { -not $_.HasExited }).Count -gt 0) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 100 }
+    if (-not $hostProcess.HasExited -or @($clientProcesses.Values | Where-Object { -not $_.HasExited }).Count -gt 0) { throw "ENet fixture with $ClientCount joining processes exceeded its deadline." }
     Assert-Fixture 'host' $hostProcess
-    Assert-Fixture 'client' $clientProcess
-    foreach ($role in @('host', 'client')) {
+    foreach ($role in $clientRoles) { Assert-Fixture $role $clientProcesses[$role] }
+    foreach ($role in (@('host') + $clientRoles)) {
         $report = Get-Content -LiteralPath ($reportPrefix + '-' + $role + '.json') -Raw | ConvertFrom-Json
         if ($report.checks -lt 1 -or $report.failures.Count -ne 0) { throw "$role fixture report failed." }
     }
     Write-Host "ENet reports and logs: $testRoot"
 } finally {
     foreach ($process in $ownedProcesses) { if (-not $process.HasExited) { $process.Kill(); $process.WaitForExit() } }
-    foreach ($name in $previousEnvironment.Keys) { [Environment]::SetEnvironmentVariable($name, $previousEnvironment[$name], 'Process') }
+    foreach ($name in $previousEnvironment.Keys) {
+        $prior = $previousEnvironment[$name]
+        if ($null -eq $prior) {
+            [Environment]::SetEnvironmentVariable($name, [NullString]::Value, 'Process')
+        } else {
+            [Environment]::SetEnvironmentVariable($name, $prior, 'Process')
+        }
+    }
     Write-Host "Fixture project: $testRoot"
 }

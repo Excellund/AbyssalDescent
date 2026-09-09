@@ -141,6 +141,7 @@ try {
         "res://scripts/tests/test_combat_pause.gd",
         "res://scripts/tests/test_hit_origins.gd",
         "res://scripts/tests/test_attack_feedback.gd",
+        "res://scripts/tests/test_player_feedback_ownership.gd",
         "res://scripts/tests/test_ruinous_feedback.gd",
         "res://scripts/tests/test_returning_crescent.gd",
         "res://scripts/tests/test_power_descriptions.gd",
