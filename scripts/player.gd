@@ -467,17 +467,17 @@ var combo_relay_stack_window: float = 2.8
 var combo_relay_max_stacks: int = 4
 var combo_relay_damage_per_stack: float = 0.05
 var combo_relay_speed_per_stack: float = 0.05
-# Relay Boost â€” on-kill speed surge
+# Relay Boost — on-kill speed surge
 var relay_boost_speed_left: float = 0.0
 const RELAY_BOOST_SPEED_MULT: float = 0.28
 const RELAY_BOOST_DURATION: float = 1.4
-# Node Shield â€” proximity-based damage resist
+# Node Shield — proximity-based damage resist
 var node_shield_resist: float = 0.0
 const NODE_SHIELD_RESIST_PER_ENEMY: float = 0.06
 const NODE_SHIELD_RADIUS: float = 180.0
 const NODE_SHIELD_MAX_RESIST: float = 0.30
 const NODE_SHIELD_LERP_RATE: float = 4.0
-# Overcharge â€” kill-chain discharge
+# Overcharge — kill-chain discharge
 var overcharge_kill_stacks: int = 0
 var overcharge_stack_timer: float = 0.0
 var overcharge_is_charged: bool = false
@@ -500,7 +500,7 @@ var last_damage_breakdown: Dictionary = {
 	"final_damage": 0
 }
 
-# Character visual identity â€” set via apply_character_package(); defaults match the shared palette
+# Character visual identity — set via apply_character_package(); defaults match the shared palette
 var player_body_color: Color = ENEMY_BASE.COLOR_PLAYER_BODY
 var player_core_color: Color = ENEMY_BASE.COLOR_PLAYER_CORE
 var player_glow_color: Color = ENEMY_BASE.COLOR_PLAYER_GLOW
@@ -508,7 +508,7 @@ var player_speed_arc_color: Color = ENEMY_BASE.COLOR_PLAYER_SPEED_ARC
 var player_dash_phase_color: Color = ENEMY_BASE.COLOR_PLAYER_DASH_PHASE
 var player_dash_streak_color: Color = ENEMY_BASE.COLOR_PLAYER_DASH_STREAK
 
-# Character passives â€” set via apply_character_package(); exactly one is active per run
+# Character passives — set via apply_character_package(); exactly one is active per run
 var passive_iron_retort: bool = false
 var passive_sigil_burst: bool = false
 var passive_veilstep_rhythm: bool = false
@@ -3480,17 +3480,19 @@ func _draw() -> void:
 	_draw_passive_state(body_radius)
 
 func _draw_character_identity(body_radius: float, facing: Vector2, side: Vector2, speed_t: float) -> void:
+	var attack_phase := 1.0 - attack_anim_time_left / attack_anim_duration if attack_anim_time_left > 0.0 and attack_anim_duration > 0.0 else -1.0
+	var dash_amount := 1.0 if dash_phasing_active else 0.0
 	if passive_iron_retort:
-		PLAYER_IDENTITY_SILHOUETTE.draw_bastion(self, body_radius, facing, side, player_core_color)
+		PLAYER_IDENTITY_SILHOUETTE.draw_bastion(self, body_radius, facing, side, player_core_color, attack_phase, dash_amount, dash_direction)
 		return
 	if passive_sigil_burst:
-		PLAYER_IDENTITY_SILHOUETTE.draw_hexweaver(self, body_radius, facing, side)
+		PLAYER_IDENTITY_SILHOUETTE.draw_hexweaver(self, body_radius, facing, side, attack_phase, dash_amount, dash_direction)
 		return
 	if passive_farline_focus:
-		PLAYER_IDENTITY_SILHOUETTE.draw_riftlancer(self, body_radius, facing, side, speed_t)
+		PLAYER_IDENTITY_SILHOUETTE.draw_riftlancer(self, body_radius, facing, side, speed_t, attack_phase, dash_amount, dash_direction)
 		return
 	if passive_veilstep_rhythm:
-		PLAYER_IDENTITY_SILHOUETTE.draw_veilstrider(self, body_radius, facing, side, speed_t)
+		PLAYER_IDENTITY_SILHOUETTE.draw_veilstrider(self, body_radius, facing, side, speed_t, attack_phase, dash_amount, dash_direction)
 		return
 	PLAYER_IDENTITY_SILHOUETTE.draw_default(self, body_radius, facing, side)
 
@@ -4965,7 +4967,7 @@ func _draw_trial_reward_state() -> void:
 			draw_arc(Vector2.ZERO, pop_r, 0.0, TAU, 36, Color(1.0, 0.98, 0.78, 0.92 * flash_t * flash_t), 3.4)
 			draw_arc(Vector2.ZERO, pop_r + 9.0, 0.0, TAU, 36, Color(0.82, 0.94, 1.0, 0.48 * flash_t), 1.8)
 
-		# Charge arc â€” fills clockwise from top, shifts yellow -> electric white at full
+		# Charge arc — fills clockwise from top, shifts yellow -> electric white at full
 		var ring_r := 26.0 + crown_pulse * 1.4
 		var charge_arc := TAU * charge
 		var arc_r := lerpf(0.44, 1.0, charge)
@@ -4975,7 +4977,7 @@ func _draw_trial_reward_state() -> void:
 		if charge_arc > 0.05:
 			draw_arc(Vector2.ZERO, ring_r, -PI * 0.5, -PI * 0.5 + charge_arc, maxi(6, int(charge_arc / 0.1)), Color(arc_r, arc_g, arc_b, arc_a), 2.6 + charge * 0.8)
 
-		# Crown ticks â€” 5 radial spikes, each lights up as charge passes their threshold
+		# Crown ticks — 5 radial spikes, each lights up as charge passes their threshold
 		var tick_count := 5
 		for i in range(tick_count):
 			var tick_angle := -PI * 0.5 + TAU * (float(i) / float(tick_count))
@@ -4997,7 +4999,7 @@ func _draw_trial_reward_state() -> void:
 		var mark_count := wraithstep_marked_enemy_expiry.size() if _is_local_control_owner() else wraithstep_remote_mark_expiry_by_network_enemy_id.size()
 		var wraith_pulse := 0.5 + 0.5 * sin(t * 6.2 + 2.4)
 
-		# Player passive ring â€” brighter when marks are active
+		# Player passive ring — brighter when marks are active
 		var passive_alpha := (0.28 + mark_count * 0.12 + wraith_pulse * 0.14) if mark_count > 0 else (0.12 + wraith_pulse * 0.06)
 		draw_arc(Vector2.ZERO, 20.0 + wraith_pulse * 1.8, 0.0, TAU, 32, Color(0.72, 0.94, 1.0, clampf(passive_alpha, 0.0, 0.72)), 1.8)
 
@@ -5068,7 +5070,7 @@ func _draw_trial_reward_state() -> void:
 		draw_circle(Vector2.ZERO, field_radius + 8.0, Color(0.04, 0.12, 0.22, (0.22 + field_pulse * 0.08) * debuff_t))
 		# Soft orange inner glow for heat/weight
 		draw_circle(Vector2.ZERO, field_radius - 4.0, Color(0.82, 0.44, 0.14, (0.08 + field_pulse * 0.06) * debuff_t))
-		# Primary rotating blue ring â€” thick and bright
+		# Primary rotating blue ring — thick and bright
 		draw_arc(Vector2.ZERO, field_radius, spin, spin + TAU, 52, Color(sovereign_blue.r, sovereign_blue.g, sovereign_blue.b, (0.72 + field_pulse * 0.2) * debuff_t), 3.4)
 		# Counter-rotating orange ring slightly outside
 		draw_arc(Vector2.ZERO, field_radius + 6.0, -spin * 1.3, -spin * 1.3 + TAU, 60, Color(sovereign_orange.r, sovereign_orange.g, sovereign_orange.b, (0.38 + field_pulse * 0.18) * debuff_t), 2.2)
@@ -5079,6 +5081,6 @@ func _draw_trial_reward_state() -> void:
 			var bind_color := sovereign_blue if i % 2 == 0 else sovereign_orange
 			draw_line(bind_dir * 8.0, bind_dir * (field_radius + 7.0), Color(bind_color.r, bind_color.g, bind_color.b, (0.52 + field_pulse * 0.24) * debuff_t), 2.8)
 			draw_circle(bind_dir * (field_radius + 7.0), 3.2 + fast_pulse * 0.6, Color(sovereign_gold.r, sovereign_gold.g, sovereign_gold.b, (0.72 + fast_pulse * 0.2) * debuff_t))
-		# Countdown sweep ring â€” shows remaining duration
+		# Countdown sweep ring — shows remaining duration
 		var sweep_angle := -PI * 0.5 + (1.0 - debuff_t) * TAU
 		draw_arc(Vector2.ZERO, field_radius + 12.0, -PI * 0.5, sweep_angle, 32, Color(0.94, 0.98, 1.0, (0.44 + field_pulse * 0.2) * debuff_t), 2.0)
