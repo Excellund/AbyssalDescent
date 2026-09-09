@@ -1,4 +1,6 @@
 extends SceneTree
+const AUDIO_RETIREMENT := preload("res://scripts/tests/fixture_audio_retirement.gd")
+var audio_retirement := AUDIO_RETIREMENT.new()
 ## Actual scene ownership across health/death retry, menu resume and restart.
 const MAPPER := preload("res://scripts/power_parameter_mapper.gd")
 const MENU := preload("res://scripts/menu_controller.gd")
@@ -64,6 +66,7 @@ func _run() -> void:
 		quit(1)
 		return
 	check(HISTORY.clear_all(), "Isolated scene fixture starts with empty local history")
+	node_added.connect(audio_retirement.observe_node)
 	ProjectSettings.set_setting("application/config/version", "dev-main-ownership-smoke")
 	ProjectSettings.set_setting("application/config/update_feed_url", "")
 	RunContext.telemetry_upload_enabled = false
@@ -163,6 +166,9 @@ func _run() -> void:
 	check(snapshots[0].orphans == 1 and snapshots[1].orphans == 1, "Only intentional shared registry remains orphaned")
 	check(snapshots[0].nodes == snapshots[1].nodes, "Post-teardown total Node count remains exact across repeated restart cycles")
 	check(snapshots[0].resources == snapshots[1].resources, "Post-teardown Resource count remains exact across repeated restart cycles")
+	var pending_audio := audio_retirement.pending_count()
+	check(await audio_retirement.wait_until_retired(self), "AudioServer releases native playback from every deleted scene owner")
+	print("[AudioRetirement] pending before barrier=%d, after=%d" % [pending_audio, audio_retirement.pending_count()])
 	MAPPER._power_registry_instance.free()
 	MAPPER._power_registry_instance = null
 	Engine.time_scale = 1.0

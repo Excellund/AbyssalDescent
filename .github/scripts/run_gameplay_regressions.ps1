@@ -145,6 +145,7 @@ try {
         "res://scripts/tests/test_player_ownership_lifecycle.gd",
         "res://scripts/tests/test_run_scene_ownership.gd",
         "res://scripts/tests/test_menu_helper_ownership.gd",
+        "res://scripts/tests/test_room_layout_entry.gd",
         "res://scripts/tests/test_ruinous_feedback.gd",
         "res://scripts/tests/test_returning_crescent.gd",
         "res://scripts/tests/test_power_descriptions.gd",

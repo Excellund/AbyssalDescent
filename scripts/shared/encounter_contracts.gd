@@ -810,6 +810,17 @@ static func normalize_profile(value: Variant) -> Dictionary:
 static func profile_label(profile_value: Dictionary) -> String:
 	return String(profile_value.get(PROFILE_KEY_LABEL, "Encounter"))
 
+## Read both native typed layouts and arrays restored from external profile data.
+## Copy the container so consumers always receive the declared Dictionary element type.
+static func profile_obstacle_layout(profile_value: Dictionary) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	var layout_value: Variant = profile_value.get("obstacle_layout", [])
+	if layout_value is Array:
+		for entry in layout_value:
+			if entry is Dictionary:
+				result.append(entry as Dictionary)
+	return result
+
 static func profile_room_size(profile_value: Dictionary) -> Vector2:
 	return profile_value.get(PROFILE_KEY_ROOM_SIZE, Vector2.ZERO) as Vector2
 

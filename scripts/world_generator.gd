@@ -3092,7 +3092,7 @@ func _begin_room(profile: Dictionary) -> void:
 	if is_instance_valid(enemy_spawner):
 		enemy_spawner.configure_room(current_room_size, spawn_padding, spawn_safe_radius, current_room_enemy_mutator, _get_active_enemy_mutators_for_room())
 	_clear_room_obstacles()
-	var obstacle_layout: Array[Dictionary] = profile.get("obstacle_layout", []) as Array[Dictionary]
+	var obstacle_layout := ENCOUNTER_CONTRACTS.profile_obstacle_layout(profile)
 	_spawn_room_obstacles(obstacle_layout)
 	renderer.set_obstacle_layout(obstacle_layout)
 	enemy_spawner.set_obstacle_circles(obstacle_layout)
