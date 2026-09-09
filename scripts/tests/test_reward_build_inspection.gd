@@ -22,9 +22,12 @@ func _run() -> void:
 	await _check_inspection()
 	await _check_owned_details()
 	_check_property_wording()
+	await _check_passive_presentations()
+	_check_passive_connections()
 	await _check_mission_bundle()
 	await _check_expanded_scroll()
 	await _check_responsive_actions()
+	await _check_choice_count_navigation()
 	ui.close_selection()
 	viewport.free()
 	registry.free()
@@ -164,7 +167,10 @@ func _check_owned_details() -> void:
 	_check(not details.visible, "Keyword details start collapsed for owned powers")
 	(owned_entry.get_child(0) as Button).pressed.emit()
 	_check(details.visible and not details.text.is_empty(), "Owned power button exposes actionable keyword definitions")
-	build.open(true)
+	# Use the same handoff as the visible Your Build button so the offer
+	# relinquishes input before testing navigation inside the modal.
+	ui._request_build_inspection()
+	_check(ui._inspection_active and build.is_open(), "Owned details enter through the production reward inspection handoff")
 	await process_frame
 	await process_frame
 	viewport.push_input(_action("ui_up"), true)
@@ -193,7 +199,7 @@ func _check_property_wording() -> void:
 	_check(plain.contains("Aegis Pulse applies Slow."), "Status-producing connections use a natural verb")
 	_check(plain.contains("Phantom Step deals damage and applies Slow."), "Mixed properties retain both highlighted actions in one grammatical line")
 	_check(plain.contains("Hunter's Snare responds to damage."), "Receiver wording uses the damage noun without changing its conditions")
-	_check(formatted.contains(BUILD_PANEL.COMBAT_KEYWORDS.keyword_bbcode("damage", "damage")) and formatted.contains(BUILD_PANEL.COMBAT_KEYWORDS.keyword_bbcode("slow")), "Natural verbs preserve explicit keyword color and bold spans")
+	_check(formatted.contains("deals damage") and formatted.contains(BUILD_PANEL.COMBAT_KEYWORDS.keyword_bbcode("slow")), "Damage stays ordinary prose while actual keywords retain their authored emphasis")
 	_check(not plain.contains("supplies dealing damage"), "Property wording contains no awkward supplied gerund")
 	build._owned_levels = {"sigil_chain": 1, "razor_wind": 1, "reaper_step": 1}
 	plain = BUILD_PANEL.COMBAT_KEYWORDS.to_plain(build._compatibility_text("lacuna_echo", 1))
@@ -201,7 +207,55 @@ func _check_property_wording() -> void:
 	plain = BUILD_PANEL.COMBAT_KEYWORDS.to_plain(build._compatibility_text("wraithstep", 2))
 	_check(plain.contains("Razor Wind lands attack hits."), "Direct-hit connections retain the distinct attack-hit keyword")
 	_check(plain.contains("Reaper Step supports Dash."), "Dash refresh support never claims an automatic Dash occurs")
+	var wake_details := BUILD_PANEL.COMBAT_KEYWORDS.to_plain(build._keyword_details("static_wake", 3))
+	_check(wake_details.contains("Rules\n• Normal Dash only.\n• Two trails share one damage clock."), "Rules are short separate lines rather than a long paragraph")
+	_check(wake_details.contains("Slow is applied after damage at level 3.") and not wake_details.contains("Damage:") and not wake_details.contains("dealing damage:"), "Rules preserve timing without presenting damage as a keyword definition")
+	_check(build._keyword_details("null_corridor", 1).contains("0.5s"), "Rule formatting preserves decimal timing")
+	_check(build._close_button.text == "Return to rewards  [Tab / Esc]", "Visible return hints show only the requested keyboard controls")
+	_check(build._candidate_details.get_theme_font_size("normal_font_size") == BUILD_PANEL.BODY_FONT_SIZE and build.passive_desc_label.get_theme_font_size("normal_font_size") == BUILD_PANEL.BODY_FONT_SIZE, "Candidate and passive explanations use the same readable body size")
+	_check(build.passive_desc_label.text.begins_with("• ") and build.passive_desc_label.get_parsed_text().contains("Dash, Recoil and Orbit break Brace."), "Character instructions retain separate rules and all movement types that break Brace")
 	build._owned_levels = saved_levels
+
+func _check_passive_presentations() -> void:
+	for size in [Vector2i(960, 720), Vector2i(1280, 720), Vector2i(1920, 1080)]:
+		viewport.size = size
+		for character: Dictionary in BUILD_PANEL.CHARACTER_REGISTRY.get_launch_characters():
+			var character_id := String(character.id)
+			var passive_id := String(character.passive_id)
+			build.refresh_from_player(player, character_id)
+			build.open()
+			await process_frame
+			await process_frame
+			var label := build.passive_desc_label
+			_check(build.passive_name_label.text == BUILD_PANEL.CHARACTER_PASSIVES.get_display_name(passive_id), "Build uses the shared passive title: " + character_id)
+			_check(label.text == BUILD_PANEL.CHARACTER_PASSIVES.get_description(passive_id), "Build preserves every authored passive rule and keyword: " + character_id)
+			_check(label.text.contains("[b][color=#") and not label.get_parsed_text().contains("{kw:"), "Build renders passive keyword emphasis: " + character_id)
+			_check(label.get_theme_font_size("normal_font_size") == BUILD_PANEL.BODY_FONT_SIZE and label.get_theme_font_size("bold_font_size") == BUILD_PANEL.BODY_FONT_SIZE, "Passive keywords retain readable build body size")
+			_check(label.get_content_height() <= label.size.y + 1.0 and label.get_content_width() <= label.size.x + 1.0, "Complete passive description fits %s: %s" % [size, character_id])
+			_check(build.passive_section.get_global_rect().grow(1.0).encloses(label.get_global_rect()), "Passive stays within its build section at %s: %s" % [size, character_id])
+			build.close()
+	build.refresh_from_player(player, "bastion")
+
+func _check_passive_connections() -> void:
+	for character_id in ["bastion", "hexweaver", "veilstrider"]:
+		build.refresh(character_id, [], [], [], null, [], {"id": "storm_crown", "desc": "Dealing damage charges chain lightning.", "stack_limit": 3})
+		var passive_name := build.passive_name_label.text
+		_check(build._candidate_more.get_parsed_text().contains(passive_name + " deals damage."), "A fresh character's passive contributes to the offered damage engine: " + character_id)
+		_check(build._owned_levels.is_empty(), "Passive compatibility does not invent an acquired power or level")
+		_check(build._compatibility_text("ruinous_impact", 1).is_empty(), "Passive Bursts do not claim Push or attack-hit Launch activation: " + character_id)
+		_check(build._compatibility_text("sigil_chain", 1).is_empty(), "Passive damage cannot claim to generate attack hits: " + character_id)
+	for character_id in ["bastion", "hexweaver"]:
+		build.refresh(character_id, [], [])
+		var arc_connection := BUILD_PANEL.COMBAT_KEYWORDS.to_plain(build._compatibility_text("razor_wind", 1))
+		_check(arc_connection.contains(build.passive_name_label.text + " responds to attack hits."), "Extended arcs can spend the armed passive: " + character_id)
+	build.refresh("veilstrider", [], [])
+	var dash_connection := BUILD_PANEL.COMBAT_KEYWORDS.to_plain(build._compatibility_text("static_wake", 1))
+	_check(dash_connection.contains("Veilstep Rhythm supports Dash.") and not dash_connection.contains("performs Dash"), "Veilstep's cooldown refresh supports Dash engines without claiming automatic movement")
+	build.refresh("riftlancer", [], [])
+	_check(build._compatibility_text("razor_wind", 1).is_empty(), "Razor Wind's extended attack hits do not receive Farline scaling")
+	var blast_connection := BUILD_PANEL.COMBAT_KEYWORDS.to_plain(build._compatibility_text("blast_drive", 1))
+	_check(blast_connection.contains("Farline Focus responds to attack hits.") and blast_connection.contains("Only melee and charged blast contacts check Farline."), "Charged Blast lists Farline with its actual source and target restrictions")
+	build.refresh_from_player(player, "bastion")
 
 func _check_mission_bundle() -> void:
 	var mutator := {"name": "Combo Relay", "banner_suffix": "Kill chain: +5% damage and movement speed per kill, up to 4; resets after 2.8s.", "icon_shape_id": "combo_relay"}
@@ -289,10 +343,8 @@ func _check_expanded_scroll() -> void:
 			continue
 		_check(build._candidate_more.size.y > build._scroll.size.y, "Regression uses keyword content taller than the viewport")
 		_check(build._candidate_details.get_parsed_text().contains("Current — Level 1:") and build._candidate_details.get_parsed_text().contains("Offered — Level 2:"), "Inspection compares actual current and offered levels")
-		var candidate_condition := String(REGISTRY.get_power_keyword_metadata("storm_crown", 2).condition_text)
-		var receiver_condition := String(REGISTRY.get_power_keyword_metadata("hunters_snare", 2).condition_text)
-		_check(build._candidate_more.text.count(candidate_condition) == 1, "Candidate restrictions appear once rather than repeating for every matching source")
-		_check(build._candidate_more.text.contains(receiver_condition), "A distinct owned receiver retains its qualifying conditions")
+		_check(build._candidate_more.text.count("• Counts each foe once per action.") == 1 and build._candidate_more.text.count("• One discharge per action.") == 1, "Candidate restrictions appear once as separate short rules")
+		_check(build._candidate_more.text.contains("Bonus checks already Slowed targets before this damage.") and build._candidate_more.text.contains("Level 1 affects Attacks, level 2+ all your damage."), "A distinct owned receiver retains its qualifying conditions")
 		var steps := 0
 		while build._candidate_more.get_global_rect().end.y > build._scroll.get_global_rect().end.y + 1.0 and steps < 40:
 			var before := build._scroll.scroll_vertical
@@ -338,3 +390,19 @@ func _check_expanded_scroll() -> void:
 	await _press_pad(JOY_BUTTON_A)
 	_check(selected.size() == 1 and not ui.is_active(), "Native controller A confirms one deliberately selected reward")
 	selected.clear()
+
+func _check_choice_count_navigation() -> void:
+	for count in [4, 2, 3, 4]:
+		ui.initialize(count, 0.0)
+		_open(ENUMS.RewardMode.BOON)
+		await process_frame
+		await process_frame
+		var controls := ui._navigation_controls()
+		_check(ui.boon_choices.size() == count and controls.size() == count + 3, "Changing choice count rebuilds the exact card and footer focus list: %d" % count)
+		_check(controls.all(func(control: Control): return is_instance_valid(control) and control.is_visible_in_tree()), "Choice count changes retain no stale or hidden focus targets")
+		ui.boon_card_panels[count - 1].grab_focus()
+		for expected: Control in [ui.build_button, ui.reroll_button, ui.skip_button, ui.boon_card_panels[0]]:
+			await _press_pad(JOY_BUTTON_DPAD_DOWN)
+			_check(viewport.gui_get_focus_owner() == expected, "Native D-pad traverses the footer and returns to cards after changing to %d choices" % count)
+		_check(selected.is_empty(), "Choice-count focus navigation never selects an offer")
+		ui.close_selection()

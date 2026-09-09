@@ -1,6 +1,8 @@
 extends RefCounted
 
 const KEYWORDS := preload("res://scripts/shared/combat_keyword_catalogue.gd")
+const PASSIVES := preload("res://scripts/shared/character_passive_catalogue.gd")
+const CHARACTERS := preload("res://scripts/character_registry.gd")
 
 const RARITY_COMMON := Color(0.62, 0.7, 0.8, 0.9)
 const RARITY_RARE := Color(0.46, 0.78, 1.0, 0.94)
@@ -13,7 +15,7 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"name": "Tutorial",
 			"group": "Special",
 			"color": Color(0.56, 0.84, 1.0, 1.0),
-			"desc": "One-time first-descent room that teaches movement, dash, attack, and build view.",
+			"desc": "Learn movement, dash, attack and build view on your first descent.",
 		},
 		{
 			"name": "Skirmish",
@@ -25,7 +27,7 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"name": "Crossfire",
 			"group": "Core",
 			"color": Color(1.0, 0.78, 0.48, 1.0),
-			"desc": "Ranged units pin you while flankers close the distance. Offset cover can break firing lanes without sealing the center.",
+			"desc": "Ranged pressure and flankers. Use offset cover to break firing lanes.",
 		},
 		{
 			"name": "Onslaught",
@@ -37,7 +39,7 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"name": "Fortress",
 			"group": "Core",
 			"color": Color(0.72, 0.9, 1.0, 1.0),
-			"desc": "Shielders block every approach. A broken ring of cover offers gaps to cross or grapple through.",
+			"desc": "Shielders defend a broken ring of cover. Move through its gaps.",
 		},
 		{
 			"name": "Blitz",
@@ -55,13 +57,13 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"name": "Vanguard",
 			"group": "Advanced",
 			"color": Color(0.72, 0.88, 1.0, 1.0),
-			"desc": "Shielded enemies advance in formation. Forked cover can split your approach around the line.",
+			"desc": "A shielded formation advances. Take a forked route around it.",
 		},
 		{
 			"name": "Ambush",
 			"group": "Advanced",
 			"color": Color(1.0, 0.58, 0.52, 1.0),
-			"desc": "Enemies cut off exits and converge from multiple angles. Side cover gives escape routes around an open center.",
+			"desc": "Enemies surround you. Use side cover to escape through the open center.",
 		},
 		{
 			"name": "Gauntlet",
@@ -79,13 +81,13 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"name": "Undertow",
 			"group": "Advanced",
 			"color": Color(0.42, 0.88, 0.92, 1.0),
-			"desc": "Appears in Acts 2 and 3. Drifters release staggered rings; find each gap while chasers keep you moving. At most two Drifters are active.",
+			"desc": "Acts 2–3: escape Drifter ring gaps while melee enemies pursue you.",
 		},
 		{
 			"name": "Breach",
 			"group": "Advanced",
 			"color": Color(0.56, 0.9, 0.76, 1.0),
-			"desc": "Acts 2 and 3: one vulnerable Keeper partially protects a small firing line. Cross the open center, use cover to break ward links, or launch the Keeper. Clear the room for a normal reward.",
+			"desc": "Acts 2–3: warded foes survive at 1 HP. Kill/push the Keeper or break links with cover.",
 		},
 		{
 			"name": "Trial",
@@ -115,7 +117,7 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"name": "Apex Breakwater",
 			"group": "Trial",
 			"color": Color(1.0, 0.66, 0.38, 1.0),
-			"desc": "Bait its locked charge toward a wall, leave the marked lane, then attack during the longer recovery. Always vulnerable; rewards Arcana.",
+			"desc": "Bait a wall charge, leave the marked lane, then punish its recovery.",
 		},
 		{
 			"name": "Last Stand",
@@ -145,13 +147,13 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"name": "Pulse Window",
 			"group": "Objective",
 			"color": Color(1.0, 0.9, 0.4, 1.0),
-			"desc": "Periodic pulses apply SURGE, EXPOSED, or SLOWED to all enemies. Kill the quota through each shift.",
+			"desc": "Clear the kill quota as pulses change enemy status.",
 		},
 		{
 			"name": "Intercept Run",
 			"group": "Objective",
 			"color": Color(0.62, 0.88, 1.0, 1.0),
-			"desc": "Escort a drone to the far side. Kill enemies before they reach it and stall its progress.",
+			"desc": "Escort a drone across the room; enemies near it slow its progress.",
 		},
 		{
 			"name": "Rest Site",
@@ -263,7 +265,7 @@ static func _mutator_rows() -> Array[Dictionary]:
 			"name": "Node Shield",
 			"color": Color(0.46, 0.86, 1.0, 1.0),
 			"icon": "res://assets/ui/mutators/node_shield.svg",
-			"desc": "Nearby enemies grant stacking damage resistance, up to 30%. Stay close to clusters to earn more.",
+			"desc": "Nearby enemies grant damage resistance, up to 30%.",
 		},
 		{
 			"name": "Overcharge",
@@ -283,12 +285,12 @@ static func _reward_rows() -> Array[Dictionary]:
 		{
 			"tier": "MISSION",
 			"color": RARITY_RARE,
-			"desc": "Complete a Mission for a permanent Boon plus a temporary power increase for 3 room clears.",
+			"desc": "A permanent Boon plus a temporary boost lasting 3 room clears.",
 		},
 		{
 			"tier": "ARCANA",
 			"color": RARITY_EPIC,
-			"desc": "Your primary build powers. Repeat picks raise levels; eligible mastered Arcana can become Prismatic once.",
+			"desc": "Build-defining powers. Repeat picks level them up; mastery unlocks one Prismatic pick.",
 		},
 		{
 			"tier": "BOSS",
@@ -383,13 +385,13 @@ static func _biome_rows() -> Array[Dictionary]:
 			"name": "The Crumble",
 			"act": 1,
 			"color": Color(1.0, 0.68, 0.22, 1.0),
-			"desc": "Chargers and Shielders dominate. Expect melee-forward pressure with strong frontline formations.",
+			"desc": "Chargers and Shielders lead strong melee formations.",
 		},
 		{
 			"name": "The Haunt",
 			"act": 1,
 			"color": Color(0.78, 0.44, 1.0, 1.0),
-			"desc": "Lurkers, Spectres, and Seamlocks cut off retreats. Ambush and disorientation define the threat.",
+			"desc": "Lurkers, Spectres and Seamlocks ambush you and cut off retreats.",
 		},
 		{
 			"name": "The Shatterfield",
@@ -401,13 +403,13 @@ static func _biome_rows() -> Array[Dictionary]:
 			"name": "The Grinding Vault",
 			"act": 2,
 			"color": Color(0.96, 0.88, 0.42, 1.0),
-			"desc": "Mirrorlines and Sentinels hold every lane. Suppression and control define each room.",
+			"desc": "Mirrorlines and Sentinels control the lanes.",
 		},
 		{
 			"name": "The Storm Reach",
 			"act": 2,
 			"color": Color(1.0, 0.66, 0.24, 1.0),
-			"desc": "Fire zones and suppression fill the field. Pyres and Tethers deny any safe position.",
+			"desc": "Pyres and Tethers fill the arena with fire and beams.",
 		},
 		{
 			"name": "The Hollow",
@@ -431,7 +433,7 @@ static func _biome_rows() -> Array[Dictionary]:
 			"name": "The Convergence",
 			"act": 3,
 			"color": Color(0.88, 0.96, 1.0, 1.0),
-			"desc": "Tethers, Lancers, and Sentinels lock down all movement. Area denial closes every gap.",
+			"desc": "Tethers, Lancers and Sentinels restrict movement with area hazards.",
 		},
 	]
 
@@ -454,99 +456,66 @@ static func _mutators_section_bbcode() -> String:
 		lines.append("%s: %s" % [_mutator_title_bbcode(row), row.get("desc", "")])
 	return "\n".join(lines)
 
-static func _motion_arcana_section_bbcode() -> String:
-	var lines: Array[String] = [_section_title_bbcode("Motion Arcana")]
-	lines.append("[b]Blast Drive[/b]")
-	lines.append("Tap Attack to strike immediately. Hold Attack for at least 0.25 seconds, then release a short, narrow cone forward and launch backward. Charge for 0.65 seconds for full power.")
-	lines.append("The blast covers a 70-degree cone. At level 1, charging increases reach from 100 to 160 and damage from 150% to 250% of Damage. Level 2 multiplies damage and reach by 1.15; level 3 by 1.30; Prismatic by 1.56.")
-	lines.append("Level 2 stores two blasts; each charge returns after 1.8 seconds. Level 3 lets movement keys steer the recoil.")
-	lines.append("")
-	lines.append("[b]Razor Orbit[/b]")
-	lines.append("Tap Dash for your normal dash. To orbit, aim at a nearby foe first, then hold Dash through the normal dash. The highlighted target is remembered while you move. If no target is highlighted, aim at a foe during the dash.")
-	lines.append("Keep holding Dash to orbit and cut. Your entry dash chooses the circling direction, which stays fixed until you detach. Attack still works. Release Dash to launch along your orbit.")
-	lines.append("At level 1, hook foes within 260. Each cut deals 35% of Damage, at most once per enemy every 0.3 seconds. An orbit lasts up to 1.4 seconds; your blue ring drains toward automatic release, with a brief sound and direction cue near the end. A level 3 transfer can extend the whole sequence to 2.4 seconds. Cards show cut damage and hook reach; Blast cards show full-charge damage and reach.")
-	lines.append("Level 2 can also anchor to columns. At level 3, keep holding and aim at another foe when your anchor dies to transfer once.")
-	lines.append("")
-	lines.append("Release a charged Blast Drive while orbiting to detach with explosive recoil. Starting a new dash cancels a held blast charge. Each Arcana level increases its damage and reach; Prismatic strengthens both again.")
-	lines.append("")
-	lines.append("[b]Returning Crescent[/b]")
-	lines.append("Attack throws a blade alongside your strike. It flies outward, then returns toward your current position. Move or dash to pull the return path across another part of the room.")
-	lines.append("At level 1, the blade travels up to 220 and deals 45% of Damage each way. An enemy can be struck once on the outward flight and once on return. One blade can be active; level 2 allows two.")
-	lines.append("Level 3 lets each blade bounce once off a wall or column on its outward flight. A blocked return dissolves. Each level adds 15% of base damage and reach; Prismatic strengthens both by another 20%.")
+## Use the same definitions and restrained semantic styling as power details.
+static func _build_keywords_section_bbcode() -> String:
+	var lines: Array[String] = [_section_title_bbcode("Build Keywords"), ""]
+	for id: String in KEYWORDS.KEYWORDS:
+		if KEYWORDS.PLAIN_TERMS.has(id):
+			continue
+		lines.append("%s  [color=#BFD2E8]—[/color]  %s" % [KEYWORDS.keyword_bbcode(id), KEYWORDS.KEYWORDS[id].definition])
 	return "\n".join(lines)
 
+static func _power_rules_section_bbcode() -> String:
+	var rows: Array[Dictionary] = [
+		{"name": "Blast Drive", "rule": "Hold Attack, then release a blast that propels you backward.", "detail": "Charge: 0.25–0.65s. Level 2: two charges. Level 3: steer recoil."},
+		{"name": "Razor Orbit", "rule": "Aim and hold Dash to circle a foe for up to 1.4s; release to depart.", "detail": "Level 2: hook columns. Level 3: transfer once when the anchor dies (2.4s total)."},
+		{"name": "Returning Crescent", "rule": "Attack throws a blade; move to guide its return through foes.", "detail": "Hits once each way. Level 2: two blades. Level 3: one outward bounce."},
+		{"name": "Static Wake", "rule": "Dash leaves up to two Electric Fields; overlapping trails share damage.", "detail": "Only Dash draws trails. Damage scales with contact time. Level 3: Slow after damage."},
+		{"name": "Hunter's Snare", "rule": "Attack hits Slow foes; bonus damage requires an already Slowed foe.", "detail": "Level 1: Attack damage. Level 2: all damage. Level 3: double your Slow durations."},
+		{"name": "Wraithstep", "rule": "Dash Marks foes. At level 2, Attack hits on Marked foes release a Burst.", "detail": "One Burst per Attack. Level 3 continues through up to three more Marked foes."},
+		{"name": "Eclipse Mark", "rule": "Kills Mark nearby foes. Damage does not spend a Mark."},
+		{"name": "Dread Resonance", "rule": "Attack hits Mark and build damage stacks against that foe.", "detail": "Once per foe per Attack. Stacks clear when you or the foe dies, or the room ends."},
+		{"name": "Storm Crown", "rule": "Dealing damage charges chain lightning; each foe counts once per action.", "detail": "One chain per action; never charges itself. Level 2: one extra jump through a Slowed foe."},
+		{"name": "Ruinous Impact", "rule": "Attack hits and eligible Pushes or Pulls arm a Launch that bursts on Impact.", "detail": "Bosses and Apex foes compress in place. Impact bursts cannot cause another Launch."},
+		{"name": "Sovereign's Double", "rule": "Dash, Recoil or Orbit completion leaves a shade that Echoes your Attack.", "detail": "Echoes deal 55% damage. Level 2: two Echoes. Further movement replaces the shade."},
+		{"name": "Warden's Verdict", "rule": "Consecutive attack hits grow stronger; every fourth triggers a Burst.", "detail": "Resets after 2.2s without an attack hit. The same foe can count on later Attacks."},
+		{"name": "Sovereign Tempo", "rule": "Connected Attacks build move speed; Dash, Recoil or Orbit spends it in a Burst.", "detail": "Up to six stacks; expire 1.8s after your last connected Attack. Burst damage refunds Dash cooldown."},
+		{"name": "Sigil Chain", "rule": "Four attack hits arm a Field; a later Attack hit places it.", "detail": "Level 2: Slow. Level 3: stronger chains. Hexweaver's passive Burst detonates sigils."},
+		{"name": "Farline Volley", "rule": "Outer attack hits add arc and damage per stack; Dash clears the stacks.", "detail": "Level 2: Slow from 2 stacks (4 Prismatic). Level 3: Dash bursts only at full stacks."},
+		{"name": "Conditional Boons", "rule": "Bonuses scale with the damage source, Field contact time and Echo strength.", "detail": "Conditions apply once per target; copied damage never doubles the same bonus."},
+	]
+	var lines: Array[String] = [_section_title_bbcode("Power Rules"), ""]
+	for row in rows:
+		lines.append("[b]%s[/b]  [color=#BFD2E8]—[/color]  %s" % [row.name, row.rule])
+		if row.has("detail"):
+			lines.append("[color=#9BAFC4]%s[/color]" % row.detail)
+		lines.append("")
+	return "\n".join(lines)
+
+static func _character_passives_section_bbcode() -> String:
+	var lines: Array[String] = [_section_title_bbcode("Character Passives"), ""]
+	for character: Dictionary in CHARACTERS.get_launch_characters():
+		var id := String(character.passive_id)
+		lines.append("[b]%s — %s[/b]" % [character.name, PASSIVES.get_display_name(id)])
+		lines.append(PASSIVES.get_description(id))
+		lines.append("")
+	return "\n".join(lines)
 
 static func _endgame_chase_section_bbcode() -> String:
-	var lines: Array[String] = []
-	lines.append(_section_title_bbcode("Endgame Chase"))
-	lines.append("[font_size=18][color=#F0C060][b]Ascension[/b][/color][/font_size]")
-	lines.append("[color=#BFD2E8][indent]Stack modifiers above Forsworn to raise your rank. Each modifier adds heat; your highest cleared rank is tracked per character. Some require Oaths to unlock.[/indent][/color]")
-	lines.append("")
-	lines.append("[font_size=18][color=#60D0A0][b]Oaths[/b][/color][/font_size]")
-	lines.append("[color=#BFD2E8][indent]Run goals that unlock rewards. Types: bearing clears, no-hit boss kills, no-boon/no-arcana runs, and Ascension rank targets. Completing one grants a Catalyst, a modifier, or both.[/indent][/color]")
-	lines.append("")
-	lines.append("[font_size=18][color=#80C0F0][b]Catalysts[/b][/color][/font_size]")
-	lines.append("[color=#BFD2E8][indent]Per-character bonuses equipped before a run, such as Prismatic Arcana, Reward Reroll, and Iron Vigil's +20 max HP. Free to use; shown on the leaderboard with your rank.[/indent][/color]")
-	return "\n".join(lines)
-
-static func _boss_combinations_section_bbcode() -> String:
-	var lines: Array[String] = [_section_title_bbcode("Boss Combinations")]
-	lines.append("[b]Ruinous Impact[/b]")
-	lines.append(KEYWORDS.format_text("Direct strikes {kw:launch|Launch} enemies. A launched foe releases a {kw:burst} on {kw:impact} with another enemy, a wall or a column. Existing {kw:push|Pushes} and {kw:pull|Pulls} can also arm a Launch."))
-	lines.append(KEYWORDS.format_text("Bosses and Apex enemies compress and {kw:burst} in place, preserving their attacks. Each enemy can {kw:launch|Launch} once every 1.1s. Level 1 deals 100% of {kw:damage_stat} in radius 70; level 2 raises these to 140% and 95."))
-	lines.append("")
-	lines.append("[b]Sovereign's Double[/b]")
-	lines.append(KEYWORDS.format_text("Completing a {kw:dash}, {kw:recoil} or {kw:orbit} leaves one shade for 4s. It appears where you last made contact during that movement, falling back to the departure position."))
-	lines.append(KEYWORDS.format_text("Your next deliberate {kw:attack} or charged blast {kw:echo|Echoes} from the shade at 55% damage. Its shape and scaled bonuses carry through; actual-target conditions apply once. Level 2 allows two Echoes. Further movement replaces the shade; automatic {kw:orbit} cuts leave its Echoes ready."))
-	lines.append(KEYWORDS.format_text("Damaging {kw:dash} effects help place the shade among enemies. Effects that refresh Dash offer another placement."))
-	lines.append(KEYWORDS.format_text("Place the shade so its {kw:echo} reaches foes your own strike misses. Echoes deal damage and can activate compatible effects under their original action limits. They cannot create a shade, {kw:launch|Launch} a foe, or replay {kw:attack_hit|attack hit} effects."))
-	return "\n".join(lines)
-
-
-static func _build_keywords_section_bbcode() -> String:
-	var lines: Array[String] = [_section_title_bbcode("Build Keywords")]
-	var ids: Array[String] = []
-	for id in KEYWORDS.KEYWORDS:
-		ids.append(id)
-	lines.append(KEYWORDS.definitions_bbcode(ids))
-	lines.append("")
-	lines.append("[b]Static Wake[/b]")
-	lines.append(KEYWORDS.format_text("A normal {kw:dash} leaves an {kw:electric} {kw:field}. No {kw:attack} is needed. Up to two trails remain; a third replaces the oldest. Overlapping trails share one damage clock. Walking, {kw:recoil} and {kw:orbit} create no extra trails."))
-	lines.append(KEYWORDS.format_text("Damage settles every 0.25s, scaled by actual contact time. Cards show damage per second before defenses. A trail's lifetime starts when it first draws; extending or finishing the Dash does not refresh it or cause a {kw:burst}. Level 3 applies {kw:slow} after damage."))
-	lines.append("")
-	lines.append("[b]Hunter's Snare[/b]")
-	lines.append(KEYWORDS.format_text("{kw:attack_hit|Attack hits} apply {kw:slow}. Level 1 increases {kw:attack} damage against already {kw:slow|Slowed} foes by 20%. Level 2 increases all your damage against them by 25%; level 3 raises this to 30% and doubles all Slow durations you apply. Prismatic raises the damage bonus to 45%."))
-	lines.append(KEYWORDS.format_text("The check happens before damage and newly applied {kw:slow}. Any player's Slow can prepare a foe. A new Slow does not retroactively increase the damage that first applied it."))
-	lines.append("")
-	lines.append("[b]Marks and resonance[/b]")
-	lines.append(KEYWORDS.format_text("{kw:mark} increases all player damage against that foe. The strongest active Mark applies; timed applications retain separate expiry and do not add together. Damage does not spend a Mark."))
-	lines.append(KEYWORDS.format_text("Wraithstep applies {kw:mark} on {kw:dash}: 15%/20%/25%, or 30% Prismatic. At level 2, an {kw:attack_hit} against an already {kw:mark|Marked} foe releases one {kw:burst} per Attack. Level 3 continues through up to three more Marked foes, without visiting one twice."))
-	lines.append(KEYWORDS.format_text("Eclipse Mark applies {kw:mark} around a {kw:kill}: 15%/20%/25% for 4/5/6 seconds. Prismatic gives 30% and preserves its longer duration and larger radius."))
-	lines.append(KEYWORDS.format_text("Dread Resonance {kw:attack_hit|attack hits} apply a 10% {kw:mark} for 3s and build one stack per foe per Attack. Each stack adds 2 percentage points to your damage against that {kw:mark|Marked} foe, up to 8/10/12 stacks. Prismatic gives 2.4 points and 15 stacks. Changing targets or a Mark expiring does not erase stacks; enemy death or leaving the room does."))
-	lines.append("")
-	lines.append("[b]Storm Crown[/b]")
-	lines.append(KEYWORDS.format_text("{kw:damage|Dealing damage} charges {kw:electric} chain lightning. Levels 1/2/3 discharge at 3/2/1 charges and jump to up to 2/3/4 other foes. {kw:attack|Attacks}, {kw:dash} effects, {kw:projectile|Projectiles}, {kw:field|Fields} and {kw:echo|Echoes} can contribute; Electric damage is not required."))
-	lines.append(KEYWORDS.format_text("Count each foe once per originating action, with one discharge per action. Later trail ticks, blade returns and {kw:echo|Echoes} share that action's count. Crown and its descendants cannot recharge it. From level 2, reaching an already {kw:slow|Slowed} foe grants one extra jump per chain; newly applied Slow does not count."))
-	lines.append("")
-	lines.append("[b]Conditional Boons[/b]")
-	lines.append(KEYWORDS.format_text("First Strike, Blood Pact and Severing Edge add to the qualifying {kw:damage_stat} basis. Percentages, {kw:field} contact time and {kw:echo} strength scale that bonus too. Each target's conditions are checked once before damage; a copied effect does not receive the same bonus twice."))
-	return "\n".join(lines)
-
-
-static func _keeper_section_bbcode() -> String:
-	var lines: Array[String] = [_section_title_bbcode("Keeper")]
-	lines.append("A Keeper links to at most two nearby ordinary allies, reducing their damage taken by 30%. The links and marked allies show who is protected. Wards never heal or grant immunity, and the Keeper itself remains vulnerable.")
-	lines.append("Kill or launch the Keeper to interrupt its links. Cover or distance also breaks a link and creates a brief opening before it can return. Bosses, Apex enemies and other Keepers cannot be warded; multiple wards never stack.")
-	return "\n".join(lines)
+	return "\n".join([
+		_section_title_bbcode("Endgame Chase"), "",
+		"[b]Ascension[/b] — Forsworn-only modifiers that raise your run's rank.",
+		"[b]Oaths[/b] — Run goals that unlock Catalysts or Ascension modifiers.",
+		"[b]Catalysts[/b] — Character bonuses equipped before starting a run.",
+	])
 
 static func glossary_sections() -> Array[Dictionary]:
 	return [
 		{"label": "Reward Tiers", "bbcode": _reward_tiers_section_bbcode()},
 		{"label": "Build Keywords", "bbcode": _build_keywords_section_bbcode()},
-		{"label": "Motion Arcana", "bbcode": _motion_arcana_section_bbcode()},
-		{"label": "Boss Combinations", "bbcode": _boss_combinations_section_bbcode()},
+		{"label": "Power Rules", "bbcode": _power_rules_section_bbcode()},
+		{"label": "Character Passives", "bbcode": _character_passives_section_bbcode()},
 		{"label": "Encounters", "bbcode": _encounters_section_bbcode()},
-		{"label": "Keeper", "bbcode": _keeper_section_bbcode()},
 		{"label": "Biomes", "bbcode": _biomes_section_bbcode()},
 		{"label": "Mutators", "bbcode": _mutators_section_bbcode()},
 		{"label": "Endgame Chase", "bbcode": _endgame_chase_section_bbcode()},

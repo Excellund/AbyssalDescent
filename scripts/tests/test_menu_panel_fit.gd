@@ -6,6 +6,8 @@ const CATALYST := preload("res://scripts/progression/catalyst_registry.gd")
 const AUDIO := preload("res://scripts/tests/fixture_audio_retirement.gd")
 class FixtureMenu extends "res://scripts/menu_controller.gd":
 	func _ready() -> void:
+		set_anchors_preset(Control.PRESET_FULL_RECT)
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_build_ui()
 		_apply_menu_layout()
 		set_process(false)
@@ -37,6 +39,21 @@ func _toggle(list: VBoxContainer, id: String) -> Button:
 		if matches:
 			return card.find_children("*", "Button", true, false).front() as Button
 	return null
+func _check_passive_labels(menu: MENU, viewport_size: Vector2i) -> void:
+	check(menu.character_ids.size() == 4, "All four character passives are present")
+	for index in range(menu.character_ids.size()):
+		var character_id := menu.character_ids[index]
+		var passive_id := String(MENU.CHARACTER_REGISTRY.get_character(character_id).get("passive_id", ""))
+		var label := menu.character_identity_containers[index].get_node_or_null("PassiveDescription") as RichTextLabel
+		check(label != null, "Passive uses rich text: " + character_id)
+		if label == null:
+			continue
+		check(label.text == MENU.CHARACTER_PASSIVES.get_short_description(passive_id), "Selection displays the shared passive rules: " + character_id)
+		check(label.text.contains("[b][color=#") and not label.get_parsed_text().contains("{kw:"), "Selection renders authored keyword emphasis: " + character_id)
+		check(label.get_theme_font_size("normal_font_size") == 14 and label.get_theme_font_size("bold_font_size") == 14, "Passive keywords retain the body size: " + character_id)
+		check(label.fit_content and not label.scroll_active and label.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Passive text fits and leaves the character button interactive")
+		check(label.get_content_height() <= label.size.y + 1.0 and label.get_content_width() <= label.size.x + 1.0, "Full passive text fits at %s: %s" % [viewport_size, character_id])
+		check(menu.character_buttons[index].get_global_rect().grow(1.0).encloses(label.get_global_rect()), "Passive remains inside its selection row at %s: %s" % [viewport_size, character_id])
 func _run() -> void:
 	if not OS.get_user_data_dir().begins_with(ProjectSettings.globalize_path("res://")):
 		quit(1)
@@ -52,6 +69,8 @@ func _run() -> void:
 		META.unlock_catalyst(RunContext.meta_progress_profile, id)
 	var menu := FixtureMenu.new()
 	root.add_child(menu)
+	menu.root_panel.hide()
+	menu.character_selector_panel.show()
 	await _settle()
 	for size in [Vector2i(1280, 720), Vector2i(960, 720), Vector2i(1920, 1080), Vector2i(2560, 1440)]:
 		root.size = size
@@ -59,6 +78,7 @@ func _run() -> void:
 		await _settle()
 		menu._apply_menu_layout()
 		await _settle()
+		_check_passive_labels(menu, size)
 		for panel: Panel in [menu.root_panel, menu.character_selector_panel, menu.difficulty_selector_panel, menu.ascension_panel]:
 			check(Rect2(Vector2.ZERO, Vector2(size)).encloses(panel.get_global_rect()), "%s contains actual panel %s" % [size, panel.size])
 		check(menu.character_selector_panel.size == menu._character_selector_panel_size(), "Fitting preserves full vessel layout dimensions")
@@ -66,6 +86,7 @@ func _run() -> void:
 		if size == Vector2i(2560, 1440):
 			check(menu.character_selector_panel.scale == Vector2.ONE and menu.ascension_panel.scale == Vector2.ONE, "Large viewport preserves original unscaled panels")
 	menu.root_panel.hide()
+	menu.character_selector_panel.hide()
 	var panel = menu.ascension_panel
 	panel.set_setup_bearing(3)
 	panel.set_run_setup_mode(true)

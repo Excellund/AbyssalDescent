@@ -65,3 +65,23 @@ Use regular earned progression to judge the new connections. In particular:
 5. During rewards, inspect Your Build, expand keyword details, return, reroll or claim. The offer must stay intact and closing details must not confirm it. Mission cards should grant the displayed temporary effect together with the selected Boon.
 
 Look for recognizable causes and useful combinations without a required named partner. No claim of player-tested enjoyment or balance follows from passing automated checks. The autonomous checkpoint delivers the integrated work for this playtest; subsequent feedback guides refinement. Focused debug exports replace that same desktop file only when requested.
+
+## Reward readability feedback — September 9
+
+The first playtest exposed clipped unowned cards: they combined a full explanation with a capped numerical sentence. Cards now have one complete bounded description, restored diamond level indicators, a single keyword accent, neutral stat text and a visible Tab build shortcut. Only changed next values receive an improvement accent. Damage and dealing damage remain ordinary text and are excluded from keyword definitions; their internal interaction metadata is retained.
+
+The glossary uses concise canonical definitions and individual power rules. Motion Arcana, Boss Combinations and Keeper chapters are removed. Build inspection uses shorter rule lines and preserves controller support, pending offers and release-before-confirm behavior. Mark uses outlined violet brackets sized to the enemy. Warden's missing accepted-contact Burst feedback is restored with a four-contact cue and the actual damage radius, replicated from the host.
+
+Validation covers all 70 required stages (full run plus focused completion after updating obsolete label assertions), 288 compiled scripts, 10,701 native reward-layout assertions, 637 wording checks and 318 description checks. The latter compare Voidfire's displayed lockout with actual overheat behavior at every level and Prismatic. Final reward/build rendering passes 57 frames and 448 assertions; glossary rendering passes eight frames and 58 assertions. Warden/Mark has 29 native checks, 52 real ENet checks and six normal-camera frames with 19 assertions. All play automation used disposable projects and isolated profiles. No balance tuning follows from these presentation checks.
+
+The normal desktop playtest is `dev-readability-20260909-164156`, replacing the canonical filename. Its exported package passes 27 normal-mode checks; SHA256 `077691CF89B30DC08DCB4D5B6D2FFEED21E6759F77AAAD46018F42649E805C79` matches the delivered file.
+
+## Clearer card explanations and stronger emphasis — September 9
+
+The next feedback pass replaces compressed Arcana/boss shorthand with level-aware explanations and a separate numerical comparison line. The authored copy covers all 21 Arcana and nine boss rewards, including structural upgrades and Prismatic; Boons retain straightforward stat descriptions. The combined reading budget is 260 visible characters, with numerical lines capped at 109. The keyword palette now distinguishes actions, target conditions and effects with warm, violet and cyan accents plus bold text. Damage stays plain. The same explanations appear in Your Build.
+
+Cards have a separate title/icon row, stronger rarity borders and a full-width reading area. Three offers remain stacked; four offers use a two-by-two grid. Responsive layout keeps body text at least 18 rendered pixels at 960, 1280 and 1920 widths. Grid navigation preserves the footer action cycle, reward inspection and release-before-confirm behavior.
+
+Numerical copy distinguishes Crown's triggering-damage ratio and Oath's Damage-stat contribution. Warden displays its first-to-fourth contact bonus range, additional fourth-hit percentage and Burst radius; Lacuna displays its actual Field bonus, base pulse, cadence, radius and lifetime. Native description tests compare those figures to damage/contact behavior. Blast explicitly produces Recoil at every level, and Aegis explicitly names its nondamaging Burst. No balance values or reward odds change in this pass.
+
+Validation includes the whole roster at each level and Prismatic, 19,581 native layout assertions, 435 native description assertions, input and modal regressions, and native power tests. Final unowned/build captures pass 60 frames and 772 assertions; the upgrade-page captures pass 84 frames and 1,393 assertions, all at 960/1280/1920 widths. The delivered normal desktop build is `dev-cards-20260909-170833`. Its package passes 27 normal-mode checks; SHA256 `1D5B61715746006FE6197DA13A25B7344AE6F7CFA318A4AA2CE0255800297C2C` matches the canonical desktop file.

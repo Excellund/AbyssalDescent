@@ -440,6 +440,7 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 	var before_health := int(health_state.current_health)
 
 	if bool(damage_context.get("is_ground_attack", false)):
+		amount = _apply_keeper_ward_health_floor(amount)
 		health_state.take_damage(amount)
 		var ground_after_health := int(health_state.current_health)
 		var ground_applied := maxi(0, before_health - ground_after_health)
@@ -464,6 +465,7 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 	
 	if mitigated_damage <= 0:
 		return
+	mitigated_damage = _apply_keeper_ward_health_floor(mitigated_damage)
 	health_state.take_damage(mitigated_damage)
 	var after_health := int(health_state.current_health)
 	var applied_amount := maxi(0, before_health - after_health)

@@ -1,6 +1,12 @@
 extends RefCounted
 
 const MAX_VISIBLE_DESC_CHARS := 109
+const MAX_VISIBLE_CARD_CHARS := 260
+
+static func assert_card_cap(text: String, power_id: String) -> String:
+	if OS.is_debug_build():
+		assert(visible_length(text) <= MAX_VISIBLE_CARD_CHARS, "Full reward card exceeds its reading budget: %s (%d)" % [power_id, visible_length(text)])
+	return text
 
 static func strip_bbcode(text: String) -> String:
 	var out := ""

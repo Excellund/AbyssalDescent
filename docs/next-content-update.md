@@ -12,9 +12,11 @@ The four cover formations and Undertow are already in the game. They need focuse
 
 **Keeper** is an ordinary support enemy introduced in **Breach**, an Act 2–3 standard encounter. Current ordinary enemies cover rushes, ranged patterns, hazards and damaging links; protecting another enemy introduces a different target-priority decision.
 
-The Keeper visibly wards up to two ordinary allies within 220 pixels, reducing their damage taken by 30% after a 0.6-second warmup. It remains vulnerable itself. Wards do not heal, grant immunity, protect bosses/Apex enemies/other Keepers, or stack. These are starting values for playtesting.
+The Keeper visibly wards up to two ordinary allies within 220 pixels after a 0.6-second warmup. Active wards reduce damage taken by 30% and prevent that damage from reducing an ally below 1 HP. Damage still wears down the protected ally, but even a large burst cannot finish it while the link holds. At 1 HP, a brighter gold link and a shield around the ally show the ward keeping it alive. The Keeper remains vulnerable itself. Wards never heal or stack and cannot protect bosses, Apex enemies or other Keepers. These are starting values for playtesting.
 
-Players can kill the Keeper, push an ally outside the ward radius, or break the link with cover. A player push of at least 40 pixels/second interrupts both wards for 1.25 seconds before a fresh warmup, giving Ruinous Impact a tactical use. A natural link break leaves that slot empty for at least one second before warming up again; a surviving second link remains active. Damage resolution checks death, distance and cover immediately.
+The 1 HP floor addresses playtest feedback that accumulated damage overwhelmed the original reduction without changing the player's decisions. It makes breaking the link matter even in a strong build, while preserving damage already dealt: after a break, an ally held at 1 HP needs only one more damaging hit.
+
+Players can kill the Keeper, push an ally outside the ward radius, or break the link with cover. A player push on the Keeper of at least 40 pixels/second interrupts both wards for 1.25 seconds before a fresh warmup, giving Ruinous Impact a tactical use. A natural link break leaves that slot empty for at least one second before warming up again; a surviving second link remains active. Damage resolution checks death, distance and cover immediately, so a broken link stops both the reduction and the 1 HP floor before the next damage is applied.
 
 Breach has one Keeper, a small ranged group and light melee pressure, with an open center and side cover. The Keeper prefers a safe position near an ally. Keepers are capped at one after composition modifiers and during spawning, including co-op. Starting populations are:
 
@@ -29,8 +31,8 @@ Blast Drive and Razor Orbit help reach or separate targets; Sovereign's Double c
 
 ## Implementation and validation
 
-- `EnemyBase` resolves ward reduction before health changes and accepted damage accounting, including the Shielder override. Primary attacks, secondary damage and kill ownership share this boundary.
-- The host owns targets, mitigation and interruptions. Compact ordered heartbeats carry stable target IDs; replica links expire after 0.5 seconds without fresh state and never apply damage reduction.
+- `EnemyBase` resolves ward reduction and the 1 HP floor before health changes and accepted damage accounting, including the Shielder override. Primary attacks, secondary damage and kill ownership share this boundary. Further damage prevented at 1 HP earns no damage or kill credit.
+- The host owns targets, mitigation and interruptions. Compact ordered heartbeats carry stable target IDs; replica links expire after 0.5 seconds without fresh state and never apply damage protection. The stronger shield display uses the protected ally's health on both host and replicas.
 - Encounter contracts, generic peer construction, profiles, biome routing, debug selection and the glossary include Keeper/Breach. Routes and rewards retain the existing behavior.
 - Isolated tests cover death, displacement, range, cover, target replacement, packet ordering, room cleanup and save/resume. Profile checks cover all four Bearings, biomes and co-op. Separate two-process ENet and actual GPU fixtures check authority and presentation.
 - The normal checkpoint uses the same desktop playtest executable and a unique internal development version. Debug progress remains separate from normal progress. Current delivery details are in [content-updates.md](content-updates.md).

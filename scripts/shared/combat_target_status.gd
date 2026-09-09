@@ -3,6 +3,7 @@ extends Node2D
 ## damage belong to the target and disappear with that enemy or room.
 
 const REGISTRY := preload("res://scripts/shared/combat_interaction_registry.gd")
+const BODY_GEOMETRY := preload("res://scripts/enemy_launch_state.gd")
 const MAX_MARKS := 32
 const MAX_OWNERS := 4
 const MAX_REMAINDERS := 128
@@ -228,21 +229,24 @@ func _draw() -> void:
 	var stacks := 0
 	for count: int in dread.values():
 		stacks = maxi(stacks, count)
-	var radius := 20.0
-	var target := get_parent()
-	if is_instance_valid(target):
-		var body_radius: Variant = target.get("body_radius")
-		if _number(body_radius):
-			radius = maxf(radius, float(body_radius) + 6.0)
-	var color := Color(0.87, 0.68, 0.93, 0.58 + 0.22 * minf(1.0, float(stacks) / 15.0))
+	var radius := marker_radius()
+	var intensity := minf(1.0, float(stacks) / 15.0)
+	var color := Color(0.87, 0.68, 0.93).lerp(Color(0.98, 0.84, 1.0), intensity * 0.65)
+	var edge := 8.5 + intensity * 1.5
+	# Open diamond corners identify vulnerability without covering the body or
+	# sharing the circular language of Slow, lightning and enemy warnings.
 	for index in range(4):
-		var angle := PI * 0.25 + float(index) * PI * 0.5
+		var angle := float(index) * PI * 0.5
 		var direction := Vector2.from_angle(angle)
 		var tangent := direction.orthogonal()
 		var tip := direction * radius
-		draw_polyline(PackedVector2Array([tip - direction * 4.0 - tangent * 3.0, tip, tip - direction * 4.0 + tangent * 3.0]), color, 1.5, true)
-	if stacks > 0:
-		draw_arc(Vector2.ZERO, radius + 3.0, -PI * 0.5, -PI * 0.5 + TAU * minf(1.0, float(stacks) / 15.0), 32, Color(0.87, 0.68, 0.93, 0.78), 1.0, true)
+		var corner := PackedVector2Array([tip - direction * edge - tangent * edge, tip, tip - direction * edge + tangent * edge])
+		draw_polyline(corner, Color(0.07, 0.03, 0.10, 0.96), 5.5, true)
+		draw_polyline(corner, color, 2.6 + intensity * 0.4, true)
+
+func marker_radius() -> float:
+	var target := get_parent() as CollisionObject2D
+	return maxf(24.0, BODY_GEOMETRY.body_radius(target) + 11.0) if is_instance_valid(target) else 24.0
 
 static func _number(value: Variant) -> bool:
 	return (value is float or value is int) and is_finite(float(value))

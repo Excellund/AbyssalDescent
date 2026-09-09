@@ -100,7 +100,7 @@ static func get_power_keyword_metadata(power_id: String, level: int = 1, _prisma
 		"sigil_chain":
 			produces = ["field", "damage"]
 			accepts = ["attack_hit"]
-			condition_text = "Deliberate attack hits charge and place Fields; automatic Field damage does not charge a new sigil."
+			condition_text = "Four attack hits arm a sigil; the next connected Attack places its Field. Automatic damage cannot charge it. Hexweaver's passive burst detonates existing sigils."
 		"blast_drive":
 			produces = ["attack_hit", "burst", "recoil", "push", "damage"]
 			accepts = ["attack"]
@@ -116,6 +116,7 @@ static func get_power_keyword_metadata(power_id: String, level: int = 1, _prisma
 		"wardens_verdict":
 			produces = ["burst", "damage"]
 			accepts = ["attack_hit"]
+			condition_text = "Each foe counts once per Attack; the same foe can count on later Attacks. The fourth contact releases a Burst. Cadence resets after 2.2s without an attack hit. Bonus power scales the rising damage of each contact."
 		"lacuna_echo":
 			produces = ["field", "pull", "damage"]
 			accepts = ["kill", "field"]
@@ -123,6 +124,7 @@ static func get_power_keyword_metadata(power_id: String, level: int = 1, _prisma
 		"sovereign_tempo":
 			produces = ["burst", "damage"]
 			accepts = ["attack_hit", "dash", "recoil", "orbit"]
+			condition_text = "Connected Attacks build movement speed. Completing Dash, Recoil or Orbit spends the stacks on one Burst; damaging a foe refunds Dash once."
 		"pillar_convergence":
 			produces = ["field", "damage"]
 			accepts = ["attack_hit"]
@@ -355,7 +357,7 @@ const DAMAGE_MODEL_BY_POWER := {
 	"sovereigns_double": {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
-		"formula_note": "A movement shade repeats one/two deliberate attacks at 55% of their resolved strike damage"
+		"formula_note": "Copies attack shape and damage at 55%; applicable bonuses are checked against each Echo target."
 	}
 }
 

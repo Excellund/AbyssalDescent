@@ -2,6 +2,7 @@ extends Node
 
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
+const CHARACTER_PASSIVES := preload("res://scripts/shared/character_passive_catalogue.gd")
 
 const MUTATOR_ICON_BLOOD_RUSH: Texture2D = preload("res://assets/ui/mutators/blood_rush.svg")
 const MUTATOR_ICON_FLASHPOINT: Texture2D = preload("res://assets/ui/mutators/flashpoint.svg")
@@ -1327,6 +1328,7 @@ func _create_build_strip(layer: CanvasLayer) -> void:
 	build_strip_passive_label.scroll_active = false
 	build_strip_passive_label.selection_enabled = false
 	build_strip_passive_label.add_theme_font_size_override("normal_font_size", 11)
+	build_strip_passive_label.add_theme_font_size_override("bold_font_size", 11)
 	build_strip_passive_label.add_theme_color_override("default_color", Color(1.0, 0.82, 0.40, 0.98))
 	build_strip_passive_label.add_theme_color_override("font_shadow_color", Color(0.02, 0.04, 0.06, 0.95))
 	build_strip_passive_label.add_theme_constant_override("shadow_offset_x", 1)
@@ -1652,29 +1654,7 @@ func _update_build_strip(state: Dictionary, player: Node) -> void:
 			stack_label.text = ""
 
 func _get_passive_display_name(passive_id: String) -> String:
-	var normalized_id := passive_id.strip_edges().to_lower()
-	match normalized_id:
-		"iron_retort":
-			return "Iron Retort"
-		"sigil_burst":
-			return "Sigil Burst"
-		"veilstep_rhythm":
-			return "Veilstep Rhythm"
-		"farline_focus":
-			return "Farline Focus"
-		"", "passive":
-			return "Passive"
-		_:
-			var words := normalized_id.split("_", false)
-			var formatted := ""
-			for i in range(words.size()):
-				if i > 0:
-					formatted += " "
-				formatted += String(words[i]).capitalize()
-			var fallback := formatted.strip_edges()
-			if fallback.is_empty():
-				return "Passive"
-			return fallback
+	return CHARACTER_PASSIVES.get_display_name(passive_id)
 
 func _get_power_display_name(power_id: String) -> String:
 	var name := power_registry_instance.get_power_display_name(power_id)

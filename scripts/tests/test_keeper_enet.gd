@@ -54,15 +54,21 @@ func host_scenarios(client_id: int) -> void:
 	check(await until(func(): return enemy(101).get_current_health() == 30), "Joiner requests 100 damage and the host applies exactly 70")
 	check(world.damage_events.size() == 1 and world.damage_events[0].amount == 70 and world.damage_events[0].peer == client_id, "Host records actual mitigated damage for the authenticated joiner")
 	check(EnemyReplicationService.killer_peer_for(101) == client_id, "Spoofed source context cannot steal the joiner's damage ownership")
-	world.fixture_command.rpc_id(client_id, "protected_kill")
-	check(await until(func(): return world.kill_peers.size() == 1), "Protected secondary kill crosses the real ownership notification path")
-	check(world.damage_events.back().amount == 30 and world.damage_events.back().killed and world.kill_peers == [client_id], "Lethal protected hit credits only remaining health and the correct kill owner")
-	keeper._update_wards(0.0)
-	_sync_keeper(2)
-	world.fixture_command.rpc_id(client_id, "inspect_death")
-	check(await until(func(): return results.has("death")), "Joiner observes removal of a dead linked target")
-	if results.has("death"):
-		check(results.death.ids == [102] and results.death.local_damage_events == 0, "Remote ward visuals prune the dead ID without duplicating combat accounting")
+	world.fixture_command.rpc_id(client_id, "protected_burst")
+	check(await until(func(): return enemy(101).get_current_health() == 1), "The host stops an overwhelming joiner secondary hit at one health")
+	check(world.damage_events.size() == 2 and world.damage_events.back().amount == 29 and not world.damage_events.back().killed and world.damage_events.back().peer == client_id and world.kill_peers.is_empty(), "Protected near-death damage credits only accepted health and creates no kill notification")
+	DAMAGE.apply_damage(enemy(101), 99999, {"attack_type": "melee"}, 1)
+	world.fixture_command.rpc_id(client_id, "repeat_protected_burst")
+	check(await until(func(): return results.has("repeated")), "Repeated joiner damage requests finish while the ward remains active")
+	check(enemy(101).get_current_health() == 1 and world.damage_events.size() == 2 and world.kill_peers.is_empty() and EnemyReplicationService.killer_peer_for(101) == client_id, "Neither rejected host damage nor repeated joiner damage can add statistics, kills or replacement ownership")
+	world._sync_enemy_states.rpc([
+		{"enemy_id": 201, "health": keeper.get_current_health(), "position": keeper.position, "runtime_state_delta": keeper.get_network_runtime_state()},
+		{"enemy_id": 101, "health": 1, "position": enemy(101).position}
+	], 2)
+	world.fixture_command.rpc_id(client_id, "inspect_floor")
+	check(await until(func(): return results.has("floor")), "Joiner receives the host's surviving health and active ward together")
+	if results.has("floor"):
+		check(results.floor.health == 1 and results.floor.ids == [101, 102] and results.floor.local_damage_events == 0 and results.floor.kill_scopes.is_empty(), "Joiner presents the survivor without duplicate damage or a premature kill proc")
 	world.fixture_command.rpc_id(client_id, "push_keeper")
 	check(await until(func(): return keeper.ward_targets.is_empty() and keeper.ward_rearm_left > 1.0), "Authenticated joiner push interrupts all host wards")
 	_sync_keeper(3)
@@ -70,6 +76,13 @@ func host_scenarios(client_id: int) -> void:
 	check(await until(func(): return results.has("break")), "Joiner receives the ward interruption state")
 	if results.has("break"):
 		check(results["break"].ids.is_empty() and results["break"].rearm > 1.0, "Both processes agree on broken links and rearm feedback")
+	world.fixture_command.rpc_id(client_id, "finish_exposed_enemy")
+	check(await until(func(): return world.kill_peers.size() == 1), "Breaking the ward lets the next joiner hit cross the real kill-notification path")
+	check(world.damage_events.size() == 3 and world.damage_events.back().amount == 1 and world.damage_events.back().killed and world.damage_events.back().peer == client_id and world.kill_peers == [client_id], "The final exposed health credits the authenticated joiner despite spoofed context")
+	world.fixture_command.rpc_id(client_id, "inspect_kill")
+	check(await until(func(): return results.has("kill")), "Joiner receives the final secondary kill notification")
+	if results.has("kill"):
+		check(results.kill.scopes == [true] and results.kill.local_damage_events == 0, "Only the actual kill fires the joiner's secondary kill proc once")
 	world.fixture_command.rpc_id(client_id, "finish")
 	await until(func(): return results.has("finished"))
 	await finish()
@@ -90,16 +103,25 @@ func client_command(command: String, _payload: Dictionary) -> void:
 		"protected_hit":
 			DAMAGE.apply_damage(enemy(101), 100, {"attack_type": "blast_drive", "source_peer_id": 1})
 			check(enemy(101).get_current_health() == 100 and world.damage_events.is_empty(), "Joiner sends raw damage without changing health or stats locally")
-		"protected_kill":
-			DAMAGE.apply_damage(enemy(101), 100, {"attack_type": "sovereigns_double", "secondary": true})
-		"inspect_death":
-			await until(func(): return _linked_ids() == [102])
-			world.fixture_result.rpc_id(1, "death", {"ids": _linked_ids(), "local_damage_events": world.damage_events.size()})
+		"protected_burst":
+			DAMAGE.apply_damage(enemy(101), 99999, {"attack_type": "sovereigns_double", "secondary": true})
+		"repeat_protected_burst":
+			for _repeat in range(16):
+				DAMAGE.apply_damage(enemy(101), 99999, {"attack_type": "static_wake", "secondary": true, "source_peer_id": 1})
+			world.fixture_result.rpc_id(1, "repeated", {})
+		"inspect_floor":
+			await until(func(): return enemy(101).get_current_health() == 1 and _linked_ids() == [101, 102])
+			world.fixture_result.rpc_id(1, "floor", {"ids": _linked_ids(), "health": enemy(101).get_current_health(), "local_damage_events": world.damage_events.size(), "kill_scopes": local_player.kill_scopes})
 		"push_keeper":
 			DAMAGE.apply_impulse(keeper, Vector2(200.0, 0.0))
 		"inspect_break":
 			await until(func(): return keeper.ward_targets.is_empty() and keeper.ward_rearm_left > 1.0)
 			world.fixture_result.rpc_id(1, "break", {"ids": _linked_ids(), "rearm": keeper.ward_rearm_left})
+		"finish_exposed_enemy":
+			DAMAGE.apply_damage(enemy(101), 100, {"attack_type": "sovereigns_double", "secondary": true, "source_peer_id": 1})
+		"inspect_kill":
+			await until(func(): return local_player.kill_scopes.size() == 1)
+			world.fixture_result.rpc_id(1, "kill", {"scopes": local_player.kill_scopes, "local_damage_events": world.damage_events.size()})
 		"finish":
 			world.fixture_result.rpc_id(1, "finished", {})
 			await create_timer(0.1).timeout

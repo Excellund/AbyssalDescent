@@ -66,6 +66,7 @@ var build_button: Button
 var mission_bonus_label: RichTextLabel
 var boon_card_panels: Array[Panel] = []
 var boon_card_labels: Array[RichTextLabel] = []
+var boon_card_title_labels: Array[Label] = []
 var boon_card_stack_labels: Array[Label] = []
 var boon_card_icon_nodes: Array[TextureRect] = []
 var boon_card_accent_bars: Array[ColorRect] = []
@@ -337,6 +338,8 @@ func handle_input(event: InputEvent) -> bool:
 	if event.is_action_pressed("reward_inspect") and not event.is_echo():
 		_request_build_inspection()
 		return true
+	if boon_choice_count == 4 and _navigate_grid(event):
+		return true
 	var step := 0
 	if event.is_action_pressed("ui_down") or event.is_action_pressed("ui_right"):
 		step = 1
@@ -357,6 +360,34 @@ func handle_input(event: InputEvent) -> bool:
 		# their handlers as well as the global mouse attack action.
 		return _confirm_release_required
 	return false
+
+func _navigate_grid(event: InputEvent) -> bool:
+	var direction := Vector2i.ZERO
+	if event.is_action_pressed("ui_down"):
+		direction.y = 1
+	elif event.is_action_pressed("ui_up"):
+		direction.y = -1
+	elif event.is_action_pressed("ui_right"):
+		direction.x = 1
+	elif event.is_action_pressed("ui_left"):
+		direction.x = -1
+	if direction == Vector2i.ZERO:
+		return false
+	var focused := get_viewport().gui_get_focus_owner()
+	var index := boon_card_panels.find(focused) if focused is Panel else -1
+	var controls := _navigation_controls()
+	if index < 0:
+		# Footer actions retain their established cycle, including the boundary
+		# back into the cards; the grid only changes movement between cards.
+		return false
+	var destination := index + direction.x + direction.y * 2
+	if direction.x != 0:
+		destination = (index / 2) * 2 + posmod(index + direction.x, 2)
+	if destination >= 0 and destination < boon_choices.size():
+		boon_card_panels[destination].grab_focus()
+	elif controls.size() > boon_choices.size():
+		controls[boon_choices.size()].grab_focus()
+	return true
 
 
 func _navigation_controls() -> Array[Control]:
@@ -746,6 +777,7 @@ func _create_ui() -> void:
 
 	boon_card_panels.clear()
 	boon_card_labels.clear()
+	boon_card_title_labels.clear()
 	boon_card_stack_labels.clear()
 	boon_card_icon_nodes.clear()
 	boon_card_accent_bars.clear()
@@ -776,6 +808,12 @@ func _create_ui() -> void:
 		icon_node.visible = false
 		icon_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		panel.add_child(icon_node)
+		var card_title := Label.new()
+		card_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		card_title.add_theme_font_size_override("font_size", 22)
+		card_title.add_theme_color_override("font_color", Color("f5ecff"))
+		panel.add_child(card_title)
+		boon_card_title_labels.append(card_title)
 
 		var option_label := RichTextLabel.new()
 		option_label.position = Vector2(BOON_LABEL_X, 10.0)
@@ -785,17 +823,19 @@ func _create_ui() -> void:
 		option_label.scroll_active = false
 		option_label.fit_content = false
 		option_label.add_theme_font_size_override("normal_font_size", 22)
-		option_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
-		option_label.add_theme_constant_override("shadow_offset_x", 2)
-		option_label.add_theme_constant_override("shadow_offset_y", 2)
+		option_label.add_theme_color_override("default_color", Color("d3d8e0"))
+		option_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.45))
+		option_label.add_theme_constant_override("shadow_offset_x", 1)
+		option_label.add_theme_constant_override("shadow_offset_y", 1)
 		panel.add_child(option_label)
+		card_title.add_theme_font_override("font", option_label.get_theme_font("bold_font"))
 
 		var stack_label := Label.new()
 		stack_label.position = Vector2(1230.0, 14.0)
-		stack_label.custom_minimum_size = Vector2(210.0, 30.0)
+		stack_label.custom_minimum_size = Vector2(100.0, 26.0)
 		stack_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		stack_label.add_theme_font_size_override("font_size", 24)
-		stack_label.add_theme_color_override("font_color", Color(0.98, 0.9, 0.68, 0.95))
+		stack_label.add_theme_font_size_override("font_size", 18)
+		stack_label.add_theme_color_override("font_color", Color("bec7d2"))
 		stack_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.9))
 		stack_label.add_theme_constant_override("shadow_offset_x", 2)
 		stack_label.add_theme_constant_override("shadow_offset_y", 2)
@@ -872,7 +912,7 @@ func _create_ui() -> void:
 	boon_layer.add_child(reroll_button)
 
 	build_button = Button.new()
-	build_button.text = "Your Build  [Tab / Y]"
+	build_button.text = "Your Build  [Tab]"
 	build_button.custom_minimum_size = Vector2(220.0, 60.0)
 	build_button.add_theme_font_size_override("font_size", 18)
 	for state in ["normal", "hover", "pressed", "focus"]:
@@ -904,47 +944,67 @@ func _layout_boon_cards() -> void:
 	if boon_card_panels.is_empty() or get_viewport() == null:
 		return
 	var viewport_size := get_viewport().get_visible_rect().size
+	var compact := viewport_size.y < 900.0
+	# Make room through layout, not by scaling readable text down.
+	boon_header_chip_label.offset_top = 10.0 if compact else 18.0
+	boon_header_chip_label.offset_bottom = 32.0 if compact else 44.0
+	boon_title_label.offset_top = 32.0 if compact else 50.0
+	boon_title_label.offset_bottom = 84.0 if compact else 114.0
+	boon_title_label.add_theme_font_size_override("font_size", 36 if compact else 46)
+	boon_subtitle_label.offset_top = 84.0 if compact else 116.0
+	boon_subtitle_label.offset_bottom = 118.0 if compact else 156.0
 	if is_instance_valid(mission_bonus_label):
-		mission_bonus_label.position = Vector2(48.0, 112.0)
-		mission_bonus_label.size = Vector2(viewport_size.x - 96.0, 52.0)
-	var side_margin := maxf(48.0, viewport_size.x * BOON_SIDE_MARGIN_RATIO)
-	var card_width := clampf(viewport_size.x - side_margin * 2.0, BOON_CARD_MIN_WIDTH, BOON_CARD_MAX_WIDTH)
-	var total_height := float(boon_choice_count) * BOON_CARD_HEIGHT + float(maxi(0, boon_choice_count - 1)) * BOON_CARD_GAP
-	var start_x := (viewport_size.x - card_width) * 0.5
-	var centered_y := (viewport_size.y - total_height) * 0.5
-	var start_y := clampf(centered_y, BOON_TOP_SAFE_Y, BOON_TOP_MAX_Y)
-	# Draft Compass can add a fourth choice. Fit the whole card group above
-	# the existing action/flavor footer, retaining each card's internal layout.
-	_boon_card_layout_scale = minf(1.0, maxf(1.0, viewport_size.y - start_y - 120.0) / total_height)
-	var visible_width := card_width
-	card_width /= _boon_card_layout_scale
+		mission_bonus_label.position = Vector2(48.0, 84.0 if compact else 112.0)
+		mission_bonus_label.size = Vector2(viewport_size.x - 96.0, 68.0)
+	var side_margin := 32.0 if viewport_size.x <= 1000.0 else maxf(48.0, viewport_size.x * BOON_SIDE_MARGIN_RATIO)
+	var group_width := clampf(viewport_size.x - side_margin * 2.0, BOON_CARD_MIN_WIDTH, BOON_CARD_MAX_WIDTH)
+	var columns := 2 if boon_choice_count == 4 else 1
+	var rows := ceili(float(boon_choice_count) / columns)
+	var gap := 16.0
+	var start_y := (160.0 if _has_mission_bonus_mutator() else 128.0) if compact else (188.0 if _has_mission_bonus_mutator() else 168.0)
+	var footer_space := 108.0 if compact and columns == 2 else 120.0
+	var card_height := minf(236.0 if columns == 2 else 180.0, (viewport_size.y - start_y - footer_space - (rows - 1) * gap) / rows)
+	var total_height := rows * card_height + (rows - 1) * gap
+	if not compact:
+		start_y = clampf((viewport_size.y - total_height) * 0.5, start_y, 224.0)
+	var start_x := (viewport_size.x - group_width) * 0.5
+	var card_width := (group_width - (columns - 1) * gap) / columns
+	_boon_card_layout_scale = 1.0
 	for i in range(boon_card_panels.size()):
 		var panel := boon_card_panels[i]
-		var base_pos := Vector2(start_x, start_y + float(i) * (BOON_CARD_HEIGHT + BOON_CARD_GAP) * _boon_card_layout_scale)
-		panel.custom_minimum_size = Vector2(card_width, BOON_CARD_HEIGHT)
+		var base_pos := Vector2(start_x + (i % columns) * (card_width + gap), start_y + (i / columns) * (card_height + gap))
+		panel.custom_minimum_size = Vector2(card_width, card_height)
 		panel.size = panel.custom_minimum_size
-		panel.pivot_offset = Vector2(card_width * 0.5, BOON_CARD_HEIGHT * 0.5)
-		panel.position = base_pos - panel.pivot_offset * (1.0 - _boon_card_layout_scale)
-		panel.scale = Vector2.ONE * _boon_card_layout_scale
-		if i < boon_card_rects.size():
-			boon_card_rects[i] = Rect2(base_pos, Vector2(visible_width, BOON_CARD_HEIGHT * _boon_card_layout_scale))
-		if i < boon_card_accent_bars.size():
-			var accent_bar := boon_card_accent_bars[i]
-			accent_bar.position = Vector2(0.0, ACCENT_BAR_INSET)
-			accent_bar.size = Vector2(ACCENT_BAR_WIDTH, BOON_CARD_HEIGHT - ACCENT_BAR_INSET * 2.0)
-		if i < boon_card_labels.size():
-			var label := boon_card_labels[i]
-			label.add_theme_font_size_override("normal_font_size", 20 if visible_width < 1000.0 else 22)
-			label.add_theme_font_size_override("bold_font_size", 20 if visible_width < 1000.0 else 22)
-			var stack_w := 210.0
-			var stack_x := card_width - stack_w - 18.0
-			var text_x := BOON_LABEL_X
-			label.position = Vector2(text_x, 6.0)
-			label.custom_minimum_size = Vector2(maxf(320.0, stack_x - text_x - 12.0), BOON_CARD_HEIGHT - 12.0)
-			label.size = label.custom_minimum_size
-		if i < boon_card_stack_labels.size():
-			var stack_label := boon_card_stack_labels[i]
-			stack_label.position = Vector2(card_width - stack_label.custom_minimum_size.x - 18.0, 14.0)
+		panel.pivot_offset = panel.size * 0.5
+		panel.position = base_pos
+		panel.scale = Vector2.ONE
+		boon_card_rects[i] = Rect2(base_pos, panel.size)
+		var inset := 20.0 if columns == 2 else 28.0
+		var accent_bar := boon_card_accent_bars[i]
+		accent_bar.position = Vector2(0.0, ACCENT_BAR_INSET)
+		accent_bar.size = Vector2(ACCENT_BAR_WIDTH, card_height - ACCENT_BAR_INSET * 2.0)
+		var title := boon_card_title_labels[i]
+		title.position = Vector2(inset, 10.0)
+		title.add_theme_font_size_override("font_size", 22 if compact else 24)
+		title.custom_minimum_size = Vector2.ZERO
+		title.size = Vector2(card_width - inset * 2.0 - 112.0, 28.0)
+		var stack_label := boon_card_stack_labels[i]
+		stack_label.position = Vector2(card_width - inset - 100.0, 11.0)
+		stack_label.size = Vector2(100.0, 26.0)
+		var label := boon_card_labels[i]
+		label.add_theme_font_size_override("normal_font_size", 18 if compact else 22)
+		label.add_theme_font_size_override("bold_font_size", 18 if compact else 22)
+		label.position = Vector2(inset, 42.0 if compact and columns == 2 else 44.0)
+		label.custom_minimum_size = Vector2(card_width - inset * 2.0, card_height - (50.0 if compact and columns == 2 else 56.0))
+		label.size = label.custom_minimum_size
+		# The icons occupy only the title row; explanation and figures use all
+		# available width beneath them, including in four-choice grids.
+		if i < boon_choices.size() and bool(boon_choices[i].get("is_mutator", false)):
+			title.position.x = MUTATOR_LABEL_X
+			title.size.x -= MUTATOR_LABEL_X - inset
+	if epitaph_label != null:
+		epitaph_label.add_theme_font_size_override("normal_font_size", 18 if compact else 24)
+		epitaph_label.add_theme_font_size_override("bold_font_size", 18 if compact else 24)
 
 func _position_epitaph_label() -> void:
 	if epitaph_label == null or boon_card_rects.is_empty() or get_viewport() == null:
@@ -1087,10 +1147,12 @@ func _refresh_boon_ui(player: Node2D) -> void:
 	for i in range(boon_card_labels.size()):
 		var panel := boon_card_panels[i]
 		var label := boon_card_labels[i]
+		var card_title := boon_card_title_labels[i]
 		var stack_label := boon_card_stack_labels[i]
 		var icon_node := boon_card_icon_nodes[i]
 		if i >= boon_choices.size():
 			label.text = ""
+			card_title.text = ""
 			stack_label.text = ""
 			stack_label.visible = false
 			icon_node.texture = null
@@ -1102,11 +1164,9 @@ func _refresh_boon_ui(player: Node2D) -> void:
 		var is_mutator_choice := bool(boon.get("is_mutator", false))
 		var stack_limit := int(boon.get("stack_limit", 0))
 		var stack_count := _get_stack_count_for_choice(boon, player)
-		var icon_line := "L%d -> L%d" % [stack_count, stack_count + 1] if stack_count > 0 else "New: L1"
-		if stack_limit <= 0:
-			icon_line = ""
+		var icon_line := _format_stack_progress_icons(stack_count, stack_limit)
 		if reward_selection_mode == ENUMS.RewardMode.ARCANA and _prismatic_arcana_enabled and _can_offer_prismatic_arcana(player, String(boon.get("id", ""))):
-			icon_line = "L%d -> Prismatic" % stack_count
+			icon_line = "Prismatic"
 		if is_mutator_choice or icon_line.is_empty():
 			stack_label.text = ""
 			stack_label.visible = false
@@ -1121,25 +1181,29 @@ func _refresh_boon_ui(player: Node2D) -> void:
 			icon_node.position = MUTATOR_ICON_POS
 			icon_node.size = MUTATOR_ICON_SIZE
 			icon_node.custom_minimum_size = MUTATOR_ICON_SIZE
-			label.position = Vector2(MUTATOR_LABEL_X, 6.0)
+			label.position = Vector2(MUTATOR_LABEL_X, 14.0)
 			icon_node.texture = icon_texture
 			icon_node.modulate = Color(icon_color.r, icon_color.g, icon_color.b, 1.0)
 			icon_node.visible = icon_texture != null
 			var boon_desc := String(boon.get("desc", boon.get("description", "")))
 			var mutator_name := _choice_display_name(boon)
-			label.text = "[b][color=#fffef0]%s[/color][/b]\n%s" % [mutator_name, boon_desc]
+			card_title.text = mutator_name
+			label.text = boon_desc
 		else:
 			icon_node.position = BOON_ICON_POS
 			icon_node.size = BOON_ICON_SIZE
 			icon_node.custom_minimum_size = BOON_ICON_SIZE
-			label.position = Vector2(BOON_LABEL_X, 6.0)
+			label.position = Vector2(BOON_LABEL_X, 14.0)
 			icon_node.texture = null
 			icon_node.visible = false
 			var boon_desc := String(boon.get("desc", boon.get("description", "")))
 			var choice_name := _choice_display_name(boon)
-			label.text = "[b][color=#ddeeff]%d. %s[/color][/b]\n%s" % [i + 1, choice_name, boon_desc]
+			card_title.text = "%d. %s" % [i + 1, choice_name]
+			label.text = boon_desc
 		label.modulate = Color(1.0, 1.0, 1.0, 0.95)
 
+	_layout_boon_cards()
+	_position_action_buttons()
 	_update_boon_reveal_visuals()
 
 func _has_mission_bonus_mutator() -> bool:
@@ -1166,7 +1230,7 @@ func _get_boon_subtitle_text() -> String:
 		return "Select one Boon. Its fixed Mission bonus is included."
 	if reveal_complete:
 		if is_arcana:
-			return "Add another stack and push your stats further"
+			return "Choose a new Arcana or strengthen one you own"
 		return "Select a card to claim your reward"
 	return "Preparing your choices..."
 
@@ -1404,10 +1468,10 @@ func _apply_boon_card_styles(_hovered_index: int) -> void:
 		var border := Color(RARITY_COMMON.r, RARITY_COMMON.g, RARITY_COMMON.b, 0.9)
 		var rarity := RARITY_COMMON
 		if is_arcana:
-			idle_bg = Color(0.14, 0.08, 0.18, 0.97).lerp(Color(0.2, 0.12, 0.26, 0.97), t)
-			hover_bg = Color(0.3, 0.18, 0.4, 0.98)
+			idle_bg = Color(0.155, 0.09, 0.22, 0.98)
+			hover_bg = Color(0.25, 0.14, 0.34, 0.98)
 			rarity = RARITY_EPIC
-			border = Color(RARITY_EPIC.r, RARITY_EPIC.g, RARITY_EPIC.b, 0.95)
+			border = Color(RARITY_EPIC.r, RARITY_EPIC.g, RARITY_EPIC.b, 0.74)
 		elif is_mission:
 			var mission_tint := RARITY_RARE
 			if i < boon_choices.size():
@@ -1436,16 +1500,14 @@ func _apply_boon_card_styles(_hovered_index: int) -> void:
 		border_alpha = clampf(border_alpha + 0.4 * reveal_flash, 0.0, 1.0)
 		var border_final := Color(border.r, border.g, border.b, border_alpha)
 
-		var border_w := 2.0 + 2.0 * weight
-		if hype_mode:
-			border_w += 0.6 * pulse
+		var border_w := 2.0 + weight
 		border_w += 1.5 * reveal_flash
 
 		var shadow_size := 8
 		var shadow_color := Color(0.0, 0.0, 0.0, 0.45)
 		if hype_mode:
-			shadow_size = int(round(10.0 + 4.0 * pulse + 4.0 * weight + 6.0 * reveal_flash))
-			shadow_color = Color(rarity.r, rarity.g, rarity.b, 0.32 + 0.18 * pulse + 0.2 * weight)
+			shadow_size = int(round(7.0 + 5.0 * weight + 4.0 * reveal_flash))
+			shadow_color = Color(rarity.r, rarity.g, rarity.b, 0.15 + 0.15 * weight + 0.12 * reveal_flash)
 		elif is_mission:
 			shadow_size = int(round(8.0 + 2.0 * pulse + 3.0 * weight))
 			shadow_color = Color(rarity.r * 0.7, rarity.g * 0.7, rarity.b * 0.7, 0.3 + 0.12 * weight)

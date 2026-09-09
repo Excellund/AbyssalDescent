@@ -147,7 +147,7 @@ func _run() -> void:
 	var prismatic_payload := CATALYSTS.merge_payloads(["extra_arcana_slot"])
 	compass_ui.configure_catalyst_payload(prismatic_payload)
 	compass_ui.open_selection("Arcana", false, ENUMS.RewardMode.ARCANA, registry, player, rng)
-	_check(compass_ui.boon_card_stack_labels[0].text == "New: L1", "Fresh Arcana states the offered first level")
+	_check(compass_ui.boon_card_stack_labels[0].text == "◇◇◇", "Fresh Arcana restores its three empty level diamonds")
 	compass_ui.close_selection()
 	var all_arcana := registry.get_trial_power_pool(player)
 	for choice in all_arcana:
@@ -163,8 +163,8 @@ func _run() -> void:
 		compass_ui.open_selection("Prismatic", false, ENUMS.RewardMode.ARCANA, registry, player, rng)
 		compass_ui.boon_choices = [choice]
 		compass_ui._refresh_boon_ui(player)
-		_check(compass_ui.boon_card_stack_labels[0].text == "L%d -> Prismatic" % stack_limit, "Card identifies Prismatic " + power_id)
-		_check(compass_ui.boon_card_stack_labels[0].get_minimum_size().x <= 210.0, "Prismatic label fits its card column")
+		_check(compass_ui.boon_card_stack_labels[0].text == "Prismatic", "Card identifies Prismatic " + power_id)
+		_check(compass_ui.boon_card_stack_labels[0].get_minimum_size().x <= 130.0, "Prismatic label fits its compact card column")
 		_check(player.upgrade_system.apply_trial_power(power_id), "Apply Prismatic " + power_id)
 		_check(player.has_trial_power_prismatic(power_id), "Player records Prismatic " + power_id)
 		_check(player.get_trial_power_stack_count(power_id) == stack_limit, "Prismatic preserves ordinary stack cap for " + power_id)

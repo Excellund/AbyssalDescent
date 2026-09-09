@@ -221,6 +221,7 @@ var health_state
 var player_feedback: PLAYER_FEEDBACK_SCRIPT
 var static_wake_controller: STATIC_WAKE_CONTROLLER
 var combat_interactions: COMBAT_INTERACTIONS
+var _warden_verdict_cue_serial: int = 0
 var _dash_interaction: Dictionary = {}
 var _convergence_interaction: Dictionary = {}
 var _collecting_hit_slows: bool = false
@@ -1822,6 +1823,8 @@ func apply_network_cue_event(event_name: String, payload: Dictionary) -> void:
 	if player_feedback == null or event_name.is_empty() or payload.is_empty():
 		return
 	match event_name:
+		"warden_verdict":
+			player_feedback.play_warden_verdict_cue(payload)
 		"returning_crescent_state":
 			_ensure_returning_crescent()
 			returning_crescent.apply_network_state(payload)
@@ -1882,6 +1885,8 @@ func apply_owner_cue_event(event_name: String, payload: Dictionary) -> void:
 	if player_feedback == null or event_name.is_empty() or payload.is_empty():
 		return
 	match event_name:
+		"warden_verdict":
+			player_feedback.play_warden_verdict_cue(payload)
 		"shared_build_state":
 			_on_cue_shared_build_state(payload)
 		"combat_interaction_state":
@@ -2083,7 +2088,7 @@ func _on_cue_boss_void_zone_empowered_hit(payload: Dictionary) -> void:
 func _broadcast_cue_event(event_name: String, payload: Dictionary, reliable: bool = false) -> void:
 	if player_id <= 0:
 		return
-	if not _is_local_control_owner():
+	if not _is_local_control_owner() and not (event_name == "warden_verdict" and MultiplayerSessionManager.should_broadcast()):
 		return
 	if event_name.is_empty() or payload.is_empty():
 		return
@@ -2556,7 +2561,8 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 						player_feedback.play_world_ring(hit_position, 36.0, Color(1.0, 0.88, 0.44, 0.92), 0.14)
 			else:
 				final_damage_mult = farline_focus_outside_damage_mult
-		_resolve_attack_hit(enemy_body, hit_position, enemy_strike_damage, String(melee_context.get("source", "melee")), rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags, sigil_burst_state, final_damage_mult, Vector2.INF, {}, strike_coefficient, strike_range)
+		if _resolve_attack_hit(enemy_body, hit_position, enemy_strike_damage, String(melee_context.get("source", "melee")), rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags, sigil_burst_state, final_damage_mult, Vector2.INF, {}, strike_coefficient, strike_range) <= 0:
+			continue
 		if retort_active and not did_hit:
 			retort_impact_position = hit_position
 		did_hit = true
@@ -2628,8 +2634,8 @@ func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupt
 		var hit_position := hit_entry.get("hit_position", enemy_body.global_position) as Vector2
 		if (hit_position - global_position).length_squared() <= inner_range_squared:
 			continue
-		_resolve_attack_hit(enemy_body, hit_position, wind_damage, "razor_wind", rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags, sigil_burst_state, 1.0, Vector2.INF, hit_action, float(wind_context.get("damage_coefficient", razor_wind_damage_ratio)))
-		did_hit = true
+		if _resolve_attack_hit(enemy_body, hit_position, wind_damage, "razor_wind", rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags, sigil_burst_state, 1.0, Vector2.INF, hit_action, float(wind_context.get("damage_coefficient", razor_wind_damage_ratio))) > 0:
+			did_hit = true
 	return did_hit
 
 func _global_slow_duration_mult() -> float:
@@ -2769,6 +2775,8 @@ func _get_first_strike_bonus_damage(enemy_node: Object) -> int:
 	return 0
 
 func clear_lingering_combat_effects() -> void:
+	if player_feedback != null:
+		player_feedback.clear_warden_verdict()
 	DAMAGEABLE.cancel_owner(player_id if player_id > 0 else DAMAGEABLE._resolve_local_peer_id())
 	if shared_build_runtime != null:
 		shared_build_runtime.cancel()
@@ -4104,9 +4112,20 @@ func _update_apex_predator_combo(delta: float) -> void:
 	if apex_predator_combo_left <= 0.0:
 		apex_predator_combo_hits = 0
 
+func _show_warden_verdict_contact(hit_position: Vector2, step: int) -> void:
+	if player_feedback == null or not hit_position.is_finite() or step < 1 or step > 4:
+		return
+	_warden_verdict_cue_serial += 1
+	var payload := {"run": INTERACTION_REGISTRY.current_run(), "room": INTERACTION_REGISTRY.current_room(), "epoch": combat_interactions._accepted_epoch, "serial": _warden_verdict_cue_serial, "step": step, "position": hit_position, "radius": _get_apex_predator_burst_radius() if step == 4 else 0.0, "duration": apex_predator_combo_window}
+	player_feedback.play_warden_verdict_cue(payload)
+	_broadcast_cue_event("warden_verdict", payload, true)
+
+func _get_apex_predator_burst_radius() -> float:
+	return clampf(72.0 + float(apex_predator_bonus_damage) * 0.35, 72.0, 126.0)
+
 func _trigger_apex_predator_burst(epicenter: Vector2, primary_enemy_id: int, base_damage: int, source_coefficient: float = -1.0) -> void:
 	var effect_action := _capture_combat_action("_trigger_apex_predator_burst")
-	var burst_radius := clampf(72.0 + float(apex_predator_bonus_damage) * 0.35, 72.0, 126.0)
+	var burst_radius := _get_apex_predator_burst_radius()
 	var burst_damage := maxi(1, int(round(float(apex_predator_bonus_damage) * 0.9 + float(base_damage) * 0.55)))
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		if not (enemy_node is Node2D):

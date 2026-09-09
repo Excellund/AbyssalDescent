@@ -84,14 +84,16 @@ func _can_ward() -> bool:
 
 
 func get_ward_damage_multiplier_for(candidate: Variant) -> float:
+	return clampf(ward_damage_multiplier, 0.70, 1.0) if has_active_ward_for(candidate) else 1.0
+
+
+func has_active_ward_for(candidate: Variant) -> bool:
 	# Damage resolution asks again, so movement, cover and death cannot leave a
-	# stale protection bonus between the Keeper's normal physics updates.
+	# stale ward between the Keeper's normal physics updates.
 	if not _can_ward():
-		return 1.0
+		return false
 	_prune_ward_targets()
-	if is_instance_valid(candidate) and ward_targets.has(candidate):
-		return clampf(ward_damage_multiplier, 0.70, 1.0)
-	return 1.0
+	return is_instance_valid(candidate) and ward_targets.has(candidate)
 
 
 func on_player_displaced(impulse: Vector2) -> void:
@@ -372,7 +374,7 @@ func _draw() -> void:
 		return
 	for ally in ward_targets:
 		if _valid_ward_ally(ally, false):
-			_draw_ward_link(to_local(ally.global_position), true)
+			_draw_ward_link(to_local(ally.global_position), true, ally.get_current_health() == 1)
 	for ally in _pending_ward_targets:
 		if _valid_ward_ally(ally, false):
 			_draw_ward_link(to_local(ally.global_position), false)
@@ -397,16 +399,27 @@ func _draw() -> void:
 	_draw_slow_indicator(15.0)
 
 
-func _draw_ward_link(endpoint: Vector2, active: bool) -> void:
+func _draw_ward_link(endpoint: Vector2, active: bool, sustaining: bool = false) -> void:
 	var direction := endpoint.normalized()
 	var start := direction * 21.0
 	var end := endpoint - direction * 19.0
 	var color := WARD_COLOR
-	color.a = 0.62 if active else 0.25
+	color.a = 0.95 if sustaining else (0.62 if active else 0.25)
 	if active:
-		draw_line(start, end, color, 1.5, true)
+		draw_line(start, end, color, 2.8 if sustaining else 1.5, true)
 	else:
 		draw_dashed_line(start, end, color, 1.1, 7.0, true)
+	if sustaining:
+		# A persistent shield makes the saved ally readable even under rapid
+		# damage. Health replication supplies the same cue to co-op joiners.
+		var shell := PackedVector2Array([
+			endpoint + Vector2(-22.0, -18.0), endpoint + Vector2(22.0, -18.0),
+			endpoint + Vector2(21.0, 9.0), endpoint + Vector2(0.0, 27.0),
+			endpoint + Vector2(-21.0, 9.0), endpoint + Vector2(-22.0, -18.0)])
+		draw_colored_polygon(shell, Color(WARD_COLOR, 0.09))
+		draw_polyline(shell, color, 2.4, true)
 	var marker := endpoint + Vector2(0.0, -23.0)
 	var shield := PackedVector2Array([marker + Vector2(-6.0, -3.0), marker + Vector2(6.0, -3.0), marker + Vector2(5.0, 3.0), marker + Vector2(0.0, 7.0), marker + Vector2(-5.0, 3.0), marker + Vector2(-6.0, -3.0)])
-	draw_polyline(shield, color, 1.6 if active else 1.0, true)
+	if sustaining:
+		draw_colored_polygon(shield, Color(WARD_COLOR, 0.32))
+	draw_polyline(shield, color, 2.2 if sustaining else (1.6 if active else 1.0), true)

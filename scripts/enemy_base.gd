@@ -18,6 +18,9 @@ func on_player_displaced(_impulse: Vector2) -> void:
 func get_ward_damage_multiplier_for(_candidate: Variant) -> float:
 	return 1.0
 
+func has_active_ward_for(_candidate: Variant) -> bool:
+	return false
+
 signal health_changed(current_health: int, max_health: int)
 signal died
 signal damage_received(applied_amount: int, remaining_health: int)
@@ -629,6 +632,7 @@ func take_damage(amount: int, _damage_context: Dictionary = {}) -> void:
 	if pulse_damage_taken_mult > 1.0:
 		amount = maxi(1, int(round(float(amount) * pulse_damage_taken_mult)))
 	amount = _apply_keeper_ward_to_damage(amount)
+	amount = _apply_keeper_ward_health_floor(amount)
 	var before_health := int(health_state.current_health)
 	health_state.take_damage(amount)
 	var after_health := int(health_state.current_health)
@@ -648,8 +652,22 @@ func _apply_keeper_ward_to_damage(amount: int) -> int:
 		var multiplier := float(keeper.get_ward_damage_multiplier_for(self))
 		if is_finite(multiplier):
 			damage_multiplier = minf(damage_multiplier, clampf(multiplier, 0.0, 1.0))
-	# Multiple Keepers never compound protection, and wards cannot grant immunity.
+	# Multiple Keepers never compound the reduction. Lethal protection is
+	# resolved separately after all damage modifiers, including Shielder's wedge.
 	return maxi(1, int(round(float(amount) * damage_multiplier)))
+
+func _apply_keeper_ward_health_floor(amount: int) -> int:
+	var current_health := get_current_health()
+	if amount < current_health or current_health <= 0 or amount <= 0:
+		return amount
+	if not network_simulation_enabled or not is_inside_tree() or MultiplayerSessionManager.is_remote_replica():
+		return amount
+	for keeper in get_tree().get_nodes_in_group("keepers"):
+		if is_instance_valid(keeper) and not keeper.is_queued_for_deletion() and keeper.has_active_ward_for(self):
+			# No healing and no deferred death: breaking the link makes the next
+			# damage lethal. Zero health loss grants no damage or kill credit.
+			return current_health - 1
+	return amount
 
 func _apply_crowd_separation(delta: float) -> void:
 	if crowd_separation_radius <= 0.0 or crowd_separation_strength <= 0.0:

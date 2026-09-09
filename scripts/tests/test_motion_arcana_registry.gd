@@ -33,16 +33,19 @@ func _check(condition: bool, description: String) -> void:
 func _check_description(text: String, power_id: String, level: int, surface: String) -> void:
 	var visible := DESCRIPTION_GUARD.strip_bbcode(text)
 	_check(not visible.is_empty(), "%s L%d %s is present" % [power_id, level, surface])
-	_check(visible.length() <= 109, "%s L%d %s fits: %d chars" % [power_id, level, surface, visible.length()])
+	var lines := visible.split("\n", false)
+	_check(visible.length() <= DESCRIPTION_GUARD.MAX_VISIBLE_CARD_CHARS, "%s L%d %s full explanation fits: %d chars" % [power_id, level, surface, visible.length()])
+	_check(lines.size() == 2 and String(lines[-1]).length() <= DESCRIPTION_GUARD.MAX_VISIBLE_DESC_CHARS, "%s L%d %s separates its explanation from a compact numeric line" % [power_id, level, surface])
 	_check(visible.contains("Damage") and visible.contains("reach"), "%s %s names both scaling parameters" % [power_id, surface])
 	if power_id == "blast_drive":
 		_check(visible.contains("Hold Attack") and visible.contains("release"), "Blast %s explains the existing hold/release control" % surface)
 		_check(visible.contains("2 charges") if level >= 2 else visible.contains("1 charge"), "Blast L%d %s shows charge capacity" % [level, surface])
 		_check(visible.contains("steer") == (level >= 3), "Blast L%d %s shows steering at its actual unlock" % [level, surface])
 	else:
-		_check(visible.contains("Hold Dash") and visible.contains("release"), "Orbit %s explains the existing hold/release control" % surface)
-		_check(visible.to_lower().contains("columns") == (level >= 2), "Orbit L%d %s shows column anchors at their actual unlock" % [level, surface])
-		_check(visible.contains("kill transfer") == (level >= 3), "Orbit L%d %s shows transfer at its actual unlock" % [level, surface])
+		var lower := visible.to_lower()
+		_check(lower.contains("dash") and (lower.contains("hold") or lower.contains("held")) and lower.contains("release"), "Orbit %s explains the existing hold/release control" % surface)
+		_check(lower.contains("column") == (level >= 2), "Orbit L%d %s shows column anchors at their actual unlock" % [level, surface])
+		_check(lower.contains("transfer once") == (level >= 3) and (level < 3 or lower.contains("anchor dies") and lower.contains("2.4 seconds total")), "Orbit L%d %s shows one bounded transfer on anchor death at its actual unlock" % [level, surface])
 
 func _run() -> void:
 	var registry := REGISTRY.new()
@@ -88,7 +91,7 @@ func _run() -> void:
 		_check_description(upgrades.get_power_current_description(power_id), power_id, 3, "Prismatic current")
 		player.set(power_id + "_damage_scale", 1.42)
 		var live_text := DESCRIPTION_GUARD.strip_bbcode(upgrades.get_power_current_description(power_id))
-		var expected_live_damage := "Damage x%.2f" % (MOTION.BLAST_DAMAGE_MULT_MAX * 1.42) if power_id == "blast_drive" else "Damage %.1f%%" % (MOTION.ORBIT_CUT_DAMAGE_RATIO * 142.0)
+		var expected_live_damage := "Full blast x%.2f Damage" % (MOTION.BLAST_DAMAGE_MULT_MAX * 1.42) if power_id == "blast_drive" else "Cut damage %.1f%% of Damage" % (MOTION.ORBIT_CUT_DAMAGE_RATIO * 142.0)
 		var expected_live_reach := "reach %.0f" % ((MOTION.BLAST_RANGE_MAX if power_id == "blast_drive" else MOTION.ORBIT_ACQUIRE_RANGE) * 1.56)
 		_check(live_text.contains(expected_live_damage) and live_text.contains(expected_live_reach), "%s current text reads independent live values" % power_id)
 		for property in ["reward_" + power_id, power_id + "_stacks", power_id + "_damage_scale", power_id + "_reach_scale"]:

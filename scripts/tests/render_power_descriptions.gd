@@ -70,7 +70,9 @@ func _cards(rewards: REWARDS, registry: REGISTRY, ids: Array, name: String, head
 		var trial := REGISTRY.TRIAL_POWER_POOL_IDS.has(id)
 		var description := player.get_trial_power_card_desc(id) if trial else player.get_upgrade_card_desc(id)
 		rewards.boon_choices.append({"id": id, "name": registry.get_power_display_name(id), "desc": description, "stack_limit": registry.get_power_stack_limit(id), "type": REGISTRY.POWER_TYPE_TRIAL if trial else REGISTRY.POWER_TYPE_UPGRADE})
-		_check(DESCRIPTION_GUARD.visible_length(description) <= 109, id + " entire reward description fits the visible cap")
+		var lines := DESCRIPTION_GUARD.strip_bbcode(description).split("\n", false)
+		_check(DESCRIPTION_GUARD.visible_length(description) <= DESCRIPTION_GUARD.MAX_VISIBLE_CARD_CHARS, id + " full reward explanation fits the visible cap")
+		_check(not lines.is_empty() and String(lines[-1]).length() <= DESCRIPTION_GUARD.MAX_VISIBLE_DESC_CHARS, id + " numeric line retains the compact visible cap")
 	rewards.boon_title_text = heading
 	rewards.reward_selection_mode = ENUMS.RewardMode.ARCANA
 	rewards.current_player = player

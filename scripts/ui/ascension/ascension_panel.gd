@@ -32,6 +32,7 @@ var _modifier_list: VBoxContainer
 var _catalyst_list: VBoxContainer
 var _oath_list: VBoxContainer
 var _modifier_lock_banner: PanelContainer
+var _all_modifiers_button: Button
 var _catalyst_info_banner: PanelContainer
 var _collapsed_clear_groups: Dictionary = {}
 var _run_setup_mode_enabled: bool = false
@@ -122,6 +123,12 @@ func _build_ui(host: Node) -> void:
 	var modifier_column: Node = _modifier_list.get_parent().get_parent().get_parent()
 	modifier_column.add_child(_modifier_lock_banner)
 	modifier_column.move_child(_modifier_lock_banner, 1)
+	_all_modifiers_button = _make_toggle_button(false, true)
+	_all_modifiers_button.text = "Equip All"
+	_all_modifiers_button.disabled = true
+	_all_modifiers_button.pressed.connect(_toggle_all_modifiers)
+	modifier_column.add_child(_all_modifiers_button)
+	modifier_column.move_child(_all_modifiers_button, 1)
 	_modifier_column_root = modifier_column
 	_catalyst_list = _build_section_column(columns, "Catalysts (max %d)" % CATALYST_REGISTRY.get_slot_limit(), 1.0)
 	_catalyst_list.add_theme_constant_override("separation", 8)
@@ -318,6 +325,37 @@ func _refresh_modifier_list() -> void:
 		if _lobby_mode_enabled and not _lobby_is_host and equipped:
 			unlocked = true
 		_modifier_list.add_child(_make_modifier_card(modifier_id, def, unlocked, equipped))
+	_all_modifiers_button.text = "Remove All" if ASCENSION_REGISTRY.get_modifier_ids().all(loadout.has) else "Equip All"
+	_all_modifiers_button.disabled = not _can_toggle_all_modifiers()
+	_all_modifiers_button.tooltip_text = "Unlock every Ascension modifier to equip all." if _all_modifiers_button.disabled else ""
+	if _lobby_mode_enabled and not _lobby_is_host:
+		_all_modifiers_button.tooltip_text = "Only the host can change Ascension modifiers."
+	elif not _is_forsworn_setup():
+		_all_modifiers_button.tooltip_text = "Ascension modifiers are only available on Forsworn."
+
+func _can_toggle_all_modifiers() -> bool:
+	if _oaths_only_mode_enabled or not _is_forsworn_setup():
+		return false
+	if _lobby_mode_enabled and not _lobby_is_host:
+		return false
+	if not _is_ascension_unlocked() and not _lobby_mode_enabled:
+		return false
+	var completed_oaths: Array[String] = META_PROGRESS_STORE.get_completed_oath_ids(_get_profile())
+	var modifier_ids: Array[String] = ASCENSION_REGISTRY.get_modifier_ids()
+	for modifier_id in modifier_ids:
+		var locked_by: String = ASCENSION_REGISTRY.get_locked_by_oath_id(modifier_id)
+		if not locked_by.is_empty() and not completed_oaths.has(locked_by):
+			return false
+	return not modifier_ids.is_empty()
+
+func _toggle_all_modifiers() -> void:
+	if not _can_toggle_all_modifiers():
+		return
+	var loadout: Array[String] = META_PROGRESS_STORE.get_ascension_loadout(_get_profile(), _character_id)
+	var modifier_ids: Array[String] = ASCENSION_REGISTRY.get_modifier_ids()
+	if modifier_ids.all(loadout.has):
+		modifier_ids.clear()
+	_save_modifier_loadout(modifier_ids)
 
 func _make_modifier_card(modifier_id: String, def: Dictionary, unlocked: bool, equipped: bool) -> PanelContainer:
 	var card := PanelContainer.new()
@@ -404,7 +442,10 @@ func _toggle_modifier(modifier_id: String) -> void:
 		loadout.erase(modifier_id)
 	else:
 		loadout.append(modifier_id)
-	META_PROGRESS_STORE.set_ascension_loadout(profile, _character_id, loadout)
+	_save_modifier_loadout(loadout)
+
+func _save_modifier_loadout(loadout: Array[String]) -> void:
+	META_PROGRESS_STORE.set_ascension_loadout(_get_profile(), _character_id, loadout)
 	_save_profile()
 	if _lobby_mode_enabled and _lobby_is_host:
 		emit_signal("ascension_loadout_changed", loadout.duplicate())
@@ -417,6 +458,8 @@ func _refresh_catalyst_list() -> void:
 	_clear_children(_catalyst_list)
 	var profile: Dictionary = _get_profile()
 	var unlocked_ids: Array[String] = META_PROGRESS_STORE.get_unlocked_catalyst_ids(profile)
+	if _catalyst_info_banner != null:
+		_catalyst_info_banner.visible = not CATALYST_REGISTRY.get_catalyst_ids().all(unlocked_ids.has)
 	var equipped_ids: Array[String] = META_PROGRESS_STORE.get_equipped_catalyst_ids(profile, _character_id)
 	var slot_limit: int = CATALYST_REGISTRY.get_slot_limit()
 	for id_variant in CATALYST_REGISTRY.get_catalyst_ids():

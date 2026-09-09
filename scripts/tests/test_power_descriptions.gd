@@ -14,6 +14,8 @@ func _run() -> void:
 	await _test_mark_and_corridor_descriptions()
 	_test_complete_changed_cards()
 	_test_returning_crescent_descriptions()
+	_test_voidfire_lockout_description()
+	_test_boss_stat_displays()
 	await _test_reward_resize()
 	if is_instance_valid(MAPPER._power_registry_instance):
 		MAPPER._power_registry_instance.free()
@@ -21,6 +23,58 @@ func _run() -> void:
 	await process_frame
 	print("[OK] Power descriptions: %d checks, %d failures" % [checks, failures.size()])
 	quit(0 if failures.is_empty() else 1)
+
+func _test_boss_stat_displays() -> void:
+	_make_world(0)
+	var target := _enemy(Vector2(30.0, 0.0))
+	for level in range(1, 3):
+		player.apply_upgrade("wardens_verdict")
+		player.apex_predator_combo_hits = 0
+		var bonuses: Array[int] = []
+		for contact in range(4):
+			bonuses.append(player._get_apex_predator_bonus(target, target.global_position, 100))
+		var current := _text("wardens_verdict")
+		var flat_range := "+%d–%d" % [bonuses[0], bonuses[3] - 42]
+		_check(current.contains("Hit bonus " + flat_range), "Warden L%d shows the actual first-to-fourth flat contact bonuses" % level)
+		_check(bonuses[1] > bonuses[0] and bonuses[2] > bonuses[1] and bonuses[3] - 42 > bonuses[2], "Warden's four native contacts grow through the advertised range")
+		_check(current.contains("fourth +42% attack damage") and current.contains("Burst radius %.0f" % player._get_apex_predator_burst_radius()), "Warden separates the fourth-hit Attack bonus and native Burst reach")
+	_free_world()
+	_make_world(0)
+	player.player_id = 1
+	for level in range(1, 3):
+		player.apply_upgrade("lacuna_echo")
+		for live_damage in [20, 80]:
+			player.damage = live_damage
+			var pulse_target := _enemy(Vector2(40.0, 0.0))
+			player._apply_void_echo(pulse_target.global_position)
+			var current := _text("lacuna_echo")
+			var shown_ratio := current.get_slice("Field bonus +", 1).get_slice("%", 0).to_float() / 100.0
+			var base_pulse := current.get_slice("base pulse ", 1).get_slice(" damage/", 0).to_int()
+			_check(is_equal_approx(shown_ratio, 0.203 if level == 1 else 0.266), "Lacuna L%d shows the intended resolved Field bonus" % level)
+			_check(player._get_void_echo_zone_bonus(pulse_target, 1000) == int(round(shown_ratio * 1000.0)), "Lacuna's displayed Field bonus matches its native zone modifier")
+			var zone: Dictionary = player.void_echo_zones[0]
+			_check(current.contains("radius %.0f" % float(zone.radius)) and current.contains("lasts %.1fs" % float(zone.life)), "Lacuna displays its actual spawned radius and lifetime")
+			var before := pulse_target.get_current_health()
+			player._update_void_echo_zones(0.01)
+			_check(before - pulse_target.get_current_health() == int(round(base_pulse * (1.0 + shown_ratio))), "Displayed Lacuna base pulse and Field bonus explain native damage at Damage %d, level %d" % [live_damage, level])
+			_check(current.contains("damage/%.2fs" % float(player.void_echo_zones[0].pulse_left)), "Lacuna displays the native pulse cadence")
+			pulse_target.free()
+	_free_world()
+
+func _test_voidfire_lockout_description() -> void:
+	_make_world()
+	for level in range(1, 5):
+		var preview := DESCRIPTION_GUARD.strip_bbcode(player.get_trial_power_card_desc("voidfire"))
+		player.apply_trial_power("voidfire")
+		player._trigger_voidfire_detonation()
+		var actual_lock := "%.2fs" % player._voidfire_lockout_left
+		var preview_lock := preview.get_slice("lockout ", 1).trim_suffix(".")
+		if preview_lock.contains(" -> "):
+			preview_lock = preview_lock.get_slice(" -> ", 1)
+		_check(preview_lock == actual_lock, "Voidfire L%d preview shows the actual Attack lock, including L3 halving" % level)
+		_check(_text("voidfire").contains("lockout " + actual_lock), "Voidfire current description matches native overheat")
+		_check(preview.contains("High Heat:") and preview.contains("overheating releases a damaging Burst") and preview.contains("empties the Heat bar"), "Voidfire card distinguishes its conditional Attack bonus, overheat Burst and resource reset")
+	_free_world()
 
 func _test_reward_resize() -> void:
 	var viewport := SubViewport.new()
@@ -39,7 +93,10 @@ func _test_reward_resize() -> void:
 			_check(panel.get_global_rect().end.x <= float(width), "Reward panel remains inside the viewport after resizing to %d" % width)
 			_check(panel.size == rewards.boon_card_rects[index].size, "Visible reward and clickable rectangle agree at %d" % width)
 			_check(label.size == label.custom_minimum_size, "Description width follows the new layout at %d" % width)
-			_check(label.position.x + label.size.x < rewards.boon_card_stack_labels[index].position.x, "Description keeps clear of the level indicator at %d" % width)
+			var title: Label = rewards.boon_card_title_labels[index]
+			var stack: Label = rewards.boon_card_stack_labels[index]
+			_check(title.position.x + title.size.x <= stack.position.x, "Title keeps clear of the level indicator at %d" % width)
+			_check(label.position.y >= maxf(title.position.y + title.size.y, stack.position.y + stack.size.y), "Full-width description sits below the header at %d" % width)
 	viewport.free()
 
 func _text(power_id: String) -> String:
@@ -90,7 +147,7 @@ func _test_complete_changed_cards() -> void:
 		var levels := 4 if trial else 2
 		for level in range(1, levels + 1):
 			var preview := player.get_trial_power_card_desc(power_id) if trial else player.get_upgrade_card_desc(power_id)
-			_check(DESCRIPTION_GUARD.visible_length(preview) <= 109, "%s L%d complete card fits with all controls and metrics" % [power_id, level])
+			_check_card_bounds(preview, "%s L%d" % [power_id, level])
 			if trial:
 				player.apply_trial_power(power_id)
 			else:
@@ -111,10 +168,11 @@ func _test_returning_crescent_descriptions() -> void:
 		var ratio := CRESCENT.DAMAGE_RATIO * 100.0 * float(player.get("returning_crescent_damage_scale"))
 		var reach := CRESCENT.OUTBOUND_DISTANCE * float(player.get("returning_crescent_reach_scale"))
 		_check(preview.contains("%.1f%%" % ratio) and preview.contains("%.0f" % reach), "Crescent L%d previews the damage/range applied by the mapper" % level)
-		_check(current.contains("Damage %.1f%% each way" % ratio) and current.contains("reach %.0f" % reach), "Crescent L%d current text exposes its real flight damage/range" % level)
+		_check(current.contains("%.1f%% Damage each way" % ratio) and current.contains("reach %.0f" % reach), "Crescent L%d current text exposes its real flight damage/range" % level)
 		_check(current.contains("2 blades") if level >= 2 else current.contains("1 blade"), "Crescent L%d describes its actual blade capacity" % level)
 		_check(current.contains("wall bounce") == (level >= 3), "Crescent L%d describes the outbound bounce at the right unlock" % level)
-		_check(preview.length() <= 109 and current.length() <= 109, "Crescent L%d complete card/current text fits" % level)
+		_check_card_bounds(preview, "Crescent L%d preview" % level)
+		_check_current_bounds(current, "Crescent L%d current" % level)
 		_check(registry.get_trial_power_pool(player).any(func(entry: Dictionary) -> bool: return entry["id"] == "returning_crescent" and entry["desc"] == player.get_trial_power_card_desc("returning_crescent")), "Crescent shared reward pool reads the same live card description")
 	_check(player.get_trial_power_stack_count("returning_crescent") == 3 and player.upgrade_system.has_trial_power_prismatic("returning_crescent"), "Crescent descriptions retain the single Prismatic system")
 	registry.free()
@@ -148,16 +206,31 @@ func _test_motion_damage_descriptions() -> void:
 				player.arcana_motion.release_blast(1.0)
 				var actual_damage := 10000 - enemy.get_current_health()
 				_check(actual_damage == int(round(float(player.damage) * MOTION.BLAST_DAMAGE_MULT_MAX * damage_scale)), "Blast L%d full-charge damage matches its description ratio" % level)
-				_check(text.contains("Full Damage x%.2f" % (MOTION.BLAST_DAMAGE_MULT_MAX * damage_scale)) and text.contains("reach %.0f" % (MOTION.BLAST_RANGE_MAX * reach_scale)), "Blast L%d displays full-charge values rather than internal scales" % level)
+				_check(text.contains("Full blast x%.2f Damage" % (MOTION.BLAST_DAMAGE_MULT_MAX * damage_scale)) and text.contains("reach %.0f" % (MOTION.BLAST_RANGE_MAX * reach_scale)), "Blast L%d displays full-charge values rather than internal scales" % level)
 			else:
 				player.arcana_motion.start_orbit(enemy)
 				player.arcana_motion._apply_cut_contacts(origin, origin + Vector2(4.0, 0.0))
 				var actual_damage := 10000 - enemy.get_current_health()
 				_check(actual_damage == int(round(float(player.damage) * MOTION.ORBIT_CUT_DAMAGE_RATIO * damage_scale)), "Orbit L%d cut damage matches its description ratio" % level)
-				_check(text.contains("Damage %.1f%%" % (MOTION.ORBIT_CUT_DAMAGE_RATIO * 100.0 * damage_scale)) and text.contains("reach %.0f" % (MOTION.ORBIT_ACQUIRE_RANGE * reach_scale)), "Orbit L%d displays cut ratio and acquisition reach" % level)
-				_check(text.contains("orbit 1.4s or release") and (level < 3 or text.contains("kill transfer 2.4s")), "Orbit description states its lifetime, early release and unlocked transfer cap")
-			_check(text.length() <= 109, "%s L%d complete build text fits" % [power_id, level])
+				_check(text.contains("Cut damage %.1f%% of Damage" % (MOTION.ORBIT_CUT_DAMAGE_RATIO * 100.0 * damage_scale)) and text.contains("hook reach %.0f" % (MOTION.ORBIT_ACQUIRE_RANGE * reach_scale)), "Orbit L%d displays cut ratio and acquisition reach" % level)
+				_check(text.contains("1.4 seconds") and text.to_lower().contains("release to depart") and (level < 3 or text.contains("transfer once, up to 2.4 seconds total")), "Orbit description states its lifetime, early release and unlocked transfer cap")
+			_check_current_bounds(text, "%s L%d current" % [power_id, level])
 			_free_world()
+
+func _check_card_bounds(text: String, context: String) -> void:
+	var plain := DESCRIPTION_GUARD.strip_bbcode(text)
+	var lines := plain.split("\n", false)
+	_check(plain.length() <= DESCRIPTION_GUARD.MAX_VISIBLE_CARD_CHARS, "%s complete explanation and stats fit the bounded card" % context)
+	_check(lines.size() == 2, "%s contains a separate mechanic explanation and numeric line" % context)
+	if not lines.is_empty():
+		_check(String(lines[-1]).length() <= DESCRIPTION_GUARD.MAX_VISIBLE_DESC_CHARS, "%s numeric line retains the existing compact cap" % context)
+
+func _check_current_bounds(text: String, context: String) -> void:
+	var plain := DESCRIPTION_GUARD.strip_bbcode(text)
+	var lines := plain.split("\n", false)
+	_check(plain.length() <= DESCRIPTION_GUARD.MAX_VISIBLE_CARD_CHARS, "%s current explanation remains bounded" % context)
+	_check(lines.size() == 2, "%s owned build keeps its mechanic explanation above the numeric line" % context)
+	_check(not lines.is_empty() and String(lines[-1]).length() <= DESCRIPTION_GUARD.MAX_VISIBLE_DESC_CHARS, "%s current numeric line retains the compact cap" % context)
 
 func _test_mark_and_corridor_descriptions() -> void:
 	_make_world()
@@ -187,7 +260,7 @@ func _test_mark_and_corridor_descriptions() -> void:
 	_check(first_damage > 0 and enemy.get_current_health() == before - first_damage, "Null Corridor respects its deflection cooldown")
 	player._update_null_corridor_segments(0.41)
 	_check(enemy.get_current_health() == before - first_damage * 2, "A stationary enemy can be deflected again after 0.5 seconds")
-	_check(_text("null_corridor").contains("at most every 0.5s"), "Null Corridor describes repeat deflections rather than a single lifetime hit")
+	_check(_text("null_corridor").contains("same enemy again after half a second"), "Null Corridor describes repeat deflections rather than a single lifetime hit")
 	var registry := REGISTRY.new()
 	_check(String(registry.get_damage_model("null_corridor")["formula_note"]).contains("24%/28%"), "Null Corridor metadata reflects the existing two reward levels")
 	registry.free()

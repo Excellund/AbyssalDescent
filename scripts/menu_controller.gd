@@ -12,6 +12,7 @@ const GLOSSARY_DATA := preload("res://scripts/shared/glossary_data.gd")
 const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
+const CHARACTER_PASSIVES := preload("res://scripts/shared/character_passive_catalogue.gd")
 const SETTINGS_STORE := preload("res://scripts/settings_store.gd")
 const UPDATE_SERVICE_SCRIPT := preload("res://scripts/update_service.gd")
 const BUILD_INFO := preload("res://scripts/build_info.gd")
@@ -1057,7 +1058,8 @@ func _apply_menu_layout() -> void:
 	if ascension_panel != null:
 		_set_centered_panel_layout(ascension_panel, Vector2(1520.0, 920.0), fit_scale, viewport_size)
 	if glossary_panel != null:
-		_set_centered_panel_layout(glossary_panel, Vector2(1360.0, 900.0), fit_scale, viewport_size)
+		var glossary_scale := minf(1.0, minf((viewport_size.x - 48.0) / 1360.0, (viewport_size.y - 48.0) / 900.0))
+		_set_centered_panel_layout(glossary_panel, Vector2(1360.0, 900.0), maxf(0.1, glossary_scale), viewport_size)
 	if multiplayer_panel != null:
 		_set_centered_panel_layout(multiplayer_panel, Vector2(980.0, 700.0), fit_scale, viewport_size)
 	if difficulty_selector_panel != null:
@@ -2723,6 +2725,7 @@ func _show_leaderboard_panel() -> void:
 
 func _build_glossary_panel() -> Panel:
 	var panel := Panel.new()
+	panel.name = "GlossaryPanel"
 	# Absolute position: (2560-1360)/2, (1440-900)/2 — centered in 2560x1440 viewport
 	panel.position = Vector2(600.0, 270.0)
 	panel.size = Vector2(1360.0, 900.0)
@@ -2780,6 +2783,7 @@ func _build_glossary_panel() -> Panel:
 	nav_panel.add_child(nav_margin)
 
 	var nav_vbox := VBoxContainer.new()
+	nav_vbox.name = "GlossaryNavigation"
 	nav_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	nav_vbox.add_theme_constant_override("separation", 6)
 	nav_margin.add_child(nav_vbox)
@@ -2791,6 +2795,7 @@ func _build_glossary_panel() -> Panel:
 	content_row.add_child(body_panel)
 
 	var body := RichTextLabel.new()
+	body.name = "GlossaryBody"
 	body.set_anchors_preset(Control.PRESET_FULL_RECT)
 	body.offset_left = 16.0
 	body.offset_top = 12.0
@@ -2801,6 +2806,8 @@ func _build_glossary_panel() -> Panel:
 	body.scroll_active = true
 	body.selection_enabled = false
 	body.add_theme_font_size_override("normal_font_size", 18)
+	body.add_theme_font_size_override("bold_font_size", 18)
+	body.add_theme_constant_override("line_separation", 5)
 	body.add_theme_color_override("default_color", Color(0.86, 0.94, 1.0, 0.96))
 	body_panel.add_child(body)
 
@@ -3191,14 +3198,19 @@ func _build_character_selector_panel() -> Panel:
 
 		var passive_desc := _passive_short_desc(passive_id)
 		if not passive_desc.is_empty():
-			var desc_label := Label.new()
+			var desc_label := RichTextLabel.new()
+			desc_label.name = "PassiveDescription"
+			desc_label.bbcode_enabled = true
+			desc_label.fit_content = true
+			desc_label.scroll_active = false
+			desc_label.selection_enabled = false
 			desc_label.text = passive_desc
 			desc_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			desc_label.custom_minimum_size = Vector2(0.0, 0.0)
-			desc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 			desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			desc_label.add_theme_font_size_override("font_size", 14)
-			desc_label.add_theme_color_override("font_color", Color(0.86, 0.90, 0.95, 0.88))
+			desc_label.add_theme_font_size_override("normal_font_size", 14)
+			desc_label.add_theme_font_size_override("bold_font_size", 14)
+			desc_label.add_theme_color_override("default_color", Color(0.86, 0.90, 0.95, 0.88))
 			desc_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			details_box.add_child(desc_label)
 
@@ -3331,26 +3343,10 @@ func _resolve_random_character() -> String:
 	return unlocked_ids[randi() % unlocked_ids.size()]
 
 func _passive_display_name(passive_id: String) -> String:
-	match passive_id.strip_edges().to_lower():
-		"iron_retort": return "Iron Retort"
-		"sigil_burst": return "Sigil Burst"
-		"veilstep_rhythm": return "Veilstep Rhythm"
-		"farline_focus": return "Farline Focus"
-	var words := passive_id.split("_", false)
-	var out := ""
-	for i in range(words.size()):
-		if i > 0:
-			out += " "
-		out += String(words[i]).capitalize()
-	return out.strip_edges()
+	return CHARACTER_PASSIVES.get_display_name(passive_id)
 
 func _passive_short_desc(passive_id: String) -> String:
-	match passive_id.strip_edges().to_lower():
-		"iron_retort": return "Stand still briefly to Brace. Next attack while Braced: +80% dmg, wider arc, and a shockwave granting Guard. Dashing breaks Brace."
-		"sigil_burst": return "Dashing arms a burst. Your next attack detonates a 70% damage sigil explosion at the target."
-		"veilstep_rhythm": return "Dashing through enemies builds Veilstep shards. At full shards, your next dash releases a high-damage surge wave."
-		"farline_focus": return "Direct attack hits inside your farline band and aim lane deal +70% damage; those outside deal 30% less — keep distance and hold your angle."
-	return ""
+	return CHARACTER_PASSIVES.get_short_description(passive_id)
 
 func _build_stat_bar(icon_text: String, fill_ratio: float, bar_color: Color) -> Control:
 	var group := HBoxContainer.new()

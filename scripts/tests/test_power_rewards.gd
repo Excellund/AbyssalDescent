@@ -228,18 +228,23 @@ func _test_boss_combination_descriptions(registry: Node) -> void:
 		for stack in range(3):
 			var card: String = upgrades.get_upgrade_card_description(power_id)
 			var current: String = upgrades.get_power_current_description(power_id)
-			_check(DESCRIPTION_GUARD.visible_length(card) <= 109 and DESCRIPTION_GUARD.visible_length(current) <= 109, "%s level %d complete descriptions fit the visible cap" % [power_id, stack])
+			var card_lines := DESCRIPTION_GUARD.strip_bbcode(card).split("\n", false)
+			var current_lines := DESCRIPTION_GUARD.strip_bbcode(current).split("\n", false)
+			_check(DESCRIPTION_GUARD.visible_length(card) <= DESCRIPTION_GUARD.MAX_VISIBLE_CARD_CHARS and DESCRIPTION_GUARD.visible_length(current) <= DESCRIPTION_GUARD.MAX_VISIBLE_CARD_CHARS, "%s level %d complete explanation and stats fit the full-card cap" % [power_id, stack])
+			_check(card_lines.size() == 2 and String(card_lines[-1]).length() <= DESCRIPTION_GUARD.MAX_VISIBLE_DESC_CHARS and not current_lines.is_empty() and String(current_lines[-1]).length() <= DESCRIPTION_GUARD.MAX_VISIBLE_DESC_CHARS, "%s level %d keeps compact numeric lines within 109 characters" % [power_id, stack])
 			_check(not card.contains("Upgrade your stats") and not current.is_empty(), "%s level %d has specific reward/build text" % [power_id, stack])
 			if power_id == "ruinous_impact":
-				_check(DESCRIPTION_GUARD.strip_bbcode(card).contains("Bosses burst in place") and DESCRIPTION_GUARD.strip_bbcode(card).contains("impacts burst"), "Ruinous Impact explains its standalone and boss effects")
+				var ruinous_text := DESCRIPTION_GUARD.strip_bbcode(card).to_lower()
+				_check(ruinous_text.contains("attack hits launch foes") and ruinous_text.contains("burst on impact") and ruinous_text.contains("each launch bursts once") and ruinous_text.contains("immovable foes compress and burst in place"), "Ruinous Impact explains its own launch, once-only impacts and immovable compression")
 				_check(current.contains("140%" if stack == 2 else "100%"), "Ruinous Impact displays the active damage ratio")
 				_check(current.contains("95" if stack == 2 else "70"), "Ruinous Impact displays the active radius")
 			else:
 				var card_text := DESCRIPTION_GUARD.strip_bbcode(card)
-				var echo_preview := "1" if stack == 0 else "%d -> %d" % [stack, mini(2, stack + 1)]
-				_check(card_text.contains("dash") and card_text.contains("recoil") and card_text.contains("orbit") and card_text.contains("shade echoes next %s attacks" % echo_preview), "Sovereign's Double explains all movement triggers and previews its next attack count")
+				var echo_preview := "1 -> 2" if stack == 1 else str(maxi(1, stack))
+				var lower_text := card_text.to_lower()
+				_check(lower_text.contains("dash") and lower_text.contains("recoil") and lower_text.contains("orbit") and card_text.contains("%s Echoes" % echo_preview), "Sovereign's Double explains all movement triggers and previews its next attack count")
 				_check(card.contains("55%") and current.contains("4s"), "Sovereign's Double preserves echo damage and lifetime")
-				_check(DESCRIPTION_GUARD.strip_bbcode(current).contains("next %d attacks" % maxi(1, stack)), "Sovereign's Double displays the active echo count")
+				_check(DESCRIPTION_GUARD.strip_bbcode(current).contains("%d Echoes" % maxi(1, stack)), "Sovereign's Double displays the active echo count")
 			var pool: Array[Dictionary] = registry.get_boss_reward_pool(player)
 			for option in pool:
 				if option.get("id") == power_id:

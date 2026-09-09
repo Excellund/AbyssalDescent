@@ -2,6 +2,19 @@
 
 The shared catalogue has 12 Boons, 21 Arcana, nine boss rewards and six fixed Mission bonuses. Offers retain equal random odds. Boons remain capped at three picks except Heartstone at two; Arcana have three levels and one eligible Prismatic upgrade; boss rewards have two levels. Names below are presentation names; saved IDs remain unchanged.
 
+## Character passives: starting build rules
+
+Passives retain their four character assignments and saved IDs. Character selection, build inspection and the glossary use `scripts/shared/character_passive_catalogue.gd`; its properties also participate in build comparisons. Passive damage can feed damage receivers, but does not perform another Attack or supply a new attack hit.
+
+| Character / passive | Trigger and result / key condition |
+|---|---|
+| Bastion / Iron Retort | Hold position or move slowly for 0.42s to Brace for 2.4s. Melee/charged Attacks gain 80% damage and 24° arc. First accepted melee, Razor Wind or charged Blast contact spends Brace, releases a 55%-of-empowered-strike-basis Burst and grants 25% resistance for 1.5s. Dash, Recoil and Orbit break Brace; Dash blocks rebuilding for 0.8s. Razor Wind can spend Brace but is not itself empowered. |
+| Hexweaver / Sigil Burst | Normal Dash arms one Burst; next accepted melee, Razor Wind or charged Blast contact releases it for 70% of the triggering attack's damage basis. Once per original Attack; repeated Dashes do not bank extra Bursts. Detonates nearby owned Sigil Chain sigils at three times their tick damage: active Fields are consumed, dormant sigils persist until the chain resets. |
+| Veilstrider / Veilstep Rhythm | One shard per normal Dash touching foes. Two shards refresh Dash and open a 4s window; the next Dash has no cooldown and ends in a 160%-Damage Burst. The Burst or an unused window's expiry clears shards. Recoil/Orbit do not grant shards. |
+| Riftlancer / Farline Focus | Melee/charged Blast damage ×1.70 inside both the outer 98/132–100% range band and Attack aim arc; ×0.70 otherwise. Band scales with Attack range; each target's body overlaps the band and its center lies in the aim arc. Razor Wind and automatic descendants do not make a new check; descendants retain copied source scaling. |
+
+Retort and Sigil descendants carry the unconditioned source basis and scaled Damage coefficient, resolving conditions against each actual victim. Retort, Sigil and Veilstep are Bursts, without Electric, Field or Push properties. Rejected damage does not itself spend Brace or an armed Sigil Burst; subsequent Recoil still breaks Brace. Farline compatibility includes charged Blast but excludes Razor Wind.
+
 ## Boons: permanent generic increases
 
 | Boon | Per pick |
@@ -60,7 +73,7 @@ Marks are timed shared vulnerabilities: strongest active base Mark applies to al
 | Unbroken Oath | Resistance plus Attack-built Oath that empowers the next Attack. |
 | Edict of the Court | Kills Push nearby enemies. |
 | Null Corridor | Dash leaves a Field that Pushes and damages at its existing cadence. |
-| Ruinous Impact | Direct strikes and eligible Push/Pull effects arm Launches; one Impact Burst, with compression for immovable targets. |
+| Ruinous Impact | Attack hits and eligible Push/Pull effects arm Launches; one Impact Burst, with compression for immovable targets. |
 | Sovereign's Double | Completed movement places a shade; one/two Echoes copy 55% of deliberate attack shape and damage without new Attack/resource/reaction allowances. |
 
 ## Missions: permanent Boon plus three-room amplification

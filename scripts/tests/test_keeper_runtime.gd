@@ -5,6 +5,7 @@ const DAMAGE := preload("res://scripts/shared/damageable.gd")
 const COMBO := preload("res://scripts/tests/test_boss_combinations.gd")
 const MAPPER := preload("res://scripts/power_parameter_mapper.gd")
 const SHIELDER := preload("res://scripts/enemy_shielder.gd")
+const INTERACTIONS := preload("res://scripts/shared/combat_interaction_registry.gd")
 
 class Keeper extends "res://scripts/enemy_keeper.gd":
 	func _ready() -> void:
@@ -95,6 +96,9 @@ func _arm(keeper: Keeper) -> void:
 
 func _run() -> void:
 	await _test_damage_and_accounting()
+	await _test_lethal_sources_and_reactions()
+	await _test_ward_break_lethality()
+	await _test_floor_without_mitigation()
 	await _test_exclusions_and_no_stacking()
 	await _test_link_lifecycle()
 	await _test_displacement_and_rearm()
@@ -131,12 +135,96 @@ func _test_damage_and_accounting() -> void:
 	_check(world.events.size() == count and EnemyReplicationService.killer_peer_for(801) == 1, "Blocked hits create no phantom damage or replacement kill credit")
 	target.damage_blocked = false
 	target.set_health(30)
-	DAMAGE.apply_damage(target, 100, {"secondary": true}, 2)
-	_check(world.events.back().amount == 30 and world.events.back().killed and world.events.back().peer == 2, "Protected lethal damage credits only remaining health to the final owner")
+	DAMAGE.apply_damage(target, 99999, {"secondary": true}, 2)
+	_check(target.get_current_health() == 1 and world.events.back().amount == 29 and not world.events.back().killed and world.events.back().peer == 2, "An overwhelming protected hit leaves one health and credits only accepted damage")
 	count = world.events.size()
 	DAMAGE.apply_damage(target, 100, {}, 1)
-	_check(world.events.size() == count and EnemyReplicationService.killer_peer_for(801) == 2, "Dead targets cannot produce phantom damage or steal kill ownership")
+	_check(target.get_current_health() == 1 and world.events.size() == count and EnemyReplicationService.killer_peer_for(801) == 2, "Damage stopped by the ward floor cannot produce phantom damage or steal ownership")
+	DAMAGE.apply_impulse(keeper, Vector2(100.0, 0.0), 1, true)
+	DAMAGE.apply_damage(target, 100, {"secondary": true}, 1)
+	_check(target.get_current_health() == 0 and world.events.back().amount == 1 and world.events.back().killed and world.events.back().peer == 1, "Breaking the ward makes the final health immediately killable by the actual owner")
+	count = world.events.size()
+	DAMAGE.apply_damage(target, 100, {}, 2)
+	_check(world.events.size() == count and EnemyReplicationService.killer_peer_for(801) == 1, "Dead targets cannot produce phantom damage or steal kill ownership")
 	_check(keeper.get_ward_damage_multiplier_for(target) == 1.0 and not keeper.ward_targets.has(target), "Death invalidates the ward at the damage query boundary")
+	_cleanup()
+
+func _test_lethal_sources_and_reactions() -> void:
+	_setup()
+	var keeper := _keeper()
+	var target := _enemy(Vector2(100.0, 0.0), 802)
+	var neighbor := _enemy(Vector2(150.0, 0.0))
+	var damage_signals: Array[int] = []
+	var deaths: Array[bool] = []
+	target.damage_received.connect(func(applied: int, _remaining: int): damage_signals.append(applied))
+	target.died.connect(func(): deaths.append(true))
+	await _settle()
+	_arm(keeper)
+	var sources := ["melee", "blast_drive", "phantom_step", "static_wake", "razor_orbit", "sovereigns_double", "ruinous_impact", "voidfire_detonate"]
+	for source in sources:
+		target.set_health(1000)
+		DAMAGE.apply_damage(target, 99999, {"attack_type": source, "secondary": source not in ["melee", "blast_drive"]}, 2)
+		_check(target.get_current_health() == 1 and world.events.back().amount == 999 and not world.events.back().killed, "The active ward stops overwhelming %s damage at one health" % source)
+	_check(deaths.is_empty() and damage_signals.size() == sources.size(), "Surviving lethal damage emits accepted damage once without any death signal")
+	player.apply_upgrade("storm_crown")
+	player.storm_crown_hit_counter = player.storm_crown_proc_every - 1
+	var crown_before := player.storm_crown_hit_counter
+	var event_count := world.events.size()
+	var hit_count := target.hits.size()
+	for index in range(48):
+		var action := player.combat_interactions.begin_action("attack")
+		var context := INTERACTIONS.damage_context(action, sources[index % sources.size()], {"secondary": true, "raw_amount": 99999.0, "damage_coefficient": 0.0})
+		if index == 0:
+			_check(not INTERACTIONS.validate_action(context.interaction, 1).is_empty() and player.combat_interactions.accepts_action(context.interaction), "Repeated floor hits carry valid actions that could otherwise generate damage reactions")
+		DAMAGE.apply_damage(target, 99999, context, 1)
+	_check(target.get_current_health() == 1 and target.hits.size() == hit_count and world.events.size() == event_count and damage_signals.size() == sources.size(), "Rapid repeated secondary damage at one health creates no accepted hits, signals or statistics")
+	_check(player.storm_crown_hit_counter == crown_before and neighbor.get_current_health() == 1000, "Rejected damage cannot charge a primed Storm Crown or discharge into another enemy")
+	_check(EnemyReplicationService.killer_peer_for(802) == 2 and not DAMAGE.is_launch_suppressed() and DAMAGE.current_interaction_context().is_empty(), "Rejected repetitions preserve previous ownership and retire their interaction scopes")
+	DAMAGE.apply_damage(target, 0, {}, 1)
+	target.take_damage(0)
+	_check(target.get_current_health() == 1 and world.events.size() == event_count and damage_signals.size() == sources.size(), "Zero damage cannot add health or create a ward hit")
+	_cleanup()
+
+func _test_ward_break_lethality() -> void:
+	for reason in ["warmup", "range", "cover", "push", "keeper death"]:
+		_setup()
+		var keeper := _keeper()
+		var target := _enemy(Vector2(100.0, 0.0))
+		target.set_health(30)
+		await _settle()
+		if reason == "warmup":
+			keeper._update_wards(0.001)
+		else:
+			_arm(keeper)
+			DAMAGE.apply_damage(target, 99999, {"secondary": true}, 1)
+			_check(target.get_current_health() == 1, "%s fixture begins with a warded survivor at one health" % reason)
+		match reason:
+			"range":
+				target.position = Vector2(221.0, 0.0)
+			"cover":
+				var wall := StaticBody2D.new()
+				_circle(wall, 20.0)
+				wall.position = Vector2(50.0, 0.0)
+				world.add_child(wall)
+				await _settle()
+			"push":
+				DAMAGE.apply_impulse(keeper, Vector2(100.0, 0.0), 2, true)
+			"keeper death":
+				keeper.take_damage(99999)
+		DAMAGE.apply_damage(target, 99999, {"secondary": true}, 2)
+		_check(target.get_current_health() == 0 and world.events.back().killed and world.events.back().amount == (30 if reason == "warmup" else 1), "%s leaves the target immediately killable without an extra AI tick" % reason)
+		_cleanup()
+
+func _test_floor_without_mitigation() -> void:
+	_setup()
+	var keeper := _keeper()
+	var target := _enemy(Vector2(100.0, 0.0))
+	keeper.ward_damage_multiplier = 1.0
+	await _settle()
+	_arm(keeper)
+	_check(keeper.has_active_ward_for(target) and keeper.get_ward_damage_multiplier_for(target) == 1.0, "An active ward remains identifiable when its damage reduction is tuned to zero")
+	DAMAGE.apply_damage(target, 99999, {"secondary": true})
+	_check(target.get_current_health() == 1 and world.events.back().amount == 999, "Preventing death depends on a valid ward rather than a reduction multiplier")
 	_cleanup()
 
 func _test_exclusions_and_no_stacking() -> void:
@@ -158,6 +246,14 @@ func _test_exclusions_and_no_stacking() -> void:
 		_check(keeper.get_ward_damage_multiplier_for(excluded) == 1.0, "Excluded bodies can never borrow a Keeper link")
 	DAMAGE.apply_damage(ordinary, 100)
 	_check(ordinary.get_current_health() == 930, "Two Keepers protecting one ally never stack reduction")
+	DAMAGE.apply_damage(ordinary, 99999, {"secondary": true})
+	_check(ordinary.get_current_health() == 1, "Overlapping Keeper wards hold the same one-health floor")
+	DAMAGE.apply_impulse(keeper, Vector2(100.0, 0.0), 1, true)
+	DAMAGE.apply_damage(ordinary, 99999, {"secondary": true})
+	_check(ordinary.get_current_health() == 1, "Breaking one Keeper leaves the other valid ward in control")
+	DAMAGE.apply_impulse(other, Vector2(100.0, 0.0), 1, true)
+	DAMAGE.apply_damage(ordinary, 99999, {"secondary": true})
+	_check(ordinary.get_current_health() == 0, "Breaking every protecting Keeper exposes the remaining health")
 	var before := keeper.get_current_health()
 	DAMAGE.apply_damage(keeper, 40)
 	_check(before - keeper.get_current_health() == 40, "The supporting Keeper remains directly vulnerable")
@@ -287,10 +383,25 @@ func _test_shielder_override() -> void:
 	var count := world.events.size()
 	DAMAGE.apply_damage(shield, 100, {"is_ground_attack": true})
 	_check(shield.get_current_health() == 860 and world.events.size() == count, "Shielder's ground path respects damage blocking and emits no credit")
-	keeper.take_damage(99999)
 	shield.damage_blocked = false
+	shield.set_health(20)
+	shield.shield_facing = Vector2.LEFT
+	DAMAGE.apply_damage(shield, 100, {"attack_origin": Vector2.ZERO})
+	var front_damage := int(70.0 * (1.0 - shield.shield_damage_reduction))
+	_check(shield.get_current_health() == 20 - front_damage and world.events.back().amount == front_damage, "Directional shield mitigation resolves before the ward's lethal floor")
+	DAMAGE.apply_damage(shield, 99999, {"attack_origin": Vector2.ZERO})
+	_check(shield.get_current_health() == 1 and not world.events.back().killed, "Even an overwhelming frontal hit leaves a warded Shielder at one health")
+	count = world.events.size()
+	DAMAGE.apply_damage(shield, 99999, {"attack_origin": Vector2.ZERO})
+	DAMAGE.apply_damage(shield, 99999, {"is_ground_attack": true, "secondary": true})
+	shield.take_damage(0, {"is_ground_attack": true})
+	_check(shield.get_current_health() == 1 and world.events.size() == count, "Repeated frontal, ground and zero damage cannot bypass a Shielder's ward floor")
+	shield.set_health(20)
+	DAMAGE.apply_damage(shield, 99999, {"is_ground_attack": true, "secondary": true})
+	_check(shield.get_current_health() == 1 and world.events.back().amount == 19, "A lethal ground hit also respects the final ward floor")
+	keeper.take_damage(99999)
 	DAMAGE.apply_damage(shield, 100, {"is_ground_attack": true})
-	_check(shield.get_current_health() == 760, "Lethal Keeper damage removes support before the next hit")
+	_check(shield.get_current_health() == 0 and world.events.back().amount == 1 and world.events.back().killed, "Lethal Keeper damage immediately exposes a Shielder's final health")
 	_cleanup()
 
 func _test_displacement_and_rearm() -> void:
@@ -331,6 +442,18 @@ func _test_real_blast_and_shade() -> void:
 	if target.hits.size() == 2:
 		_check(target.hits[0].amount == 175 and target.hits[1].amount == 97, "The 250 Blast and 55% echo each receive ward mitigation exactly once")
 		_check(world.events[0].amount == 175 and world.events[1].amount == 97, "Real primary and echo statistics equal their final health deltas")
+	target.set_health(100)
+	target.hits.clear()
+	world.events.clear()
+	var echoes_before := player.cues.count("sovereign_double_strike")
+	player.boss_combinations.create_shade(Vector2.ZERO)
+	player.perform_motion_blast(Vector2.RIGHT, 1.0)
+	_check(target.get_current_health() == 1 and target.hits.size() == 1 and target.hits[0].type == "blast_drive" and target.hits[0].amount == 99, "A real lethal Blast stops at one health and its immediate Sovereign echo cannot finish the warded ally")
+	_check(world.events.size() == 1 and world.events[0].amount == 99 and not world.events[0].killed, "The lethal Blast and rejected echo account only the 99 accepted damage")
+	_check(player.cues.count("sovereign_double_strike") == echoes_before + 1, "The rejected echo actually executes after the lethal Blast")
+	player.boss_combinations.create_shade(Vector2.ZERO)
+	player.perform_motion_blast(Vector2.RIGHT, 1.0)
+	_check(target.get_current_health() == 1 and world.events.size() == 1, "Repeating the real Blast and shade sequence cannot grind through the active ward")
 	_cleanup()
 
 func _test_replica_authority() -> void:
@@ -340,11 +463,11 @@ func _test_replica_authority() -> void:
 	await _settle()
 	_arm(keeper)
 	keeper.network_simulation_enabled = false
-	_check(keeper.get_ward_damage_multiplier_for(target) == 1.0, "A visual Keeper replica cannot mitigate even if stale links remain")
+	_check(keeper.get_ward_damage_multiplier_for(target) == 1.0 and not keeper.has_active_ward_for(target), "A visual Keeper replica cannot mitigate or prevent death even if stale links remain")
 	keeper.network_simulation_enabled = true
 	MultiplayerSessionManager.session_connected = true
 	MultiplayerSessionManager.is_host_peer = false
-	_check(keeper.get_ward_damage_multiplier_for(target) == 1.0, "Client authority gate overrides an accidentally enabled local simulation flag")
+	_check(keeper.get_ward_damage_multiplier_for(target) == 1.0 and not keeper.has_active_ward_for(target), "Client authority gate overrides an accidentally enabled local simulation flag")
 	MultiplayerSessionManager.is_host_peer = true
-	_check(keeper.get_ward_damage_multiplier_for(target) == 0.7, "The actual host remains authoritative in a co-op session")
+	_check(keeper.get_ward_damage_multiplier_for(target) == 0.7 and keeper.has_active_ward_for(target), "The actual host remains authoritative in a co-op session")
 	_cleanup()

@@ -317,7 +317,7 @@ static func _build_encounter_registry() -> Array[Dictionary]:
 			"glossary_label": "Breach",
 			"door_presentation": {"label": "Breach"},
 			"bearing_label": "Breach",
-			"identity": "A vulnerable Keeper partially wards a small firing line. Break its links or close the open approach."
+			"identity": "A vulnerable Keeper keeps two allies alive while their wards hold. Kill or push the Keeper, or break its links with distance or cover."
 		},
 		{
 			"key": "trial",

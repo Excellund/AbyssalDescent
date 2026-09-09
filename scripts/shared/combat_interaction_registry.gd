@@ -18,7 +18,8 @@ const EFFECT_FORMS := {
 	"wraithstep_chain": ["Burst"], "voidfire_detonate": ["Burst"],
 	"fracture_fault_line": ["Burst"], "farline_volley_burst": ["Burst"],
 	"apex_predator_burst": ["Burst"], "apex_momentum_wave": ["Burst"],
-	"ruinous_impact": ["Burst"], "sigil_burst": ["Burst"], "sigil_chain_detonate": ["Burst"]
+	"ruinous_impact": ["Burst"], "sigil_burst": ["Burst"], "sigil_chain_detonate": ["Burst"],
+	"iron_retort_shockwave": ["Burst"], "veilstep_rhythm_wave": ["Burst"]
 }
 
 static func is_attack_hit(source: String) -> bool:

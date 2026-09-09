@@ -1,33 +1,45 @@
 extends RefCounted
 ## Authored semantic spans only. Ordinary prose and internal HIT IDs are never rewritten.
 
+const ACTION_COLOR := "FFD38A"
+const CONDITION_COLOR := "DEAEFF"
+const EFFECT_COLOR := "79DCFF"
+const ACTION_TERMS := ["attack", "attack_hit", "dash", "recoil", "orbit", "kill"]
+const CONDITION_TERMS := ["slow", "mark"]
+# Retain metadata IDs for matching, but these are ordinary prose/stat names.
+const PLAIN_TERMS := ["damage", "damage_stat"]
+
 const KEYWORDS := {
-	"attack": {"label": "Attack", "color": "F1D38A", "definition": "The deliberate Attack-control action. Using Attack and connecting an attack are different triggers."},
-	"attack_hit": {"label": "attack hit", "color": "F1D38A", "definition": "An Attack connects with an enemy. Automatic damage does not perform another Attack."},
-	"damage": {"label": "dealing damage", "color": "F0B5A0", "definition": "Accepted damage from any qualifying source. Each receiving power keeps its own counting and repeat limits."},
-	"damage_stat": {"label": "Damage", "color": "F0B5A0", "definition": "Your base Damage stat. A percentage of Damage scales the whole eligible damage coefficient, including time spent in a Field."},
-	"dash": {"label": "Dash", "color": "8FCEF2", "definition": "Your normal Dash action. Powers state whether they react to starting, contact or completion."},
-	"recoil": {"label": "Recoil", "color": "8FCEF2", "definition": "Movement caused by releasing a charged blast. It does not count as a normal Dash."},
-	"orbit": {"label": "Orbit", "color": "8FCEF2", "definition": "Movement around a hooked anchor. It does not count as a normal Dash."},
-	"kill": {"label": "Kill", "color": "F2AB94", "definition": "An enemy dies from damage credited to you. The receiving power defines any further restrictions."},
-	"slow": {"label": "Slow", "color": "8DDDBE", "definition": "Reduced enemy movement for a limited time. Slowed means the effect is already active; another player's Slow can prepare a target."},
-	"mark": {"label": "Mark", "color": "DEADEE", "definition": "A timed vulnerability. The strongest active Mark increases all player damage to that enemy; Marks do not add together or disappear when damaged."},
-	"field": {"label": "Field", "color": "ABAEEF", "definition": "A persistent area. Each Field defines its shape, duration, damage cadence and overlap rules."},
-	"burst": {"label": "Burst", "color": "EFB38A", "definition": "An instant area effect. A Burst does not persist as a Field."},
-	"projectile": {"label": "Projectile", "color": "B9D7F3", "definition": "An effect that travels through the arena. Its power defines collision and repeat-hit limits."},
-	"push": {"label": "Push", "color": "E5C597", "definition": "Displacement away from a source. It becomes a Launch only when a power explicitly enables that interaction."},
-	"pull": {"label": "Pull", "color": "E5C597", "definition": "Displacement toward a source. It becomes a Launch only when a power explicitly enables that interaction."},
-	"launch": {"label": "Launch", "color": "E9AC83", "definition": "Displacement armed to cause an Impact. Immovable enemies compress in place instead."},
-	"impact": {"label": "Impact", "color": "E9AC83", "definition": "A launched enemy meets another enemy or arena geometry. One Launch can cause one impact Burst."},
-	"echo": {"label": "Echo", "color": "B8ACED", "definition": "A copied attack shape and scaled damage. It deals damage without performing another Attack, repeating movement or creating another Echo."},
-	"electric": {"label": "Electric", "color": "91DFF2", "definition": "A damage property. It identifies matching damage without implying a shared charge mechanic."}
+	"attack": {"label": "Attack", "definition": "A deliberate use of the Attack control; it can miss."},
+	"attack_hit": {"label": "attack hit", "definition": "Your deliberate melee, extended arc or charged blast connects with a foe."},
+	"damage": {"label": "dealing damage", "definition": "Damage accepted from any eligible source, including automatic effects."},
+	"damage_stat": {"label": "Damage", "definition": "The player stat used to scale damage amounts."},
+	"dash": {"label": "Dash", "definition": "The normal Dash action; Recoil and Orbit count only when named."},
+	"recoil": {"label": "Recoil", "definition": "Movement caused by releasing a charged blast."},
+	"orbit": {"label": "Orbit", "definition": "Movement around a hooked anchor."},
+	"kill": {"label": "Kill", "definition": "An enemy death credited to you, from any eligible damage source."},
+	"slow": {"label": "Slow", "definition": "Reduced movement; already Slowed checks the state before damage."},
+	"mark": {"label": "Mark", "definition": "Timed vulnerability shared by players; strongest wins and damage never consumes it."},
+	"field": {"label": "Field", "definition": "A persistent area with a defined footprint and lifetime."},
+	"burst": {"label": "Burst", "definition": "A brief area effect that may deal damage or apply a condition."},
+	"projectile": {"label": "Projectile", "definition": "A traveling effect; its damage does not perform another Attack."},
+	"push": {"label": "Push", "definition": "Forced movement away from an origin."},
+	"pull": {"label": "Pull", "definition": "Forced movement toward an origin."},
+	"launch": {"label": "Launch", "definition": "Forced movement armed for a collision payoff; immovable foes compress in place."},
+	"impact": {"label": "Impact", "definition": "A launched foe collides with a foe or geometry; once per Launch."},
+	"echo": {"label": "Echo", "definition": "A weaker copied attack shape, without another action or resource cost."},
+	"electric": {"label": "Electric", "definition": "A damage property; it does not imply a shared charge resource."}
 }
 
 static func keyword_bbcode(id: String, label: String = "") -> String:
 	if not KEYWORDS.has(id):
 		return label if not label.is_empty() else id
 	var item: Dictionary = KEYWORDS[id]
-	return "[b][color=#%s]%s[/color][/b]" % [item.color, item.label if label.is_empty() else label]
+	var text: String = item.label if label.is_empty() else label
+	if PLAIN_TERMS.has(id):
+		return text
+	var color := ACTION_COLOR if ACTION_TERMS.has(id) else (CONDITION_COLOR if CONDITION_TERMS.has(id) else EFFECT_COLOR)
+	return "[b][color=#%s]%s[/color][/b]" % [color, text]
 
 static func format_text(authored: String) -> String:
 	var result := ""
@@ -56,7 +68,7 @@ static func keyword_ids(authored: String) -> Array[String]:
 		if finish < 0:
 			break
 		var id := authored.substr(start + 4, finish - start - 4).split("|", true, 1)[0]
-		if KEYWORDS.has(id) and not found.has(id):
+		if KEYWORDS.has(id) and not PLAIN_TERMS.has(id) and not found.has(id):
 			found.append(id)
 		cursor = finish + 1
 	return found
@@ -64,9 +76,9 @@ static func keyword_ids(authored: String) -> Array[String]:
 static func definitions_bbcode(ids: Array[String]) -> String:
 	var lines: Array[String] = []
 	for id in ids:
-		if KEYWORDS.has(id):
+		if KEYWORDS.has(id) and not PLAIN_TERMS.has(id):
 			lines.append("%s: %s" % [keyword_bbcode(id), KEYWORDS[id].definition])
-	return "\n\n".join(lines)
+	return "\n".join(lines)
 
 static func to_plain(authored: String) -> String:
 	return preload("res://scripts/shared/description_cap_guard.gd").strip_bbcode(format_text(authored))

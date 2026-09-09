@@ -86,7 +86,7 @@ try {
     $manifestPath = Join-Path $renderRoot 'keeper_frames/manifest.json'
     if (-not (Test-Path -LiteralPath $manifestPath)) { throw 'The GPU fixture did not complete its capture manifest.' }
     $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-    if ($manifest.frames.Count -ne 4 -or $manifest.failures.Count -ne 0) { throw 'The GPU fixture did not produce all four valid states.' }
+    if ($manifest.frames.Count -ne 5 -or $manifest.failures.Count -ne 0) { throw 'The GPU fixture did not produce all five valid states.' }
     Write-Host "GPU: $($manifest.gpu)"
     Write-Host "Keeper frames: $(Split-Path -Parent $manifestPath)"
 } finally {

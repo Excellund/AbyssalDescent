@@ -95,8 +95,7 @@ func accepted_attack(event: Dictionary) -> void:
 		player.apex_predator_combo_hits += 1
 		player.apex_predator_combo_left = player.apex_predator_combo_window
 		var step := int(pending.warden_step)
-		if player.player_feedback != null:
-			player.player_feedback.play_boss_predator_mark(position, step, 4)
+		player._show_warden_verdict_contact(position, step)
 		if step == 4:
 			player._trigger_apex_predator_burst(position, target_id, int(pending.get("warden_base", raw)), float(pending.get("warden_coefficient", coefficient)))
 	if bool(pending.get("riftpunch", false)):

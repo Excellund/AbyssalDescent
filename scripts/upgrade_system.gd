@@ -5,6 +5,7 @@
 extends Node
 
 const KEYWORDS := preload("res://scripts/shared/combat_keyword_catalogue.gd")
+const CARD_COPY := preload("res://scripts/shared/reward_card_copy.gd")
 const DESCRIPTION_CAP_GUARD := preload("res://scripts/shared/description_cap_guard.gd")
 const POWER_PARAMETER_MAPPER := preload("res://scripts/power_parameter_mapper.gd")
 const ARCANA_MOTION := preload("res://scripts/arcana_motion_controller.gd")
@@ -260,28 +261,28 @@ func get_power_damage_model(power_id: String) -> Dictionary:
 	}
 
 
-## Formats a single stat value for either the initial pick (green) or an upgrade (orange -> green).
+## Only the changed next value is accented; ordinary/current values stay neutral.
 ## Use _stat("+%d", cur, nxt, is_initial) and embed the result in your description string.
 func _stat(fmt: String, cur: Variant, nxt: Variant, is_initial: bool) -> String:
-	if is_initial:
-		return "[color=#7de882]%s[/color]" % (fmt % nxt)
-	return "[color=#e8c96a]%s[/color] [color=#8899aa]->[/color] [color=#7de882]%s[/color]" % [fmt % cur, fmt % nxt]
+	if is_initial or fmt % cur == fmt % nxt:
+		return fmt % nxt
+	return "%s -> [color=#A9CDAF]%s[/color]" % [fmt % cur, fmt % nxt]
 
 
-func _initial_prefix(is_initial: bool) -> String:
-	return "[color=#9ab8d8]Initial:[/color] " if is_initial else ""
+func _initial_prefix(_is_initial: bool) -> String:
+	return ""
 
 
 func _const(value: String) -> String:
-	return "[color=#7de882]%s[/color]" % value
+	return value
 
 
 func _current_const(value: String) -> String:
-	return "[color=#e8c96a]%s[/color]" % value
+	return value
 
 
 func _current_stat(fmt: String, value: Variant) -> String:
-	return "[color=#e8c96a]%s[/color]" % (fmt % value)
+	return fmt % value
 
 
 func _desc(is_initial: bool, flavor: String, template: String, args: Array = []) -> String:
@@ -289,8 +290,9 @@ func _desc(is_initial: bool, flavor: String, template: String, args: Array = [])
 	return "%s[color=#9ab8d8]%s[/color] %s" % [_initial_prefix(is_initial), flavor, body]
 
 
-func _reward_flavor_first_desc(is_initial: bool, flavor: String, body: String) -> String:
-	return "[color=#9ab8d8]%s[/color]\n%s%s" % [flavor, _initial_prefix(is_initial), body]
+func _reward_flavor_first_desc(_is_initial: bool, _flavor: String, body: String) -> String:
+	# Full rules live in inspection; reward cards have one bounded description.
+	return body
 
 
 # Player-facing terms follow docs/combat-wording.md; internal HIT is not a copy keyword.
@@ -321,65 +323,65 @@ func _power_sentence_template(power_id: String) -> String:
 		"severing_edge":
 			return "{kw:damage_stat} %s against enemies below 55%% HP."
 		"wardens_verdict":
-			return "Bonus damage %s; {kw:burst|burst} on 4th {kw:attack_hit}."
+			return "Hit bonus %s; fourth +42%% attack damage; {kw:burst} radius %s."
 		"lacuna_echo":
-			return "{kw:field} power %s, radius %s."
+			return "Field bonus %s; base pulse %s damage/0.32s; radius %s; lasts 2.4s."
 		"sovereign_tempo":
-			return "Tempo per stack %s."
+			return "Move speed %s per stack; up to 6 stacks."
 		"pillar_convergence":
-			return "Every %s connected {kw:attack|attacks}; lasts %s; pulse every %s."
+			return "%s connected {kw:attack|Attacks}; {kw:field} lasts %s; pulses every %s."
 		"unbroken_oath":
-			return "Damage reduction %s. Fill Oath at %s; next {kw:attack|attack} gains %s damage."
+			return "Resistance %s; capacity %s; Oath adds %s of Damage."
 		"edict_of_the_court":
-			return "{kw:push} force %s, scatter radius %s."
+			return "{kw:push} force %s; radius %s."
 		"null_corridor":
-			return "{kw:dash} {kw:field|trail}: {kw:push|push} and damage at most every 0.5s. Width %s; duration %s; {kw:damage_stat} %s."
+			return "{kw:field} width %s; lifetime %s; damage %s per contact."
 		"ruinous_impact":
-			return "Strikes {kw:launch|launch} foes; {kw:impact|impacts} {kw:burst|burst}. Bosses burst in place. {kw:damage_stat} %s; radius %s."
+			return "Impact damage %s of Damage; {kw:burst} radius %s."
 		"sovereigns_double":
-			return "After {kw:dash|dash}/{kw:recoil|recoil}/{kw:orbit|orbit}: shade {kw:echo|echoes} next %s {kw:attack|attacks} at %s damage. Lasts %s."
+			return "%s {kw:echo|Echoes} at %s damage; shade lasts %s."
 		"razor_wind":
-			return "Range %s, damage %s of hit, arc %s."
+			return "Reach %s; %s of {kw:attack} damage; arc %s."
 		"execution_edge":
-			return "Every %s {kw:attack|attacks} for %s damage."
+			return "Every %s {kw:attack|Attacks}; %s {kw:attack} damage."
 		"rupture_wave":
-			return "{kw:burst} radius %s, damage %s of hit. %s"
+			return "{kw:burst} radius %s; %s of {kw:attack} damage. %s"
 		"aegis_field":
-			return "Resist %s for %s, {kw:slow} pulse radius %s, cooldown %s."
+			return "Resistance %s for %s; pulse radius %s; cooldown %s."
 		"hunters_snare":
-			return "{kw:attack|Attacks} {kw:slow} %s at %s speed; %s damage vs {kw:slow|Slowed}. %s"
+			return "{kw:slow} for %s at %s speed; bonus damage %s. %s"
 		"phantom_step":
-			return "Damage %s, {kw:slow} %s."
+			return "Dash contact damage %s; {kw:slow} for %s."
 		"riftpunch":
-			return "Bonus damage %s, window %s, grace %s. %s"
+			return "Bonus damage %s; ready for %s; contact grace %s. %s"
 		"reaper_step":
-			return "Range/speed %s, {kw:kill|kill} refresh %s. %s"
+			return "Dash range/speed %s; {kw:kill|Kill} refresh %s. %s"
 		"static_wake":
-			return "{kw:dash} {kw:field|trail}: %s {kw:electric} {kw:damage_stat}/s; lasts %s; radius %s. %s"
+			return "%s Damage/sec; {kw:field} lasts %s; radius %s. %s"
 		"storm_crown":
-			return "{kw:damage|Deal damage} %s times: %s lightning jumps; %s range; %s dmg. %s"
+			return "%s contacts; %s targets; range %s; %s of triggering damage. %s"
 		"wraithstep":
-			return "{kw:dash} {kw:mark} %s for %s; {kw:burst} %s. %s"
+			return "{kw:mark} %s for %s; {kw:burst} deals %s of attack damage. %s"
 		"voidfire":
-			return "Damage %s, detonate %s, lockout %s. %s"
+			return "High Heat: %s Attack damage; {kw:burst} %s Damage; lockout %s."
 		"dread_resonance":
-			return "{kw:attack_hit|Attack hits} {kw:mark} 10%%/3s; +%s/stack vs {kw:mark|Marked}; cap %s."
+			return "Mark: 10%% for 3s; +%s damage per stack; up to %s stacks per foe."
 		"bloodvow":
-			return "Below %s HP, {kw:attack|attacks} deal x%s damage."
+			return "Below %s health: x%s Attack damage."
 		"eclipse_mark":
-			return "{kw:kill|Kills} {kw:mark} %s for %s; radius %s."
+			return "Mark strength %s; duration %s; radius %s."
 		"fracture_field":
-			return "{kw:burst} length %s, damage %s, {kw:slow} %s."
+			return "Fault length %s; %s Damage; Slow for %s."
 		"farline_volley":
-			return "Arc +%s/Volley, +%s dmg/Volley, cap %s. %s"
+			return "Per stack: +%s arc, +%s damage; up to %s stacks. %s"
 		"sigil_chain":
-			return "{kw:field} radius %s, %s of {kw:damage_stat} per tick. %s"
+			return "Field radius %s; %s Damage per tick. %s"
 		"blast_drive":
-			return "Hold {kw:attack}; release: blast/{kw:recoil|recoil}. Full {kw:damage_stat} %s; reach %s. %s"
+			return "Full blast %s Damage; reach %s. %s"
 		"razor_orbit":
-			return "Aim; Hold {kw:dash}: {kw:orbit|orbit} 1.4s or release. {kw:damage_stat} %s; reach %s. %s"
+			return "Cut damage %s of Damage; hook reach %s. %s"
 		"returning_crescent":
-			return "{kw:attack} throws a returning {kw:projectile|blade}. {kw:damage_stat} %s each way; reach %s. %s"
+			return "%s Damage each way; reach %s. %s"
 		_:
 			return ""
 
@@ -395,7 +397,29 @@ func _power_sentence(power_id: String, args: Array = [], surface: String = "") -
 
 
 func _flavor_detail(flavor: String, body: String) -> String:
-	return "[color=#9ab8d8]%s[/color]\n    %s" % [flavor, body]
+	return "%s\n%s" % [flavor, body]
+
+
+func _warden_contact_bonus_range(power: float) -> String:
+	var first := maxi(1, int(round(power * (0.22 + 0.12))))
+	var fourth := maxi(1, int(round(power * (0.22 + 4.0 * 0.12))))
+	return "+%d–%d" % [first, fourth]
+
+
+func _warden_display_stats(current: float, next: float, initial: bool, surface: String) -> String:
+	return _power_sentence("wardens_verdict", [
+		_stat("%s", _warden_contact_bonus_range(current), _warden_contact_bonus_range(next), initial),
+		_stat("%.0f", clampf(72.0 + current * 0.35, 72.0, 126.0), clampf(72.0 + next * 0.35, 72.0, 126.0), initial)
+	], surface)
+
+
+func _lacuna_display_stats(current: float, next: float, initial: bool, surface: String) -> String:
+	var damage := float(player_reference.get("damage")) if is_instance_valid(player_reference) else 20.0
+	return _power_sentence("lacuna_echo", [
+		_stat("+%.1f%%", 14.0 + current * 0.15, 14.0 + next * 0.15, initial),
+		_stat("%d", maxi(1, int(round(current * 0.28 + damage * 0.13))), maxi(1, int(round(next * 0.28 + damage * 0.13))), initial),
+		_stat("%.0f", clampf(54.0 + current * 0.6, 54.0, 110.0), clampf(54.0 + next * 0.6, 54.0, 110.0), initial)
+	], surface)
 
 
 func _variant_to_number(value: Variant, fallback: float = 0.0) -> float:
@@ -471,7 +495,7 @@ func _power_flavor_authored(power_id: String) -> String:
 		"null_corridor":
 			return "A {kw:dash} leaves a {kw:field}. Enemies inside take damage and are {kw:push|Pushed}, at most once every 0.5s."
 		"ruinous_impact":
-			return "Direct strikes {kw:launch|Launch} foes. Existing {kw:push|Pushes} and {kw:pull|Pulls} also enable {kw:impact} {kw:burst|Bursts}. Immovable foes compress in place."
+			return "{kw:attack_hit|Attack hits} {kw:launch|Launch} foes. Eligible {kw:push|Pushes} and {kw:pull|Pulls} also enable {kw:impact} {kw:burst|Bursts}. Immovable foes compress in place."
 		"sovereigns_double":
 			return "Completing {kw:dash}, {kw:recoil} or {kw:orbit} leaves a shade that {kw:echo|Echoes} your next deliberate {kw:attack|Attacks}."
 		"razor_wind":
@@ -520,9 +544,35 @@ func _power_flavor_authored(power_id: String) -> String:
 			return ""
 
 
+## Cards and owned build entries share the same plain-English mechanic summary.
+## Numerical previews remain separate and retain their original stat calculations.
+func _compose_power_description(id: String, stats: String, level: int, prismatic: bool = false) -> String:
+	var explanation := CARD_COPY.explanation(id, maxi(1, level), prismatic)
+	if explanation.is_empty():
+		return stats
+	var numerical := stats.split("\n")[-1].strip_edges()
+	return DESCRIPTION_CAP_GUARD.assert_card_cap(explanation + "\n" + numerical, id)
+
+func get_trial_power_card_description(power_id: String) -> String:
+	var id := power_id.strip_edges().to_lower()
+	var current := get_trial_power_stack_count(id)
+	var limit := _get_power_stack_limit(id)
+	var prismatic := limit > 0 and current >= limit and not has_trial_power_prismatic(id)
+	return _compose_power_description(id, _get_trial_power_card_stats(id), current if prismatic else current + 1, prismatic)
+
+func get_upgrade_card_description(upgrade_id: String) -> String:
+	var id := upgrade_id.strip_edges().to_lower()
+	return _compose_power_description(id, _get_upgrade_card_stats(id), get_upgrade_stack_count(id) + 1)
+
+func get_power_current_description(power_id: String) -> String:
+	var id := power_id.strip_edges().to_lower()
+	var trial := _is_trial_power_id(id)
+	var level := get_trial_power_stack_count(id) if trial else get_upgrade_stack_count(id)
+	return _compose_power_description(id, _get_power_current_stats(id), level, has_trial_power_prismatic(id) if trial else false)
+
 ## Current-state description for the build detail panel.
 ## Reads actual live player values — no stack approximations.
-func get_power_current_description(power_id: String) -> String:
+func _get_power_current_stats(power_id: String) -> String:
 	if not is_instance_valid(player_reference):
 		return ""
 	var id := power_id.strip_edges().to_lower()
@@ -542,11 +592,11 @@ func get_power_current_description(power_id: String) -> String:
 				_motion_arcana_unlocks_for_stack(id, get_trial_power_stack_count(id))
 			], "build_detail")
 		"wardens_verdict":
-			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("+%d", int(player_reference.get("apex_predator_bonus_damage")))], "build_detail"))
+			var value := float(player_reference.get("apex_predator_bonus_damage"))
+			return _warden_display_stats(value, value, true, "build_detail")
 		"lacuna_echo":
-			var val := int(player_reference.get("void_echo_damage"))
-			var radius := clampf(54.0 + float(val) * 0.6, 54.0, 110.0)
-			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%d", val), _current_stat("%.0f", radius)], "build_detail"))
+			var value := float(player_reference.get("void_echo_damage"))
+			return _lacuna_display_stats(value, value, true, "build_detail")
 		"sovereign_tempo":
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("+%.0f%%", float(player_reference.get("apex_momentum_speed_bonus")) * 100.0)], "build_detail"))
 		"pillar_convergence":
@@ -637,11 +687,13 @@ func get_power_current_description(power_id: String) -> String:
 		"wraithstep":
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			var ws_unlock := _wraithstep_unlocks_for_stack(get_trial_power_stack_count(id))
+			if get_trial_power_stack_count(id) < 2:
+				return _wraithstep_initial_sentence(_current_stat("+%.0f%%", float(cur.get("bonus_ratio", 0.0)) * 100.0), _current_stat("%.2fs", float(cur.get("mark_duration", 0.0))), "build_detail")
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("+%.0f%%", float(cur.get("bonus_ratio", 0.0)) * 100.0), _current_stat("%.2fs", float(cur.get("mark_duration", 0.0))), _current_stat("%.0f%%", float(cur.get("splash_ratio", 0.0)) * 100.0), ws_unlock], "build_detail"))
 		"voidfire":
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
-			var voidfire_unlocks := _voidfire_unlocks_for_stack(get_trial_power_stack_count(id))
-			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("+%.0f%%", float(cur.get("danger_zone_amp", 0.0)) * 100.0), _current_stat("%.0f%%", float(cur.get("detonate_ratio", 0.0)) * 100.0), _current_stat("%.2fs", float(cur.get("lockout_duration", 0.0))), _current_const(voidfire_unlocks)] , "build_detail"))
+			var effective_lockout := float(cur.get("lockout_duration", 0.0)) * (0.5 if get_trial_power_stack_count(id) >= 3 else 1.0)
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("+%.0f%%", float(cur.get("danger_zone_amp", 0.0)) * 100.0), _current_stat("%.0f%%", float(cur.get("detonate_ratio", 0.0)) * 100.0), _current_stat("%.2fs", effective_lockout)] , "build_detail"))
 		"dread_resonance":
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			var max_stacks_dr := int(player_reference.get("dread_resonance_max_stacks"))
@@ -668,7 +720,7 @@ func get_power_current_description(power_id: String) -> String:
 
 
 ## Get trial power description with next stack info from the current player state.
-func get_trial_power_card_description(power_id: String) -> String:
+func _get_trial_power_card_stats(power_id: String) -> String:
 	if not is_instance_valid(player_reference):
 		return "[color=#9ab8d8]Enhances this power.[/color]"
 	var id := power_id.strip_edges().to_lower()
@@ -749,15 +801,18 @@ func get_trial_power_card_description(power_id: String) -> String:
 		"wraithstep":
 			var mark_stat := _stat("%.2fs", float(cur.get("mark_duration", 0.0)), float(next_values.get("mark_duration", 0.0)), is_initial)
 			var bonus_stat := _stat("+%.0f%%", float(cur.get("bonus_ratio", 0.0)) * 100.0, float(next_values.get("bonus_ratio", 0.0)) * 100.0, is_initial)
-			var cleave_stat := _stat("%.0f%%", float(cur.get("splash_ratio", 0.0)) * 100.0, float(next_values.get("splash_ratio", 0.0)) * 100.0, is_initial)
+			var cleave_stat := _stat("%.0f%%", float(cur.get("splash_ratio", 0.0)) * 100.0, float(next_values.get("splash_ratio", 0.0)) * 100.0, current_stack < 2)
 			var unlock := _wraithstep_unlocks_for_stack(next_stack)
+			if next_stack < 2:
+				return _wraithstep_initial_sentence(bonus_stat, mark_stat, "reward_card")
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [bonus_stat, mark_stat, cleave_stat, unlock], "reward_card"))
 		"voidfire":
 			var amp_stat := _stat("+%.0f%%", float(cur.get("danger_zone_amp", 0.0)) * 100.0, float(next_values.get("danger_zone_amp", 0.0)) * 100.0, is_initial)
 			var det_stat := _stat("%.0f%%", float(cur.get("detonate_ratio", 0.0)) * 100.0, float(next_values.get("detonate_ratio", 0.0)) * 100.0, is_initial)
-			var lockout_stat := _stat("%.2fs", float(cur.get("lockout_duration", 0.0)), float(next_values.get("lockout_duration", 0.0)), is_initial)
-			var vf_unlock := _const(_voidfire_unlocks_for_stack(next_stack))
-			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [amp_stat, det_stat, lockout_stat, vf_unlock], "reward_card"))
+			var current_lockout := float(cur.get("lockout_duration", 0.0)) * (0.5 if current_stack >= 3 else 1.0)
+			var next_lockout := float(next_values.get("lockout_duration", 0.0)) * (0.5 if next_stack >= 3 else 1.0)
+			var lockout_stat := _stat("%.2fs", current_lockout, next_lockout, is_initial)
+			return _power_sentence(id, [amp_stat, det_stat, lockout_stat], "reward_card")
 		"dread_resonance":
 			var bonus_stat := _stat("%.1f%%", float(cur.get("damage_ratio_per_stack", 0.0)) * 100.0, float(next_values.get("damage_ratio_per_stack", 0.0)) * 100.0, is_initial)
 			var max_stacks_stat := _stat("%d", int(cur.get("max_stacks", int(player_reference.get("dread_resonance_max_stacks")))), int(next_values.get("max_stacks", int(player_reference.get("dread_resonance_max_stacks")))), is_initial)
@@ -791,7 +846,7 @@ func get_trial_power_card_description(power_id: String) -> String:
 			return "[color=#9ab8d8]Enhances this power.[/color]"
 
 
-func get_upgrade_card_description(upgrade_id: String) -> String:
+func _get_upgrade_card_stats(upgrade_id: String) -> String:
 	if not is_instance_valid(player_reference):
 		return "[color=#c8daf0]Upgrade your stats.[/color]"
 	var id := upgrade_id.strip_edges().to_lower()
@@ -815,9 +870,7 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 		"battle_trance":
 			return _power_sentence(id, [_stat("+%.0f%%", float(cur_val) * 100.0, float(next_val) * 100.0, false), _const("%.2fs" % float(player_reference.get("battle_trance_duration")))], "reward_card")
 		"wardens_verdict":
-			var is_initial := int(cur_val) == 0
-			var stat := _stat("+%d", int(cur_val), int(next_val), is_initial)
-			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [stat], "reward_card"))
+			return _warden_display_stats(float(cur_val), float(next_val), int(cur_val) == 0, "reward_card")
 		"ruinous_impact":
 			var is_initial := int(cur_val) == 0
 			var current_stack := clampi(int(cur_val), 1, 2)
@@ -829,14 +882,7 @@ func get_upgrade_card_description(upgrade_id: String) -> String:
 		"sovereigns_double":
 			return _power_sentence(id, [_stat("%d", int(cur_val), clampi(int(next_val), 1, 2), int(cur_val) == 0), _const("55%"), _const("4s")], "reward_card")
 		"lacuna_echo":
-			var cur_void_echo := int(cur_val)
-			var next_void_echo := int(next_val)
-			var cur_echo_radius := clampf(54.0 + float(cur_void_echo) * 0.6, 54.0, 110.0)
-			var next_echo_radius := clampf(54.0 + float(next_void_echo) * 0.6, 54.0, 110.0)
-			var is_initial := cur_void_echo == 0
-			var power_stat := _stat("+%d", cur_void_echo, next_void_echo, is_initial)
-			var radius_stat := _stat("%.0f", cur_echo_radius, next_echo_radius, is_initial)
-			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [power_stat, radius_stat], "reward_card"))
+			return _lacuna_display_stats(float(cur_val), float(next_val), int(cur_val) == 0, "reward_card")
 		"sovereign_tempo":
 			var cur_momentum := float(cur_val) * 100.0
 			var next_momentum := float(next_val) * 100.0
@@ -954,19 +1000,13 @@ func initialize(player: Node, state: Node, registry: Node) -> void:
 	power_registry = registry as POWER_REGISTRY_SCRIPT
 
 
-func _riftpunch_unlocks_for_stack(stack_count: int) -> String:
-	if stack_count >= 3:
-		return "+{kw:slow|slow} +{kw:burst|shockwave}"
-	if stack_count >= 2:
-		return "+{kw:slow|slow}"
+func _riftpunch_unlocks_for_stack(_stack_count: int) -> String:
 	return ""
 
-func _rupture_wave_unlocks_for_stack(stack_count: int) -> String:
-	if stack_count >= 3:
-		return "+{kw:slow|slow} +chain"
-	if stack_count >= 2:
-		return "+{kw:slow|slow}"
+
+func _rupture_wave_unlocks_for_stack(_stack_count: int) -> String:
 	return ""
+
 
 func _static_wake_unlocks_for_stack(stack_count: int) -> String:
 	if stack_count >= 3:
@@ -974,41 +1014,23 @@ func _static_wake_unlocks_for_stack(stack_count: int) -> String:
 	return "%d trails." % STATIC_WAKE.MAX_RIBBONS
 
 
-func _storm_crown_unlocks_for_stack(stack_count: int) -> String:
-	return "{kw:slow} +1 jump; 1/action." if stack_count >= 2 else "1/action."
-
-func _reaper_step_unlocks_for_stack(stack_count: int) -> String:
-	if stack_count >= 3:
-		return "+chain +grace"
-	if stack_count >= 2:
-		return "+chain"
+func _storm_crown_unlocks_for_stack(_stack_count: int) -> String:
 	return ""
 
-func _hunters_snare_unlocks_for_stack(stack_count: int) -> String:
-	if stack_count >= 3:
-		return "All; {kw:slow} x2."
-	if stack_count >= 2:
-		return "All damage."
-	return "{kw:attack|Attack} only."
-
-func _voidfire_unlocks_for_stack(stack_count: int) -> String:
-	if stack_count >= 3:
-		return "+half lockout"
+func _reaper_step_unlocks_for_stack(_stack_count: int) -> String:
 	return ""
 
-func _farline_volley_unlocks_for_stack(stack_count: int) -> String:
-	if stack_count >= 3:
-		return "+{kw:slow|slow} +{kw:dash|dash} {kw:burst|burst}"
-	if stack_count >= 2:
-		return "+{kw:slow|slow}"
+
+func _hunters_snare_unlocks_for_stack(_stack_count: int) -> String:
 	return ""
 
-func _sigil_chain_unlocks_for_stack(stack_count: int) -> String:
-	if stack_count >= 3:
-		return "+slow +chain bonus | Hexweaver: detonates burst"
-	if stack_count >= 2:
-		return "+slow | Hexweaver: detonates burst"
-	return "Hexweaver: detonates burst"
+
+func _farline_volley_unlocks_for_stack(_stack_count: int) -> String:
+	return ""
+
+
+func _sigil_chain_unlocks_for_stack(_stack_count: int) -> String:
+	return ""
 
 
 ## Describe the actual hit/anchor dimensions, not the internal level multiplier.
@@ -1107,9 +1129,10 @@ func _is_trial_power_id(power_id: String) -> bool:
 	return false
 
 
-func _wraithstep_unlocks_for_stack(stack_count: int) -> String:
-	if stack_count >= 3:
-		return "Chain +3."
-	if stack_count >= 2:
-		return "1/Attack."
-	return "From L2."
+func _wraithstep_unlocks_for_stack(_stack_count: int) -> String:
+	return ""
+
+
+func _wraithstep_initial_sentence(bonus: String, duration: String, surface: String) -> String:
+	var sentence := KEYWORDS.format_text("{kw:mark} strength %s; duration %s." % [bonus, duration])
+	return DESCRIPTION_CAP_GUARD.assert_visible_cap(sentence, "wraithstep", surface)

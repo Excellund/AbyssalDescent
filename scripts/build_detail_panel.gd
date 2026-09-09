@@ -1,6 +1,7 @@
 extends Node
 
 const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
+const CHARACTER_PASSIVES := preload("res://scripts/shared/character_passive_catalogue.gd")
 const DESCRIPTION_CAP_GUARD := preload("res://scripts/shared/description_cap_guard.gd")
 const PLAYER_SCRIPT := preload("res://scripts/player.gd")
 const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
@@ -9,6 +10,8 @@ const CATALYST_REGISTRY := preload("res://scripts/progression/catalyst_registry.
 const RARITY_COMMON := Color(0.62, 0.7, 0.8, 0.9)
 const RARITY_EPIC := Color(0.82, 0.58, 1.0, 0.96)
 const RARITY_LEGENDARY := Color(1.0, 0.74, 0.42, 1.0)
+const BODY_FONT_SIZE := 17
+const BODY_COLOR := Color(0.90, 0.93, 0.98, 1.0)
 
 signal build_detail_opened
 signal build_detail_closed
@@ -27,6 +30,7 @@ var _candidate_details: RichTextLabel
 var _candidate_more: RichTextLabel
 var _candidate_toggle: Button
 var _owned_levels: Dictionary = {}
+var _active_passive_id := ""
 var power_registry_instance = POWER_REGISTRY.new()
 
 var passive_section: VBoxContainer
@@ -132,7 +136,7 @@ func _create_panel() -> void:
 	_candidate_details = _make_detail_label(17)
 	candidate_content.add_child(_candidate_details)
 	_candidate_toggle = Button.new()
-	_candidate_toggle.text = "Shared properties & keywords  ›"
+	_candidate_toggle.text = "Rules & keywords  ›"
 	_candidate_toggle.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_candidate_toggle.flat = true
 	_candidate_toggle.add_theme_font_size_override("font_size", 16)
@@ -145,7 +149,7 @@ func _create_panel() -> void:
 	_candidate_panel.visible = false
 
 	_close_button = Button.new()
-	_close_button.text = "Return to rewards  [Tab / Y / Esc / B]"
+	_close_button.text = "Return to rewards  [Tab / Esc]"
 	_close_button.custom_minimum_size.y = 42.0
 	_close_button.add_theme_font_size_override("font_size", 18)
 	_close_button.pressed.connect(close)
@@ -195,9 +199,10 @@ func _create_panel() -> void:
 	passive_desc_label.fit_content = true
 	passive_desc_label.scroll_active = false
 	passive_desc_label.selection_enabled = false
-	passive_desc_label.add_theme_font_size_override("normal_font_size", 16)
+	passive_desc_label.add_theme_font_size_override("normal_font_size", BODY_FONT_SIZE)
+	passive_desc_label.add_theme_font_size_override("bold_font_size", BODY_FONT_SIZE)
 	passive_desc_label.add_theme_constant_override("line_separation", 4)
-	passive_desc_label.add_theme_color_override("default_color", Color(0.88, 0.96, 1.0, 0.92))
+	passive_desc_label.add_theme_color_override("default_color", BODY_COLOR)
 	passive_desc_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
 	passive_desc_label.add_theme_constant_override("shadow_offset_x", 1)
 	passive_desc_label.add_theme_constant_override("shadow_offset_y", 1)
@@ -429,7 +434,7 @@ func _fit_content_widths(node: Node) -> void:
 				child.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_fit_content_widths(child)
 
-func _make_detail_label(font_size: int = 16) -> RichTextLabel:
+func _make_detail_label(font_size: int = BODY_FONT_SIZE) -> RichTextLabel:
 	var label := RichTextLabel.new()
 	label.bbcode_enabled = true
 	label.fit_content = true
@@ -437,6 +442,7 @@ func _make_detail_label(font_size: int = 16) -> RichTextLabel:
 	label.selection_enabled = false
 	label.add_theme_font_size_override("normal_font_size", font_size)
 	label.add_theme_font_size_override("bold_font_size", font_size)
+	label.add_theme_color_override("default_color", BODY_COLOR)
 	label.add_theme_constant_override("line_separation", 3)
 	return label
 
@@ -455,11 +461,22 @@ func _keyword_details(id: String, level: int, prismatic: bool = false) -> String
 	var metadata := POWER_REGISTRY.get_power_keyword_metadata(id, level, prismatic)
 	var ids: Array[String] = []
 	ids.assign(metadata.get("description_keywords", []))
-	var result := String(metadata.get("condition_text", ""))
+	ids.erase("damage")
+	ids.erase("damage_stat")
+	var rules := _rule_lines(String(metadata.get("condition_text", "")))
+	var result := "[b]Rules[/b]\n" + "\n".join(rules) if not rules.is_empty() else ""
 	var definitions := COMBAT_KEYWORDS.definitions_bbcode(ids)
 	if not definitions.is_empty():
-		result += "\n\n" + definitions
+		result += ("\n\n" if not result.is_empty() else "") + "[b]Keywords[/b]\n" + definitions
 	return result.strip_edges()
+
+func _rule_lines(condition: String) -> Array[String]:
+	var lines: Array[String] = []
+	for sentence in condition.replace("; ", ". ").split(". ", false):
+		var rule := String(sentence).strip_edges().trim_suffix(".")
+		if not rule.is_empty():
+			lines.append("• " + rule.left(1).to_upper() + rule.substr(1) + ".")
+	return lines
 
 func _update_candidate(candidate: Dictionary, player: PLAYER_SCRIPT) -> void:
 	_candidate_panel.visible = not candidate.is_empty()
@@ -482,7 +499,7 @@ func _update_candidate(candidate: Dictionary, player: PLAYER_SCRIPT) -> void:
 	_candidate_details.text = "[b]Selected offer: %s[/b]\nCurrent — %s\nOffered — %s: %s" % [name_text, current, next_title, next_desc]
 	var connections := _compatibility_text(id, next_level)
 	if not connections.is_empty():
-		_candidate_more.text = "[b]Shared properties in your build[/b]\n" + connections
+		_candidate_more.text = "[b]In your build[/b]\n" + connections
 	var details := _keyword_details(id, next_level, prism_offer)
 	if not details.is_empty():
 		_candidate_more.text += "\n\n" + details
@@ -491,32 +508,47 @@ func _update_candidate(candidate: Dictionary, player: PLAYER_SCRIPT) -> void:
 func _compatibility_text(candidate_id: String, candidate_level: int) -> String:
 	var candidate := POWER_REGISTRY.get_power_keyword_metadata(candidate_id, candidate_level)
 	var lines: Array[String] = []
+	if not _active_passive_id.is_empty():
+		var passive := CHARACTER_PASSIVES.get_keyword_metadata(_active_passive_id)
+		lines.append_array(_compatibility_lines(candidate, passive, CHARACTER_PASSIVES.get_display_name(_active_passive_id), candidate_id, _active_passive_id))
 	for owned_id: String in _owned_levels:
 		if owned_id == candidate_id:
 			continue
 		var owned := POWER_REGISTRY.get_power_keyword_metadata(owned_id, int(_owned_levels[owned_id]))
-		for direction in [0, 1]:
-			var producer: Dictionary = owned if direction == 0 else candidate
-			var receiver: Dictionary = candidate if direction == 0 else owned
-			var shared: Array[String] = []
-			for keyword: String in producer.get("produces", []):
-				if keyword in receiver.get("accepts", []):
-					shared.append(_produced_property_phrase(keyword) if direction == 0 else _property_keyword(keyword))
-			if shared.is_empty():
-				continue
-			var relationship := "%s %s." if direction == 0 else "%s responds to %s."
-			var properties: String = shared[0] if shared.size() == 1 else ", ".join(shared.slice(0, -1)) + " and " + shared[-1]
-			var line := relationship % [_power_display_name(owned_id), properties]
-			var condition := String(receiver.get("condition_text", ""))
-			# Candidate restrictions are shown once in its keyword details below.
-			# Keep distinct owned-receiver restrictions beside outgoing matches.
-			if direction == 1 and not condition.is_empty():
-				line += " " + condition
-			lines.append(line)
+		lines.append_array(_compatibility_lines(candidate, owned, _power_display_name(owned_id), candidate_id, owned_id))
 	return "\n".join(lines)
 
+func _compatibility_lines(candidate: Dictionary, owned: Dictionary, owned_name: String, candidate_id: String, owned_id: String) -> Array[String]:
+	var lines: Array[String] = []
+	for direction in [0, 1]:
+		var producer: Dictionary = owned if direction == 0 else candidate
+		var receiver: Dictionary = candidate if direction == 0 else owned
+		var producer_id := owned_id if direction == 0 else candidate_id
+		var shared: Array[String] = []
+		for keyword: String in producer.get("produces", []):
+			if keyword in receiver.get("accepts", []):
+				if keyword == "attack_hit" and not receiver.get("attack_hit_sources", []).is_empty() and producer_id not in receiver["attack_hit_sources"]:
+					continue
+				shared.append(_produced_property_phrase(keyword) if direction == 0 else _property_keyword(keyword))
+		if shared.is_empty():
+			continue
+		var relationship := "%s %s." if direction == 0 else "%s responds to %s."
+		var properties: String = shared[0] if shared.size() == 1 else ", ".join(shared.slice(0, -1)) + " and " + shared[-1]
+		var line := "• " + relationship % [owned_name, properties]
+		var condition := String(receiver.get("condition_text", ""))
+		# Candidate restrictions are shown once in its keyword details below.
+		# Keep distinct owned-receiver restrictions beside outgoing matches.
+		if direction == 1 and not condition.is_empty():
+			line += "\n" + "\n".join(_rule_lines(condition))
+		lines.append(line)
+	return lines
+
 func _property_keyword(keyword: String) -> String:
-	var label := "damage" if keyword == "damage" else ("attack hits" if keyword == "attack_hit" else "")
+	if keyword == "damage":
+		return "damage"
+	if keyword == "damage_stat":
+		return "Damage"
+	var label := "attack hits" if keyword == "attack_hit" else ""
 	return COMBAT_KEYWORDS.keyword_bbcode(keyword, label)
 
 func _produced_property_phrase(keyword: String) -> String:
@@ -557,9 +589,9 @@ func _create_catalyst_section(content: VBoxContainer) -> void:
 	catalyst_details.bbcode_enabled = true
 	catalyst_details.fit_content = true
 	catalyst_details.scroll_active = false
-	catalyst_details.add_theme_font_size_override("normal_font_size", 16)
-	catalyst_details.add_theme_font_size_override("bold_font_size", 16)
-	catalyst_details.add_theme_color_override("default_color", Color(0.88, 0.96, 1.0, 0.92))
+	catalyst_details.add_theme_font_size_override("normal_font_size", BODY_FONT_SIZE)
+	catalyst_details.add_theme_font_size_override("bold_font_size", BODY_FONT_SIZE)
+	catalyst_details.add_theme_color_override("default_color", BODY_COLOR)
 	stack.add_child(catalyst_details)
 	catalyst_panel.hide()
 
@@ -574,30 +606,16 @@ func _update_catalyst_section(catalyst_ids: Array) -> void:
 	catalyst_panel.visible = not entries.is_empty()
 
 func _update_passive_section(character_id: String) -> void:
+	_active_passive_id = ""
 	var char_data := CHARACTER_REGISTRY.get_character(character_id)
 	if char_data == null:
 		passive_name_label.text = "Unknown Character"
 		passive_desc_label.text = "No passive available"
 		return
 	
-	var passive_id := _resolve_passive_id(character_id, char_data)
-	passive_name_label.text = _format_passive_name(passive_id)
-	
-	# Get passive description based on ID
-	var desc := ""
-	match passive_id:
-		"iron_retort":
-			desc = "Hold your ground briefly to Brace. Your next melee strike while Braced is empowered (+80% damage, wider arc) and detonates an impact shockwave on hit, granting Guard (25% damage resistance for 1.5s). Dashing breaks Brace."
-		"sigil_burst":
-			desc = "Dashing arms a burst. Your next attack unleashes a 70% damage sigil explosion at the target."
-		"veilstep_rhythm":
-			desc = "Dashing through enemies builds Veilstep shards. At full shards, your next dash is empowered and releases a high-damage surge wave at dash end."
-		"farline_focus":
-			desc = "Direct attack hits inside your farline band and tight aim lane deal 70% bonus damage; those outside deal 30% less. Keep distance and commit to precision angles."
-		_:
-			desc = "Passive ability"
-	
-	passive_desc_label.text = desc
+	_active_passive_id = _resolve_passive_id(character_id, char_data)
+	passive_name_label.text = _format_passive_name(_active_passive_id)
+	passive_desc_label.text = CHARACTER_PASSIVES.get_description(_active_passive_id)
 
 func _resolve_passive_id(character_id: String, char_data: Dictionary) -> String:
 	var passive_id := String(char_data.get("passive_id", "")).strip_edges().to_lower()
@@ -646,7 +664,7 @@ func _update_power_section(container: VBoxContainer, power_ids: Array, power_typ
 		power_name.flat = true
 		power_name.tooltip_text = "Show keyword meanings and exact conditions."
 		power_name.text = "  • %s%s  ›" % [name_text, stack_suffix]
-		power_name.add_theme_font_size_override("font_size", 15)
+		power_name.add_theme_font_size_override("font_size", 18)
 		power_name.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.98))
 		power_name.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
 		power_name.add_theme_constant_override("shadow_offset_x", 1)
@@ -660,10 +678,10 @@ func _update_power_section(container: VBoxContainer, power_ids: Array, power_typ
 			power_desc.fit_content = true
 			power_desc.scroll_active = false
 			power_desc.selection_enabled = false
-			power_desc.add_theme_font_size_override("normal_font_size", 16)
-			power_desc.add_theme_font_size_override("bold_font_size", 16)
+			power_desc.add_theme_font_size_override("normal_font_size", BODY_FONT_SIZE)
+			power_desc.add_theme_font_size_override("bold_font_size", BODY_FONT_SIZE)
 			power_desc.add_theme_constant_override("line_separation", 3)
-			power_desc.add_theme_color_override("default_color", Color(0.85, 0.90, 0.96, 0.88))
+			power_desc.add_theme_color_override("default_color", BODY_COLOR)
 			power_desc.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
 			power_desc.add_theme_constant_override("shadow_offset_x", 1)
 			power_desc.add_theme_constant_override("shadow_offset_y", 1)
@@ -696,21 +714,4 @@ func _power_display_name(power_id: String) -> String:
 	return power_registry_instance.get_power_display_name(power_id)
 
 func _format_passive_name(passive_id: String) -> String:
-	var normalized_id := passive_id.strip_edges().to_lower()
-	match normalized_id:
-		"iron_retort":
-			return "Iron Retort"
-		"sigil_burst":
-			return "Sigil Burst"
-		"veilstep_rhythm":
-			return "Veilstep Rhythm"
-		"farline_focus":
-			return "Farline Focus"
-		_:
-			var words := normalized_id.split("_", false)
-			var formatted := ""
-			for i in range(words.size()):
-				if i > 0:
-					formatted += " "
-				formatted += String(words[i]).capitalize()
-			return formatted.strip_edges()
+	return CHARACTER_PASSIVES.get_display_name(passive_id)

@@ -11,6 +11,19 @@ const PLAYER_LOW_HP_SOUND := preload("res://sounds/new_stuff/low_hp_pulse.ogg")
 const ENEMY_BASE := preload("res://scripts/enemy_base.gd")
 const AUDIO_LEVELS := preload("res://scripts/shared/audio_levels.gd")
 const DAMAGE_EDGE_FLASH := preload("res://scripts/damage_edge_flash.gdshader")
+const WARDEN_VERDICT := preload("res://scripts/warden_verdict_feedback.gd")
+var warden_verdict: WARDEN_VERDICT
+
+func play_warden_verdict_cue(payload: Dictionary) -> bool:
+	if warden_verdict == null:
+		warden_verdict = WARDEN_VERDICT.new()
+		add_child(warden_verdict)
+		warden_verdict.initialize(get_parent() as Node2D)
+	return warden_verdict.apply_cue(payload)
+
+func clear_warden_verdict() -> void:
+	if warden_verdict != null:
+		warden_verdict.clear()
 
 # === SHARED TIMING & ANIMATION HELPERS ===
 static func ease_in_out_quad(t: float) -> float:
