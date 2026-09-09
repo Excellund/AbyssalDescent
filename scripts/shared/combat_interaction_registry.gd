@@ -8,19 +8,39 @@ const CROWN_ANCESTRY := 1
 const MAX_ROOTS := 256
 const MAX_TARGETS_PER_ROOT := 256
 const MAX_PENDING_HITS := 256
+const ATTACK_HIT_SOURCES := ["melee", "razor_wind", "blast_drive"]
+const EFFECT_FORMS := {
+	"static_wake": ["Field"], "sigil_chain_zone": ["Field"],
+	"void_echo_zone": ["Field"], "null_corridor_deflect": ["Field"],
+	"convergence_window": ["Field"], "returning_crescent": ["Projectile"],
+	"sovereigns_double": ["Echo"], "rupture_wave": ["Burst"],
+	"riftpunch_shockwave": ["Burst"], "wraithstep_splash": ["Burst"],
+	"wraithstep_chain": ["Burst"], "voidfire_detonate": ["Burst"],
+	"fracture_fault_line": ["Burst"], "farline_volley_burst": ["Burst"],
+	"apex_predator_burst": ["Burst"], "apex_momentum_wave": ["Burst"],
+	"ruinous_impact": ["Burst"], "sigil_burst": ["Burst"], "sigil_chain_detonate": ["Burst"]
+}
 
+static func is_attack_hit(source: String) -> bool:
+	return source in ATTACK_HIT_SOURCES
+
+static func effect_forms(source: String) -> Array:
+	return EFFECT_FORMS.get(source, []).duplicate()
+
+# Orbit and movement-completion Bursts retain their root identity, but the
+# root may be a Dash. That ancestry does not make their damage a normal Dash.
 const EFFECT_TRAITS := {
 	"melee": HIT, "razor_wind": HIT, "blast_drive": HIT,
 	"farline_volley_burst": HIT, "riftpunch_shockwave": HIT,
 	"rupture_wave": HIT, "wraithstep_chain": HIT, "wraithstep_splash": HIT,
 	"phantom_step": HIT | DASH, "static_wake": HIT | DASH | ELECTRIC,
 	"storm_crown": HIT | ELECTRIC, "veilstep_rhythm_wave": HIT | DASH,
-	"overcharge_discharge": HIT, "iron_retort_shockwave": HIT,
+	"iron_retort_shockwave": HIT,
 	"voidfire_detonate": HIT, "sigil_chain_zone": HIT, "apex_predator_burst": HIT,
-	"apex_momentum_wave": HIT | DASH, "void_echo_zone": HIT,
+	"apex_momentum_wave": HIT, "void_echo_zone": HIT,
 	"convergence_window": HIT, "null_corridor_deflect": HIT | DASH,
 	"fracture_fault_line": HIT, "sigil_burst": HIT, "sigil_chain_detonate": HIT,
-	"returning_crescent": HIT, "razor_orbit": HIT | DASH, "ruinous_impact": HIT,
+	"returning_crescent": HIT, "razor_orbit": HIT, "ruinous_impact": HIT,
 	"sovereigns_double": HIT,
 }
 
@@ -82,6 +102,10 @@ static func validate_action(raw: Variant, authenticated_owner: int) -> Dictionar
 			traits |= int(EFFECT_TRAITS.get(echo_source, 0))
 		if echo_source == "storm_crown":
 			ancestry |= CROWN_ANCESTRY
-	return {"run": active_run, "room": int(raw.room), "owner": authenticated_owner,
+	var result := {"run": active_run, "room": int(raw.room), "owner": authenticated_owner,
 		"seq": int(raw.seq), "epoch": int(raw.epoch), "kind": String(raw.kind),
 		"source": String(source), "traits": traits, "ancestry": ancestry, "echo_source": echo_source}
+	for key in ["attack_origin", "damage_direction"]:
+		if raw.get(key) is Vector2 and (raw[key] as Vector2).is_finite():
+			result[key] = raw[key]
+	return result

@@ -67,21 +67,31 @@ func _test_kill_callback_contract() -> void:
 		player.apply_upgrade("lacuna_echo")
 		player.apply_upgrade("edict_of_the_court")
 		var target := _enemy(Vector2(210.0, 0.0))
-		player._dread_resonance_target_id = target.get_instance_id()
-		player._dread_resonance_target_stacks = 2
 		player.dash_cooldown_left = 1.0
 		await _settle()
 		PlayerReplicationService.register_player(1, player)
+		for _hit_index in range(2):
+			var action := player.new_combat_action("melee")
+			DAMAGEABLE.apply_damage(target, 1, player.INTERACTION_REGISTRY.damage_context(action, "melee", {"damage_coefficient": 1.0 / float(player.damage)}), 1)
+		_check(int(DAMAGEABLE.status_snapshot(target, 1).dread_stacks) == 2, "Two accepted Attack Hits establish Dread stacks on the living target")
+		# Dread's temporary Mark expires independently of its enemy-owned stacks.
+		# Keep this baseline unmarked so the following kill isolates Eclipse.
+		var target_status := target.get_node_or_null("SharedCombatStatus")
+		if target_status != null:
+			target_status.advance(player.dread_resonance_mark_duration + 0.1)
+		_check(float(DAMAGEABLE.status_snapshot(target, 1).mark_ratio) == 0.0, "Expired Dread Mark does not hide whether the kill creates Eclipse")
+		target.hits.clear()
 		PlayerReplicationService._apply_enemy_killed_local(1, Vector2(200.0, 0.0), true, mask)
 		_check(player.dash_cooldown_left == 0.0 and target.velocity.length() > 0.0, "Mask %d retains Reaper and Edict's existing kill benefits" % mask)
-		_check(player._eclipse_marked_enemies.has(target.get_instance_id()) == (mask != 2), "Only the Lacuna-pulse restriction prevents a new Eclipse Mark")
+		var status := DAMAGEABLE.status_snapshot(target, 1)
+		_check(is_equal_approx(float(status.mark_ratio), 0.0 if mask == DAMAGEABLE.KILL_PROC_SUPPRESS_ECHO_PULSE else player.eclipse_mark_bonus_ratio), "Only the Lacuna-pulse restriction prevents a new shared Eclipse Mark")
 		_check(player.void_echo_zones.size() == (0 if mask == 2 else 1), "Fracture provenance preserves Lacuna, while a Lacuna pulse cannot renew itself")
 		_check(not target.hits.is_empty() if mask == 0 else target.hits.is_empty(), "Fracture is suppressed only by its own or the existing Lacuna-pulse restriction")
-		_check(player._dread_resonance_target_id == (target.get_instance_id() if mask == 2 else -1), "Only Lacuna-pulse suppression preserves Dread's existing target")
+		_check(int(status.dread_stacks) == 2, "An unrelated kill preserves the living target's own Dread stacks for every provenance mask")
 		_check(DAMAGEABLE.get_kill_proc_suppression() == 0 and not DAMAGEABLE.is_launch_suppressed(), "Kill notification releases both temporary scopes")
 		player.dash_cooldown_left = 1.0
 		PlayerReplicationService._apply_enemy_killed_local(1, Vector2(200.0, 0.0))
-		_check(player._eclipse_marked_enemies.has(target.get_instance_id()) and player.void_echo_zones.size() == 1 and player.dash_cooldown_left == 0.0, "A later unrelated kill has full ordinary benefits after a restricted callback")
+		_check(is_equal_approx(float(DAMAGEABLE.status_snapshot(target, 1).mark_ratio), player.eclipse_mark_bonus_ratio) and player.void_echo_zones.size() == 1 and player.dash_cooldown_left == 0.0, "A later unrelated kill has full ordinary benefits after a restricted callback")
 		PlayerReplicationService.player_nodes.clear()
 		_free_world()
 
@@ -105,7 +115,7 @@ func _test_oath_accounting() -> void:
 	await _settle()
 	DAMAGEABLE.apply_damage(victim, 20, {"attack_type": "sovereigns_double", "secondary": true}, 1)
 	_check(tracker.enemies_killed == 1 and tracker.primary_attacks_fired == 0, "Secondary kill rewards preserve kill evidence without inventing a primary attack")
-	_check(player._eclipse_marked_enemies.has(neighbor.get_instance_id()) and neighbor.velocity.length() > 0.0, "Secondary kills retain ordinary Eclipse and Edict benefits")
+	_check(is_equal_approx(float(DAMAGEABLE.status_snapshot(neighbor, 1).mark_ratio), player.eclipse_mark_bonus_ratio) and neighbor.velocity.length() > 0.0, "Secondary kills retain ordinary shared Eclipse and Edict benefits")
 	_check(EVALUATOR.evaluate_run(tracker.build_summary({"outcome": "clear"}), META._get_default_profile()).completed_oath_ids.has("closed_fist"), "Secondary-only combat does not disqualify Closed Fist")
 	player.boss_combinations.create_shade(Vector2.ZERO)
 	player._try_execute_attack(Vector2.RIGHT)

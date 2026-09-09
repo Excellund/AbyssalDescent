@@ -5,6 +5,151 @@
 extends Node
 
 const DESCRIPTION_CAP_GUARD := preload("res://scripts/shared/description_cap_guard.gd")
+const COMBAT_KEYWORDS := preload("res://scripts/shared/combat_keyword_catalogue.gd")
+
+## Resolved gameplay properties, not recipe names or changes to reward weighting.
+## Conditions remain visible alongside keyword matches; a match never grants a proc.
+static func get_power_keyword_metadata(power_id: String, level: int = 1, _prismatic: bool = false) -> Dictionary:
+	var produces: Array[String] = []
+	var accepts: Array[String] = []
+	var conditions: Array[String] = []
+	var condition_text := ""
+	match power_id:
+		"first_strike", "heavy_blow", "bloodpact", "severing_edge":
+			accepts = ["damage"]
+			condition_text = {"first_strike": "Enemy at least 80% HP; scales the qualifying Damage basis.", "heavy_blow": "Increases the Damage stat used by your powers.", "bloodpact": "You are at 50% HP or below; scales the qualifying Damage basis.", "severing_edge": "Enemy below 55% HP; scales the qualifying Damage basis."}[power_id]
+		"wide_arc", "long_reach", "execution_edge", "bloodvow":
+			accepts = ["attack"]
+			condition_text = "Modifies qualifying deliberate Attacks; automatic damage does not perform another Attack."
+		"fleet_foot", "heartstone", "iron_skin":
+			condition_text = "A general movement or survival increase."
+		"blink_dash", "surge_step":
+			accepts = ["dash"]
+		"battle_trance":
+			accepts = ["damage"]
+			condition_text = "Your accepted damage refreshes movement speed; repeated triggers do not stack its strength."
+		"aegis_field":
+			produces = ["slow"]
+			condition_text = "Automatic pulse on its cooldown. The pulse does not deal damage or leave a Field."
+		"hunters_snare":
+			produces = ["slow"]
+			accepts.assign(["attack_hit", "slow"] if level < 2 else ["attack_hit", "damage", "slow"])
+			conditions = ["slow"]
+			condition_text = "Attack hits apply Slow. Bonus checks already Slowed targets before this damage; level 1 affects Attacks, level 2+ all your damage."
+		"phantom_step":
+			produces = ["damage", "slow"]
+			accepts = ["dash"]
+			condition_text = "Normal Dash contact; not Recoil or Orbit."
+		"riftpunch":
+			accepts = ["dash", "attack_hit"]
+			if level >= 3:
+				produces = ["damage", "burst"]
+			condition_text = "Dash completion primes one deliberate attack hit, including a ranged arc."
+		"reaper_step":
+			accepts = ["kill"]
+			produces = ["dash"]
+			condition_text = "Your Kill refreshes Dash; it does not perform a Dash automatically."
+		"static_wake":
+			produces = ["field", "electric", "damage"]
+			if level >= 3:
+				produces.append("slow")
+			accepts = ["dash"]
+			condition_text = "Normal Dash only; two trails share one damage clock. Slow is applied after damage at level 3."
+		"storm_crown":
+			produces = ["electric", "damage"]
+			accepts = ["damage"]
+			if level >= 2:
+				accepts.append("slow")
+			condition_text = "Counts each foe once per action; one discharge per action. Crown descendants cannot recharge it. Level 2+ gains one jump through already Slowed foes."
+		"wraithstep":
+			produces = ["mark"]
+			accepts = ["dash"]
+			if level >= 2:
+				produces.append_array(["burst", "damage"])
+				accepts.append_array(["attack_hit", "mark"])
+				conditions = ["mark"]
+			condition_text = "Dash applies Mark. Level 2: attack hit on an already Marked foe releases one Burst per Attack; level 3 chains through up to three more Marked foes."
+		"dread_resonance":
+			produces = ["mark"]
+			accepts = ["attack_hit", "mark", "damage"]
+			conditions = ["mark"]
+			condition_text = "Attack hits build one stack per foe per Attack. Your stacks amplify your damage against that Marked foe; changing targets does not erase them."
+		"eclipse_mark":
+			produces = ["mark"]
+			accepts = ["kill"]
+			condition_text = "Your Kill applies timed Mark nearby. The strongest Mark helps all players; damage does not consume it."
+		"rupture_wave", "fracture_field":
+			produces = ["burst", "damage"]
+			accepts.assign(["attack_hit"] if power_id == "rupture_wave" else ["kill"])
+			if power_id == "fracture_field" or level >= 2:
+				produces.append("slow")
+			condition_text = "Own descendants cannot recursively repeat the same effect."
+		"razor_wind":
+			produces = ["attack_hit", "damage"]
+			accepts = ["attack"]
+			condition_text = "Only foes beyond the normal melee reach; not a traveling Projectile."
+		"voidfire":
+			produces = ["burst", "damage"]
+			accepts = ["attack_hit"]
+			condition_text = "Connected Attacks build Heat; the overheat Burst is not Electric."
+		"farline_volley":
+			accepts = ["attack_hit", "dash"]
+			if level >= 3:
+				produces = ["burst", "damage"]
+			condition_text = "Direct attack hits near the edge of reach build stacks; Dash spends/resets them."
+		"sigil_chain":
+			produces = ["field", "damage"]
+			accepts = ["attack_hit"]
+			condition_text = "Deliberate attack hits charge and place Fields; automatic Field damage does not charge a new sigil."
+		"blast_drive":
+			produces = ["attack_hit", "burst", "recoil", "push", "damage"]
+			accepts = ["attack"]
+			condition_text = "Hold after a successful Attack, then release. Each blast spends one charge."
+		"razor_orbit":
+			produces = ["orbit", "damage"]
+			accepts = ["dash"]
+			condition_text = "Hold through a successful Dash and deliberately aim at an anchor. Orbit cuts do not perform Attacks."
+		"returning_crescent":
+			produces = ["projectile", "damage"]
+			accepts = ["attack"]
+			condition_text = "One hit per foe each way; no extra Attack from the blade."
+		"wardens_verdict":
+			produces = ["burst", "damage"]
+			accepts = ["attack_hit"]
+		"lacuna_echo":
+			produces = ["field", "pull", "damage"]
+			accepts = ["kill", "field"]
+			condition_text = "Kills place a persistent well. Its bonus applies once inside any owned Field; overlapping Fields do not stack the bonus."
+		"sovereign_tempo":
+			produces = ["burst", "damage"]
+			accepts = ["attack_hit", "dash", "recoil", "orbit"]
+		"pillar_convergence":
+			produces = ["field", "damage"]
+			accepts = ["attack_hit"]
+		"unbroken_oath":
+			accepts = ["attack_hit", "attack"]
+		"edict_of_the_court":
+			produces = ["burst", "push"]
+			accepts = ["kill"]
+		"null_corridor":
+			produces = ["field", "push", "damage"]
+			accepts = ["dash"]
+			condition_text = "Normal Dash leaves a corridor; each foe can be damaged at most once every 0.5s."
+		"ruinous_impact":
+			produces = ["launch", "impact", "burst", "damage"]
+			accepts = ["attack_hit", "push", "pull"]
+			condition_text = "One impact Burst per Launch. Immovable foes compress; explosions cannot arm further explosions."
+		"sovereigns_double":
+			produces = ["echo", "damage"]
+			accepts = ["dash", "recoil", "orbit", "attack"]
+			condition_text = "Movement completion places one shade. Echoes copy damage, not another Attack, movement or Echo."
+	var description_keywords: Array[String] = []
+	for id in produces + accepts + conditions:
+		if not description_keywords.has(id):
+			description_keywords.append(id)
+	if power_id in ["first_strike", "heavy_blow", "bloodpact", "severing_edge", "static_wake", "sigil_chain", "blast_drive", "razor_orbit", "returning_crescent", "null_corridor", "ruinous_impact"]:
+		description_keywords.append("damage_stat")
+	return {"produces": produces, "accepts": accepts, "conditions": conditions, "condition_text": condition_text, "description_keywords": description_keywords}
 
 # Power type constants
 const POWER_TYPE_UPGRADE = "upgrade"  # Stat boosts: Swift Strike, Heavy Blow, etc
@@ -50,7 +195,7 @@ const DAMAGE_MODEL_BY_POWER := {
 	"first_strike": {
 		"kind": DAMAGE_KIND_FLAT,
 		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
-		"formula_note": "+X extra hit damage vs enemies above 80% HP"
+		"formula_note": "+X conditional Damage basis against enemies at or above 80% HP"
 	},
 	"heavy_blow": {
 		"kind": DAMAGE_KIND_FLAT,
@@ -74,9 +219,9 @@ const DAMAGE_MODEL_BY_POWER := {
 		"formula_note": "Y% of hit damage in radius"
 	},
 	"hunters_snare": {
-		"kind": DAMAGE_KIND_FLAT,
-		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
-		"formula_note": "+X against slowed targets"
+		"kind": DAMAGE_KIND_SCALING,
+		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
+		"formula_note": "Percentage damage amplification against already Slowed targets"
 	},
 	"phantom_step": {
 		"kind": DAMAGE_KIND_SCALING,
@@ -101,7 +246,7 @@ const DAMAGE_MODEL_BY_POWER := {
 	"wraithstep": {
 		"kind": DAMAGE_KIND_HYBRID,
 		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
-		"formula_note": "Flat marked-hit bonus + scaling splash/chain"
+		"formula_note": "Timed shared Mark vulnerability plus a bounded Attack-triggered Burst from level 2"
 	},
 	# Voidfire archetype
 	"voidfire": {
@@ -110,9 +255,9 @@ const DAMAGE_MODEL_BY_POWER := {
 		"formula_note": "Y% of hit damage on detonation burst"
 	},
 	"dread_resonance": {
-		"kind": DAMAGE_KIND_FLAT,
-		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
-		"formula_note": "+X per resonance stack on same target"
+		"kind": DAMAGE_KIND_SCALING,
+		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
+		"formula_note": "Owner-specific percentage-point bonus per stack against a Marked foe"
 	},
 	"farline_volley": {
 		"kind": DAMAGE_KIND_FLAT,
@@ -148,7 +293,7 @@ const DAMAGE_MODEL_BY_POWER := {
 	"eclipse_mark": {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
-		"formula_note": "Y% bonus hit damage on the next 1/2/3 hits against each marked enemy"
+		"formula_note": "Timed shared vulnerability; strongest active Mark amplifies all player damage"
 	},
 	"fracture_field": {
 		"kind": DAMAGE_KIND_SCALING,
@@ -159,12 +304,12 @@ const DAMAGE_MODEL_BY_POWER := {
 	"bloodpact": {
 		"kind": DAMAGE_KIND_FLAT,
 		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
-		"formula_note": "+X flat damage on every hit while below 50% HP"
+		"formula_note": "+X conditional Damage basis while at or below 50% HP"
 	},
 	"severing_edge": {
 		"kind": DAMAGE_KIND_FLAT,
 		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
-		"formula_note": "+X bonus damage on hits against enemies below 55% HP"
+		"formula_note": "+X conditional Damage basis against enemies below 55% HP"
 	},
 	# Boss rewards
 	"wardens_verdict": {
@@ -450,8 +595,8 @@ const TRIAL_POWER_DEFINITIONS := {
 	"hunters_snare": {
 		"stack_limit": 3,
 		"balance_params": {
-			"bonus_damage_base": 4,
-			"bonus_damage_per_stack": 4,
+			"bonus_ratio_base": 0.15,
+			"bonus_ratio_per_stack": 0.05,
 			"slow_duration_base": 0.6,
 			"slow_duration_per_stack": 0.16,
 			"slow_mult_base": 0.72,
@@ -462,7 +607,7 @@ const TRIAL_POWER_DEFINITIONS := {
 			"reward_flag": "reward_hunters_snare",
 			"stack_property": "hunters_snare_stacks",
 			"parameters": {
-				"bonus_damage": {"property": "hunters_snare_bonus_damage", "type": "int"},
+				"bonus_ratio": {"property": "hunters_snare_bonus_ratio", "type": "float"},
 				"slow_duration": {"property": "hunters_snare_slow_duration", "type": "float"},
 				"slow_mult": {"property": "hunters_snare_slow_mult", "type": "float"}
 			}
@@ -483,6 +628,7 @@ const TRIAL_POWER_DEFINITIONS := {
 			"stack_property": "phantom_step_stacks",
 			"parameters": {
 				"damage": {"property": "phantom_step_damage", "type": "int"},
+				"damage_ratio": {"property": "phantom_step_damage_ratio", "type": "float"},
 				"slow_duration": {"property": "phantom_step_slow_duration", "type": "float"},
 				"dash_cooldown": {"property": "dash_cooldown", "type": "float"}
 			}
@@ -547,6 +693,7 @@ const TRIAL_POWER_DEFINITIONS := {
 			"stack_property": "static_wake_stacks",
 			"parameters": {
 				"damage": {"property": "static_wake_damage", "type": "int"},
+				"damage_ratio": {"property": "static_wake_damage_ratio", "type": "float"},
 				"lifetime": {"property": "static_wake_lifetime", "type": "float"},
 				"trail_radius": {"property": "static_wake_trail_radius", "type": "float"}
 			}
@@ -583,8 +730,8 @@ const TRIAL_POWER_DEFINITIONS := {
 			"mark_duration_per_stack": 0.5,
 			"dash_mark_radius_base": 100.0,
 			"dash_mark_radius_per_stack": 20.0,
-			"bonus_damage_base": 8,
-			"bonus_damage_per_stack": 8,
+			"bonus_ratio_base": 0.10,
+			"bonus_ratio_per_stack": 0.05,
 			"splash_radius_base": 80.0,
 			"splash_radius_per_stack": 16.0,
 			"splash_ratio_base": 0.60,
@@ -596,7 +743,7 @@ const TRIAL_POWER_DEFINITIONS := {
 			"parameters": {
 				"mark_duration": {"property": "wraithstep_mark_duration", "type": "float"},
 				"dash_mark_radius": {"property": "wraithstep_dash_mark_radius", "type": "float"},
-				"bonus_damage": {"property": "wraithstep_mark_bonus_damage", "type": "int"},
+				"bonus_ratio": {"property": "wraithstep_mark_bonus_ratio", "type": "float"},
 				"splash_radius": {"property": "wraithstep_mark_splash_radius", "type": "float"},
 				"splash_ratio": {"property": "wraithstep_mark_splash_ratio", "type": "float"}
 			}
@@ -648,8 +795,9 @@ const TRIAL_POWER_DEFINITIONS := {
 	"dread_resonance": {
 		"stack_limit": 3,
 		"balance_params": {
-			"bonus_per_stack_base": 0,
-			"bonus_per_stack_per_level": 1,
+			"damage_ratio_per_stack": 0.02,
+			"mark_bonus_ratio": 0.10,
+			"mark_duration": 3.0,
 			"max_stacks_base": 6,
 			"max_stacks_per_stack": 2,
 			"max_stacks_cap": 12
@@ -658,7 +806,9 @@ const TRIAL_POWER_DEFINITIONS := {
 			"reward_flag": "reward_dread_resonance",
 			"stack_property": "dread_resonance_stacks",
 			"parameters": {
-				"bonus_per_stack": {"property": "dread_resonance_bonus_per_stack", "type": "int"},
+				"damage_ratio_per_stack": {"property": "dread_resonance_damage_ratio_per_stack", "type": "float"},
+				"mark_bonus_ratio": {"property": "dread_resonance_mark_bonus_ratio", "type": "float"},
+				"mark_duration": {"property": "dread_resonance_mark_duration", "type": "float"},
 				"max_stacks": {"property": "dread_resonance_max_stacks", "type": "int"}
 			}
 		}
@@ -685,9 +835,9 @@ const TRIAL_POWER_DEFINITIONS := {
 			"radius_base": 90.0,
 			"radius_per_stack": 18.0,
 			"mark_duration_base": 3.0,
-			"mark_duration_per_stack": 0.6,
-			"bonus_ratio_base": 0.25,
-			"bonus_ratio_per_stack": 0.10
+			"mark_duration_per_stack": 1.0,
+			"bonus_ratio_base": 0.10,
+			"bonus_ratio_per_stack": 0.05
 		},
 		"param_map": {
 			"reward_flag": "reward_eclipse_mark",
@@ -878,7 +1028,7 @@ const POWER_DISPLAY_METADATA := {
 	"razor_wind": {"name": "Razor Wind", "category": POWER_TYPE_TRIAL},
 	"execution_edge": {"name": "Execution Edge", "category": POWER_TYPE_TRIAL},
 	"rupture_wave": {"name": "Rupture Wave", "category": POWER_TYPE_TRIAL},
-	"aegis_field": {"name": "Aegis Field", "category": POWER_TYPE_TRIAL},
+	"aegis_field": {"name": "Aegis Pulse", "category": POWER_TYPE_TRIAL},
 	"hunters_snare": {"name": "Hunter's Snare", "category": POWER_TYPE_TRIAL},
 	"phantom_step": {"name": "Phantom Step", "category": POWER_TYPE_TRIAL},
 	"riftpunch": {"name": "Riftpunch", "category": POWER_TYPE_TRIAL},
@@ -890,7 +1040,7 @@ const POWER_DISPLAY_METADATA := {
 	"dread_resonance": {"name": "Dread Resonance", "category": POWER_TYPE_TRIAL},
 	"bloodvow": {"name": "Blood Vow", "category": POWER_TYPE_TRIAL},
 	"eclipse_mark": {"name": "Eclipse Mark", "category": POWER_TYPE_TRIAL},
-	"fracture_field": {"name": "Fracture Field", "category": POWER_TYPE_TRIAL},
+	"fracture_field": {"name": "Fracture", "category": POWER_TYPE_TRIAL},
 	"farline_volley": {"name": "Farline Volley", "category": POWER_TYPE_TRIAL},
 	"sigil_chain": {"name": "Sigil Chain", "category": POWER_TYPE_TRIAL},
 	"blast_drive": {"name": "Blast Drive", "category": POWER_TYPE_TRIAL},
@@ -898,7 +1048,7 @@ const POWER_DISPLAY_METADATA := {
 	"returning_crescent": {"name": "Returning Crescent", "category": POWER_TYPE_TRIAL},
 	# Boss rewards
 	"wardens_verdict": {"name": "Warden's Verdict", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
-	"lacuna_echo": {"name": "Lacuna Echo", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
+	"lacuna_echo": {"name": "Lacuna Well", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
 	"sovereign_tempo": {"name": "Sovereign Tempo", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
 	"pillar_convergence": {"name": "Pillar Convergence", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
 	"unbroken_oath": {"name": "Unbroken Oath", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},

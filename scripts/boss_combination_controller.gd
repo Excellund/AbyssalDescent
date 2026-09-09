@@ -64,7 +64,9 @@ func repeat_strike(direction: Vector2, shapes: Array[Dictionary]) -> void:
 	for shape in shapes:
 		var source := String(shape.get("source", "melee"))
 		var baseline := int(shape.get("damage", 0))
-		var amount := maxi(1, int(round(float(maxi(baseline, int(_resolved_hit_damage.get(source, 0)))) * 0.55)))
+		var raw := float(baseline) * 0.55
+		var coefficient := float(shape.get("damage_coefficient", float(baseline) / maxf(1.0, float(player.damage)))) * 0.55
+		var amount := int(raw)
 		var reach := float(shape.get("range", 0.0))
 		var arc := float(shape.get("arc_degrees", 0.0))
 		var inner := float(shape.get("inner_range", -1.0))
@@ -76,7 +78,7 @@ func repeat_strike(direction: Vector2, shapes: Array[Dictionary]) -> void:
 			var hit_position: Vector2 = hit.get("hit_position", origin)
 			if enemy == null or hit_position.distance_to(origin) <= inner:
 				continue
-			DAMAGEABLE.apply_damage(enemy, amount, INTERACTIONS.damage_context(shape.get("interaction", {}), "sovereigns_double", {"secondary": true, "is_ground_attack": true, "attack_origin": origin, "echo_source": source}))
+			DAMAGEABLE.apply_damage(enemy, amount, INTERACTIONS.damage_context(shape.get("interaction", {}), "sovereigns_double", {"secondary": true, "is_ground_attack": true, "attack_origin": origin, "echo_source": source, "raw_amount": raw, "damage_coefficient": coefficient}))
 			if generation != _cancel_generation:
 				return
 	_broadcast_shade()
@@ -88,7 +90,6 @@ func launch_enemy(enemy: ENEMY_BASE, impulse: Vector2, source_peer: int) -> void
 		return
 	var state: LAUNCH = enemy.get_launch_state()
 	var amount := maxi(1, int(round(float(player.damage) * (1.0 + 0.4 * (stacks - 1)))))
-	amount = int(player._apply_objective_mutator_damage_mult(amount))
 	var radius := 70.0 + 25.0 * (stacks - 1)
 	var callback := _impact.bind(amount, radius, source_peer, impulse.normalized(), player._capture_combat_action("ruinous_impact"))
 	if state.arm(impulse, DAMAGEABLE.is_displacement_immune(enemy), source_peer, player.get_instance_id(), callback):
@@ -110,7 +111,7 @@ func _impact(position: Vector2, amount: int, radius: float, source_peer: int, di
 		var enemy := node as Node2D
 		if enemy.global_position.distance_to(position) > radius:
 			continue
-		DAMAGEABLE.apply_damage(enemy, amount, INTERACTIONS.damage_context(interaction, "ruinous_impact", {"secondary": true, "is_ground_attack": true, "attack_origin": position}), source_peer)
+		DAMAGEABLE.apply_damage(enemy, amount, INTERACTIONS.damage_context(interaction, "ruinous_impact", {"secondary": true, "is_ground_attack": true, "attack_origin": position, "damage_coefficient": 1.0 + 0.4 * (clampi(int(player.ruinous_impact_stacks), 1, 2) - 1)}), source_peer)
 		if generation != _cancel_generation:
 			return
 

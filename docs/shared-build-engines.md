@@ -1,4 +1,6 @@
-# Shared build interactions
+# Electrical-build checkpoint: historical implementation map
+
+This records the earlier electrical-build checkpoint. For the current shared Mark, Field, generic Boon and Mission rules, use [the combat power roster](combat-power-roster.md) and [connected builds implementation](connected-builds-implementation.md). The separate Mark records, restricted Snare area list, old display names and missing-contract notes below describe that earlier state.
 
 This is the implementation map for the electrical-build update. It covers the 21 shared Arcana and nine shared boss rewards in `PowerRegistry`. It describes current behavior and explicit limits; it is not evidence that an individual power needs a balance change.
 

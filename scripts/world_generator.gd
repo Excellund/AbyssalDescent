@@ -1,4 +1,4 @@
-﻿extends Node2D
+extends Node2D
 
 const ENEMY_CHASER_SCRIPT := preload("res://scripts/enemy_chaser.gd")
 const ENEMY_CHARGER_SCRIPT := preload("res://scripts/enemy_charger.gd")
@@ -844,6 +844,7 @@ func _prepare_run_loadout() -> void:
 
 func _setup_reward_selection_system() -> void:
 	reward_selection_ui = REWARD_SELECTION_UI_SCRIPT.new()
+	reward_selection_ui.connect("build_inspection_requested", Callable(self, "_on_reward_build_inspection_requested"))
 	add_child(reward_selection_ui)
 	_configure_reward_selection_loadout()
 	if reward_selection_ui.has_signal("reward_selected"):
@@ -1458,6 +1459,12 @@ func _unhandled_input(event: InputEvent) -> void:
 				_mark_tutorial_step("build")
 		elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 			_mark_tutorial_step("attack")
+	if is_instance_valid(build_detail_panel) and build_detail_panel.handle_input(event):
+		get_viewport().set_input_as_handled()
+		return
+	if is_instance_valid(reward_selection_ui) and reward_selection_ui.handle_input(event):
+		get_viewport().set_input_as_handled()
+		return
 	# Hold Tab to show build details; release Tab to close.
 	if event is InputEventKey and event.keycode == KEY_TAB and not event.echo:
 		if is_instance_valid(build_detail_panel):
@@ -2056,8 +2063,12 @@ func _on_room_cleared() -> void:
 		})
 	else:
 		run_summary_recorder.close_active_room()
-	if is_instance_valid(player):
-		player.tick_objective_mutators_for_encounter()
+	# Damage for every party member resolves on the host. Expire its copies
+	# here, independently of later reward/build snapshots from the owners.
+	var mission_players: Array = _get_multiplayer_player_nodes() if is_multiplayer else [player]
+	for mission_player in mission_players:
+		if is_instance_valid(mission_player):
+			mission_player.tick_objective_mutators_for_encounter()
 	if is_instance_valid(game_state_replication_service):
 		game_state_replication_service.on_room_cleared(room_depth, rooms_cleared)
 	if in_second_boss_room:
@@ -2488,11 +2499,27 @@ func _on_pause_menu_closed() -> void:
 	_set_combat_paused(false)
 	_set_singleplayer_menu_wave_timer_paused(false)
 
+func _on_reward_build_inspection_requested(candidate: Dictionary) -> void:
+	var local_player: Node = reward_selection_ui.current_player if is_instance_valid(reward_selection_ui) else null
+	if not is_instance_valid(local_player):
+		local_player = _find_local_owned_player_node()
+	if not is_instance_valid(build_detail_panel) or not is_instance_valid(local_player):
+		return
+	var character_id := String(local_player.get("active_character_id"))
+	if character_id.is_empty():
+		character_id = current_character_id
+	var run_context := _get_run_context()
+	var catalyst_ids: Array = run_context.get_active_catalyst_ids(character_id) if run_context != null else []
+	build_detail_panel.refresh_from_player(local_player, character_id, catalyst_ids, candidate)
+	build_detail_panel.open(true)
+
 func _on_build_detail_opened() -> void:
 	_set_combat_paused(true)
 	_set_singleplayer_menu_wave_timer_paused(true)
 
 func _on_build_detail_closed() -> void:
+	if is_instance_valid(reward_selection_ui) and reward_selection_ui.is_active():
+		reward_selection_ui.resume_after_inspection()
 	_set_combat_paused(false)
 	_set_singleplayer_menu_wave_timer_paused(false)
 
@@ -3415,7 +3442,7 @@ func _spawn_synced_pyre_death_field(effect_payload: Dictionary) -> void:
 func request_enemy_damage_from_client(enemy_id: int, amount: int, damage_context: Dictionary = {}) -> void:
 	if not MultiplayerSessionManager.is_remote_replica():
 		return
-	if enemy_id <= 0 or amount < 0 or (amount == 0 and damage_context.get("hunters_snare_aoe_bonus") != true):
+	if enemy_id <= 0 or amount < 0 or (amount == 0 and damage_context.get("hunters_snare_aoe_bonus") != true and not damage_context.has("damage_coefficient")):
 		return
 	_sync_request_enemy_damage.rpc_id(1, enemy_id, amount, damage_context)
 
@@ -3424,7 +3451,7 @@ func request_enemy_damage_from_client(enemy_id: int, amount: int, damage_context
 func _sync_request_enemy_damage(enemy_id: int, amount: int, damage_context: Dictionary = {}) -> void:
 	if not MultiplayerSessionManager.should_broadcast():
 		return
-	if enemy_id <= 0 or amount < 0 or (amount == 0 and damage_context.get("hunters_snare_aoe_bonus") != true):
+	if enemy_id <= 0 or amount < 0 or (amount == 0 and damage_context.get("hunters_snare_aoe_bonus") != true and not damage_context.has("damage_coefficient")):
 		return
 	var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as ENEMY_BASE_SCRIPT
 	if not is_instance_valid(enemy):
@@ -3459,6 +3486,70 @@ func _sync_request_enemy_slow(enemy_id: int, duration: float, mult: float, inter
 	if not is_instance_valid(enemy) or enemy.get_current_health() <= 0:
 		return
 	DAMAGEABLE.apply_slow(enemy, duration, mult, sender_peer_id, interaction)
+
+func request_enemy_mark_from_client(enemy_id: int, source: String, ratio: float, duration: float, interaction: Dictionary = {}) -> void:
+	if MultiplayerSessionManager.is_remote_replica() and enemy_id > 0:
+		_sync_request_enemy_mark.rpc_id(1, enemy_id, source, ratio, duration, interaction)
+
+@rpc("reliable", "any_peer")
+func _sync_request_enemy_mark(enemy_id: int, source: String, ratio: float, duration: float, interaction: Dictionary = {}) -> void:
+	if not MultiplayerSessionManager.should_broadcast():
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	if not MultiplayerSessionManager.get_peer_ids().has(sender):
+		return
+	var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as ENEMY_BASE_SCRIPT
+	if is_instance_valid(enemy):
+		DAMAGEABLE.apply_mark(enemy, source, ratio, duration, sender, interaction)
+
+func request_shared_attack_start_from_client(interaction: Dictionary) -> void:
+	if MultiplayerSessionManager.is_remote_replica():
+		_sync_request_shared_attack_start.rpc_id(1, interaction)
+
+@rpc("reliable", "any_peer")
+func _sync_request_shared_attack_start(interaction: Dictionary) -> void:
+	if not MultiplayerSessionManager.should_broadcast():
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	if not MultiplayerSessionManager.get_peer_ids().has(sender):
+		return
+	var action := preload("res://scripts/shared/combat_interaction_registry.gd").validate_action(interaction, sender)
+	var owner := DAMAGEABLE._find_combat_owner(sender)
+	if is_instance_valid(owner) and not action.is_empty():
+		owner._accept_shared_attack_start(action)
+
+func request_shared_field_from_client(source: String, identity: String, geometry: Dictionary, interaction: Dictionary) -> void:
+	if MultiplayerSessionManager.is_remote_replica():
+		_sync_request_shared_field.rpc_id(1, source, identity, geometry, interaction)
+
+@rpc("reliable", "any_peer")
+func _sync_request_shared_field(source: String, identity: String, geometry: Dictionary, interaction: Dictionary) -> void:
+	if not MultiplayerSessionManager.should_broadcast():
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	if not MultiplayerSessionManager.get_peer_ids().has(sender):
+		return
+	var owner := DAMAGEABLE._find_combat_owner(sender)
+	var action := preload("res://scripts/shared/combat_interaction_registry.gd").validate_action(interaction, sender)
+	if is_instance_valid(owner) and not action.is_empty():
+		owner._ensure_shared_build_runtime()
+		owner.shared_build_runtime.register_field(source, identity, geometry, action)
+
+func request_shared_movement_from_client(kind: String, position: Vector2, interaction: Dictionary) -> void:
+	if MultiplayerSessionManager.is_remote_replica():
+		_sync_request_shared_movement.rpc_id(1, kind, position, interaction)
+
+@rpc("reliable", "any_peer")
+func _sync_request_shared_movement(kind: String, position: Vector2, interaction: Dictionary) -> void:
+	if not MultiplayerSessionManager.should_broadcast():
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	if not MultiplayerSessionManager.get_peer_ids().has(sender):
+		return
+	var action := preload("res://scripts/shared/combat_interaction_registry.gd").validate_action(interaction, sender)
+	var owner := DAMAGEABLE._find_combat_owner(sender)
+	if is_instance_valid(owner) and not action.is_empty():
+		owner._accept_shared_movement(kind, position, action)
 
 func request_enemy_impulse_from_client(enemy_id: int, impulse: Vector2, suppress_launch: bool = false, interaction: Dictionary = {}) -> void:
 	if not MultiplayerSessionManager.is_remote_replica():
@@ -4665,3 +4756,20 @@ func _get_active_biome_accent() -> Color:
 		return Color(0.62, 0.88, 0.94, 1.0)
 	var biome := BIOME_REGISTRY.get_biome(biome_id)
 	return biome.get("color_theme", {}).get("accent", Color(0.62, 0.88, 0.94, 1.0)) as Color
+
+
+func request_shared_dash_start_from_client(interaction: Dictionary) -> void:
+	if MultiplayerSessionManager.is_remote_replica():
+		_sync_request_shared_dash_start.rpc_id(1, interaction)
+
+@rpc("reliable", "any_peer")
+func _sync_request_shared_dash_start(interaction: Dictionary) -> void:
+	if not MultiplayerSessionManager.should_broadcast():
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	if not MultiplayerSessionManager.get_peer_ids().has(sender):
+		return
+	var action := preload("res://scripts/shared/combat_interaction_registry.gd").validate_action(interaction, sender)
+	var owner := DAMAGEABLE._find_combat_owner(sender)
+	if is_instance_valid(owner) and not action.is_empty():
+		owner._accept_shared_dash_start(action)

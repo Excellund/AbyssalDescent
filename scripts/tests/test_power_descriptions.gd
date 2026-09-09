@@ -1,6 +1,7 @@
 extends "res://scripts/tests/test_blast_feedback.gd"
 ## Description checks compare real upgrades and hit outcomes with their UI text.
 
+const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const DESCRIPTION_GUARD := preload("res://scripts/shared/description_cap_guard.gd")
 const REGISTRY := preload("res://scripts/power_registry.gd")
 const CRESCENT := preload("res://scripts/returning_crescent_controller.gd")
@@ -124,7 +125,7 @@ func _test_bloodpact_sign() -> void:
 	for level in range(1, 4):
 		player.upgrade_system.apply_upgrade("bloodpact")
 		var current := _text("bloodpact")
-		_check(current.contains("+%d damage" % player.bloodpact_bonus_damage) and not current.contains("++"), "Bloodpact L%d displays its bonus with one plus sign" % level)
+		_check(current.contains("Damage +%d" % player.bloodpact_bonus_damage) and not current.contains("++"), "Bloodpact L%d displays its bonus with one plus sign" % level)
 	_free_world()
 
 func _test_motion_damage_descriptions() -> void:
@@ -149,6 +150,7 @@ func _test_motion_damage_descriptions() -> void:
 				_check(actual_damage == int(round(float(player.damage) * MOTION.BLAST_DAMAGE_MULT_MAX * damage_scale)), "Blast L%d full-charge damage matches its description ratio" % level)
 				_check(text.contains("Full Damage x%.2f" % (MOTION.BLAST_DAMAGE_MULT_MAX * damage_scale)) and text.contains("reach %.0f" % (MOTION.BLAST_RANGE_MAX * reach_scale)), "Blast L%d displays full-charge values rather than internal scales" % level)
 			else:
+				player.arcana_motion.start_orbit(enemy)
 				player.arcana_motion._apply_cut_contacts(origin, origin + Vector2(4.0, 0.0))
 				var actual_damage := 10000 - enemy.get_current_health()
 				_check(actual_damage == int(round(float(player.damage) * MOTION.ORBIT_CUT_DAMAGE_RATIO * damage_scale)), "Orbit L%d cut damage matches its description ratio" % level)
@@ -164,10 +166,18 @@ func _test_mark_and_corridor_descriptions() -> void:
 		player.apply_trial_power("eclipse_mark")
 		player._apply_eclipse_mark(enemy.global_position)
 		var text := _text("eclipse_mark")
-		_check(text.contains("lasts %d hits" % level) and not text.contains("First hit"), "Eclipse L%d describes its real hit allowance without contradicting it" % level)
-		for _index in range(level):
-			_check(player._consume_eclipse_mark_bonus(enemy, 20) > 0, "Eclipse L%d retains each promised marked hit" % level)
-		_check(player._consume_eclipse_mark_bonus(enemy, 20) == 0, "Eclipse L%d expires after its displayed hit count" % level)
+		_check(text.contains("Mark") and text.contains("%.2fs" % player.eclipse_mark_duration) and not text.contains("hits"), "Eclipse L%d describes its timed vulnerability" % level)
+		var mark := DAMAGEABLE.status_snapshot(enemy, player.player_id)
+		_check(is_equal_approx(float(mark.mark_ratio), player.eclipse_mark_bonus_ratio), "Eclipse L%d applies the displayed vulnerability" % level)
+		for _index in range(4):
+			var before_hit := enemy.get_current_health()
+			var action := player.new_combat_action("attack")
+			var context := preload("res://scripts/shared/combat_interaction_registry.gd").damage_context(action, "melee", {"damage_coefficient": 1.0, "raw_amount": 20.0, "attack_origin": player.global_position})
+			DAMAGEABLE.apply_damage(enemy, 20, context, player.player_id)
+			_check(enemy.get_current_health() < before_hit - 20, "Eclipse L%d amplifies damage without consuming Mark" % level)
+		_check(is_equal_approx(float(DAMAGEABLE.status_snapshot(enemy, player.player_id).mark_ratio), player.eclipse_mark_bonus_ratio), "Four damage events do not spend the timed Mark")
+		DAMAGEABLE._target_status(enemy).advance(player.eclipse_mark_duration + 0.01)
+		_check(float(DAMAGEABLE.status_snapshot(enemy, player.player_id).mark_ratio) == 0.0, "Eclipse expires at its displayed duration")
 	player.upgrade_system.apply_upgrade("null_corridor")
 	player._apply_null_corridor_segment(enemy.global_position - Vector2(30.0, 0.0), enemy.global_position + Vector2(30.0, 0.0))
 	var before := enemy.get_current_health()

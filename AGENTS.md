@@ -10,6 +10,8 @@ When the user asks to analyze how to improve a process, speed up work, reduce fr
 - **Attack** means the deliberate Attack-control action; **attack hit** means it connects. Use **dealing damage** for any eligible damage source, including dash effects, fields and echoes. Never redefine player-facing Hit to include all damage.
 - **Electric** is a damage property. Describe generators by what they produce and receivers by the properties they accept, such as "when you deal Electric damage". Do not advertise a required named pair or imply unimplemented shared charge mechanics.
 - Preserve each power's actual source, target, timing and repeat limits. Distinguish damage scaling from activation; wording changes must not silently change mechanics. Keep internal `HIT` identifiers and serialized contexts compatible.
+- Author highlighted semantic spans through `scripts/shared/combat_keyword_catalogue.gd`; do not replace ordinary words or power titles globally. Reward cards, build details and the glossary must agree on the trigger, result and important limit.
+- Extend the existing interaction controller and accepted-damage boundary for new synergies. Carry the unconditioned damage descriptor and its Damage coefficient through descendants, resolve actual-target conditions once, and retain each power's own action/victim limits. Keep the roster map in `docs/combat-power-roster.md` current.
 
 ## Checkpoints and playtest delivery
 

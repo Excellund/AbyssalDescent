@@ -124,7 +124,7 @@ func _test_shade_wind() -> void:
 	var origin := player.global_position
 	player.sovereigns_double_stacks = 2
 	player.boss_combinations.create_shade(origin)
-	player.boss_combinations.repeat_strike(Vector2.RIGHT, [{"source": "razor_wind", "damage": 20, "range": 145.0, "arc_degrees": 70.0, "inner_range": 65.0}])
+	player.boss_combinations.repeat_strike(Vector2.RIGHT, [{"source": "razor_wind", "interaction": player.new_combat_action("melee"), "damage": 20, "range": 145.0, "arc_degrees": 70.0, "inner_range": 65.0}])
 	_check(inner_victim.get_current_health() == 10000 and wind_victim.get_current_health() == 9989, "Shade wind still damages only the outer band at 55% strength")
 	var effect: Dictionary = player.boss_combinations._echo_visuals.back()
 	var payload: Dictionary = _latest_cue("sovereign_double_strike")["payload"]

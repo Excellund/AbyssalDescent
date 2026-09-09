@@ -230,13 +230,14 @@ static func _build_trial_values_base(power_id: String, stack_count: int, balance
 			}
 		"hunters_snare":
 			return {
-				"bonus_damage": int(data.get("bonus_damage_base", 0)) + stack_count * int(data.get("bonus_damage_per_stack", 0)),
+				"bonus_ratio": float(data.get("bonus_ratio_base", 0.0)) + float(stack_count) * float(data.get("bonus_ratio_per_stack", 0.0)),
 				"slow_duration": float(data.get("slow_duration_base", 0.0)) + float(data.get("slow_duration_per_stack", 0.0)) * float(stack_count),
 				"slow_mult": maxf(float(data.get("slow_mult_min", 0.0)), float(data.get("slow_mult_base", 1.0)) + float(data.get("slow_mult_per_stack", 0.0)) * float(stack_count))
 			}
 		"phantom_step":
 			var phantom_damage_ratio := float(data.get("damage_ratio_base", 0.0)) + float(data.get("damage_ratio_per_stack", 0.0)) * float(stack_count)
 			return {
+				"damage_ratio": phantom_damage_ratio,
 				"damage": int(ceil(float(player_reference.get("damage")) * phantom_damage_ratio)),
 				"slow_duration": float(data.get("slow_duration_base", 0.0)) + float(data.get("slow_duration_per_stack", 0.0)) * float(stack_count),
 				"dash_cooldown": maxf(float(data.get("dash_cooldown_min", 0.0)), float(player_reference.get("dash_cooldown")) * float(data.get("dash_cooldown_mult", 1.0)))
@@ -278,7 +279,7 @@ static func _build_trial_values_base(power_id: String, stack_count: int, balance
 			return {
 				"mark_duration": float(data.get("mark_duration_base", 0.0)) + float(data.get("mark_duration_per_stack", 0.0)) * float(stack_count),
 				"dash_mark_radius": float(data.get("dash_mark_radius_base", 0.0)) + float(data.get("dash_mark_radius_per_stack", 0.0)) * float(stack_count),
-				"bonus_damage": int(data.get("bonus_damage_base", 0)) + stack_count * int(data.get("bonus_damage_per_stack", 0)),
+				"bonus_ratio": float(data.get("bonus_ratio_base", 0.0)) + float(stack_count) * float(data.get("bonus_ratio_per_stack", 0.0)),
 				"splash_radius": float(data.get("splash_radius_base", 0.0)) + float(data.get("splash_radius_per_stack", 0.0)) * float(stack_count),
 				"splash_ratio": minf(float(data.get("splash_ratio_cap", 1.0)), float(data.get("splash_ratio_base", 0.0)) + float(data.get("splash_ratio_per_stack", 0.0)) * float(stack_count))
 			}
@@ -307,7 +308,9 @@ static func _build_trial_values_base(power_id: String, stack_count: int, balance
 			}
 		"dread_resonance":
 			return {
-				"bonus_per_stack": int(data.get("bonus_per_stack_base", 0)) + stack_count * int(data.get("bonus_per_stack_per_level", 0)),
+				"damage_ratio_per_stack": float(data.get("damage_ratio_per_stack", 0.02)),
+				"mark_bonus_ratio": float(data.get("mark_bonus_ratio", 0.10)),
+				"mark_duration": float(data.get("mark_duration", 3.0)),
 				"max_stacks": mini(int(data.get("max_stacks_cap", 12)), int(data.get("max_stacks_base", 6)) + stack_count * int(data.get("max_stacks_per_stack", 0)))
 			}
 		"bloodvow":
@@ -371,10 +374,11 @@ static func _apply_prismatic_trial_values(power_id: String, values: Dictionary) 
 			prismatic["slow_mult"] = maxf(0.25, float(prismatic.get("slow_mult", 1.0)) * 0.82)
 			prismatic["cooldown"] = maxf(0.9, float(prismatic.get("cooldown", 0.0)) * 0.85)
 		"hunters_snare":
-			prismatic["bonus_damage"] = int(float(prismatic.get("bonus_damage", 0)) * 1.75)
+			prismatic["bonus_ratio"] = 0.45
 			prismatic["slow_duration"] = float(prismatic.get("slow_duration", 0.0)) * 1.35
 			prismatic["slow_mult"] = maxf(0.25, float(prismatic.get("slow_mult", 1.0)) * 0.72)
 		"phantom_step":
+			prismatic["damage_ratio"] = float(prismatic.get("damage_ratio", 0.0)) * 1.35
 			prismatic["damage"] = int(float(prismatic.get("damage", 0)) * 1.35)
 			prismatic["slow_duration"] = float(prismatic.get("slow_duration", 0.0)) * 1.25
 			prismatic["dash_cooldown"] = maxf(0.05, float(prismatic.get("dash_cooldown", 0.0)) * 0.85)
@@ -399,7 +403,7 @@ static func _apply_prismatic_trial_values(power_id: String, values: Dictionary) 
 		"wraithstep":
 			prismatic["mark_duration"] = float(prismatic.get("mark_duration", 0.0)) * 1.3
 			prismatic["dash_mark_radius"] = float(prismatic.get("dash_mark_radius", 0.0)) * 1.2
-			prismatic["bonus_damage"] = int(float(prismatic.get("bonus_damage", 0)) * 1.5)
+			prismatic["bonus_ratio"] = 0.30
 			prismatic["splash_radius"] = float(prismatic.get("splash_radius", 0.0)) * 1.2
 			prismatic["splash_ratio"] = float(prismatic.get("splash_ratio", 0.0)) * 1.25
 		"voidfire":
@@ -409,7 +413,7 @@ static func _apply_prismatic_trial_values(power_id: String, values: Dictionary) 
 			prismatic["detonate_radius"] = float(prismatic.get("detonate_radius", 0.0)) * 1.2
 			prismatic["lockout_duration"] = maxf(0.06, float(prismatic.get("lockout_duration", 0.0)) * 0.6)
 		"dread_resonance":
-			prismatic["bonus_per_stack"] = int(prismatic.get("bonus_per_stack", 0)) + 1
+			prismatic["damage_ratio_per_stack"] = 0.024
 			prismatic["max_stacks"] = int(prismatic.get("max_stacks", 0)) + 3
 		"bloodvow":
 			prismatic["damage_mult"] = float(prismatic.get("damage_mult", 1.0)) * 1.2
@@ -417,7 +421,7 @@ static func _apply_prismatic_trial_values(power_id: String, values: Dictionary) 
 		"eclipse_mark":
 			prismatic["radius"] = float(prismatic.get("radius", 0.0)) * 1.2
 			prismatic["mark_duration"] = float(prismatic.get("mark_duration", 0.0)) * 1.3
-			prismatic["bonus_ratio"] = float(prismatic.get("bonus_ratio", 0.0)) * 1.45
+			prismatic["bonus_ratio"] = 0.30
 		"fracture_field":
 			prismatic["radius"] = float(prismatic.get("radius", 0.0)) * 1.22
 			prismatic["damage_ratio"] = float(prismatic.get("damage_ratio", 0.0)) * 1.35

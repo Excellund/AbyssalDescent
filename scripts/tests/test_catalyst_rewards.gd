@@ -23,6 +23,7 @@ class FirstChoiceUI extends "res://scripts/reward_selection_ui.gd":
 var _checks: int = 0
 var _failures: Array[String] = []
 var _offer_events: int = 0
+var _last_selection: Dictionary = {}
 
 func _initialize() -> void:
 	call_deferred("_run")
@@ -116,6 +117,7 @@ func _run() -> void:
 		_check(compass_ui._can_reroll_current_offer() == (mode == ENUMS.RewardMode.ARCANA), "Only starting Arcana is an eligible initial reroll for mode %d" % mode)
 		compass_ui.close_selection()
 
+	compass_ui.reward_selected.connect(func(choice: Dictionary, _mode: int, _initial: bool): _last_selection = choice)
 	for spend_reroll in [false, true]:
 		Input.action_release("attack")
 		await process_frame
@@ -131,9 +133,9 @@ func _run() -> void:
 		compass_ui.process_input(0.016)
 		Input.action_release("attack")
 		await process_frame
-		_check(compass_ui.mission_reward_stage == 1, "Mission selection reaches actual bonus stage")
-		_check(not compass_ui.pending_mission_upgrade_choice.is_empty(), "Mission preserves selected draft reward")
-		_check(compass_ui.boon_choices.size() == 1, "Draft Compass leaves fixed mission bonus as one claim")
+		_check(compass_ui.mission_reward_stage == 0 and not compass_ui.is_active(), "Mission selection completes atomically")
+		_check(not _last_selection.get("mission_upgrade", {}).is_empty(), "Mission bundle includes the selected draft reward")
+		_check(_last_selection.get("mission_mutator", {}).get("full_data", {}) == mutator, "Draft Compass bundle includes the unchanged fixed Mission bonus")
 		_check(not compass_ui.reroll_button.visible, "Mission bonus immediately hides stale reroll button")
 		_check(not compass_ui._can_reroll_current_offer(), "Mission bonus cannot be rerolled")
 		_check(compass_ui._reward_rerolls_remaining == (0 if spend_reroll else 1), "Mission bonus does not reset reroll allowance")
@@ -145,7 +147,7 @@ func _run() -> void:
 	var prismatic_payload := CATALYSTS.merge_payloads(["extra_arcana_slot"])
 	compass_ui.configure_catalyst_payload(prismatic_payload)
 	compass_ui.open_selection("Arcana", false, ENUMS.RewardMode.ARCANA, registry, player, rng)
-	_check(compass_ui.boon_card_stack_labels[0].text == "◇◇◇", "Fresh Arcana shows the three actual ordinary stacks")
+	_check(compass_ui.boon_card_stack_labels[0].text == "New: L1", "Fresh Arcana states the offered first level")
 	compass_ui.close_selection()
 	var all_arcana := registry.get_trial_power_pool(player)
 	for choice in all_arcana:
@@ -161,7 +163,7 @@ func _run() -> void:
 		compass_ui.open_selection("Prismatic", false, ENUMS.RewardMode.ARCANA, registry, player, rng)
 		compass_ui.boon_choices = [choice]
 		compass_ui._refresh_boon_ui(player)
-		_check(compass_ui.boon_card_stack_labels[0].text == "Prismatic", "Card identifies Prismatic " + power_id)
+		_check(compass_ui.boon_card_stack_labels[0].text == "L%d -> Prismatic" % stack_limit, "Card identifies Prismatic " + power_id)
 		_check(compass_ui.boon_card_stack_labels[0].get_minimum_size().x <= 210.0, "Prismatic label fits its card column")
 		_check(player.upgrade_system.apply_trial_power(power_id), "Apply Prismatic " + power_id)
 		_check(player.has_trial_power_prismatic(power_id), "Player records Prismatic " + power_id)

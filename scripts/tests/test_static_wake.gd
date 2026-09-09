@@ -85,6 +85,20 @@ func _ribbon(actor: Actor, start := Vector2(-30, 0), finish := Vector2(30, 0)) -
 func _damage(target: Target) -> int:
 	return 10000 - target.health_state.current_health
 
+func _learn(actor: Actor, power: String, picks: int) -> void:
+	if not is_instance_valid(actor.upgrade_system):
+		var registry := POWERS.new()
+		actor.add_child(registry)
+		actor.upgrade_system = UPGRADES.new()
+		actor.add_child(actor.upgrade_system)
+		actor.upgrade_system.initialize(actor, null, registry)
+	for pick in range(picks):
+		actor.upgrade_system.apply_trial_power(power)
+
+func _fraction(target: Target, owner: int = 1) -> float:
+	var status := target.get_node_or_null("SharedCombatStatus")
+	return float(status._remainders.get("%d:static_wake" % owner, 0.0)) if status != null else 0.0
+
 func _clear() -> void:
 	for child in stage.get_children():
 		child.free()
@@ -94,7 +108,12 @@ func _run() -> void:
 	root.add_child(stage)
 	current_scene = stage
 	_test_cadence()
+	_test_sustained_conditions()
 	_test_levels()
+	_test_analytic_damage_scaling()
+	_test_phantom_damage_scaling()
+	_test_retort_damage_scaling()
+	_test_fixed_farline_damage()
 	_test_crossing()
 	_test_union_and_shape()
 	_test_deadlines_and_lifetime()
@@ -135,13 +154,7 @@ func _test_levels() -> void:
 		for fps in [30, 60, 120]:
 			var actor := _actor()
 			actor.damage = 20
-			var registry := POWERS.new()
-			actor.add_child(registry)
-			var upgrades := UPGRADES.new()
-			actor.add_child(upgrades)
-			upgrades.initialize(actor, null, registry)
-			for pick in range(picks):
-				upgrades.apply_trial_power("static_wake")
+			_learn(actor, "static_wake", picks)
 			var target := _target()
 			_ribbon(actor)
 			for frame in range(fps):
@@ -149,7 +162,7 @@ func _test_levels() -> void:
 			_check(_damage(target) == actor.static_wake_damage * 6, "Mapped %d-pick Wake at %dfps retains its actual per-second damage" % [picks, fps])
 			_check(target.is_slowed() == (picks >= 3), "Mapped %d-pick Wake at %dfps retains its structural Slow level" % [picks, fps])
 			if picks == 4:
-				_check(upgrades.has_trial_power_prismatic("static_wake") and not upgrades.apply_trial_power("static_wake"), "Wake retains one Prismatic pick")
+				_check(actor.upgrade_system.has_trial_power_prismatic("static_wake") and not actor.upgrade_system.apply_trial_power("static_wake"), "Wake retains one Prismatic pick")
 			_clear()
 
 func _test_crossing() -> void:
@@ -160,15 +173,17 @@ func _test_crossing() -> void:
 		for frame in range(1, fps + 1):
 			target.global_position = Vector2(0, -100.0 + 200.0 * frame / fps)
 			actor.static_wake_controller.tick(1.0 / fps)
-		_check(_damage(target) == 9, "%dfps moving target accrues .2s exact contact with fractional carry" % fps)
+		_check(_damage(target) == 9 and is_equal_approx(_fraction(target), 0.6), "%dfps moving target conserves .2s exposure with Wake floor carry" % fps)
 		_clear()
+
+
 	var actor := _actor()
 	var target := _target(Vector2(0, -100))
 	_ribbon(actor)
 	target.global_position = Vector2(0, 100)
 	actor.static_wake_controller.tick(1.0)
 	_check(_damage(target) == 9, "A full crossing within one hitch is detected and lifetime-clipped")
-	_check(is_equal_approx(float(actor.static_wake_controller._targets[target.get_instance_id()].fraction), 0.6), "Crossing fractional damage remains for later exposure")
+	_check(is_equal_approx(_fraction(target), 0.6), "Crossing credit stays on the host target's owner/source ledger")
 	_clear()
 	actor = _actor()
 	target = _target(Vector2(0, -96))
@@ -178,6 +193,161 @@ func _test_crossing() -> void:
 	_check(_damage(target) == 10, "Float64 exposure preserves an exact integer tick across a 192px crossing")
 	_clear()
 
+func _test_analytic_damage_scaling() -> void:
+	for picks in [1, 2, 3, 4]:
+		for fps in [30, 60, 120, 0]:
+			for percentages in [false, true]:
+				var actor := _actor()
+				actor.damage = 21
+				_learn(actor, "static_wake", picks)
+				actor.first_strike_bonus_damage = 16
+				var target := _target()
+				if percentages:
+					_learn(actor, "hunters_snare", 2)
+					_learn(actor, "eclipse_mark", 1)
+					target.apply_slow(10.0, 0.8)
+					var action := actor.new_combat_action("melee")
+					actor.DAMAGEABLE.apply_mark(target, "eclipse_mark", 0.15, 4.0, 1, action)
+				_ribbon(actor)
+				if fps > 0:
+					for frame in range(fps):
+						actor.static_wake_controller.tick(1.0 / fps)
+				else:
+					for delta in [0.4, 0.37, 0.23]:
+						actor.static_wake_controller.tick(delta)
+				var base_ratio: float = [0.45, 0.60, 0.75, 0.75][picks - 1]
+				var ratio: float = [0.45, 0.60, 0.75, 1.05][picks - 1]
+				var raw := int(ceil(21.0 * base_ratio))
+				if picks == 4:
+					raw = int(raw * 1.4)
+				var expected := 6.0 * (raw + 16.0 * ratio) * (1.15 * 1.25 if percentages else 1.0)
+				var label := "Learned Wake picks%d %dfps percentages=%s" % [picks, fps, percentages]
+				_check(actor.static_wake_damage == raw and is_equal_approx(actor.static_wake_damage_ratio, ratio), label + ": ordinary acquisition retains raw rounding and maps the analytic coefficient separately")
+				_check(_damage(target) == int(floor(expected + 0.000000001)), label + ": actual Field damage combines conditional Damage and preexisting Mark/Slow percentages")
+				_check(absf(_damage(target) + _fraction(target) - expected) < 0.00002, label + ": fractional carry preserves the exact formula across frame rates")
+				_clear()
+
+func _test_phantom_damage_scaling() -> void:
+	for picks in [1, 2, 3, 4]:
+		for percentages in [false, true]:
+			var actor := _actor()
+			actor.damage = 21
+			_learn(actor, "phantom_step", picks)
+			actor.first_strike_bonus_damage = 16
+			var target := _target()
+			if percentages:
+				_learn(actor, "hunters_snare", 2)
+				_learn(actor, "eclipse_mark", 1)
+				target.apply_slow(10.0, 0.8)
+				actor.DAMAGEABLE.apply_mark(target, "eclipse_mark", 0.15, 4.0, 1, actor.new_combat_action("melee"))
+			actor._apply_phantom_step_during_dash()
+			var base_ratio: float = [0.56, 0.72, 0.88, 0.88][picks - 1]
+			var ratio: float = [0.56, 0.72, 0.88, 1.188][picks - 1]
+			var raw := int(ceil(21.0 * base_ratio))
+			if picks == 4:
+				raw = int(raw * 1.35)
+			var expected := int(round((raw + 16.0 * ratio) * (1.15 * 1.25 if percentages else 1.0)))
+			var label := "Learned Phantom picks%d percentages=%s" % [picks, percentages]
+			_check(actor.phantom_step_damage == raw and is_equal_approx(actor.phantom_step_damage_ratio, ratio), label + ": ordinary acquisition preserves ceil/Prismatic rounding")
+			_check(_damage(target) == expected, label + ": actual Dash contact scales conditional Boons from its analytic ratio")
+			_check(target.is_slowed() and target.hits.size() == 1, label + ": original contact and Slow remain single delivery")
+			_check(target.hits.size() == 1 and is_equal_approx(float(target.hits[0].context.damage_coefficient), ratio), label + ": delivered descriptor excludes the raw integer rounding remainder")
+			_clear()
+
+func _test_retort_damage_scaling() -> void:
+	var actor := _actor()
+	actor.damage = 21
+	_learn(actor, "static_wake", 1) # Set up the real upgrade system.
+	actor.first_strike_bonus_damage = 16
+	actor.passive_iron_retort = true
+	actor.iron_retort_brace_ready = true
+	_target(Vector2(40.0, 0.0))
+	var secondary := _target(Vector2(-10.0, 0.0))
+	actor._perform_melee_attack(Vector2.RIGHT, {"damage": 29, "damage_coefficient": 1.37})
+	var label := "Retort preserves the Attack's analytic coefficient through its rounded shockwave"
+	_check(secondary.hits.size() == 1 and secondary.hits[0].context.attack_type == "iron_retort_shockwave", label + ": actual brace releases one wave behind the melee cone")
+	if secondary.hits.size() == 1:
+		_check(is_equal_approx(float(secondary.hits[0].context.damage_coefficient), 1.37 * 1.8 * 0.55), label)
+		_check(_damage(secondary) == int(round(round(round(29.0 * 1.8) * 0.55) + 16.0 * 1.37 * 1.8 * 0.55)), label + ": conditional Damage uses that exact inherited multiplier")
+	_clear()
+
+func _test_fixed_farline_damage() -> void:
+	for picks in [3, 4]:
+		for marked in [false, true]:
+			var actor := _actor()
+			actor.damage = 21
+			_learn(actor, "farline_volley", picks)
+			actor.first_strike_bonus_damage = 16
+			var target := _target()
+			if marked:
+				_learn(actor, "eclipse_mark", 1)
+				actor.DAMAGEABLE.apply_mark(target, "eclipse_mark", 0.15, 4.0, 1, actor.new_combat_action("melee"))
+			actor._farline_volley_current_stacks = actor.farline_volley_stack_cap
+			var raw := int(round((3.0 * 8.0 if picks == 4 else 2.0 * 5.0) * 0.45))
+			var scope := actor._begin_effect_scope("dash", actor.new_combat_action("dash"))
+			actor._consume_or_reset_farline_volley_for_dash()
+			actor.DAMAGEABLE.end_interaction_scope(scope)
+			var label := "Farline picks%d marked=%s" % [picks, marked]
+			_check(_damage(target) == int(round(raw * (1.15 if marked else 1.0))), label + ": fixed Burst ignores conditional Damage additions but retains percentage vulnerability")
+			_check(target.hits.size() == 1 and float(target.hits[0].context.damage_coefficient) == 0.0, label + ": actual Dash spender has no invented Damage-stat component")
+			_check(actor._farline_volley_current_stacks == 0, label + ": ordinary bank reset remains unchanged")
+			_clear()
+
+
+func _test_sustained_conditions() -> void:
+	# Eight seconds includes repeated exits, reentries, dash roots and ribbon
+	# replacements. A 120px/s crossing spends exactly 1/3 second inside this
+	# 40px-wide Field; the oracle integrates that independently of tick cadence.
+	for fps in [30, 60, 120, 0]:
+		for overlapping in [1, 2]:
+			for snare_picks in [0, 1, 2, 4]:
+				for moving in [false, true]:
+					var actor := _actor()
+					actor.damage = 20
+					actor.first_strike_bonus_damage = 5
+					if snare_picks > 0:
+						_learn(actor, "hunters_snare", snare_picks)
+					var target := _target(Vector2(0.0, -60.0) if moving else Vector2.ZERO)
+					target.apply_slow(1000.0, 0.8)
+					var time := 0.0
+					var tick_index := 0
+					var contact_seconds := 0.0
+					for second in range(8):
+						for ribbon in range(overlapping):
+							_ribbon(actor)
+						var end := float(second + 1)
+						while time < end - 0.000000001:
+							var delta: float = 1.0 / fps if fps > 0 else [0.4, 0.37, 0.23][tick_index % 3]
+							delta = minf(delta, end - time)
+							time += delta
+							tick_index += 1
+							var old_y := float(target.global_position.y)
+							if moving:
+								var phase := fmod(time, 2.0)
+								target.global_position.y = -60.0 + 120.0 * phase if phase <= 1.0 else 180.0 - 120.0 * phase
+							contact_seconds += _band_exposure(old_y, float(target.global_position.y), delta)
+							actor.static_wake_controller.tick(delta)
+					var exposure := 8.0 / 3.0 if moving else 8.0
+					var snare_ratio: float = (0.45 if snare_picks == 4 else 0.15 + 0.05 * snare_picks) if snare_picks >= 2 else 0.0
+					var expected := 8.0 * 6.0 * contact_seconds * (25.0 / 20.0) * (1.0 + snare_ratio)
+					var label := "%dfps/%d overlap/Snare%d/%s" % [fps, overlapping, snare_picks, "reentry" if moving else "stationary"]
+					_check(absf(contact_seconds - exposure) < 0.000001, label + ": actual Vector2 trajectory matches the analytical exposure")
+					_check(_damage(target) == int(floor(expected + 0.000000001)), "%s: sustained scaled damage is exact (%d vs %.9f)" % [label, _damage(target), expected])
+					_check(absf(float(_damage(target)) + _fraction(target) - expected) < 0.00002, label + ": host remainder conserves exposure across repeated Dash roots")
+					_check(target.hits.size() == (16 if moving else 32), label + ": one due packet per nonempty damage window")
+					_check(actor.static_wake_controller.ribbons.size() <= 2 and target.get_node("SharedCombatStatus")._remainders.size() == 1, label + ": overlapping ribbons share bounded owner/source state")
+					_clear()
+
+func _band_exposure(start_y: float, end_y: float, delta: float) -> float:
+	# Independent 1D oracle uses the actual float32 actor positions. A hitch
+	# endpoint such as 32.4px can be slightly short of the mathematical triangle;
+	# its unspent fraction must remain credited rather than being discarded.
+	var step := end_y - start_y
+	if absf(step) < 0.000000001:
+		return delta if absf(start_y) <= 20.0 else 0.0
+	var first := (-20.0 - start_y) / step
+	var second := (20.0 - start_y) / step
+	return delta * maxf(0.0, minf(1.0, maxf(first, second)) - maxf(0.0, minf(first, second)))
 func _test_union_and_shape() -> void:
 	var actor := _actor()
 	var target := _target(Vector2(30, 30))
@@ -214,10 +384,10 @@ func _test_deadlines_and_lifetime() -> void:
 	actor.static_wake_controller.tick(0.1)
 	_check(_damage(target) == 0 and actor.static_wake_controller.ribbons.is_empty(), "Expiry retires geometry without inventing an early tick")
 	actor.static_wake_controller.tick(0.15)
-	_check(_damage(target) == 4, "Pre-expiry .1s exposure settles only at the original .25s deadline")
+	_check(_damage(target) == 4 and is_equal_approx(_fraction(target), 0.8), "Pre-expiry .1s exposure retains Wake floor carry at the original .25s deadline")
 	_ribbon(actor)
 	actor.static_wake_controller.tick(0.25)
-	_check(_damage(target) == 9, "Reentry carries fractional damage rather than rounding every ribbon")
+	_check(_damage(target) == 9 and is_equal_approx(_fraction(target), 0.6), "Reentry carries fractional damage across ribbons")
 	actor.static_wake_controller.tick(0.75)
 	_check(_damage(target) == 9, "Expired ribbons accrue no extra damage in later windows")
 	_clear()
@@ -252,32 +422,36 @@ func _test_context_and_slow() -> void:
 	var actor := _actor()
 	var target := _target()
 	actor.static_wake_stacks = 3
-	actor.reward_hunters_snare = true
-	actor.hunters_snare_stacks = 2
-	actor.hunters_snare_bonus_damage = 7
+	_learn(actor, "hunters_snare", 2)
 	var action := _ribbon(actor)
 	_ribbon(actor)
 	actor.static_wake_controller.tick(0.25)
 	_check(_damage(target) == 12 and target.is_slowed(), "First Wake tick uses pre-Slow Snare eligibility, then applies level3 Slow")
 	actor.static_wake_controller.tick(0.25)
-	_check(_damage(target) == 31, "Second already-slowed tick adds the Snare bonus once despite overlap")
+	_check(_damage(target) == 27, "Mapped level2 Snare multiplies the second already-slowed tick by 1.25 once despite overlap")
 	var context: Dictionary = target.hits[0].context
 	_check(not context.get("secondary", false) and not context.get("is_ground_attack", false), "Wake retains existing primary directional-defense classification")
 	_check(int(context.interaction.traits) == (REGISTRY.HIT | REGISTRY.DASH | REGISTRY.ELECTRIC), "Wake hit has Hit, Dash and Electric properties")
 	_check(context.interaction.seq == action.seq and target.hits[1].context.interaction.seq == action.seq, "All ticks retain the actual originating Dash identity")
 	_check(context.attack_origin == Vector2.ZERO, "Damage origin is the nearest actual traveled path contact")
-	_check(actor.combat_interactions._roots.is_empty(), "Wake alone does not enable an unlearned Storm Crown")
+	_check(is_equal_approx(float(context.raw_amount), 12.0) and is_equal_approx(float(context.damage_coefficient), 12.0 / actor.damage), "Wake carries raw exposure and its exact Damage coefficient")
+	_check(REGISTRY.effect_forms(String(context.interaction.source)) == ["Field"] and not REGISTRY.is_attack_hit(String(context.interaction.source)), "Electric Field damage does not perform a deliberate Attack")
+	var ledger: Dictionary = actor.combat_interactions._roots.get(action.seq, {})
+	_check(not ledger.is_empty() and not bool(ledger.discharged) and actor.storm_crown_hit_counter == 0, "Shared damage ledger does not enable an unlearned Storm Crown")
 	_clear()
 	actor = _actor()
 	target = _target()
 	actor.static_wake_lifetime = 0.01
 	actor.static_wake_damage = 1
-	actor.reward_hunters_snare = true
-	actor.hunters_snare_stacks = 2
+	_learn(actor, "hunters_snare", 2)
 	target.apply_slow(2.0, 0.8)
 	_ribbon(actor)
 	actor.static_wake_controller.tick(0.25)
-	_check(_damage(target) == actor.hunters_snare_bonus_damage, "A qualifying fractional-only exposure permits its one authoritative pre-Slow Snare bonus")
+	_check(_damage(target) == 0 and is_equal_approx(_fraction(target), 0.075), "Tiny exposure scales Snare with the packet, not a whole flat bonus")
+	for repeat in range(9):
+		_ribbon(actor)
+		actor.static_wake_controller.tick(0.25)
+	_check(_damage(target) == 0 and is_equal_approx(_fraction(target), 0.75), "Ten tiny exposures conserve their total in the host fractional ledger")
 	_clear()
 
 func _test_empty_gap() -> void:
@@ -387,5 +561,3 @@ func _test_replica() -> void:
 	replica.static_wake_controller.apply_visual_state(partial)
 	_check(replica.static_wake_controller.ribbons.is_empty(), "Cancellation retires an in-flight multipart sequence before delayed chunks arrive")
 	_clear()
-
-

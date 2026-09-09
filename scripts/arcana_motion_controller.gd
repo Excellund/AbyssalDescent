@@ -66,6 +66,7 @@ var _orbit_hint_origin := Vector2.ZERO
 var _orbit_hint_direction := Vector2.RIGHT
 
 var _orbit_interaction: Dictionary = {}
+var _recoil_interaction: Dictionary = {}
 
 func initialize(owner_player: CharacterBody2D) -> void:
 	player = owner_player
@@ -184,7 +185,10 @@ func release_blast(strength: float) -> void:
 	motion_origin = player.global_position
 	last_contact_position = Vector2.INF
 	var generation := _cancel_generation
+	_recoil_interaction = player._capture_combat_action("blast_drive")
+	var previous := DAMAGEABLE.begin_interaction_scope(_recoil_interaction)
 	player.perform_motion_blast(direction, strength)
+	DAMAGEABLE.end_interaction_scope(previous)
 	# A killing hit may synchronously open rewards or end the run.
 	if generation != _cancel_generation or not _allowed():
 		return
@@ -375,8 +379,7 @@ func _apply_cut_contacts(start: Vector2, finish: Vector2) -> void:
 			continue
 		contact_cooldowns[id] = 0.30
 		var amount := maxi(1, int(round(float(player.damage) * ORBIT_CUT_DAMAGE_RATIO * float(player.razor_orbit_damage_scale))))
-		amount = int(player._apply_objective_mutator_damage_mult(amount))
-		DAMAGEABLE.apply_damage(enemy, amount, INTERACTIONS.damage_context(_orbit_interaction, "razor_orbit", {"is_ground_attack": true, "secondary": true}))
+		DAMAGEABLE.apply_damage(enemy, amount, INTERACTIONS.damage_context(_orbit_interaction, "razor_orbit", {"is_ground_attack": true, "secondary": true, "damage_coefficient": ORBIT_CUT_DAMAGE_RATIO * float(player.razor_orbit_damage_scale)}))
 		if generation != _cancel_generation:
 			return
 		last_contact_position = finish
@@ -402,8 +405,16 @@ func detach(carry: bool) -> void:
 
 func _finish_motion(completed: bool) -> void:
 	if completed and (motion == Motion.ORBIT or motion == Motion.RECOIL):
+		# Completion belongs to the same movement that produced its damage.
+		# It cannot create fresh Crown allowances for a deferred Tempo Burst.
+		var action := _orbit_interaction if motion == Motion.ORBIT else _recoil_interaction
+		var previous := DAMAGEABLE.begin_interaction_scope(action)
 		player.on_arcana_motion_completed(motion_origin, last_contact_position)
+		player._complete_shared_movement("orbit" if motion == Motion.ORBIT else "recoil", player.global_position)
+		DAMAGEABLE.end_interaction_scope(previous)
 	motion = Motion.NONE
+	_orbit_interaction.clear()
+	_recoil_interaction.clear()
 	anchor = null
 	recoil_left = 0.0
 	contact_cooldowns.clear()

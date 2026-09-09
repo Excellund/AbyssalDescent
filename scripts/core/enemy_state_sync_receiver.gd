@@ -13,6 +13,7 @@ extends RefCounted
 
 const ENEMY_REMOTE_SNAP_DISTANCE_PX_DEFAULT: float = 180.0
 const ENEMY_BASE_SCRIPT := preload("res://scripts/enemy_base.gd")
+const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const OBJECTIVE_RUNTIME_SCRIPT := preload("res://scripts/objective_runtime.gd")
 const OBJECTIVE_MANAGER_SCRIPT := preload("res://scripts/objective_manager.gd")
 
@@ -190,6 +191,8 @@ func apply_enemy_states(synced_states: Array, synced_enemy_count: int) -> void:
 		if state.has("health"):
 			enemy.set_health(float(state.get("health", 0.0)))
 		var runtime_state_delta := state.get("runtime_state_delta", {}) as Dictionary
+		if runtime_state_delta.get("shared_status") is PackedByteArray:
+			DAMAGEABLE.apply_status_network_packet(enemy, runtime_state_delta.shared_status)
 		enemy.apply_network_runtime_state(runtime_state_delta)
 	_world.active_room_enemy_count = synced_enemy_count
 

@@ -55,6 +55,13 @@ var _last_applied_health_sequence_by_sender: Dictionary = {}  ## (sender_peer_id
 var _cue_event_dispatcher: PlayerCueEventDispatcher = PLAYER_CUE_EVENT_DISPATCHER_SCRIPT.new()
 var _cue_sync_queue := PLAYER_CUE_SYNC_QUEUE_SCRIPT.new()
 var _interaction_epoch_announcements: Dictionary = {}
+const SHARED_BUILD_STATE_PROPERTIES := [
+	"battle_trance_active_left", "apex_predator_combo_hits", "apex_predator_combo_left",
+	"apex_momentum_stacks", "apex_momentum_stack_left", "convergence_surge_hit_counter",
+	"_sigil_chain_charge", "_sigil_chain_drop_armed", "_riftpunch_window_left", "void_heat",
+	"_farline_volley_current_stacks", "indomitable_damage_bank", "_indomitable_spirit_primed",
+	"_dash_damage_immune_left", "_shared_dash_refund_total", "combo_relay_stacks", "combo_relay_stack_timer", "sigil_burst_ready"
+]
 
 
 func _ready() -> void:
@@ -176,9 +183,17 @@ func broadcast_cue_event(peer_id: int, event_name: String, payload: Dictionary, 
 		return
 	if not _is_authority_for_peer(peer_id):
 		return
+	if event_name == "shared_build_state" and not MultiplayerSessionManager.should_broadcast():
+		return
 	var pending_variant: Variant = _pending_cue_events_by_peer.get(peer_id, [])
 	var pending_events := _cue_sync_queue.copy_pending_events(pending_variant)
 	var event_payload := payload.duplicate(true)
+	if event_name == "shared_build_state":
+		event_payload = _pack_shared_build_state(payload)
+		if event_payload.is_empty():
+			return
+		# State is cumulative, so only its latest pending snapshot is needed.
+		pending_events = pending_events.filter(func(entry: Dictionary) -> bool: return entry.get("event") != "shared_build_state")
 	var estimated_bytes := _cue_sync_queue.estimate_event_bytes(event_name, event_payload)
 	if not _cue_sync_queue.can_fit_event(estimated_bytes, cue_event_sync_payload_budget_bytes):
 		return
@@ -510,7 +525,44 @@ func _apply_network_cue_events(peer_id: int, events: Array[Dictionary]) -> void:
 	var player_node := _get_player_node(peer_id)
 	if player_node == null:
 		return
-	_cue_event_dispatcher.apply_cue_events(player_node, peer_id, local_peer_id, events)
+	var accepted_events: Array[Dictionary] = []
+	for entry: Dictionary in events:
+		if entry.get("event") != "shared_build_state":
+			accepted_events.append(entry)
+			continue
+		var sender := multiplayer.get_remote_sender_id()
+		if sender != 1 and not (sender == 0 and MultiplayerSessionManager.is_host()):
+			continue
+		var packed: Variant = entry.get("payload")
+		var unpacked := _unpack_shared_build_state(packed) if packed is Dictionary else {}
+		if not unpacked.is_empty():
+			var decoded := entry.duplicate()
+			decoded["payload"] = unpacked
+			accepted_events.append(decoded)
+	_cue_event_dispatcher.apply_cue_events(player_node, peer_id, local_peer_id, accepted_events)
+
+func _pack_shared_build_state(payload: Dictionary) -> Dictionary:
+	if not (payload.get("state") is Dictionary) or not (payload.get("run") is String) or not (payload.get("room") is int) or not (payload.get("serial") is int) or not (payload.get("epoch") is int):
+		return {}
+	var values: Array = []
+	for property: String in SHARED_BUILD_STATE_PROPERTIES:
+		var value: Variant = payload.state.get(property)
+		if value != null and not (value is bool or value is int or (value is float and is_finite(value))):
+			return {}
+		values.append(value)
+	return {"run": payload.run, "room": payload.room, "serial": payload.serial, "epoch": payload.epoch, "v": values}
+
+func _unpack_shared_build_state(payload: Dictionary) -> Dictionary:
+	if not (payload.get("v") is Array) or payload.v.size() != SHARED_BUILD_STATE_PROPERTIES.size() or not (payload.get("run") is String) or not (payload.get("room") is int) or not (payload.get("serial") is int) or not (payload.get("epoch") is int):
+		return {}
+	var state: Dictionary = {}
+	for index in range(SHARED_BUILD_STATE_PROPERTIES.size()):
+		var value: Variant = payload.v[index]
+		if value != null and not (value is bool or value is int or (value is float and is_finite(value))):
+			return {}
+		if value != null:
+			state[SHARED_BUILD_STATE_PROPERTIES[index]] = value
+	return {"run": payload.run, "room": payload.room, "serial": payload.serial, "epoch": payload.epoch, "state": state}
 
 
 ## Called by the local owner of a player when their dash phasing state toggles.
@@ -605,7 +657,16 @@ func send_enemy_killed(target_peer_id: int, kill_pos: Vector2, suppress_launch: 
 	if target_peer_id == local_peer_id:
 		_apply_enemy_killed_local(target_peer_id, kill_pos, suppress_launch, kill_proc_suppression, interaction)
 		return
+	# Damage modifiers are resolved against the host's copy of the owner. Keep
+	# this kill-driven Mission counter current without replaying other kill powers.
+	var owner := _get_player_node(target_peer_id)
+	if is_instance_valid(owner) and owner.has_method("_trigger_combo_relay_kill"):
+		owner._trigger_combo_relay_kill()
 	_rpc_apply_enemy_killed.rpc_id(target_peer_id, target_peer_id, kill_pos, suppress_launch, kill_proc_suppression, interaction)
+	# The ordinary owner kill callback runs first; the later cumulative snapshot
+	# then confirms that same count rather than adding a second client stack.
+	if is_instance_valid(owner) and is_instance_valid(owner.get("shared_build_runtime")):
+		owner.shared_build_runtime.publish_state()
 
 
 @rpc("authority", "call_remote", "reliable")

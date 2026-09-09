@@ -211,7 +211,8 @@ func tick(delta: float) -> void:
 		var facing_changed := absf(wrapf(quantized_facing_angle - previous_facing_angle, -PI, PI)) > maxf(0.0001, facing_change_threshold_rad)
 		var health_changed := not is_equal_approx(enemy_health, previous_health)
 		var previous_combat_hint := bool(_far_combat_hint_by_id.get(enemy_id, false))
-		var force_runtime_state_sampling := enemy.should_force_network_runtime_state_sampling()
+		var shared_status := DAMAGEABLE.get_status_network_packet(enemy)
+		var force_runtime_state_sampling := enemy.should_force_network_runtime_state_sampling() or not shared_status.is_empty()
 		var should_sample_runtime_state := position_changed or facing_changed or health_changed or previous_combat_hint or force_runtime_state_sampling or not is_far_enemy
 		var allow_runtime_state_sampling := should_sample_runtime_state
 		if allow_runtime_state_sampling and active_enemy_count >= 24 and not force_runtime_state_sampling and not previous_combat_hint:
@@ -225,6 +226,8 @@ func tick(delta: float) -> void:
 		var runtime_state_delta: Dictionary = {}
 		if allow_runtime_state_sampling:
 			var runtime_state := enemy.get_network_runtime_state()
+			if not shared_status.is_empty():
+				runtime_state["shared_status"] = shared_status
 			runtime_state = _quantize_runtime_state_for_network(runtime_state)
 			var previous_state := _previous_runtime_states.get(enemy_id, {}) as Dictionary
 			runtime_state_delta = _compute_runtime_state_delta(runtime_state, previous_state)
@@ -397,6 +400,8 @@ func _enemy_is_far_from_all_players(enemy_position: Vector2) -> bool:
 	return true
 
 func _enemy_is_combat_active(_enemy: ENEMY_BASE_SCRIPT, runtime_state_delta: Dictionary) -> bool:
+	if runtime_state_delta.get("shared_status") is PackedByteArray and not runtime_state_delta.shared_status.is_empty():
+		return true
 	if runtime_state_delta.has("custom"):
 		var custom_state := runtime_state_delta.get("custom", {}) as Dictionary
 		if not custom_state.is_empty():
@@ -419,6 +424,8 @@ func estimate_variant_size_bytes(value: Variant) -> int:
 			return 16
 		TYPE_VECTOR3, TYPE_VECTOR3I, TYPE_COLOR:
 			return 24
+		TYPE_PACKED_BYTE_ARRAY:
+			return 8 + ceili(float(value.size()) / 4.0) * 4
 		TYPE_ARRAY:
 			var total_size := 4
 			for item in value:
@@ -449,7 +456,9 @@ func _fit_state_to_size_limit(synced_state: Dictionary, max_estimated_bytes: int
 		if estimated_size <= max_estimated_bytes:
 			return fitted_state
 	if not runtime_delta.is_empty():
-		fitted_state["runtime_state_delta"] = {}
+		# Status snapshots are compact, ordered and self-expiring. Preserve this
+		# gameplay presentation even when crowded-room budgets trim other visuals.
+		fitted_state["runtime_state_delta"] = {"shared_status": runtime_delta.shared_status} if runtime_delta.has("shared_status") else {}
 	return fitted_state
 
 func _get_adaptive_batch_params(active_enemy_count: int) -> Dictionary:

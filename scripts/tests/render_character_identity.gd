@@ -269,6 +269,7 @@ func _electric_build_frame(show_party: bool) -> void:
 	actor.apply_trial_power("storm_crown")
 	actor.apply_trial_power("storm_crown")
 	actor.apply_trial_power("aegis_field")
+	actor.apply_trial_power("dread_resonance")
 	var targets: Array[VisibleEnemy] = []
 	for position: Vector2 in [Vector2(-195.0, -45.0), Vector2(-70.0, 30.0), Vector2(55.0, -40.0), Vector2(175.0, 40.0), Vector2(305.0, -30.0)]:
 		targets.append(_visible_enemy(position))
@@ -289,14 +290,14 @@ func _electric_build_frame(show_party: bool) -> void:
 		_check(party[2].arcana_motion.motion == MOTION.Motion.ORBIT, "Integrated party Orbit remains live")
 		_make_electric_warnings()
 	actor.static_wake_controller.tick(WAKE.TICK_INTERVAL)
-	_check(actor.storm_crown_hit_counter == 2, "Wake damage supplies Crown's second Hit without another attack")
+	_check(actor.storm_crown_hit_counter == 2, "Wake damage supplies Crown's second contact without another attack")
 	var chain_hits := 0
 	for target in get_nodes_in_group("enemies"):
 		if target is VisibleEnemy:
 			chain_hits += target.accepted_sources.count("storm_crown")
 	_check(chain_hits == actor.storm_crown_chain_targets + 1, "Aegis Slow produces exactly one additional L2 Crown hop")
 	_check(targets[0].accepted_sources.has("static_wake"), "The triggering hit is real Wake damage")
-	await _capture("electric_party" if show_party else "electric_solo", "ELECTRIC BUILD / " + ("PARTY AND WARNINGS" if show_party else "SOLO"), "Real Wake damage feeds Crown; Aegis Slow grants the teal final hop. " + ("Orbit and hostile warnings retain their own shapes." if show_party else "The same controls connect three powers through Hit and Slow."))
+	await _capture("electric_party" if show_party else "electric_solo", "ELECTRIC BUILD / " + ("PARTY AND WARNINGS" if show_party else "SOLO"), "Real Wake damage feeds Crown; Aegis Slow grants the teal final hop. " + ("Orbit and hostile warnings retain their own shapes." if show_party else "Shared damage and Slow connect these powers; the target also shows Mark."))
 	Input.action_release("dash")
 	for enemy in get_nodes_in_group("enemies"):
 		enemy.free()

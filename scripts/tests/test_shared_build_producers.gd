@@ -58,7 +58,6 @@ func _test_producer(source: String) -> void:
 			player.static_wake_controller.end_dash()
 			player.static_wake_controller.tick(0.5)
 		"veilstep_rhythm_wave": player._release_veilstep_rhythm_wave(Vector2.ZERO)
-		"overcharge_discharge": player._fire_overcharge_discharge(Vector2.ZERO)
 		"iron_retort_shockwave": player._apply_iron_retort_shockwave(Vector2.ZERO, 20)
 		"voidfire_detonate": player._trigger_voidfire_detonation()
 		"sigil_chain_zone":
@@ -189,7 +188,7 @@ func _test_snapshot_and_dash_only() -> void:
 		player.static_wake_controller.tick(0.25)
 		_check(target.get_current_health() < 10000 and player.attack_combo_counter == 0, character + " deals Wake damage using normal dash with no attack input")
 		var snapshot := player.build_run_snapshot()
-		_check(snapshot.version == 2, "New snapshots declare interaction interpretation version")
+		_check(snapshot.version == 3, "New snapshots declare interaction interpretation version")
 		player.apply_run_snapshot(snapshot)
 		_check(player.reward_static_wake and player.static_wake_stacks == 1, "Restore keeps ordinarily learned Wake")
 		_check(player.combat_interactions._roots.is_empty(), "Restore discards temporary reaction history")

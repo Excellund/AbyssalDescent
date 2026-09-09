@@ -19,6 +19,7 @@ const MUTATOR_ICON_TETHER_WEB_PATH := "res://assets/ui/mutators/tether_web.svg"
 signal reward_selected(choice: Dictionary, mode: int, is_initial: bool)
 signal reward_offers_presented(offers: Array[Dictionary], mode: int, is_initial: bool, stage: int)
 signal reward_skipped(mode: int, is_initial: bool)
+signal build_inspection_requested(candidate: Dictionary)
 
 var boon_choice_count: int = 3
 var boon_reveal_duration: float = 0.22
@@ -42,6 +43,12 @@ var _current_rng: RandomNumberGenerator = null
 var _prismatic_arcana_enabled: bool = false
 var _reward_rerolls_per_offer: int = 0
 var _reward_rerolls_remaining: int = 0
+var _inspection_active: bool = false
+var _confirm_release_required: bool = false
+var _inspection_close_frame: int = -1
+var _keyboard_selection: bool = false
+var _last_mouse_position := Vector2.ZERO
+var _saved_focus: WeakRef
 
 func _is_upgrade_blocked_for_character(upgrade_id: String) -> bool:
 	var normalized_character_id := current_character_id.strip_edges().to_lower()
@@ -55,6 +62,8 @@ var boon_header_chip_label: Label
 var epitaph_label: RichTextLabel
 var skip_button: Button
 var reroll_button: Button
+var build_button: Button
+var mission_bonus_label: RichTextLabel
 var boon_card_panels: Array[Panel] = []
 var boon_card_labels: Array[RichTextLabel] = []
 var boon_card_stack_labels: Array[Label] = []
@@ -126,6 +135,7 @@ const OPEN_FADE_DURATION := 0.32
 const CLOSE_FADE_DURATION := 0.28
 
 func initialize(choice_count: int, reveal_duration: float) -> void:
+	_ensure_inspection_actions()
 	var next_choice_count := maxi(1, choice_count)
 	var rebuild_cards := not is_instance_valid(boon_layer) or next_choice_count != boon_choice_count
 	boon_choice_count = next_choice_count
@@ -160,6 +170,10 @@ func get_choice_count() -> int:
 	return boon_choice_count
 
 func close_selection() -> void:
+	_inspection_active = false
+	_confirm_release_required = false
+	if is_instance_valid(build_button):
+		build_button.visible = false
 	boon_selection_active = false
 	pending_initial_boon = false
 	reward_selection_mode = ENUMS.RewardMode.BOON
@@ -190,6 +204,14 @@ func close_selection() -> void:
 
 
 func open_selection(title: String, is_initial: bool, mode: int, power_registry: Node, player: Node2D, rng: RandomNumberGenerator, player_mutator: Dictionary = {}, epitaph: String = "", character_id: String = "") -> void:
+	_inspection_active = false
+	_confirm_release_required = false
+	for control: Control in boon_card_panels + [build_button, reroll_button, skip_button]:
+		control.focus_mode = Control.FOCUS_ALL
+	_keyboard_selection = false
+	_last_mouse_position = get_viewport().get_mouse_position()
+	if is_instance_valid(build_button):
+		build_button.visible = true
 	boon_selection_active = true
 	pending_initial_boon = is_initial
 	boon_title_text = title
@@ -234,8 +256,11 @@ func open_selection(title: String, is_initial: bool, mode: int, power_registry: 
 	_emit_reward_offers_presented()
 
 func process_input(delta: float) -> void:
-	if not boon_selection_active:
+	if not boon_selection_active or _inspection_active:
 		return
+	if _confirm_release_required and Engine.get_process_frames() > _inspection_close_frame:
+		if not Input.is_action_pressed("attack") and not Input.is_action_pressed("ui_accept"):
+			_confirm_release_required = false
 	_idle_pulse_time += delta
 	if _open_fade_time < OPEN_FADE_DURATION:
 		_open_fade_time = minf(OPEN_FADE_DURATION, _open_fade_time + delta)
@@ -266,49 +291,9 @@ func process_input(delta: float) -> void:
 	_apply_boon_card_styles(boon_hovered_index)
 	_update_title_pulse_visuals()
 	_apply_global_ui_alpha(_compute_global_ui_alpha())
-	if Input.is_action_just_pressed("attack"):
-		if boon_hovered_index >= 0 and boon_hovered_index < boon_choices.size():
-			var picked := boon_choices[boon_hovered_index]
-			if reward_selection_mode == ENUMS.RewardMode.MISSION and mission_reward_stage == 0 and _has_mission_bonus_mutator():
-				pending_mission_upgrade_choice = picked
-				mission_reward_stage = 1
-				boon_choices = _roll_objective_mutator_choice(current_player_mutator)
-				boon_confirm_lock_time = boon_reveal_duration + 0.08
-				boon_reveal_time = 0.0
-				boon_hovered_index = -1
-				_idle_pulse_time = 0.0
-				_title_pulse_time = 0.0
-				_title_pulse_active = false
-				for hi in range(boon_hover_weights.size()):
-					boon_hover_weights[hi] = 0.0
-				_apply_boon_card_styles(-1)
-				_refresh_boon_ui(current_player)
-				_set_skip_button_visible(false)
-				_set_reroll_button_visible(false)
-				_emit_reward_offers_presented()
-				return
-			var mode := reward_selection_mode
-			var initial := pending_initial_boon
-			var emitted_choice := picked
-			if mode == ENUMS.RewardMode.MISSION and mission_reward_stage == 1 and not pending_mission_upgrade_choice.is_empty():
-				emitted_choice = {
-					"mission_upgrade": pending_mission_upgrade_choice,
-					"mission_mutator": picked
-				}
-			boon_selection_active = false
-			_begin_close_fade()
-			reward_selection_mode = ENUMS.RewardMode.BOON
-			mission_reward_stage = 0
-			pending_mission_upgrade_choice = {}
-			current_player = null
-			current_player_mutator = {}
-			pending_initial_boon = false
-			if is_instance_valid(_sfx_player):
-				_sfx_player.stream = UI_CLICK_SOUND
-				_sfx_player.play()
-			emit_signal("reward_selected", emitted_choice, mode, initial)
-			return
-	
+	if Input.is_action_just_pressed("attack") and not _confirm_release_required:
+		_confirm_choice(boon_hovered_index)
+
 	_update_epitaph_pulse(delta)
 
 
@@ -323,6 +308,134 @@ func _advance_hover_weights(delta: float, target_index: int) -> void:
 			boon_hover_weights[i] = current + sign(target - current) * step
 
 
+func _ensure_inspection_actions() -> void:
+	var accept_button := InputEventJoypadButton.new()
+	accept_button.device = -1
+	accept_button.button_index = JOY_BUTTON_A
+	if not InputMap.action_has_event("ui_accept", accept_button):
+		InputMap.action_add_event("ui_accept", accept_button)
+	for action in ["reward_inspect", "reward_back"]:
+		if InputMap.has_action(action):
+			continue
+		InputMap.add_action(action)
+		var key := InputEventKey.new()
+		key.physical_keycode = KEY_TAB if action == "reward_inspect" else KEY_ESCAPE
+		InputMap.action_add_event(action, key)
+		var button := InputEventJoypadButton.new()
+		button.button_index = JOY_BUTTON_Y if action == "reward_inspect" else JOY_BUTTON_B
+		InputMap.action_add_event(action, button)
+
+
+func _input(event: InputEvent) -> void:
+	if handle_input(event):
+		get_viewport().set_input_as_handled()
+
+
+func handle_input(event: InputEvent) -> bool:
+	if not boon_selection_active or _inspection_active:
+		return false
+	if event.is_action_pressed("reward_inspect") and not event.is_echo():
+		_request_build_inspection()
+		return true
+	var step := 0
+	if event.is_action_pressed("ui_down") or event.is_action_pressed("ui_right"):
+		step = 1
+	elif event.is_action_pressed("ui_up") or event.is_action_pressed("ui_left"):
+		step = -1
+	if step != 0:
+		var controls := _navigation_controls()
+		if not controls.is_empty():
+			var index := controls.find(get_viewport().gui_get_focus_owner())
+			controls[posmod(index + step, controls.size())].grab_focus()
+		return true
+	if event.is_action_pressed("ui_accept") and not event.is_echo():
+		var focused := get_viewport().gui_get_focus_owner()
+		if focused in boon_card_panels:
+			_confirm_choice(boon_card_panels.find(focused))
+			return true
+		# Buttons retain their normal pressed/released behavior; rearming protects
+		# their handlers as well as the global mouse attack action.
+		return _confirm_release_required
+	return false
+
+
+func _navigation_controls() -> Array[Control]:
+	var controls: Array[Control] = []
+	for i in range(mini(boon_choices.size(), boon_card_panels.size())):
+		controls.append(boon_card_panels[i])
+	for button: Button in [build_button, reroll_button, skip_button]:
+		if is_instance_valid(button) and button.visible:
+			controls.append(button)
+	return controls
+
+
+func _on_card_focused(index: int) -> void:
+	if _inspection_active or not boon_selection_active:
+		return
+	_keyboard_selection = true
+	_last_mouse_position = get_viewport().get_mouse_position()
+	boon_hovered_index = index
+
+
+func _request_build_inspection() -> void:
+	if not boon_selection_active or _inspection_active or _is_closing:
+		return
+	_inspection_active = true
+	var focused := get_viewport().gui_get_focus_owner()
+	_saved_focus = weakref(focused) if focused != null else null
+	var candidate: Dictionary = {}
+	if not boon_choices.is_empty():
+		candidate = boon_choices[clampi(boon_hovered_index, 0, boon_choices.size() - 1)].duplicate(true)
+		candidate["reward_mode"] = reward_selection_mode
+	for control in _navigation_controls():
+		control.focus_mode = Control.FOCUS_NONE
+	build_inspection_requested.emit(candidate)
+
+
+func resume_after_inspection() -> void:
+	if not _inspection_active:
+		return
+	_inspection_active = false
+	_confirm_release_required = true
+	_inspection_close_frame = Engine.get_process_frames()
+	_keyboard_selection = true
+	_last_mouse_position = get_viewport().get_mouse_position()
+	for control in _navigation_controls():
+		control.focus_mode = Control.FOCUS_ALL
+	var focused: Control = _saved_focus.get_ref() as Control if _saved_focus != null else null
+	if is_instance_valid(focused) and focused.is_visible_in_tree():
+		focused.grab_focus()
+	elif boon_hovered_index >= 0 and boon_hovered_index < boon_card_panels.size():
+		boon_card_panels[boon_hovered_index].grab_focus()
+	else:
+		build_button.grab_focus()
+	_saved_focus = null
+
+
+func _confirm_choice(index: int) -> void:
+	if not _can_skip_current_offer() or index < 0 or index >= boon_choices.size():
+		return
+	var picked: Dictionary = boon_choices[index]
+	var mode := reward_selection_mode
+	var initial := pending_initial_boon
+	var emitted_choice := picked
+	if _has_mission_bonus_mutator():
+		var bonus_choices := _roll_objective_mutator_choice(current_player_mutator)
+		emitted_choice = {"mission_upgrade": picked, "mission_mutator": bonus_choices[0]}
+	boon_selection_active = false
+	_begin_close_fade()
+	reward_selection_mode = ENUMS.RewardMode.BOON
+	mission_reward_stage = 0
+	pending_mission_upgrade_choice = {}
+	current_player = null
+	current_player_mutator = {}
+	pending_initial_boon = false
+	if is_instance_valid(_sfx_player):
+		_sfx_player.stream = UI_CLICK_SOUND
+		_sfx_player.play()
+	reward_selected.emit(emitted_choice, mode, initial)
+
+
 func _process(delta: float) -> void:
 	if not _is_closing:
 		return
@@ -333,6 +446,10 @@ func _process(delta: float) -> void:
 
 
 func _begin_close_fade() -> void:
+	build_button.visible = false
+	mission_bonus_label.visible = false
+	skip_button.visible = false
+	reroll_button.visible = false
 	_is_closing = true
 	_close_fade_time = 0.0
 	_close_snapshot_backdrop = boon_backdrop.modulate.a if boon_backdrop != null else 0.0
@@ -419,7 +536,7 @@ func _maybe_kick_title_pulse() -> void:
 
 
 func _can_skip_current_offer() -> bool:
-	if not boon_selection_active or _is_closing:
+	if not boon_selection_active or _is_closing or _inspection_active or _confirm_release_required:
 		return false
 	if boon_confirm_lock_time > 0.0:
 		return false
@@ -432,6 +549,8 @@ func _set_skip_button_visible(value: bool) -> void:
 	if value:
 		skip_button.text = "Continue  ›" if boon_choices.is_empty() else "Skip  ›"
 		skip_button.tooltip_text = "Continue without a reward." if boon_choices.is_empty() else "Skip this reward. Counts as no pick."
+		if _has_mission_bonus_mutator() and not boon_choices.is_empty():
+			skip_button.tooltip_text = "Decline this Boon and its temporary Mission bonus."
 	skip_button.visible = value
 	_position_action_buttons()
 
@@ -637,6 +756,8 @@ func _create_ui() -> void:
 		panel.position = Vector2.ZERO
 		panel.custom_minimum_size = Vector2(BOON_CARD_MAX_WIDTH, BOON_CARD_HEIGHT)
 		panel.pivot_offset = Vector2(BOON_CARD_MAX_WIDTH * 0.5, BOON_CARD_HEIGHT * 0.5)
+		panel.focus_mode = Control.FOCUS_ALL
+		panel.focus_entered.connect(_on_card_focused.bind(i))
 		boon_layer.add_child(panel)
 
 		var accent_bar := ColorRect.new()
@@ -653,12 +774,14 @@ func _create_ui() -> void:
 		icon_node.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon_node.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		icon_node.visible = false
+		icon_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		panel.add_child(icon_node)
 
 		var option_label := RichTextLabel.new()
 		option_label.position = Vector2(BOON_LABEL_X, 10.0)
 		option_label.custom_minimum_size = Vector2(1158.0, BOON_CARD_HEIGHT - 20.0)
 		option_label.bbcode_enabled = true
+		option_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		option_label.scroll_active = false
 		option_label.fit_content = false
 		option_label.add_theme_font_size_override("normal_font_size", 22)
@@ -677,6 +800,7 @@ func _create_ui() -> void:
 		stack_label.add_theme_constant_override("shadow_offset_x", 2)
 		stack_label.add_theme_constant_override("shadow_offset_y", 2)
 		stack_label.visible = false
+		stack_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		panel.add_child(stack_label)
 
 		boon_card_panels.append(panel)
@@ -721,7 +845,7 @@ func _create_ui() -> void:
 	skip_button.add_theme_stylebox_override("pressed", _make_skip_button_style(0.6))
 	skip_button.add_theme_stylebox_override("focus", _make_skip_button_style(0.8))
 	skip_button.tooltip_text = "Skip this reward. Counts as no pick."
-	skip_button.focus_mode = Control.FOCUS_NONE
+	skip_button.focus_mode = Control.FOCUS_ALL
 	skip_button.visible = false
 	skip_button.pressed.connect(_on_skip_button_pressed)
 	boon_layer.add_child(skip_button)
@@ -742,11 +866,29 @@ func _create_ui() -> void:
 	reroll_button.add_theme_stylebox_override("pressed", _make_skip_button_style(0.7))
 	reroll_button.add_theme_stylebox_override("focus", _make_skip_button_style(0.9))
 	reroll_button.tooltip_text = "Reroll this offer."
-	reroll_button.focus_mode = Control.FOCUS_NONE
+	reroll_button.focus_mode = Control.FOCUS_ALL
 	reroll_button.visible = false
 	reroll_button.pressed.connect(_on_reroll_button_pressed)
 	boon_layer.add_child(reroll_button)
 
+	build_button = Button.new()
+	build_button.text = "Your Build  [Tab / Y]"
+	build_button.custom_minimum_size = Vector2(220.0, 60.0)
+	build_button.add_theme_font_size_override("font_size", 18)
+	for state in ["normal", "hover", "pressed", "focus"]:
+		build_button.add_theme_stylebox_override(state, _make_skip_button_style(0.5 if state == "normal" else 1.0))
+	build_button.tooltip_text = "Inspect owned powers and the selected offer without choosing it."
+	build_button.pressed.connect(_request_build_inspection)
+	boon_layer.add_child(build_button)
+
+	mission_bonus_label = RichTextLabel.new()
+	mission_bonus_label.bbcode_enabled = true
+	mission_bonus_label.scroll_active = false
+	mission_bonus_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mission_bonus_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	mission_bonus_label.add_theme_font_size_override("normal_font_size", 17)
+	mission_bonus_label.add_theme_font_size_override("bold_font_size", 17)
+	boon_layer.add_child(mission_bonus_label)
 	_layout_boon_cards()
 	_position_epitaph_label()
 	boon_layer.visible = false
@@ -762,6 +904,9 @@ func _layout_boon_cards() -> void:
 	if boon_card_panels.is_empty() or get_viewport() == null:
 		return
 	var viewport_size := get_viewport().get_visible_rect().size
+	if is_instance_valid(mission_bonus_label):
+		mission_bonus_label.position = Vector2(48.0, 112.0)
+		mission_bonus_label.size = Vector2(viewport_size.x - 96.0, 52.0)
 	var side_margin := maxf(48.0, viewport_size.x * BOON_SIDE_MARGIN_RATIO)
 	var card_width := clampf(viewport_size.x - side_margin * 2.0, BOON_CARD_MIN_WIDTH, BOON_CARD_MAX_WIDTH)
 	var total_height := float(boon_choice_count) * BOON_CARD_HEIGHT + float(maxi(0, boon_choice_count - 1)) * BOON_CARD_GAP
@@ -790,6 +935,7 @@ func _layout_boon_cards() -> void:
 		if i < boon_card_labels.size():
 			var label := boon_card_labels[i]
 			label.add_theme_font_size_override("normal_font_size", 20 if visible_width < 1000.0 else 22)
+			label.add_theme_font_size_override("bold_font_size", 20 if visible_width < 1000.0 else 22)
 			var stack_w := 210.0
 			var stack_x := card_width - stack_w - 18.0
 			var text_x := BOON_LABEL_X
@@ -815,6 +961,8 @@ func _position_epitaph_label() -> void:
 		last_card_bottom = maxf(last_card_bottom, skip_button.get_rect().end.y)
 	if reroll_button != null and reroll_button.visible:
 		last_card_bottom = maxf(last_card_bottom, reroll_button.get_rect().end.y)
+	if build_button != null and build_button.visible:
+		last_card_bottom = maxf(last_card_bottom, build_button.get_rect().end.y)
 	var halfway_y := (last_card_bottom + viewport_size.y) * 0.5
 	# Position epitaph centered on halfway point
 	var epitaph_height := minf(100.0, maxf(0.0, viewport_size.y - last_card_bottom))
@@ -823,31 +971,22 @@ func _position_epitaph_label() -> void:
 	epitaph_label.size = Vector2(viewport_size.x - 120.0, epitaph_height)
 
 func _position_action_buttons() -> void:
-	if skip_button == null or reroll_button == null or get_viewport() == null:
+	if skip_button == null or reroll_button == null or build_button == null or get_viewport() == null:
 		return
 	var viewport_size := get_viewport().get_visible_rect().size
-	var button_height := skip_button.custom_minimum_size.y
-	var button_width := skip_button.custom_minimum_size.x
-	var gap := 18.0
-	var y_pos := viewport_size.y * 0.8 - button_height * 0.5
-	# Keep actions below the visible choices, including the third card at 720p.
+	var button_size := Vector2(220.0, 60.0)
+	var actions: Array[Button] = []
+	for button: Button in [build_button, reroll_button, skip_button]:
+		if button.visible:
+			actions.append(button)
+	var y_pos := viewport_size.y * 0.8 - button_size.y * 0.5
 	for i in range(mini(boon_choices.size(), boon_card_rects.size())):
 		y_pos = maxf(y_pos, boon_card_rects[i].end.y + 8.0)
-	if skip_button.visible and reroll_button.visible:
-		var total_width := button_width * 2.0 + gap
-		var start_x := (viewport_size.x - total_width) * 0.5
-		reroll_button.position = Vector2(start_x, y_pos)
-		reroll_button.size = Vector2(button_width, button_height)
-		skip_button.position = Vector2(start_x + button_width + gap, y_pos)
-		skip_button.size = Vector2(button_width, button_height)
-	elif reroll_button.visible:
-		var x_reroll := (viewport_size.x - button_width) * 0.5
-		reroll_button.position = Vector2(x_reroll, y_pos)
-		reroll_button.size = Vector2(button_width, button_height)
-	elif skip_button.visible:
-		var x_skip := (viewport_size.x - button_width) * 0.5
-		skip_button.position = Vector2(x_skip, y_pos)
-		skip_button.size = Vector2(button_width, button_height)
+	var gap := 18.0
+	var start_x := (viewport_size.x - actions.size() * button_size.x - maxi(0, actions.size() - 1) * gap) * 0.5
+	for i in range(actions.size()):
+		actions[i].position = Vector2(start_x + i * (button_size.x + gap), y_pos)
+		actions[i].size = button_size
 	_position_epitaph_label()
 
 func _make_skip_button_style(hover_weight: float) -> StyleBoxFlat:
@@ -937,6 +1076,11 @@ func _refresh_boon_ui(player: Node2D) -> void:
 		return
 	boon_layer.visible = true
 	boon_title_label.text = _get_boon_title_text()
+	boon_subtitle_label.visible = not _has_mission_bonus_mutator()
+	mission_bonus_label.visible = _has_mission_bonus_mutator()
+	if mission_bonus_label.visible:
+		var bonus_name := String(current_player_mutator.get("name", "Mission bonus"))
+		mission_bonus_label.text = "Pick one Boon + [b]%s[/b] (next 3 encounters)\n%s" % [bonus_name, _build_objective_mutator_desc(current_player_mutator)]
 	if boon_subtitle_label != null:
 		boon_subtitle_label.text = _get_boon_subtitle_text()
 
@@ -958,9 +1102,11 @@ func _refresh_boon_ui(player: Node2D) -> void:
 		var is_mutator_choice := bool(boon.get("is_mutator", false))
 		var stack_limit := int(boon.get("stack_limit", 0))
 		var stack_count := _get_stack_count_for_choice(boon, player)
-		var icon_line := _format_stack_progress_icons(stack_count, stack_limit)
+		var icon_line := "L%d -> L%d" % [stack_count, stack_count + 1] if stack_count > 0 else "New: L1"
+		if stack_limit <= 0:
+			icon_line = ""
 		if reward_selection_mode == ENUMS.RewardMode.ARCANA and _prismatic_arcana_enabled and _can_offer_prismatic_arcana(player, String(boon.get("id", ""))):
-			icon_line = "Prismatic"
+			icon_line = "L%d -> Prismatic" % stack_count
 		if is_mutator_choice or icon_line.is_empty():
 			stack_label.text = ""
 			stack_label.visible = false
@@ -1000,10 +1146,6 @@ func _has_mission_bonus_mutator() -> bool:
 	return reward_selection_mode == ENUMS.RewardMode.MISSION and not current_player_mutator.is_empty()
 
 func _get_boon_title_text() -> String:
-	if _has_mission_bonus_mutator():
-		if mission_reward_stage == 0:
-			return "%s (1/2)" % boon_title_text
-		return "Claim Mission Mutator (2/2)"
 	return boon_title_text
 
 func _get_boon_subtitle_text() -> String:
@@ -1021,13 +1163,7 @@ func _get_boon_subtitle_text() -> String:
 			return "Claim your victory reward - choose one ascended power"
 		return "Preparing your boss reward..."
 	if reward_selection_mode == ENUMS.RewardMode.MISSION:
-		if mission_reward_stage == 0:
-			if reveal_complete:
-				return "Step 1 of 2: Select a card to claim your reward"
-			return "Step 1 of 2: Preparing your choices..."
-		if reveal_complete:
-			return "Step 2 of 2: claim your bonus mission mutator"
-		return "Permanent upgrade locked in. Bonus mutator ready to claim"
+		return "Select one Boon. Its fixed Mission bonus is included."
 	if reveal_complete:
 		if is_arcana:
 			return "Add another stack and push your stats further"
@@ -1228,6 +1364,10 @@ func _update_boon_hover() -> void:
 	if boon_layer == null:
 		return
 	var mouse_pos := get_viewport().get_mouse_position()
+	if _keyboard_selection and mouse_pos.is_equal_approx(_last_mouse_position):
+		return
+	_keyboard_selection = false
+	_last_mouse_position = mouse_pos
 	var hovered := -1
 	for i in range(boon_choices.size()):
 		if i >= boon_card_rects.size():

@@ -9,6 +9,7 @@ const REWARD_UI := preload("res://scripts/reward_selection_ui.gd")
 const CHARACTER := preload("res://scripts/character_registry.gd")
 const RECORDER := preload("res://scripts/core/run_summary_recorder.gd")
 const ENUMS := preload("res://scripts/shared/enums.gd")
+const MAPPER := preload("res://scripts/power_parameter_mapper.gd")
 
 class TestContext extends "res://scripts/run_context.gd":
 	var saves := 0
@@ -24,6 +25,13 @@ class TestPlayer extends "res://scripts/player.gd":
 		_create_health_state()
 	func _is_local_control_owner() -> bool:
 		return false
+
+class MissionPlayer extends "res://scripts/player.gd":
+	func _ready() -> void:
+		super._ready()
+		set_physics_process(false)
+	func _broadcast_cue_event(_event_name: String, _payload: Dictionary, _reliable: bool = false) -> void:
+		pass
 
 class TestHud extends Node:
 	func refresh(_state: Dictionary, _player: Node) -> void:
@@ -136,9 +144,52 @@ func _run() -> void:
 	_test_checkpoint_round_trip()
 	_test_checkpoint_clear_identity()
 	_test_network_damage_modifiers()
+	_test_mission_health_and_duration()
+	if is_instance_valid(MAPPER._power_registry_instance):
+		MAPPER._power_registry_instance.free()
+		MAPPER._power_registry_instance = null
 	if _failures.is_empty():
 		print("Catalyst runtime regression tests passed: %d checks" % _checks)
 	quit(0 if _failures.is_empty() else 1)
+
+func _test_mission_health_and_duration() -> void:
+	# Every existing Mission supplies its real temporary reward alongside one
+	# permanent Boon. Resume must not heal, reacquire the Boon or renew its timer.
+	for builder_method in ["_build_fortified_mutator", "_build_hunters_focus_mutator", "_build_combo_relay_mutator", "_build_relay_boost_mutator", "_build_overcharge_mutator", "_build_node_shield_mutator"]:
+		var world := _make_world(["starting_max_hp_bonus"], 2)
+		world.run_session = preload("res://scripts/core/run_session.gd").new()
+		var partial_player := world.player
+		var actor := MissionPlayer.new()
+		world.add_child(actor)
+		actor.apply_character_package(CHARACTER.get_character("bastion"))
+		world.player = actor
+		world.party = [actor]
+		partial_player.free()
+		world._apply_difficulty_tier_bonuses(2)
+		actor.set_max_health_and_current(actor.get_max_health(), 37)
+		var damage_before := actor.damage
+		var maximum_before := actor.get_max_health()
+		var mission: Dictionary = world.encounter_profile_builder.call(builder_method)
+		var choice := {"mission_upgrade": {"id": "heavy_blow", "name": "Heavy Blow"}, "mission_mutator": {"name": mission.name, "full_data": mission}}
+		world._apply_mission_reward(choice)
+		var label := String(mission.name)
+		_check(actor.get_upgrade_stack_count("heavy_blow") == 1 and actor.damage > damage_before, label + ": production Mission acceptance grants exactly one permanent Boon")
+		_check(actor.get_active_objective_mutators().size() == 1 and int(actor.get_active_objective_mutators()[0].remaining_encounters) == 3, label + ": same acceptance grants its fixed three-clear temporary increase")
+		_check(actor.get_current_health() == 37 and actor.get_max_health() == maximum_before, label + ": non-health Mission acceptance does not heal or add maximum health")
+		actor.tick_objective_mutators_for_encounter()
+		var snapshot := world._build_active_run_snapshot()
+		var damage_after := actor.damage
+		actor.tick_objective_mutators_for_encounter()
+		actor.set_health(5)
+		_check(world._apply_active_run_snapshot(snapshot), label + ": actual World snapshot resumes")
+		_check(actor.get_current_health() == 37 and actor.get_max_health() == maximum_before, label + ": resume restores exact remaining health without reapplying its Catalyst")
+		_check(actor.damage == damage_after and actor.get_upgrade_stack_count("heavy_blow") == 1, label + ": resume preserves one permanent Boon without granting it twice")
+		_check(actor.get_active_objective_mutators().size() == 1 and int(actor.get_active_objective_mutators()[0].remaining_encounters) == 2, label + ": resume preserves two remaining clears")
+		actor.tick_objective_mutators_for_encounter()
+		_check(actor.get_active_objective_mutators().size() == 1, label + ": temporary increase survives the penultimate clear")
+		actor.tick_objective_mutators_for_encounter()
+		_check(actor.get_active_objective_mutators().is_empty() and actor.damage == damage_after and actor.get_upgrade_stack_count("heavy_blow") == 1, label + ": final clear expires only the temporary increase")
+		_free_world(world)
 
 func _test_frozen_loadout() -> void:
 	var world := _make_world(["starting_max_hp_bonus", "damage_reduction"])

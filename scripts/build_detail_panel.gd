@@ -4,6 +4,7 @@ const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 const DESCRIPTION_CAP_GUARD := preload("res://scripts/shared/description_cap_guard.gd")
 const PLAYER_SCRIPT := preload("res://scripts/player.gd")
 const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
+const COMBAT_KEYWORDS := preload("res://scripts/shared/combat_keyword_catalogue.gd")
 const CATALYST_REGISTRY := preload("res://scripts/progression/catalyst_registry.gd")
 const RARITY_COMMON := Color(0.62, 0.7, 0.8, 0.9)
 const RARITY_EPIC := Color(0.82, 0.58, 1.0, 0.96)
@@ -14,6 +15,18 @@ signal build_detail_closed
 
 var panel: Panel
 var is_visible := false
+var opened_from_reward := false
+var _layer: CanvasLayer
+var _modal_backdrop: ColorRect
+var _layout_container: VBoxContainer
+var _scroll: ScrollContainer
+var _content_vbox: VBoxContainer
+var _close_button: Button
+var _candidate_panel: PanelContainer
+var _candidate_details: RichTextLabel
+var _candidate_more: RichTextLabel
+var _candidate_toggle: Button
+var _owned_levels: Dictionary = {}
 var power_registry_instance = POWER_REGISTRY.new()
 
 var passive_section: VBoxContainer
@@ -37,14 +50,21 @@ func _init() -> void:
 
 func setup() -> void:
 	_create_panel()
+	get_viewport().size_changed.connect(_apply_layout)
 
 func _create_panel() -> void:
-	var layer := CanvasLayer.new()
-	layer.layer = 95
-	add_child(layer)
+	_layer = CanvasLayer.new()
+	_layer.layer = 95
+	add_child(_layer)
+	_modal_backdrop = ColorRect.new()
+	_modal_backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_modal_backdrop.color = Color(0.0, 0.0, 0.0, 0.28)
+	_modal_backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
+	_modal_backdrop.visible = false
+	_layer.add_child(_modal_backdrop)
 
 	panel = Panel.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	panel.custom_minimum_size = Vector2(940.0, 700.0)
 	panel.position = Vector2(-470.0, -350.0)
 	var panel_style := StyleBoxFlat.new()
@@ -63,9 +83,10 @@ func _create_panel() -> void:
 	panel_style.shadow_offset = Vector2(2.0, 4.0)
 	panel.add_theme_stylebox_override("panel", panel_style)
 	panel.visible = false
-	layer.add_child(panel)
+	_layer.add_child(panel)
 
-	var container := VBoxContainer.new()
+	_layout_container = VBoxContainer.new()
+	var container := _layout_container
 	container.position = Vector2(24.0, 24.0)
 	container.custom_minimum_size = Vector2(892.0, 652.0)
 	container.add_theme_constant_override("separation", 16)
@@ -83,15 +104,52 @@ func _create_panel() -> void:
 	container.add_child(title)
 
 	# Scroll container for content
-	var scroll := ScrollContainer.new()
+	_scroll = ScrollContainer.new()
+	var scroll := _scroll
 	scroll.custom_minimum_size = Vector2(892.0, 590.0)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.follow_focus = true
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	container.add_child(scroll)
 
-	var content_vbox := VBoxContainer.new()
+	_content_vbox = VBoxContainer.new()
+	var content_vbox := _content_vbox
 	content_vbox.custom_minimum_size = Vector2(870.0, 0.0)
 	content_vbox.add_theme_constant_override("separation", 14)
 	scroll.add_child(content_vbox)
+
+	_candidate_panel = PanelContainer.new()
+	var candidate_style := StyleBoxFlat.new()
+	candidate_style.bg_color = Color(0.10, 0.09, 0.04, 0.78)
+	candidate_style.border_color = RARITY_LEGENDARY
+	candidate_style.set_border_width_all(1)
+	candidate_style.set_content_margin_all(14.0)
+	_candidate_panel.add_theme_stylebox_override("panel", candidate_style)
+	content_vbox.add_child(_candidate_panel)
+	var candidate_content := VBoxContainer.new()
+	candidate_content.add_theme_constant_override("separation", 8)
+	_candidate_panel.add_child(candidate_content)
+	_candidate_details = _make_detail_label(17)
+	candidate_content.add_child(_candidate_details)
+	_candidate_toggle = Button.new()
+	_candidate_toggle.text = "Shared properties & keywords  ›"
+	_candidate_toggle.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_candidate_toggle.flat = true
+	_candidate_toggle.add_theme_font_size_override("font_size", 16)
+	candidate_content.add_child(_candidate_toggle)
+	_candidate_more = _make_detail_label(17)
+	_candidate_more.visible = false
+	candidate_content.add_child(_candidate_more)
+	_candidate_toggle.set_meta("build_details", weakref(_candidate_more))
+	_candidate_toggle.pressed.connect(func(): _candidate_more.visible = not _candidate_more.visible)
+	_candidate_panel.visible = false
+
+	_close_button = Button.new()
+	_close_button.text = "Return to rewards  [Tab / Y / Esc / B]"
+	_close_button.custom_minimum_size.y = 42.0
+	_close_button.add_theme_font_size_override("font_size", 18)
+	_close_button.pressed.connect(close)
+	container.add_child(_close_button)
 
 	# Passive section panel
 	var passive_panel := PanelContainer.new()
@@ -247,41 +305,231 @@ func _create_panel() -> void:
 	boons_list_container.add_theme_constant_override("separation", 6)
 	boons_section.add_child(boons_list_container)
 
-func open() -> void:
+func open(from_reward: bool = false) -> void:
 	if panel == null:
 		return
+	opened_from_reward = from_reward
+	if _layer != null:
+		_layer.layer = 140 if from_reward else 95
+	if _modal_backdrop != null:
+		_modal_backdrop.visible = from_reward
+	if _close_button != null:
+		_close_button.visible = from_reward
 	panel.visible = true
 	is_visible = true
+	_apply_layout()
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	if from_reward and _close_button != null:
+		_close_button.grab_focus()
 	build_detail_opened.emit()
 
 func close() -> void:
-	if panel == null:
+	if panel == null or not is_visible:
 		return
 	panel.visible = false
+	if _modal_backdrop != null:
+		_modal_backdrop.visible = false
 	is_visible = false
+	opened_from_reward = false
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	build_detail_closed.emit()
 
 func is_open() -> bool:
 	return is_visible
 
-func refresh(character_id: String, active_boons: Array, active_arcana: Array, active_boss_rewards: Array = [], player: PLAYER_SCRIPT = null, catalyst_ids: Array = []) -> void:
+func _input(event: InputEvent) -> void:
+	if handle_input(event):
+		get_viewport().set_input_as_handled()
+
+func handle_input(event: InputEvent) -> bool:
+	if not is_visible or not opened_from_reward:
+		return false
+	if _scroll_expanded_details(event):
+		return true
+	if event.is_echo():
+		return event.is_action("reward_inspect") or event.is_action("reward_back")
+	if event.is_action_pressed("reward_inspect") or event.is_action_pressed("reward_back"):
+		close()
+		return true
+	# Consume the inspection key's release too: the normal build view uses hold-Tab.
+	return event.is_action("reward_inspect") or event.is_action("reward_back")
+
+func _scroll_expanded_details(event: InputEvent) -> bool:
+	var direction := 1 if event.is_action_pressed("ui_down", true) else (-1 if event.is_action_pressed("ui_up", true) else 0)
+	if direction == 0 or _scroll == null:
+		return false
+	var focused := get_viewport().gui_get_focus_owner()
+	if not (focused is Button) or not focused.has_meta("build_details"):
+		return false
+	var reference: WeakRef = focused.get_meta("build_details")
+	var details := reference.get_ref() as RichTextLabel
+	if not is_instance_valid(details) or not details.is_visible_in_tree():
+		return false
+	var visible_rect := _scroll.get_global_rect()
+	var remaining := details.get_global_rect().end.y - visible_rect.end.y if direction > 0 else visible_rect.position.y - focused.get_global_rect().position.y
+	if remaining <= 1.0:
+		return false
+	var before := _scroll.scroll_vertical
+	_scroll.scroll_vertical += direction * mini(96, int(ceil(remaining)))
+	return _scroll.scroll_vertical != before
+
+func refresh_from_player(player: PLAYER_SCRIPT, character_id: String, catalyst_ids: Array = [], candidate: Dictionary = {}) -> void:
+	var boons: Array[String] = []
+	var arcana: Array[String] = []
+	var bosses: Array[String] = []
+	if is_instance_valid(player):
+		for id: String in POWER_REGISTRY.UPGRADE_BALANCE:
+			if player.get_upgrade_stack_count(id) > 0:
+				boons.append(id)
+		for id: String in POWER_REGISTRY.TRIAL_POWER_POOL_IDS:
+			if player.get_trial_power_stack_count(id) > 0:
+				arcana.append(id)
+		for id: String in POWER_REGISTRY.BOSS_REWARD_BALANCE:
+			if player.get_upgrade_stack_count(id) > 0:
+				bosses.append(id)
+	refresh(character_id, boons, arcana, bosses, player, catalyst_ids, candidate)
+
+func refresh(character_id: String, active_boons: Array, active_arcana: Array, active_boss_rewards: Array = [], player: PLAYER_SCRIPT = null, catalyst_ids: Array = [], candidate: Dictionary = {}) -> void:
 	if panel == null:
 		return
-	
-	# Update passive
+	_owned_levels.clear()
+	for id: String in active_boons + active_arcana + active_boss_rewards:
+		var is_arcana := active_arcana.has(id)
+		_owned_levels[id] = _power_level(id, is_arcana, player)
 	_update_passive_section(character_id)
 	_update_catalyst_section(catalyst_ids)
-	
-	# Update boons list
 	_update_power_section(boons_list_container, active_boons, "boon", player)
-	
-	# Update arcana list
 	_update_power_section(arcana_list_container, active_arcana, "arcana", player)
-
-	# Update boss rewards list
 	_update_power_section(boss_list_container, active_boss_rewards, "boss", player)
+	_update_candidate(candidate, player)
+	_scroll.scroll_vertical = 0
+	_apply_layout()
+
+func _apply_layout() -> void:
+	if panel == null or _layout_container == null or get_viewport() == null:
+		return
+	var viewport_size := get_viewport().get_visible_rect().size
+	var panel_size := Vector2(minf(940.0, viewport_size.x - 48.0), minf(700.0, viewport_size.y - 48.0))
+	panel.custom_minimum_size = panel_size
+	panel.size = panel_size
+	panel.position = (viewport_size - panel_size) * 0.5
+	_layout_container.custom_minimum_size = Vector2.ZERO
+	_layout_container.size = panel_size - Vector2(48.0, 48.0)
+	_scroll.custom_minimum_size = Vector2(0.0, 0.0)
+	_content_vbox.custom_minimum_size.x = panel_size.x - 70.0
+	_content_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_fit_content_widths(_content_vbox)
+
+func _fit_content_widths(node: Node) -> void:
+	for child in node.get_children():
+		if child is Control:
+			child.custom_minimum_size.x = 0.0
+			child.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			if child is Label:
+				child.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_fit_content_widths(child)
+
+func _make_detail_label(font_size: int = 16) -> RichTextLabel:
+	var label := RichTextLabel.new()
+	label.bbcode_enabled = true
+	label.fit_content = true
+	label.scroll_active = false
+	label.selection_enabled = false
+	label.add_theme_font_size_override("normal_font_size", font_size)
+	label.add_theme_font_size_override("bold_font_size", font_size)
+	label.add_theme_constant_override("line_separation", 3)
+	return label
+
+func _power_level(id: String, arcana: bool, player: PLAYER_SCRIPT) -> int:
+	if not is_instance_valid(player):
+		return 1
+	return player.get_trial_power_stack_count(id) if arcana else player.get_upgrade_stack_count(id)
+
+func _level_text(id: String, level: int, arcana: bool, player: PLAYER_SCRIPT) -> String:
+	var result := "Level %d" % level
+	if arcana and is_instance_valid(player) and player.has_trial_power_prismatic(id):
+		result += " · Prismatic"
+	return result
+
+func _keyword_details(id: String, level: int, prismatic: bool = false) -> String:
+	var metadata := POWER_REGISTRY.get_power_keyword_metadata(id, level, prismatic)
+	var ids: Array[String] = []
+	ids.assign(metadata.get("description_keywords", []))
+	var result := String(metadata.get("condition_text", ""))
+	var definitions := COMBAT_KEYWORDS.definitions_bbcode(ids)
+	if not definitions.is_empty():
+		result += "\n\n" + definitions
+	return result.strip_edges()
+
+func _update_candidate(candidate: Dictionary, player: PLAYER_SCRIPT) -> void:
+	_candidate_panel.visible = not candidate.is_empty()
+	_candidate_more.visible = false
+	_candidate_more.text = ""
+	if candidate.is_empty():
+		_candidate_details.text = ""
+		return
+	var id := String(candidate.get("id", ""))
+	var level := int(_owned_levels.get(id, 0))
+	var limit := int(candidate.get("stack_limit", 0))
+	var prism_offer := limit > 0 and level >= limit
+	var next_level := level if prism_offer else level + 1
+	var name_text := _power_display_name(id)
+	var current := "Not owned"
+	if level > 0 and is_instance_valid(player):
+		current = "Level %d: %s" % [level, player.get_power_current_desc(id)]
+	var next_title := "Prismatic" if prism_offer else "Level %d" % next_level
+	var next_desc := String(candidate.get("desc", candidate.get("description", "")))
+	_candidate_details.text = "[b]Selected offer: %s[/b]\nCurrent — %s\nOffered — %s: %s" % [name_text, current, next_title, next_desc]
+	var connections := _compatibility_text(id, next_level)
+	if not connections.is_empty():
+		_candidate_more.text = "[b]Shared properties in your build[/b]\n" + connections
+	var details := _keyword_details(id, next_level, prism_offer)
+	if not details.is_empty():
+		_candidate_more.text += "\n\n" + details
+	_candidate_toggle.visible = not _candidate_more.text.strip_edges().is_empty()
+
+func _compatibility_text(candidate_id: String, candidate_level: int) -> String:
+	var candidate := POWER_REGISTRY.get_power_keyword_metadata(candidate_id, candidate_level)
+	var lines: Array[String] = []
+	for owned_id: String in _owned_levels:
+		if owned_id == candidate_id:
+			continue
+		var owned := POWER_REGISTRY.get_power_keyword_metadata(owned_id, int(_owned_levels[owned_id]))
+		for direction in [0, 1]:
+			var producer: Dictionary = owned if direction == 0 else candidate
+			var receiver: Dictionary = candidate if direction == 0 else owned
+			var shared: Array[String] = []
+			for keyword: String in producer.get("produces", []):
+				if keyword in receiver.get("accepts", []):
+					shared.append(_produced_property_phrase(keyword) if direction == 0 else _property_keyword(keyword))
+			if shared.is_empty():
+				continue
+			var relationship := "%s %s." if direction == 0 else "%s responds to %s."
+			var properties: String = shared[0] if shared.size() == 1 else ", ".join(shared.slice(0, -1)) + " and " + shared[-1]
+			var line := relationship % [_power_display_name(owned_id), properties]
+			var condition := String(receiver.get("condition_text", ""))
+			# Candidate restrictions are shown once in its keyword details below.
+			# Keep distinct owned-receiver restrictions beside outgoing matches.
+			if direction == 1 and not condition.is_empty():
+				line += " " + condition
+			lines.append(line)
+	return "\n".join(lines)
+
+func _property_keyword(keyword: String) -> String:
+	var label := "damage" if keyword == "damage" else ("attack hits" if keyword == "attack_hit" else "")
+	return COMBAT_KEYWORDS.keyword_bbcode(keyword, label)
+
+func _produced_property_phrase(keyword: String) -> String:
+	var verb := "provides "
+	match keyword:
+		"damage": verb = "deals "
+		"slow", "mark": verb = "applies "
+		"field": verb = "creates a "
+		"attack_hit": verb = "lands "
+		"push", "pull", "recoil": verb = "causes "
+		"orbit": verb = "enables "
+		"dash": verb = "supports "
+	return verb + _property_keyword(keyword)
 
 func _create_catalyst_section(content: VBoxContainer) -> void:
 	catalyst_panel = PanelContainer.new()
@@ -384,25 +632,20 @@ func _update_power_section(container: VBoxContainer, power_ids: Array, power_typ
 	for power_id in power_ids:
 		var name_text := _power_display_name(power_id)
 		var desc_text := _get_power_current_desc(power_id, power_type, player)
-		var stack_count := 0
-		if player != null:
-			if power_type == "boon":
-				stack_count = player.get_upgrade_stack_count(String(power_id))
-			elif power_type == "arcana":
-				stack_count = player.get_trial_power_stack_count(String(power_id))
-		if stack_count <= 0:
-			stack_count = 1
-		var stack_suffix := ""
-		if stack_count > 1:
-			stack_suffix = "  x%d" % stack_count
-		
+		var id := String(power_id)
+		var stack_count := maxi(1, _power_level(id, power_type == "arcana", player))
+		var stack_suffix := "  · " + _level_text(id, stack_count, power_type == "arcana", player)
+
 		# Add power entry
 		var entry_vbox := VBoxContainer.new()
 		entry_vbox.add_theme_constant_override("separation", 4)
 		container.add_child(entry_vbox)
 		
-		var power_name := Label.new()
-		power_name.text = "  • %s%s" % [name_text, stack_suffix]
+		var power_name := Button.new()
+		power_name.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		power_name.flat = true
+		power_name.tooltip_text = "Show keyword meanings and exact conditions."
+		power_name.text = "  • %s%s  ›" % [name_text, stack_suffix]
 		power_name.add_theme_font_size_override("font_size", 15)
 		power_name.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.98))
 		power_name.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
@@ -412,12 +655,13 @@ func _update_power_section(container: VBoxContainer, power_ids: Array, power_typ
 		
 		if not desc_text.is_empty():
 			var power_desc := RichTextLabel.new()
-			power_desc.custom_minimum_size = Vector2(720.0, 0.0)
+			power_desc.custom_minimum_size = Vector2.ZERO
 			power_desc.bbcode_enabled = true
 			power_desc.fit_content = true
 			power_desc.scroll_active = false
 			power_desc.selection_enabled = false
-			power_desc.add_theme_font_size_override("normal_font_size", 14)
+			power_desc.add_theme_font_size_override("normal_font_size", 16)
+			power_desc.add_theme_font_size_override("bold_font_size", 16)
 			power_desc.add_theme_constant_override("line_separation", 3)
 			power_desc.add_theme_color_override("default_color", Color(0.85, 0.90, 0.96, 0.88))
 			power_desc.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
@@ -425,6 +669,12 @@ func _update_power_section(container: VBoxContainer, power_ids: Array, power_typ
 			power_desc.add_theme_constant_override("shadow_offset_y", 1)
 			power_desc.text = "    %s" % desc_text
 			entry_vbox.add_child(power_desc)
+		var keyword_details := _make_detail_label()
+		keyword_details.text = _keyword_details(id, stack_count, power_type == "arcana" and is_instance_valid(player) and player.has_trial_power_prismatic(id))
+		keyword_details.visible = false
+		entry_vbox.add_child(keyword_details)
+		power_name.set_meta("build_details", weakref(keyword_details))
+		power_name.pressed.connect(func(): keyword_details.visible = not keyword_details.visible)
 
 func _pi(node: Node, prop: String, fallback: int = 0) -> int:
 	var v = node.get(prop)

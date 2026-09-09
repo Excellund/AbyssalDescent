@@ -72,7 +72,8 @@ func append_segment(start: Vector2, finish: Vector2) -> void:
 		ribbon = {"id": _drawing_id, "born": _clock, "expires": _clock + lifetime, "lifetime": lifetime, "radius": maxf(8.0, radius), "context": _drawing_context.duplicate(true), "segments": []}
 		ribbons.append(ribbon)
 		if ribbons.size() > MAX_RIBBONS:
-			ribbons.pop_front()
+			var retired: Dictionary = ribbons.pop_front()
+			_register_field(retired, true)
 	else:
 		for candidate: Dictionary in ribbons:
 			if int(candidate["id"]) == _drawing_id:
@@ -90,22 +91,31 @@ func append_segment(start: Vector2, finish: Vector2) -> void:
 		var next_step := finish - start
 		if Vector2(previous["b"]).is_equal_approx(start) and absf(previous_step.cross(next_step)) <= 0.00001 and previous_step.dot(next_step) > 0.0:
 			previous["b"] = finish
+			if not MultiplayerSessionManager.is_remote_replica():
+				_register_field(ribbon)
 			_sync_renderer()
 			return
 	if segments.size() >= MAX_SEGMENTS / MAX_RIBBONS:
 		end_dash()
 		return
 	segments.append({"a": start, "b": finish})
+	_register_field(ribbon)
 	_sync_renderer()
 	_publish_state()
 
 func end_dash() -> void:
+	if _drawing_id > 0 and _is_owner():
+		for ribbon in ribbons:
+			if int(ribbon.id) == _drawing_id:
+				_register_field(ribbon)
 	_drawing_id = 0
 	_drawing_context.clear()
 
 func cancel() -> void:
 	_generation += 1
 	end_dash()
+	for ribbon in ribbons:
+		_register_field(ribbon, true)
 	ribbons.clear()
 	_targets.clear()
 	_positions.clear()
@@ -162,7 +172,7 @@ func tick(delta: float) -> void:
 			continue
 		var state: Dictionary = _targets.get(id, {})
 		if state.is_empty():
-			state = {"ref": weakref(enemy), "next": float(contacts.front()["from"]) + TICK_INTERVAL, "pending": 0.0, "fraction": 0.0, "qualified": false, "context": {}, "origin": position}
+			state = {"ref": weakref(enemy), "next": float(contacts.front()["from"]) + TICK_INTERVAL, "pending": 0.0, "pending_coefficient": 0.0, "fraction": 0.0, "qualified": false, "context": {}, "origin": position}
 			_targets[id] = state
 		var cursor := begin
 		while float(state["next"]) <= finish + 0.000000001:
@@ -221,6 +231,10 @@ func _accrue(state: Dictionary, contacts: Array[Dictionary], start: float, finis
 		if duration <= 0.0:
 			continue
 		state["pending"] = float(state["pending"]) + duration * maxf(0.0, float(player.static_wake_damage)) * DAMAGE_RATE
+		var damage_ratio := float(player.static_wake_damage_ratio)
+		if damage_ratio <= 0.0:
+			damage_ratio = float(player.static_wake_damage) / maxf(1.0, float(player.damage))
+		state["pending_coefficient"] = float(state.get("pending_coefficient", 0.0)) + duration * DAMAGE_RATE * damage_ratio
 		if not bool(state["qualified"]):
 			state["context"] = contact["context"]
 			state["origin"] = contact["origin"]
@@ -229,15 +243,15 @@ func _accrue(state: Dictionary, contacts: Array[Dictionary], start: float, finis
 func _settle(enemy: Node2D, state: Dictionary) -> void:
 	if not bool(state["qualified"]):
 		return
-	var value := float(state["fraction"]) + float(state["pending"])
-	var base_amount := int(floor(value + 0.000000001))
-	state["fraction"] = maxf(0.0, value - base_amount)
+	var raw := float(state["pending"])
+	var coefficient := float(state.get("pending_coefficient", 0.0))
 	state["pending"] = 0.0
+	state["pending_coefficient"] = 0.0
 	state["qualified"] = false
-	var amount := int(player._apply_objective_mutator_damage_mult(base_amount)) if base_amount > 0 else 0
+	var amount := int(floor(raw))
 	var action: Dictionary = state["context"]
-	# The host reads Snare eligibility before this tick applies its level3 Slow.
-	var context: Dictionary = REGISTRY.damage_context(action, "static_wake", {"attack_origin": state["origin"], "hunters_snare_aoe_bonus": true})
+	var context: Dictionary = REGISTRY.damage_context(action, "static_wake", {"attack_origin": state["origin"], "raw_amount": raw, "fractional_rounding": "floor", "damage_coefficient": coefficient})
+
 	var generation := _generation
 	var accepted := DAMAGEABLE.apply_damage(enemy, amount, context)
 	if generation != _generation or not is_instance_valid(enemy) or enemy.is_queued_for_deletion() or DAMAGEABLE._read_target_health(enemy) <= 0:
@@ -347,6 +361,9 @@ func _run_token() -> String:
 	return GameStateReplicationService.get_current_run_sync_token()
 
 func _publish_state(reliable: bool = false) -> void:
+	if _is_owner():
+		for ribbon in ribbons:
+			_register_field(ribbon)
 	_sequence += 1
 	_state_left = STATE_INTERVAL
 	var encoded: Array = []
@@ -416,3 +433,24 @@ func apply_visual_state(payload: Dictionary) -> void:
 func _process(delta: float) -> void:
 	if not _is_owner():
 		tick(delta)
+
+## Uses the same capsules and clock as damage and rendering, including expiry.
+func contains_point(point: Vector2) -> bool:
+	for ribbon in ribbons:
+		if float(ribbon.get("expires", 0.0)) <= _clock:
+			continue
+		for segment in ribbon.get("segments", []):
+			var start: Vector2 = segment.get("a", Vector2.ZERO)
+			var finish: Vector2 = segment.get("b", start)
+			var radius := float(ribbon.get("radius", player.static_wake_trail_radius))
+			if point.distance_to(Geometry2D.get_closest_point_to_segment(point, start, finish)) <= radius:
+				return true
+	return false
+
+func _register_field(ribbon: Dictionary, remove: bool = false) -> void:
+	if not _is_owner():
+		return
+	var action: Dictionary = ribbon.get("context", {})
+	var geometry := {"shape": "capsules", "segments": ribbon.get("segments", []).duplicate(true), "radius": float(ribbon.get("radius", 0.0)), "remaining": 0.0 if remove else maxf(0.0, float(ribbon.get("expires", 0.0)) - _clock)}
+	var identity := "%d:%d:%d" % [int(action.get("epoch", 0)), int(action.get("seq", 0)), int(ribbon.get("id", 0))]
+	player._register_shared_field("static_wake", geometry, action, identity)

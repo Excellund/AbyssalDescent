@@ -29,6 +29,7 @@ class Blade extends RefCounted:
 	var life_left: float = MAX_LIFETIME
 	var bounces_left: int = 0
 	var damage: int
+	var damage_coefficient: float = DAMAGE_RATIO
 	var interaction: Dictionary = {}
 	var source_peer: int
 	var outgoing_hits: Dictionary = {}
@@ -100,7 +101,8 @@ func try_launch(direction: Vector2) -> bool:
 	blade.direction = direction.normalized()
 	blade.travel_left = OUTBOUND_DISTANCE * minf(reach_scale, 2.0)
 	blade.bounces_left = 1 if stacks >= 3 else 0
-	blade.damage = int(player._apply_objective_mutator_damage_mult(maxi(1, int(round(float(player.damage) * DAMAGE_RATIO * damage_scale)))))
+	blade.damage_coefficient = DAMAGE_RATIO * damage_scale
+	blade.damage = maxi(1, int(round(float(player.damage) * DAMAGE_RATIO * damage_scale)))
 	blade.interaction = player._capture_combat_action("returning_crescent")
 	blade.source_peer = DAMAGEABLE._resolve_local_peer_id()
 	blades.append(blade)
@@ -280,7 +282,7 @@ func _apply_segment_hits(blade: Blade, start: Vector2, finish: Vector2, exclusio
 			if not get_world_2d().direct_space_state.intersect_ray(sight).is_empty():
 				continue
 		hit_ids[id] = true
-		DAMAGEABLE.apply_damage(enemy, blade.damage, INTERACTIONS.damage_context(blade.interaction, "returning_crescent", {"secondary": true, "attack_origin": start}), blade.source_peer)
+		DAMAGEABLE.apply_damage(enemy, blade.damage, INTERACTIONS.damage_context(blade.interaction, "returning_crescent", {"secondary": true, "attack_origin": start, "damage_coefficient": blade.damage_coefficient}), blade.source_peer)
 		if generation != _cancel_generation:
 			return
 		if not _owner_allowed():

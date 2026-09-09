@@ -97,6 +97,72 @@ func cancel() -> void:
 	# A remote build snapshot must not independently reopen the owner's ledger.
 	# Its authenticated owner announces a newer epoch when cancelling actions.
 
+func _ledger(action: Dictionary) -> Dictionary:
+	if not accepts_action(action):
+		return {}
+	var root_seq := int(action.seq)
+	if not _roots.has(root_seq):
+		if _roots.size() >= REGISTRY.MAX_ROOTS:
+			var oldest := int(_roots.keys().min())
+			_roots.erase(oldest)
+			_retired_through = maxi(_retired_through, oldest)
+			if root_seq <= _retired_through:
+				return {}
+		_roots[root_seq] = {"targets": {}, "attack_targets": {}, "reactions": {}, "descriptors": {}, "discharged": false}
+	return _roots[root_seq]
+
+func has_attack_hit(action: Dictionary, target_id: int) -> bool:
+	if not accepts_action(action) or not _roots.has(int(action.get("seq", 0))):
+		return false
+	var ledger: Dictionary = _roots[int(action.seq)]
+	return (ledger.get("attack_targets", {}) as Dictionary).has(target_id)
+
+func has_reaction(action: Dictionary, rule: String, target_id: int = 0) -> bool:
+	if rule.is_empty() or rule.length() > 48 or target_id < 0 or not accepts_action(action) or not _roots.has(int(action.seq)):
+		return false
+	var ledger: Dictionary = _roots[int(action.seq)]
+	return (ledger.get("reactions", {}) as Dictionary).has("%s:%d" % [rule, target_id])
+
+func claim_reaction(action: Dictionary, rule: String, target_id: int = 0) -> bool:
+	if rule.is_empty() or rule.length() > 48 or target_id < 0:
+		return false
+	var ledger := _ledger(action)
+	if ledger.is_empty():
+		return false
+	var key := "%s:%d" % [rule, target_id]
+	if ledger.reactions.has(key) or ledger.reactions.size() >= REGISTRY.MAX_TARGETS_PER_ROOT * 4:
+		return false
+	ledger.reactions[key] = true
+	return true
+
+func get_echo_descriptor(action: Dictionary, original_source: String, scale: float = 0.55) -> Dictionary:
+	if not is_finite(scale) or scale < 0.0 or not REGISTRY.is_attack_hit(original_source) or not accepts_action(action) or not _roots.has(int(action.seq)):
+		return {}
+	var ledger: Dictionary = _roots[int(action.seq)]
+	var descriptor: Dictionary = ledger.get("descriptors", {}).get(original_source, {})
+	if descriptor.is_empty():
+		return {}
+	return {"raw_amount": float(descriptor.raw_amount) * scale, "damage_coefficient": float(descriptor.damage_coefficient) * scale}
+
+func _dispatch_shared_hit(event: Dictionary, action: Dictionary, ledger: Dictionary) -> void:
+	if not bool(event.get("shared", false)):
+		return
+	var target_id := int(event.get("target_id", 0))
+	var source := String(action.source)
+	var previous := DAMAGEABLE.begin_interaction_scope(action)
+	if REGISTRY.is_attack_hit(source) and target_id > 0 and not ledger.attack_targets.has(target_id) and ledger.attack_targets.size() < REGISTRY.MAX_TARGETS_PER_ROOT:
+		event["first_attack_hit"] = ledger.attack_targets.is_empty()
+		event["first_target_in_action"] = true
+		ledger.attack_targets[target_id] = true
+		var prior_descriptor: Dictionary = ledger.descriptors.get(source, {})
+		if prior_descriptor.is_empty() or float(event.raw_amount) > float(prior_descriptor.raw_amount):
+			ledger.descriptors[source] = {"raw_amount": float(event.raw_amount), "damage_coefficient": float(event.damage_coefficient)}
+		if player.has_method("_on_shared_attack_hit"):
+			player._on_shared_attack_hit(event)
+	if player.has_method("_on_shared_damage"):
+		player._on_shared_damage(event)
+	DAMAGEABLE.end_interaction_scope(previous)
+
 func accept_hit(event: Dictionary) -> void:
 	if MultiplayerSessionManager.is_remote_replica() or not is_instance_valid(player):
 		return
@@ -105,20 +171,16 @@ func accept_hit(event: Dictionary) -> void:
 		return
 	if not accepts_action(action) or not bool(player.get("combat_damage_enabled")) or not bool(player.get("_is_alive_state")) or bool(player.get("encounter_input_frozen")):
 		return
-	if (int(action.get("traits", 0)) & REGISTRY.HIT) == 0 or (int(action.get("ancestry", 0)) & REGISTRY.CROWN_ANCESTRY) != 0:
+	if (int(action.get("traits", 0)) & REGISTRY.HIT) == 0 or int(event.get("applied", 0)) <= 0:
 		return
-	if not bool(player.get("reward_storm_crown")) or int(event.get("applied", 0)) <= 0:
+	var ledger := _ledger(action)
+	if ledger.is_empty():
 		return
-	var root_seq := int(action.seq)
-	if not _roots.has(root_seq):
-		if _roots.size() >= REGISTRY.MAX_ROOTS:
-			var oldest: int = int(_roots.keys().min())
-			_roots.erase(oldest)
-			_retired_through = maxi(_retired_through, oldest)
-			if root_seq <= _retired_through:
-				return
-		_roots[root_seq] = {"targets": {}, "discharged": false}
-	var ledger: Dictionary = _roots[root_seq]
+	_dispatch_shared_hit(event, action, ledger)
+	if int(event.get("cancel_generation", _cancel_generation)) != _cancel_generation or not accepts_action(action):
+		return
+	if not bool(player.get("reward_storm_crown")) or (int(action.get("ancestry", 0)) & REGISTRY.CROWN_ANCESTRY) != 0:
+		return
 	var target_id := int(event.get("target_id", 0))
 	if target_id <= 0 or ledger.targets.has(target_id) or ledger.targets.size() >= REGISTRY.MAX_TARGETS_PER_ROOT:
 		return
@@ -137,8 +199,12 @@ func _discharge(event: Dictionary, action: Dictionary) -> void:
 	var origin: Vector2 = event.get("position", Vector2.INF)
 	if not origin.is_finite():
 		return
-	var damage := maxi(1, int(round(float(event.get("amount", 0)) * float(player.get("storm_crown_damage_ratio")))))
-	damage = int(player._apply_objective_mutator_damage_mult(damage))
+	var shared := bool(event.get("shared", false))
+	var ratio := float(player.get("storm_crown_damage_ratio"))
+	var raw_damage := float(event.get("raw_amount", event.get("amount", 0))) * ratio
+	var damage := maxi(0 if shared else 1, int(round(raw_damage)))
+	if not shared:
+		damage = int(player._apply_objective_mutator_damage_mult(damage))
 	var reach := maxf(0.0, float(player.get("storm_crown_chain_radius")))
 	var remaining := clampi(int(player.get("storm_crown_chain_targets")), 0, 6)
 	var ordinary_hops := remaining
@@ -169,7 +235,11 @@ func _discharge(event: Dictionary, action: Dictionary) -> void:
 		var was_slowed := bool(nearest.is_slowed())
 		visited[nearest.get_instance_id()] = true
 		var before := DAMAGEABLE._read_target_health(nearest)
-		DAMAGEABLE.apply_damage(nearest, damage, REGISTRY.damage_context(action, "storm_crown", {"attack_origin": origin}), int(action.owner))
+		var context := {"attack_origin": origin}
+		if shared:
+			context["raw_amount"] = raw_damage
+			context["damage_coefficient"] = float(event.get("damage_coefficient", 0.0)) * ratio
+		DAMAGEABLE.apply_damage(nearest, damage, REGISTRY.damage_context(action, "storm_crown", context), int(action.owner))
 		var accepted := is_instance_valid(nearest) and before > DAMAGEABLE._read_target_health(nearest)
 		if generation != _cancel_generation or not bool(player.get("_is_alive_state")) or not bool(player.get("combat_damage_enabled")):
 			break

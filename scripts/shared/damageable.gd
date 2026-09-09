@@ -2,6 +2,8 @@ extends RefCounted
 
 const ENEMY_BASE_SCRIPT := preload("res://scripts/enemy_base.gd")
 const INTERACTIONS := preload("res://scripts/shared/combat_interaction_registry.gd")
+const TARGET_STATUS := preload("res://scripts/shared/combat_target_status.gd")
+const SHARED_MODIFIERS := preload("res://scripts/shared/shared_damage_modifiers.gd")
 const STAT_ATTRIBUTION_TRACE := false
 static var _secondary_scope_depth: int = 0
 const KILL_PROC_SUPPRESS_FRACTURE := 1
@@ -40,14 +42,15 @@ static func _capture_interaction_hit(target: Object, amount: int, context: Dicti
 	if not (target is Node2D) or not target.is_in_group("enemies"):
 		return {}
 	var action := INTERACTIONS.validate_action(context.get("interaction"), source_peer)
-	if action.is_empty() or (int(action.traits) & INTERACTIONS.HIT) == 0 or (int(action.ancestry) & INTERACTIONS.CROWN_ANCESTRY) != 0:
+	if action.is_empty() or (int(action.traits) & INTERACTIONS.HIT) == 0:
 		return {}
 	var owner := _find_combat_owner(source_peer)
 	var controller: Node = owner.get("combat_interactions") if owner != null else null
 	if not is_instance_valid(controller) or not controller.accepts_action(action):
 		return {}
-	return {"interaction": action, "target_id": target.get_instance_id(),
+	return {"interaction": action, "target": weakref(target), "target_id": target.get_instance_id(),
 		"position": (target as Node2D).global_position, "amount": amount,
+		"attack_origin": context.get("attack_origin", Vector2.INF), "context": context.duplicate(true),
 		"pre_slowed": bool(target.is_slowed()) if target.has_method("is_slowed") else false,
 		"controller": weakref(controller), "cancel_generation": int(controller.get("_cancel_generation"))}
 
@@ -113,13 +116,13 @@ static func is_displacement_immune(target: Object) -> bool:
 	return false
 
 static func apply_damage(target: Object, amount: int, damage_context: Dictionary = {}, source_peer_id: int = 0) -> bool:
-	if amount < 0 or (amount == 0 and damage_context.get("hunters_snare_aoe_bonus") != true):
+	var shared := damage_context.has("damage_coefficient")
+	if amount < 0 or (amount == 0 and not shared and damage_context.get("hunters_snare_aoe_bonus") != true):
 		return false
 	if not can_take_damage(target):
 		return false
 	var route_to_host := _should_route_enemy_damage_to_host(target)
-	if route_to_host or source_peer_id <= 0:
-		source_peer_id = _resolve_local_peer_id()
+	source_peer_id = _resolve_source_peer(source_peer_id, route_to_host)
 	damage_context = _with_interaction_context(damage_context)
 	damage_context = _with_attack_origin(target, damage_context, source_peer_id)
 	var secondary := is_launch_suppressed() or bool(damage_context.get("secondary", false))
@@ -133,18 +136,34 @@ static func apply_damage(target: Object, amount: int, damage_context: Dictionary
 	if route_to_host:
 		_route_enemy_damage_to_host(target, amount, damage_context)
 		return true
-	if damage_context.get("hunters_snare_aoe_bonus") == true:
+	var shared_event: Dictionary = {}
+	if shared:
+		shared_event = _resolve_shared_damage(target, amount, damage_context, source_peer_id)
+		if shared_event.is_empty():
+			return false
+		amount = int(shared_event.amount)
+	elif damage_context.get("hunters_snare_aoe_bonus") == true:
 		var action := INTERACTIONS.validate_action(damage_context.get("interaction"), source_peer_id)
 		var owner := _find_combat_owner(source_peer_id)
 		var controller: Node = owner.get("combat_interactions") if owner != null else null
 		if not action.is_empty() and action.source == "static_wake" and is_instance_valid(controller) and controller.accepts_action(action) and owner.has_method("_hunters_snare_aoe_bonus_against"):
 			amount += maxi(0, int(owner._hunters_snare_aoe_bonus_against(target)))
 	if amount <= 0:
+		_commit_damage_fraction(shared_event)
 		return false
 	var health_before := _read_target_health(target)
 	var interaction_event := _capture_interaction_hit(target, amount, damage_context, source_peer_id) if health_before > 0 else {}
-	var raw_action: Variant = damage_context.get("interaction", {})
-	var previous_interaction := begin_interaction_scope(raw_action if raw_action is Dictionary else {})
+	if not interaction_event.is_empty() and not shared_event.is_empty():
+		interaction_event.merge(shared_event, true)
+	var accepted_action := INTERACTIONS.validate_action(damage_context.get("interaction", {}), source_peer_id)
+	if not accepted_action.is_empty() and target is Node2D:
+		var origin: Variant = damage_context.get("attack_origin")
+		if origin is Vector2 and origin.is_finite():
+			accepted_action["attack_origin"] = origin
+			var direction: Variant = damage_context.get("damage_direction", damage_context.get("attack_direction", (target as Node2D).global_position - origin))
+			if direction is Vector2 and direction.is_finite() and direction.length_squared() > 0.0:
+				accepted_action["damage_direction"] = direction.normalized()
+	var previous_interaction := begin_interaction_scope(accepted_action)
 	_damage_depth += 1
 	# Death signals fire inside take_damage. Make this hit's owner visible to
 	# kill-triggered powers before those signals, then undo rejected hits.
@@ -161,6 +180,8 @@ static func apply_damage(target: Object, amount: int, damage_context: Dictionary
 	_restore_rejected_damage_credit(target, health_before, pending_credit)
 	_report_enemy_damage_applied(target, health_before, source_peer_id)
 	var health_after := _read_target_health(target)
+	if health_after >= 0 and health_after < health_before:
+		_commit_damage_fraction(shared_event)
 	if not secondary and health_after > 0 and health_after < health_before and String(damage_context.get("attack_type", "")) in ["melee", "razor_wind", "blast_drive"]:
 		_arm_primary_launch(target, source_peer_id)
 	if secondary:
@@ -173,6 +194,150 @@ static func apply_damage(target: Object, amount: int, damage_context: Dictionary
 		_pending_interaction_hits.append(interaction_event)
 	_flush_interaction_hits()
 	return true
+
+
+static func _resolve_shared_damage(target: Object, legacy_amount: int, context: Dictionary, source_peer: int) -> Dictionary:
+	if not is_instance_valid(target) or _read_target_health(target) <= 0:
+		return {}
+	var raw: Variant = context.get("raw_amount", legacy_amount)
+	var coefficient: Variant = context.get("damage_coefficient")
+	if not SHARED_MODIFIERS.valid_number(raw) or not SHARED_MODIFIERS.valid_number(coefficient) or float(raw) < 0.0 or float(coefficient) < 0.0:
+		return {}
+	var action := INTERACTIONS.validate_action(context.get("interaction"), source_peer)
+	var owner := _find_combat_owner(source_peer)
+	var controller: Node = owner.get("combat_interactions") if owner != null else null
+	if action.is_empty() or (int(action.traits) & INTERACTIONS.HIT) == 0 or not is_instance_valid(controller) or not controller.accepts_action(action):
+		return {}
+	var state: Node = _target_status(target, true)
+	if state == null:
+		return {}
+	var pre: Dictionary = state.snapshot(source_peer)
+	pre["slowed"] = bool(target.is_slowed()) if target.has_method("is_slowed") else false
+	var descriptor := {"raw_amount": float(raw), "damage_coefficient": float(coefficient), "context": context.duplicate(true)}
+	var direct := INTERACTIONS.is_attack_hit(String(action.source))
+	if direct and not controller.has_attack_hit(action, target.get_instance_id()) and owner.has_method("_prepare_shared_attack_damage"):
+		var prepared: Variant = owner._prepare_shared_attack_damage(target, descriptor.duplicate(true), action)
+		if prepared is Dictionary:
+			descriptor.merge(prepared, true)
+	elif String(action.source) == "sovereigns_double":
+		var inherited: Dictionary = controller.get_echo_descriptor(action, String(action.get("echo_source", "")), 0.55)
+		if not inherited.is_empty():
+			descriptor.merge(inherited, true)
+	if not SHARED_MODIFIERS.valid_number(descriptor.raw_amount) or not SHARED_MODIFIERS.valid_number(descriptor.damage_coefficient) or float(descriptor.raw_amount) < 0.0 or float(descriptor.damage_coefficient) < 0.0:
+		return {}
+	var resolved := SHARED_MODIFIERS.resolve(owner, target, float(descriptor.raw_amount), float(descriptor.damage_coefficient), pre, direct)
+	if not is_finite(resolved) or resolved < 0.0:
+		return {}
+	var round_down: bool = String(action.source) == "static_wake" and context.get("fractional_rounding") == "floor"
+	var fraction: Dictionary = state.prepare_damage(source_peer, String(action.source), resolved, round_down)
+	return {"shared": true, "raw_amount": float(descriptor.raw_amount), "damage_coefficient": float(descriptor.damage_coefficient),
+		"pending_bonuses": descriptor.get("pending_bonuses", {}), "pre_mark_ratio": float(pre.mark_ratio), "pre_dread_stacks": int(pre.dread_stacks),
+		"pre_slowed": bool(pre.slowed), "amount": int(fraction.amount), "fraction_state": weakref(state), "fraction": fraction}
+
+static func _commit_damage_fraction(event: Dictionary) -> void:
+	if event.get("fraction_state") is WeakRef:
+		var state: Variant = event.fraction_state.get_ref()
+		if is_instance_valid(state):
+			state.commit_damage(event.fraction)
+
+
+static func _target_status(target: Object, create: bool = false) -> Node:
+	if not is_instance_valid(target) or not (target is Node) or not target.is_in_group("enemies") or target.is_queued_for_deletion():
+		return null
+	var existing := target.get_node_or_null("SharedCombatStatus") as Node
+	if existing != null or not create:
+		return existing
+	var state := TARGET_STATUS.new()
+	state.name = "SharedCombatStatus"
+	target.add_child(state)
+	return state
+
+static func status_snapshot(target: Object, source_peer_id: int = 0) -> Dictionary:
+	var state := _target_status(target)
+	return state.snapshot(source_peer_id) if state != null else {"mark_ratio": 0.0, "dread_stacks": 0}
+
+static func clear_statuses(target: Object) -> void:
+	var state := _target_status(target)
+	if state != null:
+		state.clear()
+
+static func cancel_owner(source_peer_id: int) -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null or source_peer_id <= 0:
+		return
+	for state: Node in tree.get_nodes_in_group("shared_combat_status"):
+		if is_instance_valid(state) and state.has_method("cancel_owner"):
+			state.cancel_owner(source_peer_id)
+
+static func get_status_network_state(target: Object) -> Dictionary:
+	var state := _target_status(target)
+	return state.network_state() if state != null else {}
+
+static func get_status_network_packet(target: Object) -> PackedByteArray:
+	var state := _target_status(target)
+	return state.network_packet() if state != null else PackedByteArray()
+
+static func apply_status_network_packet(target: Object, packet: PackedByteArray) -> bool:
+	if not MultiplayerSessionManager.is_remote_replica() or packet.is_empty():
+		return false
+	var state := _target_status(target, true)
+	return state.apply_network_packet(packet) if state != null else false
+
+static func apply_status_network_state(target: Object, payload: Dictionary) -> bool:
+	if not MultiplayerSessionManager.is_remote_replica() or payload.is_empty():
+		return false
+	var state := _target_status(target, true)
+	return state.apply_network_state(payload) if state != null else false
+
+static func _status_action(interaction: Dictionary, source_peer: int) -> Dictionary:
+	var action := INTERACTIONS.validate_action(interaction if not interaction.is_empty() else current_interaction_context(), source_peer)
+	var owner := _find_combat_owner(source_peer)
+	var controller: Node = owner.get("combat_interactions") if owner != null else null
+	return action if not action.is_empty() and is_instance_valid(controller) and controller.accepts_action(action) else {}
+
+static func apply_mark(target: Object, source: String, ratio: float, duration: float, source_peer_id: int = 0, interaction: Dictionary = {}) -> bool:
+	if not is_instance_valid(target) or _read_target_health(target) <= 0 or source not in TARGET_STATUS.MARK_SOURCES or not is_finite(ratio) or not is_finite(duration) or ratio <= 0.0 or duration <= 0.0:
+		return false
+	var route := _should_route_enemy_damage_to_host(target)
+	source_peer_id = _resolve_source_peer(source_peer_id, route)
+	var action := _status_action(interaction, source_peer_id)
+	if action.is_empty():
+		return false
+	if route:
+		var tree := Engine.get_main_loop() as SceneTree
+		if tree == null or tree.current_scene == null or not tree.current_scene.has_method("request_enemy_mark_from_client"):
+			return false
+		tree.current_scene.request_enemy_mark_from_client(int(target.get_meta("network_enemy_id", 0)), source, ratio, duration, action)
+		return true
+	var owner := _find_combat_owner(source_peer_id)
+	if owner == null or owner.get("_is_alive_state") == false or owner.get("_combat_removed") == true or not bool(owner.get("reward_" + source)):
+		return false
+	match source:
+		"wraithstep":
+			ratio = SHARED_MODIFIERS.property_number(owner, "wraithstep_mark_bonus_ratio")
+			duration = SHARED_MODIFIERS.property_number(owner, "wraithstep_mark_duration")
+		"eclipse_mark":
+			ratio = SHARED_MODIFIERS.property_number(owner, "eclipse_mark_bonus_ratio")
+			duration = SHARED_MODIFIERS.property_number(owner, "eclipse_mark_duration")
+		"dread_resonance":
+			ratio = 0.1
+			duration = 3.0
+	var state := _target_status(target, true)
+	return state.apply_mark(source_peer_id, source, ratio, duration) if state != null else false
+
+static func add_dread_stack(target: Object, source_peer_id: int, cap: int, interaction: Dictionary) -> int:
+	if MultiplayerSessionManager.is_remote_replica() or not is_instance_valid(target) or _read_target_health(target) <= 0:
+		return 0
+	var action := _status_action(interaction, source_peer_id)
+	var owner := _find_combat_owner(source_peer_id)
+	if action.is_empty() or not INTERACTIONS.is_attack_hit(String(action.source)) or owner == null or owner.get("_is_alive_state") == false or owner.get("_combat_removed") == true or not bool(owner.get("reward_dread_resonance")):
+		return 0
+	cap = mini(15, maxi(0, int(SHARED_MODIFIERS.property_number(owner, "dread_resonance_max_stacks"))))
+	var controller: Node = owner.get("combat_interactions")
+	var state := _target_status(target, true)
+	if not controller.claim_reaction(action, "dread_stack", target.get_instance_id()):
+		return int(state.snapshot(source_peer_id).dread_stacks)
+	return state.add_dread(source_peer_id, cap, action)
 
 static func _valid_slow(duration: float, mult: float) -> bool:
 	return is_finite(duration) and is_finite(mult) and duration > 0.0 and mult > 0.0 and mult < 1.0
@@ -208,8 +373,7 @@ static func apply_slow(target: Object, duration: float, mult: float, source_peer
 	if not is_instance_valid(target) or not (target is ENEMY_BASE_SCRIPT) or target.is_queued_for_deletion() or _read_target_health(target) <= 0 or not _valid_slow(duration, mult):
 		return false
 	var route_to_host := _should_route_enemy_damage_to_host(target)
-	if route_to_host or source_peer_id <= 0:
-		source_peer_id = _resolve_local_peer_id()
+	source_peer_id = _resolve_source_peer(source_peer_id, route_to_host)
 	var action := interaction if not interaction.is_empty() else current_interaction_context()
 	if not action.is_empty():
 		action = INTERACTIONS.validate_action(action, source_peer_id)
@@ -276,8 +440,7 @@ static func apply_impulse(target: Object, impulse: Vector2, source_peer_id: int 
 		return false
 	suppress_launch = suppress_launch or is_launch_suppressed()
 	var action := interaction if not interaction.is_empty() else current_interaction_context()
-	if source_peer_id <= 0 or _should_route_enemy_damage_to_host(enemy):
-		source_peer_id = _resolve_local_peer_id()
+	source_peer_id = _resolve_source_peer(source_peer_id, _should_route_enemy_damage_to_host(enemy))
 	if _should_route_enemy_damage_to_host(enemy):
 		var enemy_id := int(enemy.get_meta("network_enemy_id", 0))
 		var scene_tree := Engine.get_main_loop() as SceneTree
@@ -401,6 +564,20 @@ static func _resolve_local_peer_id() -> int:
 	if MultiplayerSessionManager != null and MultiplayerSessionManager.is_session_connected():
 		return int(MultiplayerSessionManager.local_peer_id)
 	return 0
+
+
+static func _resolve_source_peer(explicit_peer: int, route_to_host: bool) -> int:
+	if route_to_host:
+		return _resolve_local_peer_id()
+	if explicit_peer > 0:
+		return explicit_peer
+	# Only an already active scope can supply ownership for host-generated
+	# descendants. Incoming damage metadata cannot select its own sender.
+	if not _interaction_scope.is_empty():
+		var inherited_owner := int(_interaction_scope.get("owner", 0))
+		if inherited_owner > 0 and not _status_action(_interaction_scope, inherited_owner).is_empty():
+			return inherited_owner
+	return _resolve_local_peer_id()
 
 
 static func _should_route_enemy_damage_to_host(target: Object) -> bool:

@@ -1456,7 +1456,7 @@ func _build_overcharge_mutator() -> Dictionary:
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_SOURCE_OBJECTIVE_KIND: "pulse_window",
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_THEME_COLOR: Color(1.0, 0.9, 0.4, 1.0),
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID: "overcharge",
-		ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX: "Kill chains stack +10% damage (5 stacks max) — reach max to discharge a nova burst on your next kill",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX: "Attack and Dash cooldowns are 20% shorter for 3 encounters",
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_PLAYER_DAMAGE_MULT: 0.0,
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_DURATION_ENCOUNTERS: 3
 	}

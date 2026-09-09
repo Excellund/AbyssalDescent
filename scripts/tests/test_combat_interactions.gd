@@ -154,6 +154,10 @@ func _test_descriptors() -> void:
 	var action := actor.combat_interactions.begin_action("dash")
 	var wake := REGISTRY.damage_context(action, "static_wake")
 	check(int(wake.interaction.traits) == (REGISTRY.HIT | REGISTRY.DASH | REGISTRY.ELECTRIC), "Wake declares Hit, Dash and Electric")
+	for source in ["razor_orbit", "apex_momentum_wave"]:
+		var movement_damage := REGISTRY.validate_action(REGISTRY.damage_context(action, source).interaction, 1)
+		check(movement_damage.seq == action.seq and movement_damage.kind == "dash", "%s preserves its original Dash root for reaction limits" % source)
+		check((int(movement_damage.traits) & REGISTRY.DASH) == 0 and (int(movement_damage.traits) & REGISTRY.HIT) != 0, "%s deals damage without claiming a normal-Dash property" % source)
 	var unknown := REGISTRY.damage_context(action, "unknown")
 	unknown.interaction.traits = REGISTRY.HIT | REGISTRY.ELECTRIC
 	check(int(REGISTRY.validate_action(unknown.interaction, 1).traits) == 0, "Unregistered effects cannot forge supported trait bits")

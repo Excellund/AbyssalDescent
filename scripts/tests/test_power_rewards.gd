@@ -231,7 +231,7 @@ func _test_boss_combination_descriptions(registry: Node) -> void:
 			_check(DESCRIPTION_GUARD.visible_length(card) <= 109 and DESCRIPTION_GUARD.visible_length(current) <= 109, "%s level %d complete descriptions fit the visible cap" % [power_id, stack])
 			_check(not card.contains("Upgrade your stats") and not current.is_empty(), "%s level %d has specific reward/build text" % [power_id, stack])
 			if power_id == "ruinous_impact":
-				_check(card.contains("Bosses burst in place") and card.contains("impacts burst"), "Ruinous Impact explains its standalone and boss effects")
+				_check(DESCRIPTION_GUARD.strip_bbcode(card).contains("Bosses burst in place") and DESCRIPTION_GUARD.strip_bbcode(card).contains("impacts burst"), "Ruinous Impact explains its standalone and boss effects")
 				_check(current.contains("140%" if stack == 2 else "100%"), "Ruinous Impact displays the active damage ratio")
 				_check(current.contains("95" if stack == 2 else "70"), "Ruinous Impact displays the active radius")
 			else:
@@ -379,7 +379,7 @@ func _test_combat_hooks() -> void:
 				activated = secondary.get_current_health() < secondary_before
 			"wraithstep":
 				player._apply_wraithstep_marks_during_dash(Vector2.ZERO, enemy.global_position)
-				activated = player._consume_wraithstep_mark(enemy, enemy.global_position, 20) > 0
+				activated = float(DAMAGEABLE.status_snapshot(enemy, player.player_id).get("mark_ratio", 0.0)) > 0.0
 			"voidfire":
 				player._gain_void_heat(player.void_heat_cap)
 				activated = player._voidfire_lockout_left > 0.0 and enemy.get_current_health() < before
@@ -393,7 +393,7 @@ func _test_combat_hooks() -> void:
 				activated = before - enemy.get_current_health() > 20
 			"eclipse_mark":
 				player._apply_eclipse_mark(enemy.global_position)
-				activated = player._consume_eclipse_mark_bonus(enemy, 20) > 0
+				activated = float(DAMAGEABLE.status_snapshot(enemy, player.player_id).get("mark_ratio", 0.0)) > 0.0
 			"fracture_field":
 				player._apply_fracture_field(enemy.global_position)
 				activated = enemy.get_current_health() < before and enemy.is_slowed()
@@ -486,7 +486,7 @@ func _test_kills_at_arena_origin() -> void:
 			"edict_of_the_court":
 				activated = enemy.velocity.x > 0.0
 			"eclipse_mark":
-				activated = player._consume_eclipse_mark_bonus(enemy, 20) > 0
+				activated = float(DAMAGEABLE.status_snapshot(enemy, player.player_id).get("mark_ratio", 0.0)) > 0.0
 			"fracture_field":
 				activated = enemy.get_current_health() < before
 		_check(activated, "%s kill at arena origin still triggers" % power_id)

@@ -35,6 +35,9 @@ func _run() -> void:
 	await _test_farline_burst_origin()
 	await _test_empowered_geometry()
 	await _test_snapshot_collision_cleanup()
+	if is_instance_valid(MAPPER._power_registry_instance):
+		MAPPER._power_registry_instance.free()
+		MAPPER._power_registry_instance = null
 	print("[HitOrigins] %d checks, %d failures" % [checks, failures.size()])
 	quit(0 if failures.is_empty() else 1)
 
@@ -152,8 +155,15 @@ func _test_effect_epicenters() -> void:
 	player.static_wake_controller.end_dash()
 	player.static_wake_controller.tick(0.25)
 	_expect_origin(enemy, Vector2(15.0, 0.0), "Static Wake")
+	var health_before_overcharge := enemy.get_current_health()
+	var cues_before_overcharge := player.cues.size()
+	player.overcharge_kill_stacks = 3
+	player.overcharge_is_charged = true
+	player._trigger_overcharge_kill(Vector2(10.0, 0.0))
 	player._fire_overcharge_discharge(Vector2(10.0, 0.0))
-	_expect_origin(enemy, Vector2(10.0, 0.0), "Overcharge")
+	player._update_overcharge_state(0.25)
+	_check(enemy.hits.is_empty() and enemy.get_current_health() == health_before_overcharge, "Overcharge cannot produce the retired kill Nova, including with stale charged state")
+	_check(player.cues.size() == cues_before_overcharge and not player.overcharge_is_charged and player.overcharge_kill_stacks == 0, "Overcharge clears retired charge state without emitting a Nova cue")
 	player.position = Vector2.ZERO
 	player.phantom_step_damage = 100
 	player._apply_phantom_step_during_dash()
@@ -180,6 +190,7 @@ func _test_farline_burst_origin() -> void:
 			var hit: Dictionary = enemy.hits[0]
 			_check(hit.get("attack_origin") == origin, "Every Farline hit uses the fixed burst origin")
 			_check(hit.get("attack_type") == "farline_volley_burst" and not bool(hit.get("secondary", true)), "Farline retains its existing primary proc classification")
+			_check(not player.INTERACTION_REGISTRY.is_attack_hit(String(hit.get("attack_type", ""))), "Farline's direct Burst remains separate from the Attack Hit trigger")
 	_free_world()
 
 func _test_empowered_geometry() -> void:

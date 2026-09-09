@@ -517,7 +517,7 @@ func _test_deferred_void_echo_scope() -> void:
 			player.boss_combinations.create_shade(Vector2(300.0, 0.0))
 			_strike()
 		elif kill_cause == "impact":
-			player.boss_combinations._impact(kill_position, 20, 70.0, 1)
+			player.boss_combinations._impact(kill_position, 20, 70.0, 1, Vector2.RIGHT, player.new_combat_action("melee"))
 		else:
 			_strike()
 		var secondary_origin: bool = kill_cause != "primary"

@@ -1,5 +1,7 @@
 extends RefCounted
 
+const KEYWORDS := preload("res://scripts/shared/combat_keyword_catalogue.gd")
+
 const RARITY_COMMON := Color(0.62, 0.7, 0.8, 0.9)
 const RARITY_RARE := Color(0.46, 0.78, 1.0, 0.94)
 const RARITY_EPIC := Color(0.82, 0.58, 1.0, 0.96)
@@ -267,7 +269,7 @@ static func _mutator_rows() -> Array[Dictionary]:
 			"name": "Overcharge",
 			"color": Color(1.0, 0.9, 0.4, 1.0),
 			"icon": "res://assets/ui/mutators/overcharge.svg",
-			"desc": "Kill chains build weapon charge (5 stacks). At max, your next kill fires a nova burst and resets to 2 stacks.",
+			"desc": KEYWORDS.format_text("Temporary boost: {kw:attack} and {kw:dash} cooldowns x0.80 for 3 room clears."),
 		},
 	]
 
@@ -276,17 +278,17 @@ static func _reward_rows() -> Array[Dictionary]:
 		{
 			"tier": "BOON",
 			"color": RARITY_COMMON,
-			"desc": "Standard room reward. Choose one core power upgrade.",
+			"desc": "Generic permanent increases to damage, movement or survival.",
 		},
 		{
 			"tier": "MISSION",
 			"color": RARITY_RARE,
-			"desc": "Earned from objective rooms. Stronger upgrades than standard boons.",
+			"desc": "Complete a Mission for a permanent Boon plus a temporary power increase for 3 room clears.",
 		},
 		{
 			"tier": "ARCANA",
 			"color": RARITY_EPIC,
-			"desc": "Earned from trial rooms. Rare powers that grow stronger each time you pick them.",
+			"desc": "Your primary build powers. Repeat picks raise levels; eligible mastered Arcana can become Prismatic once.",
 		},
 		{
 			"tier": "BOSS",
@@ -490,44 +492,44 @@ static func _endgame_chase_section_bbcode() -> String:
 static func _boss_combinations_section_bbcode() -> String:
 	var lines: Array[String] = [_section_title_bbcode("Boss Combinations")]
 	lines.append("[b]Ruinous Impact[/b]")
-	lines.append("Direct strikes launch enemies. A launched foe bursts when it hits another enemy, a wall or a column. Existing pushes and pulls can also start a launch, including Blast Drive, Lacuna Echo, Edict of the Court and Null Corridor.")
-	lines.append("Bosses and Apex enemies instead compress and burst in place, preserving their attacks. Each enemy can launch once every 1.1 seconds. Level 1 bursts deal 100% of Damage in a radius of 70; level 2 raises these to 140% and 95.")
+	lines.append(KEYWORDS.format_text("Direct strikes {kw:launch|Launch} enemies. A launched foe releases a {kw:burst} on {kw:impact} with another enemy, a wall or a column. Existing {kw:push|Pushes} and {kw:pull|Pulls} can also arm a Launch."))
+	lines.append(KEYWORDS.format_text("Bosses and Apex enemies compress and {kw:burst} in place, preserving their attacks. Each enemy can {kw:launch|Launch} once every 1.1s. Level 1 deals 100% of {kw:damage_stat} in radius 70; level 2 raises these to 140% and 95."))
 	lines.append("")
 	lines.append("[b]Sovereign's Double[/b]")
-	lines.append("Completing a dash, Blast Drive recoil or Razor Orbit leaves one shade for 4 seconds. It appears where you last made contact during that movement, or where you started if there was no contact.")
-	lines.append("Your next deliberate melee attack or charged blast repeats from the shade at 55% damage. Attack reach and strike bonuses carry through, including Razor Wind, Execution Edge and Blood Vow. Level 2 allows two echoes. Further movement replaces the shade; automatic orbit cuts leave its echoes ready.")
-	lines.append("Damaging dash effects help place the shade among enemies. Effects that refresh your dash give you another chance to place it.")
-	lines.append("Place the shade so its echo reaches foes your own strike misses. Echoes deal damage and can activate compatible damage-triggered effects, following their own limits. An echo cannot create another shade, launch a foe, or replay other attack effects.")
+	lines.append(KEYWORDS.format_text("Completing a {kw:dash}, {kw:recoil} or {kw:orbit} leaves one shade for 4s. It appears where you last made contact during that movement, falling back to the departure position."))
+	lines.append(KEYWORDS.format_text("Your next deliberate {kw:attack} or charged blast {kw:echo|Echoes} from the shade at 55% damage. Its shape and scaled bonuses carry through; actual-target conditions apply once. Level 2 allows two Echoes. Further movement replaces the shade; automatic {kw:orbit} cuts leave its Echoes ready."))
+	lines.append(KEYWORDS.format_text("Damaging {kw:dash} effects help place the shade among enemies. Effects that refresh Dash offer another placement."))
+	lines.append(KEYWORDS.format_text("Place the shade so its {kw:echo} reaches foes your own strike misses. Echoes deal damage and can activate compatible effects under their original action limits. They cannot create a shade, {kw:launch|Launch} a foe, or replay {kw:attack_hit|attack hit} effects."))
 	return "\n".join(lines)
 
 
 static func _build_keywords_section_bbcode() -> String:
 	var lines: Array[String] = [_section_title_bbcode("Build Keywords")]
-	lines.append("[b]Attack[/b]: the deliberate action performed with your Attack control (left mouse by default). An attack hit means the attack connects with an enemy. Effects triggered by using Attack and effects triggered by connecting an attack are separate.")
-	lines.append("[b]Dealing damage[/b]: damaging an enemy through any source, including Attacks, dash effects, projectiles, Fields and Echoes. Each receiving Arcana states its own counting and repeat limits. Damaging a foe with a trail does not perform another Attack.")
-	lines.append("[b]Dash[/b]: a dash can create damage, fields or other effects. Each power specifies whether it activates during the dash, on contact or when the movement ends.")
-	lines.append("[b]Electric[/b]: lightning damage. A rule that reacts to dealing Electric damage accepts matching damage from any source, under its own limits. Electric describes the damage type; Attack, Dash and Field describe how an effect is created.")
-	lines.append("[b]Slow[/b]: reduced enemy movement for a limited time. Any source of Slow, including a teammate's, can prepare a foe for effects that benefit from Slowed targets. Each effect defines when it checks that status.")
-	lines.append("[b]Mark[/b]: a temporary effect attached to a target. Its power defines the benefit, duration and how it is consumed. A Mark does not itself apply Slow.")
-	lines.append("[b]Field[/b]: a persistent area. Each power defines its shape, duration, damage cadence and overlap rules.")
-	lines.append("[b]Echo[/b]: an attack's shape and damage bonuses repeated from a second position at reduced strength. It deals damage without performing another Attack, repeating movement, spending resources again or replaying other on-attack effects.")
+	var ids: Array[String] = []
+	for id in KEYWORDS.KEYWORDS:
+		ids.append(id)
+	lines.append(KEYWORDS.definitions_bbcode(ids))
 	lines.append("")
 	lines.append("[b]Static Wake[/b]")
-	lines.append("A normal Dash leaves a Field of Electric damage. No attack is needed. Up to two trails can remain; a third replaces the oldest. Overlapping trails share their damage tick, so crossing new ground covers more enemies without stacking damage on one spot. Walking, recoil and orbiting do not draw extra trails.")
-	lines.append("Damage is applied every 0.25 seconds. Cards show the damage rate per second, before enemy defenses. A ribbon's lifetime begins when it first draws; finishing or extending the dash does not refresh that lifetime or cause an explosion.")
-	lines.append("Level 2 increases damage, lifetime and radius. Level 3 also applies Slow after damage, preparing enemies for effects that benefit from Slowed targets afterward.")
+	lines.append(KEYWORDS.format_text("A normal {kw:dash} leaves an {kw:electric} {kw:field}. No {kw:attack} is needed. Up to two trails remain; a third replaces the oldest. Overlapping trails share one damage clock. Walking, {kw:recoil} and {kw:orbit} create no extra trails."))
+	lines.append(KEYWORDS.format_text("Damage settles every 0.25s, scaled by actual contact time. Cards show damage per second before defenses. A trail's lifetime starts when it first draws; extending or finishing the Dash does not refresh it or cause a {kw:burst}. Level 3 applies {kw:slow} after damage."))
 	lines.append("")
 	lines.append("[b]Hunter's Snare[/b]")
-	lines.append("Your attack hits Slow enemies. Attack an already Slowed foe for bonus damage. Slow from another power or a teammate also prepares the target.")
-	lines.append("At level 2, the bonus also applies to Static Wake, Rupture Wave, Riftpunch shockwaves, Voidfire explosions and Fracture Field. At level 3, all Slows you apply last twice as long, including those from your other Arcana.")
+	lines.append(KEYWORDS.format_text("{kw:attack_hit|Attack hits} apply {kw:slow}. Level 1 increases {kw:attack} damage against already {kw:slow|Slowed} foes by 20%. Level 2 increases all your damage against them by 25%; level 3 raises this to 30% and doubles all Slow durations you apply. Prismatic raises the damage bonus to 45%."))
+	lines.append(KEYWORDS.format_text("The check happens before damage and newly applied {kw:slow}. Any player's Slow can prepare a foe. A new Slow does not retroactively increase the damage that first applied it."))
+	lines.append("")
+	lines.append("[b]Marks and resonance[/b]")
+	lines.append(KEYWORDS.format_text("{kw:mark} increases all player damage against that foe. The strongest active Mark applies; timed applications retain separate expiry and do not add together. Damage does not spend a Mark."))
+	lines.append(KEYWORDS.format_text("Wraithstep applies {kw:mark} on {kw:dash}: 15%/20%/25%, or 30% Prismatic. At level 2, an {kw:attack_hit} against an already {kw:mark|Marked} foe releases one {kw:burst} per Attack. Level 3 continues through up to three more Marked foes, without visiting one twice."))
+	lines.append(KEYWORDS.format_text("Eclipse Mark applies {kw:mark} around a {kw:kill}: 15%/20%/25% for 4/5/6 seconds. Prismatic gives 30% and preserves its longer duration and larger radius."))
+	lines.append(KEYWORDS.format_text("Dread Resonance {kw:attack_hit|attack hits} apply a 10% {kw:mark} for 3s and build one stack per foe per Attack. Each stack adds 2 percentage points to your damage against that {kw:mark|Marked} foe, up to 8/10/12 stacks. Prismatic gives 2.4 points and 15 stacks. Changing targets or a Mark expiring does not erase stacks; enemy death or leaving the room does."))
 	lines.append("")
 	lines.append("[b]Storm Crown[/b]")
-	lines.append("Dealing damage adds charge. Levels 1, 2 and 3 discharge at 3, 2 and 1 charges, sending lightning from the triggering foe to up to 2, 3 and 4 others. Level 2 adds one extra jump through Slow. Prismatic improves the existing values once.")
-	lines.append("Crown counts each foe once per attack, dash or effect activation. Later trail ticks, returning blades and echoes from that action share the same count, and that action can discharge Crown once. A new attack or dash can count the same foe again. Each lightning chain visits a foe once; Crown's own lightning and effects caused by it cannot charge another discharge.")
-	lines.append("Crown charges from damage of any type, including Attacks, damaging dash effects, projectiles, Fields and Echoes; Electric damage is not required. From level 2, a chain that starts from or reaches an already Slowed foe gains one extra jump. Damage that first applies Slow does not earn this bonus from that foe. Each chain gains at most one extra jump, regardless of how many Slowed foes it reaches.")
+	lines.append(KEYWORDS.format_text("{kw:damage|Dealing damage} charges {kw:electric} chain lightning. Levels 1/2/3 discharge at 3/2/1 charges and jump to up to 2/3/4 other foes. {kw:attack|Attacks}, {kw:dash} effects, {kw:projectile|Projectiles}, {kw:field|Fields} and {kw:echo|Echoes} can contribute; Electric damage is not required."))
+	lines.append(KEYWORDS.format_text("Count each foe once per originating action, with one discharge per action. Later trail ticks, blade returns and {kw:echo|Echoes} share that action's count. Crown and its descendants cannot recharge it. From level 2, reaching an already {kw:slow|Slowed} foe grants one extra jump per chain; newly applied Slow does not count."))
 	lines.append("")
-	lines.append("[b]Attack-effect exceptions[/b]")
-	lines.append("Farline Volley's level-3 dash burst repeats attack-hit effects, including combo charges, shockwaves and mark consumption. Ordinary trail, orbit, returning-blade and echo damage does not repeat those effects. Riftpunch applies to melee and charged Blast connections; Razor Wind alone does not consume its finisher.")
+	lines.append("[b]Conditional Boons[/b]")
+	lines.append(KEYWORDS.format_text("First Strike, Blood Pact and Severing Edge add to the qualifying {kw:damage_stat} basis. Percentages, {kw:field} contact time and {kw:echo} strength scale that bonus too. Each target's conditions are checked once before damage; a copied effect does not receive the same bonus twice."))
 	return "\n".join(lines)
 
 

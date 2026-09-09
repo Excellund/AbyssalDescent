@@ -11,6 +11,9 @@ const ASCENSION_REGISTRY := preload("res://scripts/progression/ascension_modifie
 const META_PROGRESS_STORE := preload("res://scripts/meta_progress_store.gd")
 const ASCENSION_PANEL_SCRIPT := preload("res://scripts/ui/ascension/ascension_panel.gd")
 const FORSWORN_TIER_ID := 3
+## Increment when authoritative combat descriptors/status contracts become incompatible.
+const COMBAT_PROTOCOL_VERSION := 1
+const COMBAT_PROTOCOL_MESSAGE := "Incompatible combat version. Use the same playtest build."
 
 signal leave_lobby_requested
 
@@ -151,7 +154,7 @@ func _ready() -> void:
 	else:
 		## CLIENT: ask host for the authoritative roster (host owns join order).
 		if _client_can_send_rpcs():
-			_request_lobby_roster.rpc_id(1)
+			_request_lobby_roster.rpc_id(1, COMBAT_PROTOCOL_VERSION)
 
 	_broadcast_local_player_name()
 	
@@ -187,7 +190,7 @@ func _process(_delta: float) -> void:
 				var idx := _consume_next_join_index()
 				_broadcast_peer_register.rpc(int(peer_id), idx)
 			elif _client_can_send_rpcs():
-				_request_lobby_roster.rpc_id(1)
+				_request_lobby_roster.rpc_id(1, COMBAT_PROTOCOL_VERSION)
 				break
 	
 	## Check if we have stale peers that disconnected without firing signal
@@ -711,6 +714,9 @@ func _on_difficulty_selected(index: int) -> void:
 ## Called when local player clicks Ready.
 func _on_ready_button_pressed() -> void:
 	_play_sfx_click()
+	if not _peer_protocol_matches(peer_state, 1):
+		_show_protocol_mismatch()
+		return
 	if not bool(multiplayer_session_manager.is_host()) and not _client_can_send_rpcs():
 		status_label.text = "Still connecting to host..."
 		return
@@ -740,7 +746,7 @@ func _on_peer_connected(peer_id: int) -> void:
 	else:
 		## Client: rely on host's roster broadcast for join order; just request to ensure sync.
 		if _client_can_send_rpcs():
-			_request_lobby_roster.rpc_id(1)
+			_request_lobby_roster.rpc_id(1, COMBAT_PROTOCOL_VERSION)
 	_update_player_list()
 
 
@@ -794,7 +800,7 @@ func _on_session_joined(_session_id: String) -> void:
 	if not bool(multiplayer_session_manager.is_host()):
 		print("[Lobby] This is a CLIENT peer. Requesting lobby roster from host.")
 		if _client_can_send_rpcs():
-			_request_lobby_roster.rpc_id(1)
+			_request_lobby_roster.rpc_id(1, COMBAT_PROTOCOL_VERSION)
 	else:
 		print("[Lobby] This is a HOST peer")
 	_broadcast_local_player_name()
@@ -844,6 +850,11 @@ func _update_debug_status() -> void:
 
 
 func _update_player_status() -> void:
+	if not _roster_protocol_matches(peer_state, peer_state.keys()):
+		_show_protocol_mismatch()
+		return
+	if ready_button != null and not local_is_ready:
+		ready_button.disabled = false
 	if bool(multiplayer_session_manager.is_host()):
 		status_label.text = ""
 		return
@@ -879,6 +890,7 @@ func _ensure_local_peer_state(default_character_id: String = "bastion") -> void:
 		print("[Lobby] Local peer_state already exists, no change needed")
 	peer_state[local_peer_id]["player_name"] = local_player_name
 	peer_state[local_peer_id]["player_uuid"] = local_player_uuid
+	peer_state[local_peer_id]["combat_protocol"] = COMBAT_PROTOCOL_VERSION
 
 
 func _consume_next_join_index() -> int:
@@ -909,7 +921,7 @@ func _broadcast_peer_register(peer_id: int, join_index: int) -> void:
 
 ## RPC: Client -> Host. Request the current authoritative roster.
 @rpc("reliable", "any_peer")
-func _request_lobby_roster() -> void:
+func _request_lobby_roster(combat_protocol: int = 0) -> void:
 	if not bool(multiplayer_session_manager.is_host()):
 		return
 	var tree := _tree_or_null()
@@ -922,7 +934,12 @@ func _request_lobby_roster() -> void:
 	if sender_peer_id not in peer_state:
 		var idx := _consume_next_join_index()
 		_broadcast_peer_register.rpc(sender_peer_id, idx)
-	_sync_lobby_roster.rpc_id(sender_peer_id, peer_state.duplicate(true))
+	peer_state[sender_peer_id]["combat_protocol"] = combat_protocol
+	if combat_protocol != COMBAT_PROTOCOL_VERSION:
+		peer_state[sender_peer_id]["is_ready"] = false
+		_explicit_ready_peers.erase(sender_peer_id)
+	_sync_lobby_roster.rpc(peer_state.duplicate(true))
+	_update_player_status()
 	_sync_room_code.rpc_id(sender_peer_id, String(multiplayer_session_manager.room_code))
 	_broadcast_difficulty.rpc_id(sender_peer_id, selected_difficulty_tier)
 	_broadcast_ascension_loadout.rpc_id(sender_peer_id, selected_ascension_loadout)
@@ -942,6 +959,7 @@ func _sync_lobby_roster(roster: Dictionary) -> void:
 			"player_name": String(entry.get("player_name", existing.get("player_name", "Player"))),
 			"player_uuid": String(entry.get("player_uuid", existing.get("player_uuid", ""))).strip_edges().to_lower(),
 			"join_index": join_index,
+			"combat_protocol": int(entry.get("combat_protocol", 0)),
 		}
 		if join_index >= _next_join_index:
 			_next_join_index = join_index + 1
@@ -1147,6 +1165,9 @@ func _request_ready_state(is_ready: bool) -> void:
 	var sender_peer_id := tree.get_multiplayer().get_remote_sender_id()
 	if sender_peer_id <= 0:
 		return
+	if is_ready and not _peer_protocol_matches(peer_state, sender_peer_id):
+		_show_protocol_mismatch()
+		return
 	if is_ready:
 		_explicit_ready_peers[sender_peer_id] = true
 	_broadcast_ready_state.rpc(sender_peer_id, is_ready)
@@ -1181,6 +1202,9 @@ func _check_all_ready() -> void:
 			## Peer connected at the network layer but our authoritative
 			## peer_register RPC hasn't been processed yet. Defer.
 			return
+		if not _peer_protocol_matches(peer_state, int(peer_id)):
+			_show_protocol_mismatch()
+			return
 		if not state.get("is_ready", false):
 			return  ## Not all ready yet
 		## Extra guard: this peer must have explicitly pressed Ready via button
@@ -1205,6 +1229,9 @@ func _launch_main_game() -> void:
 	if not bool(multiplayer_session_manager.is_host()):
 		return
 
+	if not _roster_protocol_matches(peer_state, multiplayer_session_manager.get_peer_ids()):
+		_show_protocol_mismatch()
+		return
 	print("[LobbyController] All players ready. Loading main game...")
 	var host_peer_id := local_peer_id
 	var session_identifier := String(multiplayer_session_manager.session_id)
@@ -1228,6 +1255,9 @@ func _start_game(host_peer_id: int, session_identifier: String, difficulty_tier:
 
 
 func _perform_start_game(host_peer_id: int, session_identifier: String, difficulty_tier: int, synced_peer_state: Dictionary, ascension_loadout: Array = []) -> void:
+	if not _peer_protocol_matches(synced_peer_state, host_peer_id) or not _roster_protocol_matches(synced_peer_state, multiplayer_session_manager.get_peer_ids()):
+		_show_protocol_mismatch()
+		return
 	peer_state = synced_peer_state.duplicate(true)
 	var tree := _tree_or_null()
 	if tree == null:
@@ -1664,3 +1694,24 @@ void fragment() {
 	var shader_material := ShaderMaterial.new()
 	shader_material.shader = shader
 	return shader_material
+
+
+static func _peer_protocol_matches(roster: Dictionary, peer_id: int) -> bool:
+	var entry: Variant = roster.get(peer_id, roster.get(str(peer_id)))
+	return entry is Dictionary and entry.get("combat_protocol") is int and int(entry.combat_protocol) == COMBAT_PROTOCOL_VERSION
+
+
+static func _roster_protocol_matches(roster: Dictionary, peers: Array) -> bool:
+	if peers.is_empty():
+		return false
+	for peer_id in peers:
+		if not _peer_protocol_matches(roster, int(peer_id)):
+			return false
+	return true
+
+
+func _show_protocol_mismatch() -> void:
+	if status_label != null:
+		status_label.text = COMBAT_PROTOCOL_MESSAGE
+	if ready_button != null:
+		ready_button.disabled = true
