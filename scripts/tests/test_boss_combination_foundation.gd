@@ -29,6 +29,10 @@ class TestOwner extends CharacterBody2D:
 		cues.append({"name": event_name, "payload": payload.duplicate(true)})
 	func _is_local_control_owner() -> bool:
 		return true
+	func _capture_combat_action(_kind: String) -> Dictionary:
+		# This fixture isolates launch ownership; interaction roots are exercised
+		# by the production Player and shared-engine integration suites.
+		return {}
 
 var checks: int = 0
 var failures: Array[String] = []

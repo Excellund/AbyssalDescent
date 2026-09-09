@@ -49,7 +49,7 @@ class TestWorld extends Node:
 		damage_total += amount
 		damage_events += 1
 
-	func request_enemy_impulse_from_client(enemy_id: int, impulse: Vector2, _suppress_launch: bool = false) -> void:
+	func request_enemy_impulse_from_client(enemy_id: int, impulse: Vector2, _suppress_launch: bool = false, _interaction: Dictionary = {}) -> void:
 		impulse_requests.append({"enemy_id": enemy_id, "impulse": impulse})
 
 class CombatPlayer extends "res://scripts/player.gd":
@@ -63,6 +63,10 @@ class CombatPlayer extends "res://scripts/player.gd":
 		upgrade_system = UPGRADES.new()
 		add_child(upgrade_system)
 		upgrade_system.initialize(self, null, registry)
+		player_id = 1
+		add_to_group("combat_players")
+		_ensure_combat_interactions()
+		_ensure_static_wake()
 
 	func notify_enemy_killed(kill_position: Vector2 = Vector2.INF) -> void:
 		kill_notifications += 1
@@ -199,12 +203,12 @@ func _test_derived_arc_and_descriptions(registry: Node) -> void:
 	_check(phantom_text.contains(str(player.get("phantom_step_damage"))), "Phantom Step description displays applied damage")
 	_check(not phantom_text.contains("0%"), "Phantom Step description does not show missing ratio as zero")
 	upgrades.apply_trial_power("static_wake")
-	_check(upgrades.get_power_current_description("static_wake").contains("45%"), "Static Wake description displays real ratio")
+	_check(upgrades.get_power_current_description("static_wake").contains("270%"), "Static Wake description displays real ratio")
 	upgrades.apply_trial_power("static_wake")
 	upgrades.apply_trial_power("static_wake")
-	_check(upgrades.get_trial_power_card_description("static_wake").contains("105%"), "Static Wake Prismatic preview includes its damage increase")
+	_check(upgrades.get_trial_power_card_description("static_wake").contains("630%"), "Static Wake Prismatic preview includes its damage increase")
 	upgrades.apply_trial_power("static_wake")
-	_check(upgrades.get_power_current_description("static_wake").contains("105%"), "Static Wake Prismatic current description retains increase")
+	_check(upgrades.get_power_current_description("static_wake").contains("630%"), "Static Wake Prismatic current description retains increase")
 	upgrades.free()
 	player.free()
 
@@ -362,12 +366,14 @@ func _test_combat_hooks() -> void:
 				player.notify_enemy_killed(enemy.global_position)
 				activated = player.dash_cooldown_left == 0.0
 			"static_wake":
-				player.static_wake_trails = [{"pos": enemy.global_position, "life": 1.0}]
-				player._update_static_wake_trails(0.1)
+				player.static_wake_controller.begin_dash(player.new_combat_action("dash"))
+				player.static_wake_controller.append_segment(enemy.global_position - Vector2.RIGHT, enemy.global_position)
+				player.static_wake_controller.end_dash()
+				player.static_wake_controller.tick(0.25)
 				activated = enemy.get_current_health() < before
 			"storm_crown":
 				player.storm_crown_hit_counter = player.storm_crown_proc_every - 1
-				player._apply_storm_crown_hit(enemy.global_position, enemy.get_instance_id(), 20)
+				player.DAMAGEABLE.apply_damage(enemy, 20, player.INTERACTION_REGISTRY.damage_context(player.new_combat_action("melee"), "melee"))
 				activated = secondary.get_current_health() < secondary_before
 			"wraithstep":
 				player._apply_wraithstep_marks_during_dash(Vector2.ZERO, enemy.global_position)

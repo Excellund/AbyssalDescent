@@ -48,7 +48,7 @@ class TestWorld extends Node2D:
 		damage_events.append({"amount": amount, "peer": peer, "killed": killed, "enemy": enemy})
 	func request_enemy_damage_from_client(enemy_id: int, amount: int, context: Dictionary = {}) -> void:
 		damage_requests.append({"enemy": enemy_id, "amount": amount, "context": context})
-	func request_enemy_impulse_from_client(enemy_id: int, impulse: Vector2, suppress_launch: bool = false) -> void:
+	func request_enemy_impulse_from_client(enemy_id: int, impulse: Vector2, suppress_launch: bool = false, _interaction: Dictionary = {}) -> void:
 		impulse_requests.append({"enemy": enemy_id, "impulse": impulse, "suppressed": suppress_launch})
 
 var checks := 0

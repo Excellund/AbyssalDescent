@@ -54,6 +54,7 @@ var _outgoing_health_sequence_by_peer: Dictionary = {}  ## peer_id -> last emitt
 var _last_applied_health_sequence_by_sender: Dictionary = {}  ## (sender_peer_id, target_peer_id) -> last applied health sequence
 var _cue_event_dispatcher: PlayerCueEventDispatcher = PLAYER_CUE_EVENT_DISPATCHER_SCRIPT.new()
 var _cue_sync_queue := PLAYER_CUE_SYNC_QUEUE_SCRIPT.new()
+var _interaction_epoch_announcements: Dictionary = {}
 
 
 func _ready() -> void:
@@ -89,6 +90,7 @@ func _process(delta: float) -> void:
 ## Register a player node for a specific peer.
 func register_player(peer_id: int, player_node: Node) -> void:
 	player_nodes[peer_id] = player_node
+	_apply_interaction_epoch_to_player(peer_id)
 	_remote_position_samples.erase(peer_id)
 	_last_received_transform_sequence.erase(peer_id)
 	_last_transform_sent_at.erase(peer_id)
@@ -120,6 +122,7 @@ func reset_remote_player_position(peer_id: int, position: Vector2) -> void:
 ## Unregister a player node.
 func unregister_player(peer_id: int) -> void:
 	player_nodes.erase(peer_id)
+	_interaction_epoch_announcements.erase(peer_id)
 	_last_sync_positions.erase(peer_id)
 	_last_sync_rotations.erase(peer_id)
 	_remote_target_positions.erase(peer_id)
@@ -589,30 +592,33 @@ func _apply_external_slow_local(target_peer_id: int, duration: float, mult: floa
 
 
 ## Host-authoritative: dispatch an enemy-killed notification to the player who got the kill credit.
-func send_enemy_killed(target_peer_id: int, kill_pos: Vector2, suppress_launch: bool = false, kill_proc_suppression: int = 0) -> void:
+func send_enemy_killed(target_peer_id: int, kill_pos: Vector2, suppress_launch: bool = false, kill_proc_suppression: int = 0, interaction: Dictionary = {}) -> void:
 	suppress_launch = suppress_launch or DAMAGEABLE.is_launch_suppressed()
 	kill_proc_suppression = DAMAGEABLE.sanitize_kill_proc_suppression(kill_proc_suppression) | DAMAGEABLE.get_kill_proc_suppression()
+	if interaction.is_empty():
+		interaction = DAMAGEABLE.current_interaction_context()
 	if multiplayer_session_manager == null or not bool(multiplayer_session_manager.is_session_connected()):
-		_apply_enemy_killed_local(target_peer_id, kill_pos, suppress_launch, kill_proc_suppression)
+		_apply_enemy_killed_local(target_peer_id, kill_pos, suppress_launch, kill_proc_suppression, interaction)
 		return
 	if not bool(multiplayer_session_manager.should_broadcast()):
 		return
 	if target_peer_id == local_peer_id:
-		_apply_enemy_killed_local(target_peer_id, kill_pos, suppress_launch, kill_proc_suppression)
+		_apply_enemy_killed_local(target_peer_id, kill_pos, suppress_launch, kill_proc_suppression, interaction)
 		return
-	_rpc_apply_enemy_killed.rpc_id(target_peer_id, target_peer_id, kill_pos, suppress_launch, kill_proc_suppression)
+	_rpc_apply_enemy_killed.rpc_id(target_peer_id, target_peer_id, kill_pos, suppress_launch, kill_proc_suppression, interaction)
 
 
 @rpc("authority", "call_remote", "reliable")
-func _rpc_apply_enemy_killed(target_peer_id: int, kill_pos: Vector2, suppress_launch: bool = false, kill_proc_suppression: int = 0) -> void:
-	_apply_enemy_killed_local(target_peer_id, kill_pos, suppress_launch, kill_proc_suppression)
+func _rpc_apply_enemy_killed(target_peer_id: int, kill_pos: Vector2, suppress_launch: bool = false, kill_proc_suppression: int = 0, interaction: Dictionary = {}) -> void:
+	_apply_enemy_killed_local(target_peer_id, kill_pos, suppress_launch, kill_proc_suppression, interaction)
 
 
-func _apply_enemy_killed_local(target_peer_id: int, kill_pos: Vector2, suppress_launch: bool = false, kill_proc_suppression: int = 0) -> void:
+func _apply_enemy_killed_local(target_peer_id: int, kill_pos: Vector2, suppress_launch: bool = false, kill_proc_suppression: int = 0, interaction: Dictionary = {}) -> void:
 	var player_node := _get_player_node(target_peer_id)
 	if player_node == null:
 		return
 	if player_node.has_method("notify_enemy_killed"):
+		var previous_interaction := DAMAGEABLE.begin_interaction_scope(interaction)
 		var previous_kill_scope := DAMAGEABLE.begin_kill_proc_scope(kill_proc_suppression)
 		if suppress_launch:
 			DAMAGEABLE.begin_secondary_scope()
@@ -620,3 +626,38 @@ func _apply_enemy_killed_local(target_peer_id: int, kill_pos: Vector2, suppress_
 		if suppress_launch:
 			DAMAGEABLE.end_secondary_scope()
 		DAMAGEABLE.end_kill_proc_scope(previous_kill_scope)
+		DAMAGEABLE.end_interaction_scope(previous_interaction)
+
+## Send cancellation immediately, before a later damage RPC can use old roots.
+func broadcast_interaction_epoch(peer_id: int, epoch: int, run: String, room: int) -> bool:
+	var peer := multiplayer.multiplayer_peer
+	if peer == null or peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED or peer_id != multiplayer.get_unique_id():
+		return false
+	if epoch <= 0 or run.is_empty() or run != GameStateReplicationService.get_current_run_sync_token() or room != EnemyReplicationService._current_room_sync_id():
+		return false
+	_sync_interaction_epoch.rpc(peer_id, epoch, run, room)
+	return true
+
+@rpc("any_peer", "call_local", "reliable")
+func _sync_interaction_epoch(peer_id: int, epoch: int, run: String, room: int) -> void:
+	var sender := multiplayer.get_remote_sender_id()
+	if sender == 0:
+		sender = multiplayer.get_unique_id()
+	if sender != peer_id or not MultiplayerSessionManager.get_peer_ids().has(sender) or epoch <= 0:
+		return
+	if run.is_empty() or run != GameStateReplicationService.get_current_run_sync_token() or room != EnemyReplicationService._current_room_sync_id():
+		return
+	var previous: Dictionary = _interaction_epoch_announcements.get(peer_id, {})
+	if previous.get("run") == run and previous.get("room") == room and epoch <= int(previous.get("epoch", 0)):
+		return
+	_interaction_epoch_announcements[peer_id] = {"epoch": epoch, "run": run, "room": room}
+	_apply_interaction_epoch_to_player(peer_id)
+
+func _apply_interaction_epoch_to_player(peer_id: int) -> void:
+	var entry: Dictionary = _interaction_epoch_announcements.get(peer_id, {})
+	var player_node: Variant = player_nodes.get(peer_id)
+	if entry.is_empty() or not is_instance_valid(player_node):
+		return
+	var controller: Node = player_node.get("combat_interactions")
+	if is_instance_valid(controller):
+		controller.accept_epoch(int(entry.epoch), String(entry.run), int(entry.room))

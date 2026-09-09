@@ -2,6 +2,7 @@ extends Node2D
 ## Owns movement shades and launch rewards. Echoes and impacts deliberately use
 ## secondary damage, so neither can create another echo, launch, or primary hit.
 
+const INTERACTIONS := preload("res://scripts/shared/combat_interaction_registry.gd")
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const LAUNCH := preload("res://scripts/enemy_launch_state.gd")
 const ENEMY_BASE := preload("res://scripts/enemy_base.gd")
@@ -75,7 +76,7 @@ func repeat_strike(direction: Vector2, shapes: Array[Dictionary]) -> void:
 			var hit_position: Vector2 = hit.get("hit_position", origin)
 			if enemy == null or hit_position.distance_to(origin) <= inner:
 				continue
-			DAMAGEABLE.apply_damage(enemy, amount, {"attack_type": "sovereigns_double", "secondary": true, "is_ground_attack": true, "attack_origin": origin})
+			DAMAGEABLE.apply_damage(enemy, amount, INTERACTIONS.damage_context(shape.get("interaction", {}), "sovereigns_double", {"secondary": true, "is_ground_attack": true, "attack_origin": origin, "echo_source": source}))
 			if generation != _cancel_generation:
 				return
 	_broadcast_shade()
@@ -89,7 +90,7 @@ func launch_enemy(enemy: ENEMY_BASE, impulse: Vector2, source_peer: int) -> void
 	var amount := maxi(1, int(round(float(player.damage) * (1.0 + 0.4 * (stacks - 1)))))
 	amount = int(player._apply_objective_mutator_damage_mult(amount))
 	var radius := 70.0 + 25.0 * (stacks - 1)
-	var callback := _impact.bind(amount, radius, source_peer, impulse.normalized())
+	var callback := _impact.bind(amount, radius, source_peer, impulse.normalized(), player._capture_combat_action("ruinous_impact"))
 	if state.arm(impulse, DAMAGEABLE.is_displacement_immune(enemy), source_peer, player.get_instance_id(), callback):
 		if not state.compression:
 			DAMAGEABLE.notify_player_displacement(enemy, impulse)
@@ -98,7 +99,7 @@ func launch_enemy(enemy: ENEMY_BASE, impulse: Vector2, source_peer: int) -> void
 		if serial > 0:
 			state.ended.connect(EnemyReplicationService.finish_ruinous_launch.bind(serial), CONNECT_ONE_SHOT)
 
-func _impact(position: Vector2, amount: int, radius: float, source_peer: int, direction: Vector2 = Vector2.RIGHT) -> void:
+func _impact(position: Vector2, amount: int, radius: float, source_peer: int, direction: Vector2 = Vector2.RIGHT, interaction: Dictionary = {}) -> void:
 	if not is_instance_valid(player) or not bool(player.combat_damage_enabled):
 		return
 	EnemyReplicationService.broadcast_ruinous_burst(position, radius, direction)
@@ -109,7 +110,7 @@ func _impact(position: Vector2, amount: int, radius: float, source_peer: int, di
 		var enemy := node as Node2D
 		if enemy.global_position.distance_to(position) > radius:
 			continue
-		DAMAGEABLE.apply_damage(enemy, amount, {"attack_type": "ruinous_impact", "secondary": true, "is_ground_attack": true, "attack_origin": position}, source_peer)
+		DAMAGEABLE.apply_damage(enemy, amount, INTERACTIONS.damage_context(interaction, "ruinous_impact", {"secondary": true, "is_ground_attack": true, "attack_origin": position}), source_peer)
 		if generation != _cancel_generation:
 			return
 

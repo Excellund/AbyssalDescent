@@ -2,7 +2,6 @@ extends CharacterBody2D
 
 const HEALTH_STATE_SCRIPT := preload("res://scripts/health_state.gd")
 const PLAYER_FEEDBACK_SCRIPT := preload("res://scripts/player_feedback.gd")
-const STATIC_WAKE_TRAIL_RENDERER_SCRIPT := preload("res://scripts/static_wake_trail_renderer.gd")
 const ARCANA_MOTION_SCRIPT := preload("res://scripts/arcana_motion_controller.gd")
 const RETURNING_CRESCENT_SCRIPT := preload("res://scripts/returning_crescent_controller.gd")
 const BOSS_COMBINATIONS_SCRIPT := preload("res://scripts/boss_combination_controller.gd")
@@ -14,9 +13,12 @@ const ENEMY_BASE := preload("res://scripts/enemy_base.gd")
 const ENEMY_BASE_SCRIPT := preload("res://scripts/enemy_base.gd")
 const PLAYER_IDENTITY_SILHOUETTE := preload("res://scripts/core/player_identity_silhouette.gd")
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
+const COMBAT_INTERACTIONS := preload("res://scripts/combat_interaction_controller.gd")
+const INTERACTION_REGISTRY := preload("res://scripts/shared/combat_interaction_registry.gd")
+const STATIC_WAKE_CONTROLLER := preload("res://scripts/static_wake_controller.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const PLAYER_REPLICATION_SERVICE_SCRIPT := preload("res://scripts/player_replication_service.gd")
-const RUN_SNAPSHOT_VERSION := 1
+const RUN_SNAPSHOT_VERSION := 2
 const DEFAULT_DASH_SPEED: float = 720.0
 const DEFAULT_VOIDFIRE_OVERHEAT_MOVE_MULT: float = 0.65
 const EXECUTION_EDGE_PROC_DISPLAY_HOLD: float = 0.24
@@ -214,7 +216,12 @@ var encounter_input_frozen: bool = false
 
 var health_state
 var player_feedback: PLAYER_FEEDBACK_SCRIPT
-var static_wake_trail_renderer: STATIC_WAKE_TRAIL_RENDERER_SCRIPT
+var static_wake_controller: STATIC_WAKE_CONTROLLER
+var combat_interactions: COMBAT_INTERACTIONS
+var _dash_interaction: Dictionary = {}
+var _convergence_interaction: Dictionary = {}
+var _collecting_hit_slows: bool = false
+var _pending_hit_slows: Array[Dictionary] = []
 var upgrade_system: UPGRADE_SYSTEM_SCRIPT
 var arcana_motion: ARCANA_MOTION_SCRIPT
 var returning_crescent: RETURNING_CRESCENT_SCRIPT
@@ -331,11 +338,6 @@ var wraithstep_mark_splash_ratio: float = 0.48
 var phantom_step_hit_ids: Dictionary = {}
 var phantom_step_ghost_positions: Array[Dictionary] = []
 var phantom_step_ghost_emit_cd: float = 0.0
-var static_wake_trails: Array[Dictionary] = []
-var static_wake_trail_emit_cooldown: float = 0.0
-var static_wake_dots_at_default_dash: int = 4
-var static_wake_last_emit_position: Vector2 = Vector2.ZERO
-var static_wake_has_last_emit_position: bool = false
 var void_dash_reset_pulse_left: float = 0.0
 var void_dash_reset_pulse_duration: float = 0.28
 var storm_crown_hit_counter: int = 0
@@ -465,17 +467,17 @@ var combo_relay_stack_window: float = 2.8
 var combo_relay_max_stacks: int = 4
 var combo_relay_damage_per_stack: float = 0.05
 var combo_relay_speed_per_stack: float = 0.05
-# Relay Boost — on-kill speed surge
+# Relay Boost â€” on-kill speed surge
 var relay_boost_speed_left: float = 0.0
 const RELAY_BOOST_SPEED_MULT: float = 0.28
 const RELAY_BOOST_DURATION: float = 1.4
-# Node Shield — proximity-based damage resist
+# Node Shield â€” proximity-based damage resist
 var node_shield_resist: float = 0.0
 const NODE_SHIELD_RESIST_PER_ENEMY: float = 0.06
 const NODE_SHIELD_RADIUS: float = 180.0
 const NODE_SHIELD_MAX_RESIST: float = 0.30
 const NODE_SHIELD_LERP_RATE: float = 4.0
-# Overcharge — kill-chain discharge
+# Overcharge â€” kill-chain discharge
 var overcharge_kill_stacks: int = 0
 var overcharge_stack_timer: float = 0.0
 var overcharge_is_charged: bool = false
@@ -498,7 +500,7 @@ var last_damage_breakdown: Dictionary = {
 	"final_damage": 0
 }
 
-# Character visual identity — set via apply_character_package(); defaults match the shared palette
+# Character visual identity â€” set via apply_character_package(); defaults match the shared palette
 var player_body_color: Color = ENEMY_BASE.COLOR_PLAYER_BODY
 var player_core_color: Color = ENEMY_BASE.COLOR_PLAYER_CORE
 var player_glow_color: Color = ENEMY_BASE.COLOR_PLAYER_GLOW
@@ -506,7 +508,7 @@ var player_speed_arc_color: Color = ENEMY_BASE.COLOR_PLAYER_SPEED_ARC
 var player_dash_phase_color: Color = ENEMY_BASE.COLOR_PLAYER_DASH_PHASE
 var player_dash_streak_color: Color = ENEMY_BASE.COLOR_PLAYER_DASH_STREAK
 
-# Character passives — set via apply_character_package(); exactly one is active per run
+# Character passives â€” set via apply_character_package(); exactly one is active per run
 var passive_iron_retort: bool = false
 var passive_sigil_burst: bool = false
 var passive_veilstep_rhythm: bool = false
@@ -562,7 +564,8 @@ func _ready() -> void:
 	upgrade_system.initialize(self, null, fallback_registry)
 	_create_health_state()
 	_create_player_feedback()
-	_create_static_wake_trail_renderer()
+	_ensure_combat_interactions()
+	_ensure_static_wake()
 	_ensure_arcana_motion()
 	_ensure_returning_crescent()
 	_ensure_boss_combinations()
@@ -593,7 +596,8 @@ func _physics_process(delta: float) -> void:
 	_update_attack_animation(delta)
 	_update_visual_facing_direction()
 	_update_aegis_field_state(delta)
-	_update_static_wake_trails(delta)
+	if static_wake_controller != null and _is_local_control_owner():
+		static_wake_controller.tick(delta)
 	_update_void_dash_reset_pulse(delta)
 	_update_polar_shift_dash_lockout(delta)
 	_update_external_slow(delta)
@@ -658,6 +662,41 @@ func _ensure_arcana_motion() -> void:
 	add_child(arcana_motion)
 	arcana_motion.initialize(self)
 
+func _ensure_combat_interactions() -> void:
+	if combat_interactions != null:
+		return
+	combat_interactions = COMBAT_INTERACTIONS.new()
+	add_child(combat_interactions)
+	combat_interactions.initialize(self)
+
+func _ensure_static_wake() -> void:
+	if static_wake_controller != null:
+		return
+	static_wake_controller = STATIC_WAKE_CONTROLLER.new()
+	add_child(static_wake_controller)
+	static_wake_controller.initialize(self)
+
+func new_combat_action(kind: String) -> Dictionary:
+	_ensure_combat_interactions()
+	return combat_interactions.begin_action(kind)
+
+## Delayed effects capture the originating action instead of minting a new one
+## every physics tick. Synchronous descendants inherit Damageable's scope.
+func _capture_combat_action(kind: String) -> Dictionary:
+	var inherited := DAMAGEABLE.current_interaction_context()
+	return inherited.duplicate(true) if not inherited.is_empty() else new_combat_action(kind)
+
+func _begin_effect_scope(kind: String, action: Dictionary = {}) -> Dictionary:
+	return DAMAGEABLE.begin_interaction_scope(action if not action.is_empty() else _capture_combat_action(kind))
+
+func _cancel_interactions() -> void:
+	if combat_interactions != null:
+		combat_interactions.cancel()
+	if static_wake_controller != null:
+		static_wake_controller.cancel()
+	_dash_interaction.clear()
+	_convergence_interaction.clear()
+
 func _ensure_boss_combinations() -> void:
 	add_to_group("combat_players")
 	if boss_combinations != null:
@@ -682,6 +721,7 @@ func on_arcana_motion_completed(origin: Vector2, last_contact: Vector2) -> void:
 	boss_combinations.create_shade(origin, last_contact)
 
 func perform_motion_blast(direction: Vector2, strength: float) -> void:
+	var previous_blast_scope := _begin_effect_scope("blast_drive")
 	primary_attack_fired.emit()
 	attack_combo_counter += 1
 	var execution_proc := reward_execution_edge and attack_combo_counter % maxi(1, execution_every) == 0
@@ -700,6 +740,7 @@ func perform_motion_blast(direction: Vector2, strength: float) -> void:
 	if execution_proc:
 		execution_edge_proc_display_left = EXECUTION_EDGE_PROC_DISPLAY_HOLD
 		_broadcast_cue_event("execution_edge_state", {"combo_counter": attack_combo_counter, "execution_every": execution_every, "proc_display_left": execution_edge_proc_display_left})
+	DAMAGEABLE.end_interaction_scope(previous_blast_scope)
 
 func _read_movement_direction() -> Vector2:
 	if not _is_local_control_owner():
@@ -712,6 +753,7 @@ func _read_movement_direction() -> Vector2:
 ## Input polling is global: handling a GUI event does not consume its action state.
 func discard_pending_combat_input() -> void:
 	queued_attack_after_dash = false
+	_cancel_interactions()
 	if returning_crescent != null:
 		returning_crescent.cancel()
 	if boss_combinations != null:
@@ -782,6 +824,10 @@ func _try_start_dash(direction: Vector2) -> void:
 		dash_cooldown_left = 0.0
 
 	dash_direction = direction if direction != Vector2.ZERO else last_move_direction
+	_dash_interaction = new_combat_action("dash")
+	if reward_static_wake:
+		_ensure_static_wake()
+		static_wake_controller.begin_dash(_dash_interaction)
 	_ensure_arcana_motion()
 	arcana_motion.on_dash_started()
 	_ensure_boss_combinations()
@@ -803,13 +849,13 @@ func _try_start_dash(direction: Vector2) -> void:
 	phantom_step_ghost_emit_cd = 0.0
 	veilstep_rhythm_touched_enemy_ids.clear()
 	veilstep_rhythm_shard_awarded_this_dash = false
-	static_wake_trail_emit_cooldown = 0.0
-	static_wake_has_last_emit_position = false
 	_set_dash_phasing(true)
 	if passive_sigil_burst:
 		sigil_burst_ready = true
 	if reward_farline_volley:
+		var previous_dash_scope := _begin_effect_scope("dash", _dash_interaction)
 		_consume_or_reset_farline_volley_for_dash()
+		DAMAGEABLE.end_interaction_scope(previous_dash_scope)
 	if null_corridor_strength > 0.0:
 		_null_corridor_dash_origin = global_position
 	if veilstep_rhythm_empowered_dash_active and player_feedback != null:
@@ -941,6 +987,8 @@ func _get_mouse_attack_direction() -> Vector2:
 
 func _process_active_dash(delta: float) -> bool:
 	if dash_remaining_distance <= 0.0:
+		if static_wake_controller != null:
+			static_wake_controller.end_dash()
 		return false
 
 	var dash_start := global_position
@@ -953,6 +1001,8 @@ func _process_active_dash(delta: float) -> bool:
 		dash_remaining_distance = 0.0
 		if boss_combinations != null:
 			boss_combinations.on_dash_completed()
+		if static_wake_controller != null:
+			static_wake_controller.end_dash()
 		return false
 	velocity = dash_direction * (desired_step / maxf(delta, 0.0001))
 	move_and_slide()
@@ -964,6 +1014,8 @@ func _process_active_dash(delta: float) -> bool:
 		velocity = Vector2.ZERO
 		if boss_combinations != null:
 			boss_combinations.on_dash_completed()
+		if static_wake_controller != null:
+			static_wake_controller.end_dash()
 		return false
 	dash_remaining_distance = maxf(0.0, dash_remaining_distance - moved)
 	var dash_finished := false
@@ -974,6 +1026,7 @@ func _process_active_dash(delta: float) -> bool:
 		# End dash with a small consistent carry velocity to avoid occasional hard-brake feel.
 		velocity = dash_direction * minf(max_speed * 0.9, dash_speed * 0.22)
 
+	var previous_dash_scope := _begin_effect_scope("dash", _dash_interaction)
 	if reward_phantom_step:
 		_apply_phantom_step_during_dash()
 		# Ghost afterimage emission
@@ -989,9 +1042,8 @@ func _process_active_dash(delta: float) -> bool:
 			gi -= 1
 		queue_redraw()
 
-	if reward_static_wake:
-		if _emit_static_wake_trails_along_dash_segment(dash_start, dash_end, dash_direction):
-			queue_redraw()
+	if reward_static_wake and static_wake_controller != null:
+		static_wake_controller.append_segment(dash_start, dash_end)
 
 	if reward_wraithstep:
 		_apply_wraithstep_marks_during_dash(dash_start, dash_end)
@@ -1015,6 +1067,9 @@ func _process_active_dash(delta: float) -> bool:
 		})
 		queue_redraw()
 
+	if dash_finished and static_wake_controller != null:
+		static_wake_controller.end_dash()
+	DAMAGEABLE.end_interaction_scope(previous_dash_scope)
 	return true
 
 func _update_dash_phase_state(delta: float) -> void:
@@ -1489,6 +1544,7 @@ func build_run_snapshot() -> Dictionary:
 func apply_run_snapshot(snapshot: Dictionary) -> void:
 	if snapshot.is_empty():
 		return
+	_cancel_interactions()
 	if returning_crescent != null:
 		returning_crescent.cancel()
 	if boss_combinations != null:
@@ -1533,9 +1589,6 @@ func apply_run_snapshot(snapshot: Dictionary) -> void:
 	queued_attack_after_dash = false
 	phantom_step_hit_ids.clear()
 	phantom_step_ghost_positions.clear()
-	static_wake_trails.clear()
-	static_wake_has_last_emit_position = false
-	_sync_static_wake_trail_renderer()
 	void_dash_reset_pulse_left = 0.0
 	execution_edge_proc_display_left = 0.0
 	storm_crown_hit_counter = 0
@@ -1636,7 +1689,12 @@ func apply_network_cue_event(event_name: String, payload: Dictionary) -> void:
 		"world_ring": _on_cue_world_ring(payload)
 		"chain_lightning": _on_cue_chain_lightning(payload)
 		"wraithstep_chain_echo": _on_cue_wraithstep_chain_echo(payload)
-		"static_wake_dot": _on_cue_static_wake_dot(payload)
+		"static_wake_state":
+			_ensure_static_wake()
+			static_wake_controller.apply_visual_state(payload)
+		"combat_interaction_state":
+			_ensure_combat_interactions()
+			combat_interactions.apply_network_state(payload)
 		"execution_edge_state": _on_cue_execution_edge_state(payload)
 		"oath_ui_state": _on_cue_oath_ui_state(payload)
 		"voidfire_ui_state": _on_cue_voidfire_ui_state(payload)
@@ -1645,7 +1703,6 @@ func apply_network_cue_event(event_name: String, payload: Dictionary) -> void:
 		"wraithstep_mark_clear": _on_cue_wraithstep_mark_clear()
 		"iron_retort_window_open": _on_cue_iron_retort_window_open(payload)
 		"iron_retort_consume": _on_cue_iron_retort_consume(payload)
-		"storm_crown_discharge": _on_cue_storm_crown_discharge(payload)
 		"boss_tempo_stack": _on_cue_boss_tempo_stack(payload)
 		"boss_tempo_state": _on_cue_boss_tempo_state(payload)
 		"boss_tempo_clear": player_feedback.clear_boss_tempo_state()
@@ -1654,7 +1711,6 @@ func apply_network_cue_event(event_name: String, payload: Dictionary) -> void:
 		"boss_convergence_pulse": _on_cue_boss_convergence_pulse(payload)
 		"unbroken_oath_bank_gain": _on_cue_unbroken_oath_bank_gain(payload)
 		"unbroken_oath_retaliation": _on_cue_unbroken_oath_retaliation(payload)
-		"enemy_apply_slow": _on_cue_enemy_apply_slow(payload)
 		"fracture_field_fault_lines": _on_cue_fracture_field_fault_lines(payload)
 		"boss_void_zone_spawn": _on_cue_boss_void_zone_spawn(payload)
 		"boss_void_zone_pulse": _on_cue_boss_void_zone_pulse(payload)
@@ -1670,6 +1726,9 @@ func apply_owner_cue_event(event_name: String, payload: Dictionary) -> void:
 	if player_feedback == null or event_name.is_empty() or payload.is_empty():
 		return
 	match event_name:
+		"combat_interaction_state":
+			_ensure_combat_interactions()
+			combat_interactions.apply_network_state(payload)
 		"local_damage_feedback":
 			if bool(payload.get("flash", true)):
 				player_feedback.play_damage_flash()
@@ -1700,12 +1759,6 @@ func _on_cue_wraithstep_chain_echo(payload: Dictionary) -> void:
 	var echo_to_position := payload.get("to", global_position) as Vector2
 	var echo_lifetime := float(payload.get("lifetime", 0.18))
 	player_feedback.play_wraithstep_chain_echo(echo_from_position, echo_to_position, echo_lifetime)
-
-
-func _on_cue_static_wake_dot(payload: Dictionary) -> void:
-	var static_wake_position := payload.get("position", global_position) as Vector2
-	var static_wake_life := float(payload.get("life", static_wake_lifetime))
-	_append_static_wake_trail(static_wake_position, false, static_wake_life)
 
 
 func _on_cue_execution_edge_state(payload: Dictionary) -> void:
@@ -1794,11 +1847,6 @@ func _on_cue_sigil_chain_reset(_payload: Dictionary) -> void:
 	_fade_all_sigil_chain_fx(0.4)
 
 
-func _on_cue_storm_crown_discharge(payload: Dictionary) -> void:
-	var discharge_position := payload.get("position", global_position) as Vector2
-	player_feedback.play_storm_crown_discharge(discharge_position)
-
-
 func _on_cue_boss_tempo_stack(payload: Dictionary) -> void:
 	var tempo_stack_position := payload.get("position", global_position) as Vector2
 	var tempo_stacks := int(payload.get("stacks", 0))
@@ -1846,15 +1894,6 @@ func _on_cue_unbroken_oath_retaliation(payload: Dictionary) -> void:
 	var oath_impact_position := payload.get("impact_position", global_position) as Vector2
 	var oath_bonus_ratio := float(payload.get("bonus_ratio", 1.0))
 	player_feedback.play_boss_unbroken_retaliation(oath_player_position, oath_impact_position, oath_bonus_ratio)
-
-
-func _on_cue_enemy_apply_slow(payload: Dictionary) -> void:
-	var slow_enemy_network_id := int(payload.get("enemy_network_id", -1))
-	var slow_duration := float(payload.get("duration", 0.0))
-	var slow_mult := float(payload.get("mult", 1.0))
-	var slow_enemy: ENEMY_BASE_SCRIPT = _find_enemy_node_by_network_enemy_id(slow_enemy_network_id)
-	if slow_enemy != null:
-		slow_enemy.apply_slow(slow_duration, slow_mult)
 
 
 func _on_cue_fracture_field_fault_lines(payload: Dictionary) -> void:
@@ -2037,7 +2076,7 @@ func _trigger_aegis_field() -> void:
 		var enemy_body := enemy_node as Node2D
 		if global_position.distance_to(enemy_body.global_position) > aegis_field_pulse_radius:
 			continue
-		enemy_node.apply_slow(aegis_field_slow_duration * _global_slow_duration_mult(), aegis_field_slow_mult)
+		_apply_player_slow(enemy_node, aegis_field_slow_duration * _global_slow_duration_mult(), aegis_field_slow_mult)
 	if player_feedback != null:
 		player_feedback.play_world_ring(global_position, aegis_field_pulse_radius, Color(0.62, 0.98, 1.0, 0.92), 0.22)
 		player_feedback.play_world_ring(global_position, aegis_field_pulse_radius * 0.64, Color(0.88, 1.0, 1.0, 0.78), 0.16)
@@ -2246,16 +2285,21 @@ func _is_enemy_in_attack_cone(enemy_body: Node2D, origin: Vector2, attack_direct
 		return true
 	return false
 
-func _resolve_attack_hit(enemy_body: Node2D, hit_position: Vector2, base_damage: int, source: String, rupture_triggered_enemy_ids: Dictionary, rupture_hit_enemy_ids: Dictionary, proc_flags: Dictionary, sigil_burst_state: Dictionary, final_damage_mult: float = 1.0, attack_origin: Vector2 = Vector2.INF) -> int:
+func _resolve_attack_hit(enemy_body: Node2D, hit_position: Vector2, base_damage: int, source: String, rupture_triggered_enemy_ids: Dictionary, rupture_hit_enemy_ids: Dictionary, proc_flags: Dictionary, sigil_burst_state: Dictionary, final_damage_mult: float = 1.0, attack_origin: Vector2 = Vector2.INF, interaction: Dictionary = {}) -> int:
+	var hit_action := interaction if not interaction.is_empty() else _capture_combat_action(source)
 	var resolved_origin := attack_origin if attack_origin.is_finite() else global_position
 	var enemy_id := enemy_body.get_instance_id()
+	_pending_hit_slows.clear()
+	_collecting_hit_slows = true
 	var strike_breakdown := _build_damage_breakdown(base_damage, enemy_body, hit_position, source)
+	_collecting_hit_slows = false
 	var final_damage := int(strike_breakdown.get("final_damage", base_damage))
 	if absf(final_damage_mult - 1.0) > 0.0001:
 		final_damage = maxi(1, int(round(float(final_damage) * final_damage_mult)))
-	_apply_hunters_snare(enemy_body)
+	if reward_hunters_snare:
+		_pending_hit_slows.append({"duration": hunters_snare_slow_duration * _global_slow_duration_mult(), "mult": hunters_snare_slow_mult})
 	var health_before := DAMAGEABLE._read_target_health(enemy_body)
-	DAMAGEABLE.apply_damage(enemy_body, final_damage, {"attack_type": source, "secondary": false, "attack_origin": resolved_origin})
+	DAMAGEABLE.apply_damage(enemy_body, final_damage, INTERACTION_REGISTRY.damage_context(hit_action, source, {"secondary": false, "attack_origin": resolved_origin, "slows_on_hit": _pending_hit_slows.duplicate(true)}))
 	var accepted := health_before > DAMAGEABLE._read_target_health(enemy_body) or DAMAGEABLE._should_route_enemy_damage_to_host(enemy_body)
 	if accepted:
 		if arcana_motion != null:
@@ -2268,8 +2312,6 @@ func _resolve_attack_hit(enemy_body: Node2D, hit_position: Vector2, base_damage:
 		sigil_burst_ready = false
 		sigil_burst_state["fired"] = true
 		_apply_sigil_burst(enemy_body.global_position, base_damage)
-	if reward_storm_crown:
-		_apply_storm_crown_hit(enemy_body.global_position, enemy_id, final_damage)
 	if not bool(proc_flags.get("convergence_registered", false)):
 		_try_apply_convergence_surge(enemy_body.global_position, final_damage, enemy_id)
 		proc_flags["convergence_registered"] = true
@@ -2296,6 +2338,8 @@ func _get_melee_attack_geometry(melee_context: Dictionary) -> Dictionary:
 
 
 func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary) -> bool:
+	var attack_action := new_combat_action(String(melee_context.get("source", "melee")))
+	var previous_scope := DAMAGEABLE.begin_interaction_scope(attack_action)
 	if String(melee_context.get("source", "melee")) in ["melee", "blast_drive"]:
 		_ensure_returning_crescent()
 		returning_crescent.try_launch(attack_direction)
@@ -2336,7 +2380,7 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 	if String(melee_context.get("source", "melee")) == "blast_drive":
 		_ensure_arcana_motion()
 		arcana_motion.publish_blast(global_position, attack_direction, strike_range, strike_arc_degrees)
-	var echo_shapes: Array[Dictionary] = [{"source": String(melee_context.get("source", "melee")), "damage": strike_damage, "range": strike_range, "arc_degrees": strike_arc_degrees}]
+	var echo_shapes: Array[Dictionary] = [{"source": String(melee_context.get("source", "melee")), "damage": strike_damage, "range": strike_range, "arc_degrees": strike_arc_degrees, "interaction": INTERACTION_REGISTRY.damage_context(attack_action, String(melee_context.get("source", "melee")))["interaction"]}]
 
 	var rupture_triggered_enemy_ids: Dictionary = {}
 	var rupture_hit_enemy_ids: Dictionary = {}
@@ -2394,6 +2438,7 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		wind_context["damage"] = wind_damage
 		var echo_wind := wind_context.duplicate()
 		echo_wind["source"] = "razor_wind"
+		echo_wind["interaction"] = INTERACTION_REGISTRY.damage_context(attack_action, "razor_wind")["interaction"]
 		echo_wind["inner_range"] = attack_range
 		echo_shapes.append(echo_wind)
 		did_hit = _apply_razor_wind(attack_direction, wind_context, rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags) or did_hit
@@ -2411,6 +2456,7 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		queue_redraw()
 	_indomitable_pending_melee_bonus = 0
 	boss_combinations.repeat_strike(attack_direction, echo_shapes)
+	DAMAGEABLE.end_interaction_scope(previous_scope)
 
 	return did_hit
 
@@ -2441,6 +2487,7 @@ func _get_farline_focus_half_window_radians() -> float:
 	return deg_to_rad(attack_half_window_degrees)
 
 func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupture_triggered_enemy_ids: Dictionary = {}, rupture_hit_enemy_ids: Dictionary = {}, proc_flags: Dictionary = {}) -> bool:
+	var hit_action := _capture_combat_action("razor_wind")
 	var did_hit := false
 	var wind_range := float(wind_context.get("range", attack_range * razor_wind_range_scale))
 	var wind_arc_degrees := float(wind_context.get("arc_degrees", razor_wind_arc_degrees))
@@ -2455,7 +2502,7 @@ func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupt
 		var hit_position := hit_entry.get("hit_position", enemy_body.global_position) as Vector2
 		if (hit_position - global_position).length_squared() <= inner_range_squared:
 			continue
-		_resolve_attack_hit(enemy_body, hit_position, wind_damage, "razor_wind", rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags, sigil_burst_state)
+		_resolve_attack_hit(enemy_body, hit_position, wind_damage, "razor_wind", rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags, sigil_burst_state, 1.0, Vector2.INF, hit_action)
 		did_hit = true
 	return did_hit
 
@@ -2478,22 +2525,18 @@ func _hunters_snare_aoe_bonus_against(enemy_node: Object) -> int:
 		return 0
 	return _get_hunters_snare_bonus_damage(enemy_node)
 
+func _apply_player_slow(target: Object, duration: float, multiplier: float) -> void:
+	if not _is_local_control_owner():
+		return
+	DAMAGEABLE.apply_slow(target, duration, multiplier, DAMAGEABLE._resolve_local_peer_id(), _capture_combat_action("slow"))
+
 func _apply_hunters_snare(enemy_node: Object) -> void:
 	if not reward_hunters_snare:
 		return
 	if not is_instance_valid(enemy_node):
 		return
 	var snare_duration := hunters_snare_slow_duration * _global_slow_duration_mult()
-	enemy_node.apply_slow(snare_duration, hunters_snare_slow_mult)
-	if enemy_node is Node2D:
-		var snare_enemy := enemy_node as Node2D
-		var snare_enemy_network_id := int(snare_enemy.get_meta("network_enemy_id", -1))
-		if snare_enemy_network_id > 0:
-			_broadcast_cue_event("enemy_apply_slow", {
-				"enemy_network_id": snare_enemy_network_id,
-				"duration": snare_duration,
-				"mult": hunters_snare_slow_mult
-			})
+	_apply_player_slow(enemy_node, snare_duration, hunters_snare_slow_mult)
 
 func _trigger_battle_trance() -> void:
 	if battle_trance_move_speed_bonus <= 0.0:
@@ -2528,14 +2571,10 @@ func _consume_riftpunch_bonus(source: String, hit_position: Vector2, enemy_node:
 		var riftpunch_target := enemy_node as ENEMY_BASE_SCRIPT
 		if riftpunch_target != null:
 			var riftpunch_slow_duration := 0.6 * _global_slow_duration_mult()
-			riftpunch_target.apply_slow(riftpunch_slow_duration, 0.6)
-			var slow_target_network_id := int(riftpunch_target.get_meta("network_enemy_id", -1))
-			if slow_target_network_id > 0:
-				_broadcast_cue_event("enemy_apply_slow", {
-					"enemy_network_id": slow_target_network_id,
-					"duration": riftpunch_slow_duration,
-					"mult": 0.6
-				})
+			if _collecting_hit_slows:
+				_pending_hit_slows.append({"duration": riftpunch_slow_duration, "mult": 0.6})
+			else:
+				_apply_player_slow(riftpunch_target, riftpunch_slow_duration, 0.6)
 	if riftpunch_stacks >= 3:
 		_apply_riftpunch_shockwave(impact_position, riftpunch_bonus_damage, enemy_node)
 	if player_feedback != null:
@@ -2562,6 +2601,7 @@ func _wraithstep_hits_per_mark() -> int:
 	return 1
 
 func _apply_riftpunch_shockwave(epicenter: Vector2, primary_damage: int, primary_target: Object) -> void:
+	var effect_action := _capture_combat_action("riftpunch_shockwave")
 	var shockwave_radius := 78.0
 	var shockwave_damage := maxi(1, int(round(float(primary_damage) * 0.45)))
 	shockwave_damage = _apply_objective_mutator_damage_mult(shockwave_damage)
@@ -2588,7 +2628,7 @@ func _apply_riftpunch_shockwave(epicenter: Vector2, primary_damage: int, primary
 		if enemy_body.global_position.distance_to(epicenter) > shockwave_radius:
 			continue
 		var shockwave_total_damage := shockwave_damage + _hunters_snare_aoe_bonus_against(enemy_body)
-		DAMAGEABLE.apply_damage(enemy_node, shockwave_total_damage, {"is_ground_attack": true, "attack_type": "riftpunch_shockwave"})
+		DAMAGEABLE.apply_damage(enemy_node, shockwave_total_damage, INTERACTION_REGISTRY.damage_context(effect_action, "riftpunch_shockwave", {"is_ground_attack": true, "attack_type": "riftpunch_shockwave"}))
 
 func _get_first_strike_bonus_damage(enemy_node: Object) -> int:
 	if first_strike_bonus_damage <= 0:
@@ -2604,6 +2644,7 @@ func _get_first_strike_bonus_damage(enemy_node: Object) -> int:
 	return 0
 
 func clear_lingering_combat_effects() -> void:
+	_cancel_interactions()
 	if returning_crescent != null:
 		returning_crescent.cancel()
 	if boss_combinations != null:
@@ -2613,10 +2654,6 @@ func clear_lingering_combat_effects() -> void:
 	phantom_step_hit_ids.clear()
 	phantom_step_ghost_positions.clear()
 	phantom_step_ghost_emit_cd = 0.0
-	static_wake_trails.clear()
-	static_wake_trail_emit_cooldown = 0.0
-	static_wake_has_last_emit_position = false
-	_sync_static_wake_trail_renderer()
 	wraithstep_marked_enemy_expiry.clear()
 	wraithstep_remote_mark_expiry_by_network_enemy_id.clear()
 	if _is_local_control_owner():
@@ -2673,6 +2710,7 @@ func clear_lingering_combat_effects() -> void:
 	queue_redraw()
 
 func _apply_rupture_wave(epicenter: Vector2, source_damage: int, rupture_hit_enemy_ids: Dictionary = {}, chain_depth: int = 0) -> void:
+	var effect_action := _capture_combat_action("rupture_wave")
 	var wave_radius := rupture_wave_radius
 	var wave_damage_ratio := rupture_wave_damage_ratio
 	if chain_depth > 0:
@@ -2708,17 +2746,10 @@ func _apply_rupture_wave(epicenter: Vector2, source_damage: int, rupture_hit_ene
 			continue
 		rupture_hit_enemy_ids[enemy_id] = true
 		var rupture_total_damage := wave_damage + _hunters_snare_aoe_bonus_against(enemy_body)
-		DAMAGEABLE.apply_damage(enemy_node, rupture_total_damage, {"is_ground_attack": true, "attack_type": "rupture_wave"})
+		DAMAGEABLE.apply_damage(enemy_node, rupture_total_damage, INTERACTION_REGISTRY.damage_context(effect_action, "rupture_wave", {"is_ground_attack": true, "attack_type": "rupture_wave"}))
 		if apply_slow:
 			var rupture_slow_duration := 0.4 * _global_slow_duration_mult()
-			enemy_body.apply_slow(rupture_slow_duration, 0.75)
-			var rupture_slow_network_id := int(enemy_body.get_meta("network_enemy_id", -1))
-			if rupture_slow_network_id > 0:
-				_broadcast_cue_event("enemy_apply_slow", {
-					"enemy_network_id": rupture_slow_network_id,
-					"duration": rupture_slow_duration,
-					"mult": 0.75
-				})
+			_apply_player_slow(enemy_body, rupture_slow_duration, 0.75)
 		if wants_chain and distance_to_epicenter > chain_candidate_distance:
 			chain_candidate_distance = distance_to_epicenter
 			chain_candidate_node = enemy_body
@@ -2854,6 +2885,7 @@ func _consume_wraithstep_mark(enemy_node: Object, hit_position: Vector2, base_da
 
 
 func _apply_wraithstep_chain(chain_origin: Vector2, consumed_enemy_id: int, chain_damage: int) -> void:
+	var effect_action := _capture_combat_action("wraithstep_chain")
 	if wraithstep_marked_enemy_expiry.is_empty():
 		return
 	var final_chain_damage := _apply_objective_mutator_damage_mult(chain_damage)
@@ -2888,7 +2920,7 @@ func _apply_wraithstep_chain(chain_origin: Vector2, consumed_enemy_id: int, chai
 			if triggered_network_enemy_id > 0:
 				_broadcast_cue_event("wraithstep_mark_remove", {"enemy_network_id": triggered_network_enemy_id})
 			propagated_ids[triggered_enemy_id] = true
-			DAMAGEABLE.apply_damage(triggered_enemy, final_chain_damage, {"attack_origin": epicenter})
+			DAMAGEABLE.apply_damage(triggered_enemy, final_chain_damage, INTERACTION_REGISTRY.damage_context(effect_action, "wraithstep_chain", {"attack_origin": epicenter, "attack_type": "wraithstep_chain"}))
 			pending_epicenters.append(triggered_enemy.global_position)
 			if player_feedback != null:
 				player_feedback.play_wraithstep_chain_echo(epicenter, triggered_enemy.global_position)
@@ -2907,6 +2939,7 @@ func _apply_wraithstep_chain(chain_origin: Vector2, consumed_enemy_id: int, chai
 
 
 func _apply_wraithstep_splash(epicenter: Vector2, splash_damage: int, excluded_enemy_id: int) -> void:
+	var effect_action := _capture_combat_action("wraithstep_splash")
 	var final_splash_damage := _apply_objective_mutator_damage_mult(splash_damage)
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		if not (enemy_node is Node2D):
@@ -2919,74 +2952,7 @@ func _apply_wraithstep_splash(epicenter: Vector2, splash_damage: int, excluded_e
 			continue
 		if enemy_body.global_position.distance_to(epicenter) > wraithstep_mark_splash_radius:
 			continue
-		DAMAGEABLE.apply_damage(enemy_node, final_splash_damage, {"attack_origin": epicenter})
-
-
-func _apply_storm_crown_hit(source_position: Vector2, source_enemy_id: int, source_damage: int) -> void:
-	if not reward_storm_crown:
-		return
-	storm_crown_hit_counter += 1
-	if storm_crown_hit_counter % maxi(1, storm_crown_proc_every) != 0:
-		return
-
-	var chain_damage := maxi(1, int(round(float(source_damage) * storm_crown_damage_ratio)))
-	chain_damage = _apply_objective_mutator_damage_mult(chain_damage)
-	var chained_enemy_ids: Dictionary = {source_enemy_id: true}
-	var remaining_chains := maxi(0, storm_crown_chain_targets)
-	var chain_origin := source_position
-	while remaining_chains > 0:
-		var next_enemy: Node2D = null
-		var next_enemy_id := -1
-		var nearest_distance_sq := INF
-		for enemy_node in get_tree().get_nodes_in_group("enemies"):
-			if not (enemy_node is Node2D):
-				continue
-			if not DAMAGEABLE.can_take_damage(enemy_node):
-				continue
-			var enemy_body := enemy_node as Node2D
-			var enemy_id := enemy_body.get_instance_id()
-			if chained_enemy_ids.has(enemy_id):
-				continue
-			var dist_sq := chain_origin.distance_squared_to(enemy_body.global_position)
-			if dist_sq > storm_crown_chain_radius * storm_crown_chain_radius:
-				continue
-			if dist_sq < nearest_distance_sq:
-				nearest_distance_sq = dist_sq
-				next_enemy = enemy_body
-				next_enemy_id = enemy_id
-		if next_enemy == null:
-			break
-		DAMAGEABLE.apply_damage(next_enemy, chain_damage, {"attack_origin": chain_origin})
-		chained_enemy_ids[next_enemy_id] = true
-		if player_feedback != null:
-			player_feedback.play_chain_lightning(chain_origin, next_enemy.global_position)
-			_broadcast_cue_event("chain_lightning", {
-				"from": chain_origin,
-				"to": next_enemy.global_position,
-				"color": Color(0.98, 0.98, 0.76, 0.92),
-				"lifetime": 0.14
-			})
-			player_feedback.play_world_ring(next_enemy.global_position, 16.0, Color(1.0, 0.98, 0.72, 0.82), 0.1)
-			_broadcast_cue_event("world_ring", {
-				"position": next_enemy.global_position,
-				"radius": 16.0,
-				"color": Color(1.0, 0.98, 0.72, 0.82),
-				"duration": 0.1
-			})
-			player_feedback.play_world_ring(next_enemy.global_position, 28.0, Color(0.82, 0.94, 1.0, 0.46), 0.18)
-			_broadcast_cue_event("world_ring", {
-				"position": next_enemy.global_position,
-				"radius": 28.0,
-				"color": Color(0.82, 0.94, 1.0, 0.46),
-				"duration": 0.18
-			})
-		chain_origin = next_enemy.global_position
-		remaining_chains -= 1
-	if player_feedback != null:
-		player_feedback.play_storm_crown_discharge(source_position)
-		_broadcast_cue_event("storm_crown_discharge", {"position": source_position})
-	storm_crown_discharge_flash_left = storm_crown_discharge_flash_duration
-	queue_redraw()
+		DAMAGEABLE.apply_damage(enemy_node, final_splash_damage, INTERACTION_REGISTRY.damage_context(effect_action, "wraithstep_splash", {"attack_origin": epicenter, "attack_type": "wraithstep_splash"}))
 
 
 func _apply_veilstep_rhythm_during_dash(dash_start: Vector2, dash_end: Vector2) -> void:
@@ -3048,6 +3014,7 @@ func _apply_veilstep_rhythm_during_dash(dash_start: Vector2, dash_end: Vector2) 
 
 
 func _release_veilstep_rhythm_wave(epicenter: Vector2) -> void:
+	var effect_action := _capture_combat_action("_release_veilstep_rhythm_wave")
 	var wave_damage := _apply_objective_mutator_damage_mult(maxi(1, int(round(float(damage) * veilstep_rhythm_wave_damage_ratio))))
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
 		if not (enemy_node is Node2D):
@@ -3057,7 +3024,7 @@ func _release_veilstep_rhythm_wave(epicenter: Vector2) -> void:
 		var enemy_body := enemy_node as Node2D
 		if enemy_body.global_position.distance_to(epicenter) > veilstep_rhythm_wave_radius:
 			continue
-		DAMAGEABLE.apply_damage(enemy_node, wave_damage, {"is_ground_attack": true, "attack_type": "veilstep_rhythm_wave"})
+		DAMAGEABLE.apply_damage(enemy_node, wave_damage, INTERACTION_REGISTRY.damage_context(effect_action, "veilstep_rhythm_wave", {"is_ground_attack": true, "attack_type": "veilstep_rhythm_wave"}))
 	if player_feedback != null:
 		player_feedback.play_world_ring(epicenter, veilstep_rhythm_wave_radius, Color(0.28, 1.0, 0.78, 0.92), 0.2)
 		_broadcast_cue_event("world_ring", {
@@ -3102,6 +3069,7 @@ func _update_veilstep_rhythm(delta: float) -> void:
 
 
 func _apply_phantom_step_during_dash() -> void:
+	var effect_action := _capture_combat_action("phantom_step_during_dash")
 	var hit_radius := 38.0 + float(phantom_step_stacks) * 5.0
 	var phantom_damage := _apply_objective_mutator_damage_mult(phantom_step_damage)
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
@@ -3115,18 +3083,11 @@ func _apply_phantom_step_during_dash() -> void:
 			continue
 		if global_position.distance_to(enemy_body.global_position) > hit_radius:
 			continue
-		DAMAGEABLE.apply_damage(enemy_node, phantom_damage, {"attack_origin": global_position})
+		DAMAGEABLE.apply_damage(enemy_node, phantom_damage, INTERACTION_REGISTRY.damage_context(effect_action, "phantom_step", {"attack_origin": global_position, "attack_type": "phantom_step"}))
 		if boss_combinations != null:
 			boss_combinations.record_dash_contact(global_position)
 		var phantom_slow_duration := phantom_step_slow_duration * _global_slow_duration_mult()
-		enemy_node.apply_slow(phantom_slow_duration, 0.36)
-		var phantom_enemy_network_id := int(enemy_body.get_meta("network_enemy_id", -1))
-		if phantom_enemy_network_id > 0:
-			_broadcast_cue_event("enemy_apply_slow", {
-				"enemy_network_id": phantom_enemy_network_id,
-				"duration": phantom_slow_duration,
-				"mult": 0.36
-			})
+		_apply_player_slow(enemy_node, phantom_slow_duration, 0.36)
 		phantom_step_hit_ids[eid] = true
 		if player_feedback != null:
 			# Concentric rings: outer (slow field) + inner (damage burst)
@@ -3148,129 +3109,8 @@ func _apply_phantom_step_during_dash() -> void:
 			})
 
 
-func _update_static_wake_trails(delta: float) -> void:
-	if static_wake_trails.is_empty():
-		_sync_static_wake_trail_renderer()
-		return
-	var i := static_wake_trails.size() - 1
-	while i >= 0:
-		static_wake_trails[i]["life"] -= delta
-		if static_wake_trails[i]["life"] <= 0.0:
-			static_wake_trails.remove_at(i)
-		i -= 1
-
-	if _is_local_control_owner():
-		var wake_apply_slow := static_wake_stacks >= 3
-		var wake_radius := maxf(8.0, static_wake_trail_radius)
-		for trail in static_wake_trails:
-			var trail_pos: Vector2 = trail["pos"]
-			for enemy_node in get_tree().get_nodes_in_group("enemies"):
-				if not DAMAGEABLE.can_take_damage(enemy_node):
-					continue
-				var enemy_body := enemy_node as ENEMY_BASE_SCRIPT
-				if enemy_body == null:
-					continue
-				if enemy_body.global_position.distance_to(trail_pos) <= wake_radius:
-					var wake_tick_damage := maxi(1, int(round(float(static_wake_damage) * delta * 6.0)))
-					wake_tick_damage = _apply_objective_mutator_damage_mult(wake_tick_damage)
-					wake_tick_damage += _hunters_snare_aoe_bonus_against(enemy_body)
-					DAMAGEABLE.apply_damage(enemy_node, wake_tick_damage, {"attack_origin": trail_pos})
-					if wake_apply_slow and not enemy_body.is_slowed():
-						var wake_slow_duration := 0.3 * _global_slow_duration_mult()
-						enemy_body.apply_slow(wake_slow_duration, 0.8)
-						var wake_slow_network_id := int(enemy_body.get_meta("network_enemy_id", -1))
-						if wake_slow_network_id > 0:
-							_broadcast_cue_event("enemy_apply_slow", {
-								"enemy_network_id": wake_slow_network_id,
-								"duration": wake_slow_duration,
-								"mult": 0.8
-							})
-
-	queue_redraw()
-	_sync_static_wake_trail_renderer()
-
-
-func _emit_static_wake_trails_along_dash_segment(segment_start: Vector2, segment_end: Vector2, dash_dir: Vector2) -> bool:
-	var forward_dir := dash_dir.normalized()
-	if forward_dir.length_squared() <= 0.000001:
-		return false
-	var forward_progress := (segment_end - segment_start).dot(forward_dir)
-	if forward_progress <= 0.001:
-		return false
-	var emitted := false
-	if not static_wake_has_last_emit_position:
-		static_wake_last_emit_position = segment_start
-		static_wake_has_last_emit_position = true
-		_append_static_wake_trail(static_wake_last_emit_position)
-		emitted = true
-	var spacing := _get_static_wake_trail_spacing()
-	var projected_distance_to_end := (segment_end - static_wake_last_emit_position).dot(forward_dir)
-	var safety := 0
-	while projected_distance_to_end >= spacing and safety < 64:
-		static_wake_last_emit_position += forward_dir * spacing
-		_append_static_wake_trail(static_wake_last_emit_position)
-		emitted = true
-		projected_distance_to_end = (segment_end - static_wake_last_emit_position).dot(forward_dir)
-		safety += 1
-	if safety >= 64:
-		static_wake_last_emit_position = segment_start + forward_dir * forward_progress
-	return emitted
-
-
-func _get_static_wake_trail_spacing() -> float:
-	var clamped_dot_count := maxi(2, static_wake_dots_at_default_dash)
-	return maxf(4.0, dash_distance / float(clamped_dot_count - 1))
-
-
-func _append_static_wake_trail(world_position: Vector2, should_broadcast: bool = true, forced_life: float = -1.0) -> void:
-	var clamped_position := _clamp_static_wake_position_to_arena(world_position, 0.0)
-	if not static_wake_trails.is_empty():
-		var previous_pos: Vector2 = (static_wake_trails[static_wake_trails.size() - 1] as Dictionary).get("pos", clamped_position)
-		if previous_pos.distance_to(clamped_position) < 2.0:
-			return
-	var resolved_life := static_wake_lifetime if forced_life <= 0.0 else forced_life
-	static_wake_trails.append({"pos": clamped_position, "life": resolved_life})
-	if should_broadcast and _is_local_control_owner():
-		_broadcast_cue_event("static_wake_dot", {"position": clamped_position, "life": resolved_life})
-	_sync_static_wake_trail_renderer()
-
-
-func _clamp_static_wake_position_to_arena(world_position: Vector2, margin: float) -> Vector2:
-	var bounds := _get_static_wake_bounds_rect()
-	if bounds.size == Vector2.ZERO:
-		return world_position
-	var min_x := bounds.position.x + margin
-	var max_x := bounds.position.x + bounds.size.x - margin
-	if min_x > max_x:
-		var center_x := bounds.position.x + bounds.size.x * 0.5
-		min_x = center_x
-		max_x = center_x
-	var min_y := bounds.position.y + margin
-	var max_y := bounds.position.y + bounds.size.y - margin
-	if min_y > max_y:
-		var center_y := bounds.position.y + bounds.size.y * 0.5
-		min_y = center_y
-		max_y = center_y
-	return Vector2(clampf(world_position.x, min_x, max_x), clampf(world_position.y, min_y, max_y))
-
-
-func _get_static_wake_bounds_rect() -> Rect2:
-	var camera_node := get_node_or_null("Camera2D")
-	if camera_node != null and bool(camera_node.get("has_world_bounds")):
-		var camera_bounds: Variant = camera_node.get("world_bounds_rect")
-		if camera_bounds is Rect2:
-			return camera_bounds as Rect2
-	var parent_node := get_parent()
-	if parent_node != null:
-		var room_size_value: Variant = parent_node.get("current_room_size")
-		if room_size_value is Vector2:
-			var room_size := room_size_value as Vector2
-			if room_size != Vector2.ZERO:
-				return Rect2(-room_size * 0.5, room_size)
-	return Rect2()
-
-
 func notify_enemy_killed(kill_position: Vector2 = Vector2.INF) -> void:
+	var previous_kill_scope := _begin_effect_scope("kill")
 	var has_kill_position := kill_position.is_finite()
 	var suppress_echo_kill_procs := _void_echo_pulse_kill_suppression_depth > 0 or DAMAGEABLE.is_kill_proc_suppressed(DAMAGEABLE.KILL_PROC_SUPPRESS_ECHO_PULSE)
 	_trigger_combo_relay_kill()
@@ -3288,6 +3128,7 @@ func notify_enemy_killed(kill_position: Vector2 = Vector2.INF) -> void:
 		if reward_dread_resonance:
 			_reset_dread_resonance_tracking()
 	if not reward_void_dash:
+		DAMAGEABLE.end_interaction_scope(previous_kill_scope)
 		return
 	var dash_was_active := dash_cooldown_left > 0.0
 	if dash_was_active:
@@ -3309,6 +3150,7 @@ func notify_enemy_killed(kill_position: Vector2 = Vector2.INF) -> void:
 		queue_redraw()
 	if reaper_chain_grace > 0.0 and _reaper_chain_window_left > 0.0:
 		_dash_damage_immune_left = maxf(_dash_damage_immune_left, reaper_chain_grace)
+	DAMAGEABLE.end_interaction_scope(previous_kill_scope)
 
 func _has_combo_relay_mutator_active() -> bool:
 	for entry in active_objective_mutators:
@@ -3413,6 +3255,7 @@ func _trigger_overcharge_kill(kill_position: Vector2) -> void:
 	queue_redraw()
 
 func _fire_overcharge_discharge(kill_pos: Vector2) -> void:
+	var effect_action := _capture_combat_action("overcharge_discharge")
 	overcharge_is_charged = false
 	overcharge_kill_stacks = 2
 	overcharge_stack_timer = OVERCHARGE_STACK_WINDOW
@@ -3426,7 +3269,7 @@ func _fire_overcharge_discharge(kill_pos: Vector2) -> void:
 		var enemy_body := enemy_node as Node2D
 		if kill_pos.distance_squared_to(enemy_body.global_position) > OVERCHARGE_NOVA_RADIUS * OVERCHARGE_NOVA_RADIUS:
 			continue
-		DAMAGEABLE.apply_damage(enemy_node, nova_damage, {"attack_type": "overcharge_discharge", "attack_origin": kill_pos})
+		DAMAGEABLE.apply_damage(enemy_node, nova_damage, INTERACTION_REGISTRY.damage_context(effect_action, "overcharge_discharge", {"attack_type": "overcharge_discharge", "attack_origin": kill_pos}))
 	if player_feedback != null:
 		player_feedback.play_world_ring(kill_pos, OVERCHARGE_NOVA_RADIUS * 0.42, Color(1.0, 0.98, 0.56, 0.92), 0.16)
 		player_feedback.play_world_ring(kill_pos, OVERCHARGE_NOVA_RADIUS, Color(1.0, 0.86, 0.22, 0.68), 0.24)
@@ -3499,31 +3342,9 @@ func _create_player_feedback() -> void:
 	player_feedback.setup(max_health, _get_current_health())
 
 
-func _create_static_wake_trail_renderer() -> void:
-	static_wake_trail_renderer = STATIC_WAKE_TRAIL_RENDERER_SCRIPT.new()
-	static_wake_trail_renderer.set_as_top_level(true)
-	static_wake_trail_renderer.z_as_relative = false
-	static_wake_trail_renderer.z_index = 10
-	var world_parent := get_parent()
-	if world_parent != null:
-		world_parent.add_child.call_deferred(static_wake_trail_renderer)
-	else:
-		add_child.call_deferred(static_wake_trail_renderer)
-	call_deferred("_sync_static_wake_trail_renderer")
-
-
-func _sync_static_wake_trail_renderer() -> void:
-	if static_wake_trail_renderer == null:
-		return
-	static_wake_trail_renderer.set_trails(static_wake_trails, static_wake_lifetime)
-
-
 func _exit_tree() -> void:
 	if is_instance_valid(returning_crescent):
 		returning_crescent.cancel()
-	if static_wake_trail_renderer != null and is_instance_valid(static_wake_trail_renderer):
-		static_wake_trail_renderer.queue_free()
-		static_wake_trail_renderer = null
 
 func set_sfx_volume_db(volume_db: float) -> void:
 	if player_feedback == null:
@@ -3776,6 +3597,7 @@ func _consume_iron_retort_brace(player_position: Vector2, impact_position: Vecto
 		})
 
 func _apply_iron_retort_shockwave(epicenter: Vector2, source_damage: int) -> void:
+	var effect_action := _capture_combat_action("iron_retort_shockwave")
 	var shockwave_radius := 56.0
 	var shockwave_damage := _apply_objective_mutator_damage_mult(maxi(1, int(round(float(source_damage) * 0.55))))
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
@@ -3786,7 +3608,7 @@ func _apply_iron_retort_shockwave(epicenter: Vector2, source_damage: int) -> voi
 		var enemy_body := enemy_node as Node2D
 		if enemy_body.global_position.distance_to(epicenter) > shockwave_radius:
 			continue
-		DAMAGEABLE.apply_damage(enemy_node, shockwave_damage, {"is_ground_attack": true, "attack_type": "iron_retort_shockwave"})
+		DAMAGEABLE.apply_damage(enemy_node, shockwave_damage, INTERACTION_REGISTRY.damage_context(effect_action, "iron_retort_shockwave", {"is_ground_attack": true, "attack_type": "iron_retort_shockwave"}))
 	if player_feedback != null:
 		player_feedback.play_world_ring(epicenter, shockwave_radius, Color(0.96, 0.52, 0.28, 0.9), 0.18)
 		_broadcast_cue_event("world_ring", {
@@ -3813,6 +3635,7 @@ func _gain_void_heat(amount: float) -> void:
 		_trigger_voidfire_detonation()
 
 func _trigger_voidfire_detonation() -> void:
+	var effect_action := _capture_combat_action("_trigger_voidfire_detonation")
 	var det_damage := maxi(1, int(round(float(damage) * voidfire_detonate_ratio)))
 	det_damage = _apply_objective_mutator_damage_mult(det_damage)
 	var overheat_lockout := voidfire_lockout_duration
@@ -3851,7 +3674,7 @@ func _trigger_voidfire_detonation() -> void:
 		if enemy_body.global_position.distance_to(global_position) > voidfire_detonate_radius:
 			continue
 		var voidfire_total_damage := det_damage + _hunters_snare_aoe_bonus_against(enemy_body)
-		DAMAGEABLE.apply_damage(enemy_node, voidfire_total_damage, {"is_ground_attack": true, "attack_type": "voidfire_detonate"})
+		DAMAGEABLE.apply_damage(enemy_node, voidfire_total_damage, INTERACTION_REGISTRY.damage_context(effect_action, "voidfire_detonate", {"is_ground_attack": true, "attack_type": "voidfire_detonate"}))
 	void_heat = 0.0
 	var effective_lockout := overheat_lockout
 	if voidfire_stacks >= 3:
@@ -4043,14 +3866,7 @@ func _on_farline_volley_outer_hit(enemy_body: ENEMY_BASE_SCRIPT) -> void:
 		queue_redraw()
 	if farline_volley_stacks >= 2 and _farline_volley_current_stacks >= maxi(2, int(cap / 2.0)) and is_instance_valid(enemy_body):
 		var volley_slow_duration := FARLINE_VOLLEY_SLOW_DURATION * _global_slow_duration_mult()
-		enemy_body.apply_slow(volley_slow_duration, FARLINE_VOLLEY_SLOW_MULT)
-		var volley_target_network_id := int(enemy_body.get_meta("network_enemy_id", -1))
-		if volley_target_network_id > 0:
-			_broadcast_cue_event("enemy_apply_slow", {
-				"enemy_network_id": volley_target_network_id,
-				"duration": volley_slow_duration,
-				"mult": FARLINE_VOLLEY_SLOW_MULT
-			})
+		_apply_player_slow(enemy_body, volley_slow_duration, FARLINE_VOLLEY_SLOW_MULT)
 
 func _consume_or_reset_farline_volley_for_dash() -> void:
 	if not reward_farline_volley:
@@ -4065,6 +3881,7 @@ func _consume_or_reset_farline_volley_for_dash() -> void:
 	queue_redraw()
 
 func _apply_farline_volley_dash_burst(burst_damage: int) -> void:
+	var hit_action := _capture_combat_action("farline_volley_burst")
 	var burst_origin := global_position
 	var rupture_triggered: Dictionary = {}
 	var rupture_hits: Dictionary = {}
@@ -4080,7 +3897,7 @@ func _apply_farline_volley_dash_burst(burst_damage: int) -> void:
 		var hit_position: Vector2 = enemy_body.global_position
 		if burst_origin.distance_squared_to(hit_position) > radius_squared:
 			continue
-		_resolve_attack_hit(enemy_body, hit_position, burst_damage, "farline_volley_burst", rupture_triggered, rupture_hits, burst_proc_flags, sigil_state, 1.0, burst_origin)
+		_resolve_attack_hit(enemy_body, hit_position, burst_damage, "farline_volley_burst", rupture_triggered, rupture_hits, burst_proc_flags, sigil_state, 1.0, burst_origin, hit_action)
 	if player_feedback != null:
 		player_feedback.play_world_ring(burst_origin, FARLINE_VOLLEY_DASH_BURST_RADIUS, Color(1.0, 0.86, 0.42, 0.9), 0.22)
 	_broadcast_cue_event("world_ring", {
@@ -4121,6 +3938,7 @@ func _drop_sigil_chain_zone(zone_position: Vector2) -> void:
 	damage_per_tick = _apply_objective_mutator_damage_mult(damage_per_tick)
 	var zone_data := {
 		"pos": zone_position,
+		"interaction": _capture_combat_action("sigil_chain_zone"),
 		"radius": sigil_chain_radius,
 		"life": SIGIL_CHAIN_ZONE_LIFETIME,
 		"tick_left": 0.0,
@@ -4222,17 +4040,10 @@ func _apply_sigil_chain_zone_tick(zone: Dictionary) -> void:
 			continue
 		if enemy_body.global_position.distance_squared_to(zone_pos) > radius_squared:
 			continue
-		DAMAGEABLE.apply_damage(enemy_node, tick_damage, {"is_ground_attack": true, "attack_type": "sigil_chain_zone"})
+		DAMAGEABLE.apply_damage(enemy_node, tick_damage, INTERACTION_REGISTRY.damage_context(zone.get("interaction", {}), "sigil_chain_zone", {"is_ground_attack": true, "attack_type": "sigil_chain_zone"}))
 		if apply_slow:
 			var sigil_slow_duration := SIGIL_CHAIN_SLOW_DURATION * _global_slow_duration_mult()
-			enemy_body.apply_slow(sigil_slow_duration, SIGIL_CHAIN_SLOW_MULT)
-			var sigil_target_network_id := int(enemy_body.get_meta("network_enemy_id", -1))
-			if sigil_target_network_id > 0:
-				_broadcast_cue_event("enemy_apply_slow", {
-					"enemy_network_id": sigil_target_network_id,
-					"duration": sigil_slow_duration,
-					"mult": SIGIL_CHAIN_SLOW_MULT
-				})
+			_apply_player_slow(enemy_body, sigil_slow_duration, SIGIL_CHAIN_SLOW_MULT)
 
 # --- Severing Edge (boon) ---
 
@@ -4257,6 +4068,7 @@ func _update_apex_predator_combo(delta: float) -> void:
 		apex_predator_combo_hits = 0
 
 func _trigger_apex_predator_burst(epicenter: Vector2, primary_enemy_id: int, base_damage: int) -> void:
+	var effect_action := _capture_combat_action("_trigger_apex_predator_burst")
 	var burst_radius := clampf(72.0 + float(apex_predator_bonus_damage) * 0.35, 72.0, 126.0)
 	var burst_damage := _apply_objective_mutator_damage_mult(maxi(1, int(round(float(apex_predator_bonus_damage) * 0.9 + float(base_damage) * 0.55))))
 	for enemy_node in get_tree().get_nodes_in_group("enemies"):
@@ -4269,7 +4081,7 @@ func _trigger_apex_predator_burst(epicenter: Vector2, primary_enemy_id: int, bas
 			continue
 		if enemy_body.global_position.distance_to(epicenter) > burst_radius:
 			continue
-		DAMAGEABLE.apply_damage(enemy_node, burst_damage, {"is_ground_attack": true, "attack_type": "apex_predator_burst"})
+		DAMAGEABLE.apply_damage(enemy_node, burst_damage, INTERACTION_REGISTRY.damage_context(effect_action, "apex_predator_burst", {"is_ground_attack": true, "attack_type": "apex_predator_burst"}))
 
 func _get_apex_predator_bonus(enemy_node: Object, hit_position: Vector2, base_damage: int) -> int:
 	if apex_predator_bonus_damage <= 0:
@@ -4410,6 +4222,7 @@ func _update_apex_momentum(delta: float) -> void:
 			_broadcast_cue_event("boss_tempo_clear", {"clear": true})
 
 func _release_apex_momentum_dash_wave(epicenter: Vector2) -> void:
+	var effect_action := _capture_combat_action("_release_apex_momentum_dash_wave")
 	if apex_momentum_stacks <= 0 or apex_momentum_speed_bonus <= 0.0:
 		return
 	var stacks := apex_momentum_stacks
@@ -4430,7 +4243,7 @@ func _release_apex_momentum_dash_wave(epicenter: Vector2) -> void:
 		var enemy_pos := (enemy_node as Node2D).global_position
 		if enemy_pos.distance_to(epicenter) > slash_radius:
 			continue
-		DAMAGEABLE.apply_damage(enemy_node, slash_damage, {"is_ground_attack": true, "attack_type": "apex_momentum_wave"})
+		DAMAGEABLE.apply_damage(enemy_node, slash_damage, INTERACTION_REGISTRY.damage_context(effect_action, "apex_momentum_wave", {"is_ground_attack": true, "attack_type": "apex_momentum_wave"}))
 		hit_any = true
 	if hit_any:
 		dash_cooldown_left = maxf(0.0, dash_cooldown_left - 0.12 * float(stacks))
@@ -4479,8 +4292,8 @@ func _update_void_echo_zones(delta: float) -> void:
 					continue
 				var to_center := zone_pos - enemy_body.global_position
 				if dist > 0.001:
-					DAMAGEABLE.apply_impulse(enemy_body, to_center.normalized() * 360.0)
-				DAMAGEABLE.apply_damage(enemy_node, pulse_damage, {"is_ground_attack": true, "attack_type": "void_echo_zone", "kill_proc_suppression": DAMAGEABLE.KILL_PROC_SUPPRESS_ECHO_PULSE})
+					DAMAGEABLE.apply_impulse(enemy_body, to_center.normalized() * 360.0, 0, false, zone.get("interaction", {}))
+				DAMAGEABLE.apply_damage(enemy_node, pulse_damage, INTERACTION_REGISTRY.damage_context(zone.get("interaction", {}), "void_echo_zone", {"is_ground_attack": true, "attack_type": "void_echo_zone", "kill_proc_suppression": DAMAGEABLE.KILL_PROC_SUPPRESS_ECHO_PULSE}))
 				if not void_echo_zones.has(zone):
 					break
 			_void_echo_pulse_kill_suppression_depth = maxi(0, _void_echo_pulse_kill_suppression_depth - 1)
@@ -4534,7 +4347,7 @@ func _update_convergence_window(delta: float) -> void:
 		var enemy_body := enemy_node as Node2D
 		if enemy_body.global_position.distance_to(global_position) > pulse_radius:
 			continue
-		DAMAGEABLE.apply_damage(enemy_node, pulse_damage, {"is_ground_attack": true, "attack_type": "convergence_window"})
+		DAMAGEABLE.apply_damage(enemy_node, pulse_damage, INTERACTION_REGISTRY.damage_context(_convergence_interaction, "convergence_window", {"is_ground_attack": true, "attack_type": "convergence_window"}))
 
 
 func _apply_void_echo(kill_pos: Vector2) -> void:
@@ -4544,6 +4357,7 @@ func _apply_void_echo(kill_pos: Vector2) -> void:
 	var zone_data := {
 		"pos": kill_pos,
 		"suppress_launch": DAMAGEABLE.is_launch_suppressed(),
+		"interaction": _capture_combat_action("void_echo_zone"),
 		"life": 2.4,
 		"radius": echo_radius,
 		"pulse_left": 0.0
@@ -4582,6 +4396,7 @@ func _clamp_push_to_room_bounds(enemy_pos: Vector2, push_vel: Vector2) -> Vector
 	return result
 
 func _apply_edict_court_pulse(kill_pos: Vector2) -> void:
+	var effect_action := _capture_combat_action("edict_court")
 	if not kill_pos.is_finite():
 		return
 	var scatter_radius := clampf(80.0 + float(edict_court_push_power) * 1.0, 80.0, 160.0)
@@ -4595,7 +4410,7 @@ func _apply_edict_court_pulse(kill_pos: Vector2) -> void:
 		if dist > scatter_radius:
 			continue
 		var raw_dir := to_enemy.normalized() if dist > 0.001 else Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)).normalized()
-		DAMAGEABLE.apply_impulse(enemy_body, _clamp_push_to_room_bounds(enemy_body.global_position, raw_dir * push_force))
+		DAMAGEABLE.apply_impulse(enemy_body, _clamp_push_to_room_bounds(enemy_body.global_position, raw_dir * push_force), 0, false, effect_action)
 	if player_feedback != null:
 		player_feedback.play_boss_edict_court_pulse(kill_pos, scatter_radius)
 		_broadcast_cue_event("boss_edict_court_pulse", {"position": kill_pos, "radius": scatter_radius})
@@ -4606,7 +4421,7 @@ func _apply_null_corridor_segment(seg_start: Vector2, seg_end: Vector2) -> void:
 		return
 	var lifetime := 3.2 + null_corridor_strength * 0.8
 	var width := 32.0 + null_corridor_strength * 14.0
-	null_corridor_segments.append({"start": origin, "end": seg_end, "life": lifetime, "width": width, "deflect_cooldowns": {}})
+	null_corridor_segments.append({"start": origin, "end": seg_end, "life": lifetime, "width": width, "deflect_cooldowns": {}, "interaction": _capture_combat_action("null_corridor_deflect")})
 	if player_feedback != null:
 		player_feedback.play_boss_null_corridor_spawn(origin, seg_end, width, lifetime)
 		_broadcast_cue_event("boss_null_corridor_spawn", {
@@ -4663,14 +4478,14 @@ func _update_null_corridor_segments(delta: float) -> void:
 				continue
 			# Fresh entry: strong single impulse
 			var push_dir := seg_normal if perp >= 0.0 else -seg_normal
-			DAMAGEABLE.apply_impulse(enemy_body, _clamp_push_to_room_bounds(enemy_body.global_position, push_dir * 750.0))
+			DAMAGEABLE.apply_impulse(enemy_body, _clamp_push_to_room_bounds(enemy_body.global_position, push_dir * 750.0), 0, false, seg.get("interaction", {}))
 			cooldowns[enemy_id] = 0.5
 			seg["deflect_cooldowns"] = cooldowns
 			null_corridor_segments[i] = seg
 			var bounce_ratio := 0.20 + null_corridor_strength * 0.08
 			var bounce_dmg := maxi(1, int(round(float(damage) * bounce_ratio)))
 			if DAMAGEABLE.can_take_damage(enemy_body):
-				DAMAGEABLE.apply_damage(enemy_body, bounce_dmg, {"attack_type": "null_corridor_deflect", "is_ground_attack": true})
+				DAMAGEABLE.apply_damage(enemy_body, bounce_dmg, INTERACTION_REGISTRY.damage_context(seg.get("interaction", {}), "null_corridor_deflect", {"attack_type": "null_corridor_deflect", "is_ground_attack": true}))
 			if player_feedback != null:
 				player_feedback.play_boss_null_corridor_deflect(enemy_body.global_position)
 	while not remove_indices.is_empty():
@@ -4687,6 +4502,7 @@ func _try_apply_convergence_surge(epicenter: Vector2, _source_damage: int, _prim
 	if convergence_surge_hit_counter < proc_every:
 		return
 	convergence_surge_hit_counter = 0
+	_convergence_interaction = _capture_combat_action("convergence_window")
 	convergence_window_left = maxf(convergence_window_left, 1.2 + convergence_surge_damage_ratio * 1.8)
 	convergence_pulse_cooldown = 0.0
 	var dash_refund := 0.12 + 0.24 * convergence_surge_damage_ratio
@@ -4758,6 +4574,7 @@ func _consume_eclipse_mark_bonus(enemy_node: Object, base_damage: int) -> int:
 # --- Fracture Field ---
 
 func _apply_fracture_field(kill_pos: Vector2) -> void:
+	var effect_action := _capture_combat_action("fracture_field")
 	if not kill_pos.is_finite():
 		return
 	if _fracture_field_resolving:
@@ -4808,22 +4625,16 @@ func _apply_fracture_field(kill_pos: Vector2) -> void:
 
 		hit_enemy_ids[enemy_id] = true
 		var fracture_total_damage := field_damage + _hunters_snare_aoe_bonus_against(enemy_body)
-		DAMAGEABLE.apply_damage(enemy_node, fracture_total_damage, {"is_ground_attack": true, "attack_type": "fracture_fault_line", "kill_proc_suppression": DAMAGEABLE.KILL_PROC_SUPPRESS_FRACTURE})
+		DAMAGEABLE.apply_damage(enemy_node, fracture_total_damage, INTERACTION_REGISTRY.damage_context(effect_action, "fracture_fault_line", {"is_ground_attack": true, "attack_type": "fracture_fault_line", "kill_proc_suppression": DAMAGEABLE.KILL_PROC_SUPPRESS_FRACTURE}))
 		var fracture_slow_duration := fracture_field_slow_duration * _global_slow_duration_mult()
-		enemy_node.apply_slow(fracture_slow_duration, 0.45)
-		var fracture_enemy_network_id := int(enemy_body.get_meta("network_enemy_id", -1))
-		if fracture_enemy_network_id > 0:
-			_broadcast_cue_event("enemy_apply_slow", {
-				"enemy_network_id": fracture_enemy_network_id,
-				"duration": fracture_slow_duration,
-				"mult": 0.45
-			})
+		_apply_player_slow(enemy_node, fracture_slow_duration, 0.45)
 
 	_fracture_field_resolving = false
 
 
 
 func _apply_sigil_burst(epicenter: Vector2, source_damage: int) -> void:
+	var effect_action := _capture_combat_action("sigil_burst")
 	var burst_damage: int = maxi(1, int(round(float(source_damage) * 0.7)))
 	burst_damage = _apply_objective_mutator_damage_mult(burst_damage)
 	if player_feedback != null:
@@ -4836,7 +4647,7 @@ func _apply_sigil_burst(epicenter: Vector2, source_damage: int) -> void:
 		var enemy_body := enemy_node as Node2D
 		if enemy_body.global_position.distance_to(epicenter) > 72.0:
 			continue
-		DAMAGEABLE.apply_damage(enemy_node, burst_damage, {"is_ground_attack": true, "attack_type": "sigil_burst"})
+		DAMAGEABLE.apply_damage(enemy_node, burst_damage, INTERACTION_REGISTRY.damage_context(effect_action, "sigil_burst", {"is_ground_attack": true, "attack_type": "sigil_burst"}))
 	_detonate_sigil_chain_zones_in_burst(epicenter, 72.0)
 
 func _detonate_sigil_chain_zones_in_burst(epicenter: Vector2, burst_radius: float) -> void:
@@ -4859,7 +4670,7 @@ func _detonate_sigil_chain_zones_in_burst(epicenter: Vector2, burst_radius: floa
 				continue
 			if enemy_body.global_position.distance_squared_to(zone_pos) > radius_sq:
 				continue
-			DAMAGEABLE.apply_damage(enemy_node, det_damage, {"is_ground_attack": true, "attack_type": "sigil_chain_detonate"})
+			DAMAGEABLE.apply_damage(enemy_node, det_damage, INTERACTION_REGISTRY.damage_context(zone.get("interaction", {}), "sigil_chain_detonate", {"is_ground_attack": true, "attack_type": "sigil_chain_detonate"}))
 		if player_feedback != null:
 			player_feedback.play_world_ring(zone_pos, sigil_chain_radius * 1.3, Color(0.92, 0.62, 1.0, 0.88), 0.26)
 		_broadcast_cue_event("world_ring", {
@@ -5154,7 +4965,7 @@ func _draw_trial_reward_state() -> void:
 			draw_arc(Vector2.ZERO, pop_r, 0.0, TAU, 36, Color(1.0, 0.98, 0.78, 0.92 * flash_t * flash_t), 3.4)
 			draw_arc(Vector2.ZERO, pop_r + 9.0, 0.0, TAU, 36, Color(0.82, 0.94, 1.0, 0.48 * flash_t), 1.8)
 
-		# Charge arc — fills clockwise from top, shifts yellow -> electric white at full
+		# Charge arc â€” fills clockwise from top, shifts yellow -> electric white at full
 		var ring_r := 26.0 + crown_pulse * 1.4
 		var charge_arc := TAU * charge
 		var arc_r := lerpf(0.44, 1.0, charge)
@@ -5164,7 +4975,7 @@ func _draw_trial_reward_state() -> void:
 		if charge_arc > 0.05:
 			draw_arc(Vector2.ZERO, ring_r, -PI * 0.5, -PI * 0.5 + charge_arc, maxi(6, int(charge_arc / 0.1)), Color(arc_r, arc_g, arc_b, arc_a), 2.6 + charge * 0.8)
 
-		# Crown ticks — 5 radial spikes, each lights up as charge passes their threshold
+		# Crown ticks â€” 5 radial spikes, each lights up as charge passes their threshold
 		var tick_count := 5
 		for i in range(tick_count):
 			var tick_angle := -PI * 0.5 + TAU * (float(i) / float(tick_count))
@@ -5186,7 +4997,7 @@ func _draw_trial_reward_state() -> void:
 		var mark_count := wraithstep_marked_enemy_expiry.size() if _is_local_control_owner() else wraithstep_remote_mark_expiry_by_network_enemy_id.size()
 		var wraith_pulse := 0.5 + 0.5 * sin(t * 6.2 + 2.4)
 
-		# Player passive ring — brighter when marks are active
+		# Player passive ring â€” brighter when marks are active
 		var passive_alpha := (0.28 + mark_count * 0.12 + wraith_pulse * 0.14) if mark_count > 0 else (0.12 + wraith_pulse * 0.06)
 		draw_arc(Vector2.ZERO, 20.0 + wraith_pulse * 1.8, 0.0, TAU, 32, Color(0.72, 0.94, 1.0, clampf(passive_alpha, 0.0, 0.72)), 1.8)
 
@@ -5257,7 +5068,7 @@ func _draw_trial_reward_state() -> void:
 		draw_circle(Vector2.ZERO, field_radius + 8.0, Color(0.04, 0.12, 0.22, (0.22 + field_pulse * 0.08) * debuff_t))
 		# Soft orange inner glow for heat/weight
 		draw_circle(Vector2.ZERO, field_radius - 4.0, Color(0.82, 0.44, 0.14, (0.08 + field_pulse * 0.06) * debuff_t))
-		# Primary rotating blue ring — thick and bright
+		# Primary rotating blue ring â€” thick and bright
 		draw_arc(Vector2.ZERO, field_radius, spin, spin + TAU, 52, Color(sovereign_blue.r, sovereign_blue.g, sovereign_blue.b, (0.72 + field_pulse * 0.2) * debuff_t), 3.4)
 		# Counter-rotating orange ring slightly outside
 		draw_arc(Vector2.ZERO, field_radius + 6.0, -spin * 1.3, -spin * 1.3 + TAU, 60, Color(sovereign_orange.r, sovereign_orange.g, sovereign_orange.b, (0.38 + field_pulse * 0.18) * debuff_t), 2.2)
@@ -5268,6 +5079,6 @@ func _draw_trial_reward_state() -> void:
 			var bind_color := sovereign_blue if i % 2 == 0 else sovereign_orange
 			draw_line(bind_dir * 8.0, bind_dir * (field_radius + 7.0), Color(bind_color.r, bind_color.g, bind_color.b, (0.52 + field_pulse * 0.24) * debuff_t), 2.8)
 			draw_circle(bind_dir * (field_radius + 7.0), 3.2 + fast_pulse * 0.6, Color(sovereign_gold.r, sovereign_gold.g, sovereign_gold.b, (0.72 + fast_pulse * 0.2) * debuff_t))
-		# Countdown sweep ring — shows remaining duration
+		# Countdown sweep ring â€” shows remaining duration
 		var sweep_angle := -PI * 0.5 + (1.0 - debuff_t) * TAU
 		draw_arc(Vector2.ZERO, field_radius + 12.0, -PI * 0.5, sweep_angle, 32, Color(0.94, 0.98, 1.0, (0.44 + field_pulse * 0.2) * debuff_t), 2.0)

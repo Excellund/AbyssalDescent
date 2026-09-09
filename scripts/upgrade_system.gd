@@ -8,6 +8,7 @@ const DESCRIPTION_CAP_GUARD := preload("res://scripts/shared/description_cap_gua
 const POWER_PARAMETER_MAPPER := preload("res://scripts/power_parameter_mapper.gd")
 const ARCANA_MOTION := preload("res://scripts/arcana_motion_controller.gd")
 const RETURNING_CRESCENT := preload("res://scripts/returning_crescent_controller.gd")
+const STATIC_WAKE := preload("res://scripts/static_wake_controller.gd")
 const INDOMITABLE_OATH_FILL_REQUIREMENT: float = 52.0
 const INDOMITABLE_OATH_DAMAGE_SCALE: float = 1.35
 
@@ -313,9 +314,9 @@ func _power_sentence_template(power_id: String) -> String:
 		"reaper_step":
 			return "Range/speed %s, kill refresh %s. %s"
 		"static_wake":
-			return "Damage %s of dmg, lasts %s, radius %s. %s"
+			return "Dash: Electric %s Damage/s; lasts %s; radius %s. %s"
 		"storm_crown":
-			return "Every %s hits, chains to %s targets within %s, for %s damage."
+			return "Every %s Hits: %s Electric jumps; reach %s; damage %s. %s"
 		"wraithstep":
 			return "Mark %s, marked-hit damage %s, cleave %s, lasts %s hits."
 		"voidfire":
@@ -445,9 +446,9 @@ func get_power_flavor_text(power_id: String) -> String:
 		"reaper_step":
 			return "Kills fully refresh your dash. Dash range and speed scale together."
 		"static_wake":
-			return "Dashing leaves an electrified trail that shocks any enemy who steps into it."
+			return "Dash leaves an Electric ribbon. Overlapping sections share damage; no attack is needed."
 		"storm_crown":
-			return "Every few hits discharge chain lightning from your target to nearby foes."
+			return "Damaging Hit contacts build a chain discharge. Fields, dash effects and echoes can contribute."
 		"wraithstep":
 			return "Dash marks enemies. Marked hits deal extra hit damage and chain-splash nearby foes."
 		"voidfire":
@@ -584,10 +585,10 @@ func get_power_current_description(power_id: String) -> String:
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			var runtime_values := get_trial_runtime_values(id)
 			var wake_unlocks := _static_wake_unlocks_for_stack(get_trial_power_stack_count(id))
-			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f%%", float(runtime_values.get("damage_ratio", 0.0)) * 100.0), _current_stat("%.2fs", float(cur.get("lifetime", 0.0))), _current_stat("%.0f", float(cur.get("trail_radius", 28.0))), _current_const(wake_unlocks)], "build_detail"))
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f%%", float(runtime_values.get("damage_ratio", 0.0)) * STATIC_WAKE.DAMAGE_RATE * 100.0), _current_stat("%.2fs", float(cur.get("lifetime", 0.0))), _current_stat("%.0f", float(cur.get("trail_radius", 28.0))), _current_const(wake_unlocks)], "build_detail"))
 		"storm_crown":
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
-			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%d", int(cur.get("proc_every", 1))), _current_stat("%d", int(cur.get("chain_targets", 1))), _current_stat("%.0f", float(cur.get("chain_radius", 0.0))), _current_stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0)], "build_detail"))
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%d", int(cur.get("proc_every", 1))), _current_stat("%d", int(cur.get("chain_targets", 1))), _current_stat("%.0f", float(cur.get("chain_radius", 0.0))), _current_stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0), _current_const(_storm_crown_unlocks_for_stack(get_trial_power_stack_count(id)))], "build_detail"))
 		"wraithstep":
 			var cur := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
 			var ws_hits := _wraithstep_hits_for_stack(get_trial_power_stack_count(id))
@@ -690,7 +691,7 @@ func get_trial_power_card_description(power_id: String) -> String:
 			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [range_stat, _const("full"), rs_unlock], "reward_card"))
 		"static_wake":
 			var runtime_values := get_trial_runtime_values(id)
-			var wake_damage_stat := _stat("%.0f%%", float(runtime_values.get("damage_ratio", 0.0)) * 100.0, float(next_values.get("damage_ratio", 0.0)) * 100.0, is_initial)
+			var wake_damage_stat := _stat("%.0f%%", float(runtime_values.get("damage_ratio", 0.0)) * STATIC_WAKE.DAMAGE_RATE * 100.0, float(next_values.get("damage_ratio", 0.0)) * STATIC_WAKE.DAMAGE_RATE * 100.0, is_initial)
 			var wake_life_stat := _stat("%.2fs", float(cur.get("lifetime", 0.0)), float(next_values.get("lifetime", 0.0)), is_initial)
 			var wake_radius_stat := _stat("%.0f", float(cur.get("trail_radius", 28.0)), float(next_values.get("trail_radius", 28.0)), is_initial)
 			var sw_unlock := _const(_static_wake_unlocks_for_stack(next_stack))
@@ -700,7 +701,7 @@ func get_trial_power_card_description(power_id: String) -> String:
 			var targets_stat := _stat("%d", int(cur.get("chain_targets", 1)), int(next_values.get("chain_targets", 1)), is_initial)
 			var radius_stat := _stat("%.0f", float(cur.get("chain_radius", 0.0)), float(next_values.get("chain_radius", 0.0)), is_initial)
 			var damage_stat := _stat("%.0f%%", float(cur.get("damage_ratio", 0.0)) * 100.0, float(next_values.get("damage_ratio", 0.0)) * 100.0, is_initial)
-			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [every_stat, targets_stat, radius_stat, damage_stat], "reward_card"))
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [every_stat, targets_stat, radius_stat, damage_stat, _const(_storm_crown_unlocks_for_stack(next_stack))], "reward_card"))
 		"wraithstep":
 			var mark_stat := _stat("%.2fs", float(cur.get("mark_duration", 0.0)), float(next_values.get("mark_duration", 0.0)), is_initial)
 			var bonus_stat := _stat("+%d", int(cur.get("bonus_damage", 0)), int(next_values.get("bonus_damage", 0)), is_initial)
@@ -957,8 +958,12 @@ func _rupture_wave_unlocks_for_stack(stack_count: int) -> String:
 
 func _static_wake_unlocks_for_stack(stack_count: int) -> String:
 	if stack_count >= 3:
-		return "+slow"
-	return ""
+		return "%d ribbons; Slow." % STATIC_WAKE.MAX_RIBBONS
+	return "%d ribbons." % STATIC_WAKE.MAX_RIBBONS
+
+
+func _storm_crown_unlocks_for_stack(stack_count: int) -> String:
+	return "+1 Slowed; 1/action." if stack_count >= 2 else "1/action."
 
 func _reaper_step_unlocks_for_stack(stack_count: int) -> String:
 	if stack_count >= 3:

@@ -497,7 +497,30 @@ static func _boss_combinations_section_bbcode() -> String:
 	lines.append("Completing a dash, Blast Drive recoil or Razor Orbit leaves one shade for 4 seconds. It appears where you last made contact during that movement, or where you started if there was no contact.")
 	lines.append("Your next deliberate melee attack or charged blast repeats from the shade at 55% damage. Attack reach and strike bonuses carry through, including Razor Wind, Execution Edge and Blood Vow. Level 2 allows two echoes. Further movement replaces the shade; automatic orbit cuts leave its echoes ready.")
 	lines.append("Phantom Step helps place the shade among enemies. Reaper Step refreshes your dash on kills, giving you another chance to place it.")
+	lines.append("Echo damage can contribute to Storm Crown, sharing the original attack's allowance. An echo cannot create another shade, start another launch, or replay the attack's other effects.")
 	return "\n".join(lines)
+
+
+static func _build_keywords_section_bbcode() -> String:
+	var lines: Array[String] = [_section_title_bbcode("Build Keywords")]
+	lines.append("[b]Hit[/b]: damage that reaches an enemy, including strikes, blades, dash damage, fields and echoes. Storm Crown counts each enemy once per original action. Repeated field ticks still deal damage; they do not repeatedly charge Crown on the same enemy.")
+	lines.append("[b]Dash[/b]: damage or effects created through a dash. Static Wake draws its ribbon during the normal dash only; walking, recoil and circling with Razor Orbit do not draw extra Wake ribbons.")
+	lines.append("[b]Electric[/b]: the damage property of Static Wake and Storm Crown. Crown can receive Hit contacts from other damage types too. Its own lightning, and effects caused by that lightning, cannot start another Crown discharge.")
+	lines.append("[b]Slow[/b]: an enemy's movement is reduced. From level 2, Crown gains one extra jump if its discharge reaches an already Slowed enemy. Any source of Slow can help, including a teammate's Arcana. The bonus is once per chain, regardless of how many Slowed enemies it reaches.")
+	lines.append("[b]Mark[/b]: a target-specific benefit used by Wraithstep and Eclipse Mark. Each has its own duration and remaining strikes. A Mark alone does not grant Crown's Slow bonus.")
+	lines.append("[b]Field[/b]: a persistent area such as a sigil, Wake ribbon or void corridor. Follow each power's shape, duration and damage cadence; overlapping visuals do not promise extra damage.")
+	lines.append("[b]Echo[/b]: Sovereign's Double repeats deliberate attack geometry and applicable damage bonuses. It shares the attack's Crown allowance and does not replay other effects or create another echo.")
+	lines.append("")
+	lines.append("[b]Static Wake[/b]")
+	lines.append("Dash leaves an Electric ribbon. It works without attacking. At most two ribbons can remain; creating a third replaces the oldest. Their overlapping sections damage each enemy only once on the shared tick, rather than stacking damage.")
+	lines.append("Damage is applied every 0.25 seconds. Cards show the damage rate per second, before enemy defenses. A ribbon's lifetime begins when it first draws; finishing or extending the dash does not refresh that lifetime or cause an explosion.")
+	lines.append("Level 2 increases damage, lifetime and radius. Level 3 also Slows enemies after damage. The first contact applies Slow; a later eligible hit can benefit from an already Slowed target.")
+	lines.append("")
+	lines.append("[b]Storm Crown[/b]")
+	lines.append("Levels 1, 2 and 3 discharge every 3, 2 and 1 eligible Hit contacts, jumping to up to 2, 3 and 4 additional enemies. Level 2 adds the one-extra-jump Slow interaction. Prismatic improves the existing values once.")
+	lines.append("One original action can discharge Crown once. Its delayed blades, fields and echoes share that limit; striking several new enemies can build the counter, but striking the same enemy again cannot. Each chain visits an enemy at most once.")
+	return "\n".join(lines)
+
 
 static func _keeper_section_bbcode() -> String:
 	var lines: Array[String] = [_section_title_bbcode("Keeper")]
@@ -508,6 +531,7 @@ static func _keeper_section_bbcode() -> String:
 static func glossary_sections() -> Array[Dictionary]:
 	return [
 		{"label": "Reward Tiers", "bbcode": _reward_tiers_section_bbcode()},
+		{"label": "Build Keywords", "bbcode": _build_keywords_section_bbcode()},
 		{"label": "Motion Arcana", "bbcode": _motion_arcana_section_bbcode()},
 		{"label": "Boss Combinations", "bbcode": _boss_combinations_section_bbcode()},
 		{"label": "Encounters", "bbcode": _encounters_section_bbcode()},

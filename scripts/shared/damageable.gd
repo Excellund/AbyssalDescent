@@ -1,12 +1,69 @@
 extends RefCounted
 
 const ENEMY_BASE_SCRIPT := preload("res://scripts/enemy_base.gd")
+const INTERACTIONS := preload("res://scripts/shared/combat_interaction_registry.gd")
 const STAT_ATTRIBUTION_TRACE := false
 static var _secondary_scope_depth: int = 0
 const KILL_PROC_SUPPRESS_FRACTURE := 1
 const KILL_PROC_SUPPRESS_ECHO_PULSE := 2
 const KILL_PROC_SUPPRESSION_MASK := KILL_PROC_SUPPRESS_FRACTURE | KILL_PROC_SUPPRESS_ECHO_PULSE
 static var _kill_proc_suppression: int = 0
+static var _interaction_scope: Dictionary = {}
+static var _damage_depth: int = 0
+static var _pending_interaction_hits: Array[Dictionary] = []
+static var _flushing_interactions: bool = false
+
+## Plain value scopes cross synchronous descendants; delayed effects keep a copy.
+static func begin_interaction_scope(action: Dictionary) -> Dictionary:
+	var previous := _interaction_scope
+	_interaction_scope = action.duplicate()
+	return previous
+
+static func end_interaction_scope(previous: Dictionary) -> void:
+	_interaction_scope = previous
+
+static func current_interaction_context() -> Dictionary:
+	return _interaction_scope.duplicate()
+
+static func _with_interaction_context(context: Dictionary) -> Dictionary:
+	var raw: Variant = context.get("interaction", _interaction_scope)
+	if not (raw is Dictionary) or raw.is_empty():
+		return context
+	var source := String(context.get("attack_type", raw.get("source", "")))
+	var merged := INTERACTIONS.damage_context(raw, source, context)
+	# A child cannot shed its parent's reaction ancestry during a kill callback.
+	if not _interaction_scope.is_empty():
+		merged.interaction["ancestry"] = int(merged.interaction.get("ancestry", 0)) | int(_interaction_scope.get("ancestry", 0))
+	return merged
+
+static func _capture_interaction_hit(target: Object, amount: int, context: Dictionary, source_peer: int) -> Dictionary:
+	if not (target is Node2D) or not target.is_in_group("enemies"):
+		return {}
+	var action := INTERACTIONS.validate_action(context.get("interaction"), source_peer)
+	if action.is_empty() or (int(action.traits) & INTERACTIONS.HIT) == 0 or (int(action.ancestry) & INTERACTIONS.CROWN_ANCESTRY) != 0:
+		return {}
+	var owner := _find_combat_owner(source_peer)
+	var controller: Node = owner.get("combat_interactions") if owner != null else null
+	if not is_instance_valid(controller) or not controller.accepts_action(action):
+		return {}
+	return {"interaction": action, "target_id": target.get_instance_id(),
+		"position": (target as Node2D).global_position, "amount": amount,
+		"pre_slowed": bool(target.is_slowed()) if target.has_method("is_slowed") else false,
+		"controller": weakref(controller), "cancel_generation": int(controller.get("_cancel_generation"))}
+
+static func _flush_interaction_hits() -> void:
+	if _damage_depth > 0 or _flushing_interactions:
+		return
+	_flushing_interactions = true
+	var processed := 0
+	while not _pending_interaction_hits.is_empty() and processed < INTERACTIONS.MAX_PENDING_HITS:
+		var event: Dictionary = _pending_interaction_hits.pop_front()
+		var controller: Variant = event.controller.get_ref()
+		if is_instance_valid(controller):
+			controller.accept_hit(event)
+		processed += 1
+	_pending_interaction_hits.clear()
+	_flushing_interactions = false
 
 ## Only the existing non-chaining kill rules belong here. This mask does not
 ## change primary/secondary classification, kill credit, or other kill benefits.
@@ -56,13 +113,14 @@ static func is_displacement_immune(target: Object) -> bool:
 	return false
 
 static func apply_damage(target: Object, amount: int, damage_context: Dictionary = {}, source_peer_id: int = 0) -> bool:
-	if amount <= 0:
+	if amount < 0 or (amount == 0 and damage_context.get("hunters_snare_aoe_bonus") != true):
 		return false
 	if not can_take_damage(target):
 		return false
 	var route_to_host := _should_route_enemy_damage_to_host(target)
 	if route_to_host or source_peer_id <= 0:
 		source_peer_id = _resolve_local_peer_id()
+	damage_context = _with_interaction_context(damage_context)
 	damage_context = _with_attack_origin(target, damage_context, source_peer_id)
 	var secondary := is_launch_suppressed() or bool(damage_context.get("secondary", false))
 	if secondary:
@@ -75,13 +133,27 @@ static func apply_damage(target: Object, amount: int, damage_context: Dictionary
 	if route_to_host:
 		_route_enemy_damage_to_host(target, amount, damage_context)
 		return true
+	if damage_context.get("hunters_snare_aoe_bonus") == true:
+		var action := INTERACTIONS.validate_action(damage_context.get("interaction"), source_peer_id)
+		var owner := _find_combat_owner(source_peer_id)
+		var controller: Node = owner.get("combat_interactions") if owner != null else null
+		if not action.is_empty() and action.source == "static_wake" and is_instance_valid(controller) and controller.accepts_action(action) and owner.has_method("_hunters_snare_aoe_bonus_against"):
+			amount += maxi(0, int(owner._hunters_snare_aoe_bonus_against(target)))
+	if amount <= 0:
+		return false
 	var health_before := _read_target_health(target)
+	var interaction_event := _capture_interaction_hit(target, amount, damage_context, source_peer_id) if health_before > 0 else {}
+	var raw_action: Variant = damage_context.get("interaction", {})
+	var previous_interaction := begin_interaction_scope(raw_action if raw_action is Dictionary else {})
+	_damage_depth += 1
 	# Death signals fire inside take_damage. Make this hit's owner visible to
 	# kill-triggered powers before those signals, then undo rejected hits.
 	var pending_credit := _prepare_enemy_damage_credit(target, health_before, source_peer_id)
 	var previous_kill_scope := begin_kill_proc_scope(kill_proc_suppression)
 	if secondary:
 		begin_secondary_scope()
+	if health_before > 0:
+		_apply_declared_hit_slows(target, damage_context, source_peer_id)
 	if damage_context.is_empty():
 		target.take_damage(amount)
 	else:
@@ -94,6 +166,69 @@ static func apply_damage(target: Object, amount: int, damage_context: Dictionary
 	if secondary:
 		end_secondary_scope()
 	end_kill_proc_scope(previous_kill_scope)
+	end_interaction_scope(previous_interaction)
+	_damage_depth -= 1
+	if not interaction_event.is_empty() and health_after >= 0 and health_after < health_before and _pending_interaction_hits.size() < INTERACTIONS.MAX_PENDING_HITS:
+		interaction_event["applied"] = health_before - health_after
+		_pending_interaction_hits.append(interaction_event)
+	_flush_interaction_hits()
+	return true
+
+static func _valid_slow(duration: float, mult: float) -> bool:
+	return is_finite(duration) and is_finite(mult) and duration > 0.0 and mult > 0.0 and mult < 1.0
+
+static func _apply_declared_hit_slows(target: Object, context: Dictionary, source_peer: int) -> void:
+	if not target.has_method("apply_slow"):
+		return
+	var raw_action: Variant = context.get("interaction", {})
+	if not (raw_action is Dictionary):
+		return
+	if not raw_action.is_empty():
+		var action := INTERACTIONS.validate_action(raw_action, source_peer)
+		var owner := _find_combat_owner(source_peer)
+		var controller: Node = owner.get("combat_interactions") if owner != null else null
+		if action.is_empty() or not is_instance_valid(controller) or not controller.accepts_action(action):
+			return
+	var declarations: Array = []
+	if context.get("slow_on_hit") is Dictionary:
+		declarations.append(context.slow_on_hit)
+	if context.get("slows_on_hit") is Array:
+		declarations.append_array(context.slows_on_hit)
+	for index in range(mini(declarations.size(), 8)):
+		var entry: Variant = declarations[index]
+		if not (entry is Dictionary) or not (entry.get("duration") is float or entry.get("duration") is int) or not (entry.get("mult") is float or entry.get("mult") is int):
+			continue
+		var duration := float(entry.duration)
+		var mult := float(entry.mult)
+		if _valid_slow(duration, mult):
+			target.apply_slow(duration, mult)
+
+## Status gameplay is reliable and host-owned; visual cues cannot create slows.
+static func apply_slow(target: Object, duration: float, mult: float, source_peer_id: int = 0, interaction: Dictionary = {}) -> bool:
+	if not is_instance_valid(target) or not (target is ENEMY_BASE_SCRIPT) or target.is_queued_for_deletion() or _read_target_health(target) <= 0 or not _valid_slow(duration, mult):
+		return false
+	var route_to_host := _should_route_enemy_damage_to_host(target)
+	if route_to_host or source_peer_id <= 0:
+		source_peer_id = _resolve_local_peer_id()
+	var action := interaction if not interaction.is_empty() else current_interaction_context()
+	if not action.is_empty():
+		action = INTERACTIONS.validate_action(action, source_peer_id)
+		if action.is_empty():
+			return false
+	if route_to_host:
+		if action.is_empty():
+			return false
+		var tree := Engine.get_main_loop() as SceneTree
+		if tree == null or tree.current_scene == null:
+			return false
+		tree.current_scene.request_enemy_slow_from_client(int(target.get_meta("network_enemy_id", 0)), duration, mult, action)
+		return true
+	if not action.is_empty():
+		var owner := _find_combat_owner(source_peer_id)
+		var controller: Node = owner.get("combat_interactions") if owner != null else null
+		if not is_instance_valid(controller) or not controller.accepts_action(action):
+			return false
+	target.apply_slow(duration, mult)
 	return true
 
 
@@ -133,27 +268,30 @@ static func _prepare_enemy_damage_credit(target: Object, health_before: int, sou
 
 
 ## Enemy movement is authoritative on the host, just like enemy health.
-static func apply_impulse(target: Object, impulse: Vector2, source_peer_id: int = 0, suppress_launch: bool = false) -> bool:
+static func apply_impulse(target: Object, impulse: Vector2, source_peer_id: int = 0, suppress_launch: bool = false, interaction: Dictionary = {}) -> bool:
 	if not is_instance_valid(target) or not (target is CharacterBody2D) or not impulse.is_finite():
 		return false
 	var enemy := target as CharacterBody2D
 	if not enemy.is_in_group("enemies") or _read_target_health(enemy) <= 0:
 		return false
 	suppress_launch = suppress_launch or is_launch_suppressed()
+	var action := interaction if not interaction.is_empty() else current_interaction_context()
+	if source_peer_id <= 0 or _should_route_enemy_damage_to_host(enemy):
+		source_peer_id = _resolve_local_peer_id()
 	if _should_route_enemy_damage_to_host(enemy):
 		var enemy_id := int(enemy.get_meta("network_enemy_id", 0))
 		var scene_tree := Engine.get_main_loop() as SceneTree
 		if enemy_id <= 0 or scene_tree == null or scene_tree.current_scene == null:
 			return false
-		scene_tree.current_scene.request_enemy_impulse_from_client(enemy_id, impulse, suppress_launch)
+		scene_tree.current_scene.request_enemy_impulse_from_client(enemy_id, impulse, suppress_launch, action)
 		return true
+	var previous_interaction := begin_interaction_scope(action)
 	if not is_displacement_immune(enemy):
 		enemy.velocity += impulse
 		notify_player_displacement(enemy, impulse)
 	if not suppress_launch and impulse.length_squared() > 0.0001:
-		if source_peer_id <= 0:
-			source_peer_id = _resolve_local_peer_id()
 		_arm_launch(enemy, impulse, source_peer_id)
+	end_interaction_scope(previous_interaction)
 	return true
 
 
@@ -217,7 +355,7 @@ static func _restore_rejected_damage_credit(target: Object, health_before: int, 
 
 
 static func _read_target_health(target: Object) -> int:
-	if target == null:
+	if not is_instance_valid(target):
 		return -1
 	var health_state_node := target.get("health_state") as Object
 	if health_state_node != null:
@@ -228,7 +366,7 @@ static func _read_target_health(target: Object) -> int:
 static func _report_enemy_damage_applied(target: Object, health_before: int, source_peer_id: int) -> void:
 	if health_before < 0:
 		return
-	if not (target is Node):
+	if not is_instance_valid(target) or not (target is Node):
 		return
 	var target_node := target as Node
 	if target_node == null or not target_node.is_in_group("enemies"):

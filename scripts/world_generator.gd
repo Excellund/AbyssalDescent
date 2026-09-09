@@ -3415,7 +3415,7 @@ func _spawn_synced_pyre_death_field(effect_payload: Dictionary) -> void:
 func request_enemy_damage_from_client(enemy_id: int, amount: int, damage_context: Dictionary = {}) -> void:
 	if not MultiplayerSessionManager.is_remote_replica():
 		return
-	if enemy_id <= 0 or amount <= 0:
+	if enemy_id <= 0 or amount < 0 or (amount == 0 and damage_context.get("hunters_snare_aoe_bonus") != true):
 		return
 	_sync_request_enemy_damage.rpc_id(1, enemy_id, amount, damage_context)
 
@@ -3424,7 +3424,7 @@ func request_enemy_damage_from_client(enemy_id: int, amount: int, damage_context
 func _sync_request_enemy_damage(enemy_id: int, amount: int, damage_context: Dictionary = {}) -> void:
 	if not MultiplayerSessionManager.should_broadcast():
 		return
-	if enemy_id <= 0 or amount <= 0:
+	if enemy_id <= 0 or amount < 0 or (amount == 0 and damage_context.get("hunters_snare_aoe_bonus") != true):
 		return
 	var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as ENEMY_BASE_SCRIPT
 	if not is_instance_valid(enemy):
@@ -3443,15 +3443,32 @@ func _sync_request_enemy_damage(enemy_id: int, amount: int, damage_context: Dict
 	if STAT_ATTRIBUTION_TRACE:
 		print_debug("[StatAttribution][HostApplied] enemy_id=%d source=%d before=%d after=%d applied=%d" % [enemy_id, source_peer_id, health_before, health_after, maxi(0, health_before - health_after)])
 
-func request_enemy_impulse_from_client(enemy_id: int, impulse: Vector2, suppress_launch: bool = false) -> void:
+func request_enemy_slow_from_client(enemy_id: int, duration: float, mult: float, interaction: Dictionary = {}) -> void:
+	if not MultiplayerSessionManager.is_remote_replica() or enemy_id <= 0:
+		return
+	_sync_request_enemy_slow.rpc_id(1, enemy_id, duration, mult, interaction)
+
+@rpc("reliable", "any_peer")
+func _sync_request_enemy_slow(enemy_id: int, duration: float, mult: float, interaction: Dictionary = {}) -> void:
+	if not MultiplayerSessionManager.should_broadcast() or enemy_id <= 0:
+		return
+	var sender_peer_id := get_tree().get_multiplayer().get_remote_sender_id()
+	if not MultiplayerSessionManager.get_peer_ids().has(sender_peer_id):
+		return
+	var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as ENEMY_BASE_SCRIPT
+	if not is_instance_valid(enemy) or enemy.get_current_health() <= 0:
+		return
+	DAMAGEABLE.apply_slow(enemy, duration, mult, sender_peer_id, interaction)
+
+func request_enemy_impulse_from_client(enemy_id: int, impulse: Vector2, suppress_launch: bool = false, interaction: Dictionary = {}) -> void:
 	if not MultiplayerSessionManager.is_remote_replica():
 		return
 	if enemy_id <= 0 or not impulse.is_finite():
 		return
-	_sync_request_enemy_impulse.rpc_id(1, enemy_id, impulse, suppress_launch)
+	_sync_request_enemy_impulse.rpc_id(1, enemy_id, impulse, suppress_launch, interaction)
 
 @rpc("reliable", "any_peer")
-func _sync_request_enemy_impulse(enemy_id: int, impulse: Vector2, suppress_launch: bool = false) -> void:
+func _sync_request_enemy_impulse(enemy_id: int, impulse: Vector2, suppress_launch: bool = false, interaction: Dictionary = {}) -> void:
 	if not MultiplayerSessionManager.should_broadcast():
 		return
 	if enemy_id <= 0 or not impulse.is_finite():
@@ -3462,7 +3479,7 @@ func _sync_request_enemy_impulse(enemy_id: int, impulse: Vector2, suppress_launc
 	var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as ENEMY_BASE_SCRIPT
 	if not is_instance_valid(enemy) or enemy.get_current_health() <= 0:
 		return
-	DAMAGEABLE.apply_impulse(enemy, impulse, sender_peer_id, suppress_launch)
+	DAMAGEABLE.apply_impulse(enemy, impulse, sender_peer_id, suppress_launch, interaction)
 
 func _spawn_boss_for_stage(boss_stage: int, spawn_position: Vector2) -> Node2D:
 	var boss := BOSS_STAGE_REGISTRY.create_boss_node(boss_stage, spawn_position)

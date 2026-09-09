@@ -138,13 +138,19 @@ func _test_effect_epicenters() -> void:
 	player.storm_crown_proc_every = 1
 	player.storm_crown_chain_targets = 2
 	var chained := _origin_enemy(Vector2(60.0, 0.0))
-	player._apply_storm_crown_hit(Vector2.ZERO, -1, 100)
+	var source := _origin_enemy(Vector2.ZERO)
+	DAMAGEABLE.apply_damage(source, 100, player.INTERACTION_REGISTRY.damage_context(player.new_combat_action("melee"), "melee"))
 	_expect_origin(enemy, Vector2.ZERO, "Storm Crown first hop")
 	_expect_origin(chained, enemy.global_position, "Storm Crown next hop")
 	chained.free()
-	player.static_wake_trails = [{"pos": Vector2(15.0, 0.0), "life": 1.0}]
+	source.free()
+	player.reward_storm_crown = false
+	player.reward_static_wake = true
 	player.static_wake_damage = 100
-	player._update_static_wake_trails(0.1)
+	player.static_wake_controller.begin_dash(player.new_combat_action("dash"))
+	player.static_wake_controller.append_segment(Vector2(14.0, 0.0), Vector2(15.0, 0.0))
+	player.static_wake_controller.end_dash()
+	player.static_wake_controller.tick(0.25)
 	_expect_origin(enemy, Vector2(15.0, 0.0), "Static Wake")
 	player._fire_overcharge_discharge(Vector2(10.0, 0.0))
 	_expect_origin(enemy, Vector2(10.0, 0.0), "Overcharge")

@@ -16,6 +16,9 @@ func _run() -> void:
 			for legacy in [false,true]:
 				await _test_movement_roundtrip(character_id,picks,legacy)
 	await _test_explicit_values()
+	for character_id in CHARACTER.get_launch_character_ids():
+		for picks in [1, 2, 3, 4]:
+			await _test_electricity_roundtrip(character_id, picks)
 	for single_arcana in [true,false]:
 		await _test_build_and_oath_roundtrip(single_arcana)
 	RunContext.clear_active_run()
@@ -27,6 +30,29 @@ func _run() -> void:
 	await process_frame
 	print("[OK] Power snapshots: %d checks, %d failures" % [checks,failures.size()])
 	quit(0 if failures.is_empty() else 1)
+
+func _test_electricity_roundtrip(character_id: String, picks: int) -> void:
+	_setup("solo")
+	world.current_character_id = character_id
+	world.player.apply_character_package(CHARACTER.get_character(character_id))
+	for index in range(picks):
+		world.player.apply_trial_power("static_wake")
+		world.player.apply_trial_power("storm_crown")
+	var original := world.player.build_run_snapshot()
+	var root_action := world.player.new_combat_action("dash")
+	world.player.static_wake_controller.begin_dash(root_action)
+	world.player.static_wake_controller.append_segment(Vector2.ZERO, Vector2(30.0, 0.0))
+	world.player.static_wake_controller.end_dash()
+	world._save_active_run_checkpoint()
+	var resumed := _replace_player(RunContext.load_active_run())
+	var label := "%s electricity picks%d" % [character_id, picks]
+	check(resumed.build_run_snapshot().properties == original.properties, label + ": disk resume preserves mapped stats and learned powers")
+	for power in ["static_wake", "storm_crown"]:
+		check(resumed.get_trial_power_stack_count(power) == mini(picks, 3), label + ": learned level survives")
+		check(resumed.upgrade_system.has_trial_power_prismatic(power) == (picks == 4), label + ": one-time Prismatic state survives")
+	check(resumed.static_wake_controller.ribbons.is_empty(), label + ": temporary ribbons do not survive disk restore")
+	check(resumed.combat_interactions._roots.is_empty(), label + ": reaction allowances do not survive disk restore")
+	await _cleanup()
 
 func _replace_player(snapshot: Dictionary) -> Player:
 	var old := world.player

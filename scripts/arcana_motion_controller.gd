@@ -3,6 +3,7 @@ const ARENA_BOUNDARY := preload("res://scripts/shared/arena_boundary.gd")
 ## Owns special movement, never dash immunity. The player supplies accepted input
 ## edges; held buttons cannot arm abilities after a modal or a failed action.
 
+const INTERACTIONS := preload("res://scripts/shared/combat_interaction_registry.gd")
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const BLAST_EFFECT := preload("res://scripts/blast_impact_effect.gd")
 const BLAST_RANGE_MIN := 100.0
@@ -63,6 +64,8 @@ var _orbit_warning_played := false
 var _orbit_hint_left := 0.0
 var _orbit_hint_origin := Vector2.ZERO
 var _orbit_hint_direction := Vector2.RIGHT
+
+var _orbit_interaction: Dictionary = {}
 
 func initialize(owner_player: CharacterBody2D) -> void:
 	player = owner_player
@@ -258,6 +261,7 @@ func start_orbit(candidate: Node2D) -> void:
 	_clear_orbit_request()
 	_finish_motion(true)
 	anchor = candidate
+	_orbit_interaction = player._dash_interaction.duplicate(true) if not player._dash_interaction.is_empty() else player._capture_combat_action("razor_orbit")
 	motion = Motion.ORBIT
 	motion_origin = player.global_position
 	last_contact_position = Vector2.INF
@@ -372,7 +376,7 @@ func _apply_cut_contacts(start: Vector2, finish: Vector2) -> void:
 		contact_cooldowns[id] = 0.30
 		var amount := maxi(1, int(round(float(player.damage) * ORBIT_CUT_DAMAGE_RATIO * float(player.razor_orbit_damage_scale))))
 		amount = int(player._apply_objective_mutator_damage_mult(amount))
-		DAMAGEABLE.apply_damage(enemy, amount, {"attack_type": "razor_orbit", "is_ground_attack": true, "secondary": true})
+		DAMAGEABLE.apply_damage(enemy, amount, INTERACTIONS.damage_context(_orbit_interaction, "razor_orbit", {"is_ground_attack": true, "secondary": true}))
 		if generation != _cancel_generation:
 			return
 		last_contact_position = finish
@@ -407,6 +411,7 @@ func _finish_motion(completed: bool) -> void:
 	_orbit_warning_played = false
 
 func cancel(reset_charges: bool = false) -> void:
+	_orbit_interaction.clear()
 	_cancel_generation += 1
 	charge_hold = -1.0
 	_clear_orbit_request()
