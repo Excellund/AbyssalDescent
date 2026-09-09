@@ -1,5 +1,7 @@
 # Movement, combinations and Keeper playtests
 
+The [development plan](development-plan.md) tracks current priorities and the delivery pipeline. This document retains feature and playtest history.
+
 These three updates preserve attack, dash, and movement controls. Development exports have unique `dev-*` versions, retain local run history, and cannot submit telemetry or leaderboard records remotely.
 
 Open **AbyssalDescent Playtest.exe** on the desktop (`C:/Users/mikel/Desktop/AbyssalDescent Playtest.exe`). Both normal and debug builds replace this same executable. Keep one desktop playtest file; the unique `dev-*` version inside the build identifies each update in local run history.

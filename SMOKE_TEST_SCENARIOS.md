@@ -6,6 +6,9 @@ These are manual and automated test paths that verify the behavior invariants de
 
 **Execution**: These tests should be run after completing each phase. Automate where practical; manual verification for complex scenarios is acceptable.
 
+Use [the current development plan](docs/development-plan.md) for sequencing and
+checkpoint priorities; this document remains the detailed smoke-test reference.
+
 ---
 
 ## Quick Test (Smoke Matrix)
@@ -17,17 +20,43 @@ configuration sync. It uses a temporary project with isolated user
 data and inactive service startup, preserves the real project and saves, and
 prints the location of retained logs. Manual gameplay checks below still apply.
 
-After validation passes, build a local Windows playtest with
-`& ./.github/scripts/export_playtest.ps1 -OutputPath "AbyssalDescent.playtest.exe"`.
+After validation passes, build the normal Windows playtest with
+`& ./.github/scripts/export_playtest.ps1`.
 The script uses the same Godot path settings as the regression runner and requires
 matching installed export templates. It imports and exports a fresh production
 copy with isolated editor data, verifies the embedded package, and prints its
 SHA256 and retained log location. It preserves real saves and source configuration,
-excludes test scripts, and sets only the copied build to `dev` with automatic
-update checks disabled. It does not launch the game. Existing output files are
-preserved unless `-Overwrite` is supplied; close that executable before replacing it.
+excludes test scripts, and gives the copied build a unique `dev-*` identifier with
+automatic update checks disabled. It delivers the regular menu and normal progress
+to `C:/Users/mikel/Desktop/AbyssalDescent Playtest.exe`, replacing that canonical
+file automatically only after package verification. It does not launch the game.
+Custom output paths require `-Overwrite` to replace an existing file.
+
+For requested focused debug testing, use
+`& ./.github/scripts/start_debug_playtest.ps1` to export and launch, or
+`& ./.github/scripts/export_playtest.ps1 -DebugRun` to export only. Debug builds
+use separate saves and replace the same desktop executable. Restore a normal
+build at an agreed checkpoint. Use the isolated
+`.github/scripts/test_playtest_executable.ps1 -ExecutablePath <exported-path>`
+helper for package/gameplay smoke checks; include `-DebugRun` when checking a debug
+artifact. Development builds stay out of remote telemetry and leaderboards.
 
 A minimal set of quick checks that can be run between commits to catch major breakage.
+
+### Descent Identity Playtest
+
+- Play normally through an act transition. Fractured paving, layered vaults and interrupted plates should distinguish the three acts while enemies, Electric effects and hostile warnings remain readable. Exterior decoration must not look like usable cover or an exit.
+- At a cleared doorway, inspect the focused route's payoff. Standard rooms offer a Boon, Trial/Apex rooms offer Arcana, objectives show their real temporary bonus and duration, and Rest Sites promise healing. The actual reward must match.
+- Enter a standard encounter or objective, then inspect later offers of that category. The last entered identity should be excluded where an alternative exists. Declining an offer must not make it count as a visited room.
+- Continue from a saved doorway, including a cleared Warden/Sovereign chamber. The run keeps its biome roster and offered doors; the old chamber and act heading remain through rewards. The next room introduces the new act. Older saves remain usable without invented earlier encounter or boss history.
+- Listen through combat, rewards, rest and boss entry. Quiet contexts should lower the existing room cue smoothly; combat restores it without restarting the same track. Boss entrance decoration disappears as the existing survey phase ends, before attack warnings.
+- Check defeat/victory and Retry. Results lead with recorded act/depth and known bosses, followed by the build and progression. In co-op, both players see the same descent milestones and keep their own stats/build. A result from incomplete legacy tracking must identify partial stats as such.
+
+Automated entry points are `test_descent_routes.gd`, `test_descent_presentation.gd`,
+`test_music_contexts.gd` and `test_run_result_identity.gd` through the isolated
+runner. Use `render_descent_environments.ps1` for the nine-palette/combat/door GPU
+review and `test_room_layout_entry_enet.ps1` for real local host/joiner coverage.
+These staged checks do not establish enjoyment, balance or internet lobby acceptance.
 
 ### Catalyst Playtest
 

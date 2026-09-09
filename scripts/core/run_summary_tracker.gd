@@ -28,6 +28,8 @@ var total_damage_dealt: int = 0
 var total_damage_taken: int = 0
 var enemies_killed: int = 0
 var bosses_defeated: int = 0
+var reached_act: int = 0
+var defeated_boss_ids: Array[String] = []
 
 var boon_items: Dictionary = {}
 var arcana_items: Dictionary = {}
@@ -72,6 +74,8 @@ func reset_for_run(run_seed: Dictionary) -> void:
 	total_damage_taken = 0
 	enemies_killed = 0
 	bosses_defeated = 0
+	reached_act = 1
+	defeated_boss_ids.clear()
 	boon_items.clear()
 	arcana_items.clear()
 	boss_reward_items.clear()
@@ -119,6 +123,8 @@ func record_boss_defeat(_boss_id: String = "") -> void:
 	var id: String = String(_boss_id).strip_edges().to_lower()
 	if id.is_empty():
 		id = _active_boss_id
+	if id in ["warden", "sovereign", "lacuna"] and not defeated_boss_ids.has(id):
+		defeated_boss_ids.append(id)
 	# A defeat without a matching engagement is not evidence of a clean fight.
 	if not id.is_empty() and id == _active_boss_id and not _bosses_with_damage_taken.has(id):
 		if not boss_no_hit_ids.has(id):
@@ -132,6 +138,24 @@ func record_boss_defeat(_boss_id: String = "") -> void:
 				peer_ids.append(id)
 			_boss_no_hit_ids_by_peer[peer_id] = peer_ids
 	end_boss_engagement()
+
+func record_act_entry(act: int) -> void:
+	if act >= 1 and act <= 3:
+		reached_act = maxi(reached_act, act)
+
+func restore_descent_facts(checkpoint: Dictionary) -> void:
+	# Old checkpoints did not store act/boss identity. Do not reconstruct them
+	# from depth or a victory count: debug starts and partial resumes can differ.
+	reached_act = 0
+	var saved_act: Variant = checkpoint.get("reached_act")
+	if (saved_act is int or saved_act is float) and saved_act >= 1 and saved_act <= 3 and float(saved_act) == floor(float(saved_act)):
+		reached_act = int(saved_act)
+	defeated_boss_ids.clear()
+	var saved_bosses: Variant = checkpoint.get("defeated_boss_ids", [])
+	if saved_bosses is Array:
+		for id in saved_bosses:
+			if id is String and id in ["warden", "sovereign", "lacuna"] and not defeated_boss_ids.has(id):
+				defeated_boss_ids.append(id)
 
 ## Boss fight bracketing: boss enemy id is opened on engage, closed on defeat/death.
 func begin_boss_engagement(boss_id: String, participating_peer_ids: Array = [0]) -> void:
@@ -159,6 +183,8 @@ func build_checkpoint() -> Dictionary:
 		"total_damage_taken": total_damage_taken,
 		"enemies_killed": enemies_killed,
 		"bosses_defeated": bosses_defeated,
+		"reached_act": reached_act,
+		"defeated_boss_ids": defeated_boss_ids.duplicate(),
 		"boss_no_hit_ids": boss_no_hit_ids.duplicate(),
 		"hold_full_control_achieved": hold_full_control_achieved,
 		"rest_count": rest_count,
@@ -169,6 +195,7 @@ func build_checkpoint() -> Dictionary:
 	}
 
 func restore_checkpoint(checkpoint: Dictionary) -> void:
+	restore_descent_facts(checkpoint)
 	restore_run_provenance(checkpoint.get("run_provenance"))
 	total_damage_dealt = maxi(0, int(checkpoint.get("total_damage_dealt", 0)))
 	total_damage_taken = maxi(0, int(checkpoint.get("total_damage_taken", 0)))
@@ -295,6 +322,10 @@ func build_summary(final_state: Dictionary) -> Dictionary:
 	summary["rest_count"] = rest_count
 	summary["primary_attacks_fired"] = primary_attacks_fired
 	summary["full_run_tracking_complete"] = full_run_tracking_complete
+	if reached_act > 0:
+		summary["reached_act"] = reached_act
+	if not defeated_boss_ids.is_empty():
+		summary["defeated_boss_ids"] = defeated_boss_ids.duplicate()
 	return summary
 
 func _category_for_mode(mode: int) -> String:

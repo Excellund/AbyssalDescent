@@ -1,5 +1,7 @@
 # Keeper and Breach: a support enemy and one encounter
 
+For current priorities and delivery steps, use the [development plan](development-plan.md). This document records the implemented Keeper/Breach milestone and its follow-up feedback.
+
 Status: implemented after the September 9 movement playtest. The original three updates are included. This update does not add another control or change Sovereign's Double's proc rules. The checkpoint is delivered as a normal playtest through the same desktop executable.
 
 ## Movement fix and remaining playtesting

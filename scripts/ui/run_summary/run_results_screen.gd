@@ -8,6 +8,7 @@ const RUN_STATS_PANEL_SCRIPT := preload("res://scripts/ui/run_summary/run_stats_
 const BUILD_SUMMARY_PANEL_SCRIPT := preload("res://scripts/ui/run_summary/build_summary_panel.gd")
 const REWARD_SUMMARY_PANEL_SCRIPT := preload("res://scripts/ui/run_summary/reward_summary_panel.gd")
 const RUN_ACTION_BUTTONS_SCRIPT := preload("res://scripts/ui/run_summary/run_action_buttons.gd")
+const RESULT_FACTS := preload("res://scripts/ui/run_summary/run_result_facts.gd")
 const RARITY_COMMON := Color(0.62, 0.7, 0.8, 0.9)
 const RARITY_RARE := Color(0.46, 0.78, 1.0, 0.94)
 const RARITY_EPIC := Color(0.82, 0.58, 1.0, 0.96)
@@ -17,6 +18,8 @@ var _layer: CanvasLayer
 var _root: Control
 var _card: Panel
 var _title_label: Label
+var _outcome_label: Label
+var _boss_label: Label
 var _subtitle_label: Label
 var _meta_label: Label
 var _content_scroll: ScrollContainer
@@ -26,7 +29,9 @@ var _build_panel
 var _reward_panel
 var _action_buttons
 var _timeline_visible: bool = true
+var _timeline_available: bool = false
 var _input_delay_left: float = 0.0
+var _appearance_tween: Tween
 
 func show_result(result_title: String, subtitle: String, summary: Dictionary, defeat_theme: bool = false, allow_retry_run: bool = true) -> void:
 	if _layer == null:
@@ -37,10 +42,12 @@ func show_result(result_title: String, subtitle: String, summary: Dictionary, de
 	_layer.visible = true
 	_root.modulate = Color(1.0, 1.0, 1.0, 0.0)
 	_card.scale = Vector2(0.97, 0.97)
-	var tween := create_tween()
-	tween.set_parallel(true)
-	tween.tween_property(_root, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.34).set_ease(Tween.EASE_OUT)
-	tween.tween_property(_card, "scale", Vector2.ONE, 0.36).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	if _appearance_tween != null and _appearance_tween.is_valid():
+		_appearance_tween.kill()
+	_appearance_tween = create_tween()
+	_appearance_tween.set_parallel(true)
+	_appearance_tween.tween_property(_root, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.34).set_ease(Tween.EASE_OUT)
+	_appearance_tween.tween_property(_card, "scale", Vector2.ONE, 0.36).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 
 func is_open() -> bool:
@@ -57,6 +64,10 @@ func set_retry_disabled(disabled: bool) -> void:
 func _process(delta: float) -> void:
 	if _input_delay_left > 0.0:
 		_input_delay_left = maxf(0.0, _input_delay_left - delta)
+
+func _exit_tree() -> void:
+	if _appearance_tween != null and _appearance_tween.is_valid():
+		_appearance_tween.kill()
 
 func _build_ui() -> void:
 	_layer = CanvasLayer.new()
@@ -75,7 +86,7 @@ func _build_ui() -> void:
 	_root.add_child(backdrop)
 
 	_card = Panel.new()
-	_card.custom_minimum_size = Vector2(1020.0, 700.0)
+	_card.custom_minimum_size = Vector2.ZERO
 	_root.add_child(_card)
 	_layout_card()
 
@@ -103,14 +114,27 @@ func _build_ui() -> void:
 	stack.add_theme_constant_override("separation", 12)
 	margin.add_child(stack)
 
+	_outcome_label = Label.new()
+	_outcome_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_outcome_label.add_theme_font_size_override("font_size", 17)
+	stack.add_child(_outcome_label)
+
 	_title_label = Label.new()
 	_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_title_label.add_theme_font_size_override("font_size", 56)
+	_title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_title_label.add_theme_font_size_override("font_size", 40)
 	stack.add_child(_title_label)
+
+	_boss_label = Label.new()
+	_boss_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_boss_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_boss_label.add_theme_font_size_override("font_size", 18)
+	stack.add_child(_boss_label)
 
 	_subtitle_label = Label.new()
 	_subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_subtitle_label.add_theme_font_size_override("font_size", 20)
+	_subtitle_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_subtitle_label.add_theme_font_size_override("font_size", 15)
 	stack.add_child(_subtitle_label)
 
 	_meta_label = Label.new()
@@ -136,14 +160,14 @@ func _build_ui() -> void:
 	_content_stack.add_theme_constant_override("separation", 12)
 	_content_scroll.add_child(_content_stack)
 
-	_stats_panel = RUN_STATS_PANEL_SCRIPT.new()
-	_content_stack.add_child(_stats_panel)
-
 	_build_panel = BUILD_SUMMARY_PANEL_SCRIPT.new()
 	_content_stack.add_child(_build_panel)
 
 	_reward_panel = REWARD_SUMMARY_PANEL_SCRIPT.new()
 	_content_stack.add_child(_reward_panel)
+
+	_stats_panel = RUN_STATS_PANEL_SCRIPT.new()
+	_content_stack.add_child(_stats_panel)
 
 	_action_buttons = RUN_ACTION_BUTTONS_SCRIPT.new()
 	_action_buttons.return_to_menu_pressed.connect(func() -> void:
@@ -188,32 +212,41 @@ func _apply_theme(defeat_theme: bool) -> void:
 	_card.add_theme_stylebox_override("panel", flat)
 
 func _fill_summary(result_title: String, subtitle: String, summary: Dictionary, allow_retry_run: bool) -> void:
-	_title_label.text = result_title
+	_outcome_label.text = result_title
+	_outcome_label.add_theme_color_override("font_color", RARITY_COMMON)
+	_title_label.text = RESULT_FACTS.headline(summary, result_title)
 	_title_label.add_theme_color_override("font_color", RARITY_LEGENDARY if result_title == "Victory" else Color(1.0, 0.76, 0.72, 1.0))
+	_boss_label.text = RESULT_FACTS.boss_line(summary)
+	_boss_label.visible = not _boss_label.text.is_empty()
+	_boss_label.add_theme_color_override("font_color", Color(0.88, 0.91, 0.97))
 	_subtitle_label.text = subtitle
+	_subtitle_label.visible = not subtitle.is_empty()
 	_subtitle_label.add_theme_color_override("font_color", Color(RARITY_RARE.r, RARITY_RARE.g, RARITY_RARE.b, 0.82))
 
-	var character_name := String(summary.get("character_name", "Unknown"))
-	var depth := int(summary.get("max_depth", 0))
-	var duration := _format_duration(int(summary.get("duration_seconds", 0)))
-	var difficulty := String(summary.get("difficulty_label", "Pilgrim"))
-	var ascension_rank := int(summary.get("ascension_rank", 0))
-	if ascension_rank > 0:
-		_meta_label.text = "%s  |  Depth %d  |  %s  |  %s  |  Ascension %d" % [character_name, depth, duration, difficulty, ascension_rank]
-	else:
-		_meta_label.text = "%s  |  Depth %d  |  %s  |  %s" % [character_name, depth, duration, difficulty]
+	_meta_label.text = RESULT_FACTS.metadata(summary)
+	_meta_label.visible = not _meta_label.text.is_empty()
 	_meta_label.add_theme_color_override("font_color", Color(RARITY_COMMON.r, RARITY_COMMON.g, RARITY_COMMON.b, 0.94))
 
 	var stats := summary.get("stats", {}) as Dictionary
-	_stats_panel.set_stats(stats)
+	_stats_panel.set_stats(stats, RESULT_FACTS.has_partial_history(summary))
+	_stats_panel.visible = not stats.is_empty()
 	var build_summary := summary.get("build_summary", {}) as Dictionary
 	_build_panel.set_build_summary(build_summary)
-	_reward_panel.set_progression(summary.get("unlocks", []) as Array, summary.get("reward_timeline", []) as Array)
-	_reward_panel.set_timeline_visible(_timeline_visible)
+	_build_panel.visible = summary.has("build_summary")
+	var timeline := summary.get("reward_timeline", []) as Array
+	_timeline_available = not timeline.is_empty()
+	_reward_panel.set_progression(summary.get("unlocks", []) as Array, timeline)
+	_reward_panel.visible = summary.has("unlocks") or summary.has("reward_timeline")
+	_reward_panel.set_timeline_visible(_timeline_available and _timeline_visible)
+	_action_buttons.set_timeline_available(_timeline_available)
 	_action_buttons.set_timeline_expanded(_timeline_visible)
 	_action_buttons.set_retry_visible(allow_retry_run)
+	_content_scroll.scroll_vertical = 0
+	_layout_card()
 
 func _toggle_timeline() -> void:
+	if not _timeline_available:
+		return
 	_timeline_visible = not _timeline_visible
 	_reward_panel.set_timeline_visible(_timeline_visible)
 	_action_buttons.set_timeline_expanded(_timeline_visible)

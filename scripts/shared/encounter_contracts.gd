@@ -1433,6 +1433,36 @@ static func door_option_profile(option: Dictionary) -> Dictionary:
 static func door_option_encounter_key(option: Dictionary) -> String:
 	return String(option.get(KEY_ENCOUNTER_KEY, "")).strip_edges().to_lower()
 
+## The offered route's actual payoff, independent of its encounter/mutator name.
+## Boss doors carry NONE as their room reward; their stage owns the outcome.
+static func door_reward_preview_text(option: Dictionary) -> String:
+	var kind := door_option_kind_id(option)
+	if kind == DOOR_KIND_REST:
+		return "Restore health"
+	if kind == DOOR_KIND_BOSS:
+		match door_option_encounter_key(option):
+			"warden", "sovereign":
+				return "Boss power"
+			"lacuna":
+				return "Complete the descent"
+		return ""
+	match door_option_reward_mode(option):
+		ENUMS.RewardMode.BOON:
+			return "Boon"
+		ENUMS.RewardMode.ARCANA:
+			return "Arcana"
+		ENUMS.RewardMode.MISSION:
+			var bonus := profile_player_mutator(door_option_profile(option))
+			var bonus_name := mutator_name(bonus).strip_edges()
+			if bonus_name.is_empty():
+				return "Boon"
+			var duration := maxi(0, int(bonus.get(MUTATOR_KEY_DURATION_ENCOUNTERS, 0)))
+			var payoff := "Boon + %s" % bonus_name
+			if duration > 0:
+				payoff += " (%d %s)" % [duration, "room" if duration == 1 else "rooms"]
+			return payoff
+	return ""
+
 static func door_prompt_text(option: Dictionary) -> String:
 	var normalized_option := normalize_door_option(option)
 	var icon := String(normalized_option.get(KEY_ICON, ""))

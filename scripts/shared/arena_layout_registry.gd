@@ -2,6 +2,7 @@ extends RefCounted
 
 const COLUMN_RADIUS := 28.0
 const BOULDER_RADIUS := 36.0
+const _SHATTERFIELD_CROSSFIRE_POOL := ["offset_firing_lanes", "offset_firing_lanes_mirrored"]
 
 ## Returns true for room labels that must always be obstacle-free.
 static func _obstacle_free(label: String) -> bool:
@@ -39,6 +40,8 @@ static func _resolve_positions(template_name: String) -> Array[Vector2]:
 	match template_name:
 		"offset_firing_lanes":
 			return [Vector2(-240.0, -150.0), Vector2(-85.0, 110.0), Vector2(110.0, -110.0), Vector2(260.0, 150.0)]
+		"offset_firing_lanes_mirrored":
+			return [Vector2(240.0, -150.0), Vector2(85.0, 110.0), Vector2(-110.0, -110.0), Vector2(-260.0, 150.0)]
 		"broken_ring":
 			return [Vector2(-235.0, -80.0), Vector2(-135.0, -190.0), Vector2(135.0, -190.0), Vector2(235.0, -80.0), Vector2(-135.0, 190.0), Vector2(135.0, 190.0)]
 		"forked_approach":
@@ -63,10 +66,12 @@ static func _resolve_positions(template_name: String) -> Array[Vector2]:
 ## Primary API. Returns Array of {pos: Vector2, radius: float} dicts.
 ## Positions are in world space with the room centred at origin.
 ## Uses rng to pick a template and (for scatter_3) to place columns.
-static func pick_layout(encounter_label: String, room_size: Vector2, rng: RandomNumberGenerator) -> Array[Dictionary]:
+static func pick_layout(encounter_label: String, room_size: Vector2, rng: RandomNumberGenerator, biome_id: String = "") -> Array[Dictionary]:
 	if _obstacle_free(encounter_label):
 		return []
 	var pool: Array = _ENCOUNTER_POOL.get(encounter_label, []) as Array
+	if biome_id == "shatterfield" and encounter_label == "Crossfire":
+		pool = _SHATTERFIELD_CROSSFIRE_POOL
 	if pool.is_empty():
 		return []
 	var chosen: String = String(pool[rng.randi_range(0, pool.size() - 1)])

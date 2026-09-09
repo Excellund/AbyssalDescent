@@ -21,11 +21,11 @@ func show_defeat(room_label: String = "", depth: int = 0, run_summary: Dictionar
 	if int(summary.get("max_depth", 0)) <= 0:
 		summary["max_depth"] = maxi(0, depth)
 	if String(summary.get("death_event", {}).get("room_label", "")).is_empty() and not room_label.strip_edges().is_empty():
-		summary["death_event"] = {
-			"room_label": room_label
-		}
+		var death_event := (summary.get("death_event", {}) as Dictionary).duplicate(true)
+		death_event["room_label"] = room_label
+		summary["death_event"] = death_event
 	var death_label := String(summary.get("death_event", {}).get("room_label", room_label)).strip_edges()
-	var subtitle := "Your run ended in %s. Regroup and descend again." % death_label if not death_label.is_empty() else "Your run ended. Regroup and descend again."
+	var subtitle := "Run ended in %s." % death_label if not death_label.is_empty() else ""
 	_results_screen.show_result("Defeat", subtitle, summary, true, allow_retry_run)
 
 func is_open() -> bool:

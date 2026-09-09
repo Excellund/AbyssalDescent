@@ -3,14 +3,26 @@
   "tasks": [
     {
       "label": "Validate GDScript Compile",
-      "type": "shell",
-      "command": "${config:godot.executablePath}",
+      "type": "process",
+      "command": "powershell.exe",
       "args": [
-        "--headless",
-        "--path",
-        ".",
-        "-s",
-        ".github/scripts/validate_gdscript_compile.gd"
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", "${workspaceFolder}/.github/scripts/run_gameplay_regressions.ps1",
+        "-GodotPath", "${config:godot.executablePath}",
+        "-CompileOnly"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Validate Gameplay Regressions",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", "${workspaceFolder}/.github/scripts/run_gameplay_regressions.ps1",
+        "-GodotPath", "${config:godot.executablePath}"
       ],
       "problemMatcher": []
     }

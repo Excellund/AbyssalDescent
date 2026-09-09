@@ -28,7 +28,6 @@ var archers_per_room: int = 1
 var shielder_start_room: int = 2
 var shielders_per_room: int = 1
 var hard_room_enemy_bonus: int = 4
-var last_objective_kind: String = ""
 var active_biome: Dictionary = {}
 
 func _init() -> void:
@@ -440,7 +439,7 @@ func _build_profile(label: String, room_size: Vector2, chasers: int = 0, charger
 		shielders,
 		enemy_mutator
 	)
-	profile["obstacle_layout"] = ARENA_LAYOUT_REGISTRY.pick_layout(label, room_size, rng)
+	profile["obstacle_layout"] = ARENA_LAYOUT_REGISTRY.pick_layout(label, room_size, rng, String(active_biome.get("id", "")))
 	return profile
 
 func _build_intro_profile(depth: int) -> Dictionary:
@@ -489,21 +488,19 @@ func _build_objective_profile_for_kind(kind: String, depth: int) -> Dictionary:
 		_:
 			return {}
 
-func build_objective_profile(depth: int, preferred: String = "") -> Dictionary:
+func build_objective_profile(depth: int, preferred: String = "", last_entered_kind: String = "") -> Dictionary:
 	var canonical_kind := preferred.strip_edges().to_lower()
 	var explicit_profile := _build_objective_profile_for_kind(canonical_kind, depth)
 	if not explicit_profile.is_empty():
-		last_objective_kind = canonical_kind
 		return explicit_profile
 	var all_kinds: Array[String] = ["last_stand", "cut_the_signal", "hold_the_line", "circuit_sweep", "pulse_window", "intercept_run"]
 	var pool: Array[String] = []
 	for kind in all_kinds:
-		if kind != last_objective_kind:
+		if kind != last_entered_kind:
 			pool.append(kind)
 	if pool.is_empty():
 		pool = all_kinds.duplicate()
 	var chosen_kind: String = pool[rng.randi_range(0, pool.size() - 1)]
-	last_objective_kind = chosen_kind
 	return _build_objective_profile_for_kind(chosen_kind, depth)
 
 func _canonicalize_debug_encounter_key(encounter_key: String) -> String:
@@ -1280,7 +1277,9 @@ func _normalize_route_context(route_context: Variant) -> Dictionary:
 		return {
 			"depth": maxi(0, int(context_dict.get("depth", 0))),
 			"rooms_until_boss": maxi(-1, int(context_dict.get("rooms_until_boss", -1))),
-			"all_players_full_hp": bool(context_dict.get("all_players_full_hp", false))
+			"all_players_full_hp": bool(context_dict.get("all_players_full_hp", false)),
+			"last_standard_encounter_key": String(context_dict.get("last_standard_encounter_key", "")),
+			"last_objective_kind": String(context_dict.get("last_objective_kind", ""))
 		}
 	return {
 		"depth": maxi(0, int(route_context)),
@@ -1291,12 +1290,23 @@ func _normalize_route_context(route_context: Variant) -> Dictionary:
 func _build_intro_route_option(profile: Dictionary) -> Dictionary:
 	return ENCOUNTER_CONTRACTS.intro_encounter_door_option(profile)
 
-func _build_hard_route_option(depth: int) -> Dictionary:
+func _build_hard_route_option(depth: int, last_entered_key: String = "") -> Dictionary:
 	var hard_pool: Array[Dictionary] = _get_hard_pool_for_depth(depth)
+	hard_pool = _without_previous_standard_encounter(hard_pool, last_entered_key)
 	var hard_profile: Dictionary = hard_pool[rng.randi_range(0, hard_pool.size() - 1)]
 	hard_profile = _maybe_apply_hard_mutator(hard_profile, depth)
 	hard_profile = _apply_identity_bearing_scaling(hard_profile)
 	return ENCOUNTER_CONTRACTS.standard_encounter_door_option(hard_profile)
+
+func _without_previous_standard_encounter(pool: Array[Dictionary], last_entered_key: String) -> Array[Dictionary]:
+	if last_entered_key.is_empty():
+		return pool
+	var alternatives: Array[Dictionary] = []
+	for profile in pool:
+		if ENCOUNTER_CONTRACTS.profile_encounter_key(profile) != last_entered_key:
+			alternatives.append(profile)
+	# Keep duplicate entries: they carry the biome's selection weights.
+	return alternatives if not alternatives.is_empty() else pool
 
 func _build_trial_route_option(depth: int) -> Dictionary:
 	if depth < 3 or rng.randf() > _trial_option_chance(depth):
@@ -1323,8 +1333,8 @@ func _build_apex_trial_route_option(depth: int) -> Dictionary:
 	apex_color.a = 0.96
 	return ENCOUNTER_CONTRACTS.apex_trial_door_option(apex_profile, apex_label, apex_color)
 
-func _build_objective_route_option(depth: int) -> Dictionary:
-	var objective_profile := build_objective_profile(depth)
+func _build_objective_route_option(depth: int, last_entered_kind: String = "") -> Dictionary:
+	var objective_profile := build_objective_profile(depth, "", last_entered_kind)
 	return ENCOUNTER_CONTRACTS.objective_door_option(objective_profile)
 
 func _build_rest_route_option() -> Dictionary:
@@ -1355,8 +1365,11 @@ func _build_intro_route_options(depth: int) -> Array[Dictionary]:
 		_build_intro_route_option(_build_intro_variant_profile(depth))
 	])
 
-func _build_non_rest_route_options(depth: int) -> Array[Dictionary]:
-	var options: Array[Dictionary] = [_build_hard_route_option(depth), _build_objective_route_option(depth)]
+func _build_non_rest_route_options(depth: int, context: Dictionary = {}) -> Array[Dictionary]:
+	var options: Array[Dictionary] = [
+		_build_hard_route_option(depth, String(context.get("last_standard_encounter_key", ""))),
+		_build_objective_route_option(depth, String(context.get("last_objective_kind", "")))
+	]
 	var trial_option := _build_trial_route_option(depth)
 	if not trial_option.is_empty():
 		options.append(trial_option)
@@ -1374,12 +1387,12 @@ func roll_route_options(route_context: Variant) -> Array[Dictionary]:
 	if depth < 2:
 		return _build_intro_route_options(depth)
 	if rooms_until_boss == 1:
-		var pre_boss_options := _build_non_rest_route_options(depth)
+		var pre_boss_options := _build_non_rest_route_options(depth, context)
 		if rest_disabled:
 			return _pick_two_route_options(pre_boss_options)
 		var alternate := pre_boss_options[rng.randi_range(0, pre_boss_options.size() - 1)]
 		return _shuffle_route_options([alternate, _build_rest_route_option()])
-	var options := _build_non_rest_route_options(depth)
+	var options := _build_non_rest_route_options(depth, context)
 	if not rest_disabled and not all_players_full_hp:
 		options.append(_build_rest_route_option())
 	return _pick_two_route_options(options)

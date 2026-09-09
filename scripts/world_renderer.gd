@@ -2,6 +2,7 @@ extends Node2D
 
 const ENUMS := preload("res://scripts/shared/enums.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
+const ACT_ENVIRONMENT_ART := preload("res://scripts/shared/act_environment_art.gd")
 
 const MUTATOR_ICON_BLOOD_RUSH: Texture2D = preload("res://assets/ui/mutators/blood_rush.svg")
 const MUTATOR_ICON_FLASHPOINT: Texture2D = preload("res://assets/ui/mutators/flashpoint.svg")
@@ -44,6 +45,24 @@ var _focus_commit_delay: float = 0.12
 var _focus_switch_advantage: float = 14.0
 var active_color_theme: Dictionary = {}
 var obstacle_layout: Array[Dictionary] = []
+var environment_act: int = 1
+var environment_biome_id: String = ""
+var boss_entrance_key: String = ""
+var boss_entrance_active: bool = false
+var _boss_entrance_visibility: float = 0.0
+
+func set_environment_identity(act: int, biome_id: String) -> void:
+	environment_act = clampi(act, 1, 3)
+	environment_biome_id = biome_id.strip_edges().to_lower()
+	queue_redraw()
+
+func set_boss_entrance_motif(boss_key: String, intro_active: bool) -> void:
+	boss_entrance_key = boss_key.strip_edges().to_lower()
+	boss_entrance_active = intro_active and boss_entrance_key in ["warden", "sovereign", "lacuna"]
+	# Removal is immediate: decorative entrance art never survives into a tell.
+	if not boss_entrance_active:
+		_boss_entrance_visibility = 0.0
+	queue_redraw()
 
 func set_biome_color_theme(theme: Dictionary) -> void:
 	active_color_theme = theme
@@ -71,6 +90,8 @@ func configure(config: Dictionary) -> void:
 func _process(delta: float) -> void:
 	_art_time += delta
 	_frame_delta = maxf(0.0001, delta)
+	if boss_entrance_active:
+		_boss_entrance_visibility = minf(1.0, _boss_entrance_visibility + maxf(delta, 0.0) * 3.0)
 	queue_redraw()
 
 func _draw() -> void:
@@ -88,6 +109,9 @@ func _draw() -> void:
 	var biome_backdrop_tint: Color = active_color_theme.get("backdrop_tint", default_backdrop) if not active_color_theme.is_empty() else default_backdrop
 	var backdrop_color := default_backdrop.lerp(Color(biome_backdrop_tint.r, biome_backdrop_tint.g, biome_backdrop_tint.b, default_backdrop.a), biome_blend)
 	draw_rect(viewport_world_rect.grow(50.0), backdrop_color, true)
+	ACT_ENVIRONMENT_ART.draw_surround(self, room_rect, environment_act, active_color_theme)
+	if boss_entrance_active:
+		ACT_ENVIRONMENT_ART.draw_boss_entrance(self, room_rect, boss_entrance_key, active_color_theme, _boss_entrance_visibility)
 
 	var default_glow_inner := Color(0.03, 0.08, 0.12)
 	var default_glow_outer := Color(0.09, 0.16, 0.23)
@@ -101,30 +125,7 @@ func _draw() -> void:
 		var layer_color := Color(glow_inner.r, glow_inner.g, glow_inner.b, 0.17).lerp(Color(glow_outer.r, glow_outer.g, glow_outer.b, 0.09 + arena_glow_strength * pulse * 0.32), 1.0 - ratio)
 		draw_rect(layer_rect, layer_color, true)
 
-	var default_grid_coarse := Color(0.36, 0.56, 0.78)
-	var default_grid_fine := Color(0.55, 0.74, 0.92)
-	var biome_grid_tint: Color = active_color_theme.get("grid_tint", default_grid_coarse) if not active_color_theme.is_empty() else default_grid_coarse
-	var grid_coarse := default_grid_coarse.lerp(Color(biome_grid_tint.r, biome_grid_tint.g, biome_grid_tint.b), biome_blend)
-	var grid_fine := default_grid_fine.lerp(Color(biome_grid_tint.r, biome_grid_tint.g, biome_grid_tint.b), biome_blend * 0.6)
-
-	var coarse_step := maxf(28.0, floor_grid_step)
-	var fine_step := maxf(16.0, floor_grid_fine_step)
-	
-	# Calculate grid-aligned start positions centered at origin
-	var coarse_start_x := floori(room_rect.position.x / coarse_step) * coarse_step
-	var coarse_start_y := floori(room_rect.position.y / coarse_step) * coarse_step
-	var fine_start_x := floori(room_rect.position.x / fine_step) * fine_step
-	var fine_start_y := floori(room_rect.position.y / fine_step) * fine_step
-	
-	for x in range(coarse_start_x, floori(room_rect.position.x + room_rect.size.x + coarse_step), floori(coarse_step)):
-		draw_line(Vector2(float(x), room_rect.position.y), Vector2(float(x), room_rect.position.y + room_rect.size.y), Color(grid_coarse.r, grid_coarse.g, grid_coarse.b, clampf(floor_coarse_grid_alpha, 0.01, 0.2)), 2.0)
-	for y in range(coarse_start_y, floori(room_rect.position.y + room_rect.size.y + coarse_step), floori(coarse_step)):
-		draw_line(Vector2(room_rect.position.x, float(y)), Vector2(room_rect.position.x + room_rect.size.x, float(y)), Color(grid_coarse.r, grid_coarse.g, grid_coarse.b, clampf(floor_coarse_grid_alpha, 0.01, 0.2)), 2.0)
-
-	for x in range(fine_start_x, floori(room_rect.position.x + room_rect.size.x + fine_step), floori(fine_step)):
-		draw_line(Vector2(float(x), room_rect.position.y), Vector2(float(x), room_rect.position.y + room_rect.size.y), Color(grid_fine.r, grid_fine.g, grid_fine.b, clampf(floor_fine_grid_alpha, 0.0, 0.08)), 1.0)
-	for y in range(fine_start_y, floori(room_rect.position.y + room_rect.size.y + fine_step), floori(fine_step)):
-		draw_line(Vector2(room_rect.position.x, float(y)), Vector2(room_rect.position.x + room_rect.size.x, float(y)), Color(grid_fine.r, grid_fine.g, grid_fine.b, clampf(floor_fine_grid_alpha, 0.0, 0.08)), 1.0)
+	ACT_ENVIRONMENT_ART.draw_floor(self, room_rect, environment_act, active_color_theme)
 
 	var corners := [
 		room_rect.position,
@@ -572,6 +573,7 @@ func _draw_door_identity_chip(door: Dictionary, morph_t: float, is_focused: bool
 	var superior_tag := _superior_door_tag(door)
 	var compact_text := _build_door_identity_label(door)
 	var detail_text := _build_door_prompt_text(door)
+	var reward_text := ENCOUNTER_CONTRACTS.door_reward_preview_text(door)
 	var action_text := "[E] Enter"
 	if superior:
 		action_text = "[E] Accept Challenge"
@@ -582,8 +584,10 @@ func _draw_door_identity_chip(door: Dictionary, morph_t: float, is_focused: bool
 	var compact_size := font.get_string_size(compact_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 14)
 	var detail_size := font.get_string_size(detail_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 17)
 	var action_size := font.get_string_size(action_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 13)
+	var reward_size := font.get_string_size(reward_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 13)
 	var compact_w := clampf(compact_size.x + 34.0, 96.0, 240.0)
 	var detail_w := clampf(maxf(detail_size.x, action_size.x) + 52.0, 210.0, 460.0)
+	detail_w = maxf(detail_w, minf(460.0, reward_size.x + 40.0))
 	if superior:
 		compact_w = maxf(compact_w, badge_w + 26.0)
 		detail_w = maxf(detail_w, badge_w + 34.0)
@@ -592,9 +596,9 @@ func _draw_door_identity_chip(door: Dictionary, morph_t: float, is_focused: bool
 	# Two-stage morph prevents duplicated/intersecting text at mid distance.
 	var shape_t := clampf(eased / 0.72, 0.0, 1.0)
 	var chip_w := lerpf(compact_w, detail_w, shape_t)
-	var chip_h := lerpf(26.0, 56.0, shape_t)
+	var chip_h := lerpf(26.0, 78.0 if not reward_text.is_empty() else 56.0, shape_t)
 	var chip_x := floorf(door_pos.x - chip_w * 0.5)
-	var chip_y := floorf(door_pos.y - lerpf(64.0, 100.0, shape_t))
+	var chip_y := floorf(door_pos.y - lerpf(64.0, 122.0 if not reward_text.is_empty() else 100.0, shape_t))
 	var focus_boost := 0.1 if is_focused else 0.0
 	var fill := Color(0.03, 0.05, 0.08, lerpf(0.76, 0.9, eased) + focus_boost)
 	var border_alpha := lerpf(0.55, 0.84, eased) + focus_boost * 0.4
@@ -635,6 +639,8 @@ func _draw_door_identity_chip(door: Dictionary, morph_t: float, is_focused: bool
 		draw_string(font, Vector2(chip_x, chip_y + 17.0 + detail_offset).floor(), action_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 13, Color(text_color.r, text_color.g, text_color.b, text_color.a * detail_alpha))
 		draw_string(font, Vector2(chip_x, chip_y + 46.0 + detail_offset).floor() + Vector2(1.0, 1.0), detail_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 17, Color(text_shadow.r, text_shadow.g, text_shadow.b, text_shadow.a * detail_alpha))
 		draw_string(font, Vector2(chip_x, chip_y + 46.0 + detail_offset).floor(), detail_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 17, Color(text_color.r, text_color.g, text_color.b, text_color.a * detail_alpha))
+		if not reward_text.is_empty():
+			draw_string(font, Vector2(chip_x, chip_y + 67.0 + detail_offset).floor(), reward_text, HORIZONTAL_ALIGNMENT_CENTER, chip_w, 13, Color(0.76, 0.86, 0.90, detail_alpha))
 
 func _draw_arena_pillar(pos: Vector2, radius: float, glow_tint: Color) -> void:
 	var gr := glow_tint.r

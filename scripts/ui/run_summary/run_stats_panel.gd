@@ -2,18 +2,20 @@ extends VBoxContainer
 class_name RunStatsPanel
 
 const STAT_CARD_SCRIPT := preload("res://scripts/ui/run_summary/stat_card.gd")
+const RESULT_FACTS := preload("res://scripts/ui/run_summary/run_result_facts.gd")
 
 var _grid: GridContainer
+var _title: Label
 
 func _init() -> void:
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	add_theme_constant_override("separation", 8)
 
-	var title := Label.new()
-	title.text = "Run Stats"
-	title.add_theme_font_size_override("font_size", 22)
-	title.add_theme_color_override("font_color", Color(0.9, 0.96, 1.0, 0.98))
-	add_child(title)
+	_title = Label.new()
+	_title.text = "Run Stats"
+	_title.add_theme_font_size_override("font_size", 22)
+	_title.add_theme_color_override("font_color", Color(0.9, 0.96, 1.0, 0.98))
+	add_child(_title)
 
 	_grid = GridContainer.new()
 	_grid.columns = 2
@@ -22,13 +24,18 @@ func _init() -> void:
 	_grid.add_theme_constant_override("v_separation", 10)
 	add_child(_grid)
 
-func set_stats(stats: Dictionary) -> void:
+func set_stats(stats: Dictionary, partial_history: bool = false) -> void:
+	_title.text = "Stats since resuming" if partial_history else "Run Stats"
 	for child in _grid.get_children():
 		child.queue_free()
-	_add_card("Damage Dealt", _format_number(int(stats.get("damage_dealt_total", 0))), Color(0.54, 0.94, 0.78, 1.0))
-	_add_card("Damage Taken", _format_number(int(stats.get("damage_taken_total", 0))), Color(1.0, 0.72, 0.64, 1.0))
-	_add_card("Enemies Killed", _format_number(int(stats.get("enemies_killed", 0))), Color(0.76, 0.88, 1.0, 1.0))
-	_add_card("Bosses Defeated", _format_number(int(stats.get("bosses_defeated", 0))), Color(1.0, 0.84, 0.58, 1.0))
+	for entry in [
+		["damage_dealt_total", "Damage Dealt", Color(0.54, 0.94, 0.78, 1.0)],
+		["damage_taken_total", "Damage Taken", Color(1.0, 0.72, 0.64, 1.0)],
+		["enemies_killed", "Enemies Killed", Color(0.76, 0.88, 1.0, 1.0)],
+		["bosses_defeated", "Bosses Defeated", Color(1.0, 0.84, 0.58, 1.0)]
+	]:
+		if RESULT_FACTS.is_recorded_count(stats.get(entry[0])):
+			_add_card(entry[1], _format_number(stats[entry[0]]), entry[2])
 
 func _add_card(title: String, value: String, color: Color) -> void:
 	var card = STAT_CARD_SCRIPT.new()

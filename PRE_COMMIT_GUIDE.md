@@ -1,118 +1,71 @@
-# Pre-Commit Hook System - Quick Start Guide
+# Pre-commit validation
 
-## What It Does
+The tracked hook checks debug defaults and staged scene overrides, performs quick
+GDScript checks, and runs the full isolated gameplay regression suite. A failed
+Godot import, compile, contract check, or gameplay assertion blocks the commit.
 
-This pre-commit hook system automatically blocks commits if:
+## Install once
 
-1. **Debug options are enabled** in `scripts/debug_settings.gd`:
-   `enabled` must be `false`
-   `apply_test_powers_on_start` must be `false`
-   `skip_starting_boon_selection` must be `false`
-   `start_power_preset` must be `DEBUG_ENUMS.PowerPreset.NONE`
-   `start_encounter` must be `DEBUG_ENUMS.Encounter.NONE`
-   `mutator_override` must be `DEBUG_ENUMS.MutatorOverride.NONE`
-   `end_screen_preview` must be `DEBUG_ENUMS.EndScreenPreview.NONE`
-2. **Syntax issues** in staged GDScript files (quick check)
-3. **Full GDScript compile validation** using `.github/scripts/validate_gdscript_compile.gd`
-
-## Full Compile Check (Recommended Before Commit)
-
-Run a full script compile pass (without launching gameplay):
+From the repository root:
 
 ```powershell
-godot --headless --path . -s .github/scripts/validate_gdscript_compile.gd
+& ./scripts/git-hooks/install-hooks.ps1
 ```
 
-This command force-loads and compiles all scripts under `res://scripts` and `.github/scripts`, and exits non-zero on any parse/type-inference error.
+The installer copies the hooks into `.git/hooks`, sets `core.hooksPath` to that
+directory, and runs validation. The installed shell wrapper calls the tracked
+`scripts/git-hooks/pre-commit.ps1`, so edit that tracked file when changing rules.
+See [the hook reference](scripts/git-hooks/README.md) for executable resolution
+and installation details.
 
-In VS Code you can also run the task `Validate GDScript Compile`.
+## Check a change while developing
 
-Before using that task, set your Godot executable once in workspace settings:
+For import, compilation and world/network contract checks without gameplay
+fixtures, run `& ./.github/scripts/run_gameplay_regressions.ps1 -CompileOnly`.
+The VS Code **Validate GDScript Compile** task uses this isolated path;
+**Validate Gameplay Regressions** runs the full suite. Neither task runs against
+the player's profile. `-CompileOnly` and `-TestScripts` are mutually exclusive.
 
-```json
-"godot.executablePath": "C:/Path/To/Godot_v4.x-stable_win64.exe"
-```
-
-This key is read by `.vscode/tasks.json` so the task does not depend on PATH.
-
-The pre-commit hook also uses this setting (or `GODOT_EXE`) when running full compile validation on commit.
-
-## Setup (One-Time Only)
-
-Run this in the project root:
+Select relevant fixtures for a shorter iteration:
 
 ```powershell
-.\.git\hooks\setup-hooks.ps1
+& ./.github/scripts/run_gameplay_regressions.ps1 -TestScripts @(
+    'res://scripts/tests/test_combat_interactions.gd',
+    'res://scripts/tests/test_shared_power_wording.gd'
+)
 ```
 
-This will:
+Every selection still imports the project, compiles all scripts, and checks
+world-property access and multiplayer configuration synchronization. Choose
+existing fixtures under `res://scripts/tests/` that cover the changed behavior.
 
-- Make the hooks executable
-- Configure Git to use the hooks
-- Run a validation test
+## Check a checkpoint
 
-## How It Works
-
-When you run `git commit`, the hook automatically runs before allowing the commit:
-
-```
-C:\Mike\Godot Projects\godot-2026> git commit -m "Fix gameplay balance"
-[PRE-COMMIT] Starting validation...
-
-Checking for syntax issues...
-[OK] Staged .gd files checked (3 files)
-
-Checking for enabled debug options...
-[OK] No debug options are enabled
-
-[SUCCESS] All pre-commit checks passed! Commit allowed.
-[main abc1234] Fix gameplay balance
- 5 files changed, 123 insertions(+)
-```
-
-## Bypassing the Hook (Not Recommended)
-
-If you absolutely need to skip the validation:
+Run the full suite with no fixture selection:
 
 ```powershell
-git commit --no-verify -m "Emergency commit"
+& ./.github/scripts/run_gameplay_regressions.ps1
 ```
 
-## Files in This System
-
-- `.git/hooks/pre-commit` - Shell wrapper that calls PowerShell
-- `.git/hooks/pre-commit.ps1` - Main validation script
-- `.git/hooks/setup-hooks.ps1` - Setup and initialization script
-- `.git/hooks/HOOK_SETUP.md` - Detailed setup documentation
-
-## Team Setup
-
-If you're working with a team, share these files in your repository so everyone has the same validation rules.
-
-## Customizing the Hook
-
-To add more debug options to check:
-
-1. Edit `.git/hooks/pre-commit.ps1`
-2. Add your validation logic in the "Checking for enabled debug options" section
-3. Test it: `.\.git\hooks\pre-commit.ps1`
-4. Commit your changes
-
-## Testing
-
-To manually run the validation:
+The pre-commit hook runs this full suite automatically. When committing
+immediately, use that run as the full verification instead of repeating it
+manually. To exercise its debug checks as well outside a commit, invoke the
+tracked hook from the repository root:
 
 ```powershell
-.\.git\hooks\pre-commit.ps1
+& ./scripts/git-hooks/pre-commit.ps1
 ```
 
-Expected output when all checks pass:
+The runner uses a disposable project copy, isolated user data, suppressed
+autoload startup, and cleared external endpoints. It retains and prints logs.
+Do not run unattended Godot validation against the working project or the
+player's normal profile.
 
-```
-[PRE-COMMIT] Starting validation...
-Checking for syntax issues...
-[OK] Staged .gd files checked (0 files)
-Checking for enabled debug options...
-[OK] No debug options are enabled
-[SUCCESS] All pre-commit checks passed! Commit allowed.
-```
+Focused ENet tests, GPU captures, playtest workflow checks, and exported executable
+smoke checks are separate helpers in `.github/scripts`; run the ones relevant to
+the change. A passing headless suite does not replace visual or manual playtesting.
+
+At an agreed checkpoint, follow [AGENTS.md](AGENTS.md): finish relevant checks,
+commit and push the completed work, and export the normal desktop playtest with
+`& ./.github/scripts/export_playtest.ps1`. Both normal and debug modes use the same
+desktop filename; use the debug mode only for requested focused testing.

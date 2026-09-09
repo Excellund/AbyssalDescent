@@ -228,6 +228,7 @@ func restore_tracker_items_from_snapshot(snapshot: Dictionary) -> void:
 		# Legacy saves kept the build but not prior hits, attacks, rests or time.
 		# Keep the run playable without treating unknown history as zero usage.
 		run_summary_tracker.full_run_tracking_complete = false
+		run_summary_tracker.restore_descent_facts({})
 		run_summary_tracker.restore_run_provenance(null)
 	var boon_raw: Variant = snapshot.get("tracker_boon_items", {})
 	if boon_raw is Dictionary:
@@ -614,6 +615,10 @@ func record_peer_enemy_kill(peer_id: int) -> void:
 	_add_peer_stat_delta(peer_id, "enemies_killed", 1)
 	if STAT_ATTRIBUTION_TRACE:
 		print_debug("[StatAttribution][KillCredit] peer=%d kills=%d" % [peer_id, _get_peer_stat(peer_id, "enemies_killed")])
+
+func record_act_entry(act: int) -> void:
+	if run_summary_tracker != null:
+		run_summary_tracker.record_act_entry(act)
 
 func record_boss_defeat(boss_id: String) -> void:
 	if run_summary_tracker != null:

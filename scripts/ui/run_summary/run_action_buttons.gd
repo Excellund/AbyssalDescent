@@ -34,6 +34,9 @@ func _init() -> void:
 func set_timeline_expanded(expanded: bool) -> void:
 	_timeline_button.text = "Hide Timeline" if expanded else "Build Timeline"
 
+func set_timeline_available(available: bool) -> void:
+	_timeline_button.visible = available
+
 func set_retry_visible(should_show: bool) -> void:
 	if _retry_button == null:
 		return

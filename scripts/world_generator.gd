@@ -190,6 +190,7 @@ var phase_three_rooms_cleared: int = 0
 var endless_boss_defeated: bool = false
 var choosing_next_room: bool = false
 var boss_reward_pending: bool = false
+var _last_announced_act: int = 0
 var _last_boss_reward_sync_id: int = -1
 var last_defeated_boss_id: String = ""
 
@@ -1877,6 +1878,7 @@ func _get_hud_state() -> Dictionary:
 		"first_boss_defeated": first_boss_defeated,
 		"second_boss_defeated": second_boss_defeated,
 		"second_boss_unlocked": _is_second_boss_unlocked(),
+		"display_act": _get_room_presentation_act(),
 		"third_boss_unlocked": _is_third_boss_unlocked(),
 		"current_character_passive_name": current_character_passive_name,
 		"active_biome_name": _get_active_biome_name(),
@@ -1942,6 +1944,8 @@ func _sync_renderer() -> void:
 	renderer.choosing_next_room = allow_door_visibility
 	renderer.door_options = visible_door_options
 	renderer.player_global_position = player.global_position if is_instance_valid(player) else Vector2.ZERO
+	var boss_key := "lacuna" if in_third_boss_room else ("sovereign" if in_second_boss_room else ("warden" if in_boss_room else ""))
+	renderer.set_boss_entrance_motif(boss_key, encounter_intro_grace_active and not _is_reward_selection_active())
 
 func _keep_player_inside_current_room() -> void:
 	if not is_instance_valid(player):
@@ -2316,6 +2320,8 @@ func _get_third_boss_target_depth() -> int:
 func _build_route_context(depth: int) -> Dictionary:
 	var context: Dictionary = room_depth_bookkeeper.build_route_context(depth)
 	context["all_players_full_hp"] = _all_players_at_full_hp()
+	context["last_standard_encounter_key"] = run_session.last_standard_encounter_key if run_session != null else ""
+	context["last_objective_kind"] = run_session.last_objective_kind if run_session != null else ""
 	return context
 
 func _all_players_at_full_hp() -> bool:
@@ -2428,12 +2434,13 @@ func _apply_active_run_snapshot(snapshot: Dictionary) -> bool:
 		encounter_profile_builder.set_ascension_loadout(run_context.get_active_ascension_loadout(current_difficulty_tier))
 	_apply_active_biome(_get_current_act())
 	_rebuild_legacy_ascension_doors(snapshot)
+	_last_announced_act = _get_room_presentation_act()
 	_configure_reward_selection_loadout()
 	_clear_all_enemies()
 	_reset_all_player_positions_to_slots()
 	_reset_effective_room_bounds()
 	_apply_camera_bounds_for_room(current_effective_room_size)
-	_play_room_music(false, false)
+	_set_music_context(&"rest" if current_room_label == "Rest Site" else &"reward")
 	hud.refresh(_get_hud_state(), player)
 	_set_combat_paused(false)
 	return true
@@ -3088,6 +3095,8 @@ func _begin_room(profile: Dictionary) -> void:
 	current_room_tutorial_steps = _tutorial_step_state() if current_room_tutorial_active else {}
 	if is_instance_valid(encounter_profile_builder):
 		profile = encounter_profile_builder.apply_wave_staggering(profile)
+	if run_session != null and MultiplayerSessionManager.is_authoritative():
+		run_session.record_encounter_entry(profile)
 	_prepare_room_sync_transition()
 	choosing_next_room = false
 	door_options.clear()
@@ -3102,6 +3111,8 @@ func _begin_room(profile: Dictionary) -> void:
 	_reset_effective_room_bounds()
 	current_room_static_camera = ENCOUNTER_CONTRACTS.profile_static_camera(profile)
 	current_room_label = ENCOUNTER_CONTRACTS.profile_label(profile)
+	_apply_active_biome(_get_current_act())
+	run_summary_recorder.record_act_entry(_get_current_act())
 	current_room_enemy_mutator = ENCOUNTER_CONTRACTS.profile_enemy_mutator(profile)
 	current_room_player_mutator = ENCOUNTER_CONTRACTS.profile_player_mutator(profile)
 	run_summary_recorder.record_room_entry("encounter", profile)
@@ -3146,10 +3157,12 @@ func _begin_room(profile: Dictionary) -> void:
 func _enter_rest_site() -> void:
 	_clear_room_obstacles()
 	in_boss_room = false
-	_play_room_music(false)
+	_set_music_context(&"rest")
 	current_room_label = "Rest Site"
+	_apply_active_biome(_get_current_act())
+	run_summary_recorder.record_act_entry(_get_current_act())
 	run_summary_recorder.record_room_entry("rest", {})
-	hud.show_banner("Rest Site", "")
+	_show_descent_entry_banner("Rest Site")
 	current_room_static_camera = true
 	if second_boss_defeated:
 		_apply_progression_increments(1, 1, 0, 1)
@@ -3263,6 +3276,8 @@ func _begin_boss_stage(stage: int) -> void:
 	_reset_effective_room_bounds()
 	current_room_static_camera = false
 	current_room_label = room_label
+	_apply_active_biome(stage)
+	run_summary_recorder.record_act_entry(stage)
 	current_room_enemy_mutator = {}
 	current_room_player_mutator = {}
 	run_summary_recorder.record_room_entry(room_entry_key, {})
@@ -3315,6 +3330,10 @@ func _play_room_music(is_boss_room: bool, instant: bool = false, fade_duration: 
 	if not is_instance_valid(music_system):
 		return
 	music_system.play_room_music(is_boss_room, instant, fade_duration)
+
+func _set_music_context(context: StringName) -> void:
+	if is_instance_valid(music_system):
+		music_system.set_context(context)
 
 func _on_room_enemy_died(kill_pos: Vector2 = Vector2.ZERO) -> void:
 	active_room_enemy_count = maxi(0, active_room_enemy_count - 1)
@@ -3922,6 +3941,7 @@ func _open_boon_selection(title: String, is_initial: bool, mode: int = ENUMS.Rew
 			local_player = player
 		_begin_reward_phase_sync(is_initial, mode)
 		reward_selection_ui.open_selection(title, is_initial, mode, power_registry_instance, local_player, rng, player_mutator, epitaph, character_id)
+		_set_music_context(&"reward")
 		_set_combat_paused(true)
 
 func _open_networked_reward_selection(title: String, mode: int, player_mutator: Dictionary = {}, epitaph: String = "") -> void:
@@ -4050,6 +4070,7 @@ func _finalize_reward_phase_and_advance(is_initial: bool, mode: int) -> void:
 
 func _reset_progress_for_first_encounter() -> void:
 	_world_multiplayer_sync_state.reset_for_new_run()
+	_last_announced_act = 0
 	_set_progression_counters(0, 0, 0, 0)
 	boss_unlocked = false
 	in_boss_room = false
@@ -4246,12 +4267,14 @@ func _on_player_died() -> void:
 
 func _show_victory_feedback(unlocked_tier: int, run_summary: Dictionary = {}) -> void:
 	run_summary_recorder.freeze_run_timer()
+	_set_music_context(&"reward")
 	if is_instance_valid(victory_screen):
 		victory_screen.show_victory(rooms_cleared, unlocked_tier, run_summary, true)
 		_apply_retry_vote_status_ui()
 
 func _show_defeat_feedback(room_label: String, depth: int, run_summary: Dictionary = {}) -> void:
 	run_summary_recorder.freeze_run_timer()
+	_set_music_context(&"reward")
 	player_flow_coordinator.show_defeat_feedback(hud, defeat_screen, room_label, depth, run_summary, true)
 	_apply_retry_vote_status_ui()
 
@@ -4557,7 +4580,11 @@ func _start_encounter_intro_grace() -> void:
 			continue
 		_begin_spawn_transport_if_idle(enemy, INTRO_SURVEY_TRANSPORT_PULSE_DURATION)
 	_set_enemy_targets_passive(true)
-	hud.show_banner("Survey the arena", "")
+	var boss_title := "Lacuna" if in_third_boss_room else ("Sovereign" if in_second_boss_room else ("The Warden" if in_boss_room else ""))
+	if not boss_title.is_empty():
+		hud.show_banner(boss_title, "Survey the arena")
+	else:
+		_show_descent_entry_banner("Survey the arena")
 
 func _update_encounter_intro_grace() -> bool:
 	if not encounter_intro_grace_active:
@@ -4705,6 +4732,24 @@ func _get_current_act() -> int:
 		return 2
 	return 1
 
+## Progress advances when a boss falls; its chamber remains the old place until
+## the player takes a door. Deriving from the saved room also preserves Continue.
+func _get_room_presentation_act() -> int:
+	for stage in [1, 2, 3]:
+		var descriptor := BOSS_STAGE_REGISTRY.get_descriptor(stage)
+		if current_room_label == String(descriptor.get("room_label", "")):
+			return stage
+	return _get_current_act()
+
+func _show_descent_entry_banner(fallback_title: String) -> void:
+	var act := _get_room_presentation_act()
+	if current_room_tutorial_active or act == _last_announced_act:
+		hud.show_banner(fallback_title, "")
+		return
+	_last_announced_act = act
+	var numeral: String = ["I", "II", "III"][act - 1]
+	hud.show_banner("Act %s - %s" % [numeral, _get_active_biome_name()], fallback_title, _get_active_biome_accent())
+
 func _apply_active_biome(act: int) -> void:
 	if run_session == null or run_session.act_biome_ids.size() < act:
 		return
@@ -4717,12 +4762,16 @@ func _apply_active_biome(act: int) -> void:
 	if is_instance_valid(encounter_profile_builder):
 		encounter_profile_builder.set_active_biome(biome)
 	if is_instance_valid(renderer):
-		renderer.set_biome_color_theme(biome.get("color_theme", {}) as Dictionary)
+		var presented_act := _get_room_presentation_act()
+		var presented_biome_id := run_session.act_biome_ids[presented_act - 1]
+		var presented_biome := BIOME_REGISTRY.get_biome(presented_biome_id)
+		renderer.set_environment_identity(presented_act, presented_biome_id)
+		renderer.set_biome_color_theme(presented_biome.get("color_theme", {}) as Dictionary)
 
 func _get_active_biome_name() -> String:
 	if run_session == null:
 		return ""
-	var act := _get_current_act()
+	var act := _get_room_presentation_act()
 	if run_session.act_biome_ids.size() < act:
 		return ""
 	var biome_id := run_session.act_biome_ids[act - 1]
@@ -4734,7 +4783,7 @@ func _get_active_biome_name() -> String:
 func _get_active_biome_impact_text() -> String:
 	if run_session == null:
 		return ""
-	var act := _get_current_act()
+	var act := _get_room_presentation_act()
 	if run_session.act_biome_ids.size() < act:
 		return ""
 	var biome_id := run_session.act_biome_ids[act - 1]
@@ -4748,7 +4797,7 @@ func _get_active_biome_impact_text() -> String:
 func _get_active_biome_accent() -> Color:
 	if run_session == null:
 		return Color(0.62, 0.88, 0.94, 1.0)
-	var act := _get_current_act()
+	var act := _get_room_presentation_act()
 	if run_session.act_biome_ids.size() < act:
 		return Color(0.62, 0.88, 0.94, 1.0)
 	var biome_id := run_session.act_biome_ids[act - 1]

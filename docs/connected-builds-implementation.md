@@ -1,5 +1,7 @@
 # Connected builds implementation
 
+For current sequencing and acceptance priorities, see the [development plan](development-plan.md). This document retains the approved mechanics and implementation evidence.
+
 Approved scope: retain 12 Boons, 21 Arcana, nine boss rewards and six Mission bonuses; equal random offers and existing upgrade/Prismatic eligibility. Boons increase generic capability, Arcana create builds, bosses convert/peak builds, Missions temporarily amplify builds alongside a permanent Boon.
 
 ## Checkpoints

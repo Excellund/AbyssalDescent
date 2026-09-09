@@ -908,9 +908,10 @@ func _update_status_panel_text(state: Dictionary) -> void:
 	# ── Block 1: Act header ───────────────────────────────────────────────────
 	var first_boss_defeated := bool(state.get("first_boss_defeated", false))
 	var second_boss_defeated := bool(state.get("second_boss_defeated", false))
-	if second_boss_defeated:
+	var display_act := int(state.get("display_act", 3 if second_boss_defeated else (2 if first_boss_defeated else 1)))
+	if display_act >= 3:
 		_status_act_label.text = "Act III"
-	elif first_boss_defeated:
+	elif display_act == 2:
 		_status_act_label.text = "Act II"
 	else:
 		_status_act_label.text = "Act I"

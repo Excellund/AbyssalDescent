@@ -1,0 +1,92 @@
+name: Gameplay Regressions
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches:
+      - main
+      - "codex/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Keep PR merge checks independent of branch-push checks.
+concurrency:
+  group: gameplay-regressions-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gameplay-regressions:
+    name: Windows gameplay regressions
+    runs-on: windows-2025
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: powershell
+    env:
+      GODOT_VERSION: 4.6.2-stable
+      GODOT_ARCHIVE_SHA256: 14293422efb54b24a51f79d4cb55ab4001ef3d936e064a6c8af32e1f984024be
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install verified Godot
+        timeout-minutes: 5
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          $engineRoot = Join-Path $env:RUNNER_TEMP 'abyssal-godot'
+          New-Item -ItemType Directory -Path $engineRoot -Force | Out-Null
+          $archiveName = "Godot_v$($env:GODOT_VERSION)_win64.exe.zip"
+          $archivePath = Join-Path $engineRoot $archiveName
+          $downloadUrl = "https://github.com/godotengine/godot-builds/releases/download/$($env:GODOT_VERSION)/$archiveName"
+          Invoke-WebRequest -UseBasicParsing -Uri $downloadUrl -OutFile $archivePath -TimeoutSec 180
+          $actualHash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash
+          if ($actualHash -ne $env:GODOT_ARCHIVE_SHA256) {
+            throw "Godot archive checksum mismatch: $actualHash"
+          }
+          Expand-Archive -LiteralPath $archivePath -DestinationPath $engineRoot
+          $godotExe = Join-Path $engineRoot "Godot_v$($env:GODOT_VERSION)_win64_console.exe"
+          if (-not (Test-Path -LiteralPath $godotExe -PathType Leaf)) {
+            throw "Godot console executable missing: $godotExe"
+          }
+          $engineVersion = & $godotExe --headless --version
+          if ($LASTEXITCODE -ne 0 -or $engineVersion -notmatch '^4\.6\.2\.stable\.official\.') {
+            throw "Unexpected Godot version: $engineVersion"
+          }
+          Write-Host "Verified Godot $engineVersion ($actualHash)"
+          "GODOT_EXE=$godotExe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Run isolated full regression suite
+        timeout-minutes: 20
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $validationTemp = Join-Path $env:RUNNER_TEMP 'abyssal-ci'
+          New-Item -ItemType Directory -Path $validationTemp -Force | Out-Null
+          $env:TEMP = $validationTemp
+          $env:TMP = $validationTemp
+          Start-Transcript -Path (Join-Path $validationTemp 'workflow-console.log') | Out-Null
+          try {
+            & ./.github/scripts/run_gameplay_regressions.ps1 -GodotPath $env:GODOT_EXE
+          } finally {
+            Stop-Transcript | Out-Null
+          }
+
+      - name: Retain validation logs
+        if: ${{ always() }}
+        timeout-minutes: 3
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: gameplay-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/abyssal-ci/workflow-console.log
+            ${{ runner.temp }}/abyssal-ci/abyssal-validation-*/*.log
+          if-no-files-found: warn
+          retention-days: 7
+          include-hidden-files: false

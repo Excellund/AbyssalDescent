@@ -1,10 +1,14 @@
 param(
     [string]$GodotPath = "",
-    [string[]]$TestScripts = @()
+    [string[]]$TestScripts = @(),
+    [switch]$CompileOnly
 )
 
 $ErrorActionPreference = "Stop"
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "../..")).Path
+if ($CompileOnly -and $TestScripts.Count -gt 0) {
+    throw 'Choose -CompileOnly or -TestScripts, not both.'
+}
 foreach ($testScript in $TestScripts) {
     if ($testScript -notmatch '^res://scripts/tests/[a-z0-9_]+\.gd$' -or -not (Test-Path -LiteralPath (Join-Path $projectRoot $testScript.Substring(6)) -PathType Leaf)) {
         throw "TestScripts must name existing res://scripts/tests/*.gd fixtures: $testScript"
@@ -163,6 +167,10 @@ try {
         "res://scripts/tests/test_reward_selection_layout.gd",
         "res://scripts/tests/test_reward_availability.gd",
         "res://scripts/tests/test_room_layout_entry.gd",
+        "res://scripts/tests/test_descent_routes.gd",
+        "res://scripts/tests/test_descent_presentation.gd",
+        "res://scripts/tests/test_music_contexts.gd",
+        "res://scripts/tests/test_run_result_identity.gd",
         "res://scripts/tests/test_ruinous_feedback.gd",
         "res://scripts/tests/test_returning_crescent.gd",
         "res://scripts/tests/test_power_descriptions.gd",
@@ -204,7 +212,9 @@ try {
         "res://scripts/tests/test_launch_authority.gd",
         "res://scripts/tests/test_dev_upload_eligibility.gd"
     )
-    if ($TestScripts.Count -gt 0) {
+    if ($CompileOnly) {
+        $checks = @($checks | Where-Object { $_.StartsWith('res://.github/scripts/') })
+    } elseif ($TestScripts.Count -gt 0) {
         # Focused runs retain compilation and the world/network contract checks.
         # With no selection, including from the Git hook, the full suite runs.
         $checks = @($checks | Where-Object { $_.StartsWith('res://.github/scripts/') }) + @($TestScripts | Select-Object -Unique)

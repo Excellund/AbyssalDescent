@@ -1,80 +1,69 @@
-# Git Pre-Commit Hooks
-
-This directory contains the pre-commit hook scripts for validating project state before commits.
+# Git pre-commit hooks
 
 ## Installation
 
-Run this once to install the hooks:
+From the repository root:
 
 ```powershell
-.\install-hooks.ps1
+& ./scripts/git-hooks/install-hooks.ps1
 ```
 
-## Files
+The installer copies `pre-commit` and `pre-commit.ps1` into `.git/hooks`, configures
+`core.hooksPath=.git/hooks`, and runs the copied PowerShell validator. Installation
+therefore requires a configured Godot executable and runs the full regression
+suite. This installer assumes a regular checkout with a `.git` directory.
 
-- **pre-commit.ps1** - Main validation logic (debug checks, syntax checks, and isolated gameplay regressions)
-- **pre-commit** - Shell wrapper that calls the PowerShell script
-- **install-hooks.ps1** - Setup script that copies hooks to `.git/hooks/` and configures Git
+The installed `pre-commit` shell wrapper executes the **tracked**
+`scripts/git-hooks/pre-commit.ps1`. Maintain that tracked source; an older copied
+`.git/hooks/pre-commit.ps1` is not used by the wrapper during commits.
 
-## What Gets Validated
+## Checks
 
-The hooks will block commits if any of these are true:
+- Debug settings and staged scene overrides must leave normal gameplay enabled:
+  no granted test powers, skipped starting selection, encounter or bearing
+  overrides, mutator override, or end-screen preview.
+- Staged GDScript files receive quick syntax checks. Registry presence checks
+  provide additional diagnostics.
+- Every commit runs
+  [the isolated regression runner](../../.github/scripts/run_gameplay_regressions.ps1)
+  without a fixture selection: resource import, compilation of all GDScript,
+  world-property and multiplayer configuration contracts, and the full gameplay
+  suite registered in that runner. Failed checks block the commit.
 
-1. **Debug options enabled in `scripts/debug_settings.gd` or scene debug settings:**
-   - `enabled = true`
-   - `apply_test_powers_on_start = true`
-   - `skip_starting_boon_selection = true`
-   - `start_power_preset` is not NONE (`DEBUG_ENUMS.PowerPreset.NONE`, `DEBUG_POWER_PRESET_NONE`, or `0`)
-   - `start_encounter` is not NONE (`DEBUG_ENUMS.Encounter.NONE`, `DEBUG_ENCOUNTER_NONE`, or `0`)
-   - `mutator_override` is not `DEBUG_MUTATOR_NONE`
-   - `end_screen_preview` is not `DEBUG_END_SCREEN_NONE`
+The runner copies the project into system temporary storage and isolates user
+data. Autoload fixtures retain production methods for compilation while
+suppressing startup and background services; external endpoints are cleared.
+It does not boot the working project or load normal player saves, and it prints
+the retained log directory.
 
-2. **Syntax errors in staged GDScript files**
+## Godot configuration
 
-3. **Isolated Godot validation and gameplay regressions**
-   - Runs `.github/scripts/run_gameplay_regressions.ps1` on every commit.
-   - Imports the project and compiles every GDScript, then checks forbidden world property access and multiplayer configuration synchronization.
-   - Runs the reward-input, power-reward, Oath-tracking, and Catalyst profile/reward/runtime regression suites.
-   - Blocks commit if the runner fails, including script errors or failed assertions.
+The hook resolves the executable in this order:
 
-Godot checks run in a temporary project copy with separate user data. Autoload
-fixtures retain production methods for compilation while disabling startup and
-background services; external endpoints are cleared in the temporary copy. The
-checks do not boot the working project, modify its import cache, or load normal
-player saves. The runner prints the retained temporary log directory for review.
+1. `GODOT_EXE` environment variable.
+2. `godot.executablePath` in `.vscode/settings.json`.
+3. `godot` on PATH.
+4. `godot4` on PATH.
 
-## Godot Executable Resolution
+If no executable is available, the commit is blocked. The standalone regression
+runner accepts `-GodotPath`, otherwise reads the workspace setting and then
+`GODOT_EXE`; it does not search PATH. Use the project's Godot 4.6 engine.
 
-The pre-commit hook resolves Godot in this order:
+## Development and checkpoint checks
 
-1. `GODOT_EXE` environment variable (absolute path)
-2. Workspace setting `godot.executablePath` in `.vscode/settings.json`
-3. `godot` on PATH
-4. `godot4` on PATH
-
-If none are available, commits are blocked until one is configured.
-
-## Testing
-
-Run the validation manually:
+Run the hook manually from the repository root:
 
 ```powershell
-.\pre-commit.ps1
+& ./scripts/git-hooks/pre-commit.ps1
 ```
 
-## Customization
+For shorter iterations, call the isolated runner with `-TestScripts` and relevant
+`res://scripts/tests/*.gd` fixtures. The selection retains import, full compile,
+and world/network contract checks. Omit `-TestScripts` for the full checkpoint
+suite; the hook always does so.
 
-To add new debug checks:
-
-1. Edit `pre-commit.ps1`
-2. Add logic in the "Checking for enabled debug options" section
-3. Test with `.\pre-commit.ps1`
-4. Commit your changes
-
-## Bypassing
-
-If needed (not recommended):
-
-```powershell
-git commit --no-verify
-```
+ENet multiplayer fixtures, GPU captures, playtest workflow tests, and exported
+executable smoke tests are separate checks chosen for the changed behavior.
+Use their scoped helpers and disposable profiles. See
+[the quick-start guide](../../PRE_COMMIT_GUIDE.md) and
+[project checkpoint instructions](../../AGENTS.md).
