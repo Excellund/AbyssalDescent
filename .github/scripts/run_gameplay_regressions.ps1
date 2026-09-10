@@ -132,6 +132,7 @@ try {
         "res://scripts/tests/test_queued_arcana_input.gd",
         "res://scripts/tests/test_input_transition_lifecycle.gd",
         "res://scripts/tests/test_combat_pause.gd",
+        "res://scripts/tests/test_hud_overlap_fade.gd",
         "res://scripts/tests/test_pulse_hud.gd",
         "res://scripts/tests/test_shared_status_lifecycle.gd",
         "res://scripts/tests/test_hit_origins.gd",

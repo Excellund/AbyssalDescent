@@ -1905,6 +1905,7 @@ func _get_hud_state() -> Dictionary:
 		"encounter_intro_grace_active": encounter_intro_grace_active,
 		"is_multiplayer": is_multiplayer,
 		"local_player_ready": _local_player_ready,
+		"combat_hud_overlap_fade_enabled": is_instance_valid(player) and player.combat_damage_enabled and not encounter_intro_grace_active and not choosing_next_room and not _modal_requires_combat_pause(),
 		"boss_unlocked": boss_unlocked,
 		"first_boss_defeated": first_boss_defeated,
 		"second_boss_defeated": second_boss_defeated,

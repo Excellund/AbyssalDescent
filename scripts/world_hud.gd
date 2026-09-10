@@ -17,6 +17,9 @@ const MUTATOR_ICON_NODE_SHIELD_PATH := "res://assets/ui/mutators/node_shield.svg
 const MUTATOR_ICON_COMBO_RELAY_PATH := "res://assets/ui/mutators/combo_relay.svg"
 const MUTATOR_ICON_TETHER_WEB_PATH := "res://assets/ui/mutators/tether_web.svg"
 const HUD_INFO_PANEL_WIDTH := 302.0
+const COMBAT_OVERLAP_ALPHA := 0.2
+const COMBAT_OVERLAP_MARGIN := 6.0
+const COMBAT_OVERLAP_EXIT_MARGIN := 4.0
 
 var status_panel: Panel
 var status_label: RichTextLabel
@@ -115,6 +118,60 @@ func refresh(state: Dictionary, player: Node) -> void:
 	_update_player_mutator_panel(state)
 	_update_stats_panel_text(player, state)
 	_update_build_strip(state, player)
+	_update_combat_overlap_fade(state, player)
+
+
+func _update_combat_overlap_fade(state: Dictionary, player: Node) -> void:
+	var footprint := Rect2()
+	if bool(state.get("combat_hud_overlap_fade_enabled", false)):
+		footprint = _local_player_screen_footprint(player)
+	var stats_overlap := false
+	var build_overlap := false
+	if footprint.has_area():
+		stats_overlap = _control_overlaps_footprint(stats_panel, footprint, stats_panel)
+		# The build parent intentionally has zero height. Only its visible chips
+		# cover the arena; empty rows and hidden placeholders must not trigger it.
+		build_overlap = _control_overlaps_footprint(build_strip_passive_chip, footprint, build_strip_panel)
+		for chips in [build_strip_boon_chips, build_strip_arcana_chips, build_strip_boss_chips]:
+			for chip in chips:
+				if _control_overlaps_footprint(chip, footprint, build_strip_panel):
+					build_overlap = true
+					break
+			if build_overlap:
+				break
+	if is_instance_valid(stats_panel):
+		stats_panel.modulate.a = COMBAT_OVERLAP_ALPHA if stats_overlap else 1.0
+	if is_instance_valid(build_strip_panel):
+		build_strip_panel.modulate.a = COMBAT_OVERLAP_ALPHA if build_overlap else 1.0
+
+
+func _local_player_screen_footprint(player: Node) -> Rect2:
+	if not is_instance_valid(player) or not player is Node2D or not player.is_inside_tree():
+		return Rect2()
+	if not player.is_visible_in_tree() or not player.has_method("_is_local_control_owner") or not player._is_local_control_owner():
+		return Rect2()
+	if not bool(player.get("_is_alive_state")) or bool(player.get("_combat_removed")) or int(player.get_current_health()) <= 0:
+		return Rect2()
+	var body := player.get_node_or_null("CollisionShape2D") as CollisionShape2D
+	if body == null or body.shape == null:
+		return Rect2()
+	# Transform the actual local body once, including owner scale and camera zoom.
+	# Controls below use the same viewport coordinates, across their CanvasLayer.
+	var footprint: Rect2 = body.get_global_transform_with_canvas() * body.shape.get_rect()
+	if not footprint.position.is_finite() or not footprint.size.is_finite() or not footprint.has_area():
+		return Rect2()
+	return footprint.grow(COMBAT_OVERLAP_MARGIN)
+
+
+func _control_overlaps_footprint(control: Control, footprint: Rect2, faded_parent: Control) -> bool:
+	if not is_instance_valid(control) or not control.is_visible_in_tree() or not is_instance_valid(faded_parent):
+		return false
+	var control_rect: Rect2 = control.get_global_transform_with_canvas() * Rect2(Vector2.ZERO, control.size)
+	# A few pixels of exit hysteresis prevent edge jitter without delayed
+	# restoration on menus, room transitions, or a missing local owner.
+	if faded_parent.modulate.a < 1.0:
+		footprint = footprint.grow(COMBAT_OVERLAP_EXIT_MARGIN)
+	return control_rect.has_area() and control_rect.intersects(footprint)
 
 func _process(delta: float) -> void:
 	if not _biome_hover_pending:
