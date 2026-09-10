@@ -110,6 +110,8 @@ func _test_metadata(registry: Node) -> void:
 	_check(not REGISTRY.get_power_keyword_metadata("static_wake", 2).produces.has("slow") and REGISTRY.get_power_keyword_metadata("static_wake", 3).produces.has("slow"), "Wake Slow compatibility follows actual level")
 	_check(not REGISTRY.get_power_keyword_metadata("wraithstep", 1).produces.has("burst") and REGISTRY.get_power_keyword_metadata("wraithstep", 2).produces.has("burst"), "Wraith Burst is unavailable before level 2")
 	_check(REGISTRY.get_power_keyword_metadata("storm_crown", 1).accepts == ["damage"], "Crown does not require Electric damage")
+	_check(REGISTRY.get_power_keyword_metadata("pillar_convergence", 1).accepts.has("electric") and REGISTRY.get_power_keyword_metadata("pillar_convergence", 1).accepts.has("attack_hit"), "Convergence build metadata advertises both Electric damage and Attack-hit inputs")
+	_check(REGISTRY.get_power_keyword_metadata("sovereign_tempo", 1).accepts.has("mark") and REGISTRY.get_power_keyword_metadata("sovereign_tempo", 1).accepts.has("damage") and REGISTRY.get_power_keyword_metadata("sovereign_tempo", 1).accepts.has("attack_hit"), "Tempo build metadata connects Marked damage and Attack hits")
 	_check(REGISTRY.get_power_keyword_metadata("aegis_field", 3).produces == ["slow"], "Aegis Pulse does not promise a persistent Field or damage")
 	for pair in [["aegis_field", "Aegis Pulse"], ["fracture_field", "Fracture"], ["lacuna_echo", "Lacuna Well"]]:
 		_check(registry.get_power_display_name(pair[0]) == pair[1], "Canonical names change without changing save IDs")

@@ -31,7 +31,8 @@ Lead with its trigger and result, then include the important limit. A generator 
 - **Static Wake:** "Dashing leaves a trail of Electric damage. No attack is needed."
 - **Storm Crown:** "Dealing damage charges chain lightning." It currently accepts any damage type; its description must not suggest Electric-only input. Its glossary entry explains one count per foe per original action and one discharge per action.
 - **Hunter's Snare:** "Your attacks Slow foes. Already Slowed foes take more damage." Level 1 amplifies Attack damage; level 2 amplifies all qualifying damage. Check Slow before that damage applies any new status.
-- **Future Electric-specific receiver, only after implementation:** "When you deal Electric damage, [effect]." Wake then qualifies by property. Do not put "charges Storm Crown" in Wake's description or promise that every lightning-themed power shares a charge resource.
+- **Pillar Convergence:** "Attack hits or Electric damage charge a pulsing Field that follows you." The two inputs share one charge per original action, and the active Field cannot charge. Actions that qualify while it is active cannot charge later through delayed damage. Electric generators qualify by property; do not advertise a required named pair or shared charge resource.
+- **Sovereign Tempo:** "Attack hits or damage to already Marked foes build Tempo once per action." The Mark condition uses the target's status before damage. The movement-completion Burst and its descendants cannot build Tempo; the general damage trigger does not perform another Attack.
 
 Distinguish using an attack from connecting it: Execution Edge counts attacks, even misses; Riftpunch and Sigil Chain accept deliberate melee, Razor Wind and charged Blast connections. Their automatic descendants are not new attack hits. Farline Volley's level-3 dash Burst deals damage without replaying attack-hit effects.
 

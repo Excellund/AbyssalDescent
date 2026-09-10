@@ -123,11 +123,13 @@ static func get_power_keyword_metadata(power_id: String, level: int = 1, _prisma
 			condition_text = "Kills place a persistent well. Its bonus applies once inside any owned Field; overlapping Fields do not stack the bonus."
 		"sovereign_tempo":
 			produces = ["burst", "damage"]
-			accepts = ["attack_hit", "dash", "recoil", "orbit"]
-			condition_text = "Connected Attacks build movement speed. Completing Dash, Recoil or Orbit spends the stacks on one Burst; damaging a foe refunds Dash once."
+			accepts = ["attack_hit", "damage", "mark", "dash", "recoil", "orbit"]
+			conditions = ["mark"]
+			condition_text = "Attack hits or your damage against already Marked foes build one Tempo stack per original action. Completing Dash, Recoil or Orbit spends the stacks in a Burst; its accepted damage refunds Dash once. This Burst and its descendants cannot build Tempo."
 		"pillar_convergence":
 			produces = ["field", "damage"]
-			accepts = ["attack_hit"]
+			accepts = ["attack_hit", "electric"]
+			condition_text = "Attack hits or your Electric damage add one charge per original action, including all targets, ticks and descendants. Charging pauses while the moving Field is active; actions that qualify during this window cannot charge it later."
 		"unbroken_oath":
 			accepts = ["attack_hit", "attack"]
 		"edict_of_the_court":
@@ -327,12 +329,12 @@ const DAMAGE_MODEL_BY_POWER := {
 	"sovereign_tempo": {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
-		"formula_note": "Hit stacks convert into dash-finish momentum wave damage"
+		"formula_note": "Attack hits or damage against already Marked foes build one stack per action; Dash, Recoil or Orbit completion converts stacks into a Damage-based Burst"
 	},
 	"pillar_convergence": {
 		"kind": DAMAGE_KIND_SCALING,
-		"scale_source": DAMAGE_SCALE_SOURCE_HIT,
-		"formula_note": "Every N damaging hits, enter Convergence for ~1.6-2.0s and pulse around player for ~46%-63% damage"
+		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
+		"formula_note": "Attack hits or Electric damage add one charge per action; Convergence lasts ~1.6-2.0s and pulses around the player for ~46%-63% of Damage, without charging while active"
 	},
 	"unbroken_oath": {
 		"kind": DAMAGE_KIND_HYBRID,

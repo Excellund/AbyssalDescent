@@ -103,9 +103,9 @@ static func _authored_explanation(power_id: String, level: int, prismatic: bool)
 		"lacuna_echo":
 			return "{kw:kill|Kills} leave one {kw:pull|pulling}, damaging well, replacing the last. Foes in any {kw:field} you own take more damage from you; overlapping {kw:field|Fields} do not stack the bonus."
 		"sovereign_tempo":
-			return "Connected {kw:attack|Attacks} build temporary move speed. Finishing a {kw:dash}, {kw:recoil} or {kw:orbit} spends those stacks in a damaging {kw:burst}; connecting refunds {kw:dash} cooldown."
+			return "{kw:attack_hit|Attack hits} or damage to already {kw:mark|Marked} foes build Tempo once per action. Finishing {kw:dash}, {kw:recoil} or {kw:orbit} spends it in a {kw:burst} that cannot rebuild Tempo."
 		"pillar_convergence":
-			return "Connected {kw:attack|Attacks} build toward a pulsing {kw:field} that follows you and damages nearby foes. It cannot charge again until the active {kw:field} ends."
+			return "{kw:attack_hit|Attack hits} or {kw:electric} damage charge a pulsing {kw:field} that follows you. Each action adds one charge; charging pauses while the {kw:field} is active."
 		"unbroken_oath":
 			return "Gain damage resistance. {kw:attack_hit|Attack hits} fill Oath faster when you strike several foes; filling the bar empowers your next {kw:attack}, which spends it even if you miss."
 		"edict_of_the_court":

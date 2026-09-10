@@ -68,8 +68,8 @@ Marks are timed shared vulnerabilities: strongest active base Mark applies to al
 |---|---|
 | Warden's Verdict | Consecutive attack contacts build a four-contact damage Burst. |
 | Lacuna Well | Kills create a pulling damage Field; its existing bonus applies once inside any owned Field. |
-| Sovereign Tempo | Attack contacts build Tempo, spent once when Dash/Recoil/Orbit completes; accepted wave damage refunds Dash cooldown. |
-| Pillar Convergence | Attack contacts create a moving damage Field for a bounded window. |
+| Sovereign Tempo | Attack hits or owned damage against already Marked foes build one Tempo stack per original action across all victims and descendants. Up to six stacks, expiring 1.8s after the last accepted stack; Dash/Recoil/Orbit completion spends them in one Burst. Accepted Burst damage refunds 0.12s of Dash cooldown per spent stack once per Burst; the Burst and its descendants cannot build Tempo. |
+| Pillar Convergence | Attack hits or owned Electric damage add one charge per original action across all victims and descendants. Four/two charges create a moving damage Field for its existing bounded window; no charging while active. Actions that qualify while active cannot charge later through delayed damage. |
 | Unbroken Oath | Resistance plus Attack-built Oath that empowers the next Attack. |
 | Edict of the Court | Kills Push nearby enemies. |
 | Null Corridor | Dash leaves a Field that Pushes and damages at its existing cadence. |
@@ -88,5 +88,7 @@ Marks are timed shared vulnerabilities: strongest active base Mark applies to al
 | Intercept Run | Node Shield:6% resistance per foe within 180, capped 30% |
 
 One confirmation grants the chosen permanent Boon and fixed temporary increase together. Skip declines both. Temporary effects retain three encounter clears; Overcharge does not accelerate Blast recharge or change hold thresholds.
+
+The Electric receiver in Pillar Convergence connects Electric generators to a moving Field. Sovereign Tempo turns prepared Marks into movement payoffs for Fields, Projectiles and other damage sources. Conditional Damage Boons and Battle Trance already apply across those sources at the accepted-damage boundary. The two boss receivers each keep their own once-per-original-action allowance; neither grants a new Attack or attack hit.
 
 Runtime and networking limits live in the implementations; this roster describes the approved roles, not new universal proc rules. Use [combat-wording.md](combat-wording.md) and the authored keyword catalogue for player-facing text.

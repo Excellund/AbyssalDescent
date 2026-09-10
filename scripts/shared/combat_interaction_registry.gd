@@ -5,6 +5,8 @@ const HIT := 1
 const DASH := 2
 const ELECTRIC := 4
 const CROWN_ANCESTRY := 1
+const TEMPO_ANCESTRY := 2
+const REACTION_ANCESTRY_MASK := CROWN_ANCESTRY | TEMPO_ANCESTRY
 const MAX_ROOTS := 256
 const MAX_TARGETS_PER_ROOT := 256
 const MAX_PENDING_HITS := 256
@@ -27,6 +29,12 @@ static func is_attack_hit(source: String) -> bool:
 
 static func effect_forms(source: String) -> Array:
 	return EFFECT_FORMS.get(source, []).duplicate()
+
+static func reaction_ancestry(source: String) -> int:
+	match source:
+		"storm_crown": return CROWN_ANCESTRY
+		"apex_momentum_wave": return TEMPO_ANCESTRY
+	return 0
 
 # Orbit and movement-completion Bursts retain their root identity, but the
 # root may be a Dash. That ancestry does not make their damage a normal Dash.
@@ -57,8 +65,7 @@ static func damage_context(action: Dictionary, source: String, extra: Dictionary
 			original = String(action.get("source", ""))
 		interaction["echo_source"] = original if original != source else ""
 		interaction["traits"] |= int(EFFECT_TRAITS.get(interaction.echo_source, 0))
-	if source == "storm_crown":
-		interaction["ancestry"] = int(interaction.get("ancestry", 0)) | CROWN_ANCESTRY
+	interaction["ancestry"] = int(interaction.get("ancestry", 0)) | reaction_ancestry(source)
 	result["interaction"] = interaction
 	return result
 
@@ -92,17 +99,14 @@ static func validate_action(raw: Variant, authenticated_owner: int) -> Dictionar
 	var source: Variant = raw.get("source", "")
 	if not (source is String) or String(source).length() > 64:
 		return {}
-	var ancestry := int(raw.ancestry) & CROWN_ANCESTRY
-	if source == "storm_crown":
-		ancestry |= CROWN_ANCESTRY
+	var ancestry := (int(raw.ancestry) & REACTION_ANCESTRY_MASK) | reaction_ancestry(source)
 	var traits := int(EFFECT_TRAITS.get(source, 0))
 	var echo_source := ""
 	if source == "sovereigns_double" and raw.get("echo_source") is String:
 		echo_source = String(raw.echo_source)
 		if echo_source != "sovereigns_double":
 			traits |= int(EFFECT_TRAITS.get(echo_source, 0))
-		if echo_source == "storm_crown":
-			ancestry |= CROWN_ANCESTRY
+		ancestry |= reaction_ancestry(echo_source)
 	var result := {"run": active_run, "room": int(raw.room), "owner": authenticated_owner,
 		"seq": int(raw.seq), "epoch": int(raw.epoch), "kind": String(raw.kind),
 		"source": String(source), "traits": traits, "ancestry": ancestry, "echo_source": echo_source}
