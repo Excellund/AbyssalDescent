@@ -60,6 +60,7 @@ var _room_heartbeat_in_flight: bool = false
 var _room_heartbeat_failure_count: int = 0
 var _room_heartbeat_retry_timer: float = 0.0
 var _join: JoinAttemptState = JoinAttemptState.new()
+var _join_operation_generation: int = 0
 var _upnp_mapped_port: int = 0
 var _last_host_connectivity_warning: String = ""
 var _host_public_ip: String = ""
@@ -259,6 +260,7 @@ func create_registered_room(room_registration: Dictionary) -> bool:
 		_last_host_connectivity_warning = String(upnp_result.get("message", ""))
 		if not _last_host_connectivity_warning.is_empty():
 			print("[MultiplayerSessionManager] WARNING: %s" % _last_host_connectivity_warning)
+	_join_operation_generation += 1
 	_multiplayer.multiplayer_peer = enet_peer
 	print("[MultiplayerSessionManager] Assigned ENet peer to MultiplayerAPI")
 	session_connected = true
@@ -344,6 +346,7 @@ func _create_tunnel_host(room_registration: Dictionary) -> bool:
 		push_error("[MultiplayerSessionManager] ERROR: %s" % msg)
 		return false
 
+	_join_operation_generation += 1
 	_multiplayer.multiplayer_peer = ws_peer
 	session_connected = true
 	is_host_peer = true
@@ -381,6 +384,7 @@ func _begin_tunnel_join(room_registration: Dictionary) -> bool:
 	var reg_session_id := String(room_registration.get("session_id", "")).strip_edges()
 	var reg_room_code := String(room_registration.get("room_code", "")).strip_edges().to_upper()
 
+	_join_operation_generation += 1
 	## Assign temporary placeholders; overwritten below before the async signal fires.
 	session_id = "mp-session-%d-%s" % [Time.get_unix_time_from_system(), _generate_random_code(4)]
 	room_code = _generate_random_code(6).to_upper()
@@ -448,6 +452,7 @@ func _shutdown_tunnel_helper() -> void:
 
 ## Leave current session and disconnect.
 func leave_room() -> void:
+	_join_operation_generation += 1
 	if not has_active_session_state():
 		return
 	if is_host_peer and not room_code.is_empty():
@@ -659,6 +664,11 @@ func is_authoritative_for_peer(peer_id: int) -> bool:
 	return peer_id == local_peer_id
 
 
+## Local ownership identity, stable across candidate fallback and connection.
+## New operations, leave and host takeover invalidate a menu's previous claim.
+func get_join_operation_generation() -> int:
+	return _join_operation_generation
+
 func has_active_session_state() -> bool:
 	if session_connected:
 		return true
@@ -867,6 +877,7 @@ func _begin_join_attempts(addresses: Array, host_port: int) -> bool:
 		_debug_log("[JOIN] ERROR: No valid addresses provided")
 		return false
 
+	_join_operation_generation += 1
 	_join.port = host_port
 	_join.index = -1
 	_debug_log("[JOIN] Starting join attempts with %d candidate addresses" % _join.addresses.size())

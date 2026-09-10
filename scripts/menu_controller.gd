@@ -145,6 +145,107 @@ var lobby_modal_panel: Panel
 var lobby_modal_content_host: Control
 var lobby_modal_instance: LOBBY_CONTROLLER_SCRIPT
 
+var _multiplayer_join_generation: int = 0
+var _multiplayer_join_attempt: Dictionary = {}
+
+## A menu join owns its callbacks and whole transport operation until lobby acceptance.
+## Old await continuations keep their own record and cannot clean up a newer join.
+func _begin_multiplayer_join_attempt() -> Dictionary:
+	_cancel_multiplayer_join_attempt()
+	_multiplayer_join_generation += 1
+	_multiplayer_join_attempt = {
+		"generation": _multiplayer_join_generation,
+		"manager": get_node_or_null("/root/MultiplayerSessionManager"),
+		"transport_claimed": false, "transport_starting": false, "peer": null, "operation_generation": -1, "starting_generation": -1,
+		"on_joined": Callable(), "on_failed": Callable(), "probe": null
+	}
+	if multiplayer_join_button != null:
+		multiplayer_join_button.disabled = true
+	return _multiplayer_join_attempt
+
+func _is_multiplayer_join_current(attempt: Dictionary) -> bool:
+	return is_inside_tree() and not attempt.is_empty() and not _multiplayer_join_attempt.is_empty() and int(attempt.get("generation", -1)) == int(_multiplayer_join_attempt.get("generation", -2))
+
+func _is_multiplayer_join_operation_current(attempt: Dictionary) -> bool:
+	if not bool(attempt.get("transport_claimed", false)):
+		return true
+	var manager: Node = attempt.get("manager")
+	return is_instance_valid(manager) and int(manager.get_join_operation_generation()) == int(attempt.get("operation_generation", -1))
+
+func _validate_multiplayer_join_wait(attempt: Dictionary) -> bool:
+	if not _is_multiplayer_join_current(attempt):
+		return false
+	if not _is_multiplayer_join_operation_current(attempt):
+		_cancel_multiplayer_join_attempt()
+		return false
+	return true
+func _disconnect_multiplayer_join_waiter(attempt: Dictionary) -> void:
+	var manager: Node = attempt.get("manager")
+	if not is_instance_valid(manager):
+		return
+	for entry in [["session_joined", "on_joined"], ["connection_failed", "on_failed"]]:
+		var callback: Callable = attempt.get(entry[1], Callable())
+		if callback.is_valid() and manager.is_connected(entry[0], callback):
+			manager.disconnect(entry[0], callback)
+		attempt[entry[1]] = Callable()
+
+func _claim_multiplayer_join_transport(attempt: Dictionary) -> void:
+	var manager: Node = attempt.get("manager")
+	if not is_instance_valid(manager) or manager._multiplayer == null:
+		return
+	attempt["transport_claimed"] = true
+	attempt["peer"] = manager._multiplayer.multiplayer_peer
+	attempt["operation_generation"] = int(manager.get_join_operation_generation())
+
+func _close_multiplayer_join_transport(attempt: Dictionary) -> void:
+	if not bool(attempt.get("transport_claimed", false)):
+		return
+	attempt["transport_claimed"] = false
+	var manager: Node = attempt.get("manager")
+	var peer: MultiplayerPeer = attempt.get("peer")
+	attempt["peer"] = null
+	if not is_instance_valid(manager):
+		if peer != null:
+			peer.close()
+		return
+	if int(manager.get_join_operation_generation()) != int(attempt.get("operation_generation", -1)):
+		return # A newer operation owns the manager, even if it reused a room ID.
+	var api: MultiplayerAPI = manager._multiplayer
+	var current_peer: MultiplayerPeer = api.multiplayer_peer if api != null else null
+	if peer != null:
+		peer.close()
+	if current_peer != null and current_peer != peer:
+		current_peer.close() # A candidate fallback belongs to the same operation.
+	manager.leave_room() # Also clears metadata after a terminal attempt dropped its peer.
+
+func _cancel_multiplayer_join_attempt() -> void:
+	if _multiplayer_join_attempt.is_empty():
+		return
+	var attempt := _multiplayer_join_attempt
+	var manager: Node = attempt.get("manager")
+	if bool(attempt.get("transport_starting", false)) and is_instance_valid(manager) and int(manager.get_join_operation_generation()) != int(attempt.get("starting_generation", -1)):
+		_claim_multiplayer_join_transport(attempt)
+	_multiplayer_join_attempt = {} # Invalidate before releasing any signal or peer.
+	_disconnect_multiplayer_join_waiter(attempt)
+	var probe: HTTPRequest = attempt.get("probe")
+	if is_instance_valid(probe):
+		probe.cancel_request()
+		probe.queue_free()
+	attempt["probe"] = null
+	_close_multiplayer_join_transport(attempt)
+	if is_instance_valid(multiplayer_join_button):
+		multiplayer_join_button.disabled = false
+
+func _finish_multiplayer_join_attempt(attempt: Dictionary, accepted: bool) -> void:
+	if not _is_multiplayer_join_current(attempt):
+		return
+	_disconnect_multiplayer_join_waiter(attempt)
+	if not accepted:
+		_close_multiplayer_join_transport(attempt)
+	_multiplayer_join_attempt = {}
+	if multiplayer_join_button != null:
+		multiplayer_join_button.disabled = false
+
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -229,6 +330,7 @@ func _run_duo_host_autostart() -> void:
 
 
 func _run_duo_join_autostart() -> void:
+	var join_attempt := _begin_multiplayer_join_attempt()
 	const POLL_INTERVAL_SEC := 0.5
 	const MAX_WAIT_SEC := 60.0
 	## Try to join as soon as the host writes its room code. If the first attempt
@@ -255,8 +357,11 @@ func _run_duo_join_autostart() -> void:
 		if tree == null:
 			return
 		await tree.create_timer(POLL_INTERVAL_SEC).timeout
+		if not _is_multiplayer_join_current(join_attempt):
+			return
 		elapsed += POLL_INTERVAL_SEC
 	if resolved_code.is_empty():
+		_finish_multiplayer_join_attempt(join_attempt, false)
 		push_error("[Menu/Duo] Joiner autostart: timed out after %.1fs waiting for room code file %s" % [MAX_WAIT_SEC, DUO_ROOM_CODE_PATH])
 		if multiplayer_status_label != null:
 			multiplayer_status_label.text = "[Duo] Timed out waiting for host room code."
@@ -274,18 +379,23 @@ func _run_duo_join_autostart() -> void:
 	var warm_host_address := ""
 	if multiplayer_room_service_warm != null:
 		var warm_resolve: Dictionary = await multiplayer_room_service_warm.resolve_room_code(resolved_code)
+		if not _is_multiplayer_join_current(join_attempt):
+			return
 		if bool(warm_resolve.get("ok", false)):
 			var warm_reg := warm_resolve.get("registration", {}) as Dictionary
 			warm_host_address = String(warm_reg.get("host_address", "")).strip_edges()
 			if not warm_host_address.is_empty():
 				if multiplayer_status_label != null:
 					multiplayer_status_label.text = "[Duo] Waiting for tunnel DNS propagation..."
-				var probe_ok := await _probe_tunnel_reachability(warm_host_address)
+				var probe_ok := await _probe_tunnel_reachability(warm_host_address, join_attempt)
+				if not _is_multiplayer_join_current(join_attempt):
+					return
 				if not probe_ok:
 					print("[Menu/Duo] Joiner autostart: tunnel reachability probe failed; will re-probe before each attempt")
 	for attempt in range(JOIN_RETRY_COUNT):
 		var multiplayer_session_manager = get_node_or_null("/root/MultiplayerSessionManager")
 		if multiplayer_session_manager == null:
+			_finish_multiplayer_join_attempt(join_attempt, false)
 			push_error("[Menu/Duo] Joiner autostart: MultiplayerSessionManager autoload is missing")
 			return
 		## Re-probe DNS before every join attempt. If the up-front probe timed out,
@@ -294,26 +404,27 @@ func _run_duo_join_autostart() -> void:
 		if attempt > 0 and not warm_host_address.is_empty():
 			if multiplayer_status_label != null:
 				multiplayer_status_label.text = "[Duo] Re-checking tunnel DNS before attempt %d/%d..." % [attempt + 1, JOIN_RETRY_COUNT]
-			var reprobe_ok := await _probe_tunnel_reachability(warm_host_address)
+			var reprobe_ok := await _probe_tunnel_reachability(warm_host_address, join_attempt)
+			if not _is_multiplayer_join_current(join_attempt):
+				return
 			if not reprobe_ok:
 				print("[Menu/Duo] Joiner autostart: DNS still not resolving before attempt %d; trying anyway" % (attempt + 1))
 		if multiplayer_status_label != null:
 			multiplayer_status_label.text = "[Duo] Joining room %s (attempt %d/%d)..." % [resolved_code, attempt + 1, JOIN_RETRY_COUNT]
 		print("[Menu/Duo] Joiner autostart: join attempt %d/%d for room '%s'" % [attempt + 1, JOIN_RETRY_COUNT, resolved_code])
-		await _join_multiplayer_room(resolved_code)
-		var retry_tree := _tree_or_null()
-		if retry_tree == null:
-			return
-		if bool(multiplayer_session_manager.has_active_session_state()) and bool(multiplayer_session_manager.session_connected):
+		var joined := await _join_multiplayer_room(resolved_code, join_attempt)
+		if joined:
 			print("[Menu/Duo] Joiner autostart: connected on attempt %d" % (attempt + 1))
-			## _join_multiplayer_room already opened the lobby modal; belt-and-suspenders below.
-			if lobby_modal_instance == null:
-				print("[Menu/Duo] Joiner autostart: lobby modal not yet open after join, forcing _show_lobby_modal()")
-				_show_lobby_modal()
+			return # The join caller already accepted ownership and opened its lobby.
+		if not _is_multiplayer_join_current(join_attempt):
 			return
+		var retry_tree := _tree_or_null()
 		if attempt + 1 < JOIN_RETRY_COUNT:
 			print("[Menu/Duo] Joiner autostart: attempt %d failed, retrying in %.1fs (tunnel may still be warming up)" % [attempt + 1, JOIN_RETRY_BACKOFF_SEC])
 			await retry_tree.create_timer(JOIN_RETRY_BACKOFF_SEC).timeout
+			if not _is_multiplayer_join_current(join_attempt):
+				return
+	_finish_multiplayer_join_attempt(join_attempt, false)
 	push_error("[Menu/Duo] Joiner autostart: all %d join attempts failed" % JOIN_RETRY_COUNT)
 	if multiplayer_status_label != null:
 		multiplayer_status_label.text = "[Duo] All %d join attempts failed. Check host console for the room code." % JOIN_RETRY_COUNT
@@ -333,46 +444,55 @@ func _tree_or_null() -> SceneTree:
 ## their DNS records to propagate to local resolvers after cloudflared
 ## reports the tunnel as registered. The WebSocket client cannot survive
 ## this gap because its DNS lookup fails synchronously.
-func _probe_tunnel_reachability(host_address: String) -> bool:
+func _probe_tunnel_reachability(host_address: String, attempt: Dictionary = {}) -> bool:
 	const PROBE_INTERVAL_SEC := 1.0
 	const PROBE_MAX_ATTEMPTS := 60
+	if attempt.is_empty():
+		attempt = _multiplayer_join_attempt
+	if not _is_multiplayer_join_current(attempt):
+		return false
 	var url := host_address
 	if url.begins_with("wss://"):
 		url = "https://" + url.substr(6)
 	elif url.begins_with("ws://"):
 		url = "http://" + url.substr(5)
 	if not (url.begins_with("http://") or url.begins_with("https://")):
-		return true ## Direct ENet or unrecognised scheme; nothing to probe.
-
+		return true
 	_debug_log_menu("[PROBE] Starting tunnel reachability probe for %s (max %d attempts)" % [url, PROBE_MAX_ATTEMPTS])
-	for attempt in range(PROBE_MAX_ATTEMPTS):
-		var tree := _tree_or_null()
-		if tree == null:
+	for retry in range(PROBE_MAX_ATTEMPTS):
+		if not _is_multiplayer_join_current(attempt):
 			return false
 		var req := HTTPRequest.new()
 		add_child(req)
+		attempt["probe"] = req
+		var result := {"done": false, "code": -1, "status": 0}
+		req.request_completed.connect(func(code: int, status: int, _headers: PackedStringArray, _body: PackedByteArray):
+			result["done"] = true
+			result["code"] = code
+			result["status"] = status
+		, CONNECT_ONE_SHOT)
 		var err := req.request(url, PackedStringArray(), HTTPClient.METHOD_GET)
+		if err == OK:
+			# Cancellation retires the owned request immediately. Await frames so
+			# no continuation depends on a canceled request emitting completion.
+			while not bool(result["done"]):
+				await get_tree().process_frame
+				if not _is_multiplayer_join_current(attempt):
+					return false
+		attempt["probe"] = null
+		req.queue_free()
 		if err != OK:
-			req.queue_free()
-			print("[Menu/Duo] Probe attempt %d: HTTPRequest.request() error %d for %s" % [attempt + 1, err, url])
-			_debug_log_menu("[PROBE] attempt %d/%d: request() err=%d" % [attempt + 1, PROBE_MAX_ATTEMPTS, err])
-		else:
-			var probe_result: Array = await req.request_completed
-			req.queue_free()
-			var result_code := int(probe_result[0])
-			var status_code := int(probe_result[1])
-			if result_code == HTTPRequest.RESULT_SUCCESS:
-				print("[Menu/Duo] Probe attempt %d: tunnel reachable (HTTP %d) — DNS propagated" % [attempt + 1, status_code])
-				_debug_log_menu("[PROBE] attempt %d/%d: SUCCESS http=%d — DNS propagated" % [attempt + 1, PROBE_MAX_ATTEMPTS, status_code])
-				return true
-			print("[Menu/Duo] Probe attempt %d: result=%d status=%d (DNS likely not propagated yet)" % [attempt + 1, result_code, status_code])
-			_debug_log_menu("[PROBE] attempt %d/%d: result=%d status=%d" % [attempt + 1, PROBE_MAX_ATTEMPTS, result_code, status_code])
-
-		if attempt + 1 < PROBE_MAX_ATTEMPTS:
-			var retry_tree := _tree_or_null()
-			if retry_tree == null:
+			print("[Menu/Duo] Probe attempt %d: HTTPRequest.request() error %d for %s" % [retry + 1, err, url])
+		if err == OK and int(result["code"]) == HTTPRequest.RESULT_SUCCESS:
+			print("[Menu/Duo] Probe attempt %d: tunnel reachable (HTTP %d) — DNS propagated" % [retry + 1, result["status"]])
+			_debug_log_menu("[PROBE] attempt %d/%d: SUCCESS http=%d" % [retry + 1, PROBE_MAX_ATTEMPTS, result["status"]])
+			return true
+		print("[Menu/Duo] Probe attempt %d: result=%d status=%d (DNS likely not propagated yet)" % [retry + 1, result["code"], result["status"]])
+		_debug_log_menu("[PROBE] attempt %d/%d: err=%d result=%d status=%d" % [retry + 1, PROBE_MAX_ATTEMPTS, err, result["code"], result["status"]])
+		if retry + 1 < PROBE_MAX_ATTEMPTS:
+			await get_tree().create_timer(PROBE_INTERVAL_SEC).timeout
+			if not _is_multiplayer_join_current(attempt):
 				return false
-			await retry_tree.create_timer(PROBE_INTERVAL_SEC).timeout
 	push_warning("[Menu/Duo] Tunnel reachability probe exhausted %d attempts for %s" % [PROBE_MAX_ATTEMPTS, url])
 	_debug_log_menu("[PROBE] EXHAUSTED %d attempts for %s — probe failed" % [PROBE_MAX_ATTEMPTS, url])
 	return false
@@ -382,6 +502,7 @@ func _notification(what: int) -> void:
 		_apply_menu_layout()
 
 func _change_to_gameplay_scene() -> void:
+	_cancel_multiplayer_join_attempt()
 	var tree := _tree_or_null()
 	if tree != null:
 		tree.change_scene_to_file(GAMEPLAY_SCENE_PATH)
@@ -389,6 +510,7 @@ func _change_to_gameplay_scene() -> void:
 
 ## Multiplayer entry points
 func _create_multiplayer_room() -> void:
+	_cancel_multiplayer_join_attempt()
 	var multiplayer_session_manager = get_node_or_null("/root/MultiplayerSessionManager")
 	var multiplayer_room_service = get_node_or_null("/root/MultiplayerRoomService")
 	if multiplayer_session_manager == null:
@@ -463,63 +585,54 @@ func _create_multiplayer_room() -> void:
 	_show_lobby_modal()
 
 
-func _join_multiplayer_room(room_code: String) -> void:
-	var multiplayer_session_manager = get_node_or_null("/root/MultiplayerSessionManager")
-	var multiplayer_room_service = get_node_or_null("/root/MultiplayerRoomService")
-	if multiplayer_join_button != null:
-		multiplayer_join_button.disabled = true
-	
-	## Ensure any previous session is cleaned up before joining a new one
-	var had_active_session := false
-	if multiplayer_session_manager != null:
-		had_active_session = bool(multiplayer_session_manager.has_active_session_state())
-	if had_active_session:
-		print("[Menu] WARNING: Previous session still connected. Cleaning up before joining new room...")
-		multiplayer_session_manager.leave_room()
-		var cleanup_tree := _tree_or_null()
-		if cleanup_tree == null:
-			if multiplayer_join_button != null:
-				multiplayer_join_button.disabled = false
-			return
-		await cleanup_tree.create_timer(0.2).timeout
-		if _tree_or_null() == null:
-			if multiplayer_join_button != null:
-				multiplayer_join_button.disabled = false
-			return
-	
+func _join_multiplayer_room(room_code: String, attempt: Dictionary = {}) -> bool:
+	var owns_attempt := attempt.is_empty()
+	if owns_attempt:
+		attempt = _begin_multiplayer_join_attempt()
+	if not _is_multiplayer_join_current(attempt):
+		return false
+	var joined := await _run_multiplayer_join_attempt(room_code, attempt)
+	if not _is_multiplayer_join_current(attempt):
+		return false
+	if joined:
+		_finish_multiplayer_join_attempt(attempt, true)
+		_show_lobby_modal()
+	elif owns_attempt:
+		_finish_multiplayer_join_attempt(attempt, false)
+	return joined
+
+func _run_multiplayer_join_attempt(room_code: String, attempt: Dictionary) -> bool:
+	var multiplayer_session_manager: Node = attempt.get("manager")
+	var multiplayer_room_service := get_node_or_null("/root/MultiplayerRoomService")
 	if multiplayer_session_manager == null:
 		push_error("[Menu] MultiplayerSessionManager autoload is missing")
-		if multiplayer_join_button != null:
-			multiplayer_join_button.disabled = false
-		return
+		return false
 	if multiplayer_room_service == null:
 		push_error("[Menu] MultiplayerRoomService autoload is missing")
-		if multiplayer_join_button != null:
-			multiplayer_join_button.disabled = false
-		return
+		return false
+	# Starting a requested new join preserves the existing previous-session policy.
+	if bool(multiplayer_session_manager.has_active_session_state()):
+		print("[Menu] WARNING: Previous session still connected. Cleaning up before joining new room...")
+		multiplayer_session_manager.leave_room()
+		await get_tree().create_timer(0.2).timeout
+		if not _is_multiplayer_join_current(attempt):
+			return false
 	var config_issues: PackedStringArray = multiplayer_room_service.get_configuration_issues()
 	if not config_issues.is_empty():
 		if multiplayer_status_label != null:
 			multiplayer_status_label.text = String(config_issues[0])
-		if multiplayer_join_button != null:
-			multiplayer_join_button.disabled = false
-		return
+		return false
 	var resolve_result: Dictionary = await multiplayer_room_service.resolve_room_code(room_code)
-	if _tree_or_null() == null:
-		if multiplayer_join_button != null:
-			multiplayer_join_button.disabled = false
-		return
+	if not _is_multiplayer_join_current(attempt):
+		return false
 	if not bool(resolve_result.get("ok", false)):
 		if multiplayer_status_label != null:
 			multiplayer_status_label.text = _format_multiplayer_room_error(resolve_result, false)
-		if multiplayer_join_button != null:
-			multiplayer_join_button.disabled = false
-		return
+		return false
 	var registration := resolve_result.get("registration", {}) as Dictionary
 	var resolved_host_address := String(registration.get("host_address", "")).strip_edges()
 	var resolved_host_port := int(registration.get("host_port", 7777))
 	print("[Menu] Room resolved. Host address: %s:%d" % [resolved_host_address, resolved_host_port])
-
 	## Probe tunnel DNS before attempting the WebSocket join. Cloudflare
 	## quick-tunnel hostnames (`*.trycloudflare.com`) take several seconds to
 	## propagate after the host opens the tunnel. Without this warmup,
@@ -531,11 +644,9 @@ func _join_multiplayer_room(room_code: String) -> void:
 	if is_tunnel_url:
 		if multiplayer_status_label != null:
 			multiplayer_status_label.text = "Waiting for tunnel DNS propagation..."
-		var probe_ok := await _probe_tunnel_reachability(resolved_host_address)
-		if _tree_or_null() == null:
-			if multiplayer_join_button != null:
-				multiplayer_join_button.disabled = false
-			return
+		var probe_ok := await _probe_tunnel_reachability(resolved_host_address, attempt)
+		if not _is_multiplayer_join_current(attempt):
+			return false
 		if not probe_ok:
 			print("[Menu] Tunnel DNS probe did not resolve; will still attempt join with retries")
 
@@ -546,79 +657,61 @@ func _join_multiplayer_room(room_code: String) -> void:
 	const MANUAL_JOIN_RETRY_COUNT := 4
 	const MANUAL_JOIN_RETRY_BACKOFF_SEC := 3.0
 	var begin_join := func() -> bool:
+		if not _is_multiplayer_join_current(attempt):
+			return false
 		return bool(multiplayer_session_manager.join_registered_room(registration))
 	var join_result := {"ok": false, "reason": "Unable to connect to the room host."}
-	for attempt in range(MANUAL_JOIN_RETRY_COUNT):
-		if attempt > 0:
+	for retry in range(MANUAL_JOIN_RETRY_COUNT):
+		if not _is_multiplayer_join_current(attempt):
+			return false
+		if retry > 0:
 			if multiplayer_status_label != null:
-				multiplayer_status_label.text = "Connection failed. Retrying (%d/%d)..." % [attempt + 1, MANUAL_JOIN_RETRY_COUNT]
-			print("[Menu] Manual join attempt %d/%d (previous attempt failed; retrying after backoff)" % [attempt + 1, MANUAL_JOIN_RETRY_COUNT])
-			_debug_log_menu("[JOIN] Retry attempt %d/%d after backoff" % [attempt + 1, MANUAL_JOIN_RETRY_COUNT])
+				multiplayer_status_label.text = "Connection failed. Retrying (%d/%d)..." % [retry + 1, MANUAL_JOIN_RETRY_COUNT]
+			print("[Menu] Manual join attempt %d/%d (previous attempt failed; retrying after backoff)" % [retry + 1, MANUAL_JOIN_RETRY_COUNT])
+			_debug_log_menu("[JOIN] Retry attempt %d/%d after backoff" % [retry + 1, MANUAL_JOIN_RETRY_COUNT])
 			if is_tunnel_url:
-				var reprobe_ok := await _probe_tunnel_reachability(resolved_host_address)
-				if _tree_or_null() == null:
-					if multiplayer_join_button != null:
-						multiplayer_join_button.disabled = false
-					return
+				var reprobe_ok := await _probe_tunnel_reachability(resolved_host_address, attempt)
+				if not _is_multiplayer_join_current(attempt):
+					return false
 				if not reprobe_ok:
-					print("[Menu] Reprobe still failing before attempt %d; trying anyway" % (attempt + 1))
+					print("[Menu] Reprobe still failing before attempt %d; trying anyway" % (retry + 1))
 		else:
 			_debug_log_menu("[JOIN] First attempt 1/%d" % MANUAL_JOIN_RETRY_COUNT)
-		join_result = await _await_multiplayer_join_result(
-			multiplayer_session_manager,
-			MULTIPLAYER_JOIN_CAP_SEC,
-			resolved_host_address,
-			resolved_host_port,
-			begin_join
-		)
-		if _tree_or_null() == null:
-			if multiplayer_join_button != null:
-				multiplayer_join_button.disabled = false
-			return
+		join_result = await _await_multiplayer_join_result(multiplayer_session_manager, MULTIPLAYER_JOIN_CAP_SEC, resolved_host_address, resolved_host_port, begin_join, attempt)
+		if not _is_multiplayer_join_current(attempt):
+			return false
 		if bool(join_result.get("ok", false)):
-			break
-		## Clean peer state before the next attempt so create_client() starts fresh.
-		multiplayer_session_manager.leave_room()
-		if attempt + 1 < MANUAL_JOIN_RETRY_COUNT:
-			var backoff_tree := _tree_or_null()
-			if backoff_tree == null:
-				if multiplayer_join_button != null:
-					multiplayer_join_button.disabled = false
-				return
-			await backoff_tree.create_timer(MANUAL_JOIN_RETRY_BACKOFF_SEC).timeout
-	if _tree_or_null() == null:
-		if multiplayer_join_button != null:
-			multiplayer_join_button.disabled = false
-		return
-	if bool(join_result.get("ok", false)):
-		_show_lobby_modal()
-	else:
-		multiplayer_session_manager.leave_room()
-		if multiplayer_status_label != null:
-			var reason := String(join_result.get("reason", "Unable to connect to the room host."))
-			multiplayer_status_label.text = reason
-			print("[Menu] Join failed: %s" % reason)
-	if multiplayer_join_button != null:
-		multiplayer_join_button.disabled = false
+			return true
+		_close_multiplayer_join_transport(attempt)
+		if retry + 1 < MANUAL_JOIN_RETRY_COUNT:
+			await get_tree().create_timer(MANUAL_JOIN_RETRY_BACKOFF_SEC).timeout
+			if not _is_multiplayer_join_current(attempt):
+				return false
+	if multiplayer_status_label != null:
+		multiplayer_status_label.text = String(join_result.get("reason", "Unable to connect to the room host."))
+		print("[Menu] Join failed: %s" % multiplayer_status_label.text)
+	return false
 
-
-func _await_multiplayer_join_result(multiplayer_session_manager: Node, timeout_sec: float = MULTIPLAYER_JOIN_CAP_SEC, resolved_address: String = "", resolved_port: int = 7777, begin_join: Callable = Callable()) -> Dictionary:
-	var state := {
-		"joined": false,
-		"failed": false,
-		"failure_reason": ""
-	}
-	var ui_update_interval_sec := 0.25
-	var next_ui_update_at := 0.0
-	var display_address := resolved_address if not resolved_address.is_empty() else "<resolving>"
+func _await_multiplayer_join_result(multiplayer_session_manager: Node, timeout_sec: float = MULTIPLAYER_JOIN_CAP_SEC, resolved_address: String = "", resolved_port: int = 7777, begin_join: Callable = Callable(), attempt: Dictionary = {}) -> Dictionary:
+	var owns_attempt := attempt.is_empty()
+	if owns_attempt:
+		attempt = _begin_multiplayer_join_attempt()
+	if not _validate_multiplayer_join_wait(attempt):
+		return {"ok": false, "canceled": true}
+	attempt["manager"] = multiplayer_session_manager
+	var state := {"joined": false, "failed": false, "failure_reason": ""}
 	var on_joined := func(_session_id: String) -> void:
-		print("[Menu] session_joined signal received with session_id='%s'" % _session_id)
-		state["joined"] = true
+		if _is_multiplayer_join_current(attempt) and _is_multiplayer_join_operation_current(attempt):
+			print("[Menu] session_joined signal received with session_id='%s'" % _session_id)
+			state["joined"] = true
 	var on_failed := func(reason: String) -> void:
-		print("[Menu] connection_failed signal received with reason='%s'" % reason)
-		push_error("[JOIN DEBUG] connection_failed RECEIVED! reason=%s" % reason)
-		state["failed"] = true
-		state["failure_reason"] = reason
+		if _is_multiplayer_join_current(attempt) and _is_multiplayer_join_operation_current(attempt):
+			print("[Menu] connection_failed signal received with reason='%s'" % reason)
+			push_error("[JOIN DEBUG] connection_failed RECEIVED! reason=%s" % reason)
+			state["failed"] = true
+			state["failure_reason"] = reason
+	attempt["on_joined"] = on_joined
+	attempt["on_failed"] = on_failed
 	print("[Menu] Connecting signal callbacks for join attempt...")
 	multiplayer_session_manager.session_joined.connect(on_joined, CONNECT_ONE_SHOT)
 	_debug_log_menu("[JOIN] Connected to session_joined signal")
@@ -626,62 +719,57 @@ func _await_multiplayer_join_result(multiplayer_session_manager: Node, timeout_s
 	_debug_log_menu("[JOIN] Connected to connection_failed signal")
 	print("[Menu] Signals connected. Starting timeout loop (%.0fs)..." % timeout_sec)
 	if begin_join.is_valid():
+		attempt["starting_generation"] = int(multiplayer_session_manager.get_join_operation_generation())
+		attempt["transport_starting"] = true
 		var join_started := bool(begin_join.call())
+		attempt["transport_starting"] = false
+		if not _validate_multiplayer_join_wait(attempt):
+			_disconnect_multiplayer_join_waiter(attempt)
+			return {"ok": false, "canceled": true}
+		if int(multiplayer_session_manager.get_join_operation_generation()) != int(attempt["starting_generation"]):
+			_claim_multiplayer_join_transport(attempt)
 		if not join_started:
-			if multiplayer_session_manager.session_joined.is_connected(on_joined):
-				multiplayer_session_manager.session_joined.disconnect(on_joined)
-			if multiplayer_session_manager.connection_failed.is_connected(on_failed):
-				multiplayer_session_manager.connection_failed.disconnect(on_failed)
-			return {
-				"ok": false,
-				"reason": "Unable to connect to the room host."
-			}
+			state["failed"] = true
+			state["failure_reason"] = "Unable to connect to the room host."
+	elif not bool(multiplayer_session_manager.session_connected) and not bool(multiplayer_session_manager.is_host_peer) and bool(multiplayer_session_manager.has_active_session_state()):
+		_claim_multiplayer_join_transport(attempt)
 	var elapsed := 0.0
+	var next_ui_update_at := 0.0
+	var display_address := resolved_address if not resolved_address.is_empty() else "<resolving>"
 	_debug_log_menu("[JOIN] Starting timeout loop. Waiting for session_joined or connection_failed...")
 	while elapsed < timeout_sec and not state["joined"] and not state["failed"]:
-		if _tree_or_null() == null:
-			state["failed"] = true
-			state["failure_reason"] = "Join canceled while menu was closing."
-			break
+		if not _validate_multiplayer_join_wait(attempt):
+			_disconnect_multiplayer_join_waiter(attempt)
+			return {"ok": false, "canceled": true}
 		if bool(multiplayer_session_manager.session_connected) and int(multiplayer_session_manager.local_peer_id) > 0:
 			state["joined"] = true
 			break
 		if elapsed >= next_ui_update_at:
 			var remaining_sec := maxi(0, int(ceili(timeout_sec - elapsed)))
-			var remaining_min := int(floor(float(remaining_sec) / 60.0))
-			var remaining_mod_sec := remaining_sec % 60
 			if multiplayer_status_label != null:
-				multiplayer_status_label.text = "Connecting to host %s:%d... %02d:%02d remaining" % [display_address, resolved_port, remaining_min, remaining_mod_sec]
-			next_ui_update_at = elapsed + ui_update_interval_sec
-		var frame_tree := _tree_or_null()
-		if frame_tree == null:
-			state["failed"] = true
-			state["failure_reason"] = "Join canceled while menu was closing."
-			break
-		await frame_tree.process_frame
+				multiplayer_status_label.text = "Connecting to host %s:%d... %02d:%02d remaining" % [display_address, resolved_port, int(floor(float(remaining_sec) / 60.0)), remaining_sec % 60]
+			next_ui_update_at = elapsed + 0.25
+		await get_tree().process_frame
+		if not _validate_multiplayer_join_wait(attempt):
+			_disconnect_multiplayer_join_waiter(attempt)
+			return {"ok": false, "canceled": true}
 		elapsed += get_process_delta_time()
-	if multiplayer_session_manager.session_joined.is_connected(on_joined):
-		multiplayer_session_manager.session_joined.disconnect(on_joined)
-	if multiplayer_session_manager.connection_failed.is_connected(on_failed):
-		multiplayer_session_manager.connection_failed.disconnect(on_failed)
+	_disconnect_multiplayer_join_waiter(attempt)
+	if not _validate_multiplayer_join_wait(attempt):
+		return {"ok": false, "canceled": true}
 	var joined := bool(state["joined"])
-	var failed := bool(state["failed"])
 	var failure_reason := String(state["failure_reason"])
-	_debug_log_menu("[JOIN] Loop exited: joined=%s failed=%s reason='%s'" % [joined, failed, failure_reason])
-	print("[Menu] Join attempt loop exited: joined=%s failed=%s failure_reason='%s'" % [joined, failed, failure_reason])
+	_debug_log_menu("[JOIN] Loop exited: joined=%s failed=%s reason='%s'" % [joined, state["failed"], failure_reason])
+	print("[Menu] Join attempt loop exited: joined=%s failed=%s failure_reason='%s'" % [joined, state["failed"], failure_reason])
+	if owns_attempt:
+		_finish_multiplayer_join_attempt(attempt, joined)
 	if joined:
 		print("[Menu] Join succeeded! Transitioning to lobby...")
-		return {
-			"ok": true
-		}
+		return {"ok": true}
 	if failure_reason.is_empty():
 		failure_reason = "Connection timed out. Could not reach host %s:%d after 2 minutes.\n\nPossible causes:\n• Host firewall is blocking UDP port 7777\n• Router has not properly forwarded port 7777 (check UPnP in host lobby)\n• CGNAT/Double NAT: ISP may use shared public IP that doesn't accept inbound connections\n• Different ISP network with firewall restrictions\n\nTroubleshooting:\n1. Ask host to check 'UPnP mapped port' in lobby - should show 7777\n2. Try hosting on same WiFi first to test basic connectivity\n3. Check Windows Firewall on host (port 7777 UDP must be allowed)" % [display_address, resolved_port]
 	print("[Menu] Join failed: %s" % failure_reason)
-	return {
-		"ok": false,
-		"reason": failure_reason
-	}
-
+	return {"ok": false, "reason": failure_reason}
 
 ## Helper: Log to multiplayer debug file from menu
 func _debug_log_menu(message: String) -> void:
@@ -724,6 +812,7 @@ func _read_main_debug_settings_values() -> Dictionary:
 	return values
 
 func _exit_tree() -> void:
+	_cancel_multiplayer_join_attempt()
 	if menu_music_player != null and menu_music_player.playing:
 		var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 		if run_context != null:
@@ -1287,6 +1376,7 @@ func _pick_random_quote(quotes: Array) -> String:
 	return String(quotes[rng.randi_range(0, quotes.size() - 1)])
 
 func _show_root_panel(animate: bool = true) -> void:
+	_cancel_multiplayer_join_attempt()
 	var from_panel := _current_replace_panel()
 	var closing_overlay := (options_panel != null and options_panel.visible) or (glossary_panel != null and glossary_panel.visible) or (history_panel != null and history_panel.visible) or (leaderboard_panel != null and leaderboard_panel.visible)
 	if root_panel != null:

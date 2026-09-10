@@ -151,6 +151,7 @@ try {
         "res://scripts/tests/test_player_ownership_lifecycle.gd",
         "res://scripts/tests/test_run_scene_ownership.gd",
         "res://scripts/tests/test_menu_helper_ownership.gd",
+        "res://scripts/tests/test_menu_join_cancel.gd",
         "res://scripts/tests/test_menu_panel_fit.gd",
         "res://scripts/tests/test_glossary_readability.gd",
         "res://scripts/tests/test_reward_selection_layout.gd",
