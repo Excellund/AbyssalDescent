@@ -1,5 +1,5 @@
 extends "res://scripts/tests/test_checkpoint_isolation.gd"
-## Entered-room variety and the Shatterfield pilot, with real isolated checkpoints.
+## Entered-room variety and persisted biome layouts, with real isolated checkpoints.
 
 const SESSION := preload("res://scripts/core/run_session.gd")
 const SNAPSHOT := preload("res://scripts/run_snapshot_service.gd")
@@ -87,12 +87,12 @@ func _test_weighted_variety() -> void:
 	var previous_rng_state := builder.rng.state
 	var filtered := builder._without_previous_standard_encounter(pool, "crossfire")
 	var filtered_counts := _key_counts(filtered)
-	check(not filtered_counts.has("crossfire") and original_counts.get("crossfire", 0) == 2, "Both weighted copies of the previous encounter leave the eligible pool")
+	check(not filtered_counts.has("crossfire") and original_counts.get("crossfire", 0) == 3, "All three weighted copies of the previous encounter leave the eligible pool")
 	var other_weights_preserved := true
 	for key in original_counts:
 		if key != "crossfire":
 			other_weights_preserved = other_weights_preserved and original_counts[key] == filtered_counts.get(key, 0)
-	check(other_weights_preserved and filtered_counts.get("suppression", 0) == 2 and filtered_counts.get("convergence", 0) == 2, "Repeat filtering preserves every other biome weight")
+	check(other_weights_preserved and filtered_counts.get("suppression", 0) == 3 and filtered_counts.get("convergence", 0) == 3, "Repeat filtering preserves every other biome weight")
 	check(builder.rng.state == previous_rng_state and _key_counts(pool) == original_counts, "Filtering consumes no randomness and leaves its source pool intact")
 	var one_kind: Array[Dictionary] = [{"label": "Crossfire"}, {"label": "Crossfire"}]
 	check(builder._without_previous_standard_encounter(one_kind, "crossfire") == one_kind, "A pool containing only the previous identity remains playable")
@@ -160,7 +160,7 @@ func _test_shatterfield_layouts() -> void:
 	check(valid and seen.size() == 2, "Shatterfield Crossfire chooses only the two authored four-column radius-28 layouts")
 	for label in LAYOUTS._ENCOUNTER_POOL:
 		for biome_id in ["", "crumble", "haunt", "shatterfield", "hollow"]:
-			if label == "Crossfire" and biome_id == "shatterfield":
+			if LAYOUTS.BIOME_TERRAIN_ENCOUNTERS.has(label) and not BIOMES.get_combat_identity(biome_id).is_empty():
 				continue
 			var unchanged := true
 			for seed_value in range(8):
@@ -170,7 +170,7 @@ func _test_shatterfield_layouts() -> void:
 				generator.seed = seed_value
 				var after := LAYOUTS.pick_layout(label, Vector2(1040, 760), generator, biome_id)
 				unchanged = unchanged and before == after and before_state == generator.state
-			check(unchanged, "Other layout pools and their RNG consumption remain unchanged: %s/%s" % [label, biome_id])
+			check(unchanged, "Protected and fallback layout pools and their RNG consumption remain unchanged: %s/%s" % [label, biome_id])
 	for label in ["Tutorial", "Hold the Line", "Trial Surge", "Apex Breakwater"]:
 		check(LAYOUTS.pick_layout(label, Vector2(1040, 760), generator, "shatterfield").is_empty(), "Obstacle exemption survives biome context: " + label)
 	var builder := _builder()

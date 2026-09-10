@@ -1,5 +1,6 @@
 extends RefCounted
 
+const BIOMES := preload("res://scripts/shared/biome_registry.gd")
 const KEYWORDS := preload("res://scripts/shared/combat_keyword_catalogue.gd")
 const PASSIVES := preload("res://scripts/shared/character_passive_catalogue.gd")
 const CHARACTERS := preload("res://scripts/character_registry.gd")
@@ -380,66 +381,24 @@ static func _encounters_section_bbcode() -> String:
 	return "\n".join(lines)
 
 static func _biome_rows() -> Array[Dictionary]:
-	return [
-		{
-			"name": "The Crumble",
-			"act": 1,
-			"color": Color(1.0, 0.68, 0.22, 1.0),
-			"desc": "Chargers and Shielders lead strong melee formations.",
-		},
-		{
-			"name": "The Haunt",
-			"act": 1,
-			"color": Color(0.78, 0.44, 1.0, 1.0),
-			"desc": "Lurkers, Spectres and Seamlocks ambush you and cut off retreats.",
-		},
-		{
-			"name": "The Shatterfield",
-			"act": 1,
-			"color": Color(0.44, 0.92, 1.0, 1.0),
-			"desc": "Ranged harassment and zone hazards. Archers and Lancers punish any open ground.",
-		},
-		{
-			"name": "The Grinding Vault",
-			"act": 2,
-			"color": Color(0.96, 0.88, 0.42, 1.0),
-			"desc": "Mirrorlines and Sentinels control the lanes.",
-		},
-		{
-			"name": "The Storm Reach",
-			"act": 2,
-			"color": Color(1.0, 0.66, 0.24, 1.0),
-			"desc": "Pyres and Tethers fill the arena with fire and beams.",
-		},
-		{
-			"name": "The Hollow",
-			"act": 2,
-			"color": Color(0.32, 0.86, 0.82, 1.0),
-			"desc": "Seamlocks, Lurkers, and Weavers converge. Nothing moves in a straight line.",
-		},
-		{
-			"name": "The Void Breach",
-			"act": 3,
-			"color": Color(0.96, 0.24, 0.32, 1.0),
-			"desc": "Spectres and Pyres at overwhelming density. No angle stays safe.",
-		},
-		{
-			"name": "The Maelstrom",
-			"act": 3,
-			"color": Color(1.0, 0.92, 0.38, 1.0),
-			"desc": "Every enemy type at full strength. The full arsenal, unrestricted.",
-		},
-		{
-			"name": "The Convergence",
-			"act": 3,
-			"color": Color(0.88, 0.96, 1.0, 1.0),
-			"desc": "Tethers, Lancers and Sentinels restrict movement with area hazards.",
-		},
-	]
+	var rows: Array[Dictionary] = []
+	for biome_id: String in BIOMES.BIOME_DEFINITIONS:
+		var biome := BIOMES.get_biome(biome_id)
+		var identity := BIOMES.get_combat_identity(biome_id)
+		rows.append({
+			"name": biome.name,
+			"act": biome.act,
+			"color": biome.color_theme.accent,
+			"desc": KEYWORDS.format_text(String(identity.rule) + "\n" + String(identity.tactic))
+		})
+	return rows
 
 static func _biomes_section_bbcode() -> String:
 	var lines: Array[String] = []
 	lines.append(_section_title_bbcode("Biomes"))
+	lines.append("Each biome favors its own encounter styles and enemy mix. Terrain below shapes ordinary rooms.")
+	lines.append("Breach, Undertow, Missions, Trials, Apex rooms and bosses keep their own arenas.")
+	lines.append("")
 	for act in [1, 2, 3]:
 		lines.append(_subsection_title_bbcode("Act %d" % act))
 		for row in _biome_rows():

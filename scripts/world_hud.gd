@@ -3,6 +3,7 @@ extends Node
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
 const CHARACTER_PASSIVES := preload("res://scripts/shared/character_passive_catalogue.gd")
+const COMBAT_KEYWORDS := preload("res://scripts/shared/combat_keyword_catalogue.gd")
 
 const MUTATOR_ICON_BLOOD_RUSH: Texture2D = preload("res://assets/ui/mutators/blood_rush.svg")
 const MUTATOR_ICON_FLASHPOINT: Texture2D = preload("res://assets/ui/mutators/flashpoint.svg")
@@ -195,7 +196,7 @@ func _process(delta: float) -> void:
 			_biome_tooltip_panel.position.x = vp_w - tp_w - 8.0
 	_biome_tooltip_panel.visible = true
 
-func show_banner(title: String, subtitle: String, subtitle_color: Color = Color(0.78, 0.9, 1.0, 0.92)) -> void:
+func show_banner(title: String, subtitle: String, subtitle_color: Color = Color(0.78, 0.9, 1.0, 0.92), hold_duration: float = 0.95) -> void:
 	if room_banner_title_label == null or room_banner_subtitle_label == null:
 		return
 	room_banner_persistent_visible = false
@@ -217,7 +218,7 @@ func show_banner(title: String, subtitle: String, subtitle_color: Color = Color(
 	room_banner_tween.tween_property(room_banner_title_label, "modulate:a", 1.0, 0.2)
 	if has_subtitle:
 		room_banner_tween.parallel().tween_property(room_banner_subtitle_label, "modulate:a", 1.0, 0.2)
-	room_banner_tween.tween_interval(0.95)
+	room_banner_tween.tween_interval(hold_duration)
 	room_banner_tween.tween_property(room_banner_title_label, "modulate:a", 0.0, 0.24)
 	if has_subtitle:
 		room_banner_tween.parallel().tween_property(room_banner_subtitle_label, "modulate:a", 0.0, 0.24)
@@ -743,6 +744,13 @@ func _create_status_header_bar(layer: CanvasLayer) -> void:
 	_status_header_biome_bg.mouse_entered.connect(_on_biome_header_entered)
 	_status_header_biome_bg.mouse_exited.connect(_on_biome_header_exited)
 
+	# Hover content must cover the room-entry banner as well as the HUD.
+	var tooltip_layer := CanvasLayer.new()
+	tooltip_layer.layer = 111
+	tooltip_layer.follow_viewport_enabled = false
+	tooltip_layer.follow_viewport_scale = 1.0
+	add_child(tooltip_layer)
+
 	_biome_tooltip_panel = PanelContainer.new()
 	_biome_tooltip_panel.custom_minimum_size = Vector2(240.0, 0.0)
 	var tooltip_style := StyleBoxFlat.new()
@@ -765,7 +773,7 @@ func _create_status_header_bar(layer: CanvasLayer) -> void:
 	_biome_tooltip_panel.add_theme_stylebox_override("panel", tooltip_style)
 	_biome_tooltip_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_biome_tooltip_panel.visible = false
-	layer.add_child(_biome_tooltip_panel)
+	tooltip_layer.add_child(_biome_tooltip_panel)
 
 	_biome_tooltip_content = RichTextLabel.new()
 	_biome_tooltip_content.custom_minimum_size = Vector2(220.0, 0.0)
@@ -831,7 +839,7 @@ func _on_biome_header_entered() -> void:
 			bbcode += "%s" % line
 			if i < lines.size() - 1:
 				bbcode += "\n"
-	_biome_tooltip_content.text = bbcode
+	_biome_tooltip_content.text = COMBAT_KEYWORDS.format_text(bbcode)
 	_biome_hover_pending = true
 	_biome_hover_timer = 0.0
 

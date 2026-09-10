@@ -37,9 +37,13 @@ func _run() -> void:
 	active_world._refresh_frame_ui()
 	check(active_world.encounter_intro_grace_active and not active_world._get_hud_state().combat_hud_overlap_fade_enabled, "Accepted initial reward enters survey with overlap fading disabled")
 	check(_both_restored(), "Survey starts with fully readable Stats and build")
+	# This fixed screen-space route tests native movement and HUD projection.
+	# Biome terrain has independent collision coverage and may block the route;
+	# stage a clear arena without changing input, camera or encounter state.
+	active_world._clear_room_obstacles()
+	await process_frame
 	var actor: Node = active_world.player
 	var start: Vector2 = actor.global_position
-	# Bypass either ordinary first-room column layout using movement only.
 	await _walk_to_screen_axis("move_down", 1, 440.0, true)
 	await _walk_to_screen_axis("move_left", 0, 220.0, false)
 	await _walk_to_screen_axis("move_up", 1, 350.0, false)

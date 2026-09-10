@@ -161,6 +161,8 @@ try {
         "res://scripts/tests/test_room_layout_entry.gd",
         "res://scripts/tests/test_brittle_cover.gd",
         "res://scripts/tests/test_descent_routes.gd",
+        "res://scripts/tests/test_biome_identity.gd",
+        "res://scripts/tests/test_biome_cover.gd",
         "res://scripts/tests/test_descent_presentation.gd",
         "res://scripts/tests/test_music_contexts.gd",
         "res://scripts/tests/test_run_result_identity.gd",

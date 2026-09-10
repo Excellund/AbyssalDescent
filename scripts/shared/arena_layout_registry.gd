@@ -2,7 +2,13 @@ extends RefCounted
 
 const COLUMN_RADIUS := 28.0
 const BOULDER_RADIUS := 36.0
-const _SHATTERFIELD_CROSSFIRE_POOL := ["offset_firing_lanes", "offset_firing_lanes_mirrored"]
+const BIOMES := preload("res://scripts/shared/biome_registry.gd")
+# Keep authored objective and specialist arenas intact. These ordinary rooms
+# use the biome's terrain family without changing their signature enemy mix.
+const BIOME_TERRAIN_ENCOUNTERS := [
+	"Skirmish", "Pursuit", "Crossfire", "Onslaught", "Fortress", "Blitz",
+	"Suppression", "Vanguard", "Ambush", "Convergence", "Gauntlet"
+]
 
 ## Returns true for room labels that must always be obstacle-free.
 static func _obstacle_free(label: String) -> bool:
@@ -37,11 +43,34 @@ const _ENCOUNTER_POOL: Dictionary = {
 
 ## Returns the column positions for a named template (room-center-relative).
 static func _resolve_positions(template_name: String) -> Array[Vector2]:
+	if template_name == "convergence_gates_diagonal":
+		var diagonal := _resolve_positions("convergence_gates")
+		for index in diagonal.size():
+			diagonal[index] = diagonal[index].rotated(PI * 0.25)
+		return diagonal
+	if template_name.ends_with("_inverted"):
+		var inverted := _resolve_positions(template_name.trim_suffix("_inverted"))
+		for index in inverted.size():
+			inverted[index].y *= -1.0
+		return inverted
+	if template_name.ends_with("_mirrored"):
+		var reflected := _resolve_positions(template_name.trim_suffix("_mirrored"))
+		for index in reflected.size():
+			reflected[index].x *= -1.0
+		return reflected
 	match template_name:
+		"rubble_gates":
+			return [Vector2(-220, -145), Vector2(-220, 31), Vector2(220, -31), Vector2(220, 145)]
+		"storm_shelters":
+			return [Vector2(-310, -200), Vector2(310, 200)]
+		"hollow_spine":
+			return [Vector2(-90, -210), Vector2(130, 0), Vector2(-90, 210)]
+		"maelstrom_orbit":
+			return [Vector2(-135, -20), Vector2(135, 20), Vector2(20, -135), Vector2(-20, 135)]
+		"convergence_gates":
+			return [Vector2(-245, -90), Vector2(-245, 90), Vector2(245, -90), Vector2(245, 90), Vector2(-90, -240), Vector2(90, -240), Vector2(-90, 240), Vector2(90, 240)]
 		"offset_firing_lanes":
 			return [Vector2(-240.0, -150.0), Vector2(-85.0, 110.0), Vector2(110.0, -110.0), Vector2(260.0, 150.0)]
-		"offset_firing_lanes_mirrored":
-			return [Vector2(240.0, -150.0), Vector2(85.0, 110.0), Vector2(-110.0, -110.0), Vector2(-260.0, 150.0)]
 		"broken_ring":
 			return [Vector2(-235.0, -80.0), Vector2(-135.0, -190.0), Vector2(135.0, -190.0), Vector2(235.0, -80.0), Vector2(-135.0, 190.0), Vector2(135.0, 190.0)]
 		"forked_approach":
@@ -70,8 +99,10 @@ static func pick_layout(encounter_label: String, room_size: Vector2, rng: Random
 	if _obstacle_free(encounter_label):
 		return []
 	var pool: Array = _ENCOUNTER_POOL.get(encounter_label, []) as Array
-	if biome_id == "shatterfield" and encounter_label == "Crossfire":
-		pool = _SHATTERFIELD_CROSSFIRE_POOL
+	if BIOME_TERRAIN_ENCOUNTERS.has(encounter_label):
+		var identity := BIOMES.get_combat_identity(biome_id)
+		if not identity.is_empty():
+			pool = identity.get("templates", []) as Array
 	if pool.is_empty():
 		return []
 	var chosen: String = String(pool[rng.randi_range(0, pool.size() - 1)])
@@ -91,6 +122,9 @@ static func pick_layout(encounter_label: String, room_size: Vector2, rng: Random
 			clampf(pos.y, -half_safe.y, half_safe.y)
 		)
 		var entry := {"pos": clamped, "radius": COLUMN_RADIUS}
+		if chosen.begins_with("rubble_gates"):
+			entry["radius"] = BOULDER_RADIUS
+			entry["type"] = "boulder"
 		# A small biome-specific pilot: outer shelter stays permanent while the
 		# two inner columns can be deliberately opened into a crossing lane.
 		if biome_id == "shatterfield" and encounter_label == "Crossfire" and index in [1, 2]:

@@ -2,7 +2,8 @@ param(
     [Parameter(Mandatory = $true)][string]$ValidationProject,
     [string]$GodotPath = '',
     [ValidatePattern('^res://scripts/tests/test_[a-z0-9_]+_enet\.gd$')][string]$FixtureScript = 'res://scripts/tests/test_boss_combinations_enet.gd',
-    [ValidateRange(1, 3)][int]$ClientCount = 1
+    [ValidateRange(1, 3)][int]$ClientCount = 1,
+    [ValidateRange(1, 300)][int]$FixtureTimeoutSeconds = 25
 )
 $ErrorActionPreference = 'Stop'
 $sourceRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
@@ -58,7 +59,10 @@ try {
     $fixturePort = ([Net.IPEndPoint]$reservation.Client.LocalEndPoint).Port
     $reservation.Dispose()
     $reportPrefix = Join-Path $testRoot 'result'
-    $common = @('--script', 'res://validation_entry.gd', '--quit-after', '2000', '--', $FixtureScript)
+    # Preserve the existing frame limit at the default timeout; larger scoped
+    # fixtures need a matching fallback limit so Godot cannot exit mid-report.
+    $fixtureFrameLimit = [Math]::Max(2000, $FixtureTimeoutSeconds * 80)
+    $common = @('--script', 'res://validation_entry.gd', '--quit-after', [string]$fixtureFrameLimit, '--', $FixtureScript)
     $hostProcess = Start-Fixture 'host' ($common + @('host', [string]$fixturePort, $reportPrefix))
     $deadline = [DateTime]::UtcNow.AddSeconds(25)
     while (-not (Test-Path -LiteralPath ($reportPrefix + '-ready')) -and -not $hostProcess.HasExited -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 50 }
@@ -69,9 +73,10 @@ try {
     $clientRoles = if ($ClientCount -eq 1) { @('client') } else { @(1..$ClientCount | ForEach-Object { 'client' + $_ }) }
     $clientProcesses = @{}
     foreach ($role in $clientRoles) { $clientProcesses[$role] = Start-Fixture $role ($common + @($role, [string]$fixturePort, $reportPrefix)) }
-    $deadline = [DateTime]::UtcNow.AddSeconds(25 + 5 * ($ClientCount - 1))
+    $fixtureRunSeconds = $FixtureTimeoutSeconds + 5 * ($ClientCount - 1)
+    $deadline = [DateTime]::UtcNow.AddSeconds($fixtureRunSeconds)
     while ((-not $hostProcess.HasExited -or @($clientProcesses.Values | Where-Object { -not $_.HasExited }).Count -gt 0) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 100 }
-    if (-not $hostProcess.HasExited -or @($clientProcesses.Values | Where-Object { -not $_.HasExited }).Count -gt 0) { throw "ENet fixture with $ClientCount joining processes exceeded its deadline." }
+    if (-not $hostProcess.HasExited -or @($clientProcesses.Values | Where-Object { -not $_.HasExited }).Count -gt 0) { throw "ENet fixture with $ClientCount joining processes exceeded $fixtureRunSeconds seconds." }
     Assert-Fixture 'host' $hostProcess
     foreach ($role in $clientRoles) { Assert-Fixture $role $clientProcesses[$role] }
     foreach ($role in (@('host') + $clientRoles)) {
