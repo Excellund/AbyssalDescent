@@ -1903,6 +1903,8 @@ func _get_hud_state() -> Dictionary:
 		"objective_target_flee_thresholds": objective_hud_state.get("hunt_target_flee_thresholds", [0.75, 0.5, 0.25]),
 		"objective_target_next_flee_index": int(objective_hud_state.get("hunt_target_next_flee_index", 0)),
 		"encounter_intro_grace_active": encounter_intro_grace_active,
+		"is_multiplayer": is_multiplayer,
+		"local_player_ready": _local_player_ready,
 		"boss_unlocked": boss_unlocked,
 		"first_boss_defeated": first_boss_defeated,
 		"second_boss_defeated": second_boss_defeated,
@@ -4817,7 +4819,7 @@ func _signal_local_player_ready() -> void:
 		_exit_encounter_intro_grace()
 		return
 	
-	hud.show_persistent_banner("Ready", "Waiting for ally...")
+	hud.show_persistent_banner("Ready", "Waiting for allies...")
 	
 	var local_peer_id := _resolve_local_peer_id()
 	if MultiplayerSessionManager.should_broadcast():

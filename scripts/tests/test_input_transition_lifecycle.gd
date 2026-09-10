@@ -32,7 +32,9 @@ func _run() -> void:
 	active_world.get_node("DebugSettings").enabled = false
 	root.add_child(active_world)
 	current_scene = active_world
+	Input.action_press("attack")
 	_pick_reward({"rewards": []})
+	await _check_solo_readiness_after_reward()
 	await _clear_first_room_to_checkpoint()
 	check(active_world.choosing_next_room and not active_world.door_options.is_empty(), "Real first-room clear offers generated doors")
 	active_world.player.set_physics_process(false)
@@ -73,6 +75,8 @@ func _run() -> void:
 	active_world._try_use_door()
 	Input.action_release("interact")
 	check(active_world.encounter_intro_grace_active, "Actual generated door enters next arena survey")
+	active_world._refresh_frame_ui()
+	check(not active_world._get_hud_state().local_player_ready and active_world.hud._status_hint_label.is_visible_in_tree() and active_world.hud._status_hint_label.text == "Move or Attack to engage", "The next generated room resets readiness and restores the solo instruction")
 	check(not actor.queued_attack_after_dash, "Room entry clears an old queued Attack")
 	var survey_start: Vector2 = actor.global_position
 	for frame in range(20):
@@ -83,6 +87,8 @@ func _run() -> void:
 	active_world._update_encounter_intro_grace()
 	Input.action_release("move_right")
 	check(not active_world.encounter_intro_grace_active, "A deliberate movement gesture readies the new arena")
+	active_world._refresh_frame_ui()
+	check(not active_world.hud._status_hint_label.visible, "Movement Engage removes the survey instruction")
 	for frame in range(45):
 		actor._physics_process(1.0/60.0)
 	check(actor.attack_combo_counter == old_attacks, "No fresh Attack means no old buffered strike after new-room readiness")
@@ -99,6 +105,41 @@ func _run() -> void:
 	check(await audio_retirement.wait_until_retired(self), "Deleted scene audio releases its native playback before fixture shutdown")
 	print("[InputBoundary] ",checks," checks, ",failures.size()," failures")
 	call_deferred("quit", 0 if failures.is_empty() else 1)
+
+func _check_solo_readiness_after_reward() -> void:
+	# The existing accepted-reward helper completes while Attack is held.
+	# Drive native input/state explicitly in this disposable Main instance.
+	active_world.set_process(false)
+	var actor: Node = active_world.player
+	actor.set_physics_process(false)
+	active_world._refresh_frame_ui()
+	var state: Dictionary = active_world._get_hud_state()
+	check(active_world.encounter_intro_grace_active and not state.is_multiplayer and not state.local_player_ready, "Accepted starting reward reaches the real solo survey with fresh local readiness")
+	check(active_world.hud._status_hint_label.is_visible_in_tree() and active_world.hud._status_hint_label.text == "Move or Attack to engage", "Solo survey advertises both accepted readiness controls")
+	active_world._update_encounter_intro_grace()
+	check(active_world.encounter_intro_grace_active, "Attack held across accepted reward completion cannot acknowledge the survey")
+	Input.action_release("attack")
+	Input.action_release("dash")
+	await physics_frame
+	await process_frame
+	actor._refresh_combat_input_release()
+	Input.action_press("dash")
+	var position: Vector2 = actor.global_position
+	actor._physics_process(1.0 / 60.0)
+	active_world._update_encounter_intro_grace()
+	check(active_world.encounter_intro_grace_active and actor.global_position == position and not actor._is_dash_active(), "Dash alone keeps its existing frozen-survey behavior")
+	Input.action_release("dash")
+	await physics_frame
+	await process_frame
+	actor._refresh_combat_input_release()
+	Input.action_press("attack")
+	active_world._update_encounter_intro_grace()
+	Input.action_release("attack")
+	active_world._refresh_frame_ui()
+	check(not active_world.encounter_intro_grace_active and active_world._get_hud_state().local_player_ready and not actor.encounter_input_frozen, "A fresh released-and-repressed Attack actually engages the solo arena")
+	check(not active_world.hud._status_hint_label.visible and active_world.hud.room_banner_title_label.text == "Engage", "Attack Engage replaces readiness guidance with the normal entry banner")
+	active_world.set_process(true)
+	actor.set_physics_process(true)
 
 func _arm_combo() -> void:
 	var actor: Node = active_world.player

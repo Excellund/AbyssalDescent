@@ -541,7 +541,7 @@ func _create_status_blocks() -> void:
 	_status_hint_label.add_theme_color_override("font_shadow_color", Color(0.02, 0.04, 0.06, 0.88))
 	_status_hint_label.add_theme_constant_override("shadow_offset_x", 1)
 	_status_hint_label.add_theme_constant_override("shadow_offset_y", 1)
-	_status_hint_label.text = "Move to engage"
+	_status_hint_label.text = "Move or Attack to engage"
 	_status_hint_label.visible = false
 	status_panel.add_child(_status_hint_label)
 
@@ -931,6 +931,10 @@ func _update_status_panel_text(state: Dictionary) -> void:
 	# ── Block 4: Intro hint ───────────────────────────────────────────────────
 	var encounter_intro_grace_active := bool(state.get("encounter_intro_grace_active", false))
 	if encounter_intro_grace_active:
+		if bool(state.get("is_multiplayer", false)):
+			_status_hint_label.text = "Ready — waiting for allies" if bool(state.get("local_player_ready", false)) else "Move or Attack when ready"
+		else:
+			_status_hint_label.text = "Move or Attack to engage"
 		_status_hint_label.position = Vector2(0.0, y)
 		_status_hint_label.visible = true
 		y += 18.0 + 3.0

@@ -227,8 +227,7 @@ func _check_reset(index: int) -> void:
 	for frame in 20:
 		actor._physics_process(1.0/60.0)
 	check(actor.position.distance_to(before) < 0.01, "Frozen survey does not advance previous-room movement")
-	world._signal_local_player_ready()
-	check(await _until(func(): return not world.encounter_intro_grace_active), "Actual owner readiness uses host/all-ready flow")
+	await _check_readiness_feedback(index)
 	for frame in 45:
 		actor._physics_process(1.0/60.0)
 	check(actor.attack_combo_counter == attacks and actor.arcana_motion.blast_charges == charges and not actor.arcana_motion.owns_movement(), "Still-held buttons cannot attack, launch, hook, or spend charge after readiness")
@@ -245,6 +244,42 @@ func _check_reset(index: int) -> void:
 	actor._try_attack_input()
 	check(actor.attack_combo_counter == attacks + 1 and actor.arcana_motion.charge_hold >= 0.0, "A fresh successful Attack rearms normally after release")
 	Input.action_release("attack")
+
+func _check_readiness_feedback(index: int) -> void:
+	# Keep the held Attack/Dash regression intact: ordinary Move input marks
+	# readiness without releasing or rearming the canceled combat actions.
+	var key := str(index)
+	var first_role := "client" if index == 1 else "host"
+	var actor: Node = world.player
+	var before: Vector2 = actor.position
+	world._refresh_frame_ui()
+	check(not world._local_player_ready and world.hud._status_hint_label.visible and world.hud._status_hint_label.text == "Move or Attack when ready", "New actual co-op room resets the local ready hint")
+	if role == first_role:
+		Input.action_press("move_right")
+		world._process(0.01)
+		actor._physics_process(0.01)
+		Input.action_release("move_right")
+		_write("first-ready-" + key, true)
+	check(await _until(func(): return _has("first-ready-" + key)), "First owner readies through native Move input")
+	world._refresh_frame_ui()
+	var expected := "Ready — waiting for allies" if role == first_role else "Move or Attack when ready"
+	check(world.encounter_intro_grace_active and world._local_player_ready == (role == first_role) and actor.encounter_input_frozen, "Only the ready owner changes local state while both remain in survey")
+	check(world.hud._status_hint_label.visible and world.hud._status_hint_label.text == expected, "Each real peer sees its own ready or unready instruction")
+	if role == first_role:
+		check(world.hud.room_banner_persistent_visible and world.hud.room_banner_subtitle_label.text == "Waiting for allies...", "Native ready banner agrees with persistent waiting hint")
+	await create_timer(1.6 if index == 0 else 0.05).timeout
+	world._refresh_frame_ui()
+	check(world.hud._status_hint_label.text == expected and world.encounter_intro_grace_active and world.enemy_spawner.wave_timer_paused, "Waiting hint survives ordinary banner fade without ending survey or spawning")
+	check(actor.position.distance_to(before) < 0.01, "Ready input cannot move either frozen owner")
+	_write("waiting-checked-" + role + "-" + key, true)
+	check(await _until(func(): return _has("waiting-checked-host-" + key) and _has("waiting-checked-client-" + key)), "Both waiting states are inspected before the last ready input")
+	if role != first_role:
+		Input.action_press("move_right")
+		world._process(0.01)
+		Input.action_release("move_right")
+	check(await _until(func(): return not world.encounter_intro_grace_active), "Last native Move input uses existing host/all-ready transport")
+	world._refresh_frame_ui()
+	check(not world.hud._status_hint_label.visible and not world.hud.room_banner_persistent_visible and not actor.encounter_input_frozen, "Engage removes waiting guidance and releases each owner's input")
 
 func _living() -> Array[Node]:
 	var out: Array[Node] = []
