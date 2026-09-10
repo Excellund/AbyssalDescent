@@ -5,6 +5,7 @@ const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const ENCOUNTER_DEFINITION_DATA := preload("res://scripts/shared/encounter_definition_data.gd")
 const ARENA_LAYOUT_REGISTRY := preload("res://scripts/shared/arena_layout_registry.gd")
+const BIOME_REGISTRY := preload("res://scripts/shared/biome_registry.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 const DIFFICULTY_CONFIG_MULTIPLAYER := preload("res://scripts/encounter_difficulty_multiplayer_config.gd")
 const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
@@ -600,7 +601,8 @@ func _get_hard_pool_for_depth(depth: int) -> Array[Dictionary]:
 		for profile in filtered:
 			weighted.append(profile)
 			if preferred_labels.has(ENCOUNTER_CONTRACTS.profile_label(profile)):
-				weighted.append(profile)
+				for _copy in range(BIOME_REGISTRY.PREFERRED_ENCOUNTER_WEIGHT - 1):
+					weighted.append(profile)
 		return weighted
 	return filtered
 

@@ -9,7 +9,13 @@ const MAPPER := preload("res://scripts/power_parameter_mapper.gd")
 const BREAKWATER := preload("res://scripts/enemy_breakwater.gd")
 const HISTORY := preload("res://scripts/core/run_history_store.gd")
 const AUDIO_RETIREMENT := preload("res://scripts/tests/fixture_audio_retirement.gd")
+const BIOMES := preload("res://scripts/shared/biome_registry.gd")
 const DESCENT_BIOMES := ["shatterfield", "grinding_vault", "void_breach"]
+const BIOME_OBSTACLE_COUNTS := {
+	"crumble": 4, "haunt": 4, "shatterfield": 4,
+	"grinding_vault": 6, "storm_reach": 2, "hollow": 3,
+	"void_breach": 0, "the_maelstrom": 4, "convergence_end": 8
+}
 var audio_retirement := AUDIO_RETIREMENT.new()
 var role: String
 var prefix: String
@@ -91,10 +97,27 @@ func _run() -> void:
 	else:
 		check(transport.create_client("127.0.0.1", int(args[2])) == OK, "Joiner connects on actual separate ENet process")
 	get_multiplayer().multiplayer_peer = transport
+	_write("transport-started-" + role, true)
 	if role == "host":
 		_write("ready", true)
-	check(await _until(func(): return transport.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED), "ENet becomes connected")
-	check(await _until(func(): return get_multiplayer().get_peers().size() == 1), "Both real peers are visible")
+	# The wrapper launches the client after host readiness. Loading its real
+	# Main scene can exceed a gameplay RPC's timeout on a busy machine; wait
+	# for both transports before measuring connection and replication latency.
+	var transports_started: bool = await _until(func(): return _has("transport-started-host") and _has("transport-started-client"), 25.0)
+	check(transports_started, "Both native transports finish startup before configuring the session")
+	if not transports_started:
+		await _finish()
+		return
+	var connected: bool = await _until(func(): return transport.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED)
+	check(connected, "ENet becomes connected")
+	if not connected:
+		await _finish()
+		return
+	var peers_visible: bool = await _until(func(): return get_multiplayer().get_peers().size() == 1)
+	check(peers_visible, "Both real peers are visible")
+	if not peers_visible:
+		await _finish()
+		return
 	MultiplayerSessionManager._multiplayer = get_multiplayer()
 	MultiplayerSessionManager.session_connected = true
 	MultiplayerSessionManager.is_host_peer = role == "host"
@@ -142,9 +165,13 @@ func _run() -> void:
 			check(_living().size() == 1 and _living()[0].get_script() == BREAKWATER, "Exactly one real Breakwater exists on host and joiner")
 		_write("checked-" + role + "-" + key, true)
 		check(await _until(func(): return _has("checked-host-" + key) and _has("checked-client-" + key)), "Both peers inspect the same room before advancing")
+	await _test_biome_terrain()
 	await _test_descent_flow()
 	_write("finished-" + role, true)
 	check(await _until(func(): return _has("finished-host") and _has("finished-client")), "Both peers finish before teardown")
+	await _finish()
+
+func _finish() -> void:
 	MultiplayerSessionManager.session_connected = false
 	PlayerReplicationService.player_nodes.clear()
 	EnemyReplicationService.unbind_world(world)
@@ -177,6 +204,78 @@ func _living() -> Array[Node]:
 func _barrier(key: String) -> void:
 	_write(key + "-" + role, true)
 	check(await _until(func(): return _has(key + "-host") and _has(key + "-client")), "Both peers reach " + key)
+
+## Stage the act only; the real host roster and chosen-door RPCs carry each
+## biome's authored ordinary arena and enemy mix into the joiner's Main scene.
+func _test_biome_terrain() -> void:
+	var previous_first_boss: bool = world.first_boss_defeated
+	var previous_second_boss: bool = world.second_boss_defeated
+	var previous_reached_act: int = world.run_summary_recorder.run_summary_tracker.reached_act
+	var previous_standard: String = world.run_session.last_standard_encounter_key
+	var previous_objective: String = world.run_session.last_objective_kind
+	var previous_announced_act: int = world._last_announced_act
+	var previous_biomes: Array[String] = world.run_session.act_biome_ids.duplicate()
+	for biome_id: String in BIOME_OBSTACLE_COUNTS:
+		var stage := int(BIOMES.get_biome(biome_id).act)
+		var key := "terrain-" + biome_id
+		var roster: Array[String] = ["crumble", "grinding_vault", "void_breach"]
+		roster[stage - 1] = biome_id
+		world.first_boss_defeated = stage >= 2
+		world.second_boss_defeated = stage >= 3
+		# This independent roster is valid for every act and differs from each
+		# host roster. Never place a biome in the wrong act to stage this test.
+		world.run_session.act_biome_ids = ["haunt", "hollow", "the_maelstrom"]
+		world.encounter_profile_builder.rng.seed = 196400 + stage if role == "host" else 863200 + stage
+		await _barrier(key + "-staged")
+		if role == "host":
+			world._sync_act_biomes.rpc(PackedStringArray(roster))
+		check(await _until(func(): return world.run_session.act_biome_ids == roster), "Native roster RPC installs all three valid act identities: " + biome_id)
+		check(world.encounter_profile_builder.active_biome.get("id", "") == biome_id, "Builder receives the authoritative active biome: " + biome_id)
+		check(world.renderer.environment_act == stage and world.renderer.environment_biome_id == biome_id, "Renderer receives the authoritative act and biome: " + biome_id)
+		await _barrier(key + "-roster")
+		if role == "host":
+			var host_profile: Dictionary = world.encounter_profile_builder.build_debug_encounter_profile("crossfire", world.room_depth)
+			var door := CONTRACTS.standard_encounter_door_option(host_profile)
+			world._choose_door(door)
+			world._sync_chosen_door.rpc(door, world._build_progress_sync_state())
+			_write(key + "-choice", {"room": world.get_current_room_sync_id(), "profile": host_profile})
+		check(await _until(func(): return _has(key + "-choice")), "Host dispatches the actual biome chosen-door RPC: " + biome_id)
+		var expected: Dictionary = _read(key + "-choice")
+		var profile: Dictionary = expected.profile
+		var layout := CONTRACTS.profile_obstacle_layout(profile)
+		var enemy_count := CONTRACTS.profile_total_enemy_count(profile)
+		check(await _until(func(): return world.current_room_label == "Crossfire" and world.get_current_room_sync_id() == int(expected.room) and _living().size() == enemy_count), "Native room transition and spawn replication finish: " + biome_id)
+		check(world.encounter_intro_grace_active and not world.choosing_next_room, "Biome encounter awaits play on both peers: " + biome_id)
+		check(world.active_room_enemy_count == enemy_count, "Both peers retain the complete host enemy count: " + biome_id)
+		for enemy_type: String in CONTRACTS._get_enemy_count_keys():
+			var type_count := CONTRACTS._get_enemy_count(enemy_type, profile)
+			if type_count <= 0:
+				continue
+			var actual_count := 0
+			for enemy in _living():
+				if enemy.get_script() == world.enemy_spawner.scripts.get(enemy_type):
+					actual_count += 1
+			check(actual_count == type_count, "Native enemies preserve host biome weighting for %s: %s" % [enemy_type, biome_id])
+		check(world.current_room_size == CONTRACTS.profile_room_size(profile) and world.current_room_static_camera == CONTRACTS.profile_static_camera(profile), "Room dimensions and camera mode preserve the host profile: " + biome_id)
+		check(layout.size() == int(BIOME_OBSTACLE_COUNTS[biome_id]), "Production builder chooses the biome's ordinary terrain family: " + biome_id)
+		check(world.renderer.obstacle_layout == layout and world.enemy_spawner.obstacle_circles == layout, "Renderer and spawn geometry preserve exact host terrain despite independent RNG: " + biome_id)
+		check(world._active_obstacle_nodes.size() == layout.size(), "Native collision body count matches the host terrain: " + biome_id)
+		for index in mini(layout.size(), world._active_obstacle_nodes.size()):
+			var body: StaticBody2D = world._active_obstacle_nodes[index]
+			var shape := body.shape_owner_get_shape(body.get_shape_owners()[0], 0) as CircleShape2D
+			check(body.global_position == layout[index].pos and is_equal_approx(shape.radius, float(layout[index].radius)), "Native collider preserves exact host position and radius: %s/%d" % [biome_id, index])
+		check(world.renderer.environment_act == stage and world.renderer.environment_biome_id == biome_id, "Chosen-door entry retains authoritative biome presentation: " + biome_id)
+		await _barrier(key + "-inspected")
+	# Later-act terrain fixtures must not pre-credit the following descent test.
+	world.first_boss_defeated = previous_first_boss
+	world.second_boss_defeated = previous_second_boss
+	world.run_summary_recorder.run_summary_tracker.reached_act = previous_reached_act
+	world.run_session.last_standard_encounter_key = previous_standard
+	world.run_session.last_objective_kind = previous_objective
+	world._last_announced_act = previous_announced_act
+	world.run_session.act_biome_ids = previous_biomes
+	world._apply_active_biome(world._get_current_act())
+	await _barrier("terrain-fixtures-restored")
 
 ## Deliberately stage offers and depth; exercise actual production transport for
 ## every selection, spawn, ready signal, reward completion and final outcome.
@@ -242,6 +341,8 @@ func _test_descent_flow() -> void:
 func _offer_and_request(key: String, host_offers: Array[Dictionary], expected_label: String) -> void:
 	var standard_before: String = world.run_session.last_standard_encounter_key
 	var objective_before: String = world.run_session.last_objective_kind
+	var room_sync_before := world.get_current_room_sync_id()
+	var room_label_before: String = world.current_room_label
 	# Stage the between-room state for skipped ordinary encounters. The real
 	# renderer correctly suppresses doors while a declared encounter is live.
 	world._clear_all_enemies()
@@ -277,7 +378,9 @@ func _offer_and_request(key: String, host_offers: Array[Dictionary], expected_la
 	await _barrier("offers-inspected-" + key)
 	if role == "client":
 		world._request_use_door.rpc_id(1, world.door_options[0].duplicate(true))
-	check(await _until(func(): return world.current_room_label == expected_label), "Joiner request resolves through host authority and chosen-door RPC: " + key)
+	# A changed label proves this entry; consecutive Crossfire rooms also
+	# require a new combat sync ID. Rest Sites do not advance that combat ID.
+	check(await _until(func(): return world.current_room_label == expected_label and (room_label_before != expected_label or world.get_current_room_sync_id() > room_sync_before)), "Joiner request resolves through host authority and chosen-door RPC: " + key)
 	await _barrier("entered-" + key)
 
 func _test_boss_descent(stage: int) -> void:

@@ -4748,7 +4748,11 @@ func _show_descent_entry_banner(fallback_title: String) -> void:
 		return
 	_last_announced_act = act
 	var numeral: String = ["I", "II", "III"][act - 1]
-	hud.show_banner("Act %s - %s" % [numeral, _get_active_biome_name()], fallback_title, _get_active_biome_accent())
+	var identity := BIOME_REGISTRY.get_combat_identity(run_session.act_biome_ids[act - 1]) if run_session != null and run_session.act_biome_ids.size() >= act else {}
+	var subtitle := fallback_title
+	if not identity.is_empty():
+		subtitle += "\nOrdinary rooms: " + String(identity.entry_hint)
+	hud.show_banner("Act %s - %s" % [numeral, _get_active_biome_name()], subtitle, _get_active_biome_accent(), 3.0)
 
 func _apply_active_biome(act: int) -> void:
 	if run_session == null or run_session.act_biome_ids.size() < act:
