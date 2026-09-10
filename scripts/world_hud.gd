@@ -1572,7 +1572,7 @@ func _update_stats_panel_text(player: Node, state: Dictionary) -> void:
 	var dmg := int(player.get("damage"))
 	var atk_range := float(player.get("attack_range"))
 	var atk_arc := float(player.get("attack_arc_degrees"))
-	var atk_cd := float(player.get("attack_cooldown"))
+	var atk_cd := float(player.get_effective_attack_cooldown())
 	var move_spd_base := float(player.get("max_speed"))
 	var ext_slow_mult := float(player.get("external_slow_mult"))
 	var ext_slow_left := float(player.get("external_slow_left"))
@@ -1582,7 +1582,7 @@ func _update_stats_panel_text(player: Node, state: Dictionary) -> void:
 		move_spd_text = "[color=#FF8080]%.0f[/color] [color=#FF8080](slowed)[/color]" % move_spd_effective
 	else:
 		move_spd_text = "[color=#BFD8FF]%.0f[/color]" % move_spd_base
-	var dash_cd := float(player.get("dash_cooldown"))
+	var dash_cd := float(player.get_effective_dash_cooldown())
 	var armor := int(player.get("iron_skin_armor"))
 
 	stats_label.text = "[b]Stats[/b]\nHealth: [color=#C8FFD8]%d/%d[/color]\nDamage: [color=#FFD8AA]%d[/color]\nAttack Range: [color=#FFD8AA]%.0f[/color]\nAttack Arc: [color=#FFD8AA]%.0f°[/color]\nAttack Speed: [color=#BFD8FF]%.2fs[/color]\nMove Speed: %s\nDash Cooldown: [color=#BFD8FF]%.2fs[/color]\nArmor: [color=#E8E8FF]%d[/color]%s" % [hp_now, hp, dmg, atk_range, atk_arc, atk_cd, move_spd_text, dash_cd, armor, timer_line]

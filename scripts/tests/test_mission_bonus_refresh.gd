@@ -4,6 +4,7 @@ extends "res://scripts/tests/test_power_snapshot.gd"
 const CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const SESSION := preload("res://scripts/core/run_session.gd")
 const AUDIO := preload("res://scripts/tests/fixture_audio_retirement.gd")
+const HUD := preload("res://scripts/world_hud.gd")
 var retirement := AUDIO.new()
 var mission_builder: MISSION_BUILDER
 
@@ -23,6 +24,7 @@ func _run() -> void:
 	await _test_reward_lifetimes_and_effects()
 	_test_matching_and_duplicates()
 	_test_stack_replace_and_cap()
+	await _test_effective_cooldown_stats()
 	await _cleanup()
 	RunContext.clear_active_run()
 	RunContext.clear_resume_saved_run_request()
@@ -168,3 +170,116 @@ func _test_stack_replace_and_cap() -> void:
 	check(world.player.active_objective_mutators[0].remaining_encounters == 1, "Duration minimum remains one clear")
 	world.player.tick_objective_mutators_for_encounter()
 	check(world.player.active_objective_mutators.is_empty(), "A minimum-duration bonus expires on its next clear")
+
+func _check_cooldown_stats(hud: Node, actor: Player, attack: float, dash: float, label: String) -> void:
+	hud.refresh({"timer_visible_in_hud": false, "active_player_mutators": actor.get_active_objective_mutators()}, actor)
+	var text: String = hud.stats_label.get_parsed_text()
+	check(text.contains("Attack Speed: %.2fs" % attack) and text.contains("Dash Cooldown: %.2fs" % dash), label + ": real Stats displays both ordinary action intervals")
+	check(is_equal_approx(actor.get_effective_attack_cooldown(), attack) and is_equal_approx(actor.get_effective_dash_cooldown(), dash), label + ": public cooldown values agree with the expected intervals")
+
+func _check_accepted_cooldown_stats(hud: Node, actor: Player, attack: float, dash: float, label: String) -> void:
+	var accepted := await _sample_action_cooldowns(actor)
+	check(is_equal_approx(accepted.attack, attack) and is_equal_approx(accepted.dash, dash), label + ": accepted Attack and Dash use those same intervals")
+	_check_cooldown_stats(hud, actor, attack, dash, label)
+
+func _check_blast_cooldown_stats(hud: Node, actor: Player, attack: float, dash: float, label: String) -> void:
+	actor.discard_pending_combat_input()
+	actor.arcana_motion._refresh_capacity()
+	var charges_before: int = actor.arcana_motion.blast_charges
+	var attacks_before: int = actor.attack_combo_counter
+	actor.arcana_motion.release_blast(1.0)
+	check(actor.attack_combo_counter == attacks_before + 1 and actor.arcana_motion.blast_charges == charges_before - 1 and is_equal_approx(actor.attack_cooldown_left, attack), label + ": accepted Blast consumes one charge and uses the ordinary Attack interval")
+	_check_cooldown_stats(hud, actor, attack, dash, label)
+	actor.discard_pending_combat_input()
+
+func _test_effective_cooldown_stats() -> void:
+	_reset_bonuses()
+	var hud := HUD.new()
+	world.add_child(hud)
+	hud.setup(6)
+	var actor := world.player
+	var overcharge := mission_builder._build_overcharge_mutator()
+	for character_id in CHARACTER.get_launch_character_ids():
+		actor.apply_character_package(CHARACTER.get_character(character_id))
+		var base_attack: float = actor.attack_cooldown
+		var base_dash: float = actor.dash_cooldown
+		await _check_accepted_cooldown_stats(hud, actor, base_attack, base_dash, character_id + " baseline")
+		actor.apply_objective_mutator(overcharge)
+		await _check_accepted_cooldown_stats(hud, actor, base_attack * 0.8, base_dash * 0.8, character_id + " Overcharge")
+		check(is_equal_approx(actor.attack_cooldown, base_attack) and is_equal_approx(actor.dash_cooldown, base_dash), character_id + ": temporary bonus does not rewrite the underlying cooldown properties")
+		_reset_bonuses()
+
+	# Explicit saved values catch applying the multiplier twice or baking it into
+	# permanent stats. The HUD must track the live bonus across a real disk resume.
+	world.current_character_id = "veilstrider"
+	actor.apply_character_package(CHARACTER.get_character("veilstrider"))
+	actor.attack_cooldown = 0.37
+	actor.dash_cooldown = 0.51
+	actor.apply_trial_power("blast_drive")
+	actor.apply_objective_mutator(overcharge)
+	actor.tick_objective_mutators_for_encounter()
+	actor.attack_cooldown_left = 0.09
+	actor.dash_cooldown_left = 0.12
+	_check_cooldown_stats(hud, actor, 0.296, 0.408, "Partly elapsed cooldowns")
+	actor.apply_objective_mutator(overcharge)
+	check(is_equal_approx(actor.attack_cooldown_left, 0.09) and is_equal_approx(actor.dash_cooldown_left, 0.12) and _bonus_map().overcharge.remaining_encounters == 3, "Refreshing Overcharge changes only its lifetime, preserving current action timers")
+	await _check_accepted_cooldown_stats(hud, actor, 0.296, 0.408, "Refreshed Overcharge")
+	_check_blast_cooldown_stats(hud, actor, 0.296, 0.408, "Refreshed Overcharge")
+	actor.tick_objective_mutators_for_encounter()
+	world._save_active_run_checkpoint()
+	var saved := RunContext.load_active_run()
+	check(not saved.is_empty() and is_equal_approx(float(saved.player_snapshot.properties.attack_cooldown), 0.37) and is_equal_approx(float(saved.player_snapshot.properties.dash_cooldown), 0.51), "Disk checkpoint keeps raw cooldown properties without the temporary multiplier")
+	actor = _replace_player(saved)
+	check(_bonus_map().overcharge.remaining_encounters == 2, "Disk resume retains the remaining Overcharge lifetime")
+	await _check_accepted_cooldown_stats(hud, actor, 0.296, 0.408, "Resumed Overcharge")
+	actor.apply_run_snapshot(saved.player_snapshot)
+	_check_cooldown_stats(hud, actor, 0.296, 0.408, "Repeated snapshot restore")
+	_check_blast_cooldown_stats(hud, actor, 0.296, 0.408, "Resumed Overcharge")
+	for remaining in [1, 0]:
+		actor.tick_objective_mutators_for_encounter()
+		var attack := 0.296 if remaining > 0 else 0.37
+		var dash := 0.408 if remaining > 0 else 0.51
+		await _check_accepted_cooldown_stats(hud, actor, attack, dash, "Resumed bonus remaining %d" % remaining)
+	check(actor.get_active_objective_mutators().is_empty(), "Restored Overcharge expires after exactly its two remaining clears")
+	actor.arcana_motion.tick(100.0)
+	_check_blast_cooldown_stats(hud, actor, 0.37, 0.51, "Expired Overcharge")
+
+	# Preserve the existing floors, including explicit legacy/snapshot values.
+	for charged in [false, true]:
+		_reset_bonuses()
+		if charged:
+			actor.apply_objective_mutator(overcharge)
+		actor.attack_cooldown = 0.04
+		actor.dash_cooldown = -0.02
+		await _check_accepted_cooldown_stats(hud, actor, 0.05, 0.0, "Existing cooldown floors, Overcharge %s" % charged)
+		actor.arcana_motion.tick(100.0)
+		_check_blast_cooldown_stats(hud, actor, 0.05, 0.0, "Existing Blast cooldown floor, Overcharge %s" % charged)
+
+	actor.attack_cooldown = 0.37
+	actor.dash_cooldown = 0.51
+	actor.attack_cooldown_left = 0.08
+	actor.dash_cooldown_left = 0.17
+	actor._refund_shared_dash(0.06)
+	check(is_equal_approx(actor.dash_cooldown_left, 0.11), "Existing shared Dash refund changes only the remaining timer")
+	_check_cooldown_stats(hud, actor, 0.296, 0.408, "Refunded current Dash")
+	actor._refund_shared_dash(1.0)
+	check(is_zero_approx(actor.dash_cooldown_left), "Existing Dash refunds retain the zero floor")
+
+	# Veilstep's surge is a one-shot free Dash, not a change to ordinary Stats.
+	Input.action_release("dash")
+	await process_frame
+	await physics_frame
+	await process_frame
+	actor.discard_pending_combat_input()
+	actor._refresh_combat_input_release()
+	actor.attack_lock_time_left = 0.0
+	actor.dash_cooldown_left = 0.0
+	actor.veilstep_rhythm_surge_ready = true
+	actor.veilstep_rhythm_surge_window_left = actor.veilstep_rhythm_surge_duration
+	Input.action_press("dash")
+	actor._try_start_dash(Vector2.RIGHT)
+	Input.action_release("dash")
+	check(actor.passive_veilstep_rhythm and actor.veilstep_rhythm_empowered_dash_active and actor._is_dash_active() and is_zero_approx(actor.dash_cooldown_left), "Accepted empowered Veilstep Dash keeps its zero-cooldown exception while Overcharge is active")
+	_check_cooldown_stats(hud, actor, 0.296, 0.408, "Empowered Veilstep Dash")
+	actor.discard_pending_combat_input()
+	_reset_bonuses()

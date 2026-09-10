@@ -775,6 +775,13 @@ func _shared_mission_damage_multiplier() -> float:
 func _mission_action_cooldown_multiplier() -> float:
 	return 0.8 if _has_overcharge_mutator_active() else 1.0
 
+## Ordinary action intervals, independent of remaining timers and one-shot refunds.
+func get_effective_attack_cooldown() -> float:
+	return maxf(0.05, attack_cooldown * _mission_action_cooldown_multiplier())
+
+func get_effective_dash_cooldown() -> float:
+	return maxf(0.0, dash_cooldown * _mission_action_cooldown_multiplier())
+
 func _on_cue_shared_build_state(payload: Dictionary) -> void:
 	_ensure_shared_build_runtime()
 	shared_build_runtime.apply_state(payload)
@@ -883,7 +890,7 @@ func perform_motion_blast(direction: Vector2, strength: float) -> void:
 	context["cover_blast_strength"] = strength
 	context["damage_coefficient"] = lerpf(ARCANA_MOTION_SCRIPT.BLAST_DAMAGE_MULT_MIN, ARCANA_MOTION_SCRIPT.BLAST_DAMAGE_MULT_MAX, strength) * blast_drive_damage_scale * float(context.get("damage_mult", 1.0))
 	visual_facing_direction = direction
-	attack_cooldown_left = maxf(0.05, attack_cooldown * _mission_action_cooldown_multiplier())
+	attack_cooldown_left = get_effective_attack_cooldown()
 	_perform_melee_attack(direction, context)
 	for entry in _get_damageable_enemies_in_cone(global_position, direction, blast_range, deg_to_rad(ARCANA_MOTION_SCRIPT.BLAST_ARC_DEGREES * 0.5)):
 		var enemy := entry.get("enemy") as Node2D
@@ -998,7 +1005,7 @@ func _try_start_dash(direction: Vector2) -> void:
 	var effective_duration := dash_remaining_distance / effective_dash_speed
 	dash_time_left = effective_duration
 	veilstep_rhythm_empowered_dash_active = passive_veilstep_rhythm and veilstep_rhythm_surge_ready and veilstep_rhythm_surge_window_left > 0.0
-	dash_cooldown_left = 0.0 if veilstep_rhythm_empowered_dash_active else maxf(0.0, dash_cooldown * _mission_action_cooldown_multiplier())
+	dash_cooldown_left = 0.0 if veilstep_rhythm_empowered_dash_active else get_effective_dash_cooldown()
 	dash_phase_release_left = maxf(dash_phase_release_left, dash_phase_release_duration)
 	_dash_damage_immune_left = maxf(_dash_damage_immune_left, dash_phase_release_duration)
 	phantom_step_hit_ids.clear()
@@ -1063,7 +1070,7 @@ func _try_execute_attack(attack_direction: Vector2) -> void:
 	queued_attack_after_dash = false
 	primary_attack_fired.emit()
 
-	attack_cooldown_left = maxf(0.05, attack_cooldown * _mission_action_cooldown_multiplier())
+	attack_cooldown_left = get_effective_attack_cooldown()
 	attack_anim_time_left = attack_anim_duration
 	player_feedback.play_attack_swing_sound()
 
