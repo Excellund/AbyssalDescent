@@ -1026,7 +1026,9 @@ func _update_status_panel_text(state: Dictionary) -> void:
 					line1_color = C_HOT
 				else:
 					line1 = "Hold %ds  ·  Secure %d%%" % [secs, pct]
-				if obj_ctrl_player_inside and not obj_ctrl_contested:
+				if encounter_intro_grace_active:
+					line2 = "Hold the zone uncontested"
+				elif obj_ctrl_player_inside and not obj_ctrl_contested:
 					line2 = "Zone stable — keep pressure inside"
 					line2_color = C_GOOD
 				elif obj_ctrl_contested:
@@ -1085,7 +1087,9 @@ func _update_status_panel_text(state: Dictionary) -> void:
 					line1_color = C_HOT
 				else:
 					line1 = "Intercept  ·  Drone %d%%" % intercept_pct
-				if stalled:
+				if encounter_intro_grace_active:
+					line2 = "Stay near the drone; clear its path"
+				elif stalled:
 					if enemies_near > 0:
 						line2 = "%d enemies blocking — clear the path" % enemies_near
 						line2_color = C_WARN

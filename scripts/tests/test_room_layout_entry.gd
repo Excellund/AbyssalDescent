@@ -9,6 +9,7 @@ const PROFILE := preload("res://scripts/core/profile_persistence_store.gd")
 const ENUMS := preload("res://scripts/shared/enums.gd")
 const MAPPER := preload("res://scripts/power_parameter_mapper.gd")
 const BREAKWATER := preload("res://scripts/enemy_breakwater.gd")
+const OBJECTIVE := preload("res://scripts/objective_manager.gd")
 var checks := 0
 var failures: Array[String] = []
 var world: WORLD
@@ -85,6 +86,8 @@ func _run() -> void:
 		check(world.renderer.obstacle_layout == ordinary.obstacle_layout and world.enemy_spawner.obstacle_circles == ordinary.obstacle_layout, "Serialized valid geometry reaches renderer and spawner exactly")
 		check(world._active_obstacle_nodes.size() == 2 and world._active_obstacle_nodes[0].global_position == Vector2(-190, -70) and world._active_obstacle_nodes[1].global_position == Vector2(200, 100), "Actual column bodies retain both world positions")
 		check(_living_enemies() == 2, "Serialized ordinary profile spawns its actual two enemies")
+		if tier == 1:
+			await _test_objective_survey_hints()
 		current_scene = null
 		world.queue_free()
 		world = null
@@ -107,6 +110,86 @@ func _enter(profile: Dictionary, label: String) -> void:
 	world.encounter_intro_grace_active = false
 	world._begin_room(profile)
 	check(world.encounter_intro_grace_active, label + " reaches the end of actual World._begin_room")
+
+func _test_objective_survey_hints() -> void:
+	# Drive actual World frames explicitly; keep actors fixed for deterministic
+	# proximity states while ordinary HUD/banner time continues to pass.
+	world.set_process(false)
+	world.set_physics_process(false)
+	world.player.set_physics_process(false)
+	for action in ["attack", "dash", "move_left", "move_right", "move_up", "move_down"]:
+		Input.action_release(action)
+	var hints := {
+		"hold_the_line": "Hold the zone uncontested",
+		"intercept_run": "Stay near the drone; clear its path",
+		"circuit_sweep": "Reach the active node to begin"
+	}
+	for kind: String in hints:
+		_enter(world.encounter_profile_builder.build_objective_profile(5, kind), kind + " survey")
+		world.enemy_spawner.set_process(false)
+		var enemies: Array[Node2D] = []
+		for enemy in get_nodes_in_group("enemies"):
+			if is_instance_valid(enemy) and not enemy.is_queued_for_deletion() and not enemy.is_dead():
+				enemy.set_process(false)
+				enemy.set_physics_process(false)
+				enemy.global_position = world.current_room_size * 0.5 - Vector2(40, 40)
+				enemies.append(enemy)
+		world._refresh_frame_ui()
+		var manager := world.objective_manager
+		var frozen_state := manager.serialize_sync_state()
+		check(world.hud._status_obj_line2.is_visible_in_tree() and world.hud._status_obj_line2.text == hints[kind], "Actual Main survey shows its existing objective card instruction: " + kind)
+		_check_replica_survey_hint(frozen_state, String(hints[kind]), kind)
+		for _step in range(4):
+			world._process(0.8)
+			await create_timer(0.8).timeout
+		world._refresh_frame_ui()
+		check(world.encounter_intro_grace_active and manager.serialize_sync_state() == frozen_state, "More than three seconds of survey never advances objective timers, progress or spawning: " + kind)
+		check(world.hud._status_obj_line2.is_visible_in_tree() and world.hud._status_obj_line2.text == hints[kind] and is_zero_approx(world.hud.room_banner_title_label.modulate.a), "Objective instruction remains visible after the ordinary entry banner fades: " + kind)
+		world._exit_encounter_intro_grace()
+		match kind:
+			"hold_the_line":
+				world.player.global_position = manager.control_anchor
+				world._process(0.25)
+				check(manager.control_progress > 0.0 and world.hud._status_obj_line2.text == "Zone stable — keep pressure inside", "Engage restores actual uncontested Hold progress and live guidance")
+				world.player.global_position = manager.control_anchor + Vector2(manager.control_radius + 45.0, 0)
+				world._process(0.25)
+				check(not manager.control_player_inside and world.hud._status_obj_line2.text == "Re-enter the zone before decay", "Leaving the live Hold zone restores the existing return instruction")
+				world.player.global_position = manager.control_anchor
+				for enemy in enemies:
+					enemy.global_position = manager.control_anchor
+				world._process(0.25)
+				check(manager.control_contested and world.hud._status_obj_line2.text.begins_with("Contested — clear "), "Actual enemies restore the contested Hold guidance after survey")
+			"intercept_run":
+				world.player.global_position = Vector2.ZERO
+				world._process(0.1)
+				check(manager.intercept_drone_stalled and world.hud._status_obj_line2.text == "Stay close to the drone", "Engage shows the actual outside-escort Intercept state")
+				world.player.global_position = manager.intercept_drone_position + Vector2(45, 0)
+				world._process(0.1)
+				check(manager.intercept_drone_progress > 0.0 and world.hud._status_obj_line2.text == "Path clear — drone advancing", "The drone is described as advancing only when the actual live objective advances")
+				var progress_before := manager.intercept_drone_progress
+				enemies[0].global_position = manager.intercept_drone_position
+				world._process(0.1)
+				check(manager.intercept_drone_progress == progress_before and world.hud._status_obj_line2.text.contains("enemies blocking — clear the path"), "An actual nearby enemy restores blocking guidance and stops the live drone")
+			"circuit_sweep":
+				world.player.global_position = manager.sweep_node_position
+				world._process(0.1)
+				check(manager.sweep_capture_progress > 0.0 and world.hud._status_obj_line2.text == "Stay in the ring to capture", "Circuit keeps its existing capture guidance after Engage")
+		_enter(CONTRACTS.profile("Skirmish", Vector2(1160, 860), true, 2, 0, 0, 0), "Ordinary room after " + kind)
+		world._refresh_frame_ui()
+		check(world.objective_manager.active_objective_kind.is_empty() and not world.hud._status_obj_line2.visible, "The next nonobjective room cannot retain the survey instruction: " + kind)
+
+func _check_replica_survey_hint(sync_state: Dictionary, expected: String, kind: String) -> void:
+	# Stage only the existing native objective codec and HUD path. Transport is
+	# covered by the ENet room-entry fixture; this adds no test or production RPC.
+	var authoritative := world.objective_manager
+	var replica := OBJECTIVE.new()
+	replica.apply_sync_state(bytes_to_var(var_to_bytes(sync_state)))
+	world.objective_manager = replica
+	world._refresh_frame_ui()
+	check(world.hud._status_obj_line2.is_visible_in_tree() and world.hud._status_obj_line2.text == expected, "Serialized replica objective state uses the same survey card instruction: " + kind)
+	world.objective_manager = authoritative
+	replica.free()
+	world._refresh_frame_ui()
 
 func _living_enemies() -> int:
 	var count := 0
