@@ -6,7 +6,7 @@ The user accepted the previous checkpoint, requested its merge and release, then
 
 Branch: `codex/encounter-evolution-20260910`, created from that clean baseline. Keep `main` and release tags at the accepted version. Useful game improvements, bounded additions and code cleanup remain authorized. Stop adding features at **13:30 local**; reserve the remaining time for fixes, verification and delivery. Do not use the entire time box as a reason to add weak or unverified scope.
 
-The existing task continuation `descent-identity-development-until-06-00` has been updated for this workday: every 20 minutes until 13:00 UTC. Resume current conversation, Git and agent state rather than restarting work. Pause it at final delivery or the deadline.
+The existing task continuation `descent-identity-development-until-06-00` was updated for this workday: every 20 minutes until 13:00 UTC. It is now **PAUSED** following final normal desktop delivery ahead of the deadline. The milestone sections below retain the chronological implementation and verification history; the [final delivery record](#final-normal-desktop-delivery) is the current status.
 
 ## First milestone — Encounter decisions and feedback
 
@@ -337,3 +337,29 @@ The native HUD-overlap finding and independent review above are now selected for
 - Rendered acceptance passes **16 frames/147 checks**, including teardown, at 960/1280 on RTX 4080. Native movement passes below ordinary generated columns, enters Stats, opens/closes Pause, enters the starting build chip, opens/releases Build Details, then moves out. Existing World Escape/Tab handlers are exercised; enemies and terrain remain untouched, and the player receives ordinary damage. No teleports, debug grants, invulnerability or enemy staging create the result. Reviewer inspected all 16 frames; root inspected eight representative combat/modal/restore views and approved alpha 0.2. Captures: `C:/Users/mikel/AppData/Local/Temp/abyssal-gameplay-render-ebcac36ca2e8411999211d0d08a6659b/hud_overlap_fade_frames`.
 - The first GPU fixture route walked directly into a legitimately generated center column and missed its target. Only the walking route changed to go below the columns; production and the natural encounter remained unchanged. This was a fixture routing failure, not a collision or fade defect. Evidence retains that failed attempt and the prior no-fade baseline.
 - Root reviewed and transferred World/HUD, the new headless fixture/UID and render fixture/UID from `C:/Users/mikel/AppData/Local/Temp/abyssal-hud-overlap-prep-ce489df6f9a34bfea40a0b265996d61a`, then registered the headless fixture in the required runner. Production hashes match scoped and rendered evidence. See `hud-overlap-hashes.json` and `hud-overlap-gpu-evidence.json` there. The renderer uses the existing generic helper. Full checkpoint, hosted CI and a normal candidate remain.
+
+Thirteenth checkpoint is committed and pushed as `a82441b9a3869ca748cad93fe319cd4a0f36340b` (`Reveal combat beneath overlapping Stats and build panels`). Its full hook passed **323 scripts and all 80 gameplay fixtures** in `C:/Users/mikel/AppData/Local/Temp/abyssal-validation-f9a09a18c199405991acc42333522d2d`. [Exact-commit hosted validation passed](https://github.com/Excellund/AbyssalDescent/actions/runs/34463821829): 57 watchdog checks, 323 scripts, all 80 exact committed fixtures and 34 HUD-overlap assertions, with zero unexpected gameplay errors. Artifact contains 407 log files only, retained until September 17 10:07:23 UTC. Evidence: `C:/Users/mikel/AppData/Local/Temp/abyssal-hosted-ci-a82441b-5e36d92570cc4a868c2fd3f352eb41a5`.
+
+- Normal candidate: `C:/Users/mikel/AppData/Local/Temp/abyssal-hud-fade-candidate-50fd070c92ba4eb9a3e69b5f809f9b4a/AbyssalDescent.exe`.
+- Build `dev-20260910-095524113-01b43fb7`, SHA256 `8B320500DCFD4D77467739F77347A9D44B717C9F42CE500C178D5745E5D33388`, 114260064 bytes.
+- Passed 27 package and 62 native checks with no shutdown warnings: `C:/Users/mikel/AppData/Local/Temp/abyssal-native-smoke-6f1a172f254c4d50b3188cd302906ea6/report.json`.
+- Source identity: 522 of 524 production files exact, with independently inspected build-ID and debug-disabled overrides; candidate `source-identity.json`. Final normal desktop replacement remains due before 15:00.
+
+## Final delivery preparation
+
+At 12:14 Copenhagen, all thirteen implementation checkpoints are committed, pushed and verified locally and on hosted CI. The final read-only backlog scan found no open GitHub issues and no current documented defect that warrants another implementation. Remaining questions concern ordinary earned-build feel, crowded-combat readability and the complete internet lobby experience; historical unchecked refactor checklist items do not establish new bugs. New feature work is therefore complete ahead of the 13:30 cutoff. Final normal desktop export and delivery verification are in progress, followed by a documentation checkpoint. Continue to preserve `main` and `v0.6.3`; neither a merge nor a new tag is authorized for this workday branch.
+
+## Final normal desktop delivery
+
+The completed workday build is delivered at **`C:/Users/mikel/Desktop/AbyssalDescent Playtest.exe`**. The canonical exporter ran without `-DebugRun`, verified the staged package, replaced the one desktop executable and verified its final SHA256. This is the regular Menu and normal progression, with no debug loadout. Development remote telemetry, leaderboards and update feed remain disabled. Unattended checks used a byte-identical temporary copy with an external controller and isolated user data; they did not run against the player's profile.
+
+- Runtime/source commit: **`a82441b9a3869ca748cad93fe319cd4a0f36340b`**, branch `codex/encounter-evolution-20260910`. The subsequent documentation checkpoint does not change runtime content.
+- Internal build ID: **`dev-20260910-101453509-6ad705cd`**.
+- Final SHA256: **`C5FF8CC80FE77101AD1C62AE59A0BCE9F6102A448A34F5B2CB6C4BFB7425A5F6`**; 114260064 bytes.
+- Export/import/package checks passed with Godot 4.6.2. Staging and logs: `C:/Users/mikel/AppData/Local/Temp/abyssal-playtest-export-8b45770a3c2145f6bfcc4d98fd57eae8`.
+- Delivered executable passed **27 package and 62 actual native checks**, with no shutdown warnings: `C:/Users/mikel/AppData/Local/Temp/abyssal-native-smoke-b334babdc15b412da79e6d13bdf9c4ca/report.json`. Native checks exercise Menu, tutorial/first descent, movement, Pause, return to Menu and reopening Main.
+- Independent delivery identity verification accounts for all **524 production files**, with **522 byte-identical**, no missing/extra files and only the inspected build-ID and Main debug-disabled overrides. Desktop and staged executable hashes match. Full per-file evidence: `C:/Users/mikel/AppData/Local/Temp/abyssal-playtest-export-8b45770a3c2145f6bfcc4d98fd57eae8/source-identity.json`.
+
+All thirteen source checkpoints have passing full local and exact-commit hosted validation. The final source also has the targeted rendered and real ENet evidence recorded above. The accepted `main` and peeled `v0.6.3` commit remain `922a4b576165f6af8477f69bc4c41a48f64916b1`. No new release tag or merge was made. With delivery complete and no further reproduced backlog defect selected, the task continuation was paused through the app and its saved status verified as `PAUSED`.
+
+For the next ordinary playtest, prioritize whether keeping cover versus opening a lane creates a useful choice in Shatterfield Crossfire, and whether the player and attack warnings stay readable during crowded fights as Stats/build panels fade. Complete internet-lobby acceptance and balance remain human feedback questions. Passing staged/loopback automation does not settle them.
