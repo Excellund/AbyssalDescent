@@ -60,7 +60,8 @@ const SHARED_BUILD_STATE_PROPERTIES := [
 	"apex_momentum_stacks", "apex_momentum_stack_left", "convergence_surge_hit_counter",
 	"_sigil_chain_charge", "_sigil_chain_drop_armed", "_riftpunch_window_left", "void_heat",
 	"_farline_volley_current_stacks", "indomitable_damage_bank", "_indomitable_spirit_primed",
-	"_dash_damage_immune_left", "_shared_dash_refund_total", "combo_relay_stacks", "combo_relay_stack_timer", "sigil_burst_ready"
+	"_dash_damage_immune_left", "_shared_dash_refund_total", "combo_relay_stacks", "combo_relay_stack_timer", "sigil_burst_ready",
+	"cross_stitch_window_left", "cross_stitch_target_network_id"
 ]
 
 
@@ -183,7 +184,7 @@ func broadcast_cue_event(peer_id: int, event_name: String, payload: Dictionary, 
 		return
 	if not _is_authority_for_peer(peer_id):
 		return
-	if event_name in ["shared_build_state", "warden_verdict"] and not MultiplayerSessionManager.should_broadcast():
+	if event_name in ["shared_build_state", "warden_verdict", "cross_stitch_burst"] and not MultiplayerSessionManager.should_broadcast():
 		return
 	var pending_variant: Variant = _pending_cue_events_by_peer.get(peer_id, [])
 	var pending_events := _cue_sync_queue.copy_pending_events(pending_variant)
@@ -527,13 +528,13 @@ func _apply_network_cue_events(peer_id: int, events: Array[Dictionary]) -> void:
 		return
 	var accepted_events: Array[Dictionary] = []
 	for entry: Dictionary in events:
-		if entry.get("event") not in ["shared_build_state", "warden_verdict"]:
+		if entry.get("event") not in ["shared_build_state", "warden_verdict", "cross_stitch_burst"]:
 			accepted_events.append(entry)
 			continue
 		var sender := multiplayer.get_remote_sender_id()
 		if sender != 1 and not (sender == 0 and MultiplayerSessionManager.is_host()):
 			continue
-		if entry.get("event") == "warden_verdict":
+		if entry.get("event") in ["warden_verdict", "cross_stitch_burst"]:
 			accepted_events.append(entry)
 			continue
 		var packed: Variant = entry.get("payload")

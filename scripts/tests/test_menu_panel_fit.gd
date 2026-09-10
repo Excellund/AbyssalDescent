@@ -40,7 +40,7 @@ func _toggle(list: VBoxContainer, id: String) -> Button:
 			return card.find_children("*", "Button", true, false).front() as Button
 	return null
 func _check_passive_labels(menu: MENU, viewport_size: Vector2i) -> void:
-	check(menu.character_ids.size() == 4, "All four character passives are present")
+	check(menu.character_ids == MENU.CHARACTER_REGISTRY.get_launch_character_ids(), "Every playable character passive is present in roster order")
 	for index in range(menu.character_ids.size()):
 		var character_id := menu.character_ids[index]
 		var passive_id := String(MENU.CHARACTER_REGISTRY.get_character(character_id).get("passive_id", ""))

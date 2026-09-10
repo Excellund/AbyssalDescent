@@ -4,6 +4,22 @@ extends RefCounted
 const KEYWORDS := preload("res://scripts/shared/combat_keyword_catalogue.gd")
 
 const PASSIVES := {
+	"cross_stitch": {
+		"name": "Cross Stitch",
+		"short": "Your first {kw:attack_hit} {kw:mark|Marks} a foe for 4s. Switch foes on another {kw:attack} within 4s to {kw:burst} at the previous foe, if nearby.",
+		"rules": [
+			"The first accepted {kw:attack_hit} of each {kw:attack} applies 12% {kw:mark} for 4s and threads that foe for 4s.",
+			"Switch to a different foe with another {kw:attack} while the thread lasts to release a {kw:burst} at the previous foe.",
+			"The previous foe must still be alive and within 240 range of you. The {kw:burst} reaches foes within 48 range of its center.",
+			"The {kw:burst} deals 60% of the new attack's damage basis; each foe's conditions apply separately.",
+			"Melee, extended arcs and charged blasts qualify. Only the first accepted foe counts per original {kw:attack}, even in a wide swing.",
+			"Striking the same foe refreshes its {kw:mark} and thread without a {kw:burst}. Misses, rejected contacts and automatic damage do not change the thread.",
+			"{kw:mark} benefits all players; the thread belongs to you. {kw:burst|Bursts} deal damage without another {kw:attack_hit} or a new {kw:mark}."
+		],
+		"produces": ["damage", "mark", "burst"],
+		"accepts": ["attack_hit"],
+		"condition_text": "Only the first accepted melee, extended arc or charged blast contact per original Attack threads a foe. Switch foes within 4s for a Burst at the previous living foe within 240 range. Each player's thread is independent; Mark benefits everyone."
+	},
 	"iron_retort": {
 		"name": "Iron Retort",
 		"short": "Brace boosts melee and charged {kw:attack|Attacks}. The first {kw:attack_hit} grants Guard and a {kw:burst}. {kw:dash}, {kw:recoil} and {kw:orbit} break Brace.",

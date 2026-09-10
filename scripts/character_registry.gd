@@ -80,6 +80,33 @@ const CHARACTER_DEFINITIONS := {
 			"dash_streak_color": Color(0.24, 0.96, 0.66, 0.20)
 		}
 	},
+	ENUMS.CHARACTER_ID_THREADBINDER: {
+		"id": ENUMS.CHARACTER_ID_THREADBINDER,
+		"name": "Threadbinder",
+		"archetype": "Keeper of Loose Ends",
+		"boss_opposition": "The Court",
+		"tagline": "Weave between foes, leave them vulnerable, and pull the fight apart.",
+		"lore": "Threadbinder carries the ivory shuttles once used to mend the descent's torn paths. Now they stitch enemies into the same doomed pattern. Each new foe draws the thread tight around the last, rewarding deliberate target changes while leaving openings for the whole party.",
+		"arcana_pool_key": "threadbinder",
+		"passive_id": "cross_stitch",
+		"stat_modifiers": {
+			"max_health": 90,
+			"max_speed": 225.0,
+			"damage": 24,
+			"attack_range": 96.0,
+			"attack_arc_degrees": 75.0,
+			"attack_cooldown": 0.28,
+			"dash_cooldown": 0.42
+		},
+		"visual": {
+			"body_color": Color(0.94, 0.48, 0.43, 1.0),
+			"core_color": Color(0.48, 0.19, 0.24, 1.0),
+			"glow_color": Color(0.42, 0.16, 0.14, 0.16),
+			"speed_arc_color": Color(1.00, 0.72, 0.62, 0.26),
+			"dash_phase_color": Color(1.00, 0.84, 0.72, 0.24),
+			"dash_streak_color": Color(1.00, 0.65, 0.56, 0.20)
+		}
+	},
 	ENUMS.CHARACTER_ID_RIFTLANCER: {
 		"id": ENUMS.CHARACTER_ID_RIFTLANCER,
 		"name": "Riftlancer",
@@ -119,7 +146,8 @@ const LAUNCH_CHARACTER_IDS := [
 	ENUMS.CHARACTER_ID_BASTION,
 	ENUMS.CHARACTER_ID_HEXWEAVER,
 	ENUMS.CHARACTER_ID_VEILSTRIDER,
-	ENUMS.CHARACTER_ID_RIFTLANCER
+	ENUMS.CHARACTER_ID_RIFTLANCER,
+	ENUMS.CHARACTER_ID_THREADBINDER
 ]
 
 static func get_launch_character_ids() -> Array[String]:

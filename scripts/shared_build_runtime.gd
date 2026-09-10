@@ -180,7 +180,7 @@ func publish_state() -> void:
 		return
 	_serial += 1
 	var payload := {"run": REGISTRY.current_run(), "room": REGISTRY.current_room(), "serial": _serial, "epoch": player.combat_interactions._accepted_epoch, "state": {}}
-	for property in ["battle_trance_active_left", "combo_relay_stacks", "combo_relay_stack_timer", "apex_predator_combo_hits", "apex_predator_combo_left", "apex_momentum_stacks", "apex_momentum_stack_left", "convergence_surge_hit_counter", "_sigil_chain_charge", "_sigil_chain_drop_armed", "sigil_burst_ready", "_riftpunch_window_left", "void_heat", "_farline_volley_current_stacks", "indomitable_damage_bank", "_indomitable_spirit_primed", "_dash_damage_immune_left", "_shared_dash_refund_total"]:
+	for property in ["battle_trance_active_left", "combo_relay_stacks", "combo_relay_stack_timer", "apex_predator_combo_hits", "apex_predator_combo_left", "apex_momentum_stacks", "apex_momentum_stack_left", "convergence_surge_hit_counter", "_sigil_chain_charge", "_sigil_chain_drop_armed", "sigil_burst_ready", "cross_stitch_window_left", "cross_stitch_target_network_id", "_riftpunch_window_left", "void_heat", "_farline_volley_current_stacks", "indomitable_damage_bank", "_indomitable_spirit_primed", "_dash_damage_immune_left", "_shared_dash_refund_total"]:
 		var value: Variant = player.get(property)
 		if value != null:
 			payload.state[property] = value
@@ -198,7 +198,7 @@ func apply_state(payload: Dictionary) -> void:
 	_received_epoch = epoch
 	_received_serial = int(payload.serial)
 	for property in payload.state:
-		if property in ["battle_trance_active_left", "combo_relay_stacks", "combo_relay_stack_timer", "apex_predator_combo_hits", "apex_predator_combo_left", "apex_momentum_stacks", "apex_momentum_stack_left", "convergence_surge_hit_counter", "_sigil_chain_charge", "_sigil_chain_drop_armed", "sigil_burst_ready", "_riftpunch_window_left", "void_heat", "_farline_volley_current_stacks", "indomitable_damage_bank", "_indomitable_spirit_primed"]:
+		if property in ["battle_trance_active_left", "combo_relay_stacks", "combo_relay_stack_timer", "apex_predator_combo_hits", "apex_predator_combo_left", "apex_momentum_stacks", "apex_momentum_stack_left", "convergence_surge_hit_counter", "_sigil_chain_charge", "_sigil_chain_drop_armed", "sigil_burst_ready", "cross_stitch_window_left", "cross_stitch_target_network_id", "_riftpunch_window_left", "void_heat", "_farline_volley_current_stacks", "indomitable_damage_bank", "_indomitable_spirit_primed"]:
 			player.set(property, payload.state[property])
 	var refund := float(payload.state.get("_shared_dash_refund_total", _received_dash_refund))
 	if is_finite(refund) and refund > _received_dash_refund:

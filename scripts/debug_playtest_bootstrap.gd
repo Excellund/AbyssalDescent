@@ -4,7 +4,7 @@ extends Node
 
 const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
 const DEBUG_PROFILE := "AbyssalDescent Playtest Debug"
-const PLAYTEST_CHARACTERS := ["bastion", "hexweaver", "veilstrider", "riftlancer"]
+const PLAYTEST_CHARACTERS := META_PROGRESS.CHARACTER_REGISTRY.LAUNCH_CHARACTER_IDS
 
 static func permits_profile(debug_feature: bool, version: Variant, custom_profile: Variant, profile_name: Variant) -> bool:
 	return debug_feature and version is String and String(version).begins_with("dev-") and custom_profile is bool and custom_profile and profile_name is String and profile_name == DEBUG_PROFILE

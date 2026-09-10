@@ -57,7 +57,7 @@ func _run() -> void:
 				button.pressed.emit()
 		var body := menu.glossary_panel.find_child("GlossaryBody", true, false) as RichTextLabel
 		await _capture_passive(folder, "passive_glossary_" + str(size.x))
-		_check(body.text.contains(BUILD_PANEL.CHARACTER_PASSIVES.get_description("farline_focus")), "Glossary includes the final character's full rules")
+		_check(body.text.contains(BUILD_PANEL.CHARACTER_PASSIVES.get_description("cross_stitch")), "Glossary includes the fifth character's full rules")
 		body.get_v_scroll_bar().value = body.get_v_scroll_bar().max_value
 		await _capture_passive(folder, "passive_glossary_lower_" + str(size.x))
 		menu.glossary_panel.hide()

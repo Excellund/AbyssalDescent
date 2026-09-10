@@ -88,6 +88,7 @@ func _test_producer(source: String) -> void:
 		"fracture_fault_line":
 			target.position = Vector2.ZERO
 			player._apply_fracture_field(Vector2.ZERO)
+		"cross_stitch_burst": player._apply_cross_stitch_burst(Vector2.ZERO, 20.0, 1.0, player.new_combat_action("melee"))
 		"sigil_burst": player._apply_sigil_burst(Vector2.ZERO, 20)
 		"sigil_chain_detonate":
 			player.apply_trial_power("sigil_chain")

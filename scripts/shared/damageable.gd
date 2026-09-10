@@ -310,9 +310,20 @@ static func apply_mark(target: Object, source: String, ratio: float, duration: f
 		tree.current_scene.request_enemy_mark_from_client(int(target.get_meta("network_enemy_id", 0)), source, ratio, duration, action)
 		return true
 	var owner := _find_combat_owner(source_peer_id)
-	if owner == null or owner.get("_is_alive_state") == false or owner.get("_combat_removed") == true or not bool(owner.get("reward_" + source)):
+	if owner == null or owner.get("_is_alive_state") == false or owner.get("_combat_removed") == true:
+		return false
+	var enabled_property := "passive_cross_stitch" if source == "cross_stitch" else "reward_" + source
+	if not bool(owner.get(enabled_property)):
 		return false
 	match source:
+		"cross_stitch":
+			# This passive is generated only by the accepted-attack boundary.
+			var scope := current_interaction_context()
+			var thread_ref: Variant = owner.get("cross_stitch_target")
+			if MultiplayerSessionManager.is_remote_replica() or not INTERACTIONS.is_attack_hit(String(action.get("source", ""))) or scope.get("seq") != action.get("seq") or scope.get("owner") != source_peer_id or not (thread_ref is WeakRef) or thread_ref.get_ref() != target:
+				return false
+			ratio = 0.12
+			duration = 4.0
 		"wraithstep":
 			ratio = SHARED_MODIFIERS.property_number(owner, "wraithstep_mark_bonus_ratio")
 			duration = SHARED_MODIFIERS.property_number(owner, "wraithstep_mark_duration")
