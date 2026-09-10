@@ -47,6 +47,7 @@ var _inspection_active: bool = false
 var _confirm_release_required: bool = false
 var _inspection_close_frame: int = -1
 var _keyboard_selection: bool = false
+var _inspection_candidate_index: int = -1
 var _last_mouse_position := Vector2.ZERO
 var _saved_focus: WeakRef
 
@@ -172,6 +173,7 @@ func get_choice_count() -> int:
 
 func close_selection() -> void:
 	_inspection_active = false
+	_inspection_candidate_index = -1
 	_confirm_release_required = false
 	if is_instance_valid(build_button):
 		build_button.visible = false
@@ -206,6 +208,7 @@ func close_selection() -> void:
 
 func open_selection(title: String, is_initial: bool, mode: int, power_registry: Node, player: Node2D, rng: RandomNumberGenerator, player_mutator: Dictionary = {}, epitaph: String = "", character_id: String = "") -> void:
 	_inspection_active = false
+	_inspection_candidate_index = -1
 	_confirm_release_required = false
 	for control: Control in boon_card_panels + [build_button, reroll_button, skip_button]:
 		control.focus_mode = Control.FOCUS_ALL
@@ -406,6 +409,7 @@ func _on_card_focused(index: int) -> void:
 	_keyboard_selection = true
 	_last_mouse_position = get_viewport().get_mouse_position()
 	boon_hovered_index = index
+	_inspection_candidate_index = index
 
 
 func _request_build_inspection() -> void:
@@ -416,7 +420,9 @@ func _request_build_inspection() -> void:
 	_saved_focus = weakref(focused) if focused != null else null
 	var candidate: Dictionary = {}
 	if not boon_choices.is_empty():
-		candidate = boon_choices[clampi(boon_hovered_index, 0, boon_choices.size() - 1)].duplicate(true)
+		# Moving to Your Build leaves the card's click target, but keeps its comparison.
+		var index := boon_hovered_index if boon_hovered_index >= 0 else _inspection_candidate_index
+		candidate = boon_choices[clampi(index, 0, boon_choices.size() - 1)].duplicate(true)
 		candidate["reward_mode"] = reward_selection_mode
 	for control in _navigation_controls():
 		control.focus_mode = Control.FOCUS_NONE
@@ -477,6 +483,7 @@ func _process(delta: float) -> void:
 
 
 func _begin_close_fade() -> void:
+	_inspection_candidate_index = -1
 	build_button.visible = false
 	mission_bonus_label.visible = false
 	skip_button.visible = false
@@ -652,6 +659,7 @@ func _reroll_current_offer() -> bool:
 		return false
 	_reward_rerolls_remaining -= 1
 	boon_choices = rerolled_choices
+	_inspection_candidate_index = -1
 	boon_confirm_lock_time = boon_reveal_duration + 0.08
 	boon_reveal_time = 0.0
 	boon_hovered_index = -1
@@ -1440,6 +1448,8 @@ func _update_boon_hover() -> void:
 			hovered = i
 			break
 	boon_hovered_index = hovered
+	if hovered >= 0:
+		_inspection_candidate_index = hovered
 
 func _apply_boon_card_styles(_hovered_index: int) -> void:
 	var is_arcana := reward_selection_mode == ENUMS.RewardMode.ARCANA

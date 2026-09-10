@@ -20,6 +20,7 @@ func _run() -> void:
 	node_added.connect(retirement.observe_node)
 	_setup_ui()
 	await _check_inspection()
+	await _check_mouse_inspection()
 	await _check_owned_details()
 	_check_property_wording()
 	await _check_passive_presentations()
@@ -258,6 +259,7 @@ func _check_passive_connections() -> void:
 	build.refresh_from_player(player, "bastion")
 
 func _check_mission_bundle() -> void:
+	var skips_before := skipped
 	var mutator := {"name": "Combo Relay", "banner_suffix": "Kill chain: +5% damage and movement speed per kill, up to 4; resets after 2.8s.", "icon_shape_id": "combo_relay"}
 	_open(ENUMS.RewardMode.MISSION, mutator)
 	var offer_count := offered
@@ -274,7 +276,7 @@ func _check_mission_bundle() -> void:
 	_check(ui.current_player_mutator == mutator, "Reroll changes only Boon choices, retaining the fixed Mission bonus")
 	ui.boon_confirm_lock_time = 0.0
 	ui._on_skip_button_pressed()
-	_check(skipped == 1 and selected.is_empty(), "Skipping declines both parts of the Mission bundle")
+	_check(skipped == skips_before + 1 and selected.is_empty(), "Skipping declines both parts of the Mission bundle")
 
 func _check_responsive_actions() -> void:
 	for count in [2, 3, 4]:
@@ -406,3 +408,95 @@ func _check_choice_count_navigation() -> void:
 			_check(viewport.gui_get_focus_owner() == expected, "Native D-pad traverses the footer and returns to cards after changing to %d choices" % count)
 		_check(selected.is_empty(), "Choice-count focus navigation never selects an offer")
 		ui.close_selection()
+
+func _move_reward_pointer(position: Vector2) -> void:
+	var motion := InputEventMouseMotion.new()
+	motion.position = position
+	motion.global_position = position
+	viewport.push_input(motion, true)
+	ui.process_input(0.016)
+
+func _click_reward_pointer(position: Vector2) -> void:
+	_move_reward_pointer(position)
+	for down in [true, false]:
+		var click := InputEventMouseButton.new()
+		click.position = position
+		click.global_position = position
+		click.button_index = MOUSE_BUTTON_LEFT
+		click.pressed = down
+		viewport.push_input(click, true)
+		# The normal reward loop also polls the global Attack mouse action.
+		ui.process_input(0.016)
+	await process_frame
+
+func _check_mouse_inspection() -> void:
+	for count in [3, 4]:
+		ui.initialize(count, 0.0)
+		for index in range(1, count):
+			_move_reward_pointer(Vector2(12, 12))
+			_open()
+			await process_frame
+			await process_frame
+			_check(ui._inspection_candidate_index == -1, "A new offer starts without the previous comparison")
+			var choices := ui.boon_choices.duplicate(true)
+			var rng_before := rng.state
+			var rerolls_before := ui._reward_rerolls_remaining
+			var offered_before := offered
+			var skips_before := skipped
+			_move_reward_pointer(ui.boon_card_rects[index].get_center())
+			_check(ui.boon_hovered_index == index, "Native mouse targets card %d of %d" % [index + 1, count])
+			_move_reward_pointer(ui.build_button.get_global_rect().get_center())
+			_check(ui.boon_hovered_index == -1, "Moving to the footer clears the reward click target")
+			await _click_reward_pointer(ui.build_button.get_global_rect().get_center())
+			_check(build.is_open() and build._candidate_details.get_parsed_text().begins_with("Selected offer: " + String(choices[index].name)), "Mouse Your Build retains the previously pointed card %d of %d" % [index + 1, count])
+			_check(selected.is_empty() and skipped == skips_before, "Clicking Your Build neither selects nor skips the remembered offer")
+			_check(ui.boon_choices == choices and rng.state == rng_before and ui._reward_rerolls_remaining == rerolls_before and offered == offered_before, "Mouse inspection preserves offers, RNG, rerolls and presentation events")
+			await _click_reward_pointer(build._close_button.get_global_rect().get_center())
+			_check(not build.is_open() and ui.is_active() and ui.boon_choices == choices and selected.is_empty(), "Native Return click restores the unchanged offer without confirming it")
+			ui.close_selection()
+			_check(ui._inspection_candidate_index == -1, "Closing the offer clears its remembered comparison")
+	# Keyboard focus is remembered too when the pointer subsequently moves to
+	# the footer; it does not replace that footer's own button behavior.
+	ui.initialize(3, 0.0)
+	_move_reward_pointer(Vector2(12, 12))
+	_open()
+	await process_frame
+	await process_frame
+	ui.boon_card_panels[2].grab_focus()
+	var focused_name := String(ui.boon_choices[2].name)
+	await _click_reward_pointer(ui.build_button.get_global_rect().get_center())
+	_check(build.is_open() and build._candidate_details.get_parsed_text().begins_with("Selected offer: " + focused_name), "Mouse inspection retains the last keyboard-focused card")
+	build.close()
+	await process_frame
+	ui.process_input(0.016)
+	_move_reward_pointer(ui.boon_card_rects[2].get_center())
+	await _click_reward_pointer(ui.reroll_button.get_global_rect().get_center())
+	_check(ui.is_active() and ui._reward_rerolls_remaining == 0 and ui._inspection_candidate_index == -1 and selected.is_empty(), "Native Reroll resets comparison without selecting the old card")
+	ui.boon_confirm_lock_time = 0.0
+	ui.process_input(0.016)
+	var rerolled_first := String(ui.boon_choices[0].name)
+	await _click_reward_pointer(ui.build_button.get_global_rect().get_center())
+	_check(build.is_open() and build._candidate_details.get_parsed_text().begins_with("Selected offer: " + rerolled_first), "A rerolled offer uses its first card until another is pointed or focused")
+	build.close()
+	await process_frame
+	ui.process_input(0.016)
+	_move_reward_pointer(ui.boon_card_rects[1].get_center())
+	var skips_before := skipped
+	await _click_reward_pointer(ui.skip_button.get_global_rect().get_center())
+	_check(skipped == skips_before + 1 and selected.is_empty() and not ui.is_active(), "Native Skip retains its action rather than selecting the remembered card")
+	_check(ui._inspection_candidate_index == -1, "The normal close fade clears the comparison")
+	ui.close_selection()
+	_move_reward_pointer(Vector2(12, 12))
+	_open()
+	await process_frame
+	await process_frame
+	_move_reward_pointer(ui.boon_card_rects[2].get_center())
+	_move_reward_pointer(Vector2(12, 12))
+	_check(ui._inspection_candidate_index == 2, "Leaving a card retains only its comparison target")
+	_open()
+	_check(ui._inspection_candidate_index == -1, "Replacing an open offer resets its comparison without requiring a close")
+	await _click_reward_pointer(ui.build_button.get_global_rect().get_center())
+	_check(build.is_open() and build._candidate_details.get_parsed_text().begins_with("Selected offer: " + String(ui.boon_choices[0].name)), "A new offer cannot inherit the old offer's card index")
+	build.close()
+	ui.close_selection()
+	ui.initialize(4, 0.0)
