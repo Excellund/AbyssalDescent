@@ -4,7 +4,7 @@ The shared catalogue has 12 Boons, 21 Arcana, nine boss rewards and six fixed Mi
 
 ## Character passives: starting build rules
 
-Passives retain their four character assignments and saved IDs. Character selection, build inspection and the glossary use `scripts/shared/character_passive_catalogue.gd`; its properties also participate in build comparisons. Passive damage can feed damage receivers, but does not perform another Attack or supply a new attack hit.
+Five characters have distinct starting passives; existing saved IDs are unchanged. Character selection, build inspection and the glossary use `scripts/shared/character_passive_catalogue.gd`; its properties also participate in build comparisons. Passive damage can feed damage receivers, but does not perform another Attack or supply a new attack hit.
 
 | Character / passive | Trigger and result / key condition |
 |---|---|
@@ -12,8 +12,11 @@ Passives retain their four character assignments and saved IDs. Character select
 | Hexweaver / Sigil Burst | Normal Dash arms one Burst; next accepted melee, Razor Wind or charged Blast contact releases it for 70% of the triggering attack's damage basis. Once per original Attack; repeated Dashes do not bank extra Bursts. Detonates nearby owned Sigil Chain sigils at three times their tick damage: active Fields are consumed, dormant sigils persist until the chain resets. |
 | Veilstrider / Veilstep Rhythm | One shard per normal Dash touching foes. Two shards refresh Dash and open a 4s window; the next Dash has no cooldown and ends in a 160%-Damage Burst. The Burst or an unused window's expiry clears shards. Recoil/Orbit do not grant shards. |
 | Riftlancer / Farline Focus | Melee/charged Blast damage ×1.70 inside both the outer 98/132–100% range band and Attack aim arc; ×0.70 otherwise. Band scales with Attack range; each target's body overlaps the band and its center lies in the aim arc. Razor Wind and automatic descendants do not make a new check; descendants retain copied source scaling. |
+| Threadbinder / Cross Stitch | First accepted melee, Razor Wind or charged Blast contact per original Attack applies 12% Mark for 4s and threads that foe for 4s. Switch foes on another Attack within that window for a radius-48 Burst at the previous living foe within 240 range of the player. Burst carries 60% of the new contact's unconditioned basis and Damage coefficient. Same-target Attacks refresh without bursting; misses/rejections/automatic damage do not move the thread. A lethal switch may burst the prior foe but leaves no new thread. Each player owns one thread; Mark benefits the party. |
 
 Retort and Sigil descendants carry the unconditioned source basis and scaled Damage coefficient, resolving conditions against each actual victim. Retort, Sigil and Veilstep are Bursts, without Electric, Field or Push properties. Rejected damage does not itself spend Brace or an armed Sigil Burst; subsequent Recoil still breaks Brace. Farline compatibility includes charged Blast but excludes Razor Wind.
+
+Cross Stitch follows the same accepted-damage boundary and original-action ledger. Its Burst is neither Electric nor a new Attack, does not apply Mark, and may feed damage receivers under their existing limits. Thread state clears on room exit, death, character changes and snapshot restoration; live co-op state sends only the remaining window and enemy network ID. `cross_stitch` is appended to the shared Mark source list so old packed source indices stay stable. Threadbinder unlocks after a normal Riftlancer clear and uses the ordinary shared reward pools and per-character Bearing progression.
 
 ## Boons: permanent generic increases
 

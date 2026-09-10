@@ -15,7 +15,8 @@ const CHARACTER_UNLOCK_CHAIN := [
 	"bastion",
 	"hexweaver",
 	"veilstrider",
-	"riftlancer"
+	"riftlancer",
+	"threadbinder"
 ]
 
 ## Endgame chase state (v3): see /memories/session/plan.md

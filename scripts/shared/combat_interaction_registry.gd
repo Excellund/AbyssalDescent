@@ -19,7 +19,8 @@ const EFFECT_FORMS := {
 	"fracture_fault_line": ["Burst"], "farline_volley_burst": ["Burst"],
 	"apex_predator_burst": ["Burst"], "apex_momentum_wave": ["Burst"],
 	"ruinous_impact": ["Burst"], "sigil_burst": ["Burst"], "sigil_chain_detonate": ["Burst"],
-	"iron_retort_shockwave": ["Burst"], "veilstep_rhythm_wave": ["Burst"]
+	"iron_retort_shockwave": ["Burst"], "veilstep_rhythm_wave": ["Burst"],
+	"cross_stitch_burst": ["Burst"]
 }
 
 static func is_attack_hit(source: String) -> bool:
@@ -36,7 +37,7 @@ const EFFECT_TRAITS := {
 	"rupture_wave": HIT, "wraithstep_chain": HIT, "wraithstep_splash": HIT,
 	"phantom_step": HIT | DASH, "static_wake": HIT | DASH | ELECTRIC,
 	"storm_crown": HIT | ELECTRIC, "veilstep_rhythm_wave": HIT | DASH,
-	"iron_retort_shockwave": HIT,
+	"iron_retort_shockwave": HIT, "cross_stitch_burst": HIT,
 	"voidfire_detonate": HIT, "sigil_chain_zone": HIT, "apex_predator_burst": HIT,
 	"apex_momentum_wave": HIT, "void_echo_zone": HIT,
 	"convergence_window": HIT, "null_corridor_deflect": HIT | DASH,

@@ -529,6 +529,15 @@ var passive_iron_retort: bool = false
 var passive_sigil_burst: bool = false
 var passive_veilstep_rhythm: bool = false
 var passive_farline_focus: bool = false
+var passive_cross_stitch: bool = false
+# Only the host keeps an enemy reference; clients receive its network ID for drawing.
+var cross_stitch_target: WeakRef
+var cross_stitch_target_network_id: int = 0
+var cross_stitch_window_left: float = 0.0
+const CROSS_STITCH_DURATION := 4.0
+const CROSS_STITCH_REACH := 240.0
+const CROSS_STITCH_RADIUS := 48.0
+const CROSS_STITCH_DAMAGE_RATIO := 0.6
 var active_character_id: String = ""
 var iron_retort_brace_build_left: float = 0.0
 var iron_retort_brace_build_time: float = 0.42
@@ -630,6 +639,7 @@ func _physics_process(delta: float) -> void:
 	_update_iron_retort(delta)
 	_update_veilstep_rhythm(delta)
 	_update_farline_focus_state(delta)
+	_update_cross_stitch(delta)
 	_update_riftpunch_window(delta)
 	_update_sigil_chain_state(delta)
 	if _farline_volley_proc_flash_left > 0.0:
@@ -716,6 +726,7 @@ func _prepare_shared_attack_damage(target: Node2D, descriptor: Dictionary, actio
 
 func _on_shared_attack_hit(event: Dictionary) -> void:
 	_ensure_shared_build_runtime()
+	_accept_cross_stitch(event)
 	# Delayed hits retain the spending decision of their originating Attack,
 	# even after a later Attack has changed the player's current swing state.
 	var previous_spent := _indomitable_oath_spent_this_attack
@@ -1554,6 +1565,7 @@ func set_health(value: float) -> void:
 func set_alive(is_alive: bool) -> void:
 	_is_alive_state = is_alive
 	if not is_alive:
+		_clear_cross_stitch()
 		DAMAGEABLE.cancel_owner(player_id if player_id > 0 else DAMAGEABLE._resolve_local_peer_id())
 		discard_pending_combat_input()
 		if shared_build_runtime != null:
@@ -1574,6 +1586,7 @@ func set_combat_removed(removed: bool) -> void:
 	set_process(not removed)
 	set_physics_process(not removed)
 	if removed:
+		_clear_cross_stitch()
 		DAMAGEABLE.cancel_owner(player_id if player_id > 0 else DAMAGEABLE._resolve_local_peer_id())
 		discard_pending_combat_input()
 		if shared_build_runtime != null:
@@ -1644,6 +1657,8 @@ func apply_character_package(data: Dictionary) -> void:
 	passive_sigil_burst = passive_id == "sigil_burst"
 	passive_veilstep_rhythm = passive_id == "veilstep_rhythm"
 	passive_farline_focus = passive_id == "farline_focus"
+	passive_cross_stitch = passive_id == "cross_stitch"
+	_clear_cross_stitch()
 	iron_retort_brace_build_left = 0.0
 	iron_retort_brace_ready = false
 	iron_retort_brace_window_left = 0.0
@@ -1718,6 +1733,7 @@ func apply_run_snapshot(snapshot: Dictionary, clear_target_status: bool = true) 
 		return
 	if clear_target_status:
 		DAMAGEABLE.cancel_owner(player_id if player_id > 0 else DAMAGEABLE._resolve_local_peer_id())
+		_clear_cross_stitch()
 	_cancel_interactions()
 	if returning_crescent != null:
 		returning_crescent.cancel()
@@ -1849,6 +1865,9 @@ func apply_network_cue_event(event_name: String, payload: Dictionary) -> void:
 	if player_feedback == null or event_name.is_empty() or payload.is_empty():
 		return
 	match event_name:
+		"cross_stitch_burst":
+			if MultiplayerSessionManager.is_remote_replica():
+				_on_cue_world_ring(payload)
 		"warden_verdict":
 			player_feedback.play_warden_verdict_cue(payload)
 		"returning_crescent_state":
@@ -1911,6 +1930,9 @@ func apply_owner_cue_event(event_name: String, payload: Dictionary) -> void:
 	if player_feedback == null or event_name.is_empty() or payload.is_empty():
 		return
 	match event_name:
+		"cross_stitch_burst":
+			if MultiplayerSessionManager.is_remote_replica():
+				_on_cue_world_ring(payload)
 		"warden_verdict":
 			player_feedback.play_warden_verdict_cue(payload)
 		"shared_build_state":
@@ -2804,6 +2826,7 @@ func _get_first_strike_bonus_damage(enemy_node: Object) -> int:
 	return 0
 
 func clear_lingering_combat_effects() -> void:
+	_clear_cross_stitch()
 	if player_feedback != null:
 		player_feedback.clear_warden_verdict()
 	DAMAGEABLE.cancel_owner(player_id if player_id > 0 else DAMAGEABLE._resolve_local_peer_id())
@@ -3566,7 +3589,87 @@ func _draw_character_identity(body_radius: float, facing: Vector2, side: Vector2
 	if passive_veilstep_rhythm:
 		PLAYER_IDENTITY_SILHOUETTE.draw_veilstrider(self, body_radius, facing, side, speed_t, attack_phase, dash_amount, dash_direction)
 		return
+	if passive_cross_stitch:
+		PLAYER_IDENTITY_SILHOUETTE.draw_threadbinder(self, body_radius, facing, side, speed_t, attack_phase, dash_amount, dash_direction)
+		return
 	PLAYER_IDENTITY_SILHOUETTE.draw_default(self, body_radius, facing, side)
+
+func _clear_cross_stitch() -> void:
+	cross_stitch_target = null
+	cross_stitch_target_network_id = 0
+	cross_stitch_window_left = 0.0
+	queue_redraw()
+
+func _update_cross_stitch(delta: float) -> void:
+	if not passive_cross_stitch or not _is_alive_state or not combat_damage_enabled:
+		if cross_stitch_window_left > 0.0:
+			_clear_cross_stitch()
+		return
+	if encounter_input_frozen or get_tree().paused or cross_stitch_window_left <= 0.0:
+		return
+	cross_stitch_window_left = maxf(0.0, cross_stitch_window_left - delta)
+	var target := cross_stitch_target.get_ref() as Node2D if cross_stitch_target != null else null
+	if cross_stitch_window_left <= 0.0 or (not MultiplayerSessionManager.is_remote_replica() and (not is_instance_valid(target) or DAMAGEABLE._read_target_health(target) <= 0)):
+		_clear_cross_stitch()
+	queue_redraw()
+
+func _accept_cross_stitch(event: Dictionary) -> void:
+	if not passive_cross_stitch or MultiplayerSessionManager.is_remote_replica() or not bool(event.get("first_attack_hit", false)):
+		return
+	var action: Dictionary = event.get("interaction", {})
+	if not combat_interactions.claim_reaction(action, "cross_stitch"):
+		return
+	var previous := cross_stitch_target.get_ref() as Node2D if cross_stitch_target != null else null
+	var burst_position := Vector2.INF
+	if cross_stitch_window_left > 0.0 and is_instance_valid(previous) and not previous.is_queued_for_deletion() and DAMAGEABLE._read_target_health(previous) > 0 and previous.get_instance_id() != int(event.get("target_id", 0)) and global_position.distance_to(previous.global_position) <= CROSS_STITCH_REACH:
+		burst_position = previous.global_position
+	# Store the new endpoint before dispatching descendants. A lethal connection
+	# may release the previous endpoint, but cannot leave a thread on a dead foe.
+	_clear_cross_stitch()
+	var target_ref: Variant = event.get("target")
+	var target := target_ref.get_ref() as Node2D if target_ref is WeakRef else null
+	if is_instance_valid(target) and not target.is_queued_for_deletion() and DAMAGEABLE._read_target_health(target) > 0:
+		cross_stitch_target = weakref(target)
+		cross_stitch_target_network_id = int(target.get_meta("network_enemy_id", 0))
+		cross_stitch_window_left = CROSS_STITCH_DURATION
+		DAMAGEABLE.apply_mark(target, "cross_stitch", 0.12, CROSS_STITCH_DURATION, player_id, action)
+	if burst_position.is_finite():
+		_apply_cross_stitch_burst(burst_position, float(event.get("raw_amount", 0.0)), float(event.get("damage_coefficient", 0.0)), action)
+	queue_redraw()
+
+func _apply_cross_stitch_burst(epicenter: Vector2, raw: float, coefficient: float, action: Dictionary) -> void:
+	var burst_raw := raw * CROSS_STITCH_DAMAGE_RATIO
+	var context := INTERACTION_REGISTRY.damage_context(action, "cross_stitch_burst", {
+		"raw_amount": burst_raw, "damage_coefficient": coefficient * CROSS_STITCH_DAMAGE_RATIO,
+		"is_ground_attack": true, "attack_origin": epicenter
+	})
+	for node in get_tree().get_nodes_in_group("enemies"):
+		if node is Node2D and DAMAGEABLE.can_take_damage(node) and node.global_position.distance_to(epicenter) <= CROSS_STITCH_RADIUS:
+			DAMAGEABLE.apply_damage(node, int(round(burst_raw)), context, player_id)
+	var color := Color(1.0, 0.74, 0.65, 0.85)
+	if player_feedback != null:
+		player_feedback.play_world_ring(epicenter, CROSS_STITCH_RADIUS, color, 0.24)
+	# This reaction is host-owned even when the initiating player is a joiner.
+	if MultiplayerSessionManager.should_broadcast():
+		PlayerReplicationService.broadcast_cue_event(player_id, "cross_stitch_burst", {"position": epicenter, "radius": CROSS_STITCH_RADIUS, "color": color, "duration": 0.24}, true)
+
+func _draw_cross_stitch(body_radius: float) -> void:
+	if not passive_cross_stitch or cross_stitch_window_left <= 0.0:
+		return
+	var target := cross_stitch_target.get_ref() as Node2D if cross_stitch_target != null else null
+	if target == null and cross_stitch_target_network_id > 0:
+		target = EnemyReplicationService.enemy_nodes_by_id.get(cross_stitch_target_network_id) as Node2D
+	if not is_instance_valid(target) or DAMAGEABLE._read_target_health(target) <= 0:
+		return
+	var endpoint := to_local(target.global_position)
+	var in_reach := global_position.distance_to(target.global_position) <= CROSS_STITCH_REACH
+	var thread_color := Color(1.0, 0.82, 0.73, 0.45 if in_reach else 0.12)
+	# A fine tether identifies the previous foe without covering enemy warnings.
+	draw_line(endpoint.normalized() * (body_radius + 5.0), endpoint, thread_color, 1.1, true)
+	var half := 5.0
+	var knot := PackedVector2Array([endpoint + Vector2(0, -half), endpoint + Vector2(half, 0), endpoint + Vector2(0, half), endpoint + Vector2(-half, 0), endpoint + Vector2(0, -half)])
+	draw_polyline(knot, thread_color, 1.4, true)
+	draw_arc(Vector2.ZERO, body_radius + 7.0, -PI * 0.5, -PI * 0.5 + TAU * cross_stitch_window_left / CROSS_STITCH_DURATION, 36, thread_color, 1.5, true)
 
 func _update_farline_focus_state(delta: float) -> void:
 	if not passive_farline_focus:
@@ -4778,6 +4881,7 @@ func _flash_sigil_chain_nodes_in_burst(epicenter: Vector2, burst_radius: float) 
 			player_feedback.flash_sigil_chain_burst_react(fx_node)
 
 func _draw_passive_state(body_radius: float) -> void:
+	_draw_cross_stitch(body_radius)
 	if passive_iron_retort:
 		var brace_t := clampf(iron_retort_brace_build_left / maxf(0.01, iron_retort_brace_build_time), 0.0, 1.0)
 		draw_arc(Vector2.ZERO, body_radius + 14.0, -PI * 0.5, -PI * 0.5 + TAU * brace_t, 48, Color(0.96, 0.76, 0.42, 0.58), 2.2)
