@@ -177,14 +177,17 @@ func release_blast(strength: float) -> void:
 		return
 	strength = clampf(strength, 0.0, 1.0)
 	var direction: Vector2 = player._get_mouse_attack_direction()
+	var generation := _cancel_generation
 	_finish_motion(true)
+	# The previous movement's completion wave may itself open rewards.
+	if generation != _cancel_generation or not _allowed() or motion != Motion.NONE:
+		return
 	_clear_orbit_request()
 	blast_charges -= 1
 	if recharge_left <= 0.0:
 		recharge_left = BLAST_RECHARGE
 	motion_origin = player.global_position
 	last_contact_position = Vector2.INF
-	var generation := _cancel_generation
 	_recoil_interaction = player._capture_combat_action("blast_drive")
 	var previous := DAMAGEABLE.begin_interaction_scope(_recoil_interaction)
 	player.perform_motion_blast(direction, strength)
@@ -260,10 +263,13 @@ func _anchor_radius(candidate: Node2D) -> float:
 	return float(player._get_body_radius_for(candidate, 13.0))
 
 func start_orbit(candidate: Node2D) -> void:
-	if not is_instance_valid(candidate):
+	if not _allowed() or not is_instance_valid(candidate):
 		return
 	_clear_orbit_request()
+	var generation := _cancel_generation
 	_finish_motion(true)
+	if generation != _cancel_generation or not _allowed() or motion != Motion.NONE or not _valid_orbit_anchor(candidate):
+		return
 	anchor = candidate
 	_orbit_interaction = player._dash_interaction.duplicate(true) if not player._dash_interaction.is_empty() else player._capture_combat_action("razor_orbit")
 	motion = Motion.ORBIT
@@ -392,7 +398,10 @@ func detach(carry: bool) -> void:
 	var show_departure := carry and motion == Motion.ORBIT and _allowed()
 	var departure := player.global_position
 	var direction := tangent.normalized()
+	var generation := _cancel_generation
 	_finish_motion(true)
+	if generation != _cancel_generation or not _allowed() or motion != Motion.NONE:
+		return
 	dash_hold = -1.0
 	if carry:
 		motion = Motion.CARRY
@@ -404,14 +413,21 @@ func detach(carry: bool) -> void:
 	_publish_state()
 
 func _finish_motion(completed: bool) -> void:
-	if completed and (motion == Motion.ORBIT or motion == Motion.RECOIL):
+	if completed and _allowed() and (motion == Motion.ORBIT or motion == Motion.RECOIL):
 		# Completion belongs to the same movement that produced its damage.
 		# It cannot create fresh Crown allowances for a deferred Tempo Burst.
+		var completing_motion := motion
+		var kind := "orbit" if completing_motion == Motion.ORBIT else "recoil"
+		var generation := _cancel_generation
 		var action := _orbit_interaction if motion == Motion.ORBIT else _recoil_interaction
 		var previous := DAMAGEABLE.begin_interaction_scope(action)
 		player.on_arcana_motion_completed(motion_origin, last_contact_position)
-		player._complete_shared_movement("orbit" if motion == Motion.ORBIT else "recoil", player.global_position)
+		if generation == _cancel_generation and _allowed() and motion == completing_motion:
+			player._complete_shared_movement(kind, player.global_position)
 		DAMAGEABLE.end_interaction_scope(previous)
+		# A callback can cancel or replace this movement. Its state wins.
+		if generation != _cancel_generation or motion != completing_motion:
+			return
 	motion = Motion.NONE
 	_orbit_interaction.clear()
 	_recoil_interaction.clear()

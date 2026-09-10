@@ -9,7 +9,13 @@ permissions:
   contents: write
 
 jobs:
+  validate-gameplay:
+    uses: ./.github/workflows/gameplay-regressions.yml
+    permissions:
+      contents: read
+
   build-windows:
+    needs: validate-gameplay
     runs-on: ubuntu-latest
     env:
       GODOT_VERSION: 4.6.2-stable

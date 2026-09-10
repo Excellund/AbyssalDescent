@@ -8,13 +8,14 @@ on:
       - main
       - "codex/**"
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
 
-# Keep PR merge checks independent of branch-push checks.
+# Keep callers, PR merge checks and branch-push checks independent.
 concurrency:
-  group: gameplay-regressions-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  group: gameplay-regressions-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -73,6 +74,7 @@ jobs:
           $env:TMP = $validationTemp
           Start-Transcript -Path (Join-Path $validationTemp 'workflow-console.log') | Out-Null
           try {
+            & ./.github/scripts/test_validation_process.ps1
             & ./.github/scripts/run_gameplay_regressions.ps1 -GodotPath $env:GODOT_EXE
           } finally {
             Stop-Transcript | Out-Null
@@ -87,6 +89,8 @@ jobs:
           path: |
             ${{ runner.temp }}/abyssal-ci/workflow-console.log
             ${{ runner.temp }}/abyssal-ci/abyssal-validation-*/*.log
+            ${{ runner.temp }}/abyssal-ci/abyssal-process-tests-*/*.log
+            ${{ runner.temp }}/abyssal-ci/abyssal-process-tests-*/isolated-runs/abyssal-validation-*/*.log
           if-no-files-found: warn
           retention-days: 7
           include-hidden-files: false

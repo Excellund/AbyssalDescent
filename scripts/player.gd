@@ -590,6 +590,8 @@ func _ready() -> void:
 	queue_redraw()
 
 func _physics_process(delta: float) -> void:
+	var frame_combat_enabled := combat_damage_enabled
+	var frame_input_frozen := encounter_input_frozen
 	if shared_build_runtime != null and not MultiplayerSessionManager.is_remote_replica() and _is_alive_state and combat_damage_enabled and not encounter_input_frozen:
 		shared_build_runtime.fields.advance(delta)
 	_refresh_combat_input_release()
@@ -643,13 +645,27 @@ func _physics_process(delta: float) -> void:
 	_sync_voidfire_ui()
 	_sync_oath_ui()
 	_update_eclipse_marks()
+	# A damage/completion callback can open rewards inside this frame. Stop
+	# before further input or movement, while retaining ordinary noncombat movement.
+	if not _is_alive_state or (frame_combat_enabled and not combat_damage_enabled) or (not frame_input_frozen and encounter_input_frozen):
+		velocity = Vector2.ZERO
+		return
 	_try_start_dash(direction)
+	if not _is_alive_state or (frame_combat_enabled and not combat_damage_enabled) or (not frame_input_frozen and encounter_input_frozen):
+		velocity = Vector2.ZERO
+		return
 	_try_attack_input()
 	if arcana_motion != null and _is_local_control_owner():
 		arcana_motion.tick(delta)
+	if not _is_alive_state or (frame_combat_enabled and not combat_damage_enabled) or (not frame_input_frozen and encounter_input_frozen):
+		velocity = Vector2.ZERO
+		return
 	# Orbit/recoil own movement, but must not starve an attack buffered by dash.
 	# Consume after the motion tick so an immediately acquired Orbit stays mobile.
 	_try_consume_queued_attack()
+	if not _is_alive_state or (frame_combat_enabled and not combat_damage_enabled) or (not frame_input_frozen and encounter_input_frozen):
+		velocity = Vector2.ZERO
+		return
 	if arcana_motion != null and _is_local_control_owner():
 		if arcana_motion.process_movement(delta, direction):
 			return
@@ -2146,16 +2162,13 @@ func apply_objective_mutator(mutator_data: Dictionary) -> void:
 			active_objective_mutators[matching_indices[0]] = applied_mutator
 		else:
 			active_objective_mutators.append(applied_mutator)
-	if policy == "replace" and matching_indices.size() > 1:
+	# Refresh and replace retain the first matching slot updated above. Remove
+	# only its other matches; that slot need not be the newest active bonus.
+	if policy != "stack" and matching_indices.size() > 1:
 		for i in range(matching_indices.size() - 1, 0, -1):
 			active_objective_mutators.remove_at(matching_indices[i])
 	if active_objective_mutators.size() > 8:
 		active_objective_mutators = active_objective_mutators.slice(active_objective_mutators.size() - 8, active_objective_mutators.size())
-	if policy == "refresh" and active_objective_mutators.size() > 1 and not applied_id.is_empty():
-		for i in range(active_objective_mutators.size() - 2, -1, -1):
-			var existing := active_objective_mutators[i] as Dictionary
-			if ENCOUNTER_CONTRACTS.mutator_id(existing) == applied_id:
-				active_objective_mutators.remove_at(i)
 	if active_objective_mutators.is_empty():
 		active_objective_mutators.append(applied_mutator)
 	_recalculate_objective_mutator_totals()

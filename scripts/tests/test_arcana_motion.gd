@@ -4,6 +4,11 @@ const PLAYER := preload("res://scripts/player.gd")
 const MOTION := preload("res://scripts/arcana_motion_controller.gd")
 const CHARACTER := preload("res://scripts/character_registry.gd")
 const MAPPER := preload("res://scripts/power_parameter_mapper.gd")
+const MAIN := preload("res://scenes/Main.tscn")
+const WORLD := preload("res://scripts/world_generator.gd")
+const ENUMS := preload("res://scripts/shared/enums.gd")
+const PROFILE := preload("res://scripts/core/profile_persistence_store.gd")
+const AUDIO_RETIREMENT := preload("res://scripts/tests/fixture_audio_retirement.gd")
 
 class MotionPlayer extends "res://scripts/player.gd":
 	var blast_releases: int = 0
@@ -11,6 +16,9 @@ class MotionPlayer extends "res://scripts/player.gd":
 	var local_owner: bool = true
 	var aim: Vector2 = Vector2.RIGHT
 	var motion_blast_cues: int = 0
+	var completion_hook: Callable
+	var shared_completion_hook: Callable
+	var completed_movement_kinds: Array[String] = []
 
 	func _ready() -> void:
 		super._ready()
@@ -21,6 +29,17 @@ class MotionPlayer extends "res://scripts/player.gd":
 
 	func _get_mouse_attack_direction() -> Vector2:
 		return aim
+
+	func on_arcana_motion_completed(origin: Vector2, last_contact: Vector2) -> void:
+		super.on_arcana_motion_completed(origin, last_contact)
+		if completion_hook.is_valid():
+			completion_hook.call()
+
+	func _complete_shared_movement(kind: String, position: Vector2) -> void:
+		completed_movement_kinds.append(kind)
+		super._complete_shared_movement(kind, position)
+		if shared_completion_hook.is_valid():
+			shared_completion_hook.call()
 
 	func perform_motion_blast(direction: Vector2, strength: float) -> void:
 		blast_releases += 1
@@ -178,14 +197,21 @@ func _start_dash() -> void:
 	player._try_start_dash(Vector2.RIGHT)
 
 func _run() -> void:
+	if not OS.get_user_data_dir().begins_with(ProjectSettings.globalize_path("res://")):
+		push_error("Arcana motion regressions require disposable user data")
+		quit(1)
+		return
 	await _test_attack_gestures()
 	await _test_cancellation()
+	await _test_completion_cancellation()
+	await _test_completion_anchor_invalidation()
 	await _test_dash_gestures()
 	await _test_real_anchor_geometry()
 	await _test_live_camera_aim_capture()
 	await _test_captured_anchor_gates()
 	await _test_collision_and_immunity()
 	await _test_carry_hitch_bound()
+	await _test_noncombat_movement_frame()
 	await _test_orbit_attack_and_blast_detach()
 	await _test_upgrade_and_snapshot_parity()
 	await _test_contact_cadence_and_transfer()
@@ -194,6 +220,7 @@ func _run() -> void:
 	await _test_orbit_release_feedback()
 	await _test_transfer_release_feedback()
 	await _release_actions()
+	await _test_objective_completion_transition()
 	for audio_node in root.find_children("*", "AudioStreamPlayer", true, false):
 		(audio_node as AudioStreamPlayer).stop()
 	for audio_node in root.find_children("*", "AudioStreamPlayer2D", true, false):
@@ -304,6 +331,162 @@ func _test_cancellation() -> void:
 	_check(player.motion_blast_cues == 1, "An already discharged Blast publishes its cue before a killing hit opens rewards")
 	await _release_actions()
 	_free_world()
+
+func _test_completion_cancellation() -> void:
+	for callback in ["arcana", "shared"]:
+		for transition in ["detach", "blast", "orbit"]:
+			_make_world()
+			player.apply_trial_power("razor_orbit")
+			player.apply_trial_power("blast_drive")
+			var target := _enemy(Vector2(80, 0))
+			await _release_actions()
+			var motion := player.arcana_motion
+			motion._refresh_capacity()
+			motion.start_orbit(target)
+			var charges_before := motion.blast_charges
+			# Focus loss can cancel without making the player ineligible. The
+			# generation must be checked independently of the modal/health gate.
+			var cancel_completion := func(): player.discard_pending_combat_input()
+			if callback == "arcana":
+				player.completion_hook = cancel_completion
+			else:
+				player.shared_completion_hook = cancel_completion
+			match transition:
+				"detach": motion.detach(true)
+				"blast": motion.release_blast(1.0)
+				"orbit": motion.start_orbit(target)
+			_check(motion._allowed() and not motion.owns_movement(), "%s cancellation during %s completion cannot restart movement" % [transition, callback])
+			_check(motion.blast_charges == charges_before and player.blast_releases == 0, "%s cancellation during %s completion cannot spend or fire Blast" % [transition, callback])
+			_check(motion._orbit_hint_left == 0.0 and motion.anchor == null, "%s cancellation during %s completion cannot restore a tether or departure cue" % [transition, callback])
+			var expected: Array = [] if callback == "arcana" else ["orbit"]
+			_check(player.completed_movement_kinds == expected, "Only uncancelled completion reaches the shared callback with its captured Orbit kind")
+			await _release_actions()
+			_free_world()
+	_make_world()
+	player.apply_trial_power("razor_orbit")
+	var target := _enemy(Vector2(80, 0))
+	await _release_actions()
+	player.arcana_motion.start_orbit(target)
+	player.completion_hook = func():
+		player.arcana_motion.motion = MOTION.Motion.RECOIL
+		player.arcana_motion.recoil_left = 45.0
+	player.arcana_motion.detach(true)
+	_check(player.completed_movement_kinds.is_empty(), "A callback replacing Orbit cannot complete the new Recoil under the old action")
+	_check(player.arcana_motion.motion == MOTION.Motion.RECOIL and player.arcana_motion.recoil_left == 45.0, "The old completion and detach preserve a callback's replacement movement")
+	await _release_actions()
+	_free_world()
+	_make_world()
+	player.apply_trial_power("razor_orbit")
+	player.apply_trial_power("blast_drive")
+	target = _enemy(Vector2(80, 0))
+	await _release_actions()
+	player.arcana_motion._refresh_capacity()
+	player.arcana_motion.start_orbit(target)
+	player.completion_hook = func(): player.encounter_input_frozen = true
+	player.arcana_motion.release_blast(1.0)
+	_check(player.completed_movement_kinds.is_empty() and not player.arcana_motion.owns_movement(), "Losing eligibility during completion stops both shared effects and new motion without requiring a cancellation signal")
+	_check(player.arcana_motion.blast_charges == 1 and player.blast_releases == 0, "Losing eligibility during completion preserves the unused Blast charge")
+	await _release_actions()
+	_free_world()
+
+func _test_completion_anchor_invalidation() -> void:
+	for invalidation in ["dead", "queued", "freed", "range"]:
+		_make_world()
+		player.apply_trial_power("razor_orbit")
+		var previous_target := _enemy(Vector2(80, 0))
+		var next_target := _enemy(Vector2(100, 50))
+		await _release_actions()
+		player.arcana_motion.start_orbit(previous_target)
+		player.completion_hook = func():
+			match invalidation:
+				"dead": next_target.health_state.set_health(0)
+				"queued": next_target.queue_free()
+				"freed": next_target.free()
+				"range": next_target.global_position = Vector2(900, 900)
+		player.arcana_motion.start_orbit(next_target)
+		_check(player.completed_movement_kinds == ["orbit"] and player.arcana_motion._allowed(), "Anchor invalidation completes the original movement without ending combat: " + invalidation)
+		_check(not player.arcana_motion.owns_movement() and player.arcana_motion.anchor == null, "Orbit rechecks a candidate invalidated by completion: " + invalidation)
+		await _release_actions()
+		_free_world()
+
+func _test_objective_completion_transition() -> void:
+	var audio_retirement := AUDIO_RETIREMENT.new()
+	node_added.connect(audio_retirement.observe_node)
+	ProjectSettings.set_setting("application/config/version", "dev-motion-objective-completion")
+	RunContext.telemetry_upload_enabled = false
+	RunContext.master_volume_db = -80.0
+	RunContext.music_volume_db = -80.0
+	RunContext.sfx_volume_db = -80.0
+	RunContext.multiplayer_session_id = ""
+	RunContext.active_ascension_loadout = []
+	RunContext.run_mode = ENUMS.RunMode.STANDARD
+	RunContext.selected_character_id = "bastion"
+	RunContext.current_difficulty_tier = 1
+	RunContext.clear_resume_saved_run_request()
+	MultiplayerSessionManager.session_connected = false
+	get_multiplayer().multiplayer_peer = OfflineMultiplayerPeer.new()
+	var persistence := PROFILE.new()
+	var profile := persistence.load_or_create_profile()
+	profile.first_descent_tutorial_completed = true
+	persistence.save_profile(profile)
+	for transition in ["detach", "blast"]:
+		RunContext.clear_active_run()
+		var scene_world := MAIN.instantiate() as WORLD
+		scene_world.get_node("DebugSettings").enabled = false
+		root.add_child(scene_world)
+		current_scene = scene_world
+		scene_world.set_process(false)
+		scene_world.set_physics_process(false)
+		scene_world.reward_selection_ui.close_selection()
+		scene_world.reward_selection_ui.reward_skipped.emit(ENUMS.RewardMode.ARCANA, true)
+		scene_world._clear_all_enemies()
+		var objective: Dictionary = scene_world.encounter_profile_builder.build_objective_profile(5, "cut_the_signal")
+		scene_world.pending_room_reward = ENUMS.RewardMode.MISSION
+		scene_world._begin_room(objective)
+		scene_world._exit_encounter_intro_grace()
+		scene_world.enemy_spawner.set_process(false)
+		for enemy in get_nodes_in_group("enemies"):
+			enemy.set_physics_process(false)
+		var actor := scene_world.player
+		actor.set_physics_process(false)
+		var target: Node2D = scene_world.objective_manager.hunt_target_enemy
+		target.spawn_transport_time_left = 0.0
+		target.set_max_health_and_current(1, 1)
+		scene_world.objective_runtime.trigger_priority_target_exposure()
+		actor.global_position = target.global_position - Vector2(65, 0)
+		actor.apply_trial_power("razor_orbit")
+		actor.apply_trial_power("blast_drive")
+		_check(actor.upgrade_system.apply_upgrade("sovereign_tempo"), "Native objective fixture grants real Sovereign Tempo: " + transition)
+		actor._register_apex_momentum_hit()
+		var motion: MOTION = actor.arcana_motion
+		motion._refresh_capacity()
+		motion.start_orbit(target)
+		_check(motion.motion == MOTION.Motion.ORBIT and actor.apex_momentum_stacks > 0, "Native objective fixture begins an Orbit with a completion wave ready: " + transition)
+		var charges_before := motion.blast_charges
+		var attacks_before := actor.attack_combo_counter
+		var fired_during_reward := [false]
+		actor.primary_attack_fired.connect(func(): fired_during_reward[0] = scene_world.reward_selection_ui.is_active())
+		# Execute the full native frame with held movement. Disabling future
+		# physics callbacks when rewards open cannot stop the current callback.
+		Input.action_release("dash")
+		Input.action_release("attack")
+		if transition == "blast":
+			motion.charge_hold = MOTION.FULL_CHARGE_TIME
+		Input.action_press("move_right")
+		var stopped_position := actor.global_position
+		actor._physics_process(0.02)
+		Input.action_release("move_right")
+		_check(scene_world.reward_selection_ui.is_active() and not actor.combat_damage_enabled, "Real Tempo target kill synchronously opens mission rewards: " + transition)
+		_check(not motion.owns_movement() and motion.anchor == null and motion._orbit_hint_left == 0.0, "Objective completion leaves motion and release feedback cancelled: " + transition)
+		_check(motion.blast_charges == charges_before and actor.attack_combo_counter == attacks_before and not fired_during_reward[0], "Objective completion emits no later Attack and preserves the unused Blast charge: " + transition)
+		_check(actor.global_position == stopped_position and actor.velocity == Vector2.ZERO, "The complete killing physics frame cannot move the player through rewards: " + transition)
+		current_scene = null
+		scene_world.queue_free()
+		await process_frame
+		await process_frame
+	RunContext.clear_active_run()
+	_check(await audio_retirement.wait_until_retired(self), "Native motion objective scenes retire their audio")
+	node_added.disconnect(audio_retirement.observe_node)
 
 func _test_dash_gestures() -> void:
 	_make_world("bastion", true)
@@ -539,6 +722,23 @@ func _test_carry_hitch_bound() -> void:
 	_check(absf(player.global_position.x - carry_speed * 0.15) < 0.01 and motion.carry_left == 0.0, "A long frame moves only the remaining carry duration")
 	var end_position := player.global_position
 	_check(not motion.process_movement(0.05, Vector2.ZERO) and player.global_position == end_position, "Expired carry cannot move the player again")
+	await _release_actions()
+	_free_world()
+
+func _test_noncombat_movement_frame() -> void:
+	_make_world()
+	await _release_actions()
+	player.set_combat_damage_enabled(false)
+	Input.action_press("move_right")
+	var origin := player.global_position
+	player._physics_process(0.02)
+	_check(player.global_position.x > origin.x and player.velocity.x > 0.0, "A frame that begins outside combat retains ordinary movement")
+	player.encounter_input_frozen = true
+	player.velocity = Vector2.ZERO
+	origin = player.global_position
+	player._physics_process(0.02)
+	_check(player.global_position == origin and player.velocity == Vector2.ZERO, "An encounter survey still suppresses held movement through its existing input gate")
+	Input.action_release("move_right")
 	await _release_actions()
 	_free_world()
 

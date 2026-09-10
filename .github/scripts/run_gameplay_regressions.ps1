@@ -1,10 +1,13 @@
 param(
     [string]$GodotPath = "",
     [string[]]$TestScripts = @(),
-    [switch]$CompileOnly
+    [switch]$CompileOnly,
+    [ValidateRange(1, 3600)][int]$FixtureTimeoutSeconds = 180,
+    [ValidateRange(1, 3600)][int]$ImportTimeoutSeconds = 300
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot 'validation_process.ps1')
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "../..")).Path
 if ($CompileOnly -and $TestScripts.Count -gt 0) {
     throw 'Choose -CompileOnly or -TestScripts, not both.'
@@ -104,26 +107,11 @@ func _start_test() -> void:
 '@
 
 function Invoke-GodotCheck {
-    param([string]$Label, [string[]]$Arguments)
-    $consoleLog = Join-Path $validationRoot ($Label + "-console.log")
+    param([string]$Label, [string[]]$Arguments, [int]$TimeoutSeconds = $FixtureTimeoutSeconds)
     $engineLog = Join-Path $validationRoot ($Label + ".log")
-    # Windows PowerShell represents native stderr as error records. Read the
-    # complete log and exit code instead of stopping at the first stderr line.
-    $ErrorActionPreference = "Continue"
-    & $GodotPath --headless --path $validationRoot --log-file $engineLog @Arguments *> $consoleLog
-    $checkExitCode = $LASTEXITCODE
-    $ErrorActionPreference = "Stop"
-    $output = Get-Content -LiteralPath $consoleLog
-    $errors = $output | Where-Object {
-        $_ -match 'SCRIPT ERROR:|Parse Error:|Compile Error:|ERROR:' -and
-        $_ -notmatch 'ERROR: Failed to read the root certificate store\.'
-    }
-    if ($checkExitCode -ne 0 -or $errors) {
-        $output | Write-Output
-        throw "$Label failed (exit $checkExitCode). See $consoleLog"
-    }
+    $result = Invoke-ValidationProcess -Program $GodotPath -Arguments (@('--headless', '--path', $validationRoot, '--log-file', $engineLog) + $Arguments) -Label $Label -WorkingDirectory $validationRoot -LogDirectory $validationRoot -TimeoutSeconds $TimeoutSeconds
     Write-Host "[PASS] $Label"
-    $output | Where-Object { $_ -match '^\[OK\]|^Power reward regressions:|^Oath tracking regression tests passed' } | Write-Output
+    $result.Output | Where-Object { $_ -match '^\[OK\]|^Power reward regressions:|^Oath tracking regression tests passed' } | Write-Output
 }
 
 $environmentNames = @("APPDATA", "LOCALAPPDATA", "XDG_DATA_HOME", "XDG_CONFIG_HOME")
@@ -135,7 +123,7 @@ try {
         New-Item -ItemType Directory -Path $isolatedPath | Out-Null
         [Environment]::SetEnvironmentVariable($name, $isolatedPath, "Process")
     }
-    Invoke-GodotCheck -Label "import" -Arguments @("--editor", "--import")
+    Invoke-GodotCheck -Label "import" -Arguments @("--editor", "--import") -TimeoutSeconds $ImportTimeoutSeconds
     $checks = @(
         "res://.github/scripts/validate_gdscript_compile.gd",
         "res://.github/scripts/validate_world_property_access.gd",
@@ -177,6 +165,7 @@ try {
         "res://scripts/tests/test_returning_crescent.gd",
         "res://scripts/tests/test_power_descriptions.gd",
         "res://scripts/tests/test_power_snapshot.gd",
+        "res://scripts/tests/test_mission_bonus_refresh.gd",
         "res://scripts/tests/test_boss_telegraphs.gd",
         "res://scripts/tests/test_boss_charge.gd",
         "res://scripts/tests/test_lancer_hazards.gd",
@@ -230,7 +219,13 @@ try {
     }
 } finally {
     foreach ($name in $previousEnvironment.Keys) {
-        [Environment]::SetEnvironmentVariable($name, $previousEnvironment[$name], "Process")
+        if ($null -eq $previousEnvironment[$name]) {
+            # Newer PowerShell/.NET can preserve empty environment variables;
+            # a typed null restores absence instead of converting it to "".
+            [Environment]::SetEnvironmentVariable($name, [System.Management.Automation.Language.NullString]::Value, "Process")
+        } else {
+            [Environment]::SetEnvironmentVariable($name, $previousEnvironment[$name], "Process")
+        }
     }
     Write-Host "Validation logs: $validationRoot"
 }

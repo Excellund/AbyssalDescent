@@ -240,6 +240,8 @@ func _destroy_and_release_anchor() -> void:
 	check(await _until(func(): return world._arena_cover.contacts_left(2) == 1), "Second distinct Attack advances the shared crack state")
 	old_cover_state = world._cover_state_payload().duplicate(true)
 	if role == "host":
+		# Terrain anchors unlock at L2, just as they do through normal input.
+		world.player.apply_trial_power("razor_orbit")
 		world.player.apply_trial_power("razor_orbit")
 		world.player.position = cover_origin
 		world.player.arcana_motion.start_orbit(world._arena_cover_bodies[2])

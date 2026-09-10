@@ -239,8 +239,13 @@ func _test_orbit_release() -> void:
 	world.player.apply_trial_power("razor_orbit")
 	world.player.apply_trial_power("razor_orbit")
 	world.player.apply_trial_power("razor_orbit")
+	# The preceding state cases replace several rooms in one frame. Retire
+	# their queued bodies before testing the real grapple sight query.
+	await physics_frame
+	await process_frame
 	var body: StaticBody2D = world._arena_cover_bodies[2]
 	world.player.arcana_motion.start_orbit(body)
+	check(world.player.arcana_motion.anchor == body and world.player.arcana_motion.motion == world.player.ARCANA_MOTION_SCRIPT.Motion.ORBIT, "The current visible column is a live Orbit anchor before destruction")
 	world.player.arcana_motion.tangent = Vector2.DOWN
 	for _contact in range(3):
 		world.request_brittle_cover_attack(_action(), world.player.global_position, Vector2.RIGHT)
