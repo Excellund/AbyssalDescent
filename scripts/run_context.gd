@@ -12,9 +12,11 @@ const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
 const TELEMETRY_UPLOADER_SCRIPT := preload("res://scripts/telemetry_uploader.gd")
 const LEADERBOARD_UPLOADER_SCRIPT := preload("res://scripts/leaderboard_uploader.gd")
 const RUN_RESUME_REQUEST_STATE_SCRIPT := preload("res://scripts/core/run_resume_request_state.gd")
+const ACTIVE_RUN_CHECKPOINT_STORE := preload("res://scripts/core/active_run_checkpoint_store.gd")
 const ACTIVE_RUN_SAVE_PATH := "user://active_run.save"
 const ACTIVE_RUN_DEBUG_SAVE_PATH := "user://active_run_debug.save"
 const ACTIVE_RUN_VERSION := 1
+var active_run_checkpoint_store := ACTIVE_RUN_CHECKPOINT_STORE.new()
 const AUDIO_VOLUME_MIN_DB := -80.0
 const AUDIO_VOLUME_MAX_DB := 6.0
 const DISPLAY_MODE_WINDOWED := SETTINGS_STORE.DISPLAY_MODE_WINDOWED
@@ -298,44 +300,27 @@ func _active_run_save_path() -> String:
 	return ACTIVE_RUN_SAVE_PATH
 
 func has_saved_run() -> bool:
-	return FileAccess.file_exists(_active_run_save_path())
+	_configure_active_run_store()
+	return active_run_checkpoint_store.has_saved_run()
 
 func save_active_run(snapshot: Dictionary) -> bool:
-	if snapshot.is_empty():
-		return false
-	var file := FileAccess.open(_active_run_save_path(), FileAccess.WRITE)
-	if file == null:
-		return false
-	var payload := {
-		"version": ACTIVE_RUN_VERSION,
-		"saved_at_unix": int(Time.get_unix_time_from_system()),
-		"editor_session": _is_editor_session(),
-		"snapshot": snapshot.duplicate(true)
-	}
-	file.store_var(payload)
-	return true
+	_configure_active_run_store()
+	return active_run_checkpoint_store.save_snapshot(snapshot, _is_editor_session())
 
 func load_active_run() -> Dictionary:
-	if not has_saved_run():
-		return {}
-	var file := FileAccess.open(_active_run_save_path(), FileAccess.READ)
-	if file == null:
-		return {}
-	var payload_raw: Variant = file.get_var()
-	if not (payload_raw is Dictionary):
-		return {}
-	var payload := payload_raw as Dictionary
-	if int(payload.get("version", -1)) != ACTIVE_RUN_VERSION:
-		return {}
-	var snapshot_raw: Variant = payload.get("snapshot", {})
-	if not (snapshot_raw is Dictionary):
-		return {}
-	return (snapshot_raw as Dictionary).duplicate(true)
+	_configure_active_run_store()
+	return active_run_checkpoint_store.load_snapshot()
 
-func clear_active_run() -> void:
-	if not has_saved_run():
-		return
-	DirAccess.remove_absolute(ProjectSettings.globalize_path(_active_run_save_path()))
+func clear_active_run() -> bool:
+	_configure_active_run_store()
+	return active_run_checkpoint_store.clear_snapshot()
+
+func get_active_run_status() -> String:
+	return active_run_checkpoint_store.last_status
+
+func _configure_active_run_store() -> void:
+	active_run_checkpoint_store.save_path = _active_run_save_path()
+	active_run_checkpoint_store.save_version = ACTIVE_RUN_VERSION
 
 func request_resume_saved_run() -> void:
 	if run_resume_request_state == null:

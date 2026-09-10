@@ -46,7 +46,13 @@ Use scoped checks while iterating, applicable actual rendered/network evidence, 
 
 ## Verification and handoff
 
-The first bounded implementation is frozen for checkpoint verification. No replacement desktop build has been delivered yet. Run the full suite through the commit hook, push this branch and verify its hosted run, then verify a normal candidate export including the new native smoke. Later work should start from that coherent checkpoint.
+The first bounded implementation is committed and pushed as `87c96346e4e98c6a105c8201ee0c093697595a85`. Its required pre-commit suite passed all 308 scripts and 73 gameplay fixtures, and [hosted CI passed](https://github.com/Excellund/AbyssalDescent/actions/runs/34443642073). The normal candidate export passed package inspection and 62 native startup/menu checks. No replacement desktop build has been delivered yet; preserve the accepted desktop build until final workday delivery.
+
+- Full checkpoint suite: `C:/Users/mikel/AppData/Local/Temp/abyssal-validation-ddb23ac82aad4ede995b69d209adc7f3`.
+- Normal candidate: `C:/Users/mikel/AppData/Local/Temp/abyssal-workday-candidate-12452527e2764282b74426795c97215a/AbyssalDescent.exe`.
+- Candidate build ID: `dev-20260910-060049822-bbca5fdc`; SHA256: `AF9013F34525248DE51489B1645EFF2CB0E08B99A82242FF1BE5667112DF153D`; 114243600 bytes.
+- Candidate native report: `C:/Users/mikel/AppData/Local/Temp/abyssal-native-smoke-c9e11b10549f40b58310ae38bc253cc1/report.json`.
+- Source identity: 520 of 522 production files match exactly; independently checked the two expected exporter overrides (development build ID and Main debug disabled). Details retained in candidate `source-identity.json`.
 
 - Cover native: `C:/Users/mikel/AppData/Local/Temp/abyssal-validation-0907d81aaa5a45f986b04dbedc48d14c`.
 - Cover GPU: `C:/Users/mikel/AppData/Local/Temp/abyssal-gameplay-render-f1d88009a52148718df0ebe602d07a8a/brittle_cover_frames`.
@@ -57,3 +63,25 @@ The first bounded implementation is frozen for checkpoint verification. No repla
 - Native guard proof: `C:/Users/mikel/AppData/Local/Temp/abyssal-native-guard-tests-7eff6138eafe4f7cbd6c959d5da0d6ea/`.
 
 Remaining human questions: whether preserving shelter versus opening a lane is useful with ordinarily earned builds, whether the cracked-cover action is discoverable, and whether the Pulse Window rule is readable during a live fight. Local staged ENet and automated tutorial flow do not establish full internet-lobby play or balance.
+
+## Second milestone — Continue reliability
+
+The current checkpoint writer truncates the live save before checking whether replacement succeeded. Menu and world callers also ignore write/clear failure and can silently enter a fresh descent after a failed resume. Improve this bounded active-run store and its callers; other profile/history/settings stores remain outside this milestone.
+
+- Prepare and reopen-verify a candidate and recovery record before replacing primary contents. Recover only an existing, demonstrably invalid primary. A valid primary wins; unreadable/future-format records are preserved. An absent primary is authoritative clear, because older release builds delete only that file. Temporary files never resume. Retire recovery after successful publish/read; never truncate the sole valid recovery copy while preparing another write.
+- Keep the version-one envelope and existing normal/debug filenames. Clear succeeds only when the primary is absent or a checked cleared record prevents resuming. Check each operation's result and distinguish missing, invalid, unsupported and I/O failures.
+- Menu revalidates Resume at activation and gates new runs on successful clear; errors offer Retry and an explicit error-only Discard saved descent action. A failed resume during Main boot returns to this error state without starting a tutorial or fresh run. No automatic discard of invalid saves.
+- Failed voluntary Abandon/Retry/results-menu actions keep the current screen and state. Natural death/victory still finalize once, with a visible storage notice; departure retries clear. Failed doorway saves show a progress warning without promising an earlier checkpoint exists. Co-op callers never touch the suspended solo checkpoint or its resume request.
+- `encounter_opportunities` owns the store/delegation and file-failure tests; `buildcraft_opportunities` owns menu/error UI and acceptance; `pipeline_audit` reviewed the protocol and owns lifecycle failure tests; root owns world gating, pause/results notice UI, rendered verification and documentation. Only root registers the new fixtures in the central runner and commits.
+
+This is checked interrupted-write recovery, not an atomic replacement or a hardware power-loss guarantee. Godot 4.6.2's Windows rename removes an existing destination first and its flush uses `fflush`; the implementation therefore verifies reopened contents and retains the primary directory entry. Missing-primary recovery would be incompatible with an older build's deliberate clear. Switching to an older build between an unresolved recovery-cleanup failure and that build's own interrupted new save remains ambiguous; do not claim universal cross-version crash recovery.
+
+Second-milestone implementation is frozen for its full checkpoint check. Independent review found and fixed a sole-backup hazard: unreadable/unsupported recovery now blocks overwrite, and an already-resolved sole recovery is never reread or rewritten during preparation. Review has no remaining findings. UI review also fixed menu actions extending below the viewport, centered Pause resizing during an active entrance animation, and Victory's Escape route opening Pause around result clear gating.
+
+- Store: 72 checks, all 314 scripts and property/network guards pass in `C:/Users/mikel/AppData/Local/Temp/abyssal-validation-d9ef6d6e615544fab0786d9178f1e98e`.
+- Menu: 68 new checks plus 183 existing layout/focus checks; `C:/Users/mikel/AppData/Local/Temp/abyssal-validation-d349d0e41561426db2d74e0512cead54`.
+- Lifecycle: 159 checks, including actual caller signals, failed doorway save and later recovery, paused Abandon, retry setup ordering, terminal outcomes, failed boot and co-op isolation; `C:/Users/mikel/AppData/Local/Temp/abyssal-validation-c1b0909342a740b2b30e881db334fbdc`.
+- Menu GPU: root and owner inspected both 960/1280 error frames and every action, including Exit, fits; `C:/Users/mikel/AppData/Local/Temp/abyssal-gameplay-render-3eb2446da7de402b8695dcbf34066507/checkpoint_menu_frames`.
+- Pause/results GPU: root inspected all eight frames, 98 checks, 960/1280; notice remains outside scroll content and all actions fit; `C:/Users/mikel/AppData/Local/Temp/abyssal-gameplay-render-4782a007421b4d25a1de70a69f48bf1a/checkpoint_notice_frames`.
+- All three new behavioral fixtures are registered in the full runner. The low-level fixtures inject failures at file-operation boundaries in disposable profiles; rendered UI states are staged. They do not simulate physical hardware power failure.
+- Full-suite integration exposed two old independent-run fixtures relying on silent deletion of their deliberately partial doorway records (`test_room_layout_entry` and `test_brittle_cover`). Both now clear those isolated codec records before starting the next fresh run. Scoped compilation/guards and both corrected fixtures pass in `C:/Users/mikel/AppData/Local/Temp/abyssal-validation-4dd2015e4eac44adb664a9b402b5fda7`. The first stalled fixture and interrupted rerun were stopped only by their verified temporary project/process identities; no player process was touched. A bounded regression-process timeout is a concrete follow-on pipeline fix.

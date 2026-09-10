@@ -32,6 +32,23 @@ var pause_music_value_label: Label
 var pause_sfx_value_label: Label
 var pause_resolution_hint_label: Label
 var pause_menu_visible: bool = false
+var checkpoint_notice_label: Label
+var _pause_panel_tween: Tween
+
+func set_checkpoint_notice(message: String) -> void:
+	if checkpoint_notice_label == null:
+		return
+	checkpoint_notice_label.text = message
+	checkpoint_notice_label.visible = not message.is_empty()
+	var panel_height := 540.0 if checkpoint_notice_label.visible else 480.0
+	if is_equal_approx(pause_menu_panel.custom_minimum_size.y, panel_height):
+		return
+	if _pause_panel_tween != null and _pause_panel_tween.is_valid():
+		_pause_panel_tween.kill()
+		pause_menu_panel.modulate.a = 1.0
+	pause_menu_panel.custom_minimum_size.y = panel_height
+	pause_menu_panel.offset_top = -panel_height * 0.5
+	pause_menu_panel.offset_bottom = panel_height * 0.5
 
 func initialize(context_path: String, apply_music_volume: Callable, apply_sfx_volume: Callable) -> void:
 	run_context_path = context_path
@@ -52,8 +69,6 @@ func open() -> void:
 	pause_menu_visible = true
 	if pause_menu_layer != null:
 		pause_menu_layer.visible = true
-	if pause_menu_panel != null:
-		_animate_pause_panel_in(pause_menu_panel, Vector2(0.0, 16.0))
 	if pause_options_panel != null:
 		pause_options_panel.visible = false
 	if pause_glossary_panel != null:
@@ -61,6 +76,8 @@ func open() -> void:
 	_sync_pause_options_from_context()
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	pause_opened.emit()
+	if pause_menu_panel != null:
+		_animate_pause_panel_in(pause_menu_panel, Vector2(0.0, 16.0))
 
 func close() -> void:
 	pause_menu_visible = false
@@ -146,6 +163,16 @@ func _create_pause_menu_ui() -> void:
 		exit_game_requested.emit()
 	)
 	pause_menu_panel.add_child(exit_button)
+
+	checkpoint_notice_label = Label.new()
+	checkpoint_notice_label.position = Vector2(24.0, 452.0)
+	checkpoint_notice_label.size = Vector2(392.0, 64.0)
+	checkpoint_notice_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	checkpoint_notice_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	checkpoint_notice_label.add_theme_font_size_override("font_size", 18)
+	checkpoint_notice_label.add_theme_color_override("font_color", Color(1.0, 0.78, 0.58))
+	checkpoint_notice_label.visible = false
+	pause_menu_panel.add_child(checkpoint_notice_label)
 
 	pause_options_panel = _build_pause_options_panel()
 	pause_options_panel.visible = false
@@ -682,10 +709,14 @@ func _show_pause_overlay_panel(panel_to_show: Panel, panel_to_hide: Panel) -> vo
 func _animate_pause_panel_in(panel: Control, offset: Vector2) -> void:
 	if panel == null:
 		return
+	if panel == pause_menu_panel and _pause_panel_tween != null and _pause_panel_tween.is_valid():
+		_pause_panel_tween.kill()
 	var target_position := panel.position
 	panel.modulate.a = 0.0
 	panel.position = target_position + offset
 	var tween := create_tween()
+	if panel == pause_menu_panel:
+		_pause_panel_tween = tween
 	tween.set_parallel(true)
 	tween.tween_property(panel, "modulate:a", 1.0, 0.14)
 	tween.tween_property(panel, "position", target_position, 0.18).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)

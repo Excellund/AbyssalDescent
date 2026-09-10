@@ -28,6 +28,7 @@ var _stats_panel
 var _build_panel
 var _reward_panel
 var _action_buttons
+var _checkpoint_notice_label: Label
 var _timeline_visible: bool = true
 var _timeline_available: bool = false
 var _input_delay_left: float = 0.0
@@ -37,6 +38,7 @@ func show_result(result_title: String, subtitle: String, summary: Dictionary, de
 	if _layer == null:
 		_build_ui()
 	_apply_theme(defeat_theme)
+	set_checkpoint_notice("")
 	_fill_summary(result_title, subtitle, summary, allow_retry_run)
 	_input_delay_left = 0.2
 	_layer.visible = true
@@ -60,6 +62,11 @@ func set_retry_label(text: String) -> void:
 func set_retry_disabled(disabled: bool) -> void:
 	if _action_buttons != null:
 		_action_buttons.set_retry_disabled(disabled)
+
+func set_checkpoint_notice(message: String) -> void:
+	if _checkpoint_notice_label != null:
+		_checkpoint_notice_label.text = message
+		_checkpoint_notice_label.visible = not message.is_empty()
 
 func _process(delta: float) -> void:
 	if _input_delay_left > 0.0:
@@ -168,6 +175,14 @@ func _build_ui() -> void:
 
 	_stats_panel = RUN_STATS_PANEL_SCRIPT.new()
 	_content_stack.add_child(_stats_panel)
+
+	_checkpoint_notice_label = Label.new()
+	_checkpoint_notice_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_checkpoint_notice_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_checkpoint_notice_label.add_theme_font_size_override("font_size", 18)
+	_checkpoint_notice_label.add_theme_color_override("font_color", Color(1.0, 0.78, 0.58))
+	_checkpoint_notice_label.visible = false
+	stack.add_child(_checkpoint_notice_label)
 
 	_action_buttons = RUN_ACTION_BUTTONS_SCRIPT.new()
 	_action_buttons.return_to_menu_pressed.connect(func() -> void:

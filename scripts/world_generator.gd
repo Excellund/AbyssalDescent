@@ -230,6 +230,8 @@ var victory_screen: Node
 var defeat_screen: Node
 var build_detail_panel: Node
 var run_summary_recorder
+var _checkpoint_resume_error: String = ""
+var _checkpoint_notice: String = ""
 var telemetry_spike_enabled: bool = false
 var telemetry_spike_endpoint: String = ""
 var telemetry_spike_api_key: String = ""
@@ -1003,6 +1005,14 @@ func _setup_objective_runtime_system() -> void:
 
 func _run_resume_flow() -> bool:
 	var resume_snapshot := _try_resume_saved_run()
+	if not _checkpoint_resume_error.is_empty():
+		var run_context := _get_run_context()
+		if run_context != null:
+			run_context.set_meta("checkpoint_menu_error", _checkpoint_resume_error)
+		_set_combat_paused(true)
+		set_process(false)
+		call_deferred("_return_to_menu_after_checkpoint_error")
+		return true
 	var debug_bearing_tier := _debug_bearing_override_tier()
 	if debug_bearing_tier >= 0:
 		encounter_profile_builder.set_difficulty_tier(debug_bearing_tier)
@@ -1014,6 +1024,12 @@ func _run_resume_flow() -> bool:
 	run_summary_recorder.initialize(not _is_debug_boot_session())
 	hud.refresh(_get_hud_state(), player)
 	return not resume_snapshot.is_empty()
+
+func _return_to_menu_after_checkpoint_error() -> void:
+	_change_checkpoint_scene(MENU_SCENE_PATH)
+
+func _change_checkpoint_scene(path: String) -> void:
+	get_tree().change_scene_to_file(path)
 
 func _run_debug_boot_flow() -> bool:
 	_apply_debug_start_powers_if_needed()
@@ -1457,6 +1473,9 @@ func _resolve_debug_power_id(raw_power_id: String) -> String:
 		_:
 			return canonical
 
+func _is_run_result_open() -> bool:
+	return (is_instance_valid(defeat_screen) and defeat_screen.is_open()) or (is_instance_valid(victory_screen) and victory_screen.is_open())
+
 func _unhandled_input(event: InputEvent) -> void:
 	if current_room_tutorial_active:
 		if event is InputEventKey and event.pressed and not event.echo:
@@ -1478,7 +1497,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.keycode == KEY_TAB and not event.echo:
 		if is_instance_valid(build_detail_panel):
 			if event.pressed:
-				if is_instance_valid(defeat_screen) and bool(defeat_screen.is_open()):
+				if _is_run_result_open():
 					return
 				if is_instance_valid(pause_menu_controller) and bool(pause_menu_controller.is_open()):
 					return
@@ -1497,7 +1516,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 				return
 	
-	if is_instance_valid(defeat_screen) and bool(defeat_screen.is_open()):
+	if _is_run_result_open():
 		get_viewport().set_input_as_handled()
 		return
 	if not event.is_action_pressed("ui_cancel"):
@@ -2200,6 +2219,8 @@ func _finish_second_boss_clear() -> void:
 	_open_networked_reward_selection("Claim Sovereign's Power", ENUMS.RewardMode.BOSS, {}, epitaph)
 
 func _finish_third_boss_clear() -> void:
+	if _run_outcome_coordinator.is_run_cleared():
+		return
 	in_third_boss_room = false
 	active_room_enemy_count = 0
 	choosing_next_room = false
@@ -2374,6 +2395,7 @@ func _apply_boss_difficulty_scaling(boss: CharacterBody2D) -> void:
 		boss.set(damage_property, maxi(1, int(round(float(base_damage) * boss_mult))))
 
 func _try_resume_saved_run() -> Dictionary:
+	_checkpoint_resume_error = ""
 	var run_context := _get_run_context()
 	if run_context == null:
 		return {}
@@ -2386,14 +2408,18 @@ func _try_resume_saved_run() -> Dictionary:
 		return {}
 	_apply_difficulty_tier_bonuses(current_difficulty_tier, false)
 
+	var resume_requested := run_context.consume_resume_saved_run_request()
 	var snapshot := run_context.load_active_run() as Dictionary
 	if snapshot.is_empty():
+		var status := run_context.get_active_run_status()
+		if resume_requested or status not in ["missing", "cleared"]:
+			_checkpoint_resume_error = "Could not resume the saved descent. Try Resume again."
 		return {}
 	if int(snapshot.get("version", -1)) != RUN_SNAPSHOT_VERSION:
-		run_context.clear_active_run()
+		_checkpoint_resume_error = "This saved descent needs a different game version."
 		return {}
 	if not _apply_active_run_snapshot(snapshot):
-		run_context.clear_active_run()
+		_checkpoint_resume_error = "Could not restore the saved descent. Try Resume again."
 		return {}
 	return snapshot
 
@@ -2407,16 +2433,33 @@ func _save_active_run_checkpoint() -> void:
 	var snapshot := _build_active_run_snapshot()
 	if snapshot.is_empty():
 		return
-	run_context.save_active_run(snapshot)
+	if run_context.save_active_run(snapshot):
+		_set_checkpoint_notice("")
+	else:
+		_set_checkpoint_notice("Progress could not be saved. Returning later may lose progress.")
+		if is_instance_valid(hud):
+			hud.show_banner("Progress not saved", "Returning later may lose progress")
 
-func _clear_active_run_checkpoint() -> void:
+func _clear_active_run_checkpoint() -> bool:
 	if is_multiplayer:
-		return
+		return true
 	var run_context := _get_run_context()
 	if run_context == null:
-		return
-	run_context.clear_active_run()
+		return true
+	if not run_context.clear_active_run():
+		_set_checkpoint_notice("Could not clear the saved descent. Try the action again.")
+		return false
 	run_context.clear_resume_saved_run_request()
+	_set_checkpoint_notice("")
+	return true
+
+func _set_checkpoint_notice(message: String) -> void:
+	_checkpoint_notice = message
+	if is_instance_valid(pause_menu_controller):
+		pause_menu_controller.set_checkpoint_notice(message)
+	for surface in [victory_screen, defeat_screen]:
+		if is_instance_valid(surface) and surface.is_open():
+			surface.set_checkpoint_notice(message)
 
 func _build_active_run_snapshot() -> Dictionary:
 	var run_context := _get_run_context()
@@ -2509,6 +2552,7 @@ func _set_sfx_volume_runtime(volume_db: float) -> void:
 		reward_selection_ui.set_sfx_volume_db(sfx_volume_db)
 
 func _on_pause_menu_opened() -> void:
+	pause_menu_controller.set_checkpoint_notice(_checkpoint_notice)
 	_set_combat_paused(true)
 	_set_singleplayer_menu_wave_timer_paused(true)
 
@@ -2551,10 +2595,11 @@ func _set_singleplayer_menu_wave_timer_paused(paused: bool) -> void:
 	enemy_spawner.wave_timer_paused = paused
 
 func _on_victory_back_to_menu() -> void:
+	if not _clear_active_run_checkpoint():
+		return
 	_teardown_multiplayer_session_for_menu_transition()
 	_run_summary_finish_run("clear")
-	_clear_active_run_checkpoint()
-	get_tree().change_scene_to_file(MENU_SCENE_PATH)
+	_change_checkpoint_scene(MENU_SCENE_PATH)
 
 func _on_victory_retry_run() -> void:
 	if is_multiplayer:
@@ -2563,11 +2608,12 @@ func _on_victory_retry_run() -> void:
 	_retry_current_run()
 
 func _on_defeat_back_to_menu() -> void:
+	if not _clear_active_run_checkpoint():
+		return
 	_teardown_multiplayer_session_for_menu_transition()
 	_set_combat_paused(false)
 	_run_summary_finish_run("death")
-	_clear_active_run_checkpoint()
-	get_tree().change_scene_to_file(MENU_SCENE_PATH)
+	_change_checkpoint_scene(MENU_SCENE_PATH)
 
 func _on_defeat_retry_run() -> void:
 	if is_multiplayer:
@@ -2576,13 +2622,14 @@ func _on_defeat_retry_run() -> void:
 	_retry_current_run()
 
 func _retry_current_run() -> void:
+	if not _clear_active_run_checkpoint():
+		return
 	var run_context := _get_run_context()
 	if run_context != null:
 		run_context.request_run_retry(current_character_id, current_difficulty_tier)
 	_teardown_multiplayer_session_for_menu_transition()
 	_set_combat_paused(false)
-	_clear_active_run_checkpoint()
-	get_tree().change_scene_to_file("res://scenes/Main.tscn")
+	_change_checkpoint_scene("res://scenes/Main.tscn")
 
 ## Multiplayer retry voting: collect a yes vote from every connected peer; once
 ## everyone agrees, host broadcasts a coordinated scene reload that keeps the
@@ -2727,14 +2774,15 @@ func _on_pause_back_to_menu_requested() -> void:
 	get_tree().change_scene_to_file(MENU_SCENE_PATH)
 
 func _on_pause_abandon_run_requested() -> void:
+	if not _clear_active_run_checkpoint():
+		return
 	_teardown_multiplayer_session_for_menu_transition()
 	player_flow_coordinator.prepare_for_menu_transition(combat_phase_coordinator, player, get_tree(), pause_menu_controller)
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context != null:
 		run_context.set_last_run_outcome("death")
 	_run_summary_finish_run("abandon")
-	_clear_active_run_checkpoint()
-	get_tree().change_scene_to_file(MENU_SCENE_PATH)
+	_change_checkpoint_scene(MENU_SCENE_PATH)
 
 func _teardown_multiplayer_session_for_menu_transition() -> void:
 	if not is_multiplayer:
@@ -4417,12 +4465,15 @@ func _show_victory_feedback(unlocked_tier: int, run_summary: Dictionary = {}) ->
 	_set_music_context(&"reward")
 	if is_instance_valid(victory_screen):
 		victory_screen.show_victory(rooms_cleared, unlocked_tier, run_summary, true)
+		victory_screen.set_checkpoint_notice(_checkpoint_notice)
 		_apply_retry_vote_status_ui()
 
 func _show_defeat_feedback(room_label: String, depth: int, run_summary: Dictionary = {}) -> void:
 	run_summary_recorder.freeze_run_timer()
 	_set_music_context(&"reward")
 	player_flow_coordinator.show_defeat_feedback(hud, defeat_screen, room_label, depth, run_summary, true)
+	if is_instance_valid(defeat_screen):
+		defeat_screen.set_checkpoint_notice(_checkpoint_notice)
 	_apply_retry_vote_status_ui()
 
 func get_current_player_profile() -> RefCounted:

@@ -77,6 +77,9 @@ func _test_controller() -> void:
 	check(not host.has_brittle_cover() and host.live_layout().size() == 3, "Legacy and invalid optional metadata remain permanently solid")
 
 func _setup_world(character: String) -> void:
+	# Each character is a new run; the prior codec probe saves only doorway
+	# metadata, which must never be treated as a complete resume snapshot.
+	RunContext.clear_active_run()
 	RunContext.selected_character_id = character
 	world = MAIN.instantiate() as WORLD
 	world.get_node("DebugSettings").enabled = false

@@ -53,6 +53,9 @@ func _run() -> void:
 	var valid := CONTRACTS.profile_obstacle_layout({"obstacle_layout": mixed})
 	check(valid == [first, second] and mixed.size() == 5, "Optional malformed entries cannot discard or mutate valid obstacle dictionaries")
 	for tier in range(4):
+		# Each tier starts a fresh run. The prior case's deliberately partial
+		# doorway codec record is not a complete resumable run snapshot.
+		RunContext.clear_active_run()
 		RunContext.current_difficulty_tier = tier
 		world = MAIN.instantiate() as WORLD
 		world.get_node("DebugSettings").enabled = false

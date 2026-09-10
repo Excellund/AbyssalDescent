@@ -94,6 +94,9 @@ var telemetry_consent_layer: Control
 var menu_music_player: AudioStreamPlayer
 var _sfx_player: AudioStreamPlayer
 var primary_run_button: Button
+var checkpoint_status_label: Label
+var checkpoint_discard_button: Button
+var _checkpoint_retry_action: String = ""
 var difficulty_tier_buttons: Array[Button] = []
 var difficulty_tier_name_labels: Array[Label] = []
 var difficulty_tier_desc_labels: Array[Label] = []
@@ -149,6 +152,7 @@ func _ready() -> void:
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	_build_ui()
 	_apply_menu_layout()
+	_consume_checkpoint_menu_error()
 	_start_menu_music()
 	if _try_multiplayer_duo_autostart():
 		return
@@ -917,6 +921,19 @@ func _build_ui() -> void:
 	primary_run_button.custom_minimum_size = Vector2(470.0, MAIN_MENU_ACTION_BUTTON_HEIGHT)
 	primary_run_button.pressed.connect(_on_primary_run_pressed)
 	root_actions.add_child(primary_run_button)
+	checkpoint_status_label = Label.new()
+	checkpoint_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	checkpoint_status_label.custom_minimum_size.x = 470.0
+	checkpoint_status_label.add_theme_font_size_override("font_size", 16)
+	checkpoint_status_label.add_theme_color_override("font_color", Color(1.0, 0.78, 0.62, 0.98))
+	checkpoint_status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	checkpoint_status_label.visible = false
+	root_actions.add_child(checkpoint_status_label)
+	checkpoint_discard_button = _make_menu_button("Discard saved descent")
+	checkpoint_discard_button.custom_minimum_size = Vector2(470.0, 44.0)
+	checkpoint_discard_button.pressed.connect(_on_discard_checkpoint_pressed)
+	checkpoint_discard_button.visible = false
+	root_actions.add_child(checkpoint_discard_button)
 
 	var multiplayer_button := _make_menu_button("Multiplayer")
 	multiplayer_button.custom_minimum_size = Vector2(470.0, MAIN_MENU_ACTION_BUTTON_HEIGHT)
@@ -1088,9 +1105,13 @@ func _root_panel_base_size() -> Vector2:
 	if root_shell == null:
 		return base_size
 	var min_shell_height := root_shell.get_combined_minimum_size().y
-	if min_shell_height <= 0.0:
-		return base_size
 	var required_height := min_shell_height + (MAIN_MENU_SHELL_PADDING * 2.0)
+	# The action VBox is anchored inside a plain Panel, which does not forward
+	# its content minimum to root_shell. Include it when an error adds controls.
+	if root_actions != null:
+		var action_content := root_actions.get_parent() as Control
+		if action_content != null:
+			required_height = maxf(required_height, action_content.get_combined_minimum_size().y + 2.0 * (MAIN_MENU_ACTION_CONTENT_PADDING_Y + MAIN_MENU_SHELL_PADDING))
 	base_size.y = maxf(base_size.y, required_height)
 	return base_size
 
@@ -2539,26 +2560,94 @@ func _play_sfx_click() -> void:
 
 func _on_primary_run_pressed() -> void:
 	_play_sfx_click()
-	if _has_saved_run():
+	if _checkpoint_retry_action == "endless":
+		_begin_fresh_run(ENUMS.RunMode.ENDLESS)
+		return
+	if _checkpoint_retry_action == "new":
+		_begin_fresh_run(ENUMS.RunMode.STANDARD)
+		return
+	if _checkpoint_retry_action == "resume" or _has_saved_run():
 		_on_continue_pressed()
 		return
-	_clear_saved_run()
-	_set_run_mode(ENUMS.RunMode.STANDARD)
-	if character_selector_panel != null:
-		_show_character_selector()
+	_begin_fresh_run(ENUMS.RunMode.STANDARD)
 
 func _on_continue_pressed() -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context == null:
+		show_checkpoint_error("Could not resume this descent. Try again.")
 		return
+	var snapshot: Dictionary = run_context.load_active_run()
+	var status: String = run_context.get_active_run_status()
+	if snapshot.is_empty():
+		var message := "Could not read this checkpoint. Try again."
+		if status == "missing" or status == "cleared":
+			message = "This checkpoint is unavailable. Try Resume again."
+		elif status == "invalid" or status == "unsupported":
+			message = "This checkpoint cannot be resumed. It has not been discarded."
+		show_checkpoint_error(message)
+		return
+	_clear_checkpoint_error()
 	run_context.request_resume_saved_run()
-	get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)
+	_change_to_gameplay_scene()
 
 func _on_endless_pressed() -> void:
 	_play_sfx_click()
-	_clear_saved_run()
-	_set_run_mode(ENUMS.RunMode.ENDLESS)
-	get_tree().change_scene_to_file(GAMEPLAY_SCENE_PATH)
+	_begin_fresh_run(ENUMS.RunMode.ENDLESS)
+
+func _begin_fresh_run(mode: int) -> void:
+	if not _clear_saved_run():
+		_checkpoint_retry_action = "endless" if mode == ENUMS.RunMode.ENDLESS else "new"
+		show_checkpoint_error("Could not clear the saved descent. Try again.", false)
+		return
+	_clear_checkpoint_error()
+	_set_run_mode(mode)
+	if mode == ENUMS.RunMode.STANDARD:
+		if character_selector_panel != null:
+			_show_character_selector()
+	else:
+		_change_to_gameplay_scene()
+
+func show_checkpoint_error(message: String, retry_resume: bool = true) -> void:
+	if retry_resume:
+		_checkpoint_retry_action = "resume"
+	if checkpoint_status_label != null:
+		checkpoint_status_label.text = message
+		checkpoint_status_label.visible = not message.is_empty()
+	if checkpoint_discard_button != null:
+		checkpoint_discard_button.visible = retry_resume and not message.is_empty()
+	_refresh_primary_run_button()
+	if primary_run_button != null:
+		primary_run_button.grab_focus()
+	call_deferred("_apply_menu_layout")
+
+func _on_discard_checkpoint_pressed() -> void:
+	if not _clear_saved_run():
+		show_checkpoint_error("Could not discard the saved descent. Try again.")
+		if checkpoint_discard_button != null:
+			checkpoint_discard_button.grab_focus()
+		return
+	_clear_checkpoint_error()
+	if primary_run_button != null:
+		primary_run_button.grab_focus()
+	call_deferred("_apply_menu_layout")
+
+func _clear_checkpoint_error() -> void:
+	_checkpoint_retry_action = ""
+	if checkpoint_status_label != null:
+		checkpoint_status_label.text = ""
+		checkpoint_status_label.visible = false
+	if checkpoint_discard_button != null:
+		checkpoint_discard_button.visible = false
+	_refresh_primary_run_button()
+
+func _consume_checkpoint_menu_error() -> void:
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
+	if run_context == null or not run_context.has_meta("checkpoint_menu_error"):
+		return
+	var message := String(run_context.get_meta("checkpoint_menu_error"))
+	run_context.remove_meta("checkpoint_menu_error")
+	if not message.is_empty():
+		show_checkpoint_error(message)
 
 func _on_options_pressed() -> void:
 	_play_sfx_click()
@@ -3846,17 +3935,29 @@ func _set_run_mode(mode: int) -> void:
 func _refresh_primary_run_button() -> void:
 	if primary_run_button == null:
 		return
+	if not _checkpoint_retry_action.is_empty():
+		match _checkpoint_retry_action:
+			"resume": primary_run_button.text = "Retry Resume"
+			"new": primary_run_button.text = "Retry Begin Descent"
+			"endless": primary_run_button.text = "Retry Endless Descent"
+		return
 	primary_run_button.text = "Resume Descent" if _has_saved_run() else "Begin Descent"
 
 func _has_saved_run() -> bool:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context == null:
 		return false
-	return bool(run_context.has_saved_run())
+	var available: bool = run_context.has_saved_run()
+	var status: String = run_context.get_active_run_status()
+	# An unreadable checkpoint is still a saved-run candidate. A normal Begin
+	# click must never discard it merely because validation could not read it.
+	return available or status in ["invalid", "unsupported", "read_failed"]
 
-func _clear_saved_run() -> void:
+func _clear_saved_run() -> bool:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context == null:
-		return
-	run_context.clear_active_run()
+		return false
+	if not run_context.clear_active_run():
+		return false
 	run_context.clear_resume_saved_run_request()
+	return true

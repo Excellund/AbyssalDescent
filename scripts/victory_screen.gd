@@ -39,3 +39,7 @@ func set_retry_label(text: String) -> void:
 func set_retry_disabled(disabled: bool) -> void:
 	if _results_screen != null:
 		_results_screen.set_retry_disabled(disabled)
+
+func set_checkpoint_notice(message: String) -> void:
+	if _results_screen != null:
+		_results_screen.set_checkpoint_notice(message)
