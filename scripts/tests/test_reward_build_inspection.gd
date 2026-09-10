@@ -24,7 +24,6 @@ func _run() -> void:
 	await _check_owned_details()
 	_check_property_wording()
 	await _check_passive_presentations()
-	_check_passive_connections()
 	await _check_mission_bundle()
 	await _check_expanded_scroll()
 	await _check_responsive_actions()
@@ -88,7 +87,7 @@ func _check_inspection() -> void:
 	_check(ui.is_active(), "Inspection retains the active paused offer")
 	_check(ui.build_button.focus_mode == Control.FOCUS_NONE and ui.boon_card_panels[0].focus_mode == Control.FOCUS_NONE, "Underlying offer controls leave the modal focus cycle")
 	_check(build._modal_backdrop.visible and build._modal_backdrop.mouse_filter == Control.MOUSE_FILTER_STOP, "Modal backdrop blocks pointer access to underlying cards")
-	_check(build._candidate_details.text.contains(String(choices[2].name)), "Inspection compares the focused offer")
+	_check_owned_build_only("Inspection opens the owned build without a selected-offer box")
 	ui._confirm_choice(2)
 	ui._on_skip_button_pressed()
 	ui._on_reroll_button_pressed()
@@ -157,8 +156,6 @@ func _check_owned_details() -> void:
 	player.apply_upgrade("sovereigns_double")
 	_open(ENUMS.RewardMode.BOSS)
 	build.refresh_from_player(player, "bastion")
-	_check(build._owned_levels.get("returning_crescent", 0) == 3, "Build reads the actual learned Arcana level")
-	_check(build._owned_levels.get("sovereigns_double", 0) == 2, "Build reads actual boss stacks")
 	var text := _all_text(build.panel)
 	_check(text.contains("Level 3 · Prismatic"), "Owned Arcana explicitly shows one-time Prismatic")
 	_check(text.contains("Sovereign's Double  · Level 2"), "Owned boss reward visibly shows Level 2")
@@ -191,31 +188,28 @@ func _all_text(node: Node) -> String:
 		result += "\n" + _all_text(child)
 	return result
 
+func _check_owned_build_only(message: String) -> void:
+	_check(build.is_open() and not _all_text(build.panel).contains("Selected offer:"), message)
+	_check(build._content_vbox.get_child(0) == build.passive_section.get_parent(), "Passive is the first build section; no empty offer box remains")
+
+func _owned_toggle(power_name: String) -> Button:
+	for container: VBoxContainer in [build.boss_list_container, build.arcana_list_container, build.boons_list_container]:
+		for entry in container.get_children():
+			if entry.is_queued_for_deletion() or entry.get_child_count() == 0:
+				continue
+			var first := entry.get_child(0)
+			if first is Button and first.text.contains(power_name):
+				return first
+	return null
+
 func _check_property_wording() -> void:
-	var saved_levels := build._owned_levels.duplicate(true)
-	build._owned_levels = {"static_wake": 2, "phantom_step": 1, "aegis_field": 1, "hunters_snare": 2}
-	var formatted := build._compatibility_text("storm_crown", 2)
-	var plain := BUILD_PANEL.COMBAT_KEYWORDS.to_plain(formatted)
-	_check(plain.contains("Static Wake deals damage."), "Damage-producing connections use a natural verb")
-	_check(plain.contains("Aegis Pulse applies Slow."), "Status-producing connections use a natural verb")
-	_check(plain.contains("Phantom Step deals damage and applies Slow."), "Mixed properties retain both highlighted actions in one grammatical line")
-	_check(plain.contains("Hunter's Snare responds to damage."), "Receiver wording uses the damage noun without changing its conditions")
-	_check(formatted.contains("deals damage") and formatted.contains(BUILD_PANEL.COMBAT_KEYWORDS.keyword_bbcode("slow")), "Damage stays ordinary prose while actual keywords retain their authored emphasis")
-	_check(not plain.contains("supplies dealing damage"), "Property wording contains no awkward supplied gerund")
-	build._owned_levels = {"sigil_chain": 1, "razor_wind": 1, "reaper_step": 1}
-	plain = BUILD_PANEL.COMBAT_KEYWORDS.to_plain(build._compatibility_text("lacuna_echo", 1))
-	_check(plain.contains("Sigil Chain creates a Field."), "Persistent area connections identify a created Field")
-	plain = BUILD_PANEL.COMBAT_KEYWORDS.to_plain(build._compatibility_text("wraithstep", 2))
-	_check(plain.contains("Razor Wind lands attack hits."), "Direct-hit connections retain the distinct attack-hit keyword")
-	_check(plain.contains("Reaper Step supports Dash."), "Dash refresh support never claims an automatic Dash occurs")
 	var wake_details := BUILD_PANEL.COMBAT_KEYWORDS.to_plain(build._keyword_details("static_wake", 3))
 	_check(wake_details.contains("Rules\n• Normal Dash only.\n• Two trails share one damage clock."), "Rules are short separate lines rather than a long paragraph")
 	_check(wake_details.contains("Slow is applied after damage at level 3.") and not wake_details.contains("Damage:") and not wake_details.contains("dealing damage:"), "Rules preserve timing without presenting damage as a keyword definition")
 	_check(build._keyword_details("null_corridor", 1).contains("0.5s"), "Rule formatting preserves decimal timing")
 	_check(build._close_button.text == "Return to rewards  [Tab / Esc]", "Visible return hints show only the requested keyboard controls")
-	_check(build._candidate_details.get_theme_font_size("normal_font_size") == BUILD_PANEL.BODY_FONT_SIZE and build.passive_desc_label.get_theme_font_size("normal_font_size") == BUILD_PANEL.BODY_FONT_SIZE, "Candidate and passive explanations use the same readable body size")
-	_check(build.passive_desc_label.text.begins_with("• ") and build.passive_desc_label.get_parsed_text().contains("Dash, Recoil and Orbit break Brace."), "Character instructions retain separate rules and all movement types that break Brace")
-	build._owned_levels = saved_levels
+	_check(build.passive_desc_label.get_theme_font_size("normal_font_size") == BUILD_PANEL.BODY_FONT_SIZE, "Passive explanations retain readable body size")
+	_check(not build.passive_desc_label.text.contains("\n") and build.passive_desc_label.get_parsed_text().contains("Dash, Recoil and Orbit break Brace."), "Character summary stays in one paragraph and preserves movement types that break Brace")
 
 func _check_passive_presentations() -> void:
 	for size in [Vector2i(960, 720), Vector2i(1280, 720), Vector2i(1920, 1080)]:
@@ -229,33 +223,14 @@ func _check_passive_presentations() -> void:
 			await process_frame
 			var label := build.passive_desc_label
 			_check(build.passive_name_label.text == BUILD_PANEL.CHARACTER_PASSIVES.get_display_name(passive_id), "Build uses the shared passive title: " + character_id)
-			_check(label.text == BUILD_PANEL.CHARACTER_PASSIVES.get_description(passive_id), "Build preserves every authored passive rule and keyword: " + character_id)
+			_check(label.text == BUILD_PANEL.CHARACTER_PASSIVES.get_build_description(passive_id), "Build uses the shared concise passive summary: " + character_id)
+			_check(not label.get_parsed_text().contains("\n") and label.get_parsed_text().length() <= 300, "Build passive stays one concise paragraph: " + character_id)
+			_check(BUILD_PANEL.CHARACTER_PASSIVES.get_description(passive_id).contains("\n"), "Full detailed passive rules remain available to the glossary: " + character_id)
 			_check(label.text.contains("[b][color=#") and not label.get_parsed_text().contains("{kw:"), "Build renders passive keyword emphasis: " + character_id)
 			_check(label.get_theme_font_size("normal_font_size") == BUILD_PANEL.BODY_FONT_SIZE and label.get_theme_font_size("bold_font_size") == BUILD_PANEL.BODY_FONT_SIZE, "Passive keywords retain readable build body size")
 			_check(label.get_content_height() <= label.size.y + 1.0 and label.get_content_width() <= label.size.x + 1.0, "Complete passive description fits %s: %s" % [size, character_id])
 			_check(build.passive_section.get_global_rect().grow(1.0).encloses(label.get_global_rect()), "Passive stays within its build section at %s: %s" % [size, character_id])
 			build.close()
-	build.refresh_from_player(player, "bastion")
-
-func _check_passive_connections() -> void:
-	for character_id in ["bastion", "hexweaver", "veilstrider"]:
-		build.refresh(character_id, [], [], [], null, [], {"id": "storm_crown", "desc": "Dealing damage charges chain lightning.", "stack_limit": 3})
-		var passive_name := build.passive_name_label.text
-		_check(build._candidate_more.get_parsed_text().contains(passive_name + " deals damage."), "A fresh character's passive contributes to the offered damage engine: " + character_id)
-		_check(build._owned_levels.is_empty(), "Passive compatibility does not invent an acquired power or level")
-		_check(build._compatibility_text("ruinous_impact", 1).is_empty(), "Passive Bursts do not claim Push or attack-hit Launch activation: " + character_id)
-		_check(build._compatibility_text("sigil_chain", 1).is_empty(), "Passive damage cannot claim to generate attack hits: " + character_id)
-	for character_id in ["bastion", "hexweaver"]:
-		build.refresh(character_id, [], [])
-		var arc_connection := BUILD_PANEL.COMBAT_KEYWORDS.to_plain(build._compatibility_text("razor_wind", 1))
-		_check(arc_connection.contains(build.passive_name_label.text + " responds to attack hits."), "Extended arcs can spend the armed passive: " + character_id)
-	build.refresh("veilstrider", [], [])
-	var dash_connection := BUILD_PANEL.COMBAT_KEYWORDS.to_plain(build._compatibility_text("static_wake", 1))
-	_check(dash_connection.contains("Veilstep Rhythm supports Dash.") and not dash_connection.contains("performs Dash"), "Veilstep's cooldown refresh supports Dash engines without claiming automatic movement")
-	build.refresh("riftlancer", [], [])
-	_check(build._compatibility_text("razor_wind", 1).is_empty(), "Razor Wind's extended attack hits do not receive Farline scaling")
-	var blast_connection := BUILD_PANEL.COMBAT_KEYWORDS.to_plain(build._compatibility_text("blast_drive", 1))
-	_check(blast_connection.contains("Farline Focus responds to attack hits.") and blast_connection.contains("Only melee and charged blast contacts check Farline."), "Charged Blast lists Farline with its actual source and target restrictions")
 	build.refresh_from_player(player, "bastion")
 
 func _check_mission_bundle() -> void:
@@ -300,11 +275,7 @@ func _check_responsive_actions() -> void:
 			await process_frame
 			_check(bounds.encloses(build.panel.get_global_rect()), "Build modal fits viewport")
 			_check(build.panel.get_global_rect().encloses(build._close_button.get_global_rect()), "Build close button remains visible")
-			_check(build._candidate_details.get_content_width() <= build._candidate_details.size.x + 1.0, "Candidate comparison wraps inside the build panel")
-			_check(not build._candidate_more.visible, "Offer definitions start collapsed so the owned build remains in view")
-			if build._candidate_toggle.visible:
-				build._candidate_toggle.pressed.emit()
-				_check(build._candidate_more.visible, "Offer conditions and keyword meanings are inspectable")
+			_check_owned_build_only("A new offer opens only the owned build")
 			build.close()
 			ui.close_selection()
 
@@ -336,53 +307,37 @@ func _check_expanded_scroll() -> void:
 		ui._request_build_inspection()
 		await process_frame
 		await process_frame
-		build._candidate_toggle.grab_focus()
-		await _press_pad(JOY_BUTTON_A)
-		_check(build._candidate_more.visible, "Native controller accept expands selected keyword details at %s" % size)
-		if not build._candidate_more.visible:
+		var owned_toggle := _owned_toggle("Blast Drive")
+		_check(owned_toggle != null, "Owned Blast Drive has an inspectable rules entry")
+		if owned_toggle == null:
 			build.close()
 			ui.close_selection()
 			continue
-		_check(build._candidate_more.size.y > build._scroll.size.y, "Regression uses keyword content taller than the viewport")
-		_check(build._candidate_details.get_parsed_text().contains("Current — Level 1:") and build._candidate_details.get_parsed_text().contains("Offered — Level 2:"), "Inspection compares actual current and offered levels")
-		_check(build._candidate_more.text.count("• Counts each foe once per action.") == 1 and build._candidate_more.text.count("• One discharge per action.") == 1, "Candidate restrictions appear once as separate short rules")
-		_check(build._candidate_more.text.contains("Bonus checks already Slowed targets before this damage.") and build._candidate_more.text.contains("Level 1 affects Attacks, level 2+ all your damage."), "A distinct owned receiver retains its qualifying conditions")
+		owned_toggle.grab_focus()
+		var reference: WeakRef = owned_toggle.get_meta("build_details")
+		var details := reference.get_ref() as RichTextLabel
+		await _press_pad(JOY_BUTTON_A)
+		_check(details.visible, "Native controller accept expands owned keyword details at %s" % size)
+		_check(details.text.contains("Each blast spends one charge."), "Owned rules retain the actual charge limit")
 		var steps := 0
-		while build._candidate_more.get_global_rect().end.y > build._scroll.get_global_rect().end.y + 1.0 and steps < 40:
+		while details.get_global_rect().end.y > build._scroll.get_global_rect().end.y + 1.0 and steps < 40:
 			var before := build._scroll.scroll_vertical
 			await _press_pad(JOY_BUTTON_DPAD_DOWN)
-			_check(viewport.gui_get_focus_owner() == build._candidate_toggle, "D-pad reads the expanded section before leaving its toggle")
+			_check(viewport.gui_get_focus_owner() == owned_toggle, "D-pad reads expanded owned rules before leaving their toggle")
 			_check(build._scroll.scroll_vertical > before and build._scroll.scroll_vertical - before < build._scroll.size.y, "Successive controller viewports overlap so no keyword lines are skipped")
 			steps += 1
-		_check(steps > 0 and steps < 40, "The final keyword line is reachable without a controller focus trap")
+		_check(steps > 0 and steps < 40, "The final owned keyword line is reachable without a controller focus trap")
 		steps = 0
-		while build._candidate_toggle.get_global_rect().position.y < build._scroll.get_global_rect().position.y - 1.0 and steps < 40:
+		while owned_toggle.get_global_rect().position.y < build._scroll.get_global_rect().position.y - 1.0 and steps < 40:
 			var before := build._scroll.scroll_vertical
 			await _press_pad(JOY_BUTTON_DPAD_UP)
-			_check(build._scroll.scroll_vertical < before and before - build._scroll.scroll_vertical < build._scroll.size.y, "D-pad can read backward without skipping content")
+			_check(build._scroll.scroll_vertical < before and before - build._scroll.scroll_vertical < build._scroll.size.y, "D-pad can read backward without skipping owned rules")
 			steps += 1
-		_check(steps > 0 and steps < 40, "Controller can return to the expanded section header")
+		_check(steps < 40, "Controller can return to the expanded owned section header")
 		await _press_pad(JOY_BUTTON_A)
-		_check(not build._candidate_more.visible and build.is_open(), "Controller collapses only the keyword section")
+		_check(not details.visible and build.is_open(), "Controller collapses only the owned keyword section")
 		await _press_pad(JOY_BUTTON_DPAD_DOWN)
-		_check(viewport.gui_get_focus_owner() != build._candidate_toggle, "Collapsed section resumes ordinary focus navigation")
-		# Owned detail toggles use the same navigation, including while scrolled.
-		var owned_toggle := viewport.gui_get_focus_owner() as Button
-		_check(owned_toggle != null and owned_toggle.has_meta("build_details"), "D-pad reaches an inspectable owned power")
-		if owned_toggle != null and owned_toggle.has_meta("build_details"):
-			var reference: WeakRef = owned_toggle.get_meta("build_details")
-			var details := reference.get_ref() as RichTextLabel
-			await _press_pad(JOY_BUTTON_A)
-			_check(details.visible, "Controller expands an owned power's conditions")
-			steps = 0
-			while details.get_global_rect().end.y > build._scroll.get_global_rect().end.y + 1.0 and steps < 40:
-				var before := build._scroll.scroll_vertical
-				await _press_pad(JOY_BUTTON_DPAD_DOWN)
-				_check(build._scroll.scroll_vertical > before and viewport.gui_get_focus_owner() == owned_toggle, "Owned conditions remain readable before focus moves onward")
-				steps += 1
-			_check(steps < 40, "Owned conditions finish scrolling")
-			await _press_pad(JOY_BUTTON_DPAD_DOWN)
-			_check(viewport.gui_get_focus_owner() != owned_toggle, "Completed owned section yields focus normally")
+		_check(viewport.gui_get_focus_owner() != owned_toggle, "Collapsed section resumes ordinary focus navigation")
 		await _press_pad(JOY_BUTTON_B)
 		_check(not build.is_open() and ui.is_active() and ui.boon_choices == choices and rng.state == rng_before, "Back from nested details preserves the exact reward offer and RNG")
 		_check(selected.is_empty(), "Nested controller inspection never selects a reward")
@@ -448,7 +403,7 @@ func _check_mouse_inspection() -> void:
 			_move_reward_pointer(ui.build_button.get_global_rect().get_center())
 			_check(ui.boon_hovered_index == -1, "Moving to the footer clears the reward click target")
 			await _click_reward_pointer(ui.build_button.get_global_rect().get_center())
-			_check(build.is_open() and build._candidate_details.get_parsed_text().begins_with("Selected offer: " + String(choices[index].name)), "Mouse Your Build retains the previously pointed card %d of %d" % [index + 1, count])
+			_check_owned_build_only("Mouse Your Build shows owned powers after pointing to card %d of %d" % [index + 1, count])
 			_check(selected.is_empty() and skipped == skips_before, "Clicking Your Build neither selects nor skips the remembered offer")
 			_check(ui.boon_choices == choices and rng.state == rng_before and ui._reward_rerolls_remaining == rerolls_before and offered == offered_before, "Mouse inspection preserves offers, RNG, rerolls and presentation events")
 			await _click_reward_pointer(build._close_button.get_global_rect().get_center())
@@ -463,9 +418,8 @@ func _check_mouse_inspection() -> void:
 	await process_frame
 	await process_frame
 	ui.boon_card_panels[2].grab_focus()
-	var focused_name := String(ui.boon_choices[2].name)
 	await _click_reward_pointer(ui.build_button.get_global_rect().get_center())
-	_check(build.is_open() and build._candidate_details.get_parsed_text().begins_with("Selected offer: " + focused_name), "Mouse inspection retains the last keyboard-focused card")
+	_check_owned_build_only("Mouse inspection shows owned powers after keyboard focus")
 	build.close()
 	await process_frame
 	ui.process_input(0.016)
@@ -474,9 +428,8 @@ func _check_mouse_inspection() -> void:
 	_check(ui.is_active() and ui._reward_rerolls_remaining == 0 and ui._inspection_candidate_index == -1 and selected.is_empty(), "Native Reroll resets comparison without selecting the old card")
 	ui.boon_confirm_lock_time = 0.0
 	ui.process_input(0.016)
-	var rerolled_first := String(ui.boon_choices[0].name)
 	await _click_reward_pointer(ui.build_button.get_global_rect().get_center())
-	_check(build.is_open() and build._candidate_details.get_parsed_text().begins_with("Selected offer: " + rerolled_first), "A rerolled offer uses its first card until another is pointed or focused")
+	_check_owned_build_only("A rerolled offer still opens only the owned build")
 	build.close()
 	await process_frame
 	ui.process_input(0.016)
@@ -496,7 +449,7 @@ func _check_mouse_inspection() -> void:
 	_open()
 	_check(ui._inspection_candidate_index == -1, "Replacing an open offer resets its comparison without requiring a close")
 	await _click_reward_pointer(ui.build_button.get_global_rect().get_center())
-	_check(build.is_open() and build._candidate_details.get_parsed_text().begins_with("Selected offer: " + String(ui.boon_choices[0].name)), "A new offer cannot inherit the old offer's card index")
+	_check_owned_build_only("A new offer opens only the owned build")
 	build.close()
 	ui.close_selection()
 	ui.initialize(4, 0.0)

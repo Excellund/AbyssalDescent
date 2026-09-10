@@ -137,7 +137,7 @@ func _build_ui(host: Node) -> void:
 	catalyst_column.add_child(_catalyst_info_banner)
 	catalyst_column.move_child(_catalyst_info_banner, 1)
 	_catalyst_column_root = catalyst_column
-	_oath_list = _build_section_column(columns, "Oaths", 1.7)
+	_oath_list = _build_section_column(columns, "", 1.7)
 	_oath_list.add_theme_constant_override("separation", 8)
 	_oath_column_root = _oath_list.get_parent().get_parent().get_parent()
 
@@ -172,6 +172,8 @@ func populate() -> void:
 
 func set_setup_bearing(tier: int) -> void:
 	_setup_bearing = tier
+	if _oath_list != null and _oath_list.get_child_count() > 0:
+		_refresh_oath_list()
 
 func _is_forsworn_setup() -> bool:
 	if _setup_bearing >= 0:
@@ -238,6 +240,8 @@ func _apply_mode_visibility() -> void:
 			(_modifier_column_root as Control).visible = true
 		if _catalyst_column_root != null:
 			(_catalyst_column_root as Control).visible = true
+	if _oath_list != null and _oath_list.get_child_count() > 0:
+		_refresh_oath_list()
 
 func _refresh_all() -> void:
 	_refresh_header()
@@ -588,41 +592,48 @@ func _refresh_oath_list() -> void:
 	var profile: Dictionary = _get_profile()
 	var defs: Dictionary = OATHS_REGISTRY.get_all_definitions()
 
-	var boss_ids: Array[String] = []
-	var build_ids: Array[String] = []
-	var ascension_ids: Array[String] = []
+	var stages := {"journey": [], "challenge": [], "prestige": []}
 	var clear_by_character: Dictionary = {}
 
 	var keys: Array = defs.keys()
 	keys.sort()
 	for oath_id_variant in keys:
 		var oath_id: String = String(oath_id_variant)
-		if oath_id.ends_with("_no_hit"):
-			boss_ids.append(oath_id)
-		elif oath_id.begins_with("ascension_rank_"):
-			ascension_ids.append(oath_id)
-		elif oath_id.begins_with("clear_"):
-			var trimmed: String = oath_id.substr("clear_".length())
-			var underscore_index: int = trimmed.rfind("_")
-			var character_id: String = trimmed.substr(0, underscore_index) if underscore_index > 0 else trimmed
+		var def: Dictionary = defs[oath_id]
+		var stage := String(def.get("progression_stage", "prestige"))
+		if stage == "bearing":
+			var character_id := String((def.get("params", {}) as Dictionary).get("character_id", ""))
 			if not clear_by_character.has(character_id):
 				clear_by_character[character_id] = []
 			(clear_by_character[character_id] as Array).append(oath_id)
-		else:
-			build_ids.append(oath_id)
+		elif stages.has(stage):
+			(stages[stage] as Array).append(oath_id)
 
-	_append_oath_group(profile, defs, "Boss Mastery", _sort_boss_oaths(boss_ids))
-	_append_oath_group(profile, defs, "Build Discipline", build_ids)
-	_append_oath_group(profile, defs, "Ascension Milestones", _sort_ascension_oaths(ascension_ids))
+	_append_oath_group(profile, defs, "Journey · Any Bearing", _sort_progression_oaths(stages.journey))
+	_append_oath_group(profile, defs, "Challenges · Delver+", _sort_progression_oaths(stages.challenge))
+	_append_oath_group(profile, defs, "Prestige · Forsworn", _sort_progression_oaths(stages.prestige))
 	_append_clear_groups(profile, defs, clear_by_character)
 
 const _BOSS_ORDER: Array[String] = ["warden", "sovereign", "lacuna"]
 const _BEARING_ORDER: Array[String] = ["pilgrim", "delver", "harbinger", "forsworn"]
 
+func _sort_progression_oaths(oath_ids: Array) -> Array[String]:
+	var boss_ids: Array[String] = []
+	var other_ids: Array[String] = []
+	var ascension_ids: Array[String] = []
+	for oath_id: String in oath_ids:
+		if oath_id.ends_with("_no_hit"):
+			boss_ids.append(oath_id)
+		elif oath_id.begins_with("ascension_rank_"):
+			ascension_ids.append(oath_id)
+		else:
+			other_ids.append(oath_id)
+	return _sort_boss_oaths(boss_ids) + other_ids + _sort_ascension_oaths(ascension_ids)
+
 func _sort_boss_oaths(oath_ids: Array[String]) -> Array[String]:
 	var ordered: Array[String] = []
 	for boss_id in _BOSS_ORDER:
-		var candidate: String = "%s_no_hit" % boss_id
+		var candidate: String = "forsworn_%s_no_hit" % boss_id
 		if oath_ids.has(candidate):
 			ordered.append(candidate)
 	for oath_id in oath_ids:
@@ -663,13 +674,13 @@ func _append_oath_group(profile: Dictionary, defs: Dictionary, title: String, oa
 	for oath_id_variant in oath_ids:
 		var oath_id: String = String(oath_id_variant)
 		var def: Dictionary = defs[oath_id] as Dictionary
-		var completed: bool = META_PROGRESS_STORE.is_oath_completed(profile, oath_id)
+		var completed: bool = OATHS_REGISTRY.is_completed(oath_id, META_PROGRESS_STORE.get_completed_oath_ids(profile))
 		_oath_list.add_child(_make_oath_card(def, completed))
 
 func _append_clear_groups(profile: Dictionary, defs: Dictionary, clear_by_character: Dictionary) -> void:
 	if clear_by_character.is_empty():
 		return
-	_oath_list.add_child(_make_oath_group_header("Bearing Clears"))
+	_oath_list.add_child(_make_oath_group_header("Vessel Progression"))
 	var character_keys: Array = clear_by_character.keys()
 	character_keys.sort()
 	for character_id_variant in character_keys:
@@ -677,7 +688,7 @@ func _append_clear_groups(profile: Dictionary, defs: Dictionary, clear_by_charac
 		var oath_ids: Array[String] = _sort_clear_oaths(clear_by_character[character_id] as Array)
 		var completed_count: int = 0
 		for oath_id_variant in oath_ids:
-			if META_PROGRESS_STORE.is_oath_completed(profile, String(oath_id_variant)):
+			if OATHS_REGISTRY.is_completed(String(oath_id_variant), META_PROGRESS_STORE.get_completed_oath_ids(profile)):
 				completed_count += 1
 		var character_def: Dictionary = CHARACTER_REGISTRY.get_character(character_id)
 		var character_name: String = String(character_def.get("name", character_id.capitalize()))
@@ -694,13 +705,13 @@ func _append_clear_groups(profile: Dictionary, defs: Dictionary, clear_by_charac
 		for oath_id_variant in oath_ids:
 			var oath_id: String = String(oath_id_variant)
 			var def: Dictionary = defs[oath_id] as Dictionary
-			var completed: bool = META_PROGRESS_STORE.is_oath_completed(profile, oath_id)
+			var completed: bool = OATHS_REGISTRY.is_completed(oath_id, META_PROGRESS_STORE.get_completed_oath_ids(profile))
 			_oath_list.add_child(_make_oath_card(def, completed))
 
 func _make_oath_group_header(title: String) -> Label:
 	var label := Label.new()
 	label.text = title
-	label.add_theme_font_size_override("font_size", 18)
+	label.add_theme_font_size_override("font_size", 24)
 	label.add_theme_color_override("font_color", Color(1.0, 0.86, 0.52, 0.96))
 	if _oath_list.get_child_count() > 0:
 		var spacer := Control.new()
@@ -715,7 +726,7 @@ func _make_collapse_header_button(text: String, collapsed: bool) -> Button:
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.flat = true
 	button.focus_mode = Control.FOCUS_NONE
-	button.add_theme_font_size_override("font_size", 15)
+	button.add_theme_font_size_override("font_size", 24)
 	button.add_theme_color_override("font_color", Color(0.86, 0.96, 1.0, 0.92))
 	button.add_theme_color_override("font_hover_color", Color(1.0, 1.0, 1.0, 1.0))
 	return button
@@ -723,7 +734,10 @@ func _make_collapse_header_button(text: String, collapsed: bool) -> Button:
 func _make_oath_card(def: Dictionary, completed: bool) -> PanelContainer:
 	var card := PanelContainer.new()
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	card.add_theme_stylebox_override("panel", _make_oath_card_style(completed))
+	var available := OATHS_REGISTRY.is_bearing_eligible(def, _selected_oath_bearing())
+	card.add_theme_stylebox_override("panel", _make_oath_card_style(completed, available))
+	card.set_meta(&"oath_bearing_eligible", available)
+	card.set_meta(&"oath_completed", completed)
 
 	var inner := VBoxContainer.new()
 	inner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -736,7 +750,7 @@ func _make_oath_card(def: Dictionary, completed: bool) -> PanelContainer:
 	title_label.text = "%s  %s" % [glyph, String(def.get("label", ""))]
 	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	title_label.add_theme_font_size_override("font_size", 17)
+	title_label.add_theme_font_size_override("font_size", 28)
 	title_label.add_theme_color_override("font_color", title_color)
 	inner.add_child(title_label)
 
@@ -746,9 +760,17 @@ func _make_oath_card(def: Dictionary, completed: bool) -> PanelContainer:
 		desc_label.text = description
 		desc_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		desc_label.add_theme_font_size_override("font_size", 13)
+		desc_label.add_theme_font_size_override("font_size", 23)
 		desc_label.add_theme_color_override("font_color", Color(0.72, 0.84, 0.96, 0.82))
 		inner.add_child(desc_label)
+
+	var requirement_label := Label.new()
+	requirement_label.text = _format_oath_requirement(def, completed)
+	requirement_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	requirement_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	requirement_label.add_theme_font_size_override("font_size", 21)
+	requirement_label.add_theme_color_override("font_color", Color(0.74, 1.0, 0.78, 0.96) if completed or available else Color(0.96, 0.76, 0.46, 0.96))
+	inner.add_child(requirement_label)
 
 	var reward_text: String = _format_oath_reward(def)
 	if not reward_text.is_empty():
@@ -756,20 +778,23 @@ func _make_oath_card(def: Dictionary, completed: bool) -> PanelContainer:
 		reward_label.text = reward_text
 		reward_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		reward_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		reward_label.add_theme_font_size_override("font_size", 13)
+		reward_label.add_theme_font_size_override("font_size", 21)
 		reward_label.add_theme_color_override("font_color", Color(1.0, 0.84, 0.46, 0.94))
 		inner.add_child(reward_label)
 
 	return card
 
-func _make_oath_card_style(completed: bool) -> StyleBoxFlat:
+func _make_oath_card_style(completed: bool, available: bool = true) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	if completed:
 		style.bg_color = Color(0.10, 0.22, 0.14, 0.55)
 		style.border_color = Color(0.46, 0.84, 0.54, 0.62)
-	else:
+	elif available:
 		style.bg_color = Color(0.08, 0.14, 0.22, 0.50)
 		style.border_color = Color(0.40, 0.58, 0.82, 0.40)
+	else:
+		style.bg_color = Color(0.14, 0.12, 0.10, 0.50)
+		style.border_color = Color(0.66, 0.50, 0.30, 0.46)
 	style.border_width_left = 1
 	style.border_width_top = 1
 	style.border_width_right = 1
@@ -778,11 +803,21 @@ func _make_oath_card_style(completed: bool) -> StyleBoxFlat:
 	style.corner_radius_top_right = 8
 	style.corner_radius_bottom_left = 8
 	style.corner_radius_bottom_right = 8
-	style.content_margin_left = 14.0
-	style.content_margin_right = 14.0
-	style.content_margin_top = 9.0
-	style.content_margin_bottom = 9.0
+	style.content_margin_left = 12.0
+	style.content_margin_right = 12.0
+	style.content_margin_top = 8.0
+	style.content_margin_bottom = 8.0
 	return style
+
+func _format_oath_requirement(def: Dictionary, completed: bool) -> String:
+	var minimum := int(def.get("minimum_bearing_tier", 0))
+	var requirement := "Any Bearing"
+	if String(def.get("evaluator_key", "")) == "win_with_character_at_bearing":
+		requirement = "%s Bearing" % OATHS_REGISTRY._bearing_label(int((def.get("params", {}) as Dictionary).get("bearing_tier", minimum)))
+	elif minimum > 0:
+		requirement = OATHS_REGISTRY._bearing_label(minimum) + ("+" if minimum < 3 else "")
+	var status := "Completed" if completed else ("Available" if OATHS_REGISTRY.is_bearing_eligible(def, _selected_oath_bearing()) else "Requires another Bearing")
+	return "%s · %s" % [requirement, status]
 
 func _format_oath_reward(def: Dictionary) -> String:
 	var parts: Array[String] = []
@@ -801,6 +836,13 @@ func _format_oath_reward(def: Dictionary) -> String:
 	return "★ " + " · ".join(parts)
 
 # --- builders ---
+
+func _selected_oath_bearing() -> int:
+	# A previous setup's cached bearing must not leak into ordinary menu browsing.
+	if _run_setup_mode_enabled and _setup_bearing >= 0:
+		return _setup_bearing
+	var run_context := get_node_or_null(RUN_CONTEXT_PATH) as RUN_CONTEXT_SCRIPT
+	return run_context.get_current_difficulty_tier() if run_context != null else -1
 
 func _build_modifier_lock_banner() -> PanelContainer:
 	return _build_notice_banner(
@@ -870,11 +912,12 @@ func _build_section_column(parent: HBoxContainer, header_text: String, stretch_r
 	column.add_theme_constant_override("separation", 10)
 	parent.add_child(column)
 
-	var header := Label.new()
-	header.text = header_text
-	header.add_theme_font_size_override("font_size", 20)
-	header.add_theme_color_override("font_color", Color(0.86, 0.96, 1.0, 1.0))
-	column.add_child(header)
+	if not header_text.is_empty():
+		var header := Label.new()
+		header.text = header_text
+		header.add_theme_font_size_override("font_size", 20)
+		header.add_theme_color_override("font_color", Color(0.86, 0.96, 1.0, 1.0))
+		column.add_child(header)
 
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL

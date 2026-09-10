@@ -290,6 +290,8 @@ func _test_explicit_values() -> void:
 
 func _test_build_and_oath_roundtrip(single_arcana: bool) -> void:
 	_setup("solo")
+	world.current_difficulty_tier = 3
+	RunContext.set_active_ascension_loadout([], 3)
 	var recorder := RECORDER.new(world)
 	world.run_summary_recorder = recorder
 	recorder.mark_run_start()
@@ -328,6 +330,6 @@ func _test_build_and_oath_roundtrip(single_arcana: bool) -> void:
 	var earned_before: Array = EVALUATOR.evaluate_run(before,META._get_default_profile()).completed_oath_ids
 	var earned_after: Array = EVALUATOR.evaluate_run(final,META._get_default_profile()).completed_oath_ids
 	check(earned_after == earned_before,"Finalization after disk resume preserves completed encounters and whole-run Oath evidence")
-	check(earned_after.has("singular_focus") == single_arcana and earned_after.has("closed_fist") == single_arcana and earned_after.has("flawless_run") == single_arcana,"Single-Arcana, primary-attack and damage evidence retain both their qualifying and disqualifying results")
+	check(earned_after.has("forsworn_singular_focus") == single_arcana and earned_after.has("forsworn_closed_fist") == single_arcana and earned_after.has("forsworn_flawless_run") == single_arcana,"Single-Arcana, primary-attack and damage evidence retain both their qualifying and disqualifying results")
 	check(HISTORY.load_all().size() == 1 and HISTORY.load_all()[0].build_summary == JSON.parse_string(JSON.stringify(final.build_summary)),"Final local history retains the resumed build")
 	await _cleanup()

@@ -228,6 +228,10 @@ func restore_tracker_items_from_snapshot(snapshot: Dictionary) -> void:
 		# Legacy saves kept the build but not prior hits, attacks, rests or time.
 		# Keep the run playable without treating unknown history as zero usage.
 		run_summary_tracker.full_run_tracking_complete = false
+		run_summary_tracker.dash_tracking_complete = false
+		run_summary_tracker.oath_min_difficulty_tier = -1
+		run_summary_tracker.oath_difficulty_verified = false
+		run_summary_tracker.catalyst_tracking_complete = false
 		run_summary_tracker.restore_descent_facts({})
 		run_summary_tracker.restore_run_provenance(null)
 	var boon_raw: Variant = snapshot.get("tracker_boon_items", {})
@@ -236,9 +240,20 @@ func restore_tracker_items_from_snapshot(snapshot: Dictionary) -> void:
 	var arcana_raw: Variant = snapshot.get("tracker_arcana_items", {})
 	if arcana_raw is Dictionary:
 		run_summary_tracker.arcana_items = (arcana_raw as Dictionary).duplicate(true)
-	var boss_raw: Variant = snapshot.get("tracker_boss_reward_items", {})
-	if boss_raw is Dictionary:
+	var boss_raw: Variant = snapshot.get("tracker_boss_reward_items")
+	var boss_inventory_known := boss_raw is Dictionary
+	if boss_inventory_known:
+		for item in boss_raw.values():
+			if not (item is Dictionary):
+				boss_inventory_known = false
+				break
+	if boss_inventory_known:
 		run_summary_tracker.boss_reward_items = (boss_raw as Dictionary).duplicate(true)
+	else:
+		# Missing inventory is unknown history, even beside a modern checkpoint.
+		# Preserve the incomplete-history flag in later checkpoints instead of
+		# treating missing saved evidence as a fully tracked run after resume.
+		run_summary_tracker.full_run_tracking_complete = false
 
 func mark_debug_mode() -> void:
 	_run_is_debug = true
@@ -491,6 +506,15 @@ func record_primary_attack_fired() -> void:
 	if run_summary_tracker == null:
 		return
 	run_summary_tracker.record_primary_attack_fired()
+
+func record_normal_dash_started() -> void:
+	if run_summary_tracker == null:
+		return
+	run_summary_tracker.record_normal_dash_started()
+
+func record_difficulty_applied(tier: int) -> void:
+	if run_summary_tracker != null:
+		run_summary_tracker.record_difficulty_applied(tier)
 
 func record_player_damage_taken(raw_amount: int, final_amount: int, damage_context: Dictionary) -> void:
 	if not can_record():
@@ -858,11 +882,23 @@ func finalize_synced_run_summary_for_joiner(synced_summary: Dictionary, outcome:
 	if synced_summary.is_empty():
 		return
 	var augmented := synced_summary.duplicate(true)
+	# Dash evidence belongs to this input owner, never the host's avatar.
+	augmented["dash_tracking_complete"] = false
+	augmented["catalyst_tracking_complete"] = false
+	var host_minimum: int = RUN_SUMMARY_TRACKER_SCRIPT._oath_minimum_from_summary(augmented)
+	augmented["oath_min_difficulty_tier"] = -1
+	augmented["oath_difficulty_verified"] = false
 	if run_summary_tracker != null:
 		# The local input owner records its attacks; the host's count belongs to
 		# a different player and must not decide this player's Closed Fist Oath.
 		augmented["primary_attacks_fired"] = run_summary_tracker.primary_attacks_fired
+		augmented["dashes_performed"] = run_summary_tracker.dashes_performed
+		augmented["dash_tracking_complete"] = run_summary_tracker.dash_tracking_complete and run_summary_tracker.full_run_tracking_complete
 		augmented["equipped_catalyst_ids"] = run_summary_tracker.equipped_catalyst_ids.duplicate()
+		augmented["catalyst_tracking_complete"] = run_summary_tracker.catalyst_tracking_complete and run_summary_tracker.full_run_tracking_complete
+		var local_minimum: int = mini(run_summary_tracker.oath_min_difficulty_tier, RUN_SUMMARY_TRACKER_SCRIPT._validated_oath_tier(run_summary_tracker.difficulty_tier))
+		augmented["oath_min_difficulty_tier"] = mini(host_minimum, local_minimum)
+		augmented["oath_difficulty_verified"] = RUN_SUMMARY_TRACKER_SCRIPT._is_forsworn_evidence(augmented.oath_min_difficulty_tier)
 		# The launch established this setup on every peer. A stale outcome must
 		# not grant Forsworn rank progress for a lower-tier local run.
 		augmented["difficulty_tier"] = run_summary_tracker.difficulty_tier

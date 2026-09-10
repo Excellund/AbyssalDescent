@@ -188,7 +188,7 @@ func _test_progression_guards() -> void:
 	for tier in [-1, 0, 1, 2, 3]:
 		for complete in [false, true]:
 			var world := _make_world(0)
-			var summary := {"outcome": "clear", "character_id": "bastion", "difficulty_tier": tier, "ascension_rank": 10, "ascension_tracking_complete": complete}
+			var summary := {"outcome": "clear", "character_id": "bastion", "difficulty_tier": tier, "oath_min_difficulty_tier": tier, "ascension_rank": 10, "ascension_tracking_complete": complete}
 			var completed: Array = EVALUATOR.evaluate_run(summary, world.context.meta_progress_profile).get("completed_oath_ids", [])
 			var eligible: bool = tier == 3 and complete
 			_check(completed.has("ascension_rank_10") == eligible, "Oath award independently requires Forsworn and modifier evidence: %d/%s" % [tier, complete])

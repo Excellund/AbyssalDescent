@@ -185,6 +185,7 @@ signal health_changed(current_health: int, max_health: int)
 signal died
 signal damage_taken(raw_amount: int, final_amount: int, damage_context: Dictionary)
 signal primary_attack_fired
+signal normal_dash_started
 
 @export var max_speed: float = 220.0
 @export var acceleration: float = 1400.0
@@ -1014,6 +1015,7 @@ func _try_start_dash(direction: Vector2) -> void:
 	veilstep_rhythm_touched_enemy_ids.clear()
 	veilstep_rhythm_shard_awarded_this_dash = false
 	_set_dash_phasing(true)
+	normal_dash_started.emit()
 	if passive_sigil_burst:
 		sigil_burst_ready = true
 	if reward_farline_volley:

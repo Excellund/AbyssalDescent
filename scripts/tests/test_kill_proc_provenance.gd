@@ -98,7 +98,7 @@ func _test_kill_callback_contract() -> void:
 func _test_oath_accounting() -> void:
 	_make_world()
 	var tracker := TRACKER.new()
-	tracker.reset_for_run({})
+	tracker.reset_for_run({"difficulty_tier": 3, "equipped_catalyst_ids": []})
 	player.primary_attack_fired.connect(tracker.record_primary_attack_fired)
 	for power_id in ["execution_edge", "eclipse_mark", "fracture_field", "returning_crescent", "returning_crescent"]:
 		player.apply_trial_power(power_id)
@@ -116,7 +116,7 @@ func _test_oath_accounting() -> void:
 	DAMAGEABLE.apply_damage(victim, 20, {"attack_type": "sovereigns_double", "secondary": true}, 1)
 	_check(tracker.enemies_killed == 1 and tracker.primary_attacks_fired == 0, "Secondary kill rewards preserve kill evidence without inventing a primary attack")
 	_check(is_equal_approx(float(DAMAGEABLE.status_snapshot(neighbor, 1).mark_ratio), player.eclipse_mark_bonus_ratio) and neighbor.velocity.length() > 0.0, "Secondary kills retain ordinary shared Eclipse and Edict benefits")
-	_check(EVALUATOR.evaluate_run(tracker.build_summary({"outcome": "clear"}), META._get_default_profile()).completed_oath_ids.has("closed_fist"), "Secondary-only combat does not disqualify Closed Fist")
+	_check(EVALUATOR.evaluate_run(tracker.build_summary({"outcome": "clear"}), META._get_default_profile()).completed_oath_ids.has("forsworn_closed_fist"), "Secondary-only combat does not disqualify Closed Fist")
 	player.boss_combinations.create_shade(Vector2.ZERO)
 	player._try_execute_attack(Vector2.RIGHT)
 	_check(tracker.primary_attacks_fired == 1 and player.attack_combo_counter == 1, "Accepted melee with shade/Crescent records one primary attack and one Execution step")
@@ -125,8 +125,8 @@ func _test_oath_accounting() -> void:
 	player.returning_crescent.tick(1.0)
 	_check(tracker.primary_attacks_fired == 2, "Delayed blade hits never advance primary-attack or Execution evidence")
 	var restored := TRACKER.new()
-	restored.reset_for_run({})
+	restored.reset_for_run({"difficulty_tier": 3, "equipped_catalyst_ids": []})
 	restored.restore_checkpoint(tracker.build_checkpoint())
 	_check(restored.primary_attacks_fired == 2 and restored.enemies_killed == 1, "Checkpoint preserves actual attack and secondary-kill accounting")
-	_check(not EVALUATOR.evaluate_run(restored.build_summary({"outcome": "clear"}), META._get_default_profile()).completed_oath_ids.has("closed_fist"), "Resume cannot recover Closed Fist after deliberate attacks")
+	_check(not EVALUATOR.evaluate_run(restored.build_summary({"outcome": "clear"}), META._get_default_profile()).completed_oath_ids.has("forsworn_closed_fist"), "Resume cannot recover Closed Fist after deliberate attacks")
 	_free_world()

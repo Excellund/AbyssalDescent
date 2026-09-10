@@ -6,6 +6,7 @@ const ENUMS := preload("res://scripts/shared/enums.gd")
 const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
 const PROVENANCE := preload("res://scripts/core/run_provenance.gd")
 const TELEMETRY := preload("res://scripts/run_telemetry_store.gd")
+const CATALYST_REGISTRY := preload("res://scripts/progression/catalyst_registry.gd")
 
 var started_at_unix: int = 0
 var started_at_msec: int = 0
@@ -37,7 +38,7 @@ var boss_reward_items: Dictionary = {}
 var reward_timeline: Array[Dictionary] = []
 var unlocks: Array[String] = []
 
-## Endgame chase tracking (Ascension + Oaths). Host-tracked.
+## Endgame chase: shared encounter facts, local actions and frozen run setup.
 var ascension_rank: int = 0
 var ascension_tracking_complete: bool = true
 var ascension_loadout: Array[String] = []
@@ -46,6 +47,12 @@ var boss_no_hit_ids: Array[String] = []
 var hold_full_control_achieved: bool = false
 var rest_count: int = 0
 var primary_attacks_fired: int = 0
+var dashes_performed: int = 0
+var dash_tracking_complete: bool = true
+## -1 means unknown history; a later difficulty change cannot certify it.
+var oath_min_difficulty_tier: int = -1
+var oath_difficulty_verified: bool = false
+var catalyst_tracking_complete: bool = false
 var full_run_tracking_complete: bool = true
 var _bosses_with_damage_taken: Dictionary = {}
 var _active_boss_id: String = ""
@@ -58,7 +65,9 @@ func reset_for_run(run_seed: Dictionary) -> void:
 	started_at_msec = int(run_seed.get("started_at_msec", Time.get_ticks_msec()))
 	character_id = String(run_seed.get("character_id", "unknown")).strip_edges().to_lower()
 	character_name = String(run_seed.get("character_name", character_id.capitalize())).strip_edges()
-	difficulty_tier = int(run_seed.get("difficulty_tier", 0))
+	oath_min_difficulty_tier = _validated_oath_tier(run_seed.get("difficulty_tier"))
+	difficulty_tier = oath_min_difficulty_tier
+	oath_difficulty_verified = oath_min_difficulty_tier == BEARING_ENUMS.BearingTier.FORSWORN
 	difficulty_label = String(run_seed.get("difficulty_label", "Pilgrim")).strip_edges()
 	game_version = String(run_seed.get("game_version", "dev")).strip_edges()
 	_runtime_game_version = game_version
@@ -91,6 +100,7 @@ func reset_for_run(run_seed: Dictionary) -> void:
 		for entry in loadout_raw:
 			ascension_loadout.append(String(entry))
 	var catalysts_raw: Variant = run_seed.get("equipped_catalyst_ids", [])
+	catalyst_tracking_complete = run_seed.has("equipped_catalyst_ids") and _valid_catalyst_ids(catalysts_raw)
 	equipped_catalyst_ids.clear()
 	if catalysts_raw is Array:
 		for entry in catalysts_raw:
@@ -99,6 +109,8 @@ func reset_for_run(run_seed: Dictionary) -> void:
 	hold_full_control_achieved = false
 	rest_count = 0
 	primary_attacks_fired = 0
+	dashes_performed = 0
+	dash_tracking_complete = true
 	full_run_tracking_complete = true
 	_bosses_with_damage_taken.clear()
 	_active_boss_id = ""
@@ -189,6 +201,13 @@ func build_checkpoint() -> Dictionary:
 		"hold_full_control_achieved": hold_full_control_achieved,
 		"rest_count": rest_count,
 		"primary_attacks_fired": primary_attacks_fired,
+		"dashes_performed": dashes_performed,
+		"dash_tracking_complete": dash_tracking_complete,
+		"oath_min_difficulty_tier": oath_min_difficulty_tier,
+		"oath_difficulty_verified": oath_difficulty_verified,
+		"oath_start_difficulty_tier": difficulty_tier,
+		"catalyst_tracking_complete": catalyst_tracking_complete,
+		"equipped_catalyst_ids": equipped_catalyst_ids.duplicate(),
 		"full_run_tracking_complete": full_run_tracking_complete,
 		"ascension_tracking_complete": ascension_tracking_complete,
 		"reward_timeline": reward_timeline.duplicate(true),
@@ -207,6 +226,24 @@ func restore_checkpoint(checkpoint: Dictionary) -> void:
 	hold_full_control_achieved = bool(checkpoint.get("hold_full_control_achieved", false))
 	rest_count = maxi(0, int(checkpoint.get("rest_count", 0)))
 	primary_attacks_fired = maxi(0, int(checkpoint.get("primary_attacks_fired", 0)))
+	# Earlier saves have no Dash evidence. Unknown history must never become
+	# a zero-Dash run, without invalidating unrelated tracked achievements.
+	var saved_dashes: Variant = checkpoint.get("dashes_performed")
+	var valid_dashes: bool = (saved_dashes is int or saved_dashes is float) and is_finite(float(saved_dashes)) and float(saved_dashes) >= 0.0 and float(saved_dashes) == floor(float(saved_dashes))
+	dashes_performed = int(saved_dashes) if valid_dashes else 0
+	var saved_dash_tracking: Variant = checkpoint.get("dash_tracking_complete")
+	dash_tracking_complete = valid_dashes and saved_dash_tracking is bool and saved_dash_tracking
+	var saved_difficulty: Dictionary = {
+		"difficulty_tier": checkpoint.get("oath_start_difficulty_tier"),
+		"oath_difficulty_verified": checkpoint.get("oath_difficulty_verified"),
+	}
+	if checkpoint.has("oath_min_difficulty_tier"):
+		saved_difficulty["oath_min_difficulty_tier"] = checkpoint.oath_min_difficulty_tier
+	oath_min_difficulty_tier = mini(oath_min_difficulty_tier, _oath_minimum_from_summary(saved_difficulty))
+	oath_difficulty_verified = oath_min_difficulty_tier == BEARING_ENUMS.BearingTier.FORSWORN
+	var saved_catalysts: Variant = checkpoint.get("equipped_catalyst_ids")
+	var saved_catalyst_tracking: Variant = checkpoint.get("catalyst_tracking_complete")
+	catalyst_tracking_complete = catalyst_tracking_complete and _valid_catalyst_ids(saved_catalysts) and saved_catalysts == equipped_catalyst_ids and saved_catalyst_tracking is bool and saved_catalyst_tracking
 	full_run_tracking_complete = bool(checkpoint.get("full_run_tracking_complete", true))
 	ascension_tracking_complete = ascension_tracking_complete and bool(checkpoint.get("ascension_tracking_complete", true))
 	reward_timeline.clear()
@@ -242,6 +279,45 @@ func record_hold_full_control() -> void:
 
 func record_primary_attack_fired() -> void:
 	primary_attacks_fired += 1
+
+func record_normal_dash_started() -> void:
+	dashes_performed += 1
+
+func record_difficulty_applied(tier: int) -> void:
+	# Neither a harder Bearing nor resuming can erase an easier/unknown segment.
+	oath_min_difficulty_tier = mini(oath_min_difficulty_tier, _validated_oath_tier(tier))
+	oath_difficulty_verified = oath_min_difficulty_tier == BEARING_ENUMS.BearingTier.FORSWORN
+
+static func _validated_oath_tier(raw: Variant) -> int:
+	if not (raw is int or raw is float) or not is_finite(float(raw)):
+		return -1
+	if raw < 0 or raw > BEARING_ENUMS.BearingTier.FORSWORN or float(raw) != floor(float(raw)):
+		return -1
+	return int(raw)
+
+static func _oath_minimum_from_summary(summary: Dictionary) -> int:
+	var actual_tier: int = _validated_oath_tier(summary.get("difficulty_tier"))
+	if summary.has("oath_min_difficulty_tier"):
+		return mini(actual_tier, _validated_oath_tier(summary.oath_min_difficulty_tier))
+	# The previous format only certified whole runs on Forsworn. A missing
+	# minimum on an easier run is unknown history, not evidence for that tier.
+	var legacy_proof: Variant = summary.get("oath_difficulty_verified")
+	if actual_tier == BEARING_ENUMS.BearingTier.FORSWORN and legacy_proof is bool and legacy_proof:
+		return actual_tier
+	return -1
+
+static func _is_forsworn_evidence(raw: Variant) -> bool:
+	return _validated_oath_tier(raw) == BEARING_ENUMS.BearingTier.FORSWORN
+
+static func _valid_catalyst_ids(raw: Variant) -> bool:
+	if not (raw is Array) or raw.size() > CATALYST_REGISTRY.get_slot_limit():
+		return false
+	var seen: Array[String] = []
+	for entry in raw:
+		if not (entry is String) or not CATALYST_REGISTRY.has_catalyst(entry) or seen.has(entry):
+			return false
+		seen.append(entry)
+	return true
 
 func record_unlock(unlock_label: String) -> void:
 	var label := unlock_label.strip_edges()
@@ -321,6 +397,11 @@ func build_summary(final_state: Dictionary) -> Dictionary:
 	summary["hold_full_control_achieved"] = hold_full_control_achieved
 	summary["rest_count"] = rest_count
 	summary["primary_attacks_fired"] = primary_attacks_fired
+	summary["dashes_performed"] = dashes_performed
+	summary["dash_tracking_complete"] = dash_tracking_complete
+	summary["oath_min_difficulty_tier"] = oath_min_difficulty_tier
+	summary["oath_difficulty_verified"] = oath_difficulty_verified
+	summary["catalyst_tracking_complete"] = catalyst_tracking_complete
 	summary["full_run_tracking_complete"] = full_run_tracking_complete
 	if reached_act > 0:
 		summary["reached_act"] = reached_act

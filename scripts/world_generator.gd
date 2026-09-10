@@ -530,6 +530,8 @@ func _setup_player_runtime_bindings() -> void:
 			player.connect("died", Callable(self, "_on_player_died"))
 		if player.has_signal("primary_attack_fired"):
 			player.connect("primary_attack_fired", Callable(self, "_on_player_primary_attack_fired"))
+		if player.has_signal("normal_dash_started"):
+			player.connect("normal_dash_started", Callable(self, "_on_player_normal_dash_started"))
 
 		player_camera.set_room_fit_zoom_scale(camera_base_zoom_in)
 	_bind_camera_to_local_player()
@@ -2306,6 +2308,8 @@ func _apply_difficulty_tier_bonuses(difficulty_tier: int, apply_player_health: b
 		return
 	
 	current_difficulty_tier = difficulty_tier
+	if _run_summary_ready():
+		run_summary_recorder.record_difficulty_applied(difficulty_tier)
 	current_difficulty_config = difficulty_provider.resolve_tier_config(difficulty_tier)
 	var difficulty_config := current_difficulty_config
 	var catalyst_payload: Dictionary = {}
@@ -4412,6 +4416,11 @@ func _on_player_primary_attack_fired() -> void:
 	if not _run_summary_ready():
 		return
 	run_summary_recorder.record_primary_attack_fired()
+
+func _on_player_normal_dash_started() -> void:
+	if not _run_summary_ready():
+		return
+	run_summary_recorder.record_normal_dash_started()
 
 func _on_player_damage_taken(raw_amount: int, final_amount: int, damage_context: Dictionary) -> void:
 	if not _run_summary_ready():

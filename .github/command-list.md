@@ -2,6 +2,18 @@
 
 Use these natural-language commands in chat. Phrases do not need to match exactly.
 
+## Ordered Game Feedback
+
+- Show feedback / Open the feedback board — open `Feedback Board.cmd` (or `python tools/feedback-board/board.py launch`) and show the ordered queue, current claim and playtest status.
+- Add feedback: [observation] — append an item at the bottom; include notes, build ID and source link when supplied. Recording feedback does not start work.
+- Develop the next feedback item / Choose the next improvement — continue the current development claim or claim the first available queued item, skipping blocked items without moving them. Report an empty or fully blocked queue.
+- Move [feedback ID] above [feedback ID] / Reorder feedback [IDs] — change priority only as explicitly instructed; agents do not independently rank the list.
+- Develop [feedback ID] first — follow that explicit request without rearranging the saved queue or taking another task's claim.
+- Block [feedback ID] because [reason] / Unblock [feedback ID] — preserve the queued position and record or clear the blocker.
+- Accept [feedback ID] / Reopen [feedback ID] — mark a playtested fix Done or return it to the bottom for another development pass.
+
+The [feedback board guide](../tools/feedback-board/README.md) documents CLI commands and recovery. [AGENTS.md](../AGENTS.md#ordered-game-feedback) defines the durable selection rules; existing verification and delivery requirements still apply.
+
 ## Refactor And Quality
 
 - Do the highest value refactor

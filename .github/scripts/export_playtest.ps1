@@ -216,7 +216,7 @@ func _initialize() -> void:
         failure = true
     _check_directory("res://")
     if not failure:
-        print("[OK] Package verified: production autoloads, matching dev build ID, disabled update feed, no tests/fixtures")
+        print("[OK] Package verified: production autoloads, matching dev build ID, disabled update feed, no tests/fixtures or feedback data/tooling")
     quit(1 if failure else 0)
 
 func _check_directory(path: String) -> void:
@@ -230,6 +230,9 @@ func _check_directory(path: String) -> void:
         var file_path := path.path_join(entry)
         if file_path.begins_with("res://scripts/tests/") or "validation_fixture" in file_path:
             push_error("Test or fixture included in package: " + file_path)
+            failure = true
+        if file_path.begins_with("res://.feedback/") or file_path.begins_with("res://tools/feedback-board/") or file_path == "res://Feedback Board.cmd":
+            push_error("Local feedback data or tooling included in package: " + file_path)
             failure = true
     for entry in directory.get_directories():
         _check_directory(path.path_join(entry))

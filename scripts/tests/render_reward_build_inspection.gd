@@ -33,8 +33,8 @@ func _run() -> void:
 		await _capture(folder, "arcana_" + str(size.x))
 		ui.boon_hovered_index = 3
 		ui._request_build_inspection()
-		await _capture(folder, "build_compare_" + str(size.x))
-		build._candidate_toggle.grab_focus()
+		await _capture(folder, "build_top_" + str(size.x))
+		_owned_toggle("Blast Drive").grab_focus()
 		await _press_pad(JOY_BUTTON_A)
 		await _capture(folder, "build_keywords_" + str(size.x))
 		await _press_pad(JOY_BUTTON_DPAD_DOWN)

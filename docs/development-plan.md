@@ -1,12 +1,16 @@
 # Development plan
 
-Updated September 10, 2026. This is the current entry point for priorities and the development pipeline. Feature documents retain their detailed rules and historical verification records; a file named `next-content-update.md` does not mean that feature is still unimplemented.
+Updated September 10, 2026. This is the current entry point for the development pipeline and recorded milestones. The local [ordered feedback board](../tools/feedback-board/README.md) determines the next development priority unless the user specifies otherwise. Feature documents retain their detailed rules and historical verification records; a file named `next-content-update.md` does not mean that feature is still unimplemented.
 
 **Accepted baseline:** the user accepted the sense-of-descent checkpoint and requested merge/tag. It is now on `main` and published as [v0.6.3](https://github.com/Excellund/AbyssalDescent/releases/tag/v0.6.3) at `922a4b5`: act environments and saved biome identity; entered-room variety and clear route payoffs; music, boss/act milestones and results. The [September 9–10 implementation log](overnight-descent-20260910.md) retains its development-build and gameplay evidence. Release exports now use the tested Godot 4.6.2; the published ZIP checksum and 27 isolated package checks passed, as did the [main regression workflow](https://github.com/Excellund/AbyssalDescent/actions/runs/34441655508). Package inspection did not launch the public executable or establish internet co-op acceptance.
 
 **Completed workday development:** the user authorized development until 15:00 Copenhagen today on `codex/encounter-evolution-20260910`. Thirteen pushed checkpoints through `a82441b` add brittle Shatterfield cover, persistent Pulse feedback and contextual HUD fading; improve Continue reliability, Mission bonuses, reward transitions, room-entry prompts and living co-op escort checks; fix mouse build comparisons, effective Stats cooldowns, join cancellation, History outcomes and host-authoritative co-op revival; and improve release/process validation and join diagnostics. Local suites, normal candidates and hosted validation passed all thirteen, ending with 323 scripts and 80 gameplay fixtures. The normal desktop playtest is delivered as `dev-20260910-101453509-6ad705cd`, with 27 package and 62 native checks passing. Scheduled development is paused after completing delivery ahead of the deadline. The [workday record](workday-development-20260910.md#final-normal-desktop-delivery) contains the exact source, build hash and verification evidence. The accepted release remains `v0.6.3`; this branch has not been merged or tagged.
 
 ## Current position
+
+The user requested the [feedback and Oaths checkpoint](feedback-checkpoint-20260910.md) be committed, merged into main and tagged after the final Unassisted/menu correction. That record identifies the included work, preserved independent changes and normal desktop build.
+
+The first four items from the ordered feedback board are implemented in the [Oaths and Build Details batch](feedback-development-20260910.md): additional Oaths, removal of the selected-offer box and concise character passive summaries. The latest [Oath progression revision](oath-progression.md) provides Any-Bearing Journey goals, Delver+ Challenges, Forsworn Prestige and character clears across all Bearings. It replaces the previous universal-Forsworn requirement, preserving approachable progression alongside meaningful postgame restrictions. The compact menu states each goal's requirement, and recorded difficulty history protects the harder achievements. The feature records contain verification and delivery evidence; the board records current human acceptance and retains the user's ordering.
 
 This plan was originally prepared from `main` at `4ee9681` (`Refine reward readability, character passives and Keeper protection`). The current accepted baseline is `922a4b5`; the workday branch starts from that release with a clean working tree.
 
@@ -26,7 +30,7 @@ The user has accepted the preceding development checkpoint. Keep collecting spec
 | Movement and arena pressure | Are Crescent return paths, Orbit exits, Undertow escape lanes and Breakwater's charge/recovery readable with ordinarily earned powers? | Prioritize specific control, warning or pacing problems. |
 | Complete run and co-op flow | Can players start/join, select rewards, move between rooms, pause, retry and resume as applicable? Do crowded fights remain readable? | Address lifecycle, online-flow and performance problems exposed beyond staged fixtures. |
 
-Use a small set of varied normal sessions, spreading the questions across runs rather than requiring a specific random reward combination. Record the build ID, character, Bearing/depth, relevant powers, what happened and what was expected. A short observation or clip is enough; these sessions are qualitative feedback, not a statistical balance sample.
+Use a small set of varied normal sessions, spreading the questions across runs rather than requiring a specific random reward combination. Record the build ID, character, Bearing/depth, relevant powers, what happened and what was expected. Add actionable observations to the feedback board, including a source link when useful. New feedback starts at the bottom; the user controls its order. A short observation or clip is enough; these sessions are qualitative feedback, not a statistical balance sample. The observation topics above do not assign queue priority.
 
 Use [local telemetry analysis](../playtester_telemetry/README.md) with the exact build and UTC date interval to support those observations. Report missing data and sample limitations. Debug loadouts can isolate a reported interaction when requested; they cannot establish normal-progression balance.
 
@@ -34,26 +38,26 @@ Use [local telemetry analysis](../playtester_telemetry/README.md) with the exact
 
 ## Next: one focused improvement at a time
 
-1. **Resolve the strongest playtest finding.** State the player-visible problem and acceptance condition, implement the smallest complete fix, and deliver it through the pipeline below. Prioritize broken behavior and unclear feedback before speculative numerical tuning.
+1. **Follow the ordered feedback board.** Continue the current development claim before selecting another item; otherwise claim the highest queued item that is not blocked. Keep blocked items in place with a reason. State the player-visible problem and acceptance condition, implement the smallest complete fix, and deliver it through the pipeline below. Explicit user requests take precedence without rearranging saved priorities. An empty or entirely blocked queue means there is no available next item; do not invent one or select from historical feature plans.
 2. **Use branch and pull-request validation.** The new [workflow](../.github/workflows/gameplay-regressions.yml) runs the existing full isolated suite on Windows with the verified Godot 4.6.2 archive and retains logs. It checks `main`, `codex/**` pushes and PRs targeting `main`. Verify a real hosted run before relying on it; mandatory branch protection remains a separate administrative change. GPU review and real online play remain separate checks.
-3. **Deliver one content slice at a time.** The authorized workday slice pilots brittle inner cover in Shatterfield Crossfire and fixes the missing active Pulse Window readout. The [workday record](workday-development-20260910.md) defines the player decision, limits and acceptance checks. More powers, encounters or progression require a new concrete outcome before implementation.
+3. **Close implementation and acceptance separately.** Move implemented and verified items to **Awaiting playtest**, then allow the next queued item to be selected. The user accepts an item as **Done** or reopens it at the bottom and can reorder it. Brittle inner cover in Shatterfield Crossfire and the active Pulse Window readout are completed workday changes recorded in the [workday record](workday-development-20260910.md), not a new content assignment. More powers, encounters or progression require a concrete outcome in selected feedback or an explicit user request.
 
 Performance work follows a reproducible slowdown and a representative capture. Refactoring follows a concrete maintenance problem in the area being changed. Neither needs a separate broad rewrite to continue development.
 
 ## Development pipeline
 
-**Observation -> bounded change -> focused verification -> agreed checkpoint -> normal build -> human playtest -> next observation.**
+**Observation -> user-ordered queue -> claim -> bounded change -> focused verification -> awaiting playtest -> agreed checkpoint -> normal build -> human acceptance or reopened feedback.** Adding and ordering observations does not start development. A verified item can await human playtest while development proceeds to the next available queued item.
 
 | Stage | Existing entry point / practice | Completion evidence |
 |---|---|---|
-| Define | This plan plus the relevant feature document; [combat wording](combat-wording.md) and [roster](combat-power-roster.md) for combat changes | One player-visible outcome, preserved rules and an acceptance condition. |
+| Define | Claimed feedback or an explicit user request, this plan and the relevant feature document; [combat wording](combat-wording.md) and [roster](combat-power-roster.md) for combat changes | One player-visible outcome, preserved rules and an acceptance condition; the board records the owning task. |
 | Implement | A cohesive change; `codex/` branches for new branch work; independent subtasks only where ownership is clear | Runtime, player-facing text and relevant documentation agree. |
 | Check behavior | [run_gameplay_regressions.ps1](../.github/scripts/run_gameplay_regressions.ps1); use `-TestScripts` while iterating | Relevant fixtures pass in a disposable project with isolated user data. Scoped runs still compile all scripts and check world/network contracts. |
 | Check branch/PR | [Gameplay Regressions](../.github/workflows/gameplay-regressions.yml) on GitHub-hosted Windows | Full headless suite passes for the pushed branch or proposed PR merge; failure logs are retained. See [workflow details](pull-request-validation.md). |
 | Check presentation/networking | Applicable `render_*.ps1` and `test_*_enet.ps1` helpers under [.github/scripts](../.github/scripts) | Inspect actual rendered frames for visual changes; run real host/joiner fixtures for changed network behavior. Choose checks by the change. |
 | Checkpoint | Full regression runner with no `-TestScripts`; installed pre-commit wrapper invokes [tracked validation](../scripts/git-hooks/pre-commit.ps1) | Full required checks pass for the completed source. On an agreed checkpoint or commit request, commit and push the task changes while preserving unrelated work. |
 | Deliver | [export_playtest.ps1](../.github/scripts/export_playtest.ps1), then [test_playtest_executable.ps1](../.github/scripts/test_playtest_executable.ps1) | Production package and normal-mode checks pass; delivered file hash matches; record source commit, internal build ID and evidence. |
-| Accept | Human playtest and exact-build local observations | Confirm the intended improvement, or record the next concrete issue. |
+| Accept | Human playtest and exact-build local observations | User accepts the item as Done, reopens it at the bottom, or adds a new observation; only the user changes queue priority. |
 
 Run focused checks during iteration and the required full suite at checkpoints. The commit hook runs the full suite; avoid a redundant manual full run immediately before it unless a failure or changed source warrants one. Freeze the candidate during final verification, and recheck affected evidence after changes.
 
@@ -71,6 +75,6 @@ Use local checkpoint, hosted CI and desktop playtest evidence together when asse
 
 ## Keeping the plan useful
 
-Keep one active gameplay milestone and at most one independent tooling increment. After each accepted checkpoint, update the current baseline, close the completed outcome and select the next priority. Put detailed mechanics and test evidence in their existing feature documents rather than duplicating long logs here.
+Keep one active gameplay milestone and at most one independent tooling increment. After each accepted checkpoint, update the current baseline and close the completed outcome. Select subsequent development from the feedback board when requested; only the user changes its priority order. Put detailed mechanics and test evidence in their existing feature documents rather than duplicating long logs here.
 
 Checkpoint record: source commit/branch; player-visible changes; focused/full/network/visual evidence as applicable; normal/debug mode; internal build ID; delivered SHA256; open human-feedback questions. Distinguish completed implementation, automated verification and human acceptance.

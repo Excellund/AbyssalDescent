@@ -36,10 +36,14 @@ func _run() -> void:
 	_check(not META.unlock_catalyst(profile, "unknown_catalyst"), "Unknown Catalyst cannot become an active unlock")
 	var summary := {
 		"outcome": "clear", "character_id": "bastion", "difficulty_tier": 3,
-		"ascension_rank": 10, "elapsed_seconds": 300,
+		"oath_difficulty_verified": true, "oath_min_difficulty_tier": 3, "full_run_tracking_complete": true,
+		"ascension_rank": 10, "ascension_tracking_complete": true, "duration_seconds": 300,
+		"equipped_catalyst_ids": [], "catalyst_tracking_complete": true,
+		"dashes_performed": 0, "dash_tracking_complete": true,
 		"boss_no_hit_ids": ["warden", "sovereign", "lacuna"],
+		"defeated_boss_ids": ["warden", "sovereign", "lacuna"],
 		"hold_full_control_achieved": true, "primary_attacks_fired": 0, "rest_count": 0,
-		"stats": {"damage_taken_total": 0},
+		"stats": {"damage_taken_total": 0, "enemies_killed": 100},
 		"build_summary": {"boons": [], "arcana": [], "boss_rewards": []}
 	}
 	var results := EVALUATOR.evaluate_run(summary, profile)

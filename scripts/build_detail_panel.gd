@@ -25,11 +25,6 @@ var _layout_container: VBoxContainer
 var _scroll: ScrollContainer
 var _content_vbox: VBoxContainer
 var _close_button: Button
-var _candidate_panel: PanelContainer
-var _candidate_details: RichTextLabel
-var _candidate_more: RichTextLabel
-var _candidate_toggle: Button
-var _owned_levels: Dictionary = {}
 var _active_passive_id := ""
 var power_registry_instance = POWER_REGISTRY.new()
 
@@ -122,32 +117,6 @@ func _create_panel() -> void:
 	content_vbox.add_theme_constant_override("separation", 14)
 	scroll.add_child(content_vbox)
 
-	_candidate_panel = PanelContainer.new()
-	var candidate_style := StyleBoxFlat.new()
-	candidate_style.bg_color = Color(0.10, 0.09, 0.04, 0.78)
-	candidate_style.border_color = RARITY_LEGENDARY
-	candidate_style.set_border_width_all(1)
-	candidate_style.set_content_margin_all(14.0)
-	_candidate_panel.add_theme_stylebox_override("panel", candidate_style)
-	content_vbox.add_child(_candidate_panel)
-	var candidate_content := VBoxContainer.new()
-	candidate_content.add_theme_constant_override("separation", 8)
-	_candidate_panel.add_child(candidate_content)
-	_candidate_details = _make_detail_label(17)
-	candidate_content.add_child(_candidate_details)
-	_candidate_toggle = Button.new()
-	_candidate_toggle.text = "Rules & keywords  ›"
-	_candidate_toggle.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_candidate_toggle.flat = true
-	_candidate_toggle.add_theme_font_size_override("font_size", 16)
-	candidate_content.add_child(_candidate_toggle)
-	_candidate_more = _make_detail_label(17)
-	_candidate_more.visible = false
-	candidate_content.add_child(_candidate_more)
-	_candidate_toggle.set_meta("build_details", weakref(_candidate_more))
-	_candidate_toggle.pressed.connect(func(): _candidate_more.visible = not _candidate_more.visible)
-	_candidate_panel.visible = false
-
 	_close_button = Button.new()
 	_close_button.text = "Return to rewards  [Tab / Esc]"
 	_close_button.custom_minimum_size.y = 42.0
@@ -194,7 +163,7 @@ func _create_panel() -> void:
 	passive_section.add_child(passive_name_label)
 
 	passive_desc_label = RichTextLabel.new()
-	passive_desc_label.custom_minimum_size = Vector2(720.0, 70.0)
+	passive_desc_label.custom_minimum_size = Vector2(720.0, 0.0)
 	passive_desc_label.bbcode_enabled = true
 	passive_desc_label.fit_content = true
 	passive_desc_label.scroll_active = false
@@ -374,11 +343,12 @@ func _scroll_expanded_details(event: InputEvent) -> bool:
 	var remaining := details.get_global_rect().end.y - visible_rect.end.y if direction > 0 else visible_rect.position.y - focused.get_global_rect().position.y
 	if remaining <= 1.0:
 		return false
+	remaining /= maxf(0.01, _scroll.get_global_transform().get_scale().abs().y)
 	var before := _scroll.scroll_vertical
 	_scroll.scroll_vertical += direction * mini(96, int(ceil(remaining)))
 	return _scroll.scroll_vertical != before
 
-func refresh_from_player(player: PLAYER_SCRIPT, character_id: String, catalyst_ids: Array = [], candidate: Dictionary = {}) -> void:
+func refresh_from_player(player: PLAYER_SCRIPT, character_id: String, catalyst_ids: Array = [], _candidate: Dictionary = {}) -> void:
 	var boons: Array[String] = []
 	var arcana: Array[String] = []
 	var bosses: Array[String] = []
@@ -392,21 +362,16 @@ func refresh_from_player(player: PLAYER_SCRIPT, character_id: String, catalyst_i
 		for id: String in POWER_REGISTRY.BOSS_REWARD_BALANCE:
 			if player.get_upgrade_stack_count(id) > 0:
 				bosses.append(id)
-	refresh(character_id, boons, arcana, bosses, player, catalyst_ids, candidate)
+	refresh(character_id, boons, arcana, bosses, player, catalyst_ids)
 
-func refresh(character_id: String, active_boons: Array, active_arcana: Array, active_boss_rewards: Array = [], player: PLAYER_SCRIPT = null, catalyst_ids: Array = [], candidate: Dictionary = {}) -> void:
+func refresh(character_id: String, active_boons: Array, active_arcana: Array, active_boss_rewards: Array = [], player: PLAYER_SCRIPT = null, catalyst_ids: Array = [], _candidate: Dictionary = {}) -> void:
 	if panel == null:
 		return
-	_owned_levels.clear()
-	for id: String in active_boons + active_arcana + active_boss_rewards:
-		var is_arcana := active_arcana.has(id)
-		_owned_levels[id] = _power_level(id, is_arcana, player)
 	_update_passive_section(character_id)
 	_update_catalyst_section(catalyst_ids)
 	_update_power_section(boons_list_container, active_boons, "boon", player)
 	_update_power_section(arcana_list_container, active_arcana, "arcana", player)
 	_update_power_section(boss_list_container, active_boss_rewards, "boss", player)
-	_update_candidate(candidate, player)
 	_scroll.scroll_vertical = 0
 	_apply_layout()
 
@@ -414,10 +379,18 @@ func _apply_layout() -> void:
 	if panel == null or _layout_container == null or get_viewport() == null:
 		return
 	var viewport_size := get_viewport().get_visible_rect().size
-	var panel_size := Vector2(minf(940.0, viewport_size.x - 48.0), minf(700.0, viewport_size.y - 48.0))
+	# The shipped canvas stays 2560x1440 when the physical window shrinks.
+	# Keep inspection text readable in physical pixels on those smaller windows.
+	var layout_scale := 1.0
+	var window := get_viewport() as Window
+	if window != null and window.size.y > 0:
+		layout_scale = maxf(1.0, viewport_size.y / float(window.size.y))
+	var available_size := viewport_size / layout_scale
+	var panel_size := Vector2(minf(940.0, available_size.x - 48.0), minf(700.0, available_size.y - 48.0))
 	panel.custom_minimum_size = panel_size
 	panel.size = panel_size
-	panel.position = (viewport_size - panel_size) * 0.5
+	panel.scale = Vector2.ONE * layout_scale
+	panel.position = (viewport_size - panel_size * layout_scale) * 0.5
 	_layout_container.custom_minimum_size = Vector2.ZERO
 	_layout_container.size = panel_size - Vector2(48.0, 48.0)
 	_scroll.custom_minimum_size = Vector2(0.0, 0.0)
@@ -478,91 +451,6 @@ func _rule_lines(condition: String) -> Array[String]:
 			lines.append("• " + rule.left(1).to_upper() + rule.substr(1) + ".")
 	return lines
 
-func _update_candidate(candidate: Dictionary, player: PLAYER_SCRIPT) -> void:
-	_candidate_panel.visible = not candidate.is_empty()
-	_candidate_more.visible = false
-	_candidate_more.text = ""
-	if candidate.is_empty():
-		_candidate_details.text = ""
-		return
-	var id := String(candidate.get("id", ""))
-	var level := int(_owned_levels.get(id, 0))
-	var limit := int(candidate.get("stack_limit", 0))
-	var prism_offer := limit > 0 and level >= limit
-	var next_level := level if prism_offer else level + 1
-	var name_text := _power_display_name(id)
-	var current := "Not owned"
-	if level > 0 and is_instance_valid(player):
-		current = "Level %d: %s" % [level, player.get_power_current_desc(id)]
-	var next_title := "Prismatic" if prism_offer else "Level %d" % next_level
-	var next_desc := String(candidate.get("desc", candidate.get("description", "")))
-	_candidate_details.text = "[b]Selected offer: %s[/b]\nCurrent — %s\nOffered — %s: %s" % [name_text, current, next_title, next_desc]
-	var connections := _compatibility_text(id, next_level)
-	if not connections.is_empty():
-		_candidate_more.text = "[b]In your build[/b]\n" + connections
-	var details := _keyword_details(id, next_level, prism_offer)
-	if not details.is_empty():
-		_candidate_more.text += "\n\n" + details
-	_candidate_toggle.visible = not _candidate_more.text.strip_edges().is_empty()
-
-func _compatibility_text(candidate_id: String, candidate_level: int) -> String:
-	var candidate := POWER_REGISTRY.get_power_keyword_metadata(candidate_id, candidate_level)
-	var lines: Array[String] = []
-	if not _active_passive_id.is_empty():
-		var passive := CHARACTER_PASSIVES.get_keyword_metadata(_active_passive_id)
-		lines.append_array(_compatibility_lines(candidate, passive, CHARACTER_PASSIVES.get_display_name(_active_passive_id), candidate_id, _active_passive_id))
-	for owned_id: String in _owned_levels:
-		if owned_id == candidate_id:
-			continue
-		var owned := POWER_REGISTRY.get_power_keyword_metadata(owned_id, int(_owned_levels[owned_id]))
-		lines.append_array(_compatibility_lines(candidate, owned, _power_display_name(owned_id), candidate_id, owned_id))
-	return "\n".join(lines)
-
-func _compatibility_lines(candidate: Dictionary, owned: Dictionary, owned_name: String, candidate_id: String, owned_id: String) -> Array[String]:
-	var lines: Array[String] = []
-	for direction in [0, 1]:
-		var producer: Dictionary = owned if direction == 0 else candidate
-		var receiver: Dictionary = candidate if direction == 0 else owned
-		var producer_id := owned_id if direction == 0 else candidate_id
-		var shared: Array[String] = []
-		for keyword: String in producer.get("produces", []):
-			if keyword in receiver.get("accepts", []):
-				if keyword == "attack_hit" and not receiver.get("attack_hit_sources", []).is_empty() and producer_id not in receiver["attack_hit_sources"]:
-					continue
-				shared.append(_produced_property_phrase(keyword) if direction == 0 else _property_keyword(keyword))
-		if shared.is_empty():
-			continue
-		var relationship := "%s %s." if direction == 0 else "%s responds to %s."
-		var properties: String = shared[0] if shared.size() == 1 else ", ".join(shared.slice(0, -1)) + " and " + shared[-1]
-		var line := "• " + relationship % [owned_name, properties]
-		var condition := String(receiver.get("condition_text", ""))
-		# Candidate restrictions are shown once in its keyword details below.
-		# Keep distinct owned-receiver restrictions beside outgoing matches.
-		if direction == 1 and not condition.is_empty():
-			line += "\n" + "\n".join(_rule_lines(condition))
-		lines.append(line)
-	return lines
-
-func _property_keyword(keyword: String) -> String:
-	if keyword == "damage":
-		return "damage"
-	if keyword == "damage_stat":
-		return "Damage"
-	var label := "attack hits" if keyword == "attack_hit" else ""
-	return COMBAT_KEYWORDS.keyword_bbcode(keyword, label)
-
-func _produced_property_phrase(keyword: String) -> String:
-	var verb := "provides "
-	match keyword:
-		"damage": verb = "deals "
-		"slow", "mark": verb = "applies "
-		"field": verb = "creates a "
-		"attack_hit": verb = "lands "
-		"push", "pull", "recoil": verb = "causes "
-		"orbit": verb = "enables "
-		"dash": verb = "supports "
-	return verb + _property_keyword(keyword)
-
 func _create_catalyst_section(content: VBoxContainer) -> void:
 	catalyst_panel = PanelContainer.new()
 	catalyst_panel.custom_minimum_size = Vector2(870.0, 0.0)
@@ -615,7 +503,7 @@ func _update_passive_section(character_id: String) -> void:
 	
 	_active_passive_id = _resolve_passive_id(character_id, char_data)
 	passive_name_label.text = _format_passive_name(_active_passive_id)
-	passive_desc_label.text = CHARACTER_PASSIVES.get_description(_active_passive_id)
+	passive_desc_label.text = CHARACTER_PASSIVES.get_build_description(_active_passive_id)
 
 func _resolve_passive_id(character_id: String, char_data: Dictionary) -> String:
 	var passive_id := String(char_data.get("passive_id", "")).strip_edges().to_lower()

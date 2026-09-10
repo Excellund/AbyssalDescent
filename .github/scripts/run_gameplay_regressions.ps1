@@ -190,6 +190,7 @@ try {
         "res://scripts/tests/test_live_arena_edges.gd",
         "res://scripts/tests/test_power_rewards.gd",
         "res://scripts/tests/test_oath_tracking.gd",
+        "res://scripts/tests/test_oath_movement_tracking.gd",
         "res://scripts/tests/test_catalyst_profile.gd",
         "res://scripts/tests/test_catalyst_rewards.gd",
         "res://scripts/tests/test_catalyst_runtime.gd",

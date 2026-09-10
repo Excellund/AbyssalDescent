@@ -4,6 +4,7 @@ param(
     [Parameter(Mandatory = $true)][ValidatePattern('^res://scripts/tests/[a-z0-9_]+\.gd$')][string]$FixtureScript,
     [Parameter(Mandatory = $true)][ValidatePattern('^[a-z0-9_]+$')][string]$FrameFolder,
     [Parameter(Mandatory = $true)][ValidateRange(1, 100)][int]$ExpectedFrames,
+    [switch]$PreserveProductionCanvas,
     [ValidateRange(100, 10000)][int]$MaxFrames = 1000
 )
 
@@ -51,6 +52,15 @@ window/size/window_height_override=720
 window/size/initial_position_type=0
 window/size/initial_position=Vector2i(-20000, -20000)
 '@
+if ($PreserveProductionCanvas) {
+    $productionConfig = Get-Content -LiteralPath (Join-Path $sourceRoot 'project.godot') -Raw
+    foreach ($dimension in @('width', 'height')) {
+        $canvasPattern = '(?m)^window/size/viewport_' + $dimension + '=(\d+)'
+        $productionDimension = [regex]::Match($productionConfig, $canvasPattern)
+        if (-not $productionDimension.Success) { throw "Production viewport $dimension is not configured." }
+        $config = [regex]::Replace($config, $canvasPattern, ('window/size/viewport_' + $dimension + '=' + $productionDimension.Groups[1].Value))
+    }
+}
 [IO.File]::WriteAllText((Join-Path $renderRoot 'project.godot'), $config, (New-Object Text.UTF8Encoding($false)))
 
 function Invoke-HiddenGodot([string]$Label, [string[]]$Arguments) {

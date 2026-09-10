@@ -18,3 +18,8 @@ Godot2026.exe
 Godot2026.pck
 *.exe
 *.exe
+
+# Shared local feedback queue and Python tooling caches
+.feedback/
+tools/feedback-board/**/__pycache__/
+tools/feedback-board/**/*.pyc
