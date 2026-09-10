@@ -171,6 +171,9 @@ const DAMAGE_SCALE_SOURCE_HIT = "hit_damage"
 
 # Boss epitaph lines - displayed on boss defeat
 const BOSS_EPITAPHS := {
+	"kilnheart": {"default": "The furnace cools. Its last spark is yours."},
+	"glassweaver": {"default": "The final thread breaks. The prism court falls silent."},
+	"null_archivist": {"default": "The last page closes. Your name remains."},
 	"warden": {
 		"hexweaver": "Your chaos toppled the first pillar. The void approves.",
 		"veilstrider": "The guardian never saw you coming.",
@@ -183,7 +186,7 @@ const BOSS_EPITAPHS := {
 		"veilstrider": "You danced through infinity itself.",
 		"bastion": "Not enough stone to hold the cosmos.",
 		"riftlancer": "You found the one true vector in a throne of false geometry.",
-		"default": "Sovereign's reign ends. Only Lacuna stands."
+		"default": "Sovereign's reign ends. The final threshold awaits."
 	},
 	"lacuna": {
 		"hexweaver": "The void answered your call. Now it's silent.",

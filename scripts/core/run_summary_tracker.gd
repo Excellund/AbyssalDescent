@@ -1,6 +1,8 @@
 extends RefCounted
 class_name RunSummaryTracker
 
+const BOSS_CATALOGUE := preload("res://scripts/shared/boss_catalogue.gd")
+
 const RUN_SUMMARY_MODEL := preload("res://scripts/core/run_summary_model.gd")
 const ENUMS := preload("res://scripts/shared/enums.gd")
 const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
@@ -135,7 +137,7 @@ func record_boss_defeat(_boss_id: String = "") -> void:
 	var id: String = String(_boss_id).strip_edges().to_lower()
 	if id.is_empty():
 		id = _active_boss_id
-	if id in ["warden", "sovereign", "lacuna"] and not defeated_boss_ids.has(id):
+	if BOSS_CATALOGUE.NAMES.has(id) and not defeated_boss_ids.has(id):
 		defeated_boss_ids.append(id)
 	# A defeat without a matching engagement is not evidence of a clean fight.
 	if not id.is_empty() and id == _active_boss_id and not _bosses_with_damage_taken.has(id):
@@ -166,7 +168,7 @@ func restore_descent_facts(checkpoint: Dictionary) -> void:
 	var saved_bosses: Variant = checkpoint.get("defeated_boss_ids", [])
 	if saved_bosses is Array:
 		for id in saved_bosses:
-			if id is String and id in ["warden", "sovereign", "lacuna"] and not defeated_boss_ids.has(id):
+			if id is String and BOSS_CATALOGUE.NAMES.has(id) and not defeated_boss_ids.has(id):
 				defeated_boss_ids.append(id)
 
 ## Boss fight bracketing: boss enemy id is opened on engage, closed on defeat/death.

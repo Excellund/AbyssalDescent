@@ -24,6 +24,7 @@ const BOSS_STAGE_REGISTRY := preload("res://scripts/shared/boss_stage_registry.g
 const ARENA_COVER_CONTROLLER := preload("res://scripts/core/arena_cover_controller.gd")
 const COVER_INTERACTIONS := preload("res://scripts/shared/combat_interaction_registry.gd")
 const COVER_ORIGIN_TOLERANCE := 128.0
+const BOSS_CATALOGUE := preload("res://scripts/shared/boss_catalogue.gd")
 const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 const MUSIC_SYSTEM_SCRIPT := preload("res://scripts/music_system.gd")
@@ -922,8 +923,9 @@ func _setup_encounter_profile_builder_system() -> void:
 	## Host rolls once and broadcasts; joiners wait for the RPC.
 	var mp_session_for_biome := get_node_or_null("/root/MultiplayerSessionManager") as MULTIPLAYER_SESSION_MANAGER_SCRIPT
 	var is_joiner := is_multiplayer and mp_session_for_biome != null and not mp_session_for_biome.is_host()
-	if not is_joiner:
+	if not is_joiner and run_session != null:
 		_roll_act_biomes()
+		run_session.act_boss_ids = BOSS_CATALOGUE.roll_roster(rng)
 		if is_multiplayer:
 			_sync_act_biomes.rpc(PackedStringArray(run_session.act_biome_ids))
 		_apply_active_biome(1)
@@ -1166,6 +1168,20 @@ func start_endurance_test() -> Dictionary:
 	return _start_debug_objective_room("last_stand")
 
 func start_debug_encounter(encounter_key: String) -> Dictionary:
+	var alternative_id := encounter_key.strip_edges().to_lower()
+	if alternative_id in BOSS_CATALOGUE.ALTERNATIVE_IDS:
+		var stage := BOSS_CATALOGUE.stage_for_id(alternative_id)
+		_reset_for_debug_jump()
+		run_summary_recorder.mark_debug_mode()
+		run_session.act_boss_ids = BOSS_CATALOGUE.normalize_roster([])
+		run_session.act_boss_ids[stage - 1] = alternative_id
+		first_boss_defeated = stage > 1
+		second_boss_defeated = stage > 2
+		var depth := encounter_count if stage == 1 else (_get_second_boss_target_depth() if stage == 2 else _get_third_boss_target_depth())
+		_set_progression_counters(depth, depth, second_boss_encounter_count if stage > 1 else 0, third_boss_encounter_count if stage > 2 else 0)
+		_begin_boss_stage(stage)
+		hud.refresh(_get_hud_state(), player)
+		return {"ok": true, "state": "debug_encounter", "encounter": BOSS_CATALOGUE.NAMES[alternative_id]}
 	var entry := _find_debug_encounter_entry(encounter_key)
 	if entry.is_empty():
 		return {"ok": false, "note": "Unknown encounter key."}
@@ -1213,6 +1229,7 @@ func _start_debug_selected_encounter(encounter_state: int) -> Dictionary:
 
 func _start_debug_boss_room() -> Dictionary:
 	_reset_for_debug_jump()
+	run_session.act_boss_ids = BOSS_CATALOGUE.normalize_roster([])
 	_set_progression_counters(encounter_count, encounter_count, 0, 0)
 	boss_unlocked = true
 	first_boss_defeated = false
@@ -1227,6 +1244,7 @@ func _start_debug_boss_room() -> Dictionary:
 
 func _start_debug_second_boss_room() -> Dictionary:
 	_reset_for_debug_jump()
+	run_session.act_boss_ids = BOSS_CATALOGUE.normalize_roster([])
 	var debug_depth := encounter_count + second_boss_encounter_count
 	_set_progression_counters(debug_depth, debug_depth, second_boss_encounter_count, 0)
 	boss_unlocked = true
@@ -1240,6 +1258,7 @@ func _start_debug_second_boss_room() -> Dictionary:
 
 func _start_debug_third_boss_room() -> Dictionary:
 	_reset_for_debug_jump()
+	run_session.act_boss_ids = BOSS_CATALOGUE.normalize_roster([])
 	var debug_depth := _get_third_boss_target_depth()
 	_set_progression_counters(debug_depth, debug_depth, second_boss_encounter_count, third_boss_encounter_count)
 	boss_unlocked = true
@@ -1978,7 +1997,7 @@ func _sync_renderer() -> void:
 	renderer.choosing_next_room = allow_door_visibility
 	renderer.door_options = visible_door_options
 	renderer.player_global_position = player.global_position if is_instance_valid(player) else Vector2.ZERO
-	var boss_key := "lacuna" if in_third_boss_room else ("sovereign" if in_second_boss_room else ("warden" if in_boss_room else ""))
+	var boss_key := get_active_boss_id()
 	renderer.set_boss_entrance_motif(boss_key, encounter_intro_grace_active and not _is_reward_selection_active())
 
 func _keep_player_inside_current_room() -> void:
@@ -2193,13 +2212,14 @@ func _finish_first_boss_clear() -> void:
 	_clamp_room_depth_to_sane_range()
 	boss_unlocked = false
 	pending_room_reward = ENUMS.RewardMode.NONE
-	last_defeated_boss_id = "warden"
+	last_defeated_boss_id = get_boss_id_for_stage(1)
 	run_summary_recorder.record_boss_defeat(last_defeated_boss_id)
 	boss_reward_pending = true
-	hud.show_banner("Warden Defeated", "")
-	var epitaph: String = power_registry_instance.get_boss_epitaph("warden", current_character_id)
+	var boss_name: String = BOSS_CATALOGUE.NAMES[last_defeated_boss_id]
+	hud.show_banner("%s Defeated" % boss_name, "")
+	var epitaph: String = power_registry_instance.get_boss_epitaph(last_defeated_boss_id, current_character_id)
 	_apply_active_biome(2)
-	_open_networked_reward_selection("Claim Warden's Power", ENUMS.RewardMode.BOSS, {}, epitaph)
+	_open_networked_reward_selection("Claim %s's Power" % boss_name, ENUMS.RewardMode.BOSS, {}, epitaph)
 
 func _on_room_cleared_synced() -> void:
 	if is_instance_valid(player):
@@ -2215,13 +2235,14 @@ func _finish_second_boss_clear() -> void:
 	boss_unlocked = false
 	pending_room_reward = ENUMS.RewardMode.NONE
 	_set_progression_counters(rooms_cleared, room_depth, phase_two_rooms_cleared, 0)
-	last_defeated_boss_id = "sovereign"
+	last_defeated_boss_id = get_boss_id_for_stage(2)
 	run_summary_recorder.record_boss_defeat(last_defeated_boss_id)
 	boss_reward_pending = true
-	hud.show_banner("Sovereign Defeated", "")
-	var epitaph: String = power_registry_instance.get_boss_epitaph("sovereign", current_character_id)
+	var boss_name: String = BOSS_CATALOGUE.NAMES[last_defeated_boss_id]
+	hud.show_banner("%s Defeated" % boss_name, "")
+	var epitaph: String = power_registry_instance.get_boss_epitaph(last_defeated_boss_id, current_character_id)
 	_apply_active_biome(3)
-	_open_networked_reward_selection("Claim Sovereign's Power", ENUMS.RewardMode.BOSS, {}, epitaph)
+	_open_networked_reward_selection("Claim %s's Power" % boss_name, ENUMS.RewardMode.BOSS, {}, epitaph)
 
 func _finish_third_boss_clear() -> void:
 	if _run_outcome_coordinator.is_run_cleared():
@@ -2232,7 +2253,7 @@ func _finish_third_boss_clear() -> void:
 	boss_unlocked = false
 	pending_room_reward = ENUMS.RewardMode.NONE
 	_clear_active_run_checkpoint()
-	last_defeated_boss_id = "lacuna"
+	last_defeated_boss_id = get_boss_id_for_stage(3)
 	run_summary_recorder.record_boss_defeat(last_defeated_boss_id)
 	hud.show_banner("Run Complete", "")
 	var run_context := _get_run_context()
@@ -2395,7 +2416,7 @@ func _apply_boss_difficulty_scaling(boss: CharacterBody2D) -> void:
 	var base_max_health: int = int(boss.get_max_health())
 	var scaled_max_health := maxi(1, int(round(float(base_max_health) * boss_health_mult)))
 	boss.set_max_health_and_current(scaled_max_health, scaled_max_health)
-	for damage_property in ["charge_damage", "nova_damage", "cleave_damage", "prism_damage", "gravity_damage", "echo_dash_damage", "orbital_lance_damage", "polar_shift_pull_inner_damage", "sever_damage", "null_ring_damage", "gap_damage", "echo_cross_damage", "seam_tick_damage"]:
+	for damage_property in ["attack_damage", "charge_damage", "nova_damage", "cleave_damage", "prism_damage", "gravity_damage", "echo_dash_damage", "orbital_lance_damage", "polar_shift_pull_inner_damage", "sever_damage", "null_ring_damage", "gap_damage", "echo_cross_damage", "seam_tick_damage"]:
 		if boss.get(damage_property) == null:
 			continue
 		var base_damage := int(boss.get(damage_property))
@@ -2835,6 +2856,7 @@ func _spawn_door_options() -> void:
 		return
 	choosing_next_room = bool(route_state.get("choosing_next_room", true))
 	door_options = route_state.get("door_options", [])
+	_label_selected_boss_doors()
 	boss_unlocked = bool(route_state.get("boss_unlocked", boss_unlocked))
 	if MultiplayerSessionManager.should_broadcast():
 		_sync_door_options.rpc(door_options, choosing_next_room, boss_unlocked, _build_progress_sync_state())
@@ -2932,6 +2954,7 @@ func _sync_chosen_door(chosen_door: Dictionary, progress_state: Dictionary = {})
 		_world_multiplayer_sync_state.pending_chosen_progress_state = sanitized_progress_state
 		return
 	_world_multiplayer_sync_state.clear_authoritative_door_wait()
+	_apply_boss_roster_from_progress(sanitized_progress_state)
 	_choose_door(chosen_door)
 	_apply_progress_sync_state(sanitized_progress_state)
 	enemy_state_sync_receiver.flush_pending_door_syncs()
@@ -3017,7 +3040,8 @@ func _build_progress_sync_state() -> Dictionary:
 		"in_boss_room": in_boss_room,
 		"in_second_boss_room": in_second_boss_room,
 		"in_third_boss_room": in_third_boss_room,
-		"choosing_next_room": choosing_next_room
+		"choosing_next_room": choosing_next_room,
+		"act_boss_ids": run_session.act_boss_ids.duplicate() if run_session != null else []
 	})
 
 func _build_progress_sync_policy_context(incoming_room_sync_id: int, include_apply_defaults: bool) -> Dictionary:
@@ -3062,6 +3086,7 @@ func _apply_progress_sync_state(progress_state: Dictionary) -> void:
 			push_error("[Progress Sync] Rejected impossibly high incoming depth %d (max sane: %d)" % [int(normalized_apply_state.get("incoming_depth", 0)), int(normalized_apply_state.get("max_sane_depth", 0))])
 		return
 	# Clear joiner-join flag once first valid sync is received.
+	_apply_boss_roster_from_progress(sanitized_progress_state)
 	if _world_multiplayer_sync_state.joiner_awaiting_initial_sync:
 		_world_multiplayer_sync_state.joiner_awaiting_initial_sync = false
 		print_debug("[Multiplayer] Joiner received initial progress sync")
@@ -3449,8 +3474,62 @@ func _pick_boss_spawn_position(min_player_distance: float = 260.0, wall_margin: 
 		return candidate
 	return fallback
 
+func get_boss_id_for_stage(stage: int) -> String:
+	var ids: Array = run_session.act_boss_ids if run_session != null else []
+	return BOSS_CATALOGUE.resolve_id(stage, ids[stage - 1] if stage > 0 and ids.size() >= stage else "")
+
+func get_active_boss_id() -> String:
+	if in_third_boss_room:
+		return get_boss_id_for_stage(3)
+	if in_second_boss_room:
+		return get_boss_id_for_stage(2)
+	if in_boss_room:
+		return get_boss_id_for_stage(1)
+	return ""
+
+func _apply_boss_roster_from_progress(progress: Dictionary) -> void:
+	if run_session != null and progress.has("act_boss_ids"):
+		run_session.act_boss_ids = BOSS_CATALOGUE.normalize_roster(progress.get("act_boss_ids"))
+
+func _label_selected_boss_doors() -> void:
+	for door in door_options:
+		if ENCOUNTER_CONTRACTS.door_option_kind_id(door) == ENUMS.DoorKind.BOSS:
+			var boss_id := get_boss_id_for_stage(_get_current_act())
+			door["label"] = BOSS_CATALOGUE.NAMES[boss_id]
+			# Keep the canonical stage route key; identity is explicit and travels
+			# with the resolved offer instead of rerolling when a door is chosen.
+			door["boss_id"] = boss_id
+
+func _build_boss_spawn_payload(boss: ENEMY_BASE_SCRIPT, stage: int, enemy_id: int) -> Dictionary:
+	return {
+		"boss_stage": stage,
+		"boss_id": String(boss.get_meta("boss_id", get_boss_id_for_stage(stage))),
+		"enemy_id": enemy_id,
+		"position": boss.global_position,
+		"max_health": boss.get_max_health(),
+		"health": boss.get_current_health(),
+		"runtime_state": boss.get_network_runtime_state(),
+		"projectile_state": boss.get_projectile_network_sync_state(),
+		"room_label": current_room_label,
+		"room_sync_id": _world_multiplayer_sync_state.current_room_sync_id,
+	}
+
+## Repair a missing boss node after a delayed spawn or replica reconstruction.
+## Room identity must already match: this does not fast-forward run progression.
+@rpc("any_peer", "call_remote", "reliable")
+func _request_boss_spawn_resync(enemy_id: int, source_room_sync_id: int) -> void:
+	if not MultiplayerSessionManager.should_broadcast() or get_active_boss_id().is_empty():
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	if sender <= 1 or not MultiplayerSessionManager.connected_peers.has(sender) or source_room_sync_id != _world_multiplayer_sync_state.current_room_sync_id:
+		return
+	var boss := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as ENEMY_BASE_SCRIPT
+	if not is_instance_valid(boss) or not boss.has_meta("boss_stage") or boss.is_dead():
+		return
+	_sync_spawn_boss.rpc_id(sender, _build_boss_spawn_payload(boss, int(boss.get_meta("boss_stage")), enemy_id))
+
 func _begin_boss_stage(stage: int) -> void:
-	var descriptor: Dictionary = BOSS_STAGE_REGISTRY.get_descriptor(stage)
+	var descriptor: Dictionary = BOSS_STAGE_REGISTRY.get_descriptor(stage, get_boss_id_for_stage(stage))
 	if descriptor.is_empty():
 		push_warning("_begin_boss_stage: unknown boss stage %d" % stage)
 		return
@@ -3492,7 +3571,7 @@ func _begin_boss_stage(stage: int) -> void:
 		enemy_state_sync_receiver.flush_pending_boss_spawn_syncs()
 		return
 	var spawn_position: Vector2 = _pick_boss_spawn_position(min_player_distance, wall_margin)
-	var boss := BOSS_STAGE_REGISTRY.create_boss_node(stage, spawn_position)
+	var boss := BOSS_STAGE_REGISTRY.create_boss_node(stage, spawn_position, get_boss_id_for_stage(stage))
 	add_child(boss)
 	boss.begin_spawn_transport(BOSS_SPAWN_TRANSPORT_DURATION)
 	_assign_enemy_target_candidates(boss)
@@ -3505,13 +3584,7 @@ func _begin_boss_stage(stage: int) -> void:
 	if boss.has_signal("damage_received"):
 		boss.damage_received.connect(func(applied_amount: int, _remaining_health: int): _on_enemy_damage_received(applied_amount))
 	if MultiplayerSessionManager.should_broadcast():
-		_sync_spawn_boss.rpc({
-			"boss_stage": stage,
-			"enemy_id": boss_enemy_id,
-			"position": boss.global_position,
-			"room_label": current_room_label,
-			"room_sync_id": _world_multiplayer_sync_state.current_room_sync_id
-		})
+		_sync_spawn_boss.rpc(_build_boss_spawn_payload(boss, stage, boss_enemy_id))
 	_start_encounter_intro_grace()
 
 func _begin_boss_room() -> void:
@@ -3793,10 +3866,14 @@ func _sync_request_enemy_impulse(enemy_id: int, impulse: Vector2, suppress_launc
 		return
 	DAMAGEABLE.apply_impulse(enemy, impulse, sender_peer_id, suppress_launch, interaction)
 
-func _spawn_boss_for_stage(boss_stage: int, spawn_position: Vector2) -> Node2D:
-	var boss := BOSS_STAGE_REGISTRY.create_boss_node(boss_stage, spawn_position)
+func _spawn_boss_for_stage(boss_stage: int, spawn_position: Vector2, boss_id: String = "") -> Node2D:
+	var resolved_id := BOSS_CATALOGUE.resolve_id(boss_stage, boss_id)
+	var boss := BOSS_STAGE_REGISTRY.create_boss_node(boss_stage, spawn_position, resolved_id)
 	if boss == null:
 		return null
+	if run_session != null:
+		run_session.act_boss_ids = BOSS_CATALOGUE.normalize_roster(run_session.act_boss_ids)
+		run_session.act_boss_ids[boss_stage - 1] = resolved_id
 	add_child(boss)
 	boss.begin_spawn_transport(BOSS_SPAWN_TRANSPORT_DURATION)
 	_assign_enemy_target_candidates(boss)
@@ -3867,6 +3944,11 @@ func _sync_spawn_boss(spawn_data: Dictionary) -> void:
 		return
 	var payload := {
 		"boss_stage": int(spawn_data.get("boss_stage", 0)),
+		"boss_id": String(spawn_data.get("boss_id", "")),
+		"max_health": int(spawn_data.get("max_health", 0)),
+		"health": int(spawn_data.get("health", 0)),
+		"runtime_state": spawn_data.get("runtime_state", {}) as Dictionary,
+		"projectile_state": spawn_data.get("projectile_state", {}) as Dictionary,
 		"enemy_id": int(spawn_data.get("enemy_id", -1)),
 		"position": spawn_data.get("position", Vector2.ZERO),
 		"room_label": String(spawn_data.get("room_label", "")),
@@ -4790,7 +4872,10 @@ func _start_encounter_intro_grace() -> void:
 			continue
 		_begin_spawn_transport_if_idle(enemy, INTRO_SURVEY_TRANSPORT_PULSE_DURATION)
 	_set_enemy_targets_passive(true)
-	var boss_title := "Lacuna" if in_third_boss_room else ("Sovereign" if in_second_boss_room else ("The Warden" if in_boss_room else ""))
+	var active_boss_id := get_active_boss_id()
+	var boss_title := ""
+	if not active_boss_id.is_empty():
+		boss_title = String(BOSS_STAGE_REGISTRY.get_descriptor(BOSS_CATALOGUE.stage_for_id(active_boss_id), active_boss_id).get("banner_title", ""))
 	if not boss_title.is_empty():
 		hud.show_banner(boss_title, "Survey the arena")
 	else:
@@ -4946,7 +5031,7 @@ func _get_current_act() -> int:
 ## the player takes a door. Deriving from the saved room also preserves Continue.
 func _get_room_presentation_act() -> int:
 	for stage in [1, 2, 3]:
-		var descriptor := BOSS_STAGE_REGISTRY.get_descriptor(stage)
+		var descriptor := BOSS_STAGE_REGISTRY.get_descriptor(stage, get_boss_id_for_stage(stage))
 		if current_room_label == String(descriptor.get("room_label", "")):
 			return stage
 	return _get_current_act()

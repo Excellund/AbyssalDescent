@@ -4,7 +4,7 @@ September 10, 2026. This revision supersedes the universal Forsworn requirement 
 
 ## Progression ladder
 
-The active roster contains 33 Oaths: four Journey goals available on any Bearing, five Challenges requiring Delver or higher, eight Prestige goals requiring Forsworn, and sixteen character/Bearing clears. Harder Bearings also qualify for the lower minimum requirements. Character-clear Oaths continue to name an exact Bearing, preserving their original meaning and completion IDs.
+With Threadbinder integrated, the active roster contains 37 Oaths: four Journey goals available on any Bearing, five Challenges requiring Delver or higher, eight Prestige goals requiring Forsworn, and twenty character/Bearing clears. Harder Bearings also qualify for the lower minimum requirements. Character-clear Oaths continue to name an exact Bearing, preserving their original meaning and completion IDs.
 
 | Tier | Oath | Goal | Reward |
 |---|---|---|---|
@@ -18,14 +18,14 @@ The active roster contains 33 Oaths: four Journey goals available on any Bearing
 | Challenge · Delver+ | Closed Fist | Clear without using Attack. | Reward Reroll |
 | Challenge · Delver+ | Against the Clock | Clear in under eight minutes. | Iron Vigil |
 | Prestige · Forsworn | Unassisted | Clear at Ascension rank 1 or higher with no Catalysts equipped. | Draft Compass |
-| Prestige · Forsworn | Untouched Crowns | Clear with no damage taken in any of the three boss fights. Damage elsewhere is allowed. | Calm Before Surge |
+| Prestige · Forsworn | Untouched Crowns | Clear after defeating the Warden, Sovereign and Lacuna without taking damage during those fights. Damage elsewhere is allowed. | Calm Before Surge |
 | Prestige · Forsworn | Unscathed | Clear without taking any damage. | Prismatic Arcana |
 | Prestige · Forsworn | Glass Pilgrimage | Clear with Glass Descent and Pilgrim's Burden, without Rest Sites. | Lacuna's Veil |
 | Prestige · Forsworn | First Ascension | Clear at Ascension rank 1+. | Mutator Storm and Specialist Pressure unlocks |
 | Prestige · Forsworn | Third Ascension | Clear at Ascension rank 3+. | Calm Before Surge; Crowned Bosses and Glass Descent unlocks |
 | Prestige · Forsworn | Fifth Ascension | Clear at Ascension rank 5+. | Empty Vault, Razor Sigils and Pilgrim's Burden unlocks |
 | Prestige · Forsworn | Pact of the Abyss | Clear at Ascension rank 10. | Cinder Aegis |
-| Vessel Progression | Four Bearings for each of four characters | Clear Pilgrim, Delver, Harbinger and Forsworn with each character. | Completion records |
+| Vessel Progression | Four Bearings for each of five characters | Clear Pilgrim, Delver, Harbinger and Forsworn with each character. | Completion records |
 
 Journey includes encounter goals that can be earned before a complete clear and restrictions that encourage experimentation even on Pilgrim. Delver introduces more demanding execution and movement/build constraints. Forsworn keeps the sustained mastery and Ascension chase. Unassisted now requires a positive Ascension rank: the solo setup that offers Catalysts only opens after a character's first Forsworn clear, so an ordinary first clear is not a meaningful no-Catalyst challenge. Ordinary kill-count and reward-upgrade milestones remain retired; approachability comes from meaningful goals at a suitable difficulty.
 

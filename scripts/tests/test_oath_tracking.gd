@@ -104,7 +104,11 @@ func _test_bearing_requirements() -> void:
 	var definitions: Dictionary = EVALUATOR.OATHS_REGISTRY.get_all_definitions()
 	var journey := ["forsworn_warden_no_hit", "forsworn_unbroken_line", "forsworn_singular_focus", "forsworn_unbroken_march"]
 	var challenges := ["forsworn_sovereign_no_hit", "forsworn_lacuna_no_hit", "forsworn_grounded", "forsworn_closed_fist", "forsworn_against_the_clock"]
-	_check(definitions.size() == 33, "Active roster contains 17 challenges and 16 character/Bearing clears")
+	var character_ids := META.CHARACTER_REGISTRY.get_launch_character_ids()
+	_check(definitions.size() == 17 + character_ids.size() * 4, "Active roster contains 17 challenges and four Bearing clears for every playable character")
+	for character_id in character_ids:
+		for bearing in ["pilgrim", "delver", "harbinger", "forsworn"]:
+			_check(definitions.has("clear_%s_%s" % [character_id, bearing]), "Every playable character has a clear Oath for each Bearing: %s/%s" % [character_id, bearing])
 	for id in definitions:
 		var definition: Dictionary = definitions[id]
 		var exact_clear: bool = String(id).begins_with("clear_")

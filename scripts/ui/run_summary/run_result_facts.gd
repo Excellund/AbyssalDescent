@@ -1,6 +1,6 @@
 extends RefCounted
 
-const BOSS_NAMES := {"warden": "Warden", "sovereign": "Sovereign", "lacuna": "Lacuna"}
+const BOSS_NAMES := preload("res://scripts/shared/boss_catalogue.gd").NAMES
 const ACT_NAMES := {1: "I", 2: "II", 3: "III"}
 
 static func is_recorded_count(value: Variant) -> bool:

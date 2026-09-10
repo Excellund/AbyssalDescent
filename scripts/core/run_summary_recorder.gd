@@ -24,6 +24,7 @@ const PLAYER_SCRIPT := preload("res://scripts/player.gd")
 const RUN_CONTEXT_SCRIPT := preload("res://scripts/run_context.gd")
 const OBJECTIVE_MANAGER_SCRIPT := preload("res://scripts/objective_manager.gd")
 const PROVENANCE := preload("res://scripts/core/run_provenance.gd")
+const BOSS_CATALOGUE := preload("res://scripts/shared/boss_catalogue.gd")
 
 const STAT_ATTRIBUTION_TRACE := false
 
@@ -84,6 +85,8 @@ func freeze_run_timer() -> void:
 		_run_finished_at_msec = Time.get_ticks_msec()
 
 func get_active_boss_id() -> String:
+	if _world.has_method("get_active_boss_id"):
+		return _world.get_active_boss_id()
 	if _world.in_third_boss_room:
 		return "lacuna"
 	if _world.in_second_boss_room:
@@ -473,15 +476,9 @@ func record_door_choice(choice: Dictionary) -> void:
 	var bearing_label := ENCOUNTER_CONTRACTS.profile_label(profile)
 	var bearing_key := _bearing_key_from_profile(profile, "encounter")
 	if action_id == ENUMS.EncounterAction.BOSS:
-		if _world.second_boss_defeated:
-			bearing_key = "lacuna"
-			bearing_label = "Lacuna"
-		elif _world.first_boss_defeated:
-			bearing_key = "sovereign"
-			bearing_label = "Sovereign"
-		else:
-			bearing_key = "warden"
-			bearing_label = "Warden"
+		var stage: int = 3 if _world.second_boss_defeated else (2 if _world.first_boss_defeated else 1)
+		bearing_key = _world.get_boss_id_for_stage(stage)
+		bearing_label = BOSS_CATALOGUE.NAMES[bearing_key]
 	elif action_id == ENUMS.EncounterAction.REST:
 		bearing_key = "rest"
 		bearing_label = "Rest Site"

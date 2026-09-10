@@ -183,10 +183,10 @@ static func append_reward_offers(run_id: String, event_data: Dictionary) -> void
 
 static func _boss_id_from_room_entry(room_entry: Dictionary) -> String:
 	var room_kind := String(room_entry.get("room_kind", "")).strip_edges().to_lower()
-	if room_kind == "warden" or room_kind == "sovereign" or room_kind == "lacuna":
+	if preload("res://scripts/shared/boss_catalogue.gd").NAMES.has(room_kind):
 		return room_kind
 	var bearing_key := String(room_entry.get("bearing_key", "")).strip_edges().to_lower()
-	if bearing_key == "warden" or bearing_key == "sovereign" or bearing_key == "lacuna":
+	if preload("res://scripts/shared/boss_catalogue.gd").NAMES.has(bearing_key):
 		return bearing_key
 	return ""
 

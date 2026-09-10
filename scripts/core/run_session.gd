@@ -3,6 +3,7 @@ class_name RunSession
 
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const BIOME_REGISTRY := preload("res://scripts/shared/biome_registry.gd")
+const BOSS_CATALOGUE := preload("res://scripts/shared/boss_catalogue.gd")
 
 var boons_taken: Array[String] = []
 var arcana_rewards_taken: Array[String] = []
@@ -12,6 +13,7 @@ var room_depth: int = 0
 var phase_two_rooms_cleared: int = 0
 var phase_three_rooms_cleared: int = 0
 var act_biome_ids: Array[String] = []
+var act_boss_ids: Array[String] = []
 var last_standard_encounter_key: String = ""
 var last_objective_kind: String = ""
 
@@ -20,6 +22,7 @@ func reset_for_new_run() -> void:
 	arcana_rewards_taken.clear()
 	boss_rewards_taken.clear()
 	act_biome_ids.clear()
+	act_boss_ids.clear()
 	last_standard_encounter_key = ""
 	last_objective_kind = ""
 	set_progression_counters(0, 0, 0, 0)
@@ -36,6 +39,7 @@ func record_encounter_entry(profile: Dictionary) -> void:
 
 ## Legacy or invalid biome rosters retain the run's already rolled fallback.
 func restore_descent_state(snapshot: Dictionary) -> void:
+	act_boss_ids = BOSS_CATALOGUE.normalize_roster(snapshot.get("act_boss_ids", []))
 	var saved_biomes: Variant = snapshot.get("act_biome_ids", [])
 	if saved_biomes is Array and saved_biomes.size() == 3:
 		var restored: Array[String] = []

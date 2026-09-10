@@ -20,6 +20,7 @@ const OBJECTIVE_MANAGER_SCRIPT := preload("res://scripts/objective_manager.gd")
 var enemy_remote_snap_distance_px: float = ENEMY_REMOTE_SNAP_DISTANCE_PX_DEFAULT
 
 var _world: Node2D
+var _last_boss_resync_msec: int = -1000
 
 
 func _init(world: Node2D) -> void:
@@ -63,6 +64,7 @@ func flush_pending_door_syncs() -> void:
 		var chosen_door := chosen_payload.get("chosen_door", {}) as Dictionary
 		var progress_state := chosen_payload.get("progress_state", {}) as Dictionary
 		sync_state.clear_authoritative_door_wait()
+		_world._apply_boss_roster_from_progress(progress_state)
 		_world._choose_door(chosen_door)
 		_world._apply_progress_sync_state(progress_state)
 	if not sync_state.pending_door_sync_payload.is_empty():
@@ -179,6 +181,9 @@ func apply_enemy_states(synced_states: Array, synced_enemy_count: int) -> void:
 			continue
 		var enemy := EnemyReplicationService.enemy_nodes_by_id.get(enemy_id) as ENEMY_BASE_SCRIPT
 		if not is_instance_valid(enemy):
+			if not _world.get_active_boss_id().is_empty() and Time.get_ticks_msec() - _last_boss_resync_msec >= 1000:
+				_last_boss_resync_msec = Time.get_ticks_msec()
+				_world._request_boss_spawn_resync.rpc_id(1, enemy_id, _world._world_multiplayer_sync_state.current_room_sync_id)
 			continue
 		if state.has("position"):
 			var synced_position := state.get("position", enemy.global_position) as Vector2
@@ -311,9 +316,16 @@ func _apply_boss_spawn_payload(payload: Dictionary) -> void:
 	if is_instance_valid(existing_enemy):
 		_world.active_room_enemy_count = maxi(1, _world.active_room_enemy_count)
 		return
-	var boss: Node2D = _world._spawn_boss_for_stage(boss_stage, spawn_position)
+	var boss: ENEMY_BASE_SCRIPT = _world._spawn_boss_for_stage(boss_stage, spawn_position, String(payload.get("boss_id", "")))
 	if is_instance_valid(boss):
 		_world.enemy_state_sync_broadcaster.register_enemy(boss, enemy_id)
+		var max_health := int(payload.get("max_health", 0))
+		if max_health > 0:
+			boss.set_max_health_and_current(max_health, clampi(int(payload.get("health", max_health)), 0, max_health))
+		boss.apply_network_runtime_state(payload.get("runtime_state", {}) as Dictionary)
+		var projectiles := payload.get("projectile_state", {}) as Dictionary
+		if not projectiles.is_empty():
+			boss.apply_projectile_network_sync_state(projectiles)
 	_world.active_room_enemy_count = 1
 	_world._world_multiplayer_sync_state.apply_spawn_sync_id(source_room_sync_id)
 

@@ -59,7 +59,7 @@ func set_environment_identity(act: int, biome_id: String) -> void:
 
 func set_boss_entrance_motif(boss_key: String, intro_active: bool) -> void:
 	boss_entrance_key = boss_key.strip_edges().to_lower()
-	boss_entrance_active = intro_active and boss_entrance_key in ["warden", "sovereign", "lacuna"]
+	boss_entrance_active = intro_active and preload("res://scripts/shared/boss_catalogue.gd").NAMES.has(boss_entrance_key)
 	# Removal is immediate: decorative entrance art never survives into a tell.
 	if not boss_entrance_active:
 		_boss_entrance_visibility = 0.0
@@ -219,7 +219,10 @@ func _draw_challenge_door_vfx(door: Dictionary, door_pulse: float, is_focused: b
 	var spin := _art_time * (1.1 if kind_id == ENUMS.DoorKind.BOSS else 1.8) + door_pos.x * 0.002
 
 	if kind_id == ENUMS.DoorKind.BOSS:
-		var boss_key := String(door.get("encounter_key", "")).strip_edges().to_lower()
+		var boss_key := String(door.get("boss_id", door.get("encounter_key", ""))).strip_edges().to_lower()
+		if boss_key in ["kilnheart", "glassweaver", "null_archivist"]:
+			_draw_alternative_boss_door_vfx(door_pos, boss_key, slow, focus_boost)
+			return
 		if boss_key == "sovereign":
 			_draw_sovereign_boss_door_vfx(door_pos, door_pulse, focus_boost, slow, fast, spin)
 		elif boss_key == "lacuna":
@@ -227,6 +230,29 @@ func _draw_challenge_door_vfx(door: Dictionary, door_pulse: float, is_focused: b
 		else:
 			_draw_warden_boss_door_vfx(door_pos, door_pulse, focus_boost, slow, fast, spin)
 		return
+
+func _draw_alternative_boss_door_vfx(point: Vector2, boss_key: String, pulse: float, focus_boost: float) -> void:
+	var tint: Color = {"kilnheart": Color(1.0, 0.48, 0.19), "glassweaver": Color(0.3, 0.88, 0.94), "null_archivist": Color(0.79, 0.61, 1.0)}[boss_key]
+	var line := Color(tint, 0.65 + focus_boost)
+	draw_circle(point, 45.0 + pulse * 5.0, Color(tint, 0.12 + focus_boost * 0.3))
+	match boss_key:
+		"kilnheart":
+			for i in range(6):
+				var angle := TAU * i / 6.0
+				draw_arc(point, 36.0 + pulse * 3.0, angle + 0.1, angle + 0.8, 10, line, 5.0, true)
+			draw_arc(point, 49.0, 0.0, TAU, 48, Color(tint, 0.35), 1.5, true)
+		"glassweaver":
+			for i in range(4):
+				var axis := Vector2.RIGHT.rotated(PI * 0.25 + TAU * i / 4.0)
+				var side := axis.orthogonal()
+				var diamond := PackedVector2Array([point + axis * 27.0, point + axis * 39.0 + side * 7.0, point + axis * 53.0, point + axis * 39.0 - side * 7.0, point + axis * 27.0])
+				draw_polyline(diamond, line, 2.0, true)
+		"null_archivist":
+			for side: float in [-1.0, 1.0]:
+				var page := PackedVector2Array([point + Vector2(0, -30), point + Vector2(side * 39, -43), point + Vector2(side * 43, 33), point + Vector2(0, 43)])
+				draw_polyline(page, line, 2.0, true)
+				for row in range(3):
+					draw_line(point + Vector2(side * 24, -22 + row * 14), point + Vector2(side * 35, -26 + row * 14), line, 1.5, true)
 
 func _is_superior_door(door: Dictionary) -> bool:
 	var kind_id: int = ENCOUNTER_CONTRACTS.door_option_kind_id(door)

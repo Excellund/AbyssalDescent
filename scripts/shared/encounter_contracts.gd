@@ -1465,6 +1465,8 @@ static func door_reward_preview_text(option: Dictionary) -> String:
 
 static func door_prompt_text(option: Dictionary) -> String:
 	var normalized_option := normalize_door_option(option)
+	if door_option_kind_id(normalized_option) == DOOR_KIND_BOSS:
+		return String(normalized_option.get(KEY_LABEL, "Boss"))
 	var icon := String(normalized_option.get(KEY_ICON, ""))
 	if icon == "trial":
 		return String(normalized_option.get(KEY_LABEL, "Trial"))
@@ -1493,6 +1495,8 @@ static func door_prompt_name(option: Dictionary) -> String:
 	return prompt_text + suffix
 
 static func door_identity_label(option: Dictionary) -> String:
+	if door_option_kind_id(option) == DOOR_KIND_BOSS:
+		return _truncate_door_label(String(option.get(KEY_LABEL, "Boss")))
 	var normalized_option := normalize_door_option(option)
 	var icon := String(normalized_option.get(KEY_ICON, ""))
 	if icon == "trial":

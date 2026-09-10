@@ -57,6 +57,7 @@ func _run() -> void:
 	ui.close_selection()
 	ui.reward_skipped.emit(ENUMS.RewardMode.ARCANA, true)
 	world.run_session.act_biome_ids = ["shatterfield", "grinding_vault", "void_breach"]
+	world.run_session.act_boss_ids = ["warden", "sovereign", "lacuna"]
 	_test_route_previews()
 	_test_room_history_and_identity()
 	_test_boss_transition(1, "warden", "shatterfield", "grinding_vault")

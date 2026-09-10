@@ -3,6 +3,7 @@ extends RefCounted
 func build_progress_sync_state(state: Dictionary) -> Dictionary:
 	return {
 		"room_sync_id": int(state.get("room_sync_id", 0)),
+		"act_boss_ids": state.get("act_boss_ids", []),
 		"rooms_cleared": int(state.get("rooms_cleared", 0)),
 		"room_depth": int(state.get("room_depth", 0)),
 		"phase_two_rooms_cleared": int(state.get("phase_two_rooms_cleared", 0)),

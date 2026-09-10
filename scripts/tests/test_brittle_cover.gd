@@ -2,6 +2,7 @@ extends "res://scripts/tests/test_descent_presentation.gd"
 
 const COVER := preload("res://scripts/core/arena_cover_controller.gd")
 const INTERACTIONS := preload("res://scripts/shared/combat_interaction_registry.gd")
+const CHARACTERS := preload("res://scripts/character_registry.gd")
 
 func _run() -> void:
 	if not OS.get_user_data_dir().begins_with(ProjectSettings.globalize_path("res://")):
@@ -26,7 +27,7 @@ func _run() -> void:
 	profile.first_descent_tutorial_completed = true
 	store.save_profile(profile)
 	_test_controller()
-	for character in ["bastion", "riftlancer", "veilstrider", "hexweaver"]:
+	for character in CHARACTERS.get_launch_character_ids():
 		_setup_world(character)
 		await _test_native_attacks(character)
 		if character == "bastion":

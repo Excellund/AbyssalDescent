@@ -1,16 +1,17 @@
 extends "res://scripts/tests/test_menu_panel_fit.gd"
 ## Capture the real Oaths menu at production canvas scale. Run only through
 ## render_gameplay_fixture.ps1 -PreserveProductionCanvas in an isolated copy.
-## Ten focused frames: reclaimed list space, all groups and Unassisted's
-## Forsworn requirement at two sizes, retaining legacy completion coverage.
+## Fourteen focused frames: reclaimed list space, all five vessel rows and
+## Threadbinder clear goals at two sizes, retaining legacy completion coverage.
 
 const OATHS := preload("res://scripts/progression/oaths_registry.gd")
 const OATH_PANEL := preload("res://scripts/ui/ascension/ascension_panel.gd")
+const CHARACTERS := preload("res://scripts/character_registry.gd")
 const CANVAS_SIZE := Vector2i(2560, 1440)
 const CAPTURES := {
 	0: ["forsworn_warden_no_hit", "unassisted_ascension"],
 	1: ["forsworn_sovereign_no_hit"],
-	3: ["unassisted_ascension", "clear_bastion_forsworn"],
+	3: ["unassisted_ascension", "vessel_roster", "clear_bastion_forsworn", "clear_threadbinder_forsworn"],
 }
 
 var frames: Array[Dictionary] = []
@@ -71,14 +72,21 @@ func _run() -> void:
 			scroll.scroll_vertical = 0
 			await _settle()
 			for oath_id: String in CAPTURES[tier]:
+				if oath_id == "vessel_roster":
+					await _capture_vessel_roster(folder, physical_size, panel, scroll)
+					continue
 				if oath_id.begins_with("clear_"):
-					var vessel_button := _bastion_group(panel)
+					var character_id := String((OATHS.get_definition(oath_id).get("params", {}) as Dictionary).get("character_id", ""))
+					panel._collapsed_clear_groups.clear()
+					panel.populate()
+					await _settle()
+					var vessel_button := _vessel_group(panel, character_id)
 					check(vessel_button != null and not vessel_button.disabled, "Vessel progression remains browsable at every Bearing")
 					if vessel_button == null:
 						continue
 					vessel_button.pressed.emit()
 					await _settle()
-					_check_vessel_progression(panel, tier)
+					_check_vessel_progression(panel, tier, character_id)
 				await _capture_id(folder, oath_id, physical_size, panel, scroll, "_" + OATHS._bearing_label(tier).to_lower())
 	RunContext.current_difficulty_tier = 2
 	panel.populate()
@@ -105,7 +113,9 @@ func _check_reclaimed_list_space(panel: OATH_PANEL, scroll: ScrollContainer) -> 
 		check(not label.text.contains("Selected Bearing") and not label.text.contains("Oaths for every stage of the descent"), "Removed overview and selected-Bearing text are absent")
 
 func _check_roster(panel: OATH_PANEL, tier: int) -> void:
-	check(OATHS.get_oath_ids().size() == 33, "Board lists seventeen challenges and sixteen vessel goals")
+	var character_ids := CHARACTERS.get_launch_character_ids()
+	check(OATHS.get_oath_ids().size() == 17 + character_ids.size() * 4, "Board lists seventeen challenges and four Bearing goals for every playable vessel")
+	check(character_ids.has("threadbinder"), "The playable roster includes Threadbinder")
 	var group_titles: Array[String] = []
 	var group_counts: Array[int] = []
 	for child in panel._oath_list.get_children():
@@ -126,21 +136,54 @@ func _check_roster(panel: OATH_PANEL, tier: int) -> void:
 	for child in panel._oath_list.get_children():
 		if child is Button:
 			vessel_rows.append(child.text)
-	check(vessel_rows.size() == 4 and vessel_rows[0].ends_with("(1 / 4)") and vessel_rows.slice(1).all(func(text: String): return text.ends_with("(0 / 4)")), "Each vessel has four clear goals and the old Pilgrim completion counts")
+	check(vessel_rows.size() == character_ids.size(), "Every playable vessel has one progression row")
+	for character_id: String in character_ids:
+		var vessel_button := _vessel_group(panel, character_id)
+		var expected_progress := "(1 / 4)" if character_id == "bastion" else "(0 / 4)"
+		check(vessel_button != null and vessel_button.text.ends_with(expected_progress), "Each vessel retains four Bearing goals and its saved progress: " + character_id)
+	for bearing: String in ["pilgrim", "delver", "harbinger", "forsworn"]:
+		var definition := OATHS.get_definition("clear_threadbinder_" + bearing)
+		check(not definition.is_empty() and String((definition.get("params", {}) as Dictionary).get("character_id", "")) == "threadbinder", "Threadbinder has its own registered clear goal: " + bearing)
 
-func _bastion_group(panel: OATH_PANEL) -> Button:
+func _vessel_group(panel: OATH_PANEL, character_id: String) -> Button:
+	var character_name := String(CHARACTERS.get_character(character_id).get("name", ""))
 	for child in panel._oath_list.get_children():
-		if child is Button and child.text.contains("Bastion"):
+		if child is Button and not child.is_queued_for_deletion() and child.text.contains("  " + character_name + "  ("):
 			return child
 	return null
 
-func _check_vessel_progression(panel: OATH_PANEL, selected_tier: int) -> void:
+func _check_vessel_progression(panel: OATH_PANEL, selected_tier: int, character_id: String) -> void:
 	for tier: int in range(4):
 		var bearing := OATHS._bearing_label(tier)
-		var completed := tier == 0
+		var completed := character_id == "bastion" and tier == 0
 		var available := selected_tier == tier
 		var state := "Completed" if completed else ("Available" if available else "Requires another Bearing")
-		_assert_oath_state(panel, "clear_bastion_" + bearing.to_lower(), completed, available, bearing + " Bearing · " + state)
+		_assert_oath_state(panel, "clear_" + character_id + "_" + bearing.to_lower(), completed, available, bearing + " Bearing · " + state)
+
+func _capture_vessel_roster(folder: String, physical_size: Vector2i, panel: OATH_PANEL, scroll: ScrollContainer) -> void:
+	var character_ids := CHARACTERS.get_launch_character_ids()
+	var last_button: Button
+	for child in panel._oath_list.get_children():
+		if child is Button and not child.is_queued_for_deletion():
+			last_button = child
+	check(last_button != null, "Vessel roster has a final visible row")
+	if last_button == null:
+		return
+	scroll.ensure_control_visible(last_button)
+	await _settle()
+	for character_id: String in character_ids:
+		var button := _vessel_group(panel, character_id)
+		check(button != null, "Roster capture contains: " + character_id)
+		if button == null:
+			continue
+		check(scroll.get_global_rect().grow(1.0).encloses(button.get_global_rect()), "All vessel rows fit together after scrolling: " + character_id)
+		check(button.get_combined_minimum_size().x <= button.size.x + 1.0, "Vessel name and four-Bearing progress fit: " + character_id)
+	await RenderingServer.frame_post_draw
+	var filename := "vessel_roster_%d.png" % physical_size.x
+	var picture := root.get_texture().get_image()
+	check(picture.get_size() == physical_size, "Vessel roster capture uses physical output dimensions")
+	check(not picture.is_empty() and picture.save_png(folder.path_join(filename)) == OK, "Captured " + filename)
+	frames.append({"file": filename, "character_ids": character_ids, "physical_size": [physical_size.x, physical_size.y], "scroll_vertical": scroll.scroll_vertical, "selected_bearing": panel._selected_oath_bearing()})
 
 func _assert_oath_state(panel: OATH_PANEL, oath_id: String, completed: bool, available: bool, requirement: String) -> void:
 	var card := _find_oath_card(panel._oath_list, OATHS.get_definition(oath_id), completed)

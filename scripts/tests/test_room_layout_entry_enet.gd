@@ -369,6 +369,7 @@ func _test_descent_flow() -> void:
 	world._clear_all_enemies()
 	world._set_progression_counters(4, 5, 0, 0)
 	world.run_session.act_biome_ids = ["haunt", "hollow", "convergence_end"]
+	world.run_session.act_boss_ids = ["warden", "sovereign", "lacuna"]
 	var replica_standard_before: String = world.run_session.last_standard_encounter_key
 	var replica_objective_before: String = world.run_session.last_objective_kind
 	await _barrier("descent-staged")
