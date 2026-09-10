@@ -1573,17 +1573,7 @@ func update_intercept_run_objective_state(delta: float) -> void:
 	# Check player proximity to drone (escort zone)
 	var drone_pos: Vector2 = objective_manager.intercept_drone_position
 	var escort_radius := float(objective_manager.intercept_escort_radius)
-	var player_in_zone := false
-	if is_instance_valid(world.player) and (world.player as Node2D).global_position.distance_to(drone_pos) <= escort_radius:
-		player_in_zone = true
-	if not player_in_zone and world.is_multiplayer:
-		var party_nodes: Variant = world._get_multiplayer_player_nodes()
-		if party_nodes is Array:
-			for party_node_variant in party_nodes:
-				var party_node := party_node_variant as Node2D
-				if is_instance_valid(party_node) and party_node.global_position.distance_to(drone_pos) <= escort_radius:
-					player_in_zone = true
-					break
+	var player_in_zone := _is_any_active_player_inside_control_zone(drone_pos, escort_radius)
 	objective_manager.intercept_player_in_escort_zone = player_in_zone
 
 	# Count enemies near drone

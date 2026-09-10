@@ -142,6 +142,7 @@ func _run() -> void:
 			check(_living().size() == 1 and _living()[0].get_script() == BREAKWATER, "Exactly one real Breakwater exists on host and joiner")
 		_write("checked-" + role + "-" + key, true)
 		check(await _until(func(): return _has("checked-host-" + key) and _has("checked-client-" + key)), "Both peers inspect the same room before advancing")
+	await _test_intercept_living_escorts()
 	await _test_descent_flow()
 	_write("finished-" + role, true)
 	check(await _until(func(): return _has("finished-host") and _has("finished-client")), "Both peers finish before teardown")
@@ -166,6 +167,90 @@ func _run() -> void:
 	file.close()
 	print("[ENet] %s: %d checks, %d failures" % [role, checks, failures.size()])
 	quit(0 if failures.is_empty() else 1)
+
+func _test_intercept_living_escorts() -> void:
+	# The isolated autoload suppresses startup; wire its existing health/death
+	# transport explicitly, then create both avatars through the native roster.
+	PlayerReplicationService.multiplayer_session_manager = MultiplayerSessionManager
+	world._setup_multiplayer_remote_players()
+	check(world._get_multiplayer_player_nodes().size() == 2, "Both connected peers have the two native avatars for escort eligibility")
+	var client_id := int(get_multiplayer().get_peers()[0]) if role == "host" else get_multiplayer().get_unique_id()
+	for fallen_id in [client_id, 1]:
+		var key := "escort-remote" if fallen_id == client_id else "escort-host"
+		var offers: Array[Dictionary] = []
+		if role == "host":
+			offers.append(CONTRACTS.objective_door_option(world.encounter_profile_builder.build_objective_profile(5, "intercept_run")))
+		await _offer_and_request(key, offers, "Intercept Run")
+		world._signal_local_player_ready()
+		check(await _until(func(): return not world.encounter_intro_grace_active), "Both owners Engage the real Intercept room through readiness RPCs: " + key)
+		for actor in world._get_multiplayer_player_nodes():
+			actor.set_physics_process(false)
+		for enemy in _living():
+			enemy.set_process(false)
+			enemy.set_physics_process(false)
+			enemy.global_position = Vector2(450, 300)
+		world.enemy_spawner.set_process(false)
+		# Positions and enemy locations are staged on both copies. Only the host
+		# changes health or advances the objective; receivers use real RPCs.
+		var fallen = world._get_player_for_peer(fallen_id)
+		var living = world._get_player_for_peer(1 if fallen_id == client_id else client_id)
+		var manager := world.objective_manager
+		fallen.global_position = manager.intercept_drone_position
+		living.global_position = Vector2(200, 0)
+		await _barrier("positioned-" + key)
+		if role == "host":
+			fallen.health_state.set_health(0)
+		check(await _until(func(): return fallen.is_dead() and not fallen.visible and world._count_alive_players() == 1), "Host health/death RPCs hide the same fallen avatar while retaining the living teammate: " + key)
+		check(not world._run_outcome_coordinator.is_player_defeated(), "A single replicated death keeps the co-op encounter active: " + key)
+		await _barrier("death-received-" + key)
+		if role == "client":
+			var replica_before := manager.serialize_sync_state()
+			world.objective_runtime.update_intercept_run_objective_state(0.5)
+			check(manager.serialize_sync_state() == replica_before, "Joining objective runtime cannot author escort progress: " + key)
+		if role == "host":
+			var before := manager.intercept_drone_progress
+			world._process(0.1)
+			check(manager.intercept_drone_progress == before, "Host does not advance for a fallen escort: " + key)
+		await _check_escort_network_state(key + "-outside", true, false, "Stay close to the drone")
+		living.global_position = manager.intercept_drone_position + Vector2(45, 0)
+		await _barrier("living-near-" + key)
+		if role == "host":
+			var before := manager.intercept_drone_progress
+			world._process(0.1)
+			check(manager.intercept_drone_progress > before, "The host advances when either living teammate escorts: " + key)
+		await _check_escort_network_state(key + "-moving", false, true, "Path clear — drone advancing")
+		if role == "host":
+			_living()[0].global_position = manager.intercept_drone_position
+			var before := manager.intercept_drone_progress
+			world._process(0.1)
+			check(manager.intercept_drone_progress == before, "A live enemy still blocks the host drone: " + key)
+		await _check_escort_network_state(key + "-blocked", true, true, "enemies blocking — clear the path")
+		# Stage the next case with the existing host revive path and full health;
+		# no local replica repair or fabricated alive-status packet is used.
+		if role == "host":
+			world._try_revive_fallen_multiplayer_players()
+			for actor in world._get_multiplayer_player_nodes():
+				actor.set_health(actor.health_state.max_health)
+		check(await _until(func(): return world._count_alive_players() == 2), "Existing host revival reaches both peers before the next case: " + key)
+		for actor in world._get_multiplayer_player_nodes():
+			actor.set_physics_process(false)
+		await _barrier("revived-" + key)
+
+func _check_escort_network_state(key: String, stalled: bool, escorted: bool, hint: String) -> void:
+	if role == "host":
+		_write(key + "-progress", world.objective_manager.intercept_drone_progress)
+	check(await _until(func(): return _has(key + "-progress")), "Host exposes expected progress for transport comparison: " + key)
+	var expected_progress: float = _read(key + "-progress")
+	check(await _until(func():
+		if role == "host":
+			world._sync_objective_state_tick(world.objective_state_sync_interval_sec)
+		world._refresh_frame_ui()
+		return world.objective_manager.intercept_drone_stalled == stalled and world.objective_manager.intercept_player_in_escort_zone == escorted and is_equal_approx(world.objective_manager.intercept_drone_progress, expected_progress) and world.hud._status_obj_line2.text.contains(hint)), "Existing objective RPC delivers matching stalled/progress/escort state and live HUD: " + key)
+	_write("escort-checked-" + key + "-" + role, true)
+	check(await _until(func():
+		if role == "host":
+			world._sync_objective_state_tick(world.objective_state_sync_interval_sec)
+		return _has("escort-checked-" + key + "-host") and _has("escort-checked-" + key + "-client")), "Both peers inspect the same escort state before advancing: " + key)
 
 func _living() -> Array[Node]:
 	var out: Array[Node] = []
@@ -242,6 +327,7 @@ func _test_descent_flow() -> void:
 func _offer_and_request(key: String, host_offers: Array[Dictionary], expected_label: String) -> void:
 	var standard_before: String = world.run_session.last_standard_encounter_key
 	var objective_before: String = world.run_session.last_objective_kind
+	var previous_room_id := world.get_current_room_sync_id()
 	# Stage the between-room state for skipped ordinary encounters. The real
 	# renderer correctly suppresses doors while a declared encounter is live.
 	world._clear_all_enemies()
@@ -277,7 +363,10 @@ func _offer_and_request(key: String, host_offers: Array[Dictionary], expected_la
 	await _barrier("offers-inspected-" + key)
 	if role == "client":
 		world._request_use_door.rpc_id(1, world.door_options[0].duplicate(true))
-	check(await _until(func(): return world.current_room_label == expected_label), "Joiner request resolves through host authority and chosen-door RPC: " + key)
+	# Rest does not advance the combat room ID. Encounters must advance it,
+	# including consecutive choices with the same display label.
+	var is_rest := CONTRACTS.door_option_kind_id(expected[0]) == ENUMS.DoorKind.REST
+	check(await _until(func(): return (is_rest or world.get_current_room_sync_id() > previous_room_id) and world.current_room_label == expected_label), "Joiner request resolves through host authority and the new chosen door: " + key)
 	await _barrier("entered-" + key)
 
 func _test_boss_descent(stage: int) -> void:

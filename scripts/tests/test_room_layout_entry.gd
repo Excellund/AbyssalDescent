@@ -10,6 +10,7 @@ const ENUMS := preload("res://scripts/shared/enums.gd")
 const MAPPER := preload("res://scripts/power_parameter_mapper.gd")
 const BREAKWATER := preload("res://scripts/enemy_breakwater.gd")
 const OBJECTIVE := preload("res://scripts/objective_manager.gd")
+const PLAYER_SCENE := preload("res://scenes/Player.tscn")
 var checks := 0
 var failures: Array[String] = []
 var world: WORLD
@@ -88,6 +89,7 @@ func _run() -> void:
 		check(_living_enemies() == 2, "Serialized ordinary profile spawns its actual two enemies")
 		if tier == 1:
 			await _test_objective_survey_hints()
+			await _test_intercept_living_escorts()
 		current_scene = null
 		world.queue_free()
 		world = null
@@ -138,7 +140,7 @@ func _test_objective_survey_hints() -> void:
 		var manager := world.objective_manager
 		var frozen_state := manager.serialize_sync_state()
 		check(world.hud._status_obj_line2.is_visible_in_tree() and world.hud._status_obj_line2.text == hints[kind], "Actual Main survey shows its existing objective card instruction: " + kind)
-		_check_replica_survey_hint(frozen_state, String(hints[kind]), kind)
+		_check_replica_objective_hint(frozen_state, String(hints[kind]), kind)
 		for _step in range(4):
 			world._process(0.8)
 			await create_timer(0.8).timeout
@@ -178,7 +180,77 @@ func _test_objective_survey_hints() -> void:
 		world._refresh_frame_ui()
 		check(world.objective_manager.active_objective_kind.is_empty() and not world.hud._status_obj_line2.visible, "The next nonobjective room cannot retain the survey instruction: " + kind)
 
-func _check_replica_survey_hint(sync_state: Dictionary, expected: String, kind: String) -> void:
+func _test_intercept_living_escorts() -> void:
+	# Stage two actual avatars without opening a network session. Death follows
+	# the real health signal and World lifecycle; objective fields retain the
+	# existing authoritative frame and serialization paths.
+	var previous_registry := PlayerReplicationService.player_nodes.duplicate()
+	var previous_peer_id := PlayerReplicationService.local_peer_id
+	var previous_player_id := world.player.player_id
+	var remote = PLAYER_SCENE.instantiate()
+	remote.player_id = 2
+	remote.is_local_player = false
+	world.add_child(remote)
+	remote.died.connect(world._on_player_died)
+	world.player.player_id = 1
+	PlayerReplicationService.local_peer_id = 1
+	PlayerReplicationService.player_nodes.clear()
+	PlayerReplicationService.register_player(1, world.player)
+	PlayerReplicationService.register_player(2, remote)
+	for fallen_host in [true, false]:
+		var label := "fallen host" if fallen_host else "fallen remote"
+		world.player.revive_with_health(world.player.health_state.max_health)
+		remote.revive_with_health(remote.health_state.max_health)
+		# Enter locally before staging the party, so this disconnected fixture
+		# creates native enemies without waiting for multiplayer room readiness.
+		world.is_multiplayer = false
+		_enter(world.encounter_profile_builder.build_objective_profile(5, "intercept_run"), "Co-op Intercept: " + label)
+		world._exit_encounter_intro_grace()
+		world.is_multiplayer = true
+		world.player.set_physics_process(false)
+		remote.set_physics_process(false)
+		world.enemy_spawner.set_process(false)
+		var enemies: Array[Node2D] = []
+		for enemy in get_nodes_in_group("enemies"):
+			if is_instance_valid(enemy) and not enemy.is_queued_for_deletion() and not enemy.is_dead():
+				enemy.set_process(false)
+				enemy.set_physics_process(false)
+				enemy.global_position = world.current_room_size * 0.5 - Vector2(40, 40)
+				enemies.append(enemy)
+		# Room replacement retires old enemy nodes at the end of the frame.
+		await process_frame
+		await process_frame
+		var manager := world.objective_manager
+		var fallen = world.player if fallen_host else remote
+		var living = remote if fallen_host else world.player
+		fallen.global_position = manager.intercept_drone_position
+		living.global_position = Vector2(200, 0)
+		fallen.set_health(0)
+		check(fallen.is_dead() and not fallen.visible and world._count_alive_players() == 1 and not world._run_outcome_coordinator.is_player_defeated(), "Actual co-op death hides only the fallen avatar and keeps the encounter active: " + label)
+		var progress_before := manager.intercept_drone_progress
+		world._process(0.1)
+		check(living.global_position.distance_to(manager.intercept_drone_position) > manager.intercept_escort_radius and not manager.intercept_player_in_escort_zone and manager.intercept_drone_stalled and manager.intercept_drone_progress == progress_before, "An invisible fallen avatar cannot escort while the living teammate is outside: " + label)
+		check(world.hud._status_obj_line2.text == "Stay close to the drone", "Live Intercept guidance requests a living escort: " + label)
+		_check_replica_objective_hint(manager.serialize_sync_state(), "Stay close to the drone", "live Intercept with " + label)
+		living.global_position = manager.intercept_drone_position + Vector2(45, 0)
+		world._process(0.1)
+		check(manager.intercept_player_in_escort_zone and not manager.intercept_drone_stalled and manager.intercept_drone_progress > progress_before and world.hud._status_obj_line2.text == "Path clear — drone advancing", "Either living teammate resumes the drone while the other remains fallen: " + label)
+		progress_before = manager.intercept_drone_progress
+		enemies[0].global_position = manager.intercept_drone_position
+		world._process(0.1)
+		check(manager.intercept_player_in_escort_zone and manager.intercept_drone_stalled and manager.intercept_drone_progress == progress_before and world.hud._status_obj_line2.text.contains("enemies blocking — clear the path"), "A live enemy still blocks the drone with a living escort present: " + label)
+	world.player.revive_with_health(world.player.health_state.max_health)
+	world.player.set_physics_process(false)
+	world.is_multiplayer = false
+	world.player.player_id = previous_player_id
+	PlayerReplicationService.unregister_player(1)
+	PlayerReplicationService.unregister_player(2)
+	PlayerReplicationService.player_nodes = previous_registry
+	PlayerReplicationService.local_peer_id = previous_peer_id
+	remote.queue_free()
+	await process_frame
+
+func _check_replica_objective_hint(sync_state: Dictionary, expected: String, kind: String) -> void:
 	# Stage only the existing native objective codec and HUD path. Transport is
 	# covered by the ENet room-entry fixture; this adds no test or production RPC.
 	var authoritative := world.objective_manager
@@ -186,7 +258,7 @@ func _check_replica_survey_hint(sync_state: Dictionary, expected: String, kind: 
 	replica.apply_sync_state(bytes_to_var(var_to_bytes(sync_state)))
 	world.objective_manager = replica
 	world._refresh_frame_ui()
-	check(world.hud._status_obj_line2.is_visible_in_tree() and world.hud._status_obj_line2.text == expected, "Serialized replica objective state uses the same survey card instruction: " + kind)
+	check(world.hud._status_obj_line2.is_visible_in_tree() and world.hud._status_obj_line2.text == expected, "Serialized replica objective state uses the same objective card instruction: " + kind)
 	world.objective_manager = authoritative
 	replica.free()
 	world._refresh_frame_ui()
