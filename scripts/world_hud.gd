@@ -903,6 +903,7 @@ func _update_status_panel_text(state: Dictionary) -> void:
 			status_mutator_label.visible = false
 		if status_panel != null:
 			status_panel.custom_minimum_size.y = maxf(84.0, y + 8.0)
+			status_panel.size.y = status_panel.custom_minimum_size.y
 		return
 
 	# ── Block 1: Act header ───────────────────────────────────────────────────
@@ -963,6 +964,7 @@ func _update_status_panel_text(state: Dictionary) -> void:
 		var line2_color := C_HINT
 		var line3 := ""
 		var line3_color := C_GOOD
+		var wrap_line3 := false
 
 		var objective_time_left       := float(state.get("objective_time_left", 0.0))
 		var objective_kills           := int(state.get("objective_kills", 0))
@@ -1057,8 +1059,19 @@ func _update_status_panel_text(state: Dictionary) -> void:
 					line1 = "Kill %d/%d  ·  %ds" % [objective_kills, objective_kill_target, secs]
 				var pulse_next := float(state.get("objective_pulse_next_timer", 0.0))
 				var pulse_active := bool(state.get("objective_pulse_active", false))
-				if not pulse_active:
-					if pulse_next <= 2.0:
+				if pulse_active:
+					var pulse_name := String(state.get("objective_pulse_mode", "")).strip_edges()
+					if pulse_name.is_empty():
+						pulse_name = "Pulse active"
+					line2 = "%s  ·  %.1fs left" % [pulse_name, maxf(0.0, float(state.get("objective_pulse_active_timer", 0.0)))]
+					line2_color = C_WARN
+					line3 = String(state.get("objective_pulse_rule_text", ""))
+					line3_color = C_HINT
+					wrap_line3 = true
+				else:
+					if pulse_next <= 0.0:
+						line2 = "Next pulse soon"
+					elif pulse_next <= 2.0:
 						line2 = "Next pulse in %.1fs" % pulse_next
 						line2_color = Color(1.0, 0.69, 0.38, 0.95)
 					else:
@@ -1102,14 +1115,24 @@ func _update_status_panel_text(state: Dictionary) -> void:
 		if not line3.is_empty():
 			_status_obj_line3.text = line3
 			_status_obj_line3.add_theme_color_override("font_color", line3_color)
-			_status_obj_line3.position = Vector2(0.0, y)
+			var line3_width := HUD_INFO_PANEL_WIDTH - 20.0 if wrap_line3 else HUD_INFO_PANEL_WIDTH
+			var line3_height := 19.0
+			if wrap_line3:
+				line3_height = maxf(line3_height, ThemeDB.fallback_font.get_multiline_string_size(line3, HORIZONTAL_ALIGNMENT_CENTER, line3_width, 14).y)
+			_status_obj_line3.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART if wrap_line3 else TextServer.AUTOWRAP_OFF
+			_status_obj_line3.custom_minimum_size = Vector2(line3_width, line3_height)
+			_status_obj_line3.size = Vector2(line3_width, line3_height)
+			_status_obj_line3.position = Vector2(10.0 if wrap_line3 else 0.0, y)
 			_status_obj_line3.visible = true
-			y += 19.0 + 1.0
+			y += line3_height + 1.0
 		else:
 			_status_obj_line3.visible = false
 
 	# ── Block 6: Mutator strip ────────────────────────────────────────────────
 	var current_room_enemy_mutator := state.get("current_room_enemy_mutator", {}) as Dictionary
+	# Pulse mode and its rule already occupy the objective card above.
+	if objective_kind == "pulse_window" and bool(state.get("objective_pulse_active", false)):
+		current_room_enemy_mutator = {}
 	if current_room_enemy_mutator.is_empty():
 		if status_mutator_icon != null:
 			status_mutator_icon.visible = false
@@ -1117,6 +1140,7 @@ func _update_status_panel_text(state: Dictionary) -> void:
 			status_mutator_label.visible = false
 		if status_panel != null:
 			status_panel.custom_minimum_size.y = maxf(84.0, y + 8.0)
+			status_panel.size.y = status_panel.custom_minimum_size.y
 		return
 
 	y += 4.0
@@ -1151,6 +1175,7 @@ func _update_status_panel_text(state: Dictionary) -> void:
 	y += 24.0
 	if status_panel != null:
 		status_panel.custom_minimum_size.y = maxf(84.0, y + 8.0)
+		status_panel.size.y = status_panel.custom_minimum_size.y
 
 func _bearing_name_from_tier(tier: int) -> String:
 	match tier:

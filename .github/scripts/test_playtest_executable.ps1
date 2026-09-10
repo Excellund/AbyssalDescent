@@ -1,10 +1,12 @@
 param(
     [Parameter(Mandatory = $true)][string]$ExecutablePath,
     [switch]$DebugRun,
-    [string]$GodotPath = ""
+    [string]$GodotPath = "",
+    [switch]$NativeRun
 )
 
 $ErrorActionPreference = 'Stop'
+if ($NativeRun -and $DebugRun) { throw 'NativeRun checks normal builds and cannot be combined with DebugRun.' }
 $ExecutablePath = (Resolve-Path -LiteralPath $ExecutablePath).Path
 if ([IO.Path]::GetExtension($ExecutablePath) -ne '.exe') {
     throw 'ExecutablePath must name an exported Windows executable.'
@@ -18,6 +20,10 @@ if (-not $GodotPath) {
 if (-not $GodotPath) { $GodotPath = $env:GODOT_EXE }
 if (-not $GodotPath -or -not (Test-Path -LiteralPath $GodotPath -PathType Leaf)) { throw 'Supply -GodotPath, configure .vscode/settings.json, or set GODOT_EXE.' }
 $GodotPath = (Resolve-Path -LiteralPath $GodotPath).Path
+if ($NativeRun) {
+    & (Join-Path $PSScriptRoot 'test_native_playtest.ps1') -ExecutablePath $ExecutablePath -GodotPath $GodotPath
+    return
+}
 
 # Export templates ignore --script. Inspect the actual embedded package using
 # the development engine and an external probe, then boot the debug EXE itself.

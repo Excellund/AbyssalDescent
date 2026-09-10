@@ -864,6 +864,7 @@ func perform_motion_blast(direction: Vector2, strength: float) -> void:
 	var blast_range := ARCANA_MOTION_SCRIPT.blast_range(strength, blast_drive_reach_scale)
 	var context := upgrade_system.build_melee_attack_context(blast_damage, blast_range, ARCANA_MOTION_SCRIPT.BLAST_ARC_DEGREES, execution_proc, execution_damage_mult)
 	context["source"] = "blast_drive"
+	context["cover_blast_strength"] = strength
 	context["damage_coefficient"] = lerpf(ARCANA_MOTION_SCRIPT.BLAST_DAMAGE_MULT_MIN, ARCANA_MOTION_SCRIPT.BLAST_DAMAGE_MULT_MAX, strength) * blast_drive_damage_scale * float(context.get("damage_mult", 1.0))
 	visual_facing_direction = direction
 	attack_cooldown_left = maxf(0.05, attack_cooldown * _mission_action_cooldown_multiplier())
@@ -2497,6 +2498,12 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 			player_feedback.play_world_ring(global_position, 30.0, Color(0.86, 0.18, 0.22, 0.78), 0.18)
 	var strike_geometry := _get_melee_attack_geometry(melee_context)
 	var strike_range := float(strike_geometry["range"])
+	# Cover is an environmental contact, never an enemy hit or a damage proc.
+	# Send before spending primed state so the host derives the same geometry.
+	var cover_world := get_tree().current_scene
+	if _is_local_control_owner() and is_instance_valid(cover_world) and cover_world.has_method("request_brittle_cover_attack"):
+		var cover_source := String(melee_context.get("source", "melee"))
+		cover_world.request_brittle_cover_attack(INTERACTION_REGISTRY.damage_context(attack_action, cover_source).interaction, global_position, attack_direction, float(melee_context.get("cover_blast_strength", -1.0)))
 	var oath_target_point := global_position + attack_direction * strike_range
 	var tagged_attack: Dictionary = INTERACTION_REGISTRY.damage_context(attack_action, String(melee_context.get("source", "melee"))).interaction
 	if indomitable_spirit_damage_reduction > 0.0:

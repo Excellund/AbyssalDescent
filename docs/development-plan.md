@@ -1,21 +1,23 @@
 # Development plan
 
-Updated September 9, 2026. This is the current entry point for priorities and the development pipeline. Feature documents retain their detailed rules and historical verification records; a file named `next-content-update.md` does not mean that feature is still unimplemented.
+Updated September 10, 2026. This is the current entry point for priorities and the development pipeline. Feature documents retain their detailed rules and historical verification records; a file named `next-content-update.md` does not mean that feature is still unimplemented.
 
-**Current checkpoint:** the three approved sense-of-descent updates are implemented on `codex/descent-identity` at gameplay commit `7b0d470`: act environments and saved biome identity; entered-room variety and clear route payoffs; music, boss/act milestones and results. The full local suite, staged ENet and GPU review passed, and a normal desktop playtest has been delivered. The [September 9–10 implementation log](overnight-descent-20260910.md) records the exact build, source, fixes and evidence. The authorized tooling increment adds isolated editor tasks and [branch/PR regression CI](pull-request-validation.md); its [first hosted run](https://github.com/Excellund/AbyssalDescent/actions/runs/34408344808) passed and retained logs were inspected. Next is normal playtest feedback on this checkpoint.
+**Accepted baseline:** the user accepted the sense-of-descent checkpoint and requested merge/tag. It is now on `main` and published as [v0.6.3](https://github.com/Excellund/AbyssalDescent/releases/tag/v0.6.3) at `922a4b5`: act environments and saved biome identity; entered-room variety and clear route payoffs; music, boss/act milestones and results. The [September 9–10 implementation log](overnight-descent-20260910.md) retains its development-build and gameplay evidence. Release exports now use the tested Godot 4.6.2; the published ZIP checksum and 27 isolated package checks passed, as did the [main regression workflow](https://github.com/Excellund/AbyssalDescent/actions/runs/34441655508). Package inspection did not launch the public executable or establish internet co-op acceptance.
+
+**Active work:** the user authorized continued development until 15:00 Copenhagen today on a new branch. The [workday record](workday-development-20260910.md) tracks scope, ownership and delivery on `codex/encounter-evolution-20260910`. Select one cohesive encounter improvement from concrete gaps, with at most one independent tooling increment. The released baseline stays available for playtesting.
 
 ## Current position
 
-This plan was prepared from `main` at `4ee9681` (`Refine reward readability, character passives and Keeper protection`) with a clean working tree. The current gameplay checkpoint is `7b0d470` on the descent branch; the implementation log identifies and verifies its delivered desktop build.
+This plan was originally prepared from `main` at `4ee9681` (`Refine reward readability, character passives and Keeper protection`). The current accepted baseline is `922a4b5`; the workday branch starts from that release with a clean working tree.
 
 - Connected combat rules, shared keywords, conditional damage, reward-time build inspection and save/network compatibility are implemented. See [connected builds](connected-builds-implementation.md).
 - The latest source includes revised reward explanations/layouts, character passive presentation and behavior, and Keeper protection that holds linked allies at 1 HP. See the [combat roster](combat-power-roster.md) and [Keeper/Breach](next-content-update.md).
 - Motion powers, Returning Crescent, Undertow/cover formations and Apex Breakwater are already implemented. Their next step is feedback, not another implementation pass. See [content updates](content-updates.md).
 - Automated checks have substantial recorded coverage. Ordinary progression, enjoyment, balance and the complete online lobby/join experience still need human acceptance. Older build hashes and passing test counts describe their recorded checkpoints, not every later source revision.
 
-## Now: validate the current game through ordinary progression
+## Ongoing: feedback through ordinary progression
 
-Recommended next milestone: make the connected-build update understandable and satisfying in normal runs. Keep the current roster and accepted visual style as the baseline while collecting feedback.
+The user has accepted the preceding development checkpoint. Keep collecting specific observations from normal runs alongside the new workday milestone; acceptance of a useful baseline does not imply that every balance or online-flow question below is resolved.
 
 | Focus | What to observe | Decision it informs |
 |---|---|---|
@@ -34,7 +36,7 @@ Use [local telemetry analysis](../playtester_telemetry/README.md) with the exact
 
 1. **Resolve the strongest playtest finding.** State the player-visible problem and acceptance condition, implement the smallest complete fix, and deliver it through the pipeline below. Prioritize broken behavior and unclear feedback before speculative numerical tuning.
 2. **Use branch and pull-request validation.** The new [workflow](../.github/workflows/gameplay-regressions.yml) runs the existing full isolated suite on Windows with the verified Godot 4.6.2 archive and retains logs. It checks `main`, `codex/**` pushes and PRs targeting `main`. Verify a real hosted run before relying on it; mandatory branch protection remains a separate administrative change. GPU review and real online play remain separate checks.
-3. **Select one content slice after feedback.** Choose a concrete gap in encounter decisions or build variety. Destructible-cover formations are an existing candidate, not approved production scope. Define the behavior, payoff and acceptance playtest before implementing more powers, encounters or progression.
+3. **Deliver one content slice at a time.** The authorized workday slice pilots brittle inner cover in Shatterfield Crossfire and fixes the missing active Pulse Window readout. The [workday record](workday-development-20260910.md) defines the player decision, limits and acceptance checks. More powers, encounters or progression require a new concrete outcome before implementation.
 
 Performance work follows a reproducible slowdown and a representative capture. Refactoring follows a concrete maintenance problem in the area being changed. Neither needs a separate broad rewrite to continue development.
 
@@ -57,7 +59,7 @@ Run focused checks during iteration and the required full suite at checkpoints. 
 
 All unattended Godot gameplay uses disposable projects and isolated profiles through the existing helpers. Normal delivery is `.github/scripts/export_playtest.ps1` without `-DebugRun`: regular Menu, no debug grants, normal progression. It replaces the one `C:/Users/mikel/Desktop/AbyssalDescent Playtest.exe`, with a unique internal `dev-*` ID. Verify the destination in the invoking user's environment. Debug exports use that same desktop filename and separate debug saves when requested. Development runs remain excluded from remote telemetry and leaderboards.
 
-The exporter verifies its staged package and final SHA256 itself. The separate executable helper adds package configuration checks: normal mode mounts the EXE's embedded package in the development engine without launching the EXE or exercising the full Menu-to-run lifecycle; debug mode also boots the exported EXE in isolation. Do not report that smoke check as human playtesting or complete online validation.
+The exporter verifies its staged package and final SHA256 itself. The separate executable helper defaults to embedded-package inspection for normal builds; add `-NativeRun` to check a normal `dev-*` executable's actual Menu-to-tutorial, movement, Pause, return-to-menu and second-run path. This option requires the verified Godot 4.6.2 release template and runs a byte-identical temporary copy with a sidecar test controller, isolated profile and disabled remote services. It uses native input in a headless window with dummy audio and explicitly retires the existing application-lifetime power cache at final teardown. Debug artifacts use `-DebugRun` instead. These checks are distinct from rendered review, human playtesting, between-room Continue coverage and complete internet co-op validation.
 
 ## Public release and pipeline gaps
 

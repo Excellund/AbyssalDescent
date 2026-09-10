@@ -359,8 +359,13 @@ func apply_sync_state(state: Dictionary) -> void:
 		sweep_node_position = raw_sweep_pos
 	pulse_next_timer = maxf(0.0, float(state.get("pulse_next_timer", pulse_next_timer)))
 	pulse_active = bool(state.get("pulse_active", pulse_active))
-	pulse_active_timer = maxf(0.0, float(state.get("pulse_active_timer", pulse_active_timer)))
-	pulse_mode = String(state.get("pulse_mode", pulse_mode))
+	# A legacy payload without a remaining duration cannot extend an old pulse.
+	pulse_active_timer = maxf(0.0, float(state.get("pulse_active_timer", 0.0)))
+	pulse_mode = String(state.get("pulse_mode", ""))
+	var synced_pulse_mutator: Variant = state.get("pulse_active_mutator", {})
+	pulse_active_mutator = synced_pulse_mutator.duplicate(true) if synced_pulse_mutator is Dictionary else {}
+	if active_objective_kind != "pulse_window" or not pulse_active or pulse_active_timer <= 0.0:
+		_clear_replica_pulse_display()
 	pulse_ring_time_left = maxf(0.0, float(state.get("pulse_ring_time_left", pulse_ring_time_left)))
 	var raw_ring_color: Variant = state.get("pulse_ring_color", pulse_ring_color)
 	if raw_ring_color is Color:
@@ -373,6 +378,24 @@ func apply_sync_state(state: Dictionary) -> void:
 	intercept_enemies_near_drone = maxi(0, int(state.get("intercept_enemies_near_drone", intercept_enemies_near_drone)))
 	intercept_drone_stalled = bool(state.get("intercept_drone_stalled", intercept_drone_stalled))
 	intercept_player_in_escort_zone = bool(state.get("intercept_player_in_escort_zone", intercept_player_in_escort_zone))
+
+
+## Countdown only the replicated presentation between authoritative snapshots.
+## The frame coordinator pauses this with combat and the encounter survey.
+func tick_pulse_presentation(delta: float) -> void:
+	if not MultiplayerSessionManager.is_remote_replica() or active_objective_kind != "pulse_window":
+		return
+	pulse_next_timer = maxf(0.0, pulse_next_timer - maxf(0.0, delta))
+	if pulse_active:
+		pulse_active_timer = maxf(0.0, pulse_active_timer - maxf(0.0, delta))
+		if pulse_active_timer <= 0.0:
+			_clear_replica_pulse_display()
+
+func _clear_replica_pulse_display() -> void:
+	pulse_active = false
+	pulse_active_timer = 0.0
+	pulse_mode = ""
+	pulse_active_mutator = {}
 
 
 ## Get control overlay render state for world drawing
@@ -414,6 +437,7 @@ func get_control_overlay_state() -> Dictionary:
 
 ## Get as HUD-compatible dictionary
 func get_hud_state() -> Dictionary:
+	var show_pulse := active_objective_kind == "pulse_window" and pulse_active and pulse_active_timer > 0.0
 	return {
 		"active_objective_kind": active_objective_kind,
 		"time_left": time_left,
@@ -440,9 +464,12 @@ func get_hud_state() -> Dictionary:
 		"sweep_capture_progress": sweep_capture_progress,
 		"sweep_capture_goal": sweep_capture_goal,
 		"pulse_next_timer": pulse_next_timer,
-		"pulse_active": pulse_active,
-		"pulse_active_timer": pulse_active_timer,
-		"pulse_mode": pulse_mode,
+		"pulse_active": show_pulse,
+		"pulse_active_timer": pulse_active_timer if show_pulse else 0.0,
+		"pulse_mode": pulse_mode if show_pulse else "",
+		# Keep the host's previous mutator intact: subsequent waves use its roster.
+		"pulse_active_mutator": pulse_active_mutator.duplicate(true) if show_pulse else {},
+		"pulse_rule_text": ENCOUNTER_CONTRACTS.mutator_banner_suffix(pulse_active_mutator) if show_pulse else "",
 		"pulse_ring_time_left": pulse_ring_time_left,
 		"pulse_count": pulse_count,
 		"intercept_drone_progress": intercept_drone_progress,

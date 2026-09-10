@@ -21,6 +21,9 @@ const ENEMY_SENTINEL_SCRIPT := preload("res://scripts/enemy_sentinel.gd")
 const BIOME_REGISTRY := preload("res://scripts/shared/biome_registry.gd")
 const PYRE_FIELD_SCRIPT := preload("res://scripts/pyre_field.gd")
 const BOSS_STAGE_REGISTRY := preload("res://scripts/shared/boss_stage_registry.gd")
+const ARENA_COVER_CONTROLLER := preload("res://scripts/core/arena_cover_controller.gd")
+const COVER_INTERACTIONS := preload("res://scripts/shared/combat_interaction_registry.gd")
+const COVER_ORIGIN_TOLERANCE := 128.0
 const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 const MUSIC_SYSTEM_SCRIPT := preload("res://scripts/music_system.gd")
@@ -292,6 +295,11 @@ var _enemy_clamp_last_room_size: Vector2 = Vector2.ZERO
 var enemy_remote_position_lerp_speed: float = 14.0
 var _doors_spawn_ready: bool = false
 var _active_obstacle_nodes: Array[Node] = []
+var _arena_cover := ARENA_COVER_CONTROLLER.new()
+var _arena_cover_bodies: Dictionary = {}
+var _cover_run_token: String = ""
+var _cover_room_sync_id: int = 0
+var _pending_cover_state: Dictionary = {}
 var _world_multiplayer_sync_state = WORLD_MULTIPLAYER_SYNC_STATE_SCRIPT.new()
 var _world_progress_sync_policy = WORLD_PROGRESS_SYNC_POLICY_SCRIPT.new()
 var _reward_phase_coordinator = REWARD_PHASE_COORDINATOR_SCRIPT.new()
@@ -1864,7 +1872,9 @@ func _get_hud_state() -> Dictionary:
 		"objective_sweep_capture_goal": float(objective_hud_state.get("sweep_capture_goal", 2.0)),
 		"objective_pulse_next_timer": float(objective_hud_state.get("pulse_next_timer", 0.0)),
 		"objective_pulse_active": bool(objective_hud_state.get("pulse_active", false)),
+		"objective_pulse_active_timer": float(objective_hud_state.get("pulse_active_timer", 0.0)),
 		"objective_pulse_mode": String(objective_hud_state.get("pulse_mode", "")),
+		"objective_pulse_rule_text": String(objective_hud_state.get("pulse_rule_text", "")),
 		"objective_pulse_count": int(objective_hud_state.get("pulse_count", 0)),
 		"objective_intercept_progress": float(objective_hud_state.get("intercept_drone_progress", 0.0)),
 		"objective_intercept_stalled": bool(objective_hud_state.get("intercept_drone_stalled", false)),
@@ -3132,8 +3142,6 @@ func _begin_room(profile: Dictionary) -> void:
 	_clear_room_obstacles()
 	var obstacle_layout := ENCOUNTER_CONTRACTS.profile_obstacle_layout(profile)
 	_spawn_room_obstacles(obstacle_layout)
-	renderer.set_obstacle_layout(obstacle_layout)
-	enemy_spawner.set_obstacle_circles(obstacle_layout)
 	_apply_camera_bounds_for_room(current_effective_room_size)
 	if is_multiplayer:
 		if MultiplayerSessionManager.should_broadcast():
@@ -3191,7 +3199,11 @@ func _heal_local_player_at_rest() -> void:
 	player.play_rest_site_heal_feedback()
 
 func _spawn_room_obstacles(layout: Array[Dictionary]) -> void:
-	for entry in layout:
+	_arena_cover.reset(layout)
+	_cover_run_token = COVER_INTERACTIONS.current_run()
+	_cover_room_sync_id = get_current_room_sync_id()
+	for index in layout.size():
+		var entry := layout[index]
 		var pos: Vector2 = (entry as Dictionary).get("pos", Vector2.ZERO) as Vector2
 		var radius: float = float((entry as Dictionary).get("radius", 28.0))
 		var body := StaticBody2D.new()
@@ -3204,16 +3216,151 @@ func _spawn_room_obstacles(layout: Array[Dictionary]) -> void:
 		body.global_position = pos
 		add_child(body)
 		_active_obstacle_nodes.append(body)
+		_arena_cover_bodies[index + 1] = body
+	_refresh_arena_cover_geometry()
+	_flush_pending_cover_state()
 
 func _clear_room_obstacles() -> void:
 	for node in _active_obstacle_nodes:
 		if is_instance_valid(node):
 			node.queue_free()
 	_active_obstacle_nodes.clear()
+	_arena_cover_bodies.clear()
+	_arena_cover.reset([] as Array[Dictionary])
+	_cover_run_token = ""
+	_cover_room_sync_id = 0
 	if is_instance_valid(renderer):
 		renderer.set_obstacle_layout([] as Array[Dictionary])
+		renderer.set_cover_rubble_layout([] as Array[Dictionary])
 	if is_instance_valid(enemy_spawner):
 		enemy_spawner.set_obstacle_circles([] as Array[Dictionary])
+
+func request_brittle_cover_attack(action: Dictionary, origin: Vector2, direction: Vector2, blast_strength: float = -1.0) -> void:
+	if not _arena_cover.has_brittle_cover():
+		return
+	if MultiplayerSessionManager.is_remote_replica():
+		_request_brittle_cover_attack.rpc_id(1, action, origin, direction, blast_strength)
+	else:
+		_accept_brittle_cover_attack(_resolve_local_peer_id(), action, origin, direction, blast_strength)
+
+@rpc("any_peer", "reliable")
+func _request_brittle_cover_attack(action: Dictionary, origin: Vector2, direction: Vector2, blast_strength: float) -> void:
+	if not MultiplayerSessionManager.should_broadcast():
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	if MultiplayerSessionManager.get_peer_ids().has(sender):
+		_accept_brittle_cover_attack(sender, action, origin, direction, blast_strength)
+
+func _accept_brittle_cover_attack(sender: int, raw_action: Dictionary, origin: Vector2, direction: Vector2, blast_strength: float) -> void:
+	if MultiplayerSessionManager.is_remote_replica() or not _arena_cover.has_brittle_cover() or encounter_intro_grace_active or choosing_next_room or _modal_requires_combat_pause() or get_tree().paused:
+		return
+	var owner := _get_player_for_peer(sender) as PLAYER_SCRIPT
+	if owner == null and not is_multiplayer and is_instance_valid(player):
+		owner = player
+	if owner == null or not owner._is_alive_state or not owner.combat_damage_enabled or owner.encounter_input_frozen:
+		return
+	if not origin.is_finite() or not direction.is_finite() or direction.length_squared() < 0.9 or direction.length_squared() > 1.1 or not is_finite(blast_strength):
+		return
+	# Reconcile input-owner origin only within a bounded movement-latency margin.
+	# Clients never nominate an obstacle, radius, arc or number of contacts.
+	if origin.distance_to(owner.global_position) > COVER_ORIGIN_TOLERANCE:
+		return
+	var action := COVER_INTERACTIONS.validate_action(raw_action, sender)
+	var source := String(action.get("source", ""))
+	if action.is_empty() or source not in ["melee", "blast_drive"] or action.kind != source or int(action.ancestry) != 0:
+		return
+	owner._ensure_combat_interactions()
+	if not owner.combat_interactions.accepts_action(action):
+		return
+	var shapes := _brittle_cover_attack_shapes(owner, source, blast_strength)
+	if shapes.is_empty():
+		return
+	var changed := false
+	for id in _arena_cover.contact_candidates(origin, direction.normalized(), shapes):
+		if owner.combat_interactions.claim_reaction(action, "brittle_cover", id):
+			changed = _arena_cover.apply_contact(id) or changed
+	if not changed:
+		return
+	_refresh_arena_cover_geometry()
+	if MultiplayerSessionManager.should_broadcast():
+		_sync_brittle_cover_state.rpc(_cover_state_payload())
+
+func _brittle_cover_attack_shapes(owner: PLAYER_SCRIPT, source: String, blast_strength: float) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	var base_range := owner.attack_range
+	var base_arc := owner.attack_arc_degrees
+	if source == "blast_drive":
+		if not owner.reward_blast_drive or blast_strength < 0.0 or blast_strength > 1.0:
+			return result
+		base_range = owner.ARCANA_MOTION_SCRIPT.blast_range(blast_strength, owner.blast_drive_reach_scale)
+		base_arc = owner.ARCANA_MOTION_SCRIPT.BLAST_ARC_DEGREES
+	var strike := owner._get_melee_attack_geometry({"range": base_range, "arc_degrees": base_arc})
+	result.append(strike)
+	if owner.reward_razor_wind:
+		result.append({"range": base_range * owner.razor_wind_range_scale, "arc_degrees": owner.razor_wind_arc_degrees, "inner": owner.attack_range})
+	return result
+
+func _cover_state_payload() -> Dictionary:
+	return {"run": _cover_run_token, "room": _cover_room_sync_id, "revision": _arena_cover.revision, "columns": _arena_cover.snapshot()}
+
+@rpc("authority", "reliable")
+func _sync_brittle_cover_state(payload: Dictionary) -> void:
+	if not MultiplayerSessionManager.is_remote_replica():
+		return
+	if not (payload.get("run") is String) or not (payload.get("room") is int) or not (payload.get("revision") is int) or not (payload.get("columns") is Array):
+		return
+	if payload.run != COVER_INTERACTIONS.current_run() or payload.run.is_empty() or int(payload.revision) <= 0:
+		return
+	if payload.columns.is_empty() or payload.columns.size() > 4 or int(payload.revision) > payload.columns.size() * 3:
+		return
+	var room: int = payload.room
+	if room < get_current_room_sync_id() or room > get_current_room_sync_id() + 1:
+		return
+	if room > get_current_room_sync_id():
+		if _pending_cover_state.is_empty() or _pending_cover_state.get("run") != payload.run or int(payload.revision) > int(_pending_cover_state.get("revision", 0)) or room > int(_pending_cover_state.get("room", 0)):
+			_pending_cover_state = payload.duplicate(true)
+		return
+	_apply_brittle_cover_state(payload)
+
+func _apply_brittle_cover_state(payload: Dictionary) -> void:
+	if payload.get("run") != _cover_run_token or int(payload.get("room", -1)) != _cover_room_sync_id or not _arena_cover.has_brittle_cover():
+		return
+	if _arena_cover.apply_snapshot(int(payload.revision), payload.columns):
+		_refresh_arena_cover_geometry()
+
+func _flush_pending_cover_state() -> void:
+	if _pending_cover_state.is_empty():
+		return
+	if _pending_cover_state.get("run") != _cover_run_token or int(_pending_cover_state.get("room", 0)) < _cover_room_sync_id:
+		_pending_cover_state.clear()
+	elif int(_pending_cover_state.get("room", 0)) == _cover_room_sync_id:
+		var payload := _pending_cover_state
+		_pending_cover_state = {}
+		_apply_brittle_cover_state(payload)
+
+func _refresh_arena_cover_geometry() -> void:
+	for id: int in _arena_cover_bodies.keys():
+		if _arena_cover.is_present(id):
+			continue
+		var body := _arena_cover_bodies[id] as StaticBody2D
+		if is_instance_valid(body):
+			body.remove_from_group("arena_columns")
+			body.collision_layer = 0
+			body.collision_mask = 0
+			# Removing terrain is a normal Orbit release, never an enemy-death
+			# transfer opportunity. Only the local input owner drives motion.
+			var local_owner := _find_local_player_node() as PLAYER_SCRIPT
+			if is_instance_valid(local_owner) and local_owner.arcana_motion != null and local_owner.arcana_motion.anchor == body:
+				local_owner.arcana_motion.detach(true)
+			_active_obstacle_nodes.erase(body)
+			body.queue_free()
+		_arena_cover_bodies.erase(id)
+	var live := _arena_cover.live_layout()
+	if is_instance_valid(renderer):
+		renderer.set_obstacle_layout(live)
+		renderer.set_cover_rubble_layout(_arena_cover.rubble_layout())
+	if is_instance_valid(enemy_spawner):
+		enemy_spawner.set_obstacle_circles(live)
 
 func _advance_room_progress() -> void:
 	if not is_instance_valid(encounter_flow_system):
@@ -4584,7 +4731,7 @@ func _start_encounter_intro_grace() -> void:
 	if not boss_title.is_empty():
 		hud.show_banner(boss_title, "Survey the arena")
 	else:
-		_show_descent_entry_banner("Survey the arena")
+		_show_descent_entry_banner("Survey the arena", "Attack cracked columns to open a lane" if _arena_cover.has_brittle_cover() else "")
 
 func _update_encounter_intro_grace() -> bool:
 	if not encounter_intro_grace_active:
@@ -4741,14 +4888,14 @@ func _get_room_presentation_act() -> int:
 			return stage
 	return _get_current_act()
 
-func _show_descent_entry_banner(fallback_title: String) -> void:
+func _show_descent_entry_banner(fallback_title: String, detail: String = "") -> void:
 	var act := _get_room_presentation_act()
 	if current_room_tutorial_active or act == _last_announced_act:
-		hud.show_banner(fallback_title, "")
+		hud.show_banner(fallback_title, detail)
 		return
 	_last_announced_act = act
 	var numeral: String = ["I", "II", "III"][act - 1]
-	hud.show_banner("Act %s - %s" % [numeral, _get_active_biome_name()], fallback_title, _get_active_biome_accent())
+	hud.show_banner("Act %s - %s" % [numeral, _get_active_biome_name()], detail if not detail.is_empty() else fallback_title, _get_active_biome_accent())
 
 func _apply_active_biome(act: int) -> void:
 	if run_session == null or run_session.act_biome_ids.size() < act:

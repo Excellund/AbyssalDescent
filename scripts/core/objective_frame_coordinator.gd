@@ -8,6 +8,8 @@ func tick(objective_manager: OBJECTIVE_MANAGER_SCRIPT, objective_runtime: OBJECT
 	if is_instance_valid(objective_manager):
 		active_kind = String(objective_manager.active_objective_kind)
 	var should_tick_objective := not grace_active
+	if should_tick_objective and is_instance_valid(objective_manager):
+		objective_manager.tick_pulse_presentation(delta)
 	if should_tick_objective and is_instance_valid(objective_runtime):
 		objective_runtime.update_objective_state(delta)
 	if is_instance_valid(objective_runtime):

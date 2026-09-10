@@ -45,6 +45,7 @@ var _focus_commit_delay: float = 0.12
 var _focus_switch_advantage: float = 14.0
 var active_color_theme: Dictionary = {}
 var obstacle_layout: Array[Dictionary] = []
+var cover_rubble_layout: Array[Dictionary] = []
 var environment_act: int = 1
 var environment_biome_id: String = ""
 var boss_entrance_key: String = ""
@@ -70,6 +71,10 @@ func set_biome_color_theme(theme: Dictionary) -> void:
 
 func set_obstacle_layout(layout: Array[Dictionary]) -> void:
 	obstacle_layout = layout
+	queue_redraw()
+
+func set_cover_rubble_layout(layout: Array[Dictionary]) -> void:
+	cover_rubble_layout = layout
 	queue_redraw()
 
 func _ready() -> void:
@@ -144,6 +149,9 @@ func _draw() -> void:
 			if marker_variant is Dictionary:
 				_draw_tutorial_instruction_marker(marker_variant as Dictionary)
 
+	if not choosing_next_room:
+		for entry in cover_rubble_layout:
+			_draw_cover_rubble(entry.get("pos", Vector2.ZERO) as Vector2, float(entry.get("radius", 28.0)))
 	if not obstacle_layout.is_empty() and not choosing_next_room:
 		var glow_tint: Color = active_color_theme.get("glow_tint", Color(0.18, 0.76, 0.98, 1.0)) if not active_color_theme.is_empty() else Color(0.18, 0.76, 0.98, 1.0)
 		for entry in obstacle_layout:
@@ -152,6 +160,8 @@ func _draw() -> void:
 			var obs_type := String((entry as Dictionary).get("type", "column"))
 			if obs_type == "boulder":
 				_draw_arena_boulder(col_pos, col_radius, glow_tint)
+			elif entry.get("break_contacts") is int and int(entry["break_contacts"]) == 3:
+				_draw_brittle_pillar(col_pos, col_radius, glow_tint, int(entry.get("contacts_left", entry["break_contacts"])), int(entry["break_contacts"]))
 			else:
 				_draw_arena_pillar(col_pos, col_radius, glow_tint)
 
@@ -654,6 +664,44 @@ func _draw_arena_pillar(pos: Vector2, radius: float, glow_tint: Color) -> void:
 	draw_circle(pos + Vector2(radius * 0.18, radius * 0.22), radius * 0.78, Color(0.0, 0.0, 0.0, 0.28))
 	draw_arc(pos, radius, 0.0, TAU, 24, Color(0.40, 0.60, 0.80, 0.90), 2.5)
 	draw_circle(pos - Vector2(radius * 0.26, radius * 0.30), radius * 0.34, Color(1.0, 1.0, 1.0, 0.22))
+
+func _draw_brittle_pillar(pos: Vector2, radius: float, glow_tint: Color, contacts_left: int, total_contacts: int) -> void:
+	_draw_arena_pillar(pos, radius, glow_tint)
+	var damage_stage := clampi(total_contacts - contacts_left, 0, 2)
+	var fracture := PackedVector2Array([
+		pos + Vector2(-0.32, -0.88) * radius,
+		pos + Vector2(0.06, -0.35) * radius,
+		pos + Vector2(-0.22, 0.08) * radius,
+		pos + Vector2(0.22, 0.46) * radius,
+		pos + Vector2(0.08, 0.92) * radius,
+	])
+	# Even untouched brittle cover has a visible fault. Further cracks record
+	# accepted contacts; the full silhouette remains the real collision circle.
+	draw_polyline(fracture, Color(0.02, 0.03, 0.04, 0.95), 4.0 + damage_stage, true)
+	draw_polyline(fracture, Color(0.80, 0.83, 0.79, 0.86), 1.5, true)
+	if damage_stage >= 1:
+		draw_polyline(PackedVector2Array([pos + Vector2(-0.22, 0.08) * radius, pos + Vector2(-0.53, 0.24) * radius, pos + Vector2(-0.90, 0.12) * radius]), Color(0.76, 0.80, 0.76, 0.86), 2.0, true)
+	if damage_stage >= 2:
+		draw_polyline(PackedVector2Array([pos + Vector2(0.06, -0.35) * radius, pos + Vector2(0.44, -0.12) * radius, pos + Vector2(0.88, -0.30) * radius]), Color(0.84, 0.85, 0.80, 0.90), 2.0, true)
+	# Three compact stone marks show remaining contacts without a combat bar.
+	for index in total_contacts:
+		var mark_pos := pos + Vector2((float(index) - float(total_contacts - 1) * 0.5) * 8.0, radius + 7.0)
+		var mark_color := Color(0.76, 0.80, 0.77, 0.85) if index < contacts_left else Color(0.25, 0.30, 0.32, 0.65)
+		draw_line(mark_pos + Vector2(-2.0, 0.0), mark_pos + Vector2(2.0, 0.0), mark_color, 2.0, true)
+
+func _draw_cover_rubble(pos: Vector2, radius: float) -> void:
+	# Flat, sparse fragments leave an obvious open center. No shadow, outline
+	# ring or tall silhouette remains to suggest an invisible obstacle.
+	for index in 5:
+		var angle := float(index) * TAU / 5.0 + 0.35
+		var offset := Vector2.from_angle(angle) * radius * (0.62 if index % 2 == 0 else 0.82)
+		var fragment := PackedVector2Array([
+			pos + offset + Vector2(-3.0, -1.0),
+			pos + offset + Vector2(2.0, -3.0),
+			pos + offset + Vector2(4.0, 2.0),
+			pos + offset + Vector2(-2.0, 3.0),
+		])
+		draw_colored_polygon(fragment, Color(0.32, 0.38, 0.40, 0.60))
 
 func _draw_arena_boulder(pos: Vector2, radius: float, glow_tint: Color) -> void:
 	var gr := glow_tint.r

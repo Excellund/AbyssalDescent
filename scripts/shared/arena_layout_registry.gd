@@ -83,12 +83,19 @@ static func pick_layout(encounter_label: String, room_size: Vector2, rng: Random
 		return _resolve_boulder_template(chosen, room_size)
 	var half_safe := room_size * 0.5 - Vector2.ONE * 90.0
 	var out: Array[Dictionary] = []
-	for pos in _resolve_positions(chosen):
+	var positions := _resolve_positions(chosen)
+	for index in positions.size():
+		var pos := positions[index]
 		var clamped := Vector2(
 			clampf(pos.x, -half_safe.x, half_safe.x),
 			clampf(pos.y, -half_safe.y, half_safe.y)
 		)
-		out.append({"pos": clamped, "radius": COLUMN_RADIUS})
+		var entry := {"pos": clamped, "radius": COLUMN_RADIUS}
+		# A small biome-specific pilot: outer shelter stays permanent while the
+		# two inner columns can be deliberately opened into a crossing lane.
+		if biome_id == "shatterfield" and encounter_label == "Crossfire" and index in [1, 2]:
+			entry["break_contacts"] = 3
+		out.append(entry)
 	return out
 
 static func _resolve_boulder_template(template_name: String, room_size: Vector2) -> Array[Dictionary]:

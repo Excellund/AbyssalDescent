@@ -41,7 +41,29 @@ build at an agreed checkpoint. Use the isolated
 helper for package/gameplay smoke checks; include `-DebugRun` when checking a debug
 artifact. Development builds stay out of remote telemetry and leaderboards.
 
+For actual normal executable startup, add `-NativeRun` (incompatible with
+`-DebugRun`). It first verifies the package and official Godot 4.6.2 native code,
+then runs a byte-identical temporary copy with a guarded external test controller,
+isolated profile and disabled service settings. The real Menu prompts, character
+and Bearing controls, tutorial, movement, Pause, return to Menu and second run
+are exercised with injected input. This is headless with dummy audio and an
+explicit final cache retirement; it does not establish rendered quality,
+between-room Continue behavior or internet lobby play. Logs record these limits.
+
 A minimal set of quick checks that can be run between commits to catch major breakage.
+
+### Encounter Decisions Playtest
+
+- In Shatterfield Crossfire, compare the two cracked inner columns with the solid outer columns. Three separate Attack contacts should break cracked cover, with a mark disappearing and the cracks advancing on each contact. Keeping cover should shelter against archer fire; breaking it should open a usable crossing.
+- Try normal melee, Razor Wind and charged Blast. One Attack can contact a column at most once even if its shapes overlap. Automatic damage, echoes and returning blades should leave the columns alone; cover should not grant enemy-hit resources, kills or damage statistics.
+- Orbit a cracked column while a teammate breaks it. The anchor should release tangentially, and both players should see the same open gap. A new room should clear old rubble and damage; Continue should preserve the offered layout and start its unentered cover intact.
+- In Pulse Window, read the active rule and remaining time after its banner fades. The card should return to the next-pulse countdown and shrink after expiry. Pause and Build Details should stop the display countdown with combat on both peers.
+
+Focused fixtures are `test_brittle_cover.gd` and `test_pulse_hud.gd` through the
+isolated runner. `render_brittle_cover.ps1` checks staged cover at production
+camera sizes; the dedicated `test_brittle_cover_enet.ps1` exercises real host and
+joiner authority plus Pulse Window state. See the current workday record for
+the exact verification and delivery status.
 
 ### Descent Identity Playtest
 
