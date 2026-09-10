@@ -147,6 +147,7 @@ try {
         "res://scripts/tests/test_threadbinder_integration.gd",
         "res://scripts/tests/test_owned_fields.gd",
         "res://scripts/tests/test_connected_build_runtime.gd",
+        "res://scripts/tests/test_boss_reward_synergies.gd",
         "res://scripts/tests/test_unbroken_shared_attack.gd",
         "res://scripts/tests/test_reward_build_inspection.gd",
         "res://scripts/tests/test_attack_feedback.gd",

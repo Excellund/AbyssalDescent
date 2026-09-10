@@ -60,9 +60,29 @@ func prepare_attack(target: Node2D, descriptor: Dictionary, _action: Dictionary)
 	result["pending_bonuses"] = pending
 	return result
 
-func accepted_damage(_event: Dictionary) -> void:
+func accepted_damage(event: Dictionary) -> void:
+	_accept_boss_charge(event)
 	player._trigger_battle_trance()
 	publish_state()
+
+func _accept_boss_charge(event: Dictionary) -> void:
+	var action: Dictionary = event.get("interaction", {})
+	var controller: Node = player.combat_interactions
+	var attack_hit := REGISTRY.is_attack_hit(String(action.get("source", "")))
+	# Alternative inputs share each reward's original-action allowance. Claim
+	# before triggering any descendants, including when Convergence is active,
+	# so a delayed tick cannot bank that same action after the Field expires.
+	var electric := (int(action.get("traits", 0)) & REGISTRY.ELECTRIC) != 0
+	if float(player.convergence_surge_damage_ratio) > 0.0 and (attack_hit or electric) and controller.claim_reaction(action, "convergence_charge"):
+		var context: Dictionary = event.get("context", {})
+		var position: Vector2 = context.get("hit_position", event.get("position", player.global_position))
+		if not position.is_finite():
+			position = event.get("position", player.global_position)
+		player._try_apply_convergence_surge(position, int(event.get("raw_amount", 0)), int(event.get("target_id", 0)))
+	var marked := float(event.get("pre_mark_ratio", 0.0)) > 0.0
+	var tempo_descendant := (int(action.get("ancestry", 0)) & REGISTRY.TEMPO_ANCESTRY) != 0
+	if float(player.apex_momentum_speed_bonus) > 0.0 and not tempo_descendant and (attack_hit or marked) and controller.claim_reaction(action, "tempo_charge"):
+		player._register_apex_momentum_hit()
 
 func accepted_attack(event: Dictionary) -> void:
 	var action: Dictionary = event.get("interaction", {})
@@ -86,8 +106,9 @@ func accepted_attack(event: Dictionary) -> void:
 	var victims: Dictionary = _attack_victims[key]
 	if bool(event.get("first_attack_hit", false)):
 		player._indomitable_attack_hit_count = 0
-		player._try_apply_convergence_surge(position, int(raw), target_id)
-		player._register_apex_momentum_hit()
+		# Preserve Attack startup ordering: a newly opened Field is already
+		# present when the Attack releases its other reactions.
+		_accept_boss_charge(event)
 		if player.reward_voidfire and float(player._voidfire_lockout_left) <= 0.0:
 			player._voidfire_last_hit_time = Time.get_ticks_msec() / 1000.0
 			player._gain_void_heat(player.voidfire_heat_per_hit)

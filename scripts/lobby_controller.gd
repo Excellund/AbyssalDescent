@@ -12,7 +12,8 @@ const META_PROGRESS_STORE := preload("res://scripts/meta_progress_store.gd")
 const ASCENSION_PANEL_SCRIPT := preload("res://scripts/ui/ascension/ascension_panel.gd")
 const FORSWORN_TIER_ID := 3
 ## Increment when authoritative combat descriptors/status contracts become incompatible.
-const COMBAT_PROTOCOL_VERSION := 1
+# Version 2 preserves Tempo ancestry through remote kill descendants.
+const COMBAT_PROTOCOL_VERSION := 2
 const COMBAT_PROTOCOL_MESSAGE := "Incompatible combat version. Use the same playtest build."
 
 signal leave_lobby_requested

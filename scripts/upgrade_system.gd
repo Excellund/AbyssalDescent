@@ -327,9 +327,9 @@ func _power_sentence_template(power_id: String) -> String:
 		"lacuna_echo":
 			return "Field bonus %s; base pulse %s damage/0.32s; radius %s; lasts 2.4s."
 		"sovereign_tempo":
-			return "Move speed %s per stack; up to 6 stacks."
+			return "Move speed %s per stack (max 6); {kw:burst} damage refunds {kw:dash}."
 		"pillar_convergence":
-			return "%s connected {kw:attack|Attacks}; {kw:field} lasts %s; pulses every %s."
+			return "%s charges; {kw:field} lasts %s; pulses every %s."
 		"unbroken_oath":
 			return "Resistance %s; capacity %s; Oath adds %s of Damage."
 		"edict_of_the_court":
@@ -485,9 +485,9 @@ func _power_flavor_authored(power_id: String) -> String:
 		"lacuna_echo":
 			return "{kw:kill|Kills} create a {kw:field} that {kw:pull|Pulls} foes and pulses damage. All your Fields gain its bonus once per target."
 		"sovereign_tempo":
-			return "{kw:attack_hit|Attack hits} build Tempo. Completing {kw:dash}, {kw:recoil} or {kw:orbit} releases one wave; damaged enemies refund dash cooldown."
+			return "{kw:attack_hit|Attack hits} or your damage against already {kw:mark|Marked} foes build one Tempo stack per original action. Completing {kw:dash}, {kw:recoil} or {kw:orbit} spends all stacks in a {kw:burst}; accepted {kw:burst} damage refunds {kw:dash} cooldown once. The {kw:burst} and its descendants cannot build Tempo."
 		"pillar_convergence":
-			return "Several {kw:attack_hit|attack hits} create a moving {kw:field} that pulses damage around you."
+			return "{kw:attack_hit|Attack hits} or your {kw:electric} damage charge a moving {kw:field} that pulses damage around you. All foes, ticks and descendants share one charge per original action. Charging pauses while the {kw:field} is active; an action that qualifies during this window cannot charge it later."
 		"unbroken_oath":
 			return "{kw:attack|Attacks} build Oath faster when they damage several foes. Fill the bar to empower your next Attack."
 		"edict_of_the_court":
