@@ -738,11 +738,9 @@ func _on_connected_to_server() -> void:
 	_set_debug_log_role("joiner")
 	_debug_log("[SIGNAL] === _on_connected_to_server() FIRED ===")
 	_debug_log("[STATE] session_id='%s' room_code='%s'" % [session_id, room_code])
-	push_error("[MULTIPLAYER DEBUG] === CLIENT CONNECTED TO SERVER === (This should print visibly)")
 	print("[MultiplayerSessionManager] === CLIENT CONNECTED TO SERVER ===")
 	_join.reset()
 	local_peer_id = _multiplayer.get_unique_id()
-	push_error("[MULTIPLAYER DEBUG] Client connected as peer %d" % local_peer_id)
 	print("[MultiplayerSessionManager] Client connected to server as peer %d" % local_peer_id)
 	_debug_log("[CLIENT] Connected as peer %d" % local_peer_id)
 	
@@ -762,10 +760,8 @@ func _on_connected_to_server() -> void:
 		_debug_log("[ERROR] session_id is EMPTY! Cannot emit valid signal!")
 		push_error("[MULTIPLAYER DEBUG] ERROR: session_id is empty - signal will have empty string!")
 	
-	push_error("[MULTIPLAYER DEBUG] About to emit session_joined signal with session_id: %s" % session_id)
 	session_joined.emit(session_id)
 	_debug_log("[CLIENT] session_joined signal emitted successfully with session_id='%s'" % session_id)
-	push_error("[MULTIPLAYER DEBUG] session_joined signal emitted successfully")
 	print("[MultiplayerSessionManager] Client successfully emitted session_joined signal")
 
 

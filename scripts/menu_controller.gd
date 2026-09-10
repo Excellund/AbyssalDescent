@@ -519,7 +519,6 @@ func _join_multiplayer_room(room_code: String) -> void:
 	var resolved_host_address := String(registration.get("host_address", "")).strip_edges()
 	var resolved_host_port := int(registration.get("host_port", 7777))
 	print("[Menu] Room resolved. Host address: %s:%d" % [resolved_host_address, resolved_host_port])
-	push_error("[JOIN DEBUG] Room resolved to %s:%d - Starting join attempt..." % [resolved_host_address, resolved_host_port])
 
 	## Probe tunnel DNS before attempting the WebSocket join. Cloudflare
 	## quick-tunnel hostnames (`*.trycloudflare.com`) take several seconds to
@@ -614,14 +613,12 @@ func _await_multiplayer_join_result(multiplayer_session_manager: Node, timeout_s
 	var display_address := resolved_address if not resolved_address.is_empty() else "<resolving>"
 	var on_joined := func(_session_id: String) -> void:
 		print("[Menu] session_joined signal received with session_id='%s'" % _session_id)
-		push_error("[JOIN DEBUG] session_joined RECEIVED! session_id=%s" % _session_id)
 		state["joined"] = true
 	var on_failed := func(reason: String) -> void:
 		print("[Menu] connection_failed signal received with reason='%s'" % reason)
 		push_error("[JOIN DEBUG] connection_failed RECEIVED! reason=%s" % reason)
 		state["failed"] = true
 		state["failure_reason"] = reason
-	push_error("[JOIN DEBUG] Connecting signals to join_result waiter...")
 	print("[Menu] Connecting signal callbacks for join attempt...")
 	multiplayer_session_manager.session_joined.connect(on_joined, CONNECT_ONE_SHOT)
 	_debug_log_menu("[JOIN] Connected to session_joined signal")
@@ -640,7 +637,6 @@ func _await_multiplayer_join_result(multiplayer_session_manager: Node, timeout_s
 				"reason": "Unable to connect to the room host."
 			}
 	var elapsed := 0.0
-	push_error("[JOIN DEBUG] Entering join timeout loop...")
 	_debug_log_menu("[JOIN] Starting timeout loop. Waiting for session_joined or connection_failed...")
 	while elapsed < timeout_sec and not state["joined"] and not state["failed"]:
 		if _tree_or_null() == null:
@@ -672,10 +668,8 @@ func _await_multiplayer_join_result(multiplayer_session_manager: Node, timeout_s
 	var failed := bool(state["failed"])
 	var failure_reason := String(state["failure_reason"])
 	_debug_log_menu("[JOIN] Loop exited: joined=%s failed=%s reason='%s'" % [joined, failed, failure_reason])
-	push_error("[JOIN DEBUG] Loop exited: joined=%s failed=%s" % [joined, failed])
 	print("[Menu] Join attempt loop exited: joined=%s failed=%s failure_reason='%s'" % [joined, failed, failure_reason])
 	if joined:
-		push_error("[JOIN DEBUG] >>> JOIN SUCCEEDED - TRANSITIONING TO LOBBY <<<")
 		print("[Menu] Join succeeded! Transitioning to lobby...")
 		return {
 			"ok": true
