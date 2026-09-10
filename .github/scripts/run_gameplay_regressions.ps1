@@ -149,6 +149,7 @@ try {
         "res://scripts/tests/test_player_feedback_ownership.gd",
         "res://scripts/tests/test_warden_feedback.gd",
         "res://scripts/tests/test_player_ownership_lifecycle.gd",
+        "res://scripts/tests/test_player_life_authority.gd",
         "res://scripts/tests/test_run_scene_ownership.gd",
         "res://scripts/tests/test_menu_helper_ownership.gd",
         "res://scripts/tests/test_menu_join_cancel.gd",

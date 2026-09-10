@@ -413,6 +413,8 @@ func _clear_applied_health_sequences_for_target(target_peer_id: int) -> void:
 ## RPC: Sync a player's alive/dead status.
 @rpc("reliable", "any_peer", "call_local")
 func _sync_player_alive_status(peer_id: int, is_alive: bool) -> void:
+	if not _is_host_life_state_sender():
+		return
 	if peer_id not in player_nodes:
 		return
 	var player_node := _get_player_node(peer_id)
@@ -425,6 +427,8 @@ func _sync_player_alive_status(peer_id: int, is_alive: bool) -> void:
 ## RPC: Sync a player's revived status.
 @rpc("reliable", "any_peer", "call_local")
 func _sync_player_revived(peer_id: int, revived_health: float = 1.0) -> void:
+	if not _is_host_life_state_sender():
+		return
 	if peer_id not in player_nodes:
 		return
 	var player_node := _get_player_node(peer_id)
@@ -432,6 +436,14 @@ func _sync_player_revived(peer_id: int, revived_health: float = 1.0) -> void:
 		return
 	player_node.revive_with_health(revived_health)
 	player_node.set_combat_removed(false)
+
+func _is_host_life_state_sender() -> bool:
+	var remote_sender := multiplayer.get_remote_sender_id()
+	if remote_sender > 0:
+		return remote_sender == 1
+	# Direct local calls follow the current session role, not a cached peer ID
+	# that may still belong to the previous session until the next process tick.
+	return multiplayer_session_manager != null and bool(multiplayer_session_manager.should_broadcast())
 
 
 ## Called by player's health_state when health changes.
@@ -453,15 +465,17 @@ func broadcast_health_change(peer_id: int, health: float) -> void:
 
 ## Called by player when they die.
 ## Should be called from player.gd's death signal handler.
+## Like HP, life state is host-authoritative. A joiner's inbound death callback
+## must not echo back after the host has already revived them on room clear.
 func broadcast_player_died(peer_id: int) -> void:
-	if _is_authority_for_peer(peer_id):
+	if multiplayer_session_manager != null and bool(multiplayer_session_manager.should_broadcast()):
 		_sync_player_alive_status.rpc(peer_id, false)
 
 
 ## Called when a revived player regains control.
 ## Should be called after encounter clear or revival trigger.
 func broadcast_player_revived(peer_id: int, health: float = 1.0) -> void:
-	if _is_authority_for_peer(peer_id):
+	if multiplayer_session_manager != null and bool(multiplayer_session_manager.should_broadcast()):
 		_sync_player_revived.rpc(peer_id, health)
 
 
