@@ -141,6 +141,9 @@ static func _draw_void_floor(canvas: Node2D, arena: Rect2, accent: Color) -> voi
 		row += 1
 
 static func draw_boss_entrance(canvas: Node2D, arena: Rect2, boss_key: String, theme: Dictionary, visibility: float) -> void:
+	if boss_key in ["kilnheart", "glassweaver", "null_archivist"]:
+		_draw_alternative_boss_entrance(canvas, arena, boss_key, visibility)
+		return
 	if visibility <= 0.0 or boss_key not in ["warden", "sovereign", "lacuna"]:
 		return
 	var accent := _tint(theme)
@@ -166,6 +169,7 @@ static func draw_boss_entrance(canvas: Node2D, arena: Rect2, boss_key: String, t
 					var points := PackedVector2Array([p, p + Vector2(side * 31.0, 6.0), p + Vector2(side * 22.0, 36.0), p + Vector2(side * 4.0, 26.0)])
 					canvas.draw_colored_polygon(points, fill)
 					canvas.draw_line(points[0], points[1], line, 2.0)
+
 		var anchor := Vector2(arena.get_center().x, arena.get_center().y + side * (arena.size.y * 0.5 + 30.0))
 		match boss_key:
 			"warden":
@@ -183,3 +187,26 @@ static func draw_boss_entrance(canvas: Node2D, arena: Rect2, boss_key: String, t
 					var points := PackedVector2Array([p, p + Vector2(32.0, side * 5.0), p + Vector2(19.0, side * 33.0), p + Vector2(-4.0, side * 22.0)])
 					canvas.draw_colored_polygon(points, fill)
 					canvas.draw_line(points[0], points[1], line, 2.0)
+
+
+static func _draw_alternative_boss_entrance(canvas: Node2D, arena: Rect2, boss_key: String, visibility: float) -> void:
+	if visibility <= 0.0:
+		return
+	var tint: Color = {"kilnheart": Color(1.0, 0.45, 0.16), "glassweaver": Color(0.4, 0.87, 1.0), "null_archivist": Color(0.79, 0.59, 1.0)}[boss_key]
+	var line := Color(tint, 0.3 * visibility)
+	var fill := Color(tint, 0.08 * visibility)
+	for side: float in [-1.0, 1.0]:
+		var anchor := arena.get_center() + Vector2(side * (arena.size.x * 0.5 + 20.0), 0.0)
+		for i in range(3):
+			var p := anchor + Vector2(0.0, float(i - 1) * 86.0)
+			match boss_key:
+				"kilnheart":
+					canvas.draw_arc(p, 31.0, 0.0, TAU, 24, line, 4.0)
+					canvas.draw_circle(p, 17.0, fill)
+				"glassweaver":
+					var points := PackedVector2Array([p + Vector2(0, -33), p + Vector2(24, 0), p + Vector2(0, 33), p + Vector2(-24, 0), p + Vector2(0, -33)])
+					canvas.draw_polyline(points, line, 2.0)
+				"null_archivist":
+					canvas.draw_rect(Rect2(p - Vector2(21, 29), Vector2(42, 58)), fill)
+					for row in range(4):
+						canvas.draw_line(p + Vector2(-14, -18 + row * 12), p + Vector2(14 - row * 3, -18 + row * 12), line, 2.0)

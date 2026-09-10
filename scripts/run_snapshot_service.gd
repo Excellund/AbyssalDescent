@@ -137,6 +137,7 @@ static func build_snapshot(world: Node, player: Node, run_context: Node, snapsho
 		"phase_two_rooms_cleared": world.phase_two_rooms_cleared,
 		"phase_three_rooms_cleared": world.phase_three_rooms_cleared,
 		"act_biome_ids": run_session.act_biome_ids.duplicate() if run_session != null else [],
+		"act_boss_ids": run_session.act_boss_ids.duplicate() if run_session != null else [],
 		"last_standard_encounter_key": run_session.last_standard_encounter_key if run_session != null else "",
 		"last_objective_kind": run_session.last_objective_kind if run_session != null else "",
 		"endless_boss_defeated": world.endless_boss_defeated,

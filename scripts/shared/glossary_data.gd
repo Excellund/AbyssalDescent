@@ -179,6 +179,18 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"color": Color(0.46, 1.0, 0.82, 1.0),
 			"desc": "Final boss. Cuts escape routes and suppresses dashes.",
 		},
+		{
+			"name": "Kilnheart", "group": "Boss", "color": Color(1.0, 0.55, 0.22, 1.0),
+			"desc": "First boss alternative. Dodge furnace blasts and marked ground.",
+		},
+		{
+			"name": "Glassweaver", "group": "Boss", "color": Color(0.4, 0.87, 1.0, 1.0),
+			"desc": "Second boss alternative. Find safe spaces between crossing lanes.",
+		},
+		{
+			"name": "The Null Archivist", "group": "Boss", "color": Color(0.79, 0.59, 1.0, 1.0),
+			"desc": "Final boss alternative. Leave disks, then return to their safe centers.",
+		},
 	]
 
 static func _mutator_rows() -> Array[Dictionary]:

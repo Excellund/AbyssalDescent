@@ -2,6 +2,8 @@ class_name BossStageRegistry
 extends RefCounted
 
 const ENEMY_BASE_SCRIPT := preload("res://scripts/enemy_base.gd")
+const CATALOGUE := preload("res://scripts/shared/boss_catalogue.gd")
+const ENEMY_ALTERNATIVE_SCRIPT := preload("res://scripts/enemy_boss_alternative.gd")
 
 ## Single source of truth for boss stage metadata and boss node construction.
 ##
@@ -62,19 +64,34 @@ const STAGES := {
 static func has_stage(stage: int) -> bool:
 	return STAGES.has(stage)
 
-static func get_descriptor(stage: int) -> Dictionary:
-	return STAGES.get(stage, {})
+static func get_descriptor(stage: int, boss_id: String = "") -> Dictionary:
+	var descriptor: Dictionary = STAGES.get(stage, {}).duplicate(true)
+	if descriptor.is_empty():
+		return descriptor
+	var resolved_id := CATALOGUE.resolve_id(stage, boss_id)
+	descriptor["boss_id"] = resolved_id
+	descriptor["display_name"] = CATALOGUE.NAMES[resolved_id]
+	if resolved_id in CATALOGUE.ALTERNATIVE_IDS:
+		descriptor["script"] = ENEMY_ALTERNATIVE_SCRIPT
+		descriptor["room_entry_key"] = resolved_id
+		descriptor["banner_title"] = CATALOGUE.NAMES[resolved_id]
+		descriptor["room_label"] = ["Furnace Chamber: Kilnheart", "Prism Court: Glassweaver", "Unwritten Archive: The Null Archivist"][stage - 1]
+	return descriptor
 
 ## Constructs a fully-formed boss CharacterBody2D for the given stage with its
 ## script and circular collision shape attached, positioned at `spawn_position`.
 ## The caller is responsible for adding it to the scene tree and wiring signals.
 ## Returns null if `stage` is unknown.
-static func create_boss_node(stage: int, spawn_position: Vector2) -> ENEMY_BASE_SCRIPT:
-	var descriptor: Dictionary = STAGES.get(stage, {})
+static func create_boss_node(stage: int, spawn_position: Vector2, boss_id: String = "") -> ENEMY_BASE_SCRIPT:
+	var descriptor := get_descriptor(stage, boss_id)
 	if descriptor.is_empty():
 		return null
 	var boss := CharacterBody2D.new()
 	boss.set_script(descriptor["script"])
+	boss.set_meta("boss_id", descriptor["boss_id"])
+	boss.set_meta("boss_stage", stage)
+	if descriptor["script"] == ENEMY_ALTERNATIVE_SCRIPT:
+		boss.set("boss_id", descriptor["boss_id"])
 	var collision_shape := CollisionShape2D.new()
 	collision_shape.shape = CircleShape2D.new()
 	collision_shape.shape.radius = float(descriptor["collision_radius"])
