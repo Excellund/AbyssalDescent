@@ -103,6 +103,8 @@ func _run() -> void:
 	RunContext.master_volume_db = -80.0
 	RunContext.music_volume_db = -80.0
 	RunContext.sfx_volume_db = -80.0
+	for outcome in ["abandon", "death", "clear"]:
+		await _test_history_outcome(outcome)
 	for action in ["abandon", "death_menu", "victory_menu", "death_retry", "victory_retry"]:
 		await _test_voluntary_failure(action)
 	await _test_failed_checkpoint_write()
@@ -214,6 +216,39 @@ func _notice_label(surface: Node) -> Label:
 	if surface == world.pause_menu_controller:
 		return surface.checkpoint_notice_label
 	return surface._results_screen._checkpoint_notice_label
+
+func _test_history_outcome(outcome: String) -> void:
+	_setup()
+	if outcome == "abandon":
+		var surface := _open_action_surface("abandon")
+		var abandon_button: Button = null
+		for child in surface.pause_menu_panel.get_children():
+			if child is Button and child.text == "Abandon Descent":
+				abandon_button = child
+		check(abandon_button != null, "History regression uses the actual Abandon Descent button")
+		if abandon_button != null:
+			abandon_button.pressed.emit()
+		check(world.transitions == ["res://scenes/Menu.tscn"] and not RunContext.has_saved_run(), "Actual Abandon still clears its checkpoint and returns to Menu")
+		check(RunContext.get_last_run_outcome() == "death", "Abandon preserves its existing progression context independently of the history label")
+	else:
+		_terminal(outcome)
+	var records := HISTORY.load_all()
+	check(records.size() == 1 and records[0].get("outcome") == outcome, outcome + ": actual World action and recorder persist their distinct outcome")
+	var before_hash := FileAccess.get_sha256(HISTORY.STORAGE_PATH)
+	var panel := preload("res://scripts/ui/run_history/run_history_panel.gd").new()
+	root.add_child(panel)
+	panel.size = Vector2(960, 720)
+	panel._build_ui(null)
+	panel.populate()
+	await process_frame
+	await process_frame
+	var label: String = {"abandon": "Abandoned", "death": "Defeat", "clear": "Victory"}[outcome]
+	check(panel._detail_content.get_child(0).text == label + " — " + String(records[0].get("character_name", "")), outcome + ": actual saved run reaches the matching History detail")
+	if outcome == "abandon":
+		check(panel._row_buttons[0].get_child(0).get_child(2).text == "Abandoned", "Actual abandoned run is also explicitly distinct in the History list")
+	check(FileAccess.get_sha256(HISTORY.STORAGE_PATH) == before_hash, outcome + ": showing History preserves every stored result/stat field")
+	panel.queue_free()
+	await _cleanup()
 
 func _test_voluntary_failure(action: String) -> void:
 	_setup()

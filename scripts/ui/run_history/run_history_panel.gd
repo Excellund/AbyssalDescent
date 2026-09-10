@@ -139,9 +139,22 @@ func populate() -> void:
 		_row_buttons.append(row)
 	_select_row(0)
 
+func _outcome_presentation(outcome: String) -> Dictionary:
+	match outcome:
+		"clear":
+			return {"label": "Victory", "marker": "\u2713 ", "color": Color(0.52, 0.88, 0.62, 1.0), "neutral": false}
+		"death":
+			return {"label": "Defeat", "marker": "\u2717 ", "color": Color(0.90, 0.46, 0.46, 1.0), "neutral": false}
+	var label := "Run ended"
+	match outcome:
+		"abandon": label = "Abandoned"
+		"host_left": label = "Host disconnected"
+		"menu_exit": label = "Returned to menu"
+		"quit": label = "Exited game"
+	return {"label": label, "marker": "\u00b7 ", "color": Color(0.68, 0.78, 0.90, 1.0), "neutral": true}
+
 func _make_row_button(rec: Dictionary, index: int) -> Button:
-	var outcome := String(rec.get("outcome", "unknown"))
-	var is_clear := outcome == "clear"
+	var presentation := _outcome_presentation(String(rec.get("outcome", "unknown")))
 	var char_name := String(rec.get("character_name", String(rec.get("character_id", "Unknown")).capitalize()))
 	var difficulty := String(rec.get("difficulty_label", "Pilgrim"))
 	var depth := int(rec.get("max_depth", 0))
@@ -150,7 +163,7 @@ func _make_row_button(rec: Dictionary, index: int) -> Button:
 	var is_mp := bool(rec.get("is_multiplayer", false)) or party_size > 1
 
 	var btn := Button.new()
-	btn.custom_minimum_size = Vector2(0.0, 58.0)
+	btn.custom_minimum_size = Vector2(0.0, 78.0 if presentation.neutral else 58.0)
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.focus_mode = Control.FOCUS_ALL
 	btn.text = ""
@@ -188,8 +201,8 @@ func _make_row_button(rec: Dictionary, index: int) -> Button:
 	row_content.add_theme_constant_override("separation", 2)
 	btn.add_child(row_content)
 
-	var outcome_color := Color(0.52, 0.88, 0.62, 1.0) if is_clear else Color(0.90, 0.46, 0.46, 1.0)
-	var outcome_text := ("\u2713 " if is_clear else "\u2717 ") + char_name
+	var outcome_color: Color = presentation.color
+	var outcome_text: String = presentation.marker + char_name
 	if is_mp:
 		outcome_text += "  \u2014  Co-op %dP" % party_size
 	var top_label := Label.new()
@@ -205,6 +218,13 @@ func _make_row_button(rec: Dictionary, index: int) -> Button:
 	sub_label.add_theme_color_override("font_color", Color(0.68, 0.78, 0.90, 0.80))
 	sub_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row_content.add_child(sub_label)
+	if presentation.neutral:
+		var status_label := Label.new()
+		status_label.text = presentation.label
+		status_label.add_theme_font_size_override("font_size", 13)
+		status_label.add_theme_color_override("font_color", outcome_color)
+		status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row_content.add_child(status_label)
 
 	return btn
 
@@ -237,10 +257,9 @@ func _show_detail(rec: Dictionary) -> void:
 
 	var wrapped: RunSummaryWithProfile = RUN_SUMMARY_WITH_PROFILE_SCRIPT.create(rec, null)
 
-	var outcome := wrapped.get_outcome()
-	var is_clear := outcome == "clear"
-	var outcome_color := Color(0.52, 0.88, 0.62, 1.0) if is_clear else Color(0.90, 0.46, 0.46, 1.0)
-	var outcome_text := ("Victory" if is_clear else "Defeat") + " — " + wrapped.get_character_name()
+	var presentation := _outcome_presentation(wrapped.get_outcome())
+	var outcome_color: Color = presentation.color
+	var outcome_text: String = presentation.label + " — " + wrapped.get_character_name()
 
 	_add_detail_label(outcome_text, 24, outcome_color, true)
 	_add_detail_label(wrapped.get_difficulty_label(), 16, Color(RARITY_COMMON.r, RARITY_COMMON.g, RARITY_COMMON.b, 0.9), false)

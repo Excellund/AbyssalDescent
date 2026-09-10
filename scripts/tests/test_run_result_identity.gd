@@ -5,6 +5,7 @@ const RECORDER := preload("res://scripts/core/run_summary_recorder.gd")
 const FACTS := preload("res://scripts/ui/run_summary/run_result_facts.gd")
 const SCREEN := preload("res://scripts/ui/run_summary/run_results_screen.gd")
 const HISTORY := preload("res://scripts/core/run_history_store.gd")
+const HISTORY_PANEL := preload("res://scripts/ui/run_history/run_history_panel.gd")
 
 class SummaryWorld extends Node:
 	var current_player_profile: RefCounted = null
@@ -120,6 +121,7 @@ func _run() -> void:
 	check(FACTS.headline(json_summary, "Defeat") == "Act III · Depth 20", "History JSON numbers retain headline")
 	check(FACTS.boss_line(json_summary).contains("Warden · Sovereign") and not FACTS.boss_line(json_summary).contains("Lacuna"), "Boss line includes only recorded identities")
 	_test_peer_summary_flow()
+	await _test_history_outcome_presentation()
 	_prepare_screen()
 	for size in [Vector2i(960, 720), Vector2i(1280, 720), Vector2i(1920, 1080)]:
 		viewport.size = size
@@ -149,6 +151,60 @@ func _run() -> void:
 	check(not is_instance_id_valid(screen_id), "Result owner and viewport connection retire during animation")
 	print("[OK] Run result identity: %d checks, %d failures" % [checks, failures.size()])
 	quit(0 if failures.is_empty() else 1)
+
+func _test_history_outcome_presentation() -> void:
+	var cases := [
+		{"outcome": "clear", "label": "Victory", "marker": "\u2713 ", "color": Color(0.52, 0.88, 0.62, 1.0)},
+		{"outcome": "death", "label": "Defeat", "marker": "\u2717 ", "color": Color(0.90, 0.46, 0.46, 1.0)},
+		{"outcome": "abandon", "label": "Abandoned"},
+		{"outcome": "host_left", "label": "Host disconnected"},
+		{"outcome": "menu_exit", "label": "Returned to menu"},
+		{"outcome": "quit", "label": "Exited game"},
+		{"outcome": "future_outcome", "label": "Run ended"},
+		{"outcome": "", "label": "Run ended"},
+		{"label": "Run ended"},
+	]
+	HISTORY.clear_all()
+	for i in range(cases.size() - 1, -1, -1):
+		var record := fixture_summary()
+		record["run_id"] = "history-outcome-%d" % i
+		record["character_name"] = "Veilstrider"
+		record["is_multiplayer"] = true
+		record["player_count"] = 2
+		if cases[i].has("outcome"):
+			record["outcome"] = cases[i].outcome
+		check(HISTORY.append(record), "History case persists through the actual JSON store: %d" % i)
+	var before_hash := FileAccess.get_sha256(HISTORY.STORAGE_PATH)
+	var panel := HISTORY_PANEL.new()
+	root.add_child(panel)
+	panel.size = Vector2(960, 720)
+	panel._build_ui(null)
+	panel.populate()
+	await _settle()
+	for i in range(cases.size()):
+		var expected: Dictionary = cases[i]
+		panel._row_buttons[i].pressed.emit()
+		await _settle()
+		var row: VBoxContainer = panel._row_buttons[i].get_child(0)
+		var top: Label = row.get_child(0)
+		var heading: Label = panel._detail_content.get_child(0)
+		var neutral := not expected.has("marker")
+		var color: Color = expected.get("color", Color(0.68, 0.78, 0.90, 1.0))
+		check(heading.text == expected.label + " — Veilstrider", "Selected history detail reports its actual recorded outcome: %d" % i)
+		check(top.get_theme_color("font_color") == color and heading.get_theme_color("font_color") == color, "List/detail agree on victory, defeat or neutral color: %d" % i)
+		check(top.text == expected.get("marker", "\u00b7 ") + "Veilstrider  —  Co-op 2P", "History preserves character/co-op text with the correct outcome marker: %d" % i)
+		check(row.get_child_count() == (3 if neutral else 2) and panel._row_buttons[i].custom_minimum_size.y == (78.0 if neutral else 58.0), "Only neutral outcomes add a distinct status line: %d" % i)
+		if neutral:
+			check(row.get_child(2).text == expected.label and row.get_child(2).get_theme_color("font_color") == color, "Neutral list status agrees with detail without claiming defeat: %d" % i)
+		else:
+			check(row.get_child(1).text == "Harbinger  ·  Depth 20  ·  14:02", "Victory/death supporting row text stays unchanged: %d" % i)
+	check(FileAccess.get_sha256(HISTORY.STORAGE_PATH) == before_hash, "Viewing/selecting every outcome leaves serialized outcomes, stats and progression bytes unchanged")
+	panel.populate()
+	await _settle()
+	check(panel._selected_index == 0 and panel._detail_content.get_child(0).text == "Victory — Veilstrider", "Reopening history returns to the latest record after neutral selection")
+	panel.queue_free()
+	await _settle()
+	HISTORY.clear_all()
 
 func _test_timeline_availability_reuse() -> void:
 	check(not screen._action_buttons._timeline_button.visible and not screen._reward_panel._timeline_section.visible, "Missing legacy timeline offers no unavailable action or empty section")
