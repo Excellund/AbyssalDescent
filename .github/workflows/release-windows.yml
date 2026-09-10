@@ -12,8 +12,8 @@ jobs:
   build-windows:
     runs-on: ubuntu-latest
     env:
-      GODOT_VERSION: 4.6-stable
-      GODOT_VERSION_DIR: 4.6.stable
+      GODOT_VERSION: 4.6.2-stable
+      GODOT_VERSION_DIR: 4.6.2.stable
       EXPORT_NAME: AbyssalDescent
 
     steps:
