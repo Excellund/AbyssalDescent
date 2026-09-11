@@ -1,6 +1,7 @@
 extends "res://scripts/enemy_base.gd"
 
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
+const INTERACTIONS := preload("res://scripts/shared/combat_interaction_registry.gd")
 const ENEMY_STATE_ENUMS := preload("res://scripts/shared/enemy_state_enums.gd")
 const SEAMLOCK_SYNC_GROUP := "seamlock_sync_group"
 
@@ -492,6 +493,10 @@ func _try_resolve_illusion_guesses_from_player_attacks() -> void:
 	for candidate in candidates:
 		if not is_instance_valid(candidate):
 			continue
+		# Keeper guesses arrive with the authenticated, committed Attack start.
+		# Animation cues and the body's current position cannot reconstruct it.
+		if candidate.get("passive_effigy_command") == true:
+			continue
 		var player_id := int(candidate.get_instance_id())
 		seen_player_ids[player_id] = true
 		var attack_anim_time := float(candidate.get("attack_anim_time_left")) if candidate.get("attack_anim_time_left") != null else 0.0
@@ -508,6 +513,8 @@ func _try_resolve_illusion_guesses_from_player_attacks() -> void:
 func _try_resolve_illusion_guess_from_attacking_player(attacking_player: Node2D) -> void:
 	if not is_instance_valid(attacking_player):
 		return
+	if attacking_player.get("passive_effigy_command") == true:
+		return
 	var attack_origin := attacking_player.global_position
 	var attack_direction := attacking_player.get("visual_facing_direction") as Vector2
 	if attack_direction.length_squared() <= 0.000001:
@@ -516,13 +523,39 @@ func _try_resolve_illusion_guess_from_attacking_player(attacking_player: Node2D)
 		attack_direction = Vector2.RIGHT
 	var indicator_range := float(attacking_player.get("attack_range")) if attacking_player.get("attack_range") != null else 78.0
 	var indicator_arc := float(attacking_player.get("attack_arc_degrees")) if attacking_player.get("attack_arc_degrees") != null else 130.0
+	_resolve_illusion_guess_geometry(attack_origin, attack_direction, [{"range": indicator_range, "arc_degrees": indicator_arc, "inner": 0.0}])
+
+func receive_committed_player_attack(attacking_player: Node2D, raw_action: Dictionary) -> void:
+	if MultiplayerSessionManager.is_remote_replica() or not network_simulation_enabled or is_dead() or seamlock_state != ENEMY_STATE_ENUMS.SeamlockState.ILLUSION_PHASE or _illusion_positions.is_empty():
+		return
+	if not is_instance_valid(attacking_player) or attacking_player.get("passive_effigy_command") != true or attacking_player.get("combat_damage_enabled") != true or attacking_player.get("encounter_input_frozen") == true or get_tree().paused:
+		return
+	var peer_id := int(attacking_player.get("player_id"))
+	if peer_id <= 0:
+		peer_id = DAMAGEABLE._resolve_local_peer_id()
+	var action := INTERACTIONS.validate_action(raw_action, peer_id)
+	if action.is_empty() or String(action.source) not in ["melee", "blast_drive"] or action.kind != action.source or int(action.ancestry) != 0:
+		return
+	var controller := attacking_player.get("combat_interactions") as Node
+	if not is_instance_valid(controller):
+		return
+	var accepted: Dictionary = controller.get_attack_start(action)
+	if accepted.is_empty() or not controller.claim_reaction(action, "seamlock_illusion_guess", get_instance_id()):
+		return
+	var shapes: Array[Dictionary] = []
+	for source: String in [String(action.source), "razor_wind"]:
+		if accepted.shapes.get(source) is Dictionary:
+			shapes.append(accepted.shapes[source])
+	_resolve_illusion_guess_geometry(accepted.origin, accepted.direction, shapes)
+
+func _resolve_illusion_guess_geometry(attack_origin: Vector2, attack_direction: Vector2, shapes: Array[Dictionary]) -> void:
 	var target_padding := body_draw_radius + 8.0
-	var real_hit := _is_point_inside_attack_indicator(attack_origin, attack_direction, global_position, indicator_range, indicator_arc, target_padding)
+	var real_hit := _inside_guess_shapes(global_position, attack_origin, attack_direction, shapes, target_padding)
 	var nearest_illusion_dist := INF
 	var nearest_illusion_idx := -1
 	for i in _illusion_positions.size():
 		var illusion_pos := _illusion_positions[i]
-		if not _is_point_inside_attack_indicator(attack_origin, attack_direction, illusion_pos, indicator_range, indicator_arc, target_padding):
+		if not _inside_guess_shapes(illusion_pos, attack_origin, attack_direction, shapes, target_padding):
 			continue
 		var dist := attack_origin.distance_to(illusion_pos)
 		if dist < nearest_illusion_dist:
@@ -535,6 +568,14 @@ func _try_resolve_illusion_guess_from_attacking_player(attacking_player: Node2D)
 		_apply_arena_penalty()
 		if nearest_illusion_idx < _illusion_shatter_times.size():
 			_illusion_shatter_times[nearest_illusion_idx] = 0.44
+
+func _inside_guess_shapes(point: Vector2, origin: Vector2, direction: Vector2, shapes: Array[Dictionary], padding: float) -> bool:
+	for shape: Dictionary in shapes:
+		if float(shape.get("inner", 0.0)) > 0.0 and origin.distance_to(point) + padding <= float(shape.inner):
+			continue
+		if _is_point_inside_attack_indicator(origin, direction, point, float(shape.get("range", 0.0)), float(shape.get("arc_degrees", 0.0)), padding):
+			return true
+	return false
 
 func _enter_band_attack() -> void:
 	seamlock_state = ENEMY_STATE_ENUMS.SeamlockState.BAND_ATTACK

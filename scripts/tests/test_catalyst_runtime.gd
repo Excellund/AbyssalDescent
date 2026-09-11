@@ -34,6 +34,8 @@ class MissionPlayer extends "res://scripts/player.gd":
 		pass
 
 class TestHud extends Node:
+	func hide_boss_intro() -> void:
+		pass
 	func refresh(_state: Dictionary, _player: Node) -> void:
 		pass
 	func show_banner(_title: String, _subtitle: String = "") -> void:

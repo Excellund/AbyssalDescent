@@ -67,11 +67,20 @@ func _run() -> void:
 	field.initialize(actor,94.0,6.5,0.42,7)
 	field._process(0.4)
 	await _capture("pyre_active","PYRE / LINGERING FIELD","The field keeps its original expanding footprint and survives its owner's death.")
-	field.time_left = 0.01
+	field._process(2.85)
+	var midlife_frame: Image = await _capture("pyre_midlife","PYRE / HALF THE LIFETIME REMAINS","The inset arc counts down. The complete orange boundary still marks the damaging area.")
+	field._process(2.65)
+	var late_frame: Image = await _capture("pyre_late","PYRE / FINAL 0.6 SECONDS","The danger stays clearly visible while the field can still damage the player.")
+	field._process(0.59)
+	_check(field.time_left > 0.0 and field.time_left < 0.011 and field.visible,"The final visible field frame is still inside its active lifetime")
+	var final_frame: Image = await _capture("pyre_final_active","PYRE / FINAL ACTIVE MOMENT","The floor and full boundary remain visible until the field expires.")
 	field.tick_left = 0.1
 	field._process(0.2)
-	_check(field.is_queued_for_deletion() and actor.get_current_health() == 100,"Expired field is removed without a late damage tick")
-	await _capture("pyre_expired","PYRE / EXPIRED FIELD","The expired field has disappeared and cannot deliver another tick.")
+	_check(field.is_queued_for_deletion() and not field.visible and actor.get_current_health() == 100,"Expired field is immediately hidden without a late damage tick")
+	var expired_frame: Image = await _capture("pyre_expired","PYRE / EXPIRED FIELD","The expired field has disappeared and cannot deliver another tick.")
+	_check_pyre_floor_visibility(midlife_frame,expired_frame,zoom,"halfway through")
+	_check_pyre_floor_visibility(late_frame,expired_frame,zoom,"during the final second")
+	_check_pyre_floor_visibility(final_frame,expired_frame,zoom,"immediately before expiry")
 	_clear()
 	if is_instance_valid(MAPPER._power_registry_instance):
 		MAPPER._power_registry_instance.free()
@@ -82,7 +91,24 @@ func _run() -> void:
 	print("TOLL_PYRE_FRAMES="+output_directory)
 	quit(0 if failures.is_empty() else 1)
 
-func _capture(name: String, heading: String, explanation: String) -> void:
+func _check_pyre_floor_visibility(active_frame: Image, expired_frame: Image, zoom: float, label: String) -> void:
+	var screen_center := Vector2(FRAME_SIZE) * 0.5
+	var screen_radius := 94.0 * zoom
+	var sampled := 0
+	var visibly_warm := 0
+	# Inspect actual GPU pixels in the outer floor, away from the countdown,
+	# inner ornament and radius line. A vanishing line alone cannot pass this.
+	for y in range(int(screen_center.y - screen_radius),int(screen_center.y + screen_radius) + 1):
+		for x in range(int(screen_center.x - screen_radius),int(screen_center.x + screen_radius) + 1):
+			var distance := Vector2(x,y).distance_to(screen_center)
+			if distance < screen_radius * 0.82 or distance > screen_radius * 0.9:
+				continue
+			sampled += 1
+			if active_frame.get_pixel(x,y).r - expired_frame.get_pixel(x,y).r > 0.06:
+				visibly_warm += 1
+	_check(sampled > 100 and float(visibly_warm) / float(maxi(1,sampled)) > 0.95,"Actual Pyre floor remains clearly visible " + label)
+
+func _capture(name: String, heading: String, explanation: String) -> Image:
 	title.text = heading
 	detail.text = explanation
 	for enemy in get_nodes_in_group("enemies"):
@@ -94,3 +120,4 @@ func _capture(name: String, heading: String, explanation: String) -> void:
 	_check(frame.get_size() == FRAME_SIZE and frame.save_png(path) == OK,"Saved actual GPU frame "+name)
 	frames.append({"name":name,"path":path})
 	print("[FRAME] "+path)
+	return frame

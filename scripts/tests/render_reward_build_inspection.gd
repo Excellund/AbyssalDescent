@@ -73,6 +73,40 @@ func _run() -> void:
 		_show_native_page(["static_wake", "wraithstep", "dread_resonance", "storm_crown"], ENUMS.RewardMode.ARCANA)
 		await _capture(folder, "unowned_four_" + str(size.x))
 		ui.close_selection()
+		ui.initialize(3, 0.0)
+		_show_native_page(["patient_hunter", "marked_prey", "battle_trance"], ENUMS.RewardMode.BOON)
+		await _capture(folder, "conditional_boons_unowned_" + str(size.x))
+		ui.close_selection()
+	for level in [1, 2]:
+		for id in ["patient_hunter", "marked_prey"]:
+			player.apply_upgrade(id)
+		for size in [Vector2i(960, 720), Vector2i(1280, 720), Vector2i(1920, 1080)]:
+			viewport.size = size
+			ui.initialize(3, 0.0)
+			_show_native_page(["patient_hunter", "marked_prey"], ENUMS.RewardMode.BOON, level)
+			await _capture(folder, "conditional_boons_owned%d_%d" % [level, size.x])
+			ui.close_selection()
+	for _pick in range(3):
+		player.apply_trial_power("stormbrand")
+		player.apply_trial_power("spark_relay")
+	player.apply_upgrade("shatterwake")
+	player.apply_upgrade("shatterwake")
+	for size in [Vector2i(960, 720), Vector2i(1280, 720)]:
+		viewport.size = size
+		_open()
+		ui._request_build_inspection()
+		for id in ["patient_hunter", "marked_prey", "stormbrand", "spark_relay", "shatterwake"]:
+			var toggle := _owned_toggle(registry.get_power_display_name(id))
+			_check(toggle != null, "Every new learned power has an expandable native Build entry: " + id)
+			if toggle == null:
+				continue
+			toggle.grab_focus()
+			await _press_pad(JOY_BUTTON_A)
+			build._scroll.ensure_control_visible(toggle)
+			await _capture(folder, "keyword_rules_%s_%d" % [id, size.x])
+			await _press_pad(JOY_BUTTON_A)
+		build.close()
+		ui.close_selection()
 	await _finish_render(retirement, folder)
 
 func _finish_render(retirement: AUDIO_RETIREMENT, folder: String) -> void:

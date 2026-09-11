@@ -1,5 +1,7 @@
 # Threadbinder
 
+Historical implementation record. The 11 September workday revision replaces this alternating-target passive with [Effigy Keeper](effigy-keeper.md), retaining the stable `threadbinder` character/save ID. The rules and earlier verification below describe the superseded version.
+
 Feedback `FB-7295384767ec4441`, implemented on `codex/feedback-72953847-fifth-character` from committed main. This entry adds the fifth playable character; it does not change other queued features.
 
 ## Player experience

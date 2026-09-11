@@ -243,7 +243,7 @@ func _draw() -> void:
 		var ripple_a := maxf(0.0, 0.10 - float(i) * 0.028)
 		draw_arc(Vector2.ZERO, ripple_r, 0.0, TAU, 32,
 			Color(COLOR_DRIFTER_CORE.r, COLOR_DRIFTER_CORE.g, COLOR_DRIFTER_CORE.b, ripple_a), 1.2)
-	_draw_common_body(body_radius, COLOR_DRIFTER_BODY, COLOR_DRIFTER_CORE, facing)
+	_draw_common_body(body_radius, COLOR_DRIFTER_BODY, COLOR_DRIFTER_CORE, facing, &"drifter")
 	# 3 orbiting satellite dots — rotate continuously around the body
 	var t := _draw_time_sec
 	for i in range(3):

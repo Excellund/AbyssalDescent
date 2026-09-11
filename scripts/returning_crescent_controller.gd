@@ -80,7 +80,7 @@ func _is_local_owner() -> bool:
 		return false
 	return bool(player._is_local_control_owner())
 
-func try_launch(direction: Vector2) -> bool:
+func try_launch(direction: Vector2, attack_origin: Vector2 = Vector2.INF) -> bool:
 	if not _owner_allowed() or get_tree().paused or DAMAGEABLE.is_launch_suppressed() or not bool(player.reward_returning_crescent):
 		return false
 	if not direction.is_finite() or direction.length_squared() < 0.000001 or not player.global_position.is_finite():
@@ -96,7 +96,9 @@ func try_launch(direction: Vector2) -> bool:
 	var blade := Blade.new()
 	blade.id = _next_id
 	_next_id += 1
-	blade.position = player.global_position
+	# A remote delivery point changes the outbound origin; the return still
+	# follows the living owner's body, preserving its repositioning decision.
+	blade.position = attack_origin if attack_origin.is_finite() else player.global_position
 	blade.visual_position = blade.position
 	blade.direction = direction.normalized()
 	blade.travel_left = OUTBOUND_DISTANCE * minf(reach_scale, 2.0)

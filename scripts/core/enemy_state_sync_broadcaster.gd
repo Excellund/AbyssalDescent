@@ -115,7 +115,8 @@ func deregister_enemy(enemy_id: int) -> void:
 	_far_combat_hint_by_id.erase(enemy_id)
 
 func on_enemy_died(enemy_id: int) -> void:
-	var killer_peer_id := EnemyReplicationService.killer_peer_for(enemy_id)
+	var environmental: bool = _world._is_environmental_enemy_death()
+	var killer_peer_id := 0 if environmental else EnemyReplicationService.killer_peer_for(enemy_id)
 	if STAT_ATTRIBUTION_TRACE:
 		print_debug("[StatAttribution][EnemyDied] enemy_id=%d killer_peer=%d" % [enemy_id, killer_peer_id])
 	if killer_peer_id > 0:
@@ -129,6 +130,8 @@ func on_enemy_died(enemy_id: int) -> void:
 		return
 	if MultiplayerSessionManager.should_broadcast():
 		_world._sync_enemy_died.rpc(enemy_id, death_effect_payload)
+	if environmental:
+		return
 	var replication_service := (Engine.get_main_loop() as SceneTree).root.get_node_or_null("/root/PlayerReplicationService")
 	if replication_service != null and killer_peer_id > 0:
 		replication_service.send_enemy_killed(killer_peer_id, kill_pos, DAMAGEABLE.is_launch_suppressed(), DAMAGEABLE.get_kill_proc_suppression(), DAMAGEABLE.current_interaction_context())
@@ -212,7 +215,7 @@ func tick(delta: float) -> void:
 		var health_changed := not is_equal_approx(enemy_health, previous_health)
 		var previous_combat_hint := bool(_far_combat_hint_by_id.get(enemy_id, false))
 		var shared_status := DAMAGEABLE.get_status_network_packet(enemy)
-		var force_runtime_state_sampling := enemy.should_force_network_runtime_state_sampling() or not shared_status.is_empty()
+		var force_runtime_state_sampling := enemy.should_force_network_runtime_state_sampling() or enemy.is_slowed() or not shared_status.is_empty()
 		var should_sample_runtime_state := position_changed or facing_changed or health_changed or previous_combat_hint or force_runtime_state_sampling or not is_far_enemy
 		var allow_runtime_state_sampling := should_sample_runtime_state
 		if allow_runtime_state_sampling and active_enemy_count >= 24 and not force_runtime_state_sampling and not previous_combat_hint:
@@ -238,15 +241,9 @@ func tick(delta: float) -> void:
 			_previous_runtime_states[enemy_id] = {}
 		var combat_active := _enemy_is_combat_active(enemy, runtime_state_delta)
 		_far_combat_hint_by_id[enemy_id] = combat_active
-		if is_far_enemy and not combat_active:
-			var far_elapsed := float(_far_sync_elapsed_by_id.get(enemy_id, 0.0)) + _sync_elapsed
-			var required_far_interval := maxf(0.001, sync_interval * maxf(1.0, far_sync_interval_mult))
-			if far_elapsed < required_far_interval:
-				_far_sync_elapsed_by_id[enemy_id] = far_elapsed
-				continue
-			_far_sync_elapsed_by_id[enemy_id] = 0.0
-		else:
-			_far_sync_elapsed_by_id[enemy_id] = 0.0
+		# The early far-enemy gate owns cadence. Once sampled, send changes before
+		# treating their cached values as delivered.
+		_far_sync_elapsed_by_id[enemy_id] = 0.0
 		_previous_positions[enemy_id] = quantized_position
 		_previous_facing_angles[enemy_id] = quantized_facing_angle
 		_previous_health_values[enemy_id] = enemy_health
@@ -399,7 +396,11 @@ func _enemy_is_far_from_all_players(enemy_position: Vector2) -> bool:
 			return false
 	return true
 
-func _enemy_is_combat_active(_enemy: ENEMY_BASE_SCRIPT, runtime_state_delta: Dictionary) -> bool:
+func _enemy_is_combat_active(enemy: ENEMY_BASE_SCRIPT, runtime_state_delta: Dictionary) -> bool:
+	# Keep sampling a held or quantized Slow, then use the previous hint for its
+	# final expired-state delta even when the enemy has otherwise stopped moving.
+	if enemy.is_slowed():
+		return true
 	if runtime_state_delta.get("shared_status") is PackedByteArray and not runtime_state_delta.shared_status.is_empty():
 		return true
 	if runtime_state_delta.has("custom"):

@@ -6,6 +6,7 @@ const SENDER := preload("res://scripts/core/enemy_state_sync_broadcaster.gd")
 const RECEIVER := preload("res://scripts/core/enemy_state_sync_receiver.gd")
 const DIFFICULTY := preload("res://scripts/difficulty_config.gd")
 const BLAST_EFFECT := preload("res://scripts/blast_impact_effect.gd")
+const REWARD_INTERACTIONS := preload("res://scripts/shared/combat_interaction_registry.gd")
 
 class ImpactFeedback extends "res://scripts/ruinous_impact_feedback.gd":
 	var events: Array[Dictionary] = []
@@ -216,6 +217,19 @@ func setup_actors(client_id: int) -> void:
 	circle(wall, 20.0)
 	wall.position = Vector2(165.0, 0.0)
 	world.add_child(wall)
+	_begin_reward_run()
+
+func _begin_reward_run() -> void:
+	# Reward reactions require the same real run identity as normal gameplay.
+	# Only fixtures calling this helper opt into the production handshake.
+	RunContext.set_multiplayer_session("reward-effects-loopback", role == "host")
+	RunContext.meta_progress_profile = {}
+	world.difficulty_provider = preload("res://scripts/core/difficulty_scaling_provider.gd").new(world)
+	GameStateReplicationService.initialize(world)
+	world.run_summary_recorder = preload("res://scripts/core/run_summary_recorder.gd").new(world)
+	world.run_summary_recorder.reset_summary_tracker()
+	world.run_summary_recorder.initialize(true)
+	world.run_summary_recorder.mark_run_start()
 
 func enemy(id: int) -> Enemy:
 	return EnemyReplicationService.enemy_nodes_by_id.get(id) as Enemy
@@ -244,8 +258,8 @@ func host_scenarios(client_id: int) -> void:
 		if events.size() >= 3:
 			check(events[0].serial == events[1].serial and events[2].position == enemy(101).global_position and events[2].radius == 70.0, "The joiner ends the right launch and displays the host's exact collision radius and origin")
 	world.fixture_command.rpc_id(client_id, "secondary_kill")
-	check(await until(func(): return world.kill_peers.size() == 1 and enemy(103).velocity.x > 0.0), "Secondary kill crosses the kill-notification RPC and returns an Edict impulse")
-	check(not enemy(103).get_launch_state().active, "Returned secondary-kill impulse does not arm another launch")
+	check(await until(func(): return world.kill_peers.size() == 1 and enemy(103).get_current_health() == 68 and enemy(103).is_slowed()), "Accepted secondary kill produces the host's 32-damage Edict Burst and survivor Slow")
+	check(not enemy(103).get_launch_state().active and enemy(103).velocity.is_zero_approx(), "Edict's secondary Burst neither pushes nor arms another launch")
 	check(world.kill_peers == [client_id], "Secondary kill retains the joiner's kill credit")
 	world.fixture_command.rpc_id(client_id, "inspect_secondary")
 	check(await until(func(): return results.has("secondary")), "Joiner reports the kill-notification scope")
@@ -335,19 +349,24 @@ func resolve_configuration(tier: int, loadout: Array) -> Dictionary:
 func client_command(command: String, payload: Dictionary) -> void:
 	match command:
 		"primary":
-			DAMAGE.apply_damage(enemy(101), 20, {"attack_type": "melee", "source_peer_id": 1})
+			check(await until(func(): return not REWARD_INTERACTIONS.current_run().is_empty()), "Joiner binds the real run before reward-capable combat")
+			var action := local_player.combat_interactions.begin_action("attack")
+			DAMAGE.apply_damage(enemy(101), 20, REWARD_INTERACTIONS.damage_context(action, "melee", {"source_peer_id": 1, "raw_amount": 20.0, "damage_coefficient": 0.5}))
 			check(enemy(101).get_current_health() == 100 and not enemy(101).get_launch_state().active, "Joiner routes primary damage without applying it locally")
 		"inspect_primary":
 			await until(func(): return enemy(101).get_current_health() == 40 and impact_events().size() >= 3, 2.0)
 			world.fixture_result.rpc_id(1, "primary", {"health": enemy(101).get_current_health(), "launch_active": enemy(101).get_launch_state().active, "events": impact_events().duplicate(true), "local_damage_events": world.damage_events.size()})
 		"secondary_kill":
-			DAMAGE.apply_damage(enemy(102), 20, {"attack_type": "sovereigns_double", "secondary": true})
+			var action := local_player.combat_interactions.begin_action("attack")
+			DAMAGE.apply_damage(enemy(102), 20, REWARD_INTERACTIONS.damage_context(action, "sovereigns_double", {"raw_amount": 20.0, "damage_coefficient": 0.5, "secondary": true}))
 		"inspect_secondary":
 			world.fixture_result.rpc_id(1, "secondary", {"scopes": local_player.kill_scopes})
 		"primary_compression":
-			DAMAGE.apply_damage(compression_boss, 20, {"attack_type": "melee", "source_peer_id": 1})
+			var action := local_player.combat_interactions.begin_action("attack")
+			DAMAGE.apply_damage(compression_boss, 20, REWARD_INTERACTIONS.damage_context(action, "melee", {"source_peer_id": 1, "raw_amount": 20.0, "damage_coefficient": 0.5}))
 		"primary_cancel":
-			DAMAGE.apply_damage(enemy(106), 20, {"attack_type": "melee", "source_peer_id": 1})
+			var action := local_player.combat_interactions.begin_action("attack")
+			DAMAGE.apply_damage(enemy(106), 20, REWARD_INTERACTIONS.damage_context(action, "melee", {"source_peer_id": 1, "raw_amount": 20.0, "damage_coefficient": 0.5}))
 		"inspect_ruinous":
 			var feedback := EnemyReplicationService._ruinous_feedback as ImpactFeedback
 			var serial := int(payload.serial)

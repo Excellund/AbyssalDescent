@@ -3315,7 +3315,7 @@ func _build_character_selector_panel() -> Panel:
 		role_label.text = String(character.get("archetype", ""))
 		role_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		role_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		role_label.add_theme_font_size_override("font_size", 14)
+		role_label.add_theme_font_size_override("font_size", 18)
 		role_label.add_theme_color_override("font_color", body_color.lerp(Color.WHITE, 0.45))
 		role_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		left_col.add_child(role_label)
@@ -3327,14 +3327,14 @@ func _build_character_selector_panel() -> Panel:
 		stat_label.text = "\u2665 %d   \u26a1 %d   \u2694 %d" % [hp_val, spd_val, dmg_val]
 		stat_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		stat_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		stat_label.add_theme_font_size_override("font_size", 13)
-		stat_label.add_theme_color_override("font_color", Color(body_color.r, body_color.g, body_color.b, 0.55))
+		stat_label.add_theme_font_size_override("font_size", 18)
+		stat_label.add_theme_color_override("font_color", body_color.lerp(Color.WHITE, 0.25))
 		stat_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		left_col.add_child(stat_label)
 
 		# --- RIGHT COLUMN: passive badge + description (bounded width forces proper wrapping) ---
 		var details_box := VBoxContainer.new()
-		details_box.custom_minimum_size = Vector2(340.0, 0.0)
+		details_box.custom_minimum_size = Vector2(500.0, 0.0)
 		details_box.size_flags_horizontal = Control.SIZE_SHRINK_END
 		details_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		details_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -3364,7 +3364,7 @@ func _build_character_selector_panel() -> Panel:
 
 		var badge_label := Label.new()
 		badge_label.text = _passive_display_name(passive_id)
-		badge_label.add_theme_font_size_override("font_size", 14)
+		badge_label.add_theme_font_size_override("font_size", 18)
 		badge_label.add_theme_color_override("font_color", body_color.lerp(Color.WHITE, 0.55))
 		badge_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		badge_panel.add_child(badge_label)
@@ -3381,8 +3381,8 @@ func _build_character_selector_panel() -> Panel:
 			desc_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			desc_label.custom_minimum_size = Vector2(0.0, 0.0)
 			desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			desc_label.add_theme_font_size_override("normal_font_size", 14)
-			desc_label.add_theme_font_size_override("bold_font_size", 14)
+			desc_label.add_theme_font_size_override("normal_font_size", 22)
+			desc_label.add_theme_font_size_override("bold_font_size", 22)
 			desc_label.add_theme_color_override("default_color", Color(0.86, 0.90, 0.95, 0.88))
 			desc_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			details_box.add_child(desc_label)

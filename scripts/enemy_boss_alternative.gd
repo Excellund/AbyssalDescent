@@ -33,6 +33,13 @@ var _snapshot_serial: int = 0
 var _received_serial: int = -1
 var _received_phase: int = 0
 var _received_snapshot: int = -1
+var _sequence_step: int = 0
+var _pending_attack_kind: int = -1
+var _sequence_focus: Vector2 = Vector2.ZERO
+var _sequence_forward: Vector2 = Vector2.RIGHT
+var _move_start: Vector2 = Vector2.ZERO
+var _slam_landing: Vector2 = Vector2.ZERO
+var _slam_collision_layer: int = -1
 
 func _ready() -> void:
 	if not PROFILES.has(boss_id):
@@ -64,19 +71,31 @@ func _process_behavior(delta: float) -> void:
 			_move_between_attacks(delta)
 			cooldown_left = maxf(0.0, cooldown_left - delta)
 			if cooldown_left <= 0.0:
-				begin_attack(_cycle_step % 3)
+				# Revision belongs to Record's sequence; it is not repeated as
+				# another standalone turn after the sequence has recovered.
+				var next_kind: int = (0 if _cycle_step % 2 == 0 else 2) if boss_id == "null_archivist" else _cycle_step % 3
+				begin_attack(next_kind)
 				_cycle_step += 1
 		State.WARNING:
 			# Neither crowd separation nor player movement may drag the attack.
 			velocity = Vector2.ZERO
 			state_time_left = maxf(0.0, state_time_left - delta)
 			telegraph_alpha = 1.0 - state_time_left / warning_duration
+			if boss_id == "kilnheart" and attack_kind == 0:
+				# The body approaches the already painted landing. Neither this
+				# motion nor subsequent target movement changes its damage disk.
+				global_position = _move_start.lerp(_slam_landing, telegraph_alpha)
 			if state_time_left <= 0.0:
 				_resolve_attack()
 		State.RECOVER:
 			velocity = Vector2.ZERO
 			state_time_left = maxf(0.0, state_time_left - delta)
 			if state_time_left <= 0.0:
+				if _pending_attack_kind >= 0:
+					var followup_kind: int = _pending_attack_kind
+					_pending_attack_kind = -1
+					begin_attack(followup_kind, 1)
+					return
 				boss_state = State.IDLE
 				# Enrage changes the interval, preserving the full dodge warning.
 				cooldown_left = action_cooldown * (0.72 if _get_current_health() < max_health / 2 else 1.0)
@@ -104,13 +123,16 @@ func _move_between_attacks(delta: float) -> void:
 	if forward.length_squared() > 0.001:
 		visual_facing_direction = forward
 
-func begin_attack(kind: int) -> void:
+func begin_attack(kind: int, sequence_step: int = 0) -> void:
 	if not network_simulation_enabled or _get_current_health() <= 0 or is_queued_for_deletion():
 		return
 	var candidates := _get_damageable_targets()
 	if candidates.is_empty():
 		return
+	_set_slam_nonblocking(false)
 	attack_kind = clampi(kind, 0, 2)
+	_sequence_step = clampi(sequence_step, 0, 1)
+	_pending_attack_kind = -1
 	_attack_serial += 1
 	boss_state = State.WARNING
 	velocity = Vector2.ZERO
@@ -127,10 +149,20 @@ func begin_attack(kind: int) -> void:
 	visual_facing_direction = forward
 	match boss_id:
 		"kilnheart":
-			warning_duration = [0.95, 1.1, 1.05][attack_kind]
+			warning_duration = [1.25, 1.3, 1.05][attack_kind]
 			match attack_kind:
-				0: _circle(global_position, 185.0)
-				1: _ring(global_position, 135.0, 365.0)
+				0:
+					_move_start = global_position
+					_slam_landing = global_position.move_toward(_clamp_to_arena(aim, 205.0), 420.0)
+					_circle(_slam_landing, 185.0)
+					_set_slam_nonblocking(true)
+				1:
+					if _sequence_step == 0:
+						_sequence_focus = _clamp_to_arena(global_position, 250.0)
+						_circle(_sequence_focus, 185.0)
+					else:
+						warning_duration = 1.25
+						_ring(_sequence_focus, 155.0, 300.0)
 				2:
 					for candidate in candidates:
 						_circle(candidate.global_position, 108.0)
@@ -138,20 +170,30 @@ func begin_attack(kind: int) -> void:
 			warning_duration = [1.1, 0.95, 1.15][attack_kind]
 			match attack_kind:
 				0:
-					# The unpainted corridor between the threads stays safe.
+					# Pick available floor beside the aim. The target must move
+					# into the corridor instead of receiving a free safe center.
+					_sequence_focus = _offset_safe_point(aim, forward.orthogonal(), 135.0)
+					var shift: Vector2 = _sequence_focus - aim
+					forward = shift.normalized().orthogonal()
+					_sequence_forward = forward
 					for side in [-1.0, 1.0]:
-						var center: Vector2 = aim + forward.orthogonal() * side * 150.0
+						var center: Vector2 = _sequence_focus + forward.orthogonal() * side * 150.0
 						_lane(center - forward * 470.0, center + forward * 470.0, 55.0)
 				1:
+					if _sequence_step > 0:
+						aim = _sequence_focus
+						forward = _sequence_forward
 					for axis in [forward, forward.orthogonal()]:
 						_lane(aim - axis * 330.0, aim + axis * 330.0, 38.0)
 				2:
+					_sequence_focus = aim
+					_sequence_forward = forward
 					var cage_positions: Array[Vector2] = []
 					for candidate in candidates:
 						cage_positions.append(candidate.global_position)
 					_rings_with_shared_pockets(cage_positions, 100.0, 225.0)
 		"null_archivist":
-			warning_duration = [1.05, 1.25, 1.1][attack_kind]
+			warning_duration = [1.05, 0.95, 1.25][attack_kind]
 			match attack_kind:
 				0:
 					_recorded_positions.clear()
@@ -162,13 +204,35 @@ func begin_attack(kind: int) -> void:
 					if _recorded_positions.is_empty():
 						_recorded_positions.append(aim)
 					# Return to the previous marks: their centers are now safe.
-					_rings_with_shared_pockets(_recorded_positions, 112.0, 260.0)
+					_rings_with_shared_pockets(_recorded_positions, 112.0, 480.0)
 				2:
-					_ring(global_position, 235.0, 450.0)
+					# A wall can remove the outside escape. Keep the entire band
+					# narrow enough to cross inward without spending a Dash.
+					_ring(global_position, 280.0, 450.0)
 					for axis in [forward, forward.orthogonal()]:
 						_lane(global_position - axis * 450.0, global_position + axis * 450.0, 32.0)
 	state_time_left = warning_duration
 	queue_redraw()
+
+func _clamp_to_arena(point: Vector2, margin: float) -> Vector2:
+	var arena_center: Vector2 = (get_parent() as Node2D).global_position if get_parent() is Node2D else Vector2.ZERO
+	var half: Vector2 = (arena_size * 0.5 - Vector2.ONE * margin).max(Vector2.ZERO)
+	return arena_center + (point - arena_center).clamp(-half, half)
+
+func _offset_safe_point(point: Vector2, direction: Vector2, distance: float) -> Vector2:
+	var first: Vector2 = _clamp_to_arena(point + direction * distance, 70.0)
+	var second: Vector2 = _clamp_to_arena(point - direction * distance, 70.0)
+	return first if first.distance_squared_to(point) >= second.distance_squared_to(point) else second
+
+func _set_slam_nonblocking(enabled: bool) -> void:
+	# A bystander outside the landing disk must not be carried into it by the
+	# approaching body. Preserve the configured layer, including layer zero.
+	if enabled and _slam_collision_layer < 0:
+		_slam_collision_layer = collision_layer
+		collision_layer = 0
+	elif not enabled and _slam_collision_layer >= 0:
+		collision_layer = _slam_collision_layer
+		_slam_collision_layer = -1
 
 func _circle(center: Vector2, radius: float) -> void:
 	_warning_shapes.append({"kind": "circle", "center": center, "radius": radius})
@@ -233,6 +297,19 @@ func _resolve_attack() -> void:
 	# never deal a second hit from this cast to the same player.
 	boss_state = State.RECOVER
 	state_time_left = recover_time
+	_pending_attack_kind = -1
+	if _sequence_step == 0:
+		if boss_id == "kilnheart" and attack_kind == 1:
+			_pending_attack_kind = 1
+		elif boss_id == "glassweaver" and attack_kind in [0, 2]:
+			_pending_attack_kind = 1
+		elif boss_id == "null_archivist" and attack_kind == 0:
+			_pending_attack_kind = 1
+	if _pending_attack_kind >= 0:
+		state_time_left = 0.18 if boss_id == "null_archivist" else 0.22
+	if boss_id == "kilnheart" and attack_kind == 0:
+		global_position = _slam_landing
+	_set_slam_nonblocking(false)
 	_impact_shapes = _warning_shapes.duplicate(true)
 	_warning_shapes.clear()
 	_afterglow_left = 0.3
@@ -272,6 +349,7 @@ func _is_living_target(candidate: Variant) -> bool:
 	return candidate.has_method("get_current_health") and int(candidate.get_current_health()) > 0
 
 func _cancel_attack() -> void:
+	_set_slam_nonblocking(false)
 	_attack_serial += 1
 	boss_state = State.IDLE
 	state_time_left = 0.0
@@ -280,6 +358,8 @@ func _cancel_attack() -> void:
 	_warning_shapes.clear()
 	_impact_shapes.clear()
 	_recorded_positions.clear()
+	_pending_attack_kind = -1
+	_sequence_step = 0
 	_afterglow_left = 0.0
 	velocity = Vector2.ZERO
 	queue_redraw()
@@ -306,6 +386,7 @@ func get_projectile_network_sync_state() -> Dictionary:
 	return {
 		"boss_id": boss_id, "attack_serial": _attack_serial, "snapshot_serial": _snapshot_serial,
 		"boss_state": boss_state, "attack_kind": attack_kind,
+		"sequence_step": _sequence_step, "move_start": _move_start, "slam_landing": _slam_landing,
 		"state_time_left": state_time_left, "warning_duration": warning_duration,
 		"warning_shapes": _warning_shapes.duplicate(true), "impact_shapes": _impact_shapes.duplicate(true),
 		"afterglow_left": _afterglow_left, "recorded_positions": _recorded_positions.duplicate(),
@@ -327,6 +408,10 @@ func apply_projectile_network_sync_state(payload: Dictionary) -> void:
 	_attack_serial = serial
 	boss_state = next_state
 	attack_kind = clampi(int(payload.get("attack_kind", 0)), 0, 2)
+	_sequence_step = clampi(int(payload.get("sequence_step", 0)), 0, 1)
+	_move_start = payload.get("move_start", global_position) as Vector2
+	_slam_landing = payload.get("slam_landing", global_position) as Vector2
+	_set_slam_nonblocking(boss_id == "kilnheart" and attack_kind == 0 and boss_state == State.WARNING)
 	state_time_left = clampf(float(payload.get("state_time_left", 0.0)), 0.0, 3.0)
 	warning_duration = clampf(float(payload.get("warning_duration", 1.0)), 0.1, 3.0)
 	_warning_shapes.clear()
@@ -364,6 +449,7 @@ func _process_network_visuals(delta: float) -> void:
 			# the host's resolution packet may create an impact presentation.
 			_warning_shapes.clear()
 			boss_state = State.RECOVER
+			_set_slam_nonblocking(false)
 			_received_phase = 2
 	queue_redraw()
 
@@ -381,6 +467,8 @@ func _draw() -> void:
 		var warning := Color(1.0, 0.47, 0.29)
 		for shape in _warning_shapes:
 			_draw_warning_shape(shape, warning, 0.12 + telegraph_alpha * 0.12, 2.5)
+		if boss_id == "kilnheart" and attack_kind == 0:
+			draw_dashed_line(to_local(_move_start), to_local(_slam_landing), Color(warning, 0.6), 2.5, 12.0, true)
 	if _afterglow_left > 0.0:
 		for shape in _impact_shapes:
 			_draw_warning_shape(shape, Color(1.0, 0.86, 0.61), _afterglow_left * 0.85, 4.0)
@@ -422,6 +510,8 @@ func _draw() -> void:
 	if boss_state == State.WARNING:
 		draw_arc(Vector2.ZERO, radius + 15.0, -PI * 0.5, -PI * 0.5 + TAU * telegraph_alpha, 48, Color(1.0, 0.88, 0.62), 3.0, true)
 		var attack_name: String = profile["names"][attack_kind]
+		if boss_id == "kilnheart" and attack_kind == 1:
+			attack_name += " / IN" if _sequence_step > 0 else " / OUT"
 		var font := ThemeDB.fallback_font
 		var label_size := font.get_string_size(attack_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 18)
 		draw_string(font, Vector2(-label_size.x * 0.5, -100.0), attack_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(1.0, 0.89, 0.74))

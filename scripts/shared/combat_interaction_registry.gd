@@ -6,12 +6,15 @@ const DASH := 2
 const ELECTRIC := 4
 const CROWN_ANCESTRY := 1
 const TEMPO_ANCESTRY := 2
-const REACTION_ANCESTRY_MASK := CROWN_ANCESTRY | TEMPO_ANCESTRY
+const EDICT_ANCESTRY := 4
+const REACTION_ANCESTRY_MASK := CROWN_ANCESTRY | TEMPO_ANCESTRY | EDICT_ANCESTRY
 const MAX_ROOTS := 256
 const MAX_TARGETS_PER_ROOT := 256
 const MAX_PENDING_HITS := 256
 const ATTACK_HIT_SOURCES := ["melee", "razor_wind", "blast_drive"]
 const EFFECT_FORMS := {
+	"blast_drive": ["Burst"], "spark_relay_projectile": ["Projectile"],
+	"shatterwake_burst": ["Burst"], "edict_court": ["Burst"],
 	"static_wake": ["Field"], "sigil_chain_zone": ["Field"],
 	"void_echo_zone": ["Field"], "null_corridor_deflect": ["Field"],
 	"convergence_window": ["Field"], "returning_crescent": ["Projectile"],
@@ -31,15 +34,29 @@ static func is_attack_hit(source: String) -> bool:
 static func effect_forms(source: String) -> Array:
 	return EFFECT_FORMS.get(source, []).duplicate()
 
+## Forms come from registered effects. A copied Blast retains its Burst shape,
+## but an Echo never becomes another deliberate Attack or traveling projectile.
+static func action_forms(action: Dictionary) -> Array:
+	var source := String(action.get("source", ""))
+	var forms := effect_forms(source)
+	var copied := String(action.get("echo_source", ""))
+	if source == "sovereigns_double" and is_attack_hit(copied):
+		for form: String in effect_forms(copied):
+			if not forms.has(form):
+				forms.append(form)
+	return forms
+
 static func reaction_ancestry(source: String) -> int:
 	match source:
 		"storm_crown": return CROWN_ANCESTRY
 		"apex_momentum_wave": return TEMPO_ANCESTRY
+		"edict_court": return EDICT_ANCESTRY
 	return 0
 
 # Orbit and movement-completion Bursts retain their root identity, but the
 # root may be a Dash. That ancestry does not make their damage a normal Dash.
 const EFFECT_TRAITS := {
+	"spark_relay_projectile": HIT | ELECTRIC, "shatterwake_burst": HIT, "edict_court": HIT,
 	"melee": HIT, "razor_wind": HIT, "blast_drive": HIT,
 	"farline_volley_burst": HIT, "riftpunch_shockwave": HIT,
 	"rupture_wave": HIT, "wraithstep_chain": HIT, "wraithstep_splash": HIT,

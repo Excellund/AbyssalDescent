@@ -24,6 +24,10 @@ static func resolve(owner: Object, target: Object, raw_amount: float, coefficien
 	var owner_max := float(owner.get_max_health()) if owner.has_method("get_max_health") else property_number(owner, "max_health", 1.0)
 	if owner_health / maxf(1.0, owner_max) <= 0.5:
 		flat += maxf(0.0, property_number(owner, "bloodpact_bonus_damage"))
+	if bool(pre.get("slowed", false)):
+		flat += maxf(0.0, property_number(owner, "patient_hunter_bonus_damage"))
+	if float(pre.get("mark_ratio", 0.0)) > 0.0:
+		flat += maxf(0.0, property_number(owner, "marked_prey_bonus_damage"))
 	var amount := raw_amount + coefficient * flat
 	var mark_ratio := maxf(0.0, float(pre.get("mark_ratio", 0.0)))
 	if mark_ratio > 0.0:

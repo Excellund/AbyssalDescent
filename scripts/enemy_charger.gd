@@ -289,7 +289,7 @@ func _draw() -> void:
 		core_color = COLOR_CHARGER_CORE_CHARGED
 		body_radius += 0.7
 
-	_draw_common_body(body_radius, body_color, core_color, facing)
+	_draw_common_body(body_radius, body_color, core_color, facing, &"charger")
 
 	# Ram plate and side bars keep charger silhouette distinct from other melee roles.
 	var ram_tip := facing * (body_radius + 11.5)

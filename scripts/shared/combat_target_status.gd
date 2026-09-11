@@ -7,7 +7,8 @@ const BODY_GEOMETRY := preload("res://scripts/enemy_launch_state.gd")
 const MAX_MARKS := 32
 const MAX_OWNERS := 4
 const MAX_REMAINDERS := 128
-const MARK_SOURCES := ["wraithstep", "eclipse_mark", "dread_resonance", "cross_stitch"]
+# Append sources: their indices are serialized in the compact network packet.
+const MARK_SOURCES := ["wraithstep", "eclipse_mark", "dread_resonance", "cross_stitch", "stormbrand", "null_corridor"]
 
 var marks: Dictionary = {}
 var dread: Dictionary = {}

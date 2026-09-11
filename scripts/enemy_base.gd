@@ -5,6 +5,19 @@ const COLOR_PALETTE := preload("res://scripts/shared/color_palette.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const ENEMY_LAUNCH_STATE := preload("res://scripts/enemy_launch_state.gd")
 
+# Body-local silhouettes. Explicit opt-in leaves bespoke enemies and bosses alone.
+# The two halves meet at the centre, so broad planes survive the distant co-op camera.
+static var _faceted_body_profiles: Dictionary = {
+	&"chaser": PackedVector2Array([Vector2(1.0, 0.0), Vector2(0.12, 0.7), Vector2(-0.78, 0.52), Vector2(-1.0, 0.0), Vector2(-0.78, -0.52), Vector2(0.12, -0.7)]),
+	&"charger": PackedVector2Array([Vector2(0.92, 0.0), Vector2(0.68, 0.72), Vector2(-0.58, 0.72), Vector2(-0.95, 0.0), Vector2(-0.58, -0.72), Vector2(0.68, -0.72)]),
+	&"archer": PackedVector2Array([Vector2(0.86, 0.0), Vector2(0.02, 0.52), Vector2(-0.64, 0.76), Vector2(-0.45, 0.0), Vector2(-0.64, -0.76), Vector2(0.02, -0.52)]),
+	&"shielder": PackedVector2Array([Vector2(0.95, 0.0), Vector2(0.64, 0.75), Vector2(-0.62, 0.75), Vector2(-0.96, 0.0), Vector2(-0.62, -0.75), Vector2(0.64, -0.75)]),
+	&"weaver": PackedVector2Array([Vector2(1.0, 0.0), Vector2(0.55, 0.78), Vector2(-0.6, 0.78), Vector2(-1.0, 0.0), Vector2(-0.6, -0.78), Vector2(0.55, -0.78)]),
+	&"drifter": PackedVector2Array([Vector2(1.0, 0.0), Vector2(0.44, 0.84), Vector2(-0.42, 0.88), Vector2(-0.94, 0.0), Vector2(-0.42, -0.88), Vector2(0.44, -0.84)]),
+	&"sentinel": PackedVector2Array([Vector2(1.0, 0.0), Vector2(0.0, 1.0), Vector2(-1.0, 0.0), Vector2(0.0, -1.0)]),
+}
+static var _faceted_body_geometry: Dictionary = {}
+
 var _launch_state: ENEMY_LAUNCH_STATE
 
 func get_launch_state() -> ENEMY_LAUNCH_STATE:
@@ -1164,10 +1177,16 @@ func _get_current_health() -> int:
 		return max_health
 	return health_state.current_health
 
-func _draw_common_body(body_radius: float, body_color: Color, core_color: Color, facing: Vector2) -> void:
+func _draw_common_body(body_radius: float, body_color: Color, core_color: Color, facing: Vector2, profile: StringName = &"") -> void:
 	_draw_time_sec = float(Time.get_ticks_msec()) * 0.001
 	if is_spawn_transporting():
 		_draw_spawn_transport_fx(body_radius, facing)
+		return
+	if _faceted_body_profiles.has(profile):
+		_draw_faceted_body(body_radius, body_color, core_color, facing, profile)
+		_draw_mutator_overlay(body_radius)
+		_draw_dread_resonance_overlay(body_radius)
+		_draw_damage_blocked_indicator(body_radius)
 		return
 	var side := Vector2(-facing.y, facing.x)
 	var outer_color := COLOR_BODY_OUTER_GLOW
@@ -1209,6 +1228,47 @@ func _draw_common_body(body_radius: float, body_color: Color, core_color: Color,
 	_draw_mutator_overlay(body_radius)
 	_draw_dread_resonance_overlay(body_radius)
 	_draw_damage_blocked_indicator(body_radius)
+
+func _draw_faceted_body(body_radius: float, body_color: Color, core_color: Color, facing: Vector2, profile: StringName) -> void:
+	var shell: PackedVector2Array = _faceted_body_profiles[profile]
+	if not _faceted_body_geometry.has(profile):
+		var half := shell.size() / 2
+		var upper := PackedVector2Array()
+		var lower := PackedVector2Array()
+		for i in range(half + 1):
+			upper.append(shell[i] * 0.84)
+			lower.append(shell[(half + i) % shell.size()] * 0.84)
+		var rim := shell.duplicate()
+		rim.append(shell[0])
+		_faceted_body_geometry[profile] = [upper, lower, rim]
+	var geometry: Array = _faceted_body_geometry[profile]
+	var radius := maxf(1.0, body_radius)
+	var low_detail := _is_high_load_visual_lod_active()
+	# Sentinel is a planted, axis-aligned emplacement; only its aperture turns.
+	var body_angle := 0.0 if profile == &"sentinel" else facing.angle()
+	draw_set_transform(Vector2.ZERO, body_angle, Vector2.ONE * radius)
+	draw_colored_polygon(shell, body_color.darkened(0.57))
+	draw_colored_polygon(geometry[0], body_color)
+	draw_colored_polygon(geometry[1], core_color.darkened(0.48))
+	if not low_detail:
+		draw_polyline(geometry[2], body_color.lightened(0.16), 1.1 / radius, true)
+	# One readable aperture, rather than nested glowing discs. Weaver has paired eyes.
+	var eye_angle := facing.angle() - body_angle
+	var eye_facing := Vector2.from_angle(eye_angle)
+	var eye_side := eye_facing.orthogonal()
+	var eye_center := eye_facing * 0.36
+	var inset_color := core_color.darkened(0.78)
+	var eye_color := core_color.lightened(0.3)
+	if profile == &"weaver":
+		for sign_value in [-1.0, 1.0]:
+			var eye: Vector2 = eye_center + eye_side * (0.2 * sign_value)
+			draw_circle(eye, 0.16, inset_color)
+			draw_circle(eye, 0.08, eye_color)
+	else:
+		draw_line(eye_center - eye_side * 0.2, eye_center + eye_side * 0.2, inset_color, 4.0 / radius, true)
+		draw_line(eye_center - eye_side * 0.14, eye_center + eye_side * 0.14, eye_color, 1.8 / radius, true)
+	# Restore the caller's local coordinates before appendages, warnings and overlays.
+	draw_set_transform(Vector2.ZERO)
 
 func _get_transport_color() -> Color:
 	return Color(0.56, 0.94, 1.0, 1.0)

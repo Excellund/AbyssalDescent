@@ -32,11 +32,11 @@ var retirement := AUDIO_RETIREMENT.new()
 
 func _run() -> void:
 	if not OS.get_user_data_dir().begins_with(ProjectSettings.globalize_path("res://")) or not DirAccess.dir_exists_absolute("res://validation_fixtures"):
-		push_error("Threadbinder GPU fixture requires isolated user data")
+		push_error("Effigy Keeper GPU fixture requires isolated user data")
 		quit(1)
 		return
 	if DisplayServer.get_name() == "headless" or RenderingServer.get_video_adapter_name().is_empty():
-		push_error("Threadbinder GPU fixture requires an actual GPU")
+		push_error("Effigy Keeper GPU fixture requires an actual GPU")
 		quit(1)
 		return
 	node_added.connect(retirement.observe_node)
@@ -65,33 +65,33 @@ func _run() -> void:
 	layer.add_child(caption)
 	_set_room_size(DEFINITIONS.POOL_ROOM_SIZE)
 	_make_party(["threadbinder"])
-	await _capture("solo_idle", "THREADBINDER / IDLE", "Coral body, paired ivory shuttles and a thin thread loop at ordinary arena zoom.")
+	await _capture("solo_idle", "EFFIGY KEEPER / IDLE", "Coral body, an ivory control bar and loose threads at ordinary arena zoom.")
 	actor.velocity = actor.aim * actor.max_speed
-	await _capture("solo_moving", "THREADBINDER / MOVING", "The thread trails behind movement while the short shuttles preserve the round core.")
+	await _capture("solo_moving", "EFFIGY KEEPER / MOVING", "The control bar remains readable while loose threads follow the moving Keeper.")
 	actor.velocity = Vector2.ZERO
 	actor._try_execute_attack(actor.aim)
 	actor.attack_anim_time_left = actor.attack_anim_duration * 0.75
-	_check(actor.attack_cooldown_left > 0.0, "The real Threadbinder Attack starts")
-	await _capture("solo_attack", "THREADBINDER / ATTACK", "One shuttle reaches forward as the other draws back during the real Attack pose.")
+	_check(actor.attack_cooldown_left > 0.0, "The real Effigy Keeper Attack starts")
+	await _capture("solo_attack", "EFFIGY KEEPER / ATTACK", "The first real Attack stays at the body and plants a fixed effigy ahead.")
 	actor.attack_anim_time_left = actor.attack_anim_duration * 0.2
-	await _capture("solo_release", "THREADBINDER / ATTACK RELEASE", "The shuttles return through the Attack animation without changing its damage shape.")
+	await _capture("solo_release", "EFFIGY KEEPER / ATTACK RELEASE", "The control bar settles while the placed effigy remains fixed on the battlefield.")
 	_make_party(["threadbinder"])
 	Input.action_press("dash")
 	actor._try_start_dash(Vector2(-0.65, 0.75).normalized())
 	actor.velocity = actor.dash_direction * actor.dash_speed
-	_check(actor._is_dash_active(), "The real Threadbinder dash starts")
-	await _capture("solo_dash", "THREADBINDER / DASH", "The thread follows the actual diagonal dash while the shuttles tuck toward the core.")
+	_check(actor._is_dash_active(), "The real Effigy Keeper dash starts")
+	await _capture("solo_dash", "EFFIGY KEEPER / DASH", "A normal Dash moves the Keeper and recalls any deployed effigy.")
 	Input.action_release("dash")
 	_make_party(CHARACTER.get_launch_character_ids())
 	_check(party.size() == 5, "The visual roster includes all five playable characters")
-	await _capture("full_roster", "PLAYABLE ROSTER / FIVE IDENTITIES", "Shield, orbiting glyphs, blade, lance and paired shuttles remain distinct at gameplay scale.")
+	await _capture("full_roster", "PLAYABLE ROSTER / FIVE IDENTITIES", "Shield, orbiting glyphs, blade, lance and control bar remain distinct at gameplay scale.")
 	_make_party(["threadbinder", "threadbinder", "threadbinder", "threadbinder"], true)
-	await _capture("duplicates_pool", "THREADBINDER / FOUR PARTY VARIANTS", "Actual registry color variants retain the same ivory shuttle silhouette.")
+	await _capture("duplicates_pool", "EFFIGY KEEPER / FOUR PARTY VARIANTS", "Actual registry color variants retain the same ivory control-bar silhouette.")
 	_set_room_size(DEFINITIONS.TRIAL_ROOM_SIZE)
 	for index in party.size():
 		party[index].position = [Vector2(-250.0, -95.0), Vector2(230.0, -95.0), Vector2(-250.0, 130.0), Vector2(230.0, 130.0)][index]
-	await _capture("duplicates_trial", "THREADBINDER / LARGE ROOM PARTY SCALE", "Four palette variants at the larger trial-room camera fit, with their normal player bodies.")
-	await _passive_switch_frame()
+	await _capture("duplicates_trial", "EFFIGY KEEPER / LARGE ROOM PARTY SCALE", "Four palette variants at the larger trial-room camera fit, with their normal player bodies.")
+	await _effigy_loop_frames()
 	for member in party:
 		member.discard_pending_combat_input()
 	EnemyReplicationService.unbind_world(room)
@@ -104,7 +104,7 @@ func _run() -> void:
 	await process_frame
 	_check(await retirement.wait_until_retired(self), "Native audio retires before renderer exit")
 	FileAccess.open(output_directory.path_join("manifest.json"), FileAccess.WRITE).store_string(JSON.stringify({"gpu": RenderingServer.get_video_adapter_name(), "frames": frames, "failures": failures}, "\t"))
-	print("[OK] Threadbinder GPU: %d frames, %d checks, %d failures" % [frames.size(), checks, failures.size()])
+	print("[OK] Effigy Keeper GPU: %d frames, %d checks, %d failures" % [frames.size(), checks, failures.size()])
 	print("THREADBINDER_FRAMES=" + output_directory)
 	quit(0 if failures.is_empty() else 1)
 
@@ -161,7 +161,7 @@ func _mechanical_state(member: Actor) -> Dictionary:
 		"collision": (collider.shape as CircleShape2D).radius,
 		"attack": [member.attack_cooldown_left, member.attack_anim_time_left],
 		"dash": [member.dash_remaining_distance, member._dash_damage_immune_left],
-		"thread": [member.cross_stitch_window_left, member.cross_stitch_target_network_id, member.cross_stitch_target.get_ref().get_instance_id() if member.cross_stitch_target != null and member.cross_stitch_target.get_ref() != null else 0]
+		"effigy": [member.effigy_deployed, member.effigy_position, member.effigy_action_seq]
 	}
 
 func _visible_enemy(position: Vector2) -> VisibleEnemy:
@@ -171,25 +171,48 @@ func _visible_enemy(position: Vector2) -> VisibleEnemy:
 	enemy.position = position
 	return enemy
 
-func _passive_switch_frame() -> void:
+func _effigy_loop_frames() -> void:
 	_set_room_size(DEFINITIONS.POOL_ROOM_SIZE)
 	_make_party(["threadbinder"])
-	var previous := _visible_enemy(Vector2(65.0, 0.0))
-	var next := _visible_enemy(Vector2(-65.0, 0.0))
-	var collateral := _visible_enemy(Vector2(95.0, 30.0))
+	actor.position = Vector2(-160.0, 70.0)
+	actor.aim = Vector2.RIGHT
+	var body_foe := _visible_enemy(Vector2(-120.0, 70.0))
+	var effigy_foe := _visible_enemy(Vector2(60.0, 70.0))
 	await physics_frame
 	await physics_frame
-	_check(actor._perform_melee_attack(Vector2.RIGHT, {"damage": actor.damage, "damage_coefficient": 1.0}), "The first real Attack connects in the render fixture")
-	_check(actor.cross_stitch_target != null and actor.cross_stitch_target.get_ref() == previous, "Accepted Attack damage threads the previous foe")
-	actor.aim = Vector2.LEFT
 	actor._try_execute_attack(actor.aim)
+	var anchor := actor.effigy_position
+	_check(actor.effigy_deployed and anchor.is_equal_approx(Vector2(20.0, 70.0)), "A real first Attack plants the fixed effigy 180px ahead")
+	_check(body_foe.accepted_sources.count("melee") == 1 and effigy_foe.accepted_sources.is_empty(), "Deployment renders and damages only through the body strike")
+	await _capture("effigy_deployed", "EFFIGY COMMAND / DEPLOYMENT", "The first Attack strikes beside the Keeper while the effigy appears ahead.")
+	actor.position = Vector2(-160.0, -110.0)
+	actor.velocity = Vector2.UP * actor.max_speed
+	_check(actor.effigy_position == anchor, "Walking away preserves the fixed battlefield effigy")
+	await _capture("effigy_separated", "EFFIGY COMMAND / WALK AWAY", "The Keeper moves; the effigy keeps its battlefield position and remains the Attack origin.")
+	actor.velocity = Vector2.ZERO
+	actor.attack_cooldown_left = 0.0
+	actor.attack_lock_time_left = 0.0
+	actor._try_execute_attack(Vector2.RIGHT)
 	actor.attack_anim_time_left = actor.attack_anim_duration * 0.75
-	_check(actor.cross_stitch_target != null and actor.cross_stitch_target.get_ref() == next, "A second real Attack transfers the thread to the next foe")
-	_check(previous.accepted_sources.count("cross_stitch_burst") == 1 and collateral.accepted_sources.count("cross_stitch_burst") == 1, "The actual switch Burst damages the previous foe and nearby collateral exactly once")
-	await _capture("passive_switch", "CROSS STITCH / ACCEPTED TARGET SWITCH", "The new foe receives the thread and Mark; the previous foe releases the actual nearby Burst.")
-	for enemy in [previous, next, collateral]:
-		enemy.free()
-	actor._clear_cross_stitch()
+	_check(effigy_foe.accepted_sources.count("melee") == 1 and body_foe.accepted_sources.count("melee") == 1, "The second real Attack hits at the effigy without a duplicate strike at the body")
+	await _capture("effigy_attack", "EFFIGY COMMAND / ATTACK FROM THE ANCHOR", "One real Attack swings at the fixed effigy while the Keeper remains away from the foe.")
+	actor.attack_lock_time_left = 0.0
+	actor.dash_cooldown_left = 0.0
+	Input.action_press("dash")
+	actor._try_start_dash(Vector2.LEFT)
+	Input.action_release("dash")
+	_check(actor._is_dash_active() and not actor.effigy_deployed, "Actual normal Dash removes the deployed effigy")
+	await _capture("effigy_recalled", "EFFIGY COMMAND / DASH TO RECALL", "Normal Dash recalls the effigy. The next Attack can place it from the Keeper's new position.")
+	body_foe.free()
+	effigy_foe.free()
+	_make_party(["threadbinder", "threadbinder", "threadbinder", "threadbinder"], true)
+	for index in party.size():
+		var member := party[index]
+		member.position = [Vector2(-280.0,-120.0),Vector2(180.0,-120.0),Vector2(-280.0,120.0),Vector2(180.0,120.0)][index]
+		member.aim = Vector2.RIGHT
+		member._try_execute_attack(member.aim)
+		_check(member.effigy_deployed, "Each duplicate Keeper plants its own visible effigy")
+	await _capture("effigy_party", "EFFIGY COMMAND / FOUR INDEPENDENT KEEPERS", "Each palette identifies its Keeper and fixed effigy at the ordinary party camera fit.")
 
 func _capture(name: String, title: String, explanation: String) -> void:
 	heading.text = title

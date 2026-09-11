@@ -78,10 +78,10 @@ func _test_terrain_families() -> void:
 					for obstacle_index in first.size():
 						var obstacle := first[obstacle_index]
 						family_matches = family_matches and String(obstacle.get("type", "")) == ("boulder" if biome_id == "crumble" else "")
-						var brittle := biome_id == "shatterfield" and label == "Crossfire" and obstacle_index in [1, 2]
+						var brittle := biome_id == "shatterfield" and obstacle_index in [1, 2]
 						cover_matches = cover_matches and (obstacle.get("break_contacts", 0) == 3 if brittle else not obstacle.has("break_contacts"))
 				check(deterministic and family_matches, "Ordinary rooms consistently resolve their seeded biome family: %s/%s/%s" % [biome_id, label, room_size])
-				check(cover_matches, "Only Shatterfield Crossfire's inner columns use three-contact brittle cover: %s/%s/%s" % [biome_id, label, room_size])
+				check(cover_matches, "Every ordinary Shatterfield room has three-contact inner columns and permanent outer cover: %s/%s/%s" % [biome_id, label, room_size])
 				check(safe, "Terrain preserves center, perimeter and useful gaps in every sampled layout: %s/%s/%s" % [biome_id, label, room_size])
 
 func _geometry_signature(layout: Array[Dictionary]) -> String:

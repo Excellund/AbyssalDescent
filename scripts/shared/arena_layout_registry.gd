@@ -125,9 +125,9 @@ static func pick_layout(encounter_label: String, room_size: Vector2, rng: Random
 		if chosen.begins_with("rubble_gates"):
 			entry["radius"] = BOULDER_RADIUS
 			entry["type"] = "boulder"
-		# A small biome-specific pilot: outer shelter stays permanent while the
-		# two inner columns can be deliberately opened into a crossing lane.
-		if biome_id == "shatterfield" and encounter_label == "Crossfire" and index in [1, 2]:
+		# Every ordinary Shatterfield room offers the same shelter/route choice.
+		# Specialist layouts retain their authored cover.
+		if biome_id == "shatterfield" and encounter_label in BIOME_TERRAIN_ENCOUNTERS and index in [1, 2]:
 			entry["break_contacts"] = 3
 		out.append(entry)
 	return out

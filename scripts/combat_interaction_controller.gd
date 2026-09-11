@@ -117,6 +117,16 @@ func has_attack_hit(action: Dictionary, target_id: int) -> bool:
 	var ledger: Dictionary = _roots[int(action.seq)]
 	return (ledger.get("attack_targets", {}) as Dictionary).has(target_id)
 
+func store_attack_start(action: Dictionary, state: Dictionary) -> void:
+	var ledger := _ledger(action)
+	if not ledger.is_empty() and not ledger.has("attack_start"):
+		ledger["attack_start"] = state.duplicate(true)
+
+func get_attack_start(action: Dictionary) -> Dictionary:
+	if not accepts_action(action) or not _roots.has(int(action.get("seq", 0))):
+		return {}
+	return (_roots[int(action.seq)] as Dictionary).get("attack_start", {})
+
 func has_reaction(action: Dictionary, rule: String, target_id: int = 0) -> bool:
 	if rule.is_empty() or rule.length() > 48 or target_id < 0 or not accepts_action(action) or not _roots.has(int(action.seq)):
 		return false

@@ -41,6 +41,7 @@ func setup_actors(client_id: int) -> void:
 		if id == 102:
 			target.health_state.current_health = 10
 		world.enemy_state_sync_broadcaster.register_enemy(target, id)
+	_begin_reward_run()
 
 func host_scenarios(client_id: int) -> void:
 	joiner_id = client_id
@@ -59,8 +60,9 @@ func host_scenarios(client_id: int) -> void:
 	check(events.size() == 2 and events[1].attack_origin.x > 100.0, "Return leg supplies its new approach origin over the actual damage RPC")
 	check(world.damage_events.size() == 2 and world.damage_events.all(func(event: Dictionary) -> bool: return event.peer == client_id and event.amount == 52), "Host accounts both bounded legs exactly once for the joiner")
 	world.fixture_command.rpc_id(client_id, "kill")
-	check(await until(func(): return world.kill_peers.size() == 1 and enemy(103).velocity.x > 0.0), "A blade kill retains credit and activates the owner's existing Edict effect")
-	check(world.kill_peers == [client_id] and not enemy(103).get_launch_state().active, "Secondary kill ownership and suppression survive the Edict response RPC")
+	check(await until(func(): return world.kill_peers.size() == 1 and enemy(103).is_slowed()), "A real blade kill activates the host's Edict Burst and survivor Slow")
+	var edict_hits: Array = (enemy(103) as CrescentEnemy).received_hits.filter(func(context: Dictionary) -> bool: return String(context.get("attack_type", "")) == "edict_court")
+	check(edict_hits.size() == 1 and world.kill_peers == [client_id] and not enemy(103).get_launch_state().active and enemy(103).velocity.is_zero_approx(), "One authenticated Edict Burst retains secondary kill ownership without Push or a second launch")
 	world.fixture_command.rpc_id(client_id, "inspect_kill")
 	check(await until(func(): return results.has("kill")), "Joiner reports the production kill-notification scope")
 	if results.has("kill"):
@@ -87,6 +89,7 @@ func host_scenarios(client_id: int) -> void:
 func client_command(command: String, payload: Dictionary) -> void:
 	match command:
 		"outbound":
+			check(await until(func(): return not REWARD_INTERACTIONS.current_run().is_empty()), "Native blade Attack starts with the real current run token")
 			local_player._try_execute_attack(Vector2.RIGHT)
 			local_player.returning_crescent.tick(0.18)
 			PlayerReplicationService._flush_pending_cue_events()

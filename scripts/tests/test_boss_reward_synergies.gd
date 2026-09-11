@@ -107,7 +107,7 @@ func _test_native_electric_engine() -> void:
 			player.static_wake_controller.tick(.25)
 			_check((player.convergence_window_left > 0.0) == (charge == every - 1), "Native Wake reaches the learned L%d Convergence threshold on charge %d" % [level, charge + 1])
 		var wake_hit: Dictionary = wake_target.hits[0]
-		var wake_raw := float(player.static_wake_damage) * 6.0 * .25
+		var wake_raw := float(player.static_wake_damage) * 4.5 * .25
 		var wake_coefficient := wake_raw / float(player.damage)
 		var field_multiplier := 1.14 + float(player.void_echo_damage) * .0015
 		var wake_expected := int(floor((wake_raw + wake_coefficient * player.first_strike_bonus_damage) * field_multiplier + .000000001))

@@ -30,6 +30,7 @@ func _run() -> void:
 		quit(1)
 		return
 	await _test_pyre_lifetime()
+	await _test_pyre_visibility_lifecycle()
 	await _test_all_bearings()
 	await _test_motion()
 	await _test_history_boundaries()
@@ -64,6 +65,51 @@ func _test_pyre_lifetime() -> void:
 	remote_field._process(0.5)
 	_check(remote_field.target == null and remote_field.tick_damage == 0 and actor.get_current_health() == 100, "Real World replica Pyre path keeps null target and zero damage")
 	remote_field.queue_free()
+	await _done()
+
+func _test_pyre_visibility_lifecycle() -> void:
+	_setup_toll()
+	actor.global_position = Vector2(400.0, 0.0)
+	var field := FIELD.new()
+	room.add_child(field)
+	field.set_process(false)
+	field.initialize(actor, 94.0, 6.5, 0.42, 7)
+	var previous_elapsed := 0.0
+	var previous_ratio := 1.0
+	for elapsed: float in [0.0, 0.8, 3.25, 5.5, 6.0, 6.49]:
+		if elapsed > previous_elapsed:
+			field._process(elapsed - previous_elapsed)
+		var visual: Dictionary = field.get_visual_state()
+		_check(visual.active and field.visible and not field.is_queued_for_deletion(), "Pyre remains visibly active at %.2fs while its lifetime permits damage" % elapsed)
+		_check(float(visual.fill_alpha) >= 0.14 and float(visual.inner_alpha) > 0.0 and float(visual.boundary_alpha) >= 0.7, "Pyre keeps readable fill and boundary at %.2fs, including after flashes and near expiry" % elapsed)
+		_check(float(visual.remaining_ratio) > 0.0 and float(visual.remaining_ratio) <= previous_ratio, "Pyre countdown decreases without fading its active danger at %.2fs" % elapsed)
+		if elapsed <= 5.5:
+			_check(not visual.expiry_warning, "Pyre does not signal imminent expiry during its main active lifetime")
+		elif elapsed >= 6.0:
+			_check(visual.expiry_warning, "Pyre gives a cosmetic countdown warning while late damage remains active")
+		previous_elapsed = elapsed
+		previous_ratio = float(visual.remaining_ratio)
+	_check(actor.get_current_health() == 100 and is_equal_approx(field.current_radius, 94.0), "Pyre retains its full damage radius without reaching a player outside it")
+	actor.global_position = Vector2(field.current_radius, 0.0)
+	field.tick_left = 0.001
+	field._process(0.005)
+	var late_visual: Dictionary = field.get_visual_state()
+	_check(actor.get_current_health() == 93 and late_visual.active and float(late_visual.boundary_alpha) >= 0.7, "A due tick on Pyre's exact radius remains visibly advertised during its final active interval")
+	field._process(0.01)
+	var expired_visual: Dictionary = field.get_visual_state()
+	_check(field.is_queued_for_deletion() and not field.visible and not expired_visual.active, "Pyre hides immediately when its damage lifetime ends, before deferred deletion")
+	_check(float(expired_visual.fill_alpha) == 0.0 and float(expired_visual.inner_alpha) == 0.0 and float(expired_visual.boundary_alpha) == 0.0 and float(expired_visual.remaining_ratio) == 0.0, "Expired Pyre has no lingering danger fill, boundary or countdown")
+	_check(actor.get_current_health() == 93, "Visual expiry does not add a damage tick")
+	field._process(1.0)
+	_check(actor.get_current_health() == 93 and not field.get_visual_state().active, "Deferred deletion cannot reactivate expired Pyre damage or presentation")
+	await _done()
+	_setup_toll()
+	var cancelled := FIELD.new()
+	room.add_child(cancelled)
+	cancelled.set_process(false)
+	cancelled.initialize(actor, 94.0, 6.5, 0.42, 7)
+	cancelled.queue_free()
+	_check(cancelled.time_left > 0.0 and not cancelled.get_visual_state().active, "Room cleanup cancels Pyre presentation even when its lifetime has time remaining")
 	await _done()
 
 func _test_all_bearings() -> void:

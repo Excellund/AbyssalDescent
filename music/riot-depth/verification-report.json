@@ -1,0 +1,21 @@
+{
+  "frames": 3949714,
+  "sample_rate": 48000,
+  "aligned_layers": 4,
+  "decoded_mp3_duration": 82.28570833333333,
+  "transition_peaks_dbfs": {
+    "combat->doors": -10.19,
+    "combat->reward": -8.52,
+    "doors->combat": -6.79,
+    "doors->reward": -12.93,
+    "reward->combat": -6.33,
+    "reward->doors": -15.18
+  },
+  "decoded_mp3_sample_peak_dbfs": -2.828751216623722,
+  "descriptive_energy_percent": {
+    "below125": 28.82,
+    "125to500": 54.72,
+    "500to2000": 13.84,
+    "above2000": 2.61
+  }
+}

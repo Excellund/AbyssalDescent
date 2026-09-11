@@ -50,7 +50,9 @@ func _check_passive_labels(menu: MENU, viewport_size: Vector2i) -> void:
 			continue
 		check(label.text == MENU.CHARACTER_PASSIVES.get_short_description(passive_id), "Selection displays the shared passive rules: " + character_id)
 		check(label.text.contains("[b][color=#") and not label.get_parsed_text().contains("{kw:"), "Selection renders authored keyword emphasis: " + character_id)
-		check(label.get_theme_font_size("normal_font_size") == 14 and label.get_theme_font_size("bold_font_size") == 14, "Passive keywords retain the body size: " + character_id)
+		var body_size := label.get_theme_font_size("normal_font_size")
+		var rendered_size := float(body_size) * absf(label.get_global_transform().get_scale().y)
+		check(label.get_theme_font_size("bold_font_size") == body_size and rendered_size >= 11.0, "Passive keywords match readable body text at every supported size: " + character_id)
 		check(label.fit_content and not label.scroll_active and label.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Passive text fits and leaves the character button interactive")
 		check(label.get_content_height() <= label.size.y + 1.0 and label.get_content_width() <= label.size.x + 1.0, "Full passive text fits at %s: %s" % [viewport_size, character_id])
 		check(menu.character_buttons[index].get_global_rect().grow(1.0).encloses(label.get_global_rect()), "Passive remains inside its selection row at %s: %s" % [viewport_size, character_id])

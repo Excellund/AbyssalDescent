@@ -82,13 +82,18 @@ const CHARACTER_DEFINITIONS := {
 	},
 	ENUMS.CHARACTER_ID_THREADBINDER: {
 		"id": ENUMS.CHARACTER_ID_THREADBINDER,
-		"name": "Threadbinder",
-		"archetype": "Keeper of Loose Ends",
+		"name": "Effigy Keeper",
+		"archetype": "The Distant Hand",
 		"boss_opposition": "The Court",
-		"tagline": "Weave between foes, leave them vulnerable, and pull the fight apart.",
-		"lore": "Threadbinder carries the ivory shuttles once used to mend the descent's torn paths. Now they stitch enemies into the same doomed pattern. Each new foe draws the thread tight around the last, rewarding deliberate target changes while leaving openings for the whole party.",
+		"tagline": "Place your effigy, strike through it, and make the fight come to you.",
+		"lore": "The Court demanded a body. The Keeper sent a likeness. A little ivory figure now walks the old bargains in their place, held by the only thread the Court has never learned to cut. Set it where the fight will happen. Keep yourself somewhere else.",
+		"design_lanes": {
+			"survivability": "Walk around a useful attack position while keeping your body out of danger.",
+			"expression": "Place one effigy and aim your real Attacks from its fixed position.",
+			"mastery": "Choose when to keep an established angle and when to spend Dash to recall and reposition."
+		},
 		"arcana_pool_key": "threadbinder",
-		"passive_id": "cross_stitch",
+		"passive_id": "effigy_command",
 		"stat_modifiers": {
 			"max_health": 90,
 			"max_speed": 225.0,

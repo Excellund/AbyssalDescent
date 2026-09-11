@@ -4,21 +4,22 @@ extends RefCounted
 const KEYWORDS := preload("res://scripts/shared/combat_keyword_catalogue.gd")
 
 const PASSIVES := {
-	"cross_stitch": {
-		"name": "Cross Stitch",
-		"short": "Your first {kw:attack_hit} {kw:mark|Marks} a foe for 4s. Switch foes on another {kw:attack} within 4s to {kw:burst} at the previous foe, if nearby.",
+	"effigy_command": {
+		"name": "Effigy Command",
+		"short": "{kw:attack} to place your effigy ahead. Later {kw:attack|Attacks} strike from it. Walk to keep its position; {kw:dash} to recall it.",
+		"build": "Your first {kw:attack} places an effigy ahead. Later {kw:attack|Attacks} strike from its fixed position with your normal damage and reach. Walk to keep that position; {kw:dash} to recall it and place it again.",
 		"rules": [
-			"The first accepted {kw:attack_hit} of each {kw:attack} applies 12% {kw:mark} for 4s and threads that foe for 4s.",
-			"Switch to a different foe with another {kw:attack} while the thread lasts to release a {kw:burst} at the previous foe.",
-			"The previous foe must still be alive and within 240 range of you. The {kw:burst} reaches foes within 48 range of its center.",
-			"The {kw:burst} deals 60% of the new attack's damage basis; each foe's conditions apply separately.",
-			"Melee, extended arcs and charged blasts qualify. Only the first accepted foe counts per original {kw:attack}, even in a wide swing.",
-			"Striking the same foe refreshes its {kw:mark} and thread without a {kw:burst}. Misses, rejected contacts and automatic damage do not change the thread.",
-			"{kw:mark} benefits all players; the thread belongs to you. {kw:burst|Bursts} deal damage without another {kw:attack_hit} or a new {kw:mark}."
+			"With no effigy placed, your next {kw:attack} plants one up to 180 range ahead. This first strike still comes from your body, even if it misses.",
+			"Later deliberate {kw:attack|Attacks} strike from the effigy. Your Damage, reach, arc and {kw:attack_hit} powers apply to that one original {kw:attack}.",
+			"Aim each strike from the effigy's position. It stays where you placed it while you walk and when foes die.",
+			"A normal {kw:dash} recalls the effigy; your next {kw:attack} places it again. {kw:recoil} and {kw:orbit} keep it in place.",
+			"Holding {kw:dash} to begin {kw:orbit} still recalls during the initial {kw:dash}. You can place the effigy while orbiting and keep it there.",
+			"Charged {kw:attack|Attacks} also strike from the effigy, while their {kw:recoil} still moves your body.",
+			"You command one effigy. It clears when you leave the room or die."
 		],
-		"produces": ["damage", "mark", "burst"],
-		"accepts": ["attack_hit"],
-		"condition_text": "Only the first accepted melee, extended arc or charged blast contact per original Attack threads a foe. Switch foes within 4s for a Burst at the previous living foe within 240 range. Each player's thread is independent; Mark benefits everyone."
+		"produces": [],
+		"accepts": ["attack", "dash"],
+		"condition_text": "The first deliberate Attack places one effigy and strikes from your body. Later Attacks originate at the effigy and retain their original damage properties and reaction limits. Normal Dash recalls it; walking, Recoil and Orbit preserve its position."
 	},
 	"iron_retort": {
 		"name": "Iron Retort",

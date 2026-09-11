@@ -40,6 +40,7 @@ var _status_depth_label: Label
 var _status_biome_bg: Panel
 var _status_biome_label: RichTextLabel
 var _status_hint_label: Label
+var _status_biome_rule_label: Label
 var _status_obj_divider: Panel
 var _status_obj_line1: Label
 var _status_obj_line2: Label
@@ -68,6 +69,7 @@ var room_banner_title_label: Label
 var room_banner_subtitle_label: Label
 var room_banner_tween: Tween
 var room_banner_persistent_visible: bool = false
+var boss_intro_visible: bool = false
 var _mutator_icon_killbox: Texture2D
 var _mutator_icon_surge: Texture2D
 var _mutator_icon_relay_boost: Texture2D
@@ -97,6 +99,11 @@ var build_strip_boss_stack_labels: Array[Label] = []
 var _encounter_count: int = 5
 var _banner_top_margin: float = 18.0
 var _cached_room_size: Vector2 = Vector2.ZERO
+var _header_display_signature: Array = []
+var _build_display_signature: Array = []
+var _stats_display_signature: Array = []
+var _stats_layout_dirty: bool = true
+var _stats_layout_width: float = -1.0
 
 func _init() -> void:
 	add_child(power_registry_instance)
@@ -104,6 +111,11 @@ func _init() -> void:
 func setup(encounter_count: int, banner_top_margin: float = 18.0) -> void:
 	_encounter_count = encounter_count
 	_banner_top_margin = banner_top_margin
+	_header_display_signature.clear()
+	_build_display_signature.clear()
+	_stats_display_signature.clear()
+	_stats_layout_dirty = true
+	_stats_layout_width = -1.0
 	_create_hud()
 
 func refresh(state: Dictionary, player: Node) -> void:
@@ -112,13 +124,16 @@ func refresh(state: Dictionary, player: Node) -> void:
 		return
 	_cached_room_size = state.get("room_size", Vector2.ZERO) as Vector2
 	var viewport_size := viewport.get_visible_rect().size
-	_update_banner_layout(_cached_room_size, viewport.get_canvas_transform(), viewport_size)
+	if not boss_intro_visible:
+		_update_banner_layout(_cached_room_size, viewport.get_canvas_transform(), viewport_size)
 	_layout_hud_panels(viewport_size, _cached_room_size, viewport.get_canvas_transform())
 	_update_header_bar(state)
 	_update_status_panel_text(state)
 	_update_player_mutator_panel(state)
 	_update_stats_panel_text(player, state)
 	_update_build_strip(state, player)
+	if boss_intro_visible:
+		_update_banner_layout(_cached_room_size, viewport.get_canvas_transform(), viewport_size)
 	_update_combat_overlap_fade(state, player)
 
 
@@ -197,6 +212,7 @@ func _process(delta: float) -> void:
 	_biome_tooltip_panel.visible = true
 
 func show_banner(title: String, subtitle: String, subtitle_color: Color = Color(0.78, 0.9, 1.0, 0.92), hold_duration: float = 0.95) -> void:
+	boss_intro_visible = false
 	if room_banner_title_label == null or room_banner_subtitle_label == null:
 		return
 	room_banner_persistent_visible = false
@@ -225,6 +241,7 @@ func show_banner(title: String, subtitle: String, subtitle_color: Color = Color(
 
 
 func show_persistent_banner(title: String, subtitle: String, subtitle_color: Color = Color(0.78, 0.9, 1.0, 0.92)) -> void:
+	boss_intro_visible = false
 	if room_banner_title_label == null or room_banner_subtitle_label == null:
 		return
 	if is_instance_valid(room_banner_tween):
@@ -242,7 +259,29 @@ func show_persistent_banner(title: String, subtitle: String, subtitle_color: Col
 	room_banner_subtitle_label.visible = has_subtitle
 
 
+func show_boss_intro(title: String, greeting: String) -> void:
+	show_persistent_banner(title, "\"%s\"" % greeting, Color(0.92, 0.88, 0.8, 0.96))
+	if room_banner_title_label == null or room_banner_subtitle_label == null:
+		return
+	boss_intro_visible = true
+	var viewport := get_viewport()
+	if viewport != null:
+		_update_banner_layout(_cached_room_size, viewport.get_canvas_transform(), viewport.get_visible_rect().size)
+	room_banner_title_label.modulate.a = 0.0
+	room_banner_subtitle_label.modulate.a = 0.0
+	room_banner_tween = create_tween()
+	room_banner_tween.tween_property(room_banner_title_label, "modulate:a", 1.0, 0.2)
+	room_banner_tween.parallel().tween_property(room_banner_subtitle_label, "modulate:a", 1.0, 0.2)
+
+
+func hide_boss_intro() -> void:
+	# Never dismiss the higher-priority co-op waiting or reward banner.
+	if boss_intro_visible:
+		hide_persistent_banner()
+
+
 func hide_persistent_banner() -> void:
+	boss_intro_visible = false
 	if room_banner_title_label == null or room_banner_subtitle_label == null:
 		return
 	if not room_banner_persistent_visible:
@@ -413,6 +452,8 @@ func _create_hud() -> void:
 	stats_label.add_theme_constant_override("shadow_offset_x", 1)
 	stats_label.add_theme_constant_override("shadow_offset_y", 1)
 	stats_panel.add_child(stats_label)
+	stats_label.theme_changed.connect(_invalidate_stats_layout)
+	stats_label.minimum_size_changed.connect(_invalidate_stats_layout)
 
 	player_mutator_panel = Panel.new()
 	player_mutator_panel.custom_minimum_size = Vector2(HUD_INFO_PANEL_WIDTH, 136.0)
@@ -602,6 +643,20 @@ func _create_status_blocks() -> void:
 	_status_hint_label.text = "Move or Attack to engage"
 	_status_hint_label.visible = false
 	status_panel.add_child(_status_hint_label)
+	_status_biome_rule_label = Label.new()
+	_status_biome_rule_label.custom_minimum_size = Vector2(HUD_INFO_PANEL_WIDTH - 20.0, 54.0)
+	_status_biome_rule_label.size = _status_biome_rule_label.custom_minimum_size
+	_status_biome_rule_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_status_biome_rule_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_status_biome_rule_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_status_biome_rule_label.add_theme_font_size_override("font_size", 14)
+	_status_biome_rule_label.add_theme_color_override("font_color", Color(0.78, 0.92, 0.94, 0.96))
+	_status_biome_rule_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.90))
+	_status_biome_rule_label.add_theme_constant_override("shadow_offset_x", 1)
+	_status_biome_rule_label.add_theme_constant_override("shadow_offset_y", 1)
+	_status_biome_rule_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_status_biome_rule_label.visible = false
+	status_panel.add_child(_status_biome_rule_label)
 
 	# Thin divider above objective block
 	_status_obj_divider = Panel.new()
@@ -793,6 +848,14 @@ func _update_header_bar(state: Dictionary) -> void:
 	if _status_header_bear_name == null:
 		return
 	var tier := int(state.get("current_difficulty_tier", 0))
+	var active_biome_name := String(state.get("active_biome_name", ""))
+	var impact_text := String(state.get("active_biome_impact_text", ""))
+	var active_biome_accent := state.get("active_biome_accent", Color(0.62, 0.88, 0.94, 1.0)) as Color
+	var signature: Array = [tier, active_biome_name, active_biome_accent, impact_text]
+	if signature == _header_display_signature:
+		return
+	_header_display_signature = signature
+	_active_biome_impact_text = impact_text
 	var tier_color := _bearing_color_from_tier(tier)
 	_status_header_bear_name.text = _bearing_name_from_tier(tier)
 	_status_header_bear_name.add_theme_color_override("font_color", tier_color)
@@ -803,9 +866,6 @@ func _update_header_bar(state: Dictionary) -> void:
 		sbs.border_color = Color(tier_color.r, tier_color.g, tier_color.b, 0.72)
 		sbs.bg_color = Color(tier_color.r * 0.08, tier_color.g * 0.08, tier_color.b * 0.08, 0.82)
 		_status_header_bear_bg.add_theme_stylebox_override("panel", sbs)
-	var active_biome_name := String(state.get("active_biome_name", ""))
-	_active_biome_impact_text = String(state.get("active_biome_impact_text", ""))
-	var active_biome_accent := state.get("active_biome_accent", Color(0.62, 0.88, 0.94, 1.0)) as Color
 	if not active_biome_name.is_empty():
 		_status_header_biome_name.text = active_biome_name
 		_status_header_biome_name.add_theme_color_override("font_color", Color(active_biome_accent.r, active_biome_accent.g, active_biome_accent.b, 0.96))
@@ -858,10 +918,43 @@ func _update_banner_layout(room_size: Vector2, canvas_xform: Transform2D, viewpo
 		var room_top_world := Vector2(0.0, -room_size.y * 0.5)
 		var room_top_screen := canvas_xform * room_top_world
 		top_y = clampf(room_top_screen.y + _banner_top_margin, 16.0, viewport_size.y * 0.45)
+	if boss_intro_visible:
+		_layout_boss_intro(top_y, viewport_size)
+		return
+	for label: Label in [room_banner_title_label, room_banner_subtitle_label]:
+		label.autowrap_mode = TextServer.AUTOWRAP_OFF
+		label.offset_left = 0.0
+		label.offset_right = 0.0
 	room_banner_title_label.offset_top = top_y
 	room_banner_title_label.offset_bottom = top_y + 34.0
 	room_banner_subtitle_label.offset_top = top_y + 32.0
 	room_banner_subtitle_label.offset_bottom = top_y + 60.0
+
+
+func _layout_boss_intro(top_y: float, viewport_size: Vector2) -> void:
+	const GAP := 18.0
+	var left := GAP
+	var right := viewport_size.x - GAP
+	# Reserve the actual HUD columns, including their screen-space placement.
+	# A persistent quote must remain readable while the survey is resized.
+	for panel: Control in [status_panel, _status_header_bar, stats_panel]:
+		if is_instance_valid(panel) and panel.is_visible_in_tree():
+			left = maxf(left, panel.get_global_rect().end.x + GAP)
+	if is_instance_valid(player_mutator_panel) and player_mutator_panel.is_visible_in_tree():
+		right = minf(right, player_mutator_panel.get_global_rect().position.x - GAP)
+	var width := maxf(1.0, right - left)
+	var cursor_y := top_y
+	for label: Label in [room_banner_title_label, room_banner_subtitle_label]:
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		label.offset_left = left
+		label.offset_right = right - viewport_size.x
+		var font: Font = label.get_theme_font("font")
+		var font_size: int = label.get_theme_font_size("font_size")
+		var text_height: float = font.get_multiline_string_size(label.text, HORIZONTAL_ALIGNMENT_CENTER, width, font_size).y
+		var height := maxf(float(font_size) + 4.0, text_height + 4.0)
+		label.offset_top = cursor_y
+		label.offset_bottom = cursor_y + height
+		cursor_y += height + 4.0
 
 
 func _layout_hud_panels(viewport_size: Vector2, room_size: Vector2, canvas_xform: Transform2D) -> void:
@@ -941,6 +1034,7 @@ func _update_status_panel_text(state: Dictionary) -> void:
 		return
 	var run_cleared := bool(state.get("run_cleared", false))
 	var room_depth := int(state.get("room_depth", 0))
+	_status_biome_rule_label.visible = false
 
 	var y := 8.0
 
@@ -1005,6 +1099,18 @@ func _update_status_panel_text(state: Dictionary) -> void:
 		y += 18.0 + 3.0
 	else:
 		_status_hint_label.visible = false
+
+	var biome_rule_hint := String(state.get("active_biome_rule_hint", ""))
+	if not biome_rule_hint.is_empty():
+		# A compact room can become assistance before its first warning. Keep a
+		# still-fading biome banner in agreement without restarting its tween or
+		# replacing boss dialogue and other announcements.
+		if not boss_intro_visible and is_instance_valid(room_banner_title_label) and is_instance_valid(room_banner_subtitle_label) and room_banner_title_label.text == String(state.get("active_biome_name", "")) and room_banner_subtitle_label.text != biome_rule_hint:
+			room_banner_subtitle_label.text = biome_rule_hint
+		_status_biome_rule_label.text = biome_rule_hint
+		_status_biome_rule_label.position = Vector2(10.0, y)
+		_status_biome_rule_label.visible = true
+		y += maxf(54.0, _status_biome_rule_label.get_minimum_size().y) + 4.0
 
 	# ── Block 5: Objective card ───────────────────────────────────────────────
 	var objective_kind := String(state.get("active_objective_kind", ""))
@@ -1628,12 +1734,13 @@ func _update_stats_panel_text(player: Node, state: Dictionary) -> void:
 	if stats_label == null:
 		return
 	var timer_visible := bool(state.get("timer_visible_in_hud", true))
-	var elapsed_seconds := maxi(0, int(state.get("run_elapsed_seconds", 0)))
-	var timer_line := ""
-	if timer_visible:
-		timer_line = "\nRun Time: [color=#A8FFB0]%s[/color]" % _format_hud_timer(elapsed_seconds)
+	var elapsed_seconds := maxi(0, int(state.get("run_elapsed_seconds", 0))) if timer_visible else -1
 	if not is_instance_valid(player):
-		stats_label.text = "[b]Stats[/b]\nNo player%s" % timer_line
+		var empty_signature: Array = [0, timer_visible, elapsed_seconds]
+		if empty_signature != _stats_display_signature:
+			_stats_display_signature = empty_signature
+			var empty_timer := "\nRun Time: [color=#A8FFB0]%s[/color]" % _format_hud_timer(elapsed_seconds) if timer_visible else ""
+			stats_label.text = "[b]Stats[/b]\nNo player%s" % empty_timer
 		return
 
 	var hp: int = int(player.get_max_health())
@@ -1645,17 +1752,29 @@ func _update_stats_panel_text(player: Node, state: Dictionary) -> void:
 	var move_spd_base := float(player.get("max_speed"))
 	var ext_slow_mult := float(player.get("external_slow_mult"))
 	var ext_slow_left := float(player.get("external_slow_left"))
-	var move_spd_effective := move_spd_base * clampf(ext_slow_mult, 0.05, 1.0) if ext_slow_left > 0.0 else move_spd_base
-	var move_spd_text := ""
-	if ext_slow_left > 0.0 and ext_slow_mult < 1.0:
-		move_spd_text = "[color=#FF8080]%.0f[/color] [color=#FF8080](slowed)[/color]" % move_spd_effective
-	else:
-		move_spd_text = "[color=#BFD8FF]%.0f[/color]" % move_spd_base
+	var show_slow := ext_slow_left > 0.0 and ext_slow_mult < 1.0
+	var displayed_speed := move_spd_base * clampf(ext_slow_mult, 0.05, 1.0) if show_slow else move_spd_base
 	var dash_cd := float(player.get_effective_dash_cooldown())
 	var armor := int(player.get("iron_skin_armor"))
+	# Remaining Slow time is not displayed; only its live speed and expiry
+	# matter. Exact stat values retain the existing formatting and rounding.
+	var signature: Array = [player.get_instance_id(), hp_now, hp, dmg, atk_range, atk_arc, atk_cd, show_slow, displayed_speed, dash_cd, armor, timer_visible, elapsed_seconds]
+	if signature != _stats_display_signature:
+		_stats_display_signature = signature
+		var timer_line := "\nRun Time: [color=#A8FFB0]%s[/color]" % _format_hud_timer(elapsed_seconds) if timer_visible else ""
+		var move_spd_text := "[color=#FF8080]%.0f[/color] [color=#FF8080](slowed)[/color]" % displayed_speed if show_slow else "[color=#BFD8FF]%.0f[/color]" % displayed_speed
+		stats_label.text = "[b]Stats[/b]\nHealth: [color=#C8FFD8]%d/%d[/color]\nDamage: [color=#FFD8AA]%d[/color]\nAttack Range: [color=#FFD8AA]%.0f[/color]\nAttack Arc: [color=#FFD8AA]%.0f°[/color]\nAttack Speed: [color=#BFD8FF]%.2fs[/color]\nMove Speed: %s\nDash Cooldown: [color=#BFD8FF]%.2fs[/color]\nArmor: [color=#E8E8FF]%d[/color]%s" % [hp_now, hp, dmg, atk_range, atk_arc, atk_cd, move_spd_text, dash_cd, armor, timer_line]
+		_stats_layout_dirty = true
+	if _stats_layout_dirty or not is_equal_approx(_stats_layout_width, stats_label.size.x):
+		_stats_layout_dirty = false
+		_stats_layout_width = stats_label.size.x
+		_resize_stats_panel_to_content()
 
-	stats_label.text = "[b]Stats[/b]\nHealth: [color=#C8FFD8]%d/%d[/color]\nDamage: [color=#FFD8AA]%d[/color]\nAttack Range: [color=#FFD8AA]%.0f[/color]\nAttack Arc: [color=#FFD8AA]%.0f°[/color]\nAttack Speed: [color=#BFD8FF]%.2fs[/color]\nMove Speed: %s\nDash Cooldown: [color=#BFD8FF]%.2fs[/color]\nArmor: [color=#E8E8FF]%d[/color]%s" % [hp_now, hp, dmg, atk_range, atk_arc, atk_cd, move_spd_text, dash_cd, armor, timer_line]
-	_resize_stats_panel_to_content()
+
+func _invalidate_stats_layout() -> void:
+	# Native theme/minimum-size notifications also catch deferred text shaping.
+	# Clear this before fitting so a later notification can request another fit.
+	_stats_layout_dirty = true
 
 
 func _resize_stats_panel_to_content() -> void:
@@ -1682,15 +1801,30 @@ func _format_hud_timer(total_seconds: int) -> String:
 func _update_build_strip(state: Dictionary, player: Node) -> void:
 	if build_strip_panel == null:
 		return
-	# Get passive name from state and format it
 	var passive_id := String(state.get("current_character_passive_name", "Passive"))
-	var passive_display_name := _get_passive_display_name(passive_id)
-	if build_strip_passive_label != null:
-		build_strip_passive_label.text = "[center][b]%s[/b][/center]" % passive_display_name
-	# Get active boons and arcana from state
 	var active_boons := state.get("active_boons", []) as Array
 	var active_arcana := state.get("active_arcana", []) as Array
 	var active_boss_rewards := state.get("active_boss_rewards", []) as Array
+	var player_valid := is_instance_valid(player)
+	var signature: Array = [passive_id, player.get_instance_id() if player_valid else 0]
+	var categories: Array = [active_boons, active_arcana, active_boss_rewards]
+	for category_index in categories.size():
+		var ids: Array = categories[category_index]
+		signature.append(ids.size())
+		for id: String in ids:
+			var count := 0
+			if player_valid:
+				count = int(player.get_trial_power_stack_count(id)) if category_index == 1 else int(player.get_upgrade_stack_count(id))
+			signature.append(id)
+			signature.append(count)
+	# Store values, never the caller's mutable ID arrays. Live stack counts and
+	# instance identity cover rewards, restored builds and replacement actors.
+	if signature == _build_display_signature:
+		return
+	_build_display_signature = signature
+	var passive_display_name := _get_passive_display_name(passive_id)
+	if build_strip_passive_label != null:
+		build_strip_passive_label.text = "[center][b]%s[/b][/center]" % passive_display_name
 	# Update boon chips
 	for i in range(build_strip_boon_chips.size()):
 		var chip := build_strip_boon_chips[i]

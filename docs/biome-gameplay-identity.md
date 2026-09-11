@@ -1,6 +1,55 @@
 # Biome gameplay identity
 
-Feedback **FB-196f4f3b86324f66** asks for biomes that change player decisions, rather than only the arena palette. Implementation lives on `codex/feedback-196f4f3b-biome-identity`, based on committed main `922a4b576165f6af8477f69bc4c41a48f64916b1`.
+The later workday revision extends effects to every combat route. Current room modes, objective-space rules and verification are recorded in [biome-room-coverage-20260911.md](biome-room-coverage-20260911.md). The ordinary-room implementation and its earlier verification below remain historical context.
+
+Feedback **FB-196f4f3b86324f66** asks for biomes that change player decisions, rather than only the arena palette. The September 11 revision develops that feedback on the combined playtest branch under claim `codex/combined-playtest-20260910/revision-20260911`. The earlier terrain-only implementation and its validation remain recorded below for history.
+
+## September 11: ordinary-room rules
+
+Each ordinary combat room has one dependable biome rule alongside its existing terrain and enemy mixture. The current implementation uses a shared room-owned controller in `scripts/core/biome_rule_controller.gd`, plus the existing irreversible cover controller. The character redesign remains research only; these rules do not modify character kits.
+
+| Biome | Visible rule | Player decision |
+|---|---|---|
+| Crumble | A boulder gap warns before rubble lands at that fixed position. | Change gaps, or lead pursuers into the falling rubble. |
+| Haunt | A shadow patch beside cover warns, then Slows occupants to 60% movement speed while they remain inside. | Trade protected positioning for mobility, or lead pursuing foes through the patch. |
+| Shatterfield | Three deliberate Attack contacts destroy either cracked inner column in every ordinary room. Outer columns remain permanent. | Preserve arrow protection or open a crossing lane. |
+| Grinding Vault | Pressure alternates between the center and a bounded outer ring. | Move into the clearly unlit space before the pulse; both sides of the outer band remain usable. |
+| Storm Reach | Lightning marks one living player's position, locks it, then strikes that spot. Successive strikes rotate between living players. | Bait lightning near foes and move out of the marked circle. |
+| Hollow | A narrow danger strip alternates between the two fighting lanes. | Step off the marked strip or cross through the spine's gaps. |
+| Void Breach | A floor band advances through three positions, preserving a broad gap that changes sides. | Use the visible gap or leave the band before it activates. |
+| Maelstrom | A bounded sector advances around the central columns in discrete steps. | Move to the unlit side or outside the sector's outer edge. |
+| Convergence | Two opposite gate openings warn and pulse, then the other pair takes its turn. Warnings follow the actual posts in both normal and diagonal layouts. | Use the other pair of gates while the marked openings are active. |
+
+Only one environmental event can exist at a time. The default cycle has 2.5 seconds of recovery, a 1.4-second warning and 0.85 seconds of visible activation. Haunt's active patch lasts three seconds. Timers freeze during survey, modal pauses and inactive combat; warnings and active shapes hide while combat is suspended. Room cleanup discards all pending effects.
+
+Storm and Crumble resolve one impact at the transition from warning to active; their lingering flash cannot hit a second time. Other damage zones can catch an actor entering during their brief active window, at most once per actor and event. Default player damage is 8 before normal armor/resistance, or 10 for Storm; enemy damage is 35, or 50 for Storm. Haunt deals no damage. Its Slow expires within 0.22 seconds of leaving the visible patch and refreshes only while inside; it applies on the owning peer for player movement and on authority for enemy movement.
+
+Warnings outline the exact future collision geometry and show a shrinking timer. The controller uses circles, bounded rings, strips with safe gaps, and sectors; damage never extends beyond the visible arena bounds. Hollow strips are at most 160 units wide, the Vault outer ring is 150 units thick, and Maelstrom sectors reach at most 340 units, retaining walking exits for the slowest starting character without requiring an optional Dash upgrade. Cover and existing enemy warnings remain separate: columns stop arrows, not these floor effects.
+
+Environmental damage uses native enemy protection and player damage boundaries, with explicit environmental context. It has no player Damage coefficient, Attack, Electric generator ownership, Mark application or player power reaction. Environmental kills still advance room and objective progress; they neither award a player's kill nor activate kill-triggered powers. The controller's synchronous environmental-damage guard remains active until enemy damage returns, including a reset triggered by a death callback.
+
+The world configures the controller only for ordinary labels, using the current run token, room ID, selected biome and resolved obstacle layout. Authority publishes committed geometry and phase transitions; replicas do not choose strikes or deal duplicate damage. Snapshots carry `run`, `room`, `revision`, `id`, `phase`, remaining/duration clocks, event number, shape and Slow multiplier. Wrong-run, wrong-room, stale, malformed and backward-event states are rejected. Boundary checkpoints contain no active environmental event, and previously offered cover retains its serialized geometry.
+
+The HUD retains a concise rule and response during ordinary combat, including after survey ends, while inspection supplies the full explanation. Breach, Undertow, Missions, Trials, Apex encounters, tutorials, rest sites and bosses retain their authored arenas and receive no new environmental rule.
+
+### Revision verification
+
+The isolated `test_biome_rules.gd` fixture exercises geometry, warning-before-damage, committed Storm baiting, per-event hit limits, enemy/player amounts, Haunt ownership, lifecycle and snapshot rejection. It checks walking escape routes around inflated cover across two ordinary room sizes and eight event orientations, as well as Convergence's actual gate centers. Existing identity and native cover fixtures now cover cracked Shatterfield columns in all eleven ordinary encounter labels.
+
+The new `test_biome_rules_enet.gd` fixture uses two native Main instances and actual world RPCs to check all nine configurations, host-owned damage, native health replication, pending next-room warnings, locally owned Slow, stale-state rejection and specialist-room cleanup. Run it through `test_boss_combinations_enet.ps1` with `-FixtureScript res://scripts/tests/test_biome_rules_enet.gd -FixtureTimeoutSeconds 90` and a disposable `-ValidationProject`.
+
+The new `render_biome_rules.gd` fixture captures eighteen production frames: warning and active states for eight timed rules, plus Shatterfield's intact and opened cover. Run it through `render_gameplay_fixture.ps1` with `-FrameFolder biome_rules_frames -ExpectedFrames 18 -MaxFrames 1600`.
+
+Verified September 11, 2026:
+
+- All 349 scripts compiled; world-property and multiplayer-configuration guards passed. Biome rules: 392 checks; identity: 1,182; native cover: 228; descent presentation: 145; glossary readability: 189; combat pause: 36. All passed in `C:/Users/mikel/AppData/Local/Temp/abyssal-validation-afdca77a5fcd4a68abec42215bc24e23`.
+- The collision-aware escape matrix sampled 9,982 affected grid positions. Its longest verified walking route was 181.0 units, within the 263.2-unit distance Bastion can walk during the 1.4-second warning. This verifies the authored terrain and hazard geometry; live enemies can still affect a player's chosen route.
+- Native two-process ENet passed 235 host and 246 client checks, with no failures. Evidence: `C:/Users/mikel/AppData/Local/Temp/abyssal-enet-dbede7b7b60c4cf19501968cfd5daaf8`.
+- RTX 4080 rendering passed 18 frames and 259 checks. Warning/activation pairs retain matching geometry and readable HUD instructions; the rendered Convergence patches align with the actual gate openings. Evidence: `C:/Users/mikel/AppData/Local/Temp/abyssal-gameplay-render-60cd06286f2d4a3ea94512e0f888a56d/biome_rules_frames`. The fixture stages frozen actors and manually advances rule phases for inspection, so its retained survey banner does not indicate live hazards during survey; runtime and native Main tests verify that lifecycle boundary separately.
+
+Earlier counts below validate the prior terrain implementation. Human playtesting still determines whether each new rule reads clearly, preserves comfortable routing alongside enemy attacks and remains enjoyable over a full act.
+
+## Earlier terrain implementation
 
 ## Acceptance condition
 

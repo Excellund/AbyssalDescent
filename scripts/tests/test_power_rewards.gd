@@ -203,17 +203,17 @@ func _test_derived_arc_and_descriptions(registry: Node) -> void:
 	_check(phantom_text.contains(str(player.get("phantom_step_damage"))), "Phantom Step description displays applied damage")
 	_check(not phantom_text.contains("0%"), "Phantom Step description does not show missing ratio as zero")
 	upgrades.apply_trial_power("static_wake")
-	_check(upgrades.get_power_current_description("static_wake").contains("270%"), "Static Wake description displays real ratio")
+	_check(upgrades.get_power_current_description("static_wake").contains("%.0f%%" % 202.5), "Static Wake description rounds its reduced 202.5% per-second ratio")
 	upgrades.apply_trial_power("static_wake")
 	upgrades.apply_trial_power("static_wake")
-	_check(upgrades.get_trial_power_card_description("static_wake").contains("630%"), "Static Wake Prismatic preview includes its damage increase")
+	_check(upgrades.get_trial_power_card_description("static_wake").contains("472%"), "Static Wake Prismatic preview displays its reduced ratio at current integer precision")
 	upgrades.apply_trial_power("static_wake")
-	_check(upgrades.get_power_current_description("static_wake").contains("630%"), "Static Wake Prismatic current description retains increase")
+	_check(upgrades.get_power_current_description("static_wake").contains("472%"), "Static Wake Prismatic current description retains the reduced displayed ratio")
 	upgrades.free()
 	player.free()
 
 func _test_boss_combination_descriptions(registry: Node) -> void:
-	_check(REGISTRY.BOSS_REWARD_POOL_IDS.size() == 9, "Boss pool contains the seven existing and two new rewards")
+	_check(REGISTRY.BOSS_REWARD_POOL_IDS.size() == 10 and REGISTRY.BOSS_REWARD_POOL_IDS.has("shatterwake"), "Boss pool retains its nine previous powers and adds Shatterwake")
 	var glossary := GLOSSARY.glossary_bbcode()
 	for power_id in ["ruinous_impact", "sovereigns_double"]:
 		var player := CardPlayer.new()
@@ -378,6 +378,21 @@ func _test_combat_hooks() -> void:
 				player.static_wake_controller.end_dash()
 				player.static_wake_controller.tick(0.25)
 				activated = enemy.get_current_health() < before
+			"stormbrand":
+				player.apply_trial_power("static_wake")
+				player.static_wake_controller.begin_dash(player.new_combat_action("dash"))
+				player.static_wake_controller.append_segment(enemy.global_position - Vector2.RIGHT, enemy.global_position)
+				player.static_wake_controller.end_dash()
+				player.static_wake_controller.tick(0.25)
+				activated = enemy.get_current_health() < before and float(DAMAGEABLE.status_snapshot(enemy, player.player_id).get("mark_ratio", 0.0)) > 0.0
+			"spark_relay":
+				player.apply_trial_power("blast_drive")
+				player.perform_motion_blast(Vector2.RIGHT, 1.0)
+				var after_blast: int = enemy.get_current_health()
+				var launched: bool = is_instance_valid(player.spark_relay_controller) and not player.spark_relay_controller.projectiles.is_empty()
+				if launched:
+					player.spark_relay_controller.tick(0.2)
+				activated = launched and after_blast < before and enemy.get_current_health() < after_blast
 			"storm_crown":
 				player.storm_crown_hit_counter = player.storm_crown_proc_every - 1
 				player.DAMAGEABLE.apply_damage(enemy, 20, player.INTERACTION_REGISTRY.damage_context(player.new_combat_action("melee"), "melee"))
@@ -446,12 +461,14 @@ func _test_combat_hooks() -> void:
 				player._indomitable_primed_this_attack = false
 				activated = player._consume_indomitable_spirit_bonus(enemy.global_position) > 0
 			"edict_of_the_court":
-				player.notify_enemy_killed(Vector2(40.0, 0.0))
-				activated = enemy.velocity.x > 0.0
+				secondary.set_max_health_and_current(1)
+				var action := player.new_combat_action("melee")
+				DAMAGEABLE.apply_damage(secondary, 20, player.INTERACTION_REGISTRY.damage_context(action, "melee", {"raw_amount": 20.0, "damage_coefficient": 1.0}), 1)
+				activated = secondary.is_dead() and enemy.get_current_health() < before and enemy.is_slowed() and enemy.velocity.is_zero_approx()
 			"null_corridor":
 				player._apply_null_corridor_segment(Vector2(1.0, 0.0), Vector2(100.0, 0.0))
 				player._update_null_corridor_segments(0.1)
-				activated = enemy.get_current_health() < before and not enemy.velocity.is_zero_approx()
+				activated = enemy.get_current_health() < before and enemy.velocity.is_zero_approx() and float(DAMAGEABLE.status_snapshot(enemy, 1).mark_ratio) > 0.0
 			"ruinous_impact":
 				player._ensure_boss_combinations()
 				player.boss_combinations.launch_enemy(enemy, Vector2.RIGHT * 400.0, 1)
@@ -465,6 +482,16 @@ func _test_combat_hooks() -> void:
 				player.boss_combinations.create_shade(Vector2.ZERO)
 				player._perform_melee_attack(Vector2.RIGHT, {"damage": 20, "range": 78.0, "arc_degrees": 130.0})
 				activated = before - enemy.get_current_health() > 20 and player.boss_combinations.shade_hits == 0
+			"shatterwake":
+				player.apply_trial_power("returning_crescent")
+				player._ensure_returning_crescent()
+				enemy.global_position = Vector2(150.0, 0.0)
+				secondary.global_position = Vector2(150.0, 55.0)
+				player.returning_crescent.set_physics_process(false)
+				player._perform_melee_attack(Vector2.RIGHT, {"damage": 20, "range": 78.0, "arc_degrees": 130.0})
+				var missed_by_melee: bool = enemy.get_current_health() == before and secondary.get_current_health() == secondary_before
+				player.returning_crescent.tick(0.25)
+				activated = missed_by_melee and enemy.get_current_health() < before and secondary.get_current_health() < secondary_before
 		_check(activated, "%s production combat hook produces its advertised effect" % power_id)
 		current_scene = null
 		world.free()
@@ -489,7 +516,14 @@ func _test_kills_at_arena_origin() -> void:
 			"lacuna_echo":
 				activated = not player.void_echo_zones.is_empty() and player.void_echo_zones[0]["pos"] == Vector2.ZERO
 			"edict_of_the_court":
-				activated = enemy.velocity.x > 0.0
+				_check(enemy.get_current_health() == before and enemy.velocity.is_zero_approx(), "Edict cannot be created by a location-only notification")
+				var victim := CombatEnemy.new()
+				world.add_child(victim)
+				victim.global_position = Vector2.ZERO
+				victim.set_max_health_and_current(1)
+				var action := player.new_combat_action("melee")
+				DAMAGEABLE.apply_damage(victim, 20, player.INTERACTION_REGISTRY.damage_context(action, "melee", {"raw_amount": 20.0, "damage_coefficient": 1.0}), 1)
+				activated = victim.is_dead() and enemy.get_current_health() < before and enemy.is_slowed() and enemy.velocity.is_zero_approx()
 			"eclipse_mark":
 				activated = float(DAMAGEABLE.status_snapshot(enemy, player.player_id).get("mark_ratio", 0.0)) > 0.0
 			"fracture_field":

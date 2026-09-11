@@ -482,7 +482,7 @@ func _draw() -> void:
 	if slam_state == ENEMY_STATE_ENUMS.ShielderSlamState.THUMP:
 		body_color = COLOR_SHIELDER_BODY_THUMP
 		core_color = COLOR_SHIELDER_CORE_THUMP
-	_draw_common_body(body_radius, body_color, core_color, visual_facing_direction)
+	_draw_common_body(body_radius, body_color, core_color, visual_facing_direction, &"shielder")
 
 	if slam_state == ENEMY_STATE_ENUMS.ShielderSlamState.WINDUP:
 		var windup_t := 1.0 - (slam_state_time_left / slam_windup_time) if slam_windup_time > 0.0 else 1.0

@@ -16,6 +16,8 @@ class DepartureWorld extends World:
 		retries += 1
 
 class HUD extends Node:
+	func hide_boss_intro() -> void:
+		pass
 	var banners: Array[String] = []
 	func show_banner(title: String, _detail: String = "") -> void:
 		banners.append(title)

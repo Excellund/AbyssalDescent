@@ -22,12 +22,15 @@ const BIOME_REGISTRY := preload("res://scripts/shared/biome_registry.gd")
 const PYRE_FIELD_SCRIPT := preload("res://scripts/pyre_field.gd")
 const BOSS_STAGE_REGISTRY := preload("res://scripts/shared/boss_stage_registry.gd")
 const ARENA_COVER_CONTROLLER := preload("res://scripts/core/arena_cover_controller.gd")
+const BIOME_RULE_CONTROLLER := preload("res://scripts/core/biome_rule_controller.gd")
+const BIOME_ARENA_LAYOUTS := preload("res://scripts/shared/arena_layout_registry.gd")
 const COVER_INTERACTIONS := preload("res://scripts/shared/combat_interaction_registry.gd")
 const COVER_ORIGIN_TOLERANCE := 128.0
 const BOSS_CATALOGUE := preload("res://scripts/shared/boss_catalogue.gd")
 const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 const MUSIC_SYSTEM_SCRIPT := preload("res://scripts/music_system.gd")
+const RIOT_DEPTH := preload("res://scripts/shared/riot_depth_catalogue.gd")
 const ENEMY_SPAWNER_SCRIPT := preload("res://scripts/enemy_spawner.gd")
 const ENCOUNTER_PROFILE_BUILDER_SCRIPT := preload("res://scripts/encounter_profile_builder.gd")
 const ENCOUNTER_FLOW_SYSTEM_SCRIPT := preload("res://scripts/encounter_flow_system.gd")
@@ -303,6 +306,9 @@ var _arena_cover_bodies: Dictionary = {}
 var _cover_run_token: String = ""
 var _cover_room_sync_id: int = 0
 var _pending_cover_state: Dictionary = {}
+var _biome_rules: BIOME_RULE_CONTROLLER
+var _active_biome_rule_id: String = ""
+var _pending_biome_rule_state: Dictionary = {}
 var _world_multiplayer_sync_state = WORLD_MULTIPLAYER_SYNC_STATE_SCRIPT.new()
 var _world_progress_sync_policy = WORLD_PROGRESS_SYNC_POLICY_SCRIPT.new()
 var _reward_phase_coordinator = REWARD_PHASE_COORDINATOR_SCRIPT.new()
@@ -808,10 +814,12 @@ func _setup_world_bootstrap_state() -> void:
 	_apply_camera_bounds_for_room(current_effective_room_size)
 
 func _setup_run_systems_phase() -> void:
+	_ensure_biome_rules()
 	_prepare_run_loadout()
 	music_system = MUSIC_SYSTEM_SCRIPT.new()
 	add_child(music_system)
 	music_system.initialize(normal_room_music, boss_room_music, music_volume_db, music_crossfade_duration)
+	music_system.configure_adaptive_score(RIOT_DEPTH.LAYERS, RIOT_DEPTH.BPM)
 	_world_sfx_player = AudioStreamPlayer.new()
 	_world_sfx_player.volume_db = AUDIO_LEVELS.clamp_db(sfx_volume_db)
 	add_child(_world_sfx_player)
@@ -1561,6 +1569,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _process(delta: float) -> void:
 	if _handle_modal_frame(delta):
+		if is_instance_valid(_biome_rules):
+			_biome_rules.tick(0.0, false, [], [], MultiplayerSessionManager.is_authoritative())
 		return
 	var perf_frame_start_usec := Time.get_ticks_usec() if _perf_attribution_enabled and is_multiplayer else 0
 
@@ -1572,6 +1582,7 @@ func _process(delta: float) -> void:
 	objective_frame_coordinator.tick(objective_manager, objective_runtime, delta, _grace_active)
 	_try_use_door()
 	_update_encounter_state()
+	_tick_biome_rules(delta)
 	_update_camera_mode()
 	if is_multiplayer and multiplayer_use_shared_camera:
 		_update_multiplayer_camera()
@@ -1849,14 +1860,11 @@ func _refresh_effective_room_bounds_from_seamlock_penalty() -> void:
 		_apply_camera_bounds_for_room(current_effective_room_size)
 
 func _get_hud_state() -> Dictionary:
-	var display_room_depth := room_depth
+	var display_room_depth := _get_room_presentation_depth()
 	var between_rooms := choosing_next_room or _is_reward_selection_active()
 	var display_enemy_mutator := current_room_enemy_mutator
 	if between_rooms:
 		display_enemy_mutator = {}
-	# Keep the visible depth anchored to the cleared room until the next room is entered.
-	if between_rooms and not _run_outcome_coordinator.is_run_cleared() and current_room_label != "Rest Site":
-		display_room_depth = maxi(0, room_depth - 1)
 	
 	# Get current character passive name
 	var current_character_passive_name := "Passive"
@@ -1937,6 +1945,7 @@ func _get_hud_state() -> Dictionary:
 		"active_biome_name": _get_active_biome_name(),
 		"active_biome_accent": _get_active_biome_accent(),
 		"active_biome_impact_text": _get_active_biome_impact_text(),
+		"active_biome_rule_hint": _get_biome_rule_hint(),
 		"run_elapsed_seconds": run_summary_recorder.get_run_elapsed_seconds(),
 		"timer_visible_in_hud": true,
 		"ascension_rank": encounter_profile_builder.get_ascension_rank() if encounter_profile_builder != null else 0,
@@ -2217,7 +2226,7 @@ func _finish_first_boss_clear() -> void:
 	boss_reward_pending = true
 	var boss_name: String = BOSS_CATALOGUE.NAMES[last_defeated_boss_id]
 	hud.show_banner("%s Defeated" % boss_name, "")
-	var epitaph: String = power_registry_instance.get_boss_epitaph(last_defeated_boss_id, current_character_id)
+	var epitaph: String = _get_boss_defeat_caption(last_defeated_boss_id)
 	_apply_active_biome(2)
 	_open_networked_reward_selection("Claim %s's Power" % boss_name, ENUMS.RewardMode.BOSS, {}, epitaph)
 
@@ -2240,9 +2249,15 @@ func _finish_second_boss_clear() -> void:
 	boss_reward_pending = true
 	var boss_name: String = BOSS_CATALOGUE.NAMES[last_defeated_boss_id]
 	hud.show_banner("%s Defeated" % boss_name, "")
-	var epitaph: String = power_registry_instance.get_boss_epitaph(last_defeated_boss_id, current_character_id)
+	var epitaph: String = _get_boss_defeat_caption(last_defeated_boss_id)
 	_apply_active_biome(3)
 	_open_networked_reward_selection("Claim %s's Power" % boss_name, ENUMS.RewardMode.BOSS, {}, epitaph)
+
+func _get_boss_defeat_caption(boss_id: String) -> String:
+	var line: String = BOSS_CATALOGUE.get_defeat_line(boss_id)
+	if line.is_empty():
+		return ""
+	return "%s: \"%s\"" % [String(BOSS_CATALOGUE.NAMES[boss_id]), line]
 
 func _finish_third_boss_clear() -> void:
 	if _run_outcome_coordinator.is_run_cleared():
@@ -2521,7 +2536,12 @@ func _apply_active_run_snapshot(snapshot: Dictionary) -> bool:
 	_reset_all_player_positions_to_slots()
 	_reset_effective_room_bounds()
 	_apply_camera_bounds_for_room(current_effective_room_size)
-	_set_music_context(&"rest" if current_room_label == "Rest Site" else &"reward")
+	if is_instance_valid(music_system):
+		var presented_act := _get_room_presentation_act()
+		var descriptor := BOSS_STAGE_REGISTRY.get_descriptor(presented_act, get_boss_id_for_stage(presented_act))
+		var boss_chamber := current_room_label == String(descriptor.get("room_label", ""))
+		music_system.set_run_location(presented_act, _get_room_presentation_depth(), boss_chamber)
+	_set_music_context(&"rest" if current_room_label == "Rest Site" else &"doors")
 	hud.refresh(_get_hud_state(), player)
 	_set_combat_paused(false)
 	return true
@@ -2858,6 +2878,8 @@ func _spawn_door_options() -> void:
 	door_options = route_state.get("door_options", [])
 	_label_selected_boss_doors()
 	boss_unlocked = bool(route_state.get("boss_unlocked", boss_unlocked))
+	if choosing_next_room and not door_options.is_empty():
+		_set_music_context(&"rest" if current_room_label == "Rest Site" else &"doors")
 	if MultiplayerSessionManager.should_broadcast():
 		_sync_door_options.rpc(door_options, choosing_next_room, boss_unlocked, _build_progress_sync_state())
 	_save_active_run_checkpoint()
@@ -3172,6 +3194,8 @@ func _apply_endless_scaling_to_profile(profile: Dictionary) -> Dictionary:
 	)
 
 func _prepare_room_sync_transition() -> void:
+	if is_instance_valid(hud):
+		hud.hide_boss_intro()
 	_world_multiplayer_sync_state.begin_room_transition(MultiplayerSessionManager.is_authoritative())
 
 func get_current_room_sync_id() -> int:
@@ -3196,11 +3220,11 @@ func _begin_room(profile: Dictionary) -> void:
 	in_second_boss_room = false
 	in_third_boss_room = false
 	objective_lifecycle_coordinator.reset_for_new_room(objective_manager, objective_runtime)
-	_play_room_music(false)
 	current_room_size = ENCOUNTER_CONTRACTS.profile_room_size(profile)
 	_reset_effective_room_bounds()
 	current_room_static_camera = ENCOUNTER_CONTRACTS.profile_static_camera(profile)
 	current_room_label = ENCOUNTER_CONTRACTS.profile_label(profile)
+	_play_room_music(false)
 	_apply_active_biome(_get_current_act())
 	run_summary_recorder.record_act_entry(_get_current_act())
 	current_room_enemy_mutator = ENCOUNTER_CONTRACTS.profile_enemy_mutator(profile)
@@ -3222,6 +3246,7 @@ func _begin_room(profile: Dictionary) -> void:
 	_clear_room_obstacles()
 	var obstacle_layout := ENCOUNTER_CONTRACTS.profile_obstacle_layout(profile)
 	_spawn_room_obstacles(obstacle_layout)
+	_configure_biome_rules(profile)
 	_apply_camera_bounds_for_room(current_effective_room_size)
 	if is_multiplayer:
 		if MultiplayerSessionManager.should_broadcast():
@@ -3245,7 +3270,6 @@ func _begin_room(profile: Dictionary) -> void:
 func _enter_rest_site() -> void:
 	_clear_room_obstacles()
 	in_boss_room = false
-	_set_music_context(&"rest")
 	current_room_label = "Rest Site"
 	_apply_active_biome(_get_current_act())
 	run_summary_recorder.record_act_entry(_get_current_act())
@@ -3263,6 +3287,9 @@ func _enter_rest_site() -> void:
 	else:
 		_advance_room_progress()
 		_clamp_room_depth_to_sane_range()
+	if is_instance_valid(music_system):
+		music_system.set_run_location(_get_room_presentation_act(), room_depth, false)
+	_set_music_context(&"rest")
 	_heal_local_player_at_rest()
 	run_summary_recorder.record_rest_visit(room_depth)
 	_spawn_door_options()
@@ -3301,6 +3328,9 @@ func _spawn_room_obstacles(layout: Array[Dictionary]) -> void:
 	_flush_pending_cover_state()
 
 func _clear_room_obstacles() -> void:
+	_active_biome_rule_id = ""
+	if is_instance_valid(_biome_rules):
+		_biome_rules.reset()
 	for node in _active_obstacle_nodes:
 		if is_instance_valid(node):
 			node.queue_free()
@@ -3314,6 +3344,104 @@ func _clear_room_obstacles() -> void:
 		renderer.set_cover_rubble_layout([] as Array[Dictionary])
 	if is_instance_valid(enemy_spawner):
 		enemy_spawner.set_obstacle_circles([] as Array[Dictionary])
+
+func _ensure_biome_rules() -> void:
+	if is_instance_valid(_biome_rules):
+		return
+	_biome_rules = BIOME_RULE_CONTROLLER.new()
+	_biome_rules.name = "BiomeRules"
+	add_child(_biome_rules)
+	_biome_rules.initialize(self)
+	_biome_rules.state_changed.connect(_broadcast_biome_rule_state)
+
+func _configure_biome_rules(profile: Dictionary, boss_arena: bool = false) -> void:
+	_active_biome_rule_id = ""
+	if current_room_tutorial_active or (not boss_arena and ENCOUNTER_CONTRACTS.profile_label(profile) in ["Starting Room", "Rest Site", "Tutorial"]):
+		if is_instance_valid(_biome_rules):
+			_biome_rules.reset()
+		return
+	var act := _get_room_presentation_act()
+	if run_session == null or run_session.act_biome_ids.size() < act:
+		return
+	var biome_id := String(run_session.act_biome_ids[act - 1])
+	if BIOME_REGISTRY.get_combat_identity(biome_id).is_empty():
+		return
+	_ensure_biome_rules()
+	_active_biome_rule_id = biome_id
+	var rule := {
+		"id": biome_id,
+		"mode": _biome_mode_for_profile(profile, boss_arena),
+		"shatter_fragments": biome_id == "shatterfield" and not _arena_cover.has_brittle_cover(),
+		"obstacles": ENCOUNTER_CONTRACTS.profile_obstacle_layout(profile)
+	}
+	_biome_rules.configure(rule, current_room_size, COVER_INTERACTIONS.current_run(), get_current_room_sync_id(), get_current_room_sync_id())
+	if not _pending_biome_rule_state.is_empty():
+		var pending := _pending_biome_rule_state
+		_pending_biome_rule_state = {}
+		_biome_rules.apply_snapshot(pending)
+
+func _biome_mode_for_profile(profile: Dictionary, boss_arena: bool = false) -> String:
+	if boss_arena or ENCOUNTER_CONTRACTS.profile_encounter_key(profile).begins_with("apex_") or ENCOUNTER_CONTRACTS.profile_seamlock_count(profile) > 0 or ENCOUNTER_CONTRACTS.profile_mirrorline_count(profile) > 0 or ENCOUNTER_CONTRACTS.profile_toll_count(profile) > 0 or ENCOUNTER_CONTRACTS.profile_breakwater_count(profile) > 0:
+		return "assistance"
+	if ENCOUNTER_CONTRACTS.profile_label(profile) in BIOME_ARENA_LAYOUTS.BIOME_TERRAIN_ENCOUNTERS and ENCOUNTER_CONTRACTS.profile_objective_kind(profile).is_empty():
+		return "ordinary"
+	return "compact"
+
+func _get_biome_objective_exclusions() -> Array[Dictionary]:
+	var exclusions: Array[Dictionary] = []
+	if not is_instance_valid(objective_manager):
+		return exclusions
+	var kind: String = objective_manager.active_objective_kind
+	if kind not in ["hold_the_line", "circuit_sweep", "intercept_run"]:
+		return exclusions
+	var overlay: Dictionary = objective_manager.get_control_overlay_state()
+	if kind == "intercept_run":
+		# Preserve a continuous escort route, including where the drone goes next.
+		exclusions.append({"kind": "capsule", "start": overlay.drone_start, "end": overlay.drone_end, "radius": overlay.drone_radius})
+	else:
+		exclusions.append({"kind": "circle", "center": overlay.anchor, "radius": overlay.radius})
+		if kind == "circuit_sweep" and is_instance_valid(objective_runtime):
+			for node_position: Vector2 in objective_runtime.get_pending_sweep_node_positions():
+				exclusions.append({"kind": "circle", "center": node_position, "radius": overlay.radius})
+	return exclusions
+
+func _get_biome_rule_hint() -> String:
+	if _active_biome_rule_id.is_empty() or choosing_next_room or _is_reward_selection_active():
+		return ""
+	return String(BIOME_REGISTRY.get_room_combat_identity(_active_biome_rule_id, _biome_rules.mode, _biome_rules.fragments).get("entry_hint", ""))
+
+func _tick_biome_rules(delta: float) -> void:
+	if _active_biome_rule_id.is_empty():
+		return
+	var active := is_instance_valid(player) and player.combat_damage_enabled and not encounter_intro_grace_active and not choosing_next_room and not _is_reward_selection_active() and not _modal_requires_combat_pause() and not get_tree().paused
+	_biome_rules.set_room_context(current_effective_room_size, _get_biome_objective_exclusions(), MultiplayerSessionManager.is_authoritative())
+	_biome_rules.tick(delta, active, _get_multiplayer_player_nodes(), get_tree().get_nodes_in_group("enemies"), MultiplayerSessionManager.is_authoritative())
+
+func _broadcast_biome_rule_state(payload: Dictionary) -> void:
+	if MultiplayerSessionManager.should_broadcast():
+		_sync_biome_rule_state.rpc(payload)
+
+@rpc("authority", "reliable")
+func _sync_biome_rule_state(payload: Dictionary) -> void:
+	if not MultiplayerSessionManager.is_remote_replica():
+		return
+	# Validate before reserving a future-room revision. A malformed packet must
+	# not displace a valid warning that arrived before its room-entry message.
+	if not BIOME_RULE_CONTROLLER.valid_snapshot_envelope(payload):
+		return
+	if payload.run.is_empty() or payload.run != COVER_INTERACTIONS.current_run():
+		return
+	var room: int = payload.room
+	if room < get_current_room_sync_id() or room > get_current_room_sync_id() + 1:
+		return
+	if room > get_current_room_sync_id() or _active_biome_rule_id.is_empty():
+		if _pending_biome_rule_state.is_empty() or room > int(_pending_biome_rule_state.get("room", -1)) or int(payload.revision) > int(_pending_biome_rule_state.get("revision", -1)):
+			_pending_biome_rule_state = payload.duplicate(true)
+		return
+	_biome_rules.apply_snapshot(payload)
+
+func _is_environmental_enemy_death() -> bool:
+	return is_instance_valid(_biome_rules) and _biome_rules.environment_damage_active
 
 func request_brittle_cover_attack(action: Dictionary, origin: Vector2, direction: Vector2, blast_strength: float = -1.0) -> void:
 	if not _arena_cover.has_brittle_cover():
@@ -3343,7 +3471,7 @@ func _accept_brittle_cover_attack(sender: int, raw_action: Dictionary, origin: V
 		return
 	# Reconcile input-owner origin only within a bounded movement-latency margin.
 	# Clients never nominate an obstacle, radius, arc or number of contacts.
-	if origin.distance_to(owner.global_position) > COVER_ORIGIN_TOLERANCE:
+	if not owner.passive_effigy_command and origin.distance_to(owner.global_position) > COVER_ORIGIN_TOLERANCE:
 		return
 	var action := COVER_INTERACTIONS.validate_action(raw_action, sender)
 	var source := String(action.get("source", ""))
@@ -3352,7 +3480,18 @@ func _accept_brittle_cover_attack(sender: int, raw_action: Dictionary, origin: V
 	owner._ensure_combat_interactions()
 	if not owner.combat_interactions.accepts_action(action):
 		return
+	if owner.passive_effigy_command:
+		var accepted: Dictionary = owner.combat_interactions.get_attack_start(action)
+		if accepted.is_empty() or origin.distance_to(accepted.origin) > 2.0 or direction.normalized().dot(accepted.direction) < 0.999:
+			return
 	var shapes := _brittle_cover_attack_shapes(owner, source, blast_strength)
+	if owner.passive_effigy_command:
+		# Start captured primed reach before spending its bank. Reconstructing
+		# geometry after that reliable command would shorten only remote cover hits.
+		shapes.clear()
+		var accepted: Dictionary = owner.combat_interactions.get_attack_start(action)
+		for shape: Dictionary in (accepted.get("shapes", {}) as Dictionary).values():
+			shapes.append(shape)
 	if shapes.is_empty():
 		return
 	var changed := false
@@ -3547,20 +3686,24 @@ func _begin_boss_stage(stage: int) -> void:
 
 	_clear_room_obstacles()
 	_prepare_room_sync_transition()
+	current_room_tutorial_active = false
+	current_room_tutorial_steps = {}
+	objective_lifecycle_coordinator.reset_for_new_room(objective_manager, objective_runtime)
 	encounter_intro_grace_active = false
 	combat_phase_coordinator.begin_combat_phase(player, get_tree())
 	in_boss_room = stage == 1
 	in_second_boss_room = stage == 2
 	in_third_boss_room = stage == 3
-	_play_room_music(true)
 	current_room_size = descriptor["room_size"]
 	_reset_effective_room_bounds()
 	current_room_static_camera = false
 	current_room_label = room_label
+	_play_room_music(true)
 	_apply_active_biome(stage)
 	run_summary_recorder.record_act_entry(stage)
 	current_room_enemy_mutator = {}
 	current_room_player_mutator = {}
+	_configure_biome_rules({}, true)
 	run_summary_recorder.record_room_entry(room_entry_key, {})
 	run_summary_recorder.begin_boss_engagement_for_tracker(room_entry_key)
 	hud.show_banner(banner_title, "")
@@ -3604,6 +3747,7 @@ func _spawn_profile_enemies(profile: Dictionary) -> int:
 func _play_room_music(is_boss_room: bool, instant: bool = false, fade_duration: float = -1.0) -> void:
 	if not is_instance_valid(music_system):
 		return
+	music_system.set_run_location(_get_room_presentation_act(), room_depth, is_boss_room)
 	music_system.play_room_music(is_boss_room, instant, fade_duration)
 
 func _set_music_context(context: StringName) -> void:
@@ -3613,7 +3757,7 @@ func _set_music_context(context: StringName) -> void:
 func _on_room_enemy_died(kill_pos: Vector2 = Vector2.ZERO) -> void:
 	active_room_enemy_count = maxi(0, active_room_enemy_count - 1)
 	run_summary_recorder.record_enemy_kill_for_tracker()
-	if not is_multiplayer and is_instance_valid(player):
+	if not is_multiplayer and is_instance_valid(player) and not _is_environmental_enemy_death():
 		player.notify_enemy_killed(kill_pos)
 	objective_progress_coordinator.on_enemy_killed(objective_manager, objective_runtime, kill_pos)
 	if not in_boss_room and is_instance_valid(_world_sfx_player):
@@ -3640,6 +3784,8 @@ func _record_peer_enemy_kill(peer_id: int) -> void:
 	run_summary_recorder.record_peer_enemy_kill(peer_id)
 
 func _clear_all_enemies() -> void:
+	if is_instance_valid(hud):
+		hud.hide_boss_intro()
 	EnemyReplicationService.clear_state()
 	enemy_state_sync_broadcaster.clear_state()
 	_archer_projectile_sync_elapsed = 0.0
@@ -3796,12 +3942,12 @@ func _sync_request_enemy_mark(enemy_id: int, source: String, ratio: float, durat
 	if is_instance_valid(enemy):
 		DAMAGEABLE.apply_mark(enemy, source, ratio, duration, sender, interaction)
 
-func request_shared_attack_start_from_client(interaction: Dictionary) -> void:
+func request_shared_attack_start_from_client(interaction: Dictionary, start: Dictionary = {}) -> void:
 	if MultiplayerSessionManager.is_remote_replica():
-		_sync_request_shared_attack_start.rpc_id(1, interaction)
+		_sync_request_shared_attack_start.rpc_id(1, interaction, start)
 
 @rpc("reliable", "any_peer")
-func _sync_request_shared_attack_start(interaction: Dictionary) -> void:
+func _sync_request_shared_attack_start(interaction: Dictionary, start: Dictionary = {}) -> void:
 	if not MultiplayerSessionManager.should_broadcast():
 		return
 	var sender := multiplayer.get_remote_sender_id()
@@ -3810,7 +3956,7 @@ func _sync_request_shared_attack_start(interaction: Dictionary) -> void:
 	var action := preload("res://scripts/shared/combat_interaction_registry.gd").validate_action(interaction, sender)
 	var owner := DAMAGEABLE._find_combat_owner(sender)
 	if is_instance_valid(owner) and not action.is_empty():
-		owner._accept_shared_attack_start(action)
+		owner._accept_shared_attack_start(action, start)
 
 func request_shared_field_from_client(source: String, identity: String, geometry: Dictionary, interaction: Dictionary) -> void:
 	if MultiplayerSessionManager.is_remote_replica():
@@ -4161,6 +4307,7 @@ func _reveal_tutorial_exit_door() -> void:
 	ENCOUNTER_CONTRACTS.door_option_set_position(exit_door, Vector2(0.0, -40.0))
 	door_options = [exit_door]
 	choosing_next_room = true
+	_set_music_context(&"doors")
 	if MultiplayerSessionManager.should_broadcast():
 		_sync_door_options.rpc(door_options, choosing_next_room, boss_unlocked, _build_progress_sync_state())
 	hud.refresh(_get_hud_state(), player)
@@ -4207,6 +4354,8 @@ func _roll_route_options(route_context: Variant) -> Array[Dictionary]:
 	return encounter_profile_builder.roll_route_options(route_context)
 
 func _open_boon_selection(title: String, is_initial: bool, mode: int = ENUMS.RewardMode.BOON, player_mutator: Dictionary = {}, epitaph: String = "", character_id: String = "") -> void:
+	if is_instance_valid(hud):
+		hud.hide_boss_intro()
 	print_debug("[WorldGenerator] _open_boon_selection mode=%d is_initial=%s selection_active=%s is_remote_replica=%s" % [mode, is_initial, _is_reward_selection_active(), MultiplayerSessionManager.is_remote_replica()])
 	if is_multiplayer and mode == ENUMS.RewardMode.BOSS:
 		var sync_id: int = _world_multiplayer_sync_state.current_room_sync_id
@@ -4555,6 +4704,8 @@ func _on_player_died() -> void:
 	_show_defeat_feedback(current_room_label, room_depth, _latest_run_summary())
 
 func _show_victory_feedback(unlocked_tier: int, run_summary: Dictionary = {}) -> void:
+	if is_instance_valid(hud):
+		hud.hide_boss_intro()
 	run_summary_recorder.freeze_run_timer()
 	_set_music_context(&"reward")
 	if is_instance_valid(victory_screen):
@@ -4563,6 +4714,8 @@ func _show_victory_feedback(unlocked_tier: int, run_summary: Dictionary = {}) ->
 		_apply_retry_vote_status_ui()
 
 func _show_defeat_feedback(room_label: String, depth: int, run_summary: Dictionary = {}) -> void:
+	if is_instance_valid(hud):
+		hud.hide_boss_intro()
 	run_summary_recorder.freeze_run_timer()
 	_set_music_context(&"reward")
 	player_flow_coordinator.show_defeat_feedback(hud, defeat_screen, room_label, depth, run_summary, true)
@@ -4877,7 +5030,7 @@ func _start_encounter_intro_grace() -> void:
 	if not active_boss_id.is_empty():
 		boss_title = String(BOSS_STAGE_REGISTRY.get_descriptor(BOSS_CATALOGUE.stage_for_id(active_boss_id), active_boss_id).get("banner_title", ""))
 	if not boss_title.is_empty():
-		hud.show_banner(boss_title, "Survey the arena")
+		hud.show_boss_intro(boss_title, BOSS_CATALOGUE.get_greeting(active_boss_id))
 	else:
 		_show_descent_entry_banner("Survey the arena", "Attack cracked columns to open a lane" if _arena_cover.has_brittle_cover() else "")
 
@@ -4972,7 +5125,14 @@ func _exit_encounter_intro_grace() -> void:
 	print_debug("Grace exit: step B")
 	_set_enemy_targets_passive(false)
 	print_debug("Grace exit: step C")
-	hud.show_banner("Engage", "")
+	# The first live warning owns the arena once the boss has been answered.
+	if not get_active_boss_id().is_empty():
+		return
+	var biome_hint := _get_biome_rule_hint()
+	if biome_hint.is_empty():
+		hud.show_banner("Engage", "")
+	else:
+		hud.show_banner(_get_active_biome_name(), biome_hint, _get_active_biome_accent(), 3.0)
 
 func _set_enemy_targets_passive(passive: bool) -> void:
 	var active_targets: Array = []
@@ -5026,6 +5186,14 @@ func _get_current_act() -> int:
 	elif first_boss_defeated:
 		return 2
 	return 1
+
+## Clearing advances progression before reward/door selection. Keep both the
+## HUD and a resumed score anchored to the chamber still on screen.
+func _get_room_presentation_depth() -> int:
+	var between_rooms := choosing_next_room or _is_reward_selection_active()
+	if between_rooms and not _run_outcome_coordinator.is_run_cleared() and current_room_label != "Rest Site":
+		return maxi(0, room_depth - 1)
+	return room_depth
 
 ## Progress advances when a boss falls; its chamber remains the old place until
 ## the player takes a door. Deriving from the saved room also preserves Continue.
@@ -5091,6 +5259,8 @@ func _get_active_biome_impact_text() -> String:
 	var biome := BIOME_REGISTRY.get_biome(biome_id)
 	if biome.is_empty():
 		return ""
+	if _active_biome_rule_id == biome_id and is_instance_valid(_biome_rules) and not choosing_next_room and not _is_reward_selection_active():
+		return BIOME_REGISTRY.generate_impact_text(biome, _biome_rules.mode, _biome_rules.fragments)
 	return BIOME_REGISTRY.generate_impact_text(biome)
 
 func _get_active_biome_accent() -> Color:

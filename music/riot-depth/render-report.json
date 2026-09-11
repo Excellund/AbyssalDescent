@@ -1,0 +1,145 @@
+{
+  "title": "Riot Depth",
+  "bpm": 140,
+  "bars": 48,
+  "frames": 3949714,
+  "seconds": 82.28570833333333,
+  "sample_rate": 48000,
+  "runtime_integrated": false,
+  "common_gain_db": 4.589999999999999,
+  "design": "oversampled distorted mid-bass; short low hook; gated recorded/synthetic drums; noise accents",
+  "scenario_mix": {
+    "combat": {
+      "bass": 1.0,
+      "hook": 1.0,
+      "drums": 1.0,
+      "debris": 0.75
+    },
+    "doors": {
+      "bass": 0.27,
+      "hook": 0.13,
+      "drums": 0.12,
+      "debris": 0.28
+    },
+    "reward": {
+      "bass": 0.38,
+      "hook": 0.52,
+      "drums": 0.19,
+      "debris": 0.1
+    }
+  },
+  "instrument_target_active_rms_dbfs": {
+    "base": -34.0,
+    "bass": -26.0,
+    "hook": -27.0,
+    "drums": -25.0,
+    "debris": -35.0
+  },
+  "filters": {
+    "base": "highpass=f=100,lowpass=f=2000",
+    "bass": "highpass=f=55,equalizer=f=650:t=q:w=0.7:g=3,lowpass=f=3800",
+    "hook": "highpass=f=165,equalizer=f=2300:t=q:w=0.8:g=-3.5,lowpass=f=3600",
+    "drums": "highpass=f=35,lowpass=f=9500",
+    "debris": "highpass=f=400,lowpass=f=4500"
+  },
+  "note_counts": {
+    "base": 76,
+    "bass": 167,
+    "hook": 126,
+    "drums": 267,
+    "debris": 10
+  },
+  "loudness": {
+    "combat": {
+      "input_i": -18.01,
+      "input_tp": -2.89,
+      "input_lra": 6.5
+    },
+    "doors": {
+      "input_i": -26.63,
+      "input_tp": -11.13,
+      "input_lra": 4.4
+    },
+    "reward": {
+      "input_i": -24.26,
+      "input_tp": -9.62,
+      "input_lra": 5.5
+    },
+    "journey": {
+      "input_i": -18.2,
+      "input_tp": -2.89,
+      "input_lra": 13.2
+    }
+  },
+  "loop_steps": {
+    "base": 0.0014164457097649574,
+    "combat": 0.00017822576046455652,
+    "doors": 0.00029013591120019555,
+    "reward": 0.0002377087075728923
+  },
+  "source_recordings": {
+    "Percussion/BDrumNewhit_v5_rr1_Sum.wav": {
+      "decoded_seconds": 3.333625,
+      "trimmed_leading_ms": 0.0,
+      "source_active_rms_dbfs": -23.931577620298334,
+      "sha256": "642aaf3375eaff1307973f7de3ccbf74d18e71fb3cf9412e021b08fc3bf1981c"
+    },
+    "Percussion/BDrumNewhit_v5_rr2_Sum.wav": {
+      "decoded_seconds": 3.4826875,
+      "trimmed_leading_ms": 0.0,
+      "source_active_rms_dbfs": -24.76315384269938,
+      "sha256": "a83943f8125ae39469ef5dab1d0be2fe3145c6842c0621b27be5d86aa44b325d"
+    },
+    "Percussion/Snare2-HitSN_v5_rr1_Sum.wav": {
+      "decoded_seconds": 1.363125,
+      "trimmed_leading_ms": 0.0,
+      "source_active_rms_dbfs": -32.333071424445876,
+      "sha256": "8deb654b739f6dfb01f192b7043a9aad92b7973995246252571240fe712d0876"
+    },
+    "Percussion/cymbal-crash1_mf_rr1.wav": {
+      "decoded_seconds": 8.478583333333333,
+      "trimmed_leading_ms": 0.0,
+      "source_active_rms_dbfs": -28.19128724346919,
+      "sha256": "3b4a6ed42627eedca39f6480e9825dedeaab538197fc734f85be13ba655aa6aa"
+    },
+    "Percussion/Snare2-HitSN_v5_rr2_Sum.wav": {
+      "decoded_seconds": 1.4479166666666667,
+      "trimmed_leading_ms": 0.0,
+      "source_active_rms_dbfs": -33.20780962368697,
+      "sha256": "1f7ca9367273f7958cfccd5e454c0f30bb471301bc9ee05ef753c6f0423a3798"
+    },
+    "Percussion/Snare2-HitSN_v3_rr1_Sum.wav": {
+      "decoded_seconds": 1.7305,
+      "trimmed_leading_ms": 0.0,
+      "source_active_rms_dbfs": -45.25705444527702,
+      "sha256": "3df96009d655dd4fe43c635bd3c20314a1e0cbdf9f571ee8a66207f9ef917d08"
+    },
+    "Percussion/Snare2-HitSN_v3_rr2_Sum.wav": {
+      "decoded_seconds": 1.3107916666666666,
+      "trimmed_leading_ms": 0.0,
+      "source_active_rms_dbfs": -44.38671242025955,
+      "sha256": "3ed6158d6873089e0f4967f303c3fab514ddde3991117a45d259d419f6bc62b8"
+    },
+    "Percussion/BDrumNewhit_v3_rr1_Sum.wav": {
+      "decoded_seconds": 2.0809583333333332,
+      "trimmed_leading_ms": 0.0,
+      "source_active_rms_dbfs": -31.3552169880387,
+      "sha256": "a2d8829e8b2b59e8afb12fa396b01758827059339c2a84ad066d17b36c82d1ff"
+    },
+    "Percussion/BDrumNewhit_v3_rr2_Sum.wav": {
+      "decoded_seconds": 2.0098541666666665,
+      "trimmed_leading_ms": 0.0,
+      "source_active_rms_dbfs": -32.992962957900296,
+      "sha256": "036c6c5fcfbcca845d92dbcdcef075ee6e0ae01636374a2f7dd1a696a7ba33f8"
+    },
+    "Percussion/cymbal-crash1_mf_rr2.wav": {
+      "decoded_seconds": 9.659166666666666,
+      "trimmed_leading_ms": 0.0,
+      "source_active_rms_dbfs": -25.734608322977437,
+      "sha256": "88534fac7b69522738fa6ae39f305c424a26418c274a18ca5a08a1302e4c60a2"
+    }
+  },
+  "synthesis_rate": 96000,
+  "hook_written_silence_percent": 77.32291666666666,
+  "clipped_samples": 0
+}

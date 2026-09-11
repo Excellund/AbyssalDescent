@@ -15,6 +15,26 @@ static func get_power_keyword_metadata(power_id: String, level: int = 1, _prisma
 	var conditions: Array[String] = []
 	var condition_text := ""
 	match power_id:
+		"patient_hunter", "marked_prey":
+			var condition := "slow" if power_id == "patient_hunter" else "mark"
+			accepts = ["damage", condition]
+			conditions = [condition]
+			condition_text = "Adds to the qualifying Damage basis against already %s foes. Conditions are checked before damage and scale with the source's strength and contact time." % ("Slowed" if condition == "slow" else "Marked")
+		"stormbrand":
+			accepts = ["electric"]
+			produces = ["mark"]
+			if level >= 3:
+				accepts.append("mark")
+				produces.append("slow")
+			condition_text = "Electric damage applies timed Mark after damage, once per foe per original action. At level 3, a foe already Marked before that damage is also Slowed. Strongest Mark benefits all players."
+		"spark_relay":
+			accepts = ["burst"]
+			produces = ["projectile", "electric", "damage"]
+			condition_text = "Accepted Burst damage fires one Electric Projectile from your body toward the struck foe's position per original action. It hits each foe once, stops at solid cover and retains that action's reaction limits."
+		"shatterwake":
+			accepts = ["projectile"]
+			produces = ["burst", "damage"]
+			condition_text = "Accepted Projectile damage releases one Burst per original action, including return legs and descendants. Its damage includes the struck foe if alive. Each victim resolves its own damage conditions."
 		"first_strike", "heavy_blow", "bloodpact", "severing_edge":
 			accepts = ["damage"]
 			condition_text = {"first_strike": "Enemy at least 80% HP; scales the qualifying Damage basis.", "heavy_blow": "Increases the Damage stat used by your powers.", "bloodpact": "You are at 50% HP or below; scales the qualifying Damage basis.", "severing_edge": "Enemy below 55% HP; scales the qualifying Damage basis."}[power_id]
@@ -39,7 +59,7 @@ static func get_power_keyword_metadata(power_id: String, level: int = 1, _prisma
 		"phantom_step":
 			produces = ["damage", "slow"]
 			accepts = ["dash"]
-			condition_text = "Normal Dash contact; not Recoil or Orbit."
+			condition_text = "Contact during your normal Dash deals damage and applies Slow."
 		"riftpunch":
 			accepts = ["dash", "attack_hit"]
 			if level >= 3:
@@ -48,7 +68,7 @@ static func get_power_keyword_metadata(power_id: String, level: int = 1, _prisma
 		"reaper_step":
 			accepts = ["kill"]
 			produces = ["dash"]
-			condition_text = "Your Kill refreshes Dash; it does not perform a Dash automatically."
+			condition_text = "Your Kill fully refreshes Dash."
 		"static_wake":
 			produces = ["field", "electric", "damage"]
 			if level >= 3:
@@ -73,7 +93,7 @@ static func get_power_keyword_metadata(power_id: String, level: int = 1, _prisma
 			produces = ["mark"]
 			accepts = ["attack_hit", "mark", "damage"]
 			conditions = ["mark"]
-			condition_text = "Attack hits build one stack per foe per Attack. Your stacks amplify your damage against that Marked foe; changing targets does not erase them."
+			condition_text = "Attack hits build one stack per foe per Attack. Your stacks amplify your damage against that Marked foe and persist on each foe until you or that foe dies, or the room ends."
 		"eclipse_mark":
 			produces = ["mark"]
 			accepts = ["kill"]
@@ -87,11 +107,11 @@ static func get_power_keyword_metadata(power_id: String, level: int = 1, _prisma
 		"razor_wind":
 			produces = ["attack_hit", "damage"]
 			accepts = ["attack"]
-			condition_text = "Only foes beyond the normal melee reach; not a traveling Projectile."
+			condition_text = "Each deliberate Attack extends an immediate slicing arc beyond normal melee reach."
 		"voidfire":
 			produces = ["burst", "damage"]
 			accepts = ["attack_hit"]
-			condition_text = "Connected Attacks build Heat; the overheat Burst is not Electric."
+			condition_text = "Connected Attacks build Heat; overheating releases a damaging Burst, empties Heat and briefly locks Attacks."
 		"farline_volley":
 			accepts = ["attack_hit", "dash"]
 			if level >= 3:
@@ -100,7 +120,7 @@ static func get_power_keyword_metadata(power_id: String, level: int = 1, _prisma
 		"sigil_chain":
 			produces = ["field", "damage"]
 			accepts = ["attack_hit"]
-			condition_text = "Four attack hits arm a sigil; the next connected Attack places its Field. Automatic damage cannot charge it. Hexweaver's passive burst detonates existing sigils."
+			condition_text = "Four attack hits arm a sigil; the next connected Attack places its Field. Hexweaver's Sigil Burst detonates existing sigils."
 		"blast_drive":
 			produces = ["attack_hit", "burst", "recoil", "push", "damage"]
 			accepts = ["attack"]
@@ -118,9 +138,9 @@ static func get_power_keyword_metadata(power_id: String, level: int = 1, _prisma
 			accepts = ["attack_hit"]
 			condition_text = "Each foe counts once per Attack; the same foe can count on later Attacks. The fourth contact releases a Burst. Cadence resets after 2.2s without an attack hit. Bonus power scales the rising damage of each contact."
 		"lacuna_echo":
-			produces = ["field", "pull", "damage"]
+			produces = ["field", "slow", "damage"]
 			accepts = ["kill", "field"]
-			condition_text = "Kills place a persistent well. Its bonus applies once inside any owned Field; overlapping Fields do not stack the bonus."
+			condition_text = "Kills place one damaging well, replacing the last. After pulse damage, surviving foes are Slowed. Your damage gains its bonus once inside any owned Field; overlapping Fields do not stack the bonus."
 		"sovereign_tempo":
 			produces = ["burst", "damage"]
 			accepts = ["attack_hit", "damage", "mark", "dash", "recoil", "orbit"]
@@ -133,12 +153,13 @@ static func get_power_keyword_metadata(power_id: String, level: int = 1, _prisma
 		"unbroken_oath":
 			accepts = ["attack_hit", "attack"]
 		"edict_of_the_court":
-			produces = ["burst", "push"]
+			produces = ["burst", "slow", "damage"]
 			accepts = ["kill"]
+			condition_text = "Your Kills release one damaging Burst per original action. After Burst damage, surviving foes are Slowed; all kills and descendants share the action's allowance."
 		"null_corridor":
-			produces = ["field", "push", "damage"]
+			produces = ["field", "mark", "damage"]
 			accepts = ["dash"]
-			condition_text = "Normal Dash leaves a corridor; each foe can be damaged at most once every 0.5s."
+			condition_text = "Normal Dash leaves a corridor; each trail damages a foe at most once every 0.5s and then applies a timed Mark. The strongest active Mark benefits all players."
 		"ruinous_impact":
 			produces = ["launch", "impact", "burst", "damage"]
 			accepts = ["attack_hit", "push", "pull"]
@@ -146,12 +167,12 @@ static func get_power_keyword_metadata(power_id: String, level: int = 1, _prisma
 		"sovereigns_double":
 			produces = ["echo", "damage"]
 			accepts = ["dash", "recoil", "orbit", "attack"]
-			condition_text = "Movement completion places one shade. Echoes copy damage, not another Attack, movement or Echo."
+			condition_text = "Movement completion places one shade. An Echo of Blast Drive retains its Burst shape. Echoes share the original action's reaction limits and spend no extra resources."
 	var description_keywords: Array[String] = []
 	for id in produces + accepts + conditions:
 		if not description_keywords.has(id):
 			description_keywords.append(id)
-	if power_id in ["first_strike", "heavy_blow", "bloodpact", "severing_edge", "static_wake", "sigil_chain", "blast_drive", "razor_orbit", "returning_crescent", "null_corridor", "ruinous_impact"]:
+	if power_id in ["first_strike", "heavy_blow", "bloodpact", "severing_edge", "patient_hunter", "marked_prey", "static_wake", "sigil_chain", "blast_drive", "razor_orbit", "returning_crescent", "null_corridor", "ruinous_impact"]:
 		description_keywords.append("damage_stat")
 	return {"produces": produces, "accepts": accepts, "conditions": conditions, "condition_text": condition_text, "description_keywords": description_keywords}
 
@@ -198,6 +219,11 @@ const BOSS_EPITAPHS := {
 }
 
 const DAMAGE_MODEL_BY_POWER := {
+	"patient_hunter": {"kind": DAMAGE_KIND_FLAT, "scale_source": DAMAGE_SCALE_SOURCE_NONE, "formula_note": "+X conditional Damage basis against already Slowed foes"},
+	"marked_prey": {"kind": DAMAGE_KIND_FLAT, "scale_source": DAMAGE_SCALE_SOURCE_NONE, "formula_note": "+X conditional Damage basis against already Marked foes"},
+	"stormbrand": {"kind": DAMAGE_KIND_NONE, "scale_source": DAMAGE_SCALE_SOURCE_NONE, "formula_note": "Timed Mark from accepted Electric damage; level 3 also applies Slow to an already Marked foe"},
+	"spark_relay": {"kind": DAMAGE_KIND_SCALING, "scale_source": DAMAGE_SCALE_SOURCE_HIT, "formula_note": "A fraction of the triggering Burst's unconditioned damage descriptor and coefficient"},
+	"shatterwake": {"kind": DAMAGE_KIND_SCALING, "scale_source": DAMAGE_SCALE_SOURCE_HIT, "formula_note": "A fraction of the triggering Projectile's unconditioned damage descriptor and coefficient"},
 	# Upgrades
 	"first_strike": {
 		"kind": DAMAGE_KIND_FLAT,
@@ -345,14 +371,14 @@ const DAMAGE_MODEL_BY_POWER := {
 		"formula_note": "Single-target hits trickle Oath; multihits scale exponentially. Fill bar to prime next-hit sword strike"
 	},
 	"edict_of_the_court": {
-		"kind": DAMAGE_KIND_NONE,
-		"scale_source": DAMAGE_SCALE_SOURCE_NONE,
-		"formula_note": "Emits force pulse from kill position, scattering nearby enemies outward"
+		"kind": DAMAGE_KIND_SCALING,
+		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
+		"formula_note": "Kills release one Burst per original action for 80%/120% of Damage; accepted damage Slows survivors"
 	},
 	"null_corridor": {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
-		"formula_note": "Dash path becomes a deflection zone; enemies inside take 24%/28% of Damage, at most once every 0.5s per trail"
+		"formula_note": "Dash leaves a Field dealing 24%/28% of Damage, at most once every 0.5s per trail; accepted damage applies a 10%/15% Mark for 1s"
 	},
 	"ruinous_impact": {
 		"kind": DAMAGE_KIND_SCALING,
@@ -367,6 +393,8 @@ const DAMAGE_MODEL_BY_POWER := {
 }
 
 const UPGRADE_BALANCE := {
+	"patient_hunter": {"kind": "add_int", "property": "patient_hunter_bonus_damage", "add": 12},
+	"marked_prey": {"kind": "add_int", "property": "marked_prey_bonus_damage", "add": 12},
 	"first_strike": {
 		"kind": "add_int",
 		"property": "first_strike_bonus_damage",
@@ -434,6 +462,7 @@ const UPGRADE_BALANCE := {
 }
 
 const BOSS_REWARD_BALANCE := {
+	"shatterwake": {"kind": "add_int", "property": "shatterwake_stacks", "add": 1},
 	"wardens_verdict": {
 		"kind": "add_int",
 		"property": "apex_predator_bonus_damage",
@@ -482,6 +511,8 @@ const BOSS_REWARD_BALANCE := {
 }
 
 const UPGRADE_STACK_LIMITS := {
+	"patient_hunter": 3,
+	"marked_prey": 3,
 	"first_strike": 3,
 	"heavy_blow": 3,
 	"wide_arc": 3,
@@ -500,6 +531,31 @@ const UPGRADE_STACK_LIMITS := {
 ## Each trial power now has complete metadata: balance params, stack limit, and parameter mapping rules
 ## Single source of truth for all trial power configuration
 const TRIAL_POWER_DEFINITIONS := {
+	"stormbrand": {
+		"stack_limit": 3,
+		"balance_params": {"mark_ratio_base": 0.10, "mark_ratio_per_level": 0.04, "duration_base": 3.0, "duration_per_level": 0.5, "slow_duration": 1.0, "slow_mult": 0.75},
+		"param_map": {
+			"reward_flag": "reward_stormbrand", "stack_property": "stormbrand_stacks",
+			"parameters": {
+				"mark_bonus_ratio": {"property": "stormbrand_mark_bonus_ratio", "type": "float"},
+				"mark_duration": {"property": "stormbrand_mark_duration", "type": "float"},
+				"slow_duration": {"property": "stormbrand_slow_duration", "type": "float"},
+				"slow_mult": {"property": "stormbrand_slow_mult", "type": "float"}
+			}
+		}
+	},
+	"spark_relay": {
+		"stack_limit": 3,
+		"balance_params": {"damage_ratio_base": 0.50, "damage_ratio_per_level": 0.10, "travel_range": 440.0, "max_targets_base": 1, "max_targets_per_level": 1},
+		"param_map": {
+			"reward_flag": "reward_spark_relay", "stack_property": "spark_relay_stacks",
+			"parameters": {
+				"damage_ratio": {"property": "spark_relay_damage_ratio", "type": "float"},
+				"max_targets": {"property": "spark_relay_max_targets", "type": "int"},
+				"travel_range": {"property": "spark_relay_travel_range", "type": "float"}
+			}
+		}
+	},
 	"razor_wind": {
 		"stack_limit": 3,
 		"balance_params": {
@@ -974,6 +1030,7 @@ const TRIAL_POWER_DEFINITIONS := {
 }
 
 const BOSS_REWARD_STACK_LIMITS := {
+	"shatterwake": 2,
 	"wardens_verdict": 2,
 	"lacuna_echo": 2,
 	"sovereign_tempo": 2,
@@ -1018,6 +1075,11 @@ const POWER_DISPLAY_CATEGORY_BOSS_REWARD := "boss_reward"
 ## Canonical display metadata for all powers.
 ## This supersedes ad-hoc name match blocks in UI scripts.
 const POWER_DISPLAY_METADATA := {
+	"patient_hunter": {"name": "Patient Hunter", "category": POWER_TYPE_UPGRADE},
+	"marked_prey": {"name": "Marked Prey", "category": POWER_TYPE_UPGRADE},
+	"stormbrand": {"name": "Stormbrand", "category": POWER_TYPE_TRIAL},
+	"spark_relay": {"name": "Spark Relay", "category": POWER_TYPE_TRIAL},
+	"shatterwake": {"name": "Shatterwake", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
 	# Upgrades
 	"first_strike": {"name": "First Strike", "category": POWER_TYPE_UPGRADE},
 	"heavy_blow": {"name": "Heavy Blow", "category": POWER_TYPE_UPGRADE},
@@ -1074,6 +1136,7 @@ const UPGRADE_POOL_IDS: Array[String] = [
 	"first_strike", "heavy_blow", "wide_arc", "long_reach", "fleet_foot",
 	"blink_dash", "iron_skin", "battle_trance", "surge_step", "heartstone",
 	"bloodpact", "severing_edge",
+	"patient_hunter", "marked_prey",
 ]
 
 const TRIAL_POWER_POOL_IDS: Array[String] = [
@@ -1081,11 +1144,13 @@ const TRIAL_POWER_POOL_IDS: Array[String] = [
 	"phantom_step", "riftpunch", "reaper_step", "static_wake", "storm_crown", "wraithstep",
 	"voidfire", "dread_resonance", "bloodvow", "eclipse_mark", "fracture_field",
 	"farline_volley", "sigil_chain", "blast_drive", "razor_orbit", "returning_crescent",
+	"stormbrand", "spark_relay",
 ]
 
 const BOSS_REWARD_POOL_IDS: Array[String] = [
 	"wardens_verdict", "lacuna_echo", "sovereign_tempo", "pillar_convergence", "unbroken_oath",
 	"edict_of_the_court", "null_corridor", "ruinous_impact", "sovereigns_double",
+	"shatterwake",
 ]
 
 

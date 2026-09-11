@@ -14,6 +14,17 @@ static var _interaction_scope: Dictionary = {}
 static var _damage_depth: int = 0
 static var _pending_interaction_hits: Array[Dictionary] = []
 static var _flushing_interactions: bool = false
+static var _keyword_reaction_depth: int = 0
+
+## These producers are simulated on the host. Their damage is never a client
+## request or a visual RPC, even when the owning player lives on another peer.
+static func apply_keyword_reaction_damage(target: Object, amount: int, context: Dictionary, source_peer_id: int) -> bool:
+	if MultiplayerSessionManager.is_remote_replica() or String(context.get("attack_type", "")) not in ["spark_relay_projectile", "shatterwake_burst", "edict_court"]:
+		return false
+	_keyword_reaction_depth += 1
+	var accepted := apply_damage(target, amount, context, source_peer_id)
+	_keyword_reaction_depth -= 1
+	return accepted
 
 ## Plain value scopes cross synchronous descendants; delayed effects keep a copy.
 static func begin_interaction_scope(action: Dictionary) -> Dictionary:
@@ -124,6 +135,8 @@ static func apply_damage(target: Object, amount: int, damage_context: Dictionary
 	var route_to_host := _should_route_enemy_damage_to_host(target)
 	source_peer_id = _resolve_source_peer(source_peer_id, route_to_host)
 	damage_context = _with_interaction_context(damage_context)
+	if String(damage_context.get("attack_type", "")) in ["spark_relay_projectile", "shatterwake_burst", "edict_court"] and (_keyword_reaction_depth <= 0 or MultiplayerSessionManager.is_remote_replica()):
+		return false
 	damage_context = _with_attack_origin(target, damage_context, source_peer_id)
 	var secondary := is_launch_suppressed() or bool(damage_context.get("secondary", false))
 	if secondary:
@@ -142,6 +155,8 @@ static func apply_damage(target: Object, amount: int, damage_context: Dictionary
 		if shared_event.is_empty():
 			return false
 		amount = int(shared_event.amount)
+		if shared_event.get("context") is Dictionary:
+			damage_context = shared_event.context
 	elif damage_context.get("hunters_snare_aoe_bonus") == true:
 		var action := INTERACTIONS.validate_action(damage_context.get("interaction"), source_peer_id)
 		var owner := _find_combat_owner(source_peer_id)
@@ -183,7 +198,7 @@ static func apply_damage(target: Object, amount: int, damage_context: Dictionary
 	if health_after >= 0 and health_after < health_before:
 		_commit_damage_fraction(shared_event)
 	if not secondary and health_after > 0 and health_after < health_before and String(damage_context.get("attack_type", "")) in ["melee", "razor_wind", "blast_drive"]:
-		_arm_primary_launch(target, source_peer_id)
+		_arm_primary_launch(target, source_peer_id, damage_context)
 	if secondary:
 		end_secondary_scope()
 	end_kill_proc_scope(previous_kill_scope)
@@ -191,6 +206,9 @@ static func apply_damage(target: Object, amount: int, damage_context: Dictionary
 	_damage_depth -= 1
 	if not interaction_event.is_empty() and health_after >= 0 and health_after < health_before and _pending_interaction_hits.size() < INTERACTIONS.MAX_PENDING_HITS:
 		interaction_event["applied"] = health_before - health_after
+		# Only the authoritative health transition can confirm a kill. Client
+		# contexts and owner kill notifications cannot grant this reaction.
+		interaction_event["killed"] = health_before > 0 and health_after <= 0
 		_pending_interaction_hits.append(interaction_event)
 	_flush_interaction_hits()
 	return true
@@ -215,6 +233,11 @@ static func _resolve_shared_damage(target: Object, legacy_amount: int, context: 
 	pre["slowed"] = bool(target.is_slowed()) if target.has_method("is_slowed") else false
 	var descriptor := {"raw_amount": float(raw), "damage_coefficient": float(coefficient), "context": context.duplicate(true)}
 	var direct := INTERACTIONS.is_attack_hit(String(action.source))
+	if direct and bool(owner.get("passive_effigy_command")):
+		var canonical: Dictionary = owner._validate_effigy_hit(target, action, context)
+		if canonical.is_empty():
+			return {}
+		descriptor.merge(canonical, true)
 	if direct and not controller.has_attack_hit(action, target.get_instance_id()) and owner.has_method("_prepare_shared_attack_damage"):
 		var prepared: Variant = owner._prepare_shared_attack_damage(target, descriptor.duplicate(true), action)
 		if prepared is Dictionary:
@@ -231,6 +254,7 @@ static func _resolve_shared_damage(target: Object, legacy_amount: int, context: 
 	var round_down: bool = String(action.source) == "static_wake" and context.get("fractional_rounding") == "floor"
 	var fraction: Dictionary = state.prepare_damage(source_peer, String(action.source), resolved, round_down)
 	return {"shared": true, "raw_amount": float(descriptor.raw_amount), "damage_coefficient": float(descriptor.damage_coefficient),
+		"context": descriptor.context,
 		"pending_bonuses": descriptor.get("pending_bonuses", {}), "pre_mark_ratio": float(pre.mark_ratio), "pre_dread_stacks": int(pre.dread_stacks),
 		"pre_slowed": bool(pre.slowed), "amount": int(fraction.amount), "fraction_state": weakref(state), "fraction": fraction}
 
@@ -304,6 +328,8 @@ static func apply_mark(target: Object, source: String, ratio: float, duration: f
 	if action.is_empty():
 		return false
 	if route:
+		if source == "null_corridor":
+			return false # Corridor Marks follow host-accepted damage only.
 		var tree := Engine.get_main_loop() as SceneTree
 		if tree == null or tree.current_scene == null or not tree.current_scene.has_method("request_enemy_mark_from_client"):
 			return false
@@ -312,10 +338,32 @@ static func apply_mark(target: Object, source: String, ratio: float, duration: f
 	var owner := _find_combat_owner(source_peer_id)
 	if owner == null or owner.get("_is_alive_state") == false or owner.get("_combat_removed") == true:
 		return false
-	var enabled_property := "passive_cross_stitch" if source == "cross_stitch" else "reward_" + source
-	if not bool(owner.get(enabled_property)):
-		return false
+	if source == "null_corridor":
+		if SHARED_MODIFIERS.property_number(owner, "null_corridor_strength") <= 0.0:
+			return false
+	else:
+		var enabled_property := "passive_cross_stitch" if source == "cross_stitch" else "reward_" + source
+		if not bool(owner.get(enabled_property)):
+			return false
 	match source:
+		"null_corridor":
+			# A periodic accepted tick refreshes this window; it does not spend
+			# another root allowance. The generic status RPC has no such scope.
+			var scope: Dictionary = current_interaction_context()
+			if not _flushing_interactions or scope.get("source") != "null_corridor_deflect" or action.get("source") != "null_corridor_deflect" or scope.get("seq") != action.get("seq") or scope.get("epoch") != action.get("epoch") or scope.get("owner") != source_peer_id:
+				return false
+			var level: int = clampi(int(round(SHARED_MODIFIERS.property_number(owner, "null_corridor_strength") * 2.0)), 1, 2)
+			ratio = 0.05 + 0.05 * float(level)
+			duration = 1.0
+		"stormbrand":
+			# Only a confirmed Electric event on the host may produce this Mark.
+			# In particular, the generic client status RPC is not a damage event.
+			var scope := current_interaction_context()
+			var controller: Node = owner.get("combat_interactions")
+			if route or scope.get("seq") != action.get("seq") or scope.get("epoch") != action.get("epoch") or scope.get("owner") != source_peer_id or (int(scope.get("traits", 0)) & INTERACTIONS.ELECTRIC) == 0 or not controller.has_reaction(action, "stormbrand", target.get_instance_id()):
+				return false
+			ratio = SHARED_MODIFIERS.property_number(owner, "stormbrand_mark_bonus_ratio")
+			duration = SHARED_MODIFIERS.property_number(owner, "stormbrand_mark_duration")
 		"cross_stitch":
 			# This passive is generated only by the accepted-attack boundary.
 			var scope := current_interaction_context()
@@ -489,7 +537,7 @@ static func _find_combat_owner(source_peer_id: int) -> CharacterBody2D:
 	return null
 
 
-static func _arm_primary_launch(target: Object, source_peer_id: int) -> void:
+static func _arm_primary_launch(target: Object, source_peer_id: int, context: Dictionary = {}) -> void:
 	if not (target is CharacterBody2D):
 		return
 	var owner := _find_combat_owner(source_peer_id)
@@ -497,6 +545,14 @@ static func _arm_primary_launch(target: Object, source_peer_id: int) -> void:
 		return
 	var enemy := target as CharacterBody2D
 	var direction := owner.global_position.direction_to(enemy.global_position)
+	if owner.get("passive_effigy_command") == true:
+		var origin: Variant = context.get("attack_origin")
+		if origin is Vector2 and (origin as Vector2).is_finite():
+			direction = (origin as Vector2).direction_to(enemy.global_position)
+		if direction.length_squared() <= 0.0001:
+			var committed: Variant = context.get("damage_direction", context.get("attack_direction"))
+			if committed is Vector2 and (committed as Vector2).is_finite():
+				direction = committed
 	if direction.length_squared() <= 0.0001:
 		direction = Vector2(owner.get("visual_facing_direction"))
 	_arm_launch(enemy, direction.normalized() * 540.0, source_peer_id)

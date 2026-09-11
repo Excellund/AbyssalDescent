@@ -1,0 +1,218 @@
+{
+  "bpm": 140,
+  "bars": 48,
+  "frames": 3949714,
+  "sample_rate": 48000,
+  "seconds": 82.28570833333333,
+  "selection_behavior": "Reward and doors keep the current arrangement, target and master level.",
+  "arrangements": {
+    "pursuit": {
+      "loudness": {
+        "input_i": -18.07,
+        "input_tp": -2.96,
+        "input_lra": 1.4
+      },
+      "static_gain_db": 3.629999999999996,
+      "offline_peak_control": false,
+      "notes": {
+        "base": 76,
+        "bass": 222,
+        "hook": 126,
+        "drums": 403,
+        "debris": 9
+      },
+      "source_recordings": {
+        "Percussion/BDrumNewhit_v5_rr1_Sum.wav": {
+          "decoded_seconds": 3.333625,
+          "trimmed_leading_ms": 0.0,
+          "source_active_rms_dbfs": -23.931577620298334,
+          "sha256": "642aaf3375eaff1307973f7de3ccbf74d18e71fb3cf9412e021b08fc3bf1981c"
+        },
+        "Percussion/cymbal-crash1_mf_rr1.wav": {
+          "decoded_seconds": 8.478583333333333,
+          "trimmed_leading_ms": 0.0,
+          "source_active_rms_dbfs": -28.19128724346919,
+          "sha256": "3b4a6ed42627eedca39f6480e9825dedeaab538197fc734f85be13ba655aa6aa"
+        },
+        "Percussion/BDrumNewhit_v5_rr2_Sum.wav": {
+          "decoded_seconds": 3.4826875,
+          "trimmed_leading_ms": 0.0,
+          "source_active_rms_dbfs": -24.76315384269938,
+          "sha256": "a83943f8125ae39469ef5dab1d0be2fe3145c6842c0621b27be5d86aa44b325d"
+        },
+        "Percussion/Snare2-HitSN_v5_rr1_Sum.wav": {
+          "decoded_seconds": 1.363125,
+          "trimmed_leading_ms": 0.0,
+          "source_active_rms_dbfs": -32.333071424445876,
+          "sha256": "8deb654b739f6dfb01f192b7043a9aad92b7973995246252571240fe712d0876"
+        },
+        "Percussion/Snare2-HitSN_v5_rr2_Sum.wav": {
+          "decoded_seconds": 1.4479166666666667,
+          "trimmed_leading_ms": 0.0,
+          "source_active_rms_dbfs": -33.20780962368697,
+          "sha256": "1f7ca9367273f7958cfccd5e454c0f30bb471301bc9ee05ef753c6f0423a3798"
+        },
+        "Percussion/cymbal-crash1_mf_rr2.wav": {
+          "decoded_seconds": 9.659166666666666,
+          "trimmed_leading_ms": 0.0,
+          "source_active_rms_dbfs": -25.734608322977437,
+          "sha256": "88534fac7b69522738fa6ae39f305c424a26418c274a18ca5a08a1302e4c60a2"
+        }
+      }
+    },
+    "pressure": {
+      "loudness": {
+        "input_i": -18.08,
+        "input_tp": -3.61,
+        "input_lra": 1.4
+      },
+      "static_gain_db": 3.2299999999999973,
+      "offline_peak_control": false,
+      "notes": {
+        "base": 76,
+        "bass": 174,
+        "hook": 96,
+        "drums": 356,
+        "debris": 9
+      },
+      "source_recordings": {
+        "Percussion/BDrumNewhit_v5_rr1_Sum.wav": {
+          "decoded_seconds": 3.333625,
+          "trimmed_leading_ms": 0.0,
+          "source_active_rms_dbfs": -23.931577620298334,
+          "sha256": "642aaf3375eaff1307973f7de3ccbf74d18e71fb3cf9412e021b08fc3bf1981c"
+        },
+        "Percussion/cymbal-crash1_mf_rr1.wav": {
+          "decoded_seconds": 8.478583333333333,
+          "trimmed_leading_ms": 0.0,
+          "source_active_rms_dbfs": -28.19128724346919,
+          "sha256": "3b4a6ed42627eedca39f6480e9825dedeaab538197fc734f85be13ba655aa6aa"
+        },
+        "Percussion/BDrumNewhit_v5_rr2_Sum.wav": {
+          "decoded_seconds": 3.4826875,
+          "trimmed_leading_ms": 0.0,
+          "source_active_rms_dbfs": -24.76315384269938,
+          "sha256": "a83943f8125ae39469ef5dab1d0be2fe3145c6842c0621b27be5d86aa44b325d"
+        },
+        "Percussion/Snare2-HitSN_v5_rr1_Sum.wav": {
+          "decoded_seconds": 1.363125,
+          "trimmed_leading_ms": 0.0,
+          "source_active_rms_dbfs": -32.333071424445876,
+          "sha256": "8deb654b739f6dfb01f192b7043a9aad92b7973995246252571240fe712d0876"
+        },
+        "Percussion/Snare2-HitSN_v5_rr2_Sum.wav": {
+          "decoded_seconds": 1.4479166666666667,
+          "trimmed_leading_ms": 0.0,
+          "source_active_rms_dbfs": -33.20780962368697,
+          "sha256": "1f7ca9367273f7958cfccd5e454c0f30bb471301bc9ee05ef753c6f0423a3798"
+        },
+        "Percussion/cymbal-crash1_mf_rr2.wav": {
+          "decoded_seconds": 9.659166666666666,
+          "trimmed_leading_ms": 0.0,
+          "source_active_rms_dbfs": -25.734608322977437,
+          "sha256": "88534fac7b69522738fa6ae39f305c424a26418c274a18ca5a08a1302e4c60a2"
+        }
+      }
+    },
+    "boss": {
+      "loudness": {
+        "input_i": -18.07,
+        "input_tp": -4.76,
+        "input_lra": 1.4
+      },
+      "static_gain_db": 3.2199999999999944,
+      "offline_peak_control": false,
+      "notes": {
+        "base": 76,
+        "bass": 234,
+        "hook": 132,
+        "drums": 523,
+        "debris": 9
+      },
+      "source_recordings": {
+        "Percussion/BDrumNewhit_v5_rr1_Sum.wav": {
+          "decoded_seconds": 3.333625,
+          "trimmed_leading_ms": 0.0,
+          "source_active_rms_dbfs": -23.931577620298334,
+          "sha256": "642aaf3375eaff1307973f7de3ccbf74d18e71fb3cf9412e021b08fc3bf1981c"
+        },
+        "Percussion/cymbal-crash1_mf_rr1.wav": {
+          "decoded_seconds": 8.478583333333333,
+          "trimmed_leading_ms": 0.0,
+          "source_active_rms_dbfs": -28.19128724346919,
+          "sha256": "3b4a6ed42627eedca39f6480e9825dedeaab538197fc734f85be13ba655aa6aa"
+        },
+        "Percussion/BDrumNewhit_v5_rr2_Sum.wav": {
+          "decoded_seconds": 3.4826875,
+          "trimmed_leading_ms": 0.0,
+          "source_active_rms_dbfs": -24.76315384269938,
+          "sha256": "a83943f8125ae39469ef5dab1d0be2fe3145c6842c0621b27be5d86aa44b325d"
+        },
+        "Percussion/Snare2-HitSN_v5_rr1_Sum.wav": {
+          "decoded_seconds": 1.363125,
+          "trimmed_leading_ms": 0.0,
+          "source_active_rms_dbfs": -32.333071424445876,
+          "sha256": "8deb654b739f6dfb01f192b7043a9aad92b7973995246252571240fe712d0876"
+        },
+        "Percussion/Snare2-HitSN_v5_rr2_Sum.wav": {
+          "decoded_seconds": 1.4479166666666667,
+          "trimmed_leading_ms": 0.0,
+          "source_active_rms_dbfs": -33.20780962368697,
+          "sha256": "1f7ca9367273f7958cfccd5e454c0f30bb471301bc9ee05ef753c6f0423a3798"
+        },
+        "Percussion/cymbal-crash1_mf_rr2.wav": {
+          "decoded_seconds": 9.659166666666666,
+          "trimmed_leading_ms": 0.0,
+          "source_active_rms_dbfs": -25.734608322977437,
+          "sha256": "88534fac7b69522738fa6ae39f305c424a26418c274a18ca5a08a1302e4c60a2"
+        },
+        "Percussion/Snare2-HitSN_v3_rr1_Sum.wav": {
+          "decoded_seconds": 1.7305,
+          "trimmed_leading_ms": 0.0,
+          "source_active_rms_dbfs": -45.25705444527702,
+          "sha256": "3df96009d655dd4fe43c635bd3c20314a1e0cbdf9f571ee8a66207f9ef917d08"
+        },
+        "Percussion/Snare2-HitSN_v3_rr2_Sum.wav": {
+          "decoded_seconds": 1.3107916666666666,
+          "trimmed_leading_ms": 0.0,
+          "source_active_rms_dbfs": -44.38671242025955,
+          "sha256": "3ed6158d6873089e0f4967f303c3fab514ddde3991117a45d259d419f6bc62b8"
+        }
+      }
+    },
+    "drive": {
+      "loudness": {
+        "input_i": -18.03,
+        "input_tp": -2.9,
+        "input_lra": 6.6
+      },
+      "approved_bytes_preserved": true
+    }
+  },
+  "integrated_level_spread_lu": 0.05,
+  "guided_journey": [
+    {
+      "seconds": 0.0,
+      "arrangement": "drive"
+    },
+    {
+      "seconds": 20.57142857142857,
+      "arrangement": "pursuit"
+    },
+    {
+      "seconds": 41.14285714285714,
+      "arrangement": "pressure"
+    },
+    {
+      "seconds": 61.71428571428571,
+      "arrangement": "boss"
+    }
+  ],
+  "hashes": {
+    "base": "1384bd30ecf7fae00ff4b3297341f8abfa3cab3db584501d2aefff933fda1da6",
+    "drive": "2c9d00dafacaf698cb3313956ac622aea31e1fd2d074558a22f563be9a4b395a",
+    "pursuit": "95c407965c0caf95de83c2da3e1d382bc67023ad5bd2f6dcf15fdb0e92969e15",
+    "pressure": "556c8b970a41368dcc96f1a11412e66af1f5827b47179075ac829a043f528b3f",
+    "boss": "06ac231eaf79d7722a00dac04d82eeaab83ba1fe7dd26a1ac19db23353bb24cc"
+  }
+}

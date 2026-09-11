@@ -136,7 +136,7 @@ func _test_secondary_kill_and_push() -> void:
 	victim.died.connect(func(): service._apply_enemy_killed_local(1, victim.global_position, DAMAGEABLE.is_launch_suppressed()))
 	DAMAGEABLE.apply_damage(victim, 1000, {"attack_type": "ruinous_impact", "secondary": true}, 1)
 	_check(host.kill_count == 1 and host.observed_suppression, "Secondary kill notifies the credited player inside a suppression scope")
-	_check(pushed.velocity.x == 200.0 and host.boss_combinations.launches.size() == before, "An Edict-style synchronous kill push cannot recursively arm another impact")
+	_check(pushed.velocity.x == 200.0 and host.boss_combinations.launches.size() == before, "A synchronous secondary kill impulse cannot recursively arm another impact")
 	_check(not DAMAGEABLE.is_launch_suppressed() and world.damage_events.back()["killed"], "Kill/stat accounting survives scope unwind")
 	service._apply_enemy_killed_local(1, Vector2.ZERO, true)
 	_check(host.kill_count == 2 and host.observed_suppression and host.boss_combinations.launches.size() == before, "A received remote kill flag preserves suppression through local procs")

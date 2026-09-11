@@ -184,7 +184,7 @@ func broadcast_cue_event(peer_id: int, event_name: String, payload: Dictionary, 
 		return
 	if not _is_authority_for_peer(peer_id):
 		return
-	if event_name in ["shared_build_state", "warden_verdict", "cross_stitch_burst"] and not MultiplayerSessionManager.should_broadcast():
+	if event_name in ["shared_build_state", "warden_verdict", "cross_stitch_burst", "shatterwake_burst"] and not MultiplayerSessionManager.should_broadcast():
 		return
 	var pending_variant: Variant = _pending_cue_events_by_peer.get(peer_id, [])
 	var pending_events := _cue_sync_queue.copy_pending_events(pending_variant)
@@ -489,6 +489,9 @@ func broadcast_attack_indicator(peer_id: int, attack_direction: Vector2, attack_
 
 @rpc("unreliable", "any_peer", "call_local")
 func _sync_attack_indicator(peer_id: int, attack_direction: Vector2, attack_range: float, attack_arc_degrees: float, swing_color: Color, swing_duration: float = 0.12, attack_origin: Vector2 = Vector2.INF, inner_range: float = 0.0) -> void:
+	var sender := multiplayer.get_remote_sender_id()
+	if sender != 0 and sender != 1 and sender != peer_id:
+		return
 	if peer_id not in player_nodes:
 		return
 	if peer_id == local_peer_id:
@@ -510,6 +513,10 @@ func broadcast_player_build_snapshot(peer_id: int, snapshot: Dictionary) -> void
 
 @rpc("reliable", "any_peer", "call_local")
 func _sync_player_build_snapshot(peer_id: int, snapshot: Dictionary) -> void:
+	if snapshot.has("effigy_attack_count"):
+		var sender := multiplayer.get_remote_sender_id()
+		if sender != 0 and sender != 1 and sender != peer_id:
+			return
 	if peer_id not in player_nodes:
 		return
 	if peer_id == local_peer_id:
@@ -542,13 +549,13 @@ func _apply_network_cue_events(peer_id: int, events: Array[Dictionary]) -> void:
 		return
 	var accepted_events: Array[Dictionary] = []
 	for entry: Dictionary in events:
-		if entry.get("event") not in ["shared_build_state", "warden_verdict", "cross_stitch_burst"]:
+		if entry.get("event") not in ["shared_build_state", "warden_verdict", "cross_stitch_burst", "shatterwake_burst"]:
 			accepted_events.append(entry)
 			continue
 		var sender := multiplayer.get_remote_sender_id()
 		if sender != 1 and not (sender == 0 and MultiplayerSessionManager.is_host()):
 			continue
-		if entry.get("event") in ["warden_verdict", "cross_stitch_burst"]:
+		if entry.get("event") in ["warden_verdict", "cross_stitch_burst", "shatterwake_burst"]:
 			accepted_events.append(entry)
 			continue
 		var packed: Variant = entry.get("payload")
@@ -559,6 +566,35 @@ func _apply_network_cue_events(peer_id: int, events: Array[Dictionary]) -> void:
 			accepted_events.append(decoded)
 	_cue_event_dispatcher.apply_cue_events(player_node, peer_id, local_peer_id, accepted_events)
 
+## Relay gameplay runs on the host for every owner. Dedicated bounded snapshots
+## avoid the transient cue budget and also recover an observer joining mid-flight.
+func broadcast_spark_relay_state(peer_id: int, payload: Dictionary, reliable: bool = false) -> void:
+	if peer_id <= 0 or not MultiplayerSessionManager.should_broadcast() or not player_nodes.has(peer_id):
+		return
+	if reliable:
+		_sync_spark_relay_state_reliable.rpc(peer_id, payload)
+	else:
+		_sync_spark_relay_state.rpc(peer_id, payload)
+
+@rpc("any_peer", "call_remote", "unreliable_ordered")
+func _sync_spark_relay_state(peer_id: int, payload: Dictionary) -> void:
+	_apply_spark_relay_state(peer_id, payload)
+
+@rpc("any_peer", "call_remote", "reliable")
+func _sync_spark_relay_state_reliable(peer_id: int, payload: Dictionary) -> void:
+	_apply_spark_relay_state(peer_id, payload)
+
+func _apply_spark_relay_state(peer_id: int, payload: Dictionary) -> void:
+	if multiplayer.get_remote_sender_id() != 1 or not MultiplayerSessionManager.is_remote_replica() or not player_nodes.has(peer_id):
+		return
+	var actor := _get_player_node(peer_id)
+	if actor == null or not (payload.get("projectiles") is Array) or payload.projectiles.size() > 32:
+		return
+	if payload.projectiles.is_empty() and not is_instance_valid(actor.get("spark_relay_controller")):
+		return
+	actor._ensure_combat_interactions()
+	actor._ensure_spark_relay().apply_network_state(payload)
+
 func _pack_shared_build_state(payload: Dictionary) -> Dictionary:
 	if not (payload.get("state") is Dictionary) or not (payload.get("run") is String) or not (payload.get("room") is int) or not (payload.get("serial") is int) or not (payload.get("epoch") is int):
 		return {}
@@ -568,7 +604,13 @@ func _pack_shared_build_state(payload: Dictionary) -> Dictionary:
 		if value != null and not (value is bool or value is int or (value is float and is_finite(value))):
 			return {}
 		values.append(value)
-	return {"run": payload.run, "room": payload.room, "serial": payload.serial, "epoch": payload.epoch, "v": values}
+	var packed := {"run": payload.run, "room": payload.room, "serial": payload.serial, "epoch": payload.epoch, "v": values}
+	if payload.get("effigy") is Dictionary:
+		var state: Dictionary = payload.effigy
+		if not (state.get("deployed") is bool and state.get("position") is Vector2 and state.get("seq") is int) or not (state.position as Vector2).is_finite():
+			return {}
+		packed["e"] = [state.deployed, state.position.x, state.position.y, state.seq, int(state.get("attacks", 0))]
+	return packed
 
 func _unpack_shared_build_state(payload: Dictionary) -> Dictionary:
 	if not (payload.get("v") is Array) or payload.v.size() != SHARED_BUILD_STATE_PROPERTIES.size() or not (payload.get("run") is String) or not (payload.get("room") is int) or not (payload.get("serial") is int) or not (payload.get("epoch") is int):
@@ -580,7 +622,16 @@ func _unpack_shared_build_state(payload: Dictionary) -> Dictionary:
 			return {}
 		if value != null:
 			state[SHARED_BUILD_STATE_PROPERTIES[index]] = value
-	return {"run": payload.run, "room": payload.room, "serial": payload.serial, "epoch": payload.epoch, "state": state}
+	var unpacked := {"run": payload.run, "room": payload.room, "serial": payload.serial, "epoch": payload.epoch, "state": state}
+	if payload.has("e"):
+		var effigy: Variant = payload.e
+		if not (effigy is Array) or effigy.size() != 5 or not (effigy[0] is bool) or not (effigy[3] is int) or not (effigy[4] is int) or int(effigy[4]) < 0:
+			return {}
+		for index: int in [1, 2]:
+			if not (effigy[index] is int or effigy[index] is float) or not is_finite(float(effigy[index])):
+				return {}
+		unpacked["effigy"] = {"deployed": effigy[0], "position": Vector2(float(effigy[1]), float(effigy[2])), "seq": effigy[3], "attacks": effigy[4]}
+	return unpacked
 
 
 ## Called by the local owner of a player when their dash phasing state toggles.

@@ -3,9 +3,12 @@ extends "res://scripts/tests/test_motion_arcana_registry.gd"
 const KEYWORDS := preload("res://scripts/shared/combat_keyword_catalogue.gd")
 const PASSIVES := preload("res://scripts/shared/character_passive_catalogue.gd")
 const CHARACTERS := preload("res://scripts/character_registry.gd")
+const REWARD_UI := preload("res://scripts/reward_selection_ui.gd")
 
 func _run() -> void:
 	_test_authored_keywords()
+	_test_keyword_distinction()
+	_test_keyword_card_contrast()
 	_test_passive_wording()
 	var registry := REGISTRY.new()
 	for id in ["hunters_snare", "wraithstep", "eclipse_mark", "dread_resonance"]:
@@ -58,7 +61,11 @@ func _test_passive_wording() -> void:
 		var short := PASSIVES.get_short_description(id)
 		var detail := PASSIVES.get_description(id)
 		_check(not short.contains("{kw:") and not detail.contains("{kw:"), "Passive surfaces render semantic spans: " + id)
-		_check(short.contains(KEYWORDS.ACTION_COLOR) and detail.contains(KEYWORDS.ACTION_COLOR), "Passive actions use canonical keyword styling: " + id)
+		var authored: Dictionary = PASSIVES.PASSIVES[id]
+		_check_authored_spans(String(authored.get("short", "")), short, id + " selection")
+		_check_authored_spans(String(authored.get("build", authored.get("short", ""))), PASSIVES.get_build_description(id), id + " build")
+		for rule: String in authored.get("rules", []):
+			_check_authored_spans(rule, detail, id + " glossary")
 		_check(DESCRIPTION_GUARD.strip_bbcode(short).length() <= 150, "Character selection keeps a compact passive explanation: " + id)
 		_check(glossary.contains(detail), "The glossary retains every full passive rule: " + id)
 		var metadata := PASSIVES.get_keyword_metadata(id)
@@ -103,6 +110,60 @@ func _test_authored_keywords() -> void:
 			_check(styled.contains("[b]") and styled.contains("[color=#"), "%s has text and color emphasis" % id)
 		_check(not String(KEYWORDS.KEYWORDS[id].definition).is_empty(), "%s has a shared definition" % id)
 	_check(KEYWORDS.keyword_ids("{kw:damage_stat} and {kw:damage} with {kw:slow}") == ["slow"], "Damage terms do not become glossary keywords")
+
+func _check_authored_spans(authored: String, rendered: String, label: String) -> void:
+	var spans := RegEx.new()
+	spans.compile("\\{kw:([^}|]+)(?:\\|([^}]*))?\\}")
+	for span: RegExMatch in spans.search_all(authored):
+		var id := span.get_string(1)
+		_check(rendered.contains(KEYWORDS.keyword_bbcode(id, span.get_string(2))), "Actual authored span retains its canonical style: %s/%s" % [label, id])
+
+func _test_keyword_distinction() -> void:
+	for pair: Array in [["electric", "field"], ["electric", "burst"], ["field", "burst"], ["slow", "mark"], ["dash", "attack"], ["recoil", "attack"], ["orbit", "attack"]]:
+		_check(KEYWORDS.keyword_color(String(pair[0])) != KEYWORDS.keyword_color(String(pair[1])), "Common co-occurring terms remain visually distinct: %s/%s" % [pair[0], pair[1]])
+	var colors: Dictionary = {}
+	for id: String in KEYWORDS.KEYWORDS:
+		if not KEYWORDS.PLAIN_TERMS.has(id):
+			colors[KEYWORDS.keyword_color(id)] = true
+	_check(colors.size() <= 6, "Keywords use at most a neutral and five accents rather than a separate hue per word")
+	for id: String in ["recoil", "orbit", "slow", "push", "pull", "launch"]:
+		_check(KEYWORDS.keyword_color(id) == KEYWORDS.keyword_color("dash"), "Movement terms reuse one restrained accent: " + id)
+	_check(KEYWORDS.keyword_color("impact") == KEYWORDS.keyword_color("burst"), "Instant collision and area payoffs reuse their accent")
+
+func _test_keyword_card_contrast() -> void:
+	# Exercise the production styles directly, without audio, input or a player
+	# profile. This follows changes to real card backgrounds instead of a copied
+	# list of RGB constants. White beneath their opacity is the worst backdrop.
+	var ui := REWARD_UI.new()
+	for index in range(3):
+		var panel := Panel.new()
+		ui.add_child(panel)
+		ui.boon_card_panels.append(panel)
+		ui.boon_hover_weights.append(0.0)
+	for mode: int in [REWARD_UI.ENUMS.RewardMode.BOON, REWARD_UI.ENUMS.RewardMode.ARCANA, REWARD_UI.ENUMS.RewardMode.BOSS]:
+		ui.reward_selection_mode = mode
+		for hover: float in [0.0, 1.0]:
+			ui.boon_hover_weights.fill(hover)
+			ui._apply_boon_card_styles(0)
+			for index in range(ui.boon_card_panels.size()):
+				var style := ui.boon_card_panels[index].get_theme_stylebox("panel") as StyleBoxFlat
+				var background := Color.WHITE.blend(style.bg_color)
+				var checked: Dictionary = {}
+				for id: String in KEYWORDS.KEYWORDS:
+					if KEYWORDS.PLAIN_TERMS.has(id):
+						continue
+					var hex := KEYWORDS.keyword_color(id)
+					if checked.has(hex):
+						continue
+					checked[hex] = true
+					var foreground := Color("#" + hex)
+					var contrast := (_keyword_luminance(foreground) + 0.05) / (_keyword_luminance(background) + 0.05)
+					_check(contrast >= 4.5, "Keyword contrast stays readable on actual mode %d/card %d/hover %.0f: %s %.2f" % [mode, index, hover, id, contrast])
+	ui.free()
+
+func _keyword_luminance(color: Color) -> float:
+	var linear := color.srgb_to_linear()
+	return linear.r * 0.2126 + linear.g * 0.7152 + linear.b * 0.0722
 
 func _test_metadata(registry: Node) -> void:
 	_check(not REGISTRY.get_power_keyword_metadata("hunters_snare", 1).accepts.has("damage"), "Snare L1 does not advertise automatic damage amplification")

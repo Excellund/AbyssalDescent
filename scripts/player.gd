@@ -4,6 +4,16 @@ const HEALTH_STATE_SCRIPT := preload("res://scripts/health_state.gd")
 const PLAYER_FEEDBACK_SCRIPT := preload("res://scripts/player_feedback.gd")
 const ARCANA_MOTION_SCRIPT := preload("res://scripts/arcana_motion_controller.gd")
 const RETURNING_CRESCENT_SCRIPT := preload("res://scripts/returning_crescent_controller.gd")
+const SPARK_RELAY_SCRIPT := preload("res://scripts/spark_relay_controller.gd")
+const KEYWORD_SYNERGY_DEFAULTS := {
+	"patient_hunter_bonus_damage": 0, "marked_prey_bonus_damage": 0,
+	"reward_stormbrand": false, "stormbrand_stacks": 0,
+	"stormbrand_mark_bonus_ratio": 0.10, "stormbrand_mark_duration": 3.0,
+	"stormbrand_slow_duration": 1.0, "stormbrand_slow_mult": 0.75,
+	"reward_spark_relay": false, "spark_relay_stacks": 0,
+	"spark_relay_damage_ratio": 0.50, "spark_relay_max_targets": 1,
+	"spark_relay_travel_range": 440.0, "shatterwake_stacks": 0
+}
 const BOSS_COMBINATIONS_SCRIPT := preload("res://scripts/boss_combination_controller.gd")
 const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 const UPGRADE_SYSTEM_SCRIPT_PATH := "res://scripts/upgrade_system.gd"
@@ -19,6 +29,8 @@ const STATIC_WAKE_CONTROLLER := preload("res://scripts/static_wake_controller.gd
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const PLAYER_REPLICATION_SERVICE_SCRIPT := preload("res://scripts/player_replication_service.gd")
 const SHARED_BUILD_RUNTIME := preload("res://scripts/shared_build_runtime.gd")
+const EFFIGY_CONTROLLER := preload("res://scripts/effigy_controller.gd")
+const EFFIGY_PLACE_DISTANCE := 180.0
 const RUN_SNAPSHOT_VERSION := 3
 const DEFAULT_DASH_SPEED: float = 720.0
 const DEFAULT_VOIDFIRE_OVERHEAT_MOVE_MULT: float = 0.65
@@ -41,6 +53,9 @@ const SIGIL_CHAIN_CHAIN_BONUS_PER_DEPTH: float = 0.40
 const SIGIL_CHAIN_CHAIN_BONUS_MAX_DEPTH: int = 6
 const SIGIL_CHAIN_BURST_DETONATION_MULT: int = 3
 const RUN_SNAPSHOT_PROPERTIES := [
+	"patient_hunter_bonus_damage", "marked_prey_bonus_damage",
+	"reward_stormbrand", "stormbrand_stacks", "stormbrand_mark_bonus_ratio", "stormbrand_mark_duration", "stormbrand_slow_duration", "stormbrand_slow_mult",
+	"reward_spark_relay", "spark_relay_stacks", "spark_relay_damage_ratio", "spark_relay_max_targets", "spark_relay_travel_range", "shatterwake_stacks",
 	"ruinous_impact_stacks", "sovereigns_double_stacks",
 	"reward_blast_drive", "blast_drive_stacks", "blast_drive_damage_scale", "blast_drive_reach_scale",
 	"reward_razor_orbit", "razor_orbit_stacks", "razor_orbit_damage_scale", "razor_orbit_reach_scale",
@@ -530,6 +545,15 @@ var passive_sigil_burst: bool = false
 var passive_veilstep_rhythm: bool = false
 var passive_farline_focus: bool = false
 var passive_cross_stitch: bool = false
+var passive_effigy_command: bool = false
+var effigy_deployed: bool = false
+var effigy_position: Vector2 = Vector2.ZERO
+var effigy_action_seq: int = 0
+var _effigy_retired_origin_seq: int = 0
+var _effigy_attack_count: int = 0
+var _effigy_phase_initialized: bool = false
+var effigy_controller: Node2D
+var _effigy_identity: String = ""
 # Only the host keeps an enemy reference; clients receive its network ID for drawing.
 var cross_stitch_target: WeakRef
 var cross_stitch_target_network_id: int = 0
@@ -575,6 +599,22 @@ var _last_broadcast_oath_enabled: bool = false
 var _last_broadcast_voidfire_heat_quantized: int = -1
 var _last_broadcast_voidfire_lockout_quantized: int = -1
 var _last_broadcast_voidfire_enabled: bool = false
+
+var patient_hunter_bonus_damage: int = 0
+var marked_prey_bonus_damage: int = 0
+var reward_stormbrand: bool = false
+var stormbrand_stacks: int = 0
+var stormbrand_mark_bonus_ratio: float = 0.10
+var stormbrand_mark_duration: float = 3.0
+var stormbrand_slow_duration: float = 1.0
+var stormbrand_slow_mult: float = 0.75
+var reward_spark_relay: bool = false
+var spark_relay_stacks: int = 0
+var spark_relay_damage_ratio: float = 0.50
+var spark_relay_max_targets: int = 1
+var spark_relay_travel_range: float = 440.0
+var shatterwake_stacks: int = 0
+var spark_relay_controller: Node2D
 
 func _ready() -> void:
 	body_radius_cache = _get_body_radius_for(self, 14.0)
@@ -639,7 +679,7 @@ func _physics_process(delta: float) -> void:
 	_update_iron_retort(delta)
 	_update_veilstep_rhythm(delta)
 	_update_farline_focus_state(delta)
-	_update_cross_stitch(delta)
+	_refresh_effigy_room()
 	_update_riftpunch_window(delta)
 	_update_sigil_chain_state(delta)
 	if _farline_volley_proc_flash_left > 0.0:
@@ -699,6 +739,13 @@ func _physics_process(delta: float) -> void:
 	if not active_objective_mutators.is_empty():
 		queue_redraw()
 
+func _ensure_spark_relay() -> Node2D:
+	if not is_instance_valid(spark_relay_controller):
+		spark_relay_controller = SPARK_RELAY_SCRIPT.new()
+		add_child(spark_relay_controller)
+		spark_relay_controller.initialize(self)
+	return spark_relay_controller
+
 func _ensure_arcana_motion() -> void:
 	if arcana_motion != null:
 		return
@@ -726,7 +773,6 @@ func _prepare_shared_attack_damage(target: Node2D, descriptor: Dictionary, actio
 
 func _on_shared_attack_hit(event: Dictionary) -> void:
 	_ensure_shared_build_runtime()
-	_accept_cross_stitch(event)
 	# Delayed hits retain the spending decision of their originating Attack,
 	# even after a later Attack has changed the player's current swing state.
 	var previous_spent := _indomitable_oath_spent_this_attack
@@ -734,23 +780,214 @@ func _on_shared_attack_hit(event: Dictionary) -> void:
 	shared_build_runtime.accepted_attack(event)
 	_indomitable_oath_spent_this_attack = previous_spent
 
-func _accept_shared_attack_start(action: Dictionary) -> bool:
-	if _is_local_control_owner() or not _is_alive_state or not combat_damage_enabled or encounter_input_frozen or indomitable_spirit_damage_reduction <= 0.0:
+func _accept_shared_attack_start(action: Dictionary, start: Dictionary = {}) -> bool:
+	if _is_local_control_owner() or not _is_alive_state or not combat_damage_enabled or encounter_input_frozen or get_tree().paused or not (passive_effigy_command or indomitable_spirit_damage_reduction > 0.0):
 		return false
 	if String(action.get("source", "")) not in ["melee", "blast_drive"] or action.get("kind") != action.get("source") or int(action.get("ancestry", 0)) != 0:
 		return false
 	_ensure_combat_interactions()
+	if passive_effigy_command and not _accept_effigy_attack_start(action, start):
+		return false
 	if not combat_interactions.accepts_action(action) or not combat_interactions.claim_reaction(action, "oath_attack_start"):
 		return false
 	_indomitable_attack_hit_count = 0
 	_indomitable_primed_this_attack = false
 	_indomitable_oath_spent_this_attack = false
-	if _consume_indomitable_spirit_bonus(global_position, false) > 0:
+	var oath_bonus := _consume_indomitable_spirit_bonus(global_position, false)
+	if oath_bonus > 0:
 		_indomitable_oath_spent_this_attack = true
 		combat_interactions.claim_reaction(action, "oath_attack_spent")
+		if passive_effigy_command:
+			var accepted: Dictionary = combat_interactions.get_attack_start(action)
+			accepted["oath_bonus"] = oath_bonus
+			accepted["oath_coefficient"] = _get_indomitable_retaliation_ratio()
 	_ensure_shared_build_runtime()
 	shared_build_runtime.publish_state()
 	return true
+
+func _ensure_effigy() -> void:
+	if is_instance_valid(effigy_controller):
+		return
+	effigy_controller = EFFIGY_CONTROLLER.new()
+	effigy_controller.name = "Effigy"
+	add_child(effigy_controller)
+	effigy_controller.initialize(self)
+
+func _refresh_effigy_room() -> void:
+	var identity := "%s:%d" % [INTERACTION_REGISTRY.current_run(), INTERACTION_REGISTRY.current_room()]
+	if identity != _effigy_identity:
+		_effigy_identity = identity
+		_clear_effigy()
+		effigy_action_seq = 0
+		_effigy_retired_origin_seq = 0
+	if effigy_deployed:
+		var bounds: Rect2 = EnemyReplicationService.get_current_room_bounds()
+		if bounds.has_area() and not bounds.grow(-EFFIGY_CONTROLLER.FOOTPRINT).grow(0.01).has_point(effigy_position):
+			# A shrinking arena retires this delivery point without moving it or
+			# cancelling another power's descendants. New input can plant again.
+			_effigy_retired_origin_seq = maxi(_effigy_retired_origin_seq, effigy_action_seq)
+			_clear_effigy()
+			if shared_build_runtime != null:
+				shared_build_runtime.publish_state()
+
+func get_attack_origin() -> Vector2:
+	_refresh_effigy_room()
+	return effigy_position if passive_effigy_command and effigy_deployed else global_position
+
+func _clear_effigy() -> void:
+	effigy_deployed = false
+	effigy_position = Vector2.ZERO
+	if is_instance_valid(effigy_controller):
+		effigy_controller.visible = false
+
+func get_effigy_network_state() -> Dictionary:
+	return {"deployed": effigy_deployed, "position": effigy_position, "seq": effigy_action_seq, "attacks": _effigy_attack_count}
+
+func apply_effigy_network_state(state: Dictionary) -> void:
+	if not passive_effigy_command or not _is_alive_state or _combat_removed or not (state.get("deployed") is bool) or not (state.get("position") is Vector2) or not (state.get("seq") is int):
+		return
+	var position_value: Vector2 = state.position
+	if not position_value.is_finite() or int(state.seq) < effigy_action_seq:
+		return
+	var bounds: Rect2 = EnemyReplicationService.get_current_room_bounds()
+	if bool(state.deployed) and bounds.has_area() and not bounds.grow(1.0).has_point(position_value):
+		return
+	_effigy_identity = "%s:%d" % [INTERACTION_REGISTRY.current_run(), INTERACTION_REGISTRY.current_room()]
+	effigy_action_seq = int(state.seq)
+	if state.get("attacks") is int and int(state.attacks) >= 0:
+		_effigy_attack_count = int(state.attacks)
+		attack_combo_counter = _effigy_attack_count
+		_effigy_phase_initialized = true
+	effigy_deployed = bool(state.deployed)
+	effigy_position = position_value
+	if effigy_deployed:
+		_ensure_effigy()
+	elif is_instance_valid(effigy_controller):
+		effigy_controller.visible = false
+
+func _recall_effigy(action: Dictionary = {}) -> void:
+	_refresh_effigy_room()
+	effigy_action_seq = maxi(effigy_action_seq, int(action.get("seq", 0)))
+	if effigy_deployed and player_feedback != null:
+		player_feedback.play_world_ring(effigy_position, 24.0, Color(player_core_color, 0.8), 0.18)
+	_clear_effigy()
+	if shared_build_runtime != null:
+		shared_build_runtime.publish_state()
+
+## Capture the current origin before planting; the deployment Attack stays local.
+func _begin_effigy_attack(action: Dictionary, direction: Vector2, body_origin: Vector2) -> Vector2:
+	var origin := get_attack_origin()
+	if not passive_effigy_command or not _is_alive_state or _combat_removed or not combat_damage_enabled or encounter_input_frozen or get_tree().paused:
+		return origin
+	_effigy_phase_initialized = true
+	_effigy_attack_count += 1
+	effigy_action_seq = maxi(effigy_action_seq, int(action.get("seq", 0)))
+	if not effigy_deployed:
+		origin = body_origin
+		_ensure_effigy()
+		var placed: Vector2 = effigy_controller.placement(body_origin, direction)
+		if placed.is_finite():
+			effigy_position = placed
+			effigy_deployed = true
+			if player_feedback != null:
+				player_feedback.play_world_ring(placed, 25.0, Color(player_body_color, 0.85), 0.22)
+	return origin
+
+func _accept_effigy_attack_start(action: Dictionary, start: Dictionary) -> bool:
+	_refresh_effigy_room()
+	if int(action.get("seq", 0)) <= effigy_action_seq:
+		return false
+	var body: Variant = start.get("body_origin")
+	var direction: Variant = start.get("direction")
+	var strength: Variant = start.get("blast_strength", -1.0)
+	if not (body is Vector2 and direction is Vector2 and (strength is float or strength is int)):
+		return false
+	if not body.is_finite() or not direction.is_finite() or body.distance_to(global_position) > 96.0 or direction.length_squared() < 0.9 or direction.length_squared() > 1.1 or not is_finite(float(strength)):
+		return false
+	var source := String(action.get("source", ""))
+	if source == "blast_drive" and (not reward_blast_drive or float(strength) < 0.0 or float(strength) > 1.0):
+		return false
+	if not combat_interactions.accepts_action(action) or not combat_interactions.claim_reaction(action, "effigy_attack_start"):
+		return false
+	var origin := _begin_effigy_attack(action, direction, body)
+	# Presentation cues also replicate attack_combo_counter. Keep this accepted
+	# input count independent of their unreliable arrival order.
+	var execution := reward_execution_edge and _effigy_attack_count % maxi(1, execution_every) == 0
+	var raw_damage := damage
+	var reach := attack_range
+	var arc := attack_arc_degrees
+	var coefficient := 1.0
+	if source == "blast_drive":
+		coefficient = lerpf(ARCANA_MOTION_SCRIPT.BLAST_DAMAGE_MULT_MIN, ARCANA_MOTION_SCRIPT.BLAST_DAMAGE_MULT_MAX, float(strength)) * blast_drive_damage_scale
+		raw_damage = maxi(1, int(round(float(damage) * coefficient)))
+		reach = ARCANA_MOTION_SCRIPT.blast_range(float(strength), blast_drive_reach_scale)
+		arc = ARCANA_MOTION_SCRIPT.BLAST_ARC_DEGREES
+	var context: Dictionary = upgrade_system.build_melee_attack_context(raw_damage, reach, arc, execution, execution_damage_mult)
+	context["damage_coefficient"] = coefficient * float(context.get("damage_mult", 1.0))
+	context["source"] = source
+	_store_effigy_attack(action, origin, direction, context)
+	return true
+
+func _store_effigy_attack(action: Dictionary, origin: Vector2, direction: Vector2, context: Dictionary) -> void:
+	var geometry := _get_melee_attack_geometry(context)
+	var raw := float(context.get("damage", damage))
+	var coefficient := float(context.get("damage_coefficient", context.get("damage_mult", 1.0)))
+	if reward_voidfire and _voidfire_lockout_left <= 0.0 and void_heat >= voidfire_danger_zone_threshold:
+		raw = round(raw * (1.0 + voidfire_danger_zone_amp))
+		coefficient *= 1.0 + voidfire_danger_zone_amp
+	if reward_bloodvow and _is_wounded_for_bloodvow():
+		raw = round(raw * bloodvow_damage_mult)
+		coefficient *= bloodvow_damage_mult
+	var shapes: Dictionary = {String(context.get("source", "melee")): {"raw_amount": raw, "damage_coefficient": coefficient, "range": geometry.range, "arc_degrees": geometry.arc_degrees, "inner": 0.0}}
+	if reward_razor_wind:
+		var wind: Dictionary = upgrade_system.build_razor_wind_attack_context(context, razor_wind_damage_ratio, razor_wind_range_scale, razor_wind_arc_degrees, damage, attack_range)
+		shapes["razor_wind"] = {"raw_amount": float(wind.damage), "damage_coefficient": float(context.get("damage_coefficient", context.get("damage_mult", 1.0))) * razor_wind_damage_ratio, "range": float(wind.range), "arc_degrees": float(wind.arc_degrees), "inner": attack_range, "attack_range": attack_range}
+	combat_interactions.store_attack_start(action, {"origin": origin, "direction": direction.normalized(), "shapes": shapes})
+	if not MultiplayerSessionManager.is_remote_replica():
+		for seamlock: Node in get_tree().get_nodes_in_group("seamlock_sync_group"):
+			if is_instance_valid(seamlock) and not seamlock.is_queued_for_deletion() and seamlock.has_method("receive_committed_player_attack"):
+				seamlock.receive_committed_player_attack(self, action)
+
+## Host derives damage and geometry from the accepted start, never a supplied origin.
+func _validate_effigy_hit(target: Node2D, action: Dictionary, context: Dictionary) -> Dictionary:
+	_refresh_effigy_room()
+	if not _is_alive_state or _combat_removed or not combat_damage_enabled or encounter_input_frozen or get_tree().paused:
+		return {}
+	if int(action.get("seq", 0)) <= _effigy_retired_origin_seq:
+		return {}
+	var accepted: Dictionary = combat_interactions.get_attack_start(action)
+	if accepted.is_empty():
+		return {}
+	var claimed: Variant = context.get("attack_origin")
+	if not (claimed is Vector2) or not claimed.is_finite() or claimed.distance_to(accepted.origin) > 2.0:
+		return {}
+	var shape: Dictionary = accepted.shapes.get(String(action.source), {})
+	if shape.is_empty():
+		return {}
+	var valid := false
+	var hit_position := target.global_position
+	for entry: Dictionary in _get_damageable_enemies_in_cone(accepted.origin, accepted.direction, float(shape.range), deg_to_rad(float(shape.arc_degrees) * 0.5)):
+		if entry.get("enemy") == target and (float(shape.inner) <= 0.0 or (entry.get("hit_position", target.global_position) as Vector2).distance_to(accepted.origin) > float(shape.inner)):
+			valid = true
+			hit_position = entry.get("hit_position", target.global_position)
+			break
+	if not valid or not combat_interactions.claim_reaction(action, "effigy_damage_" + String(action.source), target.get_instance_id()):
+		return {}
+	var canonical_context := context.duplicate(true)
+	canonical_context["attack_origin"] = accepted.origin
+	canonical_context["hit_position"] = hit_position
+	canonical_context["attack_direction"] = accepted.direction
+	canonical_context["damage_direction"] = accepted.direction
+	canonical_context["attack_range"] = shape.get("attack_range", shape.range)
+	if _is_local_control_owner():
+		return {"raw_amount": context.get("raw_amount", shape.raw_amount), "damage_coefficient": context.get("damage_coefficient", shape.damage_coefficient), "context": canonical_context}
+	var result := {"raw_amount": float(shape.raw_amount), "damage_coefficient": float(shape.damage_coefficient), "context": canonical_context}
+	if int(accepted.get("oath_bonus", 0)) > 0 and combat_interactions.claim_reaction(action, "effigy_oath_bonus"):
+		result.raw_amount += float(accepted.oath_bonus)
+		result.damage_coefficient += float(accepted.get("oath_coefficient", 0.0))
+	canonical_context["raw_amount"] = result.raw_amount
+	canonical_context["damage_coefficient"] = result.damage_coefficient
+	return result
 
 func _on_shared_damage(event: Dictionary) -> void:
 	_ensure_shared_build_runtime()
@@ -821,6 +1058,8 @@ func _begin_effect_scope(kind: String, action: Dictionary = {}) -> Dictionary:
 func _cancel_interactions() -> void:
 	if combat_interactions != null:
 		combat_interactions.cancel()
+	if is_instance_valid(spark_relay_controller):
+		spark_relay_controller.cancel()
 	if static_wake_controller != null:
 		static_wake_controller.cancel()
 	_dash_interaction.clear()
@@ -859,13 +1098,15 @@ func _complete_shared_movement(kind: String, position: Vector2) -> void:
 	_accept_shared_movement(kind, position, action)
 
 func _accept_shared_dash_start(action: Dictionary) -> bool:
-	if _is_local_control_owner() or not _is_alive_state or not combat_damage_enabled or encounter_input_frozen or not (reward_farline_volley or passive_sigil_burst):
+	if _is_local_control_owner() or not _is_alive_state or not combat_damage_enabled or encounter_input_frozen or not (reward_farline_volley or passive_sigil_burst or passive_effigy_command):
 		return false
 	if action.get("kind") != "dash" or String(action.get("source", "")) != "" or int(action.get("ancestry", 0)) != 0:
 		return false
 	_ensure_combat_interactions()
 	if not combat_interactions.accepts_action(action) or not combat_interactions.claim_reaction(action, "dash_start"):
 		return false
+	if passive_effigy_command:
+		_recall_effigy(action)
 	# The owner already emits any Farline departure Burst. Mirror only the
 	# resource transitions consumed later by host-confirmed attack callbacks.
 	if reward_farline_volley:
@@ -893,6 +1134,8 @@ func _accept_shared_movement(kind: String, position: Vector2, action: Dictionary
 func perform_motion_blast(direction: Vector2, strength: float) -> void:
 	var previous_blast_scope := _begin_effect_scope("blast_drive")
 	primary_attack_fired.emit()
+	if passive_effigy_command:
+		attack_combo_counter = _effigy_attack_count
 	attack_combo_counter += 1
 	var execution_proc := reward_execution_edge and attack_combo_counter % maxi(1, execution_every) == 0
 	var blast_damage := maxi(1, int(round(float(damage) * lerpf(ARCANA_MOTION_SCRIPT.BLAST_DAMAGE_MULT_MIN, ARCANA_MOTION_SCRIPT.BLAST_DAMAGE_MULT_MAX, strength) * blast_drive_damage_scale)))
@@ -903,8 +1146,9 @@ func perform_motion_blast(direction: Vector2, strength: float) -> void:
 	context["damage_coefficient"] = lerpf(ARCANA_MOTION_SCRIPT.BLAST_DAMAGE_MULT_MIN, ARCANA_MOTION_SCRIPT.BLAST_DAMAGE_MULT_MAX, strength) * blast_drive_damage_scale * float(context.get("damage_mult", 1.0))
 	visual_facing_direction = direction
 	attack_cooldown_left = get_effective_attack_cooldown()
+	var blast_origin := get_attack_origin()
 	_perform_melee_attack(direction, context)
-	for entry in _get_damageable_enemies_in_cone(global_position, direction, blast_range, deg_to_rad(ARCANA_MOTION_SCRIPT.BLAST_ARC_DEGREES * 0.5)):
+	for entry in _get_damageable_enemies_in_cone(blast_origin, direction, blast_range, deg_to_rad(ARCANA_MOTION_SCRIPT.BLAST_ARC_DEGREES * 0.5)):
 		var enemy := entry.get("enemy") as Node2D
 		if enemy == null or DAMAGEABLE.is_displacement_immune(enemy):
 			continue
@@ -997,10 +1241,12 @@ func _try_start_dash(direction: Vector2) -> void:
 
 	dash_direction = direction if direction != Vector2.ZERO else last_move_direction
 	_dash_interaction = new_combat_action("dash")
-	if MultiplayerSessionManager.is_remote_replica() and (reward_farline_volley or passive_sigil_burst):
+	if MultiplayerSessionManager.is_remote_replica() and (reward_farline_volley or passive_sigil_burst or passive_effigy_command):
 		var world := get_tree().current_scene
 		if world != null and world.has_method("request_shared_dash_start_from_client"):
 			world.request_shared_dash_start_from_client(_dash_interaction)
+	if passive_effigy_command:
+		_recall_effigy(_dash_interaction)
 	if reward_static_wake:
 		_ensure_static_wake()
 		static_wake_controller.begin_dash(_dash_interaction)
@@ -1087,6 +1333,8 @@ func _try_execute_attack(attack_direction: Vector2) -> void:
 	attack_anim_time_left = attack_anim_duration
 	player_feedback.play_attack_swing_sound()
 
+	if passive_effigy_command:
+		attack_combo_counter = _effigy_attack_count
 	attack_combo_counter += 1
 	if reward_execution_edge:
 		_broadcast_cue_event("execution_edge_state", {
@@ -1108,18 +1356,19 @@ func _try_execute_attack(attack_direction: Vector2) -> void:
 		velocity = Vector2.ZERO
 	if reward_razor_wind:
 		swing_color = ENEMY_BASE.COLOR_SWING_RAZOR_WIND if not execution_proc else ENEMY_BASE.COLOR_EXECUTION_PROC_EXTENDED
+	var visual_origin := get_attack_origin()
 	var visual_geometry := _get_melee_attack_geometry(melee_context)
 	var visual_range := float(visual_geometry["range"])
 	var visual_arc_degrees := float(visual_geometry["arc_degrees"])
-	player_feedback.play_attack_swing_visual(attack_direction, visual_range, visual_arc_degrees, swing_color)
-	_broadcast_attack_indicator(attack_direction, visual_range, visual_arc_degrees, swing_color)
+	player_feedback.play_attack_swing_visual(attack_direction, visual_range, visual_arc_degrees, swing_color, 0.11, 0.0, visual_origin)
+	_broadcast_attack_indicator(attack_direction, visual_range, visual_arc_degrees, swing_color, 0.11, visual_origin)
 	if reward_razor_wind:
 		var wind_context: Dictionary = upgrade_system.build_razor_wind_attack_context(melee_context, razor_wind_damage_ratio, razor_wind_range_scale, razor_wind_arc_degrees, damage, attack_range)
 		var wind_range := float(wind_context["range"])
 		var wind_color := ENEMY_BASE.COLOR_SWING_RAZOR_WIND_EXTENDED if not execution_proc else ENEMY_BASE.COLOR_EXECUTION_WIND_EXTENDED
 		var wind_arc_degrees_visual := float(wind_context.get("arc_degrees", razor_wind_arc_degrees))
-		player_feedback.play_attack_swing_visual(attack_direction, wind_range, wind_arc_degrees_visual, wind_color, 0.14, attack_range)
-		_broadcast_attack_indicator(attack_direction, wind_range, wind_arc_degrees_visual, wind_color, 0.14, global_position, attack_range)
+		player_feedback.play_attack_swing_visual(attack_direction, wind_range, wind_arc_degrees_visual, wind_color, 0.14, attack_range, visual_origin)
+		_broadcast_attack_indicator(attack_direction, wind_range, wind_arc_degrees_visual, wind_color, 0.14, visual_origin, attack_range)
 	if execution_proc:
 		execution_edge_proc_display_left = EXECUTION_EDGE_PROC_DISPLAY_HOLD
 		_broadcast_cue_event("execution_edge_state", {
@@ -1154,8 +1403,11 @@ func _update_battle_trance(delta: float) -> void:
 func _is_attack_locked() -> bool:
 	return attack_lock_time_left > 0.0
 
+func _get_attack_aim_point() -> Vector2:
+	return get_global_mouse_position()
+
 func _get_mouse_attack_direction() -> Vector2:
-	var to_mouse := get_global_mouse_position() - global_position
+	var to_mouse := _get_attack_aim_point() - get_attack_origin()
 	if to_mouse.length_squared() > 0.000001:
 		return to_mouse.normalized()
 	if last_move_direction != Vector2.ZERO:
@@ -1523,6 +1775,8 @@ func _broadcast_owner_damage_feedback() -> void:
 
 func set_combat_damage_enabled(enabled: bool) -> void:
 	combat_damage_enabled = enabled
+	if not enabled and is_instance_valid(spark_relay_controller):
+		spark_relay_controller.cancel()
 	if not enabled and returning_crescent != null:
 		returning_crescent.cancel()
 
@@ -1566,6 +1820,7 @@ func set_alive(is_alive: bool) -> void:
 	_is_alive_state = is_alive
 	if not is_alive:
 		_clear_cross_stitch()
+		_clear_effigy()
 		DAMAGEABLE.cancel_owner(player_id if player_id > 0 else DAMAGEABLE._resolve_local_peer_id())
 		discard_pending_combat_input()
 		if shared_build_runtime != null:
@@ -1587,6 +1842,7 @@ func set_combat_removed(removed: bool) -> void:
 	set_physics_process(not removed)
 	if removed:
 		_clear_cross_stitch()
+		_clear_effigy()
 		DAMAGEABLE.cancel_owner(player_id if player_id > 0 else DAMAGEABLE._resolve_local_peer_id())
 		discard_pending_combat_input()
 		if shared_build_runtime != null:
@@ -1616,6 +1872,14 @@ func revive_with_health(revived_health: float = 1.0) -> void:
 	set_combat_removed(false)
 
 func apply_character_package(data: Dictionary) -> void:
+	var incoming_character_id := String(data.get("id", "")).strip_edges().to_lower()
+	var has_combat_history := is_instance_valid(combat_interactions) and (int(combat_interactions._next_sequence) > 0 or not combat_interactions._roots.is_empty())
+	var owns_solo_history := not MultiplayerSessionManager.is_session_connected() and is_inside_tree() and has_combat_history
+	# A fresh avatar can receive its first package before peer assignment. It
+	# has no old identity to retire and must never borrow the local peer's ID.
+	if incoming_character_id != active_character_id and (not active_character_id.is_empty() or has_combat_history) and (player_id > 0 or owns_solo_history):
+		_cancel_interactions()
+		DAMAGEABLE.cancel_owner(player_id if player_id > 0 else DAMAGEABLE._resolve_local_peer_id())
 	var mods: Dictionary = data.get("stat_modifiers", {}) as Dictionary
 	for key in mods:
 		var prop: String = String(key)
@@ -1651,14 +1915,21 @@ func apply_character_package(data: Dictionary) -> void:
 		player_dash_phase_color = vis["dash_phase_color"] as Color
 	if vis.has("dash_streak_color"):
 		player_dash_streak_color = vis["dash_streak_color"] as Color
-	active_character_id = String(data.get("id", "")).strip_edges().to_lower()
+	active_character_id = incoming_character_id
 	var passive_id: String = String(data.get("passive_id", "")).strip_edges().to_lower()
 	passive_iron_retort = passive_id == "iron_retort"
 	passive_sigil_burst = passive_id == "sigil_burst"
 	passive_veilstep_rhythm = passive_id == "veilstep_rhythm"
 	passive_farline_focus = passive_id == "farline_focus"
-	passive_cross_stitch = passive_id == "cross_stitch"
+	var was_effigy := passive_effigy_command
+	passive_cross_stitch = false # Serialized compatibility only.
+	passive_effigy_command = passive_id == "effigy_command"
+	if passive_effigy_command or was_effigy:
+		_effigy_attack_count = 0
+		_effigy_phase_initialized = _is_local_control_owner()
+		attack_combo_counter = 0
 	_clear_cross_stitch()
+	_clear_effigy()
 	iron_retort_brace_build_left = 0.0
 	iron_retort_brace_ready = false
 	iron_retort_brace_window_left = 0.0
@@ -1734,6 +2005,11 @@ func apply_run_snapshot(snapshot: Dictionary, clear_target_status: bool = true) 
 	if clear_target_status:
 		DAMAGEABLE.cancel_owner(player_id if player_id > 0 else DAMAGEABLE._resolve_local_peer_id())
 		_clear_cross_stitch()
+		_clear_effigy()
+		if passive_effigy_command:
+			_effigy_attack_count = 0
+			attack_combo_counter = 0
+			_effigy_phase_initialized = _is_local_control_owner()
 	_cancel_interactions()
 	if returning_crescent != null:
 		returning_crescent.cancel()
@@ -1746,6 +2022,8 @@ func apply_run_snapshot(snapshot: Dictionary, clear_target_status: bool = true) 
 	returning_crescent_stacks = 0
 	returning_crescent_damage_scale = 1.0
 	returning_crescent_reach_scale = 1.0
+	for property_name: String in KEYWORD_SYNERGY_DEFAULTS:
+		set(property_name, KEYWORD_SYNERGY_DEFAULTS[property_name])
 	var properties := snapshot.get("properties", {}) as Dictionary
 	for property_name in properties.keys():
 		set(String(property_name), properties[property_name])
@@ -1766,7 +2044,7 @@ func apply_run_snapshot(snapshot: Dictionary, clear_target_status: bool = true) 
 		upgrade_system.set("upgrade_stacks", upgrade_stacks.duplicate(true))
 	_restore_omitted_power_snapshot_values(properties, upgrade_stacks)
 	if is_instance_valid(upgrade_system):
-		for power_id in ["hunters_snare", "wraithstep", "eclipse_mark", "dread_resonance"]:
+		for power_id in ["hunters_snare", "wraithstep", "eclipse_mark", "dread_resonance", "stormbrand", "spark_relay"]:
 			upgrade_system.reapply_shared_power_parameters(power_id)
 		upgrade_system.reapply_derived_damage_coefficients()
 	if shared_build_runtime != null:
@@ -1827,11 +2105,20 @@ func apply_trial_power(reward_id: String) -> void:
 	upgrade_system.apply_trial_power(reward_id)
 
 func build_network_build_snapshot() -> Dictionary:
-	return build_run_snapshot()
+	var snapshot := build_run_snapshot()
+	if passive_effigy_command:
+		snapshot["effigy_attack_count"] = _effigy_attack_count
+	return snapshot
 
 func apply_network_build_snapshot(snapshot: Dictionary) -> void:
 	# A live build announcement does not end the owner's Mark/Dread windows.
 	apply_run_snapshot(snapshot, false)
+	# Seed only a newly created replica from the reliable initial build. Once
+	# actions begin, neither later build packets nor UI cues can rewrite phase.
+	if passive_effigy_command and not _effigy_phase_initialized and snapshot.get("effigy_attack_count") is int and int(snapshot.effigy_attack_count) >= 0:
+		_effigy_attack_count = int(snapshot.effigy_attack_count)
+		attack_combo_counter = _effigy_attack_count
+		_effigy_phase_initialized = true
 
 func broadcast_network_build_snapshot() -> void:
 	if player_id <= 0:
@@ -1865,6 +2152,9 @@ func apply_network_cue_event(event_name: String, payload: Dictionary) -> void:
 	if player_feedback == null or event_name.is_empty() or payload.is_empty():
 		return
 	match event_name:
+		"shatterwake_burst":
+			if MultiplayerSessionManager.is_remote_replica():
+				_on_cue_world_ring(payload)
 		"cross_stitch_burst":
 			if MultiplayerSessionManager.is_remote_replica():
 				_on_cue_world_ring(payload)
@@ -1930,6 +2220,9 @@ func apply_owner_cue_event(event_name: String, payload: Dictionary) -> void:
 	if player_feedback == null or event_name.is_empty() or payload.is_empty():
 		return
 	match event_name:
+		"shatterwake_burst":
+			if MultiplayerSessionManager.is_remote_replica():
+				_on_cue_world_ring(payload)
 		"cross_stitch_burst":
 			if MultiplayerSessionManager.is_remote_replica():
 				_on_cue_world_ring(payload)
@@ -2517,6 +2810,17 @@ func _get_melee_attack_geometry(melee_context: Dictionary) -> Dictionary:
 func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary) -> bool:
 	var attack_action := new_combat_action(String(melee_context.get("source", "melee")))
 	var previous_scope := DAMAGEABLE.begin_interaction_scope(attack_action)
+	var strike_origin := _begin_effigy_attack(attack_action, attack_direction, global_position)
+	var tagged_attack: Dictionary = INTERACTION_REGISTRY.damage_context(attack_action, String(melee_context.get("source", "melee"))).interaction
+	if passive_effigy_command:
+		_store_effigy_attack(tagged_attack, strike_origin, attack_direction, melee_context)
+		_ensure_shared_build_runtime()
+		shared_build_runtime.publish_state()
+	# Ordered before cover and every damage descendant, including on a miss.
+	if _is_local_control_owner() and MultiplayerSessionManager.is_remote_replica() and passive_effigy_command:
+		var start_world := get_tree().current_scene
+		if is_instance_valid(start_world) and start_world.has_method("request_shared_attack_start_from_client"):
+			start_world.request_shared_attack_start_from_client(tagged_attack, {"body_origin": global_position, "direction": attack_direction, "blast_strength": float(melee_context.get("cover_blast_strength", -1.0))})
 	_ensure_boss_combinations()
 	boss_combinations.begin_direct_strike()
 	var did_hit := false
@@ -2547,9 +2851,11 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 	var cover_world := get_tree().current_scene
 	if _is_local_control_owner() and is_instance_valid(cover_world) and cover_world.has_method("request_brittle_cover_attack"):
 		var cover_source := String(melee_context.get("source", "melee"))
-		cover_world.request_brittle_cover_attack(INTERACTION_REGISTRY.damage_context(attack_action, cover_source).interaction, global_position, attack_direction, float(melee_context.get("cover_blast_strength", -1.0)))
-	var oath_target_point := global_position + attack_direction * strike_range
-	var tagged_attack: Dictionary = INTERACTION_REGISTRY.damage_context(attack_action, String(melee_context.get("source", "melee"))).interaction
+		cover_world.request_brittle_cover_attack(INTERACTION_REGISTRY.damage_context(attack_action, cover_source).interaction, strike_origin, attack_direction, float(melee_context.get("cover_blast_strength", -1.0)))
+	if not passive_effigy_command and indomitable_spirit_damage_reduction > 0.0 and _is_local_control_owner() and MultiplayerSessionManager.is_remote_replica():
+		if is_instance_valid(cover_world) and cover_world.has_method("request_shared_attack_start_from_client"):
+			cover_world.request_shared_attack_start_from_client(tagged_attack)
+	var oath_target_point := strike_origin + attack_direction * strike_range
 	if indomitable_spirit_damage_reduction > 0.0:
 		combat_interactions.claim_reaction(tagged_attack, "oath_attack_start")
 	if _indomitable_spirit_primed:
@@ -2558,26 +2864,22 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 			_indomitable_pending_damage_coefficient = _get_indomitable_retaliation_ratio()
 			_indomitable_oath_spent_this_attack = true
 			combat_interactions.claim_reaction(tagged_attack, "oath_attack_spent")
-	if indomitable_spirit_damage_reduction > 0.0 and _is_local_control_owner() and MultiplayerSessionManager.is_remote_replica():
-		var world := get_tree().current_scene
-		if is_instance_valid(world) and world.has_method("request_shared_attack_start_from_client"):
-			world.request_shared_attack_start_from_client(tagged_attack)
 	# Start notification shares the reliable damage channel and precedes every
 	# child effect, so a miss also spends the host's copy of a primed Oath bank.
 	if String(melee_context.get("source", "melee")) in ["melee", "blast_drive"]:
 		_ensure_returning_crescent()
-		returning_crescent.try_launch(attack_direction)
+		returning_crescent.try_launch(attack_direction, strike_origin)
 	var retort_active: bool = passive_iron_retort and iron_retort_brace_ready
 	if retort_active:
 		strike_damage = int(round(float(strike_damage) * 1.8))
 		strike_coefficient *= 1.8
 	var farline_focus_proc_fired: bool = false
-	var retort_impact_position: Vector2 = global_position + attack_direction * (strike_range * 0.45)
+	var retort_impact_position: Vector2 = strike_origin + attack_direction * (strike_range * 0.45)
 	var strike_arc_degrees := float(strike_geometry["arc_degrees"])
 	var max_angle_radians := deg_to_rad(strike_arc_degrees * 0.5)
 	if String(melee_context.get("source", "melee")) == "blast_drive":
 		_ensure_arcana_motion()
-		arcana_motion.publish_blast(global_position, attack_direction, strike_range, strike_arc_degrees)
+		arcana_motion.publish_blast(strike_origin, attack_direction, strike_range, strike_arc_degrees)
 	var echo_shapes: Array[Dictionary] = [{"source": String(melee_context.get("source", "melee")), "damage": strike_damage, "damage_coefficient": strike_coefficient, "range": strike_range, "arc_degrees": strike_arc_degrees, "interaction": INTERACTION_REGISTRY.damage_context(attack_action, String(melee_context.get("source", "melee")))["interaction"]}]
 
 	var rupture_triggered_enemy_ids: Dictionary = {}
@@ -2588,7 +2890,7 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		"tempo_registered": false
 	}
 
-	var cone_hits := _get_damageable_enemies_in_cone(global_position, attack_direction, strike_range, max_angle_radians)
+	var cone_hits := _get_damageable_enemies_in_cone(strike_origin, attack_direction, strike_range, max_angle_radians)
 	var sigil_chain_swing_hits := 0
 	var sigil_chain_first_hit_pos := Vector2.ZERO
 	var sigil_chain_first_hit_logged := false
@@ -2598,7 +2900,7 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 			continue
 		var hit_position := hit_entry.get("hit_position", enemy_body.global_position) as Vector2
 		var enemy_id := enemy_body.get_instance_id()
-		var to_enemy := hit_position - global_position
+		var to_enemy := hit_position - strike_origin
 		var enemy_strike_damage := strike_damage
 		var final_damage_mult := 1.0
 		if passive_farline_focus:
@@ -2612,7 +2914,7 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 						player_feedback.play_world_ring(hit_position, 36.0, Color(1.0, 0.88, 0.44, 0.92), 0.14)
 			else:
 				final_damage_mult = farline_focus_outside_damage_mult
-		if _resolve_attack_hit(enemy_body, hit_position, enemy_strike_damage, String(melee_context.get("source", "melee")), rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags, sigil_burst_state, final_damage_mult, Vector2.INF, {}, strike_coefficient, strike_range) <= 0:
+		if _resolve_attack_hit(enemy_body, hit_position, enemy_strike_damage, String(melee_context.get("source", "melee")), rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags, sigil_burst_state, final_damage_mult, strike_origin, {}, strike_coefficient, strike_range) <= 0:
 			continue
 		if retort_active and not did_hit:
 			retort_impact_position = hit_position
@@ -2628,7 +2930,7 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 		echo_wind["interaction"] = INTERACTION_REGISTRY.damage_context(attack_action, "razor_wind")["interaction"]
 		echo_wind["inner_range"] = attack_range
 		echo_shapes.append(echo_wind)
-		did_hit = _apply_razor_wind(attack_direction, wind_context, rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags) or did_hit
+		did_hit = _apply_razor_wind(attack_direction, wind_context, rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags, strike_origin) or did_hit
 
 	if retort_active and did_hit:
 		_consume_iron_retort_brace(global_position, retort_impact_position)
@@ -2669,7 +2971,8 @@ func _get_farline_focus_half_window_radians() -> float:
 		attack_half_window_degrees += maxf(0.0, farline_volley_arc_per_stack * float(_farline_volley_current_stacks)) * 0.5
 	return deg_to_rad(attack_half_window_degrees)
 
-func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupture_triggered_enemy_ids: Dictionary = {}, rupture_hit_enemy_ids: Dictionary = {}, proc_flags: Dictionary = {}) -> bool:
+func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupture_triggered_enemy_ids: Dictionary = {}, rupture_hit_enemy_ids: Dictionary = {}, proc_flags: Dictionary = {}, attack_origin: Vector2 = Vector2.INF) -> bool:
+	var origin := attack_origin if attack_origin.is_finite() else get_attack_origin()
 	var hit_action := _capture_combat_action("razor_wind")
 	var did_hit := false
 	var wind_range := float(wind_context.get("range", attack_range * razor_wind_range_scale))
@@ -2678,14 +2981,14 @@ func _apply_razor_wind(attack_direction: Vector2, wind_context: Dictionary, rupt
 	var wind_damage := int(wind_context.get("damage", maxi(1, int(round(float(damage) * razor_wind_damage_ratio)))))
 	var sigil_burst_state := {"fired": false}
 	var inner_range_squared := attack_range * attack_range
-	for hit_entry in _get_damageable_enemies_in_cone(global_position, attack_direction, wind_range, wind_half_arc):
+	for hit_entry in _get_damageable_enemies_in_cone(origin, attack_direction, wind_range, wind_half_arc):
 		var enemy_body := hit_entry.get("enemy") as Node2D
 		if enemy_body == null:
 			continue
 		var hit_position := hit_entry.get("hit_position", enemy_body.global_position) as Vector2
-		if (hit_position - global_position).length_squared() <= inner_range_squared:
+		if (hit_position - origin).length_squared() <= inner_range_squared:
 			continue
-		if _resolve_attack_hit(enemy_body, hit_position, wind_damage, "razor_wind", rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags, sigil_burst_state, 1.0, Vector2.INF, hit_action, float(wind_context.get("damage_coefficient", razor_wind_damage_ratio))) > 0:
+		if _resolve_attack_hit(enemy_body, hit_position, wind_damage, "razor_wind", rupture_triggered_enemy_ids, rupture_hit_enemy_ids, proc_flags, sigil_burst_state, 1.0, origin, hit_action, float(wind_context.get("damage_coefficient", razor_wind_damage_ratio))) > 0:
 			did_hit = true
 	return did_hit
 
@@ -2827,6 +3130,7 @@ func _get_first_strike_bonus_damage(enemy_node: Object) -> int:
 
 func clear_lingering_combat_effects() -> void:
 	_clear_cross_stitch()
+	_clear_effigy()
 	if player_feedback != null:
 		player_feedback.clear_warden_verdict()
 	DAMAGEABLE.cancel_owner(player_id if player_id > 0 else DAMAGEABLE._resolve_local_peer_id())
@@ -3270,8 +3574,6 @@ func notify_enemy_killed(kill_position: Vector2 = Vector2.INF) -> void:
 	_trigger_relay_boost_kill()
 	if has_kill_position and void_echo_damage > 0 and not suppress_echo_kill_procs:
 		_apply_void_echo(kill_position)
-	if has_kill_position and edict_court_push_power > 0:
-		_apply_edict_court_pulse(kill_position)
 	if not suppress_echo_kill_procs:
 		if has_kill_position and reward_eclipse_mark:
 			_apply_eclipse_mark(kill_position)
@@ -3438,6 +3740,8 @@ func _create_player_feedback() -> void:
 
 
 func _exit_tree() -> void:
+	if is_instance_valid(spark_relay_controller):
+		spark_relay_controller.cancel()
 	if is_instance_valid(returning_crescent):
 		returning_crescent.cancel()
 
@@ -3589,7 +3893,7 @@ func _draw_character_identity(body_radius: float, facing: Vector2, side: Vector2
 	if passive_veilstep_rhythm:
 		PLAYER_IDENTITY_SILHOUETTE.draw_veilstrider(self, body_radius, facing, side, speed_t, attack_phase, dash_amount, dash_direction)
 		return
-	if passive_cross_stitch:
+	if passive_effigy_command:
 		PLAYER_IDENTITY_SILHOUETTE.draw_threadbinder(self, body_radius, facing, side, speed_t, attack_phase, dash_amount, dash_direction)
 		return
 	PLAYER_IDENTITY_SILHOUETTE.draw_default(self, body_radius, facing, side)
@@ -4481,9 +4785,6 @@ func _update_void_echo_zones(delta: float) -> void:
 				var dist := enemy_body.global_position.distance_to(zone_pos)
 				if dist > radius:
 					continue
-				var to_center := zone_pos - enemy_body.global_position
-				if dist > 0.001:
-					DAMAGEABLE.apply_impulse(enemy_body, to_center.normalized() * 360.0, 0, false, zone.get("interaction", {}))
 				DAMAGEABLE.apply_damage(enemy_node, pulse_damage, INTERACTION_REGISTRY.damage_context(zone.get("interaction", {}), "void_echo_zone", {"damage_coefficient": 0.13, "is_ground_attack": true, "attack_type": "void_echo_zone", "kill_proc_suppression": DAMAGEABLE.KILL_PROC_SUPPRESS_ECHO_PULSE}), player_id)
 				if not void_echo_zones.has(zone):
 					break
@@ -4587,26 +4888,6 @@ func _clamp_push_to_room_bounds(enemy_pos: Vector2, push_vel: Vector2) -> Vector
 		result.y = 0.0
 	return result
 
-func _apply_edict_court_pulse(kill_pos: Vector2) -> void:
-	var effect_action := _capture_combat_action("edict_court")
-	if not kill_pos.is_finite():
-		return
-	var scatter_radius := clampf(80.0 + float(edict_court_push_power) * 1.0, 80.0, 160.0)
-	var push_force := 300.0 + float(edict_court_push_power) * 1.8
-	for enemy_node in get_tree().get_nodes_in_group("enemies"):
-		if not (enemy_node is Node2D):
-			continue
-		var enemy_body := enemy_node as Node2D
-		var to_enemy := enemy_body.global_position - kill_pos
-		var dist := to_enemy.length()
-		if dist > scatter_radius:
-			continue
-		var raw_dir := to_enemy.normalized() if dist > 0.001 else Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)).normalized()
-		DAMAGEABLE.apply_impulse(enemy_body, _clamp_push_to_room_bounds(enemy_body.global_position, raw_dir * push_force), 0, false, effect_action)
-	if player_feedback != null:
-		player_feedback.play_boss_edict_court_pulse(kill_pos, scatter_radius)
-		_broadcast_cue_event("boss_edict_court_pulse", {"position": kill_pos, "radius": scatter_radius})
-
 func _apply_null_corridor_segment(seg_start: Vector2, seg_end: Vector2) -> void:
 	var origin := _null_corridor_dash_origin if _null_corridor_dash_origin != Vector2.ZERO else seg_start
 	if origin.distance_squared_to(seg_end) < 4.0:
@@ -4670,9 +4951,7 @@ func _update_null_corridor_segments(delta: float) -> void:
 			var cooldowns := seg.get("deflect_cooldowns", {}) as Dictionary
 			if cooldowns.has(enemy_id):
 				continue
-			# Fresh entry: strong single impulse
-			var push_dir := seg_normal if perp >= 0.0 else -seg_normal
-			DAMAGEABLE.apply_impulse(enemy_body, _clamp_push_to_room_bounds(enemy_body.global_position, push_dir * 750.0), 0, false, seg.get("interaction", {}))
+			# Each trail retains its own half-second damage cadence.
 			cooldowns[enemy_id] = 0.5
 			seg["deflect_cooldowns"] = cooldowns
 			null_corridor_segments[i] = seg

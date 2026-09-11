@@ -4,6 +4,7 @@ signal back_to_main_menu_requested
 signal retry_run_requested
 
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
+const BOSS_CATALOGUE := preload("res://scripts/shared/boss_catalogue.gd")
 const RUN_RESULTS_SCREEN_SCRIPT := preload("res://scripts/ui/run_summary/run_results_screen.gd")
 
 var _results_screen
@@ -27,7 +28,25 @@ func show_victory(_rooms_cleared: int, unlocked_tier: int = -1, run_summary: Dic
 		if not unlocks.has(unlock_text):
 			unlocks.append(unlock_text)
 		summary["unlocks"] = unlocks
-	_results_screen.show_result("Victory", "The descent is complete.", summary, false, allow_retry_run)
+	_results_screen.show_result("Victory", get_victory_subtitle(summary), summary, false, allow_retry_run)
+
+static func get_victory_subtitle(summary: Dictionary) -> String:
+	const FALLBACK := "The descent is complete."
+	var defeated_ids: Variant = summary.get("defeated_boss_ids", [])
+	if not defeated_ids is Array:
+		return FALLBACK
+	var final_boss_id := ""
+	for value: Variant in defeated_ids:
+		if not value is String or BOSS_CATALOGUE.stage_for_id(value) != 3:
+			continue
+		# An ambiguous or legacy record must not invent who spoke.
+		if not final_boss_id.is_empty() and final_boss_id != value:
+			return FALLBACK
+		final_boss_id = value
+	var line: String = BOSS_CATALOGUE.get_defeat_line(final_boss_id)
+	if line.is_empty():
+		return FALLBACK
+	return "%s: \"%s\"" % [String(BOSS_CATALOGUE.NAMES[final_boss_id]), line]
 
 func is_open() -> bool:
 	return _results_screen != null and bool(_results_screen.is_open())

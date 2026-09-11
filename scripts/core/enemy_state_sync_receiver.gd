@@ -220,6 +220,10 @@ func _apply_door_options_payload(synced_door_options: Array, synced_choosing_nex
 	_world.choosing_next_room = synced_choosing_next_room
 	_world.boss_unlocked = synced_boss_unlocked
 	_world._apply_progress_sync_state(progress_state)
+	# Only accepted, visible routes change the local music. A deferred offer
+	# must not leave reward selection early, and rest sites retain their calm.
+	if _world.choosing_next_room and not _world.door_options.is_empty():
+		_world._set_music_context(&"rest" if _world.current_room_label == "Rest Site" else &"doors")
 	if synced_choosing_next_room and is_instance_valid(_world.player):
 		_world.combat_phase_coordinator.end_combat_phase(_world.player, _world.get_tree())
 

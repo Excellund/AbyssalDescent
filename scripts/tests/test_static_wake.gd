@@ -138,7 +138,7 @@ func _test_cadence() -> void:
 				_ribbon(actor)
 			for ignored in range(fps):
 				actor.static_wake_controller.tick(1.0 / fps)
-			_check(_damage(target) == 48, "%dfps/%d ribbon union deals exactly 48/sec, not rounded per frame" % [fps, count])
+			_check(_damage(target) == 36, "%dfps/%d ribbon union deals exactly 36/sec, not rounded per frame" % [fps, count])
 			_check(target.hits.size() == 4, "%dfps/%d ribbon union uses four damage windows" % [fps, count])
 			_clear()
 	var actor := _actor()
@@ -146,7 +146,7 @@ func _test_cadence() -> void:
 	_ribbon(actor)
 	for delta in [0.4, 0.37, 0.23]:
 		actor.static_wake_controller.tick(delta)
-	_check(_damage(target) == 48 and target.hits.size() == 4, "Hitches preserve all scheduled windows and exact total")
+	_check(_damage(target) == 36 and target.hits.size() == 4, "Hitches preserve all scheduled windows and exact total")
 	_clear()
 
 func _test_levels() -> void:
@@ -159,7 +159,9 @@ func _test_levels() -> void:
 			_ribbon(actor)
 			for frame in range(fps):
 				actor.static_wake_controller.tick(1.0 / fps)
-			_check(_damage(target) == actor.static_wake_damage * 6, "Mapped %d-pick Wake at %dfps retains its actual per-second damage" % [picks, fps])
+			var expected: float = [40.5, 54.0, 67.5, 94.5][picks - 1]
+			_check(_damage(target) == int(floor(expected)), "Mapped %d-pick Wake at %dfps applies its reduced per-second damage" % [picks, fps])
+			_check(is_equal_approx(_damage(target) + _fraction(target), expected), "Mapped %d-pick Wake at %dfps retains its unspent fractional damage" % [picks, fps])
 			_check(target.is_slowed() == (picks >= 3), "Mapped %d-pick Wake at %dfps retains its structural Slow level" % [picks, fps])
 			if picks == 4:
 				_check(actor.upgrade_system.has_trial_power_prismatic("static_wake") and not actor.upgrade_system.apply_trial_power("static_wake"), "Wake retains one Prismatic pick")
@@ -173,7 +175,7 @@ func _test_crossing() -> void:
 		for frame in range(1, fps + 1):
 			target.global_position = Vector2(0, -100.0 + 200.0 * frame / fps)
 			actor.static_wake_controller.tick(1.0 / fps)
-		_check(_damage(target) == 9 and is_equal_approx(_fraction(target), 0.6), "%dfps moving target conserves .2s exposure with Wake floor carry" % fps)
+		_check(_damage(target) == 7 and is_equal_approx(_fraction(target), 0.2), "%dfps moving target conserves .2s exposure with Wake floor carry" % fps)
 		_clear()
 
 
@@ -182,15 +184,15 @@ func _test_crossing() -> void:
 	_ribbon(actor)
 	target.global_position = Vector2(0, 100)
 	actor.static_wake_controller.tick(1.0)
-	_check(_damage(target) == 9, "A full crossing within one hitch is detected and lifetime-clipped")
-	_check(is_equal_approx(_fraction(target), 0.6), "Crossing credit stays on the host target's owner/source ledger")
+	_check(_damage(target) == 7, "A full crossing within one hitch is detected and lifetime-clipped")
+	_check(is_equal_approx(_fraction(target), 0.2), "Crossing credit stays on the host target's owner/source ledger")
 	_clear()
 	actor = _actor()
-	target = _target(Vector2(0, -96))
+	target = _target(Vector2(0, -72))
 	_ribbon(actor)
-	target.global_position = Vector2(0, 96)
+	target.global_position = Vector2(0, 72)
 	actor.static_wake_controller.tick(1.0)
-	_check(_damage(target) == 10, "Float64 exposure preserves an exact integer tick across a 192px crossing")
+	_check(_damage(target) == 10, "Float64 exposure preserves an exact integer tick across a 144px crossing")
 	_clear()
 
 func _test_analytic_damage_scaling() -> void:
@@ -220,7 +222,7 @@ func _test_analytic_damage_scaling() -> void:
 				var raw := int(ceil(21.0 * base_ratio))
 				if picks == 4:
 					raw = int(raw * 1.4)
-				var expected := 6.0 * (raw + 16.0 * ratio) * (1.15 * 1.25 if percentages else 1.0)
+				var expected := 4.5 * (raw + 16.0 * ratio) * (1.15 * 1.25 if percentages else 1.0)
 				var label := "Learned Wake picks%d %dfps percentages=%s" % [picks, fps, percentages]
 				_check(actor.static_wake_damage == raw and is_equal_approx(actor.static_wake_damage_ratio, ratio), label + ": ordinary acquisition retains raw rounding and maps the analytic coefficient separately")
 				_check(_damage(target) == int(floor(expected + 0.000000001)), label + ": actual Field damage combines conditional Damage and preexisting Mark/Slow percentages")
@@ -329,7 +331,7 @@ func _test_sustained_conditions() -> void:
 							actor.static_wake_controller.tick(delta)
 					var exposure := 8.0 / 3.0 if moving else 8.0
 					var snare_ratio: float = (0.45 if snare_picks == 4 else 0.15 + 0.05 * snare_picks) if snare_picks >= 2 else 0.0
-					var expected := 8.0 * 6.0 * contact_seconds * (25.0 / 20.0) * (1.0 + snare_ratio)
+					var expected := 8.0 * 4.5 * contact_seconds * (25.0 / 20.0) * (1.0 + snare_ratio)
 					var label := "%dfps/%d overlap/Snare%d/%s" % [fps, overlapping, snare_picks, "reentry" if moving else "stationary"]
 					_check(absf(contact_seconds - exposure) < 0.000001, label + ": actual Vector2 trajectory matches the analytical exposure")
 					_check(_damage(target) == int(floor(expected + 0.000000001)), "%s: sustained scaled damage is exact (%d vs %.9f)" % [label, _damage(target), expected])
@@ -373,7 +375,7 @@ func _test_union_and_shape() -> void:
 	target = _target(Vector2(50, 0))
 	_ribbon(actor, Vector2.ZERO, Vector2(30, 0))
 	actor.static_wake_controller.tick(0.25)
-	_check(_damage(target) == 12, "Closed radius includes an enemy center exactly on a round cap")
+	_check(_damage(target) == 9, "Closed radius includes an enemy center exactly on a round cap")
 	_clear()
 
 func _test_deadlines_and_lifetime() -> void:
@@ -384,12 +386,12 @@ func _test_deadlines_and_lifetime() -> void:
 	actor.static_wake_controller.tick(0.1)
 	_check(_damage(target) == 0 and actor.static_wake_controller.ribbons.is_empty(), "Expiry retires geometry without inventing an early tick")
 	actor.static_wake_controller.tick(0.15)
-	_check(_damage(target) == 4 and is_equal_approx(_fraction(target), 0.8), "Pre-expiry .1s exposure retains Wake floor carry at the original .25s deadline")
+	_check(_damage(target) == 3 and is_equal_approx(_fraction(target), 0.6), "Pre-expiry .1s exposure retains Wake floor carry at the original .25s deadline")
 	_ribbon(actor)
 	actor.static_wake_controller.tick(0.25)
-	_check(_damage(target) == 9 and is_equal_approx(_fraction(target), 0.6), "Reentry carries fractional damage across ribbons")
+	_check(_damage(target) == 7 and is_equal_approx(_fraction(target), 0.2), "Reentry carries fractional damage across ribbons")
 	actor.static_wake_controller.tick(0.75)
-	_check(_damage(target) == 9, "Expired ribbons accrue no extra damage in later windows")
+	_check(_damage(target) == 7, "Expired ribbons accrue no extra damage in later windows")
 	_clear()
 	actor = _actor()
 	target = _target()
@@ -403,7 +405,7 @@ func _test_deadlines_and_lifetime() -> void:
 	actor.static_wake_controller.end_dash()
 	_check(actor.static_wake_controller.ribbons.size() == 2, "Blocked zero-distance dash does not replace traveled ribbons")
 	actor.static_wake_controller.tick(0.05)
-	_check(_damage(target) == 12, "Replacement and overlapping reentry preserve the first damage deadline")
+	_check(_damage(target) == 9, "Replacement and overlapping reentry preserve the first damage deadline")
 	_clear()
 	actor = _actor()
 	target = _target()
@@ -415,7 +417,7 @@ func _test_deadlines_and_lifetime() -> void:
 	actor.static_wake_controller.end_dash()
 	actor.static_wake_controller.tick(0.2)
 	_check(actor.static_wake_controller.ribbons.is_empty(), "Whole-ribbon lifetime begins at first travel; append/end cannot refresh it")
-	_check(_damage(target) == 19, "A final partial lifetime accrues .4s even when the last tick spans expiry")
+	_check(_damage(target) == 14 and is_equal_approx(_fraction(target), 0.4), "A final partial lifetime accrues .4s even when the last tick spans expiry")
 	_clear()
 
 func _test_context_and_slow() -> void:
@@ -426,15 +428,15 @@ func _test_context_and_slow() -> void:
 	var action := _ribbon(actor)
 	_ribbon(actor)
 	actor.static_wake_controller.tick(0.25)
-	_check(_damage(target) == 12 and target.is_slowed(), "First Wake tick uses pre-Slow Snare eligibility, then applies level3 Slow")
+	_check(_damage(target) == 9 and target.is_slowed(), "First Wake tick uses pre-Slow Snare eligibility, then applies level3 Slow")
 	actor.static_wake_controller.tick(0.25)
-	_check(_damage(target) == 27, "Mapped level2 Snare multiplies the second already-slowed tick by 1.25 once despite overlap")
+	_check(_damage(target) == 20 and is_equal_approx(_fraction(target), 0.25), "Mapped level2 Snare multiplies the second already-slowed tick by 1.25 once despite overlap")
 	var context: Dictionary = target.hits[0].context
 	_check(not context.get("secondary", false) and not context.get("is_ground_attack", false), "Wake retains existing primary directional-defense classification")
 	_check(int(context.interaction.traits) == (REGISTRY.HIT | REGISTRY.DASH | REGISTRY.ELECTRIC), "Wake hit has Hit, Dash and Electric properties")
 	_check(context.interaction.seq == action.seq and target.hits[1].context.interaction.seq == action.seq, "All ticks retain the actual originating Dash identity")
 	_check(context.attack_origin == Vector2.ZERO, "Damage origin is the nearest actual traveled path contact")
-	_check(is_equal_approx(float(context.raw_amount), 12.0) and is_equal_approx(float(context.damage_coefficient), 12.0 / actor.damage), "Wake carries raw exposure and its exact Damage coefficient")
+	_check(is_equal_approx(float(context.raw_amount), 9.0) and is_equal_approx(float(context.damage_coefficient), 9.0 / actor.damage), "Wake carries reduced raw exposure and its exact Damage coefficient")
 	_check(REGISTRY.effect_forms(String(context.interaction.source)) == ["Field"] and not REGISTRY.is_attack_hit(String(context.interaction.source)), "Electric Field damage does not perform a deliberate Attack")
 	var ledger: Dictionary = actor.combat_interactions._roots.get(action.seq, {})
 	_check(not ledger.is_empty() and not bool(ledger.discharged) and actor.storm_crown_hit_counter == 0, "Shared damage ledger does not enable an unlearned Storm Crown")
@@ -447,11 +449,11 @@ func _test_context_and_slow() -> void:
 	target.apply_slow(2.0, 0.8)
 	_ribbon(actor)
 	actor.static_wake_controller.tick(0.25)
-	_check(_damage(target) == 0 and is_equal_approx(_fraction(target), 0.075), "Tiny exposure scales Snare with the packet, not a whole flat bonus")
+	_check(_damage(target) == 0 and is_equal_approx(_fraction(target), 0.05625), "Tiny exposure scales Snare with the packet, not a whole flat bonus")
 	for repeat in range(9):
 		_ribbon(actor)
 		actor.static_wake_controller.tick(0.25)
-	_check(_damage(target) == 0 and is_equal_approx(_fraction(target), 0.75), "Ten tiny exposures conserve their total in the host fractional ledger")
+	_check(_damage(target) == 0 and is_equal_approx(_fraction(target), 0.5625), "Ten tiny exposures conserve their total in the host fractional ledger")
 	_clear()
 
 func _test_empty_gap() -> void:
@@ -465,11 +467,11 @@ func _test_empty_gap() -> void:
 	var target := _target()
 	_ribbon(actor)
 	counted.tick(10000.0)
-	_check(_damage(target) == 96, "A huge hitch accrues only the ribbon's actual two-second lifetime")
+	_check(_damage(target) == 72, "A huge hitch accrues only the ribbon's actual two-second lifetime")
 	_check(counted.settlement_calls == 8, "Expired idle windows fast-forward without thousands of empty callbacks")
 	_ribbon(actor)
 	counted.tick(0.25)
-	_check(_damage(target) == 108, "Arithmetic fast-forward retains the established quarter-second phase on reentry")
+	_check(_damage(target) == 81, "Arithmetic fast-forward retains the established quarter-second phase on reentry")
 	_clear()
 
 func _test_cancellation() -> void:
@@ -492,7 +494,7 @@ func _test_cancellation() -> void:
 	first.cancel_owner = actor.static_wake_controller
 	_ribbon(actor)
 	actor.static_wake_controller.tick(1.0)
-	_check(_damage(first) == 12 and _damage(second) == 0, "Damage callback cancellation stops later windows and later targets safely")
+	_check(_damage(first) == 9 and _damage(second) == 0, "Damage callback cancellation stops later windows and later targets safely")
 	_check(actor.static_wake_controller.ribbons.is_empty(), "Reentrant cancellation is not undone at tick completion")
 	_clear()
 	actor = _actor()

@@ -15,6 +15,7 @@ var _received_epoch: int = 0
 var _received_dash_refund: float = 0.0
 var _sigil_armed_origin: String = ""
 var _room: String = ""
+var _effigy_state_left: float = 0.0
 
 func initialize(owner_player: CharacterBody2D) -> void:
 	player = owner_player
@@ -23,6 +24,8 @@ func initialize(owner_player: CharacterBody2D) -> void:
 	_room = "%s:%d" % [REGISTRY.current_run(), REGISTRY.current_room()]
 
 func cancel() -> void:
+	if is_instance_valid(player) and is_instance_valid(player.get("spark_relay_controller")):
+		player.spark_relay_controller.cancel()
 	if fields != null:
 		fields.clear()
 	_attack_victims.clear()
@@ -37,6 +40,12 @@ func _physics_process(_delta: float) -> void:
 	if identity != _room:
 		_room = identity
 		cancel()
+	if bool(player.get("passive_effigy_command")) or is_instance_valid(player.get("effigy_controller")):
+		player._refresh_effigy_room()
+		_effigy_state_left -= _delta
+		if _effigy_state_left <= 0.0:
+			_effigy_state_left = 0.5
+			publish_state()
 
 func prepare_attack(target: Node2D, descriptor: Dictionary, _action: Dictionary) -> Dictionary:
 	var result := descriptor.duplicate(true)
@@ -61,9 +70,113 @@ func prepare_attack(target: Node2D, descriptor: Dictionary, _action: Dictionary)
 	return result
 
 func accepted_damage(event: Dictionary) -> void:
+	_accept_stationary_boss_rewards(event)
 	_accept_boss_charge(event)
+	_accept_keyword_bridges(event)
 	player._trigger_battle_trance()
 	publish_state()
+
+func _accept_stationary_boss_rewards(event: Dictionary) -> void:
+	var action: Dictionary = event.get("interaction", {})
+	var controller: Node = player.combat_interactions
+	if MultiplayerSessionManager.is_remote_replica() or not bool(event.get("shared", false)) or not controller.accepts_action(action):
+		return
+	if not bool(player._is_alive_state) or not bool(player.combat_damage_enabled) or bool(player.encounter_input_frozen) or get_tree().paused or int(event.get("cancel_generation", controller._cancel_generation)) != int(controller._cancel_generation):
+		return
+	var reference: Variant = event.get("target")
+	var target: Node2D = reference.get_ref() as Node2D if reference is WeakRef else null
+	var source: String = String(action.get("source", ""))
+	if is_instance_valid(target) and DAMAGEABLE._read_target_health(target) > 0:
+		match source:
+			"edict_court":
+				if int(player.edict_court_push_power) > 0:
+					DAMAGEABLE.apply_slow(target, 1.5 * player._global_slow_duration_mult(), 0.75, _owner_id(), action)
+			"void_echo_zone":
+				if int(player.void_echo_damage) > 0:
+					DAMAGEABLE.apply_slow(target, 0.45 * player._global_slow_duration_mult(), 0.75, _owner_id(), action)
+			"null_corridor_deflect":
+				if float(player.null_corridor_strength) > 0.0:
+					# The status boundary derives the actual level and potency.
+					DAMAGEABLE.apply_mark(target, "null_corridor", 0.1, 1.0, _owner_id(), action)
+	# Both the root ledger and ancestry survive delayed Field/kill descendants.
+	# An Edict-produced death must never buy a fresh Edict allowance.
+	if bool(event.get("killed", false)) and int(player.edict_court_push_power) > 0 and (int(action.get("ancestry", 0)) & REGISTRY.EDICT_ANCESTRY) == 0 and controller.claim_reaction(action, "edict_court"):
+		_edict_court(event, action)
+
+func _edict_court(event: Dictionary, action: Dictionary) -> void:
+	var origin: Vector2 = event.get("position", Vector2.INF)
+	if not origin.is_finite():
+		return
+	var level: int = clampi(int(round(float(player.edict_court_push_power) / 40.0)), 1, 2)
+	var coefficient: float = 0.4 + 0.4 * float(level)
+	var raw: float = float(player.damage) * coefficient
+	var radius: float = 80.0 + 40.0 * float(level)
+	var original: Dictionary = event.get("context", {})
+	var generation: int = int(player.combat_interactions._cancel_generation)
+	for node: Node in get_tree().get_nodes_in_group("enemies"):
+		if not (node is Node2D) or node.is_queued_for_deletion() or DAMAGEABLE._read_target_health(node) <= 0:
+			continue
+		var target: Node2D = node as Node2D
+		if target.global_position.distance_to(origin) > radius:
+			continue
+		var context: Dictionary = REGISTRY.damage_context(action, "edict_court", {"secondary": true, "attack_origin": origin, "raw_amount": raw, "damage_coefficient": coefficient, "kill_proc_suppression": int(original.get("kill_proc_suppression", 0))})
+		DAMAGEABLE.apply_keyword_reaction_damage(target, int(round(raw)), context, _owner_id())
+		if generation != int(player.combat_interactions._cancel_generation) or not player.combat_interactions.accepts_action(action) or not bool(player._is_alive_state) or not bool(player.combat_damage_enabled):
+			return
+	if player.player_feedback != null:
+		player.player_feedback.play_boss_edict_court_pulse(origin, radius)
+	PlayerReplicationService.broadcast_cue_event(_owner_id(), "boss_edict_court_pulse", {"position": origin, "radius": radius}, true)
+
+func _accept_keyword_bridges(event: Dictionary) -> void:
+	var action: Dictionary = event.get("interaction", {})
+	var controller: Node = player.combat_interactions
+	if MultiplayerSessionManager.is_remote_replica() or not bool(event.get("shared", false)) or not controller.accepts_action(action):
+		return
+	if not bool(player._is_alive_state) or not bool(player.combat_damage_enabled) or bool(player.encounter_input_frozen) or int(event.get("cancel_generation", controller._cancel_generation)) != int(controller._cancel_generation):
+		return
+	var reference: Variant = event.get("target")
+	var target: Node2D = reference.get_ref() as Node2D if reference is WeakRef else null
+	var target_id := int(event.get("target_id", 0))
+	if player.reward_stormbrand and (int(action.get("traits", 0)) & REGISTRY.ELECTRIC) != 0 and is_instance_valid(target) and DAMAGEABLE._read_target_health(target) > 0 and controller.claim_reaction(action, "stormbrand", target_id):
+		DAMAGEABLE.apply_mark(target, "stormbrand", player.stormbrand_mark_bonus_ratio, player.stormbrand_mark_duration, _owner_id(), action)
+		if int(player.stormbrand_stacks) >= 3 and float(event.get("pre_mark_ratio", 0.0)) > 0.0:
+			DAMAGEABLE.apply_slow(target, player.stormbrand_slow_duration * player._global_slow_duration_mult(), player.stormbrand_slow_mult, _owner_id(), action)
+	var forms := REGISTRY.action_forms(action)
+	if player.reward_spark_relay and forms.has("Burst") and controller.claim_reaction(action, "spark_relay"):
+		player._ensure_spark_relay().launch(event)
+	if int(player.shatterwake_stacks) > 0 and forms.has("Projectile") and controller.claim_reaction(action, "shatterwake"):
+		_shatterwake(event, action)
+
+func _shatterwake(event: Dictionary, action: Dictionary) -> void:
+	var origin: Vector2 = event.get("position", Vector2.INF)
+	if not origin.is_finite():
+		return
+	var level := clampi(int(player.shatterwake_stacks), 1, 2)
+	var ratio := 0.60 + 0.20 * float(level - 1)
+	var radius := 100.0 + 25.0 * float(level - 1)
+	var raw := float(event.get("raw_amount", 0.0)) * ratio
+	var coefficient := float(event.get("damage_coefficient", 0.0)) * ratio
+	var original: Dictionary = event.get("context", {})
+	var generation := int(player.combat_interactions._cancel_generation)
+	var exclusions: Array[RID] = []
+	for group in ["combat_players", "enemies"]:
+		for body in get_tree().get_nodes_in_group(group):
+			if body is CollisionObject2D:
+				exclusions.append(body.get_rid())
+	for node in get_tree().get_nodes_in_group("enemies"):
+		if not (node is Node2D) or node.is_queued_for_deletion() or DAMAGEABLE._read_target_health(node) <= 0 or node.global_position.distance_to(origin) > radius:
+			continue
+		var sight := PhysicsRayQueryParameters2D.create(origin, node.global_position, 0xFFFFFFFF, exclusions)
+		if origin.distance_squared_to(node.global_position) > 0.01 and not player.get_world_2d().direct_space_state.intersect_ray(sight).is_empty():
+			continue
+		var context := REGISTRY.damage_context(action, "shatterwake_burst", {"secondary": true, "attack_origin": origin, "raw_amount": raw, "damage_coefficient": coefficient, "kill_proc_suppression": int(original.get("kill_proc_suppression", 0))})
+		DAMAGEABLE.apply_keyword_reaction_damage(node, int(round(raw)), context, _owner_id())
+		if generation != int(player.combat_interactions._cancel_generation) or not bool(player._is_alive_state) or not bool(player.combat_damage_enabled):
+			return
+	var cue := {"position": origin, "radius": radius, "color": Color(0.87, 0.71, 0.64, 0.72), "duration": 0.22}
+	if player.player_feedback != null:
+		player._on_cue_world_ring(cue)
+	PlayerReplicationService.broadcast_cue_event(_owner_id(), "shatterwake_burst", cue, true)
 
 func _accept_boss_charge(event: Dictionary) -> void:
 	var action: Dictionary = event.get("interaction", {})
@@ -201,6 +314,8 @@ func publish_state() -> void:
 		return
 	_serial += 1
 	var payload := {"run": REGISTRY.current_run(), "room": REGISTRY.current_room(), "serial": _serial, "epoch": player.combat_interactions._accepted_epoch, "state": {}}
+	if bool(player.get("passive_effigy_command")) or is_instance_valid(player.get("effigy_controller")):
+		payload["effigy"] = player.get_effigy_network_state()
 	for property in ["battle_trance_active_left", "combo_relay_stacks", "combo_relay_stack_timer", "apex_predator_combo_hits", "apex_predator_combo_left", "apex_momentum_stacks", "apex_momentum_stack_left", "convergence_surge_hit_counter", "_sigil_chain_charge", "_sigil_chain_drop_armed", "sigil_burst_ready", "cross_stitch_window_left", "cross_stitch_target_network_id", "_riftpunch_window_left", "void_heat", "_farline_volley_current_stacks", "indomitable_damage_bank", "_indomitable_spirit_primed", "_dash_damage_immune_left", "_shared_dash_refund_total"]:
 		var value: Variant = player.get(property)
 		if value != null:
@@ -218,6 +333,8 @@ func apply_state(payload: Dictionary) -> void:
 		return
 	_received_epoch = epoch
 	_received_serial = int(payload.serial)
+	if payload.get("effigy") is Dictionary and player.has_method("apply_effigy_network_state"):
+		player.apply_effigy_network_state(payload.effigy)
 	for property in payload.state:
 		if property in ["battle_trance_active_left", "combo_relay_stacks", "combo_relay_stack_timer", "apex_predator_combo_hits", "apex_predator_combo_left", "apex_momentum_stacks", "apex_momentum_stack_left", "convergence_surge_hit_counter", "_sigil_chain_charge", "_sigil_chain_drop_armed", "sigil_burst_ready", "cross_stitch_window_left", "cross_stitch_target_network_id", "_riftpunch_window_left", "void_heat", "_farline_volley_current_stacks", "indomitable_damage_bank", "_indomitable_spirit_primed"]:
 			player.set(property, payload.state[property])

@@ -47,6 +47,8 @@ class Recorder extends "res://scripts/core/run_summary_recorder.gd":
 		super.mark_run_start()
 
 class HUD extends Node:
+	func hide_boss_intro() -> void:
+		pass
 	var banners: Array[String] = []
 	func show_banner(title: String, _detail: String = "", _color: Color = Color.WHITE) -> void:
 		banners.append(title)

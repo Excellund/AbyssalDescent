@@ -236,10 +236,14 @@ func _clear_all_objective_state() -> void:
 
 func reset_room_objective_state() -> void:
 	objective_state_setup.clear_world_state(objective_manager)
+	_sweep_pending_node_positions.clear()
 	_intercept_relief_kills_applied = 0
 	_control_zone_runtime_sync_left = 0.0
 	_pending_objective_spawns.clear()
 	_pending_objective_spawn_timer = 0.0
+
+func get_pending_sweep_node_positions() -> Array[Vector2]:
+	return _sweep_pending_node_positions.duplicate()
 
 func begin_room_objective(profile: Dictionary) -> void:
 	objective_state_setup.activate_profile_objective_kind(objective_manager, profile)

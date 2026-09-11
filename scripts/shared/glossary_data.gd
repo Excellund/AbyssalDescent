@@ -401,15 +401,16 @@ static func _biome_rows() -> Array[Dictionary]:
 			"name": biome.name,
 			"act": biome.act,
 			"color": biome.color_theme.accent,
-			"desc": KEYWORDS.format_text(String(identity.rule) + "\n" + String(identity.tactic))
+			"desc": KEYWORDS.format_text(String(identity.rule) + "\n" + String(identity.tactic) + ("\nWithout cracked cover, warned fragment falls hurt you and foes.\nGreen fragment falls affect foes only." if biome_id == "shatterfield" else ""))
 		})
 	return rows
 
 static func _biomes_section_bbcode() -> String:
 	var lines: Array[String] = []
 	lines.append(_section_title_bbcode("Biomes"))
-	lines.append("Each biome favors its own encounter styles and enemy mix. Terrain below shapes ordinary rooms.")
-	lines.append("Breach, Undertow, Missions, Trials, Apex rooms and bosses keep their own arenas.")
+	lines.append("Each biome changes every combat route with terrain or an effect you can use against foes.\nThe rules below describe ordinary rooms.")
+	lines.append("Breach, Undertow, Missions and Trials keep their arenas and add smaller, slower patterns\naround required objectives. If space is too tight, green biome zones affect foes only.")
+	lines.append("Boss and Apex arenas use green biome zones that affect foes only.\nEnemy ability warnings remain dangerous. Biome effects pause during rewards and introductions;\nRest Sites and the tutorial are calm.")
 	lines.append("")
 	for act in [1, 2, 3]:
 		lines.append(_subsection_title_bbcode("Act %d" % act))
@@ -438,6 +439,14 @@ static func _build_keywords_section_bbcode() -> String:
 
 static func _power_rules_section_bbcode() -> String:
 	var rows: Array[Dictionary] = [
+		{"name": "Patient Hunter", "rule": KEYWORDS.format_text("Adds 12 {kw:damage_stat} per pick against already {kw:slow|Slowed} foes."), "detail": "Up to three picks. The condition is checked before damage\nand scales with contact time and copied-effect strength."},
+		{"name": "Marked Prey", "rule": KEYWORDS.format_text("Adds 12 {kw:damage_stat} per pick against already {kw:mark|Marked} foes."), "detail": "Up to three picks. Any player's active Mark can satisfy the condition.\nA Mark applied by this damage helps later damage."},
+		{"name": "Stormbrand", "rule": KEYWORDS.format_text("Your {kw:electric} damage applies a timed {kw:mark} after damage,\nonce per foe per original action."), "detail": KEYWORDS.format_text("{kw:mark}: 10/14/18% for 3/3.5/4s; Prismatic 22.5% for 5s.\nLevel 3: an already {kw:mark|Marked} foe is also {kw:slow|Slowed} to 75% speed for 1s.\nYour {kw:slow}-duration bonuses apply. The strongest active {kw:mark} benefits all players.")},
+		{"name": "Spark Relay", "rule": KEYWORDS.format_text("Your {kw:burst} damage fires one {kw:electric} {kw:projectile} from your body\ntoward the struck foe's position, once per original action."), "detail": KEYWORDS.format_text("Bolt damage: 50/60/70% of the triggering {kw:burst}'s base damage; Prismatic 87.5%.\nHits at most 1/2/3 different foes, once each. Travels 440; Prismatic 528.\nFollows a fixed line, even if the trigger foe dies. Solid cover blocks it.\nAll targets and descendants share this action's one Spark Relay allowance.")},
+		{"name": "Shatterwake", "rule": KEYWORDS.format_text("Your {kw:projectile} damage releases one {kw:burst} per original action,\nincluding the struck foe if alive."), "detail": KEYWORDS.format_text("Damage: 60/80% of the triggering {kw:projectile}'s base damage; radius 100/125.\nSolid cover blocks the {kw:burst}. Return legs and descendants share its allowance.\nSpark Relay and Shatterwake each keep their own one-per-action allowance;\ncombined reactions can chain, but cannot repeatedly recreate each other.")},
+		{"name": "Edict of the Court", "rule": KEYWORDS.format_text("Your {kw:kill|Kills} release a damaging, {kw:slow|Slowing} {kw:burst} around the defeated foe,\nonce per original action."), "detail": KEYWORDS.format_text("Damage: 80/120% of Damage; radius 120/160. Each nearby foe is struck once.\nAfter damage, survivors are {kw:slow|Slowed} to 75% speed for 1.5s.\nYour {kw:slow}-duration bonuses apply. Further kills share the action's one {kw:burst};\nits descendants cannot create another Edict {kw:burst}.")},
+		{"name": "Lacuna Well", "rule": KEYWORDS.format_text("Your {kw:kill|Kills} leave one damaging, {kw:slow|Slowing} {kw:field} for 2.4s; a new well replaces it.\nYour damage gains one bonus against foes in any {kw:field} you own."), "detail": KEYWORDS.format_text("Base pulse: 11.76/23.52 + 13% of Damage, every 0.32s; radius 79.2/104.4.\n{kw:field} bonus: +20.3/26.6%; overlapping {kw:field|Fields} share this bonus.\nEach pulse {kw:slow|Slows} survivors to 75% speed for 0.45s after damage.\nYour {kw:slow}-duration bonuses apply. Well kills cannot renew the well.")},
+		{"name": "Null Corridor", "rule": KEYWORDS.format_text("{kw:dash} leaves a {kw:field} that damages foes, then {kw:mark|Marks} survivors.\nEach trail can affect the same foe again after 0.5s."), "detail": KEYWORDS.format_text("Damage: 24/28% of Damage; width 39/46; lasts 3.6/4s.\n{kw:mark}: +10/15% damage taken for 1s; later ticks refresh it.\nThe strongest active {kw:mark} benefits all players. A new {kw:mark} helps later damage.\nAll ticks retain the original {kw:dash}'s reaction allowances.")},
 		{"name": "Blast Drive", "rule": "Hold Attack, then release a blast that propels you backward.", "detail": "Charge: 0.25–0.65s. Level 2: two charges. Level 3: steer recoil."},
 		{"name": "Razor Orbit", "rule": "Aim and hold Dash to circle a foe for up to 1.4s; release to depart.", "detail": "Level 2: hook columns. Level 3: transfer once when the anchor dies (2.4s total)."},
 		{"name": "Returning Crescent", "rule": "Attack throws a blade; move to guide its return through foes.", "detail": "Hits once each way. Level 2: two blades. Level 3: one outward bounce."},
@@ -448,7 +457,7 @@ static func _power_rules_section_bbcode() -> String:
 		{"name": "Dread Resonance", "rule": "Attack hits Mark and build damage stacks against that foe.", "detail": "Once per foe per Attack. Stacks clear when you or the foe dies, or the room ends."},
 		{"name": "Storm Crown", "rule": "Dealing damage charges chain lightning; each foe counts once per action.", "detail": "One chain per action; never charges itself. Level 2: one extra jump through a Slowed foe."},
 		{"name": "Ruinous Impact", "rule": "Attack hits and eligible Pushes or Pulls arm a Launch that bursts on Impact.", "detail": "Bosses and Apex foes compress in place. Impact bursts cannot cause another Launch."},
-		{"name": "Sovereign's Double", "rule": "Dash, Recoil or Orbit completion leaves a shade that Echoes your Attack.", "detail": "Echoes deal 55% damage. Level 2: two Echoes. Further movement replaces the shade."},
+		{"name": "Sovereign's Double", "rule": "Dash, Recoil or Orbit completion leaves a shade that Echoes your Attack.", "detail": KEYWORDS.format_text("{kw:echo|Echoes} deal 55% damage. Level 2: two {kw:echo|Echoes}. Further movement replaces the shade.\nA copied Blast Drive retains {kw:burst}; copied melee and Razor Wind retain their shapes.\nAll copies share the original action's reaction limits and spend no extra resources.")},
 		{"name": "Warden's Verdict", "rule": "Consecutive attack hits grow stronger; every fourth triggers a Burst.", "detail": "Resets after 2.2s without an attack hit. The same foe can count on later Attacks."},
 		{"name": "Sovereign Tempo", "rule": KEYWORDS.format_text("{kw:attack_hit|Attack hits} or your damage against already {kw:mark|Marked} foes build temporary move speed.\nFinishing {kw:dash}, {kw:recoil} or {kw:orbit} spends all stacks in a {kw:burst}."), "detail": KEYWORDS.format_text("One stack per original action across all foes, ticks and descendants.\nUp to six stacks; expire 1.8s after the last accepted stack.\nThe target must be {kw:mark|Marked} before damage.\nAccepted {kw:burst} damage refunds 0.12s of {kw:dash} cooldown per spent stack,\nonce per {kw:burst}; the {kw:burst} and its descendants cannot build Tempo.")},
 		{"name": "Pillar Convergence", "rule": KEYWORDS.format_text("{kw:attack_hit|Attack hits} or your {kw:electric} damage charge a pulsing {kw:field} that follows you."), "detail": KEYWORDS.format_text("One charge per original action across all foes, ticks and descendants.\nCharging pauses while the {kw:field} is active.\nAn action that qualifies during this window cannot charge it later,\neven with delayed damage after the {kw:field} ends.\nLevel 1: four charges, 1.60s duration and 0.25s pulses.\nLevel 2: two charges, 1.99s duration and 0.19s pulses.")},

@@ -158,7 +158,7 @@ func _test_secondary_kill_rewards() -> void:
 	await physics_frame
 	actor._perform_melee_attack(Vector2.RIGHT, {"damage": 20, "range": 78.0, "arc_degrees": 130.0})
 	_check(breakwater.is_dead() and actor.dash_cooldown_left == 0.0, "Secondary Apex kills retain the existing Reaper Step kill benefit")
-	_check(neighbor.velocity.length() > 0.0 and not neighbor.get_launch_state().active, "Edict's existing kill push works without recursively arming Ruinous")
+	_check(neighbor.get_current_health() < neighbor.max_health and neighbor.is_slowed() and neighbor.velocity.is_zero_approx() and not neighbor.get_launch_state().active, "Edict's accepted kill Burst Slows without moving neighbors or recursively arming Ruinous")
 	_clear()
 
 func _test_modal_cleanup() -> void:

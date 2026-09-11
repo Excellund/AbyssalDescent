@@ -1,5 +1,5 @@
 extends "res://scripts/tests/render_motion_arcana.gd"
-## Real alternate bodies and all nine committed warnings at combat scale.
+## Real alternate bodies, nine root warnings and four follow-ups at combat scale.
 
 const ALTERNATIVE_TEST := preload("res://scripts/tests/test_alternative_bosses.gd")
 const BOSS_STAGES := preload("res://scripts/shared/boss_stage_registry.gd")
@@ -45,6 +45,7 @@ func _run() -> void:
 		_fit_arena(stage)
 		var boss := ALTERNATIVE_TEST.Alternative.new()
 		boss.boss_id = id
+		boss.arena_size = world.current_effective_room_size
 		_add_shape(boss, 34.0)
 		world.add_child(boss)
 		boss.position = Vector2(-100.0, 0.0)
@@ -55,12 +56,15 @@ func _run() -> void:
 		await _capture(id + "_entrance", id.to_upper().replace("_", " ") + " / ENTRANCE", "The entrance motif clears before the first combat warning.")
 		arena_renderer.set_boss_entrance_motif(id, false)
 		for kind in range(3):
+			boss.position = Vector2(-100.0, 0.0)
 			player.position = Vector2(110.0, 30.0)
 			boss._cancel_attack()
 			boss.begin_attack(kind)
 			boss._process_behavior(boss.warning_duration * 0.55)
 			_check(not boss.get_attack_warning_geometry().is_empty(), "%s attack %d has visible geometry" % [id, kind])
 			await _capture("%s_%d" % [id, kind], "%s / ATTACK %d" % [id.to_upper().replace("_", " "), kind + 1], "Committed danger boundaries leave readable safe space before the attack resolves.")
+			if (id == "kilnheart" and kind == 1) or (id == "glassweaver" and kind in [0, 2]) or (id == "null_archivist" and kind == 0):
+				await _followup_frame(boss, id, kind)
 		if id != "kilnheart":
 			await _party_edge_frame(boss, id)
 		boss.free()
@@ -91,7 +95,46 @@ func _fit_arena(stage: int) -> void:
 	root.canvas_transform = Transform2D(0.0, scale, 0.0, Vector2(FRAME_SIZE) * 0.5)
 	arena_renderer.queue_redraw()
 
+func _followup_frame(boss: Node2D, id: String, root_kind: int) -> void:
+	var root_serial: int = boss._attack_serial
+	var root_geometry: Array = boss.get_attack_warning_geometry()
+	var safe_position: Vector2 = player.global_position
+	var title: String = ""
+	var detail: String = ""
+	match id:
+		"kilnheart":
+			safe_position = boss.global_position + Vector2(300.0, 0.0)
+			title = "KILNHEART / FURNACE HALO / IN"
+			detail = "After leaving the first disk, return through the ring's empty center or continue beyond its outer edge."
+		"glassweaver":
+			if root_kind == 0 and root_geometry.size() == 2:
+				var first: Dictionary = root_geometry[0]
+				var second: Dictionary = root_geometry[1]
+				safe_position = (Vector2(first.start) + Vector2(first.end) + Vector2(second.start) + Vector2(second.end)) * 0.25
+				title = "GLASSWEAVER / SPLIT LOOM TO CROSS STITCH"
+				detail = "The corridor was safe for Split Loom. A separate cross warning now asks the player to leave it."
+			else:
+				title = "GLASSWEAVER / GLASS CAGE TO CROSS STITCH"
+				detail = "The first ring preserves its inner pocket. The next warning crosses the remembered target position."
+		"null_archivist":
+			safe_position += Vector2(300.0, 0.0)
+			title = "THE NULL ARCHIVIST / RECORD TO REVISION"
+			detail = "The recorded position is now an empty safe pocket; the larger surrounding ring pressures the first escape."
+	_check(not ALTERNATIVE_TEST.warning_contains(root_geometry, safe_position), "%s %d preview moves outside the first impact" % [id, root_kind])
+	player.global_position = safe_position
+	var health_before: int = player.get_current_health()
+	boss._resolve_attack()
+	_check(player.get_current_health() == health_before, "%s %d first preview impact preserves the player's safe position" % [id, root_kind])
+	var gap: float = boss.state_time_left
+	boss._process_behavior(gap + 0.001)
+	_check(boss.boss_state == boss.State.WARNING and boss._sequence_step == 1 and boss._attack_serial > root_serial, "%s %d preview reaches the real queued follow-up" % [id, root_kind])
+	_check(is_equal_approx(boss.state_time_left, boss.warning_duration), "%s %d follow-up begins with its full warning" % [id, root_kind])
+	boss._process_behavior(boss.warning_duration * 0.55)
+	_check(not boss.get_attack_warning_geometry().is_empty(), "%s %d follow-up has visible geometry" % [id, root_kind])
+	await _capture("%s_%d_followup" % [id, root_kind], title, detail)
+
 func _party_edge_frame(boss: Node2D, id: String) -> void:
+	boss.position = Vector2(-100.0, 0.0)
 	var actors: Array[Node2D] = [player]
 	for index in range(3):
 		var actor := RenderPlayer.new()
@@ -114,7 +157,10 @@ func _party_edge_frame(boss: Node2D, id: String) -> void:
 		boss._resolve_attack()
 		for index in range(actors.size()):
 			actors[index].global_position = center + offsets[index]
-	boss.begin_attack(2 if id == "glassweaver" else 1)
+		var gap: float = boss.state_time_left
+		boss._process_behavior(gap + 0.001)
+	else:
+		boss.begin_attack(2)
 	boss._process_behavior(boss.warning_duration * 0.55)
 	for actor in actors:
 		_check(not ALTERNATIVE_TEST.warning_contains(boss.get_attack_warning_geometry(), actor.global_position), id + ": four-player edge cluster preserves all safe centers")

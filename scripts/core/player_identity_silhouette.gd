@@ -123,49 +123,32 @@ static func draw_riftlancer(canvas: CanvasItem, body_radius: float, facing: Vect
 
 
 static func draw_threadbinder(canvas: CanvasItem, body_radius: float, facing: Vector2, side: Vector2, speed_t: float, attack_phase: float = -1.0, dash_amount: float = 0.0, dash_direction: Vector2 = Vector2.ZERO) -> void:
-	var stitch := _attack_extension(attack_phase)
+	# The stable fifth-character draw entry now carries the Keeper's control bar.
+	var command := _attack_extension(attack_phase)
 	var dash := clampf(dash_amount, 0.0, 1.0)
 	var speed := clampf(speed_t, 0.0, 1.0)
 	var travel := dash_direction.normalized() if dash > 0.0 and dash_direction.length_squared() > 0.0001 else facing
 	var travel_side := travel.orthogonal()
-	var shuttle_spread := body_radius + 3.5 - dash * 3.0 + stitch * 1.3
-	var pivots: Array[Vector2] = []
-	var axes: Array[Vector2] = []
+	var ivory := Color(1.0, 0.94, 0.81, 0.97)
+	var thread_color := Color(1.0, 0.68, 0.59, 0.62)
+	var bar_center := facing * (body_radius + 1.5 + command * 3.0)
+	var bar_half_width := 10.0 - dash * 2.0
+	# A single transverse control bar reads differently from a blade or lance.
+	canvas.draw_line(bar_center - side * bar_half_width, bar_center + side * bar_half_width, ivory, 3.0, true)
+	canvas.draw_line(bar_center - facing * 4.2, bar_center + facing * 5.2, ivory, 2.4, true)
 	for sign_value: float in [-1.0, 1.0]:
-		# Paired short shuttles, with a visible eye through each, distinguish the
-		# weaver from a forward blade or lance. Their alternating reach suggests
-		# passing a thread without changing the player's facing or attack shape.
-		var reach := stitch * (4.5 if sign_value < 0.0 else -1.5)
-		pivots.append(facing * (body_radius * 0.15 + reach + dash * 1.5) + side * sign_value * shuttle_spread)
-		axes.append(facing.rotated(sign_value * (0.24 - stitch * 0.18)))
-	var start := pivots[0] - axes[0] * 3.5
-	var finish := pivots[1] - axes[1] * 3.5
-	var tail_length := body_radius + 10.0 + speed * 4.0 + dash * 5.0
-	var bend_a := -travel * tail_length - travel_side * (body_radius + 12.0 - dash * 4.0)
-	var bend_b := -travel * tail_length + travel_side * (body_radius + 12.0 - dash * 4.0)
-	var thread := PackedVector2Array()
-	for index in range(25):
-		thread.append(start.bezier_interpolate(bend_a, bend_b, finish, float(index) / 24.0))
-	canvas.draw_polyline(thread, Color(1.0, 0.68, 0.59, 0.69), 1.3, true)
-	for index in pivots.size():
-		var pivot := pivots[index]
-		var axis := axes[index]
-		var width := axis.orthogonal() * 2.6
-		var half_length := 6.2 + stitch * 0.6
-		var shuttle := PackedVector2Array([
-			pivot + axis * half_length,
-			pivot + axis * 1.6 + width,
-			pivot - axis * 2.0 + width,
-			pivot - axis * half_length,
-			pivot - axis * 2.0 - width,
-			pivot + axis * 1.6 - width
-		])
-		canvas.draw_colored_polygon(shuttle, Color(1.0, 0.94, 0.81, 0.97))
-		canvas.draw_line(pivot - axis * 1.8, pivot + axis * 1.8, Color(0.54, 0.19, 0.19, 0.96), 1.3, true)
-	# The bright cross stitch stays near the face; the central core remains open.
+		var start := bar_center + side * sign_value * (bar_half_width - 1.0)
+		var finish := -travel * (body_radius + 7.0 + speed * 3.0 + dash * 5.0) + travel_side * sign_value * (7.0 - dash * 2.0)
+		var bend := side * sign_value * (body_radius + 8.0 - dash * 3.0) - travel * 4.0
+		var thread := PackedVector2Array()
+		for index in range(13):
+			thread.append(start.bezier_interpolate(bend, finish - travel * 3.0, finish, float(index) / 12.0))
+		canvas.draw_polyline(thread, thread_color, 1.2, true)
+		canvas.draw_circle(start, 1.8, ivory)
+	# Two small mask eyes leave the player's bright core unobscured.
 	var eye := facing * (body_radius * 0.4)
-	canvas.draw_line(eye - side * 2.2 - facing * 1.1, eye + side * 2.2 + facing * 1.1, Color(1.0, 0.96, 0.86, 0.94), 1.5, true)
-	canvas.draw_line(eye + side * 2.2 - facing * 1.1, eye - side * 2.2 + facing * 1.1, Color(1.0, 0.96, 0.86, 0.94), 1.5, true)
+	canvas.draw_circle(eye - side * 2.3, 1.45, ivory)
+	canvas.draw_circle(eye + side * 2.3, 1.45, ivory)
 
 
 static func _attack_extension(phase: float) -> float:

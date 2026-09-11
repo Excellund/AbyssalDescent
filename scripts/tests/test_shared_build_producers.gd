@@ -109,9 +109,26 @@ func _test_producer(source: String) -> void:
 			player.apply_upgrade("ruinous_impact")
 			player.boss_combinations.launch_enemy(target, Vector2.RIGHT * 300.0, 1)
 			target.get_launch_state()._impact(target.global_position)
+		"spark_relay_projectile":
+			player.apply_trial_power("spark_relay")
+			player.perform_motion_blast(Vector2.RIGHT, 1.0)
+			player.spark_relay_controller.tick(.2)
+		"shatterwake_burst":
+			player.apply_upgrade("shatterwake")
+			player.apply_trial_power("returning_crescent")
+			target.position.x = 140.0
+			player.returning_crescent.set_physics_process(false)
+			player.returning_crescent.try_launch(Vector2.RIGHT)
+			player.returning_crescent.tick(.3)
+		"edict_court":
+			player.apply_upgrade("edict_of_the_court")
+			var victim := _enemy(Vector2(40, 0))
+			victim.set_health(1)
+			target.position = Vector2(120, 0)
+			player._perform_melee_attack(Vector2.RIGHT, {"damage": 20, "range": 78.0, "arc_degrees": 130.0})
 	var native_hits := target.contexts.filter(func(context: Dictionary) -> bool: return context.get("attack_type") == source)
 	_check(not native_hits.is_empty(), source + " native producer deals damage")
-	_check(player.storm_crown_hit_counter == 1, source + " contributes once per action/target, including repeated ticks and return legs")
+	_check(player.storm_crown_hit_counter == (2 if source == "edict_court" else 1), source + " contributes once per action/target, including its real initiating lethal hit where required")
 	for context in native_hits:
 		var action := INTERACTIONS.validate_action(context.get("interaction"), 1)
 		_check(not action.is_empty(), source + " carries valid originating action and ownership")

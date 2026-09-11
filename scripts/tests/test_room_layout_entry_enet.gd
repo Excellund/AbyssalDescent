@@ -10,6 +10,7 @@ const BREAKWATER := preload("res://scripts/enemy_breakwater.gd")
 const HISTORY := preload("res://scripts/core/run_history_store.gd")
 const AUDIO_RETIREMENT := preload("res://scripts/tests/fixture_audio_retirement.gd")
 const BIOMES := preload("res://scripts/shared/biome_registry.gd")
+const BOSS_CATALOGUE := preload("res://scripts/shared/boss_catalogue.gd")
 const DESCENT_BIOMES := ["shatterfield", "grinding_vault", "void_breach"]
 const BIOME_OBSTACLE_COUNTS := {
 	"crumble": 4, "haunt": 4, "shatterfield": 4,
@@ -23,6 +24,7 @@ var transport: ENetMultiplayerPeer
 var world: WORLD
 var failures: Array[String] = []
 var checks := 0
+var score_playback_id := 0
 var cases := ["Apex Breakwater", "Serialized Cover", "Legacy Clear"]
 
 func _initialize() -> void:
@@ -33,6 +35,22 @@ func check(value: bool, label: String) -> void:
 	if not value:
 		failures.append(label)
 		push_error(label)
+
+func _music_playback_id() -> int:
+	var music: Node = world.music_system
+	if music.active_music_player_index < 0:
+		return 0
+	var active: AudioStreamPlayer = music.music_players[music.active_music_player_index]
+	var playback: AudioStreamPlayback = active.get_stream_playback()
+	return playback.get_instance_id() if active.playing and playback != null else 0
+
+func _check_score_continuity(label: String) -> void:
+	check(score_playback_id != 0 and _music_playback_id() == score_playback_id, label)
+
+func _check_score_location(act: int, depth: int, boss_chamber: bool, label: String) -> void:
+	var normal := posmod(depth + act - 1, 3)
+	check(world.music_system.get_normal_score_variant() == normal, label + ": normal variation follows the presented location")
+	check(world.music_system.get_selected_score_variant() == (3 if boss_chamber else normal), label + ": selected variation matches the chamber")
 
 func _until(predicate: Callable, seconds: float = 8.0) -> bool:
 	var deadline := Time.get_ticks_msec() + int(seconds * 1000.0)
@@ -84,6 +102,9 @@ func _run() -> void:
 	world.get_node("DebugSettings").enabled = false
 	root.add_child(world)
 	current_scene = world
+	check(world.music_system.is_adaptive_score(), "Each real Main scene loads the adaptive Riot Depth score")
+	score_playback_id = _music_playback_id()
+	check(score_playback_id != 0, "Each peer starts one native synchronized score playback")
 	var ui: Node = world.reward_selection_ui
 	var choice: Dictionary = ui.boon_choices.front().duplicate(true)
 	ui.close_selection()
@@ -402,6 +423,8 @@ func _test_descent_flow() -> void:
 	check(world.run_session.last_standard_encounter_key == ("crossfire" if role == "host" else replica_standard_before), "Only authoritative entry advances standard history")
 	check(world.run_session.last_objective_kind == replica_objective_before, "The declined mission never advances objective history")
 	check(world.music_system.music_context == &"combat", "The selected standard encounter uses combat music on both peers")
+	_check_score_location(1, 5, false, "Both peers enter the same normal variation")
+	_check_score_continuity("Native chosen-door RPCs preserve the original score playback on each peer")
 	if role == "host":
 		var history_before: String = world.run_session.last_standard_encounter_key
 		var alternatives: Array[Dictionary] = world._roll_route_options(world._build_route_context(5))
@@ -428,6 +451,8 @@ func _offer_and_request(key: String, host_offers: Array[Dictionary], expected_la
 	var standard_before: String = world.run_session.last_standard_encounter_key
 	var objective_before: String = world.run_session.last_objective_kind
 	var previous_room_id := world.get_current_room_sync_id()
+	var previous_variant: int = world.music_system.get_selected_score_variant()
+	var previous_normal: int = world.music_system.get_normal_score_variant()
 	# Stage the between-room state for skipped ordinary encounters. The real
 	# renderer correctly suppresses doors while a declared encounter is live.
 	world._clear_all_enemies()
@@ -447,6 +472,12 @@ func _offer_and_request(key: String, host_offers: Array[Dictionary], expected_la
 		return world.choosing_next_room and world.door_options == expected), "Both peers receive exactly the same " + key + " offers")
 	world._sync_renderer()
 	check(world.renderer.door_options == expected, "The real renderer receives the same positioned doors and payoff data: " + key)
+	if role == "client":
+		var expected_music: StringName = &"rest" if world.current_room_label == "Rest Site" else &"doors"
+		check(world.music_system.music_context == expected_music, "Accepted door payload records the correct local context: " + key)
+	check(world.music_system.get_selected_score_variant() == previous_variant and world.music_system.get_normal_score_variant() == previous_normal,
+		"Door offers preserve the current room's music despite progress payloads: " + key)
+	_check_score_continuity("Receiving door offers preserves each peer's native playback: " + key)
 	check(world.run_session.last_standard_encounter_key == standard_before and world.run_session.last_objective_kind == objective_before, "Receiving offers never advances entered history: " + key)
 	for option in world.door_options:
 		var preview := CONTRACTS.door_reward_preview_text(option)
@@ -468,6 +499,16 @@ func _offer_and_request(key: String, host_offers: Array[Dictionary], expected_la
 	var is_rest := CONTRACTS.door_option_kind_id(expected[0]) == ENUMS.DoorKind.REST
 	check(await _until(func(): return (is_rest or world.get_current_room_sync_id() > previous_room_id) and world.current_room_label == expected_label), "Joiner request resolves through host authority and the new chosen door: " + key)
 	await _barrier("entered-" + key)
+	if role == "host":
+		_write("score-location-" + key, {"act": world._get_room_presentation_act(), "depth": world.room_depth,
+			"normal": world.music_system.get_normal_score_variant(), "selected": world.music_system.get_selected_score_variant()})
+	check(await _until(func(): return _has("score-location-" + key)), "Host exposes its entered musical location for both peers: " + key)
+	var score_location: Dictionary = _read("score-location-" + key)
+	var is_boss := CONTRACTS.door_option_kind_id(expected[0]) == ENUMS.DoorKind.BOSS
+	_check_score_location(int(score_location.act), int(score_location.depth), is_boss, "Replicated room " + key)
+	check(world.music_system.get_normal_score_variant() == int(score_location.normal)
+		and world.music_system.get_selected_score_variant() == int(score_location.selected), "Both peers select the host's exact room variation: " + key)
+	_check_score_continuity("A new room changes musical variation without replacing either peer's playback: " + key)
 
 func _test_boss_descent(stage: int) -> void:
 	var boss_key: String = ["warden", "sovereign", "lacuna"][stage - 1]
@@ -481,9 +522,11 @@ func _test_boss_descent(stage: int) -> void:
 	check(world.renderer.environment_act == stage and world.renderer.environment_biome_id == DESCENT_BIOMES[stage - 1], "Boss uses its own act and biome on both peers: " + boss_key)
 	check(world.encounter_intro_grace_active and world.renderer.boss_entrance_active and world.renderer.boss_entrance_key == boss_key, "Boss motif appears during the actual replicated survey: " + boss_key)
 	check(world.music_system.music_context == &"boss", "Boss entry selects boss music on both peers: " + boss_key)
+	var entered_depth := world.room_depth
+	_check_score_location(stage, entered_depth, true, "Boss entrance on each peer " + boss_key)
+	_check_score_continuity("Boss entry RPCs keep each peer's synchronized score running: " + boss_key)
 	await _barrier("boss-survey-" + boss_key)
-	world._signal_local_player_ready()
-	check(await _until(func(): return not world.encounter_intro_grace_active), "Existing readiness RPC ends the boss survey on both peers: " + boss_key)
+	await _test_boss_greeting_ready(boss_key, stage)
 	world._sync_renderer()
 	check(not world.renderer.boss_entrance_active, "Boss decoration cannot remain over combat warnings: " + boss_key)
 	await _barrier("boss-combat-" + boss_key)
@@ -498,18 +541,32 @@ func _test_boss_descent(stage: int) -> void:
 		check(await _until(func(): return world._run_outcome_coordinator.is_run_cleared()), "Native final boss death delivers victory through the existing outcome RPC")
 		return
 	check(await _until(func(): return world.reward_selection_ui.is_active()), "Native boss death opens rewards on both peers: " + boss_key)
+	check(world.reward_selection_ui.epitaph_label.visible and world.reward_selection_ui.epitaph_label.get_parsed_text() == _defeat_caption(boss_key), "Existing reward RPC displays this boss's attributed defeat line on both peers: " + boss_key)
 	world._sync_renderer()
 	check(world._get_room_presentation_act() == stage and world._get_hud_state().display_act == stage, "Boss reward HUD keeps the chamber's original act: " + boss_key)
 	check(world.renderer.environment_act == stage and world.renderer.environment_biome_id == DESCENT_BIOMES[stage - 1], "Boss rewards preserve the defeated chamber's visible environment: " + boss_key)
-	check(not world.renderer.boss_entrance_active and world.music_system.music_context == &"reward", "Reward selection keeps the motif off and enters quiet music: " + boss_key)
+	check(not world.renderer.boss_entrance_active and world.music_system.music_context == &"reward", "Reward selection records its context while the entrance motif stays off: " + boss_key)
+	_check_score_location(stage, entered_depth, true, "Boss rewards retain their defeated chamber on both peers " + boss_key)
+	_check_score_continuity("Replicated boss clear preserves the existing music through rewards: " + boss_key)
 	if role == "host":
 		check(world.run_summary_recorder.run_summary_tracker.reached_act == stage, "Defeating a boss does not falsely count the following act as entered")
 	await _barrier("boss-reward-" + boss_key)
-	world.reward_selection_ui.close_selection()
-	world.reward_selection_ui.reward_skipped.emit(ENUMS.RewardMode.BOSS, false)
+	if role == "client":
+		world.reward_selection_ui.close_selection()
+		world.reward_selection_ui.reward_skipped.emit(ENUMS.RewardMode.BOSS, false)
+	await _barrier("boss-reward-client-finished-" + boss_key)
+	check(world.music_system.music_context == &"reward", "Music stays in rewards while the other peer is still choosing: " + boss_key)
+	_check_score_location(stage, entered_depth, true, "Waiting for the other peer does not replace boss music " + boss_key)
+	await _barrier("boss-reward-wait-inspected-" + boss_key)
+	if role == "host":
+		world.reward_selection_ui.close_selection()
+		world.reward_selection_ui.reward_skipped.emit(ENUMS.RewardMode.BOSS, false)
 	check(await _until(func():
 		world.enemy_state_sync_receiver.flush_pending_door_syncs()
 		return not world.reward_selection_ui.is_active() and world.choosing_next_room and not world.door_options.is_empty()), "Both real reward completions unlock host-generated routes: " + boss_key)
+	check(world.music_system.music_context == &"doors", "Reward completion records door selection on host and joiner: " + boss_key)
+	_check_score_location(stage, entered_depth, true, "Boss door choices preserve boss music after act advancement " + boss_key)
+	_check_score_continuity("Co-op reward completion keeps the same music through door choices: " + boss_key)
 	check(world._get_current_act() == stage + 1 and world._get_room_presentation_act() == stage, "Replicated progress advances while the old chamber remains: " + boss_key)
 	await _barrier("boss-exits-" + boss_key)
 	offers.clear()
@@ -518,9 +575,66 @@ func _test_boss_descent(stage: int) -> void:
 	await _offer_and_request("rest-after-" + boss_key, offers, "Rest Site")
 	world._sync_renderer()
 	check(world.renderer.environment_act == stage + 1 and world.renderer.environment_biome_id == DESCENT_BIOMES[stage], "Actual next-room RPC reveals the following act and biome: " + boss_key)
-	check(world.music_system.music_context == &"rest", "Actual next-act rest enters its quiet music context on both peers")
+	check(world.music_system.music_context == &"rest", "Actual next-act rest selects the next location's normal music on both peers")
+	_check_score_location(stage + 1, world.room_depth, false, "Rest selects its new act and incremented depth on both peers")
+	_check_score_continuity("Rest entry and deferred rest-door payloads preserve native score playback")
 	check(world.run_summary_recorder.run_summary_tracker.reached_act == stage + 1, "Actual next-act entry advances reached_act on both peers")
 	await _barrier("next-act-" + boss_key)
+
+func _defeat_caption(boss_id: String) -> String:
+	return "%s: \"%s\"" % [String(BOSS_CATALOGUE.NAMES[boss_id]), BOSS_CATALOGUE.get_defeat_line(boss_id)]
+
+func _test_boss_greeting_ready(boss_key: String, stage: int) -> void:
+	var hud: Node = world.hud
+	var room_id := world.get_current_room_sync_id()
+	var greeting := "\"%s\"" % BOSS_CATALOGUE.get_greeting(boss_key)
+	check(hud.boss_intro_visible and hud.room_banner_persistent_visible and hud.room_banner_subtitle_label.text == greeting, "Actual replicated boss survey displays the catalogue greeting: " + boss_key)
+	# The previous chamber's completion message must not end this new survey.
+	if role == "host":
+		world._broadcast_all_players_ready.rpc(room_id - 1)
+	await _barrier("boss-stale-ready-" + boss_key)
+	check(world.encounter_intro_grace_active and hud.boss_intro_visible, "Old-room readiness cannot dismiss the current boss greeting: " + boss_key)
+	if role == "client":
+		world._signal_local_player_ready()
+		check(world._local_player_ready and not hud.boss_intro_visible and hud.room_banner_title_label.text == "Ready" and hud.room_banner_subtitle_label.text == "Waiting for allies...", "Ready replaces dialogue synchronously without a forced greeting delay: " + boss_key)
+	await _barrier("boss-client-ready-" + boss_key)
+	if role == "host":
+		var client_id := int(get_multiplayer().get_peers()[0])
+		check(await _until(func(): return bool(world._encounter_ready_peers.get(client_id, false))), "Host receives the joining player's real readiness RPC: " + boss_key)
+		check(not world._local_player_ready and hud.boss_intro_visible, "Unready host retains its own greeting while its ally waits: " + boss_key)
+	else:
+		check(hud.room_banner_persistent_visible and hud.room_banner_subtitle_label.text == "Waiting for allies...", "Co-op waiting retains priority over the boss greeting: " + boss_key)
+	check(world.encounter_intro_grace_active, "One ready ally cannot start the boss encounter alone: " + boss_key)
+	await _barrier("boss-wait-inspected-" + boss_key)
+	if role == "host":
+		world._signal_local_player_ready()
+		check(not world.encounter_intro_grace_active, "Final readiness ends the survey immediately in the same call: " + boss_key)
+	check(await _until(func(): return not world.encounter_intro_grace_active), "Existing readiness RPC ends the boss survey on both peers: " + boss_key)
+	check(not hud.boss_intro_visible and is_zero_approx(hud.room_banner_title_label.modulate.a) and is_zero_approx(hud.room_banner_subtitle_label.modulate.a), "Boss greeting is fully hidden before active combat resumes: " + boss_key)
+	# Drive the native first windup without simulating an entire combat. Its
+	# authoritative state still reaches the observer through the real sender.
+	var boss: Node = _living()[0]
+	boss.set_physics_process(false)
+	await _barrier("boss-warning-ready-" + boss_key)
+	if role == "host":
+		boss._start_next_attack(180.0, 0.0)
+		if stage == 1:
+			boss._process_telegraph_state(0.05)
+		else:
+			boss._process_windup_state(0.05)
+		world.enemy_state_sync_broadcaster.tick(0.25)
+		world.enemy_state_sync_broadcaster.tick(0.25)
+		# Sovereign and Lacuna carry full attack warnings on the separate
+		# native projectile channel, also normally pumped by World._process.
+		world._sync_archer_projectile_state_tick(0.05)
+	check(await _until(func(): return boss._is_in_priority_attack_state() and float(boss.telegraph_alpha) > 0.0), "Native first boss warning reaches both actual peers: " + boss_key)
+	check(not hud.boss_intro_visible and is_zero_approx(hud.room_banner_title_label.modulate.a) and is_zero_approx(hud.room_banner_subtitle_label.modulate.a), "First live warning has no greeting or replacement banner over it: " + boss_key)
+	if role == "host":
+		world._broadcast_all_players_ready.rpc(room_id)
+		world._broadcast_all_players_ready.rpc(room_id - 1)
+		world._broadcast_all_players_ready(room_id)
+	await _barrier("boss-duplicate-ready-" + boss_key)
+	check(not world.encounter_intro_grace_active and not hud.boss_intro_visible, "Duplicate and stale room-ready messages cannot resurrect boss dialogue: " + boss_key)
 
 func _test_final_summary() -> void:
 	var summary: Dictionary = world.run_summary_recorder.latest_run_summary
@@ -530,6 +644,7 @@ func _test_final_summary() -> void:
 	if role == "client":
 		check(world.run_summary_recorder.run_summary_tracker.defeated_boss_ids.is_empty(), "Replica final boss credits come from the host summary, not local completion guesses")
 	check(world.victory_screen.is_open(), "The actual shared result screen is displayed on both peers")
+	check(world.victory_screen._results_screen._subtitle_label.text == _defeat_caption("lacuna"), "Final result subtitle attributes Lacuna's defeat line from the transported boss summary on both peers")
 	var saved: Array = HISTORY.load_all()
 	check(not saved.is_empty() and saved.back().get("reached_act", 0) == 3 and saved.back().get("defeated_boss_ids", []) == ["warden", "sovereign", "lacuna"], "Both isolated history files retain transported descent facts")
 	await _barrier("final-summary-inspected")

@@ -14,6 +14,9 @@ static func _get_power_registry_instance():
 
 ## Maps upgrade IDs to their property definitions
 const UPGRADE_PARAM_MAP := {
+	"patient_hunter": {"property": "patient_hunter_bonus_damage"},
+	"marked_prey": {"property": "marked_prey_bonus_damage"},
+	"shatterwake": {"property": "shatterwake_stacks"},
 	"first_strike": {"property": "first_strike_bonus_damage"},
 	"heavy_blow": {"property": "damage"},
 	"wide_arc": {"property": "attack_arc_degrees"},
@@ -197,6 +200,20 @@ static func _build_trial_values_base(power_id: String, stack_count: int, balance
 		return {}
 	var data := balance_data
 	match power_id:
+		"stormbrand":
+			var levels := float(clampi(stack_count, 1, 3) - 1)
+			return {
+				"mark_bonus_ratio": float(data.mark_ratio_base) + float(data.mark_ratio_per_level) * levels,
+				"mark_duration": float(data.duration_base) + float(data.duration_per_level) * levels,
+				"slow_duration": float(data.slow_duration), "slow_mult": float(data.slow_mult)
+			}
+		"spark_relay":
+			var levels := clampi(stack_count, 1, 3) - 1
+			return {
+				"damage_ratio": float(data.damage_ratio_base) + float(data.damage_ratio_per_level) * levels,
+				"max_targets": int(data.max_targets_base) + int(data.max_targets_per_level) * levels,
+				"travel_range": float(data.travel_range)
+			}
 		"razor_wind":
 			var arc_value := float(data.get("arc_base", 24.0))
 			var arc_match_at := int(data.get("arc_match_player_at_stack", 99))
@@ -354,6 +371,12 @@ static func _build_trial_values_base(power_id: String, stack_count: int, balance
 static func _apply_prismatic_trial_values(power_id: String, values: Dictionary) -> Dictionary:
 	var prismatic := values.duplicate(true)
 	match power_id:
+		"stormbrand":
+			prismatic["mark_bonus_ratio"] = float(prismatic.mark_bonus_ratio) * 1.25
+			prismatic["mark_duration"] = float(prismatic.mark_duration) * 1.25
+		"spark_relay":
+			prismatic["damage_ratio"] = float(prismatic.damage_ratio) * 1.25
+			prismatic["travel_range"] = float(prismatic.travel_range) * 1.20
 		"razor_wind":
 			prismatic["range_scale"] = float(prismatic.get("range_scale", 1.0)) * 1.15
 			prismatic["damage_ratio"] = float(prismatic.get("damage_ratio", 0.0)) * 1.3

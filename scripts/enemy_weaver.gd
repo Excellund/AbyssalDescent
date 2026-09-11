@@ -322,12 +322,27 @@ func _draw() -> void:
 
 	# Abdomen — larger rear body, lags behind the cephalothorax
 	if _feet_initialized:
-		var ab_local := to_local(_abdomen_world_pos)
-		draw_circle(ab_local, 11.0,
-			Color(COLOR_WEAVER_BODY.r * 0.80, COLOR_WEAVER_BODY.g * 0.80, COLOR_WEAVER_BODY.b * 0.80, 1.0))
-		draw_circle(ab_local, 7.0, COLOR_WEAVER_CORE)
-		draw_arc(ab_local, 9.5, 0.0, TAU, 24,
-			Color(COLOR_WEAVER_BODY.r, COLOR_WEAVER_BODY.g, COLOR_WEAVER_BODY.b, 0.36), 1.4)
+		var ab_local: Vector2 = to_local(_abdomen_world_pos)
+		var side: Vector2 = Vector2(-facing.y, facing.x)
+		# Broad facets stay inside the previous 11-pixel shell and follow its tracked center.
+		var shell: PackedVector2Array = [
+			ab_local + facing * 11.0,
+			ab_local + facing * 4.4 + side * 9.46,
+			ab_local - facing * 6.6 + side * 8.58,
+			ab_local - facing * 11.0,
+			ab_local - facing * 6.6 - side * 8.58,
+			ab_local + facing * 4.4 - side * 9.46,
+		]
+		draw_colored_polygon(shell, COLOR_WEAVER_BODY.darkened(0.2))
+		var lit_facet: PackedVector2Array = [shell[0], shell[1], shell[2], shell[3]]
+		draw_colored_polygon(lit_facet, COLOR_WEAVER_BODY.lerp(COLOR_WEAVER_CORE, 0.3))
+		var inset: PackedVector2Array = [
+			ab_local + facing * 6.0,
+			ab_local + side * 3.2,
+			ab_local - facing * 6.0,
+			ab_local - side * 3.2,
+		]
+		draw_colored_polygon(inset, COLOR_WEAVER_CORE)
 
 	# 8 legs with world-space foot tracking and IK-style 2-joint bends
 	if _feet_initialized:
@@ -359,7 +374,7 @@ func _draw() -> void:
 				Color(COLOR_WEAVER_CORE.r, COLOR_WEAVER_CORE.g, COLOR_WEAVER_CORE.b, lerpf(0.90, 0.18, foot_lift)))
 
 	# Cephalothorax — front body, drawn over legs
-	_draw_common_body(body_radius, COLOR_WEAVER_BODY, COLOR_WEAVER_CORE, facing)
+	_draw_common_body(body_radius, COLOR_WEAVER_BODY, COLOR_WEAVER_CORE, facing, &"weaver")
 
 	# Windup telegraph — radial lines grow to show where burst fires
 	if weaver_state == WeaverState.WINDUP:

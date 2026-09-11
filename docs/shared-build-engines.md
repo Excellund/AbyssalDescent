@@ -2,6 +2,8 @@
 
 This records the earlier electrical-build checkpoint. For the current shared Mark, Field, generic Boon and Mission rules, use [the combat power roster](combat-power-roster.md) and [connected builds implementation](connected-builds-implementation.md). The separate Mark records, restricted Snare area list, old display names and missing-contract notes below describe that earlier state.
 
+Static Wake's damage rate was reduced by 25% on September 11, after this checkpoint. The six-per-second rate and reward percentages recorded below are historical; see [the balance revision](static-wake-balance-20260911.md) for the current values.
+
 This is the implementation map for the electrical-build update. It covers the 21 shared Arcana and nine shared boss rewards in `PowerRegistry`. It describes current behavior and explicit limits; it is not evidence that an individual power needs a balance change.
 
 Player-facing descriptions follow the [combat wording guide](combat-wording.md): Attack is the deliberate control action, an attack hit is a connection, and dealing damage includes any eligible source. The implementation map below uses `Hit` for the existing internal `HIT` classification; it is not wording to copy into player descriptions.

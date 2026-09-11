@@ -10,11 +10,19 @@ static func explanation(power_id: String, level: int, prismatic: bool = false) -
 
 static func _authored_explanation(power_id: String, level: int, prismatic: bool) -> String:
 	match power_id:
+		"stormbrand":
+			if level >= 3:
+				return "Your {kw:electric} damage {kw:mark|Marks} foes and {kw:slow|Slows} already {kw:mark|Marked} foes. Each foe can receive these effects once per original action."
+			return "Your {kw:electric} damage {kw:mark|Marks} foes, increasing the damage they take from all players. Each foe can be {kw:mark|Marked} once per original action."
+		"spark_relay":
+			return "Your {kw:burst} damage fires one {kw:electric} {kw:projectile} from your body toward the struck foe, once per original action. Solid cover blocks it."
+		"shatterwake":
+			return "Your {kw:projectile} damage releases a {kw:burst} around the struck foe, once per original action. The struck foe can also take {kw:burst} damage."
 		"razor_wind":
-			return "Each {kw:attack} adds a cutting arc beyond your normal melee reach. The arc damages distant foes without striking nearby enemies a second time."
+			return "Each {kw:attack} adds a cutting arc that damages foes beyond your normal melee reach."
 		"execution_edge":
 			if prismatic:
-				return "Every {kw:attack} becomes an execution strike that deals much more damage. There is no longer a weaker swing between execution strikes."
+				return "Every {kw:attack} becomes an execution strike that deals much more damage."
 			return "Every few {kw:attack|Attacks}, an execution strike deals much more damage. Misses still advance the count, so you can prepare it before closing in."
 		"rupture_wave":
 			if level >= 3:
@@ -29,9 +37,9 @@ static func _authored_explanation(power_id: String, level: int, prismatic: bool)
 				return "{kw:attack_hit|Attack hits} {kw:slow} foes, and all your damage is stronger against already {kw:slow|Slowed} enemies. All {kw:slow} effects you apply now last twice as long."
 			if level >= 2:
 				return "{kw:attack_hit|Attack hits} {kw:slow} foes. All your damage is stronger against enemies that were already {kw:slow|Slowed}, including damage from {kw:field|Fields}, {kw:projectile|Projectiles} and {kw:echo|Echoes}."
-			return "{kw:attack_hit|Attack hits} {kw:slow} foes. Your {kw:attack|Attacks} deal more damage to already {kw:slow|Slowed} targets; applying {kw:slow} with this hit does not boost that same hit."
+			return "{kw:attack_hit|Attack hits} {kw:slow} foes. Your {kw:attack|Attacks} deal more damage to already {kw:slow|Slowed} targets."
 		"phantom_step":
-			return "{kw:dash} through foes to damage and {kw:slow} them, hitting each enemy once during that {kw:dash}. {kw:recoil} and {kw:orbit} do not trigger this effect."
+			return "{kw:dash} through foes to damage and {kw:slow} them, hitting each enemy once during that {kw:dash}."
 		"riftpunch":
 			if level >= 3:
 				return "Finishing a {kw:dash} empowers your next {kw:attack_hit} with bonus damage, {kw:slow}, a damaging {kw:burst} and brief contact protection. The opening expires if unused."
@@ -43,7 +51,7 @@ static func _authored_explanation(power_id: String, level: int, prismatic: bool)
 				return "Your {kw:dash} moves faster and farther. {kw:kill|Kills} refresh it, quick {kw:kill} chains can store one extra {kw:dash}, and chain {kw:kill|Kills} grant brief contact protection."
 			if level >= 2:
 				return "Your {kw:dash} moves faster and farther, and {kw:kill|Kills} refresh it. After a {kw:kill} refreshes {kw:dash}, another quick {kw:kill} can store one extra {kw:dash}."
-			return "Your {kw:dash} moves faster and farther. {kw:kill|Killing} a foe immediately refreshes its cooldown, letting you {kw:dash} again without waiting for it to recharge."
+			return "Your {kw:dash} moves faster and farther. {kw:kill|Killing} a foe immediately refreshes its cooldown."
 		"static_wake":
 			if level >= 3:
 				return "{kw:dash} leaves an {kw:electric} {kw:field} that damages and then {kw:slow|Slows} foes in your trail. Only two trails remain; overlapping trails do not deal extra damage."
@@ -57,13 +65,13 @@ static func _authored_explanation(power_id: String, level: int, prismatic: bool)
 				return "{kw:dash} {kw:mark|Marks} foes. An {kw:attack_hit} on an already {kw:mark|Marked} foe releases one {kw:burst} per {kw:attack}, then spreads damage through up to three more {kw:mark|Marked} foes."
 			if level >= 2:
 				return "{kw:dash} {kw:mark|Marks} foes. An {kw:attack_hit} against an already {kw:mark|Marked} foe releases a damaging {kw:burst} around them, at most once per {kw:attack}."
-			return "{kw:dash} past foes to {kw:mark} them, making them take more damage from all players. {kw:mark|Marks} expire with time; dealing damage does not consume them."
+			return "{kw:dash} past foes to apply a timed {kw:mark}, making them take more damage from all players."
 		"voidfire":
 			return "Connected {kw:attack|Attacks} build Heat. High Heat strengthens your {kw:attack|Attacks}; overheating releases a damaging {kw:burst}, empties the Heat bar and briefly locks {kw:attack|Attacks}."
 		"dread_resonance":
-			return "{kw:attack_hit|Attack hits} {kw:mark} foes and build stacks on each enemy, increasing your damage while that foe is {kw:mark|Marked}. Changing targets does not erase those stacks."
+			return "{kw:attack_hit|Attack hits} {kw:mark} foes and build stacks on each enemy, increasing your damage while that foe is {kw:mark|Marked}. Stacks stay with each foe."
 		"bloodvow":
-			return "While your health is low, every {kw:attack} deals more damage. The bonus ends above the health threshold; staying lower does not increase it further."
+			return "While your health is at or below the threshold, every {kw:attack} deals more damage."
 		"eclipse_mark":
 			return "{kw:kill|Kills} {kw:mark} nearby foes, increasing the damage they take from all players. Only the strongest {kw:mark} applies, and damage does not consume it."
 		"fracture_field":
@@ -79,7 +87,7 @@ static func _authored_explanation(power_id: String, level: int, prismatic: bool)
 				return "Four {kw:attack_hit|attack hits} arm a damaging, {kw:slow|Slowing} {kw:field} for your next connected {kw:attack}. Placing more sigils before the chain fades makes their damage stronger."
 			if level >= 2:
 				return "Four {kw:attack_hit|attack hits} charge a sigil. Your next connected {kw:attack} places a {kw:field} that repeatedly damages and {kw:slow|Slows} nearby foes."
-			return "Four {kw:attack_hit|attack hits} charge a sigil. Your next connected {kw:attack} places a {kw:field} that repeatedly damages nearby foes; automatic effects cannot charge it."
+			return "Four {kw:attack_hit|attack hits} charge a sigil. Your next connected {kw:attack} places a {kw:field} that repeatedly damages nearby foes."
 		"blast_drive":
 			if level >= 3:
 				return "Hold {kw:attack}, aim, then release a forward {kw:burst} with backward {kw:recoil}. Store two charges and steer {kw:recoil} with movement input; quick taps still strike."
@@ -101,7 +109,7 @@ static func _authored_explanation(power_id: String, level: int, prismatic: bool)
 		"wardens_verdict":
 			return "Each sequence of four {kw:attack_hit|attack hits} grows stronger and ends in a damaging {kw:burst}. The count resets after 2.2 seconds without an {kw:attack_hit}."
 		"lacuna_echo":
-			return "{kw:kill|Kills} leave one {kw:pull|pulling}, damaging well, replacing the last. Foes in any {kw:field} you own take more damage from you; overlapping {kw:field|Fields} do not stack the bonus."
+			return "{kw:kill|Kills} leave a damaging, {kw:slow|Slowing} well for 2.4s, replacing the last. Your damage gains one bonus against foes in your {kw:field|Fields}."
 		"sovereign_tempo":
 			return "{kw:attack_hit|Attack hits} or damage to already {kw:mark|Marked} foes build Tempo once per action. Finishing {kw:dash}, {kw:recoil} or {kw:orbit} spends it in a {kw:burst} that cannot rebuild Tempo."
 		"pillar_convergence":
@@ -109,9 +117,9 @@ static func _authored_explanation(power_id: String, level: int, prismatic: bool)
 		"unbroken_oath":
 			return "Gain damage resistance. {kw:attack_hit|Attack hits} fill Oath faster when you strike several foes; filling the bar empowers your next {kw:attack}, which spends it even if you miss."
 		"edict_of_the_court":
-			return "{kw:kill|Kills} release a force {kw:burst} that {kw:push|Pushes} nearby foes away from the defeated enemy. The {kw:push} deals no damage by itself."
+			return "Your {kw:kill|Kills} release a damaging {kw:burst} that {kw:slow|Slows} nearby foes around the defeated enemy, once per original action."
 		"null_corridor":
-			return "{kw:dash} leaves a {kw:field} that damages foes and {kw:push|Pushes} them sideways. Each trail can affect the same enemy again after half a second."
+			return "{kw:dash} leaves a {kw:field} that damages and {kw:mark|Marks} foes. Each trail can affect the same enemy again after half a second."
 		"ruinous_impact":
 			return "{kw:attack_hit|Attack hits} {kw:launch} foes, and {kw:push|Pushes} or {kw:pull|Pulls} can also arm them to {kw:burst} on {kw:impact}. Each {kw:launch} bursts once; immovable foes compress and burst in place."
 		"sovereigns_double":

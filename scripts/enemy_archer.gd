@@ -467,7 +467,7 @@ func _draw() -> void:
 		core_color = Color(1.0, 0.9, 0.5, 0.92)
 	elif archer_state == ENEMY_STATE_ENUMS.ArcherState.RECOVER:
 		body_color = Color(0.22, 0.66, 0.86, 0.84)
-	_draw_common_body(body_radius, body_color, core_color, facing)
+	_draw_common_body(body_radius, body_color, core_color, facing, &"archer")
 
 	# Bow-arm fins communicate ranged role from a distance.
 	var fin_base := facing * (body_radius + 1.8)

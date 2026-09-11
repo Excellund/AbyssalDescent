@@ -2,23 +2,26 @@
 
 Each new normal run independently chooses one of two bosses for each act, with equal probability. The original trio remains available: Warden or Kilnheart, Sovereign or Glassweaver, and Lacuna or The Null Archivist. The host rolls the full three-act roster once. Looking at doors, changing rooms and using Continue do not reroll it.
 
-Kilnheart uses close furnace blasts, a hollow halo and marked ground. Glassweaver weaves crossing lanes with safe spaces between them. The Null Archivist records player positions as disks, then revises those positions into hollow rings. Every damaging shape is committed in world space during its warning. Co-op players share the host's geometry and damage resolution.
+Kilnheart closes distance with a committed Slam landing and alternates the safe space in a two-step Furnace Halo. Glassweaver first asks players to find a corridor or ring pocket, then warns a Cross Stitch through a remembered position. The Null Archivist records player positions as disks and promptly revises those positions into larger hollow rings. Every damaging shape is committed in world space during its own warning. Co-op players share the host's geometry and damage resolution.
 
 | Boss | Attack | Response |
 | --- | --- | --- |
-| Kilnheart | Crucible Slam | Leave the solid disk around the furnace. |
-| Kilnheart | Furnace Halo | Step into the empty inner pocket or retreat beyond the ring. |
+| Kilnheart | Crucible Slam | Leave the 185-radius landing disk. The furnace moves toward that committed landing during the warning, up to 420 units from its starting position and clamped inside the arena. |
+| Kilnheart | Furnace Halo | **OUT:** leave the initial 185-radius disk. After a short gap, **IN:** return inside the new ring's 155-radius pocket or move beyond its 300-radius edge. Both steps share a center clamped at least 250 units from the arena walls. |
 | Kilnheart | Cinderfall | Move away from your captured position before its disk resolves. |
-| Glassweaver | Split Loom | Use the unpainted corridor between the two parallel threads. |
+| Glassweaver | Split Loom → Cross Stitch | Move into the corridor between the threads, offset 135 units from the aimed position when the floor allows. Then leave the separately warned cross through that remembered corridor. |
 | Glassweaver | Cross Stitch | Move diagonally out of the cross committed to a player's position. |
-| Glassweaver | Glass Cage | Stay in the inner pocket or move beyond the outer ring. |
-| The Null Archivist | Record | Leave the disks captured at living players' positions. |
-| The Null Archivist | Revision | Return to the recorded positions, now hollow safe pockets. |
-| The Null Archivist | Final Margin | Move into an unpainted inner quadrant or outside the entire ring and cross. |
+| Glassweaver | Glass Cage → Cross Stitch | The first rings preserve every marked player's safe pocket. After they resolve, leave the new cross through the remembered aimed player's position. |
+| The Null Archivist | Record → Revision | Leave the disks captured at living players' positions. After a short gap, return to their 112-radius safe pockets or get beyond the larger 480-radius rings. |
+| The Null Archivist | Final Margin | Move into an unpainted inner quadrant or outside the entire ring and cross. The ring spans radii 280–450; the crossing lanes extend 450 units from the boss. |
 
-Bosses cycle through their three attacks. Kilnheart closes toward melee range; Glassweaver strafes between casts; the Archivist preserves its recorded positions for the following Revision. All stop during warnings and recovery. Warning times remain 0.95–1.25 seconds even below half health; enrage shortens the interval between casts instead. Base health matches the original stage (1100, 2000, 2400), with existing Bearing and co-op scaling. The alternative's `attack_damage` participates in boss damage scaling.
+Kilnheart and Glassweaver cycle their three root attacks, including any queued follow-up before advancing. The Archivist alternates the complete Record/Revision sequence with Final Margin; it does not insert another standalone Revision. Kilnheart closes toward melee range between turns, Glassweaver strafes, and the Archivist preserves its recorded positions until the matching Revision. All stop during recovery. Crucible Slam alone moves the body during its warning, along the path to the already painted landing. That approach adds no contact damage: the disk deals damage only when the warning resolves.
 
-Intersecting co-op rings merge into one enclosing safe pocket, retaining the original dangerous band's thickness. Every original safe disk remains inside that shared pocket, preventing teammates' rings from erasing another player's escape route. Damage applies once per living player per cast, including intersecting shapes and duplicate roster entries. Death, authority changes and loss of all living targets cancel warnings and remembered positions.
+Every follow-up has a new cast serial and its own complete warning. Furnace Halo waits 0.22 seconds between its 1.30-second OUT warning and 1.25-second IN warning. Glassweaver waits 0.22 seconds before a 0.95-second follow-up Cross Stitch. Record waits 0.18 seconds before Revision's 0.95-second warning. The gap shows no live danger shape. Completing the final impact gives the boss its normal recovery: 0.72 seconds for Kilnheart, 0.58 for Glassweaver and 0.62 for the Archivist. The normal interval between turns follows that recovery. Enrage still shortens only that interval, preserving the complete warnings.
+
+Base health remains 1100, 2000 and 2400, and base `attack_damage` remains 38, 40 and 36 for Kilnheart, Glassweaver and the Archivist respectively. Existing Bearing, co-op and boss damage scaling remain in place. Attack kind 1 retains its 1.15 damage multiplier. The pressure change adds separately warned impacts and changes positioning demands; it does not increase those base health or damage values.
+
+Intersecting co-op rings merge into one enclosing safe pocket, retaining the original dangerous band's thickness. Every original safe disk remains inside that shared pocket, preventing teammates' rings from erasing another player's escape route. Glass Cage preserves those pockets for its first impact; its subsequent Cross Stitch has its own visible danger. Revision likewise preserves the recorded safe centers in its merged rings. Damage applies once per living player per cast, including intersecting shapes and duplicate roster entries. Each independently warned follow-up can deal one new hit. Death, authority changes and loss of all living targets cancel warnings, pending follow-ups and remembered positions.
 
 The bosses have distinct silhouettes: Kilnheart's segmented furnace shell, Glassweaver's four needles, and the Archivist's open book. Warm outlined areas mark danger and leave safe pockets empty; a boss progress arc and attack name show the cast's progress. Brief white afterglow marks a resolved impact and deals no extra damage. World-space geometry remains stationary when players move or a replica interpolates the boss body.
 
@@ -28,7 +31,7 @@ The bosses have distinct silhouettes: Kilnheart's segmented furnace shell, Glass
 
 Reliable progress payloads carry the host roster, applied before a chosen boss door constructs the room. Boss spawn payloads include explicit identity, maximum/current health and full runtime/projectile state. A replica missing its boss can request reconstruction from the host after entering the matching room; room sync IDs and host authority prevent stale-room spawns. The baseline does not support joining an arbitrary active run: this change preserves that boundary instead of adding new room/player progression recovery.
 
-Committed shapes and precise timers travel through the existing unquantized projectile stream and spawn snapshot. Generic runtime state carries only an activity hint, because that stream rounds coordinates and can trim custom data. Increasing snapshot numbers reject reordered packets, while cast/phase guards prevent an older warning from reviving after resolution. A locally expired client warning clears without inventing an impact or dealing damage.
+Committed shapes and precise timers travel through the existing unquantized projectile stream and spawn snapshot, together with the sequence step and Slam's approach/landing endpoints. Generic runtime state carries only an activity hint, because that stream rounds coordinates and can trim custom data. Increasing snapshot numbers reject reordered packets, while cast/phase guards prevent an older warning from reviving after resolution or an old root resolution from erasing a newer follow-up warning. A locally expired client warning clears without inventing an impact or dealing damage. Only the host advances a queued follow-up and resolves its damage.
 
 For a focused debug encounter, use `start_debug_encounter("kilnheart")`, `start_debug_encounter("glassweaver")` or `start_debug_encounter("null_archivist")`. Existing named debug entries continue to select their original bosses. Keep focused automation in disposable copies with isolated user data.
 
@@ -36,13 +39,20 @@ Integration overlaps: `world_generator.gd` room entry, door labels, damage scali
 
 ## Verification and playtest
 
-Feedback item: `FB-7acc891ded854115`. Run `.github/scripts/run_gameplay_regressions.ps1` with `test_alternative_bosses.gd` and `test_alternative_boss_selection.gd`. These fixtures check real damage against independent geometry samples, recovery/cancellation, overlapping four-player rings, reordered replica packets, seeded selection, legacy saves and actual checkpoint/Continue and victory paths. Existing boss, route, reward and result suites cover compatibility.
+Feedback item: `FB-7acc891ded854115`. Run `.github/scripts/run_gameplay_regressions.ps1` with `test_alternative_bosses.gd` and `test_alternative_boss_selection.gd`. These fixtures cover real damage against independent geometry samples, recovery/cancellation, overlapping four-player rings, reordered replica packets, seeded selection, legacy saves and actual checkpoint/Continue and victory paths. Existing boss, route, reward and result suites cover compatibility.
 
-Use `.github/scripts/test_alternative_bosses_enet.ps1` against a disposable validation project for two actual host/joiner processes, and `.github/scripts/render_alternative_bosses.ps1` for GPU captures. Automated profiles and logs stay inside disposable temporary projects.
+Use `.github/scripts/test_alternative_bosses_enet.ps1` against a disposable validation project for two actual host/joiner processes, and `.github/scripts/render_alternative_bosses.ps1` for GPU captures. The updated ENet fixture covers all four queued sequences, committed Slam movement, fresh follow-up serials, stale root packets, authority, one-hit resolution and cancellation. The GPU fixture stages 20 frames, adding Halo IN, both Glassweaver follow-ups and Record/Revision to the existing roots, entrances, party pockets, cleanup and doors. Automated profiles and logs stay inside disposable temporary projects.
 
-Normal playtest should judge first-encounter readability, Kilnheart's melee openings, Glassweaver's challenge for ranged builds, the Archivist's Record/Revision sequence, and large merged rings near arena edges in four-player co-op. Balance and encounter enjoyment remain human playtest questions. Coordinate desktop build delivery with the other queue tasks; this implementation does not declare a commit or build checkpoint.
+Verified September 11, 2026:
 
-Verified September 10, 2026 on `codex/feedback-7acc891d-alternative-bosses`:
+- Final source: all 349 scripts compile. Alternative combat passes 3,740 checks, including actual Record-to-Revision wall sequences, a Slowed return, the Halo center escape after Attack lock and acceleration, and a real stationary collider along Slam's approach. Selection and Continue pass 254 checks. Evidence: `C:/Users/mikel/AppData/Local/Temp/abyssal-validation-a236469ae35c493ba4c51911fa9e5810`.
+- Native ENet passes 295 host and 76 client checks with the final 1.30-second Halo OUT warning. The real run identity handshake permits direct Attack and Returning Crescent damage while Slam temporarily disables body blocking; the boss remains damageable. Evidence: `C:/Users/mikel/AppData/Local/Temp/abyssal-enet-c93c5a35a95c4c1b9abe6d0e2cda630c`.
+- RTX 4080 rendering passes 20 frames. Manual review covers all four warning/follow-up pairs, Slam, Final Margin and both party-edge pockets. Danger, safe areas and labels remain clear. The final Halo change extended warning time without changing this captured geometry. Evidence: `C:/Users/mikel/AppData/Local/Temp/abyssal-gameplay-render-7dba5cdb5ef94bd2a2b4d30d76599db7/alternative_boss_frames`.
+- Independent geometric review samples 8,776 dangerous Final Margin edge positions and 5,778 Halo IN positions. This is finite geometry sampling; the native fixture checks the actual sequence and damage lifecycle. Neither establishes player enjoyment or final balance.
+
+Normal playtest should judge first-encounter readability, whether Slam closes enough distance, whether Halo and Glassweaver require a second positioning decision, whether returning for Revision remains practical, and whether the final recovery leaves a useful damage opening. Check large merged rings near arena edges in four-player co-op. Balance and encounter enjoyment remain human playtest questions. Coordinate desktop build delivery with the other queue tasks; this implementation does not declare a commit or build checkpoint.
+
+Prior verification, September 10, 2026, on `codex/feedback-7acc891d-alternative-bosses`. The following results precede the pressure sequences and committed Slam movement described above; they are retained as historical evidence and do not validate those later changes:
 
 - All 307 GDScript files compile; world-property and multiplayer configuration checks pass.
 - Alternative combat: 3,301 checks, zero failures. Selection, actual disk Continue, rewards and replica reconstruction: 254 checks, zero failures.

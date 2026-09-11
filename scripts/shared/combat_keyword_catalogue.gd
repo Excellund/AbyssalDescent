@@ -1,11 +1,23 @@
 extends RefCounted
 ## Authored semantic spans only. Ordinary prose and internal HIT IDs are never rewritten.
 
-const ACTION_COLOR := "FFD38A"
-const CONDITION_COLOR := "DEAEFF"
-const EFFECT_COLOR := "79DCFF"
-const ACTION_TERMS := ["attack", "attack_hit", "dash", "recoil", "orbit", "kill"]
-const CONDITION_TERMS := ["slow", "mark"]
+# A warm neutral and five muted accents separate the combinations players scan.
+# Shared colors are presentation groups, never additional trigger eligibility.
+const BASE_COLOR := "DFDACE"
+const MOTION_COLOR := "AFC8D8"
+const MARK_COLOR := "D3B6D1"
+const ELECTRIC_COLOR := "E0CB8D"
+const FIELD_COLOR := "ACCBB5"
+const BURST_COLOR := "DFB6A2"
+const KEYWORD_COLORS := {
+	"attack": BASE_COLOR, "attack_hit": BASE_COLOR, "kill": BASE_COLOR,
+	"projectile": BASE_COLOR, "echo": BASE_COLOR,
+	"dash": MOTION_COLOR, "recoil": MOTION_COLOR, "orbit": MOTION_COLOR,
+	"slow": MOTION_COLOR, "push": MOTION_COLOR, "pull": MOTION_COLOR,
+	"launch": MOTION_COLOR,
+	"mark": MARK_COLOR, "electric": ELECTRIC_COLOR, "field": FIELD_COLOR,
+	"burst": BURST_COLOR, "impact": BURST_COLOR
+}
 # Retain metadata IDs for matching, but these are ordinary prose/stat names.
 const PLAIN_TERMS := ["damage", "damage_stat"]
 
@@ -31,6 +43,9 @@ const KEYWORDS := {
 	"electric": {"label": "Electric", "definition": "A damage property; it does not imply a shared charge resource."}
 }
 
+static func keyword_color(id: String) -> String:
+	return String(KEYWORD_COLORS.get(id, BASE_COLOR))
+
 static func keyword_bbcode(id: String, label: String = "") -> String:
 	if not KEYWORDS.has(id):
 		return label if not label.is_empty() else id
@@ -38,8 +53,7 @@ static func keyword_bbcode(id: String, label: String = "") -> String:
 	var text: String = item.label if label.is_empty() else label
 	if PLAIN_TERMS.has(id):
 		return text
-	var color := ACTION_COLOR if ACTION_TERMS.has(id) else (CONDITION_COLOR if CONDITION_TERMS.has(id) else EFFECT_COLOR)
-	return "[b][color=#%s]%s[/color][/b]" % [color, text]
+	return "[b][color=#%s]%s[/color][/b]" % [keyword_color(id), text]
 
 static func format_text(authored: String) -> String:
 	var result := ""

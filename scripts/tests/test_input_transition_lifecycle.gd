@@ -137,7 +137,8 @@ func _check_solo_readiness_after_reward() -> void:
 	Input.action_release("attack")
 	active_world._refresh_frame_ui()
 	check(not active_world.encounter_intro_grace_active and active_world._get_hud_state().local_player_ready and not actor.encounter_input_frozen, "A fresh released-and-repressed Attack actually engages the solo arena")
-	check(not active_world.hud._status_hint_label.visible and active_world.hud.room_banner_title_label.text == "Engage", "Attack Engage replaces readiness guidance with the normal entry banner")
+	check(not active_world.hud._status_hint_label.visible and active_world.hud.room_banner_title_label.text == active_world._get_active_biome_name(), "Attack Engage clears readiness guidance while retaining the biome identity")
+	check(active_world.hud.room_banner_subtitle_label.text == active_world._get_biome_rule_hint() and active_world.hud._status_biome_rule_label.visible, "Engaging keeps the ordinary-room biome rule visible in the banner and HUD")
 	active_world.set_process(true)
 	actor.set_physics_process(true)
 

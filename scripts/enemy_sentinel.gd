@@ -93,7 +93,7 @@ func _draw() -> void:
 	draw_line(dp_t, dp_l, frame_color, 1.8)
 	draw_line(dp_l, dp_b, frame_color, 1.8)
 	draw_line(dp_b, dp_r, frame_color, 1.8)
-	_draw_common_body(body_radius, COLOR_SENTINEL_BODY, COLOR_SENTINEL_CORE, facing)
+	_draw_common_body(body_radius, COLOR_SENTINEL_BODY, COLOR_SENTINEL_CORE, facing, &"sentinel")
 	var half_angle := deg_to_rad(cone_angle_degrees * 0.5)
 	var start_angle := cone_direction_angle - half_angle
 	var end_angle := start_angle + deg_to_rad(cone_angle_degrees)

@@ -428,7 +428,7 @@ func _test_kill_rewards_and_corridor() -> void:
 	player.boss_combinations.create_shade(Vector2(300.0, 0.0))
 	_strike()
 	_check(echo_target.is_dead() and player.dash_cooldown_left == 0.0, "A shade kill retains Reaper Step's ordinary kill benefit")
-	_check(neighbor.velocity.length() > 0.0 and not neighbor.get_launch_state().active, "A shade kill can trigger Edict's push without recursively arming Ruinous Impact")
+	_check(neighbor.hits.any(func(hit: Dictionary) -> bool: return hit.type == "edict_court") and neighbor.is_slowed() and neighbor.velocity.is_zero_approx() and not neighbor.get_launch_state().active, "A shade kill triggers Edict's Burst and Slow without displacing its neighbor or recursively arming Ruinous")
 	_check(player.boss_combinations.shade_hits == 0, "A shade kill cannot replenish its own strike charge")
 	await _settle()
 	_free_world()
@@ -438,10 +438,10 @@ func _test_kill_rewards_and_corridor() -> void:
 	var corridor_target := _enemy(Vector2(60.0, 0.0))
 	player._apply_null_corridor_segment(Vector2(1.0, 0.0), Vector2(100.0, 0.0))
 	player._update_null_corridor_segments(0.1)
-	_check(corridor_target.get_launch_state().active, "Null Corridor's explicit enemy deflection can arm Ruinous Impact")
-	var launch_duration := corridor_target.get_launch_state().remaining
+	_check(not corridor_target.get_launch_state().active and corridor_target.velocity.is_zero_approx() and float(DAMAGEABLE.status_snapshot(corridor_target, 1).mark_ratio) > 0.0, "Null Corridor Marks its target without displacing it or arming Ruinous Impact")
+	var initial_health := corridor_target.get_current_health()
 	player._update_null_corridor_segments(0.1)
-	_check(is_equal_approx(corridor_target.get_launch_state().remaining, launch_duration), "Repeated corridor checks cannot overwrite an active launch")
+	_check(corridor_target.get_current_health() == initial_health and not corridor_target.get_launch_state().active, "Repeated corridor checks preserve its own damage cadence without creating a launch")
 	await _settle()
 	_free_world()
 
@@ -529,8 +529,8 @@ func _test_deferred_void_echo_scope() -> void:
 		pulse_victim.died.connect(func(): player.notify_enemy_killed(pulse_victim.global_position))
 		var original_life := float(player.void_echo_zones[0]["life"])
 		player._update_void_echo_zones(0.1)
-		_check(not neighbor.hits.is_empty() and neighbor.velocity.x < 0.0, "%s deferred zone still damages and pulls nearby enemies" % kill_cause)
-		_check(neighbor.get_launch_state().active != secondary_origin, "%s zone preserves the correct launch eligibility on its later pulse" % kill_cause)
+		_check(not neighbor.hits.is_empty() and neighbor.is_slowed() and neighbor.velocity.is_zero_approx(), "%s deferred zone damages and Slows nearby enemies without moving them" % kill_cause)
+		_check(not neighbor.get_launch_state().active, "%s passive Well pulse cannot initiate a Ruinous launch" % kill_cause)
 		_check(pulse_victim.is_dead() and player.void_echo_zones.size() == 1 and float(player.void_echo_zones[0]["life"]) < original_life, "%s zone's own kill cannot renew its zone into a loop" % kill_cause)
 		_check(not DAMAGEABLE.is_launch_suppressed() and player._void_echo_pulse_kill_suppression_depth == 0, "%s deferred pulse releases both suppression scopes" % kill_cause)
 		if kill_cause == "double":

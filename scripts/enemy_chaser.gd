@@ -116,7 +116,7 @@ func _draw() -> void:
 	var core_color := COLOR_CHASER_CORE
 	if speed_t > 0.4:
 		body_color = Color(1.0, 0.24, 0.3, 1.0)
-	_draw_common_body(body_radius, body_color, core_color, facing)
+	_draw_common_body(body_radius, body_color, core_color, facing, &"chaser")
 
 	# Forward claw marks make chasers readable as melee rushers.
 	var claw_base := facing * (body_radius + 4.5)

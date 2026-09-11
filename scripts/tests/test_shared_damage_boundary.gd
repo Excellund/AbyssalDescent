@@ -3,6 +3,7 @@ extends "res://scripts/tests/test_combat_interactions.gd"
 ## to the host boundary, and only accepted direct contacts commit reactions.
 
 class SharedActor extends Actor:
+	var passive_effigy_command: bool = false
 	var damage: int = 100
 	var max_health: int = 100
 	var current_health: int = 100
@@ -316,13 +317,14 @@ func _test_compact_status_and_protocol() -> void:
 	setup()
 	var state := DAMAGEABLE._target_status(enemy(Vector2.ZERO), true)
 	for peer_id in range(1, 5):
-		for source in ["wraithstep", "eclipse_mark", "dread_resonance"]:
+		for source in state.MARK_SOURCES:
 			state.apply_mark(peer_id, source, 0.15 + peer_id * 0.01, 3.25)
 		state.add_dread(peer_id, 15, {"epoch": 1, "seq": 1})
 	var bytes: PackedByteArray = state.network_packet()
-	check(bytes.size() <= 324 and state.marks.size() == 12, "All four owners and three Mark sources fit the compact bounded status packet")
+	var expected_marks: int = 4 * state.MARK_SOURCES.size()
+	check(bytes.size() <= 480 and state.marks.size() == expected_marks, "All four owners and all six current/legacy Mark sources fit the compact bounded status packet")
 	var replica := DAMAGEABLE._target_status(enemy(Vector2(100, 0)), true)
-	check(replica.apply_network_packet(bytes) and replica.marks.size() == 12 and replica.dread.size() == 4, "Packed status roundtrip preserves every independent owner/source")
+	check(replica.apply_network_packet(bytes) and replica.marks.size() == expected_marks and replica.dread.size() == 4, "Packed status roundtrip preserves every independent owner/source")
 	check(is_equal_approx(float(replica.snapshot(4).mark_ratio), 0.19), "Status precision survives native packed encoding without generic float snapping")
 	check(not replica.apply_network_packet(bytes) and not replica.apply_network_packet(bytes.slice(0, bytes.size() - 1)), "Equal and truncated compact snapshots reject atomically")
 	var broadcaster := preload("res://scripts/core/enemy_state_sync_broadcaster.gd").new(world)

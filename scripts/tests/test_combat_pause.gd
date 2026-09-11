@@ -18,6 +18,8 @@ class World extends "res://scripts/world_generator.gd":
 	func _ready() -> void:
 		set_process(false)
 		set_process_unhandled_input(false)
+	func _refresh_frame_ui() -> void:
+		pass
 
 var checks := 0
 var failures: Array[String] = []
@@ -97,6 +99,7 @@ func _run() -> void:
 	await _test_prior_flags_and_removed_nodes()
 	await _test_nested_modal_and_transition_pause()
 	await _test_combat_cleanup()
+	_test_biome_rule_ownership_and_modal_pause()
 	if is_instance_valid(MAPPER._power_registry_instance):
 		MAPPER._power_registry_instance.free()
 		MAPPER._power_registry_instance = null
@@ -205,3 +208,34 @@ func _test_combat_cleanup() -> void:
 	phase.begin_combat_phase(player, self)
 	_check(player.combat_damage_enabled and stale_web.is_queued_for_deletion(), "New combat enables damage and clears stale lingering hazards")
 	_cleanup()
+
+func _test_biome_rule_ownership_and_modal_pause() -> void:
+	_setup()
+	_check(not is_instance_valid(world._biome_rules), "A skipped-bootstrap world does not allocate an orphan biome node")
+	world._ensure_biome_rules()
+	var rules := world._biome_rules
+	var owned_rules: WeakRef = weakref(rules)
+	_check(rules.get_parent() == world, "Lazily created biome rules immediately belong to their world")
+	rules.configure({"id": "storm_reach"}, Vector2(1040, 760), "modal-fixture", 1)
+	rules.tick(2.5, true, [player], [], true)
+	var warning: Dictionary = rules.snapshot()
+	_check(warning.phase == "warning" and rules._combat_visible, "The modal fixture begins with a visible committed warning")
+	world.pause_menu_controller.open()
+	world._process(0.25)
+	_check(not rules._combat_visible and rules.snapshot() == warning, "The real Pause frame hides the biome warning without consuming its remaining time")
+	world.build_detail_panel.open()
+	world.pause_menu_controller.close()
+	world._process(0.25)
+	_check(not rules._combat_visible and rules.snapshot() == warning, "Build Details keeps the same warning hidden after Pause closes")
+	world.build_detail_panel.close()
+	world.reward_selection_ui.boon_selection_active = true
+	world._process(0.25)
+	_check(not rules._combat_visible and rules.snapshot() == warning, "Reward selection hides a retained replica warning without advancing its event")
+	world.reward_selection_ui.close_selection()
+	world._active_biome_rule_id = "storm_reach"
+	world.choosing_next_room = false
+	world.encounter_intro_grace_active = false
+	world._tick_biome_rules(0.1)
+	_check(rules._combat_visible and is_equal_approx(rules.phase_left, float(warning.left) - 0.1), "Returning to combat resumes the existing warning through the world lifecycle")
+	_cleanup()
+	_check(owned_rules.get_ref() == null, "Freeing a skipped-bootstrap world also frees its lazily owned biome controller")

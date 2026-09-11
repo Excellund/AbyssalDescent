@@ -56,7 +56,7 @@ func apply_upgrade(upgrade_id: String) -> bool:
 	upgrade_stacks[id] = current_stacks + 1
 
 	match id:
-		"first_strike", "heavy_blow", "wide_arc", "long_reach", "fleet_foot", "blink_dash", "battle_trance", "surge_step", "wardens_verdict", "lacuna_echo", "sovereign_tempo", "pillar_convergence", "unbroken_oath", "edict_of_the_court", "null_corridor", "ruinous_impact", "sovereigns_double":
+		"first_strike", "heavy_blow", "wide_arc", "long_reach", "fleet_foot", "blink_dash", "battle_trance", "surge_step", "wardens_verdict", "lacuna_echo", "sovereign_tempo", "pillar_convergence", "unbroken_oath", "edict_of_the_court", "null_corridor", "ruinous_impact", "sovereigns_double", "patient_hunter", "marked_prey", "shatterwake":
 			player_reference.set(String(preview.get("property", "")), preview.get("next", player_reference.get(String(preview.get("property", "")))))
 		"heartstone":
 			var next_max := int(preview.get("next", player_reference.get_max_health()))
@@ -210,10 +210,10 @@ func get_trial_runtime_values(power_id: String) -> Dictionary:
 	return POWER_PARAMETER_MAPPER.build_trial_values(id, stack_count, _get_power_balance_data(id), player_reference, has_trial_power_prismatic(id))
 
 
-## Snapshot migration recalculates only these shared-status parameters. It never
+## Snapshot migration recalculates only these shared-status/reaction parameters. It never
 ## grants a pick, changes health or reapplies acquisition-time stat reductions.
 func reapply_shared_power_parameters(power_id: String) -> bool:
-	if not is_instance_valid(player_reference) or not is_instance_valid(power_registry) or power_id not in ["hunters_snare", "wraithstep", "eclipse_mark", "dread_resonance"]:
+	if not is_instance_valid(player_reference) or not is_instance_valid(power_registry) or power_id not in ["hunters_snare", "wraithstep", "eclipse_mark", "dread_resonance", "stormbrand", "spark_relay"]:
 		return false
 	var mapping: Dictionary = power_registry.get_trial_power_param_map(power_id)
 	var level := get_trial_power_stack_count(power_id)
@@ -298,6 +298,16 @@ func _reward_flavor_first_desc(_is_initial: bool, _flavor: String, body: String)
 # Player-facing terms follow docs/combat-wording.md; internal HIT is not a copy keyword.
 func _power_sentence_template(power_id: String) -> String:
 	match power_id:
+		"patient_hunter":
+			return "{kw:damage_stat} %s against already {kw:slow|Slowed} foes."
+		"marked_prey":
+			return "{kw:damage_stat} %s against already {kw:mark|Marked} foes."
+		"stormbrand":
+			return "{kw:mark} %s for %s. %s"
+		"spark_relay":
+			return "Bolt %s of triggering {kw:burst}'s base damage; max targets %s; range %s."
+		"shatterwake":
+			return "{kw:burst} %s of triggering {kw:projectile}'s base damage; radius %s."
 		"first_strike":
 			return "{kw:damage_stat} %s against enemies at 80%% HP or above."
 		"heavy_blow":
@@ -325,7 +335,7 @@ func _power_sentence_template(power_id: String) -> String:
 		"wardens_verdict":
 			return "Hit bonus %s; fourth +42%% attack damage; {kw:burst} radius %s."
 		"lacuna_echo":
-			return "Field bonus %s; base pulse %s damage/0.32s; radius %s; lasts 2.4s."
+			return "Field bonus %s; base pulse %s/0.32s; radius %s; {kw:slow}: 75%% speed, %s."
 		"sovereign_tempo":
 			return "Move speed %s per stack (max 6); {kw:burst} damage refunds {kw:dash}."
 		"pillar_convergence":
@@ -333,9 +343,9 @@ func _power_sentence_template(power_id: String) -> String:
 		"unbroken_oath":
 			return "Resistance %s; capacity %s; Oath adds %s of Damage."
 		"edict_of_the_court":
-			return "{kw:push} force %s; radius %s."
+			return "{kw:burst} damage %s of Damage; radius %s; {kw:slow}: 75%% speed for %s."
 		"null_corridor":
-			return "{kw:field} width %s; lifetime %s; damage %s per contact."
+			return "{kw:field} width %s; lasts %s; damage %s of Damage; {kw:mark} %s for 1s."
 		"ruinous_impact":
 			return "Impact damage %s of Damage; {kw:burst} radius %s."
 		"sovereigns_double":
@@ -343,7 +353,7 @@ func _power_sentence_template(power_id: String) -> String:
 		"razor_wind":
 			return "Reach %s; %s of {kw:attack} damage; arc %s."
 		"execution_edge":
-			return "Every %s {kw:attack|Attacks}; %s {kw:attack} damage."
+			return "{kw:attack|Attacks} per execution: %s; %s {kw:attack} damage."
 		"rupture_wave":
 			return "{kw:burst} radius %s; %s of {kw:attack} damage. %s"
 		"aegis_field":
@@ -367,7 +377,7 @@ func _power_sentence_template(power_id: String) -> String:
 		"dread_resonance":
 			return "Mark: 10%% for 3s; +%s damage per stack; up to %s stacks per foe."
 		"bloodvow":
-			return "Below %s health: x%s Attack damage."
+			return "At %s health or below: x%s Attack damage."
 		"eclipse_mark":
 			return "Mark strength %s; duration %s; radius %s."
 		"fracture_field":
@@ -418,8 +428,16 @@ func _lacuna_display_stats(current: float, next: float, initial: bool, surface: 
 	return _power_sentence("lacuna_echo", [
 		_stat("+%.1f%%", 14.0 + current * 0.15, 14.0 + next * 0.15, initial),
 		_stat("%d", maxi(1, int(round(current * 0.28 + damage * 0.13))), maxi(1, int(round(next * 0.28 + damage * 0.13))), initial),
-		_stat("%.0f", clampf(54.0 + current * 0.6, 54.0, 110.0), clampf(54.0 + next * 0.6, 54.0, 110.0), initial)
+		_stat("%.0f", clampf(54.0 + current * 0.6, 54.0, 110.0), clampf(54.0 + next * 0.6, 54.0, 110.0), initial),
+		_const(_boss_slow_duration_text(0.45))
 	], surface)
+
+
+func _boss_slow_duration_text(base_duration: float) -> String:
+	var multiplier := 1.0
+	if is_instance_valid(player_reference) and player_reference.has_method("_global_slow_duration_mult"):
+		multiplier = float(player_reference.call("_global_slow_duration_mult"))
+	return "%.2fs" % (base_duration * multiplier)
 
 
 func _variant_to_number(value: Variant, fallback: float = 0.0) -> float:
@@ -480,10 +498,20 @@ func get_power_flavor_text(power_id: String) -> String:
 
 func _power_flavor_authored(power_id: String) -> String:
 	match power_id:
+		"patient_hunter":
+			return "Your damage is stronger against already {kw:slow|Slowed} foes."
+		"marked_prey":
+			return "Your damage is stronger against already {kw:mark|Marked} foes."
+		"stormbrand":
+			return "Your {kw:electric} damage applies a timed {kw:mark}, once per foe per original action."
+		"spark_relay":
+			return "Your {kw:burst} damage fires an {kw:electric} {kw:projectile} from your body toward the struck foe, once per original action."
+		"shatterwake":
+			return "Your {kw:projectile} damage releases a {kw:burst} around the struck foe, once per original action."
 		"wardens_verdict":
 			return "Each consecutive {kw:attack_hit} deals more bonus damage. The fourth releases a {kw:burst} that damages nearby enemies."
 		"lacuna_echo":
-			return "{kw:kill|Kills} create a {kw:field} that {kw:pull|Pulls} foes and pulses damage. All your Fields gain its bonus once per target."
+			return "{kw:kill|Kills} leave one damaging, {kw:slow|Slowing} well for 2.4s, replacing the last. Your damage gains its bonus once against foes in any {kw:field} you own."
 		"sovereign_tempo":
 			return "{kw:attack_hit|Attack hits} or your damage against already {kw:mark|Marked} foes build one Tempo stack per original action. Completing {kw:dash}, {kw:recoil} or {kw:orbit} spends all stacks in a {kw:burst}; accepted {kw:burst} damage refunds {kw:dash} cooldown once. The {kw:burst} and its descendants cannot build Tempo."
 		"pillar_convergence":
@@ -491,9 +519,9 @@ func _power_flavor_authored(power_id: String) -> String:
 		"unbroken_oath":
 			return "{kw:attack|Attacks} build Oath faster when they damage several foes. Fill the bar to empower your next Attack."
 		"edict_of_the_court":
-			return "{kw:kill|Kills} release a force {kw:burst} that {kw:push|Pushes} nearby enemies outward."
+			return "Your {kw:kill|Kills} release a damaging, {kw:slow|Slowing} {kw:burst} around the defeated enemy, once per original action."
 		"null_corridor":
-			return "A {kw:dash} leaves a {kw:field}. Enemies inside take damage and are {kw:push|Pushed}, at most once every 0.5s."
+			return "{kw:dash} leaves a {kw:field} that damages and {kw:mark|Marks} foes. Each trail can affect a foe again after 0.5s."
 		"ruinous_impact":
 			return "{kw:attack_hit|Attack hits} {kw:launch|Launch} foes. Eligible {kw:push|Pushes} and {kw:pull|Pulls} also enable {kw:impact} {kw:burst|Bursts}. Immovable foes compress in place."
 		"sovereigns_double":
@@ -515,7 +543,7 @@ func _power_flavor_authored(power_id: String) -> String:
 		"reaper_step":
 			return "{kw:kill|Kills} fully refresh your {kw:dash}. Dash range and speed scale together."
 		"static_wake":
-			return "A {kw:dash} leaves an {kw:electric} {kw:field}. No {kw:attack} is needed."
+			return "A {kw:dash} leaves an {kw:electric} {kw:field} that damages foes in your trail."
 		"storm_crown":
 			return "{kw:damage|Dealing damage} charges {kw:electric} chain lightning. {kw:attack|Attacks}, {kw:dash} effects, {kw:projectile|Projectiles}, {kw:field|Fields} and {kw:echo|Echoes} can contribute."
 		"wraithstep":
@@ -525,9 +553,9 @@ func _power_flavor_authored(power_id: String) -> String:
 		"dread_resonance":
 			return "{kw:attack_hit|Attack hits} apply {kw:mark} and build one resonance stack per foe per Attack. Each stack increases your damage against Marked foes. Stacks last until that enemy dies or you leave the room."
 		"bloodvow":
-			return "While wounded, every {kw:attack} hits harder. Lower HP, bigger windows."
+			return "At or below the health threshold, every {kw:attack} deals more damage."
 		"eclipse_mark":
-			return "{kw:kill|Kills} apply {kw:mark} to nearby foes. Marks amplify all player damage and expire with time, not hits."
+			return "{kw:kill|Kills} apply a timed {kw:mark} to nearby foes, increasing the damage they take from all players."
 		"fracture_field":
 			return "{kw:kill|Kills} rupture fault-line {kw:burst|Bursts}, damaging and applying {kw:slow} along each line."
 		"farline_volley":
@@ -578,6 +606,15 @@ func _get_power_current_stats(power_id: String) -> String:
 	var id := power_id.strip_edges().to_lower()
 	var flavor := get_power_flavor_text(id)
 	match id:
+		"patient_hunter", "marked_prey":
+			var property := "patient_hunter_bonus_damage" if id == "patient_hunter" else "marked_prey_bonus_damage"
+			return _power_sentence(id, [_current_stat("+%d", int(player_reference.get(property)))], "build_detail")
+		"stormbrand", "spark_relay":
+			var values := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
+			return _bridge_arcana_display_stats(id, values, values, true, get_trial_power_stack_count(id), "build_detail")
+		"shatterwake":
+			var stacks := int(player_reference.get("shatterwake_stacks"))
+			return _shatterwake_display_stats(stacks, stacks, true, "build_detail")
 		"ruinous_impact":
 			var stacks := clampi(int(player_reference.get("ruinous_impact_stacks")), 1, 2)
 			return _power_sentence(id, [_current_stat("%.0f%%", 100.0 + 40.0 * (stacks - 1)), _current_stat("%.0f", 70.0 + 25.0 * (stacks - 1))], "build_detail")
@@ -613,14 +650,13 @@ func _get_power_current_stats(power_id: String) -> String:
 		"edict_of_the_court":
 			var edict_power := int(player_reference.get("edict_court_push_power"))
 			var edict_radius := clampf(80.0 + float(edict_power) * 1.0, 80.0, 160.0)
-			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%.0f", float(edict_power) * 1.8 + 300.0), _current_stat("%.0f", edict_radius)], "build_detail"))
+			return _power_sentence(id, [_current_stat("%.0f%%", 40.0 + float(edict_power)), _current_stat("%.0f", edict_radius), _const(_boss_slow_duration_text(1.5))], "build_detail")
 		"null_corridor":
 			var nc_strength := float(player_reference.get("null_corridor_strength"))
 			var nc_width := 32.0 + nc_strength * 14.0
 			var nc_duration := 3.2 + nc_strength * 0.8
-			var nc_bounce_ratio := 0.20 + nc_strength * 0.08
-			var nc_bounce_dmg := maxi(1, int(round(float(player_reference.get("damage")) * nc_bounce_ratio)))
-			return _power_sentence(id, [_current_stat("%.0f", nc_width), _current_stat("%.1fs", nc_duration), _current_stat("%d", nc_bounce_dmg)], "build_detail")
+			var nc_damage_ratio := 0.20 + nc_strength * 0.08
+			return _power_sentence(id, [_current_stat("%.0f", nc_width), _current_stat("%.1fs", nc_duration), _current_stat("%.0f%%", nc_damage_ratio * 100.0), _current_stat("+%.0f%%", 5.0 + nc_strength * 10.0)], "build_detail")
 		"first_strike":
 			return _power_sentence(id, [_current_stat("+%d", int(player_reference.get("first_strike_bonus_damage")))], "build_detail")
 		"heavy_blow":
@@ -737,6 +773,8 @@ func _get_trial_power_card_stats(power_id: String) -> String:
 		flavor = "[color=#40C8B0]%s[/color]" % _get_trial_prismatic_blurb(id)
 	var is_initial := current_stack <= 0
 	match id:
+		"stormbrand", "spark_relay":
+			return _bridge_arcana_display_stats(id, cur, next_values, is_initial, next_stack, "reward_card")
 		"blast_drive", "razor_orbit", "returning_crescent":
 			var current_metrics := _motion_arcana_description_metrics(id, cur)
 			var next_metrics := _motion_arcana_description_metrics(id, next_values)
@@ -857,8 +895,10 @@ func _get_upgrade_card_stats(upgrade_id: String) -> String:
 	var next_val: Variant = preview.get("next")
 	var flavor := get_power_flavor_text(id)
 	match id:
-		"first_strike", "bloodpact", "severing_edge", "iron_skin":
+		"first_strike", "bloodpact", "severing_edge", "iron_skin", "patient_hunter", "marked_prey":
 			return _power_sentence(id, [_stat("+%d", int(cur_val), int(next_val), false)], "reward_card")
+		"shatterwake":
+			return _shatterwake_display_stats(int(cur_val), int(next_val), int(cur_val) == 0, "reward_card")
 		"heavy_blow", "heartstone":
 			return _power_sentence(id, [_stat("%d", int(cur_val), int(next_val), false)], "reward_card")
 		"wide_arc":
@@ -918,13 +958,11 @@ func _get_upgrade_card_stats(upgrade_id: String) -> String:
 			var cur_edict := int(cur_val)
 			var next_edict := int(next_val)
 			var is_initial_edict := cur_edict == 0
-			var cur_force := 300.0 + float(cur_edict) * 1.8
-			var next_force := 300.0 + float(next_edict) * 1.8
 			var cur_edict_radius := clampf(80.0 + float(cur_edict), 80.0, 160.0)
 			var next_edict_radius := clampf(80.0 + float(next_edict), 80.0, 160.0)
-			var force_stat := _stat("%.0f", cur_force, next_force, is_initial_edict)
+			var damage_stat := _stat("%.0f%%", 40.0 + float(cur_edict), 40.0 + float(next_edict), is_initial_edict)
 			var radius_stat_e := _stat("%.0f", cur_edict_radius, next_edict_radius, is_initial_edict)
-			return _reward_flavor_first_desc(is_initial_edict, flavor, _power_sentence(id, [force_stat, radius_stat_e], "reward_card"))
+			return _power_sentence(id, [damage_stat, radius_stat_e, _const(_boss_slow_duration_text(1.5))], "reward_card")
 		"null_corridor":
 			var cur_nc := float(cur_val)
 			var next_nc := float(next_val)
@@ -933,15 +971,13 @@ func _get_upgrade_card_stats(upgrade_id: String) -> String:
 			var next_nc_width := 32.0 + next_nc * 14.0
 			var cur_nc_dur := 3.2 + cur_nc * 0.8
 			var next_nc_dur := 3.2 + next_nc * 0.8
-			var cur_nc_bounce_ratio := 0.20 + cur_nc * 0.08
-			var next_nc_bounce_ratio := 0.20 + next_nc * 0.08
-			var base_dmg := float(player_reference.get("damage")) if is_instance_valid(player_reference) else 20.0
-			var cur_nc_dmg := maxi(1, int(round(base_dmg * cur_nc_bounce_ratio)))
-			var next_nc_dmg := maxi(1, int(round(base_dmg * next_nc_bounce_ratio)))
+			var cur_nc_damage_ratio := 0.20 + cur_nc * 0.08
+			var next_nc_damage_ratio := 0.20 + next_nc * 0.08
 			var width_stat := _stat("%.0f", cur_nc_width, next_nc_width, is_initial_nc)
 			var dur_stat := _stat("%.1fs", cur_nc_dur, next_nc_dur, is_initial_nc)
-			var dmg_stat := _stat("%d", cur_nc_dmg, next_nc_dmg, is_initial_nc)
-			return _power_sentence(id, [width_stat, dur_stat, dmg_stat], "reward_card")
+			var dmg_stat := _stat("%.0f%%", cur_nc_damage_ratio * 100.0, next_nc_damage_ratio * 100.0, is_initial_nc)
+			var mark_stat := _stat("+%.0f%%", 5.0 + cur_nc * 10.0, 5.0 + next_nc * 10.0, is_initial_nc)
+			return _power_sentence(id, [width_stat, dur_stat, dmg_stat, mark_stat], "reward_card")
 		_:
 			return "[color=#c8daf0]Upgrade your stats.[/color]"
 
@@ -1059,8 +1095,36 @@ func _motion_arcana_unlocks_for_stack(power_id: String, stack_count: int) -> Str
 	return "Foes + columns." if stack_count >= 2 else "Aim at a foe."
 
 
+func _bridge_arcana_display_stats(id: String, current: Dictionary, next: Dictionary, initial: bool, level: int, surface: String) -> String:
+	if id == "stormbrand":
+		var slow_text := ""
+		if level >= 3:
+			var duration_multiplier := float(player_reference.call("_global_slow_duration_mult")) if player_reference.has_method("_global_slow_duration_mult") else 1.0
+			slow_text = "{kw:slow} to %.0f%% speed for %.1fs." % [float(next.slow_mult) * 100.0, float(next.slow_duration) * duration_multiplier]
+		return _power_sentence(id, [
+			_stat("%.1f%%", float(current.mark_bonus_ratio) * 100.0, float(next.mark_bonus_ratio) * 100.0, initial),
+			_stat("%.1fs", float(current.mark_duration), float(next.mark_duration), initial), slow_text
+		], surface)
+	return _power_sentence(id, [
+		_stat("%.1f%%", float(current.damage_ratio) * 100.0, float(next.damage_ratio) * 100.0, initial),
+		_stat("%d", int(current.max_targets), int(next.max_targets), initial),
+		_stat("%.0f", float(current.travel_range), float(next.travel_range), initial)
+	], surface)
+
+func _shatterwake_display_stats(current: int, next: int, initial: bool, surface: String) -> String:
+	var current_level := clampi(current, 1, 2) - 1
+	var next_level := clampi(next, 1, 2) - 1
+	return _power_sentence("shatterwake", [
+		_stat("%.0f%%", 60.0 + 20.0 * current_level, 60.0 + 20.0 * next_level, initial),
+		_stat("%.0f", 100.0 + 25.0 * current_level, 100.0 + 25.0 * next_level, initial)
+	], surface)
+
 func _get_trial_prismatic_blurb(power_id: String) -> String:
 	match power_id:
+		"stormbrand":
+			return "stronger Marks that linger longer"
+		"spark_relay":
+			return "stronger bolts, longer reach"
 		"razor_wind":
 			return "wider arcs, harder crescents"
 		"execution_edge":

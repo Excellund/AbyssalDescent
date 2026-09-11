@@ -16,66 +16,66 @@ const PREFERRED_ENCOUNTER_WEIGHT := 3
 const COMBAT_IDENTITIES: Dictionary = {
 	"crumble": {
 		"templates": ["rubble_gates", "rubble_gates_mirrored"],
-		"terrain": "Boulder gates",
-		"rule": "Boulder pairs funnel melee formations through gaps.",
-		"tactic": "Draw crowds into a gap for area damage; use the rocks for {kw:launch} impacts.",
-		"entry_hint": "Boulder gates bunch up pursuers. Fight at a gap."
+		"terrain": "Falling rubble",
+		"rule": "Marked rockfalls strike around the boulder gates, hurting you and foes.",
+		"tactic": "Lure pursuers into a marked fall, then leave before the rocks land.",
+		"entry_hint": "Lure foes into marked rockfalls. Leave before impact."
 	},
 	"haunt": {
 		"templates": ["side_cover", "side_cover_mirrored"],
-		"terrain": "Exposed center",
-		"rule": "Cover hugs the sides, leaving the center open to ambushers.",
-		"tactic": "Keep an escape route across the center; {kw:slow} helps separate pursuers.",
-		"entry_hint": "Side cover leaves an open center. Keep room to sidestep ambushers."
+		"terrain": "Clinging shadows",
+		"rule": "Shadow patches near side cover {kw:slow} you and foes inside them.",
+		"tactic": "Draw pursuers through the shadows; cross open ground to keep your speed.",
+		"entry_hint": "Shadows Slow everyone. Lead pursuers through them."
 	},
 	"shatterfield": {
 		"templates": ["offset_firing_lanes", "offset_firing_lanes_mirrored"],
-		"terrain": "Staggered firing lanes",
-		"rule": "Four offset columns break up ranged firing lanes.",
-		"tactic": "Advance from cover to cover against Archers; beams and floor hazards still need dodging.",
-		"entry_hint": "Use staggered cover to approach Archers. Dodge floor hazards."
+		"terrain": "Breakable cover",
+		"rule": "Three {kw:attack|Attacks} break either cracked inner column. Outer cover stays intact.",
+		"tactic": "Keep cover to stop arrows, or break it to open a route. Beams and floor hazards pass through.",
+		"entry_hint": "Three Attacks break cracked cover. Keep shelter or open a route."
 	},
 	"grinding_vault": {
 		"templates": ["broken_ring", "broken_ring_inverted"],
-		"terrain": "Broken ring",
-		"rule": "A ring of columns divides inner fighting space from an outer flanking route.",
-		"tactic": "Circle the ring to flank shields; nearby columns give {kw:launch} builds impact surfaces.",
-		"entry_hint": "Circle the broken ring to reach the sides of shields."
+		"terrain": "Crushing rings",
+		"rule": "Crushers alternate between inner and outer floor rings, hurting you and foes.",
+		"tactic": "Cross the marked boundary before impact; leave slow or shielded foes behind.",
+		"entry_hint": "Crushers alternate inner and outer rings. Cross before impact."
 	},
 	"storm_reach": {
 		"templates": ["storm_shelters", "storm_shelters_mirrored"],
-		"terrain": "Open crossings",
-		"rule": "Two distant shelters leave long, exposed routes between them.",
-		"tactic": "Keep moving around fire and beams; range lets you pressure foes while relocating.",
-		"entry_hint": "Sparse cover leaves long crossings. Keep moving around hazards."
+		"terrain": "Baitable lightning",
+		"rule": "Lightning marks a player's position, then strikes that fixed spot, hurting you and foes.",
+		"tactic": "Place the warning under a crowd, then leave it. The warning stops following you.",
+		"entry_hint": "Lightning locks onto a spot. Bait foes into it, then leave."
 	},
 	"hollow": {
 		"templates": ["hollow_spine", "hollow_spine_mirrored"],
-		"terrain": "Divided lanes",
-		"rule": "A staggered column spine divides the room into two fighting lanes.",
-		"tactic": "Change sides through the gaps when a lane closes; lingering area damage can guard a crossing.",
-		"entry_hint": "A column spine splits the room. Switch lanes through its gaps."
+		"terrain": "Alternating lanes",
+		"rule": "Floor eruptions alternate across the divided lanes, hurting you and foes.",
+		"tactic": "Use the gaps to change lanes; draw foes into the next marked eruption.",
+		"entry_hint": "Eruptions alternate lanes. Cross through the gaps."
 	},
 	"void_breach": {
 		"templates": ["none"],
-		"terrain": "No cover",
-		"rule": "Ordinary arenas have no obstacles to hide behind or interrupt movement.",
-		"tactic": "Use the full floor to keep distance; long-range attacks and movement have clear paths.",
-		"entry_hint": "No cover. Keep distance and leave room to dodge."
+		"terrain": "Broken void bands",
+		"rule": "Void bands step across the open arena, leaving a gap through each marked band.",
+		"tactic": "Route through the gap or clear the band before impact. Foes caught in it take damage too.",
+		"entry_hint": "Void bands cross the arena. Use their open gap."
 	},
 	"the_maelstrom": {
 		"templates": ["maelstrom_orbit", "maelstrom_orbit_mirrored"],
-		"terrain": "Tight orbit",
-		"rule": "Four close columns create short turns around a central fighting pocket.",
-		"tactic": "Lead mixed crowds around the pocket; area damage and {kw:slow} help control the turns.",
-		"entry_hint": "Close columns create tight turns. Keep crowds on one side."
+		"terrain": "Turning storm",
+		"rule": "A dangerous sector steps around the central pocket, hurting you and foes at impact.",
+		"tactic": "Move around the pocket ahead of the next marked sector; leave pursuers in its path.",
+		"entry_hint": "The storm turns around the pocket. Stay ahead of its marked sector."
 	},
 	"convergence_end": {
 		"templates": ["convergence_gates", "convergence_gates_diagonal"],
-		"terrain": "Four gates",
-		"rule": "Paired columns form four exits around an exposed center.",
-		"tactic": "Leave a second gate clear when beams close the first; focus the foe blocking your escape.",
-		"entry_hint": "Four gates surround open ground. Keep a second exit clear."
+		"terrain": "Pulsing gates",
+		"rule": "Opposite pairs of gates alternate damaging pulses that can strike you and foes.",
+		"tactic": "Choose an unmarked gate and draw enemies through the pair about to pulse.",
+		"entry_hint": "Opposite gates pulse together. Use the unmarked pair."
 	}
 }
 
@@ -269,12 +269,54 @@ static func get_combat_identity(biome_id: String) -> Dictionary:
 	return COMBAT_IDENTITIES.get(biome_id, {}) as Dictionary
 
 
-static func generate_impact_text(biome: Dictionary) -> String:
+static func get_room_combat_identity(biome_id: String, mode: String = "ordinary", fragments: bool = false) -> Dictionary:
+	var identity := get_combat_identity(biome_id).duplicate(true)
+	if identity.is_empty() or (mode == "ordinary" and not fragments):
+		return identity
+	var patterns := {
+		"crumble": ["Falling rubble", "Small rockfalls", "rockfalls"],
+		"haunt": ["Clinging shadows", "Small shadow patches", "shadows"],
+		"shatterfield": ["Falling fragments", "Small fragment falls", "fragment falls"],
+		"grinding_vault": ["Crushing rings", "Small crushers alternating discs and rings", "crushers"],
+		"storm_reach": ["Baitable lightning", "Small lightning strikes", "lightning strikes"],
+		"hollow": ["Alternating lanes", "Short floor eruptions", "eruptions"],
+		"void_breach": ["Broken void bands", "Short void bands with an open gap", "void bands"],
+		"the_maelstrom": ["Turning storm", "Small turning storm sectors", "storm sectors"],
+		"convergence_end": ["Paired pulses", "Pairs of small floor pulses", "floor pulses"]
+	}
+	var pattern: Array = patterns[biome_id]
+	identity.terrain = pattern[0]
+	if mode == "assistance":
+		identity.rule = "%s are outlined in green and affect foes only." % String(pattern[1])
+		if biome_id == "haunt":
+			identity.rule += " Foes inside are {kw:slow|Slowed}."
+		else:
+			identity.rule += " A warning shows where damage will land."
+		identity.tactic = "Draw foes into the green zones while responding to their own moves. You can cross these biome zones safely."
+		identity.entry_hint = "Green %s hurt foes only. Lure them inside." % String(pattern[2])
+		if biome_id == "haunt":
+			identity.entry_hint = "Green shadows Slow foes only. Lead pursuers through them."
+	else:
+		identity.rule = "%s appear between longer pauses, leaving required objective space clear." % String(pattern[1])
+		if biome_id == "haunt":
+			identity.rule += " They {kw:slow} you and foes inside."
+		else:
+			identity.rule += " Their warned impacts hurt you and foes."
+		identity.tactic = "Lure foes into the marked area, then leave before impact."
+		if biome_id == "haunt":
+			identity.tactic = "Lead pursuers through the shadows; keep your own route outside them."
+		identity.entry_hint = "Marked %s hurt you and foes. Leave before impact." % String(pattern[2])
+		if biome_id == "haunt":
+			identity.entry_hint = "Shadows Slow you and foes. Lead pursuers through them."
+	return identity
+
+
+static func generate_impact_text(biome: Dictionary, mode: String = "", fragments: bool = false) -> String:
 	var sections: Array[String] = []
-	var identity := get_combat_identity(String(biome.get("id", "")))
+	var identity := get_room_combat_identity(String(biome.get("id", "")), mode if not mode.is_empty() else "ordinary", fragments)
 	if not identity.is_empty():
-		sections.append("TYPICAL TERRAIN: " + String(identity.terrain).to_upper() + "\n" + String(identity.rule))
-		sections.append("USE THE TERRAIN\n" + String(identity.tactic))
+		sections.append("BIOME RULE: " + String(identity.terrain).to_upper() + "\n" + String(identity.rule))
+		sections.append("USE IT TO YOUR ADVANTAGE\n" + String(identity.tactic))
 
 	var encounter_labels := biome.get("preferred_encounter_labels", []) as Array
 	if not encounter_labels.is_empty():
@@ -299,7 +341,12 @@ static func generate_impact_text(biome: Dictionary) -> String:
 		sections.append("COMMON THREATS\n" + _join_mid_dot(top))
 
 	if not identity.is_empty():
-		sections.append("SPECIAL ARENAS\nBreach, Undertow, Missions, Trials and bosses keep their own terrain.")
+		if mode.is_empty():
+			sections.append("EVERY COMBAT ROUTE\nSpecial rooms add smaller biome patterns around objectives. Boss and Apex biome zones affect foes only. Shatterfield uses falling fragments where there is no cracked cover.")
+		elif mode == "assistance":
+			sections.append("THIS ROOM\nGreen biome zones help you. Enemy ability warnings keep their usual danger.")
+		elif mode == "compact":
+			sections.append("THIS ROOM\nSmaller, slower patterns. Required objective space stays clear; green zones affect foes only if space is too tight.")
 	return "\n".join(sections)
 
 

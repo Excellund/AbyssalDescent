@@ -230,7 +230,13 @@ func _test_native_sources_and_echo() -> void:
 			continue
 		setup(3)
 		var targets := row(3)
-		hit(targets[0], actor.combat_interactions.begin_action("attack"), source, {"secondary": true})
+		var action := actor.combat_interactions.begin_action("attack")
+		if source in ["spark_relay_projectile", "shatterwake_burst", "edict_court"]:
+			var context := REGISTRY.damage_context(action, source, {"secondary": true})
+			check(not DAMAGEABLE.apply_damage(targets[0], 100, context, 1) and targets[0].hits.is_empty() and actor.storm_crown_hit_counter == 0, "%s rejects generic damage submission without granting damage or charge" % source)
+			DAMAGEABLE.apply_keyword_reaction_damage(targets[0], 100, context, 1)
+		else:
+			hit(targets[0], action, source, {"secondary": true})
 		check(actor.storm_crown_hit_counter == 1 and chain_count(targets) == 2, "%s participates by its Hit descriptor even when legacy damage is secondary" % source)
 		teardown()
 	setup(3)
