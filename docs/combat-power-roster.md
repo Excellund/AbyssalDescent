@@ -1,6 +1,6 @@
 # Combat power roster
 
-The shared catalogue has 14 Boons, 23 Arcana, ten boss rewards and six fixed Mission bonuses. Offers retain equal random odds. Boons remain capped at three picks except Heartstone at two; Arcana have three levels and one eligible Prismatic upgrade; boss rewards have two levels. Existing names below retain their saved IDs; the five new pieces have distinct appended IDs.
+The shared catalogue has 15 Boons, 23 Arcana, ten boss rewards and six fixed Mission bonuses. Offers retain equal random odds. Boons remain capped at three picks except Heartstone at two; Arcana have three levels and one eligible Prismatic upgrade; boss rewards have two levels. Existing names below retain their saved IDs; new powers have distinct appended IDs.
 
 ## Character passives: starting build rules
 
@@ -36,8 +36,11 @@ Effigy Command relocates the existing Attack instead of generating a secondary d
 | Severing Edge | +14 conditional Damage basis against enemies below 55% HP |
 | Patient Hunter | +12 conditional Damage basis against already Slowed foes |
 | Marked Prey | +12 conditional Damage basis against already Marked foes |
+| Farshot | +10 conditional Damage basis against foes at least 160 from your current body when damage lands |
 
 Conditional Damage additions use each source's effective coefficient, including contact time and Echo strength. They do not add their full flat amount to each tiny tick. Conditions are checked against each actual target before damage, once.
+
+Farshot checks current body-to-foe-center distance for all eligible damage, including Fields, Projectiles and Echoes. Moving before impact changes eligibility; an Effigy or Projectile origin does not set range. Its initial +10 tuning is unaccepted balance. See [Farshot](farshot.md).
 
 ## Arcana: build generators and receivers
 
@@ -62,10 +65,10 @@ Conditional Damage additions use each source's effective coefficient, including 
 | Farline Volley | Edge-of-reach attack hits build damage/arc stacks; Dash resets/spends them. Final Burst does not repeat attack-hit effects. |
 | Sigil Chain | Deliberate attack hits charge and place persistent Fields. |
 | Blast Drive | Hold Attack and release a charged Burst with Recoil. |
-| Razor Orbit | Hold Dash and aim at an anchor to Orbit and cut; manual Attacks remain available. |
+| Razor Orbit | Hold Dash and aim at an anchor to Orbit and cut; manual Attacks remain available. Release Dash for a 0.25s escape steered by movement input (no input keeps momentum). Expiry and anchor loss use the same escape; it grants no Dash effects, phasing or immunity. |
 | Returning Crescent | Attacks throw a returning Projectile; one hit per foe on each leg. |
 | Stormbrand | Accepted Electric damage applies Mark once per foe/original action: 10/14/18% for 3/3.5/4s; Prismatic 22.5% for 5s. L3 also Slows an already Marked foe to 75% speed for 1s after damage, respecting global Slow duration. |
-| Spark Relay | Accepted Burst damage launches one Electric Projectile from the body toward that foe's position per original action. Copies 50/60/70% of the triggering raw descriptor/coefficient; Prismatic 87.5%. Hits at most 1/2/3 foes once each, range 440 (Prismatic 528), speed 620, radius 8. Solid cover blocks it. |
+| Spark Relay | Accepted Burst damage launches one seeking Electric Projectile from the body per original action. Prefers the struck foe if alive and reachable, otherwise the nearest living reachable foe. Retargets after a hit or target death using the same remaining travel; no target means no bolt. Copies 50/60/70% of the triggering raw descriptor/coefficient; Prismatic 87.5%. Hits at most 1/2/3 foes once each, total travel 440 (Prismatic 528), speed 620, radius 8. Solid cover blocks it; acquisition checks the full projectile width. Host alone selects targets; replicas receive bounded flight snapshots. |
 
 Marks are timed shared vulnerabilities: strongest active base Mark applies to all player damage. Damage does not consume them. Dread stacks belong to the owner and enemy; they survive target switching and Mark expiry, clearing with that enemy or room.
 
@@ -76,8 +79,8 @@ Marks are timed shared vulnerabilities: strongest active base Mark applies to al
 | Warden's Verdict | Consecutive attack contacts build a four-contact damage Burst. |
 | Lacuna Well | Kills create one damaging Field for 2.4s, replacing the last. Accepted pulses Slow survivors to 75% speed for 0.45s; Slow-duration bonuses apply. Its existing damage bonus applies once inside any owned Field. |
 | Sovereign Tempo | Attack hits or owned damage against already Marked foes build one Tempo stack per original action across all victims and descendants. Up to six stacks, expiring 1.8s after the last accepted stack; Dash/Recoil/Orbit completion spends them in one Burst. Accepted Burst damage refunds 0.12s of Dash cooldown per spent stack once per Burst; the Burst and its descendants cannot build Tempo. |
-| Pillar Convergence | Attack hits or owned Electric damage add one charge per original action across all victims and descendants. Four/two charges create a moving damage Field for its existing bounded window; no charging while active. Actions that qualify while active cannot charge later through delayed damage. |
-| Unbroken Oath | Resistance plus Attack-built Oath that empowers the next Attack. |
+| Faultline Seal (`pillar_convergence`) | Attack hits or owned Electric damage charge once per original action. Three/two charges plant one stationary seal at the struck foe’s position, including lethal contacts. After 0.8s it releases a Burst for 180/240% of Damage in radius 76/90. Later owned Field damage to a foe inside triggers it early for 270/360%; the planting event cannot also detonate. One seal, no refresh/relocation, no charging while armed or for 0.6s afterward. Qualifying actions spent during either window cannot bank later charges. Its Burst and descendants cannot charge another seal, including delayed kill-Fields. Cover blocks the Burst; it never displaces foes or registers an owned Field. |
+| Unbroken Oath | Resistance plus Oath from accepted Attack hits. Each unique victim contributes once per original Attack across melee, charged Blast and Razor Wind, with that Attack's own successive-contact multiplier. A full bank empowers the next deliberate Attack and is spent even on a miss; that spending Attack and its descendants cannot refill it. Retaliation damage and its Damage coefficient apply once across the Attack's victims. The sword uses the committed Attack origin, including body-origin deployment and later effigy-origin Attacks. |
 | Edict of the Court | Kills release one Burst per original action for 80/120% of Damage in radius 120/160. Accepted damage Slows survivors to 75% speed for 1.5s, with Slow-duration bonuses. All kills share the root allowance; descendants cannot restart Edict. |
 | Null Corridor | Dash leaves a Field dealing 24/28% of Damage per accepted contact, at most once per foe every 0.5s per trail. It then Marks survivors for 1s at 10/15% vulnerability; strongest Mark wins. Width 39/46 and lifetime 3.6/4s are unchanged. |
 | Ruinous Impact | Attack hits and eligible Push/Pull effects arm Launches; one Impact Burst, with compression for immovable targets. |
@@ -89,6 +92,7 @@ Marks are timed shared vulnerabilities: strongest active base Mark applies to al
 | Mission | Fixed temporary increase |
 |---|---|
 | Last Stand | Fortified:15% damage resistance |
+| Relic Recovery | Fortified:15% damage resistance |
 | Cut the Signal | Hunter's Focus:25% damage increase |
 | Hold the Line | Combo Relay:5% damage and movement per Kill, four stacks, existing 2.8s reset |
 | Circuit Sweep | Relay Boost:Kill grants 28% movement speed for 1.4s |
@@ -97,7 +101,7 @@ Marks are timed shared vulnerabilities: strongest active base Mark applies to al
 
 One confirmation grants the chosen permanent Boon and fixed temporary increase together. Skip declines both. Temporary effects retain three encounter clears; Overcharge does not accelerate Blast recharge or change hold thresholds.
 
-The Electric receiver in Pillar Convergence connects Electric generators to a moving Field. Sovereign Tempo turns prepared Marks into movement payoffs for Fields, Projectiles and other damage sources. Conditional Damage Boons and Battle Trance already apply across those sources at the accepted-damage boundary. The two boss receivers each keep their own once-per-original-action allowance; neither grants a new Attack or attack hit.
+Faultline Seal connects Attack hits and Electric generators to a focused stationary Burst, and gives owned Field damage a stronger early detonation payoff. Sovereign Tempo turns prepared Marks into movement payoffs. Conditional Damage Boons and Battle Trance apply at the accepted-damage boundary. Each receiver keeps its own original-action allowance; neither grants another Attack. Faultline descendants retain their source action and ancestry, with raw Damage basis and coefficient resolved once against each actual Burst victim.
 
 Runtime and networking limits live in the implementations; this roster describes the approved roles, not new universal proc rules. Use [combat-wording.md](combat-wording.md) and the authored keyword catalogue for player-facing text.
 

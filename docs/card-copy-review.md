@@ -35,7 +35,7 @@ Read-only mechanics audit for the card explanation / numeric upgrade-line split.
 | Warden's Verdict | 144 | Consecutive attack hits grow stronger, and every fourth hit releases a damaging Burst. The count resets after 2.2 seconds without an attack hit. |
 | Lacuna Well | 163 | Kills create one pulling, damaging well, replacing the previous one. Your damage is stronger inside any of your Fields; overlapping Fields do not stack this bonus. |
 | Sovereign Tempo | 154 | Connected Attacks build temporary move speed. Finishing a Dash, Recoil or Orbit spends those stacks in a damaging Burst; connecting refunds Dash cooldown. |
-| Pillar Convergence | 140 | Connected Attacks build toward a pulsing Field that follows you and damages nearby foes. It cannot charge again until the active Field ends. |
+| Faultline Seal | 170 | Attack hits or Electric damage charge a seal at the struck foe. After 0.8s it Bursts; your Field damage inside detonates it early for 50% more damage. One seal at a time. |
 | Unbroken Oath | 159 | Gain damage resistance. Attack hits fill Oath faster when you strike several foes; filling the bar empowers your next Attack, which spends it even if you miss. |
 | Edict of the Court | 117 | Kills release a force Burst that Pushes nearby foes away from the defeated enemy. The Push deals no damage by itself. |
 | Null Corridor | 127 | Dash leaves a Field that damages foes and Pushes them sideways. Each trail can affect the same enemy again after half a second. |

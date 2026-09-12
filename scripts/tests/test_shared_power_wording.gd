@@ -55,6 +55,8 @@ func _run() -> void:
 
 func _test_passive_wording() -> void:
 	var glossary := GLOSSARY._character_passives_section_bbcode()
+	var entries := glossary.strip_edges().split("\n\n", false)
+	_check(entries.size() == CHARACTERS.get_launch_characters().size() + 1, "Glossary has only its heading and one concise entry per character")
 	for character: Dictionary in CHARACTERS.get_launch_characters():
 		var id := String(character.passive_id)
 		_check(PASSIVES.PASSIVES.has(id), "Every launch character has shared passive rules: " + id)
@@ -64,11 +66,13 @@ func _test_passive_wording() -> void:
 		var authored: Dictionary = PASSIVES.PASSIVES[id]
 		_check_authored_spans(String(authored.get("short", "")), short, id + " selection")
 		_check_authored_spans(String(authored.get("build", authored.get("short", ""))), PASSIVES.get_build_description(id), id + " build")
-		for rule: String in authored.get("rules", []):
-			_check_authored_spans(rule, detail, id + " glossary")
+		_check_authored_spans(String(authored.get("build", authored.get("short", ""))), detail, id + " glossary")
 		_check(DESCRIPTION_GUARD.strip_bbcode(short).length() <= 150, "Character selection keeps a compact passive explanation: " + id)
-		_check(glossary.contains(detail), "The glossary retains every full passive rule: " + id)
+		_check(detail == PASSIVES.get_build_description(id), "Glossary and Build Details share identical formatted passive text: " + id)
+		_check(not detail.contains("\n") and not detail.begins_with("•"), "Glossary passive remains one concise paragraph: " + id)
+		_check(entries.has("[b]%s — %s[/b]\n%s" % [character.name, PASSIVES.get_display_name(id), detail]), "Glossary entry contains exactly the title and shared Build Details paragraph: " + id)
 		var metadata := PASSIVES.get_keyword_metadata(id)
+		_check(metadata.description_keywords == KEYWORDS.keyword_ids(String(authored.get("build", authored.get("short", "")))), "Passive description keywords derive from the shared paragraph: " + id)
 		for key in metadata.produces + metadata.accepts + metadata.description_keywords:
 			_check(KEYWORDS.KEYWORDS.has(key), "Passive metadata uses registered properties: %s/%s" % [id, key])
 		_check(not metadata.produces.has("attack_hit") and not metadata.produces.has("electric") and not metadata.produces.has("field") and not metadata.produces.has("push"), "Passive output does not promise extra attacks or unsupported properties: " + id)
@@ -172,8 +176,11 @@ func _test_metadata(registry: Node) -> void:
 	_check(not REGISTRY.get_power_keyword_metadata("wraithstep", 1).produces.has("burst") and REGISTRY.get_power_keyword_metadata("wraithstep", 2).produces.has("burst"), "Wraith Burst is unavailable before level 2")
 	_check(REGISTRY.get_power_keyword_metadata("storm_crown", 1).accepts == ["damage"], "Crown does not require Electric damage")
 	_check(REGISTRY.get_power_keyword_metadata("pillar_convergence", 1).accepts.has("electric") and REGISTRY.get_power_keyword_metadata("pillar_convergence", 1).accepts.has("attack_hit"), "Convergence build metadata advertises both Electric damage and Attack-hit inputs")
+	var seal_meta := REGISTRY.get_power_keyword_metadata("pillar_convergence", 1)
+	_check(seal_meta.accepts.has("field") and seal_meta.produces.has("burst") and not seal_meta.produces.has("field") and not seal_meta.produces.has("pull"), "Faultline is a Field receiver and Burst producer with no retired Pull or Field generator metadata")
 	_check(REGISTRY.get_power_keyword_metadata("sovereign_tempo", 1).accepts.has("mark") and REGISTRY.get_power_keyword_metadata("sovereign_tempo", 1).accepts.has("damage") and REGISTRY.get_power_keyword_metadata("sovereign_tempo", 1).accepts.has("attack_hit"), "Tempo build metadata connects Marked damage and Attack hits")
-	_check(REGISTRY.get_power_keyword_metadata("aegis_field", 3).produces == ["slow"], "Aegis Pulse does not promise a persistent Field or damage")
+	var aegis_properties: Array = REGISTRY.get_power_keyword_metadata("aegis_field", 3).produces
+	_check(aegis_properties.has("burst") and aegis_properties.has("slow") and not aegis_properties.has("field") and not aegis_properties.has("damage"), "Aegis Pulse describes its Slowing Burst without promising a persistent Field or damage")
 	for pair in [["aegis_field", "Aegis Pulse"], ["fracture_field", "Fracture"], ["lacuna_echo", "Lacuna Well"]]:
 		_check(registry.get_power_display_name(pair[0]) == pair[1], "Canonical names change without changing save IDs")
 	for id in REGISTRY.UPGRADE_POOL_IDS + REGISTRY.TRIAL_POWER_POOL_IDS + REGISTRY.BOSS_REWARD_POOL_IDS:

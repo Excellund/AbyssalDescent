@@ -164,6 +164,8 @@ var _network_target_facing: Vector2 = Vector2.LEFT
 var _network_facing_lerp_speed: float = 12.0
 var _network_direction_targets: Dictionary = {}
 var slow_time_left: float = 0.0
+## Optional local training control; ordinary and network combat retain AI.
+var combat_ai_enabled: bool = true
 var slow_speed_mult: float = 1.0
 var pulse_damage_taken_mult: float = 1.0
 var pulse_damage_taken_timer: float = 0.0
@@ -268,6 +270,10 @@ func _physics_process(delta: float) -> void:
 		return
 	if _launch_state != null and _launch_state.step(self, delta):
 		_update_visual_facing_direction()
+		return
+	if not combat_ai_enabled:
+		velocity = Vector2.ZERO
+		move_and_slide()
 		return
 	_maybe_refresh_target(delta)
 	_apply_crowd_separation(delta)

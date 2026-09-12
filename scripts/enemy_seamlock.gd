@@ -1,5 +1,6 @@
 extends "res://scripts/enemy_base.gd"
 
+const ATTACK_CALLOUT := preload("res://scripts/shared/enemy_attack_callout.gd")
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const INTERACTIONS := preload("res://scripts/shared/combat_interaction_registry.gd")
 const ENEMY_STATE_ENUMS := preload("res://scripts/shared/enemy_state_enums.gd")
@@ -831,6 +832,17 @@ func _process_network_visuals(delta: float) -> void:
 
 # === Draw ===
 
+func get_attack_callout() -> String:
+	# Announce before the split; a label on the real body would reveal the answer.
+	match seamlock_state:
+		ENEMY_STATE_ENUMS.SeamlockState.TELEPORT:
+			return "False Reflections" if state_time_left > 0.0 else ""
+		ENEMY_STATE_ENUMS.SeamlockState.BAND_ATTACK:
+			return "Seam Bands" if _band_windup_left > 0.0 or _band_duration_left > 0.0 else ""
+		ENEMY_STATE_ENUMS.SeamlockState.SPIRAL:
+			return "Spiral Volley" if _spiral_windup_left > 0.0 or _spiral_active else ""
+	return ""
+
 func _draw() -> void:
 	var t := float(Time.get_ticks_msec()) * 0.001
 	var attack_pulse := _get_attack_pulse()
@@ -952,6 +964,8 @@ func _draw() -> void:
 
 	# Real body — angular/crystalline hexagon (distorted geometry theme)
 	_draw_crystalline_body(Vector2.ZERO, body_radius, BODY_COLOR, CORE_COLOR, 0.72)
+	ATTACK_CALLOUT.draw_callout(self, get_attack_callout(), -78.0)
+
 
 func _draw_crystalline_body(center: Vector2, radius: float, body_color: Color, core_color: Color, core_scale: float) -> void:
 	# Multi-layer glow with depth

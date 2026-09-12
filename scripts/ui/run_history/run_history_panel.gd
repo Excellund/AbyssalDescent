@@ -3,6 +3,9 @@ class_name RunHistoryPanel
 
 const RUN_HISTORY_STORE_SCRIPT := preload("res://scripts/core/run_history_store.gd")
 const RUN_SUMMARY_WITH_PROFILE_SCRIPT := preload("res://scripts/core/run_summary_with_profile.gd")
+const HISTORY_QUERY := preload("res://scripts/core/run_history_query.gd")
+const DAMAGE_RECAP_PANEL := preload("res://scripts/ui/run_summary/damage_recap_panel.gd")
+const SCALED_FONT := preload("res://scripts/ui/scaled_ui_font.gd")
 const RARITY_COMMON := Color(0.62, 0.7, 0.8, 0.9)
 const RARITY_RARE := Color(0.46, 0.78, 1.0, 0.94)
 const RARITY_EPIC := Color(0.82, 0.58, 1.0, 0.96)
@@ -16,9 +19,15 @@ var _detail_content: VBoxContainer
 var _empty_label: Label
 var _selected_index: int = -1
 var _records: Array = []
+var _all_records: Array = []
 var _row_buttons: Array[Button] = []
+var _outcome_filter: OptionButton
+var _mode_filter: OptionButton
+var _count_label: Label
+var _detail_scroll: ScrollContainer
 
 func _build_ui(style_ref: Object) -> void:
+	SCALED_FONT.apply_to(self)
 	var layout := MarginContainer.new()
 	layout.set_anchors_preset(Control.PRESET_FULL_RECT)
 	layout.add_theme_constant_override("margin_left", 44)
@@ -49,6 +58,7 @@ func _build_ui(style_ref: Object) -> void:
 	accent.color = Color(RARITY_RARE.r, RARITY_RARE.g, RARITY_RARE.b, 0.65)
 	accent.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	stack.add_child(accent)
+	_build_filters(stack)
 
 	var columns := HBoxContainer.new()
 	columns.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -104,6 +114,7 @@ func _build_ui(style_ref: Object) -> void:
 	detail_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	detail_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	detail_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_detail_scroll = detail_scroll
 	detail_margin.add_child(detail_scroll)
 
 	_detail_content = VBoxContainer.new()
@@ -118,16 +129,65 @@ func _build_ui(style_ref: Object) -> void:
 	back_button.pressed.connect(func() -> void: back_pressed.emit())
 	stack.add_child(back_button)
 
+func _build_filters(stack: VBoxContainer) -> void:
+	var filters := HBoxContainer.new()
+	filters.add_theme_constant_override("separation", 10)
+	stack.add_child(filters)
+	_outcome_filter = OptionButton.new()
+	_outcome_filter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_outcome_filter.custom_minimum_size.y = 38.0
+	_outcome_filter.tooltip_text = "Filter by run outcome"
+	_outcome_filter.add_theme_font_size_override("font_size", 16)
+	for label in ["All outcomes", "Victories", "Defeats", "Other endings"]:
+		_outcome_filter.add_item(label)
+	_outcome_filter.item_selected.connect(func(_index: int) -> void: _apply_filters())
+	filters.add_child(_outcome_filter)
+	_mode_filter = OptionButton.new()
+	_mode_filter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_mode_filter.tooltip_text = "Filter by solo or co-op"
+	_mode_filter.add_theme_font_size_override("font_size", 16)
+	for label in ["All modes", "Solo", "Co-op"]:
+		_mode_filter.add_item(label)
+	_mode_filter.item_selected.connect(func(_index: int) -> void: _apply_filters())
+	filters.add_child(_mode_filter)
+	var reset := Button.new()
+	reset.text = "Reset"
+	reset.add_theme_font_size_override("font_size", 16)
+	reset.tooltip_text = "Clear filters"
+	reset.pressed.connect(_reset_filters)
+	filters.add_child(reset)
+	_count_label = Label.new()
+	_count_label.add_theme_font_size_override("font_size", 14)
+	_count_label.add_theme_color_override("font_color", Color(0.68, 0.78, 0.90, 0.85))
+	stack.add_child(_count_label)
+
+func _reset_filters() -> void:
+	_outcome_filter.select(0)
+	_mode_filter.select(0)
+	_apply_filters()
+
 func populate() -> void:
-	_records = RUN_HISTORY_STORE_SCRIPT.load_all()
+	_all_records = HISTORY_QUERY.filter_records(RUN_HISTORY_STORE_SCRIPT.load_all())
+	_selected_index = -1
+	_apply_filters()
+
+func _apply_filters() -> void:
+	var previous: Dictionary = {}
+	if _selected_index >= 0 and _selected_index < _records.size():
+		previous = _records[_selected_index]
+	_records = HISTORY_QUERY.filter_records(_all_records,
+		["all", "clear", "death", "other"][_outcome_filter.selected],
+		["all", "solo", "coop"][_mode_filter.selected])
 	_selected_index = -1
 	_row_buttons.clear()
+	_count_label.text = "%d of %d recorded runs" % [_records.size(), _all_records.size()]
 	for child in _list_container.get_children():
 		if child == _empty_label:
 			continue
 		_list_container.remove_child(child)
 		child.queue_free()
 	if _records.is_empty():
+		_empty_label.text = "No runs recorded yet.\nComplete a run to see it here." if _all_records.is_empty() else "No runs match these filters.\nTry another filter or Reset."
 		_empty_label.visible = true
 		_show_detail_placeholder()
 		return
@@ -137,7 +197,8 @@ func populate() -> void:
 		var row := _make_row_button(rec, i)
 		_list_container.add_child(row)
 		_row_buttons.append(row)
-	_select_row(0)
+	var selected := _records.find(previous)
+	_select_row(selected if selected >= 0 else 0)
 
 func _outcome_presentation(outcome: String) -> Dictionary:
 	match outcome:
@@ -252,8 +313,11 @@ func _select_row(index: int) -> void:
 		_show_detail(_records[index] as Dictionary)
 
 func _show_detail(rec: Dictionary) -> void:
+	_detail_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	for child in _detail_content.get_children():
+		_detail_content.remove_child(child)
 		child.queue_free()
+	_detail_scroll.scroll_vertical = 0
 
 	var wrapped: RunSummaryWithProfile = RUN_SUMMARY_WITH_PROFILE_SCRIPT.create(rec, null)
 
@@ -279,6 +343,13 @@ func _show_detail(rec: Dictionary) -> void:
 	_add_detail_row("Bosses Defeated", str(wrapped.get_bosses_defeated()))
 	_add_detail_row("Damage Dealt", str(wrapped.get_damage_dealt()))
 	_add_detail_row("Damage Taken", str(wrapped.get_damage_taken()))
+	var damage_recap := DAMAGE_RECAP_PANEL.new()
+	damage_recap.set_summary(rec)
+	if damage_recap.visible:
+		_add_detail_separator()
+		_detail_content.add_child(damage_recap)
+	else:
+		damage_recap.free()
 
 	var display_name := wrapped.get_display_name()
 	if not display_name.is_empty() and display_name != "Player":
@@ -300,9 +371,27 @@ func _show_detail(rec: Dictionary) -> void:
 		for item in boons:
 			var d := item as Dictionary
 			_add_detail_label("\u00b7 " + String(d.get("name", "")), 14, Color(RARITY_COMMON.r, RARITY_COMMON.g, RARITY_COMMON.b, 0.9), false)
+	_add_detail_separator()
+	_add_detail_label("Build journey", 18, RARITY_RARE, true)
+	var decisions := HISTORY_QUERY.journey(rec)
+	if decisions.is_empty():
+		_add_detail_label("No build decisions recorded for this run.", 14, RARITY_COMMON, false)
+	else:
+		_add_detail_label("Rewards and rests, in the order you chose them.", 14, RARITY_COMMON, false)
+		for entry in decisions:
+			var depth := int(entry.depth)
+			var prefix := "Depth %d" % depth if depth >= 0 else "Depth unknown"
+			var color := RARITY_COMMON
+			match String(entry.category):
+				"arcana": color = RARITY_EPIC
+				"boss_reward": color = RARITY_LEGENDARY
+			_add_detail_label("%s  ·  %s" % [prefix, String(entry.label)], 15, color, false)
 
 func _show_detail_placeholder() -> void:
+	_detail_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_detail_scroll.scroll_vertical = 0
 	for child in _detail_content.get_children():
+		_detail_content.remove_child(child)
 		child.queue_free()
 	var lbl := Label.new()
 	lbl.text = "Select a run to see details."

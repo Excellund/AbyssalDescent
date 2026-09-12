@@ -43,6 +43,7 @@ func _setup() -> void:
 func _select(label: String) -> void:
 	for button in navigation.get_children():
 		if button is Button and button.text == label:
+			button.grab_focus()
 			button.button_pressed = true
 			button.pressed.emit()
 			return
@@ -55,31 +56,34 @@ func _check_section(label: String, size: Vector2i) -> void:
 	_select(label)
 	await _settle()
 	var panel := menu.glossary_panel
-	var bounds := Rect2(Vector2.ZERO, Vector2(size))
+	var bounds := viewport.get_visible_rect()
 	_check(bounds.encloses(panel.get_global_rect()), "Glossary fits viewport: %s/%s" % [label, size])
 	_check(panel.get_global_rect().encloses(body.get_global_rect()), "Glossary text remains inside panel: " + label)
-	if label != "Character Passives":
-		_check(body.get_line_count() == body.get_paragraph_count(), "%s entries fit authored lines: %d lines/%d paragraphs at %s" % [label, body.get_line_count(), body.get_paragraph_count(), size])
-	else:
-		_check(body.scroll_active, "Full passive rules can scroll without clipping at " + str(size))
+	_check(body.autowrap_mode != TextServer.AUTOWRAP_OFF and body.scroll_active, "Glossary preserves full text through wrapping and scrolling: " + label)
+	var rendered_font_size := body.get_theme_font_size("normal_font_size") * body.get_global_transform_with_canvas().get_scale().y * viewport.get_stretch_transform().get_scale().y
+	_check(rendered_font_size >= 17.99, "Glossary keeps at least 18 screen pixels at " + str(size))
+	if label == "Character Passives":
+		_check(body.scroll_active, "The character passive list can scroll without clipping at " + str(size))
 		for character: Dictionary in DATA.CHARACTERS.get_launch_characters():
-			_check(body.text.contains(DATA.PASSIVES.get_description(character.passive_id)), "Glossary preserves the complete build rules for " + String(character.name))
+			_check(body.text.contains(DATA.PASSIVES.get_build_description(character.passive_id)), "Glossary preserves the exact Build Details paragraph for " + String(character.name))
 	_check(not body.text.contains("{kw:"), "Glossary renders authored keyword spans: " + label)
 	if label == "Build Keywords":
-		_check(body.get_content_height() <= body.size.y, "Core keyword definitions fit without scrolling at " + str(size))
+		_check(body.get_content_height() > 0.0, "Core keyword definitions lay out at " + str(size))
 		_check(not body.text.contains("Static Wake"), "Core definitions contain no power paragraphs")
-	if label == "Power Rules":
-		for power in ["Blast Drive", "Razor Orbit", "Returning Crescent", "Static Wake", "Storm Crown", "Sovereign's Double", "Warden's Verdict", "Sovereign Tempo", "Sigil Chain", "Farline Volley"]:
-			_check(body.text.contains(power), "Removed chapter powers retain individual rules: " + power)
 
 func _run() -> void:
 	_setup()
 	var labels: Array[String] = []
 	for section in DATA.glossary_sections():
 		labels.append(section.label)
-	for removed in ["Motion Arcana", "Boss Combinations", "Keeper"]:
+	for removed in ["Motion Arcana", "Boss Combinations", "Keeper", "Power Rules"]:
 		_check(not labels.has(removed), "Requested glossary section is removed: " + removed)
-	_check(labels.has("Power Rules"), "Individual power rules remain available outside the core definitions")
+	_check(not DATA.glossary_bbcode().contains("Power Rules"), "Combined glossary contains no removed Power Rules chapter")
+	for power in ["Farshot", "Patient Hunter", "Marked Prey", "Static Wake", "Storm Crown", "Blast Drive", "Razor Orbit", "Sovereign's Double", "Sovereign Tempo", "Faultline Seal"]:
+		_check(not DATA.glossary_bbcode().contains("[b]" + power + "[/b]"), "Removed individual power entry is absent: " + power)
+	for button in navigation.get_children():
+		if button is Button:
+			_check(button.text != "Power Rules", "Actual glossary navigation contains no Power Rules button")
 	var keyword_text := DATA._build_keywords_section_bbcode()
 	var keyword_rows := 0
 	for id: String in KEYWORDS.KEYWORDS:

@@ -9,6 +9,8 @@ const BUILD_SUMMARY_PANEL_SCRIPT := preload("res://scripts/ui/run_summary/build_
 const REWARD_SUMMARY_PANEL_SCRIPT := preload("res://scripts/ui/run_summary/reward_summary_panel.gd")
 const RUN_ACTION_BUTTONS_SCRIPT := preload("res://scripts/ui/run_summary/run_action_buttons.gd")
 const RESULT_FACTS := preload("res://scripts/ui/run_summary/run_result_facts.gd")
+const DAMAGE_RECAP_PANEL := preload("res://scripts/ui/run_summary/damage_recap_panel.gd")
+const SCALED_FONT := preload("res://scripts/ui/scaled_ui_font.gd")
 const RARITY_COMMON := Color(0.62, 0.7, 0.8, 0.9)
 const RARITY_RARE := Color(0.46, 0.78, 1.0, 0.94)
 const RARITY_EPIC := Color(0.82, 0.58, 1.0, 0.96)
@@ -25,6 +27,7 @@ var _meta_label: Label
 var _content_scroll: ScrollContainer
 var _content_stack: VBoxContainer
 var _stats_panel
+var _damage_recap_panel
 var _build_panel
 var _reward_panel
 var _action_buttons
@@ -82,7 +85,8 @@ func _build_ui() -> void:
 	add_child(_layer)
 
 	_root = Control.new()
-	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	SCALED_FONT.apply_to(_root)
+	_root.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_layer.add_child(_root)
 	if not get_viewport().size_changed.is_connected(_layout_card):
 		get_viewport().size_changed.connect(_layout_card)
@@ -167,6 +171,9 @@ func _build_ui() -> void:
 	_content_stack.add_theme_constant_override("separation", 12)
 	_content_scroll.add_child(_content_stack)
 
+	_damage_recap_panel = DAMAGE_RECAP_PANEL.new()
+	_content_stack.add_child(_damage_recap_panel)
+
 	_build_panel = BUILD_SUMMARY_PANEL_SCRIPT.new()
 	_content_stack.add_child(_build_panel)
 
@@ -205,6 +212,13 @@ func _layout_card() -> void:
 	if _card == null:
 		return
 	var viewport_size := get_viewport().get_visible_rect().size
+	# The production canvas is 2560x1440. Keep results legible when that canvas
+	# is stretched into a smaller window, including the persistent action bar.
+	var stretch := get_viewport().get_stretch_transform().get_scale()
+	var ui_scale := maxf(1.0, 1.0 / maxf(0.01, minf(absf(stretch.x), absf(stretch.y))))
+	_root.scale = Vector2.ONE * ui_scale
+	viewport_size /= ui_scale
+	_root.size = viewport_size
 	var card_size := Vector2(minf(1060.0, viewport_size.x - 40.0), minf(760.0, viewport_size.y - 30.0))
 	_card.size = card_size
 	_card.position = (viewport_size - card_size) * 0.5
@@ -227,6 +241,7 @@ func _apply_theme(defeat_theme: bool) -> void:
 	_card.add_theme_stylebox_override("panel", flat)
 
 func _fill_summary(result_title: String, subtitle: String, summary: Dictionary, allow_retry_run: bool) -> void:
+	_damage_recap_panel.set_summary(summary)
 	_outcome_label.text = result_title
 	_outcome_label.add_theme_color_override("font_color", RARITY_COMMON)
 	_title_label.text = RESULT_FACTS.headline(summary, result_title)

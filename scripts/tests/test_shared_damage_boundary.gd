@@ -10,6 +10,7 @@ class SharedActor extends Actor:
 	var first_strike_bonus_damage: int = 0
 	var bloodpact_bonus_damage: int = 0
 	var severing_edge_bonus_damage: int = 0
+	var farshot_bonus_damage: int = 0
 	var reward_hunters_snare: bool = false
 	var hunters_snare_stacks: int = 0
 	var hunters_snare_bonus_ratio: float = 0.2

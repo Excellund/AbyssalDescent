@@ -31,6 +31,7 @@ func _run() -> void:
 		await _check_offers(viewport, ui, registry, ["sovereigns_double", "ruinous_impact", "execution_edge"], ENUMS.RewardMode.BOSS, character_id)
 		_free_world()
 	await _check_complete_roster(viewport, ui, registry)
+	await _check_mission_bonuses(viewport, ui, registry)
 	await _check_native_clicks(viewport, ui, registry)
 	await _check_grid_navigation(viewport, ui, registry)
 	ui.close_selection()
@@ -75,8 +76,19 @@ func _check_offers(viewport: SubViewport, ui: Node, registry: Node, ids: Array, 
 			choices.append("razor_wind" if mode == ENUMS.RewardMode.ARCANA else "null_corridor")
 		await _check_layout(viewport, ui, registry, choices, mode, character_id)
 
-func _check_layout(viewport: SubViewport, ui: Node, registry: Node, ids: Array, mode: int, character_id: String) -> void:
-	ui.open_selection("Reward", false, mode, registry, player, RandomNumberGenerator.new(), {}, registry.get_boss_epitaph("warden", character_id) if mode == ENUMS.RewardMode.BOSS else "", character_id)
+func _check_mission_bonuses(viewport: SubViewport, ui: Node, registry: Node) -> void:
+	var builder := preload("res://scripts/encounter_profile_builder.gd").new()
+	var bonuses: Array[Dictionary] = [builder._build_fortified_mutator(), builder._build_overcharge_mutator(), builder._build_hunters_focus_mutator(), builder._build_relay_boost_mutator(), builder._build_node_shield_mutator(), builder._build_combo_relay_mutator()]
+	_make_world(0)
+	for bonus in bonuses:
+		for count in [3, 4]:
+			ui.initialize(count, 0.0)
+			await _check_layout(viewport, ui, registry, ["farshot", "patient_hunter", "marked_prey", "battle_trance"].slice(0, count), ENUMS.RewardMode.MISSION, "bastion", bonus)
+	_free_world()
+	builder.free()
+
+func _check_layout(viewport: SubViewport, ui: Node, registry: Node, ids: Array, mode: int, character_id: String, mission_bonus: Dictionary = {}) -> void:
+	ui.open_selection("Reward", false, mode, registry, player, RandomNumberGenerator.new(), mission_bonus, registry.get_boss_epitaph("warden", character_id) if mode == ENUMS.RewardMode.BOSS else "", character_id)
 	ui.boon_choices.clear()
 	for id in ids:
 		var trial: bool = REGISTRY.TRIAL_POWER_POOL_IDS.has(id)
@@ -85,7 +97,7 @@ func _check_layout(viewport: SubViewport, ui: Node, registry: Node, ids: Array, 
 	ui.boon_confirm_lock_time = 0.0
 	ui.boon_reveal_time = 2.0
 	ui._set_skip_button_visible(true)
-	for size in [Vector2i(960, 720), Vector2i(1280, 720), Vector2i(1920, 1080), Vector2i(960, 720)]:
+	for size in [Vector2i(960, 540), Vector2i(960, 720), Vector2i(1280, 720), Vector2i(1920, 1080), Vector2i(960, 540)]:
 		viewport.size = size
 		ui._on_viewport_size_changed()
 		await process_frame
@@ -119,6 +131,13 @@ func _check_layout(viewport: SubViewport, ui: Node, registry: Node, ids: Array, 
 		if ui.epitaph_label.visible:
 			_check(not ui.epitaph_label.get_global_rect().intersects(ui.skip_button.get_global_rect()), "Boss epitaph clears action")
 			_check(ui.epitaph_label.get_content_height() <= ui.epitaph_label.size.y, "Complete boss epitaph remains readable")
+		if not mission_bonus.is_empty():
+			var banner: RichTextLabel = ui.mission_bonus_label
+			var context := "%s, %d offers at %s" % [mission_bonus.name, ids.size(), size]
+			_check(banner.visible and banner.get_content_height() <= banner.size.y, "Complete Mission bonus fits: " + context)
+			_check(not banner.get_global_rect().intersects(ui.boon_title_label.get_global_rect()), "Mission bonus clears title: " + context)
+			for index in ids.size():
+				_check(not banner.get_global_rect().intersects(ui.boon_card_panels[index].get_global_rect()), "Mission bonus clears cards: " + context)
 func _native_button(viewport: SubViewport, point: Vector2, pressed: bool) -> void:
 	var event := InputEventMouseButton.new()
 	event.position = point

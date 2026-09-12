@@ -4,6 +4,8 @@ September 10, 2026. This revision supersedes the universal Forsworn requirement 
 
 ## Progression ladder
 
+September 12 menu correction: Vessel Progression follows the actual unsealing chain: Bastion, Hexweaver, Veilstrider, Riftlancer, then Effigy Keeper. Each vessel keeps its Pilgrim, Delver, Harbinger and Forsworn goals in that order. The list reads the shared unlock chain; completion IDs and saved progress are unchanged.
+
 With Threadbinder integrated, the active roster contains 37 Oaths: four Journey goals available on any Bearing, five Challenges requiring Delver or higher, eight Prestige goals requiring Forsworn, and twenty character/Bearing clears. Harder Bearings also qualify for the lower minimum requirements. Character-clear Oaths continue to name an exact Bearing, preserving their original meaning and completion IDs.
 
 | Tier | Oath | Goal | Reward |

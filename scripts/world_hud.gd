@@ -4,6 +4,7 @@ const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.g
 const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
 const CHARACTER_PASSIVES := preload("res://scripts/shared/character_passive_catalogue.gd")
 const COMBAT_KEYWORDS := preload("res://scripts/shared/combat_keyword_catalogue.gd")
+const BUILD_KEYWORDS := preload("res://scripts/shared/build_keyword_summary.gd")
 
 const MUTATOR_ICON_BLOOD_RUSH: Texture2D = preload("res://assets/ui/mutators/blood_rush.svg")
 const MUTATOR_ICON_FLASHPOINT: Texture2D = preload("res://assets/ui/mutators/flashpoint.svg")
@@ -41,6 +42,7 @@ var _status_biome_bg: Panel
 var _status_biome_label: RichTextLabel
 var _status_hint_label: Label
 var _status_biome_rule_label: Label
+var _status_biome_phase_label: Label
 var _status_obj_divider: Panel
 var _status_obj_line1: Label
 var _status_obj_line2: Label
@@ -81,6 +83,7 @@ var _mutator_icon_tether_web: Texture2D
 
 var build_strip_panel: Panel
 var build_strip_content: VBoxContainer
+var build_keyword_label: RichTextLabel
 var build_strip_passive_chip: Panel
 var build_strip_passive_label: RichTextLabel
 var build_strip_boon_container: VBoxContainer
@@ -109,6 +112,7 @@ func _init() -> void:
 	add_child(power_registry_instance)
 
 func setup(encounter_count: int, banner_top_margin: float = 18.0) -> void:
+	add_to_group("attack_callout_hud")
 	_encounter_count = encounter_count
 	_banner_top_margin = banner_top_margin
 	_header_display_signature.clear()
@@ -148,6 +152,7 @@ func _update_combat_overlap_fade(state: Dictionary, player: Node) -> void:
 		# The build parent intentionally has zero height. Only its visible chips
 		# cover the arena; empty rows and hidden placeholders must not trigger it.
 		build_overlap = _control_overlaps_footprint(build_strip_passive_chip, footprint, build_strip_panel)
+		build_overlap = build_overlap or _control_overlaps_footprint(build_keyword_label, footprint, build_strip_panel)
 		for chips in [build_strip_boon_chips, build_strip_arcana_chips, build_strip_boss_chips]:
 			for chip in chips:
 				if _control_overlaps_footprint(chip, footprint, build_strip_panel):
@@ -643,6 +648,14 @@ func _create_status_blocks() -> void:
 	_status_hint_label.text = "Move or Attack to engage"
 	_status_hint_label.visible = false
 	status_panel.add_child(_status_hint_label)
+	_status_biome_phase_label = Label.new()
+	_status_biome_phase_label.custom_minimum_size = Vector2(HUD_INFO_PANEL_WIDTH - 20.0, 40.0)
+	_status_biome_phase_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_status_biome_phase_label.add_theme_font_size_override("font_size", 14)
+	_status_biome_phase_label.add_theme_color_override("font_color", Color(0.93, 0.81, 0.58))
+	_status_biome_phase_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_status_biome_phase_label.visible = false
+	status_panel.add_child(_status_biome_phase_label)
 	_status_biome_rule_label = Label.new()
 	_status_biome_rule_label.custom_minimum_size = Vector2(HUD_INFO_PANEL_WIDTH - 20.0, 54.0)
 	_status_biome_rule_label.size = _status_biome_rule_label.custom_minimum_size
@@ -775,7 +788,7 @@ func _create_status_header_bar(layer: CanvasLayer) -> void:
 	_status_header_biome_micro.custom_minimum_size = Vector2(CELL_W, 11.0)
 	_status_header_biome_micro.position = Vector2(0.0, 3.0)
 	_status_header_biome_micro.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_status_header_biome_micro.text = "BIOME"
+	_status_header_biome_micro.text = "BIOME · HOVER FOR RULES"
 	_status_header_biome_micro.add_theme_font_size_override("font_size", 9)
 	_status_header_biome_micro.add_theme_color_override("font_color", Color(0.45, 0.80, 0.88, 0.55))
 	_status_header_biome_micro.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.80))
@@ -807,7 +820,7 @@ func _create_status_header_bar(layer: CanvasLayer) -> void:
 	add_child(tooltip_layer)
 
 	_biome_tooltip_panel = PanelContainer.new()
-	_biome_tooltip_panel.custom_minimum_size = Vector2(240.0, 0.0)
+	_biome_tooltip_panel.custom_minimum_size = Vector2(380.0, 0.0)
 	var tooltip_style := StyleBoxFlat.new()
 	tooltip_style.bg_color = Color(0.03, 0.10, 0.14, 0.96)
 	tooltip_style.border_color = Color(0.44, 0.80, 0.90, 0.72)
@@ -831,12 +844,12 @@ func _create_status_header_bar(layer: CanvasLayer) -> void:
 	tooltip_layer.add_child(_biome_tooltip_panel)
 
 	_biome_tooltip_content = RichTextLabel.new()
-	_biome_tooltip_content.custom_minimum_size = Vector2(220.0, 0.0)
+	_biome_tooltip_content.custom_minimum_size = Vector2(360.0, 0.0)
 	_biome_tooltip_content.bbcode_enabled = true
 	_biome_tooltip_content.fit_content = true
 	_biome_tooltip_content.scroll_active = false
 	_biome_tooltip_content.selection_enabled = false
-	_biome_tooltip_content.add_theme_font_size_override("normal_font_size", 13)
+	_biome_tooltip_content.add_theme_font_size_override("normal_font_size", 15)
 	_biome_tooltip_content.add_theme_color_override("default_color", Color(0.80, 0.95, 1.0, 0.96))
 	_biome_tooltip_content.add_theme_color_override("font_shadow_color", Color(0.02, 0.04, 0.06, 0.88))
 	_biome_tooltip_content.add_theme_constant_override("shadow_offset_x", 1)
@@ -856,6 +869,8 @@ func _update_header_bar(state: Dictionary) -> void:
 		return
 	_header_display_signature = signature
 	_active_biome_impact_text = impact_text
+	if is_instance_valid(_biome_tooltip_panel) and (_biome_tooltip_panel.visible or _biome_hover_pending):
+		_on_biome_header_entered()
 	var tier_color := _bearing_color_from_tier(tier)
 	_status_header_bear_name.text = _bearing_name_from_tier(tier)
 	_status_header_bear_name.add_theme_color_override("font_color", tier_color)
@@ -894,7 +909,7 @@ func _on_biome_header_entered() -> void:
 		if line.to_upper() == line:
 			if bbcode.length() > 0:
 				bbcode += "\n"
-			bbcode += "[color=#7099B8][font_size=9]%s[/font_size][/color]\n" % line
+			bbcode += "[color=#93B2C9][font_size=11]%s[/font_size][/color]\n" % line
 		else:
 			bbcode += "%s" % line
 			if i < lines.size() - 1:
@@ -1035,6 +1050,7 @@ func _update_status_panel_text(state: Dictionary) -> void:
 	var run_cleared := bool(state.get("run_cleared", false))
 	var room_depth := int(state.get("room_depth", 0))
 	_status_biome_rule_label.visible = false
+	_status_biome_phase_label.visible = false
 
 	var y := 8.0
 
@@ -1102,6 +1118,13 @@ func _update_status_panel_text(state: Dictionary) -> void:
 
 	var biome_rule_hint := String(state.get("active_biome_rule_hint", ""))
 	if not biome_rule_hint.is_empty():
+		var biome_status := String(state.get("active_biome_rule_status", ""))
+		if not biome_status.is_empty():
+			_status_biome_phase_label.text = biome_status
+			_status_biome_phase_label.position = Vector2(10.0, y)
+			_status_biome_phase_label.add_theme_color_override("font_color", Color(0.60, 0.91, 0.73) if bool(state.get("active_biome_rule_friendly", false)) else Color(0.93, 0.81, 0.58))
+			_status_biome_phase_label.visible = true
+			y += maxf(40.0, _status_biome_phase_label.get_minimum_size().y) + 2.0
 		# A compact room can become assistance before its first warning. Keep a
 		# still-fading biome banner in agreement without restarting its tween or
 		# replacing boss dialogue and other announcements.
@@ -1253,6 +1276,28 @@ func _update_status_panel_text(state: Dictionary) -> void:
 						line2_color = Color(1.0, 0.69, 0.38, 0.95)
 					else:
 						line2 = "Next pulse in %.0fs" % pulse_next
+			"relic_recovery":
+				var recovery: Dictionary = state.get("objective_relic_recovery", {})
+				var deposited := 0
+				var carrying := false
+				var local_id := int(state.get("objective_local_player_id", 0))
+				for relic: Dictionary in recovery.get("relics", []):
+					if bool(relic.get("delivered", false)):
+						deposited += 1
+					if local_id > 0 and int(relic.get("carrier_id", 0)) == local_id:
+						carrying = true
+				line1 = "Relics delivered  %d/3" % deposited
+				if encounter_intro_grace_active:
+					line2 = "Carry relics to the central receiver"
+					line3 = "Walk over a relic to collect it. Carry one at a time."
+				elif carrying:
+					line2 = "Carrying a relic — return to the receiver"
+					line2_color = C_GOOD
+					line3 = "Enter the receiver ring to deliver it."
+				else:
+					line2 = "Walk over a relic to collect it"
+					line3 = "First pickups call reinforcements."
+				wrap_line3 = true
 			"intercept_run":
 				var intercept_pct := int(round(float(state.get("objective_intercept_progress", 0.0)) * 100.0))
 				var stalled := bool(state.get("objective_intercept_stalled", false))
@@ -1503,6 +1548,16 @@ func _create_build_strip(layer: CanvasLayer) -> void:
 	build_strip_content.custom_minimum_size = Vector2(HUD_INFO_PANEL_WIDTH - 16.0, 0.0)
 	build_strip_content.add_theme_constant_override("separation", 8)
 	build_strip_panel.add_child(build_strip_content)
+	build_keyword_label = RichTextLabel.new()
+	build_keyword_label.bbcode_enabled = true
+	build_keyword_label.fit_content = true
+	build_keyword_label.scroll_active = false
+	build_keyword_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	build_keyword_label.add_theme_font_size_override("normal_font_size", 16)
+	build_keyword_label.add_theme_font_size_override("bold_font_size", 16)
+	build_keyword_label.add_theme_constant_override("line_separation", 0)
+	build_keyword_label.add_theme_color_override("default_color", Color(0.85, 0.89, 0.94))
+	build_strip_content.add_child(build_keyword_label)
 
 	# Passive row
 	var passive_row := HBoxContainer.new()
@@ -1822,6 +1877,12 @@ func _update_build_strip(state: Dictionary, player: Node) -> void:
 	if signature == _build_display_signature:
 		return
 	_build_display_signature = signature
+	# World supplies current owned IDs each frame. Resolve the full inventory
+	# only after its existing ID/level signature changes, never for a stable HUD.
+	var owned_levels := BUILD_KEYWORDS.owned_levels(player)
+	var keyword_summary := BUILD_KEYWORDS.from_levels(owned_levels, passive_id if player_valid else "")
+	build_keyword_label.text = "[center]" + BUILD_KEYWORDS.compact_bbcode(keyword_summary, 2) + "  [font_size=12][color=#8797a8]Tab[/color][/font_size][/center]"
+	build_keyword_label.visible = not keyword_summary.effects.is_empty() or not keyword_summary.actions.is_empty()
 	var passive_display_name := _get_passive_display_name(passive_id)
 	if build_strip_passive_label != null:
 		build_strip_passive_label.text = "[center][b]%s[/b][/center]" % passive_display_name
@@ -1996,3 +2057,13 @@ func _get_tether_web_icon_texture() -> Texture2D:
 		_mutator_icon_tether_web = icon_resource as Texture2D
 		return _mutator_icon_tether_web
 	return MUTATOR_ICON_FLASHPOINT
+
+func get_attack_callout_exclusion_rects() -> Array[Rect2]:
+	var rectangles: Array[Rect2] = []
+	for control: Control in [status_panel, stats_panel, player_mutator_panel, _status_header_bar, _biome_tooltip_panel, build_strip_content]:
+		if not is_instance_valid(control) or not control.is_visible_in_tree():
+			continue
+		var rectangle: Rect2 = control.get_global_transform_with_canvas() * Rect2(Vector2.ZERO, control.size)
+		if rectangle.has_area():
+			rectangles.append(rectangle)
+	return rectangles

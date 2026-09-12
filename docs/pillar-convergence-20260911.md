@@ -1,0 +1,17 @@
+# Pillar Convergence gathering Field
+
+Historical implementation, rejected in player feedback. The current replacement is [Faultline Seal](faultline-seal-20260912.md); the moving Field, Pull and Dash refund described below are retired.
+
+Feedback: the reward was not attractive to use. Its short moving Field had limited reach, took four actions to activate at level 1, and drew pulse rings at only two thirds of its actual radius.
+
+The reward now activates after three/two connected Attack actions or owned Electric actions. It creates a wider Field (158/185 pixels instead of 118/145), refunds 0.45/0.55 seconds of Dash cooldown on activation (previously 0.17/0.23), and Pulls each damaged survivor inward once per activation. The Pull is weaker near the owner and does not move foes within 64 pixels, avoiding dragging a nearby foe through the player. Pulse damage, pulse cadence, and the 1.60/1.99-second active window retain their existing values.
+
+The Pull is processed by the existing accepted-damage controller on the host. Rejected damage, dead targets, cancelled actions, and wrong activation roots cannot spend its per-foe allowance. An initially rejected pulse can still Pull after a later pulse deals damage. Bosses and Apex enemies retain movement immunity; a learned Ruinous Impact can convert the Pull through its existing Launch/compression boundary. Pulse damage remains a non-Electric Field and does not perform an Attack.
+
+Each original action still supplies at most one charge across all foes, ticks, and descendants. Charging remains locked during the active Field, and delayed damage from an action that qualified during that window cannot bank a later charge. A fresh activation can Pull a surviving foe again. A frame crossing expiry retains a pulse scheduled strictly before the end, while excluding pulses scheduled at or after expiry.
+
+The activation cue originates at the Field owner even when a distant Electric effect supplied the last charge. Inward activation lines and a full-radius pulse ring show the actual gathering area. The card, Build Details, glossary, keyword metadata, and roster describe the same mechanics. A shared rules helper keeps gameplay, owned-Field validation, visuals, and numerical upgrade descriptions aligned.
+
+Validation: the isolated regression runner compiled all 376 scripts and passed the world/network contracts plus boss-reward synergies (135 checks), owned Fields, shared producers, and boss combinations (106 checks). The initial copy checks passed power descriptions (465), shared wording, and reward layout (22,757). Native reward rendering passed 96 upgrade/Prismatic frames and 85 unowned/build frames at 960/1280/1920 widths. The final native ENet run passed 65 host and 11 client checks after the timing correction. The final three gameplay GPU frames showed activation, owner movement, and cleanup on an RTX 4080, with no remaining Field art after expiry. Explicit before/equal/after expiry assertions cover the last scheduled pulse. The 85 unowned/build frames passed 992 layout checks; the 96 upgrade frames passed 1,525. The 960-pixel unowned and upgrade Pillar cards were visually inspected for full text and title/level separation. Batch logs: `.feedback/pillar-boundary-validation.log`, `.feedback/pillar-final-enet.log`, `.feedback/pillar-final-render.log`, `.feedback/pillar-cards.log`, and `.feedback/pillar-unowned-cards.log`.
+
+Human playtesting is still needed to judge whether the larger area and gathering payoff feel worth a boss reward.

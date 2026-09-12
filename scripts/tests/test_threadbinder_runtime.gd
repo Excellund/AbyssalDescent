@@ -29,6 +29,7 @@ func _run() -> void:
 	await _test_effigy_attack_allowances()
 	await _test_effigy_execution_boundary()
 	await _test_effigy_target_conditions()
+	await _test_effigy_farshot()
 	await _test_effigy_blast()
 	await _test_effigy_motion_preservation()
 	await _test_effigy_restore()
@@ -46,6 +47,23 @@ func _effigy_attack(direction: Vector2 = Vector2.RIGHT, owner_player: ComboPlaye
 	owner_player.attack_lock_time_left = 0.0
 	owner_player.aim = direction
 	owner_player._try_execute_attack(direction)
+
+func _test_effigy_farshot() -> void:
+	_character("threadbinder")
+	player.apply_upgrade("farshot")
+	var foe := _target(Vector2(220, 0))
+	await _settle()
+	_effigy_attack()
+	_check(player.effigy_deployed and foe.hits.is_empty(), "Farshot preserves the deployment Attack's body origin and miss")
+	_effigy_attack()
+	_check(foe.hits.size() == 1 and foe.hits.back().amount == 30, "Real canonical Effigy hit gains Farshot from body220 away despite origin40 away")
+	player.position = Vector2(100, 0)
+	_effigy_attack()
+	_check(foe.hits.size() == 2 and foe.hits.back().amount == 20, "Walking the body within160 removes Farshot while the fixed Effigy still strikes")
+	player.position = Vector2(-100, 0)
+	_effigy_attack()
+	_check(foe.hits.size() == 3 and foe.hits.back().amount == 30 and player.attack_combo_counter == 4, "Walking away restores Farshot without another trigger or extra Attack")
+	_free_world()
 
 func _test_effigy_deployment() -> void:
 	_character("threadbinder")

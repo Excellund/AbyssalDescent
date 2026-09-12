@@ -133,6 +133,8 @@ func _test_alternative_transition(stage: int) -> void:
 	check(world._apply_active_run_snapshot(snapshot), "Continue accepts the alternative-boss checkpoint")
 	check(world.run_session.act_boss_ids == ["kilnheart", "glassweaver", "null_archivist"] and world._get_room_presentation_act() == stage, "Continue preserves future selections and the cleared boss chamber")
 	world._enter_rest_site()
+	world.reward_selection_ui.process_input(1.0)
+	world.reward_selection_ui._confirm_choice(0)
 
 func _test_replica_spawn_reconstruction() -> void:
 	# Use two non-default profiles: assigning boss_id after _ready would retain

@@ -4,7 +4,7 @@ extends RefCounted
 const INTERACTIONS := preload("res://scripts/shared/combat_interaction_registry.gd")
 const MAX_FIELDS := 64
 const MAX_WAKE_SEGMENTS := 32
-const SOURCES := ["static_wake", "sigil_chain_zone", "void_echo_zone", "null_corridor_deflect", "convergence_window"]
+const SOURCES := ["static_wake", "sigil_chain_zone", "void_echo_zone", "null_corridor_deflect"]
 
 var _player: Node2D
 var _clock := 0.0
@@ -93,7 +93,7 @@ func register_field(source: String, identity: String, geometry: Dictionary, acti
 	if _fields.has(key):
 		expires = minf(expires, float(_fields[key].expires))
 	else:
-		var cap := 2 if source == "static_wake" else (1 if source in ["void_echo_zone", "convergence_window"] else MAX_FIELDS)
+		var cap := 2 if source == "static_wake" else (1 if source in ["void_echo_zone"] else MAX_FIELDS)
 		var source_keys: Array[String] = []
 		for existing: String in _fields:
 			if _fields[existing].source == source:
@@ -147,10 +147,7 @@ func _source_limits(source: String) -> Dictionary:
 			var strength := _value("null_corridor_strength")
 			if strength > 0.0:
 				return {"shape": "rectangle", "width": 32.0 + strength * 14.0, "life": 3.2 + strength * 0.8}
-		"convergence_window":
-			var ratio := _value("convergence_surge_damage_ratio")
-			if ratio > 0.0:
-				return {"shape": "moving_circle", "radius": clampf(92.0 + ratio * 120.0, 92.0, 250.0), "life": 1.2 + ratio * 1.8}
+
 	return {}
 
 func _validated_geometry(raw: Dictionary, limits: Dictionary) -> Dictionary:

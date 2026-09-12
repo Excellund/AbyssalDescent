@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-Exercises a copied normal dev-* Windows export through its production Menu/Main.
+Exercises a copied normal dev-* Windows export through its production Menu/Practice/Main.
 .DESCRIPTION
 Opt in through test_playtest_executable.ps1 -NativeRun. The supplied export is
 never modified or started in place. A verified official Godot 4.6.2 template,
@@ -173,13 +173,14 @@ function Invoke-IsolatedNativeStep([string]$Program, [string[]]$Arguments, [stri
         if (-not $process.Start()) { throw 'Could not start isolated native validation.' }
         $stdout = $process.StandardOutput.ReadToEndAsync()
         $stderr = $process.StandardError.ReadToEndAsync()
-        if (-not $process.WaitForExit($TimeoutMs)) {
+        $timedOut = -not $process.WaitForExit($TimeoutMs)
+        if ($timedOut) {
             $process.Kill()
             $process.WaitForExit()
-            throw "Native $Phase exceeded its timeout. Evidence: $nativeRoot"
         }
         $output = $stdout.GetAwaiter().GetResult() + $stderr.GetAwaiter().GetResult()
         [IO.File]::WriteAllText((Join-Path $nativeRoot ($Phase + '-console.log')), $output, $utf8)
+        if ($timedOut) { throw "Native $Phase exceeded its timeout. Evidence: $nativeRoot" }
         # GUI export templates write engine diagnostics only to --log-file.
         $engineLog = Join-Path $nativeRoot ($Phase + '-engine.log')
         if (Test-Path -LiteralPath $engineLog) { $output += [IO.File]::ReadAllText($engineLog) }
@@ -206,7 +207,7 @@ if ((Get-FileHash -LiteralPath (Join-Path $nativeRoot 'override.cfg') -Algorithm
 $native = Invoke-IsolatedNativeStep $copyPath @('--headless', '--audio-driver', 'Dummy', '--max-fps', '60', '--log-file', (Join-Path $nativeRoot 'native-engine.log')) 'native' 55000
 if ($native.nonce -ne $nonce -or @($native.stages)[-1] -ne 'completed' -or -not $native.native_template) { throw "Native driver did not complete the required flow: $nativeRoot" }
 if ((Get-FileHash -LiteralPath $copyPath -Algorithm SHA256).Hash -ne $sourceHash -or (Get-FileHash -LiteralPath $ExecutablePath -Algorithm SHA256).Hash -ne $sourceHash) { throw 'Executable changed during native smoke.' }
-Write-Host "[PASS] Actual normal executable: $($native.checks) checks; Menu, first descent, movement, return, reopen"
+Write-Host "[PASS] Actual normal executable: $($native.checks) checks; Menu, Practice configuration/restart/return, first descent, movement, return, reopen"
 if (@($native.shutdown_warnings).Count) { Write-Warning "Native shutdown warnings retained: $nativeRoot" }
 $report = [PSCustomObject]@{
     ExecutablePath = $ExecutablePath

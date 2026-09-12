@@ -223,7 +223,7 @@ func _test_boss_combination_descriptions(registry: Node) -> void:
 		_check(balance.get("kind") == "add_int" and balance.get("property") == power_id + "_stacks" and balance.get("add") == 1, "%s applies one persisted integer stack" % power_id)
 		_check(registry.get_power_stack_limit(power_id) == 2, "%s caps at two boss picks" % power_id)
 		_check(registry.get_power_display_metadata(power_id).get("category") == REGISTRY.POWER_DISPLAY_CATEGORY_BOSS_REWARD, "%s is presented as a boss reward" % power_id)
-		_check(glossary.contains(registry.get_power_display_name(power_id)), "%s has glossary instructions" % power_id)
+		_check(not glossary.contains(registry.get_power_display_name(power_id)), "%s instructions stay out of the simplified glossary" % power_id)
 		_check(not upgrades.get_power_flavor_text(power_id).is_empty(), "%s has shared mechanic text" % power_id)
 		for stack in range(3):
 			var card: String = upgrades.get_upgrade_card_description(power_id)
@@ -453,7 +453,7 @@ func _test_combat_hooks() -> void:
 			"pillar_convergence":
 				for _hit in range(6):
 					player._try_apply_convergence_surge(enemy.global_position, 20, enemy.get_instance_id())
-				player._update_convergence_window(0.1)
+				player._update_convergence_window(0.81)
 				activated = enemy.get_current_health() < before
 			"unbroken_oath":
 				for _hit in range(15):

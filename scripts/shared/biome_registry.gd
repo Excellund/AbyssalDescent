@@ -19,63 +19,63 @@ const COMBAT_IDENTITIES: Dictionary = {
 		"terrain": "Falling rubble",
 		"rule": "Marked rockfalls strike around the boulder gates, hurting you and foes.",
 		"tactic": "Lure pursuers into a marked fall, then leave before the rocks land.",
-		"entry_hint": "Lure foes into marked rockfalls. Leave before impact."
+		"entry_hint": "DANGER: Rockfalls hurt you and foes. Lure them in, then leave the circle."
 	},
 	"haunt": {
 		"templates": ["side_cover", "side_cover_mirrored"],
 		"terrain": "Clinging shadows",
 		"rule": "Shadow patches near side cover {kw:slow} you and foes inside them.",
 		"tactic": "Draw pursuers through the shadows; cross open ground to keep your speed.",
-		"entry_hint": "Shadows Slow everyone. Lead pursuers through them."
+		"entry_hint": "DANGER: Shadows Slow you and foes. Lead pursuers through them."
 	},
 	"shatterfield": {
 		"templates": ["offset_firing_lanes", "offset_firing_lanes_mirrored"],
 		"terrain": "Breakable cover",
-		"rule": "Three {kw:attack|Attacks} break either cracked inner column. Outer cover stays intact.",
-		"tactic": "Keep cover to stop arrows, or break it to open a route. Beams and floor hazards pass through.",
-		"entry_hint": "Three Attacks break cracked cover. Keep shelter or open a route."
+		"rule": "Three {kw:attack|Attacks} break each cracked inner column, releasing a {kw:burst} that hurts foes only. Outer cover stays intact.",
+		"tactic": "Lure foes near cracked cover before breaking it. Keep cover to stop arrows; beams and floor hazards pass through.",
+		"entry_hint": "HELP: Breaking cracked pillars bursts nearby foes. Three Attacks; safe for you."
 	},
 	"grinding_vault": {
 		"templates": ["broken_ring", "broken_ring_inverted"],
 		"terrain": "Crushing rings",
 		"rule": "Crushers alternate between inner and outer floor rings, hurting you and foes.",
 		"tactic": "Cross the marked boundary before impact; leave slow or shielded foes behind.",
-		"entry_hint": "Crushers alternate inner and outer rings. Cross before impact."
+		"entry_hint": "DANGER: Crushers hurt you and foes. Cross out of the marked ring."
 	},
 	"storm_reach": {
 		"templates": ["storm_shelters", "storm_shelters_mirrored"],
 		"terrain": "Baitable lightning",
 		"rule": "Lightning marks a player's position, then strikes that fixed spot, hurting you and foes.",
 		"tactic": "Place the warning under a crowd, then leave it. The warning stops following you.",
-		"entry_hint": "Lightning locks onto a spot. Bait foes into it, then leave."
+		"entry_hint": "DANGER: Lightning hurts you and foes. Leave its fixed warning circle."
 	},
 	"hollow": {
 		"templates": ["hollow_spine", "hollow_spine_mirrored"],
 		"terrain": "Alternating lanes",
 		"rule": "Floor eruptions alternate across the divided lanes, hurting you and foes.",
 		"tactic": "Use the gaps to change lanes; draw foes into the next marked eruption.",
-		"entry_hint": "Eruptions alternate lanes. Cross through the gaps."
+		"entry_hint": "DANGER: Eruptions hurt you and foes. Switch lanes through the gaps."
 	},
 	"void_breach": {
 		"templates": ["none"],
 		"terrain": "Broken void bands",
-		"rule": "Void bands step across the open arena, leaving a gap through each marked band.",
+		"rule": "Void bands step across the arena, hurting you and foes. Each band leaves an open gap.",
 		"tactic": "Route through the gap or clear the band before impact. Foes caught in it take damage too.",
-		"entry_hint": "Void bands cross the arena. Use their open gap."
+		"entry_hint": "DANGER: Void bands hurt you and foes. Use the gap in the marked band."
 	},
 	"the_maelstrom": {
 		"templates": ["maelstrom_orbit", "maelstrom_orbit_mirrored"],
 		"terrain": "Turning storm",
 		"rule": "A dangerous sector steps around the central pocket, hurting you and foes at impact.",
 		"tactic": "Move around the pocket ahead of the next marked sector; leave pursuers in its path.",
-		"entry_hint": "The storm turns around the pocket. Stay ahead of its marked sector."
+		"entry_hint": "DANGER: Storm sectors hurt you and foes. Leave the marked wedge."
 	},
 	"convergence_end": {
 		"templates": ["convergence_gates", "convergence_gates_diagonal"],
 		"terrain": "Pulsing gates",
 		"rule": "Opposite pairs of gates alternate damaging pulses that can strike you and foes.",
 		"tactic": "Choose an unmarked gate and draw enemies through the pair about to pulse.",
-		"entry_hint": "Opposite gates pulse together. Use the unmarked pair."
+		"entry_hint": "DANGER: Gate pulses hurt you and foes. Use the unmarked pair."
 	}
 }
 
@@ -287,15 +287,15 @@ static func get_room_combat_identity(biome_id: String, mode: String = "ordinary"
 	var pattern: Array = patterns[biome_id]
 	identity.terrain = pattern[0]
 	if mode == "assistance":
-		identity.rule = "%s are outlined in green and affect foes only." % String(pattern[1])
+		identity.rule = "%s affect foes only." % String(pattern[1])
 		if biome_id == "haunt":
 			identity.rule += " Foes inside are {kw:slow|Slowed}."
 		else:
 			identity.rule += " A warning shows where damage will land."
-		identity.tactic = "Draw foes into the green zones while responding to their own moves. You can cross these biome zones safely."
-		identity.entry_hint = "Green %s hurt foes only. Lure them inside." % String(pattern[2])
+		identity.tactic = "Lure foes into the smooth double borders. These biome zones are safe for you; enemy moves still hurt."
+		identity.entry_hint = "HELP: %s hurt foes only. Safe for you." % String(pattern[2]).capitalize()
 		if biome_id == "haunt":
-			identity.entry_hint = "Green shadows Slow foes only. Lead pursuers through them."
+			identity.entry_hint = "HELP: Shadows Slow foes only. Safe for you."
 	else:
 		identity.rule = "%s appear between longer pauses, leaving required objective space clear." % String(pattern[1])
 		if biome_id == "haunt":
@@ -305,9 +305,9 @@ static func get_room_combat_identity(biome_id: String, mode: String = "ordinary"
 		identity.tactic = "Lure foes into the marked area, then leave before impact."
 		if biome_id == "haunt":
 			identity.tactic = "Lead pursuers through the shadows; keep your own route outside them."
-		identity.entry_hint = "Marked %s hurt you and foes. Leave before impact." % String(pattern[2])
+		identity.entry_hint = "DANGER: %s hurt you and foes. Leave before impact." % String(pattern[2]).capitalize()
 		if biome_id == "haunt":
-			identity.entry_hint = "Shadows Slow you and foes. Lead pursuers through them."
+			identity.entry_hint = "DANGER: Shadows Slow you and foes. Keep outside the marks."
 	return identity
 
 
@@ -315,7 +315,12 @@ static func generate_impact_text(biome: Dictionary, mode: String = "", fragments
 	var sections: Array[String] = []
 	var identity := get_room_combat_identity(String(biome.get("id", "")), mode if not mode.is_empty() else "ordinary", fragments)
 	if not identity.is_empty():
-		sections.append("BIOME RULE: " + String(identity.terrain).to_upper() + "\n" + String(identity.rule))
+		var heading := "BIOME RULE" if String(biome.id) == "shatterfield" and not fragments else ("HELP" if mode == "assistance" else "DANGER")
+		sections.append(heading + ": " + String(identity.terrain).to_upper() + "\n" + String(identity.rule))
+		sections.append("EFFECT\n" + get_effect_text(String(biome.id), mode if not mode.is_empty() else "ordinary", fragments))
+		var timing := get_timing_text(String(biome.id), mode if not mode.is_empty() else "ordinary", fragments)
+		if not timing.is_empty():
+			sections.append("READ THE FLOOR\n" + timing)
 		sections.append("USE IT TO YOUR ADVANTAGE\n" + String(identity.tactic))
 
 	var encounter_labels := biome.get("preferred_encounter_labels", []) as Array
@@ -344,10 +349,51 @@ static func generate_impact_text(biome: Dictionary, mode: String = "", fragments
 		if mode.is_empty():
 			sections.append("EVERY COMBAT ROUTE\nSpecial rooms add smaller biome patterns around objectives. Boss and Apex biome zones affect foes only. Shatterfield uses falling fragments where there is no cracked cover.")
 		elif mode == "assistance":
-			sections.append("THIS ROOM\nGreen biome zones help you. Enemy ability warnings keep their usual danger.")
+			sections.append("THIS ROOM\nMint double borders mean HELP. Enemy moves remain dangerous.")
 		elif mode == "compact":
-			sections.append("THIS ROOM\nSmaller, slower patterns. Required objective space stays clear; green zones affect foes only if space is too tight.")
+			sections.append("THIS ROOM\nPatterns avoid required objective space. Crowded rooms switch to smooth double-bordered HELP, affecting foes only.")
 	return "\n".join(sections)
+
+
+static func get_effect_text(biome_id: String, mode: String = "ordinary", fragments: bool = false) -> String:
+	if biome_id == "shatterfield" and not fragments:
+		return "Each deliberate {kw:attack} contact removes one crack, regardless of damage. Three contacts open a route and release shards: 60 base damage to foes within 160, once per pillar. You are safe."
+	var friendly := mode == "assistance"
+	if biome_id == "haunt":
+		var reduction := 40 if mode == "ordinary" else 25
+		return ("Foes only: %d%% slower movement inside. You are safe." if friendly else "You and foes: %d%% slower movement inside. No damage.") % reduction
+	var enemy_damage := 50 if biome_id == "storm_reach" else 35
+	var player_damage := 10 if biome_id == "storm_reach" else 8
+	return ("Foes only: %d base damage per event. You are safe." % enemy_damage if friendly else "%d base damage to you; %d to foes, once per event. Normal damage protection applies." % [player_damage, enemy_damage])
+
+
+static func get_timing_text(biome_id: String, mode: String = "ordinary", fragments: bool = false) -> String:
+	if biome_id == "shatterfield" and not fragments:
+		return ""
+	var compact := mode != "ordinary" or fragments
+	var warning := "1.8" if compact else "1.4"
+	var recovery := "6" if mode == "assistance" else ("5" if compact else "2.5")
+	if biome_id == "haunt":
+		return "%ss warning, then %ss of shadows. %ss pause before the next warning." % [warning, "2" if compact else "3", recovery]
+	if biome_id in ["crumble", "storm_reach", "shatterfield"]:
+		return "%ss warning, then one impact at the marked spot. %ss pause after the impact fades." % [warning, recovery]
+	return "%ss warning, then %ss of damage in the marked area. %ss pause follows." % [warning, "0.5" if compact else "0.85", recovery]
+
+
+static func get_rule_status(biome_id: String, mode: String, fragments: bool, phase: String) -> String:
+	if get_combat_identity(biome_id).is_empty():
+		return ""
+	if biome_id == "shatterfield" and not fragments:
+		return "HELP · SHARD BURST · OPEN ROUTES"
+	var target := "HELP · FOES ONLY\n" if mode == "assistance" else "DANGER · YOU + FOES\n"
+	match phase:
+		"survey":
+			return target + "BIOME PAUSED"
+		"warning":
+			return target + "WARNING"
+		"active":
+			return target + ("SLOW ACTIVE" if biome_id == "haunt" else ("IMPACT" if biome_id in ["crumble", "storm_reach", "shatterfield"] else "DAMAGE ACTIVE"))
+	return target + "BETWEEN PATTERNS"
 
 
 static func _enemy_display_name(key: String) -> String:

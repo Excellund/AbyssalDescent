@@ -4,6 +4,7 @@
 
 extends Node
 
+const CONVERGENCE_RULES := preload("res://scripts/shared/pillar_convergence_rules.gd")
 const KEYWORDS := preload("res://scripts/shared/combat_keyword_catalogue.gd")
 const CARD_COPY := preload("res://scripts/shared/reward_card_copy.gd")
 const DESCRIPTION_CAP_GUARD := preload("res://scripts/shared/description_cap_guard.gd")
@@ -56,7 +57,7 @@ func apply_upgrade(upgrade_id: String) -> bool:
 	upgrade_stacks[id] = current_stacks + 1
 
 	match id:
-		"first_strike", "heavy_blow", "wide_arc", "long_reach", "fleet_foot", "blink_dash", "battle_trance", "surge_step", "wardens_verdict", "lacuna_echo", "sovereign_tempo", "pillar_convergence", "unbroken_oath", "edict_of_the_court", "null_corridor", "ruinous_impact", "sovereigns_double", "patient_hunter", "marked_prey", "shatterwake":
+		"first_strike", "heavy_blow", "wide_arc", "long_reach", "fleet_foot", "blink_dash", "battle_trance", "surge_step", "wardens_verdict", "lacuna_echo", "sovereign_tempo", "pillar_convergence", "unbroken_oath", "edict_of_the_court", "null_corridor", "ruinous_impact", "sovereigns_double", "patient_hunter", "marked_prey", "farshot", "shatterwake":
 			player_reference.set(String(preview.get("property", "")), preview.get("next", player_reference.get(String(preview.get("property", "")))))
 		"heartstone":
 			var next_max := int(preview.get("next", player_reference.get_max_health()))
@@ -298,6 +299,8 @@ func _reward_flavor_first_desc(_is_initial: bool, _flavor: String, body: String)
 # Player-facing terms follow docs/combat-wording.md; internal HIT is not a copy keyword.
 func _power_sentence_template(power_id: String) -> String:
 	match power_id:
+		"farshot":
+			return "{kw:damage_stat} %s against foes at least 160 from your body when damage lands."
 		"patient_hunter":
 			return "{kw:damage_stat} %s against already {kw:slow|Slowed} foes."
 		"marked_prey":
@@ -339,7 +342,7 @@ func _power_sentence_template(power_id: String) -> String:
 		"sovereign_tempo":
 			return "Move speed %s per stack (max 6); {kw:burst} damage refunds {kw:dash}."
 		"pillar_convergence":
-			return "%s charges; {kw:field} lasts %s; pulses every %s."
+			return "%s charges; %s of Damage; radius %s; 0.6s rearm."
 		"unbroken_oath":
 			return "Resistance %s; capacity %s; Oath adds %s of Damage."
 		"edict_of_the_court":
@@ -498,6 +501,8 @@ func get_power_flavor_text(power_id: String) -> String:
 
 func _power_flavor_authored(power_id: String) -> String:
 	match power_id:
+		"farshot":
+			return "Your damage is stronger against foes at least 160 from your current body when damage lands. The bonus scales with contact time and copied-effect strength."
 		"patient_hunter":
 			return "Your damage is stronger against already {kw:slow|Slowed} foes."
 		"marked_prey":
@@ -505,7 +510,7 @@ func _power_flavor_authored(power_id: String) -> String:
 		"stormbrand":
 			return "Your {kw:electric} damage applies a timed {kw:mark}, once per foe per original action."
 		"spark_relay":
-			return "Your {kw:burst} damage fires an {kw:electric} {kw:projectile} from your body toward the struck foe, once per original action."
+			return "Your {kw:burst} damage fires a seeking {kw:electric} {kw:projectile} from your body, once per original action. It retargets living foes if its target dies."
 		"shatterwake":
 			return "Your {kw:projectile} damage releases a {kw:burst} around the struck foe, once per original action."
 		"wardens_verdict":
@@ -515,7 +520,7 @@ func _power_flavor_authored(power_id: String) -> String:
 		"sovereign_tempo":
 			return "{kw:attack_hit|Attack hits} or your damage against already {kw:mark|Marked} foes build one Tempo stack per original action. Completing {kw:dash}, {kw:recoil} or {kw:orbit} spends all stacks in a {kw:burst}; accepted {kw:burst} damage refunds {kw:dash} cooldown once. The {kw:burst} and its descendants cannot build Tempo."
 		"pillar_convergence":
-			return "{kw:attack_hit|Attack hits} or your {kw:electric} damage charge a moving {kw:field} that pulses damage around you. All foes, ticks and descendants share one charge per original action. Charging pauses while the {kw:field} is active; an action that qualifies during this window cannot charge it later."
+			return "{kw:attack_hit|Attack hits} or your {kw:electric} damage charge a stationary seal at the struck foe. It releases a {kw:burst} after 0.8s. Your later {kw:field} damage inside its radius detonates it early for 50% more damage. One seal at a time; one charge per original action. Charging pauses until 0.6s after detonation. The {kw:burst} and its descendants cannot charge another seal."
 		"unbroken_oath":
 			return "{kw:attack|Attacks} build Oath faster when they damage several foes. Fill the bar to empower your next Attack."
 		"edict_of_the_court":
@@ -565,7 +570,7 @@ func _power_flavor_authored(power_id: String) -> String:
 		"blast_drive":
 			return "Hold {kw:attack}, then release a short, narrow {kw:burst} that launches you backward in {kw:recoil}. Taps still strike immediately."
 		"razor_orbit":
-			return "Aim at a foe, then hold {kw:dash} to {kw:orbit} and cut. Release to depart; {kw:attack} freely while orbiting."
+			return "Aim at a foe, then hold {kw:dash} to {kw:orbit} and cut. {kw:attack} freely. Release {kw:dash} to steer your escape with movement input."
 		"returning_crescent":
 			return "{kw:attack|Attacks} throw a {kw:projectile} that returns to your current position. Move to guide its return through enemies."
 		_:
@@ -606,8 +611,8 @@ func _get_power_current_stats(power_id: String) -> String:
 	var id := power_id.strip_edges().to_lower()
 	var flavor := get_power_flavor_text(id)
 	match id:
-		"patient_hunter", "marked_prey":
-			var property := "patient_hunter_bonus_damage" if id == "patient_hunter" else "marked_prey_bonus_damage"
+		"patient_hunter", "marked_prey", "farshot":
+			var property := id + "_bonus_damage"
 			return _power_sentence(id, [_current_stat("+%d", int(player_reference.get(property)))], "build_detail")
 		"stormbrand", "spark_relay":
 			var values := POWER_PARAMETER_MAPPER.get_current_values(id, player_reference)
@@ -637,11 +642,8 @@ func _get_power_current_stats(power_id: String) -> String:
 		"sovereign_tempo":
 			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("+%.0f%%", float(player_reference.get("apex_momentum_speed_bonus")) * 100.0)], "build_detail"))
 		"pillar_convergence":
-			var cs_ratio := float(player_reference.get("convergence_surge_damage_ratio"))
-			var cs_hits := maxi(2, 6 - int(round(cs_ratio * 8.0)))
-			var cs_window := 1.2 + cs_ratio * 1.8
-			var cs_pulse := maxf(0.14, 0.3 - cs_ratio * 0.25)
-			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%d", cs_hits), _current_stat("%.2fs", cs_window), _current_stat("%.2fs", cs_pulse)], "build_detail"))
+			var ratio := float(player_reference.get("convergence_surge_damage_ratio"))
+			return _flavor_detail(flavor, _power_sentence(id, [_current_stat("%d", CONVERGENCE_RULES.charges(ratio)), _current_stat("%.0f%%", 100.0 * CONVERGENCE_RULES.damage_ratio(ratio)), _current_stat("%.0f", CONVERGENCE_RULES.radius(ratio))], "build_detail"))
 		"unbroken_oath":
 			var resist := float(player_reference.get("indomitable_spirit_damage_reduction")) * 100.0
 			var fill_req := INDOMITABLE_OATH_FILL_REQUIREMENT
@@ -895,7 +897,7 @@ func _get_upgrade_card_stats(upgrade_id: String) -> String:
 	var next_val: Variant = preview.get("next")
 	var flavor := get_power_flavor_text(id)
 	match id:
-		"first_strike", "bloodpact", "severing_edge", "iron_skin", "patient_hunter", "marked_prey":
+		"first_strike", "bloodpact", "severing_edge", "iron_skin", "patient_hunter", "marked_prey", "farshot":
 			return _power_sentence(id, [_stat("+%d", int(cur_val), int(next_val), false)], "reward_card")
 		"shatterwake":
 			return _shatterwake_display_stats(int(cur_val), int(next_val), int(cur_val) == 0, "reward_card")
@@ -932,17 +934,11 @@ func _get_upgrade_card_stats(upgrade_id: String) -> String:
 		"pillar_convergence":
 			var cur_ratio := float(cur_val)
 			var next_ratio := float(next_val)
-			var cur_hits_needed := maxi(2, 6 - int(round(cur_ratio * 8.0)))
-			var next_hits_needed := maxi(2, 6 - int(round(next_ratio * 8.0)))
-			var cur_window := 1.2 + cur_ratio * 1.8
-			var next_window := 1.2 + next_ratio * 1.8
-			var cur_pulse_every := maxf(0.14, 0.3 - cur_ratio * 0.25)
-			var next_pulse_every := maxf(0.14, 0.3 - next_ratio * 0.25)
 			var is_initial := cur_ratio == 0.0
-			var hits_stat := _stat("%d", cur_hits_needed, next_hits_needed, is_initial)
-			var window_stat := _stat("%.2fs", cur_window, next_window, is_initial)
-			var pulse_stat := _stat("%.2fs", cur_pulse_every, next_pulse_every, is_initial)
-			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [hits_stat, window_stat, pulse_stat], "reward_card"))
+			var charges := _stat("%d", CONVERGENCE_RULES.charges(cur_ratio), CONVERGENCE_RULES.charges(next_ratio), is_initial)
+			var power := _stat("%.0f%%", 100.0 * CONVERGENCE_RULES.damage_ratio(cur_ratio), 100.0 * CONVERGENCE_RULES.damage_ratio(next_ratio), is_initial)
+			var radius := _stat("%.0f", CONVERGENCE_RULES.radius(cur_ratio), CONVERGENCE_RULES.radius(next_ratio), is_initial)
+			return _reward_flavor_first_desc(is_initial, flavor, _power_sentence(id, [charges, power, radius], "reward_card"))
 		"unbroken_oath":
 			var cur_resist := float(cur_val) * 100.0
 			var next_resist := float(next_val) * 100.0

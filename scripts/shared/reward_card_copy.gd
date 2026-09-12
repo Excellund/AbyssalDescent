@@ -15,7 +15,7 @@ static func _authored_explanation(power_id: String, level: int, prismatic: bool)
 				return "Your {kw:electric} damage {kw:mark|Marks} foes and {kw:slow|Slows} already {kw:mark|Marked} foes. Each foe can receive these effects once per original action."
 			return "Your {kw:electric} damage {kw:mark|Marks} foes, increasing the damage they take from all players. Each foe can be {kw:mark|Marked} once per original action."
 		"spark_relay":
-			return "Your {kw:burst} damage fires one {kw:electric} {kw:projectile} from your body toward the struck foe, once per original action. Solid cover blocks it."
+			return "Your {kw:burst} damage fires a seeking {kw:electric} {kw:projectile} from your body, once per original action. It finds another living foe if its target dies. Solid cover blocks it."
 		"shatterwake":
 			return "Your {kw:projectile} damage releases a {kw:burst} around the struck foe, once per original action. The struck foe can also take {kw:burst} damage."
 		"razor_wind":
@@ -96,10 +96,10 @@ static func _authored_explanation(power_id: String, level: int, prismatic: bool)
 			return "Hold {kw:attack} after a swing, aim, then release a forward {kw:burst} with backward {kw:recoil}. Quick taps still attack immediately; each blast spends one charge."
 		"razor_orbit":
 			if level >= 3:
-				return "Aim and hold {kw:dash} to {kw:orbit} a foe or column for 1.4 seconds; release to depart. If the foe anchor dies, aim at another to transfer once, up to 2.4 seconds total."
+				return "Hold {kw:dash} to {kw:orbit} an aimed foe or column for 1.4s. Release {kw:dash} to steer your escape. If the foe dies, aim at another to transfer once (2.4s total)."
 			if level >= 2:
-				return "Aim at a foe or column and hold {kw:dash} through its end to {kw:orbit} the anchor with cutting strikes. Release to depart, or leave after 1.4 seconds."
-			return "Aim at a foe and keep {kw:dash} held after it ends to {kw:orbit} them, cutting as you move. Release to depart, or leave automatically after 1.4 seconds."
+				return "Aim at a foe or column and hold {kw:dash} through its end to {kw:orbit} and cut for up to 1.4s. Release {kw:dash} to steer your escape with movement input."
+			return "Aim at a foe and hold {kw:dash} through its end to {kw:orbit} and cut for up to 1.4s. Release {kw:dash} to steer your escape with movement input."
 		"returning_crescent":
 			if level >= 3:
 				return "{kw:attack|Attacks} throw returning {kw:projectile|Projectiles} that bounce once off walls or obstacles outward. Keep up to two in flight; each hits a foe once outward and once returning."
@@ -113,7 +113,7 @@ static func _authored_explanation(power_id: String, level: int, prismatic: bool)
 		"sovereign_tempo":
 			return "{kw:attack_hit|Attack hits} or damage to already {kw:mark|Marked} foes build Tempo once per action. Finishing {kw:dash}, {kw:recoil} or {kw:orbit} spends it in a {kw:burst} that cannot rebuild Tempo."
 		"pillar_convergence":
-			return "{kw:attack_hit|Attack hits} or {kw:electric} damage charge a pulsing {kw:field} that follows you. Each action adds one charge; charging pauses while the {kw:field} is active."
+			return "{kw:attack_hit|Attack hits} or {kw:electric} damage charge a seal at the struck foe. After 0.8s it {kw:burst|Bursts}; your {kw:field} damage inside detonates it early for 50% more damage. One seal at a time."
 		"unbroken_oath":
 			return "Gain damage resistance. {kw:attack_hit|Attack hits} fill Oath faster when you strike several foes; filling the bar empowers your next {kw:attack}, which spends it even if you miss."
 		"edict_of_the_court":

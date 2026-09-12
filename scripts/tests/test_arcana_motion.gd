@@ -719,7 +719,7 @@ func _test_carry_hitch_bound() -> void:
 	motion.process_movement(0.05, Vector2.ZERO)
 	_check(is_equal_approx(player.global_position.x, carry_speed * 0.05), "Carry advances normally before a hitch")
 	motion.process_movement(0.75, Vector2.ZERO)
-	_check(absf(player.global_position.x - carry_speed * 0.15) < 0.01 and motion.carry_left == 0.0, "A long frame moves only the remaining carry duration")
+	_check(absf(player.global_position.x - carry_speed * MOTION.ORBIT_DISMOUNT_DURATION) < 0.01 and motion.carry_left == 0.0, "A long frame moves only the remaining carry duration")
 	var end_position := player.global_position
 	_check(not motion.process_movement(0.05, Vector2.ZERO) and player.global_position == end_position, "Expired carry cannot move the player again")
 	await _release_actions()
@@ -852,7 +852,7 @@ func _test_fixed_orbit_direction() -> void:
 			start = player.global_position
 			motion.process_movement(0.02, Vector2.ZERO)
 			_check((player.global_position - start).normalized().dot(last_displacement.normalized()) > 0.95, "Release carry continues the last circular displacement instead of reversing")
-			motion.process_movement(0.20, Vector2.ZERO)
+			motion.process_movement(MOTION.ORBIT_DISMOUNT_DURATION, Vector2.ZERO)
 			_check(not motion.owns_movement(), "Fixed-direction detach still ends after bounded carry")
 			await _release_actions()
 			_free_world()
@@ -968,7 +968,7 @@ func _test_orbit_release_feedback() -> void:
 		var departure := motion._orbit_hint_origin
 		motion.process_movement(0.02, Vector2.ZERO)
 		_check(motion._orbit_hint_origin == departure and player.global_position.distance_to(departure) > 0.0, "Departure hint remains at the real release position while carry moves")
-		motion._process(0.16)
+		motion._process(MOTION.ORBIT_RELEASE_HINT + 0.01)
 		_check(motion._orbit_hint_left == 0.0, "Departure hint expires after its short visual lifetime")
 		motion.start_orbit(target)
 		_advance_feedback_orbit(0.10)

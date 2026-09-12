@@ -118,7 +118,7 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"name": "Apex Breakwater",
 			"group": "Trial",
 			"color": Color(1.0, 0.66, 0.38, 1.0),
-			"desc": "Bait a wall charge, leave the marked lane, then punish its recovery.",
+			"desc": "Bait the ram into terrain to break Return Tide; otherwise enter its calm wake.\nHarbor Gate commits an opening where each player stands, then crosses the arena.\nHold the opening and pursue Breakwater after the crest passes.",
 		},
 		{
 			"name": "Last Stand",
@@ -157,10 +157,16 @@ static func _encounter_rows() -> Array[Dictionary]:
 			"desc": "Escort a drone across the room; enemies near it slow its progress.",
 		},
 		{
+			"name": "Relic Recovery",
+			"group": "Objective",
+			"color": Color(0.62, 0.88, 1.0, 1.0),
+			"desc": "Walk over three relics and carry them to the central receiver.\nEach living player carries one; entering the receiver delivers it.\nFirst pickups summon reinforcements. A fallen carrier drops their relic.",
+		},
+		{
 			"name": "Rest Site",
 			"group": "Special",
 			"color": Color(0.64, 1.0, 0.76, 1.0),
-			"desc": "Non-combat room that restores health.",
+			"desc": "Choose healing or an upgrade to a Boon you already own.\nUp to two eligible Boons are offered, keeping their normal limits.\nChoosing an upgrade replaces this visit's healing.",
 		},
 		{
 			"name": "Warden",
@@ -397,11 +403,14 @@ static func _biome_rows() -> Array[Dictionary]:
 	for biome_id: String in BIOMES.BIOME_DEFINITIONS:
 		var biome := BIOMES.get_biome(biome_id)
 		var identity := BIOMES.get_combat_identity(biome_id)
+		var rule := String(identity.rule)
+		if biome_id == "shatterfield":
+			rule = rule.replace(". ", ".\n")
 		rows.append({
 			"name": biome.name,
 			"act": biome.act,
 			"color": biome.color_theme.accent,
-			"desc": KEYWORDS.format_text(String(identity.rule) + "\n" + String(identity.tactic) + ("\nWithout cracked cover, warned fragment falls hurt you and foes.\nGreen fragment falls affect foes only." if biome_id == "shatterfield" else ""))
+			"desc": KEYWORDS.format_text(rule + "\n" + BIOMES.get_effect_text(biome_id).replace(". ", ".\n") + "\n" + String(identity.tactic) + ("\nWithout cracked cover, warned fragment falls hurt you and foes.\nChecked-shield HELP fragment falls affect foes only." if biome_id == "shatterfield" else ""))
 		})
 	return rows
 
@@ -409,8 +418,9 @@ static func _biomes_section_bbcode() -> String:
 	var lines: Array[String] = []
 	lines.append(_section_title_bbcode("Biomes"))
 	lines.append("Each biome changes every combat route with terrain or an effect you can use against foes.\nThe rules below describe ordinary rooms.")
-	lines.append("Breach, Undertow, Missions and Trials keep their arenas and add smaller, slower patterns\naround required objectives. If space is too tight, green biome zones affect foes only.")
-	lines.append("Boss and Apex arenas use green biome zones that affect foes only.\nEnemy ability warnings remain dangerous. Biome effects pause during rewards and introductions;\nRest Sites and the tutorial are calm.")
+	lines.append("Hover the biome name in the HUD for its current rule. Checked shields mean HELP;\ntriangles with ! mean DANGER. The HUD names targets, the active effect and its phase.\nA warning is preparation time: the effect starts when it ends.")
+	lines.append("Breach, Undertow, Missions and Trials keep their arenas and add smaller, slower patterns\naround required objectives. If space is too tight, checked-shield HELP affects foes only.")
+	lines.append("Boss and Apex arenas use checked-shield HELP that affects foes only.\nEnemy ability warnings remain dangerous. Biome effects pause during rewards and introductions;\nRest Sites and the tutorial are calm.")
 	lines.append("")
 	for act in [1, 2, 3]:
 		lines.append(_subsection_title_bbcode("Act %d" % act))
@@ -428,6 +438,101 @@ static func _mutators_section_bbcode() -> String:
 		lines.append("%s: %s" % [_mutator_title_bbcode(row), row.get("desc", "")])
 	return "\n".join(lines)
 
+## Ordinary foes and support specialists. Apex encounters keep their own rules
+## in Encounters; these entries describe the normal, unmodified enemy behavior.
+static func _enemy_rows() -> Array[Dictionary]:
+	return [
+		{
+			"id": "chaser", "name": "Chaser", "group": "Close pressure",
+			"read": "Closes directly and strikes repeatedly at close range.",
+			"response": "Keep an exit open; step out of reach before a pack surrounds you.",
+		},
+		{
+			"id": "charger", "name": "Charger", "group": "Close pressure",
+			"read": "Shows a straight lane, then rushes along that fixed direction.",
+			"response": "Step sideways out of the lane, then use its recovery to deal damage.",
+		},
+		{
+			"id": "lurker", "name": "Lurker", "group": "Close pressure",
+			"read": "Pauses near you, keeps aiming, then commits to a quick pounce.",
+			"response": "Move across its path as it lunges; the pause still tracks you.",
+		},
+		{
+			"id": "ram", "name": "Ram", "group": "Close pressure",
+			"read": "Chains three short charges, aiming again between each rush.",
+			"response": "Keep moving through the whole sequence. Strike after the last rush.",
+		},
+		{
+			"id": "spectre", "name": "Spectre", "group": "Close pressure",
+			"read": "Predicts your movement, commits its blink, then warns a forward strike.",
+			"response": "Change course after the blink target settles; leave the strike lane.",
+		},
+		{
+			"id": "archer", "name": "Archer", "group": "Ranged pressure",
+			"read": "Keeps its distance and fires three arrows along one locked aim.",
+			"response": "Move across the aim line or use solid cover to stop the arrows.",
+		},
+		{
+			"id": "lancer", "name": "Lancer", "group": "Ranged pressure",
+			"read": "Aims ahead of your facing; its bolt leaves a damaging floor zone.",
+			"response": "Leave the marked landing point and avoid the zone until it expires.",
+		},
+		{
+			"id": "drifter", "name": "Drifter", "group": "Ranged pressure",
+			"read": "Sends expanding rings of pellets, each with one broad gap.",
+			"response": "Find the gap in each new wave; the next ring can open elsewhere.",
+		},
+		{
+			"id": "pyre", "name": "Pyre", "group": "Dangerous ground",
+			"read": "Pursues you in melee and leaves an expanding fire zone when killed.",
+			"response": "Leave room to retreat from the corpse; its fire keeps dealing damage.",
+		},
+		{
+			"id": "weaver", "name": "Weaver", "group": "Dangerous ground",
+			"read": "Stops and fires webs outward, leaving damaging zones where they land.",
+			"response": "Move away during its windup, then steer around the scattered web zones.",
+		},
+		{
+			"id": "tether", "name": "Tether", "group": "Dangerous ground",
+			"read": "Pairs with another Tether, then warns and sweeps a damaging beam.",
+			"response": "Leave the space between the pair. Defeating either end breaks the beam.",
+		},
+		{
+			"id": "sentinel", "name": "Sentinel", "group": "Dangerous ground",
+			"read": "Slowly advances while a damaging cone rotates around its body.",
+			"response": "Follow behind the sweep or move beyond its reach; the cone is active.",
+		},
+		{
+			"id": "shielder", "name": "Shielder", "group": "Protection",
+			"read": "Its turning shield reduces damage from the front. It warns a nearby slam.",
+			"response": "Circle to an exposed side and leave the slam ring before it strikes.",
+		},
+		{
+			"id": "keeper", "name": "Keeper", "group": "Protection",
+			"read": "Wards up to two nearby allies. They resist damage and survive at 1 HP.",
+			"response": "Defeat the Keeper or break its links with solid cover.\nThen finish the exposed allies before it can ward them again.",
+		},
+	]
+
+static func _enemies_section_bbcode() -> String:
+	var lines: Array[String] = [
+		_section_title_bbcode("Enemy Field Guide"),
+		"Read the threat, then choose your opening. These are ordinary enemy patterns;",
+		"Mutators can change their pressure. Find Apex rules under Encounters.",
+		"",
+	]
+	var rows := _enemy_rows()
+	for group_name in ["Close pressure", "Ranged pressure", "Dangerous ground", "Protection"]:
+		lines.append(_subsection_title_bbcode(group_name))
+		for row in rows:
+			if row.group != group_name:
+				continue
+			lines.append("[b]%s[/b]" % row.name)
+			lines.append(KEYWORDS.format_text(row.read))
+			lines.append("[color=#BFD2E8]%s[/color]" % KEYWORDS.format_text(row.response))
+			lines.append("")
+	return "\n".join(lines)
+
 ## Use the same definitions and restrained semantic styling as power details.
 static func _build_keywords_section_bbcode() -> String:
 	var lines: Array[String] = [_section_title_bbcode("Build Keywords"), ""]
@@ -435,42 +540,6 @@ static func _build_keywords_section_bbcode() -> String:
 		if KEYWORDS.PLAIN_TERMS.has(id):
 			continue
 		lines.append("%s  [color=#BFD2E8]—[/color]  %s" % [KEYWORDS.keyword_bbcode(id), KEYWORDS.KEYWORDS[id].definition])
-	return "\n".join(lines)
-
-static func _power_rules_section_bbcode() -> String:
-	var rows: Array[Dictionary] = [
-		{"name": "Patient Hunter", "rule": KEYWORDS.format_text("Adds 12 {kw:damage_stat} per pick against already {kw:slow|Slowed} foes."), "detail": "Up to three picks. The condition is checked before damage\nand scales with contact time and copied-effect strength."},
-		{"name": "Marked Prey", "rule": KEYWORDS.format_text("Adds 12 {kw:damage_stat} per pick against already {kw:mark|Marked} foes."), "detail": "Up to three picks. Any player's active Mark can satisfy the condition.\nA Mark applied by this damage helps later damage."},
-		{"name": "Stormbrand", "rule": KEYWORDS.format_text("Your {kw:electric} damage applies a timed {kw:mark} after damage,\nonce per foe per original action."), "detail": KEYWORDS.format_text("{kw:mark}: 10/14/18% for 3/3.5/4s; Prismatic 22.5% for 5s.\nLevel 3: an already {kw:mark|Marked} foe is also {kw:slow|Slowed} to 75% speed for 1s.\nYour {kw:slow}-duration bonuses apply. The strongest active {kw:mark} benefits all players.")},
-		{"name": "Spark Relay", "rule": KEYWORDS.format_text("Your {kw:burst} damage fires one {kw:electric} {kw:projectile} from your body\ntoward the struck foe's position, once per original action."), "detail": KEYWORDS.format_text("Bolt damage: 50/60/70% of the triggering {kw:burst}'s base damage; Prismatic 87.5%.\nHits at most 1/2/3 different foes, once each. Travels 440; Prismatic 528.\nFollows a fixed line, even if the trigger foe dies. Solid cover blocks it.\nAll targets and descendants share this action's one Spark Relay allowance.")},
-		{"name": "Shatterwake", "rule": KEYWORDS.format_text("Your {kw:projectile} damage releases one {kw:burst} per original action,\nincluding the struck foe if alive."), "detail": KEYWORDS.format_text("Damage: 60/80% of the triggering {kw:projectile}'s base damage; radius 100/125.\nSolid cover blocks the {kw:burst}. Return legs and descendants share its allowance.\nSpark Relay and Shatterwake each keep their own one-per-action allowance;\ncombined reactions can chain, but cannot repeatedly recreate each other.")},
-		{"name": "Edict of the Court", "rule": KEYWORDS.format_text("Your {kw:kill|Kills} release a damaging, {kw:slow|Slowing} {kw:burst} around the defeated foe,\nonce per original action."), "detail": KEYWORDS.format_text("Damage: 80/120% of Damage; radius 120/160. Each nearby foe is struck once.\nAfter damage, survivors are {kw:slow|Slowed} to 75% speed for 1.5s.\nYour {kw:slow}-duration bonuses apply. Further kills share the action's one {kw:burst};\nits descendants cannot create another Edict {kw:burst}.")},
-		{"name": "Lacuna Well", "rule": KEYWORDS.format_text("Your {kw:kill|Kills} leave one damaging, {kw:slow|Slowing} {kw:field} for 2.4s; a new well replaces it.\nYour damage gains one bonus against foes in any {kw:field} you own."), "detail": KEYWORDS.format_text("Base pulse: 11.76/23.52 + 13% of Damage, every 0.32s; radius 79.2/104.4.\n{kw:field} bonus: +20.3/26.6%; overlapping {kw:field|Fields} share this bonus.\nEach pulse {kw:slow|Slows} survivors to 75% speed for 0.45s after damage.\nYour {kw:slow}-duration bonuses apply. Well kills cannot renew the well.")},
-		{"name": "Null Corridor", "rule": KEYWORDS.format_text("{kw:dash} leaves a {kw:field} that damages foes, then {kw:mark|Marks} survivors.\nEach trail can affect the same foe again after 0.5s."), "detail": KEYWORDS.format_text("Damage: 24/28% of Damage; width 39/46; lasts 3.6/4s.\n{kw:mark}: +10/15% damage taken for 1s; later ticks refresh it.\nThe strongest active {kw:mark} benefits all players. A new {kw:mark} helps later damage.\nAll ticks retain the original {kw:dash}'s reaction allowances.")},
-		{"name": "Blast Drive", "rule": "Hold Attack, then release a blast that propels you backward.", "detail": "Charge: 0.25–0.65s. Level 2: two charges. Level 3: steer recoil."},
-		{"name": "Razor Orbit", "rule": "Aim and hold Dash to circle a foe for up to 1.4s; release to depart.", "detail": "Level 2: hook columns. Level 3: transfer once when the anchor dies (2.4s total)."},
-		{"name": "Returning Crescent", "rule": "Attack throws a blade; move to guide its return through foes.", "detail": "Hits once each way. Level 2: two blades. Level 3: one outward bounce."},
-		{"name": "Static Wake", "rule": "Dash leaves up to two Electric Fields; overlapping trails share damage.", "detail": "Only Dash draws trails. Damage scales with contact time. Level 3: Slow after damage."},
-		{"name": "Hunter's Snare", "rule": "Attack hits Slow foes; bonus damage requires an already Slowed foe.", "detail": "Level 1: Attack damage. Level 2: all damage. Level 3: double your Slow durations."},
-		{"name": "Wraithstep", "rule": "Dash Marks foes. At level 2, Attack hits on Marked foes release a Burst.", "detail": "One Burst per Attack. Level 3 continues through up to three more Marked foes."},
-		{"name": "Eclipse Mark", "rule": "Kills Mark nearby foes. Damage does not spend a Mark."},
-		{"name": "Dread Resonance", "rule": "Attack hits Mark and build damage stacks against that foe.", "detail": "Once per foe per Attack. Stacks clear when you or the foe dies, or the room ends."},
-		{"name": "Storm Crown", "rule": "Dealing damage charges chain lightning; each foe counts once per action.", "detail": "One chain per action; never charges itself. Level 2: one extra jump through a Slowed foe."},
-		{"name": "Ruinous Impact", "rule": "Attack hits and eligible Pushes or Pulls arm a Launch that bursts on Impact.", "detail": "Bosses and Apex foes compress in place. Impact bursts cannot cause another Launch."},
-		{"name": "Sovereign's Double", "rule": "Dash, Recoil or Orbit completion leaves a shade that Echoes your Attack.", "detail": KEYWORDS.format_text("{kw:echo|Echoes} deal 55% damage. Level 2: two {kw:echo|Echoes}. Further movement replaces the shade.\nA copied Blast Drive retains {kw:burst}; copied melee and Razor Wind retain their shapes.\nAll copies share the original action's reaction limits and spend no extra resources.")},
-		{"name": "Warden's Verdict", "rule": "Consecutive attack hits grow stronger; every fourth triggers a Burst.", "detail": "Resets after 2.2s without an attack hit. The same foe can count on later Attacks."},
-		{"name": "Sovereign Tempo", "rule": KEYWORDS.format_text("{kw:attack_hit|Attack hits} or your damage against already {kw:mark|Marked} foes build temporary move speed.\nFinishing {kw:dash}, {kw:recoil} or {kw:orbit} spends all stacks in a {kw:burst}."), "detail": KEYWORDS.format_text("One stack per original action across all foes, ticks and descendants.\nUp to six stacks; expire 1.8s after the last accepted stack.\nThe target must be {kw:mark|Marked} before damage.\nAccepted {kw:burst} damage refunds 0.12s of {kw:dash} cooldown per spent stack,\nonce per {kw:burst}; the {kw:burst} and its descendants cannot build Tempo.")},
-		{"name": "Pillar Convergence", "rule": KEYWORDS.format_text("{kw:attack_hit|Attack hits} or your {kw:electric} damage charge a pulsing {kw:field} that follows you."), "detail": KEYWORDS.format_text("One charge per original action across all foes, ticks and descendants.\nCharging pauses while the {kw:field} is active.\nAn action that qualifies during this window cannot charge it later,\neven with delayed damage after the {kw:field} ends.\nLevel 1: four charges, 1.60s duration and 0.25s pulses.\nLevel 2: two charges, 1.99s duration and 0.19s pulses.")},
-		{"name": "Sigil Chain", "rule": "Four attack hits arm a Field; a later Attack hit places it.", "detail": "Level 2: Slow. Level 3: stronger chains. Hexweaver's passive Burst detonates sigils."},
-		{"name": "Farline Volley", "rule": "Outer attack hits add arc and damage per stack; Dash clears the stacks.", "detail": "Level 2: Slow from 2 stacks (4 Prismatic). Level 3: Dash bursts only at full stacks."},
-		{"name": "Conditional Boons", "rule": "Bonuses scale with the damage source, Field contact time and Echo strength.", "detail": "Conditions apply once per target; copied damage never doubles the same bonus."},
-	]
-	var lines: Array[String] = [_section_title_bbcode("Power Rules"), ""]
-	for row in rows:
-		lines.append("[b]%s[/b]  [color=#BFD2E8]—[/color]  %s" % [row.name, row.rule])
-		if row.has("detail"):
-			lines.append("[color=#9BAFC4]%s[/color]" % row.detail)
-		lines.append("")
 	return "\n".join(lines)
 
 static func _character_passives_section_bbcode() -> String:
@@ -494,8 +563,8 @@ static func glossary_sections() -> Array[Dictionary]:
 	return [
 		{"label": "Reward Tiers", "bbcode": _reward_tiers_section_bbcode()},
 		{"label": "Build Keywords", "bbcode": _build_keywords_section_bbcode()},
-		{"label": "Power Rules", "bbcode": _power_rules_section_bbcode()},
 		{"label": "Character Passives", "bbcode": _character_passives_section_bbcode()},
+		{"label": "Enemy Field Guide", "bbcode": _enemies_section_bbcode()},
 		{"label": "Encounters", "bbcode": _encounters_section_bbcode()},
 		{"label": "Biomes", "bbcode": _biomes_section_bbcode()},
 		{"label": "Mutators", "bbcode": _mutators_section_bbcode()},

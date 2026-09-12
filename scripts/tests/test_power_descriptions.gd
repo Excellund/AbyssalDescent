@@ -214,7 +214,7 @@ func _test_motion_damage_descriptions() -> void:
 				var actual_damage := 10000 - enemy.get_current_health()
 				_check(actual_damage == int(round(float(player.damage) * MOTION.ORBIT_CUT_DAMAGE_RATIO * damage_scale)), "Orbit L%d cut damage matches its description ratio" % level)
 				_check(text.contains("Cut damage %.1f%% of Damage" % (MOTION.ORBIT_CUT_DAMAGE_RATIO * 100.0 * damage_scale)) and text.contains("hook reach %.0f" % (MOTION.ORBIT_ACQUIRE_RANGE * reach_scale)), "Orbit L%d displays cut ratio and acquisition reach" % level)
-				_check(text.contains("1.4 seconds") and text.to_lower().contains("release to depart") and (level < 3 or text.contains("transfer once, up to 2.4 seconds total")), "Orbit description states its lifetime, early release and unlocked transfer cap")
+				_check(text.contains("1.4s") and text.contains("Release Dash to steer your escape") and (level < 3 or (text.contains("transfer once") and text.contains("2.4s total"))), "Orbit description states its lifetime, directed early escape and unlocked transfer cap")
 			_check_current_bounds(text, "%s L%d current" % [power_id, level])
 			_free_world()
 

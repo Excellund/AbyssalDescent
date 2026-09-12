@@ -1,5 +1,6 @@
 extends "res://scripts/enemy_base.gd"
 
+const ATTACK_CALLOUT := preload("res://scripts/shared/enemy_attack_callout.gd")
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const LACUNA_SEAM_OVERLAY_SCRIPT := preload("res://scripts/lacuna_seam_overlay.gd")
 const LACUNA_ATTACK_OVERLAY_SCRIPT := preload("res://scripts/lacuna_attack_overlay.gd")
@@ -347,6 +348,8 @@ func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
 	queue_redraw()
 
 func _process_network_visuals(delta: float) -> void:
+	var previous_callout := get_attack_callout()
+	_null_ring_pull_timer = maxf(0.0, _null_ring_pull_timer - delta)
 	_ensure_charge_motion()
 	_charge_motion.tick_replica(delta)
 	if boss_state == STATE_WINDUP or boss_state == STATE_ATTACK or boss_state == STATE_RECOVER:
@@ -372,6 +375,9 @@ func _process_network_visuals(delta: float) -> void:
 		expired_idx -= 1
 	_sync_seam_overlay()
 	_sync_attack_overlay()
+	if not previous_callout.is_empty() or previous_callout != get_attack_callout():
+		queue_redraw()
+
 
 func _update_target_tracking(delta: float) -> void:
 	if not is_instance_valid(target) or delta <= 0.000001:
@@ -594,7 +600,7 @@ func _apply_sever_hit(start: Vector2 = Vector2.INF, finish: Vector2 = Vector2.IN
 			return
 
 func _apply_null_ring_hit() -> void:
-	var centers := _locked_null_ring_centers if not _locked_null_ring_centers.is_empty() else [_locked_null_ring_center]
+	var centers: Array = _locked_null_ring_centers if not _locked_null_ring_centers.is_empty() else [_locked_null_ring_center]
 	var damaged: Dictionary = {}
 	for hit_target in _get_damageable_targets():
 		if not is_instance_valid(hit_target):
@@ -877,6 +883,23 @@ func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
 				if entry is Dictionary:
 					seam_zones.append(entry as Dictionary)
 
+func get_attack_callout() -> String:
+	if state_time_left <= 0.0:
+		return ""
+	if boss_state == STATE_ATTACK:
+		if active_attack == ATTACK_SEVER:
+			return "Sever"
+		if active_attack == ATTACK_NULL_RING and _null_ring_pull_timer > 0.0:
+			return "Null Ring / COLLAPSE"
+		return ""
+	if boss_state != STATE_WINDUP:
+		return ""
+	match active_attack:
+		ATTACK_SEVER: return "Sever"
+		ATTACK_NULL_RING: return "Null Ring"
+		ATTACK_ECHO_CROSS: return "Echo Cross"
+	return ""
+
 func _draw() -> void:
 	var facing := visual_facing_direction if visual_facing_direction.length_squared() > 0.000001 else Vector2.RIGHT
 	if is_spawn_transporting():
@@ -912,6 +935,8 @@ func _draw() -> void:
 		if active_attack == ATTACK_NULL_RING:
 			_draw_attack_telegraph()
 		_draw_role_state_icon(facing, body_radius)
+	ATTACK_CALLOUT.draw_callout(self, get_attack_callout(), -100.0)
+
 
 func _draw_lacuna_body(body_radius: float, body_color: Color, core_color: Color, facing: Vector2, pulse: float, threat_t: float, enrage_t: float) -> void:
 	var side := Vector2(-facing.y, facing.x)
@@ -1061,9 +1086,9 @@ func _draw_attack_telegraph() -> void:
 			draw_line(start + slash_side * (sever_width * 0.7), end + slash_side * (sever_width * 0.22), Color(0.84, 1.0, 0.95, alpha * 0.36), 1.6)
 			draw_line(start - slash_side * (sever_width * 0.7), end - slash_side * (sever_width * 0.22), Color(0.84, 1.0, 0.95, alpha * 0.24), 1.2)
 		ATTACK_NULL_RING:
-			var tele_centers := _locked_null_ring_centers if not _locked_null_ring_centers.is_empty() else [_locked_null_ring_center]
+			var tele_centers: Array = _locked_null_ring_centers if not _locked_null_ring_centers.is_empty() else [_locked_null_ring_center]
 			var danger_mid := (null_ring_safe_radius + null_ring_radius) * 0.5
-			for ring_center in tele_centers:
+			for ring_center: Vector2 in tele_centers:
 				var local_center := ring_center - global_position
 				draw_circle(local_center, null_ring_radius, Color(0.16, 0.96, 0.74, alpha * 0.24))
 				draw_arc(local_center, null_ring_radius, 0.0, TAU, 60, Color(0.76, 1.0, 0.92, alpha), 3.2)
@@ -1112,7 +1137,7 @@ func _draw_attack_afterglow(facing: Vector2) -> void:
 			draw_line(-facing * 2.0, -facing * (glow_len * 0.82), Color(0.9, 1.0, 0.98, 0.32 * fade), 4.0)
 		ATTACK_NULL_RING:
 			var ring_radius := null_ring_radius * (1.0 + (1.0 - t) * 0.24)
-			var glow_centers := _locked_null_ring_centers if not _locked_null_ring_centers.is_empty() else [_locked_null_ring_center]
+			var glow_centers: Array = _locked_null_ring_centers if not _locked_null_ring_centers.is_empty() else [_locked_null_ring_center]
 			for glow_center in glow_centers:
 				draw_arc(glow_center - global_position, ring_radius, 0.0, TAU, 56, Color(0.3, 1.0, 0.84, 0.42 * fade), 4.2)
 		ATTACK_ECHO_CROSS:

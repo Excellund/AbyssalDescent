@@ -681,8 +681,15 @@ func _append_clear_groups(profile: Dictionary, defs: Dictionary, clear_by_charac
 	if clear_by_character.is_empty():
 		return
 	_oath_list.add_child(_make_oath_group_header("Vessel Progression"))
-	var character_keys: Array = clear_by_character.keys()
-	character_keys.sort()
+	# Follow the same progression that unseals vessels after a clear.
+	var character_keys: Array[String] = []
+	for character_id: String in META_PROGRESS_STORE.CHARACTER_UNLOCK_CHAIN:
+		if clear_by_character.has(character_id):
+			character_keys.append(character_id)
+	# Keep future goals visible even before a vessel joins the unlock chain.
+	for character_id: String in clear_by_character:
+		if not character_keys.has(character_id):
+			character_keys.append(character_id)
 	for character_id_variant in character_keys:
 		var character_id: String = String(character_id_variant)
 		var oath_ids: Array[String] = _sort_clear_oaths(clear_by_character[character_id] as Array)
@@ -734,9 +741,11 @@ func _make_collapse_header_button(text: String, collapsed: bool) -> Button:
 func _make_oath_card(def: Dictionary, completed: bool) -> PanelContainer:
 	var card := PanelContainer.new()
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var available := OATHS_REGISTRY.is_bearing_eligible(def, _selected_oath_bearing())
+	var selected_bearing := _selected_oath_bearing()
+	var available := selected_bearing < 0 or OATHS_REGISTRY.is_bearing_eligible(def, selected_bearing)
 	card.add_theme_stylebox_override("panel", _make_oath_card_style(completed, available))
 	card.set_meta(&"oath_bearing_eligible", available)
+	card.set_meta(&"oath_setup_bearing", selected_bearing)
 	card.set_meta(&"oath_completed", completed)
 
 	var inner := VBoxContainer.new()
@@ -769,7 +778,12 @@ func _make_oath_card(def: Dictionary, completed: bool) -> PanelContainer:
 	requirement_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	requirement_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	requirement_label.add_theme_font_size_override("font_size", 21)
-	requirement_label.add_theme_color_override("font_color", Color(0.74, 1.0, 0.78, 0.96) if completed or available else Color(0.96, 0.76, 0.46, 0.96))
+	var requirement_color := Color(0.72, 0.84, 0.96, 0.90)
+	if completed or (selected_bearing >= 0 and available):
+		requirement_color = Color(0.74, 1.0, 0.78, 0.96)
+	elif selected_bearing >= 0:
+		requirement_color = Color(0.96, 0.76, 0.46, 0.96)
+	requirement_label.add_theme_color_override("font_color", requirement_color)
 	inner.add_child(requirement_label)
 
 	var reward_text: String = _format_oath_reward(def)
@@ -816,7 +830,12 @@ func _format_oath_requirement(def: Dictionary, completed: bool) -> String:
 		requirement = "%s Bearing" % OATHS_REGISTRY._bearing_label(int((def.get("params", {}) as Dictionary).get("bearing_tier", minimum)))
 	elif minimum > 0:
 		requirement = OATHS_REGISTRY._bearing_label(minimum) + ("+" if minimum < 3 else "")
-	var status := "Completed" if completed else ("Available" if OATHS_REGISTRY.is_bearing_eligible(def, _selected_oath_bearing()) else "Requires another Bearing")
+	if completed:
+		return requirement + " · Completed"
+	var selected_bearing := _selected_oath_bearing()
+	if selected_bearing < 0:
+		return requirement
+	var status := "Bearing matches setup" if OATHS_REGISTRY.is_bearing_eligible(def, selected_bearing) else "Bearing differs from setup"
 	return "%s · %s" % [requirement, status]
 
 func _format_oath_reward(def: Dictionary) -> String:
@@ -838,11 +857,11 @@ func _format_oath_reward(def: Dictionary) -> String:
 # --- builders ---
 
 func _selected_oath_bearing() -> int:
-	# A previous setup's cached bearing must not leak into ordinary menu browsing.
+	# Browsing Oaths is independent of the last run and any previous setup.
+	# Only an explicit current setup has a Bearing against which to check goals.
 	if _run_setup_mode_enabled and _setup_bearing >= 0:
 		return _setup_bearing
-	var run_context := get_node_or_null(RUN_CONTEXT_PATH) as RUN_CONTEXT_SCRIPT
-	return run_context.get_current_difficulty_tier() if run_context != null else -1
+	return -1
 
 func _build_modifier_lock_banner() -> PanelContainer:
 	return _build_notice_banner(

@@ -157,6 +157,11 @@ func _run() -> void:
 	world.encounter_profile_builder.set_multiplayer_party_size(2)
 	_write("built-" + role, true)
 	check(await _until(func(): return _has("built-host") and _has("built-client")), "Both actual Main instances are initialized before profile RPCs")
+	world.run_summary_recorder._schedule_party_provenance(true)
+	check(await _until(func(): return not GameStateReplicationService.get_current_run_sync_token().is_empty()), "Native run provenance is bound before scoped room choices")
+	_write("run-token-" + role, GameStateReplicationService.get_current_run_sync_token())
+	await _barrier("provenance-bound")
+	check(_read("run-token-host") == _read("run-token-client"), "Both actual Main owners share the current run identity")
 	for index in cases.size():
 		var key := str(index)
 		if role == "host":
@@ -488,7 +493,7 @@ func _offer_and_request(key: String, host_offers: Array[Dictionary], expected_la
 		elif CONTRACTS.door_option_kind_id(option) == ENUMS.DoorKind.BOSS:
 			check(preview == ("Complete the descent" if CONTRACTS.door_option_encounter_key(option) == "lacuna" else "Boss power"), "Replicated boss payoff matches this exact boss")
 		elif CONTRACTS.door_option_kind_id(option) == ENUMS.DoorKind.REST:
-			check(preview == "Restore health", "Replicated rest payoff promises its actual benefit")
+			check(preview == "Recover or improve an owned Boon", "Replicated Rest payoff explains both actual benefits")
 		else:
 			check(preview == "Boon", "Replicated standard payoff preserves the Boon category")
 	await _barrier("offers-inspected-" + key)
@@ -580,6 +585,22 @@ func _test_boss_descent(stage: int) -> void:
 	_check_score_continuity("Rest entry and deferred rest-door payloads preserve native score playback")
 	check(world.run_summary_recorder.run_summary_tracker.reached_act == stage + 1, "Actual next-act entry advances reached_act on both peers")
 	await _barrier("next-act-" + boss_key)
+	check(world.reward_selection_ui.is_active() and world.reward_selection_ui.reward_selection_mode == ENUMS.RewardMode.REST, "Rest entry opens the actual local owner's choice on both peers: " + boss_key)
+	check(not world.choosing_next_room and world.door_options.is_empty(), "Rest holds next doors until both owners choose: " + boss_key)
+	if role == "client":
+		world.reward_selection_ui.process_input(1.0)
+		world.reward_selection_ui._confirm_choice(0)
+	await _barrier("rest-client-chosen-" + boss_key)
+	check(not world.choosing_next_room and world.door_options.is_empty(), "One real Recover selection cannot advance the waiting host's Rest: " + boss_key)
+	if role == "host":
+		world.reward_selection_ui.process_input(1.0)
+		world.reward_selection_ui._confirm_choice(0)
+	check(await _until(func():
+		world.enemy_state_sync_receiver.flush_pending_door_syncs()
+		return not world.reward_selection_ui.is_active() and world.choosing_next_room and not world.door_options.is_empty()), "Both actual Recover choices release the next host-generated doors: " + boss_key)
+	_check_score_location(stage + 1, world.room_depth, false, "Resolved Rest retains its entered act and depth on both peers")
+	_check_score_continuity("Rest completion keeps the same native score playback before the next room")
+	await _barrier("rest-resolved-" + boss_key)
 
 func _defeat_caption(boss_id: String) -> String:
 	return "%s: \"%s\"" % [String(BOSS_CATALOGUE.NAMES[boss_id]), BOSS_CATALOGUE.get_defeat_line(boss_id)]

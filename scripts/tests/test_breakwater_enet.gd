@@ -2,6 +2,8 @@ extends "res://scripts/tests/test_boss_combinations_enet.gd"
 
 const BREAKWATER := preload("res://scripts/enemy_breakwater.gd")
 const COMBINATIONS := preload("res://scripts/tests/test_breakwater_combinations.gd")
+const RECORDER := preload("res://scripts/core/run_summary_recorder.gd")
+const DIFFICULTY_PROVIDER := preload("res://scripts/core/difficulty_scaling_provider.gd")
 const BREAKWATER_ID := 701
 var breakwater: COMBINATIONS.Breakwater
 var locked_state: Dictionary = {}
@@ -14,7 +16,9 @@ class ChargePlayer extends Player:
 		damage_taken.connect(func(_raw: int, _final: int, context: Dictionary): damage_contexts.append(context.duplicate(true)))
 
 func _run() -> void:
-	super._run()
+	await super._run()
+	if is_instance_valid(deadline_timer):
+		deadline_timer.start(40.0)
 	get_multiplayer().peer_disconnected.connect(MultiplayerSessionManager._on_peer_disconnected)
 
 func setup_actors(client_id: int) -> void:
@@ -49,6 +53,14 @@ func setup_actors(client_id: int) -> void:
 	breakwater.target = remote_player if role == "client" else local_player
 	breakwater.target_candidates = [local_player, local_player, remote_player]
 	world.enemy_state_sync_broadcaster.register_enemy(breakwater, BREAKWATER_ID)
+	# Exercise the real run identity/provenance boundary for client damage.
+	RunContext.set_multiplayer_session("breakwater-loopback", role == "host")
+	world.difficulty_provider = DIFFICULTY_PROVIDER.new(world)
+	GameStateReplicationService.initialize(world)
+	world.run_summary_recorder = RECORDER.new(world)
+	world.run_summary_recorder.reset_summary_tracker()
+	world.run_summary_recorder.initialize(false)
+	world.run_summary_recorder.mark_run_start()
 
 func send_state(state: Dictionary = {}) -> Dictionary:
 	var actual := breakwater.get_network_runtime_state() if state.is_empty() else state
@@ -64,7 +76,7 @@ func lock_charge() -> void:
 	check(breakwater.phase == BREAKWATER.Phase.LOCK, "Host locks a real finite charge")
 
 func snapshot() -> Dictionary:
-	return {"phase": breakwater.phase, "origin": breakwater.charge_origin, "end": breakwater.charge_end, "warnings": breakwater.get_warning_polygons(), "local_health": local_player.get_current_health(), "remote_health": remote_player.get_current_health(), "local_damage_calls": (local_player as ChargePlayer).damage_contexts.size(), "remote_damage_calls": (remote_player as ChargePlayer).damage_contexts.size(), "authority": breakwater.network_simulation_enabled, "health": breakwater.get_current_health()}
+	return {"phase": breakwater.phase, "origin": breakwater.charge_origin, "end": breakwater.charge_end, "warnings": breakwater.get_warning_polygons(), "callout": breakwater.get_attack_callout(), "local_health": local_player.get_current_health(), "remote_health": remote_player.get_current_health(), "local_damage_calls": (local_player as ChargePlayer).damage_contexts.size(), "remote_damage_calls": (remote_player as ChargePlayer).damage_contexts.size(), "authority": breakwater.network_simulation_enabled, "health": breakwater.get_current_health()}
 
 func host_scenarios(client_id: int) -> void:
 	joiner_id = client_id
@@ -72,6 +84,7 @@ func host_scenarios(client_id: int) -> void:
 	MultiplayerSessionManager.peer_disconnected.connect(world._on_multiplayer_peer_disconnected)
 	departed_registry = remote_player.upgrade_system.power_registry
 	await physics_frame
+	check(await until(func(): return world.run_summary_recorder.run_summary_tracker._received_provenance_peers.has(client_id), 6.0), "Native party handshake establishes the shared-damage run identity")
 	lock_charge()
 	locked_state = send_state()
 	world.fixture_command.rpc_id(client_id, "inspect_lock", {"origin": breakwater.charge_origin, "end": breakwater.charge_end})
@@ -144,7 +157,47 @@ func host_scenarios(client_id: int) -> void:
 	var origin := breakwater.global_position
 	check(breakwater.get_launch_state().compression, "Host resolves Ruinous as Apex compression")
 	breakwater.get_launch_state().step(breakwater, 0.17)
-	check(breakwater.global_position == origin and breakwater.get_current_health() == 831 and not breakwater.get_launch_state().active, "One host compression burst deals damage without displacement or recursion")
+	check(breakwater.global_position == origin and breakwater.get_current_health() == 831 and not breakwater.get_launch_state().active, "One host compression burst deals damage without displacement or recursion: health=%d origin=%s actual=%s active=%s" % [breakwater.get_current_health(), origin, breakwater.global_position, breakwater.get_launch_state().active])
+	# Complete the actual missed charge's recovery and send its full returning-wave warning.
+	breakwater._process_behavior(breakwater.phase_left + 0.001)
+	check(breakwater.phase == BREAKWATER.Phase.BACKWASH and is_equal_approx(breakwater.phase_left, BREAKWATER.BACKWASH_TIME), "A missed host charge starts its full brace warning")
+	local_player.global_position = breakwater._backwash_center + Vector2(-90.0, 0.0)
+	remote_player.global_position = breakwater._backwash_center + Vector2(-200.0, 100.0)
+	local_player._contact_damage_grace_left = 0.0
+	remote_player._contact_damage_grace_left = 0.0
+	var ring_state := send_state()
+	world.fixture_command.rpc_id(client_id, "inspect_backwash")
+	check(await until(func(): return results.has("backwash")), "Return Tide arrives through the production native enemy RPC")
+	if results.has("backwash"):
+		check(results.backwash.warnings == breakwater.get_warning_polygons() and results.backwash.callout == breakwater.get_attack_callout(), "Host and joiner share the exact committed returning-wave path and move name")
+		check(not results.backwash.authority and results.backwash.local_damage_calls == 0 and results.backwash.remote_damage_calls == 0, "Replica cannot originate tide damage")
+	send_state(world.enemy_state_sync_broadcaster._quantize_runtime_state_for_network(breakwater.get_network_runtime_state()))
+	world.fixture_command.rpc_id(client_id, "inspect_packet", {"key": "backwash_quantized"})
+	check(await until(func(): return results.has("backwash_quantized")), "The generic quantized runtime reaches the joiner during Backwash")
+	if results.has("backwash_quantized"):
+		check(results.backwash_quantized.warnings == breakwater.get_warning_polygons(), "Generic runtime quantization cannot move Return Tide's packed committed geometry")
+	var remote_before := remote_player.get_current_health()
+	breakwater._process_behavior(BREAKWATER.BACKWASH_TIME)
+	check(breakwater.phase == BREAKWATER.Phase.TIDE and remote_player.get_current_health() == remote_before, "Brace expiry releases the traveling crest without damaging the whole warning area")
+	breakwater._process_behavior(0.1)
+	var tide_state := send_state()
+	world.fixture_command.rpc_id(client_id, "inspect_tide")
+	check(await until(func(): return results.has("tide")), "The active returning crest arrives through the native RPC")
+	if results.has("tide"):
+		check(results.tide.warnings == breakwater.get_warning_polygons() and results.tide.callout == breakwater.get_attack_callout(), "The joiner has the exact current crest and tide identity")
+		check(results.tide.local_damage_calls == 0 and results.tide.remote_damage_calls == 0, "Replica wave prediction cannot damage either player")
+	breakwater._process_behavior(10.0)
+	breakwater._resolve_backwash()
+	check(local_player.get_current_health() == 84 and remote_player.get_current_health() == remote_before - 16, "The moving tide hits its dangerous lobe once while the calm wake remains safe")
+	check((remote_player as ChargePlayer).damage_contexts.back().ability == "breakwater_tide", "Return Tide keeps distinct authoritative damage attribution")
+	send_state()
+	world.fixture_command.rpc_id(client_id, "inspect_health", {"key": "backwash_health", "local": remote_player.get_current_health(), "remote": 84})
+	check(await until(func(): return results.has("backwash_health")), "Backwash authoritative health reaches the joiner")
+	send_state(ring_state)
+	world.fixture_command.rpc_id(client_id, "inspect_packet", {"key": "backwash_stale"})
+	check(await until(func(): return results.has("backwash_stale")), "An old tide packet is delivered after resolution")
+	if results.has("backwash_stale"):
+		check(results.backwash_stale.warnings.is_empty(), "A stale Return Tide warning cannot return after its resolved state")
 	# Lock onto the remote participant, then remove that participant after a
 	# real disconnect; the lane must stay committed and hit no departed actor.
 	local_player.position = Vector2(-500.0, 300.0)
@@ -166,6 +219,16 @@ func host_scenarios(client_id: int) -> void:
 
 func client_command(command: String, payload: Dictionary) -> void:
 	match command:
+		"inspect_tide":
+			check(await until(func(): return breakwater.phase == BREAKWATER.Phase.TIDE), "Replica receives the active tide")
+			breakwater._process_behavior(10.0)
+			breakwater._apply_tide_hits(0.0, breakwater._tide_distance)
+			world.fixture_result.rpc_id(1, "tide", snapshot())
+		"inspect_backwash":
+			check(await until(func(): return breakwater.phase == BREAKWATER.Phase.BACKWASH), "Replica receives Backwash")
+			breakwater._process_behavior(10.0)
+			breakwater._resolve_backwash()
+			world.fixture_result.rpc_id(1, "backwash", snapshot())
 		"inspect_lock":
 			check(await until(func(): return breakwater.phase == BREAKWATER.Phase.LOCK), "Replica receives lock phase")
 			check(breakwater.charge_origin == payload.origin and breakwater.charge_end == payload.end, "Replica preserves exact finite endpoints")
@@ -191,7 +254,9 @@ func client_command(command: String, payload: Dictionary) -> void:
 			local_player.returning_crescent.try_launch(Vector2.RIGHT)
 			for _index in range(100):
 				local_player.returning_crescent.tick(0.01)
-		"primary": DAMAGE.apply_damage(breakwater, 20, {"attack_type": "melee"})
+		"primary":
+			var action := local_player.combat_interactions.begin_action("attack")
+			DAMAGE.apply_damage(breakwater, 20, REWARD_INTERACTIONS.damage_context(action, "melee", {"raw_amount": 20.0, "damage_coefficient": 1.0}))
 		"disconnect":
 			world.process_mode = Node.PROCESS_MODE_DISABLED
 			world.hide()

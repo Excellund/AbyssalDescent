@@ -47,6 +47,7 @@ func _wake(start: Vector2, finish: Vector2) -> Dictionary:
 func _run() -> void:
 	await _test_shared_reward_allowances()
 	await _test_native_electric_engine()
+	await _test_convergence_gathering()
 	await _test_marked_native_effects()
 	await _test_accepted_prestate()
 	await _test_tempo_descendants()
@@ -98,43 +99,67 @@ func _test_native_electric_engine() -> void:
 		for pick in range(level):
 			player.apply_upgrade("pillar_convergence")
 		var wake_target := _observed_enemy(Vector2(500, 0))
-		var pulse_target := _observed_enemy(Vector2(40, 0))
-		var every := 4 if level == 1 else 2
+		var bystander := _observed_enemy(Vector2(565, 0))
+		var body_target := _observed_enemy(Vector2(40, 0))
+		var every := 3 if level == 1 else 2
 		var action: Dictionary = {}
 		for charge in range(every):
 			player.static_wake_controller.cancel()
 			action = _wake(Vector2(480, 0), Vector2(520, 0))
 			player.static_wake_controller.tick(.25)
-			_check((player.convergence_window_left > 0.0) == (charge == every - 1), "Native Wake reaches the learned L%d Convergence threshold on charge %d" % [level, charge + 1])
+			_check((player.convergence_window_left > 0.0) == (charge == every - 1), "Native Wake reaches the learned Faultline threshold on distinct action %d" % [charge + 1])
 		var wake_hit: Dictionary = wake_target.hits[0]
 		var wake_raw := float(player.static_wake_damage) * 4.5 * .25
 		var wake_coefficient := wake_raw / float(player.damage)
 		var field_multiplier := 1.14 + float(player.void_echo_damage) * .0015
 		var wake_expected := int(floor((wake_raw + wake_coefficient * player.first_strike_bonus_damage) * field_multiplier + .000000001))
-		_check(wake_hit.amount == wake_expected, "Wake scales the First Strike Boon and Lacuna bonus once at its actual Field target")
-		_check(is_equal_approx(float(wake_hit.context.raw_amount), wake_raw) and is_equal_approx(float(wake_hit.context.damage_coefficient), wake_coefficient), "Electric trigger preserves Wake's raw exposure and Damage coefficient")
-		_check(player._convergence_interaction.seq == action.seq, "Convergence retains the actual triggering Dash root")
-		player.static_wake_controller.cancel()
-		_check(player._shared_owned_field_contains(pulse_target) and not player._shared_owned_field_contains(wake_target), "Triggered Convergence supplies its moving Field at the player, not the remote Wake target")
-		var pulse_ratio := .28 + float(player.convergence_surge_damage_ratio) * .8
-		var pulse_raw := int(round(float(player.damage) * pulse_ratio))
-		player._update_convergence_window(.001)
-		_check(pulse_target.hits.size() == 1 and pulse_target.hits[0].amount == int(round((pulse_raw + pulse_ratio * player.first_strike_bonus_damage) * field_multiplier)), "Convergence pulse resolves its own coefficient, actual target Boon and Lacuna once")
-		_check(player.convergence_surge_hit_counter == 0, "Convergence's non-Electric pulse cannot recharge its own reward")
-		var before := pulse_target.get_current_health()
-		_packet(pulse_target, "returning_crescent", 100, 5)
-		_check(before - pulse_target.get_current_health() == int(round((100 + 5 * player.first_strike_bonus_damage) * field_multiplier)), "Convergence Field enables Lacuna on independent Projectile damage")
-		before = wake_target.get_current_health()
-		_packet(wake_target, "returning_crescent", 100, 5)
-		_check(before - wake_target.get_current_health() == 100 + 5 * player.first_strike_bonus_damage, "The same Projectile outside owned Fields receives no borrowed Lacuna bonus")
-		var during_window := player.new_combat_action("dash")
-		_packet(wake_target, "static_wake", 20, 1, during_window)
-		_check(player.convergence_surge_hit_counter == 0, "Electric action during active Convergence does not bank a charge")
-		player._update_convergence_window(player.convergence_window_left + .01)
-		_packet(wake_target, "static_wake", 20, 1, during_window)
-		_check(player.convergence_window_left == 0.0 and player.convergence_surge_hit_counter == 0, "A delayed tick cannot reuse its active-window opportunity after Convergence expires")
+		_check(wake_hit.amount == wake_expected, "Native Wake retains its actual-target conditional coefficient and Lacuna bonus")
+		_check(player._convergence_interaction.seq == action.seq and player._convergence_origin == wake_target.position, "The seal retains its planting Dash root and anchors at the distant struck foe")
+		_check(not player._shared_owned_field_contains(bystander) and not player._shared_owned_field_contains(body_target), "A fuse marker registers no Field at either the seal or player")
+		_check(bystander.hits.is_empty(), "The planting Field event cannot immediately detonate the new seal")
+		player.static_wake_controller.tick(.25)
+		var coefficient := 2.7 if level == 1 else 3.6
+		var expected := int(round((float(player.damage) + player.first_strike_bonus_damage) * coefficient))
+		_check(bystander.hits.size() == 1 and bystander.hits[0].amount == expected, "A later real Wake tick releases the stronger Burst with the bystander's own conditions and no borrowed Field bonus")
+		_check(body_target.hits.is_empty() and bystander.velocity.is_zero_approx(), "Faultline neither reaches the distant player nor displaces nearby foes")
+		_check(player.convergence_window_left == 0.0 and player.convergence_surge_hit_counter == 0 and player.convergence_pulse_cooldown > 0.0, "Early detonation closes the seal and enforces its rearm lock")
+		var during_lock := player.new_combat_action("dash")
+		_packet(wake_target, "static_wake", 20, 1, during_lock)
+		player._update_convergence_window(.61)
+		_packet(wake_target, "static_wake", 20, 1, during_lock)
+		_check(player.convergence_surge_hit_counter == 0, "An action accepted during rearm cannot bank delayed charging")
 		_packet(wake_target, "static_wake")
-		_check(player.convergence_surge_hit_counter == 1, "A fresh Electric action can charge the next Convergence window")
+		_check(player.convergence_surge_hit_counter == 1, "A fresh Electric action charges after rearm")
+		await _settle()
+		_free_world()
+
+func _test_convergence_gathering() -> void:
+	# Historical fixture entry retained; assert the replacement's fixed seal.
+	for level in [1, 2]:
+		_synergy_world()
+		for pick in range(level):
+			player.apply_upgrade("pillar_convergence")
+		player.dash_cooldown_left = 1.0
+		var distant := _observed_enemy(Vector2(500, 0))
+		var radius := 76.0 if level == 1 else 90.0
+		var edge := _observed_enemy(Vector2(500 + radius, 0))
+		var outer := _observed_enemy(Vector2(501 + radius, 0))
+		for charge in range(3 if level == 1 else 2):
+			_packet(distant, "melee")
+		_check(player.convergence_window_left > 0.0 and player.dash_cooldown_left == 1.0, "Attack input arms the seal without the retired Dash refund")
+		var during := player.new_combat_action("attack")
+		_packet(outer, "melee", 20, 1, during)
+		player.position = Vector2(-300, 0)
+		distant.position = Vector2(900, 0)
+		player._update_convergence_window(.79)
+		_check(edge.hits.is_empty() and player._convergence_origin == Vector2(500, 0), "Repeated hits, target movement and owner movement cannot refresh or relocate the fuse")
+		var before := outer.hits.size()
+		player._update_convergence_window(.02)
+		_check(edge.hits.size() == 1 and edge.hits[0].amount == int(round(float(player.damage) * (1.8 if level == 1 else 2.4))), "The ordinary fuse delivers its exact level damage at the compact boundary")
+		_check(outer.hits.size() == before and edge.velocity.is_zero_approx(), "The Burst excludes the outside edge and never Pulls its victims")
+		player._update_convergence_window(1.0)
+		_packet(outer, "melee", 20, 1, during)
+		_check(player.convergence_surge_hit_counter == 0, "Delayed contacts from a fuse-locked action cannot charge later")
 		await _settle()
 		_free_world()
 

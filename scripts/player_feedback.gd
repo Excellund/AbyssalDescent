@@ -1,5 +1,6 @@
 extends Node2D
 
+const CONVERGENCE_RULES := preload("res://scripts/shared/pillar_convergence_rules.gd")
 const DEFAULT_IMPACT_SOUND := preload("res://sounds/impactPunch_medium_002.ogg")
 const DEFAULT_ATTACK_SWING_SOUND := preload("res://sounds/impactSoft_medium_001.ogg")
 const PLAYER_HURT_SOUND_0 := preload("res://sounds/new_stuff/player_hurt_000.ogg")
@@ -13,6 +14,7 @@ const AUDIO_LEVELS := preload("res://scripts/shared/audio_levels.gd")
 const DAMAGE_EDGE_FLASH := preload("res://scripts/damage_edge_flash.gdshader")
 const WARDEN_VERDICT := preload("res://scripts/warden_verdict_feedback.gd")
 var warden_verdict: WARDEN_VERDICT
+var faultline_seal: Node2D
 
 func play_warden_verdict_cue(payload: Dictionary) -> bool:
 	if warden_verdict == null:
@@ -1217,27 +1219,34 @@ func play_boss_tempo_dash_wave(epicenter_global: Vector2, radius: float, landed:
 		_play_world_star_burst(epicenter_global, radius * 0.94, 14, Color(1.0, 0.92, 0.7, 0.54), 0.16)
 
 func play_boss_convergence_start(epicenter_global: Vector2, power_ratio: float) -> void:
-	var ratio := clampf(power_ratio, 0.0, 1.0)
-	var radius := 24.0 + 52.0 * ratio
-	_play_world_soft_pulse(epicenter_global, radius * 1.06, Color(0.56, 0.34, 0.96, 0.20 + ratio * 0.14), 0.24, 0.72, 1.14)
-	_play_world_soft_pulse(epicenter_global, radius * 0.74, Color(0.82, 0.72, 1.0, 0.18 + ratio * 0.12), 0.18, 0.76, 1.10)
-	play_world_ring(epicenter_global, radius * 0.96, Color(0.90, 0.72, 1.0, 0.92), 0.20)
-	play_world_ring(epicenter_global, radius * 0.66, Color(0.78, 0.92, 1.0, 0.66), 0.15)
-	play_world_ring(epicenter_global, radius * 0.42, Color(0.98, 0.98, 1.0, 0.56), 0.10)
-	_play_world_star_burst(epicenter_global, radius * 0.92, 10, Color(0.90, 0.80, 1.0, 0.54), 0.14)
-	for i in range(4):
-		var angle := PI * 0.25 + PI * 0.5 * float(i)
-		var dir := Vector2.RIGHT.rotated(angle)
-		var start_pos := epicenter_global + dir * (radius * 0.26)
-		var end_pos := epicenter_global + dir * (radius * 0.88)
-		_play_world_line(PackedVector2Array([start_pos, end_pos]), Color(1.0, 0.94, 1.0, 0.58), 2.4, 0.12, 0.8)
+	clear_boss_convergence()
+	if not epicenter_global.is_finite():
+		return
+	faultline_seal = preload("res://scripts/shared/faultline_seal_visual.gd").new()
+	faultline_seal.top_level = true
+	faultline_seal.position = epicenter_global
+	faultline_seal.radius = CONVERGENCE_RULES.radius(power_ratio)
+	faultline_seal.lifetime = CONVERGENCE_RULES.duration(power_ratio)
+	faultline_seal.remaining = faultline_seal.lifetime
+	faultline_seal.z_index = 22
+	add_child(faultline_seal)
 
-func play_boss_convergence_pulse(epicenter_global: Vector2, radius: float) -> void:
-	_play_world_soft_pulse(epicenter_global, radius * 0.62, Color(0.44, 0.32, 0.90, 0.16), 0.16, 0.74, 1.12)
-	play_world_ring(epicenter_global, radius * 0.66, Color(0.78, 0.88, 1.0, 0.76), 0.14)
-	play_world_ring(epicenter_global, radius * 0.50, Color(0.66, 0.84, 1.0, 0.66), 0.11)
-	play_world_ring(epicenter_global, radius * 0.32, Color(0.98, 1.0, 1.0, 0.52), 0.08)
-	_play_world_star_burst(epicenter_global, radius * 0.64, 8, Color(0.86, 0.96, 1.0, 0.48), 0.10)
+func clear_boss_convergence() -> void:
+	if is_instance_valid(faultline_seal):
+		faultline_seal.hide()
+		faultline_seal.queue_free()
+	faultline_seal = null
+
+func play_boss_convergence_pulse(epicenter_global: Vector2, radius: float, field_triggered: bool = false) -> void:
+	clear_boss_convergence()
+	var ink := Color(0.97, 0.80, 0.55, 0.9) if field_triggered else Color(0.85, 0.75, 0.97, 0.85)
+	play_world_ring(epicenter_global, radius, ink, 0.19)
+	_play_world_soft_pulse(epicenter_global, radius, Color(ink, 0.14), 0.2, 0.7, 1.0)
+	for i in range(5):
+		var angle := TAU * float(i) / 5.0
+		var foot := epicenter_global + Vector2.RIGHT.rotated(angle) * radius * 0.48
+		var height := 35.0 if field_triggered else 25.0
+		_play_world_line(PackedVector2Array([foot + Vector2(-6, 0), foot + Vector2(0, -height), foot + Vector2(6, 0)]), ink, 3.0, 0.22, 1.0)
 
 func play_boss_unbroken_bank_gain(epicenter_global: Vector2, bank_ratio: float) -> void:
 	var r := clampf(bank_ratio, 0.0, 1.0)

@@ -74,7 +74,10 @@ func accept_epoch(epoch: int, run: String, room: int) -> void:
 	_refresh_identity()
 	if run.is_empty() or run != REGISTRY.current_run() or room != REGISTRY.current_room() or epoch <= _accepted_epoch:
 		return
+	var replacing_epoch := _accepted_epoch > 0
 	_accepted_epoch = epoch
+	if replacing_epoch and is_instance_valid(player) and player.has_method("_cancel_faultline_seal"):
+		player._cancel_faultline_seal()
 	_roots.clear()
 	_retired_through = 0
 	_cancel_generation += 1
@@ -162,6 +165,8 @@ func _dispatch_shared_hit(event: Dictionary, action: Dictionary, ledger: Diction
 	var previous := DAMAGEABLE.begin_interaction_scope(action)
 	if REGISTRY.is_attack_hit(source) and target_id > 0 and not ledger.attack_targets.has(target_id) and ledger.attack_targets.size() < REGISTRY.MAX_TARGETS_PER_ROOT:
 		event["first_attack_hit"] = ledger.attack_targets.is_empty()
+		# Delayed contacts keep their original Attack's unique-victim index.
+		event["attack_hit_index"] = ledger.attack_targets.size()
 		event["first_target_in_action"] = true
 		ledger.attack_targets[target_id] = true
 		var prior_descriptor: Dictionary = ledger.descriptors.get(source, {})

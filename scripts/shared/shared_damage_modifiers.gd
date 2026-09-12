@@ -4,6 +4,8 @@ extends RefCounted
 ## time, projectile scale and Echo strength instead of awarding a full flat
 ## bonus on every tiny packet.
 
+const FARSHOT_MIN_DISTANCE := 160.0
+
 static func valid_number(value: Variant) -> bool:
 	return (value is float or value is int) and is_finite(float(value))
 
@@ -28,6 +30,14 @@ static func resolve(owner: Object, target: Object, raw_amount: float, coefficien
 		flat += maxf(0.0, property_number(owner, "patient_hunter_bonus_damage"))
 	if float(pre.get("mark_ratio", 0.0)) > 0.0:
 		flat += maxf(0.0, property_number(owner, "marked_prey_bonus_damage"))
+	var farshot := maxf(0.0, property_number(owner, "farshot_bonus_damage"))
+	if farshot > 0.0 and owner is Node2D and target is Node2D:
+		# Use the current owning body and actual victim, never launch/effigy origin
+		# or an ancestor's already-conditioned amount.
+		var body_position: Vector2 = owner.global_position
+		var target_position: Vector2 = target.global_position
+		if body_position.is_finite() and target_position.is_finite() and body_position.distance_squared_to(target_position) >= FARSHOT_MIN_DISTANCE * FARSHOT_MIN_DISTANCE:
+			flat += farshot
 	var amount := raw_amount + coefficient * flat
 	var mark_ratio := maxf(0.0, float(pre.get("mark_ratio", 0.0)))
 	if mark_ratio > 0.0:

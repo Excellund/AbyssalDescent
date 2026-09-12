@@ -1,5 +1,6 @@
 extends "res://scripts/enemy_base.gd"
 
+const ATTACK_CALLOUT := preload("res://scripts/shared/enemy_attack_callout.gd")
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const ENEMY_STATE_ENUMS := preload("res://scripts/shared/enemy_state_enums.gd")
 const COMMITTED_CHARGE := preload("res://scripts/shared/committed_charge.gd")
@@ -187,6 +188,7 @@ func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
 
 
 func _process_network_visuals(delta: float) -> void:
+	var previous_callout := get_attack_callout()
 	_ensure_charge_motion()
 	_charge_motion.tick_replica(delta)
 	if boss_state == ENEMY_STATE_ENUMS.BossState.TELEGRAPH or boss_state == ENEMY_STATE_ENUMS.BossState.ATTACK or boss_state == ENEMY_STATE_ENUMS.BossState.RECOVER:
@@ -194,6 +196,8 @@ func _process_network_visuals(delta: float) -> void:
 			state_time_left = maxf(0.0, state_time_left - delta)
 	attack_afterglow_time_left = maxf(0.0, attack_afterglow_time_left - delta)
 	impact_burst_time_left = maxf(0.0, impact_burst_time_left - delta)
+	if not previous_callout.is_empty() or previous_callout != get_attack_callout():
+		queue_redraw()
 
 
 func _process_idle_state(delta: float) -> void:
@@ -593,6 +597,17 @@ func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
 					_cleave_locked_directions.append(v)
 
 
+func get_attack_callout() -> String:
+	# Instant moves resolve at entry to ATTACK. Keep only a live charge named
+	# through its contact window; cosmetic afterglow is not another warning.
+	if state_time_left <= 0.0 or (boss_state != ENEMY_STATE_ENUMS.BossState.TELEGRAPH and not (boss_state == ENEMY_STATE_ENUMS.BossState.ATTACK and active_attack == ENEMY_STATE_ENUMS.BossAttack.CHARGE)):
+		return ""
+	match active_attack:
+		ENEMY_STATE_ENUMS.BossAttack.CHARGE: return "Iron Charge"
+		ENEMY_STATE_ENUMS.BossAttack.NOVA: return "Judgment Nova"
+		ENEMY_STATE_ENUMS.BossAttack.CLEAVE: return "Sweeping Cleave"
+	return ""
+
 func _draw() -> void:
 	var facing := visual_facing_direction if visual_facing_direction.length_squared() > 0.000001 else Vector2.RIGHT
 	if is_spawn_transporting():
@@ -640,6 +655,7 @@ func _draw() -> void:
 	if boss_state == ENEMY_STATE_ENUMS.BossState.ATTACK and active_attack == ENEMY_STATE_ENUMS.BossAttack.CHARGE:
 		var line_end := locked_direction * 120.0
 		draw_line(Vector2.ZERO, line_end, Color(COLOR_BOSS_CHARGE_LINE.r, COLOR_BOSS_CHARGE_LINE.g, COLOR_BOSS_CHARGE_LINE.b, 0.9), 8.0)
+	ATTACK_CALLOUT.draw_callout(self, get_attack_callout(), -100.0)
 
 
 func _draw_role_state_icon(facing: Vector2, body_radius: float) -> void:
@@ -681,7 +697,7 @@ func _draw_attack_telegraph() -> void:
 		
 		ENEMY_STATE_ENUMS.BossAttack.CLEAVE:
 			var half_arc := deg_to_rad(cleave_arc_degrees * 0.5)
-			var draw_dirs := _cleave_locked_directions if not _cleave_locked_directions.is_empty() else [locked_direction]
+			var draw_dirs: Array = _cleave_locked_directions if not _cleave_locked_directions.is_empty() else [locked_direction]
 			for draw_dir in draw_dirs:
 				var points := PackedVector2Array([Vector2.ZERO])
 				var segments := 26

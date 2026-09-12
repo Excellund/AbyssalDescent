@@ -24,6 +24,7 @@ class Projectile extends RefCounted:
 	var remaining_targets: int = 1
 	var interaction: Dictionary = {}
 	var hit_ids: Dictionary = {}
+	var target: WeakRef
 	var kill_proc_suppression: int = 0
 	var trail: Array[Vector2] = []
 	var presentation_finished: bool = false
@@ -64,7 +65,7 @@ func launch(event: Dictionary) -> bool:
 	if not _authority() or not _visible_allowed() or get_tree().paused or not bool(player.reward_spark_relay) or projectiles.size() >= MAX_PROJECTILES:
 		return false
 	var action: Dictionary = event.get("interaction", {})
-	if not player.combat_interactions.accepts_action(action) or not player.combat_interactions.has_reaction(action, "spark_relay"):
+	if not bool(event.get("shared", false)) or not REGISTRY.action_forms(action).has("Burst") or not player.combat_interactions.accepts_action(action) or not player.combat_interactions.has_reaction(action, "spark_relay"):
 		return false
 	var origin := player.global_position
 	var target_position: Vector2 = event.get("position", Vector2.INF)
@@ -73,18 +74,21 @@ func launch(event: Dictionary) -> bool:
 	if _identity != _current_identity():
 		cancel()
 		_identity = _current_identity()
-	var direction := origin.direction_to(target_position)
-	if direction.length_squared() < 0.000001:
-		direction = Vector2(player.visual_facing_direction).normalized()
-	if direction.length_squared() < 0.000001:
-		direction = Vector2.RIGHT
 	var ratio := clampf(float(player.spark_relay_damage_ratio), 0.0, 1.0)
 	var projectile := Projectile.new()
+	projectile.position = origin
+	projectile.travel_left = clampf(float(player.spark_relay_travel_range), 0.0, MAX_RANGE)
+	var reference: Variant = event.get("target")
+	var preferred: Node = reference.get_ref() if reference is WeakRef else null
+	var target := _acquire_target(projectile, _geometry_exclusions(), preferred)
+	if target == null:
+		return false
+	projectile.target = weakref(target)
+	projectile.direction = origin.direction_to(target.global_position)
+	if projectile.direction.is_zero_approx():
+		projectile.direction = Vector2.RIGHT
 	projectile.id = _next_id
 	_next_id += 1
-	projectile.position = origin
-	projectile.direction = direction
-	projectile.travel_left = clampf(float(player.spark_relay_travel_range), 0.0, MAX_RANGE)
 	projectile.raw_amount = float(event.get("raw_amount", 0.0)) * ratio
 	projectile.damage_coefficient = float(event.get("damage_coefficient", 0.0)) * ratio
 	projectile.remaining_targets = clampi(int(player.spark_relay_max_targets), 1, 3)
@@ -143,6 +147,18 @@ func tick(delta: float) -> void:
 			continue
 		var distance := minf(SPEED * delta, projectile.travel_left)
 		while distance > 0.000001 and projectile.remaining_targets > 0:
+			if authority:
+				var target: Node = projectile.target.get_ref() if projectile.target != null else null
+				if not _target_valid(projectile, target):
+					target = _acquire_target(projectile, exclusions)
+					if target == null:
+						projectile.travel_left = 0.0
+						break
+					projectile.target = weakref(target)
+					changed = true
+				var direction := projectile.position.direction_to((target as Node2D).global_position)
+				if not direction.is_zero_approx():
+					projectile.direction = direction
 			var step := minf(MAX_STEP, distance)
 			var start := projectile.position
 			var motion := projectile.direction * step
@@ -185,6 +201,32 @@ func _geometry_exclusions() -> Array[RID]:
 			if node is CollisionObject2D:
 				exclusions.append(node.get_rid())
 	return exclusions
+
+func _target_valid(projectile: Projectile, target: Node) -> bool:
+	if not is_instance_valid(target) or not (target is CharacterBody2D) or not target.is_inside_tree() or target.is_queued_for_deletion() or not target.is_in_group("enemies") or DAMAGEABLE._read_target_health(target) <= 0 or projectile.hit_ids.has(target.get_instance_id()):
+		return false
+	var body := target as CharacterBody2D
+	return body.global_position.is_finite() and projectile.position.distance_to(body.global_position) <= projectile.travel_left + RADIUS + BODY_GEOMETRY.body_radius(body)
+
+func _acquire_target(projectile: Projectile, exclusions: Array[RID], preferred: Node = null) -> CharacterBody2D:
+	var candidates: Array[CharacterBody2D] = []
+	for node in get_tree().get_nodes_in_group("enemies"):
+		if _target_valid(projectile, node):
+			candidates.append(node as CharacterBody2D)
+	candidates.sort_custom(func(a: CharacterBody2D, b: CharacterBody2D) -> bool:
+		if a == preferred or b == preferred:
+			return a == preferred
+		var a_distance := projectile.position.distance_squared_to(a.global_position)
+		var b_distance := projectile.position.distance_squared_to(b.global_position)
+		return a.get_instance_id() < b.get_instance_id() if is_equal_approx(a_distance, b_distance) else a_distance < b_distance)
+	for candidate in candidates:
+		# Reserve the actual swept bolt width, not just a center-line ray. Target
+		# acquisition never grants a route through cover or outside this room.
+		var motion := candidate.global_position - projectile.position
+		var contact_distance := maxf(0.0, motion.length() - RADIUS - BODY_GEOMETRY.body_radius(candidate))
+		if _wall_sweep(projectile.position, motion.normalized() * contact_distance, exclusions).is_empty():
+			return candidate
+	return null
 
 func _wall_sweep(start: Vector2, motion: Vector2, exclusions: Array[RID]) -> Dictionary:
 	var boundary := ARENA_BOUNDARY.sweep(start, motion, EnemyReplicationService.get_current_room_bounds())

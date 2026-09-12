@@ -78,6 +78,7 @@ const ROOM_CLEAR_OUTCOME_COORDINATOR_SCRIPT := preload("res://scripts/core/room_
 const COMBAT_PHASE_COORDINATOR_SCRIPT := preload("res://scripts/core/combat_phase_coordinator.gd")
 const PLAYER_FLOW_COORDINATOR_SCRIPT := preload("res://scripts/core/player_flow_coordinator.gd")
 const REWARD_PHASE_COORDINATOR_SCRIPT := preload("res://scripts/core/reward_phase_coordinator.gd")
+const REST_SITE_CHOICE_SCRIPT := preload("res://scripts/core/rest_site_choice.gd")
 const PLAYER_ROSTER_HELPERS := preload("res://scripts/core/player_roster_helpers.gd")
 const WORLD_MULTIPLAYER_SYNC_STATE_SCRIPT := preload("res://scripts/core/world_multiplayer_sync_state.gd")
 const WORLD_PROGRESS_SYNC_POLICY_SCRIPT := preload("res://scripts/core/world_progress_sync_policy.gd")
@@ -312,6 +313,9 @@ var _pending_biome_rule_state: Dictionary = {}
 var _world_multiplayer_sync_state = WORLD_MULTIPLAYER_SYNC_STATE_SCRIPT.new()
 var _world_progress_sync_policy = WORLD_PROGRESS_SYNC_POLICY_SCRIPT.new()
 var _reward_phase_coordinator = REWARD_PHASE_COORDINATOR_SCRIPT.new()
+var _rest_site_choice := REST_SITE_CHOICE_SCRIPT.new()
+var _rest_visit_run := ""
+var _rest_visit_depth := -1
 var _run_outcome_coordinator = RUN_OUTCOME_COORDINATOR_SCRIPT.new()
 var room_depth_bookkeeper
 
@@ -986,6 +990,7 @@ func _setup_ui_phase() -> void:
 	pause_menu_controller = PAUSE_MENU_CONTROLLER_SCRIPT.new()
 	add_child(pause_menu_controller)
 	pause_menu_controller.initialize(RUN_CONTEXT_PATH, Callable(self, "_set_music_volume_runtime"), Callable(self, "_set_sfx_volume_runtime"))
+	pause_menu_controller.set_oath_provider(Callable(run_summary_recorder, "get_live_oath_presentation"))
 	pause_menu_controller.connect("pause_opened", Callable(self, "_on_pause_menu_opened"))
 	pause_menu_controller.connect("pause_closed", Callable(self, "_on_pause_menu_closed"))
 	pause_menu_controller.connect("back_to_main_menu_requested", Callable(self, "_on_pause_back_to_menu_requested"))
@@ -1505,6 +1510,30 @@ func _resolve_debug_power_id(raw_power_id: String) -> String:
 func _is_run_result_open() -> bool:
 	return (is_instance_valid(defeat_screen) and defeat_screen.is_open()) or (is_instance_valid(victory_screen) and victory_screen.is_open())
 
+func _input(event: InputEvent) -> void:
+	# Open before GUI focus navigation. The panel consumes Tab/Y while open,
+	# including repeats and releases, so inspection never requires holding a key.
+	if not event.is_action("reward_inspect") or not is_instance_valid(build_detail_panel):
+		return
+	if build_detail_panel.is_open():
+		if build_detail_panel.handle_input(event):
+			get_viewport().set_input_as_handled()
+		return
+	if _is_run_result_open() or (is_instance_valid(pause_menu_controller) and bool(pause_menu_controller.is_open())):
+		return
+	if is_instance_valid(reward_selection_ui) and bool(reward_selection_ui.is_active()):
+		return
+	get_viewport().set_input_as_handled()
+	if event.is_echo() or not event.is_pressed() or build_detail_panel.is_open():
+		return
+	if current_room_tutorial_active:
+		_mark_tutorial_step("build")
+	var active_powers := _get_active_player_powers()
+	var run_context := _get_run_context()
+	var catalyst_ids: Array = run_context.get_active_catalyst_ids(current_character_id) if run_context != null else []
+	build_detail_panel.refresh(current_character_id, active_powers["boons"], active_powers["arcana"], active_powers["boss_rewards"], player, catalyst_ids)
+	build_detail_panel.open()
+
 func _unhandled_input(event: InputEvent) -> void:
 	if current_room_tutorial_active:
 		if event is InputEventKey and event.pressed and not event.echo:
@@ -1522,29 +1551,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if is_instance_valid(reward_selection_ui) and reward_selection_ui.handle_input(event):
 		get_viewport().set_input_as_handled()
 		return
-	# Hold Tab to show build details; release Tab to close.
-	if event is InputEventKey and event.keycode == KEY_TAB and not event.echo:
-		if is_instance_valid(build_detail_panel):
-			if event.pressed:
-				if _is_run_result_open():
-					return
-				if is_instance_valid(pause_menu_controller) and bool(pause_menu_controller.is_open()):
-					return
-				if is_instance_valid(reward_selection_ui) and bool(reward_selection_ui.is_active()):
-					return
-				if not build_detail_panel.is_open():
-					var active_powers := _get_active_player_powers()
-					var run_context := _get_run_context()
-					var catalyst_ids: Array = run_context.get_active_catalyst_ids(current_character_id) if run_context != null else []
-					build_detail_panel.refresh(current_character_id, active_powers["boons"], active_powers["arcana"], active_powers["boss_rewards"], player, catalyst_ids)
-					build_detail_panel.open()
-				get_viewport().set_input_as_handled()
-				return
-			if build_detail_panel.is_open():
-				build_detail_panel.close()
-				get_viewport().set_input_as_handled()
-				return
-	
+
 	if _is_run_result_open():
 		get_viewport().set_input_as_handled()
 		return
@@ -1558,6 +1565,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if bool(pause_menu_controller.is_open()) and bool(pause_menu_controller.is_glossary_open()):
 		pause_menu_controller.close_glossary()
+		get_viewport().set_input_as_handled()
+		return
+	if bool(pause_menu_controller.is_open()) and bool(pause_menu_controller.is_oaths_open()):
+		pause_menu_controller.close_oaths()
 		get_viewport().set_input_as_handled()
 		return
 	if bool(pause_menu_controller.is_open()):
@@ -1876,6 +1887,7 @@ func _get_hud_state() -> Dictionary:
 	var objective_hud_state: Dictionary = {}
 	if is_instance_valid(objective_manager):
 		objective_hud_state = objective_manager.get_hud_state()
+	var objective_local_player := _find_local_owned_player_node()
 	# During an active pulse, show the pulse mutator in the act box instead of the room mutator
 	if not between_rooms and String(objective_hud_state.get("active_objective_kind", "")) == "pulse_window":
 		if bool(objective_hud_state.get("pulse_active", false)):
@@ -1897,6 +1909,8 @@ func _get_hud_state() -> Dictionary:
 		"in_boss_room": in_boss_room,
 		"active_room_enemy_count": active_room_enemy_count,
 		"active_objective_kind": String(objective_hud_state.get("active_objective_kind", "")),
+		"objective_relic_recovery": objective_hud_state.get("relic_recovery", {}),
+		"objective_local_player_id": maxi(1, int(objective_local_player.player_id)) if is_instance_valid(objective_local_player) else 0,
 		"objective_time_left": float(objective_hud_state.get("time_left", 0.0)),
 		"objective_kills": int(objective_hud_state.get("kills", 0)),
 		"objective_kill_target": int(objective_hud_state.get("kill_target", 0)),
@@ -1946,6 +1960,8 @@ func _get_hud_state() -> Dictionary:
 		"active_biome_accent": _get_active_biome_accent(),
 		"active_biome_impact_text": _get_active_biome_impact_text(),
 		"active_biome_rule_hint": _get_biome_rule_hint(),
+		"active_biome_rule_status": _get_biome_rule_status(),
+		"active_biome_rule_friendly": is_instance_valid(_biome_rules) and (_biome_rules.mode == "assistance" or (_active_biome_rule_id == "shatterfield" and not _biome_rules.fragments)),
 		"run_elapsed_seconds": run_summary_recorder.get_run_elapsed_seconds(),
 		"timer_visible_in_hud": true,
 		"ascension_rank": encounter_profile_builder.get_ascension_rank() if encounter_profile_builder != null else 0,
@@ -2470,6 +2486,8 @@ func _save_active_run_checkpoint() -> void:
 	# Co-op cannot resume from a solo checkpoint or replace one with party state.
 	if is_multiplayer:
 		return
+	if _rest_site_choice.active:
+		return
 	var run_context := _get_run_context()
 	if run_context == null:
 		return
@@ -2523,6 +2541,9 @@ func _apply_active_run_snapshot(snapshot: Dictionary) -> bool:
 		return false
 
 	# Restore ongoing effects after the player's saved health/build is loaded.
+	_rest_site_choice.reset()
+	_rest_visit_run = ""
+	_rest_visit_depth = -1
 	# Starting-health bonuses are already included in the checkpoint maximum.
 	_apply_difficulty_tier_bonuses(current_difficulty_tier, false)
 	encounter_profile_builder.set_difficulty_tier(current_difficulty_tier)
@@ -2853,6 +2874,8 @@ func _spawn_door_options() -> void:
 		return
 	if _is_reward_selection_active():
 		return
+	if _rest_site_choice.active:
+		return
 	if is_multiplayer and not _doors_spawn_ready:
 		return
 	if choosing_next_room and not door_options.is_empty():
@@ -3139,6 +3162,9 @@ func _get_player_for_peer(peer_id: int) -> Node2D:
 	return null
 
 func _choose_door(door: Dictionary) -> void:
+	_rest_site_choice.reset()
+	_rest_visit_run = ""
+	_rest_visit_depth = -1
 	choosing_next_room = false
 	door_options.clear()
 	_clear_all_enemies()
@@ -3290,19 +3316,89 @@ func _enter_rest_site() -> void:
 	if is_instance_valid(music_system):
 		music_system.set_run_location(_get_room_presentation_act(), room_depth, false)
 	_set_music_context(&"rest")
-	_heal_local_player_at_rest()
 	run_summary_recorder.record_rest_visit(room_depth)
-	_spawn_door_options()
+	_begin_rest_site_choice()
+
+func _get_rest_heal_amount(target_player: Node2D) -> int:
+	if not is_instance_valid(target_player):
+		return 0
+	var player_max_health := int(target_player.get_max_health())
+	var heal_ratio_mult := float(current_difficulty_config.get("rest_heal_ratio_mult", 1.0))
+	return maxi(8, int(round(float(player_max_health) * rest_heal_ratio * heal_ratio_mult)))
+
+func _get_rest_local_owner() -> Node2D:
+	var local_player := _find_local_owned_player_node()
+	return local_player if is_instance_valid(local_player) and _is_local_control_owner(local_player) else null
+
+func _begin_rest_site_choice() -> void:
+	_rest_visit_run = COVER_INTERACTIONS.current_run()
+	_rest_visit_depth = room_depth
+	choosing_next_room = false
+	door_options.clear()
+	if is_multiplayer:
+		_doors_spawn_ready = false
+	_begin_reward_phase_sync(false, ENUMS.RewardMode.REST)
+	_set_combat_paused(true)
+	var local_player := _get_rest_local_owner()
+	if not is_instance_valid(local_player) or local_player.is_dead():
+		_rest_site_choice.reset()
+		if is_multiplayer:
+			_mark_local_reward_phase_complete(false, ENUMS.RewardMode.REST)
+		return
+	var choices := _rest_site_choice.begin(power_registry_instance, local_player, rng, _get_rest_heal_amount(local_player))
+	reward_selection_ui.open_rest_selection(choices, local_player, current_character_id)
+
+func _resolve_rest_site_choice(choice: Dictionary) -> void:
+	var local_player := _get_rest_local_owner()
+	var result := _rest_site_choice.resolve(String(choice.get("id", "")), power_registry_instance, local_player, _get_rest_heal_amount(local_player))
+	if not bool(result.get("ok", false)):
+		if _rest_site_choice.active and (not is_instance_valid(local_player) or local_player.is_dead()):
+			_rest_site_choice.reset()
+			if is_multiplayer:
+				_mark_local_reward_phase_complete(false, ENUMS.RewardMode.REST)
+			return
+		if _rest_site_choice.active:
+			var remaining := _rest_site_choice.current_offers(power_registry_instance, local_player, _get_rest_heal_amount(local_player))
+			if not remaining.is_empty():
+				reward_selection_ui.open_rest_selection(remaining, local_player, current_character_id)
+		return
+	var accepted := result.get("choice", {}) as Dictionary
+	accepted["restored_health"] = int(result.get("restored_health", 0))
+	run_summary_recorder.record_reward_choice(accepted, ENUMS.RewardMode.REST, false)
+	if String(accepted.get("rest_action", "")) == "upgrade":
+		run_summary_recorder.record_reward_choice_for_tracker(accepted, ENUMS.RewardMode.BOON, room_depth)
+		_record_local_peer_reward_timeline_choice(accepted, ENUMS.RewardMode.BOON, room_depth)
+		run_session.record_boon(String(accepted.get("name", "")))
+	else:
+		var restored := int(result.get("restored_health", 0))
+		run_summary_recorder.record_rest_recovery(restored, room_depth)
+		_record_local_peer_reward_timeline_choice({"id": "rest_recover", "name": "Recovered %d health" % restored}, ENUMS.RewardMode.REST, room_depth)
+	# Health broadcasts are host-only. The existing owned reward-build snapshot
+	# includes resolved health and publishes a joiner's recovery before readiness.
+	_broadcast_local_player_build_snapshot()
+	if is_multiplayer:
+		_mark_local_reward_phase_complete(false, ENUMS.RewardMode.REST)
+	else:
+		_set_combat_paused(false)
+		_spawn_door_options()
+	hud.refresh(_get_hud_state(), player)
+
+func _retire_fallen_rest_choice() -> void:
+	if not is_multiplayer or not _rest_site_choice.active:
+		return
+	var local_player := _get_rest_local_owner()
+	if is_instance_valid(local_player) and not local_player.is_dead():
+		return
+	_rest_site_choice.reset()
+	reward_selection_ui.close_selection()
+	_mark_local_reward_phase_complete(false, ENUMS.RewardMode.REST)
 
 func _heal_local_player_at_rest() -> void:
 	if not is_instance_valid(player) or player.is_dead():
 		return
 	# Each peer enters this room through the chosen-door sync and heals its
 	# own player. Health replication updates the other avatars once.
-	var player_max_health: int = int(player.get_max_health())
-	var heal_ratio_mult := float(current_difficulty_config.get("rest_heal_ratio_mult", 1.0))
-	var heal_amount := maxi(8, int(round(float(player_max_health) * rest_heal_ratio * heal_ratio_mult)))
-	player.heal(heal_amount)
+	player.heal(_get_rest_heal_amount(player))
 	player.play_rest_site_heal_feedback()
 
 func _spawn_room_obstacles(layout: Array[Dictionary]) -> void:
@@ -3392,6 +3488,13 @@ func _get_biome_objective_exclusions() -> Array[Dictionary]:
 	if not is_instance_valid(objective_manager):
 		return exclusions
 	var kind: String = objective_manager.active_objective_kind
+	if kind == "relic_recovery":
+		var recovery = objective_manager.relic_recovery
+		exclusions.append({"kind": "circle", "center": recovery.receiver, "radius": recovery.RECEIVER_RADIUS + 24.0})
+		for relic: Dictionary in recovery.relics:
+			if not bool(relic.delivered) and int(relic.carrier_id) == 0:
+				exclusions.append({"kind": "circle", "center": relic.position, "radius": recovery.PICKUP_RADIUS + 24.0})
+		return exclusions
 	if kind not in ["hold_the_line", "circuit_sweep", "intercept_run"]:
 		return exclusions
 	var overlay: Dictionary = objective_manager.get_control_overlay_state()
@@ -3409,6 +3512,18 @@ func _get_biome_rule_hint() -> String:
 	if _active_biome_rule_id.is_empty() or choosing_next_room or _is_reward_selection_active():
 		return ""
 	return String(BIOME_REGISTRY.get_room_combat_identity(_active_biome_rule_id, _biome_rules.mode, _biome_rules.fragments).get("entry_hint", ""))
+
+func _get_biome_rule_status() -> String:
+	if _active_biome_rule_id.is_empty() or choosing_next_room or _is_reward_selection_active() or not is_instance_valid(_biome_rules):
+		return ""
+	if _active_biome_rule_id == "shatterfield" and not _biome_rules.fragments:
+		var standing := 0
+		for column: Dictionary in _arena_cover.snapshot():
+			if int(column.left) > 0:
+				standing += 1
+		return "HELP · %d %s STANDING" % [standing, "PILLAR" if standing == 1 else "PILLARS"] if standing > 0 else "HELP · ROUTES OPEN"
+	var phase: String = "survey" if encounter_intro_grace_active or _modal_requires_combat_pause() or get_tree().paused else _biome_rules.phase
+	return BIOME_REGISTRY.get_rule_status(_active_biome_rule_id, _biome_rules.mode, _biome_rules.fragments, phase)
 
 func _tick_biome_rules(delta: float) -> void:
 	if _active_biome_rule_id.is_empty():
@@ -3495,14 +3610,31 @@ func _accept_brittle_cover_attack(sender: int, raw_action: Dictionary, origin: V
 	if shapes.is_empty():
 		return
 	var changed := false
+	var broken_columns: Array[Vector2] = []
 	for id in _arena_cover.contact_candidates(origin, direction.normalized(), shapes):
 		if owner.combat_interactions.claim_reaction(action, "brittle_cover", id):
-			changed = _arena_cover.apply_contact(id) or changed
+			if _arena_cover.apply_contact(id):
+				changed = true
+				if not _arena_cover.is_present(id) and is_instance_valid(_arena_cover_bodies.get(id)):
+					broken_columns.append(_arena_cover_bodies[id].global_position)
 	if not changed:
 		return
 	_refresh_arena_cover_geometry()
 	if MultiplayerSessionManager.should_broadcast():
 		_sync_brittle_cover_state.rpc(_cover_state_payload())
+	# Publish the original room's contact state before damage can kill its last
+	# foe and synchronously retire the room. Every Burst stays bound to that room.
+	_release_shatter_pillar_bursts(broken_columns, true)
+
+func _release_shatter_pillar_bursts(centers: Array[Vector2], authoritative: bool) -> void:
+	if _active_biome_rule_id != "shatterfield" or not is_instance_valid(_biome_rules):
+		return
+	var run := _cover_run_token
+	var room := _cover_room_sync_id
+	for center: Vector2 in centers:
+		if run != _cover_run_token or room != _cover_room_sync_id or _active_biome_rule_id != "shatterfield":
+			return
+		_biome_rules.release_shards(center, get_tree().get_nodes_in_group("enemies") if authoritative else [], authoritative)
 
 func _brittle_cover_attack_shapes(owner: PLAYER_SCRIPT, source: String, blast_strength: float) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
@@ -3544,8 +3676,15 @@ func _sync_brittle_cover_state(payload: Dictionary) -> void:
 func _apply_brittle_cover_state(payload: Dictionary) -> void:
 	if payload.get("run") != _cover_run_token or int(payload.get("room", -1)) != _cover_room_sync_id or not _arena_cover.has_brittle_cover():
 		return
+	var before := _arena_cover.snapshot()
 	if _arena_cover.apply_snapshot(int(payload.revision), payload.columns):
+		var broken_columns: Array[Vector2] = []
+		for column: Dictionary in before:
+			var id := int(column.id)
+			if int(column.left) > 0 and not _arena_cover.is_present(id) and is_instance_valid(_arena_cover_bodies.get(id)):
+				broken_columns.append(_arena_cover_bodies[id].global_position)
 		_refresh_arena_cover_geometry()
+		_release_shatter_pillar_bursts(broken_columns, false)
 
 func _flush_pending_cover_state() -> void:
 	if _pending_cover_state.is_empty():
@@ -4389,6 +4528,9 @@ func _sync_open_reward_selection(title: String, is_initial: bool, mode: int, pla
 	_open_boon_selection(title, is_initial, mode, player_mutator, epitaph, current_character_id)
 
 func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> void:
+	if mode == ENUMS.RewardMode.REST:
+		_resolve_rest_site_choice(choice)
+		return
 	run_summary_recorder.record_reward_choice(choice, mode, is_initial)
 	var tracked_choice := choice.duplicate(true)
 	if mode == ENUMS.RewardMode.MISSION:
@@ -4423,6 +4565,8 @@ func _on_reward_selected(choice: Dictionary, mode: int, is_initial: bool) -> voi
 	hud.refresh(_get_hud_state(), player)
 
 func _on_reward_skipped(mode: int, is_initial: bool) -> void:
+	if mode == ENUMS.RewardMode.REST:
+		return
 	run_summary_recorder.record_reward_skip(mode, is_initial, room_depth)
 	if mode == ENUMS.RewardMode.BOSS:
 		boss_reward_pending = false
@@ -4467,6 +4611,9 @@ func _mark_local_reward_phase_complete(is_initial: bool, mode: int) -> void:
 	var local_peer_id := _resolve_local_peer_id()
 	var request := _reward_phase_coordinator.build_local_completion_request(is_multiplayer, local_peer_id, is_initial, mode, hud)
 	if request.is_empty():
+		return
+	if mode == ENUMS.RewardMode.REST:
+		_sync_rest_choice_complete.rpc(local_peer_id, _rest_visit_run, _rest_visit_depth)
 		return
 	_sync_reward_phase_complete.rpc(int(request.get("peer_id", local_peer_id)), bool(request.get("is_initial", is_initial)), int(request.get("mode", mode)))
 
@@ -4519,6 +4666,8 @@ func _reset_progress_for_first_encounter() -> void:
 
 @rpc("reliable", "any_peer", "call_local")
 func _sync_reward_phase_complete(peer_id: int, is_initial: bool, mode: int) -> void:
+	if mode == ENUMS.RewardMode.REST:
+		return
 	if not _reward_phase_coordinator.register_peer_completion(is_multiplayer, peer_id, is_initial, mode):
 		return
 	_try_advance_completed_reward_phase()
@@ -4531,6 +4680,10 @@ func _try_advance_completed_reward_phase() -> void:
 		return
 	var is_initial := bool(active_phase.is_initial)
 	var mode := int(active_phase.mode)
+	if mode == ENUMS.RewardMode.REST:
+		_finalize_reward_phase_and_advance(false, mode)
+		_sync_rest_choice_advance.rpc(_rest_visit_run, _rest_visit_depth)
+		return
 	## Capture the initial encounter profile before _finalize clears pending_initial_room_profile.
 	## Both host and joiner independently seed rng, so without this the joiner rolls a different
 	## obstacle_layout from pick_layout(rng) — terrain diverges on the first encounter.
@@ -4547,10 +4700,36 @@ func _try_advance_completed_reward_phase() -> void:
 func _sync_reward_phase_advance(is_initial: bool, mode: int, initial_profile: Dictionary = {}) -> void:
 	if not MultiplayerSessionManager.is_remote_replica():
 		return
+	if mode == ENUMS.RewardMode.REST:
+		return
 	## Use the host's pre-built profile so the joiner gets the same obstacle_layout.
 	if is_initial and not initial_profile.is_empty():
 		pending_initial_room_profile = initial_profile
 	_finalize_reward_phase_and_advance(is_initial, mode)
+
+func _matches_rest_visit(run_token: String, depth: int) -> bool:
+	return is_multiplayer and current_room_label == "Rest Site" and not run_token.is_empty() and run_token == _rest_visit_run and run_token == COVER_INTERACTIONS.current_run() and depth == _rest_visit_depth and depth == room_depth
+
+@rpc("reliable", "any_peer", "call_local")
+func _sync_rest_choice_complete(peer_id: int, run_token: String, depth: int) -> void:
+	if not _matches_rest_visit(run_token, depth):
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	if sender == 0:
+		sender = _resolve_local_peer_id()
+	if sender != peer_id or not MultiplayerSessionManager.connected_peers.has(peer_id):
+		return
+	if not _reward_phase_coordinator.register_peer_completion(is_multiplayer, peer_id, false, ENUMS.RewardMode.REST):
+		return
+	_try_advance_completed_reward_phase()
+
+@rpc("reliable", "authority")
+func _sync_rest_choice_advance(run_token: String, depth: int) -> void:
+	if not MultiplayerSessionManager.is_remote_replica() or not _matches_rest_visit(run_token, depth):
+		return
+	if _rest_site_choice.active:
+		return
+	_finalize_reward_phase_and_advance(false, ENUMS.RewardMode.REST)
 
 @rpc("reliable", "authority")
 func _sync_doors_spawn_ready() -> void:
@@ -4680,6 +4859,7 @@ func _on_player_died() -> void:
 		_bind_camera_to_local_player()
 		_apply_camera_bounds_for_room(current_effective_room_size)
 	if is_multiplayer and _count_alive_players() > 0:
+		_retire_fallen_rest_choice()
 		if has_new_fallen and is_instance_valid(hud):
 			hud.show_banner("Ally Down", "Clear encounter to revive")
 		return
@@ -5032,7 +5212,7 @@ func _start_encounter_intro_grace() -> void:
 	if not boss_title.is_empty():
 		hud.show_boss_intro(boss_title, BOSS_CATALOGUE.get_greeting(active_boss_id))
 	else:
-		_show_descent_entry_banner("Survey the arena", "Attack cracked columns to open a lane" if _arena_cover.has_brittle_cover() else "")
+		_show_descent_entry_banner("Survey the arena", "Break cracked pillars to burst nearby foes" if _arena_cover.has_brittle_cover() else "")
 
 func _update_encounter_intro_grace() -> bool:
 	if not encounter_intro_grace_active:

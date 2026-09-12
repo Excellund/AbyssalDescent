@@ -45,7 +45,8 @@ func _check_description(text: String, power_id: String, level: int, surface: Str
 		var lower := visible.to_lower()
 		_check(lower.contains("dash") and (lower.contains("hold") or lower.contains("held")) and lower.contains("release"), "Orbit %s explains the existing hold/release control" % surface)
 		_check(lower.contains("column") == (level >= 2), "Orbit L%d %s shows column anchors at their actual unlock" % [level, surface])
-		_check(lower.contains("transfer once") == (level >= 3) and (level < 3 or lower.contains("anchor dies") and lower.contains("2.4 seconds total")), "Orbit L%d %s shows one bounded transfer on anchor death at its actual unlock" % [level, surface])
+		_check(lower.contains("transfer once") == (level >= 3) and (level < 3 or lower.contains("foe dies") and lower.contains("2.4s total")), "Orbit L%d %s shows one bounded transfer on anchor death at its actual unlock" % [level, surface])
+		_check(lower.contains("release dash to steer your escape"), "Orbit L%d %s teaches directional escape at every level" % [level, surface])
 
 func _run() -> void:
 	var registry := REGISTRY.new()
@@ -99,9 +100,8 @@ func _run() -> void:
 		upgrades.free()
 		player.free()
 	var glossary := GLOSSARY.glossary_bbcode()
-	_check(glossary.contains("Blast Drive") and glossary.contains("Razor Orbit"), "Glossary includes both new Arcana")
-	_check(glossary.contains("0.25") and glossary.contains("0.65"), "Glossary explains deliberate and full charge timings")
-	_check(glossary.contains("Level 2") and glossary.contains("Level 3"), "Glossary explains structural upgrades")
+	_check(not glossary.contains("Blast Drive") and not glossary.contains("Razor Orbit"), "Glossary omits individual motion power rules")
+	_check(not glossary.contains("Power Rules"), "Glossary does not restore the removed power chapter")
 	_check(not glossary.contains("door reveal"), "Catalyst glossary no longer promises an absent reward")
 	registry.free()
 	if is_instance_valid(MAPPER._power_registry_instance):

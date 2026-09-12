@@ -1,5 +1,7 @@
 extends Node2D
 
+const EXPIRY_FADE_DURATION := 0.22
+
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 
 var target: Node2D
@@ -13,6 +15,7 @@ var tick_left: float = 0.0
 var spawn_flash_left: float = 0.22
 var tick_flash_left: float = 0.0
 var expansion_duration: float = 0.75
+var expiry_fade_left: float = EXPIRY_FADE_DURATION
 
 func initialize(target_node: Node2D, field_radius: float, field_duration: float, field_tick_interval: float, field_tick_damage: int) -> void:
 	target = target_node
@@ -21,6 +24,7 @@ func initialize(target_node: Node2D, field_radius: float, field_duration: float,
 	duration = field_duration
 	tick_interval = field_tick_interval
 	tick_damage = field_tick_damage
+	expiry_fade_left = EXPIRY_FADE_DURATION
 	time_left = duration
 	tick_left = tick_interval * 0.5
 
@@ -50,11 +54,12 @@ func _process(delta: float) -> void:
 			if DAMAGEABLE.can_take_damage(target):
 				DAMAGEABLE.apply_damage(target, tick_damage, {"source": "enemy_ability", "ability": "pyre_death_field"})
 	if time_left <= 0.0:
-		# The last active tick and the danger presentation end together. Hiding
-		# now also removes the previous draw commands before deferred deletion.
-		hide()
-		queue_free()
-		return
+		# Only the portion after damage expiry advances the brief visual tail.
+		expiry_fade_left = maxf(0.0, expiry_fade_left - maxf(0.0, delta - active_delta))
+		if expiry_fade_left <= 0.0:
+			hide()
+			queue_free()
+			return
 	queue_redraw()
 
 func get_visual_state() -> Dictionary:
@@ -64,13 +69,18 @@ func get_visual_state() -> Dictionary:
 	var spawn_boost := clampf(spawn_flash_left / 0.22, 0.0, 1.0)
 	var tick_boost := clampf(tick_flash_left / 0.1, 0.0, 1.0)
 	var expiry_warning := active and time_left <= minf(0.8, duration)
-	# Brightness communicates danger, not age. Only the inset clock shrinks;
-	# the complete damaging footprint remains readable until the hard expiry.
+	# Damage keeps its complete footprint; the cosmetic tail rapidly dissolves
+	# after expiry and cannot tick. Smoothstep avoids a hard brightness change.
+	var fade := clampf(expiry_fade_left / EXPIRY_FADE_DURATION, 0.0, 1.0)
+	fade = fade * fade * (3.0 - 2.0 * fade)
+	var opacity := (1.0 if active else fade) if not is_queued_for_deletion() else 0.0
 	return {
 		"active": active,
-		"fill_alpha": (0.14 + spawn_boost * 0.07) if active else 0.0,
-		"inner_alpha": (0.08 + pulse * 0.03) if active else 0.0,
-		"boundary_alpha": clampf(0.72 + tick_boost * 0.2 + (pulse * 0.08 if expiry_warning else 0.0), 0.0, 1.0) if active else 0.0,
+		"visible": opacity > 0.0,
+		"opacity": opacity,
+		"fill_alpha": (0.14 + spawn_boost * 0.07) * opacity,
+		"inner_alpha": (0.08 + pulse * 0.03) * opacity,
+		"boundary_alpha": clampf(0.72 + tick_boost * 0.2 + (pulse * 0.08 if expiry_warning else 0.0), 0.0, 1.0) * opacity,
 		"remaining_ratio": remaining_ratio,
 		"expiry_warning": expiry_warning,
 		"pulse": pulse,
@@ -78,14 +88,15 @@ func get_visual_state() -> Dictionary:
 
 func _draw() -> void:
 	var visual := get_visual_state()
-	if not bool(visual["active"]):
+	if not bool(visual["visible"]):
 		return
 	var pulse := float(visual["pulse"])
 	draw_circle(Vector2.ZERO, current_radius, Color(1.0, 0.36, 0.1, float(visual["fill_alpha"])))
 	draw_circle(Vector2.ZERO, current_radius * 0.72, Color(1.0, 0.62, 0.18, float(visual["inner_alpha"])))
 	draw_arc(Vector2.ZERO, current_radius, 0.0, TAU, 64, Color(1.0, 0.63, 0.22, float(visual["boundary_alpha"])), 2.6, true)
-	var clock_end := -PI * 0.5 + TAU * float(visual["remaining_ratio"])
-	draw_arc(Vector2.ZERO, maxf(0.0, current_radius - 7.0), -PI * 0.5, clock_end, 64, Color(1.0, 0.84, 0.48, 0.9), 2.0, true)
+	if bool(visual["active"]):
+		var clock_end := -PI * 0.5 + TAU * float(visual["remaining_ratio"])
+		draw_arc(Vector2.ZERO, maxf(0.0, current_radius - 7.0), -PI * 0.5, clock_end, 64, Color(1.0, 0.84, 0.48, 0.9), 2.0, true)
 	for ring_i in range(3):
 		var inner_radius := current_radius * (0.34 + float(ring_i) * 0.18)
-		draw_arc(Vector2.ZERO, inner_radius, 0.0, TAU, 28, Color(0.98, 0.24, 0.08, 0.08 + pulse * 0.05), 1.2)
+		draw_arc(Vector2.ZERO, inner_radius, 0.0, TAU, 28, Color(0.98, 0.24, 0.08, (0.08 + pulse * 0.05) * float(visual["opacity"])), 1.2)

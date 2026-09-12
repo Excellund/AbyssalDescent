@@ -1,0 +1,66 @@
+{
+  "source": "https://opengameart.org/content/swishes-sound-pack",
+  "author": "artisticdude",
+  "license": "CC0",
+  "source_sha256": {
+    "9": "123883f006ce55feecbff11eea5f87c4493df4399989983037144570a23723c1",
+    "10": "4f7381a76f280d3f36f962ac3f44f16f77eec44797f30715d063c81ea3859024",
+    "11": "9e81d548d8215fbb36f7a41b5771d4b52c2fd02fbb9b5ff9a4c65118fd88ee4d",
+    "12": "0513a86d428d9ed8601e93b8554580a5932c6c1a82d39d81a8f48883f1807a67",
+    "13": "698230ba3fe05a68c18d68cd6b3a07fb98e6c1198bb1a4238592ee9912c02c77"
+  },
+  "gain_db": -21.5,
+  "return_trim_db": -8.0,
+  "files": {
+    "crescent_outbound_1.wav": {
+      "seconds": 0.1343125,
+      "sha256": "2207304617c59dd5feacde88d2f7aea69fa735aaf86fe06d2ad48b863c7512ea",
+      "peak_dbfs": -3.7417328671428867,
+      "rms_dbfs": -19.51638931396473
+    },
+    "crescent_outbound_2.wav": {
+      "seconds": 0.10972916666666667,
+      "sha256": "35a08a3d5d15291a5adf0d5fe65aa2c19309162e0b135e6d09edb0c84ee6d386",
+      "peak_dbfs": -3.7417328671428884,
+      "rms_dbfs": -17.103890771628034
+    },
+    "crescent_outbound_3.wav": {
+      "seconds": 0.0990625,
+      "sha256": "da24d22a5b0d164873506ff733cd7aa45d4ec537d75a358accbcc76574b5aa99",
+      "peak_dbfs": -3.7417328671428867,
+      "rms_dbfs": -18.390607171172665
+    },
+    "crescent_return_1.wav": {
+      "seconds": 0.06916666666666667,
+      "sha256": "630ea309ca8d771dfed6f2d0d7aa2570f8982bf5429e18b274fc3b24a3dbd81b",
+      "peak_dbfs": -3.7417328671428884,
+      "rms_dbfs": -16.892406666891528
+    },
+    "crescent_return_2.wav": {
+      "seconds": 0.07602083333333333,
+      "sha256": "a09b0097d07cab4bef7d41baa02882ecd86ab6bdfc761e0c9748037a48a0791b",
+      "peak_dbfs": -3.7417328671428884,
+      "rms_dbfs": -17.542148836280187
+    },
+    "crescent_bounce_1.wav": {
+      "seconds": 0.0691875,
+      "sha256": "df4361375f4edb12a4c05204bfcb039b0a2f7f242c9effa4f700fc7b6319f626",
+      "peak_dbfs": -3.7417328671428884,
+      "rms_dbfs": -16.980070730875312
+    }
+  },
+  "auditions": {
+    "light": {
+      "peak_dbfs": -22.58726513406406,
+      "seconds": 12.0,
+      "mix_gain_db": -21.5,
+      "return_trim_db": -8.0
+    },
+    "weightier": {
+      "peak_dbfs": -22.36144199640314,
+      "seconds": 12.0,
+      "mix_gain_db": -21.5,
+      "return_trim_db": -8.0
+    }
+  }
+}

@@ -5,6 +5,9 @@ extends Node
 
 const ENUMS := preload("res://scripts/shared/enums.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
+const RELIC_RECOVERY := preload("res://scripts/core/relic_recovery_state.gd")
+
+var relic_recovery := RELIC_RECOVERY.new()
 
 # ============================================================================
 # OBJECTIVE KIND & ROLE
@@ -140,6 +143,7 @@ var intercept_player_in_escort_zone: bool = true
 
 ## Reset all state to defaults (call when entering a room without objectives)
 func reset() -> void:
+	relic_recovery.reset()
 	active_objective_kind = ""
 	time_left = 0.0
 	spawn_interval = 0.0
@@ -254,11 +258,13 @@ func get_hunt_target_max_health() -> int:
 
 ## Whether any room objective is currently active
 func has_active_objective() -> bool:
-	return active_objective_kind == "last_stand" or active_objective_kind == "cut_the_signal" or active_objective_kind == "hold_the_line" or active_objective_kind == "circuit_sweep" or active_objective_kind == "pulse_window" or active_objective_kind == "intercept_run"
+	return active_objective_kind == "last_stand" or active_objective_kind == "cut_the_signal" or active_objective_kind == "hold_the_line" or active_objective_kind == "circuit_sweep" or active_objective_kind == "pulse_window" or active_objective_kind == "intercept_run" or active_objective_kind == "relic_recovery"
 
 
 ## Whether hold-the-line control overlay should currently render
 func should_draw_control_overlay() -> bool:
+	if active_objective_kind == "relic_recovery":
+		return relic_recovery.relics.size() == RELIC_RECOVERY.RELIC_COUNT
 	if active_objective_kind == "pulse_window":
 		return pulse_ring_time_left > 0.0
 	if control_radius <= 0.0 and intercept_drone_radius <= 0.0 and sweep_node_radius <= 0.0:
@@ -282,6 +288,10 @@ func get_telemetry_state() -> Dictionary:
 
 ## Serialize all network-synced fields into a payload for transmission.
 func serialize_sync_state() -> Dictionary:
+	if active_objective_kind == "relic_recovery":
+		# Do not append cargo to every other objective's fields. This bounded
+		# state stays below the ENet MTU and uses the existing ordered channel.
+		return {"active_objective_kind": active_objective_kind, "relic_recovery": relic_recovery.snapshot(), "max_enemies": max_enemies}
 	return {
 		"active_objective_kind": String(active_objective_kind),
 		"time_left": float(time_left),
@@ -329,6 +339,7 @@ func serialize_sync_state() -> Dictionary:
 ## Apply a received network sync payload, clamping all values to safe ranges.
 func apply_sync_state(state: Dictionary) -> void:
 	active_objective_kind = String(state.get("active_objective_kind", active_objective_kind))
+	relic_recovery.apply_snapshot(state.get("relic_recovery", {}) if active_objective_kind == "relic_recovery" else {})
 	time_left = maxf(0.0, float(state.get("time_left", time_left)))
 	spawn_interval = maxf(0.0, float(state.get("spawn_interval", spawn_interval)))
 	spawn_timer = maxf(0.0, float(state.get("spawn_timer", spawn_timer)))
@@ -400,6 +411,8 @@ func _clear_replica_pulse_display() -> void:
 
 ## Get control overlay render state for world drawing
 func get_control_overlay_state() -> Dictionary:
+	if active_objective_kind == "relic_recovery":
+		return {"should_draw": should_draw_control_overlay(), "overlay_mode": "relic_recovery", "recovery": relic_recovery.snapshot()}
 	if active_objective_kind == "circuit_sweep":
 		return {
 			"should_draw": should_draw_control_overlay(),
@@ -439,6 +452,7 @@ func get_control_overlay_state() -> Dictionary:
 func get_hud_state() -> Dictionary:
 	var show_pulse := active_objective_kind == "pulse_window" and pulse_active and pulse_active_timer > 0.0
 	return {
+		"relic_recovery": relic_recovery.snapshot() if active_objective_kind == "relic_recovery" else {},
 		"active_objective_kind": active_objective_kind,
 		"time_left": time_left,
 		"kills": kills,

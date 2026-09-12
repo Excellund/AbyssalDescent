@@ -46,6 +46,7 @@ func _run() -> void:
 	await _test_bounded_reset_and_removal()
 	await _test_intro_and_destroyed_cover()
 	await _test_range_and_zero_length_warning()
+	await _test_backwash()
 	_test_local_sound_setting()
 	if is_instance_valid(MAPPER._power_registry_instance):
 		MAPPER._power_registry_instance.free()
@@ -79,6 +80,12 @@ func _test_tracking_commit_and_miss() -> void:
 	boss._process_behavior(0.54)
 	_check(boss.phase == BREAKWATER.Phase.RECOVER and boss.global_position.distance_to(locked_end) < 0.01, "Recovery holds its stationary position through its full duration")
 	boss._process_behavior(0.02)
+	_check(boss.phase == BREAKWATER.Phase.BACKWASH and is_equal_approx(boss.phase_left, BREAKWATER.BACKWASH_TIME), "A missed charge gives a complete separate Backwash warning after its harmless recovery")
+	boss._process_behavior(BREAKWATER.BACKWASH_TIME)
+	_check(boss.phase == BREAKWATER.Phase.TIDE and not boss._backwash_pending, "The full brace warning releases a moving returning crest")
+	boss._process_behavior(10.0)
+	_check(boss.phase == BREAKWATER.Phase.RECOVER and is_equal_approx(boss.phase_left, BREAKWATER.TIDE_RECOVERY), "The finished tide grants its complete stationary punish window")
+	boss._process_behavior(BREAKWATER.TIDE_RECOVERY)
 	_check(boss.phase == BREAKWATER.Phase.SEEK and is_equal_approx(boss.phase_left, boss.attack_cooldown), "The unchanged between-attack cooldown starts after recovery")
 	_clear()
 
@@ -234,6 +241,148 @@ func _test_range_and_zero_length_warning() -> void:
 	_check(not Geometry2D.triangulate_polygon(warning[0]).is_empty(), "The contact-only warning is a valid rendered polygon")
 	_clear()
 
+func _test_backwash() -> void:
+	_setup()
+	var boss := _apex(Vector2(160.5, -30.25))
+	boss.charge_direction = Vector2.RIGHT
+	actor.global_position = Vector2(-400.0, -300.0)
+	var probes: Array[Probe] = []
+	for offset: Vector2 in [Vector2(-200.0, 0.0), Vector2(-200.0, 80.0), Vector2(-200.0, 231.0), Vector2(80.0, 80.0)]:
+		var probe := Probe.new()
+		probe.player_id = 10 + probes.size()
+		room.add_child(probe)
+		probe.global_position = boss.global_position + offset
+		probes.append(probe)
+	boss._enter_recovery(false)
+	boss._process_behavior(BREAKWATER.MISS_RECOVERY)
+	_check(boss.phase == BREAKWATER.Phase.BACKWASH and boss.get_attack_callout().begins_with("Return Tide"), "Actual miss recovery braces for the returning tide")
+	var warning := boss.get_warning_polygons()
+	for index in range(probes.size()):
+		var drawn := false
+		for polygon in warning:
+			drawn = drawn or Geometry2D.is_point_in_polygon(probes[index].global_position, polygon)
+		_check(drawn == (index == 1), "The full tide warning preserves the vacated ram lane, outer shore and calm side beyond the boss")
+	boss._process_behavior(BREAKWATER.BACKWASH_TIME - 0.01)
+	_check(probes.all(func(probe: Probe) -> bool: return probe.hit_count == 0), "Bracing deals no premature damage")
+	boss._process_behavior(0.011)
+	_check(boss.phase == BREAKWATER.Phase.TIDE and probes.all(func(probe: Probe) -> bool: return probe.hit_count == 0), "Warning expiry releases the wave without an instant full-area hit")
+	boss._process_behavior(0.1)
+	_check(probes[1].hit_count == 0, "A distant player remains unharmed until the traveling crest arrives")
+	boss._process_behavior(10.0)
+	for index in range(probes.size()):
+		_check(probes[index].hit_count == (1 if index == 1 else 0), "A long-frame tide sweep hits only the warned lobe once")
+	_check(boss.phase == BREAKWATER.Phase.RECOVER and boss.get_warning_polygons().is_empty(), "The tide completely retires into a stationary recovery")
+	boss._begin_backwash()
+	var packet := boss._get_custom_network_runtime_state()
+	var replica := _apex(Vector2(220.0, 80.0))
+	replica.set_network_simulation_enabled(false)
+	replica._apply_custom_network_runtime_state(packet)
+	_check(replica.get_warning_polygons() == boss.get_warning_polygons(), "Replica preserves exact committed wave path through body interpolation")
+	replica._resolve_backwash()
+	_check(replica.phase == BREAKWATER.Phase.BACKWASH, "A replica cannot release a wave by resolving its warning")
+	boss._resolve_backwash()
+	boss._process_behavior(0.3)
+	var active := boss._get_custom_network_runtime_state()
+	replica._apply_custom_network_runtime_state(active)
+	_check(replica.get_warning_polygons() == boss.get_warning_polygons() and replica.phase == BREAKWATER.Phase.TIDE, "The actual moving crest has identical host and replica geometry")
+	var progress := replica._tide_progress
+	replica._process_network_visuals(0.1)
+	_check(replica._tide_progress > progress, "Replica animation advances the committed crest without host damage authority")
+	replica._process_network_visuals(BREAKWATER.REMOTE_LEASE + 0.01)
+	replica._apply_custom_network_runtime_state(active)
+	_check(replica.get_warning_polygons().is_empty(), "Expired tide cannot be resurrected by a duplicate packet")
+	replica.free()
+	for reason in ["authority", "cancel", "bounds", "party_down"]:
+		boss._begin_backwash()
+		boss._resolve_backwash()
+		if reason == "authority":
+			boss.set_network_simulation_enabled(false)
+		elif reason == "cancel":
+			boss._cancel_attack()
+		elif reason == "bounds":
+			room.current_effective_room_size += Vector2(10.0, 10.0)
+			boss._process_behavior(0.01)
+		else:
+			actor.health_state.current_health = 0
+			for probe in probes:
+				probe.health_state.current_health = 0
+			boss._process_behavior(0.01)
+		_check(boss.get_warning_polygons().is_empty() and not boss._backwash_pending, reason + " retires active and pending tide")
+		boss.set_network_simulation_enabled(true)
+	_clear()
+	await _test_tide_walking_routes()
+	await _test_tide_curved_contact()
+	await _test_tide_dash_crossing()
+
+func _test_tide_walking_routes() -> void:
+	# Slowest base character at 45% speed, with Attack lock and acceleration
+	# reserved before moving. Find a straight body-safe route using independently
+	# classified published polygons, including endpoints next to every corner.
+	for size: Vector2 in [Vector2(1160, 860), Vector2(740, 540)]:
+		_setup()
+		room.current_room_size = size
+		room.current_effective_room_size = size
+		var bounds := EnemyReplicationService.get_current_room_bounds()
+		var budget := 188.0 * 0.45 * (BREAKWATER.BACKWASH_TIME - 0.25)
+		var boss := _apex()
+		for at: Vector2 in [Vector2.ZERO, bounds.position + Vector2(40, 40), bounds.end - Vector2(40, 40), Vector2(bounds.end.x - 40, bounds.position.y + 40)]:
+			for angle: float in [0.0, 0.6, 1.4, 2.6, 3.7, 4.8]:
+				boss.global_position = at
+				boss.charge_direction = Vector2.from_angle(angle)
+				boss._begin_backwash()
+				var geometry := boss.get_warning_polygons()
+				for x in range(int(bounds.position.x + 26), int(bounds.end.x - 25), 55):
+					for y in range(int(bounds.position.y + 26), int(bounds.end.y - 25), 55):
+						var point := Vector2(x, y)
+						if not _inside_tide_polygons(geometry, point) or point.distance_to(at) < 53.0:
+							continue
+						var escape := Vector2.INF
+						for direction_index in range(48):
+							var direction := Vector2.from_angle(TAU * direction_index / 48.0)
+							for distance: float in [32.0, 64.0, 96.0, budget]:
+								var candidate := point + direction * distance
+								if not bounds.has_point(candidate) or _inside_tide_polygons(geometry, candidate):
+									continue
+								if Geometry2D.get_closest_point_to_segment(at, point, candidate).distance_to(at) < 53.0:
+									continue
+								escape = candidate
+								break
+							if escape.is_finite():
+								break
+						_check(escape.is_finite(), "Tide has a Slowed walking escape before release at %s / %s / %.2f / %s" % [size, at, angle, point])
+		boss.free()
+		_clear()
+		await process_frame
+
+func _inside_tide_polygons(polygons: Array[PackedVector2Array], point: Vector2) -> bool:
+	for polygon in polygons:
+		if Geometry2D.is_point_in_polygon(point, polygon):
+			return true
+	return false
+
+func _test_tide_dash_crossing() -> void:
+	_setup()
+	var boss := _apex(Vector2(160.0, 0.0))
+	boss.charge_direction = Vector2.RIGHT
+	actor.global_position = Vector2(-80.0, 100.0)
+	boss._begin_backwash()
+	boss._resolve_backwash()
+	boss._process_behavior(0.40)
+	actor.dash_cooldown_left = 0.0
+	actor._dash_damage_immune_left = 0.0
+	actor.aim = Vector2.RIGHT
+	Input.action_press("dash")
+	actor._try_start_dash(Vector2.RIGHT)
+	Input.action_release("dash")
+	_check(actor.dash_time_left > 0.0, "The tide fixture starts the actual normal Dash through its input boundary")
+	var health := actor.get_current_health()
+	for frame in range(20):
+		actor._physics_process(1.0 / 60.0)
+		boss._process_behavior(1.0 / 60.0)
+	_check(actor.get_current_health() == health and actor.global_position.x > -20.0, "A real moving normal Dash crosses the crest through existing contact immunity")
+	_clear()
+	await process_frame
+
 func _test_local_sound_setting() -> void:
 	_setup()
 	var boss := _apex()
@@ -252,3 +401,34 @@ func _test_local_sound_setting() -> void:
 		boss._sound.stop()
 	RunContext.sfx_volume_db = saved_volume
 	_clear()
+
+func _test_tide_curved_contact() -> void:
+	_setup()
+	var boss := _apex(Vector2(150.0, 0.0))
+	var probe := Probe.new()
+	probe.player_id = 21
+	room.add_child(probe)
+	actor.global_position = Vector2(-500.0, -350.0)
+	for angle: float in [0.0, 0.63, 2.1]:
+		boss.charge_direction = Vector2.from_angle(angle)
+		boss._begin_backwash()
+		boss._resolve_backwash()
+		for progress: float in [55.0, 210.0]:
+			boss._tide_progress = progress
+			var geometry := boss.get_warning_polygons()
+			for side: float in [-1.0, 1.0]:
+				for across: float in [31.5, 32.5, 54.0, 89.0, 130.0, 191.0, 229.5, 230.5]:
+					for offset: float in [-24.5, -23.5, 0.0, 23.5, 24.5]:
+						# The test classifies the actual published polygon rather
+						# than restating the production curved-distance predicate.
+						var point := boss._tide_origin + boss._tide_direction * (progress + boss._tide_curve_offset(across) + offset) + boss._tide_direction.orthogonal() * side * across
+						probe.global_position = point
+						probe.health_state.current_health = 100
+						probe.hit_count = 0
+						boss._hit_players.clear()
+						var painted := _inside_tide_polygons(geometry, point)
+						boss._apply_tide_hits(progress, progress)
+						boss._apply_tide_hits(progress, progress)
+						_check(probe.hit_count == (1 if painted else 0), "Curved foam boundary matches authoritative contact exactly once, including wake/outer/front edges")
+	_clear()
+	await process_frame

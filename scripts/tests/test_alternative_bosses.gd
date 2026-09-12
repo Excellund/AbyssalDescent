@@ -67,10 +67,13 @@ func _run() -> void:
 	await _test_living_targets()
 	await _test_party_ring_safe_pockets()
 	await _test_pressure_sequences()
+	await _test_attack_variety()
+	await _test_new_followup_walking_routes()
 	await _test_arena_escape_routes()
 	await _test_wall_walking_routes()
 	await _test_halo_center_walking_escape()
 	await _test_slam_physical_bystander()
+	await _test_kilnheart_forge_identity()
 	current_scene = null
 	world.free()
 	await process_frame
@@ -351,7 +354,7 @@ func _test_pressure_sequences() -> void:
 	var partner: Probe = Probe.new()
 	world.add_child(probe)
 	world.add_child(partner)
-	for entry: Dictionary in [{"id": "kilnheart", "kind": 1}, {"id": "glassweaver", "kind": 0}, {"id": "glassweaver", "kind": 2}, {"id": "null_archivist", "kind": 0}]:
+	for entry: Dictionary in [{"id": "kilnheart", "kind": 0}, {"id": "kilnheart", "kind": 1}, {"id": "kilnheart", "kind": 2}, {"id": "glassweaver", "kind": 0}, {"id": "glassweaver", "kind": 1}, {"id": "glassweaver", "kind": 2}, {"id": "null_archivist", "kind": 0}, {"id": "null_archivist", "kind": 2}]:
 		var boss: Alternative = _boss(String(entry.id))
 		_prepare(boss, probe, partner, int(entry.kind))
 		var initial_serial: int = boss._attack_serial
@@ -360,8 +363,16 @@ func _test_pressure_sequences() -> void:
 		var first_safe: Vector2 = boss.global_position + Vector2(210.0, 0.0)
 		if boss.boss_id == "glassweaver":
 			first_safe = boss._sequence_focus
+			if int(entry.kind) == 1:
+				first_safe += boss._sequence_forward.rotated(PI * 0.25) * 120.0
 		elif boss.boss_id == "null_archivist":
 			first_safe = original_aim + Vector2(0.0, -132.0)
+			if int(entry.kind) == 2:
+				first_safe = boss._sequence_focus + boss._sequence_forward.rotated(PI * 0.25) * 170.0
+		elif int(entry.kind) == 2:
+			first_safe = original_aim + Vector2(0.0, -132.0)
+		elif int(entry.kind) == 0:
+			first_safe = boss._slam_landing + boss._sequence_forward * 220.0
 		_check(not warning_contains(initial_shapes, first_safe), String(entry.id) + ": the first sequence step offers its advertised escape")
 		if int(entry.kind) != 2:
 			_check(warning_contains(initial_shapes, original_aim), String(entry.id) + ": waiting at the original aim is no longer automatically safe")
@@ -416,6 +427,90 @@ func _test_pressure_sequences() -> void:
 	paused_boss._process_behavior(paused_gap + 0.001)
 	_check(paused_boss.boss_state == paused_boss.State.WARNING, "Resuming the paused sequence starts its full next warning")
 	paused_boss.free()
+	probe.free()
+	partner.free()
+	await process_frame
+
+func _test_attack_variety() -> void:
+	var probe := Probe.new()
+	world.add_child(probe)
+	probe.global_position = Vector2(390.0, 0.0)
+	seed(982451653)
+	for id in IDS:
+		var boss := _boss(id)
+		boss.target = probe
+		boss.target_candidates = [probe]
+		var previous: int = -1
+		var opening_orders: Dictionary = {}
+		for bag_index in range(30):
+			var seen: Array[int] = []
+			for _index in range(2 if id == "null_archivist" else 3):
+				var kind: int = boss._choose_root_attack()
+				_check(kind != previous, id + ": consecutive roots never repeat across bag boundaries")
+				_check(not seen.has(kind), id + ": every move appears exactly once per bag")
+				seen.append(kind)
+				previous = kind
+			opening_orders[str(seen)] = true
+			_check(seen.size() == (2 if id == "null_archivist" else 3) and seen.has(0) and seen.has(2), id + ": no root move can starve")
+		if id != "null_archivist":
+			_check(opening_orders.size() >= 3, id + ": repeated turns have multiple orders at the same target position")
+		boss.free()
+	var moving := PhysicalProbe.new()
+	world.add_child(moving)
+	moving.set_physics_process(false)
+	moving.global_position = world.global_position
+	moving.velocity = Vector2(200.0, 0.0)
+	var furnace := _boss("kilnheart")
+	furnace.target = moving
+	furnace.target_candidates = [moving]
+	furnace.begin_attack(2)
+	furnace._resolve_attack()
+	furnace._process_behavior(0.23)
+	var geometry: Array[Dictionary] = furnace.get_attack_warning_geometry()
+	_check(geometry.size() == 1 and geometry[0].center.is_equal_approx(moving.global_position + Vector2(240.0, 0.0)), "Cinder Pursuit visibly commits ahead of current movement")
+	_check(warning_contains(geometry, moving.global_position + moving.velocity * furnace.warning_duration), "Continuing the captured walking direction reaches Cinder Pursuit at impact")
+	_check(not warning_contains(geometry, moving.global_position), "Stopping instead of following the captured movement offers a safe answer to Cinder Pursuit")
+	var packet: Dictionary = furnace.get_projectile_network_sync_state()
+	moving.velocity = Vector2(-200.0, 0.0)
+	moving.global_position += Vector2(-100.0, 0.0)
+	furnace._process_behavior(0.2)
+	_check(furnace.get_attack_warning_geometry() == geometry, "Changing direction after Cinder Pursuit warning cannot drag its committed disk")
+	var replica := _boss("kilnheart", true)
+	replica.apply_projectile_network_sync_state(packet)
+	_check(replica.get_attack_warning_geometry() == geometry and replica.get_attack_callout() == "Cinder Pursuit", "Replica presents the same pursuit geometry and move identity")
+	furnace.free()
+	replica.free()
+	moving.free()
+	probe.free()
+	await process_frame
+
+func _test_new_followup_walking_routes() -> void:
+	var probe := Probe.new()
+	var partner := Probe.new()
+	world.add_child(probe)
+	world.add_child(partner)
+	for entry: Dictionary in [{"id": "kilnheart", "kind": 0}, {"id": "kilnheart", "kind": 2}, {"id": "glassweaver", "kind": 1}, {"id": "null_archivist", "kind": 2}]:
+		var boss := _boss(String(entry.id))
+		var limit: Vector2 = boss.arena_size * 0.5 - Vector2(125.0, 125.0)
+		var bounds := Rect2(world.global_position - boss.arena_size * 0.5, boss.arena_size)
+		var body_radius: float = float(boss.PROFILES[boss.boss_id]["radius"]) + Vector2(16.0, 16.0).length()
+		for offset: Vector2 in [Vector2.ZERO, limit, Vector2(-limit.x, limit.y), -limit]:
+			_prepare(boss, probe, partner, int(entry.kind))
+			boss._cancel_attack()
+			boss.global_position = world.global_position + offset
+			probe.global_position = boss._clamp_to_arena(boss.global_position + Vector2(160.0, 100.0), 20.0)
+			partner.global_position = probe.global_position
+			boss.begin_attack(int(entry.kind))
+			boss._resolve_attack()
+			boss._process_behavior(boss.state_time_left + 0.001)
+			var shapes: Array[Dictionary] = boss.get_attack_warning_geometry()
+			var budget: float = SLOWED_SPEED * (boss.warning_duration - 0.12) - 3.0
+			for point in sample_points(shapes, boss.global_position):
+				if not bounds.has_point(point) or point.distance_to(boss.global_position) <= body_radius + 1.0 or not warning_contains(shapes, point):
+					continue
+				var escape := _safe_endpoint(shapes, point, boss, budget)
+				_check(escape.is_finite(), "%s follow-up offers a Slowed escape after Attack lock at %s with boss %s" % [entry.id, point, boss.global_position])
+		boss.free()
 	probe.free()
 	partner.free()
 	await process_frame
@@ -608,4 +703,72 @@ func _test_slam_physical_bystander() -> void:
 	boss.free()
 	aim.free()
 	bystander.free()
+	await process_frame
+
+func _test_kilnheart_forge_identity() -> void:
+	var boss := _boss("kilnheart")
+	var probe := Probe.new()
+	world.add_child(probe)
+	boss.target = probe
+	boss.target_candidates = [probe, probe]
+	boss.global_position = world.global_position + Vector2(-300.0, 0.0)
+	probe.global_position = world.global_position + Vector2(120.0, 0.0)
+	_check(boss.get_max_health() == 1320 and boss.attack_damage == 38, "Kilnheart gains 20 percent durability without increasing incoming hit damage")
+	_check(boss.move_speed == 190.0 and boss.action_cooldown == 0.44 and boss.recover_time >= 0.72, "Furnace pursuit and turn pacing strengthen while the final punish opening stays intact")
+	boss.begin_attack(0)
+	var geometry := boss.get_attack_warning_geometry()
+	var start := boss.global_position
+	boss._process_behavior(boss.warning_duration * 0.3)
+	_check(boss.global_position == start and probe.health == 1000, "Slam visibly builds pressure before the rapid plunge and cannot deal early damage")
+	boss._process_behavior(boss.warning_duration * 0.45)
+	var pose := boss.get_furnace_pose()
+	_check(float(pose.lift) > 35.0 and boss.global_position != start and boss.get_attack_warning_geometry() == geometry, "The furnace lifts during its plunge while the landing geometry stays committed")
+	probe.global_position = boss._slam_landing + Vector2(220.0, 0.0)
+	boss._resolve_attack()
+	_check(probe.health == 1000 and boss._furnace_cue_count == 2, "A successfully dodged Slam still presents one charge and one heavy impact cue")
+	_check(boss.get_furnace_pose().scale.x > 1.0, "Impact visibly compresses the furnace shell")
+	boss._process_behavior(boss.state_time_left + 0.001)
+	var vents := boss.get_attack_warning_geometry()
+	_check(vents.size() == 4 and boss.get_attack_callout() == "Crucible Vents" and boss.collision_layer != 0, "Slam opens four separately warned vents with restored physical collision")
+	var floor_bounds := Rect2(world.global_position - boss.arena_size * 0.5, boss.arena_size).grow(-36.0)
+	for vent in vents:
+		_check(floor_bounds.has_point(vent.start) and floor_bounds.has_point(vent.end), "Vents keep their capsule caps inside the arena floor")
+	_check(not warning_contains(vents, boss.global_position + Vector2(60.0, 0.0)), "The vent hub leaves physical standing room outside the furnace body")
+	var replica := _boss("kilnheart", true)
+	var packet := boss.get_projectile_network_sync_state()
+	replica.apply_projectile_network_sync_state(packet)
+	var cues := replica._furnace_cue_count
+	var repeated := boss.get_projectile_network_sync_state()
+	replica.apply_projectile_network_sync_state(repeated)
+	_check(replica._furnace_cue_count == cues and replica.get_attack_warning_geometry() == vents, "Successive snapshots cannot replay the same furnace cue")
+	replica._process_network_visuals(2.0)
+	_check(replica._furnace_cue_count == cues and replica.get_attack_callout().is_empty() and replica._afterglow_left == 0.0, "Lost resolution clears the replica warning without inventing an impact or sound")
+	boss._resolve_attack()
+	var resolved := boss.get_projectile_network_sync_state()
+	replica.apply_projectile_network_sync_state(resolved)
+	_check(replica._furnace_cue_count == cues + 1, "Only the authoritative vent resolution adds the replica impact cue")
+	var duplicate_resolved := boss.get_projectile_network_sync_state()
+	replica.apply_projectile_network_sync_state(duplicate_resolved)
+	_check(replica._furnace_cue_count == cues + 1, "Repeated vent resolutions never replay their impact cue")
+	for point in sample_points(vents, boss.global_position):
+		probe.reset()
+		boss.begin_attack(0, 1)
+		probe.global_position = point
+		boss._resolve_attack()
+		_check((probe.health < 1000) == warning_contains(vents, point), "Actual Crucible Vents damage matches its independently classified committed lanes")
+		_check(probe.damage_contexts.size() <= 1, "Intersecting vent geometry can damage each party member only once")
+	for impact in [false, true]:
+		var sound := boss._make_furnace_audio(impact)
+		var energy := 0.0
+		var peak := 0
+		for index in range(sound.data.size() / 2):
+			var sample := int(sound.data.decode_s16(index * 2))
+			energy += absf(sample)
+			peak = maxi(peak, absi(sample))
+		_check(sound.get_length() >= 0.4 and energy > 1000.0 and peak < 32767, "Furnace pressure and impact audio contain audible bounded samples without digital clipping")
+	boss._cancel_attack()
+	_check(boss._impact_shapes.is_empty() and boss._warning_shapes.is_empty() and boss._pending_attack_kind == -1, "Room cleanup cancels forge impacts and queued vents together")
+	boss.free()
+	replica.free()
+	probe.free()
 	await process_frame

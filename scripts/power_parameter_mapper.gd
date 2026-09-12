@@ -16,6 +16,7 @@ static func _get_power_registry_instance():
 const UPGRADE_PARAM_MAP := {
 	"patient_hunter": {"property": "patient_hunter_bonus_damage"},
 	"marked_prey": {"property": "marked_prey_bonus_damage"},
+	"farshot": {"property": "farshot_bonus_damage"},
 	"shatterwake": {"property": "shatterwake_stacks"},
 	"first_strike": {"property": "first_strike_bonus_damage"},
 	"heavy_blow": {"property": "damage"},

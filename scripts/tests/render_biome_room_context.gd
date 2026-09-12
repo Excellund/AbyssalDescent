@@ -108,6 +108,11 @@ func _capture_context(frame_name: String, size: Vector2i, tooltip: bool) -> void
 	var state: Dictionary = world._biome_rules.snapshot()
 	var identity := BIOMES.get_room_combat_identity(String(state.id), String(state.mode), bool(state.fragments))
 	var hint: Label = world.hud._status_biome_rule_label
+	var phase_hint: Label = world.hud._status_biome_phase_label
+	check(phase_hint.visible and phase_hint.text == world._get_biome_rule_status(), "HUD identifies the actual committed phase and its targets: " + frame_name)
+	check(phase_hint.text.begins_with("HELP") if state.mode == "assistance" else phase_hint.text.begins_with("DANGER"), "Readable polarity is explicit in every room mode: " + frame_name)
+	check(not world._biome_rules.get_polarity_contours().is_empty(), "Visible biome geometry has matching polarity contours: " + frame_name)
+	check(phase_hint.get_minimum_size().x <= phase_hint.size.x + .01 and root.get_visible_rect().encloses(phase_hint.get_global_rect()), "Phase and target cue fits beside the biome advice: " + frame_name)
 	check(hint.visible and hint.text == identity.entry_hint, "Actual HUD displays the current compact/assistance rule: " + frame_name)
 	check(hint.get_minimum_size().y <= hint.size.y + .01 and root.get_visible_rect().encloses(hint.get_global_rect()), "Complete contextual rule fits the native HUD: " + frame_name)
 	if world.hud.room_banner_title_label.text == world._get_active_biome_name() and world.hud.room_banner_subtitle_label.modulate.a > .01:

@@ -2,6 +2,8 @@ extends Node2D
 ## Owner-simulated blades; remote instances only predict bounded visual state.
 ## An enemy may be hit once per leg. Neither leg executes another primary attack.
 
+const SOUNDS := preload("res://scripts/shared/crescent_sound.gd")
+const SOUND_BASE_DB := -21.5
 const INTERACTIONS := preload("res://scripts/shared/combat_interaction_registry.gd")
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const LAUNCH := preload("res://scripts/enemy_launch_state.gd")
@@ -37,6 +39,7 @@ class Blade extends RefCounted:
 	var trail: Array[Vector2] = []
 	var flash_left: float = 0.0
 	var presentation_finished: bool = false
+	var return_sound_played: bool = false
 
 var player: CharacterBody2D
 var blades: Array[Blade] = []
@@ -50,7 +53,11 @@ var _state_left: float = 0.0
 var _remote_lease: float = 0.0
 var _shape := CircleShape2D.new()
 var _sound: AudioStreamPlayer
+var _return_sound: AudioStreamPlayer
+var _bounce_sound: AudioStreamPlayer
 var _sound_left: float = 0.0
+var _sound_voices: Dictionary = {}
+var _sound_cursor: Dictionary = {}
 
 func initialize(owner_player: CharacterBody2D) -> void:
 	player = owner_player
@@ -59,12 +66,25 @@ func initialize(owner_player: CharacterBody2D) -> void:
 	z_index = 4
 	_shape.radius = BLADE_RADIUS
 	if DisplayServer.get_name() != "headless":
-		_sound = AudioStreamPlayer.new()
-		_sound.volume_db = -21.0
-		if AudioServer.get_bus_index("SFX") >= 0:
-			_sound.bus = &"SFX"
-		_sound.stream = _make_sound()
-		add_child(_sound)
+		for kind: StringName in [&"outbound", &"return", &"bounce"]:
+			var voices: Array[AudioStreamPlayer] = []
+			for index in SOUNDS.variants(kind).size():
+				voices.append(_create_sound_voice(kind, index))
+			_sound_voices[kind] = voices
+			_sound_cursor[kind] = 0
+		_sound = _sound_voices[&"outbound"][0]
+		_return_sound = _sound_voices[&"return"][0]
+		_bounce_sound = _sound_voices[&"bounce"][0]
+
+func _create_sound_voice(kind: StringName, index: int = 0) -> AudioStreamPlayer:
+	var voice := AudioStreamPlayer.new()
+	voice.volume_db = SOUND_BASE_DB + SOUNDS.trim_db(kind)
+	voice.max_polyphony = 1
+	if AudioServer.get_bus_index("SFX") >= 0:
+		voice.bus = &"SFX"
+	voice.stream = SOUNDS.stream(kind, index)
+	add_child(voice)
+	return voice
 
 func _visible_allowed() -> bool:
 	return is_instance_valid(player) and not player.is_queued_for_deletion() and bool(player._is_alive_state) and bool(player.combat_damage_enabled) and not bool(player.encounter_input_frozen)
@@ -108,7 +128,7 @@ func try_launch(direction: Vector2, attack_origin: Vector2 = Vector2.INF) -> boo
 	blade.interaction = player._capture_combat_action("returning_crescent")
 	blade.source_peer = DAMAGEABLE._resolve_local_peer_id()
 	blades.append(blade)
-	_play_sound(1.0)
+	_play_sound(&"outbound")
 	_publish_state(true)
 	queue_redraw()
 	return true
@@ -117,6 +137,12 @@ func cancel() -> void:
 	_cancel_generation += 1
 	var had_blades := not blades.is_empty()
 	blades.clear()
+	for voices: Array in _sound_voices.values():
+		for voice: AudioStreamPlayer in voices:
+			voice.stop()
+	for kind: StringName in _sound_cursor:
+		_sound_cursor[kind] = 0
+	_sound_left = 0.0
 	_remote_lease = 0.0
 	_discard_through = maxi(_discard_through, _highest_received_id)
 	if had_blades and _is_local_owner():
@@ -194,7 +220,7 @@ func _advance(blade: Blade, delta: float, deal_damage: bool, exclusions: Array[R
 		else:
 			distance = minf(distance, blade.travel_left)
 			if distance <= 0.000001:
-				blade.returning = true
+				_begin_return(blade)
 				continue
 		var start := blade.position
 		var motion := blade.direction * distance
@@ -221,11 +247,11 @@ func _advance(blade: Blade, delta: float, deal_damage: bool, exclusions: Array[R
 				blade.direction = blade.direction.bounce(normal).normalized()
 				blade.flash_left = 0.10
 				if deal_damage:
-					_play_sound(1.45)
+					_play_sound(&"bounce")
 			else:
-				blade.returning = true
+				_begin_return(blade)
 		elif not blade.returning and blade.travel_left <= 0.000001:
-			blade.returning = true
+			_begin_return(blade)
 	return blade.life_left > 0.0
 
 ## Returns a fresh exclusion array; combat bodies are hit by the swept blade,
@@ -343,11 +369,15 @@ func apply_network_state(payload: Dictionary) -> void:
 		var blade: Blade = previous.get(id, Blade.new())
 		if not previous.has(id):
 			blade.visual_position = position_value
-			_play_sound(1.0)
+			if not bool(entry[3]):
+				_play_sound(&"outbound")
 		blade.id = id
 		blade.position = position_value
 		blade.direction = direction_value.normalized()
-		blade.returning = bool(entry[3])
+		if bool(entry[3]):
+			_begin_return(blade)
+		else:
+			blade.returning = false
 		blade.travel_left = clampf(travel, 0.0, OUTBOUND_DISTANCE * 2.0)
 		blade.life_left = clampf(life, 0.0, MAX_LIFETIME)
 		blade.bounces_left = clampi(int(entry[6]), 0, 1)
@@ -372,31 +402,31 @@ func _draw() -> void:
 		if blade.flash_left > 0.0:
 			draw_arc(center, BLADE_RADIUS + 5.0, 0.0, TAU, 16, Color(0.96, 0.97, 1.0, blade.flash_left * 7.0), 1.3, true)
 
-func _play_sound(pitch: float) -> void:
-	if _sound == null or _sound_left > 0.0:
+func _begin_return(blade: Blade) -> void:
+	blade.returning = true
+	if not blade.return_sound_played and not blade.presentation_finished:
+		blade.return_sound_played = true
+		_play_sound(&"return")
+
+
+func _play_sound(kind: StringName) -> void:
+	var voices: Array = _sound_voices.get(kind, [])
+	if voices.is_empty() or (kind == &"outbound" and _sound_left > 0.0):
 		return
 	if is_instance_valid(player) and player.player_feedback != null:
 		set_sfx_volume_db(float(player.player_feedback.sfx_volume_db))
-	_sound_left = 0.05
-	_sound.pitch_scale = pitch
-	_sound.play()
+	if kind == &"outbound":
+		_sound_left = 0.05
+	# Fixed voices preserve an overlapping throw's tail. Swapping stream on a
+	# playing AudioStreamPlayer would stop its old voice. No random pitch drift.
+	var index := int(_sound_cursor.get(kind, 0)) % voices.size()
+	_sound_cursor[kind] = index + 1
+	(voices[index] as AudioStreamPlayer).play()
 
 func set_sfx_volume_db(value: float) -> void:
-	if _sound != null:
-		_sound.volume_db = clampf(-21.0 + value, -80.0, 6.0)
+	for kind: StringName in _sound_voices:
+		for voice: AudioStreamPlayer in _sound_voices[kind]:
+			voice.volume_db = clampf(SOUND_BASE_DB + SOUNDS.trim_db(kind) + value, -80.0, 6.0)
 
 static func _make_sound() -> AudioStreamWAV:
-	var sound := AudioStreamWAV.new()
-	sound.format = AudioStreamWAV.FORMAT_16_BITS
-	sound.mix_rate = 22050
-	var samples := 1764
-	var data := PackedByteArray()
-	data.resize(samples * 2)
-	var phase := 0.0
-	for index in range(samples):
-		var t := float(index) / float(samples)
-		phase += TAU * lerpf(1450.0, 540.0, t) / 22050.0
-		var amplitude := sin(t * PI) * (1.0 - t) * 0.18
-		data.encode_s16(index * 2, int(sin(phase) * amplitude * 32767.0))
-	sound.data = data
-	return sound
+	return SOUNDS.stream(&"outbound")

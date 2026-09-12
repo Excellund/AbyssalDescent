@@ -1,6 +1,7 @@
 extends Control
 
 const GAMEPLAY_SCENE_PATH := "res://scenes/Main.tscn"
+const PRACTICE_SCENE_PATH := "res://scenes/Practice.tscn"
 const RUN_CONTEXT_PATH := "/root/RunContext"
 const MENU_LOGO_TEXTURE := preload("res://assets/ui/menu_logo_mark.svg")
 const MENU_MUSIC := preload("res://music/msx1.mp3")
@@ -9,6 +10,7 @@ const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
 const AUDIO_LEVELS := preload("res://scripts/shared/audio_levels.gd")
 const UI_CLICK_SOUND := preload("res://sounds/new_stuff/ui_button_click.ogg")
 const GLOSSARY_DATA := preload("res://scripts/shared/glossary_data.gd")
+const GLOSSARY_FONT := preload("res://scripts/ui/scaled_ui_font.gd")
 const META_PROGRESS := preload("res://scripts/meta_progress_store.gd")
 const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
@@ -94,6 +96,16 @@ var telemetry_consent_layer: Control
 var menu_music_player: AudioStreamPlayer
 var _sfx_player: AudioStreamPlayer
 var primary_run_button: Button
+var practice_button: Button
+var practice_return_state: Dictionary = {}
+var _practice_starting: bool = false
+var _multiplayer_host_pending: bool = false
+var _root_action_scroll: ScrollContainer
+var _root_panel_tween: Tween
+var _root_transition_hiding: bool = false
+var _panel_transitions: Dictionary = {}
+var _panel_transition_sequence: int = 0
+var _menu_layout_queued: bool = false
 var checkpoint_status_label: Label
 var checkpoint_discard_button: Button
 var _checkpoint_retry_action: String = ""
@@ -252,8 +264,10 @@ func _ready() -> void:
 	set_process(false)
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	_build_ui()
+	get_viewport().size_changed.connect(_queue_menu_window_layout)
 	_apply_menu_layout()
 	_consume_checkpoint_menu_error()
+	_restore_practice_return_state()
 	_start_menu_music()
 	if _try_multiplayer_duo_autostart():
 		return
@@ -501,6 +515,14 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED:
 		_apply_menu_layout()
 
+func _queue_menu_window_layout() -> void:
+	# A fixed logical canvas can change its window scale without resizing this
+	# Control. Defer until the viewport's new stretch transform is available.
+	if _menu_layout_queued or not is_inside_tree():
+		return
+	_menu_layout_queued = true
+	call_deferred("_apply_menu_layout")
+
 func _change_to_gameplay_scene() -> void:
 	_cancel_multiplayer_join_attempt()
 	var tree := _tree_or_null()
@@ -510,6 +532,15 @@ func _change_to_gameplay_scene() -> void:
 
 ## Multiplayer entry points
 func _create_multiplayer_room() -> void:
+	if _multiplayer_host_pending:
+		return
+	_multiplayer_host_pending = true
+	_refresh_practice_button()
+	await _create_multiplayer_room_inner()
+	_multiplayer_host_pending = false
+	_refresh_practice_button()
+
+func _create_multiplayer_room_inner() -> void:
 	_cancel_multiplayer_join_attempt()
 	var multiplayer_session_manager = get_node_or_null("/root/MultiplayerSessionManager")
 	var multiplayer_room_service = get_node_or_null("/root/MultiplayerRoomService")
@@ -812,8 +843,11 @@ func _read_main_debug_settings_values() -> Dictionary:
 	return values
 
 func _exit_tree() -> void:
+	_retire_panel_transitions()
 	_cancel_multiplayer_join_attempt()
-	if menu_music_player != null and menu_music_player.playing:
+	# Audio children are paused before the parent exits; keep their valid
+	# playback position even when the server no longer reports PLAYING.
+	if menu_music_player != null and menu_music_player.has_stream_playback():
 		var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 		if run_context != null:
 			run_context.set_menu_music_resume_position(menu_music_player.get_playback_position())
@@ -891,6 +925,7 @@ func _build_ui() -> void:
 	root_panel.set_anchors_preset(Control.PRESET_CENTER)
 	root_panel.position = Vector2(-MAIN_MENU_PANEL_BASE_WIDTH * 0.5, -MAIN_MENU_PANEL_BASE_HEIGHT * 0.5)
 	root_panel.custom_minimum_size = Vector2(MAIN_MENU_PANEL_BASE_WIDTH, MAIN_MENU_PANEL_BASE_HEIGHT)
+	GLOSSARY_FONT.apply_to(root_panel)
 	root_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.06, 0.09, 0.13, 0.94), Color(0.34, 0.56, 0.84, 0.76), 22, 2))
 	add_child(root_panel)
 
@@ -976,7 +1011,7 @@ func _build_ui() -> void:
 	hero_content.add_child(hero_spacer)
 
 	var action_panel := Panel.new()
-	action_panel.custom_minimum_size = Vector2(MAIN_MENU_ACTION_PANEL_WIDTH, 0.0)
+	action_panel.custom_minimum_size = Vector2.ZERO
 	action_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	action_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	action_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.07, 0.11, 0.16, 0.88), Color(0.22, 0.36, 0.52, 0.44), 20, 2))
@@ -991,14 +1026,18 @@ func _build_ui() -> void:
 	action_content.add_theme_constant_override("separation", 10)
 	action_panel.add_child(action_content)
 
-	var action_spacer_top := Control.new()
-	action_spacer_top.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	action_content.add_child(action_spacer_top)
+	_root_action_scroll = ScrollContainer.new()
+	_root_action_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_root_action_scroll.follow_focus = true
+	_root_action_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_root_action_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	action_content.add_child(_root_action_scroll)
 
 	root_actions = VBoxContainer.new()
-	root_actions.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	root_actions.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	root_actions.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	root_actions.add_theme_constant_override("separation", MAIN_MENU_ACTION_BUTTON_SPACING)
-	action_content.add_child(root_actions)
+	_root_action_scroll.add_child(root_actions)
 
 	primary_run_button = _make_menu_button("Begin Descent", true)
 	primary_run_button.custom_minimum_size = Vector2(470.0, MAIN_MENU_ACTION_BUTTON_HEIGHT)
@@ -1017,6 +1056,10 @@ func _build_ui() -> void:
 	checkpoint_discard_button.pressed.connect(_on_discard_checkpoint_pressed)
 	checkpoint_discard_button.visible = false
 	root_actions.add_child(checkpoint_discard_button)
+
+	practice_button = _make_menu_button("Practice")
+	practice_button.pressed.connect(_on_practice_pressed)
+	root_actions.add_child(practice_button)
 
 	var multiplayer_button := _make_menu_button("Multiplayer")
 	multiplayer_button.custom_minimum_size = Vector2(470.0, MAIN_MENU_ACTION_BUTTON_HEIGHT)
@@ -1058,9 +1101,17 @@ func _build_ui() -> void:
 	exit_button.pressed.connect(_on_exit_pressed)
 	root_actions.add_child(exit_button)
 
-	var action_spacer_bottom := Control.new()
-	action_spacer_bottom.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	action_content.add_child(action_spacer_bottom)
+	# Only the main action list uses physical sizing; other menu panels retain
+	# their own layouts. Focus scrolls the complete list on shorter windows.
+	for action in root_actions.get_children():
+		if action is Control:
+			action.custom_minimum_size.x = 0.0
+		if action is Button:
+			action.custom_minimum_size.y = 48.0
+			action.add_theme_font_size_override("font_size", 18)
+			action.focus_entered.connect(_queue_root_action_visibility.bind(action))
+	checkpoint_status_label.add_theme_font_size_override("font_size", 18)
+	_refresh_practice_button()
 
 	update_panel = _build_update_panel()
 	update_panel.visible = false
@@ -1143,23 +1194,32 @@ func _build_ui() -> void:
 	_show_root_panel(false)
 
 func _apply_menu_layout() -> void:
+	_menu_layout_queued = false
+	if not is_inside_tree() or get_viewport() == null:
+		return
+	_retire_panel_transitions(true)
 	var viewport_size := get_viewport_rect().size
 	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
 		return
 	var fit_scale := minf(1.0, minf(viewport_size.x / MENU_LAYOUT_BASE_SIZE.x, viewport_size.y / MENU_LAYOUT_BASE_SIZE.y))
 	if root_panel != null:
-		_set_centered_panel_layout(root_panel, _root_panel_base_size(), fit_scale, viewport_size)
+		_apply_root_action_layout(viewport_size)
 	if options_panel != null:
 		_set_centered_panel_layout(options_panel, Vector2(760.0, 700.0), fit_scale, viewport_size)
 	if history_panel != null:
-		_set_centered_panel_layout(history_panel, Vector2(980.0, 680.0), fit_scale, viewport_size)
+		history_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		history_panel.custom_minimum_size = Vector2.ZERO
+		var history_stretch := get_viewport().get_stretch_transform().get_scale().abs()
+		var history_screen := viewport_size * history_stretch
+		history_panel.size = Vector2(minf(980.0, history_screen.x - 32.0), minf(680.0, history_screen.y - 32.0)).max(Vector2(600.0, 400.0))
+		history_panel.scale = Vector2.ONE / history_stretch.max(Vector2(0.1, 0.1))
+		history_panel.position = (viewport_size - history_panel.size * history_panel.scale) * 0.5
 	if leaderboard_panel != null:
 		_set_centered_panel_layout(leaderboard_panel, Vector2(1080.0, 700.0), fit_scale, viewport_size)
 	if ascension_panel != null:
 		_set_centered_panel_layout(ascension_panel, Vector2(1520.0, 920.0), fit_scale, viewport_size)
 	if glossary_panel != null:
-		var glossary_scale := minf(1.0, minf((viewport_size.x - 48.0) / 1360.0, (viewport_size.y - 48.0) / 900.0))
-		_set_centered_panel_layout(glossary_panel, Vector2(1360.0, 900.0), maxf(0.1, glossary_scale), viewport_size)
+		_apply_glossary_layout(viewport_size)
 	if multiplayer_panel != null:
 		_set_centered_panel_layout(multiplayer_panel, Vector2(980.0, 700.0), fit_scale, viewport_size)
 	if difficulty_selector_panel != null:
@@ -1174,6 +1234,14 @@ func _apply_menu_layout() -> void:
 		var vertical_gap := 16.0 * fit_scale
 		var root_scaled_size := root_panel.size * root_panel.scale
 		update_panel.position = Vector2(root_panel.position.x, root_panel.position.y + root_scaled_size.y + vertical_gap)
+		# A taller readable action list must not push the existing update card
+		# offscreen. Its original geometry stays in the left/hero column.
+		var update_stretch := get_viewport().get_stretch_transform().get_scale().abs()
+		var update_screen_size := update_base_size * fit_scale * update_stretch
+		var update_screen_origin := update_panel.position * update_stretch
+		update_screen_origin.x = root_panel.position.x * update_stretch.x + MAIN_MENU_SHELL_PADDING + maxf(0.0, (MAIN_MENU_HERO_PANEL_WIDTH - update_screen_size.x) * 0.5)
+		update_screen_origin.y = minf(update_screen_origin.y, viewport_size.y * update_stretch.y - update_screen_size.y - 8.0)
+		update_panel.position = update_screen_origin / update_stretch.max(Vector2(0.1, 0.1))
 	if atmosphere_band != null:
 		_set_centered_panel_layout(atmosphere_band, Vector2(620.0, 660.0), fit_scale, viewport_size)
 	if lobby_modal_panel != null:
@@ -1182,6 +1250,50 @@ func _apply_menu_layout() -> void:
 		lobby_modal_instance.set_anchors_preset(Control.PRESET_FULL_RECT)
 		lobby_modal_instance.position = Vector2.ZERO
 		lobby_modal_instance.size = lobby_modal_content_host.size
+
+func _apply_glossary_layout(canvas_size: Vector2) -> void:
+	var stretch := get_viewport().get_stretch_transform().get_scale().abs()
+	if stretch.x <= 0.0 or stretch.y <= 0.0:
+		return
+	# Keep reading text at its authored screen size even when the game canvas
+	# is stretched down. Narrow displays wrap and scroll instead of shrinking.
+	var screen_size := canvas_size * stretch
+	glossary_panel.scale = Vector2.ONE / stretch
+	glossary_panel.size = Vector2(minf(1360.0, screen_size.x - 48.0), minf(900.0, screen_size.y - 48.0)).max(Vector2(480.0, 360.0))
+	glossary_panel.position = (canvas_size - glossary_panel.size / stretch) * 0.5
+
+func _apply_root_action_layout(canvas_size: Vector2) -> void:
+	var stretch := get_viewport().get_stretch_transform().get_scale().abs()
+	if stretch.x <= 0.0 or stretch.y <= 0.0:
+		return
+	if _root_panel_tween != null and _root_panel_tween.is_valid():
+		_root_panel_tween.kill()
+	_root_panel_tween = null
+	if _root_transition_hiding:
+		root_panel.hide()
+	var physical_size := canvas_size * stretch
+	root_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	root_panel.custom_minimum_size = Vector2.ZERO
+	root_panel.size = Vector2(minf(980.0, physical_size.x - 48.0), minf(760.0, physical_size.y - 48.0)).max(Vector2(720.0, 440.0))
+	root_panel.scale = Vector2.ONE / stretch
+	root_panel.position = (canvas_size - root_panel.size / stretch) * 0.5
+	root_panel.modulate.a = 1.0
+
+func _queue_root_action_visibility(button: Button) -> void:
+	call_deferred("_ensure_root_action_visible", button)
+
+func _ensure_root_action_visible(button: Button) -> void:
+	if not is_inside_tree() or not is_instance_valid(button) or not button.has_focus() or not is_instance_valid(_root_action_scroll):
+		return
+	# ScrollContainer's integer focus offset can stop one pixel short under
+	# inverse canvas scaling. Finish in the scroller's own physical units.
+	var relative := _root_action_scroll.get_global_transform_with_canvas().affine_inverse() * button.get_global_transform_with_canvas()
+	var top := relative.origin.y
+	var bottom := top + button.size.y * relative.get_scale().y
+	if bottom > _root_action_scroll.size.y:
+		_root_action_scroll.scroll_vertical += ceili(bottom - _root_action_scroll.size.y)
+	elif top < 0.0:
+		_root_action_scroll.scroll_vertical -= ceili(-top)
 
 func _root_panel_base_size() -> Vector2:
 	var base_size := Vector2(MAIN_MENU_PANEL_BASE_WIDTH, MAIN_MENU_PANEL_BASE_HEIGHT)
@@ -1377,6 +1489,7 @@ func _pick_random_quote(quotes: Array) -> String:
 
 func _show_root_panel(animate: bool = true) -> void:
 	_cancel_multiplayer_join_attempt()
+	_root_transition_hiding = false
 	var from_panel := _current_replace_panel()
 	var closing_overlay := (options_panel != null and options_panel.visible) or (glossary_panel != null and glossary_panel.visible) or (history_panel != null and history_panel.visible) or (leaderboard_panel != null and leaderboard_panel.visible)
 	if root_panel != null:
@@ -1425,7 +1538,7 @@ func _show_root_panel(animate: bool = true) -> void:
 
 func _show_options_panel() -> void:
 	if root_panel != null:
-		root_panel.visible = true
+		root_panel.visible = false
 	if options_panel != null:
 		options_panel.visible = true
 		_animate_panel_in(options_panel, Vector2(0.0, 14.0))
@@ -1451,7 +1564,7 @@ func _show_options_panel() -> void:
 
 func _show_glossary_panel() -> void:
 	if root_panel != null:
-		root_panel.visible = true
+		root_panel.visible = false
 	if options_panel != null:
 		if options_panel.visible:
 			_animate_panel_out(options_panel, Vector2(0.0, -10.0))
@@ -1836,8 +1949,7 @@ func _play_menu_intro() -> void:
 		atmosphere_band.modulate.a = 0.0
 		atmosphere_band.position += Vector2(-10.0, 0.0)
 	if root_panel != null:
-		root_panel.modulate.a = 0.0
-		root_panel.position += Vector2(0.0, 14.0)
+		_animate_panel_in(root_panel, Vector2(0.0, 14.0))
 	if flavor_quote_label != null:
 		flavor_quote_label.modulate.a = 0.0
 	var tween := create_tween()
@@ -1847,9 +1959,6 @@ func _play_menu_intro() -> void:
 	if atmosphere_band != null:
 		tween.tween_property(atmosphere_band, "modulate:a", 1.0, 0.18)
 		tween.tween_property(atmosphere_band, "position", atmosphere_band.position + Vector2(10.0, 0.0), 0.24).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	if root_panel != null:
-		tween.tween_property(root_panel, "modulate:a", 1.0, 0.16)
-		tween.tween_property(root_panel, "position", root_panel.position - Vector2(0.0, 14.0), 0.22).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	if flavor_quote_label != null:
 		tween.tween_property(flavor_quote_label, "modulate:a", 1.0, 0.28).set_delay(0.06)
 		call_deferred("_start_quote_idle_animation")
@@ -1863,6 +1972,7 @@ func _start_quote_idle_animation() -> void:
 	set_process(true)
 
 func _process(delta: float) -> void:
+	_refresh_practice_button()
 	if not _quote_pulse_active or flavor_quote_label == null:
 		return
 	_quote_pulse_time += delta
@@ -1872,29 +1982,75 @@ func _process(delta: float) -> void:
 func _animate_panel_in(panel: Control, offset: Vector2) -> void:
 	if panel == null:
 		return
+	_retire_panel_transition(panel)
+	if panel == root_panel:
+		_root_transition_hiding = false
 	var target_position := panel.position
 	panel.modulate.a = 0.0
 	panel.position = target_position + offset
 	var tween := create_tween()
+	var sequence := _track_panel_transition(panel, tween, target_position, false)
 	tween.set_parallel(true)
 	tween.tween_property(panel, "modulate:a", 1.0, 0.14)
 	tween.tween_property(panel, "position", target_position, 0.18).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.finished.connect(_finish_panel_transition.bind(panel, sequence))
 
 func _animate_panel_out(panel: Control, offset: Vector2, duration: float = 0.16) -> void:
 	if panel == null or not panel.visible:
 		return
+	_retire_panel_transition(panel)
+	if panel == root_panel:
+		_root_transition_hiding = true
 	var start_position := panel.position
 	var tween := create_tween()
+	var sequence := _track_panel_transition(panel, tween, start_position, true)
 	tween.set_parallel(true)
 	tween.tween_property(panel, "modulate:a", 0.0, duration)
 	tween.tween_property(panel, "position", start_position + offset, duration).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
-	tween.finished.connect(func() -> void:
-		if not is_instance_valid(panel):
-			return
-		panel.visible = false
-		panel.position = start_position
-		panel.modulate.a = 1.0
-	)
+	tween.finished.connect(_finish_panel_transition.bind(panel, sequence))
+
+func _track_panel_transition(panel: Control, tween: Tween, origin: Vector2, hiding: bool) -> int:
+	_panel_transition_sequence += 1
+	_panel_transitions[panel.get_instance_id()] = {"panel": weakref(panel), "tween": tween, "origin": origin, "hiding": hiding, "sequence": _panel_transition_sequence}
+	if panel == root_panel:
+		_root_panel_tween = tween
+	return _panel_transition_sequence
+
+func _finish_panel_transition(panel: Control, sequence: int) -> void:
+	if not is_instance_valid(panel):
+		return
+	var state: Dictionary = _panel_transitions.get(panel.get_instance_id(), {})
+	if int(state.get("sequence", -1)) != sequence:
+		return
+	panel.position = state.origin
+	panel.modulate.a = 1.0
+	if bool(state.hiding):
+		panel.hide()
+	_panel_transitions.erase(panel.get_instance_id())
+	if panel == root_panel:
+		_root_panel_tween = null
+
+func _retire_panel_transition(panel: Control, finish_hide: bool = false) -> void:
+	var state: Dictionary = _panel_transitions.get(panel.get_instance_id(), {})
+	if state.is_empty():
+		return
+	var tween: Tween = state.tween
+	if tween != null and tween.is_valid():
+		tween.kill()
+	panel.position = state.origin
+	panel.modulate.a = 1.0
+	if finish_hide and bool(state.hiding):
+		panel.hide()
+	_panel_transitions.erase(panel.get_instance_id())
+	if panel == root_panel:
+		_root_panel_tween = null
+
+func _retire_panel_transitions(finish_hide: bool = false) -> void:
+	for state: Dictionary in _panel_transitions.values():
+		var panel := (state.panel as WeakRef).get_ref() as Control
+		if is_instance_valid(panel):
+			_retire_panel_transition(panel, finish_hide)
+	_panel_transitions.clear()
 
 func _animate_replace_transition(outgoing: Control, incoming: Control, incoming_offset: Vector2, outgoing_offset: Vector2) -> void:
 	if outgoing != null and outgoing.visible:
@@ -2655,6 +2811,87 @@ func _on_primary_run_pressed() -> void:
 		return
 	_begin_fresh_run(ENUMS.RunMode.STANDARD)
 
+func _practice_is_available() -> bool:
+	if _practice_starting or _multiplayer_host_pending or not _multiplayer_join_attempt.is_empty():
+		return false
+	var manager := get_node_or_null("/root/MultiplayerSessionManager")
+	if manager != null and manager.has_active_session_state():
+		return false
+	var context := get_node_or_null(RUN_CONTEXT_PATH)
+	return context == null or String(context.multiplayer_session_id).is_empty()
+
+func _refresh_practice_button() -> void:
+	if not is_instance_valid(practice_button):
+		return
+	practice_button.disabled = not _practice_is_available()
+	practice_button.tooltip_text = "Solo only. Leave multiplayer to practise." if practice_button.disabled else ""
+
+func _practice_menu_return_state() -> Dictionary:
+	return {
+		"retry_action": _checkpoint_retry_action,
+		"checkpoint_error": checkpoint_status_label.text if checkpoint_status_label != null else "",
+		"discard_visible": checkpoint_discard_button != null and checkpoint_discard_button.visible,
+		"focus_practice": true,
+	}
+
+func _restore_practice_return_state() -> void:
+	if practice_return_state.is_empty():
+		return
+	_checkpoint_retry_action = String(practice_return_state.get("retry_action", ""))
+	checkpoint_status_label.text = String(practice_return_state.get("checkpoint_error", ""))
+	checkpoint_status_label.visible = not checkpoint_status_label.text.is_empty()
+	checkpoint_discard_button.visible = bool(practice_return_state.get("discard_visible", false))
+	_refresh_primary_run_button()
+	if bool(practice_return_state.get("focus_practice", true)):
+		call_deferred("_focus_returned_practice")
+	practice_return_state.clear()
+
+func _focus_returned_practice() -> void:
+	if is_instance_valid(practice_button) and not practice_button.disabled and root_panel.visible and not _is_blocking_prompt_visible():
+		practice_button.grab_focus()
+
+func _is_blocking_prompt_visible() -> bool:
+	for overlay in [profile_name_prompt_layer, telemetry_consent_layer, update_prompt_layer, lobby_modal_layer]:
+		if is_instance_valid(overlay) and overlay.visible:
+			return true
+	return false
+
+func _on_practice_pressed() -> void:
+	if not _practice_is_available() or not root_panel.is_visible_in_tree() or _is_blocking_prompt_visible():
+		_refresh_practice_button()
+		return
+	_play_sfx_click()
+	_practice_starting = true
+	_refresh_practice_button()
+	call_deferred("_enter_practice_scene")
+
+func _enter_practice_scene() -> void:
+	var tree := _tree_or_null()
+	if tree == null:
+		return
+	# Recheck after the deferred boundary: hosting/joining may have started
+	# since the button press. This action never disconnects an existing party.
+	_practice_starting = false
+	if not _practice_is_available():
+		_refresh_practice_button()
+		return
+	var packed := load(PRACTICE_SCENE_PATH) as PackedScene
+	if packed == null:
+		_refresh_practice_button()
+		practice_button.tooltip_text = "Practice could not open. Your saved descent is unchanged."
+		return
+	var practice := packed.instantiate()
+	practice.set("menu_return_state", _practice_menu_return_state())
+	var old_scene := tree.current_scene
+	if old_scene != self:
+		practice.free()
+		_refresh_practice_button()
+		return
+	tree.root.remove_child(self)
+	tree.root.add_child(practice)
+	tree.current_scene = practice
+	queue_free()
+
 func _on_continue_pressed() -> void:
 	var run_context := get_node_or_null(RUN_CONTEXT_PATH)
 	if run_context == null:
@@ -2899,6 +3136,7 @@ func _show_leaderboard_panel() -> void:
 func _build_glossary_panel() -> Panel:
 	var panel := Panel.new()
 	panel.name = "GlossaryPanel"
+	GLOSSARY_FONT.apply_to(panel)
 	# Absolute position: (2560-1360)/2, (1440-900)/2 — centered in 2560x1440 viewport
 	panel.position = Vector2(600.0, 270.0)
 	panel.size = Vector2(1360.0, 900.0)
@@ -2959,7 +3197,13 @@ func _build_glossary_panel() -> Panel:
 	nav_vbox.name = "GlossaryNavigation"
 	nav_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	nav_vbox.add_theme_constant_override("separation", 6)
-	nav_margin.add_child(nav_vbox)
+	var nav_scroll := ScrollContainer.new()
+	nav_scroll.name = "GlossaryNavigationScroll"
+	nav_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	nav_scroll.follow_focus = true
+	nav_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	nav_margin.add_child(nav_scroll)
+	nav_scroll.add_child(nav_vbox)
 
 	var body_panel := Panel.new()
 	body_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -3973,13 +4217,12 @@ func _start_menu_music() -> void:
 	menu_music_player.bus = "Master"
 	menu_music_player.finished.connect(_on_menu_music_finished)
 	add_child(menu_music_player)
-	menu_music_player.play(maxf(resume_position, 0.0))
 	var initial_music_db: float
 	if run_context != null:
 		initial_music_db = AUDIO_LEVELS.clamp_db(float(run_context.get("music_volume_db")))
 	else:
 		initial_music_db = _percent_to_db(music_slider.value)
-	_apply_menu_music_volume(initial_music_db)
+	_apply_menu_music_volume(initial_music_db, resume_position)
 	_sfx_player = AudioStreamPlayer.new()
 	_sfx_player.bus = "Master"
 	add_child(_sfx_player)
@@ -3993,7 +4236,7 @@ func _on_menu_music_finished() -> void:
 		return
 	menu_music_player.play(0.0)
 
-func _apply_menu_music_volume(music_db: float) -> void:
+func _apply_menu_music_volume(music_db: float, resume_position: float = 0.0) -> void:
 	if menu_music_player == null:
 		return
 	var clamped_db := AUDIO_LEVELS.menu_music_db(music_db)
@@ -4003,7 +4246,7 @@ func _apply_menu_music_volume(music_db: float) -> void:
 			menu_music_player.stop()
 		return
 	if not menu_music_player.playing and menu_music_player.stream != null:
-		menu_music_player.play()
+		menu_music_player.play(maxf(resume_position, 0.0))
 
 func _percent_to_db(percent: float) -> float:
 	return AUDIO_LEVELS.percent_to_db(percent)

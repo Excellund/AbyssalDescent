@@ -6,7 +6,7 @@ const RENDERER := preload("res://scripts/world_renderer.gd")
 const DEFINITIONS := preload("res://scripts/shared/encounter_definition_data.gd")
 const CHARACTER := preload("res://scripts/character_registry.gd")
 const AUDIO_RETIREMENT := preload("res://scripts/tests/fixture_audio_retirement.gd")
-const FRAME_SIZE := Vector2i(1280, 720)
+const FRAME_SIZES := [Vector2i(960, 540), Vector2i(1280, 720), Vector2i(1920, 1080)]
 
 class VisibleEnemy extends "res://scripts/enemy_chaser.gd":
 	func _ready() -> void:
@@ -20,6 +20,7 @@ var title: Label
 var detail: Label
 var retirement := AUDIO_RETIREMENT.new()
 var camera: CAMERA
+var frame_size: Vector2i
 
 func _run() -> void:
 	if not OS.get_user_data_dir().begins_with(ProjectSettings.globalize_path("res://")) or not DirAccess.dir_exists_absolute("res://validation_fixtures") or DisplayServer.get_name() == "headless":
@@ -27,10 +28,23 @@ func _run() -> void:
 		quit(1)
 		return
 	node_added.connect(retirement.observe_node)
-	root.size = FRAME_SIZE
-	root.content_scale_size = FRAME_SIZE
 	output_directory = ProjectSettings.globalize_path("res://orbit_duration_frames")
 	DirAccess.make_dir_recursive_absolute(output_directory)
+	for size in FRAME_SIZES:
+		frame_size = size
+		root.size = size
+		root.content_scale_size = size
+		await _render_size()
+	if is_instance_valid(MAPPER._power_registry_instance):
+		MAPPER._power_registry_instance.free()
+		MAPPER._power_registry_instance = null
+	await process_frame
+	_check(await retirement.wait_until_retired(self), "Native audio retires before renderer exit")
+	FileAccess.open(output_directory.path_join("manifest.json"), FileAccess.WRITE).store_string(JSON.stringify({"gpu": RenderingServer.get_video_adapter_name(), "frames": frames, "failures": failures}, "\t"))
+	print("[OK] Orbit duration GPU: %d frames, %d checks, %d failures" % [frames.size(), checks, failures.size()])
+	quit(0 if failures.is_empty() else 1)
+
+func _render_size() -> void:
 	_setup()
 	room.current_room_size = DEFINITIONS.POOL_ROOM_SIZE
 	room.current_effective_room_size = room.current_room_size
@@ -84,43 +98,54 @@ func _run() -> void:
 	_check(actor.arcana_motion.motion == MOTION.Motion.ORBIT, "Halfway frame retains the real anchor")
 	await _capture("middle", "RAZOR ORBIT / HALF REMAINING", "The timer changes while the tether and enemy warning preserve their shapes.")
 	await _advance(maxf(0.0, actor.arcana_motion.orbit_limit - actor.arcana_motion.orbit_elapsed - 0.25))
+	Input.action_press("move_up")
 	Input.action_press("attack")
 	actor.arcana_motion.charge_hold = MOTION.FULL_CHARGE_TIME
 	actor.arcana_motion._publish_state()
 	_check(actor.arcana_motion.orbit_limit - actor.arcana_motion.orbit_elapsed <= 0.35, "Expiry frame is within the final 0.35 seconds")
-	await _capture("expiring", "RAZOR ORBIT / ABOUT TO RELEASE", "A charged Blast shares the player footprint; the time and tangent cue must remain distinct.")
+	await _capture("expiring", "RAZOR ORBIT / ABOUT TO RELEASE", "A charged Blast shares the player footprint; the arrow previews the held UP escape direction.")
 	# Drop only the fixture's staged charge; automatic Orbit expiry drives release.
 	actor.arcana_motion.charge_hold = -1.0
 	Input.action_release("attack")
 	await _advance(maxf(0.0, actor.arcana_motion.orbit_limit - actor.arcana_motion.orbit_elapsed) + 0.04)
-	_check(actor.arcana_motion.motion == MOTION.Motion.CARRY, "The release frame uses actual tangential carry")
+	_check(actor.arcana_motion.motion == MOTION.Motion.CARRY, "Expiry enters the actual steerable escape")
 	_check(actor.arcana_motion.get_orbit_seconds_left() < 0.0 and actor.arcana_motion._orbit_hint_left > 0.0, "Real release replaces the timer with a short departure cue")
-	await _capture("released", "RAZOR ORBIT / TANGENTIAL RELEASE", "The tether has ended and the player travels along the actual departure direction.")
+	await _capture("released", "RAZOR ORBIT / CHOSEN EXIT", "The tether ends; the player escapes UP along the direction previewed before expiry.")
 	actor.arcana_motion.cancel()
 	Input.action_release("dash")
+	Input.action_release("move_up")
 	await _capture("cleared", "RAZOR ORBIT / ACTION CLEARED", "Cancellation clears the motion presentation without leaving a false timer.")
 	_check(actor.arcana_motion.get_orbit_seconds_left() < 0.0 and actor.arcana_motion._orbit_hint_left <= 0.0, "Cancellation clears both the timer and departure cue")
+	actor.global_position = Vector2(-70.0, 0.0)
+	Input.action_press("dash")
+	actor.arcana_motion.start_orbit(anchor)
+	await _advance(0.4)
+	Input.action_press("move_left")
+	Input.action_release("dash")
+	await _advance(0.03)
+	_check(actor.arcana_motion.motion == MOTION.Motion.CARRY and actor.arcana_motion._orbit_hint_direction.dot(Vector2.LEFT) > 0.99, "Native release uses newly held LEFT for both movement and arrow")
+	await _capture("manual_escape", "RAZOR ORBIT / RELEASE DASH TO ESCAPE", "LEFT immediately chooses the dismount direction; nearby enemy warnings still matter.")
+	Input.action_release("move_left")
+	Input.action_press("move_down")
+	var turn := actor.global_position
+	await _advance(0.06)
+	_check(actor.global_position.y > turn.y and actor.arcana_motion._orbit_hint_direction.dot(Vector2.DOWN) > 0.99, "Native movement can steer again during the bounded escape")
+	await _capture("steered_escape", "RAZOR ORBIT / STEER THE ESCAPE", "Movement can turn the short escape; releasing direction retains its momentum.")
+	Input.action_release("move_down")
+	actor.arcana_motion.cancel()
 	actor.global_position = Vector2(-70.0, 0.0)
 	actor.arcana_motion.start_orbit(anchor)
 	room.current_effective_room_size = Vector2(60.0, 60.0)
 	room._keep_player_inside_current_room()
 	_check(actor.arcana_motion.get_orbit_seconds_left() < 0.0 and actor.arcana_motion._orbit_hint_left <= 0.0, "Actual room clamp cancels without a false departure cue")
 	_clear()
-	if is_instance_valid(MAPPER._power_registry_instance):
-		MAPPER._power_registry_instance.free()
-		MAPPER._power_registry_instance = null
-	await process_frame
-	_check(await retirement.wait_until_retired(self), "Native audio retires before renderer exit")
-	FileAccess.open(output_directory.path_join("manifest.json"), FileAccess.WRITE).store_string(JSON.stringify({"gpu": RenderingServer.get_video_adapter_name(), "frames": frames, "failures": failures}, "\t"))
-	print("[OK] Orbit duration GPU: %d frames, %d checks, %d failures" % [frames.size(), checks, failures.size()])
-	quit(0 if failures.is_empty() else 1)
 
 func _advance(duration: float) -> void:
 	var remaining := duration
 	while remaining > 0.00001:
 		var delta := minf(STEP, remaining)
 		actor.arcana_motion.tick(delta)
-		actor.arcana_motion.process_movement(delta, Vector2.ZERO)
+		actor.arcana_motion.process_movement(delta, actor._read_movement_direction())
 		actor.arcana_motion._process(delta)
 		remaining -= delta
 		await physics_frame
@@ -133,7 +158,7 @@ func _capture(name: String, heading: String, explanation: String) -> void:
 	await process_frame
 	await RenderingServer.frame_post_draw
 	var picture := root.get_texture().get_image()
-	var path := output_directory.path_join(name + ".png")
+	var path := output_directory.path_join("%d_%s.png" % [frame_size.x, name])
 	_check(picture.save_png(path) == OK, "Saved " + name)
-	frames.append({"name": name, "path": path, "zoom": camera.zoom.x, "remaining": maxf(0.0, actor.arcana_motion.orbit_limit - actor.arcana_motion.orbit_elapsed), "motion": actor.arcana_motion.motion, "visual": actor.arcana_motion._visual.duplicate(true)})
+	frames.append({"name": name, "viewport": frame_size, "path": path, "zoom": camera.zoom.x, "remaining": maxf(0.0, actor.arcana_motion.orbit_limit - actor.arcana_motion.orbit_elapsed), "motion": actor.arcana_motion.motion, "visual": actor.arcana_motion._visual.duplicate(true)})
 	print("[FRAME] " + path)

@@ -4,20 +4,21 @@ const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const VISUAL_MATH := preload("res://scripts/shared/visual_math.gd")
 const PLAYER_SCRIPT := preload("res://scripts/player.gd")
 
-@export var move_speed: float = 72.0
+@export var move_speed: float = 90.0
 @export var acceleration: float = 760.0
 @export var deceleration: float = 1100.0
 @export var stop_distance: float = 120.0
-@export var wave_interval: float = 3.4
-@export var ring_node_count: int = 8
-@export var ring_speed: float = 148.0
-@export var ring_radius_max: float = 280.0
+@export var wave_interval: float = 2.8
+@export var ring_node_count: int = 12
+@export var ring_speed: float = 176.0
+@export var ring_radius_max: float = 360.0
 @export var ring_damage: int = 12
-@export var node_hit_radius: float = 17.0
+@export var node_hit_radius: float = 20.0
 
 var wave_timer: float = 0.0
 # World-space origins stay fixed even while the Drifter moves away from a wave.
 # Host-only damaged maps each player's instance ID to its hit-node flags.
+# At most one pellet damage request reaches each player per wave.
 # Each ring: { "id": int, "world_pos": Vector2, "radius": float, "gap_index": int, "damaged": Dictionary }
 var rings: Array[Dictionary] = []
 var _next_ring_network_id: int = 1
@@ -57,8 +58,10 @@ func set_ring_start_offset(offset_seconds: float) -> void:
 
 
 func _ready() -> void:
+	# Base _ready creates both current health and its bar from this value.
+	# Assigning it afterward left the Drifter at the inherited 40 current HP.
+	max_health = 88
 	super()
-	max_health = 68
 	crowd_separation_radius = 52.0
 	crowd_separation_strength = 80.0
 	wave_timer = wave_interval * 0.6
@@ -114,6 +117,8 @@ func _process_rings(delta: float) -> void:
 					hit_nodes.fill(false)
 					damaged[player_id] = hit_nodes
 				var player_hit_nodes := damaged[player_id] as Array
+				if player_hit_nodes.has(true):
+					continue
 				for node_i in range(ring_node_count):
 					if node_i == gap_index or bool(player_hit_nodes[node_i]):
 						continue
@@ -123,6 +128,7 @@ func _process_rings(delta: float) -> void:
 					if node_world_pos.distance_to(hit_target.global_position) <= node_hit_radius:
 						if DAMAGEABLE.apply_damage(hit_target, ring_damage, {"source": "enemy_ability", "ability": "drifter_ring"}):
 							player_hit_nodes[node_i] = true
+							break
 		i -= 1
 	queue_redraw()
 
@@ -148,7 +154,10 @@ func _is_ring_target_valid(candidate: Node2D) -> bool:
 
 
 func _get_ring_node_world_position(ring: Dictionary, node_index: int) -> Vector2:
-	var angle := float(node_index) * TAU / float(ring_node_count)
+	# Alternate half a spoke between waves so a stationary incidental gap is
+	# not safe forever. Stable wave IDs give replicas exactly the same geometry.
+	var half_step := 0.5 if posmod(int(ring.get("id", 1)) - 1, 2) == 1 else 0.0
+	var angle := (float(node_index) + half_step) * TAU / float(ring_node_count)
 	return (ring["world_pos"] as Vector2) + Vector2(cos(angle), sin(angle)) * float(ring["radius"])
 
 
@@ -267,7 +276,9 @@ func _draw() -> void:
 			if node_i == gap_index:
 				continue
 			var node_pos := to_local(_get_ring_node_world_position(ring, node_i))
-			draw_circle(node_pos, node_hit_radius * 0.95,
-				Color(COLOR_DRIFTER_RING.r, COLOR_DRIFTER_RING.g, COLOR_DRIFTER_RING.b, 0.18 * fade))
+			draw_circle(node_pos, node_hit_radius,
+				Color(COLOR_DRIFTER_RING.r, COLOR_DRIFTER_RING.g, COLOR_DRIFTER_RING.b, 0.22 * fade))
+			draw_arc(node_pos, node_hit_radius, 0.0, TAU, 20,
+				Color(COLOR_DRIFTER_RING.r, COLOR_DRIFTER_RING.g, COLOR_DRIFTER_RING.b, 0.5 * fade), 1.2)
 			draw_circle(node_pos, node_hit_radius * 0.52,
 				Color(COLOR_DRIFTER_RING.r, COLOR_DRIFTER_RING.g, COLOR_DRIFTER_RING.b, 0.65 * fade))

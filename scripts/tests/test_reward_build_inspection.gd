@@ -190,7 +190,7 @@ func _all_text(node: Node) -> String:
 
 func _check_owned_build_only(message: String) -> void:
 	_check(build.is_open() and not _all_text(build.panel).contains("Selected offer:"), message)
-	_check(build._content_vbox.get_child(0) == build.passive_section.get_parent(), "Passive is the first build section; no empty offer box remains")
+	_check(build._content_vbox.get_child(0).is_ancestor_of(build.keyword_effect_flow), "Owned keyword overview is the first build section; no empty offer box remains")
 
 func _owned_toggle(power_name: String) -> Button:
 	for container: VBoxContainer in [build.boss_list_container, build.arcana_list_container, build.boons_list_container]:
@@ -225,7 +225,7 @@ func _check_passive_presentations() -> void:
 			_check(build.passive_name_label.text == BUILD_PANEL.CHARACTER_PASSIVES.get_display_name(passive_id), "Build uses the shared passive title: " + character_id)
 			_check(label.text == BUILD_PANEL.CHARACTER_PASSIVES.get_build_description(passive_id), "Build uses the shared concise passive summary: " + character_id)
 			_check(not label.get_parsed_text().contains("\n") and label.get_parsed_text().length() <= 300, "Build passive stays one concise paragraph: " + character_id)
-			_check(BUILD_PANEL.CHARACTER_PASSIVES.get_description(passive_id).contains("\n"), "Full detailed passive rules remain available to the glossary: " + character_id)
+			_check(BUILD_PANEL.CHARACTER_PASSIVES.get_description(passive_id) == label.text, "Glossary passive text exactly matches the rendered Build Details label: " + character_id)
 			_check(label.text.contains("[b][color=#") and not label.get_parsed_text().contains("{kw:"), "Build renders passive keyword emphasis: " + character_id)
 			_check(label.get_theme_font_size("normal_font_size") == BUILD_PANEL.BODY_FONT_SIZE and label.get_theme_font_size("bold_font_size") == BUILD_PANEL.BODY_FONT_SIZE, "Passive keywords retain readable build body size")
 			_check(label.get_content_height() <= label.size.y + 1.0 and label.get_content_width() <= label.size.x + 1.0, "Complete passive description fits %s: %s" % [size, character_id])

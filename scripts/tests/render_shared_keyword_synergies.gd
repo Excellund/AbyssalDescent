@@ -17,6 +17,7 @@ func _run() -> void:
 	await _native_chain_frames()
 	await _cover_frame()
 	await _echo_frame()
+	await _seeking_frames()
 	await create_timer(.2).timeout
 	if is_instance_valid(MAPPER._power_registry_instance):
 		MAPPER._power_registry_instance.free()
@@ -60,7 +61,7 @@ func _native_chain_frames() -> void:
 	_hold_relay()
 	_check(player.spark_relay_controller.projectiles.size() == 1, "A real Blast creates one body-origin Relay")
 	_step_relay(.065)
-	await _capture("relay_launch", "SPARK RELAY / BURST TO PROJECTILE", "The Blast sends one Electric projectile from the player toward the struck foe.")
+	await _capture("relay_launch", "SPARK RELAY / BURST TO PROJECTILE", "The Blast sends one seeking Electric projectile from the player toward a living foe.")
 	var nearby_before := nearby.get_current_health()
 	_step_relay(.105)
 	_check(DAMAGEABLE.status_snapshot(primary, 1).mark_ratio > 0.0 and nearby.get_current_health() < nearby_before, "Relay applies Stormbrand on accepted Electric contact and Shatterwake damages the nearby foe")
@@ -94,7 +95,7 @@ func _cover_frame() -> void:
 	var before := target.get_current_health()
 	player.spark_relay_controller.tick(1.0)
 	_check(target.get_current_health() == before and player.spark_relay_controller.projectiles.is_empty(), "A real column stops Relay before its target")
-	await _capture("relay_blocked", "SPARK RELAY / COVER AFTERMATH", "After the column stops the projectile, the foe behind cover has received no Relay damage or Mark.")
+	await _capture("relay_blocked", "SPARK RELAY / COVER AFTERMATH", "Solid cover prevents acquisition: the covered foe receives no Relay damage or Mark.")
 	await _free_world()
 
 func _echo_frame() -> void:
@@ -110,4 +111,28 @@ func _echo_frame() -> void:
 	_step_relay(.09)
 	_check(player.spark_relay_controller.projectiles[0].position.x < 0.0, "Copied Blast Relay starts at the real body instead of the distant shade")
 	await _capture("echo_blast_relay", "SOVEREIGN'S DOUBLE / COPIED BLAST", "The distant shade copies the Blast. Its accepted Burst launches one Electric projectile from the player.")
+	await _free_world()
+
+func _seeking_frames() -> void:
+	await _make_world()
+	player.player_id = 1
+	player.apply_trial_power("blast_drive")
+	player.apply_trial_power("spark_relay")
+	var trigger := _add_enemy(Vector2(-40, 0))
+	trigger.health_state.current_health = 1
+	var first := _add_enemy(Vector2(-70, -140))
+	var next := _add_enemy(Vector2(140, 100))
+	await physics_frame
+	player.perform_motion_blast(Vector2.RIGHT, 1.0)
+	_hold_relay()
+	_check(player.spark_relay_controller.projectiles.size() == 1, "A native lethal Blast acquires a living off-axis foe")
+	_step_relay(.12)
+	await _capture("relay_lethal_seek", "SPARK RELAY / LETHAL BURST", "The struck foe dies. Its Relay immediately seeks a living foe above the original line.")
+	var registry := preload("res://scripts/shared/combat_interaction_registry.gd")
+	DAMAGEABLE.apply_damage(first, 20000, registry.damage_context(player.new_combat_action("attack"), "melee", {"raw_amount": 20000.0, "damage_coefficient": 1.0, "attack_origin": player.global_position}), 1)
+	_step_relay(.025)
+	_check(player.spark_relay_controller.projectiles.size() == 1 and player.spark_relay_controller.projectiles[0].direction.y > 0, "The same visible bolt turns toward the surviving foe after its first candidate dies")
+	await _capture("relay_retarget", "SPARK RELAY / KEEP THE PAYOFF", "When another foe dies during flight, the same bolt redirects to a reachable survivor.")
+	_step_relay(1.0)
+	_check(player.spark_relay_controller.projectiles.is_empty() and next.get_current_health() < 10000, "The retargeted level-one bolt lands once and leaves no lingering damage")
 	await _free_world()

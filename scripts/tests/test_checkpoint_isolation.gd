@@ -118,6 +118,9 @@ func _test_death(mode: String) -> void:
 	world._on_player_died()
 	check(world._run_outcome_coordinator.is_player_defeated() and RunContext.get_last_run_outcome() == "death", mode + ": party defeat still records the terminal outcome")
 	check(world.shown_outcomes == ["death"] and world.broadcast_outcomes == ["death"], mode + ": death presentation and outcome dispatch still occur once")
+	if mode == "joiner":
+		check(HISTORY.load_all().is_empty() and not world.run_summary_recorder.telemetry_run_finished, "Joining HP0 callback waits for authoritative outcome before persisting final history")
+		world.run_summary_recorder.finalize_synced_run_summary_for_joiner(world.run_summary_recorder.latest_run_summary.duplicate(true), "death")
 	var records := HISTORY.load_all()
 	check(records.size() == 1 and String(records[0].get("outcome", "")) == "death", mode + ": production recorder retains one local death summary")
 	if not records.is_empty():

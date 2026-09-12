@@ -4,6 +4,7 @@ const ENUMS := preload("res://scripts/shared/enums.gd")
 const ENCOUNTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 const AUDIO_LEVELS := preload("res://scripts/shared/audio_levels.gd")
 const UI_CLICK_SOUND := preload("res://sounds/new_stuff/ui_button_click.ogg")
+const SCALED_UI_FONT := preload("res://scripts/ui/scaled_ui_font.gd")
 const MUTATOR_ICON_BLOOD_RUSH: Texture2D = preload("res://assets/ui/mutators/blood_rush.svg")
 const MUTATOR_ICON_FLASHPOINT: Texture2D = preload("res://assets/ui/mutators/flashpoint.svg")
 const MUTATOR_ICON_SIEGEBREAK: Texture2D = preload("res://assets/ui/mutators/siegebreak.svg")
@@ -57,6 +58,8 @@ func _is_upgrade_blocked_for_character(upgrade_id: String) -> bool:
 	return normalized_character_id == "riftlancer" and normalized_upgrade_id == "wide_arc"
 
 var boon_layer: CanvasLayer
+var _layout_root: Control
+var _scaled_theme: Theme
 var boon_title_label: Label
 var boon_subtitle_label: Label
 var boon_header_chip_label: Label
@@ -206,20 +209,27 @@ func close_selection() -> void:
 	_set_reroll_button_visible(false)
 
 
-func open_selection(title: String, is_initial: bool, mode: int, power_registry: Node, player: Node2D, rng: RandomNumberGenerator, player_mutator: Dictionary = {}, epitaph: String = "", character_id: String = "") -> void:
+func open_rest_selection(choices: Array[Dictionary], player: Node2D, character_id: String) -> void:
+	open_selection("Rest Site", false, ENUMS.RewardMode.REST, null, player, null, {}, "", character_id, choices)
+
+func open_selection(title: String, is_initial: bool, mode: int, power_registry: Node, player: Node2D, rng: RandomNumberGenerator, player_mutator: Dictionary = {}, epitaph: String = "", character_id: String = "", fixed_choices: Array[Dictionary] = []) -> void:
 	_inspection_active = false
 	_inspection_candidate_index = -1
 	_confirm_release_required = false
 	for control: Control in boon_card_panels + [build_button, reroll_button, skip_button]:
 		control.focus_mode = Control.FOCUS_ALL
 	_keyboard_selection = false
-	_last_mouse_position = get_viewport().get_mouse_position()
 	if is_instance_valid(build_button):
 		build_button.visible = true
 	boon_selection_active = true
 	pending_initial_boon = is_initial
 	boon_title_text = title
 	reward_selection_mode = mode
+	_layout_root.theme = _scaled_theme
+	for index in boon_card_title_labels.size():
+		boon_card_title_labels[index].add_theme_font_override("font", boon_card_labels[index].get_theme_font("bold_font", "RichTextLabel"))
+	_layout_content_root()
+	_last_mouse_position = _layout_root.get_local_mouse_position()
 	mission_reward_stage = 0
 	pending_mission_upgrade_choice = {}
 	current_player = player
@@ -229,9 +239,13 @@ func open_selection(title: String, is_initial: bool, mode: int, power_registry: 
 	_current_rng = rng
 	var allow_initial_reroll := is_initial and mode == ENUMS.RewardMode.ARCANA
 	_reward_rerolls_remaining = _reward_rerolls_per_offer if (not is_initial or allow_initial_reroll) else 0
+	if mode == ENUMS.RewardMode.REST:
+		_reward_rerolls_remaining = 0
 	_epitaph_text = epitaph
 	_apply_mode_theme()
-	if reward_selection_mode == ENUMS.RewardMode.ARCANA:
+	if reward_selection_mode == ENUMS.RewardMode.REST:
+		boon_choices = fixed_choices.slice(0, mini(3, boon_card_panels.size())).duplicate(true)
+	elif reward_selection_mode == ENUMS.RewardMode.ARCANA:
 		boon_choices = _roll_arcana_choices(boon_choice_count, power_registry, player, rng)
 	elif reward_selection_mode == ENUMS.RewardMode.MISSION:
 		boon_choices = _roll_objective_choices(boon_choice_count, power_registry, player, rng)
@@ -341,7 +355,7 @@ func handle_input(event: InputEvent) -> bool:
 	if event.is_action_pressed("reward_inspect") and not event.is_echo():
 		_request_build_inspection()
 		return true
-	if boon_choice_count == 4 and _navigate_grid(event):
+	if boon_choice_count == 4 and reward_selection_mode != ENUMS.RewardMode.REST and _navigate_grid(event):
 		return true
 	var step := 0
 	if event.is_action_pressed("ui_down") or event.is_action_pressed("ui_right"):
@@ -407,7 +421,7 @@ func _on_card_focused(index: int) -> void:
 	if _inspection_active or not boon_selection_active:
 		return
 	_keyboard_selection = true
-	_last_mouse_position = get_viewport().get_mouse_position()
+	_last_mouse_position = _layout_root.get_local_mouse_position()
 	boon_hovered_index = index
 	_inspection_candidate_index = index
 
@@ -424,6 +438,8 @@ func _request_build_inspection() -> void:
 		var index := boon_hovered_index if boon_hovered_index >= 0 else _inspection_candidate_index
 		candidate = boon_choices[clampi(index, 0, boon_choices.size() - 1)].duplicate(true)
 		candidate["reward_mode"] = reward_selection_mode
+		if String(candidate.get("rest_action", "")) == "recover":
+			candidate = {}
 	for control in _navigation_controls():
 		control.focus_mode = Control.FOCUS_NONE
 	build_inspection_requested.emit(candidate)
@@ -436,7 +452,7 @@ func resume_after_inspection() -> void:
 	_confirm_release_required = true
 	_inspection_close_frame = Engine.get_process_frames()
 	_keyboard_selection = true
-	_last_mouse_position = get_viewport().get_mouse_position()
+	_last_mouse_position = _layout_root.get_local_mouse_position()
 	for control in _navigation_controls():
 		control.focus_mode = Control.FOCUS_ALL
 	var focused: Control = _saved_focus.get_ref() as Control if _saved_focus != null else null
@@ -584,6 +600,7 @@ func _can_skip_current_offer() -> bool:
 func _set_skip_button_visible(value: bool) -> void:
 	if skip_button == null:
 		return
+	value = value and reward_selection_mode != ENUMS.RewardMode.REST
 	if value:
 		skip_button.text = "Continue  ›" if boon_choices.is_empty() else "Skip  ›"
 		skip_button.tooltip_text = "Continue without a reward." if boon_choices.is_empty() else "Skip this reward. Counts as no pick."
@@ -604,7 +621,7 @@ func _set_reroll_button_visible(value: bool) -> void:
 
 
 func _on_skip_button_pressed() -> void:
-	if not _can_skip_current_offer():
+	if reward_selection_mode == ENUMS.RewardMode.REST or not _can_skip_current_offer():
 		return
 	if is_instance_valid(_sfx_player):
 		_sfx_player.stream = UI_CLICK_SOUND
@@ -634,6 +651,8 @@ func _on_reroll_button_pressed() -> void:
 
 
 func _can_reroll_current_offer() -> bool:
+	if reward_selection_mode == ENUMS.RewardMode.REST:
+		return false
 	if _reward_rerolls_remaining <= 0:
 		return false
 	if pending_initial_boon and reward_selection_mode != ENUMS.RewardMode.ARCANA:
@@ -721,6 +740,15 @@ func _create_ui() -> void:
 	boon_layer = CanvasLayer.new()
 	boon_layer.layer = 130
 	add_child(boon_layer)
+	_layout_root = Control.new()
+	_layout_root.name = "RewardContent"
+	_layout_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	boon_layer.add_child(_layout_root)
+	# Retain the local font resources across mode changes. TextServer may still
+	# have shaped text using the previous theme during the theme notification.
+	SCALED_UI_FONT.apply_to(_layout_root)
+	_scaled_theme = _layout_root.theme
+	_layout_content_root()
 	if get_viewport() != null and not get_viewport().size_changed.is_connected(_on_viewport_size_changed):
 		get_viewport().size_changed.connect(_on_viewport_size_changed)
 
@@ -732,7 +760,7 @@ func _create_ui() -> void:
 	boon_backdrop.offset_bottom = 0.0
 	boon_backdrop.color = Color(0.01, 0.02, 0.05, 0.7)
 	boon_backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	boon_layer.add_child(boon_backdrop)
+	_layout_root.add_child(boon_backdrop)
 
 	boon_backdrop_glow = ColorRect.new()
 	boon_backdrop_glow.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -742,7 +770,7 @@ func _create_ui() -> void:
 	boon_backdrop_glow.offset_bottom = 0.0
 	boon_backdrop_glow.color = Color(0.0, 0.0, 0.0, 0.0)
 	boon_backdrop_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	boon_layer.add_child(boon_backdrop_glow)
+	_layout_root.add_child(boon_backdrop_glow)
 
 	boon_header_chip_label = Label.new()
 	boon_header_chip_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
@@ -755,7 +783,7 @@ func _create_ui() -> void:
 	boon_header_chip_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
 	boon_header_chip_label.add_theme_constant_override("shadow_offset_x", 2)
 	boon_header_chip_label.add_theme_constant_override("shadow_offset_y", 2)
-	boon_layer.add_child(boon_header_chip_label)
+	_layout_root.add_child(boon_header_chip_label)
 
 	boon_title_label = Label.new()
 	boon_title_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
@@ -768,7 +796,7 @@ func _create_ui() -> void:
 	boon_title_label.add_theme_color_override("font_shadow_color", Color(0.01, 0.02, 0.06, 0.96))
 	boon_title_label.add_theme_constant_override("shadow_offset_x", 3)
 	boon_title_label.add_theme_constant_override("shadow_offset_y", 3)
-	boon_layer.add_child(boon_title_label)
+	_layout_root.add_child(boon_title_label)
 
 	boon_subtitle_label = Label.new()
 	boon_subtitle_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
@@ -781,7 +809,7 @@ func _create_ui() -> void:
 	boon_subtitle_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
 	boon_subtitle_label.add_theme_constant_override("shadow_offset_x", 2)
 	boon_subtitle_label.add_theme_constant_override("shadow_offset_y", 2)
-	boon_layer.add_child(boon_subtitle_label)
+	_layout_root.add_child(boon_subtitle_label)
 
 	boon_card_panels.clear()
 	boon_card_labels.clear()
@@ -798,7 +826,7 @@ func _create_ui() -> void:
 		panel.pivot_offset = Vector2(BOON_CARD_MAX_WIDTH * 0.5, BOON_CARD_HEIGHT * 0.5)
 		panel.focus_mode = Control.FOCUS_ALL
 		panel.focus_entered.connect(_on_card_focused.bind(i))
-		boon_layer.add_child(panel)
+		_layout_root.add_child(panel)
 
 		var accent_bar := ColorRect.new()
 		accent_bar.position = Vector2(0.0, ACCENT_BAR_INSET)
@@ -875,7 +903,7 @@ func _create_ui() -> void:
 	epitaph_label.add_theme_constant_override("shadow_offset_x", 2)
 	epitaph_label.add_theme_constant_override("shadow_offset_y", 2)
 	epitaph_label.visible = false
-	boon_layer.add_child(epitaph_label)
+	_layout_root.add_child(epitaph_label)
 
 	skip_button = Button.new()
 	skip_button.text = "Skip  ›"
@@ -896,7 +924,7 @@ func _create_ui() -> void:
 	skip_button.focus_mode = Control.FOCUS_ALL
 	skip_button.visible = false
 	skip_button.pressed.connect(_on_skip_button_pressed)
-	boon_layer.add_child(skip_button)
+	_layout_root.add_child(skip_button)
 
 	reroll_button = Button.new()
 	reroll_button.text = "Reroll  ›"
@@ -917,7 +945,7 @@ func _create_ui() -> void:
 	reroll_button.focus_mode = Control.FOCUS_ALL
 	reroll_button.visible = false
 	reroll_button.pressed.connect(_on_reroll_button_pressed)
-	boon_layer.add_child(reroll_button)
+	_layout_root.add_child(reroll_button)
 
 	build_button = Button.new()
 	build_button.text = "Your Build  [Tab]"
@@ -927,31 +955,40 @@ func _create_ui() -> void:
 		build_button.add_theme_stylebox_override(state, _make_skip_button_style(0.5 if state == "normal" else 1.0))
 	build_button.tooltip_text = "Inspect owned powers and the selected offer without choosing it."
 	build_button.pressed.connect(_request_build_inspection)
-	boon_layer.add_child(build_button)
+	_layout_root.add_child(build_button)
 
 	mission_bonus_label = RichTextLabel.new()
 	mission_bonus_label.bbcode_enabled = true
 	mission_bonus_label.scroll_active = false
 	mission_bonus_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	mission_bonus_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	mission_bonus_label.add_theme_font_size_override("normal_font_size", 17)
-	mission_bonus_label.add_theme_font_size_override("bold_font_size", 17)
-	boon_layer.add_child(mission_bonus_label)
+	mission_bonus_label.add_theme_font_size_override("normal_font_size", 18)
+	mission_bonus_label.add_theme_font_size_override("bold_font_size", 18)
+	_layout_root.add_child(mission_bonus_label)
 	_layout_boon_cards()
 	_position_epitaph_label()
 	boon_layer.visible = false
 
 func _on_viewport_size_changed() -> void:
+	_layout_content_root()
 	_layout_boon_cards()
 	_position_epitaph_label()
 	_position_action_buttons()
 	if boon_selection_active:
 		_update_boon_reveal_visuals()
 
+func _layout_content_root() -> void:
+	if not is_instance_valid(_layout_root) or get_viewport() == null:
+		return
+	var logical_size := get_viewport().get_visible_rect().size
+	var stretch := get_viewport().get_stretch_transform().get_scale()
+	_layout_root.scale = Vector2(1.0 / maxf(stretch.x, 0.01), 1.0 / maxf(stretch.y, 0.01))
+	_layout_root.size = logical_size * stretch
+
 func _layout_boon_cards() -> void:
 	if boon_card_panels.is_empty() or get_viewport() == null:
 		return
-	var viewport_size := get_viewport().get_visible_rect().size
+	var viewport_size := _layout_root.size
 	var compact := viewport_size.y < 900.0
 	# Make room through layout, not by scaling readable text down.
 	boon_header_chip_label.offset_top = 10.0 if compact else 18.0
@@ -962,18 +999,48 @@ func _layout_boon_cards() -> void:
 	boon_subtitle_label.offset_top = 84.0 if compact else 116.0
 	boon_subtitle_label.offset_bottom = 118.0 if compact else 156.0
 	if is_instance_valid(mission_bonus_label):
-		mission_bonus_label.position = Vector2(48.0, 84.0 if compact else 112.0)
+		mission_bonus_label.position = Vector2(48.0, boon_title_label.offset_bottom + 4.0)
 		mission_bonus_label.size = Vector2(viewport_size.x - 96.0, 68.0)
 	var side_margin := 32.0 if viewport_size.x <= 1000.0 else maxf(48.0, viewport_size.x * BOON_SIDE_MARGIN_RATIO)
 	var group_width := clampf(viewport_size.x - side_margin * 2.0, BOON_CARD_MIN_WIDTH, BOON_CARD_MAX_WIDTH)
-	var columns := 2 if boon_choice_count == 4 else 1
-	var rows := ceili(float(boon_choice_count) / columns)
+	var rest := reward_selection_mode == ENUMS.RewardMode.REST
+	var short_window := viewport_size.y < 620.0 and not rest
+	var layout_count := maxi(1, boon_choices.size()) if rest else boon_choice_count
+	var columns := 2 if boon_choice_count == 4 and not rest else 1
+	if short_window and boon_choice_count == 3:
+		columns = 3
+	var rows := ceili(float(layout_count) / columns)
 	var gap := 16.0
 	var start_y := (160.0 if _has_mission_bonus_mutator() else 128.0) if compact else (188.0 if _has_mission_bonus_mutator() else 168.0)
 	var footer_space := 108.0 if compact and columns == 2 else 120.0
 	var card_height := minf(236.0 if columns == 2 else 180.0, (viewport_size.y - start_y - footer_space - (rows - 1) * gap) / rows)
+	if short_window:
+		gap = 8.0
+		start_y = 116.0 if _has_mission_bonus_mutator() else 60.0
+		footer_space = 94.0 if not _epitaph_text.is_empty() else 52.0
+		card_height = (viewport_size.y - start_y - footer_space - (rows - 1) * gap) / rows
+		boon_title_label.offset_top = 0.0
+		boon_title_label.offset_bottom = 36.0
+		boon_title_label.add_theme_font_size_override("font_size", 28)
+		boon_subtitle_label.offset_top = 36.0
+		boon_subtitle_label.offset_bottom = 58.0
+		mission_bonus_label.position.y = 40.0
+	if rest:
+		gap = 10.0
+		start_y = 104.0 if viewport_size.y < 620.0 else 126.0
+		card_height = minf(174.0, (viewport_size.y - start_y - 60.0 - (rows - 1) * gap) / rows)
+		boon_header_chip_label.offset_top = 6.0
+		boon_header_chip_label.offset_bottom = 24.0
+		boon_title_label.offset_top = 24.0
+		boon_title_label.offset_bottom = 64.0
+		boon_title_label.add_theme_font_size_override("font_size", 30)
+		boon_subtitle_label.offset_top = 66.0
+		boon_subtitle_label.offset_bottom = 96.0
+	boon_header_chip_label.add_theme_font_size_override("font_size", 14 if rest or short_window else 18)
+	boon_header_chip_label.visible = not short_window
+	boon_subtitle_label.add_theme_font_size_override("font_size", 14 if short_window else (16 if rest else 20))
 	var total_height := rows * card_height + (rows - 1) * gap
-	if not compact:
+	if not compact and not rest:
 		start_y = clampf((viewport_size.y - total_height) * 0.5, start_y, 224.0)
 	var start_x := (viewport_size.x - group_width) * 0.5
 	var card_width := (group_width - (columns - 1) * gap) / columns
@@ -987,13 +1054,13 @@ func _layout_boon_cards() -> void:
 		panel.position = base_pos
 		panel.scale = Vector2.ONE
 		boon_card_rects[i] = Rect2(base_pos, panel.size)
-		var inset := 20.0 if columns == 2 else 28.0
+		var inset := 16.0 if columns == 3 else (20.0 if columns == 2 else 28.0)
 		var accent_bar := boon_card_accent_bars[i]
 		accent_bar.position = Vector2(0.0, ACCENT_BAR_INSET)
 		accent_bar.size = Vector2(ACCENT_BAR_WIDTH, card_height - ACCENT_BAR_INSET * 2.0)
 		var title := boon_card_title_labels[i]
 		title.position = Vector2(inset, 10.0)
-		title.add_theme_font_size_override("font_size", 22 if compact else 24)
+		title.add_theme_font_size_override("font_size", 20 if rest or short_window else (22 if compact else 24))
 		title.custom_minimum_size = Vector2.ZERO
 		title.size = Vector2(card_width - inset * 2.0 - 112.0, 28.0)
 		var stack_label := boon_card_stack_labels[i]
@@ -1002,9 +1069,34 @@ func _layout_boon_cards() -> void:
 		var label := boon_card_labels[i]
 		label.add_theme_font_size_override("normal_font_size", 18 if compact else 22)
 		label.add_theme_font_size_override("bold_font_size", 18 if compact else 22)
-		label.position = Vector2(inset, 42.0 if compact and columns == 2 else 44.0)
+		# Keep 18px glyphs while removing surplus leading in the short grid.
+		label.add_theme_constant_override("line_separation", -4 if short_window and columns == 2 else 0)
+		label.position = Vector2(inset, 38.0 if rest else (42.0 if compact and columns == 2 else 44.0))
 		label.custom_minimum_size = Vector2(card_width - inset * 2.0, card_height - (50.0 if compact and columns == 2 else 56.0))
 		label.size = label.custom_minimum_size
+		if short_window:
+			label.position.y = 40.0
+			label.custom_minimum_size.y = card_height - 48.0
+			label.size.y = card_height - 48.0
+			if columns == 3:
+				title.size.x = card_width - inset * 2.0
+				stack_label.position.y = 38.0
+				label.position.y = 68.0
+				label.custom_minimum_size.y = card_height - 78.0
+				label.size.y = card_height - 78.0
+		if rest:
+			label.custom_minimum_size.y = card_height - 46.0
+			label.size.y = card_height - 46.0
+		# Font faces can grow the title beyond its requested 28px box.
+		title.size.y = maxf(28.0, title.get_minimum_size().y)
+		if columns == 3:
+			stack_label.position.y = title.position.y + title.size.y + 3.0
+		var body_top := title.position.y + title.size.y + 3.0
+		if stack_label.visible:
+			body_top = maxf(body_top, stack_label.position.y + stack_label.size.y + 3.0)
+		label.position.y = maxf(label.position.y, body_top)
+		label.custom_minimum_size.y = maxf(0.0, card_height - label.position.y - 8.0)
+		label.size.y = label.custom_minimum_size.y
 		# The icons occupy only the title row; explanation and figures use all
 		# available width beneath them, including in four-choice grids.
 		if i < boon_choices.size() and bool(boon_choices[i].get("is_mutator", false)):
@@ -1017,10 +1109,10 @@ func _layout_boon_cards() -> void:
 func _position_epitaph_label() -> void:
 	if epitaph_label == null or boon_card_rects.is_empty() or get_viewport() == null:
 		return
-	var viewport_size := get_viewport().get_visible_rect().size
+	var viewport_size := _layout_root.size
 	# Find the bottom of the last card
 	var last_card_bottom := 0.0
-	for rect in boon_card_rects:
+	for rect: Rect2 in boon_card_rects.slice(0, mini(boon_choices.size(), boon_card_rects.size())):
 		var card_bottom := rect.position.y + rect.size.y
 		if card_bottom > last_card_bottom:
 			last_card_bottom = card_bottom
@@ -1041,10 +1133,14 @@ func _position_epitaph_label() -> void:
 func _position_action_buttons() -> void:
 	if skip_button == null or reroll_button == null or build_button == null or get_viewport() == null:
 		return
-	var viewport_size := get_viewport().get_visible_rect().size
-	var button_size := Vector2(220.0, 60.0)
+	var viewport_size := _layout_root.size
+	var rest := reward_selection_mode == ENUMS.RewardMode.REST
+	var short_window := viewport_size.y < 620.0
+	var button_size := Vector2(220.0, 44.0 if rest or short_window else 60.0)
 	var actions: Array[Button] = []
 	for button: Button in [build_button, reroll_button, skip_button]:
+		button.custom_minimum_size = button_size
+		button.add_theme_font_size_override("font_size", 18 if rest or button == build_button else 22)
 		if button.visible:
 			actions.append(button)
 	var y_pos := viewport_size.y * 0.8 - button_size.y * 0.5
@@ -1087,7 +1183,16 @@ func _apply_mode_theme() -> void:
 	var chip_color := RARITY_COMMON
 	var accent_color := RARITY_COMMON
 	var glow_color := Color(0.0, 0.0, 0.0, 0.0)
-	if reward_selection_mode == ENUMS.RewardMode.ARCANA:
+	if reward_selection_mode == ENUMS.RewardMode.REST:
+		boon_backdrop.color = Color(0.02, 0.07, 0.06, 0.90)
+		_title_base_color = Color(0.69, 0.97, 0.81)
+		boon_title_label.add_theme_color_override("font_color", _title_base_color)
+		boon_subtitle_label.add_theme_color_override("font_color", Color(0.76, 0.88, 0.82))
+		chip_text = "REST SITE"
+		chip_color = _title_base_color
+		accent_color = _title_base_color
+		glow_color = Color(0.05, 0.20, 0.12, 0.24)
+	elif reward_selection_mode == ENUMS.RewardMode.ARCANA:
 		boon_backdrop.color = Color(0.08, 0.04, 0.1, 0.74)
 		_title_base_color = RARITY_EPIC
 		boon_title_label.add_theme_color_override("font_color", _title_base_color)
@@ -1206,6 +1311,8 @@ func _refresh_boon_ui(player: Node2D) -> void:
 			icon_node.visible = false
 			var boon_desc := String(boon.get("desc", boon.get("description", "")))
 			var choice_name := _choice_display_name(boon)
+			if reward_selection_mode == ENUMS.RewardMode.REST and String(boon.get("rest_action", "")) == "upgrade":
+				choice_name = "Upgrade " + choice_name
 			card_title.text = "%d. %s" % [i + 1, choice_name]
 			label.text = boon_desc
 		label.modulate = Color(1.0, 1.0, 1.0, 0.95)
@@ -1221,6 +1328,8 @@ func _get_boon_title_text() -> String:
 	return boon_title_text
 
 func _get_boon_subtitle_text() -> String:
+	if reward_selection_mode == ENUMS.RewardMode.REST:
+		return "Choose one: restore health or upgrade a Boon you own." if boon_choices.size() > 1 else "Recover before continuing your descent."
 	if boon_choices.is_empty():
 		return "No rewards remain in this pool. Continue your descent."
 	var is_arcana := reward_selection_mode == ENUMS.RewardMode.ARCANA
@@ -1435,7 +1544,7 @@ func _format_stack_progress_icons(stack_count: int, stack_limit: int) -> String:
 func _update_boon_hover() -> void:
 	if boon_layer == null:
 		return
-	var mouse_pos := get_viewport().get_mouse_position()
+	var mouse_pos := _layout_root.get_local_mouse_position()
 	if _keyboard_selection and mouse_pos.is_equal_approx(_last_mouse_position):
 		return
 	_keyboard_selection = false

@@ -24,6 +24,8 @@ func initialize(owner_player: CharacterBody2D) -> void:
 	_room = "%s:%d" % [REGISTRY.current_run(), REGISTRY.current_room()]
 
 func cancel() -> void:
+	if is_instance_valid(player):
+		player._cancel_faultline_seal()
 	if is_instance_valid(player) and is_instance_valid(player.get("spark_relay_controller")):
 		player.spark_relay_controller.cancel()
 	if fields != null:
@@ -71,6 +73,7 @@ func prepare_attack(target: Node2D, descriptor: Dictionary, _action: Dictionary)
 
 func accepted_damage(event: Dictionary) -> void:
 	_accept_stationary_boss_rewards(event)
+	_accept_faultline_field(event)
 	_accept_boss_charge(event)
 	_accept_keyword_bridges(event)
 	player._trigger_battle_trance()
@@ -178,15 +181,27 @@ func _shatterwake(event: Dictionary, action: Dictionary) -> void:
 		player._on_cue_world_ring(cue)
 	PlayerReplicationService.broadcast_cue_event(_owner_id(), "shatterwake_burst", cue, true)
 
+func _accept_faultline_field(event: Dictionary) -> void:
+	# Check before charging: a Field event may plant a seal but cannot also
+	# detonate it. A later accepted tick can provide the Field payoff.
+	var action: Dictionary = event.get("interaction", {})
+	if (int(action.get("ancestry", 0)) & REGISTRY.FAULTLINE_ANCESTRY) != 0 or not REGISTRY.action_forms(action).has("Field"):
+		return
+	if MultiplayerSessionManager.is_remote_replica() or not bool(event.get("shared", false)) or not player.combat_interactions.accepts_action(action):
+		return
+	if int(event.get("cancel_generation", -1)) != int(player.combat_interactions._cancel_generation):
+		return
+	player._try_detonate_convergence_from_field(event.get("position", Vector2.INF))
+
 func _accept_boss_charge(event: Dictionary) -> void:
 	var action: Dictionary = event.get("interaction", {})
 	var controller: Node = player.combat_interactions
 	var attack_hit := REGISTRY.is_attack_hit(String(action.get("source", "")))
 	# Alternative inputs share each reward's original-action allowance. Claim
 	# before triggering any descendants, including when Convergence is active,
-	# so a delayed tick cannot bank that same action after the Field expires.
+	# so a delayed tick cannot bank that same action after the seal expires.
 	var electric := (int(action.get("traits", 0)) & REGISTRY.ELECTRIC) != 0
-	if float(player.convergence_surge_damage_ratio) > 0.0 and (attack_hit or electric) and controller.claim_reaction(action, "convergence_charge"):
+	if float(player.convergence_surge_damage_ratio) > 0.0 and (int(action.get("ancestry", 0)) & REGISTRY.FAULTLINE_ANCESTRY) == 0 and (attack_hit or electric) and controller.claim_reaction(action, "convergence_charge"):
 		var context: Dictionary = event.get("context", {})
 		var position: Vector2 = context.get("hit_position", event.get("position", player.global_position))
 		if not position.is_finite():
@@ -243,7 +258,7 @@ func accepted_attack(event: Dictionary) -> void:
 			DAMAGEABLE.apply_mark(target, "dread_resonance", player.dread_resonance_mark_bonus_ratio, player.dread_resonance_mark_duration, _owner_id(), action)
 			DAMAGEABLE.add_dread_stack(target, _owner_id(), int(player.dread_resonance_max_stacks), action)
 		if not player._indomitable_oath_spent_this_attack:
-			player._gain_indomitable_oath_from_hit(target, source)
+			player._gain_indomitable_oath_from_hit(target, source, int(event.get("attack_hit_index", 0)))
 		var context: Dictionary = event.get("context", {})
 		var attack_origin: Vector2 = context.get("attack_origin", player.global_position)
 		var attack_range := float(context.get("attack_range", player.attack_range))

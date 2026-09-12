@@ -74,8 +74,10 @@ func _check_build(character_id: String, tier: int) -> void:
 		ui.process_input(ui.boon_confirm_lock_time + 0.01)
 		ui.process_input(0.01)
 		# Headless display has no movable mouse. Map only the offered card's hit rect
-		# to its fixed pointer; production hover, input, signal and World apply stay real.
-		ui.boon_card_rects[0] = Rect2(root.get_mouse_position() - Vector2(10, 10), Vector2(20, 20))
+		# to its fixed pointer in the physical reward layout's coordinates;
+		# production hover, input, signal and World apply stay real.
+		var reward_pointer: Vector2 = ui._layout_root.get_global_transform_with_canvas().affine_inverse() * root.get_mouse_position()
+		ui.boon_card_rects[0] = Rect2(reward_pointer - Vector2(10, 10), Vector2(20, 20))
 		ui._update_boon_hover()
 		check(ui.boon_hovered_index == 0, label + "offered card enters production hover selection")
 		var attacks_before := primary_attacks

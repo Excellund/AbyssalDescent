@@ -161,6 +161,7 @@ func host_scenarios(client_id: int) -> void:
 	await _conditional_scenario()
 	await _relay_scenario()
 	await _invalid_scenario()
+	await _seeking_relay_scenario()
 	await _stationary_reward_scenario()
 	check(DAMAGE.current_interaction_context().is_empty(), "All generated reactions release the authoritative interaction scope")
 	await command("finish")
@@ -209,7 +210,7 @@ func _stationary_reward_scenario() -> void:
 	check(enemy(414).get_current_health() == untouched_health and _hits(414).is_empty(), "Directly submitted Edict damage cannot forge the host-only producer even with a valid owner/root")
 	await command("unknown_ancestry")
 	var sanitized := _hits(404, "melee")
-	check(sanitized.size() == 2 and int(sanitized[0].accepted_action.ancestry) == 0 and int(sanitized[1].accepted_action.ancestry) == 7, "Actual accepted damage scope removes unknown ancestry8/128 while preserving the valid combined mask7")
+	check(sanitized.size() == 2 and int(sanitized[0].accepted_action.ancestry) == 0 and int(sanitized[1].accepted_action.ancestry) == 7, "Actual accepted damage scope removes unknown ancestry16/128 while preserving the valid combined mask7")
 	await _stationary_field_scenario()
 
 func _stationary_field_scenario() -> void:
@@ -280,6 +281,34 @@ func _relay_scenario() -> void:
 	# Leave one joining-owner flight active for the later lifecycle cancellation.
 	await command("burst_again")
 	check(relay.projectiles.size() == 1, "A later original action gets a fresh independent Relay allowance")
+
+func _seeking_relay_scenario() -> void:
+	# Move existing registered enemies so the reliable position and accepted
+	# damage transports exercise a genuine off-axis lethal-trigger redirect.
+	enemy(203).health_state.current_health = 1
+	enemy(201).position = Vector2(0, -160)
+	enemy(202).position = Vector2(160, 160)
+	_publish_status()
+	var relay: Node = remote_player._ensure_spark_relay()
+	await command("burst_again")
+	check((not is_instance_valid(enemy(203)) or enemy(203).get_current_health() <= 0) and relay.projectiles.size() == 1, "Accepted joining-owner lethal Burst still creates a useful host-owned Relay")
+	if relay.projectiles.is_empty():
+		return
+	check(relay.projectiles[0].direction.is_equal_approx(Vector2.UP), "Host acquires the living off-axis foe instead of the dead trigger's submitted position")
+	relay.tick(.06)
+	_deal(201, "melee", local_player.combat_interactions.begin_action("attack"), 20000.0)
+	relay.tick(.02)
+	check(relay.projectiles.size() == 1 and relay.projectiles[0].direction.x > .5 and relay.projectiles[0].direction.y > .3, "Host redirects the same in-flight bolt when another player kills its acquired target")
+	await command("inspect_seeking_turn")
+	var observed: Array = results.inspect_seeking_turn.owner.relay.projectiles
+	check(observed.size() == 1 and float(observed[0][3]) > .5 and float(observed[0][4]) > .3 and results.inspect_seeking_turn.damage_events == 0, "Authenticated direction snapshot reaches the joining owner without client targeting or local damage")
+	var before := _hits(202, "spark_relay_projectile").size()
+	relay.tick(1.0)
+	check(relay.projectiles.is_empty() and _hits(202, "spark_relay_projectile").size() == before + 1, "Retargeted host bolt hits the surviving foe once and ends at its original level-one cap")
+	var hit: Dictionary = _hits(202, "spark_relay_projectile").back()
+	check(int(hit.context.interaction.owner) == joiner_id and int(hit.context.interaction.seq) == int(results.burst_again.action.seq) and is_equal_approx(float(hit.context.raw_amount), 18.5) and is_equal_approx(float(hit.context.damage_coefficient), .5), "Retargeted hit preserves the joining owner's original root and unconditioned descriptor")
+	await command("inspect_relay_clear")
+	check(results.inspect_relay_clear.owner.projectiles == 0, "Reliable impact clear retires the retargeted flight on its owning client")
 
 func _late_observer_scenario() -> void:
 	var action := local_player.combat_interactions.begin_action("attack")
@@ -356,6 +385,10 @@ func client_command(name: String, payload: Dictionary) -> void:
 			_deal(203, "rupture_wave", next_action)
 		"inspect_relay":
 			check(await until(func(): return local_player._ensure_spark_relay().projectiles.size() == 1), "Actual owner receives its host-generated flight")
+		"inspect_seeking_turn":
+			check(await until(func():
+				var relay: Node = local_player._ensure_spark_relay()
+				return relay.projectiles.size() == 1 and relay.projectiles[0].direction.x > .5 and relay.projectiles[0].direction.y > .3), "Actual owner receives the authoritative retargeted direction")
 		"inspect_relay_clear":
 			check(await until(func(): return local_player._ensure_spark_relay().projectiles.is_empty()), "Owner receives the reliable impact clear")
 		"inspect_host_relay", "recover_observer":
@@ -403,7 +436,7 @@ func client_command(name: String, payload: Dictionary) -> void:
 			# Bypass the owner's producer guard to probe the real server boundary.
 			world.request_enemy_damage_from_client(414, 999, INTERACTIONS.damage_context(action, "edict_court", {"raw_amount": 999.0, "damage_coefficient": 9.0, "secondary": true}))
 		"unknown_ancestry":
-			for mask in [8, 128 | 7]:
+			for mask in [16, 128 | 7]:
 				var action := local_player.combat_interactions.begin_action("attack")
 				action.ancestry = mask
 				world.request_enemy_damage_from_client(404, 1, INTERACTIONS.damage_context(action, "melee", {"raw_amount": 1.0, "damage_coefficient": 0.0}))

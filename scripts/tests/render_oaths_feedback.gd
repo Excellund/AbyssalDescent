@@ -1,8 +1,8 @@
 extends "res://scripts/tests/test_menu_panel_fit.gd"
 ## Capture the real Oaths menu at production canvas scale. Run only through
 ## render_gameplay_fixture.ps1 -PreserveProductionCanvas in an isolated copy.
-## Fourteen focused frames: reclaimed list space, all five vessel rows and
-## Threadbinder clear goals at two sizes, retaining legacy completion coverage.
+## Eighteen frames: ordinary browsing with every vessel/Bearing/catalyst
+## unlocked, saved completion and unlock order, plus explicit setup eligibility.
 
 const OATHS := preload("res://scripts/progression/oaths_registry.gd")
 const OATH_PANEL := preload("res://scripts/ui/ascension/ascension_panel.gd")
@@ -30,6 +30,12 @@ func _run() -> void:
 	RunContext.telemetry_upload_enabled = false
 	RunContext.selected_character_id = "bastion"
 	RunContext.meta_progress_profile = META._get_default_profile()
+	for character_id: String in CHARACTERS.get_launch_character_ids():
+		META.unlock_character(RunContext.meta_progress_profile, character_id)
+		META.unlock_character_tier(RunContext.meta_progress_profile, character_id, 3)
+		META.record_forsworn_clear(RunContext.meta_progress_profile, character_id)
+	for catalyst_id: String in CATALYST.get_catalyst_ids():
+		META.unlock_catalyst(RunContext.meta_progress_profile, catalyst_id)
 	for legacy_id in ["warden_no_hit", "sovereign_no_hit", "singular_focus", "hundredfold", "pilgrims_road", "clear_bastion_pilgrim"]:
 		META.mark_oath_completed(RunContext.meta_progress_profile, legacy_id)
 	META.mark_oath_completed(RunContext.meta_progress_profile, "forsworn_grounded")
@@ -47,9 +53,10 @@ func _run() -> void:
 	check(scroll != null, "Native Oaths list has its scrolling container")
 	panel.set_setup_bearing(3)
 	panel.set_run_setup_mode(true)
-	_assert_oath_state(panel, "unassisted_ascension", false, true, "Forsworn · Available")
+	_assert_oath_state(panel, "unassisted_ascension", false, true, "Forsworn · Bearing matches setup")
 	panel.set_run_setup_mode(false)
-	_assert_oath_state(panel, "unassisted_ascension", false, false, "Forsworn · Requires another Bearing")
+	_assert_oath_state(panel, "unassisted_ascension", false, true, "Forsworn")
+	check(panel._selected_oath_bearing() == -1, "Leaving setup clears presentation eligibility despite its cached Forsworn selection")
 	var original_completed := META.get_completed_oath_ids(RunContext.meta_progress_profile).duplicate()
 	var folder := project_path.path_join("oaths_feedback_frames")
 	DirAccess.make_dir_recursive_absolute(folder)
@@ -88,10 +95,25 @@ func _run() -> void:
 					await _settle()
 					_check_vessel_progression(panel, tier, character_id)
 				await _capture_id(folder, oath_id, physical_size, panel, scroll, "_" + OATHS._bearing_label(tier).to_lower())
+		# The real setup still explains whether its selected run can earn a goal.
+		# Its status must disappear again on returning to ordinary browsing.
+		panel.set_oaths_only_mode(false)
+		panel.set_run_setup_mode(true)
+		for setup_tier: int in [1, 3]:
+			panel.set_setup_bearing(setup_tier)
+			panel.populate()
+			await _settle()
+			_assert_oath_state(panel, "unassisted_ascension", false, setup_tier == 3, "Forsworn · " + ("Bearing matches setup" if setup_tier == 3 else "Bearing differs from setup"))
+			await _capture_id(folder, "unassisted_ascension", physical_size, panel, scroll, "_setup_" + OATHS._bearing_label(setup_tier).to_lower())
+		panel.set_run_setup_mode(false)
+		panel.set_oaths_only_mode(true)
+		panel.populate()
+		await _settle()
+		_assert_oath_state(panel, "unassisted_ascension", false, true, "Forsworn")
 	RunContext.current_difficulty_tier = 2
 	panel.populate()
-	_assert_oath_state(panel, "forsworn_sovereign_no_hit", false, true, "Delver+ · Available")
-	_assert_oath_state(panel, "unassisted_ascension", false, false, "Forsworn · Requires another Bearing")
+	_assert_oath_state(panel, "forsworn_sovereign_no_hit", false, true, "Delver+")
+	_assert_oath_state(panel, "unassisted_ascension", false, true, "Forsworn")
 	check(META.get_completed_oath_ids(RunContext.meta_progress_profile) == original_completed, "Browsing never seeds or migrates saved completions")
 	menu.queue_free()
 	await _settle()
@@ -112,7 +134,7 @@ func _check_reclaimed_list_space(panel: OATH_PANEL, scroll: ScrollContainer) -> 
 			continue
 		check(not label.text.contains("Selected Bearing") and not label.text.contains("Oaths for every stage of the descent"), "Removed overview and selected-Bearing text are absent")
 
-func _check_roster(panel: OATH_PANEL, tier: int) -> void:
+func _check_roster(panel: OATH_PANEL, _tier: int) -> void:
 	var character_ids := CHARACTERS.get_launch_character_ids()
 	check(OATHS.get_oath_ids().size() == 17 + character_ids.size() * 4, "Board lists seventeen challenges and four Bearing goals for every playable vessel")
 	check(character_ids.has("threadbinder"), "The playable roster includes Threadbinder")
@@ -128,15 +150,22 @@ func _check_roster(panel: OATH_PANEL, tier: int) -> void:
 	check(group_counts == [4, 5, 8, 0], "Unassisted moves from Journey to Prestige without changing the total roster")
 	_assert_oath_state(panel, "forsworn_warden_no_hit", true, true, "Any Bearing · Completed")
 	_assert_oath_state(panel, "forsworn_singular_focus", true, true, "Any Bearing · Completed")
-	_assert_oath_state(panel, "unassisted_ascension", false, tier == 3, "Forsworn · " + ("Available" if tier == 3 else "Requires another Bearing"))
-	_assert_oath_state(panel, "forsworn_grounded", true, tier >= 1, "Delver+ · Completed")
-	_assert_oath_state(panel, "forsworn_sovereign_no_hit", false, tier >= 1, "Delver+ · " + ("Available" if tier >= 1 else "Requires another Bearing"))
-	_assert_oath_state(panel, "forsworn_glass_pilgrimage", false, tier == 3, "Forsworn · " + ("Available" if tier == 3 else "Requires another Bearing"))
+	_assert_oath_state(panel, "unassisted_ascension", false, true, "Forsworn")
+	_assert_oath_state(panel, "forsworn_grounded", true, true, "Delver+ · Completed")
+	_assert_oath_state(panel, "forsworn_sovereign_no_hit", false, true, "Delver+")
+	_assert_oath_state(panel, "forsworn_glass_pilgrimage", false, true, "Forsworn")
+	check(panel._selected_oath_bearing() == -1, "Ordinary browsing has no selected-run Bearing")
 	var vessel_rows: Array[String] = []
 	for child in panel._oath_list.get_children():
 		if child is Button:
 			vessel_rows.append(child.text)
 	check(vessel_rows.size() == character_ids.size(), "Every playable vessel has one progression row")
+	var previous_index := -1
+	for character_id: String in META.CHARACTER_UNLOCK_CHAIN:
+		var button := _vessel_group(panel, character_id)
+		check(button != null and button.get_index() > previous_index, "Vessel rows follow actual unlock order: " + character_id)
+		if button != null:
+			previous_index = button.get_index()
 	for character_id: String in character_ids:
 		var vessel_button := _vessel_group(panel, character_id)
 		var expected_progress := "(1 / 4)" if character_id == "bastion" else "(0 / 4)"
@@ -152,13 +181,12 @@ func _vessel_group(panel: OATH_PANEL, character_id: String) -> Button:
 			return child
 	return null
 
-func _check_vessel_progression(panel: OATH_PANEL, selected_tier: int, character_id: String) -> void:
+func _check_vessel_progression(panel: OATH_PANEL, _selected_tier: int, character_id: String) -> void:
 	for tier: int in range(4):
 		var bearing := OATHS._bearing_label(tier)
 		var completed := character_id == "bastion" and tier == 0
-		var available := selected_tier == tier
-		var state := "Completed" if completed else ("Available" if available else "Requires another Bearing")
-		_assert_oath_state(panel, "clear_" + character_id + "_" + bearing.to_lower(), completed, available, bearing + " Bearing · " + state)
+		var requirement := bearing + " Bearing" + (" · Completed" if completed else "")
+		_assert_oath_state(panel, "clear_" + character_id + "_" + bearing.to_lower(), completed, true, requirement)
 
 func _capture_vessel_roster(folder: String, physical_size: Vector2i, panel: OATH_PANEL, scroll: ScrollContainer) -> void:
 	var character_ids := CHARACTERS.get_launch_character_ids()
@@ -190,11 +218,20 @@ func _assert_oath_state(panel: OATH_PANEL, oath_id: String, completed: bool, ava
 	check(card != null, "Earned marker reflects actual saved progress: " + oath_id)
 	if card == null:
 		return
-	check(card.get_meta(&"oath_bearing_eligible") == available, "Card matches minimum or exact selected Bearing: " + oath_id)
+	check(card.get_meta(&"oath_bearing_eligible") == available, "Card checks eligibility only for an explicitly selected run: " + oath_id)
+	check(card.get_meta(&"oath_setup_bearing") == panel._selected_oath_bearing(), "Card records whether it has a current setup: " + oath_id)
 	var labels := card.find_children("*", "Label", true, false)
 	check(labels.any(func(label: Label): return label.text == requirement), "Card visibly states its requirement and status: " + oath_id)
 	var color := (card.get_theme_stylebox("panel") as StyleBoxFlat).border_color
-	check(color.g > color.r if completed else (color.b > color.r if available else color.r > color.b), "Completed, available and future cards retain distinct readable styles: " + oath_id)
+	check(color.g > color.r if completed else (color.b > color.r if available else color.r > color.b), "Completed and ordinary cards keep their styles; only explicit setup can indicate ineligibility: " + oath_id)
+	for label: Label in labels:
+		check(not label.text.contains("Requires another Bearing"), "The misleading legacy warning is absent: " + oath_id)
+	if not completed and panel._selected_oath_bearing() < 0:
+		check(not requirement.contains(" · "), "Ordinary unearned goals state the requirement without a run status")
+		for label: Label in labels:
+			if label.text == requirement:
+				var requirement_color := label.get_theme_color("font_color")
+				check(requirement_color.b > requirement_color.r, "Ordinary requirement text uses neutral styling")
 
 func _capture_id(folder: String, oath_id: String, physical_size: Vector2i, panel: OATH_PANEL, scroll: ScrollContainer, variant: String = "") -> void:
 	var definition: Dictionary = OATHS.get_definition(oath_id)

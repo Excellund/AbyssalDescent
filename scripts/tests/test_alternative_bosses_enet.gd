@@ -88,9 +88,11 @@ func _snapshot() -> Dictionary:
 		"run": GameStateReplicationService.get_current_run_sync_token(),
 		"snapshot": boss._received_snapshot, "phase": boss.boss_state,
 		"serial": boss._attack_serial, "sequence_step": boss._sequence_step,
+		"sequence_root": boss._sequence_root, "callout": boss.get_attack_callout(),
 		"attack_kind": boss.attack_kind, "remaining": boss.state_time_left,
 		"warning_duration": boss.warning_duration,
 		"move_start": boss._move_start, "slam_landing": boss._slam_landing,
+		"furnace_cues": boss._furnace_cue_count,
 	}
 
 func _inspect(client_id: int, key: String, options: Dictionary = {}) -> Dictionary:
@@ -144,7 +146,7 @@ func host_scenarios(client_id: int) -> void:
 				local_player.global_position = move_start + Vector2(-300.0, 200.0)
 				remote_player.global_position = local_player.global_position
 				boss._process_behavior(boss.warning_duration * 0.5)
-				check(boss.global_position.is_equal_approx(move_start.lerp(landing, 0.5)) and boss.get_attack_warning_geometry() == geometry, label + ": body approaches the committed landing after the target changes direction")
+				check(boss.global_position.is_equal_approx(move_start.lerp(landing, pow((0.5 - 0.38) / 0.62, 2.0))) and boss.get_attack_warning_geometry() == geometry, label + ": body approaches the committed landing after the target changes direction")
 				check(local_player.get_current_health() == 500 and remote_player.get_current_health() == 500, label + ": approach movement cannot resolve damage before the warning finishes")
 				var approach_packet: Dictionary = _send_state()
 				received = await _inspect(client_id, label + "_approach", {"expected_geometry": geometry, "expected_snapshot": int(approach_packet.snapshot_serial)})
@@ -165,8 +167,10 @@ func host_scenarios(client_id: int) -> void:
 			_send_state()
 			received = await _inspect(client_id, label + "_resolved", {"expected_geometry": [], "health": {"host": local_player.get_current_health(), "joiner": 500}})
 			check(received.get("local_calls", -1) == 0 and received.get("remote_calls", -1) == 0, label + ": health synchronization does not replay damage")
+			var resolved_cues := int(received.get("furnace_cues", 0))
 			_send_state(packet)
 			received = await _inspect(client_id, label + "_stale")
+			check(int(received.get("furnace_cues", 0)) == resolved_cues, label + ": reordered warning cannot replay furnace audio")
 			check(received.get("geometry", []).is_empty(), label + ": old warning cannot return after authoritative resolution")
 			boss.begin_attack(kind)
 			_send_state({}, 6)
@@ -178,12 +182,16 @@ func host_scenarios(client_id: int) -> void:
 			boss._cancel_attack()
 		match String(boss.boss_id):
 			"kilnheart":
+				await _test_pressure_sequence(client_id, 0)
 				await _test_pressure_sequence(client_id, 1)
+				await _test_pressure_sequence(client_id, 2)
 			"glassweaver":
 				await _test_pressure_sequence(client_id, 0)
+				await _test_pressure_sequence(client_id, 1)
 				await _test_pressure_sequence(client_id, 2)
 			"null_archivist":
 				await _test_pressure_sequence(client_id, 0)
+				await _test_pressure_sequence(client_id, 2)
 		boss.position = Vector2(-750.0, 350.0)
 	world.fixture_command.rpc_id(client_id, "finish")
 	await until(func(): return results.has("finished"))
@@ -235,6 +243,12 @@ func _test_pressure_sequence(client_id: int, root_kind: int) -> void:
 		"kilnheart":
 			escape_position = origin + Vector2(300.0, 0.0)
 			followup_safe = origin
+			if root_kind == 0:
+				escape_position = boss._slam_landing + forward * 220.0
+				followup_safe = boss._slam_landing + forward.rotated(PI * 0.25) * 220.0
+			if root_kind == 2:
+				escape_position = aim + Vector2(0.0, -140.0)
+				followup_safe = escape_position + Vector2(0.0, -140.0)
 		"glassweaver":
 			if root_kind == 0 and root_geometry.size() == 2:
 				var first_lane: Dictionary = root_geometry[0]
@@ -242,8 +256,14 @@ func _test_pressure_sequence(client_id: int, root_kind: int) -> void:
 				escape_position = (Vector2(first_lane.start) + Vector2(first_lane.end) + Vector2(second_lane.start) + Vector2(second_lane.end)) * 0.25
 				check(is_equal_approx(escape_position.distance_to(aim), 135.0), label + ": first warning moves its safe corridor away from the initial target")
 			followup_safe = escape_position + forward * 200.0 + forward.orthogonal() * 200.0
+			if root_kind == 1:
+				escape_position = aim + forward.rotated(PI * 0.25) * 120.0
+				followup_safe = aim + forward * 150.0
 		"null_archivist":
 			escape_position = aim + Vector2(300.0, 0.0)
+			if root_kind == 2:
+				escape_position = origin + forward.rotated(PI * 0.25) * 170.0
+				followup_safe = origin
 	check(not ALTERNATIVE_TEST.warning_contains(root_geometry, escape_position), label + ": first step has the promised escape or safe pocket")
 	local_player.global_position = escape_position
 	remote_player.global_position = escape_position
@@ -269,7 +289,7 @@ func _test_pressure_sequence(client_id: int, root_kind: int) -> void:
 	var packet_bytes: int = var_to_bytes([{"enemy_id": 851 + boss_index, "payload": followup_packet}]).size() + 15
 	check(packet_bytes <= 1392, label + ": follow-up fits an uncached ENet packet")
 	received = await _inspect(client_id, label + "_warning", {"expected_geometry": followup_geometry, "try_damage": escape_position, "try_advance": true})
-	check(int(received.get("serial", -1)) == followup_serial and int(received.get("sequence_step", -1)) == 1 and int(received.get("attack_kind", -1)) == 1, label + ": joiner receives the exact follow-up cast identity")
+	check(int(received.get("serial", -1)) == followup_serial and int(received.get("sequence_step", -1)) == 1 and int(received.get("attack_kind", -1)) == boss.attack_kind and int(received.get("sequence_root", -1)) == root_kind and String(received.get("callout", "")) == boss.get_attack_callout(), label + ": joiner receives the exact follow-up cast identity and move name")
 	check(received.get("geometry", []) == followup_geometry and received.get("local_calls", -1) == 0 and received.get("remote_calls", -1) == 0, label + ": replica cannot resolve or advance follow-up damage")
 	_send_state(root_resolved)
 	received = await _inspect(client_id, label + "_old_root_resolution")

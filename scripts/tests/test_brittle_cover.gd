@@ -117,7 +117,7 @@ func _action(source: String = "melee") -> Dictionary:
 func _test_native_attacks(character: String) -> void:
 	var profile := _enter_cover()
 	var original := profile.duplicate(true)
-	check(world.hud.room_banner_subtitle_label.text == "Attack cracked columns to open a lane", "Only the authored room explains its breakable cover during the existing survey: " + character)
+	check(world.hud.room_banner_subtitle_label.text == "Break cracked pillars to burst nearby foes", "Only the authored room explains its breakable cover during the existing survey: " + character)
 	_attack()
 	check(world._arena_cover.contacts_left(2) == 3, "Survey-phase contact is rejected on the authoritative boundary: " + character)
 	world._exit_encounter_intro_grace()

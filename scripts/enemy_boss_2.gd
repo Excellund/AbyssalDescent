@@ -1,5 +1,6 @@
 extends "res://scripts/enemy_base.gd"
 
+const ATTACK_CALLOUT := preload("res://scripts/shared/enemy_attack_callout.gd")
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 const ENEMY_STATE_ENUMS := preload("res://scripts/shared/enemy_state_enums.gd")
 const PLAYER_SCRIPT := preload("res://scripts/player.gd")
@@ -178,6 +179,7 @@ func get_projectile_network_sync_state() -> Dictionary:
 		"echo_dash_remaining": _echo_dash_remaining,
 		"echo_dash_retargeting": _echo_dash_retargeting,
 		"echo_dash_retarget_time_left": _echo_dash_retarget_time_left,
+		"echo_dash_reposition_only": _echo_dash_reposition_only,
 		"echo_dash_warning_line": _echo_dash_warning_line,
 		"polar_shift_is_pull": _polar_shift_is_pull,
 		"polar_shift_safe_angles": _polar_shift_safe_angles,
@@ -223,6 +225,7 @@ func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
 	_echo_dash_remaining = int(sync_state.get("echo_dash_remaining", _echo_dash_remaining))
 	_echo_dash_retargeting = bool(sync_state.get("echo_dash_retargeting", _echo_dash_retargeting))
 	_echo_dash_retarget_time_left = float(sync_state.get("echo_dash_retarget_time_left", _echo_dash_retarget_time_left))
+	_echo_dash_reposition_only = bool(sync_state.get("echo_dash_reposition_only", _echo_dash_reposition_only))
 	var synced_warning_line = sync_state.get("echo_dash_warning_line", PackedVector2Array())
 	if synced_warning_line is PackedVector2Array:
 		_echo_dash_warning_line = synced_warning_line
@@ -251,6 +254,8 @@ func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
 	queue_redraw()
 
 func _process_network_visuals(delta: float) -> void:
+	var previous_callout := get_attack_callout()
+	_echo_dash_retarget_time_left = maxf(0.0, _echo_dash_retarget_time_left - delta)
 	if boss_state == ENEMY_STATE_ENUMS.Boss2State.WINDUP or boss_state == ENEMY_STATE_ENUMS.Boss2State.ATTACK or boss_state == ENEMY_STATE_ENUMS.Boss2State.RECOVER:
 		if state_time_left > 0.0:
 			state_time_left = maxf(0.0, state_time_left - delta)
@@ -258,6 +263,10 @@ func _process_network_visuals(delta: float) -> void:
 	impact_burst_time_left = maxf(0.0, impact_burst_time_left - delta)
 	_polar_shift_pull_afterglow_left = maxf(0.0, _polar_shift_pull_afterglow_left - delta)
 	_orbital_fortress_hit_flash_left = maxf(0.0, _orbital_fortress_hit_flash_left - delta)
+	_polar_shift_pull_damage_delay_left = maxf(0.0, _polar_shift_pull_damage_delay_left - delta)
+	if not previous_callout.is_empty() or previous_callout != get_attack_callout():
+		queue_redraw()
+
 
 func take_damage(amount: int, _damage_context: Dictionary = {}) -> void:
 	if amount <= 0:
@@ -1024,6 +1033,31 @@ func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
 	if custom_state.has("polar_shift_pull_afterglow_left"):
 		_polar_shift_pull_afterglow_left = float(custom_state.get("polar_shift_pull_afterglow_left", _polar_shift_pull_afterglow_left))
 
+func get_attack_callout() -> String:
+	if boss_state != ENEMY_STATE_ENUMS.Boss2State.WINDUP and _polar_shift_pull_damage_pending and _polar_shift_pull_damage_delay_left > 0.0:
+		return "Polar Collapse"
+	if boss_state == ENEMY_STATE_ENUMS.Boss2State.ATTACK and active_attack == ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH:
+		# The previous leg's state timer is already zero during a real retarget
+		# warning. Its own timer keeps the next announcement visible locally and
+		# on replicas, just as each newest-boss follow-up has its own warning.
+		if (_echo_dash_retarget_time_left if _echo_dash_retargeting else state_time_left) <= 0.0:
+			return ""
+		return "Reposition" if _echo_dash_reposition_only else "Echo Dash / %d" % maxi(1, echo_dash_count - _echo_dash_remaining + 1)
+	if boss_state != ENEMY_STATE_ENUMS.Boss2State.WINDUP or state_time_left <= 0.0:
+		return ""
+	match active_attack:
+		ENEMY_STATE_ENUMS.Boss2Attack.PRISM: return "Prism Crown"
+		ENEMY_STATE_ENUMS.Boss2Attack.GRAVITY: return "Gravity Well"
+		ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH: return "Reposition" if _echo_dash_reposition_only else "Echo Dash / 1"
+		ENEMY_STATE_ENUMS.Boss2Attack.ORBITAL_LANCE: return "Orbital Lance"
+		ENEMY_STATE_ENUMS.Boss2Attack.POLAR_SHIFT: return "Polar Shift / PULL" if _polar_shift_is_pull else "Polar Shift / PUSH"
+	return ""
+
+func _is_attack_warning_active() -> bool:
+	if boss_state == ENEMY_STATE_ENUMS.Boss2State.WINDUP:
+		return state_time_left > 0.0
+	return boss_state == ENEMY_STATE_ENUMS.Boss2State.ATTACK and active_attack == ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH and _echo_dash_retargeting and _echo_dash_retarget_time_left > 0.0
+
 func _draw() -> void:
 	var facing := visual_facing_direction if visual_facing_direction.length_squared() > 0.000001 else Vector2.RIGHT
 	if is_spawn_transporting():
@@ -1033,7 +1067,8 @@ func _draw() -> void:
 	var body_radius := 36.0 + pulse * 0.78
 	var enrage_t := _get_enrage_ratio()
 	var fortress_active := _is_orbital_fortress_active()
-	var threat_t := telegraph_alpha if boss_state == ENEMY_STATE_ENUMS.Boss2State.WINDUP or (boss_state == ENEMY_STATE_ENUMS.Boss2State.ATTACK and active_attack == ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH and _echo_dash_retargeting) else 0.0
+	var warning_active := _is_attack_warning_active()
+	var threat_t := telegraph_alpha if warning_active else 0.0
 
 	var body_color := Color(0.18, 0.44, 0.72, 0.97)
 	var core_color := Color(0.66, 0.88, 1.0, 0.86)
@@ -1049,7 +1084,7 @@ func _draw() -> void:
 
 	_draw_enrage_scaling_indicator(body_radius, facing, enrage_t)
 
-	if boss_state == ENEMY_STATE_ENUMS.Boss2State.WINDUP or (boss_state == ENEMY_STATE_ENUMS.Boss2State.ATTACK and active_attack == ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH and _echo_dash_retargeting):
+	if warning_active:
 		var halo_radius := body_radius + 17.0 + threat_t * 10.0
 		draw_circle(Vector2.ZERO, halo_radius, Color(1.0, 0.26, 0.14, 0.06 + threat_t * 0.12))
 		draw_arc(Vector2.ZERO, halo_radius + 3.0, 0.0, TAU, 52, Color(1.0, 0.82, 0.46, 0.24 + threat_t * 0.3), 2.8)
@@ -1072,17 +1107,16 @@ func _draw() -> void:
 
 	_draw_orbital_satellites()
 
-	if boss_state == ENEMY_STATE_ENUMS.Boss2State.WINDUP:
-		_draw_attack_telegraph()
-		_draw_role_state_icon(facing, body_radius)
-	elif boss_state == ENEMY_STATE_ENUMS.Boss2State.ATTACK and active_attack == ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH and _echo_dash_retargeting:
+	if warning_active:
 		_draw_attack_telegraph()
 		_draw_role_state_icon(facing, body_radius)
 
-	if boss_state == ENEMY_STATE_ENUMS.Boss2State.ATTACK and active_attack == ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH:
+	if boss_state == ENEMY_STATE_ENUMS.Boss2State.ATTACK and active_attack == ENEMY_STATE_ENUMS.Boss2Attack.ECHO_DASH and not _echo_dash_retargeting and state_time_left > 0.0:
 		var tail_end := -locked_direction * 110.0
 		draw_line(Vector2.ZERO, tail_end, Color(1.0, 0.62, 0.26, 0.44), 8.0)
 		draw_line(Vector2.ZERO, tail_end * 0.8, Color(1.0, 0.9, 0.62, 0.62), 2.6)
+	ATTACK_CALLOUT.draw_callout(self, get_attack_callout(), -100.0)
+
 
 func _draw_orbital_fortress_indicator(body_radius: float) -> void:
 	var t := float(Time.get_ticks_msec()) * 0.001

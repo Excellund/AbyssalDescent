@@ -1,5 +1,6 @@
 extends "res://scripts/enemy_base.gd"
 
+const ATTACK_CALLOUT := preload("res://scripts/shared/enemy_attack_callout.gd")
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 
 # No global state machine — pulses and heals run independently on their own clocks.
@@ -541,6 +542,14 @@ func _get_damageable_targets() -> Array[Node2D]:
 
 # --- Drawing -----------------------------------------------------------------
 
+func get_attack_callout() -> String:
+	var moves := PackedStringArray()
+	if _pulse_phase != PULSE_PHASE_NONE and _pulse_phase_left > 0.0:
+		moves.append("Tribute Pulse")
+	if _heal_channel_left > 0.0:
+		moves.append("Healing Tithe")
+	return "\n".join(moves)
+
 func _draw() -> void:
 	_draw_aura()
 	_draw_inner_sanctum()
@@ -548,6 +557,8 @@ func _draw() -> void:
 	_draw_body()
 	_draw_heal_channel_overlay()
 	_draw_heal_flash()
+	ATTACK_CALLOUT.draw_callout(self, get_attack_callout(), -100.0)
+
 
 func _draw_aura() -> void:
 	if aura_slow_mult >= 1.0:

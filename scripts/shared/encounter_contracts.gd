@@ -71,6 +71,7 @@ const PROFILE_KEY_OBJECTIVE_CONTEST_THRESHOLD := "objective_contest_threshold"
 const PROFILE_KEY_OBJECTIVE_NODE_MAX_INTEGRITY := "objective_node_max_integrity"
 const PROFILE_KEY_OBJECTIVE_PULSE_INTERVAL := "objective_pulse_interval"
 const PROFILE_KEY_OBJECTIVE_INTERCEPT_TRAVERSAL_TIME := "objective_intercept_traversal_time"
+const PROFILE_KEY_OBJECTIVE_RELIC_POSITIONS := "objective_relic_positions"
 const PROFILE_KEY_WAVE_COUNT := "wave_count"
 const PROFILE_KEY_INITIAL_WAVE_FRACTION := "initial_wave_fraction"
 
@@ -421,6 +422,13 @@ static func _build_encounter_registry() -> Array[Dictionary]:
 			"is_boss": false, "is_rest": false, "is_objective": true,
 			"display_label": "Objective - Random",
 			"glossary_label": ""
+		},
+		{
+			"key": "relic_recovery",
+			"id": DEBUG_ENUMS.Encounter.OBJECTIVE_RELIC_RECOVERY,
+			"is_boss": false, "is_rest": false, "is_objective": true,
+			"display_label": "Objective - Relic Recovery",
+			"glossary_label": "Relic Recovery"
 		},
 		{
 			"key": "warden",
@@ -805,7 +813,30 @@ static func normalize_profile(value: Variant) -> Dictionary:
 		normalized[PROFILE_KEY_OBJECTIVE_PROGRESS_GOAL] = float(input.get(PROFILE_KEY_OBJECTIVE_PROGRESS_GOAL, 0.0))
 		normalized[PROFILE_KEY_OBJECTIVE_PROGRESS_DECAY] = float(input.get(PROFILE_KEY_OBJECTIVE_PROGRESS_DECAY, 0.0))
 		normalized[PROFILE_KEY_OBJECTIVE_CONTEST_THRESHOLD] = int(input.get(PROFILE_KEY_OBJECTIVE_CONTEST_THRESHOLD, 1))
+		if objective_kind == "relic_recovery":
+			normalized[PROFILE_KEY_OBJECTIVE_RELIC_POSITIONS] = profile_relic_positions(input)
 	return profile_with_spawn_limits(normalized)
+
+static func profile_relic_positions(profile_value: Dictionary) -> Array[Vector2]:
+	var fallback: Array[Vector2] = [Vector2(-280.0, -170.0), Vector2(280.0, -170.0), Vector2(0.0, 260.0)]
+	var raw: Variant = profile_value.get(PROFILE_KEY_OBJECTIVE_RELIC_POSITIONS, fallback)
+	if not (raw is Array) or raw.size() != 3:
+		return fallback
+	var positions: Array[Vector2] = []
+	var room_size := profile_room_size(profile_value)
+	var half := room_size * 0.5 - Vector2(80.0, 80.0)
+	for entry in raw:
+		if not (entry is Vector2) or not entry.is_finite() or absf(entry.x) > half.x or absf(entry.y) > half.y or entry.length() < 190.0:
+			return fallback
+		for previous in positions:
+			if previous.distance_to(entry) < 160.0:
+				return fallback
+		positions.append(entry)
+	return positions
+
+static func profile_set_relic_recovery_objective(profile_value: Dictionary, positions: Array[Vector2]) -> void:
+	profile_value[PROFILE_KEY_OBJECTIVE_KIND] = "relic_recovery"
+	profile_value[PROFILE_KEY_OBJECTIVE_RELIC_POSITIONS] = positions.duplicate()
 
 static func profile_label(profile_value: Dictionary) -> String:
 	return String(profile_value.get(PROFILE_KEY_LABEL, "Encounter"))
@@ -1438,7 +1469,7 @@ static func door_option_encounter_key(option: Dictionary) -> String:
 static func door_reward_preview_text(option: Dictionary) -> String:
 	var kind := door_option_kind_id(option)
 	if kind == DOOR_KIND_REST:
-		return "Restore health"
+		return "Recover or improve an owned Boon"
 	if kind == DOOR_KIND_BOSS:
 		match door_option_encounter_key(option):
 			"warden", "sovereign":

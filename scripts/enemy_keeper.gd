@@ -77,7 +77,7 @@ func _clear_wards() -> void:
 
 
 func _can_ward() -> bool:
-	return network_simulation_enabled and not MultiplayerSessionManager.is_remote_replica() \
+	return combat_ai_enabled and network_simulation_enabled and not MultiplayerSessionManager.is_remote_replica() \
 		and is_inside_tree() and not is_queued_for_deletion() \
 		and get_current_health() > 0 and not is_spawn_transporting() \
 		and (_launch_state == null or not _launch_state.active)

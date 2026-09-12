@@ -1,4 +1,5 @@
 extends Node2D
+const RELIC_OVERLAY := preload("res://scripts/relic_recovery_overlay.gd")
 
 ## Draws the Hold the Line control zone ring and progress arc.
 ## Reads display state from objective_manager each frame via get_control_overlay_state().
@@ -29,6 +30,9 @@ func _draw() -> void:
 	var overlay_mode := String(control_overlay.get("overlay_mode", "control"))
 	var anchor := Vector2(control_overlay.get("anchor", Vector2.ZERO))
 	var radius := float(control_overlay.get("radius", 0.0))
+	if overlay_mode == "relic_recovery":
+		RELIC_OVERLAY.draw_recovery(self, control_overlay.get("recovery", {}))
+		return
 
 	if overlay_mode == "pulse_ring":
 		var ring_time_left := float(control_overlay.get("ring_time_left", 0.0))

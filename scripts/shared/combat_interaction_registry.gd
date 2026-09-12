@@ -7,7 +7,8 @@ const ELECTRIC := 4
 const CROWN_ANCESTRY := 1
 const TEMPO_ANCESTRY := 2
 const EDICT_ANCESTRY := 4
-const REACTION_ANCESTRY_MASK := CROWN_ANCESTRY | TEMPO_ANCESTRY | EDICT_ANCESTRY
+const FAULTLINE_ANCESTRY := 8
+const REACTION_ANCESTRY_MASK := CROWN_ANCESTRY | TEMPO_ANCESTRY | EDICT_ANCESTRY | FAULTLINE_ANCESTRY
 const MAX_ROOTS := 256
 const MAX_TARGETS_PER_ROOT := 256
 const MAX_PENDING_HITS := 256
@@ -17,7 +18,7 @@ const EFFECT_FORMS := {
 	"shatterwake_burst": ["Burst"], "edict_court": ["Burst"],
 	"static_wake": ["Field"], "sigil_chain_zone": ["Field"],
 	"void_echo_zone": ["Field"], "null_corridor_deflect": ["Field"],
-	"convergence_window": ["Field"], "returning_crescent": ["Projectile"],
+	"convergence_window": ["Burst"], "returning_crescent": ["Projectile"],
 	"sovereigns_double": ["Echo"], "rupture_wave": ["Burst"],
 	"riftpunch_shockwave": ["Burst"], "wraithstep_splash": ["Burst"],
 	"wraithstep_chain": ["Burst"], "voidfire_detonate": ["Burst"],
@@ -51,6 +52,7 @@ static func reaction_ancestry(source: String) -> int:
 		"storm_crown": return CROWN_ANCESTRY
 		"apex_momentum_wave": return TEMPO_ANCESTRY
 		"edict_court": return EDICT_ANCESTRY
+		"convergence_window": return FAULTLINE_ANCESTRY
 	return 0
 
 # Orbit and movement-completion Bursts retain their root identity, but the

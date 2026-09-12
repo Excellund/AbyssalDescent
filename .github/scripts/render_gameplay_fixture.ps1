@@ -39,6 +39,9 @@ foreach ($file in @('validation_entry.gd', 'icon.svg', 'icon.svg.import')) {
 # Keep the copied, disabled autoload wrappers, but render the latest production
 # scripts. Never modify the supplied validation copy while another test uses it.
 Copy-Item -LiteralPath (Join-Path $sourceRoot 'scripts') -Destination $renderRoot -Recurse -Force
+# Sound and its import settings can change alongside presentation code. Keep
+# native playback on the caller's audio revision, then import in this copy.
+Copy-Item -LiteralPath (Join-Path $sourceRoot 'sounds') -Destination $renderRoot -Recurse -Force
 $config = [regex]::Replace($config, '(?m)^window/size/(no_focus|mode|viewport_width|viewport_height|window_width_override|window_height_override|initial_position_type|initial_position)=.*\r?\n?', '')
 $config += @'
 

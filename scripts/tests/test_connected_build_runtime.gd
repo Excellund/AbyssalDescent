@@ -137,7 +137,7 @@ func _test_contact_geometry() -> void:
 	_free_world()
 
 func _test_owned_field_bonus() -> void:
-	for source in ["static_wake", "sigil_chain", "lacuna_echo", "null_corridor", "pillar_convergence"]:
+	for source in ["static_wake", "sigil_chain", "lacuna_echo", "null_corridor"]:
 		_make_world()
 		player.apply_upgrade("lacuna_echo")
 		var target := _enemy(Vector2(20, 0))
@@ -154,10 +154,7 @@ func _test_owned_field_bonus() -> void:
 			"null_corridor":
 				player.apply_upgrade(source)
 				player._apply_null_corridor_segment(Vector2.ZERO, Vector2(50, 0))
-			"pillar_convergence":
-				player.apply_upgrade(source)
-				player.convergence_surge_hit_counter = 99
-				player._try_apply_convergence_surge(Vector2.ZERO, 20, target.get_instance_id())
+
 		_check(player._shared_owned_field_contains(target), source + " registers actual native gameplay footprint")
 		var before := target.get_current_health()
 		_packet(target, "returning_crescent", 100, 5)

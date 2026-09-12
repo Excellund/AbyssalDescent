@@ -75,8 +75,11 @@ func _run() -> void:
 	_check(field.time_left > 0.0 and field.time_left < 0.011 and field.visible,"The final visible field frame is still inside its active lifetime")
 	var final_frame: Image = await _capture("pyre_final_active","PYRE / FINAL ACTIVE MOMENT","The floor and full boundary remain visible until the field expires.")
 	field.tick_left = 0.1
-	field._process(0.2)
-	_check(field.is_queued_for_deletion() and not field.visible and actor.get_current_health() == 100,"Expired field is immediately hidden without a late damage tick")
+	field._process(0.12)
+	_check(not field.get_visual_state().active and field.visible and actor.get_current_health() == 100,"Fading field is harmless and remains briefly visible")
+	await _capture("pyre_fading","PYRE / RAPID FADE","Damage has ended. The floor and boundary dissolve in 0.22 seconds.")
+	field._process(0.22)
+	_check(field.is_queued_for_deletion() and not field.visible,"Pyre vanishes after its short fade")
 	var expired_frame: Image = await _capture("pyre_expired","PYRE / EXPIRED FIELD","The expired field has disappeared and cannot deliver another tick.")
 	_check_pyre_floor_visibility(midlife_frame,expired_frame,zoom,"halfway through")
 	_check_pyre_floor_visibility(late_frame,expired_frame,zoom,"during the final second")

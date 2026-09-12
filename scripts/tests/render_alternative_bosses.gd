@@ -63,7 +63,7 @@ func _run() -> void:
 			boss._process_behavior(boss.warning_duration * 0.55)
 			_check(not boss.get_attack_warning_geometry().is_empty(), "%s attack %d has visible geometry" % [id, kind])
 			await _capture("%s_%d" % [id, kind], "%s / ATTACK %d" % [id.to_upper().replace("_", " "), kind + 1], "Committed danger boundaries leave readable safe space before the attack resolves.")
-			if (id == "kilnheart" and kind == 1) or (id == "glassweaver" and kind in [0, 2]) or (id == "null_archivist" and kind == 0):
+			if id == "kilnheart" or id == "glassweaver" or (id == "null_archivist" and kind in [0, 2]):
 				await _followup_frame(boss, id, kind)
 		if id != "kilnheart":
 			await _party_edge_frame(boss, id)
@@ -106,6 +106,14 @@ func _followup_frame(boss: Node2D, id: String, root_kind: int) -> void:
 			safe_position = boss.global_position + Vector2(300.0, 0.0)
 			title = "KILNHEART / FURNACE HALO / IN"
 			detail = "After leaving the first disk, return through the ring's empty center or continue beyond its outer edge."
+			if root_kind == 0:
+				safe_position = boss._slam_landing + boss._sequence_forward * 220.0
+				title = "KILNHEART / CRUCIBLE VENTS"
+				detail = "After the plunge, four separately warned vents cut across the retreat. Step into a wedge between them."
+			if root_kind == 2:
+				safe_position = player.global_position + Vector2(0.0, -140.0)
+				title = "KILNHEART / CINDER PURSUIT"
+				detail = "A separate warning captures the next position and leads a moving target; changing direction leaves the disk."
 		"glassweaver":
 			if root_kind == 0 and root_geometry.size() == 2:
 				var first: Dictionary = root_geometry[0]
@@ -113,13 +121,21 @@ func _followup_frame(boss: Node2D, id: String, root_kind: int) -> void:
 				safe_position = (Vector2(first.start) + Vector2(first.end) + Vector2(second.start) + Vector2(second.end)) * 0.25
 				title = "GLASSWEAVER / SPLIT LOOM TO CROSS STITCH"
 				detail = "The corridor was safe for Split Loom. A separate cross warning now asks the player to leave it."
-			else:
+			elif root_kind == 2:
 				title = "GLASSWEAVER / GLASS CAGE TO CROSS STITCH"
 				detail = "The first ring preserves its inner pocket. The next warning crosses the remembered target position."
+			else:
+				safe_position = boss._sequence_focus + boss._sequence_forward.rotated(PI * 0.25) * 120.0
+				title = "GLASSWEAVER / TURNING STITCH"
+				detail = "The new cross rotates through the former diagonal escapes. Its own full warning gives time to change direction."
 		"null_archivist":
 			safe_position += Vector2(300.0, 0.0)
 			title = "THE NULL ARCHIVIST / RECORD TO REVISION"
 			detail = "The recorded position is now an empty safe pocket; the larger surrounding ring pressures the first escape."
+			if root_kind == 2:
+				safe_position = boss._sequence_focus + boss._sequence_forward.rotated(PI * 0.25) * 170.0
+				title = "THE NULL ARCHIVIST / CLOSING MARGIN"
+				detail = "Four disks close the old inner quadrants; the old crossing lanes, center and outer floor are now safe."
 	_check(not ALTERNATIVE_TEST.warning_contains(root_geometry, safe_position), "%s %d preview moves outside the first impact" % [id, root_kind])
 	player.global_position = safe_position
 	var health_before: int = player.get_current_health()
@@ -132,6 +148,10 @@ func _followup_frame(boss: Node2D, id: String, root_kind: int) -> void:
 	boss._process_behavior(boss.warning_duration * 0.55)
 	_check(not boss.get_attack_warning_geometry().is_empty(), "%s %d follow-up has visible geometry" % [id, root_kind])
 	await _capture("%s_%d_followup" % [id, root_kind], title, detail)
+	if id == "kilnheart" and root_kind == 0:
+		player.global_position = boss._slam_landing + boss._sequence_forward.rotated(PI * 0.25) * 220.0
+		boss._resolve_attack()
+		await _capture("kilnheart_vents_impact", "KILNHEART / FORGE IMPACT", "The furnace recoils and the vents flash at resolution, even when both steps are successfully dodged.")
 
 func _party_edge_frame(boss: Node2D, id: String) -> void:
 	boss.position = Vector2(-100.0, 0.0)

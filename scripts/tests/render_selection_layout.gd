@@ -231,7 +231,7 @@ func _build_path() -> void:
 	actor.apply_upgrade("ruinous_impact")
 	await _key(KEY_TAB, true)
 	await _settle()
-	_guard(world.build_detail_panel.is_open(), "Actual held Tab opens Build Details")
+	_guard(world.build_detail_panel.is_open(), "Actual Tab press opens Build Details")
 	_bound(world.build_detail_panel.panel, "Build Details fits viewport")
 	await _capture("build_top")
 	var scroll := world.build_detail_panel.panel.find_children("*", "ScrollContainer", true, false).front() as ScrollContainer
@@ -248,8 +248,11 @@ func _build_path() -> void:
 	_observe(scroll.scroll_vertical > 0, "Mouse wheel reaches lower current Arcana descriptions", {"scroll": scroll.scroll_vertical})
 	await _capture("build_bottom")
 	await _key(KEY_TAB, false)
+	_guard(world.build_detail_panel.is_open(), "Tab release keeps Build Details open")
+	await _key(KEY_TAB, true)
+	await _key(KEY_TAB, false)
 	await _settle()
-	_observe(not world.build_detail_panel.is_open(), "Releasing Tab after scrolling closes Build Details")
+	_observe(not world.build_detail_panel.is_open(), "A second Tab press closes Build Details after scrolling")
 	current_scene = null
 	world.queue_free()
 	world = null

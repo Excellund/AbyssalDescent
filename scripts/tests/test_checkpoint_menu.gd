@@ -209,7 +209,14 @@ func _check_error_layout(viewport_size: Vector2i) -> void:
 	check(menu.primary_run_button.has_focus() and not label.text.contains("user://") and not label.text.contains(".save"), "Error keeps actionable focus and avoids raw storage details")
 	for action: Control in menu.root_actions.get_children():
 		if action.visible:
-			check(menu.root_panel.get_global_rect().encloses(action.get_global_rect()) and Rect2(Vector2.ZERO, Vector2(viewport_size)).encloses(action.get_global_rect()), "Every visible menu action remains available at %s: %s" % [viewport_size, action.get_class()])
+			if action is Button:
+				action.grab_focus()
+			else:
+				menu._root_action_scroll.ensure_control_visible(action)
+			await _settle()
+			check(menu._root_action_scroll.get_global_rect().grow(1).encloses(action.get_global_rect()) and Rect2(Vector2.ZERO, Vector2(viewport_size)).encloses(action.get_global_rect()), "Every menu action is fully reachable in the physical action list at %s: %s" % [viewport_size, action.get_class()])
+	menu.primary_run_button.grab_focus()
+	await _settle()
 
 func _release_menu() -> void:
 	store.deny_read = false

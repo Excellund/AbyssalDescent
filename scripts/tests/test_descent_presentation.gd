@@ -119,7 +119,7 @@ func _test_route_previews() -> void:
 	check(CONTRACTS.door_reward_preview_text(CONTRACTS.standard_encounter_door_option(standard)) == "Boon", "Ordinary route shows its permanent Boon")
 	check(CONTRACTS.door_reward_preview_text(CONTRACTS.trial_door_option(standard, "Blood Rush", Color.WHITE)) == "Arcana", "Trial payoff remains Arcana regardless of encounter label")
 	check(CONTRACTS.door_reward_preview_text(CONTRACTS.apex_trial_door_option(standard, "Apex Breakwater", Color.WHITE)) == "Arcana", "Apex uses its actual Arcana reward")
-	check(CONTRACTS.door_reward_preview_text(CONTRACTS.rest_door_option()) == "Restore health", "Rest promises healing without claiming a full heal")
+	check(CONTRACTS.door_reward_preview_text(CONTRACTS.rest_door_option()) == "Recover or improve an owned Boon", "Rest promises its recovery or owned-Boon decision")
 	for boss_key in ["warden", "sovereign"]:
 		check(CONTRACTS.door_reward_preview_text(CONTRACTS.boss_door_option(boss_key)) == "Boss power", "Early boss names its power reward")
 	check(CONTRACTS.door_reward_preview_text(CONTRACTS.boss_door_option("lacuna")) == "Complete the descent", "Final boss promises victory rather than another power")
@@ -215,6 +215,8 @@ func _test_boss_transition(stage: int, boss_key: String, old_biome: String, next
 	_check_score_location(stage, entered_depth, true, "Continue restores the defeated boss chamber from its saved label")
 	_check_score_continuity("Applying a doorway checkpoint preserves the existing score playback")
 	world._enter_rest_site()
+	world.reward_selection_ui.process_input(1.0)
+	world.reward_selection_ui._confirm_choice(0)
 	check(world.renderer.environment_act == stage + 1 and world.renderer.environment_biome_id == next_biome, "Taking the next room reveals its new act")
 	check(world.music_system.music_context == &"rest", "Rest records its entered-room context")
 	_check_score_location(stage + 1, world.room_depth, false, "Next-act rest after its depth increment")

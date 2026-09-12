@@ -1,11 +1,9 @@
 # Pyre death-field visibility
 
-Pyre's death field keeps its orange floor fill and complete boundary visible for its full active lifetime. An inset arc counts down the remaining time; the final 0.8 seconds brighten the boundary slightly instead of fading the danger away. The complete field disappears at expiry, before deferred node deletion.
+Pyre keeps its full orange floor and damage boundary readable throughout its active lifetime. The inset arc counts down; the final 0.8 seconds brighten the boundary slightly. After damage ends, the complete floor and boundary dissolve over 0.22 seconds with a smooth fade instead of disappearing instantly. The countdown ends with the damage.
 
-The outer line follows the actual expanding damage radius. Lifetime, growth, damage, cadence, target selection, owner-death persistence and network authority are unchanged. The host remains responsible for damage; replicated fields remain visual only.
+Lifetime, growth, radius, damage cadence, owner-death persistence and authority are unchanged. The fade is cosmetic and cannot damage, even with an overdue tick. Replicated fields use the same fade and remain visual only. Room cleanup still removes the field immediately.
 
-Playtest by defeating a Pyre, watching its field through the final second, and entering after the field disappears. The dangerous area should stay readable until the hard cut, with no faint damaging tail or lingering danger afterward. Repeat as a co-op joiner.
+Playtest by defeating a Pyre and watching the last second. The full danger footprint should remain visible, then fade rapidly; entering during the fade should be safe. Repeat as a co-op joiner.
 
-Verification on 11 September 2026: isolated compilation passed for 349 scripts and the Toll/Pyre suite passed 86 checks. Coverage includes a real final damage tick at the exact field radius, constant late visibility, immediate hiding at expiry, and cancellation during room cleanup. Evidence: `C:/Users/mikel/AppData/Local/Temp/abyssal-validation-48d6a9660a6b413786b25aa6fcaca24d`.
-
-The existing real ENet scenario passed 44 host and 34 client checks, including the replicated field's last visible moment and immediate expiry: `C:/Users/mikel/AppData/Local/Temp/abyssal-enet-aaecb5c3276a4f7681d321a61426da03`. Nine GPU frames passed, including pixel comparisons that require the outer floor to remain readable halfway through, during the final second, and immediately before expiry. Those four expiry-sequence frames were visually inspected: `C:/Users/mikel/AppData/Local/Temp/abyssal-gameplay-render-b883789a50c74e5e839dc14165671f58/toll_pyre_frames`.
+Verification: 374 scripts compile; Toll/Pyre passes 93 checks. Real ENet passes 44 host and 34 client checks including the complete replicated fade. Ten native GPU frames pass; final-active, half-fade and expired frames were inspected. Evidence: `abyssal-validation-4dd3d21e88974c8c917bf1523cf6ae8c`, `abyssal-enet-6bf7f7f4b87f443b8196b0ac75d78136`, `abyssal-gameplay-render-e616a2a70563467c87b1b57e5eff6b12`.

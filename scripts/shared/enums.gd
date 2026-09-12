@@ -13,6 +13,7 @@ enum RewardMode {
 	ARCANA,
 	MISSION,
 	BOSS,
+	REST,
 }
 
 const REWARD_MODE_NONE := RewardMode.NONE
@@ -20,6 +21,7 @@ const REWARD_MODE_BOON := RewardMode.BOON
 const REWARD_MODE_ARCANA := RewardMode.ARCANA
 const REWARD_MODE_MISSION := RewardMode.MISSION
 const REWARD_MODE_BOSS := RewardMode.BOSS
+const REWARD_MODE_REST := RewardMode.REST
 
 enum DoorKind {
 	ENCOUNTER,

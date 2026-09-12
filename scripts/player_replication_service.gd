@@ -184,7 +184,7 @@ func broadcast_cue_event(peer_id: int, event_name: String, payload: Dictionary, 
 		return
 	if not _is_authority_for_peer(peer_id):
 		return
-	if event_name in ["shared_build_state", "warden_verdict", "cross_stitch_burst", "shatterwake_burst"] and not MultiplayerSessionManager.should_broadcast():
+	if event_name in ["shared_build_state", "warden_verdict", "cross_stitch_burst", "shatterwake_burst", "boss_convergence_start", "boss_convergence_pulse", "boss_convergence_clear"] and not MultiplayerSessionManager.should_broadcast():
 		return
 	var pending_variant: Variant = _pending_cue_events_by_peer.get(peer_id, [])
 	var pending_events := _cue_sync_queue.copy_pending_events(pending_variant)
@@ -549,13 +549,13 @@ func _apply_network_cue_events(peer_id: int, events: Array[Dictionary]) -> void:
 		return
 	var accepted_events: Array[Dictionary] = []
 	for entry: Dictionary in events:
-		if entry.get("event") not in ["shared_build_state", "warden_verdict", "cross_stitch_burst", "shatterwake_burst"]:
+		if entry.get("event") not in ["shared_build_state", "warden_verdict", "cross_stitch_burst", "shatterwake_burst", "boss_convergence_start", "boss_convergence_pulse", "boss_convergence_clear"]:
 			accepted_events.append(entry)
 			continue
 		var sender := multiplayer.get_remote_sender_id()
 		if sender != 1 and not (sender == 0 and MultiplayerSessionManager.is_host()):
 			continue
-		if entry.get("event") in ["warden_verdict", "cross_stitch_burst", "shatterwake_burst"]:
+		if entry.get("event") in ["warden_verdict", "cross_stitch_burst", "shatterwake_burst", "boss_convergence_start", "boss_convergence_pulse", "boss_convergence_clear"]:
 			accepted_events.append(entry)
 			continue
 		var packed: Variant = entry.get("payload")

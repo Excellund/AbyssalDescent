@@ -672,7 +672,9 @@ func get_join_operation_generation() -> int:
 func has_active_session_state() -> bool:
 	if session_connected:
 		return true
-	if _multiplayer != null and _multiplayer.multiplayer_peer != null:
+	# SceneMultiplayer installs an OfflineMultiplayerPeer for a normal solo
+	# scene. It owns no host/join transport and must not block a solo action.
+	if _multiplayer != null and _multiplayer.multiplayer_peer != null and not _multiplayer.multiplayer_peer is OfflineMultiplayerPeer:
 		return true
 	if not connected_peers.is_empty():
 		return true

@@ -7,14 +7,14 @@ Feedback `FB-0ca70d18a6c54ae3` requests more pieces across Boons, Arcana and bos
 | Patient Hunter | Boon | +12 conditional Damage basis per pick against already Slowed foes; up to three picks. |
 | Marked Prey | Boon | +12 conditional Damage basis per pick against already Marked foes; up to three picks. |
 | Stormbrand | Arcana | Electric damage applies a timed Mark, once per foe per original action. Level 3 also Slows foes that were already Marked before that damage. |
-| Spark Relay | Arcana | Burst damage fires one Electric Projectile from your body toward the struck foe's position, once per original action. |
+| Spark Relay | Arcana | Burst damage fires one seeking Electric Projectile from your body, once per original action. |
 | Shatterwake | Boss reward | Projectile damage releases one Burst around the struck foe, once per original action, including that foe if still alive. |
 
 Patient Hunter and Marked Prey deliberately reward a prepared build more than Heavy Blow's unconditional +7. They use the existing coefficient-scaled conditional Boon calculation, including short Field ticks and reduced Echo strength. Applying a new condition with the same damage does not retroactively earn the bonus.
 
 Stormbrand's Mark values are 10/14/18% for 3/3.5/4 seconds; Prismatic is 22.5% for 5 seconds. Its level-3 Slow is 75% movement speed for one second, extended by existing global Slow-duration bonuses. The strongest shared Mark still wins, and all players benefit. Electric Fields can therefore prepare Mark without a Kill or deliberate Attack.
 
-Spark Relay deals 50/60/70% of the triggering Burst's base damage; Prismatic deals 87.5%. It hits at most 1/2/3 distinct foes once each, with three at Prismatic. Travel speed is 620, range 440 (528 Prismatic), radius 8. It follows a fixed line and stops at solid cover or the room edge. A killed trigger foe still supplies its saved position for aiming. Effigy Keeper's effigy does not relocate this explicitly body-origin effect.
+Spark Relay deals 50/60/70% of the triggering Burst's base damage; Prismatic deals 87.5%. It hits at most 1/2/3 distinct foes once each, with three at Prismatic. Travel speed is 620, range 440 (528 Prismatic), radius 8. It now seeks the struck foe while alive and reachable, or the nearest reachable living foe when that target dies. It retargets after each hit using the remaining travel budget and stops at solid cover or the room edge. With no reachable living target it creates no bolt; see [the Spark Relay follow-up](spark-relay-seeking-20260911.md). Effigy Keeper's effigy does not relocate this explicitly body-origin effect.
 
 Shatterwake deals 60/80% of the triggering Projectile's base damage in radius 100/125. Solid cover blocks its Burst, so landing a projectile on the near side of cover does not damage foes on the far side. It adds a direct payoff to Returning Crescent and Spark Relay, including a single boss, without moving enemies toward the player. The later saved displacement-reward feedback remains a separate queued item.
 

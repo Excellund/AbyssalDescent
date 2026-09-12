@@ -163,7 +163,7 @@ func host_scenarios(client_id: int) -> void:
 	check(field_report.get("visual_only", false) and field_report.get("survives_before", false), "Actual death RPC creates targetless zero-damage replica with its original lifetime")
 	check(field_report.get("readable_before", false), "Actual Pyre replica keeps readable danger through its final active interval")
 	check(field_report.get("expired", false) and field_report.get("health") == 482, "Replica field expires and cannot damage the joining player")
-	check(field_report.get("hidden_at_expiry", false), "Actual Pyre replica hides at lifetime expiry before deferred deletion")
+	check(field_report.get("faded_after_expiry", false), "Actual Pyre replica fades harmlessly after damage expiry")
 	for field in get_nodes_in_group("enemy_lingering_effects"):
 		field.queue_free()
 	world.fixture_command.rpc_id(client_id, "finish")
@@ -186,7 +186,7 @@ func client_command(command: String, payload: Dictionary) -> void:
 		"pyre_lifetime":
 			check(await until(func(): return not get_nodes_in_group("enemy_lingering_effects").is_empty()), "Real enemy-death RPC creates Pyre replica field")
 			var fields := get_nodes_in_group("enemy_lingering_effects")
-			var report := {"visual_only": false, "survives_before": false, "readable_before": false, "expired": false, "hidden_at_expiry": false, "health": local_player.get_current_health()}
+			var report := {"visual_only": false, "survives_before": false, "readable_before": false, "expired": false, "faded_after_expiry": false, "health": local_player.get_current_health()}
 			if fields.size() == 1:
 				var field: Node2D = fields[0]
 				field.set_process(false)
@@ -196,9 +196,14 @@ func client_command(command: String, payload: Dictionary) -> void:
 				var late_visual: Dictionary = field.get_visual_state()
 				report.readable_before = field.visible and late_visual.active and float(late_visual.fill_alpha) >= 0.14 and float(late_visual.boundary_alpha) >= 0.7
 				field._process(0.02)
+				var fade_start: Dictionary = field.get_visual_state()
+				field._process(0.1)
+				var fading_visual: Dictionary = field.get_visual_state()
+				var fades: bool = not fade_start.active and field.visible and float(fading_visual.opacity) > 0.0 and float(fading_visual.opacity) < float(fade_start.opacity)
+				field._process(0.22)
 				report.expired = field.is_queued_for_deletion() and field.time_left == 0.0
 				var expired_visual: Dictionary = field.get_visual_state()
-				report.hidden_at_expiry = not field.visible and not expired_visual.active and float(expired_visual.fill_alpha) == 0.0 and float(expired_visual.boundary_alpha) == 0.0
+				report.faded_after_expiry = fades and not field.visible and not expired_visual.active and float(expired_visual.fill_alpha) == 0.0 and float(expired_visual.boundary_alpha) == 0.0
 				await process_frame
 				report.health = local_player.get_current_health()
 			world.fixture_result.rpc_id(1, "pyre_lifetime", report)

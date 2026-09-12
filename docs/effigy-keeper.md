@@ -18,6 +18,8 @@ The implementation carries an explicit origin through geometry, cover contact an
 
 Returning Crescent launches from the Attack origin and still returns to the player's body. The keeper's walking position therefore changes its return route while leaving the effigy in place. Double's temporary shade retains its own position and copies the ordinary supported shapes at reduced strength.
 
+Unbroken Oath's sword also starts at the committed Attack origin, including the body on deployment and the effigy on subsequent melee or charged Attacks. Walking, recall and later network cues cannot change that captured origin. Each original Attack counts its own unique accepted victims for Oath, sharing the count across melee and Razor Wind. The Attack that fills the bank does not spend it; the next deliberate Attack spends it even on a miss, with no refill from that Attack or its descendants.
+
 Seamlock resolves illusion guesses from the host's accepted Attack start: its committed origin, direction, source and reach/arc, including charged Blast and Razor Wind's outer band. First deployment uses the body origin even though an effigy has just appeared; later strikes use the anchor. Live body movement, aim changes and animation cues cannot replace that geometry or repeat the same guess. Owner prediction does not resolve guesses on a client.
 
 ## Build choices to explore
@@ -38,6 +40,10 @@ These are intended decisions and test cases, not evidence that the character is 
 6. In co-op, compare host and joiner views, including two Keepers. Each effigy should clearly belong to its player and clear on death or room transition.
 
 ## Verification
+
+The 12 September Oath compatibility fix was reproduced before implementation. The ordinary solo four-victim fill/spend/refill cycle already passed. In a separate accepted-contact ordering probe, two interleaved two-victim Attacks incorrectly earned 30.2956 Oath instead of 22.072 because their contact multiplier shared a player counter. Melee and charged sword cues also retained the body origin after deployment. Baseline evidence: `C:/Users/mikel/AppData/Local/Temp/abyssal-validation-f40e2db9d4b04dd084a2cb7f1962c6ab`. This identifies a specific stacking failure; it does not establish that every reported solo stacking concern had that cause.
+
+After the fix, 396 scripts compile with both contract gates passing. Oath/Effigy28, existing Unbroken Oath38 and Keeper runtime64 checks pass in `C:/Users/mikel/AppData/Local/Temp/abyssal-validation-df954f03114047c5a3653b1c9079bc77`. The new cases include actual deployment, full-bank cleaves, spend-on-miss, later refill, melee/Razor Wind shared victims, descendant exclusion, cancellation and committed geometry after walking/recall. Real ENet passes 26 host and 5 joiner checks in `C:/Users/mikel/AppData/Local/Temp/abyssal-enet-d257eac7277a403fafaf50f58f674e4f`, including accepted bank reconciliation, an explicit interleaved-contact transport probe, owner/observer sword origins and host charged Attacks. Eight native GPU frames and 31 checks pass at 960 and 1280 widths in `C:/Users/mikel/AppData/Local/Temp/abyssal-gameplay-render-c334ff3c11af40179d591abca3fc20d0/oath_effigy_frames`; deployment, displaced Keeper, charged sword and settled views were visually inspected.
 
 Verified 11 September 2026 in disposable projects and isolated profiles:
 

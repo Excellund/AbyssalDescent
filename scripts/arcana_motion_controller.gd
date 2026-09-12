@@ -21,7 +21,8 @@ const ORBIT_DURATION := 1.4
 const ORBIT_ACQUIRE_WINDOW := 0.70
 const TRANSFER_DURATION_CAP := 2.4
 const ORBIT_RELEASE_WARNING := 0.35
-const ORBIT_RELEASE_HINT := 0.15
+const ORBIT_DISMOUNT_DURATION := 0.25
+const ORBIT_RELEASE_HINT := ORBIT_DISMOUNT_DURATION
 const ORBIT_DIAL_RADIUS := 34.0
 enum Motion { NONE, RECOIL, ORBIT, CARRY }
 
@@ -316,6 +317,11 @@ func process_movement(delta: float, move_input: Vector2) -> bool:
 		Motion.CARRY:
 			var movement_delta := minf(maxf(delta, 0.0), maxf(carry_left, 0.0))
 			carry_left = maxf(0.0, carry_left - movement_delta)
+			# Movement input owns the escape immediately, including reversal.
+			# No input preserves momentum; this never starts or extends a Dash.
+			tangent = _orbit_departure_direction(move_input)
+			if _orbit_hint_left > 0.0:
+				_orbit_hint_direction = tangent
 			var collided := _move_within_arena(tangent * minf(ORBIT_SPEED, float(player.max_speed) * 1.5) * movement_delta)
 			player.velocity = (player.global_position - start) / maxf(delta, 0.0001)
 			if collided or carry_left <= 0.0:
@@ -325,7 +331,7 @@ func process_movement(delta: float, move_input: Vector2) -> bool:
 			if not _anchor_alive():
 				var next_anchor := find_anchor(_orbit_aim_world_position(), true) if int(player.razor_orbit_stacks) >= 3 and not orbit_transferred else null
 				if next_anchor == null or next_anchor == anchor:
-					detach(true)
+					detach(true, move_input)
 					return true
 				anchor = next_anchor
 				orbit_transferred = true
@@ -333,7 +339,7 @@ func process_movement(delta: float, move_input: Vector2) -> bool:
 				_orbit_warning_played = false
 				_play_sound(true)
 			if orbit_elapsed >= orbit_limit:
-				detach(true)
+				detach(true, move_input)
 				return true
 			var center := anchor.global_position
 			var offset := start - center
@@ -394,10 +400,15 @@ func record_contact() -> void:
 	if owns_movement():
 		last_contact_position = player.global_position
 
-func detach(carry: bool) -> void:
+func _orbit_departure_direction(move_input: Vector2 = Vector2.INF) -> Vector2:
+	var chosen: Vector2 = player._read_movement_direction() if not move_input.is_finite() else move_input
+	return chosen.normalized() if chosen.length_squared() > 0.0001 else tangent.normalized()
+
+func detach(carry: bool, move_input: Vector2 = Vector2.INF) -> void:
 	var show_departure := carry and motion == Motion.ORBIT and _allowed()
 	var departure := player.global_position
-	var direction := tangent.normalized()
+	# Capture before completion callbacks, just as the original tangent was.
+	var direction := _orbit_departure_direction(move_input)
 	var generation := _cancel_generation
 	_finish_motion(true)
 	if generation != _cancel_generation or not _allowed() or motion != Motion.NONE:
@@ -405,7 +416,8 @@ func detach(carry: bool) -> void:
 	dash_hold = -1.0
 	if carry:
 		motion = Motion.CARRY
-		carry_left = 0.15
+		tangent = direction
+		carry_left = ORBIT_DISMOUNT_DURATION
 	if show_departure:
 		_orbit_hint_origin = departure
 		_orbit_hint_direction = direction
@@ -543,7 +555,7 @@ func _draw() -> void:
 		if remaining > 0.0:
 			draw_arc(Vector2.ZERO, ORBIT_DIAL_RADIUS, -PI * 0.5, -PI * 0.5 + TAU * remaining, 48, cue_color, 2.0, true)
 		if ending:
-			_draw_orbit_departure_hint(Vector2.ZERO, tangent, cue_color)
+			_draw_orbit_departure_hint(Vector2.ZERO, _orbit_departure_direction(), cue_color)
 	elif _orbit_hint_left > 0.0 and _allowed():
 		_draw_orbit_departure_hint(to_local(_orbit_hint_origin), _orbit_hint_direction, Color(blue, 0.9 * _orbit_hint_left / ORBIT_RELEASE_HINT))
 	if _allowed() and bool(player.reward_razor_orbit) and not bool(player.encounter_input_frozen):

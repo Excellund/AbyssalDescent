@@ -79,7 +79,7 @@ func _test_producer(source: String) -> void:
 			player.convergence_surge_hit_counter = 99
 			player._try_apply_convergence_surge(Vector2.ZERO, 20, target.get_instance_id())
 			player._update_convergence_window(0.1)
-			player._update_convergence_window(0.4)
+			player._update_convergence_window(0.8)
 		"null_corridor_deflect":
 			player.null_corridor_strength = 0.2
 			player._apply_null_corridor_segment(Vector2(-40.0, 0.0), Vector2(60.0, 0.0))

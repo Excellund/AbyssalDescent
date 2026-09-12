@@ -1,6 +1,9 @@
 extends SceneTree
 
 const BROADCASTER := preload("res://scripts/core/enemy_state_sync_broadcaster.gd")
+const SPAWNER := preload("res://scripts/enemy_spawner.gd")
+const DRIFTER := preload("res://scripts/enemy_drifter.gd")
+const DRIFTER_CONTRACTS := preload("res://scripts/shared/encounter_contracts.gd")
 
 class TestDrifter extends "res://scripts/enemy_drifter.gd":
 	func _ready() -> void:
@@ -55,6 +58,8 @@ func _drifter(remote: bool = false) -> TestDrifter:
 func _run() -> void:
 	world = Node2D.new()
 	root.add_child(world)
+	_test_pressure_and_health()
+	_test_production_spawn_health()
 	_test_geometry_and_merge()
 	_test_packet_loss_and_order()
 	_test_charge_phase()
@@ -67,6 +72,72 @@ func _run() -> void:
 	else:
 		print("[DrifterReplication] FAIL (%d/%d checks)" % [failures.size(), checks])
 	quit(0 if failures.is_empty() else 1)
+
+func _test_pressure_and_health() -> void:
+	var host := _drifter()
+	_check(host.get_current_health() == 88 and host.get_max_health() == 88, "A fresh Drifter starts with its full intended health instead of inherited 40 HP")
+	host.take_damage(40)
+	_check(host.get_current_health() == 48 and not host.is_dead(), "A normal 40-damage hit no longer kills a fresh unscaled Drifter")
+	_check(is_equal_approx(host.health_bar.max_value, 88.0) and is_equal_approx(host.health_bar.value, 48.0), "Its health bar agrees with actual health before difficulty scaling")
+	_check(host.wave_timer >= 1.5 and host.wave_interval >= 2.5, "Faster pressure still leaves a readable first-wave warning and recovery")
+	_check(host.ring_radius_max / host.ring_speed < host.wave_interval, "An unmodified Drifter still clears its first wave before the next emission")
+	var victim := TestTarget.new()
+	world.add_child(victim)
+	host.target = victim
+	host._emit_ring()
+	host.rings[0]["radius"] = 120.0
+	host.rings[0]["gap_index"] = 6
+	var first_spoke := host._get_ring_node_world_position(host.rings[0], 0)
+	var incidental_gap := Vector2.RIGHT.rotated(PI / float(host.ring_node_count)) * 120.0
+	victim.global_position = incidental_gap
+	host._process_rings(0.0)
+	_check(victim.hits == 0, "The first wave's space between adjacent pellets remains honest collision geometry")
+	host._emit_ring()
+	host.rings[1]["radius"] = 120.0
+	host.rings[1]["gap_index"] = 6
+	_check(not host._get_ring_node_world_position(host.rings[1], 0).is_equal_approx(first_spoke), "The next wave offsets its spokes instead of repeating permanent safe lanes")
+	host._process_rings(0.0)
+	_check(victim.hits == 1, "Standing in the old incidental gap is actually pressured by the next wave")
+	for ring in host.rings.duplicate():
+		victim.global_position = host._get_ring_node_world_position(ring, int(ring.gap_index))
+		var before := victim.hits
+		# Isolate each gap from the other wave's deliberately different spokes.
+		var other := host.rings.duplicate()
+		host.rings.assign([ring])
+		host._process_rings(0.0)
+		_check(victim.hits == before, "Each wave retains an explicit safe missing spoke")
+		host.rings.assign(other)
+	host.rings.clear()
+	host._emit_ring()
+	host.rings[0]["radius"] = 5.0
+	victim.global_position = host.global_position
+	var before := victim.hits
+	host._process_rings(0.0)
+	_check(victim.hits == before + 1, "Overlapping pellets at the wave origin cannot stack into a close-range instant kill")
+	host.rings[0]["radius"] = 80.0
+	victim.global_position = host._get_ring_node_world_position(host.rings[0], (int(host.rings[0].gap_index) + 1) % host.ring_node_count)
+	host._process_rings(0.0)
+	_check(victim.hits == before + 1, "A later pellet of the same wave cannot damage that player again")
+	host.free()
+	victim.free()
+
+func _test_production_spawn_health() -> void:
+	var victim := TestTarget.new()
+	world.add_child(victim)
+	var spawner := SPAWNER.new()
+	world.add_child(spawner)
+	var random := RandomNumberGenerator.new()
+	random.seed = 942
+	spawner.initialize(world, victim, random, {"drifter": DRIFTER}, Callable())
+	for tuning in [{"mutator": 1.0, "ascension": 1.0, "health": 88}, {"mutator": 1.5, "ascension": 1.0, "health": 132}, {"mutator": 1.5, "ascension": 1.2, "health": 158}]:
+		spawner.configure_room(Vector2(1160, 860), 90.0, 170.0, {DRIFTER_CONTRACTS.MUTATOR_STAT_ENEMY_HEALTH_MULT: tuning.mutator})
+		spawner.set_ascension_enemy_health_mult(tuning.ascension)
+		var enemy: DRIFTER = spawner._spawn_enemy_in_current_room(DRIFTER)
+		enemy.set_physics_process(false)
+		_check(enemy.get_current_health() == tuning.health and enemy.get_max_health() == tuning.health, "Production spawn initializes full health, then applies health mutator and Ascension exactly once: %s" % tuning)
+		enemy.free()
+	spawner.free()
+	victim.free()
 
 func _test_geometry_and_merge() -> void:
 	var host := _drifter()
@@ -211,7 +282,7 @@ func _test_authority_and_damage() -> void:
 	_check(victim.hits == 1, "The replicated safe gap is also safe in host collision checks")
 	var host_ring_count := host.rings.size()
 	host.apply_projectile_network_sync_state({"q": 999, "r": [], "c": [2, 1.0, 1.0, 1.0]})
-	_check(host.rings.size() == host_ring_count and host.ring_node_count == 8, "Host ignores incoming remote projectile state")
+	_check(host.rings.size() == host_ring_count and host.ring_node_count == 12, "Host ignores incoming remote projectile state")
 	host.free()
 	remote.free()
 	victim.free()
@@ -271,9 +342,13 @@ func _test_coop_player_collision() -> void:
 	var first_ring_hits := host.rings[0]["damaged"] as Dictionary
 	_check(not first_ring_hits.has(dead_player.get_instance_id()) and not first_ring_hits.has(ghost_player.get_instance_id()), "Dead and ghost players do not consume ring hit bookkeeping")
 	# A separate wave has its own hit allowance for each living player.
+	host.rings.clear()
 	host._emit_ring()
-	host.rings[1]["radius"] = 74.0
-	host.rings[1]["gap_index"] = gap
+	host.rings[0]["radius"] = 74.0
+	host.rings[0]["gap_index"] = gap
+	for player in [first, second, newcomer]:
+		player.global_position = host._get_ring_node_world_position(host.rings[0], dangerous_node)
+	gap_player.global_position = host._get_ring_node_world_position(host.rings[0], gap)
 	host._process_rings(0.0)
 	_check(first.get_current_health() == 76 and second.get_current_health() == 80, "A new wave restores each player's independent hit allowance")
 	# Stale/freed candidates and a vanished chase target cannot hide living peers.

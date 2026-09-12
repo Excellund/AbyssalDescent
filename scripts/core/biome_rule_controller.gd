@@ -5,6 +5,10 @@ extends Node2D
 signal state_changed(state: Dictionary)
 
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
+const POLARITY_CONTOUR := preload("res://scripts/shared/biome_polarity_marker.gd")
+const SHARD_DAMAGE := 60
+const SHARD_RADIUS := 160.0
+const SHARD_VISUAL_TIME := 0.48
 const IDS := ["crumble", "haunt", "shatterfield", "grinding_vault", "storm_reach", "hollow", "void_breach", "the_maelstrom", "convergence_end"]
 const PHASES := ["idle", "recovery", "warning", "active"]
 const MODES := ["ordinary", "compact", "assistance"]
@@ -15,6 +19,7 @@ const WALKING_MARGIN := 12.0
 const MAX_EXCLUSIONS := 32
 
 var environment_damage_active: bool = false
+var shard_bursts: Array[Dictionary] = []
 var rule_id: String = ""
 var mode: String = "ordinary"
 var fragments: bool = false
@@ -44,6 +49,8 @@ var _player_damage: int = 8
 var _enemy_damage: int = 35
 var _slow_mult: float = 0.6
 var _combat_visible: bool = false
+var _contour_cache_key := 0
+var _contour_cache: Array[Dictionary] = []
 
 func initialize(world: Node) -> void:
 	_world = world
@@ -107,6 +114,7 @@ func reset() -> void:
 	_exclusions.clear()
 	_exclusions_valid = true
 	shape.clear()
+	shard_bursts.clear()
 	_hit_ids.clear()
 	_obstacles.clear()
 	_combat_visible = false
@@ -146,6 +154,12 @@ func set_room_context(effective_bounds: Vector2, exclusions: Array[Dictionary], 
 func tick(delta: float, combat_active: bool, players: Array, enemies: Array, authoritative: bool) -> void:
 	if _combat_visible != combat_active:
 		_combat_visible = combat_active
+		queue_redraw()
+	if combat_active and is_finite(delta) and delta > 0.0 and not shard_bursts.is_empty():
+		for index in range(shard_bursts.size() - 1, -1, -1):
+			shard_bursts[index].left = maxf(0.0, float(shard_bursts[index].left) - delta)
+			if float(shard_bursts[index].left) <= 0.0:
+				shard_bursts.remove_at(index)
 		queue_redraw()
 	if not combat_active or rule_id.is_empty() or phase == "idle" or not is_finite(delta) or delta <= 0.0:
 		return
@@ -596,6 +610,34 @@ func _apply_active_effect(players: Array, enemies: Array, entering: bool) -> voi
 		if generation != _generation:
 			return
 
+func release_shards(global_center: Vector2, enemies: Array, authoritative: bool) -> void:
+	# Called only after an authenticated cover transition, never from effect
+	# packets. The existing cover state supplies replica visuals without damage.
+	if rule_id != "shatterfield" or fragments or not global_center.is_finite():
+		return
+	var center := to_local(global_center)
+	shard_bursts.append({"center": center, "left": SHARD_VISUAL_TIME})
+	queue_redraw()
+	if not authoritative:
+		return
+	var generation := _generation
+	var seen := {}
+	for actor: Variant in enemies:
+		if not _actor_alive(actor) or not actor.has_method("take_damage") or seen.has(actor.get_instance_id()):
+			continue
+		seen[actor.get_instance_id()] = true
+		if global_center.distance_to(actor.global_position) > SHARD_RADIUS + _actor_radius(actor):
+			continue
+		var old_scope := DAMAGEABLE.begin_interaction_scope({})
+		DAMAGEABLE.begin_secondary_scope()
+		environment_damage_active = true
+		actor.take_damage(SHARD_DAMAGE, {"source": "environment", "ability": "biome_shatter_pillar", "interaction": {}, "secondary": true, "is_ground_attack": true})
+		environment_damage_active = false
+		DAMAGEABLE.end_secondary_scope()
+		DAMAGEABLE.end_interaction_scope(old_scope)
+		if generation != _generation:
+			return
+
 func _eligible_for_impact(actor: Variant) -> bool:
 	return _actor_alive(actor) and actor.has_method("take_damage") and not _hit_ids.has(actor.get_instance_id()) and geometry_contains(shape, to_local(actor.global_position), _actor_radius(actor))
 
@@ -686,18 +728,12 @@ static func _valid_shape(geometry: Dictionary, size: Vector2) -> bool:
 	return kind == "annulus" or (_finite_number(geometry.get("angle")) and _finite_number(geometry.get("half_angle")) and float(geometry.half_angle) > 0.0 and float(geometry.half_angle) <= PI)
 
 func _draw() -> void:
+	if _combat_visible:
+		_draw_shard_bursts()
 	if not _combat_visible or shape.is_empty() or phase not in ["warning", "active"] or phase_left <= 0.0:
 		return
 	var warning := phase == "warning"
-	var tint := Color(1.0, 0.72, 0.24) if warning else Color(1.0, 0.31, 0.20)
-	if rule_id == "haunt":
-		tint = Color(0.77, 0.58, 1.0) if warning else Color(0.60, 0.36, 0.94)
-	elif rule_id == "storm_reach" and not warning:
-		tint = Color(0.82, 0.95, 1.0)
-	if mode == "assistance":
-		# Friendly opportunity fields share a pale mint contour throughout the
-		# warning and impact, distinct from amber/red player danger.
-		tint = Color(0.66, 0.88, 0.76) if warning else Color(0.43, 0.86, 0.66)
+	var tint := POLARITY_CONTOUR.tint(mode == "assistance", warning)
 	var fill := Color(tint, 0.10 if warning else 0.23)
 	var line := Color(tint, 0.84 if warning else 0.96)
 	if mode == "assistance":
@@ -712,8 +748,6 @@ func _draw() -> void:
 		"circle":
 			var radius := float(shape.radius)
 			draw_circle(center, radius, fill)
-			draw_arc(center, radius, 0.0, TAU, 64, line, 2.5, true)
-			draw_arc(center, radius + 6.0, -PI * 0.5, -PI * 0.5 + TAU * remaining, 64, line, 3.2, true)
 			if rule_id == "storm_reach":
 				var bolt := PackedVector2Array([center + Vector2(8, -21), center + Vector2(-7, 1), center + Vector2(7, 1), center + Vector2(-8, 21)])
 				draw_polyline(bolt, line, 3.0, true)
@@ -731,11 +765,7 @@ func _draw() -> void:
 		"rects":
 			for rect: Rect2 in shape.rects:
 				draw_rect(rect, fill)
-				draw_rect(rect, line, false, 2.5)
-				var long_axis := rect.size.x >= rect.size.y
-				var origin := rect.position + (Vector2(0, 5) if long_axis else Vector2(5, 0))
-				var progress_end := origin + (Vector2(rect.size.x * remaining, 0) if long_axis else Vector2(0, rect.size.y * remaining))
-				draw_line(origin, progress_end, line, 3.2, true)
+
 		"annulus", "sector":
 			var inner := float(shape.inner)
 			var outer := float(shape.outer)
@@ -752,15 +782,32 @@ func _draw() -> void:
 				for polygon: PackedVector2Array in clipped:
 					if polygon.size() >= 3:
 						draw_colored_polygon(polygon, fill)
-				draw_line((center + Vector2.from_angle(a) * inner).clamp(geometry_bounds.position, geometry_bounds.end), (center + Vector2.from_angle(b) * inner).clamp(geometry_bounds.position, geometry_bounds.end), line, 2.2, true)
-				draw_line((center + Vector2.from_angle(a) * outer).clamp(geometry_bounds.position, geometry_bounds.end), (center + Vector2.from_angle(b) * outer).clamp(geometry_bounds.position, geometry_bounds.end), line, 2.2, true)
-			if kind == "sector":
-				for edge in [-1.0, 1.0]:
-					var direction := Vector2.from_angle(angle + half_angle * edge)
-					draw_line(center + direction * inner, (center + direction * outer).clamp(geometry_bounds.position, geometry_bounds.end), line, 2.5, true)
-			var meter := Rect2((center if mode != "ordinary" else Vector2.ZERO) + Vector2(-65, -13), Vector2(130, 8))
-			draw_rect(meter, Color(0.05, 0.07, 0.1, 0.8))
-			draw_rect(Rect2(meter.position, Vector2(meter.size.x * remaining, meter.size.y)), line)
+	POLARITY_CONTOUR.draw_contours(self, get_polarity_contours(), line, remaining if warning else -1.0)
+
+func get_polarity_contours() -> Array[Dictionary]:
+	if not _combat_visible or phase not in ["warning", "active"] or phase_left <= 0.0 or shape.is_empty():
+		return []
+	var unit := snappedf(POLARITY_CONTOUR.screen_unit(self), .01)
+	var cache_key := hash([shape, mode == "assistance", unit])
+	if cache_key != _contour_cache_key or _contour_cache.is_empty():
+		_contour_cache_key = cache_key
+		_contour_cache = POLARITY_CONTOUR.build_contours(shape, mode == "assistance", unit)
+	return _contour_cache
+
+func _draw_shard_bursts() -> void:
+	for burst: Dictionary in shard_bursts:
+		var center: Vector2 = burst.center
+		var remaining := clampf(float(burst.left) / SHARD_VISUAL_TIME, 0.0, 1.0)
+		var progress := 1.0 - remaining
+		var tint := Color(.56, .96, .74, remaining)
+		draw_circle(center, SHARD_RADIUS, Color(tint, .15 * remaining))
+		var geometry := {"kind": "circle", "center": center, "radius": SHARD_RADIUS, "bounds": Rect2(-room_size * .5, room_size)}
+		POLARITY_CONTOUR.draw_contours(self, POLARITY_CONTOUR.build_contours(geometry, true, POLARITY_CONTOUR.screen_unit(self)), tint)
+		for index in 12:
+			var direction := Vector2.from_angle(float(index) * TAU / 12.0)
+			var tip := center + direction * lerpf(28.0, SHARD_RADIUS - 4.0, minf(1.0, progress * 2.5))
+			var tail := tip - direction * (13.0 + 11.0 * remaining)
+			draw_line(tail, tip, tint, 3.0, true)
 
 static func _rect_polygon(rect: Rect2) -> PackedVector2Array:
 	return PackedVector2Array([rect.position, Vector2(rect.end.x, rect.position.y), rect.end, Vector2(rect.position.x, rect.end.y)])

@@ -7,6 +7,7 @@ const CATEGORY_BOSS_REWARD := "boss_reward"
 const CATEGORY_REST := "rest"
 
 const REST_TIMELINE_LABEL := "Rest Site"
+const DAMAGE_RECAP := preload("res://scripts/core/damage_recap.gd")
 
 const RARITY_COMMON := "common"
 const RARITY_RARE := "rare"
@@ -55,6 +56,8 @@ static func create_stats(damage_dealt_total: int, damage_taken_total: int, enemi
 
 static func create_summary(payload: Dictionary) -> Dictionary:
 	var summary := payload.duplicate(true)
+	if summary.has("damage_recap"):
+		summary["damage_recap"] = DAMAGE_RECAP.normalize(summary.damage_recap)
 	if not summary.has("stats"):
 		summary["stats"] = create_stats(0, 0, 0, 0)
 	if not summary.has("build_summary"):

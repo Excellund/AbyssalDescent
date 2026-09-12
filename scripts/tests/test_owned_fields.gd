@@ -60,9 +60,9 @@ func _test_geometry() -> void:
 	_check(not fields.contains_point(Vector2(30.0, 10.01)), "Corridor excludes beyond actual full width")
 	fields.clear()
 	player.global_position = Vector2(20.0, 40.0)
-	_register("convergence_window", {"shape": "moving_circle", "center": player.global_position, "radius": 30.0, "remaining": 1.0})
-	player.global_position = Vector2(200.0, 40.0)
-	_check(fields.contains_point(Vector2(230.0, 40.0)) and not fields.contains_point(Vector2(20.0, 40.0)), "Convergence follows its owner rather than a stale pulse position")
+	var retired_action := player.new_combat_action("attack")
+	_check(not fields.register_field("convergence_window", _identity(retired_action), {"shape": "moving_circle", "center": player.global_position, "radius": 30.0, "remaining": 1.0}, retired_action), "Faultline cannot register the retired moving damage Field")
+	_check(not fields.contains_point(player.global_position), "The retired Field has no gameplay membership")
 	fields.clear()
 	_register("void_echo_zone", _circle(Vector2(400.0, 0.0), 25.0, 2.4))
 	_check(fields.contains_point(Vector2(400.0, 0.0)), "Lacuna Well qualifies through its own true circle")
@@ -163,7 +163,7 @@ func _test_native_registration() -> void:
 	player.convergence_window_left = 0.0
 	for _index in range(6):
 		player._try_apply_convergence_surge(player.global_position, 20, 0)
-	_check(player.convergence_window_left > 0.0 and fields.contains_point(player.global_position), "Production Convergence activation registers its moving Field")
+	_check(player.convergence_window_left > 0.0 and not fields.contains_point(player.global_position), "Production Faultline activation does not register a Field")
 	fields.clear()
 	player.static_wake_controller.begin_dash(player.new_combat_action("dash"))
 	player.static_wake_controller.append_segment(position, position + Vector2(80.0, 0.0))

@@ -34,6 +34,7 @@ class Recorder extends "res://scripts/core/run_summary_recorder.gd":
 	var initialize_calls := 0
 	var reset_calls := 0
 	var start_calls := 0
+	var progression_calls := 0
 	func _init(owner_world: Node) -> void:
 		super(owner_world)
 	func initialize(allow_collection: bool) -> void:
@@ -45,6 +46,9 @@ class Recorder extends "res://scripts/core/run_summary_recorder.gd":
 	func mark_run_start() -> void:
 		start_calls += 1
 		super.mark_run_start()
+	func _apply_endgame_chase_progress(summary: Dictionary) -> void:
+		progression_calls += 1
+		super._apply_endgame_chase_progress(summary)
 
 class HUD extends Node:
 	func hide_boss_intro() -> void:
@@ -60,6 +64,7 @@ class World extends "res://scripts/world_generator.gd":
 	var transitions: Array[String] = []
 	var teardown_calls := 0
 	var broadcast_outcomes: Array[String] = []
+	var submitted_summaries: Array[Dictionary] = []
 	func _ready() -> void:
 		set_process(false)
 		set_physics_process(false)
@@ -71,10 +76,13 @@ class World extends "res://scripts/world_generator.gd":
 		transitions.append(path)
 	func _teardown_multiplayer_session_for_menu_transition() -> void:
 		teardown_calls += 1
+		# Model the closed connection, which the real teardown establishes before
+		# terminal persistence; no sockets or external scene transitions are used.
+		MultiplayerSessionManager.session_connected = false
 	func _broadcast_run_outcome_if_needed(outcome: String, _tier: int, _label: String, _depth: int) -> void:
 		broadcast_outcomes.append(outcome)
-	func _enqueue_leaderboard_submission(_summary: Dictionary) -> void:
-		pass
+	func _enqueue_leaderboard_submission(summary: Dictionary) -> void:
+		submitted_summaries.append(summary.duplicate(true))
 
 var checks := 0
 var failures: Array[String] = []
@@ -99,6 +107,11 @@ func _run() -> void:
 		quit(1)
 		return
 	node_added.connect(audio_retirement.observe_node)
+	# This fixture bypasses World._ready and its normal RewardSelectionUI.
+	# Install that UI's actual bindings before injecting native Escape events.
+	var input_setup := preload("res://scripts/reward_selection_ui.gd").new()
+	input_setup._ensure_inspection_actions()
+	input_setup.free()
 	original_store = RunContext.active_run_checkpoint_store
 	ProjectSettings.set_setting("application/config/version", "dev-checkpoint-lifecycle")
 	RunContext.telemetry_upload_enabled = false
@@ -274,7 +287,7 @@ func _test_voluntary_failure(action: String) -> void:
 		# tween. A delayed old tween must not overwrite the new panel bounds.
 		await create_timer(0.24).timeout
 		var panel: Control = world.pause_menu_controller.pause_menu_panel
-		check(is_equal_approx(panel.size.y, 540.0) and panel.get_global_rect().get_center().distance_to(root.get_visible_rect().get_center()) < 2.0, "Immediate failed Abandon remains centered at notice height after the entrance tween")
+		check(panel.get_rect().size.y >= notice.get_rect().end.y and panel.get_global_rect().get_center().distance_to(root.get_visible_rect().get_center()) < 2.0, "Immediate failed Abandon remains centered with the full notice after the entrance tween")
 	store.fail_io = false
 	_invoke(action, surface)
 	var expected_scene := "res://scenes/Main.tscn" if action.ends_with("retry") else "res://scenes/Menu.tscn"
@@ -320,6 +333,21 @@ func _test_terminal_outcome(mode: String, outcome: String) -> void:
 	var surface: Node = world.defeat_screen if outcome == "death" else world.victory_screen
 	var initial_results: Node = surface._results_screen
 	check(surface.is_open() and RunContext.get_last_run_outcome() == outcome, mode + "/" + outcome + ": terminal result still appears despite unavailable checkpoint writes")
+	var authoritative_summary: Dictionary = {}
+	if mode == "joiner" and outcome == "death":
+		var recorder: Recorder = world.run_summary_recorder
+		check(HISTORY.load_all().is_empty() and not recorder.telemetry_run_finished and recorder.progression_calls == 0 and world.submitted_summaries.is_empty(), "Joining provisional defeat displays without persisting incomplete attribution or awarding progress")
+		_terminal(outcome)
+		check(HISTORY.load_all().is_empty() and world.broadcast_outcomes == [outcome] and surface._results_screen == initial_results, "Repeated joining HP0 callback leaves one provisional result while awaiting the host")
+		authoritative_summary = recorder.latest_run_summary.duplicate(true)
+		authoritative_summary["run_id"] = "checkpoint-authoritative-death"
+		authoritative_summary["stats"]["damage_taken_total"] = 999
+		# Transport is controlled, but delivery enters the actual World handler.
+		# A different host total proves the final record uses the local peer map.
+		world._sync_run_outcome(outcome, -1, world.current_room_label, world.room_depth, authoritative_summary, {2: {"damage_taken_total": 73}})
+		var attributed := HISTORY.load_all()
+		check(attributed.size() == 1 and attributed[0].run_id == "checkpoint-authoritative-death-p2" and int(attributed[0].stats.damage_taken_total) == 73, "Authoritative World outcome persists the joining player's attributed result")
+		check(recorder.progression_calls == 1 and world.submitted_summaries.size() == 1, "Authoritative joining result evaluates progression and submits once")
 	check(HISTORY.load_all().size() == 1 and world.broadcast_outcomes == [outcome], mode + "/" + outcome + ": terminal history and outcome dispatch happen once")
 	check(FileAccess.get_sha256(store.save_path) == original_hash and RunContext.run_resume_request_state.resume_saved_run_requested, mode + "/" + outcome + ": uncleared checkpoint and request remain intact")
 	if mode == "solo":
@@ -341,6 +369,10 @@ func _test_terminal_outcome(mode: String, outcome: String) -> void:
 		check(store.io_attempts == 0 and world._checkpoint_notice.is_empty(), mode + "/" + outcome + ": co-op never touches suspended solo checkpoint storage")
 	_terminal(outcome)
 	check(HISTORY.load_all().size() == 1 and world.broadcast_outcomes == [outcome] and surface._results_screen == initial_results, mode + "/" + outcome + ": repeated terminal callback cannot duplicate result/history")
+	if not authoritative_summary.is_empty():
+		var history_hash := FileAccess.get_sha256(HISTORY.STORAGE_PATH)
+		world._sync_run_outcome(outcome, -1, world.current_room_label, world.room_depth, authoritative_summary, {2: {"damage_taken_total": 73}})
+		check(FileAccess.get_sha256(HISTORY.STORAGE_PATH) == history_hash and world.run_summary_recorder.progression_calls == 1 and world.submitted_summaries.size() == 1 and surface._results_screen == initial_results, "Repeated authoritative delivery preserves history bytes and cannot duplicate progress, submission or the result surface")
 	store.fail_io = false
 	surface.back_to_main_menu_requested.emit()
 	check(world.transitions == ["res://scenes/Menu.tscn"], mode + "/" + outcome + ": later menu action proceeds")
@@ -350,12 +382,23 @@ func _test_terminal_outcome(mode: String, outcome: String) -> void:
 func _test_coop_action(mode: String, action: String) -> void:
 	_setup(mode)
 	var surface := _open_action_surface(action)
+	var awaiting_host := mode == "joiner" and action == "death_menu"
+	var delayed_summary: Dictionary = world.run_summary_recorder.latest_run_summary.duplicate(true)
+	if awaiting_host:
+		check(HISTORY.load_all().is_empty() and world.run_summary_recorder.progression_calls == 0, "Joining defeat menu begins with a provisional result and no authoritative delivery")
 	var original_hash := FileAccess.get_sha256(store.save_path)
 	store.fail_io = true
 	store.io_attempts = 0
 	_invoke(action, surface)
 	check(world.transitions == ["res://scenes/Menu.tscn"] and world.teardown_calls == 1, mode + "/" + action + ": actual co-op caller proceeds independently of solo storage faults")
 	check(store.io_attempts == 0 and FileAccess.get_sha256(store.save_path) == original_hash and RunContext.run_resume_request_state.resume_saved_run_requested, mode + "/" + action + ": suspended solo bytes/request are unchanged")
+	if awaiting_host:
+		var records := HISTORY.load_all()
+		check(records.size() == 1 and records[0].outcome == "death" and world.run_summary_recorder.progression_calls == 1 and world.submitted_summaries.size() == 1, "Actual joining defeat-menu caller persists once after teardown when the host outcome never arrives")
+		var history_hash := FileAccess.get_sha256(HISTORY.STORAGE_PATH)
+		world._run_summary_finish_run("death")
+		world.run_summary_recorder.finalize_synced_run_summary_for_joiner(delayed_summary, "death")
+		check(FileAccess.get_sha256(HISTORY.STORAGE_PATH) == history_hash and world.run_summary_recorder.progression_calls == 1 and world.submitted_summaries.size() == 1, "Repeated fallback or delayed host summary cannot rewrite the persisted menu result or duplicate progress")
 	await _cleanup()
 
 func _test_failed_requested_resume(kind: String) -> void:

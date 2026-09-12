@@ -19,7 +19,7 @@ static var _keyword_reaction_depth: int = 0
 ## These producers are simulated on the host. Their damage is never a client
 ## request or a visual RPC, even when the owning player lives on another peer.
 static func apply_keyword_reaction_damage(target: Object, amount: int, context: Dictionary, source_peer_id: int) -> bool:
-	if MultiplayerSessionManager.is_remote_replica() or String(context.get("attack_type", "")) not in ["spark_relay_projectile", "shatterwake_burst", "edict_court"]:
+	if MultiplayerSessionManager.is_remote_replica() or String(context.get("attack_type", "")) not in ["spark_relay_projectile", "shatterwake_burst", "edict_court", "convergence_window"]:
 		return false
 	_keyword_reaction_depth += 1
 	var accepted := apply_damage(target, amount, context, source_peer_id)
@@ -135,7 +135,7 @@ static func apply_damage(target: Object, amount: int, damage_context: Dictionary
 	var route_to_host := _should_route_enemy_damage_to_host(target)
 	source_peer_id = _resolve_source_peer(source_peer_id, route_to_host)
 	damage_context = _with_interaction_context(damage_context)
-	if String(damage_context.get("attack_type", "")) in ["spark_relay_projectile", "shatterwake_burst", "edict_court"] and (_keyword_reaction_depth <= 0 or MultiplayerSessionManager.is_remote_replica()):
+	if String(damage_context.get("attack_type", "")) in ["spark_relay_projectile", "shatterwake_burst", "edict_court", "convergence_window"] and (_keyword_reaction_depth <= 0 or MultiplayerSessionManager.is_remote_replica()):
 		return false
 	damage_context = _with_attack_origin(target, damage_context, source_peer_id)
 	var secondary := is_launch_suppressed() or bool(damage_context.get("secondary", false))

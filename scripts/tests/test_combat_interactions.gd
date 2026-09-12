@@ -231,7 +231,7 @@ func _test_native_sources_and_echo() -> void:
 		setup(3)
 		var targets := row(3)
 		var action := actor.combat_interactions.begin_action("attack")
-		if source in ["spark_relay_projectile", "shatterwake_burst", "edict_court"]:
+		if source in ["spark_relay_projectile", "shatterwake_burst", "edict_court", "convergence_window"]:
 			var context := REGISTRY.damage_context(action, source, {"secondary": true})
 			check(not DAMAGEABLE.apply_damage(targets[0], 100, context, 1) and targets[0].hits.is_empty() and actor.storm_crown_hit_counter == 0, "%s rejects generic damage submission without granting damage or charge" % source)
 			DAMAGEABLE.apply_keyword_reaction_damage(targets[0], 100, context, 1)

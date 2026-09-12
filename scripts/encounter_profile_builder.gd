@@ -486,6 +486,8 @@ func _build_objective_profile_for_kind(kind: String, depth: int) -> Dictionary:
 			return _build_pulse_window_profile(depth)
 		"intercept_run":
 			return _build_intercept_run_profile(depth)
+		"relic_recovery":
+			return _build_relic_recovery_profile(depth)
 		_:
 			return {}
 
@@ -495,6 +497,8 @@ func build_objective_profile(depth: int, preferred: String = "", last_entered_ki
 	if not explicit_profile.is_empty():
 		return explicit_profile
 	var all_kinds: Array[String] = ["last_stand", "cut_the_signal", "hold_the_line", "circuit_sweep", "pulse_window", "intercept_run"]
+	if depth >= 2:
+		all_kinds.append("relic_recovery")
 	var pool: Array[String] = []
 	for kind in all_kinds:
 		if kind != last_entered_kind:
@@ -541,6 +545,8 @@ func build_debug_encounter_profile(encounter_key: String, depth: int) -> Diction
 			return _build_intercept_run_profile(depth)
 		"random_objective":
 			return build_objective_profile(depth)
+		"relic_recovery":
+			return _build_relic_recovery_profile(depth)
 		_:
 			return {}
 
@@ -760,7 +766,7 @@ func _build_apex_breakwater_profile(_depth: int = 0) -> Dictionary:
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_THEME_COLOR: Color(1.0, 0.66, 0.38, 1.0),
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ICON_SHAPE_ID: "breakwater",
 		"affected_archetypes": ["breakwater"],
-		ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX: "Bait the locked charge into a wall, then attack during its recovery",
+		ENCOUNTER_CONTRACTS.MUTATOR_KEY_BANNER_SUFFIX: "Sidestep the ram; hold Harbor Gate's opening, then pursue after the crest passes",
 		ENCOUNTER_CONTRACTS.MUTATOR_KEY_ENEMY_TINT: Color.WHITE,
 		ENCOUNTER_CONTRACTS.MUTATOR_STAT_ENEMY_HEALTH_MULT: health_curve[tier] * party_health,
 		ENCOUNTER_CONTRACTS.MUTATOR_STAT_CHARGER_DAMAGE_MULT: damage_curve[tier],
@@ -1202,17 +1208,17 @@ func _control_curve_value(rank_curve: Dictionary, key: String, depth_curve: floa
 func _build_circuit_sweep_profile(depth: int) -> Dictionary:
 	var effective_depth := _effective_depth(depth)
 	var room_size := Vector2(960.0, 720.0)
-	var chasers := 3 + int(floor(float(effective_depth) * 0.5))
-	var chargers := 2 + int(floor(float(effective_depth) / 5.0))
-	var archers := 2 + int(floor(float(effective_depth) / 4.0))
+	var chasers := 3 + int(floor(float(effective_depth) * 0.4))
+	var chargers := 1 + int(floor(float(effective_depth) / 6.0))
+	var archers := 1 + int(floor(float(effective_depth) / 6.0))
 	var shielders := 1 + int(floor(float(effective_depth) / 6.0))
 	var pressure_mutator := _build_surge_mutator()
 	var profile := _build_profile("Circuit Sweep", room_size, chasers, chargers, archers, shielders, pressure_mutator)
 	ENCOUNTER_CONTRACTS.profile_set_player_mutator(profile, _build_relay_boost_mutator())
 	var raw_duration := clampf(40.0 + float(effective_depth) * 0.8, 40.0, 55.0)
 	var duration := int(ceil(raw_duration / 5.0)) * 5
-	var spawn_interval := clampf(2.1 - float(effective_depth) * 0.06, 0.8, 2.1)
-	var spawn_batch := mini(5, 2 + int(floor(float(effective_depth) / 4.0)))
+	var spawn_interval := clampf(2.7 - float(effective_depth) * 0.05, 1.25, 2.7)
+	var spawn_batch := mini(4, 2 + int(floor(float(effective_depth) / 6.0)))
 	var pressure_split := _objective_pressure_split()
 	spawn_batch = _scale_objective_spawn_batch(spawn_batch, float(pressure_split["wave_mult"]))
 	ENCOUNTER_CONTRACTS.profile_set_circuit_sweep_objective(profile, duration, spawn_interval, spawn_batch)
@@ -1252,17 +1258,17 @@ func _build_pulse_window_profile(depth: int) -> Dictionary:
 func _build_intercept_run_profile(depth: int) -> Dictionary:
 	var effective_depth := _effective_depth(depth)
 	var room_size := Vector2(960.0, 720.0)
-	var chasers := 2 + int(floor(float(effective_depth) * 0.35))
-	var chargers := 1 + int(floor(float(effective_depth) / 4.0))
+	var chasers := 2 + int(floor(float(effective_depth) * 0.25))
+	var chargers := 1 + int(floor(float(effective_depth) / 7.0))
 	var archers := 1 if effective_depth >= 4 else 0
-	var shielders := 0 if effective_depth < 3 else 1 + int(floor(float(effective_depth - 2) / 5.0))
+	var shielders := 0 if effective_depth < 5 else 1
 	var profile := _build_profile("Intercept Run", room_size, chasers, chargers, archers, shielders)
 	ENCOUNTER_CONTRACTS.profile_set_player_mutator(profile, _build_node_shield_mutator())
 	var raw_duration := clampf(50.0 + float(effective_depth) * 0.5, 50.0, 65.0)
 	var duration := int(ceil(raw_duration / 5.0)) * 5
-	var spawn_interval := clampf(2.6 - float(effective_depth) * 0.06, 0.95, 2.6)
-	var spawn_batch := mini(4, 2 + int(floor(float(effective_depth) / 5.0)))
-	var traversal_time := clampf(39.0 - float(effective_depth) * 0.7, 30.0, 39.0)
+	var spawn_interval := clampf(3.4 - float(effective_depth) * 0.05, 1.8, 3.4)
+	var spawn_batch := mini(3, 1 + int(floor(float(effective_depth) / 8.0)))
+	var traversal_time := clampf(30.0 - float(effective_depth) * 0.45, 24.0, 30.0)
 	var pressure_split := _objective_pressure_split()
 	spawn_batch = _scale_objective_spawn_batch(spawn_batch, float(pressure_split["wave_mult"]))
 	ENCOUNTER_CONTRACTS.profile_set_intercept_run_objective(profile, duration, spawn_interval, spawn_batch, traversal_time)
@@ -1272,6 +1278,19 @@ func _build_intercept_run_profile(depth: int) -> Dictionary:
 	if rams > 0:
 		ENCOUNTER_CONTRACTS.profile_set_specialist_counts(result, 0, rams, 0)
 	return result
+
+func _build_relic_recovery_profile(depth: int) -> Dictionary:
+	var effective_depth := _effective_depth(depth)
+	var profile := _build_profile("Relic Recovery", Vector2(1040.0, 760.0), 3, 0, 1 if effective_depth >= 4 else 0, 0)
+	# A clear receiver and retrieval paths are part of this authored arena.
+	profile["obstacle_layout"] = []
+	var positions: Array[Vector2] = [Vector2(-280.0, -170.0), Vector2(280.0, -170.0), Vector2(0.0, 260.0)]
+	if rng.randf() < 0.5:
+		for index in positions.size():
+			positions[index].y = -positions[index].y
+	ENCOUNTER_CONTRACTS.profile_set_relic_recovery_objective(profile, positions)
+	ENCOUNTER_CONTRACTS.profile_set_player_mutator(profile, _build_fortified_mutator())
+	return _apply_bearing_count_scaling(profile)
 
 func _normalize_route_context(route_context: Variant) -> Dictionary:
 	if route_context is Dictionary:

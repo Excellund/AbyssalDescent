@@ -9,6 +9,7 @@ const BEARING_ENUMS := preload("res://scripts/shared/bearing_enums.gd")
 const PROVENANCE := preload("res://scripts/core/run_provenance.gd")
 const TELEMETRY := preload("res://scripts/run_telemetry_store.gd")
 const CATALYST_REGISTRY := preload("res://scripts/progression/catalyst_registry.gd")
+const DAMAGE_RECAP := preload("res://scripts/core/damage_recap.gd")
 
 var started_at_unix: int = 0
 var started_at_msec: int = 0
@@ -29,6 +30,8 @@ var player_count: int = 1
 
 var total_damage_dealt: int = 0
 var total_damage_taken: int = 0
+var local_damage_peer_id: int = 0
+var _damage_recaps_by_peer: Dictionary = {}
 var enemies_killed: int = 0
 var bosses_defeated: int = 0
 var reached_act: int = 0
@@ -83,6 +86,8 @@ func reset_for_run(run_seed: Dictionary) -> void:
 	player_count = maxi(1, int(run_seed.get("player_count", 1)))
 	total_damage_dealt = 0
 	total_damage_taken = 0
+	local_damage_peer_id = int(run_seed.get("local_peer_id", 0))
+	_damage_recaps_by_peer.clear()
 	enemies_killed = 0
 	bosses_defeated = 0
 	reached_act = 1
@@ -122,6 +127,16 @@ func reset_for_run(run_seed: Dictionary) -> void:
 
 func record_damage_dealt(amount: int) -> void:
 	total_damage_dealt += maxi(0, amount)
+
+func record_damage_recap_health(peer_id: int, health: int, accepted_damage: Dictionary = {}) -> void:
+	_damage_recaps_by_peer[peer_id] = DAMAGE_RECAP.record_health(_damage_recaps_by_peer.get(peer_id, {}), health, accepted_damage)
+
+func get_damage_recap(peer_id: int = -1) -> Dictionary:
+	var resolved_peer := local_damage_peer_id if peer_id < 0 else peer_id
+	var recap := DAMAGE_RECAP.normalize(_damage_recaps_by_peer.get(resolved_peer, {}))
+	if not recap.is_empty():
+		recap["peer_id"] = resolved_peer
+	return recap
 
 func record_damage_taken(amount: int, peer_id: int = 0) -> void:
 	total_damage_taken += maxi(0, amount)
@@ -195,6 +210,7 @@ func build_checkpoint() -> Dictionary:
 		"run_provenance": resolved_run_provenance(),
 		"total_damage_dealt": total_damage_dealt,
 		"total_damage_taken": total_damage_taken,
+		"damage_recap": get_damage_recap(),
 		"enemies_killed": enemies_killed,
 		"bosses_defeated": bosses_defeated,
 		"reached_act": reached_act,
@@ -220,6 +236,10 @@ func restore_checkpoint(checkpoint: Dictionary) -> void:
 	restore_run_provenance(checkpoint.get("run_provenance"))
 	total_damage_dealt = maxi(0, int(checkpoint.get("total_damage_dealt", 0)))
 	total_damage_taken = maxi(0, int(checkpoint.get("total_damage_taken", 0)))
+	_damage_recaps_by_peer.clear()
+	var restored_recap := DAMAGE_RECAP.normalize(checkpoint.get("damage_recap"))
+	if not restored_recap.is_empty():
+		_damage_recaps_by_peer[local_damage_peer_id] = restored_recap
 	enemies_killed = maxi(0, int(checkpoint.get("enemies_killed", 0)))
 	bosses_defeated = maxi(0, int(checkpoint.get("bosses_defeated", 0)))
 	boss_no_hit_ids.clear()
@@ -356,6 +376,10 @@ func record_rest_visit(depth: int, unix_time: int = 0) -> void:
 		event_unix = int(Time.get_unix_time_from_system())
 	reward_timeline.append(RUN_SUMMARY_MODEL.create_timeline_entry(depth, ENUMS.RewardMode.NONE, RUN_SUMMARY_MODEL.REST_TIMELINE_LABEL, RUN_SUMMARY_MODEL.CATEGORY_REST, event_unix))
 
+func record_rest_recovery(restored_health: int, depth: int, unix_time: int = 0) -> void:
+	var event_unix := unix_time if unix_time > 0 else int(Time.get_unix_time_from_system())
+	reward_timeline.append(RUN_SUMMARY_MODEL.create_timeline_entry(depth, ENUMS.RewardMode.REST, "Recovered %d health" % maxi(0, restored_health), RUN_SUMMARY_MODEL.CATEGORY_REST, event_unix))
+
 func build_summary(final_state: Dictionary) -> Dictionary:
 	var ended_at_unix := int(final_state.get("ended_at_unix", Time.get_unix_time_from_system()))
 	var duration_seconds := int(final_state.get("duration_seconds", 0))
@@ -381,6 +405,7 @@ func build_summary(final_state: Dictionary) -> Dictionary:
 		"is_multiplayer": is_multiplayer,
 		"player_count": player_count,
 		"death_event": (final_state.get("death_event", {}) as Dictionary).duplicate(true),
+		"damage_recap": get_damage_recap(),
 		"stats": RUN_SUMMARY_MODEL.create_stats(total_damage_dealt, total_damage_taken, enemies_killed, bosses_defeated),
 		"build_summary": {
 			"boons": _flatten_items(boon_items),

@@ -1,6 +1,8 @@
 extends Node
 
 const GLOSSARY_DATA := preload("res://scripts/shared/glossary_data.gd")
+const GLOSSARY_FONT := preload("res://scripts/ui/scaled_ui_font.gd")
+const RUN_OATH_PANEL := preload("res://scripts/ui/run_oath_panel.gd")
 const SETTINGS_STORE := preload("res://scripts/settings_store.gd")
 const AUDIO_LEVELS := preload("res://scripts/shared/audio_levels.gd")
 const MENU_STYLE_FACTORY := preload("res://scripts/core/menu_style_factory.gd")
@@ -21,6 +23,15 @@ var pause_menu_layer: CanvasLayer
 var pause_menu_panel: Panel
 var pause_options_panel: Panel
 var pause_glossary_panel: Panel
+var pause_oaths_panel: Panel
+var _pause_buttons: Array[Button] = []
+var _pause_title: Label
+var _oaths_button: Button
+var _options_button: Button
+var _glossary_button: Button
+var _overlay_return_button: Button
+var _overlay_tweens: Dictionary = {}
+var _overlay_origins: Dictionary = {}
 var pause_master_slider: HSlider
 var pause_music_slider: HSlider
 var pause_sfx_slider: HSlider
@@ -31,6 +42,10 @@ var pause_master_value_label: Label
 var pause_music_value_label: Label
 var pause_sfx_value_label: Label
 var pause_resolution_hint_label: Label
+var _pause_options_scroll: ScrollContainer
+var _pause_options_body: Control
+var _pause_options_title: Label
+var _pause_options_back: Button
 var pause_menu_visible: bool = false
 var checkpoint_notice_label: Label
 var _pause_panel_tween: Tween
@@ -40,15 +55,10 @@ func set_checkpoint_notice(message: String) -> void:
 		return
 	checkpoint_notice_label.text = message
 	checkpoint_notice_label.visible = not message.is_empty()
-	var panel_height := 540.0 if checkpoint_notice_label.visible else 480.0
-	if is_equal_approx(pause_menu_panel.custom_minimum_size.y, panel_height):
-		return
 	if _pause_panel_tween != null and _pause_panel_tween.is_valid():
 		_pause_panel_tween.kill()
 		pause_menu_panel.modulate.a = 1.0
-	pause_menu_panel.custom_minimum_size.y = panel_height
-	pause_menu_panel.offset_top = -panel_height * 0.5
-	pause_menu_panel.offset_bottom = panel_height * 0.5
+	_layout_pause_menu()
 
 func initialize(context_path: String, apply_music_volume: Callable, apply_sfx_volume: Callable) -> void:
 	run_context_path = context_path
@@ -65,19 +75,29 @@ func is_options_open() -> bool:
 func is_glossary_open() -> bool:
 	return pause_glossary_panel != null and pause_glossary_panel.visible
 
+func is_oaths_open() -> bool:
+	return pause_oaths_panel != null and pause_oaths_panel.visible
+
+func set_oath_provider(callback: Callable) -> void:
+	if pause_oaths_panel != null:
+		pause_oaths_panel.provider = callback
+
 func open() -> void:
 	pause_menu_visible = true
 	if pause_menu_layer != null:
 		pause_menu_layer.visible = true
-	if pause_options_panel != null:
-		pause_options_panel.visible = false
-	if pause_glossary_panel != null:
-		pause_glossary_panel.visible = false
+	for panel in [pause_options_panel, pause_glossary_panel, pause_oaths_panel]:
+		_hide_pause_overlay(panel)
+	if pause_menu_panel != null:
+		pause_menu_panel.visible = true
+	_set_main_buttons_enabled(true)
+	_layout_pause_menu()
 	_sync_pause_options_from_context()
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	pause_opened.emit()
 	if pause_menu_panel != null:
 		_animate_pause_panel_in(pause_menu_panel, Vector2(0.0, 16.0))
+		_pause_buttons[0].grab_focus()
 
 func close() -> void:
 	pause_menu_visible = false
@@ -86,14 +106,57 @@ func close() -> void:
 	pause_closed.emit()
 
 func close_options() -> void:
-	if pause_options_panel != null:
-		_animate_pause_panel_out(pause_options_panel, Vector2(0.0, -10.0))
-	if pause_glossary_panel != null:
-		_animate_pause_panel_out(pause_glossary_panel, Vector2(0.0, -10.0))
+	_hide_pause_overlay(pause_options_panel)
+	_hide_pause_overlay(pause_glossary_panel)
+	_restore_pause_main()
 
 func close_glossary() -> void:
-	if pause_glossary_panel != null:
-		_animate_pause_panel_out(pause_glossary_panel, Vector2(0.0, -10.0))
+	_hide_pause_overlay(pause_glossary_panel)
+	_restore_pause_main()
+
+func open_oaths() -> void:
+	if pause_oaths_panel == null or not is_open():
+		return
+	_hide_pause_overlay(pause_options_panel)
+	_hide_pause_overlay(pause_glossary_panel)
+	_overlay_return_button = _oaths_button
+	pause_oaths_panel.refresh()
+	_layout_pause_oaths()
+	pause_oaths_panel.visible = true
+	pause_menu_panel.visible = false
+	_set_main_buttons_enabled(false)
+	pause_oaths_panel.back_button.grab_focus()
+
+func close_oaths() -> void:
+	_hide_pause_overlay(pause_oaths_panel)
+	_restore_pause_main()
+
+func _hide_pause_overlay(panel: Panel) -> void:
+	if panel == null:
+		return
+	var tween: Tween = _overlay_tweens.get(panel)
+	if tween != null and tween.is_valid():
+		tween.kill()
+	if _overlay_origins.has(panel):
+		panel.position = _overlay_origins[panel]
+	_overlay_tweens.erase(panel)
+	_overlay_origins.erase(panel)
+	panel.visible = false
+	panel.modulate.a = 1.0
+
+func _restore_pause_main() -> void:
+	if is_oaths_open() or is_options_open() or is_glossary_open():
+		return
+	if pause_menu_panel != null:
+		pause_menu_panel.visible = true
+		_layout_pause_menu()
+	_set_main_buttons_enabled(true)
+	if is_instance_valid(_overlay_return_button):
+		_overlay_return_button.grab_focus()
+
+func _set_main_buttons_enabled(enabled: bool) -> void:
+	for button in _pause_buttons:
+		button.disabled = not enabled
 
 func _create_pause_menu_ui() -> void:
 	pause_menu_layer = CanvasLayer.new()
@@ -107,9 +170,6 @@ func _create_pause_menu_ui() -> void:
 	pause_menu_layer.add_child(backdrop)
 
 	pause_menu_panel = Panel.new()
-	pause_menu_panel.set_anchors_preset(Control.PRESET_CENTER)
-	pause_menu_panel.custom_minimum_size = Vector2(440.0, 480.0)
-	pause_menu_panel.position = Vector2(-220.0, -240.0)
 	var panel_style := StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.06, 0.09, 0.13, 0.94)
 	panel_style.border_color = Color(0.34, 0.56, 0.84, 0.78)
@@ -117,13 +177,14 @@ func _create_pause_menu_ui() -> void:
 	panel_style.set_corner_radius_all(14)
 	pause_menu_panel.add_theme_stylebox_override("panel", panel_style)
 	pause_menu_layer.add_child(pause_menu_panel)
+	GLOSSARY_FONT.apply_to(pause_menu_panel)
 
 	var title := Label.new()
+	_pause_title = title
 	title.text = "Paused"
 	title.position = Vector2(0.0, 34.0)
-	title.custom_minimum_size = Vector2(440.0, 40.0)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 38)
+	title.add_theme_font_size_override("font_size", 30)
 	title.add_theme_color_override("font_color", Color(0.96, 0.98, 1.0, 0.98))
 	pause_menu_panel.add_child(title)
 
@@ -140,16 +201,22 @@ func _create_pause_menu_ui() -> void:
 	pause_menu_panel.add_child(back_to_menu_button)
 
 	var options_button := _make_pause_button("Options", Vector2(80.0, 208.0))
+	_options_button = options_button
 	options_button.pressed.connect(func() -> void:
 		_show_pause_overlay_panel(pause_options_panel, pause_glossary_panel)
 	)
 	pause_menu_panel.add_child(options_button)
 
 	var glossary_button := _make_pause_button("Glossary", Vector2(80.0, 268.0))
+	_glossary_button = glossary_button
 	glossary_button.pressed.connect(func() -> void:
 		_show_pause_overlay_panel(pause_glossary_panel, pause_options_panel)
 	)
 	pause_menu_panel.add_child(glossary_button)
+
+	_oaths_button = _make_pause_button("Oaths This Run", Vector2.ZERO)
+	_oaths_button.pressed.connect(open_oaths)
+	pause_menu_panel.add_child(_oaths_button)
 
 	var abandon_run_button := _make_pause_button("Abandon Descent", Vector2(80.0, 328.0))
 	_apply_destructive_button_style(abandon_run_button)
@@ -181,6 +248,19 @@ func _create_pause_menu_ui() -> void:
 	pause_glossary_panel = _build_pause_glossary_panel()
 	pause_glossary_panel.visible = false
 	pause_menu_layer.add_child(pause_glossary_panel)
+	pause_oaths_panel = RUN_OATH_PANEL.new()
+	pause_oaths_panel.visible = false
+	pause_menu_layer.add_child(pause_oaths_panel)
+	pause_oaths_panel.back_requested.connect(close_oaths)
+	if not get_viewport().size_changed.is_connected(_layout_pause_glossary):
+		get_viewport().size_changed.connect(_layout_pause_glossary)
+	get_viewport().size_changed.connect(_layout_pause_menu)
+	get_viewport().size_changed.connect(_layout_pause_oaths)
+	get_viewport().size_changed.connect(_layout_pause_options)
+	_layout_pause_glossary()
+	_layout_pause_menu()
+	_layout_pause_oaths()
+	_layout_pause_options()
 
 	pause_menu_layer.visible = false
 
@@ -188,10 +268,10 @@ func _make_pause_button(text: String, pos: Vector2, emphasize: bool = false) -> 
 	var button := Button.new()
 	button.text = text
 	button.position = pos
-	button.custom_minimum_size = Vector2(280.0, 52.0)
+	button.custom_minimum_size = Vector2(280.0, 42.0)
 	button.focus_mode = Control.FOCUS_ALL
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	button.add_theme_font_size_override("font_size", 20)
+	button.add_theme_font_size_override("font_size", 18)
 	button.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 0.98))
 	button.add_theme_color_override("font_hover_color", Color(0.98, 1.0, 1.0, 1.0))
 	button.add_theme_color_override("font_pressed_color", Color(0.98, 1.0, 1.0, 1.0))
@@ -206,6 +286,7 @@ func _make_pause_button(text: String, pos: Vector2, emphasize: bool = false) -> 
 		button.add_theme_stylebox_override("pressed", _make_pause_button_style(Color(0.08, 0.12, 0.18, 0.98), Color(0.74, 0.90, 1.0, 0.92), 16, 2))
 	button.add_theme_stylebox_override("focus", _make_pause_button_style(Color(0.13, 0.20, 0.29, 0.98), Color(0.86, 0.96, 1.0, 1.0), 16, 2))
 	button.add_theme_stylebox_override("disabled", _make_pause_button_style(Color(0.08, 0.10, 0.14, 0.82), Color(0.22, 0.26, 0.32, 0.54), 16, 2))
+	_pause_buttons.append(button)
 	return button
 
 func _apply_destructive_button_style(button: Button) -> void:
@@ -247,6 +328,7 @@ func _make_pause_glossary_nav_button(label_text: String, btn_group: ButtonGroup)
 
 func _make_pause_panel_back_button() -> Button:
 	var button := Button.new()
+	button.set_meta("pause_overlay_back", true)
 	button.text = "Back"
 	button.custom_minimum_size = Vector2(180.0, 46.0)
 	button.focus_mode = Control.FOCUS_ALL
@@ -291,16 +373,15 @@ func _apply_pause_option_selector_theme(selector: OptionButton) -> void:
 
 func _build_pause_options_panel() -> Panel:
 	var panel := Panel.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.custom_minimum_size = Vector2(660.0, 700.0)
-	panel.position = Vector2(-330.0, -350.0)
+	GLOSSARY_FONT.apply_to(panel)
 	var style := _make_pause_panel_style(Color(0.04, 0.06, 0.1, 0.95), Color(0.44, 0.7, 0.96, 0.74), 12, 2)
 	panel.add_theme_stylebox_override("panel", style)
 
 	var title := Label.new()
+	_pause_options_title = title
 	title.text = "Options"
 	title.position = Vector2(0.0, 16.0)
-	title.custom_minimum_size = Vector2(660.0, 32.0)
+	title.custom_minimum_size = Vector2(0.0, 32.0)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 30)
 	title.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0, 0.98))
@@ -403,32 +484,74 @@ func _build_pause_options_panel() -> Panel:
 	pause_resolution_hint_label = Label.new()
 	pause_resolution_hint_label.text = "Applies immediately and recenters the game window."
 	pause_resolution_hint_label.position = Vector2(42.0, 494.0)
-	pause_resolution_hint_label.custom_minimum_size = Vector2(576.0, 34.0)
+	pause_resolution_hint_label.custom_minimum_size = Vector2(576.0, 52.0)
 	pause_resolution_hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	pause_resolution_hint_label.add_theme_font_size_override("font_size", 14)
+	pause_resolution_hint_label.add_theme_font_size_override("font_size", 18)
 	pause_resolution_hint_label.add_theme_color_override("font_color", Color(0.70, 0.80, 0.90, 0.76))
 	panel.add_child(pause_resolution_hint_label)
 
 	pause_telemetry_upload_checkbox = CheckBox.new()
 	pause_telemetry_upload_checkbox.text = "Send Anonymous Telemetry"
-	pause_telemetry_upload_checkbox.position = Vector2(42.0, 536.0)
+	pause_telemetry_upload_checkbox.position = Vector2(42.0, 556.0)
 	pause_telemetry_upload_checkbox.custom_minimum_size = Vector2(576.0, 30.0)
 	pause_telemetry_upload_checkbox.add_theme_font_size_override("font_size", 18)
+	pause_telemetry_upload_checkbox.add_theme_icon_override("unchecked", RUN_OATH_PANEL._checkbox_icon(false))
+	pause_telemetry_upload_checkbox.add_theme_icon_override("checked", RUN_OATH_PANEL._checkbox_icon(true))
+	pause_telemetry_upload_checkbox.add_theme_stylebox_override("focus", _make_pause_panel_style(Color.TRANSPARENT, Color("badfff"), 4, 2))
 	pause_telemetry_upload_checkbox.toggled.connect(_on_pause_telemetry_upload_toggled)
 	panel.add_child(pause_telemetry_upload_checkbox)
 
 	var back_button := _make_pause_panel_back_button()
+	_pause_options_back = back_button
 	back_button.position = Vector2(250.0, 602.0)
-	back_button.pressed.connect(func() -> void:
-		if pause_options_panel != null:
-			_animate_pause_panel_out(pause_options_panel, Vector2(0.0, -10.0))
-	)
+	back_button.pressed.connect(close_options)
 	panel.add_child(back_button)
+	# Preserve the existing controls and settings callbacks inside a scrolling
+	# body. Title and Back remain available at every scroll position.
+	var authored_controls := panel.get_children()
+	_pause_options_scroll = ScrollContainer.new()
+	_pause_options_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_pause_options_scroll.follow_focus = true
+	panel.add_child(_pause_options_scroll)
+	_pause_options_body = Control.new()
+	_pause_options_body.custom_minimum_size = Vector2(660.0, 534.0)
+	_pause_options_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_pause_options_scroll.add_child(_pause_options_body)
+	for control: Control in authored_controls:
+		if control == title or control == back_button:
+			continue
+		control.reparent(_pause_options_body, false)
+		control.position.y -= 70.0
+		if control is Label:
+			control.add_theme_font_size_override("font_size", 18)
+	# PopupMenu owns a Window theme, so assign the same crisp font explicitly.
+	var popup_theme := panel.theme.duplicate() as Theme
+	popup_theme.set_font("font", "PopupMenu", panel.theme.default_font)
+	popup_theme.set_font_size("font_size", "PopupMenu", 18)
+	popup_theme.set_color("font_color", "PopupMenu", Color("ecf3fa"))
+	popup_theme.set_color("font_hover_color", "PopupMenu", Color.WHITE)
+	var popup_style := _make_pause_panel_style(Color("111b29"), Color("557b9e"), 8, 2)
+	for side in ["left", "right", "top", "bottom"]:
+		popup_style.set("content_margin_" + side, 8.0)
+	popup_theme.set_stylebox("panel", "PopupMenu", popup_style)
+	popup_theme.set_stylebox("hover", "PopupMenu", _make_pause_panel_style(Color("284764"), Color("badfff"), 4, 1))
+	for selector: OptionButton in [pause_display_mode_selector, pause_resolution_selector]:
+		selector.get_popup().theme = popup_theme
+	for slider: HSlider in [pause_master_slider, pause_music_slider, pause_sfx_slider]:
+		for style_name in ["slider", "grabber_area", "grabber_area_highlight"]:
+			var track := StyleBoxFlat.new()
+			track.bg_color = Color("354e68") if style_name == "slider" else Color("86b9dc")
+			track.set_corner_radius_all(3)
+			track.content_margin_top = 3
+			track.content_margin_bottom = 3
+			slider.add_theme_stylebox_override(style_name, track)
 
 	return panel
 
 func _build_pause_glossary_panel() -> Panel:
 	var panel := Panel.new()
+	panel.name = "PauseGlossaryPanel"
+	GLOSSARY_FONT.apply_to(panel)
 	# Absolute position: (2560-1200)/2, (1440-820)/2 — centered in 2560x1440 viewport
 	panel.position = Vector2(680.0, 310.0)
 	panel.size = Vector2(1200.0, 820.0)
@@ -480,7 +603,13 @@ func _build_pause_glossary_panel() -> Panel:
 	var nav_vbox := VBoxContainer.new()
 	nav_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	nav_vbox.add_theme_constant_override("separation", 6)
-	nav_margin.add_child(nav_vbox)
+	var nav_scroll := ScrollContainer.new()
+	nav_scroll.name = "GlossaryNavigationScroll"
+	nav_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	nav_scroll.follow_focus = true
+	nav_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	nav_margin.add_child(nav_scroll)
+	nav_scroll.add_child(nav_vbox)
 
 	var body_panel := Panel.new()
 	body_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -489,6 +618,7 @@ func _build_pause_glossary_panel() -> Panel:
 	content_row.add_child(body_panel)
 
 	var body := RichTextLabel.new()
+	body.name = "GlossaryBody"
 	body.set_anchors_preset(Control.PRESET_FULL_RECT)
 	body.offset_left = 14.0
 	body.offset_top = 10.0
@@ -499,6 +629,7 @@ func _build_pause_glossary_panel() -> Panel:
 	body.scroll_active = true
 	body.selection_enabled = false
 	body.add_theme_font_size_override("normal_font_size", 18)
+	body.add_theme_font_size_override("bold_font_size", 18)
 	body.add_theme_color_override("default_color", Color(0.86, 0.94, 1.0, 0.96))
 	body_panel.add_child(body)
 
@@ -529,13 +660,98 @@ func _build_pause_glossary_panel() -> Panel:
 
 	var back_button := _make_pause_panel_back_button()
 	back_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	back_button.pressed.connect(func() -> void:
-		if pause_glossary_panel != null:
-			_animate_pause_panel_out(pause_glossary_panel, Vector2(0.0, -10.0))
-	)
+	back_button.pressed.connect(close_glossary)
 	stack.add_child(back_button)
 
 	return panel
+
+func _layout_pause_glossary() -> void:
+	if pause_glossary_panel == null or not is_inside_tree():
+		return
+	var viewport := get_viewport()
+	var canvas_size := viewport.get_visible_rect().size
+	var stretch := viewport.get_stretch_transform().get_scale().abs()
+	if stretch.x <= 0.0 or stretch.y <= 0.0:
+		return
+	# The game stretches a 2560 canvas. Counter only that transform here so
+	# glossary text remains 18 screen pixels at smaller playtest resolutions.
+	var screen_size := canvas_size * stretch
+	var panel_size := Vector2(minf(1360.0, screen_size.x - 48.0), minf(900.0, screen_size.y - 48.0))
+	panel_size = panel_size.max(Vector2(480.0, 360.0))
+	pause_glossary_panel.scale = Vector2.ONE / stretch
+	pause_glossary_panel.size = panel_size
+	pause_glossary_panel.position = (canvas_size - panel_size / stretch) * 0.5
+
+func _layout_pause_menu() -> void:
+	if pause_menu_panel == null or _pause_title == null or not is_inside_tree():
+		return
+	if _pause_panel_tween != null and _pause_panel_tween.is_valid():
+		_pause_panel_tween.kill()
+		pause_menu_panel.modulate.a = 1.0
+	var viewport := get_viewport()
+	var canvas_size := viewport.get_visible_rect().size
+	var stretch := viewport.get_stretch_transform().get_scale().abs()
+	if stretch.x <= 0.0 or stretch.y <= 0.0:
+		return
+	var screen_size := canvas_size * stretch
+	var has_notice := checkpoint_notice_label != null and checkpoint_notice_label.visible
+	var panel_size := Vector2(minf(460.0, screen_size.x - 32.0), 498.0 if has_notice else 434.0)
+	pause_menu_panel.scale = Vector2.ONE / stretch
+	pause_menu_panel.size = panel_size
+	pause_menu_panel.position = (canvas_size - panel_size / stretch) * 0.5
+	_pause_title.position = Vector2(20, 18)
+	_pause_title.size = Vector2(panel_size.x - 40, 40)
+	for i in _pause_buttons.size():
+		var button := _pause_buttons[i]
+		for style_name in ["normal", "hover", "pressed", "focus", "disabled"]:
+			var button_style := button.get_theme_stylebox(style_name) as StyleBoxFlat
+			if button_style != null:
+				button_style.content_margin_top = 8
+				button_style.content_margin_bottom = 8
+		button.custom_minimum_size.x = 0
+		button.position = Vector2(48, 70 + i * 49)
+		button.size = Vector2(panel_size.x - 96, 42)
+	if checkpoint_notice_label != null:
+		checkpoint_notice_label.position = Vector2(24, 420)
+		checkpoint_notice_label.size = Vector2(panel_size.x - 48, 62)
+
+func _layout_pause_oaths() -> void:
+	if pause_oaths_panel == null or not is_inside_tree():
+		return
+	var viewport := get_viewport()
+	var canvas_size := viewport.get_visible_rect().size
+	var stretch := viewport.get_stretch_transform().get_scale().abs()
+	if stretch.x <= 0.0 or stretch.y <= 0.0:
+		return
+	var panel_size := (canvas_size * stretch - Vector2(40, 40)).min(Vector2(1080, 900))
+	pause_oaths_panel.scale = Vector2.ONE / stretch
+	pause_oaths_panel.size = panel_size
+	pause_oaths_panel.position = (canvas_size - panel_size / stretch) * 0.5
+
+func _layout_pause_options() -> void:
+	if pause_options_panel == null or _pause_options_scroll == null or not is_inside_tree():
+		return
+	var viewport := get_viewport()
+	var canvas_size := viewport.get_visible_rect().size
+	var stretch := viewport.get_stretch_transform().get_scale().abs()
+	if stretch.x <= 0.0 or stretch.y <= 0.0:
+		return
+	var tween: Tween = _overlay_tweens.get(pause_options_panel)
+	if tween != null and tween.is_valid():
+		tween.kill()
+	_overlay_tweens.erase(pause_options_panel)
+	_overlay_origins.erase(pause_options_panel)
+	var panel_size := (canvas_size * stretch - Vector2(40, 40)).min(Vector2(740, 700))
+	pause_options_panel.modulate.a = 1.0
+	pause_options_panel.scale = Vector2.ONE / stretch
+	pause_options_panel.size = panel_size
+	pause_options_panel.position = (canvas_size - panel_size / stretch) * 0.5
+	_pause_options_title.position = Vector2(20, 16)
+	_pause_options_title.size = Vector2(panel_size.x - 40, 38)
+	_pause_options_scroll.position = Vector2(24, 70)
+	_pause_options_scroll.size = Vector2(panel_size.x - 48, panel_size.y - 152)
+	_pause_options_back.position = Vector2((panel_size.x - 180) * 0.5, panel_size.y - 66)
+	_pause_options_back.size = Vector2(180, 46)
 
 func _get_run_context() -> Node:
 	return get_node_or_null(run_context_path)
@@ -700,11 +916,23 @@ func _update_pause_resolution_control_state(current_mode: String) -> void:
 			pause_resolution_hint_label.text = "Disabled in fullscreen. Switch to Windowed to choose a resolution."
 
 func _show_pause_overlay_panel(panel_to_show: Panel, panel_to_hide: Panel) -> void:
-	if panel_to_hide != null and panel_to_hide.visible:
-		_animate_pause_panel_out(panel_to_hide, Vector2(0.0, -10.0))
+	_hide_pause_overlay(pause_oaths_panel)
+	_hide_pause_overlay(panel_to_hide)
+	_hide_pause_overlay(panel_to_show)
 	if panel_to_show != null:
+		_overlay_return_button = _glossary_button if panel_to_show == pause_glossary_panel else _options_button
+		if panel_to_show == pause_glossary_panel:
+			_layout_pause_glossary()
+		elif panel_to_show == pause_options_panel:
+			_layout_pause_options()
+		pause_menu_panel.visible = false
+		_set_main_buttons_enabled(false)
 		panel_to_show.visible = true
 		_animate_pause_panel_in(panel_to_show, Vector2(0.0, 14.0))
+		for button in panel_to_show.find_children("*", "Button", true, false):
+			if button.has_meta("pause_overlay_back"):
+				button.grab_focus()
+				break
 
 func _animate_pause_panel_in(panel: Control, offset: Vector2) -> void:
 	if panel == null:
@@ -717,25 +945,14 @@ func _animate_pause_panel_in(panel: Control, offset: Vector2) -> void:
 	var tween := create_tween()
 	if panel == pause_menu_panel:
 		_pause_panel_tween = tween
+	else:
+		_overlay_tweens[panel] = tween
+		_overlay_origins[panel] = target_position
 	tween.set_parallel(true)
 	tween.tween_property(panel, "modulate:a", 1.0, 0.14)
 	tween.tween_property(panel, "position", target_position, 0.18).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-
-func _animate_pause_panel_out(panel: Control, offset: Vector2, duration: float = 0.16) -> void:
-	if panel == null or not panel.visible:
-		return
-	var start_position := panel.position
-	var tween := create_tween()
-	tween.set_parallel(true)
-	tween.tween_property(panel, "modulate:a", 0.0, duration)
-	tween.tween_property(panel, "position", start_position + offset, duration).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
-	tween.finished.connect(func() -> void:
-		if panel == null:
-			return
-		panel.visible = false
-		panel.position = start_position
-		panel.modulate.a = 1.0
-	)
+	if panel == pause_glossary_panel:
+		tween.finished.connect(_layout_pause_glossary)
 
 func _percent_to_db(percent: float) -> float:
 	return AUDIO_LEVELS.percent_to_db(percent)

@@ -6,11 +6,13 @@ const DESCRIPTION_CAP_GUARD := preload("res://scripts/shared/description_cap_gua
 const PLAYER_SCRIPT := preload("res://scripts/player.gd")
 const POWER_REGISTRY := preload("res://scripts/power_registry.gd")
 const COMBAT_KEYWORDS := preload("res://scripts/shared/combat_keyword_catalogue.gd")
+const BUILD_KEYWORDS := preload("res://scripts/shared/build_keyword_summary.gd")
+const SCALED_UI_FONT := preload("res://scripts/ui/scaled_ui_font.gd")
 const CATALYST_REGISTRY := preload("res://scripts/progression/catalyst_registry.gd")
 const RARITY_COMMON := Color(0.62, 0.7, 0.8, 0.9)
 const RARITY_EPIC := Color(0.82, 0.58, 1.0, 0.96)
 const RARITY_LEGENDARY := Color(1.0, 0.74, 0.42, 1.0)
-const BODY_FONT_SIZE := 17
+const BODY_FONT_SIZE := 18
 const BODY_COLOR := Color(0.90, 0.93, 0.98, 1.0)
 
 signal build_detail_opened
@@ -27,6 +29,13 @@ var _content_vbox: VBoxContainer
 var _close_button: Button
 var _active_passive_id := ""
 var power_registry_instance = POWER_REGISTRY.new()
+var keyword_overview_toggle: Button
+var keyword_summary_label: RichTextLabel
+var keyword_breakdown: VBoxContainer
+var keyword_effect_flow: HFlowContainer
+var keyword_action_flow: HFlowContainer
+var keyword_source_details: RichTextLabel
+var _selected_keyword := ""
 
 var passive_section: VBoxContainer
 var passive_name_label: Label
@@ -83,6 +92,7 @@ func _create_panel() -> void:
 	panel.add_theme_stylebox_override("panel", panel_style)
 	panel.visible = false
 	_layer.add_child(panel)
+	SCALED_UI_FONT.apply_to(panel)
 
 	_layout_container = VBoxContainer.new()
 	var container := _layout_container
@@ -123,6 +133,7 @@ func _create_panel() -> void:
 	_close_button.add_theme_font_size_override("font_size", 18)
 	_close_button.pressed.connect(close)
 	container.add_child(_close_button)
+	_create_keyword_overview(content_vbox)
 
 	# Passive section panel
 	var passive_panel := PanelContainer.new()
@@ -286,14 +297,15 @@ func open(from_reward: bool = false) -> void:
 	if _layer != null:
 		_layer.layer = 140 if from_reward else 95
 	if _modal_backdrop != null:
-		_modal_backdrop.visible = from_reward
+		_modal_backdrop.visible = true
 	if _close_button != null:
-		_close_button.visible = from_reward
+		_close_button.visible = true
+		_close_button.text = "Return to rewards  [Tab / Esc]" if from_reward else "Close  [Tab / Esc]"
 	panel.visible = true
 	is_visible = true
 	_apply_layout()
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-	if from_reward and _close_button != null:
+	if _close_button != null:
 		_close_button.grab_focus()
 	build_detail_opened.emit()
 
@@ -316,7 +328,7 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 func handle_input(event: InputEvent) -> bool:
-	if not is_visible or not opened_from_reward:
+	if not is_visible:
 		return false
 	if _scroll_expanded_details(event):
 		return true
@@ -325,7 +337,8 @@ func handle_input(event: InputEvent) -> bool:
 	if event.is_action_pressed("reward_inspect") or event.is_action_pressed("reward_back"):
 		close()
 		return true
-	# Consume the inspection key's release too: the normal build view uses hold-Tab.
+	# Tab is a toggle. Consume both its release and keyboard repeats before
+	# Godot can move GUI focus and scroll to a different keyword or power.
 	return event.is_action("reward_inspect") or event.is_action("reward_back")
 
 func _scroll_expanded_details(event: InputEvent) -> bool:
@@ -368,6 +381,7 @@ func refresh(character_id: String, active_boons: Array, active_arcana: Array, ac
 	if panel == null:
 		return
 	_update_passive_section(character_id)
+	_update_keyword_overview(player)
 	_update_catalyst_section(catalyst_ids)
 	_update_power_section(boons_list_container, active_boons, "boon", player)
 	_update_power_section(arcana_list_container, active_arcana, "arcana", player)
@@ -418,6 +432,124 @@ func _make_detail_label(font_size: int = BODY_FONT_SIZE) -> RichTextLabel:
 	label.add_theme_color_override("default_color", BODY_COLOR)
 	label.add_theme_constant_override("line_separation", 3)
 	return label
+
+func _create_keyword_overview(content: VBoxContainer) -> void:
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", 8)
+	content.add_child(stack)
+	keyword_overview_toggle = Button.new()
+	keyword_overview_toggle.custom_minimum_size.y = 42.0
+	keyword_overview_toggle.toggle_mode = true
+	keyword_overview_toggle.tooltip_text = "Inspect every keyword and its contributing powers. Counts include your passive; each owned power counts once, regardless of level. Temporary bonuses are excluded."
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.04, 0.08, 0.12, 0.65)
+	style.border_color = Color(0.44, 0.60, 0.70, 0.55)
+	style.border_width_bottom = 1
+	style.set_corner_radius_all(5)
+	keyword_overview_toggle.add_theme_stylebox_override("normal", style)
+	var hover := style.duplicate() as StyleBoxFlat
+	hover.bg_color = Color(0.08, 0.14, 0.20, 0.90)
+	keyword_overview_toggle.add_theme_stylebox_override("hover", hover)
+	keyword_overview_toggle.add_theme_stylebox_override("pressed", hover)
+	stack.add_child(keyword_overview_toggle)
+	keyword_summary_label = _make_detail_label(17)
+	keyword_summary_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	keyword_summary_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	keyword_summary_label.offset_left = 12.0
+	keyword_summary_label.offset_right = -34.0
+	keyword_summary_label.offset_top = 9.0
+	keyword_summary_label.offset_bottom = -7.0
+	keyword_overview_toggle.add_child(keyword_summary_label)
+	var arrow := Label.new()
+	arrow.text = "+"
+	arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	arrow.set_anchors_and_offsets_preset(Control.PRESET_CENTER_RIGHT)
+	arrow.position = Vector2(-24.0, -12.0)
+	arrow.add_theme_font_size_override("font_size", 19)
+	keyword_overview_toggle.add_child(arrow)
+	keyword_breakdown = VBoxContainer.new()
+	keyword_breakdown.add_theme_constant_override("separation", 8)
+	keyword_breakdown.hide()
+	stack.add_child(keyword_breakdown)
+	keyword_overview_toggle.toggled.connect(func(expanded: bool):
+		keyword_breakdown.visible = expanded
+		arrow.text = "−" if expanded else "+")
+	var explanation := _make_detail_label(15)
+	explanation.text = "Owned powers + passive · Each source counts once. Select a keyword to inspect."
+	keyword_breakdown.add_child(explanation)
+	keyword_effect_flow = HFlowContainer.new()
+	keyword_effect_flow.add_theme_constant_override("h_separation", 6)
+	keyword_effect_flow.add_theme_constant_override("v_separation", 4)
+	keyword_breakdown.add_child(keyword_effect_flow)
+	var actions_heading := _make_detail_label(15)
+	actions_heading.text = "Actions & triggers"
+	keyword_breakdown.add_child(actions_heading)
+	keyword_action_flow = HFlowContainer.new()
+	keyword_action_flow.add_theme_constant_override("h_separation", 6)
+	keyword_action_flow.add_theme_constant_override("v_separation", 4)
+	keyword_breakdown.add_child(keyword_action_flow)
+	keyword_source_details = _make_detail_label()
+	keyword_source_details.hide()
+	keyword_breakdown.add_child(keyword_source_details)
+
+func _update_keyword_overview(player: PLAYER_SCRIPT) -> void:
+	var summary := BUILD_KEYWORDS.from_levels(BUILD_KEYWORDS.owned_levels(player), _active_passive_id if is_instance_valid(player) else "")
+	_selected_keyword = ""
+	keyword_source_details.hide()
+	keyword_overview_toggle.button_pressed = false
+	keyword_breakdown.hide()
+	keyword_summary_label.text = "[b]Keywords[/b]     " + BUILD_KEYWORDS.compact_bbcode(summary)
+	_fill_keyword_flow(keyword_effect_flow, summary.effects)
+	_fill_keyword_flow(keyword_action_flow, summary.actions)
+
+func _fill_keyword_flow(flow: HFlowContainer, entries: Array) -> void:
+	for child in flow.get_children():
+		flow.remove_child(child)
+		child.queue_free()
+	if entries.is_empty():
+		var empty := Label.new()
+		empty.text = "None acquired"
+		empty.add_theme_font_size_override("font_size", 17)
+		flow.add_child(empty)
+		return
+	for entry: Dictionary in entries:
+		var id := String(entry.id)
+		var button := Button.new()
+		button.text = "%s  %d" % [COMBAT_KEYWORDS.KEYWORDS[id].label, entry.count]
+		button.add_theme_font_size_override("font_size", 17)
+		button.add_theme_color_override("font_color", Color(COMBAT_KEYWORDS.keyword_color(id)))
+		button.custom_minimum_size.y = 32.0
+		button.toggle_mode = true
+		button.tooltip_text = "%d owned sources; select to inspect." % entry.count
+		button.set_meta("keyword_id", id)
+		button.set_meta("build_details", weakref(keyword_source_details))
+		button.pressed.connect(func():
+			var show_details := _selected_keyword != id or not keyword_source_details.visible
+			_selected_keyword = id
+			keyword_source_details.text = _keyword_source_text(entry)
+			keyword_source_details.visible = show_details
+			for row: HFlowContainer in [keyword_effect_flow, keyword_action_flow]:
+				for item in row.get_children():
+					if item is Button:
+						item.set_pressed_no_signal(show_details and item == button))
+		flow.add_child(button)
+
+func _keyword_source_text(entry: Dictionary) -> String:
+	var lines: Array[String] = [COMBAT_KEYWORDS.definitions_bbcode([String(entry.id)])]
+	var produces: Array[String] = []
+	var uses: Array[String] = []
+	for source: Dictionary in entry.sources:
+		var label := CHARACTER_PASSIVES.get_display_name(source.id) + " (passive)" if source.passive else _power_display_name(source.id) + " (Lv %d)" % source.level
+		if source.produces:
+			produces.append(label)
+		if source.uses:
+			uses.append(label)
+	if not produces.is_empty():
+		lines.append("[b]Produces:[/b] " + ", ".join(produces))
+	if not uses.is_empty():
+		lines.append("[b]Uses:[/b] " + ", ".join(uses))
+	lines.append("Select a power below for its activation rules.")
+	return "\n".join(lines)
 
 func _power_level(id: String, arcana: bool, player: PLAYER_SCRIPT) -> int:
 	if not is_instance_valid(player):

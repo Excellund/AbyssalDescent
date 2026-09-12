@@ -62,7 +62,7 @@ func _key(code: Key, pressed: bool) -> void:
 	event.keycode = code
 	event.physical_keycode = code
 	event.pressed = pressed
-	world._unhandled_input(event)
+	root.push_input(event, true)
 
 func _build_chip() -> Panel:
 	for chip in world.hud.build_strip_arcana_chips:
@@ -168,8 +168,10 @@ func _run() -> void:
 		_key(KEY_TAB, true)
 		await _capture("details", size, 1.0, 1.0)
 		_key(KEY_TAB, false)
+		_key(KEY_TAB, true)
+		_key(KEY_TAB, false)
 		await _capture("build_resumed", size, 1.0, 0.2)
-		check(world.player.is_physics_processing(), "Releasing Tab restores native player movement")
+		check(world.player.is_physics_processing(), "Toggling Tab closed restores native player movement")
 		await _walk_until("move_right", 0, 400.0, 1.0)
 		await _capture("exit", size, 1.0, 1.0)
 		check(natural_enemy_overlap, "Ordinary pursuing enemies enter the Stats area during native movement")

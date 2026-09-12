@@ -19,6 +19,7 @@ const DIFFICULTY_CONFIG := preload("res://scripts/difficulty_config.gd")
 const CHARACTER_REGISTRY := preload("res://scripts/character_registry.gd")
 const META_PROGRESS_STORE := preload("res://scripts/meta_progress_store.gd")
 const OATHS_EVALUATOR := preload("res://scripts/progression/oaths_evaluator.gd")
+const RUN_OATH_PRESENTATION := preload("res://scripts/progression/run_oath_presentation.gd")
 const ASCENSION_REGISTRY := preload("res://scripts/progression/ascension_modifier_registry.gd")
 const PLAYER_SCRIPT := preload("res://scripts/player.gd")
 const RUN_CONTEXT_SCRIPT := preload("res://scripts/run_context.gd")
@@ -46,6 +47,7 @@ var _summary_last_player_health_by_peer: Dictionary = {}
 var _summary_stats_by_peer: Dictionary = {}
 var _summary_reward_timeline_by_peer: Dictionary = {}
 var _latest_peer_summary_overrides: Dictionary = {}
+var _recap_damage_sequence_by_player: Dictionary = {}
 
 var _world  # WorldGenerator back-reference for context reads.
 
@@ -101,7 +103,44 @@ func get_stats_by_peer() -> Dictionary:
 func get_latest_peer_summary_overrides() -> Dictionary:
 	return _latest_peer_summary_overrides
 
+## Reading the Pause view must not finalize a run, reconcile combat events,
+## initialize peer ledgers, or write a profile. Snapshot only recorded facts.
+func get_live_oath_presentation() -> Dictionary:
+	var elapsed := get_run_elapsed_seconds()
+	var is_joiner: bool = _world.is_multiplayer and MultiplayerSessionManager.is_remote_replica()
+	var summary: Dictionary = {}
+	if run_summary_tracker != null:
+		summary = run_summary_tracker.build_summary({"outcome": "in_progress", "duration_seconds": elapsed})
+		# build_summary's terminal fallback treats zero as absent. Live zero is
+		# real, particularly when Pause opens before the first elapsed second.
+		summary["duration_seconds"] = elapsed
+		summary["is_debug"] = _run_is_debug
+		if _world.is_multiplayer:
+			var local_peer_id: int = _world._resolve_local_peer_id()
+			var local_stats := _lookup_peer_dictionary(_summary_stats_by_peer, local_peer_id)
+			# An unresolved owner must not inherit aggregate damage or a zero.
+			summary["stats"] = local_stats.duplicate(true)
+			summary["boss_no_hit_ids"] = run_summary_tracker.get_boss_no_hit_ids_for_peer(local_peer_id)
+			var local_player := _world._find_local_owned_player_node() as PLAYER_SCRIPT
+			# The roster helper can fall back to an alive ally for camera use.
+			# Build evidence must still belong to this actual input owner.
+			if is_instance_valid(local_player) and local_peer_id > 0 and local_player.player_id == local_peer_id and local_player._is_local_control_owner():
+				summary["build_summary"] = build_summary_for_player(local_player)
+			else:
+				summary.erase("build_summary")
+	var context: Node = _world._get_run_context()
+	var profile: Dictionary = context.meta_progress_profile if is_instance_valid(context) else {}
+	return {
+		"character_name": String(summary.get("character_name", "Unknown vessel")),
+		"difficulty_label": String(summary.get("difficulty_label", "Unknown Bearing")),
+		"elapsed_seconds": elapsed,
+		"is_joiner": is_joiner,
+		"rows": RUN_OATH_PRESENTATION.presentation(summary, profile, {"is_joiner": is_joiner, "profile_available": not profile.is_empty()}),
+	}
+
 func summary_category_for_mode(mode: int) -> String:
+	if mode == ENUMS.RewardMode.REST:
+		return RUN_SUMMARY_MODEL_SCRIPT.CATEGORY_REST
 	if mode == ENUMS.RewardMode.BOSS:
 		return RUN_SUMMARY_MODEL_SCRIPT.CATEGORY_BOSS_REWARD
 	if mode == ENUMS.RewardMode.ARCANA:
@@ -168,6 +207,7 @@ func reset_summary_tracker() -> void:
 	if run_summary_tracker == null:
 		run_summary_tracker = RUN_SUMMARY_TRACKER_SCRIPT.new()
 	_summary_last_player_health_by_peer.clear()
+	_recap_damage_sequence_by_player.clear()
 	_summary_stats_by_peer.clear()
 	_summary_reward_timeline_by_peer.clear()
 	_latest_peer_summary_overrides.clear()
@@ -188,6 +228,7 @@ func reset_summary_tracker() -> void:
 		"leaderboard_patch_key": RUN_TELEMETRY_STORE.leaderboard_patch_key_from_version(game_version),
 		"is_multiplayer": _world.is_multiplayer,
 		"player_count": _world.difficulty_provider.get_party_size(),
+		"local_peer_id": maxi(0, int(_world._resolve_local_peer_id())),
 	}
 	if run_context != null:
 		tracker_seed["player_uuid"] = String(run_context.get_profile_uuid())
@@ -291,6 +332,9 @@ func _schedule_party_provenance(immediate: bool = false) -> void:
 			service.call_deferred("bind_run_provenance", weakref(self), _provenance_token)
 
 func finish_run(outcome: String, death_event: Dictionary = {}) -> void:
+	if telemetry_run_finished:
+		return
+	var provisional_death: bool = outcome == "death" and _world.is_multiplayer and MultiplayerSessionManager.is_remote_replica()
 	var death_copy := death_event.duplicate(true)
 	var close_fields := {
 		"run_outcome": outcome
@@ -347,7 +391,8 @@ func finish_run(outcome: String, death_event: Dictionary = {}) -> void:
 		summary["duration_seconds"] = int(tracker_summary.get("duration_seconds", get_run_elapsed_seconds()))
 		summary["run_provenance"] = tracker_summary.run_provenance.duplicate(true)
 		summary["timestamp_text"] = String(tracker_summary.get("timestamp_text", ""))
-		_apply_endgame_chase_progress(latest_run_summary)
+		if not provisional_death:
+			_apply_endgame_chase_progress(latest_run_summary)
 		summary["unlocks"] = (latest_run_summary.get("unlocks", []) as Array).duplicate(true)
 	_latest_peer_summary_overrides = build_peer_summary_overrides()
 	summary["is_multiplayer"] = _world.is_multiplayer
@@ -355,6 +400,11 @@ func finish_run(outcome: String, death_event: Dictionary = {}) -> void:
 	if _world.is_multiplayer:
 		summary["host_peer_id"] = int(_world._resolve_local_peer_id())
 		summary["peers"] = build_peer_telemetry_entries()
+	# A reliable HP0 update can arrive before the host's outcome payload.
+	# Show the provisional local result immediately, but only persist a joiner's
+	# defeat after the authoritative per-player summary arrives.
+	if provisional_death:
+		return
 	if not can_record():
 		if not telemetry_run_finished:
 			RUN_HISTORY_STORE_SCRIPT.append(latest_run_summary)
@@ -434,6 +484,9 @@ func record_reward_choice(choice: Dictionary, mode: int, is_initial: bool) -> vo
 	}
 	if mode == ENUMS.RewardMode.BOSS:
 		event_data["boss_id"] = _world.last_defeated_boss_id
+	if mode == ENUMS.RewardMode.REST:
+		event_data["rest_action"] = String(choice.get("rest_action", ""))
+		event_data["restored_health"] = maxi(0, int(choice.get("restored_health", 0)))
 	RUN_TELEMETRY_STORE.append_reward_choice(telemetry_run_id, event_data)
 
 func record_reward_skip(mode: int, is_initial: bool, depth: int) -> void:
@@ -547,6 +600,7 @@ func on_player_health_changed(current_health: int, _max_health: int, player_node
 	var peer_id: int = _world._get_player_network_id(tracked_player)
 	var health_key := maxi(peer_id, 0)
 	var last_health := int(_summary_last_player_health_by_peer.get(health_key, -1))
+	_record_damage_recap_health(tracked_player, current_health, health_key)
 	if last_health < 0:
 		_summary_last_player_health_by_peer[health_key] = current_health
 		return
@@ -556,6 +610,19 @@ func on_player_health_changed(current_health: int, _max_health: int, player_node
 		if peer_id > 0:
 			_add_peer_stat_delta(peer_id, "damage_taken_total", health_loss)
 	_summary_last_player_health_by_peer[health_key] = current_health
+
+func _record_damage_recap_health(player_node: Node2D, health: int, peer_id: int) -> void:
+	var context: Dictionary = player_node.get_last_damage_event() if player_node.has_method("get_last_damage_event") else {}
+	var sequence := int(context.get("damage_sequence", 0))
+	var identity := player_node.get_instance_id()
+	var accepted: Dictionary = {}
+	if sequence > int(_recap_damage_sequence_by_player.get(identity, 0)):
+		_recap_damage_sequence_by_player[identity] = sequence
+		if int(context.get("health_after", -1)) == health:
+			accepted = context.duplicate(true)
+			accepted["elapsed_seconds"] = get_run_elapsed_seconds()
+			accepted["room_depth"] = _world.room_depth
+	run_summary_tracker.record_damage_recap_health(peer_id, health, accepted)
 
 func reconcile_damage_taken_to_player_health() -> void:
 	if run_summary_tracker == null:
@@ -567,6 +634,7 @@ func reconcile_damage_taken_to_player_health() -> void:
 		var peer_id: int = _world._get_player_network_id(player)
 		var health_key := maxi(peer_id, 0)
 		var peer_current_health := player.get_current_health()
+		_record_damage_recap_health(player, peer_current_health, health_key)
 		var last_health := int(_summary_last_player_health_by_peer.get(health_key, -1))
 		if last_health < 0:
 			_summary_last_player_health_by_peer[health_key] = peer_current_health
@@ -703,6 +771,10 @@ func record_rest_visit(depth: int) -> void:
 			continue
 		_append_peer_timeline_entry(peer_id, rest_entry.duplicate(true))
 
+func record_rest_recovery(restored_health: int, depth: int) -> void:
+	if run_summary_tracker != null:
+		run_summary_tracker.record_rest_recovery(restored_health, depth)
+
 
 # --- summaries --------------------------------------------------------------
 
@@ -734,6 +806,7 @@ func build_peer_summary_overrides() -> Dictionary:
 				build_ids.append(item_id)
 		overrides[peer_id] = {
 			"boss_no_hit_ids": run_summary_tracker.get_boss_no_hit_ids_for_peer(peer_id),
+			"damage_recap": run_summary_tracker.get_damage_recap(peer_id),
 			"character_id": active_character,
 			"character_name": character_name,
 			"build_summary": build_summary,
@@ -858,6 +931,8 @@ func summary_with_local_peer_stats(run_summary: Dictionary, stats_by_peer: Dicti
 
 func summary_with_local_peer_overrides(run_summary: Dictionary, peer_summary_overrides: Dictionary = {}) -> Dictionary:
 	var summary := run_summary.duplicate(true)
+	# Missing peer overrides must never expose the host's damage history.
+	summary["damage_recap"] = run_summary_tracker.get_damage_recap() if run_summary_tracker != null else {}
 	if peer_summary_overrides.is_empty():
 		return summary
 	var local_peer_id: int = _world._resolve_local_peer_id()
@@ -866,7 +941,7 @@ func summary_with_local_peer_overrides(run_summary: Dictionary, peer_summary_ove
 	var override := _lookup_peer_dictionary(peer_summary_overrides, local_peer_id)
 	if override.is_empty():
 		return summary
-	for key in ["character_id", "character_name", "build_summary", "reward_timeline", "build_ids", "boss_no_hit_ids"]:
+	for key in ["character_id", "character_name", "build_summary", "reward_timeline", "build_ids", "boss_no_hit_ids", "damage_recap"]:
 		if override.has(key):
 			summary[key] = override.get(key)
 	return summary
@@ -879,6 +954,9 @@ func finalize_synced_run_summary_for_joiner(synced_summary: Dictionary, outcome:
 	if synced_summary.is_empty():
 		return
 	var augmented := synced_summary.duplicate(true)
+	var synced_recap := RUN_SUMMARY_TRACKER_SCRIPT.DAMAGE_RECAP.normalize(augmented.get("damage_recap"))
+	if synced_recap.get("peer_id", -1) != int(_world._resolve_local_peer_id()):
+		augmented["damage_recap"] = run_summary_tracker.get_damage_recap() if run_summary_tracker != null else {}
 	# Dash evidence belongs to this input owner, never the host's avatar.
 	augmented["dash_tracking_complete"] = false
 	augmented["catalyst_tracking_complete"] = false

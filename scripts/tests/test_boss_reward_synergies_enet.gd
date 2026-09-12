@@ -27,6 +27,10 @@ func report(key: String) -> void:
 		zones.append((zone.get("interaction", {}) as Dictionary).duplicate(true))
 	world.fixture_result.rpc_id(1, key, {
 		"pillar": local_player.convergence_surge_hit_counter,
+		"seal": is_instance_valid(local_player.player_feedback.faultline_seal),
+		"seal_position": local_player.player_feedback.faultline_seal.global_position if is_instance_valid(local_player.player_feedback.faultline_seal) else Vector2.INF,
+		"host_seal": is_instance_valid(remote_player.player_feedback.faultline_seal),
+		"seal_timer": local_player.convergence_window_left,
 		"tempo": local_player.apex_momentum_stacks,
 		"host_pillar": remote_player.convergence_surge_hit_counter,
 		"host_tempo": remote_player.apex_momentum_stacks,
@@ -80,16 +84,52 @@ func test_marked_damage() -> void:
 	await inspect_owner("inspect_marked", 1, 2)
 
 func test_active_window_budget() -> void:
-	var threshold := maxi(2, 6 - int(round(remote_player.convergence_surge_damage_ratio * 8.0)))
-	await command("fill_pillar", {"count": threshold - remote_player.convergence_surge_hit_counter})
-	check(remote_player.convergence_window_left > 0.0 and remote_player.convergence_surge_hit_counter == 0, "Independent Electric actions open a real Pillar Field at its mapped threshold")
+	await command("fill_pillar", {"count": 3 - remote_player.convergence_surge_hit_counter})
+	check(remote_player.convergence_window_left > 0.0 and remote_player.convergence_surge_hit_counter == 0, "Independent Electric actions plant a real stationary seal on the host")
+	PlayerReplicationService._flush_pending_cue_events()
+	await command("inspect_seal", {"armed": true})
+	check(results.inspect_seal.seal and results.inspect_seal.seal_position == remote_player._convergence_origin and results.inspect_seal.seal_timer == 0.0, "Owning joiner receives the stationary start cue without simulating a gameplay fuse")
+	var victim := enemy(109)
+	victim.position = remote_player._convergence_origin + Vector2(65, 0)
+	var before: int = victim.get_current_health()
+	remote_player.position += Vector2(400, 200)
+	remote_player._update_convergence_window(.79)
+	check(victim.get_current_health() == before and remote_player.convergence_window_left > 0.0, "The joining owner's seal waits for its full fuse and does not follow the body")
+	# A different-location Field action is accepted during the fuse but cannot
+	# detonate this seal or bank a later charge.
 	await command("active_root")
-	check(remote_player.convergence_surge_hit_counter == 0, "A qualifying action during the active Field cannot charge or refresh Pillar")
-	remote_player._update_convergence_window(remote_player.convergence_window_left + 0.1)
+	remote_player._update_convergence_window(.02)
+	check(victim.get_current_health() == before - 180 and victim.velocity.is_zero_approx(), "The host delivers the joiner-owned normal Burst without Pull")
+	check(world.damage_events.back().peer == joiner_id, "Stationary Burst keeps authenticated joining-owner damage credit")
+	PlayerReplicationService._flush_pending_cue_events()
+	await command("inspect_seal", {"armed": false})
+	check(not results.inspect_seal.seal, "Normal Burst cue removes the joining owner’s armed visual")
+	remote_player._update_convergence_window(.61)
 	await command("repeat_active_root")
-	check(remote_player.convergence_window_left == 0.0 and remote_player.convergence_surge_hit_counter == 0, "The action first accepted during the Field cannot bank a delayed tick after expiry")
+	check(remote_player.convergence_window_left == 0.0 and remote_player.convergence_surge_hit_counter == 0, "A fuse-locked action cannot bank delayed charges after expiry")
+	victim.position = Vector2(8000, 0)
 	await command("fresh_electric")
-	check(remote_player.convergence_surge_hit_counter == 1, "A fresh Electric action rearms Pillar after its Field expires")
+	check(remote_player.convergence_surge_hit_counter == 1, "A fresh Electric action charges after rearm")
+	await command("fill_pillar", {"count": 2})
+	victim.position = remote_player._convergence_origin + Vector2(65, 0)
+	before = victim.get_current_health()
+	await command("field_detonate")
+	check(victim.get_current_health() == before - 270 and remote_player.convergence_window_left == 0.0, "Later real joining Field damage converts the seal into a stronger host Burst")
+	PlayerReplicationService._flush_pending_cue_events()
+	await command("inspect_seal", {"armed": false})
+	check(not results.inspect_seal.seal, "Early Field detonation clears the joining owner’s seal immediately")
+	check(world.damage_events.back().peer == joiner_id, "The Field-triggered Burst also retains joining-owner credit")
+	remote_player._update_convergence_window(.61)
+	await command("fresh_electric")
+	await command("fill_pillar", {"count": 2})
+	PlayerReplicationService._flush_pending_cue_events()
+	await command("inspect_seal", {"armed": true})
+	remote_player.set_alive(false)
+	PlayerReplicationService._flush_pending_cue_events()
+	await command("inspect_seal", {"armed": false})
+	check(not results.inspect_seal.seal, "Authoritative death clears the joining owner's visual through the real reliable cue")
+	remote_player.set_alive(true)
+	await command("fresh_electric")
 	await inspect_owner("inspect_window", 1, 2)
 
 func test_tempo_ancestry(client_id: int) -> void:
@@ -115,13 +155,13 @@ func test_tempo_ancestry(client_id: int) -> void:
 	await inspect_owner("inspect_ancestry", remote_player.convergence_surge_hit_counter, 2)
 
 func test_authority_and_cancellation() -> void:
-	var pillar := remote_player.convergence_surge_hit_counter
+	var pillar := 0 # Authenticated cancellation retires partial Faultline charge.
 	var tempo := remote_player.apex_momentum_stacks
 	var health_before: int = enemy(110).get_current_health()
 	await command("cancel_stale")
 	await command("forged_owner")
 	await command("forge_state")
-	check(remote_player.convergence_surge_hit_counter == pillar and remote_player.apex_momentum_stacks == tempo, "Stale action, wrong-owner metadata and forged state cannot alter host reward counters")
+	check(remote_player.convergence_surge_hit_counter == pillar and remote_player.apex_momentum_stacks == tempo, "Authenticated cancellation clears partial Faultline charge; stale damage and forged state cannot restore it")
 	check(enemy(110).get_current_health() == health_before and DAMAGE.status_snapshot(enemy(110), joiner_id).mark_ratio == 0.0, "Rejected shared requests cannot damage or Mark the actual target")
 	check(local_player.convergence_surge_hit_counter == 0 and local_player.apex_momentum_stacks == 0, "Wrong-owner requests cannot spend the host player's independent reward budget")
 	PlayerReplicationService.broadcast_cue_event(joiner_id, "shared_build_state", {"run": INTERACTIONS.current_run(), "room": INTERACTIONS.current_room(), "serial": 999999, "epoch": int(results.cancel_stale.epoch) - 1, "state": {"convergence_surge_hit_counter": 9999, "apex_momentum_stacks": 9999}}, true)
@@ -131,6 +171,16 @@ func test_authority_and_cancellation() -> void:
 	PlayerReplicationService._flush_pending_cue_events()
 	await command("inspect_observer")
 	check(results.inspect_observer.host_pillar == 1 and results.inspect_observer.host_tempo == 1, "Host-owned reward counters reach the observing joiner through native state RPCs")
+	for index in range(2):
+		var action := local_player.combat_interactions.begin_action("attack")
+		DAMAGE.apply_damage(enemy(108), 10, INTERACTIONS.damage_context(action, "melee", {"raw_amount": 10.0, "damage_coefficient": .1}), 1)
+	PlayerReplicationService._flush_pending_cue_events()
+	await command("inspect_host_seal", {"armed": true})
+	check(results.inspect_host_seal.host_seal, "Observing joiner renders the host owner's stationary seal")
+	local_player.clear_lingering_combat_effects()
+	PlayerReplicationService._flush_pending_cue_events()
+	await command("inspect_host_seal", {"armed": false})
+	check(not results.inspect_host_seal.host_seal, "Room/death cleanup also clears the observer’s host-owned seal")
 
 func client_command(name: String, payload: Dictionary) -> void:
 	match name:
@@ -165,9 +215,15 @@ func client_command(name: String, payload: Dictionary) -> void:
 				deal(101, "static_wake", local_player.combat_interactions.begin_action("dash"))
 		"active_root":
 			active_action = local_player.combat_interactions.begin_action("dash")
-			deal(101, "static_wake", active_action)
+			deal(102, "static_wake", active_action)
 		"repeat_active_root":
 			deal(102, "static_wake", active_action)
+		"inspect_seal":
+			check(await until(func(): return is_instance_valid(local_player.player_feedback.faultline_seal) == bool(payload.armed)), "Joining owner receives the expected Faultline visual state")
+		"inspect_host_seal":
+			check(await until(func(): return is_instance_valid(remote_player.player_feedback.faultline_seal) == bool(payload.armed)), "Observer receives the host owner's expected Faultline visual state")
+		"field_detonate":
+			deal(101, "static_wake", local_player.combat_interactions.begin_action("dash"))
 		"fresh_electric":
 			deal(101, "static_wake", local_player.combat_interactions.begin_action("dash"))
 		"tempo_crown":

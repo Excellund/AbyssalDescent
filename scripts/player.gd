@@ -1,12 +1,13 @@
 extends CharacterBody2D
 
+const CONVERGENCE_RULES := preload("res://scripts/shared/pillar_convergence_rules.gd")
 const HEALTH_STATE_SCRIPT := preload("res://scripts/health_state.gd")
 const PLAYER_FEEDBACK_SCRIPT := preload("res://scripts/player_feedback.gd")
 const ARCANA_MOTION_SCRIPT := preload("res://scripts/arcana_motion_controller.gd")
 const RETURNING_CRESCENT_SCRIPT := preload("res://scripts/returning_crescent_controller.gd")
 const SPARK_RELAY_SCRIPT := preload("res://scripts/spark_relay_controller.gd")
 const KEYWORD_SYNERGY_DEFAULTS := {
-	"patient_hunter_bonus_damage": 0, "marked_prey_bonus_damage": 0,
+	"patient_hunter_bonus_damage": 0, "marked_prey_bonus_damage": 0, "farshot_bonus_damage": 0,
 	"reward_stormbrand": false, "stormbrand_stacks": 0,
 	"stormbrand_mark_bonus_ratio": 0.10, "stormbrand_mark_duration": 3.0,
 	"stormbrand_slow_duration": 1.0, "stormbrand_slow_mult": 0.75,
@@ -53,7 +54,7 @@ const SIGIL_CHAIN_CHAIN_BONUS_PER_DEPTH: float = 0.40
 const SIGIL_CHAIN_CHAIN_BONUS_MAX_DEPTH: int = 6
 const SIGIL_CHAIN_BURST_DETONATION_MULT: int = 3
 const RUN_SNAPSHOT_PROPERTIES := [
-	"patient_hunter_bonus_damage", "marked_prey_bonus_damage",
+	"patient_hunter_bonus_damage", "marked_prey_bonus_damage", "farshot_bonus_damage",
 	"reward_stormbrand", "stormbrand_stacks", "stormbrand_mark_bonus_ratio", "stormbrand_mark_duration", "stormbrand_slow_duration", "stormbrand_slow_mult",
 	"reward_spark_relay", "spark_relay_stacks", "spark_relay_damage_ratio", "spark_relay_max_targets", "spark_relay_travel_range", "shatterwake_stacks",
 	"ruinous_impact_stacks", "sovereigns_double_stacks",
@@ -478,7 +479,12 @@ var apex_predator_combo_left: float = 0.0
 var void_echo_zones: Array[Dictionary] = []
 var _void_echo_pulse_kill_suppression_depth: int = 0
 var convergence_window_left: float = 0.0
-var convergence_pulse_cooldown: float = 0.0
+var convergence_pulse_cooldown: float = 0.0 # Rearm lock after the Burst; legacy name retained.
+var _convergence_origin := Vector2.ZERO
+var _convergence_damage_basis := 0.0
+var _convergence_power_ratio := 0.0
+var _convergence_cue_serial := 0
+var _convergence_seen_serial := 0
 var indomitable_damage_bank: float = 0.0
 var _indomitable_last_bank_gain_time: float = -999.0
 var _indomitable_attack_hit_count: int = 0
@@ -524,6 +530,7 @@ var contact_damage_grace_duration: float = 0.22
 var _contact_damage_grace_left: float = 0.0
 var _contact_damage_grace_ability: String = ""
 var last_damage_event: Dictionary = {}
+var _damage_event_sequence: int = 0
 var last_damage_breakdown: Dictionary = {
 	"source": "none",
 	"base_scaling_damage": 0,
@@ -602,6 +609,7 @@ var _last_broadcast_voidfire_enabled: bool = false
 
 var patient_hunter_bonus_damage: int = 0
 var marked_prey_bonus_damage: int = 0
+var farshot_bonus_damage: int = 0
 var reward_stormbrand: bool = false
 var stormbrand_stacks: int = 0
 var stormbrand_mark_bonus_ratio: float = 0.10
@@ -1056,6 +1064,7 @@ func _begin_effect_scope(kind: String, action: Dictionary = {}) -> Dictionary:
 	return DAMAGEABLE.begin_interaction_scope(action if not action.is_empty() else _capture_combat_action(kind))
 
 func _cancel_interactions() -> void:
+	_cancel_faultline_seal()
 	if combat_interactions != null:
 		combat_interactions.cancel()
 	if is_instance_valid(spark_relay_controller):
@@ -1741,17 +1750,23 @@ func take_damage(amount: int, damage_context: Dictionary = {}) -> void:
 		reduced = int(ceil(float(reduced) * incoming_contact_damage_mult))
 	reduced = maxi(1, reduced)
 	var health_before := _get_current_health()
-	health_state.take_damage(reduced)
-	if _get_current_health() < health_before:
-		var context_copy := damage_context.duplicate(true)
+	# HealthState emits health_changed and died synchronously. Publish the
+	# resolved context before those observers finalize the run's damage recap.
+	var context_copy: Dictionary = {}
+	if health_before > 0:
+		_damage_event_sequence += 1
+		context_copy = damage_context.duplicate(true)
 		context_copy["source"] = source
 		context_copy["ability"] = ability
 		context_copy["raw_amount"] = raw_amount
 		context_copy["final_amount"] = reduced
 		context_copy["health_before"] = health_before
-		context_copy["health_after"] = _get_current_health()
+		context_copy["health_after"] = maxi(0, health_before - reduced)
+		context_copy["damage_sequence"] = _damage_event_sequence
 		context_copy["unix_time"] = int(Time.get_unix_time_from_system())
 		last_damage_event = context_copy
+	health_state.take_damage(reduced)
+	if _get_current_health() < health_before:
 		damage_taken.emit(raw_amount, reduced, context_copy)
 		if _is_local_control_owner():
 			player_feedback.play_damage_flash()
@@ -2066,6 +2081,7 @@ func apply_run_snapshot(snapshot: Dictionary, clear_target_status: bool = true) 
 	void_dash_reset_pulse_left = 0.0
 	execution_edge_proc_display_left = 0.0
 	storm_crown_hit_counter = 0
+	convergence_surge_hit_counter = 0 # Saved charge progress belongs to the retired action epoch.
 	storm_crown_discharge_flash_left = 0.0
 	wraithstep_marked_enemy_expiry.clear()
 	wraithstep_remote_mark_expiry_by_network_enemy_id.clear()
@@ -2203,6 +2219,7 @@ func apply_network_cue_event(event_name: String, payload: Dictionary) -> void:
 		"boss_tempo_dash_wave": _on_cue_boss_tempo_dash_wave(payload)
 		"boss_convergence_start": _on_cue_boss_convergence_start(payload)
 		"boss_convergence_pulse": _on_cue_boss_convergence_pulse(payload)
+		"boss_convergence_clear": _on_cue_boss_convergence_clear(payload)
 		"unbroken_oath_bank_gain": _on_cue_unbroken_oath_bank_gain(payload)
 		"unbroken_oath_retaliation": _on_cue_unbroken_oath_retaliation(payload)
 		"fracture_field_fault_lines": _on_cue_fracture_field_fault_lines(payload)
@@ -2220,6 +2237,9 @@ func apply_owner_cue_event(event_name: String, payload: Dictionary) -> void:
 	if player_feedback == null or event_name.is_empty() or payload.is_empty():
 		return
 	match event_name:
+		"boss_convergence_start": _on_cue_boss_convergence_start(payload)
+		"boss_convergence_pulse": _on_cue_boss_convergence_pulse(payload)
+		"boss_convergence_clear": _on_cue_boss_convergence_clear(payload)
 		"shatterwake_burst":
 			if MultiplayerSessionManager.is_remote_replica():
 				_on_cue_world_ring(payload)
@@ -2376,16 +2396,60 @@ func _on_cue_boss_tempo_dash_wave(payload: Dictionary) -> void:
 
 
 func _on_cue_boss_convergence_start(payload: Dictionary) -> void:
-	var convergence_start_position := payload.get("position", global_position) as Vector2
-	var convergence_power_ratio := float(payload.get("power_ratio", 0.0))
-	player_feedback.play_boss_convergence_start(convergence_start_position, convergence_power_ratio)
-
+	if not _accept_faultline_cue(payload):
+		return
+	var origin: Vector2 = payload.get("position", Vector2.INF)
+	var ratio := float(payload.get("power_ratio", 0.0))
+	if origin.is_finite() and is_finite(ratio) and ratio > 0.0 and player_feedback != null:
+		player_feedback.play_boss_convergence_start(origin, ratio)
 
 func _on_cue_boss_convergence_pulse(payload: Dictionary) -> void:
-	var convergence_pulse_position := payload.get("position", global_position) as Vector2
-	var convergence_pulse_radius := float(payload.get("radius", 0.0))
-	player_feedback.play_boss_convergence_pulse(convergence_pulse_position, convergence_pulse_radius)
+	if not _accept_faultline_cue(payload):
+		return
+	var origin: Vector2 = payload.get("position", Vector2.INF)
+	var radius := float(payload.get("radius", 0.0))
+	if origin.is_finite() and is_finite(radius) and radius > 0.0 and radius <= 90.0 and player_feedback != null:
+		player_feedback.play_boss_convergence_pulse(origin, radius, bool(payload.get("field_triggered", false)))
 
+func _on_cue_boss_convergence_clear(payload: Dictionary) -> void:
+	if _accept_faultline_cue(payload, true) and player_feedback != null:
+		player_feedback.clear_boss_convergence()
+
+func _faultline_cue(values: Dictionary) -> Dictionary:
+	_convergence_cue_serial += 1
+	values["run"] = INTERACTION_REGISTRY.current_run()
+	values["room"] = INTERACTION_REGISTRY.current_room()
+	values["serial"] = _convergence_cue_serial
+	values["epoch"] = maxi(combat_interactions._accepted_epoch, combat_interactions._epoch)
+	return values
+
+func _accept_faultline_cue(payload: Dictionary, clearing: bool = false) -> bool:
+	if payload.get("run") != INTERACTION_REGISTRY.current_run() or payload.get("room") != INTERACTION_REGISTRY.current_room() or not (payload.get("serial") is int) or int(payload.serial) <= _convergence_seen_serial or not (payload.get("epoch") is int):
+		return false
+	if not clearing:
+		var epoch := int(payload.epoch)
+		var current_epoch := maxi(combat_interactions._accepted_epoch, combat_interactions._visual_epoch)
+		if shared_build_runtime != null:
+			current_epoch = maxi(current_epoch, shared_build_runtime._received_epoch)
+		if not _is_alive_state or _combat_removed or not combat_damage_enabled or encounter_input_frozen or epoch <= 0 or epoch < current_epoch or (_is_local_control_owner() and epoch != combat_interactions._epoch):
+			return false
+	_convergence_seen_serial = int(payload.serial)
+	return true
+
+func _cancel_faultline_seal() -> void:
+	var had_charge := convergence_surge_hit_counter > 0
+	var had_seal := convergence_window_left > 0.0 or (player_feedback != null and is_instance_valid(player_feedback.faultline_seal))
+	convergence_surge_hit_counter = 0
+	convergence_window_left = 0.0
+	convergence_pulse_cooldown = 0.0
+	_convergence_interaction.clear()
+	if player_feedback != null:
+		player_feedback.clear_boss_convergence()
+	if not MultiplayerSessionManager.is_remote_replica():
+		if had_seal:
+			_broadcast_cue_event("boss_convergence_clear", _faultline_cue({"clear": true}), true)
+		if (had_seal or had_charge) and shared_build_runtime != null:
+			shared_build_runtime.publish_state()
 
 func _on_cue_unbroken_oath_bank_gain(payload: Dictionary) -> void:
 	var oath_bank_position := payload.get("position", global_position) as Vector2
@@ -2429,7 +2493,7 @@ func _on_cue_boss_void_zone_empowered_hit(payload: Dictionary) -> void:
 func _broadcast_cue_event(event_name: String, payload: Dictionary, reliable: bool = false) -> void:
 	if player_id <= 0:
 		return
-	if not _is_local_control_owner() and not (event_name == "warden_verdict" and MultiplayerSessionManager.should_broadcast()):
+	if not _is_local_control_owner() and not (event_name in ["warden_verdict", "boss_convergence_start", "boss_convergence_pulse", "boss_convergence_clear"] and MultiplayerSessionManager.should_broadcast()):
 		return
 	if event_name.is_empty() or payload.is_empty():
 		return
@@ -2615,6 +2679,7 @@ func apply_power_for_test(power_id: String) -> bool:
 		return true
 
 	var boon_ids := {
+		"farshot": true,
 		"ruinous_impact": true,
 		"sovereigns_double": true,
 		"first_strike": true,
@@ -2859,7 +2924,7 @@ func _perform_melee_attack(attack_direction: Vector2, melee_context: Dictionary)
 	if indomitable_spirit_damage_reduction > 0.0:
 		combat_interactions.claim_reaction(tagged_attack, "oath_attack_start")
 	if _indomitable_spirit_primed:
-		_indomitable_pending_melee_bonus = _consume_indomitable_spirit_bonus(oath_target_point)
+		_indomitable_pending_melee_bonus = _consume_indomitable_spirit_bonus(oath_target_point, true, strike_origin)
 		if _indomitable_pending_melee_bonus > 0:
 			_indomitable_pending_damage_coefficient = _get_indomitable_retaliation_ratio()
 			_indomitable_oath_spent_this_attack = true
@@ -3179,9 +3244,12 @@ func clear_lingering_combat_effects() -> void:
 	apex_momentum_stack_left = 0.0
 	if player_feedback != null:
 		player_feedback.clear_boss_tempo_state()
-	convergence_surge_hit_counter = 0
-	convergence_window_left = 0.0
-	convergence_pulse_cooldown = 0.0
+	_cancel_faultline_seal()
+	_convergence_origin = Vector2.ZERO
+	_convergence_damage_basis = 0.0
+	_convergence_power_ratio = 0.0
+	if player_feedback != null:
+		player_feedback.clear_boss_convergence()
 	farline_focus_proc_flash_left = 0.0
 	farline_focus_ready = false
 	veilstep_rhythm_shards = 0
@@ -4615,7 +4683,7 @@ func _get_void_echo_zone_bonus(enemy_node: Object, base_damage: int) -> int:
 			return maxi(1, int(round(float(base_damage) * (0.14 + float(void_echo_damage) * 0.0015))))
 	return 0
 
-func _gain_indomitable_oath_from_hit(enemy_node: Object, source: String) -> void:
+func _gain_indomitable_oath_from_hit(enemy_node: Object, source: String, attack_hit_index: int = -1) -> void:
 	if indomitable_spirit_damage_reduction <= 0.0:
 		return
 	if not is_instance_valid(enemy_node):
@@ -4626,8 +4694,8 @@ func _gain_indomitable_oath_from_hit(enemy_node: Object, source: String) -> void
 		return
 	if _indomitable_oath_spent_this_attack:
 		return
-	var combo_index := _indomitable_attack_hit_count
-	_indomitable_attack_hit_count += 1
+	var combo_index := attack_hit_index if attack_hit_index >= 0 else _indomitable_attack_hit_count
+	_indomitable_attack_hit_count = combo_index + 1
 	var combo_mult := 1.0
 	if combo_index > 0:
 		combo_mult = pow(2.1, float(combo_index))
@@ -4653,7 +4721,7 @@ func _gain_indomitable_oath_from_hit(enemy_node: Object, source: String) -> void
 		})
 
 
-func _consume_indomitable_spirit_bonus(hit_position: Vector2, play_feedback: bool = true) -> int:
+func _consume_indomitable_spirit_bonus(hit_position: Vector2, play_feedback: bool = true, attack_origin: Vector2 = Vector2.INF) -> int:
 	if indomitable_spirit_damage_reduction <= 0.0:
 		return 0
 	if not _indomitable_spirit_primed:
@@ -4664,9 +4732,11 @@ func _consume_indomitable_spirit_bonus(hit_position: Vector2, play_feedback: boo
 	indomitable_damage_bank = 0.0
 	var ratio := _get_indomitable_retaliation_ratio()
 	if play_feedback and player_feedback != null:
-		player_feedback.play_boss_unbroken_retaliation(global_position, hit_position, ratio)
+		# Use this Attack's captured origin, including a body-origin deployment.
+		var origin := attack_origin if attack_origin.is_finite() else global_position
+		player_feedback.play_boss_unbroken_retaliation(origin, hit_position, ratio)
 		_broadcast_cue_event("unbroken_oath_retaliation", {
-			"player_position": global_position,
+			"player_position": origin,
 			"impact_position": hit_position,
 			"bonus_ratio": ratio
 		})
@@ -4816,31 +4886,58 @@ func _update_indomitable_damage_bank(delta: float) -> void:
 	indomitable_damage_bank = maxf(0.0, indomitable_damage_bank - decay_per_second * delta)
 
 func _update_convergence_window(delta: float) -> void:
-	if convergence_window_left <= 0.0 or convergence_surge_damage_ratio <= 0.0:
+	if not is_finite(delta) or delta <= 0.0 or MultiplayerSessionManager.is_remote_replica():
+		return
+	convergence_pulse_cooldown = maxf(0.0, convergence_pulse_cooldown - delta)
+	if convergence_window_left <= 0.0:
+		return
+	if not _is_alive_state or not combat_damage_enabled or encounter_input_frozen or not combat_interactions.accepts_action(_convergence_interaction):
+		_cancel_faultline_seal()
 		return
 	convergence_window_left = maxf(0.0, convergence_window_left - delta)
-	convergence_pulse_cooldown = maxf(0.0, convergence_pulse_cooldown - delta)
-	if convergence_pulse_cooldown > 0.0:
-		return
-	convergence_pulse_cooldown = maxf(0.14, 0.3 - convergence_surge_damage_ratio * 0.25)
-	var pulse_radius := clampf(92.0 + 120.0 * convergence_surge_damage_ratio, 92.0, 250.0)
-	var pulse_damage := maxi(1, int(round(float(damage) * (0.28 + convergence_surge_damage_ratio * 0.8))))
-	if player_feedback != null:
-		player_feedback.play_boss_convergence_pulse(global_position, pulse_radius)
-		_broadcast_cue_event("boss_convergence_pulse", {
-			"position": global_position,
-			"radius": pulse_radius
-		})
-	for enemy_node in get_tree().get_nodes_in_group("enemies"):
-		if not (enemy_node is Node2D):
-			continue
-		if not DAMAGEABLE.can_take_damage(enemy_node):
-			continue
-		var enemy_body := enemy_node as Node2D
-		if enemy_body.global_position.distance_to(global_position) > pulse_radius:
-			continue
-		DAMAGEABLE.apply_damage(enemy_node, pulse_damage, INTERACTION_REGISTRY.damage_context(_convergence_interaction, "convergence_window", {"damage_coefficient": 0.28 + convergence_surge_damage_ratio * 0.8, "is_ground_attack": true, "attack_type": "convergence_window"}), player_id)
+	if convergence_window_left == 0.0:
+		_detonate_convergence(false)
 
+func _try_detonate_convergence_from_field(position: Vector2) -> void:
+	if convergence_window_left <= 0.0 or not position.is_finite():
+		return
+	if position.distance_to(_convergence_origin) <= CONVERGENCE_RULES.radius(_convergence_power_ratio):
+		_detonate_convergence(true)
+
+func _detonate_convergence(field_triggered: bool) -> void:
+	var action := _convergence_interaction.duplicate(true)
+	if MultiplayerSessionManager.is_remote_replica() or not _is_alive_state or not combat_damage_enabled or encounter_input_frozen or get_tree().paused or not combat_interactions.accepts_action(action):
+		return
+	# Close and lock before descendants: Burst -> Relay -> Electric and
+	# delayed kill-Fields must never re-open this reward's action allowance.
+	convergence_window_left = 0.0
+	_convergence_interaction.clear()
+	convergence_pulse_cooldown = CONVERGENCE_RULES.cooldown(_convergence_power_ratio)
+	var origin := _convergence_origin
+	var radius := CONVERGENCE_RULES.radius(_convergence_power_ratio)
+	var coefficient := CONVERGENCE_RULES.damage_ratio(_convergence_power_ratio, field_triggered)
+	var raw := _convergence_damage_basis * coefficient
+	var generation := combat_interactions._cancel_generation
+	var cue := _faultline_cue({"position": origin, "radius": radius, "field_triggered": field_triggered})
+	_on_cue_boss_convergence_pulse(cue)
+	_broadcast_cue_event("boss_convergence_pulse", cue, true)
+	var exclusions: Array[RID] = []
+	for group in ["combat_players", "enemies"]:
+		for body in get_tree().get_nodes_in_group(group):
+			if body is CollisionObject2D:
+				exclusions.append(body.get_rid())
+	for node in get_tree().get_nodes_in_group("enemies"):
+		if not (node is Node2D) or node.is_queued_for_deletion() or not DAMAGEABLE.can_take_damage(node) or DAMAGEABLE._read_target_health(node) <= 0:
+			continue
+		if node.global_position.distance_to(origin) > radius:
+			continue
+		var sight := PhysicsRayQueryParameters2D.create(origin, node.global_position, 0xFFFFFFFF, exclusions)
+		if origin.distance_squared_to(node.global_position) > 0.01 and not get_world_2d().direct_space_state.intersect_ray(sight).is_empty():
+			continue
+		var context := INTERACTION_REGISTRY.damage_context(action, "convergence_window", {"raw_amount": raw, "damage_coefficient": coefficient, "secondary": true, "attack_origin": origin, "is_ground_attack": true})
+		DAMAGEABLE.apply_keyword_reaction_damage(node, int(round(raw)), context, player_id)
+		if generation != combat_interactions._cancel_generation or not combat_interactions.accepts_action(action) or not _is_alive_state or not combat_damage_enabled:
+			return
 
 func _apply_void_echo(kill_pos: Vector2) -> void:
 	if not kill_pos.is_finite():
@@ -4965,30 +5062,22 @@ func _update_null_corridor_segments(delta: float) -> void:
 		null_corridor_segments.remove_at(remove_indices.pop_back())
 
 func _try_apply_convergence_surge(epicenter: Vector2, _source_damage: int, _primary_enemy_id: int) -> void:
-	if convergence_surge_damage_ratio <= 0.0:
+	if convergence_surge_damage_ratio <= 0.0 or not epicenter.is_finite() or MultiplayerSessionManager.is_remote_replica() or not _is_alive_state or _combat_removed or not combat_damage_enabled or encounter_input_frozen or get_tree().paused:
 		return
-	# Convergence cannot refresh while active; rearm only after it ends.
-	if convergence_window_left > 0.0:
+	if convergence_window_left > 0.0 or convergence_pulse_cooldown > 0.0:
 		return
 	convergence_surge_hit_counter += 1
-	var proc_every := maxi(2, 6 - int(round(convergence_surge_damage_ratio * 8.0)))
-	if convergence_surge_hit_counter < proc_every:
+	if convergence_surge_hit_counter < CONVERGENCE_RULES.charges(convergence_surge_damage_ratio):
 		return
 	convergence_surge_hit_counter = 0
 	_convergence_interaction = _capture_combat_action("convergence_window")
-	convergence_window_left = maxf(convergence_window_left, 1.2 + convergence_surge_damage_ratio * 1.8)
-	convergence_pulse_cooldown = 0.0
-	_register_shared_field("convergence_window", {"shape": "moving_circle", "center": global_position, "radius": clampf(92.0 + 120.0 * convergence_surge_damage_ratio, 92.0, 250.0), "remaining": convergence_window_left}, _convergence_interaction)
-	var dash_refund := 0.12 + 0.24 * convergence_surge_damage_ratio
-	_refund_shared_dash(dash_refund)
-	if player_feedback != null:
-		player_feedback.play_boss_convergence_start(epicenter, convergence_surge_damage_ratio)
-		_broadcast_cue_event("boss_convergence_start", {
-			"position": epicenter,
-			"power_ratio": convergence_surge_damage_ratio
-		})
-
-# --- Eclipse Mark ---
+	_convergence_origin = epicenter
+	_convergence_damage_basis = float(damage)
+	_convergence_power_ratio = convergence_surge_damage_ratio
+	convergence_window_left = CONVERGENCE_RULES.duration(_convergence_power_ratio)
+	var cue := _faultline_cue({"position": epicenter, "power_ratio": _convergence_power_ratio})
+	_on_cue_boss_convergence_start(cue)
+	_broadcast_cue_event("boss_convergence_start", cue, true)
 
 func _apply_eclipse_mark(kill_pos: Vector2) -> void:
 	if not kill_pos.is_finite():

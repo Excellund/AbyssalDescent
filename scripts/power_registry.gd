@@ -15,6 +15,9 @@ static func get_power_keyword_metadata(power_id: String, level: int = 1, _prisma
 	var conditions: Array[String] = []
 	var condition_text := ""
 	match power_id:
+		"farshot":
+			accepts = ["damage"]
+			condition_text = "Foe center at least 160 from your current body when damage lands, including Fields and Echoes. The bonus scales with contact time and copied-effect strength. Effigy and Projectile origins do not set the distance."
 		"patient_hunter", "marked_prey":
 			var condition := "slow" if power_id == "patient_hunter" else "mark"
 			accepts = ["damage", condition]
@@ -30,7 +33,7 @@ static func get_power_keyword_metadata(power_id: String, level: int = 1, _prisma
 		"spark_relay":
 			accepts = ["burst"]
 			produces = ["projectile", "electric", "damage"]
-			condition_text = "Accepted Burst damage fires one Electric Projectile from your body toward the struck foe's position per original action. It hits each foe once, stops at solid cover and retains that action's reaction limits."
+			condition_text = "Accepted Burst damage fires one seeking Electric Projectile from your body per original action. It prefers the struck foe while alive and reachable, then retargets living foes after a hit or target death. It hits each foe once, shares one travel budget and stops at solid cover. No reachable foe means no bolt."
 		"shatterwake":
 			accepts = ["projectile"]
 			produces = ["burst", "damage"]
@@ -49,7 +52,7 @@ static func get_power_keyword_metadata(power_id: String, level: int = 1, _prisma
 			accepts = ["damage"]
 			condition_text = "Your accepted damage refreshes movement speed; repeated triggers do not stack its strength."
 		"aegis_field":
-			produces = ["slow"]
+			produces = ["burst", "slow"]
 			condition_text = "Automatic pulse on its cooldown. The pulse does not deal damage or leave a Field."
 		"hunters_snare":
 			produces = ["slow"]
@@ -62,8 +65,10 @@ static func get_power_keyword_metadata(power_id: String, level: int = 1, _prisma
 			condition_text = "Contact during your normal Dash deals damage and applies Slow."
 		"riftpunch":
 			accepts = ["dash", "attack_hit"]
+			if level >= 2:
+				produces.append("slow")
 			if level >= 3:
-				produces = ["damage", "burst"]
+				produces.append_array(["damage", "burst"])
 			condition_text = "Dash completion primes one deliberate attack hit, including a ranged arc."
 		"reaper_step":
 			accepts = ["kill"]
@@ -114,11 +119,15 @@ static func get_power_keyword_metadata(power_id: String, level: int = 1, _prisma
 			condition_text = "Connected Attacks build Heat; overheating releases a damaging Burst, empties Heat and briefly locks Attacks."
 		"farline_volley":
 			accepts = ["attack_hit", "dash"]
+			if level >= 2:
+				produces.append("slow")
 			if level >= 3:
-				produces = ["burst", "damage"]
+				produces.append_array(["burst", "damage"])
 			condition_text = "Direct attack hits near the edge of reach build stacks; Dash spends/resets them."
 		"sigil_chain":
 			produces = ["field", "damage"]
+			if level >= 2:
+				produces.append("slow")
 			accepts = ["attack_hit"]
 			condition_text = "Four attack hits arm a sigil; the next connected Attack places its Field. Hexweaver's Sigil Burst detonates existing sigils."
 		"blast_drive":
@@ -147,9 +156,9 @@ static func get_power_keyword_metadata(power_id: String, level: int = 1, _prisma
 			conditions = ["mark"]
 			condition_text = "Attack hits or your damage against already Marked foes build one Tempo stack per original action. Completing Dash, Recoil or Orbit spends the stacks in a Burst; its accepted damage refunds Dash once. This Burst and its descendants cannot build Tempo."
 		"pillar_convergence":
-			produces = ["field", "damage"]
-			accepts = ["attack_hit", "electric"]
-			condition_text = "Attack hits or your Electric damage add one charge per original action, including all targets, ticks and descendants. Charging pauses while the moving Field is active; actions that qualify during this window cannot charge it later."
+			produces = ["burst", "damage"]
+			accepts = ["attack_hit", "electric", "field"]
+			condition_text = "Attack hits or your Electric damage add one charge per original action. Three/two charges plant one stationary seal at the struck foe. It Bursts after 0.8s; later owned Field damage inside detonates it early at +50% damage. No charging while armed or for 0.6s afterward; actions spent then cannot charge later. Its descendants cannot plant another seal."
 		"unbroken_oath":
 			accepts = ["attack_hit", "attack"]
 		"edict_of_the_court":
@@ -172,7 +181,7 @@ static func get_power_keyword_metadata(power_id: String, level: int = 1, _prisma
 	for id in produces + accepts + conditions:
 		if not description_keywords.has(id):
 			description_keywords.append(id)
-	if power_id in ["first_strike", "heavy_blow", "bloodpact", "severing_edge", "patient_hunter", "marked_prey", "static_wake", "sigil_chain", "blast_drive", "razor_orbit", "returning_crescent", "null_corridor", "ruinous_impact"]:
+	if power_id in ["first_strike", "heavy_blow", "bloodpact", "severing_edge", "patient_hunter", "marked_prey", "farshot", "static_wake", "sigil_chain", "blast_drive", "razor_orbit", "returning_crescent", "null_corridor", "ruinous_impact"]:
 		description_keywords.append("damage_stat")
 	return {"produces": produces, "accepts": accepts, "conditions": conditions, "condition_text": condition_text, "description_keywords": description_keywords}
 
@@ -221,6 +230,7 @@ const BOSS_EPITAPHS := {
 const DAMAGE_MODEL_BY_POWER := {
 	"patient_hunter": {"kind": DAMAGE_KIND_FLAT, "scale_source": DAMAGE_SCALE_SOURCE_NONE, "formula_note": "+X conditional Damage basis against already Slowed foes"},
 	"marked_prey": {"kind": DAMAGE_KIND_FLAT, "scale_source": DAMAGE_SCALE_SOURCE_NONE, "formula_note": "+X conditional Damage basis against already Marked foes"},
+	"farshot": {"kind": DAMAGE_KIND_FLAT, "scale_source": DAMAGE_SCALE_SOURCE_NONE, "formula_note": "+X conditional Damage basis against foes at least 160 from the owner's current body when damage lands"},
 	"stormbrand": {"kind": DAMAGE_KIND_NONE, "scale_source": DAMAGE_SCALE_SOURCE_NONE, "formula_note": "Timed Mark from accepted Electric damage; level 3 also applies Slow to an already Marked foe"},
 	"spark_relay": {"kind": DAMAGE_KIND_SCALING, "scale_source": DAMAGE_SCALE_SOURCE_HIT, "formula_note": "A fraction of the triggering Burst's unconditioned damage descriptor and coefficient"},
 	"shatterwake": {"kind": DAMAGE_KIND_SCALING, "scale_source": DAMAGE_SCALE_SOURCE_HIT, "formula_note": "A fraction of the triggering Projectile's unconditioned damage descriptor and coefficient"},
@@ -363,7 +373,7 @@ const DAMAGE_MODEL_BY_POWER := {
 	"pillar_convergence": {
 		"kind": DAMAGE_KIND_SCALING,
 		"scale_source": DAMAGE_SCALE_SOURCE_DAMAGE,
-		"formula_note": "Attack hits or Electric damage add one charge per action; Convergence lasts ~1.6-2.0s and pulses around the player for ~46%-63% of Damage, without charging while active"
+		"formula_note": "Three/two Attack-hit or Electric actions plant a stationary seal; 0.8s fuse, radius 76/90, Burst 180/240% of Damage. Later owned Field damage inside detonates it early at 270/360%. One seal, no movement, 0.6s rearm lock; own descendants cannot charge another seal"
 	},
 	"unbroken_oath": {
 		"kind": DAMAGE_KIND_HYBRID,
@@ -395,6 +405,7 @@ const DAMAGE_MODEL_BY_POWER := {
 const UPGRADE_BALANCE := {
 	"patient_hunter": {"kind": "add_int", "property": "patient_hunter_bonus_damage", "add": 12},
 	"marked_prey": {"kind": "add_int", "property": "marked_prey_bonus_damage", "add": 12},
+	"farshot": {"kind": "add_int", "property": "farshot_bonus_damage", "add": 10},
 	"first_strike": {
 		"kind": "add_int",
 		"property": "first_strike_bonus_damage",
@@ -513,6 +524,7 @@ const BOSS_REWARD_BALANCE := {
 const UPGRADE_STACK_LIMITS := {
 	"patient_hunter": 3,
 	"marked_prey": 3,
+	"farshot": 3,
 	"first_strike": 3,
 	"heavy_blow": 3,
 	"wide_arc": 3,
@@ -1077,6 +1089,7 @@ const POWER_DISPLAY_CATEGORY_BOSS_REWARD := "boss_reward"
 const POWER_DISPLAY_METADATA := {
 	"patient_hunter": {"name": "Patient Hunter", "category": POWER_TYPE_UPGRADE},
 	"marked_prey": {"name": "Marked Prey", "category": POWER_TYPE_UPGRADE},
+	"farshot": {"name": "Farshot", "category": POWER_TYPE_UPGRADE},
 	"stormbrand": {"name": "Stormbrand", "category": POWER_TYPE_TRIAL},
 	"spark_relay": {"name": "Spark Relay", "category": POWER_TYPE_TRIAL},
 	"shatterwake": {"name": "Shatterwake", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
@@ -1119,7 +1132,7 @@ const POWER_DISPLAY_METADATA := {
 	"wardens_verdict": {"name": "Warden's Verdict", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
 	"lacuna_echo": {"name": "Lacuna Well", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
 	"sovereign_tempo": {"name": "Sovereign Tempo", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
-	"pillar_convergence": {"name": "Pillar Convergence", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
+	"pillar_convergence": {"name": "Faultline Seal", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
 	"unbroken_oath": {"name": "Unbroken Oath", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
 	"edict_of_the_court": {"name": "Edict of the Court", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
 	"null_corridor": {"name": "Null Corridor", "category": POWER_DISPLAY_CATEGORY_BOSS_REWARD},
@@ -1137,6 +1150,7 @@ const UPGRADE_POOL_IDS: Array[String] = [
 	"blink_dash", "iron_skin", "battle_trance", "surge_step", "heartstone",
 	"bloodpact", "severing_edge",
 	"patient_hunter", "marked_prey",
+	"farshot",
 ]
 
 const TRIAL_POWER_POOL_IDS: Array[String] = [

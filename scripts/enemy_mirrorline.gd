@@ -1,11 +1,14 @@
 extends "res://scripts/enemy_base.gd"
 
+const ATTACK_CALLOUT := preload("res://scripts/shared/enemy_attack_callout.gd")
 const DAMAGEABLE := preload("res://scripts/shared/damageable.gd")
 
 const STATE_STALK := 0
 const STATE_TELEGRAPH := 1
 const STATE_REFLECT := 2
 const STATE_COOLDOWN := 3
+const ECHO_WIRE_STRIDE := 20
+const MIRROR_WIRE_HEADER := 44
 
 # --- Scale & Health ---
 @export var max_health_apex: int = 660
@@ -57,6 +60,8 @@ const STATE_COOLDOWN := 3
 # (grace flash + telegraph + a beat into reflect). After it elapses the boss is vulnerable again, but the
 # twin axis remains active for the rest of the fight as the lasting Sundered consequence.
 @export var sundered_reduction_duration: float = 2.0
+@export var sundered_telegraph_extension: float = 0.30
+@export var sundered_cooldown_extension: float = 0.25
 
 @export var arena_size: Vector2 = Vector2(1160.0, 860.0)
 @export var arena_center_world: Vector2 = Vector2.ZERO
@@ -69,6 +74,7 @@ var _state_time_left: float = 0.0
 var _contact_attack_cooldown_left: float = 0.0
 var _reflect_echoes_remaining: int = 0
 var _reflect_next_echo_time_left: float = 0.0
+var _reflect_next_axis: int = 0
 var _seam_beam_tick_left: float = 0.0
 
 # Telegraph axis: line through arena center with given unit normal vector.
@@ -96,6 +102,9 @@ var _sundered_health_fill_default: Color = Color(0.0, 0.0, 0.0, 0.0)
 var _sundered_health_bg_default: Color = Color(0.0, 0.0, 0.0, 0.0)
 var _sundered_health_colors_cached: bool = false
 var _next_echo_id: int = 0
+var _mirror_wire_sequence: int = 0
+var _mirror_received_sequence: int = -1
+var _projectile_sync_was_active := false
 
 func should_force_network_runtime_state_sampling() -> bool:
 	return _state == STATE_TELEGRAPH or _state == STATE_REFLECT or not _active_echoes.is_empty()
@@ -107,46 +116,106 @@ func get_priority_network_sync_interval_sec() -> float:
 		return 0.03
 	return 0.0
 
+func get_network_runtime_state() -> Dictionary:
+	var runtime := super.get_network_runtime_state()
+	if not is_spawn_transporting():
+		# The zero transport timer already retires its art. Omit the inactive
+		# transport's static seed/duration to leave room for real status packets
+		# beside a full twin barrage. Both return when transport starts again.
+		runtime.erase("spawn_transport_duration")
+		runtime.erase("spawn_transport_seed")
+	return runtime
+
+func get_projectile_network_sync_state() -> Dictionary:
+	if not network_simulation_enabled:
+		return {}
+	var active := _state in [STATE_TELEGRAPH, STATE_REFLECT, STATE_COOLDOWN] or not _active_echoes.is_empty()
+	if not active and not _projectile_sync_was_active:
+		return {}
+	_projectile_sync_was_active = active
+	return _get_custom_network_runtime_state()
+
+func apply_projectile_network_sync_state(sync_state: Dictionary) -> void:
+	if network_simulation_enabled:
+		return
+	_apply_custom_network_runtime_state(sync_state)
+	queue_redraw()
+
 func _get_custom_network_runtime_state() -> Dictionary:
-	# Short keys keep the per-tick custom payload under the broadcaster's ~900B size limit. With 4
-	# active echoes the long-key version exceeded the cap and `_fit_state_to_size_limit` would erase
-	# `custom` wholesale, hiding any echoes that spawned after the first one or two. time_total is
-	# elided (joiner uses echo_lifetime) and hit is elided (host removes hit echoes immediately, so
-	# this array only ever carries live ones).
-	var echoes_payload: Array = []
-	for echo_variant in _active_echoes:
-		if echo_variant is Dictionary:
-			var echo := echo_variant as Dictionary
-			echoes_payload.append({
-				"i": int(echo.get("id", 0)),
-				"o": echo.get("origin", Vector2.ZERO),
-				"v": echo.get("velocity", Vector2.ZERO),
-				"t": float(echo.get("time_left", 0.0))
-			})
+	# A twin volley can leave sixteen echoes alive for two players. Per-echo
+	# dictionaries exceeded the broadcaster budget and hid the later shots.
+	# Keep IDs, origins and lifetimes; velocities use tenths of a unit, with
+	# at most 0.19px positional error over the complete default echo lifetime.
+	var echoes_payload := PackedByteArray()
+	echoes_payload.resize(_active_echoes.size() * ECHO_WIRE_STRIDE)
+	for index in range(_active_echoes.size()):
+		var echo: Dictionary = _active_echoes[index]
+		var offset := index * ECHO_WIRE_STRIDE
+		var origin: Vector2 = echo.origin
+		var direction: Vector2 = echo.velocity
+		echoes_payload.encode_u32(offset, int(echo.id))
+		echoes_payload.encode_float(offset + 4, origin.x)
+		echoes_payload.encode_float(offset + 8, origin.y)
+		echoes_payload.encode_s16(offset + 12, clampi(roundi(direction.x * 10.0), -32768, 32767))
+		echoes_payload.encode_s16(offset + 14, clampi(roundi(direction.y * 10.0), -32768, 32767))
+		echoes_payload.encode_float(offset + 16, float(echo.time_left))
+	# Pack the phase/pose too, leaving room for a full base runtime snapshot
+	# and shared status effects rather than fitting only ordinary deltas.
+	var packet := PackedByteArray()
+	packet.resize(MIRROR_WIRE_HEADER)
+	packet.encode_u8(0, _state)
+	packet.encode_u8(1, (1 if _twin_pending else 0) | (2 if _twin_active else 0))
+	packet.encode_u16(2, clampi(roundi(_state_time_left * 1000.0), 0, 65535))
+	packet.encode_float(4, _contact_attack_cooldown_left)
+	packet.encode_float(8, _telegraph_total)
+	packet.encode_float(12, _sundered_hit_flash_left)
+	packet.encode_float(16, _sundered_reduction_left)
+	packet.encode_float(20, _axis_prev_normal.angle())
+	packet.encode_float(24, _axis_prev_origin.x)
+	packet.encode_float(28, _axis_prev_origin.y)
+	packet.encode_float(32, _axis_target_normal.angle())
+	packet.encode_float(36, _axis_target_origin.x)
+	packet.encode_float(40, _axis_target_origin.y)
+	packet.append_array(echoes_payload)
+	_mirror_wire_sequence += 1
+	return {"m": packet, "q": _mirror_wire_sequence, "r": EnemyReplicationService._current_room_sync_id()}
+
+func _decode_mirror_state(state: Dictionary) -> Dictionary:
+	if not state.has("m"):
+		return state
+	var packet: Variant = state.m
+	if not (packet is PackedByteArray) or packet.size() < MIRROR_WIRE_HEADER or (packet.size() - MIRROR_WIRE_HEADER) % ECHO_WIRE_STRIDE != 0:
+		return {}
+	if packet.decode_u8(0) > STATE_COOLDOWN:
+		return {}
+	for offset in range(4, MIRROR_WIRE_HEADER, 4):
+		if not is_finite(packet.decode_float(offset)):
+			return {}
+	var flags: int = packet.decode_u8(1)
 	return {
-		"s": _state,
-		"cc": _contact_attack_cooldown_left,
-		"pn": _axis_prev_normal,
-		"po": _axis_prev_origin,
-		"tn": _axis_target_normal,
-		"to": _axis_target_origin,
-		"tt": _telegraph_total,
-		"tp": _twin_pending,
-		"ta": _twin_active,
-		"hf": _sundered_hit_flash_left,
-		"sr": _sundered_reduction_left,
-		"e": echoes_payload
+		"s": packet.decode_u8(0), "cc": packet.decode_float(4),
+		"st": float(packet.decode_u16(2)) / 1000.0,
+		"tt": packet.decode_float(8), "hf": packet.decode_float(12), "sr": packet.decode_float(16),
+		"pn": Vector2.from_angle(packet.decode_float(20)), "po": Vector2(packet.decode_float(24), packet.decode_float(28)),
+		"tn": Vector2.from_angle(packet.decode_float(32)), "to": Vector2(packet.decode_float(36), packet.decode_float(40)),
+		"tp": (flags & 1) != 0, "ta": (flags & 2) != 0, "e": packet.slice(MIRROR_WIRE_HEADER)
 	}
 
 func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
+	var sequence := -1
+	if custom_state.has("q"):
+		if not (custom_state.q is int) or not (custom_state.get("r") is int):
+			return
+		sequence = int(custom_state.q)
+		if sequence <= _mirror_received_sequence or int(custom_state.r) != EnemyReplicationService._current_room_sync_id():
+			return
+	custom_state = _decode_mirror_state(custom_state)
 	if custom_state.is_empty():
 		return
+	if sequence >= 0:
+		_mirror_received_sequence = sequence
 	var prev_state := _state
 	_state = int(custom_state.get("s", _state))
-	if prev_state != _state:
-		# State transitioned this packet — reset the local timer to the canonical duration so the joiner
-		# can tick it down locally between syncs without ever needing state_time_left on the wire.
-		_state_time_left = _local_duration_for_state(_state)
 	_contact_attack_cooldown_left = float(custom_state.get("cc", _contact_attack_cooldown_left))
 	_axis_prev_normal = custom_state.get("pn", _axis_prev_normal) as Vector2
 	_axis_prev_origin = custom_state.get("po", _axis_prev_origin) as Vector2
@@ -157,7 +226,12 @@ func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
 	_twin_active = bool(custom_state.get("ta", _twin_active))
 	_sundered_hit_flash_left = float(custom_state.get("hf", _sundered_hit_flash_left))
 	_sundered_reduction_left = float(custom_state.get("sr", _sundered_reduction_left))
-	_merge_remote_echoes(custom_state.get("e", []) as Array)
+	if prev_state != _state:
+		# Apply the new stage and warning duration before initializing its timer.
+		_state_time_left = _local_duration_for_state(_state)
+	if custom_state.has("st"):
+		_state_time_left = maxf(0.0, float(custom_state.st))
+	_merge_remote_echoes(_decode_echo_payload(custom_state.get("e", [])))
 	# Axis is purely derived from prev/target/time. Recompute locally so incoming snapshots never
 	# directly overwrite the visible axis position (which would shake against local extrapolation).
 	if _state == STATE_TELEGRAPH:
@@ -169,15 +243,31 @@ func _apply_custom_network_runtime_state(custom_state: Dictionary) -> void:
 func _local_duration_for_state(state_id: int) -> float:
 	match state_id:
 		STATE_TELEGRAPH:
-			return maxf(0.001, telegraph_duration)
+			return maxf(0.001, telegraph_duration + (sundered_telegraph_extension if _twin_active else 0.0))
 		STATE_REFLECT:
 			return maxf(0.001, reflect_duration)
 		STATE_COOLDOWN:
-			return maxf(0.001, cooldown_duration)
+			return maxf(0.001, cooldown_duration + (sundered_cooldown_extension if _twin_active else 0.0))
 		STATE_STALK:
 			return maxf(0.001, (stalk_duration_min + stalk_duration_max) * 0.5)
 		_:
 			return 0.0
+
+func _decode_echo_payload(payload: Variant) -> Array:
+	if payload is Array:
+		return payload # Accept the previous dictionary snapshot format as well.
+	var result: Array = []
+	if not (payload is PackedByteArray) or payload.size() % ECHO_WIRE_STRIDE != 0:
+		return result
+	for offset in range(0, payload.size(), ECHO_WIRE_STRIDE):
+		var id: int = payload.decode_u32(offset)
+		var origin := Vector2(payload.decode_float(offset + 4), payload.decode_float(offset + 8))
+		var direction := Vector2(float(payload.decode_s16(offset + 12)) / 10.0, float(payload.decode_s16(offset + 14)) / 10.0)
+		var remaining: float = payload.decode_float(offset + 16)
+		if id <= 0 or not origin.is_finite() or not direction.is_finite() or not is_finite(remaining) or remaining <= 0.0:
+			continue
+		result.append({"i": id, "o": origin, "v": direction, "t": remaining})
+	return result
 
 func _merge_remote_echoes(incoming: Array) -> void:
 	# Append-only merge: keep our locally-simulated echoes intact (origin/velocity/time_left), only adding
@@ -253,6 +343,8 @@ func _resolve_arena_center() -> void:
 		arena_center_world = global_position
 
 func _process_behavior(delta: float) -> void:
+	if not network_simulation_enabled or is_dead():
+		return
 	if _contact_attack_cooldown_left > 0.0:
 		_contact_attack_cooldown_left = maxf(0.0, _contact_attack_cooldown_left - delta)
 	_state_time_left = maxf(0.0, _state_time_left - delta)
@@ -361,12 +453,12 @@ func _process_drift(delta: float, speed_factor: float) -> void:
 
 func _enter_telegraph() -> void:
 	_state = STATE_TELEGRAPH
-	_state_time_left = telegraph_duration
-	_telegraph_total = telegraph_duration
 	if _twin_pending and not _twin_active:
 		# Promote at telegraph entry so the twin rotates into place during the windup instead of popping in mid-reflect.
 		_twin_active = true
 		_twin_pending = false
+	_state_time_left = _local_duration_for_state(STATE_TELEGRAPH)
+	_telegraph_total = _state_time_left
 	_axis_prev_normal = _axis_normal if _axis_normal.length_squared() > 0.0001 else Vector2.RIGHT
 	_axis_prev_origin = _axis_origin
 	var midpoint := arena_center_world
@@ -386,10 +478,12 @@ func _enter_telegraph() -> void:
 	queue_redraw()
 
 func _advance_axis_rotation() -> void:
-	var raw_t := 1.0 - clampf(_state_time_left / maxf(0.001, _telegraph_total), 0.0, 1.0)
 	var settle := clampf(telegraph_settle_fraction, 0.0, 0.85)
-	var rotation_window := maxf(0.001, 1.0 - settle)
-	var t := clampf(raw_t / rotation_window, 0.0, 1.0)
+	# The extra twin warning is entirely settled reading time. The seam still
+	# rotates at its familiar stage-one speed and then commits to its position.
+	var rotation_window := maxf(0.001, telegraph_duration * (1.0 - settle))
+	var elapsed := maxf(0.0, _telegraph_total - _state_time_left)
+	var t := clampf(elapsed / rotation_window, 0.0, 1.0)
 	var smoothed := smoothstep(0.0, 1.0, t)
 	var prev_angle := _axis_prev_normal.angle()
 	var target_angle := _axis_target_normal.angle()
@@ -400,15 +494,17 @@ func _advance_axis_rotation() -> void:
 func _enter_reflect() -> void:
 	_state = STATE_REFLECT
 	_state_time_left = reflect_duration
-	_reflect_echoes_remaining = maxi(1, reflect_echo_count)
-	_spawn_echo_from_player()
-	_reflect_echoes_remaining -= 1
-	_reflect_next_echo_time_left = reflect_echo_interval
+	_reflect_echoes_remaining = maxi(1, reflect_echo_count) * (2 if _twin_active else 1)
+	_reflect_next_axis = 0
+	_release_next_echo()
+	_reflect_next_echo_time_left = _echo_release_interval()
 	_seam_beam_tick_left = 0.15
 	attack_anim_time_left = attack_anim_duration
 	queue_redraw()
 
 func _tick_seam_beam_damage(delta: float) -> void:
+	if not network_simulation_enabled or is_dead():
+		return
 	_seam_beam_tick_left = maxf(0.0, _seam_beam_tick_left - delta)
 	if _seam_beam_tick_left > 0.0:
 		return
@@ -431,18 +527,30 @@ func _tick_seam_beam_damage(delta: float) -> void:
 			DAMAGEABLE.apply_damage(player, seam_beam_tick_damage, {"source": "enemy_contact", "ability": "mirrorline_seam"})
 
 func _tick_reflect_cadence(delta: float) -> void:
-	if _reflect_echoes_remaining <= 0:
+	if not network_simulation_enabled or is_dead() or _state != STATE_REFLECT or _reflect_echoes_remaining <= 0:
 		return
 	_reflect_next_echo_time_left = maxf(0.0, _reflect_next_echo_time_left - delta)
 	if _reflect_next_echo_time_left > 0.0:
 		return
-	_spawn_echo_from_player()
+	_release_next_echo()
+	_reflect_next_echo_time_left = _echo_release_interval()
+
+func _echo_release_interval() -> float:
+	return maxf(0.001, reflect_echo_interval / (2.0 if _twin_active else 1.0))
+
+func _release_next_echo() -> void:
+	# Four shots from each seam, alternating instead of arriving in pairs.
+	# Single-seam cadence and total twin-stage shot count stay familiar.
+	_spawn_echo_from_player(_reflect_next_axis)
+	_reflect_next_axis = 1 - _reflect_next_axis if _twin_active else 0
 	_reflect_echoes_remaining -= 1
-	_reflect_next_echo_time_left = reflect_echo_interval
 
 func _enter_cooldown() -> void:
 	_state = STATE_COOLDOWN
-	_state_time_left = cooldown_duration
+	_state_time_left = _local_duration_for_state(STATE_COOLDOWN)
+	_reflect_echoes_remaining = 0
+	_reflect_next_echo_time_left = 0.0
+	_reflect_next_axis = 0
 	queue_redraw()
 
 func _enter_stalk() -> void:
@@ -451,11 +559,17 @@ func _enter_stalk() -> void:
 	_telegraph_total = 0.0
 	queue_redraw()
 
-func _spawn_echo_from_player() -> void:
+func _spawn_echo_from_player(axis_index: int = -1) -> void:
+	if not network_simulation_enabled or is_dead():
+		return
 	var players := _get_damageable_targets()
 	if players.is_empty():
 		return
-	for axis in _active_axes():
+	var axes := _active_axes()
+	for index in range(axes.size()):
+		if axis_index >= 0 and index != axis_index:
+			continue
+		var axis: Dictionary = axes[index]
 		var axis_normal := axis["normal"] as Vector2
 		if axis_normal.length_squared() < 0.0001:
 			continue
@@ -497,7 +611,7 @@ func _advance_echoes(delta: float) -> void:
 		echo["time_left"] = time_left
 		if time_left <= 0.0:
 			continue
-		if not bool(echo.get("hit", false)):
+		if network_simulation_enabled and not bool(echo.get("hit", false)):
 			var elapsed := float(echo.get("time_total", echo_lifetime)) - time_left
 			# Grace window: don't allow hits in the first 0.12s. This guarantees the spawn is sampled by
 			# the network broadcaster at least once (so joiners always see the projectile) and prevents
@@ -579,6 +693,8 @@ func _try_contact_strike() -> void:
 
 func _on_health_state_died() -> void:
 	_active_echoes.clear()
+	_reflect_echoes_remaining = 0
+	_reflect_next_echo_time_left = 0.0
 	_telegraph_total = 0.0
 	died.emit()
 	queue_free()
@@ -667,12 +783,24 @@ func _check_sundered_threshold() -> void:
 	_sundered_reduction_left = maxf(0.05, sundered_reduction_duration)
 	queue_redraw()
 
+func get_attack_callout() -> String:
+	if _state not in [STATE_TELEGRAPH, STATE_REFLECT] or _state_time_left <= 0.0:
+		return ""
+	return "Twin Reflection" if _twin_active else "Mirror Reflection"
+
+func _visible_attack_state() -> int:
+	if _state in [STATE_TELEGRAPH, STATE_REFLECT] and _state_time_left <= 0.0:
+		return STATE_COOLDOWN
+	return _state
+
 func _draw() -> void:
 	_draw_axis()
 	_draw_mirror_preview()
 	_draw_echoes()
 	_draw_body()
 	_draw_sundered_flash()
+	ATTACK_CALLOUT.draw_callout(self, get_attack_callout(), -78.0)
+
 
 func _draw_sundered_flash() -> void:
 	if _sundered_flash_time_left <= 0.0:
@@ -697,7 +825,7 @@ func _draw_axis_one(axis_normal: Vector2, axis_origin: Vector2) -> void:
 	var half_extent := mirror_line_half_length
 	var start := local_origin - tangent * half_extent
 	var end := local_origin + tangent * half_extent
-	match _state:
+	match _visible_attack_state():
 		STATE_TELEGRAPH:
 			var t_norm := 1.0 - clampf(_state_time_left / maxf(0.001, _telegraph_total), 0.0, 1.0)
 			var fade := 0.45 + 0.55 * t_norm
@@ -761,7 +889,7 @@ func _draw_mirror_chevrons(local_origin: Vector2, tangent: Vector2, axis_normal:
 
 func _draw_mirror_preview() -> void:
 	# During TELEGRAPH, show every player's mirrored position(s) so each spawn point is legible.
-	if _state != STATE_TELEGRAPH:
+	if _visible_attack_state() != STATE_TELEGRAPH:
 		return
 	var players := _get_damageable_targets()
 	if players.is_empty():
@@ -850,7 +978,7 @@ func _draw_body() -> void:
 	var shimmer := 0.5 + 0.5 * sin(time * 0.0062)
 	var attack_pulse := _get_attack_pulse()
 	var radius := body_draw_radius + attack_pulse * 0.6
-	var transparency_mod := 0.55 if _state == STATE_TELEGRAPH else 1.0
+	var transparency_mod := 0.55 if _visible_attack_state() == STATE_TELEGRAPH else 1.0
 	draw_circle(Vector2.ZERO, radius + 10.0, Color(0.62, 0.84, 1.0, 0.14 * transparency_mod))
 	draw_circle(Vector2.ZERO, radius + 5.5, Color(0.78, 0.92, 1.0, 0.22 * transparency_mod))
 	draw_circle(Vector2.ZERO, radius, Color(0.16, 0.24, 0.36, 0.92 * transparency_mod))
