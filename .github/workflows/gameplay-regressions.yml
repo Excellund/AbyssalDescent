@@ -82,6 +82,8 @@ jobs:
 
       - name: Retain validation logs
         if: ${{ always() }}
+        # Storage exhaustion must not turn passing gameplay checks into a failure.
+        continue-on-error: true
         timeout-minutes: 3
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -92,5 +94,7 @@ jobs:
             ${{ runner.temp }}/abyssal-ci/abyssal-process-tests-*/*.log
             ${{ runner.temp }}/abyssal-ci/abyssal-process-tests-*/isolated-runs/abyssal-validation-*/*.log
           if-no-files-found: warn
-          retention-days: 7
+          # Keep passing evidence long enough for checkpoint inspection, and failures longer.
+          retention-days: ${{ job.status == 'success' && 1 || 7 }}
+          compression-level: 9
           include-hidden-files: false
